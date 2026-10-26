@@ -15,7 +15,7 @@ run from this repo (`.venv`).
     reinstalling from source fixed it. The bundle package now has no `dsh.client`;
     the client lives in `tether-dsh-client`.
 - After restart: sidebar button `aria-label="Tether"` exists; clicking it renders:
-  - devices: `DESKTOP-LOCAL` (local, online), `LAPTOP-01` (online), `TAILSCALE-TEST` (offline)
+  - devices: `DESKTOP-LOCAL` (local, online), `LAPTOP-01` (online); the stale `TAILSCALE-TEST` test row was removed
   - projects: `default-workspace` (DSH), `demo` (Tether root), `Tether 工作目录` (node workspace)
   - files, task list, event stream, permission drawer
 - Screenshots: `docs/screenshots/dsh-plugin-workspaces.png`,

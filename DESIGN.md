@@ -29,7 +29,7 @@
 | 权限真的分级 | readonly 写盘外路径 → 400；full 模式同路径可写；`C:\Windows` 与 `.dsh/.credentials.yaml` 始终拒绝 |
 | 删除可恢复 | 文件移动到 `D:\TetherWorkspaces\.tether-trash\<时间>-<名>` |
 | 插件内发起/取消任务 | run `r-f358e95993e9`：首事件 1261 ms，取消后 `cancelled` |
-| DeepSeek 桌面 Agent 自己调用 Tether | 在官方桌面 APP 里问"用 Tether 列出设备"，它调用 `list_peers`，返回 3 台设备、2 台在线 |
+| DeepSeek 桌面 Agent 自己调用 Tether | 在官方桌面 APP 里问"用 Tether 列出设备"，它调用 `list_peers`，返回已配对设备与在线状态 |
 | Agent 让 Agent 干活 | 它调用 `remote_task` 让 `LAPTOP-01` 创建 `D:\tether-node\work\tether-delegated.txt`，内容 `OK` |
 | 目标端是同一个持久 Harness 会话 | 第二次只读校验 run `r-8fa5928462a6` 复用 `dsh_session=tether-s-d0332f33ad47` |
 | 文件真的写对了 | 2 字节，字节 `4F 4B`，无 BOM、无换行 |

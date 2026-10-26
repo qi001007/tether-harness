@@ -3,8 +3,7 @@
 > DeepSeek Harness stays the Agent. Tether is the plugin and MCP tool that let it work on other machines.
 
 A multi-device Agent Harness client. You work inside the **DeepSeek Harness desktop
-app**: a native DSH client plugin adds a Tether page for devices, projects, files,
-permissions and live tasks; the same control plane also exposes seven MCP tools, so
+app**: a native DSH client plugin adds a Tether page for the target DSH workspace/session tree, a filesystem tree, devices, permissions and live native sessions; the same control plane also exposes seven MCP tools, so
 the DeepSeek Agent can delegate a task to another computer. The target machine runs
 its own Harness Agent with its own files, shell, and model key.
 
@@ -20,14 +19,13 @@ Tether Controller (FastAPI + SQLite) ◄──── Tether MCP server
         └──► Node LAPTOP-01    → dsh + OS file service + policy/audit
 ```
 
-The Tether plugin page is the **remote workspace browser**; the Agent conversation
-stays in DSH's own chat. Tether does not replace DSH memory, skills, or marketplace.
+The Tether plugin page is the **remote DSH workspace/session browser**; local conversation stays in DSH's own chat, while the page mirrors native remote transcripts and can start new native sessions on the target. Tether does not replace DSH memory, skills, or marketplace.
 
 ## What is verified
 
 | Claim | Evidence |
 |---|---|
-| DeepSeek Harness desktop Agent calls Tether itself | In the official desktop app, the Agent called `list_peers` and returned 3 devices / 2 online |
+| DeepSeek Harness desktop Agent calls Tether itself | In the official desktop app, the Agent called `list_peers` and returned the paired devices with online flags |
 | Agent-to-Agent delegation | The desktop Agent called `remote_task` for `LAPTOP-01`; the laptop created `D:\tether-node\work\tether-delegated.txt` with `OK` |
 | Same harness session on the target | A second read-only verification run reused `dsh_session=tether-s-d0332f33ad47` |
 | Real dsh writes/reads files | `tether-delegated.txt` is 2 bytes, bytes `4F 4B`, no BOM/newline |
