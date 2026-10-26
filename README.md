@@ -41,15 +41,17 @@ stays in DSH's own chat. Tether does not replace DSH memory, skills, or marketpl
 | Readonly really blocks outside writes | `C:\Users\...\Documents\tether-full-test.txt` → HTTP 400 `path outside allowed roots` |
 | Full-disk mode is explicit and still guards the OS | `mode=full` allowed the same write; `C:\Windows\...` stayed denied; `.dsh/.credentials.yaml` unreadable |
 | Delete is recoverable | delete moved the file to `D:\TetherWorkspaces\.tether-trash\<timestamp>-<name>` |
-| Native DSH conversation mirror | `session.v4.jsonl.zstd` parsed into 2 turns / 8 blocks; page shows the same title, reasoning, tool cards and answer |
-| Tether run rendered as chat | LAPTOP-01 run shows `思考` → `pwsh` tool → read-only verification answer, same layout as native |
+| Native DSH conversation mirror | `session.v4.jsonl.zstd` parsed into 2 turns / 8 blocks; page shows the same title, reasoning, tool calls and answer |
+| Tether task becomes a native DSH session | run `r-00aac51ff0ac` → `tether-s-91e5ba584d36` in target `~/.dsh/sessions`; attached to the demo workspace registry |
+| One workspace tree | `/workspaces` + native sessions merged by `cwd`; `DSH`/`Tether` are badges, not separate sections |
+| File tree | workspace paths + C:/D:/E: drives load lazily; `hello.txt` opens in the editor |
 | Plugin live task + cancel | run `r-f358e95993e9`: first event in 1261 ms; cancel → `cancelled` |
 | New project location | `demo` created under `D:\TetherWorkspaces\demo`; node workspace and DSH workspace unchanged |
 
-Screenshots: `docs/screenshots/dsh-plugin-native-chat.png`,
+Screenshots: `docs/screenshots/dsh-plugin-workspaces.png`,
+`docs/screenshots/dsh-plugin-native-chat.png`,
 `docs/screenshots/dsh-plugin-dark.png`,
-`docs/screenshots/dsh-plugin-files.png`, `docs/screenshots/dsh-plugin-run-chat.png`,
-`docs/screenshots/dsh-plugin-laptop-chat.png`,
+`docs/screenshots/dsh-plugin-files.png`,
 `docs/screenshots/dsh-plugin-permissions.png`,
 `docs/screenshots/deepseek-desktop.png`,
 `docs/screenshots/deepseek-after-tether.png`,
@@ -103,27 +105,34 @@ The desktop app keeps its own memory/plugins. Tether MCP adds these tools:
 
 The sidebar entry opens a native client page (no iframe, no second web app):
 
+- **Workspaces**: one tree, not a Tether-vs-DSH split. It merges
+  `~/.dsh/storages/workspace.json`, projects under `D:\TetherWorkspaces`, and
+  native sessions by `cwd`; each workspace expands to its sessions. A tiny
+  `DSH`/`Tether` badge records where a workspace/session came from, but both live
+  in the same workspace. The `+` in the panel header creates a workspace under
+  `D:\TetherWorkspaces` and registers it in the target DSH workspace store; the
+  `+` on a workspace starts a new session. DSH keeps its workspace list in
+  memory, so restart/reopen DSH if a newly created workspace is not visible in
+  its own sidebar yet (the workspace.json entry is already written).
+- **Conversation**: native DSH transcripts read from
+  `~/.dsh/sessions/**/session.vN.jsonl.zstd`: user messages, a collapsible process
+  group with reasoning/tool rows, and the final answer. Existing sessions are
+  read-only; sending from the composer starts a **new native DSH session** in the
+  selected workspace through the target's SDK (under the target `~/.dsh`), so it
+  appears in the target DSH and in this tree. Writing into an existing native
+  session still needs a DSH Host proxy and is Designed.
+- **Files**: a lazy file tree in the sidebar. Roots are the known workspaces and
+  this PC's drives (`C:`, `D:`, ...); directories load on expand and files open
+  in the editor. Read follows the target policy; writes/mkdir/rename/delete are
+  refused in readonly/locked mode.
 - **Devices**: online state, platform, agents, workspace. Click a device to switch.
-- **Projects**: DSH workspaces discovered from `~/.dsh/storages/workspace.json`,
-  projects under `D:\TetherWorkspaces`, and the node workspace.
-- **Conversation**: the native DSH transcript read from
-  `~/.dsh/sessions/**/session.vN.jsonl.zstd`: user messages, collapsible
-  reasoning, tool calls/results and the final answer, rendered like the DSH chat
-  page. Native sessions are **read-only** here; sending a message starts a new
-  Tether task in the same workspace, clearly labelled.
-- **Tasks**: Tether runs are rendered as the same chat transcript while they run,
-  including reasoning and tool events; cancel a live run from the header.
-- **Files**: a separate tab; list/read/write/mkdir/rename/delete through the target
-  node's OS filesystem service; the editor is read-only when policy does not allow
-  writes.
 - **Permissions**: readonly / locked / full-disk, editable writable roots, and the
   last 80 audit entries.
 
-The left side uses a VSCode-style fixed activity bar: conversations, devices and
-projects are separate panels. Clicking the active icon or the chevron collapses
-the panel; the bar stays. The panel width and the file-list/editor divider are
-draggable, double-click resets, and both widths plus the active panel are stored
-in `localStorage`.
+The left side uses a VSCode-style fixed activity bar: workspaces, files and
+devices are separate panels. Clicking the active icon or the chevron collapses
+the panel; the bar stays. The panel width is draggable, double-click resets, and
+the active panel and width are stored in `localStorage`.
 
 The surface follows six visual rules: hierarchy comes from background layers
 (base / sidebar / hover / active), not 1px frames; dark mode uses thinner text
@@ -132,11 +141,11 @@ steps and token counts use tabular numerals; drag handles respond on hover and
 reset with a short spring; buttons/rows compress on press. Colors come from DSH
 theme tokens, so light and dark follow the app.
 
-The native reader only reads the DSH log; it never writes to an active session or
-competes for the Session writer. It defaults to `~/.dsh`; set
-`TETHER_NATIVE_DSH_HOME` if the target DSH home is elsewhere. A target without
-`~/.dsh/sessions` (for example the current laptop build) still shows Tether task
-transcripts. The reader requires the `zstandard` Python package, installed by
+The native reader only reads existing DSH logs; new Tether tasks run through the
+target's SDK in the target DSH home and workspace, so they are native sessions
+and are attached to the workspace registry. Existing native sessions are never
+written or put under a second writer. The reader defaults to `~/.dsh`; set
+`TETHER_NATIVE_DSH_HOME` if needed. It requires `zstandard`, installed by
 `pip install -e .`.
 
 ### File policy
@@ -216,7 +225,7 @@ tether/
   evidence/        measured results
 packages/
   dsh-plugin-tether/         DSH bundle + cordis patch
-  dsh-plugin-tether-client/  native DSH client page (devices/projects/files/tasks)
+  dsh-plugin-tether-client/  native DSH client page (workspaces/files/devices)
 ```
 
 MIT licensed. Full design: [DESIGN.md](DESIGN.md). Reviewer path:

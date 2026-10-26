@@ -11,7 +11,7 @@
 ### 0.1 我做了什么
 
 - 用户在 **DeepSeek Harness 官方桌面 APP** 里正常对话，记忆、技能、插件市场都还是 DeepSeek 的；
-- DSH 侧栏装了 **Tether 原生 client 插件**：设备、目标机项目、**目标机 DSH 原生对话**、文件读写、任务事件、权限/审计都在 DSH 里完成，没有 iframe、没有第二个聊天 App；
+- DSH 侧栏装了 **Tether 原生 client 插件**：目标机 **工作区/会话树**、**磁盘文件树**、设备、原生对话（思考/工具折叠过程组）、文件读写、任务、权限/审计都在 DSH 里完成，没有 iframe、没有第二个聊天 App；
 - DeepSeek 的 Agent 通过 **Tether MCP** 调用 `list_peers` / `remote_task` / `remote_status` / `remote_cancel` / `remote_files` / `remote_workspaces` / `remote_audit`；
 - 任务被送到另一台电脑的 Tether Node，由那台机器上的 Harness Agent 用它自己的文件、shell、模型 key 执行；
 - 工具事件、结果和继续会话都在 DeepSeek 的对话里；
@@ -23,7 +23,7 @@
 
 | 主张 | 实测 |
 |---|---|
-| DSH 插件可安装、可渲染 | 干净卸载后由 `desktop/install-plugin.ps1` 重装；侧栏出现 `Tether`，设备/项目/文件/任务页渲染 |
+| DSH 插件可安装、可渲染 | 干净卸载后由 `desktop/install-plugin.ps1` 重装；侧栏出现 `Tether`，工作区/文件/设备/过程页渲染 |
 | 已有 DSH 工作区能打开 | `default-workspace` 解析到 `D:\DeepSeek harness\workspace`；readonly 下可写并留审计 |
 | 目标机原生对话能看 | 解析 `~/.dsh/sessions` 的 zstd 日志：2 轮、8 个 reasoning/tool/text 块；页面与 DSH 截图同一标题/工具/回答 |
 | 权限真的分级 | readonly 写盘外路径 → 400；full 模式同路径可写；`C:\Windows` 与 `.dsh/.credentials.yaml` 始终拒绝 |
@@ -39,9 +39,8 @@
 | 不确定不假装成功 | 节点被杀后 Run 进 `unknown`，不自动重跑；重启后 `reconcile` 返回真实状态 |
 | 跨机走 Tailscale | `LAPTOP-01` 通过 `100.x` 接入；Controller 的 UI/API 仍只允许本机，只有 `/ws/node` 对 tailnet 开放 |
 
-截图：`docs/screenshots/dsh-plugin-native-chat.png`、`dsh-plugin-dark.png`、
-`dsh-plugin-files.png`、`dsh-plugin-run-chat.png`、`dsh-plugin-laptop-chat.png`、
-`dsh-plugin-permissions.png`、
+截图：`docs/screenshots/dsh-plugin-workspaces.png`、`dsh-plugin-native-chat.png`、
+`dsh-plugin-dark.png`、`dsh-plugin-files.png`、`dsh-plugin-permissions.png`、
 `deepseek-desktop.png`、`deepseek-after-tether.png`、`deepseek-delegated.png`。
 
 ### 0.3 当前实现 vs 目标架构（先看边界）
@@ -276,7 +275,7 @@ DeepSeek Agent 自己决定调用：
 - Tether 的 MCP 指令只描述"如何发现设备、如何派活"，不抢 Agent 的决策；
 - 如果以后用 Qoder/Codex，同一套 MCP server 直接挂过去，不需要重写。
 
-Tether 自带聊天页仍然存在，但定位是**监控台**：看设备、任务、事件、证据；不是主入口。设备/项目/文件/任务的主入口是 DSH 侧栏里的 **Tether 插件页**（下一节）。
+Tether 自带聊天页仍然存在，但定位是**监控台**：看设备、任务、事件、证据；不是主入口。工作区/文件/设备/过程的主入口是 DSH 侧栏里的 **Tether 插件页**（下一节）。
 
 ### 6.1 MCP 配置
 
@@ -312,7 +311,7 @@ DSH 是 Cordis 插件架构。Tether 按官方 client plugin 形态接入，**�
 
 页面布局对齐 DSH：同一套左栏/主区/右栏结构、灰阶、字体与 8px 圆角；没有复制
 DSH 的业务组件（client bundle 不能直接 import DSH 内部 React 组件），但复用它的
-slot、布局和 token 观感。左侧是 VSCode 式常驻活动栏（对话/设备/项目）；点击当前
+slot、布局和 token 观感。左侧是 VSCode 式常驻活动栏（工作区/文件/设备）；点击当前
 项或标题栏 chevron 收起面板，活动栏不消失。面板宽度与文件栏/编辑器边界可拖，
 双击复位，宽度与当前面板写入 `localStorage`。
 
@@ -322,15 +321,15 @@ slot、布局和 token 观感。左侧是 VSCode 式常驻活动栏（对话/设
 时间、步数、token 用 tabular-nums；拖动中不加 transition，松手/双击复位用
 160–180ms 回弹，按钮/行按压 `scale(.97)`。
 
-五个区域：
+四个区域（工作区、文件、设备、权限）：
 
 | 区域 | 数据来源 | 行为 |
 |---|---|---|
+| 工作区 | `GET /api/devices/{id}/workspaces` + `GET /api/devices/{id}/dsh/sessions` | 同一棵 工作区 → 会话 树；按 `cwd` 归并；`DSH`/`Tether` 小徽标区分来源；新建工作区/新会话 |
+| 文件 | `POST /api/devices/{id}/fs/{op}` + `GET /api/devices/{id}/drives` | 侧栏惰性文件树：已知工作区 + C/D/E 等盘；文件在右侧编辑器打开 |
 | 设备 | `GET /api/state` | online/offline、平台、agents、workspace；点击切换 |
-| 项目 | `GET /api/devices/{id}/workspaces` | DSH `workspace.json` + `D:\TetherWorkspaces` + node workspace |
-| 对话 | `GET /api/devices/{id}/dsh/sessions[/{sid}]` | 读取目标机 `~/.dsh/sessions` 的 zstd JSONL，还原 user / reasoning / tool / answer；**只读** |
-| 任务 | `/api/sessions` + `/api/runs` + `/api/runs/{id}/events` | 同一套对话组件渲染 Tether Run；发起、1.2s 轮询、取消 |
-| 文件 | `POST /api/devices/{id}/fs/{op}` | 目录、读取、编辑保存、新建/重命名/删除（按策略） |
+| 权限 | `GET/POST /api/devices/{id}/policy` + `/audit` | readonly / locked / full，写根、审计 |
+| 任务/过程 | `/api/sessions` + `/api/runs` + `/api/devices/{id}/dsh/sessions` | 新任务由目标机 SDK 写成原生 DSH 会话；会话内过程组可折叠，行显示思考/工具调用 |
 
 DSH 原生会话的读取实现：`tether/node/dsh_sessions.py` 找到
 `$DSH_HOME/sessions/<encoded-cwd>/<session>/session.vN.jsonl.zstd`，用
@@ -339,9 +338,17 @@ DSH 原生会话的读取实现：`tether/node/dsh_sessions.py` 找到
 `assistant/message` 的 `reasoning`/`text`/`tool-call`、`tool/result`、`turn/end`。
 运行中的 `assistant/attempt` 流会聚合成临时 reasoning/text 预览。
 
-**原生会话只读**：不写日志、不抢 Session 写锁。输入框发送时会在同一工作区新建
-Tether 任务（清楚标注“不写入上面的原生会话”），这样不会破坏目标 DSH 正在进行的
-对话。要在原生会话里继续，需要目标机 DSH Host 的 `session/prompt` 写者代理，
+**统一工作区与会话**：工作区树同时包含 DSH 原生工作区和 `D:\TetherWorkspaces`
+下的项目。Tether 发出的任务不再落在独立的 Tether 历史里：Node 把目标机的
+`$DSH_HOME`（默认 `~/.dsh`）和所选 workspace 传给 SDK，生成的原生 Session 会
+出现在 `~/.dsh/sessions`，并由 `attach_session` 写回
+`~/.dsh/storages/workspace.json` 的 `sessionIds`。因此它和用户后来在目标机 DSH
+里直接开的会话挂在同一个工作区下；`tether-` 前缀的会话显示 `Tether` 徽标，
+DSH 直接开的会话显示 `DSH` 徽标。新建工作区会 mkdir 并注册到目标 DSH workspace
+store。
+
+**已有原生会话只读**：不写已有 Session 日志、不抢写锁；输入框只创建新会话。
+要在已有原生会话里继续，需要目标机 DSH Host 的 `session/prompt` 写者代理，
 属于下一阶段。
 
 设置抽屉做三档权限（见 §7.4），并显示审计。插件本身只改
@@ -421,10 +428,11 @@ node token 不进入 client。
 | E6 跨机 | 笔记本 Node 通过 Tailscale 接入 | `LAPTOP-01` 创建 `D:\tether-node\work\laptop-proof.txt`，返回路径和 `OK` |
 | E7 Agent-first | 在 DeepSeek 桌面 APP 里让 Agent 用 Tether | 它自己调用 `list_peers`，再 `remote_task` 让 LAPTOP-01 创建 `tether-delegated.txt`；两次校验同一 dsh 会话 |
 | E8 监控台 | Tether 自带 UI | 设备/任务/事件可看；仅作监控 |
-| E9 DSH 插件 | 干净安装 `tether-dsh-plugin` | 侧栏 `Tether`；设备/项目/文件/任务/权限页渲染；其它 bundle 未变 |
+| E9 DSH 插件 | 干净安装 `tether-dsh-plugin` | 侧栏 `Tether`；工作区/文件/设备/权限/过程页渲染；其它 bundle 未变 |
 | E10 文件权限 | readonly → full → readonly | 盘外写 400；DSH 工作区可写；full 可写；系统目录/凭据始终拒绝；删除进 `.tether-trash` |
 | E11 插件任务 | fake agent `slow plugin ui test` | 首事件 1261 ms；取消后 `cancelled`；事件 seq 连续 |
-| E12 原生对话镜像 | 读取目标机 `~/.dsh/sessions` 的 `session.v4.jsonl.zstd` | 还原 2 轮、5 个 reasoning/tool 块；页面显示与 DSH 截图同一标题/推理/工具/回答 |
+| E12 原生对话镜像 | 读取目标机 `~/.dsh/sessions` 的 `session.v4.jsonl.zstd` | 还原 2 轮、8 个 reasoning/tool 块；页面显示与 DSH 截图同一标题/推理/工具/回答 |
+| E13 Tether 任务写入目标 DSH | 在 `D:\TetherWorkspaces\demo` 发 `Reply with exactly OK.` | run `r-00aac51ff0ac` → native `tether-s-91e5ba584d36`，文件在目标 `~/.dsh/sessions`，并写入 workspace `sessionIds` |
 
 证据：`evidence/gate0.md`、`evidence/gate2.md`、`evidence/dsh_plugin_fs.md`、
 `evidence/cancel_probe.json`、`docs/screenshots/dsh-plugin-*.png`、`deepseek-*.png`。
@@ -433,7 +441,7 @@ node token 不进入 client。
 
 | 状态 | 内容 |
 |---|---|
-| **Verified** | DSH 插件安装/渲染、设备/项目/文件/任务页、三档文件权限与审计、可恢复删除、DeepSeek 桌面 Agent 通过 MCP 调用 Tether、Agent-to-Agent 派活、真实 dsh 执行、Session 继续、断线重放、幂等、`unknown`、硬取消 0 残留、Tailscale 跨机、监控台 |
+| **Verified** | DSH 插件安装/渲染、统一工作区/文件树/设备/过程页、三档文件权限与审计、可恢复删除、DeepSeek 桌面 Agent 通过 MCP 调用 Tether、Agent-to-Agent 派活、真实 dsh 执行、Session 继续、断线重放、幂等、`unknown`、硬取消 0 残留、Tailscale 跨机、监控台 |
 | **Designed** | 每台设备都跑桌面 Agent + Tether 插件/MCP 的对等网络、`@Remote` host service、配对/能力路由、审批 UI、Linux/WSL、公网 relay、多任务并发 |
 | **Not implemented** | 上述 Designed 项；生产级鉴权/审计/沙箱；笔记本侧 Agent 发起任务；笔记本节点升级到含 fs 的新代码 |
 
@@ -495,8 +503,8 @@ Copy-Item .env.example .env   # DEEPSEEK_API_KEY
 - 默认节点 token 是 demo 级；生产需要每设备凭据/吊销。
 - `LAPTOP-01` 仍跑旧 Node 构建（无 `fs` 能力）；文件/项目操作需先更新
   `C:\tether-node\app` 并重启。任务委派不受影响。
-- 目标机 DSH 原生会话现在能**只读镜像**（解析 `~/.dsh/sessions` 的 zstd 日志，
-  渲染 user/reasoning/tool/answer）；但**不能写回原生会话**。在原生会话里继续输入
+- 目标机 DSH 原生会话能**只读镜像**；Tether 新任务会写成**新的原生 Session**，
+  并注册到目标 DSH workspace。但**不能写回已有原生会话**：在已有会话里继续输入
   需要目标机 DSH Host 的 `session/prompt` 写者代理，属于 Designed。
 - dsh SDK 仍是 RC；事件词汇可能随版本变化，`dsh_adapter.py` 用通用 fallback 保留未知事件。
 - Tether 自带聊天页是监控台；主入口是 DSH 对话 + Tether 插件页。
@@ -523,7 +531,7 @@ Copy-Item .env.example .env   # DEEPSEEK_API_KEY
 - `tether/node/dsh_adapter.py`：SDK 调用、npm 运行时绕过、事件映射、硬取消。
 - `tether/static/index.html`：监控台 UI。
 - `packages/dsh-plugin-tether/`：DSH bundle + cordis patch。
-- `packages/dsh-plugin-tether-client/`：DSH 原生 client 页面（设备/项目/文件/任务/权限）。
+- `packages/dsh-plugin-tether-client/`：DSH 原生 client 页面（工作区/文件/设备/权限）。
 - `desktop/install-plugin.ps1`：安装/备份 DSH 插件。
 - `desktop/install-mcp.ps1`：把 Tether MCP 写进 DeepSeek Harness 桌面 profile。
 - `laptop/`：笔记本 Node bootstrap/启动/卸载。

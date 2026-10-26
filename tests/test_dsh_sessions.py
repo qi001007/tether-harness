@@ -75,6 +75,20 @@ def test_store_lists_and_reads_native_sessions(tmp_path: Path) -> None:
     assert store.transcript("missing") is None
 
 
+def test_workspace_registration_and_session_attach(tmp_path: Path) -> None:
+    store = DshSessionStore(tmp_path)
+    created = store.register_workspace("D:\TetherWorkspaces\demo", "demo")
+    assert created["created"] is True
+    again = store.register_workspace("D:\TetherWorkspaces\demo", "demo")
+    assert again["created"] is False
+    assert store.attach_session("D:\TetherWorkspaces\demo", "tether-s-1") is True
+    registry = json.loads((tmp_path / "storages" / "workspace.json").read_text(encoding="utf-8"))
+    row = registry["tables"]["workspaces"][created["id"]]
+    assert row["title"] == "demo"
+    assert row["sessionIds"] == ["tether-s-1"]
+    assert store.attach_session("D:\TetherWorkspaces\other", "tether-s-2") is False
+
+
 def test_unfinished_turn_is_running(tmp_path: Path) -> None:
     rows = _fixture("session-running")
     rows = [row for row in rows if row["type"] != "turn/end"]

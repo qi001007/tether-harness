@@ -165,49 +165,50 @@ window.__ModuleLoader__.load({
       return h('div', { style: { fontSize: 14, lineHeight: '24px', color: C.ink } }, nodes)
     }
 
-    function Reasoning({ text, running }) {
+    function ProcessRow({ block }) {
       const [open, setOpen] = React.useState(false)
-      const summary = String(text || '').replace(/\*\*/g, '').split('\n').find((line) => line.trim()) || ''
-      if (!text) return null
-      return h('div', { className: 'tether-ink', style: { margin: '4px 0 8px' } },
-        h('button', {
+      const isThink = block.type === 'reasoning'
+      const label = isThink ? '思考' : '工具调用'
+      const text = isThink ? String(block.text || '') : ((block.name || 'tool') + (block.command ? ' · ' + block.command : ''))
+      const color = block.status === 'error' ? C.red : (block.status === 'running' ? C.blue : C.green)
+      return h('div', { style: { minWidth: 0 } },
+        h('div', {
+          role: 'button', tabIndex: 0, className: 'tether-press tether-hover',
           onClick: () => setOpen(!open),
-          style: { display: 'flex', alignItems: 'center', gap: 7, width: '100%', border: 0, background: 'transparent', padding: '3px 0', cursor: 'pointer', textAlign: 'left', color: C.mute, fontSize: 13 }
+          onKeyDown: (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); setOpen(!open) } },
+          style: { display: 'flex', alignItems: 'center', gap: 6, padding: '3px 6px', borderRadius: 5, cursor: 'pointer', fontSize: 12.5, minHeight: 26, color: C.mute }
         },
-          h('span', { style: { fontSize: 13, width: 14 } }, open ? '▾' : '▸'),
-          h('span', { style: { fontWeight: 'var(--tether-body, 400)', color: C.sub, whiteSpace: 'nowrap', flex: '0 0 auto' } }, running ? '思考中' : '思考'),
-          !open && summary ? h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: '1 1 auto', color: C.mute } }, '· ' + summary) : null
+          h('span', { style: { width: 12, height: 12, flex: '0 0 auto', display: 'grid', placeItems: 'center', color: C.mute } }, h(Glyph, { name: isThink ? 'think' : 'tool', size: 12, stroke: 1.8 })),
+          h('span', { style: { color: C.mute, flex: '0 0 auto' } }, label),
+          h('span', { style: { color: isThink ? C.mute : C.blue, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: '1 1 auto', minWidth: 0 } }, shortText(text, 120)),
+          !isThink && block.status ? h('span', { style: { width: 6, height: 6, borderRadius: 3, background: color, flex: '0 0 auto' } }) : null,
+          h('span', { style: { color: C.mute, flex: '0 0 auto' } }, open ? '▾' : '▸')
         ),
-        open ? h('div', { style: { padding: '4px 0 4px 22px', color: C.sub, fontSize: 13, lineHeight: '21px', whiteSpace: 'pre-wrap' } }, text) : null
+        open ? h('div', { style: { margin: '2px 0 6px 24px', padding: '8px 10px', borderRadius: 6, background: C.panel, color: C.sub, fontSize: 12, lineHeight: '19px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' } },
+          isThink ? String(block.text || '') : (block.arguments || block.result || '')
+        ) : null
       )
     }
 
-    function ToolCard({ block }) {
-      const [open, setOpen] = React.useState(false)
-      const status = block.status || (block.is_error ? 'error' : 'done')
-      const color = status === 'error' ? C.red : (status === 'running' ? C.blue : C.green)
-      const args = block.arguments || ''
-      const result = block.result || ''
-      return h('div', { className: 'tether-ink', style: { border: 0, borderRadius: 8, margin: '8px 0', background: C.panel, overflow: 'hidden' } },
+    function ProcessGroup({ blocks, turn, live, latest }) {
+      const [open, setOpen] = React.useState(!!latest)
+      if (!blocks || !blocks.length) return null
+      const toolCount = blocks.filter((b) => b.type === 'tool').length
+      const stateText = turn.state === 'running' ? '运行中' : (turn.state === 'failed' ? '失败' : (turn.state === 'cancelled' ? '已取消' : '已完成'))
+      const duration = turn.started_at && turn.ended_at ? Math.max(1, Math.round(turn.ended_at - turn.started_at)) : null
+      return h('div', { className: 'tether-ink', style: { margin: '2px 0 10px' } },
         h('button', {
-          onClick: () => setOpen(!open),
-          style: { display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 10px', border: 0, background: C.soft, cursor: 'pointer', textAlign: 'left', color: C.ink }
+          onClick: () => setOpen(!open), className: 'tether-press tether-hover',
+          style: { display: 'flex', alignItems: 'center', gap: 7, width: '100%', border: 0, background: 'transparent', padding: '4px 6px', borderRadius: 6, cursor: 'pointer', textAlign: 'left', color: C.mute, fontSize: 12.5, minHeight: 28 }
         },
-          dot(false, color),
-          h('span', { style: { fontFamily: 'Consolas, monospace', fontSize: 12.5, fontWeight: 'var(--tether-strong, 600)' } }, block.name || 'tool'),
-          block.command ? h('span', { style: { color: C.mute, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: '1 1 auto' } }, block.command) : h('span', { style: { flex: '1 1 auto' } }),
-          h('span', { style: { color: C.mute, fontSize: 11, whiteSpace: 'nowrap', flex: '0 0 auto' } }, status === 'running' ? '运行中' : (status === 'error' ? '失败' : '完成')),
-          h('span', { style: { color: C.mute } }, open ? '▾' : '▸')
+          h(Glyph, { name: open ? 'chevronDown' : 'chevronRight', size: 13, stroke: 1.8 }),
+          h('span', null, stateText),
+          duration ? h('span', { className: 'tether-num' }, ' · 用时 ' + duration + ' 秒') : null,
+          toolCount ? h('span', { className: 'tether-num' }, ' · ' + toolCount + ' 个工具') : null
         ),
-        open ? h('div', { style: { padding: '8px 10px', fontSize: 12 } },
-          args && args !== '{}' ? h('div', { style: { marginBottom: 6 } },
-            h('div', { style: { color: C.mute, fontSize: 10.5, marginBottom: 3 } }, '参数'),
-            h('pre', { style: { margin: 0, padding: 8, background: C.panel, borderRadius: 6, overflow: 'auto', maxHeight: 180, fontFamily: 'Consolas, monospace', fontSize: 11.5 } }, args)
-          ) : null,
-          result ? h('div', null,
-            h('div', { style: { color: C.mute, fontSize: 10.5, marginBottom: 3 } }, '结果'),
-            h('pre', { style: { margin: 0, padding: 8, background: C.bg, color: status === 'error' ? C.red : C.sub, borderRadius: 6, overflow: 'auto', maxHeight: 260, whiteSpace: 'pre-wrap', fontFamily: 'Consolas, monospace', fontSize: 11.5 } }, result)
-          ) : h('div', { style: { color: C.mute, fontSize: 11.5 } }, '等待结果…')
+        open ? h('div', { style: { padding: '2px 0 6px 16px' } },
+          h('div', { style: { fontSize: 11, color: C.mute, padding: '2px 6px 3px' } }, '已调用工具'),
+          h('div', { style: { display: 'grid', gap: 1 } }, blocks.map((block, i) => h(ProcessRow, { key: i, block })))
         ) : null
       )
     }
@@ -218,24 +219,14 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function Turn({ turn, index, live }) {
+    function Turn({ turn, index, live, latest }) {
       const blocks = turn.blocks || []
-      const usage = turn.usage || {}
-      const steps = turn.steps || 0
-      return h('div', { style: { marginBottom: 22 } },
+      const processBlocks = blocks.filter((block) => block.type === 'reasoning' || block.type === 'tool')
+      const texts = blocks.filter((block) => block.type === 'text')
+      return h('div', { style: { marginBottom: 24 } },
         turn.user ? h(UserBubble, { text: turn.user.text }) : null,
-        blocks.map((block, i) => {
-          if (block.type === 'reasoning') return h(Reasoning, { key: i, text: block.text, running: !!block.live && live })
-          if (block.type === 'tool') return h(ToolCard, { key: i, block })
-          if (block.type === 'text') return h('div', { key: i, className: 'tether-ink', style: { margin: '6px 0' } }, h(Markdown, { text: block.text }))
-          return null
-        }),
-        h('div', { className: 'tether-num', style: { display: 'flex', gap: 8, alignItems: 'center', color: C.mute, fontSize: 11.5, marginTop: 4 } },
-          h('span', { style: { width: 7, height: 7, borderRadius: 4, background: turn.state === 'completed' ? C.green : (turn.state === 'running' ? C.blue : (turn.state === 'failed' ? C.red : C.mute)) } }),
-          h('span', null, turn.state === 'running' ? '运行中' : (turn.state === 'failed' ? '失败' : '已完成')),
-          steps ? h('span', null, steps + ' 步') : null,
-          usage.outputTokens ? h('span', null, usage.outputTokens + ' tok') : null
-        )
+        h(ProcessGroup, { blocks: processBlocks, turn, live, latest }),
+        texts.map((block, i) => h('div', { key: i, className: 'tether-ink', style: { margin: '7px 0' } }, h(Markdown, { text: block.text })))
       )
     }
 
@@ -257,7 +248,7 @@ window.__ModuleLoader__.load({
       }
       return h('div', { ref: box, className: 'tether-scroll', style: { flex: '1 1 auto', overflow: 'auto', padding: '4px 0 24px' } },
         h('div', { style: { maxWidth: 780, margin: '0 auto', padding: '0 8px' } },
-          turns.map((turn, i) => h(Turn, { key: i, turn, index: i, live }))
+          turns.map((turn, i) => h(Turn, { key: i, turn, index: i, live, latest: i === turns.length - 1 }))
         )
       )
     }
@@ -322,12 +313,9 @@ window.__ModuleLoader__.load({
       header: 11,
       gapRow: 1,
       gapGroup: 10,
-      minSide: 190,
-      maxSide: 380,
-      defaultSide: 248,
-      minFiles: 170,
-      maxFiles: 360,
-      defaultFiles: 240
+      minSide: 210,
+      maxSide: 420,
+      defaultSide: 280,
     }
 
     function clamp(value, min, max) {
@@ -351,9 +339,16 @@ window.__ModuleLoader__.load({
       chat: ['M5 5h14v10H9l-4 4V5z', 'M8 9h8', 'M8 12h5'],
       devices: ['M4 5h16v6H4z', 'M4 15h16v4H4z', 'M7 8h.01', 'M7 17h.01'],
       projects: ['M3 7h7l2 2h9v10H3z', 'M3 7V5h7l2 2'],
-      settings: ['M12 15.5a3.5 3.5 0 100-7 3.5 3.5 0 000 7z', 'M12 3v2', 'M12 19v2', 'M3 12h2', 'M19 12h2', 'M5.6 5.6L7 7', 'M17 17l1.4 1.4', 'M18.4 5.6L17 7', 'M7 17l-1.4 1.4'],
+      settings: ['M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z', 'M12 10v4', 'M10.5 9h3'],
       plus: ['M12 5v14', 'M5 12h14'],
-      file: ['M6 3h8l4 4v14H6z', 'M14 3v4h4']
+      file: ['M6 3h8l4 4v14H6z', 'M14 3v4h4'],
+      chevronRight: ['M9 6l6 6-6 6'],
+      chevronDown: ['M6 9l6 6 6-6'],
+      chevronLeft: ['M15 6l-6 6 6 6'],
+      think: ['M12 4a5 5 0 00-3 9v3h6v-3a5 5 0 00-3-9z', 'M9 20h6'],
+      tool: ['M14 7l3 3', 'M5 19l7-7', 'M13 5l6 6-2 2-6-6z'],
+      workspace: ['M3 7h7l2 2h9v10H3z', 'M3 11h18'],
+      files: ['M6 3h8l4 4v14H6z', 'M14 3v4h4', 'M9 12h6', 'M9 16h6']
     }
 
     function Glyph({ name, size = 18, stroke = 1.7 }) {
@@ -365,9 +360,9 @@ window.__ModuleLoader__.load({
 
     function ActivityBar({ active, collapsed, onSelect, onSettings, settingsOpen }) {
       const items = [
-        { id: 'conversations', label: '对话', icon: 'chat' },
-        { id: 'devices', label: '设备', icon: 'devices' },
-        { id: 'projects', label: '项目', icon: 'projects' }
+        { id: 'workspaces', label: '工作区', icon: 'workspace' },
+        { id: 'files', label: '文件', icon: 'files' },
+        { id: 'devices', label: '设备', icon: 'devices' }
       ]
       const button = (id, label, icon, onClick, selected) => h('button', {
         key: id, title: label, 'aria-label': label, onClick, className: 'tether-press tether-hover',
@@ -394,44 +389,96 @@ window.__ModuleLoader__.load({
           action,
           h('button', {
             title: '收起侧栏', 'aria-label': '收起侧栏', onClick: onCollapse, className: 'tether-hover',
-            style: { width: 26, height: 26, display: 'grid', placeItems: 'center', border: 0, borderRadius: UI.radius, background: 'transparent', color: C.mute, cursor: 'pointer', fontSize: 16, lineHeight: 1 }
-          }, '‹')
+            style: { width: 26, height: 26, display: 'grid', placeItems: 'center', border: 0, borderRadius: UI.radius, background: 'transparent', color: C.mute, cursor: 'pointer' }
+          }, h(Glyph, { name: 'chevronLeft', size: 18, stroke: 1.9 }))
         )
       )
     }
 
-    function SideRow({ selected, title, hint, icon, iconColor, onClick, right }) {
+    function SideRow({ selected, title, hint, icon, iconColor, onClick, right, indent = 0, action, actionTitle, onAction, toggle, onToggle }) {
       return h('div', {
         role: 'button', tabIndex: 0, title, onClick, className: 'tether-press tether-hover',
         onKeyDown: (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); onClick() } },
         style: {
-          display: 'flex', alignItems: 'center', gap: 7, minHeight: UI.row, boxSizing: 'border-box',
-          padding: '5px ' + UI.pad + 'px', borderRadius: UI.radius, cursor: 'pointer', minWidth: 0, width: '100%', boxSizing: 'border-box',
+          display: 'flex', alignItems: 'center', gap: 6, minHeight: UI.row, boxSizing: 'border-box',
+          padding: '5px ' + UI.pad + 'px 5px ' + (UI.pad + indent * 14) + 'px', borderRadius: UI.radius, cursor: 'pointer', minWidth: 0, width: '100%',
           background: selected ? C.active : 'transparent', fontSize: UI.font, color: C.ink
         }
       },
+        toggle ? h('button', {
+          title: toggle ? '展开/收起' : '', 'aria-label': '展开/收起',
+          onClick: (ev) => { ev.stopPropagation(); onToggle() },
+          className: 'tether-hover',
+          style: { width: 18, height: 18, flex: '0 0 auto', display: 'grid', placeItems: 'center', border: 0, borderRadius: 4, background: 'transparent', color: C.mute, cursor: 'pointer' }
+        }, h(Glyph, { name: toggle, size: 13, stroke: 1.9 })) : null,
         icon ? h('span', { style: { width: UI.icon, height: UI.icon, display: 'grid', placeItems: 'center', color: iconColor || C.mute, flex: '0 0 auto' } }, typeof icon === 'string' ? h(Glyph, { name: icon, size: UI.icon, stroke: 1.8 }) : icon) : null,
         h('span', { style: { minWidth: 0, flex: '1 1 auto', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: '18px' } }, title),
         right ? h('span', { className: 'tether-num', style: { flex: '0 0 auto', fontSize: 10, color: C.mute, whiteSpace: 'nowrap' } }, right) : null,
+        action ? h('button', {
+          title: actionTitle || action, 'aria-label': actionTitle || action,
+          onClick: (ev) => { ev.stopPropagation(); if (onAction) onAction() },
+          className: 'tether-hover',
+          style: { width: 24, height: 24, flex: '0 0 auto', display: 'grid', placeItems: 'center', border: 0, borderRadius: 5, background: 'transparent', color: C.mute, cursor: 'pointer' }
+        }, typeof action === 'string' ? h(Glyph, { name: action, size: 16, stroke: 1.8 }) : action) : null,
         hint ? h('span', { style: { flex: '0 0 auto', fontSize: 9.5, color: C.mute, border: 0, borderRadius: 999, padding: '0 5px', lineHeight: '15px', background: C.bg } }, hint) : null
       )
     }
 
+    function FileTree({ roots, children, open, onToggle, onOpenFile, selected }) {
+      const rows = []
+      const walk = (node, depth) => {
+        const isDir = node.dir !== false
+        const expanded = !!open[node.path]
+        const kids = children[node.path]
+        const color = selected === node.path ? C.ink : C.ink
+        rows.push(h('div', {
+          key: node.path, role: 'button', tabIndex: 0, title: node.path,
+          onClick: () => isDir ? onToggle(node) : onOpenFile(node),
+          onKeyDown: (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); if (isDir) onToggle(node); else onOpenFile(node) } },
+          className: 'tether-press tether-hover',
+          style: {
+            display: 'flex', alignItems: 'center', gap: 6, minHeight: 28, boxSizing: 'border-box',
+            padding: '4px ' + UI.pad + 'px 4px ' + (UI.pad + (depth + 1) * 12) + 'px', borderRadius: 5,
+            background: selected === node.path ? C.active : 'transparent', color, fontSize: 12.5, cursor: 'pointer', minWidth: 0
+          }
+        },
+          h('span', { style: { width: 12, flex: '0 0 auto', display: 'grid', placeItems: 'center', color: C.mute } },
+            isDir ? h(Glyph, { name: expanded ? 'chevronDown' : 'chevronRight', size: 12, stroke: 1.9 }) : null),
+          h('span', { style: { width: 12, flex: '0 0 auto', display: 'grid', placeItems: 'center', color: C.mute } },
+            h(Glyph, { name: isDir ? 'workspace' : 'file', size: 12, stroke: 1.8 })),
+          h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: '1 1 auto', minWidth: 0 } }, node.name || node.path),
+          !isDir && node.size != null ? h('span', { className: 'tether-num', style: { flex: '0 0 auto', fontSize: 10, color: C.mute } }, formatBytes(node.size)) : null
+        ))
+        if (isDir && expanded) {
+          if (kids === undefined) rows.push(h('div', { key: node.path + ':loading', style: { padding: '3px ' + UI.pad + 'px 3px ' + (UI.pad + (depth + 2) * 12) + 'px', fontSize: 11.5, color: C.mute } }, '加载中…'))
+          else kids.forEach((child) => walk(child, depth + 1))
+        }
+      }
+      roots.forEach((group) => {
+        rows.push(h('div', { key: 'g:' + group.id, style: { fontSize: UI.header, fontWeight: 'var(--tether-strong, 600)', color: C.mute, letterSpacing: 0.4, margin: (group.first ? 2 : UI.gapGroup) + 'px ' + UI.pad + 'px 4px' } }, group.label))
+        group.nodes.forEach((node) => walk(node, 0))
+      })
+      return h('div', null, rows)
+    }
+
     function SidePanel(props) {
       const {
-        panel, width, hidden, resizing, onResizeStart, onResetWidth, onCollapse, devices, localDevice, deviceId, onSelectDevice,
-        projects, project, onSelectProject, onNewProject, newProjectDisabled,
-        nativeSessions, runs, sessionId, runId, onSelectSession, onSelectRun
+        panel, width, hidden, resizing, onResizeStart, onResetWidth, onCollapse,
+        devices, localDevice, deviceId, onSelectDevice,
+        workspaces, openWorkspaces, onToggleWorkspace, onSelectWorkspace, selectedWorkspacePath,
+        onNewWorkspace, newWorkspaceDisabled, onNewSession, ungrouped, freshSession,
+        sessionId, runId, onSelectSession, onSelectRun,
+        treeRoots, treeChildren, treeOpen, onToggleTree, onOpenFile, treeSelected
       } = props
-      const title = panel === 'devices' ? '设备' : (panel === 'projects' ? '项目' : '对话')
-      const action = panel === 'projects' ? h('button', {
-        title: newProjectDisabled ? '当前节点不支持新建项目' : '新建项目', 'aria-label': '新建项目',
-        onClick: onNewProject, disabled: newProjectDisabled, className: 'tether-hover',
-        style: { width: 26, height: 26, display: 'grid', placeItems: 'center', border: 0, borderRadius: UI.radius, background: 'transparent', color: newProjectDisabled ? C.line : C.mute, cursor: newProjectDisabled ? 'not-allowed' : 'pointer' }
-      }, h(Glyph, { name: 'plus', size: 14 })) : null
+      const title = panel === 'devices' ? '设备' : (panel === 'files' ? '文件' : '工作区')
+      const action = panel === 'workspaces' ? h('button', {
+        title: newWorkspaceDisabled ? '当前节点不支持新建工作区' : '新建工作区', 'aria-label': '新建工作区',
+        onClick: onNewWorkspace, disabled: newWorkspaceDisabled, className: 'tether-hover',
+        style: { width: 26, height: 26, display: 'grid', placeItems: 'center', border: 0, borderRadius: UI.radius, background: 'transparent', color: newWorkspaceDisabled ? C.mute : C.mute, cursor: newWorkspaceDisabled ? 'not-allowed' : 'pointer' }
+      }, h(Glyph, { name: 'plus', size: 18, stroke: 1.9 })) : null
 
       const section = (id, content) => h('div', {
-        className: 'tether-scroll',
+        className: 'tether-scroll', 'data-panel': id,
         style: { display: panel === id ? 'block' : 'none', flex: '1 1 auto', minHeight: 0, overflowY: 'auto', padding: '2px ' + UI.pad + 'px ' + UI.pad + 'px' }
       }, content)
 
@@ -442,26 +489,32 @@ window.__ModuleLoader__.load({
         hint: d.device_id === localDevice ? 'local' : null,
         right: d.online ? null : 'offline'
       }))
-      const projectRows = ((projects && projects.workspaces) || []).map((w) => h(SideRow, {
-        key: w.path, selected: project && project.path === w.path, title: w.name, onClick: () => onSelectProject(w),
-        icon: w.kind === 'dsh' ? 'projects' : 'devices', iconColor: C.mute
-      }))
-      const nativeRows = nativeSessions.map((s) => h(SideRow, {
-        key: s.session_id, selected: s.session_id === sessionId, title: s.title || s.session_id,
-        onClick: () => onSelectSession(s.session_id),
-        icon: 'chat', iconColor: s.status === 'running' ? C.blue : C.green,
-        right: s.status === 'running' ? '运行中' : timeText((s.updated_at || 0) * 1000)
-      }))
-      const runRows = runs.map((r) => h(SideRow, {
-        key: r.run_id, selected: r.run_id === runId, title: shortText(r.prompt, 42),
-        onClick: () => onSelectRun(r.run_id),
-        icon: 'chat', iconColor: r.state === 'completed' ? C.green : (['failed', 'unknown'].includes(r.state) ? C.red : C.blue),
-        right: r.state
-      }))
-      const groupLabel = (text, first) => h('div', {
-        style: { fontSize: UI.header, fontWeight: 'var(--tether-strong, 600)', color: C.mute, letterSpacing: 0.4, margin: (first ? 2 : UI.gapGroup) + 'px ' + UI.pad + 'px 4px' }
-      }, text)
 
+      const sessionRow = (s, indent) => h(SideRow, {
+        key: s.key, selected: s.type === 'fresh' ? freshSession : (s.key === (s.type === 'run' ? 'run:' + runId : 'session:' + sessionId)),
+        title: s.title || s.session_id || s.run_id,
+        onClick: () => s.type === 'run' ? onSelectRun(s) : (s.type === 'fresh' ? null : onSelectSession(s)),
+        indent, icon: 'chat',
+        iconColor: s.status === 'running' || s.state === 'running' || s.type === 'fresh' ? C.blue : (s.state === 'failed' || s.status === 'failed' ? C.red : C.green),
+        hint: s.source === 'Tether' ? 'Tether' : 'DSH',
+        right: s.type === 'run' ? s.state : (s.type === 'fresh' ? '新会话' : (s.status === 'running' ? '运行中' : timeText((s.updated_at || 0) * 1000)))
+      })
+
+      const workspaceRows = workspaces.map((w) => {
+        const open = openWorkspaces[w.path] !== false
+        return h(React.Fragment, { key: w.path },
+          h(SideRow, {
+            selected: selectedWorkspacePath === w.path, title: w.name, onClick: () => onSelectWorkspace(w),
+            icon: 'workspace', iconColor: C.mute, hint: w.source,
+            toggle: open ? 'chevronDown' : 'chevronRight', onToggle: () => onToggleWorkspace(w.path),
+            action: 'plus', actionTitle: '新建会话', onAction: () => onNewSession(w)
+          }),
+          open ? (w.sessions || []).map((s) => sessionRow(s, 1)) : null
+        )
+      })
+      const ungroupedRows = (ungrouped || []).map((s) => sessionRow(s, 0))
+
+      const fileRoots = treeRoots || []
       return h('aside', {
         'aria-label': title,
         style: { display: hidden ? 'none' : 'flex', width, flex: '0 0 auto', minHeight: 0, borderRight: 0, background: C.panel, flexDirection: 'column', position: 'relative', transition: resizing ? 'none' : 'width 180ms cubic-bezier(.2,.85,.2,1.15)', willChange: 'width' }
@@ -469,13 +522,16 @@ window.__ModuleLoader__.load({
         h(SidePanelHeader, { title, action, onCollapse }),
         h('div', { style: { flex: '1 1 auto', minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' } },
           section('devices', h('div', { style: { display: 'grid', gap: UI.gapRow } }, deviceRows, !deviceRows.length ? h('div', { style: { color: C.mute, fontSize: 11.5, padding: '6px ' + UI.pad + 'px' } }, '暂无设备') : null)),
-          section('projects', h('div', { style: { display: 'grid', gap: UI.gapRow } }, projectRows, !projectRows.length ? h('div', { style: { color: C.mute, fontSize: 11.5, padding: '6px ' + UI.pad + 'px' } }, '暂无项目') : null)),
-          section('conversations', h('div', null,
-            groupLabel('DSH 会话', true),
-            h('div', { style: { display: 'grid', gap: UI.gapRow } }, nativeRows, !nativeRows.length ? h('div', { style: { color: C.mute, fontSize: 11.5, padding: '2px ' + UI.pad + 'px 4px' } }, '无原生会话') : null),
-            groupLabel('Tether 任务', false),
-            h('div', { style: { display: 'grid', gap: UI.gapRow } }, runRows, !runRows.length ? h('div', { style: { color: C.mute, fontSize: 11.5, padding: '2px ' + UI.pad + 'px 4px' } }, '无任务') : null)
-          ))
+          section('workspaces', h('div', null,
+            workspaceRows,
+            !workspaces.length ? h('div', { style: { color: C.mute, fontSize: 11.5, padding: '6px ' + UI.pad + 'px' } }, '暂无工作区') : null,
+            ungroupedRows.length ? h('div', { style: { fontSize: UI.header, fontWeight: 'var(--tether-strong, 600)', color: C.mute, letterSpacing: 0.4, margin: UI.gapGroup + 'px ' + UI.pad + 'px 4px' } }, '未分组') : null,
+            ungroupedRows.length ? h('div', { style: { display: 'grid', gap: UI.gapRow } }, ungroupedRows) : null
+          )),
+          section('files', h(FileTree, {
+            roots: fileRoots, children: treeChildren, open: treeOpen, selected: treeSelected,
+            onToggle: onToggleTree, onOpenFile
+          }))
         ),
         h('div', {
           className: 'tether-resizer', 'data-active': resizing ? 'true' : undefined,
@@ -493,10 +549,9 @@ window.__ModuleLoader__.load({
       const [projects, setProjects] = React.useState(null)
       const [project, setProject] = React.useState(null)
       const [view, setView] = usePersisted('tether.ui.view', 'chat')
-      const [activePanel, setActivePanel] = usePersisted('tether.ui.panel', 'conversations')
+      const [activePanel, setActivePanel] = usePersisted('tether.ui.panel.v2', 'workspaces')
       const [sidebarCollapsed, setSidebarCollapsed] = usePersisted('tether.ui.panelCollapsed', false)
-      const [sidebarWidth, setSidebarWidth] = usePersisted('tether.ui.panelWidth', UI.defaultSide)
-      const [fileListWidth, setFileListWidth] = usePersisted('tether.ui.fileListWidth', UI.defaultFiles)
+      const [sidebarWidth, setSidebarWidth] = usePersisted('tether.ui.panelWidth.v2', UI.defaultSide)
       const [resizing, setResizing] = React.useState(false)
       const [notice, setNotice] = React.useState('')
       const [busy, setBusy] = React.useState(false)
@@ -517,11 +572,16 @@ window.__ModuleLoader__.load({
       const [ask, setAsk] = React.useState(null)
       const [path, setPath] = React.useState('')
       const [pathDraft, setPathDraft] = React.useState('')
-      const [listing, setListing] = React.useState(null)
       const [selected, setSelected] = React.useState(null)
       const [file, setFile] = React.useState(null)
       const [draft, setDraft] = React.useState('')
       const [dirty, setDirty] = React.useState(false)
+      const [workspaceOpen, setWorkspaceOpen] = React.useState({})
+      const [treeChildren, setTreeChildren] = React.useState({})
+      const [treeOpen, setTreeOpen] = React.useState({})
+      const [treeSelected, setTreeSelected] = React.useState('')
+      const [drives, setDrives] = React.useState([])
+      const [freshSession, setFreshSession] = React.useState(false)
 
       const fail = (e) => {
         if (e && e.code === 'node_update_required') { setNativeError('节点待更新'); return }
@@ -552,7 +612,6 @@ window.__ModuleLoader__.load({
       const device = state && state.devices.find((d) => d.device_id === deviceId)
       const deviceOnline = !!(device && device.online)
       const safeSidebarWidth = clamp(sidebarWidth, UI.minSide, UI.maxSide)
-      const safeFileListWidth = clamp(fileListWidth, UI.minFiles, UI.maxFiles)
 
       React.useEffect(() => {
         if (!deviceId) { setPolicy(null); return }
@@ -585,7 +644,7 @@ window.__ModuleLoader__.load({
         }
       }, [deviceId])
 
-      React.useEffect(() => { setProject(null); setPath(''); setPathDraft(''); setListing(null); setFile(null); setSelected(null); setSessionId(''); setSessionData(null); setRunId(''); setNativeLoaded(false); loadProjects() }, [deviceId, loadProjects])
+      React.useEffect(() => { setProject(null); setPath(''); setPathDraft(''); setFile(null); setSelected(null); setSessionId(''); setSessionData(null); setRunId(''); setNativeLoaded(false); setWorkspaceOpen({}); setTreeChildren({}); setTreeOpen({}); setTreeSelected(''); setDrives([]); loadProjects() }, [deviceId, loadProjects])
 
       const loadNative = React.useCallback(async () => {
         if (!deviceId) return
@@ -599,6 +658,15 @@ window.__ModuleLoader__.load({
 
       React.useEffect(() => { loadNative(); const t = setInterval(loadNative, 8000); return () => clearInterval(t) }, [loadNative])
 
+      React.useEffect(() => {
+        if (!deviceId) { setDrives([]); return }
+        let live = true
+        api('/api/devices/' + encodeURIComponent(deviceId) + '/drives')
+          .then((data) => { if (live) setDrives(data.drives || []) })
+          .catch(() => { if (live) setDrives([]) })
+        return () => { live = false }
+      }, [deviceId])
+
       const lastProject = React.useRef('')
       React.useEffect(() => {
         const currentPath = project ? project.path : ''
@@ -609,12 +677,50 @@ window.__ModuleLoader__.load({
         setPath(currentPath)
         setPathDraft(currentPath)
         setFile(null)
-        setListing(null)
       }, [project])
 
-      const nativeForProject = project ? native.filter((s) => samePath(s.cwd, project.path)) : []
-      const nativeKey = nativeForProject.map((s) => s.session_id).join(',')
-      const runKey = ((state && state.runs) || []).map((r) => r.run_id).join(',')
+      const nativeKey = native.map((s) => s.session_id).sort().join(',')
+      const sessions = (state && state.sessions) || []
+      const workspaceOf = (run) => {
+        const s = sessions.find((x) => x.session_id === run.session_id)
+        return s ? s.workspace : ''
+      }
+      const runs = ((state && state.runs) || []).filter((r) => !deviceId || r.device_id === deviceId).slice(0, 80)
+      const currentRun = runs.find((r) => r.run_id === runId)
+
+      const nativeIds = new Set(native.map((s) => s.session_id))
+      const nativeItems = native.map((s) => ({
+        type: 'native', key: 'session:' + s.session_id, session_id: s.session_id,
+        title: s.title || s.session_id, status: s.status, updated_at: s.updated_at,
+        workspace: s.cwd, cwd: s.cwd,
+        source: s.session_id.startsWith('tether-') ? 'Tether' : 'DSH'
+      }))
+      const virtualRuns = runs.filter((r) => {
+        const expected = 'tether-' + r.session_id
+        const ds = (r.outcome || {}).dsh_session
+        const fresh = r.created_at && (Date.now() / 1000 - r.created_at) < 900
+        return !nativeIds.has(expected) && !(ds && nativeIds.has(ds))
+          && (['queued', 'dispatching', 'running', 'cancelling'].includes(r.state) || fresh)
+      }).map((r) => ({
+        type: 'run', key: 'run:' + r.run_id, run_id: r.run_id,
+        title: shortText(r.prompt, 54), state: r.state, updated_at: r.created_at,
+        workspace: workspaceOf(r), source: 'Tether'
+      }))
+      const freshItem = freshSession && project ? {
+        type: 'fresh', key: 'fresh', title: '新会话', state: 'queued',
+        updated_at: Date.now() / 1000, workspace: project.path, source: 'Tether'
+      } : null
+      const allSessions = [...nativeItems, ...virtualRuns, ...(freshItem ? [freshItem] : [])]
+        .sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0))
+      const projectPaths = ((projects && projects.workspaces) || []).filter((w) => w.kind !== 'node').map((w) => w.path)
+      const workspaceNodes = ((projects && projects.workspaces) || []).filter((w) => w.kind !== 'node').map((w) => ({
+        ...w,
+        name: w.name === 'default-workspace' ? '默认工作区' : w.name,
+        source: (w.kind === 'dsh' && !(projects && projects.root && normPath(w.path).startsWith(normPath(projects.root)))) ? 'DSH' : 'Tether',
+        sessions: allSessions.filter((s) => samePath(s.workspace, w.path))
+      }))
+      const ungrouped = allSessions.filter((s) => !projectPaths.some((p) => samePath(s.workspace, p)))
+      const workspaceKey = workspaceNodes.map((w) => w.path + ':' + w.sessions.map((s) => s.key).join('|')).join(';')
 
       React.useEffect(() => {
         if (!sessionId || !deviceId) { setSessionData(null); setSessionLoading(false); return }
@@ -631,28 +737,35 @@ window.__ModuleLoader__.load({
         return () => { live = false; clearInterval(t) }
       }, [sessionId, deviceId])
 
-      const sessions = (state && state.sessions) || []
-      const workspaceOf = (run) => {
-        const s = sessions.find((x) => x.session_id === run.session_id)
-        return s ? s.workspace : ''
-      }
-      const runs = ((state && state.runs) || []).filter((r) =>
-        (!deviceId || r.device_id === deviceId) && (!project || samePath(workspaceOf(r), project.path))
-      ).slice(0, 40)
-      const currentRun = runs.find((r) => r.run_id === runId)
-
       React.useEffect(() => {
-        if (sessionId) { setSessionLoading(false); return }
-        if (!nativeLoaded) return
-        if (runId || sessionId) return
-        if (nativeForProject.length) setSessionId(nativeForProject[0].session_id)
-        else if (runs.length) setRunId(runs[0].run_id)
-      }, [project, nativeLoaded, nativeKey, runKey, sessionId, runId])
+        if (!project) { setSessionId(''); setRunId(''); return }
+        if (freshSession) return
+        const node = workspaceNodes.find((w) => w.path === project.path)
+        if (!node) return
+        const hasSession = sessionId && node.sessions.some((s) => s.type === 'native' && s.session_id === sessionId)
+        const hasRun = runId && node.sessions.some((s) => s.type === 'run' && s.run_id === runId)
+        if (hasSession || hasRun) return
+        const first = node.sessions.find((s) => s.type !== 'fresh')
+        if (first) {
+          if (first.type === 'native') { setSessionId(first.session_id); setRunId('') }
+          else { setRunId(first.run_id); setSessionId('') }
+        }
+      }, [project, workspaceKey, sessionId, runId, freshSession])
 
       React.useEffect(() => {
         if (!sessionId || !nativeLoaded) return
         if (!native.some((s) => s.session_id === sessionId)) { setSessionId(''); setSessionData(null); setSessionLoading(false) }
       }, [nativeKey, nativeLoaded, sessionId])
+
+      React.useEffect(() => {
+        if (!runId) return
+        const run = runs.find((r) => r.run_id === runId)
+        if (!run) return
+        const expected = 'tether-' + run.session_id
+        const target = native.find((s) => s.session_id === expected)
+          || (((run.outcome || {}).dsh_session) ? native.find((s) => s.session_id === run.outcome.dsh_session) : null)
+        if (target) { setSessionId(target.session_id); setRunId('') }
+      }, [nativeKey, runId])
 
       React.useEffect(() => {
         if (!runId) { setRunEvents([]); return }
@@ -699,10 +812,12 @@ window.__ModuleLoader__.load({
                  turns: run ? [{ turn: 1, user: { text: run.prompt }, blocks, state: run.state === 'completed' ? 'completed' : (run.state === 'failed' ? 'failed' : 'running'), steps: 0, usage: {} }] : [] }
       }
 
+      const currentWorkspace = workspaceNodes.find((w) => w.path === (project && project.path))
+      const currentSessions = currentWorkspace ? currentWorkspace.sessions : []
       const conversation = sessionId ? sessionData : (currentRun ? runConversation(currentRun, runEvents) : null)
       const conversationTitle = sessionId
         ? ((sessionData && sessionData.title) || (native.find((s) => s.session_id === sessionId) || {}).title || 'DSH 会话')
-        : (currentRun ? shortText(currentRun.prompt, 50) : '')
+        : (currentRun ? shortText(currentRun.prompt, 50) : (freshSession ? '新会话' : ''))
       const conversationStatus = sessionId
         ? ((sessionData && sessionData.status) || 'idle')
         : (currentRun ? currentRun.state : 'idle')
@@ -711,16 +826,20 @@ window.__ModuleLoader__.load({
         if (!task.trim() || !deviceId || !project) return
         setBusy(true)
         try {
-          let session = currentRun || null
-          let sid = session ? session.session_id : ''
-          if (!sid) {
-            const existing = sessions.filter((s) => s.device_id === deviceId && samePath(s.workspace, project.path))
-            sid = existing.length ? existing[existing.length - 1].session_id : ''
+          let sid = ''
+          if (!freshSession) {
+            const session = currentRun
+            sid = session ? session.session_id : ''
+            if (!sid) {
+              const existing = sessions.filter((s) => s.device_id === deviceId && samePath(s.workspace, project.path))
+              sid = existing.length ? existing[existing.length - 1].session_id : ''
+            }
           }
           if (!sid) {
             const created = await post('/api/sessions', { device_id: deviceId, workspace: project.path })
             sid = created.session_id
           }
+          setFreshSession(false)
           const run = await post('/api/sessions/' + encodeURIComponent(sid) + '/runs', {
             request_id: 'ui-' + Date.now() + '-' + Math.random().toString(16).slice(2),
             prompt: task.trim()
@@ -731,6 +850,8 @@ window.__ModuleLoader__.load({
           setRunId(run.run_id)
           setView('chat')
           loadState()
+          setTimeout(loadNative, 1200)
+          setTimeout(loadNative, 4000)
         } catch (e) { fail(e) } finally { setBusy(false) }
       }
 
@@ -757,52 +878,71 @@ window.__ModuleLoader__.load({
         } catch (e) { fail(e) } finally { setBusy(false) }
       }
 
-      const loadDir = React.useCallback(async (target) => {
-        if (!deviceId || !target) return
-        setBusy(true)
-        try {
-          const data = await post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/list', { path: target })
-          setListing(data); setPath(data.path); setPathDraft(data.path); setSelected(null)
-        } catch (e) { fail(e) } finally { setBusy(false) }
-      }, [deviceId])
-      React.useEffect(() => { if (view === 'files' && path) loadDir(path) }, [view, path, loadDir])
-
       const openFile = async (entry) => {
-        if (entry.dir) { setPath(entry.path); setPathDraft(entry.path); return }
+        if (entry.dir) { setPath(entry.path); setPathDraft(entry.path); setTreeSelected(entry.path); setSelected(entry); return }
         setBusy(true)
         try {
           const data = await post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/read', { path: entry.path })
           const stat = await post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/stat', { path: entry.path })
+          const parent = String(entry.path).replace(/[\\/][^\\/]+$/, '')
           setFile({ ...data, writable: stat.writable }); setDraft(data.binary ? '' : data.text); setDirty(false); setSelected(entry)
+          setPath(parent); setPathDraft(parent); setTreeSelected(entry.path); setView('files')
         } catch (e) { fail(e) } finally { setBusy(false) }
+      }
+
+      const loadTreeDir = async (target) => {
+        if (!deviceId || !target) return
+        try {
+          const data = await post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/list', { path: target })
+          setTreeChildren((current) => ({ ...current, [target]: data.entries }))
+        } catch (e) {
+          setTreeChildren((current) => ({ ...current, [target]: [] }))
+          fail(e)
+        }
+      }
+
+      const toggleTree = (node) => {
+        const target = node.path
+        const next = !treeOpen[target]
+        setTreeSelected(target); setPath(target); setPathDraft(target); setSelected(node.dir ? node : null)
+        setTreeOpen((current) => ({ ...current, [target]: next }))
+        if (next && treeChildren[target] === undefined) loadTreeDir(target)
       }
       const saveFile = async () => {
         if (!file || file.binary) return
         setBusy(true)
         try {
           await post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/write', { path: file.path, text: draft })
-          setDirty(false); setNotice('Saved ' + file.path); loadDir(path)
+          setDirty(false); setNotice('Saved ' + file.path); loadTreeDir(path)
         } catch (e) { fail(e) } finally { setBusy(false) }
       }
       const askValue = (title, value, onOk) => setAsk({ title, value: value || '', onOk })
-      const newFolder = () => askValue('新建文件夹', '', async (name) => { try { await post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/mkdir', { path: path + '\\' + name }); loadDir(path) } catch (e) { fail(e) } })
-      const newFile = () => askValue('新建文件', '', async (name) => { const target = path + '\\' + name; try { await post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/write', { path: target, text: '' }); loadDir(path); openFile({ path: target, dir: false, name }) } catch (e) { fail(e) } })
-      const renameEntry = () => { if (selected) askValue('重命名', selected.name, async (name) => { try { await post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/rename', { path: selected.path, dest: path + '\\' + name }); setSelected(null); if (file && file.path === selected.path) setFile(null); loadDir(path) } catch (e) { fail(e) } }) }
+      const newFolder = () => askValue('新建文件夹', '', async (name) => { try { await post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/mkdir', { path: path + '\\' + name }); loadTreeDir(path) } catch (e) { fail(e) } })
+      const newFile = () => askValue('新建文件', '', async (name) => { const target = path + '\\' + name; try { await post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/write', { path: target, text: '' }); loadTreeDir(path); openFile({ path: target, dir: false, name }) } catch (e) { fail(e) } })
+      const renameEntry = () => { if (selected) askValue('重命名', selected.name, async (name) => { try { await post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/rename', { path: selected.path, dest: path + '\\' + name }); setSelected(null); if (file && file.path === selected.path) setFile(null); loadTreeDir(path) } catch (e) { fail(e) } }) }
       const deleteEntry = async () => {
         if (!selected) return
         if (!window.confirm('Move "' + selected.name + '" to .tether-trash?')) return
-        try { await post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/delete', { path: selected.path }); setSelected(null); if (file && file.path === selected.path) setFile(null); loadDir(path) } catch (e) { fail(e) }
+        try { await post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/delete', { path: selected.path }); setSelected(null); if (file && file.path === selected.path) setFile(null); loadTreeDir(path) } catch (e) { fail(e) }
       }
       const newProject = () => {
         if (!projects) return
-        askValue('新建项目（' + projects.root + '）', '', async (name) => {
+        askValue('新建工作区（' + projects.root + '）', '', async (name) => {
           try {
             const target = projects.root + '\\' + name
             await post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/mkdir', { path: target })
+            await post('/api/devices/' + encodeURIComponent(deviceId) + '/dsh/workspaces/register', { path: target, title: name }).catch(() => {})
             await loadProjects()
-            setProject({ name, path: target, kind: 'tether' }); setView('files'); setPath(target); setPathDraft(target); loadDir(target)
+            setProject({ name, path: target, kind: 'tether', source: 'Tether' })
+            setWorkspaceOpen((current) => ({ ...current, [target]: true }))
+            setFreshSession(true); setSessionId(''); setRunId(''); setView('chat')
           } catch (e) { fail(e) }
         })
+      }
+
+      const newSessionFor = (workspace) => {
+        setProject(workspace); setWorkspaceOpen((current) => ({ ...current, [workspace.path]: true }))
+        setFreshSession(true); setSessionId(''); setRunId(''); setTask(''); setView('chat')
       }
       const submitAsk = () => {
         if (!ask) return
@@ -812,8 +952,10 @@ window.__ModuleLoader__.load({
       }
 
       const selectPanel = (id) => {
-        if (id === activePanel && !sidebarCollapsed) setSidebarCollapsed(true)
-        else { setActivePanel(id); setSidebarCollapsed(false) }
+        if (id === activePanel && !sidebarCollapsed) { setSidebarCollapsed(true); return }
+        setActivePanel(id); setSidebarCollapsed(false)
+        if (id === 'files') setView('files')
+        if (id === 'workspaces') setView('chat')
       }
 
       const dragWidth = (event, start, setter, min, max) => {
@@ -837,9 +979,7 @@ window.__ModuleLoader__.load({
       }
 
       const startSidebarResize = (event) => dragWidth(event, safeSidebarWidth, setSidebarWidth, UI.minSide, UI.maxSide)
-      const startFileResize = (event) => dragWidth(event, safeFileListWidth, setFileListWidth, UI.minFiles, UI.maxFiles)
 
-      const rowStyle = (active) => ({ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 8px', borderRadius: 6, cursor: 'pointer', background: active ? C.active : 'transparent', fontSize: 12.5 })
       const modelText = sessionId && sessionData ? [sessionData.model, sessionData.agent_preset].filter(Boolean).join(' · ') : ''
 
       return h('div', { className: 'tether-root', style: { position: 'relative', height: '100%', display: 'flex', flexDirection: 'column', background: C.bg, color: C.ink, fontSize: 13, fontWeight: 'var(--tether-body, 400)', overflow: 'hidden' } },
@@ -878,17 +1018,42 @@ window.__ModuleLoader__.load({
             localDevice: state && state.local_device,
             deviceId,
             onSelectDevice: setDeviceId,
-            projects,
-            project,
-            onSelectProject: (w) => { setProject(w); setView('chat') },
-            onNewProject: newProject,
-            newProjectDisabled: !deviceOnline || !projects || !!projects.synthetic,
-            nativeSessions: nativeForProject,
-            runs,
+            workspaces: workspaceNodes,
+            openWorkspaces: workspaceOpen,
+            onToggleWorkspace: (path) => setWorkspaceOpen((current) => ({ ...current, [path]: current[path] === false ? true : false })),
+            onSelectWorkspace: (w) => {
+              setProject(w); setWorkspaceOpen((current) => ({ ...current, [w.path]: true })); setView('chat'); setFreshSession(false)
+            },
+            selectedWorkspacePath: project && project.path,
+            onNewWorkspace: newProject,
+            newWorkspaceDisabled: !deviceOnline || !projects || !!projects.synthetic,
+            onNewSession: newSessionFor,
+            ungrouped,
+            freshSession,
             sessionId,
             runId,
-            onSelectSession: (id) => { setSessionId(id); setRunId(''); setView('chat') },
-            onSelectRun: (id) => { setRunId(id); setSessionId(''); setView('chat') }
+            onSelectSession: (s) => {
+              const w = workspaceNodes.find((item) => samePath(item.path, s.workspace))
+              if (w) setProject(w)
+              setSessionId(s.session_id); setRunId(''); setView('chat'); setFreshSession(false)
+            },
+            onSelectRun: (s) => {
+              const w = workspaceNodes.find((item) => samePath(item.path, s.workspace))
+              if (w) setProject(w)
+              setRunId(s.run_id); setSessionId(''); setView('chat'); setFreshSession(false)
+            },
+            treeRoots: [
+              { id: 'workspaces', label: '工作区', first: true, nodes: [
+                ...(projects && projects.root ? [{ name: 'Tether 工作区', path: projects.root, dir: true }] : []),
+                ...workspaceNodes.map((w) => ({ name: w.name, path: w.path, dir: true }))
+              ] },
+              { id: 'drives', label: '此电脑', nodes: drives.map((d) => ({ name: d.name, path: d.path, dir: true })) }
+            ],
+            treeChildren,
+            treeOpen,
+            onToggleTree: toggleTree,
+            onOpenFile: openFile,
+            treeSelected
           }),
           h('main', { style: { flex: '1 1 auto', display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 } },
             view === 'chat' ? h('div', { style: { display: 'flex', flexDirection: 'column', flex: '1 1 auto', minHeight: 0 } },
@@ -896,7 +1061,7 @@ window.__ModuleLoader__.load({
                 h('div', { style: { minWidth: 0, flex: '1 1 auto' } },
                   h('div', { style: { fontSize: 14, fontWeight: 'var(--tether-strong, 600)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, conversationTitle || '对话'),
                   h('div', { style: { fontSize: 11, color: C.mute, marginTop: 1 } }, [
-                    sessionId ? '原生 DSH 会话 · 只读' : (runId ? 'Tether 任务 · 目标机执行' : '选择左侧会话或发起任务'),
+                    sessionId ? '原生 DSH 会话 · 只读' : (runId ? '会话 · 目标机执行' : (freshSession ? '新会话 · 目标机工作区' : '选择左侧会话或发起任务')),
                     modelText ? ' · ' + modelText : ''
                   ].join(''))
                 ),
@@ -905,58 +1070,39 @@ window.__ModuleLoader__.load({
               h(Conversation, {
                 data: conversation, loading: sessionLoading && !sessionData,
                 live: (sessionData && sessionData.status === 'running') || (currentRun && ['queued', 'dispatching', 'running', 'cancelling'].includes(currentRun.state)),
-                emptyText: nativeError && !runId ? '目标节点未提供原生会话；可以直接在下方发起 Tether 任务' : (nativeForProject.length ? '选择一个会话' : '还没有对话，直接发一条任务开始')
+                emptyText: freshSession ? '输入任务开始新会话' : (nativeError && !runId ? '目标节点未提供原生会话；可以直接在下方发起任务' : (currentSessions.length ? '选择一个会话' : '还没有对话，直接发一条任务开始'))
               }),
               h(Composer, {
                 value: task, onChange: setTask, onSend: send, busy,
                 disabled: !deviceOnline || !project,
-                note: sessionId ? '原生 DSH 会话只读；发送会在同一工作区新建 Tether 任务，不写入上面的原生会话' : (runId ? '继续当前 Tether 会话' : '发送到目标机的工作区')
+                note: sessionId ? '原生 DSH 会话只读；发送会在同一工作区新建会话' : (runId ? '继续当前会话' : '发送到目标机的工作区')
               })
             ) : h('div', { style: { display: 'flex', flexDirection: 'column', flex: '1 1 auto', minHeight: 0 } },
               h('div', { style: { borderBottom: 0, background: C.panel, flex: '0 0 auto' } },
                 h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, padding: '7px 10px 4px' } },
                   btn('↑', () => { if (!path) return; const parent = path.replace(/[\\/]+$/, '').replace(/[\\/][^\\/]+$/, ''); if (parent && parent !== path) { setPath(parent); setPathDraft(parent) } }, { title: '上级目录' }),
-                  h('input', { value: pathDraft, onChange: (ev) => setPathDraft(ev.target.value), onKeyDown: (ev) => { if (ev.key === 'Enter') loadDir(pathDraft) }, spellCheck: false, style: { flex: '1 1 auto', minWidth: 0, height: 28, border: 0, borderRadius: 6, padding: '0 8px', background: C.bg, fontFamily: 'Consolas, monospace', fontSize: 12 } }),
-                  btn('刷新', () => loadDir(path), { disabled: !path }),
-                  listing && !listing.writable ? pill('read-only', C.amber) : null
+                  h('input', { value: pathDraft, onChange: (ev) => setPathDraft(ev.target.value), onKeyDown: (ev) => { if (ev.key === 'Enter') { setPath(pathDraft); setTreeOpen((current) => ({ ...current, [pathDraft]: true })); loadTreeDir(pathDraft) } }, spellCheck: false, style: { flex: '1 1 auto', minWidth: 0, height: 28, border: 0, borderRadius: 6, padding: '0 8px', background: C.bg, fontFamily: 'Consolas, monospace', fontSize: 12 } }),
+                  btn('刷新', () => loadTreeDir(path), { disabled: !path })
                 ),
                 h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, padding: '0 10px 7px' } },
-                  btn('新建文件夹', newFolder, { disabled: !listing || !listing.writable }),
-                  btn('新建文件', newFile, { disabled: !listing || !listing.writable }),
+                  btn('新建文件夹', newFolder, { disabled: !path }),
+                  btn('新建文件', newFile, { disabled: !path }),
                   btn('重命名', renameEntry, { disabled: !selected }),
                   btn('删除', deleteEntry, { disabled: !selected, danger: true }),
                   selected ? h('span', { style: { marginLeft: 6, fontSize: 11.5, color: C.mute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, selected.name) : null
                 )
               ),
-              h('div', { style: { display: 'flex', flex: '1 1 auto', minHeight: 0 } },
-                h('div', { className: 'tether-scroll', style: { width: safeFileListWidth, flex: '0 0 auto', borderRight: 0, overflow: 'auto', background: C.soft, transition: resizing ? 'none' : 'width 180ms cubic-bezier(.2,.85,.2,1.15)', willChange: 'width' } },
-                  listing ? h('div', null,
-                    listing.entries.map((entry) => h('div', { key: entry.path, onClick: () => setSelected(entry), onDoubleClick: () => openFile(entry), style: { ...rowStyle(selected && selected.path === entry.path), padding: '5px 10px', borderRadius: 0 } },
-                      h('span', { style: { width: 16, color: C.mute, fontSize: 12 } }, entry.dir ? '▸' : '·'),
-                      h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: entry.hidden ? C.mute : C.ink } }, entry.name),
-                      h('span', { style: { marginLeft: 'auto', fontSize: 10, color: C.mute, whiteSpace: 'nowrap' } }, entry.dir ? '' : formatBytes(entry.size))
-                    )),
-                    !listing.entries.length ? h('div', { style: { padding: 16, color: C.mute, fontSize: 12 } }, '空目录') : null
-                  ) : h('div', { style: { padding: 16, color: C.mute, fontSize: 12 } }, path ? (busy ? '加载中…' : '无法读取') : '选择项目')
-                ),
-                h('div', {
-                  className: 'tether-resizer', 'data-active': resizing ? 'true' : undefined,
-                  onPointerDown: startFileResize, onDoubleClick: () => setFileListWidth(UI.defaultFiles),
-                  title: '拖动调整文件栏宽度，双击复位',
-                  style: { width: 7, flex: '0 0 auto', cursor: 'col-resize', background: 'transparent' }
-                }),
-                h('div', { style: { flex: '1 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column' } },
-                  file ? h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column' } },
-                    h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderBottom: 0, background: C.panel, flex: '0 0 auto' } },
-                      h('span', { style: { fontSize: 12, color: C.sub, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, file.path),
-                      file.binary ? pill('binary') : pill(formatBytes(file.size)),
-                      file.writable ? null : pill('read-only', C.amber),
-                      h('span', { style: { marginLeft: 'auto', display: 'flex', gap: 6 } }, file.writable && !file.binary ? btn(dirty ? 'Save *' : 'Save', saveFile, { primary: true, disabled: !dirty || busy }) : null)
-                    ),
-                    file.binary ? h('div', { style: { padding: 20, color: C.mute, fontSize: 12 } }, 'Binary file. Preview is not supported.')
-                      : h('textarea', { value: draft, onChange: (ev) => { setDraft(ev.target.value); setDirty(true) }, readOnly: !file.writable, spellCheck: false, style: { flex: '1 1 auto', width: '100%', boxSizing: 'border-box', resize: 'none', border: 0, outline: 'none', padding: '10px 12px', fontFamily: 'Consolas, monospace', fontSize: 12.5, lineHeight: 1.55, background: file.writable ? C.bg : C.panel, color: C.ink } })
-                  ) : h('div', { style: { display: 'grid', placeItems: 'center', height: '100%', color: C.mute, fontSize: 12 } }, path ? '双击文件查看内容' : '先从左侧选择项目')
-                )
+              h('div', { style: { flex: '1 1 auto', minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' } },
+                file ? h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column' } },
+                  h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderBottom: 0, background: C.panel, flex: '0 0 auto' } },
+                    h('span', { style: { fontSize: 12, color: C.sub, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, file.path),
+                    file.binary ? pill('binary') : pill(formatBytes(file.size)),
+                    file.writable ? null : pill('read-only', C.amber),
+                    h('span', { style: { marginLeft: 'auto', display: 'flex', gap: 6 } }, file.writable && !file.binary ? btn(dirty ? 'Save *' : 'Save', saveFile, { primary: true, disabled: !dirty || busy }) : null)
+                  ),
+                  file.binary ? h('div', { style: { padding: 20, color: C.mute, fontSize: 12 } }, 'Binary file. Preview is not supported.')
+                    : h('textarea', { value: draft, onChange: (ev) => { setDraft(ev.target.value); setDirty(true) }, readOnly: !file.writable, spellCheck: false, style: { flex: '1 1 auto', width: '100%', boxSizing: 'border-box', resize: 'none', border: 0, outline: 'none', padding: '10px 12px', fontFamily: 'Consolas, monospace', fontSize: 12.5, lineHeight: 1.55, background: file.writable ? C.bg : C.panel, color: C.ink } })
+                ) : h('div', { style: { display: 'grid', placeItems: 'center', height: '100%', color: C.mute, fontSize: 12 } }, '从左侧文件树选择文件')
               )
             )
         ),

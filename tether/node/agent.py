@@ -50,6 +50,20 @@ def default_workspaces_root() -> Path:
     return Path.home() / "TetherWorkspaces"
 
 
+def ensure_sdk_profile(home: Path) -> None:
+    """Make the target DSH home able to run the headless SDK profile."""
+    profile = home / "profiles" / "sdk"
+    if (profile / "package.json").is_file():
+        return
+    profile.mkdir(parents=True, exist_ok=True)
+    (profile / "package.json").write_text(json.dumps({
+        "name": "dsh-profile-sdk", "private": True, "dependencies": {},
+        "dsh": {"profile": {"bundles": ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-sdk-app"]}},
+    }, indent=2), encoding="utf-8")
+    (profile / "cordis.yml").write_text("[]\n", encoding="utf-8")
+    (profile / "cordis.patch.yml").write_text("[]\n", encoding="utf-8")
+
+
 class NodeStore:
     def __init__(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -175,6 +189,8 @@ class Node:
                             data_dir=data_dir or (ROOT / ".runtime"),
                             workspaces_root=self.workspaces_root)
         self.dsh_sessions = DshSessionStore()
+        self.native_dsh_home = self.dsh_sessions.home
+        ensure_sdk_profile(self.native_dsh_home)
         self.dsh_runs: dict[str, DshRun] = {}
         self.ws: Any = None
         self.connected = False
@@ -289,6 +305,12 @@ class Node:
                 result = self.dsh_sessions.transcript(str(args.get("session_id") or ""))
                 if result is None:
                     raise FsError("DSH session not found", "not_found")
+            elif op == "workspace_register":
+                result = self.dsh_sessions.register_workspace(str(args.get("path") or ""),
+                                                            str(args.get("title") or ""))
+            elif op == "session_attach":
+                result = {"attached": self.dsh_sessions.attach_session(
+                    str(args.get("path") or ""), str(args.get("session_id") or ""))}
             else:
                 raise FsError(f"unknown dsh op: {op}", "bad_op")
             reply = {"type": "dsh_result", "req_id": req_id, "ok": True, "result": result}
@@ -349,8 +371,9 @@ class Node:
         await self.state(run_id, "running")
         prompt = str(msg.get("prompt") or "")
         session_id = str(msg.get("session_id") or "")
+        workspace = Path(str(msg.get("workspace") or self.workspace)).expanduser()
         if self.agent == "dsh":
-            self.tasks[run_id] = asyncio.create_task(self._run_dsh(run_id, session_id, prompt))
+            self.tasks[run_id] = asyncio.create_task(self._run_dsh(run_id, session_id, prompt, workspace))
         else:
             self.tasks[run_id] = asyncio.create_task(self._fake_adapter(run_id, prompt))
         if self.drop_after and not self._dropped:
@@ -424,11 +447,17 @@ class Node:
             await self.emit(run_id, "log", {"text": f"adapter error: {exc}"})
             await self.state(run_id, "failed", finish_reason="error", outcome={"error": str(exc)})
 
-    async def _run_dsh(self, run_id: str, session_id: str, prompt: str) -> None:
-        run = DshRun(self, run_id, session_id, prompt)
+    async def _run_dsh(self, run_id: str, session_id: str, prompt: str, workspace: Path) -> None:
+        run = DshRun(self, run_id, session_id, prompt, workspace=workspace,
+                     dsh_home=str(self.native_dsh_home))
         self.dsh_runs[run_id] = run
         try:
             await run.start()
+            if run.dsh_session_id:
+                try:
+                    self.dsh_sessions.attach_session(str(workspace), run.dsh_session_id)
+                except Exception as exc:  # noqa: BLE001
+                    log(f"[dsh] workspace attach failed: {exc}")
             if run.cancelled.is_set():
                 await self.state(run_id, "cancelled", finish_reason="cancelled",
                                  outcome={"reason": "user cancel", "dsh_session": run.dsh_session_id})

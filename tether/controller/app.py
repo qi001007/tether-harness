@@ -242,6 +242,11 @@ async def device_workspaces(device_id: str) -> Any:
     return await _device_fs(device_id, "workspaces")
 
 
+@app.get("/api/devices/{device_id}/drives")
+async def device_drives(device_id: str) -> Any:
+    return await _device_fs(device_id, "drives")
+
+
 @app.get("/api/devices/{device_id}/policy")
 async def device_policy(device_id: str) -> Any:
     return await _device_fs(device_id, "policy_get")
@@ -281,6 +286,11 @@ async def device_dsh_sessions(device_id: str) -> Any:
 @app.get("/api/devices/{device_id}/dsh/sessions/{session_id}")
 async def device_dsh_transcript(device_id: str, session_id: str) -> Any:
     return await _device_dsh(device_id, "transcript", {"session_id": session_id})
+
+
+@app.post("/api/devices/{device_id}/dsh/workspaces/register")
+async def device_dsh_register_workspace(device_id: str, body: dict[str, Any]) -> Any:
+    return await _device_dsh(device_id, "workspace_register", body)
 
 
 @app.get("/api/events")

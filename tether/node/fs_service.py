@@ -363,6 +363,18 @@ class FsService:
                        phase="result", result="trashed")
         return {"path": str(p), "trash": str(target)}
 
+    def _op_drives(self, _args: dict[str, Any]) -> dict[str, Any]:
+        import string
+        roots = []
+        for letter in string.ascii_uppercase:
+            path = Path(f"{letter}:\\")
+            try:
+                if path.exists():
+                    roots.append({"name": f"{letter}:", "path": str(path)})
+            except OSError:
+                continue
+        return {"drives": roots}
+
     def _op_workspaces(self, _args: dict[str, Any]) -> dict[str, Any]:
         return {"root": str(self.workspaces_root), "node_workspace": str(self.workspace),
                 "workspaces": self.policy.workspaces()}

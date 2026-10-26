@@ -18,8 +18,9 @@ run from this repo (`.venv`).
   - devices: `DESKTOP-LOCAL` (local, online), `LAPTOP-01` (online), `TAILSCALE-TEST` (offline)
   - projects: `default-workspace` (DSH), `demo` (Tether root), `Tether 工作目录` (node workspace)
   - files, task list, event stream, permission drawer
-- Screenshots: `docs/screenshots/dsh-plugin-native-chat.png`,
-  `dsh-plugin-files.png`, `dsh-plugin-run-chat.png`, `dsh-plugin-permissions.png`.
+- Screenshots: `docs/screenshots/dsh-plugin-workspaces.png`,
+  `dsh-plugin-native-chat.png`, `dsh-plugin-files.png`,
+  `dsh-plugin-permissions.png`, `dsh-plugin-dark.png`.
 
 ## Filesystem API checks
 
@@ -69,11 +70,24 @@ authoritative); the controller only proxies.
   the final answer and a 2-step turn footer.
 - `tests/test_dsh_sessions.py` covers user-message filtering, tool/result linking,
   run status and the live `assistant/attempt` stream.
-- Screenshots: `docs/screenshots/dsh-plugin-native-chat.png`,
-  `docs/screenshots/dsh-plugin-run-chat.png`,
-  `docs/screenshots/dsh-plugin-laptop-chat.png`.
+- Screenshots: `docs/screenshots/dsh-plugin-workspaces.png`,
+  `docs/screenshots/dsh-plugin-native-chat.png`.
 - The native log is read-only. The composer starts a new Tether run in the same
   workspace; native write-back (`session/prompt`) is Designed.
+
+## Native Tether task in the target DSH workspace
+
+- Registered `D:\TetherWorkspaces\demo` in `~/.dsh/storages/workspace.json`
+  (`04d50db8-9d41-443d-8c48-770a131f2143`).
+- Ran `Reply with exactly OK.` on DESKTOP-LOCAL, run `r-00aac51ff0ac`.
+- Result: `completed`, native session `tether-s-91e5ba584d36`, file
+  `~/.dsh/sessions/--D-TetherWorkspaces-demo--/tether-s-91e5ba584d36/session.v4.jsonl.zstd`.
+- The registry row for demo now lists `sessionIds: ["tether-s-91e5ba584d36"]`;
+  the same session appears in `/api/devices/DESKTOP-LOCAL/dsh/sessions`.
+- This is the record-size check for "Tether-created project/session appears in the
+  target DSH workspace, not a separate Tether history".
+- The stale `TAILSCALE-TEST` device row was deleted from the controller DB; the
+  device panel now lists only DESKTOP-LOCAL and LAPTOP-01.
 
 ## Visual system checks
 

@@ -11,7 +11,10 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import time
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -275,6 +278,61 @@ class DshSessionStore:
             })
         items.sort(key=lambda item: item.get("updated_at") or 0, reverse=True)
         return items
+
+    def _registry(self) -> Path:
+        return self.home / "storages" / "workspace.json"
+
+    def _read_registry(self) -> dict[str, Any]:
+        path = self._registry()
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            data = {}
+        data.setdefault("unit", {"name": "workspace", "version": 2})
+        data.setdefault("global", {"initialized": True, "workspaceIds": [], "archivedSessionIds": [],
+                                   "pinnedSessionIds": [], "defaultWorkspaceId": None})
+        data.setdefault("tables", {})
+        data["tables"].setdefault("workspaces", {})
+        return data
+
+    def _save_registry(self, data: dict[str, Any]) -> None:
+        path = self._registry()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.exists():
+            shutil.copy2(path, path.with_suffix(".json.tether-bak"))
+        tmp = path.with_suffix(".json.tether-tmp")
+        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        os.replace(tmp, path)
+
+    def register_workspace(self, path: str, title: str) -> dict[str, Any]:
+        target = Path(path)
+        data = self._read_registry()
+        workspaces = data["tables"]["workspaces"]
+        wanted = os.path.normcase(os.path.abspath(str(target)))
+        for wid, item in workspaces.items():
+            if os.path.normcase(os.path.abspath(str(item.get("path") or ""))) == wanted:
+                return {"id": wid, "path": item.get("path"), "title": item.get("title"), "created": False}
+        wid = str(uuid.uuid4())
+        now = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+        workspaces[wid] = {"path": str(target), "title": title or target.name,
+                           "sessionIds": [], "createdAt": now, "updatedAt": now}
+        data["global"].setdefault("workspaceIds", []).append(wid)
+        self._save_registry(data)
+        return {"id": wid, "path": str(target), "title": title or target.name, "created": True}
+
+    def attach_session(self, workspace_path: str, session_id: str) -> bool:
+        data = self._read_registry()
+        wanted = os.path.normcase(os.path.abspath(str(Path(workspace_path))))
+        for wid, item in data["tables"]["workspaces"].items():
+            if os.path.normcase(os.path.abspath(str(item.get("path") or ""))) != wanted:
+                continue
+            ids = item.setdefault("sessionIds", [])
+            if session_id not in ids:
+                ids.append(session_id)
+                item["updatedAt"] = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+                self._save_registry(data)
+            return True
+        return False
 
     def transcript(self, session_id: str) -> dict[str, Any] | None:
         for path in self._files():

@@ -37,6 +37,9 @@ This file is for an AI or human reviewer who wants to decide whether the claims 
 | Reply/digit/drag motion | `.tether-ink` animation, `.tether-num` tabular numerals, resizer active line + 180ms reset transition |
 | Plugin page is native, not iframe | `packages/dsh-plugin-tether-client/lib/client.js` uses `__ModuleLoader__` + `ctx.slots.inject('main' / 'sidebar.panellist')` |
 | Native DSH conversation is mirrored | `tether/node/dsh_sessions.py` parses `~/.dsh/sessions/**/session.v4.jsonl.zstd`; `tests/test_dsh_sessions.py`; screenshot `dsh-plugin-native-chat.png` |
+| Tether tasks become native DSH sessions | run `r-00aac51ff0ac` → native `tether-s-91e5ba584d36` under target `~/.dsh/sessions`; `attach_session` adds it to `~/.dsh/storages/workspace.json` |
+| Workspaces are one tree, not two categories | `workspaceNodes` merges `/workspaces` and `/dsh/sessions` by cwd; source badges only; screenshot `dsh-plugin-workspaces.png` |
+| File tree covers workspaces and drives | `FileTree` + `/fs/list` + `/drives`; screenshot `dsh-plugin-files.png` |
 | Reasoning/tool events are rendered, not dumped | `build_transcript()` maps `reasoning`, `tool-call`, `tool/result`; the page shows collapsible think rows and tool cards |
 | Existing DSH workspace writable in readonly | `evidence/dsh_plugin_fs.md`; audit rows for `default-workspace` |
 | Readonly blocks outside writes | HTTP 400 `path outside allowed roots` in `evidence/dsh_plugin_fs.md` |
@@ -51,17 +54,17 @@ This file is for an AI or human reviewer who wants to decide whether the claims 
 
 ## Verified / Designed / Not implemented
 
-- **Verified**: DSH plugin install/render, device/project/file/task/permission
-  page, native DSH conversation mirror (read-only), DSH-style live Tether run
-  transcript, three-level file policy with audit, recoverable delete, DeepSeek
-  Harness desktop Agent calling Tether MCP, Agent-to-Agent delegation, star
-  controller/node, real dsh, session resume, event replay, idempotency,
-  `unknown`, hard cancel with 0 residual, Tailscale cross-machine, control plane
-  app, monitor UI.
-- **Designed**: native DSH session write-back (`session/prompt` host proxy),
-  symmetric peer Agent network (every device same package, two-way delegation),
-  `@Remote` host service for the plugin, approval UI, capability routing,
-  Linux/WSL, public relay, multi-task concurrency.
+- **Verified**: DSH plugin install/render, unified workspace/session tree, lazy
+  workspace+drive file tree, native DSH conversation mirror, new Tether tasks
+  written as native DSH sessions under the target home/workspace, three-level
+  file policy with audit, recoverable delete, DeepSeek Harness desktop Agent
+  calling Tether MCP, Agent-to-Agent delegation, star controller/node, real dsh,
+  session resume, event replay, idempotency, `unknown`, hard cancel with 0
+  residual, Tailscale cross-machine, control plane app, monitor UI.
+- **Designed**: write-back into an **existing** native DSH session
+  (`session/prompt` host proxy), symmetric peer Agent network (every device same
+  package, two-way delegation), `@Remote` host service for the plugin, approval
+  UI, capability routing, Linux/WSL, public relay, multi-task concurrency.
 - **Not implemented**: the Designed list; production authentication/audit/sandbox;
   the laptop node still runs the previous build without `fs` or the native reader.
 
@@ -89,12 +92,14 @@ and copying router/global-store components would create a second app. There is n
 iframe and no custom chat; the layout is reimplemented against the same tokens.
 
 **Is the native conversation a copy or a live mirror?**
-It is a live, read-only mirror: `dsh_sessions.py` decompresses the target's
-`session.vN.jsonl.zstd` log and the page polls it every 1.5 s, rebuilding
-reasoning/tool/answer blocks. It never writes the log and never competes for the
-DSH Session writer. Sending from a native session starts a new Tether run in the
-same workspace, labelled in the composer; native write-back (`session/prompt`)
-would require a Host proxy and is Designed.
+Existing native sessions are a live, read-only mirror: `dsh_sessions.py`
+decompresses the target's `session.vN.jsonl.zstd` log and the page polls it every
+1.5 s, rebuilding reasoning/tool/answer blocks. It never appends to an existing
+session or competes for its writer. Sending from the composer starts a **new**
+native DSH session through the target SDK in the target `~/.dsh` and the chosen
+workspace; it is attached to the workspace registry, so the target DSH and this
+tree show it in the same place. Writing into an **existing** DSH session
+(`session/prompt` host proxy) is Designed.
 
 **Why does the plugin call 127.0.0.1:18890 instead of a Host Remote?**
 v0.1 keeps the controller loopback-only and adds CORS for the `dsh-app://app`

@@ -132,11 +132,14 @@ def map_note(note: Any) -> list[tuple[str, dict[str, Any]]]:
 
 
 class DshRun:
-    def __init__(self, node: Any, run_id: str, tether_session_id: str, prompt: str) -> None:
+    def __init__(self, node: Any, run_id: str, tether_session_id: str, prompt: str,
+                 workspace: Path | None = None, dsh_home: str | None = None) -> None:
         self.node = node
         self.run_id = run_id
         self.tether_session_id = tether_session_id
         self.prompt = prompt
+        self.workspace = Path(workspace or node.workspace).resolve()
+        self.dsh_home = dsh_home or node.dsh_home
         self.loop: asyncio.AbstractEventLoop | None = None
         self.harness: DeepSeekHarness | None = None
         self.cancelled = threading.Event()
@@ -155,13 +158,13 @@ class DshRun:
             if first:
                 self.dsh_session_id = f"tether-{self.tether_session_id}"
             self.harness = DeepSeekHarness(
-                dsh_home=self.node.dsh_home,
-                cwd=self.node.workspace,
+                dsh_home=self.dsh_home,
+                cwd=self.workspace,
                 provider=self.node.provider,
                 model=self.node.model,
                 max_tokens=int(os.environ.get("DSH_MAX_TOKENS", "8192")),
                 initialize_timeout_seconds=60.0,
-                env={"DSH_HOME": self.node.dsh_home},
+                env={"DSH_HOME": self.dsh_home},
                 _launch_args=npm_launch_args(),
             )
             self.harness.start()
