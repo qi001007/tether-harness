@@ -1,0 +1,53 @@
+{
+  "run_id": "r-1d5cf39046c0",
+  "session_id": "s-b803606245d4",
+  "saw_tool_event": true,
+  "cancel_response_state": "cancelling",
+  "terminal_state": "cancelled",
+  "terminal_outcome": {
+    "reason": "user cancel",
+    "dsh_session": "tether-s-b803606245d4"
+  },
+  "elapsed_s": 5.4,
+  "tree_before": [
+    {
+      "pid": 30936,
+      "name": "python.exe",
+      "cmdline": "E:\\Anaconda\\python.exe -m tether.node.agent --workspace work-local --agent dsh"
+    },
+    {
+      "pid": 46600,
+      "name": "node.exe",
+      "cmdline": "E:\\Node_js\\node.EXE E:\\遥望科技实习项目\\tether\\.runtime\\npm\\node_modules\\@deepseek-ai\\dsh\\lib\\bin.js --profile sdk"
+    },
+    {
+      "pid": 48920,
+      "name": "node.exe",
+      "cmdline": "E:\\Node_js\\node.EXE E:\\遥望科技实习项目\\tether\\.runtime\\npm\\node_modules\\@deepseek-ai\\dsh-subprocess-local\\lib\\runner.js -- E:\\Node_js\\node.EXE E:\\遥望科技实习项目\\tether\\.runtime\\npm\\node_modules\\@deepseek-ai\\dsh-sandbox-windows-acl\\lib\\runner.js --workspace E:\\遥望科技实习项目\\tether\\work-local --temp C:\\Users\\Administra"
+    },
+    {
+      "pid": 38204,
+      "name": "node.exe",
+      "cmdline": "E:\\Node_js\\node.EXE E:\\遥望科技实习项目\\tether\\.runtime\\npm\\node_modules\\@deepseek-ai\\dsh-sandbox-windows-acl\\lib\\runner.js --workspace E:\\遥望科技实习项目\\tether\\work-local --temp C:\\Users\\Administrator\\AppData\\Local\\Temp\\dsh-fdkalW --mode workspace-write --write-sid S-1-4-39943855-169074928 --temp-write-sid S-1-4"
+    },
+    {
+      "pid": 40452,
+      "name": "pwsh.exe",
+      "cmdline": "C:\\Program Files\\PowerShell\\7\\pwsh.exe -NoLogo -NoProfile -NonInteractive -Command [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); $OutputEncoding = [System.Text.UTF8Encoding]::new($false); python -c \"import time; time.sleep(120)\""
+    },
+    {
+      "pid": 41272,
+      "name": "python.exe",
+      "cmdline": "E:\\Anaconda\\python.exe -c import time; time.sleep(120)"
+    }
+  ],
+  "tree_after": [
+    {
+      "pid": 30936,
+      "name": "python.exe",
+      "cmdline": "E:\\Anaconda\\python.exe -m tether.node.agent --workspace work-local --agent dsh"
+    }
+  ],
+  "residual": [],
+  "residual_count": 0
+}

@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tether Local Console</title>
+<style>
+  :root { --bg:#0b0f14; --panel:#121821; --line:#233042; --text:#d9e2ec; --dim:#7d8a99;
+          --green:#3fb950; --amber:#d29922; --red:#f85149; --blue:#58a6ff; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:14px/1.5 Consolas,"Segoe UI",monospace; }
+  header { display:flex; align-items:center; gap:12px; padding:10px 16px; border-bottom:1px solid var(--line); }
+  h1 { font-size:15px; margin:0; }
+  #live { color:var(--green); font-size:12px; }
+  main { display:grid; grid-template-columns:280px 1fr; height:calc(100vh - 45px); }
+  aside { border-right:1px solid var(--line); overflow:auto; padding:12px; }
+  section { overflow:auto; padding:14px 18px; }
+  .run { padding:8px 9px; border:1px solid var(--line); border-radius:7px; margin-bottom:7px; cursor:pointer; background:var(--panel); }
+  .run.sel { border-color:var(--blue); }
+  .row { display:flex; justify-content:space-between; gap:8px; align-items:center; }
+  .meta { color:var(--dim); font-size:12px; }
+  .badge { font-size:11px; padding:1px 6px; border:1px solid var(--line); border-radius:999px; color:var(--dim); }
+  .badge.running,.badge.dispatching,.badge.queued { color:var(--amber); }
+  .badge.completed { color:var(--green); }
+  .badge.cancelled,.badge.failed,.badge.unknown { color:var(--red); }
+  .event { border-left:2px solid var(--line); padding:5px 0 5px 10px; margin:6px 0; white-space:pre-wrap; }
+  .event.tool { border-color:var(--blue); }
+  .event.assistant { border-color:var(--green); }
+  .event.thought { border-color:#5b6675; color:var(--dim); font-style:italic; }
+  .event.log { border-color:var(--line); color:var(--dim); }
+  .k { font-size:11px; color:var(--dim); text-transform:uppercase; letter-spacing:.6px; }
+  .empty { color:var(--dim); padding:20px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Tether Local Console</h1>
+  <span id="device" class="meta"></span>
+  <span id="live">● local, read-only</span>
+</header>
+<main>
+  <aside>
+    <div class="meta" style="margin-bottom:8px">RUNS (this machine)</div>
+    <div id="runs"></div>
+  </aside>
+  <section>
+    <div id="title" class="meta">Waiting for a task…</div>
+    <h2 id="events-title"></h2>
+    <div id="events" class="empty">No events.</div>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+let selected = null;
+let last = null;
+function esc(s) { const d = document.createElement("div"); d.textContent = s == null ? "" : String(s); return d.innerHTML; }
+
+function render(state) {
+  $("device").textContent = state.device || "";
+  const runs = state.runs || [];
+  if (!selected && runs.length) selected = runs[0].run_id;
+  $("runs").innerHTML = runs.map(r => `
+    <div class="run ${r.run_id === selected ? "sel" : ""}" data-run="${esc(r.run_id)}">
+      <div class="row"><span>${esc(r.run_id)}</span><span class="badge ${esc(r.state)}">${esc(r.state)}</span></div>
+      <div class="meta">${esc((r.prompt || "").slice(0, 70))}</div>
+    </div>`).join("") || '<div class="empty">No runs yet.</div>';
+  const run = runs.find(r => r.run_id === selected);
+  if (run) {
+    $("title").textContent = `${run.run_id} · ${run.state} · ${run.session_id || ""}`;
+    $("events-title").textContent = "EVENTS";
+    const evs = (state.events || {})[selected] || [];
+    $("events").innerHTML = evs.map(ev => {
+      const p = ev.payload || {};
+      let body = p.text || p.command || JSON.stringify(p);
+      if (ev.kind === "tool") {
+        const name = p.name || (p.type === "tool/result" ? "result" : "tool");
+        const detail = p.command || p.text || "";
+        body = `${name}${detail ? " · " + detail : ""}`;
+      } else if (ev.kind === "thought") {
+        body = String(p.text || "").slice(0, 300);
+      }
+      return `<div class="event ${esc(ev.kind)}"><div class="k">#${ev.seq} ${esc(ev.kind)}</div>${esc(body)}</div>`;
+    }).join("") || '<div class="empty">No events.</div>';
+  } else {
+    $("title").textContent = "Waiting for a task…";
+  }
+  last = state;
+}
+
+async function poll() {
+  try {
+    const r = await fetch("/state", { cache: "no-store" });
+    render(await r.json());
+    $("live").textContent = "● local, live";
+    $("live").style.color = "var(--green)";
+  } catch (e) {
+    $("live").textContent = "● local, node offline";
+    $("live").style.color = "var(--red)";
+  }
+}
+document.addEventListener("click", (e) => {
+  const el = e.target.closest("[data-run]");
+  if (!el) return;
+  selected = el.dataset.run;
+  if (last) render(last);
+});
+poll();
+setInterval(poll, 1000);
+</script>
+</body>
+</html>
