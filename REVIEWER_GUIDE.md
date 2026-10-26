@@ -33,6 +33,9 @@ This file is for an AI or human reviewer who wants to decide whether the claims 
 | Agent-to-Agent delegation | same screenshot; the desktop Agent called `mcp__tether__remote_task` for `LAPTOP-01`; target session `tether-s-d0332f33ad47` |
 | DSH plugin installs without touching other bundles | `~/.dsh/profiles/desktop/package.json` bundles list; `desktop/install-plugin.ps1`; screenshot `dsh-plugin-native-chat.png` |
 | Sidebar follows the VSCode contract | `ActivityBar`/`SidePanel` in `client.js`: fixed bar, three switchable panels, active-icon/chevron collapse, draggable panel and file-list boundaries, widths/panel in `localStorage` |
+| Sidebar icons are the host's artwork | `GLYPHS` copies `ui-primitives/src/icons/artwork.ts` paths (`workspace-tree-outline`, `folder-open`, `folder-close`, `globe-outline`, 16px grid, 1px stroke); screenshot `dsh-plugin-workspaces.png` |
+| Turn chrome matches `ui-chat` | `.tether-turn-head` is 33px with a 0.5px `border-l2`; label `已完成，用时 N秒` + 14px chevron; `.tether-md` 14/24 with 16px block gap; screenshot `dsh-plugin-native-turn.png` |
+| Running state uses the native shimmer | `.tether-running` + `.tether-shimmer` (whale icon, 1.5s mask sweep); a real 6s run showed `深度求索中，用时 1秒 ···` and completed at 9秒; screenshot `dsh-plugin-streaming.png` |
 | Surfaces use background layers, not frames | computed `border*Width` of `.tether-root *` is 0; colors come from `--dsw-*` theme tokens; dark mode lowers weights 600→500 / 400→350 |
 | Reply/digit/drag motion | `.tether-ink` animation, `.tether-num` tabular numerals, resizer active line + 180ms reset transition |
 | Plugin page is native, not iframe | `packages/dsh-plugin-tether-client/lib/client.js` uses `__ModuleLoader__` + `ctx.slots.inject('main' / 'sidebar.panellist')` |

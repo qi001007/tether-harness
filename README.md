@@ -114,11 +114,15 @@ The sidebar entry opens a native client page (no iframe, no second web app):
   its own sidebar yet (the workspace.json entry is already written).
 - **Conversation**: native DSH transcripts read from
   `~/.dsh/sessions/**/session.vN.jsonl.zstd`: user messages, a collapsible process
-  group with reasoning/tool rows, and the final answer. Existing sessions are
-  read-only; sending from the composer starts a **new native DSH session** in the
-  selected workspace through the target's SDK (under the target `~/.dsh`), so it
-  appears in the target DSH and in this tree. Writing into an existing native
-  session still needs a DSH Host proxy and is Designed.
+  group with reasoning/tool rows, and the final answer. Turn chrome and typography
+  are copied from `ui-chat`: the completed row is 33px with a 0.5px bottom rule,
+  reads `已完成，用时 N秒`, and carries a 14px chevron; prose is 14/24 with a 16px
+  block rhythm, 600 strong, and 0.8em inline-code chips. A running turn instead
+  ends with `深度求索中，用时 N秒 ···`, the whale icon, and the 1.5s mask shimmer.
+  Existing sessions are read-only; sending from the composer starts a **new
+  native DSH session** in the selected workspace through the target's SDK (under
+  the target `~/.dsh`), so it appears in the target DSH and in this tree. Writing
+  into an existing native session still needs a DSH Host proxy and is Designed.
 - **Files**: a lazy file tree in the sidebar. Roots are the known workspaces and
   this PC's drives (`C:`, `D:`, ...); directories load on expand and files open
   in the editor. Read follows the target policy; writes/mkdir/rename/delete are
@@ -128,7 +132,9 @@ The sidebar entry opens a native client page (no iframe, no second web app):
   last 80 audit entries.
 
 The left side uses a VSCode-style fixed activity bar: workspaces, files and
-devices are separate panels. Clicking the active icon or the chevron collapses
+devices are separate panels. Its glyphs are DSH's own 16px/1px artwork
+(`workspace-tree`, `folder-open`, `globe`, `plus`, `chevron`), not a parallel
+icon style. Clicking the active icon or the chevron collapses
 the panel; the bar stays. The panel width is draggable, double-click resets, and
 the active panel and width are stored in `localStorage`.
 

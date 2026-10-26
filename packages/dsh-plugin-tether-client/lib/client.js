@@ -99,134 +99,217 @@ window.__ModuleLoader__.load({
 
     function inline(text) {
       const out = []
-      const pattern = /(\*\*[^*]+\*\*|`[^`]+`)/g
+      const pattern = /(\*\*[^*]+\*\*|`[^`]+`|\*[^*]+\*|\[[^\]]+\]\([^)]+\))/g
       let last = 0, match, key = 0
       while ((match = pattern.exec(text)) !== null) {
         if (match.index > last) out.push(text.slice(last, match.index))
         const token = match[0]
         if (token.startsWith('**')) out.push(h('strong', { key: 'b' + key++ }, token.slice(2, -2)))
-        else out.push(h('code', { key: 'c' + key++, style: { background: C.soft, borderRadius: 4, padding: '1px 4px', fontFamily: 'Consolas, monospace', fontSize: '0.92em' } }, token.slice(1, -1)))
+        else if (token.startsWith('`')) out.push(h('code', { key: 'c' + key++ }, token.slice(1, -1)))
+        else if (token.startsWith('[')) {
+          const link = token.match(/^\[([^\]]+)\]\(([^)]+)\)$/)
+          const href = link && /^(https?:\/\/|mailto:)/i.test(link[2]) ? link[2] : null
+          out.push(href
+            ? h('a', { key: 'a' + key++, href, target: '_blank', rel: 'noreferrer' }, link[1])
+            : h('span', { key: 'a' + key++ }, link ? link[1] + ' (' + link[2] + ')' : token))
+        } else out.push(h('em', { key: 'e' + key++ }, token.slice(1, -1)))
         last = match.index + token.length
       }
       if (last < text.length) out.push(text.slice(last))
       return out
     }
 
-    function Markdown({ text }) {
+    // Mirrors DSH's markdown token ladder (paragraph 16px rhythm, 600 strong,
+    // inline code chip, 21/30 → 16/24 headings) inside the plugin bundle.
+    function Markdown({ text, secondary }) {
       const source = String(text || '')
       if (!source) return null
-      const parts = source.split(/```/)
       const nodes = []
       let key = 0
-      parts.forEach((part, index) => {
+      source.split(/```/).forEach((part, index) => {
         if (index % 2 === 1) {
           const lines = part.replace(/^\n+|\n+$/g, '').split('\n')
           let lang = ''
-          if (lines.length && /^[a-zA-Z0-9_+-]+$/.test(lines[0].trim()) && lines.length > 1) { lang = lines.shift().trim() }
-          nodes.push(h('pre', { key: 'p' + key++, style: { margin: '10px 0', padding: '10px 12px', borderRadius: 8, background: C.block, color: C.ink, overflow: 'auto', fontSize: 12.5, lineHeight: 1.55, fontFamily: 'Consolas, monospace' } },
-            h('code', null, lines.join('\n'))))
+          if (lines.length && /^[a-zA-Z0-9_+-]+$/.test(lines[0].trim()) && lines.length > 1) lang = lines.shift().trim()
+          nodes.push(h('div', { key: 'p' + key++, className: 'tether-code' },
+            lang ? h('div', { className: 'tether-code-banner' }, lang) : null,
+            h('pre', null, h('code', null, lines.join('\n')))))
           return
         }
-        const blocks = part.split(/\n\s*\n/)
-        blocks.forEach((block) => {
-          const trimmed = block.trim()
-          if (!trimmed) return
-          const lines = trimmed.split('\n')
-          if (lines.every((line) => /^\s*\|.*\|\s*$/.test(line))) {
+        part.split(/\n\s*\n/).forEach((raw) => {
+          const block = raw.replace(/^\n+|\n+$/g, '')
+          if (!block.trim()) return
+          const lines = block.split('\n')
+          const tableRow = (line) => /^\s*\|.*\|\s*$/.test(line)
+          if (lines.length >= 2 && lines.every(tableRow)) {
             const rows = lines.map((line) => line.trim().replace(/^\||\|$/g, '').split('|').map((cell) => cell.trim()))
             const body = rows.filter((row, i) => i !== 1 || !row.every((cell) => /^:?-{3,}:?$/.test(cell)))
-            nodes.push(h('div', { key: 't' + key++, style: { overflowX: 'auto', margin: '10px 0' } },
-              h('table', { style: { borderCollapse: 'collapse', fontSize: 13, minWidth: '60%' } },
-                h('tbody', null, body.map((row, ri) => h('tr', { key: ri },
-                  row.map((cell, ci) => h(ri === 0 ? 'th' : 'td', {
-                    key: ci, style: { padding: '4px 8px', textAlign: 'left', fontSize: 12.5, whiteSpace: (ri === 0 || String(cell).length <= 12) ? 'nowrap' : 'normal', wordBreak: 'break-word', fontWeight: ri === 0 ? 'var(--tether-strong, 600)' : 'var(--tether-body, 400)', background: ri === 0 ? C.panel : (ri % 2 ? C.panel : C.bg) }
-                  }, inline(cell)))))))))
+            nodes.push(h('div', { key: 't' + key++, className: 'tether-table' },
+              h('table', null, h('tbody', null, body.map((row, ri) => h('tr', { key: ri },
+                row.map((cell, ci) => h(ri === 0 ? 'th' : 'td', { key: ci }, inline(cell)))))))))
             return
           }
-          if (/^#{1,4}\s/.test(lines[0])) {
-            const level = lines[0].match(/^#+/)[0].length
-            nodes.push(h('div', { key: 'h' + key++, style: { fontWeight: 'var(--tether-strong-2, 650)', fontSize: level <= 2 ? 17 : 15, margin: '14px 0 6px' } }, inline(lines[0].replace(/^#+\s*/, ''))))
-            if (lines.length > 1) nodes.push(h('div', { key: 'hx' + key++, style: { whiteSpace: 'pre-wrap', margin: '4px 0' } }, inline(lines.slice(1).join('\n'))))
+          const heading = lines[0].match(/^(#{1,6})\s+(.*)$/)
+          if (heading) {
+            const level = Math.min(4, heading[1].length)
+            nodes.push(h('h' + level, { key: 'h' + key++ }, inline(heading[2])))
+            if (lines.length > 1) nodes.push(h('p', { key: 'hp' + key++ }, inline(lines.slice(1).join('\n'))))
             return
           }
           if (lines.every((line) => /^\s*[-*]\s+/.test(line))) {
-            nodes.push(h('ul', { key: 'u' + key++, style: { margin: '6px 0', paddingLeft: 20 } },
-              lines.map((line, i) => h('li', { key: i, style: { margin: '2px 0', whiteSpace: 'pre-wrap' } }, inline(line.replace(/^\s*[-*]\s+/, ''))))))
+            nodes.push(h('ul', { key: 'u' + key++ },
+              lines.map((line, i) => h('li', { key: i }, inline(line.replace(/^\s*[-*]\s+/, ''))))))
             return
           }
           if (lines.every((line) => /^\s*\d+[.)]\s+/.test(line))) {
-            nodes.push(h('ol', { key: 'o' + key++, style: { margin: '6px 0', paddingLeft: 22 } },
-              lines.map((line, i) => h('li', { key: i, style: { margin: '2px 0', whiteSpace: 'pre-wrap' } }, inline(line.replace(/^\s*\d+[.)]\s+/, ''))))))
+            nodes.push(h('ol', { key: 'o' + key++ },
+              lines.map((line, i) => h('li', { key: i }, inline(line.replace(/^\s*\d+[.)]\s+/, ''))))))
             return
           }
-          nodes.push(h('div', { key: 'd' + key++, style: { whiteSpace: 'pre-wrap', margin: '6px 0' } }, inline(trimmed)))
+          if (lines.every((line) => /^\s*>\s?/.test(line))) {
+            nodes.push(h('blockquote', { key: 'q' + key++ }, h('p', null, inline(lines.map((line) => line.replace(/^\s*>\s?/, '')).join('\n')))))
+            return
+          }
+          if (lines.every((line) => /^\s*(---|\*\*\*)\s*$/.test(line))) {
+            nodes.push(h('hr', { key: 'r' + key++ }))
+            return
+          }
+          nodes.push(h('p', { key: 'd' + key++ }, inline(lines.join('\n'))))
         })
       })
-      return h('div', { style: { fontSize: 14, lineHeight: '24px', color: C.ink } }, nodes)
+      return h('div', { className: 'tether-md' + (secondary ? ' tether-md-secondary' : '') }, nodes)
     }
 
-    function ProcessRow({ block }) {
+    function Shimmer({ text, active, className }) {
+      if (!active) return h('span', { className }, text)
+      return h('span', { className: 'tether-shimmer' + (className ? ' ' + className : '') },
+        h('span', { className: 'tether-shimmer-content' }, text),
+        h('span', { className: 'tether-shimmer-cover', 'aria-hidden': true },
+          h('span', { className: 'tether-shimmer-sweep' },
+            h('span', { className: 'tether-shimmer-hi' }, text))))
+    }
+
+    function firstLine(text) {
+      const line = String(text || '')
+      const cut = line.indexOf('\n')
+      return (cut === -1 ? line : line.slice(0, cut)).replaceAll('**', '').trim()
+    }
+
+    function ProcessRow({ block, streaming }) {
       const [open, setOpen] = React.useState(false)
       const isThink = block.type === 'reasoning'
-      const label = isThink ? '思考' : '工具调用'
-      const text = isThink ? String(block.text || '') : ((block.name || 'tool') + (block.command ? ' · ' + block.command : ''))
-      const color = block.status === 'error' ? C.red : (block.status === 'running' ? C.blue : C.green)
-      return h('div', { style: { minWidth: 0 } },
+      const running = block.status === 'running'
+      const title = isThink ? '思考' : (block.name || '工具调用')
+      const text = isThink ? firstLine(block.text) : shortText(block.command || block.arguments || block.result || '', 160)
+      return h('div', { className: 'tether-proc' },
         h('div', {
-          role: 'button', tabIndex: 0, className: 'tether-press tether-hover',
-          onClick: () => setOpen(!open),
-          onKeyDown: (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); setOpen(!open) } },
-          style: { display: 'flex', alignItems: 'center', gap: 6, padding: '3px 6px', borderRadius: 5, cursor: 'pointer', fontSize: 12.5, minHeight: 26, color: C.mute }
+          role: 'button', tabIndex: 0, className: 'tether-proc-row',
+          'aria-expanded': open, onClick: () => setOpen(!open),
+          onKeyDown: (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); setOpen(!open) } }
         },
-          h('span', { style: { width: 12, height: 12, flex: '0 0 auto', display: 'grid', placeItems: 'center', color: C.mute } }, h(Glyph, { name: isThink ? 'think' : 'tool', size: 12, stroke: 1.8 })),
-          h('span', { style: { color: C.mute, flex: '0 0 auto' } }, label),
-          h('span', { style: { color: isThink ? C.mute : C.blue, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: '1 1 auto', minWidth: 0 } }, shortText(text, 120)),
-          !isThink && block.status ? h('span', { style: { width: 6, height: 6, borderRadius: 3, background: color, flex: '0 0 auto' } }) : null,
-          h('span', { style: { color: C.mute, flex: '0 0 auto' } }, open ? '▾' : '▸')
-        ),
-        open ? h('div', { style: { margin: '2px 0 6px 24px', padding: '8px 10px', borderRadius: 6, background: C.panel, color: C.sub, fontSize: 12, lineHeight: '19px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' } },
-          isThink ? String(block.text || '') : (block.arguments || block.result || '')
-        ) : null
+          h('span', { className: 'tether-proc-leading', 'data-open': open || undefined },
+            h('span', { className: 'tether-proc-idle' }, h(Glyph, { name: isThink ? 'think' : 'tool', size: 14 })),
+            h('span', { className: 'tether-proc-chev' }, h(Glyph, { name: 'chevronDown', size: 14 }))),
+          h('span', { className: 'tether-proc-title' }, title),
+          text ? h('span', { className: 'tether-proc-sep', 'aria-hidden': true }) : null,
+          text ? h('span', { className: 'tether-proc-summary' },
+            isThink ? h(Shimmer, { text, active: running || streaming }) : text) : null),
+        open ? (isThink
+          ? h('div', { className: 'tether-proc-think' }, h(Markdown, { text: String(block.text || ''), secondary: true }))
+          : h('pre', { className: 'tether-proc-output' }, block.arguments || block.result || '')) : null
       )
     }
 
+    function durationParts(seconds) {
+      const total = Math.max(0, Math.floor(seconds))
+      const hours = Math.floor(total / 3600)
+      const minutes = Math.floor(total / 60) % 60
+      const parts = []
+      if (hours > 0) parts.push({ text: String(hours), numeric: true }, { text: '小时', numeric: false })
+      if (total >= 60) parts.push({ text: String(minutes), numeric: true }, { text: '分', numeric: false })
+      parts.push({ text: String(total % 60), numeric: true }, { text: '秒', numeric: false })
+      return parts
+    }
+
+    function turnRunning(turn, live) {
+      if (turn.state === 'running') return true
+      if (turn.ended_at) return false
+      return !!live
+    }
+
     function ProcessGroup({ blocks, turn, live, latest }) {
-      const [open, setOpen] = React.useState(!!latest)
-      if (!blocks || !blocks.length) return null
-      const toolCount = blocks.filter((b) => b.type === 'tool').length
-      const stateText = turn.state === 'running' ? '运行中' : (turn.state === 'failed' ? '失败' : (turn.state === 'cancelled' ? '已取消' : '已完成'))
-      const duration = turn.started_at && turn.ended_at ? Math.max(1, Math.round(turn.ended_at - turn.started_at)) : null
-      return h('div', { className: 'tether-ink', style: { margin: '2px 0 10px' } },
+      const running = turnRunning(turn, live)
+      const [open, setOpen] = React.useState(false)
+      const list = blocks || []
+      if (running) {
+        if (!list.length) return null
+        return h('div', { className: 'tether-process' },
+          h('div', { className: 'tether-proc-list' }, list.map((block, i) => h(ProcessRow, { key: i, block, streaming: true }))))
+      }
+      const stopped = turn.state === 'cancelled' || turn.state === 'aborted' || turn.state === 'interrupted'
+      const failed = turn.state === 'failed' || turn.state === 'error'
+      const elapsed = turn.started_at && turn.ended_at ? Math.max(1, Math.round(turn.ended_at - turn.started_at)) : null
+      const parts = !stopped && !failed && elapsed ? durationParts(elapsed) : []
+      const label = stopped ? '已停止' : (failed ? '处理失败' : '已完成')
+      return h('div', { className: 'tether-process tether-ink' },
         h('button', {
-          onClick: () => setOpen(!open), className: 'tether-press tether-hover',
-          style: { display: 'flex', alignItems: 'center', gap: 7, width: '100%', border: 0, background: 'transparent', padding: '4px 6px', borderRadius: 6, cursor: 'pointer', textAlign: 'left', color: C.mute, fontSize: 12.5, minHeight: 28 }
+          type: 'button', className: 'tether-turn-head', 'data-open': open || undefined,
+          'aria-expanded': list.length ? open : undefined, disabled: !list.length,
+          'data-turn-process': turn.turn, 'data-turn-process-tool-calls': list.filter((b) => b.type === 'tool').length,
+          onClick: () => { if (list.length) setOpen(!open) }
         },
-          h(Glyph, { name: open ? 'chevronDown' : 'chevronRight', size: 13, stroke: 1.8 }),
-          h('span', null, stateText),
-          duration ? h('span', { className: 'tether-num' }, ' · 用时 ' + duration + ' 秒') : null,
-          toolCount ? h('span', { className: 'tether-num' }, ' · ' + toolCount + ' 个工具') : null
-        ),
-        open ? h('div', { style: { padding: '2px 0 6px 16px' } },
-          h('div', { style: { fontSize: 11, color: C.mute, padding: '2px 6px 3px' } }, '已调用工具'),
-          h('div', { style: { display: 'grid', gap: 1 } }, blocks.map((block, i) => h(ProcessRow, { key: i, block })))
-        ) : null
+          h('span', { className: 'tether-turn-label' },
+            label,
+            parts.length ? '，用时 ' : null,
+            parts.map((part, index) => part.numeric
+              ? h('span', { key: index, className: 'tether-turn-number' }, part.text)
+              : part.text)),
+          list.length ? h('span', { className: 'tether-turn-chev' }, h(Glyph, { name: 'chevronDown', size: 14 })) : null),
+        list.length && open ? h('div', { className: 'tether-proc-list' }, list.map((block, i) => h(ProcessRow, { key: i, block }))) : null
       )
     }
 
     function UserBubble({ text }) {
-      return h('div', { style: { display: 'flex', justifyContent: 'flex-end', margin: '14px 0 16px' } },
-        h('div', { style: { maxWidth: '82%', background: C.bubble, borderRadius: 12, padding: '9px 13px', fontSize: 14, lineHeight: '22px', whiteSpace: 'pre-wrap', color: C.ink } }, text)
-      )
+      return h('div', { className: 'tether-user-row' },
+        h('div', { className: 'tether-user-bubble' }, text))
+    }
+
+    const WHALE_PATH = 'M8.844 13.742C8.967 12.328 8.45 10.4 8.45 9.65C8.45 8.94 8.88 8.43 9.6 8.43C11.285 8.43 12.106 8.281 12.685 8.104C13.71 7.791 14.585 6.768 15.055 5.945C15.137 5.803 14.99 5.641 14.829 5.671C13.829 5.86 12.828 5.376 11.827 4.978C10.659 4.514 9.491 4.707 8.935 4.876C8.805 4.915 8.658 4.819 8.636 4.686C8.468 3.643 7.405 2.615 5.498 2.238C4.54 2.048 3.748 1.574 3.347 1.202C3.252 1.113 3.088 1.125 3.03 1.242C2.628 2.059 2.168 3.82 5.248 6.115C5.82 6.494 6.31 6.785 6.574 7.637C6.72 8.104 6.157 9.168 6.061 9.368C5.157 11.27 5.089 12.19 4.926 13.742'
+
+    function durationText(parts) {
+      return parts.map((part) => part.text).join('')
+    }
+
+    function RunningStatus({ startTime, paused, hasOutput }) {
+      const [now, setNow] = React.useState(() => Date.now())
+      React.useEffect(() => {
+        if (startTime == null || paused) return undefined
+        setNow(Date.now())
+        const timer = setInterval(() => setNow(Date.now()), 1000)
+        return () => clearInterval(timer)
+      }, [startTime, paused])
+      const label = startTime == null ? '深度求索中'
+        : '深度求索中，用时 ' + durationText(durationParts(Math.max(1, Math.floor(now / 1000 - startTime)))) + ' ···'
+      return h('div', { className: 'tether-running', 'data-chat-running': true },
+        h('span', { className: 'tether-running-divider', 'data-visible': hasOutput ? 'true' : undefined, 'aria-hidden': true }),
+        h('span', { className: 'tether-running-content' },
+          h('span', { className: 'tether-running-icon', 'aria-hidden': true },
+            h('svg', { width: '100%', height: '100%', viewBox: '0 0 16 16', fill: 'none' },
+              h('path', { d: WHALE_PATH, stroke: 'currentColor', strokeWidth: 1 }))),
+          h(Shimmer, { text: label, active: true, className: 'tether-running-text' })))
     }
 
     function Turn({ turn, index, live, latest }) {
       const blocks = turn.blocks || []
       const processBlocks = blocks.filter((block) => block.type === 'reasoning' || block.type === 'tool')
       const texts = blocks.filter((block) => block.type === 'text')
-      return h('div', { style: { marginBottom: 24 } },
+      const running = turnRunning(turn, live)
+      return h('div', { className: 'tether-turn' },
         turn.user ? h(UserBubble, { text: turn.user.text }) : null,
         h(ProcessGroup, { blocks: processBlocks, turn, live, latest }),
-        texts.map((block, i) => h('div', { key: i, className: 'tether-ink', style: { margin: '7px 0' } }, h(Markdown, { text: block.text })))
+        texts.length ? h('div', { className: 'tether-body' },
+          texts.map((block, i) => h('div', { key: i, className: 'tether-answer tether-ink' }, h(Markdown, { text: block.text })))) : null,
+        running ? h(RunningStatus, { startTime: turn.started_at, paused: false, hasOutput: blocks.length > 0 }) : null
       )
     }
 
@@ -246,8 +329,8 @@ window.__ModuleLoader__.load({
       if (!turns.length) {
         return h('div', { style: { display: 'grid', placeItems: 'center', flex: '1 1 auto', color: C.mute, fontSize: 13, padding: 30 } }, loading ? '加载中…' : emptyText)
       }
-      return h('div', { ref: box, className: 'tether-scroll', style: { flex: '1 1 auto', overflow: 'auto', padding: '4px 0 24px' } },
-        h('div', { style: { maxWidth: 780, margin: '0 auto', padding: '0 8px' } },
+      return h('div', { ref: box, className: 'tether-scroll', style: { flex: '1 1 auto', overflow: 'auto', padding: '16px 0 24px' } },
+        h('div', { className: 'tether-flow' },
           turns.map((turn, i) => h(Turn, { key: i, turn, index: i, live, latest: i === turns.length - 1 }))
         )
       )
@@ -285,6 +368,86 @@ window.__ModuleLoader__.load({
       .tether-scroll:hover::-webkit-scrollbar-thumb { background: var(--dsw-alias-scrollbar-hover-l1, #cbd5e1); }
       .tether-scroll::-webkit-scrollbar-corner { background: transparent; }
       .tether-num { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum' 1; }
+      .tether-flow { display: flex; flex-direction: column; max-width: calc(var(--dsh-chat-content-width, 748px) + 32px); width: 100%; margin: 0 auto; padding: 0 16px; box-sizing: border-box; }
+      .tether-turn { display: flex; flex-direction: column; min-width: 0; }
+      .tether-turn + .tether-turn { margin-top: 24px; }
+      .tether-user-row { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; margin-bottom: 16px; }
+      .tether-user-bubble { max-width: min(calc(var(--dsh-chat-content-width, 748px) * 0.702), 82%); background: var(--dsw-specific-bubble, #f2f4f7); border-radius: var(--dsw-radius-xl, 20px); padding: 10px 16px; font-size: var(--dsh-content-font-size, 14px); line-height: calc(22px + var(--dsh-content-font-delta, 0px)); color: var(--dsw-alias-label-primary, #101828); white-space: pre-wrap; word-break: break-word; }
+      .tether-process { display: flex; flex-direction: column; min-width: 0; }
+      .tether-turn-head { box-sizing: border-box; display: flex; align-items: center; width: 100%; min-width: 0; height: calc(33px + var(--dsh-content-font-delta, 0px)); margin: 0 0 16px; padding: 0 0 8px; border: 0; border-bottom: 0.5px solid var(--dsw-alias-border-l2); background: none; color: var(--dsw-alias-label-tertiary); font: inherit; font-size: var(--dsh-content-font-size, 14px); cursor: pointer; text-align: left; transition: color 100ms ease; }
+      .tether-turn-head[data-open] { margin-bottom: 8px; }
+      .tether-turn-head:disabled { cursor: default; }
+      @media (hover: hover) { .tether-turn-head:hover { color: var(--dsw-alias-label-secondary); } }
+      .tether-turn-label { min-width: 0; overflow: hidden; font-size: inherit; line-height: calc(24px + var(--dsh-content-font-delta, 0px)); text-overflow: ellipsis; white-space: nowrap; }
+      .tether-turn-number { font-family: var(--ds-font-family-code, monospace); font-variant-numeric: tabular-nums; }
+      .tether-turn-chev { flex: none; width: 14px; height: 14px; margin-left: 4px; display: grid; place-items: center; color: inherit; transition: transform 100ms ease; }
+      .tether-turn-head[data-open] .tether-turn-chev { transform: rotate(180deg); }
+      .tether-proc-list { display: flex; flex-direction: column; gap: 4px; padding: 0 0 4px; }
+      .tether-proc { display: flex; flex-direction: column; min-width: 0; }
+      .tether-proc-row { display: flex; align-items: center; min-width: 0; height: calc(24px + var(--dsh-content-font-delta, 0px)); border-radius: var(--dsw-radius-sm, 8px); color: var(--dsw-alias-label-tertiary); font-size: var(--dsh-content-font-size-secondary, 13px); cursor: pointer; transition: color 100ms ease; }
+      @media (hover: hover) { .tether-proc-row:hover { color: var(--dsw-alias-label-secondary); } }
+      .tether-proc-leading { position: relative; flex: none; width: calc(16px + var(--dsh-content-font-delta, 0px)); height: calc(16px + var(--dsh-content-font-delta, 0px)); margin-right: 6px; display: inline-flex; align-items: center; justify-content: center; color: inherit; }
+      .tether-proc-idle { display: inline-flex; opacity: 1; transition: opacity 100ms ease; }
+      .tether-proc-chev { position: absolute; inset: 0; margin: auto; display: grid; place-items: center; opacity: 0; transition: opacity 100ms ease; }
+      @media (hover: hover) { .tether-proc-row:hover .tether-proc-idle { opacity: 0; } .tether-proc-row:hover .tether-proc-chev { opacity: 1; } }
+      .tether-proc-leading[data-open] .tether-proc-idle { opacity: 0; }
+      .tether-proc-leading[data-open] .tether-proc-chev { opacity: 1; transform: rotate(180deg); }
+      .tether-proc-title { flex: none; font-size: var(--dsh-content-font-size-secondary, 13px); line-height: calc(24px + var(--dsh-content-font-delta, 0px)); color: inherit; font-weight: 400; }
+      .tether-proc-sep { flex: none; width: 2px; height: 2px; margin: 0 8px; border-radius: 1px; background: var(--dsw-alias-label-caption); }
+      .tether-proc-summary { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--dsh-content-font-size-secondary, 13px); line-height: calc(24px + var(--dsh-content-font-delta, 0px)); }
+      .tether-proc-think { padding: 4px 0 4px calc(22px + var(--dsh-content-font-delta, 0px)); color: var(--dsw-alias-label-tertiary); font-size: var(--dsh-content-font-size-secondary, 13px); line-height: calc(24px + var(--dsh-content-font-delta, 0px)); }
+      .tether-proc-think .tether-md { font-size: inherit; line-height: inherit; color: inherit; }
+      .tether-proc-think p { margin: 8px 0; }
+      .tether-proc-output { margin: 4px 0 6px calc(22px + var(--dsh-content-font-delta, 0px)); padding: 8px 12px; border: 0.5px solid var(--dsw-alias-border-l1); border-radius: var(--dsw-radius-sm, 8px); background: var(--dsw-alias-markdown-code-block, #f8fafc); color: var(--dsw-alias-label-secondary); font: var(--dsw-font-markdown-code-block-small, 12px/20px var(--ds-font-family-code, monospace)); white-space: pre-wrap; word-break: break-word; max-height: 320px; overflow: auto; }
+      .tether-body { display: flex; flex-direction: column; gap: 16px; }
+      .tether-process + .tether-body { margin-top: 12px; }
+      .tether-answer { min-width: 0; }
+      .tether-md { min-width: 0; overflow-wrap: anywhere; font-family: inherit; font-size: var(--dsh-content-font-size, 14px); line-height: calc(24px + var(--dsh-content-font-delta, 0px)); color: var(--dsw-alias-label-primary, #101828); }
+      .tether-md > :first-child { margin-top: 0 !important; }
+      .tether-md > :last-child { margin-bottom: 0 !important; }
+      .tether-md p { margin: 16px 0; }
+      .tether-md strong { font-weight: 600; }
+      .tether-md h1 { margin: 32px 0 16px; font-size: calc(21px + var(--dsh-content-font-delta, 0px)); line-height: calc(30px + var(--dsh-content-font-delta, 0px)); font-weight: 700; }
+      .tether-md h2 { margin: 32px 0 16px; font-size: calc(19px + var(--dsh-content-font-delta, 0px)); line-height: calc(28px + var(--dsh-content-font-delta, 0px)); font-weight: 700; }
+      .tether-md h3 { margin: 32px 0 16px; font-size: calc(18px + var(--dsh-content-font-delta, 0px)); line-height: calc(26px + var(--dsh-content-font-delta, 0px)); font-weight: 700; }
+      .tether-md h4 { margin: 16px 0; font-size: var(--dsh-content-font-size, 14px); line-height: calc(24px + var(--dsh-content-font-delta, 0px)); font-weight: 600; }
+      .tether-md ul, .tether-md ol { margin: 16px 0; padding-left: 18px; }
+      .tether-md li:not(:first-child) { margin-top: 6px; }
+      .tether-md li::marker { line-height: 24px; color: var(--dsw-alias-label-secondary); }
+      .tether-md :not(pre) > code { display: inline-flex; align-items: center; box-sizing: border-box; padding: 0 5px; border: 0.5px solid var(--dsw-alias-border-l1); border-radius: var(--dsw-radius-sm, 8px); background-color: var(--dsw-alias-markdown-inline-code, #f7f7f8); font-family: var(--ds-font-family-code, monospace); font-size: 0.875em; }
+      .tether-md a { color: var(--dsw-alias-link, #344054); font-weight: 500; text-decoration: none; }
+      .tether-md a:hover { text-decoration: underline dotted; text-underline-offset: 3px; }
+      .tether-md blockquote { margin: 16px 0; padding-left: 14px; border-left: 2px solid var(--dsw-alias-label-caption); }
+      .tether-md hr { height: 0.5px; margin: 32px 0; border: 0; background: var(--dsw-alias-border-l2); }
+      .tether-code { margin: 16px 0; background: var(--dsw-alias-markdown-code-block, #f8fafc); border-radius: var(--dsw-radius-lg, 12px); overflow: hidden; }
+      .tether-code-banner { padding: 9px 14px; background: var(--dsw-alias-markdown-code-block-banner, #f2f4f7); color: var(--dsw-alias-label-primary); font-family: var(--ds-font-family-code, monospace); font-size: 11px; line-height: 18px; }
+      .tether-code pre { margin: 0; padding: 12px 14px; overflow: auto; color: var(--dsw-alias-label-primary); font-family: var(--ds-font-family-code, monospace); font-size: calc(var(--dsh-content-font-size, 14px) - 2px); line-height: calc(20px + var(--dsh-content-font-delta, 0px)); }
+      .tether-code code { padding: 0; border: 0; background: none; font: inherit; }
+      .tether-table { margin: 16px 0; overflow-x: auto; }
+      .tether-table table { width: 100%; border-collapse: collapse; }
+      .tether-table th, .tether-table td { min-width: 100px; padding: 10px 16px; text-align: start; font-size: var(--dsh-content-font-size-secondary, 13px); line-height: calc(22px + var(--dsh-content-font-delta-secondary, 0px)); }
+      .tether-table th { border-bottom: 0.5px solid var(--dsw-alias-border-l3); font-weight: 500; }
+      .tether-table td { border-bottom: 0.5px solid var(--dsw-alias-border-l2); }
+      .tether-table th:first-child, .tether-table td:first-child { padding-left: 0; }
+      .tether-table td:last-child { padding-right: 0; }
+      .tether-running { --dsw-alias-label-shimmer: var(--dsw-alias-label-deep-diving-shimmer, rgba(16, 24, 40, 0.3)); position: relative; display: flex; flex-direction: column; align-items: flex-start; margin-top: 12px; color: var(--dsw-alias-label-deep-diving, #4b6bfb); font-size: calc(var(--dsh-content-font-size, 14px) - 2px); line-height: calc(22px + var(--dsh-content-font-delta, 0px)); }
+      .tether-process + .tether-running { margin-top: 12px; }
+      .tether-running-divider { position: absolute; top: -4px; left: 0; right: 0; height: 0.5px; background: color-mix(in srgb, var(--dsw-alias-border-l1) 75%, var(--dsw-alias-border-l2)); opacity: 0; pointer-events: none; transition: opacity 160ms ease; }
+      .tether-running-divider[data-visible] { opacity: 1; }
+      .tether-running-content { display: inline-flex; align-items: center; min-width: 0; gap: 6px; margin-top: 4px; height: calc(28px + var(--dsh-content-font-delta, 0px)); }
+      .tether-running-icon { position: relative; display: inline-flex; flex: none; width: calc(14px + var(--dsh-content-font-delta, 0px)); height: calc(14px + var(--dsh-content-font-delta, 0px)); contain: strict; overflow: hidden; }
+      .tether-running-text { min-width: 0; font-variant-numeric: tabular-nums; }
+      .tether-proc-summary .tether-shimmer { display: block; width: 100%; }
+      .tether-proc-summary .tether-shimmer-content { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .tether-proc-summary .tether-shimmer-cover { overflow: hidden; }
+      .tether-proc-summary .tether-shimmer-hi { justify-content: flex-start; white-space: nowrap; }
+      .tether-shimmer { position: relative; display: inline-grid; width: max-content; max-width: 100%; min-width: 0; vertical-align: top; color: inherit; }
+      .tether-shimmer-content { display: flex; align-items: center; min-width: 0; }
+      .tether-shimmer-cover { position: absolute; inset: 0; overflow: clip; pointer-events: none; user-select: none; }
+      .tether-shimmer-sweep { position: absolute; inset: 0; overflow: hidden; color: var(--dsw-alias-label-shimmer, rgba(16, 24, 40, 0.3)); mask-image: linear-gradient(105deg, transparent 0%, black 40% 60%, transparent 100%); transform: translateX(-100%); animation: tether-shimmer-sweep 1.5s steps(48, end) 0.3s infinite; }
+      .tether-shimmer-hi { display: flex; align-items: center; width: 100%; height: 100%; transform: translateX(100%); animation: tether-shimmer-hi 1.5s steps(48, end) 0.3s infinite; }
+      @keyframes tether-shimmer-sweep { 0% { transform: translateX(-100%); } 66.6667%, 100% { transform: translateX(100%); } }
+      @keyframes tether-shimmer-hi { 0% { transform: translateX(100%); } 66.6667%, 100% { transform: translateX(-100%); } }
       .tether-ink { animation: tether-ink 300ms cubic-bezier(.2,.7,.2,1) both; }
       @keyframes tether-ink {
         from { opacity: 0; filter: blur(3px); transform: translateY(4px); }
@@ -299,7 +462,7 @@ window.__ModuleLoader__.load({
       .tether-resizer { position: relative; }
       .tether-resizer::after { content: ''; position: absolute; top: 0; right: 2px; width: 1px; height: 100%; background: transparent; transition: background 120ms ease; }
       .tether-resizer:hover::after, .tether-resizer:active::after, .tether-resizer[data-active="true"]::after { background: var(--dsw-alias-state-business-primary, #1570ef); }
-      @media (prefers-reduced-motion: reduce) { .tether-ink { animation: none; } .tether-press { transition: none; } }
+      @media (prefers-reduced-motion: reduce) { .tether-ink { animation: none; } .tether-press { transition: none; } .tether-shimmer-cover { display: none; } .tether-shimmer-sweep, .tether-shimmer-hi { animation: none; } }
     `
 
     const UI = {
@@ -336,26 +499,72 @@ window.__ModuleLoader__.load({
     }
 
     const GLYPHS = {
-      chat: ['M5 5h14v10H9l-4 4V5z', 'M8 9h8', 'M8 12h5'],
-      devices: ['M4 5h16v6H4z', 'M4 15h16v4H4z', 'M7 8h.01', 'M7 17h.01'],
-      projects: ['M3 7h7l2 2h9v10H3z', 'M3 7V5h7l2 2'],
-      settings: ['M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z', 'M12 10v4', 'M10.5 9h3'],
-      plus: ['M12 5v14', 'M5 12h14'],
-      file: ['M6 3h8l4 4v14H6z', 'M14 3v4h4'],
-      chevronRight: ['M9 6l6 6-6 6'],
-      chevronDown: ['M6 9l6 6 6-6'],
-      chevronLeft: ['M15 6l-6 6 6 6'],
-      think: ['M12 4a5 5 0 00-3 9v3h6v-3a5 5 0 00-3-9z', 'M9 20h6'],
-      tool: ['M14 7l3 3', 'M5 19l7-7', 'M13 5l6 6-2 2-6-6z'],
-      workspace: ['M3 7h7l2 2h9v10H3z', 'M3 11h18'],
-      files: ['M6 3h8l4 4v14H6z', 'M14 3v4h4', 'M9 12h6', 'M9 16h6']
+      workspace: { cap: 'round', join: 'round', parts: [
+        { d: 'M14 12.05c0 .8-.65 1.45-1.46 1.45H3.46C2.65 13.5 2 12.85 2 12.05v-8.1c0-.8.65-1.45 1.46-1.45h2.4c.49 0 .94.24 1.21.65l.5.73c.27.4.73.65 1.21.65h3.76c.8 0 1.46.65 1.46 1.45v6.02Z' },
+        { d: 'M8.7 8.1v3M11.2 8.1v3' }
+      ] },
+      files: { parts: [
+        { d: 'M12.3994 13.5986H2.04956C1.49728 13.5986 1.04956 13.1509 1.04956 12.5986V3.40137C1.04956 2.84908 1.49728 2.40137 2.04956 2.40137H4.76632C5.01016 2.40137 5.24561 2.49046 5.42836 2.6519L6.94088 3.98799C7.12364 4.14943 7.35908 4.23852 7.60293 4.23852H12.3994C12.9517 4.23852 13.3994 4.68624 13.3994 5.23852V7.16991' },
+        { d: 'M2.55911 7.93683C2.67584 7.49906 3.07229 7.19446 3.52536 7.19446H13.6491C14.3061 7.19446 14.7846 7.81725 14.6153 8.45209L13.4411 12.856C13.3244 13.2938 12.9279 13.5984 12.4748 13.5984H2.35113C1.69411 13.5984 1.21562 12.9756 1.38489 12.3407L2.55911 7.93683Z' }
+      ] },
+      devices: { parts: [
+        { d: 'M7.99986 14.0887C11.3626 14.0887 14.0886 11.3627 14.0886 7.99998C14.0886 4.63727 11.3626 1.91125 7.99986 1.91125C4.63715 1.91125 1.91113 4.63727 1.91113 7.99998C1.91113 11.3627 4.63715 14.0887 7.99986 14.0887Z' },
+        { d: 'M2.34619 8H13.6538', cap: 'square' },
+        { d: 'M7.99976 14.0889C9.23509 14.0889 10.1743 11.3629 10.1743 8.00006C10.1743 4.63739 9.23509 1.91138 7.99976 1.91138' },
+        { d: 'M7.99973 14.0889C6.76445 14.0889 5.8252 11.3629 5.8252 8.00006C5.8252 4.63739 6.76445 1.91138 7.99973 1.91138' }
+      ] },
+      settings: { join: 'round', parts: [
+        { d: 'M6.80132 2.14853C7.70663 1.80917 8.70422 1.80919 9.60952 2.14859L14.1296 3.84317V7.11961C14.1296 11.6089 10.7615 13.5975 8.20543 14.5779C5.64931 13.5975 2.28052 11.6089 2.28052 7.11961V3.84317L6.80132 2.14853Z' }
+      ] },
+      plus: { parts: [
+        { d: 'M8 2V14' },
+        { d: 'M2 8H14' }
+      ] },
+      chevronDown: { parts: [
+        { d: 'M4 6L7.29289 9.29289C7.68342 9.68342 8.31658 9.68342 8.70711 9.29289L12 6' }
+      ] },
+      chevronRight: { parts: [
+        { d: 'M6 12L9.29289 8.70711C9.68342 8.31658 9.68342 7.68342 9.29289 7.29289L6 4' }
+      ] },
+      chevronLeft: { parts: [
+        { d: 'M10 4L6.70711 7.29289C6.31658 7.68342 6.31658 8.31658 6.70711 8.70711L10 12' }
+      ] },
+      think: { parts: [
+        { d: 'M10.2854 5.71481C12.9673 8.39663 14.1182 11.5938 12.8562 12.8559C11.5942 14.1179 8.39706 12.9669 5.71518 10.2851C3.03333 7.60323 1.88236 4.40608 3.14441 3.14403C4.40644 1.882 7.6036 3.03297 10.2854 5.71481Z' },
+        { d: 'M10.2854 10.2851C7.6036 12.9669 4.40644 14.1179 3.14441 12.8559C1.88236 11.5938 3.03333 8.39663 5.71518 5.71481C8.39706 3.03297 11.5942 1.882 12.8562 3.14403C14.1182 4.40608 12.9673 7.60323 10.2854 10.2851Z' },
+        { d: 'M8.86291 8.0002C8.86291 8.47549 8.47762 8.86087 8.00224 8.86087C7.52694 8.86087 7.1416 8.47549 7.1416 8.0002C7.1416 7.52485 7.52694 7.13953 8.00224 7.13953C8.47762 7.13953 8.86291 7.52485 8.86291 8.0002Z', fill: 'currentColor', stroke: false }
+      ] },
+      tool: { parts: [
+        { d: 'M6.27612 1.5L4.52612 14.5' },
+        { d: 'M11.4739 1.5L9.72388 14.5' },
+        { d: 'M2.39868 5.5H14.0681' },
+        { d: 'M1.93188 10.5H13.6013' }
+      ] },
+      file: { parts: [
+        { d: 'M4.9375 5.90295H11.0625' },
+        { d: 'M4.9375 9.02991H8.27841' },
+        { d: 'M12.5 1.32617C13.3039 1.32617 14 1.95171 14 2.77637V13.2246C13.9996 14.0489 13.3036 14.6738 12.5 14.6738H3.5C2.69637 14.6738 2.00042 14.0489 2 13.2246V2.77637C2 1.95171 2.69613 1.32617 3.5 1.32617H12.5ZM3.5 2.32617C3.1993 2.32617 3 2.55186 3 2.77637V13.2246C3.00044 13.4489 3.19963 13.6738 3.5 13.6738H12.5C12.8004 13.6738 12.9996 13.4489 13 13.2246V2.77637C13 2.55186 12.8007 2.32617 12.5 2.32617H3.5Z', fill: 'currentColor', stroke: false }
+      ] },
+      folderOpen: { parts: [
+        { d: 'M2.55912 7.93683C2.67584 7.49906 3.0723 7.19446 3.52536 7.19446H13.6491C14.3061 7.19446 14.7846 7.81725 14.6153 8.45209L13.4411 12.856C13.3244 13.2938 12.9279 13.5984 12.4748 13.5984H2.35113C1.69411 13.5984 1.21562 12.9756 1.38489 12.3407L2.55912 7.93683Z', fill: 'currentColor', opacity: 0.16, stroke: false },
+        { d: 'M13.6491 6.69446C14.6346 6.69453 15.3522 7.62895 15.0983 8.58118L13.9245 12.9845C13.7494 13.6412 13.1539 14.0988 12.4743 14.0988H2.35126C1.36574 14.0988 0.648153 13.1643 0.902044 12.212L2.07587 7.80774C2.25102 7.15128 2.84567 6.69455 3.52509 6.69446H13.6491ZM3.52509 7.69446C3.29865 7.69455 3.10004 7.84674 3.04169 8.06555L1.86786 12.4698C1.78345 12.7872 2.02285 13.0988 2.35126 13.0988H12.4743C12.7007 13.0988 12.8992 12.9463 12.9577 12.7277L14.1325 8.32336C14.2171 8.00598 13.9776 7.69453 13.6491 7.69446H3.52509Z', fill: 'currentColor', stroke: false },
+        { d: 'M4.7666 1.90137C5.13227 1.90144 5.48571 2.03525 5.75977 2.27734L7.27246 3.61328C7.36379 3.69382 7.48174 3.73828 7.60352 3.73828H12.3994C13.2276 3.73841 13.8993 4.41005 13.8994 5.23828V6.7168C13.8183 6.70327 13.735 6.69436 13.6494 6.69434H12.8994V5.23828C12.8993 4.96233 12.6754 4.73841 12.3994 4.73828H7.60352C7.23781 4.73828 6.88446 4.60438 6.61035 4.3623L5.09766 3.02637C5.00636 2.94576 4.88838 2.90144 4.7666 2.90137H2.0498C1.77366 2.90137 1.5498 3.12523 1.5498 3.40137V9.78223L0.902344 12.2119C0.648452 13.1642 1.36604 14.0986 2.35156 14.0986H2.0498C1.2214 14.0986 0.549838 13.427 0.549805 12.5986V3.40137C0.549805 2.57294 1.22138 1.90137 2.0498 1.90137H4.7666Z', fill: 'currentColor', stroke: false }
+      ] },
+      folderClose: { parts: [
+        { d: 'M1.50439 3.11059C1.50439 2.55831 1.95211 2.1106 2.50439 2.1106H5.43389C5.67773 2.1106 5.91318 2.19969 6.09593 2.36113L7.71649 3.79265C7.89924 3.95409 8.1347 4.04319 8.3785 4.04319H13.4958C14.0481 4.04319 14.4958 4.4909 14.4958 5.04319V12.8894C14.4958 13.4417 14.0481 13.8894 13.4958 13.8894H2.50439C1.95211 13.8894 1.50439 13.4417 1.50439 12.8894V4.04319V3.11059Z' },
+        { d: 'M3.63501 7.66614H12.3647' }
+      ] }
     }
 
-    function Glyph({ name, size = 18, stroke = 1.7 }) {
+    function Glyph({ name, size = 16, stroke }) {
+      const glyph = GLYPHS[name] || { parts: [] }
       return h('svg', {
-        width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor',
-        strokeWidth: stroke, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true
-      }, (GLYPHS[name] || []).map((d, i) => h('path', { key: i, d })))
+        width: size, height: size, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor',
+        strokeWidth: stroke == null ? 1 : stroke, strokeLinecap: glyph.cap || 'butt', strokeLinejoin: glyph.join || 'miter', 'aria-hidden': true
+      }, glyph.parts.map((part, index) => h('path', {
+        key: index, d: part.d, fill: part.fill || 'none', stroke: part.stroke === false ? 'none' : undefined,
+        opacity: part.opacity, strokeLinecap: part.cap || glyph.cap || 'butt'
+      })))
     }
 
     function ActivityBar({ active, collapsed, onSelect, onSettings, settingsOpen }) {
@@ -390,7 +599,7 @@ window.__ModuleLoader__.load({
           h('button', {
             title: '收起侧栏', 'aria-label': '收起侧栏', onClick: onCollapse, className: 'tether-hover',
             style: { width: 26, height: 26, display: 'grid', placeItems: 'center', border: 0, borderRadius: UI.radius, background: 'transparent', color: C.mute, cursor: 'pointer' }
-          }, h(Glyph, { name: 'chevronLeft', size: 18, stroke: 1.9 }))
+          }, h(Glyph, { name: 'chevronLeft', size: 14 }))
         )
       )
     }
@@ -410,8 +619,8 @@ window.__ModuleLoader__.load({
           onClick: (ev) => { ev.stopPropagation(); onToggle() },
           className: 'tether-hover',
           style: { width: 18, height: 18, flex: '0 0 auto', display: 'grid', placeItems: 'center', border: 0, borderRadius: 4, background: 'transparent', color: C.mute, cursor: 'pointer' }
-        }, h(Glyph, { name: toggle, size: 13, stroke: 1.9 })) : null,
-        icon ? h('span', { style: { width: UI.icon, height: UI.icon, display: 'grid', placeItems: 'center', color: iconColor || C.mute, flex: '0 0 auto' } }, typeof icon === 'string' ? h(Glyph, { name: icon, size: UI.icon, stroke: 1.8 }) : icon) : null,
+        }, h(Glyph, { name: toggle, size: 14 })) : null,
+        icon ? h('span', { style: { width: UI.icon, height: UI.icon, display: 'grid', placeItems: 'center', color: iconColor || C.mute, flex: '0 0 auto' } }, typeof icon === 'string' ? h(Glyph, { name: icon, size: 14 }) : icon) : null,
         h('span', { style: { minWidth: 0, flex: '1 1 auto', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: '18px' } }, title),
         right ? h('span', { className: 'tether-num', style: { flex: '0 0 auto', fontSize: 10, color: C.mute, whiteSpace: 'nowrap' } }, right) : null,
         action ? h('button', {
@@ -443,9 +652,9 @@ window.__ModuleLoader__.load({
           }
         },
           h('span', { style: { width: 12, flex: '0 0 auto', display: 'grid', placeItems: 'center', color: C.mute } },
-            isDir ? h(Glyph, { name: expanded ? 'chevronDown' : 'chevronRight', size: 12, stroke: 1.9 }) : null),
+            isDir ? h(Glyph, { name: expanded ? 'chevronDown' : 'chevronRight', size: 14 }) : null),
           h('span', { style: { width: 12, flex: '0 0 auto', display: 'grid', placeItems: 'center', color: C.mute } },
-            h(Glyph, { name: isDir ? 'workspace' : 'file', size: 12, stroke: 1.8 })),
+            h(Glyph, { name: isDir ? (expanded ? 'folderOpen' : 'folderClose') : 'file', size: 16 })),
           h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: '1 1 auto', minWidth: 0 } }, node.name || node.path),
           !isDir && node.size != null ? h('span', { className: 'tether-num', style: { flex: '0 0 auto', fontSize: 10, color: C.mute } }, formatBytes(node.size)) : null
         ))
@@ -475,7 +684,7 @@ window.__ModuleLoader__.load({
         title: newWorkspaceDisabled ? '当前节点不支持新建工作区' : '新建工作区', 'aria-label': '新建工作区',
         onClick: onNewWorkspace, disabled: newWorkspaceDisabled, className: 'tether-hover',
         style: { width: 26, height: 26, display: 'grid', placeItems: 'center', border: 0, borderRadius: UI.radius, background: 'transparent', color: newWorkspaceDisabled ? C.mute : C.mute, cursor: newWorkspaceDisabled ? 'not-allowed' : 'pointer' }
-      }, h(Glyph, { name: 'plus', size: 18, stroke: 1.9 })) : null
+      }, h(Glyph, { name: 'plus', size: 16 })) : null
 
       const section = (id, content) => h('div', {
         className: 'tether-scroll', 'data-panel': id,
@@ -740,6 +949,8 @@ window.__ModuleLoader__.load({
       React.useEffect(() => {
         if (!project) { setSessionId(''); setRunId(''); return }
         if (freshSession) return
+        // An explicit selection wins even before the fresh run shows up in state.
+        if (sessionId || runId) return
         const node = workspaceNodes.find((w) => w.path === project.path)
         if (!node) return
         const hasSession = sessionId && node.sessions.some((s) => s.type === 'native' && s.session_id === sessionId)
@@ -808,8 +1019,14 @@ window.__ModuleLoader__.load({
           }
         }
         if (!blocks.length && run && run.final_response) blocks.push({ type: 'text', text: run.final_response })
+        const turnState = !run ? 'running'
+          : run.state === 'completed' ? 'completed'
+            : run.state === 'failed' ? 'failed'
+              : run.state === 'cancelled' ? 'cancelled' : 'running'
         return { title: run ? shortText(run.prompt, 50) : '', status: state,
-                 turns: run ? [{ turn: 1, user: { text: run.prompt }, blocks, state: run.state === 'completed' ? 'completed' : (run.state === 'failed' ? 'failed' : 'running'), steps: 0, usage: {} }] : [] }
+                 turns: run ? [{ turn: 1, user: { text: run.prompt }, blocks, state: turnState,
+                   started_at: run.started_at || run.created_at || null,
+                   ended_at: run.finished_at || null, steps: 0, usage: {} }] : [] }
       }
 
       const currentWorkspace = workspaceNodes.find((w) => w.path === (project && project.path))

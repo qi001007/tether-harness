@@ -311,9 +311,20 @@ DSH 是 Cordis 插件架构。Tether 按官方 client plugin 形态接入，**�
 
 页面布局对齐 DSH：同一套左栏/主区/右栏结构、灰阶、字体与 8px 圆角；没有复制
 DSH 的业务组件（client bundle 不能直接 import DSH 内部 React 组件），但复用它的
-slot、布局和 token 观感。左侧是 VSCode 式常驻活动栏（工作区/文件/设备）；点击当前
+slot、布局和 token 观感。侧栏图标不是自绘轮廓：工作区用 DSH 的
+`workspace-tree-outline`，文件用 `folder-open`，文件树用 `folder-close/open`，设备用
+`globe-outline`，加号/chevron 也取 `ui-primitives` 的 16px、1px 路径；因此与 DSH
+原生侧栏同粗细分。左侧是 VSCode 式常驻活动栏（工作区/文件/设备）；点击当前
 项或标题栏 chevron 收起面板，活动栏不消失。面板宽度与文件栏/编辑器边界可拖，
 双击复位，宽度与当前面板写入 `localStorage`。
+
+对话区按 `ui-chat` 的几何复刻，而不是只求相似：完成后行高 33px、下边 0.5px
+`border-l2`、14px/24px 三级色，文案 `已完成，用时 N秒`，14px chevron 右侧 4px；
+正文 14px/24px、块间距 16px，粗体 600，行内代码 0.875em + 0.5px 边框 + 8px 圆角；
+过程行 24px 高、13px/24px，标题与摘要间 2×2px 点，悬停才把图标换成 chevron。
+运行中不画完成行，末尾显示 `深度求索中，用时 N秒 ···`（鲸鱼图标 + 1.5s mask
+shimmer），首次输出后上方出现 0.5px 分隔线。字体与颜色全部走 DSH 的
+`--dsw-font-markdown-*` / `--dsw-alias-label-*` token。
 
 视觉层遵循六条规则：层级由背景层（base / sidebar / hover / active）建立，不用
 1px 灰框；所有颜色取 DSH 主题 token，暗色下标题/按钮字重 600→500、正文 400→350；
