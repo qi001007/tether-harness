@@ -1,46 +1,51 @@
-# Tether：多设备 Agent Harness 客户端
+# Tether：让 Agent 拥有跨设备的手
 
 > 题二设计文档 · 2026-10-27
 > 代码与证据：https://github.com/qi001007/tether-harness
-> 一句话：让任意一台电脑上的 Agent，使用另一台电脑的文件、工具和运行环境完成任务；执行过程可看、可取消、可继续，断线不丢事件，结果不确定时绝不假装成功。
+> 交互端是 DeepSeek Harness 桌面 APP；Tether 只是它调用的 MCP 工具。
 
 ---
 
-## 0. TL;DR 与 10 分钟导览
+## 0. TL;DR
 
 ### 0.1 我做了什么
 
-一个可运行的 Tether v0.1：
+- 用户在 **DeepSeek Harness 官方桌面 APP** 里正常对话，记忆、技能、插件市场都还是 DeepSeek 的；
+- DeepSeek 的 Agent 通过 **Tether MCP** 调用 `list_peers` / `remote_task` / `remote_status` / `remote_cancel`；
+- 任务被送到另一台电脑的 Tether Node，由那台机器上的 Harness Agent 用它自己的文件、shell、模型 key 执行；
+- 工具事件、结果和继续会话都在 DeepSeek 的对话里；
+- Tether 自己的聊天页降级为**监控台**：看设备、任务、事件和证据，不是主入口。
 
-- 桌面端是一个 **Agent 对话窗口**（Edge `--app`），默认和本机 `DESKTOP-LOCAL` 的 DeepSeek Harness Agent 对话；
-- 侧栏列出已接入的其它电脑（本次是 `LAPTOP-01`），切换过去就能把任务派到那台机器；
-- 目标机器上的 Agent 用**它自己的**工作区、shell、模型 key 执行，工具调用和回答实时流回桌面；
-- 断线、重复提交、取消、节点崩溃都有明确状态；取消后进程树残留为 0；
-- 一条命令 `desktop/tether-app.ps1` 启动 Controller + 本地 Agent + 应用窗口；笔记本用同一份代码，只换 `.env`。
+这就是"交互端始终是一个独立的 Agent"：DeepSeek Harness 是 Agent，Tether 是它的跨设备工具层。
 
-### 0.2 三个已用真实数据验证的主张
+### 0.2 已用真实数据验证
 
 | 主张 | 实测 |
 |---|---|
-| 远端 Agent 真的在目标机器上干活 | 笔记本 `LAPTOP-01` 用 `pwsh` 创建了 `D:\tether-node\work\laptop-proof.txt`，返回绝对路径和内容 `OK`；桌面实时看到 tool 事件 |
-| 同一会话可以继续 | 第二次 Run 的 `dsh_session` 与第一次相同；提示"不要再读文件"，Agent 直接引用上一轮读到的内容回答 |
-| 取消后没有残留进程 | 取消前进程树 6 个：`python(agent) → node(dsh) → node(sandbox) → pwsh → python(sleep 120)`；取消后只剩 agent 本身，残留 **0** |
-| 断线不丢事件 | 模拟 8 秒断网：事件先进节点本地 outbox，重连后补发；最终 13 个事件、`ack_seq=13`、序号连续、重复 0 |
-| 幂等提交 | 同 `request_id` 同内容只产生 1 个 Run；同 id 异内容返回 409 |
-| 不确定不假装成功 | 杀掉节点后 Run 进 `unknown`，不自动重跑；重启后 `reconcile` 返回节点 ledger 的真实状态 |
+| DeepSeek 桌面 Agent 自己调用 Tether | 在官方桌面 APP 里问"用 Tether 列出设备"，它调用 `list_peers`，返回 3 台设备、2 台在线 |
+| Agent 让 Agent 干活 | 它调用 `remote_task` 让 `LAPTOP-01` 创建 `D:\tether-node\work\tether-delegated.txt`，内容 `OK` |
+| 目标端是同一个持久 Harness 会话 | 第二次只读校验 run `r-8fa5928462a6` 复用 `dsh_session=tether-s-d0332f33ad47` |
+| 文件真的写对了 | 2 字节，字节 `4F 4B`，无 BOM、无换行 |
+| 取消无残留 | 取消前 6 个进程（dsh → sandbox → pwsh → python），取消后只剩节点守护进程，残留 **0** |
+| 断线不丢事件 | 8 秒断网，事件缓冲重放：13 个事件、`ack_seq=13`、序号连续、重复 0 |
+| 幂等 | 同 `request_id` 同内容 1 个 Run；异内容 409 |
+| 不确定不假装成功 | 节点被杀后 Run 进 `unknown`，不自动重跑；重启后 `reconcile` 返回真实状态 |
+| 跨机走 Tailscale | `LAPTOP-01` 通过 `100.x` 接入；Controller 的 UI/API 仍只允许本机，只有 `/ws/node` 对 tailnet 开放 |
 
-### 0.3 当前实现与目标架构的边界（先看这张表）
+截图：`docs/screenshots/deepseek-desktop.png`、`deepseek-after-tether.png`、`deepseek-delegated.png`。
+
+### 0.3 当前实现 vs 目标架构（先看边界）
 
 | 维度 | 已验证的 v0.1（代码里真的有） | 目标 v0.2（设计，未实现） |
 |---|---|---|
-| 拓扑 | 星型：一个 Controller 派发，多个 Node 接受 | 对等：每台设备同一份包，既是发起方也是受控方 |
-| 本地 Agent | 桌面默认与 `DESKTOP-LOCAL` dsh Agent 对话 | 每台设备都常驻本地 Agent，可对话、可主动派活 |
-| 交互 | Agent 聊天 + 工具卡片 | 同一形态，增加 peer 发现/配对/能力路由 |
-| 接入 | 同一份代码；笔记本用 `.env` 指向 Controller | GitHub 一键安装 + 配对码，无需手工改地址 |
+| 交互端 | DeepSeek Harness 桌面 APP + Tether MCP | 每台设备都跑同一个桌面 APP + Tether MCP |
+| 拓扑 | 星型：一个 Controller 路由，多个 Node 执行 | 对等：任意两台 Agent 可互相派活，无唯一 master |
+| 发起方 | 桌面 Agent 发起；笔记本是被控节点 | 每台设备都可发起/被控 |
+| 接入 | 笔记本 bootstrap + `.env` | 配对码/邀请，GitHub 一键安装 |
 | Harness | 官方 Python SDK + npm dsh 运行时 | 可扩展 ACP adapter（Qoder/Codex/Claude Code） |
-| 可靠性 | `seq/ack/journal`、幂等、`unknown`、硬取消、resume | 原样复用，扩展到多 peer 任务 |
+| 可靠性 | `seq/ack/journal`、幂等、`unknown`、硬取消、resume | 原样复用，扩展到多 peer |
 
-**这不是"已经做完对等网络"，而是"对等网络所需的执行与可靠性内核已经跑通，交互先做成 Agent 对话"。** 第 9 节给出从 v0.1 到 v0.2 的具体改法。
+**不把 v0.2 的对等网络冒充成已实现。** 第 9 节给出从 v0.1 到 v0.2 的具体改法。
 
 ---
 
@@ -50,111 +55,128 @@
 
 我把它拆成四层：
 
-1. **执行层**：目标机器上的 Agent 必须真的能读写文件、跑命令、用本地模型 key。
-2. **传输层**：发起端与目标端之间要能跨 NAT/不同网络通信；目标端不应开放入站端口。
-3. **交付层**：任务有唯一身份、可重放的事件流、可取消、可继续；断线/崩溃不能产生"以为失败其实执行了"的结果。
-4. **交互层**：用户面对的是一个 Agent（能对话、能看它干活），而不是一个任务表格。
+1. **交互层**：用户面对的必须是 Agent（会对话、有记忆/技能），而不是一个任务控制台。
+2. **工具层**：这个 Agent 要能发现"还有哪些电脑可用"，并把任务派过去。
+3. **执行层**：目标电脑上的 Agent 真的读写文件、跑命令、用本地模型 key。
+4. **交付层**：任务有唯一身份、可重放事件、可取消、可继续；断线/崩溃不能产生"以为失败其实执行了"的结果。
 
-题面说"客户端"，星型遥控器是成立的；但从产品完整度看，更强的解读是：**每台电脑装同一个 Agent 客户端，任意两台可以互相派活**。本文把后者作为目标架构，把前者作为已验证的 v0.1 竖切片。
+### 1.1 关键产品判断
 
-### 1.1 假设
+最早我做了一个独立的 Tether 聊天 App，想让它当交互端。这个方向是错的：
 
-- 单 owner、2–5 台个人设备；设备之间通过 Tailscale 或可信局域网互联。
-- 目标机器上的模型 key 只属于该机器，不经过发起端。
+- 它复制不了 DeepSeek Harness 的记忆管理、技能和插件市场；
+- 用户已经有自己的 Agent，换一个陌生聊天框不是"客户端"，是"替代品"；
+- 题目说的是"操作其他电脑上的 Agent Harness"，不是"再写一个 Agent"。
+
+所以最终架构改为 **Agent-first**：
+
+- **DeepSeek Harness 桌面 APP 是交互端**（也支持 Qoder/Codex 等 MCP 客户端）；
+- **Tether 是 MCP 工具层**，只负责发现设备、派发任务、查询状态、取消；
+- **Tether 自己的 UI 只做监控/证据**。
+
+### 1.2 假设
+
+- 单 owner、2–5 台个人设备；设备间通过 Tailscale 或可信局域网互联。
+- 目标机器的模型 key 只属于该机器，不经过发起端。
 - 任务可能持续数分钟到数小时；网络会抖、设备会休眠/重启。
-- 目标机器是 Windows 或 Linux；首发只验证 Windows。
+- 首发验证 Windows；Linux 只做设计。
 
-### 1.2 明确不做
+### 1.3 明确不做
 
-- 多租户组织、复杂 RBAC、公网 Relay 集群。
+- 多租户、复杂 RBAC、公网 Relay 集群。
 - 任务跨机迁移（dsh 会话单写者、工作区不迁移）。
-- 多任务并发（v0.1 每 Session 同时只允许一个 Run）。
+- 多任务并发（v0.1 每 Session 同时一个 Run）。
 - 生产级 WSS/mTLS、设备吊销、审计、速率限制。
-- 审批 UI：安装的 SDK wheel 没有 `approval_requests` 握手，标为 Designed。
+- 审批 UI：安装的 SDK wheel 没有 `approval_requests` 握手，标 Designed。
+- 对等网络的"每台设备都能发起"：v0.1 只有桌面 Agent 发起，笔记本是被控端。
 
 ---
 
 ## 2. 开源先例与选型
 
-先做先例检索，避免重复造轮子，也避免把已有能力当自己的新设计。
-
 | 项目 | 事实 | 结论 |
 |---|---|---|
-| **DeepSeek Harness（dsh）** | TS/Cordis 插件架构；ACP v1；Python SDK 管 session/prompt/events/resume；Web UI 只绑本机、单写者 | **被控 Agent 本体**；首发用 Python SDK，不手写 ACP |
-| **Qoder** | 本机 IDE + CLI 1.1.78；CLI 支持 `--acp`、`--mcp-config`、`--config-dir` | 可作为本地 Agent 前端或额外受控端；首发不耦合 |
-| **Codex** | CLI 0.163.0；原生 MCP | 可作为第二本地 Agent；首发不耦合 |
-| **Raven** | 5.8k★ Apache-2.0 Python；gateway + WS RPC + ACP + 反向 SSH node + Job Object + 回放 | 最接近控制面；但 node 仅 POSIX/SSH，alpha；只作设计参考，不 fork |
+| **DeepSeek Harness（dsh）** | 官方 Electron 桌面 APP；TS/Cordis 插件架构；ACP v1；Python SDK；Web UI 单机 | **交互端 + 被控 Agent**；桌面 APP 直接用，Node 用 Python SDK 驱动 |
+| **Qoder** | 本机 IDE + CLI 1.1.78；CLI 支持 `--acp`、`--mcp-config` | 可作为另一个 MCP 客户端；首发不做 |
+| **Codex** | CLI 0.163.0；原生 MCP | 可作为另一个 MCP 客户端；首发不做 |
+| **Raven** | 5.8k★ Apache-2.0 Python；gateway + WS RPC + ACP + 反向 SSH node + Job Object + 回放 | 最接近控制面；node 仅 POSIX/SSH、alpha；只作设计参考，不 fork |
 | **nanoMuse** | 2.6k★ GPL-3.0 Swift；每台设备本地 Agent，relay 共享会话，Sentinel 审批 | 借"共享会话 + 审批门"思想；无 Windows/桌面 harness，不复制代码 |
 | **Herdr** | 46k★ Apache-2.0 Rust；PTY 运行时 + 多端客户端；多设备靠 SSH；事件 512 条不重放 | 备选终端客户端；不是 harness 客户端 |
-| **Orca** | 106k★ MIT TS；已支持 dsh 但走 TUI + Claude 形 hooks；插件 API 读不到会话流 | 结构化 dsh 接入要 600–900 行；20h 内不做 |
-| **Happy** | 24k★ MIT；E2EE relay + ACP；daemon 安装脚本仅 macOS | Windows 受控端不成立 |
+| **Orca** | 106k★ MIT TS；已支持 dsh 但走 TUI + hooks；插件 API 读不到会话流 | 结构化 dsh 接入要 600–900 行；20h 内不做 |
+| **Happy** | 24k★ MIT；E2EE relay + ACP；daemon 仅 macOS | Windows 受控端不成立 |
 
-**选型结论：**
+### 2.1 接入方式
 
-- 被控端用 **dsh**：它有完整 ACP、干净的插件化运行时，是题目点名的参考 harness。
-- 接入用 **官方 Python SDK**，不手写 ACP：SDK 已经封装 initialize/session/prompt/events/resume，20h 内最稳。
-- 本地交互用 **Web UI + Edge `--app`**：同一套 HTML/JS，一条命令启动，先做出 Agent 对话的实体感；不引入 Electron/React。
-- 网络用 **Tailscale + 节点主动外连 WSS**：跨网络、无入站端口；换 Controller URL 就能走 LAN 或未来公网 relay。
-- Qoder/Codex/Raven 作为设计对比和后续 adapter，不作为首发依赖。
+- **桌面 APP**：官方 Windows 安装包 `https://download.deepseek.com/desktop/dsh-latest-windows-x64.exe`；登录 DeepSeek 账号，选工作区。
+- **Agent ↔ Tether**：`@deepseek-ai/dsh-mcp-client`，stdio 配置写在 `~/.dsh/profiles/desktop/cordis.patch.yml`；工具名 `mcp__tether__*`。
+- **Node ↔ dsh**：官方 Python SDK；每个 Run 一个 worker thread + 一个 dsh 运行时；事件、resume、关闭由 SDK 管。
+- **网络**：Tailscale + 节点主动外连 WSS；Controller 绑 `0.0.0.0`，但 HTTP UI/API 只允许 loopback，只有 `/ws/node` 带 token 对 tailnet 开放。
 
-### 2.1 两个真实的 SDK 坑（Gate 0 发现）
+### 2.2 两个真实的坑（Gate 0 发现）
 
-1. **Windows 运行时打包 bug**：`deepseek-harness-sdk==0.2.1rc2` 的 wheel 把 `@koromix/koffi-win32-x64` 解析到构建机路径 `E:\snapshot\node\...`，每个 turn 都报 `The specified module could not be found`。
-   - 绕过：安装 npm 版 dsh，用 SDK 的 `_launch_args` 指向 `node .../dsh/lib/bin.js --profile sdk`；SDK 仍负责会话/事件/resume/关闭，只有运行时二进制来自 npm。
-   - 这是代码里 `tether/node/dsh_adapter.py:npm_launch_args()` 存在的原因。
-2. **SDK 没有协作式取消**：协议只注册了 `session/prompt`、`session/resume`、`session/wait`、`session/working-directory/*`，没有 `session/cancel`；`Session.run()` 阻塞到 `session.status == idle`。
-   - 所以 v0.1 的取消是**硬取消**：`harness.close()` → 宽限 → 进程树终止 → `cancelled`；无法确认则 `unknown`；下一轮用 `resume_session` 修复被中断的 turn。
-   - 文档里不写"协作式取消"，因为代码做不到。
+1. **Windows wheel 的 koffi 路径 bug**：`deepseek-harness-sdk==0.2.1rc2` 把 `@koromix/koffi-win32-x64` 解析到构建机路径 `E:\snapshot\node\...`，每个 turn 都报 `The specified module could not be found`。
+   - 绕过：装 npm 版 dsh，用 SDK 的 `_launch_args` 指向 `node .../dsh/lib/bin.js --profile sdk`；SDK 仍负责会话/事件/resume/关闭。
+   - 代码：`tether/node/dsh_adapter.py:npm_launch_args()`。
+2. **SDK 没有协作式取消**：协议只有 `session/prompt`、`session/resume`、`session/wait`、`session/working-directory/*`，没有 `session/cancel`；`Session.run()` 阻塞到 idle。
+   - 所以取消是**硬取消**：`harness.close()` → 宽限 → 进程树终止 → `cancelled`；无法确认则 `unknown`；下一轮 `resume_session` 修复被中断的 turn。
+   - 文档不写"协作式取消"。
 
 ---
 
 ## 3. 架构
 
-### 3.1 v0.1：星型控制面 + 本地 Agent
+### 3.1 v0.1：Agent 在 DeepSeek，Tether 在下面
 
 ```
-┌──────────────────────────── 桌面 Windows ────────────────────────────┐
-│  Edge --app 聊天窗口 (127.0.0.1:18890, 只允许本机)                     │
-│        │ HTTP + SSE                                                    │
-│  Tether Controller (FastAPI + SQLite)                                  │
-│        │ 出站 WSS + node token (Tailscale / LAN)                       │
-│        ├──────────────► Tether Node (DESKTOP-LOCAL) → dsh Agent        │
-│        │                   └─ 本地控制台 127.0.0.1:18893（只读）        │
-│        └──────────────► Tether Node (LAPTOP-01) → dsh Agent            │
-│                            └─ 它自己的 D:\tether-node\work              │
-└────────────────────────────────────────────────────────────────────────┘
+┌────────────────── DeepSeek Harness 桌面 APP（交互端）──────────────────┐
+│  普通对话 · 记忆 · 技能 · 插件市场                                    │
+│  工具列表里多出：mcp__tether__list_peers / remote_task / ...           │
+└───────────────────────────────┬───────────────────────────────────────┘
+                                │ MCP stdio
+                    ┌───────────▼───────────┐
+                    │  Tether MCP server    │  只做工具，不做对话
+                    └───────────┬───────────┘
+                                │ HTTP
+                    ┌───────────▼───────────┐
+                    │ Tether Controller     │  设备/会话/Run/事件/幂等
+                    │ FastAPI + SQLite      │  UI/API 仅 loopback
+                    └───────┬───────┬───────┘
+                            │ WSS   │ WSS（Tailscale）
+                ┌───────────▼──┐  ┌─▼──────────────────────────────┐
+                │ Node DESKTOP │  │ Node LAPTOP-01 → dsh Agent     │
+                │ → dsh Agent  │  │ workspace D:\tether-node\work  │
+                └──────────────┘  └────────────────────────────────┘
+Tether 自带聊天页：可选监控台（设备/任务/事件/证据），不是交互端。
 ```
 
-- **Controller**：设备注册、会话、Run、事件日志、幂等、`unknown`、SSE；不执行代码、不持有模型 key。
-- **Node**：在目标机器上运行；拉起 dsh、翻译 ACP/SDK 事件、本地 journal、进程树监督、本地控制台；只主动外连，不开入站端口。
-- **本地 Agent**：桌面默认选中 `DESKTOP-LOCAL`，用户直接和它对话；`LAPTOP-01` 是同一个 Agent 类在另一台机器上的实例。
-- **网络**：Tailscale 提供稳定 `100.x` 地址与 WireGuard 加密；Controller 绑 `0.0.0.0:18890`，但 HTTP UI/API 有 loopback 中间件，只有 `/ws/node` 对 tailnet 开放。
-- **为什么 Node 必须存在**：dsh 的 ACP/SDK 是 stdio，跟着 dsh 进程走，不监听网络端口；Node 是把它变成出站 WSS 的适配器，同时负责进程树和能力清单。
+角色边界：
 
-### 3.2 v0.2 目标：对等 Agent 网络
+| 角色 | 负责 | 不负责 |
+|---|---|---|
+| DeepSeek Harness 桌面 APP | 对话、记忆、技能、插件、决定何时调用工具 | 跨设备传输 |
+| Tether MCP server | `list_peers` / `remote_task` / `remote_status` / `remote_cancel` | 执行命令、持有 key、替代 Agent |
+| Tether Controller | 设备注册、会话、Run、事件日志、幂等、`unknown`、SSE | 执行代码、模型调用 |
+| Tether Node | 拉起 dsh、翻译事件、本地 journal、进程树、本地控制台 | 决策、对话 |
+
+**为什么 Node 必须存在**：dsh 的 SDK/ACP 是 stdio，跟着 dsh 进程走，不监听网络端口；Node 是把它变成出站 WSS 的适配器，同时负责进程树和能力清单。
+
+### 3.2 v0.2 目标：每台设备都是 Agent + Tether
 
 ```
-┌────────────── 设备 A：Tether Agent App ──────────────┐
-│ 聊天 UI · 本地 Agent(dsh) · peer 监听 · peer 注册表  │
-│        ⇅ 出站 WSS（Tailscale）                       │
-└───────────────────────┬──────────────────────────────┘
-                        │  任意两台直连；没有唯一 master
-┌───────────────────────┴──────────────────────────────┐
-│ 设备 B：Tether Agent App                              │
-│ 聊天 UI · 本地 Agent(dsh) · peer 监听 · peer 注册表  │
-└───────────────────────────────────────────────────────┘
+设备 A：DeepSeek 桌面 APP + Tether MCP + 本地 Node + peer 注册表
+        ⇅ 出站 WSS（Tailscale）
+设备 B：DeepSeek 桌面 APP + Tether MCP + 本地 Node + peer 注册表
 ```
 
-- 每台设备跑**同一份包、同一个入口**：`tether up` 启动本地 Agent + 聊天 UI + peer 监听。
-- 每台既是 host 也是 callee；A 可以在自己的聊天里让本地 Agent 把任务派给 B，B 的 Agent 在本机执行，事件流回 A。
-- 没有唯一 Controller；设备之间通过配对码/邀请交换身份和 token，直接 WSS；Tailscale 负责 NAT/加密，公网 relay 是可选演进。
-- 可靠性内核（第 5 节）原样复用：每台节点都有自己的 journal，任务事件按 `seq` 去重/重放。
+- 每台设备同一份包、同一个入口；每台既能发起也能被控；不再有唯一 master。
+- 设备 A 的 DeepSeek Agent 通过本地 MCP 调 `remote_task(device=B)`；B 的 Agent 在本机执行；事件/结果回流到 A 的 DeepSeek 对话。
+- 对等连接、配对码、能力清单、任务路由是 v0.2 的增量；可靠性内核原样复用。
 
 ### 3.3 为什么 v0.1 先做星型
 
 - 20 小时内，星型是拿到"真实远端执行 + 断线恢复 + 取消无残留"证据的最小路径。
-- 对等网络需要多 Controller/多 peer 注册、发现、配对、N×N 连接、UI peer 列表；这些是 v0.2 的增量，不是 v0.1 的前置。
-- 星型的 Controller/Node 代码已经按"设备/会话/Run/事件"抽象，改成对等主要改**连接拓扑和入口**，可靠性层不动。
+- 对等网络需要多控制面、peer 发现/配对、N×N 连接、每台设备的鉴权；这些是 v0.2 的增量，不是 v0.1 的前置。
+- 星型的 Controller/Node 已按设备/会话/Run/事件抽象，改成对等主要改连接拓扑和入口，可靠性层不动。
 
 ---
 
@@ -162,12 +184,10 @@
 
 | 对象 | 字段 | 说明 |
 |---|---|---|
-| Device | `device_id, name, platform, capabilities, allowed_workspace, online, last_seen` | 一台被控电脑；能力清单包含 OS/shell/agents/workspace |
+| Device | `device_id, name, platform, capabilities, allowed_workspace, online, last_seen` | 一台被控电脑；能力清单含 OS/shell/agents/workspace |
 | RemoteSession | `session_id, device_id, workspace, harness_session_id, created_at` | 可继续的远端 Agent 会话；同一 Session 单写者 |
 | Run | `run_id, session_id, request_id, fingerprint, prompt, state, finish_reason, final_response, outcome, ack_seq` | 一次提示词执行；继续任务 = 同 Session 下新 Run |
-| RunEvent | `run_id, seq, kind, ts, payload`，唯一键 `(run_id, seq)` | 不可变事件流；工具/assistant/thought/log |
-
-状态机：
+| RunEvent | `run_id, seq, kind, ts, payload`，唯一键 `(run_id, seq)` | 不可变事件流；tool/assistant/thought/log |
 
 ```
 queued ──► dispatching ──► running ──► completed
@@ -177,9 +197,9 @@ queued ──► dispatching ──► running ──► completed
                              └──► unknown  ◄── 节点掉线/崩溃/终态前断链
 ```
 
-- `completed` 只表示 Agent 正常结束，**不代表测试/业务目标成功**；命令非零退出、测试失败写 `outcome`，不是基础设施故障。
-- `unknown` 是安全占位，不是判决；节点重连后可以上报真实状态，把 `unknown` 校正为 `running/completed/failed`；但绝不自动重跑。
-- 同一 Session 同时只允许一个活跃 Run（会话级单写者）；第二个 Run 在第一个终态前返回 409。
+- `completed` 只表示 Agent 正常结束，不代表测试/业务目标成功；命令非零退出写 `outcome`。
+- `unknown` 是安全占位，不是判决；节点重连后可以上报真实状态校正，但绝不自动重跑。
+- 同一 Session 同时只允许一个活跃 Run（会话级单写者）；第二个 Run 在第一个终态前 409。
 
 ---
 
@@ -187,59 +207,86 @@ queued ──► dispatching ──► running ──► completed
 
 ### 5.1 事件流
 
-- Node 先把事件写入本地 SQLite outbox（fsync），再发 Controller。
-- Controller 落库 commit 后才 ack；`ack_seq` 取**最高连续**序号，有缺口不前进。
+- Node 先把事件写本地 SQLite outbox（fsync），再发 Controller。
+- Controller 落库 commit 后才 ack；`ack_seq` 取最高**连续**序号，有缺口不前进。
 - Node 只截断 `seq <= ack_seq`；重连从 `last_ack+1` 重放；Controller 用 `(run_id, seq)` 去重。
-- 语义是 **at-least-once + 幂等效果**，不声称 exactly-once。
+- 语义：at-least-once + 幂等效果，不声称 exactly-once。
 
 ### 5.2 幂等
 
 - 键：`(device_id, request_id)`；指纹：`sha256(prompt + agent + workspace)`。
-- 同键同指纹返回原 Run；同键异指纹 409；响应丢失时不假装成功。
+- 同键同指纹返回原 Run；同键异指纹 409；响应丢失不假装成功。
 
 ### 5.3 取消（SDK 限制下的硬取消）
 
-1. 用户在 UI 点取消 → Controller 把 Run 置 `cancelling` 并发 `cancel`。
+1. 用户在 DeepSeek 对话里让 Agent 取消，或监控台点取消 → Controller 置 `cancelling` 并发 `cancel`。
 2. Node 调 `harness.close()` 发 shutdown；宽限期后进程树仍在，则 Job Object/进程树终止。
-3. 再次检查残留进程；确认归零 → `cancelled`；无法确认 → `unknown`。
-4. 下一轮用 `resume_session` 修复被中断的 turn；UI 明确提示"非协作式取消，正在执行的工具可能被中断"。
+3. 再次检查残留；归零 → `cancelled`；无法确认 → `unknown`。
+4. 下一轮用 `resume_session` 修复被中断的 turn。
 
-实测：取消前 6 个进程，取消后 0 残留（证据 `evidence/cancel_probe.json`）。
+实测：取消前 6 个进程，取消后 0 残留（`evidence/cancel_probe.json`）。
 
 ### 5.4 竞态表
 
 | 竞态 | 规则 |
 |---|---|
-| cancel × complete | 先落库的终态获胜；晚到的终态事件照样入库；Run 保持 `cancelled`，`outcome` 记录实际终态与可能的部分副作用 |
+| cancel × complete | 先落库的终态获胜；晚到终态事件照样入库；Run 保持 `cancelled`，`outcome` 记录实际终态与可能的部分副作用 |
 | 离线 × 重投 | 节点先写 outbox；Controller 按 `(run_id, seq)` 去重；ack 只前进到连续位置 |
 | 重连 × unknown | 节点上报 ledger；`unknown → running/completed/failed` 允许校正；不自动重跑 |
 | 重复提交 | `request_id` + 指纹；同内容复用，异内容 409 |
-| 节点崩溃 | 本机 ledger 里 active Run 在重启时标 `unknown`；等 `reconcile` |
+| 节点崩溃 | 本机 ledger 里 active Run 重启时标 `unknown`；等 `reconcile` |
 | 同一 Session 并发 | 会话级单写者；第二个 Run 409 |
 
 ---
 
-## 6. 交互：为什么是 Agent，而不是仪表盘
+## 6. 交互：DeepSeek 是 Agent，Tether 是工具
 
-桌面打开就是和 `DESKTOP-LOCAL` 的对话：
+用户在 DeepSeek Harness 桌面 APP 里说：
 
+> 让 LAPTOP-01 的 Agent 在 D:/tether-node/work 建 tether-delegated.txt，内容 OK，然后读回来。
+
+DeepSeek Agent 自己决定调用：
+
+1. `mcp__tether__list_peers` → 看到 `LAPTOP-01` 在线、workspace 是 `D:\tether-node\work`；
+2. `mcp__tether__remote_task(device="LAPTOP-01", prompt="...")` → Tether 创建 Run，路由到笔记本 Node；
+3. 笔记本上的 dsh Agent 用 `pwsh` 写文件、读回；
+4. Tether 把终态/结果返回给 DeepSeek Agent；
+5. DeepSeek Agent 在自己的对话里总结，并可以继续追问。
+
+实际运行结果（截图 `docs/screenshots/deepseek-delegated.png`）：
+
+- 文件：`D:\tether-node\work\tether-delegated.txt`，内容 `OK`，2 字节，无 BOM；
+- 第一次写 run `r-56ca1f58b1a3`，第二次只读校验 run `r-8fa5928462a6`；
+- 两次都在 `dsh_session=tether-s-d0332f33ad47` 里，说明目标端是持久会话。
+
+为什么这是对的：
+
+- 用户不需要换聊天框；DeepSeek 的记忆、技能、插件市场全部保留；
+- Tether 的 MCP 指令只描述"如何发现设备、如何派活"，不抢 Agent 的决策；
+- 如果以后用 Qoder/Codex，同一套 MCP server 直接挂过去，不需要重写。
+
+Tether 自带聊天页仍然存在，但定位是**监控台**：看设备、任务、事件、证据；不是主入口。
+
+### 6.1 MCP 配置
+
+`~/.dsh/profiles/desktop/cordis.patch.yml` 里一条 `insert`：
+
+```yaml
+- insert:
+    - id: mcp-tether
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: tether
+        transport: stdio
+        command: '<repo>\.venv\Scripts\python.exe'
+        args: ['-m', 'tether.mcp_server']
+        env:
+          PYTHONPATH: '<repo>'
+          TETHER_CONTROLLER_HTTP: 'http://127.0.0.1:18890'
+        cwd: '<repo>'
 ```
-Tether
-DESKTOP-LOCAL · Local Agent        online · E:\...\work-local      Local console ↗
-┌ Agents ─────────────┐ ┌──────────── Chat ─────────────────────────────┐
-│ DESKTOP-LOCAL local  │ │ You: 统计 tests 目录，生成 report.md          │
-│ LAPTOP-01     peer   │ │ Agent [running]                               │
-│ + New chat           │ │  thought: 先列目录，再跑 pytest                │
-│                      │ │  tool/call pwsh: pytest -q tests              │
-│ Recent runs          │ │  tool/result: 42 passed, 3 failed             │
-│                      │ │  assistant: 已生成 report.md（1.2 KB）         │
-└──────────────────────┘ └───────────────────────────────────────────────┘
-```
 
-- 默认本地 Agent；侧栏切换 peer；顶部显示 agent/工作区/在线状态；本地 Agent 有 `Local console ↗`（127.0.0.1:18893，只读，显示节点自己的 outbox）。
-- 会话记录跨 Run 保留：用户消息、thought、tool call/result、assistant 答案都在同一时间线；底部输入框，Enter 发送，Shift+Enter 换行。
-- 一条命令 `desktop/tether-app.ps1` 启动 Controller + 本地 Node + Edge `--app` 窗口；日志在 `.runtime/logs/`。
-- 同一份代码在笔记本上跑 Node；v0.2 会把聊天 UI/Controller 也放到每台设备，形成对等。
+`desktop/install-mcp.ps1` 会备份并追加这条配置；重启 DeepSeek Harness 后生效。
 
 ---
 
@@ -249,7 +296,7 @@ DESKTOP-LOCAL · Local Agent        online · E:\...\work-local      Local conso
 
 - Node 上报能力清单：OS、shell、Python/Node、workspace、可用 agents（dsh/fake）。
 - Windows 用 Job Object/进程树；Linux 用进程组（设计，未在本次验证）。
-- 工作区路径由节点配置；Controller 只传 workspace 字符串，不做路径拼接。
+- 工作区路径由节点配置；Controller 只传字符串，不做路径拼接。
 
 ### 7.2 网络
 
@@ -262,11 +309,13 @@ DESKTOP-LOCAL · Local Agent        online · E:\...\work-local      Local conso
 | 项 | 现状 | 生产化缺口 |
 |---|---|---|
 | 传输 | Tailscale/WireGuard；WSS token | WSS/mTLS、证书轮换 |
-| 节点身份 | 共享 demo token（`TETHER_NODE_TOKEN`） | 每设备密钥、配对码、吊销 |
-| 人类 UI/API | loopback-only 中间件；只 `/ws/node` 对 tailnet 开放 | UI 登录、会话 cookie、CSRF |
-| 模型 key | 只存在目标机器 `.env`/环境变量，不经过 Controller | KMS/凭据代理 |
-| 文件边界 | workspace 由节点配置 | resolve 后白名单校验、只读/写权限 |
-| 日志 | 事件含命令输出，本地/仓库不进 key | 脱敏、保留期、审计 |
+| 节点身份 | 共享 demo token | 每设备密钥、配对码、吊销 |
+| 人类 UI/API | loopback-only 中间件；只有 `/ws/node` 对 tailnet 开放 | UI 登录、会话 cookie、CSRF |
+| 模型 key | 只在目标机器 `.env`/环境变量；桌面 APP 自己的账号 | KMS/凭据代理 |
+| 文件边界 | workspace 由节点配置 | resolve 后白名单、只读/写权限 |
+| 日志 | 事件含命令输出；不把 key 写进仓库 | 脱敏、保留期、审计 |
+
+**注意**：Controller 的 HTTP API 只允许 loopback，所以 v0.1 只有桌面侧 Agent 能通过 MCP 发起；笔记本侧的 Agent 若要发起，需要 v0.2 的每设备控制面或带鉴权的 tailnet API。
 
 ---
 
@@ -276,7 +325,7 @@ DESKTOP-LOCAL · Local Agent        online · E:\...\work-local      Local conso
 
 | 实验 | 做法 | 观测 |
 |---|---|---|
-| E0 SDK 探针 | 官方 SDK + npm dsh；dummy key | initialize/建会话/prompt/事件/idle 全通；dummy key 打到真实 401；发现 wheel 的 koffi 路径 bug 并绕过 |
+| E0 SDK 探针 | 官方 SDK + npm dsh；dummy key | initialize/建会话/prompt/事件/idle 全通；dummy key 打到真实 401；发现 wheel koffi bug 并绕过 |
 | E1 本机闭环 | Controller + Node + fake adapter | 事件实时、终态入库、重连无重复 |
 | E2 真实 dsh | 让 Agent 写 `gate2.txt` | 文件 `OK\n`；`pwsh` + `read` 工具事件；13 个 Tether 事件、29 个 dsh 事件 |
 | E2b 继续任务 | 同一 Session 第二轮，要求不重读文件 | `dsh_session` 相同；直接引用上一轮内容回答 |
@@ -284,71 +333,77 @@ DESKTOP-LOCAL · Local Agent        online · E:\...\work-local      Local conso
 | E4 幂等 | 同 `request_id` 发送 3 次；异内容 | 只 1 个真实 Run；异内容 409 |
 | E5 取消 | 真实慢命令 `python sleep 120` | 取消前 6 进程，取消后 0 残留；`cancelled` 5.4s |
 | E6 跨机 | 笔记本 Node 通过 Tailscale 接入 | `LAPTOP-01` 创建 `D:\tether-node\work\laptop-proof.txt`，返回路径和 `OK` |
-| UI | 桌面聊天窗口 + 本地控制台 | 实际发消息 "Say hello" → Agent 回复；同一会话累计 2 个 Run |
+| E7 Agent-first | 在 DeepSeek 桌面 APP 里让 Agent 用 Tether | 它自己调用 `list_peers`，再 `remote_task` 让 LAPTOP-01 创建 `tether-delegated.txt`；两次校验同一 dsh 会话 |
+| E8 监控台 | Tether 自带 UI | 设备/任务/事件可看；仅作监控 |
 
-证据文件：`evidence/gate0.md`、`evidence/gate2.md`、`evidence/cancel_probe.json`。
+证据：`evidence/gate0.md`、`evidence/gate2.md`、`evidence/cancel_probe.json`、`docs/screenshots/deepseek-*.png`。
 
 ### 8.2 Verified / Designed / Not implemented
 
 | 状态 | 内容 |
 |---|---|
-| **Verified** | 星型 Controller/Node、真实 dsh 执行、Session 继续、断线重放、幂等、`unknown`、硬取消 0 残留、Tailscale 跨机、聊天式本地 Agent、一条命令桌面应用 |
-| **Designed** | 对等 Agent 网络（每台同包、双向派活）、审批 UI、能力路由、Linux/WSL、公网 relay、多任务并发 |
-| **Not implemented** | 上述 Designed 项；生产级鉴权/审计/沙箱 |
+| **Verified** | DeepSeek 桌面 Agent 通过 MCP 调用 Tether、Agent-to-Agent 派活、真实 dsh 执行、Session 继续、断线重放、幂等、`unknown`、硬取消 0 残留、Tailscale 跨机、监控台 |
+| **Designed** | 每台设备都跑桌面 Agent + Tether MCP 的对等网络、配对/能力路由、审批 UI、Linux/WSL、公网 relay、多任务并发 |
+| **Not implemented** | 上述 Designed 项；生产级鉴权/审计/沙箱；笔记本侧 Agent 发起任务 |
 
 ### 8.3 复现
 
 ```powershell
-# 桌面
+# 控制面 + 本地 Node（监控台可选）
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e .
 npm install --prefix .runtime\npm @deepseek-ai/dsh@0.2.1-rc.2
-Copy-Item .env.example .env   # 填 DEEPSEEK_API_KEY
+Copy-Item .env.example .env   # DEEPSEEK_API_KEY
 .\desktop\tether-app.ps1
-```
 
-```powershell
-# 笔记本（同一份仓库）
+# 给 DeepSeek Harness 桌面 APP 挂 MCP（先关闭 APP）
+.\desktop\install-mcp.ps1
+# 重启 DeepSeek Harness，然后：
+#   用 Tether 列出当前已接入的设备
+#   让 LAPTOP-01 的 Agent 在 D:/tether-node/work 建文件并读回
+
+# 笔记本节点
 .\laptop\bootstrap-node.ps1
-# 填 .env 的 DEEPSEEK_API_KEY，然后把 TETHER_CONTROLLER 指向桌面 Tailscale IP
+# 填 .env，TETHER_CONTROLLER 指向桌面 Tailscale IP
 .\laptop\tether-node.ps1
 ```
 
 ---
 
-## 9. 从 v0.1 到 v0.2：对等 Agent 网络
+## 9. 从 v0.1 到 v0.2：每台设备都是 Agent
 
-目标：每台设备同一份包，任意两台互相派活，没有唯一 master。
+目标：每台设备同一份包；任意两台互相派活；没有唯一 master。
 
 需要改的四件事：
 
-1. **入口对称**：`tether up` 在每台设备同时启动本地 Agent、聊天 UI、peer 监听；Controller 不再是独立角色，而是每台设备内嵌的本地组件。
-2. **多 peer 连接**：Node 从"连一个 Controller"改成"连本机 Controller + 每个已配对 peer 的 Controller"；每个 peer 连接独立 token/心跳；任务按 `run_id` 去重，避免双向重复。
-3. **peer 注册与配对**：设备身份/公钥、一次性配对码、能力清单互换；Tailscale 提供地址，公网 relay 可选；UI 侧栏显示 peers 与在线状态。
-4. **本地 Agent 工具化**：本地 dsh 通过 MCP 暴露 `list_peers`、`remote_task`、`remote_status`、`remote_cancel`；用户对本地 Agent 说"让 LAPTOP-01 跑这个"，Agent 自己调用工具派活；结果/事件回流到本地聊天。
+1. **每台设备都跑 DeepSeek Harness 桌面 APP + Tether MCP**：交互端始终是 Agent；Tether 只是工具。笔记本也要装桌面 APP，而不是只跑 Node。
+2. **控制面归属**：当前 Controller 的 HTTP API 只允许 loopback，所以笔记本侧 MCP 不能直接调桌面 Controller。v0.2 要么每台设备内嵌本地 Controller，要么给 Controller 的 tailnet API 加设备级鉴权；前者更符合"对等"。
+3. **多 peer 连接**：Node 从"连一个 Controller"改成"连本机 Controller + 每个已配对 peer"；按 `run_id` 去重，避免双向重复；peer 发现/配对/能力清单。
+4. **本地 Agent 工具化**：本地 DeepSeek Agent 的 MCP 工具负责 `list_peers` / `remote_task`；用户对本地 Agent 说"让 B 做这个"，Agent 自己派活；结果回到本地对话。
 
 保留不变：`seq/ack/journal`、幂等、`unknown`、硬取消、resume、事件映射、Job Object/进程树、本地控制台。
 
-代价：设备数 N 时连接数 O(N²)；需要配对/发现/吊销；没有中心调度器，能力路由只能在客户端做；这些是 v0.2 的工程重点。
+代价：设备数 N 时连接数 O(N²)；需要配对/发现/吊销；没有中心调度器，能力路由只能在客户端做。
 
 ---
 
 ## 10. 已知限制
 
-- 当前是星型，不是对等；本文把对等写进目标架构，但不冒充已实现。
-- 审批 UI 未实现：SDK 0.2.1rc2 没有 `approval_requests` 握手；`next_request` 只用于诊断。
+- 当前是星型：只有桌面侧 Agent 发起，笔记本是被控端；对等网络是 v0.2。
+- 审批 UI 未实现：SDK 0.2.1rc2 没有 `approval_requests` 握手。
 - 只验证了 Windows；Linux/WSL 仅有设计。
 - 每 Session 同时一个 Run；没有多任务并发/调度。
 - 默认节点 token 是 demo 级；生产需要每设备凭据/吊销。
 - dsh SDK 仍是 RC；事件词汇可能随版本变化，`dsh_adapter.py` 用通用 fallback 保留未知事件。
+- Tether 自带聊天页是监控台，不是 Agent；不要把两者混为一谈。
 
 ### 10.1 如果还有时间
 
-1. 对称入口 + 双向 peer（第 9 节），先做两台设备的真实双向派活。
+1. 每台设备装 DeepSeek 桌面 APP + Tether MCP，做两台设备的双向派活。
 2. 审批通道：升级 SDK/走 ACP，补 allow/deny/timeout。
 3. 能力路由：按 OS/工具/资源选择目标设备。
-4. 公网 relay / 断线更长的恢复；批量任务与 DAG。
-5. WSS/mTLS、设备吊销、审计日志、工作区路径 resolve 白名单。
+4. 公网 relay / 更长断线恢复；批量任务与 DAG。
+5. WSS/mTLS、设备吊销、审计日志、workspace 路径 resolve 白名单。
 
 ---
 
@@ -356,18 +411,21 @@ Copy-Item .env.example .env   # 填 DEEPSEEK_API_KEY
 
 ### 11.1 代码位置
 
+- `tether/mcp_server.py`：MCP tools；Agent 的唯一入口。
 - `tether/controller/app.py`：HTTP/SSE/WS、loopback 中间件、transcript 端点。
 - `tether/controller/store.py`：Device/Session/Run/Event、幂等、连续 ack、`unknown`。
 - `tether/node/agent.py`：出站 WSS、outbox、重连、心跳、本地控制台。
 - `tether/node/dsh_adapter.py`：SDK 调用、npm 运行时绕过、事件映射、硬取消。
-- `tether/static/index.html`：聊天式 UI。
-- `desktop/tether-app.ps1` + `scripts/up.py`：一条命令启动 Controller + 本地 Agent + 应用窗口。
-- `laptop/`：同一份代码的笔记本 bootstrap/node 脚本。
+- `tether/static/index.html`：监控台 UI。
+- `desktop/install-mcp.ps1`：把 Tether MCP 写进 DeepSeek Harness 桌面 profile。
+- `laptop/`：笔记本 Node bootstrap/启动/卸载。
 
 ### 11.2 参考
 
 - DeepSeek Harness: https://github.com/deepseek-ai/deepseek-harness
+- DeepSeek Harness 官网/桌面端下载: https://www.deepseek.com/harness/
 - dsh Python SDK: https://github.com/deepseek-ai/deepseek-harness/blob/master/python/sdk/README.zh.md
+- dsh MCP client: https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/mcp/mcp-client/README.zh.md
 - ACP: https://agentclientprotocol.com
 - npm dsh: https://www.npmjs.com/package/@deepseek-ai/dsh
 - Tailscale: https://tailscale.com/download/windows

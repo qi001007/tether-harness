@@ -25,16 +25,20 @@ This file is for an AI or human reviewer who wants to decide whether the claims 
 | Idempotent submission | `tests` not present yet; verified via API: same `request_id` → one Run, different content → 409 |
 | Node crash is not a false failure | `mark_device_unknown` in `store.py`; `unknown` never auto-retries |
 | Cross-machine execution | `evidence/gate2.md` E6/cross-machine; `LAPTOP-01` created `D:\tether-node\work\laptop-proof.txt` |
-| Chat-first local Agent | `tether/static/index.html`; actual browser test: "Say hello" → "Hello! It's nice to meet you." |
-| One-command desktop app | `desktop/tether-app.ps1` + `scripts/up.py`; Edge `--app` window title `Tether` |
+| DeepSeek desktop Agent calls Tether | `docs/screenshots/deepseek-delegated.png`; run `r-56ca1f58b1a3` + verify run `r-8fa5928462a6`; file `D:\tether-node\work\tether-delegated.txt` |
+| Agent-to-Agent delegation | same screenshot; the desktop Agent called `mcp__tether__remote_task` for `LAPTOP-01`; target session `tether-s-d0332f33ad47` |
+| Tether MCP server | `tether/mcp_server.py`; `desktop/install-mcp.ps1`; profile entry in `~/.dsh/profiles/desktop/cordis.patch.yml` |
+| Tether window is a monitor | `tether/static/index.html`; the Agent interaction is in DeepSeek Harness desktop |
+| One-command control plane | `desktop/tether-app.ps1` + `scripts/up.py` |
 | dsh Windows wheel bug | `evidence/gate0.md`; `tether/node/dsh_adapter.py:npm_launch_args()` |
 | SDK has no session/cancel | `deepseek-harness-sdk==0.2.1rc2` protocol only has prompt/resume/wait; hard cancel documented in `DESIGN.md` §5.3 |
 
 ## Verified / Designed / Not implemented
 
-- **Verified**: star controller/node, real dsh, session resume, event replay,
+- **Verified**: DeepSeek Harness desktop Agent calling Tether MCP, Agent-to-Agent
+  delegation, star controller/node, real dsh, session resume, event replay,
   idempotency, `unknown`, hard cancel with 0 residual, Tailscale cross-machine,
-  chat-first local Agent, one-command app.
+  control plane app, monitor UI.
 - **Designed**: symmetric peer Agent network (every device same package, two-way
   delegation), approval UI, capability routing, Linux/WSL, public relay,
   multi-task concurrency.
@@ -48,6 +52,12 @@ the smallest reliable slice. The target peer architecture is in `DESIGN.md` §9,
 including the exact changes (multi-controller node, peer registry/pairing, local
 Agent tools). The current code already models Device/Session/Run/Event, so the
 reliability core is reusable.
+
+**Why not make Tether the chat UI?**
+DeepSeek Harness already owns the Agent surface: memory, skills, plugin marketplace,
+approval UI, model settings. Tether cannot and should not replicate those. Tether
+exposes four MCP tools and the reliability/routing layer; the Tether web UI is a
+monitor for devices/tasks/events.
 
 **Why the Python SDK rather than ACP?**
 The SDK is the supported high-level API for session/events/resume. ACP would
@@ -79,6 +89,10 @@ npm install --prefix .runtime\npm @deepseek-ai/dsh@0.2.1-rc.2
 Copy-Item .env.example .env   # fill DEEPSEEK_API_KEY
 .\desktop\tether-app.ps1
 ```
+
+Install the official DeepSeek Harness desktop app from
+https://www.deepseek.com/harness/ . Close it, then run `.\desktop\install-mcp.ps1`
+and restart the app. In the DeepSeek chat, ask: "用 Tether 列出当前已接入的设备".
 
 Laptop: `.\laptop\bootstrap-node.ps1`, fill `.env`, `.\laptop\tether-node.ps1`.
 

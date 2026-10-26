@@ -1,90 +1,88 @@
 # Tether 演示视频（2–3 分钟）分镜与旁白
 
-目标：让看视频的人 30 秒内明白"我在桌面上和 Agent 对话，任务在另一台电脑上真实执行"；
-2 分钟内看到本地 Agent、远端 Agent、取消、继续四件事。
+目标：30 秒内让看的人明白——**交互端是 DeepSeek Harness 桌面 APP，Agent 自己用 Tether 把任务派到另一台电脑**；不是换一个聊天框。
 
 ## 录制前检查
 
-- 桌面：`desktop/tether-app.ps1` 已启动，Edge 窗口标题是 `Tether`。
-- 桌面 UI 左侧能看到 `DESKTOP-LOCAL`（local）和 `LAPTOP-01`（peer），两个都是 online。
-- 笔记本：`laptop/tether-node.ps1` 正在运行；笔记本浏览器打开 `http://127.0.0.1:18893`。
-- 桌面点一次 `+ New chat`，让对话从干净状态开始。
-- 录屏工具：OBS 或 Win+G；1080p；如果只能录桌面，笔记本画面用手机拍一小段也可以，不要伪造。
+- DeepSeek Harness 桌面 APP 已打开，登录 DeepSeek 账号，选中默认工作区。
+- `~/.dsh/profiles/desktop/cordis.patch.yml` 里已有 `mcp-tether`（`desktop/install-mcp.ps1`）。
+- Tether 控制面在跑：`desktop/tether-app.ps1`（它的窗口只作监控，可最小化）。
+- 笔记本 `laptop/tether-node.ps1` 在跑；笔记本浏览器打开 `http://127.0.0.1:18893`。
+- 在 DeepSeek 里点"新会话"，从干净对话开始。
+- 录屏 1080p；如果只能录桌面，笔记本画面用手机拍一小段，或最后用它的本地控制台截图。
 
 ## 分镜
 
-### 0:00–0:15 开场
+### 0:00–0:15 开场：这就是 DeepSeek
 
-画面：桌面 Tether 窗口，左侧两个 Agent，右侧是聊天框。
+画面：DeepSeek Harness 桌面 APP，左侧"新会话/插件/自动化任务"，中间是正常的 DeepSeek 对话输入框。
 
 旁白：
-> 这是 Tether，一个多设备的 Agent Harness 客户端。每台电脑跑同一个 Agent；我可以在这里和本机 Agent 对话，也可以把任务交给另一台电脑上的 Agent。
+> 这是 DeepSeek Harness 的官方桌面端，交互端没有换，记忆、技能、插件市场都还是 DeepSeek 的。Tether 只是给它加了几个跨设备工具。
 
-### 0:15–0:50 本地 Agent
+### 0:15–0:45 让 Agent 看见设备
 
-在 `DESKTOP-LOCAL` 下输入：
+输入：
 
-> 用 pwsh 在当前目录建 demo.txt，内容 OK，然后读回来告诉我。
+> 用 Tether 列出当前已接入的设备，并告诉我哪台在线。
+
+画面：DeepSeek Agent 调用 `mcp__tether__list_peers`，回答表格：
+
+| 设备 | 在线 | 工作区 |
+|---|---|---|
+| DESKTOP-LOCAL | 在线 | `E:\...\work-local` |
+| LAPTOP-01 | 在线 | `D:\tether-node\work` |
+| TAILSCALE-TEST | 离线 | — |
+
+旁白：
+> Agent 自己发现有三台设备、两台在线；这一步是 Tether 的 MCP 工具，不是 DeepSeek 内置的。
+
+### 0:45–1:40 让 Agent 派活给另一台电脑
+
+输入：
+
+> 让 LAPTOP-01 的 Agent 在 D:/tether-node/work 建 tether-delegated.txt，内容 OK，然后读回来告诉我绝对路径和内容。
 
 画面：
-- 用户消息气泡；
-- thought 卡片；
-- `tool/call pwsh`；
-- `tool/result`；
-- assistant 最终回答。
+- DeepSeek Agent 调用 `mcp__tether__remote_task`；
+- 回答里出现 run id、绝对路径、内容、只读校验结果；
+- 镜头切到笔记本本地控制台 `127.0.0.1:18893`，看到同一个任务；
+- 笔记本文件资源管理器打开 `D:\tether-node\work`，`tether-delegated.txt` 存在。
 
 旁白：
-> 本机的 Agent 已经在跑。它调用 pwsh 建文件、读回来；工具调用和结果都在同一个对话里。
+> 这条任务没有在桌面执行；它通过 Tailscale 到了笔记本，笔记本上的 dsh Agent 用自己的 pwsh 和工作区执行。两次调用都在同一个 dsh 会话里，所以目标端是持久会话，不是一次性脚本。
 
-### 0:50–1:30 远端 Agent（核心）
+### 1:40–2:10 继续 + 取消（选一个）
 
-左侧切到 `LAPTOP-01`，输入：
+继续输入：
 
-> 用 pwsh 在 D:\tether-node\work 建 laptop-demo.txt，内容 OK，然后读回来。
+> 让 LAPTOP-01 再读一次这个文件，确认内容还是 OK。
 
-画面：
-- 桌面聊天窗口实时出现工具卡片；
-- 镜头切到笔记本：终端/本地控制台 `127.0.0.1:18893` 同步滚动，显示同一个任务；
-- 桌面上出现最终回答。
+画面：Agent 复用同一个 `dsh_session`，不需要重新建会话。
 
-旁白：
-> 这条任务没有在桌面执行，而是通过 Tailscale 发到笔记本；笔记本上的 Agent 用它自己的 pwsh 和工作区执行。笔记本只主动外连，没有开入站端口。
-
-### 1:30–2:00 取消 + 继续
-
-在 `LAPTOP-01` 输入：
-
-> 运行 python -c "import time; time.sleep(120)"，等它结束。
-
-等 tool 卡片出现后点 `Cancel run`。
-
-画面：
-- 状态从 running → cancelling → cancelled；
-- 笔记本终端显示任务结束；
-- 如果方便，切到笔记本任务管理器/命令行展示没有残留 python 进程（可选）。
-
-然后同一会话输入：
-
-> 刚才那个命令是干什么的？一句话。
+或者取消：
+- 让 LAPTOP-01 跑 `python -c "import time; time.sleep(120)"`；
+- 在 Tether 监控台点 cancel，或让 Agent 调 `remote_cancel`；
+- 画面：状态 `cancelling → cancelled`；监控台显示残留进程 0。
 
 旁白：
-> 取消不是把网页关掉：节点会终止整棵进程树，残留为 0；同一会话还能继续提问。
+> 取消不是关网页：节点会终止整棵进程树；证据在仓库的 `cancel_probe.json`，残留为 0。
 
-### 2:00–2:30 收尾
+### 2:10–2:40 收尾：Agent 是主体，Tether 是工具
 
-画面：DESIGN.md 的 "Verified / Designed / Not implemented" 表，或 GitHub 仓库首页。
+画面：Tether 监控台（设备/任务/事件），然后 GitHub README/DESIGN 的边界表。
 
 旁白：
-> 当前 v0.1 是星型控制面，已经把远端真跑、断线重放、幂等、取消和继续跑通；对等 Agent 网络是 v0.2 的设计目标，边界在 DESIGN.md 里写清楚了。代码和证据在 GitHub。
+> 当前 v0.1 是星型：桌面 DeepSeek Agent 发起，笔记本被控；对等 Agent 网络是 DESIGN.md 里的 v0.2，边界写清楚了。代码、MCP 配置和实测数字都在 GitHub。
 
 ## 旁白原则
 
 - 一句话说清"谁在哪台机器上做了什么"。
-- 不读代码；不堆术语；不承诺没做的功能。
-- 每个演示动作都对应真实事件，不剪辑伪造结果。
+- 不读代码、不堆术语、不承诺没做的功能。
+- 每个动作对应真实事件，不剪辑伪造结果。
 
-## 备用镜头（如果某个动作卡住）
+## 备用镜头
 
-- 远端任务失败：切回 `DESKTOP-LOCAL` 演示同样的工具流，并在旁白说明"远端链路本次未成功，证据在仓库"。
-- 取消没有及时收敛：展示 `evidence/cancel_probe.json` 的 `residual_count: 0`，说明这是脚本实测。
-- 笔记本画面不方便录：只录桌面，最后用 3 秒展示笔记本本地控制台的照片/录屏。
+- 远端任务失败：展示 `list_peers` 和监控台的任务状态，说明链路；不要把失败剪成成功。
+- 笔记本画面不方便录：只录 DeepSeek 桌面，最后用 3 秒展示笔记本本地控制台照片/录屏。
+- 如果取消没及时收敛：展示 `evidence/cancel_probe.json` 的 `residual_count: 0`，说明这是脚本实测。
