@@ -106,8 +106,8 @@ def main() -> None:
     print(f"[tether] starting local Agent node {DEVICE}")
     node = subprocess.Popen(
         [sys.executable, "-m", "tether.node.agent",
-         "--workspace", WORKSPACE, "--agent", "dsh", "--device", DEVICE,
-         "--controller", f"ws://127.0.0.1:{PORT}/ws/node"],
+         "--workspace", WORKSPACE, "--agent", os.environ.get("TETHER_AGENT", "dsh"),
+         "--device", DEVICE, "--controller", f"ws://127.0.0.1:{PORT}/ws/node"],
         cwd=str(ROOT), env=env, stdout=node_log, stderr=subprocess.STDOUT,
     )
 

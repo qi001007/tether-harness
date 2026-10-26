@@ -90,7 +90,34 @@ The local console is read-only and shows the same tool/assistant events as the
 desktop; it is served from the node's own outbox, so it keeps updating even when
 the desktop link is down.
 
-## 5. Remove
+## 6. Files and permissions
+
+The node serves the desktop plugin's file browser through its outbound WebSocket
+(no inbound port). New projects default to `D:\TetherWorkspaces`; set
+`TETHER_WORKSPACES_ROOT` before starting the node to change it. Existing DSH
+workspaces are discovered from `~/.dsh/storages/workspace.json` and stay writable
+in the default readonly mode.
+
+The node enforces policy locally (`policy.json` next to the node DB) and writes
+`audit.jsonl` before and after writes. Deletes go to
+`D:\TetherWorkspaces\.tether-trash`.
+
+## 7. Update an existing node
+
+Copy the current repo's `tether\` and `laptop\` folders over
+`C:\tether-node\app` (or re-extract a fresh `tether-node.zip`), keep the existing
+`.env` and `.runtime`, then stop and restart:
+
+```powershell
+cd C:\tether-node\app
+.\laptop\tether-node.ps1
+```
+
+A node that predates the filesystem service reports `fs: false` in its
+capabilities and the desktop plugin shows `节点待更新` for it. Task delegation
+still works, but projects/files/policy require the update.
+
+## 8. Remove
 
 ```powershell
 cd D:\tether-node\app

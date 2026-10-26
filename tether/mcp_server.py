@@ -1,14 +1,17 @@
 """Tether MCP server: the tool layer an Agent uses to delegate to peer machines.
 
 The Agent (DeepSeek Harness desktop, Qoder, Codex, ...) stays the interaction
-surface and keeps its own memory/plugins. This server only exposes:
+surface and keeps its own memory/plugins. This server exposes:
   - list_peers
   - remote_task
   - remote_status
   - remote_cancel
+  - remote_files
+  - remote_workspaces
+  - remote_audit
 
-It talks to the local Tether Controller over HTTP; the Controller routes the run
-to the target Node. The server never executes shell commands itself.
+It talks to the local Tether Controller over HTTP; the Controller routes runs and
+file calls to the target Node. The server never executes shell commands itself.
 """
 
 from __future__ import annotations
@@ -33,7 +36,9 @@ server = MCPServer(
         "Then call remote_task(device, prompt) to run a task on that machine; "
         "the remote Agent uses its own workspace, shell, and model key. "
         "Use remote_status for a run that is still in progress, and remote_cancel "
-        "to stop it. Never guess a device id; use the ids from list_peers."
+        "to stop it. Use remote_workspaces to list target projects and remote_files "
+        "to list/read/write files; the target Node enforces its file policy and "
+        "audits every write. Never guess a device id; use the ids from list_peers."
     ),
 )
 
@@ -67,7 +72,7 @@ def _device(device: str) -> dict:
 def _session_for(device_id: str, workspace: str) -> dict:
     state = _request("/api/state")
     for item in state.get("sessions", []):
-        if item.get("device_id") == device_id:
+        if item.get("device_id") == device_id and item.get("workspace") == workspace:
             return item
     return _request("/api/sessions", {"device_id": device_id, "workspace": workspace}, "POST")
 
@@ -141,6 +146,47 @@ def remote_status(run_id: str, max_events: int = 20) -> str:
 def remote_cancel(run_id: str) -> str:
     """Cancel a run on its target machine."""
     return json.dumps(_request(f"/api/runs/{run_id}/cancel", {}, "POST"), ensure_ascii=False, indent=2)
+
+
+@server.tool()
+def remote_workspaces(device: str) -> str:
+    """List a target machine's DSH workspaces, Tether projects, and node workspace."""
+    target = _device(device)
+    result = _request(f"/api/devices/{target['device_id']}/workspaces")
+    return json.dumps({"device_id": target["device_id"], **result}, ensure_ascii=False, indent=2)
+
+
+@server.tool()
+def remote_files(device: str, path: str, op: str = "list", text: str = "", dest: str = "") -> str:
+    """Operate on a target machine's filesystem (policy is enforced on that node).
+
+    device: id from list_peers. op: list|stat|read|write|mkdir|rename|delete.
+    path/dest are absolute paths on the target. `text` is required for write.
+    Writes may be refused in readonly/locked mode; the refusal and every write
+    are recorded in the node's audit log.
+    """
+    allowed = {"list", "stat", "read", "write", "mkdir", "rename", "delete"}
+    if op not in allowed:
+        raise RuntimeError(f"op must be one of {sorted(allowed)}")
+    target = _device(device)
+    args: dict = {"path": path}
+    if op == "write":
+        args["text"] = text
+    elif op == "rename":
+        if not dest:
+            raise RuntimeError("rename needs dest")
+        args["dest"] = dest
+    result = _request(f"/api/devices/{target['device_id']}/fs/{op}", args, "POST")
+    return json.dumps({"device_id": target["device_id"], "op": op, "result": result},
+                      ensure_ascii=False, indent=2)
+
+
+@server.tool()
+def remote_audit(device: str, limit: int = 20) -> str:
+    """Read the target node's recent filesystem audit entries (newest first)."""
+    target = _device(device)
+    result = _request(f"/api/devices/{target['device_id']}/audit?limit={max(1, min(int(limit), 200))}")
+    return json.dumps({"device_id": target["device_id"], **result}, ensure_ascii=False, indent=2)
 
 
 if __name__ == "__main__":

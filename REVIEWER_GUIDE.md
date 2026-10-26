@@ -8,11 +8,13 @@ This file is for an AI or human reviewer who wants to decide whether the claims 
 1. `DESIGN.md` §0.3 — current implementation vs target architecture. Do not read
    the peer-to-peer section as implemented; it is explicitly v0.2.
 2. `DESIGN.md` §3 — the star topology and why the Node exists.
-3. `DESIGN.md` §5 — event journal, idempotency, `unknown`, hard cancel.
-4. `DESIGN.md` §8 — the measured results.
-5. `evidence/gate2.md` and `evidence/cancel_probe.json` — raw numbers.
-6. Code: `tether/controller/store.py`, `tether/node/dsh_adapter.py`,
-   `tether/static/index.html`.
+3. `DESIGN.md` §6.2 — the DSH client plugin (slots, layout, data sources).
+4. `DESIGN.md` §5 — event journal, idempotency, `unknown`, hard cancel.
+5. `DESIGN.md` §7.4 — file policy, protected paths, audit, recoverable delete.
+6. `DESIGN.md` §8 — the measured results.
+7. `evidence/gate2.md`, `evidence/dsh_plugin_fs.md`, `evidence/cancel_probe.json`.
+8. Code: `tether/controller/store.py`, `tether/node/fs_service.py`,
+   `tether/node/dsh_adapter.py`, `packages/dsh-plugin-tether-client/lib/client.js`.
 
 ## Claim → evidence map
 
@@ -27,6 +29,13 @@ This file is for an AI or human reviewer who wants to decide whether the claims 
 | Cross-machine execution | `evidence/gate2.md` E6/cross-machine; `LAPTOP-01` created `D:\tether-node\work\laptop-proof.txt` |
 | DeepSeek desktop Agent calls Tether | `docs/screenshots/deepseek-delegated.png`; run `r-56ca1f58b1a3` + verify run `r-8fa5928462a6`; file `D:\tether-node\work\tether-delegated.txt` |
 | Agent-to-Agent delegation | same screenshot; the desktop Agent called `mcp__tether__remote_task` for `LAPTOP-01`; target session `tether-s-d0332f33ad47` |
+| DSH plugin installs without touching other bundles | `~/.dsh/profiles/desktop/package.json` bundles list; `desktop/install-plugin.ps1`; screenshot `dsh-plugin-devices.png` |
+| Plugin page is native, not iframe | `packages/dsh-plugin-tether-client/lib/client.js` uses `__ModuleLoader__` + `ctx.slots.inject('main' / 'sidebar.panellist')` |
+| Existing DSH workspace writable in readonly | `evidence/dsh_plugin_fs.md`; audit rows for `default-workspace` |
+| Readonly blocks outside writes | HTTP 400 `path outside allowed roots` in `evidence/dsh_plugin_fs.md` |
+| Full mode still guards OS/credentials | `C:\Windows` write and `.dsh/.credentials.yaml` read both HTTP 400 |
+| Delete is recoverable | `.tether-trash` path in `evidence/dsh_plugin_fs.md` |
+| Plugin task stream and cancel | run `r-f358e95993e9`; first event 1261 ms; terminal `cancelled` |
 | Tether MCP server | `tether/mcp_server.py`; `desktop/install-mcp.ps1`; profile entry in `~/.dsh/profiles/desktop/cordis.patch.yml` |
 | Tether window is a monitor | `tether/static/index.html`; the Agent interaction is in DeepSeek Harness desktop |
 | One-command control plane | `desktop/tether-app.ps1` + `scripts/up.py` |
@@ -35,14 +44,16 @@ This file is for an AI or human reviewer who wants to decide whether the claims 
 
 ## Verified / Designed / Not implemented
 
-- **Verified**: DeepSeek Harness desktop Agent calling Tether MCP, Agent-to-Agent
-  delegation, star controller/node, real dsh, session resume, event replay,
-  idempotency, `unknown`, hard cancel with 0 residual, Tailscale cross-machine,
-  control plane app, monitor UI.
+- **Verified**: DSH plugin install/render, device/project/file/task/permission
+  page, three-level file policy with audit, recoverable delete, DeepSeek Harness
+  desktop Agent calling Tether MCP, Agent-to-Agent delegation, star controller/node,
+  real dsh, session resume, event replay, idempotency, `unknown`, hard cancel with
+  0 residual, Tailscale cross-machine, control plane app, monitor UI.
 - **Designed**: symmetric peer Agent network (every device same package, two-way
-  delegation), approval UI, capability routing, Linux/WSL, public relay,
-  multi-task concurrency.
-- **Not implemented**: the Designed list; production authentication/audit/sandbox.
+  delegation), `@Remote` host service for the plugin, approval UI, capability
+  routing, Linux/WSL, public relay, multi-task concurrency.
+- **Not implemented**: the Designed list; production authentication/audit/sandbox;
+  the laptop node still runs the previous build without `fs`.
 
 ## Questions a reviewer may ask
 
@@ -56,8 +67,21 @@ reliability core is reusable.
 **Why not make Tether the chat UI?**
 DeepSeek Harness already owns the Agent surface: memory, skills, plugin marketplace,
 approval UI, model settings. Tether cannot and should not replicate those. Tether
-exposes four MCP tools and the reliability/routing layer; the Tether web UI is a
-monitor for devices/tasks/events.
+exposes a DSH client page for remote workspaces plus seven MCP tools; the Tether web
+UI is only a monitor.
+
+**Did you copy DSH's UI source?**
+The page is a native DSH client plugin using the same slot system
+(`main`, `sidebar.panellist`) and the same visual language (fonts, gray scale,
+8px radii). It does not literally import DSH's internal chat components: a client
+bundle may only require `PLATFORM_MODULES` (`react`, slot/layout services, etc.),
+and copying router/global-store components would create a second app. There is no
+iframe and no custom chat; the layout is reimplemented against the same tokens.
+
+**Why does the plugin call 127.0.0.1:18890 instead of a Host Remote?**
+v0.1 keeps the controller loopback-only and adds CORS for the `dsh-app://app`
+origin; the client never sees the node token. The `@Remote` host service is the
+cleaner v0.2 path (typed RPC, no CORS) and is listed as Designed.
 
 **Why the Python SDK rather than ACP?**
 The SDK is the supported high-level API for session/events/resume. ACP would

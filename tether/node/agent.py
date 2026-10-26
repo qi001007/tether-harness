@@ -22,6 +22,7 @@ import websockets
 
 from . import console as local_console
 from .dsh_adapter import DshRun
+from .fs_service import FsError, FsService
 
 ROOT = Path(__file__).resolve().parents[2]
 try:
@@ -37,6 +38,15 @@ TERMINAL = ("completed", "cancelled", "failed", "unknown")
 
 def log(*parts: Any) -> None:
     print(time.strftime("[%H:%M:%S]"), *parts, flush=True)
+
+
+def default_workspaces_root() -> Path:
+    env = os.environ.get("TETHER_WORKSPACES_ROOT")
+    if env:
+        return Path(env).expanduser()
+    if sys.platform == "win32" and Path("D:\\").exists():
+        return Path("D:\\TetherWorkspaces")
+    return Path.home() / "TetherWorkspaces"
 
 
 class NodeStore:
@@ -145,7 +155,8 @@ class Node:
     def __init__(self, *, url: str, token: str, device: str, workspace: Path, store: NodeStore,
                  drop_after: float | None = None, drop_for: float = 0.0,
                  agent: str = "fake", dsh_home: str | None = None,
-                 provider: str = "deepseek-official", model: str = "deepseek-v4-flash") -> None:
+                 provider: str = "deepseek-official", model: str = "deepseek-v4-flash",
+                 workspaces_root: Path | None = None, data_dir: Path | None = None) -> None:
         self.url = url
         self.token = token
         self.device = device
@@ -158,6 +169,10 @@ class Node:
         self.dsh_home = dsh_home or str(ROOT / ".runtime" / "dsh-home")
         self.provider = provider
         self.model = model
+        self.workspaces_root = workspaces_root or default_workspaces_root()
+        self.fs = FsService(device=device, workspace=workspace,
+                            data_dir=data_dir or (ROOT / ".runtime"),
+                            workspaces_root=self.workspaces_root)
         self.dsh_runs: dict[str, DshRun] = {}
         self.ws: Any = None
         self.connected = False
@@ -234,8 +249,29 @@ class Node:
             await self._reconcile(str(msg["run_id"]))
         elif kind == "event_ack":
             self.store.ack(str(msg["run_id"]), int(msg["ack_seq"]))
+        elif kind == "fs_call":
+            await self._fs_call(msg)
         elif kind == "error":
             log(f"[ws] controller error: {msg.get('error')}")
+
+    async def _fs_call(self, msg: dict[str, Any]) -> None:
+        req_id = str(msg.get("req_id") or "")
+        op = str(msg.get("op") or "")
+        args = msg.get("args") or {}
+        try:
+            result = await asyncio.to_thread(self.fs.dispatch, op, args)
+            reply = {"type": "fs_result", "req_id": req_id, "ok": True, "result": result}
+        except FsError as exc:
+            reply = {"type": "fs_result", "req_id": req_id, "ok": False,
+                     "error": str(exc), "code": exc.code}
+        except Exception as exc:  # noqa: BLE001 - a failed call must not kill the socket
+            log(f"[fs] {op} failed: {exc}")
+            reply = {"type": "fs_result", "req_id": req_id, "ok": False,
+                     "error": str(exc), "code": "fs_error"}
+        try:
+            await self._send(reply)
+        except Exception:
+            self.connected = False
 
     async def emit(self, run_id: str, kind: str, payload: dict[str, Any]) -> None:
         event = self.store.add_event(run_id, kind, payload)
@@ -390,7 +426,9 @@ class Node:
 
     def capabilities(self) -> dict[str, Any]:
         return {"os": platform.system(), "release": platform.release(), "python": platform.python_version(),
-                "workspace": str(self.workspace), "agents": ["fake", "dsh"]}
+                "workspace": str(self.workspace), "agents": ["fake", "dsh"], "fs": True,
+                "policy_mode": self.fs.policy.data.get("mode"),
+                "workspaces_root": str(self.workspaces_root)}
 
 
 def main() -> None:
@@ -398,6 +436,8 @@ def main() -> None:
     ap.add_argument("--controller", default=os.environ.get("TETHER_CONTROLLER", "ws://127.0.0.1:18890/ws/node"))
     ap.add_argument("--device", default=os.environ.get("TETHER_DEVICE", "DESKTOP-LOCAL"))
     ap.add_argument("--workspace", default=str(ROOT / "work-local"))
+    ap.add_argument("--workspaces-root", default=os.environ.get("TETHER_WORKSPACES_ROOT"),
+                    help="root for new remote projects (default D:\\TetherWorkspaces)")
     ap.add_argument("--token", default=os.environ.get("TETHER_NODE_TOKEN", "dev-token"))
     ap.add_argument("--db", default=str(ROOT / ".runtime" / "node-local.db"))
     ap.add_argument("--drop-after", type=float, default=None, help="test: close the socket N seconds after the first dispatch")
@@ -412,10 +452,12 @@ def main() -> None:
     workspace.mkdir(parents=True, exist_ok=True)
     store = NodeStore(Path(args.db))
     store.mark_stale_unknown()
-    log(f"[node] {args.device} workspace={workspace} db={args.db}")
+    workspaces_root = Path(args.workspaces_root).expanduser().resolve() if args.workspaces_root else default_workspaces_root()
+    log(f"[node] {args.device} workspace={workspace} db={args.db} workspaces_root={workspaces_root}")
     node = Node(url=args.controller, token=args.token, device=args.device,
                 workspace=workspace, store=store, drop_after=args.drop_after, drop_for=args.drop_for,
-                agent=args.agent, dsh_home=args.dsh_home, provider=args.provider, model=args.model)
+                agent=args.agent, dsh_home=args.dsh_home, provider=args.provider, model=args.model,
+                workspaces_root=workspaces_root, data_dir=Path(args.db).resolve().parent)
     try:
         local_console.start(store, args.device, args.console_port)
         log(f"[console] http://127.0.0.1:{args.console_port} (read-only, local)")

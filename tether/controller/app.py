@@ -9,11 +9,13 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -36,6 +38,7 @@ class Hub:
     def __init__(self) -> None:
         self.nodes: dict[str, WebSocket] = {}
         self.subscribers: set[asyncio.Queue[dict[str, Any]]] = set()
+        self.pending: dict[str, tuple[str, asyncio.Future[dict[str, Any]]]] = {}
 
     def broadcast(self, message: dict[str, Any]) -> None:
         dead: list[asyncio.Queue] = []
@@ -52,6 +55,40 @@ class Hub:
         self.subscribers.add(queue)
         return queue
 
+    async def request(self, device_id: str, payload: dict[str, Any],
+                      timeout: float = 20.0) -> dict[str, Any]:
+        ws = self.nodes.get(device_id)
+        if ws is None:
+            raise NodeOffline(device_id)
+        req_id = uuid.uuid4().hex
+        future: asyncio.Future[dict[str, Any]] = asyncio.get_running_loop().create_future()
+        self.pending[req_id] = (device_id, future)
+        try:
+            await ws.send_json({**payload, "req_id": req_id})
+            return await asyncio.wait_for(future, timeout=timeout)
+        except asyncio.TimeoutError as exc:
+            raise NodeTimeout(device_id) from exc
+        finally:
+            self.pending.pop(req_id, None)
+
+    def resolve(self, req_id: str, result: dict[str, Any]) -> None:
+        entry = self.pending.get(req_id)
+        if entry is not None and not entry[1].done():
+            entry[1].set_result(result)
+
+    def fail_device(self, device_id: str, error: Exception) -> None:
+        for req_id, (dev, future) in list(self.pending.items()):
+            if dev == device_id and not future.done():
+                future.set_exception(error)
+
+
+class NodeOffline(Exception):
+    pass
+
+
+class NodeTimeout(Exception):
+    pass
+
 
 HUB = Hub()
 
@@ -63,6 +100,16 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="Tether Controller", lifespan=lifespan)
+# Only the DeepSeek Harness client page may call the loopback API from another origin.
+# Keeping this narrow prevents a random website in the user's browser from using
+# 127.0.0.1:18890 to read or write files through an online node.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["dsh-app://app"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
+    max_age=600,
+)
 app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
 
 
@@ -163,6 +210,43 @@ async def reconcile(run_id: str) -> dict[str, Any]:
     return {"run_id": run_id, "status": "requested"}
 
 
+async def _device_fs(device_id: str, op: str, args: dict[str, Any] | None = None) -> Any:
+    try:
+        reply = await HUB.request(device_id, {"type": "fs_call", "op": op, "args": args or {}})
+    except NodeOffline as exc:
+        raise HTTPException(409, f"device offline: {device_id}") from exc
+    except NodeTimeout as exc:
+        raise HTTPException(504, "device did not answer the file request") from exc
+    if not reply.get("ok"):
+        raise HTTPException(400, {"error": reply.get("error"), "code": reply.get("code")})
+    return reply.get("result")
+
+
+@app.post("/api/devices/{device_id}/fs/{op}")
+async def device_fs(device_id: str, op: str, body: dict[str, Any] | None = None) -> Any:
+    return await _device_fs(device_id, op, body)
+
+
+@app.get("/api/devices/{device_id}/workspaces")
+async def device_workspaces(device_id: str) -> Any:
+    return await _device_fs(device_id, "workspaces")
+
+
+@app.get("/api/devices/{device_id}/policy")
+async def device_policy(device_id: str) -> Any:
+    return await _device_fs(device_id, "policy_get")
+
+
+@app.post("/api/devices/{device_id}/policy")
+async def set_device_policy(device_id: str, body: dict[str, Any]) -> Any:
+    return await _device_fs(device_id, "policy_set", body)
+
+
+@app.get("/api/devices/{device_id}/audit")
+async def device_audit(device_id: str, limit: int = 100) -> Any:
+    return await _device_fs(device_id, "audit_list", {"limit": limit})
+
+
 @app.get("/api/events")
 async def events(request: Request) -> StreamingResponse:
     async def stream():
@@ -218,6 +302,7 @@ async def node_socket(ws: WebSocket) -> None:
     finally:
         if device_id is not None:
             HUB.nodes.pop(device_id, None)
+            HUB.fail_device(device_id, NodeOffline(device_id))
             STORE.set_online(device_id, False)
             changed = STORE.mark_device_unknown(device_id)
             HUB.broadcast({"kind": "device", "device": STORE.get_device(device_id)})
@@ -251,6 +336,9 @@ async def _handle_node(device_id: str, msg: dict[str, Any]) -> None:
         HUB.broadcast({"kind": "run", "run": run})
         return
     if kind == "dispatch_ack":
+        return
+    if kind == "fs_result":
+        HUB.resolve(str(msg.get("req_id") or ""), msg)
         return
     if kind == "reconcile_result":
         run_id = str(msg["run_id"])
