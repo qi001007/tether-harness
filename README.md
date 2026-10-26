@@ -47,6 +47,7 @@ stays in DSH's own chat. Tether does not replace DSH memory, skills, or marketpl
 | New project location | `demo` created under `D:\TetherWorkspaces\demo`; node workspace and DSH workspace unchanged |
 
 Screenshots: `docs/screenshots/dsh-plugin-native-chat.png`,
+`docs/screenshots/dsh-plugin-dark.png`,
 `docs/screenshots/dsh-plugin-files.png`, `docs/screenshots/dsh-plugin-run-chat.png`,
 `docs/screenshots/dsh-plugin-laptop-chat.png`,
 `docs/screenshots/dsh-plugin-permissions.png`,
@@ -123,6 +124,13 @@ projects are separate panels. Clicking the active icon or the chevron collapses
 the panel; the bar stays. The panel width and the file-list/editor divider are
 draggable, double-click resets, and both widths plus the active panel are stored
 in `localStorage`.
+
+The surface follows six visual rules: hierarchy comes from background layers
+(base / sidebar / hover / active), not 1px frames; dark mode uses thinner text
+weights; assistant replies/tool cards fade in with an ink-like blur; times,
+steps and token counts use tabular numerals; drag handles respond on hover and
+reset with a short spring; buttons/rows compress on press. Colors come from DSH
+theme tokens, so light and dark follow the app.
 
 The native reader only reads the DSH log; it never writes to an active session or
 competes for the Session writer. It defaults to `~/.dsh`; set

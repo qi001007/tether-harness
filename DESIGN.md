@@ -39,8 +39,9 @@
 | 不确定不假装成功 | 节点被杀后 Run 进 `unknown`，不自动重跑；重启后 `reconcile` 返回真实状态 |
 | 跨机走 Tailscale | `LAPTOP-01` 通过 `100.x` 接入；Controller 的 UI/API 仍只允许本机，只有 `/ws/node` 对 tailnet 开放 |
 
-截图：`docs/screenshots/dsh-plugin-native-chat.png`、`dsh-plugin-files.png`、
-`dsh-plugin-run-chat.png`、`dsh-plugin-laptop-chat.png`、`dsh-plugin-permissions.png`、
+截图：`docs/screenshots/dsh-plugin-native-chat.png`、`dsh-plugin-dark.png`、
+`dsh-plugin-files.png`、`dsh-plugin-run-chat.png`、`dsh-plugin-laptop-chat.png`、
+`dsh-plugin-permissions.png`、
 `deepseek-desktop.png`、`deepseek-after-tether.png`、`deepseek-delegated.png`。
 
 ### 0.3 当前实现 vs 目标架构（先看边界）
@@ -314,6 +315,12 @@ DSH 的业务组件（client bundle 不能直接 import DSH 内部 React 组件�
 slot、布局和 token 观感。左侧是 VSCode 式常驻活动栏（对话/设备/项目）；点击当前
 项或标题栏 chevron 收起面板，活动栏不消失。面板宽度与文件栏/编辑器边界可拖，
 双击复位，宽度与当前面板写入 `localStorage`。
+
+视觉层遵循六条规则：层级由背景层（base / sidebar / hover / active）建立，不用
+1px 灰框；所有颜色取 DSH 主题 token，暗色下标题/按钮字重 600→500、正文 400→350；
+新出现的 assistant/思考/工具卡片用 `opacity + blur + translateY` 做水墨式入画；
+时间、步数、token 用 tabular-nums；拖动中不加 transition，松手/双击复位用
+160–180ms 回弹，按钮/行按压 `scale(.97)`。
 
 五个区域：
 

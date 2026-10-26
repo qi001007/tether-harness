@@ -75,6 +75,22 @@ authoritative); the controller only proxies.
 - The native log is read-only. The composer starts a new Tether run in the same
   workspace; native write-back (`session/prompt`) is Designed.
 
+## Visual system checks
+
+- With the DSH light and dark themes, `getComputedStyle` over every element inside
+  `.tether-root` reports `border*Width = 0`; hierarchy is background layers
+  (`--dsw-alias-bg-base`, `--dsw-specific-sidebar-fill`,
+  `--dsw-alias-interactive-bg-hover/active`).
+- Dark (`body[data-ds-dark-theme]`): root background `rgb(21,21,23)`, panel
+  `rgb(27,27,28)`, root font weight `350`, strong labels `500`.
+- `.tether-ink` exists on reasoning/tool/reply blocks and
+  `document.getAnimations()` reports the fade/blur animation; `prefers-reduced-motion`
+  disables it.
+- `.tether-num` computes `font-variant-numeric: tabular-nums` and
+  `font-feature-settings: "tnum"`.
+- Sidebar and file-list drag handles show an accent line on hover/active; width
+  has no transition during drag and a 180 ms spring on reset.
+
 ## MCP file tools
 
 `tether.mcp_server` now exposes 7 tools; calling `remote_workspaces("DESKTOP-LOCAL")`

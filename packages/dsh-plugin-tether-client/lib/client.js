@@ -7,9 +7,28 @@ window.__ModuleLoader__.load({
     const BASE = 'http://127.0.0.1:18890'
 
     const C = {
-      ink: '#101828', sub: '#475467', mute: '#667085', line: '#d0d5dd', soft: '#f2f4f7',
-      bg: '#ffffff', panel: '#f8fafc', green: '#16a34a', red: '#b42318', blue: '#1570ef',
-      amber: '#b54708', dark: '#101828', bubble: '#f2f4f7'
+      ink: 'var(--dsw-alias-label-primary, #101828)',
+      sub: 'var(--dsw-alias-label-secondary, #475467)',
+      mute: 'var(--dsw-alias-label-tertiary, #667085)',
+      line: 'var(--dsw-alias-border-l1, rgba(9, 30, 66, 0.04))',
+      soft: 'var(--dsw-alias-interactive-bg-hover, rgba(38, 49, 72, 0.06))',
+      hover: 'var(--dsw-alias-interactive-bg-hover-solid, #f2f4f7)',
+      active: 'var(--dsw-alias-interactive-bg-active, rgba(38, 49, 72, 0.10))',
+      bg: 'var(--dsw-alias-bg-base, #ffffff)',
+      panel: 'var(--dsw-specific-sidebar-fill, #f9fafb)',
+      layer1: 'var(--dsw-alias-bg-layer-1, #ffffff)',
+      layer2: 'var(--dsw-alias-bg-layer-2, #ffffff)',
+      layer3: 'var(--dsw-alias-bg-layer-3, #ffffff)',
+      input: 'var(--dsw-specific-input-major, #ffffff)',
+      green: 'var(--dsw-alias-state-success-primary, #16a34a)',
+      red: 'var(--dsw-alias-state-error-primary, #b42318)',
+      blue: 'var(--dsw-alias-state-business-primary, #1570ef)',
+      amber: 'var(--dsw-alias-state-warn-primary, #b54708)',
+      primary: 'var(--dsw-alias-button-primary-fill, #101828)',
+      onPrimary: 'var(--dsw-alias-label-primary-inverted, #ffffff)',
+      bubble: 'var(--dsw-specific-bubble, #f2f4f7)',
+      block: 'var(--dsw-alias-markdown-code-block, #f8fafc)',
+      shadow: 'var(--dsw-elevation-panel, 0 8px 24px rgba(16, 24, 40, 0.12))'
     }
 
     async function api(path, options) {
@@ -33,23 +52,22 @@ window.__ModuleLoader__.load({
       return h('span', {
         style: {
           fontSize: 11, lineHeight: '18px', padding: '0 7px', borderRadius: 999,
-          color: color || C.sub, border: '1px solid ' + (color || C.line),
-          background: color ? 'transparent' : C.soft, whiteSpace: 'nowrap'
+          color: color || C.sub, border: 0,
+          background: C.soft, whiteSpace: 'nowrap'
         }
       }, text)
     }
     function dot(on, color) {
-      return h('span', { style: { width: 7, height: 7, borderRadius: 4, display: 'inline-block', background: color || (on ? C.green : '#98a2b3'), marginRight: 7, flex: '0 0 auto' } })
+      return h('span', { style: { width: 7, height: 7, borderRadius: 4, display: 'inline-block', background: color || (on ? C.green : C.mute), marginRight: 7, flex: '0 0 auto' } })
     }
     function btn(label, onClick, opts) {
       const o = opts || {}
       return h('button', {
-        onClick, disabled: o.disabled, title: o.title || label,
+        onClick, disabled: o.disabled, title: o.title || label, className: 'tether-press',
         style: {
-          height: 28, padding: '0 10px', borderRadius: 6, fontSize: 12,
-          border: '1px solid ' + (o.primary ? C.dark : C.line),
-          background: o.primary ? C.dark : '#fff',
-          color: o.primary ? '#fff' : (o.danger ? C.red : C.ink),
+          height: 28, padding: '0 10px', borderRadius: 6, fontSize: 12, border: 0,
+          background: o.primary ? C.primary : C.soft,
+          color: o.primary ? C.onPrimary : (o.danger ? C.red : C.ink),
           cursor: o.disabled ? 'not-allowed' : 'pointer', opacity: o.disabled ? 0.5 : 1,
           whiteSpace: 'nowrap'
         }
@@ -105,7 +123,7 @@ window.__ModuleLoader__.load({
           const lines = part.replace(/^\n+|\n+$/g, '').split('\n')
           let lang = ''
           if (lines.length && /^[a-zA-Z0-9_+-]+$/.test(lines[0].trim()) && lines.length > 1) { lang = lines.shift().trim() }
-          nodes.push(h('pre', { key: 'p' + key++, style: { margin: '10px 0', padding: '10px 12px', borderRadius: 8, background: '#0f172a', color: '#e2e8f0', overflow: 'auto', fontSize: 12.5, lineHeight: 1.55, fontFamily: 'Consolas, monospace' } },
+          nodes.push(h('pre', { key: 'p' + key++, style: { margin: '10px 0', padding: '10px 12px', borderRadius: 8, background: C.block, color: C.ink, overflow: 'auto', fontSize: 12.5, lineHeight: 1.55, fontFamily: 'Consolas, monospace' } },
             h('code', null, lines.join('\n'))))
           return
         }
@@ -121,13 +139,13 @@ window.__ModuleLoader__.load({
               h('table', { style: { borderCollapse: 'collapse', fontSize: 13, minWidth: '60%' } },
                 h('tbody', null, body.map((row, ri) => h('tr', { key: ri },
                   row.map((cell, ci) => h(ri === 0 ? 'th' : 'td', {
-                    key: ci, style: { border: '1px solid ' + C.line, padding: '4px 8px', textAlign: 'left', fontSize: 12.5, whiteSpace: (ri === 0 || String(cell).length <= 12) ? 'nowrap' : 'normal', wordBreak: 'break-word', fontWeight: ri === 0 ? 600 : 400, background: ri === 0 ? C.panel : '#fff' }
+                    key: ci, style: { padding: '4px 8px', textAlign: 'left', fontSize: 12.5, whiteSpace: (ri === 0 || String(cell).length <= 12) ? 'nowrap' : 'normal', wordBreak: 'break-word', fontWeight: ri === 0 ? 'var(--tether-strong, 600)' : 'var(--tether-body, 400)', background: ri === 0 ? C.panel : (ri % 2 ? C.panel : C.bg) }
                   }, inline(cell)))))))))
             return
           }
           if (/^#{1,4}\s/.test(lines[0])) {
             const level = lines[0].match(/^#+/)[0].length
-            nodes.push(h('div', { key: 'h' + key++, style: { fontWeight: 650, fontSize: level <= 2 ? 17 : 15, margin: '14px 0 6px' } }, inline(lines[0].replace(/^#+\s*/, ''))))
+            nodes.push(h('div', { key: 'h' + key++, style: { fontWeight: 'var(--tether-strong-2, 650)', fontSize: level <= 2 ? 17 : 15, margin: '14px 0 6px' } }, inline(lines[0].replace(/^#+\s*/, ''))))
             if (lines.length > 1) nodes.push(h('div', { key: 'hx' + key++, style: { whiteSpace: 'pre-wrap', margin: '4px 0' } }, inline(lines.slice(1).join('\n'))))
             return
           }
@@ -151,13 +169,13 @@ window.__ModuleLoader__.load({
       const [open, setOpen] = React.useState(false)
       const summary = String(text || '').replace(/\*\*/g, '').split('\n').find((line) => line.trim()) || ''
       if (!text) return null
-      return h('div', { style: { margin: '4px 0 8px' } },
+      return h('div', { className: 'tether-ink', style: { margin: '4px 0 8px' } },
         h('button', {
           onClick: () => setOpen(!open),
           style: { display: 'flex', alignItems: 'center', gap: 7, width: '100%', border: 0, background: 'transparent', padding: '3px 0', cursor: 'pointer', textAlign: 'left', color: C.mute, fontSize: 13 }
         },
           h('span', { style: { fontSize: 13, width: 14 } }, open ? '▾' : '▸'),
-          h('span', { style: { fontWeight: 400, color: C.sub, whiteSpace: 'nowrap', flex: '0 0 auto' } }, running ? '思考中' : '思考'),
+          h('span', { style: { fontWeight: 'var(--tether-body, 400)', color: C.sub, whiteSpace: 'nowrap', flex: '0 0 auto' } }, running ? '思考中' : '思考'),
           !open && summary ? h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: '1 1 auto', color: C.mute } }, '· ' + summary) : null
         ),
         open ? h('div', { style: { padding: '4px 0 4px 22px', color: C.sub, fontSize: 13, lineHeight: '21px', whiteSpace: 'pre-wrap' } }, text) : null
@@ -170,13 +188,13 @@ window.__ModuleLoader__.load({
       const color = status === 'error' ? C.red : (status === 'running' ? C.blue : C.green)
       const args = block.arguments || ''
       const result = block.result || ''
-      return h('div', { style: { border: '1px solid ' + C.line, borderRadius: 8, margin: '8px 0', background: '#fff', overflow: 'hidden' } },
+      return h('div', { className: 'tether-ink', style: { border: 0, borderRadius: 8, margin: '8px 0', background: C.panel, overflow: 'hidden' } },
         h('button', {
           onClick: () => setOpen(!open),
-          style: { display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 10px', border: 0, background: C.panel, cursor: 'pointer', textAlign: 'left', color: C.ink }
+          style: { display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 10px', border: 0, background: C.soft, cursor: 'pointer', textAlign: 'left', color: C.ink }
         },
           dot(false, color),
-          h('span', { style: { fontFamily: 'Consolas, monospace', fontSize: 12.5, fontWeight: 600 } }, block.name || 'tool'),
+          h('span', { style: { fontFamily: 'Consolas, monospace', fontSize: 12.5, fontWeight: 'var(--tether-strong, 600)' } }, block.name || 'tool'),
           block.command ? h('span', { style: { color: C.mute, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: '1 1 auto' } }, block.command) : h('span', { style: { flex: '1 1 auto' } }),
           h('span', { style: { color: C.mute, fontSize: 11, whiteSpace: 'nowrap', flex: '0 0 auto' } }, status === 'running' ? '运行中' : (status === 'error' ? '失败' : '完成')),
           h('span', { style: { color: C.mute } }, open ? '▾' : '▸')
@@ -188,7 +206,7 @@ window.__ModuleLoader__.load({
           ) : null,
           result ? h('div', null,
             h('div', { style: { color: C.mute, fontSize: 10.5, marginBottom: 3 } }, '结果'),
-            h('pre', { style: { margin: 0, padding: 8, background: status === 'error' ? '#fef3f2' : C.panel, color: status === 'error' ? C.red : C.sub, borderRadius: 6, overflow: 'auto', maxHeight: 260, whiteSpace: 'pre-wrap', fontFamily: 'Consolas, monospace', fontSize: 11.5 } }, result)
+            h('pre', { style: { margin: 0, padding: 8, background: C.bg, color: status === 'error' ? C.red : C.sub, borderRadius: 6, overflow: 'auto', maxHeight: 260, whiteSpace: 'pre-wrap', fontFamily: 'Consolas, monospace', fontSize: 11.5 } }, result)
           ) : h('div', { style: { color: C.mute, fontSize: 11.5 } }, '等待结果…')
         ) : null
       )
@@ -209,10 +227,10 @@ window.__ModuleLoader__.load({
         blocks.map((block, i) => {
           if (block.type === 'reasoning') return h(Reasoning, { key: i, text: block.text, running: !!block.live && live })
           if (block.type === 'tool') return h(ToolCard, { key: i, block })
-          if (block.type === 'text') return h('div', { key: i, style: { margin: '6px 0' } }, h(Markdown, { text: block.text }))
+          if (block.type === 'text') return h('div', { key: i, className: 'tether-ink', style: { margin: '6px 0' } }, h(Markdown, { text: block.text }))
           return null
         }),
-        h('div', { style: { display: 'flex', gap: 8, alignItems: 'center', color: C.mute, fontSize: 11.5, marginTop: 4 } },
+        h('div', { className: 'tether-num', style: { display: 'flex', gap: 8, alignItems: 'center', color: C.mute, fontSize: 11.5, marginTop: 4 } },
           h('span', { style: { width: 7, height: 7, borderRadius: 4, background: turn.state === 'completed' ? C.green : (turn.state === 'running' ? C.blue : (turn.state === 'failed' ? C.red : C.mute)) } }),
           h('span', null, turn.state === 'running' ? '运行中' : (turn.state === 'failed' ? '失败' : '已完成')),
           steps ? h('span', null, steps + ' 步') : null,
@@ -245,9 +263,9 @@ window.__ModuleLoader__.load({
     }
 
     function Composer({ value, onChange, onSend, busy, disabled, note }) {
-      return h('div', { style: { borderTop: '1px solid ' + C.line, padding: '8px 12px 10px', flex: '0 0 auto', background: '#fff' } },
+      return h('div', { style: { border: 0, padding: '8px 12px 10px', flex: '0 0 auto', background: C.bg } },
         note ? h('div', { style: { color: C.mute, fontSize: 10.5, margin: '0 2px 5px' } }, note) : null,
-        h('div', { style: { maxWidth: 780, margin: '0 auto', display: 'flex', gap: 8, alignItems: 'flex-end', border: '1px solid ' + C.line, borderRadius: 12, padding: 7, boxShadow: '0 1px 2px rgba(16,24,40,0.04)' } },
+        h('div', { style: { maxWidth: 780, margin: '0 auto', display: 'flex', gap: 8, alignItems: 'flex-end', border: 0, borderRadius: 12, padding: 7, background: C.panel } },
           h('textarea', {
             value, onChange: (ev) => onChange(ev.target.value), disabled,
             onKeyDown: (ev) => { if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); onSend() } },
@@ -257,7 +275,8 @@ window.__ModuleLoader__.load({
           h('button', {
             onClick: onSend, disabled: disabled || busy || !value.trim(),
             title: '发送',
-            style: { width: 34, height: 34, borderRadius: 17, border: 0, background: disabled || busy || !value.trim() ? '#d0d5dd' : C.dark, color: '#fff', cursor: disabled || busy || !value.trim() ? 'not-allowed' : 'pointer', fontSize: 16, flex: '0 0 auto' }
+            className: 'tether-press',
+            style: { width: 34, height: 34, borderRadius: 17, border: 0, background: disabled || busy || !value.trim() ? C.soft : C.primary, color: disabled || busy || !value.trim() ? C.mute : C.onPrimary, cursor: disabled || busy || !value.trim() ? 'not-allowed' : 'pointer', fontSize: 16, flex: '0 0 auto' }
           }, '↑')
         )
       )
@@ -265,13 +284,31 @@ window.__ModuleLoader__.load({
 
 
     const SCROLL_CSS = `
+      .tether-root { --tether-strong: 600; --tether-strong-2: 650; --tether-body: 400; }
+      body[data-ds-dark-theme] .tether-root { --tether-strong: 500; --tether-strong-2: 520; --tether-body: 350; }
       .tether-scroll { scrollbar-width: thin; scrollbar-color: transparent transparent; overscroll-behavior: contain; }
-      .tether-scroll:hover { scrollbar-color: #cbd5e1 transparent; }
+      .tether-scroll:hover { scrollbar-color: var(--dsw-alias-scrollbar-hover-l1, #cbd5e1) transparent; }
       .tether-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
       .tether-scroll::-webkit-scrollbar-track { background: transparent; }
       .tether-scroll::-webkit-scrollbar-thumb { background: transparent; border-radius: 3px; }
-      .tether-scroll:hover::-webkit-scrollbar-thumb { background: #cbd5e1; }
+      .tether-scroll:hover::-webkit-scrollbar-thumb { background: var(--dsw-alias-scrollbar-hover-l1, #cbd5e1); }
       .tether-scroll::-webkit-scrollbar-corner { background: transparent; }
+      .tether-num { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum' 1; }
+      .tether-ink { animation: tether-ink 300ms cubic-bezier(.2,.7,.2,1) both; }
+      @keyframes tether-ink {
+        from { opacity: 0; filter: blur(3px); transform: translateY(4px); }
+        to { opacity: 1; filter: blur(0); transform: translateY(0); }
+      }
+      .tether-press { transition: transform 120ms cubic-bezier(.2,.8,.2,1.2), background-color 120ms ease; }
+      .tether-press:active { transform: scale(.97); }
+      .tether-press:hover { filter: brightness(.97); }
+      body[data-ds-dark-theme] .tether-press:hover { filter: brightness(1.08); }
+      .tether-root button:focus-visible, .tether-root [role=button]:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary, #1570ef); outline-offset: 2px; }
+      .tether-hover:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(38,49,72,.06)) !important; }
+      .tether-resizer { position: relative; }
+      .tether-resizer::after { content: ''; position: absolute; top: 0; right: 2px; width: 1px; height: 100%; background: transparent; transition: background 120ms ease; }
+      .tether-resizer:hover::after, .tether-resizer:active::after, .tether-resizer[data-active="true"]::after { background: var(--dsw-alias-state-business-primary, #1570ef); }
+      @media (prefers-reduced-motion: reduce) { .tether-ink { animation: none; } .tether-press { transition: none; } }
     `
 
     const UI = {
@@ -333,17 +370,17 @@ window.__ModuleLoader__.load({
         { id: 'projects', label: '项目', icon: 'projects' }
       ]
       const button = (id, label, icon, onClick, selected) => h('button', {
-        key: id, title: label, 'aria-label': label, onClick,
+        key: id, title: label, 'aria-label': label, onClick, className: 'tether-press tether-hover',
         style: {
           width: 36, height: 36, display: 'grid', placeItems: 'center', border: 0,
           borderRadius: UI.radius, cursor: 'pointer', position: 'relative',
-          background: selected ? '#fff' : 'transparent', color: selected ? C.ink : C.mute,
+          background: selected ? C.layer1 : 'transparent', color: selected ? C.ink : C.mute,
           boxShadow: selected ? '0 1px 2px rgba(16,24,40,0.08)' : 'none'
         }
       }, h(Glyph, { name: icon, size: 18 }))
       return h('nav', {
         'aria-label': 'Tether 面板',
-        style: { width: UI.activity, flex: '0 0 auto', borderRight: '1px solid ' + C.line, background: C.soft, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '6px 0', gap: 2 }
+        style: { width: UI.activity, flex: '0 0 auto', borderRight: 0, background: C.soft, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '6px 0', gap: 2 }
       },
         items.map((item) => button(item.id, item.label, item.icon, () => onSelect(item.id), active === item.id)),
         h('div', { style: { marginTop: 'auto' } }, button('settings', '文件权限', 'settings', onSettings, settingsOpen))
@@ -352,11 +389,11 @@ window.__ModuleLoader__.load({
 
     function SidePanelHeader({ title, action, onCollapse }) {
       return h('div', { style: { display: 'flex', alignItems: 'center', height: UI.row, flex: '0 0 auto', padding: '0 ' + UI.pad + 'px', gap: 2 } },
-        h('span', { style: { fontSize: UI.header, fontWeight: 600, color: C.mute, letterSpacing: 0.4 } }, title),
+        h('span', { style: { fontSize: UI.header, fontWeight: 'var(--tether-strong, 600)', color: C.mute, letterSpacing: 0.4 } }, title),
         h('span', { style: { marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 2 } },
           action,
           h('button', {
-            title: '收起侧栏', 'aria-label': '收起侧栏', onClick: onCollapse,
+            title: '收起侧栏', 'aria-label': '收起侧栏', onClick: onCollapse, className: 'tether-hover',
             style: { width: 26, height: 26, display: 'grid', placeItems: 'center', border: 0, borderRadius: UI.radius, background: 'transparent', color: C.mute, cursor: 'pointer', fontSize: 16, lineHeight: 1 }
           }, '‹')
         )
@@ -365,31 +402,31 @@ window.__ModuleLoader__.load({
 
     function SideRow({ selected, title, hint, icon, iconColor, onClick, right }) {
       return h('div', {
-        role: 'button', tabIndex: 0, title, onClick,
+        role: 'button', tabIndex: 0, title, onClick, className: 'tether-press tether-hover',
         onKeyDown: (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); onClick() } },
         style: {
           display: 'flex', alignItems: 'center', gap: 7, minHeight: UI.row, boxSizing: 'border-box',
           padding: '5px ' + UI.pad + 'px', borderRadius: UI.radius, cursor: 'pointer', minWidth: 0, width: '100%', boxSizing: 'border-box',
-          background: selected ? C.soft : 'transparent', fontSize: UI.font, color: C.ink
+          background: selected ? C.active : 'transparent', fontSize: UI.font, color: C.ink
         }
       },
         icon ? h('span', { style: { width: UI.icon, height: UI.icon, display: 'grid', placeItems: 'center', color: iconColor || C.mute, flex: '0 0 auto' } }, typeof icon === 'string' ? h(Glyph, { name: icon, size: UI.icon, stroke: 1.8 }) : icon) : null,
         h('span', { style: { minWidth: 0, flex: '1 1 auto', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: '18px' } }, title),
-        right ? h('span', { style: { flex: '0 0 auto', fontSize: 10, color: C.mute, whiteSpace: 'nowrap' } }, right) : null,
-        hint ? h('span', { style: { flex: '0 0 auto', fontSize: 9.5, color: C.mute, border: '1px solid ' + C.line, borderRadius: 999, padding: '0 5px', lineHeight: '15px' } }, hint) : null
+        right ? h('span', { className: 'tether-num', style: { flex: '0 0 auto', fontSize: 10, color: C.mute, whiteSpace: 'nowrap' } }, right) : null,
+        hint ? h('span', { style: { flex: '0 0 auto', fontSize: 9.5, color: C.mute, border: 0, borderRadius: 999, padding: '0 5px', lineHeight: '15px', background: C.bg } }, hint) : null
       )
     }
 
     function SidePanel(props) {
       const {
-        panel, width, hidden, onResizeStart, onResetWidth, onCollapse, devices, localDevice, deviceId, onSelectDevice,
+        panel, width, hidden, resizing, onResizeStart, onResetWidth, onCollapse, devices, localDevice, deviceId, onSelectDevice,
         projects, project, onSelectProject, onNewProject, newProjectDisabled,
         nativeSessions, runs, sessionId, runId, onSelectSession, onSelectRun
       } = props
       const title = panel === 'devices' ? '设备' : (panel === 'projects' ? '项目' : '对话')
       const action = panel === 'projects' ? h('button', {
         title: newProjectDisabled ? '当前节点不支持新建项目' : '新建项目', 'aria-label': '新建项目',
-        onClick: onNewProject, disabled: newProjectDisabled,
+        onClick: onNewProject, disabled: newProjectDisabled, className: 'tether-hover',
         style: { width: 26, height: 26, display: 'grid', placeItems: 'center', border: 0, borderRadius: UI.radius, background: 'transparent', color: newProjectDisabled ? C.line : C.mute, cursor: newProjectDisabled ? 'not-allowed' : 'pointer' }
       }, h(Glyph, { name: 'plus', size: 14 })) : null
 
@@ -422,12 +459,12 @@ window.__ModuleLoader__.load({
         right: r.state
       }))
       const groupLabel = (text, first) => h('div', {
-        style: { fontSize: UI.header, fontWeight: 600, color: C.mute, letterSpacing: 0.4, margin: (first ? 2 : UI.gapGroup) + 'px ' + UI.pad + 'px 4px' }
+        style: { fontSize: UI.header, fontWeight: 'var(--tether-strong, 600)', color: C.mute, letterSpacing: 0.4, margin: (first ? 2 : UI.gapGroup) + 'px ' + UI.pad + 'px 4px' }
       }, text)
 
       return h('aside', {
         'aria-label': title,
-        style: { display: hidden ? 'none' : 'flex', width, flex: '0 0 auto', minHeight: 0, borderRight: '1px solid ' + C.line, background: C.panel, flexDirection: 'column', position: 'relative' }
+        style: { display: hidden ? 'none' : 'flex', width, flex: '0 0 auto', minHeight: 0, borderRight: 0, background: C.panel, flexDirection: 'column', position: 'relative', transition: resizing ? 'none' : 'width 180ms cubic-bezier(.2,.85,.2,1.15)', willChange: 'width' }
       },
         h(SidePanelHeader, { title, action, onCollapse }),
         h('div', { style: { flex: '1 1 auto', minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' } },
@@ -441,8 +478,9 @@ window.__ModuleLoader__.load({
           ))
         ),
         h('div', {
+          className: 'tether-resizer', 'data-active': resizing ? 'true' : undefined,
           onPointerDown: onResizeStart, onDoubleClick: onResetWidth, title: '拖动调整宽度，双击复位',
-          style: { position: 'absolute', top: 0, right: -3, width: 6, height: '100%', cursor: 'col-resize', zIndex: 2 }
+          style: { position: 'absolute', top: 0, right: -3, width: 7, height: '100%', cursor: 'col-resize', zIndex: 2 }
         })
       )
     }
@@ -459,6 +497,7 @@ window.__ModuleLoader__.load({
       const [sidebarCollapsed, setSidebarCollapsed] = usePersisted('tether.ui.panelCollapsed', false)
       const [sidebarWidth, setSidebarWidth] = usePersisted('tether.ui.panelWidth', UI.defaultSide)
       const [fileListWidth, setFileListWidth] = usePersisted('tether.ui.fileListWidth', UI.defaultFiles)
+      const [resizing, setResizing] = React.useState(false)
       const [notice, setNotice] = React.useState('')
       const [busy, setBusy] = React.useState(false)
       const [native, setNative] = React.useState([])
@@ -484,7 +523,10 @@ window.__ModuleLoader__.load({
       const [draft, setDraft] = React.useState('')
       const [dirty, setDirty] = React.useState(false)
 
-      const fail = (e) => setNotice(String((e && e.message) || e))
+      const fail = (e) => {
+        if (e && e.code === 'node_update_required') { setNativeError('节点待更新'); return }
+        setNotice(String((e && e.message) || e))
+      }
       React.useEffect(() => { if (!notice) return; const t = setTimeout(() => setNotice(''), 7000); return () => clearTimeout(t) }, [notice])
 
       const loadState = React.useCallback(async () => {
@@ -776,6 +818,7 @@ window.__ModuleLoader__.load({
 
       const dragWidth = (event, start, setter, min, max) => {
         event.preventDefault()
+        setResizing(true)
         const startX = event.clientX
         const move = (ev) => setter(clamp(start + ev.clientX - startX, min, max))
         const stop = () => {
@@ -784,6 +827,7 @@ window.__ModuleLoader__.load({
           window.removeEventListener('pointercancel', stop)
           document.body.style.cursor = ''
           document.body.style.userSelect = ''
+          setResizing(false)
         }
         document.body.style.cursor = 'col-resize'
         document.body.style.userSelect = 'none'
@@ -795,25 +839,25 @@ window.__ModuleLoader__.load({
       const startSidebarResize = (event) => dragWidth(event, safeSidebarWidth, setSidebarWidth, UI.minSide, UI.maxSide)
       const startFileResize = (event) => dragWidth(event, safeFileListWidth, setFileListWidth, UI.minFiles, UI.maxFiles)
 
-      const rowStyle = (active) => ({ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 8px', borderRadius: 6, cursor: 'pointer', background: active ? C.soft : 'transparent', fontSize: 12.5 })
+      const rowStyle = (active) => ({ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 8px', borderRadius: 6, cursor: 'pointer', background: active ? C.active : 'transparent', fontSize: 12.5 })
       const modelText = sessionId && sessionData ? [sessionData.model, sessionData.agent_preset].filter(Boolean).join(' · ') : ''
 
-      return h('div', { style: { position: 'relative', height: '100%', display: 'flex', flexDirection: 'column', background: C.bg, color: C.ink, fontSize: 13, overflow: 'hidden' } },
+      return h('div', { className: 'tether-root', style: { position: 'relative', height: '100%', display: 'flex', flexDirection: 'column', background: C.bg, color: C.ink, fontSize: 13, fontWeight: 'var(--tether-body, 400)', overflow: 'hidden' } },
         h('style', null, SCROLL_CSS),
-        h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', borderBottom: '1px solid ' + C.line, flex: '0 0 auto' } },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', borderBottom: 0, background: C.panel, flex: '0 0 auto' } },
           h('strong', { style: { fontSize: 15 } }, 'Tether'),
           device ? h('span', { style: { display: 'flex', alignItems: 'center', fontSize: 12, color: C.sub } }, dot(device.online), device.name) : h('span', { style: { color: C.mute } }, 'no device'),
           device && device.capabilities && !device.capabilities.fs ? pill('节点待更新', C.amber) : null,
           h('div', { style: { display: 'flex', gap: 2, marginLeft: 10, padding: 2, background: C.soft, borderRadius: 8 } },
-            h('button', { onClick: () => setView('chat'), style: { border: 0, borderRadius: 6, padding: '4px 12px', fontSize: 12, cursor: 'pointer', background: view === 'chat' ? '#fff' : 'transparent', color: view === 'chat' ? C.ink : C.mute, boxShadow: view === 'chat' ? '0 1px 2px rgba(16,24,40,0.08)' : 'none' } }, '对话'),
-            h('button', { onClick: () => setView('files'), style: { border: 0, borderRadius: 6, padding: '4px 12px', fontSize: 12, cursor: 'pointer', background: view === 'files' ? '#fff' : 'transparent', color: view === 'files' ? C.ink : C.mute, boxShadow: view === 'files' ? '0 1px 2px rgba(16,24,40,0.08)' : 'none' } }, '文件')
+            h('button', { onClick: () => setView('chat'), className: 'tether-hover', style: { border: 0, borderRadius: 6, padding: '4px 12px', fontSize: 12, cursor: 'pointer', background: view === 'chat' ? C.bg : 'transparent', color: view === 'chat' ? C.ink : C.mute, boxShadow: 'none' } }, '对话'),
+            h('button', { onClick: () => setView('files'), className: 'tether-hover', style: { border: 0, borderRadius: 6, padding: '4px 12px', fontSize: 12, cursor: 'pointer', background: view === 'files' ? C.bg : 'transparent', color: view === 'files' ? C.ink : C.mute, boxShadow: 'none' } }, '文件')
           ),
           h('span', { style: { marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 } },
             policy ? pill(policy.mode === 'full' ? 'full-disk' : (policy.mode === 'locked' ? 'locked' : 'readonly'), policy.mode === 'full' ? C.red : (policy.mode === 'locked' ? C.amber : C.mute)) : null,
             btn('权限设置', openSettings)
           )
         ),
-        notice ? h('div', { style: { padding: '6px 14px', background: /^Saved |^Policy updated/.test(notice) ? '#ecfdf3' : '#fef3f2', color: /^Saved |^Policy updated/.test(notice) ? '#067647' : C.red, borderBottom: '1px solid ' + (/^Saved |^Policy updated/.test(notice) ? '#abefc6' : '#fecdca'), fontSize: 12 } }, notice) : null,
+        notice ? h('div', { style: { padding: '6px 14px', background: C.soft, color: /^Saved |^Policy updated/.test(notice) ? C.green : C.red, borderBottom: 0, fontSize: 12 } }, notice) : null,
         h('div', { style: { display: 'flex', flex: '1 1 auto', minHeight: 0 } },
           h(ActivityBar, {
             active: activePanel,
@@ -826,6 +870,7 @@ window.__ModuleLoader__.load({
             panel: activePanel,
             width: safeSidebarWidth,
             hidden: sidebarCollapsed,
+            resizing,
             onResizeStart: startSidebarResize,
             onResetWidth: () => setSidebarWidth(UI.defaultSide),
             onCollapse: () => setSidebarCollapsed(true),
@@ -847,9 +892,9 @@ window.__ModuleLoader__.load({
           }),
           h('main', { style: { flex: '1 1 auto', display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 } },
             view === 'chat' ? h('div', { style: { display: 'flex', flexDirection: 'column', flex: '1 1 auto', minHeight: 0 } },
-              h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderBottom: '1px solid ' + C.line, flex: '0 0 auto' } },
+              h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderBottom: 0, background: C.bg, flex: '0 0 auto' } },
                 h('div', { style: { minWidth: 0, flex: '1 1 auto' } },
-                  h('div', { style: { fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, conversationTitle || '对话'),
+                  h('div', { style: { fontSize: 14, fontWeight: 'var(--tether-strong, 600)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, conversationTitle || '对话'),
                   h('div', { style: { fontSize: 11, color: C.mute, marginTop: 1 } }, [
                     sessionId ? '原生 DSH 会话 · 只读' : (runId ? 'Tether 任务 · 目标机执行' : '选择左侧会话或发起任务'),
                     modelText ? ' · ' + modelText : ''
@@ -868,10 +913,10 @@ window.__ModuleLoader__.load({
                 note: sessionId ? '原生 DSH 会话只读；发送会在同一工作区新建 Tether 任务，不写入上面的原生会话' : (runId ? '继续当前 Tether 会话' : '发送到目标机的工作区')
               })
             ) : h('div', { style: { display: 'flex', flexDirection: 'column', flex: '1 1 auto', minHeight: 0 } },
-              h('div', { style: { borderBottom: '1px solid ' + C.line, flex: '0 0 auto' } },
+              h('div', { style: { borderBottom: 0, background: C.panel, flex: '0 0 auto' } },
                 h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, padding: '7px 10px 4px' } },
                   btn('↑', () => { if (!path) return; const parent = path.replace(/[\\/]+$/, '').replace(/[\\/][^\\/]+$/, ''); if (parent && parent !== path) { setPath(parent); setPathDraft(parent) } }, { title: '上级目录' }),
-                  h('input', { value: pathDraft, onChange: (ev) => setPathDraft(ev.target.value), onKeyDown: (ev) => { if (ev.key === 'Enter') loadDir(pathDraft) }, spellCheck: false, style: { flex: '1 1 auto', minWidth: 0, height: 28, border: '1px solid ' + C.line, borderRadius: 6, padding: '0 8px', fontFamily: 'Consolas, monospace', fontSize: 12 } }),
+                  h('input', { value: pathDraft, onChange: (ev) => setPathDraft(ev.target.value), onKeyDown: (ev) => { if (ev.key === 'Enter') loadDir(pathDraft) }, spellCheck: false, style: { flex: '1 1 auto', minWidth: 0, height: 28, border: 0, borderRadius: 6, padding: '0 8px', background: C.bg, fontFamily: 'Consolas, monospace', fontSize: 12 } }),
                   btn('刷新', () => loadDir(path), { disabled: !path }),
                   listing && !listing.writable ? pill('read-only', C.amber) : null
                 ),
@@ -884,7 +929,7 @@ window.__ModuleLoader__.load({
                 )
               ),
               h('div', { style: { display: 'flex', flex: '1 1 auto', minHeight: 0 } },
-                h('div', { className: 'tether-scroll', style: { width: safeFileListWidth, flex: '0 0 auto', borderRight: '1px solid ' + C.line, overflow: 'auto', background: C.bg } },
+                h('div', { className: 'tether-scroll', style: { width: safeFileListWidth, flex: '0 0 auto', borderRight: 0, overflow: 'auto', background: C.soft, transition: resizing ? 'none' : 'width 180ms cubic-bezier(.2,.85,.2,1.15)', willChange: 'width' } },
                   listing ? h('div', null,
                     listing.entries.map((entry) => h('div', { key: entry.path, onClick: () => setSelected(entry), onDoubleClick: () => openFile(entry), style: { ...rowStyle(selected && selected.path === entry.path), padding: '5px 10px', borderRadius: 0 } },
                       h('span', { style: { width: 16, color: C.mute, fontSize: 12 } }, entry.dir ? '▸' : '·'),
@@ -895,20 +940,21 @@ window.__ModuleLoader__.load({
                   ) : h('div', { style: { padding: 16, color: C.mute, fontSize: 12 } }, path ? (busy ? '加载中…' : '无法读取') : '选择项目')
                 ),
                 h('div', {
+                  className: 'tether-resizer', 'data-active': resizing ? 'true' : undefined,
                   onPointerDown: startFileResize, onDoubleClick: () => setFileListWidth(UI.defaultFiles),
                   title: '拖动调整文件栏宽度，双击复位',
-                  style: { width: 5, flex: '0 0 auto', cursor: 'col-resize', background: 'transparent' }
+                  style: { width: 7, flex: '0 0 auto', cursor: 'col-resize', background: 'transparent' }
                 }),
                 h('div', { style: { flex: '1 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column' } },
                   file ? h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column' } },
-                    h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderBottom: '1px solid ' + C.line, flex: '0 0 auto' } },
+                    h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderBottom: 0, background: C.panel, flex: '0 0 auto' } },
                       h('span', { style: { fontSize: 12, color: C.sub, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, file.path),
                       file.binary ? pill('binary') : pill(formatBytes(file.size)),
                       file.writable ? null : pill('read-only', C.amber),
                       h('span', { style: { marginLeft: 'auto', display: 'flex', gap: 6 } }, file.writable && !file.binary ? btn(dirty ? 'Save *' : 'Save', saveFile, { primary: true, disabled: !dirty || busy }) : null)
                     ),
                     file.binary ? h('div', { style: { padding: 20, color: C.mute, fontSize: 12 } }, 'Binary file. Preview is not supported.')
-                      : h('textarea', { value: draft, onChange: (ev) => { setDraft(ev.target.value); setDirty(true) }, readOnly: !file.writable, spellCheck: false, style: { flex: '1 1 auto', width: '100%', boxSizing: 'border-box', resize: 'none', border: 0, outline: 'none', padding: '10px 12px', fontFamily: 'Consolas, monospace', fontSize: 12.5, lineHeight: 1.55, background: file.writable ? '#fff' : C.panel, color: C.ink } })
+                      : h('textarea', { value: draft, onChange: (ev) => { setDraft(ev.target.value); setDirty(true) }, readOnly: !file.writable, spellCheck: false, style: { flex: '1 1 auto', width: '100%', boxSizing: 'border-box', resize: 'none', border: 0, outline: 'none', padding: '10px 12px', fontFamily: 'Consolas, monospace', fontSize: 12.5, lineHeight: 1.55, background: file.writable ? C.bg : C.panel, color: C.ink } })
                   ) : h('div', { style: { display: 'grid', placeItems: 'center', height: '100%', color: C.mute, fontSize: 12 } }, path ? '双击文件查看内容' : '先从左侧选择项目')
                 )
               )
@@ -916,8 +962,8 @@ window.__ModuleLoader__.load({
         ),
         ),
         showSettings ? h('div', { style: { position: 'absolute', inset: 0, background: 'rgba(16,24,40,0.35)', display: 'flex', justifyContent: 'flex-end', zIndex: 20 } },
-          h('div', { style: { width: 480, height: '100%', background: '#fff', borderLeft: '1px solid ' + C.line, display: 'flex', flexDirection: 'column', boxShadow: '-8px 0 24px rgba(16,24,40,0.12)' } },
-            h('div', { style: { padding: '12px 16px', borderBottom: '1px solid ' + C.line, display: 'flex', alignItems: 'center' } },
+          h('div', { style: { width: 480, height: '100%', background: C.bg, borderLeft: 0, display: 'flex', flexDirection: 'column', boxShadow: C.shadow } },
+            h('div', { style: { padding: '12px 16px', borderBottom: 0, background: C.panel, display: 'flex', alignItems: 'center' } },
               h('strong', null, '文件权限'), device ? h('span', { style: { marginLeft: 8, fontSize: 12, color: C.mute } }, device.name) : null,
               h('button', { onClick: () => setShowSettings(false), style: { marginLeft: 'auto', border: 0, background: 'transparent', fontSize: 18, cursor: 'pointer', color: C.mute } }, '×')
             ),
@@ -926,19 +972,19 @@ window.__ModuleLoader__.load({
                 [['readonly', '默认：全盘只读 + 项目可写', '全盘可读；仅项目根、已有 DSH 工作区、节点工作目录可写。', C.dark],
                  ['locked', '锁定：全部只读', '任何写入、新建、重命名、删除都被拒绝。', C.amber],
                  ['full', '全盘读写', '目标机主机权限。系统目录、凭据与 AppData 仍拒写；需二次确认。', C.red]].map(([value, title, desc, color]) =>
-                  h('label', { key: value, style: { border: '1px solid ' + (mode === value ? color : C.line), borderRadius: 8, padding: '8px 10px', cursor: 'pointer', background: mode === value ? (value === 'full' ? '#fef3f2' : (value === 'locked' ? '#fffaeb' : C.panel)) : '#fff' } },
+                  h('label', { key: value, style: { border: 0, borderRadius: 8, padding: '8px 10px', cursor: 'pointer', background: mode === value ? C.soft : C.panel } },
                     h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } }, h('input', { type: 'radio', checked: mode === value, onChange: () => setMode(value) }), h('strong', { style: { fontSize: 13 } }, title)),
                     h('div', { style: { fontSize: 11.5, color: C.mute, marginTop: 3 } }, desc)
                   ))
               ),
-              h('div', { style: { fontSize: 11, fontWeight: 600, color: C.mute, marginBottom: 6, letterSpacing: 0.4 } }, '可写根目录'),
-              h('textarea', { value: rootsText, onChange: (ev) => setRootsText(ev.target.value), spellCheck: false, style: { width: '100%', height: 88, boxSizing: 'border-box', border: '1px solid ' + C.line, borderRadius: 6, padding: 8, fontFamily: 'Consolas, monospace', fontSize: 12, resize: 'vertical' } }),
+              h('div', { style: { fontSize: 11, fontWeight: 'var(--tether-strong, 600)', color: C.mute, marginBottom: 6, letterSpacing: 0.4 } }, '可写根目录'),
+              h('textarea', { value: rootsText, onChange: (ev) => setRootsText(ev.target.value), spellCheck: false, style: { width: '100%', height: 88, boxSizing: 'border-box', border: 0, borderRadius: 6, padding: 8, background: C.panel, fontFamily: 'Consolas, monospace', fontSize: 12, resize: 'vertical' } }),
               h('div', { style: { display: 'flex', gap: 8, marginTop: 10 } }, btn('保存权限', savePolicy, { primary: true, disabled: busy || !device || !device.online }), h('span', { style: { fontSize: 11, color: C.mute, alignSelf: 'center' } }, policy ? ('更新于 ' + (policy.updated_by || 'default')) : '')),
-              h('div', { style: { fontSize: 11, fontWeight: 600, color: C.mute, margin: '18px 0 6px', letterSpacing: 0.4 } }, '审计（最近 80 条）'),
-              h('div', { style: { border: '1px solid ' + C.line, borderRadius: 6, overflow: 'hidden' } },
-                h('div', { style: { display: 'grid', gridTemplateColumns: '58px 1fr 70px', gap: 6, padding: '5px 8px', background: C.panel, fontSize: 10, color: C.mute, borderBottom: '1px solid ' + C.line } }, h('span', null, '操作'), h('span', null, '路径'), h('span', null, '结果')),
+              h('div', { style: { fontSize: 11, fontWeight: 'var(--tether-strong, 600)', color: C.mute, margin: '18px 0 6px', letterSpacing: 0.4 } }, '审计（最近 80 条）'),
+              h('div', { style: { border: 0, borderRadius: 6, overflow: 'hidden', background: C.panel } },
+                h('div', { style: { display: 'grid', gridTemplateColumns: '58px 1fr 70px', gap: 6, padding: '5px 8px', background: C.soft, fontSize: 10, color: C.mute, borderBottom: 0 } }, h('span', null, '操作'), h('span', null, '路径'), h('span', null, '结果')),
                 h('div', { style: { maxHeight: 220, overflow: 'auto' } },
-                  audit.map((a, i) => h('div', { key: i, style: { display: 'grid', gridTemplateColumns: '58px 1fr 70px', gap: 6, padding: '4px 8px', fontSize: 10.5, borderBottom: '1px solid ' + C.soft, color: a.result === 'denied' ? C.red : C.sub } },
+                  audit.map((a, i) => h('div', { key: i, style: { display: 'grid', gridTemplateColumns: '58px 1fr 70px', gap: 6, padding: '4px 8px', fontSize: 10.5, borderBottom: 0, background: i % 2 ? C.bg : 'transparent', color: a.result === 'denied' ? C.red : C.sub } },
                     h('span', null, a.op), h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, title: a.path }, a.path),
                     h('span', null, a.phase === 'intent' ? (a.result === 'denied' ? 'denied' : 'intent') : a.result)
                   )),
@@ -949,9 +995,9 @@ window.__ModuleLoader__.load({
           )
         ) : null,
         ask ? h('div', { style: { position: 'absolute', inset: 0, background: 'rgba(16,24,40,0.35)', display: 'grid', placeItems: 'center', zIndex: 30 } },
-          h('div', { style: { width: 380, background: '#fff', borderRadius: 10, boxShadow: '0 20px 48px rgba(16,24,40,0.24)', padding: 18 } },
-            h('div', { style: { fontSize: 14, fontWeight: 600, marginBottom: 10 } }, ask.title),
-            h('input', { autoFocus: true, value: ask.value, spellCheck: false, onChange: (ev) => setAsk({ ...ask, value: ev.target.value }), onKeyDown: (ev) => { if (ev.key === 'Enter') submitAsk(); if (ev.key === 'Escape') setAsk(null) }, style: { width: '100%', height: 32, boxSizing: 'border-box', border: '1px solid ' + C.line, borderRadius: 6, padding: '0 8px', fontSize: 13 } }),
+          h('div', { style: { width: 380, background: C.bg, borderRadius: 10, boxShadow: C.shadow, padding: 18 } },
+            h('div', { style: { fontSize: 14, fontWeight: 'var(--tether-strong, 600)', marginBottom: 10 } }, ask.title),
+            h('input', { autoFocus: true, value: ask.value, spellCheck: false, onChange: (ev) => setAsk({ ...ask, value: ev.target.value }), onKeyDown: (ev) => { if (ev.key === 'Enter') submitAsk(); if (ev.key === 'Escape') setAsk(null) }, style: { width: '100%', height: 32, boxSizing: 'border-box', border: 0, borderRadius: 6, padding: '0 8px', background: C.panel, fontSize: 13 } }),
             h('div', { style: { display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 } }, btn('取消', () => setAsk(null)), btn('确定', submitAsk, { primary: true, disabled: !ask.value.trim() }))
           )
         ) : null
@@ -959,7 +1005,7 @@ window.__ModuleLoader__.load({
     }
 
     function TetherIcon() {
-      return h('span', { title: 'Tether', style: { display: 'grid', placeItems: 'center', width: 22, height: 22, borderRadius: 6, background: '#101828', color: '#fff', fontSize: 12, fontWeight: 700 } }, 'T')
+      return h('span', { title: 'Tether', style: { display: 'grid', placeItems: 'center', width: 22, height: 22, borderRadius: 6, background: C.primary, color: C.onPrimary, fontSize: 12, fontWeight: 'var(--tether-strong-2, 700)' } }, 'T')
     }
 
     return {
