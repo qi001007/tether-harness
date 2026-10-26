@@ -15,6 +15,7 @@ dependencies = [
   "python-dotenv>=1.0",
   "deepseek-harness-sdk==0.2.1rc2",
   "mcp>=2.3",
+  "zstandard>=0.22",
 ]
 
 [tool.setuptools.packages.find]

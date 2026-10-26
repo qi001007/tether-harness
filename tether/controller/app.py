@@ -210,7 +210,17 @@ async def reconcile(run_id: str) -> dict[str, Any]:
     return {"run_id": run_id, "status": "requested"}
 
 
+def _capabilities(device_id: str) -> dict[str, Any]:
+    try:
+        return STORE.get_device(device_id).get("capabilities") or {}
+    except NotFound:
+        return {}
+
+
 async def _device_fs(device_id: str, op: str, args: dict[str, Any] | None = None) -> Any:
+    if not _capabilities(device_id).get("fs"):
+        raise HTTPException(409, {"error": "node update required for files and projects",
+                                 "code": "node_update_required"})
     try:
         reply = await HUB.request(device_id, {"type": "fs_call", "op": op, "args": args or {}})
     except NodeOffline as exc:
@@ -245,6 +255,32 @@ async def set_device_policy(device_id: str, body: dict[str, Any]) -> Any:
 @app.get("/api/devices/{device_id}/audit")
 async def device_audit(device_id: str, limit: int = 100) -> Any:
     return await _device_fs(device_id, "audit_list", {"limit": limit})
+
+
+async def _device_dsh(device_id: str, op: str, args: dict[str, Any] | None = None) -> Any:
+    if not _capabilities(device_id).get("dsh_native"):
+        raise HTTPException(409, {"error": "node update required for native DSH sessions",
+                                 "code": "node_update_required"})
+    try:
+        reply = await HUB.request(device_id, {"type": "dsh_call", "op": op, "args": args or {}})
+    except NodeOffline as exc:
+        raise HTTPException(409, f"device offline: {device_id}") from exc
+    except NodeTimeout as exc:
+        raise HTTPException(504, "device did not answer the DSH request") from exc
+    if not reply.get("ok"):
+        raise HTTPException(404 if reply.get("code") == "not_found" else 400,
+                            {"error": reply.get("error"), "code": reply.get("code")})
+    return reply.get("result")
+
+
+@app.get("/api/devices/{device_id}/dsh/sessions")
+async def device_dsh_sessions(device_id: str) -> Any:
+    return await _device_dsh(device_id, "sessions")
+
+
+@app.get("/api/devices/{device_id}/dsh/sessions/{session_id}")
+async def device_dsh_transcript(device_id: str, session_id: str) -> Any:
+    return await _device_dsh(device_id, "transcript", {"session_id": session_id})
 
 
 @app.get("/api/events")
@@ -337,7 +373,7 @@ async def _handle_node(device_id: str, msg: dict[str, Any]) -> None:
         return
     if kind == "dispatch_ack":
         return
-    if kind == "fs_result":
+    if kind == "fs_result" or kind == "dsh_result":
         HUB.resolve(str(msg.get("req_id") or ""), msg)
         return
     if kind == "reconcile_result":

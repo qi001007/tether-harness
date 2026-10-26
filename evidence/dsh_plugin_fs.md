@@ -18,8 +18,8 @@ run from this repo (`.venv`).
   - devices: `DESKTOP-LOCAL` (local, online), `LAPTOP-01` (online), `TAILSCALE-TEST` (offline)
   - projects: `default-workspace` (DSH), `demo` (Tether root), `Tether 工作目录` (node workspace)
   - files, task list, event stream, permission drawer
-- Screenshots: `docs/screenshots/dsh-plugin-devices.png`,
-  `dsh-plugin-files.png`, `dsh-plugin-task.png`, `dsh-plugin-permissions.png`.
+- Screenshots: `docs/screenshots/dsh-plugin-native-chat.png`,
+  `dsh-plugin-files.png`, `dsh-plugin-run-chat.png`, `dsh-plugin-permissions.png`.
 
 ## Filesystem API checks
 
@@ -57,6 +57,23 @@ authoritative); the controller only proxies.
     (`finish_reason=cancelled`)
 - The UI's task list is filtered by the selected workspace; legacy sessions
   created with a relative workspace (`work-local`) are matched by basename.
+
+## Native DSH conversation mirror
+
+- Source: `C:/Users/Administrator/.dsh/sessions/--C-Users-Administrator-Documents-deepseek-harness-default-workspace--/session-d49909ca-d5c5-4e23-ad37-116cb258bcff/session.v4.jsonl.zstd`
+- `DshSessionStore` decompresses all zstd frames (107,980 bytes, 52 events) and
+  builds a transcript with title `Tether 查看在线设备`, 2 turns, 8
+  reasoning/tool/text blocks (3 + 5), status `completed`.
+- The page renders the same data as DSH: right-aligned user bubble, collapsed
+  "思考" rows, `mcp__tether__list_peers` / `mcp__tether__remote_task` tool cards,
+  the final answer and a 2-step turn footer.
+- `tests/test_dsh_sessions.py` covers user-message filtering, tool/result linking,
+  run status and the live `assistant/attempt` stream.
+- Screenshots: `docs/screenshots/dsh-plugin-native-chat.png`,
+  `docs/screenshots/dsh-plugin-run-chat.png`,
+  `docs/screenshots/dsh-plugin-laptop-chat.png`.
+- The native log is read-only. The composer starts a new Tether run in the same
+  workspace; native write-back (`session/prompt`) is Designed.
 
 ## MCP file tools
 

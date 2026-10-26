@@ -14,7 +14,9 @@ This file is for an AI or human reviewer who wants to decide whether the claims 
 6. `DESIGN.md` §8 — the measured results.
 7. `evidence/gate2.md`, `evidence/dsh_plugin_fs.md`, `evidence/cancel_probe.json`.
 8. Code: `tether/controller/store.py`, `tether/node/fs_service.py`,
-   `tether/node/dsh_adapter.py`, `packages/dsh-plugin-tether-client/lib/client.js`.
+   `tether/node/dsh_sessions.py`, `tether/node/dsh_adapter.py`,
+   `packages/dsh-plugin-tether-client/lib/client.js`; tests in
+   `tests/test_dsh_sessions.py` and `tests/test_fs_service.py`.
 
 ## Claim → evidence map
 
@@ -29,8 +31,10 @@ This file is for an AI or human reviewer who wants to decide whether the claims 
 | Cross-machine execution | `evidence/gate2.md` E6/cross-machine; `LAPTOP-01` created `D:\tether-node\work\laptop-proof.txt` |
 | DeepSeek desktop Agent calls Tether | `docs/screenshots/deepseek-delegated.png`; run `r-56ca1f58b1a3` + verify run `r-8fa5928462a6`; file `D:\tether-node\work\tether-delegated.txt` |
 | Agent-to-Agent delegation | same screenshot; the desktop Agent called `mcp__tether__remote_task` for `LAPTOP-01`; target session `tether-s-d0332f33ad47` |
-| DSH plugin installs without touching other bundles | `~/.dsh/profiles/desktop/package.json` bundles list; `desktop/install-plugin.ps1`; screenshot `dsh-plugin-devices.png` |
+| DSH plugin installs without touching other bundles | `~/.dsh/profiles/desktop/package.json` bundles list; `desktop/install-plugin.ps1`; screenshot `dsh-plugin-native-chat.png` |
 | Plugin page is native, not iframe | `packages/dsh-plugin-tether-client/lib/client.js` uses `__ModuleLoader__` + `ctx.slots.inject('main' / 'sidebar.panellist')` |
+| Native DSH conversation is mirrored | `tether/node/dsh_sessions.py` parses `~/.dsh/sessions/**/session.v4.jsonl.zstd`; `tests/test_dsh_sessions.py`; screenshot `dsh-plugin-native-chat.png` |
+| Reasoning/tool events are rendered, not dumped | `build_transcript()` maps `reasoning`, `tool-call`, `tool/result`; the page shows collapsible think rows and tool cards |
 | Existing DSH workspace writable in readonly | `evidence/dsh_plugin_fs.md`; audit rows for `default-workspace` |
 | Readonly blocks outside writes | HTTP 400 `path outside allowed roots` in `evidence/dsh_plugin_fs.md` |
 | Full mode still guards OS/credentials | `C:\Windows` write and `.dsh/.credentials.yaml` read both HTTP 400 |
@@ -45,15 +49,18 @@ This file is for an AI or human reviewer who wants to decide whether the claims 
 ## Verified / Designed / Not implemented
 
 - **Verified**: DSH plugin install/render, device/project/file/task/permission
-  page, three-level file policy with audit, recoverable delete, DeepSeek Harness
-  desktop Agent calling Tether MCP, Agent-to-Agent delegation, star controller/node,
-  real dsh, session resume, event replay, idempotency, `unknown`, hard cancel with
-  0 residual, Tailscale cross-machine, control plane app, monitor UI.
-- **Designed**: symmetric peer Agent network (every device same package, two-way
-  delegation), `@Remote` host service for the plugin, approval UI, capability
-  routing, Linux/WSL, public relay, multi-task concurrency.
+  page, native DSH conversation mirror (read-only), DSH-style live Tether run
+  transcript, three-level file policy with audit, recoverable delete, DeepSeek
+  Harness desktop Agent calling Tether MCP, Agent-to-Agent delegation, star
+  controller/node, real dsh, session resume, event replay, idempotency,
+  `unknown`, hard cancel with 0 residual, Tailscale cross-machine, control plane
+  app, monitor UI.
+- **Designed**: native DSH session write-back (`session/prompt` host proxy),
+  symmetric peer Agent network (every device same package, two-way delegation),
+  `@Remote` host service for the plugin, approval UI, capability routing,
+  Linux/WSL, public relay, multi-task concurrency.
 - **Not implemented**: the Designed list; production authentication/audit/sandbox;
-  the laptop node still runs the previous build without `fs`.
+  the laptop node still runs the previous build without `fs` or the native reader.
 
 ## Questions a reviewer may ask
 
@@ -77,6 +84,14 @@ The page is a native DSH client plugin using the same slot system
 bundle may only require `PLATFORM_MODULES` (`react`, slot/layout services, etc.),
 and copying router/global-store components would create a second app. There is no
 iframe and no custom chat; the layout is reimplemented against the same tokens.
+
+**Is the native conversation a copy or a live mirror?**
+It is a live, read-only mirror: `dsh_sessions.py` decompresses the target's
+`session.vN.jsonl.zstd` log and the page polls it every 1.5 s, rebuilding
+reasoning/tool/answer blocks. It never writes the log and never competes for the
+DSH Session writer. Sending from a native session starts a new Tether run in the
+same workspace, labelled in the composer; native write-back (`session/prompt`)
+would require a Host proxy and is Designed.
 
 **Why does the plugin call 127.0.0.1:18890 instead of a Host Remote?**
 v0.1 keeps the controller loopback-only and adds CORS for the `dsh-app://app`

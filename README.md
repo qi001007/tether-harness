@@ -41,11 +41,14 @@ stays in DSH's own chat. Tether does not replace DSH memory, skills, or marketpl
 | Readonly really blocks outside writes | `C:\Users\...\Documents\tether-full-test.txt` → HTTP 400 `path outside allowed roots` |
 | Full-disk mode is explicit and still guards the OS | `mode=full` allowed the same write; `C:\Windows\...` stayed denied; `.dsh/.credentials.yaml` unreadable |
 | Delete is recoverable | delete moved the file to `D:\TetherWorkspaces\.tether-trash\<timestamp>-<name>` |
+| Native DSH conversation mirror | `session.v4.jsonl.zstd` parsed into 2 turns / 8 blocks; page shows the same title, reasoning, tool cards and answer |
+| Tether run rendered as chat | LAPTOP-01 run shows `思考` → `pwsh` tool → read-only verification answer, same layout as native |
 | Plugin live task + cancel | run `r-f358e95993e9`: first event in 1261 ms; cancel → `cancelled` |
 | New project location | `demo` created under `D:\TetherWorkspaces\demo`; node workspace and DSH workspace unchanged |
 
-Screenshots: `docs/screenshots/dsh-plugin-devices.png`,
-`docs/screenshots/dsh-plugin-files.png`, `docs/screenshots/dsh-plugin-task.png`,
+Screenshots: `docs/screenshots/dsh-plugin-native-chat.png`,
+`docs/screenshots/dsh-plugin-files.png`, `docs/screenshots/dsh-plugin-run-chat.png`,
+`docs/screenshots/dsh-plugin-laptop-chat.png`,
 `docs/screenshots/dsh-plugin-permissions.png`,
 `docs/screenshots/deepseek-desktop.png`,
 `docs/screenshots/deepseek-after-tether.png`,
@@ -102,12 +105,25 @@ The sidebar entry opens a native client page (no iframe, no second web app):
 - **Devices**: online state, platform, agents, workspace. Click a device to switch.
 - **Projects**: DSH workspaces discovered from `~/.dsh/storages/workspace.json`,
   projects under `D:\TetherWorkspaces`, and the node workspace.
-- **Files**: list/read/write/mkdir/rename/delete through the target node's OS
-  filesystem service; the editor is read-only when policy does not allow writes.
-- **Tasks**: start a prompt in the selected workspace, watch the event stream
-  (`seq`, kind, text), cancel a live run.
-- **Permissions**: readonly or full-disk, editable writable roots, and the last
-  80 audit entries.
+- **Conversation**: the native DSH transcript read from
+  `~/.dsh/sessions/**/session.vN.jsonl.zstd`: user messages, collapsible
+  reasoning, tool calls/results and the final answer, rendered like the DSH chat
+  page. Native sessions are **read-only** here; sending a message starts a new
+  Tether task in the same workspace, clearly labelled.
+- **Tasks**: Tether runs are rendered as the same chat transcript while they run,
+  including reasoning and tool events; cancel a live run from the header.
+- **Files**: a separate tab; list/read/write/mkdir/rename/delete through the target
+  node's OS filesystem service; the editor is read-only when policy does not allow
+  writes.
+- **Permissions**: readonly / locked / full-disk, editable writable roots, and the
+  last 80 audit entries.
+
+The native reader only reads the DSH log; it never writes to an active session or
+competes for the Session writer. It defaults to `~/.dsh`; set
+`TETHER_NATIVE_DSH_HOME` if the target DSH home is elsewhere. A target without
+`~/.dsh/sessions` (for example the current laptop build) still shows Tether task
+transcripts. The reader requires the `zstandard` Python package, installed by
+`pip install -e .`.
 
 ### File policy
 

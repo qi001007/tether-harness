@@ -1,14 +1,14 @@
 # Tether 演示视频（2–3 分钟）分镜与旁白
 
-目标：30 秒内让看的人明白——**交互端是 DeepSeek Harness 桌面 APP；Tether 是它的原生插件页 + MCP 工具，Agent 自己把任务派到另一台电脑**。不是换一个聊天框，也不是 iframe。
+目标：30 秒内让看的人明白——**交互端是 DeepSeek Harness 桌面 APP；Tether 插件页能直接看到目标机 Agent 的对话、推理和工具调用，也能发起新任务**。不是换一个聊天框，也不是 iframe。
 
 ## 录制前检查
 
 - DeepSeek Harness 桌面 APP 已打开，登录，侧栏能看到 `Tether`（`desktop/install-plugin.ps1`）。
 - `~/.dsh/profiles/desktop/cordis.patch.yml` 里已有 `mcp-tether`（`desktop/install-mcp.ps1`）。
 - Tether 控制面在跑：`desktop/tether-app.ps1`（它的窗口只作监控，可最小化）。
+- 目标机（桌面或笔记本）有 `~/.dsh/sessions` 原生会话；没有也能演示 Tether 任务对话。
 - 笔记本 `laptop/tether-node.ps1` 在跑；笔记本浏览器打开 `http://127.0.0.1:18893`。
-- 桌面端 `D:\TetherWorkspaces\demo\hello.txt` 已存在（插件文件页演示用）。
 - 在 DeepSeek 里点"新会话"，从干净对话开始。
 - 录屏 1080p；如果只能录桌面，笔记本画面用手机拍一小段，或最后用它的本地控制台截图。
 
@@ -21,24 +21,25 @@
 旁白：
 > 这是 DeepSeek Harness 的官方桌面端，交互端没有换，记忆、技能、插件市场都还是 DeepSeek 的。Tether 以官方插件和 MCP 工具的形式接进来。
 
-### 0:15–0:50 Tether 插件页：设备、项目、文件
+### 0:15–0:55 插件页：目标机的原生对话
 
 画面：
-- 点侧栏 `Tether`，展示设备卡片（DESKTOP-LOCAL、LAPTOP-01、TAILSCALE-TEST）；
-- 点 `Tether 工作目录`，文件列表出现 `gate2.txt`；
-- 点 `demo`，双击 `hello.txt`，编辑一行并保存。
+- 点侧栏 `Tether`，左侧出现设备和项目；`default-workspace` 下的 `Tether 查看在线设备` 是目标机 DSH 的原生会话；
+- 中间展示同一条对话：右侧用户气泡、可展开的"思考"、`mcp__tether__list_peers` 工具卡片、最终回答和表格；
+- 切到 `LAPTOP-01`，选一条已有的 Tether 任务，展示同样的对话布局：思考 → `pwsh` 工具 → 只读校验回答。
 
 旁白：
-> 插件页是 DSH 的原生 slot，不是 iframe。左边是已接入设备和目标机项目；已有 DSH 工作区直接能打开，不会被专属根限制。中间是目标机的文件，保存动作通过 Tether Node 的 OS 文件服务落到那台机器。
+> 这里不是任务列表，是目标机 Agent 的对话本身。原生 DSH 会话从目标机的 session 日志读出来，按 DSH 的消息结构还原；推理、工具调用、结果和最终回答都在。原生会话目前只读，不会写坏目标机正在进行的对话；输入框发消息会在同一工作区新建 Tether 任务。
 
-### 0:50–1:15 权限：只读、全盘、审计
+### 0:55–1:15 文件与三档权限
 
 画面：
-- 点"权限设置"，展示 `只读` / `全盘读写` 两档、可写根目录、审计表；
-- 指出一条 `write · ok` 和一条 `write · denied`（`C:\Windows` 或凭据读取）。
+- 点"文件"标签，打开 `D:\TetherWorkspaces\demo\hello.txt`，编辑并保存；
+- 点"权限设置"，展示 `默认只读` / `锁定` / `全盘读写` 三档、可写根目录、审计表；
+- 指出一条 `write · ok` 和一条 `denied`（`C:\Windows` 或凭据读取）。
 
 旁白：
-> 默认只读：全盘可读，写只允许项目根和已有工作区。全盘读写要在设置里显式打开；系统目录和凭据仍然拒绝。每次写和删除都有 intent/result 审计，删除进 `.tether-trash`，可恢复。
+> 文件走目标机 Node 的 OS 文件服务。默认只读：全盘可读，写只允许项目根和已有 DSH 工作区；锁定档全部只读；全盘读写要显式二次确认，系统目录和凭据仍然拒绝。每次写入和删除都有 intent/result 审计，删除进 `.tether-trash`。
 
 ### 1:15–1:45 让 Agent 看见设备
 
@@ -74,10 +75,10 @@
 
 ### 2:25–2:50 收尾：Agent 是主体，Tether 是工具
 
-画面：切回 Tether 插件页的任务列表/事件流，然后 GitHub README 的边界表。
+画面：切回 Tether 插件页的对话页，然后 GitHub README 的边界表。
 
 旁白：
-> 当前 v0.1 是星型：桌面 DeepSeek Agent 发起，笔记本被控；对等 Agent 网络是 DESIGN.md 里的 v0.2，边界写清楚了。插件、MCP 配置、实测数字和截图都在 GitHub。
+> 当前 v0.1 是星型：桌面 DeepSeek Agent 发起，笔记本被控；对等 Agent 网络和原生会话写回是 DESIGN.md 里的下一阶段，边界写清楚了。插件、MCP 配置、实测数字和截图都在 GitHub。
 
 ## 旁白原则
 
@@ -90,4 +91,4 @@
 - 远端任务失败：展示 `list_peers` 和任务状态，说明链路；不要把失败剪成成功。
 - 笔记本画面不方便录：只录 DeepSeek 桌面，最后用 3 秒展示笔记本本地控制台照片/录屏。
 - 如果取消没及时收敛：展示 `evidence/cancel_probe.json` 的 `residual_count: 0`，说明这是脚本实测。
-- 笔记本 Node 未升级时，文件页只演示桌面节点；README 已注明升级路径。
+- 笔记本 Node 未升级时，文件页和原生会话只演示桌面节点；README 已注明升级路径。

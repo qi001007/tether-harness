@@ -102,6 +102,12 @@ The node enforces policy locally (`policy.json` next to the node DB) and writes
 `audit.jsonl` before and after writes. Deletes go to
 `D:\TetherWorkspaces\.tether-trash`.
 
+The node also reads native DSH conversation logs under
+`%USERPROFILE%\.dsh\sessions\**\session.vN.jsonl.zstd` so the desktop plugin can
+mirror the target Agent's user messages, reasoning, tool calls and answers. This
+requires `zstandard`, which `pip install -e .` adds; it never writes to a DSH
+session or competes for its writer.
+
 ## 7. Update an existing node
 
 Copy the current repo's `tether\` and `laptop\` folders over

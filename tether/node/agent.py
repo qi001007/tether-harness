@@ -23,6 +23,7 @@ import websockets
 from . import console as local_console
 from .dsh_adapter import DshRun
 from .fs_service import FsError, FsService
+from .dsh_sessions import DshSessionStore
 
 ROOT = Path(__file__).resolve().parents[2]
 try:
@@ -173,6 +174,7 @@ class Node:
         self.fs = FsService(device=device, workspace=workspace,
                             data_dir=data_dir or (ROOT / ".runtime"),
                             workspaces_root=self.workspaces_root)
+        self.dsh_sessions = DshSessionStore()
         self.dsh_runs: dict[str, DshRun] = {}
         self.ws: Any = None
         self.connected = False
@@ -251,6 +253,8 @@ class Node:
             self.store.ack(str(msg["run_id"]), int(msg["ack_seq"]))
         elif kind == "fs_call":
             await self._fs_call(msg)
+        elif kind == "dsh_call":
+            await self._dsh_call(msg)
         elif kind == "error":
             log(f"[ws] controller error: {msg.get('error')}")
 
@@ -268,6 +272,33 @@ class Node:
             log(f"[fs] {op} failed: {exc}")
             reply = {"type": "fs_result", "req_id": req_id, "ok": False,
                      "error": str(exc), "code": "fs_error"}
+        try:
+            await self._send(reply)
+        except Exception:
+            self.connected = False
+
+    async def _dsh_call(self, msg: dict[str, Any]) -> None:
+        req_id = str(msg.get("req_id") or "")
+        op = str(msg.get("op") or "")
+        args = msg.get("args") or {}
+        try:
+            if op == "sessions":
+                result = {"sessions": self.dsh_sessions.list(),
+                          "home": str(self.dsh_sessions.home)}
+            elif op == "transcript":
+                result = self.dsh_sessions.transcript(str(args.get("session_id") or ""))
+                if result is None:
+                    raise FsError("DSH session not found", "not_found")
+            else:
+                raise FsError(f"unknown dsh op: {op}", "bad_op")
+            reply = {"type": "dsh_result", "req_id": req_id, "ok": True, "result": result}
+        except FsError as exc:
+            reply = {"type": "dsh_result", "req_id": req_id, "ok": False,
+                     "error": str(exc), "code": exc.code}
+        except Exception as exc:  # noqa: BLE001
+            log(f"[dsh] {op} failed: {exc}")
+            reply = {"type": "dsh_result", "req_id": req_id, "ok": False,
+                     "error": str(exc), "code": "dsh_error"}
         try:
             await self._send(reply)
         except Exception:
@@ -428,7 +459,9 @@ class Node:
         return {"os": platform.system(), "release": platform.release(), "python": platform.python_version(),
                 "workspace": str(self.workspace), "agents": ["fake", "dsh"], "fs": True,
                 "policy_mode": self.fs.policy.data.get("mode"),
-                "workspaces_root": str(self.workspaces_root)}
+                "workspaces_root": str(self.workspaces_root),
+                "dsh_native": self.dsh_sessions.available(),
+                "native_dsh_home": str(self.dsh_sessions.home)}
 
 
 def main() -> None:
