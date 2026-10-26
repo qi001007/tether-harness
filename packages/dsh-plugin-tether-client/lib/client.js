@@ -237,7 +237,7 @@ window.__ModuleLoader__.load({
       if (!turns.length) {
         return h('div', { style: { display: 'grid', placeItems: 'center', flex: '1 1 auto', color: C.mute, fontSize: 13, padding: 30 } }, loading ? '加载中…' : emptyText)
       }
-      return h('div', { ref: box, style: { flex: '1 1 auto', overflow: 'auto', padding: '4px 0 24px' } },
+      return h('div', { ref: box, className: 'tether-scroll', style: { flex: '1 1 auto', overflow: 'auto', padding: '4px 0 24px' } },
         h('div', { style: { maxWidth: 780, margin: '0 auto', padding: '0 8px' } },
           turns.map((turn, i) => h(Turn, { key: i, turn, index: i, live }))
         )
@@ -263,6 +263,190 @@ window.__ModuleLoader__.load({
       )
     }
 
+
+    const SCROLL_CSS = `
+      .tether-scroll { scrollbar-width: thin; scrollbar-color: transparent transparent; overscroll-behavior: contain; }
+      .tether-scroll:hover { scrollbar-color: #cbd5e1 transparent; }
+      .tether-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+      .tether-scroll::-webkit-scrollbar-track { background: transparent; }
+      .tether-scroll::-webkit-scrollbar-thumb { background: transparent; border-radius: 3px; }
+      .tether-scroll:hover::-webkit-scrollbar-thumb { background: #cbd5e1; }
+      .tether-scroll::-webkit-scrollbar-corner { background: transparent; }
+    `
+
+    const UI = {
+      activity: 44,
+      row: 32,
+      pad: 8,
+      radius: 6,
+      radiusCard: 8,
+      icon: 12,
+      font: 12.5,
+      header: 11,
+      gapRow: 1,
+      gapGroup: 10,
+      minSide: 190,
+      maxSide: 380,
+      defaultSide: 248,
+      minFiles: 170,
+      maxFiles: 360,
+      defaultFiles: 240
+    }
+
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, value))
+    }
+
+    function usePersisted(key, initial) {
+      const [value, setValue] = React.useState(() => {
+        try {
+          const raw = window.localStorage.getItem(key)
+          return raw === null ? initial : JSON.parse(raw)
+        } catch (_) { return initial }
+      })
+      React.useEffect(() => {
+        try { window.localStorage.setItem(key, JSON.stringify(value)) } catch (_) { /* private mode */ }
+      }, [key, value])
+      return [value, setValue]
+    }
+
+    const GLYPHS = {
+      chat: ['M5 5h14v10H9l-4 4V5z', 'M8 9h8', 'M8 12h5'],
+      devices: ['M4 5h16v6H4z', 'M4 15h16v4H4z', 'M7 8h.01', 'M7 17h.01'],
+      projects: ['M3 7h7l2 2h9v10H3z', 'M3 7V5h7l2 2'],
+      settings: ['M12 15.5a3.5 3.5 0 100-7 3.5 3.5 0 000 7z', 'M12 3v2', 'M12 19v2', 'M3 12h2', 'M19 12h2', 'M5.6 5.6L7 7', 'M17 17l1.4 1.4', 'M18.4 5.6L17 7', 'M7 17l-1.4 1.4'],
+      plus: ['M12 5v14', 'M5 12h14'],
+      file: ['M6 3h8l4 4v14H6z', 'M14 3v4h4']
+    }
+
+    function Glyph({ name, size = 18, stroke = 1.7 }) {
+      return h('svg', {
+        width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor',
+        strokeWidth: stroke, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true
+      }, (GLYPHS[name] || []).map((d, i) => h('path', { key: i, d })))
+    }
+
+    function ActivityBar({ active, collapsed, onSelect, onSettings, settingsOpen }) {
+      const items = [
+        { id: 'conversations', label: '对话', icon: 'chat' },
+        { id: 'devices', label: '设备', icon: 'devices' },
+        { id: 'projects', label: '项目', icon: 'projects' }
+      ]
+      const button = (id, label, icon, onClick, selected) => h('button', {
+        key: id, title: label, 'aria-label': label, onClick,
+        style: {
+          width: 36, height: 36, display: 'grid', placeItems: 'center', border: 0,
+          borderRadius: UI.radius, cursor: 'pointer', position: 'relative',
+          background: selected ? '#fff' : 'transparent', color: selected ? C.ink : C.mute,
+          boxShadow: selected ? '0 1px 2px rgba(16,24,40,0.08)' : 'none'
+        }
+      }, h(Glyph, { name: icon, size: 18 }))
+      return h('nav', {
+        'aria-label': 'Tether 面板',
+        style: { width: UI.activity, flex: '0 0 auto', borderRight: '1px solid ' + C.line, background: C.soft, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '6px 0', gap: 2 }
+      },
+        items.map((item) => button(item.id, item.label, item.icon, () => onSelect(item.id), active === item.id)),
+        h('div', { style: { marginTop: 'auto' } }, button('settings', '文件权限', 'settings', onSettings, settingsOpen))
+      )
+    }
+
+    function SidePanelHeader({ title, action, onCollapse }) {
+      return h('div', { style: { display: 'flex', alignItems: 'center', height: UI.row, flex: '0 0 auto', padding: '0 ' + UI.pad + 'px', gap: 2 } },
+        h('span', { style: { fontSize: UI.header, fontWeight: 600, color: C.mute, letterSpacing: 0.4 } }, title),
+        h('span', { style: { marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 2 } },
+          action,
+          h('button', {
+            title: '收起侧栏', 'aria-label': '收起侧栏', onClick: onCollapse,
+            style: { width: 26, height: 26, display: 'grid', placeItems: 'center', border: 0, borderRadius: UI.radius, background: 'transparent', color: C.mute, cursor: 'pointer', fontSize: 16, lineHeight: 1 }
+          }, '‹')
+        )
+      )
+    }
+
+    function SideRow({ selected, title, hint, icon, iconColor, onClick, right }) {
+      return h('div', {
+        role: 'button', tabIndex: 0, title, onClick,
+        onKeyDown: (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); onClick() } },
+        style: {
+          display: 'flex', alignItems: 'center', gap: 7, minHeight: UI.row, boxSizing: 'border-box',
+          padding: '5px ' + UI.pad + 'px', borderRadius: UI.radius, cursor: 'pointer', minWidth: 0, width: '100%', boxSizing: 'border-box',
+          background: selected ? C.soft : 'transparent', fontSize: UI.font, color: C.ink
+        }
+      },
+        icon ? h('span', { style: { width: UI.icon, height: UI.icon, display: 'grid', placeItems: 'center', color: iconColor || C.mute, flex: '0 0 auto' } }, typeof icon === 'string' ? h(Glyph, { name: icon, size: UI.icon, stroke: 1.8 }) : icon) : null,
+        h('span', { style: { minWidth: 0, flex: '1 1 auto', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: '18px' } }, title),
+        right ? h('span', { style: { flex: '0 0 auto', fontSize: 10, color: C.mute, whiteSpace: 'nowrap' } }, right) : null,
+        hint ? h('span', { style: { flex: '0 0 auto', fontSize: 9.5, color: C.mute, border: '1px solid ' + C.line, borderRadius: 999, padding: '0 5px', lineHeight: '15px' } }, hint) : null
+      )
+    }
+
+    function SidePanel(props) {
+      const {
+        panel, width, hidden, onResizeStart, onResetWidth, onCollapse, devices, localDevice, deviceId, onSelectDevice,
+        projects, project, onSelectProject, onNewProject, newProjectDisabled,
+        nativeSessions, runs, sessionId, runId, onSelectSession, onSelectRun
+      } = props
+      const title = panel === 'devices' ? '设备' : (panel === 'projects' ? '项目' : '对话')
+      const action = panel === 'projects' ? h('button', {
+        title: newProjectDisabled ? '当前节点不支持新建项目' : '新建项目', 'aria-label': '新建项目',
+        onClick: onNewProject, disabled: newProjectDisabled,
+        style: { width: 26, height: 26, display: 'grid', placeItems: 'center', border: 0, borderRadius: UI.radius, background: 'transparent', color: newProjectDisabled ? C.line : C.mute, cursor: newProjectDisabled ? 'not-allowed' : 'pointer' }
+      }, h(Glyph, { name: 'plus', size: 14 })) : null
+
+      const section = (id, content) => h('div', {
+        className: 'tether-scroll',
+        style: { display: panel === id ? 'block' : 'none', flex: '1 1 auto', minHeight: 0, overflowY: 'auto', padding: '2px ' + UI.pad + 'px ' + UI.pad + 'px' }
+      }, content)
+
+      const deviceRows = devices.map((d) => h(SideRow, {
+        key: d.device_id, selected: d.device_id === deviceId, title: d.name || d.device_id,
+        onClick: () => onSelectDevice(d.device_id),
+        icon: 'devices', iconColor: d.online ? C.green : C.mute,
+        hint: d.device_id === localDevice ? 'local' : null,
+        right: d.online ? null : 'offline'
+      }))
+      const projectRows = ((projects && projects.workspaces) || []).map((w) => h(SideRow, {
+        key: w.path, selected: project && project.path === w.path, title: w.name, onClick: () => onSelectProject(w),
+        icon: w.kind === 'dsh' ? 'projects' : 'devices', iconColor: C.mute
+      }))
+      const nativeRows = nativeSessions.map((s) => h(SideRow, {
+        key: s.session_id, selected: s.session_id === sessionId, title: s.title || s.session_id,
+        onClick: () => onSelectSession(s.session_id),
+        icon: 'chat', iconColor: s.status === 'running' ? C.blue : C.green,
+        right: s.status === 'running' ? '运行中' : timeText((s.updated_at || 0) * 1000)
+      }))
+      const runRows = runs.map((r) => h(SideRow, {
+        key: r.run_id, selected: r.run_id === runId, title: shortText(r.prompt, 42),
+        onClick: () => onSelectRun(r.run_id),
+        icon: 'chat', iconColor: r.state === 'completed' ? C.green : (['failed', 'unknown'].includes(r.state) ? C.red : C.blue),
+        right: r.state
+      }))
+      const groupLabel = (text, first) => h('div', {
+        style: { fontSize: UI.header, fontWeight: 600, color: C.mute, letterSpacing: 0.4, margin: (first ? 2 : UI.gapGroup) + 'px ' + UI.pad + 'px 4px' }
+      }, text)
+
+      return h('aside', {
+        'aria-label': title,
+        style: { display: hidden ? 'none' : 'flex', width, flex: '0 0 auto', minHeight: 0, borderRight: '1px solid ' + C.line, background: C.panel, flexDirection: 'column', position: 'relative' }
+      },
+        h(SidePanelHeader, { title, action, onCollapse }),
+        h('div', { style: { flex: '1 1 auto', minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' } },
+          section('devices', h('div', { style: { display: 'grid', gap: UI.gapRow } }, deviceRows, !deviceRows.length ? h('div', { style: { color: C.mute, fontSize: 11.5, padding: '6px ' + UI.pad + 'px' } }, '暂无设备') : null)),
+          section('projects', h('div', { style: { display: 'grid', gap: UI.gapRow } }, projectRows, !projectRows.length ? h('div', { style: { color: C.mute, fontSize: 11.5, padding: '6px ' + UI.pad + 'px' } }, '暂无项目') : null)),
+          section('conversations', h('div', null,
+            groupLabel('DSH 会话', true),
+            h('div', { style: { display: 'grid', gap: UI.gapRow } }, nativeRows, !nativeRows.length ? h('div', { style: { color: C.mute, fontSize: 11.5, padding: '2px ' + UI.pad + 'px 4px' } }, '无原生会话') : null),
+            groupLabel('Tether 任务', false),
+            h('div', { style: { display: 'grid', gap: UI.gapRow } }, runRows, !runRows.length ? h('div', { style: { color: C.mute, fontSize: 11.5, padding: '2px ' + UI.pad + 'px 4px' } }, '无任务') : null)
+          ))
+        ),
+        h('div', {
+          onPointerDown: onResizeStart, onDoubleClick: onResetWidth, title: '拖动调整宽度，双击复位',
+          style: { position: 'absolute', top: 0, right: -3, width: 6, height: '100%', cursor: 'col-resize', zIndex: 2 }
+        })
+      )
+    }
+
     function App() {
       const [state, setState] = React.useState(null)
       const stateRef = React.useRef(null)
@@ -270,7 +454,11 @@ window.__ModuleLoader__.load({
       const [deviceId, setDeviceId] = React.useState('')
       const [projects, setProjects] = React.useState(null)
       const [project, setProject] = React.useState(null)
-      const [view, setView] = React.useState('chat')
+      const [view, setView] = usePersisted('tether.ui.view', 'chat')
+      const [activePanel, setActivePanel] = usePersisted('tether.ui.panel', 'conversations')
+      const [sidebarCollapsed, setSidebarCollapsed] = usePersisted('tether.ui.panelCollapsed', false)
+      const [sidebarWidth, setSidebarWidth] = usePersisted('tether.ui.panelWidth', UI.defaultSide)
+      const [fileListWidth, setFileListWidth] = usePersisted('tether.ui.fileListWidth', UI.defaultFiles)
       const [notice, setNotice] = React.useState('')
       const [busy, setBusy] = React.useState(false)
       const [native, setNative] = React.useState([])
@@ -321,6 +509,8 @@ window.__ModuleLoader__.load({
 
       const device = state && state.devices.find((d) => d.device_id === deviceId)
       const deviceOnline = !!(device && device.online)
+      const safeSidebarWidth = clamp(sidebarWidth, UI.minSide, UI.maxSide)
+      const safeFileListWidth = clamp(fileListWidth, UI.minFiles, UI.maxFiles)
 
       React.useEffect(() => {
         if (!deviceId) { setPolicy(null); return }
@@ -579,10 +769,37 @@ window.__ModuleLoader__.load({
         const cb = ask.onOk; setAsk(null); cb(value)
       }
 
+      const selectPanel = (id) => {
+        if (id === activePanel && !sidebarCollapsed) setSidebarCollapsed(true)
+        else { setActivePanel(id); setSidebarCollapsed(false) }
+      }
+
+      const dragWidth = (event, start, setter, min, max) => {
+        event.preventDefault()
+        const startX = event.clientX
+        const move = (ev) => setter(clamp(start + ev.clientX - startX, min, max))
+        const stop = () => {
+          window.removeEventListener('pointermove', move)
+          window.removeEventListener('pointerup', stop)
+          window.removeEventListener('pointercancel', stop)
+          document.body.style.cursor = ''
+          document.body.style.userSelect = ''
+        }
+        document.body.style.cursor = 'col-resize'
+        document.body.style.userSelect = 'none'
+        window.addEventListener('pointermove', move)
+        window.addEventListener('pointerup', stop)
+        window.addEventListener('pointercancel', stop)
+      }
+
+      const startSidebarResize = (event) => dragWidth(event, safeSidebarWidth, setSidebarWidth, UI.minSide, UI.maxSide)
+      const startFileResize = (event) => dragWidth(event, safeFileListWidth, setFileListWidth, UI.minFiles, UI.maxFiles)
+
       const rowStyle = (active) => ({ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 8px', borderRadius: 6, cursor: 'pointer', background: active ? C.soft : 'transparent', fontSize: 12.5 })
       const modelText = sessionId && sessionData ? [sessionData.model, sessionData.agent_preset].filter(Boolean).join(' · ') : ''
 
       return h('div', { style: { position: 'relative', height: '100%', display: 'flex', flexDirection: 'column', background: C.bg, color: C.ink, fontSize: 13, overflow: 'hidden' } },
+        h('style', null, SCROLL_CSS),
         h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', borderBottom: '1px solid ' + C.line, flex: '0 0 auto' } },
           h('strong', { style: { fontSize: 15 } }, 'Tether'),
           device ? h('span', { style: { display: 'flex', alignItems: 'center', fontSize: 12, color: C.sub } }, dot(device.online), device.name) : h('span', { style: { color: C.mute } }, 'no device'),
@@ -598,52 +815,36 @@ window.__ModuleLoader__.load({
         ),
         notice ? h('div', { style: { padding: '6px 14px', background: /^Saved |^Policy updated/.test(notice) ? '#ecfdf3' : '#fef3f2', color: /^Saved |^Policy updated/.test(notice) ? '#067647' : C.red, borderBottom: '1px solid ' + (/^Saved |^Policy updated/.test(notice) ? '#abefc6' : '#fecdca'), fontSize: 12 } }, notice) : null,
         h('div', { style: { display: 'flex', flex: '1 1 auto', minHeight: 0 } },
-          h('aside', { style: { width: 235, flex: '0 0 auto', borderRight: '1px solid ' + C.line, display: 'flex', flexDirection: 'column', minHeight: 0, background: C.panel } },
-            h('div', { style: { padding: '10px 12px 4px', fontSize: 11, fontWeight: 600, color: C.mute, letterSpacing: 0.4 } }, '设备'),
-            h('div', { style: { padding: '0 8px 8px', overflow: 'auto', maxHeight: 150 } },
-              ((state && state.devices) || []).map((d) => h('div', { key: d.device_id, onClick: () => setDeviceId(d.device_id), style: rowStyle(d.device_id === deviceId) },
-                dot(d.online), h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, d.name || d.device_id),
-                d.device_id === (state && state.local_device) ? pill('local') : null,
-                d.online ? null : h('span', { style: { marginLeft: 'auto', fontSize: 10, color: C.mute } }, 'offline')
-              ))
-            ),
-            h('div', { style: { padding: '8px 12px 4px', display: 'flex', alignItems: 'center', gap: 6, borderTop: '1px solid ' + C.line } },
-              h('span', { style: { fontSize: 11, fontWeight: 600, color: C.mute, letterSpacing: 0.4 } }, '项目'),
-              h('button', { onClick: newProject, disabled: projects && projects.synthetic, style: { marginLeft: 'auto', border: 0, background: 'transparent', color: projects && projects.synthetic ? C.mute : C.blue, cursor: projects && projects.synthetic ? 'not-allowed' : 'pointer', fontSize: 12 } }, '+ 新建')
-            ),
-            h('div', { style: { padding: '0 8px 6px', overflow: 'auto', maxHeight: 150 } },
-              ((projects && projects.workspaces) || []).map((w) => h('div', { key: w.path, onClick: () => { setProject(w); setView('chat') }, style: rowStyle(project && project.path === w.path) },
-                h('span', { style: { width: 14, color: C.mute, fontSize: 12 } }, w.kind === 'dsh' ? '◈' : '▣'),
-                h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, w.name)
-              )),
-              (!projects || !projects.workspaces.length) ? h('div', { style: { color: C.mute, fontSize: 12, padding: '6px 8px' } }, '暂无项目') : null
-            ),
-            h('div', { style: { borderTop: '1px solid ' + C.line, padding: '8px 12px 4px', display: 'flex', alignItems: 'center' } },
-              h('span', { style: { fontSize: 11, fontWeight: 600, color: C.mute, letterSpacing: 0.4 } }, 'DSH 会话'),
-              nativeError ? h('span', { style: { marginLeft: 'auto', fontSize: 10, color: C.amber } }, '不可用') : null
-            ),
-            h('div', { style: { padding: '0 8px 8px', overflow: 'auto', maxHeight: 190 } },
-              nativeForProject.map((s) => h('div', { key: s.session_id, onClick: () => { setSessionId(s.session_id); setRunId(''); setView('chat') }, style: rowStyle(s.session_id === sessionId) },
-                dot(false, s.status === 'running' ? C.blue : C.green),
-                h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: '1 1 auto' } }, s.title || s.session_id),
-                s.status === 'running' ? pill('running', C.blue) : null
-              )),
-              !nativeForProject.length ? h('div', { style: { color: C.mute, fontSize: 11.5, padding: '4px 8px' } }, nativeError ? '节点未提供会话' : '此项目暂无原生会话') : null
-            ),
-            h('div', { style: { borderTop: '1px solid ' + C.line, padding: '8px 12px 4px', display: 'flex', alignItems: 'center' } },
-              h('span', { style: { fontSize: 11, fontWeight: 600, color: C.mute, letterSpacing: 0.4 } }, 'Tether 任务')
-            ),
-            h('div', { style: { padding: '0 8px 10px', overflow: 'auto', flex: '1 1 auto' } },
-              runs.map((r) => h('div', { key: r.run_id, onClick: () => { setRunId(r.run_id); setSessionId(''); setView('chat') }, style: rowStyle(r.run_id === runId) },
-                dot(false, r.state === 'completed' ? C.green : (['failed', 'unknown'].includes(r.state) ? C.red : C.blue)),
-                h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: '1 1 auto' } }, shortText(r.prompt, 38)),
-                h('span', { style: { fontSize: 10, color: C.mute } }, r.state)
-              )),
-              !runs.length ? h('div', { style: { color: C.mute, fontSize: 11.5, padding: '4px 8px' } }, '还没有任务') : null
-            ),
-            h('div', { style: { borderTop: '1px solid ' + C.line, padding: '7px 12px', fontSize: 10.5, color: C.mute } },
-              projects ? ('新项目根: ' + projects.root) : ' ')
-          ),
+          h(ActivityBar, {
+            active: activePanel,
+            collapsed: sidebarCollapsed,
+            onSelect: selectPanel,
+            onSettings: openSettings,
+            settingsOpen: showSettings
+          }),
+          h(SidePanel, {
+            panel: activePanel,
+            width: safeSidebarWidth,
+            hidden: sidebarCollapsed,
+            onResizeStart: startSidebarResize,
+            onResetWidth: () => setSidebarWidth(UI.defaultSide),
+            onCollapse: () => setSidebarCollapsed(true),
+            devices: (state && state.devices) || [],
+            localDevice: state && state.local_device,
+            deviceId,
+            onSelectDevice: setDeviceId,
+            projects,
+            project,
+            onSelectProject: (w) => { setProject(w); setView('chat') },
+            onNewProject: newProject,
+            newProjectDisabled: !deviceOnline || !projects || !!projects.synthetic,
+            nativeSessions: nativeForProject,
+            runs,
+            sessionId,
+            runId,
+            onSelectSession: (id) => { setSessionId(id); setRunId(''); setView('chat') },
+            onSelectRun: (id) => { setRunId(id); setSessionId(''); setView('chat') }
+          }),
           h('main', { style: { flex: '1 1 auto', display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 } },
             view === 'chat' ? h('div', { style: { display: 'flex', flexDirection: 'column', flex: '1 1 auto', minHeight: 0 } },
               h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderBottom: '1px solid ' + C.line, flex: '0 0 auto' } },
@@ -683,7 +884,7 @@ window.__ModuleLoader__.load({
                 )
               ),
               h('div', { style: { display: 'flex', flex: '1 1 auto', minHeight: 0 } },
-                h('div', { style: { width: 240, flex: '0 0 auto', borderRight: '1px solid ' + C.line, overflow: 'auto', background: C.bg } },
+                h('div', { className: 'tether-scroll', style: { width: safeFileListWidth, flex: '0 0 auto', borderRight: '1px solid ' + C.line, overflow: 'auto', background: C.bg } },
                   listing ? h('div', null,
                     listing.entries.map((entry) => h('div', { key: entry.path, onClick: () => setSelected(entry), onDoubleClick: () => openFile(entry), style: { ...rowStyle(selected && selected.path === entry.path), padding: '5px 10px', borderRadius: 0 } },
                       h('span', { style: { width: 16, color: C.mute, fontSize: 12 } }, entry.dir ? '▸' : '·'),
@@ -693,6 +894,11 @@ window.__ModuleLoader__.load({
                     !listing.entries.length ? h('div', { style: { padding: 16, color: C.mute, fontSize: 12 } }, '空目录') : null
                   ) : h('div', { style: { padding: 16, color: C.mute, fontSize: 12 } }, path ? (busy ? '加载中…' : '无法读取') : '选择项目')
                 ),
+                h('div', {
+                  onPointerDown: startFileResize, onDoubleClick: () => setFileListWidth(UI.defaultFiles),
+                  title: '拖动调整文件栏宽度，双击复位',
+                  style: { width: 5, flex: '0 0 auto', cursor: 'col-resize', background: 'transparent' }
+                }),
                 h('div', { style: { flex: '1 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column' } },
                   file ? h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column' } },
                     h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderBottom: '1px solid ' + C.line, flex: '0 0 auto' } },

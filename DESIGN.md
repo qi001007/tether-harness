@@ -311,7 +311,9 @@ DSH 是 Cordis 插件架构。Tether 按官方 client plugin 形态接入，**�
 
 页面布局对齐 DSH：同一套左栏/主区/右栏结构、灰阶、字体与 8px 圆角；没有复制
 DSH 的业务组件（client bundle 不能直接 import DSH 内部 React 组件），但复用它的
-slot、布局和 token 观感。
+slot、布局和 token 观感。左侧是 VSCode 式常驻活动栏（对话/设备/项目）；点击当前
+项或标题栏 chevron 收起面板，活动栏不消失。面板宽度与文件栏/编辑器边界可拖，
+双击复位，宽度与当前面板写入 `localStorage`。
 
 五个区域：
 

@@ -32,6 +32,7 @@ This file is for an AI or human reviewer who wants to decide whether the claims 
 | DeepSeek desktop Agent calls Tether | `docs/screenshots/deepseek-delegated.png`; run `r-56ca1f58b1a3` + verify run `r-8fa5928462a6`; file `D:\tether-node\work\tether-delegated.txt` |
 | Agent-to-Agent delegation | same screenshot; the desktop Agent called `mcp__tether__remote_task` for `LAPTOP-01`; target session `tether-s-d0332f33ad47` |
 | DSH plugin installs without touching other bundles | `~/.dsh/profiles/desktop/package.json` bundles list; `desktop/install-plugin.ps1`; screenshot `dsh-plugin-native-chat.png` |
+| Sidebar follows the VSCode contract | `ActivityBar`/`SidePanel` in `client.js`: fixed bar, three switchable panels, active-icon/chevron collapse, draggable panel and file-list boundaries, widths/panel in `localStorage` |
 | Plugin page is native, not iframe | `packages/dsh-plugin-tether-client/lib/client.js` uses `__ModuleLoader__` + `ctx.slots.inject('main' / 'sidebar.panellist')` |
 | Native DSH conversation is mirrored | `tether/node/dsh_sessions.py` parses `~/.dsh/sessions/**/session.v4.jsonl.zstd`; `tests/test_dsh_sessions.py`; screenshot `dsh-plugin-native-chat.png` |
 | Reasoning/tool events are rendered, not dumped | `build_transcript()` maps `reasoning`, `tool-call`, `tool/result`; the page shows collapsible think rows and tool cards |

@@ -118,6 +118,12 @@ The sidebar entry opens a native client page (no iframe, no second web app):
 - **Permissions**: readonly / locked / full-disk, editable writable roots, and the
   last 80 audit entries.
 
+The left side uses a VSCode-style fixed activity bar: conversations, devices and
+projects are separate panels. Clicking the active icon or the chevron collapses
+the panel; the bar stays. The panel width and the file-list/editor divider are
+draggable, double-click resets, and both widths plus the active panel are stored
+in `localStorage`.
+
 The native reader only reads the DSH log; it never writes to an active session or
 competes for the Session writer. It defaults to `~/.dsh`; set
 `TETHER_NATIVE_DSH_HOME` if the target DSH home is elsewhere. A target without
