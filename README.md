@@ -1,5 +1,7 @@
 # Tether
 
+> Phase 1 vertical slice: https://github.com/qi001007/tether-harness
+
 A multi-device Agent Harness client. One machine issues a task, another machine's
 Agent executes it locally with its own files, shell, and model key; the caller sees
 the live tool/assistant stream and can cancel or continue the session.
