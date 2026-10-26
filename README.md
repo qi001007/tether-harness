@@ -105,5 +105,5 @@ tether/
   evidence/        measured results
 ```
 
-MIT licensed. The design document for the interview answer lives in `DESIGN.md`
-(written after the Phase 1 UI freeze).
+MIT licensed. The full design document for the interview answer is in
+[DESIGN.md](DESIGN.md).
