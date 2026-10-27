@@ -156,7 +156,7 @@
                 │ Node DESKTOP │  │ Node LAPTOP-01 → dsh Agent     │
                 │ → dsh Agent  │  │ workspace D:\tether-node\work  │
                 └──────────────┘  └────────────────────────────────┘
-Tether 自带聊天页：可选监控台（设备/任务/事件/证据），不是交互端。
+Tether 监控台网页（controller 静态页）：可选，看设备/任务/事件/证据，不是交互端。
 ```
 
 角色边界：
@@ -275,7 +275,7 @@ DeepSeek Agent 自己决定调用：
 - Tether 的 MCP 指令只描述"如何发现设备、如何派活"，不抢 Agent 的决策；
 - 如果以后用 Qoder/Codex，同一套 MCP server 直接挂过去，不需要重写。
 
-Tether 自带聊天页仍然存在，但定位是**监控台**：看设备、任务、事件、证据；不是主入口。工作区/文件/设备/过程的主入口是 DSH 侧栏里的 **Tether 插件页**（下一节）。
+Tether 监控台网页仍然存在，但定位是**监控台**：看设备、任务、事件、证据；不是主入口。主入口是 DSH 侧栏里的 **Tether 插件页**：原生工作区 + 文件资源管理器 + 权限（下一节）。
 
 ### 6.1 MCP 配置
 
@@ -300,8 +300,37 @@ Tether 自带聊天页仍然存在，但定位是**监控台**：看设备、任
 
 ### 6.2 DSH 插件页
 
-DSH 是 Cordis 插件架构。Tether 按官方 client plugin 形态接入，**不是 iframe，
-也不是另起一个 Web App**：
+DSH 是 Cordis 插件架构。Tether 分两层接入：
+
+1. **完整原生页面（主路径）**：目标机 DSH Desktop 自己的 Host 页面，通过每设备
+   回环 gateway 嵌入 Tether 插件页。模型、权限、`@` 文件引用、附件、轨迹和会话
+   写者都来自目标 Host；已有会话可以原地继续。链路、凭据边界和验收标准见
+   `docs/native-surface.md`。
+2. **Tether 展示层（文件页/权限）**：官方 client plugin，负责文件资源管理器、
+   右键菜单、文件预览和文件策略/审计。它复用 DSH 的 slot/布局/token 和部分
+   MIT 展示组件，但不是对话入口。
+
+#### 6.2.1 完整原生页面
+
+目标 DSH 启动时由 `tether-dsh-surface` 发布
+`$DSH_HOME/storages/tether/native-surface.json`，只含当前 loopback origin 和
+认证 URL；目标 Node 校验 origin 后在内存中持有凭据。Controller 为每台设备开
+一个 `127.0.0.1` 随机端口 gateway：单次 ticket + HttpOnly / SameSite=None /
+Partitioned cookie；HTTP 只允许固定 Host 路径，WebSocket 只允许
+`/api/remote.mux`；Origin 只允许 gateway 自身或 `dsh-app://app`；请求、响应和
+单帧上限 8 MiB。浏览器不能传任意上游 URL，凭据不进 Controller DB、日志或前端。
+
+这个 iframe 承载的是**目标机真实 Host 页面**，不是 Tether 自绘聊天；因此它与
+"用 iframe 冒充原生页面"不同。它解决了已有会话写回：输入框直接由目标 Host 的
+writer 处理，不需要 Tether 再起一个 SDK 会话。目标机必须运行 DSH Desktop；
+只跑 Node 不够。Node 转发 HTML 时注入 `#tether-native-surface`，把
+`[class*="sidebarCol"]` 的 0.5px 右边框置 0：桌面版由
+`[data-windows-titlebar]` 隐藏这条线，浏览器版没有该属性，需要补同样的视觉
+效果。注入只发生在 Tether gateway 的响应里，不改目标 DSH 安装。
+
+#### 6.2.2 Tether 展示层
+
+官方 client plugin 的包结构：
 
 - `packages/dsh-plugin-tether`：bundle 包，`dsh.bundle.patch` 插入 host 插件；
 - `packages/dsh-plugin-tether-client`：`dsh.client` 客户端插件，bundle 为
@@ -309,63 +338,78 @@ DSH 是 Cordis 插件架构。Tether 按官方 client plugin 形态接入，**�
 - 注册 `ctx.slots.inject('main', …)` 和 `ctx.slots.inject('sidebar.panellist', …)`，
   侧栏出现 `Tether`，点击 `ctx.layout.selectPanel('tether')` 的等价行为由 slot 完成。
 
-页面布局对齐 DSH：同一套左栏/主区/右栏结构、灰阶、字体与 8px 圆角；没有复制
-DSH 的业务组件（client bundle 不能直接 import DSH 内部 React 组件），但复用它的
-slot、布局和 token 观感。侧栏图标不是自绘轮廓：工作区用 DSH 的
-`workspace-tree-outline`，文件用 `folder-open`，文件树用 `folder-close/open`，设备用
-`globe-outline`，加号/chevron 也取 `ui-primitives` 的 16px、1px 路径；因此与 DSH
-原生侧栏同粗细分。左侧是 VSCode 式常驻活动栏（工作区/文件/设备）；点击当前
-项或标题栏 chevron 收起面板，活动栏不消失。面板宽度与文件栏/编辑器边界可拖，
-双击复位，宽度与当前面板写入 `localStorage`。
+展示层只剩**文件资源管理器**和**文件权限**，不再有 Tether 自写的对话页/工作区树。
+它复用 DSH 的 MIT 展示组件：`scripts/build-native-ui-bridge.mjs` 从 `0.2.1-rc.2`
+bundle 提取 `FileEntryRow`、`MarkdownText`、文件类型图标和中文词典；不执行上游
+`apply`，不注册上游 module ID。工作区、文件等 Tether 自己的布局复用 DSH 的
+slot、字体、灰阶和 8px 圆角。
 
-对话区按 `ui-chat` 的几何复刻，而不是只求相似：完成后行高 33px、下边 0.5px
-`border-l2`、14px/24px 三级色，文案 `已完成，用时 N秒`，14px chevron 右侧 4px；
-正文 14px/24px、块间距 16px，粗体 600，行内代码 0.875em + 0.5px 边框 + 8px 圆角；
-过程行 24px 高、13px/24px，标题与摘要间 2×2px 点，悬停才把图标换成 chevron。
-运行中不画完成行，末尾显示 `深度求索中，用时 N秒 ···`（鲸鱼图标 + 1.5s mask
-shimmer），首次输出后上方出现 0.5px 分隔线。字体与颜色全部走 DSH 的
-`--dsw-font-markdown-*` / `--dsw-alias-label-*` token。
+活动栏常驻四项：显示器 = 原生工作区，文件夹 = 文件资源管理器，地球 = 互联，
+盾牌 = 文件权限。
+设备切换放在顶栏的自绘菜单（DSH 字体/圆角/色阶，在线点、设备名 + 系统版本、
+互联入口；点外部或 Escape 关闭）；不再有第二条设备栏。文件页：
+
+- 左侧树：`工作区`（注册的 DSH 工作区）、`此电脑`（C–G）、`未分组`
+  （散落会话 cwd）。文件夹整行就是展开/收起的点击目标：点一次打开并切换右侧
+  目录，再点一次收起；没有独立的小 chevron。文件/文件夹图标用 DSH
+  `FileTypeIcon`，Word/PDF/PPT/图片/Markdown 在左右两侧都能区分。
+- 右侧：当前目录的 details list（名称/修改日期/类型/大小）、面包屑、后退/上级、
+  刷新图标（加载时旋转）。双击文件夹进入，双击文件预览。
+- 右键：背景和行都有 APP 式上下文菜单（打开/重命名/删除/新建文件/新建文件夹/
+  刷新）；新建和重命名走小弹窗；删除二次确认并进 `.tether-trash`。
+- 预览：Markdown 走 `MarkdownText` 渲染（可切编辑），文本可编辑保存，图片和 PDF
+  直接显示；DOC/DOCX/PPT/PPTX 由目标机 `fs/preview` 调用 WPS/Office COM 转 PDF
+  后显示，并写一条 `preview` 审计。目标机没有 WPS/Office 时明确报错，不显示空白。
+- 字体：`工作区`/`此电脑`/`未分组`/`文件` 这类同级 section header 统一使用 DSH
+  侧栏的 13px / 400 / `--dsw-alias-label-tertiary` / 36px 高，不加粗、不加字距。
+- **互联**：左侧列出节点卡片（在线/离线、系统版本、原生页/旧节点能力），
+  8 台/页、可翻页；右侧画布铺满剩余空间，以本机为中心画节点连线。线统一用
+  中性灰、不上状态色：有控制边且两端连通为实线，有控制边但任一端离线为虚线，
+  没有控制边不画线。设备栏与画布之间的边界可拖、双击复位。滚轮缩放 40%–120%，
+  低于 72% 时标签隐藏、节点变成 22/16px 的纯色正圆（外框、填充、连线同中心）：
+  `corner-shape: round` 抵消 DSH 全局的 superellipse。本机节点填 `C.ink` 黑色，
+  和放大态的黑胶囊一致；子节点填业务蓝与侧栏底色的不透明 `color-mix`（8%，
+  选中 13%），和放大态的子节点底色一致，所以跨 72% 阈值时颜色不突变。无白边、
+  描边、外发光、玻璃或高光。普通缩放时非本机节点是同色胶囊 + 轻阴影，框可见；
+  选中不再画蓝色 outline。
+  连线端点按节点边缘裁剪：圆边进入约 1px 由节点覆盖，胶囊取 14/3px；节点
+  z-index 高于连线。布局弹簧静止长度 35，低缩放位置按 `0.72+0.28*zoom` 展开，
+  保持线长与圆的比例。节点被拖走后不会锚定回原位：力导向的弱中心力、节点斥力、
+  阻尼（0.95）
+  和有限伸缩的连线共同作用，带黏滞惯性缓慢游回平衡点（参考 Obsidian/d3-force
+  的手感，不引入完整图库）。点击卡片选中设备，双击打开原生页。后续网络视图就
+  挂在这一页。
+
+权限只在盾牌入口，点旁边空白或 Escape 关闭：三档模式、可写根目录（逐行
+添加/编辑/删除）、分页审计。审计使用 SQLite（WAL，100000 行上限，内存不随
+历史增长），覆盖 Tether 文件服务的写入、删除、权限、Office 转 PDF 和被拒绝的
+读取；写入有 `intent` 与 `result` 两行；DSH Agent 自己执行的命令不在其中。
 
 视觉层遵循六条规则：层级由背景层（base / sidebar / hover / active）建立，不用
 1px 灰框；所有颜色取 DSH 主题 token，暗色下标题/按钮字重 600→500、正文 400→350；
-新出现的 assistant/思考/工具卡片用 `opacity + blur + translateY` 做水墨式入画；
-时间、步数、token 用 tabular-nums；拖动中不加 transition，松手/双击复位用
-160–180ms 回弹，按钮/行按压 `scale(.97)`。
-
-四个区域（工作区、文件、设备、权限）：
+新出现的内容用 `opacity + blur + translateY` 做水墨式入画；时间、步数、token 用
+tabular-nums；拖动中不加 transition，松手/双击复位用 160–180ms 回弹，按钮/行
+按压 `scale(.97)`。
 
 | 区域 | 数据来源 | 行为 |
 |---|---|---|
-| 工作区 | `GET /api/devices/{id}/workspaces` + `GET /api/devices/{id}/dsh/sessions` | 同一棵 工作区 → 会话 树；按 `cwd` 归并；`DSH`/`Tether` 小徽标区分来源；新建工作区/新会话 |
-| 文件 | `POST /api/devices/{id}/fs/{op}` + `GET /api/devices/{id}/drives` | 侧栏惰性文件树：已知工作区 + C/D/E 等盘；文件在右侧编辑器打开 |
-| 设备 | `GET /api/state` | online/offline、平台、agents、workspace；点击切换 |
-| 权限 | `GET/POST /api/devices/{id}/policy` + `/audit` | readonly / locked / full，写根、审计 |
-| 任务/过程 | `/api/sessions` + `/api/runs` + `/api/devices/{id}/dsh/sessions` | 新任务由目标机 SDK 写成原生 DSH 会话；会话内过程组可折叠，行显示思考/工具调用 |
+| 原生页面 | 目标 DSH Host（经每设备 gateway） | 工作区/会话/模型/权限/`@` 文件/附件/轨迹/写者均为目标原生；已有会话原地继续 |
+| 文件资源管理器 | `GET /api/devices/{id}/workspaces` + `/drives` + `POST /fs/{op}` | 左树 + 右 details list；面包屑/后退/刷新；双击进入/预览 |
+| 右键菜单 | 同 `/fs/{op}` | 打开、重命名、删除、新建文件/文件夹、刷新 |
+| 预览 | `POST /fs/preview` | MD 渲染、文本编辑、图片/PDF 直显；Office 经 WPS COM 转 PDF |
+| 互联 | `GET /api/state` | 全量节点卡片 + 本机居中拓扑；双击卡片打开原生页 |
+| 权限 | `GET/POST /api/devices/{id}/policy` + `/audit` | readonly / locked / full；可写根目录行；SQLite 审计 100000 行上限、分页 |
 
-DSH 原生会话的读取实现：`tether/node/dsh_sessions.py` 找到
-`$DSH_HOME/sessions/<encoded-cwd>/<session>/session.vN.jsonl.zstd`，用
-`zstandard` 解压全部帧，按 `SessionWireEvent` 还原 `turn/start`、`user/message`
-（只保留 `source.kind=user/user-rpc`，过滤 runtime-context/skill 注入）、
-`assistant/message` 的 `reasoning`/`text`/`tool-call`、`tool/result`、`turn/end`。
-运行中的 `assistant/attempt` 流会聚合成临时 reasoning/text 预览。
-
-**统一工作区与会话**：工作区树同时包含 DSH 原生工作区和 `D:\TetherWorkspaces`
-下的项目。Tether 发出的任务不再落在独立的 Tether 历史里：Node 把目标机的
-`$DSH_HOME`（默认 `~/.dsh`）和所选 workspace 传给 SDK，生成的原生 Session 会
-出现在 `~/.dsh/sessions`，并由 `attach_session` 写回
-`~/.dsh/storages/workspace.json` 的 `sessionIds`。因此它和用户后来在目标机 DSH
-里直接开的会话挂在同一个工作区下；`tether-` 前缀的会话显示 `Tether` 徽标，
-DSH 直接开的会话显示 `DSH` 徽标。新建工作区会 mkdir 并注册到目标 DSH workspace
-store。
-
-**已有原生会话只读**：不写已有 Session 日志、不抢写锁；输入框只创建新会话。
-要在已有原生会话里继续，需要目标机 DSH Host 的 `session/prompt` 写者代理，
-属于下一阶段。
+DSH 原生会话的读取实现仍保留：`tether/node/dsh_sessions.py` 读取
+`~/.dsh/sessions` 的 zstd 日志，用于历史/证据和旧节点兼容，不再是插件页面。
+Tether SDK 任务仍写成新的原生 Session 并注册到 workspace；已有会话由原生页面
+的目标 Host writer 原地继续，Tether 不写已有 Session 日志。
 
 设置抽屉做三档权限（见 §7.4），并显示审计。插件本身只改
 `~/.dsh/profiles/desktop/package.json` 的 bundle/dependency；卸载不影响 DSH 启动。
 
-已知限制：当前 client 直接访问 `127.0.0.1:18890`（controller 的 CORS 只允许 `dsh-app://app`），
+已知限制：Tether 展示层直接访问 `127.0.0.1:18890`（controller 的 CORS 只允许
+`dsh-app://app`）；原生页面经每设备 gateway（ticket/cookie/origin 校验）。
 计划中的 `@Remote` host service 尚未实现；controller 仍然 loopback-only，
 node token 不进入 client。
 
@@ -452,9 +496,9 @@ node token 不进入 client。
 
 | 状态 | 内容 |
 |---|---|
-| **Verified** | DSH 插件安装/渲染、统一工作区/文件树/设备/过程页、三档文件权限与审计、可恢复删除、DeepSeek 桌面 Agent 通过 MCP 调用 Tether、Agent-to-Agent 派活、真实 dsh 执行、Session 继续、断线重放、幂等、`unknown`、硬取消 0 残留、Tailscale 跨机、监控台 |
+| **Verified** | DSH 插件安装/渲染、统一工作区/文件树/设备/过程页、三档文件权限与审计、可恢复删除、目标 DSH 原生页面（DESKTOP-LOCAL 同 Host：模型/权限/`@` 引用/轨迹/Node 重启恢复）、DeepSeek 桌面 Agent 通过 MCP 调用 Tether、Agent-to-Agent 派活、真实 dsh 执行、Session 继续、断线重放、幂等、`unknown`、硬取消 0 残留、Tailscale 跨机、监控台 |
 | **Designed** | 每台设备都跑桌面 Agent + Tether 插件/MCP 的对等网络、`@Remote` host service、配对/能力路由、审批 UI、Linux/WSL、公网 relay、多任务并发 |
-| **Not implemented** | 上述 Designed 项；生产级鉴权/审计/沙箱；笔记本侧 Agent 发起任务；笔记本节点升级到含 fs 的新代码 |
+| **Not implemented** | 上述 Designed 项；生产级鉴权/审计/沙箱；笔记本侧 Agent 发起任务；`LAPTOP-01` 节点升级与跨机原生页面；已有会话的真实模型发送；附件上传 |
 
 ### 8.3 复现
 
@@ -504,21 +548,22 @@ Copy-Item .env.example .env   # DEEPSEEK_API_KEY
 ## 10. 已知限制
 
 - 当前是星型：只有桌面侧 Agent 发起，笔记本是被控端；对等网络是 v0.2。
-- DSH 插件的 client 直接访问 loopback Controller（CORS 只允许 `dsh-app://app`）；
-  计划中的 `@Remote`
-  host service 未实现。插件复用了 DSH 的 slot/布局/视觉 token，但没有直接 import
-  DSH 内部业务组件（client bundle 的依赖受 `PLATFORM_MODULES` 限制）。
+- Tether 展示层直接访问 loopback Controller（CORS 只允许 `dsh-app://app`）；
+  原生页面走每设备 gateway。计划中的 `@Remote` host service 未实现。展示层复用
+  DSH 的 slot/布局/token，并通过生成桥包复用部分 MIT 展示组件。
 - 审批 UI 未实现：SDK 0.2.1rc2 没有 `approval_requests` 握手。
 - 只验证了 Windows；Linux/WSL 仅有设计。
 - 每 Session 同时一个 Run；没有多任务并发/调度。
 - 默认节点 token 是 demo 级；生产需要每设备凭据/吊销。
-- `LAPTOP-01` 仍跑旧 Node 构建（无 `fs` 能力）；文件/项目操作需先更新
-  `C:\tether-node\app` 并重启。任务委派不受影响。
-- 目标机 DSH 原生会话能**只读镜像**；Tether 新任务会写成**新的原生 Session**，
-  并注册到目标 DSH workspace。但**不能写回已有原生会话**：在已有会话里继续输入
-  需要目标机 DSH Host 的 `session/prompt` 写者代理，属于 Designed。
+- `LAPTOP-01` 仍跑旧 Node 构建（无 `fs`/`surface_protocol`）；文件、原生页面需先
+  更新 `C:\tether-node\app`、重装目标 DSH 插件并重启 DSH 与 Node。任务委派不受
+  影响，但页面会显示"节点待更新"。
+- 原生页面要求目标机 **DSH Desktop 正在运行**；只跑 Node 时显示"目标 DSH 未
+  运行"。已有会话由目标 Host writer 原地继续；Tether 日志镜像仍只读。
+- Tether 新任务写成新的原生 Session 并注册到 workspace；跨机原生页面和真实模型
+  发送尚未验收。
 - dsh SDK 仍是 RC；事件词汇可能随版本变化，`dsh_adapter.py` 用通用 fallback 保留未知事件。
-- Tether 自带聊天页是监控台；主入口是 DSH 对话 + Tether 插件页。
+- Tether 监控台网页不是插件对话页；插件主入口是目标 DSH 原生页面 + 文件资源管理器 + 权限。
 
 ### 10.1 如果还有时间
 
@@ -561,3 +606,167 @@ Copy-Item .env.example .env   # DEEPSEEK_API_KEY
 - Herdr: https://github.com/herdrdev/herdr
 - Orca: https://github.com/stablyai/orca
 - Happy: https://github.com/slopus/happy
+---
+
+## 12. 团队拓扑、传输与三端复用（方向）
+
+**拓扑模型**：当前是中心中继星型——每台 Node 只向 Controller 建一条出站 WSS，
+设备之间没有 TCP 直连；Controller 可以控制 N 台设备，子设备之间默认不互通。
+下一版把"线"变成 Controller 里的逻辑边 `Edge(parent, child, allow/deny)`，由
+Team/Account 服务保存设备、成员、角色和边；同一账号/团队的所有客户端订阅同一份
+拓扑，因此每台机器看到的图一致。派活时 Controller 只沿允许的边路由，未连边的
+设备不会互相看到；这样天然支持"一个上位机控制十几个下位机、下位机之间隔离"，
+也支持后续把任意节点接成万物互联。默认仍走中心中继（每个节点 1 条连接，避免
+N² 条 TCP）；需要低延迟时再给边加可选的 P2P 直连，中继作为回退。
+
+**是否必须 Tailscale**：不是。Node 的目标地址来自 `TETHER_CONTROLLER`，现在
+用 Tailscale 只是因为它提供了最省事的 L3 网络路径；WSS/HTTP 协议本身与
+Tailscale 无关，同一局域网可直连，公网可端口转发。要把它变成 Tether 自己的
+能力，需要补一个 **Tether relay/account 服务**：监听 TLS/WSS，设备只做出站连接，
+配对码/设备密钥、团队同步和吊销都在这里；公网 NAT 穿透可先用 relay（类似
+Tailscale DERP），真正 P2P 再叠加 STUN/TURN/WebRTC。这样 Tailscale 变成可选
+的部署方式，而不是产品依赖。边界要讲清：**纯插件本身不可能在双方都在 NAT 后
+时无中生有地建立公网连接**；必须有一个公网可达的 Controller/relay（或用户
+自己做端口映射/局域网直连）。纯 App 如果有自己的后端服务，可以把 relay 收进
+产品里，但仍然是"要有一台公网机器"，不是零基础设施。
+
+**三端复用**：文件资源管理器、互联画布、权限抽屉都是普通 React 组件，放成
+共享 UI 包；DSH 插件只保留 slot/`window.__ModuleLoader__` 适配，独立 Tether
+App（Electron/Tauri + 内嵌 Controller/Web 服务）和 Web 共用同一套组件。下载方式
+就是两种：App（含桌面端和 Web 服务）或 DSH 插件；插件以后可上 DSH 插件市场。
+APP 作为主体、插件作为 DSH 适配、WebUI 作为 APP 自带服务的具体拆分、运行形态、
+服务监督、Relay 集成和分阶段验收见 `docs/APP_PLAN.md`。
+
+### 12.1 连接关系、线语义与百台设备操作（设计，未实现）
+
+**边的语义**：`Edge{id, from, to, mode, status, created_by, updated_at}`，
+`from` 控制 `to`；没有边就不画线。画布线样式由边和两端状态派生：
+
+| 条件 | 画法 |
+|---|---|
+| 有边、两端在线 | 实线 |
+| 有边、任一端离线 | 虚线 |
+| 没有边 | 不画线 |
+
+线一律用中性灰，颜色不承载状态；**连通只用实线表达，不再加绿色中心点**，避免
+和卡片在线点、节点填充重复表达。当前 v0.1 是隐式星型（本机 → 所有已配对节点），所以现有画布对每台节点都有
+线；显式边和"无边"是 v0.2。线的两端按节点实际边缘裁剪（圆点进入圆边约 1px，
+胶囊取端点 14/3px），不依赖节点背景盖住线。卡片标签表达连接方式与健康状态：
+`插件互联`（surface_protocol）、`App 互联`（app_protocol，未实现前不显示）、
+`插件版本过旧`/`文件服务缺失`/`节点受损`/`连接异常`；一个根因只显示主错误，
+避免标签堆叠。
+
+**入口统一**：右键设备卡片或画布节点，菜单里放“纳管到本机 / 断开控制”
+（隐藏动作），这是所有规模都成立的主入口。画布拖线只是它的可视化快捷方式，
+命令面板和多选批量是它的键盘/批量快捷方式；三个入口写同一套 `edges`，不能
+各自有一套状态。
+
+**小图（≤20 节点）**：画布右上角"连接"进入连线模式，节点 hover 出现端口；
+从父节点端口拖到子节点完成连接，Esc 取消。触控/触控板用两步点击（先父后子）
+作为等价操作。普通拖拽只移动节点，避免误连。边可选中，`Delete` 或右键断开；
+连接成功后给一条可撤销提示。
+
+**100+ 设备**：画布拖拽不是主路径：
+
+0. **入网即连**：新设备通过配对码/团队邀请加入时，直接选择父节点或控制组，
+   边随入网创建；不要要求用户先在图里找到新节点。
+1. **命令面板**（`Ctrl/Cmd+K`）：按设备名、ID、OS、工作区搜索，直接选
+   "A → B" 建边；不依赖在画布上找节点。
+2. **左栏多选 + 纳管**：Shift/Ctrl 选 N 台，默认父节点是本机，一次"纳管到本机"
+   建 N 条边；要指定别的父节点时用命令面板。支持撤销，这是百台设备最常用的路径。
+3. **控制组**：把设备加入"控制组"，边由成员关系派生，新设备继承组规则；100+
+   设备时管理组，而不是逐条管理边。
+4. **连接表格**：源/目标/在线状态/创建者/最后检查，可筛选、批量删除；比在
+   画布上一根根找线可靠。
+5. **画布聚合**：按团队/工作区/网段折叠成组节点，低缩放显示组，点开展开；
+   搜索时非匹配节点淡出。100+ 节点不直接把所有标签和线铺满画布。
+
+**数据与权限**：v0.1 单用户时边存 Controller SQLite，`/api/edges` 提供
+GET/POST/DELETE 和批量接口；v0.2 移到 Team/Account 服务，同一团队订阅同一份
+图。只有 owner/admin 能建边，所有变更写审计；客户端乐观更新，带版本号冲突回滚；
+浏览器只传设备 ID，不允许传任意 URL。**验收门禁**：两端在线实线、任一端离线
+虚线、无边不画线；100 台虚拟设备下命令面板搜索和批量连接不卡；断线重连后边与
+状态恢复；非管理员不能建边。**分片**：A 线端点/标签（本轮已完成）→ B 本地边表、
+命令面板、批量连接（单 Controller）→ C Team 同步、权限、控制组 → D 聚合视图与
+100+ 性能。
+
+### 12.2 设备身份与显示名（已实现单用户改名）
+
+- `device_id` 永远不变；`host_name` 是节点上报的机器名；`display_name` 是
+  Tether 的别名。显示名存 Controller SQLite，节点重连只更新 `host_name`，
+  不会覆盖别名；离线设备也可以改名，重新上线后继续显示别名。
+- 改名入口隐藏在网络卡片/画布节点的右键菜单里；`POST /api/devices/{id}/name`
+  校验 1–64 个可打印字符。当前插件每 2.5s 拉 `/api/state`，所以同一 Controller
+  下的所有 Tether 客户端会同步看到新名字。目标机当前只跑 Node + DSH surface，
+  不跑 Tether 控制台；团队版要让每台设备登录同一个 Team/Account 服务，才能让
+  目标机自己的插件也显示别名。目标 DSH 原生页面里的机器名仍是目标 hostname，
+  别名不写回 OS。
+- 权限：当前 v0.1 是单用户 loopback 信任模型，能访问 Controller 的客户端可以给
+  任意已配对节点改名，没有角色校验；v0.2 建议默认允许改自己、owner/admin 可改
+  团队内其他节点，并记录 actor/时间。多端并发改名用 `updated_at` 或版本号做
+  乐观冲突回滚，不能只靠最后写入悄悄覆盖。
+- 已知风险：两个客户端同时改名时当前是 last-write-wins，会静默丢一次更新；
+  客户端靠 2.5s 轮询，最多有约 2.5s 的旧值；没有唯一性约束，两台设备可以同名；
+  没有审计和撤销；若将来出现多个 Controller/团队服务各自存一份别名，名字会
+  分叉。团队版需要版本号 + SSE/WebSocket 推送 + 角色权限 + 审计 + 统一
+  Team/Account 单一真源；设备身份应绑定密钥而不是可复用的 `device_id` 字符串。
+
+### 12.3 自建互联服务：Tether Relay/Account（替代 Tailscale，设计）
+
+**先划清边界**：纯插件不能独自承担 Tailscale 的角色。Tailscale 实际提供了
+四件事：身份/协调、加密传输、NAT 穿透、relay 回退。Tether 的流量是 HTTP/WS，
+不需要虚拟网卡或 TUN；应用层中继就够。但**必须有一个对设备可达的后端**：
+公网 VPS、端口映射/公网 IP，或同局域网直连。没有任何公网可达点，又在双方
+NAT 后，任何纯插件都无法凭空建立连接。
+
+**推荐拓扑**（不复制 Tailscale 的 L3，只复制它需要的能力）：
+
+```
+桌面 Controller（UI/API 仍 loopback）
+        │ 主动出站 TLS/WSS
+        ▼
+Tether Relay/Account（公网 VPS，TLS）
+        ▲
+        │ 主动出站 TLS/WSS
+目标 Node（文件/shell/DSH Host 不变）
+```
+
+- 两端都只找出站连接；Node/目标机不开入站端口。Relay 按 `device_id` 和
+  channel 转发帧；Controller 仍然只在本机暴露 UI/API。
+- 同一局域网可直接连 Controller，不经过 Relay；没有公网需求时 Relay 可选。
+- Relay 只是 NAT 回退，不是必须的数据面：未来可加 STUN/QUIC/WebRTC 做 P2P，
+  Relay 保留作对称 NAT/降级路径。Tailscale 的 DERP 就是同类模型。
+- 不建议自己写 WireGuard/TUN：Windows 驱动、路由、内核和权限成本远超收益；
+  Tether 不需要三层虚拟网络。
+
+**最小服务接口**：
+
+1. 设备入网：`POST /v1/devices/enroll`，一次性配对码 + 设备公钥；返回
+   `device_id`、短期证书/令牌和 Relay URL。每设备独立密钥，支持吊销和轮换。
+2. 长连接：`/v1/node`（Node 出站）和 `/v1/controller`（桌面 Controller 出站）。
+   Relay 维护 `device_id -> node socket` 映射。
+3. 帧：`{channel, kind, payload}`；沿用现有 Node/Controller 消息，不把业务
+   协议重写一遍。限制帧大小、队列长度和每设备并发。
+4. TLS 终止用 Caddy/nginx 或服务内建证书；Relay 只做转发。需要更强隔离时把
+   payload 做设备端到端加密，Relay 只看到密文和路由头。
+5. Account 服务保存用户、团队、设备、边、角色、吊销和审计；Controller 的
+   SQLite 在单用户模式保留，团队模式改为向 Account 同步。
+
+**落地顺序**：
+
+1. **本地三进程验证**：Relay + Controller + 两个模拟 Node 全在 loopback，跑
+   现有 `/api/state`、文件、run、断线重连测试；证明“经 Relay”与直连语义一致。
+2. **公网单机验证**：一台 VPS 部署 Relay，关掉 Tailscale；桌面 Controller 和
+   笔记本 Node 都出站接入；验证 NAT、重启、断线、吊销。
+3. **局域网/直连优先**：同网段直接连 Controller；跨网才走 Relay；保持 Relay
+   回退，避免所有流量绕公网。
+4. **P2P 可选**：STUN/QUIC/WebRTC 打洞，失败回落 Relay；不把 P2P 作为第一阶段
+   前置条件。
+5. **团队化**：Account 登录、配对码、设备吊销、边 ACL、审计、Relay 配额和健康
+   监控。
+
+**验收门禁**：卸载/关闭 Tailscale 后，设备仍能上线；Node 不开放入站端口；
+Relay 断开时显示离线并可重连；局域网直连优先且不绕公网；设备吊销立即生效；
+帧大小/队列有上限；100 台设备一个 Relay 不出现串设备或重放。**当前状态**：
+以上只是设计，尚未实现；现有 `TETHER_CONTROLLER` 仍需要一个可达地址，Tailscale
+只是当前部署路径之一。

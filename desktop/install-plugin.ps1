@@ -7,6 +7,17 @@ $ErrorActionPreference = "Stop"
 
 $AppDir = Split-Path -Parent $PSScriptRoot
 $Plugin = Join-Path $AppDir "packages\dsh-plugin-tether"
+$NativeUiBuild = Join-Path $AppDir "scripts\build-native-ui-bridge.mjs"
+if (-not (Test-Path $NativeUiBuild)) {
+  throw "Native DSH UI bridge generator not found at $NativeUiBuild"
+}
+Push-Location $AppDir
+try {
+  & node $NativeUiBuild
+  if ($LASTEXITCODE -ne 0) { throw "Native DSH UI bridge generation failed with exit code $LASTEXITCODE" }
+} finally {
+  Pop-Location
+}
 if (-not (Test-Path (Join-Path $Plugin "package.json"))) {
   throw "Plugin package not found at $Plugin"
 }

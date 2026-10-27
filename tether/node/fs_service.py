@@ -9,19 +9,54 @@ from __future__ import annotations
 
 import base64
 import json
+import mimetypes
 import os
 import shutil
+import sqlite3
+import subprocess
+import tempfile
 import time
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
 
 MAX_READ = 256 * 1024
+MAX_PREVIEW_BYTES = 8 * 1024 * 1024
+MAX_PREVIEW_TEXT = 512 * 1024
 TEXT_SUFFIXES = {
     ".txt", ".md", ".py", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".json", ".yml", ".yaml",
     ".toml", ".ini", ".cfg", ".csv", ".log", ".xml", ".html", ".css", ".scss", ".sh", ".ps1",
     ".bat", ".cmd", ".c", ".h", ".cpp", ".hpp", ".java", ".go", ".rs", ".sql", ".env", ".gitignore",
 }
+MARKDOWN_SUFFIXES = {".md", ".markdown"}
+IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"}
+OFFICE_KINDS = {".doc": "word", ".docx": "word", ".ppt": "powerpoint", ".pptx": "powerpoint"}
+OFFICE_SCRIPT = r'''
+param(
+  [Parameter(Mandatory = $true)][string]$Source,
+  [Parameter(Mandatory = $true)][string]$Output,
+  [Parameter(Mandatory = $true)][string]$Kind
+)
+$ErrorActionPreference = 'Stop'
+if ($Kind -eq 'word') {
+  $app = New-Object -ComObject Word.Application
+  $app.Visible = $false
+  $app.DisplayAlerts = 0
+  try {
+    $doc = $app.Documents.Open($Source, $false, $true)
+    $doc.SaveAs([ref]$Output, [ref]17)
+    $doc.Close($false)
+  } finally { $app.Quit() }
+} else {
+  $app = New-Object -ComObject PowerPoint.Application
+  try {
+    $pres = $app.Presentations.Open($Source, $true, $false, $false)
+    $pres.SaveAs($Output, 32)
+    $pres.Close()
+  } finally { $app.Quit() }
+}
+'''
 
 
 def _norm(path: Path | str) -> str:
@@ -189,36 +224,123 @@ class Policy:
 
 
 class Audit:
-    def __init__(self, path: Path, *, device: str, limit: int = 500) -> None:
-        self.path = path
-        self.device = device
-        self.limit = limit
-        self.entries: list[dict[str, Any]] = []
-        self._load_tail()
+    """Append-only audit in SQLite; memory stays constant and old rows age out."""
 
-    def _load_tail(self) -> None:
+    MAX_ROWS = 100_000
+    BASE_KEYS = {"ts", "device", "op", "path", "mode", "phase", "result", "reason"}
+
+    def __init__(self, path: Path, *, device: str, max_rows: int | None = None) -> None:
+        self.path = Path(path)
+        self.db_path = self.path.with_suffix(".db")
+        self.device = device
+        self.max_rows = max_rows or self.MAX_ROWS
+        self._inserts = 0
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        with self._connect() as conn:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS audit (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ts REAL NOT NULL,
+                    device TEXT,
+                    op TEXT,
+                    path TEXT,
+                    mode TEXT,
+                    phase TEXT,
+                    result TEXT,
+                    reason TEXT,
+                    extra TEXT
+                )
+            """)
+        self._migrate_legacy()
+
+    @contextmanager
+    def _connect(self):
+        conn = sqlite3.connect(str(self.db_path), timeout=10)
+        conn.row_factory = sqlite3.Row
         try:
-            lines = self.path.read_text(encoding="utf-8", errors="replace").splitlines()[-self.limit:]
-        except OSError:
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA synchronous=NORMAL")
+            yield conn
+            conn.commit()
+        finally:
+            conn.close()
+
+    def _migrate_legacy(self) -> None:
+        if not self.path.is_file():
             return
-        for line in lines:
+        with self._connect() as conn:
+            if conn.execute("SELECT COUNT(*) FROM audit").fetchone()[0]:
+                return
             try:
-                self.entries.append(json.loads(line))
-            except ValueError:
-                continue
+                lines = self.path.read_text(encoding="utf-8", errors="replace").splitlines()
+            except OSError:
+                return
+            for line in lines:
+                try:
+                    item = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(item, dict):
+                    self._insert(conn, item)
+            if conn.execute("SELECT COUNT(*) FROM audit").fetchone()[0] > self.max_rows:
+                conn.execute(
+                    "DELETE FROM audit WHERE id <= (SELECT MAX(id) - ? FROM audit)",
+                    (self.max_rows,),
+                )
+        try:
+            self.path.rename(self.path.with_name(self.path.name + ".migrated"))
+        except OSError:
+            pass
+
+    def _insert(self, conn: sqlite3.Connection, item: dict[str, Any]) -> None:
+        extra = {key: value for key, value in item.items() if key not in self.BASE_KEYS}
+        conn.execute(
+            "INSERT INTO audit(ts, device, op, path, mode, phase, result, reason, extra) "
+            "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (float(item.get("ts") or time.time()), item.get("device") or self.device,
+             item.get("op"), item.get("path"), item.get("mode"), item.get("phase"),
+             item.get("result"), item.get("reason"),
+             json.dumps(extra, ensure_ascii=False) if extra else None),
+        )
+
+    def _prune(self, conn: sqlite3.Connection) -> None:
+        row = conn.execute(
+            "SELECT id FROM audit ORDER BY id DESC LIMIT 1 OFFSET ?", (self.max_rows,)
+        ).fetchone()
+        if row is not None:
+            conn.execute("DELETE FROM audit WHERE id <= ?", (row["id"],))
 
     def add(self, **entry: Any) -> dict[str, Any]:
         item = {"ts": time.time(), "device": self.device, **entry}
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self.path.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(item, ensure_ascii=False) + "\n")
-        self.entries.append(item)
-        if len(self.entries) > self.limit:
-            self.entries = self.entries[-self.limit:]
+        with self._connect() as conn:
+            self._insert(conn, item)
+            self._inserts += 1
+            if self._inserts % 256 == 0:
+                self._prune(conn)
         return item
 
-    def list(self, limit: int = 100) -> list[dict[str, Any]]:
-        return list(reversed(self.entries[-max(1, min(limit, self.limit)):]))
+    def page(self, limit: int = 100, offset: int = 0) -> dict[str, Any]:
+        limit = max(1, min(int(limit or 100), 5000))
+        offset = max(0, int(offset or 0))
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM audit ORDER BY id DESC LIMIT ? OFFSET ?", (limit, offset)
+            ).fetchall()
+            total = conn.execute("SELECT COUNT(*) FROM audit").fetchone()[0]
+        entries: list[dict[str, Any]] = []
+        for row in rows:
+            item = {key: row[key] for key in ("ts", "device", "op", "path", "mode", "phase", "result", "reason")
+                    if row[key] is not None}
+            if row["extra"]:
+                try:
+                    item.update(json.loads(row["extra"]))
+                except ValueError:
+                    pass
+            entries.append(item)
+        return {"entries": entries, "count": total, "retained": self.max_rows}
+
+    def list(self, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
+        return self.page(limit, offset)["entries"]
 
 
 class FsService:
@@ -234,7 +356,10 @@ class FsService:
     def _resolve(self, raw: str | None) -> Path:
         if not raw:
             raise FsError("path is required", "bad_path")
-        p = Path(raw).expanduser()
+        text = str(raw)
+        if len(text) == 2 and text[1] == ":" and text[0].isalpha():
+            text += "\\"
+        p = Path(text).expanduser()
         if not p.is_absolute():
             raise FsError("path must be absolute", "bad_path")
         return p.resolve()
@@ -309,6 +434,71 @@ class FsService:
         else:
             result.update({"binary": False, "text": chunk.decode("utf-8", errors="replace")})
         return result
+
+    def _op_preview(self, args: dict[str, Any]) -> dict[str, Any]:
+        p = self._resolve(args.get("path"))
+        self._read_guard(p)
+        if not p.is_file():
+            raise FsError("not a file", "not_file")
+        suffix = p.suffix.lower()
+        size = p.stat().st_size
+        writable = self.policy.can_write(p, op="write")[0]
+        result: dict[str, Any] = {"path": str(p), "size": size, "writable": writable}
+        if suffix in TEXT_SUFFIXES or suffix in MARKDOWN_SUFFIXES:
+            chunk = p.read_bytes()[:MAX_PREVIEW_TEXT]
+            result.update({
+                "kind": "markdown" if suffix in MARKDOWN_SUFFIXES else "text",
+                "text": chunk.decode("utf-8", errors="replace"),
+                "truncated": size > MAX_PREVIEW_TEXT,
+            })
+            return result
+        if suffix in IMAGE_SUFFIXES:
+            if size > MAX_PREVIEW_BYTES:
+                raise FsError("file too large to preview", "too_large")
+            mime = mimetypes.guess_type(str(p))[0] or "application/octet-stream"
+            result.update({"kind": "image", "mime": mime,
+                           "base64": base64.b64encode(p.read_bytes()).decode("ascii")})
+            return result
+        if suffix == ".pdf":
+            if size > MAX_PREVIEW_BYTES:
+                raise FsError("file too large to preview", "too_large")
+            result.update({"kind": "pdf", "mime": "application/pdf",
+                           "base64": base64.b64encode(p.read_bytes()).decode("ascii")})
+            return result
+        if suffix in OFFICE_KINDS:
+            data = self._office_pdf(p, OFFICE_KINDS[suffix])
+            if len(data) > MAX_PREVIEW_BYTES:
+                raise FsError("converted preview too large", "too_large")
+            self.audit.add(op="preview", path=str(p), mode=self.policy.data.get("mode"),
+                           result="ok", converted=OFFICE_KINDS[suffix])
+            result.update({"kind": "pdf", "mime": "application/pdf",
+                           "base64": base64.b64encode(data).decode("ascii"), "converted": True})
+            return result
+        result.update({"kind": "unsupported", "mime": mimetypes.guess_type(str(p))[0] or ""})
+        return result
+
+    def _office_pdf(self, source: Path, kind: str) -> bytes:
+        if os.name != "nt":
+            raise FsError("Office preview is only available on Windows", "unsupported")
+        with tempfile.TemporaryDirectory(prefix="tether-preview-") as folder:
+            script = Path(folder) / "convert.ps1"
+            target = Path(folder) / "preview.pdf"
+            script.write_text(OFFICE_SCRIPT, encoding="utf-8")
+            flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+            try:
+                run = subprocess.run(
+                    ["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+                     "-File", str(script), "-Source", str(source), "-Output", str(target),
+                     "-Kind", kind],
+                    capture_output=True, text=True, timeout=45, creationflags=flags,
+                )
+            except subprocess.TimeoutExpired:
+                raise FsError("Office preview timed out", "preview_timeout") from None
+            except OSError:
+                raise FsError("Office preview is unavailable", "preview_unavailable") from None
+            if run.returncode != 0 or not target.is_file():
+                raise FsError("Office preview failed; WPS or Office is required", "preview_unavailable")
+            return target.read_bytes()
 
     def _op_write(self, args: dict[str, Any]) -> dict[str, Any]:
         p = self._resolve(args.get("path"))
@@ -389,4 +579,4 @@ class FsService:
         return policy
 
     def _op_audit_list(self, args: dict[str, Any]) -> dict[str, Any]:
-        return {"entries": self.audit.list(int(args.get("limit") or 100))}
+        return self.audit.page(int(args.get("limit") or 100), int(args.get("offset") or 0))

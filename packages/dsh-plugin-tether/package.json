@@ -12,7 +12,9 @@
   "files": ["lib/index.js", "cordis.patch.yml", "package.json"],
   "license": "MIT",
   "dependencies": {
-    "tether-dsh-client": "file:../dsh-plugin-tether-client"
+    "tether-dsh-client": "file:../dsh-plugin-tether-client",
+    "tether-dsh-native-ui": "file:../tether-dsh-native-ui",
+    "tether-dsh-surface": "file:../tether-dsh-surface"
   },
   "dsh": {
     "bundle": { "patch": "./cordis.patch.yml" }

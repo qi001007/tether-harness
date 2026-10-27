@@ -46,6 +46,7 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS devices (
   device_id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
+  display_name TEXT,
   platform TEXT,
   capabilities TEXT NOT NULL DEFAULT '{}',
   token_hash TEXT NOT NULL,
@@ -97,6 +98,9 @@ class Store:
         self._db.row_factory = sqlite3.Row
         with self._lock:
             self._db.executescript(SCHEMA)
+            columns = {row["name"] for row in self._db.execute("PRAGMA table_info(devices)")}
+            if "display_name" not in columns:
+                self._db.execute("ALTER TABLE devices ADD COLUMN display_name TEXT")
             self._db.commit()
 
     def close(self) -> None:
@@ -133,6 +137,15 @@ class Store:
             self._db.execute("UPDATE devices SET online=1, last_seen=? WHERE device_id=?", (now(), device_id))
             self._db.commit()
 
+    def rename_device(self, device_id: str, display_name: str) -> dict[str, Any]:
+        with self._lock:
+            cursor = self._db.execute("UPDATE devices SET display_name=? WHERE device_id=?",
+                                      (display_name, device_id))
+            self._db.commit()
+        if cursor.rowcount == 0:
+            raise NotFound(device_id)
+        return self.get_device(device_id)
+
     def get_device(self, device_id: str) -> dict[str, Any]:
         with self._lock:
             row = self._db.execute("SELECT * FROM devices WHERE device_id=?", (device_id,)).fetchone()
@@ -142,7 +155,7 @@ class Store:
 
     def list_devices(self) -> list[dict[str, Any]]:
         with self._lock:
-            rows = self._db.execute("SELECT * FROM devices ORDER BY name").fetchall()
+            rows = self._db.execute("SELECT * FROM devices ORDER BY COALESCE(display_name, name)").fetchall()
         return [_device(r) for r in rows]
 
     # sessions ----------------------------------------------------------------
@@ -310,7 +323,8 @@ class Store:
 
 def _device(row: sqlite3.Row) -> dict[str, Any]:
     return {
-        "device_id": row["device_id"], "name": row["name"], "platform": row["platform"],
+        "device_id": row["device_id"], "name": row["display_name"] or row["name"],
+        "host_name": row["name"], "display_name": row["display_name"], "platform": row["platform"],
         "capabilities": json.loads(row["capabilities"]),
         "online": bool(row["online"]), "last_seen": row["last_seen"],
     }

@@ -11,10 +11,15 @@
   },
   "files": ["lib/index.js", "lib/client.js", "package.json"],
   "license": "MIT",
+  "dependencies": {
+    "tether-dsh-native-ui": "file:../tether-dsh-native-ui"
+  },
   "dsh": {
     "client": {
       "platform": "web",
+      "external": ["tether-dsh-native-ui"],
       "inject": [
+        "tether-dsh-native-ui",
         "@deepseek-ai/dsh-client-ui-slots",
         "@deepseek-ai/dsh-client-ui-layout",
         "@deepseek-ai/dsh-client-ui-sidebar"

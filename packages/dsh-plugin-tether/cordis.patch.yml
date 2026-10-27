@@ -1,3 +1,7 @@
 - insert:
+    - id: tether-native-ui
+      name: 'tether-dsh-native-ui'
+    - id: tether-dsh-surface
+      name: 'tether-dsh-surface'
     - id: tether-client
       name: 'tether-dsh-client'

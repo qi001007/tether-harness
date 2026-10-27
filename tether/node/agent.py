@@ -24,6 +24,18 @@ from . import console as local_console
 from .dsh_adapter import DshRun
 from .fs_service import FsError, FsService
 from .dsh_sessions import DshSessionStore
+from .native_surface import NativeSurface, NativeSurfaceError
+
+
+def os_label() -> str:
+    if sys.platform == "win32":
+        try:
+            version = sys.getwindowsversion()
+            name = "Windows 11" if version.build >= 22000 else ("Windows 10" if version.build >= 10240 else f"Windows {version.major}.{version.minor}")
+            return f"{name} · {version.build}"
+        except Exception:
+            pass
+    return platform.platform(terse=True)
 
 ROOT = Path(__file__).resolve().parents[2]
 try:
@@ -191,10 +203,12 @@ class Node:
         self.dsh_sessions = DshSessionStore()
         self.native_dsh_home = self.dsh_sessions.home
         ensure_sdk_profile(self.native_dsh_home)
+        self.native_surface = NativeSurface(self.native_dsh_home)
         self.dsh_runs: dict[str, DshRun] = {}
         self.ws: Any = None
         self.connected = False
         self.tasks: dict[str, asyncio.Task] = {}
+        self.surface_tasks: set[asyncio.Task] = set()
         self.cancels: dict[str, asyncio.Event] = {}
         self._dropped = False
 
@@ -213,7 +227,8 @@ class Node:
             backoff = min(backoff * 2, 5.0)
 
     async def _session(self) -> None:
-        async with websockets.connect(self.url, ping_interval=20, ping_timeout=20) as ws:
+        async with websockets.connect(self.url, ping_interval=20, ping_timeout=20,
+                                      max_size=48 * 1024 * 1024) as ws:
             self.ws = ws
             await self._send({"type": "register", "device_id": self.device, "name": self.device,
                               "token": self.token, "platform": platform.platform(),
@@ -235,6 +250,12 @@ class Node:
                     await self._handle(json.loads(raw))
             finally:
                 hb.cancel()
+                for task in tuple(self.surface_tasks):
+                    task.cancel()
+                if self.surface_tasks:
+                    await asyncio.gather(*self.surface_tasks, return_exceptions=True)
+                self.surface_tasks.clear()
+                await self.native_surface.dispose()
                 self.ws = None
 
     async def _drop_later(self) -> None:
@@ -271,6 +292,15 @@ class Node:
             await self._fs_call(msg)
         elif kind == "dsh_call":
             await self._dsh_call(msg)
+        elif kind == "surface_call":
+            if len(self.surface_tasks) >= 64:
+                await self._send({"type": "surface_result", "req_id": str(msg.get("req_id") or ""),
+                                  "ok": False, "error": "too many pending surface requests",
+                                  "code": "capacity"})
+                return
+            task = asyncio.create_task(self._surface_call(msg))
+            self.surface_tasks.add(task)
+            task.add_done_callback(self.surface_tasks.discard)
         elif kind == "error":
             log(f"[ws] controller error: {msg.get('error')}")
 
@@ -321,6 +351,27 @@ class Node:
             log(f"[dsh] {op} failed: {exc}")
             reply = {"type": "dsh_result", "req_id": req_id, "ok": False,
                      "error": str(exc), "code": "dsh_error"}
+        try:
+            await self._send(reply)
+        except Exception:
+            self.connected = False
+
+    async def _surface_call(self, msg: dict[str, Any]) -> None:
+        req_id = str(msg.get("req_id") or "")
+        op = str(msg.get("op") or "")
+        args = msg.get("args") or {}
+        try:
+            result = await self.native_surface.call(op, args)
+            reply = {"type": "surface_result", "req_id": req_id, "ok": True, "result": result}
+        except NativeSurfaceError as exc:
+            reply = {"type": "surface_result", "req_id": req_id, "ok": False,
+                     "error": str(exc), "code": exc.code}
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log(f"[surface] {op} failed")
+            reply = {"type": "surface_result", "req_id": req_id, "ok": False,
+                     "error": "native surface request failed", "code": "surface_error"}
         try:
             await self._send(reply)
         except Exception:
@@ -485,12 +536,15 @@ class Node:
             self.dsh_runs.pop(run_id, None)
 
     def capabilities(self) -> dict[str, Any]:
-        return {"os": platform.system(), "release": platform.release(), "python": platform.python_version(),
+        return {"os": platform.system(), "release": platform.release(), "os_label": os_label(),
+                "python": platform.python_version(),
                 "workspace": str(self.workspace), "agents": ["fake", "dsh"], "fs": True,
                 "policy_mode": self.fs.policy.data.get("mode"),
                 "workspaces_root": str(self.workspaces_root),
                 "dsh_native": self.dsh_sessions.available(),
-                "native_dsh_home": str(self.dsh_sessions.home)}
+                "native_dsh_home": str(self.dsh_sessions.home),
+                "surface_protocol": 1,
+                "dsh_surface": self.native_surface.available()}
 
 
 def main() -> None:

@@ -1,0 +1,22 @@
+# 修改记录
+
+- 2026-10-27：新增干净 VM 执行生成 bridge factory 的启动 smoke，检查原生组件导出与词典常量依赖。
+- 2026-10-27：调用真实 `runConversation` 回归 DSH tool/result 的 `message.isError` 到 `is_error/status` 映射。
+- 2026-10-27：增加原生工具卡片适配、错误结果/畸形参数保留及折叠过程分组顺序回归检查。
+- 2026-10-27：新增 `test_file_tree.mjs`，验证文件树节点身份、路径缓存隔离、工作区标题与目录名，以及异步设备切换保护。
+- 2026-10-27：扩展 `test_file_tree.mjs`，用 VM 中的 React createElement stub 调用真实 `FileTree`，覆盖旧路径 key 冲突复现、workspace/drive 同路径兄弟 key 唯一、循环条目去除，以及十轮展开/收起稳定渲染。
+- 2026-10-27：增加发送目标解析回归，覆盖 native DSH 精确链接、`tether-` 前缀关联、未关联历史阻止、current run 设备/工作区校验和新 session ID 唯一性。
+- 2026-10-27：增加 App 选择状态回归，执行同一 workspace 的 select→toggle→toggle 及跨 workspace 显式选择非首 session 后 effect 顺序，验证展开可恢复且 session id 保留。
+- 2026-10-27：新增 ProcessGroup 状态切换 hook 顺序回归测试，覆盖 live running → completed 渲染。
+- 2026-10-27：新增 native DSH surface 测试，覆盖 descriptor loopback 校验、路径 SSRF 拦截、凭据/响应头隔离及 WebSocket 二进制往返和关闭。
+- 2026-10-27：补充认证 303 Set-Cookie、原生 same-origin 校验和 pending WebSocket receive 期间同时 send/HTTP 调用的并发回归。
+- 2026-10-27：新增以 MAX_BODY 常量为准的请求大小限制测试，不构造大体积样本。
+- 2026-10-27：新增 gzip 响应透传测试，验证 content-encoding 与原始压缩 bytes 保持一致。
+- 2026-10-27：增加原生 client 的安全 loopback URL、child-frame recursion VM 回归，以及 companion descriptor 的权限、活 Host 防覆盖、stale Host 接管和 lifecycle cleanup 测试。
+- 2026-10-27：新增原生 iframe loopback URL 与子页面防递归 VM 回归，以及 companion descriptor 发布、权限、活 Host 防覆盖、陈旧 Host 替换和卸载清理检查。
+- 2026-10-27：原生页面 ready 状态绑定 deviceId，验证切设备时旧 iframe URL 不可渲染；通过客户端结构契约验证文件/日志视图只隐藏、不卸载 iframe。
+- 2026-10-27：新增 preview 回归（文本/Markdown/图片/PDF/unsupported）；沿用 surface 客户端契约测试；Python 26、JavaScript 20 全过。
+- 2026-10-27：新增盘符根 `_resolve("C:")` 回归；Python 27、JavaScript 20 全过。
+- 2026-10-27：新增 audit SQLite 分页/迁移回归；权限/互联页契约由 JS 20 项覆盖。
+- 2026-10-27：新增 HTML 原生页注入回归：gzip HTML 解压后包含 `#tether-native-surface`，去掉 content-encoding/ETag 并设 `no-store`；JS 的 gzip 字节与头保持不变；Python 29、JavaScript 20 全过。
+- 2026-10-27：新增 `test_device_names.py`：显示名在节点重连后保留、旧 devices 表自动补 `display_name`、缺失设备抛 `NotFound`；Python 32、JavaScript 20 全过。

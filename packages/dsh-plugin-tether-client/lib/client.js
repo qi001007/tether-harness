@@ -3,6 +3,7 @@ window.__ModuleLoader__.load({
   factory: (require) => {
     const React = require('react')
     const h = React.createElement
+    const Native = require('tether-dsh-native-ui')
     const PANEL_ID = 'tether'
     const BASE = 'http://127.0.0.1:18890'
 
@@ -27,6 +28,8 @@ window.__ModuleLoader__.load({
       primary: 'var(--dsw-alias-button-primary-fill, #101828)',
       onPrimary: 'var(--dsw-alias-label-primary-inverted, #ffffff)',
       bubble: 'var(--dsw-specific-bubble, #f2f4f7)',
+      nodeChild: 'color-mix(in srgb, var(--dsw-alias-state-business-primary, #1570ef) 8%, var(--dsw-specific-sidebar-fill, #f9fafb))',
+      nodeChildActive: 'color-mix(in srgb, var(--dsw-alias-state-business-primary, #1570ef) 13%, var(--dsw-specific-sidebar-fill, #f9fafb))',
       block: 'var(--dsw-alias-markdown-code-block, #f8fafc)',
       shadow: 'var(--dsw-elevation-panel, 0 8px 24px rgba(16, 24, 40, 0.12))'
     }
@@ -73,6 +76,73 @@ window.__ModuleLoader__.load({
         }
       }, label)
     }
+    function deviceOs(device) {
+      const caps = device.capabilities || {}
+      if (caps.os_label) return caps.os_label
+      const raw = String(device.platform || '')
+      const match = raw.match(/Windows-(?:\d+)-([\d.]+)/)
+      if (match) {
+        const build = match[1].split('.').pop()
+        if (build && Number(build) >= 22000) return 'Windows 11 · ' + build
+        if (build) return 'Windows 10 · ' + build
+      }
+      return raw || 'Unknown'
+    }
+
+    function DeviceSwitcher({ devices, value, onChange, onOpenNetwork }) {
+      const [open, setOpen] = React.useState(false)
+      const root = React.useRef(null)
+      const current = devices.find((item) => item.device_id === value) || devices[0]
+      React.useEffect(() => {
+        if (!open) return undefined
+        const onPointer = (event) => {
+          if (root.current && !root.current.contains(event.target)) setOpen(false)
+        }
+        const onKey = (event) => { if (event.key === 'Escape') setOpen(false) }
+        document.addEventListener('pointerdown', onPointer)
+        window.addEventListener('keydown', onKey)
+        return () => {
+          document.removeEventListener('pointerdown', onPointer)
+          window.removeEventListener('keydown', onKey)
+        }
+      }, [open])
+      if (!current) return h('span', { style: { color: C.mute, fontSize: 12 } }, 'no device')
+      const item = (device) => h('button', {
+        key: device.device_id, role: 'option', 'aria-selected': device.device_id === value,
+        onClick: () => { onChange(device.device_id); setOpen(false) },
+        className: 'tether-hover',
+        style: { display: 'flex', width: '100%', alignItems: 'center', gap: 8, minHeight: 40, padding: '4px 8px', border: 0, borderRadius: 6, background: device.device_id === value ? C.soft : 'transparent', color: C.ink, fontSize: 13, textAlign: 'left', cursor: 'pointer' }
+      },
+        dot(device.online),
+        h('span', { style: { minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1, overflow: 'hidden' } },
+          h('span', { style: { minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, device.name || device.device_id),
+          h('span', { style: { fontSize: 10.5, color: C.mute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, deviceOs(device))
+        ),
+        h('span', { style: { marginLeft: 'auto', fontSize: 10.5, color: device.online ? C.green : C.mute, whiteSpace: 'nowrap' } }, device.online ? '在线' : '离线')
+      )
+      return h('div', { ref: root, style: { position: 'relative', minWidth: 0 } },
+        h('button', {
+          onClick: () => setOpen((value) => !value), title: '切换设备', 'aria-haspopup': 'listbox', 'aria-expanded': open,
+          className: 'tether-hover tether-press',
+          style: { height: 26, maxWidth: 220, display: 'flex', alignItems: 'center', gap: 6, padding: '0 7px', border: 0, borderRadius: 7, background: open ? C.active : C.soft, color: C.ink, fontSize: 12, cursor: 'pointer' }
+        },
+          dot(current.online),
+          h('span', { style: { minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, current.name || current.device_id),
+          h(Glyph, { name: 'chevronDown', size: 12 })
+        ),
+        open ? h('div', {
+          onPointerDown: (event) => { event.preventDefault(); setOpen(false) },
+          style: { position: 'fixed', inset: 0, zIndex: 70, background: 'transparent' }
+        }) : null,
+        open ? h('div', { role: 'listbox', style: { position: 'absolute', top: 32, left: 0, minWidth: 260, maxWidth: 320, maxHeight: 340, overflow: 'auto', background: C.layer1, borderRadius: 10, boxShadow: C.shadow, padding: 4, zIndex: 80 } },
+          devices.map(item),
+          onOpenNetwork ? h('div', { style: { height: 1, background: C.line, margin: '4px 2px' } }) : null,
+          onOpenNetwork ? h('button', { onClick: () => { setOpen(false); onOpenNetwork() }, className: 'tether-hover', style: { display: 'flex', width: '100%', alignItems: 'center', gap: 8, height: 32, padding: '0 8px', border: 0, borderRadius: 6, background: 'transparent', color: C.ink, fontSize: 13, cursor: 'pointer' } },
+            h(Glyph, { name: 'devices', size: 15 }), '互联') : null
+        ) : null
+      )
+    }
+
     function formatBytes(n) {
       if (n == null) return ''
       if (n < 1024) return n + ' B'
@@ -81,6 +151,75 @@ window.__ModuleLoader__.load({
     }
     function normPath(p) {
       return String(p || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
+    }
+    function treeCacheKey(deviceId, path) { return String(deviceId || '') + '|' + normPath(path) }
+    function treeNodeId(deviceId, groupId, workspaceId, path) { return [deviceId, groupId, workspaceId || '', normPath(path)].join('|') }
+    function treeResponseIsCurrent(requestDevice, currentDevice, requestEpoch, currentEpoch) {
+      return requestDevice === currentDevice && requestEpoch === currentEpoch
+    }
+    function pathBasename(path) { return String(path || '').replace(/[\\/]+$/, '').split(/[\\/]/).pop() || String(path || '') }
+    function joinPath(base, name) { return String(base || '').replace(/[\\/]+$/, '') + '\\' + String(name || '') }
+    function pathSegments(target) {
+      const clean = String(target || '').replace(/[\\/]+$/, '')
+      if (!clean) return []
+      const drive = clean.match(/^([A-Za-z]:)(.*)$/)
+      const out = []
+      let cursor = ''
+      if (drive) {
+        cursor = drive[1] + '\\'
+        out.push({ label: drive[1], path: cursor })
+      }
+      const rest = drive ? drive[2] : clean
+      rest.split(/[\\/]+/).filter(Boolean).forEach((part) => {
+        cursor = cursor ? cursor.replace(/[\\/]+$/, '') + '\\' + part : part
+        out.push({ label: part, path: cursor })
+      })
+      return out
+    }
+    function formatMtime(seconds) {
+      if (!seconds) return ''
+      const date = new Date(seconds * 1000)
+      return date.toLocaleDateString([], { month: '2-digit', day: '2-digit' }) + ' ' +
+        date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    }
+    function entryTypeLabel(entry) {
+      if (entry.dir) return '文件夹'
+      const suffix = String(entry.name || '').split('.').pop()
+      return suffix && suffix !== entry.name ? suffix.toUpperCase() + ' 文件' : '文件'
+    }
+    function resolveSessionTarget(selectedNativeId, currentRun, nativeSessions, remoteSessions, remoteRuns, deviceId, workspace, runWorkspace) {
+      if (selectedNativeId) {
+        const nativeSession = nativeSessions.find((session) => session.session_id === selectedNativeId)
+        const linkedRun = remoteRuns.find((run) => run.device_id === deviceId && samePath(run.workspace || workspace, workspace)
+          && ((run.outcome || {}).dsh_session === selectedNativeId || 'tether-' + run.session_id === selectedNativeId))
+        const remoteSession = linkedRun && remoteSessions.find((session) => session.session_id === linkedRun.session_id
+          && session.device_id === deviceId && samePath(session.workspace, workspace))
+        return nativeSession && remoteSession ? { sessionId: remoteSession.session_id } : { blocked: true }
+      }
+      if (currentRun) {
+        if (currentRun.device_id !== deviceId || !samePath(runWorkspace, workspace)) return { blocked: true }
+        return { sessionId: currentRun.session_id }
+      }
+      return null
+    }
+    function isNewSessionId(sessionId, existingSessions) {
+      return !!sessionId && !existingSessions.some((session) => session.session_id === sessionId)
+    }
+    function toggleWorkspaceOpen(open, path) {
+      return { ...open, [path]: open[path] === false ? true : false }
+    }
+    function selectWorkspaceState(lastProject, current, workspace, selection) {
+      const changed = current.projectPath !== workspace.path
+      const next = {
+        projectPath: workspace.path,
+        path: workspace.path,
+        pathDraft: workspace.path,
+        file: changed ? null : current.file,
+        sessionId: selection && selection.type === 'session' ? selection.id : (changed ? '' : current.sessionId),
+        runId: selection && selection.type === 'run' ? selection.id : (changed ? '' : current.runId)
+      }
+      lastProject.current = next.projectPath
+      return next
     }
     function samePath(a, b) {
       const na = normPath(a), nb = normPath(b)
@@ -97,138 +236,73 @@ window.__ModuleLoader__.load({
       return line.length > n ? line.slice(0, n) + '…' : line
     }
 
-    function inline(text) {
-      const out = []
-      const pattern = /(\*\*[^*]+\*\*|`[^`]+`|\*[^*]+\*|\[[^\]]+\]\([^)]+\))/g
-      let last = 0, match, key = 0
-      while ((match = pattern.exec(text)) !== null) {
-        if (match.index > last) out.push(text.slice(last, match.index))
-        const token = match[0]
-        if (token.startsWith('**')) out.push(h('strong', { key: 'b' + key++ }, token.slice(2, -2)))
-        else if (token.startsWith('`')) out.push(h('code', { key: 'c' + key++ }, token.slice(1, -1)))
-        else if (token.startsWith('[')) {
-          const link = token.match(/^\[([^\]]+)\]\(([^)]+)\)$/)
-          const href = link && /^(https?:\/\/|mailto:)/i.test(link[2]) ? link[2] : null
-          out.push(href
-            ? h('a', { key: 'a' + key++, href, target: '_blank', rel: 'noreferrer' }, link[1])
-            : h('span', { key: 'a' + key++ }, link ? link[1] + ' (' + link[2] + ')' : token))
-        } else out.push(h('em', { key: 'e' + key++ }, token.slice(1, -1)))
-        last = match.index + token.length
+    function nativeTranslate(dictionary) {
+      return (key, values) => {
+        let value = dictionary[key] || key
+        for (const [name, replacement] of Object.entries(values || {})) value = value.replaceAll('{' + name + '}', String(replacement))
+        return value
       }
-      if (last < text.length) out.push(text.slice(last))
-      return out
     }
+    const chatT = nativeTranslate({
+      ...Native.chatZh,
+      copy: '复制', copied: '已复制', 'codeBlock.title': '代码',
+      'codeBlock.wrap': '自动换行', 'codeBlock.unwrap': '关闭自动换行', 'markdown.footnotes': '脚注'
+    })
+    const workspaceT = nativeTranslate(Native.workspaceZh)
+    const toolT = nativeTranslate(Native.toolZh)
+    const nativeMarkdownLabels = Native.markdownLabels(chatT)
 
-    // Mirrors DSH's markdown token ladder (paragraph 16px rhythm, 600 strong,
-    // inline code chip, 21/30 → 16/24 headings) inside the plugin bundle.
-    function Markdown({ text, secondary }) {
+    function Markdown({ text, secondary, streaming }) {
       const source = String(text || '')
       if (!source) return null
-      const nodes = []
-      let key = 0
-      source.split(/```/).forEach((part, index) => {
-        if (index % 2 === 1) {
-          const lines = part.replace(/^\n+|\n+$/g, '').split('\n')
-          let lang = ''
-          if (lines.length && /^[a-zA-Z0-9_+-]+$/.test(lines[0].trim()) && lines.length > 1) lang = lines.shift().trim()
-          nodes.push(h('div', { key: 'p' + key++, className: 'tether-code' },
-            lang ? h('div', { className: 'tether-code-banner' }, lang) : null,
-            h('pre', null, h('code', null, lines.join('\n')))))
-          return
-        }
-        part.split(/\n\s*\n/).forEach((raw) => {
-          const block = raw.replace(/^\n+|\n+$/g, '')
-          if (!block.trim()) return
-          const lines = block.split('\n')
-          const tableRow = (line) => /^\s*\|.*\|\s*$/.test(line)
-          if (lines.length >= 2 && lines.every(tableRow)) {
-            const rows = lines.map((line) => line.trim().replace(/^\||\|$/g, '').split('|').map((cell) => cell.trim()))
-            const body = rows.filter((row, i) => i !== 1 || !row.every((cell) => /^:?-{3,}:?$/.test(cell)))
-            nodes.push(h('div', { key: 't' + key++, className: 'tether-table' },
-              h('table', null, h('tbody', null, body.map((row, ri) => h('tr', { key: ri },
-                row.map((cell, ci) => h(ri === 0 ? 'th' : 'td', { key: ci }, inline(cell)))))))))
-            return
-          }
-          const heading = lines[0].match(/^(#{1,6})\s+(.*)$/)
-          if (heading) {
-            const level = Math.min(4, heading[1].length)
-            nodes.push(h('h' + level, { key: 'h' + key++ }, inline(heading[2])))
-            if (lines.length > 1) nodes.push(h('p', { key: 'hp' + key++ }, inline(lines.slice(1).join('\n'))))
-            return
-          }
-          if (lines.every((line) => /^\s*[-*]\s+/.test(line))) {
-            nodes.push(h('ul', { key: 'u' + key++ },
-              lines.map((line, i) => h('li', { key: i }, inline(line.replace(/^\s*[-*]\s+/, ''))))))
-            return
-          }
-          if (lines.every((line) => /^\s*\d+[.)]\s+/.test(line))) {
-            nodes.push(h('ol', { key: 'o' + key++ },
-              lines.map((line, i) => h('li', { key: i }, inline(line.replace(/^\s*\d+[.)]\s+/, ''))))))
-            return
-          }
-          if (lines.every((line) => /^\s*>\s?/.test(line))) {
-            nodes.push(h('blockquote', { key: 'q' + key++ }, h('p', null, inline(lines.map((line) => line.replace(/^\s*>\s?/, '')).join('\n')))))
-            return
-          }
-          if (lines.every((line) => /^\s*(---|\*\*\*)\s*$/.test(line))) {
-            nodes.push(h('hr', { key: 'r' + key++ }))
-            return
-          }
-          nodes.push(h('p', { key: 'd' + key++ }, inline(lines.join('\n'))))
-        })
+      return h('div', { className: 'tether-md' + (secondary ? ' tether-md-secondary' : '') },
+        h(Native.MarkdownText, { text: source, labels: nativeMarkdownLabels, streaming: !!streaming }))
+    }
+
+    function useNativeDisclosure() {
+      const [expanded, setExpanded] = React.useState(false)
+      return { expanded, toggle: () => setExpanded((current) => !current) }
+    }
+    function toolArguments(raw) {
+      let parsed
+      try { parsed = JSON.parse(raw) } catch (_) { parsed = null }
+      const values = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+      const text = (key) => typeof values[key] === 'string' ? values[key] : undefined
+      return { text, complete: (key) => text(key) !== undefined }
+    }
+    function renderNativeMarkdown(_name, props) {
+      return h(Markdown, { text: props && props.text, secondary: true, streaming: props && props.running })
+    }
+    function NativeReasoningRow({ text, running }) {
+      return h(Native.ReasoningRow, {
+        text: String(text || ''), running: !!running,
+        useDisclosure: useNativeDisclosure,
+        usePresentation: (select) => select({ settledReasoningPreview: true }),
+        renderSlot: renderNativeMarkdown,
+        t: chatT
       })
-      return h('div', { className: 'tether-md' + (secondary ? ' tether-md-secondary' : '') }, nodes)
-    }
-
-    function Shimmer({ text, active, className }) {
-      if (!active) return h('span', { className }, text)
-      return h('span', { className: 'tether-shimmer' + (className ? ' ' + className : '') },
-        h('span', { className: 'tether-shimmer-content' }, text),
-        h('span', { className: 'tether-shimmer-cover', 'aria-hidden': true },
-          h('span', { className: 'tether-shimmer-sweep' },
-            h('span', { className: 'tether-shimmer-hi' }, text))))
-    }
-
-    function firstLine(text) {
-      const line = String(text || '')
-      const cut = line.indexOf('\n')
-      return (cut === -1 ? line : line.slice(0, cut)).replaceAll('**', '').trim()
     }
 
     function ProcessRow({ block, streaming }) {
-      const [open, setOpen] = React.useState(false)
       const isThink = block.type === 'reasoning'
-      const running = block.status === 'running'
-      const title = isThink ? '思考' : (block.name || '工具调用')
-      const text = isThink ? firstLine(block.text) : shortText(block.command || block.arguments || block.result || '', 160)
+      if (isThink) return h('div', { className: 'tether-proc' },
+        h(NativeReasoningRow, { text: block.text, running: block.status === 'running' || streaming }))
+      const argsRaw = typeof block.arguments === 'string' ? block.arguments : ''
+      const args = toolArguments(argsRaw)
+      const name = block.name || 'tool'
+      const callId = String(block.id || '')
+      const toolBlock = block.status === 'running'
+        ? { phase: 'start', name, argsRaw, callId, args }
+        : {
+            kind: 'tool-result', call: { name, argsRaw }, args,
+            content: block.result ? [{ type: 'text', text: String(block.result) }] : [],
+            isError: !!(block.is_error || block.status === 'error'), callId
+          }
       return h('div', { className: 'tether-proc' },
-        h('div', {
-          role: 'button', tabIndex: 0, className: 'tether-proc-row',
-          'aria-expanded': open, onClick: () => setOpen(!open),
-          onKeyDown: (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); setOpen(!open) } }
-        },
-          h('span', { className: 'tether-proc-leading', 'data-open': open || undefined },
-            h('span', { className: 'tether-proc-idle' }, h(Glyph, { name: isThink ? 'think' : 'tool', size: 14 })),
-            h('span', { className: 'tether-proc-chev' }, h(Glyph, { name: 'chevronDown', size: 14 }))),
-          h('span', { className: 'tether-proc-title' }, title),
-          text ? h('span', { className: 'tether-proc-sep', 'aria-hidden': true }) : null,
-          text ? h('span', { className: 'tether-proc-summary' },
-            isThink ? h(Shimmer, { text, active: running || streaming }) : text) : null),
-        open ? (isThink
-          ? h('div', { className: 'tether-proc-think' }, h(Markdown, { text: String(block.text || ''), secondary: true }))
-          : h('pre', { className: 'tether-proc-output' }, block.arguments || block.result || '')) : null
-      )
-    }
-
-    function durationParts(seconds) {
-      const total = Math.max(0, Math.floor(seconds))
-      const hours = Math.floor(total / 3600)
-      const minutes = Math.floor(total / 60) % 60
-      const parts = []
-      if (hours > 0) parts.push({ text: String(hours), numeric: true }, { text: '小时', numeric: false })
-      if (total >= 60) parts.push({ text: String(minutes), numeric: true }, { text: '分', numeric: false })
-      parts.push({ text: String(total % 60), numeric: true }, { text: '秒', numeric: false })
-      return parts
+        h(Native.GenericToolCard, {
+          toolName: name, block: toolBlock, cwd: undefined, home: undefined,
+          useDisclosure: useNativeDisclosure, t: toolT
+        }))
     }
 
     function turnRunning(turn, live) {
@@ -238,65 +312,81 @@ window.__ModuleLoader__.load({
     }
 
     function ProcessGroup({ blocks, turn, live, latest }) {
-      const running = turnRunning(turn, live)
       const [open, setOpen] = React.useState(false)
+      const [groupOpen, setGroupOpen] = React.useState(false)
+      const bodyId = React.useId()
+      const running = turnRunning(turn, live)
       const list = blocks || []
       if (running) {
         if (!list.length) return null
-        return h('div', { className: 'tether-process' },
-          h('div', { className: 'tether-proc-list' }, list.map((block, i) => h(ProcessRow, { key: i, block, streaming: true }))))
       }
       const stopped = turn.state === 'cancelled' || turn.state === 'aborted' || turn.state === 'interrupted'
       const failed = turn.state === 'failed' || turn.state === 'error'
-      const elapsed = turn.started_at && turn.ended_at ? Math.max(1, Math.round(turn.ended_at - turn.started_at)) : null
-      const parts = !stopped && !failed && elapsed ? durationParts(elapsed) : []
-      const label = stopped ? '已停止' : (failed ? '处理失败' : '已完成')
+      const startedAt = turn.started_at ? turn.started_at * 1000 : undefined
+      const endedAt = turn.ended_at ? turn.ended_at * 1000 : undefined
+      const reason = stopped ? 'interrupted' : (failed ? 'error' : 'completed')
+      const processNode = {
+        kind: 'turn-process',
+        location: { kind: 'turn', turn: {
+          status: 'closed', start: startedAt === undefined ? undefined : { time: startedAt },
+          end: endedAt === undefined ? undefined : { time: endedAt, data: { reason: { kind: reason } } }
+        } },
+        data: { turn: turn.turn, messageCount: 0, toolCallCount: list.filter((b) => b.type === 'tool').length, subagentCount: 0 }
+      }
+      const processState = { foldable: list.length > 0, open, hasContent: list.length > 0, setOpen }
+      const toolCount = list.filter((block) => block.type === 'tool').length
+      const groupData = {
+        closed: !running,
+        summary: {
+          counts: [{ kind: toolCount ? 'tools' : 'thinking', count: toolCount || list.filter((block) => block.type === 'reasoning').length }],
+          running: toolCount ? 'tools' : 'thinking', runningDetail: '', preparing: false
+        }
+      }
+      const useChatGroup = (_groupKey, select) => select({ data: groupData })
+      const usePresentation = (select) => select({ liveProcessDetail: false })
+      const toggleGroup = () => setGroupOpen((current) => !current)
       return h('div', { className: 'tether-process tether-ink' },
-        h('button', {
-          type: 'button', className: 'tether-turn-head', 'data-open': open || undefined,
-          'aria-expanded': list.length ? open : undefined, disabled: !list.length,
-          'data-turn-process': turn.turn, 'data-turn-process-tool-calls': list.filter((b) => b.type === 'tool').length,
-          onClick: () => { if (list.length) setOpen(!open) }
+        running ? null : h(Native.TurnProcessNodeView, { node: processNode, turnProcess: processState, t: chatT }),
+        list.length ? h('div', {
+          className: Native.ChatGroupSeat_module_css_default.root,
+          hidden: !running && !open,
+          style: { display: running || open ? undefined : 'none' }
         },
-          h('span', { className: 'tether-turn-label' },
-            label,
-            parts.length ? '，用时 ' : null,
-            parts.map((part, index) => part.numeric
-              ? h('span', { key: index, className: 'tether-turn-number' }, part.text)
-              : part.text)),
-          list.length ? h('span', { className: 'tether-turn-chev' }, h(Glyph, { name: 'chevronDown', size: 14 })) : null),
-        list.length && open ? h('div', { className: 'tether-proc-list' }, list.map((block, i) => h(ProcessRow, { key: i, block }))) : null
+          h('div', null, h(Native.ProcessGroupHeader, {
+            groupKey: 'tether:' + String(turn.turn), useChatGroup, usePresentation, t: chatT,
+            open: groupOpen, bodyId, toggle: toggleGroup
+          })),
+          h('div', {
+            id: bodyId,
+            className: [Native.ChatGroupSeat_module_css_default.body, Native.ChatGroupSeat_module_css_default.expandedBody].join(' '),
+            hidden: !groupOpen, style: { display: groupOpen ? undefined : 'none' }
+          }, h('div', {
+            className: Native.ChatGroupSeat_module_css_default.content,
+            'data-step-process-content': true, 'data-chat-flow': ''
+          }, list.map((block, i) => h(ProcessRow, { key: i, block, streaming: running }))))
+        ) : null
       )
     }
 
     function UserBubble({ text }) {
-      return h('div', { className: 'tether-user-row' },
-        h('div', { className: 'tether-user-bubble' }, text))
+      const renderFactorySlot = (name, props) => {
+        if (name === 'conversation.chat.user.content') {
+          return h(Native.UserContent, {
+            ...props, loadImage: () => undefined, t: chatT,
+            renderSlot: () => null,
+            renderFactorySlot: (_textName, textProps) => h('span', null, textProps && textProps.text)
+          })
+        }
+        return null
+      }
+      return h(Native.UserStyleBubble, {
+        content: [{ type: 'text', text: String(text || '') }],
+        loadImage: () => undefined, renderFactorySlot
+      })
     }
 
-    const WHALE_PATH = 'M8.844 13.742C8.967 12.328 8.45 10.4 8.45 9.65C8.45 8.94 8.88 8.43 9.6 8.43C11.285 8.43 12.106 8.281 12.685 8.104C13.71 7.791 14.585 6.768 15.055 5.945C15.137 5.803 14.99 5.641 14.829 5.671C13.829 5.86 12.828 5.376 11.827 4.978C10.659 4.514 9.491 4.707 8.935 4.876C8.805 4.915 8.658 4.819 8.636 4.686C8.468 3.643 7.405 2.615 5.498 2.238C4.54 2.048 3.748 1.574 3.347 1.202C3.252 1.113 3.088 1.125 3.03 1.242C2.628 2.059 2.168 3.82 5.248 6.115C5.82 6.494 6.31 6.785 6.574 7.637C6.72 8.104 6.157 9.168 6.061 9.368C5.157 11.27 5.089 12.19 4.926 13.742'
-
-    function durationText(parts) {
-      return parts.map((part) => part.text).join('')
-    }
-
-    function RunningStatus({ startTime, paused, hasOutput }) {
-      const [now, setNow] = React.useState(() => Date.now())
-      React.useEffect(() => {
-        if (startTime == null || paused) return undefined
-        setNow(Date.now())
-        const timer = setInterval(() => setNow(Date.now()), 1000)
-        return () => clearInterval(timer)
-      }, [startTime, paused])
-      const label = startTime == null ? '深度求索中'
-        : '深度求索中，用时 ' + durationText(durationParts(Math.max(1, Math.floor(now / 1000 - startTime)))) + ' ···'
-      return h('div', { className: 'tether-running', 'data-chat-running': true },
-        h('span', { className: 'tether-running-divider', 'data-visible': hasOutput ? 'true' : undefined, 'aria-hidden': true }),
-        h('span', { className: 'tether-running-content' },
-          h('span', { className: 'tether-running-icon', 'aria-hidden': true },
-            h('svg', { width: '100%', height: '100%', viewBox: '0 0 16 16', fill: 'none' },
-              h('path', { d: WHALE_PATH, stroke: 'currentColor', strokeWidth: 1 }))),
-          h(Shimmer, { text: label, active: true, className: 'tether-running-text' })))
+    function RunningStatus({ startTime }) {
+      return h(Native.RunningStatus, { startTime: startTime == null ? undefined : startTime * 1000, t: chatT })
     }
 
     function Turn({ turn, index, live, latest }) {
@@ -308,43 +398,61 @@ window.__ModuleLoader__.load({
         turn.user ? h(UserBubble, { text: turn.user.text }) : null,
         h(ProcessGroup, { blocks: processBlocks, turn, live, latest }),
         texts.length ? h('div', { className: 'tether-body' },
-          texts.map((block, i) => h('div', { key: i, className: 'tether-answer tether-ink' }, h(Markdown, { text: block.text })))) : null,
+          texts.map((block, i) => h('div', { key: i, className: 'tether-answer tether-ink' }, h(Markdown, { text: block.text, streaming: running && i === texts.length - 1 })))) : null,
         running ? h(RunningStatus, { startTime: turn.started_at, paused: false, hasOutput: blocks.length > 0 }) : null
       )
     }
 
-    function Conversation({ data, loading, emptyText, live }) {
+    function Conversation({ data, loading, emptyText, live, sessionKey }) {
       const box = React.useRef(null)
-      const lastLen = React.useRef(0)
-      React.useEffect(() => {
+      const atBottom = React.useRef(true)
+      const activeSession = React.useRef(sessionKey)
+      const lastSnapshot = React.useRef('')
+      React.useLayoutEffect(() => {
         const el = box.current
         if (!el) return
-        const size = JSON.stringify(data && data.turns || []).length
-        if (size !== lastLen.current) {
-          lastLen.current = size
+        const snapshot = JSON.stringify(data && data.turns || [])
+        if (activeSession.current !== sessionKey) {
+          activeSession.current = sessionKey
+          lastSnapshot.current = snapshot
           el.scrollTop = el.scrollHeight
+          atBottom.current = true
+          return
         }
-      }, [data])
+        if (snapshot !== lastSnapshot.current) {
+          lastSnapshot.current = snapshot
+          if (atBottom.current) el.scrollTop = el.scrollHeight
+        }
+      }, [data, sessionKey])
       const turns = (data && data.turns) || []
       if (!turns.length) {
         return h('div', { style: { display: 'grid', placeItems: 'center', flex: '1 1 auto', color: C.mute, fontSize: 13, padding: 30 } }, loading ? '加载中…' : emptyText)
       }
-      return h('div', { ref: box, className: 'tether-scroll', style: { flex: '1 1 auto', overflow: 'auto', padding: '16px 0 24px' } },
+      return h('div', {
+        ref: box, className: 'tether-scroll',
+        onScroll: (event) => {
+          const el = event.currentTarget
+          atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight <= 80
+        },
+        style: { flex: '1 1 auto', overflow: 'auto', padding: '16px 0 24px' }
+      },
         h('div', { className: 'tether-flow' },
           turns.map((turn, i) => h(Turn, { key: i, turn, index: i, live, latest: i === turns.length - 1 }))
         )
       )
     }
 
-    function Composer({ value, onChange, onSend, busy, disabled, note }) {
-      return h('div', { style: { border: 0, padding: '8px 12px 10px', flex: '0 0 auto', background: C.bg } },
-        note ? h('div', { style: { color: C.mute, fontSize: 10.5, margin: '0 2px 5px' } }, note) : null,
-        h('div', { style: { maxWidth: 780, margin: '0 auto', display: 'flex', gap: 8, alignItems: 'flex-end', border: 0, borderRadius: 12, padding: 7, background: C.panel } },
+    function Composer({ value, onChange, onSend, busy, disabled, note, action, placeholder }) {
+      return h('div', { style: { width: '100%', maxWidth: 'calc(var(--dsh-chat-content-width, 748px) + 32px)', boxSizing: 'border-box', padding: '8px 16px 10px', margin: '0 auto', flex: '0 0 auto', background: C.bg } },
+        note || action ? h('div', { style: { display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '4px 10px', color: C.mute, fontSize: 10.5, margin: '0 2px 5px' } },
+          note ? h('span', null, note) : h('span'), action || null
+        ) : null,
+        h('div', { style: { width: '100%', boxSizing: 'border-box', display: 'flex', gap: 8, alignItems: 'flex-end', border: 0, borderRadius: 12, padding: 7, background: C.panel } },
           h('textarea', {
             value, onChange: (ev) => onChange(ev.target.value), disabled,
             onKeyDown: (ev) => { if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); onSend() } },
-            placeholder: disabled ? '选择项目后可发起任务' : '发消息或发起任务…',
-            style: { flex: '1 1 auto', minHeight: 38, maxHeight: 160, resize: 'none', border: 0, outline: 'none', padding: '6px 8px', fontSize: 13.5, lineHeight: '20px', fontFamily: 'inherit', background: 'transparent' }
+            placeholder: placeholder || (disabled ? '选择项目后可发起任务' : '发消息或发起任务…'),
+            style: { flex: '1 1 0', width: 0, minWidth: 0, minHeight: 38, maxHeight: 160, resize: 'none', border: 0, outline: 'none', padding: '6px 8px', fontSize: 13.5, lineHeight: '20px', fontFamily: 'inherit', background: 'transparent' }
           }),
           h('button', {
             onClick: onSend, disabled: disabled || busy || !value.trim(),
@@ -368,86 +476,23 @@ window.__ModuleLoader__.load({
       .tether-scroll:hover::-webkit-scrollbar-thumb { background: var(--dsw-alias-scrollbar-hover-l1, #cbd5e1); }
       .tether-scroll::-webkit-scrollbar-corner { background: transparent; }
       .tether-num { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum' 1; }
+      .tether-spin { animation: tether-spin .8s linear infinite; }
+      @keyframes tether-spin { to { transform: rotate(360deg); } }
+      .tether-node-fill { position: absolute; inset: 0; z-index: 1; border-radius: 50%; corner-shape: round; transition: background-color 160ms ease; }
+      .tether-file-markdown { max-width: 860px; margin: 0 auto; color: var(--dsw-alias-label-primary); font-size: 14px; line-height: 24px; }
+      .tether-file-text { tab-size: 2; }
+      @media (prefers-reduced-motion: reduce) { .tether-spin { animation-duration: 1.6s; } }
       .tether-flow { display: flex; flex-direction: column; max-width: calc(var(--dsh-chat-content-width, 748px) + 32px); width: 100%; margin: 0 auto; padding: 0 16px; box-sizing: border-box; }
       .tether-turn { display: flex; flex-direction: column; min-width: 0; }
       .tether-turn + .tether-turn { margin-top: 24px; }
-      .tether-user-row { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; margin-bottom: 16px; }
-      .tether-user-bubble { max-width: min(calc(var(--dsh-chat-content-width, 748px) * 0.702), 82%); background: var(--dsw-specific-bubble, #f2f4f7); border-radius: var(--dsw-radius-xl, 20px); padding: 10px 16px; font-size: var(--dsh-content-font-size, 14px); line-height: calc(22px + var(--dsh-content-font-delta, 0px)); color: var(--dsw-alias-label-primary, #101828); white-space: pre-wrap; word-break: break-word; }
       .tether-process { display: flex; flex-direction: column; min-width: 0; }
-      .tether-turn-head { box-sizing: border-box; display: flex; align-items: center; width: 100%; min-width: 0; height: calc(33px + var(--dsh-content-font-delta, 0px)); margin: 0 0 16px; padding: 0 0 8px; border: 0; border-bottom: 0.5px solid var(--dsw-alias-border-l2); background: none; color: var(--dsw-alias-label-tertiary); font: inherit; font-size: var(--dsh-content-font-size, 14px); cursor: pointer; text-align: left; transition: color 100ms ease; }
-      .tether-turn-head[data-open] { margin-bottom: 8px; }
-      .tether-turn-head:disabled { cursor: default; }
-      @media (hover: hover) { .tether-turn-head:hover { color: var(--dsw-alias-label-secondary); } }
-      .tether-turn-label { min-width: 0; overflow: hidden; font-size: inherit; line-height: calc(24px + var(--dsh-content-font-delta, 0px)); text-overflow: ellipsis; white-space: nowrap; }
-      .tether-turn-number { font-family: var(--ds-font-family-code, monospace); font-variant-numeric: tabular-nums; }
-      .tether-turn-chev { flex: none; width: 14px; height: 14px; margin-left: 4px; display: grid; place-items: center; color: inherit; transition: transform 100ms ease; }
-      .tether-turn-head[data-open] .tether-turn-chev { transform: rotate(180deg); }
+      .tether-md { min-width: 0; color: var(--dsw-alias-label-primary); }
+      .tether-md-secondary { color: var(--dsw-alias-label-secondary); }
       .tether-proc-list { display: flex; flex-direction: column; gap: 4px; padding: 0 0 4px; }
       .tether-proc { display: flex; flex-direction: column; min-width: 0; }
-      .tether-proc-row { display: flex; align-items: center; min-width: 0; height: calc(24px + var(--dsh-content-font-delta, 0px)); border-radius: var(--dsw-radius-sm, 8px); color: var(--dsw-alias-label-tertiary); font-size: var(--dsh-content-font-size-secondary, 13px); cursor: pointer; transition: color 100ms ease; }
-      @media (hover: hover) { .tether-proc-row:hover { color: var(--dsw-alias-label-secondary); } }
-      .tether-proc-leading { position: relative; flex: none; width: calc(16px + var(--dsh-content-font-delta, 0px)); height: calc(16px + var(--dsh-content-font-delta, 0px)); margin-right: 6px; display: inline-flex; align-items: center; justify-content: center; color: inherit; }
-      .tether-proc-idle { display: inline-flex; opacity: 1; transition: opacity 100ms ease; }
-      .tether-proc-chev { position: absolute; inset: 0; margin: auto; display: grid; place-items: center; opacity: 0; transition: opacity 100ms ease; }
-      @media (hover: hover) { .tether-proc-row:hover .tether-proc-idle { opacity: 0; } .tether-proc-row:hover .tether-proc-chev { opacity: 1; } }
-      .tether-proc-leading[data-open] .tether-proc-idle { opacity: 0; }
-      .tether-proc-leading[data-open] .tether-proc-chev { opacity: 1; transform: rotate(180deg); }
-      .tether-proc-title { flex: none; font-size: var(--dsh-content-font-size-secondary, 13px); line-height: calc(24px + var(--dsh-content-font-delta, 0px)); color: inherit; font-weight: 400; }
-      .tether-proc-sep { flex: none; width: 2px; height: 2px; margin: 0 8px; border-radius: 1px; background: var(--dsw-alias-label-caption); }
-      .tether-proc-summary { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--dsh-content-font-size-secondary, 13px); line-height: calc(24px + var(--dsh-content-font-delta, 0px)); }
-      .tether-proc-think { padding: 4px 0 4px calc(22px + var(--dsh-content-font-delta, 0px)); color: var(--dsw-alias-label-tertiary); font-size: var(--dsh-content-font-size-secondary, 13px); line-height: calc(24px + var(--dsh-content-font-delta, 0px)); }
-      .tether-proc-think .tether-md { font-size: inherit; line-height: inherit; color: inherit; }
-      .tether-proc-think p { margin: 8px 0; }
-      .tether-proc-output { margin: 4px 0 6px calc(22px + var(--dsh-content-font-delta, 0px)); padding: 8px 12px; border: 0.5px solid var(--dsw-alias-border-l1); border-radius: var(--dsw-radius-sm, 8px); background: var(--dsw-alias-markdown-code-block, #f8fafc); color: var(--dsw-alias-label-secondary); font: var(--dsw-font-markdown-code-block-small, 12px/20px var(--ds-font-family-code, monospace)); white-space: pre-wrap; word-break: break-word; max-height: 320px; overflow: auto; }
       .tether-body { display: flex; flex-direction: column; gap: 16px; }
       .tether-process + .tether-body { margin-top: 12px; }
       .tether-answer { min-width: 0; }
-      .tether-md { min-width: 0; overflow-wrap: anywhere; font-family: inherit; font-size: var(--dsh-content-font-size, 14px); line-height: calc(24px + var(--dsh-content-font-delta, 0px)); color: var(--dsw-alias-label-primary, #101828); }
-      .tether-md > :first-child { margin-top: 0 !important; }
-      .tether-md > :last-child { margin-bottom: 0 !important; }
-      .tether-md p { margin: 16px 0; }
-      .tether-md strong { font-weight: 600; }
-      .tether-md h1 { margin: 32px 0 16px; font-size: calc(21px + var(--dsh-content-font-delta, 0px)); line-height: calc(30px + var(--dsh-content-font-delta, 0px)); font-weight: 700; }
-      .tether-md h2 { margin: 32px 0 16px; font-size: calc(19px + var(--dsh-content-font-delta, 0px)); line-height: calc(28px + var(--dsh-content-font-delta, 0px)); font-weight: 700; }
-      .tether-md h3 { margin: 32px 0 16px; font-size: calc(18px + var(--dsh-content-font-delta, 0px)); line-height: calc(26px + var(--dsh-content-font-delta, 0px)); font-weight: 700; }
-      .tether-md h4 { margin: 16px 0; font-size: var(--dsh-content-font-size, 14px); line-height: calc(24px + var(--dsh-content-font-delta, 0px)); font-weight: 600; }
-      .tether-md ul, .tether-md ol { margin: 16px 0; padding-left: 18px; }
-      .tether-md li:not(:first-child) { margin-top: 6px; }
-      .tether-md li::marker { line-height: 24px; color: var(--dsw-alias-label-secondary); }
-      .tether-md :not(pre) > code { display: inline-flex; align-items: center; box-sizing: border-box; padding: 0 5px; border: 0.5px solid var(--dsw-alias-border-l1); border-radius: var(--dsw-radius-sm, 8px); background-color: var(--dsw-alias-markdown-inline-code, #f7f7f8); font-family: var(--ds-font-family-code, monospace); font-size: 0.875em; }
-      .tether-md a { color: var(--dsw-alias-link, #344054); font-weight: 500; text-decoration: none; }
-      .tether-md a:hover { text-decoration: underline dotted; text-underline-offset: 3px; }
-      .tether-md blockquote { margin: 16px 0; padding-left: 14px; border-left: 2px solid var(--dsw-alias-label-caption); }
-      .tether-md hr { height: 0.5px; margin: 32px 0; border: 0; background: var(--dsw-alias-border-l2); }
-      .tether-code { margin: 16px 0; background: var(--dsw-alias-markdown-code-block, #f8fafc); border-radius: var(--dsw-radius-lg, 12px); overflow: hidden; }
-      .tether-code-banner { padding: 9px 14px; background: var(--dsw-alias-markdown-code-block-banner, #f2f4f7); color: var(--dsw-alias-label-primary); font-family: var(--ds-font-family-code, monospace); font-size: 11px; line-height: 18px; }
-      .tether-code pre { margin: 0; padding: 12px 14px; overflow: auto; color: var(--dsw-alias-label-primary); font-family: var(--ds-font-family-code, monospace); font-size: calc(var(--dsh-content-font-size, 14px) - 2px); line-height: calc(20px + var(--dsh-content-font-delta, 0px)); }
-      .tether-code code { padding: 0; border: 0; background: none; font: inherit; }
-      .tether-table { margin: 16px 0; overflow-x: auto; }
-      .tether-table table { width: 100%; border-collapse: collapse; }
-      .tether-table th, .tether-table td { min-width: 100px; padding: 10px 16px; text-align: start; font-size: var(--dsh-content-font-size-secondary, 13px); line-height: calc(22px + var(--dsh-content-font-delta-secondary, 0px)); }
-      .tether-table th { border-bottom: 0.5px solid var(--dsw-alias-border-l3); font-weight: 500; }
-      .tether-table td { border-bottom: 0.5px solid var(--dsw-alias-border-l2); }
-      .tether-table th:first-child, .tether-table td:first-child { padding-left: 0; }
-      .tether-table td:last-child { padding-right: 0; }
-      .tether-running { --dsw-alias-label-shimmer: var(--dsw-alias-label-deep-diving-shimmer, rgba(16, 24, 40, 0.3)); position: relative; display: flex; flex-direction: column; align-items: flex-start; margin-top: 12px; color: var(--dsw-alias-label-deep-diving, #4b6bfb); font-size: calc(var(--dsh-content-font-size, 14px) - 2px); line-height: calc(22px + var(--dsh-content-font-delta, 0px)); }
-      .tether-process + .tether-running { margin-top: 12px; }
-      .tether-running-divider { position: absolute; top: -4px; left: 0; right: 0; height: 0.5px; background: color-mix(in srgb, var(--dsw-alias-border-l1) 75%, var(--dsw-alias-border-l2)); opacity: 0; pointer-events: none; transition: opacity 160ms ease; }
-      .tether-running-divider[data-visible] { opacity: 1; }
-      .tether-running-content { display: inline-flex; align-items: center; min-width: 0; gap: 6px; margin-top: 4px; height: calc(28px + var(--dsh-content-font-delta, 0px)); }
-      .tether-running-icon { position: relative; display: inline-flex; flex: none; width: calc(14px + var(--dsh-content-font-delta, 0px)); height: calc(14px + var(--dsh-content-font-delta, 0px)); contain: strict; overflow: hidden; }
-      .tether-running-text { min-width: 0; font-variant-numeric: tabular-nums; }
-      .tether-proc-summary .tether-shimmer { display: block; width: 100%; }
-      .tether-proc-summary .tether-shimmer-content { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .tether-proc-summary .tether-shimmer-cover { overflow: hidden; }
-      .tether-proc-summary .tether-shimmer-hi { justify-content: flex-start; white-space: nowrap; }
-      .tether-shimmer { position: relative; display: inline-grid; width: max-content; max-width: 100%; min-width: 0; vertical-align: top; color: inherit; }
-      .tether-shimmer-content { display: flex; align-items: center; min-width: 0; }
-      .tether-shimmer-cover { position: absolute; inset: 0; overflow: clip; pointer-events: none; user-select: none; }
-      .tether-shimmer-sweep { position: absolute; inset: 0; overflow: hidden; color: var(--dsw-alias-label-shimmer, rgba(16, 24, 40, 0.3)); mask-image: linear-gradient(105deg, transparent 0%, black 40% 60%, transparent 100%); transform: translateX(-100%); animation: tether-shimmer-sweep 1.5s steps(48, end) 0.3s infinite; }
-      .tether-shimmer-hi { display: flex; align-items: center; width: 100%; height: 100%; transform: translateX(100%); animation: tether-shimmer-hi 1.5s steps(48, end) 0.3s infinite; }
-      @keyframes tether-shimmer-sweep { 0% { transform: translateX(-100%); } 66.6667%, 100% { transform: translateX(100%); } }
-      @keyframes tether-shimmer-hi { 0% { transform: translateX(100%); } 66.6667%, 100% { transform: translateX(-100%); } }
       .tether-ink { animation: tether-ink 300ms cubic-bezier(.2,.7,.2,1) both; }
       @keyframes tether-ink {
         from { opacity: 0; filter: blur(3px); transform: translateY(4px); }
@@ -460,20 +505,18 @@ window.__ModuleLoader__.load({
       .tether-root button:focus-visible, .tether-root [role=button]:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary, #1570ef); outline-offset: 2px; }
       .tether-hover:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(38,49,72,.06)) !important; }
       .tether-resizer { position: relative; }
-      .tether-resizer::after { content: ''; position: absolute; top: 0; right: 2px; width: 1px; height: 100%; background: transparent; transition: background 120ms ease; }
-      .tether-resizer:hover::after, .tether-resizer:active::after, .tether-resizer[data-active="true"]::after { background: var(--dsw-alias-state-business-primary, #1570ef); }
-      @media (prefers-reduced-motion: reduce) { .tether-ink { animation: none; } .tether-press { transition: none; } .tether-shimmer-cover { display: none; } .tether-shimmer-sweep, .tether-shimmer-hi { animation: none; } }
+      @media (prefers-reduced-motion: reduce) { .tether-ink { animation: none; } .tether-press { transition: none; } }
     `
 
     const UI = {
       activity: 44,
       row: 32,
       pad: 8,
-      radius: 6,
+      radius: 'var(--dsw-radius-md, 8px)',
       radiusCard: 8,
-      icon: 12,
-      font: 12.5,
-      header: 11,
+      icon: 16,
+      font: 14,
+      header: 12,
       gapRow: 1,
       gapGroup: 10,
       minSide: 210,
@@ -515,6 +558,33 @@ window.__ModuleLoader__.load({
       ] },
       settings: { join: 'round', parts: [
         { d: 'M6.80132 2.14853C7.70663 1.80917 8.70422 1.80919 9.60952 2.14859L14.1296 3.84317V7.11961C14.1296 11.6089 10.7615 13.5975 8.20543 14.5779C5.64931 13.5975 2.28052 11.6089 2.28052 7.11961V3.84317L6.80132 2.14853Z' }
+      ] },
+      monitor: { parts: [
+        { d: 'M2 3.2h12v8.1H2z' },
+        { d: 'M6 13.8h4M8 11.3v2.5' }
+      ] },
+      refresh: { parts: [
+        { d: 'M13 8a5 5 0 1 1-1.5-3.56' },
+        { d: 'M13.2 2.3v3.1h-3.1' }
+      ] },
+      pencil: { parts: [
+        { d: 'M10.8 2.6l2.6 2.6-7.7 7.7-3.4.8.8-3.4z' },
+        { d: 'M9.4 4l2.6 2.6' }
+      ] },
+      trash: { parts: [
+        { d: 'M2.8 4.2h10.4M6 4.2V2.6h4v1.6M4.1 4.2l.7 9.2h6.4l.7-9.2' },
+        { d: 'M6.8 6.7v4.6M9.2 6.7v4.6' }
+      ] },
+      arrowUp: { parts: [
+        { d: 'M8 13V3M3.6 7.4L8 3l4.4 4.4' }
+      ] },
+      back: { parts: [
+        { d: 'M10.2 3.2L5.4 8l4.8 4.8' }
+      ] },
+      save: { parts: [
+        { d: 'M3 2.4h8.2L13.4 4.6v9H3z' },
+        { d: 'M5.4 2.4v3.2h5V2.4' },
+        { d: 'M5.4 9.2h5.2v4.4H5.4z' }
       ] },
       plus: { parts: [
         { d: 'M8 2V14' },
@@ -569,9 +639,9 @@ window.__ModuleLoader__.load({
 
     function ActivityBar({ active, collapsed, onSelect, onSettings, settingsOpen }) {
       const items = [
-        { id: 'workspaces', label: '工作区', icon: 'workspace' },
-        { id: 'files', label: '文件', icon: 'files' },
-        { id: 'devices', label: '设备', icon: 'devices' }
+        { id: 'workspaces', label: '原生工作区', icon: 'monitor' },
+        { id: 'files', label: '文件资源管理器', icon: 'files' },
+        { id: 'network', label: '互联', icon: 'devices' }
       ]
       const button = (id, label, icon, onClick, selected) => h('button', {
         key: id, title: label, 'aria-label': label, onClick, className: 'tether-press tether-hover',
@@ -591,10 +661,11 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function SidePanelHeader({ title, action, onCollapse }) {
-      return h('div', { style: { display: 'flex', alignItems: 'center', height: UI.row, flex: '0 0 auto', padding: '0 ' + UI.pad + 'px', gap: 2 } },
-        h('span', { style: { fontSize: UI.header, fontWeight: 'var(--tether-strong, 600)', color: C.mute, letterSpacing: 0.4 } }, title),
+    function SidePanelHeader({ title, action, onCollapse, loading }) {
+      return h('div', { style: { display: 'flex', alignItems: 'center', height: 36, flex: '0 0 auto', padding: '0 ' + UI.pad + 'px', gap: 4 } },
+        h('span', { style: { fontSize: 13, lineHeight: '20px', fontWeight: 'var(--tether-body, 400)', color: C.mute } }, title),
         h('span', { style: { marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 2 } },
+          loading ? h('span', { className: 'tether-spin', style: { width: 14, height: 14, display: 'grid', placeItems: 'center', color: C.mute } }, h(Glyph, { name: 'refresh', size: 14 })) : null,
           action,
           h('button', {
             title: '收起侧栏', 'aria-label': '收起侧栏', onClick: onCollapse, className: 'tether-hover',
@@ -620,7 +691,7 @@ window.__ModuleLoader__.load({
           className: 'tether-hover',
           style: { width: 18, height: 18, flex: '0 0 auto', display: 'grid', placeItems: 'center', border: 0, borderRadius: 4, background: 'transparent', color: C.mute, cursor: 'pointer' }
         }, h(Glyph, { name: toggle, size: 14 })) : null,
-        icon ? h('span', { style: { width: UI.icon, height: UI.icon, display: 'grid', placeItems: 'center', color: iconColor || C.mute, flex: '0 0 auto' } }, typeof icon === 'string' ? h(Glyph, { name: icon, size: 14 }) : icon) : null,
+        icon ? h('span', { style: { width: UI.icon, height: UI.icon, display: 'grid', placeItems: 'center', color: iconColor || C.mute, flex: '0 0 auto' } }, typeof icon === 'string' ? h(Glyph, { name: icon, size: 16 }) : icon) : null,
         h('span', { style: { minWidth: 0, flex: '1 1 auto', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: '18px' } }, title),
         right ? h('span', { className: 'tether-num', style: { flex: '0 0 auto', fontSize: 10, color: C.mute, whiteSpace: 'nowrap' } }, right) : null,
         action ? h('button', {
@@ -633,114 +704,312 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function FileTree({ roots, children, open, onToggle, onOpenFile, selected }) {
-      const rows = []
-      const walk = (node, depth) => {
-        const isDir = node.dir !== false
-        const expanded = !!open[node.path]
-        const kids = children[node.path]
-        const color = selected === node.path ? C.ink : C.ink
-        rows.push(h('div', {
-          key: node.path, role: 'button', tabIndex: 0, title: node.path,
-          onClick: () => isDir ? onToggle(node) : onOpenFile(node),
-          onKeyDown: (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); if (isDir) onToggle(node); else onOpenFile(node) } },
-          className: 'tether-press tether-hover',
-          style: {
-            display: 'flex', alignItems: 'center', gap: 6, minHeight: 28, boxSizing: 'border-box',
-            padding: '4px ' + UI.pad + 'px 4px ' + (UI.pad + (depth + 1) * 12) + 'px', borderRadius: 5,
-            background: selected === node.path ? C.active : 'transparent', color, fontSize: 12.5, cursor: 'pointer', minWidth: 0
+    function NativeSessionRow({ session, selected, onClick }) {
+      const node = {
+        id: session.session_id,
+        title: session.title || '',
+        blank: session.type === 'fresh',
+        running: session.status === 'running' || session.state === 'running',
+        runningSubagentCount: 0,
+        completed: false,
+        pinned: false,
+        archived: session.status === 'archived',
+        updatedAt: (session.updated_at || 0) * 1000,
+        cwd: session.cwd || session.workspace || undefined
+      }
+      return h(Native.SessionNodeItem, {
+        node, currentId: selected ? node.id : undefined, now: Date.now(),
+        onOpen: onClick, renderSlot: () => null, disableActions: true,
+        useSessionAccess: () => false, t: workspaceT
+      })
+    }
+
+    function NetworkGraph({ devices, localId, selectedId, onSelect, onOpen, onContextMenu }) {
+      const stage = React.useRef(null)
+      const nodesRef = React.useRef([])
+      const dragRef = React.useRef(null)
+      const frameRef = React.useRef(0)
+      const centerIdRef = React.useRef('')
+      const [nodes, setNodes] = React.useState([])
+      const [zoom, setZoom] = React.useState(1)
+      const posZoom = zoom <= 1 ? 0.72 + 0.28 * zoom : zoom
+      const key = devices.map((item) => item.device_id).join('|')
+      const centerId = (devices.find((item) => item.device_id === localId) || devices[0] || {}).device_id || ''
+      centerIdRef.current = centerId
+      const update = (next) => { nodesRef.current = next; setNodes(next) }
+      const kick = () => { if (!frameRef.current) frameRef.current = requestAnimationFrame(animate) }
+      React.useEffect(() => {
+        const center = devices.find((item) => item.device_id === localId) || devices[0]
+        const remotes = center ? devices.filter((item) => item.device_id !== center.device_id) : []
+        const radius = Math.min(40, 34 + remotes.length * 2)
+        const next = devices.map((item) => {
+          const index = remotes.findIndex((candidate) => candidate.device_id === item.device_id)
+          const angle = index < 0 ? 0 : (-90 + index * (360 / Math.max(1, remotes.length))) * Math.PI / 180
+          return { id: item.device_id, x: index < 0 ? 50 : 50 + Math.cos(angle) * radius, y: index < 0 ? 50 : 50 + Math.sin(angle) * radius, vx: 0, vy: 0 }
+        })
+        update(next)
+        if (frameRef.current) { cancelAnimationFrame(frameRef.current); frameRef.current = 0 }
+        kick()
+      }, [key, localId])
+      React.useEffect(() => {
+        const el = stage.current
+        if (!el) return undefined
+        const onWheel = (event) => {
+          event.preventDefault()
+          setZoom((value) => clamp(value * Math.pow(0.998, event.deltaY), 0.4, 1.2))
+        }
+        el.addEventListener('wheel', onWheel, { passive: false })
+        return () => el.removeEventListener('wheel', onWheel)
+      }, [])
+      React.useEffect(() => () => { if (frameRef.current) cancelAnimationFrame(frameRef.current) }, [])
+      function animate() {
+        const list = nodesRef.current.map((node) => ({ ...node }))
+        if (!list.length) { frameRef.current = 0; return }
+        const byId = new Map(list.map((node) => [node.id, node]))
+        const center = byId.get(centerIdRef.current)
+        const fx = new Map(list.map((node) => [node.id, 0]))
+        const fy = new Map(list.map((node) => [node.id, 0]))
+        let moving = false
+        for (const node of list) {
+          if (dragRef.current && dragRef.current.id === node.id) continue
+          fx.set(node.id, fx.get(node.id) + (50 - node.x) * 0.0006)
+          fy.set(node.id, fy.get(node.id) + (50 - node.y) * 0.0006)
+          if (!center || node.id === center.id) continue
+          const dx = center.x - node.x
+          const dy = center.y - node.y
+          const distance = Math.max(0.001, Math.hypot(dx, dy))
+          const pull = (distance - 40) * 0.0035 + Math.max(0, distance - 55) * 0.01
+          fx.set(node.id, fx.get(node.id) + dx / distance * pull)
+          fy.set(node.id, fy.get(node.id) + dy / distance * pull)
+          fx.set(center.id, fx.get(center.id) - dx / distance * pull * 0.22)
+          fy.set(center.id, fy.get(center.id) - dy / distance * pull * 0.22)
+        }
+        for (let i = 0; i < list.length; i += 1) {
+          for (let j = i + 1; j < list.length; j += 1) {
+            const dx = list[j].x - list[i].x
+            const dy = list[j].y - list[i].y
+            const distance = Math.max(0.001, Math.hypot(dx, dy))
+            if (distance >= 15) continue
+            const push = (15 - distance) * 0.004
+            fx.set(list[i].id, fx.get(list[i].id) - dx / distance * push)
+            fy.set(list[i].id, fy.get(list[i].id) - dy / distance * push)
+            fx.set(list[j].id, fx.get(list[j].id) + dx / distance * push)
+            fy.set(list[j].id, fy.get(list[j].id) + dy / distance * push)
           }
-        },
-          h('span', { style: { width: 12, flex: '0 0 auto', display: 'grid', placeItems: 'center', color: C.mute } },
-            isDir ? h(Glyph, { name: expanded ? 'chevronDown' : 'chevronRight', size: 14 }) : null),
-          h('span', { style: { width: 12, flex: '0 0 auto', display: 'grid', placeItems: 'center', color: C.mute } },
-            h(Glyph, { name: isDir ? (expanded ? 'folderOpen' : 'folderClose') : 'file', size: 16 })),
-          h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: '1 1 auto', minWidth: 0 } }, node.name || node.path),
-          !isDir && node.size != null ? h('span', { className: 'tether-num', style: { flex: '0 0 auto', fontSize: 10, color: C.mute } }, formatBytes(node.size)) : null
-        ))
-        if (isDir && expanded) {
-          if (kids === undefined) rows.push(h('div', { key: node.path + ':loading', style: { padding: '3px ' + UI.pad + 'px 3px ' + (UI.pad + (depth + 2) * 12) + 'px', fontSize: 11.5, color: C.mute } }, '加载中…'))
-          else kids.forEach((child) => walk(child, depth + 1))
+        }
+        for (const node of list) {
+          if (dragRef.current && dragRef.current.id === node.id) { moving = true; continue }
+          node.vx = (node.vx + fx.get(node.id)) * 0.95
+          node.vy = (node.vy + fy.get(node.id)) * 0.95
+          node.x = clamp(node.x + node.vx, 4, 96)
+          node.y = clamp(node.y + node.vy, 7, 93)
+          if (node.x <= 4 || node.x >= 96) node.vx *= -0.35
+          if (node.y <= 7 || node.y >= 93) node.vy *= -0.35
+          if (Math.abs(node.vx) + Math.abs(node.vy) > 0.002) moving = true
+        }
+        update(list)
+        frameRef.current = moving ? requestAnimationFrame(animate) : 0
+      }
+      const startDrag = (event, item) => {
+        if (event.button !== 0) return
+        event.preventDefault(); event.stopPropagation()
+        onSelect(item)
+        const node = nodesRef.current.find((candidate) => candidate.id === item.device_id)
+        dragRef.current = { id: item.device_id, lastX: node ? node.x : 50, lastY: node ? node.y : 50, vx: 0, vy: 0 }
+        event.currentTarget.setPointerCapture?.(event.pointerId)
+        kick()
+      }
+      const moveDrag = (event) => {
+        const drag = dragRef.current
+        if (!drag || !stage.current) return
+        const rect = stage.current.getBoundingClientRect()
+        if (!rect.width || !rect.height) return
+        const x = clamp(50 + (((event.clientX - rect.left) / rect.width * 100) - 50) / posZoom, 4, 96)
+        const y = clamp(50 + (((event.clientY - rect.top) / rect.height * 100) - 50) / posZoom, 7, 93)
+        drag.vx = x - drag.lastX
+        drag.vy = y - drag.lastY
+        drag.lastX = x; drag.lastY = y
+        update(nodesRef.current.map((node) => node.id === drag.id ? { ...node, x, y, vx: drag.vx * 0.8, vy: drag.vy * 0.8 } : node))
+        kick()
+      }
+      const endDrag = () => {
+        if (!dragRef.current) return
+        dragRef.current = null
+        kick()
+      }
+      const screen = (node) => ({ x: 50 + (node.x - 50) * posZoom, y: 50 + (node.y - 50) * posZoom })
+      const center = nodes.find((node) => node.id === centerId) || nodes[0]
+      const remotes = center ? nodes.filter((node) => node.id !== center.id) : []
+      const lookup = new Map(devices.map((item) => [item.device_id, item]))
+      const compact = zoom < 0.72
+      const linkPoints = (from, to, fromId, toId) => {
+        const el = stage.current
+        const rect = el && el.getBoundingClientRect()
+        if (!rect || !rect.width || !rect.height) return { x1: from.x, y1: from.y, x2: to.x, y2: to.y }
+        const a = { x: from.x / 100 * rect.width, y: from.y / 100 * rect.height }
+        const b = { x: to.x / 100 * rect.width, y: to.y / 100 * rect.height }
+        const dx = b.x - a.x
+        const dy = b.y - a.y
+        const length = Math.hypot(dx, dy)
+        if (!length) return null
+        const inset = (id) => {
+          const isCenter = center && center.id === id
+          if (compact) return isCenter ? 9 : 6
+          return isCenter ? 14 : 3
+        }
+        const start = inset(fromId)
+        const end = inset(toId)
+        if (length <= start + end + 1) return null
+        const ux = dx / length
+        const uy = dy / length
+        return {
+          x1: (a.x + ux * start) / rect.width * 100,
+          y1: (a.y + uy * start) / rect.height * 100,
+          x2: (b.x - ux * end) / rect.width * 100,
+          y2: (b.y - uy * end) / rect.height * 100
         }
       }
+      const centerItem = center ? lookup.get(center.id) : null
+      return h('div', { ref: stage, style: { position: 'absolute', inset: 0, overflow: 'hidden', touchAction: 'none' } },
+        h('div', { style: { position: 'absolute', left: 14, top: 12, fontSize: 12, color: C.mute } }, '网络'),
+        h('svg', { viewBox: '0 0 100 100', preserveAspectRatio: 'none', style: { position: 'absolute', inset: 0, width: '100%', height: '100%' } },
+          remotes.map((node) => {
+            const item = lookup.get(node.id)
+            const from = center ? screen(center) : { x: 50, y: 50 }
+            const to = screen(node)
+            const points = linkPoints(from, to, center && center.id, node.id)
+            if (!points) return null
+            const linked = !!(centerItem && centerItem.online && item && item.online)
+            return h('line', { key: 'line:' + node.id, ...points, stroke: C.mute, strokeWidth: 0.3, strokeDasharray: linked ? undefined : '1.5 1.5', opacity: linked ? 0.6 : 0.3 })
+          })
+        ),
+        nodes.map((node) => {
+          const item = lookup.get(node.id) || { device_id: node.id, name: node.id, online: false }
+          const isCenter = center && center.id === node.id
+          const selected = node.id === selectedId
+          const pos = screen(node)
+          return h('div', {
+            key: 'node:' + node.id,
+            onPointerDown: (event) => startDrag(event, item),
+            onPointerMove: moveDrag,
+            onPointerUp: endDrag,
+            onPointerCancel: endDrag,
+            onDoubleClick: () => onOpen(item),
+            onContextMenu: (event) => { event.preventDefault(); event.stopPropagation(); if (onContextMenu) onContextMenu(event, item) },
+            title: item.name || item.device_id,
+            style: compact ? {
+              position: 'absolute', left: pos.x + '%', top: pos.y + '%', transform: 'translate(-50%, -50%)',
+              zIndex: isCenter ? 3 : 2, width: isCenter ? 22 : 16, height: isCenter ? 22 : 16,
+              borderRadius: '50%', cornerShape: 'round', border: 0, padding: 0, background: 'transparent',
+              opacity: item.online ? 1 : 0.46, cursor: 'grab', userSelect: 'none'
+            } : {
+              position: 'absolute', left: pos.x + '%', top: pos.y + '%', transform: 'translate(-50%, -50%)',
+              zIndex: isCenter ? 3 : 2, display: 'flex', alignItems: 'center', gap: 6,
+              padding: isCenter ? '8px 12px' : '6px 9px', borderRadius: 999,
+              background: isCenter ? C.ink : (selected ? C.nodeChildActive : C.nodeChild), color: isCenter ? C.onPrimary : C.ink,
+              fontSize: isCenter ? 12 : 11, boxShadow: isCenter ? C.shadow : (selected ? '0 1px 3px rgba(16,24,40,0.12)' : '0 1px 2px rgba(16,24,40,0.06)'),
+              transition: 'background-color 160ms ease',
+              cursor: 'grab', whiteSpace: 'nowrap', opacity: item.online ? 1 : 0.55, userSelect: 'none'
+            }
+          },
+            compact
+              ? h('span', {
+                className: 'tether-node-fill',
+                'data-center': isCenter ? 'true' : undefined,
+                'data-selected': selected ? 'true' : undefined,
+                style: {
+                  background: isCenter ? C.ink : (selected ? C.nodeChildActive : C.nodeChild),
+                  borderRadius: '50%', cornerShape: 'round', pointerEvents: 'none'
+                }
+              })
+              : h('span', { style: { width: 7, height: 7, borderRadius: 4, background: item.online ? C.green : C.mute, display: 'inline-block', flex: '0 0 auto' } }),
+            compact ? null : (item.name || item.device_id))
+        }),
+        h('div', { onClick: () => setZoom(1), title: '重置缩放', style: { position: 'absolute', right: 12, bottom: 10, zIndex: 4, fontSize: 10, color: C.mute, background: C.layer1, borderRadius: 999, padding: '2px 7px', cursor: 'pointer' } }, Math.round(zoom * 100) + '%'),
+        !devices.length ? h('div', { style: { position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: C.mute, fontSize: 12 } }, '暂无设备') : null
+      )
+    }
+
+    function FileTree({ roots, children, open, onToggle, onOpenFile, onContextMenuNode, selected }) {
+      const rows = []
+      const walk = (node, depth, ancestors) => {
+        const isDir = node.dir !== false
+        const normalizedPath = normPath(node.path)
+        const isCycle = isDir && ancestors.has(normalizedPath)
+        const expanded = !isCycle && !!open[node.id]
+        const cached = children[node.cacheKey]
+        const kids = cached && cached.status === 'loaded' ? cached.entries : undefined
+        const parentPath = String(node.path || '').replace(/[\\/]+$/, '').replace(/[\\/][^\\/]+$/, '')
+        const entryName = node.name || pathBasename(node.path)
+        const nativeRow = Native.FileEntryRow({
+          parent: parentPath,
+          entry: { name: entryName, type: isDir ? 'directory' : 'file' },
+          tree: {
+            state: { expanded: expanded ? [node.path, parentPath + '/' + entryName, parentPath + '\\' + entryName] : [] },
+            onToggle: () => onToggle(node), onOpen: () => onOpenFile(node), t: (key) => key
+          }, expanded
+        })
+        const row = React.cloneElement(nativeRow, {
+          title: node.path, 'data-tree-node-id': node.id,
+          'aria-expanded': isDir ? expanded : undefined,
+          className: nativeRow.props.className + ' tether-press tether-hover',
+          style: {
+            ...nativeRow.props.style, marginLeft: depth * 12, borderRadius: 'var(--dsw-radius-md)',
+            background: selected === node.id ? C.active : nativeRow.props.style && nativeRow.props.style.background,
+            color: C.ink, fontSize: 14
+          }
+        })
+        rows.push(h('div', {
+          key: node.id,
+          onContextMenu: (event) => { if (onContextMenuNode) onContextMenuNode(event, node) },
+          style: { display: 'flex', alignItems: 'center', minWidth: 0 }
+        },
+          row,
+          !isDir && node.size != null ? h('span', { className: 'tether-num', style: { flex: '0 0 auto', paddingRight: 10, fontSize: 10, color: C.mute } }, formatBytes(node.size)) : null
+        ))
+        if (isDir && expanded) {
+          if (!cached || cached.status === 'loading') rows.push(h('div', { key: node.id + ':loading', style: { padding: '3px ' + UI.pad + 'px 3px ' + (UI.pad + (depth + 2) * 12) + 'px', fontSize: 11.5, color: C.mute } }, '加载中…'))
+          else if (cached.status === 'error') rows.push(h('button', { key: node.id + ':error', onClick: (ev) => { ev.stopPropagation(); onToggle(node, true) }, style: { border: 0, background: 'transparent', padding: '3px ' + UI.pad + 'px 3px ' + (UI.pad + (depth + 2) * 12) + 'px', color: C.red, fontSize: 11.5, cursor: 'pointer' } }, '加载失败，点击重试'))
+          else if (!kids.length) rows.push(h('div', { key: node.id + ':empty', style: { padding: '3px ' + UI.pad + 'px 3px ' + (UI.pad + (depth + 2) * 12) + 'px', fontSize: 11.5, color: C.mute } }, '空文件夹'))
+          else {
+            const nextAncestors = new Set(ancestors)
+            nextAncestors.add(normalizedPath)
+            const seen = new Set()
+            kids.forEach((child) => {
+              const childPath = normPath(child.path)
+              if (!childPath || seen.has(childPath) || nextAncestors.has(childPath)) return
+              seen.add(childPath)
+              walk({ ...child, id: treeNodeId(node.deviceId, node.groupId, node.workspaceId, child.path), cacheKey: treeCacheKey(node.deviceId, child.path), deviceId: node.deviceId, groupId: node.groupId, workspaceId: node.workspaceId }, depth + 1, nextAncestors)
+            })
+          }
+        }
+      }
+      const groupStyle = { display: 'flex', alignItems: 'center', height: 36, padding: '0 ' + UI.pad + 'px', fontSize: 13, lineHeight: '20px', fontWeight: 'var(--tether-body, 400)', color: C.mute }
       roots.forEach((group) => {
-        rows.push(h('div', { key: 'g:' + group.id, style: { fontSize: UI.header, fontWeight: 'var(--tether-strong, 600)', color: C.mute, letterSpacing: 0.4, margin: (group.first ? 2 : UI.gapGroup) + 'px ' + UI.pad + 'px 4px' } }, group.label))
-        group.nodes.forEach((node) => walk(node, 0))
+        rows.push(h('div', { key: 'g:' + group.id, style: { ...groupStyle, marginTop: group.first ? 0 : 8 } }, group.label))
+        ;(group.groups || []).forEach((subgroup) => {
+          rows.push(h('div', { key: 'g:' + subgroup.id, style: { ...groupStyle, marginTop: 8 } }, subgroup.label))
+          subgroup.nodes.forEach((node) => walk(node, 0, new Set()))
+        })
+        ;(group.nodes || []).forEach((node) => walk(node, 0, new Set()))
       })
       return h('div', null, rows)
     }
 
     function SidePanel(props) {
-      const {
-        panel, width, hidden, resizing, onResizeStart, onResetWidth, onCollapse,
-        devices, localDevice, deviceId, onSelectDevice,
-        workspaces, openWorkspaces, onToggleWorkspace, onSelectWorkspace, selectedWorkspacePath,
-        onNewWorkspace, newWorkspaceDisabled, onNewSession, ungrouped, freshSession,
-        sessionId, runId, onSelectSession, onSelectRun,
-        treeRoots, treeChildren, treeOpen, onToggleTree, onOpenFile, treeSelected
-      } = props
-      const title = panel === 'devices' ? '设备' : (panel === 'files' ? '文件' : '工作区')
-      const action = panel === 'workspaces' ? h('button', {
-        title: newWorkspaceDisabled ? '当前节点不支持新建工作区' : '新建工作区', 'aria-label': '新建工作区',
-        onClick: onNewWorkspace, disabled: newWorkspaceDisabled, className: 'tether-hover',
-        style: { width: 26, height: 26, display: 'grid', placeItems: 'center', border: 0, borderRadius: UI.radius, background: 'transparent', color: newWorkspaceDisabled ? C.mute : C.mute, cursor: newWorkspaceDisabled ? 'not-allowed' : 'pointer' }
-      }, h(Glyph, { name: 'plus', size: 16 })) : null
-
-      const section = (id, content) => h('div', {
-        className: 'tether-scroll', 'data-panel': id,
-        style: { display: panel === id ? 'block' : 'none', flex: '1 1 auto', minHeight: 0, overflowY: 'auto', padding: '2px ' + UI.pad + 'px ' + UI.pad + 'px' }
-      }, content)
-
-      const deviceRows = devices.map((d) => h(SideRow, {
-        key: d.device_id, selected: d.device_id === deviceId, title: d.name || d.device_id,
-        onClick: () => onSelectDevice(d.device_id),
-        icon: 'devices', iconColor: d.online ? C.green : C.mute,
-        hint: d.device_id === localDevice ? 'local' : null,
-        right: d.online ? null : 'offline'
-      }))
-
-      const sessionRow = (s, indent) => h(SideRow, {
-        key: s.key, selected: s.type === 'fresh' ? freshSession : (s.key === (s.type === 'run' ? 'run:' + runId : 'session:' + sessionId)),
-        title: s.title || s.session_id || s.run_id,
-        onClick: () => s.type === 'run' ? onSelectRun(s) : (s.type === 'fresh' ? null : onSelectSession(s)),
-        indent, icon: 'chat',
-        iconColor: s.status === 'running' || s.state === 'running' || s.type === 'fresh' ? C.blue : (s.state === 'failed' || s.status === 'failed' ? C.red : C.green),
-        hint: s.source === 'Tether' ? 'Tether' : 'DSH',
-        right: s.type === 'run' ? s.state : (s.type === 'fresh' ? '新会话' : (s.status === 'running' ? '运行中' : timeText((s.updated_at || 0) * 1000)))
-      })
-
-      const workspaceRows = workspaces.map((w) => {
-        const open = openWorkspaces[w.path] !== false
-        return h(React.Fragment, { key: w.path },
-          h(SideRow, {
-            selected: selectedWorkspacePath === w.path, title: w.name, onClick: () => onSelectWorkspace(w),
-            icon: 'workspace', iconColor: C.mute, hint: w.source,
-            toggle: open ? 'chevronDown' : 'chevronRight', onToggle: () => onToggleWorkspace(w.path),
-            action: 'plus', actionTitle: '新建会话', onAction: () => onNewSession(w)
-          }),
-          open ? (w.sessions || []).map((s) => sessionRow(s, 1)) : null
-        )
-      })
-      const ungroupedRows = (ungrouped || []).map((s) => sessionRow(s, 0))
-
-      const fileRoots = treeRoots || []
+      const { width, hidden, resizing, onResizeStart, onResetWidth, onCollapse,
+        treeRoots, treeChildren, treeOpen, onToggleTree, onOpenFile, onContextMenuNode, treeSelected,
+        loadingTree } = props
       return h('aside', {
-        'aria-label': title,
+        'aria-label': '文件',
         style: { display: hidden ? 'none' : 'flex', width, flex: '0 0 auto', minHeight: 0, borderRight: 0, background: C.panel, flexDirection: 'column', position: 'relative', transition: resizing ? 'none' : 'width 180ms cubic-bezier(.2,.85,.2,1.15)', willChange: 'width' }
       },
-        h(SidePanelHeader, { title, action, onCollapse }),
-        h('div', { style: { flex: '1 1 auto', minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' } },
-          section('devices', h('div', { style: { display: 'grid', gap: UI.gapRow } }, deviceRows, !deviceRows.length ? h('div', { style: { color: C.mute, fontSize: 11.5, padding: '6px ' + UI.pad + 'px' } }, '暂无设备') : null)),
-          section('workspaces', h('div', null,
-            workspaceRows,
-            !workspaces.length ? h('div', { style: { color: C.mute, fontSize: 11.5, padding: '6px ' + UI.pad + 'px' } }, '暂无工作区') : null,
-            ungroupedRows.length ? h('div', { style: { fontSize: UI.header, fontWeight: 'var(--tether-strong, 600)', color: C.mute, letterSpacing: 0.4, margin: UI.gapGroup + 'px ' + UI.pad + 'px 4px' } }, '未分组') : null,
-            ungroupedRows.length ? h('div', { style: { display: 'grid', gap: UI.gapRow } }, ungroupedRows) : null
-          )),
-          section('files', h(FileTree, {
-            roots: fileRoots, children: treeChildren, open: treeOpen, selected: treeSelected,
-            onToggle: onToggleTree, onOpenFile
-          }))
+        h(SidePanelHeader, { title: '文件', onCollapse, loading: loadingTree }),
+        h('div', { className: 'tether-scroll', style: { flex: '1 1 auto', minHeight: 0, overflowY: 'auto', padding: '0 ' + UI.pad + 'px ' + UI.pad + 'px' } },
+          h(FileTree, {
+            roots: treeRoots || [], children: treeChildren, open: treeOpen, selected: treeSelected,
+            onToggle: onToggleTree, onOpenFile, onContextMenuNode
+          })
         ),
         h('div', {
           className: 'tether-resizer', 'data-active': resizing ? 'true' : undefined,
@@ -750,18 +1019,109 @@ window.__ModuleLoader__.load({
       )
     }
 
+    function nativeSurfaceStateForDevice(state, deviceId, online) {
+      if (!deviceId) return { deviceId, status: 'no-device', url: '' }
+      if (!online) return { deviceId, status: 'offline', url: '' }
+      if (state && state.deviceId === deviceId && state.status !== 'offline') return state
+      return { deviceId, status: 'loading', url: '' }
+    }
+
+    function nativeSurfaceContainerStyle(visible) {
+      return { display: visible ? 'flex' : 'none', flex: '1 1 auto', minWidth: 0, minHeight: 0, flexDirection: 'column' }
+    }
+
+    function NativeSurface({ deviceId, online, visible }) {
+      const [state, setState] = React.useState({ deviceId, status: deviceId ? 'loading' : 'no-device', url: '' })
+      const [attempt, setAttempt] = React.useState(0)
+      const currentState = nativeSurfaceStateForDevice(state, deviceId, online)
+      React.useEffect(() => {
+        let current = true
+        if (!deviceId) { setState({ deviceId, status: 'no-device', url: '' }); return () => { current = false } }
+        if (!online) { setState({ deviceId, status: 'offline', url: '' }); return () => { current = false } }
+        setState({ deviceId, status: 'loading', url: '' })
+        fetch(BASE + '/api/devices/' + encodeURIComponent(deviceId) + '/dsh/surface')
+          .then(async (response) => {
+            let data = {}
+            try { data = await response.json() } catch (_) { /* empty body */ }
+            if (!response.ok) {
+              const detail = data.detail || {}
+              const code = detail.code
+              const message = response.status === 404 ? '目标设备不存在或已移除'
+                : code === 'node_update_required' ? '目标节点版本较旧，需要更新后才能打开完整 DSH 工作区'
+                  : code === 'device_offline' ? '目标设备离线。设备重新在线后可重试。'
+                    : code === 'descriptor_missing' ? '目标设备的 DeepSeek Harness 未运行，或没有安装 Tether surface 组件。请先启动目标 DSH。'
+                      : code === 'descriptor_invalid' ? '目标设备的 DSH surface 描述无效，请重启目标 DSH 或重新安装插件。'
+                        : code === 'host_unreachable' ? '目标 DSH 进程没有响应，请确认它已启动。'
+                          : code === 'auth_failed' ? '目标 DSH 的登录态已失效，请在目标机重新登录 DeepSeek Harness。'
+                            : code === 'surface_timeout' ? '目标设备没有及时响应，请稍后重试。'
+                              : '原生 DSH 页面暂不可用'
+              throw new Error(message)
+            }
+            if (!data.available || !isSafeNativeSurfaceUrl(data.url)) throw new Error('Controller 返回了无效或非 loopback 的原生页面地址')
+            const url = new URL(data.url)
+            url.searchParams.set('tether_native', '1')
+            if (current) setState({ deviceId, status: 'ready', url: url.href })
+          })
+          .catch((error) => { if (current) setState({ deviceId, status: 'error', url: '', message: error.message }) })
+        return () => { current = false }
+      }, [deviceId, online, attempt])
+
+      const message = currentState.status === 'loading' ? '正在连接目标设备的 DSH 原生工作区…'
+        : currentState.status === 'offline' ? '目标设备离线。设备重新在线后可重试。'
+          : currentState.status === 'no-device' ? '先从左侧设备列表选择目标设备。'
+            : currentState.status === 'error' ? currentState.message
+              : ''
+      return h('div', { className: 'tether-native-surface', style: nativeSurfaceContainerStyle(visible) },
+        currentState.status === 'ready' && currentState.deviceId === deviceId && online
+          ? h('iframe', {
+            key: deviceId,
+            src: currentState.url,
+            title: '目标设备的 DSH 原生工作区',
+            referrerPolicy: 'no-referrer',
+            style: { flex: '1 1 auto', width: '100%', height: '100%', minWidth: 0, minHeight: 0, border: 0, background: C.bg }
+          })
+          : h('div', { style: { display: 'grid', placeItems: 'center', alignContent: 'center', gap: 12, flex: '1 1 auto', minHeight: 0, color: C.sub, textAlign: 'center', padding: 24 } },
+            h('div', null, message),
+            currentState.status !== 'loading' ? btn('重试', () => setAttempt((value) => value + 1)) : null
+          )
+      )
+    }
+
+    function isSafeNativeSurfaceUrl(value) {
+      let url
+      try { url = new URL(value) } catch (_) { return false }
+      const host = url.hostname.toLowerCase()
+      const loopback = host === '127.0.0.1' || host === '[::1]'
+      return url.protocol === 'http:' && loopback && !url.username && !url.password &&
+        Number(url.port || 80) > 0 && Number(url.port || 80) <= 65535 && url.pathname === '/tether-connect' &&
+        !!url.searchParams.get('ticket') && !url.hash
+    }
+
     function App() {
       const [state, setState] = React.useState(null)
       const stateRef = React.useRef(null)
       stateRef.current = state
       const [deviceId, setDeviceId] = React.useState('')
+      const deviceIdRef = React.useRef('')
+      const treeDeviceEpochRef = React.useRef(0)
+      const loadedDirRef = React.useRef('')
+      const treeDeviceRef = React.useRef('')
+      if (treeDeviceRef.current !== deviceId) {
+        treeDeviceRef.current = deviceId
+        treeDeviceEpochRef.current += 1
+      }
+      deviceIdRef.current = deviceId
       const [projects, setProjects] = React.useState(null)
       const [project, setProject] = React.useState(null)
-      const [view, setView] = usePersisted('tether.ui.view', 'chat')
+      const [view, setView] = React.useState('chat')
       const [activePanel, setActivePanel] = usePersisted('tether.ui.panel.v2', 'workspaces')
       const [sidebarCollapsed, setSidebarCollapsed] = usePersisted('tether.ui.panelCollapsed', false)
       const [sidebarWidth, setSidebarWidth] = usePersisted('tether.ui.panelWidth.v2', UI.defaultSide)
       const [resizing, setResizing] = React.useState(false)
+      const [networkListWidth, setNetworkListWidth] = usePersisted('tether.ui.network.width', 300)
+      const [networkResizing, setNetworkResizing] = React.useState(false)
+      const [networkPage, setNetworkPage] = React.useState(1)
+      const [networkRefreshing, setNetworkRefreshing] = React.useState(false)
       const [notice, setNotice] = React.useState('')
       const [busy, setBusy] = React.useState(false)
       const [native, setNative] = React.useState([])
@@ -776,6 +1136,9 @@ window.__ModuleLoader__.load({
       const [showSettings, setShowSettings] = React.useState(false)
       const [policy, setPolicy] = React.useState(null)
       const [audit, setAudit] = React.useState([])
+      const [auditCount, setAuditCount] = React.useState(0)
+      const [auditRetained, setAuditRetained] = React.useState(100000)
+      const [auditLoading, setAuditLoading] = React.useState(false)
       const [mode, setMode] = React.useState('readonly')
       const [rootsText, setRootsText] = React.useState('')
       const [ask, setAsk] = React.useState(null)
@@ -785,6 +1148,14 @@ window.__ModuleLoader__.load({
       const [file, setFile] = React.useState(null)
       const [draft, setDraft] = React.useState('')
       const [dirty, setDirty] = React.useState(false)
+      const [dirEntries, setDirEntries] = React.useState([])
+      const [dirLoading, setDirLoading] = React.useState(false)
+      const [dirError, setDirError] = React.useState('')
+      const [history, setHistory] = React.useState([])
+      const [contextMenu, setContextMenu] = React.useState(null)
+      const [deviceMenu, setDeviceMenu] = React.useState(null)
+      const [previewBusy, setPreviewBusy] = React.useState(false)
+      const [editMode, setEditMode] = React.useState(false)
       const [workspaceOpen, setWorkspaceOpen] = React.useState({})
       const [treeChildren, setTreeChildren] = React.useState({})
       const [treeOpen, setTreeOpen] = React.useState({})
@@ -821,6 +1192,14 @@ window.__ModuleLoader__.load({
       const device = state && state.devices.find((d) => d.device_id === deviceId)
       const deviceOnline = !!(device && device.online)
       const safeSidebarWidth = clamp(sidebarWidth, UI.minSide, UI.maxSide)
+      const previewUrl = React.useMemo(() => {
+        if (!file || !file.base64) return ''
+        try {
+          const bytes = Uint8Array.from(atob(file.base64), (char) => char.charCodeAt(0))
+          return URL.createObjectURL(new Blob([bytes], { type: file.mime || 'application/octet-stream' }))
+        } catch (_) { return '' }
+      }, [file && file.path, file && file.base64, file && file.mime])
+      React.useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl) }, [previewUrl])
 
       React.useEffect(() => {
         if (!deviceId) { setPolicy(null); return }
@@ -831,15 +1210,20 @@ window.__ModuleLoader__.load({
 
       const loadProjects = React.useCallback(async () => {
         if (!deviceId) return
+        const requestDevice = deviceId
+        const requestEpoch = treeDeviceEpochRef.current
+        const stillCurrent = () => treeResponseIsCurrent(requestDevice, deviceIdRef.current, requestEpoch, treeDeviceEpochRef.current)
         try {
-          const data = await api('/api/devices/' + encodeURIComponent(deviceId) + '/workspaces')
+          const data = await api('/api/devices/' + encodeURIComponent(requestDevice) + '/workspaces')
+          if (!stillCurrent()) return
           setProjects(data)
           setProject((current) => {
             if (current && data.workspaces.some((w) => w.path === current.path)) return current
             return data.workspaces[0] || null
           })
         } catch (e) {
-          const dev = ((stateRef.current && stateRef.current.devices) || []).find((d) => d.device_id === deviceId)
+          if (!stillCurrent()) return
+          const dev = ((stateRef.current && stateRef.current.devices) || []).find((d) => d.device_id === requestDevice)
           const fallback = dev && dev.capabilities && dev.capabilities.workspace
           if (fallback) {
             const synthetic = { name: 'Tether 工作目录', path: fallback, kind: 'node', writable: true, synthetic: true }
@@ -853,16 +1237,27 @@ window.__ModuleLoader__.load({
         }
       }, [deviceId])
 
-      React.useEffect(() => { setProject(null); setPath(''); setPathDraft(''); setFile(null); setSelected(null); setSessionId(''); setSessionData(null); setRunId(''); setNativeLoaded(false); setWorkspaceOpen({}); setTreeChildren({}); setTreeOpen({}); setTreeSelected(''); setDrives([]); loadProjects() }, [deviceId, loadProjects])
+      React.useEffect(() => {
+        setProject(null); setPath(''); setPathDraft(''); setFile(null); setSelected(null)
+        setSessionId(''); setSessionData(null); setRunId(''); setNativeLoaded(false)
+        setWorkspaceOpen({}); setTreeChildren({}); setTreeOpen({}); setTreeSelected(''); setDrives([])
+        setDirEntries([]); setDirLoading(false); setDirError(''); setHistory([]); setContextMenu(null)
+        setPreviewBusy(false); setEditMode(false); loadedDirRef.current = ''
+        loadProjects()
+      }, [deviceId, loadProjects])
 
       const loadNative = React.useCallback(async () => {
         if (!deviceId) return
+        const requestDevice = deviceId
+        const requestEpoch = treeDeviceEpochRef.current
+        const stillCurrent = () => treeResponseIsCurrent(requestDevice, deviceIdRef.current, requestEpoch, treeDeviceEpochRef.current)
         try {
-          const data = await api('/api/devices/' + encodeURIComponent(deviceId) + '/dsh/sessions')
+          const data = await api('/api/devices/' + encodeURIComponent(requestDevice) + '/dsh/sessions')
+          if (!stillCurrent()) return
           setNative(data.sessions || [])
           setNativeError('')
           setNativeLoaded(true)
-        } catch (e) { setNative([]); setNativeError(String(e.message || e)); setNativeLoaded(true) }
+        } catch (e) { if (!stillCurrent()) return; setNative([]); setNativeError(String(e.message || e)); setNativeLoaded(true) }
       }, [deviceId])
 
       React.useEffect(() => { loadNative(); const t = setInterval(loadNative, 8000); return () => clearInterval(t) }, [loadNative])
@@ -883,10 +1278,12 @@ window.__ModuleLoader__.load({
         lastProject.current = currentPath
         setSessionId('')
         setRunId('')
-        setPath(currentPath)
-        setPathDraft(currentPath)
-        setFile(null)
-      }, [project])
+        if (view !== 'files') {
+          setPath(currentPath)
+          setPathDraft(currentPath)
+          setFile(null)
+        }
+      }, [project, view])
 
       const nativeKey = native.map((s) => s.session_id).sort().join(',')
       const sessions = (state && state.sessions) || []
@@ -929,6 +1326,9 @@ window.__ModuleLoader__.load({
         sessions: allSessions.filter((s) => samePath(s.workspace, w.path))
       }))
       const ungrouped = allSessions.filter((s) => !projectPaths.some((p) => samePath(s.workspace, p)))
+      const ungroupedPaths = Array.from(new Map(ungrouped
+        .filter((s) => s.workspace && !projectPaths.some((p) => samePath(s.workspace, p)))
+        .map((s) => [normPath(s.workspace), s.workspace])).values())
       const workspaceKey = workspaceNodes.map((w) => w.path + ':' + w.sessions.map((s) => s.key).join('|')).join(';')
 
       React.useEffect(() => {
@@ -1011,9 +1411,15 @@ window.__ModuleLoader__.load({
           } else if (ev.kind === 'tool' && p.type === 'tool/result') {
             let data = {}
             try { data = JSON.parse(p.data || '{}') } catch (_) {}
-            const id = (data.message && data.message.toolCallId) || data.toolCallId || ''
+            const message = data.message || {}
+            const id = message.toolCallId || data.toolCallId || ''
             const target = (id && blocks.find((b) => b.type === 'tool' && b.id === id)) || call
-            if (target) { target.result = String(p.text || ''); target.status = 'done'; call = null }
+            if (target) {
+              target.result = String(p.text || '')
+              target.is_error = !!message.isError
+              target.status = target.is_error ? 'error' : 'done'
+              call = null
+            }
           } else if (ev.kind === 'log' && p.type === 'turn/end') {
             state = p.reason === 'completed' ? 'completed' : (p.reason === 'cancelled' ? 'cancelled' : (p.reason === 'error' ? 'failed' : state))
           }
@@ -1038,22 +1444,23 @@ window.__ModuleLoader__.load({
       const conversationStatus = sessionId
         ? ((sessionData && sessionData.status) || 'idle')
         : (currentRun ? currentRun.state : 'idle')
+      const sendTarget = freshSession ? null : resolveSessionTarget(sessionId, currentRun, native, sessions, runs, deviceId, project && project.path, currentRun && workspaceOf(currentRun))
+      const historicalSessionReadOnly = !!(sessionId && sendTarget && sendTarget.blocked)
+      const invalidRunTarget = !!(runId && !freshSession && (!currentRun || (sendTarget && sendTarget.blocked)))
+      const sendTargetBlocked = historicalSessionReadOnly || invalidRunTarget
 
       const startTask = async () => {
         if (!task.trim() || !deviceId || !project) return
+        if (!freshSession && (sendTargetBlocked || ((sessionId || currentRun) && !sendTarget))) {
+          setNotice('当前历史会话没有可继续的目标，请在此工作区新建会话。')
+          return
+        }
         setBusy(true)
         try {
-          let sid = ''
-          if (!freshSession) {
-            const session = currentRun
-            sid = session ? session.session_id : ''
-            if (!sid) {
-              const existing = sessions.filter((s) => s.device_id === deviceId && samePath(s.workspace, project.path))
-              sid = existing.length ? existing[existing.length - 1].session_id : ''
-            }
-          }
+          let sid = !freshSession && sendTarget ? sendTarget.sessionId : ''
           if (!sid) {
             const created = await post('/api/sessions', { device_id: deviceId, workspace: project.path })
+            if (!isNewSessionId(created.session_id, sessions)) throw new Error('新会话未生成新的会话 ID，请重试。')
             sid = created.session_id
           }
           setFreshSession(false)
@@ -1079,68 +1486,220 @@ window.__ModuleLoader__.load({
         try {
           const p = await api('/api/devices/' + encodeURIComponent(deviceId) + '/policy')
           setPolicy(p); setMode(p.mode); setRootsText((p.allowed_roots || []).join('\n'))
-          const a = await api('/api/devices/' + encodeURIComponent(deviceId) + '/audit?limit=80')
-          setAudit(a.entries || [])
+          const a = await api('/api/devices/' + encodeURIComponent(deviceId) + '/audit?limit=200')
+          setAudit(a.entries || []); setAuditCount(a.count || 0); setAuditRetained(a.retained || 100000)
         } catch (e) { fail(e) }
+      }
+      const rootList = () => rootsText.split(/\r?\n/).map((item) => item.trim()).filter(Boolean)
+      const editRoot = (index) => {
+        const list = rootList()
+        askValue('编辑可写根目录', list[index] || '', (value) => {
+          const next = [...list]; next[index] = value; setRootsText(next.join('\n'))
+        })
+      }
+      const addRoot = () => askValue('添加可写根目录', '', (value) => {
+        const list = rootList()
+        if (!list.some((item) => normPath(item) === normPath(value))) setRootsText([...list, value].join('\n'))
+      })
+      const removeRoot = (index) => {
+        const list = rootList()
+        setRootsText(list.filter((_, itemIndex) => itemIndex !== index).join('\n'))
       }
       const savePolicy = async () => {
         if (mode === 'full' && !window.confirm('Full-disk mode lets this Tether plugin write and delete files anywhere the node user can, except protected system directories and credential stores.\n\nEnable it?')) return
         setBusy(true)
         try {
-          const roots = rootsText.split(/\r?\n/).map((s) => s.trim()).filter(Boolean)
+          const roots = rootList()
           const p = await post('/api/devices/' + encodeURIComponent(deviceId) + '/policy', { mode, allowed_roots: roots })
           setPolicy(p); setNotice('Policy updated: ' + p.mode)
-          const a = await api('/api/devices/' + encodeURIComponent(deviceId) + '/audit?limit=80')
-          setAudit(a.entries || [])
+          const a = await api('/api/devices/' + encodeURIComponent(deviceId) + '/audit?limit=200')
+          setAudit(a.entries || []); setAuditCount(a.count || 0); setAuditRetained(a.retained || 100000)
         } catch (e) { fail(e) } finally { setBusy(false) }
       }
-
-      const openFile = async (entry) => {
-        if (entry.dir) { setPath(entry.path); setPathDraft(entry.path); setTreeSelected(entry.path); setSelected(entry); return }
-        setBusy(true)
+      const loadMoreAudit = async () => {
+        if (auditLoading) return
+        setAuditLoading(true)
         try {
-          const data = await post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/read', { path: entry.path })
-          const stat = await post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/stat', { path: entry.path })
-          const parent = String(entry.path).replace(/[\\/][^\\/]+$/, '')
-          setFile({ ...data, writable: stat.writable }); setDraft(data.binary ? '' : data.text); setDirty(false); setSelected(entry)
-          setPath(parent); setPathDraft(parent); setTreeSelected(entry.path); setView('files')
-        } catch (e) { fail(e) } finally { setBusy(false) }
+          const a = await api('/api/devices/' + encodeURIComponent(deviceId) + '/audit?limit=200&offset=' + audit.length)
+          setAudit((current) => [...current, ...(a.entries || [])])
+          setAuditCount(a.count || 0); setAuditRetained(a.retained || 100000)
+        } catch (e) { fail(e) } finally { setAuditLoading(false) }
       }
 
-      const loadTreeDir = async (target) => {
-        if (!deviceId || !target) return
+      const fsPath = (op) => '/api/devices/' + encodeURIComponent(deviceId) + '/fs/' + op
+      const parentOf = (target) => {
+        const clean = String(target || '').replace(/[\\/]+$/, '')
+        const parent = clean.replace(/[\\/][^\\/]+$/, '')
+        return parent && parent !== clean ? parent : clean
+      }
+      const pathInfo = (target) => {
+        const norm = normPath(target)
+        if (!norm) return null
+        const workspace = workspaceNodes.find((w) => norm === normPath(w.path) || norm.startsWith(normPath(w.path) + '/'))
+        if (workspace) return { groupId: 'workspaces', workspaceId: workspace.id, root: workspace.path }
+        const stray = ungroupedPaths.find((p) => norm === normPath(p) || norm.startsWith(normPath(p) + '/'))
+        if (stray) return { groupId: 'ungrouped', workspaceId: '', root: stray }
+        const drive = drives.find((d) => norm === normPath(d.path) || norm.startsWith(normPath(d.path) + '/'))
+        return drive ? { groupId: 'drives', workspaceId: '', root: drive.path } : null
+      }
+      const treeNodeFor = (target, info) => ({
+        id: treeNodeId(deviceId, info.groupId, info.workspaceId, target),
+        cacheKey: treeCacheKey(deviceId, target), deviceId,
+        groupId: info.groupId, workspaceId: info.workspaceId,
+        name: pathBasename(target), path: target, dir: true
+      })
+
+      const loadTreeDir = async (target, node) => {
+        const requestDevice = deviceId
+        if (!requestDevice || !target) return
+        const requestEpoch = treeDeviceEpochRef.current
+        const key = node ? node.cacheKey : treeCacheKey(requestDevice, target)
+        setTreeChildren((current) => ({ ...current, [key]: { status: 'loading', entries: [] } }))
         try {
-          const data = await post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/list', { path: target })
-          setTreeChildren((current) => ({ ...current, [target]: data.entries }))
+          const data = await post('/api/devices/' + encodeURIComponent(requestDevice) + '/fs/list', { path: target })
+          if (!treeResponseIsCurrent(requestDevice, deviceIdRef.current, requestEpoch, treeDeviceEpochRef.current)) return
+          const entries = (data.entries || [])
+            .map((entry) => ({ ...entry, path: joinPath(target, entry.name) }))
+            .filter((entry, index, all) => all.findIndex((item) => normPath(item.path) === normPath(entry.path)) === index)
+          setTreeChildren((current) => ({ ...current, [key]: { status: 'loaded', entries } }))
         } catch (e) {
-          setTreeChildren((current) => ({ ...current, [target]: [] }))
-          fail(e)
+          if (!treeResponseIsCurrent(requestDevice, deviceIdRef.current, requestEpoch, treeDeviceEpochRef.current)) return
+          setTreeChildren((current) => ({ ...current, [key]: { status: 'error', entries: [] } }))
         }
       }
 
-      const toggleTree = (node) => {
-        const target = node.path
-        const next = !treeOpen[target]
-        setTreeSelected(target); setPath(target); setPathDraft(target); setSelected(node.dir ? node : null)
-        setTreeOpen((current) => ({ ...current, [target]: next }))
-        if (next && treeChildren[target] === undefined) loadTreeDir(target)
+      const revealTree = (target) => {
+        const info = pathInfo(target)
+        if (!info) return
+        const normTarget = normPath(target)
+        const normRoot = normPath(info.root)
+        const paths = [info.root]
+        if (normTarget !== normRoot && normTarget.startsWith(normRoot + '/')) {
+          let cursor = String(info.root).replace(/[\\/]+$/, '')
+          const relative = String(target).slice(String(info.root).length).replace(/^[\\/]+/, '')
+          for (const part of relative.split(/[\\/]+/)) {
+            if (!part) continue
+            cursor += '\\' + part
+            paths.push(cursor)
+          }
+        }
+        const open = {}
+        paths.forEach((item) => {
+          const node = treeNodeFor(item, info)
+          open[node.id] = true
+          const cached = treeChildren[node.cacheKey]
+          if (!cached || cached.status === 'error') loadTreeDir(item, node)
+        })
+        setTreeOpen((current) => ({ ...current, ...open }))
+        const selectedPath = target
+        setTreeSelected(treeNodeId(deviceId, info.groupId, info.workspaceId, selectedPath))
       }
+
+      const loadDir = async (target, options) => {
+        const opts = options || {}
+        if (!deviceId || !target) return
+        const requestDevice = deviceId
+        const rawTarget = String(target)
+        const requestTarget = /^[A-Za-z]:[\\/]?$/.test(rawTarget) ? rawTarget.slice(0, 2) + '\\' : rawTarget
+        setDirLoading(true); setDirError('')
+        try {
+          const data = await post(fsPath('list'), { path: requestTarget })
+          if (deviceIdRef.current !== requestDevice) return
+          const nextPath = /^[A-Za-z]:[\\/]?$/.test(rawTarget) ? requestTarget : (rawTarget.replace(/[\\/]+$/, '') || rawTarget)
+          const entries = (data.entries || []).map((entry) => ({ ...entry, path: joinPath(requestTarget, entry.name) }))
+          if (opts.push !== false && path && path !== nextPath) setHistory((current) => [...current, path])
+          setDirEntries(entries)
+          setPath(nextPath); setPathDraft(nextPath)
+          loadedDirRef.current = requestDevice + '|' + normPath(nextPath)
+          setSelected(null)
+          if (!opts.keepFile) { setFile(null); setEditMode(false); setDirty(false); setDraft('') }
+          revealTree(nextPath)
+        } catch (e) {
+          if (deviceIdRef.current !== requestDevice) return
+          setDirError(String(e.message || e)); setDirEntries([])
+        } finally { setDirLoading(false) }
+      }
+
+      const openPreview = async (entry) => {
+        if (!entry || entry.dir) return
+        setPreviewBusy(true); setDirError('')
+        try {
+          const data = await post(fsPath('preview'), { path: entry.path })
+          const parent = parentOf(entry.path)
+          setFile({ ...data, path: entry.path, name: entry.name || pathBasename(entry.path) })
+          setDraft(data.text || '')
+          setDirty(false); setEditMode(false); setSelected(entry)
+          setPath(parent); setPathDraft(parent)
+          setView('files')
+          await loadDir(parent, { push: false, keepFile: true })
+          setSelected(entry)
+        } catch (e) { fail(e) } finally { setPreviewBusy(false) }
+      }
+
+      const openFile = async (entry) => {
+        if (!entry) return
+        if (entry.dir) {
+          setSelected(entry); setTreeOpen((current) => ({ ...current, [entry.id]: true }))
+          await loadDir(entry.path, { push: true })
+          return
+        }
+        await openPreview(entry)
+      }
+
+      const toggleTree = (node, retry) => {
+        if (!node.dir) { openPreview(node); return }
+        const target = node.path
+        const next = retry || !treeOpen[node.id]
+        setTreeSelected(node.id); setTreeOpen((current) => ({ ...current, [node.id]: next }))
+        if (next) {
+          loadDir(target, { push: true })
+          const cached = treeChildren[node.cacheKey]
+          if (retry || !cached || cached.status === 'error') loadTreeDir(target, node)
+        } else {
+          setPath(target); setPathDraft(target)
+        }
+      }
+
+      const goBack = () => {
+        if (!history.length) return
+        const previous = history[history.length - 1]
+        setHistory((current) => current.slice(0, -1))
+        loadDir(previous, { push: false })
+      }
+
+      const refreshExplorer = () => {
+        if (file) openPreview(file)
+        else if (path) loadDir(path, { push: false, keepFile: true })
+      }
+
+      const openContextMenu = (event, entry, base) => {
+        event.preventDefault(); event.stopPropagation()
+        if (entry) setSelected(entry)
+        setContextMenu({ x: event.clientX, y: event.clientY, entry: entry || null, base: base || path })
+      }
+
       const saveFile = async () => {
-        if (!file || file.binary) return
+        if (!file || file.kind === 'image' || file.kind === 'pdf' || file.kind === 'unsupported') return
         setBusy(true)
         try {
-          await post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/write', { path: file.path, text: draft })
-          setDirty(false); setNotice('Saved ' + file.path); loadTreeDir(path)
+          await post(fsPath('write'), { path: file.path, text: draft })
+          setDirty(false); setNotice('Saved ' + file.path)
+          const data = await post(fsPath('preview'), { path: file.path })
+          setFile({ ...data, path: file.path, name: file.name })
+          setDraft(data.text || '')
+          setEditMode(false)
+          if (path) loadDir(path, { push: false, keepFile: true })
         } catch (e) { fail(e) } finally { setBusy(false) }
       }
       const askValue = (title, value, onOk) => setAsk({ title, value: value || '', onOk })
-      const newFolder = () => askValue('新建文件夹', '', async (name) => { try { await post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/mkdir', { path: path + '\\' + name }); loadTreeDir(path) } catch (e) { fail(e) } })
-      const newFile = () => askValue('新建文件', '', async (name) => { const target = path + '\\' + name; try { await post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/write', { path: target, text: '' }); loadTreeDir(path); openFile({ path: target, dir: false, name }) } catch (e) { fail(e) } })
-      const renameEntry = () => { if (selected) askValue('重命名', selected.name, async (name) => { try { await post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/rename', { path: selected.path, dest: path + '\\' + name }); setSelected(null); if (file && file.path === selected.path) setFile(null); loadTreeDir(path) } catch (e) { fail(e) } }) }
-      const deleteEntry = async () => {
-        if (!selected) return
-        if (!window.confirm('Move "' + selected.name + '" to .tether-trash?')) return
-        try { await post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/delete', { path: selected.path }); setSelected(null); if (file && file.path === selected.path) setFile(null); loadTreeDir(path) } catch (e) { fail(e) }
+      const makeFolder = (base) => askValue('新建文件夹', '', async (name) => { try { await post(fsPath('mkdir'), { path: String(base).replace(/[\\/]+$/, '') + '\\' + name }); setContextMenu(null); await loadDir(base, { push: false, keepFile: true }); const info = pathInfo(base); if (info) loadTreeDir(base, treeNodeFor(base, info)) } catch (e) { fail(e) } })
+      const makeFile = (base) => askValue('新建文件', '', async (name) => { const target = String(base).replace(/[\\/]+$/, '') + '\\' + name; try { await post(fsPath('write'), { path: target, text: '' }); setContextMenu(null); await loadDir(base, { push: false, keepFile: true }); openPreview({ path: target, dir: false, name }) } catch (e) { fail(e) } })
+      const renameEntry = (entry) => { const target = entry || selected; if (!target) return; askValue('重命名', target.name, async (name) => { try { await post(fsPath('rename'), { path: target.path, dest: parentOf(target.path) + '\\' + name }); setContextMenu(null); setSelected(null); if (file && file.path === target.path) setFile(null); await loadDir(path, { push: false, keepFile: true }) } catch (e) { fail(e) } }) }
+      const deleteEntry = async (entry) => {
+        const target = entry || selected
+        if (!target) return
+        if (!window.confirm('Move "' + target.name + '" to .tether-trash?')) return
+        try { await post(fsPath('delete'), { path: target.path }); setContextMenu(null); setSelected(null); if (file && file.path === target.path) setFile(null); await loadDir(path, { push: false, keepFile: true }) } catch (e) { fail(e) }
       }
       const newProject = () => {
         if (!projects) return
@@ -1161,6 +1720,12 @@ window.__ModuleLoader__.load({
         setProject(workspace); setWorkspaceOpen((current) => ({ ...current, [workspace.path]: true }))
         setFreshSession(true); setSessionId(''); setRunId(''); setTask(''); setView('chat')
       }
+      const applyWorkspaceSelection = (workspace, selection) => {
+        const next = selectWorkspaceState(lastProject, { projectPath: project ? project.path : '', sessionId, runId, path, pathDraft, file }, workspace, selection)
+        setProject(workspace)
+        setPath(next.path); setPathDraft(next.path); setFile(next.file)
+        setSessionId(next.sessionId); setRunId(next.runId)
+      }
       const submitAsk = () => {
         if (!ask) return
         const value = ask.value.trim()
@@ -1169,10 +1734,23 @@ window.__ModuleLoader__.load({
       }
 
       const selectPanel = (id) => {
-        if (id === activePanel && !sidebarCollapsed) { setSidebarCollapsed(true); return }
-        setActivePanel(id); setSidebarCollapsed(false)
-        if (id === 'files') setView('files')
-        if (id === 'workspaces') setView('chat')
+        if (id === 'workspaces') {
+          setView('chat'); setActivePanel('workspaces'); setSidebarCollapsed(true)
+          return
+        }
+        if (id === 'network') {
+          setView('network'); setActivePanel('network'); setSidebarCollapsed(true)
+          return
+        }
+        if (id === 'files') {
+          if (view === 'files' && activePanel === 'files' && !sidebarCollapsed) { setSidebarCollapsed(true); return }
+          const info = path ? pathInfo(path) : null
+          if (workspaceNodes[0] && view !== 'files' && (!info || info.groupId === 'ungrouped')) {
+            setPath(workspaceNodes[0].path); setPathDraft(workspaceNodes[0].path)
+            setFile(null); setSelected(null); loadedDirRef.current = ''
+          }
+          setView('files'); setActivePanel('files'); setSidebarCollapsed(false)
+        }
       }
 
       const dragWidth = (event, start, setter, min, max) => {
@@ -1196,164 +1774,389 @@ window.__ModuleLoader__.load({
       }
 
       const startSidebarResize = (event) => dragWidth(event, safeSidebarWidth, setSidebarWidth, UI.minSide, UI.maxSide)
+      const startNetworkResize = (event) => {
+        event.preventDefault()
+        setNetworkResizing(true)
+        const startX = event.clientX
+        const startWidth = networkListWidth
+        const move = (ev) => setNetworkListWidth(clamp(startWidth + ev.clientX - startX, 220, 520))
+        const stop = () => {
+          window.removeEventListener('pointermove', move)
+          window.removeEventListener('pointerup', stop)
+          window.removeEventListener('pointercancel', stop)
+          document.body.style.cursor = ''
+          setNetworkResizing(false)
+        }
+        document.body.style.cursor = 'col-resize'
+        window.addEventListener('pointermove', move)
+        window.addEventListener('pointerup', stop)
+        window.addEventListener('pointercancel', stop)
+      }
+      const refreshNetwork = async () => {
+        if (networkRefreshing) return
+        setNetworkRefreshing(true)
+        try { await loadState() } finally { setTimeout(() => setNetworkRefreshing(false), 280) }
+      }
+
+      React.useEffect(() => {
+        if (!contextMenu) return undefined
+        const close = () => setContextMenu(null)
+        const onKey = (event) => { if (event.key === 'Escape') close() }
+        window.addEventListener('pointerdown', close)
+        window.addEventListener('keydown', onKey)
+        return () => {
+          window.removeEventListener('pointerdown', close)
+          window.removeEventListener('keydown', onKey)
+        }
+      }, [contextMenu])
+
+      React.useEffect(() => {
+        if (!deviceMenu) return undefined
+        const close = () => setDeviceMenu(null)
+        const onKey = (event) => { if (event.key === 'Escape') close() }
+        window.addEventListener('pointerdown', close)
+        window.addEventListener('keydown', onKey)
+        return () => {
+          window.removeEventListener('pointerdown', close)
+          window.removeEventListener('keydown', onKey)
+        }
+      }, [deviceMenu])
+
+      React.useEffect(() => {
+        if (!showSettings) return undefined
+        const onKey = (event) => { if (event.key === 'Escape') setShowSettings(false) }
+        window.addEventListener('keydown', onKey)
+        return () => window.removeEventListener('keydown', onKey)
+      }, [showSettings])
+
+      React.useEffect(() => {
+        if (view !== 'files' || !deviceId || !projects || projects.synthetic) return
+        const firstWorkspace = workspaceNodes[0] && workspaceNodes[0].path
+        const target = (loadedDirRef.current ? (path || firstWorkspace) : (firstWorkspace || (project && project.path) || path)) || ''
+        if (!target) return
+        const key = deviceId + '|' + normPath(target)
+        if (loadedDirRef.current === key) return
+        loadedDirRef.current = key
+        setPath(target); setPathDraft(target)
+        loadDir(target, { push: false, keepFile: !!file })
+      }, [view, deviceId, path, project, projects, workspaceKey])
 
       const modelText = sessionId && sessionData ? [sessionData.model, sessionData.agent_preset].filter(Boolean).join(' · ') : ''
 
+      const renderExplorer = () => {
+        const iconButton = (name, label, onClick, disabled, spinning) => h('button', {
+          title: label, 'aria-label': label, onClick, disabled,
+          className: 'tether-hover tether-press',
+          style: { width: 28, height: 28, display: 'grid', placeItems: 'center', border: 0, borderRadius: 6, background: 'transparent', color: disabled ? C.mute : C.sub, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.45 : 1, flex: '0 0 auto' }
+        }, spinning ? h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 16 })) : h(Glyph, { name, size: 16 }))
+        const crumbs = pathSegments(file ? file.path : path)
+        const toolbar = h('div', { style: { display: 'flex', alignItems: 'center', gap: 2, height: 40, padding: '0 8px', background: C.bg, flex: '0 0 auto', minWidth: 0 } },
+          iconButton('back', '后退', goBack, !history.length),
+          iconButton('arrowUp', '上级目录', () => { const parent = parentOf(file ? file.path : path); if (parent && parent !== path) { setFile(null); loadDir(parent, { push: true }) } }, !path),
+          iconButton('refresh', '刷新', refreshExplorer, !path, dirLoading || previewBusy),
+          h('div', { style: { display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, overflow: 'hidden', marginLeft: 6 } },
+            crumbs.map((segment, index) => h(React.Fragment, { key: segment.path },
+              index ? h('span', { style: { color: C.mute, fontSize: 10, flex: '0 0 auto' } }, '›') : null,
+              h('button', {
+                title: segment.path, onClick: () => { setFile(null); loadDir(segment.path, { push: true }) },
+                className: 'tether-hover',
+                style: { border: 0, background: 'transparent', borderRadius: 5, padding: '3px 5px', fontSize: 12, lineHeight: '18px', color: index === crumbs.length - 1 ? C.ink : C.sub, cursor: 'pointer', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 190 }
+              }, segment.label)
+            ))
+          ),
+          selected && !file ? h('span', { style: { marginLeft: 'auto', fontSize: 11, color: C.mute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 220 } }, selected.name) : null
+        )
+
+        const closePreview = () => { setFile(null); setEditMode(false); setDirty(false); setDraft(''); if (path) loadDir(path, { push: false }) }
+        const fileHeader = file ? h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, height: 40, padding: '0 10px', background: C.panel, flex: '0 0 auto', minWidth: 0 } },
+          iconButton('back', '返回文件夹', closePreview, false),
+          h(Native.FileTypeIcon, { path: file.name || file.path, size: 16 }),
+          h('span', { style: { fontSize: 13, fontWeight: 'var(--tether-strong, 600)', color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, file.name || pathBasename(file.path)),
+          file.writable ? null : pill('只读', C.amber),
+          file.converted ? pill('已转 PDF', C.mute) : null,
+          h('span', { style: { marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 2 } },
+            (file.kind === 'markdown' || file.kind === 'text') && file.writable ? iconButton('pencil', editMode ? '预览' : '编辑', () => setEditMode((value) => !value), false) : null,
+            (file.kind === 'markdown' || file.kind === 'text') && file.writable ? iconButton('save', '保存', saveFile, !dirty || busy) : null,
+            h('span', { className: 'tether-num', style: { fontSize: 10.5, color: C.mute, marginLeft: 4 } }, formatBytes(file.size))
+          )
+        ) : null
+
+        const previewBody = () => {
+          if (previewBusy) return h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', color: C.mute, fontSize: 12 } }, h('span', { className: 'tether-spin', style: { width: 18, height: 18, display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 18 })))
+          if (!file) return null
+          if (file.kind === 'markdown') {
+            if (editMode) return h('textarea', { value: draft, onChange: (ev) => { setDraft(ev.target.value); setDirty(true) }, spellCheck: false, style: { flex: '1 1 auto', width: '100%', boxSizing: 'border-box', resize: 'none', border: 0, outline: 'none', padding: '14px 18px', fontFamily: 'Consolas, monospace', fontSize: 12.5, lineHeight: 1.6, background: C.bg, color: C.ink } })
+            return h('div', { className: 'tether-file-scroll', style: { flex: '1 1 auto', overflow: 'auto', padding: '22px 28px 40px' } }, h('div', { className: 'tether-file-markdown' }, h(Markdown, { text: draft || '', labels: nativeMarkdownLabels })))
+          }
+          if (file.kind === 'text') {
+            if (editMode) return h('textarea', { value: draft, onChange: (ev) => { setDraft(ev.target.value); setDirty(true) }, spellCheck: false, style: { flex: '1 1 auto', width: '100%', boxSizing: 'border-box', resize: 'none', border: 0, outline: 'none', padding: '14px 18px', fontFamily: 'Consolas, monospace', fontSize: 12.5, lineHeight: 1.6, background: C.bg, color: C.ink } })
+            return h('pre', { className: 'tether-file-text tether-scroll', style: { flex: '1 1 auto', overflow: 'auto', margin: 0, padding: '16px 20px', fontFamily: 'Consolas, monospace', fontSize: 12.5, lineHeight: 1.6, whiteSpace: 'pre-wrap', color: C.ink, background: C.bg } }, draft)
+          }
+          if (file.kind === 'image') return h('div', { style: { flex: '1 1 auto', overflow: 'auto', display: 'grid', placeItems: 'center', padding: 18, background: C.panel } },
+            previewUrl ? h('img', { src: previewUrl, alt: file.name || '', style: { maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: 6 } }) : h('span', { style: { color: C.mute, fontSize: 12 } }, '图片预览失败'))
+          if (file.kind === 'pdf') return previewUrl
+            ? h('embed', { src: previewUrl, type: 'application/pdf', style: { flex: '1 1 auto', width: '100%', height: '100%', minHeight: 0, border: 0, background: C.panel } })
+            : h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', color: C.mute, fontSize: 12 } }, 'PDF 预览失败')
+          return h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', alignContent: 'center', gap: 6, color: C.mute, fontSize: 12, padding: 24, textAlign: 'center' } },
+            h('div', null, '此类型暂不支持预览'),
+            h('div', { className: 'tether-num', style: { fontSize: 11 } }, (file.name || file.path) + ' · ' + formatBytes(file.size)))
+        }
+
+        const entries = [...dirEntries].sort((a, b) => (a.dir === b.dir ? String(a.name || '').localeCompare(String(b.name || '')) : (a.dir ? -1 : 1)))
+        const columns = 'minmax(0,1fr) 132px 104px 78px'
+        const directoryBody = () => {
+          if (dirLoading && !entries.length) return h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', color: C.mute, fontSize: 12 } }, '加载中…')
+          if (dirError) return h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', alignContent: 'center', gap: 8, color: C.red, fontSize: 12, padding: 24, textAlign: 'center' } },
+            h('div', null, dirError),
+            h('button', { onClick: refreshExplorer, className: 'tether-hover', style: { border: 0, borderRadius: 6, padding: '5px 10px', background: C.soft, color: C.ink, fontSize: 12, cursor: 'pointer' } }, '重试'))
+          if (!path) return h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', color: C.mute, fontSize: 12 } }, '从左侧选择工作区或磁盘')
+          if (!entries.length) return h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', color: C.mute, fontSize: 12 } }, '空文件夹')
+          return h('div', { className: 'tether-scroll', style: { flex: '1 1 auto', overflow: 'auto', padding: '0 10px 24px' } },
+            h('div', { style: { display: 'grid', gridTemplateColumns: columns, gap: 8, height: 28, padding: '0 8px', alignItems: 'center', fontSize: 11, color: C.mute } },
+              h('span', null, '名称'), h('span', null, '修改日期'), h('span', null, '类型'), h('span', { style: { textAlign: 'right' } }, '大小')),
+            entries.map((entry) => h('div', {
+              key: entry.path, role: 'button', tabIndex: 0, title: entry.path,
+              onClick: () => setSelected(entry),
+              onDoubleClick: () => openFile(entry),
+              onContextMenu: (event) => openContextMenu(event, entry, entry.dir ? entry.path : path),
+              onKeyDown: (event) => { if (event.key === 'Enter') openFile(entry) },
+              className: 'tether-hover',
+              style: { display: 'grid', gridTemplateColumns: columns, gap: 8, height: 30, padding: '0 8px', alignItems: 'center', borderRadius: 6, fontSize: 13, color: C.ink, background: selected && selected.path === entry.path ? C.active : 'transparent', cursor: 'default' }
+            },
+              h('div', { style: { display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 } },
+                h('span', { style: { width: 16, height: 16, display: 'grid', placeItems: 'center', flex: '0 0 auto' } },
+                  h(Native.FileTypeIcon, entry.dir ? { kind: 'folder', size: 15 } : { path: entry.path, size: 15 })),
+                h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, entry.name)),
+              h('span', { style: { color: C.mute, fontSize: 11, whiteSpace: 'nowrap' } }, formatMtime(entry.mtime)),
+              h('span', { style: { color: C.mute, fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, entryTypeLabel(entry)),
+              h('span', { className: 'tether-num', style: { color: C.mute, fontSize: 11, textAlign: 'right' } }, entry.dir ? '' : formatBytes(entry.size))
+            ))
+          )
+        }
+
+        const menuItem = (icon, label, onClick, danger) => h('button', {
+          onClick, className: 'tether-hover',
+          style: { display: 'flex', alignItems: 'center', gap: 8, width: '100%', height: 30, padding: '0 8px', border: 0, borderRadius: 6, background: 'transparent', color: danger ? C.red : C.ink, fontSize: 13, textAlign: 'left', cursor: 'pointer' }
+        }, h(Glyph, { name: icon, size: 15 }), h('span', null, label))
+        const context = contextMenu ? h('div', {
+          onPointerDown: (event) => event.stopPropagation(),
+          style: { position: 'fixed', left: Math.max(8, Math.min(contextMenu.x, window.innerWidth - 190)), top: Math.max(8, Math.min(contextMenu.y, window.innerHeight - 250)), width: 178, zIndex: 60, background: C.layer1, borderRadius: 8, boxShadow: C.shadow, padding: 4, userSelect: 'none' }
+        },
+          contextMenu.entry ? menuItem('file', '打开', () => { setContextMenu(null); openFile(contextMenu.entry) }) : null,
+          contextMenu.entry ? menuItem('pencil', '重命名', () => { const entry = contextMenu.entry; setContextMenu(null); renameEntry(entry) }) : null,
+          contextMenu.entry ? menuItem('trash', '删除', () => { const entry = contextMenu.entry; setContextMenu(null); deleteEntry(entry) }, true) : null,
+          contextMenu.entry ? h('div', { style: { height: 1, background: C.line, margin: '4px 2px' } }) : null,
+          menuItem('plus', '新建文件', () => { const base = contextMenu.base; setContextMenu(null); makeFile(base) }),
+          menuItem('files', '新建文件夹', () => { const base = contextMenu.base; setContextMenu(null); makeFolder(base) }),
+          h('div', { style: { height: 1, background: C.line, margin: '4px 2px' } }),
+          menuItem('refresh', '刷新', () => { setContextMenu(null); refreshExplorer() })
+        ) : null
+
+        return h('div', {
+          onContextMenu: (event) => { if (!file) openContextMenu(event, null, path) },
+          style: { display: 'flex', flexDirection: 'column', flex: '1 1 auto', minHeight: 0, background: C.bg }
+        },
+          toolbar,
+          file ? h('div', { style: { display: 'flex', flexDirection: 'column', flex: '1 1 auto', minHeight: 0 } }, fileHeader, previewBody()) : directoryBody(),
+          context
+        )
+      }
+
+      const renderNetwork = () => {
+        const devices = (state && state.devices) || []
+        const localId = state && state.local_device
+        const online = devices.filter((item) => item.online)
+        const caps = (item) => {
+          const values = []
+          const capabilities = item.capabilities || {}
+          if (capabilities.surface_protocol === 1) values.push('插件互联')
+          if (capabilities.app_protocol === 1) values.push('App 互联')
+          if (capabilities.surface_protocol !== 1 && capabilities.app_protocol !== 1) values.push('插件版本过旧')
+          else if (!capabilities.fs) values.push('文件服务缺失')
+          return values
+        }
+        const openDevice = (item) => {
+          setDeviceId(item.device_id); setView('chat'); setActivePanel('workspaces'); setSidebarCollapsed(true)
+        }
+        const renameDevice = (item) => {
+          setDeviceMenu(null)
+          askValue('重命名节点', item.name || item.device_id, async (name) => {
+            try {
+              const updated = await post('/api/devices/' + encodeURIComponent(item.device_id) + '/name', { name })
+              setState((current) => current ? {
+                ...current,
+                devices: current.devices.map((device) => device.device_id === updated.device_id ? updated : device)
+              } : current)
+              setNotice('已重命名为「' + (updated.name || updated.device_id) + '」')
+            } catch (error) { fail(error) }
+          })
+        }
+        const openDeviceMenu = (event, item) => {
+          event.preventDefault()
+          event.stopPropagation()
+          setDeviceId(item.device_id)
+          setDeviceMenu({ x: event.clientX, y: event.clientY, device: item })
+        }
+        const menuItem = (icon, label, onClick) => h('button', {
+          onClick, className: 'tether-hover',
+          style: { display: 'flex', alignItems: 'center', gap: 8, width: '100%', height: 30, padding: '0 8px', border: 0, borderRadius: 6, background: 'transparent', color: C.ink, fontSize: 13, textAlign: 'left', cursor: 'pointer' }
+        }, h(Glyph, { name: icon, size: 15 }), h('span', null, label))
+        const deviceContext = deviceMenu ? h('div', {
+          onPointerDown: (event) => event.stopPropagation(),
+          style: { position: 'fixed', left: Math.max(8, Math.min(deviceMenu.x, window.innerWidth - 190)), top: Math.max(8, Math.min(deviceMenu.y, window.innerHeight - 110)), width: 178, zIndex: 60, background: C.layer1, borderRadius: 8, boxShadow: C.shadow, padding: 4, userSelect: 'none' }
+        },
+          menuItem('monitor', '打开原生工作区', () => { const item = deviceMenu.device; setDeviceMenu(null); openDevice(item) }),
+          menuItem('pencil', '重命名', () => renameDevice(deviceMenu.device))
+        ) : null
+        const card = (item) => h('div', {
+          key: item.device_id, onClick: () => setDeviceId(item.device_id), onDoubleClick: () => openDevice(item),
+          onContextMenu: (event) => openDeviceMenu(event, item),
+          title: item.capabilities && item.capabilities.surface_protocol === 1 ? '双击打开原生工作区' : '插件版本过旧，双击查看详情',
+          style: { background: item.device_id === deviceId ? C.soft : C.panel, borderRadius: 10, padding: '10px 12px', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }
+        },
+          h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 } },
+            dot(item.online),
+            h('span', { style: { fontWeight: 'var(--tether-strong, 600)', fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, item.name || item.device_id),
+            item.device_id === localId ? pill('本机', C.mute) : null,
+            h('span', { style: { marginLeft: 'auto', fontSize: 10.5, color: item.online ? C.green : C.mute } }, item.online ? '在线' : '离线')
+          ),
+          h('div', { style: { fontSize: 11, color: C.mute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, deviceOs(item)),
+          h('div', { style: { display: 'flex', gap: 4, flexWrap: 'wrap' } },
+            caps(item).map((label) => pill(label, /过旧|缺失|受损|异常/.test(label) ? C.amber : C.mute)))
+        )
+        const pageSize = 8
+        const totalPages = Math.max(1, Math.ceil(devices.length / pageSize))
+        const page = Math.min(networkPage, totalPages)
+        const visible = devices.slice((page - 1) * pageSize, page * pageSize)
+        const pager = totalPages > 1 ? h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 2px 0', flex: '0 0 auto' } },
+          h('button', { title: '上一页', 'aria-label': '上一页', onClick: () => setNetworkPage(Math.max(1, page - 1)), disabled: page <= 1, className: 'tether-hover', style: { width: 26, height: 26, display: 'grid', placeItems: 'center', border: 0, borderRadius: 6, background: 'transparent', color: page <= 1 ? C.mute : C.sub, cursor: page <= 1 ? 'default' : 'pointer', opacity: page <= 1 ? 0.4 : 1 } }, h(Glyph, { name: 'chevronLeft', size: 14 })),
+          h('span', { className: 'tether-num', style: { fontSize: 11, color: C.mute } }, page + ' / ' + totalPages),
+          h('button', { title: '下一页', 'aria-label': '下一页', onClick: () => setNetworkPage(Math.min(totalPages, page + 1)), disabled: page >= totalPages, className: 'tether-hover', style: { width: 26, height: 26, display: 'grid', placeItems: 'center', border: 0, borderRadius: 6, background: 'transparent', color: page >= totalPages ? C.mute : C.sub, cursor: page >= totalPages ? 'default' : 'pointer', opacity: page >= totalPages ? 0.4 : 1 } }, h(Glyph, { name: 'chevronRight', size: 14 }))
+        ) : null
+        return h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', background: C.bg } },
+          h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '14px 18px 10px', flex: '0 0 auto' } },
+            h('div', { style: { fontSize: 18, fontWeight: 'var(--tether-strong, 600)' } }, '互联'),
+            pill(online.length + ' / ' + devices.length + ' 在线', online.length ? C.green : C.mute),
+            h('span', { style: { marginLeft: 'auto' } },
+              h('button', { title: '刷新', 'aria-label': '刷新', onClick: refreshNetwork, className: 'tether-hover', style: { width: 28, height: 28, display: 'grid', placeItems: 'center', border: 0, borderRadius: 6, background: 'transparent', color: C.mute, cursor: 'pointer' } },
+                networkRefreshing ? h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 16 })) : h(Glyph, { name: 'refresh', size: 16 })))
+          ),
+          h('div', { style: { display: 'flex', flex: '1 1 auto', minHeight: 0, padding: '0 18px 18px', alignItems: 'stretch' } },
+            h('div', { style: { width: networkListWidth, flex: '0 0 auto', minHeight: 0, display: 'flex', flexDirection: 'column', transition: networkResizing ? 'none' : 'width 180ms cubic-bezier(.2,.85,.2,1.15)' } },
+              h('div', { className: 'tether-scroll', style: { flex: '1 1 auto', minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8, paddingRight: 6 } },
+                visible.map(card),
+                !devices.length ? h('div', { style: { color: C.mute, fontSize: 12 } }, '暂无设备') : null),
+              pager
+            ),
+            h('div', { className: 'tether-resizer', title: '拖动调整宽度，双击复位', onPointerDown: startNetworkResize, onDoubleClick: () => setNetworkListWidth(300), style: { width: 6, flex: '0 0 auto', cursor: 'col-resize', position: 'relative' } }),
+            h('div', { style: { flex: '1 1 auto', minWidth: 0, minHeight: 0, position: 'relative', background: C.panel, borderRadius: 12, overflow: 'hidden' } },
+              h(NetworkGraph, { devices, localId, selectedId: deviceId, onSelect: (item) => setDeviceId(item.device_id), onOpen: openDevice, onContextMenu: openDeviceMenu })
+            )
+          ),
+          deviceContext
+        )
+      }
+
       return h('div', { className: 'tether-root', style: { position: 'relative', height: '100%', display: 'flex', flexDirection: 'column', background: C.bg, color: C.ink, fontSize: 13, fontWeight: 'var(--tether-body, 400)', overflow: 'hidden' } },
         h('style', null, SCROLL_CSS),
-        h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', borderBottom: 0, background: C.panel, flex: '0 0 auto' } },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', borderBottom: 0, background: C.soft, position: 'relative', zIndex: 2, flex: '0 0 auto' } },
           h('strong', { style: { fontSize: 15 } }, 'Tether'),
-          device ? h('span', { style: { display: 'flex', alignItems: 'center', fontSize: 12, color: C.sub } }, dot(device.online), device.name) : h('span', { style: { color: C.mute } }, 'no device'),
-          device && device.capabilities && !device.capabilities.fs ? pill('节点待更新', C.amber) : null,
-          h('div', { style: { display: 'flex', gap: 2, marginLeft: 10, padding: 2, background: C.soft, borderRadius: 8 } },
-            h('button', { onClick: () => setView('chat'), className: 'tether-hover', style: { border: 0, borderRadius: 6, padding: '4px 12px', fontSize: 12, cursor: 'pointer', background: view === 'chat' ? C.bg : 'transparent', color: view === 'chat' ? C.ink : C.mute, boxShadow: 'none' } }, '对话'),
-            h('button', { onClick: () => setView('files'), className: 'tether-hover', style: { border: 0, borderRadius: 6, padding: '4px 12px', fontSize: 12, cursor: 'pointer', background: view === 'files' ? C.bg : 'transparent', color: view === 'files' ? C.ink : C.mute, boxShadow: 'none' } }, '文件')
-          ),
-          h('span', { style: { marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 } },
-            policy ? pill(policy.mode === 'full' ? 'full-disk' : (policy.mode === 'locked' ? 'locked' : 'readonly'), policy.mode === 'full' ? C.red : (policy.mode === 'locked' ? C.amber : C.mute)) : null,
-            btn('权限设置', openSettings)
-          )
+          device ? h(DeviceSwitcher, {
+            devices: (state && state.devices) || [],
+            value: deviceId,
+            onChange: setDeviceId,
+            onOpenNetwork: () => selectPanel('network')
+          }) : h('span', { style: { color: C.mute } }, 'no device'),
+          device && device.capabilities && (!device.capabilities.fs || device.capabilities.surface_protocol !== 1) ? pill('节点待更新', C.amber) : null
         ),
-        notice ? h('div', { style: { padding: '6px 14px', background: C.soft, color: /^Saved |^Policy updated/.test(notice) ? C.green : C.red, borderBottom: 0, fontSize: 12 } }, notice) : null,
+        notice ? h('div', { style: { padding: '6px 14px', background: C.soft, color: /^Saved |^Policy updated|^已重命名/.test(notice) ? C.green : C.red, borderBottom: 0, fontSize: 12 } }, notice) : null,
         h('div', { style: { display: 'flex', flex: '1 1 auto', minHeight: 0 } },
           h(ActivityBar, {
-            active: activePanel,
+            active: view === 'files' ? 'files' : (view === 'network' ? 'network' : 'workspaces'),
             collapsed: sidebarCollapsed,
             onSelect: selectPanel,
             onSettings: openSettings,
             settingsOpen: showSettings
           }),
           h(SidePanel, {
-            panel: activePanel,
             width: safeSidebarWidth,
-            hidden: sidebarCollapsed,
+            hidden: sidebarCollapsed || view !== 'files',
             resizing,
             onResizeStart: startSidebarResize,
             onResetWidth: () => setSidebarWidth(UI.defaultSide),
             onCollapse: () => setSidebarCollapsed(true),
-            devices: (state && state.devices) || [],
-            localDevice: state && state.local_device,
-            deviceId,
-            onSelectDevice: setDeviceId,
-            workspaces: workspaceNodes,
-            openWorkspaces: workspaceOpen,
-            onToggleWorkspace: (path) => setWorkspaceOpen((current) => ({ ...current, [path]: current[path] === false ? true : false })),
-            onSelectWorkspace: (w) => {
-              setProject(w); setWorkspaceOpen((current) => ({ ...current, [w.path]: true })); setView('chat'); setFreshSession(false)
-            },
-            selectedWorkspacePath: project && project.path,
-            onNewWorkspace: newProject,
-            newWorkspaceDisabled: !deviceOnline || !projects || !!projects.synthetic,
-            onNewSession: newSessionFor,
-            ungrouped,
-            freshSession,
-            sessionId,
-            runId,
-            onSelectSession: (s) => {
-              const w = workspaceNodes.find((item) => samePath(item.path, s.workspace))
-              if (w) setProject(w)
-              setSessionId(s.session_id); setRunId(''); setView('chat'); setFreshSession(false)
-            },
-            onSelectRun: (s) => {
-              const w = workspaceNodes.find((item) => samePath(item.path, s.workspace))
-              if (w) setProject(w)
-              setRunId(s.run_id); setSessionId(''); setView('chat'); setFreshSession(false)
-            },
+            loadingTree: Object.values(treeChildren).some((item) => item && item.status === 'loading'),
             treeRoots: [
-              { id: 'workspaces', label: '工作区', first: true, nodes: [
-                ...(projects && projects.root ? [{ name: 'Tether 工作区', path: projects.root, dir: true }] : []),
-                ...workspaceNodes.map((w) => ({ name: w.name, path: w.path, dir: true }))
-              ] },
-              { id: 'drives', label: '此电脑', nodes: drives.map((d) => ({ name: d.name, path: d.path, dir: true })) }
+              { id: treeNodeId(deviceId, 'workspaces', '', ''), label: '工作区', first: true, nodes: workspaceNodes.map((w) => {
+                const wid = w.id || w.workspace_id || w.path
+                return { id: treeNodeId(deviceId, 'workspaces', wid, w.path), cacheKey: treeCacheKey(deviceId, w.path), deviceId, groupId: 'workspaces', workspaceId: wid, name: w.name, path: w.path, dir: true }
+              }) },
+              { id: treeNodeId(deviceId, 'drives', '', ''), label: '此电脑', nodes: drives.map((d) => ({ id: treeNodeId(deviceId, 'drives', '', d.path), cacheKey: treeCacheKey(deviceId, d.path), deviceId, groupId: 'drives', workspaceId: '', name: d.name, path: d.path, dir: true })) },
+              ...(ungroupedPaths.length ? [{
+                id: treeNodeId(deviceId, 'ungrouped', '', ''), label: '未分组', nodes: ungroupedPaths.map((item) => ({ id: treeNodeId(deviceId, 'ungrouped', '', item), cacheKey: treeCacheKey(deviceId, item), deviceId, groupId: 'ungrouped', workspaceId: '', name: pathBasename(item), path: item, dir: true }))
+              }] : [])
             ],
             treeChildren,
             treeOpen,
             onToggleTree: toggleTree,
             onOpenFile: openFile,
+            onContextMenuNode: (event, node) => openContextMenu(event, { name: node.name, path: node.path, dir: node.dir }, node.dir ? node.path : parentOf(node.path)),
             treeSelected
           }),
           h('main', { style: { flex: '1 1 auto', display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 } },
-            view === 'chat' ? h('div', { style: { display: 'flex', flexDirection: 'column', flex: '1 1 auto', minHeight: 0 } },
-              h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderBottom: 0, background: C.bg, flex: '0 0 auto' } },
-                h('div', { style: { minWidth: 0, flex: '1 1 auto' } },
-                  h('div', { style: { fontSize: 14, fontWeight: 'var(--tether-strong, 600)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, conversationTitle || '对话'),
-                  h('div', { style: { fontSize: 11, color: C.mute, marginTop: 1 } }, [
-                    sessionId ? '原生 DSH 会话 · 只读' : (runId ? '会话 · 目标机执行' : (freshSession ? '新会话 · 目标机工作区' : '选择左侧会话或发起任务')),
-                    modelText ? ' · ' + modelText : ''
-                  ].join(''))
-                ),
-                pill(conversationStatus || 'idle', conversationStatus === 'running' ? C.blue : (conversationStatus === 'failed' ? C.red : C.mute))
-              ),
-              h(Conversation, {
-                data: conversation, loading: sessionLoading && !sessionData,
-                live: (sessionData && sessionData.status === 'running') || (currentRun && ['queued', 'dispatching', 'running', 'cancelling'].includes(currentRun.state)),
-                emptyText: freshSession ? '输入任务开始新会话' : (nativeError && !runId ? '目标节点未提供原生会话；可以直接在下方发起任务' : (currentSessions.length ? '选择一个会话' : '还没有对话，直接发一条任务开始'))
-              }),
-              h(Composer, {
-                value: task, onChange: setTask, onSend: send, busy,
-                disabled: !deviceOnline || !project,
-                note: sessionId ? '原生 DSH 会话只读；发送会在同一工作区新建会话' : (runId ? '继续当前会话' : '发送到目标机的工作区')
-              })
-            ) : h('div', { style: { display: 'flex', flexDirection: 'column', flex: '1 1 auto', minHeight: 0 } },
-              h('div', { style: { borderBottom: 0, background: C.panel, flex: '0 0 auto' } },
-                h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, padding: '7px 10px 4px' } },
-                  btn('↑', () => { if (!path) return; const parent = path.replace(/[\\/]+$/, '').replace(/[\\/][^\\/]+$/, ''); if (parent && parent !== path) { setPath(parent); setPathDraft(parent) } }, { title: '上级目录' }),
-                  h('input', { value: pathDraft, onChange: (ev) => setPathDraft(ev.target.value), onKeyDown: (ev) => { if (ev.key === 'Enter') { setPath(pathDraft); setTreeOpen((current) => ({ ...current, [pathDraft]: true })); loadTreeDir(pathDraft) } }, spellCheck: false, style: { flex: '1 1 auto', minWidth: 0, height: 28, border: 0, borderRadius: 6, padding: '0 8px', background: C.bg, fontFamily: 'Consolas, monospace', fontSize: 12 } }),
-                  btn('刷新', () => loadTreeDir(path), { disabled: !path })
-                ),
-                h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, padding: '0 10px 7px' } },
-                  btn('新建文件夹', newFolder, { disabled: !path }),
-                  btn('新建文件', newFile, { disabled: !path }),
-                  btn('重命名', renameEntry, { disabled: !selected }),
-                  btn('删除', deleteEntry, { disabled: !selected, danger: true }),
-                  selected ? h('span', { style: { marginLeft: 6, fontSize: 11.5, color: C.mute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, selected.name) : null
-                )
-              ),
-              h('div', { style: { flex: '1 1 auto', minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' } },
-                file ? h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column' } },
-                  h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderBottom: 0, background: C.panel, flex: '0 0 auto' } },
-                    h('span', { style: { fontSize: 12, color: C.sub, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, file.path),
-                    file.binary ? pill('binary') : pill(formatBytes(file.size)),
-                    file.writable ? null : pill('read-only', C.amber),
-                    h('span', { style: { marginLeft: 'auto', display: 'flex', gap: 6 } }, file.writable && !file.binary ? btn(dirty ? 'Save *' : 'Save', saveFile, { primary: true, disabled: !dirty || busy }) : null)
-                  ),
-                  file.binary ? h('div', { style: { padding: 20, color: C.mute, fontSize: 12 } }, 'Binary file. Preview is not supported.')
-                    : h('textarea', { value: draft, onChange: (ev) => { setDraft(ev.target.value); setDirty(true) }, readOnly: !file.writable, spellCheck: false, style: { flex: '1 1 auto', width: '100%', boxSizing: 'border-box', resize: 'none', border: 0, outline: 'none', padding: '10px 12px', fontFamily: 'Consolas, monospace', fontSize: 12.5, lineHeight: 1.55, background: file.writable ? C.bg : C.panel, color: C.ink } })
-                ) : h('div', { style: { display: 'grid', placeItems: 'center', height: '100%', color: C.mute, fontSize: 12 } }, '从左侧文件树选择文件')
-              )
-            )
+            h(NativeSurface, { deviceId, online: deviceOnline, visible: view === 'chat' }),
+            view === 'files' ? renderExplorer() : (view === 'network' ? renderNetwork() : null)
         ),
         ),
-        showSettings ? h('div', { style: { position: 'absolute', inset: 0, background: 'rgba(16,24,40,0.35)', display: 'flex', justifyContent: 'flex-end', zIndex: 20 } },
+        showSettings ? h('div', {
+          onPointerDown: (event) => { if (event.target === event.currentTarget) setShowSettings(false) },
+          style: { position: 'absolute', inset: 0, background: 'rgba(16,24,40,0.35)', display: 'flex', justifyContent: 'flex-end', zIndex: 20 }
+        },
           h('div', { style: { width: 480, height: '100%', background: C.bg, borderLeft: 0, display: 'flex', flexDirection: 'column', boxShadow: C.shadow } },
             h('div', { style: { padding: '12px 16px', borderBottom: 0, background: C.panel, display: 'flex', alignItems: 'center' } },
               h('strong', null, '文件权限'), device ? h('span', { style: { marginLeft: 8, fontSize: 12, color: C.mute } }, device.name) : null,
               h('button', { onClick: () => setShowSettings(false), style: { marginLeft: 'auto', border: 0, background: 'transparent', fontSize: 18, cursor: 'pointer', color: C.mute } }, '×')
             ),
             h('div', { style: { padding: 16, overflow: 'auto', flex: '1 1 auto' } },
-              h('div', { style: { display: 'grid', gap: 6, marginBottom: 12 } },
-                [['readonly', '默认：全盘只读 + 项目可写', '全盘可读；仅项目根、已有 DSH 工作区、节点工作目录可写。', C.dark],
-                 ['locked', '锁定：全部只读', '任何写入、新建、重命名、删除都被拒绝。', C.amber],
-                 ['full', '全盘读写', '目标机主机权限。系统目录、凭据与 AppData 仍拒写；需二次确认。', C.red]].map(([value, title, desc, color]) =>
+              h('div', { style: { display: 'grid', gap: 6, marginBottom: 4 } },
+                [['readonly', '默认：全盘只读 + 项目可写', '全盘可读；只写项目根和下列目录。'],
+                 ['locked', '锁定：全部只读', '拒绝所有写入、删除。'],
+                 ['full', '全盘读写', '主机权限；系统/凭据仍拒绝。']].map(([value, title, desc]) =>
                   h('label', { key: value, style: { border: 0, borderRadius: 8, padding: '8px 10px', cursor: 'pointer', background: mode === value ? C.soft : C.panel } },
                     h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } }, h('input', { type: 'radio', checked: mode === value, onChange: () => setMode(value) }), h('strong', { style: { fontSize: 13 } }, title)),
-                    h('div', { style: { fontSize: 11.5, color: C.mute, marginTop: 3 } }, desc)
+                    h('div', { style: { fontSize: 11.5, color: C.mute, marginTop: 3, lineHeight: '18px' } }, desc)
                   ))
               ),
-              h('div', { style: { fontSize: 11, fontWeight: 'var(--tether-strong, 600)', color: C.mute, marginBottom: 6, letterSpacing: 0.4 } }, '可写根目录'),
-              h('textarea', { value: rootsText, onChange: (ev) => setRootsText(ev.target.value), spellCheck: false, style: { width: '100%', height: 88, boxSizing: 'border-box', border: 0, borderRadius: 6, padding: 8, background: C.panel, fontFamily: 'Consolas, monospace', fontSize: 12, resize: 'vertical' } }),
-              h('div', { style: { display: 'flex', gap: 8, marginTop: 10 } }, btn('保存权限', savePolicy, { primary: true, disabled: busy || !device || !device.online }), h('span', { style: { fontSize: 11, color: C.mute, alignSelf: 'center' } }, policy ? ('更新于 ' + (policy.updated_by || 'default')) : '')),
-              h('div', { style: { fontSize: 11, fontWeight: 'var(--tether-strong, 600)', color: C.mute, margin: '18px 0 6px', letterSpacing: 0.4 } }, '审计（最近 80 条）'),
+              h('div', { style: { display: 'flex', alignItems: 'center', height: 28, marginTop: 16, fontSize: 13, lineHeight: '20px', fontWeight: 'var(--tether-body, 400)', color: C.mute } },
+                h('span', null, '可写根目录'),
+                h('button', { title: '添加可写根目录', 'aria-label': '添加可写根目录', onClick: addRoot, className: 'tether-hover', style: { marginLeft: 'auto', width: 26, height: 26, display: 'grid', placeItems: 'center', border: 0, borderRadius: 6, background: 'transparent', color: C.mute, cursor: 'pointer' } }, h(Glyph, { name: 'plus', size: 15 }))),
+              h('div', { style: { fontSize: 11.5, color: C.mute, lineHeight: '18px', margin: '0 0 6px' } }, '额外可写；DSH 工作区与节点工作目录始终可写。'),
+              h('div', { style: { borderRadius: 6, overflow: 'hidden', background: C.panel } },
+                rootList().length ? rootList().map((root, index) => h('div', {
+                  key: index + ':' + root, title: root,
+                  style: { display: 'flex', alignItems: 'center', gap: 6, height: 30, padding: '0 8px', fontSize: 11.5, color: C.sub }
+                },
+                  h('span', { style: { flex: '1 1 auto', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'Consolas, monospace' } }, root),
+                  h('button', { title: '编辑', 'aria-label': '编辑', onClick: () => editRoot(index), className: 'tether-hover', style: { width: 24, height: 24, display: 'grid', placeItems: 'center', border: 0, borderRadius: 5, background: 'transparent', color: C.mute, cursor: 'pointer' } }, h(Glyph, { name: 'pencil', size: 14 })),
+                  h('button', { title: '删除', 'aria-label': '删除', onClick: () => removeRoot(index), className: 'tether-hover', style: { width: 24, height: 24, display: 'grid', placeItems: 'center', border: 0, borderRadius: 5, background: 'transparent', color: C.mute, cursor: 'pointer' } }, h(Glyph, { name: 'trash', size: 14 }))
+                )) : h('div', { style: { padding: '8px', fontSize: 11.5, color: C.mute } }, '未添加额外目录')
+              ),
+              h('div', { style: { display: 'flex', gap: 8, marginTop: 10, alignItems: 'center' } },
+                h('button', { onClick: savePolicy, disabled: busy || !device || !device.online, className: 'tether-press tether-hover', title: policy ? ('更新于 ' + (policy.updated_by || 'default')) : '', style: { height: 28, padding: '0 10px', borderRadius: 6, border: 0, background: C.primary, color: C.onPrimary, fontSize: 12, cursor: busy || !device || !device.online ? 'not-allowed' : 'pointer', opacity: busy || !device || !device.online ? 0.5 : 1, display: 'flex', alignItems: 'center', gap: 6 } }, h(Glyph, { name: 'save', size: 14 }), '保存权限')),
+              h('div', { style: { fontSize: 13, lineHeight: '20px', fontWeight: 'var(--tether-body, 400)', color: C.mute, margin: '18px 0 4px' } }, '审计 · ' + (auditCount || 0) + ' 条 / 上限 ' + (auditRetained || 100000)),
+              h('div', { style: { fontSize: 11.5, color: C.mute, lineHeight: '18px', marginBottom: 6 } }, 'Tether 文件服务操作；不含 DSH Agent 命令。写入含 intent/result。'),
               h('div', { style: { border: 0, borderRadius: 6, overflow: 'hidden', background: C.panel } },
                 h('div', { style: { display: 'grid', gridTemplateColumns: '58px 1fr 70px', gap: 6, padding: '5px 8px', background: C.soft, fontSize: 10, color: C.mute, borderBottom: 0 } }, h('span', null, '操作'), h('span', null, '路径'), h('span', null, '结果')),
-                h('div', { style: { maxHeight: 220, overflow: 'auto' } },
+                h('div', { style: { maxHeight: 260, overflow: 'auto' } },
                   audit.map((a, i) => h('div', { key: i, style: { display: 'grid', gridTemplateColumns: '58px 1fr 70px', gap: 6, padding: '4px 8px', fontSize: 10.5, borderBottom: 0, background: i % 2 ? C.bg : 'transparent', color: a.result === 'denied' ? C.red : C.sub } },
                     h('span', null, a.op), h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, title: a.path }, a.path),
                     h('span', null, a.phase === 'intent' ? (a.result === 'denied' ? 'denied' : 'intent') : a.result)
                   )),
                   !audit.length ? h('div', { style: { padding: 10, fontSize: 11, color: C.mute } }, '暂无审计') : null
                 )
-              )
+              ),
+              audit.length < auditCount ? h('div', { style: { textAlign: 'center', paddingTop: 8 } },
+                h('button', { onClick: loadMoreAudit, disabled: auditLoading, className: 'tether-hover', style: { border: 0, borderRadius: 6, padding: '5px 12px', background: C.soft, color: C.ink, fontSize: 12, cursor: auditLoading ? 'default' : 'pointer', opacity: auditLoading ? 0.6 : 1 } }, auditLoading ? '加载中…' : '加载更多')) : null
             )
           )
         ) : null,
@@ -1368,13 +2171,17 @@ window.__ModuleLoader__.load({
     }
 
     function TetherIcon() {
-      return h('span', { title: 'Tether', style: { display: 'grid', placeItems: 'center', width: 22, height: 22, borderRadius: 6, background: C.primary, color: C.onPrimary, fontSize: 12, fontWeight: 'var(--tether-strong-2, 700)' } }, 'T')
+      return h('span', { title: 'Tether', style: { display: 'grid', placeItems: 'center', width: 16, height: 16, borderRadius: 4, background: C.primary, color: C.onPrimary, fontSize: 10, lineHeight: '16px', fontFamily: 'inherit', fontWeight: 'var(--tether-strong-2, 700)', flex: '0 0 auto' } }, 'T')
     }
 
     return {
       name: 'tether',
       inject: ['slots', 'layout'],
       apply(ctx) {
+        if (new URL(window.location.href).searchParams.has('tether_native')) {
+          ctx.layout.selectPanel(null)
+          return
+        }
         ctx.slots.inject('main', function* () {
           yield ctx.slots.register({ name: 'main', key: PANEL_ID }, App)
         })

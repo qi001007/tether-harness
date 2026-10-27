@@ -20,6 +20,7 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from .store import Conflict, NotFound, Store
+from .native_surface import NativeSurfaceGateways
 
 ROOT = Path(__file__).resolve().parents[2]
 STATIC = Path(__file__).resolve().parents[1] / "static"
@@ -91,11 +92,13 @@ class NodeTimeout(Exception):
 
 
 HUB = Hub()
+NATIVE_SURFACES = NativeSurfaceGateways(HUB.request)
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     yield
+    await NATIVE_SURFACES.close()
     STORE.close()
 
 
@@ -131,6 +134,22 @@ async def index() -> FileResponse:
 async def state() -> dict[str, Any]:
     return {"devices": STORE.list_devices(), "sessions": STORE.list_sessions(), "runs": STORE.list_runs(),
             "local_device": os.environ.get("TETHER_DEVICE", "DESKTOP-LOCAL")}
+
+
+@app.post("/api/devices/{device_id}/name")
+async def rename_device(device_id: str, body: dict[str, Any]) -> dict[str, Any]:
+    raw = body.get("name")
+    if not isinstance(raw, str):
+        raise HTTPException(400, "name is required")
+    name = raw.strip()
+    if not name or len(name) > 64 or any(ord(char) < 32 for char in name):
+        raise HTTPException(400, "name must be 1-64 printable characters")
+    try:
+        device = STORE.rename_device(device_id, name)
+    except NotFound as exc:
+        raise HTTPException(404, "device not found") from exc
+    HUB.broadcast({"kind": "device", "device": device})
+    return device
 
 
 @app.post("/api/sessions")
@@ -258,8 +277,8 @@ async def set_device_policy(device_id: str, body: dict[str, Any]) -> Any:
 
 
 @app.get("/api/devices/{device_id}/audit")
-async def device_audit(device_id: str, limit: int = 100) -> Any:
-    return await _device_fs(device_id, "audit_list", {"limit": limit})
+async def device_audit(device_id: str, limit: int = 100, offset: int = 0) -> Any:
+    return await _device_fs(device_id, "audit_list", {"limit": limit, "offset": offset})
 
 
 async def _device_dsh(device_id: str, op: str, args: dict[str, Any] | None = None) -> Any:
@@ -291,6 +310,33 @@ async def device_dsh_transcript(device_id: str, session_id: str) -> Any:
 @app.post("/api/devices/{device_id}/dsh/workspaces/register")
 async def device_dsh_register_workspace(device_id: str, body: dict[str, Any]) -> Any:
     return await _device_dsh(device_id, "workspace_register", body)
+
+
+@app.get("/api/devices/{device_id}/dsh/surface")
+async def device_dsh_surface(device_id: str) -> Any:
+    try:
+        device = STORE.get_device(device_id)
+    except NotFound as exc:
+        raise HTTPException(404, "device not found") from exc
+    if not device["online"]:
+        raise HTTPException(409, {"error": "device offline", "code": "device_offline"})
+    capabilities = device.get("capabilities") or {}
+    if not capabilities.get("dsh_native") or capabilities.get("surface_protocol") != 1:
+        raise HTTPException(409, {"error": "node update required for native DSH surface",
+                                 "code": "node_update_required"})
+    try:
+        return await NATIVE_SURFACES.connect(device_id)
+    except NodeOffline as exc:
+        raise HTTPException(409, {"error": "device offline", "code": "device_offline"}) from exc
+    except NodeTimeout as exc:
+        raise HTTPException(504, {"error": "device did not answer the native surface request",
+                                  "code": "surface_timeout"}) from exc
+    except Exception as exc:  # noqa: BLE001 - do not expose node or upstream details
+        reason = str(exc)
+        code = reason if reason in {"descriptor_missing", "descriptor_invalid",
+                                    "host_unreachable", "auth_failed"} else "surface_unavailable"
+        raise HTTPException(409, {"error": "native DSH surface unavailable",
+                                  "code": code}) from exc
 
 
 @app.get("/api/events")
@@ -383,7 +429,7 @@ async def _handle_node(device_id: str, msg: dict[str, Any]) -> None:
         return
     if kind == "dispatch_ack":
         return
-    if kind == "fs_result" or kind == "dsh_result":
+    if kind in ("fs_result", "dsh_result", "surface_result"):
         HUB.resolve(str(msg.get("req_id") or ""), msg)
         return
     if kind == "reconcile_result":

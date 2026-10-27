@@ -1,0 +1,110 @@
+{
+  "target": "http://127.0.0.1:18897/",
+  "actions": {
+    "previewExplanation": {
+      "present": false,
+      "clickedContinue": false,
+      "dismissed": true,
+      "alreadyDismissed": true
+    },
+    "loginDialog": "none",
+    "existingSession": {
+      "found": true,
+      "clicked": true
+    },
+    "conversationTab": {
+      "found": true,
+      "clicked": true
+    },
+    "modelMenu": {
+      "found": true,
+      "clicked": true,
+      "opened": true,
+      "label": "model menu",
+      "popupVisible": true,
+      "contentChanged": false
+    },
+    "permissionMenu": {
+      "found": true,
+      "clicked": true,
+      "opened": true,
+      "label": "permission menu",
+      "popupVisible": true,
+      "contentChanged": false,
+      "readOnlyOptionVisible": false,
+      "workspaceModifyOptionVisible": true,
+      "visibleOptionCount": 3
+    },
+    "addFileOrReference": {
+      "found": true,
+      "clicked": true,
+      "opened": true,
+      "label": "file/reference menu",
+      "popupVisible": true,
+      "contentChanged": false
+    },
+    "referenceDraft": {
+      "composerFound": true,
+      "atTyped": true,
+      "sent": false,
+      "suggestionVisible": true
+    },
+    "trajectoryTab": {
+      "found": true,
+      "clicked": true
+    },
+    "trajectoryHistoryTab": {
+      "found": false,
+      "label": "trajectory history tab"
+    }
+  },
+  "runtime": {
+    "consoleMessages": [
+      {
+        "type": "error",
+        "text": "Failed to load resource: net::ERR_BLOCKED_BY_CLIENT.Inspector"
+      }
+    ],
+    "consoleErrors": [
+      "Failed to load resource: net::ERR_BLOCKED_BY_CLIENT.Inspector"
+    ],
+    "pageErrors": [],
+    "requestFailed": [
+      {
+        "method": "GET",
+        "url": "https://static.deepseek.com/user-avatar/76IrXffF8ZQ7d3PXXE7kLLMq",
+        "failure": "net::ERR_BLOCKED_BY_CLIENT.Inspector"
+      }
+    ],
+    "blockedRequests": [
+      {
+        "method": "GET",
+        "url": "https://static.deepseek.com/user-avatar/76IrXffF8ZQ7d3PXXE7kLLMq",
+        "reason": "non-loopback destination blocked"
+      }
+    ]
+  },
+  "checks": {
+    "nativePageVisible": true,
+    "visibleControls": {
+      "buttons": 38,
+      "tabs": 0,
+      "composers": 1
+    },
+    "nativeFrameCount": 1,
+    "trajectoryContent": {
+      "tables": 1,
+      "timelines": 3
+    },
+    "duplicateRendererFactoryRegistration": {
+      "reproduced": false,
+      "occurrences": 0
+    },
+    "authentication": "No login or account entry performed; only an explicit close control was used.",
+    "modelRequests": "No send/submit control, Enter key, or file selection was invoked. Known message/run submission endpoints are blocked; other loopback POST requests remain available for native read operations.",
+    "harnessPath": "Direct local NativeSurfaceGateways harness; this run does not validate the target Node WebSocket tunnel."
+  },
+  "passed": true,
+  "screenshotPath": "E:\\遥望科技实习项目\\tether\\docs\\screenshots\\native-surface-full.png",
+  "reportPath": "E:\\遥望科技实习项目\\tether\\docs\\screenshots\\native-surface-full-report.json"
+}

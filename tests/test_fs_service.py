@@ -79,6 +79,46 @@ def test_full_mode_writes_outside_but_still_protects_system_and_credentials(env,
     assert caught.value.code == "denied"
 
 
+def test_audit_uses_sqlite_and_pages_newest_first(env) -> None:
+    svc: FsService = env["svc"]
+    for index in range(12):
+        svc.audit.add(op="probe", path=str(index), phase="result", result="ok")
+    first = svc.dispatch("audit_list", {"limit": 5, "offset": 0})
+    assert [row["path"] for row in first["entries"]] == ["11", "10", "9", "8", "7"]
+    second = svc.dispatch("audit_list", {"limit": 5, "offset": 5})
+    assert [row["path"] for row in second["entries"]] == ["6", "5", "4", "3", "2"]
+    assert first["count"] >= 12
+    assert first["retained"] == 100000
+    assert (env["data"] / "audit.db").is_file()
+
+
+def test_drive_root_without_trailing_separator_resolves(env) -> None:
+    svc: FsService = env["svc"]
+    resolved = svc._resolve("C:")
+    assert resolved.is_absolute()
+    assert str(resolved).endswith("\\")
+
+
+def test_preview_returns_renderable_text_markdown_image_and_pdf(env) -> None:
+    svc: FsService = env["svc"]
+    folder = env["root"] / "preview"
+    folder.mkdir()
+    (folder / "note.md").write_text("# Title\n\nbody", encoding="utf-8")
+    (folder / "plain.txt").write_text("line one", encoding="utf-8")
+    (folder / "pic.png").write_bytes(b"\x89PNG\r\n\x1a\n" + b"x" * 16)
+    (folder / "doc.pdf").write_bytes(b"%PDF-1.4\n%%EOF")
+    (folder / "blob.bin").write_bytes(b"\x00\x01\x02")
+
+    markdown = svc.dispatch("preview", {"path": str(folder / "note.md")})
+    assert markdown["kind"] == "markdown" and "# Title" in markdown["text"]
+    assert svc.dispatch("preview", {"path": str(folder / "plain.txt")})["kind"] == "text"
+    image = svc.dispatch("preview", {"path": str(folder / "pic.png")})
+    assert image["kind"] == "image" and image["mime"] == "image/png" and image["base64"]
+    pdf = svc.dispatch("preview", {"path": str(folder / "doc.pdf")})
+    assert pdf["kind"] == "pdf" and pdf["mime"] == "application/pdf" and pdf["base64"]
+    assert svc.dispatch("preview", {"path": str(folder / "blob.bin")})["kind"] == "unsupported"
+
+
 def test_locked_mode_blocks_all_writes(env) -> None:
     svc: FsService = env["svc"]
     svc.dispatch("policy_set", {"mode": "locked"})
