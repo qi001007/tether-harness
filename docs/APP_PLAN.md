@@ -17,7 +17,8 @@ APP 壳、Relay/Account 仍是设计，未实现。
   `npm --prefix packages/tether-ui run build:web`、`node packages/tether-ui/web/serve.mjs`。
 - 回归：`tests/test_tether_ui_shared.mjs` 断言插件 bundle 与共享源码逐字一致并能在 VM 启动；
   JS 23/23 通过。WebUI 在 Edge 1600×1000 实机验收：原生工作区 iframe、文件树/明细/面包屑、
-  互联卡片+拓扑、权限/审计抽屉均读取真实 Controller 数据。
+  互联卡片+拓扑、权限/审计抽屉均读取真实 Controller 数据。证据截图：
+  `docs/screenshots/webui-files-1600.png`、`docs/screenshots/webui-network-1600.png`。
 - 已知边界：Web 回落组件只覆盖插件用到的三个原生组件；原生 surface 的 iframe 在
   Web origin 下未做网关/Cookie 重验（当前本机可显示，不作为验收结论）；Electron 未开始。
 
