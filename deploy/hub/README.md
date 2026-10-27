@@ -115,11 +115,37 @@ TETHER_INSECURE_TLS=1
 
 This is for today's demo only; a real certificate is the production path.
 
+## Native DSH page across machines
+
+Each device gateway gets its own public origin instead of a Hub loopback URL:
+
+- Caddy serves `https://g<port>.<TETHER_SURFACE_SUFFIX>` with on-demand TLS.
+- `deploy/hub/surface_mux.py` (systemd `tether-surface-mux.service`, listen
+  `127.0.0.1:18990`) maps the host to that gateway port and rewrites Host/Origin
+  for HTTP and WebSocket, including the gateway cookie.
+- The Controller sets `TETHER_SURFACE_SUFFIX` and returns the public URL.
+
+```bash
+# once, on the Hub
+/opt/tether/app/.venv/bin/pip install httpx
+cp deploy/hub/surface_mux.py /opt/tether/app/deploy/hub/
+cp deploy/hub/tether-surface-mux.service /etc/systemd/system/
+echo 'TETHER_SURFACE_SUFFIX=8-220-198-26.sslip.io' >> /opt/tether/app/.env
+systemctl daemon-reload && systemctl enable --now tether-surface-mux
+systemctl restart tether-hub
+cp /etc/caddy/Caddyfile /etc/caddy/Caddyfile.bak
+cp deploy/hub/Caddyfile.example /etc/caddy/Caddyfile
+caddy validate --config /etc/caddy/Caddyfile && systemctl reload caddy
+```
+
+The wildcard DNS must resolve to the Hub (sslip.io does for any `g<port>` prefix).
+Do not open gateway ports; only 443 is used.
+
 ## Current limits
 
-- Cross-machine **file explorer / permissions / rename / audit** work through `/api`.
-- The **native DSH workspace iframe** returned by the Hub points at the Controller's
-  loopback gateway and is not yet proxied through the public origin. Local plugin
-  (on the target) still shows it; remote operator should treat that one view as pending.
+- The native page needs both the target Node and its DSH surface; a Node alone is
+  not enough.
+- Cross-machine **file explorer / permissions / rename / audit** and the native
+  DSH page work through `/api` and the per-device public origin.
 - The Hub is single-user and token-protected. Do not share the token or open the API
   beyond the operator.

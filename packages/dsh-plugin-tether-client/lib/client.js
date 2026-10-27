@@ -1150,9 +1150,11 @@ function createTetherPanel({ React, Native, host }) {
       try { url = new URL(value) } catch (_) { return false }
       const host = url.hostname.toLowerCase()
       const loopback = host === '127.0.0.1' || host === '[::1]'
-      return url.protocol === 'http:' && loopback && !url.username && !url.password &&
-        Number(url.port || 80) > 0 && Number(url.port || 80) <= 65535 && url.pathname === '/tether-connect' &&
-        !!url.searchParams.get('ticket') && !url.hash
+      const publicSurface = url.protocol === 'https:' && /^g\d{2,5}\.[a-z0-9.-]+$/.test(host)
+      const allowedHost = (url.protocol === 'http:' && loopback) || publicSurface
+      return allowedHost && !url.username && !url.password &&
+        Number(url.port || (url.protocol === 'https:' ? 443 : 80)) > 0 &&
+        url.pathname === '/tether-connect' && !!url.searchParams.get('ticket') && !url.hash
     }
 
     function App() {

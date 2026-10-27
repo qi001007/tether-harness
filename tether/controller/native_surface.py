@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import os
 import binascii
 import secrets
 import socket
@@ -23,6 +24,8 @@ MAX_BODY = 8 * 1024 * 1024
 MAX_GATEWAYS = 64
 HTTP_TIMEOUT = 30.0
 WS_TIMEOUT = 55.0
+SURFACE_SUFFIX = os.environ.get("TETHER_SURFACE_SUFFIX", "")
+
 HOP_HEADERS = {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
                "te", "trailer", "transfer-encoding", "upgrade", "set-cookie",
                "authorization", "cookie", "location", "access-control-allow-origin"}
@@ -48,6 +51,10 @@ class _Gateway:
     def host(self) -> str:
         return f"127.0.0.1:{self.port}"
 
+    @property
+    def public_origin(self) -> str:
+        return f"https://g{self.port}.{SURFACE_SUFFIX}" if SURFACE_SUFFIX else self.origin
+
 
 class NativeSurfaceGateways:
     """Per-device loopback HTTP/WS relays. The callback is bound to each gateway."""
@@ -66,7 +73,7 @@ class NativeSurfaceGateways:
                     await self._stop(old)
                     raise RuntimeError((status.get("result") or {}).get("reason") or status.get("error") or "surface_unavailable")
                 ticket = self._new_ticket(old)
-                return {"url": f"{old.origin}/tether-connect?ticket={ticket}", "available": True}
+                return {"url": f"{old.public_origin}/tether-connect?ticket={ticket}", "available": True}
             if len(self._gateways) >= MAX_GATEWAYS:
                 raise RuntimeError("surface_gateway_capacity")
             status = await self._call(device_id, "status", {}, HTTP_TIMEOUT)
@@ -105,7 +112,7 @@ class NativeSurfaceGateways:
                     await self._stop(gateway)
                     raise RuntimeError("surface_gateway_start_failed")
                 ticket = self._new_ticket(gateway)
-                return {"url": f"{gateway.origin}/tether-connect?ticket={ticket}", "available": True}
+                return {"url": f"{gateway.public_origin}/tether-connect?ticket={ticket}", "available": True}
             except BaseException:
                 sock.close()
                 raise

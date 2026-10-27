@@ -1,0 +1,16 @@
+[Unit]
+Description=Tether surface origin mux
+After=network-online.target tether-hub.service
+
+[Service]
+User=tether
+Group=tether
+WorkingDirectory=/opt/tether/app/deploy/hub
+EnvironmentFile=/opt/tether/app/.env
+Environment=TETHER_SURFACE_SUFFIX=8-220-198-26.sslip.io
+ExecStart=/opt/tether/app/.venv/bin/python -m uvicorn surface_mux:app --host 127.0.0.1 --port 18990
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

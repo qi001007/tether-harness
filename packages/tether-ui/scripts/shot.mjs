@@ -57,7 +57,7 @@ try {
     await send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: Math.round(width * 0.65), y: Math.round(height * 0.5), deltaX: 0, deltaY: wheel, pointerType: 'mouse' })
     await sleep(900)
   }
-  await sleep(2000)
+  await sleep(Number(process.env.TETHER_SHOT_WAIT || 2000))
   const shot = await send('Page.captureScreenshot', { format: 'png' })
   fs.writeFileSync(out, Buffer.from(shot.result.data, 'base64'))
   console.log(JSON.stringify({ out, clicked, bytes: fs.statSync(out).size }))

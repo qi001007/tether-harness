@@ -188,7 +188,7 @@ E:\遥望科技实习项目\tether\.runtime\env-before-hub-20261027.bak
    同时修复了 Windows Node 的 wss bug：`websockets.connect` 不能显式传 `ssl=None`，否则报 `ValueError: ssl=None is incompatible with a wss:// URI`；现在只在有 CA/不安全开关时才传 `ssl`。目标机必须拉到此修复后再接入。
 2. 目标机计划是 Windows `LAPTOP-01`；历史报告路径为 `C:\tether-node\app`，但必须先到目标机重新确认路径和版本，不能直接覆盖。
 3. 目标机接入后仍需验证：设备在线、文件资源管理、权限、改名、审计和任务。
-4. 原生 DSH 工作区 iframe 跨机仍未代理。Hub 返回的原生页指向 Controller 主机 loopback gateway；目标机本地插件仍可显示，但操作者远程查看该页暂不可用。
+4. 原生 DSH iframe 已改为每设备公网子域：Hub 设置 `TETHER_SURFACE_SUFFIX`，Caddy 按需 TLS 服务 `g<port>.<suffix>`，`surface_mux.py` 转发到该设备 loopback 网关（含 Cookie/WS）。本机 APP 与插件已实测加载原生页；目标机接入后同一路径可用。
 5. 单用户共享令牌属于当前演示阶段；正式多用户产品需要账号、设备配对、令牌轮换和权限模型。
 6. `hub.remotestitch.com` 需等待 `clientHold` 解除，公网 DNS 生效后再替换临时域名并申请正式证书。
 7. 真实大文件上传、真实模型服务发送、原生文档持久化和第二台机器验收不能由本地 UI 或 HTTP 200 代替。
@@ -220,7 +220,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\deploy\hub\join-node.ps1 `
 2. 服务器日志出现 `LAPTOP-01` 注册。
 3. APP 从 `在线设备：否` 变为在线并可选择目标设备。
 4. 文件/权限/改名/审计各做一次真实操作并核对服务器状态。
-5. 单独记录原生 DSH iframe 未代理，不把它写成已完成。
+5. 原生 iframe 使用 g<port>.<suffix> 公网 origin；记录实际设备端口与加载结果。
 
 ### B. 域名审核通过后切换
 
