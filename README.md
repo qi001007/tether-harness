@@ -35,7 +35,7 @@ The plugin connects to the configured service; it does not create a service or n
 
 Install the Node using the package and instructions provided by your service operator. Configure its service address, device identity, and assigned credentials locally. Nodes connect outbound to the configured service; a target device does not need to expose an inbound public port. The Node's file policy determines which operations are allowed.
 
-Use compatible client, plugin, Node, and service releases. Updating only one component can leave the system unable to connect. Legacy release packages are being removed as part of repository cleanup; do not assume older downloads remain available. New independent installation packages have not been published.
+Use compatible client, plugin, Node, and service releases. Updating only one component can leave the system unable to connect. The legacy `v0.2.0` release has been withdrawn and its ZIP assets removed; the release tag remains with a withdrawal notice. New independent installation packages have not been published.
 
 ## Plugin tools
 
