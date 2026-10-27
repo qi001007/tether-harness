@@ -24,16 +24,19 @@ for i in $(seq 1 40); do
   if /opt/tether/app/.venv/bin/python - <<'PY'
 import os, urllib.request
 from pathlib import Path
-token = ''
+try:
+    token = ''
 for line in Path('.env').read_text(encoding='utf-8').splitlines():
     if line.startswith('TETHER_ACCESS_TOKEN='):
         token = line.split('=', 1)[1].strip().strip('"').strip("'")
-if not token:
+    if not token:
+        raise SystemExit(1)
+    req = urllib.request.Request('http://127.0.0.1:18890/api/state',
+                                 headers={'Authorization': 'Bearer ' + token})
+    with urllib.request.urlopen(req, timeout=3) as response:
+        raise SystemExit(0 if response.status == 200 else 1)
+except Exception:
     raise SystemExit(1)
-req = urllib.request.Request('http://127.0.0.1:18890/api/state',
-                             headers={'Authorization': 'Bearer ' + token})
-with urllib.request.urlopen(req, timeout=3) as response:
-    raise SystemExit(0 if response.status == 200 else 1)
 PY
   then
     break
