@@ -64,6 +64,8 @@ kept as evidence and may show earlier UI.
 
 - DSH native client plugin: native DSH page, file explorer, previews, permissions/audit,
   network graph, device rename and context menus.
+- Shared React UI package `packages/tether-ui`: the plugin bundle is generated from it,
+  and a browser WebUI runs the same source through the `WebHost` adapter.
 - Controller + Node + MCP tools, with Tailscale or LAN as the current transport.
 - Regression tests and acceptance screenshots.
 
@@ -71,10 +73,30 @@ kept as evidence and may show earlier UI.
 
 - Standalone APP (Electron shell + service supervisor + embedded Web UI).
 - Tether Relay/Account to replace the Tailscale dependency.
-- Shared UI package used by plugin, APP and WebUI.
 
 The plan is in [docs/APP_PLAN.md](docs/APP_PLAN.md). `desktop/tether-app.ps1` today is
 only a launcher for the Controller/Node monitor window; it is not the standalone APP.
+
+### Shared UI (Phase 1)
+
+```
+packages/tether-ui/src/app.js        createTetherPanel({ React, Native, host })
+packages/tether-ui/src/hosts/dsh.js  DSH API base + native bridge
+packages/tether-ui/src/hosts/web.js  Web fallbacks for FileEntryRow/FileTypeIcon/Markdown
+```
+
+`packages/dsh-plugin-tether-client/lib/client.js` is generated:
+
+```powershell
+node packages/tether-ui/scripts/build.mjs          # regenerate plugin bundle
+node packages/tether-ui/scripts/build.mjs --check  # fail if out of date
+npm --prefix packages/tether-ui run build:web      # browser bundle
+node packages/tether-ui/web/serve.mjs              # http://127.0.0.1:18891
+```
+
+`web/serve.mjs` proxies `/api` to the Controller so the WebUI stays same-origin
+(the Controller still only allows the `dsh-app://app` origin directly). The WebUI is a
+development/acceptance entry for Phase 1; the Electron APP is Phase 2.
 
 ## What is verified
 
@@ -361,10 +383,11 @@ tether/                    Python package
   static/                  current monitor Web UI
 
 packages/
-  dsh-plugin-tether/        DSH bundle + Cordis patch
-  dsh-plugin-tether-client/ native DSH client page (all Tether panels)
-  tether-dsh-native-ui/     generated bridge to DSH MIT UI primitives
-  tether-dsh-surface/       target Host descriptor companion
+  tether-ui/               shared React UI, hosts and WebUI entry (Phase 1)
+  dsh-plugin-tether/       DSH bundle + Cordis patch
+  dsh-plugin-tether-client/ generated DSH plugin shell + Tether panels
+  tether-dsh-native-ui/    generated bridge to DSH MIT UI primitives
+  tether-dsh-surface/      target Host descriptor companion
 
 scripts/                   launcher, QA harnesses, service restart
 desktop/                   plugin/MCP installers, app launcher, LAN/Tailscale helpers
@@ -374,7 +397,6 @@ docs/                      architecture, feedback, progress, screenshots, APP pl
 evidence/                  measured results
 
 # planned, not present yet
-packages/tether-ui/        shared React UI for plugin/APP/WebUI
 apps/tether-app/           Electron app shell + service supervisor
 tether/relay/              Tether Relay/Account
 ```

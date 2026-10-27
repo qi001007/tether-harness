@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tether WebUI</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --dsw-radius-md: 8px;
+      --dsh-chat-content-width: 748px;
+      --dsw-alias-label-primary: #101828;
+      --dsw-alias-label-secondary: #475467;
+      --dsw-alias-label-tertiary: #667085;
+      --dsw-alias-bg-base: #ffffff;
+      --dsw-specific-sidebar-fill: #f9fafb;
+      --dsw-alias-interactive-bg-hover: rgba(38, 49, 72, 0.06);
+      --dsw-alias-interactive-bg-active: rgba(38, 49, 72, 0.10);
+      --dsw-alias-border-l1: rgba(9, 30, 66, 0.04);
+      --dsw-alias-state-business-primary: #1570ef;
+      --dsw-alias-state-success-primary: #16a34a;
+      --dsw-alias-state-error-primary: #b42318;
+      --dsw-alias-state-warn-primary: #b54708;
+      --dsw-alias-markdown-code-block: #f8fafc;
+      --dsw-elevation-panel: 0 8px 24px rgba(16, 24, 40, 0.12);
+    }
+    html, body, #root { height: 100%; margin: 0; }
+    body {
+      background: #ffffff;
+      color: #101828;
+      font-family: -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="./dist/app.js"></script>
+</body>
+</html>

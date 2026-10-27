@@ -6,3 +6,5 @@ __pycache__/
 *.pyc
 .pytest_cache/
 *.log
+node_modules/
+packages/tether-ui/web/dist/

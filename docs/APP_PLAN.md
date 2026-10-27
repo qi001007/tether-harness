@@ -1,7 +1,25 @@
 # Tether APP 集成计划（APP / 插件 / WebUI 同一套 UI）
 
-状态：**设计，未实现**。当前可运行的只有 DSH 插件 + Controller/Node；本计划把插件页面、
-网络传输和启动器收进 APP，同时保留插件和 Tailscale 作为过渡路径。
+状态：**Phase 1 窄切片已实现**（`packages/tether-ui` + 插件生成壳 + WebHost 本地入口）；
+APP 壳、Relay/Account 仍是设计，未实现。
+
+## Phase 1 当前切片（2026-10-27）
+
+- `packages/tether-ui/src/app.js`：唯一 UI 源码，导出 `createTetherPanel({ React, Native, host })`。
+  由 `client.js` 机械抽取，UI 主体 2167 行逐字未改。
+- `packages/tether-ui/src/hosts/dsh.js` / `hosts/web.js`：API base 与原生组件适配；
+  Web 回落实现 `FileEntryRow` / `FileTypeIcon` / `MarkdownText`。
+- `packages/dsh-plugin-tether-client/lib/client.js`：**生成物**，由
+  `node packages/tether-ui/scripts/build.mjs` 把共享源码嵌进原 `__ModuleLoader__` 壳；
+  不新增 DSH external、不改装配方式，插件行为与 `03f0351` 一致。
+- WebUI：`packages/tether-ui/web`（esbuild 打包、无框架改造），`web/serve.mjs` 把 `/api`
+  反代到 Controller，避开当前只允许 `dsh-app://app` 的 CORS。命令：
+  `npm --prefix packages/tether-ui run build:web`、`node packages/tether-ui/web/serve.mjs`。
+- 回归：`tests/test_tether_ui_shared.mjs` 断言插件 bundle 与共享源码逐字一致并能在 VM 启动；
+  JS 23/23 通过。WebUI 在 Edge 1600×1000 实机验收：原生工作区 iframe、文件树/明细/面包屑、
+  互联卡片+拓扑、权限/审计抽屉均读取真实 Controller 数据。
+- 已知边界：Web 回落组件只覆盖插件用到的三个原生组件；原生 surface 的 iframe 在
+  Web origin 下未做网关/Cookie 重验（当前本机可显示，不作为验收结论）；Electron 未开始。
 
 ## 0. 目标与边界
 
