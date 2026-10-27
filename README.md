@@ -12,6 +12,10 @@ own Harness Agent with its own files, shell, and model key.
 
 Repo: https://github.com/qi001007/tether-harness
 
+[Preview](#preview) · [Current release](#current-release) · [Quick start](#quick-start-dsh-plugin--mcp) ·
+[The plugin page](#the-dsh-plugin-page) · [File policy](#file-policy) ·
+[Deploy a second machine](#deploy-on-a-second-machine) · [APP plan](docs/APP_PLAN.md)
+
 ```
 DeepSeek Harness desktop (Agent + Tether plugin + MCP tools)
    │ Tether page                          │ MCP stdio
@@ -30,6 +34,47 @@ The Tether plugin is the **remote DSH page**: the target Host supplies the nativ
 workspace/session navigation, composer, model menu, permission menu and writer;
 Tether supplies the device switch and the file/permission tools around it. Tether
 does not replace DSH memory, skills, or marketplace.
+
+## Preview
+
+These are screenshots from the current Electron/DSH build, not mockups. The target
+Host page is the real DSH desktop UI; the file, network and permission panels are
+Tether-owned.
+
+| Native DSH workspace | File explorer |
+|---|---|
+| ![Native DSH workspace](docs/screenshots/native-workspace-final.png) | ![File explorer](docs/screenshots/file-explorer-final.png) |
+| **原生工作区**: the target machine's own DSH Host, embedded through the per-device gateway. | **文件资源管理器**: workspace/drive tree, details list, breadcrumb, refresh and right-click actions. |
+| **Markdown preview** | **Office preview** |
+| ![Markdown preview](docs/screenshots/file-markdown-final.png) | ![Office preview](docs/screenshots/file-pptx-final.png) |
+| Markdown is rendered in place; text can switch to edit mode and save. | DOCX/PPTX are converted to PDF by WPS/Office COM on the target, then shown in place. |
+| **Network overview** | **Network at 41% zoom** |
+| ![Network overview](docs/screenshots/network-final.png) | ![Network at 41% zoom](docs/screenshots/network-zoom-final.png) |
+| Node cards plus a local-centered topology; neutral solid line means connected, dashed means the relation exists but an end is offline. | Labels disappear and nodes become small flat circles; colors stay continuous across the zoom threshold. |
+| **Permissions and audit** | **Device menu** |
+| ![Permissions and audit](docs/screenshots/file-permissions-final.png) | ![Device menu](docs/screenshots/device-menu-final.png) |
+| Shield-only settings, editable writable roots, and SQLite audit with a 100,000-row cap. | The same custom DSH-token device menu on the top bar, including OS and online state. |
+
+More screenshots are in [docs/screenshots](docs/screenshots); older images are
+kept as evidence and may show earlier UI.
+
+## Current release
+
+**Included in this repository now**
+
+- DSH native client plugin: native DSH page, file explorer, previews, permissions/audit,
+  network graph, device rename and context menus.
+- Controller + Node + MCP tools, with Tailscale or LAN as the current transport.
+- Regression tests and acceptance screenshots.
+
+**Planned, not in this release**
+
+- Standalone APP (Electron shell + service supervisor + embedded Web UI).
+- Tether Relay/Account to replace the Tailscale dependency.
+- Shared UI package used by plugin, APP and WebUI.
+
+The plan is in [docs/APP_PLAN.md](docs/APP_PLAN.md). `desktop/tether-app.ps1` today is
+only a launcher for the Controller/Node monitor window; it is not the standalone APP.
 
 ## What is verified
 
@@ -66,28 +111,12 @@ Not yet verified: the laptop's native page (`LAPTOP-01` still runs the previous
 node build), a real model send from an existing session, and attachment upload.
 The native page has been verified on `DESKTOP-LOCAL` only.
 
-Screenshots: `docs/screenshots/dsh-plugin-workspaces.png`,
-`docs/screenshots/dsh-plugin-native-chat.png`,
-`docs/screenshots/dsh-plugin-dark.png`,
-`docs/screenshots/dsh-plugin-files.png`,
-`docs/screenshots/dsh-plugin-permissions.png`,
-`docs/screenshots/deepseek-desktop.png`,
-`docs/screenshots/deepseek-after-tether.png`,
-`docs/screenshots/deepseek-delegated.png`,
-`docs/screenshots/native-surface-desktop.png`,
-`docs/screenshots/native-surface-trajectory.png`,
-`docs/screenshots/native-workspace-final.png`,
-`docs/screenshots/file-explorer-final.png`,
-`docs/screenshots/file-markdown-final.png`,
-`docs/screenshots/file-pdf-final.png`,
-`docs/screenshots/file-pptx-final.png`,
-`docs/screenshots/file-context-final.png`,
-`docs/screenshots/file-permissions-final.png`,
-`docs/screenshots/network-final.png`,
-`docs/screenshots/network-zoom-final.png`,
-`docs/screenshots/device-menu-final.png`.
-Raw notes: `evidence/gate0.md`, `evidence/gate2.md`,
-`evidence/dsh_plugin_fs.md`, `evidence/cancel_probe.json`.
+The main views are embedded in [Preview](#preview). More screenshots and older
+evidence are in [docs/screenshots](docs/screenshots). Raw notes:
+[`evidence/gate0.md`](evidence/gate0.md),
+[`evidence/gate2.md`](evidence/gate2.md),
+[`evidence/dsh_plugin_fs.md`](evidence/dsh_plugin_fs.md),
+[`evidence/cancel_probe.json`](evidence/cancel_probe.json).
 
 ## Quick start (DSH plugin + MCP)
 
@@ -101,7 +130,6 @@ normally, run `desktop/install-plugin.ps1`, start DSH, then restart its Node. Th
 
 ```powershell
 # 1) Tether control plane + local node (the Tether window is only a monitor)
-cd tether
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e .
 npm install --prefix .runtime\npm --no-audit --no-fund "@deepseek-ai/dsh@0.2.1-rc.2"
@@ -135,6 +163,23 @@ The desktop app keeps its own memory/plugins. Tether MCP adds these tools:
 - `remote_files(device, path, op, text?, dest?)` — list/read/write/mkdir/rename/delete
   under the target node's policy
 - `remote_audit(device, limit)`
+
+## Deploy on a second machine
+
+Use the same repository revision on both machines; do not mix an old Node with a
+new plugin.
+
+1. Clone/pull `main` and create `.env` from `.env.example`. Set `TETHER_DEVICE`,
+   `TETHER_CONTROLLER` and the paths for that machine; keep API keys in the local
+   (gitignored) `.env`.
+2. Close the target DeepSeek Harness normally, run `desktop/install-plugin.ps1`,
+   then start DSH again and confirm that **Tether** appears in the sidebar.
+3. For a controlled machine, start/update its Node (`laptop/tether-node.ps1` or
+   `python -m tether.node.agent ...`) with the same revision. The native DSH page
+   needs DSH Desktop running on that machine, not just the Node.
+4. Cross-machine reachability currently needs a reachable Controller (Tailscale
+   or LAN/port forwarding). The self-hosted Relay/APP is planned, not in this
+   release.
 
 ## The DSH plugin page
 
@@ -309,18 +354,29 @@ The desktop app has its own bundled runtime and is not affected.
 ## Repository layout
 
 ```
-tether/
-  mcp_server.py    MCP tools the Agent calls (list_peers/remote_task/...)
-  controller/      FastAPI API, SSE, device/run/event store, fs proxy
-  node/            WSS, outbox, dsh adapter, fs_service (policy/audit), console
-  static/          optional monitor UI
-  scripts/up.py    control plane + local node + monitor window
-  desktop/         plugin/MCP installers, app launcher, Tailscale/LAN helpers
-  laptop/          bootstrap + node scripts (no inbound port)
-  evidence/        measured results
+tether/                    Python package
+  mcp_server.py            MCP tools the Agent calls
+  controller/              FastAPI API, SSE, device/run/event store, native gateway
+  node/                     outbound WSS, outbox, DSH adapter, fs policy/audit
+  static/                  current monitor Web UI
+
 packages/
-  dsh-plugin-tether/         DSH bundle + cordis patch
-  dsh-plugin-tether-client/  native DSH client page (workspaces/files/devices)
+  dsh-plugin-tether/        DSH bundle + Cordis patch
+  dsh-plugin-tether-client/ native DSH client page (all Tether panels)
+  tether-dsh-native-ui/     generated bridge to DSH MIT UI primitives
+  tether-dsh-surface/       target Host descriptor companion
+
+scripts/                   launcher, QA harnesses, service restart
+desktop/                   plugin/MCP installers, app launcher, LAN/Tailscale helpers
+laptop/                    bootstrap + node scripts (no inbound port)
+tests/                     Python + Node regression tests
+docs/                      architecture, feedback, progress, screenshots, APP plan
+evidence/                  measured results
+
+# planned, not present yet
+packages/tether-ui/        shared React UI for plugin/APP/WebUI
+apps/tether-app/           Electron app shell + service supervisor
+tether/relay/              Tether Relay/Account
 ```
 
 MIT licensed. Full design: [DESIGN.md](DESIGN.md). Reviewer path:
