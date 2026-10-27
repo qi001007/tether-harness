@@ -26,9 +26,9 @@ import os, urllib.request
 from pathlib import Path
 try:
     token = ''
-for line in Path('.env').read_text(encoding='utf-8').splitlines():
-    if line.startswith('TETHER_ACCESS_TOKEN='):
-        token = line.split('=', 1)[1].strip().strip('"').strip("'")
+    for line in Path('.env').read_text(encoding='utf-8').splitlines():
+        if line.startswith('TETHER_ACCESS_TOKEN='):
+            token = line.split('=', 1)[1].strip().strip('"').strip("'")
     if not token:
         raise SystemExit(1)
     req = urllib.request.Request('http://127.0.0.1:18890/api/state',
