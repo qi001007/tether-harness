@@ -63,6 +63,7 @@ jobs:
           if ($components.Count -ne 1 -or ("v" + $releaseVersion) -ne $tag) { throw "Tag $tag does not match component versions in version.json" }
           "RELEASE_TAG=$tag" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "CREATE_TAG=$(-not $tagExists)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          exit 0
       - name: Install Python project and test dependencies
         shell: pwsh
         run: |
