@@ -4,19 +4,16 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tether-harness"
-version = "0.1.0"
+version = "0.2.1"
 description = "MCP/ACP multi-device Agent Harness client (interview prototype)"
 requires-python = ">=3.10"
 dependencies = [
-  "fastapi>=0.115",
-  "uvicorn[standard]>=0.30",
   "websockets>=13",
   "psutil>=6",
-  "python-dotenv>=1.0",
   "deepseek-harness-sdk==0.2.1rc2",
   "mcp>=2.3",
   "zstandard>=0.22",
 ]
 
 [tool.setuptools.packages.find]
-include = ["tether*"]
+include = ["tether", "tether.node*"]

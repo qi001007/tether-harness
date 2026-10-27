@@ -26,7 +26,7 @@ except ImportError:
 
 LOGS = ROOT / ".runtime" / "logs"
 PORT = int(os.environ.get("TETHER_PORT", "18890"))
-HOST = os.environ.get("TETHER_HOST", "0.0.0.0")
+HOST = os.environ.get("TETHER_HOST", "127.0.0.1")
 DEVICE = os.environ.get("TETHER_DEVICE", "DESKTOP-LOCAL")
 WORKSPACE = str(ROOT / "work-local")
 
@@ -92,16 +92,23 @@ def main() -> None:
 
     controller_log = (LOGS / "controller.log").open("w", encoding="utf-8")
     node_log = (LOGS / "node.log").open("w", encoding="utf-8")
-
-    print(f"[tether] starting controller on {HOST}:{PORT}")
-    controller = subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "tether.controller.app:app",
-         "--host", HOST, "--port", str(PORT), "--log-level", "info"],
-        cwd=str(ROOT), env=env, stdout=controller_log, stderr=subprocess.STDOUT,
-    )
-    if not wait_controller():
-        kill_tree(controller)
-        raise SystemExit(f"[tether] controller did not start; see {LOGS / 'controller.log'}")
+    controller = None
+    if wait_controller(timeout=1):
+        print(f"[tether] attaching to existing Controller at 127.0.0.1:{PORT}")
+    else:
+        probe = subprocess.run([sys.executable, "-c", "import importlib.util; raise SystemExit(0 if importlib.util.find_spec('tether_server.controller.app') else 1)"],
+                               cwd=str(ROOT), env=env, capture_output=True)
+        if probe.returncode != 0:
+            raise SystemExit("[tether] no local Controller is running and private tether_server is not installed. Configure a Hub in the APP or install the private server component in this Python environment.")
+        print(f"[tether] starting private Controller on {HOST}:{PORT}")
+        controller = subprocess.Popen(
+            [sys.executable, "-m", "uvicorn", "tether_server.controller.app:app",
+             "--host", HOST, "--port", str(PORT), "--log-level", "info"],
+            cwd=str(ROOT), env=env, stdout=controller_log, stderr=subprocess.STDOUT,
+        )
+        if not wait_controller():
+            kill_tree(controller)
+            raise SystemExit(f"[tether] private Controller did not start; see {LOGS / 'controller.log'}")
 
     print(f"[tether] starting local Agent node {DEVICE}")
     node = subprocess.Popen(
@@ -126,7 +133,7 @@ def main() -> None:
     try:
         while True:
             time.sleep(0.5)
-            if controller.poll() is not None or node.poll() is not None:
+            if (controller and controller.poll() is not None) or node.poll() is not None:
                 print("[tether] a child exited; shutting down")
                 break
     except KeyboardInterrupt:
@@ -134,7 +141,8 @@ def main() -> None:
     finally:
         print("[tether] stopping")
         kill_tree(node)
-        kill_tree(controller)
+        if controller:
+            kill_tree(controller)
         controller_log.close()
         node_log.close()
 

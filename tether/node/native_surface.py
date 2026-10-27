@@ -7,6 +7,7 @@ import base64
 import gzip
 import http.cookiejar
 import json
+import re
 import socket
 import urllib.error
 import urllib.parse
@@ -17,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 import websockets
+import psutil
 
 MAX_BODY = 8 * 1024 * 1024
 MAX_FRAME = 8 * 1024 * 1024
@@ -72,6 +74,8 @@ class NativeSurface:
         self._origin = ""
         self._auth_url = ""
         self._reason = "descriptor_missing"
+        self._profile: str | None = None
+        self._pid: int | None = None
         self._jar = http.cookiejar.CookieJar()
         self._authenticated = False
         self._auth_lock = threading.Lock()
@@ -120,6 +124,9 @@ class NativeSurface:
             self._reset_auth()
             self._close_channels()
         self._snapshot, self._origin, self._auth_url = snapshot, origin.rstrip("/"), auth
+        profile, pid = data.get("profile"), data.get("pid")
+        self._profile = profile if isinstance(profile, str) and re.fullmatch(r"[A-Za-z0-9_-]{1,80}", profile) else None
+        self._pid = pid if type(pid) is int and 0 < pid <= 2_147_483_647 else None
         self._reason = "ready"
         return True
 
@@ -136,8 +143,26 @@ class NativeSurface:
     def _clear(self) -> None:
         self._snapshot = None
         self._origin = self._auth_url = ""
+        self._profile = None
+        self._pid = None
         self._reset_auth()
         self._close_channels()
+
+    def active_profile(self) -> str | None:
+        """Return the profile published by the live DSH Host companion, if known."""
+        try:
+            loaded = self._load()
+        except Exception:
+            self._clear()
+            return None
+        if not loaded or not self._profile or self._pid is None:
+            return None
+        try:
+            if not psutil.pid_exists(self._pid):
+                return None
+        except (OSError, ValueError):
+            return None
+        return self._profile
 
     def available(self) -> bool:
         return self._load()

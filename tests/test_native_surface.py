@@ -158,6 +158,30 @@ def test_status_distinguishes_missing_descriptor_and_unreachable_host(tmp_path):
     assert NativeSurface(tmp_path).status() == {"available": False, "reason": "host_unreachable"}
 
 
+def test_active_profile_requires_profile_metadata_and_live_host_pid(tmp_path, monkeypatch):
+    home = tmp_path
+    path = home / "storages" / "tether" / "native-surface.json"
+    path.parent.mkdir(parents=True)
+    data = {"version": 1, "pid": 12345, "profile": "work",
+            "origin": "http://127.0.0.1:33091",
+            "authenticated_url": "http://127.0.0.1:33091/?token=fixture"}
+    path.write_text(json.dumps(data), encoding="utf-8")
+    queried = []
+    monkeypatch.setattr(native_surface_module.psutil, "pid_exists", lambda pid: queried.append(pid) or True)
+    assert NativeSurface(home).active_profile() == "work"
+    assert queried == [12345]
+
+    data["pid"] = 2147483646
+    path.write_text(json.dumps(data), encoding="utf-8")
+    monkeypatch.setattr(native_surface_module.psutil, "pid_exists", lambda _pid: False)
+    assert NativeSurface(home).active_profile() is None
+
+    data["pid"] = 12345
+    data.pop("profile")
+    path.write_text(json.dumps(data), encoding="utf-8")
+    assert NativeSurface(home).active_profile() is None
+
+
 @pytest.mark.parametrize("path", ["//evil.example/x", "/a/../b", "/a/%2e%2e/b", "https://evil/x"])
 def test_rejects_ssrf_paths(native_home, path):
     service = NativeSurface(native_home[0])

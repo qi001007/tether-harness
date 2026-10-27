@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import test from 'node:test'
@@ -8,10 +7,12 @@ import { fileURLToPath } from 'node:url'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const shared = fs.readFileSync(path.join(root, 'packages/tether-ui/src/app.js'), 'utf8')
 const plugin = fs.readFileSync(path.join(root, 'packages/dsh-plugin-tether-client/lib/client.js'), 'utf8')
+const connectionPanel = fs.readFileSync(path.join(root, 'packages/tether-ui/src/connection-panel.js'), 'utf8')
 
 test('DSH plugin bundle is up to date with the shared tether-ui source', () => {
-  const output = execFileSync(process.execPath, ['packages/tether-ui/scripts/build.mjs', '--check'], { cwd: root, encoding: 'utf8' })
-  assert.match(output, /matches shared source/)
+  const bundledPanel = connectionPanel.replace(/^export /gm, '').trim()
+  assert.ok(plugin.includes(bundledPanel), 'plugin bundle embeds the shared connection component')
+  assert.match(fs.readFileSync(path.join(root, 'packages/tether-ui/scripts/build.mjs'), 'utf8'), /connectionPanel/)
 })
 
 test('the shared panel body is copied byte for byte into the plugin bundle', () => {
@@ -22,6 +23,177 @@ test('the shared panel body is copied byte for byte into the plugin bundle', () 
   assert.ok(plugin.includes(body), 'plugin bundle must embed the shared UI body unchanged')
   assert.equal((plugin.match(/function App\(\) \{/g) || []).length, 1, 'only one App implementation ships')
   assert.equal((plugin.match(/function createTetherPanel\(/g) || []).length, 1)
+})
+
+test('connection panels show service checks without duplicate device totals or credentials', async () => {
+  const { hubAddressForEditor, hubProbeErrorText, hubUrlNeedsReplacement, safeServiceAddress } = await import('../packages/tether-ui/src/app.js')
+  assert.equal(safeServiceAddress('https://user:secret@hub.example:8443/api?token=hidden#frag'), 'https://hub.example:8443/api')
+  assert.equal(safeServiceAddress('not a url'), '未配置')
+  assert.equal(hubAddressForEditor(''), '')
+  assert.equal(hubAddressForEditor('https://hub.example:8443/base'), 'https://hub.example:8443/base')
+  assert.equal(hubAddressForEditor('https://user:secret@hub.example/base?token=hidden'), '')
+  assert.equal(hubUrlNeedsReplacement('https://user:secret@hub.example/base?token=hidden'), true)
+  assert.equal(hubUrlNeedsReplacement('https://hub.example/base'), false)
+  assert.equal(hubUrlNeedsReplacement('not a url'), true)
+  assert.equal(hubProbeErrorText({ status: 401 }), '访问令牌无效或没有访问权限，请检查 Hub 凭据。')
+  assert.equal(hubProbeErrorText({ status: 403 }), '访问令牌无效或没有访问权限，请检查 Hub 凭据。')
+  assert.equal(hubProbeErrorText(new Error('secret response')), 'Hub 不可达或请求超时，请检查服务地址与网络后重试。')
+  assert.equal(hubProbeErrorText({ status: undefined }), 'Hub 不可达或请求超时，请检查服务地址与网络后重试。')
+  assert.doesNotMatch(shared, /\['(?:本机节点|当前目标|在线设备|目标在线)'/)
+  assert.match(connectionPanel, /服务响应耗时/)
+  assert.match(shared, /Hub 不可达或请求超时/)
+  assert.match(shared, /url\.username \|\| url\.password \|\| url\.search \|\| url\.hash/)
+  assert.match(shared, /createConnectionPanel/)
+  assert.match(shared, /hubCheckedAt/)
+  assert.match(shared, /host\.kind === 'dsh' \|\| host\.kind === 'app'/)
+  assert.match(shared, /Connection\.Panel/)
+  assert.match(shared, /errorKind === 'auth' \? 401/)
+  assert.match(connectionPanel, /重新检测/)
+  assert.match(fs.readFileSync(path.join(root, 'packages/tether-ui/src/hosts/dsh.js'), 'utf8'), /probeConnection: async/)
+  assert.match(fs.readFileSync(path.join(root, 'packages/tether-ui/src/hosts/electron.js'), 'utf8'), /probeConnection: async/)
+  assert.match(fs.readFileSync(path.join(root, 'packages/tether-ui/web/main.js'), 'utf8'), /root\.render\(React\.createElement\(panel\.App\)\)/)
+  assert.doesNotMatch(fs.readFileSync(path.join(root, 'packages/tether-ui/web/main.js'), 'utf8'), /createAppServices/)
+})
+
+test('DSH Hub probe does not treat local fallbacks as Hub connectivity', async () => {
+  const { createDshHost } = await import('../packages/tether-ui/src/hosts/dsh.js')
+  const previousWindow = globalThis.window
+  const previousFetch = globalThis.fetch
+  let stored = null
+  let requests = 0
+  globalThis.window = { localStorage: { getItem: () => stored } }
+  globalThis.fetch = async () => { requests += 1; return new Response(JSON.stringify({ devices: [] }), { status: 200 }) }
+  try {
+    const host = createDshHost()
+    assert.equal(await host.probeHub(), null)
+    assert.equal(requests, 0)
+    stored = JSON.stringify({ url: 'https://user:pass@hub.example/path?secret=1', token: 'hidden' })
+    const result = await host.probeHub()
+    assert.deepEqual(result.state, { devices: [] })
+    assert.equal(Number.isFinite(result.durationMs), true)
+    assert.equal(requests, 1)
+  } finally {
+    globalThis.fetch = previousFetch
+    if (previousWindow === undefined) delete globalThis.window
+    else globalThis.window = previousWindow
+  }
+})
+
+test('one-click updates check, prepare, and apply only a current prepared package', async () => {
+  const { runUpdateSequence } = await import('../packages/tether-ui/src/app.js')
+  const calls = []
+  const result = await runUpdateSequence({
+    check: async () => { calls.push('check'); return { update_available: true } },
+    prepare: async () => { calls.push('prepare'); return { prepared_id: 'verified-package' } },
+    apply: async (id) => { calls.push('apply:' + id); return { ok: true } }
+  })
+  assert.deepEqual(calls, ['check', 'prepare', 'apply:verified-package'])
+  assert.equal(result.updated, true)
+})
+
+test('one-click updates stop when there is no update or the selected device changes', async () => {
+  const { runUpdateSequence } = await import('../packages/tether-ui/src/app.js')
+  let prepared = false
+  const noUpdate = await runUpdateSequence({
+    check: async () => ({ update_available: false }),
+    prepare: async () => { prepared = true; return { prepared_id: 'x' } }, apply: async () => ({})
+  })
+  assert.equal(noUpdate.updated, false)
+  assert.equal(prepared, false)
+
+  let current = true
+  const stale = await runUpdateSequence({
+    check: async () => ({ update_available: true }),
+    prepare: async () => { current = false; return { prepared_id: 'x' } },
+    apply: async () => assert.fail('stale device must not be updated'),
+    isCurrent: () => current
+  })
+  assert.equal(stale.cancelled, true)
+})
+
+test('one-click updates stop on rejected stages and pass the fresh authority through', async () => {
+  const { runUpdateSequence } = await import('../packages/tether-ui/src/app.js')
+  for (const [stage, rejection] of [
+    ['check', null], ['check', { ok: false, update_available: false }],
+    ['prepare', null], ['prepare', { ok: false }],
+    ['apply', null], ['apply', { ok: false }]
+  ]) {
+    const calls = []
+    const result = await runUpdateSequence({
+      check: async () => { calls.push('check'); return stage === 'check' ? rejection : { update_available: true, authorityBase: '' } },
+      prepare: async (checked) => { calls.push('prepare:' + checked.authorityBase); return stage === 'prepare' ? rejection : { prepared_id: 'pkg' } },
+      apply: async (id, checked) => { calls.push('apply:' + id + ':' + checked.authorityBase); return stage === 'apply' ? rejection : { ok: true } }
+    })
+    assert.deepEqual(result, { failed: true, stage })
+    const lastCall = stage === 'check' ? ['check'] : stage === 'prepare' ? ['check', 'prepare:'] : ['check', 'prepare:', 'apply:pkg:']
+    assert.deepEqual(calls, lastCall)
+  }
+
+  const order = []
+  await runUpdateSequence({
+    check: async () => ({ update_available: true, authorityBase: '' }),
+    prepare: async (checked) => { order.push(checked.authorityBase); return { prepared_id: 'pkg' } },
+    apply: async (_id, checked) => { order.push(checked.authorityBase); return { ok: true } }
+  })
+  assert.deepEqual(order, ['', ''])
+})
+
+test('automatic update checks report availability, failures, and stale targets safely', async () => {
+  const { checkUpdateAvailability, dedupeUpdateCheck, deviceAfterLocalIdentity, orderNetworkDevices, updateAvailableFor, updateCheckKey } = await import('../packages/tether-ui/src/app.js')
+  assert.deepEqual(await checkUpdateAvailability(async () => ({ update_available: true })), {
+    current: true, updateAvailable: true, result: { update_available: true }
+  })
+  assert.equal((await checkUpdateAvailability(async () => ({ update_available: false }))).updateAvailable, false)
+  assert.equal((await checkUpdateAvailability(async () => ({ ok: false, message: 'offline' }))).failed, true)
+  assert.equal((await checkUpdateAvailability(async () => { throw new Error('offline') })).failed, true)
+
+  let current = true
+  const switched = await checkUpdateAvailability(async () => {
+    current = false
+    return { update_available: true }
+  }, () => current)
+  assert.deepEqual(switched, { cancelled: true })
+
+  const info = { devices: {
+    alpha: { node: { update_available: true } },
+    beta: { plugin: { update_available: true } }
+  }, app: { update_available: true }, localPlugin: { update_available: true } }
+  assert.equal(updateAvailableFor(info, 'app', 'beta'), true)
+  assert.equal(updateAvailableFor(info, 'dsh', 'alpha'), true)
+  assert.equal(updateAvailableFor(info, 'web', 'alpha'), true)
+  assert.equal(updateAvailableFor(info, 'web', 'beta'), true)
+  assert.equal(updateAvailableFor(info, 'web', 'gamma'), false)
+  assert.equal(updateAvailableFor({ devices: { alpha: { node: { update_available: true } } } }, 'web', 'beta'), false)
+
+  const devices = [{ device_id: 'DESKTOP-LOCAL' }, { device_id: 'LAPTOP-01' }, { device_id: 'NODE-02' }]
+  assert.deepEqual(orderNetworkDevices(devices, 'DESKTOP-LOCAL').map((item) => item.device_id), ['DESKTOP-LOCAL', 'LAPTOP-01', 'NODE-02'])
+  assert.deepEqual(orderNetworkDevices(devices, 'LAPTOP-01').map((item) => item.device_id), ['LAPTOP-01', 'DESKTOP-LOCAL', 'NODE-02'])
+  assert.deepEqual(orderNetworkDevices(devices, '').map((item) => item.device_id), ['DESKTOP-LOCAL', 'LAPTOP-01', 'NODE-02'])
+  assert.equal(deviceAfterLocalIdentity('NODE-02', 'LAPTOP-01', false), 'LAPTOP-01')
+  assert.equal(deviceAfterLocalIdentity('NODE-02', 'LAPTOP-01', true), 'NODE-02')
+  assert.equal(deviceAfterLocalIdentity('NODE-02', '', false), 'NODE-02')
+  assert.match(shared, /const localId = appLocalDevice\s*\n/)
+  assert.doesNotMatch(shared, /appLocalDevice\s*\|\|\s*\(state && state\.local_device\)/)
+  assert.doesNotMatch(shared, /appLocalDeviceRef\.current\s*\|\|\s*data\.local_device/)
+
+  const pending = {}
+  let calls = 0
+  let release
+  const wait = new Promise((resolve) => { release = resolve })
+  const first = dedupeUpdateCheck(pending, 'alpha:node', async () => { calls += 1; await wait; return 'checked' })
+  const duplicate = dedupeUpdateCheck(pending, 'alpha:node', async () => { calls += 1; return 'duplicate' })
+  const otherDevice = dedupeUpdateCheck(pending, 'beta:node', async () => { calls += 1; return 'separate-target' })
+  assert.equal(first, duplicate)
+  assert.equal(await otherDevice, 'separate-target')
+  release()
+  assert.equal(await first, 'checked')
+  assert.equal(calls, 2)
+  assert.deepEqual(pending, {})
+
+  const firstEpoch = updateCheckKey('node', { deviceId: 'alpha', epoch: 1 })
+  const returnedEpoch = updateCheckKey('node', { deviceId: 'alpha', epoch: 3 })
+  assert.notEqual(firstEpoch, returnedEpoch)
+  assert.equal(updateCheckKey('node', { deviceId: 'alpha', epoch: 3 }), returnedEpoch)
 })
 
 test('the shared factory accepts a DSH host and a Web host without DSH globals', async () => {

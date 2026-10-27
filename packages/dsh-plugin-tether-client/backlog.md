@@ -13,3 +13,4 @@
 - 对话默认改为整页承载目标设备的 DSH 原生工作区 iframe；加入严格 loopback URL 校验、设备切换过期保护、离线/不支持状态与重试，旧日志界面改为显式次级预览。
 - 在嵌套原生 surface URL 上跳过 Tether 插件注册并选择原生 conversation panel，避免 Tether iframe 递归。
 - 2026-10-27：`lib/client.js` 从 `packages/tether-ui` 生成，插件本身仍走原 `__ModuleLoader__` 装配，不新增 DSH external。
+- 2026-10-27：将客户端包与更新提示版本统一到 0.2.1。

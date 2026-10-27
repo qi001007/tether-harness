@@ -10,3 +10,4 @@ node_modules/
 apps/tether-app/data/
 
 release/
+packages/tether-dsh-surface/updater/

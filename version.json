@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "components": {
+    "app": "0.2.1",
+    "plugin": "0.2.1",
+    "node": "0.2.1"
+  }
+}

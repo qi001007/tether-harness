@@ -1,10 +1,10 @@
 {
   "name": "tether-dsh-surface",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "description": "Publishes the installed DSH native web surface to Tether",
   "type": "module",
   "main": "lib/index.js",
   "exports": { ".": "./lib/index.js", "./package.json": "./package.json" },
-  "files": ["lib/index.js", "package.json"],
+  "files": ["lib/index.js", "lib/local-updates.js", "updater/tether/*.py", "updater/tether/node/*.py", "package.json"],
   "license": "MIT"
 }

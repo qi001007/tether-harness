@@ -26,6 +26,8 @@ from .dsh_adapter import DshRun
 from .fs_service import FsError, FsService
 from .dsh_sessions import DshSessionStore
 from .native_surface import NativeSurface, NativeSurfaceError
+from .local_identity import remove_identity, write_identity
+from ..updates import UpdateManager
 
 
 def os_label() -> str:
@@ -195,21 +197,36 @@ class Node:
         self._block_until = 0.0
         self.agent = agent
         self.dsh_home = dsh_home or str(ROOT / ".runtime" / "dsh-home")
+        self.data_dir = Path(data_dir or (ROOT / ".runtime")).expanduser().resolve()
         self.provider = provider
         self.model = model
         self.workspaces_root = workspaces_root or default_workspaces_root()
         self.fs = FsService(device=device, workspace=workspace,
-                            data_dir=data_dir or (ROOT / ".runtime"),
+                            data_dir=self.data_dir,
                             workspaces_root=self.workspaces_root)
         self.dsh_sessions = DshSessionStore()
         self.native_dsh_home = self.dsh_sessions.home
         ensure_sdk_profile(self.native_dsh_home)
         self.native_surface = NativeSurface(self.native_dsh_home)
+        update_state_dir = self.data_dir / "updates"
+        self.update_managers = {
+            component: UpdateManager(ROOT, component, dsh_home=self.native_dsh_home,
+                                     manifest_url=os.environ.get("TETHER_UPDATE_MANIFEST_URL"),
+                                     state_dir=update_state_dir / component)
+            for component in ("node", "plugin")
+        }
+        node_status = self.update_managers["node"].status()
+        self.node_version = ((node_status.get("current_version") or "unknown")
+                             if node_status.get("ok") else "unknown")
         self.dsh_runs: dict[str, DshRun] = {}
         self.ws: Any = None
         self.connected = False
         self.tasks: dict[str, asyncio.Task] = {}
         self.surface_tasks: set[asyncio.Task] = set()
+        self.update_tasks: set[asyncio.Task] = set()
+        self.update_lock = asyncio.Lock()
+        self.update_applying = False
+        self.restart_requested = False
         self.cancels: dict[str, asyncio.Event] = {}
         self._dropped = False
 
@@ -224,6 +241,8 @@ class Node:
             except Exception as exc:  # noqa: BLE001 - reconnect forever
                 log(f"[ws] disconnected: {type(exc).__name__}: {exc}")
             self.connected = False
+            if self.restart_requested:
+                return
             await asyncio.sleep(backoff)
             backoff = min(backoff * 2, 5.0)
 
@@ -313,6 +332,10 @@ class Node:
             task = asyncio.create_task(self._surface_call(msg))
             self.surface_tasks.add(task)
             task.add_done_callback(self.surface_tasks.discard)
+        elif kind == "update_call":
+            task = asyncio.create_task(self._update_call(msg))
+            self.update_tasks.add(task)
+            task.add_done_callback(self.update_tasks.discard)
         elif kind == "error":
             log(f"[ws] controller error: {msg.get('error')}")
 
@@ -389,6 +412,91 @@ class Node:
         except Exception:
             self.connected = False
 
+    def _update_busy_reason(self) -> str | None:
+        if any(run and run.get("state") in ACTIVE for run in self.store.all_runs()):
+            return "tether_task_active"
+        if any(not task.done() for task in self.tasks.values()):
+            return "tether_task_active"
+        session_files = self.dsh_sessions._files()
+        if (any(path.name.endswith(".zstd") for path in session_files)
+                and not self.dsh_sessions.available()):
+            return "native_activity_unknown"
+        if any(item.get("status") == "running" for item in self.dsh_sessions.list()):
+            return "native_dsh_turn_active"
+        return None
+
+    async def _update_call(self, msg: dict[str, Any]) -> None:
+        req_id = str(msg.get("req_id") or "")
+        component = msg.get("component")
+        action = msg.get("action")
+        allowed = {"type", "req_id", "action", "component", "prepared_id"}
+        if (set(msg) - allowed or not isinstance(component, str) or component not in self.update_managers
+                or not isinstance(action, str) or action not in {"check", "status", "prepare", "apply"}
+                or (action == "apply") != ("prepared_id" in msg)):
+            await self._send({"type": "update_result", "req_id": req_id, "ok": False,
+                              "error_code": "invalid_update_request", "error": "invalid update request"})
+            return
+        component = str(component)
+        applying = action == "apply"
+        async with self.update_lock:
+            if component == "plugin":
+                profile = self.native_surface.active_profile()
+                if not profile:
+                    await self._send({"type": "update_result", "req_id": req_id, "ok": False,
+                                      "error_code": "plugin_profile_unknown",
+                                      "error": "无法确认当前运行的 DSH Host profile，已拒绝远程插件更新；请在目标 DSH 内更新。"})
+                    return
+                self.update_managers[component].profile = profile
+            if applying:
+                # Block new dispatches before inspecting native DSH logs off-loop.
+                self.update_applying = True
+                busy = await asyncio.to_thread(self._update_busy_reason)
+                if busy:
+                    self.update_applying = False
+                    await self._send({"type": "update_result", "req_id": req_id, "ok": False,
+                                      "error_code": "update_busy", "error": busy})
+                    if self.ws is not None:
+                        await self._send({"type": "update_ready"})
+                    return
+            manager = self.update_managers[component]
+            result: dict[str, Any] | None = None
+            try:
+                if action == "apply":
+                    result = await asyncio.to_thread(manager.apply, msg["prepared_id"])
+                else:
+                    result = await asyncio.to_thread(getattr(manager, str(action)))
+                if result.get("ok") and component == "plugin" and action == "apply":
+                    result["restart_required"] = True
+                if applying and result.get("ok") and component == "node":
+                    self.restart_requested = True
+                    self.update_applying = True
+                try:
+                    await self._send({"type": "update_result", "req_id": req_id, **result})
+                except Exception:
+                    self.connected = False
+                if applying and result.get("ok") and component == "node":
+                    if self.ws is not None:
+                        try:
+                            await self.ws.close(code=1012, reason="node update applied")
+                        except Exception:
+                            pass
+                    return
+            except Exception as exc:  # noqa: BLE001 - updater errors do not take down the WS reader
+                log(f"[update] {action} {component} failed: {type(exc).__name__}")
+                try:
+                    await self._send({"type": "update_result", "req_id": req_id, "ok": False,
+                                      "error_code": "update_failed", "error": "update operation failed"})
+                except Exception:
+                    self.connected = False
+            finally:
+                if applying and not self.restart_requested:
+                    self.update_applying = False
+                    if self.ws is not None:
+                        try:
+                            await self._send({"type": "update_ready"})
+                        except Exception:
+                            self.connected = False
+
     async def emit(self, run_id: str, kind: str, payload: dict[str, Any]) -> None:
         event = self.store.add_event(run_id, kind, payload)
         log(f"[{run_id}] {kind}: {json.dumps(payload, ensure_ascii=False)[:200]}")
@@ -422,6 +530,9 @@ class Node:
 
     async def _dispatch(self, msg: dict[str, Any]) -> None:
         run_id = str(msg["run_id"])
+        if self.update_applying:
+            await self._send({"type": "dispatch_ack", "run_id": run_id, "accepted": False})
+            return
         existing = self.store.get_run(run_id)
         if existing and existing["state"] in TERMINAL:
             await self.state(run_id, existing["state"])
@@ -550,6 +661,7 @@ class Node:
     def capabilities(self) -> dict[str, Any]:
         return {"os": platform.system(), "release": platform.release(), "os_label": os_label(),
                 "python": platform.python_version(),
+                "node_version": self.node_version, "update_protocol": 1,
                 "workspace": str(self.workspace), "agents": ["fake", "dsh"], "fs": True,
                 "policy_mode": self.fs.policy.data.get("mode"),
                 "workspaces_root": str(self.workspaces_root),
@@ -557,6 +669,15 @@ class Node:
                 "native_dsh_home": str(self.dsh_sessions.home),
                 "surface_protocol": 1,
                 "dsh_surface": self.native_surface.available()}
+
+
+def restart_node_process() -> None:
+    if os.environ.get("TETHER_NODE_MANAGED") == "1":
+        raise SystemExit(75)
+    original = getattr(sys, "orig_argv", None)
+    if original and len(original) > 1:
+        os.execv(sys.executable, [sys.executable, *original[1:]])
+    os.execv(sys.executable, [sys.executable, "-m", "tether.node.agent", *sys.argv[1:]])
 
 
 def main() -> None:
@@ -586,15 +707,48 @@ def main() -> None:
                 workspace=workspace, store=store, drop_after=args.drop_after, drop_for=args.drop_for,
                 agent=args.agent, dsh_home=args.dsh_home, provider=args.provider, model=args.model,
                 workspaces_root=workspaces_root, data_dir=Path(args.db).resolve().parent)
+    console_server = None
     try:
-        local_console.start(store, args.device, args.console_port)
+        console_server = local_console.start(store, args.device, args.console_port)
         log(f"[console] http://127.0.0.1:{args.console_port} (read-only, local)")
     except OSError as exc:
         log(f"[console] not started: {exc}")
+    identity_published = False
     try:
-        asyncio.run(node.run())
+        write_identity(node.native_dsh_home, args.device)
+        identity_published = True
+    except Exception as exc:  # noqa: BLE001 - identity metadata must not block the Node service
+        log(f"[node] local identity descriptor not published: {exc}")
+
+    async def run_with_identity() -> None:
+        async def refresh_identity() -> None:
+            while True:
+                await asyncio.sleep(3)
+                try:
+                    write_identity(node.native_dsh_home, args.device)
+                except Exception as exc:  # noqa: BLE001 - keep the identity heartbeat auxiliary
+                    log(f"[node] local identity refresh failed: {exc}")
+
+        refresher = asyncio.create_task(refresh_identity()) if identity_published else None
+        try:
+            await node.run()
+        finally:
+            if refresher is not None:
+                refresher.cancel()
+                await asyncio.gather(refresher, return_exceptions=True)
+            if identity_published:
+                remove_identity(node.native_dsh_home, args.device)
+
+    try:
+        asyncio.run(run_with_identity())
     except KeyboardInterrupt:
         pass
+    if node.restart_requested:
+        if console_server is not None:
+            console_server.shutdown()
+            console_server.server_close()
+        store.db.close()
+        restart_node_process()
 
 
 if __name__ == "__main__":

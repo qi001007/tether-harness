@@ -1,9 +1,9 @@
-const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron')
+const { app, BrowserWindow, ipcMain, shell } = require('electron')
 const fs = require('node:fs')
 const path = require('node:path')
 const { pathToFileURL } = require('node:url')
 const { Supervisor } = require('./supervisor.js')
-const { updateInstalledPlugin } = require('./plugin-updater.js')
+const { UpdateService } = require('./update-service.js')
 
 const repoRoot = path.resolve(__dirname, '..', '..')
 const webRoot = path.join(repoRoot, 'packages', 'tether-ui', 'web')
@@ -45,11 +45,13 @@ const panel = panelArg ? panelArg.slice('--panel='.length) : ''
 const rowArg = process.argv.find((value) => value.startsWith('--row='))
 const row = rowArg ? rowArg.slice('--row='.length) : ''
 const shotDelay = Number(process.env.TETHER_APP_SHOT_DELAY || 2500)
+const shotPanelDelay = Number(process.env.TETHER_APP_SHOT_PANEL_DELAY || 1500)
 
 fs.mkdirSync(dataDir, { recursive: true })
 app.setPath('userData', path.join(dataDir, 'electron'))
 const supervisor = new Supervisor({ repoRoot, dataDir, env })
-const pluginUpdate = updateInstalledPlugin({ repoRoot })
+const updates = new UpdateService({ repoRoot, dataDir, python: supervisor.python, env, app })
+let uiOrigin = ''
 
 function log(line) {
   fs.appendFileSync(logFile, new Date().toISOString() + ' ' + line + '\n')
@@ -66,11 +68,20 @@ async function createWindow() {
     port: Number(env.TETHER_APP_PORT || 18892),
     device: supervisor.device,
     hub: !!supervisor.remoteUrl,
+    connectionInfo: () => {
+      const state = supervisor.snapshot()
+      return { serverUrl: state.remoteUrl || state.endpoints.api, lastProbe: state.lastProbe }
+    },
+    probeConnection: async () => {
+      const state = await supervisor.probe()
+      return { serverUrl: state.remoteUrl || state.endpoints.api, lastProbe: state.lastProbe }
+    },
     accessToken: env.TETHER_ACCESS_TOKEN || '',
     insecureTls: ['1', 'true', 'yes'].includes(String(env.TETHER_INSECURE_TLS || '').toLowerCase())
   })
   const url = await webServer.listen()
-  log('app start ' + app.getVersion() + ' ui ' + url + ' controller ' + controller + ' pluginUpdate=' + (pluginUpdate.updated ? pluginUpdate.dirs.map((item) => item.profile).join(',') : 'none'))
+  uiOrigin = new URL(url).origin
+  log('app start ' + app.getVersion() + ' ui ' + url + ' controller ' + controller)
   supervisor.start().then((state) => log('services ' + state.mode + ' controller=' + state.controller.state + ' node=' + state.node.state)).catch((error) => log('services failed ' + (error.stack || error)))
 
   mainWindow = new BrowserWindow({
@@ -92,20 +103,11 @@ async function createWindow() {
   mainWindow.on('closed', () => { mainWindow = null })
   await mainWindow.loadURL(url)
 
-  if (!shotPath && pluginUpdate.updated) {
-    dialog.showMessageBox(mainWindow, {
-      type: 'info',
-      title: 'Tether 插件已更新',
-      message: 'Tether 插件已自动更新',
-      detail: '已更新 profile：' + pluginUpdate.dirs.map((item) => item.profile).join('、') + '。重启 DeepSeek Harness 后生效。'
-    }).catch(() => {})
-  }
-
   if (shotPath) {
     await new Promise((resolve) => setTimeout(resolve, shotDelay))
     if (panel) {
       await mainWindow.webContents.executeJavaScript(`(() => { const b = [...document.querySelectorAll('button')].find((x) => x.getAttribute('aria-label') === ${JSON.stringify(panel)} || x.title === ${JSON.stringify(panel)}); if (b) b.click(); return !!b })()`)
-      await new Promise((resolve) => setTimeout(resolve, 1500))
+      await new Promise((resolve) => setTimeout(resolve, shotPanelDelay))
     }
     if (row) {
       await mainWindow.webContents.executeJavaScript(`(() => { const b = [...document.querySelectorAll('button')].find((x) => x.title === ${JSON.stringify(row)}); if (b) b.click(); return !!b })()`)
@@ -124,10 +126,24 @@ ipcMain.handle('tether:app-info', () => ({
   controller,
   dataDir,
   logFile,
-  services: supervisor.snapshot(),
-  pluginUpdate: { updated: pluginUpdate.updated, profiles: pluginUpdate.dirs.map((item) => item.profile) }
+  services: supervisor.snapshot()
 }))
+function trustedUpdateRequest(event) {
+  try {
+    return !!(uiOrigin && event.senderFrame && event.senderFrame === event.sender.mainFrame && new URL(event.senderFrame.url).origin === uiOrigin)
+  } catch (_) { return false }
+}
+ipcMain.handle('tether:updates-status', (event) => trustedUpdateRequest(event) ? updates.status() : { ok: false, error: 'Untrusted IPC caller' })
+ipcMain.handle('tether:updates-check', (event) => trustedUpdateRequest(event) ? updates.check() : { ok: false, error: 'Untrusted IPC caller' })
+ipcMain.handle('tether:updates-prepare', (event) => trustedUpdateRequest(event) ? updates.prepare() : { ok: false, error: 'Untrusted IPC caller' })
+ipcMain.handle('tether:updates-apply', async (event, preparedId) => {
+  if (!trustedUpdateRequest(event)) return { ok: false, error: 'Untrusted IPC caller' }
+  const result = await updates.apply(preparedId)
+  setTimeout(() => app.quit(), 150)
+  return result
+})
 ipcMain.handle('tether:services', () => supervisor.snapshot())
+ipcMain.handle('tether:probe-services', () => supervisor.probe())
 ipcMain.handle('tether:start-services', () => supervisor.start())
 ipcMain.handle('tether:stop-services', () => supervisor.stop())
 ipcMain.handle('tether:restart-services', () => supervisor.restart())

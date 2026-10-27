@@ -6,10 +6,12 @@ const sharedPath = path.join(root, 'packages/tether-ui/src/app.js')
 const pluginPath = path.join(root, 'packages/dsh-plugin-tether-client/lib/client.js')
 
 const strip = (file) => fs.readFileSync(path.join(root, 'packages/tether-ui/src', file), 'utf8')
+  .replace(/^import .*$/gm, '')
   .replace(/^export /gm, '')
   .trim()
 
 const shared = strip('app.js')
+const connectionPanel = strip('connection-panel.js')
 const dshHost = strip('hosts/dsh.js')
 
 const plugin = `window.__ModuleLoader__.load({
@@ -19,7 +21,12 @@ const plugin = `window.__ModuleLoader__.load({
     const Native = require('tether-dsh-native-ui')
     const PANEL_ID = 'tether'
 ${dshHost}
-    const host = createDshHost()
+${connectionPanel}
+    let localPluginRpc = null
+    const host = createDshHost({
+      localPluginUpdates: createDshLocalPluginUpdateBridge(() => localPluginRpc),
+      localDeviceIdentity: createDshLocalIdentityBridge(() => localPluginRpc)
+    })
 
 ${shared}
     const tetherPanel = createTetherPanel({ React, Native, host })
@@ -28,11 +35,14 @@ ${shared}
 
     return {
       name: 'tether',
-      inject: ['slots', 'layout'],
+      inject: ['slots', 'layout', 'connection'],
       apply(ctx) {
         if (new URL(window.location.href).searchParams.has('tether_native')) {
           ctx.layout.selectPanel(null)
           return
+        }
+        if (ctx.connection && ctx.connection.rpc && typeof ctx.connection.rpc.call === 'function') {
+          localPluginRpc = ctx.connection.rpc
         }
         ctx.slots.inject('main', function* () {
           yield ctx.slots.register({ name: 'main', key: PANEL_ID }, App)
