@@ -6,6 +6,7 @@ const edge = process.env.EDGE || 'C:\\Program Files (x86)\\Microsoft\\Edge\\Appl
 const root = path.resolve(import.meta.dirname, '..', '..', '..')
 const profile = path.join(root, '.runtime', 'cdp-webui')
 const out = process.argv[2] || path.join(root, '.runtime', 'webui-desktop.png')
+const targetUrl = process.env.TETHER_SHOT_URL || 'http://127.0.0.1:18891/'
 const panel = process.argv[3] || '文件资源管理器'
 const row = process.argv[4] || ''
 const width = Number(process.env.TETHER_SHOT_WIDTH || 1600)
@@ -28,7 +29,7 @@ async function version() {
 
 try {
   await version()
-  const page = await (await fetch('http://127.0.0.1:' + port + '/json/new?http://127.0.0.1:18891/', { method: 'PUT' })).json()
+  const page = await (await fetch('http://127.0.0.1:' + port + '/json/new?' + encodeURIComponent(targetUrl), { method: 'PUT' })).json()
   const socket = new WebSocket(page.webSocketDebuggerUrl)
   let nextId = 1
   const pending = new Map()

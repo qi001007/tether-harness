@@ -33,12 +33,12 @@ export function createTetherPanel({ React, Native, host }) {
       shadow: 'var(--dsw-elevation-panel, 0 8px 24px rgba(16, 24, 40, 0.12))'
     }
 
-    let ACTIVE_BASE = BASE
+    const apiBaseList = host && host.apiBases ? host.apiBases() : [BASE]
+    let ACTIVE_BASE = apiBaseList[0] || BASE
     async function api(path, options) {
       const init = { ...(options || {}) }
       init.headers = { 'Content-Type': 'application/json', ...(init.headers || {}) }
-      const bases = host && host.apiBases ? host.apiBases() : [BASE]
-      const ordered = [ACTIVE_BASE, ...bases.filter((base) => base !== ACTIVE_BASE)]
+      const ordered = [ACTIVE_BASE, ...apiBaseList.filter((base) => base !== ACTIVE_BASE)]
       let lastError = null
       for (const base of ordered) {
         let res
@@ -1085,7 +1085,20 @@ export function createTetherPanel({ React, Native, host }) {
               throw new Error(message)
             }
             if (!data.available || !isSafeNativeSurfaceUrl(data.url)) throw new Error('Controller 返回了无效或非 loopback 的原生页面地址')
-            const url = new URL(data.url)
+            let surfaceUrl = data.url
+            const parsed = new URL(data.url)
+            if ((parsed.hostname === '127.0.0.1' || parsed.hostname === '[::1]') && ACTIVE_BASE !== 'http://127.0.0.1:18890') {
+              let localOk = false
+              try {
+                const localRes = await fetch(ACTIVE_BASE + '/local-api/api/devices/' + encodeURIComponent(deviceId) + '/dsh/surface')
+                if (localRes.ok) {
+                  const localData = await localRes.json()
+                  if (localData.available && isSafeNativeSurfaceUrl(localData.url)) { surfaceUrl = localData.url; localOk = true }
+                }
+              } catch (_) { /* no local controller */ }
+              if (!localOk) throw new Error('远端 Hub 的原生页指向其 loopback 网关，跨机代理尚未实现；本机设备请保持本地 Controller 运行')
+            }
+            const url = new URL(surfaceUrl)
             url.searchParams.set('tether_native', '1')
             if (current) setState({ deviceId, status: 'ready', url: url.href })
           })

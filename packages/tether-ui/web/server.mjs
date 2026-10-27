@@ -3,7 +3,8 @@ import https from 'node:https'
 import fs from 'node:fs'
 import path from 'node:path'
 
-const CORS = { 'access-control-allow-origin': 'dsh-app://app', 'access-control-allow-methods': 'GET, POST, OPTIONS', 'access-control-allow-headers': 'Content-Type, Authorization, X-Tether-Token', vary: 'Origin' }
+const CORS = { 'access-control-allow-methods': 'GET, POST, OPTIONS', 'access-control-allow-headers': 'Content-Type, Authorization, X-Tether-Token', vary: 'Origin' }
+const ORIGIN_OK = (origin) => origin === 'dsh-app://app' || /^http:\/\/(127\.0\.0\.1|localhost):\d+$/.test(origin || '')
 
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.map': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png' }
 
@@ -34,6 +35,24 @@ export function createWebServer({ root = import.meta.dirname, controller = 'http
     req.pipe(upstream)
   }
 
+  const proxyLocal = (req, res) => {
+    const upstream = http.request({
+      hostname: '127.0.0.1', port: 18890,
+      path: req.url.replace(/^\/local-api/, '') || '/',
+      method: req.method,
+      headers: { ...req.headers, host: '127.0.0.1:18890' }
+    }, (upstreamRes) => {
+      res.writeHead(upstreamRes.statusCode || 502, upstreamRes.headers)
+      upstreamRes.pipe(res)
+    })
+    upstream.on('error', (error) => {
+      if (res.headersSent) { res.end(); return }
+      res.writeHead(502, { 'content-type': 'application/json; charset=utf-8' })
+      res.end(JSON.stringify({ detail: { error: 'local controller unreachable: ' + error.message } }))
+    })
+    req.pipe(upstream)
+  }
+
   const serveStatic = (req, res) => {
     const url = new URL(req.url, 'http://localhost')
     const relative = decodeURIComponent(url.pathname === '/' ? '/index.html' : url.pathname)
@@ -51,8 +70,11 @@ export function createWebServer({ root = import.meta.dirname, controller = 'http
 
   const server = http.createServer((req, res) => {
     for (const [key, value] of Object.entries(CORS)) res.setHeader(key, value)
+    const origin = req.headers.origin
+    if (ORIGIN_OK(origin)) res.setHeader('access-control-allow-origin', origin)
     if (req.method === 'OPTIONS') { res.writeHead(204).end(); return }
-    if (req.url === '/api' || req.url.startsWith('/api/')) proxy(req, res)
+    if (req.url.startsWith('/local-api/')) proxyLocal(req, res)
+    else if (req.url === '/api' || req.url.startsWith('/api/')) proxy(req, res)
     else serveStatic(req, res)
   })
 

@@ -7276,12 +7276,12 @@ function createTetherPanel({ React: React2, Native, host }) {
     block: "var(--dsw-alias-markdown-code-block, #f8fafc)",
     shadow: "var(--dsw-elevation-panel, 0 8px 24px rgba(16, 24, 40, 0.12))"
   };
-  let ACTIVE_BASE = BASE;
+  const apiBaseList = host && host.apiBases ? host.apiBases() : [BASE];
+  let ACTIVE_BASE = apiBaseList[0] || BASE;
   async function api(path, options) {
     const init = { ...options || {} };
     init.headers = { "Content-Type": "application/json", ...init.headers || {} };
-    const bases = host && host.apiBases ? host.apiBases() : [BASE];
-    const ordered = [ACTIVE_BASE, ...bases.filter((base) => base !== ACTIVE_BASE)];
+    const ordered = [ACTIVE_BASE, ...apiBaseList.filter((base) => base !== ACTIVE_BASE)];
     let lastError = null;
     for (const base of ordered) {
       let res;
@@ -8584,7 +8584,24 @@ function createTetherPanel({ React: React2, Native, host }) {
           throw new Error(message2);
         }
         if (!data.available || !isSafeNativeSurfaceUrl(data.url)) throw new Error("Controller \u8FD4\u56DE\u4E86\u65E0\u6548\u6216\u975E loopback \u7684\u539F\u751F\u9875\u9762\u5730\u5740");
-        const url = new URL(data.url);
+        let surfaceUrl = data.url;
+        const parsed = new URL(data.url);
+        if ((parsed.hostname === "127.0.0.1" || parsed.hostname === "[::1]") && ACTIVE_BASE !== "http://127.0.0.1:18890") {
+          let localOk = false;
+          try {
+            const localRes = await fetch(ACTIVE_BASE + "/local-api/api/devices/" + encodeURIComponent(deviceId) + "/dsh/surface");
+            if (localRes.ok) {
+              const localData = await localRes.json();
+              if (localData.available && isSafeNativeSurfaceUrl(localData.url)) {
+                surfaceUrl = localData.url;
+                localOk = true;
+              }
+            }
+          } catch (_) {
+          }
+          if (!localOk) throw new Error("\u8FDC\u7AEF Hub \u7684\u539F\u751F\u9875\u6307\u5411\u5176 loopback \u7F51\u5173\uFF0C\u8DE8\u673A\u4EE3\u7406\u5C1A\u672A\u5B9E\u73B0\uFF1B\u672C\u673A\u8BBE\u5907\u8BF7\u4FDD\u6301\u672C\u5730 Controller \u8FD0\u884C");
+        }
+        const url = new URL(surfaceUrl);
         url.searchParams.set("tether_native", "1");
         if (current) setState({ deviceId, status: "ready", url: url.href });
       }).catch((error) => {
