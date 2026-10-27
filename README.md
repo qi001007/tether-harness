@@ -200,7 +200,12 @@ Both live in this repository, but neither requires the other:
 | **APP only** | `desktop/install-app.ps1` (desktop + Start Menu shortcut), or run `apps/tether-app/Tether-App.cmd` | Node 22+, Python 3.11+; no DSH |
 | **Both** | run both installers; the plugin reuses the APP at `127.0.0.1:18892` when it is running, otherwise falls back to `18890` | recommended for three-end sync |
 
-Direct download: [GitHub main archive](https://github.com/qi001007/tether-harness/archive/refs/heads/main.zip).
+Direct downloads for `v0.2.0`:
+
+- [Plugin only](https://github.com/qi001007/tether-harness/releases/download/v0.2.0/tether-plugin-0.2.0.zip) — DSH plugin, no APP
+- [APP only](https://github.com/qi001007/tether-harness/releases/download/v0.2.0/tether-app-0.2.0.zip) — desktop client, no plugin
+- Both: unpack both archives and run both installers; they share the Hub through `127.0.0.1:18892` and stay in sync.
+
 The plugin checks `packages/dsh-plugin-tether-client/version.json` on its own and shows a red dot in the Tether sidebar when a newer version exists; the update panel opens from the top bar. It does not need the APP for the update check. The APP is installed from the same checkout, so a `git pull` updates its source; the launcher installs npm dependencies on first run.
 
 ## Quick start (DSH plugin + MCP)

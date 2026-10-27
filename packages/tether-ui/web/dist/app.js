@@ -7280,7 +7280,7 @@ function createTetherPanel({ React: React2, Native, host }) {
   let ACTIVE_BASE = apiBaseList[0] || BASE;
   async function api(path, options) {
     const init = { ...options || {} };
-    init.headers = { "Content-Type": "application/json", ...init.headers || {} };
+    init.headers = { "Content-Type": "application/json", ...host && host.apiHeaders ? host.apiHeaders() : {}, ...init.headers || {} };
     const ordered = [ACTIVE_BASE, ...apiBaseList.filter((base) => base !== ACTIVE_BASE)];
     let lastError = null;
     for (const base of ordered) {
@@ -8782,6 +8782,9 @@ function createTetherPanel({ React: React2, Native, host }) {
     const appLocalDeviceRef = React2.useRef("");
     const pluginUpdate = usePluginUpdate();
     const [showUpdate, setShowUpdate] = React2.useState(false);
+    const [showHub, setShowHub] = React2.useState(false);
+    const [hubUrl, setHubUrl] = React2.useState("");
+    const [hubToken, setHubToken] = React2.useState("");
     const fail2 = (e) => {
       if (e && e.code === "node_update_required") {
         setNativeError("\u8282\u70B9\u5F85\u66F4\u65B0");
@@ -10038,11 +10041,26 @@ function createTetherPanel({ React: React2, Native, host }) {
           onOpenNetwork: () => selectPanel("network")
         }) : h("span", { style: { color: C2.mute } }, "no device"),
         device && device.capabilities && (!device.capabilities.fs || device.capabilities.surface_protocol !== 1) ? pill("\u8282\u70B9\u5F85\u66F4\u65B0", C2.amber) : null,
+        host && host.kind === "dsh" ? h("button", {
+          onClick: () => {
+            let saved = {};
+            try {
+              saved = JSON.parse(window.localStorage.getItem("tether.hub") || "{}");
+            } catch (_) {
+            }
+            setHubUrl(saved.url || "");
+            setHubToken(saved.token || "");
+            setShowHub(true);
+          },
+          title: "\u8FDE\u63A5 Tether Hub\uFF08\u4E0D\u4F9D\u8D56 APP\uFF09",
+          className: "tether-press tether-hover",
+          style: { marginLeft: "auto", height: 26, padding: "0 10px", borderRadius: 999, border: 0, background: C2.bg, color: C2.sub, display: "flex", alignItems: "center", gap: 6, fontSize: 12, cursor: "pointer", flex: "0 0 auto" }
+        }, "Hub") : null,
         pluginUpdate ? h("button", {
           onClick: () => setShowUpdate(true),
           title: "Tether \u63D2\u4EF6\u6709\u65B0\u7248\u672C",
           className: "tether-press tether-hover",
-          style: { marginLeft: "auto", marginRight: host && host.kind === "app" ? 72 : 0, height: 26, padding: "0 10px", borderRadius: 999, border: 0, background: C2.bg, color: C2.sub, display: "flex", alignItems: "center", gap: 6, fontSize: 12, cursor: "pointer", flex: "0 0 auto" }
+          style: { marginLeft: host && host.kind === "dsh" ? 8 : "auto", marginRight: host && host.kind === "app" ? 72 : 0, height: 26, padding: "0 10px", borderRadius: 999, border: 0, background: C2.bg, color: C2.sub, display: "flex", alignItems: "center", gap: 6, fontSize: 12, cursor: "pointer", flex: "0 0 auto" }
         }, h("span", { style: { width: 7, height: 7, borderRadius: 4, background: C2.red, flex: "0 0 auto" } }), "\u66F4\u65B0") : null
       ),
       notice ? h("div", { style: { padding: "6px 14px", background: C2.soft, color: /^Saved |^Policy updated|^已重命名/.test(notice) ? C2.green : C2.red, borderBottom: 0, fontSize: 12 } }, notice) : null,
@@ -10090,6 +10108,41 @@ function createTetherPanel({ React: React2, Native, host }) {
           view === "files" ? renderExplorer() : view === "network" ? renderNetwork() : null
         )
       ),
+      showHub && host && host.kind === "dsh" ? h(
+        "div",
+        {
+          onPointerDown: (event) => {
+            if (event.target === event.currentTarget) setShowHub(false);
+          },
+          style: { position: "absolute", inset: 0, background: "rgba(16,24,40,0.35)", display: "grid", placeItems: "center", zIndex: 31 }
+        },
+        h(
+          "div",
+          { style: { width: 420, maxWidth: "calc(100% - 32px)", background: C2.bg, borderRadius: 10, boxShadow: C2.shadow, padding: 18 } },
+          h("div", { style: { fontSize: 14, fontWeight: "var(--tether-strong, 600)", marginBottom: 6 } }, "\u8FDE\u63A5 Tether Hub"),
+          h("div", { style: { fontSize: 11.5, color: C2.mute, lineHeight: "18px", marginBottom: 12 } }, "\u63D2\u4EF6\u53EF\u76F4\u63A5\u8FDE Hub\uFF0C\u4E0D\u9700\u8981 APP\u3002\u4EE4\u724C\u53EA\u4FDD\u5B58\u5728\u672C\u673A\u6D4F\u89C8\u5668\u5B58\u50A8\u3002"),
+          h("input", { value: hubUrl, onChange: (event) => setHubUrl(event.target.value), placeholder: "https://hub.example.com", spellCheck: false, style: { width: "100%", height: 32, boxSizing: "border-box", border: 0, borderRadius: 6, padding: "0 8px", background: C2.panel, fontSize: 12, marginBottom: 8 } }),
+          h("input", { value: hubToken, onChange: (event) => setHubToken(event.target.value), placeholder: "TETHER_ACCESS_TOKEN", type: "password", spellCheck: false, style: { width: "100%", height: 32, boxSizing: "border-box", border: 0, borderRadius: 6, padding: "0 8px", background: C2.panel, fontSize: 12, marginBottom: 14 } }),
+          h(
+            "div",
+            { style: { display: "flex", justifyContent: "flex-end", gap: 8 } },
+            h("button", { onClick: () => {
+              window.localStorage.removeItem("tether.hub");
+              window.location.reload();
+            }, className: "tether-hover", style: { height: 28, padding: "0 10px", borderRadius: 6, border: 0, background: C2.soft, color: C2.red, fontSize: 12, cursor: "pointer" } }, "\u65AD\u5F00"),
+            btn("\u53D6\u6D88", () => setShowHub(false)),
+            btn("\u4FDD\u5B58\u5E76\u91CD\u8FDE", () => {
+              const url = hubUrl.trim().replace(/\/+$/, "");
+              if (!/^https?:\/\//.test(url) || !hubToken.trim()) {
+                setNotice("Hub URL \u6216\u4EE4\u724C\u65E0\u6548");
+                return;
+              }
+              window.localStorage.setItem("tether.hub", JSON.stringify({ url, token: hubToken.trim() }));
+              window.location.reload();
+            }, { primary: true })
+          )
+        )
+      ) : null,
       showUpdate && pluginUpdate ? h(
         "div",
         {

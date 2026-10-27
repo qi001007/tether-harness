@@ -8,3 +8,5 @@ __pycache__/
 *.log
 node_modules/
 apps/tether-app/data/
+
+release/

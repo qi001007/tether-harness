@@ -37,7 +37,7 @@ export function createTetherPanel({ React, Native, host }) {
     let ACTIVE_BASE = apiBaseList[0] || BASE
     async function api(path, options) {
       const init = { ...(options || {}) }
-      init.headers = { 'Content-Type': 'application/json', ...(init.headers || {}) }
+      init.headers = { 'Content-Type': 'application/json', ...(host && host.apiHeaders ? host.apiHeaders() : {}), ...(init.headers || {}) }
       const ordered = [ACTIVE_BASE, ...apiBaseList.filter((base) => base !== ACTIVE_BASE)]
       let lastError = null
       for (const base of ordered) {
@@ -1270,6 +1270,9 @@ export function createTetherPanel({ React, Native, host }) {
       const appLocalDeviceRef = React.useRef('')
       const pluginUpdate = usePluginUpdate()
       const [showUpdate, setShowUpdate] = React.useState(false)
+      const [showHub, setShowHub] = React.useState(false)
+      const [hubUrl, setHubUrl] = React.useState('')
+      const [hubToken, setHubToken] = React.useState('')
 
       const fail = (e) => {
         if (e && e.code === 'node_update_required') { setNativeError('节点待更新'); return }
@@ -2192,10 +2195,22 @@ export function createTetherPanel({ React, Native, host }) {
             onOpenNetwork: () => selectPanel('network')
           }) : h('span', { style: { color: C.mute } }, 'no device'),
           device && device.capabilities && (!device.capabilities.fs || device.capabilities.surface_protocol !== 1) ? pill('节点待更新', C.amber) : null,
+          host && host.kind === 'dsh' ? h('button', {
+            onClick: () => {
+              let saved = {}
+              try { saved = JSON.parse(window.localStorage.getItem('tether.hub') || '{}') } catch (_) { /* ignore */ }
+              setHubUrl(saved.url || '')
+              setHubToken(saved.token || '')
+              setShowHub(true)
+            },
+            title: '连接 Tether Hub（不依赖 APP）',
+            className: 'tether-press tether-hover',
+            style: { marginLeft: 'auto', height: 26, padding: '0 10px', borderRadius: 999, border: 0, background: C.bg, color: C.sub, display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer', flex: '0 0 auto' }
+          }, 'Hub') : null,
           pluginUpdate ? h('button', {
             onClick: () => setShowUpdate(true), title: 'Tether 插件有新版本',
             className: 'tether-press tether-hover',
-            style: { marginLeft: 'auto', marginRight: host && host.kind === 'app' ? 72 : 0, height: 26, padding: '0 10px', borderRadius: 999, border: 0, background: C.bg, color: C.sub, display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer', flex: '0 0 auto' }
+            style: { marginLeft: host && host.kind === 'dsh' ? 8 : 'auto', marginRight: host && host.kind === 'app' ? 72 : 0, height: 26, padding: '0 10px', borderRadius: 999, border: 0, background: C.bg, color: C.sub, display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer', flex: '0 0 auto' }
           }, h('span', { style: { width: 7, height: 7, borderRadius: 4, background: C.red, flex: '0 0 auto' } }), '更新') : null
         ),
         notice ? h('div', { style: { padding: '6px 14px', background: C.soft, color: /^Saved |^Policy updated|^已重命名/.test(notice) ? C.green : C.red, borderBottom: 0, fontSize: 12 } }, notice) : null,
@@ -2237,6 +2252,27 @@ export function createTetherPanel({ React, Native, host }) {
             view === 'files' ? renderExplorer() : (view === 'network' ? renderNetwork() : null)
         ),
         ),
+        showHub && host && host.kind === 'dsh' ? h('div', {
+          onPointerDown: (event) => { if (event.target === event.currentTarget) setShowHub(false) },
+          style: { position: 'absolute', inset: 0, background: 'rgba(16,24,40,0.35)', display: 'grid', placeItems: 'center', zIndex: 31 }
+        },
+          h('div', { style: { width: 420, maxWidth: 'calc(100% - 32px)', background: C.bg, borderRadius: 10, boxShadow: C.shadow, padding: 18 } },
+            h('div', { style: { fontSize: 14, fontWeight: 'var(--tether-strong, 600)', marginBottom: 6 } }, '连接 Tether Hub'),
+            h('div', { style: { fontSize: 11.5, color: C.mute, lineHeight: '18px', marginBottom: 12 } }, '插件可直接连 Hub，不需要 APP。令牌只保存在本机浏览器存储。'),
+            h('input', { value: hubUrl, onChange: (event) => setHubUrl(event.target.value), placeholder: 'https://hub.example.com', spellCheck: false, style: { width: '100%', height: 32, boxSizing: 'border-box', border: 0, borderRadius: 6, padding: '0 8px', background: C.panel, fontSize: 12, marginBottom: 8 } }),
+            h('input', { value: hubToken, onChange: (event) => setHubToken(event.target.value), placeholder: 'TETHER_ACCESS_TOKEN', type: 'password', spellCheck: false, style: { width: '100%', height: 32, boxSizing: 'border-box', border: 0, borderRadius: 6, padding: '0 8px', background: C.panel, fontSize: 12, marginBottom: 14 } }),
+            h('div', { style: { display: 'flex', justifyContent: 'flex-end', gap: 8 } },
+              h('button', { onClick: () => { window.localStorage.removeItem('tether.hub'); window.location.reload() }, className: 'tether-hover', style: { height: 28, padding: '0 10px', borderRadius: 6, border: 0, background: C.soft, color: C.red, fontSize: 12, cursor: 'pointer' } }, '断开'),
+              btn('取消', () => setShowHub(false)),
+              btn('保存并重连', () => {
+                const url = hubUrl.trim().replace(/\/+$/, '')
+                if (!/^https?:\/\//.test(url) || !hubToken.trim()) { setNotice('Hub URL 或令牌无效'); return }
+                window.localStorage.setItem('tether.hub', JSON.stringify({ url, token: hubToken.trim() }))
+                window.location.reload()
+              }, { primary: true })
+            )
+          )
+        ) : null,
         showUpdate && pluginUpdate ? h('div', {
           onPointerDown: (event) => { if (event.target === event.currentTarget) setShowUpdate(false) },
           style: { position: 'absolute', inset: 0, background: 'rgba(16,24,40,0.35)', display: 'grid', placeItems: 'center', zIndex: 30 }
