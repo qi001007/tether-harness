@@ -1204,12 +1204,30 @@ export function createTetherPanel({ React, Native, host }) {
       const [treeSelected, setTreeSelected] = React.useState('')
       const [drives, setDrives] = React.useState([])
       const [freshSession, setFreshSession] = React.useState(false)
+      const [appLocalDevice, setAppLocalDevice] = React.useState('')
+      const appLocalDeviceRef = React.useRef('')
 
       const fail = (e) => {
         if (e && e.code === 'node_update_required') { setNativeError('节点待更新'); return }
         setNotice(String((e && e.message) || e))
       }
       React.useEffect(() => { if (!notice) return; const t = setTimeout(() => setNotice(''), 7000); return () => clearTimeout(t) }, [notice])
+      React.useEffect(() => {
+        let alive = true
+        fetch(ACTIVE_BASE + '/app-context')
+          .then((res) => res.ok ? res.json() : null)
+          .then((data) => {
+            if (!alive || !data || !data.device) return
+            appLocalDeviceRef.current = data.device
+            setAppLocalDevice(data.device)
+            setDeviceId((current) => {
+              const hubLocal = stateRef.current && stateRef.current.local_device
+              return (!current || current === hubLocal) ? data.device : current
+            })
+          })
+          .catch(() => { /* no APP context */ })
+        return () => { alive = false }
+      }, [])
 
       const loadState = React.useCallback(async () => {
         try {
@@ -1217,7 +1235,7 @@ export function createTetherPanel({ React, Native, host }) {
           setState(data)
           setDeviceId((current) => {
             if (current && data.devices.some((d) => d.device_id === current)) return current
-            const local = data.local_device
+            const local = appLocalDeviceRef.current || data.local_device
             if (local && data.devices.some((d) => d.device_id === local)) return local
             const online = data.devices.find((d) => d.online)
             return (online && online.device_id) || ((data.devices[0] || {}).device_id || '')
@@ -2006,7 +2024,7 @@ export function createTetherPanel({ React, Native, host }) {
 
       const renderNetwork = () => {
         const devices = (state && state.devices) || []
-        const localId = state && state.local_device
+        const localId = appLocalDevice || (state && state.local_device)
         const online = devices.filter((item) => item.online)
         const caps = (item) => {
           const values = []

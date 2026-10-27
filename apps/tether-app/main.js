@@ -62,6 +62,8 @@ async function createWindow() {
     root: webRoot,
     controller,
     port: Number(env.TETHER_APP_PORT || 18892),
+    device: supervisor.device,
+    hub: !!supervisor.remoteUrl,
     accessToken: env.TETHER_ACCESS_TOKEN || '',
     insecureTls: ['1', 'true', 'yes'].includes(String(env.TETHER_INSECURE_TLS || '').toLowerCase())
   })

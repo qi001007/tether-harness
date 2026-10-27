@@ -8,7 +8,7 @@ const ORIGIN_OK = (origin) => origin === 'dsh-app://app' || /^http:\/\/(127\.0\.
 
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.map': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png' }
 
-export function createWebServer({ root = import.meta.dirname, controller = 'http://127.0.0.1:18890', port = 18891, host = '127.0.0.1', accessToken = '', insecureTls = false } = {}) {
+export function createWebServer({ root = import.meta.dirname, controller = 'http://127.0.0.1:18890', port = 18891, host = '127.0.0.1', accessToken = '', insecureTls = false, device = '', hub = false } = {}) {
   const target = new URL(controller)
   const here = root
 
@@ -73,6 +73,11 @@ export function createWebServer({ root = import.meta.dirname, controller = 'http
     const origin = req.headers.origin
     if (ORIGIN_OK(origin)) res.setHeader('access-control-allow-origin', origin)
     if (req.method === 'OPTIONS') { res.writeHead(204).end(); return }
+    if (req.url === '/app-context') {
+      res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' })
+      res.end(JSON.stringify({ device, hub }))
+      return
+    }
     if (req.url.startsWith('/local-api/')) proxyLocal(req, res)
     else if (req.url === '/api' || req.url.startsWith('/api/')) proxy(req, res)
     else serveStatic(req, res)

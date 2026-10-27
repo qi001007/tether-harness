@@ -8707,6 +8707,8 @@ function createTetherPanel({ React: React2, Native, host }) {
     const [treeSelected, setTreeSelected] = React2.useState("");
     const [drives, setDrives] = React2.useState([]);
     const [freshSession, setFreshSession] = React2.useState(false);
+    const [appLocalDevice, setAppLocalDevice] = React2.useState("");
+    const appLocalDeviceRef = React2.useRef("");
     const fail2 = (e) => {
       if (e && e.code === "node_update_required") {
         setNativeError("\u8282\u70B9\u5F85\u66F4\u65B0");
@@ -8719,13 +8721,29 @@ function createTetherPanel({ React: React2, Native, host }) {
       const t = setTimeout(() => setNotice(""), 7e3);
       return () => clearTimeout(t);
     }, [notice]);
+    React2.useEffect(() => {
+      let alive = true;
+      fetch(ACTIVE_BASE + "/app-context").then((res) => res.ok ? res.json() : null).then((data) => {
+        if (!alive || !data || !data.device) return;
+        appLocalDeviceRef.current = data.device;
+        setAppLocalDevice(data.device);
+        setDeviceId((current) => {
+          const hubLocal = stateRef.current && stateRef.current.local_device;
+          return !current || current === hubLocal ? data.device : current;
+        });
+      }).catch(() => {
+      });
+      return () => {
+        alive = false;
+      };
+    }, []);
     const loadState = React2.useCallback(async () => {
       try {
         const data = await api("/api/state");
         setState(data);
         setDeviceId((current) => {
           if (current && data.devices.some((d) => d.device_id === current)) return current;
-          const local = data.local_device;
+          const local = appLocalDeviceRef.current || data.local_device;
           if (local && data.devices.some((d) => d.device_id === local)) return local;
           const online = data.devices.find((d) => d.online);
           return online && online.device_id || ((data.devices[0] || {}).device_id || "");
@@ -9798,7 +9816,7 @@ function createTetherPanel({ React: React2, Native, host }) {
     };
     const renderNetwork = () => {
       const devices = state && state.devices || [];
-      const localId = state && state.local_device;
+      const localId = appLocalDevice || state && state.local_device;
       const online = devices.filter((item) => item.online);
       const caps = (item) => {
         const values = [];
