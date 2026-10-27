@@ -240,8 +240,10 @@ Copy-Item .env.example .env   # fill DEEPSEEK_API_KEY
 
 `install-plugin.ps1` only appends `tether-dsh-plugin` to
 `~/.dsh/profiles/desktop/package.json` and installs its two packages. It does not
-touch the other bundles or `cordis.patch.yml`; removing the package restores the
+touch the other bundles; removing the package restores the
 original DSH boot.
+The one edit outside `package.json` is the welcome-notice row described under
+"The preview notice does not close" (skip it with `-SkipDshNotice`).
 
 The desktop app keeps its own memory/plugins. Tether MCP adds these tools:
 
@@ -417,6 +419,30 @@ SDK at it (`tether/node/dsh_adapter.py:npm_launch_args()`). The SDK still owns t
 session, events, resume, and shutdown; only the runtime binary comes from npm.
 
 The desktop app has its own bundled runtime and is not affected.
+
+### The preview notice does not close
+
+Clicking 继续 on DSH's 预览版说明 asks the Host to persist
+`ui-settings-general.welcomeNoticeVersion`. Some preview builds refuse that write,
+so the modal answers "暂时无法保存确认状态，请重试。" on every attempt and blocks the
+window. The refusal is inside DSH: nothing in the profile changes when it fails,
+and Tether's Hub, node, and plugin are not involved.
+
+`desktop/dsh-welcome-notice.mjs` writes the same value into the profile patch
+layer instead. It reads the version from the installed build rather than
+hardcoding one, only touches the `desktop` profile by default, backs the file up,
+and is safe to rerun:
+
+```
+node desktop\dsh-welcome-notice.mjs            # seed (close DSH first)
+node desktop\dsh-welcome-notice.mjs --check    # report only; exits 1 if it would change
+node desktop\dsh-welcome-notice.mjs --revert   # remove the row again
+```
+
+`install-plugin.ps1` runs the seed step after installing; pass `-SkipDshNotice` to
+leave the patch layer alone. The profile is read at boot, so restart DeepSeek
+Harness afterwards. When a build bumps the notice copy, the modal returns — that
+is DSH's intent — and rerunning the script acknowledges the new version.
 
 ## Design boundaries
 

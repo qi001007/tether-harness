@@ -1,7 +1,8 @@
 # Install the Tether client plugin into the DeepSeek Harness desktop profile.
 # The plugin is plain ESM; there is no build step.
 param(
-  [switch]$Restart
+  [switch]$Restart,
+  [switch]$SkipDshNotice
 )
 $ErrorActionPreference = "Stop"
 
@@ -51,11 +52,30 @@ if ($LASTEXITCODE -ne 0) { throw "dsh plugin add failed with exit code $LASTEXIT
 
 Write-Host "[tether] plugin installed. Restart DeepSeek Harness to load it."
 Write-Host "[tether] The sidebar entry is named Tether."
+
+$exe = "D:\DeepSeek harness\DeepSeek Harness.exe"
 if ($Restart) {
-  $exe = "D:\DeepSeek harness\DeepSeek Harness.exe"
   if (-not (Test-Path $exe)) { throw "Set the DeepSeek Harness path in install-plugin.ps1 (-Restart)." }
   Get-Process "DeepSeek Harness" -ErrorAction SilentlyContinue | Stop-Process -Force
   Start-Sleep -Seconds 2
+}
+
+# Preview builds can leave DSH behind an undismissable "预览版说明" modal when the
+# Host refuses the acknowledgement write; seed it while the profile is idle.
+if (-not $SkipDshNotice) {
+  $Notice = Join-Path $AppDir "desktop\dsh-welcome-notice.mjs"
+  if (Test-Path $Notice) {
+    if (Get-Process "DeepSeek Harness" -ErrorAction SilentlyContinue) {
+      Write-Host "[tether] DeepSeek Harness is running, so the welcome-notice check was skipped."
+      Write-Host "[tether] To run it: close DeepSeek Harness, then node `"$Notice`""
+    } else {
+      & node $Notice --home $DshHome
+      if ($LASTEXITCODE -ne 0) { Write-Warning "[tether] Welcome-notice check failed; DeepSeek Harness still starts normally." }
+    }
+  }
+}
+
+if ($Restart) {
   Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
   Start-Process $exe
   Write-Host "[tether] DeepSeek Harness restarted."
