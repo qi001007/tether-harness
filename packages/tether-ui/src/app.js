@@ -1066,7 +1066,7 @@ export function createTetherPanel({ React, Native, host }) {
         if (!deviceId) { setState({ deviceId, status: 'no-device', url: '' }); return () => { current = false } }
         if (!online) { setState({ deviceId, status: 'offline', url: '' }); return () => { current = false } }
         setState({ deviceId, status: 'loading', url: '' })
-        fetch(ACTIVE_BASE + '/api/devices/' + encodeURIComponent(deviceId) + '/dsh/surface')
+        fetch(ACTIVE_BASE + '/api/devices/' + encodeURIComponent(deviceId) + '/dsh/surface', { signal: AbortSignal.timeout(8000) })
           .then(async (response) => {
             let data = {}
             try { data = await response.json() } catch (_) { /* empty body */ }
@@ -1110,7 +1110,7 @@ export function createTetherPanel({ React, Native, host }) {
         let alive = true
         const timer = setInterval(async () => {
           try {
-            const res = await fetch(ACTIVE_BASE + '/api/devices/' + encodeURIComponent(deviceId) + '/dsh/surface')
+            const res = await fetch(ACTIVE_BASE + '/api/devices/' + encodeURIComponent(deviceId) + '/dsh/surface', { signal: AbortSignal.timeout(8000) })
             if (!res.ok) return
             const data = await res.json()
             if (!alive || !data.available || !isSafeNativeSurfaceUrl(data.url)) return

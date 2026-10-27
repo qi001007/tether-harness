@@ -71,10 +71,6 @@ class NativeSurfaceGateways:
                 await self._stop(old)
                 old = None
             if old is not None:
-                status = await self._call(device_id, "status", {}, HTTP_TIMEOUT)
-                if not status.get("ok") or not (status.get("result") or {}).get("available"):
-                    await self._stop(old)
-                    raise RuntimeError((status.get("result") or {}).get("reason") or status.get("error") or "surface_unavailable")
                 ticket = self._new_ticket(old)
                 return {"url": f"{old.public_origin}/tether-connect?ticket={ticket}", "available": True}
             if len(self._gateways) >= MAX_GATEWAYS:
