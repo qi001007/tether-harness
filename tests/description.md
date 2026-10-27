@@ -5,3 +5,4 @@ APP/插件/Node 更新事务、设备身份、更新 API authority 路由、原�
 更新 manifest 的下一版兼容性由当前 updater 对未来版本 ZIP 的真实暂存覆盖。
 Node 启动配置回归实际调用 python-dotenv 读取 UTF-8 无 BOM 的临时 `.env`，包括中文路径和设备名。
 Release workflow 校验回归会在临时本地 Git 仓库中执行实际 PowerShell 脚本，并模拟 Actions 的退出码包装。
+更新服务 helper 集成测试优先使用 TETHER_TEST_PYTHON，其次使用可运行的项目虚拟环境，再探测 PATH 中的 python/python3；每个候选都先执行 --version。

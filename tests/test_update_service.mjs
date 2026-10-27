@@ -70,11 +70,30 @@ try {
   assert.deepEqual(helperConfig.launchArgs, [path.join(repoRoot, 'apps', 'tether-app')])
   assert.equal(helperConfig.env.PYTHONPATH, path.join(userData, 'update-helper-runtime'))
 
-  const python = path.join(projectRoot, '.venv', 'Scripts', 'python.exe')
-  if (!fs.existsSync(python)) throw new Error('project Python runtime is required for the temporary helper integration check')
-  const pythonProbe = spawnSync(python, ['--version'], { windowsHide: true, encoding: 'utf8' })
-  if (pythonProbe.error && pythonProbe.error.code === 'EPERM') {
+  const pythonCandidates = [
+    process.env.TETHER_TEST_PYTHON,
+    path.join(projectRoot, '.venv', 'Scripts', 'python.exe'),
+    path.join(projectRoot, '.venv', 'bin', 'python'),
+    'python',
+    'python3'
+  ].filter(Boolean)
+  const triedPython = new Set()
+  let python
+  let pythonExecutionBlocked = false
+  for (const candidate of pythonCandidates) {
+    if (triedPython.has(candidate)) continue
+    triedPython.add(candidate)
+    const probe = spawnSync(candidate, ['--version'], { windowsHide: true, encoding: 'utf8' })
+    if (probe.status === 0) {
+      python = candidate
+      break
+    }
+    if (probe.error?.code === 'EPERM') pythonExecutionBlocked = true
+  }
+  if (!python && pythonExecutionBlocked) {
     process.stdout.write('SKIP temporary helper CLI integration: sandbox denied Python process creation with EPERM\n')
+  } else if (!python) {
+    throw new Error('no runnable Python found; set TETHER_TEST_PYTHON or add python to PATH')
   } else {
   const applyArgsPath = path.join(temp, 'apply-args.json')
   const launchMarkerPath = path.join(temp, 'restarted.txt')

@@ -54,3 +54,4 @@
 - 2026-10-27：增加连接与服务面板行为回归：独立探测不重启受管服务、成功/失败时间与请求时延、重复设备条目移除及地址脱敏。APP supervisor 用例通过；共享 UI 用例除既有子进程 build --check 被 sandbox EPERM 阻止外通过。
 - 2026-10-27：补充 401/403 凭据错误与不可达/超时提示映射、DSH auth 状态码测试及 APP 不回传敏感 URL 测试。定向 supervisor 6/6、API auth 8/8；共享 UI 功能用例通过，内部子进程检查在 sandbox EPERM，改用独立 bundle check 验证。
 - 2026-10-27：增加 Hub 地址编辑输入的空配置、正常路径保留、敏感附加参数隐藏提示及断开按钮可用状态回归。
+- 2026-10-28：修复更新服务 helper CLI 集成测试对仓库 `.venv/Scripts/python.exe` 的硬编码，按显式环境变量、有效项目虚拟环境和 PATH 顺序探测可运行 Python，保留真实 helper activity/apply/relaunch 断言。
