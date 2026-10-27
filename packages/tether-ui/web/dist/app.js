@@ -8319,11 +8319,11 @@ function createTetherPanel({ React: React2, Native, host }) {
           return h("line", {
             key: "line:" + node.id,
             ...points,
-            stroke: C2.mute,
-            strokeWidth: zoom > 1 ? 0.75 : 1,
+            stroke: C2.sub,
+            strokeWidth: zoom > 1 ? 1 : 1.2,
             vectorEffect: "non-scaling-stroke",
-            strokeDasharray: linked ? void 0 : "3 4",
-            opacity: linked ? 0.55 : 0.28
+            strokeDasharray: linked ? void 0 : "4 5",
+            opacity: linked ? 0.7 : 0.4
           });
         })
       ),

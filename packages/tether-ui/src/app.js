@@ -893,11 +893,11 @@ export function createTetherPanel({ React, Native, host }) {
             const linked = !!(centerItem && centerItem.online && item && item.online)
             return h('line', {
               key: 'line:' + node.id, ...points,
-              stroke: C.mute,
-              strokeWidth: zoom > 1 ? 0.75 : 1,
+              stroke: C.sub,
+              strokeWidth: zoom > 1 ? 1 : 1.2,
               vectorEffect: 'non-scaling-stroke',
-              strokeDasharray: linked ? undefined : '3 4',
-              opacity: linked ? 0.55 : 0.28
+              strokeDasharray: linked ? undefined : '4 5',
+              opacity: linked ? 0.7 : 0.4
             })
           })
         ),
