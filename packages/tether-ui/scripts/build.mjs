@@ -5,13 +5,12 @@ const root = path.resolve(import.meta.dirname, '..', '..', '..')
 const sharedPath = path.join(root, 'packages/tether-ui/src/app.js')
 const pluginPath = path.join(root, 'packages/dsh-plugin-tether-client/lib/client.js')
 
-const strip = (file, name) => fs.readFileSync(path.join(root, 'packages/tether-ui/src', file), 'utf8')
-  .replace('export const DSH_API_BASE', 'const DSH_API_BASE')
-  .replace('export function ' + name, 'function ' + name)
+const strip = (file) => fs.readFileSync(path.join(root, 'packages/tether-ui/src', file), 'utf8')
+  .replace(/^export /gm, '')
   .trim()
 
-const shared = strip('app.js', 'createTetherPanel')
-const dshHost = strip('hosts/dsh.js', 'createDshHost')
+const shared = strip('app.js')
+const dshHost = strip('hosts/dsh.js')
 
 const plugin = `window.__ModuleLoader__.load({
   id: 'tether-dsh-client',

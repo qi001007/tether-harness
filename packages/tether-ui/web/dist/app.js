@@ -7276,23 +7276,37 @@ function createTetherPanel({ React: React2, Native, host }) {
     block: "var(--dsw-alias-markdown-code-block, #f8fafc)",
     shadow: "var(--dsw-elevation-panel, 0 8px 24px rgba(16, 24, 40, 0.12))"
   };
+  let ACTIVE_BASE = BASE;
   async function api(path, options) {
     const init = { ...options || {} };
     init.headers = { "Content-Type": "application/json", ...init.headers || {} };
-    const res = await fetch(BASE + path, init);
-    let data = {};
-    try {
-      data = await res.json();
-    } catch (_) {
+    const bases = host && host.apiBases ? host.apiBases() : [BASE];
+    const ordered = [ACTIVE_BASE, ...bases.filter((base) => base !== ACTIVE_BASE)];
+    let lastError = null;
+    for (const base of ordered) {
+      let res;
+      try {
+        res = await fetch(base + path, init);
+      } catch (error) {
+        lastError = error;
+        continue;
+      }
+      ACTIVE_BASE = base;
+      let data = {};
+      try {
+        data = await res.json();
+      } catch (_) {
+      }
+      if (!res.ok) {
+        const detail = data && data.detail;
+        const message = detail && detail.error || typeof detail === "string" && detail || data.error || "HTTP " + res.status;
+        const err = new Error(message);
+        err.code = detail && detail.code;
+        throw err;
+      }
+      return data;
     }
-    if (!res.ok) {
-      const detail = data && data.detail;
-      const message = detail && detail.error || typeof detail === "string" && detail || data.error || "HTTP " + res.status;
-      const err = new Error(message);
-      err.code = detail && detail.code;
-      throw err;
-    }
-    return data;
+    throw lastError || new Error("network error");
   }
   const post = (path, body) => api(path, { method: "POST", body: JSON.stringify(body || {}) });
   function pill(text, color) {
@@ -8557,7 +8571,7 @@ function createTetherPanel({ React: React2, Native, host }) {
         };
       }
       setState({ deviceId, status: "loading", url: "" });
-      fetch(BASE + "/api/devices/" + encodeURIComponent(deviceId) + "/dsh/surface").then(async (response) => {
+      fetch(ACTIVE_BASE + "/api/devices/" + encodeURIComponent(deviceId) + "/dsh/surface").then(async (response) => {
         let data = {};
         try {
           data = await response.json();

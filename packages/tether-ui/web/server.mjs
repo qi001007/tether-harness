@@ -3,6 +3,8 @@ import https from 'node:https'
 import fs from 'node:fs'
 import path from 'node:path'
 
+const CORS = { 'access-control-allow-origin': 'dsh-app://app', 'access-control-allow-methods': 'GET, POST, OPTIONS', 'access-control-allow-headers': 'Content-Type, Authorization, X-Tether-Token', vary: 'Origin' }
+
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.map': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png' }
 
 export function createWebServer({ root = import.meta.dirname, controller = 'http://127.0.0.1:18890', port = 18891, host = '127.0.0.1', accessToken = '', insecureTls = false } = {}) {
@@ -48,6 +50,8 @@ export function createWebServer({ root = import.meta.dirname, controller = 'http
   }
 
   const server = http.createServer((req, res) => {
+    for (const [key, value] of Object.entries(CORS)) res.setHeader(key, value)
+    if (req.method === 'OPTIONS') { res.writeHead(204).end(); return }
     if (req.url === '/api' || req.url.startsWith('/api/')) proxy(req, res)
     else serveStatic(req, res)
   })

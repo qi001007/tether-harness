@@ -33,20 +33,29 @@ export function createTetherPanel({ React, Native, host }) {
       shadow: 'var(--dsw-elevation-panel, 0 8px 24px rgba(16, 24, 40, 0.12))'
     }
 
+    let ACTIVE_BASE = BASE
     async function api(path, options) {
       const init = { ...(options || {}) }
       init.headers = { 'Content-Type': 'application/json', ...(init.headers || {}) }
-      const res = await fetch(BASE + path, init)
-      let data = {}
-      try { data = await res.json() } catch (_) { /* empty body */ }
-      if (!res.ok) {
-        const detail = data && data.detail
-        const message = (detail && detail.error) || (typeof detail === 'string' && detail) || data.error || ('HTTP ' + res.status)
-        const err = new Error(message)
-        err.code = detail && detail.code
-        throw err
+      const bases = host && host.apiBases ? host.apiBases() : [BASE]
+      const ordered = [ACTIVE_BASE, ...bases.filter((base) => base !== ACTIVE_BASE)]
+      let lastError = null
+      for (const base of ordered) {
+        let res
+        try { res = await fetch(base + path, init) } catch (error) { lastError = error; continue }
+        ACTIVE_BASE = base
+        let data = {}
+        try { data = await res.json() } catch (_) { /* empty body */ }
+        if (!res.ok) {
+          const detail = data && data.detail
+          const message = (detail && detail.error) || (typeof detail === 'string' && detail) || data.error || ('HTTP ' + res.status)
+          const err = new Error(message)
+          err.code = detail && detail.code
+          throw err
+        }
+        return data
       }
-      return data
+      throw lastError || new Error('network error')
     }
     const post = (path, body) => api(path, { method: 'POST', body: JSON.stringify(body || {}) })
 
@@ -1057,7 +1066,7 @@ export function createTetherPanel({ React, Native, host }) {
         if (!deviceId) { setState({ deviceId, status: 'no-device', url: '' }); return () => { current = false } }
         if (!online) { setState({ deviceId, status: 'offline', url: '' }); return () => { current = false } }
         setState({ deviceId, status: 'loading', url: '' })
-        fetch(BASE + '/api/devices/' + encodeURIComponent(deviceId) + '/dsh/surface')
+        fetch(ACTIVE_BASE + '/api/devices/' + encodeURIComponent(deviceId) + '/dsh/surface')
           .then(async (response) => {
             let data = {}
             try { data = await response.json() } catch (_) { /* empty body */ }

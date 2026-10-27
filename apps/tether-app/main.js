@@ -61,7 +61,7 @@ async function createWindow() {
   webServer = createWebServer({
     root: webRoot,
     controller,
-    port: 0,
+    port: Number(env.TETHER_APP_PORT || 18892),
     accessToken: env.TETHER_ACCESS_TOKEN || '',
     insecureTls: ['1', 'true', 'yes'].includes(String(env.TETHER_INSECURE_TLS || '').toLowerCase())
   })
