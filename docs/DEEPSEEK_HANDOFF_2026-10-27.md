@@ -184,7 +184,8 @@ E:\遥望科技实习项目\tether\.runtime\env-before-hub-20261027.bak
 
 ## 7. 尚未完成的部分
 
-1. **目标机 Node 未接入。** 当前 APP 显示 `no device / 在线设备：否`，因此还不能宣称跨机端到端成功。
+1. **目标机 Node 未接入。** LAPTOP-01 仍未注册。为排除链路问题，已把本机 `DESKTOP-LOCAL` 通过 `wss://8-220-198-26.sslip.io/ws/node` 注册到 Hub，APP 互联页实测显示 `1 / 1 在线`；这只证明单机经 Hub 的链路，不等于双机验收。
+   同时修复了 Windows Node 的 wss bug：`websockets.connect` 不能显式传 `ssl=None`，否则报 `ValueError: ssl=None is incompatible with a wss:// URI`；现在只在有 CA/不安全开关时才传 `ssl`。目标机必须拉到此修复后再接入。
 2. 目标机计划是 Windows `LAPTOP-01`；历史报告路径为 `C:\tether-node\app`，但必须先到目标机重新确认路径和版本，不能直接覆盖。
 3. 目标机接入后仍需验证：设备在线、文件资源管理、权限、改名、审计和任务。
 4. 原生 DSH 工作区 iframe 跨机仍未代理。Hub 返回的原生页指向 Controller 主机 loopback gateway；目标机本地插件仍可显示，但操作者远程查看该页暂不可用。
