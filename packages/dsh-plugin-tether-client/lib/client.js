@@ -910,7 +910,7 @@ function createTetherPanel({ React, Native, host }) {
             return h('line', {
               key: 'line:' + node.id, ...points,
               stroke: C.mute,
-              strokeWidth: 1,
+              strokeWidth: zoom > 1 ? 0.75 : 1,
               vectorEffect: 'non-scaling-stroke',
               strokeDasharray: linked ? undefined : '3 4',
               opacity: linked ? 0.55 : 0.28
@@ -2151,7 +2151,8 @@ function createTetherPanel({ React, Native, host }) {
               h('strong', null, '文件权限'), device ? h('span', { style: { marginLeft: 8, fontSize: 12, color: C.mute } }, device.name) : null,
               h('button', { onClick: () => setShowSettings(false), style: { marginLeft: 'auto', border: 0, background: 'transparent', fontSize: 18, cursor: 'pointer', color: C.mute } }, '×')
             ),
-            h('div', { className: 'tether-drawer-body', style: { overflow: 'auto', flex: '1 1 auto' } },
+            h('div', { className: 'tether-drawer-body', style: { overflow: 'hidden', flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column' } },
+              h('div', { style: { flex: '0 0 auto', maxHeight: '58%', overflowY: 'auto' } },
               h('div', { style: { display: 'grid', gap: 6, marginBottom: 4 } },
                 [['readonly', '默认（只读 + 项目可写）', '全盘可读；只写项目根与下列目录'],
                  ['locked', '锁定（全部只读）', '拒绝所有写入与删除'],
@@ -2175,10 +2176,12 @@ function createTetherPanel({ React, Native, host }) {
               ),
               h('div', { style: { display: 'flex', gap: 8, marginTop: 10, alignItems: 'center' } },
                 h('button', { onClick: savePolicy, disabled: busy || !device || !device.online, className: 'tether-press tether-hover', title: policy ? ('更新于 ' + (policy.updated_by || 'default')) : '', style: { height: 28, padding: '0 10px', borderRadius: 6, border: 0, background: C.primary, color: C.onPrimary, fontSize: 12, cursor: busy || !device || !device.online ? 'not-allowed' : 'pointer', opacity: busy || !device || !device.online ? 0.5 : 1, display: 'flex', alignItems: 'center', gap: 6 } }, h(Glyph, { name: 'save', size: 14 }), '保存权限')),
-              h('div', { title: 'Tether 文件服务操作，不含 DSH Agent 命令；写入含 intent/result', style: { fontSize: 12.5, lineHeight: '20px', fontWeight: 'var(--tether-body, 400)', color: C.mute, margin: '16px 0 6px' } }, '审计 · ' + (auditCount || 0) + ' / ' + (auditRetained || 100000)),
-              h('div', { style: { border: 0, borderRadius: 6, overflow: 'hidden', background: C.panel } },
+              ),
+              h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column' } },
+              h('div', { title: 'Tether 文件服务操作，不含 DSH Agent 命令；写入含 intent/result', style: { fontSize: 12.5, lineHeight: '20px', fontWeight: 'var(--tether-body, 400)', color: C.mute, margin: '12px 0 6px', flex: '0 0 auto' } }, '审计 · ' + (auditCount || 0) + ' / ' + (auditRetained || 100000)),
+              h('div', { style: { border: 0, borderRadius: 6, overflow: 'hidden', background: C.panel, flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column' } },
                 h('div', { className: 'tether-audit-head' }, h('span', null, '操作'), h('span', null, '路径'), h('span', null, '结果')),
-                h('div', { style: { maxHeight: 260, overflow: 'auto' } },
+                h('div', { style: { flex: '1 1 auto', minHeight: 0, overflow: 'auto' } },
                   audit.map((a, i) => h('div', { key: i, className: 'tether-audit-row', style: { background: i % 2 ? C.bg : 'transparent', color: a.result === 'denied' ? C.red : C.sub } },
                     h('span', null, a.op), h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, title: a.path }, a.path),
                     h('span', null, a.phase === 'intent' ? (a.result === 'denied' ? 'denied' : 'intent') : a.result)
@@ -2186,8 +2189,9 @@ function createTetherPanel({ React, Native, host }) {
                   !audit.length ? h('div', { style: { padding: 10, fontSize: 11, color: C.mute } }, '暂无审计') : null
                 )
               ),
-              audit.length < auditCount ? h('div', { style: { textAlign: 'center', paddingTop: 8 } },
+              audit.length < auditCount ? h('div', { style: { textAlign: 'center', paddingTop: 8, flex: '0 0 auto' } },
                 h('button', { onClick: loadMoreAudit, disabled: auditLoading, className: 'tether-hover', style: { border: 0, borderRadius: 6, padding: '5px 12px', background: C.soft, color: C.ink, fontSize: 12, cursor: auditLoading ? 'default' : 'pointer', opacity: auditLoading ? 0.6 : 1 } }, auditLoading ? '加载中…' : '加载更多')) : null
+              )
             )
           )
         ) : null,

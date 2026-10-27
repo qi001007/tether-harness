@@ -106,6 +106,9 @@ node packages/tether-ui/web/serve.mjs              # http://127.0.0.1:18891
 `web/serve.mjs` proxies `/api` to the Controller so the WebUI stays same-origin
 (the Controller still only allows the `dsh-app://app` origin directly). The WebUI is a
 development/acceptance entry for Phase 1; the Electron APP is Phase 2.
+`packages/tether-ui/web/dist/app.js` is committed so a fresh clone can run the APP/WebUI
+without a build step; rebuild it (`npm --prefix packages/tether-ui run build:web`) after
+editing `src/`.
 
 ```powershell
 cd apps/tether-app
