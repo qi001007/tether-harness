@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 import websockets
+from dotenv import load_dotenv
 
 from . import console as local_console
 from .dsh_adapter import DshRun
@@ -41,12 +42,7 @@ def os_label() -> str:
     return platform.platform(terse=True)
 
 ROOT = Path(__file__).resolve().parents[2]
-try:
-    from dotenv import load_dotenv
-
-    load_dotenv(ROOT / ".env")
-except ImportError:
-    pass
+load_dotenv(ROOT / ".env")
 
 ACTIVE = ("queued", "dispatching", "running", "cancelling")
 TERMINAL = ("completed", "cancelled", "failed", "unknown")

@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing version tag, for example v0.2.1
+        description: Version tag to build from main, for example v0.2.1
         required: true
         type: string
 permissions:
@@ -16,10 +16,10 @@ jobs:
   build-and-draft:
     runs-on: windows-latest
     steps:
-      - name: Check out the exact tagged source
+      - name: Check out the requested source
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.ref }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
 
       - uses: actions/setup-python@v7
@@ -29,23 +29,40 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
-      - name: Validate an existing tag against version.json
+      - name: Validate release source and tag
         shell: pwsh
         env:
           INPUT_TAG: ${{ inputs.tag }}
         run: |
           $ErrorActionPreference = 'Stop'
-          $tag = $env:GITHUB_REF_NAME
-          if ($env:GITHUB_EVENT_NAME -eq 'workflow_dispatch' -and ($env:GITHUB_REF_TYPE -ne 'tag' -or $env:INPUT_TAG -ne $tag)) {
-            throw 'Manual runs must select an existing tag as the workflow ref and enter the same tag in the input.'
+          if ($env:GITHUB_EVENT_NAME -eq 'workflow_dispatch') {
+            if ($env:GITHUB_REF_TYPE -ne 'branch' -or $env:GITHUB_REF_NAME -ne 'main') {
+              throw 'Manual baseline releases must run from the main branch.'
+            }
+            $tag = $env:INPUT_TAG
+          } else {
+            $tag = $env:GITHUB_REF_NAME
           }
           if ($tag -notmatch '^v\d+\.\d+\.\d+$') { throw "Invalid release tag: $tag" }
-          git cat-file -e "refs/tags/$tag^{commit}"
-          if ($LASTEXITCODE -ne 0) { throw "Tag does not exist: $tag" }
+          $tagRef = "refs/tags/$tag"
+          $tagExists = $false
+          $tagCommit = $null
+          git show-ref --verify --quiet $tagRef
+          if ($LASTEXITCODE -eq 0) {
+            $tagExists = $true
+            $tagCommit = (git rev-parse "$tagRef^{commit}").Trim()
+            if ($LASTEXITCODE -ne 0) { throw "Tag does not resolve to a commit: $tag" }
+            if ($tagCommit -ne $env:GITHUB_SHA) { throw "Tag $tag points to $tagCommit, not this workflow commit $env:GITHUB_SHA" }
+          } elseif ($LASTEXITCODE -ne 1) {
+            throw "Could not check tag: $tag"
+          }
+          if ($env:GITHUB_EVENT_NAME -eq 'push' -and -not $tagExists) { throw "Pushed tag is missing from checkout: $tag" }
           $version = Get-Content -Raw version.json | ConvertFrom-Json
           $components = @($version.components.app, $version.components.plugin, $version.components.node) | Select-Object -Unique
-          if ($components.Count -ne 1 -or "v$($components[0])" -ne $tag) { throw "Tag $tag does not match component versions in version.json" }
+          $releaseVersion = [string]$version.components.app
+          if ($components.Count -ne 1 -or ("v" + $releaseVersion) -ne $tag) { throw "Tag $tag does not match component versions in version.json" }
           "RELEASE_TAG=$tag" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "CREATE_TAG=$(-not $tagExists)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: Install Python project and test dependencies
         shell: pwsh
         run: |
@@ -74,19 +91,30 @@ jobs:
 
       - name: Create or refresh a draft release and upload artifacts
         uses: actions/github-script@v9
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
         with:
           script: |
             const fs = require('node:fs')
             const path = require('node:path')
             const tag = process.env.RELEASE_TAG
+            if (process.env.CREATE_TAG === 'True') {
+              try {
+                await github.rest.git.createRef({ owner: context.repo.owner, repo: context.repo.repo,
+                  ref: `refs/tags/${tag}`, sha: context.sha })
+                core.info(`Created ${tag} at ${context.sha} after all build checks passed.`)
+              } catch (error) {
+                if (error.status !== 422) throw error
+                const existing = await github.rest.git.getRef({ owner: context.repo.owner, repo: context.repo.repo,
+                  ref: `tags/${tag}` })
+                if (existing.data.object.sha !== context.sha) throw new Error(`Tag ${tag} was concurrently created at a different commit.`)
+              }
+            }
             const names = ['tether-app', 'tether-plugin', 'tether-node'].map(name => `${name}-${tag.slice(1)}.zip`).concat('tether-update.json')
             const { owner, repo } = context.repo
             let release
             try {
               const current = await github.rest.repos.getReleaseByTag({ owner, repo, tag })
               if (!current.data.draft) throw new Error(`Release ${tag} is already published; refusing to replace it.`)
+              if (current.data.tag_name !== tag) throw new Error(`Release tag mismatch for ${tag}.`)
               release = current.data; await github.rest.repos.updateRelease({ owner, repo, release_id: release.id, name: tag, draft: true })
             } catch (error) {
               if (error.status !== 404) throw error

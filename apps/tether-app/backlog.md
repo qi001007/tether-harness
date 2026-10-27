@@ -1,4 +1,5 @@
 # tether-app backlog
+- 2026-10-28：截图模式记录 renderer 错误与 DOM 状态，更新中心截图在界面未实际渲染时失败退出。
 - 2026-10-28：本机 Controller 启动改为使用已安装的私有 `tether-harness-server`；无私有包且无健康本机服务时返回明确配置 Hub/安装组件提示。客户端继续外接已有服务与远端 Hub。
 - 2026-10-27：更新 APP 目录说明，删除旧 `app-services.js` 专属抽屉引用；连接页由共享 UI 提供。
 - 2026-10-27：移除 APP 专属服务面板挂载，APP 与 DSH 在共享 UI toolbar 使用同一“连接”按钮和服务器状态面板；Web server 的连接摘要/探测响应不含访问令牌。

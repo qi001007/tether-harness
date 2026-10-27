@@ -1,5 +1,3 @@
-# workflows 变更记录
+# 变更记录
 
-## 2026-10-27
-
-- Release 工作流安装 `pytest-asyncio`，以支持带 `@pytest.mark.asyncio` 的异步回归用例。
+- 2026-10-28：允许从 main 输入新版本号生成首个 Draft Release；验证组件版本与本次提交，构建验证通过后才创建缺失 tag，并拒绝不同提交的已有 tag 及已发布 Release 覆盖。

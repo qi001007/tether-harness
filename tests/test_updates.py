@@ -96,13 +96,14 @@ def make_zip(component: str, version: str = "0.2.1", extra: dict[str, bytes] | N
     return output.getvalue()
 
 
-def install_manifest(server: ArtifactServer, component: str, archive: bytes, *, bad_hash: bool = False) -> str:
+def install_manifest(server: ArtifactServer, component: str, archive: bytes, *, bad_hash: bool = False,
+                     version: str = "0.2.1", min_updater: str = "0.2.1") -> str:
     artifact_path = f"/{component}.zip"
     server.files[artifact_path] = archive
     entry = {
-        "version": "0.2.1", "url": server.base + artifact_path,
+        "version": version, "url": server.base + artifact_path,
         "sha256": "0" * 64 if bad_hash else hashlib.sha256(archive).hexdigest(),
-        "size": len(archive), "protocol": 1, "min_updater": "0.2.1",
+        "size": len(archive), "protocol": 1, "min_updater": min_updater,
     }
     components = {name: dict(entry) for name in ("app", "plugin", "node")}
     components[component]["url"] = server.base + artifact_path
@@ -169,6 +170,25 @@ def test_bad_archive_hash_is_rejected_before_staging(artifact_server: ArtifactSe
     assert result["ok"] is False
     assert result["error_code"] == "hash_mismatch"
     assert manager.status()["prepared"] == []
+
+
+def test_current_updater_can_prepare_next_release_when_protocol_is_unchanged(
+    artifact_server: ArtifactServer, tmp_path: Path
+) -> None:
+    root = tmp_path / "install"
+    seed_version(root)
+    archive = make_zip("app", version="0.2.2")
+    url = install_manifest(artifact_server, "app", archive, version="0.2.2", min_updater="0.2.1")
+    manager = UpdateManager(root, "app", dsh_home=tmp_path / "empty-dsh", manifest_url=url,
+                            state_dir=tmp_path / "state")
+
+    checked = manager.check()
+    prepared = manager.prepare()
+
+    assert checked["ok"] is True
+    assert checked["latest_version"] == "0.2.2"
+    assert checked["update_available"] is True
+    assert prepared["ok"] is True, prepared
 
 
 def test_node_update_rejects_python_dependency_changes(artifact_server: ArtifactServer, tmp_path: Path) -> None:

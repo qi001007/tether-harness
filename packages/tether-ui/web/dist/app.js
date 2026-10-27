@@ -24,9 +24,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// tether/packages/tether-ui/node_modules/react/cjs/react.production.min.js
+// packages/tether-ui/node_modules/react/cjs/react.production.min.js
 var require_react_production_min = __commonJS({
-  "tether/packages/tether-ui/node_modules/react/cjs/react.production.min.js"(exports) {
+  "packages/tether-ui/node_modules/react/cjs/react.production.min.js"(exports) {
     "use strict";
     var l = Symbol.for("react.element");
     var n = Symbol.for("react.portal");
@@ -297,9 +297,9 @@ var require_react_production_min = __commonJS({
   }
 });
 
-// tether/packages/tether-ui/node_modules/react/index.js
+// packages/tether-ui/node_modules/react/index.js
 var require_react = __commonJS({
-  "tether/packages/tether-ui/node_modules/react/index.js"(exports, module) {
+  "packages/tether-ui/node_modules/react/index.js"(exports, module) {
     "use strict";
     if (true) {
       module.exports = require_react_production_min();
@@ -309,9 +309,9 @@ var require_react = __commonJS({
   }
 });
 
-// tether/packages/tether-ui/node_modules/scheduler/cjs/scheduler.production.min.js
+// packages/tether-ui/node_modules/scheduler/cjs/scheduler.production.min.js
 var require_scheduler_production_min = __commonJS({
-  "tether/packages/tether-ui/node_modules/scheduler/cjs/scheduler.production.min.js"(exports) {
+  "packages/tether-ui/node_modules/scheduler/cjs/scheduler.production.min.js"(exports) {
     "use strict";
     function f(a, b) {
       var c = a.length;
@@ -562,9 +562,9 @@ var require_scheduler_production_min = __commonJS({
   }
 });
 
-// tether/packages/tether-ui/node_modules/scheduler/index.js
+// packages/tether-ui/node_modules/scheduler/index.js
 var require_scheduler = __commonJS({
-  "tether/packages/tether-ui/node_modules/scheduler/index.js"(exports, module) {
+  "packages/tether-ui/node_modules/scheduler/index.js"(exports, module) {
     "use strict";
     if (true) {
       module.exports = require_scheduler_production_min();
@@ -574,9 +574,9 @@ var require_scheduler = __commonJS({
   }
 });
 
-// tether/packages/tether-ui/node_modules/react-dom/cjs/react-dom.production.min.js
+// packages/tether-ui/node_modules/react-dom/cjs/react-dom.production.min.js
 var require_react_dom_production_min = __commonJS({
-  "tether/packages/tether-ui/node_modules/react-dom/cjs/react-dom.production.min.js"(exports) {
+  "packages/tether-ui/node_modules/react-dom/cjs/react-dom.production.min.js"(exports) {
     "use strict";
     var aa = require_react();
     var ca = require_scheduler();
@@ -7184,9 +7184,9 @@ var require_react_dom_production_min = __commonJS({
   }
 });
 
-// tether/packages/tether-ui/node_modules/react-dom/index.js
+// packages/tether-ui/node_modules/react-dom/index.js
 var require_react_dom = __commonJS({
-  "tether/packages/tether-ui/node_modules/react-dom/index.js"(exports, module) {
+  "packages/tether-ui/node_modules/react-dom/index.js"(exports, module) {
     "use strict";
     function checkDCE() {
       if (typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ === "undefined" || typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.checkDCE !== "function") {
@@ -7210,9 +7210,9 @@ var require_react_dom = __commonJS({
   }
 });
 
-// tether/packages/tether-ui/node_modules/react-dom/client.js
+// packages/tether-ui/node_modules/react-dom/client.js
 var require_client = __commonJS({
-  "tether/packages/tether-ui/node_modules/react-dom/client.js"(exports) {
+  "packages/tether-ui/node_modules/react-dom/client.js"(exports) {
     "use strict";
     var m = require_react_dom();
     if (true) {
@@ -7241,11 +7241,11 @@ var require_client = __commonJS({
   }
 });
 
-// tether/packages/tether-ui/web/main.js
+// packages/tether-ui/web/main.js
 var import_react = __toESM(require_react(), 1);
 var import_client = __toESM(require_client(), 1);
 
-// tether/packages/tether-ui/src/connection-panel.js
+// packages/tether-ui/src/connection-panel.js
 function createConnectionPanel(React2) {
   const h = React2.createElement;
   const ink = "var(--dsw-alias-label-primary, #101828)";
@@ -7316,7 +7316,7 @@ function createConnectionPanel(React2) {
   return { Panel: ConnectionPanel, Trigger: ConnectionTrigger };
 }
 
-// tether/packages/tether-ui/src/app.js
+// packages/tether-ui/src/app.js
 function isUpdateTargetCurrent(requestDevice, requestEpoch, currentDevice, currentEpoch) {
   return requestDevice === currentDevice && requestEpoch === currentEpoch;
 }
@@ -7391,6 +7391,15 @@ function dedupeUpdateCheck(inFlight, key, check) {
 }
 function updateCheckKey(component, scope) {
   return (scope ? scope.deviceId + ":" + scope.epoch : "local") + ":" + component;
+}
+function validateWorkspaceResponse(data) {
+  if (!data || data.ok === false || !Array.isArray(data.workspaces) || data.workspaces.some((workspace) => !workspace || typeof workspace.path !== "string")) throw new Error("\u5DE5\u4F5C\u533A\u63A5\u53E3\u8FD4\u56DE\u7684\u6570\u636E\u683C\u5F0F\u65E0\u6548");
+  return data;
+}
+function workspaceStateAfterLoadFailure({ projects, project, loadedDeviceId, requestDeviceId, fallbackPath }) {
+  if (loadedDeviceId === requestDeviceId || !fallbackPath) return { projects, project, synthetic: false };
+  const workspace = { name: "Tether \u5DE5\u4F5C\u76EE\u5F55", path: fallbackPath, kind: "node", writable: true, synthetic: true };
+  return { projects: { root: fallbackPath, node_workspace: fallbackPath, workspaces: [workspace], synthetic: true }, project: workspace, synthetic: true };
 }
 async function runUpdateSequence({ check, prepare, apply, isCurrent = () => true }) {
   const checked = await check();
@@ -8881,7 +8890,13 @@ function createTetherPanel({ React: React2, Native, host }) {
     }
     deviceIdRef.current = deviceId;
     const [projects, setProjects] = React2.useState(null);
+    const [projectsError, setProjectsError] = React2.useState("");
     const [project, setProject] = React2.useState(null);
+    const projectsRef = React2.useRef(null);
+    const projectRef = React2.useRef(null);
+    const projectsDeviceRef = React2.useRef("");
+    projectsRef.current = projects;
+    projectRef.current = project;
     const [view, setView] = React2.useState("chat");
     const [activePanel, setActivePanel] = usePersisted("tether.ui.panel.v2", "workspaces");
     const [sidebarCollapsed, setSidebarCollapsed] = usePersisted("tether.ui.panelCollapsed", false);
@@ -9304,14 +9319,26 @@ function createTetherPanel({ React: React2, Native, host }) {
       api("/api/devices/" + encodeURIComponent(deviceId) + "/policy").then(setPolicy).catch(() => setPolicy(null));
     }, [deviceId]);
     const loadProjects = React2.useCallback(async () => {
-      if (!deviceId) return;
+      if (!deviceId) {
+        setProjects(null);
+        setProject(null);
+        projectsRef.current = null;
+        projectRef.current = null;
+        projectsDeviceRef.current = "";
+        setProjectsError("");
+        return;
+      }
+      setProjectsError("");
       const requestDevice = deviceId;
       const requestEpoch = treeDeviceEpochRef.current;
       const stillCurrent = () => treeResponseIsCurrent(requestDevice, deviceIdRef.current, requestEpoch, treeDeviceEpochRef.current);
       try {
-        const data = await api("/api/devices/" + encodeURIComponent(requestDevice) + "/workspaces");
+        const data = validateWorkspaceResponse(await api("/api/devices/" + encodeURIComponent(requestDevice) + "/workspaces"));
         if (!stillCurrent()) return;
+        setProjectsError("");
         setProjects(data);
+        projectsRef.current = data;
+        projectsDeviceRef.current = requestDevice;
         setProject((current) => {
           if (current && data.workspaces.some((w) => w.path === current.path)) return current;
           return data.workspaces[0] || null;
@@ -9320,19 +9347,32 @@ function createTetherPanel({ React: React2, Native, host }) {
         if (!stillCurrent()) return;
         const dev = (stateRef.current && stateRef.current.devices || []).find((d) => d.device_id === requestDevice);
         const fallback = dev && dev.capabilities && dev.capabilities.workspace;
-        if (fallback) {
-          const synthetic = { name: "Tether \u5DE5\u4F5C\u76EE\u5F55", path: fallback, kind: "node", writable: true, synthetic: true };
-          setProjects({ root: fallback, node_workspace: fallback, workspaces: [synthetic], synthetic: true });
-          setProject((current) => current && samePath(current.path, fallback) ? current : synthetic);
+        const failureState = workspaceStateAfterLoadFailure({
+          projects: projectsRef.current,
+          project: projectRef.current,
+          loadedDeviceId: projectsDeviceRef.current,
+          requestDeviceId: requestDevice,
+          fallbackPath: fallback
+        });
+        if (failureState.synthetic) {
+          setProjects(failureState.projects);
+          projectsRef.current = failureState.projects;
+          projectsDeviceRef.current = requestDevice;
+          setProject(failureState.project);
+          projectRef.current = failureState.project;
+          setProjectsError("\u8282\u70B9\u5DE5\u4F5C\u533A\u63A5\u53E3\u6682\u4E0D\u53EF\u7528\uFF0C\u5F53\u524D\u663E\u793A\u8282\u70B9\u9ED8\u8BA4\u5DE5\u4F5C\u76EE\u5F55\u3002");
           setNativeError("\u8282\u70B9\u672A\u5347\u7EA7\uFF0C\u539F\u751F\u4F1A\u8BDD\u4E0D\u53EF\u7528");
         } else {
-          setProjects(null);
-          fail2(e);
+          setProjectsError(e && e.message === "\u5DE5\u4F5C\u533A\u63A5\u53E3\u8FD4\u56DE\u7684\u6570\u636E\u683C\u5F0F\u65E0\u6548" ? "\u5DE5\u4F5C\u533A\u63A5\u53E3\u8FD4\u56DE\u7684\u6570\u636E\u683C\u5F0F\u65E0\u6548\uFF0C\u8BF7\u68C0\u67E5\u76EE\u6807\u8282\u70B9\u7248\u672C\u540E\u91CD\u8BD5\u3002" : "\u8BFB\u53D6\u5DE5\u4F5C\u533A\u5931\u8D25\uFF0C\u8BF7\u68C0\u67E5\u8282\u70B9\u8FDE\u63A5\u548C\u63A5\u53E3\u7248\u672C\u540E\u91CD\u8BD5\u3002");
         }
       }
     }, [deviceId]);
     React2.useEffect(() => {
+      setProjects(null);
       setProject(null);
+      projectsDeviceRef.current = "";
+      projectsRef.current = null;
+      projectRef.current = null;
       setPath("");
       setPathDraft("");
       setFile(null);
@@ -10528,6 +10568,12 @@ function createTetherPanel({ React: React2, Native, host }) {
         }, updateHasAvailable ? "\u66F4\u65B0 \xB7 \u6709\u65B0\u7248\u672C" : updateHasFailure ? "\u66F4\u65B0 \xB7 \u68C0\u67E5\u5931\u8D25" : "\u66F4\u65B0")
       ),
       notice ? h("div", { style: { padding: "6px 14px", background: C.soft, color: /^Saved |^Policy updated|^已重命名/.test(notice) ? C.green : C.red, borderBottom: 0, fontSize: 12 } }, notice) : null,
+      projectsError ? h(
+        "div",
+        { role: "alert", style: { display: "flex", alignItems: "center", gap: 8, padding: "6px 14px", background: C.soft, color: C.red, fontSize: 12 } },
+        h("span", null, projectsError),
+        btn("\u91CD\u8BD5\u5DE5\u4F5C\u533A", loadProjects)
+      ) : null,
       h(
         "div",
         { style: { display: "flex", flex: "1 1 auto", minHeight: 0 } },
@@ -10759,7 +10805,7 @@ function createTetherPanel({ React: React2, Native, host }) {
   return { App, TetherIcon };
 }
 
-// tether/packages/tether-ui/src/hosts/web.js
+// packages/tether-ui/src/hosts/web.js
 var EXT_KIND = {
   md: "md",
   markdown: "md",
@@ -11035,7 +11081,7 @@ function createWebHost({ apiBase = "" } = {}) {
   };
 }
 
-// tether/packages/tether-ui/src/hosts/electron.js
+// packages/tether-ui/src/hosts/electron.js
 function createElectronHost({ apiBase = "" } = {}) {
   return {
     ...createWebHost({ apiBase }),
@@ -11069,7 +11115,32 @@ function createElectronHost({ apiBase = "" } = {}) {
   };
 }
 
-// tether/packages/tether-ui/web/main.js
+// packages/tether-ui/web/app-error-boundary.js
+function createAppErrorBoundary(React2) {
+  return class AppErrorBoundary extends React2.Component {
+    constructor(props) {
+      super(props);
+      this.state = { error: null };
+    }
+    static getDerivedStateFromError(error) {
+      return { error };
+    }
+    componentDidCatch(error) {
+      console.error("Tether UI render failed", error);
+    }
+    render() {
+      if (!this.state.error) return this.props.children;
+      return React2.createElement(
+        "div",
+        { role: "alert", style: { padding: 24, color: "#b42318", font: "14px/1.6 Segoe UI, sans-serif" } },
+        React2.createElement("div", null, "\u754C\u9762\u9047\u5230\u9519\u8BEF\uFF0C\u8BF7\u91CD\u8BD5\u91CD\u65B0\u52A0\u8F7D\u3002"),
+        React2.createElement("button", { type: "button", onClick: () => this.setState({ error: null }), style: { marginTop: 12, padding: "6px 12px", cursor: "pointer" } }, "\u91CD\u8BD5")
+      );
+    }
+  };
+}
+
+// packages/tether-ui/web/main.js
 function fail(error) {
   const box = document.getElementById("root");
   if (!box) return;
@@ -11086,7 +11157,8 @@ try {
     host: inApp ? createElectronHost({ apiBase: "" }) : createWebHost({ apiBase: "" })
   });
   const root = (0, import_client.createRoot)(document.getElementById("root"));
-  root.render(import_react.default.createElement(panel.App));
+  const AppErrorBoundary = createAppErrorBoundary(import_react.default);
+  root.render(import_react.default.createElement(AppErrorBoundary, null, import_react.default.createElement(panel.App)));
 } catch (error) {
   fail(error);
 }

@@ -10,7 +10,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "release"
-VERSION = "0.2.1"
+VERSION = json.loads((ROOT / "version.json").read_text(encoding="utf-8"))["components"]["app"]
+MIN_UPDATER_VERSION = "0.2.1"
 SKIP = {"node_modules", "data", "__pycache__", ".pytest_cache", ".venv", ".git", "release",
         ".aws", ".dsh", ".ssh", "credentials"}
 
@@ -58,7 +59,27 @@ def add_tether_runtime(archive: zipfile.ZipFile, prefix: str) -> None:
                 archive.write(path, f"{prefix}/{rel}")
 
 
+def validate_versions() -> None:
+    components = json.loads((ROOT / "version.json").read_text(encoding="utf-8"))["components"]
+    if set(components) != {"app", "plugin", "node"} or len(set(components.values())) != 1:
+        raise ValueError("version.json must define matching app, plugin, and node versions")
+    version = components["app"]
+    pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    project_match = re.search(r"(?ms)^\[project\]\s*.*?^version\s*=\s*['\"]([^'\"]+)", pyproject)
+    if not project_match or project_match.group(1) != version:
+        raise ValueError("pyproject.toml version does not match version.json")
+    package_paths = [ROOT / "apps/tether-app/package.json"] + [
+        ROOT / "packages" / name / "package.json"
+        for name in ("dsh-plugin-tether", "dsh-plugin-tether-client", "tether-dsh-native-ui", "tether-dsh-surface")
+    ]
+    for path in package_paths:
+        package = json.loads(path.read_text(encoding="utf-8"))
+        if package.get("version") != version:
+            raise ValueError(f"{path.relative_to(ROOT)} version does not match version.json")
+
+
 def main() -> None:
+    validate_versions()
     OUT.mkdir(exist_ok=True)
     plugin_prefix = f"tether-plugin-{VERSION}"
     app_prefix = f"tether-app-{VERSION}"
@@ -108,14 +129,18 @@ tether-harness-server component is installed. Otherwise, configure a Hub or inst
     with zipfile.ZipFile(node, "w", zipfile.ZIP_DEFLATED) as archive:
         add_tether_runtime(archive, node_prefix)
         for rel in ("laptop/tether-node.ps1", "laptop/bootstrap-node.ps1", "pyproject.toml",
-                    ".env.example", "version.json"):
+                    "version.json"):
             add_file(archive, rel, node_prefix)
         archive.writestr(f"{node_prefix}/README-INSTALL.md", """# Tether Node (standalone)
 
-Install the Python dependencies listed in `pyproject.toml`, create a local `.env`
-from `.env.example` as needed, then run `laptop\\tether-node.ps1`. This archive
-contains the Node backend and launch/bootstrap scripts; it does not install APP
-or modify a DeepSeek Harness profile.
+Install the Python dependencies listed in `pyproject.toml`, then run
+`laptop\\bootstrap-node.ps1` with `-ControllerUrl` and `-Token`, or create a
+local `.env` containing `TETHER_CONTROLLER` and `TETHER_NODE_TOKEN`. Configure
+the Hub WebSocket URL to end in `/ws/node`. Existing `.env` files are kept;
+missing configuration is reported without starting against placeholders.
+Device name defaults to this computer's hostname.
+This archive contains the Node backend and launch/bootstrap scripts; it does not
+install APP or modify a DeepSeek Harness profile.
 """)
 
     manifest = {"schema": 1, "components": {}}
@@ -127,7 +152,7 @@ or modify a DeepSeek Harness profile.
             "sha256": hashlib.sha256(payload).hexdigest(),
             "size": len(payload),
             "protocol": 1,
-            "min_updater": VERSION,
+            "min_updater": MIN_UPDATER_VERSION,
         }
     manifest_path = OUT / "tether-update.json"
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

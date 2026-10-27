@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { createTetherPanel } from '../src/app.js'
 import { createWebHost, createWebNative } from '../src/hosts/web.js'
 import { createElectronHost } from '../src/hosts/electron.js'
+import { createAppErrorBoundary } from './app-error-boundary.js'
 
 function fail(error) {
   const box = document.getElementById('root')
@@ -21,7 +22,8 @@ try {
     host: inApp ? createElectronHost({ apiBase: '' }) : createWebHost({ apiBase: '' })
   })
   const root = createRoot(document.getElementById('root'))
-  root.render(React.createElement(panel.App))
+  const AppErrorBoundary = createAppErrorBoundary(React)
+  root.render(React.createElement(AppErrorBoundary, null, React.createElement(panel.App)))
 } catch (error) {
   fail(error)
 }

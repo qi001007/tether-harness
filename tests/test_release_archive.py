@@ -59,6 +59,15 @@ def test_standalone_plugin_archive_passes_offline_installer_preflight(tmp_path: 
         assert "tether-node-0.2.1/tether/node/agent.py" in node_names
         assert "tether-node-0.2.1/laptop/tether-node.ps1" in node_names
         assert "tether-node-0.2.1/version.json" in node_names
+        assert "tether-node-0.2.1/.env.example" not in node_names
+        install_readme = archive.read("tether-node-0.2.1/README-INSTALL.md").decode("utf-8")
+        bootstrap = archive.read("tether-node-0.2.1/laptop/bootstrap-node.ps1").decode("utf-8")
+        assert "Hub WebSocket URL" in install_readme
+        assert "hostname" in install_readme
+        assert ".env.example" not in install_readme
+        assert "100.x.x.x" not in bootstrap
+        assert "tether-local-2026" not in bootstrap
+        assert "DEEPSEEK_API_KEY" not in bootstrap
         assert not any(name.startswith((
             "tether-node-0.2.1/tether/controller/", "tether-node-0.2.1/tether/static/",
             "tether-node-0.2.1/tether_server/", "tether-node-0.2.1/deploy/",
@@ -68,6 +77,7 @@ def test_standalone_plugin_archive_passes_offline_installer_preflight(tmp_path: 
     manifest_data = json.loads(manifest)
     assert set(manifest_data["components"]) == {"app", "plugin", "node"}
     assert all(item["version"] == "0.2.1" for item in manifest_data["components"].values())
+    assert all(item["min_updater"] == "0.2.1" for item in manifest_data["components"].values())
 
     install_script = tmp_path / "extracted" / "tether-plugin-0.2.1" / "desktop" / "install-plugin.ps1"
     result = subprocess.run(

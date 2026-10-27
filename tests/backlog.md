@@ -1,4 +1,10 @@
 # 修改记录
+- 2026-10-28：工作区错误回归覆盖同设备失败保留列表/选择及切设备后才使用 legacy fallback。
+- 2026-10-28：新增共享 UI 工作区响应验证用例，覆盖缺失/错误列表与合法空列表；Electron QA 可注入无效 workspaces 响应，验证更新中心可见且错误提示保留。
+
+- 2026-10-28：验证当前 updater 可暂存协议不变的下一版本 manifest；构建归档验证版本元数据一致、Node 包无旧占位 Hub/token/API-key 指引，并使用实际 hostname 默认设备名。
+- 2026-10-28：增加 Python dotenv 对 UTF-8 无 BOM `.env` 中中文路径和设备名的临时配置回归；Node runtime 显式依赖 python-dotenv。
+- 2026-10-28：Electron 更新中心 QA 修复 panel 选择器与 stub Controller 响应契约；现断言无 renderer 异常、更新中心 DOM 和 Controller online，并将截图及隔离运行日志保存到指定维护目录。此前错误 stub 缺少 `workspaces` 字段触发 React TypeError，且旧 panel 名称不匹配实际按钮标题，导致空白截图仍以 exit 0 通过。
 
 - 2026-10-28：将 Controller 状态更新、设备名存储与 native surface gateway 测试迁入私有 `tether-harness-server/tests`；公开新增缺少私有服务组件时的 Supervisor 提示与 APP/Node 发布 ZIP 服务实现排除回归。
 

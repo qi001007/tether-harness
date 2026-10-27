@@ -59,6 +59,7 @@ function log(line) {
 
 let mainWindow = null
 let webServer = null
+let rendererConsoleErrors = 0
 
 async function createWindow() {
   const { createWebServer } = await import(pathToFileURL(path.join(webRoot, 'server.mjs')).href)
@@ -101,17 +102,36 @@ async function createWindow() {
     }
   })
   mainWindow.on('closed', () => { mainWindow = null })
+  mainWindow.webContents.on('console-message', (_event, level, _message, line, sourceId) => {
+    if (level >= 3) rendererConsoleErrors += 1
+    if (shotPath && level >= 3) log('renderer console error source=' + sourceId + ':' + line)
+  })
+  mainWindow.webContents.on('did-fail-load', (_event, code, description) => {
+    if (shotPath) log('renderer load failed code=' + code + ' ' + description)
+  })
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    if (shotPath) log('renderer process gone reason=' + details.reason + ' exitCode=' + details.exitCode)
+  })
   await mainWindow.loadURL(url)
 
   if (shotPath) {
     await new Promise((resolve) => setTimeout(resolve, shotDelay))
     if (panel) {
-      await mainWindow.webContents.executeJavaScript(`(() => { const b = [...document.querySelectorAll('button')].find((x) => x.getAttribute('aria-label') === ${JSON.stringify(panel)} || x.title === ${JSON.stringify(panel)}); if (b) b.click(); return !!b })()`)
+      await mainWindow.webContents.executeJavaScript(`(() => { const b = [...document.querySelectorAll('button')].find((x) => x.getAttribute('aria-label') === ${JSON.stringify(panel)} || x.title === ${JSON.stringify(panel)} || x.innerText.includes(${JSON.stringify(panel)})); if (b) b.click(); return !!b })()`)
       await new Promise((resolve) => setTimeout(resolve, shotPanelDelay))
     }
     if (row) {
       await mainWindow.webContents.executeJavaScript(`(() => { const b = [...document.querySelectorAll('button')].find((x) => x.title === ${JSON.stringify(row)}); if (b) b.click(); return !!b })()`)
       await new Promise((resolve) => setTimeout(resolve, 2000))
+    }
+    const renderState = await mainWindow.webContents.executeJavaScript(`({ readyState: document.readyState, rootContent: !!document.querySelector('#root')?.childElementCount, hasUpdateCenter: (document.querySelector('#root')?.innerText || '').includes('更新中心'), hasWorkspaceError: (document.querySelector('#root')?.innerText || '').includes('工作区接口返回的数据格式无效'), appBridge: !!window.tetherApp, qaRendererErrorCount: window.__qaRendererErrorCount || 0 })`)
+    renderState.rendererConsoleErrors = rendererConsoleErrors
+    log('renderer state ' + JSON.stringify(renderState))
+    if (!renderState.rootContent || renderState.rendererConsoleErrors || renderState.qaRendererErrorCount) {
+      throw new Error('Renderer did not produce a clean UI: ' + JSON.stringify(renderState))
+    }
+    if (panel.includes('更新') && !renderState.hasUpdateCenter) {
+      throw new Error('Renderer did not show the update center: ' + JSON.stringify(renderState))
     }
     const image = await mainWindow.webContents.capturePage()
     fs.mkdirSync(path.dirname(shotPath), { recursive: true })

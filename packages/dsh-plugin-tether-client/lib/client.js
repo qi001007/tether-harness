@@ -277,6 +277,17 @@ function updateCheckKey(component, scope) {
   return (scope ? scope.deviceId + ':' + scope.epoch : 'local') + ':' + component
 }
 
+function validateWorkspaceResponse(data) {
+  if (!data || data.ok === false || !Array.isArray(data.workspaces) || data.workspaces.some((workspace) => !workspace || typeof workspace.path !== 'string')) throw new Error('工作区接口返回的数据格式无效')
+  return data
+}
+
+function workspaceStateAfterLoadFailure({ projects, project, loadedDeviceId, requestDeviceId, fallbackPath }) {
+  if (loadedDeviceId === requestDeviceId || !fallbackPath) return { projects, project, synthetic: false }
+  const workspace = { name: 'Tether 工作目录', path: fallbackPath, kind: 'node', writable: true, synthetic: true }
+  return { projects: { root: fallbackPath, node_workspace: fallbackPath, workspaces: [workspace], synthetic: true }, project: workspace, synthetic: true }
+}
+
 async function runUpdateSequence({ check, prepare, apply, isCurrent = () => true }) {
   const checked = await check()
   if (!checked || checked.failed || checked.ok === false) return { failed: true, stage: 'check' }
@@ -1504,7 +1515,13 @@ function createTetherPanel({ React, Native, host }) {
       }
       deviceIdRef.current = deviceId
       const [projects, setProjects] = React.useState(null)
+      const [projectsError, setProjectsError] = React.useState('')
       const [project, setProject] = React.useState(null)
+      const projectsRef = React.useRef(null)
+      const projectRef = React.useRef(null)
+      const projectsDeviceRef = React.useRef('')
+      projectsRef.current = projects
+      projectRef.current = project
       const [view, setView] = React.useState('chat')
       const [activePanel, setActivePanel] = usePersisted('tether.ui.panel.v2', 'workspaces')
       const [sidebarCollapsed, setSidebarCollapsed] = usePersisted('tether.ui.panelCollapsed', false)
@@ -1908,14 +1925,18 @@ function createTetherPanel({ React, Native, host }) {
       }, [deviceId])
 
       const loadProjects = React.useCallback(async () => {
-        if (!deviceId) return
+        if (!deviceId) { setProjects(null); setProject(null); projectsRef.current = null; projectRef.current = null; projectsDeviceRef.current = ''; setProjectsError(''); return }
+        setProjectsError('')
         const requestDevice = deviceId
         const requestEpoch = treeDeviceEpochRef.current
         const stillCurrent = () => treeResponseIsCurrent(requestDevice, deviceIdRef.current, requestEpoch, treeDeviceEpochRef.current)
         try {
-          const data = await api('/api/devices/' + encodeURIComponent(requestDevice) + '/workspaces')
+          const data = validateWorkspaceResponse(await api('/api/devices/' + encodeURIComponent(requestDevice) + '/workspaces'))
           if (!stillCurrent()) return
+          setProjectsError('')
           setProjects(data)
+          projectsRef.current = data
+          projectsDeviceRef.current = requestDevice
           setProject((current) => {
             if (current && data.workspaces.some((w) => w.path === current.path)) return current
             return data.workspaces[0] || null
@@ -1924,20 +1945,30 @@ function createTetherPanel({ React, Native, host }) {
           if (!stillCurrent()) return
           const dev = ((stateRef.current && stateRef.current.devices) || []).find((d) => d.device_id === requestDevice)
           const fallback = dev && dev.capabilities && dev.capabilities.workspace
-          if (fallback) {
-            const synthetic = { name: 'Tether 工作目录', path: fallback, kind: 'node', writable: true, synthetic: true }
-            setProjects({ root: fallback, node_workspace: fallback, workspaces: [synthetic], synthetic: true })
-            setProject((current) => current && samePath(current.path, fallback) ? current : synthetic)
+          const failureState = workspaceStateAfterLoadFailure({
+            projects: projectsRef.current, project: projectRef.current,
+            loadedDeviceId: projectsDeviceRef.current, requestDeviceId: requestDevice, fallbackPath: fallback
+          })
+          if (failureState.synthetic) {
+            setProjects(failureState.projects)
+            projectsRef.current = failureState.projects
+            projectsDeviceRef.current = requestDevice
+            setProject(failureState.project)
+            projectRef.current = failureState.project
+            setProjectsError('节点工作区接口暂不可用，当前显示节点默认工作目录。')
             setNativeError('节点未升级，原生会话不可用')
           } else {
-            setProjects(null)
-            fail(e)
+            setProjectsError(e && e.message === '工作区接口返回的数据格式无效'
+              ? '工作区接口返回的数据格式无效，请检查目标节点版本后重试。'
+              : '读取工作区失败，请检查节点连接和接口版本后重试。')
           }
         }
       }, [deviceId])
 
       React.useEffect(() => {
-        setProject(null); setPath(''); setPathDraft(''); setFile(null); setSelected(null)
+        setProjects(null); setProject(null); projectsDeviceRef.current = ''
+        projectsRef.current = null; projectRef.current = null
+        setPath(''); setPathDraft(''); setFile(null); setSelected(null)
         setSessionId(''); setSessionData(null); setRunId(''); setNativeLoaded(false)
         setWorkspaceOpen({}); setTreeChildren({}); setTreeOpen({}); setTreeSelected(''); setDrives([])
         setDirEntries([]); setDirLoading(false); setDirError(''); setHistory([]); setContextMenu(null)
@@ -2799,6 +2830,8 @@ function createTetherPanel({ React, Native, host }) {
           }, updateHasAvailable ? '更新 · 有新版本' : updateHasFailure ? '更新 · 检查失败' : '更新')
         ),
         notice ? h('div', { style: { padding: '6px 14px', background: C.soft, color: /^Saved |^Policy updated|^已重命名/.test(notice) ? C.green : C.red, borderBottom: 0, fontSize: 12 } }, notice) : null,
+        projectsError ? h('div', { role: 'alert', style: { display: 'flex', alignItems: 'center', gap: 8, padding: '6px 14px', background: C.soft, color: C.red, fontSize: 12 } },
+          h('span', null, projectsError), btn('重试工作区', loadProjects)) : null,
         h('div', { style: { display: 'flex', flex: '1 1 auto', minHeight: 0 } },
           h(ActivityBar, {
             active: view === 'files' ? 'files' : (view === 'network' ? 'network' : 'workspaces'),

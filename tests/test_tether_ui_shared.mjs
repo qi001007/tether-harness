@@ -51,8 +51,30 @@ test('connection panels show service checks without duplicate device totals or c
   assert.match(connectionPanel, /重新检测/)
   assert.match(fs.readFileSync(path.join(root, 'packages/tether-ui/src/hosts/dsh.js'), 'utf8'), /probeConnection: async/)
   assert.match(fs.readFileSync(path.join(root, 'packages/tether-ui/src/hosts/electron.js'), 'utf8'), /probeConnection: async/)
-  assert.match(fs.readFileSync(path.join(root, 'packages/tether-ui/web/main.js'), 'utf8'), /root\.render\(React\.createElement\(panel\.App\)\)/)
+  const webMain = fs.readFileSync(path.join(root, 'packages/tether-ui/web/main.js'), 'utf8')
+  assert.match(webMain, /createAppErrorBoundary\(React\)/)
+  assert.match(webMain, /root\.render\(React\.createElement\(AppErrorBoundary, null, React\.createElement\(panel\.App\)\)\)/)
   assert.doesNotMatch(fs.readFileSync(path.join(root, 'packages/tether-ui/web/main.js'), 'utf8'), /createAppServices/)
+})
+
+test('Web UI error boundary renders a retry action and recovers its children', async () => {
+  const { createAppErrorBoundary } = await import('../packages/tether-ui/web/app-error-boundary.js')
+  class Component {
+    constructor(props) { this.props = props }
+    setState(next) { this.state = { ...this.state, ...next } }
+  }
+  const React = { Component, createElement: (type, props, ...children) => ({ type, props: props || {}, children }) }
+  const Boundary = createAppErrorBoundary(React)
+  const children = { type: 'shared-panel' }
+  const boundary = new Boundary({ children })
+  boundary.state = Boundary.getDerivedStateFromError(new Error('render failed'))
+  const fallback = boundary.render()
+  assert.equal(fallback.props.role, 'alert')
+  assert.match(fallback.children[0].children[0], /界面遇到错误，请重试重新加载/)
+  const retry = fallback.children[1]
+  assert.equal(retry.children[0], '重试')
+  retry.props.onClick()
+  assert.equal(boundary.render(), children)
 })
 
 test('DSH Hub probe does not treat local fallbacks as Hub connectivity', async () => {

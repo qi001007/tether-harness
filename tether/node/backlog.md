@@ -1,5 +1,7 @@
 # 修改记录
 
+- 2026-10-28：Node runtime 将 `python-dotenv` 作为必需依赖加载，缺包时不再静默忽略 `.env` 中的 Hub/Node 配置。
+
 - 2026-10-27：Node 在与 DSH 共用的 DSH_HOME 下原子发布带 PID、device_id、更新时间的短期身份 descriptor；每 3 秒刷新，正常退出只清理自身匹配记录。
 
 - 2026-10-27：新增原生 DSH surface 服务，通过目标机 descriptor 固定回环地址，内部维护认证 CookieJar，提供受限 HTTP 与 WebSocket 隧道；Node 以异步请求处理器接入 `surface_call`，断连时取消请求并清理通道。
