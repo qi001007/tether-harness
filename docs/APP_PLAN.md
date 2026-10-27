@@ -1,7 +1,17 @@
 # Tether APP 集成计划（APP / 插件 / WebUI 同一套 UI）
 
-状态：**Phase 1 窄切片已实现**（`packages/tether-ui` + 插件生成壳 + WebHost 本地入口）；
-APP 壳、Relay/Account 仍是设计，未实现。
+状态：**Phase 1 已实现；Phase 2 已起 Electron 壳（服务监督未做）**；Relay/Account 仍是设计。
+
+## Phase 2 当前切片（2026-10-27）
+
+- `apps/tether-app`：Electron 单实例窗口，内嵌 `packages/tether-ui/web/server.mjs`
+  （随机 loopback 端口，`/api` 同源反代到 Controller），加载与 WebUI/插件同一份构建。
+- 主进程按 4s 探测 `/api/state`，状态经 IPC 暴露；数据目录 `apps/tether-app/data`
+  （gitignored），日志 `data/app.log`；截图模式 `--shot --panel=... --row=...`。
+- 验收：Electron 窗口内原生工作区、文件树/明细/预览入口、互联、权限均来自真实 Controller；
+  APP 实机截图 `docs/screenshots/tether-app-files.png`（同一套 UI 与类型图标）。
+- 未做：ServiceSupervisor（Controller/Node 子进程启停、端口冲突、退出清理）、托盘、
+  APP 服务页、打包/快捷方式。当前双击 APP 仍要求 Controller 已由外部启动，不能宣称完整自举。
 
 ## Phase 1 当前切片（2026-10-27）
 

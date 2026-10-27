@@ -71,9 +71,11 @@ kept as evidence and may show earlier UI.
 
 **Planned, not in this release**
 
-- Standalone APP (Electron shell + service supervisor + embedded Web UI).
+- APP service supervisor (start/stop Controller/Node), tray, service page and packaging.
 - Tether Relay/Account to replace the Tailscale dependency.
 
+The Electron shell exists in `apps/tether-app` and reuses the same WebUI bundle; it
+currently expects the Controller to be running (supervisor is the next Phase 2 step).
 The plan is in [docs/APP_PLAN.md](docs/APP_PLAN.md). `desktop/tether-app.ps1` today is
 only a launcher for the Controller/Node monitor window; it is not the standalone APP.
 
@@ -97,6 +99,17 @@ node packages/tether-ui/web/serve.mjs              # http://127.0.0.1:18891
 `web/serve.mjs` proxies `/api` to the Controller so the WebUI stays same-origin
 (the Controller still only allows the `dsh-app://app` origin directly). The WebUI is a
 development/acceptance entry for Phase 1; the Electron APP is Phase 2.
+
+```powershell
+cd apps/tether-app
+npm install
+$env:ELECTRON_RUN_AS_NODE = $null   # only if your shell sets it
+npm start
+```
+
+The APP window loads the same `tether-ui` bundle through an embedded loopback server.
+It currently expects the Controller to be running; start/stop supervision is the next
+Phase 2 step.
 
 ## What is verified
 
@@ -389,6 +402,9 @@ packages/
   tether-dsh-native-ui/    generated bridge to DSH MIT UI primitives
   tether-dsh-surface/      target Host descriptor companion
 
+apps/
+  tether-app/              Electron shell + embedded UI server (Phase 2 slice)
+
 scripts/                   launcher, QA harnesses, service restart
 desktop/                   plugin/MCP installers, app launcher, LAN/Tailscale helpers
 laptop/                    bootstrap + node scripts (no inbound port)
@@ -397,7 +413,6 @@ docs/                      architecture, feedback, progress, screenshots, APP pl
 evidence/                  measured results
 
 # planned, not present yet
-apps/tether-app/           Electron app shell + service supervisor
 tether/relay/              Tether Relay/Account
 ```
 

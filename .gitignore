@@ -8,3 +8,4 @@ __pycache__/
 *.log
 node_modules/
 packages/tether-ui/web/dist/
+apps/tether-app/data/
