@@ -8611,6 +8611,34 @@ function createTetherPanel({ React: React2, Native, host }) {
         current = false;
       };
     }, [deviceId, online, attempt]);
+    React2.useEffect(() => {
+      if (!deviceId || !online) return void 0;
+      let alive = true;
+      const timer = setInterval(async () => {
+        try {
+          const res = await fetch(ACTIVE_BASE + "/api/devices/" + encodeURIComponent(deviceId) + "/dsh/surface");
+          if (!res.ok) return;
+          const data = await res.json();
+          if (!alive || !data.available || !isSafeNativeSurfaceUrl(data.url)) return;
+          setState((prev) => {
+            if (prev.status !== "ready" || !prev.url) return prev;
+            try {
+              const fresh = new URL(data.url);
+              if (new URL(prev.url).origin === fresh.origin) return prev;
+              fresh.searchParams.set("tether_native", "1");
+              return { deviceId, status: "ready", url: fresh.href };
+            } catch (_) {
+              return prev;
+            }
+          });
+        } catch (_) {
+        }
+      }, 8e3);
+      return () => {
+        alive = false;
+        clearInterval(timer);
+      };
+    }, [deviceId, online]);
     const message = currentState.status === "loading" ? "\u6B63\u5728\u8FDE\u63A5\u76EE\u6807\u8BBE\u5907\u7684 DSH \u539F\u751F\u5DE5\u4F5C\u533A\u2026" : currentState.status === "offline" ? "\u76EE\u6807\u8BBE\u5907\u79BB\u7EBF\u3002\u8BBE\u5907\u91CD\u65B0\u5728\u7EBF\u540E\u53EF\u91CD\u8BD5\u3002" : currentState.status === "no-device" ? "\u5148\u4ECE\u5DE6\u4FA7\u8BBE\u5907\u5217\u8868\u9009\u62E9\u76EE\u6807\u8BBE\u5907\u3002" : currentState.status === "error" ? currentState.message : "";
     return h(
       "div",

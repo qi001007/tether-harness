@@ -1105,6 +1105,28 @@ export function createTetherPanel({ React, Native, host }) {
           .catch((error) => { if (current) setState({ deviceId, status: 'error', url: '', message: error.message }) })
         return () => { current = false }
       }, [deviceId, online, attempt])
+      React.useEffect(() => {
+        if (!deviceId || !online) return undefined
+        let alive = true
+        const timer = setInterval(async () => {
+          try {
+            const res = await fetch(ACTIVE_BASE + '/api/devices/' + encodeURIComponent(deviceId) + '/dsh/surface')
+            if (!res.ok) return
+            const data = await res.json()
+            if (!alive || !data.available || !isSafeNativeSurfaceUrl(data.url)) return
+            setState((prev) => {
+              if (prev.status !== 'ready' || !prev.url) return prev
+              try {
+                const fresh = new URL(data.url)
+                if (new URL(prev.url).origin === fresh.origin) return prev
+                fresh.searchParams.set('tether_native', '1')
+                return { deviceId, status: 'ready', url: fresh.href }
+              } catch (_) { return prev }
+            })
+          } catch (_) { /* keep the current frame */ }
+        }, 8000)
+        return () => { alive = false; clearInterval(timer) }
+      }, [deviceId, online])
 
       const message = currentState.status === 'loading' ? '正在连接目标设备的 DSH 原生工作区…'
         : currentState.status === 'offline' ? '目标设备离线。设备重新在线后可重试。'

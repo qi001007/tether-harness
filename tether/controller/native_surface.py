@@ -67,6 +67,9 @@ class NativeSurfaceGateways:
     async def connect(self, device_id: str) -> dict[str, Any]:
         async with self._lock:
             old = self._gateways.get(device_id)
+            if old is not None and old.task is not None and old.task.done():
+                await self._stop(old)
+                old = None
             if old is not None:
                 status = await self._call(device_id, "status", {}, HTTP_TIMEOUT)
                 if not status.get("ok") or not (status.get("result") or {}).get("available"):

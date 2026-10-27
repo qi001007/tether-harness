@@ -1,8 +1,9 @@
-const { app, BrowserWindow, ipcMain, shell } = require('electron')
+const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron')
 const fs = require('node:fs')
 const path = require('node:path')
 const { pathToFileURL } = require('node:url')
 const { Supervisor } = require('./supervisor.js')
+const { updateInstalledPlugin } = require('./plugin-updater.js')
 
 const repoRoot = path.resolve(__dirname, '..', '..')
 const webRoot = path.join(repoRoot, 'packages', 'tether-ui', 'web')
@@ -48,6 +49,7 @@ const shotDelay = Number(process.env.TETHER_APP_SHOT_DELAY || 2500)
 fs.mkdirSync(dataDir, { recursive: true })
 app.setPath('userData', path.join(dataDir, 'electron'))
 const supervisor = new Supervisor({ repoRoot, dataDir, env })
+const pluginUpdate = updateInstalledPlugin({ repoRoot })
 
 function log(line) {
   fs.appendFileSync(logFile, new Date().toISOString() + ' ' + line + '\n')
@@ -68,7 +70,7 @@ async function createWindow() {
     insecureTls: ['1', 'true', 'yes'].includes(String(env.TETHER_INSECURE_TLS || '').toLowerCase())
   })
   const url = await webServer.listen()
-  log('app start ' + app.getVersion() + ' ui ' + url + ' controller ' + controller)
+  log('app start ' + app.getVersion() + ' ui ' + url + ' controller ' + controller + ' pluginUpdate=' + (pluginUpdate.updated ? pluginUpdate.dirs.map((item) => item.profile).join(',') : 'none'))
   supervisor.start().then((state) => log('services ' + state.mode + ' controller=' + state.controller.state + ' node=' + state.node.state)).catch((error) => log('services failed ' + (error.stack || error)))
 
   mainWindow = new BrowserWindow({
@@ -88,6 +90,15 @@ async function createWindow() {
   })
   mainWindow.on('closed', () => { mainWindow = null })
   await mainWindow.loadURL(url)
+
+  if (!shotPath && pluginUpdate.updated) {
+    dialog.showMessageBox(mainWindow, {
+      type: 'info',
+      title: 'Tether 插件已更新',
+      message: 'Tether 插件已自动更新',
+      detail: '已更新 profile：' + pluginUpdate.dirs.map((item) => item.profile).join('、') + '。重启 DeepSeek Harness 后生效。'
+    }).catch(() => {})
+  }
 
   if (shotPath) {
     await new Promise((resolve) => setTimeout(resolve, shotDelay))
@@ -112,7 +123,8 @@ ipcMain.handle('tether:app-info', () => ({
   controller,
   dataDir,
   logFile,
-  services: supervisor.snapshot()
+  services: supervisor.snapshot(),
+  pluginUpdate: { updated: pluginUpdate.updated, profiles: pluginUpdate.dirs.map((item) => item.profile) }
 }))
 ipcMain.handle('tether:services', () => supervisor.snapshot())
 ipcMain.handle('tether:start-services', () => supervisor.start())

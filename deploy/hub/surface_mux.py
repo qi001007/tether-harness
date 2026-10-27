@@ -58,8 +58,11 @@ async def proxy(request: Request, path: str) -> Response:
     if request.url.query:
         url += "?" + request.url.query
     body = await request.body()
-    upstream = await client.send(client.build_request(
-        request.method, url, headers=public_headers(request, port, path.lstrip('/').startswith('tether-connect')), content=body), stream=True)
+    try:
+        upstream = await client.send(client.build_request(
+            request.method, url, headers=public_headers(request, port, path.lstrip('/').startswith('tether-connect')), content=body), stream=True)
+    except httpx.HTTPError as error:
+        return Response(status_code=502, content='{"error":"surface gateway unavailable"}', media_type='application/json')
     headers = {key: value for key, value in upstream.headers.items()
                if key.lower() not in {"connection", "keep-alive", "transfer-encoding", "content-length"}}
     location = headers.get("location")
