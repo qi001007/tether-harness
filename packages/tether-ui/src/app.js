@@ -944,7 +944,7 @@ export function createTetherPanel({ React, Native, host }) {
             compact ? null : (item.name || item.device_id))
         }),
         h('div', { onClick: () => setZoom(1), title: '重置缩放', style: { position: 'absolute', right: 12, bottom: 10, zIndex: 4, fontSize: 10, color: C.mute, background: C.layer1, borderRadius: 999, padding: '2px 7px', cursor: 'pointer' } }, Math.round(zoom * 100) + '%'),
-        !devices.length ? h('div', { style: { position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: C.mute, fontSize: 12 } }, '暂无设备') : null
+        !devices.length ? h('div', { style: { position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: C.mute, fontSize: 12 } }, '暂无设备 · 目标机需接入 Hub') : null
       )
     }
 
@@ -2063,7 +2063,7 @@ export function createTetherPanel({ React, Native, host }) {
             h('div', { style: { width: networkListWidth, flex: '0 0 auto', minHeight: 0, display: 'flex', flexDirection: 'column', transition: networkResizing ? 'none' : 'width 180ms cubic-bezier(.2,.85,.2,1.15)' } },
               h('div', { className: 'tether-scroll', style: { flex: '1 1 auto', minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8, paddingRight: 6 } },
                 visible.map(card),
-                !devices.length ? h('div', { style: { color: C.mute, fontSize: 12 } }, '暂无设备') : null),
+                !devices.length ? h('div', { style: { color: C.mute, fontSize: 12 } }, '暂无设备 · 目标机需接入 Hub') : null),
               pager
             ),
             h('div', { className: 'tether-resizer', title: '拖动调整宽度，双击复位', onPointerDown: startNetworkResize, onDoubleClick: () => setNetworkListWidth(300), style: { width: 6, flex: '0 0 auto', cursor: 'col-resize', position: 'relative' } }),

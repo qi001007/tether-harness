@@ -8400,7 +8400,7 @@ function createTetherPanel({ React: React2, Native, host }) {
         );
       }),
       h("div", { onClick: () => setZoom(1), title: "\u91CD\u7F6E\u7F29\u653E", style: { position: "absolute", right: 12, bottom: 10, zIndex: 4, fontSize: 10, color: C2.mute, background: C2.layer1, borderRadius: 999, padding: "2px 7px", cursor: "pointer" } }, Math.round(zoom * 100) + "%"),
-      !devices.length ? h("div", { style: { position: "absolute", inset: 0, display: "grid", placeItems: "center", color: C2.mute, fontSize: 12 } }, "\u6682\u65E0\u8BBE\u5907") : null
+      !devices.length ? h("div", { style: { position: "absolute", inset: 0, display: "grid", placeItems: "center", color: C2.mute, fontSize: 12 } }, "\u6682\u65E0\u8BBE\u5907 \xB7 \u76EE\u6807\u673A\u9700\u63A5\u5165 Hub") : null
     );
   }
   function FileTree({ roots, children, open, onToggle, onOpenFile, onContextMenuNode, selected }) {
@@ -9885,7 +9885,7 @@ function createTetherPanel({ React: React2, Native, host }) {
               "div",
               { className: "tether-scroll", style: { flex: "1 1 auto", minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", gap: 8, paddingRight: 6 } },
               visible.map(card),
-              !devices.length ? h("div", { style: { color: C2.mute, fontSize: 12 } }, "\u6682\u65E0\u8BBE\u5907") : null
+              !devices.length ? h("div", { style: { color: C2.mute, fontSize: 12 } }, "\u6682\u65E0\u8BBE\u5907 \xB7 \u76EE\u6807\u673A\u9700\u63A5\u5165 Hub") : null
             ),
             pager
           ),
