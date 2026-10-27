@@ -141,6 +141,18 @@ caddy validate --config /etc/caddy/Caddyfile && systemctl reload caddy
 The wildcard DNS must resolve to the Hub (sslip.io does for any `g<port>` prefix).
 Do not open gateway ports; only 443 is used.
 
+## Updates and health
+
+```bash
+# on the Hub, from the repo
+bash deploy/hub/deploy.sh                  # fast-forward + restart + health gate
+/opt/tether/app/.venv/bin/python scripts/smoke_hub_surface.py
+```
+
+`deploy.sh` refuses to continue on a health failure and prints the previous
+commit; it never resets `.env`, the SQLite database or Caddy state. The desktop
+repo can run the same smoke test (it reads `.env` + `.runtime/hub-secrets.env`).
+
 ## Current limits
 
 - The native page needs both the target Node and its DSH surface; a Node alone is

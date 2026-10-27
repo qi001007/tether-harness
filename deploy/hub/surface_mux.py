@@ -44,6 +44,11 @@ def public_headers(request: Request, port: int, bootstrap: bool = False) -> dict
     return headers
 
 
+@app.get("/healthz")
+async def healthz() -> Response:
+    return Response(content='{"ok":true}', media_type='application/json')
+
+
 @app.get("/__allow")
 async def allow(domain: str = "") -> Response:
     return Response(status_code=200 if HOST_RE.match(domain) else 403)
