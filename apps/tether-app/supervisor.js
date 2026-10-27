@@ -1,5 +1,7 @@
 const { spawn, spawnSync } = require('node:child_process')
 const fs = require('node:fs')
+const http = require('node:http')
+const https = require('node:https')
 const path = require('node:path')
 
 function killTree(pid) {
@@ -17,6 +19,9 @@ class Supervisor {
     this.logsDir = path.join(dataDir, 'logs')
     this.baseEnv = env
     this.port = Number(env.TETHER_PORT || 18890)
+    this.remoteUrl = (env.TETHER_CONTROLLER_URL || '').replace(/\/+$/, '')
+    this.accessToken = env.TETHER_ACCESS_TOKEN || ''
+    this.insecureTls = ['1', 'true', 'yes'].includes(String(env.TETHER_INSECURE_TLS || '').toLowerCase())
     this.device = env.TETHER_DEVICE || 'TETHER-APP'
     this.python = env.TETHER_PYTHON || path.join(repoRoot, '.venv', 'Scripts', 'python.exe')
     if (!fs.existsSync(this.python)) this.python = process.platform === 'win32' ? 'python' : 'python3'
@@ -29,14 +34,36 @@ class Supervisor {
     fs.mkdirSync(this.logsDir, { recursive: true })
   }
 
+  baseUrl() {
+    return this.remoteUrl || 'http://127.0.0.1:' + this.port
+  }
+
+  requestState(timeout = 2500) {
+    const url = new URL(this.baseUrl() + '/api/state')
+    const client = url.protocol === 'https:' ? https : http
+    const headers = {}
+    if (this.accessToken) headers.authorization = 'Bearer ' + this.accessToken
+    return new Promise((resolve) => {
+      const req = client.get({
+        hostname: url.hostname,
+        port: url.port || (url.protocol === 'https:' ? 443 : 80),
+        path: url.pathname + url.search,
+        headers,
+        rejectUnauthorized: url.protocol === 'https:' ? !this.insecureTls : undefined
+      }, (res) => {
+        if (res.statusCode !== 200) { res.resume(); resolve(null); return }
+        let body = ''
+        res.setEncoding('utf8')
+        res.on('data', (chunk) => { body += chunk })
+        res.on('end', () => { try { resolve(JSON.parse(body)) } catch (_) { resolve(null) } })
+      })
+      req.setTimeout(timeout, () => { req.destroy(); resolve(null) })
+      req.on('error', () => resolve(null))
+    })
+  }
+
   async healthy() {
-    try {
-      const res = await fetch('http://127.0.0.1:' + this.port + '/api/state', { signal: AbortSignal.timeout(1500) })
-      if (!res.ok) return null
-      return await res.json()
-    } catch (_) {
-      return null
-    }
+    return await this.requestState()
   }
 
   spawnProcess(name, args) {
@@ -69,6 +96,22 @@ class Supervisor {
 
   async start() {
     if (this.controller.state === 'online' || this.controller.state === 'starting') return this.snapshot()
+    if (this.remoteUrl) {
+      this.mode = 'hub'
+      const probe = await this.healthy()
+      const parsed = new URL(this.remoteUrl)
+      this.controller = {
+        state: probe ? 'online' : 'offline',
+        pid: 0,
+        managed: false,
+        url: this.remoteUrl,
+        port: Number(parsed.port || (parsed.protocol === 'https:' ? 443 : 80))
+      }
+      this.node = { state: 'external', pid: 0, deviceOnline: !!(probe && (probe.devices || []).some((item) => item.online)) }
+      this.lastError = probe ? '' : '远端 Hub 不可达：' + this.remoteUrl
+      this.startPolling()
+      return this.snapshot()
+    }
     fs.mkdirSync(this.logsDir, { recursive: true })
     const state = await this.healthy()
     if (state) {
@@ -130,6 +173,12 @@ class Supervisor {
     if (this.timer) return
     this.timer = setInterval(async () => {
       const state = await this.healthy()
+      if (this.mode === 'hub') {
+        this.controller.state = state ? 'online' : 'offline'
+        this.node.deviceOnline = !!(state && (state.devices || []).some((item) => item.online))
+        this.lastError = state ? '' : '远端 Hub 不可达：' + this.remoteUrl
+        return
+      }
       if (state) {
         if (this.controller.state !== 'online') this.controller.state = 'online'
         if (this.mode === 'standalone' && this.node.state === 'running') this.node.deviceOnline = this.deviceOnline(state)
@@ -171,13 +220,14 @@ class Supervisor {
   snapshot() {
     return {
       mode: this.mode,
+      remoteUrl: this.remoteUrl,
       controller: { ...this.controller },
       node: { ...this.node },
       python: this.python,
       logsDir: this.logsDir,
       device: this.device,
       error: this.lastError,
-      endpoints: { api: 'http://127.0.0.1:' + this.port, plugin: 'http://127.0.0.1:18890' }
+      endpoints: { api: this.baseUrl(), plugin: 'http://127.0.0.1:18890' }
     }
   }
 }

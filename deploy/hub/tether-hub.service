@@ -1,0 +1,21 @@
+[Unit]
+Description=Tether Hub (Controller)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=tether
+Group=tether
+WorkingDirectory=/opt/tether/app
+EnvironmentFile=/opt/tether/app/.env
+Environment=PYTHONPATH=/opt/tether/app
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/tether/app/.venv/bin/python -m uvicorn tether.controller.app:app --host 127.0.0.1 --port 18890 --log-level info
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

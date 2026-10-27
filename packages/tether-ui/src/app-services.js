@@ -59,6 +59,7 @@ export function createAppServices(React) {
 
     const controller = (state && state.controller) || { state: 'stopped', port: 18890 }
     const node = (state && state.node) || { state: 'stopped', deviceOnline: false }
+    const hub = !!(state && state.mode === 'hub')
     const dot = state && state.error ? C.red
       : controller.state === 'error' || controller.state === 'offline' ? C.red
         : controller.state === 'starting' || node.state === 'starting' ? C.amber
@@ -105,7 +106,7 @@ export function createAppServices(React) {
         h('div', { style: { padding: '12px 16px', background: C.panel, display: 'flex', alignItems: 'center' } },
           h('span', { style: { fontWeight: 600, fontSize: 14, color: C.ink } }, 'APP 服务'),
           h('span', { style: { marginLeft: 8, fontSize: 11, color: C.mute } },
-            state && state.mode === 'external' ? '已连接外部 Controller' : (state && state.mode === 'standalone' ? '本机自举' : '未启动')),
+            state && state.mode === 'external' ? '已连接外部 Controller' : (state && state.mode === 'hub' ? '远端 Hub' : (state && state.mode === 'standalone' ? '本机自举' : '未启动'))),
           h('button', {
             onClick: () => setOpen(false), title: '关闭', 'aria-label': '关闭', className: 'tether-hover',
             style: { marginLeft: 'auto', width: 28, height: 28, border: 0, borderRadius: 6, background: 'transparent', color: C.mute, fontSize: 16, cursor: 'pointer' }
@@ -115,22 +116,27 @@ export function createAppServices(React) {
           h('div', { style: { borderRadius: 8, background: C.panel, padding: '4px 12px', marginBottom: 14 } },
             row('Controller', (LABELS[controller.state] || controller.state) + ' · :' + controller.port, controller.state === 'error' || controller.state === 'offline' ? C.red : (controller.state === 'starting' ? C.amber : C.green)),
             row('Node', (LABELS[node.state] || node.state) + (state && state.device ? ' · ' + state.device : ''), node.state === 'error' ? C.red : (node.state === 'starting' ? C.amber : C.green)),
-            row('节点在线', node.deviceOnline ? '是' : '否', node.deviceOnline ? C.green : C.mute)
+            row(hub ? '在线设备' : '节点在线', node.deviceOnline ? '是' : '否', node.deviceOnline ? C.green : C.mute)
           ),
           state && state.error ? h('div', { style: { fontSize: 11.5, lineHeight: '18px', color: C.red, marginBottom: 12, wordBreak: 'break-all' } }, state.error) : null,
           error ? h('div', { style: { fontSize: 11.5, lineHeight: '18px', color: C.red, marginBottom: 12, wordBreak: 'break-all' } }, error) : null,
           h('div', { style: { display: 'flex', gap: 8, marginBottom: 10 } },
-            button('启动', () => action('startServices'), { primary: true, disabled: busy }),
-            button('重启', () => action('restartServices'), { disabled: busy }),
-            button('停止', () => action('stopServices'), { danger: true, disabled: busy })
+            hub
+              ? button('重新探测', () => action('startServices'), { primary: true, disabled: busy })
+              : [
+                button('启动', () => action('startServices'), { primary: true, disabled: busy }),
+                button('重启', () => action('restartServices'), { disabled: busy }),
+                button('停止', () => action('stopServices'), { danger: true, disabled: busy })
+              ]
           ),
           h('div', { style: { display: 'flex', gap: 8, marginBottom: 16 } },
             button('打开日志目录', () => action('openLogs')),
             button('打开数据目录', () => action('openDataDir'))
           ),
           h('div', { style: { fontSize: 11.5, lineHeight: '19px', color: C.mute } },
-            '插件在本机使用 ', h('code', null, 'http://127.0.0.1:18890'),
-            '。本机自举时 APP 启动 Controller 与 Node；已有外部 Controller 时只连接、不抢占。跨机连接要求双方可达（局域网/端口转发/Tailscale），或等 Relay（Phase 3）。'
+            hub
+              ? ['当前通过 APP 代理连接远端 Hub：', h('code', null, (state && state.remoteUrl) || ''), '。目标机 Node 用 ', h('code', null, 'wss://<hub>/ws/node'), ' 出站注册；Controller 不暴露明文端口。']
+              : ['插件在本机使用 ', h('code', null, 'http://127.0.0.1:18890'), '。本机自举时 APP 启动 Controller 与 Node；已有外部 Controller 时只连接、不抢占。跨机连接要求双方可达（局域网/端口转发/Tailscale），或等 Relay（Phase 3）。']
           ),
           state && state.python ? h('div', { style: { marginTop: 12, fontSize: 10.5, color: C.mute, fontFamily: 'Consolas, monospace', wordBreak: 'break-all' } }, state.python) : null
         )

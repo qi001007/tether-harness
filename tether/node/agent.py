@@ -13,6 +13,7 @@ import json
 import os
 import platform
 import sqlite3
+import ssl
 import sys
 import time
 from pathlib import Path
@@ -227,8 +228,17 @@ class Node:
             backoff = min(backoff * 2, 5.0)
 
     async def _session(self) -> None:
+        ssl_context = None
+        if self.url.startswith("wss://"):
+            ca_file = os.environ.get("TETHER_CA_FILE", "")
+            if ca_file:
+                ssl_context = ssl.create_default_context(cafile=ca_file)
+            elif os.environ.get("TETHER_INSECURE_TLS", "") in ("1", "true", "yes"):
+                ssl_context = ssl.create_default_context()
+                ssl_context.check_hostname = False
+                ssl_context.verify_mode = ssl.CERT_NONE
         async with websockets.connect(self.url, ping_interval=20, ping_timeout=20,
-                                      max_size=48 * 1024 * 1024) as ws:
+                                      max_size=48 * 1024 * 1024, ssl=ssl_context) as ws:
             self.ws = ws
             await self._send({"type": "register", "device_id": self.device, "name": self.device,
                               "token": self.token, "platform": platform.platform(),

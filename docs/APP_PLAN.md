@@ -1,6 +1,24 @@
 # Tether APP 集成计划（APP / 插件 / WebUI 同一套 UI）
 
-状态：**Phase 1 已实现；Phase 2 已实现 Electron 壳 + 服务监督**；Relay/Account 仍是设计。
+状态：**Phase 1/2 已实现；Hub-on-VPS（访问令牌 + APP 远端模式）已实现**；真正的 Relay
+（Controller 在 NAT 后）仍未实现。
+
+## Phase 3 当前切片：Hub on VPS（2026-10-27）
+
+- Controller 新增 `TETHER_ACCESS_TOKEN`：设置后所有 `/api/*` 必须带
+  `Authorization: Bearer` 或 `X-Tether-Token`（loopback 也不例外），非 loopback 仅放行
+  带令牌的 API；`/ws/node` 仍用节点令牌注册。
+- APP 新增远端模式：`.env` 设 `TETHER_CONTROLLER_URL=https://<hub>` +
+  `TETHER_ACCESS_TOKEN` 后，supervisor 进入 `hub` 模式，不启动本地 Controller；内嵌 UI
+  代理 `/api` 并在服务端注入令牌，令牌不进浏览器。
+- 目标机 Node 支持 `wss://`：`TETHER_CA_FILE` 信任自有 CA；仅演示可用
+  `TETHER_INSECURE_TLS=1`（自签），不得作为生产默认。
+- 部署资料：`deploy/hub/README.md`、`deploy/hub/tether-hub.service`（Caddy/自签两条路）。
+- 验收：本地启动带令牌的 Controller，`/api/state` 无令牌/错令牌 401、正确令牌 200；
+  APP 远端模式显示“远端 Hub”、Controller 在线；Python 32/32、JS 23/23。
+- 未做：真正的 Relay（Controller 自身在 NAT 后时反向接入公共点）、Account/配对码/
+  设备密钥轮换与吊销、原生 DSH iframe 的公共 origin 代理。当前令牌是单一共享密钥，
+  只适合单用户演示；公网部署必须用长随机值并限制来源。
 
 ## Phase 2 当前切片（2026-10-27）
 

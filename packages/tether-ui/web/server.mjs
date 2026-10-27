@@ -1,20 +1,25 @@
 import http from 'node:http'
+import https from 'node:https'
 import fs from 'node:fs'
 import path from 'node:path'
 
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.map': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png' }
 
-export function createWebServer({ root = import.meta.dirname, controller = 'http://127.0.0.1:18890', port = 18891, host = '127.0.0.1' } = {}) {
+export function createWebServer({ root = import.meta.dirname, controller = 'http://127.0.0.1:18890', port = 18891, host = '127.0.0.1', accessToken = '', insecureTls = false } = {}) {
   const target = new URL(controller)
   const here = root
 
   const proxy = (req, res) => {
-    const upstream = http.request({
+    const headers = { ...req.headers, host: target.host }
+    if (accessToken) headers.authorization = 'Bearer ' + accessToken
+    const client = target.protocol === 'https:' ? https : http
+    const upstream = client.request({
       hostname: target.hostname,
-      port: target.port || 80,
+      port: target.port || (target.protocol === 'https:' ? 443 : 80),
       path: req.url,
       method: req.method,
-      headers: { ...req.headers, host: target.host }
+      headers,
+      rejectUnauthorized: target.protocol === 'https:' ? !insecureTls : undefined
     }, (upstreamRes) => {
       res.writeHead(upstreamRes.statusCode || 502, upstreamRes.headers)
       upstreamRes.pipe(res)

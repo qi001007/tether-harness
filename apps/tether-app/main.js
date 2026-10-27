@@ -48,7 +48,13 @@ let webServer = null
 
 async function createWindow() {
   const { createWebServer } = await import(pathToFileURL(path.join(webRoot, 'server.mjs')).href)
-  webServer = createWebServer({ root: webRoot, controller, port: 0 })
+  webServer = createWebServer({
+    root: webRoot,
+    controller,
+    port: 0,
+    accessToken: env.TETHER_ACCESS_TOKEN || '',
+    insecureTls: ['1', 'true', 'yes'].includes(String(env.TETHER_INSECURE_TLS || '').toLowerCase())
+  })
   const url = await webServer.listen()
   log('app start ' + app.getVersion() + ' ui ' + url + ' controller ' + controller)
   supervisor.start().then((state) => log('services ' + state.mode + ' controller=' + state.controller.state + ' node=' + state.node.state)).catch((error) => log('services failed ' + (error.stack || error)))

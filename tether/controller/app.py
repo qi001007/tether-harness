@@ -7,6 +7,7 @@ are deliberately deferred; do not expose this port to an untrusted network.
 from __future__ import annotations
 
 import asyncio
+import hmac
 import json
 import os
 import uuid
@@ -32,6 +33,9 @@ except ImportError:
     pass
 DB_PATH = Path(os.environ.get("TETHER_DB", ROOT / ".runtime" / "controller.db"))
 NODE_TOKEN = os.environ.get("TETHER_NODE_TOKEN", "dev-token")
+ACCESS_TOKEN = os.environ.get("TETHER_ACCESS_TOKEN", "")
+if not ACCESS_TOKEN:
+    ACCESS_TOKEN = os.environ.get("TETHER_HUB_TOKEN", "")
 STORE = Store(DB_PATH)
 
 
@@ -110,7 +114,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["dsh-app://app"],
     allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Content-Type", "Authorization", "X-Tether-Token"],
     max_age=600,
 )
 app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
@@ -118,9 +122,26 @@ app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
 
 @app.middleware("http")
 async def loopback_only(request: Request, call_next):
-    """Keep the human UI/API on this machine; remote nodes use /ws/node + token."""
+    """Keep the human UI/API on this machine; remote nodes use /ws/node + token.
+
+    A Hub deployed on a public host sets TETHER_ACCESS_TOKEN. In that mode every
+    /api request must present the token (Bearer or X-Tether-Token), including
+    loopback requests, so a local process cannot bypass it by accident.
+    """
+    path = request.url.path
     client = request.client.host if request.client else ""
-    if client not in ("127.0.0.1", "::1", "localhost"):
+    loopback = client in ("127.0.0.1", "::1", "localhost")
+    supplied = request.headers.get("authorization", "")
+    if supplied.lower().startswith("bearer "):
+        supplied = supplied[7:].strip()
+    supplied = supplied or request.headers.get("x-tether-token", "")
+    if ACCESS_TOKEN and path.startswith("/api/"):
+        if not hmac.compare_digest(supplied, ACCESS_TOKEN):
+            return JSONResponse({"detail": {"error": "access token required", "code": "access_token_required"}},
+                                status_code=401)
+    if not loopback:
+        if path.startswith("/api/") and ACCESS_TOKEN:
+            return await call_next(request)
         return JSONResponse({"error": "controller UI/API is loopback-only"}, status_code=403)
     return await call_next(request)
 

@@ -67,6 +67,9 @@ kept as evidence and may show earlier UI.
 - Shared React UI package `packages/tether-ui`: the plugin bundle is generated from it,
   and a browser WebUI runs the same source through the `WebHost` adapter.
 - Controller + Node + MCP tools, with Tailscale or LAN as the current transport.
+- Self-hosted **Hub** mode: run the Controller on a public VPS with an access token,
+  connect target Nodes outbound over WSS, and point the APP at the Hub
+  ([deploy/hub](deploy/hub/README.md)).
 - Regression tests and acceptance screenshots.
 
 **Planned, not in this release**
@@ -125,6 +128,22 @@ This is what makes a freshly deployed machine work with the DSH plugin alone: th
 still points at `127.0.0.1:18890`, but that address now has a real Controller and Node
 behind it. It does **not** create a network between two machines; for that the control
 plane still needs a reachable path (see below).
+
+### Across two networks (self-hosted Hub)
+
+If you have a VPS with a public IP and an optional domain, run the existing Controller
+there as a Hub instead of adding a new tunnel protocol:
+
+- VPS: Controller bound to `127.0.0.1`, behind Caddy TLS, with
+  `TETHER_ACCESS_TOKEN` (operator) and `TETHER_NODE_TOKEN` (nodes).
+- Target machine: `TETHER_CONTROLLER=wss://<hub>/ws/node`; Node only opens outbound WSS.
+- Operator APP `.env`: `TETHER_CONTROLLER_URL=https://<hub>` +
+  `TETHER_ACCESS_TOKEN=...`; the embedded proxy injects the token server-side.
+
+Step-by-step commands, a systemd unit, the self-signed fallback, and current limits are
+in [deploy/hub/README.md](deploy/hub/README.md). File explorer, permissions, rename and
+audit work through the Hub; the native DSH iframe is not yet proxied through the public
+origin (local plugin still shows it on the target).
 
 ## What is verified
 
@@ -419,6 +438,8 @@ packages/
 
 apps/
   tether-app/              Electron shell + embedded UI server (Phase 2 slice)
+
+deploy/hub/                public VPS Hub: systemd unit + Caddy + fallback notes
 
 scripts/                   launcher, QA harnesses, service restart
 desktop/                   plugin/MCP installers, app launcher, LAN/Tailscale helpers
