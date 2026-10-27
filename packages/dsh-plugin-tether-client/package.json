@@ -1,6 +1,6 @@
 {
   "name": "tether-dsh-client",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Tether client page for DeepSeek Harness",
   "type": "module",
   "main": "lib/index.js",
@@ -9,7 +9,11 @@
     "./client": "./lib/client.js",
     "./package.json": "./package.json"
   },
-  "files": ["lib/index.js", "lib/client.js", "package.json"],
+  "files": [
+    "lib/index.js",
+    "lib/client.js",
+    "package.json"
+  ],
   "license": "MIT",
   "dependencies": {
     "tether-dsh-native-ui": "file:../tether-dsh-native-ui"
@@ -17,7 +21,9 @@
   "dsh": {
     "client": {
       "platform": "web",
-      "external": ["tether-dsh-native-ui"],
+      "external": [
+        "tether-dsh-native-ui"
+      ],
       "inject": [
         "tether-dsh-native-ui",
         "@deepseek-ai/dsh-client-ui-slots",

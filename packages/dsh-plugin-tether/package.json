@@ -1,6 +1,6 @@
 {
   "name": "tether-dsh-plugin",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Tether bundle for DeepSeek Harness: installs the Tether client page",
   "type": "module",
   "main": "lib/index.js",
@@ -9,7 +9,11 @@
     "./package.json": "./package.json",
     "./cordis.patch.yml": "./cordis.patch.yml"
   },
-  "files": ["lib/index.js", "cordis.patch.yml", "package.json"],
+  "files": [
+    "lib/index.js",
+    "cordis.patch.yml",
+    "package.json"
+  ],
   "license": "MIT",
   "dependencies": {
     "tether-dsh-client": "file:../dsh-plugin-tether-client",
@@ -17,6 +21,8 @@
     "tether-dsh-surface": "file:../tether-dsh-surface"
   },
   "dsh": {
-    "bundle": { "patch": "./cordis.patch.yml" }
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
   }
 }

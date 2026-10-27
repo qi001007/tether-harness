@@ -22,7 +22,15 @@ function createDshLocalPluginUpdateBridge(getRpc) {
     const rpc = typeof getRpc === 'function' ? getRpc() : null
     if (!rpc || typeof rpc.call !== 'function') throw new Error('当前 DSH 插件没有本机更新通道，请先安装新版插件。')
     const body = action === 'apply' ? { prepared_id: payload.prepared_id } : {}
-    const reply = await rpc.call('/tether-updates', action, body)
+    let reply
+    try {
+      reply = await rpc.call('/tether-updates', action, body)
+    } catch (error) {
+      const unavailable = new Error('本机插件更新通道不可用，请使用 APP 的更新中心更新该设备上的插件。')
+      unavailable.code = 'local_update_unavailable'
+      unavailable.cause = error
+      throw unavailable
+    }
     if (reply && reply.ok === false) {
       const detail = reply.error && typeof reply.error === 'object' ? reply.error : {}
       const error = new Error(detail.message || reply.error || reply.message || '本机插件更新失败')

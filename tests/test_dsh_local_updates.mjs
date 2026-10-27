@@ -109,3 +109,11 @@ test('missing bundled updater fails safely without confusing it with a missing P
   assert.equal(response.value.error_code, 'updater_missing')
   assert.equal(spawned, false)
 })
+
+test('selectedProfile falls back to the live DSH host profile argument', () => {
+  const root = 'C:/fixture/.dsh'
+  assert.equal(selectedProfile('C:/installed/tether-dsh-surface', root, ['node', 'C:/fixture/.dsh/profiles/desktop']), 'desktop')
+  assert.equal(selectedProfile('C:/installed/tether-dsh-surface', root, ['node', 'C:/fixture/.dsh/profiles/desktop/node_modules']), undefined)
+  assert.equal(selectedProfile('C:/installed/tether-dsh-surface', root, ['node', 'C:/other/profiles/desktop']), undefined)
+  assert.equal(selectedProfile('C:/installed/tether-dsh-surface', root, ['node', 'relative/profiles/desktop']), undefined)
+})

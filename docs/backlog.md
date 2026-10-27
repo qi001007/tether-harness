@@ -1,5 +1,13 @@
 # docs 变更记录
 
+## 2026-10-28 v0.2.2 修复与发布准备
+
+- APP 首次 bootstrap：修正 PowerShell 变量大小写冲突导致的 venv 空装，增加解释器可见性重试、依赖导入校验与 `bootstrap.log`。
+- Node：`active_profile()` 在 descriptor 缺失或无 profile 时从 DSH Host argv 推断 profile，远程插件更新不再被 `plugin_profile_unknown` 阻塞。
+- Surface 插件：RPC 注册失败不阻断 descriptor 发布；profile 从 Host argv 解析。
+- 客户端本机插件更新通道不可用时给出明确降级提示。
+- 版本统一 `0.2.2`；Python 76 passed/1 skipped，JavaScript 62 passed；v0.2.2 干净 bootstrap 在临时目录通过。
+
 ## 2026-10-28 本机 v0.2.1 基线安装
 
 - DESKTOP-LOCAL 从三份独立 ZIP 安装 APP/插件/Node `0.2.1`；APP 更新中心显示 APP/Node 已是最新。

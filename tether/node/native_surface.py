@@ -148,21 +148,53 @@ class NativeSurface:
         self._reset_auth()
         self._close_channels()
 
+    def _profile_from_host_argv(self) -> str | None:
+        """Infer the profile from the live DSH desktop host when the descriptor omits it."""
+        try:
+            profiles = (self.home / "profiles").resolve()
+        except OSError:
+            return None
+        try:
+            processes = psutil.process_iter(["cmdline"])
+        except Exception:
+            return None
+        for process in processes:
+            try:
+                cmdline = process.info.get("cmdline") or []
+            except (psutil.Error, OSError):
+                continue
+            if not any(isinstance(arg, str) and "dsh-desktop-host" in arg for arg in cmdline):
+                continue
+            for arg in cmdline:
+                if not isinstance(arg, str) or not arg:
+                    continue
+                try:
+                    candidate = Path(arg)
+                    if not candidate.is_absolute():
+                        continue
+                    resolved = candidate.resolve()
+                except (OSError, ValueError):
+                    continue
+                if resolved.parent != profiles:
+                    continue
+                if re.fullmatch(r"[A-Za-z0-9_-]{1,80}", resolved.name):
+                    return resolved.name
+        return None
+
     def active_profile(self) -> str | None:
         """Return the profile published by the live DSH Host companion, if known."""
         try:
             loaded = self._load()
         except Exception:
             self._clear()
-            return None
-        if not loaded or not self._profile or self._pid is None:
-            return None
-        try:
-            if not psutil.pid_exists(self._pid):
-                return None
-        except (OSError, ValueError):
-            return None
-        return self._profile
+            loaded = False
+        if loaded and self._profile and self._pid is not None:
+            try:
+                if psutil.pid_exists(self._pid):
+                    return self._profile
+            except (OSError, ValueError):
+                pass
+        return self._profile_from_host_argv()
 
     def available(self) -> bool:
         return self._load()

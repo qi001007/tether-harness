@@ -20,7 +20,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 
-UPDATER_VERSION = "0.2.1"
+UPDATER_VERSION = "0.2.2"
 LEGACY_BASELINE_VERSION = "0.2.0"
 UPDATE_PROTOCOL = 1
 DEFAULT_MANIFEST_URL = (

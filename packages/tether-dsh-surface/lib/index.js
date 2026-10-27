@@ -109,12 +109,23 @@ function publish(webServer, connection) {
   }
 }
 
+function registerRpc(rpc, route, handler) {
+  if (!rpc || typeof rpc.handle !== 'function') return () => {}
+  try {
+    const dispose = rpc.handle(route, handler)
+    return typeof dispose === 'function' ? dispose : () => {}
+  } catch (error) {
+    console.error('tether-dsh-surface could not register ' + route + ':', error?.message || error)
+    return () => {}
+  }
+}
+
 export function apply(ctx) {
   let disposed = false
   let dispose
-  const disposeUpdates = ctx.connection.rpc.handle('/tether-updates',
-    createLocalPluginUpdateHandler({ env: process.env }))
-  const disposeIdentity = ctx.connection.rpc.handle('/tether-identity', (action, _payload, _signal, peer) => {
+  const rpc = ctx.connection && ctx.connection.rpc
+  const disposeUpdates = registerRpc(rpc, '/tether-updates', createLocalPluginUpdateHandler({ env: process.env }))
+  const disposeIdentity = registerRpc(rpc, '/tether-identity', (action, _payload, _signal, peer) => {
     if (peer?.principal?.kind !== 'owner') {
       return { ok: false, error: { code: 'forbidden', message: 'Only the Host owner may read local Tether identity.', details: {} } }
     }

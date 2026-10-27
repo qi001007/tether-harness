@@ -278,3 +278,26 @@ async def test_websocket_receive_timeout_and_dispose(native_home, monkeypatch):
     assert await service.call("ws_receive", {"channel": "test"}) == {"kind": "idle"}
     await service.dispose()
     assert socket.closed
+
+
+def test_active_profile_falls_back_to_live_dsh_host_argv(tmp_path, monkeypatch):
+    profile_dir = tmp_path / "profiles" / "desktop"
+    profile_dir.mkdir(parents=True)
+
+    class HostProcess:
+        info = {"cmdline": [
+            r"D:\DeepSeek harness\DeepSeek Harness.exe",
+            "--expose-internals",
+            r"D:\DeepSeek harness\resources\app.asar\dsh\node_modules\@deepseek-ai\dsh-desktop-host\lib\index.js",
+            str(profile_dir),
+        ]}
+
+    monkeypatch.setattr(native_surface_module.psutil, "process_iter", lambda *_: [HostProcess()])
+    service = NativeSurface(tmp_path)
+    assert service.active_profile() == "desktop"
+
+    class UnrelatedProcess:
+        info = {"cmdline": ["dsh-desktop-host", str(tmp_path / "other")]}
+
+    monkeypatch.setattr(native_surface_module.psutil, "process_iter", lambda *_: [UnrelatedProcess()])
+    assert service.active_profile() is None

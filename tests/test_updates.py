@@ -539,19 +539,20 @@ def test_built_release_archives_prepare_and_apply_for_all_components(
     spec.loader.exec_module(builder)
     builder.OUT = tmp_path / "release"
     builder.main()
+    version = builder.VERSION
 
     manifest = json.loads((builder.OUT / "tether-update.json").read_text(encoding="utf-8"))
     for component in ("app", "plugin", "node"):
-        archive = (builder.OUT / f"tether-{component}-0.2.1.zip").read_bytes()
+        archive = (builder.OUT / f"tether-{component}-{version}.zip").read_bytes()
         manifest["components"][component]["url"] = artifact_server.base + f"/{component}.zip"
         artifact_server.files[f"/{component}.zip"] = archive
     artifact_server.files["/manifest.json"] = json.dumps(manifest).encode()
     manifest_url = artifact_server.base + "/manifest.json"
 
     app_container = tmp_path / "app-install"
-    with zipfile.ZipFile(builder.OUT / "tether-app-0.2.1.zip") as app_zip:
+    with zipfile.ZipFile(builder.OUT / f"tether-app-{version}.zip") as app_zip:
         app_zip.extractall(app_container)
-    app_root = app_container / "tether-app-0.2.1"
+    app_root = app_container / f"tether-app-{version}"
     (app_root / "version.json").write_text(json.dumps({
         "schema": 1, "components": {"app": "0.2.0", "plugin": "0.2.0", "node": "0.2.0"}
     }), encoding="utf-8")
@@ -565,9 +566,9 @@ def test_built_release_archives_prepare_and_apply_for_all_components(
     assert (app_root / ".env.example").is_file()
 
     node_container = tmp_path / "node-install"
-    with zipfile.ZipFile(builder.OUT / "tether-node-0.2.1.zip") as node_zip:
+    with zipfile.ZipFile(builder.OUT / f"tether-node-{version}.zip") as node_zip:
         node_zip.extractall(node_container)
-    node_root = node_container / "tether-node-0.2.1"
+    node_root = node_container / f"tether-node-{version}"
     (node_root / "version.json").write_text(json.dumps({
         "schema": 1, "components": {"app": "0.2.0", "plugin": "0.2.0", "node": "0.2.0"}
     }), encoding="utf-8")
@@ -585,9 +586,9 @@ def test_built_release_archives_prepare_and_apply_for_all_components(
     packages = dsh_home / "profiles/desktop/node_modules"
     for package_name in ("tether-dsh-plugin", "tether-dsh-client", "tether-dsh-native-ui", "tether-dsh-surface"):
         (packages / package_name).mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(builder.OUT / "tether-plugin-0.2.1.zip") as plugin_zip:
+    with zipfile.ZipFile(builder.OUT / f"tether-plugin-{version}.zip") as plugin_zip:
         for archive_name in plugin_zip.namelist():
-            match = re.fullmatch(r"tether-plugin-0\.2\.1/packages/([^/]+)/(.*)", archive_name)
+            match = re.fullmatch(rf"tether-plugin-{re.escape(version)}/packages/([^/]+)/(.*)", archive_name)
             if not match:
                 continue
             source_name, relative = match.groups()
@@ -601,7 +602,7 @@ def test_built_release_archives_prepare_and_apply_for_all_components(
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(plugin_zip.read(archive_name))
     client = packages / "tether-dsh-client/lib/client.js"
-    client.write_text(re.sub(r"(PLUGIN_VERSION\s*=\s*['\"])0\.2\.1", r"\g<1>0.2.0",
+    client.write_text(re.sub(rf"(PLUGIN_VERSION\s*=\s*['\"]){re.escape(version)}", r"\g<1>0.2.0",
                              client.read_text(encoding="utf-8")),
                       encoding="utf-8")
     client_package = packages / "tether-dsh-client/package.json"
@@ -615,8 +616,8 @@ def test_built_release_archives_prepare_and_apply_for_all_components(
     plugin_result = plugin.apply(plugin_prepared["prepared_id"])
     assert plugin_result["ok"] is True, plugin_result
     installed_client_package = json.loads((packages / "tether-dsh-client/package.json").read_text(encoding="utf-8"))
-    assert installed_client_package["version"] == "0.2.1"
-    assert plugin.status()["current_version"] == "0.2.1"
+    assert installed_client_package["version"] == version
+    assert plugin.status()["current_version"] == version
     assert (packages / "tether-dsh-surface/updater/tether/updates.py").is_file()
     updater_root = packages / "tether-dsh-surface/updater"
     cli_result = subprocess.run(
@@ -626,7 +627,7 @@ def test_built_release_archives_prepare_and_apply_for_all_components(
         cwd=updater_root, capture_output=True, text=True, timeout=30, check=False,
     )
     assert cli_result.returncode == 0, cli_result.stderr + cli_result.stdout
-    assert json.loads(cli_result.stdout)["current_version"] == "0.2.1"
+    assert json.loads(cli_result.stdout)["current_version"] == version
 
 
 def test_real_020_release_archives_upgrade_with_bootstrap_updater(
@@ -655,7 +656,7 @@ def test_real_020_release_archives_upgrade_with_bootstrap_updater(
     builder.main()
     manifest = json.loads((builder.OUT / "tether-update.json").read_text(encoding="utf-8"))
     for component in ("app", "plugin", "node"):
-        artifact = (builder.OUT / f"tether-{component}-0.2.1.zip").read_bytes()
+        artifact = (builder.OUT / f"tether-{component}-{version}.zip").read_bytes()
         manifest["components"][component]["url"] = artifact_server.base + f"/{component}.zip"
         artifact_server.files[f"/{component}.zip"] = artifact
     artifact_server.files["/manifest.json"] = json.dumps(manifest).encode()
@@ -715,5 +716,5 @@ def test_real_020_release_archives_upgrade_with_bootstrap_updater(
     assert plugin_prepared["ok"] is True, plugin_prepared
     plugin_result = plugin.apply(plugin_prepared["prepared_id"])
     assert plugin_result["ok"] is True, plugin_result
-    assert plugin.status()["current_version"] == "0.2.1"
+    assert plugin.status()["current_version"] == version
     assert (packages / "tether-dsh-surface/updater/tether/updates.py").is_file()

@@ -17,7 +17,21 @@ function selectedDshHome(env, homeDir) {
   return path.resolve(env.DSH_HOME || path.join(homeDir, '.dsh'))
 }
 
-function selectedProfile(packageRoot, dshHome) {
+function profileFromArgv(dshHome, argv) {
+  const profilesRoot = path.resolve(dshHome, 'profiles')
+  for (const arg of argv || []) {
+    if (typeof arg !== 'string' || !arg || !path.isAbsolute(arg)) continue
+    const relative = path.relative(profilesRoot, path.resolve(arg))
+    if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) continue
+    const parts = relative.split(path.sep)
+    if (parts.length === 1 && /^[A-Za-z0-9_-]{1,80}$/.test(parts[0])) return parts[0]
+  }
+  return undefined
+}
+
+function selectedProfile(packageRoot, dshHome, argv = process.argv) {
+  const fromArgv = profileFromArgv(dshHome, argv)
+  if (fromArgv) return fromArgv
   const absolute = path.resolve(packageRoot)
   const profilesRoot = path.join(path.resolve(dshHome), 'profiles')
   const relative = path.relative(profilesRoot, absolute).split(path.sep)

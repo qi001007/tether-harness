@@ -1,5 +1,15 @@
 # Public client releases
 
+## v0.2.2
+
+This release fixes three defects found during the v0.2.1 baseline installation:
+
+- APP first-run bootstrap now verifies the virtual-environment interpreter path and installed runtime, retries venv creation when Windows reports the interpreter late, and fails visibly instead of starting a broken APP.
+- The DSH surface publishes its descriptor with the profile inferred from the live DSH Host argv; a failed RPC registration no longer prevents descriptor publication. This lets remote plugin updates identify the profile for out-of-tree plugin installations.
+- The local plugin update channel now falls back to a clear "use the APP update center" message when the DSH RPC transport is unavailable.
+
+The release publishes separate APP, plugin, and Node ZIPs plus `tether-update.json`. Packages are unsigned. Real in-app upgrade, rollback, and cross-device acceptance are recorded separately from the package checks.
+
 ## v0.2.1
 
 [GitHub Release](https://github.com/qi001007/tether-harness/releases/tag/v0.2.1) publishes separate APP, DSH plugin, and Node ZIP packages plus `tether-update.json`. These are ZIP packages, not self-contained EXE installers, and do not include a Hub/server. Configure all components to use the same compatible Hub.
