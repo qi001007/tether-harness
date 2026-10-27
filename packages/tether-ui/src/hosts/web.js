@@ -1,9 +1,42 @@
-const EXT_LABEL = {
-  md: 'MD', markdown: 'MD', txt: 'TXT', log: 'LOG', json: 'JSON', yml: 'YML', yaml: 'YML',
-  pdf: 'PDF', doc: 'DOC', docx: 'DOC', ppt: 'PPT', pptx: 'PPT', xls: 'XLS', xlsx: 'XLS',
-  png: 'IMG', jpg: 'IMG', jpeg: 'IMG', gif: 'IMG', webp: 'IMG', svg: 'SVG',
-  js: 'JS', mjs: 'JS', ts: 'TS', tsx: 'TS', jsx: 'JS', py: 'PY', ps1: 'PS1', sh: 'SH',
-  zip: 'ZIP', rar: 'ZIP', exe: 'EXE'
+const EXT_KIND = {
+  md: 'md', markdown: 'md', mdx: 'md',
+  txt: 'text', log: 'text', ini: 'text', cfg: 'text',
+  pdf: 'pdf',
+  doc: 'doc', docx: 'doc', rtf: 'doc', odt: 'doc', wps: 'doc',
+  ppt: 'ppt', pptx: 'ppt', odp: 'ppt', dps: 'ppt',
+  xls: 'xls', xlsx: 'xls', csv: 'xls', ods: 'xls', et: 'xls',
+  png: 'image', jpg: 'image', jpeg: 'image', gif: 'image', webp: 'image', bmp: 'image', svg: 'image', ico: 'image', tif: 'image', tiff: 'image',
+  zip: 'archive', rar: 'archive', '7z': 'archive', gz: 'archive', tar: 'archive',
+  js: 'code', mjs: 'code', cjs: 'code', ts: 'code', tsx: 'code', jsx: 'code', py: 'code',
+  ps1: 'code', sh: 'code', bat: 'code', json: 'code', yml: 'code', yaml: 'code', toml: 'code',
+  html: 'code', css: 'code', java: 'code', c: 'code', cpp: 'code', h: 'code', go: 'code', rs: 'code',
+  exe: 'binary', dll: 'binary', bin: 'binary', msi: 'binary'
+}
+
+const KIND_COLOR = {
+  pdf: '#d64545', doc: '#2b6cb0', ppt: '#dd6b20', xls: '#2f855a',
+  image: '#6b46c1', md: '#334155', text: '#64748b', code: '#0f766e',
+  archive: '#b7791f', binary: '#475569', unknown: '#94a3b8'
+}
+
+const GLYPHS = {
+  ppt: [['path', { d: 'M4.6 5.2h6.8v4.6H4.6z' }], ['path', { d: 'M6.2 11.8h3.6M8 9.8v2' }]],
+  doc: [['path', { d: 'M4.8 5.4h6.4M4.8 8h6.4M4.8 10.6h4.2' }]],
+  pdf: [['path', { d: 'M5.2 4.2h4.1l1.5 1.5v6.1H5.2z' }], ['path', { d: 'M6.6 7.2h2.8M6.6 9.2h2.8' }]],
+  xls: [['path', { d: 'M4.6 5.2h6.8v5.6H4.6zM4.6 8h6.8M8 5.2v5.6' }]],
+  image: [['circle', { cx: 6.4, cy: 6.6, r: 0.9 }], ['path', { d: 'M4.4 11.4 7 8.6l1.6 1.6 1.2-1.1 1.8 2.3z' }]],
+  md: [['path', { d: 'M4.4 10.6V5.9l2 2.1 2-2.1v4.7' }], ['path', { d: 'M11.2 6v4.6M9.9 9.4l1.3 1.3 1.3-1.3' }]],
+  text: [['path', { d: 'M4.8 5.4h6.4M4.8 8h6.4M4.8 10.6h3.4' }]],
+  code: [['path', { d: 'M6.6 5.8 4.2 8l2.4 2.2M9.4 5.8 11.8 8l-2.4 2.2' }]],
+  archive: [['path', { d: 'M8 3.9v1.1M8 6v1.1M8 8.1v1.1M8 10.2v1.1' }], ['path', { d: 'M6.8 5h2.4M6.8 9.2h2.4' }]],
+  binary: [['path', { d: 'M5.2 6 6.7 8l-1.5 2M8.4 10h2.4' }]],
+  unknown: [['path', { d: 'M5.2 4.4h4l1.6 1.6v5.6H5.2z' }], ['path', { d: 'M6.6 7.2h2.8M6.6 9.2h2.2' }]]
+}
+
+function fileKind(path) {
+  const name = String(path || '').split(/[\\/]/).pop()
+  if (!name || !name.includes('.')) return 'unknown'
+  return EXT_KIND[name.split('.').pop().toLowerCase()] || 'unknown'
 }
 
 export function createWebFileTypeIcon(React) {
@@ -18,17 +51,19 @@ export function createWebFileTypeIcon(React) {
         stroke: 'currentColor', strokeWidth: 1.2
       }))
     }
-    const suffix = String(path || '').split('.').pop().toLowerCase()
-    const label = String(path || '').includes('.') ? (EXT_LABEL[suffix] || suffix.slice(0, 3).toUpperCase()) : 'FILE'
-    return h('span', {
-      'aria-hidden': true,
-      style: {
-        width: size, height: size, flex: '0 0 auto', display: 'grid', placeItems: 'center',
-        borderRadius: 3, background: 'var(--dsw-alias-interactive-bg-hover, rgba(38,49,72,0.06))',
-        color: 'var(--dsw-alias-label-tertiary, #667085)', fontSize: Math.max(6, Math.round(size * 0.42)),
-        fontWeight: 600, letterSpacing: 0, overflow: 'hidden'
-      }
-    }, label)
+    const type = fileKind(path)
+    const shapes = GLYPHS[type] || GLYPHS.unknown
+    return h('svg', {
+      'aria-hidden': true, width: size, height: size, viewBox: '0 0 16 16', fill: 'none',
+      style: { flex: '0 0 auto' }
+    },
+      h('rect', { x: 1.5, y: 1.5, width: 13, height: 13, rx: 3, fill: KIND_COLOR[type] || KIND_COLOR.unknown }),
+      ...shapes.map((shape, index) => h(shape[0], {
+        key: index,
+        ...shape[1],
+        stroke: '#ffffff', strokeWidth: 1.2, strokeLinecap: 'round', strokeLinejoin: 'round'
+      }))
+    )
   }
 }
 
