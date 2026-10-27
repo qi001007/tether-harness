@@ -1,5 +1,11 @@
 # docs 变更记录
 
+## 2026-10-28 v0.2.1 发布收尾
+
+- 更新 README、PRD、PROGRESS、FEEDBACK、TECHNICAL 与 CORE_RECOVERY_PLAN，区分已发布 ZIP 与尚未完成的安装、升级、远端更新、回滚和签名验收。
+- 新增 RELEASES.md，简要记录 v0.2.1 制品和 commit、draft、检查、publish、下载核验流程。
+- 更新 docs/description.md；仅改公开文档，未改代码或私有资料，未提交或推送。
+
 ## 2026-10-28 更新基础版本准备
 
 - 明确先修复和验证更新页面、发布独立基础版本，再验证后续版本软件内升级的执行顺序；服务器接口及真实双机验收保持独立门禁。

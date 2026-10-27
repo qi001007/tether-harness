@@ -9,7 +9,7 @@ Repo: https://github.com/qi001007/tether-harness
 | Component | What it does |
 |---|---|
 | DSH plugin | Adds device selection, file and permission views, and optional MCP tools to the DSH desktop app. The target DSH Host remains responsible for its own model, account, and session. |
-| APP client | Provides a separate desktop entry point for connecting to a configured Tether service. Standalone installation and update acceptance are still in progress. |
+| APP client | Provides a separate desktop entry point for connecting to a configured Tether service. |
 | Node | Runs on a target device and performs operations allowed by that device's policy. |
 | Tether service | Connects clients and Nodes. Use an approved private service if you have access, or configure a reachable Hub that you operate or are authorized to use. |
 
@@ -19,23 +19,38 @@ The client and Node need the address and credentials for the same compatible ser
 
 **Optional private service:** if your organization provides the Tether service as a private dependency, install it using the package source and instructions in its private repository or approved internal catalog. This public repository intentionally does not publish the private repository URL, deployment configuration, or credentials.
 
-**Without access to a private service:** configure a reachable Hub that you operate or are authorized to use. Set the APP's local `TETHER_CONTROLLER_URL` to `https://<your-hub>` and its local `TETHER_ACCESS_TOKEN` to the token supplied by that Hub's operator. Configure each Node with `TETHER_CONTROLLER=wss://<your-hub>/ws/node` and its assigned `TETHER_NODE_TOKEN`. These values are examples; replace the host and tokens locally. If no compatible service is reachable and configured, remote device features are unavailable.
+**Without access to a private service:** configure a reachable, compatible Hub that you operate or are authorized to use. For the APP, put its URL, access token, and Node token in the extracted APP's local `apps/tether-app/data/hub.json` (keys: `url`, `accessToken`, `nodeToken`) or supply the corresponding `TETHER_CONTROLLER_URL`, `TETHER_ACCESS_TOKEN`, and `TETHER_NODE_TOKEN` environment variables. For a Node, set `TETHER_CONTROLLER=wss://<your-hub>/ws/node` and its assigned `TETHER_NODE_TOKEN`; configure the DSH plugin through its connection page. These values are examples; replace the host and tokens locally, and do not commit credentials. If no compatible service is reachable and configured, remote device features are unavailable.
 
-## Install the DSH plugin
+## Download v0.2.1 packages
 
-Prerequisites: Windows, the DeepSeek Harness desktop app, and a configured Tether service. Close the DSH app normally before installing the plugin, then reopen it and select **Tether** in the sidebar.
+The [v0.2.1 GitHub Release](https://github.com/qi001007/tether-harness/releases/tag/v0.2.1) contains one ZIP per component and the update manifest:
+
+- [APP ZIP](https://github.com/qi001007/tether-harness/releases/download/v0.2.1/tether-app-0.2.1.zip)
+- [DSH plugin ZIP](https://github.com/qi001007/tether-harness/releases/download/v0.2.1/tether-plugin-0.2.1.zip)
+- [Node ZIP](https://github.com/qi001007/tether-harness/releases/download/v0.2.1/tether-node-0.2.1.zip)
+- [Update manifest](https://github.com/qi001007/tether-harness/releases/download/v0.2.1/tether-update.json)
+
+These are ZIP packages, not self-contained EXE installers. They do not include or configure a Hub. Configure all components to use the same reachable, compatible service and use compatible client, plugin, Node, and service versions.
+
+### APP ZIP
+
+On Windows, extract the ZIP and run `apps\tether-app\Tether-App.cmd` from the extracted folder. The launcher prepares its Python environment and installs APP dependencies on first run. It requires Python 3.11+ and Node.js 24 LTS with npm available on `PATH`.
+
+### DSH plugin ZIP
+
+Prerequisites: Windows, the DeepSeek Harness desktop app, and access to a configured compatible Tether service. Extract the ZIP, close DeepSeek Harness, and run this command from the extracted folder:
 
 ```powershell
 .\desktop\install-plugin.ps1
 ```
 
-The plugin connects to the configured service; it does not create a service or network path by itself. Each target that needs the native DSH page must also have the DSH desktop app running with a compatible Tether plugin and Node.
+Reopen DeepSeek Harness and select **Tether** in the sidebar. This archive installs the plugin only; it does not install the APP, Node, or a service.
 
-## Install a Node
+### Node ZIP
 
-Install the Node using the package and instructions provided by your service operator. Configure its service address, device identity, and assigned credentials locally. Nodes connect outbound to the configured service; a target device does not need to expose an inbound public port. The Node's file policy determines which operations are allowed.
+On Windows, extract the ZIP, then follow its included `README-INSTALL.md`. The bootstrap requires Python 3.10+, Node.js 24 LTS, and npm. Configure the Hub WebSocket URL and the Node token issued by its operator; Nodes connect outbound and do not need a public inbound port. The Node's file policy determines which operations are allowed.
 
-Use compatible client, plugin, Node, and service releases. Updating only one component can leave the system unable to connect. The legacy `v0.2.0` release has been withdrawn and its ZIP assets removed; the release tag remains with a withdrawal notice. New independent installation packages have not been published.
+The v0.2.1 packages and manifest are published, and the official HTTPS downloads and SHA-256 values were checked. Archive and updater-manifest checks do not establish clean installation, an in-app upgrade, remote Node update, rollback, or real cross-device acceptance. The packages are not digitally signed. The legacy `v0.2.0` release has been withdrawn; its tag remains with a withdrawal notice.
 
 ## Plugin tools
 
@@ -54,15 +69,15 @@ The target DSH Host owns model and session behavior. Tether does not replace its
 
 - Core plugin and file-management views are implemented; local regression and desktop checks are recorded.
 - A real local DSH response has been observed, but cross-device session continuity, remote native Host behavior, and attachment transfer are not fully accepted.
-- APP, plugin, and Node independent installation and upgrade still need clean-install and real-device acceptance.
-- Update checks and local update flows have implementation and isolated regression evidence. The latest build has not been publicly released; complete remote update acceptance and digital signatures remain outstanding.
+- APP, plugin, and Node ZIP packages are published separately. Clean installation and upgrade on target devices still need acceptance.
+- Update checks and local update flows have implementation and isolated regression evidence. The v0.2.1 updater manifest was checked over HTTPS; in-app upgrade, remote Node update, rollback, and digital signatures remain outstanding.
 - APP and plugin must present the same connection page and meaningful service status. The latest design has not received final real-service/user acceptance.
 
-See [PRD](docs/PRD.md), [live progress](docs/PROGRESS.md), [feedback](docs/FEEDBACK.md), and [public technical notes](docs/TECHNICAL.md) for scope and acceptance status.
+See [release downloads and process](docs/RELEASES.md), [PRD](docs/PRD.md), [live progress](docs/PROGRESS.md), [feedback](docs/FEEDBACK.md), and [public technical notes](docs/TECHNICAL.md) for scope and acceptance status.
 
 ## Development
 
-Clone the public source repository for development:
+To develop both the APP and plugin together, clone the public source repository:
 
 ```powershell
 git clone https://github.com/qi001007/tether-harness.git
@@ -76,7 +91,7 @@ npm install --prefix apps/tether-app
 npm --prefix apps/tether-app start
 ```
 
-This is a source-development path, not a published standalone installer. The shared UI source and public client packages are in `packages/`. To rebuild the browser UI bundle during client development:
+This is the combined source-development path, separate from the individual v0.2.1 ZIP downloads above. The shared UI source and public client packages are in `packages/`. To rebuild the browser UI bundle during client development:
 
 ```powershell
 npm --prefix packages/tether-ui run build:web
