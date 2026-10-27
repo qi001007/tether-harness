@@ -79,6 +79,7 @@ async function createWindow() {
     minWidth: 960,
     minHeight: 640,
     title: 'Tether',
+    icon: path.join(repoRoot, 'assets', 'tether.ico'),
     backgroundColor: '#ffffff',
     autoHideMenuBar: true,
     webPreferences: {

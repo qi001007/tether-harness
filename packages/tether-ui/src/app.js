@@ -59,6 +59,46 @@ export function createTetherPanel({ React, Native, host }) {
     }
     const post = (path, body) => api(path, { method: 'POST', body: JSON.stringify(body || {}) })
 
+    const PLUGIN_VERSION = '0.2.0'
+    const UPDATE_URLS = [
+      'https://raw.githubusercontent.com/qi001007/tether-harness/main/packages/dsh-plugin-tether-client/version.json',
+      'https://cdn.jsdelivr.net/gh/qi001007/tether-harness@main/packages/dsh-plugin-tether-client/version.json'
+    ]
+    function pluginUpdateNewer(remote) {
+      const a = String(remote || '').split('.').map((part) => parseInt(part, 10) || 0)
+      const b = PLUGIN_VERSION.split('.').map((part) => parseInt(part, 10) || 0)
+      for (let i = 0; i < Math.max(a.length, b.length); i += 1) {
+        if ((a[i] || 0) > (b[i] || 0)) return true
+        if ((a[i] || 0) < (b[i] || 0)) return false
+      }
+      return false
+    }
+    function usePluginUpdate() {
+      const [info, setInfo] = React.useState(null)
+      React.useEffect(() => {
+        let alive = true
+        if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('tether_update_test')) {
+          setInfo({ version: '9.9.9', notes: '测试更新提示', download: 'https://github.com/qi001007/tether-harness', install: 'git pull' })
+          return undefined
+        }
+        const check = async () => {
+          for (const url of UPDATE_URLS) {
+            try {
+              const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(6000) })
+              if (!res.ok) continue
+              const data = await res.json()
+              if (alive && data.version && pluginUpdateNewer(data.version)) setInfo(data)
+              return
+            } catch (_) { /* try the next mirror */ }
+          }
+        }
+        check()
+        const timer = setInterval(check, 6 * 60 * 60 * 1000)
+        return () => { alive = false; clearInterval(timer) }
+      }, [])
+      return info
+    }
+
     function pill(text, color) {
       return h('span', {
         style: {
@@ -1228,6 +1268,8 @@ export function createTetherPanel({ React, Native, host }) {
       const [freshSession, setFreshSession] = React.useState(false)
       const [appLocalDevice, setAppLocalDevice] = React.useState('')
       const appLocalDeviceRef = React.useRef('')
+      const pluginUpdate = usePluginUpdate()
+      const [showUpdate, setShowUpdate] = React.useState(false)
 
       const fail = (e) => {
         if (e && e.code === 'node_update_required') { setNativeError('节点待更新'); return }
@@ -2149,7 +2191,12 @@ export function createTetherPanel({ React, Native, host }) {
             onChange: setDeviceId,
             onOpenNetwork: () => selectPanel('network')
           }) : h('span', { style: { color: C.mute } }, 'no device'),
-          device && device.capabilities && (!device.capabilities.fs || device.capabilities.surface_protocol !== 1) ? pill('节点待更新', C.amber) : null
+          device && device.capabilities && (!device.capabilities.fs || device.capabilities.surface_protocol !== 1) ? pill('节点待更新', C.amber) : null,
+          pluginUpdate ? h('button', {
+            onClick: () => setShowUpdate(true), title: 'Tether 插件有新版本',
+            className: 'tether-press tether-hover',
+            style: { marginLeft: 'auto', marginRight: host && host.kind === 'app' ? 72 : 0, height: 26, padding: '0 10px', borderRadius: 999, border: 0, background: C.bg, color: C.sub, display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer', flex: '0 0 auto' }
+          }, h('span', { style: { width: 7, height: 7, borderRadius: 4, background: C.red, flex: '0 0 auto' } }), '更新') : null
         ),
         notice ? h('div', { style: { padding: '6px 14px', background: C.soft, color: /^Saved |^Policy updated|^已重命名/.test(notice) ? C.green : C.red, borderBottom: 0, fontSize: 12 } }, notice) : null,
         h('div', { style: { display: 'flex', flex: '1 1 auto', minHeight: 0 } },
@@ -2190,6 +2237,20 @@ export function createTetherPanel({ React, Native, host }) {
             view === 'files' ? renderExplorer() : (view === 'network' ? renderNetwork() : null)
         ),
         ),
+        showUpdate && pluginUpdate ? h('div', {
+          onPointerDown: (event) => { if (event.target === event.currentTarget) setShowUpdate(false) },
+          style: { position: 'absolute', inset: 0, background: 'rgba(16,24,40,0.35)', display: 'grid', placeItems: 'center', zIndex: 30 }
+        },
+          h('div', { style: { width: 400, maxWidth: 'calc(100% - 32px)', background: C.bg, borderRadius: 10, boxShadow: C.shadow, padding: 18 } },
+            h('div', { style: { fontSize: 14, fontWeight: 'var(--tether-strong, 600)', marginBottom: 6 } }, 'Tether 插件 ' + pluginUpdate.version),
+            h('div', { style: { fontSize: 12, color: C.sub, lineHeight: '19px', marginBottom: 12 } }, pluginUpdate.notes || '有新版本可用'),
+            h('pre', { style: { margin: '0 0 12px', padding: '8px 10px', borderRadius: 6, background: C.panel, fontSize: 11, lineHeight: '17px', whiteSpace: 'pre-wrap', wordBreak: 'break-all', color: C.sub } }, pluginUpdate.install || 'git pull'),
+            h('div', { style: { display: 'flex', justifyContent: 'flex-end', gap: 8 } },
+              h('a', { href: pluginUpdate.download || 'https://github.com/qi001007/tether-harness', target: '_blank', rel: 'noreferrer', style: { height: 28, padding: '0 10px', borderRadius: 6, background: C.soft, color: C.ink, fontSize: 12, display: 'flex', alignItems: 'center', textDecoration: 'none' } }, '打开下载页'),
+              h('button', { onClick: () => { if (navigator.clipboard) navigator.clipboard.writeText(pluginUpdate.install || '').catch(() => {}); setShowUpdate(false); setNotice('更新命令已复制') }, className: 'tether-press', style: { height: 28, padding: '0 10px', borderRadius: 6, border: 0, background: C.primary, color: C.onPrimary, fontSize: 12, cursor: 'pointer' } }, '复制更新命令')
+            )
+          )
+        ) : null,
         showSettings ? h('div', {
           onPointerDown: (event) => { if (event.target === event.currentTarget) setShowSettings(false) },
           style: { position: 'absolute', inset: 0, background: 'rgba(16,24,40,0.35)', display: 'flex', justifyContent: 'flex-end', zIndex: 20 }
@@ -2254,7 +2315,16 @@ export function createTetherPanel({ React, Native, host }) {
     }
 
     function TetherIcon() {
-      return h('span', { title: 'Tether', style: { display: 'grid', placeItems: 'center', width: 16, height: 16, borderRadius: 4, background: C.primary, color: C.onPrimary, fontSize: 10, lineHeight: '16px', fontFamily: 'inherit', fontWeight: 'var(--tether-strong-2, 700)', flex: '0 0 auto' } }, 'T')
+      const update = usePluginUpdate()
+      return h('span', { title: 'Tether', style: { position: 'relative', display: 'inline-block', width: 16, height: 16, flex: '0 0 auto' } },
+        h('svg', { width: 16, height: 16, viewBox: '0 0 1024 1024', 'aria-hidden': true },
+          h('rect', { x: 30, y: 30, width: 964, height: 964, rx: 235, fill: C.primary }),
+          h('path', { d: 'M338 297 C 512 297, 512 727, 686 727', fill: 'none', stroke: '#ffffff', strokeWidth: 56, strokeLinecap: 'round' }),
+          h('circle', { cx: 338, cy: 297, r: 88, fill: 'none', stroke: '#ffffff', strokeWidth: 60 }),
+          h('circle', { cx: 686, cy: 727, r: 88, fill: 'none', stroke: '#f59e0b', strokeWidth: 60 })
+        ),
+        update ? h('span', { style: { position: 'absolute', right: -1, top: -1, width: 5, height: 5, borderRadius: 3, background: C.red, border: '1px solid ' + C.bg } }) : null
+      )
     }
 
     return { App, TetherIcon }

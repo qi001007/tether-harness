@@ -60,23 +60,3 @@ if ($Restart) {
   Start-Process $exe
   Write-Host "[tether] DeepSeek Harness restarted."
 }
-
-# The APP ships in the same repository. Create a launcher when the checkout has it.
-$Repo = Split-Path -Parent $PSScriptRoot
-$AppDir = Join-Path $Repo "apps\tether-app"
-$AppCmd = Join-Path $AppDir "Tether-App.cmd"
-if (Test-Path $AppCmd) {
-  $shell = New-Object -ComObject WScript.Shell
-  $icon = Join-Path $AppDir "node_modules\electron\dist\electron.exe"
-  if (-not (Test-Path $icon)) { $icon = $AppCmd }
-  foreach ($folder in @([Environment]::GetFolderPath('Desktop'), [Environment]::GetFolderPath('Programs'))) {
-    if (-not $folder) { continue }
-    $lnk = $shell.CreateShortcut((Join-Path $folder "Tether APP.lnk"))
-    $lnk.TargetPath = $AppCmd
-    $lnk.WorkingDirectory = $AppDir
-    $lnk.IconLocation = "$icon,0"
-    $lnk.Description = "Tether APP"
-    $lnk.Save()
-  }
-  Write-Host "[tether] APP shortcut created on Desktop and Start Menu."
-}
