@@ -43,8 +43,8 @@ Tether-owned.
 
 | Native DSH workspace | File explorer |
 |---|---|
-| ![Native DSH workspace](docs/screenshots/native-workspace-final.png) | ![File explorer](docs/screenshots/file-explorer-final.png) |
-| **原生工作区**: the target machine's own DSH Host, embedded through the per-device gateway. | **文件资源管理器**: workspace/drive tree, details list, breadcrumb, refresh and right-click actions. |
+| ![Native DSH workspace](docs/screenshots/native-public-app.png) | ![File explorer](docs/screenshots/file-explorer-final.png) |
+| **原生工作区**: the target DSH Host, embedded through the Hub's per-device public surface. | **文件资源管理器**: workspace/drive tree, details list, breadcrumb, refresh and right-click actions. |
 | **Markdown preview** | **Office preview** |
 | ![Markdown preview](docs/screenshots/file-markdown-final.png) | ![Office preview](docs/screenshots/file-pptx-final.png) |
 | Markdown is rendered in place; text can switch to edit mode and save. | DOCX/PPTX are converted to PDF by WPS/Office COM on the target, then shown in place. |
