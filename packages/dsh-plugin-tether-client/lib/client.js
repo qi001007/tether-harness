@@ -520,6 +520,18 @@ function createTetherPanel({ React, Native, host }) {
       .tether-root button:focus-visible, .tether-root [role=button]:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary, #1570ef); outline-offset: 2px; }
       .tether-hover:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(38,49,72,.06)) !important; }
       .tether-resizer { position: relative; }
+      .tether-drawer { width: min(480px, 100%); }
+      .tether-drawer-body { padding: 16px; }
+      .tether-audit-head { display: grid; grid-template-columns: 54px minmax(0, 1fr) 64px; gap: 6px; padding: 5px 8px; background: var(--dsw-alias-interactive-bg-hover, rgba(38, 49, 72, 0.06)); font-size: 10px; color: var(--dsw-alias-label-tertiary, #667085); }
+      .tether-audit-row { display: grid; grid-template-columns: 54px minmax(0, 1fr) 64px; gap: 6px; padding: 4px 8px; font-size: 10.5px; }
+      @media (max-width: 760px) {
+        .tether-drawer { width: 100%; }
+        .tether-drawer-body { padding: 12px; }
+        .tether-audit-head, .tether-audit-row { grid-template-columns: 46px minmax(0, 1fr) 54px; gap: 4px; }
+      }
+      @media (max-width: 520px) {
+        .tether-audit-head, .tether-audit-row { grid-template-columns: 40px minmax(0, 1fr) 48px; gap: 3px; font-size: 9.5px; }
+      }
       @media (prefers-reduced-motion: reduce) { .tether-ink { animation: none; } .tether-press { transition: none; } }
     `
 
@@ -895,7 +907,14 @@ function createTetherPanel({ React, Native, host }) {
             const points = linkPoints(from, to, center && center.id, node.id)
             if (!points) return null
             const linked = !!(centerItem && centerItem.online && item && item.online)
-            return h('line', { key: 'line:' + node.id, ...points, stroke: C.mute, strokeWidth: 0.3, strokeDasharray: linked ? undefined : '1.5 1.5', opacity: linked ? 0.6 : 0.3 })
+            return h('line', {
+              key: 'line:' + node.id, ...points,
+              stroke: C.mute,
+              strokeWidth: 1,
+              vectorEffect: 'non-scaling-stroke',
+              strokeDasharray: linked ? undefined : '3 4',
+              opacity: linked ? 0.55 : 0.28
+            })
           })
         ),
         nodes.map((node) => {
@@ -2127,25 +2146,23 @@ function createTetherPanel({ React, Native, host }) {
           onPointerDown: (event) => { if (event.target === event.currentTarget) setShowSettings(false) },
           style: { position: 'absolute', inset: 0, background: 'rgba(16,24,40,0.35)', display: 'flex', justifyContent: 'flex-end', zIndex: 20 }
         },
-          h('div', { style: { width: 480, height: '100%', background: C.bg, borderLeft: 0, display: 'flex', flexDirection: 'column', boxShadow: C.shadow } },
+          h('div', { className: 'tether-drawer', style: { height: '100%', background: C.bg, borderLeft: 0, display: 'flex', flexDirection: 'column', boxShadow: C.shadow } },
             h('div', { style: { padding: '12px 16px', borderBottom: 0, background: C.panel, display: 'flex', alignItems: 'center' } },
               h('strong', null, '文件权限'), device ? h('span', { style: { marginLeft: 8, fontSize: 12, color: C.mute } }, device.name) : null,
               h('button', { onClick: () => setShowSettings(false), style: { marginLeft: 'auto', border: 0, background: 'transparent', fontSize: 18, cursor: 'pointer', color: C.mute } }, '×')
             ),
-            h('div', { style: { padding: 16, overflow: 'auto', flex: '1 1 auto' } },
+            h('div', { className: 'tether-drawer-body', style: { overflow: 'auto', flex: '1 1 auto' } },
               h('div', { style: { display: 'grid', gap: 6, marginBottom: 4 } },
-                [['readonly', '默认：全盘只读 + 项目可写', '全盘可读；只写项目根和下列目录。'],
-                 ['locked', '锁定：全部只读', '拒绝所有写入、删除。'],
-                 ['full', '全盘读写', '主机权限；系统/凭据仍拒绝。']].map(([value, title, desc]) =>
-                  h('label', { key: value, style: { border: 0, borderRadius: 8, padding: '8px 10px', cursor: 'pointer', background: mode === value ? C.soft : C.panel } },
-                    h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } }, h('input', { type: 'radio', checked: mode === value, onChange: () => setMode(value) }), h('strong', { style: { fontSize: 13 } }, title)),
-                    h('div', { style: { fontSize: 11.5, color: C.mute, marginTop: 3, lineHeight: '18px' } }, desc)
+                [['readonly', '默认（只读 + 项目可写）', '全盘可读；只写项目根与下列目录'],
+                 ['locked', '锁定（全部只读）', '拒绝所有写入与删除'],
+                 ['full', '全盘读写', '系统与凭据目录仍拒绝']].map(([value, title, desc]) =>
+                  h('label', { key: value, title: desc, style: { border: 0, borderRadius: 8, padding: '8px 10px', cursor: 'pointer', background: mode === value ? C.soft : C.panel } },
+                    h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } }, h('input', { type: 'radio', checked: mode === value, onChange: () => setMode(value) }), h('strong', { style: { fontSize: 13 } }, title))
                   ))
               ),
-              h('div', { style: { display: 'flex', alignItems: 'center', height: 28, marginTop: 16, fontSize: 13, lineHeight: '20px', fontWeight: 'var(--tether-body, 400)', color: C.mute } },
+              h('div', { title: 'DSH 工作区与节点工作目录始终可写', style: { display: 'flex', alignItems: 'center', height: 28, marginTop: 14, fontSize: 13, lineHeight: '20px', fontWeight: 'var(--tether-body, 400)', color: C.mute } },
                 h('span', null, '可写根目录'),
                 h('button', { title: '添加可写根目录', 'aria-label': '添加可写根目录', onClick: addRoot, className: 'tether-hover', style: { marginLeft: 'auto', width: 26, height: 26, display: 'grid', placeItems: 'center', border: 0, borderRadius: 6, background: 'transparent', color: C.mute, cursor: 'pointer' } }, h(Glyph, { name: 'plus', size: 15 }))),
-              h('div', { style: { fontSize: 11.5, color: C.mute, lineHeight: '18px', margin: '0 0 6px' } }, '额外可写；DSH 工作区与节点工作目录始终可写。'),
               h('div', { style: { borderRadius: 6, overflow: 'hidden', background: C.panel } },
                 rootList().length ? rootList().map((root, index) => h('div', {
                   key: index + ':' + root, title: root,
@@ -2158,12 +2175,11 @@ function createTetherPanel({ React, Native, host }) {
               ),
               h('div', { style: { display: 'flex', gap: 8, marginTop: 10, alignItems: 'center' } },
                 h('button', { onClick: savePolicy, disabled: busy || !device || !device.online, className: 'tether-press tether-hover', title: policy ? ('更新于 ' + (policy.updated_by || 'default')) : '', style: { height: 28, padding: '0 10px', borderRadius: 6, border: 0, background: C.primary, color: C.onPrimary, fontSize: 12, cursor: busy || !device || !device.online ? 'not-allowed' : 'pointer', opacity: busy || !device || !device.online ? 0.5 : 1, display: 'flex', alignItems: 'center', gap: 6 } }, h(Glyph, { name: 'save', size: 14 }), '保存权限')),
-              h('div', { style: { fontSize: 13, lineHeight: '20px', fontWeight: 'var(--tether-body, 400)', color: C.mute, margin: '18px 0 4px' } }, '审计 · ' + (auditCount || 0) + ' 条 / 上限 ' + (auditRetained || 100000)),
-              h('div', { style: { fontSize: 11.5, color: C.mute, lineHeight: '18px', marginBottom: 6 } }, 'Tether 文件服务操作；不含 DSH Agent 命令。写入含 intent/result。'),
+              h('div', { title: 'Tether 文件服务操作，不含 DSH Agent 命令；写入含 intent/result', style: { fontSize: 12.5, lineHeight: '20px', fontWeight: 'var(--tether-body, 400)', color: C.mute, margin: '16px 0 6px' } }, '审计 · ' + (auditCount || 0) + ' / ' + (auditRetained || 100000)),
               h('div', { style: { border: 0, borderRadius: 6, overflow: 'hidden', background: C.panel } },
-                h('div', { style: { display: 'grid', gridTemplateColumns: '58px 1fr 70px', gap: 6, padding: '5px 8px', background: C.soft, fontSize: 10, color: C.mute, borderBottom: 0 } }, h('span', null, '操作'), h('span', null, '路径'), h('span', null, '结果')),
+                h('div', { className: 'tether-audit-head' }, h('span', null, '操作'), h('span', null, '路径'), h('span', null, '结果')),
                 h('div', { style: { maxHeight: 260, overflow: 'auto' } },
-                  audit.map((a, i) => h('div', { key: i, style: { display: 'grid', gridTemplateColumns: '58px 1fr 70px', gap: 6, padding: '4px 8px', fontSize: 10.5, borderBottom: 0, background: i % 2 ? C.bg : 'transparent', color: a.result === 'denied' ? C.red : C.sub } },
+                  audit.map((a, i) => h('div', { key: i, className: 'tether-audit-row', style: { background: i % 2 ? C.bg : 'transparent', color: a.result === 'denied' ? C.red : C.sub } },
                     h('span', null, a.op), h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, title: a.path }, a.path),
                     h('span', null, a.phase === 'intent' ? (a.result === 'denied' ? 'denied' : 'intent') : a.result)
                   )),

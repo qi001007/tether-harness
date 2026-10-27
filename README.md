@@ -48,12 +48,12 @@ Tether-owned.
 | **Markdown preview** | **Office preview** |
 | ![Markdown preview](docs/screenshots/file-markdown-final.png) | ![Office preview](docs/screenshots/file-pptx-final.png) |
 | Markdown is rendered in place; text can switch to edit mode and save. | DOCX/PPTX are converted to PDF by WPS/Office COM on the target, then shown in place. |
-| **Network overview** | **Network at 41% zoom** |
-| ![Network overview](docs/screenshots/network-final.png) | ![Network at 41% zoom](docs/screenshots/network-zoom-final.png) |
-| Node cards plus a local-centered topology; neutral solid line means connected, dashed means the relation exists but an end is offline. | Labels disappear and nodes become small flat circles; colors stay continuous across the zoom threshold. |
+| **Network overview** | **Network at 120% zoom** |
+| ![Network overview](docs/screenshots/network-thin.png) | ![Network at 120% zoom](docs/screenshots/network-thin-120.png) |
+| Node cards plus a local-centered topology; neutral 1px lines, dashed when an end is offline. | Lines keep a constant 1px screen width instead of growing with zoom. |
 | **Permissions and audit** | **Device menu** |
-| ![Permissions and audit](docs/screenshots/file-permissions-final.png) | ![Device menu](docs/screenshots/device-menu-final.png) |
-| Shield-only settings, editable writable roots, and SQLite audit with a 100,000-row cap. | The same custom DSH-token device menu on the top bar, including OS and online state. |
+| ![Permissions and audit](docs/screenshots/permissions-compact.png) | ![Device menu](docs/screenshots/device-menu-final.png) |
+| Compact responsive drawer: no per-option paragraphs, audit table fits narrow windows. | The same custom DSH-token device menu on the top bar, including OS and online state. |
 
 More screenshots are in [docs/screenshots](docs/screenshots); older images are
 kept as evidence and may show earlier UI.

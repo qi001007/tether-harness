@@ -84,11 +84,11 @@ export function createAppServices(React) {
       h('span', { style: { color: C.mute } }, label),
       h('span', { style: { color: color || C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, value))
 
-    const chip = h('button', {
+    const chip = !open ? h('button', {
       onClick: () => setOpen(true), title: 'APP 服务状态与启动/停止',
       className: 'tether-press tether-hover',
       style: {
-        position: 'fixed', top: 8, right: 14, zIndex: 30, height: 26, padding: '0 10px',
+        position: 'fixed', top: 8, right: 14, zIndex: 10, height: 26, padding: '0 10px',
         borderRadius: 999, border: 0, background: C.bg, color: C.sub,
         display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer',
         boxShadow: '0 1px 2px rgba(16,24,40,0.06)'
@@ -96,13 +96,13 @@ export function createAppServices(React) {
     },
       h('span', { style: { width: 7, height: 7, borderRadius: 4, background: dot, flex: '0 0 auto' } }),
       '服务'
-    )
+    ) : null
 
     const drawer = open ? h('div', {
       onPointerDown: (event) => { if (event.target === event.currentTarget) setOpen(false) },
       style: { position: 'fixed', inset: 0, background: 'rgba(16,24,40,0.35)', display: 'flex', justifyContent: 'flex-end', zIndex: 50 }
     },
-      h('div', { style: { width: 400, height: '100%', background: C.bg, display: 'flex', flexDirection: 'column', boxShadow: C.shadow } },
+      h('div', { style: { width: 'min(400px, 100%)', height: '100%', background: C.bg, display: 'flex', flexDirection: 'column', boxShadow: C.shadow } },
         h('div', { style: { padding: '12px 16px', background: C.panel, display: 'flex', alignItems: 'center' } },
           h('span', { style: { fontWeight: 600, fontSize: 14, color: C.ink } }, 'APP 服务'),
           h('span', { style: { marginLeft: 8, fontSize: 11, color: C.mute } },

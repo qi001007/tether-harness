@@ -8,12 +8,15 @@ const profile = path.join(root, '.runtime', 'cdp-webui')
 const out = process.argv[2] || path.join(root, '.runtime', 'webui-desktop.png')
 const panel = process.argv[3] || '文件资源管理器'
 const row = process.argv[4] || ''
+const width = Number(process.env.TETHER_SHOT_WIDTH || 1600)
+const height = Number(process.env.TETHER_SHOT_HEIGHT || 1000)
+const wheel = Number(process.env.TETHER_SHOT_WHEEL || 0)
 const port = 9333
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 const child = spawn(edge, [
   '--headless=new', '--no-sandbox', '--disable-gpu', '--remote-debugging-port=' + port,
-  '--user-data-dir=' + profile, '--window-size=1600,1000', 'about:blank'
+  '--user-data-dir=' + profile, '--window-size=' + width + ',' + height, 'about:blank'
 ], { stdio: 'ignore' })
 
 async function version() {
@@ -48,6 +51,10 @@ try {
   await sleep(1500)
   if (row) {
     await evaluate(`(() => { const b = [...document.querySelectorAll('button')].find((x) => x.title === ${JSON.stringify(row)} || x.getAttribute('aria-label') === ${JSON.stringify(row)}); if (!b) return 'missing'; b.click(); return 'clicked' })()`)
+  }
+  if (wheel) {
+    await send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: Math.round(width * 0.65), y: Math.round(height * 0.5), deltaX: 0, deltaY: wheel, pointerType: 'mouse' })
+    await sleep(900)
   }
   await sleep(2000)
   const shot = await send('Page.captureScreenshot', { format: 'png' })
