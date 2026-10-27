@@ -26,6 +26,16 @@ function loadEnv() {
 }
 
 const env = loadEnv()
+const hubConfigFile = path.join(dataDir, 'hub.json')
+if (fs.existsSync(hubConfigFile)) {
+  try {
+    const cfg = JSON.parse(fs.readFileSync(hubConfigFile, 'utf8'))
+    if (cfg.url) env.TETHER_CONTROLLER_URL = cfg.url
+    if (cfg.accessToken) env.TETHER_ACCESS_TOKEN = cfg.accessToken
+    if (cfg.nodeToken) env.TETHER_NODE_TOKEN = cfg.nodeToken
+    if (cfg.device) env.TETHER_DEVICE = cfg.device
+  } catch (_) { /* invalid local config is ignored */ }
+}
 const controller = env.TETHER_CONTROLLER_URL || ('http://127.0.0.1:' + (env.TETHER_PORT || 18890))
 const shotIndex = process.argv.indexOf('--shot')
 const shotPath = shotIndex >= 0 ? path.join(repoRoot, '.runtime', 'tether-app-shot.png') : ''

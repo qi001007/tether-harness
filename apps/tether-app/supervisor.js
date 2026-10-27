@@ -2,6 +2,7 @@ const { spawn, spawnSync } = require('node:child_process')
 const fs = require('node:fs')
 const http = require('node:http')
 const https = require('node:https')
+const os = require('node:os')
 const path = require('node:path')
 
 function killTree(pid) {
@@ -22,7 +23,10 @@ class Supervisor {
     this.remoteUrl = (env.TETHER_CONTROLLER_URL || '').replace(/\/+$/, '')
     this.accessToken = env.TETHER_ACCESS_TOKEN || ''
     this.insecureTls = ['1', 'true', 'yes'].includes(String(env.TETHER_INSECURE_TLS || '').toLowerCase())
-    this.device = env.TETHER_DEVICE || 'TETHER-APP'
+    this.device = env.TETHER_DEVICE || os.hostname()
+    this.nodeToken = env.TETHER_NODE_TOKEN || ''
+    this.hubWss = env.TETHER_HUB_WSS || (this.remoteUrl ? this.remoteUrl.replace(/^http/, 'ws').replace(/\/+$/, '') + '/ws/node' : '')
+    this.consolePort = Number(env.TETHER_CONSOLE_PORT || 18894)
     this.python = env.TETHER_PYTHON || path.join(repoRoot, '.venv', 'Scripts', 'python.exe')
     if (!fs.existsSync(this.python)) this.python = process.platform === 'win32' ? 'python' : 'python3'
     this.mode = null
@@ -109,6 +113,20 @@ class Supervisor {
       }
       this.node = { state: 'external', pid: 0, deviceOnline: !!(probe && (probe.devices || []).some((item) => item.online)) }
       this.lastError = probe ? '' : '远端 Hub 不可达：' + this.remoteUrl
+      if (this.nodeToken && this.hubWss) {
+        this.baseEnv.TETHER_NODE_TOKEN = this.nodeToken
+        const node = this.spawnProcess('node', [
+          '-m', 'tether.node.agent',
+          '--workspace', path.join(this.repoRoot, 'work-local'),
+          '--agent', this.baseEnv.TETHER_AGENT || 'dsh',
+          '--device', this.device,
+          '--controller', this.hubWss,
+          '--console-port', String(this.consolePort),
+          '--db', path.join(this.dataDir, 'node-hub.db')
+        ])
+        this.procs.node = node
+        this.node = { state: 'running', pid: node.pid, deviceOnline: !!(probe && (probe.devices || []).some((item) => item.online)) }
+      }
       this.startPolling()
       return this.snapshot()
     }
