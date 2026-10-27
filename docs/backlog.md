@@ -1,5 +1,11 @@
 # docs 变更记录
 
+## 2026-10-28 本机 v0.2.1 基线安装
+
+- DESKTOP-LOCAL 从三份独立 ZIP 安装 APP/插件/Node `0.2.1`；APP 更新中心显示 APP/Node 已是最新。
+- 旧 Hub 配置、节点数据库、工作区与 DSH 会话保留；APP supervisor 启动唯一 DESKTOP-LOCAL 节点。
+- 发现并记录真实缺陷：APP 首次 bootstrap 空 venv、插件 surface descriptor 未发布、插件本机更新检查 405；作为下一版本修复，不勾选 F28/F30。
+
 ## 2026-10-28 v0.2.1 发布收尾
 
 - 更新 README、PRD、PROGRESS、FEEDBACK、TECHNICAL 与 CORE_RECOVERY_PLAN，区分已发布 ZIP 与尚未完成的安装、升级、远端更新、回滚和签名验收。
