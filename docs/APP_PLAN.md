@@ -1,17 +1,25 @@
 # Tether APP 集成计划（APP / 插件 / WebUI 同一套 UI）
 
-状态：**Phase 1 已实现；Phase 2 已起 Electron 壳（服务监督未做）**；Relay/Account 仍是设计。
+状态：**Phase 1 已实现；Phase 2 已实现 Electron 壳 + 服务监督**；Relay/Account 仍是设计。
 
 ## Phase 2 当前切片（2026-10-27）
 
 - `apps/tether-app`：Electron 单实例窗口，内嵌 `packages/tether-ui/web/server.mjs`
   （随机 loopback 端口，`/api` 同源反代到 Controller），加载与 WebUI/插件同一份构建。
-- 主进程按 4s 探测 `/api/state`，状态经 IPC 暴露；数据目录 `apps/tether-app/data`
-  （gitignored），日志 `data/app.log`；截图模式 `--shot --panel=... --row=...`。
-- 验收：Electron 窗口内原生工作区、文件树/明细/预览入口、互联、权限均来自真实 Controller；
-  APP 实机截图 `docs/screenshots/tether-app-files.png`（同一套 UI 与类型图标）。
-- 未做：ServiceSupervisor（Controller/Node 子进程启停、端口冲突、退出清理）、托盘、
-  APP 服务页、打包/快捷方式。当前双击 APP 仍要求 Controller 已由外部启动，不能宣称完整自举。
+- `supervisor.js`：先探测 `127.0.0.1:TETHER_PORT/api/state`；健康则以 **external** 模式
+  只连接、不抢占；否则用仓库 `.venv` Python 启动 Controller，等待健康后启动本地 Node，
+  日志写 `apps/tether-app/data/logs`，退出只杀自己启动的进程树并释放端口。
+- APP 专属 UI 在 `packages/tether-ui/src/app-services.js`（由 Electron 入口叠加渲染，
+  不进插件 bundle）：右上 `服务` 状态点 + 抽屉，显示 Controller/Node/节点在线、启动/重启/
+  停止、打开日志/数据目录。
+- 验收：外部模式（已有 18890）显示“已连接外部 Controller”；独立模式用
+  `TETHER_PORT=18895 + 临时 DB` 实测 Controller `:18895`、Node `APP-SELFTEST` 均运行、
+  节点在线=是；退出后 18895/18898 无 LISTENING。截图
+  `docs/screenshots/tether-app-standalone.png`。
+- 未做：托盘、完整服务页（端口冲突处理/诊断复制）、打包安装器、开机自启。
+- 跨机仍未打通：APP 只保证**本机**有后端。两台机器要在不同网络互连，仍需要可达路径
+  （局域网/端口转发/Tailscale），或 Phase 3 的 Relay。当前 Controller 无鉴权，不能直接
+  暴露公网；开公网前必须先做每设备密钥与吊销。
 
 ## Phase 1 当前切片（2026-10-27）
 

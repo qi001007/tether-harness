@@ -71,11 +71,15 @@ kept as evidence and may show earlier UI.
 
 **Planned, not in this release**
 
-- APP service supervisor (start/stop Controller/Node), tray, service page and packaging.
+- APP tray, full service page and packaging.
 - Tether Relay/Account to replace the Tailscale dependency.
 
-The Electron shell exists in `apps/tether-app` and reuses the same WebUI bundle; it
-currently expects the Controller to be running (supervisor is the next Phase 2 step).
+The Electron shell exists in `apps/tether-app` and reuses the same WebUI bundle. It now
+supervises the local control plane: if `127.0.0.1:18890` already answers it attaches as
+an external controller, otherwise it starts Controller + the local Node with the repo
+`.venv`, waits for health, and kills the process tree on quit. The top-right `服务`
+chip opens status/start/stop/restart and the log directory. Cross-machine control still
+needs a reachable network path (LAN/port forwarding/Tailscale) until the Relay exists.
 The plan is in [docs/APP_PLAN.md](docs/APP_PLAN.md). `desktop/tether-app.ps1` today is
 only a launcher for the Controller/Node monitor window; it is not the standalone APP.
 
@@ -108,8 +112,19 @@ npm start
 ```
 
 The APP window loads the same `tether-ui` bundle through an embedded loopback server.
-It currently expects the Controller to be running; start/stop supervision is the next
-Phase 2 step.
+Its supervisor gives a target machine a local backend without any manual terminal:
+
+- `127.0.0.1:18890` healthy → APP attaches as **external**, never starts a second copy;
+- otherwise APP starts Controller + the local Node with `.venv\Scripts\python.exe`,
+  waits up to 60 s for `/api/state`, and writes logs to `apps/tether-app/data/logs`;
+- the top-right `服务` chip shows Controller/Node state and offers start/stop/restart
+  plus the log and data directories;
+- quitting the APP kills only the children it started, so the port is released.
+
+This is what makes a freshly deployed machine work with the DSH plugin alone: the plugin
+still points at `127.0.0.1:18890`, but that address now has a real Controller and Node
+behind it. It does **not** create a network between two machines; for that the control
+plane still needs a reachable path (see below).
 
 ## What is verified
 

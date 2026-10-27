@@ -2,21 +2,42 @@ const { app, BrowserWindow, ipcMain, shell } = require('electron')
 const fs = require('node:fs')
 const path = require('node:path')
 const { pathToFileURL } = require('node:url')
+const { Supervisor } = require('./supervisor.js')
 
 const repoRoot = path.resolve(__dirname, '..', '..')
 const webRoot = path.join(repoRoot, 'packages', 'tether-ui', 'web')
 const dataDir = path.join(__dirname, 'data')
 const logFile = path.join(dataDir, 'app.log')
-const controller = process.env.TETHER_CONTROLLER || 'http://127.0.0.1:18890'
+
+function loadEnv() {
+  const env = { ...process.env }
+  const file = path.join(repoRoot, '.env')
+  if (!fs.existsSync(file)) return env
+  for (const raw of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
+    const line = raw.trim()
+    if (!line || line.startsWith('#') || !line.includes('=')) continue
+    const index = line.indexOf('=')
+    const key = line.slice(0, index).trim()
+    let value = line.slice(index + 1).trim()
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) value = value.slice(1, -1)
+    if (!(key in process.env)) env[key] = value
+  }
+  return env
+}
+
+const env = loadEnv()
+const controller = env.TETHER_CONTROLLER_URL || ('http://127.0.0.1:' + (env.TETHER_PORT || 18890))
 const shotIndex = process.argv.indexOf('--shot')
 const shotPath = shotIndex >= 0 ? path.join(repoRoot, '.runtime', 'tether-app-shot.png') : ''
 const panelArg = process.argv.find((value) => value.startsWith('--panel='))
 const panel = panelArg ? panelArg.slice('--panel='.length) : ''
 const rowArg = process.argv.find((value) => value.startsWith('--row='))
 const row = rowArg ? rowArg.slice('--row='.length) : ''
+const shotDelay = Number(process.env.TETHER_APP_SHOT_DELAY || 2500)
 
 fs.mkdirSync(dataDir, { recursive: true })
 app.setPath('userData', path.join(dataDir, 'electron'))
+const supervisor = new Supervisor({ repoRoot, dataDir, env })
 
 function log(line) {
   fs.appendFileSync(logFile, new Date().toISOString() + ' ' + line + '\n')
@@ -24,32 +45,13 @@ function log(line) {
 
 let mainWindow = null
 let webServer = null
-let healthTimer = null
-const status = { controller: 'unknown', url: '', pid: process.pid }
-
-async function probe() {
-  let next = 'offline'
-  let detail = ''
-  try {
-    const res = await fetch(controller + '/api/state', { signal: AbortSignal.timeout(2500) })
-    next = res.ok ? 'online' : 'error'
-    detail = res.ok ? '' : 'HTTP ' + res.status
-  } catch (error) {
-    detail = error.message
-  }
-  if (next !== status.controller) {
-    status.controller = next
-    log('controller ' + next + (detail ? ' (' + detail + ')' : ''))
-    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('tether:status', { ...status })
-  }
-}
 
 async function createWindow() {
   const { createWebServer } = await import(pathToFileURL(path.join(webRoot, 'server.mjs')).href)
   webServer = createWebServer({ root: webRoot, controller, port: 0 })
   const url = await webServer.listen()
-  status.url = url
   log('app start ' + app.getVersion() + ' ui ' + url + ' controller ' + controller)
+  supervisor.start().then((state) => log('services ' + state.mode + ' controller=' + state.controller.state + ' node=' + state.node.state)).catch((error) => log('services failed ' + (error.stack || error)))
 
   mainWindow = new BrowserWindow({
     width: 1480,
@@ -69,11 +71,8 @@ async function createWindow() {
   mainWindow.on('closed', () => { mainWindow = null })
   await mainWindow.loadURL(url)
 
-  healthTimer = setInterval(probe, 4000)
-  probe()
-
   if (shotPath) {
-    await new Promise((resolve) => setTimeout(resolve, 2500))
+    await new Promise((resolve) => setTimeout(resolve, shotDelay))
     if (panel) {
       await mainWindow.webContents.executeJavaScript(`(() => { const b = [...document.querySelectorAll('button')].find((x) => x.getAttribute('aria-label') === ${JSON.stringify(panel)} || x.title === ${JSON.stringify(panel)}); if (b) b.click(); return !!b })()`)
       await new Promise((resolve) => setTimeout(resolve, 1500))
@@ -95,8 +94,13 @@ ipcMain.handle('tether:app-info', () => ({
   controller,
   dataDir,
   logFile,
-  status: { ...status }
+  services: supervisor.snapshot()
 }))
+ipcMain.handle('tether:services', () => supervisor.snapshot())
+ipcMain.handle('tether:start-services', () => supervisor.start())
+ipcMain.handle('tether:stop-services', () => supervisor.stop())
+ipcMain.handle('tether:restart-services', () => supervisor.restart())
+ipcMain.handle('tether:open-logs', () => shell.openPath(supervisor.logsDir))
 ipcMain.handle('tether:open-data', () => shell.openPath(dataDir))
 ipcMain.handle('tether:open-external', (_event, url) => {
   if (typeof url === 'string' && /^https?:\/\//.test(url)) return shell.openExternal(url)
@@ -118,6 +122,6 @@ if (!locked) {
 
 app.on('window-all-closed', () => app.quit())
 app.on('before-quit', () => {
-  if (healthTimer) clearInterval(healthTimer)
+  supervisor.stopSync()
   if (webServer) webServer.close()
 })
