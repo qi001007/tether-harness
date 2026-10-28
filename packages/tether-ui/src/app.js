@@ -1415,6 +1415,7 @@ export function createTetherPanel({ React, Native, host }) {
       const appLocalDeviceRef = React.useRef('')
       const [showUpdate, setShowUpdate] = React.useState(false)
       const [pendingApp, setPendingApp] = React.useState('')
+      const [updatePage, setUpdatePage] = React.useState(1)
       const [updateInfo, setUpdateInfo] = React.useState({ app: null, localPlugin: null, devices: {} })
       const [updateBusy, setUpdateBusy] = React.useState('')
       const [updateErrors, setUpdateErrors] = React.useState({ app: '', localPlugin: '', devices: {} })
@@ -1683,16 +1684,12 @@ export function createTetherPanel({ React, Native, host }) {
         return h('div', { key: product, style: { padding: 12, borderRadius: 8, background: C.panel, marginBottom: 10 } },
           h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 } },
             h('strong', { style: { fontSize: 13 } }, title),
-            h('span', { style: { marginLeft: 'auto' } }, busy ? pill('更新中…', C.amber)
+            h('span', { style: { marginLeft: 'auto' } }, busy ? h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center', color: C.amber } }, h(Glyph, { name: 'refresh', size: 14 }))
               : hasUpdate ? pill('有更新', C.amber)
                 : known ? pill('已是最新', C.green) : pill('检查中…', C.mute))),
           h('div', { style: { color: C.sub, fontSize: 12, lineHeight: '19px' } }, '当前 ' + currentText + (latest.length ? ' · 最新 ' + latest[0] : '')),
           h('div', { style: { marginTop: 8 } },
-            btn(busy ? '更新中…' : '一键更新', () => runProductUpdate(product), { primary: true, disabled: busy || !hasUpdate })))
-      }
-      const deviceForm = (item) => {
-        const profile = String((item.capabilities && (item.capabilities.dsh_surface ? 'DSH' : '')) || '')
-        return profile || 'Node'
+            btn(busy ? h('span', { className: 'tether-spin', style: { width: 16, height: 16, display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 16 })) : '一键更新', () => runProductUpdate(product), { primary: true, disabled: busy || !hasUpdate })))
       }
       const deviceCard = (item) => {
         const scope = { deviceId: item.device_id, epoch: 0 }
@@ -1708,13 +1705,15 @@ export function createTetherPanel({ React, Native, host }) {
             h('strong', { style: { fontSize: 13 } }, item.name || item.device_id),
             h('span', { style: { color: C.mute, fontSize: 11 } }, item.name && item.name !== item.device_id ? item.device_id : ''),
             h('span', { style: { marginLeft: 'auto' } }, !item.online ? pill('离线', C.mute)
-              : busy ? pill('更新中…', C.amber)
+              : busy ? h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center', color: C.amber } }, h(Glyph, { name: 'refresh', size: 14 }))
                 : hasUpdate ? pill('有更新', C.amber)
                   : known ? pill('已是最新', C.green) : pill('检查中…', C.mute))),
           h('div', { style: { color: C.sub, fontSize: 12, lineHeight: '19px' } },
-            deviceForm(item) + (hasPlugin ? ' · 插件 ' + (plugin.current_version || '未知') : '') + ' · Node ' + (node.current_version || '未知')),
+            ((item.capabilities && item.capabilities.app_version) ? 'APP ' + item.capabilities.app_version + ' · ' : '')
+            + (hasPlugin ? '插件 ' + (plugin.current_version || '未知') + ' · ' : '')
+            + 'Node ' + (node.current_version || '未知')),
           h('div', { style: { marginTop: 8 } },
-            btn(busy ? '更新中…' : item.online ? '一键更新' : '离线，开机后可更新', () => runDeviceUpdate(item), { primary: true, disabled: busy || !item.online || !hasUpdate })))
+            btn(busy ? h('span', { className: 'tether-spin', style: { width: 16, height: 16, display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 16 })) : item.online ? '一键更新' : '离线', () => runDeviceUpdate(item), { primary: true, disabled: busy || !item.online || !hasUpdate })))
       }
       const runProductUpdate = async (product) => {
         const localId = appLocalDevice || deviceId
@@ -3066,18 +3065,29 @@ export function createTetherPanel({ React, Native, host }) {
           h('div', { style: { width: 520, maxWidth: '100%', maxHeight: '100%', overflow: 'auto', background: C.bg, borderRadius: 10, boxShadow: C.shadow, padding: 18, boxSizing: 'border-box' } },
             h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 } },
               h('strong', { style: { fontSize: 14 } }, '更新中心'),
-              h('button', { onClick: refreshUpdateCenter, title: '刷新', 'aria-label': '刷新', style: { marginLeft: 'auto', border: 0, background: 'transparent', fontSize: 14, cursor: 'pointer', color: C.sub } }, '刷新'),
+              h('button', { onClick: refreshUpdateCenter, title: '刷新', 'aria-label': '刷新', className: 'tether-hover', style: { marginLeft: 'auto', width: 26, height: 26, display: 'grid', placeItems: 'center', border: 0, borderRadius: 6, background: 'transparent', color: C.sub, cursor: 'pointer' } }, h(Glyph, { name: 'refresh', size: 16 })),
               h('button', { onClick: () => setShowUpdate(false), style: { border: 0, background: 'transparent', fontSize: 18, cursor: 'pointer', color: C.mute } }, '×')),
             host && host.kind === 'app' ? productCard('desktop') : null,
             host && host.kind === 'dsh' ? productCard('dsh') : null,
-            ((state && state.devices) || []).filter((item) => host && host.kind === 'web' || item.device_id !== (appLocalDevice || deviceId)).length
-              ? h('div', { style: { color: C.mute, fontSize: 11, margin: '4px 0 8px' } }, '其他设备')
-              : null,
-            ((state && state.devices) || [])
-              .filter((item) => host && host.kind === 'web' || item.device_id !== (appLocalDevice || deviceId))
-              .sort((a, b) => (b.online ? 1 : 0) - (a.online ? 1 : 0))
-              .map(deviceCard),
-            h('div', { style: { color: C.mute, fontSize: 11.5, lineHeight: '18px', marginTop: 2 } }, '其他设备需在线才能更新；远端 APP 只能在其本机自更新。')
+            (() => {
+              const others = ((state && state.devices) || [])
+                .filter((item) => (host && host.kind === 'web') || item.device_id !== (appLocalDevice || deviceId))
+                .sort((a, b) => (b.online ? 1 : 0) - (a.online ? 1 : 0))
+              const pageSize = 6
+              const total = Math.max(1, Math.ceil(others.length / pageSize))
+              const page = Math.min(updatePage, total)
+              const pager = (delta, label, disabled) => h('button', {
+                onClick: () => setUpdatePage(Math.max(1, Math.min(total, page + delta))), disabled,
+                'aria-label': label, title: label, className: 'tether-hover',
+                style: { width: 24, height: 24, display: 'grid', placeItems: 'center', border: 0, borderRadius: 5, background: 'transparent', color: disabled ? C.mute : C.sub, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.4 : 1 }
+              }, h(Glyph, { name: delta < 0 ? 'chevronLeft' : 'chevronRight', size: 14 }))
+              return [
+                others.length ? h('div', { key: 'label', style: { color: C.mute, fontSize: 11, margin: '4px 0 8px' } }, '其他设备') : null,
+                ...others.slice((page - 1) * pageSize, page * pageSize).map(deviceCard),
+                total > 1 ? h('div', { key: 'pager', style: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 4 } },
+                  pager(-1, '上一页', page <= 1), h('span', { className: 'tether-num', style: { fontSize: 11, color: C.mute } }, page + '/' + total), pager(1, '下一页', page >= total)) : null
+              ]
+            })()
           )
         ) : null,
         pendingApp ? h('div', {

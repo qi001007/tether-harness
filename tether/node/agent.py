@@ -671,6 +671,15 @@ class Node:
         finally:
             self.dsh_runs.pop(run_id, None)
 
+    def _managed_app_version(self) -> str:
+        if os.environ.get("TETHER_NODE_MANAGED") != "1":
+            return ""
+        try:
+            data = json.loads((ROOT / "version.json").read_text(encoding="utf-8"))
+            return str((data.get("components") or {}).get("app") or "")
+        except (OSError, ValueError):
+            return ""
+
     def capabilities(self) -> dict[str, Any]:
         return {"os": platform.system(), "release": platform.release(), "os_label": os_label(),
                 "python": platform.python_version(),
@@ -681,6 +690,7 @@ class Node:
                 "dsh_native": self.dsh_sessions.available(),
                 "native_dsh_home": str(self.dsh_sessions.home),
                 "surface_protocol": 1,
+                "app_version": self._managed_app_version(),
                 "dsh_surface": self.native_surface.available()}
 
 

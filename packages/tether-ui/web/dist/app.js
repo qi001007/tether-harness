@@ -8983,6 +8983,7 @@ function createTetherPanel({ React: React2, Native, host }) {
     const appLocalDeviceRef = React2.useRef("");
     const [showUpdate, setShowUpdate] = React2.useState(false);
     const [pendingApp, setPendingApp] = React2.useState("");
+    const [updatePage, setUpdatePage] = React2.useState(1);
     const [updateInfo, setUpdateInfo] = React2.useState({ app: null, localPlugin: null, devices: {} });
     const [updateBusy, setUpdateBusy] = React2.useState("");
     const [updateErrors, setUpdateErrors] = React2.useState({ app: "", localPlugin: "", devices: {} });
@@ -9257,19 +9258,15 @@ function createTetherPanel({ React: React2, Native, host }) {
           "div",
           { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 4 } },
           h("strong", { style: { fontSize: 13 } }, title),
-          h("span", { style: { marginLeft: "auto" } }, busy2 ? pill("\u66F4\u65B0\u4E2D\u2026", C.amber) : hasUpdate ? pill("\u6709\u66F4\u65B0", C.amber) : known ? pill("\u5DF2\u662F\u6700\u65B0", C.green) : pill("\u68C0\u67E5\u4E2D\u2026", C.mute))
+          h("span", { style: { marginLeft: "auto" } }, busy2 ? h("span", { className: "tether-spin", style: { display: "grid", placeItems: "center", color: C.amber } }, h(Glyph, { name: "refresh", size: 14 })) : hasUpdate ? pill("\u6709\u66F4\u65B0", C.amber) : known ? pill("\u5DF2\u662F\u6700\u65B0", C.green) : pill("\u68C0\u67E5\u4E2D\u2026", C.mute))
         ),
         h("div", { style: { color: C.sub, fontSize: 12, lineHeight: "19px" } }, "\u5F53\u524D " + currentText + (latest.length ? " \xB7 \u6700\u65B0 " + latest[0] : "")),
         h(
           "div",
           { style: { marginTop: 8 } },
-          btn(busy2 ? "\u66F4\u65B0\u4E2D\u2026" : "\u4E00\u952E\u66F4\u65B0", () => runProductUpdate(product), { primary: true, disabled: busy2 || !hasUpdate })
+          btn(busy2 ? h("span", { className: "tether-spin", style: { width: 16, height: 16, display: "grid", placeItems: "center" } }, h(Glyph, { name: "refresh", size: 16 })) : "\u4E00\u952E\u66F4\u65B0", () => runProductUpdate(product), { primary: true, disabled: busy2 || !hasUpdate })
         )
       );
-    };
-    const deviceForm = (item) => {
-      const profile = String(item.capabilities && (item.capabilities.dsh_surface ? "DSH" : "") || "");
-      return profile || "Node";
     };
     const deviceCard = (item) => {
       const scope = { deviceId: item.device_id, epoch: 0 };
@@ -9288,17 +9285,17 @@ function createTetherPanel({ React: React2, Native, host }) {
           { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 4 } },
           h("strong", { style: { fontSize: 13 } }, item.name || item.device_id),
           h("span", { style: { color: C.mute, fontSize: 11 } }, item.name && item.name !== item.device_id ? item.device_id : ""),
-          h("span", { style: { marginLeft: "auto" } }, !item.online ? pill("\u79BB\u7EBF", C.mute) : busy2 ? pill("\u66F4\u65B0\u4E2D\u2026", C.amber) : hasUpdate ? pill("\u6709\u66F4\u65B0", C.amber) : known ? pill("\u5DF2\u662F\u6700\u65B0", C.green) : pill("\u68C0\u67E5\u4E2D\u2026", C.mute))
+          h("span", { style: { marginLeft: "auto" } }, !item.online ? pill("\u79BB\u7EBF", C.mute) : busy2 ? h("span", { className: "tether-spin", style: { display: "grid", placeItems: "center", color: C.amber } }, h(Glyph, { name: "refresh", size: 14 })) : hasUpdate ? pill("\u6709\u66F4\u65B0", C.amber) : known ? pill("\u5DF2\u662F\u6700\u65B0", C.green) : pill("\u68C0\u67E5\u4E2D\u2026", C.mute))
         ),
         h(
           "div",
           { style: { color: C.sub, fontSize: 12, lineHeight: "19px" } },
-          deviceForm(item) + (hasPlugin ? " \xB7 \u63D2\u4EF6 " + (plugin.current_version || "\u672A\u77E5") : "") + " \xB7 Node " + (node.current_version || "\u672A\u77E5")
+          (item.capabilities && item.capabilities.app_version ? "APP " + item.capabilities.app_version + " \xB7 " : "") + (hasPlugin ? "\u63D2\u4EF6 " + (plugin.current_version || "\u672A\u77E5") + " \xB7 " : "") + "Node " + (node.current_version || "\u672A\u77E5")
         ),
         h(
           "div",
           { style: { marginTop: 8 } },
-          btn(busy2 ? "\u66F4\u65B0\u4E2D\u2026" : item.online ? "\u4E00\u952E\u66F4\u65B0" : "\u79BB\u7EBF\uFF0C\u5F00\u673A\u540E\u53EF\u66F4\u65B0", () => runDeviceUpdate(item), { primary: true, disabled: busy2 || !item.online || !hasUpdate })
+          btn(busy2 ? h("span", { className: "tether-spin", style: { width: 16, height: 16, display: "grid", placeItems: "center" } }, h(Glyph, { name: "refresh", size: 16 })) : item.online ? "\u4E00\u952E\u66F4\u65B0" : "\u79BB\u7EBF", () => runDeviceUpdate(item), { primary: true, disabled: busy2 || !item.online || !hasUpdate })
         )
       );
     };
@@ -11100,14 +11097,36 @@ function createTetherPanel({ React: React2, Native, host }) {
             "div",
             { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 12 } },
             h("strong", { style: { fontSize: 14 } }, "\u66F4\u65B0\u4E2D\u5FC3"),
-            h("button", { onClick: refreshUpdateCenter, title: "\u5237\u65B0", "aria-label": "\u5237\u65B0", style: { marginLeft: "auto", border: 0, background: "transparent", fontSize: 14, cursor: "pointer", color: C.sub } }, "\u5237\u65B0"),
+            h("button", { onClick: refreshUpdateCenter, title: "\u5237\u65B0", "aria-label": "\u5237\u65B0", className: "tether-hover", style: { marginLeft: "auto", width: 26, height: 26, display: "grid", placeItems: "center", border: 0, borderRadius: 6, background: "transparent", color: C.sub, cursor: "pointer" } }, h(Glyph, { name: "refresh", size: 16 })),
             h("button", { onClick: () => setShowUpdate(false), style: { border: 0, background: "transparent", fontSize: 18, cursor: "pointer", color: C.mute } }, "\xD7")
           ),
           host && host.kind === "app" ? productCard("desktop") : null,
           host && host.kind === "dsh" ? productCard("dsh") : null,
-          (state && state.devices || []).filter((item) => host && host.kind === "web" || item.device_id !== (appLocalDevice || deviceId)).length ? h("div", { style: { color: C.mute, fontSize: 11, margin: "4px 0 8px" } }, "\u5176\u4ED6\u8BBE\u5907") : null,
-          (state && state.devices || []).filter((item) => host && host.kind === "web" || item.device_id !== (appLocalDevice || deviceId)).sort((a, b) => (b.online ? 1 : 0) - (a.online ? 1 : 0)).map(deviceCard),
-          h("div", { style: { color: C.mute, fontSize: 11.5, lineHeight: "18px", marginTop: 2 } }, "\u5176\u4ED6\u8BBE\u5907\u9700\u5728\u7EBF\u624D\u80FD\u66F4\u65B0\uFF1B\u8FDC\u7AEF APP \u53EA\u80FD\u5728\u5176\u672C\u673A\u81EA\u66F4\u65B0\u3002")
+          (() => {
+            const others = (state && state.devices || []).filter((item) => host && host.kind === "web" || item.device_id !== (appLocalDevice || deviceId)).sort((a, b) => (b.online ? 1 : 0) - (a.online ? 1 : 0));
+            const pageSize = 6;
+            const total = Math.max(1, Math.ceil(others.length / pageSize));
+            const page = Math.min(updatePage, total);
+            const pager = (delta, label, disabled) => h("button", {
+              onClick: () => setUpdatePage(Math.max(1, Math.min(total, page + delta))),
+              disabled,
+              "aria-label": label,
+              title: label,
+              className: "tether-hover",
+              style: { width: 24, height: 24, display: "grid", placeItems: "center", border: 0, borderRadius: 5, background: "transparent", color: disabled ? C.mute : C.sub, cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.4 : 1 }
+            }, h(Glyph, { name: delta < 0 ? "chevronLeft" : "chevronRight", size: 14 }));
+            return [
+              others.length ? h("div", { key: "label", style: { color: C.mute, fontSize: 11, margin: "4px 0 8px" } }, "\u5176\u4ED6\u8BBE\u5907") : null,
+              ...others.slice((page - 1) * pageSize, page * pageSize).map(deviceCard),
+              total > 1 ? h(
+                "div",
+                { key: "pager", style: { display: "flex", alignItems: "center", justifyContent: "center", gap: 10, marginTop: 4 } },
+                pager(-1, "\u4E0A\u4E00\u9875", page <= 1),
+                h("span", { className: "tether-num", style: { fontSize: 11, color: C.mute } }, page + "/" + total),
+                pager(1, "\u4E0B\u4E00\u9875", page >= total)
+              ) : null
+            ];
+          })()
         )
       ) : null,
       pendingApp ? h(
