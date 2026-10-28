@@ -1441,6 +1441,7 @@ export function createTetherPanel({ React, Native, host }) {
       const [path, setPath] = React.useState('')
       const [pathDraft, setPathDraft] = React.useState('')
       const [pathEditing, setPathEditing] = React.useState(false)
+      const [clipboard, setClipboard] = React.useState(null)
       pathRef.current = path
       const [hoverTip, setHoverTip] = React.useState(null)
       const [selected, setSelected] = React.useState(null)
@@ -1750,7 +1751,11 @@ export function createTetherPanel({ React, Native, host }) {
         if (host && host.kind === 'web') return null
         const localId = appLocalDevice || deviceId
         const components = product === 'desktop' ? ['app', 'node'] : ['localPlugin', 'node']
-        const infos = components.map((component) => infoFor(component, component === 'node' ? localId : ''))
+        const infos = components.map((component) => {
+          const info = infoFor(component, component === 'node' ? localId : '')
+          if (component === 'localPlugin' && !info.latest_version && localId) return infoFor('plugin', localId)
+          return info
+        })
         const busyKey = product === 'desktop' ? 'desktop' : 'dsh'
         const busy = updateBusy === 'product:' + busyKey
         const productErrors = updateErrors.devices[localId] || {}
@@ -2895,8 +2900,21 @@ export function createTetherPanel({ React, Native, host }) {
           iconButton('arrowUp', '上级目录', () => { const parent = parentOf(file ? file.path : path); if (parent && parent !== path) { setFile(null); loadDir(parent, { push: true }) } }, !path),
           iconButton('refresh', '刷新', refreshExplorer, !path, dirLoading || previewBusy),
           iconButton('plus', '新建文件', () => makeFile(path), !path || dirLoading || previewBusy),
-          h('div', { style: { display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, overflow: 'hidden', marginLeft: 6 } },
-            crumbs.map((segment, index) => h(React.Fragment, { key: segment.path },
+          h('div', {
+            title: '点击空白处输入路径',
+            onClick: (event) => { if (event.target === event.currentTarget) { setPathDraft(file ? file.path : path); setPathEditing(true) } },
+            style: { display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, flex: '1 1 auto', overflow: 'hidden', marginLeft: 6, height: 28, cursor: 'text' }
+          },
+            pathEditing ? h('input', {
+              autoFocus: true, value: pathDraft, spellCheck: false,
+              onChange: (event) => setPathDraft(event.target.value),
+              onBlur: () => setPathEditing(false),
+              onKeyDown: (event) => {
+                if (event.key === 'Enter') { setPathEditing(false); setFile(null); if (pathDraft.trim()) loadDir(pathDraft.trim(), { push: true }) }
+                if (event.key === 'Escape') setPathEditing(false)
+              },
+              style: { flex: '1 1 auto', minWidth: 0, height: 26, boxSizing: 'border-box', border: 0, borderRadius: 5, padding: '0 6px', background: C.soft, color: C.ink, fontSize: 12, fontFamily: 'Consolas, monospace', outline: 'none' }
+            }) : crumbs.map((segment, index) => h(React.Fragment, { key: segment.path },
               index ? h('span', { style: { color: C.mute, fontSize: 10, flex: '0 0 auto' } }, '›') : null,
               h('button', {
                 title: segment.path, onClick: () => { setFile(null); loadDir(segment.path, { push: true }) },
@@ -3002,6 +3020,8 @@ export function createTetherPanel({ React, Native, host }) {
           style: { position: 'fixed', left: Math.max(8, Math.min(contextMenu.x, window.innerWidth - 190)), top: Math.max(8, Math.min(contextMenu.y, window.innerHeight - 250)), width: 178, zIndex: 60, background: C.layer1, borderRadius: 8, boxShadow: C.shadow, padding: 4, userSelect: 'none' }
         },
           contextMenu.entry ? menuItem('file', '打开', () => { setContextMenu(null); openFile(contextMenu.entry) }) : null,
+          contextMenu.entry ? menuItem('file', '复制', () => { const entry = contextMenu.entry; setClipboard(entry); setContextMenu(null); setNotice('已复制 ' + entry.name) }) : null,
+          clipboard && contextMenu.base ? menuItem('file', '粘贴', async () => { const base = contextMenu.base; setContextMenu(null); try { await post(fsPath('copy'), { path: clipboard.path, dest: String(base).replace(/[\\/]+$/, '') + '\\' + clipboard.name }); invalidateDir(deviceId, base); await loadDir(base, { push: false, keepFile: true, fresh: true }) } catch (e) { fail(e) } }) : null,
           contextMenu.entry ? menuItem('pencil', '重命名', () => { const entry = contextMenu.entry; setContextMenu(null); renameEntry(entry) }) : null,
           contextMenu.entry ? menuItem('trash', '删除', () => { const entry = contextMenu.entry; setContextMenu(null); deleteEntry(entry) }, true) : null,
           contextMenu.entry ? h('div', { style: { height: 1, background: C.line, margin: '4px 2px' } }) : null,

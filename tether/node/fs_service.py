@@ -600,6 +600,27 @@ class FsService:
                        phase="result", result="ok")
         return {"path": str(src), "dest": str(dst)}
 
+    def _op_copy(self, args: dict[str, Any]) -> dict[str, Any]:
+        src = self._resolve(args.get("path"))
+        dst = self._resolve(args.get("dest"))
+        self._read_guard(src)
+        self._write_guard(dst, "copy", source=str(src))
+        if not src.exists():
+            raise FsError("not found", "not_found")
+        if dst.exists():
+            raise FsError("destination already exists", "exists")
+        try:
+            if src.is_dir():
+                shutil.copytree(src, dst)
+            else:
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dst)
+        except OSError as exc:
+            raise FsError(f"copy failed: {exc}", "copy_failed") from exc
+        self.audit.add(op="copy", path=str(src), dest=str(dst), mode=self.policy.data.get("mode"),
+                       phase="result", result="ok")
+        return {"path": str(src), "dest": str(dst)}
+
     def _op_delete(self, args: dict[str, Any]) -> dict[str, Any]:
         p = self._resolve(args.get("path"))
         self._write_guard(p, "delete")

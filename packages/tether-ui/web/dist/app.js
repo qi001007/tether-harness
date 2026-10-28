@@ -9006,6 +9006,7 @@ function createTetherPanel({ React: React2, Native, host }) {
     const [path, setPath] = React2.useState("");
     const [pathDraft, setPathDraft] = React2.useState("");
     const [pathEditing, setPathEditing] = React2.useState(false);
+    const [clipboard, setClipboard] = React2.useState(null);
     pathRef.current = path;
     const [hoverTip, setHoverTip] = React2.useState(null);
     const [selected, setSelected] = React2.useState(null);
@@ -9323,7 +9324,11 @@ function createTetherPanel({ React: React2, Native, host }) {
       if (host && host.kind === "web") return null;
       const localId = appLocalDevice || deviceId;
       const components = product === "desktop" ? ["app", "node"] : ["localPlugin", "node"];
-      const infos = components.map((component) => infoFor(component, component === "node" ? localId : ""));
+      const infos = components.map((component) => {
+        const info = infoFor(component, component === "node" ? localId : "");
+        if (component === "localPlugin" && !info.latest_version && localId) return infoFor("plugin", localId);
+        return info;
+      });
       const busyKey = product === "desktop" ? "desktop" : "dsh";
       const busy2 = updateBusy === "product:" + busyKey;
       const productErrors = updateErrors.devices[localId] || {};
@@ -10776,8 +10781,32 @@ function createTetherPanel({ React: React2, Native, host }) {
         iconButton("plus", "\u65B0\u5EFA\u6587\u4EF6", () => makeFile(path), !path || dirLoading || previewBusy),
         h(
           "div",
-          { style: { display: "flex", alignItems: "center", gap: 1, minWidth: 0, overflow: "hidden", marginLeft: 6 } },
-          crumbs.map((segment, index) => h(
+          {
+            title: "\u70B9\u51FB\u7A7A\u767D\u5904\u8F93\u5165\u8DEF\u5F84",
+            onClick: (event) => {
+              if (event.target === event.currentTarget) {
+                setPathDraft(file ? file.path : path);
+                setPathEditing(true);
+              }
+            },
+            style: { display: "flex", alignItems: "center", gap: 1, minWidth: 0, flex: "1 1 auto", overflow: "hidden", marginLeft: 6, height: 28, cursor: "text" }
+          },
+          pathEditing ? h("input", {
+            autoFocus: true,
+            value: pathDraft,
+            spellCheck: false,
+            onChange: (event) => setPathDraft(event.target.value),
+            onBlur: () => setPathEditing(false),
+            onKeyDown: (event) => {
+              if (event.key === "Enter") {
+                setPathEditing(false);
+                setFile(null);
+                if (pathDraft.trim()) loadDir(pathDraft.trim(), { push: true });
+              }
+              if (event.key === "Escape") setPathEditing(false);
+            },
+            style: { flex: "1 1 auto", minWidth: 0, height: 26, boxSizing: "border-box", border: 0, borderRadius: 5, padding: "0 6px", background: C.soft, color: C.ink, fontSize: 12, fontFamily: "Consolas, monospace", outline: "none" }
+          }) : crumbs.map((segment, index) => h(
             React2.Fragment,
             { key: segment.path },
             index ? h("span", { style: { color: C.mute, fontSize: 10, flex: "0 0 auto" } }, "\u203A") : null,
@@ -10946,6 +10975,23 @@ function createTetherPanel({ React: React2, Native, host }) {
         contextMenu.entry ? menuItem("file", "\u6253\u5F00", () => {
           setContextMenu(null);
           openFile(contextMenu.entry);
+        }) : null,
+        contextMenu.entry ? menuItem("file", "\u590D\u5236", () => {
+          const entry = contextMenu.entry;
+          setClipboard(entry);
+          setContextMenu(null);
+          setNotice("\u5DF2\u590D\u5236 " + entry.name);
+        }) : null,
+        clipboard && contextMenu.base ? menuItem("file", "\u7C98\u8D34", async () => {
+          const base = contextMenu.base;
+          setContextMenu(null);
+          try {
+            await post(fsPath("copy"), { path: clipboard.path, dest: String(base).replace(/[\\/]+$/, "") + "\\" + clipboard.name });
+            invalidateDir(deviceId, base);
+            await loadDir(base, { push: false, keepFile: true, fresh: true });
+          } catch (e) {
+            fail2(e);
+          }
         }) : null,
         contextMenu.entry ? menuItem("pencil", "\u91CD\u547D\u540D", () => {
           const entry = contextMenu.entry;
