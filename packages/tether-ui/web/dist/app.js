@@ -10284,6 +10284,7 @@ function createTetherPanel({ React: React2, Native, host }) {
       try {
         const pending = dirInflightRef.current.get(key);
         const data = pending ? await pending : await post("/api/devices/" + encodeURIComponent(requestDevice) + "/fs/list", { path: requestTarget }, void 0, { signal: controller.signal });
+        if (!data) throw new Error("\u76EE\u5F55\u8BFB\u53D6\u5931\u8D25");
         if (seq !== dirSeqRef.current || deviceIdRef.current !== requestDevice) return;
         const entries = (data.entries || []).map((entry) => ({ ...entry, path: joinPath(requestTarget, entry.name) }));
         cacheStore(dirCacheRef.current, key, { entries, at: Date.now() });
@@ -10711,7 +10712,7 @@ function createTetherPanel({ React: React2, Native, host }) {
         )
       );
     };
-    const CODE_FILE = /\.(js|mjs|cjs|ts|tsx|jsx|py|json|css|scss|html|sh|ps1|java|c|h|cpp|hpp|go|rs|sql|yml|yaml|toml|ini|xml)$/i;
+    const CODE_FILE = /\.(js|mjs|cjs|ts|tsx|jsx|py|json|css|scss|html|sh|ps1|java|c|h|cpp|hpp|cc|m|mm|pr|cs|php|rb|swift|kt|lua|r|pl|tex|vue|svelte|dart|gradle|go|rs|sql|yml|yaml|toml|ini|xml)$/i;
     const CODE_WORDS = new Set("const let var function return if else for while class import from export async await def None True False public private void new try catch throw extends implements interface type struct fn use package self this in of not and or lambda yield match case switch break continue".split(" "));
     const renderCode = (text, name) => {
       if (!CODE_FILE.test(String(name || ""))) return text;

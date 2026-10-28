@@ -17,6 +17,7 @@ import sqlite3
 import subprocess
 import tempfile
 import threading
+import zipfile
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -31,7 +32,9 @@ PREVIEW_CACHE_MAX_BYTES = 256 * 1024 * 1024
 TEXT_SUFFIXES = {
     ".txt", ".md", ".py", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".json", ".yml", ".yaml",
     ".toml", ".ini", ".cfg", ".csv", ".log", ".xml", ".html", ".css", ".scss", ".sh", ".ps1",
-    ".bat", ".cmd", ".c", ".h", ".cpp", ".hpp", ".java", ".go", ".rs", ".sql", ".env", ".gitignore",
+    ".bat", ".cmd", ".c", ".h", ".cpp", ".hpp", ".cc", ".m", ".mm", ".pr", ".java", ".go", ".rs",
+    ".sql", ".env", ".gitignore", ".cs", ".php", ".rb", ".swift", ".kt", ".lua", ".r", ".pl", ".tex",
+    ".vue", ".svelte", ".dart", ".gradle", ".dockerfile", ".cmake", ".makefile",
 }
 MARKDOWN_SUFFIXES = {".md", ".markdown"}
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"}
@@ -472,6 +475,33 @@ class FsService:
             result.update({"kind": "pdf", "mime": "application/pdf",
                            "base64": base64.b64encode(p.read_bytes()).decode("ascii")})
             return result
+        if suffix == ".zip":
+            try:
+                with zipfile.ZipFile(p) as archive:
+                    infos = archive.infolist()[:500]
+                    text = "\n".join(f"{item.filename}\t{item.file_size}" for item in infos)
+                result.update({"kind": "text", "text": text, "truncated": len(infos) >= 500})
+                return result
+            except (OSError, zipfile.BadZipFile) as exc:
+                raise FsError(f"invalid zip archive: {exc}", "preview_unavailable") from exc
+        if suffix in (".xlsx", ".xlsm"):
+            try:
+                from openpyxl import load_workbook
+                workbook = load_workbook(p, read_only=True, data_only=True)
+                sheet = workbook.active
+                rows = []
+                for row in sheet.iter_rows(values_only=True):
+                    rows.append("\t".join("" if cell is None else str(cell) for cell in row))
+                    if len(rows) >= 2000:
+                        break
+                workbook.close()
+                result.update({"kind": "text", "text": "\n".join(rows), "truncated": sheet.max_row > len(rows)})
+                return result
+            except ImportError:
+                result.update({"kind": "unsupported", "mime": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"})
+                return result
+            except Exception as exc:  # noqa: BLE001 - malformed workbook should not break preview
+                raise FsError(f"xlsx preview failed: {exc}", "preview_unavailable") from exc
         if suffix in OFFICE_KINDS:
             data, from_cache = self._office_pdf_cached(p, OFFICE_KINDS[suffix])
             if len(data) > MAX_PREVIEW_BYTES:
@@ -481,6 +511,13 @@ class FsService:
             result.update({"kind": "pdf", "mime": "application/pdf",
                            "base64": base64.b64encode(data).decode("ascii"), "converted": True})
             return result
+        if size <= MAX_PREVIEW_BYTES:
+            probe = p.read_bytes()[:8192]
+            if b"\x00" not in probe:
+                chunk = p.read_bytes()[:MAX_PREVIEW_TEXT]
+                result.update({"kind": "text", "text": chunk.decode("utf-8", errors="replace"),
+                               "truncated": size > MAX_PREVIEW_TEXT})
+                return result
         result.update({"kind": "unsupported", "mime": mimetypes.guess_type(str(p))[0] or ""})
         return result
 

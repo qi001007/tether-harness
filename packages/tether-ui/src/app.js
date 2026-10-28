@@ -2541,6 +2541,7 @@ export function createTetherPanel({ React, Native, host }) {
           const data = pending
             ? await pending
             : await post('/api/devices/' + encodeURIComponent(requestDevice) + '/fs/list', { path: requestTarget }, undefined, { signal: controller.signal })
+          if (!data) throw new Error('目录读取失败')
           if (seq !== dirSeqRef.current || deviceIdRef.current !== requestDevice) return
           const entries = (data.entries || []).map((entry) => ({ ...entry, path: joinPath(requestTarget, entry.name) }))
           cacheStore(dirCacheRef.current, key, { entries, at: Date.now() })
@@ -2861,7 +2862,7 @@ export function createTetherPanel({ React, Native, host }) {
         )
       }
 
-      const CODE_FILE = /\.(js|mjs|cjs|ts|tsx|jsx|py|json|css|scss|html|sh|ps1|java|c|h|cpp|hpp|go|rs|sql|yml|yaml|toml|ini|xml)$/i
+      const CODE_FILE = /\.(js|mjs|cjs|ts|tsx|jsx|py|json|css|scss|html|sh|ps1|java|c|h|cpp|hpp|cc|m|mm|pr|cs|php|rb|swift|kt|lua|r|pl|tex|vue|svelte|dart|gradle|go|rs|sql|yml|yaml|toml|ini|xml)$/i
       const CODE_WORDS = new Set('const let var function return if else for while class import from export async await def None True False public private void new try catch throw extends implements interface type struct fn use package self this in of not and or lambda yield match case switch break continue'.split(' '))
       const renderCode = (text, name) => {
         if (!CODE_FILE.test(String(name || ''))) return text
