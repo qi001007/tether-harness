@@ -103,7 +103,8 @@ $rootPath = [IO.Path]::GetFullPath($config.root).TrimEnd('\')
 $readyFile = $config.ready_file
 $logFile = $config.log_file
 $appDir = Join-Path $rootPath 'apps\tether-app'
-$launcher = Join-Path $appDir 'Tether-App.cmd'
+$launcher = Join-Path $appDir 'Tether-App.vbs'
+if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) { $launcher = Join-Path $appDir 'Tether-App.cmd' }
 $electron = [IO.Path]::GetFullPath((Join-Path $appDir 'node_modules\electron\dist\electron.exe'))
 try {
   if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) { throw 'APP launcher not found' }
@@ -142,7 +143,9 @@ def schedule_app_restart(root: Path) -> bool:
     if sys.platform != "win32":
         return False
     root = Path(root).resolve()
-    launcher = root / "apps" / "tether-app" / "Tether-App.cmd"
+    launcher = root / "apps" / "tether-app" / "Tether-App.vbs"
+    if not launcher.is_file():
+        launcher = root / "apps" / "tether-app" / "Tether-App.cmd"
     log_path = root / ".runtime" / "updates" / "remote-app-restart.log"
     log_path.parent.mkdir(parents=True, exist_ok=True)
 

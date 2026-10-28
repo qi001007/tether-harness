@@ -700,6 +700,20 @@ function createTetherPanel({ React, Native, host }) {
       return response.data
     }
     const post = (path, body, pinnedBase, extra) => api(path, { method: 'POST', body: JSON.stringify(body || {}), ...(extra || {}) }, pinnedBase)
+    // A large remote folder can take seconds; one quiet retry turns a transient
+    // socket/5xx hiccup into a slightly slower load instead of a red error.
+    const postRetry = async (path, body, pinnedBase, extra, attempts = 2) => {
+      let last
+      for (let i = 0; i < attempts; i += 1) {
+        try { return await post(path, body, pinnedBase, extra) } catch (e) {
+          last = e
+          if (e && (e.name === 'AbortError' || e.code === 'not_dir' || e.code === 'not_file'
+            || e.code === 'forbidden' || e.code === 'not_found' || e.code === 'too_large')) throw e
+          if (i + 1 < attempts) await new Promise((resolve) => setTimeout(resolve, 600))
+        }
+      }
+      throw last
+    }
 
     function pill(text, color) {
       return h('span', {
@@ -1957,6 +1971,10 @@ function createTetherPanel({ React, Native, host }) {
 
       const fail = (e) => {
         if (e && e.code === 'node_update_required') { setNativeError('节点待更新'); return }
+        // Transient list/preview failures already retry and show their own inline
+        // state; a red toast on a slow remote folder is noise, not information.
+        if (e && (e.name === 'AbortError' || e.code === 'update_timeout' || e.code === 'node_timeout'
+          || e.code === 'device_busy' || e.code === 'device_offline' || (e.status && e.status >= 500))) return
         setNotice(String((e && e.message) || e))
       }
       const probeConfiguredHub = async () => {
@@ -2992,7 +3010,7 @@ function createTetherPanel({ React, Native, host }) {
           const pending = dirInflightRef.current.get(key)
           const data = pending
             ? await pending
-            : await post('/api/devices/' + encodeURIComponent(requestDevice) + '/fs/list', { path: requestTarget }, undefined, { signal: controller.signal })
+            : await postRetry('/api/devices/' + encodeURIComponent(requestDevice) + '/fs/list', { path: requestTarget }, undefined, { signal: controller.signal })
           if (!data) throw new Error('目录读取失败')
           if (seq !== dirSeqRef.current || deviceIdRef.current !== requestDevice) return
           const entries = (data.entries || []).map((entry) => ({ ...entry, path: joinPath(requestTarget, entry.name) }))

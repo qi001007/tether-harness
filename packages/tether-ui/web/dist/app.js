@@ -7550,6 +7550,19 @@ function createTetherPanel({ React: React2, Native, host }) {
     return response.data;
   }
   const post = (path, body, pinnedBase, extra) => api(path, { method: "POST", body: JSON.stringify(body || {}), ...extra || {} }, pinnedBase);
+  const postRetry = async (path, body, pinnedBase, extra, attempts = 2) => {
+    let last;
+    for (let i = 0; i < attempts; i += 1) {
+      try {
+        return await post(path, body, pinnedBase, extra);
+      } catch (e) {
+        last = e;
+        if (e && (e.name === "AbortError" || e.code === "not_dir" || e.code === "not_file" || e.code === "forbidden" || e.code === "not_found" || e.code === "too_large")) throw e;
+        if (i + 1 < attempts) await new Promise((resolve) => setTimeout(resolve, 600));
+      }
+    }
+    throw last;
+  };
   function pill(text, color) {
     return h("span", {
       style: {
@@ -9080,6 +9093,7 @@ function createTetherPanel({ React: React2, Native, host }) {
         setNativeError("\u8282\u70B9\u5F85\u66F4\u65B0");
         return;
       }
+      if (e && (e.name === "AbortError" || e.code === "update_timeout" || e.code === "node_timeout" || e.code === "device_busy" || e.code === "device_offline" || e.status && e.status >= 500)) return;
       setNotice(String(e && e.message || e));
     };
     const probeConfiguredHub = async () => {
@@ -10288,7 +10302,7 @@ function createTetherPanel({ React: React2, Native, host }) {
       }
       try {
         const pending = dirInflightRef.current.get(key);
-        const data = pending ? await pending : await post("/api/devices/" + encodeURIComponent(requestDevice) + "/fs/list", { path: requestTarget }, void 0, { signal: controller.signal });
+        const data = pending ? await pending : await postRetry("/api/devices/" + encodeURIComponent(requestDevice) + "/fs/list", { path: requestTarget }, void 0, { signal: controller.signal });
         if (!data) throw new Error("\u76EE\u5F55\u8BFB\u53D6\u5931\u8D25");
         if (seq !== dirSeqRef.current || deviceIdRef.current !== requestDevice) return;
         const entries = (data.entries || []).map((entry) => ({ ...entry, path: joinPath(requestTarget, entry.name) }));
