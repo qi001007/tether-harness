@@ -18,6 +18,7 @@ import subprocess
 import tempfile
 import threading
 import zipfile
+import xml.etree.ElementTree as ET
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -485,22 +486,13 @@ class FsService:
             except (OSError, zipfile.BadZipFile) as exc:
                 raise FsError(f"invalid zip archive: {exc}", "preview_unavailable") from exc
         if suffix in (".xlsx", ".xlsm"):
+            if size > MAX_PREVIEW_BYTES:
+                raise FsError("file too large to preview", "too_large")
             try:
-                from openpyxl import load_workbook
-                workbook = load_workbook(p, read_only=True, data_only=True)
-                sheet = workbook.active
-                rows = []
-                for row in sheet.iter_rows(values_only=True):
-                    rows.append("\t".join("" if cell is None else str(cell) for cell in row))
-                    if len(rows) >= 2000:
-                        break
-                workbook.close()
-                result.update({"kind": "text", "text": "\n".join(rows), "truncated": sheet.max_row > len(rows)})
+                rows = self._xlsx_rows(p)
+                result.update({"kind": "text", "text": "\n".join(rows), "truncated": len(rows) >= 2000})
                 return result
-            except ImportError:
-                result.update({"kind": "unsupported", "mime": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"})
-                return result
-            except Exception as exc:  # noqa: BLE001 - malformed workbook should not break preview
+            except (OSError, KeyError, ValueError, zipfile.BadZipFile) as exc:
                 raise FsError(f"xlsx preview failed: {exc}", "preview_unavailable") from exc
         if suffix in OFFICE_KINDS:
             data, from_cache = self._office_pdf_cached(p, OFFICE_KINDS[suffix])
@@ -520,6 +512,37 @@ class FsService:
                 return result
         result.update({"kind": "unsupported", "mime": mimetypes.guess_type(str(p))[0] or ""})
         return result
+
+    def _xlsx_rows(self, source: Path) -> list[str]:
+        namespace = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
+        with zipfile.ZipFile(source) as archive:
+            names = set(archive.namelist())
+            shared: list[str] = []
+            if "xl/sharedStrings.xml" in names:
+                root = ET.fromstring(archive.read("xl/sharedStrings.xml"))
+                for item in root.findall(namespace + "si"):
+                    shared.append("".join(node.text or "" for node in item.iter(namespace + "t")))
+            sheets = sorted(name for name in names if name.startswith("xl/worksheets/sheet") and name.endswith(".xml"))
+            if not sheets:
+                raise ValueError("no worksheet")
+            root = ET.fromstring(archive.read(sheets[0]))
+        rows: list[str] = []
+        for row in root.iter(namespace + "row"):
+            values: list[str] = []
+            for cell in row.findall(namespace + "c"):
+                kind = cell.get("t")
+                value_node = cell.find(namespace + "v")
+                if kind == "s" and value_node is not None and value_node.text is not None:
+                    index = int(value_node.text)
+                    values.append(shared[index] if 0 <= index < len(shared) else "")
+                elif kind == "inlineStr":
+                    values.append("".join(node.text or "" for node in cell.iter(namespace + "t")))
+                else:
+                    values.append((value_node.text or "") if value_node is not None else "")
+            rows.append("\t".join(values))
+            if len(rows) >= 2000:
+                break
+        return rows
 
     def _office_cache_path(self, source: Path, kind: str) -> Path:
         st = source.stat()
