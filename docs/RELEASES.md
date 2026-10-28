@@ -10,6 +10,8 @@ Fixes found during the v0.2.1 to v0.2.2 upgrade acceptance:
 
 This release includes the v0.2.2 first-run bootstrap and surface profile fixes. Packages are unsigned; real upgrade, rollback, and cross-device acceptance remain separately recorded.
 
+Real upgrade on DESKTOP-LOCAL: APP, Node, and plugin moved from `0.2.1` through `0.2.2` to `0.2.3` through the APP update center; user data, database integrity, workspace files, and DSH sessions were preserved. Known residuals: restart labels remain after restart, the root `version.json` plugin field still reports `0.2.2` while the DSH profile is `0.2.3`, and the DSH-local plugin update button still reports a check failure; the APP update center is the working plugin update path.
+
 ## v0.2.2
 
 This release fixes three defects found during the v0.2.1 baseline installation:

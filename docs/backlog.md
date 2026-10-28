@@ -14,6 +14,7 @@
 - Surface 插件：RPC 注册失败不阻断 descriptor 发布；profile 从 Host argv 解析。
 - 客户端本机插件更新通道不可用时给出明确降级提示。
 - 版本统一 `0.2.2`；Python 76 passed/1 skipped，JavaScript 62 passed；v0.2.2 干净 bootstrap 在临时目录通过。
+- 2026-10-28：APP/Node/插件通过 APP 更新中心完成 `0.2.1→0.2.2→0.2.3` 真实升级，数据保留；APP 与 DSH 插件原生工作区加载成功。遗留：重启标签不清、根 `version.json` 插件字段仍为 0.2.2、DSH 本机插件更新按钮仍报检查失败。
 
 ## 2026-10-28 本机 v0.2.1 基线安装
 
