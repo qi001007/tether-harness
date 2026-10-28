@@ -259,7 +259,7 @@ If you find a security issue, do not paste tokens, personal data, or private dev
 | Public release v0.2.3 | Published; all three ZIPs and the manifest verified |
 | Client update chain | Real APP/Node/plugin updates `0.2.1 → 0.2.2 → 0.2.3`; data preserved |
 | Same-device APP + plugin | Verified: one DESKTOP-LOCAL DSH Host/session, bidirectional turns, a real `pwsh` command, matching file pages |
-| Remote target native surface | **Open issue**: a remote node can show a blank DSH panel; remote cross-device acceptance is pending. The local and remote paths use the same Hub surface gateway; the failing machine needs a v0.2.3 Node and live diagnostics |
+| Remote target native surface | Reproduced on a second local node: v0.2.1 showed a blank DSH panel; upgrading the Node to v0.2.3 loaded the DSH UI and executed `REMOTE-OK`. The local and remote paths use the same Hub gateway; physical second-machine acceptance is still pending. |
 | Cross-device on a second physical machine | Pending; the second machine is not currently connected to the Hub |
 | Accounts / login / per-user isolation | **Not implemented** |
 | Digital signatures | Not implemented |

@@ -1,5 +1,10 @@
 # docs 变更记录
 
+## 2026-10-28 远端 surface 复现
+
+- 非默认测试 Node（同机）走同一公网 Hub：v0.2.1 时远端原生 DSH 页白屏；升级 Node 到 v0.2.3 后正常加载，并从远端视图执行 `Reply with exactly REMOTE-OK.` → `REMOTE-OK`。
+- 说明远端/本地走同一条 Hub surface gateway，白屏由旧 Node 代码导致；物理 LAPTOP-01 仍待 v0.2.3 上线验收。
+
 ## 2026-10-28 README 展示页与下载/版本管理重写
 
 - 重写 README：hero/badges、Why、架构、组件与独立安装矩阵、Node 说明、下载与校验、版本/兼容、更新、Tailscale 边界、安全现状、状态、开发与发布流程。
