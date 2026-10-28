@@ -25,10 +25,12 @@ const plugin = `window.__ModuleLoader__.load({
 ${dshHost}
 ${connectionPanel}
     let localPluginRpc = null
+    let localPluginRemote = null
     const host = createDshHost({
       pluginVersion: PLUGIN_VERSION,
       localPluginUpdates: createDshLocalPluginUpdateBridge(() => localPluginRpc),
-      localDeviceIdentity: createDshLocalIdentityBridge(() => localPluginRpc)
+      localDeviceIdentity: createDshLocalIdentityBridge(() => localPluginRpc),
+      localPluginSurfaceReload: createDshLocalPluginSurfaceReloadBridge(() => localPluginRemote)
     })
 
 ${shared}
@@ -38,14 +40,21 @@ ${shared}
 
     return {
       name: 'tether',
-      inject: ['slots', 'layout', 'connection'],
+      inject: ['slots', 'layout', 'connection', 'remote', 'remote.workspaceFiles', 'remote.pluginManager', 'fileDrag'],
       apply(ctx) {
-        if (new URL(window.location.href).searchParams.has('tether_native')) {
-          ctx.layout.selectPanel(null)
-          return
-        }
+        localPluginRemote = ctx.remote
         if (ctx.connection && ctx.connection.rpc && typeof ctx.connection.rpc.call === 'function') {
           localPluginRpc = ctx.connection.rpc
+        }
+        if (new URL(window.location.href).searchParams.has('tether_native')) {
+          ctx.layout.selectPanel(null)
+          const targetFiles = createDshTargetFilesBridge({ getRpc: () => localPluginRpc, getRemote: () => localPluginRemote })
+          const attachments = createDshTargetAttachments(React, Native, targetFiles)
+          ctx.slots.inject('conversation.input.attachments', () => ctx.slots.register({
+            name: 'conversation.input.attachments', priority: -1000, locale: 'conversation',
+            inject: () => ({ readFileDrag: ctx.fileDrag.read })
+          }, attachments))
+          return
         }
         ctx.slots.inject('main', function* () {
           yield ctx.slots.register({ name: 'main', key: PANEL_ID }, App)

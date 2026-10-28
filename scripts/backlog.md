@@ -1,4 +1,5 @@
 # 修改记录
+- 2026-10-28：原生 UI bridge 从当前安装的 MIT `dsh-client-ui-attachment@0.2.1-rc.2` factory 单独导出 ComposerAttachments，供原生附件 slot 包装器复用；保留上游 factory hash。
 
 - 2026-10-28：更新清单最低 updater 版本与制品版本解耦，构建拒绝版本元数据不一致；Node 独立安装说明要求配置 Hub WebSocket 地址与 Node token，不再暗示本地开放 Controller。
 

@@ -2,6 +2,22 @@
 
 更新日期：2026-10-28。
 
+## 当前实测状态：v0.2.11 已发布，LAPTOP-01 已升级并自动重连
+
+- 正式 tag `v0.2.11` 指向 `591d4d689cf7a6a1408b13d1561fd9573de51cb6`；公开 PR #5、发行 CI `40654194962` 已完成，APP/插件/Node ZIP 与 manifest 的版本、大小和 SHA-256 已核对。下方“候选、尚未发布”是较早快照。
+- 通过正式更新 API 对 LAPTOP-01 依次应用 Node、插件、APP；三组件安装状态均 `0.2.11`。Node apply 672 ms，观察到新版 Node 在线用时 2688 ms；APP apply 750 ms，响应后 9047 ms 观察到 APP/Node 都以 `0.2.11` 在线。该次验收经实际产品后端发起，未重复验收 UI 点击路径。
+- 更新前后 `hub.json` SHA-256、1 个会话记录、3 个工作区树摘要一致。更新后的三组件联网检查 797–1250 ms，当前状态查询 781–1266 ms；运行中更新检查不会下载安装。
+- 桌面 DSH 的真实 owner RPC 已返回 HTTP 200，运行/安装插件均为 `0.2.11`。LAPTOP-01 通过 owner pluginManager 安全重载返回 `application=applied`（HTTP 200，2141 ms），随后 `/tether-updates/status` 确认 current/runtime 均为 `0.2.11`；证据见 `maintenance/ui-regression.../laptop-official-plugin-reload.json`。此结果验证了本机 surface reload 流程，无需手工重启 DSH。
+- 浏览器长期缓存仅用于已鉴权、成功返回的哈希 JS/CSS；动态 HTML 仍 `no-store`。已实测缓存头与 gzip，尚未将 Python HTTP 重复请求当作浏览器缓存命中证据。
+- 原生对话目标设备附件选择器源码已实现并通过自动回归；真实安装窗口与跨设备模型上传仍未验收。首次冷加载约 32 秒的全部耗时尚未归因。桌面旧快捷方式对应的 `D:\Tether\app` 仍为 `0.2.9`，升级命令因自动审批用量限制未执行，不能称为已升级。
+
+## 原生目标设备附件窄切片（2026-10-28）
+
+- 候选源码：原生 iframe 的附件 slot 增加“目标设备文件…”浏览入口；owner-only RPC 确认当前 DSH `device_id`，读取端改用 DSH Host `remote.workspaceFiles` 并绑定 `sessionId`，当前只浏览该会话工作区，路径必须来自已列出的目录/文件。
+- 复用安装版 MIT `ComposerAttachments` 组件保留预览、移除、重试、上传进度和拖拽；通过 `workspaceFiles.readBytes` 获取原始 `Uint8Array`，按 256 KiB 分块，单文件最多 10 MiB。目标设备或会话作用域切换后丢弃异步结果。
+- 自动验证：附件桥接 5 项 JavaScript 回归通过（含原始二进制、路径 capability、权限拒绝、大小上限、设备/会话切换）。当前 Node `fs/read` 服务保持未修改。尚未在真实已安装 DSH Host 验证 `remote.workspaceFiles` 注入和实际跨设备模型上传；未发布、安装或重启。
+- 后端通道补充证据：LAPTOP-01 的真实 owner `workspaceFiles.list` 对当前原生 Session 工作区 `.` 返回 HTTP 200 / `ok:true`（目录当前为空），证明无需给 iframe 配置额外 Hub token即可调用目标 Host API；此证据不覆盖 `readBytes`、UI 注入或模型上传验收。
+
 ## 演示前修复快照（2026-10-28 15:54）
 
 - 防御与性能候选版本为 `0.2.11`，尚未作为正式客户端发行发布。公开 Python 全量 95 passed / 1 旧制品 fixture skip；JS 单进程全量 83 passed。实际 DSH owner 版本 RPC 已恢复 HTTP 200 / 78 ms，安装与运行插件版本均 `0.2.10`。
@@ -31,7 +47,7 @@
 
 | 需求 | 当前状态 | 下一步 / 验收边界 |
 |---|---|---|
-| DSH 插件与原生工作区 | 客户端已实现；本机宿主完成部分实机验证 | 跨设备完整原生工作区、真实会话发送和附件仍未完成验收。 |
+| DSH 插件与原生工作区 | 客户端已实现；本机宿主完成部分实机验证 | 跨设备完整原生工作区、真实会话发送和目标设备附件仍未完成实机验收。 |
 | 文件、权限与审计 | 主要功能已实现并有本机回归记录 | 仍需在目标设备和独立安装环境复核。 |
 | 多设备任务与连接状态 | 同设备 APP/插件已共享 DESKTOP-LOCAL 的同一 DSH Host/会话；`OK`/`SYNC` 与 `pwsh` 命令双向可见；两端文件页列同一目录；连接页字段一致；互联页本机置顶 | F34/F35 技术验证完成，待主人确认体验；LAPTOP-01 已在线并完成远程更新，但跨机真实会话、任务、命令与文件仍需单独验收。 |
 | APP、插件、Node 独立安装 | DESKTOP-LOCAL 已从三份独立 ZIP 安装并真实升级到 v0.2.3：APP 窗口可见、Node `0.2.3` 在线、插件四包 `0.2.3`；v0.2.3 的 APP 首装 bootstrap 在临时干净目录通过，旧配置、数据库、工作区与 DSH 会话保留 | 仍需在第二台真实设备（LAPTOP-01）复验干净安装/共存；源码克隆只作开发路径。 |

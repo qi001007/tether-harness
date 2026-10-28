@@ -1,4 +1,7 @@
 # 修改记录
+- 2026-10-28：原生 DSH UI 包 package.json 发布版本升至 `0.2.12`。
+- 2026-10-28：仅复用当前安装的 MIT attachment factory 并导出 ComposerAttachments，原生上传卡片、移除/重试、进度及拖拽展示继续由 DSH 组件负责。
+- 2026-10-28：标明 attachment factory 是 bridge 生成期来源且嵌入 client bundle，不加入运行时依赖，避免更新器依赖变更门禁。
 - 2026-10-28：原生 DSH UI 包版本递增至 `0.2.11`。
 - 2026-10-28：原生 DSH UI 包版本递增至 `0.2.10`。
 - 2026-10-28：原生 DSH UI 包版本随三组件发行同步到 `0.2.9`。
