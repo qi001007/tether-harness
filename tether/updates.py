@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import hashlib
+import copy
+import threading
+import time
 import io
 import json
 import os
@@ -16,6 +19,7 @@ import urllib.parse
 import urllib.request
 import uuid
 import zipfile
+from concurrent.futures import Future, TimeoutError as FutureTimeout
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -33,6 +37,11 @@ MAX_FILE_BYTES = 32 * 1024 * 1024
 MAX_ARCHIVE_FILES = 4096
 MAX_COMPRESSION_RATIO = 150
 COMPONENTS = {"app", "plugin", "node"}
+MANIFEST_CHECK_CACHE_TTL = 60.0
+MANIFEST_CHECK_TIMEOUT = 4.0
+_manifest_cache_lock = threading.Lock()
+_manifest_check_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+_manifest_check_flights: dict[str, Future[dict[str, Any]]] = {}
 
 PLUGIN_PACKAGE_MAP = {
     "dsh-plugin-tether": "tether-dsh-plugin",
@@ -88,6 +97,7 @@ ERROR_MESSAGES = {
     "updater_too_old": "当前更新器版本过旧。",
     "dirty_checkout": "检测到未提交的开发文件，已阻止更新以保留本地工作。",
     "plugin_package_missing": "DeepSeek Harness 桌面配置中缺少待更新的 Tether 插件包。",
+    "plugin_source_unavailable": "DSH 插件 file: 源码依赖目录无法安全确认，已阻止更新。",
     "plugin_profile_changed": "更新准备后当前 DSH profile 已变化，请重新检查并准备更新。",
     "dependency_change_requires_manual_install": "更新包含依赖变化，需要手动安装依赖后再更新。",
     "update_busy": "另一个更新正在进行。",
@@ -247,12 +257,12 @@ class UpdateManager:
     def _opener(self) -> urllib.request.OpenerDirector:
         return urllib.request.build_opener(_SafeRedirectHandler(self._allow_loopback_http))
 
-    def _fetch(self, url: str, limit: int) -> bytes:
+    def _fetch(self, url: str, limit: int, *, timeout: float = 15.0) -> bytes:
         if not self._url_allowed(url):
             raise UpdateError("insecure_url")
         request = urllib.request.Request(url, headers={"User-Agent": "Tether-Updater/" + UPDATER_VERSION})
         try:
-            with self._opener().open(request, timeout=15) as response:
+            with self._opener().open(request, timeout=timeout) as response:
                 final_url = response.geturl()
                 if not self._url_allowed(final_url):
                     raise UpdateError("insecure_redirect")
@@ -283,8 +293,8 @@ class UpdateManager:
         except (OSError, urllib.error.URLError, TimeoutError):
             raise UpdateError("download_failed") from None
 
-    def _load_manifest(self) -> dict[str, Any]:
-        manifest = _json_object(self._fetch(self.manifest_url, MAX_MANIFEST_BYTES))
+    def _read_manifest(self, *, timeout: float = 15.0) -> dict[str, Any]:
+        manifest = _json_object(self._fetch(self.manifest_url, MAX_MANIFEST_BYTES, timeout=timeout))
         if type(manifest.get("schema")) is not int or manifest.get("schema") != 1:
             raise UpdateError("unsupported_manifest")
         components = manifest.get("components")
@@ -306,6 +316,39 @@ class UpdateManager:
                 raise UpdateError("invalid_manifest")
             if not isinstance(item.get("sha256"), str) or not re.fullmatch(r"[0-9a-f]{64}", item["sha256"]):
                 raise UpdateError("invalid_manifest")
+        return manifest
+
+    def _load_manifest(self, *, use_check_cache: bool = False) -> dict[str, Any]:
+        if not use_check_cache:
+            return self._read_manifest()
+        now = time.monotonic()
+        with _manifest_cache_lock:
+            cached = _manifest_check_cache.get(self.manifest_url)
+            if cached is not None and cached[0] > now:
+                return copy.deepcopy(cached[1])
+            flight = _manifest_check_flights.get(self.manifest_url)
+            leader = flight is None
+            if leader:
+                flight = Future()
+                _manifest_check_flights[self.manifest_url] = flight
+        assert flight is not None
+        if not leader:
+            try:
+                return copy.deepcopy(flight.result(timeout=MANIFEST_CHECK_TIMEOUT + 0.5))
+            except FutureTimeout:
+                raise UpdateError("download_failed") from None
+        try:
+            manifest = self._read_manifest(timeout=MANIFEST_CHECK_TIMEOUT)
+        except Exception as exc:
+            with _manifest_cache_lock:
+                _manifest_check_flights.pop(self.manifest_url, None)
+                flight.set_exception(exc)
+            raise
+        with _manifest_cache_lock:
+            _manifest_check_cache[self.manifest_url] = (
+                time.monotonic() + MANIFEST_CHECK_CACHE_TTL, copy.deepcopy(manifest))
+            _manifest_check_flights.pop(self.manifest_url, None)
+            flight.set_result(copy.deepcopy(manifest))
         return manifest
 
     def _versions(self) -> dict[str, str]:
@@ -333,33 +376,122 @@ class UpdateManager:
         return versions
 
     def _installed_plugin_version(self) -> str:
-        client = self.dsh_home / "profiles" / self.profile / "node_modules" / "tether-dsh-client" / "lib" / "client.js"
+        packages = self.dsh_home / "profiles" / self.profile / "node_modules"
+        client = packages / "tether-dsh-client" / "lib" / "client.js"
         try:
             source = client.read_text(encoding="utf-8")
         except OSError:
             source = ""
         match = re.search(r"\bPLUGIN_VERSION\s*=\s*['\"]([^'\"]+)['\"]", source)
+        versions: list[str] = []
         if match:
             _semver(match.group(1))
-            return match.group(1)
-        package = client.parents[1] / "package.json"
-        try:
-            value = _json_object(package.read_bytes()).get("version")
-            _semver(value)
-            return value
-        except (OSError, UpdateError):
+            versions.append(match.group(1))
+        for package_name in PLUGIN_PACKAGE_MAP.values():
             try:
-                state = _json_object((self.state_dir / "installed-plugin.json").read_bytes())
-                value = state.get("version", state.get("plugin_version"))
-                _semver(value)
-                return value
+                manifest = _json_object((packages / package_name / "package.json").read_bytes())
+            except FileNotFoundError:
+                raise UpdateError("plugin_package_missing") from None
+            value = manifest.get("version")
+            _semver(value)
+            versions.append(value)
+        for package_name, source_root in self._plugin_source_packages().items():
+            source_package = _json_object((source_root / "package.json").read_bytes())
+            value = source_package.get("version")
+            _semver(value)
+            versions.append(value)
+            if package_name == "tether-dsh-client":
+                source_client = (source_root / "lib" / "client.js").read_text(encoding="utf-8")
+                source_match = re.search(r"\bPLUGIN_VERSION\s*=\s*['\"]([^'\"]+)['\"]", source_client)
+                if source_match:
+                    _semver(source_match.group(1))
+                    versions.append(source_match.group(1))
+        if versions:
+            return min(versions, key=_semver)
+        raise UpdateError("local_version_unknown")
+
+    @staticmethod
+    def _file_dependency_path(spec: Any, package_dir: Path) -> Path | None:
+        if not isinstance(spec, str) or not spec.startswith("file:"):
+            return None
+        raw = urllib.parse.unquote(spec[5:])
+        if raw.startswith("//"):
+            parsed = urllib.parse.urlsplit("file:" + raw)
+            if parsed.netloc not in ("", "localhost"):
+                raise UpdateError("plugin_source_unavailable")
+            raw = parsed.path
+            if os.name == "nt" and re.match(r"^/[A-Za-z]:/", raw):
+                raw = raw[1:]
+        candidate = Path(raw)
+        # Normalize traversal without following links so the caller can reject
+        # symlinks in every component before reading or writing package files.
+        return Path(os.path.abspath(candidate if candidate.is_absolute() else package_dir / candidate))
+
+    def _plugin_source_packages(self) -> dict[str, Path]:
+        """Resolve explicitly configured workspace file dependencies for this DSH profile."""
+        profile_dir = self.dsh_home / "profiles" / self.profile
+        try:
+            profile = _json_object((profile_dir / "package.json").read_bytes())
+        except FileNotFoundError:
+            return {}
+        except (OSError, UpdateError):
+            raise UpdateError("plugin_source_unavailable") from None
+        dependencies = profile.get("dependencies", {})
+        if not isinstance(dependencies, dict):
+            raise UpdateError("plugin_source_unavailable")
+        plugin_root = self._file_dependency_path(dependencies.get("tether-dsh-plugin"), profile_dir)
+        if plugin_root is None:
+            return {}
+        expected = {"tether-dsh-plugin": plugin_root}
+        pending = [("tether-dsh-plugin", plugin_root)]
+        while pending:
+            package_name, package_dir = pending.pop()
+            if package_dir.name != {"tether-dsh-plugin": "dsh-plugin-tether",
+                                    "tether-dsh-client": "dsh-plugin-tether-client",
+                                    "tether-dsh-native-ui": "tether-dsh-native-ui",
+                                    "tether-dsh-surface": "tether-dsh-surface"}[package_name]:
+                raise UpdateError("plugin_source_unavailable")
+            packages_dir = package_dir.parent
+            if packages_dir.name != "packages" or package_dir.is_symlink():
+                raise UpdateError("plugin_source_unavailable")
+            cursor = packages_dir
+            while True:
+                if cursor.is_symlink():
+                    raise UpdateError("plugin_source_unavailable")
+                if cursor.parent == cursor:
+                    break
+                cursor = cursor.parent
+            try:
+                manifest = _json_object((package_dir / "package.json").read_bytes())
             except (OSError, UpdateError):
-                raise UpdateError("local_version_unknown") from None
+                raise UpdateError("plugin_source_unavailable") from None
+            if manifest.get("name") != package_name:
+                raise UpdateError("plugin_source_unavailable")
+            package_dependencies = manifest.get("dependencies", {})
+            if not isinstance(package_dependencies, dict):
+                raise UpdateError("plugin_source_unavailable")
+            for dependency_name in ("tether-dsh-client", "tether-dsh-native-ui", "tether-dsh-surface"):
+                spec = package_dependencies.get(dependency_name)
+                if not isinstance(spec, str) or not spec.startswith("file:"):
+                    continue
+                dependency_path = self._file_dependency_path(spec, package_dir)
+                if dependency_path is None or dependency_path.parent != packages_dir:
+                    raise UpdateError("plugin_source_unavailable")
+                try:
+                    dependency_manifest = _json_object((dependency_path / "package.json").read_bytes())
+                except (OSError, UpdateError):
+                    raise UpdateError("plugin_source_unavailable") from None
+                if dependency_manifest.get("name") != dependency_name:
+                    raise UpdateError("plugin_source_unavailable")
+                if dependency_name not in expected:
+                    expected[dependency_name] = dependency_path
+                    pending.append((dependency_name, dependency_path))
+        return expected
 
     def check(self) -> dict[str, Any]:
         try:
             current = self._versions()[self.component]
-            manifest = self._load_manifest()
+            manifest = self._load_manifest(use_check_cache=True)
             remote = manifest["components"][self.component]
             version = remote["version"]
             newer = _is_newer(version, current)
@@ -466,10 +598,48 @@ class UpdateManager:
             raise UpdateError("dirty_checkout")
 
     def _check_plugin_targets(self) -> None:
+        import subprocess
+
         packages = self.dsh_home / "profiles" / self.profile / "node_modules"
         for package in PLUGIN_PACKAGE_MAP.values():
             if not (packages / package).is_dir():
                 raise UpdateError("plugin_package_missing")
+        sources = self._plugin_source_packages()
+        checked_roots: set[Path] = set()
+        for source in sources.values():
+            repository = next((parent for parent in (source, *source.parents) if (parent / ".git").exists()), None)
+            if repository is None or repository.resolve() == self.root.resolve() or repository.resolve() in checked_roots:
+                continue
+            checked_roots.add(repository.resolve())
+            try:
+                result = subprocess.run(
+                    ["git", "-C", str(repository), "status", "--porcelain", "--untracked-files=normal"],
+                    capture_output=True, text=True, timeout=10, check=False,
+                )
+            except (OSError, subprocess.TimeoutExpired):
+                raise UpdateError("checkout_state_unknown") from None
+            if result.returncode != 0:
+                raise UpdateError("checkout_state_unknown")
+            if result.stdout.strip():
+                raise UpdateError("dirty_checkout")
+
+    def _component_targets(self, path: str) -> list[tuple[Path, str]]:
+        mapping = self._component_files(path)
+        if mapping is None:
+            return []
+        target, relative_target = mapping
+        targets = [(target, relative_target)]
+        if self.component != "plugin":
+            return targets
+        parts = PurePosixPath(path).parts
+        if len(parts) < 3 or parts[0] != "packages":
+            return targets
+        package_name = PLUGIN_PACKAGE_MAP.get(parts[1])
+        source_root = self._plugin_source_packages().get(package_name or "")
+        if source_root is not None:
+            source_target = source_root.joinpath(*parts[2:])
+            targets.append((source_target, str(source_target)))
+        return targets
 
     def _check_dependencies(self, staged: list[tuple[Path, Path, str]]) -> None:
         for source, target, relative in staged:
@@ -582,12 +752,13 @@ class UpdateManager:
         return target, str(relative / Path(*pure.parts[2:]))
 
     def _safe_target(self, target: Path) -> Path:
-        base = self.dsh_home if self.component == "plugin" else self.root
-        base = base.resolve()
+        bases = [self.dsh_home.resolve()] if self.component == "plugin" else [self.root.resolve()]
+        if self.component == "plugin":
+            bases.extend(path.resolve() for path in self._plugin_source_packages().values())
         resolved = target.resolve(strict=False)
-        try:
-            resolved.relative_to(base)
-        except ValueError:
+        base = next((candidate for candidate in sorted(bases, key=lambda item: len(item.parts), reverse=True)
+                     if resolved == candidate or candidate in resolved.parents), None)
+        if base is None:
             raise UpdateError("unsafe_target") from None
         cursor = base
         for part in target.relative_to(base).parts:
@@ -739,7 +910,9 @@ class UpdateManager:
                 "to_version": target_version, "sha256": item["sha256"], "size": item["size"],
                 "profile": self.profile if self.component == "plugin" else None,
                 "files": [{"path": entry[2], "sha256": _sha256_path(entry[0]),
-                           "size": entry[0].stat().st_size} for entry in staged],
+                           "size": entry[0].stat().st_size,
+                           "targets": [str(target) for target, _relative in self._component_targets(entry[2])]}
+                          for entry in staged],
             }
             (prepared_root / "prepared.json").write_text(json.dumps(record, indent=2), encoding="utf-8")
             return {"ok": True, "prepared_id": prepared_id, "component": self.component,
@@ -788,16 +961,18 @@ class UpdateManager:
             relative = item.get("path")
             if not isinstance(relative, str):
                 raise UpdateError("prepared_mismatch")
-            mapping = self._component_files(relative)
-            if mapping is None:
+            targets = self._component_targets(relative)
+            if not targets:
                 continue
-            target, _relative_target = mapping
+            saved_targets = item.get("targets")
+            if saved_targets is not None and saved_targets != [str(target) for target, _target_relative in targets]:
+                raise UpdateError("prepared_stale")
             staged_path = prepared_root.joinpath(*PurePosixPath(relative).parts)
             if not staged_path.is_file():
                 raise UpdateError("prepared_file_missing")
             if staged_path.stat().st_size != item.get("size") or _sha256_path(staged_path) != item.get("sha256"):
                 raise UpdateError("prepared_hash_mismatch")
-            staged.append((staged_path, target, relative))
+            staged.extend((staged_path, target, relative) for target, _target_relative in targets)
         if not staged:
             raise UpdateError("prepared_empty")
         return prepared_root, record, staged
@@ -825,6 +1000,8 @@ class UpdateManager:
             lock_fd, lock_path = self._lock()
             self._check_clean_checkout()
             prepared_root, record, staged = self._load_prepared(prepared_id)
+            if self.component == "plugin":
+                self._check_plugin_targets()
             expected_version = record["to_version"]
             _semver(expected_version)
             current = self._versions()[self.component]
@@ -836,11 +1013,11 @@ class UpdateManager:
             base = self.dsh_home if self.component == "plugin" else self.root
             backup_dir = self.state_dir / "backups" / self.component / prepared_id
             backup_dir.mkdir(parents=True, exist_ok=False)
-            for source, target, relative in staged:
+            for target_index, (source, target, relative) in enumerate(staged):
                 safe_target = self._safe_target(target)
                 backup: Path | None = None
                 if safe_target.exists():
-                    backup = backup_dir / Path(*PurePosixPath(relative).parts)
+                    backup = backup_dir / str(target_index) / Path(*PurePosixPath(relative).parts)
                     backup.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(safe_target, backup)
                 replaced.append((safe_target, backup))

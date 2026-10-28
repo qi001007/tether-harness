@@ -2,6 +2,22 @@
 
 更新日期：2026-10-28。
 
+## 演示前修复快照（2026-10-28 15:54）
+
+- 防御与性能候选版本为 `0.2.11`，尚未作为正式客户端发行发布。公开 Python 全量 95 passed / 1 旧制品 fixture skip；JS 单进程全量 83 passed。实际 DSH owner 版本 RPC 已恢复 HTTP 200 / 78 ms，安装与运行插件版本均 `0.2.10`。
+- 当前桌面开发 APP/Node 已加载候选修复；真实版本 status 三组件并发返回 281–500 ms。检查与安装锁分离，manifest 检查 4 秒超时、60 秒 singleflight 缓存；UI 5 分钟缓存、显式强刷、6–6.5 秒失败收敛。正常打开只检查，绝不自动安装。
+- 流式转发已部署到私有 Hub；实际公网网关 bootstrap 加 DSH 模块图为 1969 ms，HTTP 200，已收到 graph。该证据不替代 Electron 实际 composer 完整渲染验收。
+- 按主人明确要求，两台在线设备文件策略从 readonly 即时切换 full，未重启；桌面与 LAPTOP-01 均创建唯一测试文件并读回一致，笔记本写入+读回为 1250 ms，权限切换为 328 ms。系统与凭据目录仍保留保护。FilesPane 候选工具栏新增新建文件按钮。
+- 15:52 复查 LAPTOP-01 已离线，版本接口为明确 409/device_offline；其上次验证的三组件仍为 `0.2.10`，不能把离线状态称为已验证在线。
+- 未完成：原生 iframe 的上传加号接入远端文件选择器；候选客户端正式 CI/发行/两机安装；完整原生 composer 实际窗口复验。上述缺口保留，不能声称演示全功能完成。
+
+## 当前修复：桌面 DSH 插件版本查询与更新目录漂移
+
+- 已复现真实 DSH owner RPC `/tether-updates/status` 返回 HTTP 405；根因是插件使用旧 `connection.rpc.handle` 注册方式，而当前安装 SDK 提供 `connection.register(owner, channel, handler)`，原代码静默跳过注册。
+- 已备份并热修复本机安装源和 desktop profile 的三个插件文件，空闲检查后只重启唯一 DSH 宿主。重启后真实 owner RPC 返回 HTTP 200，78 ms，`runtime_version=current_version=0.2.10`、`restart_required=false`。这是本机补丁验收，尚未发布新版本。
+- 插件页面从已加载 bundle 的版本常量初始化当前版本；联网检查不再决定当前版本是否可见。更新器正在补齐 file: 安装源与 profile 同事务同步、失败回退、脏开发目录保护及多包版本漂移检测。
+- APP 原生页面白屏另查到 `/plugins/events` 为持续事件流，旧代理缓冲至 EOF 后超时返回 502；流式转发及 APP 启动时 Node 就绪检查仍在实现和验证，尚不标记完成。
+
 ## 当前权威状态：v0.2.10 远程 APP 更新已通过 LAPTOP-01 真机验收
 
 - 客户端 tag `v0.2.10`（`e9b8ad85ba757e8c5735a7cdcd9e930da75d322b`）已发布；公开 PR #3 合并，CI run `40643560927` 全绿，APP/Node/插件三份 ZIP 与 manifest 的 SHA-256 已核对并发布。v0.2.9 保留为历史版本。

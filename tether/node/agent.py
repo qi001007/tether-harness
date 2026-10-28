@@ -561,6 +561,34 @@ class Node:
         component = str(component)
         applying = action == "apply"
         app_restart_scheduled = False
+        if action in {"check", "status"}:
+            if self.update_applying:
+                await self._send({"type": "update_result", "req_id": req_id, "ok": False,
+                                  "component": component, "error_code": "update_busy",
+                                  "error": "update is applying"})
+                return
+            manager = self.update_managers[component]
+            if component == "plugin":
+                profile = self.native_surface.active_profile()
+                if not profile:
+                    await self._send({"type": "update_result", "req_id": req_id, "ok": False,
+                                      "error_code": "plugin_profile_unknown",
+                                      "error": "无法确认当前运行的 DSH Host profile，已拒绝远程插件更新；请在目标 DSH 内更新。"})
+                    return
+                manager = UpdateManager(manager.root, component, dsh_home=manager.dsh_home,
+                                        manifest_url=manager.manifest_url, state_dir=manager.state_dir,
+                                        profile=profile)
+            try:
+                result = await asyncio.to_thread(getattr(manager, action))
+                await self._send({"type": "update_result", "req_id": req_id, **result})
+            except Exception as exc:  # noqa: BLE001 - failed reads must not stop the Node reader
+                log(f"[update] {action} {component} failed: {type(exc).__name__}")
+                try:
+                    await self._send({"type": "update_result", "req_id": req_id, "ok": False,
+                                      "error_code": "update_failed", "error": "update operation failed"})
+                except Exception:
+                    self.connected = False
+            return
         async with self.update_lock:
             if component == "plugin":
                 profile = self.native_surface.active_profile()
