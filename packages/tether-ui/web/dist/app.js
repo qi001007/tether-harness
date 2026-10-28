@@ -10707,6 +10707,71 @@ function createTetherPanel({ React: React2, Native, host }) {
         )
       );
     };
+    const CODE_FILE = /\.(js|mjs|cjs|ts|tsx|jsx|py|json|css|scss|html|sh|ps1|java|c|h|cpp|hpp|go|rs|sql|yml|yaml|toml|ini|xml)$/i;
+    const CODE_WORDS = new Set("const let var function return if else for while class import from export async await def None True False public private void new try catch throw extends implements interface type struct fn use package self this in of not and or lambda yield match case switch break continue".split(" "));
+    const renderCode = (text, name) => {
+      if (!CODE_FILE.test(String(name || ""))) return text;
+      const parts = [];
+      const push = (value, color) => {
+        if (!value) return;
+        parts.push(color ? h("span", { key: parts.length, style: { color } }, value) : value);
+      };
+      let i = 0;
+      while (i < text.length) {
+        const ch = text[i];
+        const next = text[i + 1];
+        if (ch === "/" && next === "/") {
+          let j = text.indexOf(String.fromCharCode(10), i);
+          if (j < 0) j = text.length;
+          push(text.slice(i, j), "#6a737d");
+          i = j;
+          continue;
+        }
+        if (ch === "#") {
+          let j = text.indexOf(String.fromCharCode(10), i);
+          if (j < 0) j = text.length;
+          push(text.slice(i, j), "#6a737d");
+          i = j;
+          continue;
+        }
+        if (ch === '"' || ch === "'" || ch === "`") {
+          let j = i + 1;
+          while (j < text.length) {
+            if (text[j] === String.fromCharCode(92)) {
+              j += 2;
+              continue;
+            }
+            if (text[j] === ch) {
+              j += 1;
+              break;
+            }
+            j += 1;
+          }
+          push(text.slice(i, j), "#a31515");
+          i = j;
+          continue;
+        }
+        if (/[0-9]/.test(ch)) {
+          let j = i + 1;
+          while (j < text.length && /[0-9.]/.test(text[j])) j += 1;
+          push(text.slice(i, j), "#098658");
+          i = j;
+          continue;
+        }
+        if (/[A-Za-z_$]/.test(ch)) {
+          let j = i + 1;
+          while (j < text.length && /[A-Za-z0-9_$]/.test(text[j])) j += 1;
+          const word = text.slice(i, j);
+          if (CODE_WORDS.has(word)) push(word, "#0000ff");
+          else parts.push(word);
+          i = j;
+          continue;
+        }
+        parts.push(ch);
+        i += 1;
+      }
+      return parts;
+    };
     const renderToasts = () => {
       const row = (text, color, onClose, extra) => h(
         "div",
@@ -10867,7 +10932,7 @@ function createTetherPanel({ React: React2, Native, host }) {
             setDraft(ev.target.value);
             setDirty(true);
           }, spellCheck: false, style: { flex: "1 1 auto", width: "100%", boxSizing: "border-box", resize: "none", border: 0, outline: "none", padding: "14px 18px", fontFamily: "Consolas, monospace", fontSize: 12.5, lineHeight: 1.6, background: C.bg, color: C.ink } });
-          return h("pre", { className: "tether-file-text tether-scroll", style: { flex: "1 1 auto", overflow: "auto", margin: 0, padding: "16px 20px", fontFamily: "Consolas, monospace", fontSize: 12.5, lineHeight: 1.6, whiteSpace: "pre-wrap", color: C.ink, background: C.bg } }, draft);
+          return h("pre", { className: "tether-file-text tether-scroll", style: { flex: "1 1 auto", overflow: "auto", margin: 0, padding: "16px 20px", fontFamily: "Consolas, monospace", fontSize: 12.5, lineHeight: 1.6, whiteSpace: "pre-wrap", color: C.ink, background: C.bg } }, renderCode(draft, file.name));
         }
         if (file.kind === "image") return h(
           "div",
