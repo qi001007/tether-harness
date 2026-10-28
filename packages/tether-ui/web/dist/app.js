@@ -7317,11 +7317,17 @@ function createConnectionPanel(React2) {
 }
 
 // packages/tether-ui/src/app.js
-function isUpdateTargetCurrent(requestDevice, requestEpoch, currentDevice, currentEpoch) {
-  return requestDevice === currentDevice && requestEpoch === currentEpoch;
-}
 function updateErrorText(value) {
   return String(value && value.message || value || "\u66F4\u65B0\u5931\u8D25").replace(/^Error invoking remote method ['"]tether:[^'"]+['"]:\s*/, "").replace(/^Error:\s*/, "");
+}
+function shortUpdateError(error) {
+  const code = error && error.code;
+  if (code === "device_offline") return "\u8BBE\u5907\u79BB\u7EBF";
+  if (code === "node_update_required" || code === "bad_component" || code === "not_found") return "\u8282\u70B9\u7248\u672C\u8FC7\u65E7\uFF0C\u8BF7\u5148\u5B89\u88C5\u542B\u66F4\u65B0\u5668\u7684\u53D1\u884C\u7248";
+  if (error && error.status === 404) return "\u670D\u52A1\u7AEF\u4E0D\u652F\u6301\u66F4\u65B0";
+  if (code === "device_not_found") return "\u8BBE\u5907\u4E0D\u5B58\u5728";
+  if (error && !error.status && !code) return "Hub \u4E0D\u53EF\u8FBE";
+  return updateErrorText(error);
 }
 function safeServiceAddress(value) {
   try {
@@ -8890,10 +8896,6 @@ function createTetherPanel({ React: React2, Native, host }) {
       setDeviceId(value);
     };
     const deviceIdRef = React2.useRef("");
-    const updateTargetRef = React2.useRef({ deviceId: "", epoch: 0 });
-    if (updateTargetRef.current.deviceId !== deviceId) {
-      updateTargetRef.current = { deviceId, epoch: updateTargetRef.current.epoch + 1 };
-    }
     const treeDeviceEpochRef = React2.useRef(0);
     const loadedDirRef = React2.useRef("");
     const pathRef = React2.useRef("");
@@ -8984,6 +8986,8 @@ function createTetherPanel({ React: React2, Native, host }) {
     const [updateBusy, setUpdateBusy] = React2.useState("");
     const [updateErrors, setUpdateErrors] = React2.useState({ app: "", localPlugin: "", devices: {} });
     const autoUpdateChecksRef = React2.useRef({});
+    const lastUpdateToastRef = React2.useRef({});
+    const [updateToast, setUpdateToast] = React2.useState("");
     const [showHub, setShowHub] = React2.useState(false);
     const [hubUrl, setHubUrl] = React2.useState("");
     const [hubToken, setHubToken] = React2.useState("");
@@ -9047,8 +9051,8 @@ function createTetherPanel({ React: React2, Native, host }) {
       probeConfiguredHub();
       return void 0;
     }, [showHub]);
-    const updateScope = (component) => component === "node" || component === "plugin" ? { deviceId, epoch: deviceId === updateTargetRef.current.deviceId ? updateTargetRef.current.epoch : -1 } : null;
-    const scopeIsCurrent = (scope) => !scope || isUpdateTargetCurrent(scope.deviceId, scope.epoch, deviceIdRef.current, updateTargetRef.current.epoch);
+    const updateScope = (component) => component === "node" || component === "plugin" ? deviceId ? { deviceId, epoch: 0 } : null : null;
+    const scopeIsCurrent = (scope) => !scope || !!(stateRef.current && stateRef.current.devices && stateRef.current.devices.some((item) => item.device_id === scope.deviceId));
     const updateCheckScopeIsCurrent = (scope) => scopeIsCurrent(scope) && (!scope || !!(stateRef.current && stateRef.current.devices && stateRef.current.devices.some((item) => item.device_id === scope.deviceId && item.online)));
     const setComponentUpdateInfo = (component, value, scope) => {
       if (scope && !scopeIsCurrent(scope)) return;
@@ -9060,6 +9064,13 @@ function createTetherPanel({ React: React2, Native, host }) {
     };
     const setComponentUpdateError = (component, message, scope) => {
       if (scope && !scopeIsCurrent(scope)) return;
+      if (message) {
+        const key = (scope ? scope.deviceId : "") + ":" + component;
+        if (lastUpdateToastRef.current[key] !== message) {
+          lastUpdateToastRef.current[key] = message;
+          setUpdateToast(message);
+        }
+      }
       if (!scope) setUpdateErrors((current) => ({ ...current, [component]: message }));
       else setUpdateErrors((current) => ({
         ...current,
@@ -9107,7 +9118,7 @@ function createTetherPanel({ React: React2, Native, host }) {
       const key = updateCheckKey(component, scope);
       return dedupeUpdateCheck(autoUpdateChecksRef.current, key, () => checkUpdateAvailability(() => loadUpdateInfo(component, "check", void 0, scope), () => updateCheckScopeIsCurrent(scope)).then((result) => {
         if (result.cancelled) return result;
-        setComponentUpdateError(component, result.failed ? updateErrorText(result.error) : "", scope);
+        setComponentUpdateError(component, result.failed ? shortUpdateError(result.error) : "", scope);
         return result;
       }));
     };
@@ -9159,15 +9170,32 @@ function createTetherPanel({ React: React2, Native, host }) {
         return result;
       } catch (error) {
         const code = error && error.code;
-        const message = code === "update_busy" ? component === "app" ? updateErrorText(error) : "\u76EE\u6807\u8BBE\u5907\u5F53\u524D\u6B63\u5728\u8FD0\u884C\u4EFB\u52A1\uFF0C\u8BF7\u7B49\u5F85\u4EFB\u52A1\u7ED3\u675F\u540E\u91CD\u8BD5\u3002" : code === "device_offline" ? "\u76EE\u6807\u8BBE\u5907\u79BB\u7EBF\uFF0C\u8FDE\u63A5\u540E\u53EF\u91CD\u8BD5\u3002" : code === "node_update_required" ? "\u76EE\u6807\u8282\u70B9\u7248\u672C\u8FC7\u65E7\uFF0C\u8BF7\u5148\u5B89\u88C5\u4E00\u6B21\u5305\u542B\u66F4\u65B0\u5668\u7684\u65B0\u53D1\u884C\u7248\u3002" : error && error.status === 404 && code !== "device_not_found" && component !== "app" ? "\u5F53\u524D Hub/Controller \u5C1A\u672A\u652F\u6301\u66F4\u65B0\uFF0C\u8BF7\u5148\u5B89\u88C5\u5305\u542B\u66F4\u65B0\u63A5\u53E3\u7684\u670D\u52A1\u7AEF\u57FA\u7EBF\u3002" : code === "device_not_found" ? "\u627E\u4E0D\u5230\u6240\u9009\u76EE\u6807\u8BBE\u5907\uFF0C\u8BF7\u5237\u65B0\u8BBE\u5907\u5217\u8868\u540E\u91CD\u8BD5\u3002" : code === "bad_component" || code === "not_found" ? "\u76EE\u6807\u8BBE\u5907\u7684\u66F4\u65B0\u534F\u8BAE\u8F83\u65E7\uFF0C\u8BF7\u5148\u5B89\u88C5\u4E00\u6B21\u5305\u542B\u66F4\u65B0\u5668\u7684\u65B0\u53D1\u884C\u7248\u3002" : scope && !error.status && !code ? action === "check" || action === "status" ? "\u76EE\u6807 Hub/Controller \u6682\u65F6\u4E0D\u53EF\u8FBE\uFF0C\u66F4\u65B0\u68C0\u67E5\u5931\u8D25\uFF0C\u53EF\u8FDE\u63A5\u540E\u91CD\u8BD5\u3002" : "\u8FDE\u63A5\u63A7\u5236\u9762\u5DF2\u53D8\u5316\uFF0C\u8BF7\u91CD\u65B0\u68C0\u67E5\u66F4\u65B0\u540E\u518D\u8BD5\u3002" : updateErrorText(error);
+        const message = code === "update_busy" ? "\u76EE\u6807\u8BBE\u5907\u5FD9\uFF0C\u7A0D\u540E\u91CD\u8BD5" : shortUpdateError(error);
         setComponentUpdateError(component, message, scope);
         return null;
       } finally {
         setUpdateBusy((current) => current === key ? "" : current);
       }
     };
-    const updateOneClick = async (component) => {
-      const scope = updateScope(component);
+    const watchNodeRestart = async (scope, authority) => {
+      for (let attempt = 0; attempt < 90; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 2e3));
+        if (!scopeIsCurrent(scope)) return;
+        const target = (stateRef.current && stateRef.current.devices || []).find((item) => item.device_id === scope.deviceId);
+        const running = target && target.capabilities && target.capabilities.node_version;
+        try {
+          const status = await loadUpdateInfo("node", "status", authority, scope);
+          const versionOk = !!(running && status && status.ok !== false && status.latest_version && running === status.latest_version);
+          if (status && status.ok !== false && (!status.restart_required || versionOk)) {
+            if (status.restart_required) setComponentUpdateInfo("node", { ...status, restart_required: false }, scope);
+            return;
+          }
+        } catch (_) {
+        }
+      }
+    };
+    const updateOneClick = async (component, fixedScope) => {
+      const scope = fixedScope === void 0 ? updateScope(component) : fixedScope;
       let authority;
       const current = () => scopeIsCurrent(scope);
       try {
@@ -9187,6 +9215,7 @@ function createTetherPanel({ React: React2, Native, host }) {
         });
         if (outcome.cancelled) return;
         if (!outcome.failed && !outcome.updated) setComponentUpdateError(component, "", scope);
+        if (!outcome.failed && outcome.updated && component === "node") watchNodeRestart(scope, authority);
       } catch (error) {
         setComponentUpdateError(component, updateErrorText(error), scope);
       }
@@ -9195,52 +9224,64 @@ function createTetherPanel({ React: React2, Native, host }) {
       setShowUpdate(true);
       if (host && host.kind === "app") automaticUpdateCheck("app", null);
       if (host && host.kind === "dsh") automaticUpdateCheck("localPlugin", null);
-      if (deviceId) {
-        const scope = updateScope("node");
+      (state && state.devices || []).forEach((item) => {
+        const scope = { deviceId: item.device_id, epoch: 0 };
+        const info = (updateInfo.devices[item.device_id] || {}).node || {};
+        const running = item.capabilities && item.capabilities.node_version;
+        if (info.restart_required && running && info.current_version && running === info.current_version) {
+          setComponentUpdateInfo("node", { ...info, restart_required: false }, scope);
+        }
+        if (!item.online) return;
         automaticUpdateCheck("node", scope);
         automaticUpdateCheck("plugin", scope);
-      }
+      });
     };
-    const renderUpdateCard = (component, title, targetDevice) => {
+    const renderUpdateCard = (component, targetDevice) => {
       const scope = updateScope(component);
       const info = scope ? (updateInfo.devices[scope.deviceId] || {})[component] || {} : updateInfo[component] || {};
       const errorText = scope ? (updateErrors.devices[scope.deviceId] || {})[component] || "" : updateErrors[component] || "";
       const preparedId = info.prepared_id || ((info.prepared || [])[0] || {}).prepared_id;
       const localTarget = component === "app" || component === "localPlugin";
       const online = localTarget || !!(targetDevice && targetDevice.online);
-      const targetLabel = component === "app" ? "\u5F53\u524D Tether APP" : component === "localPlugin" ? "\u5F53\u524D DSH \u63D2\u4EF6\u5B9E\u4F8B" : targetDevice ? (targetDevice.name || targetDevice.device_id) + " \xB7 " + targetDevice.device_id : "\u672A\u9009\u62E9\u76EE\u6807\u8BBE\u5907";
-      const busy2 = updateBusy.startsWith((scope ? scope.deviceId : "") + ":" + component + ":");
+      const deviceName = targetDevice ? targetDevice.name || targetDevice.device_id : "";
+      const title = component === "app" ? "\u672C\u673A Tether APP" : component === "localPlugin" ? "\u672C\u673A DSH \u63D2\u4EF6" : (deviceName || "\u672A\u9009\u62E9\u8BBE\u5907") + (component === "node" ? " \xB7 Node" : " \xB7 DSH \u63D2\u4EF6");
+      const busy2 = updateBusy.startsWith((scope ? scope.deviceId : "") + ":");
+      const statusPill = info.restart_required ? pill(component === "plugin" || component === "localPlugin" ? "\u91CD\u542F DSH \u540E\u751F\u6548" : "\u8282\u70B9\u91CD\u542F\u4E2D", C.amber) : info.update_available ? pill("\u6709\u66F4\u65B0", C.amber) : info.installed_latest === true ? pill("\u5DF2\u662F\u6700\u65B0", C.green) : errorText ? pill("\u5931\u8D25", C.red) : !online && !localTarget ? pill("\u79BB\u7EBF", C.mute) : null;
       return h(
         "div",
-        { key: component, style: { padding: 12, borderRadius: 8, background: C.panel, marginBottom: 10 } },
+        { key: (scope ? scope.deviceId : "") + ":" + component, style: { padding: 12, borderRadius: 8, background: C.panel, marginBottom: 10 } },
         h(
           "div",
-          { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 6 } },
-          h("strong", { style: { fontSize: 13 } }, title),
-          info.restart_required ? pill(component === "plugin" || component === "localPlugin" ? "\u91CD\u542F DSH \u540E\u751F\u6548" : "\u8282\u70B9\u6B63\u5728\u91CD\u542F", C.amber) : info.update_available ? pill("\u6709\u66F4\u65B0", C.amber) : info.installed_latest ? pill("\u5DF2\u662F\u6700\u65B0", C.green) : null
+          { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 4, minWidth: 0 } },
+          h("strong", { style: { fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, title),
+          targetDevice && deviceName !== targetDevice.device_id ? h("span", { style: { color: C.mute, fontSize: 11 } }, targetDevice.device_id) : null,
+          h("span", { style: { marginLeft: "auto", display: "flex", alignItems: "center" } }, statusPill)
         ),
-        h("div", { style: { color: C.mute, fontSize: 11.5, lineHeight: "18px", marginBottom: 4 } }, "\u76EE\u6807\uFF1A" + targetLabel),
-        h("div", { style: { color: C.sub, fontSize: 12, lineHeight: "19px" } }, "\u5F53\u524D\u7248\u672C\uFF1A" + (info.current_version || "\u672A\u77E5") + "\u3000\u6700\u65B0\u7248\u672C\uFF1A" + (info.latest_version || "\u672A\u77E5")),
-        component === "plugin" || component === "localPlugin" ? h("div", { style: { color: C.mute, fontSize: 11.5, lineHeight: "18px", marginTop: 4 } }, component === "localPlugin" ? "\u66F4\u65B0\u53EA\u4F5C\u7528\u4E8E\u5F53\u524D\u8FD0\u884C\u6B64\u63D2\u4EF6\u7684 DSH \u5B9E\u4F8B\uFF1B\u4E0D\u4F1A\u4FEE\u6539\u9009\u4E2D\u7684\u8FDC\u7AEF\u8BBE\u5907\u3002\u5B89\u88C5\u540E\u9700\u91CD\u542F\u5F53\u524D DeepSeek Harness\u3002" : "\u63D2\u4EF6\u4F1A\u5B89\u88C5\u5230\u6240\u9009\u8BBE\u5907\u7684 DSH\u3002\u5B89\u88C5\u540E\u9700\u8981\u91CD\u542F\u8BE5\u8BBE\u5907\u4E0A\u7684 DeepSeek Harness\u3002") : null,
-        component === "node" ? h("div", { style: { color: C.mute, fontSize: 11.5, lineHeight: "18px", marginTop: 4 } }, "\u66F4\u65B0\u76EE\u6807\u662F\u6240\u9009\u8BBE\u5907\u7684 Tether Node\u3002") : null,
-        component === "app" ? h("div", { style: { color: C.mute, fontSize: 11.5, lineHeight: "18px", marginTop: 4 } }, "\u51C6\u5907\u5B8C\u6210\u540E\uFF0CAPP \u4F1A\u9000\u51FA\u5B89\u88C5\u5E76\u81EA\u52A8\u91CD\u65B0\u542F\u52A8\u3002") : null,
-        info.restart_required ? h("div", { style: { color: C.amber, fontSize: 11.5, lineHeight: "18px", marginTop: 4 } }, component === "plugin" ? "\u63D2\u4EF6\u5DF2\u5B89\u88C5\uFF0C\u9700\u91CD\u542F\u76EE\u6807\u8BBE\u5907\u4E0A\u7684 DeepSeek Harness \u624D\u4F1A\u751F\u6548\u3002" : component === "localPlugin" ? "\u63D2\u4EF6\u5DF2\u5B89\u88C5\uFF0C\u9700\u91CD\u542F\u5F53\u524D DeepSeek Harness \u624D\u4F1A\u751F\u6548\u3002" : "\u8282\u70B9\u66F4\u65B0\u5DF2\u5B89\u88C5\uFF0C\u7B49\u5F85\u53D7\u7BA1 Node \u8FDB\u7A0B\u91CD\u65B0\u542F\u52A8\u3002") : null,
-        errorText || (info.last_result && info.last_result.ok === false ? info.last_result.message : "") ? h("div", { role: "alert", style: { color: C.red, fontSize: 11.5, lineHeight: "18px", marginTop: 5 } }, errorText || info.last_result.message) : null,
         h(
           "div",
-          { style: { display: "flex", gap: 7, flexWrap: "wrap", marginTop: 9 } },
-          btn("\u4E00\u952E\u66F4\u65B0", () => updateOneClick(component), { primary: true, disabled: busy2 || !online || !!info.busy }),
-          btn(busy2 ? "\u5904\u7406\u4E2D\u2026" : "\u68C0\u67E5\u66F4\u65B0", () => updateAction(component, "check"), { disabled: busy2 || !online }),
-          info.update_available ? btn("\u4E0B\u8F7D\u5E76\u6821\u9A8C", () => updateAction(component, "prepare"), { disabled: busy2 || !online || !!info.busy }) : null,
-          preparedId ? btn(component === "app" ? "\u5B89\u88C5\u5E76\u91CD\u542F APP" : component === "localPlugin" ? "\u5B89\u88C5\u5F53\u524D\u63D2\u4EF6" : component === "plugin" ? "\u5B89\u88C5\u5230\u76EE\u6807\u8BBE\u5907" : "\u5B89\u88C5\u5E76\u91CD\u542F\u8282\u70B9", () => updateAction(component, "apply", preparedId), { primary: true, disabled: busy2 || !online || !!info.busy }) : null,
-          info.busy ? h("span", { style: { color: C.amber, fontSize: 11.5, alignSelf: "center" } }, "\u76EE\u6807\u8BBE\u5907\u6B63\u5728\u8FD0\u884C\u4EFB\u52A1\uFF0C\u6682\u4E0D\u53EF\u5B89\u88C5\u3002") : null
+          { style: { color: C.sub, fontSize: 12, lineHeight: "19px" } },
+          "\u5F53\u524D " + (info.current_version || "\u672A\u77E5") + " \xB7 \u6700\u65B0 " + (info.latest_version || "\u672A\u77E5")
+        ),
+        h(
+          "div",
+          { style: { display: "flex", gap: 7, flexWrap: "wrap", marginTop: 8 } },
+          btn("\u4E00\u952E\u66F4\u65B0", () => updateOneClick(component, scope), { primary: true, disabled: busy2 || !online || !!info.busy || !!info.restart_required }),
+          btn(busy2 ? "\u5904\u7406\u4E2D\u2026" : "\u68C0\u67E5\u66F4\u65B0", () => updateAction(component, "check", void 0, scope), { disabled: busy2 || !online }),
+          info.update_available ? btn("\u4E0B\u8F7D\u5E76\u6821\u9A8C", () => updateAction(component, "prepare", void 0, scope), { disabled: busy2 || !online || !!info.busy }) : null,
+          preparedId ? btn(component === "app" ? "\u5B89\u88C5\u5E76\u91CD\u542F APP" : "\u5B89\u88C5", () => updateAction(component, "apply", preparedId, scope), { primary: true, disabled: busy2 || !online || !!info.busy }) : null,
+          info.restart_required && (component === "plugin" || component === "localPlugin") ? btn("\u5DF2\u91CD\u542F DSH\uFF0C\u91CD\u65B0\u68C0\u67E5", async () => {
+            try {
+              await updateAction(component, "check", void 0, scope);
+              const status = await loadUpdateInfo(component, "status", void 0, scope);
+              if (status && status.ok !== false && !status.update_available) {
+                setComponentUpdateInfo(component, { ...status, restart_required: false }, scope);
+              }
+            } catch (_) {
+            }
+          }, { disabled: busy2 }) : null
         )
       );
     };
-    React2.useEffect(() => {
-      setUpdateInfo((current) => ({ ...current, devices: {} }));
-      setUpdateErrors((current) => ({ ...current, devices: {} }));
-    }, [deviceId]);
     React2.useEffect(() => {
       const components = host && host.kind === "app" ? ["app"] : host && host.kind === "dsh" ? ["localPlugin"] : [];
       if (!components.length) return void 0;
@@ -10492,12 +10533,13 @@ function createTetherPanel({ React: React2, Native, host }) {
         }, "\xD7")
       );
       const rows = [];
+      if (updateToast) rows.push(row(updateToast, C.red, () => setUpdateToast("")));
       if (notice) rows.push(row(notice, /^Saved |^Policy updated|^已重命名/.test(notice) ? C.green : C.red, () => setNotice("")));
       if (projectsError) rows.push(row(projectsError, C.red, () => setProjectsError(""), btn("\u91CD\u8BD5\u5DE5\u4F5C\u533A", loadProjects)));
       return h("div", {
         style: {
           position: "absolute",
-          top: 50,
+          bottom: 14,
           right: 12,
           zIndex: 85,
           display: "grid",
@@ -10923,7 +10965,7 @@ function createTetherPanel({ React: React2, Native, host }) {
           style: { marginLeft: 8, marginRight: 0, height: 26, padding: "0 10px", borderRadius: 999, border: 0, background: C.bg, color: C.sub, display: "flex", alignItems: "center", gap: 6, fontSize: 12, cursor: "pointer", flex: "0 0 auto" }
         }, updateHasAvailable ? "\u66F4\u65B0 \xB7 \u6709\u65B0\u7248\u672C" : updateHasFailure ? "\u66F4\u65B0 \xB7 \u68C0\u67E5\u5931\u8D25" : "\u66F4\u65B0")
       ),
-      notice || projectsError ? renderToasts() : null,
+      notice || projectsError || updateToast ? renderToasts() : null,
       h(
         "div",
         { style: { display: "flex", flex: "1 1 auto", minHeight: 0 } },
@@ -10995,11 +11037,10 @@ function createTetherPanel({ React: React2, Native, host }) {
             h("strong", { style: { fontSize: 14 } }, "\u66F4\u65B0\u4E2D\u5FC3"),
             h("button", { onClick: () => setShowUpdate(false), style: { marginLeft: "auto", border: 0, background: "transparent", fontSize: 18, cursor: "pointer", color: C.mute } }, "\xD7")
           ),
-          host && host.kind === "app" ? renderUpdateCard("app", "Tether APP", null) : null,
-          host && host.kind === "dsh" ? renderUpdateCard("localPlugin", "\u5F53\u524D\u63D2\u4EF6\uFF08\u672C\u673A DSH\uFF09", null) : null,
-          renderUpdateCard("node", "Tether Node", device),
-          renderUpdateCard("plugin", "\u76EE\u6807\u8BBE\u5907\u4E0A\u7684 DSH \u63D2\u4EF6", device),
-          host && host.kind === "dsh" ? h("div", { style: { color: C.mute, fontSize: 11.5, lineHeight: "18px", marginTop: 2 } }, "\u201C\u5F53\u524D\u63D2\u4EF6\u201D\u901A\u8FC7\u5F53\u524D DSH \u5B9E\u4F8B\u7684\u8BA4\u8BC1 RPC \u66F4\u65B0\uFF1B\u201C\u76EE\u6807\u8BBE\u5907\u4E0A\u7684 DSH \u63D2\u4EF6\u201D\u548C Node \u66F4\u65B0\u53EA\u4F5C\u7528\u4E8E\u9009\u4E2D\u7684\u8BBE\u5907\u3002") : host && host.kind === "web" ? h("div", { style: { color: C.mute, fontSize: 11.5, lineHeight: "18px", marginTop: 2 } }, "Node \u4E0E\u63D2\u4EF6\u66F4\u65B0\u53EA\u4F5C\u7528\u4E8E\u5F53\u524D\u9009\u4E2D\u7684\u8BBE\u5907\u3002") : null
+          host && host.kind === "app" ? renderUpdateCard("app", null) : null,
+          host && host.kind === "dsh" ? renderUpdateCard("localPlugin", null) : null,
+          (state && state.devices || []).slice().sort((a, b) => (a.device_id === appLocalDevice ? 0 : 1) - (b.device_id === appLocalDevice ? 0 : 1)).flatMap((item) => [renderUpdateCard("node", item), renderUpdateCard("plugin", item)]),
+          h("div", { style: { color: C.mute, fontSize: 11.5, lineHeight: "18px", marginTop: 2 } }, "Node \u4E0E DSH \u63D2\u4EF6\u53EF\u5728\u6B64\u8FDC\u7A0B\u66F4\u65B0\uFF1BTether APP \u53EA\u80FD\u5728\u5176\u6240\u5728\u7535\u8111\u4E0A\u81EA\u66F4\u65B0\u3002\u63D2\u4EF6\u5B89\u88C5\u540E\u9700\u91CD\u542F\u5BF9\u5E94\u8BBE\u5907\u7684 DeepSeek Harness\u3002")
         )
       ) : null,
       showSettings ? h(

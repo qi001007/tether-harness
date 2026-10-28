@@ -1,5 +1,16 @@
 # Public client releases
 
+## v0.2.6
+
+Update-center rework from feedback F48–F55:
+
+- Cards are titled by device (`设备名 · Node`, `设备名 · DSH 插件`, `本机 Tether APP`, `本机 DSH 插件`); the modal lists every known device (local first), and opening it checks all online devices. Remote APP updates are explicitly out of scope (one-line note).
+- Update errors are short one-liners, deduplicated through the bottom-right toast layer, and never rendered inside cards.
+- After a one-click Node update the UI polls `capabilities.node_version` and converges the card to `已是最新`; plugin cards show `已重启 DSH，重新检查` and converge after the user restarts DSH. The one-click chain was verified end-to-end: DESKTOP-LOCAL plugin `0.2.3 → 0.2.5` via check → prepare (`bc04336b…`) → apply → status `current=0.2.5, installed_latest=true`.
+- The local DSH-plugin card degrades to a short failure toast when the DSH-side RPC channel is unavailable; every device's Hub card remains the reliable version/update path.
+
+The cross-machine attachment issue (F54) is recorded as pending a design decision; it is a browser file-picker boundary, not a routing bug. Packages are unsigned; install acceptance remains separate.
+
 ## v0.2.5
 
 Fixes found in the first v0.2.4 deployment:

@@ -68,7 +68,7 @@ test('the node console serves session transcripts so local devices do not 404', 
 
 test('errors render as a dismissible overlay instead of pushing the page down', () => {
   assert.match(source, /const renderToasts = \(\) => \{/)
-  assert.match(source, /position: 'absolute', top: 50, right: 12, zIndex: 85/)
+  assert.match(source, /position: 'absolute', bottom: 14, right: 12, zIndex: 85/)
   assert.match(source, /'aria-label': '关闭提示'/)
   assert.match(source, /setProjectsError\(''\)/)
   assert.doesNotMatch(source, /notice \? h\('div', \{ style: \{ padding: '6px 14px'/)
