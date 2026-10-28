@@ -2,6 +2,14 @@
 
 更新日期：2026-10-28。
 
+## 当前状态：v0.2.14 已发布并完成两机更新，插件宿主待重载
+
+- 公开 PR #8 合并（`e57931f`），tag `v0.2.14`；发行 CI `40688429123` 全绿，构建步骤内**强制验签**（缺 `TETHER_RELEASE_PRIVATE_KEY` 直接失败，产出后再验一次）。Release `v0.2.14` 已发布；匿名 `latest/download/tether-update.json` 为 `0.2.14`、`channel=stable`、签名 88 字节，三 ZIP 的大小与 SHA-256 与清单逐项一致。
+- 私有 PR #6/#7 合并并部署：线上 `/opt/tether/server` = `2b0a795`，`/releases/manifest` 200 且返回签名的 0.2.14；备份 `server-20261028T123737Z`、`server-20261028T124217Z`，Hub/mux/Caddy active、`NRestarts=0`。`/releases/manifest` 改为先查 GitHub API 的 `tag_name` 再取不可变 `/releases/download/<tag>/...`——发布后 `latest` 重定向按 PoP 边缘缓存，曾让镜像多分钟停留在 0.2.13。
+- 两机更新（经 Hub 的 check/prepare/apply，与更新页同一后端）：DESKTOP-LOCAL 与 LAPTOP-01 的 APP/Node 均报告 `0.2.14`；Node 重启后分别约 12 s / 6 s 重新在线，APP 由 helper 重启后回到在线。插件在磁盘/profile/`file:` 源均为 `0.2.14`。
+- 数据保留：更新后 DESKTOP-LOCAL 3 个工作区、12 个会话；LAPTOP-01 2 个工作区、1 个会话；与更新前一致。未读取或输出 `hub.json` 内容。
+- **未完成**：插件宿主内存仍是 0.2.13（DSH 于 18:58 启动，插件文件 20:46 才替换），需在更新页点“立即生效”或重启一次 DSH；0.2.14 的 `runtime_version` 仍按磁盘读取，会误报“已是最新”，修复已在 `next/0.2.15`（`3b37be0`）但尚未发行。
+
 ## 当前实测状态：v0.2.13 已发布，两机安装待主人验收
 
 - 公开 PR #7 已合并；`v0.2.13` tag 指向 `5938b70ed3188a6095bda2bf32778ad9edee68ef`，发行 CI `40667788605` 成功，[GitHub Release v0.2.13](https://github.com/qi001007/tether-harness/releases/tag/v0.2.13) 已发布。APP、插件、Node 三个 ZIP 与 manifest 的版本、大小、SHA-256 均已核验；匿名 `latest/download/tether-update.json` 返回 HTTP 200，SHA-256 为 `3ce3fc8166d61e91eaefa1acc282a4d71e0f7a1774177075606aa63f6e8de507`，三个组件版本均为 `0.2.13`。`v0.2.12` 失败 tag 保留，未改写。
