@@ -1,100 +1,325 @@
-# Tether
+<div align="center">
+  <img src="assets/tether-icon.svg" width="88" alt="Tether icon" />
+  <h1>Tether</h1>
+  <p><strong>Your DeepSeek Harness workspace, across all your devices.</strong></p>
+  <p>
+    <a href="https://github.com/qi001007/tether-harness/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/qi001007/tether-harness?sort=semver" /></a>
+    <a href="https://github.com/qi001007/tether-harness/actions/workflows/release.yml"><img alt="Release workflow" src="https://github.com/qi001007/tether-harness/actions/workflows/release.yml/badge.svg" /></a>
+    <a href="https://github.com/qi001007/tether-harness/blob/main/LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg" /></a>
+    <img alt="Platform: Windows 11+" src="https://img.shields.io/badge/platform-Windows%2011%2B-0078D4" />
+    <img alt="Status: alpha" src="https://img.shields.io/badge/status-alpha-orange" />
+  </p>
+  <p>
+    <a href="#quick-start">Quick start</a> ·
+    <a href="#download">Download</a> ·
+    <a href="#versioning">Versioning</a> ·
+    <a href="#how-it-works">Architecture</a> ·
+    <a href="#security">Security</a> ·
+    <a href="#status">Status</a>
+  </p>
+</div>
 
-Tether adds device-aware file tools and remote task actions to the DeepSeek Harness desktop app. It consists of a DSH client plugin, an optional desktop APP client, and a Node installed on each target device. A compatible Tether service is required for multi-device use.
+---
 
-Repo: https://github.com/qi001007/tether-harness
+Tether connects the **DeepSeek Harness (DSH)** desktop app on one machine to the DSH app on another. It does not replace DSH, proxy your model, or create a second conversational backend: the target device's **DSH Host remains the only place where the model runs and the session is written**. Tether adds the network, device identity, file policy, updates, and the UI that lets you choose which machine you are working on.
 
-## Components
+> **Project status: alpha.** Tether is a working research prototype, not a production multi-tenant service. Read [Status](#status) and [Security](#security) before exposing a Hub to other people.
 
-| Component | What it does |
-|---|---|
-| DSH plugin | Adds device selection, file and permission views, and optional MCP tools to the DSH desktop app. The target DSH Host remains responsible for its own model, account, and session. |
-| APP client | Provides a separate desktop entry point for connecting to a configured Tether service. |
-| Node | Runs on a target device and performs operations allowed by that device's policy. |
-| Tether service | Connects clients and Nodes. Use an approved private service if you have access, or configure a reachable Hub that you operate or are authorized to use. |
+## Why Tether
 
-## Connect to a service
+- **DSH-native.** The remote surface is the real DSH web UI, not a rebuilt chat page. Your plugins, account, tools, and session history stay on the target DSH Host.
+- **Choose your entry point.** The APP and the DSH plugin are independent clients. A headless Node makes any Windows machine a target.
+- **No VPN required.** Nodes connect outbound to a public HTTPS/WSS Hub. Tailscale is not part of the production path.
+- **Policy and audit by default.** File access is restricted to configured roots; every file operation is auditable on the target device.
+- **One update contract.** APP, plugin, and Node share a version manifest and an in-app update center.
 
-The client and Node need the address and credentials for the same compatible service. Keep credentials in local environment configuration; never commit them or paste them into public issues.
+## How it works
 
-**Optional private service:** if your organization provides the Tether service as a private dependency, install it using the package source and instructions in its private repository or approved internal catalog. This public repository intentionally does not publish the private repository URL, deployment configuration, or credentials.
-
-**Without access to a private service:** configure a reachable, compatible Hub that you operate or are authorized to use. For the APP, put its URL, access token, and Node token in the extracted APP's local `apps/tether-app/data/hub.json` (keys: `url`, `accessToken`, `nodeToken`) or supply the corresponding `TETHER_CONTROLLER_URL`, `TETHER_ACCESS_TOKEN`, and `TETHER_NODE_TOKEN` environment variables. For a Node, set `TETHER_CONTROLLER=wss://<your-hub>/ws/node` and its assigned `TETHER_NODE_TOKEN`; configure the DSH plugin through its connection page. These values are examples; replace the host and tokens locally, and do not commit credentials. If no compatible service is reachable and configured, remote device features are unavailable.
-
-## Download v0.2.3 packages
-
-The [v0.2.3 GitHub Release](https://github.com/qi001007/tether-harness/releases/tag/v0.2.3) contains one ZIP per component and the update manifest:
-
-- [APP ZIP](https://github.com/qi001007/tether-harness/releases/download/v0.2.3/tether-app-0.2.3.zip)
-- [DSH plugin ZIP](https://github.com/qi001007/tether-harness/releases/download/v0.2.3/tether-plugin-0.2.3.zip)
-- [Node ZIP](https://github.com/qi001007/tether-harness/releases/download/v0.2.3/tether-node-0.2.3.zip)
-- [Update manifest](https://github.com/qi001007/tether-harness/releases/download/v0.2.3/tether-update.json)
-
-These are ZIP packages, not self-contained EXE installers. They do not include or configure a Hub. Configure all components to use the same reachable, compatible service and use compatible client, plugin, Node, and service versions.
-
-### APP ZIP
-
-On Windows, extract the ZIP and run `apps\tether-app\Tether-App.cmd` from the extracted folder. The launcher prepares its Python environment and installs APP dependencies on first run. It requires Python 3.11+ and Node.js 24 LTS with npm available on `PATH`.
-
-### DSH plugin ZIP
-
-Prerequisites: Windows, the DeepSeek Harness desktop app, and access to a configured compatible Tether service. Extract the ZIP, close DeepSeek Harness, and run this command from the extracted folder:
-
-```powershell
-.\desktop\install-plugin.ps1
+```text
+┌──────────────────┐        HTTPS / WSS         ┌────────────────────┐
+│  APP  /  plugin  │ ─────────────────────────▶ │        Hub         │
+│     clients      │ ◀───────────────────────── │ auth · route · state│
+└──────────────────┘                            └─────────┬──────────┘
+                                                          │ WSS /ws/node
+                                                          ▼
+                                                ┌────────────────────┐
+                                                │        Node        │
+                                                │  target-device     │
+                                                │  agent (headless)  │
+                                                └─────────┬──────────┘
+                                                          │ loopback HTTP/WS
+                                                          ▼
+                                                ┌────────────────────┐
+                                                │     DSH Host       │
+                                                │ model · tools ·    │
+                                                │ session authority  │
+                                                └────────────────────┘
 ```
 
-Reopen DeepSeek Harness and select **Tether** in the sidebar. This archive installs the plugin only; it does not install the APP, Node, or a service.
+For the native DSH page, the Hub creates a short-lived surface gateway and the public URL `https://g<port>.<hub-suffix>/...` is routed by Caddy and `surface_mux` to that gateway. The gateway relays HTTP and WebSocket traffic to the target Node, which talks to its local DSH Host. The same path is used for a local or a remote target; there is no local-only shortcut.
 
-### Node ZIP
+### Components
 
-On Windows, extract the ZIP, then follow its included `README-INSTALL.md`. The bootstrap requires Python 3.10+, Node.js 24 LTS, and npm. Configure the Hub WebSocket URL and the Node token issued by its operator; Nodes connect outbound and do not need a public inbound port. The Node's file policy determines which operations are allowed.
+| Component | Runs on | What it is | What it is not |
+|---|---|---|---|
+| **APP** | A desktop | Electron client with a local supervisor; it can start a Node for the local machine and provides the update center, connection page, file explorer, permissions and interconnect views. | Not a second model backend. |
+| **DSH plugin** | Inside DSH | The Tether panel, connection page, native surface descriptor, and local update channel. | Does not start a Node and does not make the local machine a target by itself. |
+| **Node** | A target device | The headless agent that registers the device, executes file/command/DSH-surface requests, enforces policy, writes audit records, and applies Node/plugin updates. | It has no chat UI and does not run the model. |
+| **Hub** | A server you operate | Authentication, device registry, request routing, surface gateways, and state sync. | Does not run models or write DSH sessions. |
+| **Caddy + surface_mux** | The Hub host | TLS edge and public subdomain routing for native DSH surfaces. | Not a second Hub. |
 
-The v0.2.3 packages and manifest are built from this tag and checked before publication. v0.2.3 keeps the first-run/surface fixes from v0.2.2, restores a visible APP window after a self-update relaunch, removes applied prepared updates from status, and preserves the actual installed plugin version when APP or Node metadata is rewritten. Archive and manifest checks do not by themselves establish a target-device upgrade, rollback, or cross-device acceptance. The packages are not digitally signed. The legacy `v0.2.0` release has been withdrawn; its tag remains with a withdrawal notice.
+### Do I need a Node?
 
-## Plugin tools
+**Yes, if you want a machine to be controlled.** The APP and the plugin are clients; the Node is the thing that gives a machine an executor. The APP can start a Node for you; the plugin cannot.
 
-When MCP tools are enabled, the DSH Agent can use:
+| You install | Can connect to a Hub | Can control other devices | Can be controlled as a target |
+|---|---|---|---|
+| APP only (with DSH) | Yes | Yes | Yes, if `nodeToken` is configured; the APP supervisor starts its Node |
+| Plugin only (with DSH) | Yes | Yes | **No** — install the Node ZIP (or the APP) for that machine |
+| Node only | Yes, headless | n/a | Yes |
+| APP + plugin | Yes | Yes | Yes, through the APP's Node |
+| Plugin + Node | Yes | Yes | Yes, through the standalone Node |
 
-- `list_peers` — list connected devices.
-- `remote_task(device, prompt)` — submit a task to a device.
-- `remote_status(run_id)` and `remote_cancel(run_id)` — inspect or cancel a task.
-- `remote_workspaces(device)` — list a device's available workspaces.
-- `remote_files(device, path, op, text?, dest?)` — perform policy-scoped file operations.
-- `remote_audit(device, limit)` — inspect available audit records.
+A typical desktop uses **APP + plugin** (two views of the same machine). A laptop or a headless box can use **Node only** and be controlled from the desktop. The plugin-only installation is a valid client, but it cannot expose its own machine without a Node.
 
-The target DSH Host owns model and session behavior. Tether does not replace its memory, plugins, or credentials. File access and writes remain subject to the Node's configured policy.
+## Quick start
 
-## Current status
+### Prerequisites
 
-- Core plugin and file-management views are implemented; local regression and desktop checks are recorded.
-- A real local DSH response has been observed, but cross-device session continuity, remote native Host behavior, and attachment transfer are not fully accepted.
-- APP, plugin, and Node ZIP packages are published separately. Clean installation and upgrade on target devices still need acceptance.
-- Update checks and local update flows have implementation and isolated regression evidence. The v0.2.1 updater manifest was checked over HTTPS; in-app upgrade, remote Node update, rollback, and digital signatures remain outstanding.
-- APP and plugin must present the same connection page and meaningful service status. The latest design has not received final real-service/user acceptance.
+- Windows 11 or later.
+- The DeepSeek Harness desktop app installed and signed in on the device that will run the DSH Host.
+- Python 3.11+ and Node.js 24 LTS with `npm` on `PATH` for the client packages.
+- A reachable, compatible Tether Hub. The public repository does not include the Hub; use an operator-provided Hub or a self-hosted deployment you are authorized to run.
 
-See [release downloads and process](docs/RELEASES.md), [PRD](docs/PRD.md), [live progress](docs/PROGRESS.md), [feedback](docs/FEEDBACK.md), and [public technical notes](docs/TECHNICAL.md) for scope and acceptance status.
+### 1. Choose your package
+
+| Goal | Install |
+|---|---|
+| Control other machines from a desktop | APP and/or DSH plugin |
+| Make this desktop a target | APP (its supervisor starts a Node) or the Node ZIP |
+| Make a laptop/headless machine a target | Node ZIP |
+| Work with remote machines from inside DSH | DSH plugin + a Hub |
+
+### 2. Connect the components to the same Hub
+
+All components must use the same Hub URL and compatible credentials.
+
+- **APP**: create `apps/tether-app/data/hub.json` in the extracted APP with `url`, `accessToken`, `nodeToken`, and `device` (or set the corresponding `TETHER_*` environment variables). `nodeToken` is what makes the APP start a local Node.
+- **DSH plugin**: open **Tether → 连接** and enter the Hub URL and access token. The plugin stores its connection settings in the DSH profile's local storage.
+- **Node**: create a local `.env` with `TETHER_CONTROLLER=wss://<hub>/ws/node`, `TETHER_NODE_TOKEN=<node token>`, `TETHER_DEVICE=<device name>`, then run the Node bootstrap. Nodes connect outbound; no inbound port or VPN is required.
+
+Never commit tokens, `.env` files, or `hub.json` to a public repository.
+
+### 3. Verify
+
+- Nodes expose a read-only local console; the APP-managed Node uses `http://127.0.0.1:18894`, and a standalone Node uses `18893` by default (or the configured `--console-port`).
+- The Hub connection page should show the server address, connection status, last check time, and latency.
+- Open **Interconnect** in the APP or plugin; the local device should be listed first, followed by the other devices.
+- Open **Native workspace**; the target DSH UI should load. If a remote target stays blank, see [Status](#status).
+
+### 4. Update
+
+Open the APP's **Update center**. APP updates are downloaded and applied by the APP itself; Node and plugin updates are requested through the Hub and applied on the target device. Updates are deferred while a Tether task is active.
+
+## Download
+
+### Latest stable: v0.2.3
+
+| Package | Download | Size | SHA-256 |
+|---|---|---:|---|
+| APP | [tether-app-0.2.3.zip](https://github.com/qi001007/tether-harness/releases/download/v0.2.3/tether-app-0.2.3.zip) | 337,869 B | `b8f9ee56a3833fe933686e2098154148a7ef945d70e25112fff792faafc67aec` |
+| DSH plugin | [tether-plugin-0.2.3.zip](https://github.com/qi001007/tether-harness/releases/download/v0.2.3/tether-plugin-0.2.3.zip) | 367,417 B | `7eacbf54733c4faa180c24399271665413c9ae8389821cff0b8e2db12bad0f92` |
+| Node | [tether-node-0.2.3.zip](https://github.com/qi001007/tether-harness/releases/download/v0.2.3/tether-node-0.2.3.zip) | 51,348 B | `0645f7cfd898963ae6c7fd28c8b5db879e25c91789516db1698649c09331a199` |
+| Update manifest | [tether-update.json](https://github.com/qi001007/tether-harness/releases/download/v0.2.3/tether-update.json) | 997 B | — |
+
+The manifest has a stable `latest` alias; component ZIP names include the version, so use the versioned links above for reproducible component downloads:
+
+```text
+https://github.com/qi001007/tether-harness/releases/latest/download/tether-update.json
+```
+
+Verify a Windows download with:
+
+```powershell
+Get-FileHash .\tether-app-0.2.3.zip -Algorithm SHA256
+```
+
+These are **ZIP source packages**, not self-contained EXE installers. They do not bundle Python, Node.js, DSH, or a Hub. Packages are **unsigned**; SHA-256 checks integrity against the manifest, not publisher identity.
+
+### Package contents
+
+- **APP ZIP**: Electron shell, shared UI, Python client/Node runtime, launcher, and bootstrap. Does not include the DSH plugin or a Hub.
+- **DSH plugin ZIP**: the four Tether plugin packages and the installer. Does not include the APP, Node, or a Hub.
+- **Node ZIP**: the headless Node runtime and bootstrap scripts. Does not include the APP, DSH plugin, or a Hub.
+
+## Versioning
+
+Tether uses **SemVer** and a single version for the client train. The source of truth is [`version.json`](version.json):
+
+```json
+{
+  "schema": 1,
+  "components": {
+    "app": "0.2.3",
+    "plugin": "0.2.3",
+    "node": "0.2.3"
+  }
+}
+```
+
+- All APP, plugin, and Node packages in a release share the same version.
+- Git tags are `vMAJOR.MINOR.PATCH`; the release workflow refuses a tag that does not match `version.json`.
+- Every component ZIP carries a `version.json`; the updater merges only the component it is updating.
+- `protocol` is the client/Hub update protocol (`1` today).
+- `min_updater` is the oldest updater allowed to consume the manifest (`0.2.1` today). Older clients must install the `0.2.1` baseline once manually.
+- There is no nightly channel. Only published releases are offered by the official manifest.
+
+### Compatibility
+
+| Surface | Current contract |
+|---|---|
+| Client update manifest | `schema: 1`, `protocol: 1`, `min_updater: 0.2.1` |
+| Hub update API | `/api/devices/{device_id}/updates` for Node and plugin |
+| Native DSH surface | `surface_protocol: 1`; requires a live DSH Host descriptor |
+| Node registration | outbound `/ws/node` with `device_id`, token, capabilities |
+| Server package | Private `tether-harness-server`; deployed independently from the client train |
+
+## Updates
+
+The APP update center has three rows:
+
+1. **Tether APP** — self-update: manifest check, download, SHA-256, staging, idle apply, relaunch.
+2. **Tether Node** — the selected device's Node updates itself through the Hub; the supervisor restarts it.
+3. **DSH plugin** — the target device's plugin is updated through the Node; restart DSH to load it.
+
+Safety rules:
+
+- No automatic restart while a Tether task is active.
+- Downloads are checked against the manifest SHA-256 before staging.
+- Apply uses a backup and a file transaction; `data/`, `.env`, workspaces, and credentials are excluded.
+- The updater never copies account credentials, sessions, or user data into a release asset.
+
+Known residuals in 0.2.3:
+
+- After a restart, the update card can still show a stale “restarting” label until the next refresh; the actual `current`/`latest` versions are correct.
+- The root `version.json` plugin field can lag one component behind; the DSH profile and Hub status are authoritative.
+- The DSH-local plugin update button can report a check failure; the APP update center is the working plugin update path.
+
+## Networking and Tailscale
+
+Tether's production path is:
+
+```text
+APP/plugin  ──HTTPS/WSS──▶  Hub (public TLS)  ◀──WSS outbound──  Node
+                                  │
+                                  └── Caddy ──▶ surface_mux ──▶ Hub surface gateway ──▶ Node ──▶ local DSH Host
+```
+
+- Nodes make **outbound** connections; no public inbound port is required.
+- **Tailscale is not required** for multi-device use. The `start-tailscale.ps1` and `start-lan.ps1` scripts in the repository are local-development helpers, not the production architecture.
+- The Hub must be reachable over HTTPS/WSS. Do not expose the loopback Controller port or the DSH Host port directly to the internet.
+- Surface URLs use short-lived tickets and per-gateway cookies; the gateway only relays to the selected Node's local DSH Host.
+
+## Security
+
+**Current authentication is single-operator, not multi-tenant.** A Hub uses a shared access token for clients and a shared node token for Nodes. Anyone with those tokens can see and control every device on that Hub. Do not expose a Hub to other users, and do not use it as a public service in its current form.
+
+Current protections:
+
+- TLS at the Caddy edge; loopback-only Controller and mux.
+- Shared-secret authentication for clients and Nodes; constant-time token comparison.
+- Per-device file policy with allowed roots and read-only/read-write modes.
+- Audit records on the target Node.
+- Short-lived native surface tickets; HTTP/WS origin and Host checks.
+- No package signature; SHA-256 is an integrity check only.
+
+Planned (see [Status](#status)):
+
+- User accounts and login on APP and plugin.
+- One-time device pairing; per-device credentials; revoke/rotate.
+- Per-user device isolation: a user can only see and control their own devices.
+- Secure token storage in the OS credential store instead of plaintext JSON/`.env`.
+- Email verification/password reset, rate limits, session revocation, and signed releases.
+
+If you find a security issue, do not paste tokens, personal data, or private device information into a public issue. Open a minimal report and ask for a private channel.
+
+## Status
+
+| Area | Status |
+|---|---|
+| Public release v0.2.3 | Published; all three ZIPs and the manifest verified |
+| Client update chain | Real APP/Node/plugin updates `0.2.1 → 0.2.2 → 0.2.3`; data preserved |
+| Same-device APP + plugin | Verified: one DESKTOP-LOCAL DSH Host/session, bidirectional turns, a real `pwsh` command, matching file pages |
+| Remote target native surface | **Open issue**: a remote node can show a blank DSH panel; remote cross-device acceptance is pending. The local and remote paths use the same Hub surface gateway; the failing machine needs a v0.2.3 Node and live diagnostics |
+| Cross-device on a second physical machine | Pending; the second machine is not currently connected to the Hub |
+| Accounts / login / per-user isolation | **Not implemented** |
+| Digital signatures | Not implemented |
+| Server release automation | Not implemented; the Hub uses a pinned-commit, backed-up, gated deploy with a rollback drill |
 
 ## Development
-
-To develop both the APP and plugin together, clone the public source repository:
 
 ```powershell
 git clone https://github.com/qi001007/tether-harness.git
 cd tether-harness
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -e . pytest pytest-asyncio httpx
+npm ci --prefix packages/tether-ui
 ```
 
-The APP can be run directly from its source package after installing its dependencies:
+Run the regressions:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q
+node --test tests/test_*.mjs
+```
+
+Build the release archives and manifest locally:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\build_release.py
+```
+
+Run the APP from source:
 
 ```powershell
 npm install --prefix apps/tether-app
 npm --prefix apps/tether-app start
 ```
 
-This is the combined source-development path, separate from the individual v0.2.1 ZIP downloads above. The shared UI source and public client packages are in `packages/`. To rebuild the browser UI bundle during client development:
+### Repository layout
 
-```powershell
-npm --prefix packages/tether-ui run build:web
-```
+| Path | Contents |
+|---|---|
+| `apps/tether-app/` | Electron APP, supervisor, updater helper |
+| `packages/` | Shared UI, DSH plugin bundles, native UI bridge, surface plugin |
+| `tether/` | Python client, Node runtime, native surface, updater, MCP tools |
+| `desktop/`, `laptop/` | Install/bootstrap scripts |
+| `scripts/` | Build, native UI bridge, probes |
+| `tests/` | Python and JavaScript regressions |
+| `docs/` | PRD, progress, feedback, releases, technical notes |
+| `.github/workflows/release.yml` | Tag-driven draft release workflow |
 
-Service provisioning, private dependencies, and operations are documented separately for authorized operators and are not part of this public client guide.
+The Hub/Controller is a **private service** and is not part of this public repository. Operator deployment and server release details are kept in the private operations repository.
+
+## Release process
+
+1. Update `version.json`, `pyproject.toml`, and all component `package.json` files to the same SemVer.
+2. Run the Python and JavaScript regressions.
+3. Commit, create `vX.Y.Z`, and push the tag.
+4. The release workflow validates the tag, runs tests, builds the three ZIPs and `tether-update.json`, and creates a **draft** GitHub Release.
+5. Review the draft assets and manifest; publish it explicitly.
+6. Verify the official `releases/latest/download/tether-update.json` and record the real install/upgrade result separately from the build result.
+
+## Documentation
+
+- [Product requirements](docs/PRD.md)
+- [Live progress and acceptance boundaries](docs/PROGRESS.md)
+- [User feedback](docs/FEEDBACK.md)
+- [Release notes](docs/RELEASES.md)
+- [Public technical notes](docs/TECHNICAL.md)
+- [Core recovery and acceptance plan](docs/CORE_RECOVERY_PLAN.md)
+- [Native DSH surface notes](docs/native-surface.md)
+
+## License
+
+MIT. See [LICENSE](LICENSE).

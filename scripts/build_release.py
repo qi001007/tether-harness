@@ -100,9 +100,12 @@ def main() -> None:
 2. Run `desktop\\install-plugin.ps1` from this folder.
 3. Start DeepSeek Harness and open Tether in the sidebar.
 
-This archive contains only the DSH plugin. It does not install the APP.
+This archive contains only the DSH plugin. It does not install the APP or a Node.
 Open Tether and use its connection page to configure the service address and credentials.
-The plugin connects to the configured service; this archive does not install or start a server.
+The plugin is a client: it can connect to a Hub and control devices that run a Node.
+It does NOT make this machine a target by itself. To be controlled, also install the
+Node ZIP (or the APP, whose supervisor can start a Node). This archive does not install
+or start a server.
 """)
 
     app = OUT / f"tether-app-{VERSION}.zip"
@@ -118,8 +121,11 @@ The plugin connects to the configured service; this archive does not install or 
 Run `apps\\tether-app\\Tether-App.cmd` (or `desktop\\install-app.ps1` for a shortcut).
 The launcher creates `.venv`, installs Python deps once, installs Electron once.
 
-This archive contains only the APP. It does not install the DSH plugin.
+This archive contains only the APP. It does not install the DSH plugin or a Hub.
 To use a Hub, create `apps\\tether-app\\data\\hub.json` with url/accessToken/nodeToken.
+When `nodeToken` is present, the APP supervisor starts a local Node and this machine
+can be controlled by other devices. The DeepSeek Harness desktop app must be installed
+for native DSH sessions; the DSH plugin is optional.
 Without a Hub, the APP starts a local private Controller and Node only when the private
 tether-harness-server component is installed. Otherwise, configure a Hub or install that component.
 """)
@@ -139,8 +145,12 @@ local `.env` containing `TETHER_CONTROLLER` and `TETHER_NODE_TOKEN`. Configure
 the Hub WebSocket URL to end in `/ws/node`. Existing `.env` files are kept;
 missing configuration is reported without starting against placeholders.
 Device name defaults to this computer's hostname.
-This archive contains the Node backend and launch/bootstrap scripts; it does not
-install APP or modify a DeepSeek Harness profile.
+
+The Node is a headless target-device agent: it has no chat UI and is controlled
+from an APP or DSH plugin on another device. It connects outbound to the Hub;
+no inbound port or Tailscale/VPN is required. This archive contains the Node
+backend and launch/bootstrap scripts; it does not install APP or modify a
+DeepSeek Harness profile.
 """)
 
     manifest = {"schema": 1, "components": {}}
