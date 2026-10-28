@@ -101,22 +101,33 @@ function safeManifestUrl(value) {
   } catch (_) { return undefined }
 }
 
-function loadedPluginVersion(packageRoot, dshHome, profile) {
+function readPluginVersion(directory) {
+  try {
+    const manifest = JSON.parse(fs.readFileSync(path.join(directory, 'package.json'), 'utf8'))
+    const source = fs.readFileSync(path.join(directory, 'lib', 'client.js'), 'utf8')
+    const match = /\bPLUGIN_VERSION\s*=\s*['"]([^'"]+)['"]/.exec(source)
+    const version = (match && match[1]) || manifest.version || null
+    return version ? { version, directory } : null
+  } catch (_) { return null }
+}
+
+function resolvePluginVersions(packageRoot, dshHome, profile) {
   const packageDirectory = path.resolve(packageRoot, '..')
   const siblingName = path.basename(packageDirectory) === 'packages' ? 'dsh-plugin-tether-client' : 'tether-dsh-client'
-  const candidates = [
-    path.join(packageDirectory, siblingName),
-    path.join(dshHome, 'profiles', profile || '', 'node_modules', 'tether-dsh-client')
-  ]
-  for (const candidate of candidates) {
-    try {
-      const manifest = JSON.parse(fs.readFileSync(path.join(candidate, 'package.json'), 'utf8'))
-      const source = fs.readFileSync(path.join(candidate, 'lib', 'client.js'), 'utf8')
-      const match = /\bPLUGIN_VERSION\s*=\s*['"]([^'"]+)['"]/.exec(source)
-      return (match && match[1]) || manifest.version || null
-    } catch (_) { /* try the other package location */ }
+  const loaded = readPluginVersion(path.join(packageDirectory, siblingName))
+  const installed = readPluginVersion(path.join(dshHome, 'profiles', profile || '', 'node_modules', 'tether-dsh-client'))
+  const runtime = loaded || installed
+  const drift = Boolean(loaded && installed && loaded.directory !== installed.directory && loaded.version !== installed.version)
+  return {
+    runtime: runtime ? runtime.version : null,
+    installed: installed ? installed.version : null,
+    source: drift && loaded ? loaded.version : null,
+    drift
   }
-  return null
+}
+
+function loadedPluginVersion(packageRoot, dshHome, profile) {
+  return resolvePluginVersions(packageRoot, dshHome, profile).runtime
 }
 
 function safeEnvironment(env, dshHome) {
@@ -171,10 +182,12 @@ export function createLocalPluginUpdateHandler({
 } = {}) {
   const dshHome = selectedDshHome(env, homeDir, packageRoot)
   const profile = selectedProfile(packageRoot, dshHome)
-  const runtimeVersion = loadedPluginVersion(packageRoot, dshHome, profile)
+  const versions = resolvePluginVersions(packageRoot, dshHome, profile)
+  const runtimeVersion = versions.runtime
   const updaterRoot = path.join(packageRoot, 'updater')
   const stateDir = path.join(dshHome, 'storages', 'tether', 'updates')
   const childEnv = safeEnvironment(env, dshHome)
+  const inFlight = new Map()
 
   async function invoke(action, extraArgs = [], manifestUrl) {
     const args = ['-m', 'tether.updates_cli', action, '--component', 'plugin', '--root', updaterRoot,
@@ -183,13 +196,16 @@ export function createLocalPluginUpdateHandler({
       ...(manifestUrl ? ['--manifest-url', manifestUrl] : []),
       ...extraArgs]
     const candidates = resolvePythonCandidates(env, platform)
+    // Status/check must never outlive the UI's own wait, or the renderer reports
+    // a failure while an orphan updater keeps downloading in the background.
+    const actionTimeout = action === 'prepare' || action === 'apply' ? timeoutMs : Math.min(timeoutMs, 20_000)
     let lastError
     for (const candidate of candidates) {
       try {
         const result = await execFileImpl(candidate.file, [...candidate.prefix, ...args], {
           cwd: updaterRoot,
           env: childEnv,
-          timeout: action === 'prepare' || action === 'apply' ? timeoutMs : Math.min(timeoutMs, 30_000),
+          timeout: actionTimeout,
           maxBuffer: 1024 * 1024,
           windowsHide: true
         })
@@ -232,7 +248,11 @@ export function createLocalPluginUpdateHandler({
       return { ok: true, value: { ok: false, component: 'plugin', error_code: 'updater_missing', error: '本机插件更新器资源缺失；请重新安装包含更新器的插件包。' } }
     }
     const manifestUrl = safeManifestUrl(payload.manifest_url)
-    try {
+    const flightKey = action === 'apply' ? 'apply:' + payload.prepared_id : action
+    if (inFlight.has(flightKey)) {
+      return { ok: true, value: { ok: false, component: 'plugin', error_code: 'update_busy', error: '同一个更新请求仍在执行，请稍候。' } }
+    }
+    const task = (async () => {
       if (action === 'apply') {
         const activity = await invoke('activity')
         if (!activity.ok) return { ok: true, value: activity }
@@ -241,15 +261,23 @@ export function createLocalPluginUpdateHandler({
         }
       }
       const result = await invoke(action, action === 'apply' ? ['--prepared-id', payload.prepared_id] : [], manifestUrl)
-      const value = runtimeVersion && result && typeof result === 'object'
-        ? { ...result, runtime_version: runtimeVersion,
-          ...(result.current_version ? { restart_required: result.current_version !== runtimeVersion } : {}) }
-        : result
-      return { ok: true, value }
-    } catch (_) {
-      return { ok: true, value: { ok: false, component: 'plugin', error_code: 'invalid_updater_output', error: '本机插件更新器返回了无效结果。' } }
-    }
+      if (!runtimeVersion || !result || typeof result !== 'object') return { ok: true, value: result }
+      return {
+        ok: true,
+        value: {
+          ...result,
+          runtime_version: runtimeVersion,
+          ...(versions.installed ? { installed_version: versions.installed } : {}),
+          ...(versions.source ? { source_version: versions.source } : {}),
+          ...(versions.drift ? { version_drift: true } : {}),
+          ...(result.current_version ? { restart_required: result.current_version !== runtimeVersion } : {})
+        }
+      }
+    })().catch(() => ({ ok: true, value: { ok: false, component: 'plugin', error_code: 'invalid_updater_output', error: '本机插件更新器返回了无效结果。' } }))
+      .finally(() => { inFlight.delete(flightKey) })
+    inFlight.set(flightKey, task)
+    return task
   }
 }
 
-export { loadedPluginVersion, parsePayload, resolvePythonCandidates, selectedDshHome, selectedProfile }
+export { loadedPluginVersion, parsePayload, resolvePluginVersions, resolvePythonCandidates, selectedDshHome, selectedProfile }

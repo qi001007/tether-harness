@@ -24,9 +24,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// packages/tether-ui/node_modules/react/cjs/react.production.min.js
+// node_modules/react/cjs/react.production.min.js
 var require_react_production_min = __commonJS({
-  "packages/tether-ui/node_modules/react/cjs/react.production.min.js"(exports) {
+  "node_modules/react/cjs/react.production.min.js"(exports) {
     "use strict";
     var l = Symbol.for("react.element");
     var n = Symbol.for("react.portal");
@@ -297,9 +297,9 @@ var require_react_production_min = __commonJS({
   }
 });
 
-// packages/tether-ui/node_modules/react/index.js
+// node_modules/react/index.js
 var require_react = __commonJS({
-  "packages/tether-ui/node_modules/react/index.js"(exports, module) {
+  "node_modules/react/index.js"(exports, module) {
     "use strict";
     if (true) {
       module.exports = require_react_production_min();
@@ -309,9 +309,9 @@ var require_react = __commonJS({
   }
 });
 
-// packages/tether-ui/node_modules/scheduler/cjs/scheduler.production.min.js
+// node_modules/scheduler/cjs/scheduler.production.min.js
 var require_scheduler_production_min = __commonJS({
-  "packages/tether-ui/node_modules/scheduler/cjs/scheduler.production.min.js"(exports) {
+  "node_modules/scheduler/cjs/scheduler.production.min.js"(exports) {
     "use strict";
     function f(a, b) {
       var c = a.length;
@@ -562,9 +562,9 @@ var require_scheduler_production_min = __commonJS({
   }
 });
 
-// packages/tether-ui/node_modules/scheduler/index.js
+// node_modules/scheduler/index.js
 var require_scheduler = __commonJS({
-  "packages/tether-ui/node_modules/scheduler/index.js"(exports, module) {
+  "node_modules/scheduler/index.js"(exports, module) {
     "use strict";
     if (true) {
       module.exports = require_scheduler_production_min();
@@ -574,9 +574,9 @@ var require_scheduler = __commonJS({
   }
 });
 
-// packages/tether-ui/node_modules/react-dom/cjs/react-dom.production.min.js
+// node_modules/react-dom/cjs/react-dom.production.min.js
 var require_react_dom_production_min = __commonJS({
-  "packages/tether-ui/node_modules/react-dom/cjs/react-dom.production.min.js"(exports) {
+  "node_modules/react-dom/cjs/react-dom.production.min.js"(exports) {
     "use strict";
     var aa = require_react();
     var ca = require_scheduler();
@@ -7184,9 +7184,9 @@ var require_react_dom_production_min = __commonJS({
   }
 });
 
-// packages/tether-ui/node_modules/react-dom/index.js
+// node_modules/react-dom/index.js
 var require_react_dom = __commonJS({
-  "packages/tether-ui/node_modules/react-dom/index.js"(exports, module) {
+  "node_modules/react-dom/index.js"(exports, module) {
     "use strict";
     function checkDCE() {
       if (typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ === "undefined" || typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.checkDCE !== "function") {
@@ -7210,9 +7210,9 @@ var require_react_dom = __commonJS({
   }
 });
 
-// packages/tether-ui/node_modules/react-dom/client.js
+// node_modules/react-dom/client.js
 var require_client = __commonJS({
-  "packages/tether-ui/node_modules/react-dom/client.js"(exports) {
+  "node_modules/react-dom/client.js"(exports) {
     "use strict";
     var m = require_react_dom();
     if (true) {
@@ -7241,11 +7241,11 @@ var require_client = __commonJS({
   }
 });
 
-// packages/tether-ui/web/main.js
+// web/main.js
 var import_react = __toESM(require_react(), 1);
 var import_client = __toESM(require_client(), 1);
 
-// packages/tether-ui/src/connection-panel.js
+// src/connection-panel.js
 function createConnectionPanel(React2) {
   const h = React2.createElement;
   const ink = "var(--dsw-alias-label-primary, #101828)";
@@ -7316,7 +7316,7 @@ function createConnectionPanel(React2) {
   return { Panel: ConnectionPanel, Trigger: ConnectionTrigger };
 }
 
-// packages/tether-ui/src/app.js
+// src/app.js
 function updateErrorText(value) {
   return String(value && value.message || value || "\u66F4\u65B0\u5931\u8D25").replace(/^Error invoking remote method ['"]tether:[^'"]+['"]:\s*/, "").replace(/^Error:\s*/, "");
 }
@@ -7325,7 +7325,8 @@ function shortUpdateError(error) {
   if (code === "device_offline") return "\u8BBE\u5907\u79BB\u7EBF";
   if (code === "node_update_required" || code === "bad_component" || code === "not_found") return "\u8282\u70B9\u7248\u672C\u8FC7\u65E7\uFF0C\u8BF7\u5148\u5B89\u88C5\u542B\u66F4\u65B0\u5668\u7684\u53D1\u884C\u7248";
   if (code === "update_timeout") return "\u66F4\u65B0\u68C0\u67E5\u8D85\u65F6\uFF0C\u8BF7\u624B\u52A8\u5237\u65B0\u91CD\u8BD5";
-  if (error && error.status === 404) return "\u670D\u52A1\u7AEF\u4E0D\u652F\u6301\u66F4\u65B0";
+  if (error && (error.status === 404 || error.status === 405 || error.status === 501)) return "\u670D\u52A1\u7AEF\u4E0D\u652F\u6301\u66F4\u65B0";
+  if (error && (error.status === 401 || error.status === 403)) return "\u66F4\u65B0\u670D\u52A1\u62D2\u7EDD\u4E86\u672C\u6B21\u8BF7\u6C42\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55";
   if (code === "device_not_found") return "\u8BBE\u5907\u4E0D\u5B58\u5728";
   if (error && !error.status && !code) return "Hub \u4E0D\u53EF\u8FBE";
   return updateErrorText(error);
@@ -7419,6 +7420,9 @@ function withUpdateTimeout(promise, timeoutMs, message = "\u66F4\u65B0\u68C0\u67
 }
 function updateCheckKey(component, scope) {
   return (scope ? scope.deviceId + ":" + scope.epoch : "local") + ":" + component;
+}
+function localUpdateWaitMs(component) {
+  return component === "localPlugin" ? 22e3 : 6500;
 }
 function validateWorkspaceResponse(data) {
   if (!data || data.ok === false || !Array.isArray(data.workspaces) || data.workspaces.some((workspace) => !workspace || typeof workspace.path !== "string")) throw new Error("\u5DE5\u4F5C\u533A\u63A5\u53E3\u8FD4\u56DE\u7684\u6570\u636E\u683C\u5F0F\u65E0\u6548");
@@ -8069,13 +8073,13 @@ function createTetherPanel({ React: React2, Native, host }) {
       .tether-scroll:hover::-webkit-scrollbar-thumb { background: var(--dsw-alias-scrollbar-hover-l1, #cbd5e1); }
       .tether-scroll::-webkit-scrollbar-corner { background: transparent; }
       .tether-num { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum' 1; }
-      .tether-spin { display: inline-grid; width: 1em; height: 1em; flex: 0 0 auto; place-items: center; transform-box: border-box; transform-origin: 50% 50%; animation: tether-refresh-rotate .8s linear infinite; }
-      .tether-spin > svg { display: block; margin: auto; }
+      .tether-spin { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+      .tether-spin > svg { display: block; transform-box: view-box; transform-origin: 50% 50%; animation: tether-refresh-rotate .8s linear infinite; }
       @keyframes tether-refresh-rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       .tether-node-fill { position: absolute; inset: 0; z-index: 1; border-radius: 50%; corner-shape: round; transition: background-color 160ms ease; }
       .tether-file-markdown { max-width: 860px; margin: 0 auto; color: var(--dsw-alias-label-primary); font-size: 14px; line-height: 24px; }
       .tether-file-text { tab-size: 2; }
-      @media (prefers-reduced-motion: reduce) { .tether-spin { animation-duration: 1.6s; } }
+      @media (prefers-reduced-motion: reduce) { .tether-spin > svg { animation-duration: 1.6s; } }
       .tether-flow { display: flex; flex-direction: column; max-width: calc(var(--dsh-chat-content-width, 748px) + 32px); width: 100%; margin: 0 auto; padding: 0 16px; box-sizing: border-box; }
       .tether-turn { display: flex; flex-direction: column; min-width: 0; }
       .tether-turn + .tether-turn { margin-top: 24px; }
@@ -9146,7 +9150,7 @@ function createTetherPanel({ React: React2, Native, host }) {
       }
       if (component === "localPlugin") {
         if (!host || host.kind !== "dsh" || !host.localPluginUpdates) throw new Error("\u5F53\u524D\u5BBF\u4E3B\u6CA1\u6709\u672C\u673A DSH \u63D2\u4EF6\u66F4\u65B0\u901A\u9053\u3002");
-        const result2 = await withUpdateTimeout(host.localPluginUpdates(action === "status" ? "status" : "check"), 6e3);
+        const result2 = await withUpdateTimeout(host.localPluginUpdates(action === "status" ? "status" : "check"), localUpdateWaitMs(component));
         if (result2 && result2.ok === false) throw new Error(result2.message || result2.error || (action === "status" ? "\u672C\u673A\u63D2\u4EF6\u66F4\u65B0\u72B6\u6001\u8BFB\u53D6\u5931\u8D25" : "\u672C\u673A\u63D2\u4EF6\u66F4\u65B0\u68C0\u67E5\u5931\u8D25"));
         setComponentUpdateInfo(component, result2);
         return result2;
@@ -9164,13 +9168,13 @@ function createTetherPanel({ React: React2, Native, host }) {
     const updateCheckCacheRef = React2.useRef(/* @__PURE__ */ new Map());
     const automaticUpdateCheck = (component, scope = updateScope(component), force = false) => {
       const key = updateCheckKey(component, scope);
-      withUpdateTimeout(loadUpdateInfo(component, "status", void 0, scope), 6e3).catch(() => {
+      withUpdateTimeout(loadUpdateInfo(component, "status", void 0, scope), localUpdateWaitMs(component)).catch(() => {
       });
       return cachedUpdateCheck(
         updateCheckCacheRef.current,
         key,
         () => dedupeUpdateCheck(autoUpdateChecksRef.current, key, () => checkUpdateAvailability(
-          () => withUpdateTimeout(loadUpdateInfo(component, "check", void 0, scope), 6500),
+          () => withUpdateTimeout(loadUpdateInfo(component, "check", void 0, scope), localUpdateWaitMs(component)),
           () => updateCheckScopeIsCurrent(scope)
         )),
         { force }
@@ -11588,7 +11592,7 @@ function createTetherPanel({ React: React2, Native, host }) {
   return { App, TetherIcon };
 }
 
-// packages/tether-ui/src/hosts/web.js
+// src/hosts/web.js
 var EXT_KIND = {
   md: "md",
   markdown: "md",
@@ -11864,7 +11868,7 @@ function createWebHost({ apiBase = "" } = {}) {
   };
 }
 
-// packages/tether-ui/src/hosts/electron.js
+// src/hosts/electron.js
 function createElectronHost({ apiBase = "" } = {}) {
   return {
     ...createWebHost({ apiBase }),
@@ -11898,7 +11902,7 @@ function createElectronHost({ apiBase = "" } = {}) {
   };
 }
 
-// packages/tether-ui/web/app-error-boundary.js
+// web/app-error-boundary.js
 function createAppErrorBoundary(React2) {
   return class AppErrorBoundary extends React2.Component {
     constructor(props) {
@@ -11923,7 +11927,7 @@ function createAppErrorBoundary(React2) {
   };
 }
 
-// packages/tether-ui/web/main.js
+// web/main.js
 function fail(error) {
   const box = document.getElementById("root");
   if (!box) return;

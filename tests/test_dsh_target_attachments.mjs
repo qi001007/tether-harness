@@ -110,7 +110,10 @@ test('changed file versions across byte chunks are rejected and image MIME types
 test('native attachment wrapper follows the repository fileDrag injection contract', () => {
   const buildSource = fs.readFileSync(new URL('../packages/tether-ui/scripts/build.mjs', import.meta.url), 'utf8')
   assert.match(buildSource, /priority: -1000, locale: 'conversation',[\s\S]*inject: \(\) => \(\{ readFileDrag: ctx\.fileDrag\.read \}\)/)
-  assert.match(buildSource, /'fileDrag'\]/)
+  // DSH hosts without the fileDrag service must still boot, so fileDrag is an
+  // optional capability probe rather than a required injection.
+  assert.doesNotMatch(buildSource, /inject: \[[^\]]*'fileDrag'/)
+  assert.match(buildSource, /ctx\.fileDrag && typeof ctx\.fileDrag\.read === 'function'/)
 
   const nativeUiPackage = JSON.parse(fs.readFileSync(new URL('../packages/tether-dsh-native-ui/package.json', import.meta.url), 'utf8'))
   assert.equal(nativeUiPackage.dependencies['@deepseek-ai/dsh-client-ui-attachment'], undefined)

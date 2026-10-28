@@ -462,7 +462,8 @@ function shortUpdateError(error) {
   if (code === 'device_offline') return '设备离线'
   if (code === 'node_update_required' || code === 'bad_component' || code === 'not_found') return '节点版本过旧，请先安装含更新器的发行版'
   if (code === 'update_timeout') return '更新检查超时，请手动刷新重试'
-  if (error && error.status === 404) return '服务端不支持更新'
+  if (error && (error.status === 404 || error.status === 405 || error.status === 501)) return '服务端不支持更新'
+  if (error && (error.status === 401 || error.status === 403)) return '更新服务拒绝了本次请求，请重新登录'
   if (code === 'device_not_found') return '设备不存在'
   if (error && !error.status && !code) return 'Hub 不可达'
   return updateErrorText(error)
@@ -559,6 +560,12 @@ function withUpdateTimeout(promise, timeoutMs, message = '更新检查超时，�
 
 function updateCheckKey(component, scope) {
   return (scope ? scope.deviceId + ':' + scope.epoch : 'local') + ':' + component
+}
+
+// The plugin updater caps status/check at 20 s internally; the renderer has to
+// wait longer than that or a slow first check is reported as a failure.
+function localUpdateWaitMs(component) {
+  return component === 'localPlugin' ? 22000 : 6500
 }
 
 function validateWorkspaceResponse(data) {
@@ -1119,13 +1126,13 @@ function createTetherPanel({ React, Native, host }) {
       .tether-scroll:hover::-webkit-scrollbar-thumb { background: var(--dsw-alias-scrollbar-hover-l1, #cbd5e1); }
       .tether-scroll::-webkit-scrollbar-corner { background: transparent; }
       .tether-num { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum' 1; }
-      .tether-spin { display: inline-grid; width: 1em; height: 1em; flex: 0 0 auto; place-items: center; transform-box: border-box; transform-origin: 50% 50%; animation: tether-refresh-rotate .8s linear infinite; }
-      .tether-spin > svg { display: block; margin: auto; }
+      .tether-spin { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+      .tether-spin > svg { display: block; transform-box: view-box; transform-origin: 50% 50%; animation: tether-refresh-rotate .8s linear infinite; }
       @keyframes tether-refresh-rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       .tether-node-fill { position: absolute; inset: 0; z-index: 1; border-radius: 50%; corner-shape: round; transition: background-color 160ms ease; }
       .tether-file-markdown { max-width: 860px; margin: 0 auto; color: var(--dsw-alias-label-primary); font-size: 14px; line-height: 24px; }
       .tether-file-text { tab-size: 2; }
-      @media (prefers-reduced-motion: reduce) { .tether-spin { animation-duration: 1.6s; } }
+      @media (prefers-reduced-motion: reduce) { .tether-spin > svg { animation-duration: 1.6s; } }
       .tether-flow { display: flex; flex-direction: column; max-width: calc(var(--dsh-chat-content-width, 748px) + 32px); width: 100%; margin: 0 auto; padding: 0 16px; box-sizing: border-box; }
       .tether-turn { display: flex; flex-direction: column; min-width: 0; }
       .tether-turn + .tether-turn { margin-top: 24px; }
@@ -2024,7 +2031,7 @@ function createTetherPanel({ React, Native, host }) {
         }
         if (component === 'localPlugin') {
           if (!host || host.kind !== 'dsh' || !host.localPluginUpdates) throw new Error('当前宿主没有本机 DSH 插件更新通道。')
-          const result = await withUpdateTimeout(host.localPluginUpdates(action === 'status' ? 'status' : 'check'), 6000)
+          const result = await withUpdateTimeout(host.localPluginUpdates(action === 'status' ? 'status' : 'check'), localUpdateWaitMs(component))
           if (result && result.ok === false) throw new Error(result.message || result.error || (action === 'status' ? '本机插件更新状态读取失败' : '本机插件更新检查失败'))
           setComponentUpdateInfo(component, result)
           return result
@@ -2044,10 +2051,10 @@ function createTetherPanel({ React, Native, host }) {
       const updateCheckCacheRef = React.useRef(new Map())
       const automaticUpdateCheck = (component, scope = updateScope(component), force = false) => {
         const key = updateCheckKey(component, scope)
-        withUpdateTimeout(loadUpdateInfo(component, 'status', undefined, scope), 6000).catch(() => {})
+        withUpdateTimeout(loadUpdateInfo(component, 'status', undefined, scope), localUpdateWaitMs(component)).catch(() => {})
         return cachedUpdateCheck(updateCheckCacheRef.current, key,
           () => dedupeUpdateCheck(autoUpdateChecksRef.current, key, () => checkUpdateAvailability(
-            () => withUpdateTimeout(loadUpdateInfo(component, 'check', undefined, scope), 6500),
+            () => withUpdateTimeout(loadUpdateInfo(component, 'check', undefined, scope), localUpdateWaitMs(component)),
             () => updateCheckScopeIsCurrent(scope)
           )), { force }).then((result) => {
           if (result.cancelled) return result

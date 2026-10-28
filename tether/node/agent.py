@@ -31,7 +31,7 @@ from .fs_service import FsError, FsService
 from .dsh_sessions import DshSessionStore
 from .native_surface import NativeSurface, NativeSurfaceError
 from .local_identity import remove_identity, write_identity
-from ..updates import UpdateManager, select_profile
+from ..updates import MAX_UPDATE_PROTOCOL, MIN_UPDATE_PROTOCOL, UPDATE_PROTOCOL, UpdateManager, select_profile
 
 
 def os_label() -> str:
@@ -871,8 +871,9 @@ class Node:
     def capabilities(self) -> dict[str, Any]:
         return {"os": platform.system(), "release": platform.release(), "os_label": os_label(),
                 "python": platform.python_version(),
-                "node_version": self.node_version, "update_protocol": 1,
-                "min_update_protocol": 1,
+                "node_version": self.node_version, "update_protocol": UPDATE_PROTOCOL,
+                "min_update_protocol": MIN_UPDATE_PROTOCOL,
+                "max_update_protocol": MAX_UPDATE_PROTOCOL,
                 "update_features": ["check", "prepare", "apply", "app_restart", "plugin_profile_fallback"],
                 "update_manifest": "hub-or-github",
                 "workspace": str(self.workspace), "agents": ["fake", "dsh"], "fs": True,

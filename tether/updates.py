@@ -345,6 +345,9 @@ class UpdateManager:
             allow_unsigned = os.environ.get("TETHER_ALLOW_UNSIGNED_RELEASE", "") == "1"
         self._allow_unsigned = bool(allow_unsigned)
         self._public_key_hex = public_key_hex
+        self.channel = str(os.environ.get("TETHER_UPDATE_CHANNEL") or "stable").strip().lower()
+        if self.channel not in {"stable", "beta"}:
+            self.channel = "stable"
         self._disk_manifest_path = self.state_dir / "manifest-cache.json"
         self._last_source = ""
         self._last_stale = False
@@ -409,6 +412,11 @@ class UpdateManager:
         manifest = _json_object(self._fetch(source, MAX_MANIFEST_BYTES, timeout=timeout))
         if type(manifest.get("schema")) is not int or manifest.get("schema") != 1:
             raise UpdateError("unsupported_manifest")
+        channel = manifest.get("channel", "stable")
+        if not isinstance(channel, str) or channel not in {"stable", "beta"}:
+            raise UpdateError("invalid_manifest")
+        if channel != "stable" and channel != self.channel:
+            raise UpdateError("channel_not_selected")
         components = manifest.get("components")
         if not isinstance(components, dict) or not COMPONENTS.issubset(components):
             raise UpdateError("invalid_manifest")
@@ -522,7 +530,7 @@ class UpdateManager:
                     manifest = stale
             if manifest is None:
                 priority = ("client_update_required", "signature_invalid", "signature_missing",
-                            "unsupported_manifest", "invalid_manifest", "manifest_missing")
+                            "channel_not_selected", "unsupported_manifest", "invalid_manifest", "manifest_missing")
                 for code in priority:
                     match = next((error for error in errors if error.code == code), None)
                     if match is not None:
@@ -1288,6 +1296,14 @@ class UpdateManager:
             current = self._versions()[self.component]
             if record.get("from_version") != current or not _is_newer(expected_version, current):
                 raise UpdateError("prepared_stale")
+            # A prepare can sit for hours; re-check the held rollout against the
+            # cached manifest (no network) so an operator's pause still applies.
+            cached = self._load_disk_manifest(MANIFEST_DISK_MAX_AGE)
+            if cached is not None:
+                cached_item = (cached.get("components") or {}).get(self.component)
+                if isinstance(cached_item, dict) and cached_item.get("version") == expected_version:
+                    if not _rollout_allows(cached_item, self.component, expected_version, self.device):
+                        raise UpdateError("rollout_paused")
             if self.component in {"app", "plugin"} and self.activity()["busy"]:
                 raise UpdateError("app_busy")
             self._check_dependencies(staged)

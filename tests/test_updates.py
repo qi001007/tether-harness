@@ -990,14 +990,14 @@ _TEST_PUBLIC_HEX = _TEST_KEY.public_key().public_bytes(
 
 def _signed_manifest(server: ArtifactServer, component: str, archive: bytes, *, version: str = "0.2.1",
                      protocol: int = 1, min_protocol: int = 1, rollout: dict | None = None,
-                     sign: bool = True) -> str:
+                     sign: bool = True, channel: str = "stable") -> str:
     entry = {
         "version": version, "url": server.base + f"/{component}.zip",
         "sha256": hashlib.sha256(archive).hexdigest(), "size": len(archive),
         "protocol": protocol, "min_protocol": min_protocol, "min_updater": "0.2.1",
         "rollout": rollout or {"percent": 100, "include": [], "exclude": []},
     }
-    manifest = {"schema": 1, "channel": "stable",
+    manifest = {"schema": 1, "channel": channel,
                 "components": {name: dict(entry) for name in ("app", "plugin", "node")}}
     if sign:
         manifest["signature"] = _base64.b64encode(_TEST_KEY.sign(_canonical_bytes(manifest))).decode("ascii")
@@ -1067,6 +1067,39 @@ def test_rollout_pauses_devices_until_included(artifact_server: ArtifactServer, 
     included = _strict_manager(root, url, tmp_path / "state-2", device="TEST-DEVICE").check(force=True)
     assert included["update_available"] is True
     assert included["rollout_paused"] is False
+
+
+def test_apply_rechecks_a_held_rollout_from_the_cached_manifest(artifact_server: ArtifactServer, tmp_path: Path) -> None:
+    root = tmp_path / "install"
+    seed_version(root)
+    url = _signed_manifest(artifact_server, "app", make_zip("app", version="0.2.1"))
+    manager = _strict_manager(root, url, tmp_path / "state", device="TEST-DEVICE")
+    prepared = manager.prepare()
+    assert prepared["ok"] is True, prepared
+
+    _signed_manifest(artifact_server, "app", make_zip("app", version="0.2.1"),
+                     rollout={"percent": 100, "include": [], "exclude": [], "hold": True})
+    assert manager.check(force=True)["update_available"] is False
+
+    applied = manager.apply(prepared["prepared_id"])
+
+    assert applied["ok"] is False
+    assert applied["error_code"] == "rollout_paused"
+    assert json.loads((root / "version.json").read_text(encoding="utf-8"))["components"]["app"] == "0.2.0"
+
+
+def test_beta_channel_is_opt_in_only(artifact_server: ArtifactServer, tmp_path: Path, monkeypatch) -> None:
+    root = tmp_path / "install"
+    seed_version(root)
+    url = _signed_manifest(artifact_server, "app", make_zip("app", version="0.2.1"), channel="beta")
+
+    monkeypatch.delenv("TETHER_UPDATE_CHANNEL", raising=False)
+    assert _strict_manager(root, url, tmp_path / "stable").check()["error_code"] == "channel_not_selected"
+
+    monkeypatch.setenv("TETHER_UPDATE_CHANNEL", "beta")
+    checked = _strict_manager(root, url, tmp_path / "beta").check()
+    assert checked["ok"] is True
+    assert checked["update_available"] is True
 
 
 def test_plugin_detection_tolerates_missing_optional_packages(tmp_path: Path) -> None:

@@ -47,12 +47,16 @@ def _node(tmp_path: Path, monkeypatch) -> Node:
 
 
 def test_capabilities_advertise_update_protocol_and_cached_version(tmp_path, monkeypatch):
+    from tether.updates import MAX_UPDATE_PROTOCOL, MIN_UPDATE_PROTOCOL, UPDATE_PROTOCOL
+
     node = _node(tmp_path, monkeypatch)
     node.update_managers["node"] = FakeUpdateManager()
     node.node_version = "0.2.1"
     capabilities = node.capabilities()
     assert capabilities["node_version"] == "0.2.1"
-    assert capabilities["update_protocol"] == 1
+    assert capabilities["update_protocol"] == UPDATE_PROTOCOL
+    assert capabilities["min_update_protocol"] == MIN_UPDATE_PROTOCOL
+    assert capabilities["max_update_protocol"] == MAX_UPDATE_PROTOCOL
     assert capabilities["app_version"] == node._managed_app_version()
     assert "app" in node.update_managers
     node.store.db.close()
