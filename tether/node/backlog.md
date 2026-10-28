@@ -1,5 +1,8 @@
 # 修改记录
 
+- 2026-10-28：WS 消息循环把 `fs_call`/`dsh_call` 改为有并发上限的任务，慢 DSH transcript 不再阻塞文件请求；断连时统一取消。回归 `test_node_concurrency.py`。
+- 2026-10-28：`fs/preview` 的 Office 转换按路径+`mtime_ns`+大小+类型缓存 PDF（`data/preview-cache`，96 个/256 MB），命中不调用 COM；转换串行锁避免多实例冲突。回归 `test_office_preview_reuses_converted_pdf_until_source_changes`。
+- 2026-10-28：console 在带 `--local-api-token`/`TETHER_LOCAL_API_TOKEN` 时提供 token 保护的本地设备 API（fs/workspaces/drives/policy/audit/dsh sessions），路由形状与控制端一致；无 token 时仍只读。回归 `test_node_console_api.py`。token 由 APP supervisor 每进程随机生成并经环境变量传入，不写入 argv。
 - 2026-10-28：Node runtime 将 `python-dotenv` 作为必需依赖加载，缺包时不再静默忽略 `.env` 中的 Hub/Node 配置。
 
 - 2026-10-27：Node 在与 DSH 共用的 DSH_HOME 下原子发布带 PID、device_id、更新时间的短期身份 descriptor；每 3 秒刷新，正常退出只清理自身匹配记录。

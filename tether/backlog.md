@@ -1,5 +1,6 @@
 # Tether Python 后端变更记录
 
+- 2026-10-28：Node console 增加本地设备 API（token 保护，复用 FsService 策略/审计）；Office 预览增加磁盘缓存；WS `fs_call`/`dsh_call` 并发化。详见 `tether/node/backlog.md`。
 - 2026-10-28：公开包提取为客户端/Node运行时；Controller、静态服务页及其服务器更新路由迁入独立私有 `tether-harness-server` 项目。发行包改为显式客户端运行时清单。
 
 - 2026-10-27：新增 APP/插件/Node 更新核心：HTTPS manifest 与下载、严格版本比较、SHA-256、白名单 ZIP 暂存、独占锁、备份、原子替换和失败回滚；CLI仅输出安全 JSON。

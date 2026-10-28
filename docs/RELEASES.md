@@ -1,5 +1,18 @@
 # Public client releases
 
+## v0.2.4
+
+Response-time release driven by live Hub measurements:
+
+- APP routes file, workspace, drive, policy, audit, and DSH session requests for the local device directly to the loopback Node console instead of the public Hub. The console API is token-protected; the APP supervisor generates a per-process random token and passes it to the Node through `TETHER_LOCAL_API_TOKEN`.
+- The shared UI caches directory/workspace data per device, seeds the tree from directory loads, prefetches directories and lightweight previews on hover, coalesces duplicate requests, aborts stale directory/preview requests, and exposes a stop control.
+- Device switching is gated on the workspace response belonging to the new device, fixing the previous `not a directory` error when the old path was reused.
+- Office previews are cached on the Node by path, `mtime_ns`, size, and kind; repeat previews do not invoke Word/PowerPoint COM again.
+- Node WebSocket handling runs `fs_call` and `dsh_call` as bounded tasks, so a slow DSH transcript no longer blocks file requests.
+- File rows use an in-app hover card instead of the native `title` tooltip; single click no longer fires twice during a double click.
+
+Measured on an isolated Node behind the APP gateway: `fs/list` 3–4 ms (Hub baseline 264–681 ms), text preview 3 ms (baseline 261–604 ms), PPTX preview 2.9 s cold and 5 ms cached (baseline 5.3–5.6 s every time). Tests: Python 83 passed / 1 skipped, JavaScript 70 passed. These are local measurements; install, remote Node upgrade, and dual-machine acceptance remain separate gates. Packages are unsigned.
+
 ## v0.2.3
 
 Fixes found during the v0.2.1 to v0.2.2 upgrade acceptance:

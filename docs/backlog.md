@@ -1,5 +1,11 @@
 # docs 变更记录
 
+## 2026-10-28 v0.2.4 性能批次
+
+- 分段测量公网 Hub：`state` 110–541 ms、`workspaces` 297–646 ms、非空目录 `fs/list` 264–681 ms、文本预览 261–604 ms、PPTX 预览 5311–5610 ms。
+- 修复：APP 本机文件请求经 `/local-api`/APP 网关直连 Node console（实测 3–4 ms）；UI 目录/工作区缓存、悬停预取、请求去重、AbortController 停止；预览不再重载父目录；设备切换增加 `projectsDevice` 门禁；悬浮卡替换原生 `title`；Office 按路径+mtime+大小缓存 PDF（二次 5 ms）；Node WS 的 `fs_call`/`dsh_call` 并发化，避免被 DSH 轮询阻塞。
+- 版本统一 `0.2.4`；Python 83 passed/1 skipped，JavaScript 70 passed。发布、APP/Node 安装与双机复验仍按 PROGRESS/FEEDBACK 的 F30/F38–F45 跟踪。
+
 ## 2026-10-28 远端 surface 复现
 
 - 非默认测试 Node（同机）走同一公网 Hub：v0.2.1 时远端原生 DSH 页白屏；升级 Node 到 v0.2.3 后正常加载，并从远端视图执行 `Reply with exactly REMOTE-OK.` → `REMOTE-OK`。

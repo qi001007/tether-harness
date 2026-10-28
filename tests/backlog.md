@@ -1,4 +1,5 @@
 # 修改记录
+- 2026-10-28：新增 `test_ui_performance.mjs`（abort 不换 base、缓存/预取/停止/设备门禁/悬浮卡/本地路由断言）、`test_web_local_api.mjs`（APP 网关只转发本机设备路由）、`test_node_console_api.py`（token/设备/策略/审计/DSH 路由）、`test_node_concurrency.py`（fs 与 dsh 并发）、Office 缓存回归。
 - 2026-10-28：工作区错误回归覆盖同设备失败保留列表/选择及切设备后才使用 legacy fallback。
 - 2026-10-28：新增共享 UI 工作区响应验证用例，覆盖缺失/错误列表与合法空列表；Electron QA 可注入无效 workspaces 响应，验证更新中心可见且错误提示保留。
 

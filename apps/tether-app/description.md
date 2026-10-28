@@ -7,7 +7,7 @@ Tether 的 Electron 外壳与服务监督（Phase 2）。`main.js` 启动内嵌 
 `preload.js` 暴露服务状态/启停/日志目录和受信任的 APP 更新 IPC；连接入口与状态页由三端共用的 `packages/tether-ui/src/app.js` 提供。
 截图模式会记录 renderer console、加载/崩溃事件和 DOM 文本；指定更新面板截图时要求更新中心确实挂载。
 
-Hub 状态中的节点在线标记按本机配置的 `TETHER_DEVICE` 精确匹配设备 ID。
+Hub 状态中的节点在线标记按本机配置的 `TETHER_DEVICE` 精确匹配设备 ID。Hub 模式下 supervisor 为每次进程生成随机本地 API token，Web 服务只把本机设备的文件/工作区/策略/审计/DSH 会话路由直连 Node 回环 console，其余请求仍走公网 Hub。
 
 启动：`cd apps/tether-app && npm start`。若 shell 带 `ELECTRON_RUN_AS_NODE=1`，先
 `unset ELECTRON_RUN_AS_NODE`。数据目录 `apps/tether-app/data`（gitignored）。截图模式：
