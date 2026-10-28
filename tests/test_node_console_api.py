@@ -25,6 +25,7 @@ def local_api(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     sessions = SimpleNamespace(
         home=tmp_path / "dsh-home",
         list=lambda: [{"session_id": "s1"}],
+        transcript=lambda session_id: {"session_id": session_id, "events": []} if session_id == "s1" else None,
         register_workspace=lambda path, title: {"path": path, "title": title},
     )
     api = SimpleNamespace(fs=svc, dsh_sessions=sessions)
@@ -82,6 +83,10 @@ def test_local_api_matches_controller_routes_and_enforces_policy(local_api) -> N
     assert status == 200 and body["count"] >= 2
     status, body = call(port, "GET", "/api/devices/DEV/dsh/sessions")
     assert status == 200 and body["sessions"] == [{"session_id": "s1"}]
+    status, body = call(port, "GET", "/api/devices/DEV/dsh/sessions/s1")
+    assert status == 200 and body == {"session_id": "s1", "events": []}
+    status, body = call(port, "GET", "/api/devices/DEV/dsh/sessions/missing")
+    assert status == 400 and body["detail"]["code"] == "not_found"
     status, body = call(port, "POST", "/api/devices/DEV/dsh/workspaces/register",
                         {"path": str(root / "demo"), "title": "demo"})
     assert status == 200 and body == {"path": str(root / "demo"), "title": "demo"}

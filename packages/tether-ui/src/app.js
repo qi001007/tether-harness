@@ -2629,6 +2629,33 @@ export function createTetherPanel({ React, Native, host }) {
         )
       }
 
+      const renderToasts = () => {
+        const row = (text, color, onClose, extra) => h('div', {
+          role: 'alert',
+          style: {
+            display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 10px',
+            background: C.layer1, border: '1px solid rgba(16, 24, 40, 0.16)', borderRadius: 8,
+            boxShadow: C.shadow, color, fontSize: 12, lineHeight: '17px',
+            pointerEvents: 'auto', minWidth: 0
+          }
+        },
+          h('span', { style: { flex: '1 1 auto', minWidth: 0, overflowWrap: 'anywhere' } }, text),
+          extra || null,
+          h('button', {
+            title: '关闭', 'aria-label': '关闭提示', onClick: onClose,
+            style: { border: 0, background: 'transparent', color: C.mute, fontSize: 14, lineHeight: '16px', cursor: 'pointer', padding: '0 2px', flex: '0 0 auto' }
+          }, '×'))
+        const rows = []
+        if (notice) rows.push(row(notice, /^Saved |^Policy updated|^已重命名/.test(notice) ? C.green : C.red, () => setNotice('')))
+        if (projectsError) rows.push(row(projectsError, C.red, () => setProjectsError(''), btn('重试工作区', loadProjects)))
+        return h('div', {
+          style: {
+            position: 'absolute', top: 50, right: 12, zIndex: 85, display: 'grid', gap: 6,
+            justifyContent: 'end', pointerEvents: 'none', maxWidth: 'min(480px, calc(100% - 24px))'
+          }
+        }, rows)
+      }
+
       const modelText = sessionId && sessionData ? [sessionData.model, sessionData.agent_preset].filter(Boolean).join(' · ') : ''
 
       const renderExplorer = () => {
@@ -2898,9 +2925,7 @@ export function createTetherPanel({ React, Native, host }) {
             style: { marginLeft: 8, marginRight: 0, height: 26, padding: '0 10px', borderRadius: 999, border: 0, background: C.bg, color: C.sub, display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer', flex: '0 0 auto' }
           }, updateHasAvailable ? '更新 · 有新版本' : updateHasFailure ? '更新 · 检查失败' : '更新')
         ),
-        notice ? h('div', { style: { padding: '6px 14px', background: C.soft, color: /^Saved |^Policy updated|^已重命名/.test(notice) ? C.green : C.red, borderBottom: 0, fontSize: 12 } }, notice) : null,
-        projectsError ? h('div', { role: 'alert', style: { display: 'flex', alignItems: 'center', gap: 8, padding: '6px 14px', background: C.soft, color: C.red, fontSize: 12 } },
-          h('span', null, projectsError), btn('重试工作区', loadProjects)) : null,
+        notice || projectsError ? renderToasts() : null,
         h('div', { style: { display: 'flex', flex: '1 1 auto', minHeight: 0 } },
           h(ActivityBar, {
             active: view === 'files' ? 'files' : (view === 'network' ? 'network' : 'workspaces'),

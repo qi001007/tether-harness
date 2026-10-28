@@ -59,3 +59,18 @@ test('APP routes only local device file routes to the node and keeps the token s
   assert.match(supervisor, /crypto\.randomBytes\(24\)\.toString\('hex'\)/)
   assert.match(supervisor, /env\.TETHER_LOCAL_API_TOKEN = this\.localApiToken/)
 })
+
+test('the node console serves session transcripts so local devices do not 404', () => {
+  const consoleSource = fs.readFileSync(path.join(root, 'tether/node/console.py'), 'utf8')
+  assert.match(consoleSource, /len\(tail\) == 3 and tail\[0\] == "dsh" and tail\[1\] == "sessions"/)
+  assert.match(consoleSource, /DSH session not found/)
+})
+
+test('errors render as a dismissible overlay instead of pushing the page down', () => {
+  assert.match(source, /const renderToasts = \(\) => \{/)
+  assert.match(source, /position: 'absolute', top: 50, right: 12, zIndex: 85/)
+  assert.match(source, /'aria-label': '关闭提示'/)
+  assert.match(source, /setProjectsError\(''\)/)
+  assert.doesNotMatch(source, /notice \? h\('div', \{ style: \{ padding: '6px 14px'/)
+  assert.doesNotMatch(source, /projectsError \? h\('div', \{ role: 'alert', style: \{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 14px'/)
+})

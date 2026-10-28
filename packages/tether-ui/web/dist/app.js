@@ -10461,6 +10461,53 @@ function createTetherPanel({ React: React2, Native, host }) {
         )
       );
     };
+    const renderToasts = () => {
+      const row = (text, color, onClose, extra) => h(
+        "div",
+        {
+          role: "alert",
+          style: {
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 8,
+            padding: "8px 10px",
+            background: C.layer1,
+            border: "1px solid rgba(16, 24, 40, 0.16)",
+            borderRadius: 8,
+            boxShadow: C.shadow,
+            color,
+            fontSize: 12,
+            lineHeight: "17px",
+            pointerEvents: "auto",
+            minWidth: 0
+          }
+        },
+        h("span", { style: { flex: "1 1 auto", minWidth: 0, overflowWrap: "anywhere" } }, text),
+        extra || null,
+        h("button", {
+          title: "\u5173\u95ED",
+          "aria-label": "\u5173\u95ED\u63D0\u793A",
+          onClick: onClose,
+          style: { border: 0, background: "transparent", color: C.mute, fontSize: 14, lineHeight: "16px", cursor: "pointer", padding: "0 2px", flex: "0 0 auto" }
+        }, "\xD7")
+      );
+      const rows = [];
+      if (notice) rows.push(row(notice, /^Saved |^Policy updated|^已重命名/.test(notice) ? C.green : C.red, () => setNotice("")));
+      if (projectsError) rows.push(row(projectsError, C.red, () => setProjectsError(""), btn("\u91CD\u8BD5\u5DE5\u4F5C\u533A", loadProjects)));
+      return h("div", {
+        style: {
+          position: "absolute",
+          top: 50,
+          right: 12,
+          zIndex: 85,
+          display: "grid",
+          gap: 6,
+          justifyContent: "end",
+          pointerEvents: "none",
+          maxWidth: "min(480px, calc(100% - 24px))"
+        }
+      }, rows);
+    };
     const modelText = sessionId && sessionData ? [sessionData.model, sessionData.agent_preset].filter(Boolean).join(" \xB7 ") : "";
     const renderExplorer = () => {
       const iconButton = (name, label, onClick, disabled, spinning) => h("button", {
@@ -10876,13 +10923,7 @@ function createTetherPanel({ React: React2, Native, host }) {
           style: { marginLeft: 8, marginRight: 0, height: 26, padding: "0 10px", borderRadius: 999, border: 0, background: C.bg, color: C.sub, display: "flex", alignItems: "center", gap: 6, fontSize: 12, cursor: "pointer", flex: "0 0 auto" }
         }, updateHasAvailable ? "\u66F4\u65B0 \xB7 \u6709\u65B0\u7248\u672C" : updateHasFailure ? "\u66F4\u65B0 \xB7 \u68C0\u67E5\u5931\u8D25" : "\u66F4\u65B0")
       ),
-      notice ? h("div", { style: { padding: "6px 14px", background: C.soft, color: /^Saved |^Policy updated|^已重命名/.test(notice) ? C.green : C.red, borderBottom: 0, fontSize: 12 } }, notice) : null,
-      projectsError ? h(
-        "div",
-        { role: "alert", style: { display: "flex", alignItems: "center", gap: 8, padding: "6px 14px", background: C.soft, color: C.red, fontSize: 12 } },
-        h("span", null, projectsError),
-        btn("\u91CD\u8BD5\u5DE5\u4F5C\u533A", loadProjects)
-      ) : null,
+      notice || projectsError ? renderToasts() : null,
       h(
         "div",
         { style: { display: "flex", flex: "1 1 auto", minHeight: 0 } },

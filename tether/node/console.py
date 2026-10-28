@@ -101,6 +101,12 @@ class _Handler(BaseHTTPRequestHandler):
         elif tail == ["dsh", "sessions"]:
             result = {"sessions": self.api.dsh_sessions.list(),
                       "home": str(self.api.dsh_sessions.home)}
+        elif len(tail) == 3 and tail[0] == "dsh" and tail[1] == "sessions":
+            transcript = self.api.dsh_sessions.transcript(tail[2])
+            if transcript is None:
+                self._error(400, "DSH session not found", "not_found")
+                return
+            result = transcript
         else:
             self._error(404, "local route not found", "not_found")
             return
