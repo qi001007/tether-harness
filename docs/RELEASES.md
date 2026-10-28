@@ -9,6 +9,8 @@ Fixes found in the first v0.2.4 deployment:
 
 Verified behind the APP gateway against an isolated Node: session list 200, transcript of a real DSH session 200, unknown session 400 `not_found`. Browser check: the overlay appears without layout shift and closes via `×`. Tests: Python 83 passed / 1 skipped, JavaScript 72 passed. Packages are unsigned; install and dual-machine acceptance remain separate gates.
 
+Deployment status: published after CI run 40627590181 verified the three ZIPs and manifest SHA-256 values. DESKTOP-LOCAL was overlaid with the v0.2.5 package (data untouched — `hub.json`, `policy.json` and workspace hashes unchanged) and restarted; the Hub reports Node `0.2.5` online, and the local session transcript answers through the APP gateway with `x-tether-local: 1` in 13 ms, so the repeated `local route not found` on the local device is gone. The second machine still needs the v0.2.5 APP.
+
 ## v0.2.4
 
 Response-time release driven by live Hub measurements:
