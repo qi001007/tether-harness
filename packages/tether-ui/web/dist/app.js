@@ -8954,6 +8954,7 @@ function createTetherPanel({ React: React2, Native, host }) {
     const previewBytesRef = React2.useRef(0);
     const previewInflightRef = React2.useRef(/* @__PURE__ */ new Map());
     const previewAbortRef = React2.useRef(null);
+    const previewOpeningKeyRef = React2.useRef("");
     const previewSeqRef = React2.useRef(0);
     const workspaceCacheRef = React2.useRef(/* @__PURE__ */ new Map());
     const drivesCacheRef = React2.useRef(/* @__PURE__ */ new Map());
@@ -10311,6 +10312,8 @@ function createTetherPanel({ React: React2, Native, host }) {
       const requestDevice = deviceId;
       if (!requestDevice) return;
       const key = previewCacheKey(requestDevice, entry.path);
+      if (previewOpeningKeyRef.current === key) return;
+      previewOpeningKeyRef.current = key;
       const cached = opts.fresh === true ? null : previewCacheRef.current.get(key);
       const seq = previewSeqRef.current + 1;
       previewSeqRef.current = seq;
@@ -10357,6 +10360,7 @@ function createTetherPanel({ React: React2, Native, host }) {
         if (cached) previewCacheRef.current.delete(key);
         fail2(e);
       } finally {
+        if (previewOpeningKeyRef.current === key) previewOpeningKeyRef.current = "";
         if (seq === previewSeqRef.current) setPreviewBusy(false);
       }
     };
@@ -10906,7 +10910,7 @@ function createTetherPanel({ React: React2, Native, host }) {
         h(
           "span",
           { style: { marginLeft: "auto", display: "flex", alignItems: "center", gap: 2 } },
-          (file.kind === "markdown" || file.kind === "text") && file.writable ? iconButton(editMode ? "eye" : "pencil", editMode ? "\u9884\u89C8" : "\u7F16\u8F91", () => setEditMode((value) => !value), false) : null,
+          file.kind === "markdown" && file.writable ? iconButton(editMode ? "eye" : "pencil", editMode ? "\u9884\u89C8" : "\u7F16\u8F91", () => setEditMode((value) => !value), false) : null,
           (file.kind === "markdown" || file.kind === "text") && file.writable ? iconButton("save", "\u4FDD\u5B58", saveFile, !dirty || busy) : null,
           h("span", { className: "tether-num", style: { fontSize: 10.5, color: C.mute, marginLeft: 4 } }, formatBytes(file.size))
         )

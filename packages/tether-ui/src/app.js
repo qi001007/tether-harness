@@ -1389,6 +1389,7 @@ export function createTetherPanel({ React, Native, host }) {
       const previewBytesRef = React.useRef(0)
       const previewInflightRef = React.useRef(new Map())
       const previewAbortRef = React.useRef(null)
+      const previewOpeningKeyRef = React.useRef('')
       const previewSeqRef = React.useRef(0)
       const workspaceCacheRef = React.useRef(new Map())
       const drivesCacheRef = React.useRef(new Map())
@@ -2566,6 +2567,8 @@ export function createTetherPanel({ React, Native, host }) {
         const requestDevice = deviceId
         if (!requestDevice) return
         const key = previewCacheKey(requestDevice, entry.path)
+        if (previewOpeningKeyRef.current === key) return
+        previewOpeningKeyRef.current = key
         const cached = opts.fresh === true ? null : previewCacheRef.current.get(key)
         const seq = previewSeqRef.current + 1
         previewSeqRef.current = seq
@@ -2607,7 +2610,7 @@ export function createTetherPanel({ React, Native, host }) {
           if (seq !== previewSeqRef.current || deviceIdRef.current !== requestDevice) return
           if (cached) previewCacheRef.current.delete(key)
           fail(e)
-        } finally { if (seq === previewSeqRef.current) setPreviewBusy(false) }
+        } finally { if (previewOpeningKeyRef.current === key) previewOpeningKeyRef.current = ''; if (seq === previewSeqRef.current) setPreviewBusy(false) }
       }
 
       const openFile = async (entry) => {
@@ -2983,7 +2986,7 @@ export function createTetherPanel({ React, Native, host }) {
           file.writable ? null : pill('只读', C.amber),
           file.converted ? pill('已转 PDF', C.mute) : null,
           h('span', { style: { marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 2 } },
-            (file.kind === 'markdown' || file.kind === 'text') && file.writable ? iconButton(editMode ? 'eye' : 'pencil', editMode ? '预览' : '编辑', () => setEditMode((value) => !value), false) : null,
+            file.kind === 'markdown' && file.writable ? iconButton(editMode ? 'eye' : 'pencil', editMode ? '预览' : '编辑', () => setEditMode((value) => !value), false) : null,
             (file.kind === 'markdown' || file.kind === 'text') && file.writable ? iconButton('save', '保存', saveFile, !dirty || busy) : null,
             h('span', { className: 'tether-num', style: { fontSize: 10.5, color: C.mute, marginLeft: 4 } }, formatBytes(file.size))
           )
