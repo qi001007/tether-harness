@@ -1,4 +1,5 @@
 # tether-dsh-surface 变更记录
+- 2026-10-28：Surface 包版本递增至 `0.2.10`。
 - 2026-10-28：Surface 包版本随三组件发行同步到 `0.2.9`。
 
 - 2026-10-27：增加 owner-only `/tether-identity` RPC，从同一 DSH_HOME 的有效 Node 短期 descriptor 返回唯一设备 ID；不输出凭据，多身份冲突/无有效记录均返回 unknown。

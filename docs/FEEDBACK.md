@@ -13,7 +13,7 @@
 
 ## 当前待办
 
-- [ ] F56：远程更新目标设备 APP，并让设备自动重启、重新连回 Hub。实现：Node 注册 app 更新器；Controller 放行 app 组件；远程设备按 Node→插件→APP 应用；Windows helper 按 Node 实际安装根目录匹配 Electron、等待更新响应后通过 Explorer 启动 `Tether-App.cmd`；UI 等待 `app_version` 追平。源码与定向回归已完成（Node 11 项、Updater 39 项含 1 项跳过、Controller 5 项、UI 更新顺序覆盖）；LAPTOP-01 真机更新、30 秒重连及 `hub.json`/会话/工作区数据哈希仍待验证。
+- [ ] F56：远程更新目标设备 APP，并让设备自动重启、重新连回 Hub。v0.2.9 桌面端链路成功；LAPTOP-01 磁盘 APP 已到 `0.2.9`，但运行中的 Node 仍报告 `app_version=0.2.4`，计划任务 helper 启动超时（具体限制未确认）。v0.2.10 Explorer helper 修复候选尚未发布/真机验证。失败快照显示 Hub 配置、会话 ID 与工作区树未变；待笔记本 APP 重启、重连和数据核验后关闭。
 
 - [ ] F01：完成目标设备原生 Host 页面、真实会话发送与附件的跨设备验收。现有本机 Host 展示验证不覆盖旧节点升级后的双机行为。DESKTOP-LOCAL 同设备原生 Host、真实会话/命令/文件已验收；非默认测试 Node 在 v0.2.1 时远端原生页白屏，升 v0.2.3 后正常并执行 `REMOTE-OK`；LAPTOP-01 离线，物理跨设备与附件待验收。
 - [x] F28：从独立制品干净安装 APP、DSH 插件和 Node，分别确认安装、启动与后台管理；源码克隆仅作开发路径。DESKTOP-LOCAL 已完成三组件安装/启动并升级到 `v0.2.3`，`v0.2.3` 的 APP 首装 bootstrap 在临时干净目录通过；LAPTOP-01 的第二台设备复验归入双机验收。
