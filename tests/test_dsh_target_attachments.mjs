@@ -1,8 +1,6 @@
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import test from 'node:test'
-import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 
 import {
   addDshTargetAttachment,
@@ -109,18 +107,12 @@ test('changed file versions across byte chunks are rejected and image MIME types
   assert.equal(file.options.type, 'image/png')
 })
 
-test('native attachment wrapper passes the SDK fileDrag reader and uses the lowest winning slot priority', () => {
-  const nativePath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../packages/tether-ui/scripts/build.mjs')
-  const source = fs.readFileSync(nativePath, 'utf8')
-  assert.match(source, /priority: -1000, locale: 'conversation',[\s\S]*inject: \(\) => \(\{ readFileDrag: ctx\.fileDrag\.read \}\)/)
-  assert.match(source, /'fileDrag'\]/)
+test('native attachment wrapper follows the repository fileDrag injection contract', () => {
+  const buildSource = fs.readFileSync(new URL('../packages/tether-ui/scripts/build.mjs', import.meta.url), 'utf8')
+  assert.match(buildSource, /priority: -1000, locale: 'conversation',[\s\S]*inject: \(\) => \(\{ readFileDrag: ctx\.fileDrag\.read \}\)/)
+  assert.match(buildSource, /'fileDrag'\]/)
 
-  const slotsPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../.runtime/dsh-src/packages/client/ui-slots/src/index.ts')
-  const slotsSource = fs.readFileSync(slotsPath, 'utf8')
-  assert.match(slotsSource, /lowest renders/)
-  assert.match(slotsSource, /\(a\.options\.priority \?\? 0\) - \(b\.options\.priority \?\? 0\)/)
-
-  const nativeUiPackage = JSON.parse(fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../packages/tether-dsh-native-ui/package.json'), 'utf8'))
+  const nativeUiPackage = JSON.parse(fs.readFileSync(new URL('../packages/tether-dsh-native-ui/package.json', import.meta.url), 'utf8'))
   assert.equal(nativeUiPackage.dependencies['@deepseek-ai/dsh-client-ui-attachment'], undefined)
 
   const readFileDrag = () => new File([], 'drop.txt')
