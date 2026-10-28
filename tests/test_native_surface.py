@@ -59,6 +59,40 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(HTML_BODY)
             return
+        if self.path.split("?", 1)[0] == "/plugins/events":
+            if self.headers.get("Accept") != "text/event-stream":
+                self.send_response(406)
+                self.end_headers()
+                return
+            if self.path.endswith("?error=1"):
+                self.send_response(503)
+                self.send_header("Content-Type", "text/plain")
+                self.send_header("Content-Length", "5")
+                self.end_headers()
+                self.wfile.write(b"error")
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Transfer-Encoding", "chunked")
+            self.end_headers()
+            try:
+                first = b"data: first\n\n"
+                self.wfile.write(f"{len(first):X}\r\n".encode() + first + b"\r\n")
+                self.wfile.flush()
+                self.server.sse_first_sent.set()
+                self.server.sse_continue.wait(2)
+                second = b"data: second\n\n"
+                self.wfile.write(f"{len(second):X}\r\n".encode() + second + b"\r\n")
+                self.wfile.flush()
+                self.server.sse_second_sent.set()
+                self.server.sse_finish.wait(2)
+                third = b"data: after-close\n\n"
+                self.wfile.write(f"{len(third):X}\r\n".encode() + third + b"\r\n")
+                self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError, OSError):
+                self.server.sse_disconnected.set()
+            return
         body = b"native"
         self.send_response(200)
         self.send_header("Content-Type", "application/octet-stream")
@@ -74,6 +108,11 @@ class Handler(BaseHTTPRequestHandler):
 @pytest.fixture
 def native_home(tmp_path):
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    server.sse_first_sent = threading.Event()
+    server.sse_second_sent = threading.Event()
+    server.sse_continue = threading.Event()
+    server.sse_finish = threading.Event()
+    server.sse_disconnected = threading.Event()
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     port = server.server_address[1]
@@ -84,13 +123,76 @@ def native_home(tmp_path):
         "version": 1, "pid": 123, "origin": f"http://127.0.0.1:{port}",
         "authenticated_url": f"http://127.0.0.1:{port}/?token=secret-token", "updated_at": 1,
     }), encoding="utf-8")
-    yield home, port
+    yield home, port, server
+    server.sse_continue.set()
+    server.sse_finish.set()
     server.shutdown()
     thread.join(timeout=2)
 
 
+def test_sse_stream_delivers_chunks_without_eof_buffering_and_closes(native_home):
+    async def run():
+        home, _, server = native_home
+        service = NativeSurface(home)
+        with pytest.raises(NativeSurfaceError) as rejected:
+            await service.call("http_stream_open", {"method": "GET", "path": "/api/upload"})
+        assert rejected.value.code == "bad_path"
+        opened = await asyncio.wait_for(service.call("http_stream_open", {
+            "method": "GET", "path": "/plugins/events",
+            "headers": {"accept": "text/event-stream"},
+        }), 1)
+        stream = opened["stream"]
+        assert opened["status"] == 200
+        assert "text/event-stream" in opened["headers"]["content-type"]
+        first = await asyncio.wait_for(service.call("http_stream_read", {"stream": stream}), 1)
+        assert first["kind"] == "chunk"
+        assert base64.b64decode(first["data"]) == b"data: first\n\n"
+        # The upstream intentionally pauses between events. The second read must wait
+        # briefly and return the next bytes without requiring the response to end.
+        asyncio.get_running_loop().call_later(0.1, server.sse_continue.set)
+        started = asyncio.get_running_loop().time()
+        second = await asyncio.wait_for(service.call("http_stream_read", {"stream": stream}), 1)
+        assert asyncio.get_running_loop().time() - started >= 0.05
+        assert second["kind"] == "chunk"
+        assert base64.b64decode(second["data"]) == b"data: second\n\n"
+        pump = service._http_streams[stream].pump
+        await service.call("http_stream_close", {"stream": stream})
+        assert pump.done() and pump.cancelled()
+        assert await service.call("http_stream_read", {"stream": stream}) == {"kind": "closed"}
+        error = await service.call("http_stream_open", {
+            "method": "GET", "path": "/plugins/events?error=1",
+            "headers": {"accept": "text/event-stream"},
+        })
+        assert error["status"] == 503
+        assert base64.b64decode(error["body_base64"]) == b"error"
+        await service.dispose()
+
+    asyncio.run(run())
+
+
+def test_sse_stream_idle_ttl_closes_unpolled_reader(native_home, monkeypatch):
+    async def run():
+        home, _, _ = native_home
+        monkeypatch.setattr(native_surface_module, "HTTP_STREAM_IDLE_TTL", 0.05)
+        monkeypatch.setattr(native_surface_module, "HTTP_STREAM_WATCHDOG_POLL", 0.01)
+        service = NativeSurface(home)
+        opened = await service.call("http_stream_open", {
+            "method": "GET", "path": "/plugins/events",
+            "headers": {"accept": "text/event-stream"},
+        })
+        stream = opened["stream"]
+        pump = service._http_streams[stream].pump
+        watchdog = service._http_streams[stream].watchdog
+        await asyncio.wait_for(watchdog, 1)
+        assert pump.done()
+        assert await service.call("http_stream_read", {"stream": stream}) == {"kind": "closed"}
+        await service.dispose()
+
+    asyncio.run(run())
+
+
 def test_http_fixed_target_and_credential_filter(native_home):
-    home, _ = native_home
+    home, _, _ = native_home
     service = NativeSurface(home)
     assert service.status() == {"available": True, "reason": "ready"}
     result = asyncio.run(service.call("http", {"path": "/api/remote/connect", "headers": {
@@ -191,7 +293,7 @@ def test_rejects_ssrf_paths(native_home, path):
 
 @pytest.mark.asyncio
 async def test_websocket_binary_roundtrip_and_close(native_home):
-    home, _ = native_home
+    home, _, _ = native_home
     received = asyncio.Future()
 
     async def echo(ws):
@@ -225,7 +327,7 @@ async def test_websocket_binary_roundtrip_and_close(native_home):
 
 @pytest.mark.asyncio
 async def test_http_and_send_progress_while_receive_is_pending(native_home, monkeypatch):
-    home, _ = native_home
+    home, _, _ = native_home
     finish = asyncio.Event()
 
     async def handler(ws):

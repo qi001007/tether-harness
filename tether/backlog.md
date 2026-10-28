@@ -1,5 +1,9 @@
 # Tether Python 后端变更记录
 
+- 2026-10-28：Node `status`/`check` 不再等待 prepare/apply 的长锁；manifest check 增加 60 秒进程内单飞缓存，check 下载限时 4 秒，prepare 仍强制刷新 manifest。
+
+- 2026-10-28：插件更新器识别 DSH profile 中明确声明的 `file:` 源码依赖；状态版本取 profile/source 包中的最低版本，应用时在一个备份/回滚事务内同步两个加载位置，避免重装时恢复旧共享 UI。
+- 2026-10-28：插件状态版本同时取四个 profile 包与 `file:` 源码包的最低版本；旧 surface 等任一包落后都会继续报告更新，缺失包不再由旧状态文件掩盖。
 - 2026-10-28：Node console 增加本地设备 API（token 保护，复用 FsService 策略/审计）；Office 预览增加磁盘缓存；WS `fs_call`/`dsh_call` 并发化。详见 `tether/node/backlog.md`。
 - 2026-10-28：公开包提取为客户端/Node运行时；Controller、静态服务页及其服务器更新路由迁入独立私有 `tether-harness-server` 项目。发行包改为显式客户端运行时清单。
 

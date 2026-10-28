@@ -20,5 +20,7 @@
 - 2026-10-27：Audit 改 SQLite WAL（100000 行上限、分页、旧 JSONL 一次性迁移），内存不再保存历史；新增 audit 分页回归。
 - 2026-10-27：Node capabilities 增加 `os_label`，按 `sys.getwindowsversion().build` 区分 Windows 10/11，避免 `platform.release()` 误报。
 - 2026-10-27：原生 surface 转发 HTML 时注入 `#tether-native-surface`，将内嵌 DSH `.sidebarCol` 的右边框置 0（桌面版由 `[data-windows-titlebar]` 隐藏）；gzip HTML 先解压再注入并移除 ETag/Last-Modified，JS/CSS 的 gzip 透传不变。
+- 2026-10-28：为原生 surface 的 `GET /plugins/events` 增加有界 SSE 转发：48 KiB 分块、每节点 8 条流、短轮询、90 秒空闲清理，明确 `http_stream_open/read/close` RPC；流关闭时取消异步读取任务并关闭连接。
+- 2026-10-28：状态/检查请求绕开 prepare/apply 串行锁；plugin 只读请求使用活动 profile 的独立 manager，避免 profile 共享状态竞争。
 - 2026-10-27：Node 宣告缓存的本机版本与 update protocol 1；异步接入 UpdateManager 的 node/plugin check/status/prepare/apply，参数只含白名单组件/动作/暂存 ID。apply 前复核 Node 本地活动 Tether run 与原生 DSH 未结束 turn，状态未知或繁忙时拒绝；下载/应用不阻塞 WS reader。Node 成功换版后优雅关闭并交由 APP supervisor 退出码 75 重启，独立节点保留原 argv 自替换；插件更新只改目标 Node 的 DSH 安装并要求目标 DSH 重启。
 - 2026-10-27：远程插件 apply 必须从活动 Host companion descriptor 取得 profile，且 descriptor PID 存活；未升级 companion、profile 缺失或 Host 不在运行时拒绝更新，不再默认写 desktop。

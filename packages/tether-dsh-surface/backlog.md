@@ -1,4 +1,5 @@
 # tether-dsh-surface 变更记录
+- 2026-10-28：Surface 包版本递增至公开版本 `0.2.11`。
 - 2026-10-28：Surface 包版本递增至 `0.2.10`。
 - 2026-10-28：Surface 包版本随三组件发行同步到 `0.2.9`。
 
@@ -9,3 +10,8 @@
 - 新增 Host companion：等待 DSH loader 收敛后读取已绑定 origin，并以 0600 权限原子发布 authenticated URL；仅清理本进程、同 origin 的 descriptor。
 - 增加本机插件自更新 RPC：走独立 DSH authenticated `/tether-updates` channel，调用随插件包发布的 Python updater；应用前检查原生 DSH 活动回合，只安装本机插件文件并报告需重启，不修改已选远端节点或终止 Host。真实发布包升级与回滚验收待完成。
 - 2026-10-27：统一发布包版本为 0.2.1，并随独立插件包携带白名单本机 updater runtime。
+# 变更记录
+
+- 2026-10-28：按当前 HostConnectionService `register(ctx, channel, handler)` 注册本机更新与身份 RPC；旧 `rpc.handle` 保留兼容，无可用 API 时显式报错。
+- 2026-10-28：插件 file: 源码位于 Git 工作树时，更新前/应用前要求工作树干净，避免覆盖未提交源码。
+- 2026-10-28：覆盖当前 DSH connection 注册 API、无 `rpc` 属性的 Host、缺失注册 API 显式失败，以及脏源码 checkout 保护。

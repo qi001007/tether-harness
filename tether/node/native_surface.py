@@ -14,6 +14,8 @@ import urllib.parse
 import urllib.request
 import uuid
 import threading
+import time
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +25,12 @@ import psutil
 MAX_BODY = 8 * 1024 * 1024
 MAX_FRAME = 8 * 1024 * 1024
 TIMEOUT = 20
+MAX_HTTP_STREAMS = 8
+HTTP_STREAM_CHUNK = 48 * 1024
+HTTP_STREAM_QUEUE = 4
+HTTP_STREAM_POLL = 1.0
+HTTP_STREAM_IDLE_TTL = 90.0
+HTTP_STREAM_WATCHDOG_POLL = 1.0
 ALLOWED_RESPONSE_HEADERS = {
     "content-type", "cache-control", "content-disposition", "etag", "content-encoding",
     "last-modified", "expires", "vary", "x-content-type-options",
@@ -33,6 +41,21 @@ NATIVE_SURFACE_STYLE = (
     b'[class*="sidebarCol"]{border-right:0!important}'
     b'</style>'
 )
+
+
+@dataclass
+class _HttpStream:
+    reader: asyncio.StreamReader
+    writer: asyncio.StreamWriter
+    chunked: bool = False
+    content_remaining: int | None = None
+    current_chunk_remaining: int = 0
+    last_access: float = field(default_factory=time.monotonic)
+    chunks: asyncio.Queue[tuple[str, bytes | None]] = field(
+        default_factory=lambda: asyncio.Queue(maxsize=HTTP_STREAM_QUEUE))
+    stop: asyncio.Event = field(default_factory=asyncio.Event)
+    pump: asyncio.Task | None = None
+    watchdog: asyncio.Task | None = None
 
 
 def polish_native_html(payload: bytes, headers: dict[str, str]) -> tuple[bytes, dict[str, str]]:
@@ -81,6 +104,8 @@ class NativeSurface:
         self._auth_lock = threading.Lock()
         self._channels: dict[str, Any] = {}
         self._pending_channels = 0
+        self._http_streams: dict[str, _HttpStream] = {}
+        self._pending_http_streams = 0
         self._lock = asyncio.Lock()
 
     def _load(self) -> bool:
@@ -123,6 +148,7 @@ class NativeSurface:
         if self._snapshot is not None and snapshot != self._snapshot:
             self._reset_auth()
             self._close_channels()
+            self._close_http_streams()
         self._snapshot, self._origin, self._auth_url = snapshot, origin.rstrip("/"), auth
         profile, pid = data.get("profile"), data.get("pid")
         self._profile = profile if isinstance(profile, str) and re.fullmatch(r"[A-Za-z0-9_-]{1,80}", profile) else None
@@ -147,6 +173,16 @@ class NativeSurface:
         self._pid = None
         self._reset_auth()
         self._close_channels()
+        self._close_http_streams()
+
+    def _close_http_streams(self) -> None:
+        streams, self._http_streams = list(self._http_streams.values()), {}
+        for state in streams:
+            state.stop.set()
+            for task in (state.pump, state.watchdog):
+                if task is not None and not task.done():
+                    task.cancel()
+            state.writer.close()
 
     def _profile_from_host_argv(self) -> str | None:
         """Infer the profile from the live DSH desktop host when the descriptor omits it."""
@@ -275,7 +311,22 @@ class NativeSurface:
                     raise NativeSurfaceError("too many websocket channels", "capacity")
                 self._pending_channels += 1
                 url = self._target(args.get("path"), websocket=True, origin=self._origin)
-            elif op not in {"ws_send", "ws_receive", "ws_close"}:
+            elif op == "http_stream_open":
+                url = self._target(args.get("path"), origin=self._origin)
+                if (str(args.get("method") or "GET").upper() != "GET"
+                        or urllib.parse.urlsplit(url).path != "/plugins/events"):
+                    raise NativeSurfaceError("unsupported HTTP stream", "bad_path")
+                now = time.monotonic()
+                expired = [key for key, state in self._http_streams.items()
+                           if now - state.last_access > HTTP_STREAM_IDLE_TTL
+                           or now - state.created > HTTP_STREAM_MAX_AGE]
+                for key in expired:
+                    state = self._http_streams.pop(key)
+                    asyncio.create_task(self._stop_http_stream(state))
+                if len(self._http_streams) + self._pending_http_streams >= MAX_HTTP_STREAMS:
+                    raise NativeSurfaceError("too many HTTP streams", "capacity")
+                self._pending_http_streams += 1
+            elif op not in {"http_stream_read", "http_stream_close", "ws_send", "ws_receive", "ws_close"}:
                 raise NativeSurfaceError("unknown surface operation", "bad_op")
         if op == "http":
             return await asyncio.to_thread(self._http, args, url, self._origin)
@@ -285,6 +336,16 @@ class NativeSurface:
             finally:
                 async with self._lock:
                     self._pending_channels -= 1
+        if op == "http_stream_open":
+            try:
+                return await self._http_stream_open(args, url, self._origin)
+            finally:
+                async with self._lock:
+                    self._pending_http_streams -= 1
+        if op == "http_stream_read":
+            return await self._http_stream_read(args)
+        if op == "http_stream_close":
+            return await self._http_stream_close(args)
         if op == "ws_send":
             return await self._ws_send(args)
         if op == "ws_receive":
@@ -340,6 +401,220 @@ class NativeSurface:
             payload, result_headers = polish_native_html(payload, result_headers)
             return {"status": response.code, "headers": result_headers,
                     "body_base64": base64.b64encode(payload).decode("ascii")}
+
+    async def _http_stream_open(self, args: dict[str, Any], url: str, origin: str) -> dict[str, Any]:
+        headers = args.get("headers") or {}
+        if not isinstance(headers, dict):
+            raise NativeSurfaceError("invalid headers", "bad_headers")
+        accept = headers.get("accept", "text/event-stream")
+        if (not isinstance(accept, str) or "\r" in accept or "\n" in accept
+                or "text/event-stream" not in accept.lower()):
+            raise NativeSurfaceError("invalid headers", "bad_headers")
+        await asyncio.to_thread(self._ensure_authenticated)
+        cookie = self._cookie_header()
+        parsed = urllib.parse.urlsplit(url)
+        host, port = parsed.hostname or "", parsed.port or 80
+        host_header = f"[{host}]" if ":" in host else host
+        path = parsed.path or "/"
+        if parsed.query:
+            path += "?" + parsed.query
+        if any(ord(char) <= 32 or ord(char) == 127 or ord(char) > 126 for char in path):
+            raise NativeSurfaceError("invalid surface path", "bad_path")
+        request_headers = [f"GET {path} HTTP/1.1", f"Host: {host_header}:{port}",
+                           f"Accept: {accept}", "Accept-Encoding: identity",
+                           f"Origin: {origin}", "Sec-Fetch-Site: same-origin", "Connection: keep-alive"]
+        if cookie:
+            request_headers.append(f"Cookie: {cookie}")
+        writer: asyncio.StreamWriter | None = None
+        try:
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection(host, port, limit=64 * 1024), timeout=TIMEOUT)
+            writer.write(("\r\n".join(request_headers) + "\r\n\r\n").encode("latin-1"))
+            await writer.drain()
+            raw_head = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), timeout=TIMEOUT)
+        except asyncio.CancelledError:
+            if writer is not None:
+                writer.close()
+            raise
+        except Exception:
+            if writer is not None:
+                writer.close()
+            raise NativeSurfaceError("native DSH stream failed", "upstream_error") from None
+        try:
+            lines = raw_head.decode("iso-8859-1").split("\r\n")
+            status_match = re.fullmatch(r"HTTP/1\.[01] ([0-9]{3})(?: .*)?", lines[0])
+            if status_match is None:
+                raise ValueError
+            status = int(status_match.group(1))
+            raw_response_headers: dict[str, str] = {}
+            for line in lines[1:]:
+                if not line:
+                    continue
+                name, separator, value = line.partition(":")
+                if not separator:
+                    raise ValueError
+                raw_response_headers[name.strip().lower()] = value.strip()
+        except (UnicodeError, ValueError):
+            writer.close()
+            raise NativeSurfaceError("native DSH stream response invalid", "bad_response") from None
+        result_headers = {key: value for key, value in raw_response_headers.items()
+                          if key in ALLOWED_RESPONSE_HEADERS and "\r" not in value and "\n" not in value}
+        transfer_encoding = raw_response_headers.get("transfer-encoding", "").lower()
+        if transfer_encoding and "chunked" not in transfer_encoding.split(",")[-1].strip():
+            writer.close()
+            raise NativeSurfaceError("unsupported native DSH stream framing", "bad_response")
+        content_length: int | None = None
+        if "content-length" in raw_response_headers:
+            try:
+                content_length = int(raw_response_headers["content-length"])
+                if content_length < 0:
+                    raise ValueError
+            except ValueError:
+                writer.close()
+                raise NativeSurfaceError("native DSH stream response invalid", "bad_response") from None
+        if status != 200:
+            payload = b""
+            if content_length is not None:
+                try:
+                    payload = await asyncio.wait_for(
+                        reader.readexactly(min(content_length, HTTP_STREAM_CHUNK)), timeout=TIMEOUT)
+                except (asyncio.TimeoutError, asyncio.IncompleteReadError):
+                    writer.close()
+                    raise NativeSurfaceError("native DSH stream response incomplete", "bad_response") from None
+            writer.close()
+            return {"status": status, "headers": result_headers,
+                    "body_base64": base64.b64encode(payload).decode("ascii")}
+        if "text/event-stream" not in result_headers.get("content-type", "").lower():
+            writer.close()
+            raise NativeSurfaceError("native DSH stream content type invalid", "bad_response")
+        stream_id = uuid.uuid4().hex
+        state = _HttpStream(reader, writer, chunked="chunked" in transfer_encoding,
+                            content_remaining=content_length)
+        self._http_streams[stream_id] = state
+        state.pump = asyncio.create_task(self._http_stream_pump(state))
+        state.watchdog = asyncio.create_task(self._http_stream_watchdog(stream_id, state))
+        return {"status": status, "headers": result_headers, "stream": stream_id}
+
+    @staticmethod
+    def _http_stream_expired(state: _HttpStream) -> bool:
+        return time.monotonic() - state.last_access > HTTP_STREAM_IDLE_TTL
+
+    async def _read_http_stream_chunk(self, state: _HttpStream) -> bytes:
+        if state.chunked:
+            if state.current_chunk_remaining == 0:
+                line = await state.reader.readuntil(b"\r\n")
+                if len(line) > 1024:
+                    raise NativeSurfaceError("native DSH stream chunk header too large", "too_large")
+                try:
+                    size = int(line[:-2].split(b";", 1)[0].strip(), 16)
+                except ValueError:
+                    raise NativeSurfaceError("invalid native DSH stream framing", "bad_response") from None
+                if size == 0:
+                    trailer_bytes = 0
+                    for _ in range(64):
+                        trailer = await state.reader.readuntil(b"\r\n")
+                        trailer_bytes += len(trailer)
+                        if trailer_bytes > 8192:
+                            raise NativeSurfaceError("native DSH stream trailer too large", "too_large")
+                        if trailer == b"\r\n":
+                            return b""
+                    raise NativeSurfaceError("too many native DSH stream trailers", "bad_response")
+                state.current_chunk_remaining = size
+            size = min(HTTP_STREAM_CHUNK, state.current_chunk_remaining)
+            data = await state.reader.readexactly(size)
+            state.current_chunk_remaining -= len(data)
+            if state.current_chunk_remaining == 0 and await state.reader.readexactly(2) != b"\r\n":
+                raise NativeSurfaceError("invalid native DSH stream framing", "bad_response")
+            return data
+        if state.content_remaining is not None:
+            if state.content_remaining == 0:
+                return b""
+            data = await state.reader.readexactly(min(HTTP_STREAM_CHUNK, state.content_remaining))
+            state.content_remaining -= len(data)
+            return data
+        return await state.reader.read(HTTP_STREAM_CHUNK)
+
+    async def _http_stream_pump(self, state: _HttpStream) -> None:
+        try:
+            while not state.stop.is_set():
+                if self._http_stream_expired(state):
+                    break
+                chunk = await self._read_http_stream_chunk(state)
+                if not chunk:
+                    await state.chunks.put(("eof", None))
+                    break
+                await state.chunks.put(("chunk", chunk))
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            if not state.stop.is_set():
+                await state.chunks.put(("error", None))
+
+    async def _http_stream_watchdog(self, stream_id: str, state: _HttpStream) -> None:
+        while not state.stop.is_set():
+            await asyncio.sleep(HTTP_STREAM_WATCHDOG_POLL)
+            if self._http_stream_expired(state):
+                async with self._lock:
+                    if self._http_streams.get(stream_id) is state:
+                        self._http_streams.pop(stream_id, None)
+                await self._stop_http_stream(state)
+                return
+
+    def _http_stream_state(self, args: dict[str, Any]) -> tuple[str, _HttpStream] | None:
+        stream_id = args.get("stream")
+        if not isinstance(stream_id, str) or not re.fullmatch(r"[a-f0-9]{32}", stream_id):
+            return None
+        state = self._http_streams.get(stream_id)
+        if state is None:
+            return None
+        if self._http_stream_expired(state):
+            self._http_streams.pop(stream_id, None)
+            asyncio.create_task(self._stop_http_stream(state))
+            return None
+        state.last_access = time.monotonic()
+        return stream_id, state
+
+    async def _http_stream_read(self, args: dict[str, Any]) -> dict[str, Any]:
+        async with self._lock:
+            found = self._http_stream_state(args)
+        if found is None:
+            return {"kind": "closed"}
+        stream_id, state = found
+        try:
+            kind, data = await asyncio.wait_for(state.chunks.get(), timeout=HTTP_STREAM_POLL)
+        except asyncio.TimeoutError:
+            if state.stop.is_set():
+                return {"kind": "closed"}
+            return {"kind": "idle"}
+        if kind == "chunk" and data is not None:
+            return {"kind": "chunk", "data": base64.b64encode(data).decode("ascii")}
+        async with self._lock:
+            self._http_streams.pop(stream_id, None)
+        await self._stop_http_stream(state)
+        return {"kind": "eof" if kind == "eof" else "closed"}
+
+    async def _stop_http_stream(self, state: _HttpStream) -> None:
+        state.stop.set()
+        current = asyncio.current_task()
+        tasks = [task for task in (state.pump, state.watchdog)
+                 if task is not None and task is not current and not task.done()]
+        for task in tasks:
+            task.cancel()
+        state.writer.close()
+        try:
+            await asyncio.wait_for(state.writer.wait_closed(), timeout=1.0)
+        except (asyncio.TimeoutError, OSError, RuntimeError):
+            pass
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def _http_stream_close(self, args: dict[str, Any]) -> dict[str, Any]:
+        async with self._lock:
+            stream_id = args.get("stream")
+            state = self._http_streams.pop(stream_id, None) if isinstance(stream_id, str) else None
+        if state is not None:
+            await self._stop_http_stream(state)
+        return {"ok": True}
 
     async def _ws_open(self, args: dict[str, Any], url: str, origin: str) -> dict[str, Any]:
         await asyncio.to_thread(self._ensure_authenticated)
@@ -436,9 +711,13 @@ class NativeSurface:
     async def dispose(self) -> None:
         async with self._lock:
             sockets = list(self._channels.values()) + getattr(self, "_stale_channels", [])
+            streams = list(self._http_streams.values())
             self._channels.clear()
+            self._http_streams.clear()
             self._stale_channels = []
             await self._close_many(sockets)
+            for state in streams:
+                await self._stop_http_stream(state)
             self._reset_auth()
 
 
