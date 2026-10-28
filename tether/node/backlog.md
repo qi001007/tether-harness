@@ -1,4 +1,5 @@
 # 修改记录
+- 2026-10-28：v0.2.10 候选将 APP 重启代理改为 Explorer→临时 CMD→隐藏 PowerShell worker，避免依赖 Task Scheduler；保留按实际安装根路径匹配 Electron、等待回包和重连日志。
 
 - 2026-10-28：Node 远程更新注册 app 组件，保留 `app_version` 能力上报；APP apply 将更新器的 `restart_required` 结果透传给 Hub。新增 app apply 与能力回归。
 

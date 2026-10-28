@@ -12,13 +12,13 @@ import asyncio
 import json
 import os
 import platform
+import shutil
 import sqlite3
 import ssl
 import sys
 import subprocess
 import tempfile
 import time
-import uuid
 from pathlib import Path
 from typing import Any
 
@@ -78,36 +78,19 @@ def ensure_sdk_profile(home: Path) -> None:
     (profile / "cordis.patch.yml").write_text("[]\n", encoding="utf-8")
 
 
-_APP_RESTART_SCRIPT = r'''param([string]$Root, [string]$TaskName, [string]$ReadyFile, [string]$LogFile, [switch]$Worker)
+_APP_RESTART_SCRIPT = r'''param([string]$ConfigFile)
 $ErrorActionPreference = 'Stop'
-$rootPath = [IO.Path]::GetFullPath($Root).TrimEnd('\')
+$config = Get-Content -LiteralPath $ConfigFile -Raw | ConvertFrom-Json
+$rootPath = [IO.Path]::GetFullPath($config.root).TrimEnd('\')
+$readyFile = $config.ready_file
+$logFile = $config.log_file
 $appDir = Join-Path $rootPath 'apps\tether-app'
 $launcher = Join-Path $appDir 'Tether-App.cmd'
 $electron = [IO.Path]::GetFullPath((Join-Path $appDir 'node_modules\electron\dist\electron.exe'))
-if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) {
-  if ($Worker) { Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue }
-  throw 'APP launcher not found'
-}
-if (-not $Worker) {
-  $powerShell = Join-Path $PSHOME 'powershell.exe'
-  $arguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + $PSCommandPath + '" -Root "' + $rootPath + '" -TaskName "' + $TaskName + '" -ReadyFile "' + $ReadyFile + '" -LogFile "' + $LogFile + '" -Worker'
-  $action = New-ScheduledTaskAction -Execute $powerShell -Argument $arguments
-  $principal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive -RunLevel Limited
-  Register-ScheduledTask -TaskName $TaskName -Action $action -Principal $principal -Force | Out-Null
-  try {
-    Start-ScheduledTask -TaskName $TaskName
-    $deadline = [DateTime]::UtcNow.AddSeconds(20)
-    while (-not (Test-Path -LiteralPath $ReadyFile) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 100 }
-    if (-not (Test-Path -LiteralPath $ReadyFile)) { throw 'Scheduled APP restart worker did not start' }
-  } catch {
-    Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
-    throw
-  }
-  exit 0
-}
 try {
-  Set-Content -LiteralPath $ReadyFile -Value 'ready' -Encoding Ascii
-  Add-Content -LiteralPath $LogFile -Value ((Get-Date -Format o) + ' restart worker started')
+  if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) { throw 'APP launcher not found' }
+  Set-Content -LiteralPath $readyFile -Value 'ready' -Encoding Ascii
+  Add-Content -LiteralPath $logFile -Value ((Get-Date -Format o) + ' restart worker started')
   Start-Sleep -Seconds 2
   foreach ($process in Get-CimInstance Win32_Process -Filter "Name = 'electron.exe'") {
     if (-not $process.ExecutablePath) { continue }
@@ -124,19 +107,20 @@ try {
     })
   } while ($remaining.Count -gt 0 -and [DateTime]::UtcNow -lt $deadline)
   Start-Process -FilePath (Join-Path $env:WINDIR 'explorer.exe') -ArgumentList @('"' + $launcher + '"')
-  Add-Content -LiteralPath $LogFile -Value ((Get-Date -Format o) + ' APP launcher opened')
+  Add-Content -LiteralPath $logFile -Value ((Get-Date -Format o) + ' APP launcher opened')
 } catch {
-  Add-Content -LiteralPath $LogFile -Value ((Get-Date -Format o) + ' restart worker failed')
+  Add-Content -LiteralPath $logFile -Value ((Get-Date -Format o) + ' restart worker failed')
   throw
 } finally {
-  Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
-  Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
+  foreach ($path in @($ConfigFile, $config.wrapper_file, $MyInvocation.MyCommand.Path, $readyFile)) {
+    Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
+  }
 }
 '''
 
 
 def schedule_app_restart(root: Path) -> bool:
-    """Start a Windows helper outside Node's supervisor process/job tree."""
+    """Start a restart wrapper through the existing interactive Explorer shell."""
     if sys.platform != "win32":
         return False
     root = Path(root).resolve()
@@ -154,42 +138,48 @@ def schedule_app_restart(root: Path) -> bool:
     if not launcher.is_file():
         record("APP launcher missing")
         return False
-    fd, script_path = tempfile.mkstemp(prefix="tether-app-restart-", suffix=".ps1")
-    os.close(fd)
-    marker_fd, ready_path = tempfile.mkstemp(prefix="tether-app-restart-", suffix=".ready")
-    os.close(marker_fd)
-    os.unlink(ready_path)
-    task_name = "TetherAppRestart-" + uuid.uuid4().hex
-    scheduled = False
+    work_dir = Path(tempfile.mkdtemp(prefix="tether-app-restart-"))
+    script_path = work_dir / "worker.ps1"
+    wrapper_path = work_dir / "restart.cmd"
+    config_path = work_dir / "restart.json"
+    ready_path = work_dir / "worker.ready"
+    handed_off = False
     try:
-        with open(script_path, "w", encoding="utf-8", newline="\r\n") as script:
-            script.write(_APP_RESTART_SCRIPT)
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-        result = subprocess.run(
-            ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-             "-WindowStyle", "Hidden", "-File", script_path, "-Root", str(root),
-             "-TaskName", task_name, "-ReadyFile", ready_path, "-LogFile", str(log_path)],
-            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            close_fds=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000),
-            timeout=25, check=False,
+        script_path.write_text(_APP_RESTART_SCRIPT, encoding="utf-8", newline="\r\n")
+        config_path.write_text(json.dumps({
+            "root": str(root), "ready_file": str(ready_path), "log_file": str(log_path),
+            "wrapper_file": str(wrapper_path),
+        }), encoding="utf-8")
+        wrapper_path.write_text(
+            '@echo off\r\n'
+            '"%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" '
+            '-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden '
+            '-File "%~dp0worker.ps1" -ConfigFile "%~dp0restart.json"\r\n',
+            encoding="utf-8",
         )
-        scheduled = result.returncode == 0
-        record("restart worker scheduled" if scheduled else "restart worker scheduling failed")
-        return scheduled
-    except OSError:
-        record("restart worker could not be started")
+        subprocess.Popen(
+            ["explorer.exe", str(wrapper_path)],
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            close_fds=True,
+            creationflags=(getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
+                           | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)),
+        )
+        deadline = time.monotonic() + 15
+        while time.monotonic() < deadline:
+            if ready_path.is_file():
+                handed_off = True
+                record("restart worker handed off through Explorer")
+                return True
+            time.sleep(0.1)
+        record("Explorer restart worker did not become ready")
         return False
-    except subprocess.TimeoutExpired:
-        record("restart worker scheduling timed out")
+    except OSError:
+        record("Explorer restart wrapper could not be started")
         return False
     finally:
-        try:
-            Path(ready_path).unlink()
-        except OSError:
-            pass
-        if not scheduled:
+        if not handed_off:
             try:
-                Path(script_path).unlink()
+                shutil.rmtree(work_dir)
             except OSError:
                 pass
 

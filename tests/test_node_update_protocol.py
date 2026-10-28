@@ -147,28 +147,34 @@ def test_windows_app_restart_helper_targets_only_install_electron_and_launcher(t
     launcher.write_text("@echo off\n", encoding="utf-8")
     captured: list[tuple[list[str], dict]] = []
 
-    def run(args, **kwargs):
+    def popen(args, **kwargs):
         captured.append((args, kwargs))
-        ready = Path(args[args.index("-ReadyFile") + 1])
-        ready.write_text("ready", encoding="ascii")
-        return type("Process", (), {"returncode": 0})()
+        wrapper = Path(args[1])
+        config_path = Path(wrapper.with_name("restart.json"))
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        Path(config["ready_file"]).write_text("ready", encoding="ascii")
+        return object()
 
     monkeypatch.setattr(agent.sys, "platform", "win32")
-    monkeypatch.setattr(agent.subprocess, "run", run)
+    monkeypatch.setattr(agent.subprocess, "Popen", popen)
     assert agent.schedule_app_restart(app_root) is True
     args, options = captured[0]
-    script = Path(args[args.index("-File") + 1])
+    assert args[0] == "explorer.exe"
+    wrapper = Path(args[1])
+    script = wrapper.with_name("worker.ps1")
+    config_path = wrapper.with_name("restart.json")
     source = script.read_text(encoding="utf-8")
-    assert "Register-ScheduledTask" in source
-    assert "-LogonType Interactive" in source
-    assert "-RunLevel Limited" in source
-    assert "Start-ScheduledTask" in source
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    wrapper_source = wrapper.read_text(encoding="utf-8")
+    assert "Win32_Process" in source
     assert "Stop-Process" in source
     assert "Start-Sleep -Seconds 2" in source
     assert "explorer.exe" in source
-    assert str(app_root.resolve()) in args
-    assert options["timeout"] == 25
-    script.unlink()
+    assert "WindowsPowerShell\\v1.0\\powershell.exe" in wrapper_source
+    assert config["root"] == str(app_root.resolve())
+    assert config["wrapper_file"] == str(wrapper)
+    assert options["creationflags"] & getattr(agent.subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
+    agent.shutil.rmtree(wrapper.parent)
 
 
 def test_app_restart_helper_fails_cleanly_when_launcher_is_missing(tmp_path, monkeypatch):

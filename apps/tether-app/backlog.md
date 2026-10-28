@@ -1,4 +1,5 @@
 # tether-app backlog
+- 2026-10-28：APP 包与 package-lock 根版本递增至 `0.2.10`，对应 Explorer broker 重启修复候选。
 - 2026-10-28：将 APP 包版本和 package-lock 根元数据统一到 `0.2.9`，用于远程 APP 更新闭环版本。
 - 2026-10-28：hub 模式下 supervisor 每进程生成随机本地 API token，经 `TETHER_LOCAL_API_TOKEN` 传给 Node；`main.js` 把本机设备、console 端口和 token 交给 UI server；server 只把本机设备的 fs/workspaces/drives/policy/audit/dsh sessions 路由到 `127.0.0.1:18894` 并注入 Bearer，其余仍走公网 Hub，响应带 `x-tether-local: 1`。不要把 token 写进 argv 或 `/app-context`。
 - 2026-10-28：截图模式记录 renderer 错误与 DOM 状态，更新中心截图在界面未实际渲染时失败退出。
