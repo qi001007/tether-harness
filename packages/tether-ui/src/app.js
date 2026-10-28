@@ -1414,6 +1414,7 @@ export function createTetherPanel({ React, Native, host }) {
       const [appLocalDevice, setAppLocalDevice] = React.useState('')
       const appLocalDeviceRef = React.useRef('')
       const [showUpdate, setShowUpdate] = React.useState(false)
+      const [pendingApp, setPendingApp] = React.useState('')
       const [updateInfo, setUpdateInfo] = React.useState({ app: null, localPlugin: null, devices: {} })
       const [updateBusy, setUpdateBusy] = React.useState('')
       const [updateErrors, setUpdateErrors] = React.useState({ app: '', localPlugin: '', devices: {} })
@@ -1639,70 +1640,117 @@ export function createTetherPanel({ React, Native, host }) {
             },
             apply: (id, checked) => updateAction(component, 'apply', id, scope, checked.authorityBase)
           })
-          if (outcome.cancelled) return
+          if (outcome.cancelled) return false
           if (!outcome.failed && !outcome.updated) setComponentUpdateError(component, '', scope)
           if (!outcome.failed && outcome.updated && component === 'node') watchNodeRestart(scope, authority)
+          return !outcome.failed
         } catch (error) {
           setComponentUpdateError(component, updateErrorText(error), scope)
+          return false
         }
       }
       const openUpdateCenter = () => {
         setShowUpdate(true)
+        refreshUpdateCenter()
+      }
+      const refreshUpdateCenter = () => {
         if (host && host.kind === 'app') automaticUpdateCheck('app', null)
         if (host && host.kind === 'dsh') automaticUpdateCheck('localPlugin', null)
         ;((state && state.devices) || []).forEach((item) => {
-          const scope = { deviceId: item.device_id, epoch: 0 }
-          const info = ((updateInfo.devices[item.device_id] || {}).node) || {}
-          const running = item.capabilities && item.capabilities.node_version
-          if (info.restart_required && running && info.current_version && running === info.current_version) {
-            setComponentUpdateInfo('node', { ...info, restart_required: false }, scope)
-          }
           if (!item.online) return
+          const scope = { deviceId: item.device_id, epoch: 0 }
           automaticUpdateCheck('node', scope)
           automaticUpdateCheck('plugin', scope)
         })
       }
-      const renderUpdateCard = (component, targetDevice) => {
-        const scope = updateScope(component)
-        const info = scope ? ((updateInfo.devices[scope.deviceId] || {})[component] || {}) : (updateInfo[component] || {})
-        const errorText = scope ? ((updateErrors.devices[scope.deviceId] || {})[component] || '') : (updateErrors[component] || '')
-        const preparedId = info.prepared_id || ((info.prepared || [])[0] || {}).prepared_id
-        const localTarget = component === 'app' || component === 'localPlugin'
-        const online = localTarget || !!(targetDevice && targetDevice.online)
-        const deviceName = targetDevice ? (targetDevice.name || targetDevice.device_id) : ''
-        const title = component === 'app' ? '本机 Tether APP'
-          : component === 'localPlugin' ? '本机 DSH 插件'
-            : (deviceName || '未选择设备') + (component === 'node' ? ' · Node' : ' · DSH 插件')
-        const busy = updateBusy.startsWith((scope ? scope.deviceId : '') + ':')
-        const statusPill = info.restart_required ? pill(component === 'plugin' || component === 'localPlugin' ? '重启 DSH 后生效' : '节点重启中', C.amber)
-          : info.update_available ? pill('有更新', C.amber)
-            : info.installed_latest === true ? pill('已是最新', C.green)
-              : errorText ? pill('失败', C.red)
-                : !online && !localTarget ? pill('离线', C.mute)
-                  : null
-        return h('div', { key: (scope ? scope.deviceId : '') + ':' + component, style: { padding: 12, borderRadius: 8, background: C.panel, marginBottom: 10 } },
-          h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, minWidth: 0 } },
-            h('strong', { style: { fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, title),
-            targetDevice && deviceName !== targetDevice.device_id ? h('span', { style: { color: C.mute, fontSize: 11 } }, targetDevice.device_id) : null,
-            h('span', { style: { marginLeft: 'auto', display: 'flex', alignItems: 'center' } }, statusPill)),
+      const infoFor = (component, targetId) => targetId
+        ? ((updateInfo.devices[targetId] || {})[component] || {})
+        : (updateInfo[component] || {})
+      const productCard = (product) => {
+        if (host && host.kind === 'web') return null
+        const localId = appLocalDevice || deviceId
+        const components = product === 'desktop' ? ['app', 'node'] : ['localPlugin', 'node']
+        const infos = components.map((component) => infoFor(component, component === 'node' ? localId : ''))
+        const busyKey = product === 'desktop' ? 'desktop' : 'dsh'
+        const busy = updateBusy === 'product:' + busyKey
+        const hasUpdate = infos.some((info) => info && info.update_available === true)
+        const known = infos.every((info) => info && info.current_version && info.latest_version)
+        const latest = infos.map((info) => info && info.latest_version).filter(Boolean)
+        const currentText = product === 'desktop'
+          ? 'APP ' + (infos[0].current_version || '未知') + ' / Node ' + (infos[1].current_version || '未知')
+          : '插件 ' + (infos[0].current_version || '未知') + ' / Node ' + (infos[1].current_version || '未知')
+        const title = product === 'desktop' ? 'Tether Desktop（APP + Node）' : 'Tether for DSH（插件 + Node）'
+        return h('div', { key: product, style: { padding: 12, borderRadius: 8, background: C.panel, marginBottom: 10 } },
+          h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 } },
+            h('strong', { style: { fontSize: 13 } }, title),
+            h('span', { style: { marginLeft: 'auto' } }, busy ? pill('更新中…', C.amber)
+              : hasUpdate ? pill('有更新', C.amber)
+                : known ? pill('已是最新', C.green) : pill('检查中…', C.mute))),
+          h('div', { style: { color: C.sub, fontSize: 12, lineHeight: '19px' } }, '当前 ' + currentText + (latest.length ? ' · 最新 ' + latest[0] : '')),
+          h('div', { style: { marginTop: 8 } },
+            btn(busy ? '更新中…' : '一键更新', () => runProductUpdate(product), { primary: true, disabled: busy || !hasUpdate })))
+      }
+      const deviceForm = (item) => {
+        const profile = String((item.capabilities && (item.capabilities.dsh_surface ? 'DSH' : '')) || '')
+        return profile || 'Node'
+      }
+      const deviceCard = (item) => {
+        const scope = { deviceId: item.device_id, epoch: 0 }
+        const node = infoFor('node', item.device_id)
+        const plugin = infoFor('plugin', item.device_id)
+        const hasPlugin = !!(item.capabilities && item.capabilities.dsh_surface)
+        const infos = hasPlugin ? [node, plugin] : [node]
+        const hasUpdate = infos.some((info) => info && info.update_available === true)
+        const known = infos.every((info) => info && info.current_version && info.latest_version)
+        const busy = updateBusy.startsWith(item.device_id + ':') || updateBusy === 'device:' + item.device_id
+        return h('div', { key: 'device:' + item.device_id, style: { padding: 12, borderRadius: 8, background: C.panel, marginBottom: 10, opacity: item.online ? 1 : 0.6 } },
+          h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 } },
+            h('strong', { style: { fontSize: 13 } }, item.name || item.device_id),
+            h('span', { style: { color: C.mute, fontSize: 11 } }, item.name && item.name !== item.device_id ? item.device_id : ''),
+            h('span', { style: { marginLeft: 'auto' } }, !item.online ? pill('离线', C.mute)
+              : busy ? pill('更新中…', C.amber)
+                : hasUpdate ? pill('有更新', C.amber)
+                  : known ? pill('已是最新', C.green) : pill('检查中…', C.mute))),
           h('div', { style: { color: C.sub, fontSize: 12, lineHeight: '19px' } },
-            '当前 ' + (info.current_version || '未知') + ' · 最新 ' + (info.latest_version || '未知')),
-          h('div', { style: { display: 'flex', gap: 7, flexWrap: 'wrap', marginTop: 8 } },
-            btn('一键更新', () => updateOneClick(component, scope), { primary: true, disabled: busy || !online || !!info.busy || !!info.restart_required }),
-            btn(busy ? '处理中…' : '检查更新', () => updateAction(component, 'check', undefined, scope), { disabled: busy || !online }),
-            info.update_available ? btn('下载并校验', () => updateAction(component, 'prepare', undefined, scope), { disabled: busy || !online || !!info.busy }) : null,
-            preparedId ? btn(component === 'app' ? '安装并重启 APP' : '安装', () => updateAction(component, 'apply', preparedId, scope), { primary: true, disabled: busy || !online || !!info.busy }) : null,
-            info.restart_required && (component === 'plugin' || component === 'localPlugin') ? btn('已重启 DSH，重新检查', async () => {
-              try {
-                await updateAction(component, 'check', undefined, scope)
-                const status = await loadUpdateInfo(component, 'status', undefined, scope)
-                if (status && status.ok !== false && !status.update_available) {
-                  setComponentUpdateInfo(component, { ...status, restart_required: false }, scope)
-                }
-              } catch (_) { /* the check already surfaced the error */ }
-            }, { disabled: busy }) : null
-          )
-        )
+            deviceForm(item) + (hasPlugin ? ' · 插件 ' + (plugin.current_version || '未知') : '') + ' · Node ' + (node.current_version || '未知')),
+          h('div', { style: { marginTop: 8 } },
+            btn(busy ? '更新中…' : item.online ? '一键更新' : '离线，开机后可更新', () => runDeviceUpdate(item), { primary: true, disabled: busy || !item.online || !hasUpdate })))
+      }
+      const runProductUpdate = async (product) => {
+        const localId = appLocalDevice || deviceId
+        if (product === 'desktop') {
+          setUpdateBusy('product:desktop')
+          try {
+            const nodeOk = localId ? await updateOneClick('node', { deviceId: localId, epoch: 0 }) : true
+            if (!nodeOk) return
+            const checked = await updateAction('app', 'check', undefined, null)
+            if (!checked || checked.update_available !== true) { refreshUpdateCenter(); return }
+            const prepared = await updateAction('app', 'prepare', undefined, null)
+            const preparedId = prepared && (prepared.prepared_id || ((prepared.prepared || [])[0] || {}).prepared_id)
+            if (!preparedId) throw new Error('APP 更新包未准备好，请重试')
+            setPendingApp(preparedId)
+          } catch (error) {
+            setComponentUpdateError('app', shortUpdateError(error), null)
+          } finally { setUpdateBusy('') }
+          return
+        }
+        setUpdateBusy('product:dsh')
+        try {
+          const nodeOk = localId ? await updateOneClick('node', { deviceId: localId, epoch: 0 }) : true
+          if (!nodeOk) return
+          await updateOneClick('localPlugin', null)
+          refreshUpdateCenter()
+        } finally { setUpdateBusy('') }
+      }
+      const runDeviceUpdate = async (item) => {
+        setUpdateBusy('device:' + item.device_id)
+        try {
+          const scope = { deviceId: item.device_id, epoch: 0 }
+          const nodeOk = await updateOneClick('node', scope)
+          if (!nodeOk) return
+          if (item.capabilities && item.capabilities.dsh_surface) await updateOneClick('plugin', scope)
+          refreshUpdateCenter()
+        } finally { setUpdateBusy('') }
       }
       React.useEffect(() => {
         const components = host && host.kind === 'app' ? ['app'] : host && host.kind === 'dsh' ? ['localPlugin'] : []
@@ -3016,15 +3064,35 @@ export function createTetherPanel({ React, Native, host }) {
           style: { position: 'absolute', inset: 0, background: 'rgba(16,24,40,0.35)', display: 'grid', placeItems: 'center', zIndex: 30, padding: 16, boxSizing: 'border-box' }
         },
           h('div', { style: { width: 520, maxWidth: '100%', maxHeight: '100%', overflow: 'auto', background: C.bg, borderRadius: 10, boxShadow: C.shadow, padding: 18, boxSizing: 'border-box' } },
-            h('div', { style: { display: 'flex', alignItems: 'center', marginBottom: 12 } },
+            h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 } },
               h('strong', { style: { fontSize: 14 } }, '更新中心'),
-              h('button', { onClick: () => setShowUpdate(false), style: { marginLeft: 'auto', border: 0, background: 'transparent', fontSize: 18, cursor: 'pointer', color: C.mute } }, '×')),
-            host && host.kind === 'app' ? renderUpdateCard('app', null) : null,
-            host && host.kind === 'dsh' ? renderUpdateCard('localPlugin', null) : null,
-            ((state && state.devices) || []).slice()
-              .sort((a, b) => (a.device_id === appLocalDevice ? 0 : 1) - (b.device_id === appLocalDevice ? 0 : 1))
-              .flatMap((item) => [renderUpdateCard('node', item), renderUpdateCard('plugin', item)]),
-            h('div', { style: { color: C.mute, fontSize: 11.5, lineHeight: '18px', marginTop: 2 } }, 'Node 与 DSH 插件可在此远程更新；Tether APP 只能在其所在电脑上自更新。插件安装后需重启对应设备的 DeepSeek Harness。')
+              h('button', { onClick: refreshUpdateCenter, title: '刷新', 'aria-label': '刷新', style: { marginLeft: 'auto', border: 0, background: 'transparent', fontSize: 14, cursor: 'pointer', color: C.sub } }, '刷新'),
+              h('button', { onClick: () => setShowUpdate(false), style: { border: 0, background: 'transparent', fontSize: 18, cursor: 'pointer', color: C.mute } }, '×')),
+            host && host.kind === 'app' ? productCard('desktop') : null,
+            host && host.kind === 'dsh' ? productCard('dsh') : null,
+            ((state && state.devices) || []).filter((item) => host && host.kind === 'web' || item.device_id !== (appLocalDevice || deviceId)).length
+              ? h('div', { style: { color: C.mute, fontSize: 11, margin: '4px 0 8px' } }, '其他设备')
+              : null,
+            ((state && state.devices) || [])
+              .filter((item) => host && host.kind === 'web' || item.device_id !== (appLocalDevice || deviceId))
+              .sort((a, b) => (b.online ? 1 : 0) - (a.online ? 1 : 0))
+              .map(deviceCard),
+            h('div', { style: { color: C.mute, fontSize: 11.5, lineHeight: '18px', marginTop: 2 } }, '其他设备需在线才能更新；远端 APP 只能在其本机自更新。')
+          )
+        ) : null,
+        pendingApp ? h('div', {
+          style: { position: 'absolute', inset: 0, background: 'rgba(16,24,40,0.35)', display: 'grid', placeItems: 'center', zIndex: 35, padding: 16 }
+        },
+          h('div', { style: { width: 360, background: C.bg, borderRadius: 10, boxShadow: C.shadow, padding: 18 } },
+            h('div', { style: { fontSize: 14, fontWeight: 'var(--tether-strong, 600)', marginBottom: 6 } }, 'APP 已下载'),
+            h('div', { style: { color: C.sub, fontSize: 12, lineHeight: '18px', marginBottom: 14 } }, '需要重启 Tether 才能完成安装。'),
+            h('div', { style: { display: 'flex', justifyContent: 'flex-end', gap: 8 } },
+              btn('稍后', () => { setPendingApp(''); setNotice('APP 已下载，下次打开更新页可继续安装') }),
+              btn('重启并安装', async () => {
+                const id = pendingApp
+                setPendingApp('')
+                try { await host.updates.apply(id); setNotice('APP 正在重启安装') } catch (error) { setComponentUpdateError('app', shortUpdateError(error), null) }
+              }, { primary: true }))
           )
         ) : null,
         showSettings ? h('div', {

@@ -8982,6 +8982,7 @@ function createTetherPanel({ React: React2, Native, host }) {
     const [appLocalDevice, setAppLocalDevice] = React2.useState("");
     const appLocalDeviceRef = React2.useRef("");
     const [showUpdate, setShowUpdate] = React2.useState(false);
+    const [pendingApp, setPendingApp] = React2.useState("");
     const [updateInfo, setUpdateInfo] = React2.useState({ app: null, localPlugin: null, devices: {} });
     const [updateBusy, setUpdateBusy] = React2.useState("");
     const [updateErrors, setUpdateErrors] = React2.useState({ app: "", localPlugin: "", devices: {} });
@@ -9213,74 +9214,138 @@ function createTetherPanel({ React: React2, Native, host }) {
           },
           apply: (id, checked) => updateAction(component, "apply", id, scope, checked.authorityBase)
         });
-        if (outcome.cancelled) return;
+        if (outcome.cancelled) return false;
         if (!outcome.failed && !outcome.updated) setComponentUpdateError(component, "", scope);
         if (!outcome.failed && outcome.updated && component === "node") watchNodeRestart(scope, authority);
+        return !outcome.failed;
       } catch (error) {
         setComponentUpdateError(component, updateErrorText(error), scope);
+        return false;
       }
     };
     const openUpdateCenter = () => {
       setShowUpdate(true);
+      refreshUpdateCenter();
+    };
+    const refreshUpdateCenter = () => {
       if (host && host.kind === "app") automaticUpdateCheck("app", null);
       if (host && host.kind === "dsh") automaticUpdateCheck("localPlugin", null);
       (state && state.devices || []).forEach((item) => {
-        const scope = { deviceId: item.device_id, epoch: 0 };
-        const info = (updateInfo.devices[item.device_id] || {}).node || {};
-        const running = item.capabilities && item.capabilities.node_version;
-        if (info.restart_required && running && info.current_version && running === info.current_version) {
-          setComponentUpdateInfo("node", { ...info, restart_required: false }, scope);
-        }
         if (!item.online) return;
+        const scope = { deviceId: item.device_id, epoch: 0 };
         automaticUpdateCheck("node", scope);
         automaticUpdateCheck("plugin", scope);
       });
     };
-    const renderUpdateCard = (component, targetDevice) => {
-      const scope = updateScope(component);
-      const info = scope ? (updateInfo.devices[scope.deviceId] || {})[component] || {} : updateInfo[component] || {};
-      const errorText = scope ? (updateErrors.devices[scope.deviceId] || {})[component] || "" : updateErrors[component] || "";
-      const preparedId = info.prepared_id || ((info.prepared || [])[0] || {}).prepared_id;
-      const localTarget = component === "app" || component === "localPlugin";
-      const online = localTarget || !!(targetDevice && targetDevice.online);
-      const deviceName = targetDevice ? targetDevice.name || targetDevice.device_id : "";
-      const title = component === "app" ? "\u672C\u673A Tether APP" : component === "localPlugin" ? "\u672C\u673A DSH \u63D2\u4EF6" : (deviceName || "\u672A\u9009\u62E9\u8BBE\u5907") + (component === "node" ? " \xB7 Node" : " \xB7 DSH \u63D2\u4EF6");
-      const busy2 = updateBusy.startsWith((scope ? scope.deviceId : "") + ":");
-      const statusPill = info.restart_required ? pill(component === "plugin" || component === "localPlugin" ? "\u91CD\u542F DSH \u540E\u751F\u6548" : "\u8282\u70B9\u91CD\u542F\u4E2D", C.amber) : info.update_available ? pill("\u6709\u66F4\u65B0", C.amber) : info.installed_latest === true ? pill("\u5DF2\u662F\u6700\u65B0", C.green) : errorText ? pill("\u5931\u8D25", C.red) : !online && !localTarget ? pill("\u79BB\u7EBF", C.mute) : null;
+    const infoFor = (component, targetId) => targetId ? (updateInfo.devices[targetId] || {})[component] || {} : updateInfo[component] || {};
+    const productCard = (product) => {
+      if (host && host.kind === "web") return null;
+      const localId = appLocalDevice || deviceId;
+      const components = product === "desktop" ? ["app", "node"] : ["localPlugin", "node"];
+      const infos = components.map((component) => infoFor(component, component === "node" ? localId : ""));
+      const busyKey = product === "desktop" ? "desktop" : "dsh";
+      const busy2 = updateBusy === "product:" + busyKey;
+      const hasUpdate = infos.some((info) => info && info.update_available === true);
+      const known = infos.every((info) => info && info.current_version && info.latest_version);
+      const latest = infos.map((info) => info && info.latest_version).filter(Boolean);
+      const currentText = product === "desktop" ? "APP " + (infos[0].current_version || "\u672A\u77E5") + " / Node " + (infos[1].current_version || "\u672A\u77E5") : "\u63D2\u4EF6 " + (infos[0].current_version || "\u672A\u77E5") + " / Node " + (infos[1].current_version || "\u672A\u77E5");
+      const title = product === "desktop" ? "Tether Desktop\uFF08APP + Node\uFF09" : "Tether for DSH\uFF08\u63D2\u4EF6 + Node\uFF09";
       return h(
         "div",
-        { key: (scope ? scope.deviceId : "") + ":" + component, style: { padding: 12, borderRadius: 8, background: C.panel, marginBottom: 10 } },
+        { key: product, style: { padding: 12, borderRadius: 8, background: C.panel, marginBottom: 10 } },
         h(
           "div",
-          { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 4, minWidth: 0 } },
-          h("strong", { style: { fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, title),
-          targetDevice && deviceName !== targetDevice.device_id ? h("span", { style: { color: C.mute, fontSize: 11 } }, targetDevice.device_id) : null,
-          h("span", { style: { marginLeft: "auto", display: "flex", alignItems: "center" } }, statusPill)
+          { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 4 } },
+          h("strong", { style: { fontSize: 13 } }, title),
+          h("span", { style: { marginLeft: "auto" } }, busy2 ? pill("\u66F4\u65B0\u4E2D\u2026", C.amber) : hasUpdate ? pill("\u6709\u66F4\u65B0", C.amber) : known ? pill("\u5DF2\u662F\u6700\u65B0", C.green) : pill("\u68C0\u67E5\u4E2D\u2026", C.mute))
+        ),
+        h("div", { style: { color: C.sub, fontSize: 12, lineHeight: "19px" } }, "\u5F53\u524D " + currentText + (latest.length ? " \xB7 \u6700\u65B0 " + latest[0] : "")),
+        h(
+          "div",
+          { style: { marginTop: 8 } },
+          btn(busy2 ? "\u66F4\u65B0\u4E2D\u2026" : "\u4E00\u952E\u66F4\u65B0", () => runProductUpdate(product), { primary: true, disabled: busy2 || !hasUpdate })
+        )
+      );
+    };
+    const deviceForm = (item) => {
+      const profile = String(item.capabilities && (item.capabilities.dsh_surface ? "DSH" : "") || "");
+      return profile || "Node";
+    };
+    const deviceCard = (item) => {
+      const scope = { deviceId: item.device_id, epoch: 0 };
+      const node = infoFor("node", item.device_id);
+      const plugin = infoFor("plugin", item.device_id);
+      const hasPlugin = !!(item.capabilities && item.capabilities.dsh_surface);
+      const infos = hasPlugin ? [node, plugin] : [node];
+      const hasUpdate = infos.some((info) => info && info.update_available === true);
+      const known = infos.every((info) => info && info.current_version && info.latest_version);
+      const busy2 = updateBusy.startsWith(item.device_id + ":") || updateBusy === "device:" + item.device_id;
+      return h(
+        "div",
+        { key: "device:" + item.device_id, style: { padding: 12, borderRadius: 8, background: C.panel, marginBottom: 10, opacity: item.online ? 1 : 0.6 } },
+        h(
+          "div",
+          { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 4 } },
+          h("strong", { style: { fontSize: 13 } }, item.name || item.device_id),
+          h("span", { style: { color: C.mute, fontSize: 11 } }, item.name && item.name !== item.device_id ? item.device_id : ""),
+          h("span", { style: { marginLeft: "auto" } }, !item.online ? pill("\u79BB\u7EBF", C.mute) : busy2 ? pill("\u66F4\u65B0\u4E2D\u2026", C.amber) : hasUpdate ? pill("\u6709\u66F4\u65B0", C.amber) : known ? pill("\u5DF2\u662F\u6700\u65B0", C.green) : pill("\u68C0\u67E5\u4E2D\u2026", C.mute))
         ),
         h(
           "div",
           { style: { color: C.sub, fontSize: 12, lineHeight: "19px" } },
-          "\u5F53\u524D " + (info.current_version || "\u672A\u77E5") + " \xB7 \u6700\u65B0 " + (info.latest_version || "\u672A\u77E5")
+          deviceForm(item) + (hasPlugin ? " \xB7 \u63D2\u4EF6 " + (plugin.current_version || "\u672A\u77E5") : "") + " \xB7 Node " + (node.current_version || "\u672A\u77E5")
         ),
         h(
           "div",
-          { style: { display: "flex", gap: 7, flexWrap: "wrap", marginTop: 8 } },
-          btn("\u4E00\u952E\u66F4\u65B0", () => updateOneClick(component, scope), { primary: true, disabled: busy2 || !online || !!info.busy || !!info.restart_required }),
-          btn(busy2 ? "\u5904\u7406\u4E2D\u2026" : "\u68C0\u67E5\u66F4\u65B0", () => updateAction(component, "check", void 0, scope), { disabled: busy2 || !online }),
-          info.update_available ? btn("\u4E0B\u8F7D\u5E76\u6821\u9A8C", () => updateAction(component, "prepare", void 0, scope), { disabled: busy2 || !online || !!info.busy }) : null,
-          preparedId ? btn(component === "app" ? "\u5B89\u88C5\u5E76\u91CD\u542F APP" : "\u5B89\u88C5", () => updateAction(component, "apply", preparedId, scope), { primary: true, disabled: busy2 || !online || !!info.busy }) : null,
-          info.restart_required && (component === "plugin" || component === "localPlugin") ? btn("\u5DF2\u91CD\u542F DSH\uFF0C\u91CD\u65B0\u68C0\u67E5", async () => {
-            try {
-              await updateAction(component, "check", void 0, scope);
-              const status = await loadUpdateInfo(component, "status", void 0, scope);
-              if (status && status.ok !== false && !status.update_available) {
-                setComponentUpdateInfo(component, { ...status, restart_required: false }, scope);
-              }
-            } catch (_) {
-            }
-          }, { disabled: busy2 }) : null
+          { style: { marginTop: 8 } },
+          btn(busy2 ? "\u66F4\u65B0\u4E2D\u2026" : item.online ? "\u4E00\u952E\u66F4\u65B0" : "\u79BB\u7EBF\uFF0C\u5F00\u673A\u540E\u53EF\u66F4\u65B0", () => runDeviceUpdate(item), { primary: true, disabled: busy2 || !item.online || !hasUpdate })
         )
       );
+    };
+    const runProductUpdate = async (product) => {
+      const localId = appLocalDevice || deviceId;
+      if (product === "desktop") {
+        setUpdateBusy("product:desktop");
+        try {
+          const nodeOk = localId ? await updateOneClick("node", { deviceId: localId, epoch: 0 }) : true;
+          if (!nodeOk) return;
+          const checked = await updateAction("app", "check", void 0, null);
+          if (!checked || checked.update_available !== true) {
+            refreshUpdateCenter();
+            return;
+          }
+          const prepared = await updateAction("app", "prepare", void 0, null);
+          const preparedId = prepared && (prepared.prepared_id || ((prepared.prepared || [])[0] || {}).prepared_id);
+          if (!preparedId) throw new Error("APP \u66F4\u65B0\u5305\u672A\u51C6\u5907\u597D\uFF0C\u8BF7\u91CD\u8BD5");
+          setPendingApp(preparedId);
+        } catch (error) {
+          setComponentUpdateError("app", shortUpdateError(error), null);
+        } finally {
+          setUpdateBusy("");
+        }
+        return;
+      }
+      setUpdateBusy("product:dsh");
+      try {
+        const nodeOk = localId ? await updateOneClick("node", { deviceId: localId, epoch: 0 }) : true;
+        if (!nodeOk) return;
+        await updateOneClick("localPlugin", null);
+        refreshUpdateCenter();
+      } finally {
+        setUpdateBusy("");
+      }
+    };
+    const runDeviceUpdate = async (item) => {
+      setUpdateBusy("device:" + item.device_id);
+      try {
+        const scope = { deviceId: item.device_id, epoch: 0 };
+        const nodeOk = await updateOneClick("node", scope);
+        if (!nodeOk) return;
+        if (item.capabilities && item.capabilities.dsh_surface) await updateOneClick("plugin", scope);
+        refreshUpdateCenter();
+      } finally {
+        setUpdateBusy("");
+      }
     };
     React2.useEffect(() => {
       const components = host && host.kind === "app" ? ["app"] : host && host.kind === "dsh" ? ["localPlugin"] : [];
@@ -11033,14 +11098,46 @@ function createTetherPanel({ React: React2, Native, host }) {
           { style: { width: 520, maxWidth: "100%", maxHeight: "100%", overflow: "auto", background: C.bg, borderRadius: 10, boxShadow: C.shadow, padding: 18, boxSizing: "border-box" } },
           h(
             "div",
-            { style: { display: "flex", alignItems: "center", marginBottom: 12 } },
+            { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 12 } },
             h("strong", { style: { fontSize: 14 } }, "\u66F4\u65B0\u4E2D\u5FC3"),
-            h("button", { onClick: () => setShowUpdate(false), style: { marginLeft: "auto", border: 0, background: "transparent", fontSize: 18, cursor: "pointer", color: C.mute } }, "\xD7")
+            h("button", { onClick: refreshUpdateCenter, title: "\u5237\u65B0", "aria-label": "\u5237\u65B0", style: { marginLeft: "auto", border: 0, background: "transparent", fontSize: 14, cursor: "pointer", color: C.sub } }, "\u5237\u65B0"),
+            h("button", { onClick: () => setShowUpdate(false), style: { border: 0, background: "transparent", fontSize: 18, cursor: "pointer", color: C.mute } }, "\xD7")
           ),
-          host && host.kind === "app" ? renderUpdateCard("app", null) : null,
-          host && host.kind === "dsh" ? renderUpdateCard("localPlugin", null) : null,
-          (state && state.devices || []).slice().sort((a, b) => (a.device_id === appLocalDevice ? 0 : 1) - (b.device_id === appLocalDevice ? 0 : 1)).flatMap((item) => [renderUpdateCard("node", item), renderUpdateCard("plugin", item)]),
-          h("div", { style: { color: C.mute, fontSize: 11.5, lineHeight: "18px", marginTop: 2 } }, "Node \u4E0E DSH \u63D2\u4EF6\u53EF\u5728\u6B64\u8FDC\u7A0B\u66F4\u65B0\uFF1BTether APP \u53EA\u80FD\u5728\u5176\u6240\u5728\u7535\u8111\u4E0A\u81EA\u66F4\u65B0\u3002\u63D2\u4EF6\u5B89\u88C5\u540E\u9700\u91CD\u542F\u5BF9\u5E94\u8BBE\u5907\u7684 DeepSeek Harness\u3002")
+          host && host.kind === "app" ? productCard("desktop") : null,
+          host && host.kind === "dsh" ? productCard("dsh") : null,
+          (state && state.devices || []).filter((item) => host && host.kind === "web" || item.device_id !== (appLocalDevice || deviceId)).length ? h("div", { style: { color: C.mute, fontSize: 11, margin: "4px 0 8px" } }, "\u5176\u4ED6\u8BBE\u5907") : null,
+          (state && state.devices || []).filter((item) => host && host.kind === "web" || item.device_id !== (appLocalDevice || deviceId)).sort((a, b) => (b.online ? 1 : 0) - (a.online ? 1 : 0)).map(deviceCard),
+          h("div", { style: { color: C.mute, fontSize: 11.5, lineHeight: "18px", marginTop: 2 } }, "\u5176\u4ED6\u8BBE\u5907\u9700\u5728\u7EBF\u624D\u80FD\u66F4\u65B0\uFF1B\u8FDC\u7AEF APP \u53EA\u80FD\u5728\u5176\u672C\u673A\u81EA\u66F4\u65B0\u3002")
+        )
+      ) : null,
+      pendingApp ? h(
+        "div",
+        {
+          style: { position: "absolute", inset: 0, background: "rgba(16,24,40,0.35)", display: "grid", placeItems: "center", zIndex: 35, padding: 16 }
+        },
+        h(
+          "div",
+          { style: { width: 360, background: C.bg, borderRadius: 10, boxShadow: C.shadow, padding: 18 } },
+          h("div", { style: { fontSize: 14, fontWeight: "var(--tether-strong, 600)", marginBottom: 6 } }, "APP \u5DF2\u4E0B\u8F7D"),
+          h("div", { style: { color: C.sub, fontSize: 12, lineHeight: "18px", marginBottom: 14 } }, "\u9700\u8981\u91CD\u542F Tether \u624D\u80FD\u5B8C\u6210\u5B89\u88C5\u3002"),
+          h(
+            "div",
+            { style: { display: "flex", justifyContent: "flex-end", gap: 8 } },
+            btn("\u7A0D\u540E", () => {
+              setPendingApp("");
+              setNotice("APP \u5DF2\u4E0B\u8F7D\uFF0C\u4E0B\u6B21\u6253\u5F00\u66F4\u65B0\u9875\u53EF\u7EE7\u7EED\u5B89\u88C5");
+            }),
+            btn("\u91CD\u542F\u5E76\u5B89\u88C5", async () => {
+              const id = pendingApp;
+              setPendingApp("");
+              try {
+                await host.updates.apply(id);
+                setNotice("APP \u6B63\u5728\u91CD\u542F\u5B89\u88C5");
+              } catch (error) {
+                setComponentUpdateError("app", shortUpdateError(error), null);
+              }
+            }, { primary: true })
+          )
         )
       ) : null,
       showSettings ? h(
