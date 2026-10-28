@@ -37,6 +37,9 @@
 - [ ] F44：Office 预览缓存。实现：Node 按“路径+`mtime_ns`+大小+类型”缓存转换后的 PDF，上限 96 个/256 MB，命中不重新调用 COM。证据：隔离 Node 实测 PPTX 首次 2879 ms、第二次 5 ms（Hub 基线每次 5311–5610 ms）；源文件变化后重新转换由 `test_office_preview_reuses_converted_pdf_until_source_changes` 覆盖。
 - [ ] F45：远端文件请求被 DSH 轮询阻塞。实现：Node WS 将 `fs_call`/`dsh_call` 改为受并发上限约束的任务，不再顺序 await 阻塞后续请求。证据：`test_node_concurrency.py` 证明慢 DSH 调用期间文件调用可同时开始；真实 LAPTOP-01 需升级 v0.2.4 后复验。
 
+- [ ] F46：选中本机设备时不得反复报 `local route not found`（远端设备正常）。根因：会话详情每 1.5 秒轮询 `/api/devices/{id}/dsh/sessions/{id}`，APP 网关把本机该路由转发给 Node 本地 API，而 console 只实现了会话列表、缺 transcript。v0.2.5 已补齐并覆盖 400 not_found；判据：本机选中后不再出现该报错，隔离网关实测 transcript 200。
+- [ ] F47：报错不得把页面往下挤压，且必须可手动关闭。v0.2.5 把 notice/工作区错误改为右上角浮层（绝对定位、不参与布局），每条带 `×` 关闭按钮，工作区错误保留“重试工作区”。浏览器实测浮层显示/关闭且主区域不动。
+
 ## 验收边界
 
 离线测试、隔离 UI、单机 DSH、本机真实模型回答、干净安装、真实跨设备操作和公开发布分别记录，不能互相替代。未完成发布与实机验收前，保持对应条目未完成。

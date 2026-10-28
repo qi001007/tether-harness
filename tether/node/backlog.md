@@ -1,5 +1,6 @@
 # 修改记录
 
+- 2026-10-28：console 补 `GET /api/devices/{id}/dsh/sessions/{session_id}` transcript 路由（未知会话 400 `not_found`），修复 v0.2.4 本机设备会话详情轮询 404 `local route not found`；APP 网关白名单本就含 `/dsh/sessions/` 前缀。回归在 `test_node_console_api.py`。
 - 2026-10-28：WS 消息循环把 `fs_call`/`dsh_call` 改为有并发上限的任务，慢 DSH transcript 不再阻塞文件请求；断连时统一取消。回归 `test_node_concurrency.py`。
 - 2026-10-28：`fs/preview` 的 Office 转换按路径+`mtime_ns`+大小+类型缓存 PDF（`data/preview-cache`，96 个/256 MB），命中不调用 COM；转换串行锁避免多实例冲突。回归 `test_office_preview_reuses_converted_pdf_until_source_changes`。
 - 2026-10-28：console 在带 `--local-api-token`/`TETHER_LOCAL_API_TOKEN` 时提供 token 保护的本地设备 API（fs/workspaces/drives/policy/audit/dsh sessions），路由形状与控制端一致；无 token 时仍只读。回归 `test_node_console_api.py`。token 由 APP supervisor 每进程随机生成并经环境变量传入，不写入 argv。

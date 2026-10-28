@@ -1,5 +1,14 @@
 # Public client releases
 
+## v0.2.5
+
+Fixes found in the first v0.2.4 deployment:
+
+- Selecting the local device repeatedly raised `local route not found`: the session-detail poll requests `/api/devices/{id}/dsh/sessions/{session_id}`, the APP gateway forwards that route for the local device to the Node console, and the console only served the session list. The console now serves session transcripts (and the controller-matching 400 `not_found` for unknown IDs); devices reached through the Hub were never affected.
+- Error banners no longer push the page content down: notices and workspace errors render as a dismissible overlay in the top-right corner with a close button; the workspace error keeps its retry action.
+
+Verified behind the APP gateway against an isolated Node: session list 200, transcript of a real DSH session 200, unknown session 400 `not_found`. Browser check: the overlay appears without layout shift and closes via `×`. Tests: Python 83 passed / 1 skipped, JavaScript 72 passed. Packages are unsigned; install and dual-machine acceptance remain separate gates.
+
 ## v0.2.4
 
 Response-time release driven by live Hub measurements:
