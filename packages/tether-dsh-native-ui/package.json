@@ -1,6 +1,6 @@
 {
   "name": "tether-dsh-native-ui",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "description": "Reproducible presentation bridge to the installed DSH UI components",
   "type": "module",
   "main": "lib/index.js",

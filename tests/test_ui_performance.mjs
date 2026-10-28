@@ -43,6 +43,16 @@ test('device switching cannot apply the previous device workspace path', () => {
   assert.match(source, /setProjectsDevice\(''\)/)
 })
 
+test('remote device updates order node, installed plugin, then app', async () => {
+  const { deviceUpdateComponents, updateAvailableFor } = await import('../packages/tether-ui/src/app.js')
+  assert.deepEqual(deviceUpdateComponents({ app_version: '0.2.4', dsh_surface: true }), ['node', 'plugin', 'app'])
+  assert.deepEqual(deviceUpdateComponents({ app_version: '0.2.4' }), ['node', 'app'])
+  assert.deepEqual(deviceUpdateComponents({ dsh_surface: true }), ['node', 'plugin'])
+  assert.equal(updateAvailableFor({ devices: { laptop: { app: { update_available: true } } } }, 'app', 'laptop'), true)
+  assert.match(source, /await watchNodeRestart\(scope, authority\)/)
+  assert.match(source, /watchAppRestart\(scope, checkedApp\.authorityBase, expectedVersion\)/)
+})
+
 test('hover uses an in-app tooltip and double click is guarded', () => {
   assert.match(source, /const \[hoverTip, setHoverTip\] = React\.useState\(null\)/)
   assert.match(source, /role: 'tooltip'/)
