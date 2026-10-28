@@ -21,6 +21,7 @@
 - 插件、APP、Node 与服务端必须使用兼容的协议版本。每次发布都应核对版本清单与制品摘要，并分别验收升级/回滚；v0.2.1 尚未完成数字签名和完整远端升级验收。
 - v0.2.1 的三份 ZIP 与统一更新清单已发布；官方 HTTPS 下载、SHA-256 和部分更新器清单检查已完成。这不证明制品已在目标设备干净安装或完成软件内/远端升级。
 - 设备文件操作受 Node 当前策略限制。用户界面显示的设备与工作区不能改变服务端授权范围。
+- DSH 原生附件 picker 从当前 Host 的 owner-only `/tether-identity` RPC 取得 `device_id`；读取使用 DSH `remote.workspaceFiles.list/readBytes`，受当前 DSH Session workspace scope 与 Host filesystem 权限约束，不需要在 iframe origin 配置 Hub token。picker 只允许打开最近由 API 返回的目录和文件条目，`readBytes` 的 `Uint8Array` 按 256 KiB 分块形成附件，单文件限 10 MiB；设备或 Session 作用域变化后不调用当前 composer `onAddFiles`。该候选仍需实机验证 DSH Remote 注入与上传生命周期。
 
 ## MCP 工具接口
 

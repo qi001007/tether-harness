@@ -1,4 +1,6 @@
 # 修改记录
+- 2026-10-28：插件 bundle 注入 `remote.pluginManager` 与受限 `reloadLocalPluginSurface()`，交给更新确认流程按需调用一次。
+- 2026-10-28：生成 native iframe 插件 bundle 注册目标设备附件 slot picker，并完整保留 DSH ComposerAttachments 原组件。
 - 2026-10-28：重建公开插件客户端 bundle，内嵌版本常量同步至 `0.2.11`。
 - 2026-10-28：重新生成 DSH 客户端 bundle，校正共享 UI 同步回归。
 - 2026-10-28：由共享 UI 构建器同步远端设备 APP 更新顺序与重连闭环代码。

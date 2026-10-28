@@ -20,18 +20,34 @@ test('native surface accepts only the ticketed loopback bootstrap and avoids nes
 
   let plugin
   const React = { createElement() { return {} }, useState() {}, useEffect() {}, useRef() {}, useCallback() {} }
-  const Native = { chatZh: {}, workspaceZh: {}, toolZh: {}, markdownLabels: () => ({}) }
+  const Native = { chatZh: {}, workspaceZh: {}, toolZh: {}, markdownLabels: () => ({}), ComposerAttachments() {} }
   const window = {
     location: { href: 'http://127.0.0.1/?tether_native=1' },
     __ModuleLoader__: { load(module) { plugin = module.factory((id) => id === 'react' ? React : id === 'tether-dsh-native-ui' ? Native : {}) } }
   }
   vm.runInNewContext(clientSource, { window, URL, setTimeout, clearTimeout, console })
   const selections = []
+  const registrations = []
+  const injectedSlots = []
+  const readFileDrag = () => undefined
+  const workspaceFiles = { list() {}, readBytes() {} }
   plugin.apply({
     layout: { selectPanel(value) { selections.push(value) } },
-    slots: { inject() { throw new Error('nested native frame must not register the Tether panel') } }
+    connection: { rpc: { call() {} } },
+    remote: { workspaceFiles, pluginManager: {} },
+    fileDrag: { read: readFileDrag },
+    slots: {
+      inject(name, register) { injectedSlots.push(name); register() },
+      register(options, component) { registrations.push({ options, component }) }
+    }
   })
   assert.deepEqual(selections, [null])
+  assert.deepEqual(injectedSlots, ['conversation.input.attachments'], 'native iframe may inject only its attachment slot')
+  assert.equal(registrations.length, 1)
+  assert.equal(registrations[0].options.name, 'conversation.input.attachments')
+  assert.equal(registrations[0].options.priority, -1000)
+  assert.equal(registrations[0].options.locale, 'conversation')
+  assert.equal(registrations[0].options.inject().readFileDrag, readFileDrag)
 })
 
 test('native surface state is device-bound and its iframe remains mounted while hidden views change', () => {

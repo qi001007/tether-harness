@@ -26,8 +26,10 @@ test('the shared panel body is copied byte for byte into the plugin bundle', () 
 })
 
 test('remote FilesPane exposes a new-file action for the current target directory', () => {
-  assert.match(shared, /const makeFile = \(base\) => askValue\('新建文件'/)
-  assert.match(shared, /post\(fsPath\('write'\), \{ path: target, text: '' \}\)/)
+  assert.match(shared, /const makeFile = \(base\) => \{/)
+  assert.match(shared, /const requestDevice = deviceIdRef\.current/)
+  assert.match(shared, /deviceIdRef\.current !== requestDevice/)
+  assert.match(shared, /post\('\/api\/devices\/' \+ encodeURIComponent\(requestDevice\) \+ '\/fs\/write', \{ path: target, text: '', overwrite: false \}\)/)
   assert.match(shared, /iconButton\('plus', '新建文件', \(\) => makeFile\(path\), !path \|\| dirLoading \|\| previewBusy\)/)
 })
 
@@ -164,6 +166,40 @@ test('one-click updates stop on rejected stages and pass the fresh authority thr
     apply: async (_id, checked) => { order.push(checked.authorityBase); return { ok: true } }
   })
   assert.deepEqual(order, ['', ''])
+})
+
+test('local DSH update reloads the surface once and reports profiles that still need a manual restart', async () => {
+  const { activateLocalDshUpdate } = await import('../packages/tether-ui/src/app.js')
+  const calls = []
+  const active = await activateLocalDshUpdate({
+    reloadSurface: async () => { calls.push('reload'); return { application: 'applied' } },
+    status: async () => { calls.push('status'); return { runtime_version: '0.2.12', current_version: '0.2.12' } }
+  })
+  assert.deepEqual(calls, ['reload', 'status'])
+  assert.equal(active.status, 'active')
+
+  const staleCalls = []
+  const stale = await activateLocalDshUpdate({
+    reloadSurface: async () => { staleCalls.push('reload'); return { application: 'applied' } },
+    status: async () => { staleCalls.push('status'); return { runtime_version: '0.2.11', current_version: '0.2.12' } }
+  })
+  assert.deepEqual(staleCalls, ['reload', 'status'])
+  assert.equal(stale.status, 'manual_restart_required')
+
+  const noHmrCalls = []
+  const noHmr = await activateLocalDshUpdate({
+    reloadSurface: async () => { noHmrCalls.push('reload'); return { application: 'restart-required' } }
+  })
+  assert.deepEqual(noHmrCalls, ['reload'])
+  assert.equal(noHmr.status, 'manual_restart_required')
+
+  assert.deepEqual(await activateLocalDshUpdate({ reloadSurface: async () => ({ application: 'failed' }) }), { status: 'reload_failed' })
+  for (const status of [{ ok: true }, { ok: true, runtime_version: '', current_version: '0.2.12' },
+    { ok: true, runtime_version: '0.2.12' }]) {
+    assert.deepEqual(await activateLocalDshUpdate({
+      reloadSurface: async () => ({ application: 'applied' }), status: async () => status
+    }), { status: 'reload_failed' })
+  }
 })
 
 test('automatic update checks report availability, failures, and stale targets safely', async () => {
