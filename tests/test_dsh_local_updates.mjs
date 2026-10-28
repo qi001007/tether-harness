@@ -192,3 +192,35 @@ test('overlapping status calls are refused instead of spawning a second updater'
   assert.equal((await first).ok, true)
   assert.equal(started, 1)
 })
+
+test('a plugin replaced on disk after the host loaded it reports reload_required', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'tether-plugin-reload-'))
+  try {
+    const profileDir = path.join(home, '.dsh', 'profiles', 'desktop')
+    const surface = path.join(profileDir, 'node_modules', 'tether-dsh-surface')
+    const client = path.join(profileDir, 'node_modules', 'tether-dsh-client')
+    fs.mkdirSync(path.join(surface, 'updater'), { recursive: true })
+    fs.mkdirSync(path.join(client, 'lib'), { recursive: true })
+    const write = (version) => {
+      fs.writeFileSync(path.join(client, 'package.json'), JSON.stringify({ name: 'tether-dsh-client', version }))
+      fs.writeFileSync(path.join(client, 'lib', 'client.js'), "const PLUGIN_VERSION = '" + version + "'")
+    }
+    write('0.2.13')
+    const handler = createLocalPluginUpdateHandler({
+      env: { DSH_HOME: path.join(home, '.dsh') }, homeDir: home, packageRoot: surface, existsSync: () => true,
+      execFileImpl: async () => ({ stdout: JSON.stringify({ ok: true, component: 'plugin', current_version: '0.2.14' }) })
+    })
+    const before = await handler('status', {}, undefined, ownerPeer)
+    assert.equal(before.value.runtime_version, '0.2.13')
+    assert.equal(before.value.reload_required, undefined)
+
+    write('0.2.14')
+    const after = await handler('status', {}, undefined, ownerPeer)
+    assert.equal(after.value.runtime_version, '0.2.13', 'runtime is what the host loaded')
+    assert.equal(after.value.disk_version, '0.2.14')
+    assert.equal(after.value.reload_required, true)
+    assert.equal(after.value.restart_required, true)
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true })
+  }
+})
