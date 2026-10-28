@@ -4,7 +4,7 @@ window.__ModuleLoader__.load({
     const React = require('react')
     const Native = require('tether-dsh-native-ui')
     const PANEL_ID = 'tether'
-    const PLUGIN_VERSION = "0.2.13"
+    const PLUGIN_VERSION = "0.2.14"
 const DSH_API_BASE = 'http://127.0.0.1:18890'
 const DSH_APP_BASE = 'http://127.0.0.1:18892'
 
