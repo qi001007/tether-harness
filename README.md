@@ -269,7 +269,9 @@ If you find a security issue, do not paste tokens, personal data, or private dev
 
 - **Two products, one hidden runtime.** Ship **Tether Desktop** (APP + Node + surface plugin) and **Tether for DSH** (plugin + Node + surface plugin). Keep one shared Node runtime per device and reduce the update center to APP and plugin rows; a headless Node installer remains an advanced option.
 - **Accounts and isolation.** User login, one-time device pairing, per-device credentials, per-user device isolation, an admin dashboard with invites/users/devices/health/audit, and invite-only testing.
+- **Host adapter boundary.** Keep accounts, devices, routing, files and updates host-agnostic; put DSH behind a `HostAdapter` + `surface_kind` contract so alternative host/agent runtimes can be added without rewriting the network and account layer.
 - **Remote surface acceptance.** Fix the blank remote DSH panel and accept real cross-device native control on a second physical machine.
+- **Performance instrumentation.** Add per-segment timestamps, p50/p95 latency, incremental event streaming, and file range/cache/preview hooks before optimizing state sync and remote file rendering.
 - **Release hardening.** Signed packages, real update rollback drills, backup/restore drills, and a repeatable server release/rollback process.
 
 ## Development

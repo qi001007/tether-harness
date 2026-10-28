@@ -7,6 +7,7 @@
 - 更新 `scripts/build_release.py` 内三个 ZIP 的安装说明，下一次发布生效；不重建已发布的 v0.2.3 资产。
 - 记录远程目标 native surface 白屏为开放问题，登录/账户/多租户隔离未实现。
 - 修正独立安装矩阵：v0.2.3 的 APP-only 不包含 DSH surface 插件，只能作为文件/命令目标；补充两产品（APP+Node / 插件+Node）、共享 runtime、账户/管理后台 Roadmap。
+- Roadmap 增加 HostAdapter/surface_kind 扩展边界与性能埋点（分段时延、p50/p95、增量事件、文件 range/cache/preview），为后续 Herder/终端类 Host 和状态/文件优化预留入口。
 
 ## 2026-10-28 v0.2.3 更新器修复
 
