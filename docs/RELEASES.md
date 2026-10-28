@@ -13,6 +13,8 @@ Response-time release driven by live Hub measurements:
 
 Measured on an isolated Node behind the APP gateway: `fs/list` 3–4 ms (Hub baseline 264–681 ms), text preview 3 ms (baseline 261–604 ms), PPTX preview 2.9 s cold and 5 ms cached (baseline 5.3–5.6 s every time). Tests: Python 83 passed / 1 skipped, JavaScript 70 passed. These are local measurements; install, remote Node upgrade, and dual-machine acceptance remain separate gates. Packages are unsigned.
 
+Deployment status: the release was built by CI (run 40624603316), the three ZIPs and manifest were downloaded and their SHA-256 values verified, and the draft was published. DESKTOP-LOCAL's installed APP was stopped, overlaid with the v0.2.4 package (data, `.venv`, `node_modules` and `work-local` untouched — `hub.json`, `policy.json` and workspace hashes unchanged), and restarted: the Hub reports Node `0.2.4` online, the local fast path answers with `x-tether-local: 1` in 3–4 ms, and the first PPTX preview cost 3814 ms with 6 ms on the second open. The second machine and the remote Node/plugin update are still pending.
+
 ## v0.2.3
 
 Fixes found during the v0.2.1 to v0.2.2 upgrade acceptance:

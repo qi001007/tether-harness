@@ -26,7 +26,7 @@
 
 ## 2026-10-28 性能批次（v0.2.4 候选）
 
-判据统一为：桌面 APP 选中 DESKTOP-LOCAL 时，目录切换命中缓存/本地直连不出现整屏加载；远端文件请求不再被 DSH 轮询阻塞；Office 同一文件第二次预览命中缓存；取消按钮能终止当前目录或预览请求；悬浮卡片四边完整。以下为源码与浏览器/隔离进程实测，安装到 APP 后仍需按 F38 复验。
+判据统一为：桌面 APP 选中 DESKTOP-LOCAL 时，目录切换命中缓存/本地直连不出现整屏加载；远端文件请求不再被 DSH 轮询阻塞；Office 同一文件第二次预览命中缓存；取消按钮能终止当前目录或预览请求；悬浮卡片四边完整。v0.2.4 已发布并安装到 DESKTOP-LOCAL（数据哈希不变，Node `0.2.4` 在线，本机 `fs/list` 3–4 ms、PPTX 二次预览 6 ms）；LAPTOP-01 更新与双机复验仍未做。
 
 - [ ] F38：切换设备后资源管理器必须显示新设备的第一个工作区，不能沿用上一台设备的路径。实现：目录初始化增加 `projectsDevice === deviceId` 门禁；设备切换保留按设备分键的树/目录缓存。证据：浏览器实测 DESKTOP-LOCAL↔LAPTOP-01 往返，面包屑与列表均切到对应设备的 `C:\Users\<user>\...`，不再出现 `not a directory`。
 - [ ] F39：本机文件操作走回环直连，不再绕公网 Hub。实现：Node console 增加 token 保护的 `/api/devices/{id}/fs|workspaces|drives|policy|audit|dsh/sessions`；APP 网关仅把本机设备这些路由转发到 `127.0.0.1:18894`。证据：隔离 Node + APP 网关实测 `fs/list` 3–4 ms（Hub 基线 264–681 ms），文本预览 3 ms（基线 261–604 ms）。
