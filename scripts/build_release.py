@@ -2,13 +2,21 @@
 """Build standalone plugin and APP archives (no repository clone needed)."""
 from __future__ import annotations
 
-import zipfile
+import base64
 import hashlib
 import json
+import os
 import re
+import sys
+import time
+import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+from tether.release import canonical_bytes, verify_signature  # noqa: E402
+
 OUT = ROOT / "release"
 VERSION = json.loads((ROOT / "version.json").read_text(encoding="utf-8"))["components"]["app"]
 MIN_UPDATER_VERSION = "0.2.1"
@@ -49,7 +57,7 @@ def add_mapped_file(archive: zipfile.ZipFile, source: str, target: str, prefix: 
 def add_tether_runtime(archive: zipfile.ZipFile, prefix: str) -> None:
     """Add only the public client/Node runtime; Controller and web admin UI are private."""
     for rel in ("tether/__init__.py", "tether/updates.py", "tether/updates_cli.py",
-                "tether/mcp_server.py"):
+                "tether/release.py", "tether/ed25519.py", "tether/mcp_server.py"):
         add_file(archive, rel, prefix)
     node = ROOT / "tether" / "node"
     for path in node.rglob("*"):
@@ -57,6 +65,42 @@ def add_tether_runtime(archive: zipfile.ZipFile, prefix: str) -> None:
             rel = path.relative_to(ROOT).as_posix()
             if "__pycache__" not in path.parts:
                 archive.write(path, f"{prefix}/{rel}")
+
+
+def release_private_key():
+    material = os.environ.get("TETHER_RELEASE_PRIVATE_KEY", "").strip()
+    key_file = os.environ.get("TETHER_RELEASE_PRIVATE_KEY_FILE", "").strip()
+    if not material and key_file:
+        material = Path(key_file).read_text(encoding="ascii").strip()
+    if not material:
+        if os.environ.get("TETHER_REQUIRE_SIGNED_RELEASE", "") == "1":
+            raise SystemExit("TETHER_RELEASE_PRIVATE_KEY is required for a signed release")
+        return None
+    try:
+        seed = base64.b64decode(material.encode("ascii"), validate=True)
+    except (ValueError, UnicodeError):
+        raise SystemExit("TETHER_RELEASE_PRIVATE_KEY must be base64-encoded")
+    if len(seed) != 32:
+        raise SystemExit("TETHER_RELEASE_PRIVATE_KEY must contain a 32-byte Ed25519 seed")
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    return Ed25519PrivateKey.from_private_bytes(seed)
+
+
+def rollout_config() -> dict:
+    percent_text = os.environ.get("TETHER_ROLLOUT_PERCENT", "100").strip() or "100"
+    try:
+        percent = int(percent_text)
+    except ValueError:
+        raise SystemExit("TETHER_ROLLOUT_PERCENT must be an integer")
+    if not 0 <= percent <= 100:
+        raise SystemExit("TETHER_ROLLOUT_PERCENT must be between 0 and 100")
+    include = [item.strip() for item in os.environ.get("TETHER_ROLLOUT_INCLUDE", "").split(",") if item.strip()]
+    exclude = [item.strip() for item in os.environ.get("TETHER_ROLLOUT_EXCLUDE", "").split(",") if item.strip()]
+    rollout = {"percent": percent, "include": include, "exclude": exclude}
+    if os.environ.get("TETHER_ROLLOUT_HOLD", "") == "1":
+        rollout["hold"] = True
+    return rollout
 
 
 def validate_versions() -> None:
@@ -92,6 +136,7 @@ def main() -> None:
         for package in ("dsh-plugin-tether", "dsh-plugin-tether-client", "tether-dsh-native-ui", "tether-dsh-surface"):
             add_tree(archive, ROOT / "packages" / package, plugin_prefix)
         for rel in ("tether/__init__.py", "tether/updates.py", "tether/updates_cli.py",
+                    "tether/release.py", "tether/ed25519.py",
                     "tether/node/__init__.py", "tether/node/dsh_sessions.py"):
             add_mapped_file(archive, rel, f"packages/tether-dsh-surface/updater/{rel}", plugin_prefix)
         archive.writestr(f"{plugin_prefix}/README-INSTALL.md", """# Tether DSH plugin (standalone)
@@ -153,7 +198,9 @@ backend and launch/bootstrap scripts; it does not install APP or modify a
 DeepSeek Harness profile.
 """)
 
-    manifest = {"schema": 1, "components": {}}
+    rollout = rollout_config()
+    manifest = {"schema": 1, "channel": "stable", "released_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "components": {}}
     for component, archive in (("app", app), ("plugin", plugin), ("node", node)):
         payload = archive.read_bytes()
         manifest["components"][component] = {
@@ -162,13 +209,20 @@ DeepSeek Harness profile.
             "sha256": hashlib.sha256(payload).hexdigest(),
             "size": len(payload),
             "protocol": 1,
+            "min_protocol": 1,
             "min_updater": MIN_UPDATER_VERSION,
+            "rollout": rollout,
         }
+    key = release_private_key()
+    if key is not None:
+        manifest["signature"] = base64.b64encode(key.sign(canonical_bytes(manifest))).decode("ascii")
+        verify_signature(manifest)
     manifest_path = OUT / "tether-update.json"
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
     for archive in (plugin, app, node, manifest_path):
         print(archive.name, archive.stat().st_size)
+    print("signed" if key is not None else "unsigned development manifest")
 
 
 if __name__ == "__main__":

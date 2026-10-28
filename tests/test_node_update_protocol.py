@@ -274,7 +274,7 @@ def test_apply_refuses_active_tether_run(tmp_path, monkeypatch):
     node.store.db.close()
 
 
-def test_remote_plugin_apply_refuses_when_live_host_profile_is_unknown(tmp_path, monkeypatch):
+def test_remote_plugin_apply_refuses_when_no_profile_has_the_plugin(tmp_path, monkeypatch):
     node = _node(tmp_path, monkeypatch)
     manager = FakeUpdateManager()
     node.update_managers["plugin"] = manager
@@ -289,7 +289,7 @@ def test_remote_plugin_apply_refuses_when_live_host_profile_is_unknown(tmp_path,
                                    "action": "apply", "component": "plugin",
                                    "prepared_id": "a" * 32}))
 
-    assert sent[0]["error_code"] == "plugin_profile_unknown"
+    assert sent[0]["error_code"] == "plugin_package_missing"
     assert manager.apply_calls == 0
     assert node.update_applying is False
     node.store.db.close()

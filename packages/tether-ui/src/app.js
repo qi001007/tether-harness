@@ -675,8 +675,8 @@ export function createTetherPanel({ React, Native, host }) {
       .tether-scroll:hover::-webkit-scrollbar-thumb { background: var(--dsw-alias-scrollbar-hover-l1, #cbd5e1); }
       .tether-scroll::-webkit-scrollbar-corner { background: transparent; }
       .tether-num { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum' 1; }
-      .tether-spin { display: inline-grid; flex: 0 0 auto; place-items: center; }
-      .tether-spin > svg { display: block; margin: auto; transform-box: fill-box; transform-origin: 50% 50%; animation: tether-refresh-rotate .8s linear infinite; }
+      .tether-spin { display: inline-grid; width: 1em; height: 1em; flex: 0 0 auto; place-items: center; transform-box: border-box; transform-origin: 50% 50%; animation: tether-refresh-rotate .8s linear infinite; }
+      .tether-spin > svg { display: block; margin: auto; }
       @keyframes tether-refresh-rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       .tether-node-fill { position: absolute; inset: 0; z-index: 1; border-radius: 50%; corner-shape: round; transition: background-color 160ms ease; }
       .tether-file-markdown { max-width: 860px; margin: 0 auto; color: var(--dsw-alias-label-primary); font-size: 14px; line-height: 24px; }
