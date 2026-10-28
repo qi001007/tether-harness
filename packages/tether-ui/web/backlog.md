@@ -8,3 +8,4 @@
 - 2026-10-28：增加 React 渲染错误边界，显示可理解的错误说明和重试入口；由 `scripts/build-web.mjs` 更新 `dist/app.js`。
 - 2026-10-28：重新生成 `dist/app.js`（共享 `NativeSurface` 自动重连）；纯 Web 宿主没有 `window.tetherApp`，该路径不启用。
 - 2026-10-28：重新生成 `dist/app.js`（代码页首开竞态修复 + 标签栏/当前行高亮/可拖动分隔条）。
+- 2026-10-29：重新生成 `dist/app.js`（CSV/TSV/XLSX 只读表格预览与纯文本切换）。

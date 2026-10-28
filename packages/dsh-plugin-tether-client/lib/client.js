@@ -669,6 +669,136 @@ async function resolvePreviewBody({ pending, fresh, fetchFresh, isAborted }) {
   return fetchFresh()
 }
 
+const TABLE_PREVIEW_MAX_ROWS = 5000
+const TABLE_PREVIEW_MAX_COLUMNS = 100
+const TABLE_NUMBER = /^[-+]?(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d+)?%?$/
+
+// The node previews .xlsx as tab-joined cells from its first worksheet (no CSV
+// quoting), so it shares the table view but must not treat quotes as syntax.
+function tablePreviewFormat(name) {
+  const value = String(name || '').toLowerCase()
+  if (value.endsWith('.csv')) return { delimiter: ',', quoted: true }
+  if (value.endsWith('.tsv')) return { delimiter: '\t', quoted: true }
+  if (value.endsWith('.xlsx') || value.endsWith('.xlsm')) return { delimiter: '\t', quoted: false }
+  return null
+}
+
+// RFC4180 parsing for the CSV/TSV preview: quoted fields may hold delimiters,
+// escaped quotes and line breaks; CRLF/CR are normalised and a BOM is dropped.
+// Parsing stops once the row cap is reached so a huge file cannot stall the
+// renderer, and the returned flags say whether anything was cut.
+function parseDelimited(text, options) {
+  const opts = options || {}
+  const delimiter = typeof opts.delimiter === 'string' && opts.delimiter.length === 1 ? opts.delimiter : ','
+  const quoted = opts.quoted !== false
+  const rowLimit = Math.max(1, Math.floor(opts.rowLimit == null ? TABLE_PREVIEW_MAX_ROWS : opts.rowLimit))
+  const columnLimit = Math.max(1, Math.floor(opts.columnLimit == null ? TABLE_PREVIEW_MAX_COLUMNS : opts.columnLimit))
+  const source = String(text == null ? '' : text).replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n')
+  const rows = []
+  let row = []
+  let field = ''
+  let fieldCount = 0
+  let inQuotes = false
+  let started = false
+  let truncatedRows = false
+  let truncatedColumns = false
+  let stoppedAtLimit = false
+  const pushField = () => {
+    if (fieldCount < columnLimit) row.push(field)
+    else truncatedColumns = true
+    fieldCount += 1
+    field = ''
+  }
+  const endRow = () => {
+    pushField()
+    rows.push(row)
+    row = []
+    fieldCount = 0
+    started = false
+  }
+  let index = 0
+  while (index < source.length) {
+    const ch = source[index]
+    if (inQuotes) {
+      if (ch === '"') {
+        if (source[index + 1] === '"') { field += '"'; index += 2; continue }
+        inQuotes = false; index += 1; continue
+      }
+      field += ch; index += 1; continue
+    }
+    if (quoted && ch === '"' && field === '') { inQuotes = true; started = true; index += 1; continue }
+    if (ch === delimiter) { started = true; pushField(); index += 1; continue }
+    if (ch === '\n') {
+      endRow()
+      index += 1
+      if (rows.length >= rowLimit + 1) { truncatedRows = index < source.length; stoppedAtLimit = true; break }
+      continue
+    }
+    field += ch; started = true; index += 1
+  }
+  if (!stoppedAtLimit && (started || field !== '' || row.length > 0)) endRow()
+  return {
+    rows,
+    truncatedRows,
+    truncatedColumns,
+    openQuote: inQuotes,
+    endedWithNewline: source.length > 0 && source[source.length - 1] === '\n'
+  }
+}
+
+function tableNumericColumns(rows, columnCount) {
+  const flags = new Array(Math.max(0, columnCount)).fill(false)
+  for (let column = 0; column < flags.length; column += 1) {
+    let filled = 0
+    let numeric = 0
+    for (const row of rows) {
+      const value = String((row && row[column]) == null ? '' : row[column]).trim()
+      if (!value) continue
+      filled += 1
+      if (TABLE_NUMBER.test(value)) numeric += 1
+    }
+    flags[column] = filled >= 2 && numeric / filled >= 0.6
+  }
+  return flags
+}
+
+function buildTablePreview({ name, text, sourceTruncated, rowLimit, columnLimit } = {}) {
+  const format = tablePreviewFormat(name)
+  if (!format) return null
+  const parsed = parseDelimited(text, { delimiter: format.delimiter, quoted: format.quoted, rowLimit, columnLimit })
+  const headerRow = parsed.rows[0] || []
+  let body = parsed.rows.slice(1)
+  // A 512 KB node preview can end mid-record; that half row is not data.
+  let droppedPartialRow = false
+  if (sourceTruncated && !parsed.endedWithNewline && body.length) {
+    body = body.slice(0, -1)
+    droppedPartialRow = true
+  }
+  const columnCount = Math.max(0, ...parsed.rows.map((row) => row.length))
+  const headers = []
+  for (let column = 0; column < columnCount; column += 1) {
+    const label = String(headerRow[column] == null ? '' : headerRow[column]).replace(/\s+/g, ' ').trim()
+    headers.push(label || '列 ' + (column + 1))
+  }
+  const rows = body.map((row) => {
+    const cells = []
+    for (let column = 0; column < columnCount; column += 1) cells.push(row[column] == null ? '' : row[column])
+    return cells
+  })
+  return {
+    headers,
+    rows,
+    columnCount,
+    numericColumns: tableNumericColumns(rows, columnCount),
+    truncatedRows: parsed.truncatedRows,
+    truncatedColumns: parsed.truncatedColumns,
+    sourceTruncated: !!sourceTruncated,
+    droppedPartialRow,
+    rowLimit: rowLimit == null ? TABLE_PREVIEW_MAX_ROWS : rowLimit,
+    columnLimit: columnLimit == null ? TABLE_PREVIEW_MAX_COLUMNS : columnLimit
+  }
+}
+
 function createTetherPanel({ React, Native, host }) {
     const h = React.createElement
     const Connection = createConnectionPanel(React)
@@ -1215,6 +1345,8 @@ function createTetherPanel({ React, Native, host }) {
         --tether-code-comment: #6a737d;
         --tether-code-line: rgba(38, 49, 72, 0.055);
         --tether-code-line-gutter: color-mix(in srgb, var(--dsw-alias-state-business-primary, #1570ef) 9%, var(--dsw-alias-bg-base, #ffffff));
+        --tether-table-head: color-mix(in srgb, var(--dsw-alias-label-primary, #101828) 5%, var(--dsw-alias-bg-base, #ffffff));
+        --tether-table-grid: color-mix(in srgb, var(--dsw-alias-label-primary, #101828) 9%, transparent);
         --tether-tab-bg: var(--dsw-alias-bg-base, #ffffff); }
       body[data-ds-dark-theme] .tether-root {
         --tether-strong: 500; --tether-strong-2: 520; --tether-body: 350;
@@ -1256,6 +1388,17 @@ function createTetherPanel({ React, Native, host }) {
       .tether-node-fill { position: absolute; inset: 0; z-index: 1; border-radius: 50%; corner-shape: round; transition: background-color 160ms ease; }
       .tether-file-markdown { max-width: 860px; margin: 0 auto; color: var(--dsw-alias-label-primary); font-size: 14px; line-height: 24px; }
       .tether-file-text { tab-size: 2; }
+      .tether-viewtoggle { display: flex; align-items: center; gap: 1px; padding: 1px; border-radius: 6px; background: var(--dsw-alias-interactive-bg-hover, rgba(38, 49, 72, 0.06)); flex: 0 0 auto; }
+      .tether-viewtoggle-btn { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 7px; border: 0; border-radius: 5px; background: transparent; color: var(--dsw-alias-label-tertiary, #667085); font-size: 11px; line-height: 1; cursor: pointer; white-space: nowrap; }
+      .tether-viewtoggle-btn[data-active=true] { background: var(--dsw-alias-bg-base, #fff); color: var(--dsw-alias-label-primary, #101828); box-shadow: 0 1px 2px rgba(16, 24, 40, 0.1); }
+      .tether-table-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; background: var(--dsw-alias-bg-base, #fff); }
+      .tether-table { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; font-size: 12.5px; line-height: 20px; color: var(--dsw-alias-label-primary, #101828); }
+      .tether-table th, .tether-table td { box-sizing: border-box; max-width: 420px; padding: 4px 12px; border-right: 1px solid var(--tether-table-grid); border-bottom: 1px solid var(--tether-table-grid); white-space: pre-wrap; overflow-wrap: anywhere; vertical-align: top; }
+      .tether-table th { position: sticky; top: 0; z-index: 2; background: var(--tether-table-head); color: var(--dsw-alias-label-secondary, #475467); font-weight: var(--tether-strong, 600); font-size: 11.5px; white-space: nowrap; border-bottom: 1px solid var(--tether-split); }
+      .tether-table th.tether-num, .tether-table td.tether-num { white-space: nowrap; }
+      .tether-table tbody tr:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(38, 49, 72, 0.06)); }
+      .tether-table-status { display: flex; align-items: center; gap: 12px; height: 26px; flex: 0 0 auto; padding: 0 12px; border-top: 1px solid var(--tether-split); background: var(--tether-tabstrip, #f9fafb); color: var(--dsw-alias-label-tertiary, #667085); font-size: 11px; white-space: nowrap; overflow: hidden; }
+      .tether-table-warn { color: var(--dsw-alias-state-warn-primary, #b54708); overflow: hidden; text-overflow: ellipsis; }
       @media (prefers-reduced-motion: reduce) { .tether-spin > svg { animation-duration: 1.6s; } }
       .tether-flow { display: flex; flex-direction: column; max-width: calc(var(--dsh-chat-content-width, 748px) + 32px); width: 100%; margin: 0 auto; padding: 0 16px; box-sizing: border-box; }
       .tether-turn { display: flex; flex-direction: column; min-width: 0; }
@@ -1400,6 +1543,13 @@ function createTetherPanel({ React, Native, host }) {
       ] },
       chevronDown: { parts: [
         { d: 'M4 6L7.29289 9.29289C7.68342 9.68342 8.31658 9.68342 8.70711 9.29289L12 6' }
+      ] },
+      table: { parts: [
+        { d: 'M2.6 3.4h10.8v9.2H2.6z' },
+        { d: 'M2.6 6.4h10.8M6.4 6.4v6.2M9.6 6.4v6.2' }
+      ] },
+      plainText: { parts: [
+        { d: 'M3 4.2h10M3 8h10M3 11.8h6.2' }
       ] },
       chevronRight: { parts: [
         { d: 'M6 12L9.29289 8.70711C9.68342 8.31658 9.68342 7.68342 9.29289 7.29289L6 4' }
@@ -2114,6 +2264,7 @@ function createTetherPanel({ React, Native, host }) {
       const [previewError, setPreviewError] = React.useState('')
       const [codeLine, setCodeLine] = React.useState(1)
       const [editMode, setEditMode] = React.useState(false)
+      const [tableView, setTableView] = React.useState(true)
       const [workspaceOpen, setWorkspaceOpen] = React.useState({})
       const [treeChildren, setTreeChildren] = React.useState({})
       const [treeOpen, setTreeOpen] = React.useState({})
@@ -2633,6 +2784,9 @@ function createTetherPanel({ React, Native, host }) {
         } catch (_) { return '' }
       }, [file && file.path, file && file.base64, file && file.mime])
       React.useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl) }, [previewUrl])
+      const tablePreview = React.useMemo(() => (file && file.kind === 'text'
+        ? buildTablePreview({ name: file.name || file.path, text: draft, sourceTruncated: !!file.truncated })
+        : null), [file && file.path, file && file.name, file && file.kind, file && file.truncated, draft])
 
       React.useEffect(() => {
         if (!deviceId) { setPolicy(null); return }
@@ -3256,6 +3410,7 @@ function createTetherPanel({ React, Native, host }) {
         const apply = (data) => {
           setFile({ ...data, path: entry.path, name: entry.name || pathBasename(entry.path) })
           if (!sameFile || !dirty) { setDraft(data.text || ''); setDirty(false); setEditMode(false) }
+          if (!sameFile) setTableView(true)
           setSelected(entry)
           const parent = parentOf(entry.path)
           setPath(parent); setPathDraft(parent); pathRef.current = parent
@@ -3655,6 +3810,39 @@ function createTetherPanel({ React, Native, host }) {
         )
       }
 
+      const tablePreviewBody = (model) => {
+        if (!model || !model.columnCount) {
+          return h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', color: C.mute, fontSize: 12 } }, '空文件')
+        }
+        const notes = []
+        if (model.truncatedRows) notes.push('仅显示前 ' + model.rowLimit.toLocaleString() + ' 行')
+        if (model.truncatedColumns) notes.push('仅显示前 ' + model.columnLimit + ' 列')
+        if (model.sourceTruncated) notes.push('源文件超出读取上限')
+        return h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column' } },
+          h('div', { className: 'tether-scroll tether-table-scroll' },
+            h('table', { className: 'tether-table', 'aria-label': '只读表格预览' },
+              h('thead', null,
+                h('tr', null, model.headers.map((label, column) => h('th', {
+                  key: column, scope: 'col', title: label,
+                  className: model.numericColumns[column] ? 'tether-num' : undefined,
+                  style: { textAlign: model.numericColumns[column] ? 'right' : 'left' }
+                }, label)))),
+              h('tbody', null,
+                model.rows.map((cells, rowIndex) => h('tr', { key: rowIndex },
+                  cells.map((cell, column) => h('td', {
+                    key: column, title: cell.length > 60 ? cell : undefined,
+                    className: model.numericColumns[column] ? 'tether-num' : undefined,
+                    style: { textAlign: model.numericColumns[column] ? 'right' : 'left' }
+                  }, cell)))))
+            )
+          ),
+          h('div', { className: 'tether-table-status' },
+            h('span', { className: 'tether-num' }, model.rows.length.toLocaleString() + ' 行 × ' + model.columnCount + ' 列'),
+            notes.length ? h('span', { className: 'tether-table-warn', role: 'status' }, notes.join(' · ')) : null,
+            h('span', { style: { marginLeft: 'auto' } }, '只读'))
+        )
+      }
+
       const renderToasts = () => {
         const row = (text, color, onClose, extra) => h('div', {
           role: 'alert',
@@ -3743,6 +3931,11 @@ function createTetherPanel({ React, Native, host }) {
         )
 
         const closePreview = () => { setFile(null); setEditMode(false); setDirty(false); setDraft(''); setPreviewError(''); if (path) loadDir(path, { push: false }) }
+        const viewToggle = (icon, label, active, onClick) => h('button', {
+          type: 'button', onClick, title: label + '视图', 'aria-label': label + '视图',
+          'aria-pressed': active ? 'true' : 'false', 'data-active': active ? 'true' : undefined,
+          className: 'tether-hover tether-viewtoggle-btn'
+        }, h(Glyph, { name: icon, size: 13 }), h('span', null, label))
         const fileTabBar = file ? h('div', {
           className: 'tether-tabbar',
           style: { display: 'flex', alignItems: 'stretch', height: 37, flex: '0 0 auto', minWidth: 0, background: 'var(--tether-tabstrip, ' + C.panel + ')', borderBottom: '1px solid var(--tether-split)', boxSizing: 'border-box' }
@@ -3764,6 +3957,10 @@ function createTetherPanel({ React, Native, host }) {
           h('div', { style: { flex: '1 1 auto', minWidth: 0, display: 'flex', alignItems: 'center', gap: 4, padding: '0 8px' } },
             file.truncated ? pill('已截断', C.amber) : null,
             file.converted ? pill('已转 PDF', C.mute) : null,
+            tablePreview ? h('div', { className: 'tether-viewtoggle', role: 'group', 'aria-label': '预览视图' },
+              viewToggle('table', '表格', tableView, () => setTableView(true)),
+              viewToggle('plainText', '纯文本', !tableView, () => setTableView(false))
+            ) : null,
             h('span', { style: { marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 2 } },
               file.kind === 'markdown' && file.writable ? iconButton(editMode ? 'eye' : 'pencil', editMode ? '预览' : '编辑', () => setEditMode((value) => !value), false) : null,
               (file.kind === 'markdown' || file.kind === 'text') && file.writable ? iconButton('save', '保存', saveFile, !dirty || busy) : null,
@@ -3787,6 +3984,7 @@ function createTetherPanel({ React, Native, host }) {
           }
           if (file.kind === 'text') {
             if (editMode) return h('textarea', { value: draft, onChange: (ev) => { setDraft(ev.target.value); setDirty(true) }, spellCheck: false, style: { flex: '1 1 auto', width: '100%', boxSizing: 'border-box', resize: 'none', border: 0, outline: 'none', padding: '14px 18px', fontFamily: CODE_FONT, fontSize: 12.5, lineHeight: 1.6, background: C.bg, color: C.ink } })
+            if (tablePreview && tableView) return tablePreviewBody(tablePreview)
             if (!CODE_FILE.test(String(file.name || ''))) {
               return h('pre', { className: 'tether-file-text tether-scroll', style: { flex: '1 1 auto', overflow: 'auto', margin: 0, padding: '16px 20px', fontFamily: CODE_FONT, fontSize: 12.5, lineHeight: '20px', whiteSpace: 'pre-wrap', color: C.ink, background: 'var(--tether-code-bg, ' + C.bg + ')' } }, draft)
             }

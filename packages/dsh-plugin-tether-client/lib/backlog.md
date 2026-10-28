@@ -47,3 +47,4 @@
 - 2026-10-28：重新生成 `client.js`，加入 `NativeSurface` 自动重连与退避辅助函数（`tests/test_surface_recovery.mjs` 覆盖）。
 - 2026-10-28：重新生成 `client.js`（代码页首开竞态修复 + 标签栏/当前行高亮/可拖动分隔条）。
 - 2026-10-29：重新生成 `client.js`，仅更新内嵌 `PLUGIN_VERSION` 至 `0.2.16`。
+- 2026-10-29：重新生成 `client.js`，包含 CSV/TSV/XLSX 只读表格预览与纯文本切换（同源共享 UI）。

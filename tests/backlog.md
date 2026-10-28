@@ -80,3 +80,4 @@
 - 2026-10-28：Node 更新协议回归确认 prepare 期间仍可及时回复 status/check；manifest 测试覆盖同 URL 并发 singleflight 与 prepare 新鲜读取。
 - 2026-10-28：附件回归改以仓库 `build.mjs` 的 fileDrag injection contract 验证，移除对未跟踪 `.runtime/dsh-src` SDK 源码的依赖；共享 UI 增加刷新 busy/旋转、稳定更新入口圆点和 toast 4 秒收敛断言。
 - 2026-10-28：新增 `test_preview_open`/`test_code_view`：预取在飞时首开复用请求体、无效/失败预取回退重试且不毒化缓存、中断不被吞；代码页标签栏/当前行/分隔条与暗色变量不变量。
+- 2026-10-29：新增 `test_csv_preview`：RFC4180 引号/转义/字段内换行、CRLF/CR、BOM、空单元格、行/列上限、源截断丢弃半行、TSV/XLSX 分支、数字列右对齐与表格/纯文本切换接线。
