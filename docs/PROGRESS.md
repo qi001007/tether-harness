@@ -2,10 +2,11 @@
 
 更新日期：2026-10-28。
 
-## v0.2.13 候选修复（尚未发布）
+## 当前实测状态：v0.2.13 已发布，两机安装待主人验收
 
-- 版本元数据已准备为 `0.2.13`；`v0.2.12` 标签发行失败后保留历史，不改写该标签。候选修复覆盖刷新旋转与请求忙态、错误 toast 4 秒自动消失、更新入口固定文案和状态圆点，以及附件测试移除 `.runtime/dsh-src` 依赖。
-- 共享 UI、DSH client 和 WebUI bundle 均已重建。定向回归 21/21 通过；父任务全量回归为 Python 95 passed / 1 legacy fixture skip、JavaScript 96 passed。发行、安装和设备验收均未完成。
+- 公开 PR #7 已合并；`v0.2.13` tag 指向 `5938b70ed3188a6095bda2bf32778ad9edee68ef`，发行 CI `40667788605` 成功，[GitHub Release v0.2.13](https://github.com/qi001007/tether-harness/releases/tag/v0.2.13) 已发布。APP、插件、Node 三个 ZIP 与 manifest 的版本、大小、SHA-256 均已核验；匿名 `latest/download/tether-update.json` 返回 HTTP 200，SHA-256 为 `3ce3fc8166d61e91eaefa1acc282a4d71e0f7a1774177075606aa63f6e8de507`，三个组件版本均为 `0.2.13`。`v0.2.12` 失败 tag 保留，未改写。
+- 刷新旋转、请求期间忙态、错误 toast 4 秒自动消失、更新入口固定文案/状态圆点及附件测试仓库契约检查已包含在发布版本。定向回归 21/21、全量 Python 95 passed / 1 legacy fixture skip、JavaScript 96 passed。
+- 隔离 Electron 动态验收确认更新中心刷新按钮旋转并在请求结束后停止、失败提示自动消失；文件资源管理器延迟 `fs/list` 约 1013 ms 时旋转矩阵持续变化，约 1080 ms 采样时已停止。此隔离 UI 证据不代表用户设备安装验收；主人两台设备安装与实际 UI 复验仍待完成。
 
 ## 当前实测状态：v0.2.11 已发布，LAPTOP-01 已升级并自动重连
 
