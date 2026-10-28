@@ -78,3 +78,4 @@
 - 2026-10-28：新增真实本机 SSE fixture 回归，验证首字节不等 EOF、间隔事件分块读取及 close 中断上游；新增 Controller 流式转发/客户端取消关闭 RPC 回归。
 - 2026-10-28：Node 更新协议回归确认 prepare 期间仍可及时回复 status/check；manifest 测试覆盖同 URL 并发 singleflight 与 prepare 新鲜读取。
 - 2026-10-28：附件回归改以仓库 `build.mjs` 的 fileDrag injection contract 验证，移除对未跟踪 `.runtime/dsh-src` SDK 源码的依赖；共享 UI 增加刷新 busy/旋转、稳定更新入口圆点和 toast 4 秒收敛断言。
+- 2026-10-28：新增 `test_preview_open`/`test_code_view`：预取在飞时首开复用请求体、无效/失败预取回退重试且不毒化缓存、中断不被吞；代码页标签栏/当前行/分隔条与暗色变量不变量。

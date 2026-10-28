@@ -44,3 +44,4 @@
 
 - 2026-10-28：重新生成 `client.js`，同步共享 UI 对运行中与磁盘插件版本不一致的提示。
 - 2026-10-28：重新生成 `client.js`，加入 `NativeSurface` 自动重连与退避辅助函数（`tests/test_surface_recovery.mjs` 覆盖）。
+- 2026-10-28：重新生成 `client.js`（代码页首开竞态修复 + 标签栏/当前行高亮/可拖动分隔条）。
