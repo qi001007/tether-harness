@@ -27,3 +27,4 @@
 - 2026-10-27：Supervisor 为受管 Node 传 `TETHER_NODE_MANAGED=1`，Node 以退出码 75 完成更新时按原参数顺序重启；DSH 插件更新仍明确由目标设备上的用户重启 Harness。
 - 2026-10-27：APP组件版本统一到0.2.1，发布包包含更新CLI与引擎入口；依赖有变化时更新器拒绝静默应用。
 - 2026-10-28：APP package.json 与 package-lock 根元数据升至 `0.2.13`，等待 release gate。
+- 2026-10-28：APP 自更新助手的运行时改为**遍历 `tether/` 整包**暂存，不再手写文件清单；必须覆盖 `updates.py/updates_cli.py/release.py/ed25519.py`。原因：`updates.py` 新增 `import .release` 后，旧清单让助手在 APP 退出后直接 `ModuleNotFoundError`，自更新必失败。回归 `test_update_service.mjs`（真实 import 闭环）。
