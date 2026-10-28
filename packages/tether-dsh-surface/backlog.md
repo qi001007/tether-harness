@@ -17,3 +17,4 @@
 - 2026-10-28：插件 file: 源码位于 Git 工作树时，更新前/应用前要求工作树干净，避免覆盖未提交源码。
 - 2026-10-28：覆盖当前 DSH connection 注册 API、无 `rpc` 属性的 Host、缺失注册 API 显式失败，以及脏源码 checkout 保护。
 - 2026-10-28：Surface 包版本升至 `0.2.13`。
+- 2026-10-28：本机插件更新器 status/check 子进程上限 20s、同一请求单飞（重叠返回 `update_busy`），并区分「宿主加载时版本」与「磁盘版本」：磁盘变了而上报 `reload_required/restart_required`，否则更新中心会把旧宿主误报成已是最新。

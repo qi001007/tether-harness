@@ -184,6 +184,9 @@ export function createLocalPluginUpdateHandler({
   const profile = selectedProfile(packageRoot, dshHome)
   const versions = resolvePluginVersions(packageRoot, dshHome, profile)
   const runtimeVersion = versions.runtime
+  // Recorded when the host loaded this handler: if the files on disk change
+  // afterwards the running DSH still executes the old bundle until it reloads.
+  const loadedVersion = runtimeVersion
   const updaterRoot = path.join(packageRoot, 'updater')
   const stateDir = path.join(dshHome, 'storages', 'tether', 'updates')
   const childEnv = safeEnvironment(env, dshHome)
@@ -262,15 +265,19 @@ export function createLocalPluginUpdateHandler({
       }
       const result = await invoke(action, action === 'apply' ? ['--prepared-id', payload.prepared_id] : [], manifestUrl)
       if (!runtimeVersion || !result || typeof result !== 'object') return { ok: true, value: result }
+      const current = resolvePluginVersions(packageRoot, dshHome, profile)
+      const reloadRequired = Boolean(loadedVersion && current.runtime && loadedVersion !== current.runtime)
       return {
         ok: true,
         value: {
           ...result,
-          runtime_version: runtimeVersion,
-          ...(versions.installed ? { installed_version: versions.installed } : {}),
-          ...(versions.source ? { source_version: versions.source } : {}),
-          ...(versions.drift ? { version_drift: true } : {}),
-          ...(result.current_version ? { restart_required: result.current_version !== runtimeVersion } : {})
+          runtime_version: loadedVersion,
+          ...(current.runtime ? { disk_version: current.runtime } : {}),
+          ...(versions.installed ? { installed_version: current.installed } : {}),
+          ...(current.source ? { source_version: current.source } : {}),
+          ...(current.drift ? { version_drift: true } : {}),
+          ...(reloadRequired ? { reload_required: true, restart_required: true } : {}),
+          ...(!reloadRequired && result.current_version ? { restart_required: result.current_version !== loadedVersion } : {})
         }
       }
     })().catch(() => ({ ok: true, value: { ok: false, component: 'plugin', error_code: 'invalid_updater_output', error: '本机插件更新器返回了无效结果。' } }))
