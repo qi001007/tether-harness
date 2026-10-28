@@ -16,3 +16,4 @@
 - 2026-10-28：按当前 HostConnectionService `register(ctx, channel, handler)` 注册本机更新与身份 RPC；旧 `rpc.handle` 保留兼容，无可用 API 时显式报错。
 - 2026-10-28：插件 file: 源码位于 Git 工作树时，更新前/应用前要求工作树干净，避免覆盖未提交源码。
 - 2026-10-28：覆盖当前 DSH connection 注册 API、无 `rpc` 属性的 Host、缺失注册 API 显式失败，以及脏源码 checkout 保护。
+- 2026-10-28：Surface 包版本升至 `0.2.13`。

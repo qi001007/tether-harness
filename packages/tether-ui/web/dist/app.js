@@ -8069,8 +8069,8 @@ function createTetherPanel({ React: React2, Native, host }) {
       .tether-scroll:hover::-webkit-scrollbar-thumb { background: var(--dsw-alias-scrollbar-hover-l1, #cbd5e1); }
       .tether-scroll::-webkit-scrollbar-corner { background: transparent; }
       .tether-num { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum' 1; }
-      .tether-spin { animation: tether-spin .8s linear infinite; }
-      @keyframes tether-spin { to { transform: rotate(360deg); } }
+      .tether-spin { display: inline-grid; width: 1em; height: 1em; flex: 0 0 auto; place-items: center; transform-box: border-box; transform-origin: 50% 50%; animation: tether-refresh-rotate .8s linear infinite; }
+      @keyframes tether-refresh-rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       .tether-node-fill { position: absolute; inset: 0; z-index: 1; border-radius: 50%; corner-shape: round; transition: background-color 160ms ease; }
       .tether-file-markdown { max-width: 860px; margin: 0 auto; color: var(--dsw-alias-label-primary); font-size: 14px; line-height: 24px; }
       .tether-file-text { tab-size: 2; }
@@ -9023,6 +9023,7 @@ function createTetherPanel({ React: React2, Native, host }) {
     const [appLocalDevice, setAppLocalDevice] = React2.useState("");
     const appLocalDeviceRef = React2.useRef("");
     const [showUpdate, setShowUpdate] = React2.useState(false);
+    const [updateRefreshing, setUpdateRefreshing] = React2.useState(false);
     const [pendingApp, setPendingApp] = React2.useState("");
     const [pendingDshRestart, setPendingDshRestart] = React2.useState(false);
     const [dshRestartBusy, setDshRestartBusy] = React2.useState(false);
@@ -9293,16 +9294,23 @@ function createTetherPanel({ React: React2, Native, host }) {
       setShowUpdate(true);
       refreshUpdateCenter();
     };
-    const refreshUpdateCenter = (force = false) => {
-      if (host && host.kind === "app") automaticUpdateCheck("app", null, force);
-      if (host && host.kind === "dsh") automaticUpdateCheck("localPlugin", null, force);
-      (state && state.devices || []).forEach((item) => {
-        if (!item.online) return;
-        const scope = { deviceId: item.device_id, epoch: 0 };
-        automaticUpdateCheck("node", scope, force);
-        automaticUpdateCheck("plugin", scope, force);
-        if (item.capabilities && item.capabilities.app_version) automaticUpdateCheck("app", scope, force);
-      });
+    const refreshUpdateCenter = async (force = false) => {
+      if (updateRefreshing) return;
+      setUpdateRefreshing(true);
+      try {
+        const checks = [];
+        if (host && host.kind === "app") checks.push(automaticUpdateCheck("app", null, force));
+        if (host && host.kind === "dsh") checks.push(automaticUpdateCheck("localPlugin", null, force));
+        (state && state.devices || []).forEach((item) => {
+          if (!item.online) return;
+          const scope = { deviceId: item.device_id, epoch: 0 };
+          checks.push(automaticUpdateCheck("node", scope, force), automaticUpdateCheck("plugin", scope, force));
+          if (item.capabilities && item.capabilities.app_version) checks.push(automaticUpdateCheck("app", scope, force));
+        });
+        await Promise.allSettled(checks);
+      } finally {
+        setTimeout(() => setUpdateRefreshing(false), 280);
+      }
     };
     const infoFor = (component, targetId) => targetId ? (updateInfo.devices[targetId] || {})[component] || {} : updateInfo[component] || {};
     const productCard = (product) => {
@@ -9473,9 +9481,19 @@ function createTetherPanel({ React: React2, Native, host }) {
     }, [deviceId, !!(state && state.devices && state.devices.find((item) => item.device_id === deviceId)?.online)]);
     React2.useEffect(() => {
       if (!notice) return;
-      const t = setTimeout(() => setNotice(""), 7e3);
+      const t = setTimeout(() => setNotice(""), 4e3);
       return () => clearTimeout(t);
     }, [notice]);
+    React2.useEffect(() => {
+      if (!updateToast) return;
+      const t = setTimeout(() => setUpdateToast(""), 4e3);
+      return () => clearTimeout(t);
+    }, [updateToast]);
+    React2.useEffect(() => {
+      if (!projectsError) return;
+      const t = setTimeout(() => setProjectsError(""), 4e3);
+      return () => clearTimeout(t);
+    }, [projectsError]);
     React2.useEffect(() => {
       let alive = true;
       let pending = false;
@@ -11140,7 +11158,7 @@ function createTetherPanel({ React: React2, Native, host }) {
           title: updateHasAvailable ? "\u53D1\u73B0\u53EF\u7528\u66F4\u65B0\uFF0C\u6253\u5F00\u66F4\u65B0\u4E2D\u5FC3" : updateHasFailure ? "\u66F4\u65B0\u68C0\u67E5\u5931\u8D25\uFF0C\u6253\u5F00\u66F4\u65B0\u4E2D\u5FC3\u91CD\u8BD5" : "\u67E5\u770B APP\u3001\u8282\u70B9\u4E0E\u63D2\u4EF6\u66F4\u65B0\u72B6\u6001",
           className: "tether-press tether-hover tether-update-trigger",
           style: { marginLeft: 8, marginRight: 0, height: 26, padding: "0 10px", borderRadius: 999, border: 0, background: C.bg, color: C.sub, display: "flex", alignItems: "center", gap: 6, fontSize: 12, cursor: "pointer", flex: "0 0 auto" }
-        }, updateHasAvailable ? "\u66F4\u65B0 \xB7 \u6709\u65B0\u7248\u672C" : updateHasFailure ? "\u66F4\u65B0 \xB7 \u68C0\u67E5\u5931\u8D25" : "\u66F4\u65B0")
+        }, "\u66F4\u65B0", updateHasAvailable || updateHasFailure ? h("span", { "aria-label": updateHasAvailable ? "\u6709\u53EF\u7528\u66F4\u65B0" : "\u66F4\u65B0\u68C0\u67E5\u5931\u8D25", style: { width: 6, height: 6, borderRadius: "50%", background: C.red, flex: "0 0 auto" } }) : null)
       ),
       notice || projectsError || updateToast ? renderToasts() : null,
       h(
@@ -11212,7 +11230,7 @@ function createTetherPanel({ React: React2, Native, host }) {
             "div",
             { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 12 } },
             h("strong", { style: { fontSize: 14 } }, "\u66F4\u65B0\u4E2D\u5FC3"),
-            h("button", { onClick: () => refreshUpdateCenter(true), title: "\u5F3A\u5236\u5237\u65B0\u66F4\u65B0\u72B6\u6001", "aria-label": "\u5237\u65B0", className: "tether-hover", style: { marginLeft: "auto", width: 26, height: 26, display: "grid", placeItems: "center", border: 0, borderRadius: 6, background: "transparent", color: C.sub, cursor: "pointer" } }, h(Glyph, { name: "refresh", size: 16 })),
+            h("button", { onClick: () => refreshUpdateCenter(true), disabled: updateRefreshing, title: "\u5F3A\u5236\u5237\u65B0\u66F4\u65B0\u72B6\u6001", "aria-label": "\u5237\u65B0", className: "tether-hover", style: { marginLeft: "auto", width: 26, height: 26, display: "grid", placeItems: "center", border: 0, borderRadius: 6, background: "transparent", color: C.sub, cursor: updateRefreshing ? "default" : "pointer" } }, updateRefreshing ? h("span", { className: "tether-spin" }, h(Glyph, { name: "refresh", size: 16 })) : h(Glyph, { name: "refresh", size: 16 })),
             h("button", { onClick: () => setShowUpdate(false), style: { border: 0, background: "transparent", fontSize: 18, cursor: "pointer", color: C.mute } }, "\xD7")
           ),
           host && host.kind === "app" ? productCard("desktop") : null,

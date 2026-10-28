@@ -314,3 +314,21 @@ test('the shared factory accepts a DSH host and a Web host without DSH globals',
   assert.equal(pdf.children[0].props.fill, '#d64545')
   assert.equal(folder.children[0].props.stroke, 'currentColor')
 })
+
+test('refresh indicators have a sized rotation animation and track their request state', () => {
+  assert.match(shared, /\.tether-spin \{ display: inline-grid; width: 1em; height: 1em; flex: 0 0 auto; place-items: center; transform-box: border-box; transform-origin: 50% 50%; animation: tether-refresh-rotate \.8s linear infinite; \}/)
+  assert.match(shared, /@keyframes tether-refresh-rotate \{ from \{ transform: rotate\(0deg\); \} to \{ transform: rotate\(360deg\); \} \}/)
+  assert.match(shared, /const refreshUpdateCenter = async \(force = false\) => \{[\s\S]*await Promise\.allSettled\(checks\)[\s\S]*setTimeout\(\(\) => setUpdateRefreshing\(false\), 280\)/)
+  assert.match(shared, /iconButton\('refresh', '刷新', refreshExplorer, !path, dirLoading \|\| previewBusy\)/)
+  assert.match(shared, /onClick: refreshNetwork[\s\S]*networkRefreshing \? h\('span', \{ className: 'tether-spin'/)
+  assert.match(shared, /disabled: updateRefreshing[\s\S]*updateRefreshing \? h\('span', \{ className: 'tether-spin'/)
+})
+
+test('error toasts expire automatically and the update entry uses a stable label with a status dot', () => {
+  assert.match(shared, /setNotice\(''\), 4000/)
+  assert.match(shared, /setUpdateToast\(''\), 4000/)
+  assert.match(shared, /setProjectsError\(''\), 4000/)
+  assert.match(shared, /\}, '更新', updateHasAvailable \|\| updateHasFailure \? h\('span', \{ 'aria-label': updateHasAvailable \? '有可用更新' : '更新检查失败'/)
+  assert.match(shared, /background: C\.red, flex: '0 0 auto'/)
+  assert.doesNotMatch(shared, /\}, updateHasAvailable \? '更新 · 有新版本'/)
+})

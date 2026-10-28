@@ -4,7 +4,7 @@ window.__ModuleLoader__.load({
     const React = require('react')
     const Native = require('tether-dsh-native-ui')
     const PANEL_ID = 'tether'
-    const PLUGIN_VERSION = "0.2.12"
+    const PLUGIN_VERSION = "0.2.13"
 const DSH_API_BASE = 'http://127.0.0.1:18890'
 const DSH_APP_BASE = 'http://127.0.0.1:18892'
 
@@ -1114,8 +1114,8 @@ function createTetherPanel({ React, Native, host }) {
       .tether-scroll:hover::-webkit-scrollbar-thumb { background: var(--dsw-alias-scrollbar-hover-l1, #cbd5e1); }
       .tether-scroll::-webkit-scrollbar-corner { background: transparent; }
       .tether-num { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum' 1; }
-      .tether-spin { animation: tether-spin .8s linear infinite; }
-      @keyframes tether-spin { to { transform: rotate(360deg); } }
+      .tether-spin { display: inline-grid; width: 1em; height: 1em; flex: 0 0 auto; place-items: center; transform-box: border-box; transform-origin: 50% 50%; animation: tether-refresh-rotate .8s linear infinite; }
+      @keyframes tether-refresh-rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       .tether-node-fill { position: absolute; inset: 0; z-index: 1; border-radius: 50%; corner-shape: round; transition: background-color 160ms ease; }
       .tether-file-markdown { max-width: 860px; margin: 0 auto; color: var(--dsw-alias-label-primary); font-size: 14px; line-height: 24px; }
       .tether-file-text { tab-size: 2; }
@@ -1897,6 +1897,7 @@ function createTetherPanel({ React, Native, host }) {
       const [appLocalDevice, setAppLocalDevice] = React.useState('')
       const appLocalDeviceRef = React.useRef('')
       const [showUpdate, setShowUpdate] = React.useState(false)
+      const [updateRefreshing, setUpdateRefreshing] = React.useState(false)
       const [pendingApp, setPendingApp] = React.useState('')
       const [pendingDshRestart, setPendingDshRestart] = React.useState(false)
       const [dshRestartBusy, setDshRestartBusy] = React.useState(false)
@@ -2157,16 +2158,23 @@ function createTetherPanel({ React, Native, host }) {
         setShowUpdate(true)
         refreshUpdateCenter()
       }
-      const refreshUpdateCenter = (force = false) => {
-        if (host && host.kind === 'app') automaticUpdateCheck('app', null, force)
-        if (host && host.kind === 'dsh') automaticUpdateCheck('localPlugin', null, force)
-        ;((state && state.devices) || []).forEach((item) => {
-          if (!item.online) return
-          const scope = { deviceId: item.device_id, epoch: 0 }
-          automaticUpdateCheck('node', scope, force)
-          automaticUpdateCheck('plugin', scope, force)
-          if (item.capabilities && item.capabilities.app_version) automaticUpdateCheck('app', scope, force)
-        })
+      const refreshUpdateCenter = async (force = false) => {
+        if (updateRefreshing) return
+        setUpdateRefreshing(true)
+        try {
+          const checks = []
+          if (host && host.kind === 'app') checks.push(automaticUpdateCheck('app', null, force))
+          if (host && host.kind === 'dsh') checks.push(automaticUpdateCheck('localPlugin', null, force))
+          ;((state && state.devices) || []).forEach((item) => {
+            if (!item.online) return
+            const scope = { deviceId: item.device_id, epoch: 0 }
+            checks.push(automaticUpdateCheck('node', scope, force), automaticUpdateCheck('plugin', scope, force))
+            if (item.capabilities && item.capabilities.app_version) checks.push(automaticUpdateCheck('app', scope, force))
+          })
+          await Promise.allSettled(checks)
+        } finally {
+          setTimeout(() => setUpdateRefreshing(false), 280)
+        }
       }
       const infoFor = (component, targetId) => targetId
         ? ((updateInfo.devices[targetId] || {})[component] || {})
@@ -2320,7 +2328,9 @@ function createTetherPanel({ React, Native, host }) {
         const timer = setInterval(check, 6 * 60 * 60 * 1000)
         return () => clearInterval(timer)
       }, [deviceId, !!(state && state.devices && state.devices.find((item) => item.device_id === deviceId)?.online)])
-      React.useEffect(() => { if (!notice) return; const t = setTimeout(() => setNotice(''), 7000); return () => clearTimeout(t) }, [notice])
+      React.useEffect(() => { if (!notice) return; const t = setTimeout(() => setNotice(''), 4000); return () => clearTimeout(t) }, [notice])
+      React.useEffect(() => { if (!updateToast) return; const t = setTimeout(() => setUpdateToast(''), 4000); return () => clearTimeout(t) }, [updateToast])
+      React.useEffect(() => { if (!projectsError) return; const t = setTimeout(() => setProjectsError(''), 4000); return () => clearTimeout(t) }, [projectsError])
       React.useEffect(() => {
         let alive = true
         let pending = false
@@ -3572,7 +3582,7 @@ function createTetherPanel({ React, Native, host }) {
             onClick: openUpdateCenter, title: updateHasAvailable ? '发现可用更新，打开更新中心' : updateHasFailure ? '更新检查失败，打开更新中心重试' : '查看 APP、节点与插件更新状态',
             className: 'tether-press tether-hover tether-update-trigger',
             style: { marginLeft: 8, marginRight: 0, height: 26, padding: '0 10px', borderRadius: 999, border: 0, background: C.bg, color: C.sub, display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer', flex: '0 0 auto' }
-          }, updateHasAvailable ? '更新 · 有新版本' : updateHasFailure ? '更新 · 检查失败' : '更新')
+          }, '更新', updateHasAvailable || updateHasFailure ? h('span', { 'aria-label': updateHasAvailable ? '有可用更新' : '更新检查失败', style: { width: 6, height: 6, borderRadius: '50%', background: C.red, flex: '0 0 auto' } }) : null)
         ),
         notice || projectsError || updateToast ? renderToasts() : null,
         h('div', { style: { display: 'flex', flex: '1 1 auto', minHeight: 0 } },
@@ -3627,7 +3637,7 @@ function createTetherPanel({ React, Native, host }) {
           h('div', { style: { width: 520, maxWidth: '100%', maxHeight: '100%', overflow: 'auto', background: C.bg, borderRadius: 10, boxShadow: C.shadow, padding: 18, boxSizing: 'border-box' } },
             h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 } },
               h('strong', { style: { fontSize: 14 } }, '更新中心'),
-              h('button', { onClick: () => refreshUpdateCenter(true), title: '强制刷新更新状态', 'aria-label': '刷新', className: 'tether-hover', style: { marginLeft: 'auto', width: 26, height: 26, display: 'grid', placeItems: 'center', border: 0, borderRadius: 6, background: 'transparent', color: C.sub, cursor: 'pointer' } }, h(Glyph, { name: 'refresh', size: 16 })),
+              h('button', { onClick: () => refreshUpdateCenter(true), disabled: updateRefreshing, title: '强制刷新更新状态', 'aria-label': '刷新', className: 'tether-hover', style: { marginLeft: 'auto', width: 26, height: 26, display: 'grid', placeItems: 'center', border: 0, borderRadius: 6, background: 'transparent', color: C.sub, cursor: updateRefreshing ? 'default' : 'pointer' } }, updateRefreshing ? h('span', { className: 'tether-spin' }, h(Glyph, { name: 'refresh', size: 16 })) : h(Glyph, { name: 'refresh', size: 16 })),
               h('button', { onClick: () => setShowUpdate(false), style: { border: 0, background: 'transparent', fontSize: 18, cursor: 'pointer', color: C.mute } }, '×')),
             host && host.kind === 'app' ? productCard('desktop') : null,
             host && host.kind === 'dsh' ? productCard('dsh') : null,
