@@ -7,6 +7,7 @@ import sys
 import threading
 from pathlib import Path
 
+from tether.node import agent
 from tether.node.agent import Node, NodeStore, restart_node_process
 
 
@@ -52,7 +53,127 @@ def test_capabilities_advertise_update_protocol_and_cached_version(tmp_path, mon
     capabilities = node.capabilities()
     assert capabilities["node_version"] == "0.2.1"
     assert capabilities["update_protocol"] == 1
+    assert capabilities["app_version"] == node._managed_app_version()
+    assert "app" in node.update_managers
     node.store.db.close()
+
+
+def test_remote_app_apply_returns_restart_required(tmp_path, monkeypatch):
+    node = _node(tmp_path, monkeypatch)
+    monkeypatch.delenv("TETHER_NODE_MANAGED", raising=False)
+    manager = FakeUpdateManager()
+    manager.apply = lambda _prepared_id: {"ok": True, "component": "app", "version": "0.2.2",
+                                          "restart_required": True}
+    node.update_managers["app"] = manager
+    node.dsh_sessions.list = lambda: []
+    node.dsh_sessions._files = lambda: []
+    sent: list[dict] = []
+
+    async def send(message: dict) -> None:
+        sent.append(message)
+
+    monkeypatch.setattr(node, "_send", send)
+    asyncio.run(node._update_call({"type": "update_call", "req_id": "app-apply",
+                                   "action": "apply", "component": "app",
+                                   "prepared_id": "a" * 32}))
+
+    assert sent[0]["ok"] is True
+    assert sent[0]["component"] == "app"
+    assert sent[0]["restart_required"] is True
+    node.store.db.close()
+
+
+def test_remote_app_restart_is_scheduled_only_after_result_send(tmp_path, monkeypatch):
+    node = _node(tmp_path, monkeypatch)
+    manager = FakeUpdateManager()
+    manager.apply = lambda _prepared_id: {"ok": True, "component": "app", "version": "0.2.9",
+                                          "restart_required": True}
+    node.update_managers["app"] = manager
+    node.dsh_sessions.list = lambda: []
+    node.dsh_sessions._files = lambda: []
+    order: list[str] = []
+
+    async def send(_message: dict) -> None:
+        order.append("response")
+
+    def schedule(root: Path) -> bool:
+        assert root == agent.ROOT
+        order.append("restart")
+        return True
+
+    monkeypatch.setenv("TETHER_NODE_MANAGED", "1")
+    monkeypatch.setattr(node, "_send", send)
+    monkeypatch.setattr(agent, "schedule_app_restart", schedule)
+    asyncio.run(node._update_call({"type": "update_call", "req_id": "app-restart",
+                                   "action": "apply", "component": "app",
+                                   "prepared_id": "a" * 32}))
+
+    assert order == ["response", "restart"]
+    assert node.update_applying is True
+    node.store.db.close()
+
+
+def test_remote_app_restart_helper_failure_releases_update_gate(tmp_path, monkeypatch):
+    node = _node(tmp_path, monkeypatch)
+    manager = FakeUpdateManager()
+    manager.apply = lambda _prepared_id: {"ok": True, "component": "app", "version": "0.2.9",
+                                          "restart_required": True}
+    node.update_managers["app"] = manager
+    node.dsh_sessions.list = lambda: []
+    node.dsh_sessions._files = lambda: []
+    node.ws = object()
+    sent: list[dict] = []
+
+    async def send(message: dict) -> None:
+        sent.append(message)
+
+    monkeypatch.setenv("TETHER_NODE_MANAGED", "1")
+    monkeypatch.setattr(node, "_send", send)
+    monkeypatch.setattr(agent, "schedule_app_restart", lambda _root: False)
+    asyncio.run(node._update_call({"type": "update_call", "req_id": "app-restart-fail",
+                                   "action": "apply", "component": "app",
+                                   "prepared_id": "a" * 32}))
+
+    assert sent[0]["ok"] is True
+    assert sent[-1]["type"] == "update_ready"
+    assert node.update_applying is False
+    node.store.db.close()
+
+
+def test_windows_app_restart_helper_targets_only_install_electron_and_launcher(tmp_path, monkeypatch):
+    app_root = tmp_path / "installed app"
+    launcher = app_root / "apps" / "tether-app" / "Tether-App.cmd"
+    launcher.parent.mkdir(parents=True)
+    launcher.write_text("@echo off\n", encoding="utf-8")
+    captured: list[tuple[list[str], dict]] = []
+
+    def run(args, **kwargs):
+        captured.append((args, kwargs))
+        ready = Path(args[args.index("-ReadyFile") + 1])
+        ready.write_text("ready", encoding="ascii")
+        return type("Process", (), {"returncode": 0})()
+
+    monkeypatch.setattr(agent.sys, "platform", "win32")
+    monkeypatch.setattr(agent.subprocess, "run", run)
+    assert agent.schedule_app_restart(app_root) is True
+    args, options = captured[0]
+    script = Path(args[args.index("-File") + 1])
+    source = script.read_text(encoding="utf-8")
+    assert "Register-ScheduledTask" in source
+    assert "-LogonType Interactive" in source
+    assert "-RunLevel Limited" in source
+    assert "Start-ScheduledTask" in source
+    assert "Stop-Process" in source
+    assert "Start-Sleep -Seconds 2" in source
+    assert "explorer.exe" in source
+    assert str(app_root.resolve()) in args
+    assert options["timeout"] == 25
+    script.unlink()
+
+
+def test_app_restart_helper_fails_cleanly_when_launcher_is_missing(tmp_path, monkeypatch):
+    monkeypatch.setattr(agent.sys, "platform", "win32")
+    assert agent.schedule_app_restart(tmp_path) is False
 
 
 def test_update_prepare_does_not_block_message_receiver_or_cancel_heartbeat(tmp_path, monkeypatch):

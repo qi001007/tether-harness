@@ -61,7 +61,7 @@ export function updateAvailableFor(updateInfo, hostKind, deviceId) {
   if (hostKind === 'app' && updateInfo && updateInfo.app && updateInfo.app.update_available) return true
   if (hostKind === 'dsh' && updateInfo && updateInfo.localPlugin && updateInfo.localPlugin.update_available) return true
   const target = updateInfo && updateInfo.devices && updateInfo.devices[deviceId]
-  return !!(deviceId && target && ((target.node && target.node.update_available) || (target.plugin && target.plugin.update_available)))
+  return !!(deviceId && target && ((target.app && target.app.update_available) || (target.node && target.node.update_available) || (target.plugin && target.plugin.update_available)))
 }
 
 export function orderNetworkDevices(devices, appDeviceId) {
@@ -121,6 +121,10 @@ export async function runUpdateSequence({ check, prepare, apply, isCurrent = () 
   const result = await apply(preparedId, checked)
   if (!result || result.failed || result.ok === false) return { failed: true, stage: 'apply' }
   return isCurrent() ? { current: true, updated: true, result } : { cancelled: true }
+}
+
+export function deviceUpdateComponents(capabilities = {}) {
+  return ['node', ...(capabilities.dsh_surface ? ['plugin'] : []), ...(capabilities.app_version ? ['app'] : [])]
 }
 
 export async function fetchApiJson(path, init = {}, { activeBase, apiBaseList, pinnedBase, headersForBase, fetcher = fetch } = {}) {
@@ -1513,7 +1517,7 @@ export function createTetherPanel({ React, Native, host }) {
       const updatesPath = (component, targetId = deviceId) => '/api/devices/' + encodeURIComponent(targetId) + '/updates?component=' + encodeURIComponent(component)
       const loadUpdateInfo = async (component, action, pinnedBase, fixedScope) => {
         const scope = fixedScope === undefined ? updateScope(component) : fixedScope
-        if (component === 'app') {
+        if (component === 'app' && !scope) {
           if (!host || host.kind !== 'app' || !host.updates) return
           const status = await host.updates.status()
           if (status && status.ok === false) throw new Error(status.message || 'APP 更新状态读取失败')
@@ -1572,7 +1576,7 @@ export function createTetherPanel({ React, Native, host }) {
             if (checkResult.failed) throw new Error(updateErrorText(checkResult.error))
             result = checkResult.result
           } else if (action === 'status') result = await loadUpdateInfo(component, action, undefined, scope)
-          else if (component === 'app') {
+          else if (component === 'app' && !scope) {
             if (action === 'prepare') result = await host.updates.prepare()
             else result = await host.updates.apply(preparedId)
             setComponentUpdateInfo(component, { ...(updateInfo[component] || {}), ...result })
@@ -1594,7 +1598,7 @@ export function createTetherPanel({ React, Native, host }) {
           }
           if (result && result.ok === false) throw new Error(result.message || result.error || (action === 'check' ? '更新检查失败' : '更新操作失败'))
           if (action === 'prepare') {
-            const status = await loadUpdateInfo(component, 'status', pinnedBase)
+            const status = await loadUpdateInfo(component, 'status', pinnedBase, scope)
             if (status && status.ok === false) throw new Error(status.message || status.error || '更新包状态读取失败')
             result = { ...(status || {}), ...(result || {}) }
           }
@@ -1622,6 +1626,24 @@ export function createTetherPanel({ React, Native, host }) {
           } catch (_) { /* the node is restarting; keep polling */ }
         }
       }
+      const watchAppRestart = async (scope, authority, expectedVersion) => {
+        for (let attempt = 0; attempt < 90; attempt += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 2000))
+          if (!scopeIsCurrent(scope)) return false
+          try {
+            await loadState()
+            const target = ((stateRef.current && stateRef.current.devices) || []).find((item) => item.device_id === scope.deviceId)
+            const running = target && target.capabilities && target.capabilities.app_version
+            const status = await loadUpdateInfo('app', 'status', authority, scope)
+            if (target && target.online && running === expectedVersion && status && status.ok !== false
+                && status.current_version === expectedVersion) {
+              setComponentUpdateInfo('app', { ...status, restart_required: false }, scope)
+              return true
+            }
+          } catch (_) { /* the app and node are restarting; keep polling */ }
+        }
+        return false
+      }
       const updateOneClick = async (component, fixedScope) => {
         const scope = fixedScope === undefined ? updateScope(component) : fixedScope
         let authority
@@ -1643,7 +1665,7 @@ export function createTetherPanel({ React, Native, host }) {
           })
           if (outcome.cancelled) return false
           if (!outcome.failed && !outcome.updated) setComponentUpdateError(component, '', scope)
-          if (!outcome.failed && outcome.updated && component === 'node') watchNodeRestart(scope, authority)
+          if (!outcome.failed && outcome.updated && component === 'node') await watchNodeRestart(scope, authority)
           return !outcome.failed
         } catch (error) {
           setComponentUpdateError(component, updateErrorText(error), scope)
@@ -1662,6 +1684,7 @@ export function createTetherPanel({ React, Native, host }) {
           const scope = { deviceId: item.device_id, epoch: 0 }
           automaticUpdateCheck('node', scope)
           automaticUpdateCheck('plugin', scope)
+          if (item.capabilities && item.capabilities.app_version) automaticUpdateCheck('app', scope)
         })
       }
       const infoFor = (component, targetId) => targetId
@@ -1695,8 +1718,10 @@ export function createTetherPanel({ React, Native, host }) {
         const scope = { deviceId: item.device_id, epoch: 0 }
         const node = infoFor('node', item.device_id)
         const plugin = infoFor('plugin', item.device_id)
+        const app = infoFor('app', item.device_id)
         const hasPlugin = !!(item.capabilities && item.capabilities.dsh_surface)
-        const infos = hasPlugin ? [node, plugin] : [node]
+        const hasApp = !!(item.capabilities && item.capabilities.app_version)
+        const infos = [node, ...(hasPlugin ? [plugin] : []), ...(hasApp ? [app] : [])]
         const hasUpdate = infos.some((info) => info && info.update_available === true)
         const known = infos.every((info) => info && info.current_version && info.latest_version)
         const busy = updateBusy.startsWith(item.device_id + ':') || updateBusy === 'device:' + item.device_id
@@ -1709,7 +1734,7 @@ export function createTetherPanel({ React, Native, host }) {
                 : hasUpdate ? pill('有更新', C.amber)
                   : known ? pill('已是最新', C.green) : pill('检查中…', C.mute))),
           h('div', { style: { color: C.sub, fontSize: 12, lineHeight: '19px' } },
-            ((item.capabilities && item.capabilities.app_version) ? 'APP ' + item.capabilities.app_version + ' · ' : '')
+            (hasApp ? 'APP ' + item.capabilities.app_version + (app.latest_version ? ' (' + app.latest_version + ')' : '') + ' · ' : '')
             + (hasPlugin ? '插件 ' + (plugin.current_version || '未知') + ' · ' : '')
             + 'Node ' + (node.current_version || '未知')),
           h('div', { style: { marginTop: 8 } },
@@ -1745,9 +1770,20 @@ export function createTetherPanel({ React, Native, host }) {
         setUpdateBusy('device:' + item.device_id)
         try {
           const scope = { deviceId: item.device_id, epoch: 0 }
-          const nodeOk = await updateOneClick('node', scope)
-          if (!nodeOk) return
-          if (item.capabilities && item.capabilities.dsh_surface) await updateOneClick('plugin', scope)
+          for (const component of deviceUpdateComponents(item.capabilities)) {
+            if (component !== 'app') {
+              if (!await updateOneClick(component, scope)) return
+              continue
+            }
+            const checkedApp = await updateAction('app', 'check', undefined, scope)
+            if (checkedApp && checkedApp.update_available) {
+              const expectedVersion = checkedApp.latest_version
+              if (await updateOneClick('app', scope)) {
+                const reconnected = await watchAppRestart(scope, checkedApp.authorityBase, expectedVersion)
+                if (!reconnected) setComponentUpdateError('app', 'APP 更新后尚未重新连接，请稍后刷新', scope)
+              }
+            }
+          }
           refreshUpdateCenter()
         } finally { setUpdateBusy('') }
       }

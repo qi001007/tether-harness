@@ -15,7 +15,10 @@ import platform
 import sqlite3
 import ssl
 import sys
+import subprocess
+import tempfile
 import time
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -73,6 +76,122 @@ def ensure_sdk_profile(home: Path) -> None:
     }, indent=2), encoding="utf-8")
     (profile / "cordis.yml").write_text("[]\n", encoding="utf-8")
     (profile / "cordis.patch.yml").write_text("[]\n", encoding="utf-8")
+
+
+_APP_RESTART_SCRIPT = r'''param([string]$Root, [string]$TaskName, [string]$ReadyFile, [string]$LogFile, [switch]$Worker)
+$ErrorActionPreference = 'Stop'
+$rootPath = [IO.Path]::GetFullPath($Root).TrimEnd('\')
+$appDir = Join-Path $rootPath 'apps\tether-app'
+$launcher = Join-Path $appDir 'Tether-App.cmd'
+$electron = [IO.Path]::GetFullPath((Join-Path $appDir 'node_modules\electron\dist\electron.exe'))
+if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) {
+  if ($Worker) { Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue }
+  throw 'APP launcher not found'
+}
+if (-not $Worker) {
+  $powerShell = Join-Path $PSHOME 'powershell.exe'
+  $arguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + $PSCommandPath + '" -Root "' + $rootPath + '" -TaskName "' + $TaskName + '" -ReadyFile "' + $ReadyFile + '" -LogFile "' + $LogFile + '" -Worker'
+  $action = New-ScheduledTaskAction -Execute $powerShell -Argument $arguments
+  $principal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive -RunLevel Limited
+  Register-ScheduledTask -TaskName $TaskName -Action $action -Principal $principal -Force | Out-Null
+  try {
+    Start-ScheduledTask -TaskName $TaskName
+    $deadline = [DateTime]::UtcNow.AddSeconds(20)
+    while (-not (Test-Path -LiteralPath $ReadyFile) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 100 }
+    if (-not (Test-Path -LiteralPath $ReadyFile)) { throw 'Scheduled APP restart worker did not start' }
+  } catch {
+    Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
+    throw
+  }
+  exit 0
+}
+try {
+  Set-Content -LiteralPath $ReadyFile -Value 'ready' -Encoding Ascii
+  Add-Content -LiteralPath $LogFile -Value ((Get-Date -Format o) + ' restart worker started')
+  Start-Sleep -Seconds 2
+  foreach ($process in Get-CimInstance Win32_Process -Filter "Name = 'electron.exe'") {
+    if (-not $process.ExecutablePath) { continue }
+    try { $processPath = [IO.Path]::GetFullPath($process.ExecutablePath) } catch { continue }
+    if ([string]::Equals($processPath, $electron, [StringComparison]::OrdinalIgnoreCase)) {
+      Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue
+    }
+  }
+  $deadline = [DateTime]::UtcNow.AddSeconds(10)
+  do {
+    Start-Sleep -Milliseconds 250
+    $remaining = @(Get-CimInstance Win32_Process -Filter "Name = 'electron.exe'" | Where-Object {
+      $_.ExecutablePath -and [string]::Equals([IO.Path]::GetFullPath($_.ExecutablePath), $electron, [StringComparison]::OrdinalIgnoreCase)
+    })
+  } while ($remaining.Count -gt 0 -and [DateTime]::UtcNow -lt $deadline)
+  Start-Process -FilePath (Join-Path $env:WINDIR 'explorer.exe') -ArgumentList @('"' + $launcher + '"')
+  Add-Content -LiteralPath $LogFile -Value ((Get-Date -Format o) + ' APP launcher opened')
+} catch {
+  Add-Content -LiteralPath $LogFile -Value ((Get-Date -Format o) + ' restart worker failed')
+  throw
+} finally {
+  Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
+}
+'''
+
+
+def schedule_app_restart(root: Path) -> bool:
+    """Start a Windows helper outside Node's supervisor process/job tree."""
+    if sys.platform != "win32":
+        return False
+    root = Path(root).resolve()
+    launcher = root / "apps" / "tether-app" / "Tether-App.cmd"
+    log_path = root / ".runtime" / "updates" / "remote-app-restart.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    def record(message: str) -> None:
+        try:
+            with log_path.open("a", encoding="utf-8") as log_file:
+                log_file.write(f"{time.strftime('%Y-%m-%dT%H:%M:%S%z')} {message}\n")
+        except OSError:
+            pass
+
+    if not launcher.is_file():
+        record("APP launcher missing")
+        return False
+    fd, script_path = tempfile.mkstemp(prefix="tether-app-restart-", suffix=".ps1")
+    os.close(fd)
+    marker_fd, ready_path = tempfile.mkstemp(prefix="tether-app-restart-", suffix=".ready")
+    os.close(marker_fd)
+    os.unlink(ready_path)
+    task_name = "TetherAppRestart-" + uuid.uuid4().hex
+    scheduled = False
+    try:
+        with open(script_path, "w", encoding="utf-8", newline="\r\n") as script:
+            script.write(_APP_RESTART_SCRIPT)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        result = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+             "-WindowStyle", "Hidden", "-File", script_path, "-Root", str(root),
+             "-TaskName", task_name, "-ReadyFile", ready_path, "-LogFile", str(log_path)],
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            close_fds=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000),
+            timeout=25, check=False,
+        )
+        scheduled = result.returncode == 0
+        record("restart worker scheduled" if scheduled else "restart worker scheduling failed")
+        return scheduled
+    except OSError:
+        record("restart worker could not be started")
+        return False
+    except subprocess.TimeoutExpired:
+        record("restart worker scheduling timed out")
+        return False
+    finally:
+        try:
+            Path(ready_path).unlink()
+        except OSError:
+            pass
+        if not scheduled:
+            try:
+                Path(script_path).unlink()
+            except OSError:
+                pass
 
 
 class NodeStore:
@@ -209,7 +328,7 @@ class Node:
             component: UpdateManager(ROOT, component, dsh_home=self.native_dsh_home,
                                      manifest_url=os.environ.get("TETHER_UPDATE_MANIFEST_URL"),
                                      state_dir=update_state_dir / component)
-            for component in ("node", "plugin")
+              for component in ("node", "plugin", "app")
         }
         node_status = self.update_managers["node"].status()
         self.node_version = ((node_status.get("current_version") or "unknown")
@@ -451,6 +570,7 @@ class Node:
             return
         component = str(component)
         applying = action == "apply"
+        app_restart_scheduled = False
         async with self.update_lock:
             if component == "plugin":
                 profile = self.native_surface.active_profile()
@@ -483,10 +603,19 @@ class Node:
                 if applying and result.get("ok") and component == "node":
                     self.restart_requested = True
                     self.update_applying = True
+                response_sent = False
                 try:
                     await self._send({"type": "update_result", "req_id": req_id, **result})
+                    response_sent = True
                 except Exception:
                     self.connected = False
+                if (applying and result.get("ok") and component == "app" and response_sent
+                        and os.environ.get("TETHER_NODE_MANAGED") == "1"):
+                    app_restart_scheduled = await asyncio.to_thread(schedule_app_restart, ROOT)
+                    if app_restart_scheduled:
+                        self.update_applying = True
+                    else:
+                        log("[update] APP restart helper could not be scheduled")
                 if applying and result.get("ok") and component == "node":
                     if self.ws is not None:
                         try:
@@ -502,7 +631,7 @@ class Node:
                 except Exception:
                     self.connected = False
             finally:
-                if applying and not self.restart_requested:
+                if applying and not self.restart_requested and not app_restart_scheduled:
                     self.update_applying = False
                     if self.ws is not None:
                         try:
