@@ -72,15 +72,24 @@ For the native DSH page, the Hub creates a short-lived surface gateway and the p
 
 **Yes, if you want a machine to be controlled.** The APP and the plugin are clients; the Node is the thing that gives a machine an executor. The APP can start a Node for you; the plugin cannot.
 
-| You install | Can connect to a Hub | Can control other devices | Can be controlled as a target |
-|---|---|---|---|
-| APP only (with DSH) | Yes | Yes | Yes, if `nodeToken` is configured; the APP supervisor starts its Node |
-| Plugin only (with DSH) | Yes | Yes | **No** — install the Node ZIP (or the APP) for that machine |
-| Node only | Yes, headless | n/a | Yes |
-| APP + plugin | Yes | Yes | Yes, through the APP's Node |
-| Plugin + Node | Yes | Yes | Yes, through the standalone Node |
+There are two different kinds of "target": a **file/command target** uses the Node's file policy and audit; a **native DSH target** additionally needs the target DSH Host to publish a `native-surface.json` descriptor, which is done by the DSH surface plugin (`tether-dsh-surface`).
 
-A typical desktop uses **APP + plugin** (two views of the same machine). A laptop or a headless box can use **Node only** and be controlled from the desktop. The plugin-only installation is a valid client, but it cannot expose its own machine without a Node.
+| You install | Connect to Hub | Control others | File/command target | Native DSH target |
+|---|---|---|---|---|
+| APP only (with DSH) | Yes | Yes | Yes, if `nodeToken` is configured; the APP supervisor starts its Node | **No in v0.2.3** — the APP ZIP does not install the DSH surface plugin, so there is no descriptor |
+| Plugin only (with DSH) | Yes | Yes | No — no Node | No — no Node |
+| Node only | Yes, headless | n/a | Yes | No descriptor unless the DSH surface plugin is installed separately |
+| APP + plugin | Yes | Yes | Yes | Yes |
+| Plugin + Node | Yes | Yes | Yes | Yes |
+
+A typical desktop uses **APP + plugin** (two views of the same machine). A laptop or a headless box can use **Node only** for file/command control, or **plugin + Node** for native DSH control. The current v0.2.3 APP ZIP and plugin ZIP are still the older split; the packaging goal below removes this caveat.
+
+The planned packaging is two user-facing products:
+
+- **Tether Desktop** = APP + Node + DSH surface plugin;
+- **Tether for DSH** = DSH plugin + Node + DSH surface plugin.
+
+Both would include the runtime and the surface descriptor, so both can connect, control, and be controlled. A headless Node installer remains as an advanced option. Until that packaging lands, install **APP + plugin** for the full native experience, or **plugin + Node** for a native headless target.
 
 ## Quick start
 
@@ -255,6 +264,13 @@ If you find a security issue, do not paste tokens, personal data, or private dev
 | Accounts / login / per-user isolation | **Not implemented** |
 | Digital signatures | Not implemented |
 | Server release automation | Not implemented; the Hub uses a pinned-commit, backed-up, gated deploy with a rollback drill |
+
+## Roadmap
+
+- **Two products, one hidden runtime.** Ship **Tether Desktop** (APP + Node + surface plugin) and **Tether for DSH** (plugin + Node + surface plugin). Keep one shared Node runtime per device and reduce the update center to APP and plugin rows; a headless Node installer remains an advanced option.
+- **Accounts and isolation.** User login, one-time device pairing, per-device credentials, per-user device isolation, an admin dashboard with invites/users/devices/health/audit, and invite-only testing.
+- **Remote surface acceptance.** Fix the blank remote DSH panel and accept real cross-device native control on a second physical machine.
+- **Release hardening.** Signed packages, real update rollback drills, backup/restore drills, and a repeatable server release/rollback process.
 
 ## Development
 

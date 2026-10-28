@@ -6,6 +6,7 @@
 - 明确 APP/插件可独立连接 Hub，但插件单独不能作为被控目标；Node 是目标设备执行器；生产路径不需要 Tailscale。
 - 更新 `scripts/build_release.py` 内三个 ZIP 的安装说明，下一次发布生效；不重建已发布的 v0.2.3 资产。
 - 记录远程目标 native surface 白屏为开放问题，登录/账户/多租户隔离未实现。
+- 修正独立安装矩阵：v0.2.3 的 APP-only 不包含 DSH surface 插件，只能作为文件/命令目标；补充两产品（APP+Node / 插件+Node）、共享 runtime、账户/管理后台 Roadmap。
 
 ## 2026-10-28 v0.2.3 更新器修复
 
