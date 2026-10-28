@@ -9025,6 +9025,7 @@ function createTetherPanel({ React: React2, Native, host }) {
     const [contextMenu, setContextMenu] = React2.useState(null);
     const [deviceMenu, setDeviceMenu] = React2.useState(null);
     const [previewBusy, setPreviewBusy] = React2.useState(false);
+    const [previewError, setPreviewError] = React2.useState("");
     const [editMode, setEditMode] = React2.useState(false);
     const [workspaceOpen, setWorkspaceOpen] = React2.useState({});
     const [treeChildren, setTreeChildren] = React2.useState({});
@@ -10326,6 +10327,7 @@ function createTetherPanel({ React: React2, Native, host }) {
       const controller = new AbortController();
       previewAbortRef.current = controller;
       setDirError("");
+      setPreviewError("");
       const sameFile = !!(file && file.path === entry.path);
       const apply = (data) => {
         setFile({ ...data, path: entry.path, name: entry.name || pathBasename(entry.path) });
@@ -10363,6 +10365,7 @@ function createTetherPanel({ React: React2, Native, host }) {
         if (controller.signal.aborted || e && e.name === "AbortError") return;
         if (seq !== previewSeqRef.current || deviceIdRef.current !== requestDevice) return;
         if (cached) previewCacheRef.current.delete(key);
+        setPreviewError(String(e && e.message || e));
         fail2(e);
       } finally {
         if (previewOpeningKeyRef.current === key) previewOpeningKeyRef.current = "";
@@ -10718,8 +10721,12 @@ function createTetherPanel({ React: React2, Native, host }) {
     };
     const CODE_FILE = /\.(js|mjs|cjs|ts|tsx|jsx|py|json|css|scss|html|sh|ps1|java|c|h|cpp|hpp|cc|m|mm|pr|cs|php|rb|swift|kt|lua|r|pl|tex|vue|svelte|dart|gradle|go|rs|sql|yml|yaml|toml|ini|xml)$/i;
     const CODE_WORDS = new Set("const let var function return if else for while class import from export async await def None True False public private void new try catch throw extends implements interface type struct fn use package self this in of not and or lambda yield match case switch break continue".split(" "));
+    const CODE_FONT = 'Consolas, "Cascadia Mono", "Cascadia Code", "Courier New", monospace';
+    const MAX_HIGHLIGHT_CHARS = 160 * 1024;
+    const MAX_HIGHLIGHT_LINES = 4e3;
     const renderCode = (text, name) => {
       if (!CODE_FILE.test(String(name || ""))) return text;
+      if (text.length > MAX_HIGHLIGHT_CHARS || text.split(String.fromCharCode(10)).length > MAX_HIGHLIGHT_LINES) return text;
       const parts = [];
       const push = (value, color) => {
         if (!value) return;
@@ -10902,6 +10909,7 @@ function createTetherPanel({ React: React2, Native, host }) {
         setEditMode(false);
         setDirty(false);
         setDraft("");
+        setPreviewError("");
         if (path) loadDir(path, { push: false });
       };
       const fileHeader = file ? h(
@@ -10911,6 +10919,7 @@ function createTetherPanel({ React: React2, Native, host }) {
         h(Native.FileTypeIcon, { path: file.name || file.path, size: 16 }),
         h("span", { style: { fontSize: 13, fontWeight: "var(--tether-strong, 600)", color: C.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, file.name || pathBasename(file.path)),
         file.writable ? null : pill("\u53EA\u8BFB", C.amber),
+        file.truncated ? pill("\u5DF2\u622A\u65AD", C.amber) : null,
         file.converted ? pill("\u5DF2\u8F6C PDF", C.mute) : null,
         h(
           "span",
@@ -10928,6 +10937,12 @@ function createTetherPanel({ React: React2, Native, host }) {
           h("span", null, "\u6B63\u5728\u8BFB\u53D6\u2026"),
           h("button", { onClick: stopLoading, className: "tether-hover", style: { border: 0, borderRadius: 6, padding: "4px 10px", background: C.soft, color: C.ink, fontSize: 11.5, cursor: "pointer" } }, "\u505C\u6B62\u52A0\u8F7D")
         );
+        if (previewError) return h(
+          "div",
+          { style: { flex: "1 1 auto", display: "grid", placeItems: "center", alignContent: "center", gap: 8, color: C.red, fontSize: 12, padding: 24, textAlign: "center" } },
+          h("div", null, "\u65E0\u6CD5\u6253\u5F00\uFF1A" + previewError),
+          h("button", { onClick: () => openPreview({ path: file ? file.path : "", name: file ? file.name : "" }, { fresh: true }), className: "tether-hover", style: { border: 0, borderRadius: 6, padding: "5px 10px", background: C.soft, color: C.ink, fontSize: 12, cursor: "pointer" } }, "\u91CD\u8BD5")
+        );
         if (!file) return null;
         if (file.kind === "markdown") {
           if (editMode) return h("textarea", { value: draft, onChange: (ev) => {
@@ -10940,8 +10955,21 @@ function createTetherPanel({ React: React2, Native, host }) {
           if (editMode) return h("textarea", { value: draft, onChange: (ev) => {
             setDraft(ev.target.value);
             setDirty(true);
-          }, spellCheck: false, style: { flex: "1 1 auto", width: "100%", boxSizing: "border-box", resize: "none", border: 0, outline: "none", padding: "14px 18px", fontFamily: "Consolas, monospace", fontSize: 12.5, lineHeight: 1.6, background: C.bg, color: C.ink } });
-          return h("pre", { className: "tether-file-text tether-scroll", style: { flex: "1 1 auto", overflow: "auto", margin: 0, padding: "16px 20px", fontFamily: "Consolas, monospace", fontSize: 12.5, lineHeight: 1.6, whiteSpace: "pre-wrap", color: C.ink, background: C.bg } }, renderCode(draft, file.name));
+          }, spellCheck: false, style: { flex: "1 1 auto", width: "100%", boxSizing: "border-box", resize: "none", border: 0, outline: "none", padding: "14px 18px", fontFamily: CODE_FONT, fontSize: 12.5, lineHeight: 1.6, background: C.bg, color: C.ink } });
+          if (!CODE_FILE.test(String(file.name || ""))) {
+            return h("pre", { className: "tether-file-text tether-scroll", style: { flex: "1 1 auto", overflow: "auto", margin: 0, padding: "16px 20px", fontFamily: CODE_FONT, fontSize: 12.5, lineHeight: 1.6, whiteSpace: "pre-wrap", color: C.ink, background: C.bg } }, renderCode(draft, file.name));
+          }
+          const codeLines = String(draft || "").split(String.fromCharCode(10));
+          return h(
+            "div",
+            { className: "tether-scroll", style: { flex: "1 1 auto", overflow: "auto", display: "flex", alignItems: "flex-start", minHeight: 0, background: C.bg } },
+            h(
+              "pre",
+              { "aria-hidden": true, className: "tether-num", style: { flex: "0 0 auto", margin: 0, padding: "16px 10px 16px 16px", fontFamily: CODE_FONT, fontSize: 12.5, lineHeight: 1.6, color: C.mute, textAlign: "right", userSelect: "none", borderRight: "1px solid " + C.line, background: C.panel } },
+              codeLines.map((_, index) => index + 1).join(String.fromCharCode(10))
+            ),
+            h("pre", { className: "tether-file-text", style: { flex: "1 0 auto", margin: 0, padding: "16px 24px 16px 12px", fontFamily: CODE_FONT, fontSize: 12.5, lineHeight: 1.6, whiteSpace: "pre", color: C.ink, background: "transparent" } }, renderCode(draft, file.name))
+          );
         }
         if (file.kind === "image") return h(
           "div",
