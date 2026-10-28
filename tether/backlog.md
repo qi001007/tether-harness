@@ -12,3 +12,4 @@
 - 2026-10-27：UpdateManager/CLI 支持明确 profile 名；插件版本探测、包存在性检查和目标映射使用该 profile，拒绝路径穿越或非法 profile 名；远端 Node 仅使用当前 Host descriptor 提供的 profile。
 - 2026-10-27：暂存插件更新记录目标 profile；apply 时若活动 Host profile 已变化或旧暂存无 profile 绑定则拒绝，避免跨 profile 套用准备结果。
 - 2026-10-28：0.2.14 起清单默认强制 Ed25519 验签（仅 loopback 开发源与显式 `TETHER_ALLOW_UNSIGNED_RELEASE=1` 例外）；`channel` 参与校验，beta 需 `TETHER_UPDATE_CHANNEL=beta`；`apply` 用缓存清单复核 rollout（hold/排除立即生效）；签名错误码 `channel_not_selected` 进入错误优先级，避免被 `manifest_unavailable` 掩盖。
+- 2026-10-29：0.2.16 版本元数据统一：`UPDATER_VERSION` 升至 `0.2.16`；更新协议常量保持 `1`，无迁移。

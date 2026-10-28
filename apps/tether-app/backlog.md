@@ -29,3 +29,4 @@
 - 2026-10-28：APP package.json 与 package-lock 根元数据升至 `0.2.13`，等待 release gate。
 - 2026-10-28：APP 自更新助手的运行时改为**遍历 `tether/` 整包**暂存，不再手写文件清单；必须覆盖 `updates.py/updates_cli.py/release.py/ed25519.py`。原因：`updates.py` 新增 `import .release` 后，旧清单让助手在 APP 退出后直接 `ModuleNotFoundError`，自更新必失败。回归 `test_update_service.mjs`（真实 import 闭环）。
 - 2026-10-28：surface 启动失败自动恢复：main 监听子 frame 的 `web boot: N entry did not activate`，经 preload `onSurfaceBootFailed` 通知 renderer；`NativeSurface` 换新 ticket 重建 iframe（1/2/4s，最多 3 次），surface 接口的 502/504/device_offline/surface_timeout 也自动重试。
+- 2026-10-29：APP package.json 发布版本升至 `0.2.16`，等待 release gate。

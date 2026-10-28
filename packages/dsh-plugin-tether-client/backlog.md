@@ -21,3 +21,4 @@
 - 2026-10-27：`lib/client.js` 从 `packages/tether-ui` 生成，插件本身仍走原 `__ModuleLoader__` 装配，不新增 DSH external。
 - 2026-10-27：将客户端包与更新提示版本统一到 0.2.1。
 - 2026-10-28：client bundle 重新生成，包含共享 UI 刷新状态、旋转图标与自动消失 toast；package/version 元数据升至 `0.2.13`。
+- 2026-10-29：客户端 package.json 与 version.json 升至 `0.2.16`，`lib/client.js` 重新生成以更新 `PLUGIN_VERSION`。
