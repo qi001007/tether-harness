@@ -58,7 +58,7 @@ async function main() {
   delete childEnv.ELECTRON_RUN_AS_NODE
   const child = require('node:child_process').spawn(config.executable, config.launchArgs, {
     detached: true,
-    windowsHide: true,
+    windowsHide: false,
     stdio: 'ignore',
     env: childEnv
   })
@@ -72,7 +72,7 @@ main().catch((error) => {
   delete childEnv.ELECTRON_RUN_AS_NODE
   const child = require('node:child_process').spawn(config.executable, config.launchArgs, {
     detached: true,
-    windowsHide: true,
+    windowsHide: false,
     stdio: 'ignore',
     env: childEnv
   })

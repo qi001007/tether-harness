@@ -1,5 +1,12 @@
 # docs 变更记录
 
+## 2026-10-28 v0.2.3 更新器修复
+
+- `update-helper` 重启 APP 时使用 `windowsHide: false`，修复自更新后新窗口不可见。
+- `apply` 成功后删除 prepared；`status` 忽略不高于当前版本的 prepared 记录。
+- APP/Node 写 `version.json` 时保留 DSH profile 中实际安装的插件版本。
+- Python 78 passed/1 skipped；JavaScript 62 passed。
+
 ## 2026-10-28 v0.2.2 修复与发布准备
 
 - APP 首次 bootstrap：修正 PowerShell 变量大小写冲突导致的 venv 空装，增加解释器可见性重试、依赖导入校验与 `bootstrap.log`。

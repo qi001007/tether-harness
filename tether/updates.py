@@ -20,7 +20,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 
-UPDATER_VERSION = "0.2.2"
+UPDATER_VERSION = "0.2.3"
 LEGACY_BASELINE_VERSION = "0.2.0"
 UPDATE_PROTOCOL = 1
 DEFAULT_MANIFEST_URL = (
@@ -309,20 +309,27 @@ class UpdateManager:
         return manifest
 
     def _versions(self) -> dict[str, str]:
-        if self.component == "plugin":
-            return {"app": "0.0.0", "node": "0.0.0", "plugin": self._installed_plugin_version()}
         path = self.root / "version.json"
-        if not path.is_file():
-            return {name: LEGACY_BASELINE_VERSION for name in COMPONENTS}
-        data = _json_object(path.read_bytes())
-        components = data.get("components")
-        if not isinstance(components, dict):
-            raise UpdateError("local_version_invalid")
         versions: dict[str, str] = {}
-        for name in COMPONENTS:
-            value = components.get(name, LEGACY_BASELINE_VERSION)
-            _semver(value)
-            versions[name] = value
+        if path.is_file():
+            data = _json_object(path.read_bytes())
+            components = data.get("components")
+            if not isinstance(components, dict):
+                raise UpdateError("local_version_invalid")
+            for name in COMPONENTS:
+                value = components.get(name, LEGACY_BASELINE_VERSION)
+                _semver(value)
+                versions[name] = value
+        else:
+            versions = {name: LEGACY_BASELINE_VERSION for name in COMPONENTS}
+        if self.component == "plugin":
+            versions["plugin"] = self._installed_plugin_version()
+            return versions
+        if self.dsh_home is not None:
+            try:
+                versions["plugin"] = self._installed_plugin_version()
+            except UpdateError:
+                pass
         return versions
 
     def _installed_plugin_version(self) -> str:
@@ -867,6 +874,10 @@ class UpdateManager:
                     shutil.copy2(safe_version_target, version_backup)
                 replaced.append((safe_version_target, version_backup))
                 self._write_atomic(safe_version_target, version_bytes)
+            try:
+                shutil.rmtree(prepared_root, ignore_errors=True)
+            except OSError:
+                pass
             return {"ok": True, "component": self.component, "version": expected_version,
                     "backup_dir": str(backup_dir), "restart_required": True,
                     "updated_files": len(staged), "error": ""}
@@ -911,9 +922,18 @@ class UpdateManager:
                         record = _json_object((path / "prepared.json").read_bytes())
                     except (OSError, UpdateError):
                         continue
-                    if record.get("component") == self.component:
-                        prepared.append({"prepared_id": str(record.get("id") or ""),
-                                         "to_version": str(record.get("to_version") or "")})
+                    if record.get("component") != self.component:
+                        continue
+                    to_version = record.get("to_version")
+                    if not isinstance(to_version, str):
+                        continue
+                    try:
+                        if not _is_newer(to_version, current):
+                            continue
+                    except UpdateError:
+                        continue
+                    prepared.append({"prepared_id": str(record.get("id") or ""),
+                                     "to_version": to_version})
             restart_required = False
             try:
                 applied = _json_object((self.state_dir / f"applied-{self.component}.json").read_bytes())

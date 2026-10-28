@@ -615,6 +615,8 @@ def test_built_release_archives_prepare_and_apply_for_all_components(
     assert plugin_prepared["ok"] is True, plugin_prepared
     plugin_result = plugin.apply(plugin_prepared["prepared_id"])
     assert plugin_result["ok"] is True, plugin_result
+    assert node.status()["prepared"] == []
+    assert plugin.status()["prepared"] == []
     installed_client_package = json.loads((packages / "tether-dsh-client/package.json").read_text(encoding="utf-8"))
     assert installed_client_package["version"] == version
     assert plugin.status()["current_version"] == version
@@ -718,3 +720,34 @@ def test_real_020_release_archives_upgrade_with_bootstrap_updater(
     assert plugin_result["ok"] is True, plugin_result
     assert plugin.status()["current_version"] == version
     assert (packages / "tether-dsh-surface/updater/tether/updates.py").is_file()
+
+
+def test_app_and_node_version_reads_preserve_actual_plugin_version(tmp_path: Path) -> None:
+    root = tmp_path / "install"
+    seed_version(root)
+    dsh_home = tmp_path / "dsh"
+    client = dsh_home / "profiles/desktop/node_modules/tether-dsh-client/lib/client.js"
+    client.parent.mkdir(parents=True)
+    client.write_text("const PLUGIN_VERSION = '0.2.2'\n", encoding="utf-8")
+    for component in ("app", "node"):
+        manager = UpdateManager(root, component, dsh_home=dsh_home, state_dir=tmp_path / f"state-{component}")
+        versions = manager._versions()
+        assert versions == {"app": "0.2.0", "node": "0.2.0", "plugin": "0.2.2"}
+    plugin = UpdateManager(root, "plugin", dsh_home=dsh_home, state_dir=tmp_path / "state-plugin")
+    assert plugin._versions() == {"app": "0.2.0", "node": "0.2.0", "plugin": "0.2.2"}
+
+
+def test_status_ignores_prepared_updates_that_are_not_newer(tmp_path: Path) -> None:
+    root = tmp_path / "install"
+    seed_version(root)
+    manager = UpdateManager(root, "app", dsh_home=tmp_path / "empty-dsh", state_dir=tmp_path / "state")
+    prepared_dir = manager.state_dir / "prepared" / ("a" * 32)
+    prepared_dir.mkdir(parents=True)
+    (prepared_dir / "prepared.json").write_text(json.dumps({
+        "id": "a" * 32, "component": "app", "from_version": "0.2.0", "to_version": "0.2.2",
+    }), encoding="utf-8")
+    assert manager.status()["prepared"][0]["to_version"] == "0.2.2"
+    (root / "version.json").write_text(json.dumps({
+        "schema": 1, "components": {"app": "0.2.2", "plugin": "0.2.0", "node": "0.2.0"},
+    }), encoding="utf-8")
+    assert manager.status()["prepared"] == []

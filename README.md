@@ -21,14 +21,14 @@ The client and Node need the address and credentials for the same compatible ser
 
 **Without access to a private service:** configure a reachable, compatible Hub that you operate or are authorized to use. For the APP, put its URL, access token, and Node token in the extracted APP's local `apps/tether-app/data/hub.json` (keys: `url`, `accessToken`, `nodeToken`) or supply the corresponding `TETHER_CONTROLLER_URL`, `TETHER_ACCESS_TOKEN`, and `TETHER_NODE_TOKEN` environment variables. For a Node, set `TETHER_CONTROLLER=wss://<your-hub>/ws/node` and its assigned `TETHER_NODE_TOKEN`; configure the DSH plugin through its connection page. These values are examples; replace the host and tokens locally, and do not commit credentials. If no compatible service is reachable and configured, remote device features are unavailable.
 
-## Download v0.2.2 packages
+## Download v0.2.3 packages
 
-The [v0.2.2 GitHub Release](https://github.com/qi001007/tether-harness/releases/tag/v0.2.2) contains one ZIP per component and the update manifest:
+The [v0.2.3 GitHub Release](https://github.com/qi001007/tether-harness/releases/tag/v0.2.3) contains one ZIP per component and the update manifest:
 
-- [APP ZIP](https://github.com/qi001007/tether-harness/releases/download/v0.2.2/tether-app-0.2.2.zip)
-- [DSH plugin ZIP](https://github.com/qi001007/tether-harness/releases/download/v0.2.2/tether-plugin-0.2.2.zip)
-- [Node ZIP](https://github.com/qi001007/tether-harness/releases/download/v0.2.2/tether-node-0.2.2.zip)
-- [Update manifest](https://github.com/qi001007/tether-harness/releases/download/v0.2.2/tether-update.json)
+- [APP ZIP](https://github.com/qi001007/tether-harness/releases/download/v0.2.3/tether-app-0.2.3.zip)
+- [DSH plugin ZIP](https://github.com/qi001007/tether-harness/releases/download/v0.2.3/tether-plugin-0.2.3.zip)
+- [Node ZIP](https://github.com/qi001007/tether-harness/releases/download/v0.2.3/tether-node-0.2.3.zip)
+- [Update manifest](https://github.com/qi001007/tether-harness/releases/download/v0.2.3/tether-update.json)
 
 These are ZIP packages, not self-contained EXE installers. They do not include or configure a Hub. Configure all components to use the same reachable, compatible service and use compatible client, plugin, Node, and service versions.
 
@@ -50,7 +50,7 @@ Reopen DeepSeek Harness and select **Tether** in the sidebar. This archive insta
 
 On Windows, extract the ZIP, then follow its included `README-INSTALL.md`. The bootstrap requires Python 3.10+, Node.js 24 LTS, and npm. Configure the Hub WebSocket URL and the Node token issued by its operator; Nodes connect outbound and do not need a public inbound port. The Node's file policy determines which operations are allowed.
 
-The v0.2.2 packages and manifest are built from this tag and checked before publication. v0.2.2 fixes the first-run Python environment check, publishes the DSH surface profile used by remote plugin updates, and turns an unavailable local plugin update channel into a clear fallback message. Archive and manifest checks do not by themselves establish a target-device upgrade, rollback, or cross-device acceptance. The packages are not digitally signed. The legacy `v0.2.0` release has been withdrawn; its tag remains with a withdrawal notice.
+The v0.2.3 packages and manifest are built from this tag and checked before publication. v0.2.3 keeps the first-run/surface fixes from v0.2.2, restores a visible APP window after a self-update relaunch, removes applied prepared updates from status, and preserves the actual installed plugin version when APP or Node metadata is rewritten. Archive and manifest checks do not by themselves establish a target-device upgrade, rollback, or cross-device acceptance. The packages are not digitally signed. The legacy `v0.2.0` release has been withdrawn; its tag remains with a withdrawal notice.
 
 ## Plugin tools
 

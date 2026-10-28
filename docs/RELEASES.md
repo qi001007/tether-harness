@@ -1,5 +1,15 @@
 # Public client releases
 
+## v0.2.3
+
+Fixes found during the v0.2.1 to v0.2.2 upgrade acceptance:
+
+- APP self-update now relaunches the APP with a visible window; the previous helper started the child with `windowsHide: true`.
+- Applied prepared updates are removed from the update status, and prepared records that are not newer than the current version are ignored.
+- APP and Node metadata writes preserve the plugin version actually installed in the DSH profile instead of regressing it.
+
+This release includes the v0.2.2 first-run bootstrap and surface profile fixes. Packages are unsigned; real upgrade, rollback, and cross-device acceptance remain separately recorded.
+
 ## v0.2.2
 
 This release fixes three defects found during the v0.2.1 baseline installation:
