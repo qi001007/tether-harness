@@ -51,7 +51,10 @@ test('local plugin updater invokes a bundled Python module with fixed plugin pat
   assert.equal(calls[0].options.env.DEEPSEEK_API_KEY, undefined)
   assert.equal(calls[0].options.env.TETHER_NODE_TOKEN, undefined)
   assert.deepEqual(await handler('prepare', { url: 'https://attacker.invalid' }, undefined, ownerPeer), {
-    ok: false, error: { code: 'invalid_request', message: 'prepare does not accept parameters', details: {} }
+    ok: false, error: { code: 'invalid_request', message: 'prepare does not accept url', details: {} }
+  })
+  assert.deepEqual(await handler('prepare', { manifest_url: 'http://plain.invalid/tether-update.json' }, undefined, ownerPeer), {
+    ok: false, error: { code: 'invalid_request', message: 'manifest_url must be a trusted HTTPS URL', details: {} }
   })
   assert.equal(calls.length, 1)
 })
@@ -146,4 +149,46 @@ test('selectedProfile falls back to the live DSH host profile argument', () => {
   assert.equal(selectedProfile('C:/installed/tether-dsh-surface', root, ['node', 'C:/fixture/.dsh/profiles/desktop/node_modules']), undefined)
   assert.equal(selectedProfile('C:/installed/tether-dsh-surface', root, ['node', 'C:/other/profiles/desktop']), undefined)
   assert.equal(selectedProfile('C:/installed/tether-dsh-surface', root, ['node', 'relative/profiles/desktop']), undefined)
+})
+
+test('a source checkout and the installed profile reporting different versions is flagged as drift', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'tether-plugin-drift-'))
+  try {
+    const repo = path.join(home, 'repo')
+    const surface = path.join(repo, 'packages', 'tether-dsh-surface')
+    const source = path.join(repo, 'packages', 'dsh-plugin-tether-client')
+    const installed = path.join(home, '.dsh', 'profiles', 'desktop', 'node_modules', 'tether-dsh-client')
+    for (const directory of [path.join(surface, 'updater'), path.join(source, 'lib'), path.join(installed, 'lib')]) fs.mkdirSync(directory, { recursive: true })
+    fs.writeFileSync(path.join(source, 'package.json'), JSON.stringify({ name: 'dsh-plugin-tether-client', version: '0.2.14' }))
+    fs.writeFileSync(path.join(source, 'lib', 'client.js'), "const PLUGIN_VERSION = '0.2.14'")
+    fs.writeFileSync(path.join(installed, 'package.json'), JSON.stringify({ name: 'tether-dsh-client', version: '0.2.13' }))
+    fs.writeFileSync(path.join(installed, 'lib', 'client.js'), "const PLUGIN_VERSION = '0.2.13'")
+    const handler = createLocalPluginUpdateHandler({
+      env: { DSH_HOME: path.join(home, '.dsh') }, homeDir: home, packageRoot: surface, existsSync: () => true,
+      execFileImpl: async () => ({ stdout: JSON.stringify({ ok: true, component: 'plugin', current_version: '0.2.14' }) })
+    })
+    const response = await handler('status', {}, undefined, ownerPeer)
+    assert.equal(response.value.runtime_version, '0.2.14')
+    assert.equal(response.value.installed_version, '0.2.13')
+    assert.equal(response.value.source_version, '0.2.14')
+    assert.equal(response.value.version_drift, true)
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true })
+  }
+})
+
+test('overlapping status calls are refused instead of spawning a second updater', async () => {
+  let release
+  const gate = new Promise((resolve) => { release = resolve })
+  let started = 0
+  const handler = createLocalPluginUpdateHandler({
+    env: {}, homeDir: 'C:/fixture', packageRoot: 'C:/fixture/.dsh/profiles/desktop/node_modules/tether-dsh-surface', existsSync: () => true,
+    execFileImpl: async () => { started += 1; await gate; return { stdout: JSON.stringify({ ok: true, component: 'plugin' }) } }
+  })
+  const first = handler('status', {}, undefined, ownerPeer)
+  const second = await handler('status', {}, undefined, ownerPeer)
+  assert.equal(second.value.error_code, 'update_busy')
+  release()
+  assert.equal((await first).ok, true)
+  assert.equal(started, 1)
 })

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import copy
+import socket
 import threading
 import time
 import io
@@ -23,10 +24,14 @@ from concurrent.futures import Future, TimeoutError as FutureTimeout
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from .release import ReleaseSignatureError, verify_signature
 
-UPDATER_VERSION = "0.2.3"
+
+UPDATER_VERSION = "0.2.14"
 LEGACY_BASELINE_VERSION = "0.2.0"
 UPDATE_PROTOCOL = 1
+MIN_UPDATE_PROTOCOL = 1
+MAX_UPDATE_PROTOCOL = 1
 DEFAULT_MANIFEST_URL = (
     "https://github.com/qi001007/tether-harness/releases/latest/download/tether-update.json"
 )
@@ -38,7 +43,10 @@ MAX_ARCHIVE_FILES = 4096
 MAX_COMPRESSION_RATIO = 150
 COMPONENTS = {"app", "plugin", "node"}
 MANIFEST_CHECK_CACHE_TTL = 60.0
-MANIFEST_CHECK_TIMEOUT = 4.0
+MANIFEST_DISK_CACHE_TTL = 600.0
+MANIFEST_DISK_MAX_AGE = 7 * 24 * 3600.0
+MANIFEST_CHECK_TIMEOUT = 15.0
+ARTIFACT_CHECK_TIMEOUT = 60.0
 _manifest_cache_lock = threading.Lock()
 _manifest_check_cache: dict[str, tuple[float, dict[str, Any]]] = {}
 _manifest_check_flights: dict[str, Future[dict[str, Any]]] = {}
@@ -59,6 +67,8 @@ PLUGIN_UPDATER_FILES = {
     "updater/tether/__init__.py",
     "updater/tether/updates.py",
     "updater/tether/updates_cli.py",
+    "updater/tether/release.py",
+    "updater/tether/ed25519.py",
     "updater/tether/node/__init__.py",
     "updater/tether/node/dsh_sessions.py",
 }
@@ -68,8 +78,11 @@ APP_ALLOWED = (
     "packages/tether-ui/src/",
     "packages/tether-ui/web/",
     "assets/",
+    "tether/__init__.py",
     "tether/updates.py",
     "tether/updates_cli.py",
+    "tether/release.py",
+    "tether/ed25519.py",
     "desktop/install-app.ps1",
     "version.json",
 )
@@ -94,6 +107,13 @@ ERROR_MESSAGES = {
     "invalid_manifest": "更新清单格式无效。",
     "unsupported_manifest": "更新清单版本不受支持。",
     "unsupported_protocol": "更新协议版本不兼容。",
+    "client_update_required": "更新源要求更高版本的 Tether 客户端，请先手动安装最新发行版。",
+    "signature_missing": "更新清单未签名，已阻止安装。",
+    "signature_invalid": "更新清单签名校验失败，已阻止安装。",
+    "manifest_unavailable": "暂时无法获取更新清单，请稍后重试。",
+    "artifact_too_large": "更新文件超过大小限制。",
+    "artifact_hash_mismatch": "更新文件校验失败。",
+    "rollout_paused": "该版本正在分批发布，当前设备暂未开放。",
     "updater_too_old": "当前更新器版本过旧。",
     "dirty_checkout": "检测到未提交的开发文件，已阻止更新以保留本地工作。",
     "plugin_package_missing": "DeepSeek Harness 桌面配置中缺少待更新的 Tether 插件包。",
@@ -170,6 +190,77 @@ def _is_newer(remote: str, current: str) -> bool:
     return len(r[3]) > len(c[3])
 
 
+def _rollout_item(item: dict[str, Any]) -> dict[str, Any] | None:
+    rollout = item.get("rollout")
+    if not isinstance(rollout, dict):
+        return None
+    percent = rollout.get("percent", 100)
+    if type(percent) is not int or not 0 <= percent <= 100:
+        raise UpdateError("invalid_manifest")
+    include = rollout.get("include", [])
+    exclude = rollout.get("exclude", [])
+    for values in (include, exclude):
+        if not isinstance(values, list) or len(values) > 500:
+            raise UpdateError("invalid_manifest")
+        if any(not isinstance(value, str) or not value or len(value) > 200 for value in values):
+            raise UpdateError("invalid_manifest")
+    return {"percent": percent, "include": include, "exclude": exclude, "hold": rollout.get("hold") is True}
+
+
+def _rollout_allows(item: dict[str, Any], component: str, version: str, device: str) -> bool:
+    rollout = _rollout_item(item)
+    if rollout is None:
+        return True
+    if rollout["hold"]:
+        return False
+    if device and device in rollout["include"]:
+        return True
+    if device and device in rollout["exclude"]:
+        return False
+    percent = rollout["percent"]
+    if percent >= 100:
+        return True
+    if percent <= 0:
+        return False
+    bucket = int(hashlib.sha256(f"{device}|{component}|{version}".encode("utf-8")).hexdigest()[:8], 16) % 100
+    return bucket < percent
+
+
+def _safe_device(value: str | None) -> str:
+    raw = value if isinstance(value, str) and value.strip() else os.environ.get("TETHER_DEVICE", "")
+    if not raw:
+        raw = socket.gethostname()
+    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "-", str(raw).strip())[:120].strip("-")
+    return cleaned or "unknown"
+
+
+def select_profile(dsh_home: Path, preferred: str | None = None) -> str | None:
+    """Pick the DSH profile that actually contains the Tether plugin."""
+    if preferred and re.fullmatch(r"[A-Za-z0-9_-]{1,80}", preferred):
+        candidate = Path(dsh_home) / "profiles" / preferred / "node_modules" / "tether-dsh-client"
+        if candidate.is_dir():
+            return preferred
+    profiles = Path(dsh_home) / "profiles"
+    try:
+        entries = [path for path in profiles.iterdir() if path.is_dir()]
+    except OSError:
+        return None
+    found: list[tuple[float, str]] = []
+    for path in entries:
+        client = path / "node_modules" / "tether-dsh-client" / "package.json"
+        if client.is_file():
+            try:
+                found.append((client.stat().st_mtime, path.name))
+            except OSError:
+                found.append((0.0, path.name))
+    if not found:
+        return None
+    for _mtime, name in found:
+        if name == "desktop":
+            return name
+    return max(found)[1]
+
+
 def _json_object(raw: bytes) -> dict[str, Any]:
     try:
         value = json.loads(raw.decode("utf-8"))
@@ -225,6 +316,10 @@ class UpdateManager:
         manifest_url: str | None = None,
         state_dir: Path | None = None,
         profile: str = "desktop",
+        device: str | None = None,
+        fallback_manifest_urls: list[str] | None = None,
+        allow_unsigned: bool | None = None,
+        public_key_hex: str | None = None,
     ) -> None:
         if component not in COMPONENTS:
             raise ValueError("component must be app, plugin, or node")
@@ -235,9 +330,28 @@ class UpdateManager:
         self.profile = profile
         self.dsh_home = Path(dsh_home or (Path.home() / ".dsh")).expanduser().resolve()
         self.state_dir = Path(state_dir or (self.root / ".runtime" / "updates")).expanduser().resolve()
+        self.device = _safe_device(device)
         explicit_url = manifest_url is not None
         self.manifest_url = manifest_url or os.environ.get("TETHER_UPDATE_MANIFEST_URL") or DEFAULT_MANIFEST_URL
+        self._manifest_urls = []
+        urls = [self.manifest_url]
+        urls.extend([DEFAULT_MANIFEST_URL] if fallback_manifest_urls is None else fallback_manifest_urls)
+        for url in urls:
+            if isinstance(url, str) and url and url not in self._manifest_urls:
+                self._manifest_urls.append(url)
         self._allow_loopback_http = explicit_url and self._is_loopback_http_url(self.manifest_url)
+        self._allow_unsigned_explicit = allow_unsigned is not None
+        if allow_unsigned is None:
+            allow_unsigned = os.environ.get("TETHER_ALLOW_UNSIGNED_RELEASE", "") == "1"
+        self._allow_unsigned = bool(allow_unsigned)
+        self._public_key_hex = public_key_hex
+        self.channel = str(os.environ.get("TETHER_UPDATE_CHANNEL") or "stable").strip().lower()
+        if self.channel not in {"stable", "beta"}:
+            self.channel = "stable"
+        self._disk_manifest_path = self.state_dir / "manifest-cache.json"
+        self._last_source = ""
+        self._last_stale = False
+        self._last_checked_at = 0.0
 
     @staticmethod
     def _is_loopback_http_url(value: str) -> bool:
@@ -293,10 +407,16 @@ class UpdateManager:
         except (OSError, urllib.error.URLError, TimeoutError):
             raise UpdateError("download_failed") from None
 
-    def _read_manifest(self, *, timeout: float = 15.0) -> dict[str, Any]:
-        manifest = _json_object(self._fetch(self.manifest_url, MAX_MANIFEST_BYTES, timeout=timeout))
+    def _read_manifest(self, url: str | None = None, *, timeout: float = MANIFEST_CHECK_TIMEOUT) -> dict[str, Any]:
+        source = url or self.manifest_url
+        manifest = _json_object(self._fetch(source, MAX_MANIFEST_BYTES, timeout=timeout))
         if type(manifest.get("schema")) is not int or manifest.get("schema") != 1:
             raise UpdateError("unsupported_manifest")
+        channel = manifest.get("channel", "stable")
+        if not isinstance(channel, str) or channel not in {"stable", "beta"}:
+            raise UpdateError("invalid_manifest")
+        if channel != "stable" and channel != self.channel:
+            raise UpdateError("channel_not_selected")
         components = manifest.get("components")
         if not isinstance(components, dict) or not COMPONENTS.issubset(components):
             raise UpdateError("invalid_manifest")
@@ -308,48 +428,132 @@ class UpdateManager:
             _semver(item.get("min_updater"))
             if _is_newer(item["min_updater"], UPDATER_VERSION):
                 raise UpdateError("updater_too_old")
-            if type(item.get("protocol")) is not int or item.get("protocol") != UPDATE_PROTOCOL:
-                raise UpdateError("unsupported_protocol")
+            protocol = item.get("protocol")
+            if type(protocol) is not int or protocol < MIN_UPDATE_PROTOCOL:
+                raise UpdateError("invalid_manifest")
+            if protocol > MAX_UPDATE_PROTOCOL:
+                raise UpdateError("client_update_required")
+            min_protocol = item.get("min_protocol", MIN_UPDATE_PROTOCOL)
+            if type(min_protocol) is not int or not MIN_UPDATE_PROTOCOL <= min_protocol <= protocol:
+                raise UpdateError("invalid_manifest")
+            if min_protocol > UPDATE_PROTOCOL:
+                raise UpdateError("client_update_required")
+            _rollout_item(item)
             if not self._url_allowed(item.get("url")):
                 raise UpdateError("insecure_url")
             if type(item.get("size")) is not int or not 0 < item["size"] <= MAX_ARCHIVE_BYTES:
                 raise UpdateError("invalid_manifest")
             if not isinstance(item.get("sha256"), str) or not re.fullmatch(r"[0-9a-f]{64}", item["sha256"]):
                 raise UpdateError("invalid_manifest")
+        try:
+            verify_signature(manifest, self._public_key_hex)
+        except ReleaseSignatureError as exc:
+            dev_loopback = not self._allow_unsigned_explicit and self._is_loopback_http_url(source)
+            if not (exc.code == "signature_missing" and (self._allow_unsigned or dev_loopback)):
+                raise UpdateError(exc.code) from None
+        self._last_source = source
+        self._last_stale = False
         return manifest
 
-    def _load_manifest(self, *, use_check_cache: bool = False) -> dict[str, Any]:
-        if not use_check_cache:
-            return self._read_manifest()
+    def _load_disk_manifest(self, max_age: float) -> dict[str, Any] | None:
+        try:
+            record = _json_object(self._disk_manifest_path.read_bytes())
+        except (OSError, UpdateError):
+            return None
+        if record.get("schema") != 1:
+            return None
+        fetched_at = record.get("fetched_at")
+        manifest = record.get("manifest")
+        if not isinstance(fetched_at, (int, float)) or not isinstance(manifest, dict):
+            return None
+        if time.time() - float(fetched_at) > max_age:
+            return None
+        try:
+            verify_signature(manifest, self._public_key_hex)
+        except ReleaseSignatureError as exc:
+            source = record.get("source")
+            dev_loopback = not self._allow_unsigned_explicit and self._is_loopback_http_url(source)
+            if not (exc.code == "signature_missing" and (self._allow_unsigned or dev_loopback)):
+                return None
+        return manifest
+
+    def _save_disk_manifest(self, manifest: dict[str, Any], source: str) -> None:
+        try:
+            self.state_dir.mkdir(parents=True, exist_ok=True)
+            self._write_atomic(self._disk_manifest_path, (json.dumps({
+                "schema": 1, "fetched_at": time.time(), "source": source, "manifest": manifest,
+            }, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
+        except OSError:
+            pass
+
+    def _load_manifest(self, *, use_check_cache: bool = False, force: bool = False) -> dict[str, Any]:
+        if not force and use_check_cache:
+            cached = self._load_disk_manifest(MANIFEST_DISK_CACHE_TTL)
+            if cached is not None:
+                self._last_source = "disk-cache"
+                self._last_stale = False
+                return cached
         now = time.monotonic()
+        if not force and use_check_cache:
+            with _manifest_cache_lock:
+                cached = _manifest_check_cache.get(self.manifest_url)
+                if cached is not None and cached[0] > now:
+                    self._last_source = self.manifest_url
+                    self._last_stale = False
+                    return copy.deepcopy(cached[1])
         with _manifest_cache_lock:
-            cached = _manifest_check_cache.get(self.manifest_url)
-            if cached is not None and cached[0] > now:
-                return copy.deepcopy(cached[1])
             flight = _manifest_check_flights.get(self.manifest_url)
             leader = flight is None
             if leader:
                 flight = Future()
                 _manifest_check_flights[self.manifest_url] = flight
         assert flight is not None
-        if not leader:
+        if not leader and use_check_cache and not force:
             try:
                 return copy.deepcopy(flight.result(timeout=MANIFEST_CHECK_TIMEOUT + 0.5))
             except FutureTimeout:
                 raise UpdateError("download_failed") from None
+        errors: list[UpdateError] = []
+        manifest: dict[str, Any] | None = None
         try:
-            manifest = self._read_manifest(timeout=MANIFEST_CHECK_TIMEOUT)
+            for url in self._manifest_urls:
+                try:
+                    manifest = self._read_manifest(url, timeout=MANIFEST_CHECK_TIMEOUT)
+                    break
+                except UpdateError as exc:
+                    errors.append(exc)
+            if manifest is None:
+                stale = self._load_disk_manifest(MANIFEST_DISK_MAX_AGE)
+                if stale is not None:
+                    self._last_source = "disk-cache"
+                    self._last_stale = True
+                    manifest = stale
+            if manifest is None:
+                priority = ("client_update_required", "signature_invalid", "signature_missing",
+                            "channel_not_selected", "unsupported_manifest", "invalid_manifest", "manifest_missing")
+                for code in priority:
+                    match = next((error for error in errors if error.code == code), None)
+                    if match is not None:
+                        raise match
+                raise UpdateError("manifest_unavailable")
+            for url in self._manifest_urls:
+                if url == self._last_source:
+                    self._save_disk_manifest(manifest, url)
+                    break
+            with _manifest_cache_lock:
+                _manifest_check_cache[self.manifest_url] = (
+                    time.monotonic() + MANIFEST_CHECK_CACHE_TTL, copy.deepcopy(manifest))
+                _manifest_check_flights.pop(self.manifest_url, None)
+                flight.set_result(copy.deepcopy(manifest))
+            return copy.deepcopy(manifest)
         except Exception as exc:
             with _manifest_cache_lock:
                 _manifest_check_flights.pop(self.manifest_url, None)
-                flight.set_exception(exc)
-            raise
-        with _manifest_cache_lock:
-            _manifest_check_cache[self.manifest_url] = (
-                time.monotonic() + MANIFEST_CHECK_CACHE_TTL, copy.deepcopy(manifest))
-            _manifest_check_flights.pop(self.manifest_url, None)
-            flight.set_result(copy.deepcopy(manifest))
-        return manifest
+                if leader:
+                    flight.set_exception(exc)
+            if isinstance(exc, UpdateError):
+                raise
+            raise UpdateError("download_failed") from None
 
     def _versions(self) -> dict[str, str]:
         path = self.root / "version.json"
@@ -375,40 +579,91 @@ class UpdateManager:
                 pass
         return versions
 
-    def _installed_plugin_version(self) -> str:
+    def _plugin_details(self) -> dict[str, Any]:
+        if not (self.dsh_home / "profiles" / self.profile / "node_modules" / "tether-dsh-client").is_dir():
+            resolved = select_profile(self.dsh_home, self.profile)
+            if resolved:
+                self.profile = resolved
         packages = self.dsh_home / "profiles" / self.profile / "node_modules"
+        found: dict[str, str] = {}
+        missing: list[str] = []
+        for package_name in PLUGIN_PACKAGE_MAP.values():
+            try:
+                manifest = _json_object((packages / package_name / "package.json").read_bytes())
+            except (OSError, UpdateError):
+                missing.append(package_name)
+                continue
+            value = manifest.get("version")
+            try:
+                _semver(value)
+            except UpdateError:
+                missing.append(package_name)
+                continue
+            found[package_name] = value
         client = packages / "tether-dsh-client" / "lib" / "client.js"
         try:
             source = client.read_text(encoding="utf-8")
         except OSError:
             source = ""
         match = re.search(r"\bPLUGIN_VERSION\s*=\s*['\"]([^'\"]+)['\"]", source)
-        versions: list[str] = []
         if match:
-            _semver(match.group(1))
-            versions.append(match.group(1))
-        for package_name in PLUGIN_PACKAGE_MAP.values():
             try:
-                manifest = _json_object((packages / package_name / "package.json").read_bytes())
-            except FileNotFoundError:
-                raise UpdateError("plugin_package_missing") from None
-            value = manifest.get("version")
-            _semver(value)
-            versions.append(value)
-        for package_name, source_root in self._plugin_source_packages().items():
-            source_package = _json_object((source_root / "package.json").read_bytes())
-            value = source_package.get("version")
-            _semver(value)
-            versions.append(value)
-            if package_name == "tether-dsh-client":
-                source_client = (source_root / "lib" / "client.js").read_text(encoding="utf-8")
-                source_match = re.search(r"\bPLUGIN_VERSION\s*=\s*['\"]([^'\"]+)['\"]", source_client)
-                if source_match:
-                    _semver(source_match.group(1))
-                    versions.append(source_match.group(1))
-        if versions:
-            return min(versions, key=_semver)
-        raise UpdateError("local_version_unknown")
+                _semver(match.group(1))
+                found["tether-dsh-client#runtime"] = match.group(1)
+            except UpdateError:
+                missing.append("tether-dsh-client#runtime")
+        if "tether-dsh-client" not in found and "tether-dsh-client#runtime" not in found and "tether-dsh-surface" not in found:
+            raise UpdateError("plugin_package_missing")
+        profile_versions = [value for key, value in found.items() if "#" not in key]
+        profile_version = min(profile_versions, key=_semver) if profile_versions else ""
+        source_versions: list[str] = []
+        warnings: list[str] = []
+        try:
+            sources = self._plugin_source_packages()
+        except UpdateError as exc:
+            sources = {}
+            warnings.append(exc.code)
+        for package_name, source_root in sources.items():
+            try:
+                source_package = _json_object((source_root / "package.json").read_bytes())
+                value = source_package.get("version")
+                _semver(value)
+                source_versions.append(value)
+                if package_name == "tether-dsh-client":
+                    source_client = (source_root / "lib" / "client.js").read_text(encoding="utf-8")
+                    source_match = re.search(r"\bPLUGIN_VERSION\s*=\s*['\"]([^'\"]+)['\"]", source_client)
+                    if source_match:
+                        _semver(source_match.group(1))
+                        source_versions.append(source_match.group(1))
+            except (OSError, UpdateError):
+                warnings.append("plugin_source_unreadable")
+        source_version = max(source_versions, key=_semver) if source_versions else ""
+        candidates = list(found.values()) + source_versions
+        if not candidates:
+            raise UpdateError("local_version_unknown")
+        # Keep detecting mixed profile installs, but never let a newer development
+        # checkout look older than the released profile packages.
+        version = profile_version or source_version
+        if source_version and (not version or _is_newer(source_version, version)):
+            version = source_version
+        return {
+            "version": version,
+            "profile_version": profile_version,
+            "source_version": source_version,
+            "profile": self.profile,
+            "missing_packages": sorted(set(missing)),
+            "warnings": sorted(set(warnings)),
+            "versions": dict(sorted(found.items())),
+        }
+
+    def plugin_health(self) -> dict[str, Any]:
+        try:
+            return {"ok": True, **self._plugin_details()}
+        except UpdateError as exc:
+            return {"ok": False, "error_code": exc.code, "error": ERROR_MESSAGES.get(exc.code, "插件版本读取失败。")}
+
+    def _installed_plugin_version(self) -> str:
+        return str(self._plugin_details()["version"])
 
     @staticmethod
     def _file_dependency_path(spec: Any, package_dir: Path) -> Path | None:
@@ -488,29 +743,38 @@ class UpdateManager:
                     pending.append((dependency_name, dependency_path))
         return expected
 
-    def check(self) -> dict[str, Any]:
+    def check(self, force: bool = False) -> dict[str, Any]:
         try:
             current = self._versions()[self.component]
-            manifest = self._load_manifest(use_check_cache=True)
+            manifest = self._load_manifest(use_check_cache=True, force=force)
             remote = manifest["components"][self.component]
             version = remote["version"]
             newer = _is_newer(version, current)
+            allowed = _rollout_allows(remote, self.component, version, self.device)
+            update_available = newer and allowed
+            checked_at = time.time()
+            rollout = _rollout_item(remote)
+            self._last_checked_at = checked_at
             try:
                 self.state_dir.mkdir(parents=True, exist_ok=True)
                 self._write_atomic(
                     self.state_dir / f"latest-{self.component}.json",
                     (json.dumps({"schema": 1, "component": self.component, "version": version,
-                                 "update_available": newer}, indent=2) + "\n").encode("utf-8"),
+                                 "update_available": update_available, "rollout_paused": newer and not allowed,
+                                 "checked_at": checked_at, "source": self._last_source}, indent=2) + "\n").encode("utf-8"),
                 )
             except OSError:
                 pass
-            return {"ok": True, "component": self.component, "current_version": current,
-                    "latest_version": version, "update_available": newer, "error": ""}
+            result = {"ok": True, "component": self.component, "current_version": current,
+                      "latest_version": version, "update_available": update_available,
+                      "rollout_paused": newer and not allowed,
+                      "rollout_percent": rollout["percent"] if rollout else 100,
+                      "checked_at": checked_at, "stale": self._last_stale,
+                      "manifest_source": self._last_source, "device": self.device, "error": ""}
+            if self.component == "plugin":
+                result["plugin"] = self.plugin_health()
+            return result
         except UpdateError as exc:
-            try:
-                (self.state_dir / f"latest-{self.component}.json").unlink()
-            except OSError:
-                pass
             return self._error(exc.code)
         except OSError:
             return self._error("local_state_error")
@@ -601,7 +865,7 @@ class UpdateManager:
         import subprocess
 
         packages = self.dsh_home / "profiles" / self.profile / "node_modules"
-        for package in PLUGIN_PACKAGE_MAP.values():
+        for package in ("tether-dsh-client", "tether-dsh-surface"):
             if not (packages / package).is_dir():
                 raise UpdateError("plugin_package_missing")
         sources = self._plugin_source_packages()
@@ -694,7 +958,9 @@ class UpdateManager:
             if self.component == "app":
                 if path in {"pyproject.toml", ".env.example", "README-INSTALL.md"}:
                     return None
-                if path.startswith("tether/") and path not in {"tether/updates.py", "tether/updates_cli.py"}:
+                if path.startswith("tether/") and path not in {
+                        "tether/__init__.py", "tether/updates.py", "tether/updates_cli.py",
+                        "tether/release.py", "tether/ed25519.py"}:
                     return None
                 if path.startswith("apps/tether-app/") and pure.name in {"description.md", "backlog.md"}:
                     return None
@@ -747,7 +1013,7 @@ class UpdateManager:
             raise UpdateError("file_not_allowed")
         relative = Path("profiles") / self.profile / "node_modules" / package_name
         target = self.dsh_home / relative / Path(*pure.parts[2:])
-        if not (self.dsh_home / relative).is_dir():
+        if package_name in {"tether-dsh-client", "tether-dsh-surface"} and not (self.dsh_home / relative).is_dir():
             raise UpdateError("plugin_package_missing")
         return target, str(relative / Path(*pure.parts[2:]))
 
@@ -868,9 +1134,11 @@ class UpdateManager:
             required = {
                 "app": {"version.json", "apps/tether-app/main.js", "apps/tether-app/preload.js",
                         "apps/tether-app/package.json", "packages/tether-ui/src/app.js",
-                        "tether/updates.py", "tether/updates_cli.py"},
+                        "tether/__init__.py", "tether/updates.py", "tether/updates_cli.py",
+                        "tether/release.py", "tether/ed25519.py"},
                 "node": {"version.json", "pyproject.toml", "tether/node/agent.py",
-                         "tether/updates.py", "tether/updates_cli.py"},
+                         "tether/updates.py", "tether/updates_cli.py",
+                         "tether/release.py", "tether/ed25519.py"},
                 "plugin": {"version.json", "packages/dsh-plugin-tether/package.json",
                            "packages/dsh-plugin-tether-client/lib/client.js",
                            "packages/tether-dsh-native-ui/lib/client.js",
@@ -884,6 +1152,25 @@ class UpdateManager:
                 raise UpdateError("empty_archive")
         return staged
 
+    def _fetch_artifact(self, item: dict[str, Any]) -> bytes:
+        urls: list[str] = []
+        source = self._last_source
+        if isinstance(source, str) and source.endswith("/releases/manifest"):
+            urls.append(source[: -len("/manifest")] + "/artifacts/" + item["sha256"])
+        override = os.environ.get("TETHER_UPDATE_ARTIFACT_MIRROR", "").strip()
+        if override:
+            urls.append(override.rstrip("/") + "/" + item["sha256"])
+        urls.append(item["url"])
+        errors: list[UpdateError] = []
+        for url in dict.fromkeys(urls):
+            try:
+                return self._fetch(url, MAX_ARCHIVE_BYTES, timeout=ARTIFACT_CHECK_TIMEOUT)
+            except UpdateError as exc:
+                errors.append(exc)
+        if errors:
+            raise errors[-1]
+        raise UpdateError("download_failed")
+
     def prepare(self) -> dict[str, Any]:
         prepared_root: Path | None = None
         try:
@@ -893,12 +1180,14 @@ class UpdateManager:
             if self.component == "plugin":
                 self._check_plugin_targets()
             current = self._versions()[self.component]
-            manifest = self._load_manifest()
+            manifest = self._load_manifest(force=True)
             item = manifest["components"][self.component]
             target_version = item["version"]
             if not _is_newer(target_version, current):
                 return self._error("no_update")
-            archive_bytes = self._fetch(item["url"], MAX_ARCHIVE_BYTES)
+            if not _rollout_allows(item, self.component, target_version, self.device):
+                return self._error("rollout_paused")
+            archive_bytes = self._fetch_artifact(item)
             prepared_id = uuid.uuid4().hex
             self.state_dir.mkdir(parents=True, exist_ok=True)
             prepared_root = self.state_dir / "prepared" / prepared_id
@@ -1007,6 +1296,14 @@ class UpdateManager:
             current = self._versions()[self.component]
             if record.get("from_version") != current or not _is_newer(expected_version, current):
                 raise UpdateError("prepared_stale")
+            # A prepare can sit for hours; re-check the held rollout against the
+            # cached manifest (no network) so an operator's pause still applies.
+            cached = self._load_disk_manifest(MANIFEST_DISK_MAX_AGE)
+            if cached is not None:
+                cached_item = (cached.get("components") or {}).get(self.component)
+                if isinstance(cached_item, dict) and cached_item.get("version") == expected_version:
+                    if not _rollout_allows(cached_item, self.component, expected_version, self.device):
+                        raise UpdateError("rollout_paused")
             if self.component in {"app", "plugin"} and self.activity()["busy"]:
                 raise UpdateError("app_busy")
             self._check_dependencies(staged)
@@ -1118,17 +1415,36 @@ class UpdateManager:
             except (OSError, UpdateError):
                 pass
             installed_latest: bool | None = None
+            latest_version = ""
+            checked_at = 0.0
+            latest_source = ""
+            rollout_paused = False
             try:
                 latest = _json_object((self.state_dir / f"latest-{self.component}.json").read_bytes())
                 if latest.get("component") == self.component and isinstance(latest.get("version"), str):
+                    latest_version = latest["version"]
                     installed_latest = latest["version"] == current
-            except (OSError, UpdateError):
+                    checked_at = float(latest.get("checked_at") or 0)
+                    latest_source = str(latest.get("source") or "")
+                    rollout_paused = latest.get("rollout_paused") is True
+            except (OSError, UpdateError, TypeError, ValueError):
                 pass
             if prepared:
                 installed_latest = False
-            return {"ok": True, "component": self.component, "current_version": current,
-                    "prepared": prepared, "restart_required": restart_required,
-                    "installed_latest": installed_latest, "error": ""}
+            try:
+                newer = bool(latest_version) and _is_newer(latest_version, current)
+            except UpdateError:
+                newer = False
+            result = {"ok": True, "component": self.component, "current_version": current,
+                      "latest_version": latest_version or None,
+                      "update_available": bool(newer and not rollout_paused),
+                      "checked_at": checked_at or None, "manifest_source": latest_source,
+                      "rollout_paused": rollout_paused, "device": self.device,
+                      "prepared": prepared, "restart_required": restart_required,
+                      "installed_latest": installed_latest, "error": ""}
+            if self.component == "plugin":
+                result["plugin"] = self.plugin_health()
+            return result
         except UpdateError as exc:
             return self._error(exc.code)
         except OSError:

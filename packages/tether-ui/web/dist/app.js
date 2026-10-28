@@ -7325,7 +7325,8 @@ function shortUpdateError(error) {
   if (code === "device_offline") return "\u8BBE\u5907\u79BB\u7EBF";
   if (code === "node_update_required" || code === "bad_component" || code === "not_found") return "\u8282\u70B9\u7248\u672C\u8FC7\u65E7\uFF0C\u8BF7\u5148\u5B89\u88C5\u542B\u66F4\u65B0\u5668\u7684\u53D1\u884C\u7248";
   if (code === "update_timeout") return "\u66F4\u65B0\u68C0\u67E5\u8D85\u65F6\uFF0C\u8BF7\u624B\u52A8\u5237\u65B0\u91CD\u8BD5";
-  if (error && error.status === 404) return "\u670D\u52A1\u7AEF\u4E0D\u652F\u6301\u66F4\u65B0";
+  if (error && (error.status === 404 || error.status === 405 || error.status === 501)) return "\u670D\u52A1\u7AEF\u4E0D\u652F\u6301\u66F4\u65B0";
+  if (error && (error.status === 401 || error.status === 403)) return "\u66F4\u65B0\u670D\u52A1\u62D2\u7EDD\u4E86\u672C\u6B21\u8BF7\u6C42\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55";
   if (code === "device_not_found") return "\u8BBE\u5907\u4E0D\u5B58\u5728";
   if (error && !error.status && !code) return "Hub \u4E0D\u53EF\u8FBE";
   return updateErrorText(error);
@@ -7419,6 +7420,9 @@ function withUpdateTimeout(promise, timeoutMs, message = "\u66F4\u65B0\u68C0\u67
 }
 function updateCheckKey(component, scope) {
   return (scope ? scope.deviceId + ":" + scope.epoch : "local") + ":" + component;
+}
+function localUpdateWaitMs(component) {
+  return component === "localPlugin" ? 22e3 : 6500;
 }
 function validateWorkspaceResponse(data) {
   if (!data || data.ok === false || !Array.isArray(data.workspaces) || data.workspaces.some((workspace) => !workspace || typeof workspace.path !== "string")) throw new Error("\u5DE5\u4F5C\u533A\u63A5\u53E3\u8FD4\u56DE\u7684\u6570\u636E\u683C\u5F0F\u65E0\u6548");
@@ -8069,12 +8073,13 @@ function createTetherPanel({ React: React2, Native, host }) {
       .tether-scroll:hover::-webkit-scrollbar-thumb { background: var(--dsw-alias-scrollbar-hover-l1, #cbd5e1); }
       .tether-scroll::-webkit-scrollbar-corner { background: transparent; }
       .tether-num { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum' 1; }
-      .tether-spin { display: inline-grid; width: 1em; height: 1em; flex: 0 0 auto; place-items: center; transform-box: border-box; transform-origin: 50% 50%; animation: tether-refresh-rotate .8s linear infinite; }
+      .tether-spin { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+      .tether-spin > svg { display: block; transform-box: view-box; transform-origin: 50% 50%; animation: tether-refresh-rotate .8s linear infinite; }
       @keyframes tether-refresh-rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       .tether-node-fill { position: absolute; inset: 0; z-index: 1; border-radius: 50%; corner-shape: round; transition: background-color 160ms ease; }
       .tether-file-markdown { max-width: 860px; margin: 0 auto; color: var(--dsw-alias-label-primary); font-size: 14px; line-height: 24px; }
       .tether-file-text { tab-size: 2; }
-      @media (prefers-reduced-motion: reduce) { .tether-spin { animation-duration: 1.6s; } }
+      @media (prefers-reduced-motion: reduce) { .tether-spin > svg { animation-duration: 1.6s; } }
       .tether-flow { display: flex; flex-direction: column; max-width: calc(var(--dsh-chat-content-width, 748px) + 32px); width: 100%; margin: 0 auto; padding: 0 16px; box-sizing: border-box; }
       .tether-turn { display: flex; flex-direction: column; min-width: 0; }
       .tether-turn + .tether-turn { margin-top: 24px; }
@@ -8182,6 +8187,10 @@ function createTetherPanel({ React: React2, Native, host }) {
     ] },
     stop: { parts: [
       { d: "M4.6 4.6h6.8v6.8H4.6z", fill: "currentColor", stroke: false }
+    ] },
+    eye: { parts: [
+      { d: "M1.8 8s2.2-4.2 6.2-4.2S14.2 8 14.2 8s-2.2 4.2-6.2 4.2S1.8 8 1.8 8z" },
+      { d: "M8 9.6A1.6 1.6 0 1 0 8 6.4a1.6 1.6 0 0 0 0 3.2z" }
     ] },
     pencil: { parts: [
       { d: "M10.8 2.6l2.6 2.6-7.7 7.7-3.4.8.8-3.4z" },
@@ -8949,6 +8958,7 @@ function createTetherPanel({ React: React2, Native, host }) {
     const previewBytesRef = React2.useRef(0);
     const previewInflightRef = React2.useRef(/* @__PURE__ */ new Map());
     const previewAbortRef = React2.useRef(null);
+    const previewOpeningKeyRef = React2.useRef("");
     const previewSeqRef = React2.useRef(0);
     const workspaceCacheRef = React2.useRef(/* @__PURE__ */ new Map());
     const drivesCacheRef = React2.useRef(/* @__PURE__ */ new Map());
@@ -9000,6 +9010,8 @@ function createTetherPanel({ React: React2, Native, host }) {
     const [ask, setAsk] = React2.useState(null);
     const [path, setPath] = React2.useState("");
     const [pathDraft, setPathDraft] = React2.useState("");
+    const [pathEditing, setPathEditing] = React2.useState(false);
+    const [clipboard, setClipboard] = React2.useState(null);
     pathRef.current = path;
     const [hoverTip, setHoverTip] = React2.useState(null);
     const [selected, setSelected] = React2.useState(null);
@@ -9138,7 +9150,7 @@ function createTetherPanel({ React: React2, Native, host }) {
       }
       if (component === "localPlugin") {
         if (!host || host.kind !== "dsh" || !host.localPluginUpdates) throw new Error("\u5F53\u524D\u5BBF\u4E3B\u6CA1\u6709\u672C\u673A DSH \u63D2\u4EF6\u66F4\u65B0\u901A\u9053\u3002");
-        const result2 = await withUpdateTimeout(host.localPluginUpdates(action === "status" ? "status" : "check"), 6e3);
+        const result2 = await withUpdateTimeout(host.localPluginUpdates(action === "status" ? "status" : "check"), localUpdateWaitMs(component));
         if (result2 && result2.ok === false) throw new Error(result2.message || result2.error || (action === "status" ? "\u672C\u673A\u63D2\u4EF6\u66F4\u65B0\u72B6\u6001\u8BFB\u53D6\u5931\u8D25" : "\u672C\u673A\u63D2\u4EF6\u66F4\u65B0\u68C0\u67E5\u5931\u8D25"));
         setComponentUpdateInfo(component, result2);
         return result2;
@@ -9156,13 +9168,13 @@ function createTetherPanel({ React: React2, Native, host }) {
     const updateCheckCacheRef = React2.useRef(/* @__PURE__ */ new Map());
     const automaticUpdateCheck = (component, scope = updateScope(component), force = false) => {
       const key = updateCheckKey(component, scope);
-      withUpdateTimeout(loadUpdateInfo(component, "status", void 0, scope), 6e3).catch(() => {
+      withUpdateTimeout(loadUpdateInfo(component, "status", void 0, scope), localUpdateWaitMs(component)).catch(() => {
       });
       return cachedUpdateCheck(
         updateCheckCacheRef.current,
         key,
         () => dedupeUpdateCheck(autoUpdateChecksRef.current, key, () => checkUpdateAvailability(
-          () => withUpdateTimeout(loadUpdateInfo(component, "check", void 0, scope), 6500),
+          () => withUpdateTimeout(loadUpdateInfo(component, "check", void 0, scope), localUpdateWaitMs(component)),
           () => updateCheckScopeIsCurrent(scope)
         )),
         { force }
@@ -9317,7 +9329,11 @@ function createTetherPanel({ React: React2, Native, host }) {
       if (host && host.kind === "web") return null;
       const localId = appLocalDevice || deviceId;
       const components = product === "desktop" ? ["app", "node"] : ["localPlugin", "node"];
-      const infos = components.map((component) => infoFor(component, component === "node" ? localId : ""));
+      const infos = components.map((component) => {
+        const info = infoFor(component, component === "node" ? localId : "");
+        if (component === "localPlugin" && !info.latest_version && localId) return infoFor("plugin", localId);
+        return info;
+      });
       const busyKey = product === "desktop" ? "desktop" : "dsh";
       const busy2 = updateBusy === "product:" + busyKey;
       const productErrors = updateErrors.devices[localId] || {};
@@ -10272,6 +10288,7 @@ function createTetherPanel({ React: React2, Native, host }) {
       try {
         const pending = dirInflightRef.current.get(key);
         const data = pending ? await pending : await post("/api/devices/" + encodeURIComponent(requestDevice) + "/fs/list", { path: requestTarget }, void 0, { signal: controller.signal });
+        if (!data) throw new Error("\u76EE\u5F55\u8BFB\u53D6\u5931\u8D25");
         if (seq !== dirSeqRef.current || deviceIdRef.current !== requestDevice) return;
         const entries = (data.entries || []).map((entry) => ({ ...entry, path: joinPath(requestTarget, entry.name) }));
         cacheStore(dirCacheRef.current, key, { entries, at: Date.now() });
@@ -10300,6 +10317,8 @@ function createTetherPanel({ React: React2, Native, host }) {
       const requestDevice = deviceId;
       if (!requestDevice) return;
       const key = previewCacheKey(requestDevice, entry.path);
+      if (previewOpeningKeyRef.current === key) return;
+      previewOpeningKeyRef.current = key;
       const cached = opts.fresh === true ? null : previewCacheRef.current.get(key);
       const seq = previewSeqRef.current + 1;
       previewSeqRef.current = seq;
@@ -10346,6 +10365,7 @@ function createTetherPanel({ React: React2, Native, host }) {
         if (cached) previewCacheRef.current.delete(key);
         fail2(e);
       } finally {
+        if (previewOpeningKeyRef.current === key) previewOpeningKeyRef.current = "";
         if (seq === previewSeqRef.current) setPreviewBusy(false);
       }
     };
@@ -10696,6 +10716,71 @@ function createTetherPanel({ React: React2, Native, host }) {
         )
       );
     };
+    const CODE_FILE = /\.(js|mjs|cjs|ts|tsx|jsx|py|json|css|scss|html|sh|ps1|java|c|h|cpp|hpp|cc|m|mm|pr|cs|php|rb|swift|kt|lua|r|pl|tex|vue|svelte|dart|gradle|go|rs|sql|yml|yaml|toml|ini|xml)$/i;
+    const CODE_WORDS = new Set("const let var function return if else for while class import from export async await def None True False public private void new try catch throw extends implements interface type struct fn use package self this in of not and or lambda yield match case switch break continue".split(" "));
+    const renderCode = (text, name) => {
+      if (!CODE_FILE.test(String(name || ""))) return text;
+      const parts = [];
+      const push = (value, color) => {
+        if (!value) return;
+        parts.push(color ? h("span", { key: parts.length, style: { color } }, value) : value);
+      };
+      let i = 0;
+      while (i < text.length) {
+        const ch = text[i];
+        const next = text[i + 1];
+        if (ch === "/" && next === "/") {
+          let j = text.indexOf(String.fromCharCode(10), i);
+          if (j < 0) j = text.length;
+          push(text.slice(i, j), "#6a737d");
+          i = j;
+          continue;
+        }
+        if (ch === "#") {
+          let j = text.indexOf(String.fromCharCode(10), i);
+          if (j < 0) j = text.length;
+          push(text.slice(i, j), "#6a737d");
+          i = j;
+          continue;
+        }
+        if (ch === '"' || ch === "'" || ch === "`") {
+          let j = i + 1;
+          while (j < text.length) {
+            if (text[j] === String.fromCharCode(92)) {
+              j += 2;
+              continue;
+            }
+            if (text[j] === ch) {
+              j += 1;
+              break;
+            }
+            j += 1;
+          }
+          push(text.slice(i, j), "#a31515");
+          i = j;
+          continue;
+        }
+        if (/[0-9]/.test(ch)) {
+          let j = i + 1;
+          while (j < text.length && /[0-9.]/.test(text[j])) j += 1;
+          push(text.slice(i, j), "#098658");
+          i = j;
+          continue;
+        }
+        if (/[A-Za-z_$]/.test(ch)) {
+          let j = i + 1;
+          while (j < text.length && /[A-Za-z0-9_$]/.test(text[j])) j += 1;
+          const word = text.slice(i, j);
+          if (CODE_WORDS.has(word)) push(word, "#0000ff");
+          else parts.push(word);
+          i = j;
+          continue;
+        }
+        parts.push(ch);
+        i += 1;
+      }
+      return parts;
+    };
     const renderToasts = () => {
       const row = (text, color, onClose, extra) => h(
         "div",
@@ -10770,8 +10855,32 @@ function createTetherPanel({ React: React2, Native, host }) {
         iconButton("plus", "\u65B0\u5EFA\u6587\u4EF6", () => makeFile(path), !path || dirLoading || previewBusy),
         h(
           "div",
-          { style: { display: "flex", alignItems: "center", gap: 1, minWidth: 0, overflow: "hidden", marginLeft: 6 } },
-          crumbs.map((segment, index) => h(
+          {
+            title: "\u70B9\u51FB\u7A7A\u767D\u5904\u8F93\u5165\u8DEF\u5F84",
+            onClick: (event) => {
+              if (event.target === event.currentTarget) {
+                setPathDraft(file ? file.path : path);
+                setPathEditing(true);
+              }
+            },
+            style: { display: "flex", alignItems: "center", gap: 1, minWidth: 0, flex: "1 1 auto", overflow: "hidden", marginLeft: 6, height: 28, cursor: "text" }
+          },
+          pathEditing ? h("input", {
+            autoFocus: true,
+            value: pathDraft,
+            spellCheck: false,
+            onChange: (event) => setPathDraft(event.target.value),
+            onBlur: () => setPathEditing(false),
+            onKeyDown: (event) => {
+              if (event.key === "Enter") {
+                setPathEditing(false);
+                setFile(null);
+                if (pathDraft.trim()) loadDir(pathDraft.trim(), { push: true });
+              }
+              if (event.key === "Escape") setPathEditing(false);
+            },
+            style: { flex: "1 1 auto", minWidth: 0, height: 26, boxSizing: "border-box", border: 0, borderRadius: 5, padding: "0 6px", background: C.soft, color: C.ink, fontSize: 12, fontFamily: "Consolas, monospace", outline: "none" }
+          }) : crumbs.map((segment, index) => h(
             React2.Fragment,
             { key: segment.path },
             index ? h("span", { style: { color: C.mute, fontSize: 10, flex: "0 0 auto" } }, "\u203A") : null,
@@ -10806,7 +10915,7 @@ function createTetherPanel({ React: React2, Native, host }) {
         h(
           "span",
           { style: { marginLeft: "auto", display: "flex", alignItems: "center", gap: 2 } },
-          (file.kind === "markdown" || file.kind === "text") && file.writable ? iconButton("pencil", editMode ? "\u9884\u89C8" : "\u7F16\u8F91", () => setEditMode((value) => !value), false) : null,
+          file.kind === "markdown" && file.writable ? iconButton(editMode ? "eye" : "pencil", editMode ? "\u9884\u89C8" : "\u7F16\u8F91", () => setEditMode((value) => !value), false) : null,
           (file.kind === "markdown" || file.kind === "text") && file.writable ? iconButton("save", "\u4FDD\u5B58", saveFile, !dirty || busy) : null,
           h("span", { className: "tether-num", style: { fontSize: 10.5, color: C.mute, marginLeft: 4 } }, formatBytes(file.size))
         )
@@ -10832,7 +10941,7 @@ function createTetherPanel({ React: React2, Native, host }) {
             setDraft(ev.target.value);
             setDirty(true);
           }, spellCheck: false, style: { flex: "1 1 auto", width: "100%", boxSizing: "border-box", resize: "none", border: 0, outline: "none", padding: "14px 18px", fontFamily: "Consolas, monospace", fontSize: 12.5, lineHeight: 1.6, background: C.bg, color: C.ink } });
-          return h("pre", { className: "tether-file-text tether-scroll", style: { flex: "1 1 auto", overflow: "auto", margin: 0, padding: "16px 20px", fontFamily: "Consolas, monospace", fontSize: 12.5, lineHeight: 1.6, whiteSpace: "pre-wrap", color: C.ink, background: C.bg } }, draft);
+          return h("pre", { className: "tether-file-text tether-scroll", style: { flex: "1 1 auto", overflow: "auto", margin: 0, padding: "16px 20px", fontFamily: "Consolas, monospace", fontSize: 12.5, lineHeight: 1.6, whiteSpace: "pre-wrap", color: C.ink, background: C.bg } }, renderCode(draft, file.name));
         }
         if (file.kind === "image") return h(
           "div",
@@ -10940,6 +11049,23 @@ function createTetherPanel({ React: React2, Native, host }) {
         contextMenu.entry ? menuItem("file", "\u6253\u5F00", () => {
           setContextMenu(null);
           openFile(contextMenu.entry);
+        }) : null,
+        contextMenu.entry ? menuItem("file", "\u590D\u5236", () => {
+          const entry = contextMenu.entry;
+          setClipboard(entry);
+          setContextMenu(null);
+          setNotice("\u5DF2\u590D\u5236 " + entry.name);
+        }) : null,
+        clipboard && contextMenu.base ? menuItem("file", "\u7C98\u8D34", async () => {
+          const base = contextMenu.base;
+          setContextMenu(null);
+          try {
+            await post(fsPath("copy"), { path: clipboard.path, dest: String(base).replace(/[\\/]+$/, "") + "\\" + clipboard.name });
+            invalidateDir(deviceId, base);
+            await loadDir(base, { push: false, keepFile: true, fresh: true });
+          } catch (e) {
+            fail2(e);
+          }
         }) : null,
         contextMenu.entry ? menuItem("pencil", "\u91CD\u547D\u540D", () => {
           const entry = contextMenu.entry;

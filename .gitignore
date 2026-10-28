@@ -11,3 +11,4 @@ apps/tether-app/data/
 
 release/
 packages/tether-dsh-surface/updater/
+*.egg-info/

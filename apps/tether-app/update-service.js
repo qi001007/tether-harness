@@ -6,6 +6,30 @@ const { promisify } = require('node:util')
 
 const execFileAsync = promisify(execFile)
 
+const UPDATER_RUNTIME_FILES = ['updates.py', 'updates_cli.py', 'release.py', 'ed25519.py']
+
+// The helper runs after the APP process is gone, so it must carry a self-contained
+// copy of every module tether.updates_cli imports. Walk the package instead of
+// listing files: a new import (release.py, ed25519.py) previously broke self-update.
+function stageUpdaterRuntime(repoRoot, stagingPackage) {
+  const sourcePackage = path.join(repoRoot, 'tether')
+  const runtimeFiles = []
+  const walk = (directory) => {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      if (entry.name === '__pycache__' || entry.name.startsWith('.')) continue
+      const absolute = path.join(directory, entry.name)
+      if (entry.isDirectory()) walk(absolute)
+      else if (entry.isFile() && entry.name.endsWith('.py')) runtimeFiles.push([absolute, path.join(stagingPackage, path.relative(sourcePackage, absolute))])
+    }
+  }
+  if (fs.existsSync(sourcePackage)) walk(sourcePackage)
+  const staged = new Set(runtimeFiles.map(([source]) => path.relative(sourcePackage, source)))
+  if (UPDATER_RUNTIME_FILES.some((name) => !staged.has(name))) throw new Error('更新助手文件缺失，请先安装包含更新器的 Tether 发行版')
+  for (const [, destination] of runtimeFiles) fs.mkdirSync(path.dirname(destination), { recursive: true })
+  for (const [source, destination] of runtimeFiles) fs.copyFileSync(source, destination)
+  return runtimeFiles.length
+}
+
 class UpdateService {
   constructor({ repoRoot, dataDir, python, env, app, exec = execFileAsync, spawnChild = spawn }) {
     this.repoRoot = repoRoot
@@ -93,18 +117,8 @@ class UpdateService {
     const configPath = path.join(userData, 'tether-update-helper.json')
     const stagingDir = path.join(userData, 'update-helper-runtime')
     const stagingPackage = path.join(stagingDir, 'tether')
-    const stagingNodePackage = path.join(stagingPackage, 'node')
-    const runtimeFiles = [
-      [path.join(this.repoRoot, 'tether', 'updates.py'), path.join(stagingPackage, 'updates.py')],
-      [path.join(this.repoRoot, 'tether', 'updates_cli.py'), path.join(stagingPackage, 'updates_cli.py')],
-      [path.join(this.repoRoot, 'tether', '__init__.py'), path.join(stagingPackage, '__init__.py')],
-      [path.join(this.repoRoot, 'tether', 'node', '__init__.py'), path.join(stagingNodePackage, '__init__.py')],
-      [path.join(this.repoRoot, 'tether', 'node', 'dsh_sessions.py'), path.join(stagingNodePackage, 'dsh_sessions.py')]
-    ]
-    if (runtimeFiles.some(([source]) => !fs.existsSync(source))) throw new Error('更新助手文件缺失，请先安装包含更新器的 Tether 发行版')
     fs.mkdirSync(userData, { recursive: true })
-    fs.mkdirSync(stagingNodePackage, { recursive: true })
-    for (const [source, destination] of runtimeFiles) fs.copyFileSync(source, destination)
+    stageUpdaterRuntime(this.repoRoot, stagingPackage)
     fs.copyFileSync(this.helperSource, helperPath)
     const config = {
       pid: process.pid,
@@ -148,4 +162,4 @@ class UpdateService {
   }
 }
 
-module.exports = { UpdateService }
+module.exports = { UpdateService, stageUpdaterRuntime }

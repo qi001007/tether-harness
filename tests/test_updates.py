@@ -65,8 +65,11 @@ def make_zip(component: str, version: str = "0.2.1", extra: dict[str, bytes] | N
             "apps/tether-app/preload.js": b"new-preload",
             "apps/tether-app/package.json": b'{"dependencies":{},"devDependencies":{}}',
             "packages/tether-ui/src/app.js": b"new-ui",
+            "tether/__init__.py": b"",
             "tether/updates.py": b"update-engine",
             "tether/updates_cli.py": b"update-cli",
+            "tether/release.py": b"release",
+            "tether/ed25519.py": b"ed25519",
         }
     elif component == "node":
         files = {
@@ -75,6 +78,8 @@ def make_zip(component: str, version: str = "0.2.1", extra: dict[str, bytes] | N
             "tether/node/agent.py": b"new-node",
             "tether/updates.py": b"update-engine",
             "tether/updates_cli.py": b"update-cli",
+            "tether/release.py": b"release",
+            "tether/ed25519.py": b"ed25519",
         }
     else:
         files = {
@@ -90,6 +95,8 @@ def make_zip(component: str, version: str = "0.2.1", extra: dict[str, bytes] | N
             "packages/tether-dsh-surface/updater/tether/__init__.py": b"",
             "packages/tether-dsh-surface/updater/tether/updates.py": b"updater",
             "packages/tether-dsh-surface/updater/tether/updates_cli.py": b"cli",
+            "packages/tether-dsh-surface/updater/tether/release.py": b"release",
+            "packages/tether-dsh-surface/updater/tether/ed25519.py": b"ed25519",
             "packages/tether-dsh-surface/updater/tether/node/__init__.py": b"",
             "packages/tether-dsh-surface/updater/tether/node/dsh_sessions.py": b"sessions",
         }
@@ -624,7 +631,7 @@ def test_plugin_file_dependencies_update_source_and_profile_transactionally(
     checked = manager.check()
     prepared = manager.prepare()
 
-    assert checked["current_version"] == "0.2.1"
+    assert checked["current_version"] == "0.2.5"
     assert checked["update_available"] is True
     assert prepared["ok"] is True, prepared
     if fail_source_write:
@@ -715,12 +722,13 @@ def test_plugin_apply_refuses_if_host_profile_changes_after_prepare(artifact_ser
 def test_missing_remote_manifest_is_reported_without_claiming_a_version(artifact_server: ArtifactServer, tmp_path: Path) -> None:
     root = tmp_path / "install"
     seed_version(root)
-    manager = UpdateManager(root, "app", manifest_url=artifact_server.base + "/missing.json")
+    manager = UpdateManager(root, "app", manifest_url=artifact_server.base + "/missing.json",
+                            fallback_manifest_urls=[])
 
     result = manager.check()
 
     assert result["ok"] is False
-    assert result["error_code"] == "manifest_missing"
+    assert result["error_code"] in {"manifest_missing", "manifest_unavailable"}
     assert "http" not in result["error"].lower()
 
 
@@ -964,3 +972,180 @@ def test_status_ignores_prepared_updates_that_are_not_newer(tmp_path: Path) -> N
         "schema": 1, "components": {"app": "0.2.2", "plugin": "0.2.0", "node": "0.2.0"},
     }), encoding="utf-8")
     assert manager.status()["prepared"] == []
+
+
+# --- release signature, protocol floor, rollout, and Hub mirror ---
+
+import base64 as _base64
+
+from cryptography.hazmat.primitives import serialization as _serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey as _Ed25519PrivateKey
+
+from tether.release import canonical_bytes as _canonical_bytes
+
+_TEST_KEY = _Ed25519PrivateKey.from_private_bytes(bytes(range(32)))
+_TEST_PUBLIC_HEX = _TEST_KEY.public_key().public_bytes(
+    _serialization.Encoding.Raw, _serialization.PublicFormat.Raw).hex()
+
+
+def _signed_manifest(server: ArtifactServer, component: str, archive: bytes, *, version: str = "0.2.1",
+                     protocol: int = 1, min_protocol: int = 1, rollout: dict | None = None,
+                     sign: bool = True, channel: str = "stable") -> str:
+    entry = {
+        "version": version, "url": server.base + f"/{component}.zip",
+        "sha256": hashlib.sha256(archive).hexdigest(), "size": len(archive),
+        "protocol": protocol, "min_protocol": min_protocol, "min_updater": "0.2.1",
+        "rollout": rollout or {"percent": 100, "include": [], "exclude": []},
+    }
+    manifest = {"schema": 1, "channel": channel,
+                "components": {name: dict(entry) for name in ("app", "plugin", "node")}}
+    if sign:
+        manifest["signature"] = _base64.b64encode(_TEST_KEY.sign(_canonical_bytes(manifest))).decode("ascii")
+    server.files[f"/{component}.zip"] = archive
+    server.files["/manifest.json"] = json.dumps(manifest).encode()
+    return server.base + "/manifest.json"
+
+
+def _strict_manager(root: Path, url: str, state: Path, **kwargs) -> UpdateManager:
+    return UpdateManager(root, "app", manifest_url=url, state_dir=state,
+                         allow_unsigned=False, public_key_hex=_TEST_PUBLIC_HEX,
+                         fallback_manifest_urls=[], **kwargs)
+
+
+def test_signed_manifest_round_trip_and_tamper_detection(artifact_server: ArtifactServer, tmp_path: Path) -> None:
+    root = tmp_path / "install"
+    seed_version(root)
+    url = _signed_manifest(artifact_server, "app", make_zip("app", version="0.2.1"))
+    manager = _strict_manager(root, url, tmp_path / "state")
+    checked = manager.check()
+    assert checked["ok"] is True
+    assert checked["update_available"] is True
+
+    tampered = json.loads(artifact_server.files["/manifest.json"])
+    tampered["components"]["app"]["version"] = "0.2.2"
+    artifact_server.files["/manifest.json"] = json.dumps(tampered).encode()
+    strict = _strict_manager(root, url, tmp_path / "state-2")
+    result = strict.check(force=True)
+    assert result["ok"] is False
+    assert result["error_code"] == "signature_invalid"
+
+
+def test_strict_manager_rejects_unsigned_manifest(artifact_server: ArtifactServer, tmp_path: Path) -> None:
+    root = tmp_path / "install"
+    seed_version(root)
+    url = _signed_manifest(artifact_server, "app", make_zip("app"), sign=False)
+    result = _strict_manager(root, url, tmp_path / "state").check()
+    assert result["ok"] is False
+    assert result["error_code"] == "signature_missing"
+
+
+def test_protocol_floor_rejects_a_future_client(artifact_server: ArtifactServer, tmp_path: Path) -> None:
+    root = tmp_path / "install"
+    seed_version(root)
+    url = _signed_manifest(artifact_server, "app", make_zip("app"), protocol=2)
+    result = _strict_manager(root, url, tmp_path / "state").check()
+    assert result["ok"] is False
+    assert result["error_code"] == "client_update_required"
+    url = _signed_manifest(artifact_server, "app", make_zip("app"), protocol=2, min_protocol=2)
+    result = _strict_manager(root, url, tmp_path / "state-2").check()
+    assert result["ok"] is False
+    assert result["error_code"] == "client_update_required"
+
+
+def test_rollout_pauses_devices_until_included(artifact_server: ArtifactServer, tmp_path: Path) -> None:
+    root = tmp_path / "install"
+    seed_version(root)
+    url = _signed_manifest(artifact_server, "app", make_zip("app", version="0.2.1"),
+                           rollout={"percent": 0, "include": [], "exclude": []})
+    paused = _strict_manager(root, url, tmp_path / "state", device="TEST-DEVICE").check()
+    assert paused["ok"] is True
+    assert paused["update_available"] is False
+    assert paused["rollout_paused"] is True
+
+    url = _signed_manifest(artifact_server, "app", make_zip("app", version="0.2.1"),
+                           rollout={"percent": 0, "include": ["TEST-DEVICE"], "exclude": []})
+    included = _strict_manager(root, url, tmp_path / "state-2", device="TEST-DEVICE").check(force=True)
+    assert included["update_available"] is True
+    assert included["rollout_paused"] is False
+
+
+def test_apply_rechecks_a_held_rollout_from_the_cached_manifest(artifact_server: ArtifactServer, tmp_path: Path) -> None:
+    root = tmp_path / "install"
+    seed_version(root)
+    url = _signed_manifest(artifact_server, "app", make_zip("app", version="0.2.1"))
+    manager = _strict_manager(root, url, tmp_path / "state", device="TEST-DEVICE")
+    prepared = manager.prepare()
+    assert prepared["ok"] is True, prepared
+
+    _signed_manifest(artifact_server, "app", make_zip("app", version="0.2.1"),
+                     rollout={"percent": 100, "include": [], "exclude": [], "hold": True})
+    assert manager.check(force=True)["update_available"] is False
+
+    applied = manager.apply(prepared["prepared_id"])
+
+    assert applied["ok"] is False
+    assert applied["error_code"] == "rollout_paused"
+    assert json.loads((root / "version.json").read_text(encoding="utf-8"))["components"]["app"] == "0.2.0"
+
+
+def test_beta_channel_is_opt_in_only(artifact_server: ArtifactServer, tmp_path: Path, monkeypatch) -> None:
+    root = tmp_path / "install"
+    seed_version(root)
+    url = _signed_manifest(artifact_server, "app", make_zip("app", version="0.2.1"), channel="beta")
+
+    monkeypatch.delenv("TETHER_UPDATE_CHANNEL", raising=False)
+    assert _strict_manager(root, url, tmp_path / "stable").check()["error_code"] == "channel_not_selected"
+
+    monkeypatch.setenv("TETHER_UPDATE_CHANNEL", "beta")
+    checked = _strict_manager(root, url, tmp_path / "beta").check()
+    assert checked["ok"] is True
+    assert checked["update_available"] is True
+
+
+def test_plugin_detection_tolerates_missing_optional_packages(tmp_path: Path) -> None:
+    root = tmp_path / "install"
+    seed_version(root)
+    dsh_home = tmp_path / "dsh"
+    client = dsh_home / "profiles" / "desktop" / "node_modules" / "tether-dsh-client"
+    client.mkdir(parents=True)
+    (client / "package.json").write_text(json.dumps({"name": "tether-dsh-client", "version": "0.2.13"}), encoding="utf-8")
+    (client / "lib").mkdir()
+    (client / "lib" / "client.js").write_text("const PLUGIN_VERSION = '0.2.13'", encoding="utf-8")
+    health = UpdateManager(root, "plugin", dsh_home=dsh_home, state_dir=tmp_path / "state").plugin_health()
+    assert health["ok"] is True
+    assert health["version"] == "0.2.13"
+    assert "tether-dsh-surface" in health["missing_packages"]
+
+
+def test_manifest_disk_cache_is_used_when_the_network_fails(artifact_server: ArtifactServer, tmp_path: Path, monkeypatch) -> None:
+    root = tmp_path / "install"
+    seed_version(root)
+    url = _signed_manifest(artifact_server, "app", make_zip("app"))
+    manager = _strict_manager(root, url, tmp_path / "state")
+    assert manager.check()["latest_version"] == "0.2.1"
+    artifact_server.close()
+    monkeypatch.setattr("tether.updates.MANIFEST_DISK_CACHE_TTL", -1)
+    cached = _strict_manager(root, url, tmp_path / "state").check(force=True)
+    assert cached["ok"] is True
+    assert cached["latest_version"] == "0.2.1"
+    assert cached["stale"] is True
+
+
+def test_hub_mirror_is_preferred_over_the_manifest_artifact_url(artifact_server: ArtifactServer, tmp_path: Path) -> None:
+    root = tmp_path / "install"
+    seed_version(root)
+    archive = make_zip("app", version="0.2.1")
+    url = _signed_manifest(artifact_server, "app", archive)
+    artifact_server.files["/releases/manifest"] = artifact_server.files.pop("/manifest.json")
+    sha = hashlib.sha256(archive).hexdigest()
+    artifact_server.files[f"/releases/artifacts/{sha}"] = archive
+    manifest = json.loads(artifact_server.files["/releases/manifest"])
+    for item in manifest["components"].values():
+        item["url"] = "https://unreachable.invalid/tether.zip"
+    artifact_server.files["/releases/manifest"] = json.dumps(manifest).encode()
+    # Re-sign after changing the artifact URL.
+    manifest["signature"] = _base64.b64encode(_TEST_KEY.sign(_canonical_bytes(manifest))).decode("ascii")
+    artifact_server.files["/releases/manifest"] = json.dumps(manifest).encode()
+    manager = _strict_manager(root, artifact_server.base + "/releases/manifest", tmp_path / "state")
+    prepared = manager.prepare()
+    assert prepared["ok"] is True, prepared

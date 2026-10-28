@@ -15,8 +15,13 @@ export function createDshLocalPluginUpdateBridge(getRpc) {
     if (!['status', 'check', 'prepare', 'apply'].includes(action)) throw new Error('不支持的本机插件更新操作')
     const rpc = typeof getRpc === 'function' ? getRpc() : null
     if (!rpc || typeof rpc.call !== 'function') throw new Error('当前 DSH 插件没有本机更新通道，请先安装新版插件。')
+    const hub = storedHub()
+    const manifestUrl = hub ? hub.url.replace(/\/+$/, '') + '/releases/manifest' : ''
     const body = action === 'apply' ? { prepared_id: payload.prepared_id } : {}
-    const reply = await rpc.call('/tether-updates', action, body)
+    let reply = await rpc.call('/tether-updates', action, manifestUrl ? { ...body, manifest_url: manifestUrl } : body)
+    if (manifestUrl && reply && reply.ok === false && reply.error && reply.error.code === 'invalid_request') {
+      reply = await rpc.call('/tether-updates', action, body)
+    }
     if (reply && reply.ok === false) {
       const detail = reply.error && typeof reply.error === 'object' ? reply.error : {}
       const error = new Error(detail.message || reply.error || reply.message || '本机插件更新失败')

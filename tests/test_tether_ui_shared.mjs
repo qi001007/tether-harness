@@ -33,6 +33,14 @@ test('remote FilesPane exposes a new-file action for the current target director
   assert.match(shared, /iconButton\('plus', '新建文件', \(\) => makeFile\(path\), !path \|\| dirLoading \|\| previewBusy\)/)
 })
 
+test('loading spinners rotate the icon itself so the pivot is its own centre', () => {
+  // The wrapper used to be a 1em box while glyphs are 14-18px, so the icon
+  // overflowed its rotating parent and appeared to orbit off-centre.
+  assert.match(shared, /\.tether-spin > svg \{[^}]*transform-origin: 50% 50%;[^}]*animation: tether-refresh-rotate/)
+  assert.doesNotMatch(shared, /\.tether-spin \{[^}]*width: 1em/)
+  assert.doesNotMatch(shared, /\.tether-spin \{[^}]*animation:/)
+})
+
 test('connection panels show service checks without duplicate device totals or credentials', async () => {
   const { hubAddressForEditor, hubProbeErrorText, hubUrlNeedsReplacement, safeServiceAddress } = await import('../packages/tether-ui/src/app.js')
   assert.equal(safeServiceAddress('https://user:secret@hub.example:8443/api?token=hidden#frag'), 'https://hub.example:8443/api')
@@ -316,7 +324,7 @@ test('the shared factory accepts a DSH host and a Web host without DSH globals',
 })
 
 test('refresh indicators have a sized rotation animation and track their request state', () => {
-  assert.match(shared, /\.tether-spin \{ display: inline-grid; width: 1em; height: 1em; flex: 0 0 auto; place-items: center; transform-box: border-box; transform-origin: 50% 50%; animation: tether-refresh-rotate \.8s linear infinite; \}/)
+  assert.match(shared, /\.tether-spin > svg \{[^}]*animation: tether-refresh-rotate \.8s linear infinite[^}]*\}/)
   assert.match(shared, /@keyframes tether-refresh-rotate \{ from \{ transform: rotate\(0deg\); \} to \{ transform: rotate\(360deg\); \} \}/)
   assert.match(shared, /const refreshUpdateCenter = async \(force = false\) => \{[\s\S]*await Promise\.allSettled\(checks\)[\s\S]*setTimeout\(\(\) => setUpdateRefreshing\(false\), 280\)/)
   assert.match(shared, /iconButton\('refresh', '刷新', refreshExplorer, !path, dirLoading \|\| previewBusy\)/)

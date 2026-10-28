@@ -9,14 +9,14 @@ import { fileURLToPath } from 'node:url'
 import vm from 'node:vm'
 
 const require = createRequire(import.meta.url)
-const { UpdateService } = require('../apps/tether-app/update-service.js')
+const { UpdateService, stageUpdaterRuntime } = require('../apps/tether-app/update-service.js')
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'tether-update-service-'))
 const repoRoot = path.join(temp, 'repo')
 const dataDir = path.join(temp, 'data')
 const userData = path.join(temp, 'user-data')
 fs.mkdirSync(path.join(repoRoot, 'tether'), { recursive: true })
-for (const name of ['updates.py', 'updates_cli.py', '__init__.py']) fs.writeFileSync(path.join(repoRoot, 'tether', name), '# fixture\n')
+for (const name of ['updates.py', 'updates_cli.py', 'release.py', 'ed25519.py', '__init__.py']) fs.writeFileSync(path.join(repoRoot, 'tether', name), '# fixture\n')
 fs.mkdirSync(path.join(repoRoot, 'tether', 'node'), { recursive: true })
 for (const name of ['__init__.py', 'dsh_sessions.py']) fs.writeFileSync(path.join(repoRoot, 'tether', 'node', name), '# fixture\n')
 
@@ -60,6 +60,8 @@ try {
   const result = await service.apply(prepared.prepared_id)
   assert.equal(result.status, 'installing')
   assert.ok(fs.existsSync(path.join(userData, 'update-helper-runtime', 'tether', 'updates.py')))
+  assert.ok(fs.existsSync(path.join(userData, 'update-helper-runtime', 'tether', 'release.py')))
+  assert.ok(fs.existsSync(path.join(userData, 'update-helper-runtime', 'tether', 'ed25519.py')))
   assert.ok(fs.existsSync(path.join(userData, 'update-helper-runtime', 'tether', 'node', 'dsh_sessions.py')))
   assert.ok(fs.existsSync(path.join(userData, 'tether-update-helper.js')))
   assert.equal(spawnConfig.options.env.ELECTRON_RUN_AS_NODE, '1')
@@ -130,6 +132,18 @@ try {
   assert.equal(cliCalls[1][1], 'apply')
   assert.ok(cliCalls[1].includes(helperConfig.preparedId))
   assert.equal(JSON.parse(fs.readFileSync(helperConfig.resultPath, 'utf8')).ok, true)
+
+  // The staged runtime must import on its own: updates.py imports .release which
+  // imports .ed25519. A hardcoded staging list silently broke APP self-update.
+  const closureDir = path.join(temp, 'closure')
+  stageUpdaterRuntime(projectRoot, path.join(closureDir, 'tether'))
+  const closure = spawnSync(python, ['-c', 'import tether.updates_cli'], {
+    cwd: closureDir,
+    env: { ...process.env, PYTHONPATH: closureDir, PYTHONIOENCODING: 'utf-8' },
+    encoding: 'utf8',
+    windowsHide: true
+  })
+  assert.equal(closure.status, 0, 'staged updater runtime imports: ' + String(closure.stderr || closure.stdout).slice(0, 500))
   }
 
   const source = fs.readFileSync(path.join(projectRoot, 'apps', 'tether-app', 'main.js'), 'utf8')
@@ -223,7 +237,7 @@ try {
   const inject = build.match(/inject: \[([^\]]+)\]/)?.[1]
   assert.ok(inject, 'generated DSH client must declare its allowed client services')
   assert.deepEqual([...inject.matchAll(/'([^']+)'/g)].map(([, service]) => service), [
-    'slots', 'layout', 'connection', 'remote', 'remote.workspaceFiles', 'remote.pluginManager', 'fileDrag'
+    'slots', 'layout', 'connection', 'remote', 'remote.workspaceFiles', 'remote.pluginManager'
   ])
 } finally {
   fs.rmSync(temp, { recursive: true, force: true })

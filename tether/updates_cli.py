@@ -24,6 +24,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--state-dir", type=Path)
     parser.add_argument("--dsh-home", type=Path, default=Path(os.environ["DSH_HOME"]) if os.environ.get("DSH_HOME") else None)
     parser.add_argument("--profile", default="desktop")
+    parser.add_argument("--device")
+    parser.add_argument("--manifest-url")
+    parser.add_argument("--fallback-manifest-url", action="append", default=[])
+    parser.add_argument("--allow-unsigned", action="store_true")
+    parser.add_argument("--force", action="store_true")
     args = parser.parse_args(argv)
 
     manager = UpdateManager(
@@ -32,13 +37,17 @@ def main(argv: list[str] | None = None) -> int:
         dsh_home=args.dsh_home,
         state_dir=args.state_dir,
         profile=args.profile,
+        device=args.device,
+        manifest_url=args.manifest_url,
+        fallback_manifest_urls=args.fallback_manifest_url or None,
+        allow_unsigned=True if args.allow_unsigned else None,
     )
     if args.action == "activity":
         result = manager.activity()
     elif args.action == "status":
         result = manager.status()
     elif args.action == "check":
-        result = manager.check()
+        result = manager.check(force=args.force)
     elif args.action == "prepare":
         result = manager.prepare()
     else:

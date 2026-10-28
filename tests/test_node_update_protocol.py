@@ -47,12 +47,16 @@ def _node(tmp_path: Path, monkeypatch) -> Node:
 
 
 def test_capabilities_advertise_update_protocol_and_cached_version(tmp_path, monkeypatch):
+    from tether.updates import MAX_UPDATE_PROTOCOL, MIN_UPDATE_PROTOCOL, UPDATE_PROTOCOL
+
     node = _node(tmp_path, monkeypatch)
     node.update_managers["node"] = FakeUpdateManager()
     node.node_version = "0.2.1"
     capabilities = node.capabilities()
     assert capabilities["node_version"] == "0.2.1"
-    assert capabilities["update_protocol"] == 1
+    assert capabilities["update_protocol"] == UPDATE_PROTOCOL
+    assert capabilities["min_update_protocol"] == MIN_UPDATE_PROTOCOL
+    assert capabilities["max_update_protocol"] == MAX_UPDATE_PROTOCOL
     assert capabilities["app_version"] == node._managed_app_version()
     assert "app" in node.update_managers
     node.store.db.close()
@@ -274,7 +278,7 @@ def test_apply_refuses_active_tether_run(tmp_path, monkeypatch):
     node.store.db.close()
 
 
-def test_remote_plugin_apply_refuses_when_live_host_profile_is_unknown(tmp_path, monkeypatch):
+def test_remote_plugin_apply_refuses_when_no_profile_has_the_plugin(tmp_path, monkeypatch):
     node = _node(tmp_path, monkeypatch)
     manager = FakeUpdateManager()
     node.update_managers["plugin"] = manager
@@ -289,7 +293,7 @@ def test_remote_plugin_apply_refuses_when_live_host_profile_is_unknown(tmp_path,
                                    "action": "apply", "component": "plugin",
                                    "prepared_id": "a" * 32}))
 
-    assert sent[0]["error_code"] == "plugin_profile_unknown"
+    assert sent[0]["error_code"] == "plugin_package_missing"
     assert manager.apply_calls == 0
     assert node.update_applying is False
     node.store.db.close()

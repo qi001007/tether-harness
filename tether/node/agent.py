@@ -31,7 +31,7 @@ from .fs_service import FsError, FsService
 from .dsh_sessions import DshSessionStore
 from .native_surface import NativeSurface, NativeSurfaceError
 from .local_identity import remove_identity, write_identity
-from ..updates import UpdateManager
+from ..updates import MAX_UPDATE_PROTOCOL, MIN_UPDATE_PROTOCOL, UPDATE_PROTOCOL, UpdateManager, select_profile
 
 
 def os_label() -> str:
@@ -53,6 +53,24 @@ TERMINAL = ("completed", "cancelled", "failed", "unknown")
 
 def log(*parts: Any) -> None:
     print(time.strftime("[%H:%M:%S]"), *parts, flush=True)
+
+
+def release_manifest_url() -> str | None:
+    explicit = os.environ.get("TETHER_UPDATE_MANIFEST_URL", "").strip()
+    if explicit:
+        return explicit
+    controller = os.environ.get("TETHER_CONTROLLER_URL", "").strip() or os.environ.get("TETHER_CONTROLLER", "").strip()
+    try:
+        from urllib.parse import urlsplit
+
+        parts = urlsplit(controller)
+        host = (parts.hostname or "").lower()
+        if not host or host in {"127.0.0.1", "::1", "localhost"}:
+            return None
+        scheme = "https" if parts.scheme in {"wss", "https"} else "http"
+        return f"{scheme}://{parts.netloc}/releases/manifest"
+    except ValueError:
+        return None
 
 
 def default_workspaces_root() -> Path:
@@ -314,10 +332,12 @@ class Node:
         ensure_sdk_profile(self.native_dsh_home)
         self.native_surface = NativeSurface(self.native_dsh_home)
         update_state_dir = self.data_dir / "updates"
+        manifest_url = release_manifest_url()
+        plugin_profile = select_profile(Path(self.native_dsh_home), "desktop") or "desktop"
         self.update_managers = {
             component: UpdateManager(ROOT, component, dsh_home=self.native_dsh_home,
-                                     manifest_url=os.environ.get("TETHER_UPDATE_MANIFEST_URL"),
-                                     state_dir=update_state_dir / component)
+                                     manifest_url=manifest_url, state_dir=update_state_dir / component,
+                                     device=self.device, profile=plugin_profile if component == "plugin" else "desktop")
               for component in ("node", "plugin", "app")
         }
         node_status = self.update_managers["node"].status()
@@ -337,7 +357,24 @@ class Node:
         self.cancels: dict[str, asyncio.Event] = {}
         self._dropped = False
 
+    async def _warm_updates(self) -> None:
+        await asyncio.sleep(2)
+        while True:
+            try:
+                if not self.update_applying:
+                    manager = self.update_managers["node"]
+                    await asyncio.to_thread(manager.check)
+                    plugin = self.update_managers["plugin"]
+                    profile = self.native_surface.active_profile() or select_profile(Path(self.native_dsh_home), plugin.profile)
+                    if profile:
+                        plugin.profile = profile
+                        await asyncio.to_thread(plugin.check)
+            except Exception:
+                pass
+            await asyncio.sleep(600)
+
     async def run(self) -> None:
+        warm = asyncio.create_task(self._warm_updates())
         backoff = 0.5
         while True:
             if self._block_until > time.monotonic():
@@ -569,15 +606,18 @@ class Node:
                 return
             manager = self.update_managers[component]
             if component == "plugin":
-                profile = self.native_surface.active_profile()
+                profile = self.native_surface.active_profile() or select_profile(
+                    Path(self.native_dsh_home), getattr(manager, "profile", "desktop"))
                 if not profile:
                     await self._send({"type": "update_result", "req_id": req_id, "ok": False,
-                                      "error_code": "plugin_profile_unknown",
-                                      "error": "无法确认当前运行的 DSH Host profile，已拒绝远程插件更新；请在目标 DSH 内更新。"})
+                                      "error_code": "plugin_package_missing",
+                                      "error": "未找到已安装的 Tether DSH 插件 profile，无法检测插件更新。"})
                     return
-                manager = UpdateManager(manager.root, component, dsh_home=manager.dsh_home,
-                                        manifest_url=manager.manifest_url, state_dir=manager.state_dir,
-                                        profile=profile)
+                manager = UpdateManager(getattr(manager, "root", ROOT), component,
+                                        dsh_home=getattr(manager, "dsh_home", Path(self.native_dsh_home)),
+                                        manifest_url=getattr(manager, "manifest_url", None),
+                                        state_dir=getattr(manager, "state_dir", None),
+                                        profile=profile, device=self.device)
             try:
                 result = await asyncio.to_thread(getattr(manager, action))
                 await self._send({"type": "update_result", "req_id": req_id, **result})
@@ -591,11 +631,12 @@ class Node:
             return
         async with self.update_lock:
             if component == "plugin":
-                profile = self.native_surface.active_profile()
+                profile = self.native_surface.active_profile() or select_profile(
+                    Path(self.native_dsh_home), getattr(self.update_managers[component], "profile", "desktop"))
                 if not profile:
                     await self._send({"type": "update_result", "req_id": req_id, "ok": False,
-                                      "error_code": "plugin_profile_unknown",
-                                      "error": "无法确认当前运行的 DSH Host profile，已拒绝远程插件更新；请在目标 DSH 内更新。"})
+                                      "error_code": "plugin_package_missing",
+                                      "error": "未找到已安装的 Tether DSH 插件 profile，无法更新插件。"})
                     return
                 self.update_managers[component].profile = profile
             if applying:
@@ -830,7 +871,11 @@ class Node:
     def capabilities(self) -> dict[str, Any]:
         return {"os": platform.system(), "release": platform.release(), "os_label": os_label(),
                 "python": platform.python_version(),
-                "node_version": self.node_version, "update_protocol": 1,
+                "node_version": self.node_version, "update_protocol": UPDATE_PROTOCOL,
+                "min_update_protocol": MIN_UPDATE_PROTOCOL,
+                "max_update_protocol": MAX_UPDATE_PROTOCOL,
+                "update_features": ["check", "prepare", "apply", "app_restart", "plugin_profile_fallback"],
+                "update_manifest": "hub-or-github",
                 "workspace": str(self.workspace), "agents": ["fake", "dsh"], "fs": True,
                 "policy_mode": self.fs.policy.data.get("mode"),
                 "workspaces_root": str(self.workspaces_root),

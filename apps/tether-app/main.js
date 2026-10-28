@@ -33,7 +33,10 @@ const hubConfigFile = path.join(dataDir, 'hub.json')
 if (fs.existsSync(hubConfigFile)) {
   try {
     const cfg = JSON.parse(fs.readFileSync(hubConfigFile, 'utf8'))
-    if (cfg.url) env.TETHER_CONTROLLER_URL = cfg.url
+    if (cfg.url) {
+      env.TETHER_CONTROLLER_URL = cfg.url
+      if (!env.TETHER_UPDATE_MANIFEST_URL) env.TETHER_UPDATE_MANIFEST_URL = String(cfg.url).replace(/\/+$/, '') + '/releases/manifest'
+    }
     if (cfg.accessToken) env.TETHER_ACCESS_TOKEN = cfg.accessToken
     if (cfg.nodeToken) env.TETHER_NODE_TOKEN = cfg.nodeToken
     if (cfg.device) env.TETHER_DEVICE = cfg.device
