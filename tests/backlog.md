@@ -1,4 +1,5 @@
 # 修改记录
+- 2026-10-29：新增 `test_explorer_navigation.mjs`：历史栈前进/后退/新导航清空 forward、目录优先的三种排序与升降序、搜索大小写与空查询过滤，以及工具栏/列头/搜索空态接线断言。
 - 2026-10-28：新增本机 DSH 更新确认流程回归，覆盖 owner 在线重载、重载后运行版本核对，以及 no-HMR/运行版本未追平时停止自动操作并明确提示。
 - 2026-10-28：新增原生目标设备附件与 surface owner RPC 回归，覆盖 owner identity、session workspace API、路径 capability、readBytes 二进制跨块无损、超限/拒绝及设备/会话切换后不 attach。
 - 2026-10-28：共享 UI 回归断言新建文件固定当前 target device、设置 `overwrite:false` 且设备变化后丢弃旧目录 UI 更新。

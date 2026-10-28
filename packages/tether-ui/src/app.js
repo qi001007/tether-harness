@@ -430,6 +430,57 @@ export function createTetherPanel({ React, Native, host }) {
       const suffix = String(entry.name || '').split('.').pop()
       return suffix && suffix !== entry.name ? suffix.toUpperCase() + ' 文件' : '文件'
     }
+    const EXPLORER_SORT_KEYS = ['name', 'mtime', 'size']
+    function explorerHistory(history) {
+      const state = history || {}
+      return {
+        back: Array.isArray(state.back) ? state.back : [],
+        forward: Array.isArray(state.forward) ? state.forward : []
+      }
+    }
+    function explorerNavigate(history, from, to) {
+      if (!from || !to || normPath(from) === normPath(to)) return history
+      const state = explorerHistory(history)
+      return { back: [...state.back, from], forward: [] }
+    }
+    function explorerHistoryStep(history, direction, current) {
+      const state = explorerHistory(history)
+      if (direction === 'back') {
+        if (!state.back.length) return null
+        return {
+          history: { back: state.back.slice(0, -1), forward: current ? [...state.forward, current] : state.forward },
+          target: state.back[state.back.length - 1]
+        }
+      }
+      if (!state.forward.length) return null
+      return {
+        history: { back: current ? [...state.back, current] : state.back, forward: state.forward.slice(0, -1) },
+        target: state.forward[state.forward.length - 1]
+      }
+    }
+    function toggleExplorerSort(current, key) {
+      const state = current || {}
+      if (state.key === key) return { key, dir: state.dir === 'desc' ? 'asc' : 'desc' }
+      return { key, dir: key === 'name' ? 'asc' : 'desc' }
+    }
+    function compareExplorerEntries(a, b, key, direction) {
+      const rank = (entry) => (entry && entry.dir ? 0 : 1)
+      if (rank(a) !== rank(b)) return rank(a) - rank(b)
+      const byName = () => String((a && a.name) || '').localeCompare(String((b && b.name) || ''), undefined, { numeric: true, sensitivity: 'base' })
+      const sign = direction === 'desc' ? -1 : 1
+      if (key === 'name' || (key !== 'mtime' && key !== 'size')) return byName() * sign
+      const primary = key === 'mtime' ? (Number(a && a.mtime) || 0) - (Number(b && b.mtime) || 0) : (Number(a && a.size) || 0) - (Number(b && b.size) || 0)
+      return primary ? primary * sign : byName()
+    }
+    function sortExplorerEntries(entries, key, direction) {
+      return [...(entries || [])].sort((a, b) => compareExplorerEntries(a, b, key, direction))
+    }
+    function filterExplorerEntries(entries, query) {
+      const needle = String(query == null ? '' : query).trim().toLowerCase()
+      const list = entries || []
+      if (!needle) return list
+      return list.filter((entry) => String((entry && entry.name) || '').toLowerCase().includes(needle))
+    }
     function resolveSessionTarget(selectedNativeId, currentRun, nativeSessions, remoteSessions, remoteRuns, deviceId, workspace, runWorkspace) {
       if (selectedNativeId) {
         const nativeSession = nativeSessions.find((session) => session.session_id === selectedNativeId)
@@ -886,6 +937,13 @@ export function createTetherPanel({ React, Native, host }) {
       ] },
       back: { parts: [
         { d: 'M10.2 3.2L5.4 8l4.8 4.8' }
+      ] },
+      forward: { parts: [
+        { d: 'M5.8 3.2L10.6 8l-4.8 4.8' }
+      ] },
+      search: { parts: [
+        { d: 'M7.1 12.2a5.1 5.1 0 1 0 0-10.2 5.1 5.1 0 0 0 0 10.2z' },
+        { d: 'M11 11l3 3' }
       ] },
       save: { parts: [
         { d: 'M3 2.4h8.2L13.4 4.6v9H3z' },
@@ -1603,7 +1661,9 @@ export function createTetherPanel({ React, Native, host }) {
       const [dirEntries, setDirEntries] = React.useState([])
       const [dirLoading, setDirLoading] = React.useState(false)
       const [dirError, setDirError] = React.useState('')
-      const [history, setHistory] = React.useState([])
+      const [history, setHistory] = React.useState({ back: [], forward: [] })
+      const [sort, setSort] = usePersisted('tether.explorer.sort', { key: 'name', dir: 'asc' })
+      const [search, setSearch] = React.useState('')
       const [contextMenu, setContextMenu] = React.useState(null)
       const [deviceMenu, setDeviceMenu] = React.useState(null)
       const [previewBusy, setPreviewBusy] = React.useState(false)
@@ -2195,7 +2255,7 @@ export function createTetherPanel({ React, Native, host }) {
         setPath(''); setPathDraft(''); pathRef.current = ''; setFile(null); setSelected(null)
         setSessionId(''); setSessionData(null); setRunId(''); setNativeLoaded(false)
         setTreeSelected(''); setDrives([])
-        setDirEntries([]); setDirLoading(false); setDirError(''); setHistory([]); setContextMenu(null)
+        setDirEntries([]); setDirLoading(false); setDirError(''); setHistory({ back: [], forward: [] }); setSearch(''); setContextMenu(null)
         setPreviewBusy(false); setEditMode(false); loadedDirRef.current = ''
         loadProjects()
       }, [deviceId, loadProjects])
@@ -2685,7 +2745,11 @@ export function createTetherPanel({ React, Native, host }) {
         const controller = new AbortController()
         dirAbortRef.current = controller
         const enter = (entries, push) => {
-          if (push !== false && pathRef.current && pathRef.current !== nextPath) setHistory((current) => [...current, pathRef.current])
+          const from = pathRef.current
+          if (from && normPath(from) !== normPath(nextPath)) {
+            setSearch('')
+            if (push !== false) setHistory((current) => explorerNavigate(current, from, nextPath))
+          }
           setDirEntries(entries)
           setPath(nextPath); setPathDraft(nextPath); pathRef.current = nextPath
           loadedDirRef.current = requestDevice + '|' + normPath(nextPath)
@@ -2808,11 +2872,22 @@ export function createTetherPanel({ React, Native, host }) {
         }
       }
 
-      const goBack = () => {
-        if (!history.length) return
-        const previous = history[history.length - 1]
-        setHistory((current) => current.slice(0, -1))
-        loadDir(previous, { push: false })
+      const stepHistory = (direction) => {
+        const step = explorerHistoryStep(history, direction, pathRef.current || path)
+        if (!step) return
+        setHistory(step.history)
+        setFile(null); setEditMode(false); setDirty(false); setDraft('')
+        loadDir(step.target, { push: false })
+      }
+      const goBack = () => stepHistory('back')
+      const goForward = () => stepHistory('forward')
+      const goUp = () => {
+        const current = pathRef.current || path
+        if (!current) return
+        const parent = parentOf(current)
+        if (!parent || normPath(parent) === normPath(current)) return
+        setFile(null); setEditMode(false); setDirty(false); setDraft('')
+        loadDir(parent, { push: true })
       }
 
       const refreshExplorer = () => {
@@ -3007,6 +3082,22 @@ export function createTetherPanel({ React, Native, host }) {
         loadDir(target, { push: false, keepFile: !!file })
       }, [view, deviceId, path, project, projects, projectsDevice, workspaceKey])
 
+      React.useEffect(() => {
+        if (view !== 'files' || ask) return undefined
+        const onKey = (event) => {
+          if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
+          if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight' && event.key !== 'ArrowUp') return
+          const tag = event.target && event.target.tagName
+          if (tag === 'INPUT' || tag === 'TEXTAREA') return
+          event.preventDefault()
+          if (event.key === 'ArrowLeft') goBack()
+          else if (event.key === 'ArrowRight') goForward()
+          else goUp()
+        }
+        window.addEventListener('keydown', onKey)
+        return () => window.removeEventListener('keydown', onKey)
+      }, [view, ask, history, path])
+
       const renderHoverTip = () => {
         if (!hoverTip) return null
         const entry = hoverTip.entry
@@ -3157,9 +3248,13 @@ export function createTetherPanel({ React, Native, host }) {
           style: { width: 28, height: 28, display: 'grid', placeItems: 'center', border: 0, borderRadius: 6, background: 'transparent', color: disabled ? C.mute : C.sub, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.45 : 1, flex: '0 0 auto' }
         }, spinning ? h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 16 })) : h(Glyph, { name, size: 16 }))
         const crumbs = pathSegments(file ? file.path : path)
+        const sortKey = EXPLORER_SORT_KEYS.includes(sort && sort.key) ? sort.key : 'name'
+        const sortDir = sort && sort.dir === 'desc' ? 'desc' : 'asc'
+        const canGoUp = !!path && normPath(parentOf(path)) !== normPath(path)
         const toolbar = h('div', { style: { display: 'flex', alignItems: 'center', gap: 2, height: 40, padding: '0 8px', background: C.bg, flex: '0 0 auto', minWidth: 0 } },
-          iconButton('back', '后退', goBack, !history.length),
-          iconButton('arrowUp', '上级目录', () => { const parent = parentOf(file ? file.path : path); if (parent && parent !== path) { setFile(null); loadDir(parent, { push: true }) } }, !path),
+          iconButton('back', '后退 (Alt+←)', goBack, !history.back.length),
+          iconButton('forward', '前进 (Alt+→)', goForward, !history.forward.length),
+          iconButton('arrowUp', '上级目录 (Alt+↑)', goUp, !canGoUp),
           iconButton('refresh', '刷新', refreshExplorer, !path, dirLoading || previewBusy),
           iconButton('plus', '新建文件', () => makeFile(path), !path || dirLoading || previewBusy),
           h('div', {
@@ -3185,6 +3280,21 @@ export function createTetherPanel({ React, Native, host }) {
               }, segment.label)
             ))
           ),
+          path && !file ? h('div', {
+            style: { display: 'flex', alignItems: 'center', gap: 5, flex: '0 1 210px', minWidth: 128, height: 26, boxSizing: 'border-box', padding: '0 3px 0 7px', borderRadius: 6, background: C.soft, color: C.mute, marginLeft: 4 }
+          },
+            h(Glyph, { name: 'search', size: 13 }),
+            h('input', {
+              value: search, placeholder: '搜索当前目录', 'aria-label': '搜索当前目录', spellCheck: false,
+              onChange: (event) => setSearch(event.target.value),
+              onKeyDown: (event) => { if (event.key === 'Escape') { setSearch(''); event.currentTarget.blur() } },
+              style: { flex: '1 1 auto', minWidth: 0, height: 24, padding: 0, border: 0, background: 'transparent', color: C.ink, fontSize: 12, outline: 'none' }
+            }),
+            search ? h('button', {
+              title: '清除搜索', 'aria-label': '清除搜索', onClick: () => setSearch(''), className: 'tether-hover',
+              style: { width: 20, height: 20, flex: '0 0 auto', display: 'grid', placeItems: 'center', border: 0, borderRadius: 4, background: 'transparent', color: C.mute, fontSize: 13, lineHeight: '14px', padding: 0, cursor: 'pointer' }
+            }, '×') : null
+          ) : null,
           selected && !file ? h('span', { style: { marginLeft: 'auto', fontSize: 11, color: C.mute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 220 } }, selected.name) : null
         )
 
@@ -3255,8 +3365,20 @@ export function createTetherPanel({ React, Native, host }) {
             h('div', { className: 'tether-num', style: { fontSize: 11 } }, (file.name || file.path) + ' · ' + formatBytes(file.size)))
         }
 
-        const entries = [...dirEntries].sort((a, b) => (a.dir === b.dir ? String(a.name || '').localeCompare(String(b.name || '')) : (a.dir ? -1 : 1)))
+        const entries = filterExplorerEntries(sortExplorerEntries(dirEntries, sortKey, sortDir), search)
+        const filtering = !!search.trim()
         const columns = 'minmax(0,1fr) 132px 104px 78px'
+        const sortHeader = (key, label, align) => h('button', {
+          onClick: () => setSort((current) => toggleExplorerSort(current, key)),
+          title: '按' + label + '排序',
+          'aria-label': '按' + label + '排序',
+          'data-sort': sortKey === key ? sortDir : undefined,
+          className: 'tether-hover',
+          style: { display: 'flex', alignItems: 'center', gap: 3, justifyContent: align === 'right' ? 'flex-end' : 'flex-start', minWidth: 0, height: 22, padding: '0 4px', margin: '0 -4px', border: 0, borderRadius: 4, background: 'transparent', color: sortKey === key ? C.ink : C.mute, fontSize: 11, cursor: 'pointer' }
+        },
+          h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, label),
+          sortKey === key ? h('span', { style: { display: 'grid', placeItems: 'center', flex: '0 0 auto', transform: sortDir === 'asc' ? 'rotate(180deg)' : 'none' } }, h(Glyph, { name: 'chevronDown', size: 11 })) : null
+        )
         const directoryBody = () => {
           if (dirLoading && !entries.length) return h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', alignContent: 'center', gap: 8, color: C.mute, fontSize: 12 } },
             h('span', { className: 'tether-spin', style: { width: 18, height: 18, display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 18 })),
@@ -3266,6 +3388,9 @@ export function createTetherPanel({ React, Native, host }) {
             h('div', null, dirError),
             h('button', { onClick: refreshExplorer, className: 'tether-hover', style: { border: 0, borderRadius: 6, padding: '5px 10px', background: C.soft, color: C.ink, fontSize: 12, cursor: 'pointer' } }, '重试'))
           if (!path) return h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', color: C.mute, fontSize: 12 } }, '从左侧选择工作区或磁盘')
+          if (filtering && !entries.length) return h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', alignContent: 'center', gap: 8, color: C.mute, fontSize: 12, padding: 24, textAlign: 'center' } },
+            h('div', null, '未找到匹配 “' + search.trim() + '” 的项目'),
+            h('button', { onClick: () => setSearch(''), className: 'tether-hover', style: { border: 0, borderRadius: 6, padding: '5px 10px', background: C.soft, color: C.ink, fontSize: 12, cursor: 'pointer' } }, '清除搜索'))
           if (!entries.length) return h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', color: C.mute, fontSize: 12 } }, '空文件夹')
           return h('div', { className: 'tether-scroll', onScroll: hideHoverTip, style: { flex: '1 1 auto', overflow: 'auto', padding: '0 10px 24px' } },
             dirLoading ? h('div', { style: { display: 'flex', alignItems: 'center', gap: 7, height: 26, padding: '0 8px', fontSize: 11, color: C.mute } },
@@ -3273,7 +3398,7 @@ export function createTetherPanel({ React, Native, host }) {
               h('span', null, '正在刷新…'),
               h('button', { onClick: stopLoading, className: 'tether-hover', style: { border: 0, borderRadius: 5, padding: '2px 8px', background: C.soft, color: C.ink, fontSize: 11, cursor: 'pointer' } }, '停止')) : null,
             h('div', { style: { display: 'grid', gridTemplateColumns: columns, gap: 8, height: 28, padding: '0 8px', alignItems: 'center', fontSize: 11, color: C.mute } },
-              h('span', null, '名称'), h('span', null, '修改日期'), h('span', null, '类型'), h('span', { style: { textAlign: 'right' } }, '大小')),
+              sortHeader('name', '名称'), sortHeader('mtime', '修改日期'), h('span', null, '类型'), sortHeader('size', '大小', 'right')),
             entries.map((entry) => h('div', {
               key: entry.path, role: 'button', tabIndex: 0,
               onClick: (event) => {
