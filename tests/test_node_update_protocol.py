@@ -199,15 +199,28 @@ def test_update_prepare_does_not_block_message_receiver_or_cancel_heartbeat(tmp_
         assert await asyncio.to_thread(manager.prepare_started.wait, 2)
         await node._handle({"type": "heartbeat", "ts": 1.0})
         assert node.connected is False
+        await node._handle({"type": "update_call", "req_id": "check-during-prepare",
+                            "action": "check", "component": "node"})
+        await node._handle({"type": "update_call", "req_id": "status-during-prepare",
+                            "action": "status", "component": "node"})
+        for _ in range(100):
+            if {message.get("req_id") for message in sent} >= {
+                    "check-during-prepare", "status-during-prepare"}:
+                break
+            await asyncio.sleep(0.01)
+        assert {message.get("req_id") for message in sent} >= {
+            "check-during-prepare", "status-during-prepare"}
+        assert not any(message.get("req_id") == "prepare-1" for message in sent)
         manager.prepare_release.set()
         for _ in range(100):
-            if sent:
+            if any(message.get("req_id") == "prepare-1" for message in sent):
                 break
             await asyncio.sleep(0.01)
 
     asyncio.run(scenario())
-    assert sent == [{"type": "update_result", "req_id": "prepare-1", "ok": True,
-                     "component": "node", "prepared_id": "a" * 32}]
+    assert {message["req_id"] for message in sent} == {
+        "check-during-prepare", "status-during-prepare", "prepare-1"}
+    assert next(message for message in sent if message["req_id"] == "prepare-1")["prepared_id"] == "a" * 32
     node.store.db.close()
 
 

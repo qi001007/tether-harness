@@ -4,6 +4,7 @@ import path from 'node:path'
 const root = path.resolve(import.meta.dirname, '..', '..', '..')
 const sharedPath = path.join(root, 'packages/tether-ui/src/app.js')
 const pluginPath = path.join(root, 'packages/dsh-plugin-tether-client/lib/client.js')
+const pluginVersion = JSON.parse(fs.readFileSync(path.join(root, 'packages/dsh-plugin-tether-client/package.json'), 'utf8')).version
 
 const strip = (file) => fs.readFileSync(path.join(root, 'packages/tether-ui/src', file), 'utf8')
   .replace(/^import .*$/gm, '')
@@ -20,10 +21,12 @@ const plugin = `window.__ModuleLoader__.load({
     const React = require('react')
     const Native = require('tether-dsh-native-ui')
     const PANEL_ID = 'tether'
+    const PLUGIN_VERSION = ${JSON.stringify(pluginVersion)}
 ${dshHost}
 ${connectionPanel}
     let localPluginRpc = null
     const host = createDshHost({
+      pluginVersion: PLUGIN_VERSION,
       localPluginUpdates: createDshLocalPluginUpdateBridge(() => localPluginRpc),
       localDeviceIdentity: createDshLocalIdentityBridge(() => localPluginRpc)
     })

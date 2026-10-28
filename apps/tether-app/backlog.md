@@ -1,4 +1,7 @@
 # tether-app backlog
+- 2026-10-28：公开 APP 版本升至 `0.2.11`，并在窗口首次加载前增加最多 8 秒服务启动等待和最多 3 秒本机 Node API 就绪探测；超时仍展示 UI。
+- 2026-10-28：窗口加载前最多等待 supervisor 8 秒；Hub 模式的 APP 本机 Node 启动后，以当前设备身份和本进程 token 对本机 policy 只读接口最多轮询 3 秒，超时或启动失败仍加载可诊断 UI。回归 `test_app_startup_readiness.mjs`。
+- 2026-10-28：Electron renderer 记录脱敏的 console/load/navigation 诊断、本机与配置 Hub 的请求错误/HTTP 状态，以及 frame 即时与 3 秒稳定后的就绪/composer 标记；不记录 headers、body 或页面文字。
 - 2026-10-28：APP 包与 package-lock 根版本递增至 `0.2.10`，对应 Explorer broker 重启修复候选。
 - 2026-10-28：将 APP 包版本和 package-lock 根元数据统一到 `0.2.9`，用于远程 APP 更新闭环版本。
 - 2026-10-28：hub 模式下 supervisor 每进程生成随机本地 API token，经 `TETHER_LOCAL_API_TOKEN` 传给 Node；`main.js` 把本机设备、console 端口和 token 交给 UI server；server 只把本机设备的 fs/workspaces/drives/policy/audit/dsh sessions 路由到 `127.0.0.1:18894` 并注入 Bearer，其余仍走公网 Hub，响应带 `x-tether-local: 1`。不要把 token 写进 argv 或 `/app-context`。

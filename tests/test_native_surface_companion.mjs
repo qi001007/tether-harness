@@ -115,3 +115,33 @@ test('local identity RPC is owner-only and resolves only one fresh live Node ide
     fs.rmSync(home, { recursive: true, force: true })
   }
 })
+
+test('companion registers authenticated RPCs through the current HostConnectionService API without an rpc property', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'tether-dsh-register-'))
+  const oldHome = process.env.DSH_HOME
+  process.env.DSH_HOME = home
+  const registered = []
+  const ctx = {
+    connection: {
+      authenticatedUrl: (value) => value,
+      register(context, channel, handler) {
+        assert.equal(context, ctx)
+        registered.push({ channel, handler })
+        return () => {}
+      }
+    },
+    webServer: { getOrigin: () => 'http://127.0.0.1:34568' },
+    effect: (register) => register(),
+    get: () => undefined,
+  }
+  try {
+    apply(ctx)
+    assert.deepEqual(registered.map(({ channel }) => channel), ['/tether-updates', '/tether-identity'])
+    assert.ok(registered.every(({ handler }) => typeof handler === 'function'))
+    assert.throws(() => internals.registerRpc({}, ctx, '/missing', () => {}), /requires the DSH connection RPC registration API/)
+  } finally {
+    if (oldHome === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = oldHome
+    fs.rmSync(home, { recursive: true, force: true })
+  }
+})

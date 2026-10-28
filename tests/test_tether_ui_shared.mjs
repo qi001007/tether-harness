@@ -25,6 +25,12 @@ test('the shared panel body is copied byte for byte into the plugin bundle', () 
   assert.equal((plugin.match(/function createTetherPanel\(/g) || []).length, 1)
 })
 
+test('remote FilesPane exposes a new-file action for the current target directory', () => {
+  assert.match(shared, /const makeFile = \(base\) => askValue\('新建文件'/)
+  assert.match(shared, /post\(fsPath\('write'\), \{ path: target, text: '' \}\)/)
+  assert.match(shared, /iconButton\('plus', '新建文件', \(\) => makeFile\(path\), !path \|\| dirLoading \|\| previewBusy\)/)
+})
+
 test('connection panels show service checks without duplicate device totals or credentials', async () => {
   const { hubAddressForEditor, hubProbeErrorText, hubUrlNeedsReplacement, safeServiceAddress } = await import('../packages/tether-ui/src/app.js')
   assert.equal(safeServiceAddress('https://user:secret@hub.example:8443/api?token=hidden#frag'), 'https://hub.example:8443/api')
@@ -161,13 +167,32 @@ test('one-click updates stop on rejected stages and pass the fresh authority thr
 })
 
 test('automatic update checks report availability, failures, and stale targets safely', async () => {
-  const { checkUpdateAvailability, dedupeUpdateCheck, deviceAfterLocalIdentity, orderNetworkDevices, updateAvailableFor, updateCheckKey } = await import('../packages/tether-ui/src/app.js')
+  const { cachedUpdateCheck, checkUpdateAvailability, dedupeUpdateCheck, deviceAfterLocalIdentity, localPluginNeedsRestart, localPluginVersionSeed, orderNetworkDevices, shortUpdateError, updateAvailableFor, updateCheckKey, withUpdateTimeout } = await import('../packages/tether-ui/src/app.js')
   assert.deepEqual(await checkUpdateAvailability(async () => ({ update_available: true })), {
     current: true, updateAvailable: true, result: { update_available: true }
   })
   assert.equal((await checkUpdateAvailability(async () => ({ update_available: false }))).updateAvailable, false)
   assert.equal((await checkUpdateAvailability(async () => ({ ok: false, message: 'offline' }))).failed, true)
   assert.equal((await checkUpdateAvailability(async () => { throw new Error('offline') })).failed, true)
+  assert.equal(shortUpdateError(Object.assign(new Error('timeout'), { code: 'update_timeout' })), '更新检查超时，请手动刷新重试')
+  let now = 1000
+  let checks = 0
+  const cache = new Map()
+  const cachedCheck = () => cachedUpdateCheck(cache, 'device:node', async () => ({ update_available: ++checks > 0 }), { now: () => now })
+  await cachedCheck()
+  await cachedCheck()
+  assert.equal(checks, 1)
+  now += 300_001
+  await cachedCheck()
+  assert.equal(checks, 2)
+  await cachedUpdateCheck(cache, 'device:node', async () => ({ update_available: true, forced: true }), { force: true, now: () => now })
+  assert.equal(cache.get('device:node').value.forced, true)
+  await assert.rejects(withUpdateTimeout(new Promise(() => {}), 5), (error) => error.code === 'update_timeout')
+  assert.equal(localPluginNeedsRestart({ current_version: '0.2.10', runtime_version: '0.2.5' }), true)
+  assert.equal(localPluginNeedsRestart({ current_version: '0.2.10', runtime_version: '0.2.10' }), false)
+  assert.equal(localPluginNeedsRestart({ current_version: '0.2.10' }), false)
+  assert.deepEqual(localPluginVersionSeed({ kind: 'dsh', pluginVersion: '0.2.10' }), { current_version: '0.2.10', runtime_version: '0.2.10' })
+  assert.equal(localPluginVersionSeed({ kind: 'web', pluginVersion: '0.2.10' }), null)
 
   let current = true
   const switched = await checkUpdateAvailability(async () => {

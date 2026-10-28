@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import test from 'node:test'
-import { createLocalPluginUpdateHandler, selectedProfile } from '../packages/tether-dsh-surface/lib/local-updates.js'
+import { createLocalPluginUpdateHandler, loadedPluginVersion, selectedProfile } from '../packages/tether-dsh-surface/lib/local-updates.js'
 
 const normalized = (value) => String(value).replaceAll('\\', '/')
 const ownerPeer = { principal: { kind: 'owner' } }
@@ -66,6 +69,33 @@ test('local plugin updater derives profile from its installed DSH package path a
   const response = await handler('apply', { prepared_id: 'a'.repeat(32) }, undefined, ownerPeer)
   assert.equal(response.value.error_code, 'plugin_profile_unknown')
   assert.equal(spawned, false)
+})
+
+test('local plugin status reports loaded code separately from disk so a restart is not shown as latest', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'tether-loaded-plugin-'))
+  try {
+    const profileDir = path.join(home, '.dsh', 'profiles', 'desktop')
+    const surface = path.join(profileDir, 'node_modules', 'tether-dsh-surface')
+    const client = path.join(profileDir, 'node_modules', 'tether-dsh-client')
+    fs.mkdirSync(path.join(surface, 'updater'), { recursive: true })
+    fs.mkdirSync(path.join(client, 'lib'), { recursive: true })
+    fs.writeFileSync(path.join(client, 'package.json'), JSON.stringify({ name: 'tether-dsh-client', version: '0.2.5' }))
+    fs.writeFileSync(path.join(client, 'lib', 'client.js'), "const PLUGIN_VERSION = '0.2.5'")
+    assert.equal(loadedPluginVersion(surface, path.join(home, '.dsh'), 'desktop'), '0.2.5')
+    const handler = createLocalPluginUpdateHandler({
+      env: { DSH_HOME: path.join(home, '.dsh') }, homeDir: home, packageRoot: surface,
+      existsSync: () => true,
+      execFileImpl: async () => ({ stdout: JSON.stringify({
+        ok: true, component: 'plugin', current_version: '0.2.10', latest_version: '0.2.10', restart_required: false,
+      }) })
+    })
+    const response = await handler('status', {}, undefined, ownerPeer)
+    assert.equal(response.value.runtime_version, '0.2.5')
+    assert.equal(response.value.current_version, '0.2.10')
+    assert.equal(response.value.restart_required, true)
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true })
+  }
 })
 
 test('local plugin apply checks native DSH activity and refuses while a turn is active', async () => {

@@ -1,4 +1,8 @@
 # 修改记录
+- 2026-10-28：回归覆盖 FilesPane 在当前目标目录显示新建文件按钮，且调用目标设备文件写入接口。
+- 2026-10-28：发布流水线新增 `test_*.cjs` 测试发现步骤，避免遗漏 CommonJS renderer 诊断回归。
+- 2026-10-28：新增 `test_app_startup_readiness.mjs`，覆盖 supervisor 有界等待、本机 Node API 带身份/token 的只读就绪探测、以及探测超时。
+- 2026-10-28：新增 `file:` 插件依赖漂移回归：profile 版本较新但源码依赖较旧时仍报告可更新；成功时同步 profile/source，源码写入失败时两处都回滚且保留无关用户文件。
 - 2026-10-28：更新 APP 重启 helper 回归，覆盖 Explorer wrapper、Worker 路径、版本候选失败处理及隔离启动契约。
 - 2026-10-28：新增 Node 远程 APP 更新回归，覆盖 app manager 注册、app_version 保留与 apply 的 restart_required 返回。
 - 2026-10-28：新增 `test_ui_performance.mjs`（abort 不换 base、缓存/预取/停止/设备门禁/悬浮卡/本地路由断言）、`test_web_local_api.mjs`（APP 网关只转发本机设备路由）、`test_node_console_api.py`（token/设备/策略/审计/DSH 路由）、`test_node_concurrency.py`（fs 与 dsh 并发）、Office 缓存回归。
@@ -58,3 +62,12 @@
 - 2026-10-27：补充 401/403 凭据错误与不可达/超时提示映射、DSH auth 状态码测试及 APP 不回传敏感 URL 测试。定向 supervisor 6/6、API auth 8/8；共享 UI 功能用例通过，内部子进程检查在 sandbox EPERM，改用独立 bundle check 验证。
 - 2026-10-27：增加 Hub 地址编辑输入的空配置、正常路径保留、敏感附加参数隐藏提示及断开按钮可用状态回归。
 - 2026-10-28：修复更新服务 helper CLI 集成测试对仓库 `.venv/Scripts/python.exe` 的硬编码，按显式环境变量、有效项目虚拟环境和 PATH 顺序探测可运行 Python，保留真实 helper activity/apply/relaunch 断言。
+# 变更记录
+
+- 2026-10-28：增加 DSH 源码依赖与 profile 双路径插件更新及回滚测试、运行版本提示测试，以及 renderer 网络范围/日志脱敏/只读即时与稳定 frame 状态测试。
+- 2026-10-28：新增当前 SDK `register(ctx, channel, handler)` 无 `rpc` 属性的 companion 回归，并验证 dirty file: Git 工作树阻止插件写入。
+- 2026-10-28：surface descriptor 发布回归改用现代连接注册 API，并断言两条 owner RPC 均被注册。
+- 2026-10-28：回归验证 profile 中 surface 包旧于 client 时按旧 surface 版本报告更新，且不会采用缓存安装版本掩盖差异。
+- 2026-10-28：验证更新检查 5 分钟缓存/强刷/过期重查、明确超时失败，并保留只检查不安装的行为。
+- 2026-10-28：新增真实本机 SSE fixture 回归，验证首字节不等 EOF、间隔事件分块读取及 close 中断上游；新增 Controller 流式转发/客户端取消关闭 RPC 回归。
+- 2026-10-28：Node 更新协议回归确认 prepare 期间仍可及时回复 status/check；manifest 测试覆盖同 URL 并发 singleflight 与 prepare 新鲜读取。

@@ -14,6 +14,10 @@ Tether 将目标设备当前运行的 DeepSeek Harness Host 页面嵌入客户�
 - 传输大小与失败边界须明确；超限应返回可理解的错误。
 - 跨设备支持须在目标节点安装兼容版本后单独验收。
 
+## 实时事件转发
+
+`GET /plugins/events` 通过独立 `http_stream_open/read/close` Node RPC 转发 SSE。Node 在固定的本机 DSH Host 上建立同源认证请求，由有界异步读取器按最多 48 KiB 的块读取；每个设备最多 8 条流，读取轮询最多等待约 1 秒，90 秒没有读取轮询时自动关闭空闲流。活动浏览器每轮轮询续期，因此静默但仍连接的 SSE 不会按固定时长中断。Controller 以 `StreamingResponse` 逐块写回，浏览器断开或请求结束时关闭 Node 流。该路径只接受 GET 和 `Accept: text/event-stream`，不缓冲到 EOF，也不向浏览器暴露 DSH Cookie。
+
 ## 当前状态
 
 已完成本机 DSH Host 页面与 Node 转发的部分桌面验证，包括页面、模型列表、权限菜单、目标文件引用和既有轨迹的展示。该验证不代表模型发送、附件传输、独立安装或跨设备验收通过。目标节点更新和双设备验收仍未完成。

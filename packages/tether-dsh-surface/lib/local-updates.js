@@ -40,6 +40,24 @@ function selectedProfile(packageRoot, dshHome, argv = process.argv) {
   return relative[0]
 }
 
+function loadedPluginVersion(packageRoot, dshHome, profile) {
+  const packageDirectory = path.resolve(packageRoot, '..')
+  const siblingName = path.basename(packageDirectory) === 'packages' ? 'dsh-plugin-tether-client' : 'tether-dsh-client'
+  const candidates = [
+    path.join(packageDirectory, siblingName),
+    path.join(dshHome, 'profiles', profile || '', 'node_modules', 'tether-dsh-client')
+  ]
+  for (const candidate of candidates) {
+    try {
+      const manifest = JSON.parse(fs.readFileSync(path.join(candidate, 'package.json'), 'utf8'))
+      const source = fs.readFileSync(path.join(candidate, 'lib', 'client.js'), 'utf8')
+      const match = /\bPLUGIN_VERSION\s*=\s*['"]([^'"]+)['"]/.exec(source)
+      return (match && match[1]) || manifest.version || null
+    } catch (_) { /* try the other package location */ }
+  }
+  return null
+}
+
 function safeEnvironment(env, dshHome) {
   const result = {}
   for (const key of SAFE_ENV_KEYS) {
@@ -88,6 +106,7 @@ export function createLocalPluginUpdateHandler({
 } = {}) {
   const dshHome = selectedDshHome(env, homeDir)
   const profile = selectedProfile(packageRoot, dshHome)
+  const runtimeVersion = loadedPluginVersion(packageRoot, dshHome, profile)
   const updaterRoot = path.join(packageRoot, 'updater')
   const stateDir = path.join(dshHome, 'storages', 'tether', 'updates')
   const childEnv = safeEnvironment(env, dshHome)
@@ -153,11 +172,15 @@ export function createLocalPluginUpdateHandler({
         }
       }
       const result = await invoke(action, action === 'apply' ? ['--prepared-id', payload.prepared_id] : [])
-      return { ok: true, value: result }
+      const value = runtimeVersion && result && typeof result === 'object'
+        ? { ...result, runtime_version: runtimeVersion,
+          ...(result.current_version ? { restart_required: result.current_version !== runtimeVersion } : {}) }
+        : result
+      return { ok: true, value }
     } catch (_) {
       return { ok: true, value: { ok: false, component: 'plugin', error_code: 'invalid_updater_output', error: '本机插件更新器返回了无效结果。' } }
     }
   }
 }
 
-export { parsePayload, resolvePythonCandidates, selectedDshHome, selectedProfile }
+export { loadedPluginVersion, parsePayload, resolvePythonCandidates, selectedDshHome, selectedProfile }

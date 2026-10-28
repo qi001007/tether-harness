@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import sqlite3
 import stat
 import subprocess
 import sys
 import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -76,7 +79,10 @@ def make_zip(component: str, version: str = "0.2.1", extra: dict[str, bytes] | N
     else:
         files = {
             "version.json": json.dumps({"schema": 1, "components": {"plugin": version}}).encode(),
-            "packages/dsh-plugin-tether/package.json": b"{}",
+            "packages/dsh-plugin-tether/package.json": json.dumps({"name": "tether-dsh-plugin", "version": version}).encode(),
+            "packages/dsh-plugin-tether-client/package.json": json.dumps({"name": "tether-dsh-client", "version": version}).encode(),
+            "packages/tether-dsh-native-ui/package.json": json.dumps({"name": "tether-dsh-native-ui", "version": version}).encode(),
+            "packages/tether-dsh-surface/package.json": json.dumps({"name": "tether-dsh-surface", "version": version}).encode(),
             "packages/dsh-plugin-tether-client/lib/client.js": b"const PLUGIN_VERSION = '0.2.1'",
             "packages/tether-dsh-native-ui/lib/client.js": b"native-ui",
             "packages/tether-dsh-surface/lib/index.js": b"surface",
@@ -110,6 +116,38 @@ def install_manifest(server: ArtifactServer, component: str, archive: bytes, *, 
     raw = json.dumps({"schema": 1, "components": components}).encode()
     server.files["/manifest.json"] = raw
     return server.base + "/manifest.json"
+
+
+def test_check_manifest_cache_singleflights_and_prepare_fetches_fresh_manifest(
+        artifact_server: ArtifactServer, tmp_path: Path, monkeypatch) -> None:
+    root = tmp_path / "install"
+    seed_version(root)
+    manifest_url = install_manifest(artifact_server, "app", make_zip("app", version="0.2.1"),
+                                    version="0.2.1")
+    manager = UpdateManager(root, "app", manifest_url=manifest_url, state_dir=tmp_path / "state")
+    original_fetch = manager._fetch
+    fetched_manifests: list[str] = []
+    fetched_lock = threading.Lock()
+
+    def counted_fetch(url: str, limit: int, *, timeout: float = 15.0) -> bytes:
+        if url == manifest_url:
+            with fetched_lock:
+                fetched_manifests.append(url)
+            time.sleep(0.05)
+        return original_fetch(url, limit, timeout=timeout)
+
+    monkeypatch.setattr(manager, "_fetch", counted_fetch)
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        checked = list(pool.map(lambda _index: manager.check(), range(5)))
+    assert all(item["ok"] and item["latest_version"] == "0.2.1" for item in checked)
+    assert fetched_manifests == [manifest_url]
+
+    install_manifest(artifact_server, "app", make_zip("app", version="0.2.2"), version="0.2.2")
+    assert manager.check()["latest_version"] == "0.2.1"  # check cache is short-lived
+    prepared = manager.prepare()
+    assert prepared["ok"] is True, prepared
+    assert prepared["to_version"] == "0.2.2"
+    assert fetched_manifests == [manifest_url, manifest_url]
 
 
 def seed_version(root: Path) -> None:
@@ -358,6 +396,39 @@ def test_dirty_development_checkout_is_not_updated(artifact_server: ArtifactServ
     assert (root / "user-edit.py").read_text(encoding="utf-8") == "keep"
 
 
+def test_dirty_file_dependency_checkout_is_not_modified(artifact_server: ArtifactServer, tmp_path: Path) -> None:
+    root = tmp_path / "app-root"
+    seed_version(root)
+    source_packages = tmp_path / "source" / "packages"
+    source_plugin = source_packages / "dsh-plugin-tether"
+    source_plugin.mkdir(parents=True)
+    original_manifest = json.dumps({"name": "tether-dsh-plugin", "version": "0.2.1"})
+    (source_plugin / "package.json").write_text(original_manifest, encoding="utf-8")
+    subprocess.run(["git", "init", str(tmp_path / "source")], capture_output=True, check=True)
+    user_change = source_plugin / "user-edit.txt"
+    user_change.write_text("keep", encoding="utf-8")
+
+    dsh_home = tmp_path / "dsh"
+    profile_dir = dsh_home / "profiles" / "desktop"
+    packages = profile_dir / "node_modules"
+    profile_dir.mkdir(parents=True)
+    (profile_dir / "package.json").write_text(json.dumps({
+        "dependencies": {"tether-dsh-plugin": "file:" + os.path.relpath(source_plugin, profile_dir)},
+    }), encoding="utf-8")
+    for package in ("tether-dsh-plugin", "tether-dsh-client", "tether-dsh-native-ui", "tether-dsh-surface"):
+        (packages / package).mkdir(parents=True)
+    url = install_manifest(artifact_server, "plugin", make_zip("plugin"))
+    manager = UpdateManager(root, "plugin", dsh_home=dsh_home, manifest_url=url,
+                            state_dir=tmp_path / "state", profile="desktop")
+
+    prepared = manager.prepare()
+
+    assert prepared["ok"] is False
+    assert prepared["error_code"] == "dirty_checkout"
+    assert user_change.read_text(encoding="utf-8") == "keep"
+    assert (source_plugin / "package.json").read_text(encoding="utf-8") == original_manifest
+
+
 def test_plugin_apply_failure_restores_previously_replaced_package_file(
     artifact_server: ArtifactServer, tmp_path: Path
 ) -> None:
@@ -366,10 +437,12 @@ def test_plugin_apply_failure_restores_previously_replaced_package_file(
     dsh_home = tmp_path / "dsh"
     packages = dsh_home / "profiles/desktop/node_modules"
     for name in ("tether-dsh-plugin", "tether-dsh-client", "tether-dsh-native-ui", "tether-dsh-surface"):
-        (packages / name / "lib").mkdir(parents=True)
+        package = packages / name
+        (package / "lib").mkdir(parents=True)
+        (package / "package.json").write_text(json.dumps({"name": name, "version": "0.2.0"}), encoding="utf-8")
     plugin_json = packages / "tether-dsh-plugin/package.json"
     client_js = packages / "tether-dsh-client/lib/client.js"
-    plugin_json.write_bytes(b"old-plugin-json")
+    plugin_json.write_bytes(b'{"name":"tether-dsh-plugin","version":"0.2.0"}')
     client_js.write_text("const PLUGIN_VERSION = '0.2.0'", encoding="utf-8")
     url = install_manifest(artifact_server, "plugin", make_zip("plugin"))
     manager = UpdateManager(root, "plugin", dsh_home=dsh_home, manifest_url=url,
@@ -391,7 +464,7 @@ def test_plugin_apply_failure_restores_previously_replaced_package_file(
 
     assert result["ok"] is False
     assert result["error_code"] == "apply_failed"
-    assert plugin_json.read_bytes() == b"old-plugin-json"
+    assert plugin_json.read_bytes() == b'{"name":"tether-dsh-plugin","version":"0.2.0"}'
     assert client_js.read_text(encoding="utf-8") == "const PLUGIN_VERSION = '0.2.0'"
 
 
@@ -461,9 +534,9 @@ def test_plugin_maps_zip_sources_to_existing_profile_packages(artifact_server: A
     packages = dsh_home / "profiles" / "work" / "node_modules"
     for name in ("tether-dsh-plugin", "tether-dsh-client", "tether-dsh-native-ui", "tether-dsh-surface"):
         (packages / name / "lib").mkdir(parents=True)
+        (packages / name / "package.json").write_text(json.dumps({"name": name, "version": "0.2.0"}), encoding="utf-8")
     (packages / "tether-dsh-client" / "lib" / "client.js").write_text(
         "const PLUGIN_VERSION = '0.2.0'", encoding="utf-8")
-    (packages / "tether-dsh-plugin" / "package.json").write_text("old", encoding="utf-8")
     url = install_manifest(artifact_server, "plugin", make_zip("plugin"))
     manager = UpdateManager(root, "plugin", dsh_home=dsh_home, manifest_url=url, state_dir=tmp_path / "state", profile="work")
 
@@ -474,10 +547,145 @@ def test_plugin_maps_zip_sources_to_existing_profile_packages(artifact_server: A
 
     assert result["ok"] is True
     assert result["restart_required"] is True
-    assert (packages / "tether-dsh-plugin" / "package.json").read_bytes() == b"{}"
+    assert json.loads((packages / "tether-dsh-plugin" / "package.json").read_text(encoding="utf-8"))["version"] == "0.2.1"
     assert "0.2.1" in (packages / "tether-dsh-client" / "lib" / "client.js").read_text(encoding="utf-8")
     assert json.loads((root / "version.json").read_text(encoding="utf-8"))["components"]["plugin"] == "0.2.0"
     assert manager.status()["current_version"] == "0.2.1"
+
+
+@pytest.mark.parametrize("fail_source_write", [False, True])
+def test_plugin_file_dependencies_update_source_and_profile_transactionally(
+    artifact_server: ArtifactServer, tmp_path: Path, fail_source_write: bool
+) -> None:
+    root = tmp_path / "app-root"
+    seed_version(root)
+    dsh_home = tmp_path / "dsh"
+    profile_dir = dsh_home / "profiles" / "desktop"
+    packages = profile_dir / "node_modules"
+    source_packages = tmp_path / "plugin" / "packages"
+    package_names = {
+        "dsh-plugin-tether": "tether-dsh-plugin",
+        "dsh-plugin-tether-client": "tether-dsh-client",
+        "tether-dsh-native-ui": "tether-dsh-native-ui",
+        "tether-dsh-surface": "tether-dsh-surface",
+    }
+    source_dependencies = {
+        "tether-dsh-plugin": {
+            "tether-dsh-client": "file:../dsh-plugin-tether-client",
+            "tether-dsh-native-ui": "file:../tether-dsh-native-ui",
+            "tether-dsh-surface": "file:../tether-dsh-surface",
+        },
+        "tether-dsh-client": {"tether-dsh-native-ui": "file:../tether-dsh-native-ui"},
+    }
+    profile_dir.mkdir(parents=True)
+    (profile_dir / "package.json").write_text(json.dumps({
+        "dependencies": {"tether-dsh-plugin": "file:" + os.path.relpath(
+            source_packages / "dsh-plugin-tether", profile_dir)},
+    }), encoding="utf-8")
+    for source_name, package_name in package_names.items():
+        profile_package = packages / package_name
+        profile_package.mkdir(parents=True)
+        (profile_package / "package.json").write_text(json.dumps({"name": package_name, "version": "0.2.5"}), encoding="utf-8")
+        source_package = source_packages / source_name
+        (source_package / "lib").mkdir(parents=True)
+        (source_package / "package.json").write_text(json.dumps({
+            "name": package_name,
+            "version": "0.2.1",
+            "dependencies": source_dependencies.get(package_name, {}),
+        }), encoding="utf-8")
+        (source_package / "lib" / ("client.js" if source_name == "dsh-plugin-tether-client" else "index.js")).write_text(
+            "const PLUGIN_VERSION = '0.2.1'" if source_name == "dsh-plugin-tether-client" else "old source",
+            encoding="utf-8",
+        )
+    profile_client = packages / "tether-dsh-client"
+    (profile_client / "lib").mkdir()
+    (profile_client / "lib" / "client.js").write_text("const PLUGIN_VERSION = '0.2.5'", encoding="utf-8")
+    retained = source_packages / "dsh-plugin-tether" / "user-note.txt"
+    retained.write_text("preserve", encoding="utf-8")
+
+    newer_packages = {
+        "dsh-plugin-tether/package.json": json.dumps({
+            "name": "tether-dsh-plugin", "version": "0.2.10", "dependencies": source_dependencies["tether-dsh-plugin"]
+        }).encode(),
+        "dsh-plugin-tether-client/package.json": json.dumps({
+            "name": "tether-dsh-client", "version": "0.2.10",
+            "dependencies": source_dependencies["tether-dsh-client"],
+        }).encode(),
+        "tether-dsh-native-ui/package.json": json.dumps({"name": "tether-dsh-native-ui", "version": "0.2.10"}).encode(),
+        "tether-dsh-surface/package.json": json.dumps({"name": "tether-dsh-surface", "version": "0.2.10"}).encode(),
+    }
+    archive = make_zip("plugin", version="0.2.10", extra={
+        **{f"packages/{path}": value for path, value in newer_packages.items()},
+        "packages/dsh-plugin-tether-client/lib/client.js": b"const PLUGIN_VERSION = '0.2.10'",
+    })
+    url = install_manifest(artifact_server, "plugin", archive, version="0.2.10")
+    manager = UpdateManager(root, "plugin", dsh_home=dsh_home, manifest_url=url, state_dir=tmp_path / "state")
+
+    checked = manager.check()
+    prepared = manager.prepare()
+
+    assert checked["current_version"] == "0.2.1"
+    assert checked["update_available"] is True
+    assert prepared["ok"] is True, prepared
+    if fail_source_write:
+        write_atomic = manager._write_atomic
+        failed = False
+
+        def fail_once(target: Path, data: bytes) -> None:
+            nonlocal failed
+            if not failed and target == source_packages / "dsh-plugin-tether-client" / "lib" / "client.js":
+                failed = True
+                raise OSError("injected source package write failure")
+            write_atomic(target, data)
+
+        manager._write_atomic = fail_once  # type: ignore[method-assign]
+
+    result = manager.apply(prepared["prepared_id"])
+
+    if fail_source_write:
+        assert result["ok"] is False
+        assert result["error_code"] == "apply_failed"
+        assert "0.2.1" in (source_packages / "dsh-plugin-tether-client" / "lib" / "client.js").read_text(encoding="utf-8")
+        assert "0.2.5" in (packages / "tether-dsh-client" / "lib" / "client.js").read_text(encoding="utf-8")
+        assert retained.read_text(encoding="utf-8") == "preserve"
+        return
+
+    assert result["ok"] is True, result
+    assert result["restart_required"] is True
+    assert "0.2.10" in (source_packages / "dsh-plugin-tether-client" / "lib" / "client.js").read_text(encoding="utf-8")
+    assert "0.2.10" in (packages / "tether-dsh-client" / "lib" / "client.js").read_text(encoding="utf-8")
+    for source_name, package_name in package_names.items():
+        source_manifest = json.loads((source_packages / source_name / "package.json").read_text(encoding="utf-8"))
+        profile_manifest = json.loads((packages / package_name / "package.json").read_text(encoding="utf-8"))
+        assert source_manifest["version"] == profile_manifest["version"] == "0.2.10"
+    assert retained.read_text(encoding="utf-8") == "preserve"
+    assert manager.status()["current_version"] == "0.2.10"
+
+
+def test_plugin_version_uses_the_oldest_profile_package_manifest(artifact_server: ArtifactServer, tmp_path: Path) -> None:
+    root = tmp_path / "app-root"
+    seed_version(root)
+    dsh_home = tmp_path / "dsh"
+    packages = dsh_home / "profiles" / "desktop" / "node_modules"
+    for name in ("tether-dsh-plugin", "tether-dsh-client", "tether-dsh-native-ui", "tether-dsh-surface"):
+        package = packages / name
+        (package / "lib").mkdir(parents=True)
+        version = "0.2.5" if name == "tether-dsh-surface" else "0.2.10"
+        (package / "package.json").write_text(json.dumps({"name": name, "version": version}), encoding="utf-8")
+    (packages / "tether-dsh-client" / "lib" / "client.js").write_text(
+        "const PLUGIN_VERSION = '0.2.10'", encoding="utf-8")
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
+    (state_dir / "installed-plugin.json").write_text(json.dumps({"version": "0.2.10"}), encoding="utf-8")
+    url = install_manifest(artifact_server, "plugin", make_zip("plugin", version="0.2.10"), version="0.2.10")
+    manager = UpdateManager(root, "plugin", dsh_home=dsh_home, manifest_url=url, state_dir=state_dir)
+
+    status = manager.status()
+    checked = manager.check()
+
+    assert status["current_version"] == "0.2.5"
+    assert checked["current_version"] == "0.2.5"
+    assert checked["update_available"] is True
 
 
 def test_plugin_apply_refuses_if_host_profile_changes_after_prepare(artifact_server: ArtifactServer, tmp_path: Path) -> None:
@@ -487,6 +695,7 @@ def test_plugin_apply_refuses_if_host_profile_changes_after_prepare(artifact_ser
     packages = dsh_home / "profiles" / "work" / "node_modules"
     for name in ("tether-dsh-plugin", "tether-dsh-client", "tether-dsh-native-ui", "tether-dsh-surface"):
         (packages / name / "lib").mkdir(parents=True)
+        (packages / name / "package.json").write_text(json.dumps({"name": name, "version": "0.2.0"}), encoding="utf-8")
     (packages / "tether-dsh-client" / "lib" / "client.js").write_text(
         "const PLUGIN_VERSION = '0.2.0'", encoding="utf-8")
     url = install_manifest(artifact_server, "plugin", make_zip("plugin"))
@@ -726,8 +935,12 @@ def test_app_and_node_version_reads_preserve_actual_plugin_version(tmp_path: Pat
     root = tmp_path / "install"
     seed_version(root)
     dsh_home = tmp_path / "dsh"
-    client = dsh_home / "profiles/desktop/node_modules/tether-dsh-client/lib/client.js"
-    client.parent.mkdir(parents=True)
+    packages = dsh_home / "profiles/desktop/node_modules"
+    for name in ("tether-dsh-plugin", "tether-dsh-client", "tether-dsh-native-ui", "tether-dsh-surface"):
+        package = packages / name
+        (package / "lib").mkdir(parents=True)
+        (package / "package.json").write_text(json.dumps({"name": name, "version": "0.2.2"}), encoding="utf-8")
+    client = packages / "tether-dsh-client/lib/client.js"
     client.write_text("const PLUGIN_VERSION = '0.2.2'\n", encoding="utf-8")
     for component in ("app", "node"):
         manager = UpdateManager(root, component, dsh_home=dsh_home, state_dir=tmp_path / f"state-{component}")

@@ -45,7 +45,7 @@ export function createDshLocalIdentityBridge(getRpc) {
   }
 }
 
-export function createDshHost({ apiBase = DSH_API_BASE, localPluginUpdates, localDeviceIdentity } = {}) {
+export function createDshHost({ apiBase = DSH_API_BASE, pluginVersion = null, localPluginUpdates, localDeviceIdentity } = {}) {
   const normalize = (value) => String(value || '').replace(/\/+$/, '')
   const appContext = async () => {
     const response = await fetch(DSH_APP_BASE + '/app-context', { signal: AbortSignal.timeout(1500) })
@@ -67,6 +67,7 @@ export function createDshHost({ apiBase = DSH_API_BASE, localPluginUpdates, loca
   }
   return {
     kind: 'dsh',
+    pluginVersion,
     apiBase: () => apiBase,
     localDeviceId: async () => {
       try {

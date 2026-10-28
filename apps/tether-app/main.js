@@ -1,9 +1,11 @@
-const { app, BrowserWindow, ipcMain, shell } = require('electron')
+const { app, BrowserWindow, ipcMain, shell, session, webFrameMain } = require('electron')
 const fs = require('node:fs')
 const path = require('node:path')
 const { pathToFileURL } = require('node:url')
 const { Supervisor } = require('./supervisor.js')
+const { waitForSupervisorStart, waitForLocalNodeApi } = require('./startup-readiness.js')
 const { UpdateService } = require('./update-service.js')
+const { rendererDiagnostic, rendererFrameState, rendererRequestScope, rendererSettledFrameState, safeRendererMessage, safeRendererPath } = require('./renderer-diagnostics.js')
 
 const repoRoot = path.resolve(__dirname, '..', '..')
 const webRoot = path.join(repoRoot, 'packages', 'tether-ui', 'web')
@@ -61,7 +63,35 @@ let mainWindow = null
 let webServer = null
 let rendererConsoleErrors = 0
 
+function logRendererNetworkFailure(event, details) {
+  const scope = rendererRequestScope(details.url, controller)
+  if (!scope) return
+  const method = /^[A-Z]{1,12}$/.test(details.method || '') ? details.method : 'OTHER'
+  const resource = /^[a-z-]{1,32}$/.test(details.resourceType || '') ? details.resourceType : 'other'
+  const path = safeRendererPath(details.url)
+  if (event === 'error') {
+    log('renderer request failed scope=' + scope + ' method=' + method + ' resource=' + resource
+      + ' path=' + path + ' error=' + safeRendererMessage(details.error))
+  } else if (Number(details.statusCode) >= 400) {
+    log('renderer request http-error scope=' + scope + ' method=' + method + ' resource=' + resource
+      + ' status=' + Number(details.statusCode) + ' path=' + path)
+  }
+}
+
 async function createWindow() {
+  const startupResult = await waitForSupervisorStart(supervisor.start())
+  if (!startupResult.completed) log('services startup wait timed out; loading UI')
+  else if (startupResult.error) log('services failed ' + (startupResult.error.stack || startupResult.error))
+  else if (startupResult.state) log('services ' + startupResult.state.mode + ' controller=' + startupResult.state.controller.state + ' node=' + startupResult.state.node.state)
+  if (startupResult.completed && startupResult.state && startupResult.state.mode === 'hub' && startupResult.state.node.state === 'running') {
+    const ready = await waitForLocalNodeApi({
+      port: supervisor.consolePort,
+      device: supervisor.device,
+      token: supervisor.localApiToken
+    }, { timeoutMs: 3000 })
+    if (!ready) log('local node API readiness timed out; loading UI')
+  }
+
   const { createWebServer } = await import(pathToFileURL(path.join(webRoot, 'server.mjs')).href)
   webServer = createWebServer({
     root: webRoot,
@@ -86,8 +116,8 @@ async function createWindow() {
   const url = await webServer.listen()
   uiOrigin = new URL(url).origin
   log('app start ' + app.getVersion() + ' ui ' + url + ' controller ' + controller)
-  supervisor.start().then((state) => log('services ' + state.mode + ' controller=' + state.controller.state + ' node=' + state.node.state)).catch((error) => log('services failed ' + (error.stack || error)))
-
+  session.defaultSession.webRequest.onErrorOccurred({ urls: ['<all_urls>'] }, (details) => logRendererNetworkFailure('error', details))
+  session.defaultSession.webRequest.onCompleted({ urls: ['<all_urls>'] }, (details) => logRendererNetworkFailure('complete', details))
   mainWindow = new BrowserWindow({
     width: 1480,
     height: 920,
@@ -105,15 +135,40 @@ async function createWindow() {
     }
   })
   mainWindow.on('closed', () => { mainWindow = null })
-  mainWindow.webContents.on('console-message', (_event, level, _message, line, sourceId) => {
+  mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
     if (level >= 3) rendererConsoleErrors += 1
-    if (shotPath && level >= 3) log('renderer console error source=' + sourceId + ':' + line)
+    if (level >= 3) log(rendererDiagnostic(message, sourceId, line))
   })
-  mainWindow.webContents.on('did-fail-load', (_event, code, description) => {
-    if (shotPath) log('renderer load failed code=' + code + ' ' + description)
+  mainWindow.webContents.on('did-start-navigation', (_event, navigationUrl, isInPlace, isMainFrame) => {
+    if (!isInPlace) log('renderer navigation started main=' + !!isMainFrame + ' path=' + safeRendererPath(navigationUrl))
+  })
+  mainWindow.webContents.on('did-fail-load', (_event, code, description, validatedURL, isMainFrame) => {
+    log('renderer load failed main=' + !!isMainFrame + ' code=' + code + ' path=' + safeRendererPath(validatedURL)
+      + ' message=' + safeRendererMessage(description))
+  })
+  mainWindow.webContents.on('did-frame-finish-load', (_event, isMainFrame, frameProcessId, frameRoutingId) => {
+    try {
+      const frame = webFrameMain.fromId(frameProcessId, frameRoutingId)
+      if (!frame) return
+      const frameUrl = frame.url
+      const framePath = safeRendererPath(frameUrl)
+      const logFrameState = (label, state) => {
+        log('renderer frame ' + label + ' main=' + !!isMainFrame + ' path=' + framePath
+          + ' readyState=' + state.readyState + ' childElements=' + Number(state.childElements || 0)
+          + ' hasComposer=' + !!state.hasComposer)
+      }
+      rendererFrameState(frame).then((state) => logFrameState('ready', state))
+        .catch(() => log('renderer frame ready unavailable main=' + !!isMainFrame + ' path=' + framePath))
+      const settledTimer = setTimeout(() => {
+        rendererSettledFrameState((pid, routingId) => webFrameMain.fromId(pid, routingId), frameProcessId, frameRoutingId, frameUrl)
+          .then((state) => state ? logFrameState('settled', state)
+            : log('renderer frame settled unavailable main=' + !!isMainFrame + ' path=' + framePath))
+      }, 3000)
+      if (typeof settledTimer.unref === 'function') settledTimer.unref()
+    } catch (_) { /* frame may have navigated away */ }
   })
   mainWindow.webContents.on('render-process-gone', (_event, details) => {
-    if (shotPath) log('renderer process gone reason=' + details.reason + ' exitCode=' + details.exitCode)
+    log('renderer process gone reason=' + String(details.reason || 'unknown').slice(0, 40) + ' exitCode=' + Number(details.exitCode || 0))
   })
   await mainWindow.loadURL(url)
 
