@@ -23,6 +23,12 @@ function rendererDiagnostic(message, source, line) {
     + ' message=' + safeRendererMessage(message)
 }
 
+const SURFACE_BOOT_FAILURE = /(?:^|\n)\s*(?:Error:\s*)?web boot:\s*\d+\s+entr(?:y|ies)\s+did not activate\b/
+
+function isSurfaceBootFailure(message) {
+  return SURFACE_BOOT_FAILURE.test(String(message || ''))
+}
+
 function rendererRequestScope(value, controllerUrl) {
   try {
     const request = new URL(value)
@@ -57,4 +63,4 @@ async function rendererSettledFrameState(fromId, processId, routingId, expectedU
   } catch (_) { return null }
 }
 
-module.exports = { rendererDiagnostic, rendererFrameState, rendererRequestScope, rendererSettledFrameState, safeRendererMessage, safeRendererPath }
+module.exports = { isSurfaceBootFailure, rendererDiagnostic, rendererFrameState, rendererRequestScope, rendererSettledFrameState, safeRendererMessage, safeRendererPath }

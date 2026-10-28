@@ -1286,10 +1286,66 @@ export function createTetherPanel({ React, Native, host }) {
       return { display: visible ? 'flex' : 'none', flex: '1 1 auto', minWidth: 0, minHeight: 0, flexDirection: 'column' }
     }
 
+    const NATIVE_SURFACE_RETRIES = 3
+
+    function nativeSurfaceRetryDelay(attempt) {
+      return Math.min(1000 * Math.pow(2, Math.max(0, attempt - 1)), 8000)
+    }
+
+    function nativeSurfaceFailureMatches(currentUrl, sourceUrl) {
+      if (!currentUrl || !sourceUrl) return false
+      try { return new URL(currentUrl).host === new URL(sourceUrl).host } catch (_) { return false }
+    }
+
+    function nativeSurfaceTransientError(error) {
+      return !!error && (error.surfaceStatus === 502 || error.surfaceStatus === 504
+        || error.surfaceCode === 'device_offline' || error.surfaceCode === 'surface_timeout')
+    }
+
     function NativeSurface({ deviceId, online, visible }) {
       const [state, setState] = React.useState({ deviceId, status: deviceId ? 'loading' : 'no-device', url: '' })
       const [attempt, setAttempt] = React.useState(0)
       const currentState = nativeSurfaceStateForDevice(state, deviceId, online)
+      const retryCountRef = React.useRef(0)
+      const retryTimerRef = React.useRef(null)
+      const surfaceStateRef = React.useRef(currentState)
+      surfaceStateRef.current = currentState
+
+      React.useEffect(() => {
+        retryCountRef.current = 0
+        if (retryTimerRef.current) { clearTimeout(retryTimerRef.current); retryTimerRef.current = null }
+      }, [deviceId])
+
+      React.useEffect(() => () => {
+        if (retryTimerRef.current) { clearTimeout(retryTimerRef.current); retryTimerRef.current = null }
+      }, [])
+
+      // DSH boots its client roster from plugin bundles fetched through the
+      // surface gateway. A control-link blip turns those fetches into 502s and
+      // the boot page never retries, so recover the frame from here.
+      React.useEffect(() => {
+        const bridge = typeof window !== 'undefined' ? window.tetherApp : undefined
+        if (!deviceId || !online || !bridge || typeof bridge.onSurfaceBootFailed !== 'function') return undefined
+        return bridge.onSurfaceBootFailed((detail) => {
+          const current = surfaceStateRef.current
+          if (!current || current.deviceId !== deviceId || current.status !== 'ready' || !current.url) return
+          if (detail && detail.source) {
+            if (!nativeSurfaceFailureMatches(current.url, detail.source)) return
+          } else if (!visible) return
+          if (retryTimerRef.current) return
+          if (retryCountRef.current >= NATIVE_SURFACE_RETRIES) {
+            if (visible) setState({ deviceId, status: 'error', url: '', message: 'DSH 工作区启动失败：目标设备连接中断。请重试。' })
+            return
+          }
+          retryCountRef.current += 1
+          retryTimerRef.current = setTimeout(() => {
+            retryTimerRef.current = null
+            setState({ deviceId, status: 'loading', url: '', message: 'DSH 工作区连接中断，正在自动重连…' })
+            setAttempt((value) => value + 1)
+          }, nativeSurfaceRetryDelay(retryCountRef.current))
+        })
+      }, [deviceId, online, visible])
+
       React.useEffect(() => {
         let current = true
         if (!deviceId) { setState({ deviceId, status: 'no-device', url: '' }); return () => { current = false } }
@@ -1311,7 +1367,10 @@ export function createTetherPanel({ React, Native, host }) {
                           : code === 'auth_failed' ? '目标 DSH 的登录态已失效，请在目标机重新登录 DeepSeek Harness。'
                             : code === 'surface_timeout' ? '目标设备没有及时响应，请稍后重试。'
                               : '原生 DSH 页面暂不可用'
-              throw new Error(message)
+              const error = new Error(message)
+              error.surfaceStatus = response.status
+              error.surfaceCode = code
+              throw error
             }
             if (!data.available || !isSafeNativeSurfaceUrl(data.url)) throw new Error('Controller 返回了无效或非 loopback 的原生页面地址')
             let surfaceUrl = data.url
@@ -1331,7 +1390,19 @@ export function createTetherPanel({ React, Native, host }) {
             url.searchParams.set('tether_native', '1')
             if (current) setState({ deviceId, status: 'ready', url: url.href })
           })
-          .catch((error) => { if (current) setState({ deviceId, status: 'error', url: '', message: error.message }) })
+          .catch((error) => {
+            if (!current) return
+            if (nativeSurfaceTransientError(error) && !retryTimerRef.current && retryCountRef.current < NATIVE_SURFACE_RETRIES) {
+              retryCountRef.current += 1
+              setState({ deviceId, status: 'loading', url: '', message: '目标设备连接中断，正在自动重连…' })
+              retryTimerRef.current = setTimeout(() => {
+                retryTimerRef.current = null
+                setAttempt((value) => value + 1)
+              }, nativeSurfaceRetryDelay(retryCountRef.current))
+              return
+            }
+            setState({ deviceId, status: 'error', url: '', message: error.message })
+          })
         return () => { current = false }
       }, [deviceId, online, attempt])
       React.useEffect(() => {
@@ -1357,7 +1428,7 @@ export function createTetherPanel({ React, Native, host }) {
         return () => { alive = false; clearInterval(timer) }
       }, [deviceId, online])
 
-      const message = currentState.status === 'loading' ? '正在连接目标设备的 DSH 原生工作区…'
+      const message = currentState.status === 'loading' ? (currentState.message || '正在连接目标设备的 DSH 原生工作区…')
         : currentState.status === 'offline' ? '目标设备离线。设备重新在线后可重试。'
           : currentState.status === 'no-device' ? '先从左侧设备列表选择目标设备。'
             : currentState.status === 'error' ? currentState.message
@@ -1373,7 +1444,7 @@ export function createTetherPanel({ React, Native, host }) {
           })
           : h('div', { style: { display: 'grid', placeItems: 'center', alignContent: 'center', gap: 12, flex: '1 1 auto', minHeight: 0, color: C.sub, textAlign: 'center', padding: 24 } },
             h('div', null, message),
-            currentState.status !== 'loading' ? btn('重试', () => setAttempt((value) => value + 1)) : null
+            currentState.status !== 'loading' ? btn('重试', () => { retryCountRef.current = 0; setAttempt((value) => value + 1) }) : null
           )
       )
     }

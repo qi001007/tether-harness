@@ -18,5 +18,10 @@ contextBridge.exposeInMainWorld('tetherApp', {
     const listener = (_event, value) => callback(value)
     ipcRenderer.on('tether:status', listener)
     return () => ipcRenderer.off('tether:status', listener)
+  },
+  onSurfaceBootFailed: (callback) => {
+    const listener = (_event, value) => callback(value)
+    ipcRenderer.on('tether:surface-boot-failed', listener)
+    return () => ipcRenderer.off('tether:surface-boot-failed', listener)
   }
 })

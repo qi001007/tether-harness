@@ -8830,10 +8830,64 @@ function createTetherPanel({ React: React2, Native, host }) {
   function nativeSurfaceContainerStyle(visible) {
     return { display: visible ? "flex" : "none", flex: "1 1 auto", minWidth: 0, minHeight: 0, flexDirection: "column" };
   }
+  const NATIVE_SURFACE_RETRIES = 3;
+  function nativeSurfaceRetryDelay(attempt) {
+    return Math.min(1e3 * Math.pow(2, Math.max(0, attempt - 1)), 8e3);
+  }
+  function nativeSurfaceFailureMatches(currentUrl, sourceUrl) {
+    if (!currentUrl || !sourceUrl) return false;
+    try {
+      return new URL(currentUrl).host === new URL(sourceUrl).host;
+    } catch (_) {
+      return false;
+    }
+  }
+  function nativeSurfaceTransientError(error) {
+    return !!error && (error.surfaceStatus === 502 || error.surfaceStatus === 504 || error.surfaceCode === "device_offline" || error.surfaceCode === "surface_timeout");
+  }
   function NativeSurface({ deviceId, online, visible }) {
     const [state, setState] = React2.useState({ deviceId, status: deviceId ? "loading" : "no-device", url: "" });
     const [attempt, setAttempt] = React2.useState(0);
     const currentState = nativeSurfaceStateForDevice(state, deviceId, online);
+    const retryCountRef = React2.useRef(0);
+    const retryTimerRef = React2.useRef(null);
+    const surfaceStateRef = React2.useRef(currentState);
+    surfaceStateRef.current = currentState;
+    React2.useEffect(() => {
+      retryCountRef.current = 0;
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
+    }, [deviceId]);
+    React2.useEffect(() => () => {
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
+    }, []);
+    React2.useEffect(() => {
+      const bridge = typeof window !== "undefined" ? window.tetherApp : void 0;
+      if (!deviceId || !online || !bridge || typeof bridge.onSurfaceBootFailed !== "function") return void 0;
+      return bridge.onSurfaceBootFailed((detail) => {
+        const current = surfaceStateRef.current;
+        if (!current || current.deviceId !== deviceId || current.status !== "ready" || !current.url) return;
+        if (detail && detail.source) {
+          if (!nativeSurfaceFailureMatches(current.url, detail.source)) return;
+        } else if (!visible) return;
+        if (retryTimerRef.current) return;
+        if (retryCountRef.current >= NATIVE_SURFACE_RETRIES) {
+          if (visible) setState({ deviceId, status: "error", url: "", message: "DSH \u5DE5\u4F5C\u533A\u542F\u52A8\u5931\u8D25\uFF1A\u76EE\u6807\u8BBE\u5907\u8FDE\u63A5\u4E2D\u65AD\u3002\u8BF7\u91CD\u8BD5\u3002" });
+          return;
+        }
+        retryCountRef.current += 1;
+        retryTimerRef.current = setTimeout(() => {
+          retryTimerRef.current = null;
+          setState({ deviceId, status: "loading", url: "", message: "DSH \u5DE5\u4F5C\u533A\u8FDE\u63A5\u4E2D\u65AD\uFF0C\u6B63\u5728\u81EA\u52A8\u91CD\u8FDE\u2026" });
+          setAttempt((value) => value + 1);
+        }, nativeSurfaceRetryDelay(retryCountRef.current));
+      });
+    }, [deviceId, online, visible]);
     React2.useEffect(() => {
       let current = true;
       if (!deviceId) {
@@ -8859,7 +8913,10 @@ function createTetherPanel({ React: React2, Native, host }) {
           const detail = data.detail || {};
           const code = detail.code;
           const message2 = response.status === 404 ? "\u76EE\u6807\u8BBE\u5907\u4E0D\u5B58\u5728\u6216\u5DF2\u79FB\u9664" : code === "node_update_required" ? "\u76EE\u6807\u8282\u70B9\u7248\u672C\u8F83\u65E7\uFF0C\u9700\u8981\u66F4\u65B0\u540E\u624D\u80FD\u6253\u5F00\u5B8C\u6574 DSH \u5DE5\u4F5C\u533A" : code === "device_offline" ? "\u76EE\u6807\u8BBE\u5907\u79BB\u7EBF\u3002\u8BBE\u5907\u91CD\u65B0\u5728\u7EBF\u540E\u53EF\u91CD\u8BD5\u3002" : code === "descriptor_missing" ? "\u76EE\u6807\u8BBE\u5907\u7684 DeepSeek Harness \u672A\u8FD0\u884C\uFF0C\u6216\u6CA1\u6709\u5B89\u88C5 Tether surface \u7EC4\u4EF6\u3002\u8BF7\u5148\u542F\u52A8\u76EE\u6807 DSH\u3002" : code === "descriptor_invalid" ? "\u76EE\u6807\u8BBE\u5907\u7684 DSH surface \u63CF\u8FF0\u65E0\u6548\uFF0C\u8BF7\u91CD\u542F\u76EE\u6807 DSH \u6216\u91CD\u65B0\u5B89\u88C5\u63D2\u4EF6\u3002" : code === "host_unreachable" ? "\u76EE\u6807 DSH \u8FDB\u7A0B\u6CA1\u6709\u54CD\u5E94\uFF0C\u8BF7\u786E\u8BA4\u5B83\u5DF2\u542F\u52A8\u3002" : code === "auth_failed" ? "\u76EE\u6807 DSH \u7684\u767B\u5F55\u6001\u5DF2\u5931\u6548\uFF0C\u8BF7\u5728\u76EE\u6807\u673A\u91CD\u65B0\u767B\u5F55 DeepSeek Harness\u3002" : code === "surface_timeout" ? "\u76EE\u6807\u8BBE\u5907\u6CA1\u6709\u53CA\u65F6\u54CD\u5E94\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5\u3002" : "\u539F\u751F DSH \u9875\u9762\u6682\u4E0D\u53EF\u7528";
-          throw new Error(message2);
+          const error = new Error(message2);
+          error.surfaceStatus = response.status;
+          error.surfaceCode = code;
+          throw error;
         }
         if (!data.available || !isSafeNativeSurfaceUrl(data.url)) throw new Error("Controller \u8FD4\u56DE\u4E86\u65E0\u6548\u6216\u975E loopback \u7684\u539F\u751F\u9875\u9762\u5730\u5740");
         let surfaceUrl = data.url;
@@ -8883,7 +8940,17 @@ function createTetherPanel({ React: React2, Native, host }) {
         url.searchParams.set("tether_native", "1");
         if (current) setState({ deviceId, status: "ready", url: url.href });
       }).catch((error) => {
-        if (current) setState({ deviceId, status: "error", url: "", message: error.message });
+        if (!current) return;
+        if (nativeSurfaceTransientError(error) && !retryTimerRef.current && retryCountRef.current < NATIVE_SURFACE_RETRIES) {
+          retryCountRef.current += 1;
+          setState({ deviceId, status: "loading", url: "", message: "\u76EE\u6807\u8BBE\u5907\u8FDE\u63A5\u4E2D\u65AD\uFF0C\u6B63\u5728\u81EA\u52A8\u91CD\u8FDE\u2026" });
+          retryTimerRef.current = setTimeout(() => {
+            retryTimerRef.current = null;
+            setAttempt((value) => value + 1);
+          }, nativeSurfaceRetryDelay(retryCountRef.current));
+          return;
+        }
+        setState({ deviceId, status: "error", url: "", message: error.message });
       });
       return () => {
         current = false;
@@ -8917,7 +8984,7 @@ function createTetherPanel({ React: React2, Native, host }) {
         clearInterval(timer);
       };
     }, [deviceId, online]);
-    const message = currentState.status === "loading" ? "\u6B63\u5728\u8FDE\u63A5\u76EE\u6807\u8BBE\u5907\u7684 DSH \u539F\u751F\u5DE5\u4F5C\u533A\u2026" : currentState.status === "offline" ? "\u76EE\u6807\u8BBE\u5907\u79BB\u7EBF\u3002\u8BBE\u5907\u91CD\u65B0\u5728\u7EBF\u540E\u53EF\u91CD\u8BD5\u3002" : currentState.status === "no-device" ? "\u5148\u4ECE\u5DE6\u4FA7\u8BBE\u5907\u5217\u8868\u9009\u62E9\u76EE\u6807\u8BBE\u5907\u3002" : currentState.status === "error" ? currentState.message : "";
+    const message = currentState.status === "loading" ? currentState.message || "\u6B63\u5728\u8FDE\u63A5\u76EE\u6807\u8BBE\u5907\u7684 DSH \u539F\u751F\u5DE5\u4F5C\u533A\u2026" : currentState.status === "offline" ? "\u76EE\u6807\u8BBE\u5907\u79BB\u7EBF\u3002\u8BBE\u5907\u91CD\u65B0\u5728\u7EBF\u540E\u53EF\u91CD\u8BD5\u3002" : currentState.status === "no-device" ? "\u5148\u4ECE\u5DE6\u4FA7\u8BBE\u5907\u5217\u8868\u9009\u62E9\u76EE\u6807\u8BBE\u5907\u3002" : currentState.status === "error" ? currentState.message : "";
     return h(
       "div",
       { className: "tether-native-surface", style: nativeSurfaceContainerStyle(visible) },
@@ -8931,7 +8998,10 @@ function createTetherPanel({ React: React2, Native, host }) {
         "div",
         { style: { display: "grid", placeItems: "center", alignContent: "center", gap: 12, flex: "1 1 auto", minHeight: 0, color: C.sub, textAlign: "center", padding: 24 } },
         h("div", null, message),
-        currentState.status !== "loading" ? btn("\u91CD\u8BD5", () => setAttempt((value) => value + 1)) : null
+        currentState.status !== "loading" ? btn("\u91CD\u8BD5", () => {
+          retryCountRef.current = 0;
+          setAttempt((value) => value + 1);
+        }) : null
       )
     );
   }
