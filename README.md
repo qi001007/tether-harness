@@ -76,13 +76,13 @@ There are two different kinds of "target": a **file/command target** uses the No
 
 | You install | Connect to Hub | Control others | File/command target | Native DSH target |
 |---|---|---|---|---|
-| APP only (with DSH) | Yes | Yes | Yes, if `nodeToken` is configured; the APP supervisor starts its Node | **No in v0.2.3** — the APP ZIP does not install the DSH surface plugin, so there is no descriptor |
+| APP only (with DSH) | Yes | Yes | Yes, if `nodeToken` is configured; the APP supervisor starts its Node | **No today** — the APP ZIP does not install the DSH surface plugin, so there is no descriptor |
 | Plugin only (with DSH) | Yes | Yes | No — no Node | No — no Node |
 | Node only | Yes, headless | n/a | Yes | No descriptor unless the DSH surface plugin is installed separately |
 | APP + plugin | Yes | Yes | Yes | Yes |
 | Plugin + Node | Yes | Yes | Yes | Yes |
 
-A typical desktop uses **APP + plugin** (two views of the same machine). A laptop or a headless box can use **Node only** for file/command control, or **plugin + Node** for native DSH control. The current v0.2.3 APP ZIP and plugin ZIP are still the older split; the packaging goal below removes this caveat.
+A typical desktop uses **APP + plugin** (two views of the same machine). A laptop or a headless box can use **Node only** for file/command control, or **plugin + Node** for native DSH control. The current APP ZIP and plugin ZIP are still the older split; the packaging goal below removes this caveat.
 
 The planned packaging is two user-facing products:
 
@@ -132,14 +132,14 @@ Open the APP's **Update center**. APP updates are downloaded and applied by the 
 
 ## Download
 
-### Latest stable: v0.2.3
+### Latest stable: v0.2.4
 
 | Package | Download | Size | SHA-256 |
 |---|---|---:|---|
-| APP | [tether-app-0.2.3.zip](https://github.com/qi001007/tether-harness/releases/download/v0.2.3/tether-app-0.2.3.zip) | 337,869 B | `b8f9ee56a3833fe933686e2098154148a7ef945d70e25112fff792faafc67aec` |
-| DSH plugin | [tether-plugin-0.2.3.zip](https://github.com/qi001007/tether-harness/releases/download/v0.2.3/tether-plugin-0.2.3.zip) | 367,417 B | `7eacbf54733c4faa180c24399271665413c9ae8389821cff0b8e2db12bad0f92` |
-| Node | [tether-node-0.2.3.zip](https://github.com/qi001007/tether-harness/releases/download/v0.2.3/tether-node-0.2.3.zip) | 51,348 B | `0645f7cfd898963ae6c7fd28c8b5db879e25c91789516db1698649c09331a199` |
-| Update manifest | [tether-update.json](https://github.com/qi001007/tether-harness/releases/download/v0.2.3/tether-update.json) | 997 B | — |
+| APP | [tether-app-0.2.4.zip](https://github.com/qi001007/tether-harness/releases/download/v0.2.4/tether-app-0.2.4.zip) | 347,263 B | `182f97390a84b3377f4ea594088288fb2a2502b65b3bf9547a754c2bd980ee91` |
+| DSH plugin | [tether-plugin-0.2.4.zip](https://github.com/qi001007/tether-harness/releases/download/v0.2.4/tether-plugin-0.2.4.zip) | 370,234 B | `4f898ebb439d3b1d25c23e9f09e22601a06f3897264a72d05f0b162f5352bc04` |
+| Node | [tether-node-0.2.4.zip](https://github.com/qi001007/tether-harness/releases/download/v0.2.4/tether-node-0.2.4.zip) | 53,604 B | `ce671c11b3c94d43e6d095686e9ab72961bc06759ef91102f68431bdfaf2cf96` |
+| Update manifest | [tether-update.json](https://github.com/qi001007/tether-harness/releases/download/v0.2.4/tether-update.json) | 997 B | — |
 
 The manifest has a stable `latest` alias; component ZIP names include the version, so use the versioned links above for reproducible component downloads:
 
@@ -150,7 +150,7 @@ https://github.com/qi001007/tether-harness/releases/latest/download/tether-updat
 Verify a Windows download with:
 
 ```powershell
-Get-FileHash .\tether-app-0.2.3.zip -Algorithm SHA256
+Get-FileHash .\tether-app-0.2.4.zip -Algorithm SHA256
 ```
 
 These are **ZIP source packages**, not self-contained EXE installers. They do not bundle Python, Node.js, DSH, or a Hub. Packages are **unsigned**; SHA-256 checks integrity against the manifest, not publisher identity.
@@ -169,9 +169,9 @@ Tether uses **SemVer** and a single version for the client train. The source of 
 {
   "schema": 1,
   "components": {
-    "app": "0.2.3",
-    "plugin": "0.2.3",
-    "node": "0.2.3"
+    "app": "0.2.4",
+    "plugin": "0.2.4",
+    "node": "0.2.4"
   }
 }
 ```
@@ -208,7 +208,7 @@ Safety rules:
 - Apply uses a backup and a file transaction; `data/`, `.env`, workspaces, and credentials are excluded.
 - The updater never copies account credentials, sessions, or user data into a release asset.
 
-Known residuals in 0.2.3:
+Known residuals in 0.2.3 that are still present in 0.2.4:
 
 - After a restart, the update card can still show a stale “restarting” label until the next refresh; the actual `current`/`latest` versions are correct.
 - The root `version.json` plugin field can lag one component behind; the DSH profile and Hub status are authoritative.
@@ -256,11 +256,12 @@ If you find a security issue, do not paste tokens, personal data, or private dev
 
 | Area | Status |
 |---|---|
-| Public release v0.2.3 | Published; all three ZIPs and the manifest verified |
-| Client update chain | Real APP/Node/plugin updates `0.2.1 → 0.2.2 → 0.2.3`; data preserved |
+| Public release v0.2.4 | Published; all three ZIPs and the manifest verified |
+| Client update chain | Real APP/Node/plugin updates `0.2.1 → 0.2.2 → 0.2.3`; data preserved; `0.2.4` install acceptance pending |
+| Response time | v0.2.4 adds the loopback fast path, per-device caching/prefetch, a stop control, Office preview caching, and concurrent Node request handling. Measured behind the APP gateway: `fs/list` 3–4 ms (Hub 264–681 ms), text preview 3 ms (261–604 ms), PPTX preview 2.9 s cold / 5 ms cached (5.3–5.6 s before) |
 | Same-device APP + plugin | Verified: one DESKTOP-LOCAL DSH Host/session, bidirectional turns, a real `pwsh` command, matching file pages |
 | Remote target native surface | Reproduced on a second local node: v0.2.1 showed a blank DSH panel; upgrading the Node to v0.2.3 loaded the DSH UI and executed `REMOTE-OK`. The local and remote paths use the same Hub gateway; physical second-machine acceptance is still pending. |
-| Cross-device on a second physical machine | Pending; the second machine is not currently connected to the Hub |
+| Cross-device on a second physical machine | Pending; the second machine is online and reports 0.2.3, but real cross-device use has not been accepted |
 | Accounts / login / per-user isolation | **Not implemented** |
 | Digital signatures | Not implemented |
 | Server release automation | Not implemented; the Hub uses a pinned-commit, backed-up, gated deploy with a rollback drill |
@@ -271,7 +272,7 @@ If you find a security issue, do not paste tokens, personal data, or private dev
 - **Accounts and isolation.** User login, one-time device pairing, per-device credentials, per-user device isolation, an admin dashboard with invites/users/devices/health/audit, and invite-only testing.
 - **Host adapter boundary.** Keep accounts, devices, routing, files and updates host-agnostic; put DSH behind a `HostAdapter` + `surface_kind` contract so alternative host/agent runtimes can be added without rewriting the network and account layer.
 - **Remote surface acceptance.** Fix the blank remote DSH panel and accept real cross-device native control on a second physical machine.
-- **Performance instrumentation.** Add per-segment timestamps, p50/p95 latency, incremental event streaming, and file range/cache/preview hooks before optimizing state sync and remote file rendering.
+- **Performance instrumentation.** v0.2.4 delivers the first measured step (loopback fast path, per-device caching/prefetch, Office preview caching, concurrent Node request handling). Still to add: per-segment timestamps, p50/p95 latency, incremental event streaming, and file range/preview hooks before optimizing state sync and remote file rendering.
 - **Release hardening.** Signed packages, real update rollback drills, backup/restore drills, and a repeatable server release/rollback process.
 
 ## Development
