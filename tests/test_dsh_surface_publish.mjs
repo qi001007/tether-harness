@@ -15,19 +15,27 @@ test('surface publishes its descriptor with the current connection API and resol
   const registered = []
   process.env.DSH_HOME = home
   process.argv = [...previousArgv, profile]
+  const identityDir = path.join(home, 'storages', 'tether')
+  fs.mkdirSync(identityDir, { recursive: true })
+  fs.writeFileSync(path.join(identityDir, `node-identity-${process.pid}.json`), JSON.stringify({
+    version: 1, pid: process.pid, device_id: 'DESKTOP-LOCAL', updated_at: Date.now()
+  }))
   let cleanup
   try {
     const ctx = {
       connection: {
         authenticatedUrl: (origin) => origin + '/?token=fixture',
-        register(_owner, channel, handler) { registered.push(channel); assert.equal(typeof handler, 'function'); return () => {} }
+        register(_owner, channel, handler) { registered.push({ channel, handler }); assert.equal(typeof handler, 'function'); return () => {} }
       },
       webServer: { getOrigin: () => 'http://127.0.0.1:34567' },
       effect: (fn) => { cleanup = fn() },
       get: () => undefined,
     }
     apply(ctx)
-    assert.deepEqual(registered, ['/tether-updates', '/tether-identity'])
+    assert.deepEqual(registered.map(item => item.channel), ['/tether-updates', '/tether-identity'])
+    const identity = registered.find(item => item.channel === '/tether-identity').handler
+    assert.deepEqual(identity('get', {}, undefined, { principal: { kind: 'user' } }).error.code, 'forbidden')
+    assert.deepEqual(identity('get', {}, undefined, { principal: { kind: 'owner' } }).value, { device_id: 'DESKTOP-LOCAL' })
     const descriptor = JSON.parse(fs.readFileSync(internals.descriptorPath(), 'utf8'))
     assert.equal(descriptor.version, 1)
     assert.equal(descriptor.profile, 'desktop')

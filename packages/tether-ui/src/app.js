@@ -143,6 +143,17 @@ export async function runUpdateSequence({ check, prepare, apply, isCurrent = () 
   return isCurrent() ? { current: true, updated: true, result } : { cancelled: true }
 }
 
+export async function activateLocalDshUpdate({ reloadSurface, status }) {
+  if (typeof reloadSurface !== 'function') return { status: 'manual_restart_required' }
+  const reloaded = await reloadSurface()
+  if (!reloaded || !['applied', 'restart-required'].includes(reloaded.application)) return { status: 'reload_failed' }
+  if (reloaded.application === 'restart-required') return { status: 'manual_restart_required' }
+  const installed = await status()
+  if (!installed || installed.ok === false || typeof installed.runtime_version !== 'string' || !installed.runtime_version
+      || typeof installed.current_version !== 'string' || !installed.current_version) return { status: 'reload_failed' }
+  return { status: localPluginNeedsRestart(installed) ? 'manual_restart_required' : 'active' }
+}
+
 export function deviceUpdateComponents(capabilities = {}) {
   return ['node', ...(capabilities.dsh_surface ? ['plugin'] : []), ...(capabilities.app_version ? ['app'] : [])]
 }
@@ -1448,6 +1459,8 @@ export function createTetherPanel({ React, Native, host }) {
       const appLocalDeviceRef = React.useRef('')
       const [showUpdate, setShowUpdate] = React.useState(false)
       const [pendingApp, setPendingApp] = React.useState('')
+      const [pendingDshRestart, setPendingDshRestart] = React.useState(false)
+      const [dshRestartBusy, setDshRestartBusy] = React.useState(false)
       const [updatePage, setUpdatePage] = React.useState(1)
       const [updateInfo, setUpdateInfo] = React.useState(() => ({ app: null, localPlugin: localPluginVersionSeed(host), devices: {} }))
       const [updateBusy, setUpdateBusy] = React.useState('')
@@ -1736,19 +1749,21 @@ export function createTetherPanel({ React, Native, host }) {
         const currentText = product === 'desktop'
           ? 'APP ' + (infos[0].current_version || '未知') + ' / Node ' + (infos[1].current_version || '未知')
           : '插件 ' + (infos[0].runtime_version || infos[0].current_version || '未知')
-            + (runtimeRestartRequired ? '（磁盘 ' + infos[0].current_version + '，重启 DSH 生效）' : '')
+            + (runtimeRestartRequired ? '（已安装 ' + infos[0].current_version + '，待生效）' : '')
             + ' / Node ' + (infos[1].current_version || '未知')
         const title = product === 'desktop' ? 'Tether Desktop（APP + Node）' : 'Tether for DSH（插件 + Node）'
         return h('div', { key: product, style: { padding: 12, borderRadius: 8, background: C.panel, marginBottom: 10 } },
           h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 } },
             h('strong', { style: { fontSize: 13 } }, title),
             h('span', { style: { marginLeft: 'auto' } }, busy ? h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center', color: C.amber } }, h(Glyph, { name: 'refresh', size: 14 }))
-              : runtimeRestartRequired ? pill('重启 DSH 生效', C.amber)
+              : runtimeRestartRequired ? pill('待生效', C.amber)
                 : hasUpdate ? pill('有更新', C.amber)
                 : known ? pill('已是最新', C.green) : failed ? pill('检查失败', C.red) : pill('检查中…', C.mute))),
           h('div', { style: { color: C.sub, fontSize: 12, lineHeight: '19px' } }, '当前 ' + currentText + (latest.length ? ' · 最新 ' + latest[0] : '')),
           h('div', { style: { marginTop: 8 } },
-            btn(busy ? h('span', { className: 'tether-spin', style: { width: 16, height: 16, display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 16 })) : '一键更新', () => runProductUpdate(product), { primary: true, disabled: busy || !hasUpdate })))
+            runtimeRestartRequired
+              ? btn('立即生效', () => setPendingDshRestart(true), { primary: true, disabled: busy })
+              : btn(busy ? h('span', { className: 'tether-spin', style: { width: 16, height: 16, display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 16 })) : '一键更新', () => runProductUpdate(product), { primary: true, disabled: busy || !hasUpdate })))
       }
       const deviceCard = (item) => {
         const scope = { deviceId: item.device_id, epoch: 0 }
@@ -1799,9 +1814,30 @@ export function createTetherPanel({ React, Native, host }) {
         try {
           const nodeOk = localId ? await updateOneClick('node', { deviceId: localId, epoch: 0 }) : true
           if (!nodeOk) return
-          await updateOneClick('localPlugin', null)
+          const outcome = await runUpdateSequence({
+            check: () => updateAction('localPlugin', 'check', undefined, null),
+            prepare: () => updateAction('localPlugin', 'prepare', undefined, null),
+            apply: (id) => updateAction('localPlugin', 'apply', id, null)
+          })
+          if (outcome.updated && localPluginNeedsRestart(outcome.result)) setPendingDshRestart(true)
           refreshUpdateCenter()
         } finally { setUpdateBusy('') }
+      }
+      const confirmDshRestart = async () => {
+        setDshRestartBusy(true)
+        try {
+          const result = await activateLocalDshUpdate({
+            reloadSurface: typeof host.reloadLocalPluginSurface === 'function' ? () => host.reloadLocalPluginSurface() : undefined,
+            status: () => host.localPluginUpdates('status')
+          })
+          setPendingDshRestart(false)
+          if (result.status === 'active') setNotice('插件更新已立即生效')
+          else if (result.status === 'reload_failed') setNotice('DSH 插件未能在线重载，请手动重启 DeepSeek Harness。')
+          else setNotice('当前 DSH 无法在线重启；请手动重启一次以加载本次更新。')
+        } catch (error) {
+          setPendingDshRestart(false)
+          setComponentUpdateError('localPlugin', shortUpdateError(error), null)
+        } finally { setDshRestartBusy(false) }
       }
       const runDeviceUpdate = async (item) => {
         setUpdateBusy('device:' + item.device_id)
@@ -2613,7 +2649,20 @@ export function createTetherPanel({ React, Native, host }) {
       }
       const askValue = (title, value, onOk) => setAsk({ title, value: value || '', onOk })
       const makeFolder = (base) => askValue('新建文件夹', '', async (name) => { try { await post(fsPath('mkdir'), { path: String(base).replace(/[\\/]+$/, '') + '\\' + name }); setContextMenu(null); invalidateDir(deviceId, base); await loadDir(base, { push: false, keepFile: true, fresh: true }) } catch (e) { fail(e) } })
-      const makeFile = (base) => askValue('新建文件', '', async (name) => { const target = String(base).replace(/[\\/]+$/, '') + '\\' + name; try { await post(fsPath('write'), { path: target, text: '' }); setContextMenu(null); invalidateDir(deviceId, base); await loadDir(base, { push: false, keepFile: true, fresh: true }); openPreview({ path: target, dir: false, name }) } catch (e) { fail(e) } })
+      const makeFile = (base) => {
+        const requestDevice = deviceIdRef.current
+        return askValue('新建文件', '', async (name) => {
+          if (!requestDevice || deviceIdRef.current !== requestDevice) { fail(new Error('目标设备已切换，请重新选择目录')); return }
+          const target = String(base).replace(/[\\/]+$/, '') + '\\' + name
+          try {
+            await post('/api/devices/' + encodeURIComponent(requestDevice) + '/fs/write', { path: target, text: '', overwrite: false })
+            if (deviceIdRef.current !== requestDevice) return
+            setContextMenu(null); invalidateDir(requestDevice, base)
+            await loadDir(base, { push: false, keepFile: true, fresh: true })
+            if (deviceIdRef.current === requestDevice) openPreview({ path: target, dir: false, name })
+          } catch (e) { fail(e) }
+        })
+      }
       const renameEntry = (entry) => { const target = entry || selected; if (!target) return; askValue('重命名', target.name, async (name) => { const dest = parentOf(target.path) + '\\' + name; try { await post(fsPath('rename'), { path: target.path, dest }); setContextMenu(null); setSelected(null); if (file && file.path === target.path) setFile(null); previewCacheRef.current.delete(previewCacheKey(deviceId, target.path)); previewCacheRef.current.delete(previewCacheKey(deviceId, dest)); invalidateDir(deviceId, parentOf(target.path)); await loadDir(path, { push: false, keepFile: true, fresh: true }) } catch (e) { fail(e) } }) }
       const deleteEntry = async (entry) => {
         const target = entry || selected
@@ -3177,6 +3226,17 @@ export function createTetherPanel({ React, Native, host }) {
                 setPendingApp('')
                 try { await host.updates.apply(id); setNotice('APP 正在重启安装') } catch (error) { setComponentUpdateError('app', shortUpdateError(error), null) }
               }, { primary: true }))
+          )
+        ) : null,
+        pendingDshRestart ? h('div', {
+          style: { position: 'absolute', inset: 0, background: 'rgba(16,24,40,0.35)', display: 'grid', placeItems: 'center', zIndex: 35, padding: 16 }
+        },
+          h('div', { role: 'dialog', 'aria-label': '应用本机 DSH 插件更新', style: { width: 360, background: C.bg, borderRadius: 10, boxShadow: C.shadow, padding: 18 } },
+            h('div', { style: { fontSize: 14, fontWeight: 'var(--tether-strong, 600)', marginBottom: 6 } }, '插件更新已安装'),
+            h('div', { style: { color: C.sub, fontSize: 12, lineHeight: '18px', marginBottom: 14 } }, '先尝试在当前 DSH 会话中在线加载新插件；若当前 profile 不支持在线重载，会提示需要重启。'),
+            h('div', { style: { display: 'flex', justifyContent: 'flex-end', gap: 8 } },
+              btn('稍后', () => setPendingDshRestart(false), { disabled: dshRestartBusy }),
+              btn(dshRestartBusy ? '正在应用…' : '立即生效', confirmDshRestart, { primary: true, disabled: dshRestartBusy }))
           )
         ) : null,
         showSettings ? h('div', {

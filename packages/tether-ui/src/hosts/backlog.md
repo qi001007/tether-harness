@@ -1,4 +1,6 @@
 # UI 宿主适配变更记录
+- 2026-10-28：暴露一次性本机 surface 重载接口；唯一启用的 `tether-dsh-surface` 插件由 `remote.pluginManager` 重新应用，其 `application` 状态原样返回并区分 `restart-required`。
+- 2026-10-28：新增 owner-only 目标身份绑定附件读取桥；固定配置 Hub 地址、逐块请求原始 base64 字节、单文件 10 MiB 上限，并在目标设备或会话变化时拒绝 addFiles。
 
 - 2026-10-27：DSH 本机身份先查同机 APP 上下文，再经 owner-only RPC 读取 Node descriptor；未知时不使用 Hub 或 Controller 的 local_device。
 

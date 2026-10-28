@@ -220,7 +220,11 @@ try {
   assert.ok(!ui.includes('git pull'))
   const build = fs.readFileSync(path.join(projectRoot, 'packages', 'tether-ui', 'scripts', 'build.mjs'), 'utf8')
   assert.ok(build.includes('createDshLocalPluginUpdateBridge(() => localPluginRpc)'))
-  assert.ok(build.includes("inject: ['slots', 'layout', 'connection']"))
+  const inject = build.match(/inject: \[([^\]]+)\]/)?.[1]
+  assert.ok(inject, 'generated DSH client must declare its allowed client services')
+  assert.deepEqual([...inject.matchAll(/'([^']+)'/g)].map(([, service]) => service), [
+    'slots', 'layout', 'connection', 'remote', 'remote.workspaceFiles', 'remote.pluginManager', 'fileDrag'
+  ])
 } finally {
   fs.rmSync(temp, { recursive: true, force: true })
 }

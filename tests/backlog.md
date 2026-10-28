@@ -1,4 +1,8 @@
 # 修改记录
+- 2026-10-28：新增本机 DSH 更新确认流程回归，覆盖 owner 在线重载、重载后运行版本核对，以及 no-HMR/运行版本未追平时停止自动操作并明确提示。
+- 2026-10-28：新增原生目标设备附件与 surface owner RPC 回归，覆盖 owner identity、session workspace API、路径 capability、readBytes 二进制跨块无损、超限/拒绝及设备/会话切换后不 attach。
+- 2026-10-28：共享 UI 回归断言新建文件固定当前 target device、设置 `overwrite:false` 且设备变化后丢弃旧目录 UI 更新。
+- 2026-10-28：新增 DSH 本机 surface 重载回归，覆盖唯一启用项、重复匹配拒绝及 `restart-required` 状态透传。
 - 2026-10-28：回归覆盖 FilesPane 在当前目标目录显示新建文件按钮，且调用目标设备文件写入接口。
 - 2026-10-28：发布流水线新增 `test_*.cjs` 测试发现步骤，避免遗漏 CommonJS renderer 诊断回归。
 - 2026-10-28：新增 `test_app_startup_readiness.mjs`，覆盖 supervisor 有界等待、本机 Node API 带身份/token 的只读就绪探测、以及探测超时。
@@ -64,7 +68,9 @@
 - 2026-10-28：修复更新服务 helper CLI 集成测试对仓库 `.venv/Scripts/python.exe` 的硬编码，按显式环境变量、有效项目虚拟环境和 PATH 顺序探测可运行 Python，保留真实 helper activity/apply/relaunch 断言。
 # 变更记录
 
+- 2026-10-28：附件目标读取回归覆盖跨 chunk 版本变化拒绝、PNG MIME、SDK slot priority 胜者顺序及原生 `fileDrag.read`/locale props 透传。
 - 2026-10-28：增加 DSH 源码依赖与 profile 双路径插件更新及回滚测试、运行版本提示测试，以及 renderer 网络范围/日志脱敏/只读即时与稳定 frame 状态测试。
+- 2026-10-28：更新 native iframe 契约回归为只允许附件 slot，并验证其 fileDrag/remote 上下文；仍断言不注册嵌套 Tether main/sidebar。
 - 2026-10-28：新增当前 SDK `register(ctx, channel, handler)` 无 `rpc` 属性的 companion 回归，并验证 dirty file: Git 工作树阻止插件写入。
 - 2026-10-28：surface descriptor 发布回归改用现代连接注册 API，并断言两条 owner RPC 均被注册。
 - 2026-10-28：回归验证 profile 中 surface 包旧于 client 时按旧 surface 版本报告更新，且不会采用缓存安装版本掩盖差异。

@@ -7443,6 +7443,15 @@ async function runUpdateSequence({ check, prepare, apply, isCurrent = () => true
   if (!result || result.failed || result.ok === false) return { failed: true, stage: "apply" };
   return isCurrent() ? { current: true, updated: true, result } : { cancelled: true };
 }
+async function activateLocalDshUpdate({ reloadSurface, status }) {
+  if (typeof reloadSurface !== "function") return { status: "manual_restart_required" };
+  const reloaded = await reloadSurface();
+  if (!reloaded || !["applied", "restart-required"].includes(reloaded.application)) return { status: "reload_failed" };
+  if (reloaded.application === "restart-required") return { status: "manual_restart_required" };
+  const installed = await status();
+  if (!installed || installed.ok === false || typeof installed.runtime_version !== "string" || !installed.runtime_version || typeof installed.current_version !== "string" || !installed.current_version) return { status: "reload_failed" };
+  return { status: localPluginNeedsRestart(installed) ? "manual_restart_required" : "active" };
+}
 function deviceUpdateComponents(capabilities = {}) {
   return ["node", ...capabilities.dsh_surface ? ["plugin"] : [], ...capabilities.app_version ? ["app"] : []];
 }
@@ -9015,6 +9024,8 @@ function createTetherPanel({ React: React2, Native, host }) {
     const appLocalDeviceRef = React2.useRef("");
     const [showUpdate, setShowUpdate] = React2.useState(false);
     const [pendingApp, setPendingApp] = React2.useState("");
+    const [pendingDshRestart, setPendingDshRestart] = React2.useState(false);
+    const [dshRestartBusy, setDshRestartBusy] = React2.useState(false);
     const [updatePage, setUpdatePage] = React2.useState(1);
     const [updateInfo, setUpdateInfo] = React2.useState(() => ({ app: null, localPlugin: localPluginVersionSeed(host), devices: {} }));
     const [updateBusy, setUpdateBusy] = React2.useState("");
@@ -9307,7 +9318,7 @@ function createTetherPanel({ React: React2, Native, host }) {
       const hasUpdate = infos.some((info) => info && info.update_available === true);
       const known = infos.every((info) => info && info.current_version && info.latest_version);
       const latest = infos.map((info) => info && info.latest_version).filter(Boolean);
-      const currentText = product === "desktop" ? "APP " + (infos[0].current_version || "\u672A\u77E5") + " / Node " + (infos[1].current_version || "\u672A\u77E5") : "\u63D2\u4EF6 " + (infos[0].runtime_version || infos[0].current_version || "\u672A\u77E5") + (runtimeRestartRequired ? "\uFF08\u78C1\u76D8 " + infos[0].current_version + "\uFF0C\u91CD\u542F DSH \u751F\u6548\uFF09" : "") + " / Node " + (infos[1].current_version || "\u672A\u77E5");
+      const currentText = product === "desktop" ? "APP " + (infos[0].current_version || "\u672A\u77E5") + " / Node " + (infos[1].current_version || "\u672A\u77E5") : "\u63D2\u4EF6 " + (infos[0].runtime_version || infos[0].current_version || "\u672A\u77E5") + (runtimeRestartRequired ? "\uFF08\u5DF2\u5B89\u88C5 " + infos[0].current_version + "\uFF0C\u5F85\u751F\u6548\uFF09" : "") + " / Node " + (infos[1].current_version || "\u672A\u77E5");
       const title = product === "desktop" ? "Tether Desktop\uFF08APP + Node\uFF09" : "Tether for DSH\uFF08\u63D2\u4EF6 + Node\uFF09";
       return h(
         "div",
@@ -9316,13 +9327,13 @@ function createTetherPanel({ React: React2, Native, host }) {
           "div",
           { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 4 } },
           h("strong", { style: { fontSize: 13 } }, title),
-          h("span", { style: { marginLeft: "auto" } }, busy2 ? h("span", { className: "tether-spin", style: { display: "grid", placeItems: "center", color: C.amber } }, h(Glyph, { name: "refresh", size: 14 })) : runtimeRestartRequired ? pill("\u91CD\u542F DSH \u751F\u6548", C.amber) : hasUpdate ? pill("\u6709\u66F4\u65B0", C.amber) : known ? pill("\u5DF2\u662F\u6700\u65B0", C.green) : failed ? pill("\u68C0\u67E5\u5931\u8D25", C.red) : pill("\u68C0\u67E5\u4E2D\u2026", C.mute))
+          h("span", { style: { marginLeft: "auto" } }, busy2 ? h("span", { className: "tether-spin", style: { display: "grid", placeItems: "center", color: C.amber } }, h(Glyph, { name: "refresh", size: 14 })) : runtimeRestartRequired ? pill("\u5F85\u751F\u6548", C.amber) : hasUpdate ? pill("\u6709\u66F4\u65B0", C.amber) : known ? pill("\u5DF2\u662F\u6700\u65B0", C.green) : failed ? pill("\u68C0\u67E5\u5931\u8D25", C.red) : pill("\u68C0\u67E5\u4E2D\u2026", C.mute))
         ),
         h("div", { style: { color: C.sub, fontSize: 12, lineHeight: "19px" } }, "\u5F53\u524D " + currentText + (latest.length ? " \xB7 \u6700\u65B0 " + latest[0] : "")),
         h(
           "div",
           { style: { marginTop: 8 } },
-          btn(busy2 ? h("span", { className: "tether-spin", style: { width: 16, height: 16, display: "grid", placeItems: "center" } }, h(Glyph, { name: "refresh", size: 16 })) : "\u4E00\u952E\u66F4\u65B0", () => runProductUpdate(product), { primary: true, disabled: busy2 || !hasUpdate })
+          runtimeRestartRequired ? btn("\u7ACB\u5373\u751F\u6548", () => setPendingDshRestart(true), { primary: true, disabled: busy2 }) : btn(busy2 ? h("span", { className: "tether-spin", style: { width: 16, height: 16, display: "grid", placeItems: "center" } }, h(Glyph, { name: "refresh", size: 16 })) : "\u4E00\u952E\u66F4\u65B0", () => runProductUpdate(product), { primary: true, disabled: busy2 || !hasUpdate })
         )
       );
     };
@@ -9387,10 +9398,33 @@ function createTetherPanel({ React: React2, Native, host }) {
       try {
         const nodeOk = localId ? await updateOneClick("node", { deviceId: localId, epoch: 0 }) : true;
         if (!nodeOk) return;
-        await updateOneClick("localPlugin", null);
+        const outcome = await runUpdateSequence({
+          check: () => updateAction("localPlugin", "check", void 0, null),
+          prepare: () => updateAction("localPlugin", "prepare", void 0, null),
+          apply: (id) => updateAction("localPlugin", "apply", id, null)
+        });
+        if (outcome.updated && localPluginNeedsRestart(outcome.result)) setPendingDshRestart(true);
         refreshUpdateCenter();
       } finally {
         setUpdateBusy("");
+      }
+    };
+    const confirmDshRestart = async () => {
+      setDshRestartBusy(true);
+      try {
+        const result = await activateLocalDshUpdate({
+          reloadSurface: typeof host.reloadLocalPluginSurface === "function" ? () => host.reloadLocalPluginSurface() : void 0,
+          status: () => host.localPluginUpdates("status")
+        });
+        setPendingDshRestart(false);
+        if (result.status === "active") setNotice("\u63D2\u4EF6\u66F4\u65B0\u5DF2\u7ACB\u5373\u751F\u6548");
+        else if (result.status === "reload_failed") setNotice("DSH \u63D2\u4EF6\u672A\u80FD\u5728\u7EBF\u91CD\u8F7D\uFF0C\u8BF7\u624B\u52A8\u91CD\u542F DeepSeek Harness\u3002");
+        else setNotice("\u5F53\u524D DSH \u65E0\u6CD5\u5728\u7EBF\u91CD\u542F\uFF1B\u8BF7\u624B\u52A8\u91CD\u542F\u4E00\u6B21\u4EE5\u52A0\u8F7D\u672C\u6B21\u66F4\u65B0\u3002");
+      } catch (error) {
+        setPendingDshRestart(false);
+        setComponentUpdateError("localPlugin", shortUpdateError(error), null);
+      } finally {
+        setDshRestartBusy(false);
       }
     };
     const runDeviceUpdate = async (item) => {
@@ -10374,18 +10408,26 @@ function createTetherPanel({ React: React2, Native, host }) {
         fail2(e);
       }
     });
-    const makeFile = (base) => askValue("\u65B0\u5EFA\u6587\u4EF6", "", async (name) => {
-      const target = String(base).replace(/[\\/]+$/, "") + "\\" + name;
-      try {
-        await post(fsPath("write"), { path: target, text: "" });
-        setContextMenu(null);
-        invalidateDir(deviceId, base);
-        await loadDir(base, { push: false, keepFile: true, fresh: true });
-        openPreview({ path: target, dir: false, name });
-      } catch (e) {
-        fail2(e);
-      }
-    });
+    const makeFile = (base) => {
+      const requestDevice = deviceIdRef.current;
+      return askValue("\u65B0\u5EFA\u6587\u4EF6", "", async (name) => {
+        if (!requestDevice || deviceIdRef.current !== requestDevice) {
+          fail2(new Error("\u76EE\u6807\u8BBE\u5907\u5DF2\u5207\u6362\uFF0C\u8BF7\u91CD\u65B0\u9009\u62E9\u76EE\u5F55"));
+          return;
+        }
+        const target = String(base).replace(/[\\/]+$/, "") + "\\" + name;
+        try {
+          await post("/api/devices/" + encodeURIComponent(requestDevice) + "/fs/write", { path: target, text: "", overwrite: false });
+          if (deviceIdRef.current !== requestDevice) return;
+          setContextMenu(null);
+          invalidateDir(requestDevice, base);
+          await loadDir(base, { push: false, keepFile: true, fresh: true });
+          if (deviceIdRef.current === requestDevice) openPreview({ path: target, dir: false, name });
+        } catch (e) {
+          fail2(e);
+        }
+      });
+    };
     const renameEntry = (entry) => {
       const target = entry || selected;
       if (!target) return;
@@ -11229,6 +11271,24 @@ function createTetherPanel({ React: React2, Native, host }) {
                 setComponentUpdateError("app", shortUpdateError(error), null);
               }
             }, { primary: true })
+          )
+        )
+      ) : null,
+      pendingDshRestart ? h(
+        "div",
+        {
+          style: { position: "absolute", inset: 0, background: "rgba(16,24,40,0.35)", display: "grid", placeItems: "center", zIndex: 35, padding: 16 }
+        },
+        h(
+          "div",
+          { role: "dialog", "aria-label": "\u5E94\u7528\u672C\u673A DSH \u63D2\u4EF6\u66F4\u65B0", style: { width: 360, background: C.bg, borderRadius: 10, boxShadow: C.shadow, padding: 18 } },
+          h("div", { style: { fontSize: 14, fontWeight: "var(--tether-strong, 600)", marginBottom: 6 } }, "\u63D2\u4EF6\u66F4\u65B0\u5DF2\u5B89\u88C5"),
+          h("div", { style: { color: C.sub, fontSize: 12, lineHeight: "18px", marginBottom: 14 } }, "\u5148\u5C1D\u8BD5\u5728\u5F53\u524D DSH \u4F1A\u8BDD\u4E2D\u5728\u7EBF\u52A0\u8F7D\u65B0\u63D2\u4EF6\uFF1B\u82E5\u5F53\u524D profile \u4E0D\u652F\u6301\u5728\u7EBF\u91CD\u8F7D\uFF0C\u4F1A\u63D0\u793A\u9700\u8981\u91CD\u542F\u3002"),
+          h(
+            "div",
+            { style: { display: "flex", justifyContent: "flex-end", gap: 8 } },
+            btn("\u7A0D\u540E", () => setPendingDshRestart(false), { disabled: dshRestartBusy }),
+            btn(dshRestartBusy ? "\u6B63\u5728\u5E94\u7528\u2026" : "\u7ACB\u5373\u751F\u6548", confirmDshRestart, { primary: true, disabled: dshRestartBusy })
           )
         )
       ) : null,

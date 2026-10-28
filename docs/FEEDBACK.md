@@ -13,14 +13,18 @@
 
 ## 当前待办
 
+- [ ] F63：旧快捷方式启动旧安装版，可能再次出现版本回退。`D:\Tether\app` 的 APP/Node 仍 `0.2.9`，运行中的桌面开发 APP/Node 为 `0.2.11`。已备好精确进程/活动门禁、配置摘要与回退备份保护的升级脚本，但自动审批因用量限制无法完成，命令未执行；保持待处理。
+- F59 补充实测：桌面运行/安装插件均 `0.2.11`，真实 owner RPC 为 HTTP 200；LAPTOP-01 安装文件已 `0.2.11`，旧 DSH Host 仍 HTTP 405，待加载新宿主代码。远程 APP/Node 自动重启不能替代 DSH 插件宿主重启验收。
+- F60 补充实测：LAPTOP-01 升级 `0.2.11` 后，三组件检查 797–1250 ms，当前版本查询 781–1266 ms。5 分钟 UI 检查缓存与强制刷新已发布；现有自动检查周期为 6 小时，自动检查不会下载安装。
+
 - [ ] F60：更新中心检查慢和长期“检查中”。候选已拆开 Node 读状态与下载/安装长锁；增加 manifest singleflight/4 秒超时和 UI 5 分钟缓存/6–6.5 秒失败收敛。桌面真实 status 为 281–500 ms；候选待正式发行与双机 UI 验收。
-- [ ] F61：原生对话上传加号必须选择目标设备文件。已核对原生 SDK `conversation.input.attachments.onAddFiles(File[])`，尚未接通跨源 iframe 与目标 fs 选择器；普通浏览器 file input 仍打开操作者本机。此问题未修复。
+- [ ] F61：原生对话目标设备附件选择器候选代码使用 owner-only RPC 身份与 DSH `workspaceFiles` 会话作用域 API，将原始字节交给原生 `onAddFiles(File[])`。自动回归仍需随更新后重跑；尚未验证安装 Host 的 API 注入、原生窗口及真实上传。
 - [x] F62：演示前开启文件管理写权限并验证即开即用。两设备 full 策略即时生效，无重启；跨机新建并读回成功，LAPTOP-01 往返 1250 ms。仅证明文件管理通道，未证明模型命令执行链路。
 
 - [x] F56：通过桌面 APP 一键更新另一台设备的 APP、插件与 Node，并验证自动重启、重新连回和用户数据保留。v0.2.10 已在 LAPTOP-01 完成实机更新；三组件报告 `0.2.10`，APP 新进程启动，Hub 在 apply 响应后 25.159 秒内恢复在线（最后一次离线至在线 17.688 秒）。更新前后 `hub.json` SHA-256、会话数量和三个工作区树哈希一致。v0.2.9 自动重启 helper 超时作为历史失败记录保留。
 - [ ] F57：DSH 插件安装后仍显示旧版三卡更新页，本机 `/tether-updates` status RPC 与远端插件更新状态也失败。已确认 profile 四个包为 `0.2.5`，实际 `file:` 源码根原为 `0.2.1`，所以只更新 profile 会在 DSH 重装时重新加载旧 UI；本地开发 Hub 也未提供 updates 路由。更新器已增加对该 `file:` 加载契约的漂移检测与同事务双路径更新回归，仍待安装版 DSH 重启后复验共享 UI、RPC、远端插件状态和原生工作区。
 - [ ] F58：Tether Desktop `0.2.10` 本机产品卡的 Node 版本显示“未知”，原生 DSH 工作区空白；目标 LAPTOP-01 设备卡三组件 `0.2.10` 正常。当前 APP 管理 Node 控制台与 Hub/表面网关均有在线响应，但本机卡状态作用域和原生 iframe 地址/授权链路尚未定位。需在本地 DSH 插件更新并重启后，用 Electron 原生窗口和 DSH 原生页面分别复验；未确认根因前不改 Hub/服务端路由。
-- [ ] F59：新版插件更新中心仍显示“当前插件未知”。已确认真实 owner RPC 返回 HTTP 405：旧注册方式 `connection.rpc.handle` 与实际 SDK 的 `connection.register(owner, channel, handler)` 不匹配且被静默忽略。已补现代 API 注册、缺失 API 显式失败、bundle 当前版本种子和运行/磁盘版本区分；本机备份安装并重启后真实 RPC 为 HTTP 200 / 78 ms，运行与磁盘均 `0.2.10`。本机补丁已验，正式发布与真实页面复验仍待收尾。
+- [x] F59：新版插件更新中心仍显示“当前插件未知”。已修正 owner RPC 注册，并在 DESKTOP-LOCAL 验证 HTTP 200；LAPTOP-01 通过 owner `pluginManager.setPluginEnabled(id:'include:tether-dsh-surface', enabled:true)` 安全重载后返回 `application=applied`（HTTP 200，2141 ms），随即 `/tether-updates/status` 确认 current/runtime 均为 `0.2.11`，无需手动重启 DSH。证据：`maintenance/ui-regression.../laptop-official-plugin-reload.json`。
 
 - [ ] F01：完成目标设备原生 Host 页面、真实会话发送与附件的跨设备验收。现有本机 Host 展示验证不覆盖旧节点升级后的双机行为。DESKTOP-LOCAL 同设备原生 Host、真实会话/命令/文件已验收；非默认测试 Node 在 v0.2.1 时远端原生页白屏，升 v0.2.3 后正常并执行 `REMOTE-OK`；LAPTOP-01 离线，物理跨设备与附件待验收。
 - [x] F28：从独立制品干净安装 APP、DSH 插件和 Node，分别确认安装、启动与后台管理；源码克隆仅作开发路径。DESKTOP-LOCAL 已完成三组件安装/启动并升级到 `v0.2.3`，`v0.2.3` 的 APP 首装 bootstrap 在临时干净目录通过；LAPTOP-01 的第二台设备复验归入双机验收。
@@ -57,7 +61,7 @@
 - [ ] F51 更新后状态闭环：一键更新期间按钮禁用；Node 更新后 UI 每 2 秒核对 `capabilities.node_version`，进程到新版即清除"节点重启中"并显示"已是最新"；插件更新后出现"已重启 DSH，重新检查"，点击后若已最新则收敛为"已是最新"。待真实更新流程复验。
 - [ ] F52 插件端检查更新提取不到版本：本机 RPC 通道失败时卡片显示"失败"浮层提示；同时每台设备的 Hub 卡片（含本机）始终提供版本与一键更新，作为可靠通道。local RPC 失败根因（旧 surface 插件未注册 `/tether-updates`）需升级 surface 插件后复验。
 - [x] F53 一键更新端到端验证：经 Hub 真实执行 DESKTOP-LOCAL DSH 插件 `0.2.3→0.2.5`：check available=true → prepare prepared_id `bc04336b…` to 0.2.5 → apply ok restart_required=true → 复查 current=0.2.5、installed_latest=true。链路可用；期间两次 409/504 为设备忙/超时，已映射为短句。
-- [ ] F54【严重·待拍板】跨机附件：原生页里"导入文件"是 DSH 自己的按钮，文件选择器固定在**运行浏览器/APP 的一端**弹出，这是浏览器安全模型，Tether 无法替换该按钮；上传请求本身会经 surface 隧道到达受控 DSH（本地文件可传远端会话），但"浏览受控机文件"没有入口。候选方案：在 Tether 侧新增"受控机附件"入口——Tether 文件选择器浏览远端 fs，选中文本/代码直接注入 Tether 会话输入框随 SDK 消息发送；任意文件复制进 DSH 工作区并以路径引用交给 Agent。需要主人拍板后做窄切片。
+- [ ] F54 跨机附件：picker 已从隐藏 Hub/localStorage 依赖改为 DSH Host `remote.workspaceFiles`；限定当前会话工作区并校验条目 capability。需要在实际运行的 Host 确认 `remote.workspaceFiles` 注入与 `readBytes` 字节回传后再关闭此项。
 - [ ] F55 报错浮层准则：错误一律右下角绝对定位浮层＋`×`（更新中心内同样适用），不进文档流、不进卡片正文。v0.2.10 笔记本更新成功后，旧 v0.2.9 的“APP 更新后尚未重新连接”失败提示仍留在界面；已在验收时手动关闭。提示未自动清除的问题仍待单独修复和验收。
 
 ## 验收边界
