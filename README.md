@@ -132,14 +132,14 @@ Open the APP's **Update center**. APP updates are downloaded and applied by the 
 
 ## Download
 
-### Latest stable: v0.2.4
+### Latest stable: v0.2.5
 
 | Package | Download | Size | SHA-256 |
 |---|---|---:|---|
-| APP | [tether-app-0.2.4.zip](https://github.com/qi001007/tether-harness/releases/download/v0.2.4/tether-app-0.2.4.zip) | 347,263 B | `182f97390a84b3377f4ea594088288fb2a2502b65b3bf9547a754c2bd980ee91` |
-| DSH plugin | [tether-plugin-0.2.4.zip](https://github.com/qi001007/tether-harness/releases/download/v0.2.4/tether-plugin-0.2.4.zip) | 370,234 B | `4f898ebb439d3b1d25c23e9f09e22601a06f3897264a72d05f0b162f5352bc04` |
-| Node | [tether-node-0.2.4.zip](https://github.com/qi001007/tether-harness/releases/download/v0.2.4/tether-node-0.2.4.zip) | 53,604 B | `ce671c11b3c94d43e6d095686e9ab72961bc06759ef91102f68431bdfaf2cf96` |
-| Update manifest | [tether-update.json](https://github.com/qi001007/tether-harness/releases/download/v0.2.4/tether-update.json) | 997 B | — |
+| APP | [tether-app-0.2.5.zip](https://github.com/qi001007/tether-harness/releases/download/v0.2.5/tether-app-0.2.5.zip) | 347,909 B | `19daf78cc93a720a7d98d9c04dcd8b478a0c60299b38d901597dd51da91ffbab` |
+| DSH plugin | [tether-plugin-0.2.5.zip](https://github.com/qi001007/tether-harness/releases/download/v0.2.5/tether-plugin-0.2.5.zip) | 370,480 B | `0e6075d5e1dccc53827f87996584debec02bc9d9aea51691125c3bdd004c8aec` |
+| Node | [tether-node-0.2.5.zip](https://github.com/qi001007/tether-harness/releases/download/v0.2.5/tether-node-0.2.5.zip) | 53,665 B | `0ef4654c67d77dcb7e37e9a93df260f16a20c0ceb3e91126de2005402f71a77d` |
+| Update manifest | [tether-update.json](https://github.com/qi001007/tether-harness/releases/download/v0.2.5/tether-update.json) | 997 B | — |
 
 The manifest has a stable `latest` alias; component ZIP names include the version, so use the versioned links above for reproducible component downloads:
 
@@ -150,7 +150,7 @@ https://github.com/qi001007/tether-harness/releases/latest/download/tether-updat
 Verify a Windows download with:
 
 ```powershell
-Get-FileHash .\tether-app-0.2.4.zip -Algorithm SHA256
+Get-FileHash .\tether-app-0.2.5.zip -Algorithm SHA256
 ```
 
 These are **ZIP source packages**, not self-contained EXE installers. They do not bundle Python, Node.js, DSH, or a Hub. Packages are **unsigned**; SHA-256 checks integrity against the manifest, not publisher identity.
@@ -169,9 +169,9 @@ Tether uses **SemVer** and a single version for the client train. The source of 
 {
   "schema": 1,
   "components": {
-    "app": "0.2.4",
-    "plugin": "0.2.4",
-    "node": "0.2.4"
+    "app": "0.2.5",
+    "plugin": "0.2.5",
+    "node": "0.2.5"
   }
 }
 ```
@@ -256,7 +256,7 @@ If you find a security issue, do not paste tokens, personal data, or private dev
 
 | Area | Status |
 |---|---|
-| Public release v0.2.4 | Published; all three ZIPs and the manifest verified |
+| Public release v0.2.5 | Published; all three ZIPs and the manifest verified. v0.2.5 fixes the local-device transcript 404 and turns error banners into a dismissible overlay |
 | Client update chain | Real APP/Node/plugin updates `0.2.1 → 0.2.2 → 0.2.3`; data preserved; `0.2.4` install acceptance pending |
 | Response time | v0.2.4 adds the loopback fast path, per-device caching/prefetch, a stop control, Office preview caching, and concurrent Node request handling. Measured behind the APP gateway: `fs/list` 3–4 ms (Hub 264–681 ms), text preview 3 ms (261–604 ms), PPTX preview 2.9 s cold / 5 ms cached (5.3–5.6 s before) |
 | Same-device APP + plugin | Verified: one DESKTOP-LOCAL DSH Host/session, bidirectional turns, a real `pwsh` command, matching file pages |
