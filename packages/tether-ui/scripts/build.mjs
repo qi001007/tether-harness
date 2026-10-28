@@ -40,7 +40,7 @@ ${shared}
 
     return {
       name: 'tether',
-      inject: ['slots', 'layout', 'connection', 'remote', 'remote.workspaceFiles', 'remote.pluginManager', 'fileDrag'],
+      inject: ['slots', 'layout', 'connection', 'remote', 'remote.workspaceFiles', 'remote.pluginManager'],
       apply(ctx) {
         localPluginRemote = ctx.remote
         if (ctx.connection && ctx.connection.rpc && typeof ctx.connection.rpc.call === 'function') {
@@ -49,11 +49,13 @@ ${shared}
         if (new URL(window.location.href).searchParams.has('tether_native')) {
           ctx.layout.selectPanel(null)
           const targetFiles = createDshTargetFilesBridge({ getRpc: () => localPluginRpc, getRemote: () => localPluginRemote })
-          const attachments = createDshTargetAttachments(React, Native, targetFiles)
-          ctx.slots.inject('conversation.input.attachments', () => ctx.slots.register({
-            name: 'conversation.input.attachments', priority: -1000, locale: 'conversation',
-            inject: () => ({ readFileDrag: ctx.fileDrag.read })
-          }, attachments))
+          if (ctx.fileDrag && typeof ctx.fileDrag.read === 'function') {
+            const attachments = createDshTargetAttachments(React, Native, targetFiles)
+            ctx.slots.inject('conversation.input.attachments', () => ctx.slots.register({
+              name: 'conversation.input.attachments', priority: -1000, locale: 'conversation',
+              inject: () => ({ readFileDrag: ctx.fileDrag.read })
+            }, attachments))
+          }
           return
         }
         ctx.slots.inject('main', function* () {
