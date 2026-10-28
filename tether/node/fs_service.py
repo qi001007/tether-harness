@@ -8,6 +8,7 @@ policy on its own.
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import mimetypes
 import os
@@ -15,6 +16,7 @@ import shutil
 import sqlite3
 import subprocess
 import tempfile
+import threading
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -24,6 +26,8 @@ from typing import Any
 MAX_READ = 256 * 1024
 MAX_PREVIEW_BYTES = 8 * 1024 * 1024
 MAX_PREVIEW_TEXT = 512 * 1024
+PREVIEW_CACHE_MAX_FILES = 96
+PREVIEW_CACHE_MAX_BYTES = 256 * 1024 * 1024
 TEXT_SUFFIXES = {
     ".txt", ".md", ".py", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".json", ".yml", ".yaml",
     ".toml", ".ini", ".cfg", ".csv", ".log", ".xml", ".html", ".css", ".scss", ".sh", ".ps1",
@@ -352,6 +356,9 @@ class FsService:
         self.policy = Policy(data_dir / "policy.json", device=device,
                              node_workspace=workspace, workspaces_root=workspaces_root)
         self.audit = Audit(data_dir / "audit.jsonl", device=device)
+        self.preview_cache_dir = data_dir / "preview-cache"
+        self.preview_cache_dir.mkdir(parents=True, exist_ok=True)
+        self._office_lock = threading.Lock()
 
     def _resolve(self, raw: str | None) -> Path:
         if not raw:
@@ -466,16 +473,71 @@ class FsService:
                            "base64": base64.b64encode(p.read_bytes()).decode("ascii")})
             return result
         if suffix in OFFICE_KINDS:
-            data = self._office_pdf(p, OFFICE_KINDS[suffix])
+            data, from_cache = self._office_pdf_cached(p, OFFICE_KINDS[suffix])
             if len(data) > MAX_PREVIEW_BYTES:
                 raise FsError("converted preview too large", "too_large")
             self.audit.add(op="preview", path=str(p), mode=self.policy.data.get("mode"),
-                           result="ok", converted=OFFICE_KINDS[suffix])
+                           result="ok", converted=OFFICE_KINDS[suffix], from_cache=from_cache)
             result.update({"kind": "pdf", "mime": "application/pdf",
                            "base64": base64.b64encode(data).decode("ascii"), "converted": True})
             return result
         result.update({"kind": "unsupported", "mime": mimetypes.guess_type(str(p))[0] or ""})
         return result
+
+    def _office_cache_path(self, source: Path, kind: str) -> Path:
+        st = source.stat()
+        seed = f"{_norm(source)}|{st.st_mtime_ns}|{st.st_size}|{kind}|v1"
+        digest = hashlib.sha256(seed.encode("utf-8")).hexdigest()
+        return self.preview_cache_dir / (digest + ".pdf")
+
+    def _office_pdf_cached(self, source: Path, kind: str) -> tuple[bytes, bool]:
+        target = self._office_cache_path(source, kind)
+        try:
+            if target.is_file():
+                return target.read_bytes(), True
+        except OSError:
+            pass
+        with self._office_lock:
+            try:
+                if target.is_file():
+                    return target.read_bytes(), True
+            except OSError:
+                pass
+            data = self._office_pdf(source, kind)
+            tmp = target.with_name(target.name + f".{os.getpid()}.tmp")
+            try:
+                tmp.write_bytes(data)
+                os.replace(tmp, target)
+            finally:
+                try:
+                    tmp.unlink()
+                except OSError:
+                    pass
+            self._trim_preview_cache()
+            return data, False
+
+    def _trim_preview_cache(self) -> None:
+        try:
+            files = []
+            for item in self.preview_cache_dir.iterdir():
+                if not item.is_file() or item.suffix != ".pdf":
+                    continue
+                try:
+                    st = item.stat()
+                except OSError:
+                    continue
+                files.append((st.st_mtime, st.st_size, item))
+        except OSError:
+            return
+        total = sum(size for _, size, _ in files)
+        files.sort()
+        while files and (len(files) > PREVIEW_CACHE_MAX_FILES or total > PREVIEW_CACHE_MAX_BYTES):
+            _, size, item = files.pop(0)
+            try:
+                item.unlink()
+                total -= size
+            except OSError:
+                pass
 
     def _office_pdf(self, source: Path, kind: str) -> bytes:
         if os.name != "nt":

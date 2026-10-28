@@ -218,6 +218,8 @@ class Node:
         self.ws: Any = None
         self.connected = False
         self.tasks: dict[str, asyncio.Task] = {}
+        self.fs_tasks: set[asyncio.Task] = set()
+        self.dsh_tasks: set[asyncio.Task] = set()
         self.surface_tasks: set[asyncio.Task] = set()
         self.update_tasks: set[asyncio.Task] = set()
         self.update_lock = asyncio.Lock()
@@ -277,11 +279,12 @@ class Node:
                     await self._handle(json.loads(raw))
             finally:
                 hb.cancel()
-                for task in tuple(self.surface_tasks):
-                    task.cancel()
-                if self.surface_tasks:
-                    await asyncio.gather(*self.surface_tasks, return_exceptions=True)
-                self.surface_tasks.clear()
+                for tasks in (self.fs_tasks, self.dsh_tasks, self.surface_tasks):
+                    for task in tuple(tasks):
+                        task.cancel()
+                    if tasks:
+                        await asyncio.gather(*tasks, return_exceptions=True)
+                    tasks.clear()
                 await self.native_surface.dispose()
                 self.ws = None
 
@@ -316,9 +319,23 @@ class Node:
         elif kind == "event_ack":
             self.store.ack(str(msg["run_id"]), int(msg["ack_seq"]))
         elif kind == "fs_call":
-            await self._fs_call(msg)
+            if len(self.fs_tasks) >= 128:
+                await self._send({"type": "fs_result", "req_id": str(msg.get("req_id") or ""),
+                                  "ok": False, "error": "too many pending file requests",
+                                  "code": "capacity"})
+                return
+            task = asyncio.create_task(self._fs_call(msg))
+            self.fs_tasks.add(task)
+            task.add_done_callback(self.fs_tasks.discard)
         elif kind == "dsh_call":
-            await self._dsh_call(msg)
+            if len(self.dsh_tasks) >= 64:
+                await self._send({"type": "dsh_result", "req_id": str(msg.get("req_id") or ""),
+                                  "ok": False, "error": "too many pending dsh requests",
+                                  "code": "capacity"})
+                return
+            task = asyncio.create_task(self._dsh_call(msg))
+            self.dsh_tasks.add(task)
+            task.add_done_callback(self.dsh_tasks.discard)
         elif kind == "surface_call":
             if len(self.surface_tasks) >= 64:
                 await self._send({"type": "surface_result", "req_id": str(msg.get("req_id") or ""),
@@ -692,6 +709,7 @@ def main() -> None:
     ap.add_argument("--provider", default=os.environ.get("DSH_PROVIDER", "deepseek-official"))
     ap.add_argument("--model", default=os.environ.get("DSH_MODEL", "deepseek-v4-flash"))
     ap.add_argument("--console-port", type=int, default=int(os.environ.get("TETHER_CONSOLE_PORT", "18893")))
+    ap.add_argument("--local-api-token", default=os.environ.get("TETHER_LOCAL_API_TOKEN", ""))
     args = ap.parse_args()
     workspace = Path(args.workspace).resolve()
     workspace.mkdir(parents=True, exist_ok=True)
@@ -705,8 +723,10 @@ def main() -> None:
                 workspaces_root=workspaces_root, data_dir=Path(args.db).resolve().parent)
     console_server = None
     try:
-        console_server = local_console.start(store, args.device, args.console_port)
-        log(f"[console] http://127.0.0.1:{args.console_port} (read-only, local)")
+        console_server = local_console.start(store, args.device, args.console_port,
+                                             api=node, token=args.local_api_token)
+        mode = "local API" if args.local_api_token else "read-only"
+        log(f"[console] http://127.0.0.1:{args.console_port} ({mode}, local)")
     except OSError as exc:
         log(f"[console] not started: {exc}")
     identity_published = False

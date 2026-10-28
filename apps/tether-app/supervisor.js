@@ -1,4 +1,5 @@
 const { spawn, spawnSync } = require('node:child_process')
+const crypto = require('node:crypto')
 const fs = require('node:fs')
 const http = require('node:http')
 const https = require('node:https')
@@ -28,6 +29,7 @@ class Supervisor {
     this.nodeToken = env.TETHER_NODE_TOKEN || ''
     this.hubWss = env.TETHER_HUB_WSS || (this.remoteUrl ? this.remoteUrl.replace(/^http/, 'ws').replace(/\/+$/, '') + '/ws/node' : '')
     this.consolePort = Number(env.TETHER_CONSOLE_PORT || 18894)
+    this.localApiToken = crypto.randomBytes(24).toString('hex')
     this.python = env.TETHER_PYTHON || path.join(repoRoot, '.venv', 'Scripts', 'python.exe')
     if (!fs.existsSync(this.python)) this.python = process.platform === 'win32' ? 'python' : 'python3'
     this.mode = null
@@ -101,7 +103,10 @@ class Supervisor {
       TETHER_HOST: this.baseEnv.TETHER_HOST || '0.0.0.0',
       TETHER_NODE_TOKEN: this.baseEnv.TETHER_NODE_TOKEN || 'dev-token'
     }
-    if (name === 'node') env.TETHER_NODE_MANAGED = '1'
+    if (name === 'node') {
+      env.TETHER_NODE_MANAGED = '1'
+      env.TETHER_LOCAL_API_TOKEN = this.localApiToken
+    }
     this.procArgs[name] = args.slice()
     const child = this.spawnChild(this.python, args, {
       cwd: this.repoRoot,

@@ -78,7 +78,10 @@ async function createWindow() {
       return { serverUrl: state.remoteUrl || state.endpoints.api, lastProbe: state.lastProbe }
     },
     accessToken: env.TETHER_ACCESS_TOKEN || '',
-    insecureTls: ['1', 'true', 'yes'].includes(String(env.TETHER_INSECURE_TLS || '').toLowerCase())
+    insecureTls: ['1', 'true', 'yes'].includes(String(env.TETHER_INSECURE_TLS || '').toLowerCase()),
+    localApi: supervisor.remoteUrl
+      ? { device: supervisor.device, port: supervisor.consolePort, token: supervisor.localApiToken }
+      : null
   })
   const url = await webServer.listen()
   uiOrigin = new URL(url).origin

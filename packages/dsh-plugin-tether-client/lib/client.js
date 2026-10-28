@@ -22,15 +22,7 @@ function createDshLocalPluginUpdateBridge(getRpc) {
     const rpc = typeof getRpc === 'function' ? getRpc() : null
     if (!rpc || typeof rpc.call !== 'function') throw new Error('当前 DSH 插件没有本机更新通道，请先安装新版插件。')
     const body = action === 'apply' ? { prepared_id: payload.prepared_id } : {}
-    let reply
-    try {
-      reply = await rpc.call('/tether-updates', action, body)
-    } catch (error) {
-      const unavailable = new Error('本机插件更新通道不可用，请使用 APP 的更新中心更新该设备上的插件。')
-      unavailable.code = 'local_update_unavailable'
-      unavailable.cause = error
-      throw unavailable
-    }
+    const reply = await rpc.call('/tether-updates', action, body)
     if (reply && reply.ok === false) {
       const detail = reply.error && typeof reply.error === 'object' ? reply.error : {}
       const error = new Error(detail.message || reply.error || reply.message || '本机插件更新失败')
@@ -319,6 +311,7 @@ async function fetchApiJson(path, init = {}, { activeBase, apiBaseList, pinnedBa
     let response
     const headers = { ...(headersForBase ? headersForBase(base) : {}), ...(init.headers || {}) }
     try { response = await fetcher(base + path, { ...init, headers }) } catch (error) {
+      if (error && error.name === 'AbortError') throw error
       lastError = error
       if (hasPinnedBase) throw error
       continue
@@ -391,7 +384,7 @@ function createTetherPanel({ React, Native, host }) {
       ACTIVE_BASE = response.base
       return response.data
     }
-    const post = (path, body, pinnedBase) => api(path, { method: 'POST', body: JSON.stringify(body || {}) }, pinnedBase)
+    const post = (path, body, pinnedBase, extra) => api(path, { method: 'POST', body: JSON.stringify(body || {}), ...(extra || {}) }, pinnedBase)
 
     function pill(text, color) {
       return h('span', {
@@ -928,6 +921,9 @@ function createTetherPanel({ React, Native, host }) {
         { d: 'M13 8a5 5 0 1 1-1.5-3.56' },
         { d: 'M13.2 2.3v3.1h-3.1' }
       ] },
+      stop: { parts: [
+        { d: 'M4.6 4.6h6.8v6.8H4.6z', fill: 'currentColor', stroke: false }
+      ] },
       pencil: { parts: [
         { d: 'M10.8 2.6l2.6 2.6-7.7 7.7-3.4.8.8-3.4z' },
         { d: 'M9.4 4l2.6 2.6' }
@@ -1298,7 +1294,7 @@ function createTetherPanel({ React, Native, host }) {
       )
     }
 
-    function FileTree({ roots, children, open, onToggle, onOpenFile, onContextMenuNode, selected }) {
+    function FileTree({ roots, children, open, onToggle, onOpenFile, onContextMenuNode, selected, onHoverEntry, onLeaveEntry }) {
       const rows = []
       const walk = (node, depth, ancestors) => {
         const isDir = node.dir !== false
@@ -1318,7 +1314,7 @@ function createTetherPanel({ React, Native, host }) {
           }, expanded
         })
         const row = React.cloneElement(nativeRow, {
-          title: node.path, 'data-tree-node-id': node.id,
+          'data-tree-node-id': node.id,
           'aria-expanded': isDir ? expanded : undefined,
           className: nativeRow.props.className + ' tether-press tether-hover',
           style: {
@@ -1329,6 +1325,8 @@ function createTetherPanel({ React, Native, host }) {
         })
         rows.push(h('div', {
           key: node.id,
+          onMouseEnter: (event) => { if (onHoverEntry) onHoverEntry(event, { ...node, dir: isDir }) },
+          onMouseLeave: () => { if (onLeaveEntry) onLeaveEntry() },
           onContextMenu: (event) => { if (onContextMenuNode) onContextMenuNode(event, node) },
           style: { display: 'flex', alignItems: 'center', minWidth: 0 }
         },
@@ -1367,16 +1365,16 @@ function createTetherPanel({ React, Native, host }) {
     function SidePanel(props) {
       const { width, hidden, resizing, onResizeStart, onResetWidth, onCollapse,
         treeRoots, treeChildren, treeOpen, onToggleTree, onOpenFile, onContextMenuNode, treeSelected,
-        loadingTree } = props
+        onHoverEntry, onLeaveEntry, loadingTree } = props
       return h('aside', {
         'aria-label': '文件',
         style: { display: hidden ? 'none' : 'flex', width, flex: '0 0 auto', minHeight: 0, borderRight: 0, background: C.panel, flexDirection: 'column', position: 'relative', transition: resizing ? 'none' : 'width 180ms cubic-bezier(.2,.85,.2,1.15)', willChange: 'width' }
       },
         h(SidePanelHeader, { title: '文件', onCollapse, loading: loadingTree }),
-        h('div', { className: 'tether-scroll', style: { flex: '1 1 auto', minHeight: 0, overflowY: 'auto', padding: '0 ' + UI.pad + 'px ' + UI.pad + 'px' } },
+        h('div', { className: 'tether-scroll', onScroll: props.onLeaveEntry, style: { flex: '1 1 auto', minHeight: 0, overflowY: 'auto', padding: '0 ' + UI.pad + 'px ' + UI.pad + 'px' } },
           h(FileTree, {
             roots: treeRoots || [], children: treeChildren, open: treeOpen, selected: treeSelected,
-            onToggle: onToggleTree, onOpenFile, onContextMenuNode
+            onToggle: onToggleTree, onOpenFile, onContextMenuNode, onHoverEntry, onLeaveEntry
           })
         ),
         h('div', {
@@ -1516,6 +1514,21 @@ function createTetherPanel({ React, Native, host }) {
       }
       const treeDeviceEpochRef = React.useRef(0)
       const loadedDirRef = React.useRef('')
+      const pathRef = React.useRef('')
+      const dirCacheRef = React.useRef(new Map())
+      const dirInflightRef = React.useRef(new Map())
+      const treeInflightRef = React.useRef(new Set())
+      const dirAbortRef = React.useRef(null)
+      const dirSeqRef = React.useRef(0)
+      const previewCacheRef = React.useRef(new Map())
+      const previewBytesRef = React.useRef(0)
+      const previewInflightRef = React.useRef(new Map())
+      const previewAbortRef = React.useRef(null)
+      const previewSeqRef = React.useRef(0)
+      const workspaceCacheRef = React.useRef(new Map())
+      const drivesCacheRef = React.useRef(new Map())
+      const policyCacheRef = React.useRef(new Map())
+      const hoverTimerRef = React.useRef(null)
       const treeDeviceRef = React.useRef('')
       if (treeDeviceRef.current !== deviceId) {
         treeDeviceRef.current = deviceId
@@ -1523,6 +1536,7 @@ function createTetherPanel({ React, Native, host }) {
       }
       deviceIdRef.current = deviceId
       const [projects, setProjects] = React.useState(null)
+      const [projectsDevice, setProjectsDevice] = React.useState('')
       const [projectsError, setProjectsError] = React.useState('')
       const [project, setProject] = React.useState(null)
       const projectsRef = React.useRef(null)
@@ -1561,6 +1575,8 @@ function createTetherPanel({ React, Native, host }) {
       const [ask, setAsk] = React.useState(null)
       const [path, setPath] = React.useState('')
       const [pathDraft, setPathDraft] = React.useState('')
+      pathRef.current = path
+      const [hoverTip, setHoverTip] = React.useState(null)
       const [selected, setSelected] = React.useState(null)
       const [file, setFile] = React.useState(null)
       const [draft, setDraft] = React.useState('')
@@ -1889,6 +1905,7 @@ function createTetherPanel({ React, Native, host }) {
       }, [])
 
       const loadState = React.useCallback(async () => {
+        if (stateRef.current && typeof document !== 'undefined' && document.hidden) return
         try {
           const data = await api('/api/state')
           setState(data)
@@ -1907,6 +1924,9 @@ function createTetherPanel({ React, Native, host }) {
         const t = setInterval(loadState, 2500)
         return () => clearInterval(t)
       }, [loadState])
+
+      React.useEffect(() => { hideHoverTip() }, [deviceId, view])
+      React.useEffect(() => () => { if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current) }, [])
 
       const device = state && state.devices.find((d) => d.device_id === deviceId)
       const updateHasAvailable = updateAvailableFor(updateInfo, host && host.kind, deviceId)
@@ -1927,22 +1947,32 @@ function createTetherPanel({ React, Native, host }) {
 
       React.useEffect(() => {
         if (!deviceId) { setPolicy(null); return }
+        const cached = policyCacheRef.current.get(deviceId)
+        if (cached) setPolicy(cached)
         api('/api/devices/' + encodeURIComponent(deviceId) + '/policy')
-          .then(setPolicy)
-          .catch(() => setPolicy(null))
+          .then((data) => { cacheStore(policyCacheRef.current, deviceId, data, 32); setPolicy(data) })
+          .catch(() => { if (!cached) setPolicy(null) })
       }, [deviceId])
 
       const loadProjects = React.useCallback(async () => {
-        if (!deviceId) { setProjects(null); setProject(null); projectsRef.current = null; projectRef.current = null; projectsDeviceRef.current = ''; setProjectsError(''); return }
+        if (!deviceId) { setProjects(null); setProject(null); setProjectsDevice(''); projectsRef.current = null; projectRef.current = null; projectsDeviceRef.current = ''; setProjectsError(''); return }
         setProjectsError('')
         const requestDevice = deviceId
         const requestEpoch = treeDeviceEpochRef.current
         const stillCurrent = () => treeResponseIsCurrent(requestDevice, deviceIdRef.current, requestEpoch, treeDeviceEpochRef.current)
+        const cached = workspaceCacheRef.current.get(requestDevice)
+        if (cached) {
+          setProjects(cached); setProjectsDevice(requestDevice)
+          projectsRef.current = cached; projectsDeviceRef.current = requestDevice
+          setProject((current) => current && cached.workspaces.some((w) => w.path === current.path) ? current : (cached.workspaces[0] || null))
+        }
         try {
           const data = validateWorkspaceResponse(await api('/api/devices/' + encodeURIComponent(requestDevice) + '/workspaces'))
           if (!stillCurrent()) return
+          cacheStore(workspaceCacheRef.current, requestDevice, data, 32)
           setProjectsError('')
-          setProjects(data)
+          setProjects(data); setProjectsDevice(requestDevice)
+          projectsRef.current = data
           projectsRef.current = data
           projectsDeviceRef.current = requestDevice
           setProject((current) => {
@@ -1958,7 +1988,7 @@ function createTetherPanel({ React, Native, host }) {
             loadedDeviceId: projectsDeviceRef.current, requestDeviceId: requestDevice, fallbackPath: fallback
           })
           if (failureState.synthetic) {
-            setProjects(failureState.projects)
+            setProjects(failureState.projects); setProjectsDevice(requestDevice)
             projectsRef.current = failureState.projects
             projectsDeviceRef.current = requestDevice
             setProject(failureState.project)
@@ -1966,6 +1996,7 @@ function createTetherPanel({ React, Native, host }) {
             setProjectsError('节点工作区接口暂不可用，当前显示节点默认工作目录。')
             setNativeError('节点未升级，原生会话不可用')
           } else {
+            if (!cached) setProjectsDevice('')
             setProjectsError(e && e.message === '工作区接口返回的数据格式无效'
               ? '工作区接口返回的数据格式无效，请检查目标节点版本后重试。'
               : '读取工作区失败，请检查节点连接和接口版本后重试。')
@@ -1974,11 +2005,11 @@ function createTetherPanel({ React, Native, host }) {
       }, [deviceId])
 
       React.useEffect(() => {
-        setProjects(null); setProject(null); projectsDeviceRef.current = ''
+        setProjects(null); setProject(null); setProjectsDevice(''); projectsDeviceRef.current = ''
         projectsRef.current = null; projectRef.current = null
-        setPath(''); setPathDraft(''); setFile(null); setSelected(null)
+        setPath(''); setPathDraft(''); pathRef.current = ''; setFile(null); setSelected(null)
         setSessionId(''); setSessionData(null); setRunId(''); setNativeLoaded(false)
-        setWorkspaceOpen({}); setTreeChildren({}); setTreeOpen({}); setTreeSelected(''); setDrives([])
+        setTreeSelected(''); setDrives([])
         setDirEntries([]); setDirLoading(false); setDirError(''); setHistory([]); setContextMenu(null)
         setPreviewBusy(false); setEditMode(false); loadedDirRef.current = ''
         loadProjects()
@@ -1986,6 +2017,7 @@ function createTetherPanel({ React, Native, host }) {
 
       const loadNative = React.useCallback(async () => {
         if (!deviceId) return
+        if (typeof document !== 'undefined' && document.hidden) return
         const requestDevice = deviceId
         const requestEpoch = treeDeviceEpochRef.current
         const stillCurrent = () => treeResponseIsCurrent(requestDevice, deviceIdRef.current, requestEpoch, treeDeviceEpochRef.current)
@@ -1998,14 +2030,21 @@ function createTetherPanel({ React, Native, host }) {
         } catch (e) { if (!stillCurrent()) return; setNative([]); setNativeError(String(e.message || e)); setNativeLoaded(true) }
       }, [deviceId])
 
-      React.useEffect(() => { loadNative(); const t = setInterval(loadNative, 8000); return () => clearInterval(t) }, [loadNative])
+      React.useEffect(() => {
+        if (view !== 'chat') return undefined
+        loadNative()
+        const t = setInterval(loadNative, 8000)
+        return () => clearInterval(t)
+      }, [loadNative, view])
 
       React.useEffect(() => {
         if (!deviceId) { setDrives([]); return }
         let live = true
+        const cached = drivesCacheRef.current.get(deviceId)
+        if (cached) setDrives(cached)
         api('/api/devices/' + encodeURIComponent(deviceId) + '/drives')
-          .then((data) => { if (live) setDrives(data.drives || []) })
-          .catch(() => { if (live) setDrives([]) })
+          .then((data) => { if (!live) return; cacheStore(drivesCacheRef.current, deviceId, data.drives || [], 32); setDrives(data.drives || []) })
+          .catch(() => { if (live && !cached) setDrives([]) })
         return () => { live = false }
       }, [deviceId])
 
@@ -2272,6 +2311,100 @@ function createTetherPanel({ React, Native, host }) {
       }
 
       const fsPath = (op) => '/api/devices/' + encodeURIComponent(deviceId) + '/fs/' + op
+      const cacheStore = (cache, key, value, max) => {
+        cache.delete(key)
+        cache.set(key, value)
+        while (cache.size > (max || 240)) cache.delete(cache.keys().next().value)
+      }
+      const rememberDir = (targetDevice, target, entries) => {
+        cacheStore(dirCacheRef.current, treeCacheKey(targetDevice, target), { entries, at: Date.now() })
+        if (deviceIdRef.current !== targetDevice) return
+        setTreeChildren((current) => ({ ...current, [treeCacheKey(targetDevice, target)]: { status: 'loaded', entries } }))
+      }
+      const invalidateDir = (targetDevice, target) => {
+        const key = treeCacheKey(targetDevice, target)
+        dirCacheRef.current.delete(key)
+        if (deviceIdRef.current === targetDevice) {
+          setTreeChildren((current) => {
+            if (!current[key]) return current
+            const next = { ...current }
+            delete next[key]
+            return next
+          })
+        }
+      }
+      const rememberPreview = (key, data) => {
+        const bytes = Math.round((data && data.base64 ? data.base64.length * 0.75 : 0) + (data && data.text ? data.text.length * 2 : 0))
+        const previous = previewCacheRef.current.get(key)
+        if (previous) previewBytesRef.current -= previous.bytes
+        previewCacheRef.current.delete(key)
+        previewCacheRef.current.set(key, { data, bytes, at: Date.now() })
+        previewBytesRef.current += bytes
+        while (previewCacheRef.current.size > 1 && (previewCacheRef.current.size > 24 || previewBytesRef.current > 48_000_000)) {
+          const oldest = previewCacheRef.current.keys().next().value
+          const dropped = previewCacheRef.current.get(oldest)
+          previewCacheRef.current.delete(oldest)
+          previewBytesRef.current -= (dropped && dropped.bytes) || 0
+        }
+      }
+      const previewCacheKey = (targetDevice, target) => String(targetDevice) + '|' + normPath(target)
+      const prefetchDir = (target) => {
+        const requestDevice = deviceIdRef.current
+        if (!requestDevice || !target) return
+        const key = treeCacheKey(requestDevice, target)
+        const cached = dirCacheRef.current.get(key)
+        if (cached && Date.now() - cached.at < 30000) return
+        if (dirInflightRef.current.has(key)) return
+        const pending = post('/api/devices/' + encodeURIComponent(requestDevice) + '/fs/list', { path: target })
+          .then((data) => {
+            if (deviceIdRef.current !== requestDevice) return
+            const entries = (data.entries || []).map((entry) => ({ ...entry, path: joinPath(target, entry.name) }))
+            rememberDir(requestDevice, target, entries)
+          })
+          .catch(() => {})
+          .finally(() => dirInflightRef.current.delete(key))
+        dirInflightRef.current.set(key, pending)
+      }
+      const prefetchPreview = (entry) => {
+        if (!entry || entry.dir) return
+        const name = String(entry.name || entry.path || '')
+        if (!/\.(txt|md|markdown|json|js|mjs|cjs|ts|tsx|jsx|py|css|html|htm|yml|yaml|toml|ini|log|csv|xml|sh|ps1|sql|java|c|h|cpp|go|rs|vue|png|jpg|jpeg|gif|webp|bmp|svg|pdf)$/i.test(name)) return
+        if (entry.size != null && entry.size > 8_000_000) return
+        const requestDevice = deviceIdRef.current
+        if (!requestDevice) return
+        const key = previewCacheKey(requestDevice, entry.path)
+        if (previewCacheRef.current.has(key) || previewInflightRef.current.has(key)) return
+        const pending = post('/api/devices/' + encodeURIComponent(requestDevice) + '/fs/preview', { path: entry.path })
+          .then((data) => { if (deviceIdRef.current === requestDevice) rememberPreview(key, data) })
+          .catch(() => {})
+          .finally(() => previewInflightRef.current.delete(key))
+        previewInflightRef.current.set(key, pending)
+      }
+      const hideHoverTip = () => {
+        if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current)
+        hoverTimerRef.current = null
+        setHoverTip(null)
+      }
+      const showHoverTip = (event, entry) => {
+        if (!entry) return
+        const x = event.clientX
+        const y = event.clientY
+        if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current)
+        hoverTimerRef.current = setTimeout(() => {
+          hoverTimerRef.current = null
+          setHoverTip({ x, y, entry })
+          if (entry.dir) prefetchDir(entry.path)
+          else prefetchPreview(entry)
+        }, 360)
+      }
+      const stopLoading = () => {
+        dirSeqRef.current += 1
+        previewSeqRef.current += 1
+        if (dirAbortRef.current) dirAbortRef.current.abort()
+        if (previewAbortRef.current) previewAbortRef.current.abort()
+        setDirLoading(false)
+        setPreviewBusy(false)
+      }
       const parentOf = (target) => {
         const clean = String(target || '').replace(/[\\/]+$/, '')
         const parent = clean.replace(/[\\/][^\\/]+$/, '')
@@ -2299,6 +2432,8 @@ function createTetherPanel({ React, Native, host }) {
         if (!requestDevice || !target) return
         const requestEpoch = treeDeviceEpochRef.current
         const key = node ? node.cacheKey : treeCacheKey(requestDevice, target)
+        if (treeInflightRef.current.has(key)) return
+        treeInflightRef.current.add(key)
         setTreeChildren((current) => ({ ...current, [key]: { status: 'loading', entries: [] } }))
         try {
           const data = await post('/api/devices/' + encodeURIComponent(requestDevice) + '/fs/list', { path: target })
@@ -2306,16 +2441,18 @@ function createTetherPanel({ React, Native, host }) {
           const entries = (data.entries || [])
             .map((entry) => ({ ...entry, path: joinPath(target, entry.name) }))
             .filter((entry, index, all) => all.findIndex((item) => normPath(item.path) === normPath(entry.path)) === index)
+          cacheStore(dirCacheRef.current, key, { entries, at: Date.now() })
           setTreeChildren((current) => ({ ...current, [key]: { status: 'loaded', entries } }))
         } catch (e) {
           if (!treeResponseIsCurrent(requestDevice, deviceIdRef.current, requestEpoch, treeDeviceEpochRef.current)) return
           setTreeChildren((current) => ({ ...current, [key]: { status: 'error', entries: [] } }))
-        }
+        } finally { treeInflightRef.current.delete(key) }
       }
 
-      const revealTree = (target) => {
+      const revealTree = (target, seed) => {
         const info = pathInfo(target)
         if (!info) return
+        const seedKey = seed ? treeCacheKey(deviceId, seed.path) : ''
         const normTarget = normPath(target)
         const normRoot = normPath(info.root)
         const paths = [info.root]
@@ -2332,6 +2469,10 @@ function createTetherPanel({ React, Native, host }) {
         paths.forEach((item) => {
           const node = treeNodeFor(item, info)
           open[node.id] = true
+          if (seedKey && node.cacheKey === seedKey) {
+            setTreeChildren((current) => ({ ...current, [node.cacheKey]: { status: 'loaded', entries: seed.entries } }))
+            return
+          }
           const cached = treeChildren[node.cacheKey]
           if (!cached || cached.status === 'error') loadTreeDir(item, node)
         })
@@ -2346,39 +2487,101 @@ function createTetherPanel({ React, Native, host }) {
         const requestDevice = deviceId
         const rawTarget = String(target)
         const requestTarget = /^[A-Za-z]:[\\/]?$/.test(rawTarget) ? rawTarget.slice(0, 2) + '\\' : rawTarget
-        setDirLoading(true); setDirError('')
-        try {
-          const data = await post(fsPath('list'), { path: requestTarget })
-          if (deviceIdRef.current !== requestDevice) return
-          const nextPath = /^[A-Za-z]:[\\/]?$/.test(rawTarget) ? requestTarget : (rawTarget.replace(/[\\/]+$/, '') || rawTarget)
-          const entries = (data.entries || []).map((entry) => ({ ...entry, path: joinPath(requestTarget, entry.name) }))
-          if (opts.push !== false && path && path !== nextPath) setHistory((current) => [...current, path])
+        const nextPath = /^[A-Za-z]:[\\/]?$/.test(rawTarget) ? requestTarget : (rawTarget.replace(/[\\/]+$/, '') || rawTarget)
+        const key = treeCacheKey(requestDevice, nextPath)
+        const cached = opts.fresh === true ? null : dirCacheRef.current.get(key)
+        const seq = dirSeqRef.current + 1
+        dirSeqRef.current = seq
+        if (dirAbortRef.current) dirAbortRef.current.abort()
+        const controller = new AbortController()
+        dirAbortRef.current = controller
+        const enter = (entries, push) => {
+          if (push !== false && pathRef.current && pathRef.current !== nextPath) setHistory((current) => [...current, pathRef.current])
           setDirEntries(entries)
-          setPath(nextPath); setPathDraft(nextPath)
+          setPath(nextPath); setPathDraft(nextPath); pathRef.current = nextPath
           loadedDirRef.current = requestDevice + '|' + normPath(nextPath)
           setSelected(null)
           if (!opts.keepFile) { setFile(null); setEditMode(false); setDirty(false); setDraft('') }
-          revealTree(nextPath)
+        }
+        setDirError('')
+        setDirLoading(true)
+        if (cached) {
+          enter(cached.entries, opts.push)
+          revealTree(nextPath, { path: nextPath, entries: cached.entries })
+        }
+        try {
+          const pending = dirInflightRef.current.get(key)
+          const data = pending
+            ? await pending
+            : await post('/api/devices/' + encodeURIComponent(requestDevice) + '/fs/list', { path: requestTarget }, undefined, { signal: controller.signal })
+          if (seq !== dirSeqRef.current || deviceIdRef.current !== requestDevice) return
+          const entries = (data.entries || []).map((entry) => ({ ...entry, path: joinPath(requestTarget, entry.name) }))
+          cacheStore(dirCacheRef.current, key, { entries, at: Date.now() })
+          if (cached) {
+            setDirEntries(entries)
+            setTreeChildren((current) => ({ ...current, [key]: { status: 'loaded', entries } }))
+          } else {
+            enter(entries, opts.push)
+            revealTree(nextPath, { path: nextPath, entries })
+          }
         } catch (e) {
-          if (deviceIdRef.current !== requestDevice) return
-          setDirError(String(e.message || e)); setDirEntries([])
-        } finally { setDirLoading(false) }
+          if (controller.signal.aborted || (e && e.name === 'AbortError')) return
+          if (deviceIdRef.current !== requestDevice || seq !== dirSeqRef.current) return
+          if (!cached) {
+            setDirError(String(e.message || e)); setDirEntries([])
+            setTreeChildren((current) => ({ ...current, [key]: { status: 'error', entries: [] } }))
+          }
+        } finally { if (seq === dirSeqRef.current) setDirLoading(false) }
       }
 
-      const openPreview = async (entry) => {
+      const openPreview = async (entry, options) => {
+        const opts = options || {}
         if (!entry || entry.dir) return
-        setPreviewBusy(true); setDirError('')
-        try {
-          const data = await post(fsPath('preview'), { path: entry.path })
-          const parent = parentOf(entry.path)
+        const requestDevice = deviceId
+        if (!requestDevice) return
+        const key = previewCacheKey(requestDevice, entry.path)
+        const cached = opts.fresh === true ? null : previewCacheRef.current.get(key)
+        const seq = previewSeqRef.current + 1
+        previewSeqRef.current = seq
+        if (previewAbortRef.current) previewAbortRef.current.abort()
+        const controller = new AbortController()
+        previewAbortRef.current = controller
+        setDirError('')
+        const sameFile = !!(file && file.path === entry.path)
+        const apply = (data) => {
           setFile({ ...data, path: entry.path, name: entry.name || pathBasename(entry.path) })
-          setDraft(data.text || '')
-          setDirty(false); setEditMode(false); setSelected(entry)
-          setPath(parent); setPathDraft(parent)
-          setView('files')
-          await loadDir(parent, { push: false, keepFile: true })
+          if (!sameFile || !dirty) { setDraft(data.text || ''); setDirty(false); setEditMode(false) }
           setSelected(entry)
-        } catch (e) { fail(e) } finally { setPreviewBusy(false) }
+          const parent = parentOf(entry.path)
+          setPath(parent); setPathDraft(parent); pathRef.current = parent
+          setView('files')
+          revealTree(parent)
+        }
+        if (cached) {
+          apply(cached.data)
+          setPreviewBusy(false)
+        } else {
+          setPreviewBusy(true)
+        }
+        try {
+          const pending = previewInflightRef.current.get(key)
+          const data = pending
+            ? await pending
+            : await post('/api/devices/' + encodeURIComponent(requestDevice) + '/fs/preview', { path: entry.path }, undefined, { signal: controller.signal })
+          if (seq !== previewSeqRef.current || deviceIdRef.current !== requestDevice) return
+          rememberPreview(key, data)
+          if (!(cached && dirty && sameFile)) apply(data)
+          const parent = parentOf(entry.path)
+          if (loadedDirRef.current !== requestDevice + '|' + normPath(parent)) {
+            await loadDir(parent, { push: false, keepFile: true })
+            if (seq === previewSeqRef.current) setSelected(entry)
+          }
+        } catch (e) {
+          if (controller.signal.aborted || (e && e.name === 'AbortError')) return
+          if (seq !== previewSeqRef.current || deviceIdRef.current !== requestDevice) return
+          if (cached) previewCacheRef.current.delete(key)
+          fail(e)
+        } finally { if (seq === previewSeqRef.current) setPreviewBusy(false) }
       }
 
       const openFile = async (entry) => {
@@ -2392,16 +2595,15 @@ function createTetherPanel({ React, Native, host }) {
       }
 
       const toggleTree = (node, retry) => {
+        hideHoverTip()
         if (!node.dir) { openPreview(node); return }
         const target = node.path
         const next = retry || !treeOpen[node.id]
         setTreeSelected(node.id); setTreeOpen((current) => ({ ...current, [node.id]: next }))
         if (next) {
-          loadDir(target, { push: true })
-          const cached = treeChildren[node.cacheKey]
-          if (retry || !cached || cached.status === 'error') loadTreeDir(target, node)
+          loadDir(target, retry ? { push: true, fresh: true } : { push: true })
         } else {
-          setPath(target); setPathDraft(target)
+          setPath(target); setPathDraft(target); pathRef.current = target
         }
       }
 
@@ -2413,8 +2615,8 @@ function createTetherPanel({ React, Native, host }) {
       }
 
       const refreshExplorer = () => {
-        if (file) openPreview(file)
-        else if (path) loadDir(path, { push: false, keepFile: true })
+        if (file) openPreview(file, { fresh: true })
+        else if (path) loadDir(path, { push: false, keepFile: true, fresh: true })
       }
 
       const openContextMenu = (event, entry, base) => {
@@ -2429,22 +2631,26 @@ function createTetherPanel({ React, Native, host }) {
         try {
           await post(fsPath('write'), { path: file.path, text: draft })
           setDirty(false); setNotice('Saved ' + file.path)
+          const key = previewCacheKey(deviceId, file.path)
+          previewCacheRef.current.delete(key)
+          invalidateDir(deviceId, parentOf(file.path))
           const data = await post(fsPath('preview'), { path: file.path })
+          rememberPreview(key, data)
           setFile({ ...data, path: file.path, name: file.name })
           setDraft(data.text || '')
           setEditMode(false)
-          if (path) loadDir(path, { push: false, keepFile: true })
+          if (path) loadDir(path, { push: false, keepFile: true, fresh: true })
         } catch (e) { fail(e) } finally { setBusy(false) }
       }
       const askValue = (title, value, onOk) => setAsk({ title, value: value || '', onOk })
-      const makeFolder = (base) => askValue('新建文件夹', '', async (name) => { try { await post(fsPath('mkdir'), { path: String(base).replace(/[\\/]+$/, '') + '\\' + name }); setContextMenu(null); await loadDir(base, { push: false, keepFile: true }); const info = pathInfo(base); if (info) loadTreeDir(base, treeNodeFor(base, info)) } catch (e) { fail(e) } })
-      const makeFile = (base) => askValue('新建文件', '', async (name) => { const target = String(base).replace(/[\\/]+$/, '') + '\\' + name; try { await post(fsPath('write'), { path: target, text: '' }); setContextMenu(null); await loadDir(base, { push: false, keepFile: true }); openPreview({ path: target, dir: false, name }) } catch (e) { fail(e) } })
-      const renameEntry = (entry) => { const target = entry || selected; if (!target) return; askValue('重命名', target.name, async (name) => { try { await post(fsPath('rename'), { path: target.path, dest: parentOf(target.path) + '\\' + name }); setContextMenu(null); setSelected(null); if (file && file.path === target.path) setFile(null); await loadDir(path, { push: false, keepFile: true }) } catch (e) { fail(e) } }) }
+      const makeFolder = (base) => askValue('新建文件夹', '', async (name) => { try { await post(fsPath('mkdir'), { path: String(base).replace(/[\\/]+$/, '') + '\\' + name }); setContextMenu(null); invalidateDir(deviceId, base); await loadDir(base, { push: false, keepFile: true, fresh: true }) } catch (e) { fail(e) } })
+      const makeFile = (base) => askValue('新建文件', '', async (name) => { const target = String(base).replace(/[\\/]+$/, '') + '\\' + name; try { await post(fsPath('write'), { path: target, text: '' }); setContextMenu(null); invalidateDir(deviceId, base); await loadDir(base, { push: false, keepFile: true, fresh: true }); openPreview({ path: target, dir: false, name }) } catch (e) { fail(e) } })
+      const renameEntry = (entry) => { const target = entry || selected; if (!target) return; askValue('重命名', target.name, async (name) => { const dest = parentOf(target.path) + '\\' + name; try { await post(fsPath('rename'), { path: target.path, dest }); setContextMenu(null); setSelected(null); if (file && file.path === target.path) setFile(null); previewCacheRef.current.delete(previewCacheKey(deviceId, target.path)); previewCacheRef.current.delete(previewCacheKey(deviceId, dest)); invalidateDir(deviceId, parentOf(target.path)); await loadDir(path, { push: false, keepFile: true, fresh: true }) } catch (e) { fail(e) } }) }
       const deleteEntry = async (entry) => {
         const target = entry || selected
         if (!target) return
         if (!window.confirm('Move "' + target.name + '" to .tether-trash?')) return
-        try { await post(fsPath('delete'), { path: target.path }); setContextMenu(null); setSelected(null); if (file && file.path === target.path) setFile(null); await loadDir(path, { push: false, keepFile: true }) } catch (e) { fail(e) }
+        try { await post(fsPath('delete'), { path: target.path }); setContextMenu(null); setSelected(null); if (file && file.path === target.path) setFile(null); previewCacheRef.current.delete(previewCacheKey(deviceId, target.path)); invalidateDir(deviceId, parentOf(target.path)); await loadDir(path, { push: false, keepFile: true, fresh: true }) } catch (e) { fail(e) }
       }
       const newProject = () => {
         if (!projects) return
@@ -2576,6 +2782,7 @@ function createTetherPanel({ React, Native, host }) {
 
       React.useEffect(() => {
         if (view !== 'files' || !deviceId || !projects || projects.synthetic) return
+        if (projectsDevice !== deviceId) return
         const firstWorkspace = workspaceNodes[0] && workspaceNodes[0].path
         const target = (loadedDirRef.current ? (path || firstWorkspace) : (firstWorkspace || (project && project.path) || path)) || ''
         if (!target) return
@@ -2584,7 +2791,33 @@ function createTetherPanel({ React, Native, host }) {
         loadedDirRef.current = key
         setPath(target); setPathDraft(target)
         loadDir(target, { push: false, keepFile: !!file })
-      }, [view, deviceId, path, project, projects, workspaceKey])
+      }, [view, deviceId, path, project, projects, projectsDevice, workspaceKey])
+
+      const renderHoverTip = () => {
+        if (!hoverTip) return null
+        const entry = hoverTip.entry
+        const width = 340
+        const viewWidth = typeof window !== 'undefined' ? window.innerWidth : 1200
+        const viewHeight = typeof window !== 'undefined' ? window.innerHeight : 800
+        const left = Math.max(8, Math.min(hoverTip.x + 14, viewWidth - width - 8))
+        const top = Math.max(8, Math.min(hoverTip.y + 18, viewHeight - 86))
+        return h('div', {
+          role: 'tooltip',
+          style: {
+            position: 'fixed', left, top, width, zIndex: 90, pointerEvents: 'none',
+            background: C.layer1, border: '1px solid rgba(16, 24, 40, 0.16)', borderRadius: 8,
+            boxShadow: C.shadow, padding: '8px 10px', color: C.ink, fontSize: 12, lineHeight: '17px'
+          }
+        },
+          h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 } },
+            h('span', { style: { fontWeight: 'var(--tether-strong, 600)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, entry.name || pathBasename(entry.path)),
+            entry.dir ? pill('文件夹', C.mute) : null),
+          h('div', { style: { marginTop: 2, color: C.mute, fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, entry.path),
+          entry.dir && entry.mtime == null ? null : h('div', { style: { display: 'flex', gap: 10, marginTop: 3, color: C.mute, fontSize: 10.5 } },
+            entry.dir ? null : h('span', { className: 'tether-num' }, formatBytes(entry.size)),
+            entry.mtime != null ? h('span', { className: 'tether-num' }, formatMtime(entry.mtime)) : null)
+        )
+      }
 
       const modelText = sessionId && sessionData ? [sessionData.model, sessionData.agent_preset].filter(Boolean).join(' · ') : ''
 
@@ -2627,7 +2860,10 @@ function createTetherPanel({ React, Native, host }) {
         ) : null
 
         const previewBody = () => {
-          if (previewBusy) return h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', color: C.mute, fontSize: 12 } }, h('span', { className: 'tether-spin', style: { width: 18, height: 18, display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 18 })))
+          if (previewBusy) return h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', alignContent: 'center', gap: 8, color: C.mute, fontSize: 12 } },
+            h('span', { className: 'tether-spin', style: { width: 18, height: 18, display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 18 })),
+            h('span', null, '正在读取…'),
+            h('button', { onClick: stopLoading, className: 'tether-hover', style: { border: 0, borderRadius: 6, padding: '4px 10px', background: C.soft, color: C.ink, fontSize: 11.5, cursor: 'pointer' } }, '停止加载'))
           if (!file) return null
           if (file.kind === 'markdown') {
             if (editMode) return h('textarea', { value: draft, onChange: (ev) => { setDraft(ev.target.value); setDirty(true) }, spellCheck: false, style: { flex: '1 1 auto', width: '100%', boxSizing: 'border-box', resize: 'none', border: 0, outline: 'none', padding: '14px 18px', fontFamily: 'Consolas, monospace', fontSize: 12.5, lineHeight: 1.6, background: C.bg, color: C.ink } })
@@ -2650,19 +2886,34 @@ function createTetherPanel({ React, Native, host }) {
         const entries = [...dirEntries].sort((a, b) => (a.dir === b.dir ? String(a.name || '').localeCompare(String(b.name || '')) : (a.dir ? -1 : 1)))
         const columns = 'minmax(0,1fr) 132px 104px 78px'
         const directoryBody = () => {
-          if (dirLoading && !entries.length) return h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', color: C.mute, fontSize: 12 } }, '加载中…')
+          if (dirLoading && !entries.length) return h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', alignContent: 'center', gap: 8, color: C.mute, fontSize: 12 } },
+            h('span', { className: 'tether-spin', style: { width: 18, height: 18, display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 18 })),
+            h('span', null, '加载中…'),
+            h('button', { onClick: stopLoading, className: 'tether-hover', style: { border: 0, borderRadius: 6, padding: '4px 10px', background: C.soft, color: C.ink, fontSize: 11.5, cursor: 'pointer' } }, '停止加载'))
           if (dirError) return h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', alignContent: 'center', gap: 8, color: C.red, fontSize: 12, padding: 24, textAlign: 'center' } },
             h('div', null, dirError),
             h('button', { onClick: refreshExplorer, className: 'tether-hover', style: { border: 0, borderRadius: 6, padding: '5px 10px', background: C.soft, color: C.ink, fontSize: 12, cursor: 'pointer' } }, '重试'))
           if (!path) return h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', color: C.mute, fontSize: 12 } }, '从左侧选择工作区或磁盘')
           if (!entries.length) return h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', color: C.mute, fontSize: 12 } }, '空文件夹')
-          return h('div', { className: 'tether-scroll', style: { flex: '1 1 auto', overflow: 'auto', padding: '0 10px 24px' } },
+          return h('div', { className: 'tether-scroll', onScroll: hideHoverTip, style: { flex: '1 1 auto', overflow: 'auto', padding: '0 10px 24px' } },
+            dirLoading ? h('div', { style: { display: 'flex', alignItems: 'center', gap: 7, height: 26, padding: '0 8px', fontSize: 11, color: C.mute } },
+              h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 13 })),
+              h('span', null, '正在刷新…'),
+              h('button', { onClick: stopLoading, className: 'tether-hover', style: { border: 0, borderRadius: 5, padding: '2px 8px', background: C.soft, color: C.ink, fontSize: 11, cursor: 'pointer' } }, '停止')) : null,
             h('div', { style: { display: 'grid', gridTemplateColumns: columns, gap: 8, height: 28, padding: '0 8px', alignItems: 'center', fontSize: 11, color: C.mute } },
               h('span', null, '名称'), h('span', null, '修改日期'), h('span', null, '类型'), h('span', { style: { textAlign: 'right' } }, '大小')),
             entries.map((entry) => h('div', {
-              key: entry.path, role: 'button', tabIndex: 0, title: entry.path,
-              onClick: () => setSelected(entry),
-              onDoubleClick: () => openFile(entry),
+              key: entry.path, role: 'button', tabIndex: 0,
+              onClick: (event) => {
+                if (event.detail > 1) return
+                hideHoverTip()
+                setSelected(entry)
+                if (entry.dir) prefetchDir(entry.path)
+                else prefetchPreview(entry)
+              },
+              onDoubleClick: (event) => { event.preventDefault(); hideHoverTip(); openFile(entry) },
+              onMouseEnter: (event) => showHoverTip(event, entry),
+              onMouseLeave: hideHoverTip,
               onContextMenu: (event) => openContextMenu(event, entry, entry.dir ? entry.path : path),
               onKeyDown: (event) => { if (event.key === 'Enter') openFile(entry) },
               className: 'tether-hover',
@@ -2855,7 +3106,7 @@ function createTetherPanel({ React, Native, host }) {
             onResizeStart: startSidebarResize,
             onResetWidth: () => setSidebarWidth(UI.defaultSide),
             onCollapse: () => setSidebarCollapsed(true),
-            loadingTree: Object.values(treeChildren).some((item) => item && item.status === 'loading'),
+            loadingTree: Object.entries(treeChildren).some(([key, item]) => key.startsWith(deviceId + '|') && item && item.status === 'loading'),
             treeRoots: [
               { id: treeNodeId(deviceId, 'workspaces', '', ''), label: '工作区', first: true, nodes: workspaceNodes.map((w) => {
                 const wid = w.id || w.workspace_id || w.path
@@ -2870,6 +3121,8 @@ function createTetherPanel({ React, Native, host }) {
             treeOpen,
             onToggleTree: toggleTree,
             onOpenFile: openFile,
+            onHoverEntry: (event, node) => showHoverTip(event, node),
+            onLeaveEntry: hideHoverTip,
             onContextMenuNode: (event, node) => openContextMenu(event, { name: node.name, path: node.path, dir: node.dir }, node.dir ? node.path : parentOf(node.path)),
             treeSelected
           }),
@@ -2970,7 +3223,8 @@ function createTetherPanel({ React, Native, host }) {
             h('input', { autoFocus: true, value: ask.value, spellCheck: false, onChange: (ev) => setAsk({ ...ask, value: ev.target.value }), onKeyDown: (ev) => { if (ev.key === 'Enter') submitAsk(); if (ev.key === 'Escape') setAsk(null) }, style: { width: '100%', height: 32, boxSizing: 'border-box', border: 0, borderRadius: 6, padding: '0 8px', background: C.panel, fontSize: 13 } }),
             h('div', { style: { display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 } }, btn('取消', () => setAsk(null)), btn('确定', submitAsk, { primary: true, disabled: !ask.value.trim() }))
           )
-        ) : null
+        ) : null,
+        hoverTip ? renderHoverTip() : null
       )
     }
 

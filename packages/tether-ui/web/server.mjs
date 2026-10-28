@@ -8,9 +8,21 @@ const ORIGIN_OK = (origin) => origin === 'dsh-app://app' || /^http:\/\/(127\.0\.
 
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.map': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png' }
 
-export function createWebServer({ root = import.meta.dirname, controller = 'http://127.0.0.1:18890', port = 18891, host = '127.0.0.1', accessToken = '', insecureTls = false, device = '', hub = false, connectionInfo, probeConnection } = {}) {
+export function createWebServer({ root = import.meta.dirname, controller = 'http://127.0.0.1:18890', port = 18891, host = '127.0.0.1', accessToken = '', insecureTls = false, device = '', hub = false, localApi = null, connectionInfo, probeConnection } = {}) {
   const target = new URL(controller)
   const here = root
+  const localDevice = localApi && localApi.device ? String(localApi.device) : ''
+  const localPort = localApi && Number(localApi.port) ? Number(localApi.port) : 0
+  const localToken = (localApi && localApi.token) || ''
+  const LOCAL_ROUTES = ['/fs/', '/workspaces', '/drives', '/policy', '/audit', '/dsh/sessions', '/dsh/workspaces/register']
+  const isLocalDeviceApi = (url) => {
+    if (!localDevice || !localPort) return false
+    const pathname = url.split('?')[0]
+    const prefix = '/api/devices/' + encodeURIComponent(localDevice)
+    if (!pathname.startsWith(prefix + '/')) return false
+    const rest = pathname.slice(prefix.length)
+    return LOCAL_ROUTES.some((route) => route.endsWith('/') ? rest.startsWith(route) : (rest === route || rest.startsWith(route + '/')))
+  }
 
   const proxy = (req, res) => {
     const headers = { ...req.headers, host: target.host }
@@ -53,6 +65,26 @@ export function createWebServer({ root = import.meta.dirname, controller = 'http
     req.pipe(upstream)
   }
 
+  const proxyLocalNode = (req, res) => {
+    const headers = { ...req.headers, host: '127.0.0.1:' + localPort }
+    if (localToken) headers.authorization = 'Bearer ' + localToken
+    const upstream = http.request({
+      hostname: '127.0.0.1', port: localPort,
+      path: req.url,
+      method: req.method,
+      headers
+    }, (upstreamRes) => {
+      res.writeHead(upstreamRes.statusCode || 502, { ...upstreamRes.headers, 'x-tether-local': '1' })
+      upstreamRes.pipe(res)
+    })
+    upstream.on('error', (error) => {
+      if (res.headersSent) { res.end(); return }
+      res.writeHead(502, { 'content-type': 'application/json; charset=utf-8', 'x-tether-local': '1' })
+      res.end(JSON.stringify({ detail: { error: 'local node unreachable: ' + error.message, code: 'local_unreachable' } }))
+    })
+    req.pipe(upstream)
+  }
+
   const serveStatic = (req, res) => {
     const url = new URL(req.url, 'http://localhost')
     const relative = decodeURIComponent(url.pathname === '/' ? '/index.html' : url.pathname)
@@ -89,6 +121,7 @@ export function createWebServer({ root = import.meta.dirname, controller = 'http
       return
     }
     if (req.url.startsWith('/local-api/')) proxyLocal(req, res)
+    else if (isLocalDeviceApi(req.url)) proxyLocalNode(req, res)
     else if (req.url === '/api' || req.url.startsWith('/api/')) proxy(req, res)
     else serveStatic(req, res)
   })

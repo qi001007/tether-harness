@@ -119,6 +119,34 @@ def test_preview_returns_renderable_text_markdown_image_and_pdf(env) -> None:
     assert svc.dispatch("preview", {"path": str(folder / "blob.bin")})["kind"] == "unsupported"
 
 
+def test_office_preview_reuses_converted_pdf_until_source_changes(env, monkeypatch: pytest.MonkeyPatch) -> None:
+    svc: FsService = env["svc"]
+    folder = env["root"] / "office"
+    folder.mkdir()
+    doc = folder / "report.docx"
+    doc.write_bytes(b"fake-docx")
+    calls: list[tuple[str, str]] = []
+
+    def fake_convert(source: Path, kind: str) -> bytes:
+        calls.append((str(source), kind))
+        return b"%PDF-1.4\nfake-converted"
+
+    monkeypatch.setattr(svc, "_office_pdf", fake_convert)
+    first = svc.dispatch("preview", {"path": str(doc)})
+    second = svc.dispatch("preview", {"path": str(doc)})
+    assert first["converted"] is True and second["converted"] is True
+    assert first["base64"] == second["base64"]
+    assert len(calls) == 1
+    assert len(list(svc.preview_cache_dir.glob("*.pdf"))) == 1
+    audit = svc.dispatch("audit_list", {"limit": 20})["entries"]
+    assert any(row.get("from_cache") is True for row in audit)
+
+    doc.write_bytes(b"fake-docx-v2")
+    third = svc.dispatch("preview", {"path": str(doc)})
+    assert third["kind"] == "pdf"
+    assert len(calls) == 2
+
+
 def test_locked_mode_blocks_all_writes(env) -> None:
     svc: FsService = env["svc"]
     svc.dispatch("policy_set", {"mode": "locked"})
