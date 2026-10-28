@@ -223,7 +223,7 @@ try {
   const inject = build.match(/inject: \[([^\]]+)\]/)?.[1]
   assert.ok(inject, 'generated DSH client must declare its allowed client services')
   assert.deepEqual([...inject.matchAll(/'([^']+)'/g)].map(([, service]) => service), [
-    'slots', 'layout', 'connection', 'remote', 'remote.workspaceFiles', 'remote.pluginManager', 'fileDrag'
+    'slots', 'layout', 'connection', 'remote', 'remote.workspaceFiles', 'remote.pluginManager'
   ])
 } finally {
   fs.rmSync(temp, { recursive: true, force: true })

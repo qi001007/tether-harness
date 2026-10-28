@@ -1114,7 +1114,8 @@ function createTetherPanel({ React, Native, host }) {
       .tether-scroll:hover::-webkit-scrollbar-thumb { background: var(--dsw-alias-scrollbar-hover-l1, #cbd5e1); }
       .tether-scroll::-webkit-scrollbar-corner { background: transparent; }
       .tether-num { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum' 1; }
-      .tether-spin { display: inline-grid; width: 1em; height: 1em; flex: 0 0 auto; place-items: center; transform-box: border-box; transform-origin: 50% 50%; animation: tether-refresh-rotate .8s linear infinite; }
+      .tether-spin { display: inline-grid; flex: 0 0 auto; place-items: center; }
+      .tether-spin > svg { display: block; margin: auto; transform-box: fill-box; transform-origin: 50% 50%; animation: tether-refresh-rotate .8s linear infinite; }
       @keyframes tether-refresh-rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       .tether-node-fill { position: absolute; inset: 0; z-index: 1; border-radius: 50%; corner-shape: round; transition: background-color 160ms ease; }
       .tether-file-markdown { max-width: 860px; margin: 0 auto; color: var(--dsw-alias-label-primary); font-size: 14px; line-height: 24px; }
@@ -1226,6 +1227,10 @@ function createTetherPanel({ React, Native, host }) {
       ] },
       stop: { parts: [
         { d: 'M4.6 4.6h6.8v6.8H4.6z', fill: 'currentColor', stroke: false }
+      ] },
+      eye: { parts: [
+        { d: 'M1.8 8s2.2-4.2 6.2-4.2S14.2 8 14.2 8s-2.2 4.2-6.2 4.2S1.8 8 1.8 8z' },
+        { d: 'M8 9.6A1.6 1.6 0 1 0 8 6.4a1.6 1.6 0 0 0 0 3.2z' }
       ] },
       pencil: { parts: [
         { d: 'M10.8 2.6l2.6 2.6-7.7 7.7-3.4.8.8-3.4z' },
@@ -1874,6 +1879,7 @@ function createTetherPanel({ React, Native, host }) {
       const [ask, setAsk] = React.useState(null)
       const [path, setPath] = React.useState('')
       const [pathDraft, setPathDraft] = React.useState('')
+      const [pathEditing, setPathEditing] = React.useState(false)
       pathRef.current = path
       const [hoverTip, setHoverTip] = React.useState(null)
       const [selected, setSelected] = React.useState(null)
@@ -3349,7 +3355,7 @@ function createTetherPanel({ React, Native, host }) {
           file.writable ? null : pill('只读', C.amber),
           file.converted ? pill('已转 PDF', C.mute) : null,
           h('span', { style: { marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 2 } },
-            (file.kind === 'markdown' || file.kind === 'text') && file.writable ? iconButton('pencil', editMode ? '预览' : '编辑', () => setEditMode((value) => !value), false) : null,
+            (file.kind === 'markdown' || file.kind === 'text') && file.writable ? iconButton(editMode ? 'eye' : 'pencil', editMode ? '预览' : '编辑', () => setEditMode((value) => !value), false) : null,
             (file.kind === 'markdown' || file.kind === 'text') && file.writable ? iconButton('save', '保存', saveFile, !dirty || busy) : null,
             h('span', { className: 'tether-num', style: { fontSize: 10.5, color: C.mute, marginLeft: 4 } }, formatBytes(file.size))
           )

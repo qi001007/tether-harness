@@ -24,9 +24,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// node_modules/react/cjs/react.production.min.js
+// packages/tether-ui/node_modules/react/cjs/react.production.min.js
 var require_react_production_min = __commonJS({
-  "node_modules/react/cjs/react.production.min.js"(exports) {
+  "packages/tether-ui/node_modules/react/cjs/react.production.min.js"(exports) {
     "use strict";
     var l = Symbol.for("react.element");
     var n = Symbol.for("react.portal");
@@ -297,9 +297,9 @@ var require_react_production_min = __commonJS({
   }
 });
 
-// node_modules/react/index.js
+// packages/tether-ui/node_modules/react/index.js
 var require_react = __commonJS({
-  "node_modules/react/index.js"(exports, module) {
+  "packages/tether-ui/node_modules/react/index.js"(exports, module) {
     "use strict";
     if (true) {
       module.exports = require_react_production_min();
@@ -309,9 +309,9 @@ var require_react = __commonJS({
   }
 });
 
-// node_modules/scheduler/cjs/scheduler.production.min.js
+// packages/tether-ui/node_modules/scheduler/cjs/scheduler.production.min.js
 var require_scheduler_production_min = __commonJS({
-  "node_modules/scheduler/cjs/scheduler.production.min.js"(exports) {
+  "packages/tether-ui/node_modules/scheduler/cjs/scheduler.production.min.js"(exports) {
     "use strict";
     function f(a, b) {
       var c = a.length;
@@ -562,9 +562,9 @@ var require_scheduler_production_min = __commonJS({
   }
 });
 
-// node_modules/scheduler/index.js
+// packages/tether-ui/node_modules/scheduler/index.js
 var require_scheduler = __commonJS({
-  "node_modules/scheduler/index.js"(exports, module) {
+  "packages/tether-ui/node_modules/scheduler/index.js"(exports, module) {
     "use strict";
     if (true) {
       module.exports = require_scheduler_production_min();
@@ -574,9 +574,9 @@ var require_scheduler = __commonJS({
   }
 });
 
-// node_modules/react-dom/cjs/react-dom.production.min.js
+// packages/tether-ui/node_modules/react-dom/cjs/react-dom.production.min.js
 var require_react_dom_production_min = __commonJS({
-  "node_modules/react-dom/cjs/react-dom.production.min.js"(exports) {
+  "packages/tether-ui/node_modules/react-dom/cjs/react-dom.production.min.js"(exports) {
     "use strict";
     var aa = require_react();
     var ca = require_scheduler();
@@ -7184,9 +7184,9 @@ var require_react_dom_production_min = __commonJS({
   }
 });
 
-// node_modules/react-dom/index.js
+// packages/tether-ui/node_modules/react-dom/index.js
 var require_react_dom = __commonJS({
-  "node_modules/react-dom/index.js"(exports, module) {
+  "packages/tether-ui/node_modules/react-dom/index.js"(exports, module) {
     "use strict";
     function checkDCE() {
       if (typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ === "undefined" || typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.checkDCE !== "function") {
@@ -7210,9 +7210,9 @@ var require_react_dom = __commonJS({
   }
 });
 
-// node_modules/react-dom/client.js
+// packages/tether-ui/node_modules/react-dom/client.js
 var require_client = __commonJS({
-  "node_modules/react-dom/client.js"(exports) {
+  "packages/tether-ui/node_modules/react-dom/client.js"(exports) {
     "use strict";
     var m = require_react_dom();
     if (true) {
@@ -7241,11 +7241,11 @@ var require_client = __commonJS({
   }
 });
 
-// web/main.js
+// packages/tether-ui/web/main.js
 var import_react = __toESM(require_react(), 1);
 var import_client = __toESM(require_client(), 1);
 
-// src/connection-panel.js
+// packages/tether-ui/src/connection-panel.js
 function createConnectionPanel(React2) {
   const h = React2.createElement;
   const ink = "var(--dsw-alias-label-primary, #101828)";
@@ -7316,7 +7316,7 @@ function createConnectionPanel(React2) {
   return { Panel: ConnectionPanel, Trigger: ConnectionTrigger };
 }
 
-// src/app.js
+// packages/tether-ui/src/app.js
 function updateErrorText(value) {
   return String(value && value.message || value || "\u66F4\u65B0\u5931\u8D25").replace(/^Error invoking remote method ['"]tether:[^'"]+['"]:\s*/, "").replace(/^Error:\s*/, "");
 }
@@ -8069,7 +8069,8 @@ function createTetherPanel({ React: React2, Native, host }) {
       .tether-scroll:hover::-webkit-scrollbar-thumb { background: var(--dsw-alias-scrollbar-hover-l1, #cbd5e1); }
       .tether-scroll::-webkit-scrollbar-corner { background: transparent; }
       .tether-num { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum' 1; }
-      .tether-spin { display: inline-grid; width: 1em; height: 1em; flex: 0 0 auto; place-items: center; transform-box: border-box; transform-origin: 50% 50%; animation: tether-refresh-rotate .8s linear infinite; }
+      .tether-spin { display: inline-grid; flex: 0 0 auto; place-items: center; }
+      .tether-spin > svg { display: block; margin: auto; transform-box: fill-box; transform-origin: 50% 50%; animation: tether-refresh-rotate .8s linear infinite; }
       @keyframes tether-refresh-rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       .tether-node-fill { position: absolute; inset: 0; z-index: 1; border-radius: 50%; corner-shape: round; transition: background-color 160ms ease; }
       .tether-file-markdown { max-width: 860px; margin: 0 auto; color: var(--dsw-alias-label-primary); font-size: 14px; line-height: 24px; }
@@ -8182,6 +8183,10 @@ function createTetherPanel({ React: React2, Native, host }) {
     ] },
     stop: { parts: [
       { d: "M4.6 4.6h6.8v6.8H4.6z", fill: "currentColor", stroke: false }
+    ] },
+    eye: { parts: [
+      { d: "M1.8 8s2.2-4.2 6.2-4.2S14.2 8 14.2 8s-2.2 4.2-6.2 4.2S1.8 8 1.8 8z" },
+      { d: "M8 9.6A1.6 1.6 0 1 0 8 6.4a1.6 1.6 0 0 0 0 3.2z" }
     ] },
     pencil: { parts: [
       { d: "M10.8 2.6l2.6 2.6-7.7 7.7-3.4.8.8-3.4z" },
@@ -9000,6 +9005,7 @@ function createTetherPanel({ React: React2, Native, host }) {
     const [ask, setAsk] = React2.useState(null);
     const [path, setPath] = React2.useState("");
     const [pathDraft, setPathDraft] = React2.useState("");
+    const [pathEditing, setPathEditing] = React2.useState(false);
     pathRef.current = path;
     const [hoverTip, setHoverTip] = React2.useState(null);
     const [selected, setSelected] = React2.useState(null);
@@ -10806,7 +10812,7 @@ function createTetherPanel({ React: React2, Native, host }) {
         h(
           "span",
           { style: { marginLeft: "auto", display: "flex", alignItems: "center", gap: 2 } },
-          (file.kind === "markdown" || file.kind === "text") && file.writable ? iconButton("pencil", editMode ? "\u9884\u89C8" : "\u7F16\u8F91", () => setEditMode((value) => !value), false) : null,
+          (file.kind === "markdown" || file.kind === "text") && file.writable ? iconButton(editMode ? "eye" : "pencil", editMode ? "\u9884\u89C8" : "\u7F16\u8F91", () => setEditMode((value) => !value), false) : null,
           (file.kind === "markdown" || file.kind === "text") && file.writable ? iconButton("save", "\u4FDD\u5B58", saveFile, !dirty || busy) : null,
           h("span", { className: "tether-num", style: { fontSize: 10.5, color: C.mute, marginLeft: 4 } }, formatBytes(file.size))
         )
@@ -11466,7 +11472,7 @@ function createTetherPanel({ React: React2, Native, host }) {
   return { App, TetherIcon };
 }
 
-// src/hosts/web.js
+// packages/tether-ui/src/hosts/web.js
 var EXT_KIND = {
   md: "md",
   markdown: "md",
@@ -11742,7 +11748,7 @@ function createWebHost({ apiBase = "" } = {}) {
   };
 }
 
-// src/hosts/electron.js
+// packages/tether-ui/src/hosts/electron.js
 function createElectronHost({ apiBase = "" } = {}) {
   return {
     ...createWebHost({ apiBase }),
@@ -11776,7 +11782,7 @@ function createElectronHost({ apiBase = "" } = {}) {
   };
 }
 
-// web/app-error-boundary.js
+// packages/tether-ui/web/app-error-boundary.js
 function createAppErrorBoundary(React2) {
   return class AppErrorBoundary extends React2.Component {
     constructor(props) {
@@ -11801,7 +11807,7 @@ function createAppErrorBoundary(React2) {
   };
 }
 
-// web/main.js
+// packages/tether-ui/web/main.js
 function fail(error) {
   const box = document.getElementById("root");
   if (!box) return;
