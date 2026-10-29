@@ -9822,6 +9822,7 @@ function createTetherPanel({ React: React2, Native, host }) {
       const known = infos.every((info) => info && info.current_version && info.latest_version);
       const busy2 = updateBusy.startsWith(item.device_id + ":") || updateBusy === "device:" + item.device_id;
       const failed = infos.some((_info, index) => !!(updateErrors.devices[item.device_id] || {})[["node", ...hasPlugin ? ["plugin"] : [], ...hasApp ? ["app"] : []][index]]);
+      const pluginRestart = !!(hasPlugin && plugin && plugin.restart_required);
       const nodeTuple = versionTuple(node.current_version, node.latest_version);
       const versionRows = [];
       if (hasApp) versionRows.push("APP " + versionTuple(item.capabilities.app_version, app.latest_version) + "/Node " + nodeTuple);
@@ -9835,7 +9836,7 @@ function createTetherPanel({ React: React2, Native, host }) {
           { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 4 } },
           h("strong", { style: { fontSize: 13 } }, item.name || item.device_id),
           h("span", { style: { color: C.mute, fontSize: 11 } }, item.name && item.name !== item.device_id ? item.device_id : ""),
-          h("span", { style: { marginLeft: "auto" } }, !item.online ? pill("\u79BB\u7EBF", C.mute) : busy2 ? h("span", { className: "tether-spin", style: { display: "grid", placeItems: "center", color: C.amber } }, h(Glyph, { name: "refresh", size: 14 })) : hasUpdate ? pill("\u6709\u66F4\u65B0", C.amber) : known ? pill("\u5DF2\u662F\u6700\u65B0", C.green) : failed ? pill("\u68C0\u67E5\u5931\u8D25", C.red) : pill("\u68C0\u67E5\u4E2D\u2026", C.mute))
+          h("span", { style: { marginLeft: "auto" } }, !item.online ? pill("\u79BB\u7EBF", C.mute) : busy2 ? h("span", { className: "tether-spin", style: { display: "grid", placeItems: "center", color: C.amber } }, h(Glyph, { name: "refresh", size: 14 })) : hasUpdate ? pill("\u6709\u66F4\u65B0", C.amber) : pluginRestart ? pill("\u63D2\u4EF6\u5F85\u91CD\u542F DSH", C.amber) : known ? pill("\u5DF2\u662F\u6700\u65B0", C.green) : failed ? pill("\u68C0\u67E5\u5931\u8D25", C.red) : pill("\u68C0\u67E5\u4E2D\u2026", C.mute))
         ),
         h(
           "div",
@@ -9905,24 +9906,58 @@ function createTetherPanel({ React: React2, Native, host }) {
         setDshRestartBusy(false);
       }
     };
+    const transientUpdateError = (error) => {
+      const code = error && (error.code || error.detail && error.detail.code);
+      if (code === "device_offline" || code === "update_busy" || code === "surface_timeout") return true;
+      const status = error && error.status;
+      return !status || status === 400 || status === 408 || status === 429 || status >= 500;
+    };
+    const checkUpdateWithRetry = async (component, scope, attempts = 3) => {
+      let lastError;
+      for (let i = 0; i < attempts; i += 1) {
+        try {
+          return await updateAction(component, "check", void 0, scope);
+        } catch (error) {
+          lastError = error;
+          if (!transientUpdateError(error) || i + 1 >= attempts) break;
+          await new Promise((resolve) => setTimeout(resolve, 2e3));
+        }
+      }
+      throw lastError;
+    };
     const runDeviceUpdate = async (item) => {
       setUpdateBusy("device:" + item.device_id);
+      const failures = [];
       try {
         const scope = { deviceId: item.device_id, epoch: 0 };
         for (const component of deviceUpdateComponents(item.capabilities)) {
           if (component !== "app") {
-            if (!await updateOneClick(component, scope)) return;
+            try {
+              if (!await updateOneClick(component, scope)) failures.push(component);
+            } catch (error) {
+              failures.push(component);
+              setComponentUpdateError(component, shortUpdateError(error), scope);
+            }
             continue;
           }
-          const checkedApp = await updateAction("app", "check", void 0, scope);
-          if (checkedApp && checkedApp.update_available) {
-            const expectedVersion = checkedApp.latest_version;
-            if (await updateOneClick("app", scope)) {
-              const reconnected = await watchAppRestart(scope, checkedApp.authorityBase, expectedVersion);
-              if (!reconnected) setComponentUpdateError("app", "APP \u66F4\u65B0\u540E\u5C1A\u672A\u91CD\u65B0\u8FDE\u63A5\uFF0C\u8BF7\u7A0D\u540E\u5237\u65B0", scope);
+          try {
+            const checkedApp = await checkUpdateWithRetry("app", scope);
+            if (checkedApp && checkedApp.update_available) {
+              const expectedVersion = checkedApp.latest_version;
+              if (await updateOneClick("app", scope)) {
+                const reconnected = await watchAppRestart(scope, checkedApp.authorityBase, expectedVersion);
+                if (!reconnected) {
+                  failures.push("app");
+                  setComponentUpdateError("app", "APP \u66F4\u65B0\u540E\u5C1A\u672A\u91CD\u65B0\u8FDE\u63A5\uFF0C\u8BF7\u7A0D\u540E\u5237\u65B0", scope);
+                }
+              } else failures.push("app");
             }
+          } catch (error) {
+            failures.push("app");
+            setComponentUpdateError("app", shortUpdateError(error), scope);
           }
         }
+        if (failures.length) setNotice("\u90E8\u5206\u7EC4\u4EF6\u672A\u66F4\u65B0\uFF1A" + failures.join("\u3001") + "\uFF0C\u53EF\u91CD\u8BD5");
         refreshUpdateCenter();
       } finally {
         setUpdateBusy("");
