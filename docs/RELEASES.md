@@ -2,7 +2,9 @@
 
 ## v0.2.26
 
-Release candidate for the update-state and local-updater correction:
+[GitHub Release](https://github.com/qi001007/tether-harness/releases/tag/v0.2.26) · tag `v0.2.26` → `89441d3` · workflow run `40913233051` · assets app 1,656,746 B / node 73,558 B / plugin 1,302,240 B / manifest 1,566 B.
+
+Released for the update-state and local-updater correction:
 
 - Device one-click updates keep a single `正在更新` state for the whole Node → plugin → APP run; per-component intermediate states are suppressed until the final refresh. The header update dot also stays in the running state, and a failed run ends in `更新失败` with retry.
 - Local plugin status uses the installed DSH profile as `current_version`; a newer source checkout is diagnostic only. A profile at 0.2.24 with source at 0.2.26 now reports an available update instead of a false `待生效`.
@@ -10,7 +12,7 @@ Release candidate for the update-state and local-updater correction:
 - The plugin archive now ships `tether/node/dsh_restart.py`, and the installer refreshes stale updater files from a source checkout, so local plugin self-updates can auto-restart DSH like remote plugin updates.
 - Connection status is probed on mount and every 15 seconds without opening the panel; update checks refresh every 5 minutes.
 
-Gates: pytest 125 passed / 1 skipped, mjs 172/172, cjs 6/6, `build.mjs --check`, reproducible Web bundle, `validate_versions()`. Release publication and installed acceptance are recorded after completion.
+Gates: pytest 125 passed / 1 skipped, mjs 172/172, cjs 6/6, `build.mjs --check`, reproducible Web bundle, `validate_versions()`. Published at 2026-10-29T16:39:47Z; the downloaded draft matched the manifest size/SHA-256 and verified its Ed25519 signature; the Hub manifest served 0.2.26 at 16:43:13Z with matching hashes. Installed acceptance is recorded separately after completion.
 
 ## v0.2.25
 
