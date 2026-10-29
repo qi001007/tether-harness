@@ -39,14 +39,15 @@
 - 本机实验台源码 Node 于 15:46:09 重启并加载候选；连续运行 12.8 分钟后，15:46:10 注册以来日志无新 keepalive timeout、断线或 `InvalidStateError`，DESKTOP-LOCAL 与 LAPTOP-01 均保持 online。两台设备分别显式检查 node/plugin，四次均返回 `ok=true`、current/latest=`0.2.24`。
 - 边界：客户端修复已随 0.2.25 发布，但尚未安装到两台运行版；服务端 ping 参数、Hub/Caddy 部署未改。
 
-## 2026-10-30 更新状态机与本地更新修复（0.2.26 候选）
+## 2026-10-30 更新状态机与本地更新修复（0.2.26 已发布）
 
-- 远端 `0.2.24 → 0.2.25` 一键更新已由主人在 LAPTOP-01 实测完成：Node/APP/插件均到 `0.2.25`，更新中心最终显示“已是最新”。
+- `v0.2.26` 已发布：tag → `89441d3`，工作流 `40913233051`；资产 app 1,656,746 B / node 73,558 B / plugin 1,302,240 B / manifest 1,566 B；草案与 Hub 清单均验签、大小/SHA 一致；Release `2026-10-29T16:39:47Z`，Hub 在 `16:43:13Z` 切到 0.2.26。
+- 远端 `0.2.24 → 0.2.25` 一键更新已由主人在 LAPTOP-01 实测完成：`16:17:27` 离线、`16:17:31` Node 0.2.25 回来；`16:18:03` 再次离线、`16:18:09` APP 0.2.25 回来；插件最终 0.2.25，更新中心显示“已是最新”。
 - 设备卡改为单一运行态：Node → 插件 → APP 全程“正在更新”，直到最终 refresh 完成才切“已是最新”；失败切“更新失败 / 重试”。逐组件 busy 不再覆盖外层运行态；运行期间顶部更新灯保持 `checking`，不闪中间态。
-- 本地插件 `current_version` 改取已安装 profile；源码 checkout 只作诊断。DESKTOP-LOCAL 的 profile `0.2.24` + 仓库 `0.2.26` 应显示 `0.2.24(0.2.26)` 与“一键更新”，不再假“待生效”。
+- 本地插件 `current_version` 改取已安装 profile；源码 checkout 只作诊断。实测 profile `0.2.24`、updater `0.2.26` 的强制 check 返回 `current_version=0.2.24`、`latest_version=0.2.26`、`update_available=true`；APP 更新中心 DESKTOP-LOCAL 卡显示 `插件 0.2.24(0.2.26) + 一键更新`，尚未点击安装。
 - 插件 zip 增加 `packages/tether-dsh-surface/updater/tether/node/dsh_restart.py`；`install-plugin.ps1` 在源码存在时刷新旧 updater；本地插件 apply 若 `restart_scheduled=true` 自动重启 DSH，否则保留“立即生效”回退。
 - 连接灯挂载即探测并每 15 秒刷新，不依赖连接面板；更新检查每 5 分钟刷新。
-- 门禁：pytest 125 passed / 1 skipped、mjs 172/172、cjs 6/6、`build.mjs --check`、Web 重建哈希一致、`validate_versions()`。**尚未发布、未安装 0.2.26**；本地一键更新和两机 0.2.26 验收待回填。
+- 门禁：pytest 125 passed / 1 skipped、mjs 172/172、cjs 6/6、`build.mjs --check`、Web 重建哈希一致、`validate_versions()`。0.2.26 已发布；本机 APP/Node 已是 0.2.26，DSH profile 仍 0.2.24 且已准备一键更新；本地点击和两机 0.2.26 安装验收待回填。
 
 ## 当前实测状态：v0.2.25 已发布
 
