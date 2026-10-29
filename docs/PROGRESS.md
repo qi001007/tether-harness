@@ -10,6 +10,14 @@
 - 本机实验台口径：插件与 APP 从仓库构建后直接替换本机（`desktop/install-plugin.ps1 -Restart` 把 desktop profile 指向仓库包，备份 `package.json.bak-tether-plugin-20261029-090410`；DSH 重启后插件 bundle 与仓库 `client.js` SHA-256 一致；dev APP 加载仓库 `packages/tether-ui/web`）。本机不通过更新中心更新；更新中心只用于其他节点。
 - 门禁：`node --test tests/test_*.mjs` 143 passed、`cjs` 6 passed、`pytest` 108 passed + 1 skipped、`build.mjs --check` 通过。均为本机实验台结果；两机更新与发行包未做。
 
+## UI 批次：色差分隔、代码编辑、CSV 表格编辑（2026-10-29 上午）
+
+- 分界线改色差：树/详情、代码行号、标签栏、表格状态栏的 1px 硬边框去掉，分隔条只在悬停/拖动时显蓝色把手；行号改独立满高列（真机 755px 视口下 755px）。
+- 代码页配色：关键字蓝 `#1a5fb4`、字符串绿 `#2f855a`、数字紫 `#6b46c1`、注释灰；暗色 `#7aa2f7/#9ece6a/#bb9af7`；红色不再用于语法。
+- 代码编辑：`text`/`markdown` 可进入编辑，代码态带同步行号槽；Tab 插入两空格、`Ctrl+S` 保存、原生 `Ctrl+Z/Y` 撤销重做；未保存时关闭/切换先确认。真机插入 `# edited` → `Ctrl+Z` 回退 → 插入 `# saved` → `Ctrl+S`，磁盘首行变为 `# saved`。
+- CSV/TSV：表头与单元格可编辑，`Ctrl+S` 走 RFC4180 序列化；XLSX 仍只读；截断文件禁用表格编辑。真机写入 `XAlice` 并保存成功。
+- 门禁：147 mjs / 6 cjs / 108 pytest。提交 `f0f1fd6`。
+
 ## 当前实测状态：v0.2.13 已发布，两机安装待主人验收
 
 - 公开 PR #7 已合并；`v0.2.13` tag 指向 `5938b70ed3188a6095bda2bf32778ad9edee68ef`，发行 CI `40667788605` 成功，[GitHub Release v0.2.13](https://github.com/qi001007/tether-harness/releases/tag/v0.2.13) 已发布。APP、插件、Node 三个 ZIP 与 manifest 的版本、大小、SHA-256 均已核验；匿名 `latest/download/tether-update.json` 返回 HTTP 200，SHA-256 为 `3ce3fc8166d61e91eaefa1acc282a4d71e0f7a1774177075606aa63f6e8de507`，三个组件版本均为 `0.2.13`。`v0.2.12` 失败 tag 保留，未改写。

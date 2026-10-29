@@ -36,3 +36,4 @@
 - 2026-10-29：CSV/TSV 预览默认用只读表格（RFC4180 引号/逗号/字段内换行、BOM/CRLF、5000 行/100 列上限并在底栏提示），标签栏分段按钮切回纯文本；XLSX 复用节点首个工作表 TSV 输出，不新增解析依赖。
 - 2026-10-29：本机 DSH 工作区改走节点回环 surface：`isSafeNativeSurfaceUrl` 接受 `http://127.0.0.1:<port>/?token=`，同机 token URL 跳过“Hub 指向 loopback 网关”防护；更新中心版本行固定为 `APP|插件 X(Y)/Node X(Y)`（各组件用各自 latest），删除随检查状态漂移的“当前/· 最新/待生效”文案。
 - 2026-10-29：插件端 surface 优先走宿主给的快路径（`host.surfaceBase(isLocal)`，DSH host → 18892，失败回退 Hub），NativeSurface 从面板拿到 `localDeviceId`；轮询对同机 token URL 比较 token，DSH 同端口重启也能换新地址。
+- 2026-10-29：相邻色块改色差（树/详情、行号、标签栏、状态栏去硬边框；分隔条只悬停/拖动显把手）；行号改满高列；代码配色蓝/绿/紫、红只留给报错；代码文件可编辑（行号槽、Tab=2 空格、Ctrl+S、原生撤销、脏改动确认）；CSV/TSV 表格就地编辑并按 RFC4180 保存，XLSX 只读。
