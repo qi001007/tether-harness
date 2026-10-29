@@ -16,7 +16,8 @@ from pathlib import Path
 
 import pytest
 
-from tether.updates import UpdateError, UpdateManager, _is_newer, _restart_cleared
+from tether.updates import (UpdateError, UpdateManager, _is_newer, _restart_cleared,
+                             _resolve_latest_manifest_url)
 
 
 class ArtifactServer:
@@ -1171,3 +1172,23 @@ def test_plugin_apply_schedules_the_dsh_restart_helper():
     helper_text = helper.read_text(encoding="utf-8")
     assert "dsh-desktop-host" in helper_text
     assert 'exe.lower().endswith("deepseek harness.exe")' in helper_text
+
+
+def test_latest_manifest_url_resolves_through_the_github_api(monkeypatch):
+    import tether.updates as updates
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            return False
+
+        def read(self, _size=-1):
+            return json.dumps({"tag_name": "v9.9.9"}).encode()
+
+    monkeypatch.setattr("tether.updates.urllib.request.urlopen", lambda *_args, **_kwargs: Response())
+    url = "https://github.com/o/r/releases/latest/download/x.json"
+    updates._LATEST_RESOLVE_CACHE.pop(url, None)
+    assert _resolve_latest_manifest_url(url) == "https://github.com/o/r/releases/download/v9.9.9/x.json"
+    assert _resolve_latest_manifest_url("https://example.test/x.json") == "https://example.test/x.json"

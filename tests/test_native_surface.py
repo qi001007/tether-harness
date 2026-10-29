@@ -256,7 +256,9 @@ def test_http_reauthenticates_once_after_dsh_rejects_the_session(native_home):
 
 def test_local_url_only_when_the_descriptor_is_live(native_home, tmp_path):
     home, port, _server = native_home
-    assert NativeSurface(home).local_url() == f"http://127.0.0.1:{port}/?token=secret-token"
+    surface = NativeSurface(home)
+    assert surface.local_url() == f"http://127.0.0.1:{port}/?token=secret-token"
+    assert surface.descriptor_info() == {"pid": 123, "updated_at": 1.0}
     assert NativeSurface(tmp_path / "empty").local_url() is None
 
 

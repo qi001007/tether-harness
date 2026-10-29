@@ -94,3 +94,10 @@ test('native surface state is device-bound and its iframe remains mounted while 
     'NativeSurface stays mounted above the file/network branch')
   assert.equal(clientSource.includes('nativeSurfaceEnabled'), false, 'legacy Tether chat toggle is removed')
 })
+
+
+test('the native frame reloads when the DSH host pid changes', () => {
+  assert.match(clientSource, /key: deviceId \+ ':' \+ \(currentState\.pid \|\| 0\)/)
+  assert.match(clientSource, /pid && \(prev\.pid \|\| 0\) !== pid/)
+  assert.match(clientSource, /pid: Number\(data\.pid\) \|\| 0/)
+})

@@ -99,6 +99,7 @@ class NativeSurface:
         self._reason = "descriptor_missing"
         self._profile: str | None = None
         self._pid: int | None = None
+        self._updated_at: float | None = None
         self._jar = http.cookiejar.CookieJar()
         self._authenticated = False
         self._auth_lock = threading.Lock()
@@ -153,6 +154,8 @@ class NativeSurface:
         profile, pid = data.get("profile"), data.get("pid")
         self._profile = profile if isinstance(profile, str) and re.fullmatch(r"[A-Za-z0-9_-]{1,80}", profile) else None
         self._pid = pid if type(pid) is int and 0 < pid <= 2_147_483_647 else None
+        updated_at = data.get("updated_at")
+        self._updated_at = float(updated_at) if isinstance(updated_at, (int, float)) and updated_at > 0 else None
         self._reason = "ready"
         return True
 
@@ -171,6 +174,7 @@ class NativeSurface:
         self._origin = self._auth_url = ""
         self._profile = None
         self._pid = None
+        self._updated_at = None
         self._reset_auth()
         self._close_channels()
         self._close_http_streams()
@@ -249,6 +253,17 @@ class NativeSurface:
         if not self._reachable():
             return {"available": False, "reason": "host_unreachable"}
         return {"available": True, "reason": "ready"}
+
+    def descriptor_info(self) -> dict[str, Any]:
+        """Identity of the live DSH host, used by the UI to reload after a restart."""
+        if not self.status().get("available"):
+            return {}
+        info: dict[str, Any] = {}
+        if self._pid is not None:
+            info["pid"] = self._pid
+        if self._updated_at is not None:
+            info["updated_at"] = self._updated_at
+        return info
 
     def local_url(self) -> str | None:
         """Same-host authenticated DSH URL, for the APP's zero-WAN-hop path."""

@@ -4,7 +4,7 @@ window.__ModuleLoader__.load({
     const React = require('react')
     const Native = require('tether-dsh-native-ui')
     const PANEL_ID = 'tether'
-    const PLUGIN_VERSION = "0.2.19"
+    const PLUGIN_VERSION = "0.2.20"
 const DSH_API_BASE = 'http://127.0.0.1:18890'
 const DSH_APP_BASE = 'http://127.0.0.1:18892'
 
@@ -2143,7 +2143,7 @@ function createTetherPanel({ React, Native, host }) {
             }
             const url = new URL(surfaceUrl)
             url.searchParams.set('tether_native', '1')
-            if (current) setState({ deviceId, status: 'ready', url: url.href })
+            if (current) setState({ deviceId, status: 'ready', url: url.href, pid: Number(data.pid) || 0 })
           })
           .catch((error) => {
             if (!current) return
@@ -2173,11 +2173,16 @@ function createTetherPanel({ React, Native, host }) {
               try {
                 const fresh = new URL(data.url)
                 const current = new URL(prev.url)
+                const pid = Number(data.pid) || 0
+                if (pid && (prev.pid || 0) !== pid) {
+                  fresh.searchParams.set('tether_native', '1')
+                  return { deviceId, status: 'ready', url: fresh.href, pid }
+                }
                 const sameHostToken = fresh.pathname === '/' && !!fresh.searchParams.get('token')
                 if (sameHostToken ? fresh.searchParams.get('token') === current.searchParams.get('token')
                   : current.origin === fresh.origin) return prev
                 fresh.searchParams.set('tether_native', '1')
-                return { deviceId, status: 'ready', url: fresh.href }
+                return { deviceId, status: 'ready', url: fresh.href, pid: pid || (prev.pid || 0) }
               } catch (_) { return prev }
             })
           } catch (_) { /* keep the current frame */ }
@@ -2193,7 +2198,7 @@ function createTetherPanel({ React, Native, host }) {
       return h('div', { className: 'tether-native-surface', style: nativeSurfaceContainerStyle(visible) },
         currentState.status === 'ready' && currentState.deviceId === deviceId && online
           ? h('iframe', {
-            key: deviceId,
+            key: deviceId + ':' + (currentState.pid || 0),
             src: currentState.url,
             title: '目标设备的 DSH 原生工作区',
             referrerPolicy: 'no-referrer',
