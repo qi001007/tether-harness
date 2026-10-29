@@ -174,9 +174,22 @@ export function localPluginVersionSeed(host) {
   return version ? { current_version: version, runtime_version: version } : null
 }
 
+const versionRank = (value) => String(value || '').split('.').map((part) => Number.parseInt(part, 10) || 0)
+const versionNotOlder = (candidate, base) => {
+  const left = versionRank(candidate)
+  const right = versionRank(base)
+  for (let index = 0; index < Math.max(left.length, right.length); index += 1) {
+    const a = left[index] || 0
+    const b = right[index] || 0
+    if (a !== b) return a > b
+  }
+  return true
+}
+
 export function versionTuple(current, latest) {
   const value = current === undefined || current === null || current === '' ? '-' : String(current)
-  return value + '(' + (latest ? String(latest) : value) + ')'
+  const shown = latest && value !== '-' && versionNotOlder(latest, value) ? String(latest) : value
+  return value + '(' + shown + ')'
 }
 
 export function versionLine(label, primary = {}, node = {}) {
@@ -1606,6 +1619,13 @@ export function createTetherPanel({ React, Native, host }) {
       surfaceStateRef.current = currentState
 
       const fetchSurfaceDescriptor = async (id) => {
+        if (host && host.kind === 'dsh' && localDeviceId && id === localDeviceId
+            && typeof window !== 'undefined' && window.location) {
+          const origin = window.location.origin
+          if (/^http:\/\/(127\.0\.0\.1|\[::1\]):\d+$/.test(origin)) {
+            return { response: { ok: true }, data: { available: true, url: origin + '/', pid: 0, sameOrigin: true } }
+          }
+        }
         const bases = []
         const preferred = host && typeof host.surfaceBase === 'function' ? host.surfaceBase(id === localDeviceId) : ''
         if (preferred) bases.push(preferred)
@@ -1787,7 +1807,9 @@ export function createTetherPanel({ React, Native, host }) {
       const publicSurface = url.protocol === 'https:' && /^g\d{2,5}\.[a-z0-9.-]+$/.test(host)
       const ticketed = url.pathname === '/tether-connect' && !!url.searchParams.get('ticket')
       const localToken = url.pathname === '/' && !!url.searchParams.get('token')
-      const allowedHost = (url.protocol === 'http:' && loopback && (ticketed || localToken)) || (publicSurface && ticketed)
+      const sameOrigin = typeof window !== 'undefined' && window.location
+        && url.origin === window.location.origin && url.pathname === '/'
+      const allowedHost = (url.protocol === 'http:' && loopback && (ticketed || localToken || sameOrigin)) || (publicSurface && ticketed)
       return allowedHost && !url.username && !url.password &&
         Number(url.port || (url.protocol === 'https:' ? 443 : 80)) > 0 && !url.hash
     }
