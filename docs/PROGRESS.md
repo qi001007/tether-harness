@@ -2,6 +2,12 @@
 
 更新日期：2026-10-29。
 
+## 当前实测状态：v0.2.16 已发布
+
+- tag `v0.2.16` → `8343fae`；发行工作流 `40810305861` 成功；4 个资产已下载：三组件均 `0.2.16`，大小/SHA-256 与 manifest 一致，`verify_signature` 通过（app 404,824 B、plugin 413,149 B、node 68,030 B）；Draft 已发布，Hub mirror 已切到 `0.2.16`（`released_at 2026-10-29T03:09:34Z`）。
+- 本机实验台为源码安装（APP/Node/插件 0.2.16，desktop profile 指向仓库包）；LAPTOP-01 在线 `0.2.15`，待通过更新中心升级；TETHER-REMOTE-TEST 离线。
+- 发布前门禁：149 mjs / 6 cjs / 108 pytest（1 skipped）、`build.mjs --check`、`validate_versions()`；PR #11（51 文件 +3416/−387，15 提交）。
+
 ## 实验台修复：本机 DSH 工作区直连 + 更新中心版本行（2026-10-29）
 
 - 本机（DESKTOP-LOCAL）打开 DSH 原生工作区失败：走公网 Hub 时，DSH 启动期核心资源在网关 30 s 截止点返回 502（含插件的组合包 825 KB gzip 仍用了 14 s），DSH 报 `web boot: 1 entry did not activate`；直连 `127.0.0.1:57168` 约 1 s。修复为本机设备 surface 走节点回环 console：console 新增 `GET /api/devices/{id}/dsh/surface`（返回 `?token=` 地址，descriptor 不可用 409），Web 服务的本机快路径加入 `/dsh/surface`，UI 接受同机 token URL 并跳过“Hub loopback”误判。提交 `536832f`。真机：dev APP iframe 指向 `127.0.0.1:53057/?token=…&tether_native=1`，首屏正常，无 HARNESS 失败页。

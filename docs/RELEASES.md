@@ -1,5 +1,16 @@
 # Public client releases
 
+## v0.2.16
+
+[GitHub Release](https://github.com/qi001007/tether-harness/releases/tag/v0.2.16) · tag `v0.2.16` → `8343fae` · workflow run `40810305861`.
+
+- The local DSH workspace loads over the loopback surface instead of the public Hub: the node console serves `/dsh/surface`, the APP web server routes it through the local fast path, and the DSH plugin asks the host for that base. The node also refreshes a stale DSH session once on 401/403.
+- The update center renders a fixed `APP|插件 X(Y)/Node X(Y)` line with per-component latest versions instead of mode-dependent text.
+- The explorer separates panes by background shade (no 1px dividers), the code gutter spans the full height, syntax colours are blue/green/purple with red reserved for errors, code files are editable (Tab, `Ctrl+S`, native undo, dirty guard), and CSV/TSV tables edit in place with RFC4180 serialization. XLSX stays read-only.
+- A fast folder double-click no longer shows a false "目录读取失败"; directory refreshes use a centred overlay instead of shifting the list.
+
+Pre-release gates: `build.mjs --check`, 149 JS / 6 cjs / 108 pytest (1 skipped), `validate_versions()`. Assets: app 404,824 B `bd95088a…`, plugin 413,149 B `b52c751d…`, node 68,030 B `53fdfcc5…`; the manifest signature was verified locally and all sizes/SHA-256 values match. The Hub mirror serves 0.2.16. This desktop is the lab bench (source install); LAPTOP-01 is online at 0.2.15 and updates through the update center.
+
 ## v0.2.6
 
 Update-center rework from feedback F48–F55:
