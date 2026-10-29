@@ -27,9 +27,11 @@ test('native surface accepts only ticketed loopback, public ticket and same-host
   assert.ok(clientSource.includes("const sameHostToken = parsed.pathname === '/' && !!parsed.searchParams.get('token')"),
     'same-host token URLs bypass the hub-loopback guard')
   assert.ok(clientSource.includes('surfaceBase: () => DSH_APP_BASE'),
-    'the DSH host asks the local APP server first')
-  assert.ok(clientSource.includes('host.surfaceBase(id === localDeviceId)'),
+    'the DSH host asks the local APP server for the local surface first')
+  assert.ok(clientSource.includes('host.surfaceBase(isLocalTarget)'),
     'the surface descriptor asks the host for its fast path')
+  assert.ok(clientSource.includes("host.kind === 'dsh' && !isLocalTarget ? '?via=hub' : ''"),
+    'only remote surfaces go through the hub; the local device stays on the local route')
   assert.ok(clientSource.includes('localDeviceId: appLocalDevice'),
     'the panel passes the local device into the surface')
   assert.ok(webHostSource.includes('surfaceBase: () => apiBase'),

@@ -35,6 +35,8 @@
 - 2026-10-28：代码页首开竞态——预取请求本身直接交给 `openPreview`（原先把 `then` 的返回值当数据，必为 `undefined`），失败或无效预取回退 `postRetry` 且不写缓存；同次改动加标签栏、逐行当前行高亮与可拖动分隔条，暗色配色走 `data-ds-dark-theme`。
 - 2026-10-29：CSV/TSV 预览默认用只读表格（RFC4180 引号/逗号/字段内换行、BOM/CRLF、5000 行/100 列上限并在底栏提示），标签栏分段按钮切回纯文本；XLSX 复用节点首个工作表 TSV 输出，不新增解析依赖。
 - 2026-10-29：本机 DSH 工作区改走节点回环 surface：`isSafeNativeSurfaceUrl` 接受 `http://127.0.0.1:<port>/?token=`，同机 token URL 跳过“Hub 指向 loopback 网关”防护；更新中心版本行固定为 `APP|插件 X(Y)/Node X(Y)`（各组件用各自 latest），删除随检查状态漂移的“当前/· 最新/待生效”文案。
-- 2026-10-29：插件端 surface 优先走宿主给的快路径（`host.surfaceBase(isLocal)`，DSH host → 18892，失败回退 Hub），NativeSurface 从面板拿到 `localDeviceId`；轮询对同机 token URL 比较 token，DSH 同端口重启也能换新地址。
+- 2026-10-29：插件端本机设备不再内嵌 DSH：桌面宿主顶层是 `dsh-app://app`，DSH 的 `SameSite=Strict` 会话 Cookie 不会发给 127.0.0.1 子 frame，`dsh-app` 子 frame 又缺 preload，都会 401 或停在 `Loading plugins…`；本机直接显示“已在 DSH 中”。浏览器宿主的同源内嵌保留。
+- 2026-10-29：远端 surface 走 `host.surfaceBase(isLocal)` 快路径（DSH host → 18892）并带 `?via=hub`，失败回退 Hub；本机 `localDeviceId` 由 APP `app-context` 或插件本地身份提供。
+- 2026-10-29：更新中心 latest 只显示清单里的值（缺失时才回落 current），本机与远端必须显示同一个 latest；后台自动检查失败不再弹红 toast、不再点亮“更新”红点，错误只留在更新中心的“检查失败”状态。
 - 2026-10-29：相邻色块改色差（树/详情、行号、标签栏、状态栏去硬边框；分隔条只悬停/拖动显把手）；行号改满高列；代码配色蓝/绿/紫、红只留给报错；代码文件可编辑（行号槽、Tab=2 空格、Ctrl+S、原生撤销、脏改动确认）；CSV/TSV 表格就地编辑并按 RFC4180 保存，XLSX 只读。
 - 2026-10-29：目录预取 Promise 必须返回响应体（只做 `rememberDir` 会解析成 `undefined`，快速双击时 `loadDir` 复用它就误报“目录读取失败”）；`loadDir` 复用值空时回退 `postRetry`；刷新用覆盖式转圈，不插行、不挤压列表。

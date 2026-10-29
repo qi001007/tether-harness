@@ -32,6 +32,15 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(401)
             self.end_headers()
             return
+        if getattr(self.server, "force_auth_page_once", False):
+            self.server.force_auth_page_once = False
+            body = b"dsh web authentication required"
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if self.headers.get("Cookie") != "session=secret-cookie":
             self.send_response(401)
             self.end_headers()
@@ -249,6 +258,16 @@ def test_http_reauthenticates_once_after_dsh_rejects_the_session(native_home):
     surface = NativeSurface(home)
     assert surface._load()
     server.force_401_once = True
+    result = surface._http({"method": "GET", "path": "/api/anything"})
+    assert result["status"] == 200
+    assert base64.b64decode(result["body_base64"]) == b"native"
+
+
+def test_http_reauthenticates_on_the_dsh_auth_page(native_home):
+    home, _port, server = native_home
+    surface = NativeSurface(home)
+    assert surface._load()
+    server.force_auth_page_once = True
     result = surface._http({"method": "GET", "path": "/api/anything"})
     assert result["status"] == 200
     assert base64.b64decode(result["body_base64"]) == b"native"

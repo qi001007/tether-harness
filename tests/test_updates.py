@@ -1161,13 +1161,25 @@ def test_restart_cleared_requires_a_different_live_host_pid():
     assert _restart_cleared(None, 11) is False
 
 
+def test_restart_cleared_when_dsh_was_closed_during_apply():
+    applied = {"restart_required": True, "applied_at": 2_000_000}
+    assert _restart_cleared(applied, 11, 2_000_100) is True
+    assert _restart_cleared(applied, 11, 1_990_000) is False
+    assert _restart_cleared(applied, None, 2_000_100) is False
+    assert _restart_cleared({"restart_required": True}, 11, 2_000_100) is False
+    # A recorded pid still wins over the timestamp: the same host never reloads in place.
+    assert _restart_cleared({"restart_required": True, "dsh_pid": 11, "applied_at": 1}, 11, 9_999_999) is False
+
+
 def test_plugin_apply_schedules_the_dsh_restart_helper():
     source = Path(__file__).resolve().parents[1] / "tether" / "updates.py"
     text = source.read_text(encoding="utf-8")
     assert 'dsh_pid = self._dsh_host_pid() if self.component == "plugin" else None' in text
     assert 'if self.component == "plugin" and dsh_pid:' in text
     assert "self._spawn_dsh_restart()" in text
-    assert '_restart_cleared(applied, self._dsh_host_pid())' in text
+    assert '_restart_cleared(applied, self._dsh_host_pid())' not in text
+    assert '_restart_cleared(applied, host["pid"], host["updated_at"])' in text
+    assert '"applied_at": int(time.time() * 1000)' in text
     helper = Path(__file__).resolve().parents[1] / "tether" / "node" / "dsh_restart.py"
     helper_text = helper.read_text(encoding="utf-8")
     assert "dsh-desktop-host" in helper_text

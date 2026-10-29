@@ -4,7 +4,7 @@ window.__ModuleLoader__.load({
     const React = require('react')
     const Native = require('tether-dsh-native-ui')
     const PANEL_ID = 'tether'
-    const PLUGIN_VERSION = "0.2.23"
+    const PLUGIN_VERSION = "0.2.24"
 const DSH_API_BASE = 'http://127.0.0.1:18890'
 const DSH_APP_BASE = 'http://127.0.0.1:18892'
 
@@ -630,21 +630,9 @@ function localPluginVersionSeed(host) {
   return version ? { current_version: version, runtime_version: version } : null
 }
 
-const versionRank = (value) => String(value || '').split('.').map((part) => Number.parseInt(part, 10) || 0)
-const versionNotOlder = (candidate, base) => {
-  const left = versionRank(candidate)
-  const right = versionRank(base)
-  for (let index = 0; index < Math.max(left.length, right.length); index += 1) {
-    const a = left[index] || 0
-    const b = right[index] || 0
-    if (a !== b) return a > b
-  }
-  return true
-}
-
 function versionTuple(current, latest) {
   const value = current === undefined || current === null || current === '' ? '-' : String(current)
-  const shown = latest && value !== '-' && versionNotOlder(latest, value) ? String(latest) : value
+  const shown = latest === undefined || latest === null || latest === '' || value === '-' ? value : String(latest)
   return value + '(' + shown + ')'
 }
 
@@ -2077,29 +2065,33 @@ function createTetherPanel({ React, Native, host }) {
       const fetchSurfaceDescriptor = async (id) => {
         if (host && host.kind === 'dsh' && localDeviceId && id === localDeviceId
             && typeof window !== 'undefined' && window.location) {
-          const origin = window.location.origin
-          if (/^http:\/\/(127\.0\.0\.1|\[::1\]):\d+$/.test(origin)) {
-            return { response: { ok: true }, data: { available: true, url: origin + '/', pid: 0, sameOrigin: true } }
+          // The desktop host runs its own client with a preload and the DSH
+          // client connects with a SameSite=Strict cookie, so a second copy in
+          // an iframe can never boot (401 or a stalled plugin roster). The
+          // browser-hosted DSH is the only place where the local page can be
+          // embedded same-origin.
+          const browserHost = /^http:\/\/(127\.0\.0\.1|\[::1\]):\d+$/.test(window.location.origin)
+          if (browserHost || window.location.protocol === 'dsh-app:') {
+            return { response: { ok: true }, data: { available: true, local: true, url: '', pid: 0 } }
           }
         }
+        const isLocalTarget = !!(localDeviceId && id === localDeviceId)
+        const hub = host && host.kind === 'dsh' && typeof host.hubConfig === 'function' ? host.hubConfig() : null
+        const hubBase = hub && typeof hub.url === 'string' && hub.url ? hub.url.replace(/\/+$/, '') : ''
         const bases = []
-        const preferred = host && typeof host.surfaceBase === 'function' ? host.surfaceBase(id === localDeviceId) : ''
+        if (!isLocalTarget && hubBase) bases.push(hubBase)
+        const preferred = host && typeof host.surfaceBase === 'function' ? host.surfaceBase(isLocalTarget) : ''
         if (preferred) bases.push(preferred)
+        if (isLocalTarget && hubBase) bases.push(hubBase)
         bases.push(ACTIVE_BASE)
         let lastError = null
         for (const base of [...new Set(bases)]) {
           try {
-            const response = await fetch(base + '/api/devices/' + encodeURIComponent(id) + '/dsh/surface', { signal: AbortSignal.timeout(8000) })
+            const headers = host && typeof host.apiHeaders === 'function' ? host.apiHeaders(base) : undefined
+            const via = host && host.kind === 'dsh' && !isLocalTarget ? '?via=hub' : ''
+            const response = await fetch(base + '/api/devices/' + encodeURIComponent(id) + '/dsh/surface' + via, { headers, signal: AbortSignal.timeout(8000) })
             const data = await response.json().catch(() => ({}))
             if (!response.ok && (response.status === 502 || response.status === 504) && base !== ACTIVE_BASE) continue
-            if (host && host.kind === 'dsh' && data && typeof data.url === 'string'
-                && typeof window !== 'undefined' && window.location) {
-              try {
-                if (new URL(data.url).origin === window.location.origin) {
-                  return { response, data: { available: true, local: true, url: '', pid: data.pid || 0 } }
-                }
-              } catch (_) { /* keep the descriptor URL */ }
-            }
             return { response, data }
           } catch (error) { lastError = error }
         }
@@ -2156,7 +2148,7 @@ function createTetherPanel({ React, Native, host }) {
         fetchSurfaceDescriptor(deviceId)
           .then(async ({ response, data }) => {
             if (data && data.local) {
-              if (current) setState({ deviceId, status: 'local', url: '', pid: Number(data.pid) || 0 })
+              if (current) setState({ deviceId, status: 'local', url: '', pid: 0 })
               return
             }
             if (!response.ok) {
@@ -2279,7 +2271,7 @@ function createTetherPanel({ React, Native, host }) {
       const localToken = url.pathname === '/' && !!url.searchParams.get('token')
       const sameOrigin = typeof window !== 'undefined' && window.location
         && url.origin === window.location.origin && url.pathname === '/'
-      const allowedHost = (url.protocol === 'http:' && loopback && (ticketed || localToken || sameOrigin)) || (publicSurface && ticketed)
+      const allowedHost = sameOrigin || (url.protocol === 'http:' && loopback && (ticketed || localToken)) || (publicSurface && ticketed)
       return allowedHost && !url.username && !url.password &&
         Number(url.port || (url.protocol === 'https:' ? 443 : 80)) > 0 && !url.hash
     }
@@ -2506,9 +2498,9 @@ function createTetherPanel({ React, Native, host }) {
           } }
         }))
       }
-      const setComponentUpdateError = (component, message, scope) => {
+      const setComponentUpdateError = (component, message, scope, notify = true) => {
         if (scope && !scopeIsCurrent(scope)) return
-        if (message) {
+        if (message && notify) {
           const key = (scope ? scope.deviceId : '') + ':' + component
           if (lastUpdateToastRef.current[key] !== message) {
             lastUpdateToastRef.current[key] = message
@@ -2560,7 +2552,7 @@ function createTetherPanel({ React, Native, host }) {
             () => updateCheckScopeIsCurrent(scope)
           )), { force }).then((result) => {
           if (result.cancelled) return result
-          setComponentUpdateError(component, result.failed ? shortUpdateError(result.error) : '', scope)
+          setComponentUpdateError(component, result.failed ? shortUpdateError(result.error) : '', scope, false)
           return result
         })
       }
@@ -2968,10 +2960,6 @@ function createTetherPanel({ React, Native, host }) {
 
       const device = state && state.devices.find((d) => d.device_id === deviceId)
       const updateHasAvailable = updateAvailableFor(updateInfo, host && host.kind, deviceId)
-      const targetUpdateErrors = updateErrors.devices[deviceId] || {}
-      const updateHasFailure = host && host.kind === 'app' ? !!updateErrors.app
-        : host && host.kind === 'dsh' ? !!updateErrors.localPlugin
-          : !!(targetUpdateErrors.node || targetUpdateErrors.plugin)
       const deviceOnline = !!(device && device.online)
       const safeSidebarWidth = clamp(sidebarWidth, UI.minSide, UI.maxSide)
       const previewUrl = React.useMemo(() => {
@@ -4520,10 +4508,10 @@ function createTetherPanel({ React, Native, host }) {
             status: hubStatus
           }) : null,
           h('button', {
-            onClick: openUpdateCenter, title: updateHasAvailable ? '发现可用更新，打开更新中心' : updateHasFailure ? '更新检查失败，打开更新中心重试' : '查看 APP、节点与插件更新状态',
+            onClick: openUpdateCenter, title: updateHasAvailable ? '发现可用更新，打开更新中心' : '查看 APP、节点与插件更新状态',
             className: 'tether-press tether-hover tether-update-trigger',
             style: { marginLeft: 8, marginRight: 0, height: 26, padding: '0 10px', borderRadius: 999, border: 0, background: C.bg, color: C.sub, display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer', flex: '0 0 auto' }
-          }, '更新', updateHasAvailable || updateHasFailure ? h('span', { 'aria-label': updateHasAvailable ? '有可用更新' : '更新检查失败', style: { width: 6, height: 6, borderRadius: '50%', background: C.red, flex: '0 0 auto' } }) : null)
+          }, '更新', updateHasAvailable ? h('span', { 'aria-label': '有可用更新', style: { width: 6, height: 6, borderRadius: '50%', background: C.red, flex: '0 0 auto' } }) : null)
         ),
         notice || projectsError || updateToast ? renderToasts() : null,
         h('div', { style: { display: 'flex', flex: '1 1 auto', minHeight: 0 } },

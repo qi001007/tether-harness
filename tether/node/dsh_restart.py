@@ -103,8 +103,13 @@ def _stop_tree(root: psutil.Process) -> None:
 
 
 def _launch(exe: str) -> subprocess.Popen[Any]:
+    env = dict(os.environ)
+    # The helper can inherit this from a Node launcher; Electron then runs as a
+    # plain Node process instead of starting the DSH window.
+    env.pop("ELECTRON_RUN_AS_NODE", None)
     kwargs: dict[str, Any] = {
         "cwd": str(Path(exe).parent),
+        "env": env,
         "stdin": subprocess.DEVNULL,
         "stdout": subprocess.DEVNULL,
         "stderr": subprocess.DEVNULL,
@@ -142,13 +147,19 @@ def restart(descriptor: Path, log: Path | None, *, delay: float = 1.5, wait: flo
         return 1
     _log(log, f"stopping DSH (host={host.pid} root={root.pid})")
     _stop_tree(root)
-    try:
-        _launch(exe)
-    except OSError as exc:
-        _log(log, f"relaunch failed: {exc}")
-        return 1
     deadline = time.time() + max(5.0, wait)
+    launches = 0
+    last_launch = 0.0
     while time.time() < deadline:
+        if launches < 2 and (launches == 0 or time.time() - last_launch >= 20.0):
+            if launches:
+                _log(log, "no new descriptor yet; relaunching DSH")
+            try:
+                _launch(exe)
+                launches += 1
+                last_launch = time.time()
+            except OSError as exc:
+                _log(log, f"relaunch failed: {exc}")
         time.sleep(1.0)
         current = _host_pid(descriptor)
         if current is not None and current != before:

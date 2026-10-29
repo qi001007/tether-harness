@@ -416,28 +416,46 @@ class NativeSurface:
             except Exception:
                 raise NativeSurfaceError("native DSH request failed", "upstream_error") from None
 
-        response = send()
-        if response.code in (401, 403):
-            # DSH rotates its web session on restart; stale cookies must be replaced once.
-            response.close()
-            self._reset_auth()
-            self._ensure_authenticated()
-            refreshed = self._cookie_header()
-            if refreshed:
-                clean["cookie"] = refreshed
-            else:
-                clean.pop("cookie", None)
-            request = urllib.request.Request(url, data=body, headers=clean, method=method)
+        auth_marker = b"dsh web authentication required"
+
+        def needs_reauth(payload: bytes, response: Any) -> bool:
+            if response.code in (401, 403):
+                return True
+            if response.code != 200:
+                return False
+            probe = payload
+            encoding = (response.headers.get("content-encoding") or "").lower()
+            if encoding == "gzip":
+                try:
+                    probe = gzip.decompress(payload)
+                except OSError:
+                    probe = payload
+            return auth_marker in probe[:8192]
+
+        retried = False
+        while True:
             response = send()
-        with response:
-            payload = response.read(MAX_BODY + 1)
-            if len(payload) > MAX_BODY:
-                raise NativeSurfaceError("native DSH response too large", "too_large")
-            result_headers = {k.lower(): v for k, v in response.headers.items()
-                              if k.lower() in ALLOWED_RESPONSE_HEADERS and "\r" not in v and "\n" not in v}
-            payload, result_headers = polish_native_html(payload, result_headers)
-            return {"status": response.code, "headers": result_headers,
-                    "body_base64": base64.b64encode(payload).decode("ascii")}
+            with response:
+                payload = response.read(MAX_BODY + 1)
+                if len(payload) > MAX_BODY:
+                    raise NativeSurfaceError("native DSH response too large", "too_large")
+                if not retried and needs_reauth(payload, response):
+                    # DSH rotates its web session on restart; replace stale cookies once.
+                    retried = True
+                    self._reset_auth()
+                    self._ensure_authenticated()
+                    refreshed = self._cookie_header()
+                    if refreshed:
+                        clean["cookie"] = refreshed
+                    else:
+                        clean.pop("cookie", None)
+                    request = urllib.request.Request(url, data=body, headers=clean, method=method)
+                    continue
+                result_headers = {k.lower(): v for k, v in response.headers.items()
+                                  if k.lower() in ALLOWED_RESPONSE_HEADERS and "\r" not in v and "\n" not in v}
+                payload, result_headers = polish_native_html(payload, result_headers)
+                return {"status": response.code, "headers": result_headers,
+                        "body_base64": base64.b64encode(payload).decode("ascii")}
 
     async def _http_stream_open(self, args: dict[str, Any], url: str, origin: str) -> dict[str, Any]:
         headers = args.get("headers") or {}

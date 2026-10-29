@@ -58,6 +58,10 @@ test('APP web server routes the local device API, including the surface descript
     const foreignSurface = await fetch(base + '/api/devices/OTHER/dsh/surface')
     assert.equal(foreignSurface.status, 502)
     assert.equal(foreignSurface.headers.get('x-tether-local'), null)
+
+    const viaHub = await fetch(base + '/api/devices/DESKTOP-LOCAL/dsh/surface?via=hub')
+    assert.equal(viaHub.status, 502)
+    assert.equal(viaHub.headers.get('x-tether-local'), null)
   } finally {
     await app.close()
     await new Promise((resolve) => node.close(resolve))

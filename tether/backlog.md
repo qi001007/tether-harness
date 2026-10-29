@@ -13,3 +13,4 @@
 - 2026-10-27：暂存插件更新记录目标 profile；apply 时若活动 Host profile 已变化或旧暂存无 profile 绑定则拒绝，避免跨 profile 套用准备结果。
 - 2026-10-28：0.2.14 起清单默认强制 Ed25519 验签（仅 loopback 开发源与显式 `TETHER_ALLOW_UNSIGNED_RELEASE=1` 例外）；`channel` 参与校验，beta 需 `TETHER_UPDATE_CHANNEL=beta`；`apply` 用缓存清单复核 rollout（hold/排除立即生效）；签名错误码 `channel_not_selected` 进入错误优先级，避免被 `manifest_unavailable` 掩盖。
 - 2026-10-29：0.2.16 版本元数据统一：`UPDATER_VERSION` 升至 `0.2.16`；更新协议常量保持 `1`，无迁移。
+- 2026-10-29：0.2.24 插件 `restart_required` 的清除条件是“记录的 Host pid 被替换”或“apply 时没有运行中的 Host，之后有 Host 在 apply 之后发布 descriptor”；apply 记录写 `applied_at`（epoch ms），DSH 关闭时安装不再永久挂“待重启”。

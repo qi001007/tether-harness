@@ -336,7 +336,9 @@ test('error toasts expire automatically and the update entry uses a stable label
   assert.match(shared, /setNotice\(''\), 4000/)
   assert.match(shared, /setUpdateToast\(''\), 4000/)
   assert.match(shared, /setProjectsError\(''\), 4000/)
-  assert.match(shared, /\}, '更新', updateHasAvailable \|\| updateHasFailure \? h\('span', \{ 'aria-label': updateHasAvailable \? '有可用更新' : '更新检查失败'/)
+  assert.match(shared, /\}, '更新', updateHasAvailable \? h\('span', \{ 'aria-label': '有可用更新'/)
   assert.match(shared, /background: C\.red, flex: '0 0 auto'/)
   assert.doesNotMatch(shared, /\}, updateHasAvailable \? '更新 · 有新版本'/)
+  assert.match(shared, /setComponentUpdateError\(component, result\.failed \? shortUpdateError\(result\.error\) : '', scope, false\)/,
+    'background update checks stay quiet; only explicit actions toast')
 })
