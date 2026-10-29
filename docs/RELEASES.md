@@ -2,7 +2,9 @@
 
 ## v0.2.25
 
-Release candidate for the accepted remote-development workspace and connection-stability batch:
+[GitHub Release](https://github.com/qi001007/tether-harness/releases/tag/v0.2.25) · tag `v0.2.25` → `ed49c23` · workflow run `40898090981` · assets app 1,654,227 B / node 73,521 B / plugin 1,298,504 B / manifest 1,566 B.
+
+Released for the accepted remote-development workspace and connection-stability batch:
 
 - The file explorer now uses Monaco `0.57.0` for editable code and Markdown, with device/path-isolated models, VSCode-like syntax themes, minimap, `Ctrl+S`, target path status, encoding/newline preservation, SHA-256 conflict detection, and target-device version polling. Ordinary code opens directly in the editor; only Markdown and table formats expose rendering switches.
 - File create, rename, save, copy and paste continue to execute on the selected target device. Responses are device-bound when the node supplies an identity, while released nodes through 0.2.24 remain compatible when the field is absent. The DSH composer keeps local upload and adds a separate target-device file entry.
@@ -11,7 +13,7 @@ Release candidate for the accepted remote-development workspace and connection-s
 - Node control WebSockets opt out of inherited environment proxies when the installed `websockets` runtime supports it. Update replies are bound to the socket that received the request, so closing connections no longer leak `InvalidStateError` into a replacement connection.
 - The source-installed DSH updater includes the same `release.py` and `ed25519.py` files as release archives, preventing the local plugin card from reporting `updater_missing`.
 
-Pre-release gates: pytest 123 passed / 1 skipped, mjs 167/167, cjs 6/6, targeted editor regression 8/8, both shared bundles rebuilt and checked, and `validate_versions()` passed. DESKTOP-LOCAL held the candidate Node connection for 12.8 minutes without a keepalive timeout, disconnect, or `InvalidStateError`; release publication and installed two-device update acceptance are recorded separately after completion.
+Gates: pytest 123 passed / 1 skipped, mjs 167/167, cjs 6/6, targeted editor regression 8/8, both shared bundles rebuilt and checked, and `validate_versions()` passed. DESKTOP-LOCAL held the candidate Node connection for 12.8 minutes without a keepalive timeout, disconnect, or `InvalidStateError`. Published at 2026-10-29T15:12:25Z; asset size/SHA-256 and the Ed25519 signature were re-verified from the downloaded draft. The Hub manifest served 0.2.25 at 2026-10-29T15:13:02Z with a valid signature and matching hashes. Installed two-device update acceptance is recorded separately after completion.
 
 ## v0.2.24
 
