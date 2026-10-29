@@ -2,6 +2,13 @@
 
 更新日期：2026-10-29。
 
+## 当前实测状态：v0.2.17 已发布
+
+- tag `v0.2.17` → `fdc9e35`；发行工作流 `40812163945` 成功；资产 app 404,944 B、node 68,122 B、plugin 413,162 B，manifest 验签通过、大小/SHA 一致；Release 已发布，Hub mirror 已切到 `0.2.17`。
+- 修复“发布后强制刷新仍显示旧 latest”：UI 的强制刷新只清了渲染器缓存，Node 与 APP/插件本地更新器仍用 10 分钟磁盘清单缓存。现在 Node 的 check 强制拉取（status 仍缓存），APP 与 DSH 插件的 check 命令带 `--force`；本机实测 `manifest_source` 为 Hub 地址而非 `disk-cache`。
+- 本机实验台已升到 `0.2.17`（源码安装，desktop profile 指向仓库包）；LAPTOP-01 仍 `0.2.15`，旧节点的缓存最多 10 分钟后才会看到 `0.2.17`，届时用更新中心直接升 `0.2.17`。`0.2.16` 的制品仍有效，但被 `0.2.17` 取代。
+- 门禁：149 mjs / 6 cjs / 109 pytest（1 skipped）、`build.mjs --check`、`validate_versions()`。
+
 ## 当前实测状态：v0.2.16 已发布
 
 - tag `v0.2.16` → `8343fae`；发行工作流 `40810305861` 成功；4 个资产已下载：三组件均 `0.2.16`，大小/SHA-256 与 manifest 一致，`verify_signature` 通过（app 404,824 B、plugin 413,149 B、node 68,030 B）；Draft 已发布，Hub mirror 已切到 `0.2.16`（`released_at 2026-10-29T03:09:34Z`）。

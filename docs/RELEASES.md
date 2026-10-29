@@ -1,5 +1,17 @@
 # Public client releases
 
+## v0.2.17
+
+[GitHub Release](https://github.com/qi001007/tether-harness/releases/tag/v0.2.17) · tag `v0.2.17` → `fdc9e35` · workflow run `40812163945`.
+
+Patch release for the update check. The update center's force refresh only cleared the renderer cache; the Node and the local APP/plugin updaters still served a 10-minute disk manifest, so a just-published release could still show the previous version as latest.
+
+- The Node's update check now calls `UpdateManager.check(force=True)`; status keeps the short-lived cache.
+- The APP and DSH-plugin updater commands pass `--force` for check.
+- Verified on the lab bench: a local Node/plugin check now reports `manifest_source` = the Hub mirror instead of `disk-cache`, and shows `latest_version=0.2.17` immediately after the release.
+
+Assets: app 404,944 B, node 68,122 B, plugin 413,162 B; manifest signature verified locally, sizes and SHA-256 match, `min_updater=0.2.1`. The Hub mirror serves 0.2.17. Nodes on 0.2.15/0.2.16 can update directly once their old-version manifest cache expires (up to 10 minutes on the pre-fix build).
+
 ## v0.2.16
 
 [GitHub Release](https://github.com/qi001007/tether-harness/releases/tag/v0.2.16) · tag `v0.2.16` → `8343fae` · workflow run `40810305861`.
