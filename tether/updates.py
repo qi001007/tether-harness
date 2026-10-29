@@ -5,6 +5,8 @@ from __future__ import annotations
 import hashlib
 import copy
 import socket
+import subprocess
+import sys
 import threading
 import time
 import io
@@ -24,10 +26,12 @@ from concurrent.futures import Future, TimeoutError as FutureTimeout
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+import psutil
+
 from .release import ReleaseSignatureError, verify_signature
 
 
-UPDATER_VERSION = "0.2.18"
+UPDATER_VERSION = "0.2.19"
 LEGACY_BASELINE_VERSION = "0.2.0"
 UPDATE_PROTOCOL = 1
 MIN_UPDATE_PROTOCOL = 1
@@ -166,6 +170,14 @@ def _semver(value: Any) -> tuple[int, int, int, tuple[str, ...]]:
     major, minor, patch = (int(match.group(i)) for i in (1, 2, 3))
     prerelease = tuple((match.group(4) or "").split(".")) if match.group(4) else ()
     return major, minor, patch, prerelease
+
+
+def _restart_cleared(applied: dict[str, Any] | None, current_pid: int | None) -> bool:
+    """The plugin apply recorded a DSH host pid; a different live pid means the host reloaded."""
+    if not isinstance(applied, dict) or applied.get("restart_required") is not True:
+        return False
+    applied_pid = applied.get("dsh_pid")
+    return bool(type(applied_pid) is int and current_pid is not None and current_pid != applied_pid)
 
 
 def _is_newer(remote: str, current: str) -> bool:
@@ -1322,9 +1334,13 @@ class UpdateManager:
 
             installed_path = self.state_dir / f"installed-{self.component}.json"
             applied_path = self.state_dir / f"applied-{self.component}.json"
+            dsh_pid = self._dsh_host_pid() if self.component == "plugin" else None
+            applied_record: dict[str, Any] = {"schema": 1, "component": self.component,
+                                              "version": expected_version, "restart_required": True}
+            if dsh_pid:
+                applied_record["dsh_pid"] = dsh_pid
             for path, content in (
-                (applied_path, {"schema": 1, "component": self.component, "version": expected_version,
-                                "restart_required": True}),
+                (applied_path, applied_record),
                 (installed_path, {"schema": 1, "component": self.component, "version": expected_version}),
             ):
                 backup: Path | None = None
@@ -1352,6 +1368,8 @@ class UpdateManager:
                 shutil.rmtree(prepared_root, ignore_errors=True)
             except OSError:
                 pass
+            if self.component == "plugin" and dsh_pid:
+                self._spawn_dsh_restart()
             return {"ok": True, "component": self.component, "version": expected_version,
                     "backup_dir": str(backup_dir), "restart_required": True,
                     "updated_files": len(staged), "error": ""}
@@ -1385,6 +1403,43 @@ class UpdateManager:
                 success = False
         return success
 
+    def _dsh_descriptor(self) -> Path:
+        return self.dsh_home / "storages" / "tether" / "native-surface.json"
+
+    def _dsh_host_pid(self) -> int | None:
+        try:
+            data = json.loads(self._dsh_descriptor().read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        pid = data.get("pid") if isinstance(data, dict) else None
+        if type(pid) is not int or not 0 < pid <= 2_147_483_647:
+            return None
+        try:
+            return pid if psutil.pid_exists(pid) else None
+        except (OSError, ValueError):
+            return None
+
+    def _spawn_dsh_restart(self) -> bool:
+        log = self.state_dir / "dsh-restart.log"
+        args = [sys.executable, "-m", "tether.node.dsh_restart",
+                "--descriptor", str(self._dsh_descriptor()), "--log", str(log),
+                "--delay", "1.5", "--wait", "60"]
+        env = dict(os.environ)
+        env["PYTHONPATH"] = str(self.root) + ((os.pathsep + env["PYTHONPATH"]) if env.get("PYTHONPATH") else "")
+        env["PYTHONIOENCODING"] = "utf-8"
+        kwargs: dict[str, Any] = {"cwd": str(self.root), "env": env,
+                                  "stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL,
+                                  "stderr": subprocess.DEVNULL, "close_fds": True}
+        if os.name == "nt":
+            kwargs["creationflags"] = 0x00000008 | 0x00000200
+        else:
+            kwargs["start_new_session"] = True
+        try:
+            subprocess.Popen(args, **kwargs)
+            return True
+        except OSError:
+            return False
+
     def status(self) -> dict[str, Any]:
         try:
             current = self._versions()[self.component]
@@ -1412,6 +1467,14 @@ class UpdateManager:
             try:
                 applied = _json_object((self.state_dir / f"applied-{self.component}.json").read_bytes())
                 restart_required = applied.get("component") == self.component and applied.get("restart_required") is True
+                if restart_required and self.component == "plugin" and _restart_cleared(applied, self._dsh_host_pid()):
+                    restart_required = False
+                    try:
+                        applied["restart_required"] = False
+                        self._write_atomic(self.state_dir / f"applied-{self.component}.json",
+                                           (json.dumps(applied, indent=2) + "\n").encode("utf-8"))
+                    except OSError:
+                        pass
             except (OSError, UpdateError):
                 pass
             installed_latest: bool | None = None
