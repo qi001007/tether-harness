@@ -137,7 +137,8 @@ def main() -> None:
             add_tree(archive, ROOT / "packages" / package, plugin_prefix)
         for rel in ("tether/__init__.py", "tether/updates.py", "tether/updates_cli.py",
                     "tether/release.py", "tether/ed25519.py",
-                    "tether/node/__init__.py", "tether/node/dsh_sessions.py"):
+                    "tether/node/__init__.py", "tether/node/dsh_sessions.py",
+                    "tether/node/dsh_restart.py"):
             add_mapped_file(archive, rel, f"packages/tether-dsh-surface/updater/{rel}", plugin_prefix)
         archive.writestr(f"{plugin_prefix}/README-INSTALL.md", """# Tether DSH plugin (standalone)
 

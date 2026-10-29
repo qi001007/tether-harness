@@ -22,14 +22,14 @@ $UpdaterFiles = @(
   "release.py",
   "ed25519.py",
   "node\__init__.py",
-  "node\dsh_sessions.py"
+  "node\dsh_sessions.py",
+  "node\dsh_restart.py"
 )
+$UpdaterSource = Join-Path $AppDir "tether"
+$HasUpdaterSource = Test-Path (Join-Path $UpdaterSource "updates.py")
 $UpdaterComplete = @($UpdaterFiles | Where-Object { -not (Test-Path (Join-Path $UpdaterTarget $_)) }).Count -eq 0
-if (-not $UpdaterComplete) {
-  $UpdaterSource = Join-Path $AppDir "tether"
-  if (-not (Test-Path (Join-Path $UpdaterSource "updates.py"))) {
-    throw "Plugin updater runtime is incomplete and source files are unavailable. Reinstall a complete Tether plugin package."
-  }
+if ($HasUpdaterSource) {
+  # A source checkout is authoritative: refresh stale updater files on every install.
   foreach ($directory in @($SurfacePackage, $UpdaterRoot, $UpdaterTarget)) {
     if (Test-Path $directory) {
       $item = Get-Item -LiteralPath $directory -Force
@@ -49,6 +49,9 @@ if (-not $UpdaterComplete) {
     New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
     Copy-Item -LiteralPath $source -Destination $destination -Force
   }
+}
+elseif (-not $UpdaterComplete) {
+  throw "Plugin updater runtime is incomplete and source files are unavailable. Reinstall a complete Tether plugin package."
 }
 if (@($UpdaterFiles | Where-Object { -not (Test-Path (Join-Path $UpdaterTarget $_)) }).Count -gt 0) {
   throw "Plugin updater runtime verification failed."

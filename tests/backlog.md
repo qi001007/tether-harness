@@ -1,4 +1,5 @@
 # 修改记录
+- 2026-10-30：新增更新运行态、profile 版本优先、`restart_scheduled`、`dsh_restart` 打包回归；全量 125 pytest / 172 mjs / 6 cjs 通过。
 - 2026-10-29：F79 第五版回归固定行号区与代码区无人工边线、13px 留白保留，以及亮暗行号区新灰阶 `#f7f7f8` / `#232325`；定向代码视图 8/8、全量 167 mjs / 6 cjs / 123 pytest（1 skipped）通过。
 - 2026-10-29：F79 第四版回归固定 Monaco 22px 装饰区、13px 分界/留白层、行号栏独立灰阶以及 `renderLineHighlight='line'`，防止当前行矩形覆盖行号；定向 8/8、全量 167 mjs / 6 cjs / 123 pytest（1 skipped）通过。
 - 2026-10-29：F79 第三版回归固定资源树/行号栏灰阶、扩展名徽标标签、无通用文件图标及 Monaco 16px 装饰区；定向 8/8、全量 167 mjs / 6 cjs / 123 pytest（1 skipped）通过。

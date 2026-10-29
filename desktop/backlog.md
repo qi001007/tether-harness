@@ -1,4 +1,5 @@
 # desktop 变更记录
+- 2026-10-30：`install-plugin.ps1` 在源码存在时刷新旧 updater（含 `node/dsh_restart.py`），不再只判文件存在。
 
 - 2026-10-28：LAN 与 Tailscale Controller 启动脚本迁入私有 `tether-harness-server/scripts`，公开 desktop 目录只保留客户端安装与启动入口。
 

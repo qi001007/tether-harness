@@ -425,6 +425,59 @@ test('connection and update triggers share deterministic status colours', async 
   assert.match(connectionPanel, /status === 'checking'/)
 })
 
+test('device and product update cards keep one running state until the run ends', async () => {
+  const { updateCardState } = await import('../packages/tether-ui/src/app.js')
+  const running = updateCardState({ running: true, error: 'boom', hasUpdate: true, restartRequired: true, failed: true })
+  assert.equal(running.kind, 'running')
+  assert.equal(running.pill, '正在更新')
+  assert.equal(running.action, 'none')
+  assert.equal(running.disabled, true)
+
+  const failedRun = updateCardState({ error: '部分组件未更新：app', hasUpdate: true })
+  assert.equal(failedRun.kind, 'error')
+  assert.equal(failedRun.pill, '更新失败')
+  assert.equal(failedRun.action, 'retry')
+  assert.equal(failedRun.disabled, false)
+
+  const update = updateCardState({ hasUpdate: true, restartRequired: true, known: true })
+  assert.equal(update.kind, 'update', 'an available update outranks a stale restart banner')
+  assert.equal(update.pill, '有更新')
+  assert.equal(update.action, 'update')
+  assert.equal(update.label, '一键更新')
+
+  const restart = updateCardState({ restartRequired: true, restartPill: '待生效' })
+  assert.equal(restart.kind, 'restart')
+  assert.equal(restart.pill, '待生效')
+  assert.equal(restart.action, 'restart')
+  assert.equal(restart.label, '立即生效')
+
+  const remoteRestart = updateCardState({ restartRequired: true, restartPill: '插件待重启 DSH', restartAction: 'none' })
+  assert.equal(remoteRestart.kind, 'restart')
+  assert.equal(remoteRestart.action, 'none')
+  assert.equal(remoteRestart.disabled, true)
+
+  const current = updateCardState({ known: true })
+  assert.equal(current.kind, 'current')
+  assert.equal(current.pill, '已是最新')
+  assert.equal(current.disabled, true)
+
+  const checkFailed = updateCardState({ failed: true })
+  assert.equal(checkFailed.kind, 'failed')
+  assert.equal(checkFailed.pill, '检查失败')
+  assert.equal(checkFailed.action, 'recheck')
+})
+
+test('a running update and a pending plugin restart keep the update trigger honest', async () => {
+  const { updateTriggerState } = await import('../packages/tether-ui/src/app.js')
+  const current = { localPlugin: { current_version: '0.2.24', latest_version: '0.2.24', update_available: false } }
+  assert.equal(updateTriggerState(current, {}, false, null, true), 'checking',
+    'a running device update must not flash intermediate card states')
+  assert.equal(updateTriggerState(
+    { localPlugin: { current_version: '0.2.24', latest_version: '0.2.24', runtime_version: '0.2.23', update_available: false } },
+    {}
+  ), 'available', 'a loaded plugin older than the installed profile is not current')
+})
+
 test('legacy node responses without device_id remain valid', async () => {
   const { responseBelongsToDevice } = await import('../packages/tether-ui/src/app.js')
   assert.equal(responseBelongsToDevice({ device_id: 'A' }, 'A'), true)

@@ -1,4 +1,5 @@
 # tether-dsh-surface 变更记录
+- 2026-10-30：同步 `0.2.26` 候选；本地 updater 增加 `dsh_restart.py`。
 - 2026-10-29：随已验收的客户端批次将 Surface 包发行元数据推进到 `0.2.25`，并保留本机 updater 文件完整性修复。
 - 2026-10-28：Surface 包 package.json 发布版本升至 `0.2.12`。
 - 2026-10-28：Surface 包版本递增至公开版本 `0.2.11`。

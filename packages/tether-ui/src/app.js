@@ -72,13 +72,16 @@ export function updateAvailableFor(updateInfo, hostKind, deviceId) {
   return !!(deviceId && target && ((target.app && target.app.update_available) || (target.node && target.node.update_available) || (target.plugin && target.plugin.update_available)))
 }
 
-export function updateTriggerState(updateInfo, updateErrors, refreshing = false, devices = null) {
+export function updateTriggerState(updateInfo, updateErrors, refreshing = false, devices = null, running = false) {
+  if (running) return 'checking'
   const statuses = []
   const add = (infos, errors) => {
     const list = (infos || []).filter(Boolean)
     const failures = (errors || []).some(Boolean)
     if (!list.length && !failures) return
-    if (list.some((info) => info.update_available === true)) statuses.push('available')
+    const needsRestart = list.some((info) => info.runtime_version && info.current_version
+      && info.runtime_version !== info.current_version)
+    if (list.some((info) => info.update_available === true) || needsRestart) statuses.push('available')
     else if (list.length && list.every((info) => info.current_version && info.latest_version)) statuses.push('current')
     else if (failures) statuses.push('failed')
     else statuses.push('checking')
@@ -104,6 +107,24 @@ export function updateTriggerState(updateInfo, updateErrors, refreshing = false,
   if (statuses.length && statuses.every((status) => status === 'current')) return 'current'
   if (refreshing || statuses.length) return 'checking'
   return 'unknown'
+}
+
+export function updateCardState({ running = false, error = '', hasUpdate = false, restartRequired = false,
+                                   known = false, failed = false, restartPill = '待生效',
+                                   restartAction = 'restart' } = {}) {
+  if (running) return { kind: 'running', pill: '正在更新', tone: 'amber', action: 'none', label: '更新中', disabled: true }
+  if (error) return { kind: 'error', pill: '更新失败', tone: 'red', action: 'retry', label: '重试', disabled: false }
+  if (hasUpdate) return { kind: 'update', pill: '有更新', tone: 'amber', action: 'update', label: '一键更新', disabled: false }
+  if (restartRequired) {
+    return {
+      kind: 'restart', pill: restartPill, tone: 'amber',
+      action: restartAction, label: restartAction === 'restart' ? '立即生效' : '一键更新',
+      disabled: restartAction === 'none'
+    }
+  }
+  if (known) return { kind: 'current', pill: '已是最新', tone: 'green', action: 'none', label: '一键更新', disabled: true }
+  if (failed) return { kind: 'failed', pill: '检查失败', tone: 'red', action: 'recheck', label: '重试', disabled: false }
+  return { kind: 'checking', pill: '检查中…', tone: 'mute', action: 'none', label: '一键更新', disabled: true }
 }
 
 export function isTransientUpdateError(error) {
@@ -2089,6 +2110,21 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const [updatePage, setUpdatePage] = React.useState(1)
       const [updateInfo, setUpdateInfo] = React.useState(() => ({ app: null, localPlugin: localPluginVersionSeed(host), devices: {} }))
       const [updateBusy, setUpdateBusy] = React.useState('')
+      const updateRefreshRef = React.useRef(null)
+      const [updateRuns, setUpdateRuns] = React.useState({})
+      const setUpdateRun = (key, value) => setUpdateRuns((current) => {
+        const next = { ...current }
+        if (value == null) delete next[key]
+        else next[key] = value
+        return next
+      })
+      const clearFinishedUpdateRuns = () => setUpdateRuns((current) => {
+        const next = {}
+        for (const [key, value] of Object.entries(current)) {
+          if (value && value.state === 'running') next[key] = value
+        }
+        return next
+      })
       const [updateErrors, setUpdateErrors] = React.useState({ app: '', localPlugin: '', devices: {} })
       const autoUpdateChecksRef = React.useRef({})
       const lastUpdateToastRef = React.useRef({})
@@ -2104,6 +2140,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const [hubDuration, setHubDuration] = React.useState(null)
       const [hubCheckedAt, setHubCheckedAt] = React.useState(null)
       const [hubAddress, setHubAddress] = React.useState('')
+      const hubProbeRef = React.useRef(null)
       const formatCheckTime = (date) => date ? [date.getHours(), date.getMinutes(), date.getSeconds()].map((part) => String(part).padStart(2, '0')).join(':') : ''
       React.useEffect(() => {
         if (!host || typeof host.connectionInfo !== 'function') return undefined
@@ -2111,7 +2148,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         host.connectionInfo(host.activeApiBase ? host.activeApiBase() : undefined).then((info) => {
           if (!alive || !info) return
           setHubAddress(info.address || '')
-          setHubStatus(info.status || 'unknown')
+          if (info.status && info.status !== 'unknown') setHubStatus(info.status)
           setHubCheckedAt(info.checkedAt ? new Date(info.checkedAt) : null)
           setHubDuration(Number.isFinite(info.durationMs) ? info.durationMs : null)
           setHubError(info.status === 'offline' ? hubProbeErrorText({ status: info.errorKind === 'auth' ? 401 : undefined }) : '')
@@ -2127,31 +2164,45 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           || e.code === 'device_busy' || e.code === 'device_offline' || (e.status && e.status >= 500))) return
         setNotice(String((e && e.message) || e))
       }
-      const probeConfiguredHub = async () => {
-        if (!host || typeof host.probeConnection !== 'function') return
-        setHubBusy(true)
+      const probeConfiguredHub = async ({ silent = false } = {}) => {
+        if (!host || typeof host.probeConnection !== 'function') return null
+        if (hubProbeRef.current) return hubProbeRef.current
+        if (!silent) setHubBusy(true)
         setHubError('')
-        try {
-          const result = await host.probeConnection(host.activeApiBase ? host.activeApiBase() : undefined)
-          if (result && result.address) setHubAddress(result.address)
-          const next = result && (result.state || (result.status === 'online' ? {} : null))
-          setHubState(next || null)
-          setHubDuration(result && Number.isFinite(result.durationMs) ? result.durationMs : null)
-          setHubCheckedAt(result && result.checkedAt ? new Date(result.checkedAt) : new Date())
-          setHubStatus(result && result.status || (next ? 'online' : 'unknown'))
-          setHubError(result && result.status === 'offline'
-            ? hubProbeErrorText({ status: result.errorKind === 'auth' ? 401 : undefined })
-            : '')
-        } catch (error) {
-          setHubState(null)
-          setHubDuration(null)
-          setHubCheckedAt(new Date())
-          setHubStatus('offline')
-          setHubError(hubProbeErrorText(error))
-        } finally {
-          setHubBusy(false)
-        }
+        const task = (async () => {
+          try {
+            const result = await host.probeConnection(host.activeApiBase ? host.activeApiBase() : undefined)
+            if (result && result.address) setHubAddress(result.address)
+            const next = result && (result.state || (result.status === 'online' ? {} : null))
+            setHubState(next || null)
+            setHubDuration(result && Number.isFinite(result.durationMs) ? result.durationMs : null)
+            setHubCheckedAt(result && result.checkedAt ? new Date(result.checkedAt) : new Date())
+            setHubStatus(result && result.status || (next ? 'online' : 'unknown'))
+            setHubError(result && result.status === 'offline'
+              ? hubProbeErrorText({ status: result.errorKind === 'auth' ? 401 : undefined })
+              : '')
+            return result
+          } catch (error) {
+            setHubState(null)
+            setHubDuration(null)
+            setHubCheckedAt(new Date())
+            setHubStatus('offline')
+            setHubError(hubProbeErrorText(error))
+            return null
+          } finally {
+            if (!silent) setHubBusy(false)
+          }
+        })()
+        hubProbeRef.current = task.finally(() => { hubProbeRef.current = null })
+        return hubProbeRef.current
       }
+      React.useEffect(() => {
+        if (!host || typeof host.probeConnection !== 'function') return undefined
+        const run = () => { if (!document.hidden) probeConfiguredHub({ silent: true }).catch(() => {}) }
+        run()
+        const timer = setInterval(run, 15000)
+        return () => clearInterval(timer)
+      }, [host])
       React.useEffect(() => {
         if (!showHub) return undefined
         probeConfiguredHub()
@@ -2365,30 +2416,47 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         }
       }
       const openUpdateCenter = () => {
+        clearFinishedUpdateRuns()
         setShowUpdate(true)
         refreshUpdateCenter()
       }
       const refreshUpdateCenter = async (force = false) => {
-        if (updateRefreshing) return
-        setUpdateRefreshing(true)
-        try {
-          const checks = []
-          if (host && host.kind === 'app') checks.push(automaticUpdateCheck('app', null, force))
-          if (host && host.kind === 'dsh') checks.push(automaticUpdateCheck('localPlugin', null, force))
-          ;((state && state.devices) || []).forEach((item) => {
-            if (!item.online) return
-            const scope = { deviceId: item.device_id, epoch: 0 }
-            checks.push(automaticUpdateCheck('node', scope, force), automaticUpdateCheck('plugin', scope, force))
-            if (item.capabilities && item.capabilities.app_version) checks.push(automaticUpdateCheck('app', scope, force))
-          })
-          await Promise.allSettled(checks)
-        } finally {
-          setTimeout(() => setUpdateRefreshing(false), 280)
+        if (updateRefreshRef.current) {
+          if (!force) return updateRefreshRef.current
+          return updateRefreshRef.current.catch(() => {}).then(() => refreshUpdateCenter(true))
         }
+        setUpdateRefreshing(true)
+        const task = (async () => {
+          try {
+            const checks = []
+            if (host && host.kind === 'app') checks.push(automaticUpdateCheck('app', null, force))
+            if (host && host.kind === 'dsh') checks.push(automaticUpdateCheck('localPlugin', null, force))
+            ;((state && state.devices) || []).forEach((item) => {
+              if (!item.online) return
+              const scope = { deviceId: item.device_id, epoch: 0 }
+              checks.push(automaticUpdateCheck('node', scope, force), automaticUpdateCheck('plugin', scope, force))
+              if (item.capabilities && item.capabilities.app_version) checks.push(automaticUpdateCheck('app', scope, force))
+            })
+            await Promise.allSettled(checks)
+          } finally {
+            setTimeout(() => setUpdateRefreshing(false), 280)
+          }
+        })()
+        updateRefreshRef.current = task.finally(() => { updateRefreshRef.current = null })
+        return updateRefreshRef.current
       }
       const infoFor = (component, targetId) => targetId
         ? ((updateInfo.devices[targetId] || {})[component] || {})
         : (updateInfo[component] || {})
+      const updateToneColor = (tone) => tone === 'red' ? C.red : tone === 'green' ? C.green : tone === 'amber' ? C.amber : C.mute
+      const updateRunState = (key) => updateRuns[key] || null
+      const anyUpdateRunning = Object.values(updateRuns).some((run) => run && run.state === 'running')
+      const updateButton = (card, onRetry, onRecheck, onPrimary, disabled = false) => {
+        if (card.action === 'retry') return btn('重试', onRetry, { primary: true, disabled: anyUpdateRunning || disabled })
+        if (card.action === 'recheck') return btn('重试', onRecheck, { primary: true, disabled: anyUpdateRunning || disabled })
+        if (card.action === 'restart') return btn('立即生效', () => setPendingDshRestart(true), { primary: true, disabled: anyUpdateRunning || disabled })
+        return btn(card.disabled ? '一键更新' : card.label, onPrimary, { primary: true, disabled: anyUpdateRunning || disabled || card.disabled })
+      }
       const productCard = (product) => {
         if (host && host.kind === 'web') return null
         const localId = appLocalDevice || deviceId
@@ -2406,14 +2474,16 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           }
           return info
         })
-        const busyKey = product === 'desktop' ? 'desktop' : 'dsh'
-        const busy = updateBusy === 'product:' + busyKey
+        const run = updateRunState('product:' + product)
+        const running = run?.state === 'running'
         const productErrors = updateErrors.devices[localId] || {}
         const failed = product === 'desktop' ? !!(updateErrors.app || productErrors.node)
           : !!(updateErrors.localPlugin || productErrors.node)
         const runtimeRestartRequired = product === 'dsh' && localPluginNeedsRestart(infos[0])
         const hasUpdate = infos.some((info) => info && info.update_available === true)
         const known = infos.every((info) => info && info.current_version && info.latest_version)
+        const card = updateCardState({ running, error: run?.state === 'error' ? run.message : '',
+          hasUpdate, restartRequired: runtimeRestartRequired, known, failed })
         const versionText = versionLine(product === 'desktop' ? 'APP' : '插件',
           {
             current: product === 'desktop'
@@ -2426,18 +2496,14 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         return h('div', { key: product, style: { padding: 12, borderRadius: 8, background: C.panel, marginBottom: 10 } },
           h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 } },
             h('strong', { style: { fontSize: 13 } }, title),
-            h('span', { style: { marginLeft: 'auto' } }, busy ? h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center', color: C.amber } }, h(Glyph, { name: 'refresh', size: 14 }))
-              : runtimeRestartRequired ? pill('待生效', C.amber)
-                : hasUpdate ? pill('有更新', C.amber)
-                : known ? pill('已是最新', C.green) : failed ? pill('检查失败', C.red) : pill('检查中…', C.mute))),
+            h('span', { style: { marginLeft: 'auto' } }, running ? h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center', color: C.amber } }, h(Glyph, { name: 'refresh', size: 14 }))
+              : pill(card.pill, updateToneColor(card.tone)))),
           h('div', { style: { color: C.sub, fontSize: 12, lineHeight: '19px' } }, versionText),
           h('div', { style: { marginTop: 8 } },
-            runtimeRestartRequired
-              ? btn('立即生效', () => setPendingDshRestart(true), { primary: true, disabled: busy })
-              : btn(busy ? h('span', { className: 'tether-spin', style: { width: 16, height: 16, display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 16 })) : '一键更新', () => runProductUpdate(product), { primary: true, disabled: busy || !hasUpdate })))
+            running ? btn(h('span', { className: 'tether-spin', style: { width: 16, height: 16, display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 16 })), () => {}, { primary: true, disabled: true })
+              : updateButton(card, () => runProductUpdate(product), () => refreshUpdateCenter(true), () => runProductUpdate(product))))
       }
       const deviceCard = (item) => {
-        const scope = { deviceId: item.device_id, epoch: 0 }
         const node = infoFor('node', item.device_id)
         const plugin = infoFor('plugin', item.device_id)
         const app = infoFor('app', item.device_id)
@@ -2446,9 +2512,13 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         const infos = [node, ...(hasPlugin ? [plugin] : []), ...(hasApp ? [app] : [])]
         const hasUpdate = infos.some((info) => info && info.update_available === true)
         const known = infos.every((info) => info && info.current_version && info.latest_version)
-        const busy = updateBusy.startsWith(item.device_id + ':') || updateBusy === 'device:' + item.device_id
+        const run = updateRunState('device:' + item.device_id)
+        const running = run?.state === 'running'
         const failed = infos.some((_info, index) => !!(updateErrors.devices[item.device_id] || {})[['node', ...(hasPlugin ? ['plugin'] : []), ...(hasApp ? ['app'] : [])][index]])
         const pluginRestart = !!(hasPlugin && plugin && plugin.restart_required)
+        const card = updateCardState({ running, error: run?.state === 'error' ? run.message : '',
+          hasUpdate, restartRequired: pluginRestart, known, failed,
+          restartPill: '插件待重启 DSH', restartAction: 'none' })
         const nodeTuple = versionTuple(node.current_version || (item.capabilities && item.capabilities.node_version), node.latest_version)
         const versionRows = []
         if (hasApp) versionRows.push('APP ' + versionTuple(item.capabilities.app_version, app.latest_version) + '/Node ' + nodeTuple)
@@ -2459,45 +2529,54 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             h('strong', { style: { fontSize: 13 } }, item.name || item.device_id),
             h('span', { style: { color: C.mute, fontSize: 11 } }, item.name && item.name !== item.device_id ? item.device_id : ''),
             h('span', { style: { marginLeft: 'auto' } }, !item.online ? pill('离线', C.mute)
-              : busy ? h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center', color: C.amber } }, h(Glyph, { name: 'refresh', size: 14 }))
-                : hasUpdate ? pill('有更新', C.amber)
-                  : pluginRestart ? pill('插件待重启 DSH', C.amber)
-                    : known ? pill('已是最新', C.green) : failed ? pill('检查失败', C.red) : pill('检查中…', C.mute))),
+              : running ? h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center', color: C.amber } }, h(Glyph, { name: 'refresh', size: 14 }))
+                : pill(card.pill, updateToneColor(card.tone)))),
           h('div', { style: { color: C.sub, fontSize: 12, lineHeight: '19px' } },
             versionRows.map((text) => h('div', { key: text }, text))),
           h('div', { style: { marginTop: 8 } },
-            btn(busy ? h('span', { className: 'tether-spin', style: { width: 16, height: 16, display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 16 })) : item.online ? '一键更新' : '离线', () => runDeviceUpdate(item), { primary: true, disabled: busy || !item.online || !hasUpdate })))
+            running ? btn(h('span', { className: 'tether-spin', style: { width: 16, height: 16, display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 16 })), () => {}, { primary: true, disabled: true })
+              : !item.online ? btn('离线', () => {}, { primary: true, disabled: true })
+                : updateButton(card, () => runDeviceUpdate(item), () => refreshUpdateCenter(true),
+                  () => runDeviceUpdate(item), false)))
       }
       const runProductUpdate = async (product) => {
         const localId = appLocalDevice || deviceId
-        if (product === 'desktop') {
-          setUpdateBusy('product:desktop')
-          try {
-            const nodeOk = localId ? await updateOneClick('node', { deviceId: localId, epoch: 0 }) : true
-            if (!nodeOk) return
-            const checked = await updateAction('app', 'check', undefined, null)
-            if (!checked || checked.update_available !== true) { refreshUpdateCenter(); return }
-            const prepared = await updateAction('app', 'prepare', undefined, null)
-            const preparedId = prepared && (prepared.prepared_id || ((prepared.prepared || [])[0] || {}).prepared_id)
-            if (!preparedId) throw new Error('APP 更新包未准备好，请重试')
-            setPendingApp(preparedId)
-          } catch (error) {
-            setComponentUpdateError('app', shortUpdateError(error), null)
-          } finally { setUpdateBusy('') }
-          return
-        }
-        setUpdateBusy('product:dsh')
+        const runKey = 'product:' + product
+        setUpdateRun(runKey, { state: 'running' })
+        setUpdateBusy('product:' + product)
+        let failure = ''
         try {
           const nodeOk = localId ? await updateOneClick('node', { deviceId: localId, epoch: 0 }) : true
-          if (!nodeOk) return
-          const outcome = await runUpdateSequence({
-            check: () => updateAction('localPlugin', 'check', undefined, null),
-            prepare: () => updateAction('localPlugin', 'prepare', undefined, null),
-            apply: (id) => updateAction('localPlugin', 'apply', id, null)
-          })
-          if (outcome.updated && localPluginNeedsRestart(outcome.result)) setPendingDshRestart(true)
-          refreshUpdateCenter()
-        } finally { setUpdateBusy('') }
+          if (!nodeOk) failure = 'Node 更新失败'
+          else if (product === 'desktop') {
+            const checked = await updateAction('app', 'check', undefined, null)
+            if (!checked) failure = 'APP 更新检查失败'
+            else if (checked.update_available === true) {
+              const prepared = await updateAction('app', 'prepare', undefined, null)
+              const preparedId = prepared && (prepared.prepared_id || ((prepared.prepared || [])[0] || {}).prepared_id)
+              if (!preparedId) throw new Error('APP 更新包未准备好，请重试')
+              setPendingApp(preparedId)
+            }
+          } else {
+            const outcome = await runUpdateSequence({
+              check: () => updateAction('localPlugin', 'check', undefined, null),
+              prepare: () => updateAction('localPlugin', 'prepare', undefined, null),
+              apply: (id) => updateAction('localPlugin', 'apply', id, null)
+            })
+            if (outcome.failed) failure = '插件更新失败'
+            else if (outcome.updated && localPluginNeedsRestart(outcome.result)) {
+              if (outcome.result.restart_scheduled === true) setNotice('插件已安装，DSH 正在自动重启…')
+              else setPendingDshRestart(true)
+            }
+          }
+        } catch (error) {
+          failure = shortUpdateError(error)
+          setComponentUpdateError(product === 'desktop' ? 'app' : 'localPlugin', failure, null)
+        } finally {
+          await refreshUpdateCenter(true)
+          setUpdateRun(runKey, failure ? { state: 'error', message: failure } : { state: 'done' })
+          setUpdateBusy('')
+        }
       }
       const confirmDshRestart = async () => {
         setDshRestartBusy(true)
@@ -2533,6 +2612,8 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         throw lastError
       }
       const runDeviceUpdate = async (item) => {
+        const runKey = 'device:' + item.device_id
+        setUpdateRun(runKey, { state: 'running' })
         setUpdateBusy('device:' + item.device_id)
         const failures = []
         try {
@@ -2571,16 +2652,23 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
               setComponentUpdateError('app', shortUpdateError(error), scope)
             }
           }
-          if (failures.length) setNotice('部分组件未更新：' + failures.join('、') + '，可重试')
-          refreshUpdateCenter()
-        } finally { setUpdateBusy('') }
+        } catch (error) {
+          failures.push('更新流程')
+          setComponentUpdateError('node', shortUpdateError(error), { deviceId: item.device_id, epoch: 0 })
+        } finally {
+          await refreshUpdateCenter(true)
+          const message = failures.length ? '部分组件未更新：' + failures.join('、') + '，可重试' : ''
+          if (message) setNotice(message)
+          setUpdateRun(runKey, message ? { state: 'error', message } : { state: 'done' })
+          setUpdateBusy('')
+        }
       }
       React.useEffect(() => {
         const components = host && host.kind === 'app' ? ['app'] : host && host.kind === 'dsh' ? ['localPlugin'] : []
         if (!components.length) return undefined
         const check = () => components.forEach((component) => automaticUpdateCheck(component, null))
         check()
-        const timer = setInterval(check, 6 * 60 * 60 * 1000)
+        const timer = setInterval(check, 5 * 60 * 1000)
         return () => clearInterval(timer)
       }, [host && host.kind])
       React.useEffect(() => {
@@ -2593,7 +2681,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           automaticUpdateCheck('plugin', scope)
         }
         check()
-        const timer = setInterval(check, 6 * 60 * 60 * 1000)
+        const timer = setInterval(check, 5 * 60 * 1000)
         return () => clearInterval(timer)
       }, [deviceId, !!(state && state.devices && state.devices.find((item) => item.device_id === deviceId)?.online)])
       React.useEffect(() => { if (!notice) return; const t = setTimeout(() => setNotice(''), 4000); return () => clearTimeout(t) }, [notice])
@@ -2652,7 +2740,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
 
       const device = state && state.devices.find((d) => d.device_id === deviceId)
       const editableFile = file && file.editable === true && !file.truncated
-      const updateStatus = updateTriggerState(updateInfo, updateErrors, updateRefreshing, state && state.devices)
+      const updateStatus = updateTriggerState(updateInfo, updateErrors, updateRefreshing, state && state.devices, anyUpdateRunning)
       const updateStatusColor = updateStatus === 'available' ? C.red
         : updateStatus === 'failed' ? C.amber
           : updateStatus === 'current' ? C.green : C.mute
@@ -4257,7 +4345,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           h('div', { style: { width: 520, maxWidth: '100%', maxHeight: '100%', overflow: 'auto', background: C.bg, borderRadius: 10, boxShadow: C.shadow, padding: 18, boxSizing: 'border-box' } },
             h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 } },
               h('strong', { style: { fontSize: 14 } }, '更新中心'),
-              h('button', { onClick: () => refreshUpdateCenter(true), disabled: updateRefreshing, title: '强制刷新更新状态', 'aria-label': '刷新', className: 'tether-hover', style: { marginLeft: 'auto', width: 26, height: 26, display: 'grid', placeItems: 'center', border: 0, borderRadius: 6, background: 'transparent', color: C.sub, cursor: updateRefreshing ? 'default' : 'pointer' } }, updateRefreshing ? h('span', { className: 'tether-spin' }, h(Glyph, { name: 'refresh', size: 16 })) : h(Glyph, { name: 'refresh', size: 16 })),
+              h('button', { onClick: () => { clearFinishedUpdateRuns(); refreshUpdateCenter(true) }, disabled: updateRefreshing, title: '强制刷新更新状态', 'aria-label': '刷新', className: 'tether-hover', style: { marginLeft: 'auto', width: 26, height: 26, display: 'grid', placeItems: 'center', border: 0, borderRadius: 6, background: 'transparent', color: C.sub, cursor: updateRefreshing ? 'default' : 'pointer' } }, updateRefreshing ? h('span', { className: 'tether-spin' }, h(Glyph, { name: 'refresh', size: 16 })) : h(Glyph, { name: 'refresh', size: 16 })),
               h('button', { onClick: () => setShowUpdate(false), style: { border: 0, background: 'transparent', fontSize: 18, cursor: 'pointer', color: C.mute } }, '×')),
             host && host.kind === 'app' ? productCard('desktop') : null,
             host && host.kind === 'dsh' ? productCard('dsh') : null,
