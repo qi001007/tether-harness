@@ -1,5 +1,16 @@
 # Public client releases
 
+## v0.2.21
+
+[GitHub Release](https://github.com/qi001007/tether-harness/releases/tag/v0.2.21) · tag `v0.2.21` → `5d01994` · workflow run `40821192816`.
+
+Patch release for the remaining local-side update issues:
+
+- The Electron APP kept a stale DSH session cookie on a reused port, so the native frame still showed `dsh web authentication required` even with a fresh token. The APP now clears cookies/localStorage for the loopback surface origin before loading or remounting the frame.
+- The APP and DSH-plugin local updaters followed GitHub's edge-cached `latest` redirect and still showed `0.2.19` for the local cards. They now prefer the Hub mirror manifest (`hub.json` / app-context `serverUrl`); the API-based latest resolution stays as the fallback.
+
+Verified on the lab bench: after installing 0.2.21 and restarting DSH, the native frame settled with `hasComposer=true` (no auth page), and both the APP and plugin updaters reported `latest_version=0.2.21` with `manifest_source` = the Hub mirror. A full remote update of LAPTOP-01 (0.2.20 → 0.2.21, no manual steps) applied Node (19 files), plugin (40 files, automatic DSH restart, `restart_required=false`) and APP (34 files, automatic restart); both machines report APP/Node 0.2.21.
+
 ## v0.2.20
 
 [GitHub Release](https://github.com/qi001007/tether-harness/releases/tag/v0.2.20) · tag `v0.2.20` → `965adf1` · workflow run `40819992563`.

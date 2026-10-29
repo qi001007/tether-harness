@@ -2,6 +2,13 @@
 
 更新日期：2026-10-29。
 
+## 当前实测状态：v0.2.21 已发布
+
+- tag `v0.2.21` → `5d01994`；发行工作流 `40821192816` 成功；资产 app 410,118 B、node 71,555 B、plugin 415,137 B，manifest 验签通过、大小/SHA 一致；Release 已发布。
+- 修复两个本机侧问题：① Electron 在 DSH 重启后保留了同端口的旧会话 cookie，即使换新 token 也停在 `dsh web authentication required`；现在加载/重建 iframe 前清掉该 loopback origin 的 cookies/localStorage。本机 0.2.21 重启后原生页 `hasComposer=true`。② 本机 APP/插件更新器仍走 GitHub latest 的边缘缓存，卡片 latest 停在 0.2.19；现在优先用 Hub mirror（`hub.json` / app-context `serverUrl`），实测两者 `latest_version=0.2.21`、`manifest_source` 为 Hub mirror。
+- 本机实验台与 LAPTOP-01 均已 `0.2.21`；远程更新（0.2.20 → 0.2.21，目标端零手工）：Node 19 文件、插件 40 文件后 DSH 自动重启、APP 34 文件自动重启，两机 APP/Node 0.2.21。
+- 门禁：155 mjs / 6 cjs / 112 pytest（1 skipped）、`build.mjs --check`、`validate_versions()`。
+
 ## 当前实测状态：v0.2.20 已发布
 
 - tag `v0.2.20` → `965adf1`；发行工作流 `40819992563` 成功；资产 app 409,414 B、node 71,554 B、plugin 414,910 B，manifest 验签通过、大小/SHA 一致；Release 已发布。
