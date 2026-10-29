@@ -1,4 +1,5 @@
 # tether-dsh-surface 变更记录
+- 2026-10-29：随已验收的客户端批次将 Surface 包发行元数据推进到 `0.2.25`，并保留本机 updater 文件完整性修复。
 - 2026-10-28：Surface 包 package.json 发布版本升至 `0.2.12`。
 - 2026-10-28：Surface 包版本递增至公开版本 `0.2.11`。
 - 2026-10-28：Surface 包版本递增至 `0.2.10`。
@@ -19,3 +20,4 @@
 - 2026-10-28：Surface 包版本升至 `0.2.13`。
 - 2026-10-28：本机插件更新器 status/check 子进程上限 20s、同一请求单飞（重叠返回 `update_busy`），并区分「宿主加载时版本」与「磁盘版本」：磁盘变了而上报 `reload_required/restart_required`，否则更新中心会把旧宿主误报成已是最新。
 - 2026-10-29：Surface 包版本升至 `0.2.16`，与三组件发行版本一致。
+- 2026-10-29：源码 updater 补 `tether/release.py`、`tether/ed25519.py`；`local-updates.js` 的 `UPDATER_FILES` 校验现在能在源码安装的 profile 中通过，不再误报 `updater_missing`。

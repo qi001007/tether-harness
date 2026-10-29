@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from tether.node.fs_service import FsError, FsService
+from tether.node.fs_service import MAX_PREVIEW_TEXT, FsError, FsService
 
 
 @pytest.fixture()
@@ -117,6 +117,69 @@ def test_preview_returns_renderable_text_markdown_image_and_pdf(env) -> None:
     pdf = svc.dispatch("preview", {"path": str(folder / "doc.pdf")})
     assert pdf["kind"] == "pdf" and pdf["mime"] == "application/pdf" and pdf["base64"]
     assert svc.dispatch("preview", {"path": str(folder / "blob.bin")})["kind"] == "unsupported"
+
+
+def test_text_preview_preserves_remote_identity_encoding_newline_and_version(env) -> None:
+    svc: FsService = env["svc"]
+    folder = env["root"] / "editing"
+    folder.mkdir()
+    target = folder / "legacy.py"
+    target.write_bytes("# 中文\r\nprint('ok')\r\n".encode("gb18030"))
+
+    preview = svc.dispatch("preview", {"path": str(target)})
+    assert preview["device_id"] == "TEST"
+    assert preview["encoding"] == "gb18030"
+    assert preview["newline"] == "crlf"
+    assert preview["editable"] is True
+    assert preview["truncated"] is False
+    assert len(preview["version"]) == 64
+    stat = svc.dispatch("stat", {"path": str(target)})
+    assert stat["device_id"] == "TEST"
+    assert stat["version"] == preview["version"]
+
+    saved = svc.dispatch("write", {
+        "path": str(target),
+        "text": preview["text"].replace("ok", "saved"),
+        "expected_version": preview["version"],
+        "encoding": preview["encoding"],
+        "newline": preview["newline"],
+    })
+    assert saved["device_id"] == "TEST"
+    assert saved["version"] != preview["version"]
+    raw = target.read_bytes()
+    assert b"\r\n" in raw and b"\n" not in raw.replace(b"\r\n", b"")
+    assert raw.decode("gb18030").endswith("print('saved')\r\n")
+
+    target.write_text("external\n", encoding="utf-8")
+    with pytest.raises(FsError) as caught:
+        svc.dispatch("write", {
+            "path": str(target), "text": "stale", "expected_version": saved["version"],
+            "encoding": "gb18030", "newline": "crlf",
+        })
+    assert caught.value.code == "conflict"
+    assert target.read_text(encoding="utf-8") == "external\n"
+
+
+def test_only_complete_source_text_is_editable(env) -> None:
+    svc: FsService = env["svc"]
+    folder = env["root"] / "editable"
+    folder.mkdir()
+    unknown = folder / "Dockerfile.custom"
+    unknown.write_text("FROM python:3.13\n", encoding="utf-8")
+    archive = folder / "sample.zip"
+    with __import__("zipfile").ZipFile(archive, "w") as output:
+        output.writestr("inside.txt", "data")
+    large = folder / "large.txt"
+    large.write_text("x" * (MAX_PREVIEW_TEXT + 1), encoding="utf-8")
+
+    unknown_preview = svc.dispatch("preview", {"path": str(unknown)})
+    assert unknown_preview["kind"] == "text"
+    assert unknown_preview["editable"] is True
+    assert unknown_preview["encoding"] == "utf-8"
+    assert svc.dispatch("preview", {"path": str(archive)})["editable"] is False
+    large_preview = svc.dispatch("preview", {"path": str(large)})
+    assert large_preview["truncated"] is True
+    assert large_preview["editable"] is False
 
 
 def test_office_preview_reuses_converted_pdf_until_source_changes(env, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -1,0 +1,1 @@
+declare const __TETHER_MONACO_WORKER_SOURCE__: string

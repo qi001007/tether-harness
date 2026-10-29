@@ -126,6 +126,17 @@ test('the explorer wires history, sort and search into the visible toolbar', () 
   assert.match(source, /if \(event\.key === 'ArrowLeft'\) goBack\(\)\s+else if \(event\.key === 'ArrowRight'\) goForward\(\)\s+else goUp\(\)/)
 })
 
+test('the visible command bar exposes the existing file operations', () => {
+  assert.match(source, /iconButton\('plus', '新建文件'/)
+  assert.match(source, /iconButton\('folderClose', '新建文件夹'/)
+  assert.match(source, /iconButton\('file', '复制选中项'/)
+  assert.match(source, /iconButton\('files', '粘贴'/)
+  assert.match(source, /iconButton\('pencil', '重命名'/)
+  assert.match(source, /iconButton\('trash', '删除'/)
+  assert.match(source, /const copyEntry = \(entry\) =>/)
+  assert.match(source, /const pasteEntry = async \(base\) =>/)
+})
+
 test('the explorer exposes sort headers, a search box with a clear action and a search empty state', () => {
   assert.match(source, /usePersisted\('tether\.explorer\.sort', \{ key: 'name', dir: 'asc' \}\)/)
   assert.match(source, /sortHeader\('name', '名称'\), sortHeader\('mtime', '修改日期'\), h\('span', null, '类型'\), sortHeader\('size', '大小', 'right'\)/)

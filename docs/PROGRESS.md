@@ -4,6 +4,41 @@
 
 > 交接：给 Codex 的接手说明见 [HANDOFF-2026-10-29.md](HANDOFF-2026-10-29.md)（现状、故障证据、更新契约、红线与排期）。
 
+## 2026-10-29 接手修复（未发布）
+
+- 更新入口灯与更新卡同源：`updateTriggerState` 按在线设备 capability 取 node/plugin/app，known 优先于历史错误，离线设备不参与；瞬时 `InvalidStateError`/网络错误重试一次，失败结果不进入 5 分钟缓存。实测 DESKTOP-LOCAL 与 LAPTOP-01 两卡“已是最新”、头部 `current` 绿色。
+- 跨节点旧节点响应兼容：`responseBelongsToDevice` 在响应缺 `device_id` 时按旧节点放行，有值必须匹配；覆盖预览、保存、新建、重命名和版本轮询。实测 LAPTOP-01 `D:\TetherWorkspaces\Tether-demo-check-1aba3266.txt` 打开成功，无“目标设备身份校验失败”。
+- Monaco 主题跟随宿主：读 `body/html[data-ds-dark-theme]`，MutationObserver 调 `monaco.editor.setTheme`。实测亮色 `rgb(255,255,255)` → 加暗色标记 `rgb(13,17,23)` → 移除恢复亮色。
+- 重建 `client.js` 与 `dist/app.js`，重装 DSH profile 并重启；`build.mjs --check` 通过。更新灯修复同时让 Codex 16:23 的 native surface 去边线守卫生效：APP 原生工作区侧栏边缘像素由 `219,220,220` 变为底色 `249,250,251`。
+- DSH 本机卡常红/`插件 -(-)` 的独立根因是源码 updater 缺 `tether/release.py`、`tether/ed25519.py`；补齐后 `install-plugin.ps1` 复制七个 updater 文件，DSH 更新中心本机卡恢复 `0.2.24(0.2.24)` 并显示“已是最新”。
+- 门禁：166 mjs / 6 cjs / 123 pytest（1 skipped）/ `build.mjs --check` / `build-web.mjs --check` / `validate_versions()`。**未发布、未分发**；LAPTOP-01 仍为 0.2.24，跨机编辑所需的 `version/editable` 字段要等新 Node 分发。
+- 证据：`.scratch/fix-update-green.png`、`.scratch/fix-remote-open.png`、`.scratch/dsh-update-center-final2.png`、`.scratch/webui-code-monaco.png`。
+
+## 资源管理器视觉审查候选（未发布）
+
+- 主人已于 2026-10-29 认可第五版视觉候选；版本元数据已进入 `0.2.25` 打包发布准备。发布、清单验签和两机安装状态必须在实际完成后单独回填，当前不提前标记。
+- 第一版因蓝色渐变/蓝色状态条、普通代码仍有切换按钮、标签页与整体质感不足被主人驳回。第二版继续复用既有远端文件协议和资源树，没有从零重构：顶栏、活动栏、资源树、命令区、标签栏、编辑区和状态栏全部改为白灰黑中性层级，仍靠色差而不是常驻硬边线分区；拖动把手只在悬停/拖动时出现。
+- 删除旧手写代码高亮旁路，代码与 Markdown 编辑统一使用 Monaco `0.57.0`。普通代码打开后直接编辑，不显示预览/编辑切换；只有 Markdown 与 CSV/TSV 等确需渲染的类型保留视图切换。Monaco 补齐 TOML/INI、YAML、XML、SQL、Shell、PowerShell、Go、Rust、C#、PHP、Ruby、Swift、Kotlin、Lua、R、Perl、Dart、Dockerfile、Less、SCSS 等语言注册，并采用接近 VSCode Light+/Dark+ 的语法色板。
+- 文件标签第三版改为中性的扩展名徽标（`PY`/`JS`/`TOML` 等）、圆角页签与悬停关闭，不使用通用文件图标或彩色强调线。第五版继续保留 Monaco 22px 装饰区与 13px 白色留白，但删除第四版新增的人工分界线；亮色三层为文件树 `#efeff1`、行号区 `#f7f7f8`、代码区 `#ffffff`，暗色行号区为 `#232325`。`renderLineHighlight='line'` 继续保证当前行背景仅覆盖代码区，活动行号只加深文字颜色，不叠加矩形背景。蓝色只允许作为代码语法色，不作为工作台 chrome。目录命令区现有新建/复制/粘贴/重命名/删除逻辑保留，跨设备粘贴仍拒绝混用来源设备。
+- 仓库版 `http://127.0.0.1:18892/` 已真实加载第五版 `dist/app.js`；在 DESKTOP-LOCAL 打开 `E:\遥望科技实习项目\tether\tether\node\agent.py`，实测文件树、行号区、代码区分别为 `rgb(239,239,241)`、`rgb(247,247,248)`、`rgb(255,255,255)`，留白层为 13px 且左边框宽度为 0。活动行号背景透明、文字为 `rgb(41,41,41)`，当前行代码背景从代码区起点开始。该页面只是主人审查候选，不代表已发布或已分发安装包。
+- 本轮门禁：MJS 167/167、CJS 6/6、Python 123 passed / 1 skipped、定向代码视图 8/8、`build.mjs --check`、`build-web.mjs --check`、版本校验全部通过。
+
+## 编辑器与目标端文件语义候选（未发布）
+
+- 资源管理器代码编辑已替换为 Monaco `0.57.0`：worker 与 CSS 由现有构建器内嵌，Web 与 DSH 共用同一运行时；model URI 包含目标设备和路径，状态栏显示目标、路径、光标、编码与换行。
+- Node 文件服务为可编辑文本返回 SHA-256 `version`、`device_id`、`encoding`、`newline`、`editable`；写入使用 `expected_version` 防止覆盖目标端外部修改，并保留 UTF-8 BOM/UTF-16/GB18030 与 CRLF/LF。UI 每 5 秒及窗口聚焦检查目标版本；干净文档自动刷新，脏文档提示冲突。
+- DSH 加号菜单候选保留原“文件”（操作者本机上传），并注册“目标设备文件”（目标 DSH 会话工作区）。本机源码插件已重装，真实 WebUI/DSH Monaco 可见；LAPTOP-01 仍运行 0.2.24 bundle，因此新菜单项的跨机验收必须等下一版插件分发，未绕过发布链直接改远端安装。
+- 连接/更新入口统一使用状态圆点：在线/当前为绿、离线为红、连接检测中为琥珀、未知为灰、更新检查失败为琥珀、发现更新为红；后台更新检查失败仍不弹红 toast、不点红点。
+- 真实 DESKTOP-LOCAL API 创建/保存后磁盘立即变化；外部改写后旧版本保存返回 `conflict` 且目标内容未被覆盖。完整门禁：Python 123 passed / 1 skipped、MJS 164/164、CJS 6/6、bundle check 与版本校验通过；定向 Python 16 passed、共享 UI/DSH 19 passed。
+
+## P0 候选：Node↔Hub WebSocket 稳定性（本机实验台已验证，未发布）
+
+- 14:34–14:38 的 Node 重连与 Hub 接受新 WSS 的时间逐次对齐；Hub、surface mux、Caddy 均未重启（`NRestarts=0`），另一来源节点保持连接，未发现 Hub 全局事件循环停顿证据。客户端环境存在 `127.0.0.1:7890` HTTP/SOCKS 代理，而 `websockets>=15` 默认继承环境代理；故障形态符合该路径在网络/代理切换时黑洞。
+- 源码候选让 Node 控制面 WSS 在运行库支持 `proxy` 参数时显式直连；更新结果绑定原接收 WebSocket，旧任务不得跨重连发送，closing socket 的 `InvalidStateError` 只按传输中断处理。
+- 离线门禁：pytest 121 passed / 1 skipped、mjs 158/158、cjs 6/6、bundle check 与版本校验通过。公网只读观察持续 603.9 s：直连 Ping 59/59，P50 125 ms、最大 547 ms；DESKTOP-LOCAL 与 LAPTOP-01 无 online 状态变化，state/manifest 零失败，三组件 latest 始终 0.2.24。
+- 本机实验台源码 Node 于 15:46:09 重启并加载候选；连续运行 12.8 分钟后，15:46:10 注册以来日志无新 keepalive timeout、断线或 `InvalidStateError`，DESKTOP-LOCAL 与 LAPTOP-01 均保持 online。两台设备分别显式检查 node/plugin，四次均返回 `ok=true`、current/latest=`0.2.24`。
+- 边界：P0 客户端候选已通过本机 10 分钟门禁，但尚未正式发布到两台安装版；未修改服务端 ping 参数、Hub/Caddy 部署、CI、tag 或 release。
+
 ## 当前实测状态：v0.2.24 已发布
 
 - tag `v0.2.24` → `a6de4a3`；发行工作流 `40828646049` 成功；资产 app 412,251 B、node 72,254 B、plugin 416,117 B；manifest 验签通过、大小/SHA 一致；Release 已发布（2026-10-29T06:23:28Z）。

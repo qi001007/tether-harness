@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { bundledMonacoRuntime } from './monaco-build.mjs'
 
 const root = path.resolve(import.meta.dirname, '..', '..', '..')
 const sharedPath = path.join(root, 'packages/tether-ui/src/app.js')
@@ -14,12 +15,15 @@ const strip = (file) => fs.readFileSync(path.join(root, 'packages/tether-ui/src'
 const shared = strip('app.js')
 const connectionPanel = strip('connection-panel.js')
 const dshHost = strip('hosts/dsh.js')
+const monacoRuntime = await bundledMonacoRuntime()
 
 const plugin = `window.__ModuleLoader__.load({
   id: 'tether-dsh-client',
   factory: (require) => {
     const React = require('react')
     const Native = require('tether-dsh-native-ui')
+${monacoRuntime}
+    const EditorRuntime = TetherMonacoRuntime
     const PANEL_ID = 'tether'
     const PLUGIN_VERSION = ${JSON.stringify(pluginVersion)}
 ${dshHost}
@@ -34,13 +38,13 @@ ${connectionPanel}
     })
 
 ${shared}
-    const tetherPanel = createTetherPanel({ React, Native, host })
+    const tetherPanel = createTetherPanel({ React, Native, host, EditorRuntime })
     const App = tetherPanel.App
     const TetherIcon = tetherPanel.TetherIcon
 
     return {
       name: 'tether',
-      inject: ['slots', 'layout', 'connection', 'remote', 'remote.workspaceFiles', 'remote.pluginManager'],
+      inject: ['slots', 'layout', 'connection', 'remote', 'remote.workspaceFiles', 'remote.pluginManager', 'commandUi'],
       apply(ctx) {
         localPluginRemote = ctx.remote
         if (ctx.connection && ctx.connection.rpc && typeof ctx.connection.rpc.call === 'function') {
@@ -50,14 +54,35 @@ ${shared}
         if (embedded || new URL(window.location.href).searchParams.has('tether_native')) {
           try { ctx.layout.selectPanel(null) } catch (_) { /* embedded surface has no Tether panel */ }
           try {
+            if (typeof document !== 'undefined') {
+              document.documentElement.dataset.tetherNativeSurface = '1'
+              const nativeSurfaceStyleId = 'tether-native-surface-chrome'
+              if (!document.getElementById(nativeSurfaceStyleId)) {
+                const nativeSurfaceStyle = document.createElement('style')
+                nativeSurfaceStyle.id = nativeSurfaceStyleId
+                nativeSurfaceStyle.textContent = 'html[data-tether-native-surface] :is(div, aside, nav):has([aria-label="全局面板"]) { border-right-color: transparent !important; border-inline-end-color: transparent !important; }'
+                document.head.appendChild(nativeSurfaceStyle)
+              }
+            }
+          } catch (_) { /* DSH chrome stays usable if style injection is unavailable */ }
+          try {
             const targetFiles = createDshTargetFilesBridge({ getRpc: () => localPluginRpc, getRemote: () => localPluginRemote })
+            const targetFilePicker = { open: null }
             if (ctx.fileDrag && typeof ctx.fileDrag.read === 'function') {
-              const attachments = createDshTargetAttachments(React, Native, targetFiles)
+              const attachments = createDshTargetAttachments(React, Native, targetFiles, targetFilePicker)
               ctx.slots.inject('conversation.input.attachments', () => ctx.slots.register({
                 name: 'conversation.input.attachments', priority: -1000, locale: 'conversation',
                 inject: () => ({ readFileDrag: ctx.fileDrag.read })
               }, attachments))
             }
+            ctx.inject(['commandUi'], (scope) => {
+              const commands = scope.get('commandUi')
+              scope.effect(() => commands.register({
+                name: 'tether-target-file', label: () => '目标设备文件', icon: TetherIcon,
+                available: () => typeof targetFilePicker.open === 'function',
+                ui: { kind: 'action', run: () => targetFilePicker.open?.() }
+              }), 'tether: target device file action')
+            })
           } catch (_) { /* attachments are optional in an embedded surface */ }
           return
         }

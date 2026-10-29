@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import inspect
 import json
 import os
 import platform
@@ -403,7 +404,15 @@ class Node:
                 ssl_context = ssl.create_default_context()
                 ssl_context.check_hostname = False
                 ssl_context.verify_mode = ssl.CERT_NONE
-        connect_options = {"ping_interval": 20, "ping_timeout": 20, "max_size": 48 * 1024 * 1024}
+        connect_options = {
+            "ping_interval": 20,
+            "ping_timeout": 20,
+            "max_size": 48 * 1024 * 1024,
+        }
+        if "proxy" in inspect.signature(websockets.connect).parameters:
+            # Since websockets 15, clients inherit desktop HTTP/SOCKS proxies.
+            # Proxy restarts can black-hole this long-lived control tunnel.
+            connect_options["proxy"] = None
         if ssl_context is not None:
             connect_options["ssl"] = ssl_context
         async with websockets.connect(self.url, **connect_options) as ws:
@@ -457,6 +466,17 @@ class Node:
             raise RuntimeError("not connected")
         await self.ws.send(json.dumps(msg, ensure_ascii=False))
 
+    async def _send_update_result(self, ws: Any, msg: dict[str, Any]) -> bool:
+        """Send an update reply only on the session that received its request."""
+        if self.ws is not ws:
+            return False
+        try:
+            await self._send(msg)
+        except (asyncio.InvalidStateError, OSError, RuntimeError, websockets.ConnectionClosed):
+            self.connected = False
+            return False
+        return True
+
     async def _handle(self, msg: dict[str, Any]) -> None:
         kind = msg.get("type")
         if kind == "dispatch":
@@ -495,7 +515,7 @@ class Node:
             self.surface_tasks.add(task)
             task.add_done_callback(self.surface_tasks.discard)
         elif kind == "update_call":
-            task = asyncio.create_task(self._update_call(msg))
+            task = asyncio.create_task(self._update_call(msg, self.ws))
             self.update_tasks.add(task)
             task.add_done_callback(self.update_tasks.discard)
         elif kind == "error":
@@ -587,7 +607,9 @@ class Node:
             return "native_dsh_turn_active"
         return None
 
-    async def _update_call(self, msg: dict[str, Any]) -> None:
+    async def _update_call(self, msg: dict[str, Any], response_ws: Any = None) -> None:
+        if response_ws is None:
+            response_ws = self.ws
         req_id = str(msg.get("req_id") or "")
         component = msg.get("component")
         action = msg.get("action")
@@ -595,26 +617,35 @@ class Node:
         if (set(msg) - allowed or not isinstance(component, str) or component not in self.update_managers
                 or not isinstance(action, str) or action not in {"check", "status", "prepare", "apply"}
                 or (action == "apply") != ("prepared_id" in msg)):
-            await self._send({"type": "update_result", "req_id": req_id, "ok": False,
-                              "error_code": "invalid_update_request", "error": "invalid update request"})
+            await self._send_update_result(
+                response_ws,
+                {"type": "update_result", "req_id": req_id, "ok": False,
+                 "error_code": "invalid_update_request", "error": "invalid update request"},
+            )
             return
         component = str(component)
         applying = action == "apply"
         app_restart_scheduled = False
         if action in {"check", "status"}:
             if self.update_applying:
-                await self._send({"type": "update_result", "req_id": req_id, "ok": False,
-                                  "component": component, "error_code": "update_busy",
-                                  "error": "update is applying"})
+                await self._send_update_result(
+                    response_ws,
+                    {"type": "update_result", "req_id": req_id, "ok": False,
+                     "component": component, "error_code": "update_busy",
+                     "error": "update is applying"},
+                )
                 return
             manager = self.update_managers[component]
             if component == "plugin":
                 profile = self.native_surface.active_profile() or select_profile(
                     Path(self.native_dsh_home), getattr(manager, "profile", "desktop"))
                 if not profile:
-                    await self._send({"type": "update_result", "req_id": req_id, "ok": False,
-                                      "error_code": "plugin_package_missing",
-                                      "error": "未找到已安装的 Tether DSH 插件 profile，无法检测插件更新。"})
+                    await self._send_update_result(
+                        response_ws,
+                        {"type": "update_result", "req_id": req_id, "ok": False,
+                         "error_code": "plugin_package_missing",
+                         "error": "未找到已安装的 Tether DSH 插件 profile，无法检测插件更新。"},
+                    )
                     return
                 manager = UpdateManager(getattr(manager, "root", ROOT), component,
                                         dsh_home=getattr(manager, "dsh_home", Path(self.native_dsh_home)),
@@ -628,23 +659,29 @@ class Node:
                     result = await asyncio.to_thread(manager.check, True)
                 else:
                     result = await asyncio.to_thread(manager.status)
-                await self._send({"type": "update_result", "req_id": req_id, **result})
             except Exception as exc:  # noqa: BLE001 - failed reads must not stop the Node reader
                 log(f"[update] {action} {component} failed: {type(exc).__name__}")
-                try:
-                    await self._send({"type": "update_result", "req_id": req_id, "ok": False,
-                                      "error_code": "update_failed", "error": "update operation failed"})
-                except Exception:
-                    self.connected = False
+                await self._send_update_result(
+                    response_ws,
+                    {"type": "update_result", "req_id": req_id, "ok": False,
+                     "error_code": "update_failed", "error": "update operation failed"},
+                )
+            else:
+                await self._send_update_result(
+                    response_ws, {"type": "update_result", "req_id": req_id, **result}
+                )
             return
         async with self.update_lock:
             if component == "plugin":
                 profile = self.native_surface.active_profile() or select_profile(
                     Path(self.native_dsh_home), getattr(self.update_managers[component], "profile", "desktop"))
                 if not profile:
-                    await self._send({"type": "update_result", "req_id": req_id, "ok": False,
-                                      "error_code": "plugin_package_missing",
-                                      "error": "未找到已安装的 Tether DSH 插件 profile，无法更新插件。"})
+                    await self._send_update_result(
+                        response_ws,
+                        {"type": "update_result", "req_id": req_id, "ok": False,
+                         "error_code": "plugin_package_missing",
+                         "error": "未找到已安装的 Tether DSH 插件 profile，无法更新插件。"},
+                    )
                     return
                 self.update_managers[component].profile = profile
             if applying:
@@ -653,10 +690,12 @@ class Node:
                 busy = await asyncio.to_thread(self._update_busy_reason)
                 if busy:
                     self.update_applying = False
-                    await self._send({"type": "update_result", "req_id": req_id, "ok": False,
-                                      "error_code": "update_busy", "error": busy})
-                    if self.ws is not None:
-                        await self._send({"type": "update_ready"})
+                    await self._send_update_result(
+                        response_ws,
+                        {"type": "update_result", "req_id": req_id, "ok": False,
+                         "error_code": "update_busy", "error": busy},
+                    )
+                    await self._send_update_result(response_ws, {"type": "update_ready"})
                     return
             manager = self.update_managers[component]
             result: dict[str, Any] | None = None
@@ -670,12 +709,9 @@ class Node:
                 if applying and result.get("ok") and component == "node":
                     self.restart_requested = True
                     self.update_applying = True
-                response_sent = False
-                try:
-                    await self._send({"type": "update_result", "req_id": req_id, **result})
-                    response_sent = True
-                except Exception:
-                    self.connected = False
+                response_sent = await self._send_update_result(
+                    response_ws, {"type": "update_result", "req_id": req_id, **result}
+                )
                 if (applying and result.get("ok") and component == "app" and response_sent
                         and os.environ.get("TETHER_NODE_MANAGED") == "1"):
                     app_restart_scheduled = await asyncio.to_thread(schedule_app_restart, ROOT)
@@ -692,19 +728,15 @@ class Node:
                     return
             except Exception as exc:  # noqa: BLE001 - updater errors do not take down the WS reader
                 log(f"[update] {action} {component} failed: {type(exc).__name__}")
-                try:
-                    await self._send({"type": "update_result", "req_id": req_id, "ok": False,
-                                      "error_code": "update_failed", "error": "update operation failed"})
-                except Exception:
-                    self.connected = False
+                await self._send_update_result(
+                    response_ws,
+                    {"type": "update_result", "req_id": req_id, "ok": False,
+                     "error_code": "update_failed", "error": "update operation failed"},
+                )
             finally:
                 if applying and not self.restart_requested and not app_restart_scheduled:
                     self.update_applying = False
-                    if self.ws is not None:
-                        try:
-                            await self._send({"type": "update_ready"})
-                        except Exception:
-                            self.connected = False
+                    await self._send_update_result(response_ws, {"type": "update_ready"})
 
     async def emit(self, run_id: str, kind: str, payload: dict[str, Any]) -> None:
         event = self.store.add_event(run_id, kind, payload)

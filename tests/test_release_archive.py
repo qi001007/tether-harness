@@ -100,7 +100,7 @@ def test_standalone_plugin_archive_passes_offline_installer_preflight(tmp_path: 
     native_ui.parent.mkdir(parents=True)
     shutil.copy2(ROOT / "packages/tether-dsh-native-ui/lib/client.js", native_ui)
     for relative in (
-        "__init__.py", "updates.py", "updates_cli.py", "node/__init__.py", "node/dsh_sessions.py"
+        "__init__.py", "updates.py", "updates_cli.py", "release.py", "ed25519.py", "node/__init__.py", "node/dsh_sessions.py"
     ):
         destination = source_root / "tether" / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -113,6 +113,6 @@ def test_standalone_plugin_archive_passes_offline_installer_preflight(tmp_path: 
     )
     assert source_preflight.returncode == 0, source_preflight.stdout + source_preflight.stderr
     for relative in (
-        "__init__.py", "updates.py", "updates_cli.py", "node/__init__.py", "node/dsh_sessions.py"
+        "__init__.py", "updates.py", "updates_cli.py", "release.py", "ed25519.py", "node/__init__.py", "node/dsh_sessions.py"
     ):
         assert (source_root / "packages/tether-dsh-surface/updater/tether" / relative).is_file()

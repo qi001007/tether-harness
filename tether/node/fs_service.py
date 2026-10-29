@@ -8,6 +8,7 @@ policy on its own.
 from __future__ import annotations
 
 import base64
+import codecs
 import hashlib
 import json
 import mimetypes
@@ -76,6 +77,80 @@ def _inside(candidate: Path, root: Path) -> bool:
         return os.path.commonpath([_norm(candidate), _norm(root)]) == _norm(root)
     except ValueError:
         return False
+
+
+def _content_version(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def _path_version(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        while True:
+            chunk = stream.read(1024 * 1024)
+            if not chunk:
+                break
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _newline_name(text: str) -> str:
+    crlf = text.count("\r\n")
+    bare_lf = text.count("\n") - crlf
+    bare_cr = text.count("\r") - crlf
+    if crlf >= bare_lf and crlf >= bare_cr and crlf:
+        return "crlf"
+    if bare_cr > bare_lf:
+        return "cr"
+    return "lf"
+
+
+def _decode_text(data: bytes) -> tuple[str, str, str] | None:
+    if data.startswith(codecs.BOM_UTF8):
+        text = data.decode("utf-8-sig")
+        encoding = "utf-8-bom"
+    elif data.startswith(codecs.BOM_UTF16_LE):
+        text = data[len(codecs.BOM_UTF16_LE):].decode("utf-16-le")
+        encoding = "utf-16-le"
+    elif data.startswith(codecs.BOM_UTF16_BE):
+        text = data[len(codecs.BOM_UTF16_BE):].decode("utf-16-be")
+        encoding = "utf-16-be"
+    else:
+        if b"\x00" in data:
+            return None
+        try:
+            text = data.decode("utf-8")
+            encoding = "utf-8"
+        except UnicodeDecodeError:
+            try:
+                text = data.decode("gb18030")
+                encoding = "gb18030"
+            except UnicodeDecodeError:
+                return None
+    if text:
+        controls = sum(ord(char) < 32 and char not in "\t\n\r\f\b" for char in text)
+        if controls / len(text) > 0.02:
+            return None
+    return text, encoding, _newline_name(text)
+
+
+def _encode_text(text: str, encoding: str, newline: str) -> bytes:
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    separator = {"lf": "\n", "crlf": "\r\n", "cr": "\r"}.get(newline)
+    if separator is None:
+        raise FsError("unsupported newline mode", "bad_args")
+    normalized = normalized.replace("\n", separator)
+    if encoding == "utf-8":
+        return normalized.encode("utf-8")
+    if encoding == "utf-8-bom":
+        return codecs.BOM_UTF8 + normalized.encode("utf-8")
+    if encoding == "utf-16-le":
+        return codecs.BOM_UTF16_LE + normalized.encode("utf-16-le")
+    if encoding == "utf-16-be":
+        return codecs.BOM_UTF16_BE + normalized.encode("utf-16-be")
+    if encoding == "gb18030":
+        return normalized.encode("gb18030")
+    raise FsError("unsupported text encoding", "bad_args")
 
 
 class FsError(Exception):
@@ -393,7 +468,10 @@ class FsService:
         handler = getattr(self, "_op_" + op, None)
         if handler is None:
             raise FsError(f"unknown fs op: {op}", "bad_op")
-        return handler(args)
+        result = handler(args)
+        if isinstance(result, dict):
+            result.setdefault("device_id", self.policy.device)
+        return result
 
     def _op_list(self, args: dict[str, Any]) -> dict[str, Any]:
         p = self._resolve(args.get("path"))
@@ -424,6 +502,7 @@ class FsService:
         except FileNotFoundError as exc:
             raise FsError("not found", "not_found") from exc
         return {"path": str(p), "dir": p.is_dir(), "size": st.st_size, "mtime": st.st_mtime,
+                "version": _path_version(p) if p.is_file() else "",
                 "writable": self.policy.can_write(p, op="write")[0]}
 
     def _op_read(self, args: dict[str, Any]) -> dict[str, Any]:
@@ -452,15 +531,27 @@ class FsService:
         if not p.is_file():
             raise FsError("not a file", "not_file")
         suffix = p.suffix.lower()
-        size = p.stat().st_size
+        st = p.stat()
+        size = st.st_size
         writable = self.policy.can_write(p, op="write")[0]
-        result: dict[str, Any] = {"path": str(p), "size": size, "writable": writable}
+        result: dict[str, Any] = {
+            "path": str(p), "size": size, "writable": writable,
+            "version": _path_version(p), "mtime": st.st_mtime,
+            "editable": False,
+        }
         if suffix in TEXT_SUFFIXES or suffix in MARKDOWN_SUFFIXES:
-            chunk = p.read_bytes()[:MAX_PREVIEW_TEXT]
+            with p.open("rb") as stream:
+                chunk = stream.read(MAX_PREVIEW_TEXT)
+            decoded = _decode_text(chunk)
+            if decoded is None:
+                result.update({"kind": "unsupported", "mime": mimetypes.guess_type(str(p))[0] or ""})
+                return result
+            text, encoding, newline = decoded
+            truncated = size > MAX_PREVIEW_TEXT
             result.update({
                 "kind": "markdown" if suffix in MARKDOWN_SUFFIXES else "text",
-                "text": chunk.decode("utf-8", errors="replace"),
-                "truncated": size > MAX_PREVIEW_TEXT,
+                "text": text, "encoding": encoding, "newline": newline,
+                "truncated": truncated, "editable": writable and not truncated,
             })
             return result
         if suffix in IMAGE_SUFFIXES:
@@ -481,7 +572,8 @@ class FsService:
                 with zipfile.ZipFile(p) as archive:
                     infos = archive.infolist()[:500]
                     text = "\n".join(f"{item.filename}\t{item.file_size}" for item in infos)
-                result.update({"kind": "text", "text": text, "truncated": len(infos) >= 500})
+                result.update({"kind": "text", "text": text, "truncated": len(infos) >= 500,
+                               "editable": False})
                 return result
             except (OSError, zipfile.BadZipFile) as exc:
                 raise FsError(f"invalid zip archive: {exc}", "preview_unavailable") from exc
@@ -490,7 +582,8 @@ class FsService:
                 raise FsError("file too large to preview", "too_large")
             try:
                 rows = self._xlsx_rows(p)
-                result.update({"kind": "text", "text": "\n".join(rows), "truncated": len(rows) >= 2000})
+                result.update({"kind": "text", "text": "\n".join(rows), "truncated": len(rows) >= 2000,
+                               "editable": False})
                 return result
             except (OSError, KeyError, ValueError, zipfile.BadZipFile) as exc:
                 raise FsError(f"xlsx preview failed: {exc}", "preview_unavailable") from exc
@@ -504,11 +597,15 @@ class FsService:
                            "base64": base64.b64encode(data).decode("ascii"), "converted": True})
             return result
         if size <= MAX_PREVIEW_BYTES:
-            probe = p.read_bytes()[:8192]
-            if b"\x00" not in probe:
-                chunk = p.read_bytes()[:MAX_PREVIEW_TEXT]
-                result.update({"kind": "text", "text": chunk.decode("utf-8", errors="replace"),
-                               "truncated": size > MAX_PREVIEW_TEXT})
+            with p.open("rb") as stream:
+                chunk = stream.read(MAX_PREVIEW_TEXT)
+            decoded = _decode_text(chunk)
+            if decoded is not None:
+                text, encoding, newline = decoded
+                truncated = size > MAX_PREVIEW_TEXT
+                result.update({"kind": "text", "text": text, "encoding": encoding,
+                               "newline": newline, "truncated": truncated,
+                               "editable": writable and not truncated})
                 return result
         result.update({"kind": "unsupported", "mime": mimetypes.guess_type(str(p))[0] or ""})
         return result
@@ -627,17 +724,30 @@ class FsService:
         content = args.get("text")
         if not isinstance(content, str):
             raise FsError("text is required", "bad_args")
-        data = content.encode("utf-8")
+        encoding = str(args.get("encoding") or "utf-8")
+        newline = str(args.get("newline") or "lf")
+        data = _encode_text(content, encoding, newline)
         self._write_guard(p, "write", bytes=len(data))
         if p.exists() and not args.get("overwrite", True):
             raise FsError("file exists", "exists")
+        expected_version = args.get("expected_version")
+        if expected_version is not None:
+            if not isinstance(expected_version, str) or len(expected_version) != 64:
+                raise FsError("expected_version must be a SHA-256 digest", "bad_args")
+            current_version = _path_version(p) if p.exists() else ""
+            if current_version != expected_version:
+                raise FsError("file changed on target device", "conflict")
         p.parent.mkdir(parents=True, exist_ok=True)
         tmp = p.with_name(p.name + ".tether-tmp")
         tmp.write_bytes(data)
         os.replace(tmp, p)
+        st = p.stat()
+        version = _content_version(data)
         self.audit.add(op="write", path=str(p), mode=self.policy.data.get("mode"),
-                       phase="result", result="ok", bytes=len(data))
-        return {"path": str(p), "bytes": len(data)}
+                       phase="result", result="ok", bytes=len(data), version=version)
+        return {"path": str(p), "bytes": len(data), "size": st.st_size,
+                "mtime": st.st_mtime, "version": version,
+                "encoding": encoding, "newline": newline}
 
     def _op_mkdir(self, args: dict[str, Any]) -> dict[str, Any]:
         p = self._resolve(args.get("path"))
@@ -656,9 +766,12 @@ class FsService:
             raise FsError("destination exists", "exists")
         dst.parent.mkdir(parents=True, exist_ok=True)
         os.replace(src, dst)
+        st = dst.stat()
         self.audit.add(op="rename", path=str(src), dest=str(dst), mode=self.policy.data.get("mode"),
                        phase="result", result="ok")
-        return {"path": str(src), "dest": str(dst)}
+        return {"path": str(src), "dest": str(dst), "size": st.st_size,
+                "mtime": st.st_mtime,
+                "version": _path_version(dst) if dst.is_file() else None}
 
     def _op_copy(self, args: dict[str, Any]) -> dict[str, Any]:
         src = self._resolve(args.get("path"))
