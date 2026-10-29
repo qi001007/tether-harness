@@ -31,7 +31,7 @@ import psutil
 from .release import ReleaseSignatureError, verify_signature
 
 
-UPDATER_VERSION = "0.2.19"
+UPDATER_VERSION = "0.2.20"
 LEGACY_BASELINE_VERSION = "0.2.0"
 UPDATE_PROTOCOL = 1
 MIN_UPDATE_PROTOCOL = 1
@@ -40,6 +40,36 @@ DEFAULT_MANIFEST_URL = (
     "https://github.com/qi001007/tether-harness/releases/latest/download/tether-update.json"
 )
 MAX_MANIFEST_BYTES = 256 * 1024
+
+GITHUB_LATEST_RE = re.compile(r"https://github\.com/([^/]+)/([^/]+)/releases/latest/download/([^/?#]+)")
+_LATEST_RESOLVE_CACHE: dict[str, tuple[float, str]] = {}
+_LATEST_RESOLVE_TTL = 300.0
+
+
+def _resolve_latest_manifest_url(url: str) -> str:
+    """Resolve GitHub's edge-cached latest redirect through the release API."""
+    match = GITHUB_LATEST_RE.fullmatch(url)
+    if not match:
+        return url
+    now = time.monotonic()
+    cached = _LATEST_RESOLVE_CACHE.get(url)
+    if cached is not None and cached[0] > now:
+        return cached[1]
+    owner, repo, asset = match.groups()
+    resolved = url
+    try:
+        request = urllib.request.Request(
+            f"https://api.github.com/repos/{owner}/{repo}/releases/latest",
+            headers={"Accept": "application/vnd.github+json", "User-Agent": "Tether-Updater"})
+        with urllib.request.urlopen(request, timeout=10) as response:
+            data = json.loads(response.read(MAX_MANIFEST_BYTES))
+        tag = data.get("tag_name")
+        if isinstance(tag, str) and re.fullmatch(r"v\d+\.\d+\.\d+", tag):
+            resolved = f"https://github.com/{owner}/{repo}/releases/download/{tag}/{asset}"
+    except Exception:
+        resolved = url
+    _LATEST_RESOLVE_CACHE[url] = (now + _LATEST_RESOLVE_TTL, resolved)
+    return resolved
 MAX_ARCHIVE_BYTES = 100 * 1024 * 1024
 MAX_UNPACKED_BYTES = 256 * 1024 * 1024
 MAX_FILE_BYTES = 32 * 1024 * 1024
@@ -421,7 +451,8 @@ class UpdateManager:
 
     def _read_manifest(self, url: str | None = None, *, timeout: float = MANIFEST_CHECK_TIMEOUT) -> dict[str, Any]:
         source = url or self.manifest_url
-        manifest = _json_object(self._fetch(source, MAX_MANIFEST_BYTES, timeout=timeout))
+        manifest = _json_object(self._fetch(_resolve_latest_manifest_url(source), MAX_MANIFEST_BYTES, timeout=timeout))
+        self._last_source = source
         if type(manifest.get("schema")) is not int or manifest.get("schema") != 1:
             raise UpdateError("unsupported_manifest")
         channel = manifest.get("channel", "stable")

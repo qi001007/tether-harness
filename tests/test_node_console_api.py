@@ -95,14 +95,15 @@ def test_local_api_matches_controller_routes_and_enforces_policy(local_api) -> N
 def test_local_api_exposes_the_same_host_surface_url(local_api) -> None:
     base = local_api["api"]
     api = SimpleNamespace(fs=base.fs, dsh_sessions=base.dsh_sessions,
-                          native_surface=SimpleNamespace(local_url=lambda: "http://127.0.0.1:43123/?token=local"))
+                          native_surface=SimpleNamespace(local_url=lambda: "http://127.0.0.1:43123/?token=local",
+                                                          descriptor_info=lambda: {"pid": 4321, "updated_at": 1.0}))
     store = SimpleNamespace(snapshot=lambda device: {"device": device})
     server = console.start(store, "DEV", 0, api=api, token="local-token")
     try:
         port = server.server_address[1]
         status, body = call(port, "GET", "/api/devices/DEV/dsh/surface")
         assert status == 200
-        assert body == {"available": True, "url": "http://127.0.0.1:43123/?token=local"}
+        assert body == {"available": True, "url": "http://127.0.0.1:43123/?token=local", "pid": 4321, "updated_at": 1.0}
         status, body = call(port, "GET", "/api/devices/DEV/dsh/surface", token=None)
         assert status == 401 and body["detail"]["code"] == "unauthorized"
         status, body = call(port, "GET", "/api/devices/OTHER/dsh/surface")

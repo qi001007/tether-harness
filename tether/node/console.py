@@ -105,6 +105,9 @@ class _Handler(BaseHTTPRequestHandler):
                 self._error(409, "native DSH surface unavailable", "descriptor_missing")
                 return
             result = {"available": True, "url": url}
+            info = getattr(surface, "descriptor_info", None)
+            if callable(info):
+                result.update(info() or {})
         elif tail == ["dsh", "sessions"]:
             result = {"sessions": self.api.dsh_sessions.list(),
                       "home": str(self.api.dsh_sessions.home)}

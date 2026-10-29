@@ -9244,7 +9244,7 @@ function createTetherPanel({ React: React2, Native, host }) {
         }
         const url = new URL(surfaceUrl);
         url.searchParams.set("tether_native", "1");
-        if (current) setState({ deviceId, status: "ready", url: url.href });
+        if (current) setState({ deviceId, status: "ready", url: url.href, pid: Number(data.pid) || 0 });
       }).catch((error) => {
         if (!current) return;
         if (nativeSurfaceTransientError(error) && !retryTimerRef.current && retryCountRef.current < NATIVE_SURFACE_RETRIES) {
@@ -9275,10 +9275,15 @@ function createTetherPanel({ React: React2, Native, host }) {
             try {
               const fresh = new URL(data.url);
               const current = new URL(prev.url);
+              const pid = Number(data.pid) || 0;
+              if (pid && (prev.pid || 0) !== pid) {
+                fresh.searchParams.set("tether_native", "1");
+                return { deviceId, status: "ready", url: fresh.href, pid };
+              }
               const sameHostToken = fresh.pathname === "/" && !!fresh.searchParams.get("token");
               if (sameHostToken ? fresh.searchParams.get("token") === current.searchParams.get("token") : current.origin === fresh.origin) return prev;
               fresh.searchParams.set("tether_native", "1");
-              return { deviceId, status: "ready", url: fresh.href };
+              return { deviceId, status: "ready", url: fresh.href, pid: pid || (prev.pid || 0) };
             } catch (_) {
               return prev;
             }
@@ -9296,7 +9301,7 @@ function createTetherPanel({ React: React2, Native, host }) {
       "div",
       { className: "tether-native-surface", style: nativeSurfaceContainerStyle(visible) },
       currentState.status === "ready" && currentState.deviceId === deviceId && online ? h("iframe", {
-        key: deviceId,
+        key: deviceId + ":" + (currentState.pid || 0),
         src: currentState.url,
         title: "\u76EE\u6807\u8BBE\u5907\u7684 DSH \u539F\u751F\u5DE5\u4F5C\u533A",
         referrerPolicy: "no-referrer",
