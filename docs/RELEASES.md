@@ -1,5 +1,14 @@
 # Public client releases
 
+## v0.2.28
+
+Release candidate hotfix for a single release snapshot:
+
+- `normalizeUpdateLatest` now takes the highest latest version across the whole refresh and applies it to every component, not a per-component maximum. A Node disk-cache record at 0.2.26 can no longer leave app/node cards at 0.2.26 while the plugin updater reports 0.2.27.
+- Includes the 0.2.27 fixes: a local product update skips an already-current Node, a failed Node check no longer aborts the plugin, and device sequences skip components already at the normalized latest.
+
+Gates: pytest 125 passed / 1 skipped, mjs 175/175, cjs 6/6, `build.mjs --check`, reproducible Web bundle, `validate_versions()`.
+
 ## v0.2.27
 
 Release candidate hotfix for update consistency and the local plugin entry:
