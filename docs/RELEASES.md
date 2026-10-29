@@ -1,5 +1,28 @@
 # Public client releases
 
+## v0.2.24
+
+[GitHub Release](https://github.com/qi001007/tether-harness/releases/tag/v0.2.24) · tag `v0.2.24` → `a6de4a3` · workflow run `40828646049`.
+
+- The plugin no longer embeds the local DSH page. The desktop host runs at `dsh-app://app`, and DSH mints its session cookie with `SameSite=Strict`, so the cookie is never sent to a `127.0.0.1` subframe (401); a `dsh-app` subframe has no preload and stalls at `Loading plugins…`. The local device now shows “已在 DSH 中”; remote devices keep using the Hub surface.
+- The update center shows one manifest latest for every device (falling back to the current version only when the manifest has none). The display clamp that substituted the current version for a newer local build is gone, so local and remote cards can no longer disagree.
+- Background update checks no longer raise a red toast or light the red dot on 更新; explicit actions still report errors.
+- Updater hardening: a plugin apply while DSH is closed no longer leaves `restart_required` set forever (it clears when the next host publishes after the apply); the DSH restart helper strips an inherited `ELECTRON_RUN_AS_NODE` and relaunches once more if no new descriptor appears within 20 s; the APP check timeout is 90 s so the Hub→GitHub fallback fits.
+
+Gates: pytest 117 passed / 1 skipped, mjs 158/158, cjs 6/6, `build.mjs --check` and `validate_versions` pass; both bundles rebuilt. Real desktop DSH window (CDP): the local panel settles on the local message with no 401 or stalled frame; the update center reports `0.2.24(0.2.23)` locally and `0.2.21(0.2.23)` for LAPTOP-01 with the same latest.
+
+## v0.2.23
+
+[GitHub Release](https://github.com/qi001007/tether-harness/releases/tag/v0.2.23) · tag `v0.2.23` → `d7ddaaf` · workflow run `40823756564` · assets app 411,239 B / node 71,555 B / plugin 415,745 B.
+
+The Tether plugin entry no longer activates inside an embedded DSH page (`window.top !== window.self`), which removed the DSH-inside-DSH recursion. The local iframe still pointed at a cross-origin loopback or gateway URL, so the desktop host kept failing; 0.2.24 removed that path.
+
+## v0.2.22
+
+[GitHub Release](https://github.com/qi001007/tether-harness/releases/tag/v0.2.22) · tag `v0.2.22` → `5968952` · workflow run `40822614336` · assets app 410,782 B / node 71,554 B / plugin 415,460 B.
+
+The plugin’s native panel switched to the current DSH session (loopback token URL) and the node re-authenticates once on a rotated session. In the desktop host the Strict cookie still blocks the subframe; 0.2.24 replaced this with the local state.
+
 ## v0.2.21
 
 [GitHub Release](https://github.com/qi001007/tether-harness/releases/tag/v0.2.21) · tag `v0.2.21` → `5d01994` · workflow run `40821192816`.

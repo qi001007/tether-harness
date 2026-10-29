@@ -2,6 +2,15 @@
 
 更新日期：2026-10-29。
 
+## 当前实测状态：v0.2.24 已发布
+
+- tag `v0.2.24` → `a6de4a3`；发行工作流 `40828646049` 成功；资产 app 412,251 B、node 72,254 B、plugin 416,117 B；manifest 验签通过、大小/SHA 一致；Release 已发布（2026-10-29T06:23:28Z）。
+- 插件本机面板不再内嵌 DSH：桌面宿主顶层是 `dsh-app://app`，DSH 的会话 Cookie 为 `SameSite=Strict`，127.0.0.1 子 frame 收不到；`dsh-app` 子 frame 又缺 preload，会停在 `Loading plugins…`。本机显示“已在 DSH 中”，远端设备仍走 Hub surface；真机窗口（CDP 取证）无 401、无卡死。
+- 更新中心 latest 统一取清单值：本机 `插件 0.2.24(0.2.24)/Node 0.2.24(0.2.24)`，LAPTOP-01 同为 `0.2.24(0.2.24)`；后台自动检查失败不再弹红 toast、不再点亮“更新”红点。
+- 远程更新 LAPTOP-01（0.2.21 → 0.2.24，目标端零手工）：Node 19 文件后自动重启；插件 40 文件后 DSH 自动重启并清掉 `restart_required`；APP 34 文件后自动重启。两机 APP/Node/插件均 `0.2.24`，surface 可用。
+- 本机实验台：仓库包 `0.2.24`，APP/Node 重启后上报 `0.2.24`；DSH desktop profile 指向仓库包并已加载 `0.2.24`。
+- 已知边界：Hub mirror 的 GitHub latest 解析缓存 `latest_ttl=300s`（服务端 `tether-harness-server`，不在本仓），发布后最多约 5 分钟内仍可能显示旧 latest；节点/APP 的状态文件会保留 `restart_required=true`，UI 以运行版本判定完成，不阻塞更新链。
+
 ## 当前实测状态：v0.2.21 已发布
 
 - tag `v0.2.21` → `5d01994`；发行工作流 `40821192816` 成功；资产 app 410,118 B、node 71,555 B、plugin 415,137 B，manifest 验签通过、大小/SHA 一致；Release 已发布。
