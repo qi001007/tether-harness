@@ -9122,7 +9122,7 @@ function createTetherPanel({ React: React2, Native, host }) {
   function nativeSurfaceTransientError(error) {
     return !!error && (error.surfaceStatus === 502 || error.surfaceStatus === 504 || error.surfaceCode === "device_offline" || error.surfaceCode === "surface_timeout");
   }
-  function NativeSurface({ deviceId, online, visible }) {
+  function NativeSurface({ deviceId, online, visible, localDeviceId }) {
     const [state, setState] = React2.useState({ deviceId, status: deviceId ? "loading" : "no-device", url: "" });
     const [attempt, setAttempt] = React2.useState(0);
     const currentState = nativeSurfaceStateForDevice(state, deviceId, online);
@@ -9130,6 +9130,24 @@ function createTetherPanel({ React: React2, Native, host }) {
     const retryTimerRef = React2.useRef(null);
     const surfaceStateRef = React2.useRef(currentState);
     surfaceStateRef.current = currentState;
+    const fetchSurfaceDescriptor = async (id) => {
+      const bases = [];
+      const preferred = host && typeof host.surfaceBase === "function" ? host.surfaceBase(id === localDeviceId) : "";
+      if (preferred) bases.push(preferred);
+      bases.push(ACTIVE_BASE);
+      let lastError = null;
+      for (const base of [...new Set(bases)]) {
+        try {
+          const response = await fetch(base + "/api/devices/" + encodeURIComponent(id) + "/dsh/surface", { signal: AbortSignal.timeout(8e3) });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok && (response.status === 502 || response.status === 504) && base !== ACTIVE_BASE) continue;
+          return { response, data };
+        } catch (error) {
+          lastError = error;
+        }
+      }
+      throw lastError || new Error("\u539F\u751F DSH \u9875\u9762\u6682\u4E0D\u53EF\u7528");
+    };
     React2.useEffect(() => {
       retryCountRef.current = 0;
       if (retryTimerRef.current) {
@@ -9180,12 +9198,7 @@ function createTetherPanel({ React: React2, Native, host }) {
         };
       }
       setState({ deviceId, status: "loading", url: "" });
-      fetch(ACTIVE_BASE + "/api/devices/" + encodeURIComponent(deviceId) + "/dsh/surface", { signal: AbortSignal.timeout(8e3) }).then(async (response) => {
-        let data = {};
-        try {
-          data = await response.json();
-        } catch (_) {
-        }
+      fetchSurfaceDescriptor(deviceId).then(async ({ response, data }) => {
         if (!response.ok) {
           const detail = data.detail || {};
           const code = detail.code;
@@ -9239,15 +9252,16 @@ function createTetherPanel({ React: React2, Native, host }) {
       let alive = true;
       const timer = setInterval(async () => {
         try {
-          const res = await fetch(ACTIVE_BASE + "/api/devices/" + encodeURIComponent(deviceId) + "/dsh/surface", { signal: AbortSignal.timeout(8e3) });
-          if (!res.ok) return;
-          const data = await res.json();
+          const { response, data } = await fetchSurfaceDescriptor(deviceId);
+          if (!response.ok) return;
           if (!alive || !data.available || !isSafeNativeSurfaceUrl(data.url)) return;
           setState((prev) => {
             if (prev.status !== "ready" || !prev.url) return prev;
             try {
               const fresh = new URL(data.url);
-              if (new URL(prev.url).origin === fresh.origin) return prev;
+              const current = new URL(prev.url);
+              const sameHostToken = fresh.pathname === "/" && !!fresh.searchParams.get("token");
+              if (sameHostToken ? fresh.searchParams.get("token") === current.searchParams.get("token") : current.origin === fresh.origin) return prev;
               fresh.searchParams.set("tether_native", "1");
               return { deviceId, status: "ready", url: fresh.href };
             } catch (_) {
@@ -11967,7 +11981,7 @@ function createTetherPanel({ React: React2, Native, host }) {
         h(
           "main",
           { style: { flex: "1 1 auto", display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0 } },
-          h(NativeSurface, { deviceId, online: deviceOnline, visible: view === "chat" }),
+          h(NativeSurface, { deviceId, online: deviceOnline, visible: view === "chat", localDeviceId: appLocalDevice }),
           view === "files" ? renderExplorer() : view === "network" ? renderNetwork() : null
         )
       ),
@@ -12502,7 +12516,8 @@ function createWebNative(React2) {
 function createWebHost({ apiBase = "" } = {}) {
   return {
     kind: "web",
-    apiBase: () => apiBase
+    apiBase: () => apiBase,
+    surfaceBase: () => apiBase
   };
 }
 

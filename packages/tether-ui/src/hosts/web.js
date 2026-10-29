@@ -181,6 +181,7 @@ export function createWebNative(React) {
 export function createWebHost({ apiBase = '' } = {}) {
   return {
     kind: 'web',
-    apiBase: () => apiBase
+    apiBase: () => apiBase,
+    surfaceBase: () => apiBase
   }
 }

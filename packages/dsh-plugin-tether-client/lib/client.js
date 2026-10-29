@@ -383,6 +383,7 @@ function createDshHost({ apiBase = DSH_API_BASE, pluginVersion = null, localPlug
       const hub = storedHub()
       return hub ? [hub.url.replace(/\/+$/, ''), DSH_APP_BASE, apiBase] : [DSH_APP_BASE, apiBase]
     },
+    surfaceBase: (isLocal) => (isLocal ? DSH_APP_BASE : ''),
     apiHeaders: (base) => {
       const hub = storedHub()
       const normalize = (value) => String(value || '').replace(/\/+$/, '')
@@ -2022,7 +2023,7 @@ function createTetherPanel({ React, Native, host }) {
         || error.surfaceCode === 'device_offline' || error.surfaceCode === 'surface_timeout')
     }
 
-    function NativeSurface({ deviceId, online, visible }) {
+    function NativeSurface({ deviceId, online, visible, localDeviceId }) {
       const [state, setState] = React.useState({ deviceId, status: deviceId ? 'loading' : 'no-device', url: '' })
       const [attempt, setAttempt] = React.useState(0)
       const currentState = nativeSurfaceStateForDevice(state, deviceId, online)
@@ -2030,6 +2031,23 @@ function createTetherPanel({ React, Native, host }) {
       const retryTimerRef = React.useRef(null)
       const surfaceStateRef = React.useRef(currentState)
       surfaceStateRef.current = currentState
+
+      const fetchSurfaceDescriptor = async (id) => {
+        const bases = []
+        const preferred = host && typeof host.surfaceBase === 'function' ? host.surfaceBase(id === localDeviceId) : ''
+        if (preferred) bases.push(preferred)
+        bases.push(ACTIVE_BASE)
+        let lastError = null
+        for (const base of [...new Set(bases)]) {
+          try {
+            const response = await fetch(base + '/api/devices/' + encodeURIComponent(id) + '/dsh/surface', { signal: AbortSignal.timeout(8000) })
+            const data = await response.json().catch(() => ({}))
+            if (!response.ok && (response.status === 502 || response.status === 504) && base !== ACTIVE_BASE) continue
+            return { response, data }
+          } catch (error) { lastError = error }
+        }
+        throw lastError || new Error('原生 DSH 页面暂不可用')
+      }
 
       React.useEffect(() => {
         retryCountRef.current = 0
@@ -2071,10 +2089,8 @@ function createTetherPanel({ React, Native, host }) {
         if (!deviceId) { setState({ deviceId, status: 'no-device', url: '' }); return () => { current = false } }
         if (!online) { setState({ deviceId, status: 'offline', url: '' }); return () => { current = false } }
         setState({ deviceId, status: 'loading', url: '' })
-        fetch(ACTIVE_BASE + '/api/devices/' + encodeURIComponent(deviceId) + '/dsh/surface', { signal: AbortSignal.timeout(8000) })
-          .then(async (response) => {
-            let data = {}
-            try { data = await response.json() } catch (_) { /* empty body */ }
+        fetchSurfaceDescriptor(deviceId)
+          .then(async ({ response, data }) => {
             if (!response.ok) {
               const detail = data.detail || {}
               const code = detail.code
@@ -2131,15 +2147,17 @@ function createTetherPanel({ React, Native, host }) {
         let alive = true
         const timer = setInterval(async () => {
           try {
-            const res = await fetch(ACTIVE_BASE + '/api/devices/' + encodeURIComponent(deviceId) + '/dsh/surface', { signal: AbortSignal.timeout(8000) })
-            if (!res.ok) return
-            const data = await res.json()
+            const { response, data } = await fetchSurfaceDescriptor(deviceId)
+            if (!response.ok) return
             if (!alive || !data.available || !isSafeNativeSurfaceUrl(data.url)) return
             setState((prev) => {
               if (prev.status !== 'ready' || !prev.url) return prev
               try {
                 const fresh = new URL(data.url)
-                if (new URL(prev.url).origin === fresh.origin) return prev
+                const current = new URL(prev.url)
+                const sameHostToken = fresh.pathname === '/' && !!fresh.searchParams.get('token')
+                if (sameHostToken ? fresh.searchParams.get('token') === current.searchParams.get('token')
+                  : current.origin === fresh.origin) return prev
                 fresh.searchParams.set('tether_native', '1')
                 return { deviceId, status: 'ready', url: fresh.href }
               } catch (_) { return prev }
@@ -4282,7 +4300,7 @@ function createTetherPanel({ React, Native, host }) {
             treeSelected
           }),
           h('main', { style: { flex: '1 1 auto', display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 } },
-            h(NativeSurface, { deviceId, online: deviceOnline, visible: view === 'chat' }),
+            h(NativeSurface, { deviceId, online: deviceOnline, visible: view === 'chat', localDeviceId: appLocalDevice }),
             view === 'files' ? renderExplorer() : (view === 'network' ? renderNetwork() : null)
         ),
         ),

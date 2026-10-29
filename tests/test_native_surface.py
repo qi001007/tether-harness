@@ -27,6 +27,11 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Location", "/login")
             self.end_headers()
             return
+        if getattr(self.server, "force_401_once", False):
+            self.server.force_401_once = False
+            self.send_response(401)
+            self.end_headers()
+            return
         if self.headers.get("Cookie") != "session=secret-cookie":
             self.send_response(401)
             self.end_headers()
@@ -237,6 +242,16 @@ def test_html_response_drops_native_sidebar_seam(native_home):
     assert "content-encoding" not in result["headers"]
     assert "etag" not in result["headers"]
     assert result["headers"]["cache-control"] == "no-store"
+
+
+def test_http_reauthenticates_once_after_dsh_rejects_the_session(native_home):
+    home, _port, server = native_home
+    surface = NativeSurface(home)
+    assert surface._load()
+    server.force_401_once = True
+    result = surface._http({"method": "GET", "path": "/api/anything"})
+    assert result["status"] == 200
+    assert base64.b64decode(result["body_base64"]) == b"native"
 
 
 def test_local_url_only_when_the_descriptor_is_live(native_home, tmp_path):
