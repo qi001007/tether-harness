@@ -34,6 +34,17 @@ test('a one-click device run owns the card until the final refresh finishes', ()
     'a pending restart must not hide an available one-click update')
 })
 
+test('a local product update skips a current node and still runs the plugin', () => {
+  assert.match(source, /const localNodeInfo = localId \? infoFor\('node', localId\) : null/)
+  assert.match(source, /if \(localId && updateNeededFor\(localNodeInfo\)\)/)
+  assert.match(source, /if \(nodeFailure && !failure\) failure = 'Node 更新失败'/)
+  assert.match(source, /if \(!updateNeededFor\(infoFor\(component, item\.device_id\)\)\) continue/)
+})
+
+test('the update center commits one normalized latest snapshot per refresh', () => {
+  assert.match(source, /await Promise\.allSettled\(checks\)[\s\S]*normalizeUpdateLatest\(current\)/)
+})
+
 test('a local plugin apply that scheduled a DSH restart does not fall back to a manual button', () => {
   assert.match(source, /outcome\.result\.restart_scheduled === true/)
   assert.match(source, /setNotice\('插件已安装，DSH 正在自动重启…'\)/)

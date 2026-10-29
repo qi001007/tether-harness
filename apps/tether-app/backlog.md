@@ -1,4 +1,5 @@
 # tether-app backlog
+- 2026-10-30：0.2.27 热修版本元数据；更新中心 latest 归一化。
 - 2026-10-30：APP/Node 一键更新卡改为单一运行态；版本元数据推进到 `0.2.26` 候选。
 - 2026-10-29：主人认可资源管理器第五版后，将 APP package 与 lock 根元数据推进到 `0.2.25`；实际发布与安装状态仍以 release/进度文档的后续验收为准。
 - 2026-10-28：APP package.json 与 package-lock 根元数据升至 `0.2.12`，等待 release gate。
