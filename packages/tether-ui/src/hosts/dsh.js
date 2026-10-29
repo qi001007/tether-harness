@@ -229,7 +229,7 @@ export async function addDshTargetAttachment(owner, bridge, sessionId, entry, is
   return file
 }
 
-export function createDshTargetAttachments(React, Native, bridge) {
+export function createDshTargetAttachments(React, Native, bridge, pickerCommand) {
   const h = React.createElement
   return function DshTargetAttachments(props) {
     const [open, setOpen] = React.useState(false)
@@ -263,6 +263,12 @@ export function createDshTargetAttachments(React, Native, bridge) {
       catch (cause) { if (mounted.current) setError(cause.message || '读取目标设备目录失败') }
       finally { if (mounted.current) setBusy(false) }
     }
+    React.useEffect(() => {
+      if (!pickerCommand) return undefined
+      const open = () => { if (!busy && props.canAcceptDrop && props.sessionId) void openPicker() }
+      pickerCommand.open = open
+      return () => { if (pickerCommand.open === open) pickerCommand.open = null }
+    }, [busy, props.canAcceptDrop, props.sessionId])
     const enterDirectory = async (item) => {
       setBusy(true); setError('')
       try {

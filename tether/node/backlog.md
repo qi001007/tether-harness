@@ -1,4 +1,6 @@
 # 修改记录
+- 2026-10-29：文件预览/状态/写入返回目标 `device_id` 与 SHA-256 版本；文本识别保留 UTF-8 BOM/UTF-16/GB18030 和 CRLF/LF，完整可解码文本才可编辑；写入使用 `expected_version` 拒绝覆盖目标端外部修改。
+- 2026-10-29：P0 WebSocket 稳定性候选修复：Node 控制面连接不再继承桌面通用 HTTP/SOCKS 代理；每个更新请求的结果绑定原接收 WebSocket，断线后的旧任务不得跨重连发送，关闭态发送不再误报为更新器失败。
 - 2026-10-28：v0.2.10 候选将 APP 重启代理改为 Explorer→临时 CMD→隐藏 PowerShell worker，避免依赖 Task Scheduler；保留按实际安装根路径匹配 Electron、等待回包和重连日志。
 
 - 2026-10-28：Node 远程更新注册 app 组件，保留 `app_version` 能力上报；APP apply 将更新器的 `restart_required` 结果透传给 Hub。新增 app apply 与能力回归。

@@ -4,6 +4,7 @@ import { createTetherPanel } from '../src/app.js'
 import { createWebHost, createWebNative } from '../src/hosts/web.js'
 import { createElectronHost } from '../src/hosts/electron.js'
 import { createAppErrorBoundary } from './app-error-boundary.js'
+import * as EditorRuntime from '../src/monaco-runtime.js'
 
 function fail(error) {
   const box = document.getElementById('root')
@@ -19,7 +20,8 @@ try {
   const panel = createTetherPanel({
     React,
     Native: createWebNative(React),
-    host: inApp ? createElectronHost({ apiBase: '' }) : createWebHost({ apiBase: '' })
+    host: inApp ? createElectronHost({ apiBase: '' }) : createWebHost({ apiBase: '' }),
+    EditorRuntime
   })
   const root = createRoot(document.getElementById('root'))
   const AppErrorBoundary = createAppErrorBoundary(React)

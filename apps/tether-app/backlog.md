@@ -1,4 +1,5 @@
 # tether-app backlog
+- 2026-10-29：主人认可资源管理器第五版后，将 APP package 与 lock 根元数据推进到 `0.2.25`；实际发布与安装状态仍以 release/进度文档的后续验收为准。
 - 2026-10-28：APP package.json 与 package-lock 根元数据升至 `0.2.12`，等待 release gate。
 - 2026-10-28：公开 APP 版本升至 `0.2.11`，并在窗口首次加载前增加最多 8 秒服务启动等待和最多 3 秒本机 Node API 就绪探测；超时仍展示 UI。
 - 2026-10-28：窗口加载前最多等待 supervisor 8 秒；Hub 模式的 APP 本机 Node 启动后，以当前设备身份和本进程 token 对本机 policy 只读接口最多轮询 3 秒，超时或启动失败仍加载可诊断 UI。回归 `test_app_startup_readiness.mjs`。

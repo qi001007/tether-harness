@@ -19,6 +19,8 @@ $UpdaterFiles = @(
   "__init__.py",
   "updates.py",
   "updates_cli.py",
+  "release.py",
+  "ed25519.py",
   "node\__init__.py",
   "node\dsh_sessions.py"
 )

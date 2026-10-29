@@ -1,5 +1,18 @@
 # Public client releases
 
+## v0.2.25
+
+Release candidate for the accepted remote-development workspace and connection-stability batch:
+
+- The file explorer now uses Monaco `0.57.0` for editable code and Markdown, with device/path-isolated models, VSCode-like syntax themes, minimap, `Ctrl+S`, target path status, encoding/newline preservation, SHA-256 conflict detection, and target-device version polling. Ordinary code opens directly in the editor; only Markdown and table formats expose rendering switches.
+- File create, rename, save, copy and paste continue to execute on the selected target device. Responses are device-bound when the node supplies an identity, while released nodes through 0.2.24 remain compatible when the field is absent. The DSH composer keeps local upload and adds a separate target-device file entry.
+- The accepted explorer chrome uses neutral white/gray/black layers. The file tree, line-number gutter and code surface are `#efeff1`, `#f7f7f8` and `#ffffff`; the gutter keeps 13px visual whitespace without an artificial divider. Current-line background starts in the code area and the active line number only changes text color.
+- Connection and update entries now share semantic status dots. Update availability is red, current/online is green, failure/offline is mapped by the corresponding card state, and background update-check failures remain silent outside the update center.
+- Node control WebSockets opt out of inherited environment proxies when the installed `websockets` runtime supports it. Update replies are bound to the socket that received the request, so closing connections no longer leak `InvalidStateError` into a replacement connection.
+- The source-installed DSH updater includes the same `release.py` and `ed25519.py` files as release archives, preventing the local plugin card from reporting `updater_missing`.
+
+Pre-release gates: pytest 123 passed / 1 skipped, mjs 167/167, cjs 6/6, targeted editor regression 8/8, both shared bundles rebuilt and checked, and `validate_versions()` passed. DESKTOP-LOCAL held the candidate Node connection for 12.8 minutes without a keepalive timeout, disconnect, or `InvalidStateError`; release publication and installed two-device update acceptance are recorded separately after completion.
+
 ## v0.2.24
 
 [GitHub Release](https://github.com/qi001007/tether-harness/releases/tag/v0.2.24) · tag `v0.2.24` → `a6de4a3` · workflow run `40828646049`.

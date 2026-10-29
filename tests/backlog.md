@@ -1,4 +1,11 @@
 # 修改记录
+- 2026-10-29：F79 第五版回归固定行号区与代码区无人工边线、13px 留白保留，以及亮暗行号区新灰阶 `#f7f7f8` / `#232325`；定向代码视图 8/8、全量 167 mjs / 6 cjs / 123 pytest（1 skipped）通过。
+- 2026-10-29：F79 第四版回归固定 Monaco 22px 装饰区、13px 分界/留白层、行号栏独立灰阶以及 `renderLineHighlight='line'`，防止当前行矩形覆盖行号；定向 8/8、全量 167 mjs / 6 cjs / 123 pytest（1 skipped）通过。
+- 2026-10-29：F79 第三版回归固定资源树/行号栏灰阶、扩展名徽标标签、无通用文件图标及 Monaco 16px 装饰区；定向 8/8、全量 167 mjs / 6 cjs / 123 pytest（1 skipped）通过。
+- 2026-10-29：F79 第二版回归覆盖中性白灰黑 chrome、无蓝色状态条/彩色标签线、普通代码直接使用唯一 Monaco 路径、Markdown 专属切换、常见语言注册及 VSCode 式语法色板；定向 29/29、全量 167 mjs / 6 cjs / 123 pytest（1 skipped）通过。
+- 2026-10-29：新增资源管理器分层工作台与可见命令组回归，断言各区域色差 token、无常驻 1px pane 边线、Monaco minimap/连字，以及新建/复制/粘贴/重命名/删除接线；原生 surface 顺序断言同步识别 `tether-workbench`，全量 166 mjs / 6 cjs / 123 pytest（1 skipped）通过。
+- 2026-10-29：`test_native_surface_client` 固定内嵌 DSH 去硬分界线契约，继续保留 embedded 守卫与不注册嵌套 Tether 面板断言。
+- 2026-10-29：新增目标文件身份/编码/换行/SHA-256 版本与冲突回归；共享 UI 覆盖 Monaco 按设备+路径 model、固定目标保存、DSH 本机/目标文件双入口和状态圆点映射。
 - 2026-10-29：新增 `test_explorer_navigation.mjs`：历史栈前进/后退/新导航清空 forward、目录优先的三种排序与升降序、搜索大小写与空查询过滤，以及工具栏/列头/搜索空态接线断言。
 - 2026-10-28：新增本机 DSH 更新确认流程回归，覆盖 owner 在线重载、重载后运行版本核对，以及 no-HMR/运行版本未追平时停止自动操作并明确提示。
 - 2026-10-28：新增原生目标设备附件与 surface owner RPC 回归，覆盖 owner identity、session workspace API、路径 capability、readBytes 二进制跨块无损、超限/拒绝及设备/会话切换后不 attach。
@@ -69,6 +76,7 @@
 - 2026-10-28：修复更新服务 helper CLI 集成测试对仓库 `.venv/Scripts/python.exe` 的硬编码，按显式环境变量、有效项目虚拟环境和 PATH 顺序探测可运行 Python，保留真实 helper activity/apply/relaunch 断言。
 # 变更记录
 
+- 2026-10-29：Node P0 连接回归覆盖控制面 WSS 禁用环境代理、更新结果不跨重连 WebSocket 发送、Node apply 在断线后仍关闭当前连接请求重启，以及 closing socket 的 `InvalidStateError` 只按传输中断收敛；定向 Node 更新/并发测试 21 项通过。
 - 2026-10-28：附件目标读取回归覆盖跨 chunk 版本变化拒绝、PNG MIME、SDK slot priority 胜者顺序及原生 `fileDrag.read`/locale props 透传。
 - 2026-10-28：增加 DSH 源码依赖与 profile 双路径插件更新及回滚测试、运行版本提示测试，以及 renderer 网络范围/日志脱敏/只读即时与稳定 frame 状态测试。
 - 2026-10-28：更新 native iframe 契约回归为只允许附件 slot，并验证其 fileDrag/remote 上下文；仍断言不注册嵌套 Tether main/sidebar。
@@ -85,3 +93,5 @@
 - 2026-10-29：`test_native_surface` 增加 401 后重新认证并重放一次的用例（第二次仍失败则保留 401）；`test_native_surface_client` 增加插件 `surfaceBase` 快路径与 `localDeviceId` 接线断言。
 - 2026-10-29：`test_code_view` 改为断言满高行号槽、无硬分界线和蓝/绿/紫配色，新增代码编辑（Tab/Ctrl+S/脏改动确认）断言；`test_csv_preview` 增加 `serializeDelimited` 往返测试与表格就地编辑/Ctrl+S 接线断言。
 - 2026-10-29：`test_explorer_navigation` 增加预取返回响应体、`loadDir` 空值回退和覆盖式加载遮罩断言（防止再出现“双击快就报目录读取失败”与加载挤行）。
+- 2026-10-29：`test_tether_ui_shared` 增加更新灯与卡片同源、离线设备不染色、瞬时错误重试/失败不缓存、旧节点 `device_id` 缺省兼容与不匹配拒绝的用例。
+- 2026-10-29：`test_dsh_local_updates` 增加“源码 updater 与安装脚本必须带齐 `UPDATER_FILES`（含 release/ed25519）”的回归；`test_release_archive` 的源码预检 fixture 同步补齐这两个文件。

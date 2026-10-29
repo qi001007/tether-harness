@@ -44,9 +44,16 @@ test('native surface accepts only ticketed loopback, public ticket and same-host
     location: { href: 'http://127.0.0.1/?tether_native=1' },
     __ModuleLoader__: { load(module) { plugin = module.factory((id) => id === 'react' ? React : id === 'tether-dsh-native-ui' ? Native : {}) } }
   }
-  vm.runInNewContext(clientSource, { window, URL, setTimeout, clearTimeout, console })
+  const monacoStart = clientSource.indexOf('var TetherMonacoRuntime=')
+  const monacoEnd = clientSource.indexOf('    const EditorRuntime = TetherMonacoRuntime', monacoStart)
+  assert.ok(monacoStart > 0 && monacoEnd > monacoStart, 'generated bundle contains the Monaco runtime boundary')
+  const executableClientSource = clientSource.slice(0, monacoStart)
+    + 'var TetherMonacoRuntime = { monaco: {} };\n'
+    + clientSource.slice(monacoEnd)
+  vm.runInNewContext(executableClientSource, { window, URL, setTimeout, clearTimeout, console })
   const selections = []
   const registrations = []
+  const commands = []
   const injectedSlots = []
   const readFileDrag = () => undefined
   const workspaceFiles = { list() {}, readBytes() {} }
@@ -55,6 +62,13 @@ test('native surface accepts only ticketed loopback, public ticket and same-host
     connection: { rpc: { call() {} } },
     remote: { workspaceFiles, pluginManager: {} },
     fileDrag: { read: readFileDrag },
+    inject(services, apply) {
+      assert.equal(Array.from(services).join(','), 'commandUi')
+      apply({
+        get() { return { register(command) { commands.push(command); return () => {} } } },
+        effect(register) { return register() }
+      })
+    },
     slots: {
       inject(name, register) { injectedSlots.push(name); register() },
       register(options, component) { registrations.push({ options, component }) }
@@ -67,6 +81,9 @@ test('native surface accepts only ticketed loopback, public ticket and same-host
   assert.equal(registrations[0].options.priority, -1000)
   assert.equal(registrations[0].options.locale, 'conversation')
   assert.equal(registrations[0].options.inject().readFileDrag, readFileDrag)
+  assert.equal(commands.length, 1)
+  assert.equal(commands[0].name, 'tether-target-file')
+  assert.equal(commands[0].label(), '目标设备文件')
 })
 
 test('native surface state is device-bound and its iframe remains mounted while hidden views change', () => {
@@ -89,7 +106,7 @@ test('native surface state is device-bound and its iframe remains mounted while 
   assert.equal(helpers.nativeSurfaceContainerStyle(false).display, 'none')
   assert.equal(helpers.nativeSurfaceContainerStyle(true).display, 'flex')
 
-  const mainStart = clientSource.indexOf("h('main', { style: { flex: '1 1 auto', display: 'flex'")
+  const mainStart = clientSource.indexOf("h('main', { className: 'tether-workbench', style: { flex: '1 1 auto', display: 'flex'")
   const nativeChild = clientSource.indexOf('h(NativeSurface, { deviceId, online: deviceOnline, visible:', mainStart)
   const viewBranch = clientSource.indexOf("view === 'files' ? renderExplorer() : (view === 'network' ? renderNetwork() : null)", mainStart)
   assert.ok(mainStart >= 0 && nativeChild > mainStart && viewBranch > nativeChild,
@@ -124,4 +141,7 @@ test('the local device id participates in the surface effect dependencies', () =
 test('an embedded DSH page never registers the Tether plugin', () => {
   assert.ok(clientSource.includes('window.top !== window.self'))
   assert.ok(clientSource.includes("embedded || new URL(window.location.href).searchParams.has('tether_native')"))
+  assert.ok(clientSource.includes("const nativeSurfaceStyleId = 'tether-native-surface-chrome'"))
+  assert.ok(clientSource.includes(':has([aria-label="全局面板"])'))
+  assert.ok(clientSource.includes('border-right-color: transparent !important'))
 })

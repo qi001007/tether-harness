@@ -33,7 +33,9 @@ export function createConnectionPanel(React) {
     )
   }
   function ConnectionTrigger({ onClick, status = 'unknown' }) {
-    const color = status === 'online' ? 'var(--dsw-alias-state-success-primary, #16a34a)' : status === 'offline' ? 'var(--dsw-alias-state-error-primary, #b42318)' : mute
+    const color = status === 'online' ? 'var(--dsw-alias-state-success-primary, #16a34a)'
+      : status === 'offline' ? 'var(--dsw-alias-state-error-primary, #b42318)'
+        : status === 'checking' ? 'var(--dsw-alias-state-warn-primary, #b54708)' : mute
     return h('button', { onClick, title: '服务器连接', className: 'tether-press tether-hover', style: { marginLeft: 'auto', height: 26, padding: '0 10px', borderRadius: 999, border: 0, background: bg, color: sub, display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer', flex: '0 0 auto', boxShadow: '0 1px 2px rgba(16,24,40,0.06)' } },
       h('span', { style: { width: 7, height: 7, borderRadius: 4, background: color, flex: '0 0 auto' } }), '连接')
   }

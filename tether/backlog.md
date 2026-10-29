@@ -1,5 +1,7 @@
 # Tether Python 后端变更记录
 
+- 2026-10-29：将三组件与 updater 版本统一推进到 `0.2.25`，纳入 Node WebSocket 直连/重连隔离和目标端文件版本安全保存候选。
+
 - 2026-10-28：Node `status`/`check` 不再等待 prepare/apply 的长锁；manifest check 增加 60 秒进程内单飞缓存，check 下载限时 4 秒，prepare 仍强制刷新 manifest。
 
 - 2026-10-28：插件更新器识别 DSH profile 中明确声明的 `file:` 源码依赖；状态版本取 profile/source 包中的最低版本，应用时在一个备份/回滚事务内同步两个加载位置，避免重装时恢复旧共享 UI。

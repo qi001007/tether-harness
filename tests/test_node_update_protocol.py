@@ -78,6 +78,100 @@ def test_check_forces_the_manifest_while_status_keeps_the_cache(tmp_path, monkey
     node.store.db.close()
 
 
+def test_control_websocket_bypasses_desktop_proxy(tmp_path, monkeypatch):
+    node = _node(tmp_path, monkeypatch)
+    captured: dict = {}
+
+    class FakeWebSocket:
+        receives = 0
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+        async def send(self, _message: str) -> None:
+            return None
+
+        async def recv(self) -> str:
+            self.receives += 1
+            if self.receives == 1:
+                return json.dumps({"type": "registered"})
+            raise OSError("fixture disconnect")
+
+    def connect(url: str, *, proxy=True, **options):
+        options["proxy"] = proxy
+        captured.update({"url": url, **options})
+        return FakeWebSocket()
+
+    monkeypatch.setattr(agent.websockets, "connect", connect)
+    try:
+        asyncio.run(node._session())
+    except OSError as exc:
+        assert str(exc) == "fixture disconnect"
+
+    assert captured["proxy"] is None
+    assert captured["ping_interval"] == 20
+    assert captured["ping_timeout"] == 20
+    node.store.db.close()
+
+
+def test_update_result_does_not_cross_reconnected_websocket(tmp_path, monkeypatch):
+    node = _node(tmp_path, monkeypatch)
+    manager = FakeUpdateManager()
+    node.update_managers["node"] = manager
+    old_ws = object()
+    new_ws = object()
+    node.ws = old_ws
+    node.connected = True
+    sent: list[dict] = []
+    original_check = manager.check
+
+    def blocking_check(_force: bool = False) -> dict:
+        manager.prepare_started.set()
+        manager.prepare_release.wait(3)
+        return original_check(True)
+
+    async def send(message: dict) -> None:
+        sent.append(message)
+
+    manager.check = blocking_check
+    monkeypatch.setattr(node, "_send", send)
+
+    async def scenario() -> None:
+        await node._handle({"type": "update_call", "req_id": "stale-check",
+                            "component": "node", "action": "check"})
+        task = next(iter(node.update_tasks))
+        assert await asyncio.to_thread(manager.prepare_started.wait, 2)
+        node.ws = new_ws
+        manager.prepare_release.set()
+        await task
+
+    asyncio.run(scenario())
+    assert sent == []
+    node.store.db.close()
+
+
+def test_invalid_state_while_sending_result_is_transport_churn(
+        tmp_path, monkeypatch, capsys):
+    node = _node(tmp_path, monkeypatch)
+    node.update_managers["node"] = FakeUpdateManager()
+    node.ws = object()
+    node.connected = True
+
+    async def send(_message: dict) -> None:
+        raise asyncio.InvalidStateError
+
+    monkeypatch.setattr(node, "_send", send)
+    asyncio.run(node._update_call({"type": "update_call", "req_id": "closing-check",
+                                   "component": "node", "action": "check"}, node.ws))
+
+    assert "InvalidStateError" not in capsys.readouterr().out
+    assert node.connected is False
+    node.store.db.close()
+
+
 def test_remote_app_apply_returns_restart_required(tmp_path, monkeypatch):
     node = _node(tmp_path, monkeypatch)
     monkeypatch.delenv("TETHER_NODE_MANAGED", raising=False)
@@ -365,6 +459,33 @@ def test_apply_success_requests_restart_even_if_result_send_fails(tmp_path, monk
     assert node.restart_requested is True
     assert node.update_applying is True
     assert ws.closed is True
+    assert manager.apply_calls == 1
+    node.store.db.close()
+
+
+def test_node_apply_closes_current_socket_after_request_socket_reconnects(
+        tmp_path, monkeypatch):
+    node = _node(tmp_path, monkeypatch)
+    manager = FakeUpdateManager()
+    node.update_managers["node"] = manager
+    node.dsh_sessions.list = lambda: []
+    node.dsh_sessions._files = lambda: []
+    request_ws = object()
+
+    class CurrentWebSocket:
+        closed = False
+
+        async def close(self, **_kwargs) -> None:
+            self.closed = True
+
+    current_ws = CurrentWebSocket()
+    node.ws = current_ws
+    asyncio.run(node._update_call({"type": "update_call", "req_id": "apply-after-reconnect",
+                                   "action": "apply", "component": "node",
+                                   "prepared_id": "a" * 32}, request_ws))
+
+    assert current_ws.closed is True
+    assert node.restart_requested is True
     assert manager.apply_calls == 1
     node.store.db.close()
 

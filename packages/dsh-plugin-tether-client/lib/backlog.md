@@ -1,4 +1,7 @@
 # 修改记录
+- 2026-10-29：重建 `client.js`，同步 F79 第二版白灰黑中性工作台、Monaco 常见语言与 VSCode 式语法色板、普通代码直接编辑/Markdown 专属切换及中性文件标签；尚未发布或分发到已安装插件。
+- 2026-10-29：重建 `client.js`，同步资源管理器分层工作台、无常驻硬分界线、Monaco minimap/状态栏与文件操作命令组；仍待主人审查及下一版分发后的 LAPTOP-01 真宿主验收。
+- 2026-10-29：重建 DSH 客户端 bundle，内嵌 Monaco，加入目标端版本安全保存、状态圆点及加号菜单“目标设备文件”命令候选。
 - 2026-10-29：重建插件客户端 bundle，同步资源管理器导航、排序与搜索 UI。
 - 2026-10-28：插件 bundle 注入 `remote.pluginManager` 与受限 `reloadLocalPluginSurface()`，交给更新确认流程按需调用一次。
 - 2026-10-28：生成 native iframe 插件 bundle 注册目标设备附件 slot picker，并完整保留 DSH ComposerAttachments 原组件。
@@ -48,3 +51,4 @@
 - 2026-10-28：重新生成 `client.js`（代码页首开竞态修复 + 标签栏/当前行高亮/可拖动分隔条）。
 - 2026-10-29：重新生成 `client.js`，仅更新内嵌 `PLUGIN_VERSION` 至 `0.2.16`。
 - 2026-10-29：重新生成 `client.js`，包含 CSV/TSV/XLSX 只读表格预览与纯文本切换（同源共享 UI）。
+- 2026-10-29：重新生成 `client.js`，包含 nativeSurfaceStyleId 守卫、更新灯聚合、旧节点响应兼容与 Monaco 主题跟随；已重装 DSH profile 并重启。

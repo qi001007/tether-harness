@@ -8,6 +8,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const shared = fs.readFileSync(path.join(root, 'packages/tether-ui/src/app.js'), 'utf8')
 const plugin = fs.readFileSync(path.join(root, 'packages/dsh-plugin-tether-client/lib/client.js'), 'utf8')
 const connectionPanel = fs.readFileSync(path.join(root, 'packages/tether-ui/src/connection-panel.js'), 'utf8')
+const monacoRuntime = fs.readFileSync(path.join(root, 'packages/tether-ui/src/monaco-runtime.js'), 'utf8')
 
 test('DSH plugin bundle is up to date with the shared tether-ui source', () => {
   const bundledPanel = connectionPanel.replace(/^export /gm, '').trim()
@@ -31,6 +32,44 @@ test('remote FilesPane exposes a new-file action for the current target director
   assert.match(shared, /deviceIdRef\.current !== requestDevice/)
   assert.match(shared, /post\('\/api\/devices\/' \+ encodeURIComponent\(requestDevice\) \+ '\/fs\/write', \{ path: target, text: '', overwrite: false \}\)/)
   assert.match(shared, /iconButton\('plus', '新建文件', \(\) => makeFile\(path\), !path \|\| dirLoading \|\| previewBusy\)/)
+})
+
+test('DSH plus menu keeps local upload and adds a target-device file action', () => {
+  const build = fs.readFileSync(path.resolve(root, 'packages/tether-ui/scripts/build.mjs'), 'utf8')
+  const dsh = fs.readFileSync(path.resolve(root, 'packages/tether-ui/src/hosts/dsh.js'), 'utf8')
+  assert.match(build, /name: 'tether-target-file'/)
+  assert.match(build, /label: \(\) => '目标设备文件'/)
+  assert.match(build, /createDshTargetAttachments\(React, Native, targetFiles, targetFilePicker\)/)
+  assert.match(dsh, /pickerCommand\.open = open/)
+  assert.match(dsh, /h\(Native\.ComposerAttachments/)
+})
+
+test('remote editing pins device identity and file version before saving', () => {
+  assert.match(shared, /const editableFile = file && file\.editable === true && !file\.truncated/)
+  assert.match(shared, /expected_version: requestFile\.version/)
+  assert.match(shared, /encoding: requestFile\.encoding/)
+  assert.match(shared, /newline: requestFile\.newline/)
+  assert.match(shared, /export function responseBelongsToDevice/)
+  assert.match(shared, /responseBelongsToDevice\(result, requestDevice\)/)
+  assert.match(shared, /目标设备已切换，未保存内容已保留/)
+  assert.match(shared, /目标文件已被其他程序修改/)
+})
+
+test('code editing uses Monaco models scoped by device and path', () => {
+  const manifest = JSON.parse(fs.readFileSync(path.join(root, 'packages/tether-ui/package.json'), 'utf8'))
+  const webMain = fs.readFileSync(path.join(root, 'packages/tether-ui/web/main.js'), 'utf8')
+  const pluginBuild = fs.readFileSync(path.join(root, 'packages/tether-ui/scripts/build.mjs'), 'utf8')
+  assert.equal(manifest.dependencies['monaco-editor'], '0.57.0')
+  assert.match(shared, /createTetherPanel\(\{ React, Native, host, EditorRuntime \}\)/)
+  assert.match(shared, /monaco\.editor\.create\(containerRef\.current/)
+  assert.match(shared, /const key = deviceId \+ '\\|' \+ path/)
+  assert.match(shared, /EditorRuntime\.modelUri\(deviceId, path\)/)
+  assert.match(shared, /id: 'tether\.save\.remote'/)
+  assert.match(shared, /Monaco Editor 未加载，已禁止回落到伪代码编辑器/)
+  assert.match(monacoRuntime, /__TETHER_MONACO_WORKER_SOURCE__/)
+  assert.match(monacoRuntime, /function modelUri\(deviceId, path\)/)
+  assert.match(webMain, /import \* as EditorRuntime from '\.\.\/src\/monaco-runtime\.js'/)
+  assert.match(pluginBuild, /const EditorRuntime = TetherMonacoRuntime/)
 })
 
 test('loading spinners rotate the icon itself so the pivot is its own centre', () => {
@@ -231,6 +270,10 @@ test('automatic update checks report availability, failures, and stale targets s
   assert.equal(checks, 2)
   await cachedUpdateCheck(cache, 'device:node', async () => ({ update_available: true, forced: true }), { force: true, now: () => now })
   assert.equal(cache.get('device:node').value.forced, true)
+  const failCache = new Map()
+  const failed = await cachedUpdateCheck(failCache, 'failed', async () => ({ failed: true }), { now: () => now })
+  assert.equal(failed.failed, true)
+  assert.equal(failCache.has('failed'), false, 'a failed check must be retried instead of cached for five minutes')
   await assert.rejects(withUpdateTimeout(new Promise(() => {}), 5), (error) => error.code === 'update_timeout')
   assert.equal(localPluginNeedsRestart({ current_version: '0.2.10', runtime_version: '0.2.5' }), true)
   assert.equal(localPluginNeedsRestart({ current_version: '0.2.10', runtime_version: '0.2.10' }), false)
@@ -336,9 +379,57 @@ test('error toasts expire automatically and the update entry uses a stable label
   assert.match(shared, /setNotice\(''\), 4000/)
   assert.match(shared, /setUpdateToast\(''\), 4000/)
   assert.match(shared, /setProjectsError\(''\), 4000/)
-  assert.match(shared, /\}, '更新', updateHasAvailable \? h\('span', \{ 'aria-label': '有可用更新'/)
-  assert.match(shared, /background: C\.red, flex: '0 0 auto'/)
+  assert.match(shared, /'更新状态：' \+ updateStatus/)
+  assert.match(shared, /background: updateStatusColor/)
+  assert.match(shared, /updateStatus === 'available' \? C\.red/)
+  assert.match(shared, /updateStatus === 'failed' \? C\.amber/)
+  assert.match(shared, /updateStatus === 'current' \? C\.green/)
   assert.doesNotMatch(shared, /\}, updateHasAvailable \? '更新 · 有新版本'/)
   assert.match(shared, /setComponentUpdateError\(component, result\.failed \? shortUpdateError\(result\.error\) : '', scope, false\)/,
     'background update checks stay quiet; only explicit actions toast')
+})
+
+test('connection and update triggers share deterministic status colours', async () => {
+  const { updateTriggerState, isTransientUpdateError } = await import('../packages/tether-ui/src/app.js')
+  assert.equal(updateTriggerState({ devices: { d: { node: { current_version: '0.2.24', latest_version: '0.2.25', update_available: true } } } }, {}), 'available')
+  assert.equal(updateTriggerState({ devices: { d: { node: { current_version: '0.2.24', latest_version: '0.2.24', update_available: false } } } }, {}), 'current')
+  assert.equal(updateTriggerState({}, { app: 'offline' }), 'failed')
+  assert.equal(updateTriggerState({}, {}, true), 'checking')
+  assert.equal(updateTriggerState({}, {}, false), 'unknown')
+  assert.equal(updateTriggerState(
+    { devices: { d: { node: { current_version: '0.2.24', latest_version: '0.2.24', update_available: false } } } },
+    { devices: { d: { node: 'offline' } } }
+  ), 'current', 'a stale error must not turn a known-current record amber')
+  assert.equal(updateTriggerState(
+    { devices: { d: { node: { current_version: '0.2.24', latest_version: '0.2.24', update_available: false } } } },
+    { devices: { gone: { node: 'offline' } } },
+    false,
+    [{ device_id: 'd', online: true }, { device_id: 'gone', online: false }]
+  ), 'current', 'offline devices do not colour the update trigger')
+  assert.equal(updateTriggerState(
+    { devices: { d: {} } },
+    { devices: { d: { node: 'offline' } } },
+    false,
+    [{ device_id: 'd', online: true }]
+  ), 'failed', 'an online device with no known record and an error stays amber')
+  assert.equal(updateTriggerState(
+    { devices: { d: { node: { current_version: '0.2.24', latest_version: '0.2.24', update_available: false } } } },
+    {},
+    true,
+    [{ device_id: 'd', online: true }]
+  ), 'current', 'refreshing keeps the known-current colour')
+  assert.equal(isTransientUpdateError(new Error('InvalidStateError: closing socket')), true)
+  assert.equal(isTransientUpdateError(new Error('update_failed')), false)
+  assert.match(connectionPanel, /status === 'online'/)
+  assert.match(connectionPanel, /status === 'offline'/)
+  assert.match(connectionPanel, /status === 'checking'/)
+})
+
+test('legacy node responses without device_id remain valid', async () => {
+  const { responseBelongsToDevice } = await import('../packages/tether-ui/src/app.js')
+  assert.equal(responseBelongsToDevice({ device_id: 'A' }, 'A'), true)
+  assert.equal(responseBelongsToDevice({ device_id: 'B' }, 'A'), false)
+  assert.equal(responseBelongsToDevice({ path: 'x' }, 'A'), true, 'released nodes do not echo device_id')
+  assert.equal(responseBelongsToDevice(null, 'A'), false)
+  assert.equal(responseBelongsToDevice({}, ''), false)
 })
