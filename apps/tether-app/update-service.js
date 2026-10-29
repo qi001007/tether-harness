@@ -49,6 +49,12 @@ class UpdateService {
     const args = ['-m', 'tether.updates_cli', command, '--component', 'app', '--root', this.repoRoot, '--state-dir', stateDir, '--dsh-home', this.dshHome]
     if (preparedId) args.push('--prepared-id', preparedId)
     if (force) args.push('--force')
+    try {
+      const hub = JSON.parse(fs.readFileSync(path.join(this.dataDir, 'hub.json'), 'utf8'))
+      if (hub && typeof hub.url === 'string' && /^https?:\/\//.test(hub.url)) {
+        args.push('--manifest-url', hub.url.replace(/\/+$/, '') + '/releases/manifest')
+      }
+    } catch (_) { /* fall back to the default manifest */ }
     const env = { ...this.env, PYTHONPATH: this.repoRoot, PYTHONIOENCODING: 'utf-8' }
     try {
       const { stdout } = await this.exec(this.python, args, {

@@ -221,6 +221,19 @@ function trustedUpdateRequest(event) {
     return !!(uiOrigin && event.senderFrame && event.senderFrame === event.sender.mainFrame && new URL(event.senderFrame.url).origin === uiOrigin)
   } catch (_) { return false }
 }
+ipcMain.handle('tether:reset-surface-auth', async (event, origin) => {
+  if (!trustedUpdateRequest(event)) return { ok: false, error: 'Untrusted IPC caller' }
+  let parsed
+  try { parsed = new URL(String(origin)) } catch (_) { return { ok: false } }
+  const loopback = parsed.protocol === 'http:' && (parsed.hostname === '127.0.0.1' || parsed.hostname === '[::1]')
+  if (!loopback) return { ok: false }
+  try {
+    await session.defaultSession.clearStorageData({ origin: parsed.origin, storages: ['cookies', 'localstorage', 'cachestorage'] })
+    return { ok: true }
+  } catch (error) {
+    return { ok: false, error: String(error && error.message || error) }
+  }
+})
 ipcMain.handle('tether:updates-status', (event) => trustedUpdateRequest(event) ? updates.status() : { ok: false, error: 'Untrusted IPC caller' })
 ipcMain.handle('tether:updates-check', (event) => trustedUpdateRequest(event) ? updates.check() : { ok: false, error: 'Untrusted IPC caller' })
 ipcMain.handle('tether:updates-prepare', (event) => trustedUpdateRequest(event) ? updates.prepare() : { ok: false, error: 'Untrusted IPC caller' })

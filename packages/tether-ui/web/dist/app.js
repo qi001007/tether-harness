@@ -9163,6 +9163,15 @@ function createTetherPanel({ React: React2, Native, host }) {
       }
       throw lastError || new Error("\u539F\u751F DSH \u9875\u9762\u6682\u4E0D\u53EF\u7528");
     };
+    const resetSurfaceAuth = async (url) => {
+      const bridge = typeof window !== "undefined" ? window.tetherApp : void 0;
+      if (!bridge || typeof bridge.resetSurfaceAuth !== "function") return;
+      if (url.protocol !== "http:" || url.hostname !== "127.0.0.1" && url.hostname !== "[::1]") return;
+      try {
+        await bridge.resetSurfaceAuth(url.origin);
+      } catch (_) {
+      }
+    };
     React2.useEffect(() => {
       retryCountRef.current = 0;
       if (retryTimerRef.current) {
@@ -9244,6 +9253,7 @@ function createTetherPanel({ React: React2, Native, host }) {
         }
         const url = new URL(surfaceUrl);
         url.searchParams.set("tether_native", "1");
+        await resetSurfaceAuth(url);
         if (current) setState({ deviceId, status: "ready", url: url.href, pid: Number(data.pid) || 0 });
       }).catch((error) => {
         if (!current) return;
@@ -9270,6 +9280,14 @@ function createTetherPanel({ React: React2, Native, host }) {
           const { response, data } = await fetchSurfaceDescriptor(deviceId);
           if (!response.ok) return;
           if (!alive || !data.available || !isSafeNativeSurfaceUrl(data.url)) return;
+          const nextPid = Number(data.pid) || 0;
+          const previous = surfaceStateRef.current;
+          if (nextPid && previous && (previous.pid || 0) !== nextPid) {
+            try {
+              await resetSurfaceAuth(new URL(data.url));
+            } catch (_) {
+            }
+          }
           setState((prev) => {
             if (prev.status !== "ready" || !prev.url) return prev;
             try {
