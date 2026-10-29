@@ -39,6 +39,12 @@
 - 本机实验台源码 Node 于 15:46:09 重启并加载候选；连续运行 12.8 分钟后，15:46:10 注册以来日志无新 keepalive timeout、断线或 `InvalidStateError`，DESKTOP-LOCAL 与 LAPTOP-01 均保持 online。两台设备分别显式检查 node/plugin，四次均返回 `ok=true`、current/latest=`0.2.24`。
 - 边界：客户端修复已随 0.2.25 发布，但尚未安装到两台运行版；服务端 ping 参数、Hub/Caddy 部署未改。
 
+## 2026-10-30 单一发布快照热修（0.2.28 候选）
+
+- 0.2.27 按组件取 max 仍会被 Node 的 `disk-cache` 拖住：本机 app/node latest 停在 0.2.26，插件 0.2.27。0.2.28 改为取本轮所有组件中的最高 latest，统一写给全部卡片；所有组件同版本发布，因此一个刷新只出现一个版本号。
+- 保留 0.2.27 的解阻：本机产品更新跳过已最新 Node；Node 检查失败只记为部分失败，插件照常 check/prepare/apply；设备序列跳过已最新组件。
+- 门禁：pytest 125/1、mjs 175、cjs 6、bundle check、Web 重建哈希一致、`validate_versions()`；待发布。
+
 ## 2026-10-30 更新一致性与本地插件入口热修（0.2.27 候选）
 
 - 主人实测指出：同一次刷新里本机 0.2.26、远端 APP/Node 0.2.25、插件 0.2.26 混显；DSH 本机插件卡点“一键更新”无任何动作。证据：`00:49–00:52` Node 日志 `check node failed: InvalidStateError`，DSH updater 目录没有 `prepared/applied-plugin.json`，说明本机插件更新先被 Node 检查失败挡住。

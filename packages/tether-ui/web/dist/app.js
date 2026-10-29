@@ -163080,32 +163080,32 @@ function updateNeededFor(info) {
   return true;
 }
 function normalizeUpdateLatest(updateInfo) {
-  const latest = {};
-  const consider = (component, info) => {
+  let latestVersion = "";
+  const consider = (info) => {
     if (!info || !info.latest_version) return;
-    if (!latest[component] || isVersionNewer(info.latest_version, latest[component])) latest[component] = info.latest_version;
+    if (!latestVersion || isVersionNewer(info.latest_version, latestVersion)) latestVersion = info.latest_version;
   };
-  consider("app", updateInfo.app);
-  consider("localPlugin", updateInfo.localPlugin);
+  consider(updateInfo.app);
+  consider(updateInfo.localPlugin);
   for (const target of Object.values(updateInfo.devices || {})) {
-    for (const component of ["app", "plugin", "node"]) consider(component, target && target[component]);
+    for (const component of ["app", "plugin", "node"]) consider(target && target[component]);
   }
-  const apply2 = (component, info) => {
-    if (!info || !latest[component]) return info;
-    const next = { ...info, latest_version: latest[component] };
+  const apply2 = (info) => {
+    if (!info || !latestVersion) return info;
+    const next = { ...info, latest_version: latestVersion };
     if (!info.current_version) return next;
-    next.update_available = info.rollout_paused === true ? false : isVersionNewer(latest[component], info.current_version);
+    next.update_available = info.rollout_paused === true ? false : isVersionNewer(latestVersion, info.current_version);
     return next;
   };
   return {
     ...updateInfo,
-    app: apply2("app", updateInfo.app),
-    localPlugin: apply2("localPlugin", updateInfo.localPlugin),
+    app: apply2(updateInfo.app),
+    localPlugin: apply2(updateInfo.localPlugin),
     devices: Object.fromEntries(Object.entries(updateInfo.devices || {}).map(([deviceId, target]) => [deviceId, {
       ...target,
-      app: apply2("app", target && target.app),
-      plugin: apply2("plugin", target && target.plugin),
-      node: apply2("node", target && target.node)
+      app: apply2(target && target.app),
+      plugin: apply2(target && target.plugin),
+      node: apply2(target && target.node)
     }]))
   };
 }

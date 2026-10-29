@@ -501,6 +501,12 @@ test('one refresh normalizes every update card to the same latest snapshot', asy
   assert.equal(normalized.devices.desktop.node.latest_version, '0.2.26')
   assert.equal(normalized.devices.desktop.node.update_available, false)
   assert.equal(normalized.localPlugin.latest_version, '0.2.26')
+  const mixed = normalizeUpdateLatest({
+    localPlugin: { current_version: '0.2.26', latest_version: '0.2.27', update_available: true },
+    devices: { d: { app: { current_version: '0.2.26', latest_version: '0.2.26', update_available: false } } }
+  })
+  assert.equal(mixed.devices.d.app.latest_version, '0.2.27', 'all components share the release version')
+  assert.equal(mixed.devices.d.app.update_available, true)
   assert.equal(isVersionNewer('0.2.26', '0.2.25'), true)
   assert.equal(isVersionNewer('0.2.26', '0.2.26'), false)
   assert.equal(updateNeededFor({ current_version: '0.2.26', latest_version: '0.2.26', update_available: false }), false)
