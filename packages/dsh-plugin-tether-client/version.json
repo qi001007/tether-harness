@@ -1,5 +1,5 @@
 {
-  "version": "0.2.21",
+  "version": "0.2.22",
   "notes": "Tether shared client and local API startup readiness.",
   "download": "https://github.com/qi001007/tether-harness",
   "install": "git pull && powershell -ExecutionPolicy Bypass -File desktop/install-plugin.ps1"

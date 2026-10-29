@@ -31,7 +31,7 @@ import psutil
 from .release import ReleaseSignatureError, verify_signature
 
 
-UPDATER_VERSION = "0.2.21"
+UPDATER_VERSION = "0.2.22"
 LEGACY_BASELINE_VERSION = "0.2.0"
 UPDATE_PROTOCOL = 1
 MIN_UPDATE_PROTOCOL = 1

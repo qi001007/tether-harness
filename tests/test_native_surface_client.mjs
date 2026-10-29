@@ -101,3 +101,15 @@ test('the native frame reloads when the DSH host pid changes', () => {
   assert.match(clientSource, /pid && \(prev\.pid \|\| 0\) !== pid/)
   assert.match(clientSource, /pid: Number\(data\.pid\) \|\| 0/)
 })
+
+
+test('the DSH plugin embeds the local workspace with the current same-origin session', () => {
+  const start = clientSource.indexOf('    function isSafeNativeSurfaceUrl(value) {')
+  const end = clientSource.indexOf('\n\n    function App()', start)
+  assert.ok(start >= 0 && end > start)
+  const isSafe = vm.runInNewContext(clientSource.slice(start, end) + '\n; isSafeNativeSurfaceUrl',
+    { URL, window: { location: { origin: 'http://127.0.0.1:43123' } } })
+  assert.equal(isSafe('http://127.0.0.1:43123/'), true)
+  assert.equal(isSafe('http://127.0.0.1:43124/'), false)
+  assert.ok(clientSource.includes("host.kind === 'dsh' && localDeviceId && id === localDeviceId"))
+})
