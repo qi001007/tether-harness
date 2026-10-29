@@ -2242,6 +2242,7 @@ export function createTetherPanel({ React, Native, host }) {
         const known = infos.every((info) => info && info.current_version && info.latest_version)
         const busy = updateBusy.startsWith(item.device_id + ':') || updateBusy === 'device:' + item.device_id
         const failed = infos.some((_info, index) => !!(updateErrors.devices[item.device_id] || {})[['node', ...(hasPlugin ? ['plugin'] : []), ...(hasApp ? ['app'] : [])][index]])
+        const pluginRestart = !!(hasPlugin && plugin && plugin.restart_required)
         const nodeTuple = versionTuple(node.current_version, node.latest_version)
         const versionRows = []
         if (hasApp) versionRows.push('APP ' + versionTuple(item.capabilities.app_version, app.latest_version) + '/Node ' + nodeTuple)
@@ -2254,7 +2255,8 @@ export function createTetherPanel({ React, Native, host }) {
             h('span', { style: { marginLeft: 'auto' } }, !item.online ? pill('离线', C.mute)
               : busy ? h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center', color: C.amber } }, h(Glyph, { name: 'refresh', size: 14 }))
                 : hasUpdate ? pill('有更新', C.amber)
-                  : known ? pill('已是最新', C.green) : failed ? pill('检查失败', C.red) : pill('检查中…', C.mute))),
+                  : pluginRestart ? pill('插件待重启 DSH', C.amber)
+                    : known ? pill('已是最新', C.green) : failed ? pill('检查失败', C.red) : pill('检查中…', C.mute))),
           h('div', { style: { color: C.sub, fontSize: 12, lineHeight: '19px' } },
             versionRows.map((text) => h('div', { key: text }, text))),
           h('div', { style: { marginTop: 8 } },
@@ -2307,24 +2309,56 @@ export function createTetherPanel({ React, Native, host }) {
           setComponentUpdateError('localPlugin', shortUpdateError(error), null)
         } finally { setDshRestartBusy(false) }
       }
+      const transientUpdateError = (error) => {
+        const code = error && (error.code || (error.detail && error.detail.code))
+        if (code === 'device_offline' || code === 'update_busy' || code === 'surface_timeout') return true
+        const status = error && error.status
+        return !status || status === 400 || status === 408 || status === 429 || status >= 500
+      }
+      const checkUpdateWithRetry = async (component, scope, attempts = 3) => {
+        let lastError
+        for (let i = 0; i < attempts; i += 1) {
+          try { return await updateAction(component, 'check', undefined, scope) } catch (error) {
+            lastError = error
+            if (!transientUpdateError(error) || i + 1 >= attempts) break
+            await new Promise((resolve) => setTimeout(resolve, 2000))
+          }
+        }
+        throw lastError
+      }
       const runDeviceUpdate = async (item) => {
         setUpdateBusy('device:' + item.device_id)
+        const failures = []
         try {
           const scope = { deviceId: item.device_id, epoch: 0 }
           for (const component of deviceUpdateComponents(item.capabilities)) {
             if (component !== 'app') {
-              if (!await updateOneClick(component, scope)) return
+              try {
+                if (!await updateOneClick(component, scope)) failures.push(component)
+              } catch (error) {
+                failures.push(component)
+                setComponentUpdateError(component, shortUpdateError(error), scope)
+              }
               continue
             }
-            const checkedApp = await updateAction('app', 'check', undefined, scope)
-            if (checkedApp && checkedApp.update_available) {
-              const expectedVersion = checkedApp.latest_version
-              if (await updateOneClick('app', scope)) {
-                const reconnected = await watchAppRestart(scope, checkedApp.authorityBase, expectedVersion)
-                if (!reconnected) setComponentUpdateError('app', 'APP 更新后尚未重新连接，请稍后刷新', scope)
+            try {
+              const checkedApp = await checkUpdateWithRetry('app', scope)
+              if (checkedApp && checkedApp.update_available) {
+                const expectedVersion = checkedApp.latest_version
+                if (await updateOneClick('app', scope)) {
+                  const reconnected = await watchAppRestart(scope, checkedApp.authorityBase, expectedVersion)
+                  if (!reconnected) {
+                    failures.push('app')
+                    setComponentUpdateError('app', 'APP 更新后尚未重新连接，请稍后刷新', scope)
+                  }
+                } else failures.push('app')
               }
+            } catch (error) {
+              failures.push('app')
+              setComponentUpdateError('app', shortUpdateError(error), scope)
             }
           }
+          if (failures.length) setNotice('部分组件未更新：' + failures.join('、') + '，可重试')
           refreshUpdateCenter()
         } finally { setUpdateBusy('') }
       }
