@@ -1,4 +1,5 @@
 # Tether Python 后端变更记录
+- 2026-10-30：0.2.27 热修版本元数据；更新器实现沿用 0.2.26 的 profile 基准与 `restart_scheduled`。
 - 2026-10-30：`_plugin_details` 以已安装 profile 为更新基准（源码只作诊断）；插件 apply 返回 `restart_scheduled`；`UPDATER_VERSION` 推进到 `0.2.26`。
 
 - 2026-10-29：将三组件与 updater 版本统一推进到 `0.2.25`，纳入 Node WebSocket 直连/重连隔离和目标端文件版本安全保存候选。

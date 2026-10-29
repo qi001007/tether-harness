@@ -39,6 +39,13 @@
 - 本机实验台源码 Node 于 15:46:09 重启并加载候选；连续运行 12.8 分钟后，15:46:10 注册以来日志无新 keepalive timeout、断线或 `InvalidStateError`，DESKTOP-LOCAL 与 LAPTOP-01 均保持 online。两台设备分别显式检查 node/plugin，四次均返回 `ok=true`、current/latest=`0.2.24`。
 - 边界：客户端修复已随 0.2.25 发布，但尚未安装到两台运行版；服务端 ping 参数、Hub/Caddy 部署未改。
 
+## 2026-10-30 更新一致性与本地插件入口热修（0.2.27 候选）
+
+- 主人实测指出：同一次刷新里本机 0.2.26、远端 APP/Node 0.2.25、插件 0.2.26 混显；DSH 本机插件卡点“一键更新”无任何动作。证据：`00:49–00:52` Node 日志 `check node failed: InvalidStateError`，DSH updater 目录没有 `prepared/applied-plugin.json`，说明本机插件更新先被 Node 检查失败挡住。
+- 修复：`refreshUpdateCenter` 在所有检查结束后调用 `normalizeUpdateLatest`，把同一次刷新内各组件/设备的 latest 统一到同一快照并重算 `update_available`；本机产品更新在 Node 已是最新时跳过 Node 检查，Node 失败只记为部分失败，插件照常 check/prepare/apply；设备一键序列跳过已最新的组件。
+- 新增回归：`normalizeUpdateLatest` 混合版本统一、`updateNeededFor` 当前版本判断、产品更新跳过当前 Node、刷新后归一化。
+- 门禁：pytest 125/1、mjs 175、cjs 6、bundle check、Web 重建哈希一致、`validate_versions()`；本地 0.2.27 资产已构建，待发布和本机一键验收。
+
 ## 2026-10-30 更新状态机与本地更新修复（0.2.26 已发布）
 
 - `v0.2.26` 已发布：tag → `89441d3`，工作流 `40913233051`；资产 app 1,656,746 B / node 73,558 B / plugin 1,302,240 B / manifest 1,566 B；草案与 Hub 清单均验签、大小/SHA 一致；Release `2026-10-29T16:39:47Z`，Hub 在 `16:43:13Z` 切到 0.2.26。

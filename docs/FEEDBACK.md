@@ -13,6 +13,8 @@
 
 ## 当前待办
 
+- [ ] F84：本机插件一键更新不得被 Node 检查失败阻断。判据：Node 已是最新（如 0.2.26）而插件仍低于 latest 时，跳过 Node 更新检查，直接执行插件 check/prepare/apply；Node 检查失败只记录为部分失败，不得让插件一步都不执行。当前证据：2026-10-30 00:49–00:52 的 Node 日志 `check node failed: InvalidStateError`，DSH 插件卡点击后没有 `prepared/applied-plugin.json`。
+- [ ] F85：更新中心一次刷新必须给出一致的 latest。判据：同一次刷新完成后，所有在线设备的 app/plugin/node 与本地插件 latest 必须来自同一版本快照；不得出现本机 0.2.26、远端 APP/Node 0.2.25、插件 0.2.26 混显；刷新结果不得因刷新次数不同而漂移。
 - [ ] F83：本地 DSH 插件自更新必须像远端一样自动重启并重连，不得把“立即生效”作为主路径。判据：profile 的插件 updater 包含 `tether/node/dsh_restart.py`，`UPDATER_FILES`/`build_release.py`/`install-plugin.ps1` 同步；一键更新 apply 后 DSH 自动重启，UI 等到新 host 和插件版本，不出现需要用户手点的“立即生效”；旧 updater 的混合安装要在安装脚本刷新时被纠正。0.2.26 已发布：插件 zip 带 `dsh_restart.py`，安装脚本按源码刷新 updater，apply 返回 `restart_scheduled`；本地 updater 已刷新，待点击验收。
 - [ ] F80：发布/更新流程不得破坏主人的本机测试基线。判据：发布前保留本机 0.2.24 的 APP/Node/插件运行态或独立工作树；发布后本机更新中心仍显示 0.2.24→0.2.25 的“一键更新”；不得把正在被本机 APP/DSH profile 引用的仓库直接切到新版本后再声称发布完成。0.2.26 已发布；本轮只改代码与文档，未再改动本机 profile 包版本，本地 0.2.24 基线已保留。
 - [ ] F81：版本参差时一键更新必须把所有低于 latest 的组件更新到 latest。判据：插件 0.2.24 / Node 0.2.25 / APP 0.2.25 同时存在时，插件卡仍显示“一键更新”；`current_version` 取已安装 profile 版本，源码 checkout 只作诊断；任一组件可更新时不得只显示“立即生效”；“立即生效”只在 apply 成功后出现；兼容旧节点的连接与页面加载不受更新状态阻断。0.2.26 已发布：`current_version` 取已安装 profile，源码只作诊断；本机已显示 `0.2.24(0.2.26) + 一键更新`，待点击验收。

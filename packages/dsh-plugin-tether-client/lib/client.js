@@ -5763,7 +5763,7 @@ monaco-editor/esm/vs/languages/definitions/swift/swift.js:
 
     const EditorRuntime = TetherMonacoRuntime
     const PANEL_ID = 'tether'
-    const PLUGIN_VERSION = "0.2.26"
+    const PLUGIN_VERSION = "0.2.27"
 const DSH_API_BASE = 'http://127.0.0.1:18890'
 const DSH_APP_BASE = 'http://127.0.0.1:18892'
 
@@ -6348,6 +6348,57 @@ function updateCardState({ running = false, error = '', hasUpdate = false, resta
   if (known) return { kind: 'current', pill: '已是最新', tone: 'green', action: 'none', label: '一键更新', disabled: true }
   if (failed) return { kind: 'failed', pill: '检查失败', tone: 'red', action: 'recheck', label: '重试', disabled: false }
   return { kind: 'checking', pill: '检查中…', tone: 'mute', action: 'none', label: '一键更新', disabled: true }
+}
+
+function isVersionNewer(candidate, current) {
+  const parse = (value) => String(value || '').split('-')[0].split('.').map((part) => Number(part) || 0)
+  const next = parse(candidate)
+  const base = parse(current)
+  for (let index = 0; index < 3; index += 1) {
+    if (next[index] !== base[index]) return next[index] > base[index]
+  }
+  return false
+}
+
+function updateNeededFor(info) {
+  if (!info) return true
+  if (info.current_version && info.latest_version) return isVersionNewer(info.latest_version, info.current_version)
+  if (info.update_available === true) return true
+  if (info.update_available === false) return false
+  return true
+}
+
+function normalizeUpdateLatest(updateInfo) {
+  const latest = {}
+  const consider = (component, info) => {
+    if (!info || !info.latest_version) return
+    if (!latest[component] || isVersionNewer(info.latest_version, latest[component])) latest[component] = info.latest_version
+  }
+  consider('app', updateInfo.app)
+  consider('localPlugin', updateInfo.localPlugin)
+  for (const target of Object.values(updateInfo.devices || {})) {
+    for (const component of ['app', 'plugin', 'node']) consider(component, target && target[component])
+  }
+  const apply = (component, info) => {
+    if (!info || !latest[component]) return info
+    const next = { ...info, latest_version: latest[component] }
+    if (!info.current_version) return next
+    next.update_available = info.rollout_paused === true
+      ? false
+      : isVersionNewer(latest[component], info.current_version)
+    return next
+  }
+  return {
+    ...updateInfo,
+    app: apply('app', updateInfo.app),
+    localPlugin: apply('localPlugin', updateInfo.localPlugin),
+    devices: Object.fromEntries(Object.entries(updateInfo.devices || {}).map(([deviceId, target]) => [deviceId, {
+      ...target,
+      app: apply('app', target && target.app),
+      plugin: apply('plugin', target && target.plugin),
+      node: apply('node', target && target.node)
+    }]))
+  }
 }
 
 function isTransientUpdateError(error) {
@@ -8661,6 +8712,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
               if (item.capabilities && item.capabilities.app_version) checks.push(automaticUpdateCheck('app', scope, force))
             })
             await Promise.allSettled(checks)
+            setUpdateInfo((current) => normalizeUpdateLatest(current))
           } finally {
             setTimeout(() => setUpdateRefreshing(false), 280)
           }
@@ -8769,9 +8821,13 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         setUpdateBusy('product:' + product)
         let failure = ''
         try {
-          const nodeOk = localId ? await updateOneClick('node', { deviceId: localId, epoch: 0 }) : true
-          if (!nodeOk) failure = 'Node 更新失败'
-          else if (product === 'desktop') {
+          let nodeFailure = false
+          const localNodeInfo = localId ? infoFor('node', localId) : null
+          if (localId && updateNeededFor(localNodeInfo)) {
+            const nodeOk = await updateOneClick('node', { deviceId: localId, epoch: 0 })
+            if (!nodeOk) nodeFailure = true
+          }
+          if (product === 'desktop') {
             const checked = await updateAction('app', 'check', undefined, null)
             if (!checked) failure = 'APP 更新检查失败'
             else if (checked.update_available === true) {
@@ -8792,6 +8848,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
               else setPendingDshRestart(true)
             }
           }
+          if (nodeFailure && !failure) failure = 'Node 更新失败'
         } catch (error) {
           failure = shortUpdateError(error)
           setComponentUpdateError(product === 'desktop' ? 'app' : 'localPlugin', failure, null)
@@ -8842,6 +8899,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         try {
           const scope = { deviceId: item.device_id, epoch: 0 }
           for (const component of deviceUpdateComponents(item.capabilities)) {
+            if (!updateNeededFor(infoFor(component, item.device_id))) continue
             if (component !== 'app') {
               try {
                 if (!await updateOneClick(component, scope)) failures.push(component)

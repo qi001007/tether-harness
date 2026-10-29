@@ -1,5 +1,16 @@
 # Public client releases
 
+## v0.2.27
+
+Release candidate hotfix for update consistency and the local plugin entry:
+
+- Each update-center refresh commits one normalized latest snapshot after all checks; local and remote cards can no longer show `0.2.26`, `0.2.25` and `0.2.26` for the same release. `update_available` is recomputed from each card's current version against that snapshot.
+- A local product update skips a Node that is already at the normalized latest and continues to the plugin; a failed Node check is reported as a partial failure but no longer aborts the plugin check/prepare/apply.
+- Device one-click sequences skip components whose normalized record is already current, so a flaky check on one component does not delay or block the others.
+- The plugin updater and DSH restart packaging from 0.2.26 remain in place.
+
+Gates: pytest 125 passed / 1 skipped, mjs 175/175, cjs 6/6, `build.mjs --check`, reproducible Web bundle, `validate_versions()`.
+
 ## v0.2.26
 
 [GitHub Release](https://github.com/qi001007/tether-harness/releases/tag/v0.2.26) · tag `v0.2.26` → `89441d3` · workflow run `40913233051` · assets app 1,656,746 B / node 73,558 B / plugin 1,302,240 B / manifest 1,566 B.

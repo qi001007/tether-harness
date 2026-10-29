@@ -478,6 +478,36 @@ test('a running update and a pending plugin restart keep the update trigger hone
   ), 'available', 'a loaded plugin older than the installed profile is not current')
 })
 
+test('one refresh normalizes every update card to the same latest snapshot', async () => {
+  const { normalizeUpdateLatest, updateNeededFor, isVersionNewer } = await import('../packages/tether-ui/src/app.js')
+  const info = {
+    app: null,
+    localPlugin: { current_version: '0.2.24', latest_version: '0.2.26', update_available: true },
+    devices: {
+      laptop: {
+        app: { current_version: '0.2.25', latest_version: '0.2.25', update_available: false },
+        node: { current_version: '0.2.25', latest_version: '0.2.26', update_available: true },
+        plugin: { current_version: '0.2.25', latest_version: '0.2.26', update_available: true }
+      },
+      desktop: {
+        app: { current_version: '0.2.26', latest_version: '0.2.26', update_available: false },
+        node: { current_version: '0.2.26', latest_version: '0.2.25', update_available: false }
+      }
+    }
+  }
+  const normalized = normalizeUpdateLatest(info)
+  assert.equal(normalized.devices.laptop.app.latest_version, '0.2.26')
+  assert.equal(normalized.devices.laptop.app.update_available, true)
+  assert.equal(normalized.devices.desktop.node.latest_version, '0.2.26')
+  assert.equal(normalized.devices.desktop.node.update_available, false)
+  assert.equal(normalized.localPlugin.latest_version, '0.2.26')
+  assert.equal(isVersionNewer('0.2.26', '0.2.25'), true)
+  assert.equal(isVersionNewer('0.2.26', '0.2.26'), false)
+  assert.equal(updateNeededFor({ current_version: '0.2.26', latest_version: '0.2.26', update_available: false }), false)
+  assert.equal(updateNeededFor({ current_version: '0.2.24', latest_version: '0.2.26', update_available: false }), true)
+  assert.equal(updateNeededFor({ update_available: true }), true)
+})
+
 test('legacy node responses without device_id remain valid', async () => {
   const { responseBelongsToDevice } = await import('../packages/tether-ui/src/app.js')
   assert.equal(responseBelongsToDevice({ device_id: 'A' }, 'A'), true)
