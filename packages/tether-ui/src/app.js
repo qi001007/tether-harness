@@ -1642,7 +1642,8 @@ export function createTetherPanel({ React, Native, host }) {
             if (!data.available || !isSafeNativeSurfaceUrl(data.url)) throw new Error('Controller 返回了无效或非 loopback 的原生页面地址')
             let surfaceUrl = data.url
             const parsed = new URL(data.url)
-            if ((parsed.hostname === '127.0.0.1' || parsed.hostname === '[::1]') && ACTIVE_BASE !== 'http://127.0.0.1:18890') {
+            const sameHostToken = parsed.pathname === '/' && !!parsed.searchParams.get('token')
+            if (!sameHostToken && (parsed.hostname === '127.0.0.1' || parsed.hostname === '[::1]') && ACTIVE_BASE !== 'http://127.0.0.1:18890') {
               let localOk = false
               try {
                 const localRes = await fetch(ACTIVE_BASE + '/local-api/api/devices/' + encodeURIComponent(deviceId) + '/dsh/surface')
@@ -1722,10 +1723,11 @@ export function createTetherPanel({ React, Native, host }) {
       const host = url.hostname.toLowerCase()
       const loopback = host === '127.0.0.1' || host === '[::1]'
       const publicSurface = url.protocol === 'https:' && /^g\d{2,5}\.[a-z0-9.-]+$/.test(host)
-      const allowedHost = (url.protocol === 'http:' && loopback) || publicSurface
+      const ticketed = url.pathname === '/tether-connect' && !!url.searchParams.get('ticket')
+      const localToken = url.pathname === '/' && !!url.searchParams.get('token')
+      const allowedHost = (url.protocol === 'http:' && loopback && (ticketed || localToken)) || (publicSurface && ticketed)
       return allowedHost && !url.username && !url.password &&
-        Number(url.port || (url.protocol === 'https:' ? 443 : 80)) > 0 &&
-        url.pathname === '/tether-connect' && !!url.searchParams.get('ticket') && !url.hash
+        Number(url.port || (url.protocol === 'https:' ? 443 : 80)) > 0 && !url.hash
     }
 
     function App() {

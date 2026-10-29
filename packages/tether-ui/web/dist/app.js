@@ -9191,7 +9191,8 @@ function createTetherPanel({ React: React2, Native, host }) {
         if (!data.available || !isSafeNativeSurfaceUrl(data.url)) throw new Error("Controller \u8FD4\u56DE\u4E86\u65E0\u6548\u6216\u975E loopback \u7684\u539F\u751F\u9875\u9762\u5730\u5740");
         let surfaceUrl = data.url;
         const parsed = new URL(data.url);
-        if ((parsed.hostname === "127.0.0.1" || parsed.hostname === "[::1]") && ACTIVE_BASE !== "http://127.0.0.1:18890") {
+        const sameHostToken = parsed.pathname === "/" && !!parsed.searchParams.get("token");
+        if (!sameHostToken && (parsed.hostname === "127.0.0.1" || parsed.hostname === "[::1]") && ACTIVE_BASE !== "http://127.0.0.1:18890") {
           let localOk = false;
           try {
             const localRes = await fetch(ACTIVE_BASE + "/local-api/api/devices/" + encodeURIComponent(deviceId) + "/dsh/surface");
@@ -9285,8 +9286,10 @@ function createTetherPanel({ React: React2, Native, host }) {
     const host2 = url.hostname.toLowerCase();
     const loopback = host2 === "127.0.0.1" || host2 === "[::1]";
     const publicSurface = url.protocol === "https:" && /^g\d{2,5}\.[a-z0-9.-]+$/.test(host2);
-    const allowedHost = url.protocol === "http:" && loopback || publicSurface;
-    return allowedHost && !url.username && !url.password && Number(url.port || (url.protocol === "https:" ? 443 : 80)) > 0 && url.pathname === "/tether-connect" && !!url.searchParams.get("ticket") && !url.hash;
+    const ticketed = url.pathname === "/tether-connect" && !!url.searchParams.get("ticket");
+    const localToken = url.pathname === "/" && !!url.searchParams.get("token");
+    const allowedHost = url.protocol === "http:" && loopback && (ticketed || localToken) || publicSurface && ticketed;
+    return allowedHost && !url.username && !url.password && Number(url.port || (url.protocol === "https:" ? 443 : 80)) > 0 && !url.hash;
   }
   function App() {
     const [state, setState] = React2.useState(null);

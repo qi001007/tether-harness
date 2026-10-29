@@ -250,6 +250,12 @@ class NativeSurface:
             return {"available": False, "reason": "host_unreachable"}
         return {"available": True, "reason": "ready"}
 
+    def local_url(self) -> str | None:
+        """Same-host authenticated DSH URL, for the APP's zero-WAN-hop path."""
+        if not self.status().get("available"):
+            return None
+        return self._auth_url or None
+
     def _target(self, path: Any, *, websocket: bool = False, origin: str | None = None) -> str:
         origin = origin or self._origin
         if not origin:

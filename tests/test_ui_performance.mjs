@@ -62,8 +62,8 @@ test('hover uses an in-app tooltip and double click is guarded', () => {
   assert.match(source, /onHoverEntry/)
 })
 
-test('APP routes only local device file routes to the node and keeps the token server-side', () => {
-  assert.match(server, /const LOCAL_ROUTES = \['\/fs\/', '\/workspaces', '\/drives', '\/policy', '\/audit', '\/dsh\/sessions', '\/dsh\/workspaces\/register'\]/)
+test('APP routes the local device file API and surface descriptor to the node and keeps the token server-side', () => {
+  assert.match(server, /const LOCAL_ROUTES = \['\/fs\/', '\/workspaces', '\/drives', '\/policy', '\/audit', '\/dsh\/sessions', '\/dsh\/surface', '\/dsh\/workspaces\/register'\]/)
   assert.match(server, /headers\.authorization = 'Bearer ' \+ localToken/)
   assert.match(server, /'x-tether-local': '1'/)
   assert.match(supervisor, /crypto\.randomBytes\(24\)\.toString\('hex'\)/)

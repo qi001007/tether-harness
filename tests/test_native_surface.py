@@ -239,6 +239,12 @@ def test_html_response_drops_native_sidebar_seam(native_home):
     assert result["headers"]["cache-control"] == "no-store"
 
 
+def test_local_url_only_when_the_descriptor_is_live(native_home, tmp_path):
+    home, port, _server = native_home
+    assert NativeSurface(home).local_url() == f"http://127.0.0.1:{port}/?token=secret-token"
+    assert NativeSurface(tmp_path / "empty").local_url() is None
+
+
 @pytest.mark.parametrize("origin", ["http://example.com:1234", "http://127.0.0.1:0", "http://127.0.0.1:65536"])
 def test_rejects_non_loopback_or_invalid_port(tmp_path, origin):
     path = tmp_path / "storages" / "tether" / "native-surface.json"

@@ -5,18 +5,26 @@ import test from 'node:test'
 
 const clientSource = fs.readFileSync(new URL('../packages/dsh-plugin-tether-client/lib/client.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
 
-test('native surface accepts only the ticketed loopback bootstrap and avoids nested Tether registration', () => {
+test('native surface accepts only ticketed loopback, public ticket and same-host token URLs', () => {
   const start = clientSource.indexOf('    function isSafeNativeSurfaceUrl(value) {')
   const end = clientSource.indexOf('\n\n    function App()', start)
   assert.ok(start >= 0 && end > start, 'native surface URL validator is present')
   const isSafeNativeSurfaceUrl = vm.runInNewContext(clientSource.slice(start, end) + '\n; isSafeNativeSurfaceUrl', { URL })
   assert.equal(isSafeNativeSurfaceUrl('http://127.0.0.1:43123/tether-connect?ticket=one'), true)
   assert.equal(isSafeNativeSurfaceUrl('http://[::1]:43123/tether-connect?ticket=one'), true)
+  assert.equal(isSafeNativeSurfaceUrl('http://127.0.0.1:57168/?token=local-one'), true)
+  assert.equal(isSafeNativeSurfaceUrl('http://[::1]:57168/?token=local-one'), true)
+  assert.equal(isSafeNativeSurfaceUrl('http://127.0.0.1:57168/'), false)
+  assert.equal(isSafeNativeSurfaceUrl('http://127.0.0.1:57168/other?token=local-one'), false)
+  assert.equal(isSafeNativeSurfaceUrl('https://g46285.8-220-198-26.sslip.io/?token=local-one'), false)
   assert.equal(isSafeNativeSurfaceUrl('http://localhost:43123/tether-connect?ticket=one'), false)
   assert.equal(isSafeNativeSurfaceUrl('http://127.0.0.1.evil.test:43123/tether-connect?ticket=one'), false)
   assert.equal(isSafeNativeSurfaceUrl('http://user:pass@127.0.0.1:43123/tether-connect?ticket=one'), false)
+  assert.equal(isSafeNativeSurfaceUrl('http://user:pass@127.0.0.1:43123/?token=local-one'), false)
   assert.equal(isSafeNativeSurfaceUrl('http://127.0.0.1:43123/tether-connect'), false)
   assert.equal(isSafeNativeSurfaceUrl('https://127.0.0.1:43123/tether-connect?ticket=one'), false)
+  assert.ok(clientSource.includes("const sameHostToken = parsed.pathname === '/' && !!parsed.searchParams.get('token')"),
+    'same-host token URLs bypass the hub-loopback guard')
 
   let plugin
   const React = { createElement() { return {} }, useState() {}, useEffect() {}, useRef() {}, useCallback() {} }
