@@ -1,5 +1,16 @@
 # Public client releases
 
+## v0.2.20
+
+[GitHub Release](https://github.com/qi001007/tether-harness/releases/tag/v0.2.20) · tag `v0.2.20` → `965adf1` · workflow run `40819992563`.
+
+Fixes two regressions seen after the 0.2.19 automatic DSH restart:
+
+- The native workspace kept showing `dsh web authentication required` after a DSH restart: the descriptor token stayed the same while the host session changed. The node now returns the DSH host `pid`/`updated_at` with the surface descriptor; the APP remounts the iframe and re-authenticates whenever that pid changes.
+- The local plugin card still showed latest `0.2.18` after 0.2.19 shipped: the plugin updater followed GitHub's edge-cached `latest` redirect. It now resolves the latest tag through the release API (5-minute cache) before fetching, like the Hub mirror.
+
+Verified on the lab bench: after installing 0.2.20 and restarting DSH, the native frame loads the current token URL (no auth error) and the plugin updater reports `latest_version=0.2.20`. A full remote update of LAPTOP-01 (0.2.19 → 0.2.20, no manual steps on the target) applied Node (19 files), plugin (40 files, automatic DSH restart, `restart_required=false`) and APP (34 files, automatic restart); both machines report APP/Node 0.2.20.
+
 ## v0.2.19
 
 [GitHub Release](https://github.com/qi001007/tether-harness/releases/tag/v0.2.19) · tag `v0.2.19` → `66fdef1` · workflow run `40818499641`.

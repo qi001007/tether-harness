@@ -2,6 +2,13 @@
 
 更新日期：2026-10-29。
 
+## 当前实测状态：v0.2.20 已发布
+
+- tag `v0.2.20` → `965adf1`；发行工作流 `40819992563` 成功；资产 app 409,414 B、node 71,554 B、plugin 414,910 B，manifest 验签通过、大小/SHA 一致；Release 已发布。
+- 修复两个 0.2.19 之后出现的回归：① DSH 自动重启后 APP 原生页停在 `dsh web authentication required`——描述符 token 未变但宿主会话已换；现在节点在 surface 描述符里返回 DSH host 的 `pid`/`updated_at`，APP 在 pid 变化时重建 iframe 并重新认证。② 本机插件卡 latest 仍显示 0.2.18——插件本地更新器走了 GitHub latest 的边缘缓存；现在更新器先通过 release API 解析 tag（5 分钟缓存）再取清单。
+- 本机实验台与 LAPTOP-01 均已 `0.2.20`。远程实测（目标端零手工）：Node 19 文件、自动重启；插件 40 文件、DSH 自动重启后 `restart_required=false`；APP 34 文件、自动重启后 0.2.20 在线；两机 APP/Node 均 0.2.20。
+- 门禁：153 mjs / 6 cjs / 112 pytest（1 skipped）、`build.mjs --check`、`validate_versions()`。
+
 ## 当前实测状态：v0.2.19 已发布
 
 - tag `v0.2.19` → `66fdef1`；发行工作流 `40818499641` 成功；资产 app 408,693 B、node 70,969 B、plugin 414,448 B，manifest 验签通过、大小/SHA 一致；Release 已发布。
