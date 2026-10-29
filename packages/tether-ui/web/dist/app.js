@@ -9174,6 +9174,14 @@ function createTetherPanel({ React: React2, Native, host }) {
           const response = await fetch(base + "/api/devices/" + encodeURIComponent(id) + "/dsh/surface", { signal: AbortSignal.timeout(8e3) });
           const data = await response.json().catch(() => ({}));
           if (!response.ok && (response.status === 502 || response.status === 504) && base !== ACTIVE_BASE) continue;
+          if (host && host.kind === "dsh" && data && typeof data.url === "string" && typeof window !== "undefined" && window.location) {
+            try {
+              if (new URL(data.url).origin === window.location.origin) {
+                return { response, data: { available: true, local: true, url: "", pid: data.pid || 0 } };
+              }
+            } catch (_) {
+            }
+          }
           return { response, data };
         } catch (error) {
           lastError = error;
@@ -9241,6 +9249,10 @@ function createTetherPanel({ React: React2, Native, host }) {
       }
       setState({ deviceId, status: "loading", url: "" });
       fetchSurfaceDescriptor(deviceId).then(async ({ response, data }) => {
+        if (data && data.local) {
+          if (current) setState({ deviceId, status: "local", url: "", pid: Number(data.pid) || 0 });
+          return;
+        }
         if (!response.ok) {
           const detail = data.detail || {};
           const code = detail.code;
@@ -9254,7 +9266,8 @@ function createTetherPanel({ React: React2, Native, host }) {
         let surfaceUrl = data.url;
         const parsed = new URL(data.url);
         const sameHostToken = parsed.pathname === "/" && !!parsed.searchParams.get("token");
-        if (!sameHostToken && (parsed.hostname === "127.0.0.1" || parsed.hostname === "[::1]") && ACTIVE_BASE !== "http://127.0.0.1:18890") {
+        const sameOriginUrl = typeof window !== "undefined" && window.location && parsed.origin === window.location.origin;
+        if (!sameHostToken && !sameOriginUrl && (parsed.hostname === "127.0.0.1" || parsed.hostname === "[::1]") && ACTIVE_BASE !== "http://127.0.0.1:18890") {
           let localOk = false;
           try {
             const localRes = await fetch(ACTIVE_BASE + "/local-api/api/devices/" + encodeURIComponent(deviceId) + "/dsh/surface");
@@ -9289,7 +9302,7 @@ function createTetherPanel({ React: React2, Native, host }) {
       return () => {
         current = false;
       };
-    }, [deviceId, online, attempt]);
+    }, [deviceId, online, attempt, localDeviceId]);
     React2.useEffect(() => {
       if (!deviceId || !online) return void 0;
       let alive = true;
@@ -9331,8 +9344,8 @@ function createTetherPanel({ React: React2, Native, host }) {
         alive = false;
         clearInterval(timer);
       };
-    }, [deviceId, online]);
-    const message = currentState.status === "loading" ? currentState.message || "\u6B63\u5728\u8FDE\u63A5\u76EE\u6807\u8BBE\u5907\u7684 DSH \u539F\u751F\u5DE5\u4F5C\u533A\u2026" : currentState.status === "offline" ? "\u76EE\u6807\u8BBE\u5907\u79BB\u7EBF\u3002\u8BBE\u5907\u91CD\u65B0\u5728\u7EBF\u540E\u53EF\u91CD\u8BD5\u3002" : currentState.status === "no-device" ? "\u5148\u4ECE\u5DE6\u4FA7\u8BBE\u5907\u5217\u8868\u9009\u62E9\u76EE\u6807\u8BBE\u5907\u3002" : currentState.status === "error" ? currentState.message : "";
+    }, [deviceId, online, localDeviceId]);
+    const message = currentState.status === "loading" ? currentState.message || "\u6B63\u5728\u8FDE\u63A5\u76EE\u6807\u8BBE\u5907\u7684 DSH \u539F\u751F\u5DE5\u4F5C\u533A\u2026" : currentState.status === "local" ? "\u5F53\u524D\u5DF2\u5728 DeepSeek Harness \u4E2D\uFF1B\u672C\u673A\u5DE5\u4F5C\u533A\u65E0\u9700\u518D\u5D4C\u5165\uFF0C\u53EF\u7528\u5DE6\u4FA7\u300C\u6587\u4EF6\u300D\u6216\u300C\u8FDE\u63A5\u300D\u3002" : currentState.status === "offline" ? "\u76EE\u6807\u8BBE\u5907\u79BB\u7EBF\u3002\u8BBE\u5907\u91CD\u65B0\u5728\u7EBF\u540E\u53EF\u91CD\u8BD5\u3002" : currentState.status === "no-device" ? "\u5148\u4ECE\u5DE6\u4FA7\u8BBE\u5907\u5217\u8868\u9009\u62E9\u76EE\u6807\u8BBE\u5907\u3002" : currentState.status === "error" ? currentState.message : "";
     return h(
       "div",
       { className: "tether-native-surface", style: nativeSurfaceContainerStyle(visible) },
@@ -9346,7 +9359,7 @@ function createTetherPanel({ React: React2, Native, host }) {
         "div",
         { style: { display: "grid", placeItems: "center", alignContent: "center", gap: 12, flex: "1 1 auto", minHeight: 0, color: C.sub, textAlign: "center", padding: 24 } },
         h("div", null, message),
-        currentState.status !== "loading" ? btn("\u91CD\u8BD5", () => {
+        currentState.status !== "loading" && currentState.status !== "local" ? btn("\u91CD\u8BD5", () => {
           retryCountRef.current = 0;
           setAttempt((value) => value + 1);
         }) : null
