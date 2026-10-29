@@ -46,16 +46,19 @@ ${shared}
         if (ctx.connection && ctx.connection.rpc && typeof ctx.connection.rpc.call === 'function') {
           localPluginRpc = ctx.connection.rpc
         }
-        if (new URL(window.location.href).searchParams.has('tether_native')) {
-          ctx.layout.selectPanel(null)
-          const targetFiles = createDshTargetFilesBridge({ getRpc: () => localPluginRpc, getRemote: () => localPluginRemote })
-          if (ctx.fileDrag && typeof ctx.fileDrag.read === 'function') {
-            const attachments = createDshTargetAttachments(React, Native, targetFiles)
-            ctx.slots.inject('conversation.input.attachments', () => ctx.slots.register({
-              name: 'conversation.input.attachments', priority: -1000, locale: 'conversation',
-              inject: () => ({ readFileDrag: ctx.fileDrag.read })
-            }, attachments))
-          }
+        const embedded = (() => { try { return window.top !== window.self } catch (_) { return true } })()
+        if (embedded || new URL(window.location.href).searchParams.has('tether_native')) {
+          try { ctx.layout.selectPanel(null) } catch (_) { /* embedded surface has no Tether panel */ }
+          try {
+            const targetFiles = createDshTargetFilesBridge({ getRpc: () => localPluginRpc, getRemote: () => localPluginRemote })
+            if (ctx.fileDrag && typeof ctx.fileDrag.read === 'function') {
+              const attachments = createDshTargetAttachments(React, Native, targetFiles)
+              ctx.slots.inject('conversation.input.attachments', () => ctx.slots.register({
+                name: 'conversation.input.attachments', priority: -1000, locale: 'conversation',
+                inject: () => ({ readFileDrag: ctx.fileDrag.read })
+              }, attachments))
+            }
+          } catch (_) { /* attachments are optional in an embedded surface */ }
           return
         }
         ctx.slots.inject('main', function* () {

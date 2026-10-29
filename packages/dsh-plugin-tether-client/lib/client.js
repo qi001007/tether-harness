@@ -4,7 +4,7 @@ window.__ModuleLoader__.load({
     const React = require('react')
     const Native = require('tether-dsh-native-ui')
     const PANEL_ID = 'tether'
-    const PLUGIN_VERSION = "0.2.22"
+    const PLUGIN_VERSION = "0.2.23"
 const DSH_API_BASE = 'http://127.0.0.1:18890'
 const DSH_APP_BASE = 'http://127.0.0.1:18892'
 
@@ -394,7 +394,7 @@ function createDshHost({ apiBase = DSH_API_BASE, pluginVersion = null, localPlug
       const hub = storedHub()
       return hub ? [hub.url.replace(/\/+$/, ''), DSH_APP_BASE, apiBase] : [DSH_APP_BASE, apiBase]
     },
-    surfaceBase: (isLocal) => (isLocal ? DSH_APP_BASE : ''),
+    surfaceBase: () => DSH_APP_BASE,
     apiHeaders: (base) => {
       const hub = storedHub()
       const normalize = (value) => String(value || '').replace(/\/+$/, '')
@@ -2092,6 +2092,14 @@ function createTetherPanel({ React, Native, host }) {
             const response = await fetch(base + '/api/devices/' + encodeURIComponent(id) + '/dsh/surface', { signal: AbortSignal.timeout(8000) })
             const data = await response.json().catch(() => ({}))
             if (!response.ok && (response.status === 502 || response.status === 504) && base !== ACTIVE_BASE) continue
+            if (host && host.kind === 'dsh' && data && typeof data.url === 'string'
+                && typeof window !== 'undefined' && window.location) {
+              try {
+                if (new URL(data.url).origin === window.location.origin) {
+                  return { response, data: { available: true, local: true, url: '', pid: data.pid || 0 } }
+                }
+              } catch (_) { /* keep the descriptor URL */ }
+            }
             return { response, data }
           } catch (error) { lastError = error }
         }
@@ -2147,6 +2155,10 @@ function createTetherPanel({ React, Native, host }) {
         setState({ deviceId, status: 'loading', url: '' })
         fetchSurfaceDescriptor(deviceId)
           .then(async ({ response, data }) => {
+            if (data && data.local) {
+              if (current) setState({ deviceId, status: 'local', url: '', pid: Number(data.pid) || 0 })
+              return
+            }
             if (!response.ok) {
               const detail = data.detail || {}
               const code = detail.code
@@ -2168,7 +2180,8 @@ function createTetherPanel({ React, Native, host }) {
             let surfaceUrl = data.url
             const parsed = new URL(data.url)
             const sameHostToken = parsed.pathname === '/' && !!parsed.searchParams.get('token')
-            if (!sameHostToken && (parsed.hostname === '127.0.0.1' || parsed.hostname === '[::1]') && ACTIVE_BASE !== 'http://127.0.0.1:18890') {
+            const sameOriginUrl = typeof window !== 'undefined' && window.location && parsed.origin === window.location.origin
+            if (!sameHostToken && !sameOriginUrl && (parsed.hostname === '127.0.0.1' || parsed.hostname === '[::1]') && ACTIVE_BASE !== 'http://127.0.0.1:18890') {
               let localOk = false
               try {
                 const localRes = await fetch(ACTIVE_BASE + '/local-api/api/devices/' + encodeURIComponent(deviceId) + '/dsh/surface')
@@ -2198,7 +2211,7 @@ function createTetherPanel({ React, Native, host }) {
             setState({ deviceId, status: 'error', url: '', message: error.message })
           })
         return () => { current = false }
-      }, [deviceId, online, attempt])
+      }, [deviceId, online, attempt, localDeviceId])
       React.useEffect(() => {
         if (!deviceId || !online) return undefined
         let alive = true
@@ -2232,10 +2245,11 @@ function createTetherPanel({ React, Native, host }) {
           } catch (_) { /* keep the current frame */ }
         }, 8000)
         return () => { alive = false; clearInterval(timer) }
-      }, [deviceId, online])
+      }, [deviceId, online, localDeviceId])
 
       const message = currentState.status === 'loading' ? (currentState.message || '正在连接目标设备的 DSH 原生工作区…')
-        : currentState.status === 'offline' ? '目标设备离线。设备重新在线后可重试。'
+        : currentState.status === 'local' ? '当前已在 DeepSeek Harness 中；本机工作区无需再嵌入，可用左侧「文件」或「连接」。'
+          : currentState.status === 'offline' ? '目标设备离线。设备重新在线后可重试。'
           : currentState.status === 'no-device' ? '先从左侧设备列表选择目标设备。'
             : currentState.status === 'error' ? currentState.message
               : ''
@@ -2250,7 +2264,7 @@ function createTetherPanel({ React, Native, host }) {
           })
           : h('div', { style: { display: 'grid', placeItems: 'center', alignContent: 'center', gap: 12, flex: '1 1 auto', minHeight: 0, color: C.sub, textAlign: 'center', padding: 24 } },
             h('div', null, message),
-            currentState.status !== 'loading' ? btn('重试', () => { retryCountRef.current = 0; setAttempt((value) => value + 1) }) : null
+            currentState.status !== 'loading' && currentState.status !== 'local' ? btn('重试', () => { retryCountRef.current = 0; setAttempt((value) => value + 1) }) : null
           )
       )
     }
@@ -4717,16 +4731,19 @@ function createTetherPanel({ React, Native, host }) {
         if (ctx.connection && ctx.connection.rpc && typeof ctx.connection.rpc.call === 'function') {
           localPluginRpc = ctx.connection.rpc
         }
-        if (new URL(window.location.href).searchParams.has('tether_native')) {
-          ctx.layout.selectPanel(null)
-          const targetFiles = createDshTargetFilesBridge({ getRpc: () => localPluginRpc, getRemote: () => localPluginRemote })
-          if (ctx.fileDrag && typeof ctx.fileDrag.read === 'function') {
-            const attachments = createDshTargetAttachments(React, Native, targetFiles)
-            ctx.slots.inject('conversation.input.attachments', () => ctx.slots.register({
-              name: 'conversation.input.attachments', priority: -1000, locale: 'conversation',
-              inject: () => ({ readFileDrag: ctx.fileDrag.read })
-            }, attachments))
-          }
+        const embedded = (() => { try { return window.top !== window.self } catch (_) { return true } })()
+        if (embedded || new URL(window.location.href).searchParams.has('tether_native')) {
+          try { ctx.layout.selectPanel(null) } catch (_) { /* embedded surface has no Tether panel */ }
+          try {
+            const targetFiles = createDshTargetFilesBridge({ getRpc: () => localPluginRpc, getRemote: () => localPluginRemote })
+            if (ctx.fileDrag && typeof ctx.fileDrag.read === 'function') {
+              const attachments = createDshTargetAttachments(React, Native, targetFiles)
+              ctx.slots.inject('conversation.input.attachments', () => ctx.slots.register({
+                name: 'conversation.input.attachments', priority: -1000, locale: 'conversation',
+                inject: () => ({ readFileDrag: ctx.fileDrag.read })
+              }, attachments))
+            }
+          } catch (_) { /* attachments are optional in an embedded surface */ }
           return
         }
         ctx.slots.inject('main', function* () {

@@ -26,8 +26,8 @@ test('native surface accepts only ticketed loopback, public ticket and same-host
   assert.equal(isSafeNativeSurfaceUrl('https://127.0.0.1:43123/tether-connect?ticket=one'), false)
   assert.ok(clientSource.includes("const sameHostToken = parsed.pathname === '/' && !!parsed.searchParams.get('token')"),
     'same-host token URLs bypass the hub-loopback guard')
-  assert.ok(clientSource.includes("surfaceBase: (isLocal) => (isLocal ? DSH_APP_BASE : '')"),
-    'the DSH host prefers the local APP server for the local device')
+  assert.ok(clientSource.includes('surfaceBase: () => DSH_APP_BASE'),
+    'the DSH host asks the local APP server first')
   assert.ok(clientSource.includes('host.surfaceBase(id === localDeviceId)'),
     'the surface descriptor asks the host for its fast path')
   assert.ok(clientSource.includes('localDeviceId: appLocalDevice'),
@@ -112,4 +112,14 @@ test('the DSH plugin embeds the local workspace with the current same-origin ses
   assert.equal(isSafe('http://127.0.0.1:43123/'), true)
   assert.equal(isSafe('http://127.0.0.1:43124/'), false)
   assert.ok(clientSource.includes("host.kind === 'dsh' && localDeviceId && id === localDeviceId"))
+})
+
+test('the local device id participates in the surface effect dependencies', () => {
+  assert.ok(clientSource.includes('}, [deviceId, online, attempt, localDeviceId])'))
+  assert.ok(clientSource.includes('}, [deviceId, online, localDeviceId])'))
+})
+
+test('an embedded DSH page never registers the Tether plugin', () => {
+  assert.ok(clientSource.includes('window.top !== window.self'))
+  assert.ok(clientSource.includes("embedded || new URL(window.location.href).searchParams.has('tether_native')"))
 })
