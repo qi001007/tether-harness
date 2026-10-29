@@ -4395,7 +4395,21 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           open: true,
           onClose: () => setShowHub(false),
           info: { address: hubAddress || '未知', status: hubStatus, checkedAt: hubCheckedAt, durationMs: hubDuration },
-          busy: hubBusy, error: hubError, onProbe: probeConfiguredHub
+          busy: hubBusy, error: hubError, onProbe: probeConfiguredHub,
+          defaultUrl: hubUrl || '',
+          defaultDeviceId: appLocalDevice || deviceId || '',
+          defaultDeviceName: ((state && state.devices || []).find((item) => item.device_id === (appLocalDevice || deviceId)) || {}).name || appLocalDevice || deviceId || '',
+          platform: (typeof navigator !== 'undefined' && navigator.platform) || 'Windows',
+          onConfigured: ({ url, token, user }) => {
+            try { window.localStorage.setItem('tether.hub', JSON.stringify({ url, token })) } catch (_) { /* storage may be unavailable */ }
+            setHubUrl(url)
+            setHubToken(token)
+            setHubAddress(url)
+            setHubStatus('online')
+            setShowHub(false)
+            setNotice('登录成功' + (user && user.email ? '：' + user.email : '，已连接 Hub'))
+            if (host && typeof host.probeConnection === 'function') host.probeConnection(url).catch(() => {})
+          }
         }) : null,        showUpdate ? h('div', {
           onPointerDown: (event) => { if (event.target === event.currentTarget) setShowUpdate(false) },
           style: { position: 'absolute', inset: 0, background: 'rgba(16,24,40,0.35)', display: 'grid', placeItems: 'center', zIndex: 30, padding: 16, boxSizing: 'border-box' }
