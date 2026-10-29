@@ -7466,6 +7466,13 @@ function localPluginVersionSeed(host) {
   const version = host && host.kind === "dsh" && typeof host.pluginVersion === "string" ? host.pluginVersion : "";
   return version ? { current_version: version, runtime_version: version } : null;
 }
+function versionTuple(current, latest) {
+  const value = current === void 0 || current === null || current === "" ? "-" : String(current);
+  return value + "(" + (latest ? String(latest) : value) + ")";
+}
+function versionLine(label, primary = {}, node = {}) {
+  return label + " " + versionTuple(primary.current, primary.latest) + "/Node " + versionTuple(node.current, node.latest);
+}
 async function fetchApiJson(path, init = {}, { activeBase, apiBaseList, pinnedBase, headersForBase, fetcher = fetch } = {}) {
   const hasPinnedBase = pinnedBase !== void 0 && pinnedBase !== null;
   const ordered = hasPinnedBase ? [pinnedBase] : [activeBase, ...(apiBaseList || []).filter((base) => base !== activeBase)];
@@ -9703,8 +9710,14 @@ function createTetherPanel({ React: React2, Native, host }) {
       const runtimeRestartRequired = product === "dsh" && localPluginNeedsRestart(infos[0]);
       const hasUpdate = infos.some((info) => info && info.update_available === true);
       const known = infos.every((info) => info && info.current_version && info.latest_version);
-      const latest = infos.map((info) => info && info.latest_version).filter(Boolean);
-      const currentText = product === "desktop" ? "APP " + (infos[0].current_version || "\u672A\u77E5") + " / Node " + (infos[1].current_version || "\u672A\u77E5") : "\u63D2\u4EF6 " + (infos[0].runtime_version || infos[0].current_version || "\u672A\u77E5") + (runtimeRestartRequired ? "\uFF08\u5DF2\u5B89\u88C5 " + infos[0].current_version + "\uFF0C\u5F85\u751F\u6548\uFF09" : "") + " / Node " + (infos[1].current_version || "\u672A\u77E5");
+      const versionText = versionLine(
+        product === "desktop" ? "APP" : "\u63D2\u4EF6",
+        {
+          current: product === "desktop" ? infos[0].current_version : infos[0].runtime_version || infos[0].current_version,
+          latest: infos[0].latest_version
+        },
+        { current: infos[1].current_version, latest: infos[1].latest_version }
+      );
       const title = product === "desktop" ? "Tether Desktop\uFF08APP + Node\uFF09" : "Tether for DSH\uFF08\u63D2\u4EF6 + Node\uFF09";
       return h(
         "div",
@@ -9715,7 +9728,7 @@ function createTetherPanel({ React: React2, Native, host }) {
           h("strong", { style: { fontSize: 13 } }, title),
           h("span", { style: { marginLeft: "auto" } }, busy2 ? h("span", { className: "tether-spin", style: { display: "grid", placeItems: "center", color: C.amber } }, h(Glyph, { name: "refresh", size: 14 })) : runtimeRestartRequired ? pill("\u5F85\u751F\u6548", C.amber) : hasUpdate ? pill("\u6709\u66F4\u65B0", C.amber) : known ? pill("\u5DF2\u662F\u6700\u65B0", C.green) : failed ? pill("\u68C0\u67E5\u5931\u8D25", C.red) : pill("\u68C0\u67E5\u4E2D\u2026", C.mute))
         ),
-        h("div", { style: { color: C.sub, fontSize: 12, lineHeight: "19px" } }, "\u5F53\u524D " + currentText + (latest.length ? " \xB7 \u6700\u65B0 " + latest[0] : "")),
+        h("div", { style: { color: C.sub, fontSize: 12, lineHeight: "19px" } }, versionText),
         h(
           "div",
           { style: { marginTop: 8 } },
@@ -9735,6 +9748,11 @@ function createTetherPanel({ React: React2, Native, host }) {
       const known = infos.every((info) => info && info.current_version && info.latest_version);
       const busy2 = updateBusy.startsWith(item.device_id + ":") || updateBusy === "device:" + item.device_id;
       const failed = infos.some((_info, index) => !!(updateErrors.devices[item.device_id] || {})[["node", ...hasPlugin ? ["plugin"] : [], ...hasApp ? ["app"] : []][index]]);
+      const nodeTuple = versionTuple(node.current_version, node.latest_version);
+      const versionRows = [];
+      if (hasApp) versionRows.push("APP " + versionTuple(item.capabilities.app_version, app.latest_version) + "/Node " + nodeTuple);
+      if (hasPlugin) versionRows.push("\u63D2\u4EF6 " + versionTuple(plugin.current_version, plugin.latest_version) + "/Node " + nodeTuple);
+      if (!versionRows.length) versionRows.push("Node " + nodeTuple);
       return h(
         "div",
         { key: "device:" + item.device_id, style: { padding: 12, borderRadius: 8, background: C.panel, marginBottom: 10, opacity: item.online ? 1 : 0.6 } },
@@ -9748,7 +9766,7 @@ function createTetherPanel({ React: React2, Native, host }) {
         h(
           "div",
           { style: { color: C.sub, fontSize: 12, lineHeight: "19px" } },
-          (hasApp ? "APP " + item.capabilities.app_version + (app.latest_version ? " (" + app.latest_version + ")" : "") + " \xB7 " : "") + (hasPlugin ? "\u63D2\u4EF6 " + (plugin.current_version || "\u672A\u77E5") + " \xB7 " : "") + "Node " + (node.current_version || "\u672A\u77E5")
+          versionRows.map((text) => h("div", { key: text }, text))
         ),
         h(
           "div",

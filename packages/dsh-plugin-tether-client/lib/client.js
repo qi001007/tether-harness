@@ -618,6 +618,15 @@ function localPluginVersionSeed(host) {
   return version ? { current_version: version, runtime_version: version } : null
 }
 
+function versionTuple(current, latest) {
+  const value = current === undefined || current === null || current === '' ? '-' : String(current)
+  return value + '(' + (latest ? String(latest) : value) + ')'
+}
+
+function versionLine(label, primary = {}, node = {}) {
+  return label + ' ' + versionTuple(primary.current, primary.latest) + '/Node ' + versionTuple(node.current, node.latest)
+}
+
 async function fetchApiJson(path, init = {}, { activeBase, apiBaseList, pinnedBase, headersForBase, fetcher = fetch } = {}) {
   const hasPinnedBase = pinnedBase !== undefined && pinnedBase !== null
   const ordered = hasPinnedBase ? [pinnedBase] : [activeBase, ...(apiBaseList || []).filter((base) => base !== activeBase)]
@@ -2579,12 +2588,14 @@ function createTetherPanel({ React, Native, host }) {
         const runtimeRestartRequired = product === 'dsh' && localPluginNeedsRestart(infos[0])
         const hasUpdate = infos.some((info) => info && info.update_available === true)
         const known = infos.every((info) => info && info.current_version && info.latest_version)
-        const latest = infos.map((info) => info && info.latest_version).filter(Boolean)
-        const currentText = product === 'desktop'
-          ? 'APP ' + (infos[0].current_version || '未知') + ' / Node ' + (infos[1].current_version || '未知')
-          : '插件 ' + (infos[0].runtime_version || infos[0].current_version || '未知')
-            + (runtimeRestartRequired ? '（已安装 ' + infos[0].current_version + '，待生效）' : '')
-            + ' / Node ' + (infos[1].current_version || '未知')
+        const versionText = versionLine(product === 'desktop' ? 'APP' : '插件',
+          {
+            current: product === 'desktop'
+              ? infos[0].current_version
+              : (infos[0].runtime_version || infos[0].current_version),
+            latest: infos[0].latest_version
+          },
+          { current: infos[1].current_version, latest: infos[1].latest_version })
         const title = product === 'desktop' ? 'Tether Desktop（APP + Node）' : 'Tether for DSH（插件 + Node）'
         return h('div', { key: product, style: { padding: 12, borderRadius: 8, background: C.panel, marginBottom: 10 } },
           h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 } },
@@ -2593,7 +2604,7 @@ function createTetherPanel({ React, Native, host }) {
               : runtimeRestartRequired ? pill('待生效', C.amber)
                 : hasUpdate ? pill('有更新', C.amber)
                 : known ? pill('已是最新', C.green) : failed ? pill('检查失败', C.red) : pill('检查中…', C.mute))),
-          h('div', { style: { color: C.sub, fontSize: 12, lineHeight: '19px' } }, '当前 ' + currentText + (latest.length ? ' · 最新 ' + latest[0] : '')),
+          h('div', { style: { color: C.sub, fontSize: 12, lineHeight: '19px' } }, versionText),
           h('div', { style: { marginTop: 8 } },
             runtimeRestartRequired
               ? btn('立即生效', () => setPendingDshRestart(true), { primary: true, disabled: busy })
@@ -2611,6 +2622,11 @@ function createTetherPanel({ React, Native, host }) {
         const known = infos.every((info) => info && info.current_version && info.latest_version)
         const busy = updateBusy.startsWith(item.device_id + ':') || updateBusy === 'device:' + item.device_id
         const failed = infos.some((_info, index) => !!(updateErrors.devices[item.device_id] || {})[['node', ...(hasPlugin ? ['plugin'] : []), ...(hasApp ? ['app'] : [])][index]])
+        const nodeTuple = versionTuple(node.current_version, node.latest_version)
+        const versionRows = []
+        if (hasApp) versionRows.push('APP ' + versionTuple(item.capabilities.app_version, app.latest_version) + '/Node ' + nodeTuple)
+        if (hasPlugin) versionRows.push('插件 ' + versionTuple(plugin.current_version, plugin.latest_version) + '/Node ' + nodeTuple)
+        if (!versionRows.length) versionRows.push('Node ' + nodeTuple)
         return h('div', { key: 'device:' + item.device_id, style: { padding: 12, borderRadius: 8, background: C.panel, marginBottom: 10, opacity: item.online ? 1 : 0.6 } },
           h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 } },
             h('strong', { style: { fontSize: 13 } }, item.name || item.device_id),
@@ -2620,9 +2636,7 @@ function createTetherPanel({ React, Native, host }) {
                 : hasUpdate ? pill('有更新', C.amber)
                   : known ? pill('已是最新', C.green) : failed ? pill('检查失败', C.red) : pill('检查中…', C.mute))),
           h('div', { style: { color: C.sub, fontSize: 12, lineHeight: '19px' } },
-            (hasApp ? 'APP ' + item.capabilities.app_version + (app.latest_version ? ' (' + app.latest_version + ')' : '') + ' · ' : '')
-            + (hasPlugin ? '插件 ' + (plugin.current_version || '未知') + ' · ' : '')
-            + 'Node ' + (node.current_version || '未知')),
+            versionRows.map((text) => h('div', { key: text }, text))),
           h('div', { style: { marginTop: 8 } },
             btn(busy ? h('span', { className: 'tether-spin', style: { width: 16, height: 16, display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 16 })) : item.online ? '一键更新' : '离线', () => runDeviceUpdate(item), { primary: true, disabled: busy || !item.online || !hasUpdate })))
       }
