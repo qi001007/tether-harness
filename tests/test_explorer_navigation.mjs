@@ -136,3 +136,16 @@ test('the explorer exposes sort headers, a search box with a clear action and a 
   assert.match(source, /未找到匹配 “' \+ search\.trim\(\) \+ '” 的项目/)
   assert.match(source, /if \(filtering && !entries\.length\) return/)
 })
+
+test('a fast folder double-click reuses the prefetched listing without a false read error', () => {
+  assert.match(source, /rememberDir\(requestDevice, target, entries\)\s*return data/)
+  assert.match(source, /let data = pending \? await pending : null/)
+  assert.match(source, /if \(!data\) data = await postRetry\('\/api\/devices\/' \+ encodeURIComponent\(requestDevice\) \+ '\/fs\/list'/)
+})
+
+test('directory loading overlays the list instead of shifting it', () => {
+  assert.equal(source.includes("'正在刷新…'"), false, 'no inline refresh row')
+  assert.match(source, /className: 'tether-dir-loading'/)
+  assert.match(source, /\.tether-dir-loading \{ position: absolute; inset: 0;/)
+  assert.match(source, /position: 'relative', display: 'flex' \} \},\s*h\('div', \{ className: 'tether-scroll'/)
+})

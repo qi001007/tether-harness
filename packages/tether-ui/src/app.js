@@ -980,6 +980,8 @@ export function createTetherPanel({ React, Native, host }) {
       .tether-table tbody tr:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(38, 49, 72, 0.06)); }
       .tether-table-status { display: flex; align-items: center; gap: 12px; height: 26px; flex: 0 0 auto; padding: 0 12px; background: var(--tether-tabstrip, #f9fafb); color: var(--dsw-alias-label-tertiary, #667085); font-size: 11px; white-space: nowrap; overflow: hidden; }
       .tether-table-warn { color: var(--dsw-alias-state-warn-primary, #b54708); overflow: hidden; text-overflow: ellipsis; }
+      .tether-dir-loading { position: absolute; inset: 0; z-index: 4; display: grid; place-items: center; background: color-mix(in srgb, var(--dsw-alias-bg-base, #fff) 78%, transparent); color: var(--dsw-alias-label-tertiary, #667085); }
+      .tether-dir-loading > span { width: 20px; height: 20px; display: grid; place-items: center; }
       @media (prefers-reduced-motion: reduce) { .tether-spin > svg { animation-duration: 1.6s; } }
       .tether-flow { display: flex; flex-direction: column; max-width: calc(var(--dsh-chat-content-width, 748px) + 32px); width: 100%; margin: 0 auto; padding: 0 16px; box-sizing: border-box; }
       .tether-turn { display: flex; flex-direction: column; min-width: 0; }
@@ -2835,9 +2837,10 @@ export function createTetherPanel({ React, Native, host }) {
         if (dirInflightRef.current.has(key)) return
         const pending = post('/api/devices/' + encodeURIComponent(requestDevice) + '/fs/list', { path: target })
           .then((data) => {
-            if (deviceIdRef.current !== requestDevice) return
+            if (deviceIdRef.current !== requestDevice) return data
             const entries = (data.entries || []).map((entry) => ({ ...entry, path: joinPath(target, entry.name) }))
             rememberDir(requestDevice, target, entries)
+            return data
           })
           .catch(() => {})
           .finally(() => dirInflightRef.current.delete(key))
@@ -2996,9 +2999,8 @@ export function createTetherPanel({ React, Native, host }) {
         }
         try {
           const pending = dirInflightRef.current.get(key)
-          const data = pending
-            ? await pending
-            : await postRetry('/api/devices/' + encodeURIComponent(requestDevice) + '/fs/list', { path: requestTarget }, undefined, { signal: controller.signal })
+          let data = pending ? await pending : null
+          if (!data) data = await postRetry('/api/devices/' + encodeURIComponent(requestDevice) + '/fs/list', { path: requestTarget }, undefined, { signal: controller.signal })
           if (!data) throw new Error('目录读取失败')
           if (seq !== dirSeqRef.current || deviceIdRef.current !== requestDevice) return
           const entries = (data.entries || []).map((entry) => ({ ...entry, path: joinPath(requestTarget, entry.name) }))
@@ -3766,14 +3768,11 @@ export function createTetherPanel({ React, Native, host }) {
             h('div', null, '未找到匹配 “' + search.trim() + '” 的项目'),
             h('button', { onClick: () => setSearch(''), className: 'tether-hover', style: { border: 0, borderRadius: 6, padding: '5px 10px', background: C.soft, color: C.ink, fontSize: 12, cursor: 'pointer' } }, '清除搜索'))
           if (!entries.length) return h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', color: C.mute, fontSize: 12 } }, '空文件夹')
-          return h('div', { className: 'tether-scroll', onScroll: hideHoverTip, style: { flex: '1 1 auto', overflow: 'auto', padding: '0 10px 24px' } },
-            dirLoading ? h('div', { style: { display: 'flex', alignItems: 'center', gap: 7, height: 26, padding: '0 8px', fontSize: 11, color: C.mute } },
-              h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 13 })),
-              h('span', null, '正在刷新…'),
-              h('button', { onClick: stopLoading, className: 'tether-hover', style: { border: 0, borderRadius: 5, padding: '2px 8px', background: C.soft, color: C.ink, fontSize: 11, cursor: 'pointer' } }, '停止')) : null,
-            h('div', { style: { display: 'grid', gridTemplateColumns: columns, gap: 8, height: 28, padding: '0 8px', alignItems: 'center', fontSize: 11, color: C.mute } },
-              sortHeader('name', '名称'), sortHeader('mtime', '修改日期'), h('span', null, '类型'), sortHeader('size', '大小', 'right')),
-            entries.map((entry) => h('div', {
+          return h('div', { style: { flex: '1 1 auto', minHeight: 0, position: 'relative', display: 'flex' } },
+            h('div', { className: 'tether-scroll', onScroll: hideHoverTip, style: { flex: '1 1 auto', overflow: 'auto', padding: '0 10px 24px' } },
+              h('div', { style: { display: 'grid', gridTemplateColumns: columns, gap: 8, height: 28, padding: '0 8px', alignItems: 'center', fontSize: 11, color: C.mute } },
+                sortHeader('name', '名称'), sortHeader('mtime', '修改日期'), h('span', null, '类型'), sortHeader('size', '大小', 'right')),
+              entries.map((entry) => h('div', {
               key: entry.path, role: 'button', tabIndex: 0,
               onClick: (event) => {
                 if (event.detail > 1) return
@@ -3798,6 +3797,9 @@ export function createTetherPanel({ React, Native, host }) {
               h('span', { style: { color: C.mute, fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, entryTypeLabel(entry)),
               h('span', { className: 'tether-num', style: { color: C.mute, fontSize: 11, textAlign: 'right' } }, entry.dir ? '' : formatBytes(entry.size))
             ))
+            ),
+            dirLoading ? h('div', { className: 'tether-dir-loading', role: 'status', 'aria-live': 'polite', 'aria-label': '正在加载目录' },
+              h('span', { className: 'tether-spin' }, h(Glyph, { name: 'refresh', size: 18 }))) : null
           )
         }
 

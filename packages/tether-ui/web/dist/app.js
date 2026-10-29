@@ -8368,6 +8368,8 @@ function createTetherPanel({ React: React2, Native, host }) {
       .tether-table tbody tr:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(38, 49, 72, 0.06)); }
       .tether-table-status { display: flex; align-items: center; gap: 12px; height: 26px; flex: 0 0 auto; padding: 0 12px; background: var(--tether-tabstrip, #f9fafb); color: var(--dsw-alias-label-tertiary, #667085); font-size: 11px; white-space: nowrap; overflow: hidden; }
       .tether-table-warn { color: var(--dsw-alias-state-warn-primary, #b54708); overflow: hidden; text-overflow: ellipsis; }
+      .tether-dir-loading { position: absolute; inset: 0; z-index: 4; display: grid; place-items: center; background: color-mix(in srgb, var(--dsw-alias-bg-base, #fff) 78%, transparent); color: var(--dsw-alias-label-tertiary, #667085); }
+      .tether-dir-loading > span { width: 20px; height: 20px; display: grid; place-items: center; }
       @media (prefers-reduced-motion: reduce) { .tether-spin > svg { animation-duration: 1.6s; } }
       .tether-flow { display: flex; flex-direction: column; max-width: calc(var(--dsh-chat-content-width, 748px) + 32px); width: 100%; margin: 0 auto; padding: 0 16px; box-sizing: border-box; }
       .tether-turn { display: flex; flex-direction: column; min-width: 0; }
@@ -10584,9 +10586,10 @@ function createTetherPanel({ React: React2, Native, host }) {
       if (cached && Date.now() - cached.at < 3e4) return;
       if (dirInflightRef.current.has(key)) return;
       const pending = post("/api/devices/" + encodeURIComponent(requestDevice) + "/fs/list", { path: target }).then((data) => {
-        if (deviceIdRef.current !== requestDevice) return;
+        if (deviceIdRef.current !== requestDevice) return data;
         const entries = (data.entries || []).map((entry) => ({ ...entry, path: joinPath(target, entry.name) }));
         rememberDir(requestDevice, target, entries);
+        return data;
       }).catch(() => {
       }).finally(() => dirInflightRef.current.delete(key));
       dirInflightRef.current.set(key, pending);
@@ -10752,7 +10755,8 @@ function createTetherPanel({ React: React2, Native, host }) {
       }
       try {
         const pending = dirInflightRef.current.get(key);
-        const data = pending ? await pending : await postRetry("/api/devices/" + encodeURIComponent(requestDevice) + "/fs/list", { path: requestTarget }, void 0, { signal: controller.signal });
+        let data = pending ? await pending : null;
+        if (!data) data = await postRetry("/api/devices/" + encodeURIComponent(requestDevice) + "/fs/list", { path: requestTarget }, void 0, { signal: controller.signal });
         if (!data) throw new Error("\u76EE\u5F55\u8BFB\u53D6\u5931\u8D25");
         if (seq !== dirSeqRef.current || deviceIdRef.current !== requestDevice) return;
         const entries = (data.entries || []).map((entry) => ({ ...entry, path: joinPath(requestTarget, entry.name) }));
@@ -11823,63 +11827,65 @@ function createTetherPanel({ React: React2, Native, host }) {
         if (!entries.length) return h("div", { style: { flex: "1 1 auto", display: "grid", placeItems: "center", color: C.mute, fontSize: 12 } }, "\u7A7A\u6587\u4EF6\u5939");
         return h(
           "div",
-          { className: "tether-scroll", onScroll: hideHoverTip, style: { flex: "1 1 auto", overflow: "auto", padding: "0 10px 24px" } },
-          dirLoading ? h(
-            "div",
-            { style: { display: "flex", alignItems: "center", gap: 7, height: 26, padding: "0 8px", fontSize: 11, color: C.mute } },
-            h("span", { className: "tether-spin", style: { display: "grid", placeItems: "center" } }, h(Glyph, { name: "refresh", size: 13 })),
-            h("span", null, "\u6B63\u5728\u5237\u65B0\u2026"),
-            h("button", { onClick: stopLoading, className: "tether-hover", style: { border: 0, borderRadius: 5, padding: "2px 8px", background: C.soft, color: C.ink, fontSize: 11, cursor: "pointer" } }, "\u505C\u6B62")
-          ) : null,
+          { style: { flex: "1 1 auto", minHeight: 0, position: "relative", display: "flex" } },
           h(
             "div",
-            { style: { display: "grid", gridTemplateColumns: columns, gap: 8, height: 28, padding: "0 8px", alignItems: "center", fontSize: 11, color: C.mute } },
-            sortHeader("name", "\u540D\u79F0"),
-            sortHeader("mtime", "\u4FEE\u6539\u65E5\u671F"),
-            h("span", null, "\u7C7B\u578B"),
-            sortHeader("size", "\u5927\u5C0F", "right")
-          ),
-          entries.map((entry) => h(
-            "div",
-            {
-              key: entry.path,
-              role: "button",
-              tabIndex: 0,
-              onClick: (event) => {
-                if (event.detail > 1) return;
-                hideHoverTip();
-                setSelected(entry);
-                if (entry.dir) prefetchDir(entry.path);
-                else prefetchPreview(entry);
-              },
-              onDoubleClick: (event) => {
-                event.preventDefault();
-                hideHoverTip();
-                openFile(entry);
-              },
-              onMouseEnter: (event) => showHoverTip(event, entry),
-              onMouseLeave: hideHoverTip,
-              onContextMenu: (event) => openContextMenu(event, entry, entry.dir ? entry.path : path),
-              onKeyDown: (event) => {
-                if (event.key === "Enter") openFile(entry);
-              },
-              className: "tether-hover",
-              style: { display: "grid", gridTemplateColumns: columns, gap: 8, height: 30, padding: "0 8px", alignItems: "center", borderRadius: 6, fontSize: 13, color: C.ink, background: selected && selected.path === entry.path ? C.active : "transparent", cursor: "default" }
-            },
+            { className: "tether-scroll", onScroll: hideHoverTip, style: { flex: "1 1 auto", overflow: "auto", padding: "0 10px 24px" } },
             h(
               "div",
-              { style: { display: "flex", alignItems: "center", gap: 7, minWidth: 0 } },
-              h(
-                "span",
-                { style: { width: 16, height: 16, display: "grid", placeItems: "center", flex: "0 0 auto" } },
-                h(Native.FileTypeIcon, entry.dir ? { kind: "folder", size: 15 } : { path: entry.path, size: 15 })
-              ),
-              h("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, entry.name)
+              { style: { display: "grid", gridTemplateColumns: columns, gap: 8, height: 28, padding: "0 8px", alignItems: "center", fontSize: 11, color: C.mute } },
+              sortHeader("name", "\u540D\u79F0"),
+              sortHeader("mtime", "\u4FEE\u6539\u65E5\u671F"),
+              h("span", null, "\u7C7B\u578B"),
+              sortHeader("size", "\u5927\u5C0F", "right")
             ),
-            h("span", { style: { color: C.mute, fontSize: 11, whiteSpace: "nowrap" } }, formatMtime(entry.mtime)),
-            h("span", { style: { color: C.mute, fontSize: 11, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, entryTypeLabel(entry)),
-            h("span", { className: "tether-num", style: { color: C.mute, fontSize: 11, textAlign: "right" } }, entry.dir ? "" : formatBytes(entry.size))
-          ))
+            entries.map((entry) => h(
+              "div",
+              {
+                key: entry.path,
+                role: "button",
+                tabIndex: 0,
+                onClick: (event) => {
+                  if (event.detail > 1) return;
+                  hideHoverTip();
+                  setSelected(entry);
+                  if (entry.dir) prefetchDir(entry.path);
+                  else prefetchPreview(entry);
+                },
+                onDoubleClick: (event) => {
+                  event.preventDefault();
+                  hideHoverTip();
+                  openFile(entry);
+                },
+                onMouseEnter: (event) => showHoverTip(event, entry),
+                onMouseLeave: hideHoverTip,
+                onContextMenu: (event) => openContextMenu(event, entry, entry.dir ? entry.path : path),
+                onKeyDown: (event) => {
+                  if (event.key === "Enter") openFile(entry);
+                },
+                className: "tether-hover",
+                style: { display: "grid", gridTemplateColumns: columns, gap: 8, height: 30, padding: "0 8px", alignItems: "center", borderRadius: 6, fontSize: 13, color: C.ink, background: selected && selected.path === entry.path ? C.active : "transparent", cursor: "default" }
+              },
+              h(
+                "div",
+                { style: { display: "flex", alignItems: "center", gap: 7, minWidth: 0 } },
+                h(
+                  "span",
+                  { style: { width: 16, height: 16, display: "grid", placeItems: "center", flex: "0 0 auto" } },
+                  h(Native.FileTypeIcon, entry.dir ? { kind: "folder", size: 15 } : { path: entry.path, size: 15 })
+                ),
+                h("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, entry.name)
+              ),
+              h("span", { style: { color: C.mute, fontSize: 11, whiteSpace: "nowrap" } }, formatMtime(entry.mtime)),
+              h("span", { style: { color: C.mute, fontSize: 11, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, entryTypeLabel(entry)),
+              h("span", { className: "tether-num", style: { color: C.mute, fontSize: 11, textAlign: "right" } }, entry.dir ? "" : formatBytes(entry.size))
+            ))
+          ),
+          dirLoading ? h(
+            "div",
+            { className: "tether-dir-loading", role: "status", "aria-live": "polite", "aria-label": "\u6B63\u5728\u52A0\u8F7D\u76EE\u5F55" },
+            h("span", { className: "tether-spin" }, h(Glyph, { name: "refresh", size: 18 }))
+          ) : null
         );
       };
       const menuItem = (icon, label, onClick, danger) => h("button", {
