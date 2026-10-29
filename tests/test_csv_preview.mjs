@@ -6,6 +6,7 @@ import {
   TABLE_PREVIEW_MAX_ROWS,
   buildTablePreview,
   parseDelimited,
+  serializeDelimited,
   tableNumericColumns,
   tablePreviewFormat
 } from '../packages/tether-ui/src/app.js'
@@ -143,7 +144,7 @@ test('quoted empty fields and delimiter-only lines stay aligned', () => {
 })
 
 test('the explorer renders a sticky, scrollable table with a text toggle', () => {
-  assert.match(source, /if \(tablePreview && tableView\) return tablePreviewBody\(tablePreview\)/)
+  assert.match(source, /if \(tablePreview && tableView\) return tableEdit \? tableEditBody\(\) : tablePreviewBody\(tablePreview\)/)
   assert.match(source, /className: 'tether-scroll tether-table-scroll'/)
   assert.match(source, /className: 'tether-table', 'aria-label': '只读表格预览'/)
   assert.match(source, /\.tether-table th \{ position: sticky; top: 0;/)
@@ -157,4 +158,26 @@ test('the explorer renders a sticky, scrollable table with a text toggle', () =>
   assert.match(source, /--tether-table-grid: color-mix\(in srgb, var\(--dsw-alias-label-primary/)
   assert.match(source, /tether-table-warn \{ color: var\(--dsw-alias-state-warn-primary/)
   assert.match(source, /if \(!sameFile\) setTableView\(true\)/)
+})
+
+test('serializeDelimited round-trips CSV quoting, delimiters and line endings', () => {
+  const rows = [['a', 'b,c', 'he said "hi"'], ['1', 'line1\nline2', '']]
+  assert.equal(serializeDelimited(rows, { delimiter: ',', quoted: true }), 'a,"b,c","he said ""hi"""\n1,"line1\nline2",\n')
+  assert.equal(serializeDelimited(rows, { delimiter: ',', quoted: true, newline: '\r\n' }), 'a,"b,c","he said ""hi"""\r\n1,"line1\nline2",\r\n')
+  assert.equal(serializeDelimited([['a', 'b', 'c']], { delimiter: '\t', quoted: true }), 'a\tb\tc\n')
+  assert.equal(serializeDelimited([['a\tb', 'c']], { delimiter: '\t', quoted: false }), 'a b\tc\n')
+  const parsed = parseDelimited(serializeDelimited(rows, { delimiter: ',', quoted: true }), { delimiter: ',', quoted: true })
+  assert.deepEqual(parsed.rows, rows)
+})
+
+test('CSV/TSV tables edit in place and read the DOM back on save', () => {
+  assert.match(source, /export function serializeDelimited\(rows, options = \{\}\)/)
+  assert.match(source, /contentEditable: true, suppressContentEditableWarning: true/)
+  assert.match(source, /className: 'tether-table tether-table-edit'/)
+  assert.match(source, /const saveTable = async \(\) => \{/)
+  assert.match(source, /const table = document\.querySelector\('\.tether-table-edit'\)/)
+  assert.match(source, /serializeDelimited\(rows, \{ delimiter: format\.delimiter, quoted: format\.quoted, newline: format\.newline/)
+  assert.match(source, /tableEdit \? iconButton\('eye', '退出表格编辑', cancelTableEdit, false\)/)
+  assert.match(source, /tablePreview && tableView && tableCanEdit && file\.writable \? iconButton\('pencil', '编辑表格', startTableEdit, false\)/)
+  assert.match(source, /const tableCanEdit = !!\(file && tablePreview && tableFormatOf\(file\) && !file\.truncated && !tablePreview\.truncatedRows && !tablePreview\.truncatedColumns\)/)
 })
