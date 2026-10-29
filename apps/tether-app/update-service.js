@@ -44,10 +44,11 @@ class UpdateService {
     this.preparedIds = new Set()
   }
 
-  async run(command, preparedId) {
+  async run(command, preparedId, force = false) {
     const stateDir = path.join(this.dataDir, 'updates')
     const args = ['-m', 'tether.updates_cli', command, '--component', 'app', '--root', this.repoRoot, '--state-dir', stateDir, '--dsh-home', this.dshHome]
     if (preparedId) args.push('--prepared-id', preparedId)
+    if (force) args.push('--force')
     const env = { ...this.env, PYTHONPATH: this.repoRoot, PYTHONIOENCODING: 'utf-8' }
     try {
       const { stdout } = await this.exec(this.python, args, {
@@ -87,7 +88,7 @@ class UpdateService {
     }
     return result
   }
-  check() { return this.run('check') }
+  check() { return this.run('check', undefined, true) }
   async activity() {
     const result = await this.run('activity')
     if (result.busy) {

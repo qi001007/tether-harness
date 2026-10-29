@@ -52,8 +52,11 @@ try {
   assert.ok(calls[0].includes('--root') && calls[0].includes(repoRoot))
   assert.ok(calls[0].includes('--state-dir') && calls[0].includes(path.join(dataDir, 'updates')))
   assert.ok(calls[0].includes('--dsh-home') && calls[0].includes('C:/Users/test/.dsh'))
+  assert.ok(calls[0].includes('--force'), 'a manual check must bypass the manifest disk cache')
 
   await service.status()
+  const statusCall = calls.find((args) => args[2] === 'status')
+  assert.ok(statusCall && !statusCall.includes('--force'), 'status keeps the short-lived cache')
   assert.equal(await service.apply('unknown-prepared-id').catch((error) => error.code), 'invalid_prepared_id')
   const prepared = await service.prepare()
   assert.equal(prepared.prepared_id, 'fixture-prepared-02')

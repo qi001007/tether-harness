@@ -196,6 +196,7 @@ export function createLocalPluginUpdateHandler({
     const args = ['-m', 'tether.updates_cli', action, '--component', 'plugin', '--root', updaterRoot,
       '--dsh-home', dshHome, '--state-dir', stateDir, '--profile', profile,
       ...(env.TETHER_DEVICE ? ['--device', env.TETHER_DEVICE] : []),
+      ...(action === 'check' ? ['--force'] : []),
       ...(manifestUrl ? ['--manifest-url', manifestUrl] : []),
       ...extraArgs]
     const candidates = resolvePythonCandidates(env, platform)
