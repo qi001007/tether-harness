@@ -5,7 +5,7 @@ const { pathToFileURL } = require('node:url')
 const { Supervisor } = require('./supervisor.js')
 const { waitForSupervisorStart, waitForLocalNodeApi } = require('./startup-readiness.js')
 const { UpdateService } = require('./update-service.js')
-const { rendererDiagnostic, rendererFrameState, rendererRequestScope, rendererSettledFrameState, safeRendererMessage, safeRendererPath } = require('./renderer-diagnostics.js')
+const { rendererDiagnostic, isSurfaceBootFailure, rendererFrameState, rendererRequestScope, rendererSettledFrameState, safeRendererMessage, safeRendererPath } = require('./renderer-diagnostics.js')
 
 const repoRoot = path.resolve(__dirname, '..', '..')
 const webRoot = path.join(repoRoot, 'packages', 'tether-ui', 'web')
@@ -65,6 +65,7 @@ function log(line) {
 let mainWindow = null
 let webServer = null
 let rendererConsoleErrors = 0
+let surfaceBootFailureSentAt = 0
 
 function logRendererNetworkFailure(event, details) {
   const scope = rendererRequestScope(details.url, controller)
@@ -141,6 +142,12 @@ async function createWindow() {
   mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
     if (level >= 3) rendererConsoleErrors += 1
     if (level >= 3) log(rendererDiagnostic(message, sourceId, line))
+    if (level >= 3 && isSurfaceBootFailure(message) && Date.now() - surfaceBootFailureSentAt > 3000) {
+      surfaceBootFailureSentAt = Date.now()
+      let source = ''
+      try { source = new URL(sourceId).href } catch (_) { /* relative console source */ }
+      mainWindow.webContents.send('tether:surface-boot-failed', { source })
+    }
   })
   mainWindow.webContents.on('did-start-navigation', (_event, navigationUrl, isInPlace, isMainFrame) => {
     if (!isInPlace) log('renderer navigation started main=' + !!isMainFrame + ' path=' + safeRendererPath(navigationUrl))

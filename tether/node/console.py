@@ -98,6 +98,13 @@ class _Handler(BaseHTTPRequestHandler):
                 self._error(400, "limit and offset must be integers", "bad_args")
                 return
             result = self._dispatch("audit_list", {"limit": limit, "offset": offset})
+        elif tail == ["dsh", "surface"]:
+            surface = getattr(self.api, "native_surface", None)
+            url = surface.local_url() if surface is not None else None
+            if not url:
+                self._error(409, "native DSH surface unavailable", "descriptor_missing")
+                return
+            result = {"available": True, "url": url}
         elif tail == ["dsh", "sessions"]:
             result = {"sessions": self.api.dsh_sessions.list(),
                       "home": str(self.api.dsh_sessions.home)}

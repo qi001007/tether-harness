@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict')
 const test = require('node:test')
-const { rendererDiagnostic, rendererFrameState, rendererRequestScope, rendererSettledFrameState, safeRendererMessage, safeRendererPath } = require('../apps/tether-app/renderer-diagnostics.js')
+const { isSurfaceBootFailure, rendererDiagnostic, rendererFrameState, rendererRequestScope, rendererSettledFrameState, safeRendererMessage, safeRendererPath } = require('../apps/tether-app/renderer-diagnostics.js')
 
 test('renderer diagnostics retain source and error clues while removing credentials and URL queries', () => {
   const diagnostic = rendererDiagnostic(
@@ -19,6 +19,15 @@ test('renderer error messages strip URL credentials and bearer values', () => {
   assert.match(safe, /Bearer \[redacted\]/)
   assert.doesNotMatch(safe, /private|abcdef/)
   assert.equal(safeRendererPath('file:///workspace/app.js?key=value'), '/workspace/app.js')
+})
+
+test('surface boot activation failures are recognized without matching unrelated renderer errors', () => {
+  assert.equal(isSurfaceBootFailure('Error: web boot: 1 entry did not activate\ntether-dsh-client: failed'), true)
+  assert.equal(isSurfaceBootFailure('web boot: 2 entries did not activate\nA: failed\nB: failed'), true)
+  assert.equal(isSurfaceBootFailure('TypeError: web boot: network down'), false)
+  assert.equal(isSurfaceBootFailure('web boot: gateway answered 502'), false)
+  assert.equal(isSurfaceBootFailure(''), false)
+  assert.equal(isSurfaceBootFailure(undefined), false)
 })
 
 test('renderer network diagnostics scope local and configured gateway requests only', () => {

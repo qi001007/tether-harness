@@ -12,3 +12,4 @@
 # 变更记录
 
 - 2026-10-28：DSH Host 接收 bundle 内嵌插件版本，供本机更新卡在 RPC 失败时仍显示实际运行版本。
+- 2026-10-29：DSH host 新增 `surfaceBase(isLocal)`：本地设备的 surface 描述符先问本机 APP 服务（18892），其余仍走 API base 列表；web/electron host 的 `surfaceBase` 保持同源。

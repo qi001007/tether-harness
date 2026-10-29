@@ -250,6 +250,12 @@ class NativeSurface:
             return {"available": False, "reason": "host_unreachable"}
         return {"available": True, "reason": "ready"}
 
+    def local_url(self) -> str | None:
+        """Same-host authenticated DSH URL, for the APP's zero-WAN-hop path."""
+        if not self.status().get("available"):
+            return None
+        return self._auth_url or None
+
     def _target(self, path: Any, *, websocket: bool = False, origin: str | None = None) -> str:
         origin = origin or self._origin
         if not origin:
@@ -386,12 +392,28 @@ class NativeSurface:
         clean["accept-encoding"] = "gzip"
         request = urllib.request.Request(url, data=body, headers=clean, method=method)
         opener = urllib.request.build_opener(_NoRedirect())
-        try:
-            response = opener.open(request, timeout=TIMEOUT)
-        except urllib.error.HTTPError as exc:
-            response = exc
-        except Exception as exc:
-            raise NativeSurfaceError("native DSH request failed", "upstream_error") from None
+
+        def send() -> Any:
+            try:
+                return opener.open(request, timeout=TIMEOUT)
+            except urllib.error.HTTPError as exc:
+                return exc
+            except Exception:
+                raise NativeSurfaceError("native DSH request failed", "upstream_error") from None
+
+        response = send()
+        if response.code in (401, 403):
+            # DSH rotates its web session on restart; stale cookies must be replaced once.
+            response.close()
+            self._reset_auth()
+            self._ensure_authenticated()
+            refreshed = self._cookie_header()
+            if refreshed:
+                clean["cookie"] = refreshed
+            else:
+                clean.pop("cookie", None)
+            request = urllib.request.Request(url, data=body, headers=clean, method=method)
+            response = send()
         with response:
             payload = response.read(MAX_BODY + 1)
             if len(payload) > MAX_BODY:

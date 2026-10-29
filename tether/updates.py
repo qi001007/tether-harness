@@ -27,7 +27,7 @@ from typing import Any
 from .release import ReleaseSignatureError, verify_signature
 
 
-UPDATER_VERSION = "0.2.15"
+UPDATER_VERSION = "0.2.16"
 LEGACY_BASELINE_VERSION = "0.2.0"
 UPDATE_PROTOCOL = 1
 MIN_UPDATE_PROTOCOL = 1

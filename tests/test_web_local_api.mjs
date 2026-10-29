@@ -10,7 +10,7 @@ function listen(server) {
   })
 }
 
-test('APP web server routes only the local device file API to the local node', async () => {
+test('APP web server routes the local device API, including the surface descriptor, to the local node', async () => {
   const seen = []
   const node = http.createServer((req, res) => {
     let body = ''
@@ -50,9 +50,14 @@ test('APP web server routes only the local device file API to the local node', a
     assert.equal(remote.headers.get('x-tether-local'), null)
 
     const surface = await fetch(base + '/api/devices/DESKTOP-LOCAL/dsh/surface')
-    assert.equal(surface.status, 502)
-    assert.equal(surface.headers.get('x-tether-local'), null)
-    assert.equal(seen.length, 2)
+    assert.equal(surface.status, 200)
+    assert.equal(surface.headers.get('x-tether-local'), '1')
+    assert.equal(seen.at(-1).url, '/api/devices/DESKTOP-LOCAL/dsh/surface')
+    assert.equal(seen.length, 3)
+
+    const foreignSurface = await fetch(base + '/api/devices/OTHER/dsh/surface')
+    assert.equal(foreignSurface.status, 502)
+    assert.equal(foreignSurface.headers.get('x-tether-local'), null)
   } finally {
     await app.close()
     await new Promise((resolve) => node.close(resolve))

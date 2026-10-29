@@ -1,4 +1,5 @@
 # 修改记录
+- 2026-10-29：重建插件客户端 bundle，同步资源管理器导航、排序与搜索 UI。
 - 2026-10-28：插件 bundle 注入 `remote.pluginManager` 与受限 `reloadLocalPluginSurface()`，交给更新确认流程按需调用一次。
 - 2026-10-28：生成 native iframe 插件 bundle 注册目标设备附件 slot picker，并完整保留 DSH ComposerAttachments 原组件。
 - 2026-10-28：重建公开插件客户端 bundle，内嵌版本常量同步至 `0.2.11`。
@@ -43,3 +44,7 @@
 # 变更记录
 
 - 2026-10-28：重新生成 `client.js`，同步共享 UI 对运行中与磁盘插件版本不一致的提示。
+- 2026-10-28：重新生成 `client.js`，加入 `NativeSurface` 自动重连与退避辅助函数（`tests/test_surface_recovery.mjs` 覆盖）。
+- 2026-10-28：重新生成 `client.js`（代码页首开竞态修复 + 标签栏/当前行高亮/可拖动分隔条）。
+- 2026-10-29：重新生成 `client.js`，仅更新内嵌 `PLUGIN_VERSION` 至 `0.2.16`。
+- 2026-10-29：重新生成 `client.js`，包含 CSV/TSV/XLSX 只读表格预览与纯文本切换（同源共享 UI）。

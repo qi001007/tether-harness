@@ -174,6 +174,15 @@ export function localPluginVersionSeed(host) {
   return version ? { current_version: version, runtime_version: version } : null
 }
 
+export function versionTuple(current, latest) {
+  const value = current === undefined || current === null || current === '' ? '-' : String(current)
+  return value + '(' + (latest ? String(latest) : value) + ')'
+}
+
+export function versionLine(label, primary = {}, node = {}) {
+  return label + ' ' + versionTuple(primary.current, primary.latest) + '/Node ' + versionTuple(node.current, node.latest)
+}
+
 export async function fetchApiJson(path, init = {}, { activeBase, apiBaseList, pinnedBase, headersForBase, fetcher = fetch } = {}) {
   const hasPinnedBase = pinnedBase !== undefined && pinnedBase !== null
   const ordered = hasPinnedBase ? [pinnedBase] : [activeBase, ...(apiBaseList || []).filter((base) => base !== activeBase)]
@@ -200,6 +209,173 @@ export async function fetchApiJson(path, init = {}, { activeBase, apiBaseList, p
     return { base, data }
   }
   throw lastError || new Error('network error')
+}
+
+// A prefetch promise resolves with the request body, but a failed or aborted
+// one must never be treated as preview data: the viewer would render an empty
+// file and the cache would keep serving it.
+export function usablePreviewData(data) {
+  return !!data && typeof data === 'object' && typeof data.kind === 'string' && data.kind.length > 0
+}
+
+// A hover prefetch may still be in flight when the file is double-clicked.
+// Wait for it, but only accept a real body: the promise may also complete with
+// an error, in which case the caller fetches again (with retry) instead of
+// showing a red error for a transient blip.
+export async function resolvePreviewBody({ pending, fresh, fetchFresh, isAborted }) {
+  if (pending && !fresh) {
+    try {
+      const data = await pending
+      if (usablePreviewData(data)) return data
+    } catch (error) {
+      if (isAborted && isAborted(error)) throw error
+    }
+  }
+  return fetchFresh()
+}
+
+export const TABLE_PREVIEW_MAX_ROWS = 5000
+export const TABLE_PREVIEW_MAX_COLUMNS = 100
+const TABLE_NUMBER = /^[-+]?(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d+)?%?$/
+
+// The node previews .xlsx as tab-joined cells from its first worksheet (no CSV
+// quoting), so it shares the table view but must not treat quotes as syntax.
+export function tablePreviewFormat(name) {
+  const value = String(name || '').toLowerCase()
+  if (value.endsWith('.csv')) return { delimiter: ',', quoted: true }
+  if (value.endsWith('.tsv')) return { delimiter: '\t', quoted: true }
+  if (value.endsWith('.xlsx') || value.endsWith('.xlsm')) return { delimiter: '\t', quoted: false }
+  return null
+}
+
+// RFC4180 parsing for the CSV/TSV preview: quoted fields may hold delimiters,
+// escaped quotes and line breaks; CRLF/CR are normalised and a BOM is dropped.
+// Parsing stops once the row cap is reached so a huge file cannot stall the
+// renderer, and the returned flags say whether anything was cut.
+export function parseDelimited(text, options) {
+  const opts = options || {}
+  const delimiter = typeof opts.delimiter === 'string' && opts.delimiter.length === 1 ? opts.delimiter : ','
+  const quoted = opts.quoted !== false
+  const rowLimit = Math.max(1, Math.floor(opts.rowLimit == null ? TABLE_PREVIEW_MAX_ROWS : opts.rowLimit))
+  const columnLimit = Math.max(1, Math.floor(opts.columnLimit == null ? TABLE_PREVIEW_MAX_COLUMNS : opts.columnLimit))
+  const source = String(text == null ? '' : text).replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n')
+  const rows = []
+  let row = []
+  let field = ''
+  let fieldCount = 0
+  let inQuotes = false
+  let started = false
+  let truncatedRows = false
+  let truncatedColumns = false
+  let stoppedAtLimit = false
+  const pushField = () => {
+    if (fieldCount < columnLimit) row.push(field)
+    else truncatedColumns = true
+    fieldCount += 1
+    field = ''
+  }
+  const endRow = () => {
+    pushField()
+    rows.push(row)
+    row = []
+    fieldCount = 0
+    started = false
+  }
+  let index = 0
+  while (index < source.length) {
+    const ch = source[index]
+    if (inQuotes) {
+      if (ch === '"') {
+        if (source[index + 1] === '"') { field += '"'; index += 2; continue }
+        inQuotes = false; index += 1; continue
+      }
+      field += ch; index += 1; continue
+    }
+    if (quoted && ch === '"' && field === '') { inQuotes = true; started = true; index += 1; continue }
+    if (ch === delimiter) { started = true; pushField(); index += 1; continue }
+    if (ch === '\n') {
+      endRow()
+      index += 1
+      if (rows.length >= rowLimit + 1) { truncatedRows = index < source.length; stoppedAtLimit = true; break }
+      continue
+    }
+    field += ch; started = true; index += 1
+  }
+  if (!stoppedAtLimit && (started || field !== '' || row.length > 0)) endRow()
+  return {
+    rows,
+    truncatedRows,
+    truncatedColumns,
+    openQuote: inQuotes,
+    endedWithNewline: source.length > 0 && source[source.length - 1] === '\n'
+  }
+}
+
+export function tableNumericColumns(rows, columnCount) {
+  const flags = new Array(Math.max(0, columnCount)).fill(false)
+  for (let column = 0; column < flags.length; column += 1) {
+    let filled = 0
+    let numeric = 0
+    for (const row of rows) {
+      const value = String((row && row[column]) == null ? '' : row[column]).trim()
+      if (!value) continue
+      filled += 1
+      if (TABLE_NUMBER.test(value)) numeric += 1
+    }
+    flags[column] = filled >= 2 && numeric / filled >= 0.6
+  }
+  return flags
+}
+
+export function serializeDelimited(rows, options = {}) {
+  const delimiter = typeof options.delimiter === 'string' && options.delimiter.length === 1 ? options.delimiter : ','
+  const quoted = options.quoted !== false
+  const newline = options.newline === '\r\n' ? '\r\n' : '\n'
+  const encode = (value) => {
+    const text = String(value == null ? '' : value)
+    if (!quoted) return text.replace(/[\t\r\n]+/g, ' ')
+    return /["\r\n]/.test(text) || text.includes(delimiter)
+      ? '"' + text.replace(/"/g, '""') + '"'
+      : text
+  }
+  return rows.map((row) => row.map(encode).join(delimiter)).join(newline) + newline
+}
+
+export function buildTablePreview({ name, text, sourceTruncated, rowLimit, columnLimit } = {}) {
+  const format = tablePreviewFormat(name)
+  if (!format) return null
+  const parsed = parseDelimited(text, { delimiter: format.delimiter, quoted: format.quoted, rowLimit, columnLimit })
+  const headerRow = parsed.rows[0] || []
+  let body = parsed.rows.slice(1)
+  // A 512 KB node preview can end mid-record; that half row is not data.
+  let droppedPartialRow = false
+  if (sourceTruncated && !parsed.endedWithNewline && body.length) {
+    body = body.slice(0, -1)
+    droppedPartialRow = true
+  }
+  const columnCount = Math.max(0, ...parsed.rows.map((row) => row.length))
+  const headers = []
+  for (let column = 0; column < columnCount; column += 1) {
+    const label = String(headerRow[column] == null ? '' : headerRow[column]).replace(/\s+/g, ' ').trim()
+    headers.push(label || '列 ' + (column + 1))
+  }
+  const rows = body.map((row) => {
+    const cells = []
+    for (let column = 0; column < columnCount; column += 1) cells.push(row[column] == null ? '' : row[column])
+    return cells
+  })
+  return {
+    headers,
+    rows,
+    columnCount,
+    numericColumns: tableNumericColumns(rows, columnCount),
+    truncatedRows: parsed.truncatedRows,
+    truncatedColumns: parsed.truncatedColumns,
+    sourceTruncated: !!sourceTruncated,
+    droppedPartialRow,
+    rowLimit: rowLimit == null ? TABLE_PREVIEW_MAX_ROWS : rowLimit,
+    columnLimit: columnLimit == null ? TABLE_PREVIEW_MAX_COLUMNS : columnLimit
+  }
 }
 
 export function createTetherPanel({ React, Native, host }) {
@@ -256,6 +432,20 @@ export function createTetherPanel({ React, Native, host }) {
       return response.data
     }
     const post = (path, body, pinnedBase, extra) => api(path, { method: 'POST', body: JSON.stringify(body || {}), ...(extra || {}) }, pinnedBase)
+    // A large remote folder can take seconds; one quiet retry turns a transient
+    // socket/5xx hiccup into a slightly slower load instead of a red error.
+    const postRetry = async (path, body, pinnedBase, extra, attempts = 2) => {
+      let last
+      for (let i = 0; i < attempts; i += 1) {
+        try { return await post(path, body, pinnedBase, extra) } catch (e) {
+          last = e
+          if (e && (e.name === 'AbortError' || e.code === 'not_dir' || e.code === 'not_file'
+            || e.code === 'forbidden' || e.code === 'not_found' || e.code === 'too_large')) throw e
+          if (i + 1 < attempts) await new Promise((resolve) => setTimeout(resolve, 600))
+        }
+      }
+      throw last
+    }
 
     function pill(text, color) {
       return h('span', {
@@ -392,6 +582,57 @@ export function createTetherPanel({ React, Native, host }) {
       if (entry.dir) return '文件夹'
       const suffix = String(entry.name || '').split('.').pop()
       return suffix && suffix !== entry.name ? suffix.toUpperCase() + ' 文件' : '文件'
+    }
+    const EXPLORER_SORT_KEYS = ['name', 'mtime', 'size']
+    function explorerHistory(history) {
+      const state = history || {}
+      return {
+        back: Array.isArray(state.back) ? state.back : [],
+        forward: Array.isArray(state.forward) ? state.forward : []
+      }
+    }
+    function explorerNavigate(history, from, to) {
+      if (!from || !to || normPath(from) === normPath(to)) return history
+      const state = explorerHistory(history)
+      return { back: [...state.back, from], forward: [] }
+    }
+    function explorerHistoryStep(history, direction, current) {
+      const state = explorerHistory(history)
+      if (direction === 'back') {
+        if (!state.back.length) return null
+        return {
+          history: { back: state.back.slice(0, -1), forward: current ? [...state.forward, current] : state.forward },
+          target: state.back[state.back.length - 1]
+        }
+      }
+      if (!state.forward.length) return null
+      return {
+        history: { back: current ? [...state.back, current] : state.back, forward: state.forward.slice(0, -1) },
+        target: state.forward[state.forward.length - 1]
+      }
+    }
+    function toggleExplorerSort(current, key) {
+      const state = current || {}
+      if (state.key === key) return { key, dir: state.dir === 'desc' ? 'asc' : 'desc' }
+      return { key, dir: key === 'name' ? 'asc' : 'desc' }
+    }
+    function compareExplorerEntries(a, b, key, direction) {
+      const rank = (entry) => (entry && entry.dir ? 0 : 1)
+      if (rank(a) !== rank(b)) return rank(a) - rank(b)
+      const byName = () => String((a && a.name) || '').localeCompare(String((b && b.name) || ''), undefined, { numeric: true, sensitivity: 'base' })
+      const sign = direction === 'desc' ? -1 : 1
+      if (key === 'name' || (key !== 'mtime' && key !== 'size')) return byName() * sign
+      const primary = key === 'mtime' ? (Number(a && a.mtime) || 0) - (Number(b && b.mtime) || 0) : (Number(a && a.size) || 0) - (Number(b && b.size) || 0)
+      return primary ? primary * sign : byName()
+    }
+    function sortExplorerEntries(entries, key, direction) {
+      return [...(entries || [])].sort((a, b) => compareExplorerEntries(a, b, key, direction))
+    }
+    function filterExplorerEntries(entries, query) {
+      const needle = String(query == null ? '' : query).trim().toLowerCase()
+      const list = entries || []
+      if (!needle) return list
+      return list.filter((entry) => String((entry && entry.name) || '').toLowerCase().includes(needle))
     }
     function resolveSessionTarget(selectedNativeId, currentRun, nativeSessions, remoteSessions, remoteRuns, deviceId, workspace, runWorkspace) {
       if (selectedNativeId) {
@@ -672,8 +913,48 @@ export function createTetherPanel({ React, Native, host }) {
 
 
     const SCROLL_CSS = `
-      .tether-root { --tether-strong: 600; --tether-strong-2: 650; --tether-body: 400; }
-      body[data-ds-dark-theme] .tether-root { --tether-strong: 500; --tether-strong-2: 520; --tether-body: 350; }
+      .tether-root { --tether-strong: 600; --tether-strong-2: 650; --tether-body: 400;
+        --tether-split: var(--dsw-alias-border-l2, rgba(9, 30, 66, 0.16));
+        --tether-tabstrip: color-mix(in srgb, var(--dsw-alias-label-primary, #101828) 7%, var(--dsw-alias-bg-base, #ffffff));
+        --tether-code-bg: var(--dsw-alias-bg-base, #ffffff);
+        --tether-code-gutter: var(--dsw-specific-sidebar-fill, #f9fafb);
+        --tether-code-keyword: #1a5fb4;
+        --tether-code-string: #2f855a;
+        --tether-code-number: #6b46c1;
+        --tether-code-comment: #667085;
+        --tether-code-line: rgba(38, 49, 72, 0.055);
+        --tether-code-line-gutter: color-mix(in srgb, var(--dsw-alias-state-business-primary, #1570ef) 9%, var(--dsw-alias-bg-base, #ffffff));
+        --tether-table-head: color-mix(in srgb, var(--dsw-alias-label-primary, #101828) 5%, var(--dsw-alias-bg-base, #ffffff));
+        --tether-table-grid: color-mix(in srgb, var(--dsw-alias-label-primary, #101828) 6%, transparent);
+        --tether-tab-bg: var(--dsw-alias-bg-base, #ffffff); }
+      body[data-ds-dark-theme] .tether-root {
+        --tether-strong: 500; --tether-strong-2: 520; --tether-body: 350;
+        --tether-split: rgba(255, 255, 255, 0.12);
+        --tether-code-keyword: #7aa2f7;
+        --tether-code-string: #9ece6a;
+        --tether-code-number: #bb9af7;
+        --tether-code-comment: #7f848e;
+        --tether-code-line: rgba(255, 255, 255, 0.045);
+        --tether-code-line-gutter: color-mix(in srgb, var(--dsw-alias-state-business-primary, #4e9eff) 16%, var(--dsw-alias-bg-base, #1e1e1e)); }
+      .tether-side-split { touch-action: none; }
+      .tether-side-split::after { content: ''; position: absolute; top: 0; bottom: 0; left: 4px; width: 1px; background: transparent; transition: width 120ms ease, left 120ms ease, background-color 120ms ease; }
+      .tether-side-split:hover::after, .tether-side-split[data-active=true]::after { left: 3px; width: 3px; border-radius: 2px; background: var(--dsw-alias-state-business-primary, #1570ef); opacity: .5; }
+      .tether-tabbar { user-select: none; }
+      .tether-tab { transition: background-color 120ms ease; }
+      .tether-tab-accent { position: absolute; left: 0; right: 0; top: 0; height: 2px; background: transparent; }
+      .tether-tab[data-dirty=true] .tether-tab-accent, .tether-tab:hover .tether-tab-accent { background: var(--dsw-alias-state-business-primary, #1570ef); opacity: .85; }
+      .tether-code-scroll { font-family: Consolas, "Cascadia Mono", "Cascadia Code", "Courier New", monospace; font-size: 12.5px; line-height: 20px; tab-size: 2; }
+      .tether-code-gutter { position: sticky; left: 0; z-index: 1; flex: 0 0 auto; box-sizing: border-box; padding: 8px 0 0; background: var(--tether-code-gutter); }
+      .tether-code-gutter-row { height: 20px; padding: 0 10px 0 4px; text-align: right; color: var(--dsw-alias-label-tertiary, #667085); user-select: none; font-variant-numeric: tabular-nums; }
+      .tether-code-gutter-row[data-active=true] { color: var(--dsw-alias-label-secondary, #475467); background: var(--tether-code-line-gutter); }
+      .tether-code-body { flex: 0 0 auto; min-width: max-content; padding: 8px 0 24px; }
+      .tether-code-row { display: block; height: 20px; width: max-content; min-width: 100%; }
+      .tether-code-row[data-active=true] { background: var(--tether-code-line); }
+      .tether-code-line { display: block; padding: 0 24px 0 14px; white-space: pre; color: var(--dsw-alias-label-primary, #1f2328); }
+      .tether-tok-keyword { color: var(--tether-code-keyword); }
+      .tether-tok-string { color: var(--tether-code-string); }
+      .tether-tok-number { color: var(--tether-code-number); }
+      .tether-tok-comment { color: var(--tether-code-comment); font-style: italic; }
       .tether-scroll { scrollbar-width: thin; scrollbar-color: transparent transparent; overscroll-behavior: contain; }
       .tether-scroll:hover { scrollbar-color: var(--dsw-alias-scrollbar-hover-l1, #cbd5e1) transparent; }
       .tether-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -688,6 +969,19 @@ export function createTetherPanel({ React, Native, host }) {
       .tether-node-fill { position: absolute; inset: 0; z-index: 1; border-radius: 50%; corner-shape: round; transition: background-color 160ms ease; }
       .tether-file-markdown { max-width: 860px; margin: 0 auto; color: var(--dsw-alias-label-primary); font-size: 14px; line-height: 24px; }
       .tether-file-text { tab-size: 2; }
+      .tether-viewtoggle { display: flex; align-items: center; gap: 1px; padding: 1px; border-radius: 6px; background: var(--dsw-alias-interactive-bg-hover, rgba(38, 49, 72, 0.06)); flex: 0 0 auto; }
+      .tether-viewtoggle-btn { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 7px; border: 0; border-radius: 5px; background: transparent; color: var(--dsw-alias-label-tertiary, #667085); font-size: 11px; line-height: 1; cursor: pointer; white-space: nowrap; }
+      .tether-viewtoggle-btn[data-active=true] { background: var(--dsw-alias-bg-base, #fff); color: var(--dsw-alias-label-primary, #101828); box-shadow: 0 1px 2px rgba(16, 24, 40, 0.1); }
+      .tether-table-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; background: var(--dsw-alias-bg-base, #fff); }
+      .tether-table { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; font-size: 12.5px; line-height: 20px; color: var(--dsw-alias-label-primary, #101828); }
+      .tether-table th, .tether-table td { box-sizing: border-box; max-width: 420px; padding: 4px 12px; border-right: 1px solid var(--tether-table-grid); border-bottom: 1px solid var(--tether-table-grid); white-space: pre-wrap; overflow-wrap: anywhere; vertical-align: top; }
+      .tether-table th { position: sticky; top: 0; z-index: 2; background: var(--tether-table-head); color: var(--dsw-alias-label-secondary, #475467); font-weight: var(--tether-strong, 600); font-size: 11.5px; white-space: nowrap; }
+      .tether-table th.tether-num, .tether-table td.tether-num { white-space: nowrap; }
+      .tether-table tbody tr:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(38, 49, 72, 0.06)); }
+      .tether-table-status { display: flex; align-items: center; gap: 12px; height: 26px; flex: 0 0 auto; padding: 0 12px; background: var(--tether-tabstrip, #f9fafb); color: var(--dsw-alias-label-tertiary, #667085); font-size: 11px; white-space: nowrap; overflow: hidden; }
+      .tether-table-warn { color: var(--dsw-alias-state-warn-primary, #b54708); overflow: hidden; text-overflow: ellipsis; }
+      .tether-dir-loading { position: absolute; inset: 0; z-index: 4; display: grid; place-items: center; background: color-mix(in srgb, var(--dsw-alias-bg-base, #fff) 78%, transparent); color: var(--dsw-alias-label-tertiary, #667085); }
+      .tether-dir-loading > span { width: 20px; height: 20px; display: grid; place-items: center; }
       @media (prefers-reduced-motion: reduce) { .tether-spin > svg { animation-duration: 1.6s; } }
       .tether-flow { display: flex; flex-direction: column; max-width: calc(var(--dsh-chat-content-width, 748px) + 32px); width: 100%; margin: 0 auto; padding: 0 16px; box-sizing: border-box; }
       .tether-turn { display: flex; flex-direction: column; min-width: 0; }
@@ -814,6 +1108,13 @@ export function createTetherPanel({ React, Native, host }) {
       back: { parts: [
         { d: 'M10.2 3.2L5.4 8l4.8 4.8' }
       ] },
+      forward: { parts: [
+        { d: 'M5.8 3.2L10.6 8l-4.8 4.8' }
+      ] },
+      search: { parts: [
+        { d: 'M7.1 12.2a5.1 5.1 0 1 0 0-10.2 5.1 5.1 0 0 0 0 10.2z' },
+        { d: 'M11 11l3 3' }
+      ] },
       save: { parts: [
         { d: 'M3 2.4h8.2L13.4 4.6v9H3z' },
         { d: 'M5.4 2.4v3.2h5V2.4' },
@@ -825,6 +1126,13 @@ export function createTetherPanel({ React, Native, host }) {
       ] },
       chevronDown: { parts: [
         { d: 'M4 6L7.29289 9.29289C7.68342 9.68342 8.31658 9.68342 8.70711 9.29289L12 6' }
+      ] },
+      table: { parts: [
+        { d: 'M2.6 3.4h10.8v9.2H2.6z' },
+        { d: 'M2.6 6.4h10.8M6.4 6.4v6.2M9.6 6.4v6.2' }
+      ] },
+      plainText: { parts: [
+        { d: 'M3 4.2h10M3 8h10M3 11.8h6.2' }
       ] },
       chevronRight: { parts: [
         { d: 'M6 12L9.29289 8.70711C9.68342 8.31658 9.68342 7.68342 9.29289 7.29289L6 4' }
@@ -1244,7 +1552,7 @@ export function createTetherPanel({ React, Native, host }) {
         onHoverEntry, onLeaveEntry, loadingTree } = props
       return h('aside', {
         'aria-label': '文件',
-        style: { display: hidden ? 'none' : 'flex', width, flex: '0 0 auto', minHeight: 0, borderRight: 0, background: C.panel, flexDirection: 'column', position: 'relative', transition: resizing ? 'none' : 'width 180ms cubic-bezier(.2,.85,.2,1.15)', willChange: 'width' }
+        style: { display: hidden ? 'none' : 'flex', width, flex: '0 0 auto', minHeight: 0, background: C.panel, flexDirection: 'column', position: 'relative', transition: resizing ? 'none' : 'width 180ms cubic-bezier(.2,.85,.2,1.15)', willChange: 'width' }
       },
         h(SidePanelHeader, { title: '文件', onCollapse, loading: loadingTree }),
         h('div', { className: 'tether-scroll', onScroll: props.onLeaveEntry, style: { flex: '1 1 auto', minHeight: 0, overflowY: 'auto', padding: '0 ' + UI.pad + 'px ' + UI.pad + 'px' } },
@@ -1254,9 +1562,9 @@ export function createTetherPanel({ React, Native, host }) {
           })
         ),
         h('div', {
-          className: 'tether-resizer', 'data-active': resizing ? 'true' : undefined,
+          className: 'tether-resizer tether-side-split', 'data-active': resizing ? 'true' : undefined,
           onPointerDown: onResizeStart, onDoubleClick: onResetWidth, title: '拖动调整宽度，双击复位',
-          style: { position: 'absolute', top: 0, right: -3, width: 7, height: '100%', cursor: 'col-resize', zIndex: 2 }
+          style: { position: 'absolute', top: 0, right: -4, width: 9, height: '100%', cursor: 'col-resize', zIndex: 3 }
         })
       )
     }
@@ -1272,19 +1580,90 @@ export function createTetherPanel({ React, Native, host }) {
       return { display: visible ? 'flex' : 'none', flex: '1 1 auto', minWidth: 0, minHeight: 0, flexDirection: 'column' }
     }
 
-    function NativeSurface({ deviceId, online, visible }) {
+    const NATIVE_SURFACE_RETRIES = 3
+
+    function nativeSurfaceRetryDelay(attempt) {
+      return Math.min(1000 * Math.pow(2, Math.max(0, attempt - 1)), 8000)
+    }
+
+    function nativeSurfaceFailureMatches(currentUrl, sourceUrl) {
+      if (!currentUrl || !sourceUrl) return false
+      try { return new URL(currentUrl).host === new URL(sourceUrl).host } catch (_) { return false }
+    }
+
+    function nativeSurfaceTransientError(error) {
+      return !!error && (error.surfaceStatus === 502 || error.surfaceStatus === 504
+        || error.surfaceCode === 'device_offline' || error.surfaceCode === 'surface_timeout')
+    }
+
+    function NativeSurface({ deviceId, online, visible, localDeviceId }) {
       const [state, setState] = React.useState({ deviceId, status: deviceId ? 'loading' : 'no-device', url: '' })
       const [attempt, setAttempt] = React.useState(0)
       const currentState = nativeSurfaceStateForDevice(state, deviceId, online)
+      const retryCountRef = React.useRef(0)
+      const retryTimerRef = React.useRef(null)
+      const surfaceStateRef = React.useRef(currentState)
+      surfaceStateRef.current = currentState
+
+      const fetchSurfaceDescriptor = async (id) => {
+        const bases = []
+        const preferred = host && typeof host.surfaceBase === 'function' ? host.surfaceBase(id === localDeviceId) : ''
+        if (preferred) bases.push(preferred)
+        bases.push(ACTIVE_BASE)
+        let lastError = null
+        for (const base of [...new Set(bases)]) {
+          try {
+            const response = await fetch(base + '/api/devices/' + encodeURIComponent(id) + '/dsh/surface', { signal: AbortSignal.timeout(8000) })
+            const data = await response.json().catch(() => ({}))
+            if (!response.ok && (response.status === 502 || response.status === 504) && base !== ACTIVE_BASE) continue
+            return { response, data }
+          } catch (error) { lastError = error }
+        }
+        throw lastError || new Error('原生 DSH 页面暂不可用')
+      }
+
+      React.useEffect(() => {
+        retryCountRef.current = 0
+        if (retryTimerRef.current) { clearTimeout(retryTimerRef.current); retryTimerRef.current = null }
+      }, [deviceId])
+
+      React.useEffect(() => () => {
+        if (retryTimerRef.current) { clearTimeout(retryTimerRef.current); retryTimerRef.current = null }
+      }, [])
+
+      // DSH boots its client roster from plugin bundles fetched through the
+      // surface gateway. A control-link blip turns those fetches into 502s and
+      // the boot page never retries, so recover the frame from here.
+      React.useEffect(() => {
+        const bridge = typeof window !== 'undefined' ? window.tetherApp : undefined
+        if (!deviceId || !online || !bridge || typeof bridge.onSurfaceBootFailed !== 'function') return undefined
+        return bridge.onSurfaceBootFailed((detail) => {
+          const current = surfaceStateRef.current
+          if (!current || current.deviceId !== deviceId || current.status !== 'ready' || !current.url) return
+          if (detail && detail.source) {
+            if (!nativeSurfaceFailureMatches(current.url, detail.source)) return
+          } else if (!visible) return
+          if (retryTimerRef.current) return
+          if (retryCountRef.current >= NATIVE_SURFACE_RETRIES) {
+            if (visible) setState({ deviceId, status: 'error', url: '', message: 'DSH 工作区启动失败：目标设备连接中断。请重试。' })
+            return
+          }
+          retryCountRef.current += 1
+          retryTimerRef.current = setTimeout(() => {
+            retryTimerRef.current = null
+            setState({ deviceId, status: 'loading', url: '', message: 'DSH 工作区连接中断，正在自动重连…' })
+            setAttempt((value) => value + 1)
+          }, nativeSurfaceRetryDelay(retryCountRef.current))
+        })
+      }, [deviceId, online, visible])
+
       React.useEffect(() => {
         let current = true
         if (!deviceId) { setState({ deviceId, status: 'no-device', url: '' }); return () => { current = false } }
         if (!online) { setState({ deviceId, status: 'offline', url: '' }); return () => { current = false } }
         setState({ deviceId, status: 'loading', url: '' })
-        fetch(ACTIVE_BASE + '/api/devices/' + encodeURIComponent(deviceId) + '/dsh/surface', { signal: AbortSignal.timeout(8000) })
-          .then(async (response) => {
-            let data = {}
-            try { data = await response.json() } catch (_) { /* empty body */ }
+        fetchSurfaceDescriptor(deviceId)
+          .then(async ({ response, data }) => {
             if (!response.ok) {
               const detail = data.detail || {}
               const code = detail.code
@@ -1297,12 +1676,16 @@ export function createTetherPanel({ React, Native, host }) {
                           : code === 'auth_failed' ? '目标 DSH 的登录态已失效，请在目标机重新登录 DeepSeek Harness。'
                             : code === 'surface_timeout' ? '目标设备没有及时响应，请稍后重试。'
                               : '原生 DSH 页面暂不可用'
-              throw new Error(message)
+              const error = new Error(message)
+              error.surfaceStatus = response.status
+              error.surfaceCode = code
+              throw error
             }
             if (!data.available || !isSafeNativeSurfaceUrl(data.url)) throw new Error('Controller 返回了无效或非 loopback 的原生页面地址')
             let surfaceUrl = data.url
             const parsed = new URL(data.url)
-            if ((parsed.hostname === '127.0.0.1' || parsed.hostname === '[::1]') && ACTIVE_BASE !== 'http://127.0.0.1:18890') {
+            const sameHostToken = parsed.pathname === '/' && !!parsed.searchParams.get('token')
+            if (!sameHostToken && (parsed.hostname === '127.0.0.1' || parsed.hostname === '[::1]') && ACTIVE_BASE !== 'http://127.0.0.1:18890') {
               let localOk = false
               try {
                 const localRes = await fetch(ACTIVE_BASE + '/local-api/api/devices/' + encodeURIComponent(deviceId) + '/dsh/surface')
@@ -1317,7 +1700,19 @@ export function createTetherPanel({ React, Native, host }) {
             url.searchParams.set('tether_native', '1')
             if (current) setState({ deviceId, status: 'ready', url: url.href })
           })
-          .catch((error) => { if (current) setState({ deviceId, status: 'error', url: '', message: error.message }) })
+          .catch((error) => {
+            if (!current) return
+            if (nativeSurfaceTransientError(error) && !retryTimerRef.current && retryCountRef.current < NATIVE_SURFACE_RETRIES) {
+              retryCountRef.current += 1
+              setState({ deviceId, status: 'loading', url: '', message: '目标设备连接中断，正在自动重连…' })
+              retryTimerRef.current = setTimeout(() => {
+                retryTimerRef.current = null
+                setAttempt((value) => value + 1)
+              }, nativeSurfaceRetryDelay(retryCountRef.current))
+              return
+            }
+            setState({ deviceId, status: 'error', url: '', message: error.message })
+          })
         return () => { current = false }
       }, [deviceId, online, attempt])
       React.useEffect(() => {
@@ -1325,15 +1720,17 @@ export function createTetherPanel({ React, Native, host }) {
         let alive = true
         const timer = setInterval(async () => {
           try {
-            const res = await fetch(ACTIVE_BASE + '/api/devices/' + encodeURIComponent(deviceId) + '/dsh/surface', { signal: AbortSignal.timeout(8000) })
-            if (!res.ok) return
-            const data = await res.json()
+            const { response, data } = await fetchSurfaceDescriptor(deviceId)
+            if (!response.ok) return
             if (!alive || !data.available || !isSafeNativeSurfaceUrl(data.url)) return
             setState((prev) => {
               if (prev.status !== 'ready' || !prev.url) return prev
               try {
                 const fresh = new URL(data.url)
-                if (new URL(prev.url).origin === fresh.origin) return prev
+                const current = new URL(prev.url)
+                const sameHostToken = fresh.pathname === '/' && !!fresh.searchParams.get('token')
+                if (sameHostToken ? fresh.searchParams.get('token') === current.searchParams.get('token')
+                  : current.origin === fresh.origin) return prev
                 fresh.searchParams.set('tether_native', '1')
                 return { deviceId, status: 'ready', url: fresh.href }
               } catch (_) { return prev }
@@ -1343,7 +1740,7 @@ export function createTetherPanel({ React, Native, host }) {
         return () => { alive = false; clearInterval(timer) }
       }, [deviceId, online])
 
-      const message = currentState.status === 'loading' ? '正在连接目标设备的 DSH 原生工作区…'
+      const message = currentState.status === 'loading' ? (currentState.message || '正在连接目标设备的 DSH 原生工作区…')
         : currentState.status === 'offline' ? '目标设备离线。设备重新在线后可重试。'
           : currentState.status === 'no-device' ? '先从左侧设备列表选择目标设备。'
             : currentState.status === 'error' ? currentState.message
@@ -1359,7 +1756,7 @@ export function createTetherPanel({ React, Native, host }) {
           })
           : h('div', { style: { display: 'grid', placeItems: 'center', alignContent: 'center', gap: 12, flex: '1 1 auto', minHeight: 0, color: C.sub, textAlign: 'center', padding: 24 } },
             h('div', null, message),
-            currentState.status !== 'loading' ? btn('重试', () => setAttempt((value) => value + 1)) : null
+            currentState.status !== 'loading' ? btn('重试', () => { retryCountRef.current = 0; setAttempt((value) => value + 1) }) : null
           )
       )
     }
@@ -1370,10 +1767,38 @@ export function createTetherPanel({ React, Native, host }) {
       const host = url.hostname.toLowerCase()
       const loopback = host === '127.0.0.1' || host === '[::1]'
       const publicSurface = url.protocol === 'https:' && /^g\d{2,5}\.[a-z0-9.-]+$/.test(host)
-      const allowedHost = (url.protocol === 'http:' && loopback) || publicSurface
+      const ticketed = url.pathname === '/tether-connect' && !!url.searchParams.get('ticket')
+      const localToken = url.pathname === '/' && !!url.searchParams.get('token')
+      const allowedHost = (url.protocol === 'http:' && loopback && (ticketed || localToken)) || (publicSurface && ticketed)
       return allowedHost && !url.username && !url.password &&
-        Number(url.port || (url.protocol === 'https:' ? 443 : 80)) > 0 &&
-        url.pathname === '/tether-connect' && !!url.searchParams.get('ticket') && !url.hash
+        Number(url.port || (url.protocol === 'https:' ? 443 : 80)) > 0 && !url.hash
+    }
+
+    function CodeEditor({ value, onChange, onSave, font }) {
+      const gutterRef = React.useRef(null)
+      const textRef = React.useRef(null)
+      const lines = String(value || '').split(String.fromCharCode(10))
+      const gutterWidth = String(lines.length).length * 8 + 22
+      const syncScroll = (event) => { if (gutterRef.current) gutterRef.current.scrollTop = event.currentTarget.scrollTop }
+      const onKeyDown = (event) => {
+        if ((event.ctrlKey || event.metaKey) && String(event.key).toLowerCase() === 's') { event.preventDefault(); onSave(); return }
+        if (event.key === 'Tab') {
+          event.preventDefault()
+          const el = textRef.current
+          if (!el) return
+          el.setRangeText('  ', el.selectionStart, el.selectionEnd, 'end')
+          onChange(el.value)
+        }
+      }
+      return h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex', alignItems: 'stretch', background: 'var(--tether-code-bg, ' + C.bg + ')' } },
+        h('div', { ref: gutterRef, className: 'tether-code-gutter', style: { width: gutterWidth, overflow: 'hidden' } },
+          lines.map((_, index) => h('div', { key: index, className: 'tether-code-gutter-row' }, index + 1))),
+        h('textarea', {
+          ref: textRef, defaultValue: value, onChange: (event) => onChange(event.target.value),
+          onScroll: syncScroll, onKeyDown, spellCheck: false, wrap: 'off', 'aria-label': '代码编辑器',
+          style: { flex: '1 1 auto', minWidth: 0, margin: 0, border: 0, outline: 'none', resize: 'none', padding: '8px 24px 24px 14px', fontFamily: font, fontSize: 12.5, lineHeight: '20px', tabSize: 2, whiteSpace: 'pre', overflow: 'auto', background: 'transparent', color: C.ink }
+        })
+      )
     }
 
     function App() {
@@ -1459,12 +1884,18 @@ export function createTetherPanel({ React, Native, host }) {
       const [dirEntries, setDirEntries] = React.useState([])
       const [dirLoading, setDirLoading] = React.useState(false)
       const [dirError, setDirError] = React.useState('')
-      const [history, setHistory] = React.useState([])
+      const [history, setHistory] = React.useState({ back: [], forward: [] })
+      const [sort, setSort] = usePersisted('tether.explorer.sort', { key: 'name', dir: 'asc' })
+      const [search, setSearch] = React.useState('')
       const [contextMenu, setContextMenu] = React.useState(null)
       const [deviceMenu, setDeviceMenu] = React.useState(null)
       const [previewBusy, setPreviewBusy] = React.useState(false)
       const [previewError, setPreviewError] = React.useState('')
+      const [codeLine, setCodeLine] = React.useState(1)
       const [editMode, setEditMode] = React.useState(false)
+      const [tableView, setTableView] = React.useState(true)
+      const [tableEdit, setTableEdit] = React.useState(false)
+      const [tableEditFormat, setTableEditFormat] = React.useState(null)
       const [workspaceOpen, setWorkspaceOpen] = React.useState({})
       const [treeChildren, setTreeChildren] = React.useState({})
       const [treeOpen, setTreeOpen] = React.useState({})
@@ -1513,6 +1944,10 @@ export function createTetherPanel({ React, Native, host }) {
 
       const fail = (e) => {
         if (e && e.code === 'node_update_required') { setNativeError('节点待更新'); return }
+        // Transient list/preview failures already retry and show their own inline
+        // state; a red toast on a slow remote folder is noise, not information.
+        if (e && (e.name === 'AbortError' || e.code === 'update_timeout' || e.code === 'node_timeout'
+          || e.code === 'device_busy' || e.code === 'device_offline' || (e.status && e.status >= 500))) return
         setNotice(String((e && e.message) || e))
       }
       const probeConfiguredHub = async () => {
@@ -1773,12 +2208,14 @@ export function createTetherPanel({ React, Native, host }) {
         const runtimeRestartRequired = product === 'dsh' && localPluginNeedsRestart(infos[0])
         const hasUpdate = infos.some((info) => info && info.update_available === true)
         const known = infos.every((info) => info && info.current_version && info.latest_version)
-        const latest = infos.map((info) => info && info.latest_version).filter(Boolean)
-        const currentText = product === 'desktop'
-          ? 'APP ' + (infos[0].current_version || '未知') + ' / Node ' + (infos[1].current_version || '未知')
-          : '插件 ' + (infos[0].runtime_version || infos[0].current_version || '未知')
-            + (runtimeRestartRequired ? '（已安装 ' + infos[0].current_version + '，待生效）' : '')
-            + ' / Node ' + (infos[1].current_version || '未知')
+        const versionText = versionLine(product === 'desktop' ? 'APP' : '插件',
+          {
+            current: product === 'desktop'
+              ? infos[0].current_version
+              : (infos[0].runtime_version || infos[0].current_version),
+            latest: infos[0].latest_version
+          },
+          { current: infos[1].current_version, latest: infos[1].latest_version })
         const title = product === 'desktop' ? 'Tether Desktop（APP + Node）' : 'Tether for DSH（插件 + Node）'
         return h('div', { key: product, style: { padding: 12, borderRadius: 8, background: C.panel, marginBottom: 10 } },
           h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 } },
@@ -1787,7 +2224,7 @@ export function createTetherPanel({ React, Native, host }) {
               : runtimeRestartRequired ? pill('待生效', C.amber)
                 : hasUpdate ? pill('有更新', C.amber)
                 : known ? pill('已是最新', C.green) : failed ? pill('检查失败', C.red) : pill('检查中…', C.mute))),
-          h('div', { style: { color: C.sub, fontSize: 12, lineHeight: '19px' } }, '当前 ' + currentText + (latest.length ? ' · 最新 ' + latest[0] : '')),
+          h('div', { style: { color: C.sub, fontSize: 12, lineHeight: '19px' } }, versionText),
           h('div', { style: { marginTop: 8 } },
             runtimeRestartRequired
               ? btn('立即生效', () => setPendingDshRestart(true), { primary: true, disabled: busy })
@@ -1805,6 +2242,11 @@ export function createTetherPanel({ React, Native, host }) {
         const known = infos.every((info) => info && info.current_version && info.latest_version)
         const busy = updateBusy.startsWith(item.device_id + ':') || updateBusy === 'device:' + item.device_id
         const failed = infos.some((_info, index) => !!(updateErrors.devices[item.device_id] || {})[['node', ...(hasPlugin ? ['plugin'] : []), ...(hasApp ? ['app'] : [])][index]])
+        const nodeTuple = versionTuple(node.current_version, node.latest_version)
+        const versionRows = []
+        if (hasApp) versionRows.push('APP ' + versionTuple(item.capabilities.app_version, app.latest_version) + '/Node ' + nodeTuple)
+        if (hasPlugin) versionRows.push('插件 ' + versionTuple(plugin.current_version, plugin.latest_version) + '/Node ' + nodeTuple)
+        if (!versionRows.length) versionRows.push('Node ' + nodeTuple)
         return h('div', { key: 'device:' + item.device_id, style: { padding: 12, borderRadius: 8, background: C.panel, marginBottom: 10, opacity: item.online ? 1 : 0.6 } },
           h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 } },
             h('strong', { style: { fontSize: 13 } }, item.name || item.device_id),
@@ -1814,9 +2256,7 @@ export function createTetherPanel({ React, Native, host }) {
                 : hasUpdate ? pill('有更新', C.amber)
                   : known ? pill('已是最新', C.green) : failed ? pill('检查失败', C.red) : pill('检查中…', C.mute))),
           h('div', { style: { color: C.sub, fontSize: 12, lineHeight: '19px' } },
-            (hasApp ? 'APP ' + item.capabilities.app_version + (app.latest_version ? ' (' + app.latest_version + ')' : '') + ' · ' : '')
-            + (hasPlugin ? '插件 ' + (plugin.current_version || '未知') + ' · ' : '')
-            + 'Node ' + (node.current_version || '未知')),
+            versionRows.map((text) => h('div', { key: text }, text))),
           h('div', { style: { marginTop: 8 } },
             btn(busy ? h('span', { className: 'tether-spin', style: { width: 16, height: 16, display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 16 })) : item.online ? '一键更新' : '离线', () => runDeviceUpdate(item), { primary: true, disabled: busy || !item.online || !hasUpdate })))
       }
@@ -1961,6 +2401,7 @@ export function createTetherPanel({ React, Native, host }) {
       }, [loadState])
 
       React.useEffect(() => { hideHoverTip() }, [deviceId, view])
+      React.useEffect(() => { setCodeLine(1) }, [file && file.path])
       React.useEffect(() => () => { if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current) }, [])
 
       const device = state && state.devices.find((d) => d.device_id === deviceId)
@@ -1979,6 +2420,9 @@ export function createTetherPanel({ React, Native, host }) {
         } catch (_) { return '' }
       }, [file && file.path, file && file.base64, file && file.mime])
       React.useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl) }, [previewUrl])
+      const tablePreview = React.useMemo(() => (file && file.kind === 'text'
+        ? buildTablePreview({ name: file.name || file.path, text: draft, sourceTruncated: !!file.truncated })
+        : null), [file && file.path, file && file.name, file && file.kind, file && file.truncated, draft])
 
       React.useEffect(() => {
         if (!deviceId) { setPolicy(null); return }
@@ -2045,7 +2489,7 @@ export function createTetherPanel({ React, Native, host }) {
         setPath(''); setPathDraft(''); pathRef.current = ''; setFile(null); setSelected(null)
         setSessionId(''); setSessionData(null); setRunId(''); setNativeLoaded(false)
         setTreeSelected(''); setDrives([])
-        setDirEntries([]); setDirLoading(false); setDirError(''); setHistory([]); setContextMenu(null)
+        setDirEntries([]); setDirLoading(false); setDirError(''); setHistory({ back: [], forward: [] }); setSearch(''); setContextMenu(null)
         setPreviewBusy(false); setEditMode(false); loadedDirRef.current = ''
         loadProjects()
       }, [deviceId, loadProjects])
@@ -2369,6 +2813,7 @@ export function createTetherPanel({ React, Native, host }) {
         }
       }
       const rememberPreview = (key, data) => {
+        if (!usablePreviewData(data)) return
         const bytes = Math.round((data && data.base64 ? data.base64.length * 0.75 : 0) + (data && data.text ? data.text.length * 2 : 0))
         const previous = previewCacheRef.current.get(key)
         if (previous) previewBytesRef.current -= previous.bytes
@@ -2392,9 +2837,10 @@ export function createTetherPanel({ React, Native, host }) {
         if (dirInflightRef.current.has(key)) return
         const pending = post('/api/devices/' + encodeURIComponent(requestDevice) + '/fs/list', { path: target })
           .then((data) => {
-            if (deviceIdRef.current !== requestDevice) return
+            if (deviceIdRef.current !== requestDevice) return data
             const entries = (data.entries || []).map((entry) => ({ ...entry, path: joinPath(target, entry.name) }))
             rememberDir(requestDevice, target, entries)
+            return data
           })
           .catch(() => {})
           .finally(() => dirInflightRef.current.delete(key))
@@ -2409,11 +2855,14 @@ export function createTetherPanel({ React, Native, host }) {
         if (!requestDevice) return
         const key = previewCacheKey(requestDevice, entry.path)
         if (previewCacheRef.current.has(key) || previewInflightRef.current.has(key)) return
-        const pending = post('/api/devices/' + encodeURIComponent(requestDevice) + '/fs/preview', { path: entry.path })
+        // Keep the raw request in the inflight map so openPreview receives the
+        // body itself; the fire-and-forget chain only warms the cache.
+        const request = post('/api/devices/' + encodeURIComponent(requestDevice) + '/fs/preview', { path: entry.path })
+        previewInflightRef.current.set(key, request)
+        request
           .then((data) => { if (deviceIdRef.current === requestDevice) rememberPreview(key, data) })
           .catch(() => {})
-          .finally(() => previewInflightRef.current.delete(key))
-        previewInflightRef.current.set(key, pending)
+          .finally(() => { if (previewInflightRef.current.get(key) === request) previewInflightRef.current.delete(key) })
       }
       const hideHoverTip = () => {
         if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current)
@@ -2531,7 +2980,11 @@ export function createTetherPanel({ React, Native, host }) {
         const controller = new AbortController()
         dirAbortRef.current = controller
         const enter = (entries, push) => {
-          if (push !== false && pathRef.current && pathRef.current !== nextPath) setHistory((current) => [...current, pathRef.current])
+          const from = pathRef.current
+          if (from && normPath(from) !== normPath(nextPath)) {
+            setSearch('')
+            if (push !== false) setHistory((current) => explorerNavigate(current, from, nextPath))
+          }
           setDirEntries(entries)
           setPath(nextPath); setPathDraft(nextPath); pathRef.current = nextPath
           loadedDirRef.current = requestDevice + '|' + normPath(nextPath)
@@ -2546,9 +2999,8 @@ export function createTetherPanel({ React, Native, host }) {
         }
         try {
           const pending = dirInflightRef.current.get(key)
-          const data = pending
-            ? await pending
-            : await post('/api/devices/' + encodeURIComponent(requestDevice) + '/fs/list', { path: requestTarget }, undefined, { signal: controller.signal })
+          let data = pending ? await pending : null
+          if (!data) data = await postRetry('/api/devices/' + encodeURIComponent(requestDevice) + '/fs/list', { path: requestTarget }, undefined, { signal: controller.signal })
           if (!data) throw new Error('目录读取失败')
           if (seq !== dirSeqRef.current || deviceIdRef.current !== requestDevice) return
           const entries = (data.entries || []).map((entry) => ({ ...entry, path: joinPath(requestTarget, entry.name) }))
@@ -2573,12 +3025,17 @@ export function createTetherPanel({ React, Native, host }) {
       const openPreview = async (entry, options) => {
         const opts = options || {}
         if (!entry || entry.dir) return
+        if (dirty && file && file.path !== entry.path && !window.confirm('有未保存的修改，确定打开其他文件？')) return
         const requestDevice = deviceId
         if (!requestDevice) return
         const key = previewCacheKey(requestDevice, entry.path)
         if (previewOpeningKeyRef.current === key) return
         previewOpeningKeyRef.current = key
-        const cached = opts.fresh === true ? null : previewCacheRef.current.get(key)
+        let cached = opts.fresh === true ? null : previewCacheRef.current.get(key)
+        if (cached && !usablePreviewData(cached.data)) {
+          previewCacheRef.current.delete(key)
+          cached = null
+        }
         const seq = previewSeqRef.current + 1
         previewSeqRef.current = seq
         if (previewAbortRef.current) previewAbortRef.current.abort()
@@ -2590,24 +3047,29 @@ export function createTetherPanel({ React, Native, host }) {
         const apply = (data) => {
           setFile({ ...data, path: entry.path, name: entry.name || pathBasename(entry.path) })
           if (!sameFile || !dirty) { setDraft(data.text || ''); setDirty(false); setEditMode(false) }
+          if (!sameFile) setTableView(true)
+        if (!sameFile) { setTableEdit(false); setTableEditFormat(null) }
           setSelected(entry)
           const parent = parentOf(entry.path)
           setPath(parent); setPathDraft(parent); pathRef.current = parent
           setView('files')
           revealTree(parent)
         }
-        if (cached) {
-          apply(cached.data)
-          setPreviewBusy(false)
-        } else {
-          setPreviewBusy(true)
-        }
         try {
-          const pending = previewInflightRef.current.get(key)
-          const data = pending
-            ? await pending
-            : await post('/api/devices/' + encodeURIComponent(requestDevice) + '/fs/preview', { path: entry.path }, undefined, { signal: controller.signal })
+          if (cached) {
+            apply(cached.data)
+            setPreviewBusy(false)
+          } else {
+            setPreviewBusy(true)
+          }
+          const data = await resolvePreviewBody({
+            pending: previewInflightRef.current.get(key),
+            fresh: opts.fresh === true,
+            fetchFresh: () => postRetry('/api/devices/' + encodeURIComponent(requestDevice) + '/fs/preview', { path: entry.path }, undefined, { signal: controller.signal }),
+            isAborted: (error) => controller.signal.aborted || (error && error.name === 'AbortError')
+          })
           if (seq !== previewSeqRef.current || deviceIdRef.current !== requestDevice) return
+          if (!usablePreviewData(data)) throw new Error('预览数据无效')
           rememberPreview(key, data)
           if (!(cached && dirty && sameFile)) apply(data)
           const parent = parentOf(entry.path)
@@ -2647,11 +3109,22 @@ export function createTetherPanel({ React, Native, host }) {
         }
       }
 
-      const goBack = () => {
-        if (!history.length) return
-        const previous = history[history.length - 1]
-        setHistory((current) => current.slice(0, -1))
-        loadDir(previous, { push: false })
+      const stepHistory = (direction) => {
+        const step = explorerHistoryStep(history, direction, pathRef.current || path)
+        if (!step) return
+        setHistory(step.history)
+        setFile(null); setEditMode(false); setDirty(false); setDraft('')
+        loadDir(step.target, { push: false })
+      }
+      const goBack = () => stepHistory('back')
+      const goForward = () => stepHistory('forward')
+      const goUp = () => {
+        const current = pathRef.current || path
+        if (!current) return
+        const parent = parentOf(current)
+        if (!parent || normPath(parent) === normPath(current)) return
+        setFile(null); setEditMode(false); setDirty(false); setDraft('')
+        loadDir(parent, { push: true })
       }
 
       const refreshExplorer = () => {
@@ -2665,11 +3138,12 @@ export function createTetherPanel({ React, Native, host }) {
         setContextMenu({ x: event.clientX, y: event.clientY, entry: entry || null, base: base || path })
       }
 
-      const saveFile = async () => {
+      const saveFile = async (overrideText) => {
         if (!file || file.kind === 'image' || file.kind === 'pdf' || file.kind === 'unsupported') return
         setBusy(true)
         try {
-          await post(fsPath('write'), { path: file.path, text: draft })
+          const text = typeof overrideText === 'string' ? overrideText : draft
+          await post(fsPath('write'), { path: file.path, text })
           setDirty(false); setNotice('Saved ' + file.path)
           const key = previewCacheKey(deviceId, file.path)
           previewCacheRef.current.delete(key)
@@ -2679,9 +3153,51 @@ export function createTetherPanel({ React, Native, host }) {
           setFile({ ...data, path: file.path, name: file.name })
           setDraft(data.text || '')
           setEditMode(false)
+          setTableEdit(false)
+          setTableEditFormat(null)
           if (path) loadDir(path, { push: false, keepFile: true, fresh: true })
         } catch (e) { fail(e) } finally { setBusy(false) }
       }
+      const tableFormatOf = (target) => {
+        const name = String(target && (target.name || target.path) || '')
+        return /\.(csv|tsv)$/i.test(name) ? tablePreviewFormat(name) : null
+      }
+      const startTableEdit = () => {
+        if (!file || !tablePreview) return
+        const format = tableFormatOf(file)
+        if (!format || file.truncated || tablePreview.truncatedRows || tablePreview.truncatedColumns) return
+        setTableEditFormat({ ...format, newline: draft.includes(String.fromCharCode(13) + String.fromCharCode(10)) ? String.fromCharCode(13) + String.fromCharCode(10) : String.fromCharCode(10) })
+        setTableEdit(true)
+      }
+      const cancelTableEdit = () => {
+        if (dirty && !window.confirm('表格中未保存的修改将丢失，确定退出编辑？')) return
+        setTableEdit(false)
+        setTableEditFormat(null)
+        setDirty(false)
+      }
+      const saveTable = async () => {
+        const table = document.querySelector('.tether-table-edit')
+        if (!table) { await saveFile(); return }
+        const rows = Array.from(table.querySelectorAll('tr')).map((tr) => Array.from(tr.children).map((cell) => cell.textContent))
+        const format = tableEditFormat || tableFormatOf(file) || { delimiter: ',', quoted: true }
+        await saveFile(serializeDelimited(rows, { delimiter: format.delimiter, quoted: format.quoted, newline: format.newline || String.fromCharCode(10) }))
+      }
+      const saveFileRef = React.useRef(saveFile)
+      saveFileRef.current = saveFile
+      const saveTableRef = React.useRef(saveTable)
+      saveTableRef.current = saveTable
+      React.useEffect(() => {
+        if (!tableEdit && (!editMode || !dirty)) return undefined
+        const onKey = (event) => {
+          if ((event.ctrlKey || event.metaKey) && String(event.key).toLowerCase() === 's') {
+            event.preventDefault()
+            if (tableEdit) saveTableRef.current()
+            else saveFileRef.current()
+          }
+        }
+        window.addEventListener('keydown', onKey)
+        return () => window.removeEventListener('keydown', onKey)
+      }, [editMode, tableEdit, dirty])
       const askValue = (title, value, onOk) => setAsk({ title, value: value || '', onOk })
       const makeFolder = (base) => askValue('新建文件夹', '', async (name) => { try { await post(fsPath('mkdir'), { path: String(base).replace(/[\\/]+$/, '') + '\\' + name }); setContextMenu(null); invalidateDir(deviceId, base); await loadDir(base, { push: false, keepFile: true, fresh: true }) } catch (e) { fail(e) } })
       const makeFile = (base) => {
@@ -2846,6 +3362,22 @@ export function createTetherPanel({ React, Native, host }) {
         loadDir(target, { push: false, keepFile: !!file })
       }, [view, deviceId, path, project, projects, projectsDevice, workspaceKey])
 
+      React.useEffect(() => {
+        if (view !== 'files' || ask) return undefined
+        const onKey = (event) => {
+          if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
+          if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight' && event.key !== 'ArrowUp') return
+          const tag = event.target && event.target.tagName
+          if (tag === 'INPUT' || tag === 'TEXTAREA') return
+          event.preventDefault()
+          if (event.key === 'ArrowLeft') goBack()
+          else if (event.key === 'ArrowRight') goForward()
+          else goUp()
+        }
+        window.addEventListener('keydown', onKey)
+        return () => window.removeEventListener('keydown', onKey)
+      }, [view, ask, history, path])
+
       const renderHoverTip = () => {
         if (!hoverTip) return null
         const entry = hoverTip.entry
@@ -2879,13 +3411,22 @@ export function createTetherPanel({ React, Native, host }) {
       const CODE_FONT = 'Consolas, "Cascadia Mono", "Cascadia Code", "Courier New", monospace'
       const MAX_HIGHLIGHT_CHARS = 160 * 1024
       const MAX_HIGHLIGHT_LINES = 4000
-      const renderCode = (text, name) => {
-        if (!CODE_FILE.test(String(name || ''))) return text
-        if (text.length > MAX_HIGHLIGHT_CHARS || text.split(String.fromCharCode(10)).length > MAX_HIGHLIGHT_LINES) return text
-        const parts = []
-        const push = (value, color) => {
+      const highlightLines = (text, name) => {
+        if (!CODE_FILE.test(String(name || ''))) return null
+        if (text.length > MAX_HIGHLIGHT_CHARS || text.split(String.fromCharCode(10)).length > MAX_HIGHLIGHT_LINES) return null
+        const lines = [[]]
+        const push = (value, cls) => {
           if (!value) return
-          parts.push(color ? h('span', { key: parts.length, style: { color } }, value) : value)
+          const textValue = String(value)
+          const line = lines[lines.length - 1]
+          if (textValue.indexOf(String.fromCharCode(10)) < 0) {
+            line.push(cls ? { text: textValue, cls } : textValue)
+            return
+          }
+          textValue.split(String.fromCharCode(10)).forEach((chunk, index) => {
+            if (index) lines.push([])
+            if (chunk) lines[lines.length - 1].push(cls ? { text: chunk, cls } : chunk)
+          })
         }
         let i = 0
         while (i < text.length) {
@@ -2894,12 +3435,12 @@ export function createTetherPanel({ React, Native, host }) {
           if (ch === '/' && next === '/') {
             let j = text.indexOf(String.fromCharCode(10), i)
             if (j < 0) j = text.length
-            push(text.slice(i, j), '#6a737d'); i = j; continue
+            push(text.slice(i, j), 'comment'); i = j; continue
           }
           if (ch === '#') {
             let j = text.indexOf(String.fromCharCode(10), i)
             if (j < 0) j = text.length
-            push(text.slice(i, j), '#6a737d'); i = j; continue
+            push(text.slice(i, j), 'comment'); i = j; continue
           }
           if (ch === '"' || ch === "'" || ch === '`') {
             let j = i + 1
@@ -2908,23 +3449,123 @@ export function createTetherPanel({ React, Native, host }) {
               if (text[j] === ch) { j += 1; break }
               j += 1
             }
-            push(text.slice(i, j), '#a31515'); i = j; continue
+            push(text.slice(i, j), 'string'); i = j; continue
           }
           if (/[0-9]/.test(ch)) {
             let j = i + 1
             while (j < text.length && /[0-9.]/.test(text[j])) j += 1
-            push(text.slice(i, j), '#098658'); i = j; continue
+            push(text.slice(i, j), 'number'); i = j; continue
           }
           if (/[A-Za-z_$]/.test(ch)) {
             let j = i + 1
             while (j < text.length && /[A-Za-z0-9_$]/.test(text[j])) j += 1
             const word = text.slice(i, j)
-            if (CODE_WORDS.has(word)) push(word, '#0000ff'); else parts.push(word)
+            push(word, CODE_WORDS.has(word) ? 'keyword' : '')
             i = j; continue
           }
-          parts.push(ch); i += 1
+          push(ch); i += 1
         }
-        return parts
+        return lines
+      }
+
+      const tokenNode = (token, index) => typeof token === 'string'
+        ? token
+        : h('span', { key: index, className: 'tether-tok-' + token.cls }, token.text)
+
+      const codeView = (lines) => {
+        const gutterWidth = String(lines.length).length * 8 + 22
+        return h('div', {
+          className: 'tether-scroll tether-code-scroll',
+          style: { flex: '1 1 auto', minHeight: 0, overflow: 'auto', display: 'flex', alignItems: 'stretch', background: 'var(--tether-code-bg, ' + C.bg + ')' }
+        },
+          h('div', { className: 'tether-code-gutter', style: { width: gutterWidth, minHeight: '100%' } },
+            lines.map((_, index) => h('div', {
+              key: index, className: 'tether-code-gutter-row', 'data-line': index + 1,
+              'data-active': codeLine === index + 1 ? 'true' : undefined,
+              onClick: () => setCodeLine(index + 1)
+            }, index + 1))),
+          h('div', { className: 'tether-code-body' },
+            lines.map((tokens, index) => h('div', {
+              key: index, className: 'tether-code-row', 'data-line': index + 1,
+              'data-active': codeLine === index + 1 ? 'true' : undefined,
+              onClick: () => setCodeLine(index + 1)
+            },
+              h('span', { className: 'tether-code-line' }, tokens.map(tokenNode))
+            ))
+          )
+        )
+      }
+
+      const tablePreviewBody = (model) => {
+        if (!model || !model.columnCount) {
+          return h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', color: C.mute, fontSize: 12 } }, '空文件')
+        }
+        const notes = []
+        if (model.truncatedRows) notes.push('仅显示前 ' + model.rowLimit.toLocaleString() + ' 行')
+        if (model.truncatedColumns) notes.push('仅显示前 ' + model.columnLimit + ' 列')
+        if (model.sourceTruncated) notes.push('源文件超出读取上限')
+        return h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column' } },
+          h('div', { className: 'tether-scroll tether-table-scroll' },
+            h('table', { className: 'tether-table', 'aria-label': '只读表格预览' },
+              h('thead', null,
+                h('tr', null, model.headers.map((label, column) => h('th', {
+                  key: column, scope: 'col', title: label,
+                  className: model.numericColumns[column] ? 'tether-num' : undefined,
+                  style: { textAlign: model.numericColumns[column] ? 'right' : 'left' }
+                }, label)))),
+              h('tbody', null,
+                model.rows.map((cells, rowIndex) => h('tr', { key: rowIndex },
+                  cells.map((cell, column) => h('td', {
+                    key: column, title: cell.length > 60 ? cell : undefined,
+                    className: model.numericColumns[column] ? 'tether-num' : undefined,
+                    style: { textAlign: model.numericColumns[column] ? 'right' : 'left' }
+                  }, cell)))))
+            )
+          ),
+          h('div', { className: 'tether-table-status' },
+            h('span', { className: 'tether-num' }, model.rows.length.toLocaleString() + ' 行 × ' + model.columnCount + ' 列'),
+            notes.length ? h('span', { className: 'tether-table-warn', role: 'status' }, notes.join(' · ')) : null,
+            h('span', { style: { marginLeft: 'auto' } }, '只读'))
+        )
+      }
+
+      const tableEditBody = () => {
+        const format = tableEditFormat || tableFormatOf(file) || { delimiter: ',', quoted: true }
+        const parsed = parseDelimited(draft, {
+          delimiter: format.delimiter, quoted: format.quoted,
+          rowLimit: TABLE_PREVIEW_MAX_ROWS, columnLimit: TABLE_PREVIEW_MAX_COLUMNS
+        })
+        const width = tablePreview ? tablePreview.columnCount : 0
+        const raw = parsed.rows.map((row) => {
+          const cells = []
+          for (let column = 0; column < width; column += 1) cells.push(row[column] == null ? '' : String(row[column]))
+          return cells
+        })
+        const headers = raw.shift() || []
+        const cell = (value, key, align) => h('td', {
+          key, contentEditable: true, suppressContentEditableWarning: true,
+          onBlur: () => setDirty(true),
+          onKeyDown: (event) => { if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur() } },
+          style: { textAlign: align ? 'right' : 'left', outline: 'none' }
+        }, value)
+        return h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column' } },
+          h('div', { className: 'tether-scroll tether-table-scroll' },
+            h('table', { className: 'tether-table tether-table-edit', 'aria-label': '表格编辑' },
+              h('thead', null, h('tr', null, headers.map((label, column) => h('th', {
+                key: column, scope: 'col', contentEditable: true, suppressContentEditableWarning: true,
+                onBlur: () => setDirty(true),
+                onKeyDown: (event) => { if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur() } },
+                style: { textAlign: 'left', outline: 'none' }
+              }, label)))),
+              h('tbody', null, raw.map((cells, rowIndex) => h('tr', { key: rowIndex },
+                cells.map((value, column) => cell(value, column, tablePreview && tablePreview.numericColumns[column])))))
+            )
+          ),
+          h('div', { className: 'tether-table-status' },
+            h('span', { className: 'tether-num' }, raw.length.toLocaleString() + ' 行 × ' + headers.length + ' 列'),
+            h('span', { className: 'tether-table-warn', role: 'status' }, '编辑中'),
+            h('span', { style: { marginLeft: 'auto' } }, 'Ctrl+S 保存'))
+        )
       }
 
       const renderToasts = () => {
@@ -2964,9 +3605,13 @@ export function createTetherPanel({ React, Native, host }) {
           style: { width: 28, height: 28, display: 'grid', placeItems: 'center', border: 0, borderRadius: 6, background: 'transparent', color: disabled ? C.mute : C.sub, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.45 : 1, flex: '0 0 auto' }
         }, spinning ? h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 16 })) : h(Glyph, { name, size: 16 }))
         const crumbs = pathSegments(file ? file.path : path)
+        const sortKey = EXPLORER_SORT_KEYS.includes(sort && sort.key) ? sort.key : 'name'
+        const sortDir = sort && sort.dir === 'desc' ? 'desc' : 'asc'
+        const canGoUp = !!path && normPath(parentOf(path)) !== normPath(path)
         const toolbar = h('div', { style: { display: 'flex', alignItems: 'center', gap: 2, height: 40, padding: '0 8px', background: C.bg, flex: '0 0 auto', minWidth: 0 } },
-          iconButton('back', '后退', goBack, !history.length),
-          iconButton('arrowUp', '上级目录', () => { const parent = parentOf(file ? file.path : path); if (parent && parent !== path) { setFile(null); loadDir(parent, { push: true }) } }, !path),
+          iconButton('back', '后退 (Alt+←)', goBack, !history.back.length),
+          iconButton('forward', '前进 (Alt+→)', goForward, !history.forward.length),
+          iconButton('arrowUp', '上级目录 (Alt+↑)', goUp, !canGoUp),
           iconButton('refresh', '刷新', refreshExplorer, !path, dirLoading || previewBusy),
           iconButton('plus', '新建文件', () => makeFile(path), !path || dirLoading || previewBusy),
           h('div', {
@@ -2992,21 +3637,68 @@ export function createTetherPanel({ React, Native, host }) {
               }, segment.label)
             ))
           ),
+          path && !file ? h('div', {
+            style: { display: 'flex', alignItems: 'center', gap: 5, flex: '0 1 210px', minWidth: 128, height: 26, boxSizing: 'border-box', padding: '0 3px 0 7px', borderRadius: 6, background: C.soft, color: C.mute, marginLeft: 4 }
+          },
+            h(Glyph, { name: 'search', size: 13 }),
+            h('input', {
+              value: search, placeholder: '搜索当前目录', 'aria-label': '搜索当前目录', spellCheck: false,
+              onChange: (event) => setSearch(event.target.value),
+              onKeyDown: (event) => { if (event.key === 'Escape') { setSearch(''); event.currentTarget.blur() } },
+              style: { flex: '1 1 auto', minWidth: 0, height: 24, padding: 0, border: 0, background: 'transparent', color: C.ink, fontSize: 12, outline: 'none' }
+            }),
+            search ? h('button', {
+              title: '清除搜索', 'aria-label': '清除搜索', onClick: () => setSearch(''), className: 'tether-hover',
+              style: { width: 20, height: 20, flex: '0 0 auto', display: 'grid', placeItems: 'center', border: 0, borderRadius: 4, background: 'transparent', color: C.mute, fontSize: 13, lineHeight: '14px', padding: 0, cursor: 'pointer' }
+            }, '×') : null
+          ) : null,
           selected && !file ? h('span', { style: { marginLeft: 'auto', fontSize: 11, color: C.mute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 220 } }, selected.name) : null
         )
 
-        const closePreview = () => { setFile(null); setEditMode(false); setDirty(false); setDraft(''); setPreviewError(''); if (path) loadDir(path, { push: false }) }
-        const fileHeader = file ? h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, height: 40, padding: '0 10px', background: C.panel, flex: '0 0 auto', minWidth: 0 } },
-          iconButton('back', '返回文件夹', closePreview, false),
-          h(Native.FileTypeIcon, { path: file.name || file.path, size: 16 }),
-          h('span', { style: { fontSize: 13, fontWeight: 'var(--tether-strong, 600)', color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, file.name || pathBasename(file.path)),
-          file.writable ? null : pill('只读', C.amber),
-          file.truncated ? pill('已截断', C.amber) : null,
-          file.converted ? pill('已转 PDF', C.mute) : null,
-          h('span', { style: { marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 2 } },
-            file.kind === 'markdown' && file.writable ? iconButton(editMode ? 'eye' : 'pencil', editMode ? '预览' : '编辑', () => setEditMode((value) => !value), false) : null,
-            (file.kind === 'markdown' || file.kind === 'text') && file.writable ? iconButton('save', '保存', saveFile, !dirty || busy) : null,
-            h('span', { className: 'tether-num', style: { fontSize: 10.5, color: C.mute, marginLeft: 4 } }, formatBytes(file.size))
+        const closePreview = () => {
+          if (dirty && !window.confirm('有未保存的修改，确定关闭？')) return
+          setFile(null); setEditMode(false); setDirty(false); setDraft(''); setPreviewError(''); setTableEdit(false); setTableEditFormat(null); if (path) loadDir(path, { push: false })
+        }
+        const viewToggle = (icon, label, active, onClick) => h('button', {
+          type: 'button', onClick, title: label + '视图', 'aria-label': label + '视图',
+          'aria-pressed': active ? 'true' : 'false', 'data-active': active ? 'true' : undefined,
+          className: 'tether-hover tether-viewtoggle-btn'
+        }, h(Glyph, { name: icon, size: 13 }), h('span', null, label))
+        const tableCanEdit = !!(file && tablePreview && tableFormatOf(file) && !file.truncated && !tablePreview.truncatedRows && !tablePreview.truncatedColumns)
+        const fileTabBar = file ? h('div', {
+          className: 'tether-tabbar',
+          style: { display: 'flex', alignItems: 'stretch', height: 37, flex: '0 0 auto', minWidth: 0, background: 'var(--tether-tabstrip, ' + C.panel + ')', boxSizing: 'border-box' }
+        },
+          h('div', {
+            className: 'tether-tab', title: file.path, 'data-dirty': dirty ? 'true' : undefined,
+            style: { display: 'flex', alignItems: 'center', gap: 7, height: 36, boxSizing: 'border-box', padding: '0 6px 0 12px', background: 'var(--tether-tab-bg, ' + C.bg + ')', maxWidth: 360, minWidth: 0, position: 'relative', flex: '0 0 auto' }
+          },
+            h('span', { className: 'tether-tab-accent', 'aria-hidden': true }),
+            h(Native.FileTypeIcon, { path: file.name || file.path, size: 15 }),
+            h('span', { style: { fontSize: 12.5, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, file.name || pathBasename(file.path)),
+            dirty ? h('span', { title: '未保存', style: { width: 7, height: 7, borderRadius: '50%', background: C.blue, flex: '0 0 auto' } }) : null,
+            file.writable ? null : pill('只读', C.amber),
+            h('button', {
+              title: '关闭文件', 'aria-label': '关闭文件', onClick: closePreview, className: 'tether-hover',
+              style: { width: 22, height: 22, flex: '0 0 auto', display: 'grid', placeItems: 'center', border: 0, borderRadius: 4, background: 'transparent', color: C.mute, fontSize: 14, lineHeight: '16px', cursor: 'pointer', marginLeft: 2 }
+            }, '×')
+          ),
+          h('div', { style: { flex: '1 1 auto', minWidth: 0, display: 'flex', alignItems: 'center', gap: 4, padding: '0 8px' } },
+            file.truncated ? pill('已截断', C.amber) : null,
+            file.converted ? pill('已转 PDF', C.mute) : null,
+            tablePreview && !tableEdit ? h('div', { className: 'tether-viewtoggle', role: 'group', 'aria-label': '预览视图' },
+              viewToggle('table', '表格', tableView, () => setTableView(true)),
+              viewToggle('plainText', '纯文本', !tableView, () => setTableView(false))
+            ) : null,
+            tableEdit ? pill('编辑中', C.amber) : null,
+            h('span', { style: { marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 2 } },
+              tableEdit ? iconButton('eye', '退出表格编辑', cancelTableEdit, false)
+                : tablePreview && tableView && tableCanEdit && file.writable ? iconButton('pencil', '编辑表格', startTableEdit, false)
+                  : (file.kind === 'markdown' || file.kind === 'text') && file.writable && !(tablePreview && tableView) ? iconButton(editMode ? 'eye' : 'pencil', editMode ? '预览' : '编辑', () => setEditMode((value) => !value), false)
+                    : null,
+              (file.kind === 'markdown' || file.kind === 'text') && file.writable ? iconButton('save', '保存', () => (tableEdit ? saveTable() : saveFile()), (!dirty && !tableEdit) || busy) : null,
+              h('span', { className: 'tether-num', style: { fontSize: 10.5, color: C.mute, marginLeft: 4 } }, formatBytes(file.size))
+            )
           )
         ) : null
 
@@ -3024,15 +3716,20 @@ export function createTetherPanel({ React, Native, host }) {
             return h('div', { className: 'tether-file-scroll', style: { flex: '1 1 auto', overflow: 'auto', padding: '22px 28px 40px' } }, h('div', { className: 'tether-file-markdown' }, h(Markdown, { text: draft || '', labels: nativeMarkdownLabels })))
           }
           if (file.kind === 'text') {
+            if (editMode && CODE_FILE.test(String(file.name || ''))) return h(CodeEditor, { key: file.path, value: draft, onChange: (next) => { setDraft(next); setDirty(true) }, onSave: saveFile, font: CODE_FONT })
             if (editMode) return h('textarea', { value: draft, onChange: (ev) => { setDraft(ev.target.value); setDirty(true) }, spellCheck: false, style: { flex: '1 1 auto', width: '100%', boxSizing: 'border-box', resize: 'none', border: 0, outline: 'none', padding: '14px 18px', fontFamily: CODE_FONT, fontSize: 12.5, lineHeight: 1.6, background: C.bg, color: C.ink } })
+            if (tablePreview && tableView) return tableEdit ? tableEditBody() : tablePreviewBody(tablePreview)
             if (!CODE_FILE.test(String(file.name || ''))) {
-              return h('pre', { className: 'tether-file-text tether-scroll', style: { flex: '1 1 auto', overflow: 'auto', margin: 0, padding: '16px 20px', fontFamily: CODE_FONT, fontSize: 12.5, lineHeight: 1.6, whiteSpace: 'pre-wrap', color: C.ink, background: C.bg } }, renderCode(draft, file.name))
+              return h('pre', { className: 'tether-file-text tether-scroll', style: { flex: '1 1 auto', overflow: 'auto', margin: 0, padding: '16px 20px', fontFamily: CODE_FONT, fontSize: 12.5, lineHeight: '20px', whiteSpace: 'pre-wrap', color: C.ink, background: 'var(--tether-code-bg, ' + C.bg + ')' } }, draft)
             }
+            const highlighted = highlightLines(draft, file.name)
+            if (highlighted) return codeView(highlighted)
+            // Very large files skip per-line rendering; keep the plain gutter view.
             const codeLines = String(draft || '').split(String.fromCharCode(10))
-            return h('div', { className: 'tether-scroll', style: { flex: '1 1 auto', overflow: 'auto', display: 'flex', alignItems: 'flex-start', minHeight: 0, background: C.bg } },
-              h('pre', { 'aria-hidden': true, className: 'tether-num', style: { flex: '0 0 auto', margin: 0, padding: '16px 10px 16px 16px', fontFamily: CODE_FONT, fontSize: 12.5, lineHeight: 1.6, color: C.mute, textAlign: 'right', userSelect: 'none', borderRight: '1px solid ' + C.line, background: C.panel } },
+            return h('div', { className: 'tether-scroll', style: { flex: '1 1 auto', overflow: 'auto', display: 'flex', alignItems: 'stretch', minHeight: 0, background: 'var(--tether-code-bg, ' + C.bg + ')' } },
+              h('pre', { 'aria-hidden': true, className: 'tether-num', style: { flex: '0 0 auto', alignSelf: 'stretch', margin: 0, padding: '16px 10px 16px 16px', fontFamily: CODE_FONT, fontSize: 12.5, lineHeight: '20px', color: C.mute, textAlign: 'right', userSelect: 'none', background: 'var(--tether-code-gutter, ' + C.panel + ')' } },
                 codeLines.map((_, index) => index + 1).join(String.fromCharCode(10))),
-              h('pre', { className: 'tether-file-text', style: { flex: '1 0 auto', margin: 0, padding: '16px 24px 16px 12px', fontFamily: CODE_FONT, fontSize: 12.5, lineHeight: 1.6, whiteSpace: 'pre', color: C.ink, background: 'transparent' } }, renderCode(draft, file.name)))
+              h('pre', { className: 'tether-file-text', style: { flex: '1 0 auto', margin: 0, padding: '16px 24px 16px 12px', fontFamily: CODE_FONT, fontSize: 12.5, lineHeight: '20px', whiteSpace: 'pre', color: C.ink, background: 'transparent' } }, draft))
           }
           if (file.kind === 'image') return h('div', { style: { flex: '1 1 auto', overflow: 'auto', display: 'grid', placeItems: 'center', padding: 18, background: C.panel } },
             previewUrl ? h('img', { src: previewUrl, alt: file.name || '', style: { maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: 6 } }) : h('span', { style: { color: C.mute, fontSize: 12 } }, '图片预览失败'))
@@ -3044,8 +3741,20 @@ export function createTetherPanel({ React, Native, host }) {
             h('div', { className: 'tether-num', style: { fontSize: 11 } }, (file.name || file.path) + ' · ' + formatBytes(file.size)))
         }
 
-        const entries = [...dirEntries].sort((a, b) => (a.dir === b.dir ? String(a.name || '').localeCompare(String(b.name || '')) : (a.dir ? -1 : 1)))
+        const entries = filterExplorerEntries(sortExplorerEntries(dirEntries, sortKey, sortDir), search)
+        const filtering = !!search.trim()
         const columns = 'minmax(0,1fr) 132px 104px 78px'
+        const sortHeader = (key, label, align) => h('button', {
+          onClick: () => setSort((current) => toggleExplorerSort(current, key)),
+          title: '按' + label + '排序',
+          'aria-label': '按' + label + '排序',
+          'data-sort': sortKey === key ? sortDir : undefined,
+          className: 'tether-hover',
+          style: { display: 'flex', alignItems: 'center', gap: 3, justifyContent: align === 'right' ? 'flex-end' : 'flex-start', minWidth: 0, height: 22, padding: '0 4px', margin: '0 -4px', border: 0, borderRadius: 4, background: 'transparent', color: sortKey === key ? C.ink : C.mute, fontSize: 11, cursor: 'pointer' }
+        },
+          h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, label),
+          sortKey === key ? h('span', { style: { display: 'grid', placeItems: 'center', flex: '0 0 auto', transform: sortDir === 'asc' ? 'rotate(180deg)' : 'none' } }, h(Glyph, { name: 'chevronDown', size: 11 })) : null
+        )
         const directoryBody = () => {
           if (dirLoading && !entries.length) return h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', alignContent: 'center', gap: 8, color: C.mute, fontSize: 12 } },
             h('span', { className: 'tether-spin', style: { width: 18, height: 18, display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 18 })),
@@ -3055,15 +3764,15 @@ export function createTetherPanel({ React, Native, host }) {
             h('div', null, dirError),
             h('button', { onClick: refreshExplorer, className: 'tether-hover', style: { border: 0, borderRadius: 6, padding: '5px 10px', background: C.soft, color: C.ink, fontSize: 12, cursor: 'pointer' } }, '重试'))
           if (!path) return h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', color: C.mute, fontSize: 12 } }, '从左侧选择工作区或磁盘')
+          if (filtering && !entries.length) return h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', alignContent: 'center', gap: 8, color: C.mute, fontSize: 12, padding: 24, textAlign: 'center' } },
+            h('div', null, '未找到匹配 “' + search.trim() + '” 的项目'),
+            h('button', { onClick: () => setSearch(''), className: 'tether-hover', style: { border: 0, borderRadius: 6, padding: '5px 10px', background: C.soft, color: C.ink, fontSize: 12, cursor: 'pointer' } }, '清除搜索'))
           if (!entries.length) return h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', color: C.mute, fontSize: 12 } }, '空文件夹')
-          return h('div', { className: 'tether-scroll', onScroll: hideHoverTip, style: { flex: '1 1 auto', overflow: 'auto', padding: '0 10px 24px' } },
-            dirLoading ? h('div', { style: { display: 'flex', alignItems: 'center', gap: 7, height: 26, padding: '0 8px', fontSize: 11, color: C.mute } },
-              h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 13 })),
-              h('span', null, '正在刷新…'),
-              h('button', { onClick: stopLoading, className: 'tether-hover', style: { border: 0, borderRadius: 5, padding: '2px 8px', background: C.soft, color: C.ink, fontSize: 11, cursor: 'pointer' } }, '停止')) : null,
-            h('div', { style: { display: 'grid', gridTemplateColumns: columns, gap: 8, height: 28, padding: '0 8px', alignItems: 'center', fontSize: 11, color: C.mute } },
-              h('span', null, '名称'), h('span', null, '修改日期'), h('span', null, '类型'), h('span', { style: { textAlign: 'right' } }, '大小')),
-            entries.map((entry) => h('div', {
+          return h('div', { style: { flex: '1 1 auto', minHeight: 0, position: 'relative', display: 'flex' } },
+            h('div', { className: 'tether-scroll', onScroll: hideHoverTip, style: { flex: '1 1 auto', overflow: 'auto', padding: '0 10px 24px' } },
+              h('div', { style: { display: 'grid', gridTemplateColumns: columns, gap: 8, height: 28, padding: '0 8px', alignItems: 'center', fontSize: 11, color: C.mute } },
+                sortHeader('name', '名称'), sortHeader('mtime', '修改日期'), h('span', null, '类型'), sortHeader('size', '大小', 'right')),
+              entries.map((entry) => h('div', {
               key: entry.path, role: 'button', tabIndex: 0,
               onClick: (event) => {
                 if (event.detail > 1) return
@@ -3088,6 +3797,9 @@ export function createTetherPanel({ React, Native, host }) {
               h('span', { style: { color: C.mute, fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, entryTypeLabel(entry)),
               h('span', { className: 'tether-num', style: { color: C.mute, fontSize: 11, textAlign: 'right' } }, entry.dir ? '' : formatBytes(entry.size))
             ))
+            ),
+            dirLoading ? h('div', { className: 'tether-dir-loading', role: 'status', 'aria-live': 'polite', 'aria-label': '正在加载目录' },
+              h('span', { className: 'tether-spin' }, h(Glyph, { name: 'refresh', size: 18 }))) : null
           )
         }
 
@@ -3116,7 +3828,7 @@ export function createTetherPanel({ React, Native, host }) {
           style: { display: 'flex', flexDirection: 'column', flex: '1 1 auto', minHeight: 0, background: C.bg }
         },
           toolbar,
-          file ? h('div', { style: { display: 'flex', flexDirection: 'column', flex: '1 1 auto', minHeight: 0 } }, fileHeader, previewBody()) : directoryBody(),
+          file ? h('div', { style: { display: 'flex', flexDirection: 'column', flex: '1 1 auto', minHeight: 0 } }, fileTabBar, previewBody()) : directoryBody(),
           context
         )
       }
@@ -3288,7 +4000,7 @@ export function createTetherPanel({ React, Native, host }) {
             treeSelected
           }),
           h('main', { style: { flex: '1 1 auto', display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 } },
-            h(NativeSurface, { deviceId, online: deviceOnline, visible: view === 'chat' }),
+            h(NativeSurface, { deviceId, online: deviceOnline, visible: view === 'chat', localDeviceId: appLocalDevice }),
             view === 'files' ? renderExplorer() : (view === 'network' ? renderNetwork() : null)
         ),
         ),

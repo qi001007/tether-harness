@@ -1,4 +1,5 @@
 # 修改记录
+- 2026-10-29：新增 `test_explorer_navigation.mjs`：历史栈前进/后退/新导航清空 forward、目录优先的三种排序与升降序、搜索大小写与空查询过滤，以及工具栏/列头/搜索空态接线断言。
 - 2026-10-28：新增本机 DSH 更新确认流程回归，覆盖 owner 在线重载、重载后运行版本核对，以及 no-HMR/运行版本未追平时停止自动操作并明确提示。
 - 2026-10-28：新增原生目标设备附件与 surface owner RPC 回归，覆盖 owner identity、session workspace API、路径 capability、readBytes 二进制跨块无损、超限/拒绝及设备/会话切换后不 attach。
 - 2026-10-28：共享 UI 回归断言新建文件固定当前 target device、设置 `overwrite:false` 且设备变化后丢弃旧目录 UI 更新。
@@ -78,3 +79,9 @@
 - 2026-10-28：新增真实本机 SSE fixture 回归，验证首字节不等 EOF、间隔事件分块读取及 close 中断上游；新增 Controller 流式转发/客户端取消关闭 RPC 回归。
 - 2026-10-28：Node 更新协议回归确认 prepare 期间仍可及时回复 status/check；manifest 测试覆盖同 URL 并发 singleflight 与 prepare 新鲜读取。
 - 2026-10-28：附件回归改以仓库 `build.mjs` 的 fileDrag injection contract 验证，移除对未跟踪 `.runtime/dsh-src` SDK 源码的依赖；共享 UI 增加刷新 busy/旋转、稳定更新入口圆点和 toast 4 秒收敛断言。
+- 2026-10-28：新增 `test_preview_open`/`test_code_view`：预取在飞时首开复用请求体、无效/失败预取回退重试且不毒化缓存、中断不被吞；代码页标签栏/当前行/分隔条与暗色变量不变量。
+- 2026-10-29：新增 `test_csv_preview`：RFC4180 引号/转义/字段内换行、CRLF/CR、BOM、空单元格、行/列上限、源截断丢弃半行、TSV/XLSX 分支、数字列右对齐与表格/纯文本切换接线。
+- 2026-10-29：新增 `test_update_version_line`（版本元组/两条固定格式/无旧文案）；`test_node_console_api` 增加本机 `dsh/surface` 200/401/404/409，`test_web_local_api` 与 `test_ui_performance` 改为断言 `/dsh/surface` 走本机节点；`test_native_surface_client` 覆盖同机 token URL 与 Hub-loopback 防护豁免。
+- 2026-10-29：`test_native_surface` 增加 401 后重新认证并重放一次的用例（第二次仍失败则保留 401）；`test_native_surface_client` 增加插件 `surfaceBase` 快路径与 `localDeviceId` 接线断言。
+- 2026-10-29：`test_code_view` 改为断言满高行号槽、无硬分界线和蓝/绿/紫配色，新增代码编辑（Tab/Ctrl+S/脏改动确认）断言；`test_csv_preview` 增加 `serializeDelimited` 往返测试与表格就地编辑/Ctrl+S 接线断言。
+- 2026-10-29：`test_explorer_navigation` 增加预取返回响应体、`loadDir` 空值回退和覆盖式加载遮罩断言（防止再出现“双击快就报目录读取失败”与加载挤行）。

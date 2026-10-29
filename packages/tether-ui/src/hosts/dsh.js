@@ -376,6 +376,7 @@ export function createDshHost({ apiBase = DSH_API_BASE, pluginVersion = null, lo
       const hub = storedHub()
       return hub ? [hub.url.replace(/\/+$/, ''), DSH_APP_BASE, apiBase] : [DSH_APP_BASE, apiBase]
     },
+    surfaceBase: (isLocal) => (isLocal ? DSH_APP_BASE : ''),
     apiHeaders: (base) => {
       const hub = storedHub()
       const normalize = (value) => String(value || '').replace(/\/+$/, '')

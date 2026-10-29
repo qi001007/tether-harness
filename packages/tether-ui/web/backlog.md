@@ -1,7 +1,14 @@
 # Tether Web UI 变更记录
+- 2026-10-29：重建 Web bundle，带上资源管理器前进/后退/上级、列头排序与当前目录搜索。
 - 2026-10-28：重建 WebUI dist bundle，包含 v0.2.13 候选刷新动效、状态圆点和自动消失 toast。
 - 2026-10-28：共享 UI 更新后尝试重建 Web bundle；当前环境 `spawn EPERM` 导致失败，保留既有产物。
 - 2026-10-28：重新生成 Web bundle；UI 源码无本次改动，保留发布构建产物与测试同步。
 
 - 2026-10-28：将 React 错误边界抽为无 DOM 可测的局部组件工厂，回归覆盖 fallback 与重试恢复。
 - 2026-10-28：增加 React 渲染错误边界，显示可理解的错误说明和重试入口；由 `scripts/build-web.mjs` 更新 `dist/app.js`。
+- 2026-10-28：重新生成 `dist/app.js`（共享 `NativeSurface` 自动重连）；纯 Web 宿主没有 `window.tetherApp`，该路径不启用。
+- 2026-10-28：重新生成 `dist/app.js`（代码页首开竞态修复 + 标签栏/当前行高亮/可拖动分隔条）。
+- 2026-10-29：重新生成 `dist/app.js`（CSV/TSV/XLSX 只读表格预览与纯文本切换）。
+- 2026-10-29：`LOCAL_ROUTES` 增加 `/dsh/surface`，本机设备的 surface 描述符直连节点回环 console；重新生成 `dist/app.js`（本机直连 + 固定版本行）。
+- 2026-10-29：重新生成 `dist/app.js`（色差分隔、满高行号、蓝/绿/紫语法色、代码编辑与 CSV 表格编辑）。
+- 2026-10-29：重新生成 `dist/app.js`（目录预取竞态修复 + 覆盖式加载转圈）。

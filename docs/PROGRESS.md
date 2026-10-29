@@ -1,6 +1,23 @@
 # 实时进度
 
-更新日期：2026-10-28。
+更新日期：2026-10-29。
+
+## 实验台修复：本机 DSH 工作区直连 + 更新中心版本行（2026-10-29）
+
+- 本机（DESKTOP-LOCAL）打开 DSH 原生工作区失败：走公网 Hub 时，DSH 启动期核心资源在网关 30 s 截止点返回 502（含插件的组合包 825 KB gzip 仍用了 14 s），DSH 报 `web boot: 1 entry did not activate`；直连 `127.0.0.1:57168` 约 1 s。修复为本机设备 surface 走节点回环 console：console 新增 `GET /api/devices/{id}/dsh/surface`（返回 `?token=` 地址，descriptor 不可用 409），Web 服务的本机快路径加入 `/dsh/surface`，UI 接受同机 token URL 并跳过“Hub loopback”误判。提交 `536832f`。真机：dev APP iframe 指向 `127.0.0.1:53057/?token=…&tether_native=1`，首屏正常，无 HARNESS 失败页。
+- 插件端（DSH 面板）原先仍从 Hub 取 surface：DSH 重启后节点里旧 Cookie 失效，面板显示 `dsh web authentication required`。修复：`createDshHost.surfaceBase` 对本地设备返回 18892（APP 服务快路径，失败回退 Hub），节点 `NativeSurface._http` 遇 401/403 清空 jar 重新登录并重放一次；轮询对同机 token URL 比较 token，同端口重启也能换新。提交 `ca196eb`。真机：DSH 面板内层 iframe 为 `127.0.0.1:54805/?token=…&tether_native=1`，显示工作区而非认证错误。
+- 更新中心版本行改为固定模板：本机 APP 卡 `APP 0.2.16(0.2.15)/Node 0.2.16(0.2.15)`，本机插件卡 `插件 0.2.16(0.2.15)/Node 0.2.16(0.2.15)`，其他设备两行同格式；删除“当前/· 最新/（已安装…待生效）”。提交 `5118572`。
+- 本机实验台口径：插件与 APP 从仓库构建后直接替换本机（`desktop/install-plugin.ps1 -Restart` 把 desktop profile 指向仓库包，备份 `package.json.bak-tether-plugin-20261029-090410`；DSH 重启后插件 bundle 与仓库 `client.js` SHA-256 一致；dev APP 加载仓库 `packages/tether-ui/web`）。本机不通过更新中心更新；更新中心只用于其他节点。
+- 门禁：`node --test tests/test_*.mjs` 143 passed、`cjs` 6 passed、`pytest` 108 passed + 1 skipped、`build.mjs --check` 通过。均为本机实验台结果；两机更新与发行包未做。
+
+## UI 批次：色差分隔、代码编辑、CSV 表格编辑（2026-10-29 上午）
+
+- 分界线改色差：树/详情、代码行号、标签栏、表格状态栏的 1px 硬边框去掉，分隔条只在悬停/拖动时显蓝色把手；行号改独立满高列（真机 755px 视口下 755px）。
+- 代码页配色：关键字蓝 `#1a5fb4`、字符串绿 `#2f855a`、数字紫 `#6b46c1`、注释灰；暗色 `#7aa2f7/#9ece6a/#bb9af7`；红色不再用于语法。
+- 代码编辑：`text`/`markdown` 可进入编辑，代码态带同步行号槽；Tab 插入两空格、`Ctrl+S` 保存、原生 `Ctrl+Z/Y` 撤销重做；未保存时关闭/切换先确认。真机插入 `# edited` → `Ctrl+Z` 回退 → 插入 `# saved` → `Ctrl+S`，磁盘首行变为 `# saved`。
+- CSV/TSV：表头与单元格可编辑，`Ctrl+S` 走 RFC4180 序列化；XLSX 仍只读；截断文件禁用表格编辑。真机写入 `XAlice` 并保存成功。
+- 目录加载：修复快速双击的预取竞态（预取 Promise 解析成 `undefined` 被当成响应，触发“目录读取失败”）；刷新改为覆盖式居中转圈，列表不再被顶部“正在刷新…”行挤压。提交 `970ff5c`。
+- 门禁：149 mjs / 6 cjs / 108 pytest。提交 `f0f1fd6`、`970ff5c`。
 
 ## 当前状态：v0.2.14 已发布并完成两机更新，插件宿主待重载
 

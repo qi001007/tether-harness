@@ -10,3 +10,4 @@
 - 安装 native-surface Host companion，向 Tether 发布当前 DSH listener 的认证 URL 描述文件。
 - 2026-10-27：统一发布包版本为 0.2.1。
 - 2026-10-28：bundle 插件 package.json 发布版本升至 `0.2.13`。
+- 2026-10-29：bundle 插件 package.json 发布版本升至 `0.2.16`，与三组件版本一致。

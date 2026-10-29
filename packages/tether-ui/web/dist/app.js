@@ -7466,6 +7466,13 @@ function localPluginVersionSeed(host) {
   const version = host && host.kind === "dsh" && typeof host.pluginVersion === "string" ? host.pluginVersion : "";
   return version ? { current_version: version, runtime_version: version } : null;
 }
+function versionTuple(current, latest) {
+  const value = current === void 0 || current === null || current === "" ? "-" : String(current);
+  return value + "(" + (latest ? String(latest) : value) + ")";
+}
+function versionLine(label, primary = {}, node = {}) {
+  return label + " " + versionTuple(primary.current, primary.latest) + "/Node " + versionTuple(node.current, node.latest);
+}
 async function fetchApiJson(path, init = {}, { activeBase, apiBaseList, pinnedBase, headersForBase, fetcher = fetch } = {}) {
   const hasPinnedBase = pinnedBase !== void 0 && pinnedBase !== null;
   const ordered = hasPinnedBase ? [pinnedBase] : [activeBase, ...(apiBaseList || []).filter((base) => base !== activeBase)];
@@ -7497,6 +7504,173 @@ async function fetchApiJson(path, init = {}, { activeBase, apiBaseList, pinnedBa
     return { base, data };
   }
   throw lastError || new Error("network error");
+}
+function usablePreviewData(data) {
+  return !!data && typeof data === "object" && typeof data.kind === "string" && data.kind.length > 0;
+}
+async function resolvePreviewBody({ pending, fresh, fetchFresh, isAborted }) {
+  if (pending && !fresh) {
+    try {
+      const data = await pending;
+      if (usablePreviewData(data)) return data;
+    } catch (error) {
+      if (isAborted && isAborted(error)) throw error;
+    }
+  }
+  return fetchFresh();
+}
+var TABLE_PREVIEW_MAX_ROWS = 5e3;
+var TABLE_PREVIEW_MAX_COLUMNS = 100;
+var TABLE_NUMBER = /^[-+]?(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d+)?%?$/;
+function tablePreviewFormat(name) {
+  const value = String(name || "").toLowerCase();
+  if (value.endsWith(".csv")) return { delimiter: ",", quoted: true };
+  if (value.endsWith(".tsv")) return { delimiter: "	", quoted: true };
+  if (value.endsWith(".xlsx") || value.endsWith(".xlsm")) return { delimiter: "	", quoted: false };
+  return null;
+}
+function parseDelimited(text, options) {
+  const opts = options || {};
+  const delimiter = typeof opts.delimiter === "string" && opts.delimiter.length === 1 ? opts.delimiter : ",";
+  const quoted = opts.quoted !== false;
+  const rowLimit = Math.max(1, Math.floor(opts.rowLimit == null ? TABLE_PREVIEW_MAX_ROWS : opts.rowLimit));
+  const columnLimit = Math.max(1, Math.floor(opts.columnLimit == null ? TABLE_PREVIEW_MAX_COLUMNS : opts.columnLimit));
+  const source = String(text == null ? "" : text).replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n");
+  const rows = [];
+  let row = [];
+  let field = "";
+  let fieldCount = 0;
+  let inQuotes = false;
+  let started = false;
+  let truncatedRows = false;
+  let truncatedColumns = false;
+  let stoppedAtLimit = false;
+  const pushField = () => {
+    if (fieldCount < columnLimit) row.push(field);
+    else truncatedColumns = true;
+    fieldCount += 1;
+    field = "";
+  };
+  const endRow = () => {
+    pushField();
+    rows.push(row);
+    row = [];
+    fieldCount = 0;
+    started = false;
+  };
+  let index = 0;
+  while (index < source.length) {
+    const ch = source[index];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (source[index + 1] === '"') {
+          field += '"';
+          index += 2;
+          continue;
+        }
+        inQuotes = false;
+        index += 1;
+        continue;
+      }
+      field += ch;
+      index += 1;
+      continue;
+    }
+    if (quoted && ch === '"' && field === "") {
+      inQuotes = true;
+      started = true;
+      index += 1;
+      continue;
+    }
+    if (ch === delimiter) {
+      started = true;
+      pushField();
+      index += 1;
+      continue;
+    }
+    if (ch === "\n") {
+      endRow();
+      index += 1;
+      if (rows.length >= rowLimit + 1) {
+        truncatedRows = index < source.length;
+        stoppedAtLimit = true;
+        break;
+      }
+      continue;
+    }
+    field += ch;
+    started = true;
+    index += 1;
+  }
+  if (!stoppedAtLimit && (started || field !== "" || row.length > 0)) endRow();
+  return {
+    rows,
+    truncatedRows,
+    truncatedColumns,
+    openQuote: inQuotes,
+    endedWithNewline: source.length > 0 && source[source.length - 1] === "\n"
+  };
+}
+function tableNumericColumns(rows, columnCount) {
+  const flags = new Array(Math.max(0, columnCount)).fill(false);
+  for (let column = 0; column < flags.length; column += 1) {
+    let filled = 0;
+    let numeric = 0;
+    for (const row of rows) {
+      const value = String((row && row[column]) == null ? "" : row[column]).trim();
+      if (!value) continue;
+      filled += 1;
+      if (TABLE_NUMBER.test(value)) numeric += 1;
+    }
+    flags[column] = filled >= 2 && numeric / filled >= 0.6;
+  }
+  return flags;
+}
+function serializeDelimited(rows, options = {}) {
+  const delimiter = typeof options.delimiter === "string" && options.delimiter.length === 1 ? options.delimiter : ",";
+  const quoted = options.quoted !== false;
+  const newline = options.newline === "\r\n" ? "\r\n" : "\n";
+  const encode = (value) => {
+    const text = String(value == null ? "" : value);
+    if (!quoted) return text.replace(/[\t\r\n]+/g, " ");
+    return /["\r\n]/.test(text) || text.includes(delimiter) ? '"' + text.replace(/"/g, '""') + '"' : text;
+  };
+  return rows.map((row) => row.map(encode).join(delimiter)).join(newline) + newline;
+}
+function buildTablePreview({ name, text, sourceTruncated, rowLimit, columnLimit } = {}) {
+  const format = tablePreviewFormat(name);
+  if (!format) return null;
+  const parsed = parseDelimited(text, { delimiter: format.delimiter, quoted: format.quoted, rowLimit, columnLimit });
+  const headerRow = parsed.rows[0] || [];
+  let body = parsed.rows.slice(1);
+  let droppedPartialRow = false;
+  if (sourceTruncated && !parsed.endedWithNewline && body.length) {
+    body = body.slice(0, -1);
+    droppedPartialRow = true;
+  }
+  const columnCount = Math.max(0, ...parsed.rows.map((row) => row.length));
+  const headers = [];
+  for (let column = 0; column < columnCount; column += 1) {
+    const label = String(headerRow[column] == null ? "" : headerRow[column]).replace(/\s+/g, " ").trim();
+    headers.push(label || "\u5217 " + (column + 1));
+  }
+  const rows = body.map((row) => {
+    const cells = [];
+    for (let column = 0; column < columnCount; column += 1) cells.push(row[column] == null ? "" : row[column]);
+    return cells;
+  });
+  return {
+    headers,
+    rows,
+    columnCount,
+    numericColumns: tableNumericColumns(rows, columnCount),
+    truncatedRows: parsed.truncatedRows,
+    truncatedColumns: parsed.truncatedColumns,
+    sourceTruncated: !!sourceTruncated,
+    droppedPartialRow,
+    rowLimit: rowLimit == null ? TABLE_PREVIEW_MAX_ROWS : rowLimit,
+    columnLimit: columnLimit == null ? TABLE_PREVIEW_MAX_COLUMNS : columnLimit
+  };
 }
 function createTetherPanel({ React: React2, Native, host }) {
   const h = React2.createElement;
@@ -7550,6 +7724,19 @@ function createTetherPanel({ React: React2, Native, host }) {
     return response.data;
   }
   const post = (path, body, pinnedBase, extra) => api(path, { method: "POST", body: JSON.stringify(body || {}), ...extra || {} }, pinnedBase);
+  const postRetry = async (path, body, pinnedBase, extra, attempts = 2) => {
+    let last;
+    for (let i = 0; i < attempts; i += 1) {
+      try {
+        return await post(path, body, pinnedBase, extra);
+      } catch (e) {
+        last = e;
+        if (e && (e.name === "AbortError" || e.code === "not_dir" || e.code === "not_file" || e.code === "forbidden" || e.code === "not_found" || e.code === "too_large")) throw e;
+        if (i + 1 < attempts) await new Promise((resolve) => setTimeout(resolve, 600));
+      }
+    }
+    throw last;
+  };
   function pill(text, color) {
     return h("span", {
       style: {
@@ -7733,6 +7920,57 @@ function createTetherPanel({ React: React2, Native, host }) {
     if (entry.dir) return "\u6587\u4EF6\u5939";
     const suffix = String(entry.name || "").split(".").pop();
     return suffix && suffix !== entry.name ? suffix.toUpperCase() + " \u6587\u4EF6" : "\u6587\u4EF6";
+  }
+  const EXPLORER_SORT_KEYS = ["name", "mtime", "size"];
+  function explorerHistory(history) {
+    const state = history || {};
+    return {
+      back: Array.isArray(state.back) ? state.back : [],
+      forward: Array.isArray(state.forward) ? state.forward : []
+    };
+  }
+  function explorerNavigate(history, from, to) {
+    if (!from || !to || normPath(from) === normPath(to)) return history;
+    const state = explorerHistory(history);
+    return { back: [...state.back, from], forward: [] };
+  }
+  function explorerHistoryStep(history, direction, current) {
+    const state = explorerHistory(history);
+    if (direction === "back") {
+      if (!state.back.length) return null;
+      return {
+        history: { back: state.back.slice(0, -1), forward: current ? [...state.forward, current] : state.forward },
+        target: state.back[state.back.length - 1]
+      };
+    }
+    if (!state.forward.length) return null;
+    return {
+      history: { back: current ? [...state.back, current] : state.back, forward: state.forward.slice(0, -1) },
+      target: state.forward[state.forward.length - 1]
+    };
+  }
+  function toggleExplorerSort(current, key) {
+    const state = current || {};
+    if (state.key === key) return { key, dir: state.dir === "desc" ? "asc" : "desc" };
+    return { key, dir: key === "name" ? "asc" : "desc" };
+  }
+  function compareExplorerEntries(a, b, key, direction) {
+    const rank = (entry) => entry && entry.dir ? 0 : 1;
+    if (rank(a) !== rank(b)) return rank(a) - rank(b);
+    const byName = () => String(a && a.name || "").localeCompare(String(b && b.name || ""), void 0, { numeric: true, sensitivity: "base" });
+    const sign = direction === "desc" ? -1 : 1;
+    if (key === "name" || key !== "mtime" && key !== "size") return byName() * sign;
+    const primary = key === "mtime" ? (Number(a && a.mtime) || 0) - (Number(b && b.mtime) || 0) : (Number(a && a.size) || 0) - (Number(b && b.size) || 0);
+    return primary ? primary * sign : byName();
+  }
+  function sortExplorerEntries(entries, key, direction) {
+    return [...entries || []].sort((a, b) => compareExplorerEntries(a, b, key, direction));
+  }
+  function filterExplorerEntries(entries, query) {
+    const needle = String(query == null ? "" : query).trim().toLowerCase();
+    const list = entries || [];
+    if (!needle) return list;
+    return list.filter((entry) => String(entry && entry.name || "").toLowerCase().includes(needle));
   }
   function resolveSessionTarget(selectedNativeId, currentRun, nativeSessions, remoteSessions, remoteRuns, deviceId, workspace, runWorkspace) {
     if (selectedNativeId) {
@@ -8063,8 +8301,48 @@ function createTetherPanel({ React: React2, Native, host }) {
     );
   }
   const SCROLL_CSS = `
-      .tether-root { --tether-strong: 600; --tether-strong-2: 650; --tether-body: 400; }
-      body[data-ds-dark-theme] .tether-root { --tether-strong: 500; --tether-strong-2: 520; --tether-body: 350; }
+      .tether-root { --tether-strong: 600; --tether-strong-2: 650; --tether-body: 400;
+        --tether-split: var(--dsw-alias-border-l2, rgba(9, 30, 66, 0.16));
+        --tether-tabstrip: color-mix(in srgb, var(--dsw-alias-label-primary, #101828) 7%, var(--dsw-alias-bg-base, #ffffff));
+        --tether-code-bg: var(--dsw-alias-bg-base, #ffffff);
+        --tether-code-gutter: var(--dsw-specific-sidebar-fill, #f9fafb);
+        --tether-code-keyword: #1a5fb4;
+        --tether-code-string: #2f855a;
+        --tether-code-number: #6b46c1;
+        --tether-code-comment: #667085;
+        --tether-code-line: rgba(38, 49, 72, 0.055);
+        --tether-code-line-gutter: color-mix(in srgb, var(--dsw-alias-state-business-primary, #1570ef) 9%, var(--dsw-alias-bg-base, #ffffff));
+        --tether-table-head: color-mix(in srgb, var(--dsw-alias-label-primary, #101828) 5%, var(--dsw-alias-bg-base, #ffffff));
+        --tether-table-grid: color-mix(in srgb, var(--dsw-alias-label-primary, #101828) 6%, transparent);
+        --tether-tab-bg: var(--dsw-alias-bg-base, #ffffff); }
+      body[data-ds-dark-theme] .tether-root {
+        --tether-strong: 500; --tether-strong-2: 520; --tether-body: 350;
+        --tether-split: rgba(255, 255, 255, 0.12);
+        --tether-code-keyword: #7aa2f7;
+        --tether-code-string: #9ece6a;
+        --tether-code-number: #bb9af7;
+        --tether-code-comment: #7f848e;
+        --tether-code-line: rgba(255, 255, 255, 0.045);
+        --tether-code-line-gutter: color-mix(in srgb, var(--dsw-alias-state-business-primary, #4e9eff) 16%, var(--dsw-alias-bg-base, #1e1e1e)); }
+      .tether-side-split { touch-action: none; }
+      .tether-side-split::after { content: ''; position: absolute; top: 0; bottom: 0; left: 4px; width: 1px; background: transparent; transition: width 120ms ease, left 120ms ease, background-color 120ms ease; }
+      .tether-side-split:hover::after, .tether-side-split[data-active=true]::after { left: 3px; width: 3px; border-radius: 2px; background: var(--dsw-alias-state-business-primary, #1570ef); opacity: .5; }
+      .tether-tabbar { user-select: none; }
+      .tether-tab { transition: background-color 120ms ease; }
+      .tether-tab-accent { position: absolute; left: 0; right: 0; top: 0; height: 2px; background: transparent; }
+      .tether-tab[data-dirty=true] .tether-tab-accent, .tether-tab:hover .tether-tab-accent { background: var(--dsw-alias-state-business-primary, #1570ef); opacity: .85; }
+      .tether-code-scroll { font-family: Consolas, "Cascadia Mono", "Cascadia Code", "Courier New", monospace; font-size: 12.5px; line-height: 20px; tab-size: 2; }
+      .tether-code-gutter { position: sticky; left: 0; z-index: 1; flex: 0 0 auto; box-sizing: border-box; padding: 8px 0 0; background: var(--tether-code-gutter); }
+      .tether-code-gutter-row { height: 20px; padding: 0 10px 0 4px; text-align: right; color: var(--dsw-alias-label-tertiary, #667085); user-select: none; font-variant-numeric: tabular-nums; }
+      .tether-code-gutter-row[data-active=true] { color: var(--dsw-alias-label-secondary, #475467); background: var(--tether-code-line-gutter); }
+      .tether-code-body { flex: 0 0 auto; min-width: max-content; padding: 8px 0 24px; }
+      .tether-code-row { display: block; height: 20px; width: max-content; min-width: 100%; }
+      .tether-code-row[data-active=true] { background: var(--tether-code-line); }
+      .tether-code-line { display: block; padding: 0 24px 0 14px; white-space: pre; color: var(--dsw-alias-label-primary, #1f2328); }
+      .tether-tok-keyword { color: var(--tether-code-keyword); }
+      .tether-tok-string { color: var(--tether-code-string); }
+      .tether-tok-number { color: var(--tether-code-number); }
+      .tether-tok-comment { color: var(--tether-code-comment); font-style: italic; }
       .tether-scroll { scrollbar-width: thin; scrollbar-color: transparent transparent; overscroll-behavior: contain; }
       .tether-scroll:hover { scrollbar-color: var(--dsw-alias-scrollbar-hover-l1, #cbd5e1) transparent; }
       .tether-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -8079,6 +8357,19 @@ function createTetherPanel({ React: React2, Native, host }) {
       .tether-node-fill { position: absolute; inset: 0; z-index: 1; border-radius: 50%; corner-shape: round; transition: background-color 160ms ease; }
       .tether-file-markdown { max-width: 860px; margin: 0 auto; color: var(--dsw-alias-label-primary); font-size: 14px; line-height: 24px; }
       .tether-file-text { tab-size: 2; }
+      .tether-viewtoggle { display: flex; align-items: center; gap: 1px; padding: 1px; border-radius: 6px; background: var(--dsw-alias-interactive-bg-hover, rgba(38, 49, 72, 0.06)); flex: 0 0 auto; }
+      .tether-viewtoggle-btn { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 7px; border: 0; border-radius: 5px; background: transparent; color: var(--dsw-alias-label-tertiary, #667085); font-size: 11px; line-height: 1; cursor: pointer; white-space: nowrap; }
+      .tether-viewtoggle-btn[data-active=true] { background: var(--dsw-alias-bg-base, #fff); color: var(--dsw-alias-label-primary, #101828); box-shadow: 0 1px 2px rgba(16, 24, 40, 0.1); }
+      .tether-table-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; background: var(--dsw-alias-bg-base, #fff); }
+      .tether-table { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; font-size: 12.5px; line-height: 20px; color: var(--dsw-alias-label-primary, #101828); }
+      .tether-table th, .tether-table td { box-sizing: border-box; max-width: 420px; padding: 4px 12px; border-right: 1px solid var(--tether-table-grid); border-bottom: 1px solid var(--tether-table-grid); white-space: pre-wrap; overflow-wrap: anywhere; vertical-align: top; }
+      .tether-table th { position: sticky; top: 0; z-index: 2; background: var(--tether-table-head); color: var(--dsw-alias-label-secondary, #475467); font-weight: var(--tether-strong, 600); font-size: 11.5px; white-space: nowrap; }
+      .tether-table th.tether-num, .tether-table td.tether-num { white-space: nowrap; }
+      .tether-table tbody tr:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(38, 49, 72, 0.06)); }
+      .tether-table-status { display: flex; align-items: center; gap: 12px; height: 26px; flex: 0 0 auto; padding: 0 12px; background: var(--tether-tabstrip, #f9fafb); color: var(--dsw-alias-label-tertiary, #667085); font-size: 11px; white-space: nowrap; overflow: hidden; }
+      .tether-table-warn { color: var(--dsw-alias-state-warn-primary, #b54708); overflow: hidden; text-overflow: ellipsis; }
+      .tether-dir-loading { position: absolute; inset: 0; z-index: 4; display: grid; place-items: center; background: color-mix(in srgb, var(--dsw-alias-bg-base, #fff) 78%, transparent); color: var(--dsw-alias-label-tertiary, #667085); }
+      .tether-dir-loading > span { width: 20px; height: 20px; display: grid; place-items: center; }
       @media (prefers-reduced-motion: reduce) { .tether-spin > svg { animation-duration: 1.6s; } }
       .tether-flow { display: flex; flex-direction: column; max-width: calc(var(--dsh-chat-content-width, 748px) + 32px); width: 100%; margin: 0 auto; padding: 0 16px; box-sizing: border-box; }
       .tether-turn { display: flex; flex-direction: column; min-width: 0; }
@@ -8206,6 +8497,13 @@ function createTetherPanel({ React: React2, Native, host }) {
     back: { parts: [
       { d: "M10.2 3.2L5.4 8l4.8 4.8" }
     ] },
+    forward: { parts: [
+      { d: "M5.8 3.2L10.6 8l-4.8 4.8" }
+    ] },
+    search: { parts: [
+      { d: "M7.1 12.2a5.1 5.1 0 1 0 0-10.2 5.1 5.1 0 0 0 0 10.2z" },
+      { d: "M11 11l3 3" }
+    ] },
     save: { parts: [
       { d: "M3 2.4h8.2L13.4 4.6v9H3z" },
       { d: "M5.4 2.4v3.2h5V2.4" },
@@ -8217,6 +8515,13 @@ function createTetherPanel({ React: React2, Native, host }) {
     ] },
     chevronDown: { parts: [
       { d: "M4 6L7.29289 9.29289C7.68342 9.68342 8.31658 9.68342 8.70711 9.29289L12 6" }
+    ] },
+    table: { parts: [
+      { d: "M2.6 3.4h10.8v9.2H2.6z" },
+      { d: "M2.6 6.4h10.8M6.4 6.4v6.2M9.6 6.4v6.2" }
+    ] },
+    plainText: { parts: [
+      { d: "M3 4.2h10M3 8h10M3 11.8h6.2" }
     ] },
     chevronRight: { parts: [
       { d: "M6 12L9.29289 8.70711C9.68342 8.31658 9.68342 7.68342 9.29289 7.29289L6 4" }
@@ -8780,7 +9085,7 @@ function createTetherPanel({ React: React2, Native, host }) {
       "aside",
       {
         "aria-label": "\u6587\u4EF6",
-        style: { display: hidden ? "none" : "flex", width, flex: "0 0 auto", minHeight: 0, borderRight: 0, background: C.panel, flexDirection: "column", position: "relative", transition: resizing ? "none" : "width 180ms cubic-bezier(.2,.85,.2,1.15)", willChange: "width" }
+        style: { display: hidden ? "none" : "flex", width, flex: "0 0 auto", minHeight: 0, background: C.panel, flexDirection: "column", position: "relative", transition: resizing ? "none" : "width 180ms cubic-bezier(.2,.85,.2,1.15)", willChange: "width" }
       },
       h(SidePanelHeader, { title: "\u6587\u4EF6", onCollapse, loading: loadingTree }),
       h(
@@ -8799,12 +9104,12 @@ function createTetherPanel({ React: React2, Native, host }) {
         })
       ),
       h("div", {
-        className: "tether-resizer",
+        className: "tether-resizer tether-side-split",
         "data-active": resizing ? "true" : void 0,
         onPointerDown: onResizeStart,
         onDoubleClick: onResetWidth,
         title: "\u62D6\u52A8\u8C03\u6574\u5BBD\u5EA6\uFF0C\u53CC\u51FB\u590D\u4F4D",
-        style: { position: "absolute", top: 0, right: -3, width: 7, height: "100%", cursor: "col-resize", zIndex: 2 }
+        style: { position: "absolute", top: 0, right: -4, width: 9, height: "100%", cursor: "col-resize", zIndex: 3 }
       })
     );
   }
@@ -8817,10 +9122,82 @@ function createTetherPanel({ React: React2, Native, host }) {
   function nativeSurfaceContainerStyle(visible) {
     return { display: visible ? "flex" : "none", flex: "1 1 auto", minWidth: 0, minHeight: 0, flexDirection: "column" };
   }
-  function NativeSurface({ deviceId, online, visible }) {
+  const NATIVE_SURFACE_RETRIES = 3;
+  function nativeSurfaceRetryDelay(attempt) {
+    return Math.min(1e3 * Math.pow(2, Math.max(0, attempt - 1)), 8e3);
+  }
+  function nativeSurfaceFailureMatches(currentUrl, sourceUrl) {
+    if (!currentUrl || !sourceUrl) return false;
+    try {
+      return new URL(currentUrl).host === new URL(sourceUrl).host;
+    } catch (_) {
+      return false;
+    }
+  }
+  function nativeSurfaceTransientError(error) {
+    return !!error && (error.surfaceStatus === 502 || error.surfaceStatus === 504 || error.surfaceCode === "device_offline" || error.surfaceCode === "surface_timeout");
+  }
+  function NativeSurface({ deviceId, online, visible, localDeviceId }) {
     const [state, setState] = React2.useState({ deviceId, status: deviceId ? "loading" : "no-device", url: "" });
     const [attempt, setAttempt] = React2.useState(0);
     const currentState = nativeSurfaceStateForDevice(state, deviceId, online);
+    const retryCountRef = React2.useRef(0);
+    const retryTimerRef = React2.useRef(null);
+    const surfaceStateRef = React2.useRef(currentState);
+    surfaceStateRef.current = currentState;
+    const fetchSurfaceDescriptor = async (id) => {
+      const bases = [];
+      const preferred = host && typeof host.surfaceBase === "function" ? host.surfaceBase(id === localDeviceId) : "";
+      if (preferred) bases.push(preferred);
+      bases.push(ACTIVE_BASE);
+      let lastError = null;
+      for (const base of [...new Set(bases)]) {
+        try {
+          const response = await fetch(base + "/api/devices/" + encodeURIComponent(id) + "/dsh/surface", { signal: AbortSignal.timeout(8e3) });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok && (response.status === 502 || response.status === 504) && base !== ACTIVE_BASE) continue;
+          return { response, data };
+        } catch (error) {
+          lastError = error;
+        }
+      }
+      throw lastError || new Error("\u539F\u751F DSH \u9875\u9762\u6682\u4E0D\u53EF\u7528");
+    };
+    React2.useEffect(() => {
+      retryCountRef.current = 0;
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
+    }, [deviceId]);
+    React2.useEffect(() => () => {
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
+    }, []);
+    React2.useEffect(() => {
+      const bridge = typeof window !== "undefined" ? window.tetherApp : void 0;
+      if (!deviceId || !online || !bridge || typeof bridge.onSurfaceBootFailed !== "function") return void 0;
+      return bridge.onSurfaceBootFailed((detail) => {
+        const current = surfaceStateRef.current;
+        if (!current || current.deviceId !== deviceId || current.status !== "ready" || !current.url) return;
+        if (detail && detail.source) {
+          if (!nativeSurfaceFailureMatches(current.url, detail.source)) return;
+        } else if (!visible) return;
+        if (retryTimerRef.current) return;
+        if (retryCountRef.current >= NATIVE_SURFACE_RETRIES) {
+          if (visible) setState({ deviceId, status: "error", url: "", message: "DSH \u5DE5\u4F5C\u533A\u542F\u52A8\u5931\u8D25\uFF1A\u76EE\u6807\u8BBE\u5907\u8FDE\u63A5\u4E2D\u65AD\u3002\u8BF7\u91CD\u8BD5\u3002" });
+          return;
+        }
+        retryCountRef.current += 1;
+        retryTimerRef.current = setTimeout(() => {
+          retryTimerRef.current = null;
+          setState({ deviceId, status: "loading", url: "", message: "DSH \u5DE5\u4F5C\u533A\u8FDE\u63A5\u4E2D\u65AD\uFF0C\u6B63\u5728\u81EA\u52A8\u91CD\u8FDE\u2026" });
+          setAttempt((value) => value + 1);
+        }, nativeSurfaceRetryDelay(retryCountRef.current));
+      });
+    }, [deviceId, online, visible]);
     React2.useEffect(() => {
       let current = true;
       if (!deviceId) {
@@ -8836,22 +9213,21 @@ function createTetherPanel({ React: React2, Native, host }) {
         };
       }
       setState({ deviceId, status: "loading", url: "" });
-      fetch(ACTIVE_BASE + "/api/devices/" + encodeURIComponent(deviceId) + "/dsh/surface", { signal: AbortSignal.timeout(8e3) }).then(async (response) => {
-        let data = {};
-        try {
-          data = await response.json();
-        } catch (_) {
-        }
+      fetchSurfaceDescriptor(deviceId).then(async ({ response, data }) => {
         if (!response.ok) {
           const detail = data.detail || {};
           const code = detail.code;
           const message2 = response.status === 404 ? "\u76EE\u6807\u8BBE\u5907\u4E0D\u5B58\u5728\u6216\u5DF2\u79FB\u9664" : code === "node_update_required" ? "\u76EE\u6807\u8282\u70B9\u7248\u672C\u8F83\u65E7\uFF0C\u9700\u8981\u66F4\u65B0\u540E\u624D\u80FD\u6253\u5F00\u5B8C\u6574 DSH \u5DE5\u4F5C\u533A" : code === "device_offline" ? "\u76EE\u6807\u8BBE\u5907\u79BB\u7EBF\u3002\u8BBE\u5907\u91CD\u65B0\u5728\u7EBF\u540E\u53EF\u91CD\u8BD5\u3002" : code === "descriptor_missing" ? "\u76EE\u6807\u8BBE\u5907\u7684 DeepSeek Harness \u672A\u8FD0\u884C\uFF0C\u6216\u6CA1\u6709\u5B89\u88C5 Tether surface \u7EC4\u4EF6\u3002\u8BF7\u5148\u542F\u52A8\u76EE\u6807 DSH\u3002" : code === "descriptor_invalid" ? "\u76EE\u6807\u8BBE\u5907\u7684 DSH surface \u63CF\u8FF0\u65E0\u6548\uFF0C\u8BF7\u91CD\u542F\u76EE\u6807 DSH \u6216\u91CD\u65B0\u5B89\u88C5\u63D2\u4EF6\u3002" : code === "host_unreachable" ? "\u76EE\u6807 DSH \u8FDB\u7A0B\u6CA1\u6709\u54CD\u5E94\uFF0C\u8BF7\u786E\u8BA4\u5B83\u5DF2\u542F\u52A8\u3002" : code === "auth_failed" ? "\u76EE\u6807 DSH \u7684\u767B\u5F55\u6001\u5DF2\u5931\u6548\uFF0C\u8BF7\u5728\u76EE\u6807\u673A\u91CD\u65B0\u767B\u5F55 DeepSeek Harness\u3002" : code === "surface_timeout" ? "\u76EE\u6807\u8BBE\u5907\u6CA1\u6709\u53CA\u65F6\u54CD\u5E94\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5\u3002" : "\u539F\u751F DSH \u9875\u9762\u6682\u4E0D\u53EF\u7528";
-          throw new Error(message2);
+          const error = new Error(message2);
+          error.surfaceStatus = response.status;
+          error.surfaceCode = code;
+          throw error;
         }
         if (!data.available || !isSafeNativeSurfaceUrl(data.url)) throw new Error("Controller \u8FD4\u56DE\u4E86\u65E0\u6548\u6216\u975E loopback \u7684\u539F\u751F\u9875\u9762\u5730\u5740");
         let surfaceUrl = data.url;
         const parsed = new URL(data.url);
-        if ((parsed.hostname === "127.0.0.1" || parsed.hostname === "[::1]") && ACTIVE_BASE !== "http://127.0.0.1:18890") {
+        const sameHostToken = parsed.pathname === "/" && !!parsed.searchParams.get("token");
+        if (!sameHostToken && (parsed.hostname === "127.0.0.1" || parsed.hostname === "[::1]") && ACTIVE_BASE !== "http://127.0.0.1:18890") {
           let localOk = false;
           try {
             const localRes = await fetch(ACTIVE_BASE + "/local-api/api/devices/" + encodeURIComponent(deviceId) + "/dsh/surface");
@@ -8870,7 +9246,17 @@ function createTetherPanel({ React: React2, Native, host }) {
         url.searchParams.set("tether_native", "1");
         if (current) setState({ deviceId, status: "ready", url: url.href });
       }).catch((error) => {
-        if (current) setState({ deviceId, status: "error", url: "", message: error.message });
+        if (!current) return;
+        if (nativeSurfaceTransientError(error) && !retryTimerRef.current && retryCountRef.current < NATIVE_SURFACE_RETRIES) {
+          retryCountRef.current += 1;
+          setState({ deviceId, status: "loading", url: "", message: "\u76EE\u6807\u8BBE\u5907\u8FDE\u63A5\u4E2D\u65AD\uFF0C\u6B63\u5728\u81EA\u52A8\u91CD\u8FDE\u2026" });
+          retryTimerRef.current = setTimeout(() => {
+            retryTimerRef.current = null;
+            setAttempt((value) => value + 1);
+          }, nativeSurfaceRetryDelay(retryCountRef.current));
+          return;
+        }
+        setState({ deviceId, status: "error", url: "", message: error.message });
       });
       return () => {
         current = false;
@@ -8881,15 +9267,16 @@ function createTetherPanel({ React: React2, Native, host }) {
       let alive = true;
       const timer = setInterval(async () => {
         try {
-          const res = await fetch(ACTIVE_BASE + "/api/devices/" + encodeURIComponent(deviceId) + "/dsh/surface", { signal: AbortSignal.timeout(8e3) });
-          if (!res.ok) return;
-          const data = await res.json();
+          const { response, data } = await fetchSurfaceDescriptor(deviceId);
+          if (!response.ok) return;
           if (!alive || !data.available || !isSafeNativeSurfaceUrl(data.url)) return;
           setState((prev) => {
             if (prev.status !== "ready" || !prev.url) return prev;
             try {
               const fresh = new URL(data.url);
-              if (new URL(prev.url).origin === fresh.origin) return prev;
+              const current = new URL(prev.url);
+              const sameHostToken = fresh.pathname === "/" && !!fresh.searchParams.get("token");
+              if (sameHostToken ? fresh.searchParams.get("token") === current.searchParams.get("token") : current.origin === fresh.origin) return prev;
               fresh.searchParams.set("tether_native", "1");
               return { deviceId, status: "ready", url: fresh.href };
             } catch (_) {
@@ -8904,7 +9291,7 @@ function createTetherPanel({ React: React2, Native, host }) {
         clearInterval(timer);
       };
     }, [deviceId, online]);
-    const message = currentState.status === "loading" ? "\u6B63\u5728\u8FDE\u63A5\u76EE\u6807\u8BBE\u5907\u7684 DSH \u539F\u751F\u5DE5\u4F5C\u533A\u2026" : currentState.status === "offline" ? "\u76EE\u6807\u8BBE\u5907\u79BB\u7EBF\u3002\u8BBE\u5907\u91CD\u65B0\u5728\u7EBF\u540E\u53EF\u91CD\u8BD5\u3002" : currentState.status === "no-device" ? "\u5148\u4ECE\u5DE6\u4FA7\u8BBE\u5907\u5217\u8868\u9009\u62E9\u76EE\u6807\u8BBE\u5907\u3002" : currentState.status === "error" ? currentState.message : "";
+    const message = currentState.status === "loading" ? currentState.message || "\u6B63\u5728\u8FDE\u63A5\u76EE\u6807\u8BBE\u5907\u7684 DSH \u539F\u751F\u5DE5\u4F5C\u533A\u2026" : currentState.status === "offline" ? "\u76EE\u6807\u8BBE\u5907\u79BB\u7EBF\u3002\u8BBE\u5907\u91CD\u65B0\u5728\u7EBF\u540E\u53EF\u91CD\u8BD5\u3002" : currentState.status === "no-device" ? "\u5148\u4ECE\u5DE6\u4FA7\u8BBE\u5907\u5217\u8868\u9009\u62E9\u76EE\u6807\u8BBE\u5907\u3002" : currentState.status === "error" ? currentState.message : "";
     return h(
       "div",
       { className: "tether-native-surface", style: nativeSurfaceContainerStyle(visible) },
@@ -8918,7 +9305,10 @@ function createTetherPanel({ React: React2, Native, host }) {
         "div",
         { style: { display: "grid", placeItems: "center", alignContent: "center", gap: 12, flex: "1 1 auto", minHeight: 0, color: C.sub, textAlign: "center", padding: 24 } },
         h("div", null, message),
-        currentState.status !== "loading" ? btn("\u91CD\u8BD5", () => setAttempt((value) => value + 1)) : null
+        currentState.status !== "loading" ? btn("\u91CD\u8BD5", () => {
+          retryCountRef.current = 0;
+          setAttempt((value) => value + 1);
+        }) : null
       )
     );
   }
@@ -8932,8 +9322,53 @@ function createTetherPanel({ React: React2, Native, host }) {
     const host2 = url.hostname.toLowerCase();
     const loopback = host2 === "127.0.0.1" || host2 === "[::1]";
     const publicSurface = url.protocol === "https:" && /^g\d{2,5}\.[a-z0-9.-]+$/.test(host2);
-    const allowedHost = url.protocol === "http:" && loopback || publicSurface;
-    return allowedHost && !url.username && !url.password && Number(url.port || (url.protocol === "https:" ? 443 : 80)) > 0 && url.pathname === "/tether-connect" && !!url.searchParams.get("ticket") && !url.hash;
+    const ticketed = url.pathname === "/tether-connect" && !!url.searchParams.get("ticket");
+    const localToken = url.pathname === "/" && !!url.searchParams.get("token");
+    const allowedHost = url.protocol === "http:" && loopback && (ticketed || localToken) || publicSurface && ticketed;
+    return allowedHost && !url.username && !url.password && Number(url.port || (url.protocol === "https:" ? 443 : 80)) > 0 && !url.hash;
+  }
+  function CodeEditor({ value, onChange, onSave, font }) {
+    const gutterRef = React2.useRef(null);
+    const textRef = React2.useRef(null);
+    const lines = String(value || "").split(String.fromCharCode(10));
+    const gutterWidth = String(lines.length).length * 8 + 22;
+    const syncScroll = (event) => {
+      if (gutterRef.current) gutterRef.current.scrollTop = event.currentTarget.scrollTop;
+    };
+    const onKeyDown = (event) => {
+      if ((event.ctrlKey || event.metaKey) && String(event.key).toLowerCase() === "s") {
+        event.preventDefault();
+        onSave();
+        return;
+      }
+      if (event.key === "Tab") {
+        event.preventDefault();
+        const el = textRef.current;
+        if (!el) return;
+        el.setRangeText("  ", el.selectionStart, el.selectionEnd, "end");
+        onChange(el.value);
+      }
+    };
+    return h(
+      "div",
+      { style: { flex: "1 1 auto", minHeight: 0, display: "flex", alignItems: "stretch", background: "var(--tether-code-bg, " + C.bg + ")" } },
+      h(
+        "div",
+        { ref: gutterRef, className: "tether-code-gutter", style: { width: gutterWidth, overflow: "hidden" } },
+        lines.map((_, index) => h("div", { key: index, className: "tether-code-gutter-row" }, index + 1))
+      ),
+      h("textarea", {
+        ref: textRef,
+        defaultValue: value,
+        onChange: (event) => onChange(event.target.value),
+        onScroll: syncScroll,
+        onKeyDown,
+        spellCheck: false,
+        wrap: "off",
+        "aria-label": "\u4EE3\u7801\u7F16\u8F91\u5668",
+        style: { flex: "1 1 auto", minWidth: 0, margin: 0, border: 0, outline: "none", resize: "none", padding: "8px 24px 24px 14px", fontFamily: font, fontSize: 12.5, lineHeight: "20px", tabSize: 2, whiteSpace: "pre", overflow: "auto", background: "transparent", color: C.ink }
+      })
+    );
   }
   function App() {
     const [state, setState] = React2.useState(null);
@@ -9021,12 +9456,18 @@ function createTetherPanel({ React: React2, Native, host }) {
     const [dirEntries, setDirEntries] = React2.useState([]);
     const [dirLoading, setDirLoading] = React2.useState(false);
     const [dirError, setDirError] = React2.useState("");
-    const [history, setHistory] = React2.useState([]);
+    const [history, setHistory] = React2.useState({ back: [], forward: [] });
+    const [sort, setSort] = usePersisted("tether.explorer.sort", { key: "name", dir: "asc" });
+    const [search, setSearch] = React2.useState("");
     const [contextMenu, setContextMenu] = React2.useState(null);
     const [deviceMenu, setDeviceMenu] = React2.useState(null);
     const [previewBusy, setPreviewBusy] = React2.useState(false);
     const [previewError, setPreviewError] = React2.useState("");
+    const [codeLine, setCodeLine] = React2.useState(1);
     const [editMode, setEditMode] = React2.useState(false);
+    const [tableView, setTableView] = React2.useState(true);
+    const [tableEdit, setTableEdit] = React2.useState(false);
+    const [tableEditFormat, setTableEditFormat] = React2.useState(null);
     const [workspaceOpen, setWorkspaceOpen] = React2.useState({});
     const [treeChildren, setTreeChildren] = React2.useState({});
     const [treeOpen, setTreeOpen] = React2.useState({});
@@ -9080,6 +9521,7 @@ function createTetherPanel({ React: React2, Native, host }) {
         setNativeError("\u8282\u70B9\u5F85\u66F4\u65B0");
         return;
       }
+      if (e && (e.name === "AbortError" || e.code === "update_timeout" || e.code === "node_timeout" || e.code === "device_busy" || e.code === "device_offline" || e.status && e.status >= 500)) return;
       setNotice(String(e && e.message || e));
     };
     const probeConfiguredHub = async () => {
@@ -9342,8 +9784,14 @@ function createTetherPanel({ React: React2, Native, host }) {
       const runtimeRestartRequired = product === "dsh" && localPluginNeedsRestart(infos[0]);
       const hasUpdate = infos.some((info) => info && info.update_available === true);
       const known = infos.every((info) => info && info.current_version && info.latest_version);
-      const latest = infos.map((info) => info && info.latest_version).filter(Boolean);
-      const currentText = product === "desktop" ? "APP " + (infos[0].current_version || "\u672A\u77E5") + " / Node " + (infos[1].current_version || "\u672A\u77E5") : "\u63D2\u4EF6 " + (infos[0].runtime_version || infos[0].current_version || "\u672A\u77E5") + (runtimeRestartRequired ? "\uFF08\u5DF2\u5B89\u88C5 " + infos[0].current_version + "\uFF0C\u5F85\u751F\u6548\uFF09" : "") + " / Node " + (infos[1].current_version || "\u672A\u77E5");
+      const versionText = versionLine(
+        product === "desktop" ? "APP" : "\u63D2\u4EF6",
+        {
+          current: product === "desktop" ? infos[0].current_version : infos[0].runtime_version || infos[0].current_version,
+          latest: infos[0].latest_version
+        },
+        { current: infos[1].current_version, latest: infos[1].latest_version }
+      );
       const title = product === "desktop" ? "Tether Desktop\uFF08APP + Node\uFF09" : "Tether for DSH\uFF08\u63D2\u4EF6 + Node\uFF09";
       return h(
         "div",
@@ -9354,7 +9802,7 @@ function createTetherPanel({ React: React2, Native, host }) {
           h("strong", { style: { fontSize: 13 } }, title),
           h("span", { style: { marginLeft: "auto" } }, busy2 ? h("span", { className: "tether-spin", style: { display: "grid", placeItems: "center", color: C.amber } }, h(Glyph, { name: "refresh", size: 14 })) : runtimeRestartRequired ? pill("\u5F85\u751F\u6548", C.amber) : hasUpdate ? pill("\u6709\u66F4\u65B0", C.amber) : known ? pill("\u5DF2\u662F\u6700\u65B0", C.green) : failed ? pill("\u68C0\u67E5\u5931\u8D25", C.red) : pill("\u68C0\u67E5\u4E2D\u2026", C.mute))
         ),
-        h("div", { style: { color: C.sub, fontSize: 12, lineHeight: "19px" } }, "\u5F53\u524D " + currentText + (latest.length ? " \xB7 \u6700\u65B0 " + latest[0] : "")),
+        h("div", { style: { color: C.sub, fontSize: 12, lineHeight: "19px" } }, versionText),
         h(
           "div",
           { style: { marginTop: 8 } },
@@ -9374,6 +9822,11 @@ function createTetherPanel({ React: React2, Native, host }) {
       const known = infos.every((info) => info && info.current_version && info.latest_version);
       const busy2 = updateBusy.startsWith(item.device_id + ":") || updateBusy === "device:" + item.device_id;
       const failed = infos.some((_info, index) => !!(updateErrors.devices[item.device_id] || {})[["node", ...hasPlugin ? ["plugin"] : [], ...hasApp ? ["app"] : []][index]]);
+      const nodeTuple = versionTuple(node.current_version, node.latest_version);
+      const versionRows = [];
+      if (hasApp) versionRows.push("APP " + versionTuple(item.capabilities.app_version, app.latest_version) + "/Node " + nodeTuple);
+      if (hasPlugin) versionRows.push("\u63D2\u4EF6 " + versionTuple(plugin.current_version, plugin.latest_version) + "/Node " + nodeTuple);
+      if (!versionRows.length) versionRows.push("Node " + nodeTuple);
       return h(
         "div",
         { key: "device:" + item.device_id, style: { padding: 12, borderRadius: 8, background: C.panel, marginBottom: 10, opacity: item.online ? 1 : 0.6 } },
@@ -9387,7 +9840,7 @@ function createTetherPanel({ React: React2, Native, host }) {
         h(
           "div",
           { style: { color: C.sub, fontSize: 12, lineHeight: "19px" } },
-          (hasApp ? "APP " + item.capabilities.app_version + (app.latest_version ? " (" + app.latest_version + ")" : "") + " \xB7 " : "") + (hasPlugin ? "\u63D2\u4EF6 " + (plugin.current_version || "\u672A\u77E5") + " \xB7 " : "") + "Node " + (node.current_version || "\u672A\u77E5")
+          versionRows.map((text) => h("div", { key: text }, text))
         ),
         h(
           "div",
@@ -9572,6 +10025,9 @@ function createTetherPanel({ React: React2, Native, host }) {
     React2.useEffect(() => {
       hideHoverTip();
     }, [deviceId, view]);
+    React2.useEffect(() => {
+      setCodeLine(1);
+    }, [file && file.path]);
     React2.useEffect(() => () => {
       if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
     }, []);
@@ -9593,6 +10049,7 @@ function createTetherPanel({ React: React2, Native, host }) {
     React2.useEffect(() => () => {
       if (previewUrl) URL.revokeObjectURL(previewUrl);
     }, [previewUrl]);
+    const tablePreview = React2.useMemo(() => file && file.kind === "text" ? buildTablePreview({ name: file.name || file.path, text: draft, sourceTruncated: !!file.truncated }) : null, [file && file.path, file && file.name, file && file.kind, file && file.truncated, draft]);
     React2.useEffect(() => {
       if (!deviceId) {
         setPolicy(null);
@@ -9691,7 +10148,8 @@ function createTetherPanel({ React: React2, Native, host }) {
       setDirEntries([]);
       setDirLoading(false);
       setDirError("");
-      setHistory([]);
+      setHistory({ back: [], forward: [] });
+      setSearch("");
       setContextMenu(null);
       setPreviewBusy(false);
       setEditMode(false);
@@ -10105,6 +10563,7 @@ function createTetherPanel({ React: React2, Native, host }) {
       }
     };
     const rememberPreview = (key, data) => {
+      if (!usablePreviewData(data)) return;
       const bytes = Math.round((data && data.base64 ? data.base64.length * 0.75 : 0) + (data && data.text ? data.text.length * 2 : 0));
       const previous = previewCacheRef.current.get(key);
       if (previous) previewBytesRef.current -= previous.bytes;
@@ -10127,9 +10586,10 @@ function createTetherPanel({ React: React2, Native, host }) {
       if (cached && Date.now() - cached.at < 3e4) return;
       if (dirInflightRef.current.has(key)) return;
       const pending = post("/api/devices/" + encodeURIComponent(requestDevice) + "/fs/list", { path: target }).then((data) => {
-        if (deviceIdRef.current !== requestDevice) return;
+        if (deviceIdRef.current !== requestDevice) return data;
         const entries = (data.entries || []).map((entry) => ({ ...entry, path: joinPath(target, entry.name) }));
         rememberDir(requestDevice, target, entries);
+        return data;
       }).catch(() => {
       }).finally(() => dirInflightRef.current.delete(key));
       dirInflightRef.current.set(key, pending);
@@ -10143,11 +10603,14 @@ function createTetherPanel({ React: React2, Native, host }) {
       if (!requestDevice) return;
       const key = previewCacheKey(requestDevice, entry.path);
       if (previewCacheRef.current.has(key) || previewInflightRef.current.has(key)) return;
-      const pending = post("/api/devices/" + encodeURIComponent(requestDevice) + "/fs/preview", { path: entry.path }).then((data) => {
+      const request = post("/api/devices/" + encodeURIComponent(requestDevice) + "/fs/preview", { path: entry.path });
+      previewInflightRef.current.set(key, request);
+      request.then((data) => {
         if (deviceIdRef.current === requestDevice) rememberPreview(key, data);
       }).catch(() => {
-      }).finally(() => previewInflightRef.current.delete(key));
-      previewInflightRef.current.set(key, pending);
+      }).finally(() => {
+        if (previewInflightRef.current.get(key) === request) previewInflightRef.current.delete(key);
+      });
     };
     const hideHoverTip = () => {
       if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
@@ -10266,7 +10729,11 @@ function createTetherPanel({ React: React2, Native, host }) {
       const controller = new AbortController();
       dirAbortRef.current = controller;
       const enter = (entries, push) => {
-        if (push !== false && pathRef.current && pathRef.current !== nextPath) setHistory((current) => [...current, pathRef.current]);
+        const from = pathRef.current;
+        if (from && normPath(from) !== normPath(nextPath)) {
+          setSearch("");
+          if (push !== false) setHistory((current) => explorerNavigate(current, from, nextPath));
+        }
         setDirEntries(entries);
         setPath(nextPath);
         setPathDraft(nextPath);
@@ -10288,7 +10755,8 @@ function createTetherPanel({ React: React2, Native, host }) {
       }
       try {
         const pending = dirInflightRef.current.get(key);
-        const data = pending ? await pending : await post("/api/devices/" + encodeURIComponent(requestDevice) + "/fs/list", { path: requestTarget }, void 0, { signal: controller.signal });
+        let data = pending ? await pending : null;
+        if (!data) data = await postRetry("/api/devices/" + encodeURIComponent(requestDevice) + "/fs/list", { path: requestTarget }, void 0, { signal: controller.signal });
         if (!data) throw new Error("\u76EE\u5F55\u8BFB\u53D6\u5931\u8D25");
         if (seq !== dirSeqRef.current || deviceIdRef.current !== requestDevice) return;
         const entries = (data.entries || []).map((entry) => ({ ...entry, path: joinPath(requestTarget, entry.name) }));
@@ -10315,12 +10783,17 @@ function createTetherPanel({ React: React2, Native, host }) {
     const openPreview = async (entry, options) => {
       const opts = options || {};
       if (!entry || entry.dir) return;
+      if (dirty && file && file.path !== entry.path && !window.confirm("\u6709\u672A\u4FDD\u5B58\u7684\u4FEE\u6539\uFF0C\u786E\u5B9A\u6253\u5F00\u5176\u4ED6\u6587\u4EF6\uFF1F")) return;
       const requestDevice = deviceId;
       if (!requestDevice) return;
       const key = previewCacheKey(requestDevice, entry.path);
       if (previewOpeningKeyRef.current === key) return;
       previewOpeningKeyRef.current = key;
-      const cached = opts.fresh === true ? null : previewCacheRef.current.get(key);
+      let cached = opts.fresh === true ? null : previewCacheRef.current.get(key);
+      if (cached && !usablePreviewData(cached.data)) {
+        previewCacheRef.current.delete(key);
+        cached = null;
+      }
       const seq = previewSeqRef.current + 1;
       previewSeqRef.current = seq;
       if (previewAbortRef.current) previewAbortRef.current.abort();
@@ -10336,6 +10809,11 @@ function createTetherPanel({ React: React2, Native, host }) {
           setDirty(false);
           setEditMode(false);
         }
+        if (!sameFile) setTableView(true);
+        if (!sameFile) {
+          setTableEdit(false);
+          setTableEditFormat(null);
+        }
         setSelected(entry);
         const parent = parentOf(entry.path);
         setPath(parent);
@@ -10344,16 +10822,21 @@ function createTetherPanel({ React: React2, Native, host }) {
         setView("files");
         revealTree(parent);
       };
-      if (cached) {
-        apply(cached.data);
-        setPreviewBusy(false);
-      } else {
-        setPreviewBusy(true);
-      }
       try {
-        const pending = previewInflightRef.current.get(key);
-        const data = pending ? await pending : await post("/api/devices/" + encodeURIComponent(requestDevice) + "/fs/preview", { path: entry.path }, void 0, { signal: controller.signal });
+        if (cached) {
+          apply(cached.data);
+          setPreviewBusy(false);
+        } else {
+          setPreviewBusy(true);
+        }
+        const data = await resolvePreviewBody({
+          pending: previewInflightRef.current.get(key),
+          fresh: opts.fresh === true,
+          fetchFresh: () => postRetry("/api/devices/" + encodeURIComponent(requestDevice) + "/fs/preview", { path: entry.path }, void 0, { signal: controller.signal }),
+          isAborted: (error) => controller.signal.aborted || error && error.name === "AbortError"
+        });
         if (seq !== previewSeqRef.current || deviceIdRef.current !== requestDevice) return;
+        if (!usablePreviewData(data)) throw new Error("\u9884\u89C8\u6570\u636E\u65E0\u6548");
         rememberPreview(key, data);
         if (!(cached && dirty && sameFile)) apply(data);
         const parent = parentOf(entry.path);
@@ -10400,11 +10883,28 @@ function createTetherPanel({ React: React2, Native, host }) {
         pathRef.current = target;
       }
     };
-    const goBack = () => {
-      if (!history.length) return;
-      const previous = history[history.length - 1];
-      setHistory((current) => current.slice(0, -1));
-      loadDir(previous, { push: false });
+    const stepHistory = (direction) => {
+      const step = explorerHistoryStep(history, direction, pathRef.current || path);
+      if (!step) return;
+      setHistory(step.history);
+      setFile(null);
+      setEditMode(false);
+      setDirty(false);
+      setDraft("");
+      loadDir(step.target, { push: false });
+    };
+    const goBack = () => stepHistory("back");
+    const goForward = () => stepHistory("forward");
+    const goUp = () => {
+      const current = pathRef.current || path;
+      if (!current) return;
+      const parent = parentOf(current);
+      if (!parent || normPath(parent) === normPath(current)) return;
+      setFile(null);
+      setEditMode(false);
+      setDirty(false);
+      setDraft("");
+      loadDir(parent, { push: true });
     };
     const refreshExplorer = () => {
       if (file) openPreview(file, { fresh: true });
@@ -10416,11 +10916,12 @@ function createTetherPanel({ React: React2, Native, host }) {
       if (entry) setSelected(entry);
       setContextMenu({ x: event.clientX, y: event.clientY, entry: entry || null, base: base || path });
     };
-    const saveFile = async () => {
+    const saveFile = async (overrideText) => {
       if (!file || file.kind === "image" || file.kind === "pdf" || file.kind === "unsupported") return;
       setBusy(true);
       try {
-        await post(fsPath("write"), { path: file.path, text: draft });
+        const text = typeof overrideText === "string" ? overrideText : draft;
+        await post(fsPath("write"), { path: file.path, text });
         setDirty(false);
         setNotice("Saved " + file.path);
         const key = previewCacheKey(deviceId, file.path);
@@ -10431,6 +10932,8 @@ function createTetherPanel({ React: React2, Native, host }) {
         setFile({ ...data, path: file.path, name: file.name });
         setDraft(data.text || "");
         setEditMode(false);
+        setTableEdit(false);
+        setTableEditFormat(null);
         if (path) loadDir(path, { push: false, keepFile: true, fresh: true });
       } catch (e) {
         fail2(e);
@@ -10438,6 +10941,49 @@ function createTetherPanel({ React: React2, Native, host }) {
         setBusy(false);
       }
     };
+    const tableFormatOf = (target) => {
+      const name = String(target && (target.name || target.path) || "");
+      return /\.(csv|tsv)$/i.test(name) ? tablePreviewFormat(name) : null;
+    };
+    const startTableEdit = () => {
+      if (!file || !tablePreview) return;
+      const format = tableFormatOf(file);
+      if (!format || file.truncated || tablePreview.truncatedRows || tablePreview.truncatedColumns) return;
+      setTableEditFormat({ ...format, newline: draft.includes(String.fromCharCode(13) + String.fromCharCode(10)) ? String.fromCharCode(13) + String.fromCharCode(10) : String.fromCharCode(10) });
+      setTableEdit(true);
+    };
+    const cancelTableEdit = () => {
+      if (dirty && !window.confirm("\u8868\u683C\u4E2D\u672A\u4FDD\u5B58\u7684\u4FEE\u6539\u5C06\u4E22\u5931\uFF0C\u786E\u5B9A\u9000\u51FA\u7F16\u8F91\uFF1F")) return;
+      setTableEdit(false);
+      setTableEditFormat(null);
+      setDirty(false);
+    };
+    const saveTable = async () => {
+      const table = document.querySelector(".tether-table-edit");
+      if (!table) {
+        await saveFile();
+        return;
+      }
+      const rows = Array.from(table.querySelectorAll("tr")).map((tr) => Array.from(tr.children).map((cell) => cell.textContent));
+      const format = tableEditFormat || tableFormatOf(file) || { delimiter: ",", quoted: true };
+      await saveFile(serializeDelimited(rows, { delimiter: format.delimiter, quoted: format.quoted, newline: format.newline || String.fromCharCode(10) }));
+    };
+    const saveFileRef = React2.useRef(saveFile);
+    saveFileRef.current = saveFile;
+    const saveTableRef = React2.useRef(saveTable);
+    saveTableRef.current = saveTable;
+    React2.useEffect(() => {
+      if (!tableEdit && (!editMode || !dirty)) return void 0;
+      const onKey = (event) => {
+        if ((event.ctrlKey || event.metaKey) && String(event.key).toLowerCase() === "s") {
+          event.preventDefault();
+          if (tableEdit) saveTableRef.current();
+          else saveFileRef.current();
+        }
+      };
+      window.addEventListener("keydown", onKey);
+      return () => window.removeEventListener("keydown", onKey);
+    }, [editMode, tableEdit, dirty]);
     const askValue = (title, value, onOk) => setAsk({ title, value: value || "", onOk });
     const makeFolder = (base) => askValue("\u65B0\u5EFA\u6587\u4EF6\u5939", "", async (name) => {
       try {
@@ -10675,6 +11221,21 @@ function createTetherPanel({ React: React2, Native, host }) {
       setPathDraft(target);
       loadDir(target, { push: false, keepFile: !!file });
     }, [view, deviceId, path, project, projects, projectsDevice, workspaceKey]);
+    React2.useEffect(() => {
+      if (view !== "files" || ask) return void 0;
+      const onKey = (event) => {
+        if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight" && event.key !== "ArrowUp") return;
+        const tag = event.target && event.target.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA") return;
+        event.preventDefault();
+        if (event.key === "ArrowLeft") goBack();
+        else if (event.key === "ArrowRight") goForward();
+        else goUp();
+      };
+      window.addEventListener("keydown", onKey);
+      return () => window.removeEventListener("keydown", onKey);
+    }, [view, ask, history, path]);
     const renderHoverTip = () => {
       if (!hoverTip) return null;
       const entry = hoverTip.entry;
@@ -10724,13 +11285,22 @@ function createTetherPanel({ React: React2, Native, host }) {
     const CODE_FONT = 'Consolas, "Cascadia Mono", "Cascadia Code", "Courier New", monospace';
     const MAX_HIGHLIGHT_CHARS = 160 * 1024;
     const MAX_HIGHLIGHT_LINES = 4e3;
-    const renderCode = (text, name) => {
-      if (!CODE_FILE.test(String(name || ""))) return text;
-      if (text.length > MAX_HIGHLIGHT_CHARS || text.split(String.fromCharCode(10)).length > MAX_HIGHLIGHT_LINES) return text;
-      const parts = [];
-      const push = (value, color) => {
+    const highlightLines = (text, name) => {
+      if (!CODE_FILE.test(String(name || ""))) return null;
+      if (text.length > MAX_HIGHLIGHT_CHARS || text.split(String.fromCharCode(10)).length > MAX_HIGHLIGHT_LINES) return null;
+      const lines = [[]];
+      const push = (value, cls) => {
         if (!value) return;
-        parts.push(color ? h("span", { key: parts.length, style: { color } }, value) : value);
+        const textValue = String(value);
+        const line = lines[lines.length - 1];
+        if (textValue.indexOf(String.fromCharCode(10)) < 0) {
+          line.push(cls ? { text: textValue, cls } : textValue);
+          return;
+        }
+        textValue.split(String.fromCharCode(10)).forEach((chunk, index) => {
+          if (index) lines.push([]);
+          if (chunk) lines[lines.length - 1].push(cls ? { text: chunk, cls } : chunk);
+        });
       };
       let i = 0;
       while (i < text.length) {
@@ -10739,14 +11309,14 @@ function createTetherPanel({ React: React2, Native, host }) {
         if (ch === "/" && next === "/") {
           let j = text.indexOf(String.fromCharCode(10), i);
           if (j < 0) j = text.length;
-          push(text.slice(i, j), "#6a737d");
+          push(text.slice(i, j), "comment");
           i = j;
           continue;
         }
         if (ch === "#") {
           let j = text.indexOf(String.fromCharCode(10), i);
           if (j < 0) j = text.length;
-          push(text.slice(i, j), "#6a737d");
+          push(text.slice(i, j), "comment");
           i = j;
           continue;
         }
@@ -10763,14 +11333,14 @@ function createTetherPanel({ React: React2, Native, host }) {
             }
             j += 1;
           }
-          push(text.slice(i, j), "#a31515");
+          push(text.slice(i, j), "string");
           i = j;
           continue;
         }
         if (/[0-9]/.test(ch)) {
           let j = i + 1;
           while (j < text.length && /[0-9.]/.test(text[j])) j += 1;
-          push(text.slice(i, j), "#098658");
+          push(text.slice(i, j), "number");
           i = j;
           continue;
         }
@@ -10778,15 +11348,171 @@ function createTetherPanel({ React: React2, Native, host }) {
           let j = i + 1;
           while (j < text.length && /[A-Za-z0-9_$]/.test(text[j])) j += 1;
           const word = text.slice(i, j);
-          if (CODE_WORDS.has(word)) push(word, "#0000ff");
-          else parts.push(word);
+          push(word, CODE_WORDS.has(word) ? "keyword" : "");
           i = j;
           continue;
         }
-        parts.push(ch);
+        push(ch);
         i += 1;
       }
-      return parts;
+      return lines;
+    };
+    const tokenNode = (token, index) => typeof token === "string" ? token : h("span", { key: index, className: "tether-tok-" + token.cls }, token.text);
+    const codeView = (lines) => {
+      const gutterWidth = String(lines.length).length * 8 + 22;
+      return h(
+        "div",
+        {
+          className: "tether-scroll tether-code-scroll",
+          style: { flex: "1 1 auto", minHeight: 0, overflow: "auto", display: "flex", alignItems: "stretch", background: "var(--tether-code-bg, " + C.bg + ")" }
+        },
+        h(
+          "div",
+          { className: "tether-code-gutter", style: { width: gutterWidth, minHeight: "100%" } },
+          lines.map((_, index) => h("div", {
+            key: index,
+            className: "tether-code-gutter-row",
+            "data-line": index + 1,
+            "data-active": codeLine === index + 1 ? "true" : void 0,
+            onClick: () => setCodeLine(index + 1)
+          }, index + 1))
+        ),
+        h(
+          "div",
+          { className: "tether-code-body" },
+          lines.map((tokens, index) => h(
+            "div",
+            {
+              key: index,
+              className: "tether-code-row",
+              "data-line": index + 1,
+              "data-active": codeLine === index + 1 ? "true" : void 0,
+              onClick: () => setCodeLine(index + 1)
+            },
+            h("span", { className: "tether-code-line" }, tokens.map(tokenNode))
+          ))
+        )
+      );
+    };
+    const tablePreviewBody = (model) => {
+      if (!model || !model.columnCount) {
+        return h("div", { style: { flex: "1 1 auto", display: "grid", placeItems: "center", color: C.mute, fontSize: 12 } }, "\u7A7A\u6587\u4EF6");
+      }
+      const notes = [];
+      if (model.truncatedRows) notes.push("\u4EC5\u663E\u793A\u524D " + model.rowLimit.toLocaleString() + " \u884C");
+      if (model.truncatedColumns) notes.push("\u4EC5\u663E\u793A\u524D " + model.columnLimit + " \u5217");
+      if (model.sourceTruncated) notes.push("\u6E90\u6587\u4EF6\u8D85\u51FA\u8BFB\u53D6\u4E0A\u9650");
+      return h(
+        "div",
+        { style: { flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column" } },
+        h(
+          "div",
+          { className: "tether-scroll tether-table-scroll" },
+          h(
+            "table",
+            { className: "tether-table", "aria-label": "\u53EA\u8BFB\u8868\u683C\u9884\u89C8" },
+            h(
+              "thead",
+              null,
+              h("tr", null, model.headers.map((label, column) => h("th", {
+                key: column,
+                scope: "col",
+                title: label,
+                className: model.numericColumns[column] ? "tether-num" : void 0,
+                style: { textAlign: model.numericColumns[column] ? "right" : "left" }
+              }, label)))
+            ),
+            h(
+              "tbody",
+              null,
+              model.rows.map((cells, rowIndex) => h(
+                "tr",
+                { key: rowIndex },
+                cells.map((cell, column) => h("td", {
+                  key: column,
+                  title: cell.length > 60 ? cell : void 0,
+                  className: model.numericColumns[column] ? "tether-num" : void 0,
+                  style: { textAlign: model.numericColumns[column] ? "right" : "left" }
+                }, cell))
+              ))
+            )
+          )
+        ),
+        h(
+          "div",
+          { className: "tether-table-status" },
+          h("span", { className: "tether-num" }, model.rows.length.toLocaleString() + " \u884C \xD7 " + model.columnCount + " \u5217"),
+          notes.length ? h("span", { className: "tether-table-warn", role: "status" }, notes.join(" \xB7 ")) : null,
+          h("span", { style: { marginLeft: "auto" } }, "\u53EA\u8BFB")
+        )
+      );
+    };
+    const tableEditBody = () => {
+      const format = tableEditFormat || tableFormatOf(file) || { delimiter: ",", quoted: true };
+      const parsed = parseDelimited(draft, {
+        delimiter: format.delimiter,
+        quoted: format.quoted,
+        rowLimit: TABLE_PREVIEW_MAX_ROWS,
+        columnLimit: TABLE_PREVIEW_MAX_COLUMNS
+      });
+      const width = tablePreview ? tablePreview.columnCount : 0;
+      const raw = parsed.rows.map((row) => {
+        const cells = [];
+        for (let column = 0; column < width; column += 1) cells.push(row[column] == null ? "" : String(row[column]));
+        return cells;
+      });
+      const headers = raw.shift() || [];
+      const cell = (value, key, align) => h("td", {
+        key,
+        contentEditable: true,
+        suppressContentEditableWarning: true,
+        onBlur: () => setDirty(true),
+        onKeyDown: (event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            event.currentTarget.blur();
+          }
+        },
+        style: { textAlign: align ? "right" : "left", outline: "none" }
+      }, value);
+      return h(
+        "div",
+        { style: { flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column" } },
+        h(
+          "div",
+          { className: "tether-scroll tether-table-scroll" },
+          h(
+            "table",
+            { className: "tether-table tether-table-edit", "aria-label": "\u8868\u683C\u7F16\u8F91" },
+            h("thead", null, h("tr", null, headers.map((label, column) => h("th", {
+              key: column,
+              scope: "col",
+              contentEditable: true,
+              suppressContentEditableWarning: true,
+              onBlur: () => setDirty(true),
+              onKeyDown: (event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  event.currentTarget.blur();
+                }
+              },
+              style: { textAlign: "left", outline: "none" }
+            }, label)))),
+            h("tbody", null, raw.map((cells, rowIndex) => h(
+              "tr",
+              { key: rowIndex },
+              cells.map((value, column) => cell(value, column, tablePreview && tablePreview.numericColumns[column]))
+            )))
+          )
+        ),
+        h(
+          "div",
+          { className: "tether-table-status" },
+          h("span", { className: "tether-num" }, raw.length.toLocaleString() + " \u884C \xD7 " + headers.length + " \u5217"),
+          h("span", { className: "tether-table-warn", role: "status" }, "\u7F16\u8F91\u4E2D"),
+          h("span", { style: { marginLeft: "auto" } }, "Ctrl+S \u4FDD\u5B58")
+        )
+      );
     };
     const renderToasts = () => {
       const row = (text, color, onClose, extra) => h(
@@ -10847,17 +11573,15 @@ function createTetherPanel({ React: React2, Native, host }) {
         style: { width: 28, height: 28, display: "grid", placeItems: "center", border: 0, borderRadius: 6, background: "transparent", color: disabled ? C.mute : C.sub, cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.45 : 1, flex: "0 0 auto" }
       }, spinning ? h("span", { className: "tether-spin", style: { display: "grid", placeItems: "center" } }, h(Glyph, { name: "refresh", size: 16 })) : h(Glyph, { name, size: 16 }));
       const crumbs = pathSegments(file ? file.path : path);
+      const sortKey = EXPLORER_SORT_KEYS.includes(sort && sort.key) ? sort.key : "name";
+      const sortDir = sort && sort.dir === "desc" ? "desc" : "asc";
+      const canGoUp = !!path && normPath(parentOf(path)) !== normPath(path);
       const toolbar = h(
         "div",
         { style: { display: "flex", alignItems: "center", gap: 2, height: 40, padding: "0 8px", background: C.bg, flex: "0 0 auto", minWidth: 0 } },
-        iconButton("back", "\u540E\u9000", goBack, !history.length),
-        iconButton("arrowUp", "\u4E0A\u7EA7\u76EE\u5F55", () => {
-          const parent = parentOf(file ? file.path : path);
-          if (parent && parent !== path) {
-            setFile(null);
-            loadDir(parent, { push: true });
-          }
-        }, !path),
+        iconButton("back", "\u540E\u9000 (Alt+\u2190)", goBack, !history.back.length),
+        iconButton("forward", "\u524D\u8FDB (Alt+\u2192)", goForward, !history.forward.length),
+        iconButton("arrowUp", "\u4E0A\u7EA7\u76EE\u5F55 (Alt+\u2191)", goUp, !canGoUp),
         iconButton("refresh", "\u5237\u65B0", refreshExplorer, !path, dirLoading || previewBusy),
         iconButton("plus", "\u65B0\u5EFA\u6587\u4EF6", () => makeFile(path), !path || dirLoading || previewBusy),
         h(
@@ -10902,31 +11626,103 @@ function createTetherPanel({ React: React2, Native, host }) {
             }, segment.label)
           ))
         ),
+        path && !file ? h(
+          "div",
+          {
+            style: { display: "flex", alignItems: "center", gap: 5, flex: "0 1 210px", minWidth: 128, height: 26, boxSizing: "border-box", padding: "0 3px 0 7px", borderRadius: 6, background: C.soft, color: C.mute, marginLeft: 4 }
+          },
+          h(Glyph, { name: "search", size: 13 }),
+          h("input", {
+            value: search,
+            placeholder: "\u641C\u7D22\u5F53\u524D\u76EE\u5F55",
+            "aria-label": "\u641C\u7D22\u5F53\u524D\u76EE\u5F55",
+            spellCheck: false,
+            onChange: (event) => setSearch(event.target.value),
+            onKeyDown: (event) => {
+              if (event.key === "Escape") {
+                setSearch("");
+                event.currentTarget.blur();
+              }
+            },
+            style: { flex: "1 1 auto", minWidth: 0, height: 24, padding: 0, border: 0, background: "transparent", color: C.ink, fontSize: 12, outline: "none" }
+          }),
+          search ? h("button", {
+            title: "\u6E05\u9664\u641C\u7D22",
+            "aria-label": "\u6E05\u9664\u641C\u7D22",
+            onClick: () => setSearch(""),
+            className: "tether-hover",
+            style: { width: 20, height: 20, flex: "0 0 auto", display: "grid", placeItems: "center", border: 0, borderRadius: 4, background: "transparent", color: C.mute, fontSize: 13, lineHeight: "14px", padding: 0, cursor: "pointer" }
+          }, "\xD7") : null
+        ) : null,
         selected && !file ? h("span", { style: { marginLeft: "auto", fontSize: 11, color: C.mute, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 220 } }, selected.name) : null
       );
       const closePreview = () => {
+        if (dirty && !window.confirm("\u6709\u672A\u4FDD\u5B58\u7684\u4FEE\u6539\uFF0C\u786E\u5B9A\u5173\u95ED\uFF1F")) return;
         setFile(null);
         setEditMode(false);
         setDirty(false);
         setDraft("");
         setPreviewError("");
+        setTableEdit(false);
+        setTableEditFormat(null);
         if (path) loadDir(path, { push: false });
       };
-      const fileHeader = file ? h(
+      const viewToggle = (icon, label, active, onClick) => h("button", {
+        type: "button",
+        onClick,
+        title: label + "\u89C6\u56FE",
+        "aria-label": label + "\u89C6\u56FE",
+        "aria-pressed": active ? "true" : "false",
+        "data-active": active ? "true" : void 0,
+        className: "tether-hover tether-viewtoggle-btn"
+      }, h(Glyph, { name: icon, size: 13 }), h("span", null, label));
+      const tableCanEdit = !!(file && tablePreview && tableFormatOf(file) && !file.truncated && !tablePreview.truncatedRows && !tablePreview.truncatedColumns);
+      const fileTabBar = file ? h(
         "div",
-        { style: { display: "flex", alignItems: "center", gap: 8, height: 40, padding: "0 10px", background: C.panel, flex: "0 0 auto", minWidth: 0 } },
-        iconButton("back", "\u8FD4\u56DE\u6587\u4EF6\u5939", closePreview, false),
-        h(Native.FileTypeIcon, { path: file.name || file.path, size: 16 }),
-        h("span", { style: { fontSize: 13, fontWeight: "var(--tether-strong, 600)", color: C.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, file.name || pathBasename(file.path)),
-        file.writable ? null : pill("\u53EA\u8BFB", C.amber),
-        file.truncated ? pill("\u5DF2\u622A\u65AD", C.amber) : null,
-        file.converted ? pill("\u5DF2\u8F6C PDF", C.mute) : null,
+        {
+          className: "tether-tabbar",
+          style: { display: "flex", alignItems: "stretch", height: 37, flex: "0 0 auto", minWidth: 0, background: "var(--tether-tabstrip, " + C.panel + ")", boxSizing: "border-box" }
+        },
         h(
-          "span",
-          { style: { marginLeft: "auto", display: "flex", alignItems: "center", gap: 2 } },
-          file.kind === "markdown" && file.writable ? iconButton(editMode ? "eye" : "pencil", editMode ? "\u9884\u89C8" : "\u7F16\u8F91", () => setEditMode((value) => !value), false) : null,
-          (file.kind === "markdown" || file.kind === "text") && file.writable ? iconButton("save", "\u4FDD\u5B58", saveFile, !dirty || busy) : null,
-          h("span", { className: "tether-num", style: { fontSize: 10.5, color: C.mute, marginLeft: 4 } }, formatBytes(file.size))
+          "div",
+          {
+            className: "tether-tab",
+            title: file.path,
+            "data-dirty": dirty ? "true" : void 0,
+            style: { display: "flex", alignItems: "center", gap: 7, height: 36, boxSizing: "border-box", padding: "0 6px 0 12px", background: "var(--tether-tab-bg, " + C.bg + ")", maxWidth: 360, minWidth: 0, position: "relative", flex: "0 0 auto" }
+          },
+          h("span", { className: "tether-tab-accent", "aria-hidden": true }),
+          h(Native.FileTypeIcon, { path: file.name || file.path, size: 15 }),
+          h("span", { style: { fontSize: 12.5, color: C.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, file.name || pathBasename(file.path)),
+          dirty ? h("span", { title: "\u672A\u4FDD\u5B58", style: { width: 7, height: 7, borderRadius: "50%", background: C.blue, flex: "0 0 auto" } }) : null,
+          file.writable ? null : pill("\u53EA\u8BFB", C.amber),
+          h("button", {
+            title: "\u5173\u95ED\u6587\u4EF6",
+            "aria-label": "\u5173\u95ED\u6587\u4EF6",
+            onClick: closePreview,
+            className: "tether-hover",
+            style: { width: 22, height: 22, flex: "0 0 auto", display: "grid", placeItems: "center", border: 0, borderRadius: 4, background: "transparent", color: C.mute, fontSize: 14, lineHeight: "16px", cursor: "pointer", marginLeft: 2 }
+          }, "\xD7")
+        ),
+        h(
+          "div",
+          { style: { flex: "1 1 auto", minWidth: 0, display: "flex", alignItems: "center", gap: 4, padding: "0 8px" } },
+          file.truncated ? pill("\u5DF2\u622A\u65AD", C.amber) : null,
+          file.converted ? pill("\u5DF2\u8F6C PDF", C.mute) : null,
+          tablePreview && !tableEdit ? h(
+            "div",
+            { className: "tether-viewtoggle", role: "group", "aria-label": "\u9884\u89C8\u89C6\u56FE" },
+            viewToggle("table", "\u8868\u683C", tableView, () => setTableView(true)),
+            viewToggle("plainText", "\u7EAF\u6587\u672C", !tableView, () => setTableView(false))
+          ) : null,
+          tableEdit ? pill("\u7F16\u8F91\u4E2D", C.amber) : null,
+          h(
+            "span",
+            { style: { marginLeft: "auto", display: "flex", alignItems: "center", gap: 2 } },
+            tableEdit ? iconButton("eye", "\u9000\u51FA\u8868\u683C\u7F16\u8F91", cancelTableEdit, false) : tablePreview && tableView && tableCanEdit && file.writable ? iconButton("pencil", "\u7F16\u8F91\u8868\u683C", startTableEdit, false) : (file.kind === "markdown" || file.kind === "text") && file.writable && !(tablePreview && tableView) ? iconButton(editMode ? "eye" : "pencil", editMode ? "\u9884\u89C8" : "\u7F16\u8F91", () => setEditMode((value) => !value), false) : null,
+            (file.kind === "markdown" || file.kind === "text") && file.writable ? iconButton("save", "\u4FDD\u5B58", () => tableEdit ? saveTable() : saveFile(), !dirty && !tableEdit || busy) : null,
+            h("span", { className: "tether-num", style: { fontSize: 10.5, color: C.mute, marginLeft: 4 } }, formatBytes(file.size))
+          )
         )
       ) : null;
       const previewBody = () => {
@@ -10952,23 +11748,30 @@ function createTetherPanel({ React: React2, Native, host }) {
           return h("div", { className: "tether-file-scroll", style: { flex: "1 1 auto", overflow: "auto", padding: "22px 28px 40px" } }, h("div", { className: "tether-file-markdown" }, h(Markdown, { text: draft || "", labels: nativeMarkdownLabels })));
         }
         if (file.kind === "text") {
+          if (editMode && CODE_FILE.test(String(file.name || ""))) return h(CodeEditor, { key: file.path, value: draft, onChange: (next) => {
+            setDraft(next);
+            setDirty(true);
+          }, onSave: saveFile, font: CODE_FONT });
           if (editMode) return h("textarea", { value: draft, onChange: (ev) => {
             setDraft(ev.target.value);
             setDirty(true);
           }, spellCheck: false, style: { flex: "1 1 auto", width: "100%", boxSizing: "border-box", resize: "none", border: 0, outline: "none", padding: "14px 18px", fontFamily: CODE_FONT, fontSize: 12.5, lineHeight: 1.6, background: C.bg, color: C.ink } });
+          if (tablePreview && tableView) return tableEdit ? tableEditBody() : tablePreviewBody(tablePreview);
           if (!CODE_FILE.test(String(file.name || ""))) {
-            return h("pre", { className: "tether-file-text tether-scroll", style: { flex: "1 1 auto", overflow: "auto", margin: 0, padding: "16px 20px", fontFamily: CODE_FONT, fontSize: 12.5, lineHeight: 1.6, whiteSpace: "pre-wrap", color: C.ink, background: C.bg } }, renderCode(draft, file.name));
+            return h("pre", { className: "tether-file-text tether-scroll", style: { flex: "1 1 auto", overflow: "auto", margin: 0, padding: "16px 20px", fontFamily: CODE_FONT, fontSize: 12.5, lineHeight: "20px", whiteSpace: "pre-wrap", color: C.ink, background: "var(--tether-code-bg, " + C.bg + ")" } }, draft);
           }
+          const highlighted = highlightLines(draft, file.name);
+          if (highlighted) return codeView(highlighted);
           const codeLines = String(draft || "").split(String.fromCharCode(10));
           return h(
             "div",
-            { className: "tether-scroll", style: { flex: "1 1 auto", overflow: "auto", display: "flex", alignItems: "flex-start", minHeight: 0, background: C.bg } },
+            { className: "tether-scroll", style: { flex: "1 1 auto", overflow: "auto", display: "flex", alignItems: "stretch", minHeight: 0, background: "var(--tether-code-bg, " + C.bg + ")" } },
             h(
               "pre",
-              { "aria-hidden": true, className: "tether-num", style: { flex: "0 0 auto", margin: 0, padding: "16px 10px 16px 16px", fontFamily: CODE_FONT, fontSize: 12.5, lineHeight: 1.6, color: C.mute, textAlign: "right", userSelect: "none", borderRight: "1px solid " + C.line, background: C.panel } },
+              { "aria-hidden": true, className: "tether-num", style: { flex: "0 0 auto", alignSelf: "stretch", margin: 0, padding: "16px 10px 16px 16px", fontFamily: CODE_FONT, fontSize: 12.5, lineHeight: "20px", color: C.mute, textAlign: "right", userSelect: "none", background: "var(--tether-code-gutter, " + C.panel + ")" } },
               codeLines.map((_, index) => index + 1).join(String.fromCharCode(10))
             ),
-            h("pre", { className: "tether-file-text", style: { flex: "1 0 auto", margin: 0, padding: "16px 24px 16px 12px", fontFamily: CODE_FONT, fontSize: 12.5, lineHeight: 1.6, whiteSpace: "pre", color: C.ink, background: "transparent" } }, renderCode(draft, file.name))
+            h("pre", { className: "tether-file-text", style: { flex: "1 0 auto", margin: 0, padding: "16px 24px 16px 12px", fontFamily: CODE_FONT, fontSize: 12.5, lineHeight: "20px", whiteSpace: "pre", color: C.ink, background: "transparent" } }, draft)
           );
         }
         if (file.kind === "image") return h(
@@ -10984,8 +11787,22 @@ function createTetherPanel({ React: React2, Native, host }) {
           h("div", { className: "tether-num", style: { fontSize: 11 } }, (file.name || file.path) + " \xB7 " + formatBytes(file.size))
         );
       };
-      const entries = [...dirEntries].sort((a, b) => a.dir === b.dir ? String(a.name || "").localeCompare(String(b.name || "")) : a.dir ? -1 : 1);
+      const entries = filterExplorerEntries(sortExplorerEntries(dirEntries, sortKey, sortDir), search);
+      const filtering = !!search.trim();
       const columns = "minmax(0,1fr) 132px 104px 78px";
+      const sortHeader = (key, label, align) => h(
+        "button",
+        {
+          onClick: () => setSort((current) => toggleExplorerSort(current, key)),
+          title: "\u6309" + label + "\u6392\u5E8F",
+          "aria-label": "\u6309" + label + "\u6392\u5E8F",
+          "data-sort": sortKey === key ? sortDir : void 0,
+          className: "tether-hover",
+          style: { display: "flex", alignItems: "center", gap: 3, justifyContent: align === "right" ? "flex-end" : "flex-start", minWidth: 0, height: 22, padding: "0 4px", margin: "0 -4px", border: 0, borderRadius: 4, background: "transparent", color: sortKey === key ? C.ink : C.mute, fontSize: 11, cursor: "pointer" }
+        },
+        h("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, label),
+        sortKey === key ? h("span", { style: { display: "grid", placeItems: "center", flex: "0 0 auto", transform: sortDir === "asc" ? "rotate(180deg)" : "none" } }, h(Glyph, { name: "chevronDown", size: 11 })) : null
+      );
       const directoryBody = () => {
         if (dirLoading && !entries.length) return h(
           "div",
@@ -11001,66 +11818,74 @@ function createTetherPanel({ React: React2, Native, host }) {
           h("button", { onClick: refreshExplorer, className: "tether-hover", style: { border: 0, borderRadius: 6, padding: "5px 10px", background: C.soft, color: C.ink, fontSize: 12, cursor: "pointer" } }, "\u91CD\u8BD5")
         );
         if (!path) return h("div", { style: { flex: "1 1 auto", display: "grid", placeItems: "center", color: C.mute, fontSize: 12 } }, "\u4ECE\u5DE6\u4FA7\u9009\u62E9\u5DE5\u4F5C\u533A\u6216\u78C1\u76D8");
+        if (filtering && !entries.length) return h(
+          "div",
+          { style: { flex: "1 1 auto", display: "grid", placeItems: "center", alignContent: "center", gap: 8, color: C.mute, fontSize: 12, padding: 24, textAlign: "center" } },
+          h("div", null, "\u672A\u627E\u5230\u5339\u914D \u201C" + search.trim() + "\u201D \u7684\u9879\u76EE"),
+          h("button", { onClick: () => setSearch(""), className: "tether-hover", style: { border: 0, borderRadius: 6, padding: "5px 10px", background: C.soft, color: C.ink, fontSize: 12, cursor: "pointer" } }, "\u6E05\u9664\u641C\u7D22")
+        );
         if (!entries.length) return h("div", { style: { flex: "1 1 auto", display: "grid", placeItems: "center", color: C.mute, fontSize: 12 } }, "\u7A7A\u6587\u4EF6\u5939");
         return h(
           "div",
-          { className: "tether-scroll", onScroll: hideHoverTip, style: { flex: "1 1 auto", overflow: "auto", padding: "0 10px 24px" } },
-          dirLoading ? h(
-            "div",
-            { style: { display: "flex", alignItems: "center", gap: 7, height: 26, padding: "0 8px", fontSize: 11, color: C.mute } },
-            h("span", { className: "tether-spin", style: { display: "grid", placeItems: "center" } }, h(Glyph, { name: "refresh", size: 13 })),
-            h("span", null, "\u6B63\u5728\u5237\u65B0\u2026"),
-            h("button", { onClick: stopLoading, className: "tether-hover", style: { border: 0, borderRadius: 5, padding: "2px 8px", background: C.soft, color: C.ink, fontSize: 11, cursor: "pointer" } }, "\u505C\u6B62")
-          ) : null,
+          { style: { flex: "1 1 auto", minHeight: 0, position: "relative", display: "flex" } },
           h(
             "div",
-            { style: { display: "grid", gridTemplateColumns: columns, gap: 8, height: 28, padding: "0 8px", alignItems: "center", fontSize: 11, color: C.mute } },
-            h("span", null, "\u540D\u79F0"),
-            h("span", null, "\u4FEE\u6539\u65E5\u671F"),
-            h("span", null, "\u7C7B\u578B"),
-            h("span", { style: { textAlign: "right" } }, "\u5927\u5C0F")
-          ),
-          entries.map((entry) => h(
-            "div",
-            {
-              key: entry.path,
-              role: "button",
-              tabIndex: 0,
-              onClick: (event) => {
-                if (event.detail > 1) return;
-                hideHoverTip();
-                setSelected(entry);
-                if (entry.dir) prefetchDir(entry.path);
-                else prefetchPreview(entry);
-              },
-              onDoubleClick: (event) => {
-                event.preventDefault();
-                hideHoverTip();
-                openFile(entry);
-              },
-              onMouseEnter: (event) => showHoverTip(event, entry),
-              onMouseLeave: hideHoverTip,
-              onContextMenu: (event) => openContextMenu(event, entry, entry.dir ? entry.path : path),
-              onKeyDown: (event) => {
-                if (event.key === "Enter") openFile(entry);
-              },
-              className: "tether-hover",
-              style: { display: "grid", gridTemplateColumns: columns, gap: 8, height: 30, padding: "0 8px", alignItems: "center", borderRadius: 6, fontSize: 13, color: C.ink, background: selected && selected.path === entry.path ? C.active : "transparent", cursor: "default" }
-            },
+            { className: "tether-scroll", onScroll: hideHoverTip, style: { flex: "1 1 auto", overflow: "auto", padding: "0 10px 24px" } },
             h(
               "div",
-              { style: { display: "flex", alignItems: "center", gap: 7, minWidth: 0 } },
-              h(
-                "span",
-                { style: { width: 16, height: 16, display: "grid", placeItems: "center", flex: "0 0 auto" } },
-                h(Native.FileTypeIcon, entry.dir ? { kind: "folder", size: 15 } : { path: entry.path, size: 15 })
-              ),
-              h("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, entry.name)
+              { style: { display: "grid", gridTemplateColumns: columns, gap: 8, height: 28, padding: "0 8px", alignItems: "center", fontSize: 11, color: C.mute } },
+              sortHeader("name", "\u540D\u79F0"),
+              sortHeader("mtime", "\u4FEE\u6539\u65E5\u671F"),
+              h("span", null, "\u7C7B\u578B"),
+              sortHeader("size", "\u5927\u5C0F", "right")
             ),
-            h("span", { style: { color: C.mute, fontSize: 11, whiteSpace: "nowrap" } }, formatMtime(entry.mtime)),
-            h("span", { style: { color: C.mute, fontSize: 11, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, entryTypeLabel(entry)),
-            h("span", { className: "tether-num", style: { color: C.mute, fontSize: 11, textAlign: "right" } }, entry.dir ? "" : formatBytes(entry.size))
-          ))
+            entries.map((entry) => h(
+              "div",
+              {
+                key: entry.path,
+                role: "button",
+                tabIndex: 0,
+                onClick: (event) => {
+                  if (event.detail > 1) return;
+                  hideHoverTip();
+                  setSelected(entry);
+                  if (entry.dir) prefetchDir(entry.path);
+                  else prefetchPreview(entry);
+                },
+                onDoubleClick: (event) => {
+                  event.preventDefault();
+                  hideHoverTip();
+                  openFile(entry);
+                },
+                onMouseEnter: (event) => showHoverTip(event, entry),
+                onMouseLeave: hideHoverTip,
+                onContextMenu: (event) => openContextMenu(event, entry, entry.dir ? entry.path : path),
+                onKeyDown: (event) => {
+                  if (event.key === "Enter") openFile(entry);
+                },
+                className: "tether-hover",
+                style: { display: "grid", gridTemplateColumns: columns, gap: 8, height: 30, padding: "0 8px", alignItems: "center", borderRadius: 6, fontSize: 13, color: C.ink, background: selected && selected.path === entry.path ? C.active : "transparent", cursor: "default" }
+              },
+              h(
+                "div",
+                { style: { display: "flex", alignItems: "center", gap: 7, minWidth: 0 } },
+                h(
+                  "span",
+                  { style: { width: 16, height: 16, display: "grid", placeItems: "center", flex: "0 0 auto" } },
+                  h(Native.FileTypeIcon, entry.dir ? { kind: "folder", size: 15 } : { path: entry.path, size: 15 })
+                ),
+                h("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, entry.name)
+              ),
+              h("span", { style: { color: C.mute, fontSize: 11, whiteSpace: "nowrap" } }, formatMtime(entry.mtime)),
+              h("span", { style: { color: C.mute, fontSize: 11, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, entryTypeLabel(entry)),
+              h("span", { className: "tether-num", style: { color: C.mute, fontSize: 11, textAlign: "right" } }, entry.dir ? "" : formatBytes(entry.size))
+            ))
+          ),
+          dirLoading ? h(
+            "div",
+            { className: "tether-dir-loading", role: "status", "aria-live": "polite", "aria-label": "\u6B63\u5728\u52A0\u8F7D\u76EE\u5F55" },
+            h("span", { className: "tether-spin" }, h(Glyph, { name: "refresh", size: 18 }))
+          ) : null
         );
       };
       const menuItem = (icon, label, onClick, danger) => h("button", {
@@ -11131,7 +11956,7 @@ function createTetherPanel({ React: React2, Native, host }) {
           style: { display: "flex", flexDirection: "column", flex: "1 1 auto", minHeight: 0, background: C.bg }
         },
         toolbar,
-        file ? h("div", { style: { display: "flex", flexDirection: "column", flex: "1 1 auto", minHeight: 0 } }, fileHeader, previewBody()) : directoryBody(),
+        file ? h("div", { style: { display: "flex", flexDirection: "column", flex: "1 1 auto", minHeight: 0 } }, fileTabBar, previewBody()) : directoryBody(),
         context
       );
     };
@@ -11357,7 +12182,7 @@ function createTetherPanel({ React: React2, Native, host }) {
         h(
           "main",
           { style: { flex: "1 1 auto", display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0 } },
-          h(NativeSurface, { deviceId, online: deviceOnline, visible: view === "chat" }),
+          h(NativeSurface, { deviceId, online: deviceOnline, visible: view === "chat", localDeviceId: appLocalDevice }),
           view === "files" ? renderExplorer() : view === "network" ? renderNetwork() : null
         )
       ),
@@ -11892,7 +12717,8 @@ function createWebNative(React2) {
 function createWebHost({ apiBase = "" } = {}) {
   return {
     kind: "web",
-    apiBase: () => apiBase
+    apiBase: () => apiBase,
+    surfaceBase: () => apiBase
   };
 }
 
