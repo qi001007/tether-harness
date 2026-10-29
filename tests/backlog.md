@@ -84,3 +84,4 @@
 - 2026-10-29：新增 `test_update_version_line`（版本元组/两条固定格式/无旧文案）；`test_node_console_api` 增加本机 `dsh/surface` 200/401/404/409，`test_web_local_api` 与 `test_ui_performance` 改为断言 `/dsh/surface` 走本机节点；`test_native_surface_client` 覆盖同机 token URL 与 Hub-loopback 防护豁免。
 - 2026-10-29：`test_native_surface` 增加 401 后重新认证并重放一次的用例（第二次仍失败则保留 401）；`test_native_surface_client` 增加插件 `surfaceBase` 快路径与 `localDeviceId` 接线断言。
 - 2026-10-29：`test_code_view` 改为断言满高行号槽、无硬分界线和蓝/绿/紫配色，新增代码编辑（Tab/Ctrl+S/脏改动确认）断言；`test_csv_preview` 增加 `serializeDelimited` 往返测试与表格就地编辑/Ctrl+S 接线断言。
+- 2026-10-29：`test_explorer_navigation` 增加预取返回响应体、`loadDir` 空值回退和覆盖式加载遮罩断言（防止再出现“双击快就报目录读取失败”与加载挤行）。

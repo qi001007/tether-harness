@@ -37,3 +37,4 @@
 - 2026-10-29：本机 DSH 工作区改走节点回环 surface：`isSafeNativeSurfaceUrl` 接受 `http://127.0.0.1:<port>/?token=`，同机 token URL 跳过“Hub 指向 loopback 网关”防护；更新中心版本行固定为 `APP|插件 X(Y)/Node X(Y)`（各组件用各自 latest），删除随检查状态漂移的“当前/· 最新/待生效”文案。
 - 2026-10-29：插件端 surface 优先走宿主给的快路径（`host.surfaceBase(isLocal)`，DSH host → 18892，失败回退 Hub），NativeSurface 从面板拿到 `localDeviceId`；轮询对同机 token URL 比较 token，DSH 同端口重启也能换新地址。
 - 2026-10-29：相邻色块改色差（树/详情、行号、标签栏、状态栏去硬边框；分隔条只悬停/拖动显把手）；行号改满高列；代码配色蓝/绿/紫、红只留给报错；代码文件可编辑（行号槽、Tab=2 空格、Ctrl+S、原生撤销、脏改动确认）；CSV/TSV 表格就地编辑并按 RFC4180 保存，XLSX 只读。
+- 2026-10-29：目录预取 Promise 必须返回响应体（只做 `rememberDir` 会解析成 `undefined`，快速双击时 `loadDir` 复用它就误报“目录读取失败”）；`loadDir` 复用值空时回退 `postRetry`；刷新用覆盖式转圈，不插行、不挤压列表。
