@@ -34,3 +34,4 @@
 - 2026-10-28：`NativeSurface` 增加自动重连（DSH boot 失败或瞬态 surface 错误，退避 1/2/4s、最多 3 次，耗尽后回到 Tether 错误页）；宿主 boot 对 502 不重试，控制链抖一下就永久停在失败页。
 - 2026-10-28：代码页首开竞态——预取请求本身直接交给 `openPreview`（原先把 `then` 的返回值当数据，必为 `undefined`），失败或无效预取回退 `postRetry` 且不写缓存；同次改动加标签栏、逐行当前行高亮与可拖动分隔条，暗色配色走 `data-ds-dark-theme`。
 - 2026-10-29：CSV/TSV 预览默认用只读表格（RFC4180 引号/逗号/字段内换行、BOM/CRLF、5000 行/100 列上限并在底栏提示），标签栏分段按钮切回纯文本；XLSX 复用节点首个工作表 TSV 输出，不新增解析依赖。
+- 2026-10-29：本机 DSH 工作区改走节点回环 surface：`isSafeNativeSurfaceUrl` 接受 `http://127.0.0.1:<port>/?token=`，同机 token URL 跳过“Hub 指向 loopback 网关”防护；更新中心版本行固定为 `APP|插件 X(Y)/Node X(Y)`（各组件用各自 latest），删除随检查状态漂移的“当前/· 最新/待生效”文案。

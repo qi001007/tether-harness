@@ -25,3 +25,4 @@
 - 2026-10-27：Node 宣告缓存的本机版本与 update protocol 1；异步接入 UpdateManager 的 node/plugin check/status/prepare/apply，参数只含白名单组件/动作/暂存 ID。apply 前复核 Node 本地活动 Tether run 与原生 DSH 未结束 turn，状态未知或繁忙时拒绝；下载/应用不阻塞 WS reader。Node 成功换版后优雅关闭并交由 APP supervisor 退出码 75 重启，独立节点保留原 argv 自替换；插件更新只改目标 Node 的 DSH 安装并要求目标 DSH 重启。
 - 2026-10-27：远程插件 apply 必须从活动 Host companion descriptor 取得 profile，且 descriptor PID 存活；未升级 companion、profile 缺失或 Host 不在运行时拒绝更新，不再默认写 desktop。
 - 2026-10-28：`capabilities` 的 `update_protocol/min_update_protocol` 必须引用 `tether.updates` 常量（新增 `max_update_protocol`），禁止再写字面量 1，避免协议升级时能力上报与实际判断漂移。
+- 2026-10-29：本机 console 增加 `GET /api/devices/{device}/dsh/surface`，返回 `NativeSurface.local_url()` 的 `/?token=` 回环地址（descriptor 缺失或 DSH 不可达时 409 `descriptor_missing`）；APP 的本机 surface 因此零公网跳，不再撞 Hub 网关 30 s 超时。

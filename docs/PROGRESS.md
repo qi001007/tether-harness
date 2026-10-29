@@ -1,6 +1,13 @@
 # 实时进度
 
-更新日期：2026-10-28。
+更新日期：2026-10-29。
+
+## 实验台修复：本机 DSH 工作区直连 + 更新中心版本行（2026-10-29）
+
+- 本机（DESKTOP-LOCAL）打开 DSH 原生工作区失败：走公网 Hub 时，DSH 启动期核心资源在网关 30 s 截止点返回 502（含插件的组合包 825 KB gzip 仍用了 14 s），DSH 报 `web boot: 1 entry did not activate`；直连 `127.0.0.1:57168` 约 1 s。修复为本机设备 surface 走节点回环 console：console 新增 `GET /api/devices/{id}/dsh/surface`（返回 `?token=` 地址，descriptor 不可用 409），Web 服务的本机快路径加入 `/dsh/surface`，UI 接受同机 token URL 并跳过“Hub loopback”误判。提交 `536832f`。真机：dev APP iframe 指向 `127.0.0.1:53057/?token=…&tether_native=1`，首屏正常，无 HARNESS 失败页。
+- 更新中心版本行改为固定模板：本机 APP 卡 `APP 0.2.16(0.2.15)/Node 0.2.16(0.2.15)`，本机插件卡 `插件 0.2.16(0.2.15)/Node 0.2.16(0.2.15)`，其他设备两行同格式；删除“当前/· 最新/（已安装…待生效）”。提交 `5118572`。
+- 本机实验台口径：插件与 APP 从仓库构建后直接替换本机（`desktop/install-plugin.ps1 -Restart` 把 desktop profile 指向仓库包，备份 `package.json.bak-tether-plugin-20261029-090410`；DSH 重启后插件 bundle 与仓库 `client.js` SHA-256 一致；dev APP 加载仓库 `packages/tether-ui/web`）。本机不通过更新中心更新；更新中心只用于其他节点。
+- 门禁：`node --test tests/test_*.mjs` 143 passed、`cjs` 6 passed、`pytest` 107 passed + 1 skipped、`build.mjs --check` 通过。均为本机实验台结果；两机更新与发行包未做。
 
 ## 当前实测状态：v0.2.13 已发布，两机安装待主人验收
 
