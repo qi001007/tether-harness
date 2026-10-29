@@ -18,14 +18,38 @@ test('one-click device updates keep going after a transient component failure', 
   assert.match(source, /const checkedApp = await checkUpdateWithRetry\('app', scope\)/)
   assert.match(source, /failures\.push\(component\)/)
   assert.match(source, /failures\.push\('app'\)/)
-  assert.match(source, /if \(failures\.length\) setNotice\('部分组件未更新/)
+  assert.match(source, /const message = failures\.length \? '部分组件未更新/)
   assert.equal(source.includes('if (!await updateOneClick(component, scope)) return'), false,
     'a failed step must not abort the remaining components')
 })
 
+test('a one-click device run owns the card until the final refresh finishes', () => {
+  assert.match(source, /const \[updateRuns, setUpdateRuns\] = React\.useState\(\{\}\)/)
+  assert.match(source, /const runKey = 'device:' \+ item\.device_id/)
+  assert.match(source, /setUpdateRun\(runKey, \{ state: 'running' \}\)/)
+  assert.match(source, /await refreshUpdateCenter\(true\)/)
+  assert.match(source, /state: 'done'/)
+  assert.match(source, /updateCardState\(/)
+  assert.equal(/runtimeRestartRequired\s*\? btn\('立即生效'/.test(source), false,
+    'a pending restart must not hide an available one-click update')
+})
+
+test('a local plugin apply that scheduled a DSH restart does not fall back to a manual button', () => {
+  assert.match(source, /outcome\.result\.restart_scheduled === true/)
+  assert.match(source, /setNotice\('插件已安装，DSH 正在自动重启…'\)/)
+  assert.match(source, /else setPendingDshRestart\(true\)/)
+})
+
+test('connection status is probed without opening the connection panel', () => {
+  assert.match(source, /probeConfiguredHub\(\{ silent: true \}\)/)
+  assert.match(source, /setInterval\(run, 15000\)/)
+  assert.match(source, /if \(!document\.hidden\)/)
+})
+
 test('a remote plugin that needs a DSH restart is shown instead of up to date', () => {
   assert.match(source, /const pluginRestart = !!\(hasPlugin && plugin && plugin\.restart_required\)/)
-  assert.match(source, /pluginRestart \? pill\('插件待重启 DSH', C\.amber\)/)
+  assert.match(source, /restartPill: '插件待重启 DSH', restartAction: 'none'/)
+  assert.match(source, /updateCardState\(\{ running, error: run\?\.state === 'error' \? run\.message : '',/)
 })
 
 test('the device chain waits for the target DSH to restart after a plugin apply', () => {

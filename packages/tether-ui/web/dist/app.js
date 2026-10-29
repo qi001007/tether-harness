@@ -163003,13 +163003,15 @@ function updateAuthorityBase(updateInfo, deviceId, component) {
   const record = updateInfo && updateInfo.devices && updateInfo.devices[deviceId] && updateInfo.devices[deviceId][component];
   return record && Object.prototype.hasOwnProperty.call(record, "authorityBase") ? record.authorityBase : void 0;
 }
-function updateTriggerState(updateInfo, updateErrors, refreshing = false, devices = null) {
+function updateTriggerState(updateInfo, updateErrors, refreshing = false, devices = null, running = false) {
+  if (running) return "checking";
   const statuses = [];
   const add = (infos, errors) => {
     const list2 = (infos || []).filter(Boolean);
     const failures = (errors || []).some(Boolean);
     if (!list2.length && !failures) return;
-    if (list2.some((info) => info.update_available === true)) statuses.push("available");
+    const needsRestart = list2.some((info) => info.runtime_version && info.current_version && info.runtime_version !== info.current_version);
+    if (list2.some((info) => info.update_available === true) || needsRestart) statuses.push("available");
     else if (list2.length && list2.every((info) => info.current_version && info.latest_version)) statuses.push("current");
     else if (failures) statuses.push("failed");
     else statuses.push("checking");
@@ -163033,6 +163035,33 @@ function updateTriggerState(updateInfo, updateErrors, refreshing = false, device
   if (statuses.length && statuses.every((status2) => status2 === "current")) return "current";
   if (refreshing || statuses.length) return "checking";
   return "unknown";
+}
+function updateCardState({
+  running = false,
+  error = "",
+  hasUpdate = false,
+  restartRequired = false,
+  known = false,
+  failed = false,
+  restartPill = "\u5F85\u751F\u6548",
+  restartAction = "restart"
+} = {}) {
+  if (running) return { kind: "running", pill: "\u6B63\u5728\u66F4\u65B0", tone: "amber", action: "none", label: "\u66F4\u65B0\u4E2D", disabled: true };
+  if (error) return { kind: "error", pill: "\u66F4\u65B0\u5931\u8D25", tone: "red", action: "retry", label: "\u91CD\u8BD5", disabled: false };
+  if (hasUpdate) return { kind: "update", pill: "\u6709\u66F4\u65B0", tone: "amber", action: "update", label: "\u4E00\u952E\u66F4\u65B0", disabled: false };
+  if (restartRequired) {
+    return {
+      kind: "restart",
+      pill: restartPill,
+      tone: "amber",
+      action: restartAction,
+      label: restartAction === "restart" ? "\u7ACB\u5373\u751F\u6548" : "\u4E00\u952E\u66F4\u65B0",
+      disabled: restartAction === "none"
+    };
+  }
+  if (known) return { kind: "current", pill: "\u5DF2\u662F\u6700\u65B0", tone: "green", action: "none", label: "\u4E00\u952E\u66F4\u65B0", disabled: true };
+  if (failed) return { kind: "failed", pill: "\u68C0\u67E5\u5931\u8D25", tone: "red", action: "recheck", label: "\u91CD\u8BD5", disabled: false };
+  return { kind: "checking", pill: "\u68C0\u67E5\u4E2D\u2026", tone: "mute", action: "none", label: "\u4E00\u952E\u66F4\u65B0", disabled: true };
 }
 function isTransientUpdateError(error) {
   const text2 = String(error && (error.code || error.message) || error || "");
@@ -165291,6 +165320,21 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const [updatePage, setUpdatePage] = React2.useState(1);
     const [updateInfo, setUpdateInfo] = React2.useState(() => ({ app: null, localPlugin: localPluginVersionSeed(host), devices: {} }));
     const [updateBusy, setUpdateBusy] = React2.useState("");
+    const updateRefreshRef = React2.useRef(null);
+    const [updateRuns, setUpdateRuns] = React2.useState({});
+    const setUpdateRun = (key, value) => setUpdateRuns((current) => {
+      const next = { ...current };
+      if (value == null) delete next[key];
+      else next[key] = value;
+      return next;
+    });
+    const clearFinishedUpdateRuns = () => setUpdateRuns((current) => {
+      const next = {};
+      for (const [key, value] of Object.entries(current)) {
+        if (value && value.state === "running") next[key] = value;
+      }
+      return next;
+    });
     const [updateErrors, setUpdateErrors] = React2.useState({ app: "", localPlugin: "", devices: {} });
     const autoUpdateChecksRef = React2.useRef({});
     const lastUpdateToastRef = React2.useRef({});
@@ -165306,6 +165350,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const [hubDuration, setHubDuration] = React2.useState(null);
     const [hubCheckedAt, setHubCheckedAt] = React2.useState(null);
     const [hubAddress, setHubAddress] = React2.useState("");
+    const hubProbeRef = React2.useRef(null);
     const formatCheckTime = (date) => date ? [date.getHours(), date.getMinutes(), date.getSeconds()].map((part) => String(part).padStart(2, "0")).join(":") : "";
     React2.useEffect(() => {
       if (!host || typeof host.connectionInfo !== "function") return void 0;
@@ -165313,7 +165358,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       host.connectionInfo(host.activeApiBase ? host.activeApiBase() : void 0).then((info) => {
         if (!alive || !info) return;
         setHubAddress(info.address || "");
-        setHubStatus(info.status || "unknown");
+        if (info.status && info.status !== "unknown") setHubStatus(info.status);
         setHubCheckedAt(info.checkedAt ? new Date(info.checkedAt) : null);
         setHubDuration(Number.isFinite(info.durationMs) ? info.durationMs : null);
         setHubError(info.status === "offline" ? hubProbeErrorText({ status: info.errorKind === "auth" ? 401 : void 0 }) : "");
@@ -165331,29 +165376,48 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       if (e && (e.name === "AbortError" || e.code === "update_timeout" || e.code === "node_timeout" || e.code === "device_busy" || e.code === "device_offline" || e.status && e.status >= 500)) return;
       setNotice(String(e && e.message || e));
     };
-    const probeConfiguredHub = async () => {
-      if (!host || typeof host.probeConnection !== "function") return;
-      setHubBusy(true);
+    const probeConfiguredHub = async ({ silent = false } = {}) => {
+      if (!host || typeof host.probeConnection !== "function") return null;
+      if (hubProbeRef.current) return hubProbeRef.current;
+      if (!silent) setHubBusy(true);
       setHubError("");
-      try {
-        const result = await host.probeConnection(host.activeApiBase ? host.activeApiBase() : void 0);
-        if (result && result.address) setHubAddress(result.address);
-        const next = result && (result.state || (result.status === "online" ? {} : null));
-        setHubState(next || null);
-        setHubDuration(result && Number.isFinite(result.durationMs) ? result.durationMs : null);
-        setHubCheckedAt(result && result.checkedAt ? new Date(result.checkedAt) : /* @__PURE__ */ new Date());
-        setHubStatus(result && result.status || (next ? "online" : "unknown"));
-        setHubError(result && result.status === "offline" ? hubProbeErrorText({ status: result.errorKind === "auth" ? 401 : void 0 }) : "");
-      } catch (error) {
-        setHubState(null);
-        setHubDuration(null);
-        setHubCheckedAt(/* @__PURE__ */ new Date());
-        setHubStatus("offline");
-        setHubError(hubProbeErrorText(error));
-      } finally {
-        setHubBusy(false);
-      }
+      const task2 = (async () => {
+        try {
+          const result = await host.probeConnection(host.activeApiBase ? host.activeApiBase() : void 0);
+          if (result && result.address) setHubAddress(result.address);
+          const next = result && (result.state || (result.status === "online" ? {} : null));
+          setHubState(next || null);
+          setHubDuration(result && Number.isFinite(result.durationMs) ? result.durationMs : null);
+          setHubCheckedAt(result && result.checkedAt ? new Date(result.checkedAt) : /* @__PURE__ */ new Date());
+          setHubStatus(result && result.status || (next ? "online" : "unknown"));
+          setHubError(result && result.status === "offline" ? hubProbeErrorText({ status: result.errorKind === "auth" ? 401 : void 0 }) : "");
+          return result;
+        } catch (error) {
+          setHubState(null);
+          setHubDuration(null);
+          setHubCheckedAt(/* @__PURE__ */ new Date());
+          setHubStatus("offline");
+          setHubError(hubProbeErrorText(error));
+          return null;
+        } finally {
+          if (!silent) setHubBusy(false);
+        }
+      })();
+      hubProbeRef.current = task2.finally(() => {
+        hubProbeRef.current = null;
+      });
+      return hubProbeRef.current;
     };
+    React2.useEffect(() => {
+      if (!host || typeof host.probeConnection !== "function") return void 0;
+      const run = () => {
+        if (!document.hidden) probeConfiguredHub({ silent: true }).catch(() => {
+        });
+      };
+      run();
+      const timer = setInterval(run, 15e3);
+      return () => clearInterval(timer);
+    }, [host]);
     React2.useEffect(() => {
       if (!showHub) return void 0;
       probeConfiguredHub();
@@ -165576,28 +165640,48 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       }
     };
     const openUpdateCenter = () => {
+      clearFinishedUpdateRuns();
       setShowUpdate(true);
       refreshUpdateCenter();
     };
     const refreshUpdateCenter = async (force = false) => {
-      if (updateRefreshing) return;
-      setUpdateRefreshing(true);
-      try {
-        const checks = [];
-        if (host && host.kind === "app") checks.push(automaticUpdateCheck("app", null, force));
-        if (host && host.kind === "dsh") checks.push(automaticUpdateCheck("localPlugin", null, force));
-        (state && state.devices || []).forEach((item) => {
-          if (!item.online) return;
-          const scope = { deviceId: item.device_id, epoch: 0 };
-          checks.push(automaticUpdateCheck("node", scope, force), automaticUpdateCheck("plugin", scope, force));
-          if (item.capabilities && item.capabilities.app_version) checks.push(automaticUpdateCheck("app", scope, force));
-        });
-        await Promise.allSettled(checks);
-      } finally {
-        setTimeout(() => setUpdateRefreshing(false), 280);
+      if (updateRefreshRef.current) {
+        if (!force) return updateRefreshRef.current;
+        return updateRefreshRef.current.catch(() => {
+        }).then(() => refreshUpdateCenter(true));
       }
+      setUpdateRefreshing(true);
+      const task2 = (async () => {
+        try {
+          const checks = [];
+          if (host && host.kind === "app") checks.push(automaticUpdateCheck("app", null, force));
+          if (host && host.kind === "dsh") checks.push(automaticUpdateCheck("localPlugin", null, force));
+          (state && state.devices || []).forEach((item) => {
+            if (!item.online) return;
+            const scope = { deviceId: item.device_id, epoch: 0 };
+            checks.push(automaticUpdateCheck("node", scope, force), automaticUpdateCheck("plugin", scope, force));
+            if (item.capabilities && item.capabilities.app_version) checks.push(automaticUpdateCheck("app", scope, force));
+          });
+          await Promise.allSettled(checks);
+        } finally {
+          setTimeout(() => setUpdateRefreshing(false), 280);
+        }
+      })();
+      updateRefreshRef.current = task2.finally(() => {
+        updateRefreshRef.current = null;
+      });
+      return updateRefreshRef.current;
     };
     const infoFor = (component, targetId) => targetId ? (updateInfo.devices[targetId] || {})[component] || {} : updateInfo[component] || {};
+    const updateToneColor = (tone) => tone === "red" ? C.red : tone === "green" ? C.green : tone === "amber" ? C.amber : C.mute;
+    const updateRunState = (key) => updateRuns[key] || null;
+    const anyUpdateRunning = Object.values(updateRuns).some((run) => run && run.state === "running");
+    const updateButton = (card, onRetry, onRecheck, onPrimary, disabled = false) => {
+      if (card.action === "retry") return btn("\u91CD\u8BD5", onRetry, { primary: true, disabled: anyUpdateRunning || disabled });
+      if (card.action === "recheck") return btn("\u91CD\u8BD5", onRecheck, { primary: true, disabled: anyUpdateRunning || disabled });
+      if (card.action === "restart") return btn("\u7ACB\u5373\u751F\u6548", () => setPendingDshRestart(true), { primary: true, disabled: anyUpdateRunning || disabled });
+      return btn(card.disabled ? "\u4E00\u952E\u66F4\u65B0" : card.label, onPrimary, { primary: true, disabled: anyUpdateRunning || disabled || card.disabled });
+    };
     const productCard = (product2) => {
       if (host && host.kind === "web") return null;
       const localId = appLocalDevice || deviceId;
@@ -165615,13 +165699,21 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         }
         return info;
       });
-      const busyKey = product2 === "desktop" ? "desktop" : "dsh";
-      const busy2 = updateBusy === "product:" + busyKey;
+      const run = updateRunState("product:" + product2);
+      const running = run?.state === "running";
       const productErrors = updateErrors.devices[localId] || {};
       const failed = product2 === "desktop" ? !!(updateErrors.app || productErrors.node) : !!(updateErrors.localPlugin || productErrors.node);
       const runtimeRestartRequired = product2 === "dsh" && localPluginNeedsRestart(infos[0]);
       const hasUpdate = infos.some((info) => info && info.update_available === true);
       const known = infos.every((info) => info && info.current_version && info.latest_version);
+      const card = updateCardState({
+        running,
+        error: run?.state === "error" ? run.message : "",
+        hasUpdate,
+        restartRequired: runtimeRestartRequired,
+        known,
+        failed
+      });
       const versionText = versionLine(
         product2 === "desktop" ? "APP" : "\u63D2\u4EF6",
         {
@@ -165638,18 +165730,18 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           "div",
           { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 4 } },
           h2("strong", { style: { fontSize: 13 } }, title),
-          h2("span", { style: { marginLeft: "auto" } }, busy2 ? h2("span", { className: "tether-spin", style: { display: "grid", placeItems: "center", color: C.amber } }, h2(Glyph, { name: "refresh", size: 14 })) : runtimeRestartRequired ? pill("\u5F85\u751F\u6548", C.amber) : hasUpdate ? pill("\u6709\u66F4\u65B0", C.amber) : known ? pill("\u5DF2\u662F\u6700\u65B0", C.green) : failed ? pill("\u68C0\u67E5\u5931\u8D25", C.red) : pill("\u68C0\u67E5\u4E2D\u2026", C.mute))
+          h2("span", { style: { marginLeft: "auto" } }, running ? h2("span", { className: "tether-spin", style: { display: "grid", placeItems: "center", color: C.amber } }, h2(Glyph, { name: "refresh", size: 14 })) : pill(card.pill, updateToneColor(card.tone)))
         ),
         h2("div", { style: { color: C.sub, fontSize: 12, lineHeight: "19px" } }, versionText),
         h2(
           "div",
           { style: { marginTop: 8 } },
-          runtimeRestartRequired ? btn("\u7ACB\u5373\u751F\u6548", () => setPendingDshRestart(true), { primary: true, disabled: busy2 }) : btn(busy2 ? h2("span", { className: "tether-spin", style: { width: 16, height: 16, display: "grid", placeItems: "center" } }, h2(Glyph, { name: "refresh", size: 16 })) : "\u4E00\u952E\u66F4\u65B0", () => runProductUpdate(product2), { primary: true, disabled: busy2 || !hasUpdate })
+          running ? btn(h2("span", { className: "tether-spin", style: { width: 16, height: 16, display: "grid", placeItems: "center" } }, h2(Glyph, { name: "refresh", size: 16 })), () => {
+          }, { primary: true, disabled: true }) : updateButton(card, () => runProductUpdate(product2), () => refreshUpdateCenter(true), () => runProductUpdate(product2))
         )
       );
     };
     const deviceCard = (item) => {
-      const scope = { deviceId: item.device_id, epoch: 0 };
       const node = infoFor("node", item.device_id);
       const plugin = infoFor("plugin", item.device_id);
       const app = infoFor("app", item.device_id);
@@ -165658,9 +165750,20 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       const infos = [node, ...hasPlugin ? [plugin] : [], ...hasApp ? [app] : []];
       const hasUpdate = infos.some((info) => info && info.update_available === true);
       const known = infos.every((info) => info && info.current_version && info.latest_version);
-      const busy2 = updateBusy.startsWith(item.device_id + ":") || updateBusy === "device:" + item.device_id;
+      const run = updateRunState("device:" + item.device_id);
+      const running = run?.state === "running";
       const failed = infos.some((_info, index) => !!(updateErrors.devices[item.device_id] || {})[["node", ...hasPlugin ? ["plugin"] : [], ...hasApp ? ["app"] : []][index]]);
       const pluginRestart = !!(hasPlugin && plugin && plugin.restart_required);
+      const card = updateCardState({
+        running,
+        error: run?.state === "error" ? run.message : "",
+        hasUpdate,
+        restartRequired: pluginRestart,
+        known,
+        failed,
+        restartPill: "\u63D2\u4EF6\u5F85\u91CD\u542F DSH",
+        restartAction: "none"
+      });
       const nodeTuple = versionTuple(node.current_version || item.capabilities && item.capabilities.node_version, node.latest_version);
       const versionRows = [];
       if (hasApp) versionRows.push("APP " + versionTuple(item.capabilities.app_version, app.latest_version) + "/Node " + nodeTuple);
@@ -165674,7 +165777,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 4 } },
           h2("strong", { style: { fontSize: 13 } }, item.name || item.device_id),
           h2("span", { style: { color: C.mute, fontSize: 11 } }, item.name && item.name !== item.device_id ? item.device_id : ""),
-          h2("span", { style: { marginLeft: "auto" } }, !item.online ? pill("\u79BB\u7EBF", C.mute) : busy2 ? h2("span", { className: "tether-spin", style: { display: "grid", placeItems: "center", color: C.amber } }, h2(Glyph, { name: "refresh", size: 14 })) : hasUpdate ? pill("\u6709\u66F4\u65B0", C.amber) : pluginRestart ? pill("\u63D2\u4EF6\u5F85\u91CD\u542F DSH", C.amber) : known ? pill("\u5DF2\u662F\u6700\u65B0", C.green) : failed ? pill("\u68C0\u67E5\u5931\u8D25", C.red) : pill("\u68C0\u67E5\u4E2D\u2026", C.mute))
+          h2("span", { style: { marginLeft: "auto" } }, !item.online ? pill("\u79BB\u7EBF", C.mute) : running ? h2("span", { className: "tether-spin", style: { display: "grid", placeItems: "center", color: C.amber } }, h2(Glyph, { name: "refresh", size: 14 })) : pill(card.pill, updateToneColor(card.tone)))
         ),
         h2(
           "div",
@@ -165684,45 +165787,54 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         h2(
           "div",
           { style: { marginTop: 8 } },
-          btn(busy2 ? h2("span", { className: "tether-spin", style: { width: 16, height: 16, display: "grid", placeItems: "center" } }, h2(Glyph, { name: "refresh", size: 16 })) : item.online ? "\u4E00\u952E\u66F4\u65B0" : "\u79BB\u7EBF", () => runDeviceUpdate(item), { primary: true, disabled: busy2 || !item.online || !hasUpdate })
+          running ? btn(h2("span", { className: "tether-spin", style: { width: 16, height: 16, display: "grid", placeItems: "center" } }, h2(Glyph, { name: "refresh", size: 16 })), () => {
+          }, { primary: true, disabled: true }) : !item.online ? btn("\u79BB\u7EBF", () => {
+          }, { primary: true, disabled: true }) : updateButton(
+            card,
+            () => runDeviceUpdate(item),
+            () => refreshUpdateCenter(true),
+            () => runDeviceUpdate(item),
+            false
+          )
         )
       );
     };
     const runProductUpdate = async (product2) => {
       const localId = appLocalDevice || deviceId;
-      if (product2 === "desktop") {
-        setUpdateBusy("product:desktop");
-        try {
-          const nodeOk = localId ? await updateOneClick("node", { deviceId: localId, epoch: 0 }) : true;
-          if (!nodeOk) return;
-          const checked = await updateAction("app", "check", void 0, null);
-          if (!checked || checked.update_available !== true) {
-            refreshUpdateCenter();
-            return;
-          }
-          const prepared = await updateAction("app", "prepare", void 0, null);
-          const preparedId = prepared && (prepared.prepared_id || ((prepared.prepared || [])[0] || {}).prepared_id);
-          if (!preparedId) throw new Error("APP \u66F4\u65B0\u5305\u672A\u51C6\u5907\u597D\uFF0C\u8BF7\u91CD\u8BD5");
-          setPendingApp(preparedId);
-        } catch (error) {
-          setComponentUpdateError("app", shortUpdateError(error), null);
-        } finally {
-          setUpdateBusy("");
-        }
-        return;
-      }
-      setUpdateBusy("product:dsh");
+      const runKey = "product:" + product2;
+      setUpdateRun(runKey, { state: "running" });
+      setUpdateBusy("product:" + product2);
+      let failure = "";
       try {
         const nodeOk = localId ? await updateOneClick("node", { deviceId: localId, epoch: 0 }) : true;
-        if (!nodeOk) return;
-        const outcome = await runUpdateSequence({
-          check: () => updateAction("localPlugin", "check", void 0, null),
-          prepare: () => updateAction("localPlugin", "prepare", void 0, null),
-          apply: (id) => updateAction("localPlugin", "apply", id, null)
-        });
-        if (outcome.updated && localPluginNeedsRestart(outcome.result)) setPendingDshRestart(true);
-        refreshUpdateCenter();
+        if (!nodeOk) failure = "Node \u66F4\u65B0\u5931\u8D25";
+        else if (product2 === "desktop") {
+          const checked = await updateAction("app", "check", void 0, null);
+          if (!checked) failure = "APP \u66F4\u65B0\u68C0\u67E5\u5931\u8D25";
+          else if (checked.update_available === true) {
+            const prepared = await updateAction("app", "prepare", void 0, null);
+            const preparedId = prepared && (prepared.prepared_id || ((prepared.prepared || [])[0] || {}).prepared_id);
+            if (!preparedId) throw new Error("APP \u66F4\u65B0\u5305\u672A\u51C6\u5907\u597D\uFF0C\u8BF7\u91CD\u8BD5");
+            setPendingApp(preparedId);
+          }
+        } else {
+          const outcome = await runUpdateSequence({
+            check: () => updateAction("localPlugin", "check", void 0, null),
+            prepare: () => updateAction("localPlugin", "prepare", void 0, null),
+            apply: (id) => updateAction("localPlugin", "apply", id, null)
+          });
+          if (outcome.failed) failure = "\u63D2\u4EF6\u66F4\u65B0\u5931\u8D25";
+          else if (outcome.updated && localPluginNeedsRestart(outcome.result)) {
+            if (outcome.result.restart_scheduled === true) setNotice("\u63D2\u4EF6\u5DF2\u5B89\u88C5\uFF0CDSH \u6B63\u5728\u81EA\u52A8\u91CD\u542F\u2026");
+            else setPendingDshRestart(true);
+          }
+        }
+      } catch (error) {
+        failure = shortUpdateError(error);
+        setComponentUpdateError(product2 === "desktop" ? "app" : "localPlugin", failure, null);
       } finally {
+        await refreshUpdateCenter(true);
+        setUpdateRun(runKey, failure ? { state: "error", message: failure } : { state: "done" });
         setUpdateBusy("");
       }
     };
@@ -165764,6 +165876,8 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       throw lastError;
     };
     const runDeviceUpdate = async (item) => {
+      const runKey = "device:" + item.device_id;
+      setUpdateRun(runKey, { state: "running" });
       setUpdateBusy("device:" + item.device_id);
       const failures = [];
       try {
@@ -165802,9 +165916,14 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
             setComponentUpdateError("app", shortUpdateError(error), scope);
           }
         }
-        if (failures.length) setNotice("\u90E8\u5206\u7EC4\u4EF6\u672A\u66F4\u65B0\uFF1A" + failures.join("\u3001") + "\uFF0C\u53EF\u91CD\u8BD5");
-        refreshUpdateCenter();
+      } catch (error) {
+        failures.push("\u66F4\u65B0\u6D41\u7A0B");
+        setComponentUpdateError("node", shortUpdateError(error), { deviceId: item.device_id, epoch: 0 });
       } finally {
+        await refreshUpdateCenter(true);
+        const message = failures.length ? "\u90E8\u5206\u7EC4\u4EF6\u672A\u66F4\u65B0\uFF1A" + failures.join("\u3001") + "\uFF0C\u53EF\u91CD\u8BD5" : "";
+        if (message) setNotice(message);
+        setUpdateRun(runKey, message ? { state: "error", message } : { state: "done" });
         setUpdateBusy("");
       }
     };
@@ -165813,7 +165932,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       if (!components.length) return void 0;
       const check = () => components.forEach((component) => automaticUpdateCheck(component, null));
       check();
-      const timer = setInterval(check, 6 * 60 * 60 * 1e3);
+      const timer = setInterval(check, 5 * 60 * 1e3);
       return () => clearInterval(timer);
     }, [host && host.kind]);
     React2.useEffect(() => {
@@ -165826,7 +165945,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         automaticUpdateCheck("plugin", scope);
       };
       check();
-      const timer = setInterval(check, 6 * 60 * 60 * 1e3);
+      const timer = setInterval(check, 5 * 60 * 1e3);
       return () => clearInterval(timer);
     }, [deviceId, !!(state && state.devices && state.devices.find((item) => item.device_id === deviceId)?.online)]);
     React2.useEffect(() => {
@@ -165910,7 +166029,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     }, []);
     const device = state && state.devices.find((d) => d.device_id === deviceId);
     const editableFile = file && file.editable === true && !file.truncated;
-    const updateStatus = updateTriggerState(updateInfo, updateErrors, updateRefreshing, state && state.devices);
+    const updateStatus = updateTriggerState(updateInfo, updateErrors, updateRefreshing, state && state.devices, anyUpdateRunning);
     const updateStatusColor = updateStatus === "available" ? C.red : updateStatus === "failed" ? C.amber : updateStatus === "current" ? C.green : C.mute;
     const deviceOnline = !!(device && device.online);
     const safeSidebarWidth = clamp2(sidebarWidth, UI.minSide, UI.maxSide);
@@ -168064,7 +168183,10 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
             "div",
             { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 12 } },
             h2("strong", { style: { fontSize: 14 } }, "\u66F4\u65B0\u4E2D\u5FC3"),
-            h2("button", { onClick: () => refreshUpdateCenter(true), disabled: updateRefreshing, title: "\u5F3A\u5236\u5237\u65B0\u66F4\u65B0\u72B6\u6001", "aria-label": "\u5237\u65B0", className: "tether-hover", style: { marginLeft: "auto", width: 26, height: 26, display: "grid", placeItems: "center", border: 0, borderRadius: 6, background: "transparent", color: C.sub, cursor: updateRefreshing ? "default" : "pointer" } }, updateRefreshing ? h2("span", { className: "tether-spin" }, h2(Glyph, { name: "refresh", size: 16 })) : h2(Glyph, { name: "refresh", size: 16 })),
+            h2("button", { onClick: () => {
+              clearFinishedUpdateRuns();
+              refreshUpdateCenter(true);
+            }, disabled: updateRefreshing, title: "\u5F3A\u5236\u5237\u65B0\u66F4\u65B0\u72B6\u6001", "aria-label": "\u5237\u65B0", className: "tether-hover", style: { marginLeft: "auto", width: 26, height: 26, display: "grid", placeItems: "center", border: 0, borderRadius: 6, background: "transparent", color: C.sub, cursor: updateRefreshing ? "default" : "pointer" } }, updateRefreshing ? h2("span", { className: "tether-spin" }, h2(Glyph, { name: "refresh", size: 16 })) : h2(Glyph, { name: "refresh", size: 16 })),
             h2("button", { onClick: () => setShowUpdate(false), style: { border: 0, background: "transparent", fontSize: 18, cursor: "pointer", color: C.mute } }, "\xD7")
           ),
           host && host.kind === "app" ? productCard("desktop") : null,

@@ -31,7 +31,7 @@ import psutil
 from .release import ReleaseSignatureError, verify_signature
 
 
-UPDATER_VERSION = "0.2.25"
+UPDATER_VERSION = "0.2.26"
 LEGACY_BASELINE_VERSION = "0.2.0"
 UPDATE_PROTOCOL = 1
 MIN_UPDATE_PROTOCOL = 1
@@ -105,6 +105,7 @@ PLUGIN_UPDATER_FILES = {
     "updater/tether/ed25519.py",
     "updater/tether/node/__init__.py",
     "updater/tether/node/dsh_sessions.py",
+    "updater/tether/node/dsh_restart.py",
 }
 
 APP_ALLOWED = (
@@ -696,11 +697,10 @@ class UpdateManager:
         candidates = list(found.values()) + source_versions
         if not candidates:
             raise UpdateError("local_version_unknown")
-        # Keep detecting mixed profile installs, but never let a newer development
-        # checkout look older than the released profile packages.
+        # The installed profile is the update basis. A source checkout reached through
+        # a file: dependency is diagnostic only; letting it win hides the fact that
+        # the running profile still needs the release package.
         version = profile_version or source_version
-        if source_version and (not version or _is_newer(source_version, version)):
-            version = source_version
         return {
             "version": version,
             "profile_version": profile_version,
@@ -1412,10 +1412,12 @@ class UpdateManager:
                 shutil.rmtree(prepared_root, ignore_errors=True)
             except OSError:
                 pass
+            restart_scheduled = False
             if self.component == "plugin" and dsh_pid:
-                self._spawn_dsh_restart()
+                restart_scheduled = self._spawn_dsh_restart()
             return {"ok": True, "component": self.component, "version": expected_version,
                     "backup_dir": str(backup_dir), "restart_required": True,
+                    "restart_scheduled": restart_scheduled,
                     "updated_files": len(staged), "error": ""}
         except UpdateError as exc:
             rolled_back = self._rollback(replaced)

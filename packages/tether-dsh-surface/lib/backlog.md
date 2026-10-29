@@ -1,4 +1,5 @@
 # tether-dsh-surface/lib 变更记录
+- 2026-10-30：`UPDATER_FILES` 增加 `tether/node/dsh_restart.py`，本地插件 apply 可拉起 DSH 重启助手。
 
 - 2026-10-27：注册 owner-only `/tether-identity` RPC，只返回 `{device_id}` 业务值，不暴露 descriptor 路径、PID 或凭据。
 

@@ -235,7 +235,7 @@ try {
   assert.ok(ui.includes("'Tether Desktop（APP + Node）'"))
   assert.ok(ui.includes("'Tether for DSH（插件 + Node）'"))
   assert.ok(!ui.includes('目标设备上的'), 'card titles must name the device, not "target device"')
-  assert.ok(ui.includes('disabled: busy || !hasUpdate'), 'one-click must be disabled when already current')
+  assert.ok(ui.includes('disabled: anyUpdateRunning || disabled || card.disabled'), 'one-click must be disabled when already current')
   assert.ok(ui.includes("btn('稍后'") && ui.includes("btn('重启并安装'"))
   assert.ok(ui.includes('error.status = response.status'))
   assert.ok(ui.includes("'服务端不支持更新'"))

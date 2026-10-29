@@ -9,7 +9,7 @@ const DEFAULT_TIMEOUT_MS = 120_000
 const PREPARED_ID = /^[a-f0-9]{32}$/
 const ACTIONS = new Set(['status', 'check', 'prepare', 'apply'])
 const SAFE_ENV_KEYS = ['PATH', 'PATHEXT', 'SYSTEMROOT', 'WINDIR', 'TEMP', 'TMP', 'HOME', 'USERPROFILE', 'DSH_HOME']
-const UPDATER_FILES = ['tether/__init__.py', 'tether/updates.py', 'tether/updates_cli.py', 'tether/release.py', 'tether/ed25519.py', 'tether/node/__init__.py', 'tether/node/dsh_sessions.py']
+const UPDATER_FILES = ['tether/__init__.py', 'tether/updates.py', 'tether/updates_cli.py', 'tether/release.py', 'tether/ed25519.py', 'tether/node/__init__.py', 'tether/node/dsh_sessions.py', 'tether/node/dsh_restart.py']
 
 const execFile = promisify(nodeExecFile)
 

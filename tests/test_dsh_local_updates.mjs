@@ -231,15 +231,19 @@ test('a plugin replaced on disk after the host loaded it reports reload_required
 
 test('the source updater and installer ship every file the local updater verifies', () => {
   const root = path.resolve(import.meta.dirname, '..')
-  for (const relative of ['release.py', 'ed25519.py']) {
+  for (const relative of ['release.py', 'ed25519.py', 'node/dsh_restart.py']) {
     assert.ok(fs.existsSync(path.join(root, 'tether', relative)), relative)
   }
   const installer = fs.readFileSync(path.join(root, 'desktop/install-plugin.ps1'), 'utf8')
-  for (const relative of ['release.py', 'ed25519.py']) {
+  for (const relative of ['release.py', 'ed25519.py', 'node\\dsh_restart.py']) {
     assert.ok(installer.includes('"' + relative + '"'), 'installer copies ' + relative)
   }
+  assert.match(installer, /\$UpdaterSource\s*=\s*Join-Path \$AppDir "tether"/)
+  assert.match(installer, /\$HasUpdaterSource\s*=\s*Test-Path \(Join-Path \$UpdaterSource "updates\.py"\)/)
+  assert.match(installer, /if \(\$HasUpdaterSource\) \{[\s\S]*Copy-Item -LiteralPath \$source -Destination \$destination -Force/,
+    'a source checkout refreshes stale updater files')
   const runtime = fs.readFileSync(path.join(root, 'packages/tether-dsh-surface/lib/local-updates.js'), 'utf8')
-  for (const relative of ['tether/release.py', 'tether/ed25519.py']) {
+  for (const relative of ['tether/release.py', 'tether/ed25519.py', 'tether/node/dsh_restart.py']) {
     assert.ok(runtime.includes("'" + relative + "'"), 'runtime verifies ' + relative)
   }
 })

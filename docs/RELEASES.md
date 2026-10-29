@@ -1,5 +1,17 @@
 # Public client releases
 
+## v0.2.26
+
+Release candidate for the update-state and local-updater correction:
+
+- Device one-click updates keep a single `正在更新` state for the whole Node → plugin → APP run; per-component intermediate states are suppressed until the final refresh. The header update dot also stays in the running state, and a failed run ends in `更新失败` with retry.
+- Local plugin status uses the installed DSH profile as `current_version`; a newer source checkout is diagnostic only. A profile at 0.2.24 with source at 0.2.26 now reports an available update instead of a false `待生效`.
+- When an update is available, the card always offers `一键更新`; `立即生效` is only the fallback after an apply that did not schedule a restart.
+- The plugin archive now ships `tether/node/dsh_restart.py`, and the installer refreshes stale updater files from a source checkout, so local plugin self-updates can auto-restart DSH like remote plugin updates.
+- Connection status is probed on mount and every 15 seconds without opening the panel; update checks refresh every 5 minutes.
+
+Gates: pytest 125 passed / 1 skipped, mjs 172/172, cjs 6/6, `build.mjs --check`, reproducible Web bundle, `validate_versions()`. Release publication and installed acceptance are recorded after completion.
+
 ## v0.2.25
 
 [GitHub Release](https://github.com/qi001007/tether-harness/releases/tag/v0.2.25) · tag `v0.2.25` → `ed49c23` · workflow run `40898090981` · assets app 1,654,227 B / node 73,521 B / plugin 1,298,504 B / manifest 1,566 B.
