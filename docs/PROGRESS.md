@@ -2,6 +2,13 @@
 
 更新日期：2026-10-29。
 
+## 当前实测状态：v0.2.18 已发布
+
+- tag `v0.2.18` → `787aa3c`；发行工作流 `40816719901` 成功；资产 app 405,627 B、node 68,122 B、plugin 413,538 B，manifest 验签通过、大小/SHA 一致；Release 已发布，Hub mirror 已切到 `0.2.18`。
+- 修复远程一键更新的链路：节点更新重启的窗口里，后续组件的 check 会拿到 400 `device_offline`，原实现直接 `return`，APP 步被静默跳过。现在每个组件独立执行、瞬时错误重试 3 次、失败汇总提示，APP 重启仍按 `app_version` 验收；远程插件装好后显示“插件待重启 DSH”，不再假装已是最新。
+- 本机实验台已升到 `0.2.18`；LAPTOP-01 为 Node/APP `0.2.17`，三组件均能看到 `0.2.18` 可更新（`manifest_source` = Hub mirror）。插件运行时仍需目标 DSH 重启一次。
+- 门禁：151 mjs / 6 cjs / 109 pytest（1 skipped）、`build.mjs --check`、`validate_versions()`。
+
 ## 当前实测状态：v0.2.17 已发布
 
 - tag `v0.2.17` → `fdc9e35`；发行工作流 `40812163945` 成功；资产 app 404,944 B、node 68,122 B、plugin 413,162 B，manifest 验签通过、大小/SHA 一致；Release 已发布，Hub mirror 已切到 `0.2.17`。
