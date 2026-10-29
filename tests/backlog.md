@@ -82,3 +82,4 @@
 - 2026-10-28：新增 `test_preview_open`/`test_code_view`：预取在飞时首开复用请求体、无效/失败预取回退重试且不毒化缓存、中断不被吞；代码页标签栏/当前行/分隔条与暗色变量不变量。
 - 2026-10-29：新增 `test_csv_preview`：RFC4180 引号/转义/字段内换行、CRLF/CR、BOM、空单元格、行/列上限、源截断丢弃半行、TSV/XLSX 分支、数字列右对齐与表格/纯文本切换接线。
 - 2026-10-29：新增 `test_update_version_line`（版本元组/两条固定格式/无旧文案）；`test_node_console_api` 增加本机 `dsh/surface` 200/401/404/409，`test_web_local_api` 与 `test_ui_performance` 改为断言 `/dsh/surface` 走本机节点；`test_native_surface_client` 覆盖同机 token URL 与 Hub-loopback 防护豁免。
+- 2026-10-29：`test_native_surface` 增加 401 后重新认证并重放一次的用例（第二次仍失败则保留 401）；`test_native_surface_client` 增加插件 `surfaceBase` 快路径与 `localDeviceId` 接线断言。

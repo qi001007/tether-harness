@@ -26,3 +26,4 @@
 - 2026-10-27：远程插件 apply 必须从活动 Host companion descriptor 取得 profile，且 descriptor PID 存活；未升级 companion、profile 缺失或 Host 不在运行时拒绝更新，不再默认写 desktop。
 - 2026-10-28：`capabilities` 的 `update_protocol/min_update_protocol` 必须引用 `tether.updates` 常量（新增 `max_update_protocol`），禁止再写字面量 1，避免协议升级时能力上报与实际判断漂移。
 - 2026-10-29：本机 console 增加 `GET /api/devices/{device}/dsh/surface`，返回 `NativeSurface.local_url()` 的 `/?token=` 回环地址（descriptor 缺失或 DSH 不可达时 409 `descriptor_missing`）；APP 的本机 surface 因此零公网跳，不再撞 Hub 网关 30 s 超时。
+- 2026-10-29：`NativeSurface._http` 遇 DSH 的 401/403 时清空 cookie jar、重新认证并重放一次（DSH 重启后旧会话失效，不能继续用旧 Cookie）；重放仍失败则原样返回 401。
