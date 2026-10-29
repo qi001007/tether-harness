@@ -40,6 +40,8 @@ const spawnChild = (_executable, args, options) => {
   setImmediate(() => child.emit('message', { ready: true }))
   return child
 }
+fs.mkdirSync(dataDir, { recursive: true })
+fs.writeFileSync(path.join(dataDir, 'hub.json'), JSON.stringify({ url: 'https://hub.test' }))
 const service = new UpdateService({
   repoRoot, dataDir, python: 'python-fixture', env: { TETHER_NATIVE_DSH_HOME: 'C:/Users/test/.dsh', DSH_HOME: 'ignored' },
   app: { getPath: () => userData, isPackaged: false }, exec, spawnChild
@@ -52,6 +54,7 @@ try {
   assert.ok(calls[0].includes('--root') && calls[0].includes(repoRoot))
   assert.ok(calls[0].includes('--state-dir') && calls[0].includes(path.join(dataDir, 'updates')))
   assert.ok(calls[0].includes('--dsh-home') && calls[0].includes('C:/Users/test/.dsh'))
+  assert.ok(calls[0].includes('--manifest-url') && calls[0].includes('https://hub.test/releases/manifest'), 'the APP updater prefers the Hub mirror')
   assert.ok(calls[0].includes('--force'), 'a manual check must bypass the manifest disk cache')
 
   await service.status()
@@ -211,6 +214,8 @@ try {
   }), /APP proxy offline/)
   assert.deepEqual(failedSameOrigin, ['/api/devices/device-a/updates/prepare'])
   const localRpcCalls = []
+  const savedFetch = globalThis.fetch
+  globalThis.fetch = async () => ({ ok: false })
   let rpcReply = { ok: true, value: { ok: true } }
   const fakeCtx = { connection: { rpc: { call: async (...args) => { localRpcCalls.push(args); return rpcReply } } } }
   const localBridge = createDshLocalPluginUpdateBridge(() => fakeCtx.connection.rpc)
@@ -223,6 +228,7 @@ try {
   ])
   rpcReply = { ok: false, error: { code: 'update_busy', message: 'busy' } }
   await assert.rejects(dshHost.localPluginUpdates('apply', { prepared_id: 'prepared-local' }), (error) => error.code === 'update_busy')
+  globalThis.fetch = savedFetch
   const ui = fs.readFileSync(path.join(projectRoot, 'packages', 'tether-ui', 'src', 'app.js'), 'utf8')
   assert.ok(ui.includes("replace('/updates?', '/updates/status?')"))
   assert.ok(ui.includes('/updates?component='))

@@ -4,7 +4,7 @@ window.__ModuleLoader__.load({
     const React = require('react')
     const Native = require('tether-dsh-native-ui')
     const PANEL_ID = 'tether'
-    const PLUGIN_VERSION = "0.2.20"
+    const PLUGIN_VERSION = "0.2.21"
 const DSH_API_BASE = 'http://127.0.0.1:18890'
 const DSH_APP_BASE = 'http://127.0.0.1:18892'
 
@@ -23,7 +23,18 @@ function createDshLocalPluginUpdateBridge(getRpc) {
     const rpc = typeof getRpc === 'function' ? getRpc() : null
     if (!rpc || typeof rpc.call !== 'function') throw new Error('当前 DSH 插件没有本机更新通道，请先安装新版插件。')
     const hub = storedHub()
-    const manifestUrl = hub ? hub.url.replace(/\/+$/, '') + '/releases/manifest' : ''
+    let manifestUrl = hub ? hub.url.replace(/\/+$/, '') + '/releases/manifest' : ''
+    if (!manifestUrl) {
+      try {
+        const response = await fetch(DSH_APP_BASE + '/app-context', { signal: AbortSignal.timeout(1500) })
+        if (response.ok) {
+          const context = await response.json()
+          if (context && typeof context.serverUrl === 'string' && /^https?:\/\//.test(context.serverUrl)) {
+            manifestUrl = context.serverUrl.replace(/\/+$/, '') + '/releases/manifest'
+          }
+        }
+      } catch (_) { /* standalone plugin: fall back to the default manifest */ }
+    }
     const body = action === 'apply' ? { prepared_id: payload.prepared_id } : {}
     let reply = await rpc.call('/tether-updates', action, manifestUrl ? { ...body, manifest_url: manifestUrl } : body)
     if (manifestUrl && reply && reply.ok === false && reply.error && reply.error.code === 'invalid_request') {
@@ -2067,6 +2078,13 @@ function createTetherPanel({ React, Native, host }) {
         throw lastError || new Error('原生 DSH 页面暂不可用')
       }
 
+      const resetSurfaceAuth = async (url) => {
+        const bridge = typeof window !== 'undefined' ? window.tetherApp : undefined
+        if (!bridge || typeof bridge.resetSurfaceAuth !== 'function') return
+        if (url.protocol !== 'http:' || (url.hostname !== '127.0.0.1' && url.hostname !== '[::1]')) return
+        try { await bridge.resetSurfaceAuth(url.origin) } catch (_) { /* best effort */ }
+      }
+
       React.useEffect(() => {
         retryCountRef.current = 0
         if (retryTimerRef.current) { clearTimeout(retryTimerRef.current); retryTimerRef.current = null }
@@ -2143,6 +2161,7 @@ function createTetherPanel({ React, Native, host }) {
             }
             const url = new URL(surfaceUrl)
             url.searchParams.set('tether_native', '1')
+            await resetSurfaceAuth(url)
             if (current) setState({ deviceId, status: 'ready', url: url.href, pid: Number(data.pid) || 0 })
           })
           .catch((error) => {
@@ -2168,6 +2187,11 @@ function createTetherPanel({ React, Native, host }) {
             const { response, data } = await fetchSurfaceDescriptor(deviceId)
             if (!response.ok) return
             if (!alive || !data.available || !isSafeNativeSurfaceUrl(data.url)) return
+            const nextPid = Number(data.pid) || 0
+            const previous = surfaceStateRef.current
+            if (nextPid && previous && (previous.pid || 0) !== nextPid) {
+              try { await resetSurfaceAuth(new URL(data.url)) } catch (_) { /* best effort */ }
+            }
             setState((prev) => {
               if (prev.status !== 'ready' || !prev.url) return prev
               try {

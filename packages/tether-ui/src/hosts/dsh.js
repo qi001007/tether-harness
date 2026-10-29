@@ -16,7 +16,18 @@ export function createDshLocalPluginUpdateBridge(getRpc) {
     const rpc = typeof getRpc === 'function' ? getRpc() : null
     if (!rpc || typeof rpc.call !== 'function') throw new Error('当前 DSH 插件没有本机更新通道，请先安装新版插件。')
     const hub = storedHub()
-    const manifestUrl = hub ? hub.url.replace(/\/+$/, '') + '/releases/manifest' : ''
+    let manifestUrl = hub ? hub.url.replace(/\/+$/, '') + '/releases/manifest' : ''
+    if (!manifestUrl) {
+      try {
+        const response = await fetch(DSH_APP_BASE + '/app-context', { signal: AbortSignal.timeout(1500) })
+        if (response.ok) {
+          const context = await response.json()
+          if (context && typeof context.serverUrl === 'string' && /^https?:\/\//.test(context.serverUrl)) {
+            manifestUrl = context.serverUrl.replace(/\/+$/, '') + '/releases/manifest'
+          }
+        }
+      } catch (_) { /* standalone plugin: fall back to the default manifest */ }
+    }
     const body = action === 'apply' ? { prepared_id: payload.prepared_id } : {}
     let reply = await rpc.call('/tether-updates', action, manifestUrl ? { ...body, manifest_url: manifestUrl } : body)
     if (manifestUrl && reply && reply.ok === false && reply.error && reply.error.code === 'invalid_request') {
