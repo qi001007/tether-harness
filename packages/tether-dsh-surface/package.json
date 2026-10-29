@@ -1,6 +1,6 @@
 {
   "name": "tether-dsh-surface",
-  "version": "0.2.23",
+  "version": "0.2.24",
   "description": "Publishes the installed DSH native web surface to Tether",
   "type": "module",
   "main": "lib/index.js",

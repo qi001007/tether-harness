@@ -31,7 +31,7 @@ import psutil
 from .release import ReleaseSignatureError, verify_signature
 
 
-UPDATER_VERSION = "0.2.23"
+UPDATER_VERSION = "0.2.24"
 LEGACY_BASELINE_VERSION = "0.2.0"
 UPDATE_PROTOCOL = 1
 MIN_UPDATE_PROTOCOL = 1
@@ -202,12 +202,24 @@ def _semver(value: Any) -> tuple[int, int, int, tuple[str, ...]]:
     return major, minor, patch, prerelease
 
 
-def _restart_cleared(applied: dict[str, Any] | None, current_pid: int | None) -> bool:
-    """The plugin apply recorded a DSH host pid; a different live pid means the host reloaded."""
+def _restart_cleared(applied: dict[str, Any] | None, current_pid: int | None,
+                     current_updated_at: float | None = None) -> bool:
+    """Clear restart_required once a DSH host has loaded the new plugin bundle.
+
+    A recorded host pid clears when that host is replaced. When the apply found no
+    running host (DSH was closed), nothing was holding the old bundle in memory, so
+    the next host that publishes its descriptor after the apply has the new files.
+    """
     if not isinstance(applied, dict) or applied.get("restart_required") is not True:
         return False
     applied_pid = applied.get("dsh_pid")
-    return bool(type(applied_pid) is int and current_pid is not None and current_pid != applied_pid)
+    if type(applied_pid) is int:
+        return current_pid is not None and current_pid != applied_pid
+    applied_at = applied.get("applied_at")
+    return bool(current_pid is not None
+                and (type(applied_at) is int or type(applied_at) is float)
+                and current_updated_at is not None
+                and current_updated_at >= applied_at - 5000)
 
 
 def _is_newer(remote: str, current: str) -> bool:
@@ -1367,7 +1379,8 @@ class UpdateManager:
             applied_path = self.state_dir / f"applied-{self.component}.json"
             dsh_pid = self._dsh_host_pid() if self.component == "plugin" else None
             applied_record: dict[str, Any] = {"schema": 1, "component": self.component,
-                                              "version": expected_version, "restart_required": True}
+                                              "version": expected_version, "restart_required": True,
+                                              "applied_at": int(time.time() * 1000)}
             if dsh_pid:
                 applied_record["dsh_pid"] = dsh_pid
             for path, content in (
@@ -1437,18 +1450,28 @@ class UpdateManager:
     def _dsh_descriptor(self) -> Path:
         return self.dsh_home / "storages" / "tether" / "native-surface.json"
 
-    def _dsh_host_pid(self) -> int | None:
+    def _dsh_host_state(self) -> dict[str, Any]:
         try:
             data = json.loads(self._dsh_descriptor().read_text(encoding="utf-8"))
         except (OSError, ValueError):
-            return None
-        pid = data.get("pid") if isinstance(data, dict) else None
+            return {"pid": None, "updated_at": None}
+        if not isinstance(data, dict):
+            return {"pid": None, "updated_at": None}
+        pid = data.get("pid")
         if type(pid) is not int or not 0 < pid <= 2_147_483_647:
-            return None
-        try:
-            return pid if psutil.pid_exists(pid) else None
-        except (OSError, ValueError):
-            return None
+            pid = None
+        else:
+            try:
+                if not psutil.pid_exists(pid):
+                    pid = None
+            except (OSError, ValueError):
+                pid = None
+        updated = data.get("updated_at")
+        return {"pid": pid,
+                "updated_at": float(updated) if isinstance(updated, (int, float)) and not isinstance(updated, bool) and updated > 0 else None}
+
+    def _dsh_host_pid(self) -> int | None:
+        return self._dsh_host_state()["pid"]
 
     def _spawn_dsh_restart(self) -> bool:
         log = self.state_dir / "dsh-restart.log"
@@ -1498,14 +1521,16 @@ class UpdateManager:
             try:
                 applied = _json_object((self.state_dir / f"applied-{self.component}.json").read_bytes())
                 restart_required = applied.get("component") == self.component and applied.get("restart_required") is True
-                if restart_required and self.component == "plugin" and _restart_cleared(applied, self._dsh_host_pid()):
-                    restart_required = False
-                    try:
-                        applied["restart_required"] = False
-                        self._write_atomic(self.state_dir / f"applied-{self.component}.json",
-                                           (json.dumps(applied, indent=2) + "\n").encode("utf-8"))
-                    except OSError:
-                        pass
+                if restart_required and self.component == "plugin":
+                    host = self._dsh_host_state()
+                    if _restart_cleared(applied, host["pid"], host["updated_at"]):
+                        restart_required = False
+                        try:
+                            applied["restart_required"] = False
+                            self._write_atomic(self.state_dir / f"applied-{self.component}.json",
+                                               (json.dumps(applied, indent=2) + "\n").encode("utf-8"))
+                        except OSError:
+                            pass
             except (OSError, UpdateError):
                 pass
             installed_latest: bool | None = None

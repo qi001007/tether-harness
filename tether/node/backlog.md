@@ -27,3 +27,4 @@
 - 2026-10-28：`capabilities` 的 `update_protocol/min_update_protocol` 必须引用 `tether.updates` 常量（新增 `max_update_protocol`），禁止再写字面量 1，避免协议升级时能力上报与实际判断漂移。
 - 2026-10-29：本机 console 增加 `GET /api/devices/{device}/dsh/surface`，返回 `NativeSurface.local_url()` 的 `/?token=` 回环地址（descriptor 缺失或 DSH 不可达时 409 `descriptor_missing`）；APP 的本机 surface 因此零公网跳，不再撞 Hub 网关 30 s 超时。
 - 2026-10-29：`NativeSurface._http` 遇 DSH 的 401/403 时清空 cookie jar、重新认证并重放一次（DSH 重启后旧会话失效，不能继续用旧 Cookie）；重放仍失败则原样返回 401。
+- 2026-10-29：`dsh_restart` 重启时剥离继承的 `ELECTRON_RUN_AS_NODE`（否则 DSH 以纯 Node 启动，窗口永远不出现）；首次启动 20 s 内没有新 descriptor 时再补一次启动，最多两次。

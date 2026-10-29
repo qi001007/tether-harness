@@ -61,7 +61,7 @@ class UpdateService {
         cwd: this.repoRoot,
         env,
         windowsHide: true,
-        timeout: command === 'check' ? 45000 : 120000,
+        timeout: command === 'check' ? 90000 : 120000,
         maxBuffer: 1024 * 1024
       })
       const result = JSON.parse(stdout.trim())

@@ -24,9 +24,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// node_modules/react/cjs/react.production.min.js
+// packages/tether-ui/node_modules/react/cjs/react.production.min.js
 var require_react_production_min = __commonJS({
-  "node_modules/react/cjs/react.production.min.js"(exports) {
+  "packages/tether-ui/node_modules/react/cjs/react.production.min.js"(exports) {
     "use strict";
     var l = Symbol.for("react.element");
     var n = Symbol.for("react.portal");
@@ -297,9 +297,9 @@ var require_react_production_min = __commonJS({
   }
 });
 
-// node_modules/react/index.js
+// packages/tether-ui/node_modules/react/index.js
 var require_react = __commonJS({
-  "node_modules/react/index.js"(exports, module) {
+  "packages/tether-ui/node_modules/react/index.js"(exports, module) {
     "use strict";
     if (true) {
       module.exports = require_react_production_min();
@@ -309,9 +309,9 @@ var require_react = __commonJS({
   }
 });
 
-// node_modules/scheduler/cjs/scheduler.production.min.js
+// packages/tether-ui/node_modules/scheduler/cjs/scheduler.production.min.js
 var require_scheduler_production_min = __commonJS({
-  "node_modules/scheduler/cjs/scheduler.production.min.js"(exports) {
+  "packages/tether-ui/node_modules/scheduler/cjs/scheduler.production.min.js"(exports) {
     "use strict";
     function f(a, b) {
       var c = a.length;
@@ -562,9 +562,9 @@ var require_scheduler_production_min = __commonJS({
   }
 });
 
-// node_modules/scheduler/index.js
+// packages/tether-ui/node_modules/scheduler/index.js
 var require_scheduler = __commonJS({
-  "node_modules/scheduler/index.js"(exports, module) {
+  "packages/tether-ui/node_modules/scheduler/index.js"(exports, module) {
     "use strict";
     if (true) {
       module.exports = require_scheduler_production_min();
@@ -574,9 +574,9 @@ var require_scheduler = __commonJS({
   }
 });
 
-// node_modules/react-dom/cjs/react-dom.production.min.js
+// packages/tether-ui/node_modules/react-dom/cjs/react-dom.production.min.js
 var require_react_dom_production_min = __commonJS({
-  "node_modules/react-dom/cjs/react-dom.production.min.js"(exports) {
+  "packages/tether-ui/node_modules/react-dom/cjs/react-dom.production.min.js"(exports) {
     "use strict";
     var aa = require_react();
     var ca = require_scheduler();
@@ -7184,9 +7184,9 @@ var require_react_dom_production_min = __commonJS({
   }
 });
 
-// node_modules/react-dom/index.js
+// packages/tether-ui/node_modules/react-dom/index.js
 var require_react_dom = __commonJS({
-  "node_modules/react-dom/index.js"(exports, module) {
+  "packages/tether-ui/node_modules/react-dom/index.js"(exports, module) {
     "use strict";
     function checkDCE() {
       if (typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ === "undefined" || typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.checkDCE !== "function") {
@@ -7210,9 +7210,9 @@ var require_react_dom = __commonJS({
   }
 });
 
-// node_modules/react-dom/client.js
+// packages/tether-ui/node_modules/react-dom/client.js
 var require_client = __commonJS({
-  "node_modules/react-dom/client.js"(exports) {
+  "packages/tether-ui/node_modules/react-dom/client.js"(exports) {
     "use strict";
     var m = require_react_dom();
     if (true) {
@@ -7241,11 +7241,11 @@ var require_client = __commonJS({
   }
 });
 
-// web/main.js
+// packages/tether-ui/web/main.js
 var import_react = __toESM(require_react(), 1);
 var import_client = __toESM(require_client(), 1);
 
-// src/connection-panel.js
+// packages/tether-ui/src/connection-panel.js
 function createConnectionPanel(React2) {
   const h = React2.createElement;
   const ink = "var(--dsw-alias-label-primary, #101828)";
@@ -7316,7 +7316,7 @@ function createConnectionPanel(React2) {
   return { Panel: ConnectionPanel, Trigger: ConnectionTrigger };
 }
 
-// src/app.js
+// packages/tether-ui/src/app.js
 function updateErrorText(value) {
   return String(value && value.message || value || "\u66F4\u65B0\u5931\u8D25").replace(/^Error invoking remote method ['"]tether:[^'"]+['"]:\s*/, "").replace(/^Error:\s*/, "");
 }
@@ -7466,20 +7466,9 @@ function localPluginVersionSeed(host) {
   const version = host && host.kind === "dsh" && typeof host.pluginVersion === "string" ? host.pluginVersion : "";
   return version ? { current_version: version, runtime_version: version } : null;
 }
-var versionRank = (value) => String(value || "").split(".").map((part) => Number.parseInt(part, 10) || 0);
-var versionNotOlder = (candidate, base) => {
-  const left = versionRank(candidate);
-  const right = versionRank(base);
-  for (let index = 0; index < Math.max(left.length, right.length); index += 1) {
-    const a = left[index] || 0;
-    const b = right[index] || 0;
-    if (a !== b) return a > b;
-  }
-  return true;
-};
 function versionTuple(current, latest) {
   const value = current === void 0 || current === null || current === "" ? "-" : String(current);
-  const shown = latest && value !== "-" && versionNotOlder(latest, value) ? String(latest) : value;
+  const shown = latest === void 0 || latest === null || latest === "" || value === "-" ? value : String(latest);
   return value + "(" + shown + ")";
 }
 function versionLine(label, primary = {}, node = {}) {
@@ -9164,24 +9153,23 @@ function createTetherPanel({ React: React2, Native, host }) {
           return { response: { ok: true }, data: { available: true, url: origin + "/", pid: 0, sameOrigin: true } };
         }
       }
+      const isLocalTarget = !!(localDeviceId && id === localDeviceId);
+      const hub = host && host.kind === "dsh" && typeof host.hubConfig === "function" ? host.hubConfig() : null;
+      const hubBase = hub && typeof hub.url === "string" && hub.url ? hub.url.replace(/\/+$/, "") : "";
       const bases = [];
-      const preferred = host && typeof host.surfaceBase === "function" ? host.surfaceBase(id === localDeviceId) : "";
+      if (!isLocalTarget && hubBase) bases.push(hubBase);
+      const preferred = host && typeof host.surfaceBase === "function" ? host.surfaceBase(isLocalTarget) : "";
       if (preferred) bases.push(preferred);
+      if (isLocalTarget && hubBase) bases.push(hubBase);
       bases.push(ACTIVE_BASE);
       let lastError = null;
       for (const base of [...new Set(bases)]) {
         try {
-          const response = await fetch(base + "/api/devices/" + encodeURIComponent(id) + "/dsh/surface", { signal: AbortSignal.timeout(8e3) });
+          const headers = host && typeof host.apiHeaders === "function" ? host.apiHeaders(base) : void 0;
+          const via = host && host.kind === "dsh" && !isLocalTarget ? "?via=hub" : "";
+          const response = await fetch(base + "/api/devices/" + encodeURIComponent(id) + "/dsh/surface" + via, { headers, signal: AbortSignal.timeout(8e3) });
           const data = await response.json().catch(() => ({}));
           if (!response.ok && (response.status === 502 || response.status === 504) && base !== ACTIVE_BASE) continue;
-          if (host && host.kind === "dsh" && data && typeof data.url === "string" && typeof window !== "undefined" && window.location) {
-            try {
-              if (new URL(data.url).origin === window.location.origin) {
-                return { response, data: { available: true, local: true, url: "", pid: data.pid || 0 } };
-              }
-            } catch (_) {
-            }
-          }
           return { response, data };
         } catch (error) {
           lastError = error;
@@ -9249,10 +9237,6 @@ function createTetherPanel({ React: React2, Native, host }) {
       }
       setState({ deviceId, status: "loading", url: "" });
       fetchSurfaceDescriptor(deviceId).then(async ({ response, data }) => {
-        if (data && data.local) {
-          if (current) setState({ deviceId, status: "local", url: "", pid: Number(data.pid) || 0 });
-          return;
-        }
         if (!response.ok) {
           const detail = data.detail || {};
           const code = detail.code;
@@ -9621,9 +9605,9 @@ function createTetherPanel({ React: React2, Native, host }) {
         } }
       }));
     };
-    const setComponentUpdateError = (component, message, scope) => {
+    const setComponentUpdateError = (component, message, scope, notify = true) => {
       if (scope && !scopeIsCurrent(scope)) return;
-      if (message) {
+      if (message && notify) {
         const key = (scope ? scope.deviceId : "") + ":" + component;
         if (lastUpdateToastRef.current[key] !== message) {
           lastUpdateToastRef.current[key] = message;
@@ -9678,7 +9662,7 @@ function createTetherPanel({ React: React2, Native, host }) {
         { force }
       ).then((result) => {
         if (result.cancelled) return result;
-        setComponentUpdateError(component, result.failed ? shortUpdateError(result.error) : "", scope);
+        setComponentUpdateError(component, result.failed ? shortUpdateError(result.error) : "", scope, false);
         return result;
       });
     };
@@ -10142,8 +10126,6 @@ function createTetherPanel({ React: React2, Native, host }) {
     }, []);
     const device = state && state.devices.find((d) => d.device_id === deviceId);
     const updateHasAvailable = updateAvailableFor(updateInfo, host && host.kind, deviceId);
-    const targetUpdateErrors = updateErrors.devices[deviceId] || {};
-    const updateHasFailure = host && host.kind === "app" ? !!updateErrors.app : host && host.kind === "dsh" ? !!updateErrors.localPlugin : !!(targetUpdateErrors.node || targetUpdateErrors.plugin);
     const deviceOnline = !!(device && device.online);
     const safeSidebarWidth = clamp(sidebarWidth, UI.minSide, UI.maxSide);
     const previewUrl = React2.useMemo(() => {
@@ -12243,10 +12225,10 @@ function createTetherPanel({ React: React2, Native, host }) {
         }) : null,
         h("button", {
           onClick: openUpdateCenter,
-          title: updateHasAvailable ? "\u53D1\u73B0\u53EF\u7528\u66F4\u65B0\uFF0C\u6253\u5F00\u66F4\u65B0\u4E2D\u5FC3" : updateHasFailure ? "\u66F4\u65B0\u68C0\u67E5\u5931\u8D25\uFF0C\u6253\u5F00\u66F4\u65B0\u4E2D\u5FC3\u91CD\u8BD5" : "\u67E5\u770B APP\u3001\u8282\u70B9\u4E0E\u63D2\u4EF6\u66F4\u65B0\u72B6\u6001",
+          title: updateHasAvailable ? "\u53D1\u73B0\u53EF\u7528\u66F4\u65B0\uFF0C\u6253\u5F00\u66F4\u65B0\u4E2D\u5FC3" : "\u67E5\u770B APP\u3001\u8282\u70B9\u4E0E\u63D2\u4EF6\u66F4\u65B0\u72B6\u6001",
           className: "tether-press tether-hover tether-update-trigger",
           style: { marginLeft: 8, marginRight: 0, height: 26, padding: "0 10px", borderRadius: 999, border: 0, background: C.bg, color: C.sub, display: "flex", alignItems: "center", gap: 6, fontSize: 12, cursor: "pointer", flex: "0 0 auto" }
-        }, "\u66F4\u65B0", updateHasAvailable || updateHasFailure ? h("span", { "aria-label": updateHasAvailable ? "\u6709\u53EF\u7528\u66F4\u65B0" : "\u66F4\u65B0\u68C0\u67E5\u5931\u8D25", style: { width: 6, height: 6, borderRadius: "50%", background: C.red, flex: "0 0 auto" } }) : null)
+        }, "\u66F4\u65B0", updateHasAvailable ? h("span", { "aria-label": "\u6709\u53EF\u7528\u66F4\u65B0", style: { width: 6, height: 6, borderRadius: "50%", background: C.red, flex: "0 0 auto" } }) : null)
       ),
       notice || projectsError || updateToast ? renderToasts() : null,
       h(
@@ -12554,7 +12536,7 @@ function createTetherPanel({ React: React2, Native, host }) {
   return { App, TetherIcon };
 }
 
-// src/hosts/web.js
+// packages/tether-ui/src/hosts/web.js
 var EXT_KIND = {
   md: "md",
   markdown: "md",
@@ -12831,7 +12813,7 @@ function createWebHost({ apiBase = "" } = {}) {
   };
 }
 
-// src/hosts/electron.js
+// packages/tether-ui/src/hosts/electron.js
 function createElectronHost({ apiBase = "" } = {}) {
   return {
     ...createWebHost({ apiBase }),
@@ -12865,7 +12847,7 @@ function createElectronHost({ apiBase = "" } = {}) {
   };
 }
 
-// web/app-error-boundary.js
+// packages/tether-ui/web/app-error-boundary.js
 function createAppErrorBoundary(React2) {
   return class AppErrorBoundary extends React2.Component {
     constructor(props) {
@@ -12890,7 +12872,7 @@ function createAppErrorBoundary(React2) {
   };
 }
 
-// web/main.js
+// packages/tether-ui/web/main.js
 function fail(error) {
   const box = document.getElementById("root");
   if (!box) return;
