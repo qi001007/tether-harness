@@ -50,13 +50,17 @@ test('local plugin updater invokes a bundled Python module with fixed plugin pat
   assert.equal(normalized(calls[0].options.cwd), 'C:/fixture/.dsh/profiles/desktop/node_modules/tether-dsh-surface/updater')
   assert.equal(calls[0].options.env.DEEPSEEK_API_KEY, undefined)
   assert.equal(calls[0].options.env.TETHER_NODE_TOKEN, undefined)
+  const checked = await handler('check', {}, undefined, ownerPeer)
+  assert.equal(checked.ok, true)
+  const checkCall = calls.find((call) => call.args[2] === 'check')
+  assert.ok(checkCall && checkCall.args.includes('--force'), 'a manual plugin check must bypass the manifest disk cache')
   assert.deepEqual(await handler('prepare', { url: 'https://attacker.invalid' }, undefined, ownerPeer), {
     ok: false, error: { code: 'invalid_request', message: 'prepare does not accept url', details: {} }
   })
   assert.deepEqual(await handler('prepare', { manifest_url: 'http://plain.invalid/tether-update.json' }, undefined, ownerPeer), {
     ok: false, error: { code: 'invalid_request', message: 'manifest_url must be a trusted HTTPS URL', details: {} }
   })
-  assert.equal(calls.length, 1)
+  assert.equal(calls.length, 2)
 })
 
 test('local plugin updater derives profile from its installed DSH package path and refuses unknown paths', async () => {

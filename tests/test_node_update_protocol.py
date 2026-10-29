@@ -14,10 +14,12 @@ from tether.node.agent import Node, NodeStore, restart_node_process
 class FakeUpdateManager:
     def __init__(self) -> None:
         self.apply_calls = 0
+        self.last_force = None
         self.prepare_started = threading.Event()
         self.prepare_release = threading.Event()
 
-    def check(self) -> dict:
+    def check(self, force: bool = False) -> dict:
+        self.last_force = force
         return {"ok": True, "component": "node", "current_version": "0.2.1",
                 "latest_version": "0.2.2", "update_available": True}
 
@@ -59,6 +61,20 @@ def test_capabilities_advertise_update_protocol_and_cached_version(tmp_path, mon
     assert capabilities["max_update_protocol"] == MAX_UPDATE_PROTOCOL
     assert capabilities["app_version"] == node._managed_app_version()
     assert "app" in node.update_managers
+    node.store.db.close()
+
+
+def test_check_forces_the_manifest_while_status_keeps_the_cache(tmp_path, monkeypatch):
+    node = _node(tmp_path, monkeypatch)
+    manager = FakeUpdateManager()
+    node.update_managers["node"] = manager
+    asyncio.run(node._update_call({"type": "update_call", "req_id": "check-1",
+                                   "component": "node", "action": "check"}))
+    assert manager.last_force is True
+    manager.last_force = None
+    asyncio.run(node._update_call({"type": "update_call", "req_id": "status-1",
+                                   "component": "node", "action": "status"}))
+    assert manager.last_force is None
     node.store.db.close()
 
 

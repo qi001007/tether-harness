@@ -622,7 +622,12 @@ class Node:
                                         state_dir=getattr(manager, "state_dir", None),
                                         profile=profile, device=self.device)
             try:
-                result = await asyncio.to_thread(getattr(manager, action))
+                if action == "check":
+                    # A user-triggered check must see a just-published release;
+                    # status keeps the short-lived cache for polling.
+                    result = await asyncio.to_thread(manager.check, True)
+                else:
+                    result = await asyncio.to_thread(manager.status)
                 await self._send({"type": "update_result", "req_id": req_id, **result})
             except Exception as exc:  # noqa: BLE001 - failed reads must not stop the Node reader
                 log(f"[update] {action} {component} failed: {type(exc).__name__}")
