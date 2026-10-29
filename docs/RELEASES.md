@@ -1,5 +1,18 @@
 # Public client releases
 
+## v0.2.18
+
+[GitHub Release](https://github.com/qi001007/tether-harness/releases/tag/v0.2.18) · tag `v0.2.18` → `787aa3c` · workflow run `40816719901`.
+
+Patch release for the remote one-click update chain. A node update briefly drops the control link, so the next component's check could return 400 `device_offline`; the chain aborted and silently skipped the APP, leaving a remote laptop on an older APP while its Node had updated.
+
+- Each component now runs independently; a failed step is recorded and the remaining components still run.
+- Checks retry transient errors (`device_offline`, `update_busy`, network, 5xx; three attempts, 2 s apart).
+- Failures are collected into one notice; the APP restart is still verified against the device's reported `app_version`.
+- A remote plugin that needs a DSH restart now shows `插件待重启 DSH` instead of `已是最新`.
+
+Assets: app 405,627 B, node 68,122 B, plugin 413,538 B; manifest signature verified locally, sizes and SHA-256 match. Verified on the lab bench: LAPTOP-01 (Node/APP 0.2.17) sees all three components at 0.2.18 with `manifest_source` = the Hub mirror. The plugin runtime still needs one DSH restart on the target after apply.
+
 ## v0.2.17
 
 [GitHub Release](https://github.com/qi001007/tether-harness/releases/tag/v0.2.17) · tag `v0.2.17` → `fdc9e35` · workflow run `40812163945`.
