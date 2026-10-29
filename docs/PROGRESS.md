@@ -39,11 +39,13 @@
 - 本机实验台源码 Node 于 15:46:09 重启并加载候选；连续运行 12.8 分钟后，15:46:10 注册以来日志无新 keepalive timeout、断线或 `InvalidStateError`，DESKTOP-LOCAL 与 LAPTOP-01 均保持 online。两台设备分别显式检查 node/plugin，四次均返回 `ok=true`、current/latest=`0.2.24`。
 - 边界：客户端修复已随 0.2.25 发布，但尚未安装到两台运行版；服务端 ping 参数、Hub/Caddy 部署未改。
 
-## 2026-10-30 单一发布快照热修（0.2.28 候选）
+## 2026-10-30 单一发布快照热修（0.2.28 已发布）
 
+- `v0.2.28` 已发布：tag → `e6ce3c0`，工作流 `40918330411`；资产 app 1,658,001 B / node 73,558 B / plugin 1,302,899 B / manifest 1,566 B；草案与 Hub 清单验签、大小/SHA 一致；Release `17:10:56Z`，Hub 在 `17:13:23Z` 切到 0.2.28。
+- `v0.2.27` 也已发布：tag → `6437901`，工作流 `40917015921`；保留作 0.2.28 的前置热修。
 - 0.2.27 按组件取 max 仍会被 Node 的 `disk-cache` 拖住：本机 app/node latest 停在 0.2.26，插件 0.2.27。0.2.28 改为取本轮所有组件中的最高 latest，统一写给全部卡片；所有组件同版本发布，因此一个刷新只出现一个版本号。
 - 保留 0.2.27 的解阻：本机产品更新跳过已最新 Node；Node 检查失败只记为部分失败，插件照常 check/prepare/apply；设备序列跳过已最新组件。
-- 门禁：pytest 125/1、mjs 175、cjs 6、bundle check、Web 重建哈希一致、`validate_versions()`；待发布。
+- 门禁：pytest 125/1、mjs 175、cjs 6、bundle check、Web 重建哈希一致、`validate_versions()`。本机 APP/Node 已是 0.2.28，DSH profile 仍 0.2.24、updater 已刷新到 0.2.28；强制刷新后所有卡片 latest 统一为 0.2.28，本地插件 `0.2.24(0.2.28)` 一键待点击验收。
 
 ## 2026-10-30 更新一致性与本地插件入口热修（0.2.27 候选）
 

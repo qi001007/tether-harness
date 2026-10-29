@@ -2,7 +2,9 @@
 
 ## v0.2.28
 
-Release candidate hotfix for a single release snapshot:
+[GitHub Release](https://github.com/qi001007/tether-harness/releases/tag/v0.2.28) · tag `v0.2.28` → `e6ce3c0` · workflow run `40918330411` · assets app 1,658,001 B / node 73,558 B / plugin 1,302,899 B / manifest 1,566 B. Published 2026-10-29T17:10:56Z.
+
+Hotfix for a single release snapshot:
 
 - `normalizeUpdateLatest` now takes the highest latest version across the whole refresh and applies it to every component, not a per-component maximum. A Node disk-cache record at 0.2.26 can no longer leave app/node cards at 0.2.26 while the plugin updater reports 0.2.27.
 - Includes the 0.2.27 fixes: a local product update skips an already-current Node, a failed Node check no longer aborts the plugin, and device sequences skip components already at the normalized latest.
@@ -11,7 +13,9 @@ Gates: pytest 125 passed / 1 skipped, mjs 175/175, cjs 6/6, `build.mjs --check`,
 
 ## v0.2.27
 
-Release candidate hotfix for update consistency and the local plugin entry:
+[GitHub Release](https://github.com/qi001007/tether-harness/releases/tag/v0.2.27) · tag `v0.2.27` → `6437901` · workflow run `40917015921` · assets app 1,658,045 B / node 73,558 B / plugin 1,302,922 B / manifest 1,566 B. Published 2026-10-29T17:02:57Z.
+
+Hotfix for update consistency and the local plugin entry:
 
 - Each update-center refresh commits one normalized latest snapshot after all checks; local and remote cards can no longer show `0.2.26`, `0.2.25` and `0.2.26` for the same release. `update_available` is recomputed from each card's current version against that snapshot.
 - A local product update skips a Node that is already at the normalized latest and continues to the plugin; a failed Node check is reported as a partial failure but no longer aborts the plugin check/prepare/apply.
