@@ -6,12 +6,12 @@
 
 ## 2026-10-30 开发者版本：共享登录 / 邀请 / 配对 UI（未发布正式版）
 
-分支 `dev/client-auth-20261030`，基于 `origin/main` `98c102d`（0.2.28 冻结基线）。只改共享 `connection-panel.js` 与 APP 的调用点，DSH 插件与 APP 共用同一份源码和构建产物；**未打正式 tag、未改版本号、未发布 Release**。
+分支 `dev/client-auth-20261030`，最新提交见 tag `dev/client-auth-20261030-r2`；基于 `origin/main` `98c102d`（0.2.28 冻结基线）。只改共享 `connection-panel.js` 与 APP 的调用点，DSH 插件与 APP 共用同一份源码和构建产物；**未改版本号、未发布正式 Release**。
 
-- **三种入口**：连接抽屉新增“登录”（邮箱/密码/TOTP）、“邀请码注册”（邀请码/邮箱/密码）、“配对码兑换”（配对码/设备 ID/名称）三个表单；服务地址可填自建/默认，提交后统一走 `POST /api/auth/login`、`/api/auth/accept-invite`、`/api/pairing/exchange`。
+- **四种入口**：连接抽屉新增“登录”（邮箱/密码/TOTP）、“修改密码”（当前密码/新密码）、“邀请码注册”（邀请码/邮箱/密码）、“配对码兑换”（配对码/设备 ID/名称）四个表单；服务地址可填自建/默认，提交后走 `POST /api/auth/login`、`/api/auth/password`、`/api/auth/accept-invite`、`/api/pairing/exchange`。修改密码使用当前登录 token，成功后静默换新 token 并提示其他设备旧登录失效。
 - **登录态**：登录或注册成功返回个人 API token，写入 `localStorage['tether.hub']`（`{url, token}`），关闭抽屉、标记 Hub 在线、提示登录邮箱，并触发一次 `probeConnection`；配对兑换显示一次性设备 token，供 Node 配置使用。
 - **APP 接线**：`app.js` 把默认服务器地址、本机设备 ID/名称、平台传给连接面板，并在 `onConfigured` 中落盘凭据与刷新连接状态；DSH 插件自然复用同一面板。
-- **实测**：dev harness（`.dev-harness/`，未提交）连本地 dev Hub `127.0.0.1:18896`，登录 `owner@dev.test` 返回 token，邀请码注册返回 token，配对码兑换返回设备 token；服务端 66 tests、客户端 175 mjs / 6 cjs / 125 pytest、`build.mjs --check` 与 `build-web.mjs --check` 均通过；重建 `packages/dsh-plugin-tether-client/lib/client.js` 与 `packages/tether-ui/web/dist/app.js`。
+- **实测**：dev harness（`.dev-harness/`，未提交）连本地 dev Hub `127.0.0.1:18896`，登录 `member@dev.test` 返回 token，修改密码按钮由禁用变为可用，完整改密往返两次均提示成功，旧密码恢复后 200、临时密码 401；此前已实跑 owner 登录、邀请码注册、配对码兑换。服务端 72 tests、客户端 175 mjs / 6 cjs / 125 pytest、`build.mjs --check` 与 `build-web.mjs --check` 均通过；重建 `packages/dsh-plugin-tether-client/lib/client.js` 与 `packages/tether-ui/web/dist/app.js`。
 - **边界**：生产 Hub 仍为冻结基线 `d6dabd6`；该分支未部署、未分发，等待主人审查后再决定合入与正式版本。
 
 ## 2026-10-29 接手修复（随 0.2.25 发布）

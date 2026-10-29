@@ -13,7 +13,7 @@ export function createConnectionPanel(React) {
     try { const url = new URL(value); return url.origin + url.pathname.replace(/\/$/, '') } catch (_) { return '未配置' }
   }
   const cleanUrl = (value) => String(value || '').trim().replace(/\/+$/, '')
-  function ConnectionPanel({ open, onClose, info, busy, error, onProbe, defaultUrl = '', onConfigured, defaultDeviceId = '', defaultDeviceName = '', platform = 'Windows' }) {
+  function ConnectionPanel({ open, onClose, info, busy, error, onProbe, defaultUrl = '', defaultToken = '', onConfigured, defaultDeviceId = '', defaultDeviceName = '', platform = 'Windows' }) {
     const initialServer = defaultUrl || (info && /^https?:\/\//.test(info.address || '') ? info.address : '')
     const [server, setServer] = React.useState(initialServer)
     const [email, setEmail] = React.useState('')
@@ -26,8 +26,12 @@ export function createConnectionPanel(React) {
     const [pairDevice, setPairDevice] = React.useState(defaultDeviceId)
     const [pairName, setPairName] = React.useState(defaultDeviceName || defaultDeviceId)
     const [pairResult, setPairResult] = React.useState('')
+    const [accessToken, setAccessToken] = React.useState(defaultToken || '')
+    const [currentPassword, setCurrentPassword] = React.useState('')
+    const [newPassword, setNewPassword] = React.useState('')
     const [formBusy, setFormBusy] = React.useState('')
     const [message, setMessage] = React.useState('')
+    React.useEffect(() => { setAccessToken(defaultToken || '') }, [defaultToken])
     if (!open) return null
     const status = info && info.status || 'unknown'
     const checkedAt = info && info.checkedAt ? new Date(info.checkedAt) : null
@@ -37,12 +41,12 @@ export function createConnectionPanel(React) {
       h('span', { style: { color: ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, value))
     const title = (text) => h('div', { style: { color: sub, fontSize: 12, fontWeight: 600, margin: '16px 0 8px' } }, text)
     const fieldRow = (label, input) => h('label', { style: { display: 'grid', gap: 4, fontSize: 11.5, color: mute } }, label, input)
-    const post = async (path, body) => {
+    const post = async (path, body, headers = {}) => {
       const base = cleanUrl(server)
       if (!/^https?:\/\/[^/]+/.test(base)) throw new Error('先填写服务器地址')
       const response = await fetch(base + path, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...headers },
         body: JSON.stringify(body || {})
       })
       let data = {}
@@ -56,6 +60,7 @@ export function createConnectionPanel(React) {
       try { await work() } catch (error) { setMessage(String(error && error.message || error)) } finally { setFormBusy('') }
     }
     const saveLogin = (data, base, label) => {
+      setAccessToken(data.token || '')
       if (typeof onConfigured === 'function') onConfigured({ url: base, token: data.token, user: data.user })
       setMessage(label + '成功，已保存登录凭据')
     }
@@ -66,6 +71,17 @@ export function createConnectionPanel(React) {
     const acceptInvite = () => run('invite', async () => {
       const data = await post('/api/auth/accept-invite', { code: inviteCode.trim(), email: inviteEmail.trim(), password: invitePassword })
       saveLogin(data, cleanUrl(server), '邀请码注册')
+    })
+    const changePassword = () => run('password', async () => {
+      if (!accessToken) throw new Error('先登录再修改密码')
+      const data = await post('/api/auth/password', {
+        current_password: currentPassword, new_password: newPassword
+      }, { Authorization: 'Bearer ' + accessToken })
+      setAccessToken(data.token || '')
+      setCurrentPassword('')
+      setNewPassword('')
+      if (typeof onConfigured === 'function') onConfigured({ url: cleanUrl(server), token: data.token, user: data.user })
+      setMessage('密码已修改，其他设备的旧登录已失效')
     })
     const pair = () => run('pair', async () => {
       const data = await post('/api/pairing/exchange', {
@@ -102,6 +118,13 @@ export function createConnectionPanel(React) {
               fieldRow('两步验证码', h('input', { value: totp, onChange: (event) => setTotp(event.target.value), inputMode: 'numeric', maxLength: 6, style: field }))),
             h('button', { onClick: login, disabled: !!formBusy, style: { ...primary, opacity: formBusy ? 0.5 : 1, justifySelf: 'start' } }, formBusy === 'login' ? '登录中…' : '登录')),
 
+          title('修改密码'),
+          h('div', { style: { display: 'grid', gap: 7 } },
+            fieldRow('当前密码', h('input', { value: currentPassword, onChange: (event) => setCurrentPassword(event.target.value), type: 'password', autoComplete: 'current-password', style: field })),
+            fieldRow('新密码（至少 10 位）', h('input', { value: newPassword, onChange: (event) => setNewPassword(event.target.value), type: 'password', autoComplete: 'new-password', style: field })),
+            h('button', { onClick: changePassword, disabled: !!formBusy || !accessToken, title: accessToken ? '' : '先登录', style: { ...secondary, justifySelf: 'start', opacity: formBusy || !accessToken ? 0.5 : 1 } }, formBusy === 'password' ? '修改中…' : '修改密码'),
+            h('div', { style: { color: mute, fontSize: 11, lineHeight: '17px' } }, '修改后其他设备的旧登录和 API 令牌都会失效。')),
+
           title('使用邀请码注册'),
           h('div', { style: { display: 'grid', gap: 7 } },
             h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7 } },
@@ -122,7 +145,7 @@ export function createConnectionPanel(React) {
             pairResult ? h('textarea', { readOnly: true, value: pairResult, rows: 2, style: { ...field, height: 'auto', padding: 8, resize: 'vertical', wordBreak: 'break-all' } }) : null,
             h('div', { style: { color: mute, fontSize: 11, lineHeight: '17px' } }, '设备令牌只显示一次。APP 的 Node 可使用这个令牌接入；不要把令牌发到群里。')),
 
-          message ? h('div', { style: { marginTop: 12, color: message.includes('成功') || message.includes('已保存') || message.includes('已复制') ? 'var(--dsw-alias-state-success-primary, #16a34a)' : 'var(--dsw-alias-state-error-primary, #b42318)', fontSize: 12 } }, message) : null))
+          message ? h('div', { style: { marginTop: 12, color: message.includes('成功') || message.includes('已保存') || message.includes('已复制') || message.includes('已修改') ? 'var(--dsw-alias-state-success-primary, #16a34a)' : 'var(--dsw-alias-state-error-primary, #b42318)', fontSize: 12 } }, message) : null))
     )
   }
   function ConnectionTrigger({ onClick, status = 'unknown' }) {

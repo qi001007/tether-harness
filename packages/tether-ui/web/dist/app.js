@@ -162901,7 +162901,7 @@ function createConnectionPanel(React2) {
     }
   };
   const cleanUrl2 = (value) => String(value || "").trim().replace(/\/+$/, "");
-  function ConnectionPanel({ open, onClose, info, busy, error, onProbe, defaultUrl = "", onConfigured, defaultDeviceId = "", defaultDeviceName = "", platform: platform3 = "Windows" }) {
+  function ConnectionPanel({ open, onClose, info, busy, error, onProbe, defaultUrl = "", defaultToken = "", onConfigured, defaultDeviceId = "", defaultDeviceName = "", platform: platform3 = "Windows" }) {
     const initialServer = defaultUrl || (info && /^https?:\/\//.test(info.address || "") ? info.address : "");
     const [server, setServer] = React2.useState(initialServer);
     const [email, setEmail] = React2.useState("");
@@ -162914,8 +162914,14 @@ function createConnectionPanel(React2) {
     const [pairDevice, setPairDevice] = React2.useState(defaultDeviceId);
     const [pairName, setPairName] = React2.useState(defaultDeviceName || defaultDeviceId);
     const [pairResult, setPairResult] = React2.useState("");
+    const [accessToken, setAccessToken] = React2.useState(defaultToken || "");
+    const [currentPassword, setCurrentPassword] = React2.useState("");
+    const [newPassword, setNewPassword] = React2.useState("");
     const [formBusy, setFormBusy] = React2.useState("");
     const [message, setMessage] = React2.useState("");
+    React2.useEffect(() => {
+      setAccessToken(defaultToken || "");
+    }, [defaultToken]);
     if (!open) return null;
     const status2 = info && info.status || "unknown";
     const checkedAt = info && info.checkedAt ? new Date(info.checkedAt) : null;
@@ -162928,12 +162934,12 @@ function createConnectionPanel(React2) {
     );
     const title = (text2) => h2("div", { style: { color: sub, fontSize: 12, fontWeight: 600, margin: "16px 0 8px" } }, text2);
     const fieldRow = (label, input) => h2("label", { style: { display: "grid", gap: 4, fontSize: 11.5, color: mute } }, label, input);
-    const post = async (path, body) => {
+    const post = async (path, body, headers = {}) => {
       const base = cleanUrl2(server);
       if (!/^https?:\/\/[^/]+/.test(base)) throw new Error("\u5148\u586B\u5199\u670D\u52A1\u5668\u5730\u5740");
       const response = await fetch(base + path, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...headers },
         body: JSON.stringify(body || {})
       });
       let data = {};
@@ -162956,6 +162962,7 @@ function createConnectionPanel(React2) {
       }
     };
     const saveLogin = (data, base, label) => {
+      setAccessToken(data.token || "");
       if (typeof onConfigured === "function") onConfigured({ url: base, token: data.token, user: data.user });
       setMessage(label + "\u6210\u529F\uFF0C\u5DF2\u4FDD\u5B58\u767B\u5F55\u51ED\u636E");
     };
@@ -162966,6 +162973,18 @@ function createConnectionPanel(React2) {
     const acceptInvite = () => run("invite", async () => {
       const data = await post("/api/auth/accept-invite", { code: inviteCode.trim(), email: inviteEmail.trim(), password: invitePassword });
       saveLogin(data, cleanUrl2(server), "\u9080\u8BF7\u7801\u6CE8\u518C");
+    });
+    const changePassword = () => run("password", async () => {
+      if (!accessToken) throw new Error("\u5148\u767B\u5F55\u518D\u4FEE\u6539\u5BC6\u7801");
+      const data = await post("/api/auth/password", {
+        current_password: currentPassword,
+        new_password: newPassword
+      }, { Authorization: "Bearer " + accessToken });
+      setAccessToken(data.token || "");
+      setCurrentPassword("");
+      setNewPassword("");
+      if (typeof onConfigured === "function") onConfigured({ url: cleanUrl2(server), token: data.token, user: data.user });
+      setMessage("\u5BC6\u7801\u5DF2\u4FEE\u6539\uFF0C\u5176\u4ED6\u8BBE\u5907\u7684\u65E7\u767B\u5F55\u5DF2\u5931\u6548");
     });
     const pair = () => run("pair", async () => {
       const data = await post("/api/pairing/exchange", {
@@ -163028,6 +163047,15 @@ function createConnectionPanel(React2) {
             ),
             h2("button", { onClick: login, disabled: !!formBusy, style: { ...primary, opacity: formBusy ? 0.5 : 1, justifySelf: "start" } }, formBusy === "login" ? "\u767B\u5F55\u4E2D\u2026" : "\u767B\u5F55")
           ),
+          title("\u4FEE\u6539\u5BC6\u7801"),
+          h2(
+            "div",
+            { style: { display: "grid", gap: 7 } },
+            fieldRow("\u5F53\u524D\u5BC6\u7801", h2("input", { value: currentPassword, onChange: (event) => setCurrentPassword(event.target.value), type: "password", autoComplete: "current-password", style: field })),
+            fieldRow("\u65B0\u5BC6\u7801\uFF08\u81F3\u5C11 10 \u4F4D\uFF09", h2("input", { value: newPassword, onChange: (event) => setNewPassword(event.target.value), type: "password", autoComplete: "new-password", style: field })),
+            h2("button", { onClick: changePassword, disabled: !!formBusy || !accessToken, title: accessToken ? "" : "\u5148\u767B\u5F55", style: { ...secondary, justifySelf: "start", opacity: formBusy || !accessToken ? 0.5 : 1 } }, formBusy === "password" ? "\u4FEE\u6539\u4E2D\u2026" : "\u4FEE\u6539\u5BC6\u7801"),
+            h2("div", { style: { color: mute, fontSize: 11, lineHeight: "17px" } }, "\u4FEE\u6539\u540E\u5176\u4ED6\u8BBE\u5907\u7684\u65E7\u767B\u5F55\u548C API \u4EE4\u724C\u90FD\u4F1A\u5931\u6548\u3002")
+          ),
           title("\u4F7F\u7528\u9080\u8BF7\u7801\u6CE8\u518C"),
           h2(
             "div",
@@ -163061,7 +163089,7 @@ function createConnectionPanel(React2) {
             pairResult ? h2("textarea", { readOnly: true, value: pairResult, rows: 2, style: { ...field, height: "auto", padding: 8, resize: "vertical", wordBreak: "break-all" } }) : null,
             h2("div", { style: { color: mute, fontSize: 11, lineHeight: "17px" } }, "\u8BBE\u5907\u4EE4\u724C\u53EA\u663E\u793A\u4E00\u6B21\u3002APP \u7684 Node \u53EF\u4F7F\u7528\u8FD9\u4E2A\u4EE4\u724C\u63A5\u5165\uFF1B\u4E0D\u8981\u628A\u4EE4\u724C\u53D1\u5230\u7FA4\u91CC\u3002")
           ),
-          message ? h2("div", { style: { marginTop: 12, color: message.includes("\u6210\u529F") || message.includes("\u5DF2\u4FDD\u5B58") || message.includes("\u5DF2\u590D\u5236") ? "var(--dsw-alias-state-success-primary, #16a34a)" : "var(--dsw-alias-state-error-primary, #b42318)", fontSize: 12 } }, message) : null
+          message ? h2("div", { style: { marginTop: 12, color: message.includes("\u6210\u529F") || message.includes("\u5DF2\u4FDD\u5B58") || message.includes("\u5DF2\u590D\u5236") || message.includes("\u5DF2\u4FEE\u6539") ? "var(--dsw-alias-state-success-primary, #16a34a)" : "var(--dsw-alias-state-error-primary, #b42318)", fontSize: 12 } }, message) : null
         )
       )
     );
@@ -168348,6 +168376,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         error: hubError,
         onProbe: probeConfiguredHub,
         defaultUrl: hubUrl || "",
+        defaultToken: hubToken || "",
         defaultDeviceId: appLocalDevice || deviceId || "",
         defaultDeviceName: ((state && state.devices || []).find((item) => item.device_id === (appLocalDevice || deviceId)) || {}).name || appLocalDevice || deviceId || "",
         platform: typeof navigator !== "undefined" && navigator.platform || "Windows",

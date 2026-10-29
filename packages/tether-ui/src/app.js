@@ -4397,6 +4397,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           info: { address: hubAddress || '未知', status: hubStatus, checkedAt: hubCheckedAt, durationMs: hubDuration },
           busy: hubBusy, error: hubError, onProbe: probeConfiguredHub,
           defaultUrl: hubUrl || '',
+          defaultToken: hubToken || '',
           defaultDeviceId: appLocalDevice || deviceId || '',
           defaultDeviceName: ((state && state.devices || []).find((item) => item.device_id === (appLocalDevice || deviceId)) || {}).name || appLocalDevice || deviceId || '',
           platform: (typeof navigator !== 'undefined' && navigator.platform) || 'Windows',
