@@ -9717,6 +9717,18 @@ function createTetherPanel({ React: React2, Native, host }) {
       }
       return false;
     };
+    const watchPluginRestart = async (scope, authority) => {
+      for (let attempt = 0; attempt < 30; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 2e3));
+        if (!scopeIsCurrent(scope)) return false;
+        try {
+          const status = await loadUpdateInfo("plugin", "status", authority, scope);
+          if (status && status.ok !== false && status.restart_required !== true) return true;
+        } catch (_) {
+        }
+      }
+      return false;
+    };
     const updateOneClick = async (component, fixedScope) => {
       const scope = fixedScope === void 0 ? updateScope(component) : fixedScope;
       let authority;
@@ -9934,6 +9946,13 @@ function createTetherPanel({ React: React2, Native, host }) {
           if (component !== "app") {
             try {
               if (!await updateOneClick(component, scope)) failures.push(component);
+              else if (component === "plugin") {
+                const restarted = await watchPluginRestart(scope);
+                if (!restarted) {
+                  failures.push("plugin");
+                  setComponentUpdateError("plugin", "\u63D2\u4EF6\u5DF2\u5B89\u88C5\uFF0C\u76EE\u6807 DSH \u5C1A\u672A\u5B8C\u6210\u91CD\u542F", scope);
+                }
+              }
             } catch (error) {
               failures.push(component);
               setComponentUpdateError(component, shortUpdateError(error), scope);

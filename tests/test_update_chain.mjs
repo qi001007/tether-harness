@@ -21,3 +21,10 @@ test('a remote plugin that needs a DSH restart is shown instead of up to date', 
   assert.match(source, /const pluginRestart = !!\(hasPlugin && plugin && plugin\.restart_required\)/)
   assert.match(source, /pluginRestart \? pill\('插件待重启 DSH', C\.amber\)/)
 })
+
+test('the device chain waits for the target DSH to restart after a plugin apply', () => {
+  assert.match(source, /const watchPluginRestart = async \(scope, authority\)/)
+  assert.match(source, /status\.restart_required !== true\) return true/)
+  assert.match(source, /else if \(component === 'plugin'\) \{/)
+  assert.match(source, /插件已安装，目标 DSH 尚未完成重启/)
+})

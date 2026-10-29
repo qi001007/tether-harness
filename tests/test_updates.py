@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from tether.updates import UpdateError, UpdateManager, _is_newer
+from tether.updates import UpdateError, UpdateManager, _is_newer, _restart_cleared
 
 
 class ArtifactServer:
@@ -1149,3 +1149,25 @@ def test_hub_mirror_is_preferred_over_the_manifest_artifact_url(artifact_server:
     manager = _strict_manager(root, artifact_server.base + "/releases/manifest", tmp_path / "state")
     prepared = manager.prepare()
     assert prepared["ok"] is True, prepared
+
+
+def test_restart_cleared_requires_a_different_live_host_pid():
+    assert _restart_cleared({"restart_required": True, "dsh_pid": 10}, 11) is True
+    assert _restart_cleared({"restart_required": True, "dsh_pid": 10}, 10) is False
+    assert _restart_cleared({"restart_required": True, "dsh_pid": 10}, None) is False
+    assert _restart_cleared({"restart_required": True}, 11) is False
+    assert _restart_cleared({"restart_required": False, "dsh_pid": 10}, 11) is False
+    assert _restart_cleared(None, 11) is False
+
+
+def test_plugin_apply_schedules_the_dsh_restart_helper():
+    source = Path(__file__).resolve().parents[1] / "tether" / "updates.py"
+    text = source.read_text(encoding="utf-8")
+    assert 'dsh_pid = self._dsh_host_pid() if self.component == "plugin" else None' in text
+    assert 'if self.component == "plugin" and dsh_pid:' in text
+    assert "self._spawn_dsh_restart()" in text
+    assert '_restart_cleared(applied, self._dsh_host_pid())' in text
+    helper = Path(__file__).resolve().parents[1] / "tether" / "node" / "dsh_restart.py"
+    helper_text = helper.read_text(encoding="utf-8")
+    assert "dsh-desktop-host" in helper_text
+    assert 'exe.lower().endswith("deepseek harness.exe")' in helper_text

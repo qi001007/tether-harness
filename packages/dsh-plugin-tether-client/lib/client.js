@@ -4,7 +4,7 @@ window.__ModuleLoader__.load({
     const React = require('react')
     const Native = require('tether-dsh-native-ui')
     const PANEL_ID = 'tether'
-    const PLUGIN_VERSION = "0.2.18"
+    const PLUGIN_VERSION = "0.2.19"
 const DSH_API_BASE = 'http://127.0.0.1:18890'
 const DSH_APP_BASE = 'http://127.0.0.1:18892'
 
@@ -2583,6 +2583,17 @@ function createTetherPanel({ React, Native, host }) {
         }
         return false
       }
+      const watchPluginRestart = async (scope, authority) => {
+        for (let attempt = 0; attempt < 30; attempt += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 2000))
+          if (!scopeIsCurrent(scope)) return false
+          try {
+            const status = await loadUpdateInfo('plugin', 'status', authority, scope)
+            if (status && status.ok !== false && status.restart_required !== true) return true
+          } catch (_) { /* the target DSH is restarting; keep polling */ }
+        }
+        return false
+      }
       const updateOneClick = async (component, fixedScope) => {
         const scope = fixedScope === undefined ? updateScope(component) : fixedScope
         let authority
@@ -2780,6 +2791,13 @@ function createTetherPanel({ React, Native, host }) {
             if (component !== 'app') {
               try {
                 if (!await updateOneClick(component, scope)) failures.push(component)
+                else if (component === 'plugin') {
+                  const restarted = await watchPluginRestart(scope)
+                  if (!restarted) {
+                    failures.push('plugin')
+                    setComponentUpdateError('plugin', '插件已安装，目标 DSH 尚未完成重启', scope)
+                  }
+                }
               } catch (error) {
                 failures.push(component)
                 setComponentUpdateError(component, shortUpdateError(error), scope)
