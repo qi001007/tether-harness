@@ -2,6 +2,13 @@
 
 更新日期：2026-10-29。
 
+## 当前实测状态：v0.2.19 已发布
+
+- tag `v0.2.19` → `66fdef1`；发行工作流 `40818499641` 成功；资产 app 408,693 B、node 70,969 B、plugin 414,448 B，manifest 验签通过、大小/SHA 一致；Release 已发布。
+- 远程插件更新现在自己收尾：插件 apply 记录目标 DSH 的 host pid，调度一个 detached 重启帮手关闭并重开 DeepSeek Harness；新 host 回写描述符、pid 变化后 `restart_required` 自动清除，链路等它完成再继续。正常路径不再需要人在目标机上重启 DSH。
+- 本机实验台与 LAPTOP-01 均已 `0.2.19`。远程实测（DESKTOP-LOCAL → LAPTOP-01，目标端零手工）：Node 重启后约 5 s 以 0.2.19 重新注册；插件 40 个文件、DSH 自动重启后约 12 s `restart_required=false`、运行时 0.2.19；APP 34 个文件、重启后约 10 s 以 0.2.19 重连。最终三组件均 0.2.19、在线、surface 可用。
+- 门禁：152 mjs / 6 cjs / 111 pytest（1 skipped）、`build.mjs --check`、`validate_versions()`。
+
 ## 当前实测状态：v0.2.18 已发布
 
 - tag `v0.2.18` → `787aa3c`；发行工作流 `40816719901` 成功；资产 app 405,627 B、node 68,122 B、plugin 413,538 B，manifest 验签通过、大小/SHA 一致；Release 已发布，Hub mirror 已切到 `0.2.18`。

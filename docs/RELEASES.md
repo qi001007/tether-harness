@@ -1,5 +1,20 @@
 # Public client releases
 
+## v0.2.19
+
+[GitHub Release](https://github.com/qi001007/tether-harness/releases/tag/v0.2.19) · tag `v0.2.19` → `66fdef1` · workflow run `40818499641`.
+
+Remote plugin updates now finish on their own. A plugin bundle cannot be swapped inside a running DSH host, so the apply records the current host pid and schedules a detached restart helper on the target: it closes and reopens the DeepSeek Harness desktop app, the new host rewrites the surface descriptor, and the update status clears `restart_required` once the pid changes. The device chain waits for that restart before moving on.
+
+End-to-end verification from DESKTOP-LOCAL to LAPTOP-01 (0.2.17 → 0.2.19, no manual steps on the target):
+
+- Node: 40 s prepare/apply, the Node restarted itself and re-registered as `0.2.19` in about 5 s.
+- Plugin: 40 files applied; the target DSH closed and reopened automatically; `restart_required` cleared and the runtime reported `0.2.19` about 12 s after apply.
+- APP: 34 files applied; the APP restarted and reconnected as `0.2.19` in about 10 s.
+- Final state: LAPTOP-01 online with APP/Node `0.2.19`, plugin runtime `0.2.19`, surface available.
+
+The restart helper only targets the DeepSeek Harness executable; if it cannot be scheduled the plugin stays pending instead of pretending to be current. Chain hardening from 0.2.18 (per-component continuation, transient retries) is included.
+
 ## v0.2.18
 
 [GitHub Release](https://github.com/qi001007/tether-harness/releases/tag/v0.2.18) · tag `v0.2.18` → `787aa3c` · workflow run `40816719901`.
