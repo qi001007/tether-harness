@@ -1,5 +1,13 @@
 # 用户反馈与处理
 
+## 2026-10-30 稳定性整改
+
+- [ ] C30-1：更新刷新不得被迟到状态/旧服务地址的响应覆盖；失败和缓存数据不得显示成新鲜“已是最新”。0.2.29 候选已纳入 authority 代次与更新竞态修复，隔离本机候选验证通过；LAPTOP-01 实际安装验收待做。
+- [ ] C30-2：普通用户不依赖 Python/npm、手写 JSON 或询问 AI 完成安装、登录与配对；现有 ZIP 流程仍不满足，列为独立发行阻断项。
+- [ ] C30-3：更新失败、中断、重启与回退须保留会话/工作区；真实两机测试待补。
+
+- [ ] C30-4：原生 Composer 附件需能发到目标设备工作区。0.2.29 候选在隔离本机 DSH Web Host + QA Node 验证目标工作区选择及 90B 文本、4B 二进制附件；multipart 原始响应字节匹配 `00 ff 41 80`，无模型请求。物理 LAPTOP-01 未安装复验。
+
 本文只保留有效需求及当前验收状态。逐项实现过程和旧版状态记录已随维护清理归档；勾选以代码和对应层级的实际验证为准。
 
 ## 已完成的用户体验需求
@@ -49,7 +57,7 @@
 - F60 补充实测：LAPTOP-01 升级 `0.2.11` 后，三组件检查 797–1250 ms，当前版本查询 781–1266 ms。5 分钟 UI 检查缓存与强制刷新已发布；现有自动检查周期为 6 小时，自动检查不会下载安装。
 
 - [ ] F60：更新中心检查慢和长期“检查中”。候选已拆开 Node 读状态与下载/安装长锁；增加 manifest singleflight/4 秒超时和 UI 5 分钟缓存/6–6.5 秒失败收敛。桌面真实 status 为 281–500 ms；候选待正式发行与双机 UI 验收。
-- [ ] F61：原生对话目标设备附件选择器候选代码使用 owner-only RPC 身份与 DSH `workspaceFiles` 会话作用域 API，将原始字节交给原生 `onAddFiles(File[])`。自动回归仍需随更新后重跑；尚未验证安装 Host 的 API 注入、原生窗口及真实上传。
+- [ ] F61：原生对话目标设备附件选择器使用 owner-only RPC 身份与 DSH `workspaceFiles` 会话作用域 API，将原始字节交给原生 `onAddFiles(File[])`。候选 0.2.29 已在隔离真实 DSH Web Host + QA Node 完成 composer 实测：目标工作区列出 txt/bin，90B txt 与 4B bin 均进入原生附件 chip；multipart 原始响应核对 bin 字节为 `00 ff 41 80`。截图：`C:\Users\Administrator\.codex\visualizations\2026\10\30\01a18af0-f175-7453-8498-918bb3a022bd\tether-target-attachment-accepted.png`。未点击发送、无模型调用；物理 LAPTOP-01 跨设备验收待完成。
 - [x] F62：演示前开启文件管理写权限并验证即开即用。两设备 full 策略即时生效，无重启；跨机新建并读回成功，LAPTOP-01 往返 1250 ms。仅证明文件管理通道，未证明模型命令执行链路。
 
 - [x] F56：通过桌面 APP 一键更新另一台设备的 APP、插件与 Node，并验证自动重启、重新连回和用户数据保留。v0.2.10 已在 LAPTOP-01 完成实机更新；三组件报告 `0.2.10`，APP 新进程启动，Hub 在 apply 响应后 25.159 秒内恢复在线（最后一次离线至在线 17.688 秒）。更新前后 `hub.json` SHA-256、会话数量和三个工作区树哈希一致。v0.2.9 自动重启 helper 超时作为历史失败记录保留。
@@ -92,7 +100,7 @@
 - [ ] F51 更新后状态闭环：一键更新期间按钮禁用；Node 更新后 UI 每 2 秒核对 `capabilities.node_version`，进程到新版即清除"节点重启中"并显示"已是最新"；插件更新后出现"已重启 DSH，重新检查"，点击后若已最新则收敛为"已是最新"。待真实更新流程复验。
 - [ ] F52 插件端检查更新提取不到版本：本机 RPC 通道失败时卡片显示"失败"浮层提示；同时每台设备的 Hub 卡片（含本机）始终提供版本与一键更新，作为可靠通道。local RPC 失败根因（旧 surface 插件未注册 `/tether-updates`）需升级 surface 插件后复验。
 - [x] F53 一键更新端到端验证：经 Hub 真实执行 DESKTOP-LOCAL DSH 插件 `0.2.3→0.2.5`：check available=true → prepare prepared_id `bc04336b…` to 0.2.5 → apply ok restart_required=true → 复查 current=0.2.5、installed_latest=true。链路可用；期间两次 409/504 为设备忙/超时，已映射为短句。
-- [ ] F54 跨机附件：picker 已从隐藏 Hub/localStorage 依赖改为 DSH Host `remote.workspaceFiles`；限定当前会话工作区并校验条目 capability。需要在实际运行的 Host 确认 `remote.workspaceFiles` 注入与 `readBytes` 字节回传后再关闭此项。
+- [ ] F54 跨机附件：picker 使用 DSH Host `remote.workspaceFiles`，限定当前会话工作区并校验条目 capability。候选 0.2.29 已在隔离真实 DSH Web Host + QA Node 验证注入、目标文件列表、原生 composer 附件 chip 及二进制 `readBytes` 回传（`00 ff 41 80`）；没有发送消息或调用模型。截图：`C:\Users\Administrator\.codex\visualizations\2026\10\30\01a18af0-f175-7453-8498-918bb3a022bd\tether-target-attachment-accepted.png`。物理 LAPTOP-01 尚未安装/复验，跨设备验收待完成。
 - [ ] F55 报错浮层准则：错误一律右下角绝对定位浮层＋`×`（更新中心内同样适用），不进文档流、不进卡片正文。v0.2.10 笔记本更新成功后，旧 v0.2.9 的“APP 更新后尚未重新连接”失败提示仍留在界面；已在验收时手动关闭。提示未自动清除的问题仍待单独修复和验收。
 
 ## 验收边界

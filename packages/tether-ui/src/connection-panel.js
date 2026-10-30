@@ -59,9 +59,9 @@ export function createConnectionPanel(React) {
       setFormBusy(kind)
       try { await work() } catch (error) { setMessage(String(error && error.message || error)) } finally { setFormBusy('') }
     }
-    const saveLogin = (data, base, label) => {
+    const saveLogin = async (data, base, label) => {
+      if (typeof onConfigured === 'function') await onConfigured({ url: base, token: data.token, user: data.user })
       setAccessToken(data.token || '')
-      if (typeof onConfigured === 'function') onConfigured({ url: base, token: data.token, user: data.user })
       setMessage(label + '成功，已保存登录凭据')
     }
     const login = () => run('login', async () => {

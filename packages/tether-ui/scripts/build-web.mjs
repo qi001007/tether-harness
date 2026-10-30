@@ -4,6 +4,7 @@ import { inlineCssPlugin, monacoDefine } from './monaco-build.mjs'
 
 const root = path.resolve(import.meta.dirname, '..')
 await build({
+  absWorkingDir: root,
   entryPoints: [path.join(root, 'web/main.js')],
   bundle: true,
   format: 'esm',

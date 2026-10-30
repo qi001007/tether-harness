@@ -58,9 +58,9 @@ test('connection status is probed without opening the connection panel', () => {
 })
 
 test('a remote plugin that needs a DSH restart is shown instead of up to date', () => {
-  assert.match(source, /const pluginRestart = !!\(hasPlugin && plugin && plugin\.restart_required\)/)
+  assert.match(source, /const pluginRestart = !!\(hasPlugin && plugin && !isUpdateInfoStale\(plugin\) && plugin\.restart_required\)/)
   assert.match(source, /restartPill: '插件待重启 DSH', restartAction: 'none'/)
-  assert.match(source, /updateCardState\(\{ running, error: run\?\.state === 'error' \? run\.message : '',/)
+  assert.match(source, /updateCardStateForInfos\(infos, \{ running, error: run\?\.state === 'error' \? run\.message : '',/)
 })
 
 test('the device chain waits for the target DSH to restart after a plugin apply', () => {

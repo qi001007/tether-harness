@@ -54,3 +54,8 @@
 - 2026-10-29：重新生成 `client.js`，仅更新内嵌 `PLUGIN_VERSION` 至 `0.2.16`。
 - 2026-10-29：重新生成 `client.js`，包含 CSV/TSV/XLSX 只读表格预览与纯文本切换（同源共享 UI）。
 - 2026-10-29：重新生成 `client.js`，包含 nativeSurfaceStyleId 守卫、更新灯聚合、旧节点响应兼容与 Monaco 主题跟随；已重装 DSH profile 并重启。
+- 2026-10-30：重建 `client.js`，同步更新检查响应代际仲裁与 stale/error/cache 版本来源标记。
+- 2026-10-30：重建 `client.js`，将 Composer 加号的隐藏文件输入点击默认转到远端会话工作区 picker，并保留“本机文件…”入口。
+
+- 2026-10-30：重建 client.js，按 DSH InputBar 的 session-maybe 附件 slot 注入 sessionId；无 session 时通过官方 uiWorkspace.startSession 准备空会话后自动打开远端文件 picker。
+- 2026-10-30：按 `build.mjs` 从 client package.json 生成 `0.2.29` bundle；离线插件 ZIP 中嵌入版本已核对。

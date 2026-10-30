@@ -179,9 +179,48 @@ export function createWebNative(React) {
 }
 
 export function createWebHost({ apiBase = '' } = {}) {
+  const normalize = (value) => String(value || '').replace(/\/+$/, '')
+  const hubConfig = () => {
+    try {
+      const value = JSON.parse(window.localStorage.getItem('tether.hub') || 'null')
+      return value && typeof value.url === 'string' && typeof value.token === 'string' && value.url && value.token
+        ? { url: normalize(value.url), token: value.token }
+        : null
+    } catch (_) { return null }
+  }
   return {
     kind: 'web',
     apiBase: () => apiBase,
-    surfaceBase: () => apiBase
+    apiBases: () => {
+      const hub = hubConfig()
+      return hub ? [hub.url] : [apiBase]
+    },
+    apiHeaders: (base) => {
+      const hub = hubConfig()
+      return hub && normalize(base) === hub.url ? { Authorization: 'Bearer ' + hub.token } : {}
+    },
+    hubConfig: () => {
+      const hub = hubConfig()
+      return hub ? { url: hub.url } : null
+    },
+    surfaceBase: (isLocal = false) => isLocal ? apiBase : (hubConfig()?.url || apiBase),
+    connectionInfo: async (activeBase) => ({ address: activeBase || hubConfig()?.url || apiBase || '未配置', status: 'unknown' }),
+    probeConnection: async (activeBase, token) => {
+      const hub = hubConfig()
+      const base = normalize(activeBase || (hub && hub.url))
+      if (!base) throw new Error('Hub 地址未配置')
+      const started = Date.now()
+      const response = await fetch(base + '/api/state', {
+        headers: { Authorization: 'Bearer ' + (token || (hub && hub.url === base ? hub.token : '')) },
+        signal: AbortSignal.timeout(5000)
+      })
+      if (!response.ok) {
+        const error = new Error('Hub 请求失败')
+        error.status = response.status
+        throw error
+      }
+      const state = await response.json()
+      return { state, address: base, status: 'online', checkedAt: new Date().toISOString(), durationMs: Date.now() - started }
+    }
   }
 }

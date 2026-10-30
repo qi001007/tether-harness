@@ -44,7 +44,7 @@ ${shared}
 
     return {
       name: 'tether',
-      inject: ['slots', 'layout', 'connection', 'remote', 'remote.workspaceFiles', 'remote.pluginManager', 'commandUi'],
+      inject: ['slots', 'layout', 'connection', 'remote', 'remote.workspaceFiles', 'remote.pluginManager', 'commandUi', 'uiWorkspace', 'sessions'],
       apply(ctx) {
         localPluginRemote = ctx.remote
         if (ctx.connection && ctx.connection.rpc && typeof ctx.connection.rpc.call === 'function') {
@@ -67,12 +67,13 @@ ${shared}
           } catch (_) { /* DSH chrome stays usable if style injection is unavailable */ }
           try {
             const targetFiles = createDshTargetFilesBridge({ getRpc: () => localPluginRpc, getRemote: () => localPluginRemote })
-            const targetFilePicker = { open: null }
-            if (ctx.fileDrag && typeof ctx.fileDrag.read === 'function') {
-              const attachments = createDshTargetAttachments(React, Native, targetFiles, targetFilePicker)
+            const targetFilePicker = { open: null, pendingSessionStart: null }
+            if (ctx.connection && ctx.connection.rpc && typeof ctx.connection.rpc.call === 'function'
+                && ctx.remote && ctx.remote.workspaceFiles) {
+              const attachments = createDshTargetAttachments(React, Native, targetFiles, targetFilePicker, ctx.uiWorkspace, ctx.sessions)
               ctx.slots.inject('conversation.input.attachments', () => ctx.slots.register({
                 name: 'conversation.input.attachments', priority: -1000, locale: 'conversation',
-                inject: () => ({ readFileDrag: ctx.fileDrag.read })
+                inject: (sessionId) => ({ sessionId })
               }, attachments))
             }
             ctx.inject(['commandUi'], (scope) => {

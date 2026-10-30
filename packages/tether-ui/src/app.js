@@ -60,16 +60,44 @@ export function hubProbeErrorText(error) {
     : 'Hub 不可达或请求超时，请检查服务地址与网络后重试。'
 }
 
+export function assertCurrentAuthorityGeneration(requestGeneration, currentGeneration) {
+  if (requestGeneration === currentGeneration) return
+  const error = new Error('连接配置已更改')
+  error.code = 'authority_changed'
+  throw error
+}
+
+export async function fetchApiJsonForAuthority(path, init, options, requestGeneration, currentGeneration) {
+  const response = await fetchApiJson(path, init, options)
+  assertCurrentAuthorityGeneration(requestGeneration, currentGeneration())
+  return response
+}
+
+export function nativeSurfaceAuthorityKey(surfaceBase, hubUrl, activeBase, generation) {
+  return [surfaceBase || '', hubUrl || '', activeBase || '', generation].join('|')
+}
+
+export function apiCandidatesForAuthority(activeBase, candidates, explicitAuthority = '') {
+  return explicitAuthority ? [explicitAuthority] : [activeBase, ...(candidates || []).filter((base) => base !== activeBase)]
+}
+
 export function updateAuthorityBase(updateInfo, deviceId, component) {
   const record = updateInfo && updateInfo.devices && updateInfo.devices[deviceId] && updateInfo.devices[deviceId][component]
   return record && Object.prototype.hasOwnProperty.call(record, 'authorityBase') ? record.authorityBase : undefined
 }
 
 export function updateAvailableFor(updateInfo, hostKind, deviceId) {
-  if (hostKind === 'app' && updateInfo && updateInfo.app && updateInfo.app.update_available) return true
-  if (hostKind === 'dsh' && updateInfo && updateInfo.localPlugin && updateInfo.localPlugin.update_available) return true
+  if (hostKind === 'app' && updateInfo && updateInfo.app && !isUpdateInfoStale(updateInfo.app) && updateInfo.app.update_available) return true
+  if (hostKind === 'dsh' && updateInfo && updateInfo.localPlugin && !isUpdateInfoStale(updateInfo.localPlugin) && updateInfo.localPlugin.update_available) return true
   const target = updateInfo && updateInfo.devices && updateInfo.devices[deviceId]
-  return !!(deviceId && target && ((target.app && target.app.update_available) || (target.node && target.node.update_available) || (target.plugin && target.plugin.update_available)))
+  return !!(deviceId && target && ['app', 'node', 'plugin'].some((component) => {
+    const info = target[component]
+    return info && !isUpdateInfoStale(info) && info.update_available
+  }))
+}
+
+export function isUpdateInfoStale(info) {
+  return !!(info && (info.stale === true || info.from_cache === true || info.check_error))
 }
 
 export function updateTriggerState(updateInfo, updateErrors, refreshing = false, devices = null, running = false) {
@@ -77,13 +105,14 @@ export function updateTriggerState(updateInfo, updateErrors, refreshing = false,
   const statuses = []
   const add = (infos, errors) => {
     const list = (infos || []).filter(Boolean)
-    const failures = (errors || []).some(Boolean)
+    const failures = (errors || []).some(Boolean) || list.some((info) => info && info.check_error)
     if (!list.length && !failures) return
-    const needsRestart = list.some((info) => info.runtime_version && info.current_version
+    const needsRestart = list.some((info) => !isUpdateInfoStale(info) && info.runtime_version && info.current_version
       && info.runtime_version !== info.current_version)
-    if (list.some((info) => info.update_available === true) || needsRestart) statuses.push('available')
-    else if (list.length && list.every((info) => info.current_version && info.latest_version)) statuses.push('current')
+    if (list.some((info) => !isUpdateInfoStale(info) && info.update_available === true) || needsRestart) statuses.push('available')
     else if (failures) statuses.push('failed')
+    else if (list.some(isUpdateInfoStale)) statuses.push('checking')
+    else if (list.length && list.every((info) => info.current_version && info.latest_version)) statuses.push('current')
     else statuses.push('checking')
   }
   add([updateInfo && updateInfo.app], [updateErrors && updateErrors.app])
@@ -110,10 +139,11 @@ export function updateTriggerState(updateInfo, updateErrors, refreshing = false,
 }
 
 export function updateCardState({ running = false, error = '', hasUpdate = false, restartRequired = false,
-                                   known = false, failed = false, restartPill = '待生效',
+                                   known = false, failed = false, stale = false, restartPill = '待生效',
                                    restartAction = 'restart' } = {}) {
   if (running) return { kind: 'running', pill: '正在更新', tone: 'amber', action: 'none', label: '更新中', disabled: true }
   if (error) return { kind: 'error', pill: '更新失败', tone: 'red', action: 'retry', label: '重试', disabled: false }
+  if (failed) return { kind: 'failed', pill: '检查失败', tone: 'red', action: 'recheck', label: '重试', disabled: false }
   if (hasUpdate) return { kind: 'update', pill: '有更新', tone: 'amber', action: 'update', label: '一键更新', disabled: false }
   if (restartRequired) {
     return {
@@ -122,9 +152,18 @@ export function updateCardState({ running = false, error = '', hasUpdate = false
       disabled: restartAction === 'none'
     }
   }
+  if (stale) return { kind: 'stale', pill: '上次结果', tone: 'mute', action: 'recheck', label: '检查更新', disabled: false }
   if (known) return { kind: 'current', pill: '已是最新', tone: 'green', action: 'none', label: '一键更新', disabled: true }
-  if (failed) return { kind: 'failed', pill: '检查失败', tone: 'red', action: 'recheck', label: '重试', disabled: false }
   return { kind: 'checking', pill: '检查中…', tone: 'mute', action: 'none', label: '一键更新', disabled: true }
+}
+
+export function updateCardStateForInfos(infos, options = {}) {
+  const list = (infos || []).filter(Boolean)
+  const stale = list.some(isUpdateInfoStale)
+  const failed = options.failed === true || list.some((info) => !!info.check_error)
+  const hasUpdate = list.some((info) => !isUpdateInfoStale(info) && info.update_available === true)
+  const known = list.length > 0 && list.every((info) => info.current_version && info.latest_version && !isUpdateInfoStale(info))
+  return updateCardState({ ...options, stale, failed, hasUpdate, known })
 }
 
 export function isVersionNewer(candidate, current) {
@@ -139,6 +178,7 @@ export function isVersionNewer(candidate, current) {
 
 export function updateNeededFor(info) {
   if (!info) return true
+  if (isUpdateInfoStale(info)) return true
   if (info.current_version && info.latest_version) return isVersionNewer(info.latest_version, info.current_version)
   if (info.update_available === true) return true
   if (info.update_available === false) return false
@@ -148,7 +188,7 @@ export function updateNeededFor(info) {
 export function normalizeUpdateLatest(updateInfo) {
   let latestVersion = ''
   const consider = (info) => {
-    if (!info || !info.latest_version) return
+    if (!info || !info.latest_version || isUpdateInfoStale(info)) return
     if (!latestVersion || isVersionNewer(info.latest_version, latestVersion)) latestVersion = info.latest_version
   }
   consider(updateInfo.app)
@@ -157,7 +197,7 @@ export function normalizeUpdateLatest(updateInfo) {
     for (const component of ['app', 'plugin', 'node']) consider(target && target[component])
   }
   const apply = (info) => {
-    if (!info || !latestVersion) return info
+    if (!info || !latestVersion || isUpdateInfoStale(info)) return info
     const next = { ...info, latest_version: latestVersion }
     if (!info.current_version) return next
     next.update_available = info.rollout_paused === true
@@ -176,6 +216,87 @@ export function normalizeUpdateLatest(updateInfo) {
       node: apply(target && target.node)
     }]))
   }
+}
+
+export function createUpdateResponseArbiter() {
+  const latest = new Map()
+  const latestCheck = new Map()
+  let sequence = 0
+  return {
+    begin(key, authority, action = 'check') {
+      const arbiterKey = key + ':' + action
+      sequence += 1
+      if (action === 'check') latestCheck.set(key, sequence)
+      const token = { sequence, authority, action, arbiterKey, key, checkSequence: latestCheck.get(key) || 0, accepted: true }
+      latest.set(arbiterKey, { sequence, authority })
+      return token
+    },
+    isCurrent(key, request, authority) {
+      const current = request && latest.get(request.arbiterKey || key + ':' + request.action)
+      if (!request || !request.accepted || !current || request.authority !== authority) return false
+      return current.sequence === request.sequence && current.authority === authority
+        && (request.action !== 'status' || request.checkSequence === (latestCheck.get(request.key) || 0))
+    }
+  }
+}
+
+export async function commitLatestUpdateResponse(arbiter, key, authority, action, request, commit, isCurrent = () => true) {
+  const token = arbiter.begin(key, authority, action)
+  try {
+    const value = await request()
+    const result = commitArbitratedUpdateValue(arbiter, key, token, authority, value, commit, isCurrent)
+    return result
+  } catch (error) {
+    const current = arbiter.isCurrent(key, token, authority) && isCurrent()
+    if (!current) return { cancelled: true }
+    throw error
+  }
+}
+
+export function commitArbitratedUpdateValue(arbiter, key, token, authority, value, commit, isCurrent = () => true) {
+  if (!arbiter.isCurrent(key, token, authority) || !isCurrent()) return { cancelled: true }
+  commit(value)
+  return value
+}
+
+export function isUsableUpdateStatus(status) {
+  return !!status && status.cancelled !== true && status.ok !== false
+}
+
+export function updateInfoAfterCheck(info, result) {
+  if (!result || result.cancelled) return info
+  if (result.failed) return { ...info, stale: true, from_cache: false, check_error: String(result.error || '更新检查失败') }
+  const source = result.result || {}
+  const fromCache = result.from_cache === true || source.from_cache === true || source.stale === true
+    || source.source === 'disk-cache' || source.manifest_source === 'disk-cache'
+  return {
+    ...info,
+    stale: fromCache,
+    from_cache: fromCache,
+    check_error: source.check_error || undefined
+  }
+}
+
+export function updateInfoAfterStatus(info) {
+  return info ? { ...info, stale: true, from_cache: true } : info
+}
+
+export function mergeUpdateStatusInfo(previous, status) {
+  const next = { ...(previous || {}), ...(updateInfoAfterStatus(status) || {}) }
+  if (previous && !isUpdateInfoStale(previous)) {
+    next.latest_version = previous.latest_version
+    if (previous.update_available === true && next.current_version && previous.latest_version) {
+      next.update_available = previous.rollout_paused === true
+        ? false
+        : isVersionNewer(previous.latest_version, next.current_version)
+    } else next.update_available = previous.update_available
+    next.manifest_source = previous.manifest_source
+    next.checked_at = previous.checked_at
+    next.stale = false
+    next.from_cache = false
+    next.check_error = previous.check_error
+  }
+  return next
 }
 
 export function isTransientUpdateError(error) {
@@ -197,9 +318,9 @@ export function deviceAfterLocalIdentity(current, localDeviceId, manuallySelecte
 export async function checkUpdateAvailability(check, isCurrent = () => true) {
   try {
     const result = await check()
-    if (!isCurrent()) return { cancelled: true }
+    if (!isCurrent() || (result && result.cancelled)) return { cancelled: true }
     if (!result || result.ok === false) return { failed: true, error: result && (result.message || result.error) || '更新检查失败' }
-    return { current: true, updateAvailable: result.update_available === true, result }
+    return { current: true, updateAvailable: result.update_available === true, from_cache: result.from_cache === true, result }
   } catch (error) {
     return isCurrent() ? { failed: true, error } : { cancelled: true }
   }
@@ -214,7 +335,10 @@ export function dedupeUpdateCheck(inFlight, key, check) {
 
 export function cachedUpdateCheck(cache, key, check, { force = false, now = Date.now, ttlMs = 300_000 } = {}) {
   const cached = cache.get(key)
-  if (!force && cached && now() - cached.checkedAt < ttlMs) return Promise.resolve(cached.value)
+  if (!force && cached && now() - cached.checkedAt < ttlMs) {
+    const value = cached.value
+    return Promise.resolve(value && typeof value === 'object' ? { ...value, from_cache: true } : value)
+  }
   return Promise.resolve().then(check).then((value) => {
     if (!value || (!value.cancelled && !value.failed)) cache.set(key, { checkedAt: now(), value })
     return value
@@ -233,6 +357,10 @@ export function withUpdateTimeout(promise, timeoutMs, message = '更新检查超
 
 export function updateCheckKey(component, scope) {
   return (scope ? scope.deviceId + ':' + scope.epoch : 'local') + ':' + component
+}
+
+export function updateCheckCacheKey(key, authority, generation = 0) {
+  return safeServiceAddress(authority) + '@' + generation + ':' + key
 }
 
 // The plugin updater caps status/check at 20 s internally; the renderer has to
@@ -529,24 +657,35 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       shadow: 'var(--dsw-elevation-panel, 0 8px 24px rgba(16, 24, 40, 0.12))'
     }
 
-    const apiBaseList = host && host.apiBases ? host.apiBases() : [BASE]
+    let apiBaseList = host && host.apiBases ? host.apiBases() : [BASE]
     let ACTIVE_BASE = apiBaseList[0] || BASE
+    let ACTIVE_BASE_GENERATION = 0
+    let EXPLICIT_AUTHORITY = false
     if (host) host.activeApiBase = () => ACTIVE_BASE
     async function api(path, options, pinnedBase) {
+      const mayChangeActiveBase = pinnedBase === undefined || pinnedBase === null
+      const requestBaseGeneration = ACTIVE_BASE_GENERATION
       const init = { ...(options || {}) }
       let response
       try {
-        response = await fetchApiJson(path, init, {
+        response = await fetchApiJsonForAuthority(path, init, {
           activeBase: ACTIVE_BASE,
-          apiBaseList,
+          apiBaseList: apiCandidatesForAuthority(ACTIVE_BASE, host && host.apiBases ? host.apiBases() : apiBaseList, EXPLICIT_AUTHORITY ? ACTIVE_BASE : ''),
           pinnedBase,
           headersForBase: (base) => ({ 'Content-Type': 'application/json', ...(host && host.apiHeaders ? host.apiHeaders(base) : {}) })
-        })
+        }, requestBaseGeneration, () => ACTIVE_BASE_GENERATION)
       } catch (error) {
-        if (error && error.base) ACTIVE_BASE = error.base
+        assertCurrentAuthorityGeneration(requestBaseGeneration, ACTIVE_BASE_GENERATION)
+        if (mayChangeActiveBase && requestBaseGeneration === ACTIVE_BASE_GENERATION && error && error.base && ACTIVE_BASE !== error.base) {
+          ACTIVE_BASE = error.base
+          ACTIVE_BASE_GENERATION += 1
+        }
         throw error
       }
-      ACTIVE_BASE = response.base
+      if (mayChangeActiveBase && requestBaseGeneration === ACTIVE_BASE_GENERATION && ACTIVE_BASE !== response.base) {
+        ACTIVE_BASE = response.base
+        ACTIVE_BASE_GENERATION += 1
+      }
       return response.data
     }
     const post = (path, body, pinnedBase, extra) => api(path, { method: 'POST', body: JSON.stringify(body || {}), ...(extra || {}) }, pinnedBase)
@@ -1727,6 +1866,8 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
     }
 
     const NATIVE_SURFACE_RETRIES = 3
+    const NATIVE_SURFACE_DOCUMENT_RETRIES = 1
+    const NATIVE_SURFACE_DOCUMENT_TIMEOUT_MS = 30000
 
     function nativeSurfaceRetryDelay(attempt) {
       return Math.min(1000 * Math.pow(2, Math.max(0, attempt - 1)), 8000)
@@ -1742,16 +1883,39 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         || error.surfaceCode === 'device_offline' || error.surfaceCode === 'surface_timeout')
     }
 
+    function reportNativeSurfaceTiming(phase, startedAt) {
+      const durationMs = Math.max(0, Math.round(performance.now() - startedAt))
+      try {
+        if (host && typeof host.onSurfaceTiming === 'function') host.onSurfaceTiming({ phase, durationMs })
+      } catch (_) { /* timing is optional and must not affect surface loading */ }
+      try {
+        if (typeof performance !== 'undefined' && typeof performance.mark === 'function') {
+          performance.mark('tether-native-surface-' + phase, { detail: { durationMs } })
+        }
+      } catch (_) { /* performance marks are optional */ }
+    }
+
     function NativeSurface({ deviceId, online, visible, localDeviceId }) {
       const [state, setState] = React.useState({ deviceId, status: deviceId ? 'loading' : 'no-device', url: '' })
       const [attempt, setAttempt] = React.useState(0)
       const currentState = nativeSurfaceStateForDevice(state, deviceId, online)
       const retryCountRef = React.useRef(0)
+      const documentRetryCountRef = React.useRef(0)
       const retryTimerRef = React.useRef(null)
+      const documentTimerRef = React.useRef(null)
+      const documentStartedAtRef = React.useRef(0)
+      const pollFlightRef = React.useRef(null)
       const surfaceStateRef = React.useRef(currentState)
       surfaceStateRef.current = currentState
+      const surfaceSourceKey = (() => {
+        try {
+          const hub = host && typeof host.hubConfig === 'function' ? host.hubConfig() : null
+          const isLocal = !!(localDeviceId && deviceId === localDeviceId)
+          return nativeSurfaceAuthorityKey(host && typeof host.surfaceBase === 'function' ? host.surfaceBase(isLocal) : '', hub && hub.url || '', ACTIVE_BASE, ACTIVE_BASE_GENERATION)
+        } catch (_) { return ACTIVE_BASE }
+      })()
 
-      const fetchSurfaceDescriptor = async (id) => {
+      const fetchSurfaceDescriptor = async (id, signal) => {
         if (host && host.kind === 'dsh' && localDeviceId && id === localDeviceId
             && typeof window !== 'undefined' && window.location) {
           // The desktop host runs its own client with a preload and the DSH
@@ -1778,11 +1942,16 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           try {
             const headers = host && typeof host.apiHeaders === 'function' ? host.apiHeaders(base) : undefined
             const via = host && host.kind === 'dsh' && !isLocalTarget ? '?via=hub' : ''
-            const response = await fetch(base + '/api/devices/' + encodeURIComponent(id) + '/dsh/surface' + via, { headers, signal: AbortSignal.timeout(8000) })
+            const timeoutSignal = AbortSignal.timeout(8000)
+            const requestSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal
+            const response = await fetch(base + '/api/devices/' + encodeURIComponent(id) + '/dsh/surface' + via, { headers, signal: requestSignal })
             const data = await response.json().catch(() => ({}))
             if (!response.ok && (response.status === 502 || response.status === 504) && base !== ACTIVE_BASE) continue
             return { response, data }
-          } catch (error) { lastError = error }
+          } catch (error) {
+            if (signal && signal.aborted) throw error
+            lastError = error
+          }
         }
         throw lastError || new Error('原生 DSH 页面暂不可用')
       }
@@ -1796,11 +1965,14 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
 
       React.useEffect(() => {
         retryCountRef.current = 0
+        documentRetryCountRef.current = 0
         if (retryTimerRef.current) { clearTimeout(retryTimerRef.current); retryTimerRef.current = null }
+        if (documentTimerRef.current) { clearTimeout(documentTimerRef.current); documentTimerRef.current = null }
       }, [deviceId])
 
       React.useEffect(() => () => {
         if (retryTimerRef.current) { clearTimeout(retryTimerRef.current); retryTimerRef.current = null }
+        if (documentTimerRef.current) { clearTimeout(documentTimerRef.current); documentTimerRef.current = null }
       }, [])
 
       // DSH boots its client roster from plugin bundles fetched through the
@@ -1811,7 +1983,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         if (!deviceId || !online || !bridge || typeof bridge.onSurfaceBootFailed !== 'function') return undefined
         return bridge.onSurfaceBootFailed((detail) => {
           const current = surfaceStateRef.current
-          if (!current || current.deviceId !== deviceId || current.status !== 'ready' || !current.url) return
+          if (!current || current.deviceId !== deviceId || !['document-loading', 'document-loaded'].includes(current.status) || !current.url) return
           if (detail && detail.source) {
             if (!nativeSurfaceFailureMatches(current.url, detail.source)) return
           } else if (!visible) return
@@ -1831,11 +2003,20 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
 
       React.useEffect(() => {
         let current = true
+        const controller = new AbortController()
         if (!deviceId) { setState({ deviceId, status: 'no-device', url: '' }); return () => { current = false } }
         if (!online) { setState({ deviceId, status: 'offline', url: '' }); return () => { current = false } }
+        if (!visible) return () => { current = false; controller.abort() }
+        const existing = surfaceStateRef.current
+        if (existing && existing.deviceId === deviceId && existing.sourceKey === surfaceSourceKey
+            && ['document-loading', 'document-loaded'].includes(existing.status) && existing.url) {
+          return () => { current = false; controller.abort() }
+        }
         setState({ deviceId, status: 'loading', url: '' })
-        fetchSurfaceDescriptor(deviceId)
+        const descriptorStartedAt = performance.now()
+        fetchSurfaceDescriptor(deviceId, controller.signal)
           .then(async ({ response, data }) => {
+            reportNativeSurfaceTiming('descriptor', descriptorStartedAt)
             if (data && data.local) {
               if (current) setState({ deviceId, status: 'local', url: '', pid: 0 })
               return
@@ -1865,7 +2046,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             if (!sameHostToken && !sameOriginUrl && (parsed.hostname === '127.0.0.1' || parsed.hostname === '[::1]') && ACTIVE_BASE !== 'http://127.0.0.1:18890') {
               let localOk = false
               try {
-                const localRes = await fetch(ACTIVE_BASE + '/local-api/api/devices/' + encodeURIComponent(deviceId) + '/dsh/surface')
+                const localRes = await fetch(ACTIVE_BASE + '/local-api/api/devices/' + encodeURIComponent(deviceId) + '/dsh/surface', { signal: controller.signal })
                 if (localRes.ok) {
                   const localData = await localRes.json()
                   if (localData.available && isSafeNativeSurfaceUrl(localData.url)) { surfaceUrl = localData.url; localOk = true }
@@ -1876,7 +2057,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             const url = new URL(surfaceUrl)
             url.searchParams.set('tether_native', '1')
             await resetSurfaceAuth(url)
-            if (current) setState({ deviceId, status: 'ready', url: url.href, pid: Number(data.pid) || 0 })
+            if (current) setState({ deviceId, status: 'document-loading', url: url.href, pid: Number(data.pid) || 0, sourceKey: surfaceSourceKey })
           })
           .catch((error) => {
             if (!current) return
@@ -1891,14 +2072,18 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             }
             setState({ deviceId, status: 'error', url: '', message: error.message })
           })
-        return () => { current = false }
-      }, [deviceId, online, attempt, localDeviceId])
+        return () => { current = false; controller.abort() }
+      }, [deviceId, online, visible, attempt, localDeviceId, surfaceSourceKey])
       React.useEffect(() => {
-        if (!deviceId || !online) return undefined
+        if (!deviceId || !online || !visible || typeof document === 'undefined') return undefined
         let alive = true
-        const timer = setInterval(async () => {
+        let timer = null
+        const poll = async () => {
+          if (!alive || document.visibilityState === 'hidden' || pollFlightRef.current) return schedule()
+          const controller = new AbortController()
+          pollFlightRef.current = controller
           try {
-            const { response, data } = await fetchSurfaceDescriptor(deviceId)
+            const { response, data } = await fetchSurfaceDescriptor(deviceId, controller.signal)
             if (!response.ok) return
             if (!alive || !data.available || !isSafeNativeSurfaceUrl(data.url)) return
             const nextPid = Number(data.pid) || 0
@@ -1907,26 +2092,78 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
               try { await resetSurfaceAuth(new URL(data.url)) } catch (_) { /* best effort */ }
             }
             setState((prev) => {
-              if (prev.status !== 'ready' || !prev.url) return prev
+              if (!['document-loading', 'document-loaded'].includes(prev.status) || !prev.url) return prev
               try {
                 const fresh = new URL(data.url)
                 const current = new URL(prev.url)
                 const pid = Number(data.pid) || 0
                 if (pid && (prev.pid || 0) !== pid) {
                   fresh.searchParams.set('tether_native', '1')
-                  return { deviceId, status: 'ready', url: fresh.href, pid }
+                  documentRetryCountRef.current = 0
+                  return { deviceId, status: 'document-loading', url: fresh.href, pid, sourceKey: surfaceSourceKey }
                 }
                 const sameHostToken = fresh.pathname === '/' && !!fresh.searchParams.get('token')
                 if (sameHostToken ? fresh.searchParams.get('token') === current.searchParams.get('token')
                   : current.origin === fresh.origin) return prev
                 fresh.searchParams.set('tether_native', '1')
-                return { deviceId, status: 'ready', url: fresh.href, pid: pid || (prev.pid || 0) }
+                documentRetryCountRef.current = 0
+                return { deviceId, status: 'document-loading', url: fresh.href, pid: pid || (prev.pid || 0), sourceKey: surfaceSourceKey }
               } catch (_) { return prev }
             })
           } catch (_) { /* keep the current frame */ }
-        }, 8000)
-        return () => { alive = false; clearInterval(timer) }
-      }, [deviceId, online, localDeviceId])
+          finally { if (pollFlightRef.current === controller) pollFlightRef.current = null; schedule() }
+        }
+        const schedule = () => {
+          if (alive && document.visibilityState !== 'hidden') timer = setTimeout(poll, 8000)
+        }
+        const onVisibilityChange = () => {
+          if (document.visibilityState === 'hidden') {
+            if (timer) { clearTimeout(timer); timer = null }
+            if (pollFlightRef.current) pollFlightRef.current.abort()
+          } else if (!timer && !pollFlightRef.current) poll()
+        }
+        document.addEventListener('visibilitychange', onVisibilityChange)
+        if (document.visibilityState !== 'hidden') schedule()
+        return () => {
+          alive = false
+          if (timer) clearTimeout(timer)
+          document.removeEventListener('visibilitychange', onVisibilityChange)
+          if (pollFlightRef.current) pollFlightRef.current.abort()
+          pollFlightRef.current = null
+        }
+      }, [deviceId, online, visible, localDeviceId, surfaceSourceKey])
+
+      React.useEffect(() => {
+        if (documentTimerRef.current) { clearTimeout(documentTimerRef.current); documentTimerRef.current = null }
+        if (!visible || currentState.status !== 'document-loading' || !currentState.url) return undefined
+        documentStartedAtRef.current = performance.now()
+        documentTimerRef.current = setTimeout(() => {
+          documentTimerRef.current = null
+          if (documentRetryCountRef.current < NATIVE_SURFACE_DOCUMENT_RETRIES) {
+            documentRetryCountRef.current += 1
+            setState({ deviceId, status: 'loading', url: '', message: '原生工作区页面加载超时，正在重新获取连接…' })
+            setAttempt((value) => value + 1)
+          } else {
+            setState({ deviceId, status: 'error', url: '', message: '原生工作区页面加载超时。请检查目标设备连接后重试。' })
+          }
+        }, NATIVE_SURFACE_DOCUMENT_TIMEOUT_MS)
+        return () => { if (documentTimerRef.current) { clearTimeout(documentTimerRef.current); documentTimerRef.current = null } }
+      }, [deviceId, visible, currentState.status, currentState.url])
+
+      const retryDocument = () => {
+        documentRetryCountRef.current = 0
+        retryCountRef.current = 0
+        setState({ deviceId, status: 'loading', url: '' })
+        setAttempt((value) => value + 1)
+      }
+      const handleDocumentFailure = () => {
+        if (documentRetryCountRef.current < NATIVE_SURFACE_DOCUMENT_RETRIES) {
+          documentRetryCountRef.current += 1
+          setState({ deviceId, status: 'loading', url: '', message: '原生工作区页面加载失败，正在重新获取连接…' })
+          setAttempt((value) => value + 1)
+        }
+        else setState({ deviceId, status: 'error', url: '', message: '原生工作区页面加载失败。请检查目标设备连接后重试。' })
+      }
 
       const message = currentState.status === 'loading' ? (currentState.message || '正在连接目标设备的 DSH 原生工作区…')
         : currentState.status === 'local' ? '当前已在 DeepSeek Harness 中；本机工作区无需再嵌入，可用左侧「文件」或「连接」。'
@@ -1935,17 +2172,35 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             : currentState.status === 'error' ? currentState.message
               : ''
       return h('div', { className: 'tether-native-surface', style: nativeSurfaceContainerStyle(visible) },
-        currentState.status === 'ready' && currentState.deviceId === deviceId && online
-          ? h('iframe', {
-            key: deviceId + ':' + (currentState.pid || 0),
-            src: currentState.url,
-            title: '目标设备的 DSH 原生工作区',
-            referrerPolicy: 'no-referrer',
-            style: { flex: '1 1 auto', width: '100%', height: '100%', minWidth: 0, minHeight: 0, border: 0, background: C.bg }
-          })
+        ['document-loading', 'document-loaded'].includes(currentState.status) && currentState.deviceId === deviceId && online
+          ? h('div', { style: { position: 'relative', display: 'flex', flex: '1 1 auto', minWidth: 0, minHeight: 0 } },
+            h('iframe', {
+              key: deviceId + ':' + (currentState.pid || 0),
+              src: currentState.url,
+              onLoad: () => {
+                const loadedState = surfaceStateRef.current
+                if (!loadedState || loadedState.deviceId !== deviceId || loadedState.url !== currentState.url
+                    || loadedState.sourceKey !== currentState.sourceKey
+                    || !['document-loading', 'document-loaded'].includes(loadedState.status)) return
+                if (documentTimerRef.current) { clearTimeout(documentTimerRef.current); documentTimerRef.current = null }
+                documentRetryCountRef.current = 0
+                reportNativeSurfaceTiming('document', documentStartedAtRef.current || performance.now())
+                setState((prev) => prev.deviceId === deviceId && prev.url === currentState.url && prev.sourceKey === currentState.sourceKey
+                  ? { ...prev, status: 'document-loaded' } : prev)
+              },
+              onError: handleDocumentFailure,
+              title: '目标设备的 DSH 原生工作区',
+              referrerPolicy: 'no-referrer',
+              style: { flex: '1 1 auto', width: '100%', height: '100%', minWidth: 0, minHeight: 0, border: 0, background: C.bg }
+            }),
+            currentState.status === 'document-loading' ? h('div', {
+              role: 'status', 'aria-live': 'polite',
+              style: { position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', padding: '6px 10px', borderRadius: 6, background: 'rgba(255,255,255,.92)', color: C.sub, fontSize: 12, boxShadow: '0 1px 4px rgba(16,24,40,.12)', pointerEvents: 'none' }
+            }, '目标工作区页面正在加载…') : null
+          )
           : h('div', { style: { display: 'grid', placeItems: 'center', alignContent: 'center', gap: 12, flex: '1 1 auto', minHeight: 0, color: C.sub, textAlign: 'center', padding: 24 } },
             h('div', null, message),
-            currentState.status !== 'loading' && currentState.status !== 'local' ? btn('重试', () => { retryCountRef.current = 0; setAttempt((value) => value + 1) }) : null
+            currentState.status !== 'loading' && currentState.status !== 'local' ? btn('重试', retryDocument) : null
           )
       )
     }
@@ -2205,9 +2460,10 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           setHubError(info.status === 'offline' ? hubProbeErrorText({ status: info.errorKind === 'auth' ? 401 : undefined }) : '')
         }).catch(() => {})
         return () => { alive = false }
-      }, [host])
+      }, [host, ACTIVE_BASE_GENERATION])
 
       const fail = (e) => {
+        if (e && e.code === 'authority_changed') return
         if (e && e.code === 'node_update_required') { setNativeError('节点待更新'); return }
         // Transient list/preview failures already retry and show their own inline
         // state; a red toast on a slow remote folder is noise, not information.
@@ -2218,11 +2474,14 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const probeConfiguredHub = async ({ silent = false } = {}) => {
         if (!host || typeof host.probeConnection !== 'function') return null
         if (hubProbeRef.current) return hubProbeRef.current
+        const generation = ACTIVE_BASE_GENERATION
+        const base = ACTIVE_BASE
         if (!silent) setHubBusy(true)
         setHubError('')
         const task = (async () => {
           try {
             const result = await host.probeConnection(host.activeApiBase ? host.activeApiBase() : undefined)
+            if (generation !== ACTIVE_BASE_GENERATION || base !== ACTIVE_BASE) return null
             if (result && result.address) setHubAddress(result.address)
             const next = result && (result.state || (result.status === 'online' ? {} : null))
             setHubState(next || null)
@@ -2234,6 +2493,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
               : '')
             return result
           } catch (error) {
+            if (generation !== ACTIVE_BASE_GENERATION || base !== ACTIVE_BASE) return null
             setHubState(null)
             setHubDuration(null)
             setHubCheckedAt(new Date())
@@ -2241,7 +2501,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             setHubError(hubProbeErrorText(error))
             return null
           } finally {
-            if (!silent) setHubBusy(false)
+            if (!silent && generation === ACTIVE_BASE_GENERATION) setHubBusy(false)
           }
         })()
         hubProbeRef.current = task.finally(() => { hubProbeRef.current = null })
@@ -2264,14 +2524,17 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         : null
       const scopeIsCurrent = (scope) => !scope || !!(stateRef.current && stateRef.current.devices && stateRef.current.devices.some((item) => item.device_id === scope.deviceId))
       const updateCheckScopeIsCurrent = (scope) => scopeIsCurrent(scope) && (!scope || !!(stateRef.current && stateRef.current.devices && stateRef.current.devices.some((item) => item.device_id === scope.deviceId && item.online)))
-      const setComponentUpdateInfo = (component, value, scope) => {
+      const setComponentUpdateInfo = (component, value, scope, statusSnapshot = false) => {
         if (scope && !scopeIsCurrent(scope)) return
-        if (!scope) setUpdateInfo((current) => ({ ...current, [component]: { ...(current[component] || {}), ...(value || {}) } }))
+        const merge = (previous) => statusSnapshot
+          ? mergeUpdateStatusInfo(previous, value)
+          : { ...(previous || {}), ...(value || {}) }
+        if (!scope) setUpdateInfo((current) => ({ ...current, [component]: merge(current[component]) }))
         else setUpdateInfo((current) => ({
           ...current,
           devices: { ...current.devices, [scope.deviceId]: {
             ...(current.devices[scope.deviceId] || {}),
-            [component]: { ...((current.devices[scope.deviceId] || {})[component] || {}), ...(value || {}) }
+            [component]: merge((current.devices[scope.deviceId] || {})[component])
           } }
         }))
       }
@@ -2291,33 +2554,55 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         }))
       }
       const updatesPath = (component, targetId = deviceId) => '/api/devices/' + encodeURIComponent(targetId) + '/updates?component=' + encodeURIComponent(component)
-      const loadUpdateInfo = async (component, action, pinnedBase, fixedScope) => {
+      const updateResponseArbiterRef = React.useRef(createUpdateResponseArbiter())
+      const updateCacheAuthorityRef = React.useRef(null)
+      const updateHostIdentityRef = React.useRef({ hosts: new WeakMap(), next: 1 })
+      const commitUpdateResponse = (component, action, scope, authority, request, mapValue = (value) => value,
+        isAuthorityCurrent = () => true) =>
+        commitLatestUpdateResponse(
+          updateResponseArbiterRef.current,
+          updateCheckKey(component, scope),
+          authority,
+          action,
+          request,
+          (value) => setComponentUpdateInfo(component, mapValue(value), scope, action === 'status'),
+          () => scopeIsCurrent(scope) && (action !== 'check' || updateCheckScopeIsCurrent(scope)) && isAuthorityCurrent()
+        )
+      const loadUpdateInfo = async (component, action, pinnedBase, fixedScope, fixedAuthorityGeneration) => {
         const scope = fixedScope === undefined ? updateScope(component) : fixedScope
         if (component === 'app' && !scope) {
           if (!host || host.kind !== 'app' || !host.updates) return
-          const result = await withUpdateTimeout(action === 'status' ? host.updates.status() : host.updates.check(), 6000)
-          if (result && result.ok === false) throw new Error(result.message || result.error || (action === 'status' ? 'APP 更新状态读取失败' : 'APP 更新检查失败'))
-          setComponentUpdateInfo(component, result)
-          return result
+          const localAuthority = host
+          return commitUpdateResponse(component, action, scope, localAuthority,
+            async () => {
+              const result = await withUpdateTimeout(action === 'status' ? host.updates.status() : host.updates.check(), 6000)
+              if (result && result.ok === false) throw new Error(result.message || result.error || (action === 'status' ? 'APP 更新状态读取失败' : 'APP 更新检查失败'))
+              return result
+            }, action === 'status' ? updateInfoAfterStatus : undefined, () => host === localAuthority)
         }
         if (component === 'localPlugin') {
           if (!host || host.kind !== 'dsh' || !host.localPluginUpdates) throw new Error('当前宿主没有本机 DSH 插件更新通道。')
-          const result = await withUpdateTimeout(host.localPluginUpdates(action === 'status' ? 'status' : 'check'), localUpdateWaitMs(component))
-          if (result && result.ok === false) throw new Error(result.message || result.error || (action === 'status' ? '本机插件更新状态读取失败' : '本机插件更新检查失败'))
-          setComponentUpdateInfo(component, result)
-          return result
+          const localAuthority = host
+          return commitUpdateResponse(component, action, scope, localAuthority,
+            async () => {
+              const result = await withUpdateTimeout(host.localPluginUpdates(action === 'status' ? 'status' : 'check'), localUpdateWaitMs(component))
+              if (result && result.ok === false) throw new Error(result.message || result.error || (action === 'status' ? '本机插件更新状态读取失败' : '本机插件更新检查失败'))
+              return result
+            }, action === 'status' ? updateInfoAfterStatus : undefined, () => host === localAuthority)
         }
         if (!scope.deviceId) throw new Error('先选择目标设备')
         const requestBase = pinnedBase ?? ACTIVE_BASE
+        const requestBaseGeneration = fixedAuthorityGeneration ?? ACTIVE_BASE_GENERATION
         const statusAction = action === 'status'
         const requestPath = statusAction
           ? updatesPath(component, scope.deviceId).replace('/updates?', '/updates/status?')
           : updatesPath(component, scope.deviceId)
-        const result = await withUpdateTimeout(api(requestPath, { signal: AbortSignal.timeout(6000) }, requestBase), 6500)
-        if (result && result.ok === false) throw new Error(result.message || result.error || (statusAction ? '目标设备更新状态读取失败' : '目标设备更新检查失败'))
-        const value = { ...result, authorityBase: requestBase }
-        setComponentUpdateInfo(component, value, scope)
-        return value
+        return commitUpdateResponse(component, action, scope, requestBase, async () => {
+          const result = await withUpdateTimeout(api(requestPath, { signal: AbortSignal.timeout(6000) }, requestBase), 6500)
+          if (result && result.ok === false) throw new Error(result.message || result.error || (statusAction ? '目标设备更新状态读取失败' : '目标设备更新检查失败'))
+          return { ...result, authorityBase: requestBase }
+        }, action === 'status' ? updateInfoAfterStatus : undefined,
+        () => requestBase === ACTIVE_BASE && requestBaseGeneration === ACTIVE_BASE_GENERATION)
       }
       const updateCheckCacheRef = React.useRef(new Map())
       const retryTransientUpdate = async (run) => {
@@ -2332,15 +2617,46 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       }
       const automaticUpdateCheck = (component, scope = updateScope(component), force = false) => {
         const key = updateCheckKey(component, scope)
-        withUpdateTimeout(loadUpdateInfo(component, 'status', undefined, scope), localUpdateWaitMs(component)).catch(() => {})
-        return cachedUpdateCheck(updateCheckCacheRef.current, key,
-          () => dedupeUpdateCheck(autoUpdateChecksRef.current, key, () => checkUpdateAvailability(
-            () => retryTransientUpdate(() => withUpdateTimeout(loadUpdateInfo(component, 'check', undefined, scope), localUpdateWaitMs(component))),
-            () => updateCheckScopeIsCurrent(scope)
+        const authority = scope ? ACTIVE_BASE : host
+        const authorityGeneration = ACTIVE_BASE_GENERATION
+        let hostIdentity = 'none'
+        if (host && typeof host === 'object') {
+          hostIdentity = updateHostIdentityRef.current.hosts.get(host)
+          if (!hostIdentity) {
+            hostIdentity = updateHostIdentityRef.current.next++
+            updateHostIdentityRef.current.hosts.set(host, hostIdentity)
+          }
+        }
+        const cacheAuthority = 'connection:' + hostIdentity + '@' + String(ACTIVE_BASE) + ':' + ACTIVE_BASE_GENERATION
+        let requestAuthority = 'local:none'
+        if (scope) {
+          requestAuthority = 'hub:' + String(authority) + '@' + authorityGeneration
+        } else if (host && typeof host === 'object') {
+          requestAuthority = 'local:' + host.kind + ':' + hostIdentity
+        }
+        if (updateCacheAuthorityRef.current !== cacheAuthority) {
+          updateCheckCacheRef.current.clear()
+          autoUpdateChecksRef.current = {}
+          updateCacheAuthorityRef.current = cacheAuthority
+        }
+        const cacheKey = scope ? updateCheckCacheKey(key, authority, authorityGeneration) : requestAuthority + ':' + key
+        const metaKey = 'check:' + key
+        const metaToken = updateResponseArbiterRef.current.begin(metaKey, authority, 'check')
+        const authorityIsCurrent = () => scope
+          ? ACTIVE_BASE === authority && ACTIVE_BASE_GENERATION === authorityGeneration
+          : host === authority
+        const metadataIsCurrent = () => updateResponseArbiterRef.current.isCurrent(metaKey, metaToken, authority)
+          && authorityIsCurrent() && updateCheckScopeIsCurrent(scope)
+        return cachedUpdateCheck(updateCheckCacheRef.current, cacheKey,
+          () => dedupeUpdateCheck(autoUpdateChecksRef.current, cacheKey, () => checkUpdateAvailability(
+            () => retryTransientUpdate(() => withUpdateTimeout(loadUpdateInfo(component, 'check', scope ? authority : undefined, scope, authorityGeneration), localUpdateWaitMs(component))),
+            () => metadataIsCurrent()
           )), { force }).then((result) => {
-          if (result.cancelled) return result
-          setComponentUpdateError(component, result.failed ? shortUpdateError(result.error) : '', scope, false)
-          return result
+          return commitArbitratedUpdateValue(updateResponseArbiterRef.current, metaKey, metaToken, authority, result, (current) => {
+            if (current.cancelled) return
+            setComponentUpdateInfo(component, updateInfoAfterCheck({}, current), scope)
+            setComponentUpdateError(component, current.failed ? shortUpdateError(current.error) : '', scope, false)
+          }, metadataIsCurrent)
         })
       }
       const updateAction = async (component, action, preparedId, fixedScope, fixedAuthority) => {
@@ -2382,7 +2698,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           if (result && result.ok === false) throw new Error(result.message || result.error || (action === 'check' ? '更新检查失败' : '更新操作失败'))
           if (action === 'prepare') {
             const status = await loadUpdateInfo(component, 'status', pinnedBase, scope)
-            if (status && status.ok === false) throw new Error(status.message || status.error || '更新包状态读取失败')
+            if (!isUsableUpdateStatus(status)) throw new Error(status && (status.message || status.error) || '更新包状态读取失败')
             result = { ...(status || {}), ...(result || {}) }
           }
           return result
@@ -2401,8 +2717,8 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           const running = target && target.capabilities && target.capabilities.node_version
           try {
             const status = await loadUpdateInfo('node', 'status', authority, scope)
-            const versionOk = !!(running && status && status.ok !== false && status.latest_version && running === status.latest_version)
-            if (status && status.ok !== false && (!status.restart_required || versionOk)) {
+            const versionOk = !!(running && isUsableUpdateStatus(status) && status.latest_version && running === status.latest_version)
+            if (isUsableUpdateStatus(status) && (!status.restart_required || versionOk)) {
               if (status.restart_required) setComponentUpdateInfo('node', { ...status, restart_required: false }, scope)
               return
             }
@@ -2418,7 +2734,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             const target = ((stateRef.current && stateRef.current.devices) || []).find((item) => item.device_id === scope.deviceId)
             const running = target && target.capabilities && target.capabilities.app_version
             const status = await loadUpdateInfo('app', 'status', authority, scope)
-            if (target && target.online && running === expectedVersion && status && status.ok !== false
+            if (target && target.online && running === expectedVersion && isUsableUpdateStatus(status)
                 && status.current_version === expectedVersion) {
               setComponentUpdateInfo('app', { ...status, restart_required: false }, scope)
               return true
@@ -2433,7 +2749,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           if (!scopeIsCurrent(scope)) return false
           try {
             const status = await loadUpdateInfo('plugin', 'status', authority, scope)
-            if (status && status.ok !== false && status.restart_required !== true) return true
+            if (isUsableUpdateStatus(status) && status.restart_required !== true) return true
           } catch (_) { /* the target DSH is restarting; keep polling */ }
         }
         return false
@@ -2531,11 +2847,9 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         const productErrors = updateErrors.devices[localId] || {}
         const failed = product === 'desktop' ? !!(updateErrors.app || productErrors.node)
           : !!(updateErrors.localPlugin || productErrors.node)
-        const runtimeRestartRequired = product === 'dsh' && localPluginNeedsRestart(infos[0])
-        const hasUpdate = infos.some((info) => info && info.update_available === true)
-        const known = infos.every((info) => info && info.current_version && info.latest_version)
-        const card = updateCardState({ running, error: run?.state === 'error' ? run.message : '',
-          hasUpdate, restartRequired: runtimeRestartRequired, known, failed })
+        const runtimeRestartRequired = product === 'dsh' && !isUpdateInfoStale(infos[0]) && localPluginNeedsRestart(infos[0])
+        const card = updateCardStateForInfos(infos, { running, error: run?.state === 'error' ? run.message : '',
+          restartRequired: runtimeRestartRequired, failed })
         const versionText = versionLine(product === 'desktop' ? 'APP' : '插件',
           {
             current: product === 'desktop'
@@ -2562,14 +2876,13 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         const hasPlugin = !!(item.capabilities && item.capabilities.dsh_surface)
         const hasApp = !!(item.capabilities && item.capabilities.app_version)
         const infos = [node, ...(hasPlugin ? [plugin] : []), ...(hasApp ? [app] : [])]
-        const hasUpdate = infos.some((info) => info && info.update_available === true)
-        const known = infos.every((info) => info && info.current_version && info.latest_version)
         const run = updateRunState('device:' + item.device_id)
         const running = run?.state === 'running'
-        const failed = infos.some((_info, index) => !!(updateErrors.devices[item.device_id] || {})[['node', ...(hasPlugin ? ['plugin'] : []), ...(hasApp ? ['app'] : [])][index]])
-        const pluginRestart = !!(hasPlugin && plugin && plugin.restart_required)
-        const card = updateCardState({ running, error: run?.state === 'error' ? run.message : '',
-          hasUpdate, restartRequired: pluginRestart, known, failed,
+        const failed = infos.some((info, index) => !!(updateErrors.devices[item.device_id] || {})[['node', ...(hasPlugin ? ['plugin'] : []), ...(hasApp ? ['app'] : [])][index]]
+          || !!(info && info.check_error))
+        const pluginRestart = !!(hasPlugin && plugin && !isUpdateInfoStale(plugin) && plugin.restart_required)
+        const card = updateCardStateForInfos(infos, { running, error: run?.state === 'error' ? run.message : '',
+          restartRequired: pluginRestart, failed,
           restartPill: '插件待重启 DSH', restartAction: 'none' })
         const nodeTuple = versionTuple(node.current_version || (item.capabilities && item.capabilities.node_version), node.latest_version)
         const versionRows = []
@@ -4326,7 +4639,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           device && device.capabilities && (!device.capabilities.fs || device.capabilities.surface_protocol !== 1) ? pill('节点待更新', C.amber) : null,
           host && (host.kind === 'dsh' || host.kind === 'app') ? h(Connection.Trigger, {
             onClick: () => {
-              if (host.kind === 'dsh') {
+              if (host.kind === 'dsh' || host.kind === 'app') {
                 let saved = {}
                 try { saved = JSON.parse(window.localStorage.getItem('tether.hub') || '{}') } catch (_) { /* ignore */ }
                 setHubUrl(hubAddressForEditor(saved.url || ''))
@@ -4401,15 +4714,94 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           defaultDeviceId: appLocalDevice || deviceId || '',
           defaultDeviceName: ((state && state.devices || []).find((item) => item.device_id === (appLocalDevice || deviceId)) || {}).name || appLocalDevice || deviceId || '',
           platform: (typeof navigator !== 'undefined' && navigator.platform) || 'Windows',
-          onConfigured: ({ url, token, user }) => {
-            try { window.localStorage.setItem('tether.hub', JSON.stringify({ url, token })) } catch (_) { /* storage may be unavailable */ }
+          onConfigured: async ({ url, token, user }) => {
+            try { window.localStorage.setItem('tether.hub', JSON.stringify({ url, token })) } catch (_) { throw new Error('无法保存 Hub 登录凭据') }
+            ACTIVE_BASE = url
+            ACTIVE_BASE_GENERATION += 1
+            EXPLICIT_AUTHORITY = true
+            apiBaseList = host && host.apiBases ? host.apiBases() : [url]
+            if (host) host.activeApiBase = () => ACTIVE_BASE
+            treeDeviceEpochRef.current += 1
+            deviceIdRef.current = ''
+            setState(null)
+            setDeviceId('')
+            setProjects(null)
+            setProjectsDevice('')
+            setProjectsError('')
+            setProject(null)
+            projectsRef.current = null
+            projectRef.current = null
+            projectsDeviceRef.current = ''
+            setNative([])
+            setNativeError('')
+            setNativeLoaded(false)
+            setSessionId('')
+            setSessionData(null)
+            setSessionLoading(false)
+            setRunId('')
+            setRunEvents([])
+            setTask('')
+            setTreeChildren({})
+            setTreeOpen({})
+            setTreeSelected('')
+            setDrives([])
+            setPolicy(null)
+            setAudit([])
+            setAuditCount(0)
+            setAuditLoading(false)
+            setSelected(null)
+            setFile(null)
+            setHistory({ back: [], forward: [] })
+            setWorkspaceOpen({})
+            dirCacheRef.current.clear()
+            dirInflightRef.current.clear()
+            treeInflightRef.current.clear()
+            previewCacheRef.current.clear()
+            previewInflightRef.current.clear()
+            workspaceCacheRef.current.clear()
+            drivesCacheRef.current.clear()
+            policyCacheRef.current.clear()
+            if (dirAbortRef.current) dirAbortRef.current.abort()
+            if (previewAbortRef.current) previewAbortRef.current.abort()
+            setUpdateInfo({ app: null, localPlugin: localPluginVersionSeed(host), devices: {} })
+            setUpdateErrors({ app: '', localPlugin: '', devices: {} })
+            setUpdateRuns({})
+            setUpdateBusy('')
+            setUpdateToast('')
+            updateCheckCacheRef.current.clear()
+            autoUpdateChecksRef.current = {}
+            updateCacheAuthorityRef.current = ''
+            setHubStatus('unknown')
+            setHubState(null)
+            setHubError('')
             setHubUrl(url)
             setHubToken(token)
             setHubAddress(url)
-            setHubStatus('online')
-            setShowHub(false)
-            setNotice('登录成功' + (user && user.email ? '：' + user.email : '，已连接 Hub'))
-            if (host && typeof host.probeConnection === 'function') host.probeConnection(url).catch(() => {})
+            setHubBusy(true)
+            const generation = ACTIVE_BASE_GENERATION
+            try {
+              const result = await host.probeConnection(url, token)
+              if (generation !== ACTIVE_BASE_GENERATION) throw new Error('连接配置已更改，请重试')
+              if (!result || result.status !== 'online') throw new Error('Hub 连接验证失败')
+              setHubState(result.state || null)
+              setHubStatus('online')
+              setHubDuration(Number.isFinite(result.durationMs) ? result.durationMs : null)
+              setHubCheckedAt(result.checkedAt ? new Date(result.checkedAt) : new Date())
+              setHubError('')
+              setShowHub(false)
+              setNotice('登录成功' + (user && user.email ? '：' + user.email : '，已连接 Hub'))
+              loadState()
+              refreshUpdateCenter(true)
+            } catch (error) {
+              if (generation === ACTIVE_BASE_GENERATION) {
+                setHubStatus('offline')
+                setHubCheckedAt(new Date())
+                setHubError(hubProbeErrorText(error))
+              }
+              throw error
+            } finally {
+              if (generation === ACTIVE_BASE_GENERATION) setHubBusy(false)
+            }
           }
         }) : null,        showUpdate ? h('div', {
           onPointerDown: (event) => { if (event.target === event.currentTarget) setShowUpdate(false) },
@@ -4557,5 +4949,5 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       )
     }
 
-    return { App, TetherIcon }
+    return { App, TetherIcon, NativeSurface }
 }

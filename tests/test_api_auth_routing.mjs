@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { fetchApiJson } from '../packages/tether-ui/src/app.js'
+import { apiCandidatesForAuthority, assertCurrentAuthorityGeneration, fetchApiJson, fetchApiJsonForAuthority, nativeSurfaceAuthorityKey } from '../packages/tether-ui/src/app.js'
 import { createDshHost } from '../packages/tether-ui/src/hosts/dsh.js'
+import { createElectronHost } from '../packages/tether-ui/src/hosts/electron.js'
 
 function makeApi(host, fetch) {
   const apiBaseList = host.apiBases()
@@ -137,4 +138,108 @@ test('Hub 401 and 403 responses remain terminal and do not trigger local fallbac
       assert.equal(calls[0].init.headers.Authorization, 'Bearer hub-secret')
     })
   }
+})
+
+test('Electron login authority sends each selected account token only to its Hub', async () => {
+  let saved = { url: 'https://hub.example', token: 'account-a-secret' }
+  globalThis.window = { localStorage: { getItem: () => JSON.stringify(saved) } }
+  const host = createElectronHost({ apiBase: 'http://127.0.0.1:18890' })
+  const calls = []
+  const fetcher = async (url, init) => {
+    calls.push({ url, authorization: init.headers.Authorization })
+    return { ok: true, json: async () => ({ ok: true }) }
+  }
+  const request = () => fetchApiJson('/api/state', {}, {
+    activeBase: host.apiBases()[0],
+    apiBaseList: host.apiBases(),
+    headersForBase: (base) => host.apiHeaders(base),
+    fetcher
+  })
+
+  await request()
+  saved = { url: 'https://hub.example', token: 'account-b-secret' }
+  await request()
+  saved = { url: 'https://other.example', token: 'account-b-secret' }
+  await request()
+
+  assert.deepEqual(calls, [
+    { url: 'https://hub.example/api/state', authorization: 'Bearer account-a-secret' },
+    { url: 'https://hub.example/api/state', authorization: 'Bearer account-b-secret' },
+    { url: 'https://other.example/api/state', authorization: 'Bearer account-b-secret' }
+  ])
+  assert.deepEqual(host.apiBases(), ['https://other.example'])
+  delete globalThis.window
+})
+
+test('Electron Hub probe verifies the newly selected account and keeps authorization failures terminal', async (t) => {
+  const previousFetch = globalThis.fetch
+  let saved = { url: 'https://hub-b.example', token: 'account-b-secret' }
+  globalThis.window = { localStorage: { getItem: () => JSON.stringify(saved) } }
+  const calls = []
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url, authorization: init.headers.Authorization })
+    return { ok: false, status: 401 }
+  }
+  t.after(() => { globalThis.fetch = previousFetch; delete globalThis.window })
+  const host = createElectronHost({ apiBase: 'http://127.0.0.1:18890' })
+
+  await assert.rejects(host.probeConnection('https://hub-b.example', 'account-b-secret'), (error) => error.status === 401)
+  assert.deepEqual(calls, [{ url: 'https://hub-b.example/api/state', authorization: 'Bearer account-b-secret' }])
+})
+
+test('same-Hub account switch changes NativeSurface authority without exposing credentials', () => {
+  const first = nativeSurfaceAuthorityKey('https://hub.example', 'https://hub.example', 'https://hub.example', 4)
+  const second = nativeSurfaceAuthorityKey('https://hub.example', 'https://hub.example', 'https://hub.example', 5)
+  assert.notEqual(first, second)
+  assert.equal(first.includes('secret'), false)
+})
+
+test('ordinary network fallback retains other configured candidates while explicit login locks to the selected Hub', () => {
+  const candidates = ['https://hub.example', 'http://127.0.0.1:18892', 'http://127.0.0.1:18890']
+  assert.deepEqual(apiCandidatesForAuthority('http://127.0.0.1:18890', candidates), [
+    'http://127.0.0.1:18890', 'https://hub.example', 'http://127.0.0.1:18892'
+  ])
+  assert.deepEqual(apiCandidatesForAuthority('https://hub.example', candidates, 'https://hub.example'), ['https://hub.example'])
+})
+
+test('network fallback does not lock later requests to the last successful local proxy', async () => {
+  const bases = ['https://hub.example', 'http://127.0.0.1:18892', 'http://127.0.0.1:18890']
+  let activeBase = bases[0]
+  const calls = []
+  const fetcher = async (url) => {
+    calls.push(url)
+    if (url.startsWith('https://hub.example') || url.startsWith('http://127.0.0.1:18892')) throw new TypeError('unavailable')
+    return { ok: true, json: async () => ({ ok: true }) }
+  }
+  const first = await fetchApiJson('/api/state', {}, {
+    activeBase, apiBaseList: apiCandidatesForAuthority(activeBase, bases), fetcher
+  })
+  activeBase = first.base
+  assert.equal(activeBase, 'http://127.0.0.1:18890')
+  calls.length = 0
+  const second = await fetchApiJson('/api/state', {}, {
+    activeBase, apiBaseList: apiCandidatesForAuthority(activeBase, bases),
+    fetcher: async (url) => {
+      calls.push(url)
+      if (url.startsWith('http://127.0.0.1:18890')) throw new TypeError('unavailable')
+      return { ok: true, json: async () => ({ ok: true }) }
+    }
+  })
+  assert.equal(second.base, 'https://hub.example')
+  assert.deepEqual(calls, ['http://127.0.0.1:18890/api/state', 'https://hub.example/api/state'])
+})
+
+test('late API results from an earlier authority generation are rejected before state consumers receive them', async () => {
+  let generation = 7
+  let resolveFetch
+  const request = fetchApiJsonForAuthority('/api/state', {}, {
+    activeBase: 'https://hub-a.example',
+    apiBaseList: ['https://hub-a.example'],
+    fetcher: () => new Promise((resolve) => { resolveFetch = resolve })
+  }, generation, () => generation)
+  generation = 8
+  resolveFetch({ ok: true, json: async () => ({ devices: [{ device_id: 'old-account-device' }] }) })
+  await assert.rejects(request, (error) => error.code === 'authority_changed')
+  assert.throws(() => assertCurrentAuthorityGeneration(7, 8), (error) => error.code === 'authority_changed')
+  assert.doesNotThrow(() => assertCurrentAuthorityGeneration(8, 8))
 })

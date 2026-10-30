@@ -10,3 +10,10 @@
 
 - 2026-10-28：插件 bundle 构建器从客户端 package.json 嵌入 `PLUGIN_VERSION` 并交给 DSH Host，作为本机运行版本可信种子。
 - 2026-10-29：重建 `client.js`，包含 native surface 去边线守卫、更新灯聚合、旧节点响应兼容与 Monaco 主题跟随；`build.mjs --check` 通过。
+- 2026-10-30：Web 构建固定 `absWorkingDir` 到 dist 目录，使工作树中经 node_modules junction 解析的依赖模块标签与既有 bundle 路径稳定一致。
+- 2026-10-30：更新缓存失效改按宿主与活动 Hub 连接身份，避免本机组件与远端组件轮询交替清空缓存。
+- 2026-10-30：共享 DSH 插件桥以 owner RPC 与 remote.workspaceFiles 能力启用默认远端 Composer picker；`fileDrag` 仅作为可选 props 转发，不再决定附件集成是否挂载。
+
+- 2026-10-30：附件 slot 注入原生 sessionId 与 uiWorkspace/sessions 服务；新草稿首次选文件会准备空白 DSH session，自动续接 workspace picker。
+
+- 2026-10-30：附件 slot 注册不再从未注入的 ctx.fileDrag 读取服务；remote.workspaceFiles 与会话绑定足以提供目标附件，原生附件组件继续保留自身拖拽处理。

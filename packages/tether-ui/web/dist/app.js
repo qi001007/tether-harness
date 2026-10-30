@@ -162961,9 +162961,9 @@ function createConnectionPanel(React2) {
         setFormBusy("");
       }
     };
-    const saveLogin = (data, base, label) => {
+    const saveLogin = async (data, base, label) => {
+      if (typeof onConfigured === "function") await onConfigured({ url: base, token: data.token, user: data.user });
       setAccessToken(data.token || "");
-      if (typeof onConfigured === "function") onConfigured({ url: base, token: data.token, user: data.user });
       setMessage(label + "\u6210\u529F\uFF0C\u5DF2\u4FDD\u5B58\u767B\u5F55\u51ED\u636E");
     };
     const login = () => run("login", async () => {
@@ -163154,21 +163154,42 @@ function hubUrlNeedsReplacement(value) {
 function hubProbeErrorText(error) {
   return error && (error.status === 401 || error.status === 403) ? "\u8BBF\u95EE\u4EE4\u724C\u65E0\u6548\u6216\u6CA1\u6709\u8BBF\u95EE\u6743\u9650\uFF0C\u8BF7\u68C0\u67E5 Hub \u51ED\u636E\u3002" : "Hub \u4E0D\u53EF\u8FBE\u6216\u8BF7\u6C42\u8D85\u65F6\uFF0C\u8BF7\u68C0\u67E5\u670D\u52A1\u5730\u5740\u4E0E\u7F51\u7EDC\u540E\u91CD\u8BD5\u3002";
 }
+function assertCurrentAuthorityGeneration(requestGeneration, currentGeneration) {
+  if (requestGeneration === currentGeneration) return;
+  const error = new Error("\u8FDE\u63A5\u914D\u7F6E\u5DF2\u66F4\u6539");
+  error.code = "authority_changed";
+  throw error;
+}
+async function fetchApiJsonForAuthority(path, init, options, requestGeneration, currentGeneration) {
+  const response = await fetchApiJson(path, init, options);
+  assertCurrentAuthorityGeneration(requestGeneration, currentGeneration());
+  return response;
+}
+function nativeSurfaceAuthorityKey(surfaceBase, hubUrl, activeBase, generation) {
+  return [surfaceBase || "", hubUrl || "", activeBase || "", generation].join("|");
+}
+function apiCandidatesForAuthority(activeBase, candidates, explicitAuthority = "") {
+  return explicitAuthority ? [explicitAuthority] : [activeBase, ...(candidates || []).filter((base) => base !== activeBase)];
+}
 function updateAuthorityBase(updateInfo, deviceId, component) {
   const record = updateInfo && updateInfo.devices && updateInfo.devices[deviceId] && updateInfo.devices[deviceId][component];
   return record && Object.prototype.hasOwnProperty.call(record, "authorityBase") ? record.authorityBase : void 0;
+}
+function isUpdateInfoStale(info) {
+  return !!(info && (info.stale === true || info.from_cache === true || info.check_error));
 }
 function updateTriggerState(updateInfo, updateErrors, refreshing = false, devices = null, running = false) {
   if (running) return "checking";
   const statuses = [];
   const add = (infos, errors) => {
     const list2 = (infos || []).filter(Boolean);
-    const failures = (errors || []).some(Boolean);
+    const failures = (errors || []).some(Boolean) || list2.some((info) => info && info.check_error);
     if (!list2.length && !failures) return;
-    const needsRestart = list2.some((info) => info.runtime_version && info.current_version && info.runtime_version !== info.current_version);
-    if (list2.some((info) => info.update_available === true) || needsRestart) statuses.push("available");
-    else if (list2.length && list2.every((info) => info.current_version && info.latest_version)) statuses.push("current");
+    const needsRestart = list2.some((info) => !isUpdateInfoStale(info) && info.runtime_version && info.current_version && info.runtime_version !== info.current_version);
+    if (list2.some((info) => !isUpdateInfoStale(info) && info.update_available === true) || needsRestart) statuses.push("available");
     else if (failures) statuses.push("failed");
+    else if (list2.some(isUpdateInfoStale)) statuses.push("checking");
+    else if (list2.length && list2.every((info) => info.current_version && info.latest_version)) statuses.push("current");
     else statuses.push("checking");
   };
   add([updateInfo && updateInfo.app], [updateErrors && updateErrors.app]);
@@ -163198,11 +163219,13 @@ function updateCardState({
   restartRequired = false,
   known = false,
   failed = false,
+  stale = false,
   restartPill = "\u5F85\u751F\u6548",
   restartAction = "restart"
 } = {}) {
   if (running) return { kind: "running", pill: "\u6B63\u5728\u66F4\u65B0", tone: "amber", action: "none", label: "\u66F4\u65B0\u4E2D", disabled: true };
   if (error) return { kind: "error", pill: "\u66F4\u65B0\u5931\u8D25", tone: "red", action: "retry", label: "\u91CD\u8BD5", disabled: false };
+  if (failed) return { kind: "failed", pill: "\u68C0\u67E5\u5931\u8D25", tone: "red", action: "recheck", label: "\u91CD\u8BD5", disabled: false };
   if (hasUpdate) return { kind: "update", pill: "\u6709\u66F4\u65B0", tone: "amber", action: "update", label: "\u4E00\u952E\u66F4\u65B0", disabled: false };
   if (restartRequired) {
     return {
@@ -163214,9 +163237,17 @@ function updateCardState({
       disabled: restartAction === "none"
     };
   }
+  if (stale) return { kind: "stale", pill: "\u4E0A\u6B21\u7ED3\u679C", tone: "mute", action: "recheck", label: "\u68C0\u67E5\u66F4\u65B0", disabled: false };
   if (known) return { kind: "current", pill: "\u5DF2\u662F\u6700\u65B0", tone: "green", action: "none", label: "\u4E00\u952E\u66F4\u65B0", disabled: true };
-  if (failed) return { kind: "failed", pill: "\u68C0\u67E5\u5931\u8D25", tone: "red", action: "recheck", label: "\u91CD\u8BD5", disabled: false };
   return { kind: "checking", pill: "\u68C0\u67E5\u4E2D\u2026", tone: "mute", action: "none", label: "\u4E00\u952E\u66F4\u65B0", disabled: true };
+}
+function updateCardStateForInfos(infos, options = {}) {
+  const list2 = (infos || []).filter(Boolean);
+  const stale = list2.some(isUpdateInfoStale);
+  const failed = options.failed === true || list2.some((info) => !!info.check_error);
+  const hasUpdate = list2.some((info) => !isUpdateInfoStale(info) && info.update_available === true);
+  const known = list2.length > 0 && list2.every((info) => info.current_version && info.latest_version && !isUpdateInfoStale(info));
+  return updateCardState({ ...options, stale, failed, hasUpdate, known });
 }
 function isVersionNewer(candidate, current) {
   const parse4 = (value) => String(value || "").split("-")[0].split(".").map((part) => Number(part) || 0);
@@ -163229,6 +163260,7 @@ function isVersionNewer(candidate, current) {
 }
 function updateNeededFor(info) {
   if (!info) return true;
+  if (isUpdateInfoStale(info)) return true;
   if (info.current_version && info.latest_version) return isVersionNewer(info.latest_version, info.current_version);
   if (info.update_available === true) return true;
   if (info.update_available === false) return false;
@@ -163237,7 +163269,7 @@ function updateNeededFor(info) {
 function normalizeUpdateLatest(updateInfo) {
   let latestVersion = "";
   const consider = (info) => {
-    if (!info || !info.latest_version) return;
+    if (!info || !info.latest_version || isUpdateInfoStale(info)) return;
     if (!latestVersion || isVersionNewer(info.latest_version, latestVersion)) latestVersion = info.latest_version;
   };
   consider(updateInfo.app);
@@ -163246,7 +163278,7 @@ function normalizeUpdateLatest(updateInfo) {
     for (const component of ["app", "plugin", "node"]) consider(target && target[component]);
   }
   const apply2 = (info) => {
-    if (!info || !latestVersion) return info;
+    if (!info || !latestVersion || isUpdateInfoStale(info)) return info;
     const next = { ...info, latest_version: latestVersion };
     if (!info.current_version) return next;
     next.update_available = info.rollout_paused === true ? false : isVersionNewer(latestVersion, info.current_version);
@@ -163264,6 +163296,76 @@ function normalizeUpdateLatest(updateInfo) {
     }]))
   };
 }
+function createUpdateResponseArbiter() {
+  const latest = /* @__PURE__ */ new Map();
+  const latestCheck = /* @__PURE__ */ new Map();
+  let sequence = 0;
+  return {
+    begin(key, authority, action = "check") {
+      const arbiterKey = key + ":" + action;
+      sequence += 1;
+      if (action === "check") latestCheck.set(key, sequence);
+      const token = { sequence, authority, action, arbiterKey, key, checkSequence: latestCheck.get(key) || 0, accepted: true };
+      latest.set(arbiterKey, { sequence, authority });
+      return token;
+    },
+    isCurrent(key, request, authority) {
+      const current = request && latest.get(request.arbiterKey || key + ":" + request.action);
+      if (!request || !request.accepted || !current || request.authority !== authority) return false;
+      return current.sequence === request.sequence && current.authority === authority && (request.action !== "status" || request.checkSequence === (latestCheck.get(request.key) || 0));
+    }
+  };
+}
+async function commitLatestUpdateResponse(arbiter, key, authority, action, request, commit, isCurrent = () => true) {
+  const token = arbiter.begin(key, authority, action);
+  try {
+    const value = await request();
+    const result = commitArbitratedUpdateValue(arbiter, key, token, authority, value, commit, isCurrent);
+    return result;
+  } catch (error) {
+    const current = arbiter.isCurrent(key, token, authority) && isCurrent();
+    if (!current) return { cancelled: true };
+    throw error;
+  }
+}
+function commitArbitratedUpdateValue(arbiter, key, token, authority, value, commit, isCurrent = () => true) {
+  if (!arbiter.isCurrent(key, token, authority) || !isCurrent()) return { cancelled: true };
+  commit(value);
+  return value;
+}
+function isUsableUpdateStatus(status2) {
+  return !!status2 && status2.cancelled !== true && status2.ok !== false;
+}
+function updateInfoAfterCheck(info, result) {
+  if (!result || result.cancelled) return info;
+  if (result.failed) return { ...info, stale: true, from_cache: false, check_error: String(result.error || "\u66F4\u65B0\u68C0\u67E5\u5931\u8D25") };
+  const source = result.result || {};
+  const fromCache = result.from_cache === true || source.from_cache === true || source.stale === true || source.source === "disk-cache" || source.manifest_source === "disk-cache";
+  return {
+    ...info,
+    stale: fromCache,
+    from_cache: fromCache,
+    check_error: source.check_error || void 0
+  };
+}
+function updateInfoAfterStatus(info) {
+  return info ? { ...info, stale: true, from_cache: true } : info;
+}
+function mergeUpdateStatusInfo(previous, status2) {
+  const next = { ...previous || {}, ...updateInfoAfterStatus(status2) || {} };
+  if (previous && !isUpdateInfoStale(previous)) {
+    next.latest_version = previous.latest_version;
+    if (previous.update_available === true && next.current_version && previous.latest_version) {
+      next.update_available = previous.rollout_paused === true ? false : isVersionNewer(previous.latest_version, next.current_version);
+    } else next.update_available = previous.update_available;
+    next.manifest_source = previous.manifest_source;
+    next.checked_at = previous.checked_at;
+    next.stale = false;
+    next.from_cache = false;
+    next.check_error = previous.check_error;
+  }
+  return next;
+}
 function isTransientUpdateError(error) {
   const text2 = String(error && (error.code || error.message) || error || "");
   return /InvalidStateError|closing|not connected|socket|network|ECONN/i.test(text2);
@@ -163280,9 +163382,9 @@ function deviceAfterLocalIdentity(current, localDeviceId, manuallySelected) {
 async function checkUpdateAvailability(check, isCurrent = () => true) {
   try {
     const result = await check();
-    if (!isCurrent()) return { cancelled: true };
+    if (!isCurrent() || result && result.cancelled) return { cancelled: true };
     if (!result || result.ok === false) return { failed: true, error: result && (result.message || result.error) || "\u66F4\u65B0\u68C0\u67E5\u5931\u8D25" };
-    return { current: true, updateAvailable: result.update_available === true, result };
+    return { current: true, updateAvailable: result.update_available === true, from_cache: result.from_cache === true, result };
   } catch (error) {
     return isCurrent() ? { failed: true, error } : { cancelled: true };
   }
@@ -163297,7 +163399,10 @@ function dedupeUpdateCheck(inFlight, key, check) {
 }
 function cachedUpdateCheck(cache, key, check, { force = false, now = Date.now, ttlMs = 3e5 } = {}) {
   const cached = cache.get(key);
-  if (!force && cached && now() - cached.checkedAt < ttlMs) return Promise.resolve(cached.value);
+  if (!force && cached && now() - cached.checkedAt < ttlMs) {
+    const value = cached.value;
+    return Promise.resolve(value && typeof value === "object" ? { ...value, from_cache: true } : value);
+  }
   return Promise.resolve().then(check).then((value) => {
     if (!value || !value.cancelled && !value.failed) cache.set(key, { checkedAt: now(), value });
     return value;
@@ -163318,6 +163423,9 @@ function withUpdateTimeout(promise, timeoutMs, message = "\u66F4\u65B0\u68C0\u67
 }
 function updateCheckKey(component, scope) {
   return (scope ? scope.deviceId + ":" + scope.epoch : "local") + ":" + component;
+}
+function updateCheckCacheKey(key, authority, generation = 0) {
+  return safeServiceAddress(authority) + "@" + generation + ":" + key;
 }
 function localUpdateWaitMs(component) {
   return component === "localPlugin" ? 22e3 : 6500;
@@ -163602,24 +163710,35 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     block: "var(--dsw-alias-markdown-code-block, #f8fafc)",
     shadow: "var(--dsw-elevation-panel, 0 8px 24px rgba(16, 24, 40, 0.12))"
   };
-  const apiBaseList = host && host.apiBases ? host.apiBases() : [BASE];
+  let apiBaseList = host && host.apiBases ? host.apiBases() : [BASE];
   let ACTIVE_BASE = apiBaseList[0] || BASE;
+  let ACTIVE_BASE_GENERATION = 0;
+  let EXPLICIT_AUTHORITY = false;
   if (host) host.activeApiBase = () => ACTIVE_BASE;
   async function api2(path, options, pinnedBase) {
+    const mayChangeActiveBase = pinnedBase === void 0 || pinnedBase === null;
+    const requestBaseGeneration = ACTIVE_BASE_GENERATION;
     const init = { ...options || {} };
     let response;
     try {
-      response = await fetchApiJson(path, init, {
+      response = await fetchApiJsonForAuthority(path, init, {
         activeBase: ACTIVE_BASE,
-        apiBaseList,
+        apiBaseList: apiCandidatesForAuthority(ACTIVE_BASE, host && host.apiBases ? host.apiBases() : apiBaseList, EXPLICIT_AUTHORITY ? ACTIVE_BASE : ""),
         pinnedBase,
         headersForBase: (base) => ({ "Content-Type": "application/json", ...host && host.apiHeaders ? host.apiHeaders(base) : {} })
-      });
+      }, requestBaseGeneration, () => ACTIVE_BASE_GENERATION);
     } catch (error) {
-      if (error && error.base) ACTIVE_BASE = error.base;
+      assertCurrentAuthorityGeneration(requestBaseGeneration, ACTIVE_BASE_GENERATION);
+      if (mayChangeActiveBase && requestBaseGeneration === ACTIVE_BASE_GENERATION && error && error.base && ACTIVE_BASE !== error.base) {
+        ACTIVE_BASE = error.base;
+        ACTIVE_BASE_GENERATION += 1;
+      }
       throw error;
     }
-    ACTIVE_BASE = response.base;
+    if (mayChangeActiveBase && requestBaseGeneration === ACTIVE_BASE_GENERATION && ACTIVE_BASE !== response.base) {
+      ACTIVE_BASE = response.base;
+      ACTIVE_BASE_GENERATION += 1;
+    }
     return response.data;
   }
   const post = (path, body, pinnedBase, extra) => api2(path, { method: "POST", body: JSON.stringify(body || {}), ...extra || {} }, pinnedBase);
@@ -165052,6 +165171,8 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     return { display: visible ? "flex" : "none", flex: "1 1 auto", minWidth: 0, minHeight: 0, flexDirection: "column" };
   }
   const NATIVE_SURFACE_RETRIES = 3;
+  const NATIVE_SURFACE_DOCUMENT_RETRIES = 1;
+  const NATIVE_SURFACE_DOCUMENT_TIMEOUT_MS = 3e4;
   function nativeSurfaceRetryDelay(attempt) {
     return Math.min(1e3 * Math.pow(2, Math.max(0, attempt - 1)), 8e3);
   }
@@ -165066,15 +165187,41 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
   function nativeSurfaceTransientError(error) {
     return !!error && (error.surfaceStatus === 502 || error.surfaceStatus === 504 || error.surfaceCode === "device_offline" || error.surfaceCode === "surface_timeout");
   }
+  function reportNativeSurfaceTiming(phase, startedAt) {
+    const durationMs = Math.max(0, Math.round(performance.now() - startedAt));
+    try {
+      if (host && typeof host.onSurfaceTiming === "function") host.onSurfaceTiming({ phase, durationMs });
+    } catch (_) {
+    }
+    try {
+      if (typeof performance !== "undefined" && typeof performance.mark === "function") {
+        performance.mark("tether-native-surface-" + phase, { detail: { durationMs } });
+      }
+    } catch (_) {
+    }
+  }
   function NativeSurface({ deviceId, online, visible, localDeviceId }) {
     const [state, setState] = React2.useState({ deviceId, status: deviceId ? "loading" : "no-device", url: "" });
     const [attempt, setAttempt] = React2.useState(0);
     const currentState = nativeSurfaceStateForDevice(state, deviceId, online);
     const retryCountRef = React2.useRef(0);
+    const documentRetryCountRef = React2.useRef(0);
     const retryTimerRef = React2.useRef(null);
+    const documentTimerRef = React2.useRef(null);
+    const documentStartedAtRef = React2.useRef(0);
+    const pollFlightRef = React2.useRef(null);
     const surfaceStateRef = React2.useRef(currentState);
     surfaceStateRef.current = currentState;
-    const fetchSurfaceDescriptor = async (id) => {
+    const surfaceSourceKey = (() => {
+      try {
+        const hub = host && typeof host.hubConfig === "function" ? host.hubConfig() : null;
+        const isLocal = !!(localDeviceId && deviceId === localDeviceId);
+        return nativeSurfaceAuthorityKey(host && typeof host.surfaceBase === "function" ? host.surfaceBase(isLocal) : "", hub && hub.url || "", ACTIVE_BASE, ACTIVE_BASE_GENERATION);
+      } catch (_) {
+        return ACTIVE_BASE;
+      }
+    })();
+    const fetchSurfaceDescriptor = async (id, signal) => {
       if (host && host.kind === "dsh" && localDeviceId && id === localDeviceId && typeof window !== "undefined" && window.location) {
         const browserHost = /^http:\/\/(127\.0\.0\.1|\[::1\]):\d+$/.test(window.location.origin);
         if (browserHost || window.location.protocol === "dsh-app:") {
@@ -165095,11 +165242,14 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         try {
           const headers = host && typeof host.apiHeaders === "function" ? host.apiHeaders(base) : void 0;
           const via = host && host.kind === "dsh" && !isLocalTarget ? "?via=hub" : "";
-          const response = await fetch(base + "/api/devices/" + encodeURIComponent(id) + "/dsh/surface" + via, { headers, signal: AbortSignal.timeout(8e3) });
+          const timeoutSignal = AbortSignal.timeout(8e3);
+          const requestSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
+          const response = await fetch(base + "/api/devices/" + encodeURIComponent(id) + "/dsh/surface" + via, { headers, signal: requestSignal });
           const data = await response.json().catch(() => ({}));
           if (!response.ok && (response.status === 502 || response.status === 504) && base !== ACTIVE_BASE) continue;
           return { response, data };
         } catch (error) {
+          if (signal && signal.aborted) throw error;
           lastError = error;
         }
       }
@@ -165116,9 +165266,14 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     };
     React2.useEffect(() => {
       retryCountRef.current = 0;
+      documentRetryCountRef.current = 0;
       if (retryTimerRef.current) {
         clearTimeout(retryTimerRef.current);
         retryTimerRef.current = null;
+      }
+      if (documentTimerRef.current) {
+        clearTimeout(documentTimerRef.current);
+        documentTimerRef.current = null;
       }
     }, [deviceId]);
     React2.useEffect(() => () => {
@@ -165126,13 +165281,17 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         clearTimeout(retryTimerRef.current);
         retryTimerRef.current = null;
       }
+      if (documentTimerRef.current) {
+        clearTimeout(documentTimerRef.current);
+        documentTimerRef.current = null;
+      }
     }, []);
     React2.useEffect(() => {
       const bridge = typeof window !== "undefined" ? window.tetherApp : void 0;
       if (!deviceId || !online || !bridge || typeof bridge.onSurfaceBootFailed !== "function") return void 0;
       return bridge.onSurfaceBootFailed((detail) => {
         const current = surfaceStateRef.current;
-        if (!current || current.deviceId !== deviceId || current.status !== "ready" || !current.url) return;
+        if (!current || current.deviceId !== deviceId || !["document-loading", "document-loaded"].includes(current.status) || !current.url) return;
         if (detail && detail.source) {
           if (!nativeSurfaceFailureMatches(current.url, detail.source)) return;
         } else if (!visible) return;
@@ -165151,6 +165310,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     }, [deviceId, online, visible]);
     React2.useEffect(() => {
       let current = true;
+      const controller = new AbortController();
       if (!deviceId) {
         setState({ deviceId, status: "no-device", url: "" });
         return () => {
@@ -165163,8 +165323,21 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           current = false;
         };
       }
+      if (!visible) return () => {
+        current = false;
+        controller.abort();
+      };
+      const existing = surfaceStateRef.current;
+      if (existing && existing.deviceId === deviceId && existing.sourceKey === surfaceSourceKey && ["document-loading", "document-loaded"].includes(existing.status) && existing.url) {
+        return () => {
+          current = false;
+          controller.abort();
+        };
+      }
       setState({ deviceId, status: "loading", url: "" });
-      fetchSurfaceDescriptor(deviceId).then(async ({ response, data }) => {
+      const descriptorStartedAt = performance.now();
+      fetchSurfaceDescriptor(deviceId, controller.signal).then(async ({ response, data }) => {
+        reportNativeSurfaceTiming("descriptor", descriptorStartedAt);
         if (data && data.local) {
           if (current) setState({ deviceId, status: "local", url: "", pid: 0 });
           return;
@@ -165186,7 +165359,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         if (!sameHostToken && !sameOriginUrl && (parsed.hostname === "127.0.0.1" || parsed.hostname === "[::1]") && ACTIVE_BASE !== "http://127.0.0.1:18890") {
           let localOk = false;
           try {
-            const localRes = await fetch(ACTIVE_BASE + "/local-api/api/devices/" + encodeURIComponent(deviceId) + "/dsh/surface");
+            const localRes = await fetch(ACTIVE_BASE + "/local-api/api/devices/" + encodeURIComponent(deviceId) + "/dsh/surface", { signal: controller.signal });
             if (localRes.ok) {
               const localData = await localRes.json();
               if (localData.available && isSafeNativeSurfaceUrl(localData.url)) {
@@ -165201,7 +165374,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         const url = new URL(surfaceUrl);
         url.searchParams.set("tether_native", "1");
         await resetSurfaceAuth(url);
-        if (current) setState({ deviceId, status: "ready", url: url.href, pid: Number(data.pid) || 0 });
+        if (current) setState({ deviceId, status: "document-loading", url: url.href, pid: Number(data.pid) || 0, sourceKey: surfaceSourceKey });
       }).catch((error) => {
         if (!current) return;
         if (nativeSurfaceTransientError(error) && !retryTimerRef.current && retryCountRef.current < NATIVE_SURFACE_RETRIES) {
@@ -165217,14 +165390,19 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       });
       return () => {
         current = false;
+        controller.abort();
       };
-    }, [deviceId, online, attempt, localDeviceId]);
+    }, [deviceId, online, visible, attempt, localDeviceId, surfaceSourceKey]);
     React2.useEffect(() => {
-      if (!deviceId || !online) return void 0;
+      if (!deviceId || !online || !visible || typeof document === "undefined") return void 0;
       let alive = true;
-      const timer = setInterval(async () => {
+      let timer = null;
+      const poll = async () => {
+        if (!alive || document.visibilityState === "hidden" || pollFlightRef.current) return schedule();
+        const controller = new AbortController();
+        pollFlightRef.current = controller;
         try {
-          const { response, data } = await fetchSurfaceDescriptor(deviceId);
+          const { response, data } = await fetchSurfaceDescriptor(deviceId, controller.signal);
           if (!response.ok) return;
           if (!alive || !data.available || !isSafeNativeSurfaceUrl(data.url)) return;
           const nextPid = Number(data.pid) || 0;
@@ -165236,49 +165414,126 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
             }
           }
           setState((prev) => {
-            if (prev.status !== "ready" || !prev.url) return prev;
+            if (!["document-loading", "document-loaded"].includes(prev.status) || !prev.url) return prev;
             try {
               const fresh = new URL(data.url);
               const current = new URL(prev.url);
               const pid = Number(data.pid) || 0;
               if (pid && (prev.pid || 0) !== pid) {
                 fresh.searchParams.set("tether_native", "1");
-                return { deviceId, status: "ready", url: fresh.href, pid };
+                documentRetryCountRef.current = 0;
+                return { deviceId, status: "document-loading", url: fresh.href, pid, sourceKey: surfaceSourceKey };
               }
               const sameHostToken = fresh.pathname === "/" && !!fresh.searchParams.get("token");
               if (sameHostToken ? fresh.searchParams.get("token") === current.searchParams.get("token") : current.origin === fresh.origin) return prev;
               fresh.searchParams.set("tether_native", "1");
-              return { deviceId, status: "ready", url: fresh.href, pid: pid || (prev.pid || 0) };
+              documentRetryCountRef.current = 0;
+              return { deviceId, status: "document-loading", url: fresh.href, pid: pid || (prev.pid || 0), sourceKey: surfaceSourceKey };
             } catch (_) {
               return prev;
             }
           });
         } catch (_) {
+        } finally {
+          if (pollFlightRef.current === controller) pollFlightRef.current = null;
+          schedule();
         }
-      }, 8e3);
+      };
+      const schedule = () => {
+        if (alive && document.visibilityState !== "hidden") timer = setTimeout(poll, 8e3);
+      };
+      const onVisibilityChange = () => {
+        if (document.visibilityState === "hidden") {
+          if (timer) {
+            clearTimeout(timer);
+            timer = null;
+          }
+          if (pollFlightRef.current) pollFlightRef.current.abort();
+        } else if (!timer && !pollFlightRef.current) poll();
+      };
+      document.addEventListener("visibilitychange", onVisibilityChange);
+      if (document.visibilityState !== "hidden") schedule();
       return () => {
         alive = false;
-        clearInterval(timer);
+        if (timer) clearTimeout(timer);
+        document.removeEventListener("visibilitychange", onVisibilityChange);
+        if (pollFlightRef.current) pollFlightRef.current.abort();
+        pollFlightRef.current = null;
       };
-    }, [deviceId, online, localDeviceId]);
+    }, [deviceId, online, visible, localDeviceId, surfaceSourceKey]);
+    React2.useEffect(() => {
+      if (documentTimerRef.current) {
+        clearTimeout(documentTimerRef.current);
+        documentTimerRef.current = null;
+      }
+      if (!visible || currentState.status !== "document-loading" || !currentState.url) return void 0;
+      documentStartedAtRef.current = performance.now();
+      documentTimerRef.current = setTimeout(() => {
+        documentTimerRef.current = null;
+        if (documentRetryCountRef.current < NATIVE_SURFACE_DOCUMENT_RETRIES) {
+          documentRetryCountRef.current += 1;
+          setState({ deviceId, status: "loading", url: "", message: "\u539F\u751F\u5DE5\u4F5C\u533A\u9875\u9762\u52A0\u8F7D\u8D85\u65F6\uFF0C\u6B63\u5728\u91CD\u65B0\u83B7\u53D6\u8FDE\u63A5\u2026" });
+          setAttempt((value) => value + 1);
+        } else {
+          setState({ deviceId, status: "error", url: "", message: "\u539F\u751F\u5DE5\u4F5C\u533A\u9875\u9762\u52A0\u8F7D\u8D85\u65F6\u3002\u8BF7\u68C0\u67E5\u76EE\u6807\u8BBE\u5907\u8FDE\u63A5\u540E\u91CD\u8BD5\u3002" });
+        }
+      }, NATIVE_SURFACE_DOCUMENT_TIMEOUT_MS);
+      return () => {
+        if (documentTimerRef.current) {
+          clearTimeout(documentTimerRef.current);
+          documentTimerRef.current = null;
+        }
+      };
+    }, [deviceId, visible, currentState.status, currentState.url]);
+    const retryDocument = () => {
+      documentRetryCountRef.current = 0;
+      retryCountRef.current = 0;
+      setState({ deviceId, status: "loading", url: "" });
+      setAttempt((value) => value + 1);
+    };
+    const handleDocumentFailure = () => {
+      if (documentRetryCountRef.current < NATIVE_SURFACE_DOCUMENT_RETRIES) {
+        documentRetryCountRef.current += 1;
+        setState({ deviceId, status: "loading", url: "", message: "\u539F\u751F\u5DE5\u4F5C\u533A\u9875\u9762\u52A0\u8F7D\u5931\u8D25\uFF0C\u6B63\u5728\u91CD\u65B0\u83B7\u53D6\u8FDE\u63A5\u2026" });
+        setAttempt((value) => value + 1);
+      } else setState({ deviceId, status: "error", url: "", message: "\u539F\u751F\u5DE5\u4F5C\u533A\u9875\u9762\u52A0\u8F7D\u5931\u8D25\u3002\u8BF7\u68C0\u67E5\u76EE\u6807\u8BBE\u5907\u8FDE\u63A5\u540E\u91CD\u8BD5\u3002" });
+    };
     const message = currentState.status === "loading" ? currentState.message || "\u6B63\u5728\u8FDE\u63A5\u76EE\u6807\u8BBE\u5907\u7684 DSH \u539F\u751F\u5DE5\u4F5C\u533A\u2026" : currentState.status === "local" ? "\u5F53\u524D\u5DF2\u5728 DeepSeek Harness \u4E2D\uFF1B\u672C\u673A\u5DE5\u4F5C\u533A\u65E0\u9700\u518D\u5D4C\u5165\uFF0C\u53EF\u7528\u5DE6\u4FA7\u300C\u6587\u4EF6\u300D\u6216\u300C\u8FDE\u63A5\u300D\u3002" : currentState.status === "offline" ? "\u76EE\u6807\u8BBE\u5907\u79BB\u7EBF\u3002\u8BBE\u5907\u91CD\u65B0\u5728\u7EBF\u540E\u53EF\u91CD\u8BD5\u3002" : currentState.status === "no-device" ? "\u5148\u4ECE\u5DE6\u4FA7\u8BBE\u5907\u5217\u8868\u9009\u62E9\u76EE\u6807\u8BBE\u5907\u3002" : currentState.status === "error" ? currentState.message : "";
     return h2(
       "div",
       { className: "tether-native-surface", style: nativeSurfaceContainerStyle(visible) },
-      currentState.status === "ready" && currentState.deviceId === deviceId && online ? h2("iframe", {
-        key: deviceId + ":" + (currentState.pid || 0),
-        src: currentState.url,
-        title: "\u76EE\u6807\u8BBE\u5907\u7684 DSH \u539F\u751F\u5DE5\u4F5C\u533A",
-        referrerPolicy: "no-referrer",
-        style: { flex: "1 1 auto", width: "100%", height: "100%", minWidth: 0, minHeight: 0, border: 0, background: C.bg }
-      }) : h2(
+      ["document-loading", "document-loaded"].includes(currentState.status) && currentState.deviceId === deviceId && online ? h2(
+        "div",
+        { style: { position: "relative", display: "flex", flex: "1 1 auto", minWidth: 0, minHeight: 0 } },
+        h2("iframe", {
+          key: deviceId + ":" + (currentState.pid || 0),
+          src: currentState.url,
+          onLoad: () => {
+            const loadedState = surfaceStateRef.current;
+            if (!loadedState || loadedState.deviceId !== deviceId || loadedState.url !== currentState.url || loadedState.sourceKey !== currentState.sourceKey || !["document-loading", "document-loaded"].includes(loadedState.status)) return;
+            if (documentTimerRef.current) {
+              clearTimeout(documentTimerRef.current);
+              documentTimerRef.current = null;
+            }
+            documentRetryCountRef.current = 0;
+            reportNativeSurfaceTiming("document", documentStartedAtRef.current || performance.now());
+            setState((prev) => prev.deviceId === deviceId && prev.url === currentState.url && prev.sourceKey === currentState.sourceKey ? { ...prev, status: "document-loaded" } : prev);
+          },
+          onError: handleDocumentFailure,
+          title: "\u76EE\u6807\u8BBE\u5907\u7684 DSH \u539F\u751F\u5DE5\u4F5C\u533A",
+          referrerPolicy: "no-referrer",
+          style: { flex: "1 1 auto", width: "100%", height: "100%", minWidth: 0, minHeight: 0, border: 0, background: C.bg }
+        }),
+        currentState.status === "document-loading" ? h2("div", {
+          role: "status",
+          "aria-live": "polite",
+          style: { position: "absolute", top: 12, left: "50%", transform: "translateX(-50%)", padding: "6px 10px", borderRadius: 6, background: "rgba(255,255,255,.92)", color: C.sub, fontSize: 12, boxShadow: "0 1px 4px rgba(16,24,40,.12)", pointerEvents: "none" }
+        }, "\u76EE\u6807\u5DE5\u4F5C\u533A\u9875\u9762\u6B63\u5728\u52A0\u8F7D\u2026") : null
+      ) : h2(
         "div",
         { style: { display: "grid", placeItems: "center", alignContent: "center", gap: 12, flex: "1 1 auto", minHeight: 0, color: C.sub, textAlign: "center", padding: 24 } },
         h2("div", null, message),
-        currentState.status !== "loading" && currentState.status !== "local" ? btn("\u91CD\u8BD5", () => {
-          retryCountRef.current = 0;
-          setAttempt((value) => value + 1);
-        }) : null
+        currentState.status !== "loading" && currentState.status !== "local" ? btn("\u91CD\u8BD5", retryDocument) : null
       )
     );
   }
@@ -165568,8 +165823,9 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       return () => {
         alive = false;
       };
-    }, [host]);
+    }, [host, ACTIVE_BASE_GENERATION]);
     const fail2 = (e) => {
+      if (e && e.code === "authority_changed") return;
       if (e && e.code === "node_update_required") {
         setNativeError("\u8282\u70B9\u5F85\u66F4\u65B0");
         return;
@@ -165580,11 +165836,14 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const probeConfiguredHub = async ({ silent = false } = {}) => {
       if (!host || typeof host.probeConnection !== "function") return null;
       if (hubProbeRef.current) return hubProbeRef.current;
+      const generation = ACTIVE_BASE_GENERATION;
+      const base = ACTIVE_BASE;
       if (!silent) setHubBusy(true);
       setHubError("");
       const task2 = (async () => {
         try {
           const result = await host.probeConnection(host.activeApiBase ? host.activeApiBase() : void 0);
+          if (generation !== ACTIVE_BASE_GENERATION || base !== ACTIVE_BASE) return null;
           if (result && result.address) setHubAddress(result.address);
           const next = result && (result.state || (result.status === "online" ? {} : null));
           setHubState(next || null);
@@ -165594,6 +165853,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           setHubError(result && result.status === "offline" ? hubProbeErrorText({ status: result.errorKind === "auth" ? 401 : void 0 }) : "");
           return result;
         } catch (error) {
+          if (generation !== ACTIVE_BASE_GENERATION || base !== ACTIVE_BASE) return null;
           setHubState(null);
           setHubDuration(null);
           setHubCheckedAt(/* @__PURE__ */ new Date());
@@ -165601,7 +165861,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           setHubError(hubProbeErrorText(error));
           return null;
         } finally {
-          if (!silent) setHubBusy(false);
+          if (!silent && generation === ACTIVE_BASE_GENERATION) setHubBusy(false);
         }
       })();
       hubProbeRef.current = task2.finally(() => {
@@ -165627,14 +165887,15 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const updateScope = (component) => component === "node" || component === "plugin" ? deviceId ? { deviceId, epoch: 0 } : null : null;
     const scopeIsCurrent = (scope) => !scope || !!(stateRef.current && stateRef.current.devices && stateRef.current.devices.some((item) => item.device_id === scope.deviceId));
     const updateCheckScopeIsCurrent = (scope) => scopeIsCurrent(scope) && (!scope || !!(stateRef.current && stateRef.current.devices && stateRef.current.devices.some((item) => item.device_id === scope.deviceId && item.online)));
-    const setComponentUpdateInfo = (component, value, scope) => {
+    const setComponentUpdateInfo = (component, value, scope, statusSnapshot = false) => {
       if (scope && !scopeIsCurrent(scope)) return;
-      if (!scope) setUpdateInfo((current) => ({ ...current, [component]: { ...current[component] || {}, ...value || {} } }));
+      const merge = (previous) => statusSnapshot ? mergeUpdateStatusInfo(previous, value) : { ...previous || {}, ...value || {} };
+      if (!scope) setUpdateInfo((current) => ({ ...current, [component]: merge(current[component]) }));
       else setUpdateInfo((current) => ({
         ...current,
         devices: { ...current.devices, [scope.deviceId]: {
           ...current.devices[scope.deviceId] || {},
-          [component]: { ...(current.devices[scope.deviceId] || {})[component] || {}, ...value || {} }
+          [component]: merge((current.devices[scope.deviceId] || {})[component])
         } }
       }));
     };
@@ -165654,31 +165915,72 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       }));
     };
     const updatesPath = (component, targetId = deviceId) => "/api/devices/" + encodeURIComponent(targetId) + "/updates?component=" + encodeURIComponent(component);
-    const loadUpdateInfo = async (component, action, pinnedBase, fixedScope) => {
+    const updateResponseArbiterRef = React2.useRef(createUpdateResponseArbiter());
+    const updateCacheAuthorityRef = React2.useRef(null);
+    const updateHostIdentityRef = React2.useRef({ hosts: /* @__PURE__ */ new WeakMap(), next: 1 });
+    const commitUpdateResponse = (component, action, scope, authority, request, mapValue = (value) => value, isAuthorityCurrent = () => true) => commitLatestUpdateResponse(
+      updateResponseArbiterRef.current,
+      updateCheckKey(component, scope),
+      authority,
+      action,
+      request,
+      (value) => setComponentUpdateInfo(component, mapValue(value), scope, action === "status"),
+      () => scopeIsCurrent(scope) && (action !== "check" || updateCheckScopeIsCurrent(scope)) && isAuthorityCurrent()
+    );
+    const loadUpdateInfo = async (component, action, pinnedBase, fixedScope, fixedAuthorityGeneration) => {
       const scope = fixedScope === void 0 ? updateScope(component) : fixedScope;
       if (component === "app" && !scope) {
         if (!host || host.kind !== "app" || !host.updates) return;
-        const result2 = await withUpdateTimeout(action === "status" ? host.updates.status() : host.updates.check(), 6e3);
-        if (result2 && result2.ok === false) throw new Error(result2.message || result2.error || (action === "status" ? "APP \u66F4\u65B0\u72B6\u6001\u8BFB\u53D6\u5931\u8D25" : "APP \u66F4\u65B0\u68C0\u67E5\u5931\u8D25"));
-        setComponentUpdateInfo(component, result2);
-        return result2;
+        const localAuthority = host;
+        return commitUpdateResponse(
+          component,
+          action,
+          scope,
+          localAuthority,
+          async () => {
+            const result = await withUpdateTimeout(action === "status" ? host.updates.status() : host.updates.check(), 6e3);
+            if (result && result.ok === false) throw new Error(result.message || result.error || (action === "status" ? "APP \u66F4\u65B0\u72B6\u6001\u8BFB\u53D6\u5931\u8D25" : "APP \u66F4\u65B0\u68C0\u67E5\u5931\u8D25"));
+            return result;
+          },
+          action === "status" ? updateInfoAfterStatus : void 0,
+          () => host === localAuthority
+        );
       }
       if (component === "localPlugin") {
         if (!host || host.kind !== "dsh" || !host.localPluginUpdates) throw new Error("\u5F53\u524D\u5BBF\u4E3B\u6CA1\u6709\u672C\u673A DSH \u63D2\u4EF6\u66F4\u65B0\u901A\u9053\u3002");
-        const result2 = await withUpdateTimeout(host.localPluginUpdates(action === "status" ? "status" : "check"), localUpdateWaitMs(component));
-        if (result2 && result2.ok === false) throw new Error(result2.message || result2.error || (action === "status" ? "\u672C\u673A\u63D2\u4EF6\u66F4\u65B0\u72B6\u6001\u8BFB\u53D6\u5931\u8D25" : "\u672C\u673A\u63D2\u4EF6\u66F4\u65B0\u68C0\u67E5\u5931\u8D25"));
-        setComponentUpdateInfo(component, result2);
-        return result2;
+        const localAuthority = host;
+        return commitUpdateResponse(
+          component,
+          action,
+          scope,
+          localAuthority,
+          async () => {
+            const result = await withUpdateTimeout(host.localPluginUpdates(action === "status" ? "status" : "check"), localUpdateWaitMs(component));
+            if (result && result.ok === false) throw new Error(result.message || result.error || (action === "status" ? "\u672C\u673A\u63D2\u4EF6\u66F4\u65B0\u72B6\u6001\u8BFB\u53D6\u5931\u8D25" : "\u672C\u673A\u63D2\u4EF6\u66F4\u65B0\u68C0\u67E5\u5931\u8D25"));
+            return result;
+          },
+          action === "status" ? updateInfoAfterStatus : void 0,
+          () => host === localAuthority
+        );
       }
       if (!scope.deviceId) throw new Error("\u5148\u9009\u62E9\u76EE\u6807\u8BBE\u5907");
       const requestBase = pinnedBase ?? ACTIVE_BASE;
+      const requestBaseGeneration = fixedAuthorityGeneration ?? ACTIVE_BASE_GENERATION;
       const statusAction = action === "status";
       const requestPath = statusAction ? updatesPath(component, scope.deviceId).replace("/updates?", "/updates/status?") : updatesPath(component, scope.deviceId);
-      const result = await withUpdateTimeout(api2(requestPath, { signal: AbortSignal.timeout(6e3) }, requestBase), 6500);
-      if (result && result.ok === false) throw new Error(result.message || result.error || (statusAction ? "\u76EE\u6807\u8BBE\u5907\u66F4\u65B0\u72B6\u6001\u8BFB\u53D6\u5931\u8D25" : "\u76EE\u6807\u8BBE\u5907\u66F4\u65B0\u68C0\u67E5\u5931\u8D25"));
-      const value = { ...result, authorityBase: requestBase };
-      setComponentUpdateInfo(component, value, scope);
-      return value;
+      return commitUpdateResponse(
+        component,
+        action,
+        scope,
+        requestBase,
+        async () => {
+          const result = await withUpdateTimeout(api2(requestPath, { signal: AbortSignal.timeout(6e3) }, requestBase), 6500);
+          if (result && result.ok === false) throw new Error(result.message || result.error || (statusAction ? "\u76EE\u6807\u8BBE\u5907\u66F4\u65B0\u72B6\u6001\u8BFB\u53D6\u5931\u8D25" : "\u76EE\u6807\u8BBE\u5907\u66F4\u65B0\u68C0\u67E5\u5931\u8D25"));
+          return { ...result, authorityBase: requestBase };
+        },
+        action === "status" ? updateInfoAfterStatus : void 0,
+        () => requestBase === ACTIVE_BASE && requestBaseGeneration === ACTIVE_BASE_GENERATION
+      );
     };
     const updateCheckCacheRef = React2.useRef(/* @__PURE__ */ new Map());
     const retryTransientUpdate = async (run) => {
@@ -165694,20 +165996,47 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     };
     const automaticUpdateCheck = (component, scope = updateScope(component), force = false) => {
       const key = updateCheckKey(component, scope);
-      withUpdateTimeout(loadUpdateInfo(component, "status", void 0, scope), localUpdateWaitMs(component)).catch(() => {
-      });
+      const authority = scope ? ACTIVE_BASE : host;
+      const authorityGeneration = ACTIVE_BASE_GENERATION;
+      let hostIdentity = "none";
+      if (host && typeof host === "object") {
+        hostIdentity = updateHostIdentityRef.current.hosts.get(host);
+        if (!hostIdentity) {
+          hostIdentity = updateHostIdentityRef.current.next++;
+          updateHostIdentityRef.current.hosts.set(host, hostIdentity);
+        }
+      }
+      const cacheAuthority = "connection:" + hostIdentity + "@" + String(ACTIVE_BASE) + ":" + ACTIVE_BASE_GENERATION;
+      let requestAuthority = "local:none";
+      if (scope) {
+        requestAuthority = "hub:" + String(authority) + "@" + authorityGeneration;
+      } else if (host && typeof host === "object") {
+        requestAuthority = "local:" + host.kind + ":" + hostIdentity;
+      }
+      if (updateCacheAuthorityRef.current !== cacheAuthority) {
+        updateCheckCacheRef.current.clear();
+        autoUpdateChecksRef.current = {};
+        updateCacheAuthorityRef.current = cacheAuthority;
+      }
+      const cacheKey = scope ? updateCheckCacheKey(key, authority, authorityGeneration) : requestAuthority + ":" + key;
+      const metaKey = "check:" + key;
+      const metaToken = updateResponseArbiterRef.current.begin(metaKey, authority, "check");
+      const authorityIsCurrent = () => scope ? ACTIVE_BASE === authority && ACTIVE_BASE_GENERATION === authorityGeneration : host === authority;
+      const metadataIsCurrent = () => updateResponseArbiterRef.current.isCurrent(metaKey, metaToken, authority) && authorityIsCurrent() && updateCheckScopeIsCurrent(scope);
       return cachedUpdateCheck(
         updateCheckCacheRef.current,
-        key,
-        () => dedupeUpdateCheck(autoUpdateChecksRef.current, key, () => checkUpdateAvailability(
-          () => retryTransientUpdate(() => withUpdateTimeout(loadUpdateInfo(component, "check", void 0, scope), localUpdateWaitMs(component))),
-          () => updateCheckScopeIsCurrent(scope)
+        cacheKey,
+        () => dedupeUpdateCheck(autoUpdateChecksRef.current, cacheKey, () => checkUpdateAvailability(
+          () => retryTransientUpdate(() => withUpdateTimeout(loadUpdateInfo(component, "check", scope ? authority : void 0, scope, authorityGeneration), localUpdateWaitMs(component))),
+          () => metadataIsCurrent()
         )),
         { force }
       ).then((result) => {
-        if (result.cancelled) return result;
-        setComponentUpdateError(component, result.failed ? shortUpdateError(result.error) : "", scope, false);
-        return result;
+        return commitArbitratedUpdateValue(updateResponseArbiterRef.current, metaKey, metaToken, authority, result, (current) => {
+          if (current.cancelled) return;
+          setComponentUpdateInfo(component, updateInfoAfterCheck({}, current), scope);
+          setComponentUpdateError(component, current.failed ? shortUpdateError(current.error) : "", scope, false);
+        }, metadataIsCurrent);
       });
     };
     const updateAction = async (component, action, preparedId, fixedScope, fixedAuthority) => {
@@ -165752,7 +166081,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         if (result && result.ok === false) throw new Error(result.message || result.error || (action === "check" ? "\u66F4\u65B0\u68C0\u67E5\u5931\u8D25" : "\u66F4\u65B0\u64CD\u4F5C\u5931\u8D25"));
         if (action === "prepare") {
           const status2 = await loadUpdateInfo(component, "status", pinnedBase, scope);
-          if (status2 && status2.ok === false) throw new Error(status2.message || status2.error || "\u66F4\u65B0\u5305\u72B6\u6001\u8BFB\u53D6\u5931\u8D25");
+          if (!isUsableUpdateStatus(status2)) throw new Error(status2 && (status2.message || status2.error) || "\u66F4\u65B0\u5305\u72B6\u6001\u8BFB\u53D6\u5931\u8D25");
           result = { ...status2 || {}, ...result || {} };
         }
         return result;
@@ -165773,8 +166102,8 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         const running = target && target.capabilities && target.capabilities.node_version;
         try {
           const status2 = await loadUpdateInfo("node", "status", authority, scope);
-          const versionOk = !!(running && status2 && status2.ok !== false && status2.latest_version && running === status2.latest_version);
-          if (status2 && status2.ok !== false && (!status2.restart_required || versionOk)) {
+          const versionOk = !!(running && isUsableUpdateStatus(status2) && status2.latest_version && running === status2.latest_version);
+          if (isUsableUpdateStatus(status2) && (!status2.restart_required || versionOk)) {
             if (status2.restart_required) setComponentUpdateInfo("node", { ...status2, restart_required: false }, scope);
             return;
           }
@@ -165791,7 +166120,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           const target = (stateRef.current && stateRef.current.devices || []).find((item) => item.device_id === scope.deviceId);
           const running = target && target.capabilities && target.capabilities.app_version;
           const status2 = await loadUpdateInfo("app", "status", authority, scope);
-          if (target && target.online && running === expectedVersion && status2 && status2.ok !== false && status2.current_version === expectedVersion) {
+          if (target && target.online && running === expectedVersion && isUsableUpdateStatus(status2) && status2.current_version === expectedVersion) {
             setComponentUpdateInfo("app", { ...status2, restart_required: false }, scope);
             return true;
           }
@@ -165806,7 +166135,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         if (!scopeIsCurrent(scope)) return false;
         try {
           const status2 = await loadUpdateInfo("plugin", "status", authority, scope);
-          if (status2 && status2.ok !== false && status2.restart_required !== true) return true;
+          if (isUsableUpdateStatus(status2) && status2.restart_required !== true) return true;
         } catch (_) {
         }
       }
@@ -165905,15 +166234,11 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       const running = run?.state === "running";
       const productErrors = updateErrors.devices[localId] || {};
       const failed = product2 === "desktop" ? !!(updateErrors.app || productErrors.node) : !!(updateErrors.localPlugin || productErrors.node);
-      const runtimeRestartRequired = product2 === "dsh" && localPluginNeedsRestart(infos[0]);
-      const hasUpdate = infos.some((info) => info && info.update_available === true);
-      const known = infos.every((info) => info && info.current_version && info.latest_version);
-      const card = updateCardState({
+      const runtimeRestartRequired = product2 === "dsh" && !isUpdateInfoStale(infos[0]) && localPluginNeedsRestart(infos[0]);
+      const card = updateCardStateForInfos(infos, {
         running,
         error: run?.state === "error" ? run.message : "",
-        hasUpdate,
         restartRequired: runtimeRestartRequired,
-        known,
         failed
       });
       const versionText = versionLine(
@@ -165950,18 +166275,14 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       const hasPlugin = !!(item.capabilities && item.capabilities.dsh_surface);
       const hasApp = !!(item.capabilities && item.capabilities.app_version);
       const infos = [node, ...hasPlugin ? [plugin] : [], ...hasApp ? [app] : []];
-      const hasUpdate = infos.some((info) => info && info.update_available === true);
-      const known = infos.every((info) => info && info.current_version && info.latest_version);
       const run = updateRunState("device:" + item.device_id);
       const running = run?.state === "running";
-      const failed = infos.some((_info, index) => !!(updateErrors.devices[item.device_id] || {})[["node", ...hasPlugin ? ["plugin"] : [], ...hasApp ? ["app"] : []][index]]);
-      const pluginRestart = !!(hasPlugin && plugin && plugin.restart_required);
-      const card = updateCardState({
+      const failed = infos.some((info, index) => !!(updateErrors.devices[item.device_id] || {})[["node", ...hasPlugin ? ["plugin"] : [], ...hasApp ? ["app"] : []][index]] || !!(info && info.check_error));
+      const pluginRestart = !!(hasPlugin && plugin && !isUpdateInfoStale(plugin) && plugin.restart_required);
+      const card = updateCardStateForInfos(infos, {
         running,
         error: run?.state === "error" ? run.message : "",
-        hasUpdate,
         restartRequired: pluginRestart,
-        known,
         failed,
         restartPill: "\u63D2\u4EF6\u5F85\u91CD\u542F DSH",
         restartAction: "none"
@@ -168296,7 +168617,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         device && device.capabilities && (!device.capabilities.fs || device.capabilities.surface_protocol !== 1) ? pill("\u8282\u70B9\u5F85\u66F4\u65B0", C.amber) : null,
         host && (host.kind === "dsh" || host.kind === "app") ? h2(Connection.Trigger, {
           onClick: () => {
-            if (host.kind === "dsh") {
+            if (host.kind === "dsh" || host.kind === "app") {
               let saved = {};
               try {
                 saved = JSON.parse(window.localStorage.getItem("tether.hub") || "{}");
@@ -168380,19 +168701,98 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         defaultDeviceId: appLocalDevice || deviceId || "",
         defaultDeviceName: ((state && state.devices || []).find((item) => item.device_id === (appLocalDevice || deviceId)) || {}).name || appLocalDevice || deviceId || "",
         platform: typeof navigator !== "undefined" && navigator.platform || "Windows",
-        onConfigured: ({ url, token, user }) => {
+        onConfigured: async ({ url, token, user }) => {
           try {
             window.localStorage.setItem("tether.hub", JSON.stringify({ url, token }));
           } catch (_) {
+            throw new Error("\u65E0\u6CD5\u4FDD\u5B58 Hub \u767B\u5F55\u51ED\u636E");
           }
+          ACTIVE_BASE = url;
+          ACTIVE_BASE_GENERATION += 1;
+          EXPLICIT_AUTHORITY = true;
+          apiBaseList = host && host.apiBases ? host.apiBases() : [url];
+          if (host) host.activeApiBase = () => ACTIVE_BASE;
+          treeDeviceEpochRef.current += 1;
+          deviceIdRef.current = "";
+          setState(null);
+          setDeviceId("");
+          setProjects(null);
+          setProjectsDevice("");
+          setProjectsError("");
+          setProject(null);
+          projectsRef.current = null;
+          projectRef.current = null;
+          projectsDeviceRef.current = "";
+          setNative([]);
+          setNativeError("");
+          setNativeLoaded(false);
+          setSessionId("");
+          setSessionData(null);
+          setSessionLoading(false);
+          setRunId("");
+          setRunEvents([]);
+          setTask("");
+          setTreeChildren({});
+          setTreeOpen({});
+          setTreeSelected("");
+          setDrives([]);
+          setPolicy(null);
+          setAudit([]);
+          setAuditCount(0);
+          setAuditLoading(false);
+          setSelected(null);
+          setFile(null);
+          setHistory({ back: [], forward: [] });
+          setWorkspaceOpen({});
+          dirCacheRef.current.clear();
+          dirInflightRef.current.clear();
+          treeInflightRef.current.clear();
+          previewCacheRef.current.clear();
+          previewInflightRef.current.clear();
+          workspaceCacheRef.current.clear();
+          drivesCacheRef.current.clear();
+          policyCacheRef.current.clear();
+          if (dirAbortRef.current) dirAbortRef.current.abort();
+          if (previewAbortRef.current) previewAbortRef.current.abort();
+          setUpdateInfo({ app: null, localPlugin: localPluginVersionSeed(host), devices: {} });
+          setUpdateErrors({ app: "", localPlugin: "", devices: {} });
+          setUpdateRuns({});
+          setUpdateBusy("");
+          setUpdateToast("");
+          updateCheckCacheRef.current.clear();
+          autoUpdateChecksRef.current = {};
+          updateCacheAuthorityRef.current = "";
+          setHubStatus("unknown");
+          setHubState(null);
+          setHubError("");
           setHubUrl(url);
           setHubToken(token);
           setHubAddress(url);
-          setHubStatus("online");
-          setShowHub(false);
-          setNotice("\u767B\u5F55\u6210\u529F" + (user && user.email ? "\uFF1A" + user.email : "\uFF0C\u5DF2\u8FDE\u63A5 Hub"));
-          if (host && typeof host.probeConnection === "function") host.probeConnection(url).catch(() => {
-          });
+          setHubBusy(true);
+          const generation = ACTIVE_BASE_GENERATION;
+          try {
+            const result = await host.probeConnection(url, token);
+            if (generation !== ACTIVE_BASE_GENERATION) throw new Error("\u8FDE\u63A5\u914D\u7F6E\u5DF2\u66F4\u6539\uFF0C\u8BF7\u91CD\u8BD5");
+            if (!result || result.status !== "online") throw new Error("Hub \u8FDE\u63A5\u9A8C\u8BC1\u5931\u8D25");
+            setHubState(result.state || null);
+            setHubStatus("online");
+            setHubDuration(Number.isFinite(result.durationMs) ? result.durationMs : null);
+            setHubCheckedAt(result.checkedAt ? new Date(result.checkedAt) : /* @__PURE__ */ new Date());
+            setHubError("");
+            setShowHub(false);
+            setNotice("\u767B\u5F55\u6210\u529F" + (user && user.email ? "\uFF1A" + user.email : "\uFF0C\u5DF2\u8FDE\u63A5 Hub"));
+            loadState();
+            refreshUpdateCenter(true);
+          } catch (error) {
+            if (generation === ACTIVE_BASE_GENERATION) {
+              setHubStatus("offline");
+              setHubCheckedAt(/* @__PURE__ */ new Date());
+              setHubError(hubProbeErrorText(error));
+            }
+            throw error;
+          } finally {
+            if (generation === ACTIVE_BASE_GENERATION) setHubBusy(false);
+          }
         }
       }) : null,
       showUpdate ? h2(
@@ -168646,7 +169046,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       )
     );
   }
-  return { App, TetherIcon };
+  return { App, TetherIcon, NativeSurface };
 }
 
 // src/hosts/web.js
@@ -168919,19 +169319,60 @@ function createWebNative(React2) {
   };
 }
 function createWebHost({ apiBase = "" } = {}) {
+  const normalize3 = (value) => String(value || "").replace(/\/+$/, "");
+  const hubConfig = () => {
+    try {
+      const value = JSON.parse(window.localStorage.getItem("tether.hub") || "null");
+      return value && typeof value.url === "string" && typeof value.token === "string" && value.url && value.token ? { url: normalize3(value.url), token: value.token } : null;
+    } catch (_) {
+      return null;
+    }
+  };
   return {
     kind: "web",
     apiBase: () => apiBase,
-    surfaceBase: () => apiBase
+    apiBases: () => {
+      const hub = hubConfig();
+      return hub ? [hub.url] : [apiBase];
+    },
+    apiHeaders: (base) => {
+      const hub = hubConfig();
+      return hub && normalize3(base) === hub.url ? { Authorization: "Bearer " + hub.token } : {};
+    },
+    hubConfig: () => {
+      const hub = hubConfig();
+      return hub ? { url: hub.url } : null;
+    },
+    surfaceBase: (isLocal = false) => isLocal ? apiBase : hubConfig()?.url || apiBase,
+    connectionInfo: async (activeBase) => ({ address: activeBase || hubConfig()?.url || apiBase || "\u672A\u914D\u7F6E", status: "unknown" }),
+    probeConnection: async (activeBase, token) => {
+      const hub = hubConfig();
+      const base = normalize3(activeBase || hub && hub.url);
+      if (!base) throw new Error("Hub \u5730\u5740\u672A\u914D\u7F6E");
+      const started = Date.now();
+      const response = await fetch(base + "/api/state", {
+        headers: { Authorization: "Bearer " + (token || (hub && hub.url === base ? hub.token : "")) },
+        signal: AbortSignal.timeout(5e3)
+      });
+      if (!response.ok) {
+        const error = new Error("Hub \u8BF7\u6C42\u5931\u8D25");
+        error.status = response.status;
+        throw error;
+      }
+      const state = await response.json();
+      return { state, address: base, status: "online", checkedAt: (/* @__PURE__ */ new Date()).toISOString(), durationMs: Date.now() - started };
+    }
   };
 }
 
 // src/hosts/electron.js
 function createElectronHost({ apiBase = "" } = {}) {
+  const webHost = createWebHost({ apiBase });
   return {
-    ...createWebHost({ apiBase }),
+    ...webHost,
     kind: "app",
-    connectionInfo: async () => {
+    connectionInfo: async (activeBase) => {
+      if (webHost.hubConfig()) return webHost.connectionInfo(activeBase);
       const state = await window.tetherApp.services();
       return {
         address: state.remoteUrl || state.endpoints && state.endpoints.api || "\u672A\u914D\u7F6E",
@@ -168941,7 +169382,8 @@ function createElectronHost({ apiBase = "" } = {}) {
         durationMs: state.lastProbe && state.lastProbe.durationMs
       };
     },
-    probeConnection: async () => {
+    probeConnection: async (activeBase, token) => {
+      if (webHost.hubConfig()) return webHost.probeConnection(activeBase, token);
       const state = await window.tetherApp.probeServices();
       return {
         address: state.remoteUrl || state.endpoints && state.endpoints.api || "\u672A\u914D\u7F6E",

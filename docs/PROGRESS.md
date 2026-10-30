@@ -1,5 +1,15 @@
 # 实时进度
 
+## 2026-10-30 v0.2.29 本地发行准备（未发布）
+
+候选分支 `dev/client-auth-20261030` 的三组件版本元数据已准备到 0.2.29，包含登录 authority 作用域修复、更新/NativeSurface 迟到状态竞态处理和原生 Composer 附件路由。隔离本机 DSH Web Host + QA Node 的 Composer → 目标工作区附件链路已通过；物理 LAPTOP-01 未安装或复验。父代理报告 Python 125 passed / 1 skipped、Hub/server 116 passed、Node 199 passed。项目 venv 的 `validate_versions()` 通过；本地 unsigned APP/Plugin/Node ZIP 与清单的版本、大小及 SHA-256 匹配，离线检查确认没有 `.scratch`、`.dev-harness`、私有 server 源码或 QA fixture。当前清单无签名；CI 签名和公开 Release 尚待完成。
+
+## 2026-10-30 Codex 更新状态候选（未发布、未安装）
+
+在现有登录 UI 开发分支中修复更新请求竞态；源码与两种客户端构建产物同步。最终父代理验证：24个Node测试文件、187用例全部通过（退出0）；共享源码/bundle检查通过；Web两次标准构建SHA-256一致。覆盖迟到状态/错误、连接地址代际、失败/缓存来源、安装后版本追平和灰度资格保留。此处不表示两机更新中心验收通过，也不改变正式客户端版本。
+
+干净系统安装仍依赖 Python/npm，部分配置要求手工文件；小白安装与商店发布资格尚未完成。
+
 更新日期：2026-10-29。
 
 > 交接：给 Codex 的接手说明见 [HANDOFF-2026-10-29.md](HANDOFF-2026-10-29.md)（现状、故障证据、更新契约、红线与排期）。
@@ -170,13 +180,13 @@
 - 更新前后 `hub.json` SHA-256、1 个会话记录、3 个工作区树摘要一致。更新后的三组件联网检查 797–1250 ms，当前状态查询 781–1266 ms；运行中更新检查不会下载安装。
 - 桌面 DSH 的真实 owner RPC 已返回 HTTP 200，运行/安装插件均为 `0.2.11`。LAPTOP-01 通过 owner pluginManager 安全重载返回 `application=applied`（HTTP 200，2141 ms），随后 `/tether-updates/status` 确认 current/runtime 均为 `0.2.11`；证据见 `maintenance/ui-regression.../laptop-official-plugin-reload.json`。此结果验证了本机 surface reload 流程，无需手工重启 DSH。
 - 浏览器长期缓存仅用于已鉴权、成功返回的哈希 JS/CSS；动态 HTML 仍 `no-store`。已实测缓存头与 gzip，尚未将 Python HTTP 重复请求当作浏览器缓存命中证据。
-- 原生对话目标设备附件选择器源码已实现并通过自动回归；真实安装窗口与跨设备模型上传仍未验收。首次冷加载约 32 秒的全部耗时尚未归因。桌面旧快捷方式对应的 `D:\Tether\app` 仍为 `0.2.9`，升级命令因自动审批用量限制未执行，不能称为已升级。
+- 原生对话目标设备附件选择器已在隔离真实 DSH Web Host + QA Node 验证：picker 列出 txt/bin，90B 与 4B 文件进入原生 composer，multipart 原始字节包含预期 `00 ff 41 80`。未发送消息、未调用模型；物理 LAPTOP-01 跨设备与模型上传仍待验收。首次冷加载约 32 秒的全部耗时尚未归因。桌面旧快捷方式对应的 `D:\Tether\app` 仍为 `0.2.9`，升级命令因自动审批用量限制未执行，不能称为已升级。
 
 ## 原生目标设备附件窄切片（2026-10-28）
 
 - 候选源码：原生 iframe 的附件 slot 增加“目标设备文件…”浏览入口；owner-only RPC 确认当前 DSH `device_id`，读取端改用 DSH Host `remote.workspaceFiles` 并绑定 `sessionId`，当前只浏览该会话工作区，路径必须来自已列出的目录/文件。
 - 复用安装版 MIT `ComposerAttachments` 组件保留预览、移除、重试、上传进度和拖拽；通过 `workspaceFiles.readBytes` 获取原始 `Uint8Array`，按 256 KiB 分块，单文件最多 10 MiB。目标设备或会话作用域切换后丢弃异步结果。
-- 自动验证：附件桥接 5 项 JavaScript 回归通过（含原始二进制、路径 capability、权限拒绝、大小上限、设备/会话切换）。当前 Node `fs/read` 服务保持未修改。尚未在真实已安装 DSH Host 验证 `remote.workspaceFiles` 注入和实际跨设备模型上传；未发布、安装或重启。
+- 自动验证：附件桥接 JavaScript 回归覆盖原始二进制、路径 capability、权限拒绝、大小上限、设备/会话切换；另有隔离真实 DSH Web Host + QA Node 验证 `remote.workspaceFiles` 注入、原生 chip 与二进制 `readBytes` 回传。当前 Node `fs/read` 服务保持未修改。物理 LAPTOP-01 与模型上传验收待完成；未发布或安装到该设备。
 - 后端通道补充证据：LAPTOP-01 的真实 owner `workspaceFiles.list` 对当前原生 Session 工作区 `.` 返回 HTTP 200 / `ok:true`（目录当前为空），证明无需给 iframe 配置额外 Hub token即可调用目标 Host API；此证据不覆盖 `readBytes`、UI 注入或模型上传验收。
 
 ## 演示前修复快照（2026-10-28 15:54）

@@ -49,6 +49,64 @@ function fixture({ deviceIds = ['LAPTOP-01'], payload = new Uint8Array(), fileNa
   return { bridge, lists, reads }
 }
 
+function componentHarness(component, props, React) {
+  const hooks = []
+  let cursor = 0
+  let pendingEffects = []
+  let output
+  let currentProps = props
+  const render = () => {
+    cursor = 0
+    pendingEffects = []
+    output = component(currentProps)
+    for (const { index, effect, dependencies } of pendingEffects) {
+      hooks[index]?.cleanup?.()
+      hooks[index] = { dependencies, cleanup: effect() }
+    }
+    return output
+  }
+  React.useState = (initial) => {
+    const index = cursor++
+    if (!hooks[index]) hooks[index] = { value: typeof initial === 'function' ? initial() : initial }
+    return [hooks[index].value, (value) => { hooks[index].value = typeof value === 'function' ? value(hooks[index].value) : value }]
+  }
+  React.useRef = (initial) => {
+    const index = cursor++
+    if (!hooks[index]) hooks[index] = { current: initial }
+    return hooks[index]
+  }
+  React.useEffect = (effect, dependencies) => {
+    const index = cursor++
+    const prior = hooks[index]
+    if (!prior || !dependencies || dependencies.some((value, i) => !Object.is(value, prior.dependencies?.[i]))) {
+      pendingEffects.push({ index, effect, dependencies })
+    }
+  }
+  return {
+    render,
+    update: nextProps => { currentProps = nextProps },
+    dispose: () => hooks.forEach((hook) => hook?.cleanup?.()),
+    output: () => output
+  }
+}
+
+function findElement(node, predicate) {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const match = findElement(child, predicate)
+      if (match) return match
+    }
+    return null
+  }
+  if (!node || typeof node !== 'object') return null
+  if (predicate(node)) return node
+  for (const child of node.children || []) {
+    const match = findElement(child, predicate)
+    if (match) return match
+  }
+  return null
+}
+
 test('listing and file reads use the native owner identity and active session workspace API', async () => {
   const { bridge, lists } = fixture()
   const root = await bridge.getRoots('SESSION-1')
@@ -107,13 +165,13 @@ test('changed file versions across byte chunks are rejected and image MIME types
   assert.equal(file.options.type, 'image/png')
 })
 
-test('native attachment wrapper follows the repository fileDrag injection contract', () => {
+test('target picker uses the remote workspace API and retains the native attachment/drop contract', () => {
   const buildSource = fs.readFileSync(new URL('../packages/tether-ui/scripts/build.mjs', import.meta.url), 'utf8')
-  assert.match(buildSource, /priority: -1000, locale: 'conversation',[\s\S]*inject: \(\) => \(\{ readFileDrag: ctx\.fileDrag\.read \}\)/)
-  // DSH hosts without the fileDrag service must still boot, so fileDrag is an
-  // optional capability probe rather than a required injection.
-  assert.doesNotMatch(buildSource, /inject: \[[^\]]*'fileDrag'/)
-  assert.match(buildSource, /ctx\.fileDrag && typeof ctx\.fileDrag\.read === 'function'/)
+  assert.match(buildSource, /typeof ctx\.connection\.rpc\.call === 'function'[\s\S]*ctx\.remote\.workspaceFiles/)
+  assert.match(buildSource, /priority: -1000, locale: 'conversation'/)
+  assert.match(buildSource, /inject: \(sessionId\) => \(\{ sessionId \}\)/)
+  assert.match(buildSource, /'uiWorkspace', 'sessions'/)
+  assert.doesNotMatch(buildSource, /ctx\.fileDrag/)
 
   const nativeUiPackage = JSON.parse(fs.readFileSync(new URL('../packages/tether-dsh-native-ui/package.json', import.meta.url), 'utf8'))
   assert.equal(nativeUiPackage.dependencies['@deepseek-ai/dsh-client-ui-attachment'], undefined)
@@ -133,6 +191,251 @@ test('native attachment wrapper follows the repository fileDrag injection contra
   assert.equal(tree.children[0].type, Native.ComposerAttachments)
   assert.equal(tree.children[0].props.readFileDrag, readFileDrag)
   assert.equal(tree.children[0].props.t, translate)
+})
+
+test('Composer plus opens the scoped remote picker and its local-file button still opens the native picker', async () => {
+  const previousDocument = globalThis.document
+  const listeners = []
+  let nativeDialogOpens = 0
+  const composerParent = { parentElement: null, querySelectorAll(selector) {
+    assert.equal(selector, 'input[type="file"][hidden]')
+    return [input]
+  } }
+  const document = {
+    addEventListener(type, listener, capture) { if (type === 'click' && capture) listeners.push(listener) },
+    removeEventListener(type, listener) { const index = listeners.indexOf(listener); if (index >= 0) listeners.splice(index, 1) }
+  }
+  const input = {
+    tagName: 'INPUT', type: 'file', hidden: true,
+    click() {
+      const event = {
+        target: input, defaultPrevented: false, propagationStopped: false, immediateStopped: false,
+        preventDefault() { this.defaultPrevented = true },
+        stopPropagation() { this.propagationStopped = true },
+        stopImmediatePropagation() { this.immediateStopped = true }
+      }
+      for (const listener of [...listeners]) listener(event)
+      if (!event.defaultPrevented) nativeDialogOpens += 1
+      this.lastClick = event
+    }
+  }
+  globalThis.document = document
+  const payload = new Uint8Array([0x00, 0xff, 0x41, 0x80])
+  const { bridge, lists } = fixture({ payload })
+  const added = []
+  const React = {
+    Fragment: 'fragment',
+    createElement(type, props, ...children) { return { type, props: props || {}, children } }
+  }
+  const Native = { ComposerAttachments: props => ({ type: 'native-attachments', props }) }
+  const Component = createDshTargetAttachments(React, Native, bridge)
+  const props = { sessionId: 'SESSION-1', canAcceptDrop: true, attachments: [], onAddFiles: files => added.push(...files) }
+  const harness = componentHarness(Component, props, React)
+  try {
+    harness.render()
+    const container = findElement(harness.output(), node => node.type === 'div' && node.props.ref)
+    assert.ok(container)
+    container.props.ref.current = { parentElement: composerParent }
+    input.click() // the same hidden input the native Composer plus button clicks
+    input.click() // repeated clicks while listing is busy must not duplicate the request
+    assert.equal(input.lastClick.defaultPrevented, true)
+    assert.equal(input.lastClick.immediateStopped, true)
+    const otherInput = { tagName: 'INPUT', type: 'file', hidden: true }
+    const unrelatedClick = { target: otherInput, defaultPrevented: false, preventDefault() { this.defaultPrevented = true } }
+    for (const listener of [...listeners]) listener(unrelatedClick)
+    assert.equal(unrelatedClick.defaultPrevented, false, 'other hidden file inputs keep their native behavior')
+    nativeDialogOpens += 1
+    await new Promise(resolve => setImmediate(resolve))
+    await new Promise(resolve => setImmediate(resolve))
+    let tree = harness.render()
+    assert.equal(lists.length, 1, 'repeated plus clicks while busy do not duplicate remote requests')
+    assert.equal(lists[0].path, '.', 'plus opens the remote session workspace')
+    const fileButton = findElement(tree, node => node.type === 'button' && String(node.children?.[0]).startsWith('📄 file.txt'))
+    assert.ok(fileButton, 'the real remote picker renders the listed target file: ' + JSON.stringify(tree))
+    fileButton.props.onClick()
+    await new Promise(resolve => setImmediate(resolve))
+    await new Promise(resolve => setImmediate(resolve))
+    assert.equal(added.length, 1, 'the selected target file reaches Composer onAddFiles')
+    assert.deepEqual(Buffer.concat(added[0].chunks.map(part => Buffer.from(part))), Buffer.from(payload),
+      'the remote picker preserves original bytes without text decoding')
+
+    tree = harness.render()
+    const localButton = findElement(tree, node => node.type === 'button' && node.children?.[0] === '本机文件…')
+    assert.ok(localButton, 'local upload remains as an explicit secondary action')
+    const nativeOpensBeforeLocal = nativeDialogOpens
+    localButton.props.onClick()
+    assert.equal(nativeDialogOpens, nativeOpensBeforeLocal + 1, 'the explicit local action bypasses the remote default')
+    assert.equal(listeners.length, 1, 'the hidden input listener is installed once')
+  } finally {
+    harness.dispose()
+    if (previousDocument === undefined) delete globalThis.document
+    else globalThis.document = previousDocument
+  }
+})
+
+test('multiple Composer attachment slots stay session-bound and no-session plus clicks never fall back to native picker', async () => {
+  const previousDocument = globalThis.document
+  const listeners = []
+  globalThis.document = {
+    addEventListener(type, listener, capture) { if (type === 'click' && capture) listeners.push(listener) },
+    removeEventListener(type, listener) { const index = listeners.indexOf(listener); if (index >= 0) listeners.splice(index, 1) }
+  }
+  const makeInput = () => ({ tagName: 'INPUT', type: 'file', hidden: true, click() {
+    const event = { target: this, prevented: false, preventDefault() { this.prevented = true }, stopPropagation() {}, stopImmediatePropagation() {} }
+    for (const listener of [...listeners]) listener(event)
+    return event
+  } })
+  const React = { Fragment: 'fragment', createElement(type, props, ...children) { return { type, props: props || {}, children } } }
+  const Native = { ComposerAttachments: props => ({ type: 'native-attachments', props }) }
+  const inputs = [makeInput(), makeInput(), makeInput()]
+  const fixtures = [fixture(), fixture(), fixture()]
+  const harnesses = fixtures.map(({ bridge }, index) => {
+    const Component = createDshTargetAttachments(React, Native, bridge)
+    const harness = componentHarness(Component, { sessionId: index < 2 ? `SESSION-${index}` : undefined, canAcceptDrop: true, attachments: [], onAddFiles() {} }, React)
+    harness.render()
+    const container = findElement(harness.output(), node => node.type === 'div' && node.props.ref)
+    container.props.ref.current = { parentElement: {
+      parentElement: null,
+      querySelectorAll() { return [inputs[index]] }
+    } }
+    return harness
+  })
+  try {
+    const clickA = inputs[0].click()
+    assert.equal(clickA.prevented, true, 'the first mounted Composer routes its own input')
+    assert.equal(fixtures[0].lists.length, 0, 'workspace listing starts asynchronously')
+    assert.equal(fixtures[1].lists.length, 0, 'the other session receives no request')
+    const clickB = inputs[1].click()
+    assert.equal(clickB.prevented, true, 'the second mounted Composer routes its own input')
+    const clickWithoutSession = inputs[2].click()
+    assert.equal(clickWithoutSession.prevented, true, 'a composer without a session does not silently open the local picker')
+    await new Promise(resolve => setImmediate(resolve))
+    await new Promise(resolve => setImmediate(resolve))
+    assert.deepEqual(fixtures[0].lists.map(item => item.sessionId), ['SESSION-0'])
+    assert.deepEqual(fixtures[1].lists.map(item => item.sessionId), ['SESSION-1'])
+    assert.deepEqual(fixtures[2].lists, [], 'an unselected composer never reads either session workspace')
+    assert.match(JSON.stringify(harnesses[2].render()), /先在目标设备选择或创建工作区/)
+  } finally {
+    for (const harness of harnesses) harness.dispose()
+    if (previousDocument === undefined) delete globalThis.document
+    else globalThis.document = previousDocument
+  }
+})
+
+test('new-draft plus click creates one official blank session, then resumes the target picker with current intake callback', async () => {
+  const previousDocument = globalThis.document
+  const listeners = []
+  let nativeDialogOpens = 0
+  const input = {
+    tagName: 'INPUT', type: 'file', hidden: true,
+    click() {
+      const event = { target: input, defaultPrevented: false, preventDefault() { this.defaultPrevented = true }, stopPropagation() {}, stopImmediatePropagation() {} }
+      for (const listener of [...listeners]) listener(event)
+      if (!event.defaultPrevented) nativeDialogOpens += 1
+      return event
+    }
+  }
+  const composerParent = { parentElement: null, querySelectorAll: () => [input] }
+  globalThis.document = {
+    addEventListener(type, listener, capture) { if (type === 'click' && capture) listeners.push(listener) },
+    removeEventListener(type, listener) { const index = listeners.indexOf(listener); if (index >= 0) listeners.splice(index, 1) }
+  }
+  const payload = new Uint8Array([0, 255, 65])
+  const { bridge, lists } = fixture({ payload })
+  const React = { Fragment: 'fragment', createElement(type, props, ...children) { return { type, props: props || {}, children } } }
+  const Native = { ComposerAttachments: props => ({ type: 'native-attachments', props }) }
+  let startCalls = 0
+  const uiWorkspace = { startSession() { startCalls += 1 } }
+  const sessions = { list: { getSnapshot: () => ({ ids: ['OLD-SESSION'] }) } }
+  const pickerCommand = { pendingSessionStart: null }
+  const Component = createDshTargetAttachments(React, Native, bridge, pickerCommand, uiWorkspace, sessions)
+  const oldFiles = []
+  const newFiles = []
+  const harness = componentHarness(Component, { canAcceptDrop: true, attachments: [], onAddFiles: files => oldFiles.push(...files) }, React)
+  try {
+    let tree = harness.render()
+    findElement(tree, node => node.type === 'div' && node.props.ref).props.ref.current = { parentElement: composerParent }
+    const firstClick = input.click()
+    assert.equal(firstClick.defaultPrevented, true)
+    assert.equal(nativeDialogOpens, 0, 'the default plus path never opens the local file dialog')
+    assert.equal(startCalls, 1, 'a new-draft click asks the official DSH workspace service for one blank session')
+    assert.ok(pickerCommand.pendingSessionStart)
+    input.click()
+    assert.equal(startCalls, 1, 'repeated clicks while preparing do not create duplicate sessions')
+    assert.match(JSON.stringify(harness.render()), /正在准备目标 DSH 会话/)
+
+    harness.update({ sessionId: 'NEW-SESSION', canAcceptDrop: true, attachments: [], onAddFiles: files => newFiles.push(...files) })
+    tree = harness.render()
+    await new Promise(resolve => setImmediate(resolve))
+    await new Promise(resolve => setImmediate(resolve))
+    assert.equal(pickerCommand.pendingSessionStart, null, 'the pending open intent is consumed by the new session')
+    assert.deepEqual(lists, [{ sessionId: 'NEW-SESSION', path: '.' }], 'the new session opens its authorized workspace once')
+    tree = harness.render()
+    const fileButton = findElement(tree, node => node.type === 'button' && String(node.children?.[0]).startsWith('📄 file.txt'))
+    assert.ok(fileButton)
+    fileButton.props.onClick()
+    await new Promise(resolve => setImmediate(resolve))
+    await new Promise(resolve => setImmediate(resolve))
+    assert.equal(oldFiles.length, 0, 'the old draft callback is not retained across session creation')
+    assert.equal(newFiles.length, 1, 'the new session receives the attachment')
+    assert.deepEqual(Buffer.concat(newFiles[0].chunks.map(part => Buffer.from(part))), Buffer.from(payload))
+    assert.equal(nativeDialogOpens, 0)
+  } finally {
+    harness.dispose()
+    clearTimeout(pickerCommand.pendingSessionStart?.timeoutId)
+    if (previousDocument === undefined) delete globalThis.document
+    else globalThis.document = previousDocument
+  }
+})
+
+test('draft picker start failures and a switch to an existing session clear the pending open without local fallback', () => {
+  const previousDocument = globalThis.document
+  const listeners = []
+  let nativeDialogOpens = 0
+  const input = { tagName: 'INPUT', type: 'file', hidden: true, click() {
+    const event = { target: input, defaultPrevented: false, preventDefault() { this.defaultPrevented = true }, stopPropagation() {}, stopImmediatePropagation() {} }
+    for (const listener of [...listeners]) listener(event)
+    if (!event.defaultPrevented) nativeDialogOpens += 1
+    return event
+  } }
+  globalThis.document = {
+    addEventListener(type, listener, capture) { if (type === 'click' && capture) listeners.push(listener) },
+    removeEventListener(type, listener) { const index = listeners.indexOf(listener); if (index >= 0) listeners.splice(index, 1) }
+  }
+  const React = { Fragment: 'fragment', createElement(type, props, ...children) { return { type, props: props || {}, children } } }
+  const Native = { ComposerAttachments: props => ({ type: 'native-attachments', props }) }
+  const { bridge, lists } = fixture()
+  const sessions = { list: { getSnapshot: () => ({ ids: ['EXISTING'] }) } }
+  const pickerCommand = { pendingSessionStart: null }
+  const Component = createDshTargetAttachments(React, Native, bridge, pickerCommand, { startSession() {} }, sessions)
+  const harness = componentHarness(Component, { canAcceptDrop: true, attachments: [], onAddFiles() {} }, React)
+  try {
+    let tree = harness.render()
+    findElement(tree, node => node.type === 'div' && node.props.ref).props.ref.current = { parentElement: { parentElement: null, querySelectorAll: () => [input] } }
+    assert.equal(input.click().defaultPrevented, true)
+    assert.ok(pickerCommand.pendingSessionStart)
+    harness.update({ sessionId: 'EXISTING', canAcceptDrop: true, attachments: [], onAddFiles() {} })
+    harness.render()
+    assert.equal(pickerCommand.pendingSessionStart, null, 'switching to an unrelated pre-existing session cancels the pending draft picker')
+    assert.deepEqual(lists, [], 'the switched session does not receive a stale workspace request')
+    assert.equal(nativeDialogOpens, 0)
+
+    const failedCommand = { pendingSessionStart: null }
+    const failed = createDshTargetAttachments(React, Native, bridge, failedCommand, { startSession() { throw new Error('workspace unavailable') } }, sessions)
+    const failedHarness = componentHarness(failed, { canAcceptDrop: true, attachments: [], onAddFiles() {} }, React)
+    try {
+      tree = failedHarness.render()
+      findElement(tree, node => node.type === 'div' && node.props.ref).props.ref.current = { parentElement: { parentElement: null, querySelectorAll: () => [input] } }
+      assert.equal(input.click().defaultPrevented, true)
+      assert.equal(failedCommand.pendingSessionStart, null)
+      assert.match(JSON.stringify(failedHarness.render()), /workspace unavailable/)
+      assert.equal(nativeDialogOpens, 0, 'a failed remote start never falls back to a local file dialog')
+    } finally { failedHarness.dispose() }
+  } finally {
+    harness.dispose()
+    if (previousDocument === undefined) delete globalThis.document
+    else globalThis.document = previousDocument
+  }
 })
 
 test('oversized files and DSH permission refusals never reach the composer', async () => {

@@ -10,3 +10,4 @@
 - 加入 DeepSeek 原生 UI 展示桥及其依赖；客户端和 bundle 显式声明本地包关系。
 - 新增 Host 原生 surface companion 包，负责发布 DSH 原生 Web listener descriptor。
 - 2026-10-28：统一发布版本元数据到 `0.2.13`；共享 UI、WebUI bundle 与 DSH client bundle 刷新忙态改动待构建验证。
+- 2026-10-30：DSH 插件 bundle、client、native UI 与 surface 四个发布包版本统一至 `0.2.29`。
