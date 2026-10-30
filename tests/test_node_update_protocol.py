@@ -254,46 +254,148 @@ def test_remote_app_restart_helper_failure_releases_update_gate(tmp_path, monkey
     node.store.db.close()
 
 
-def test_windows_app_restart_helper_targets_only_install_electron_and_launcher(tmp_path, monkeypatch):
+def test_windows_app_restart_helper_spawns_a_windowless_python_helper(tmp_path, monkeypatch):
     app_root = tmp_path / "installed app"
+    electron = (app_root / "apps" / "tether-app" / "node_modules" / "electron"
+                / "dist" / "electron.exe")
+    electron.parent.mkdir(parents=True)
+    electron.write_bytes(b"MZ")
     launcher = app_root / "apps" / "tether-app" / "Tether-App.cmd"
-    launcher.parent.mkdir(parents=True)
     launcher.write_text("@echo off\n", encoding="utf-8")
     captured: list[tuple[list[str], dict]] = []
 
     def popen(args, **kwargs):
         captured.append((args, kwargs))
-        wrapper = Path(args[1])
-        config_path = Path(wrapper.with_name("restart.json"))
-        config = json.loads(config_path.read_text(encoding="utf-8"))
-        Path(config["ready_file"]).write_text("ready", encoding="ascii")
         return object()
 
     monkeypatch.setattr(agent.sys, "platform", "win32")
     monkeypatch.setattr(agent.subprocess, "Popen", popen)
     assert agent.schedule_app_restart(app_root) is True
     args, options = captured[0]
-    assert args[0] == "explorer.exe"
-    wrapper = Path(args[1])
-    script = wrapper.with_name("worker.ps1")
-    config_path = wrapper.with_name("restart.json")
-    source = script.read_text(encoding="utf-8")
-    config = json.loads(config_path.read_text(encoding="utf-8"))
-    wrapper_source = wrapper.read_text(encoding="utf-8")
-    assert "Win32_Process" in source
-    assert "Stop-Process" in source
-    assert "Start-Sleep -Seconds 2" in source
-    assert "explorer.exe" in source
-    assert "WindowsPowerShell\\v1.0\\powershell.exe" in wrapper_source
-    assert config["root"] == str(app_root.resolve())
-    assert config["wrapper_file"] == str(wrapper)
-    assert options["creationflags"] & getattr(agent.subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
-    agent.shutil.rmtree(wrapper.parent)
+    assert args[:3] == [agent.sys.executable, "-m", "tether.node.app_restart"]
+    assert args[args.index("--root") + 1] == str(app_root.resolve())
+    lowered = [str(arg).lower() for arg in args]
+    assert not any("explorer" in arg or arg.endswith(".cmd") or "powershell" in arg for arg in lowered)
+    assert options["creationflags"] & agent.CREATE_NO_WINDOW
+    assert options["creationflags"] & agent.DETACHED_PROCESS
+    assert options["creationflags"] & agent.CREATE_NEW_PROCESS_GROUP
+    assert options["windowsHide"] is True
 
 
-def test_app_restart_helper_fails_cleanly_when_launcher_is_missing(tmp_path, monkeypatch):
+def test_app_restart_helper_fails_cleanly_when_electron_is_missing(tmp_path, monkeypatch):
     monkeypatch.setattr(agent.sys, "platform", "win32")
     assert agent.schedule_app_restart(tmp_path) is False
+
+
+def test_app_restart_launches_electron_directly_without_a_shell(tmp_path, monkeypatch):
+    from tether.node import app_restart
+
+    root = tmp_path / "install"
+    electron = app_restart.electron_executable(root)
+    app_dir = root / "apps" / "tether-app"
+    electron.parent.mkdir(parents=True)
+    electron.write_bytes(b"MZ")
+    captured: list[tuple[list[str], dict]] = []
+
+    def popen(args, **kwargs):
+        captured.append((args, kwargs))
+        return object()
+
+    monkeypatch.setattr(app_restart.sys, "platform", "win32")
+    monkeypatch.setattr(app_restart.subprocess, "Popen", popen)
+    monkeypatch.setattr(app_restart, "stop_app", lambda _electron, _log: None)
+    code = app_restart.main(["--root", str(root), "--log", str(tmp_path / "restart.log"),
+                             "--delay", "0"])
+
+    assert code == 0
+    args, options = captured[0]
+    assert args == [str(electron), str(app_dir)]
+    assert options["cwd"] == str(app_dir)
+    assert not any("explorer" in str(arg).lower() or str(arg).lower().endswith(".cmd") for arg in args)
+    assert "ELECTRON_RUN_AS_NODE" not in options["env"]
+
+
+def test_update_calls_attach_while_an_apply_is_running(tmp_path, monkeypatch):
+    node = _node(tmp_path, monkeypatch)
+    manager = FakeUpdateManager()
+    node.update_managers["node"] = manager
+    node.update_applying = True
+    sent: list[dict] = []
+
+    async def send(message: dict) -> None:
+        sent.append(message)
+
+    monkeypatch.setattr(node, "_send", send)
+    for req_id, action in (("status-during", "status"), ("check-during", "check")):
+        asyncio.run(node._update_call({"type": "update_call", "req_id": req_id,
+                                       "action": action, "component": "node"}))
+    asyncio.run(node._update_call({"type": "update_call", "req_id": "apply-during",
+                                   "action": "apply", "component": "node",
+                                   "prepared_id": "b" * 32}))
+
+    assert [message["status"] for message in sent] == ["in_progress"] * 3
+    assert all(message["ok"] is True and message["in_progress"] is True for message in sent)
+    assert manager.apply_calls == 0
+    assert node.update_applying is True
+    node.store.db.close()
+
+
+def test_in_progress_apply_result_does_not_request_a_restart(tmp_path, monkeypatch):
+    node = _node(tmp_path, monkeypatch)
+    manager = FakeUpdateManager()
+    manager.apply = lambda _prepared_id: {"ok": True, "component": "node",
+                                          "status": "in_progress", "in_progress": True,
+                                          "restart_required": False, "error": ""}
+    node.update_managers["node"] = manager
+    node.dsh_sessions.list = lambda: []
+    node.dsh_sessions._files = lambda: []
+    sent: list[dict] = []
+
+    async def send(message: dict) -> None:
+        sent.append(message)
+
+    monkeypatch.setattr(node, "_send", send)
+    asyncio.run(node._update_call({"type": "update_call", "req_id": "node-attached",
+                                   "action": "apply", "component": "node",
+                                   "prepared_id": "b" * 32}))
+
+    assert sent[0]["status"] == "in_progress"
+    assert node.restart_requested is False
+    assert node.update_applying is False
+    assert sent[-1]["type"] == "update_ready"
+    node.store.db.close()
+
+
+def test_node_restart_is_deferred_when_the_app_update_is_prepared(tmp_path, monkeypatch):
+    node = _node(tmp_path, monkeypatch)
+    manager = FakeUpdateManager()
+    node.update_managers["node"] = manager
+
+    class PreparedAppManager(FakeUpdateManager):
+        def status(self) -> dict:
+            return {"ok": True, "component": "app", "prepared": [{"to_version": "0.2.2"}]}
+
+    node.update_managers["app"] = PreparedAppManager()
+    node.dsh_sessions.list = lambda: []
+    node.dsh_sessions._files = lambda: []
+    sent: list[dict] = []
+
+    async def send(message: dict) -> None:
+        sent.append(message)
+
+    monkeypatch.setattr(node, "_send", send)
+    asyncio.run(node._update_call({"type": "update_call", "req_id": "node-defer",
+                                   "action": "apply", "component": "node",
+                                   "prepared_id": "a" * 32}))
+
+    result = sent[0]
+    assert result["ok"] is True
+    assert result["restart_required"] is True
+    assert result["restart_deferred"] is True
+    assert node.restart_requested is False
+    assert node.update_applying is False
+    assert sent[-1]["type"] == "update_ready"
+    node.store.db.close()
 
 
 def test_update_prepare_does_not_block_message_receiver_or_cancel_heartbeat(tmp_path, monkeypatch):

@@ -45,7 +45,9 @@ class UpdateService {
   }
 
   async run(command, preparedId, force = false) {
-    const stateDir = path.join(this.dataDir, 'updates')
+    // Shared with the node's APP update manager so a prepared APP update is
+    // visible to both and node can defer its own restart until the APP applies.
+    const stateDir = path.join(this.dataDir, 'updates', 'app')
     const args = ['-m', 'tether.updates_cli', command, '--component', 'app', '--root', this.repoRoot, '--state-dir', stateDir, '--dsh-home', this.dshHome]
     if (preparedId) args.push('--prepared-id', preparedId)
     if (force) args.push('--force')
@@ -131,7 +133,7 @@ class UpdateService {
       pid: process.pid,
       python: this.python,
       root: this.repoRoot,
-      stateDir: path.join(this.dataDir, 'updates'),
+      stateDir: path.join(this.dataDir, 'updates', 'app'),
       dshHome: this.dshHome,
       component: 'app',
       preparedId,

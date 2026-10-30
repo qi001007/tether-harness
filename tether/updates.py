@@ -24,14 +24,19 @@ import uuid
 import zipfile
 from concurrent.futures import Future, TimeoutError as FutureTimeout
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Any, Callable
 
 import psutil
 
 from .release import ReleaseSignatureError, verify_signature
 
 
-UPDATER_VERSION = "0.2.30"
+UPDATER_VERSION = "0.2.31"
+CREATE_NO_WINDOW = 0x08000000
+DETACHED_PROCESS = 0x00000008
+CREATE_NEW_PROCESS_GROUP = 0x00000200
+# Byte locked on Windows so the JSON holder record at offset 0 stays readable.
+LOCK_BYTE_OFFSET = 4096
 LEGACY_BASELINE_VERSION = "0.2.0"
 UPDATE_PROTOCOL = 1
 MIN_UPDATE_PROTOCOL = 1
@@ -407,6 +412,7 @@ class UpdateManager:
         self._last_source = ""
         self._last_stale = False
         self._last_checked_at = 0.0
+        self._checkout_cache: tuple[float, dict[str, Any]] | None = None
 
     @staticmethod
     def _is_loopback_http_url(value: str) -> bool:
@@ -426,7 +432,8 @@ class UpdateManager:
     def _opener(self) -> urllib.request.OpenerDirector:
         return urllib.request.build_opener(_SafeRedirectHandler(self._allow_loopback_http))
 
-    def _fetch(self, url: str, limit: int, *, timeout: float = 15.0) -> bytes:
+    def _fetch(self, url: str, limit: int, *, timeout: float = 15.0,
+               progress: Callable[[int, int | None], None] | None = None) -> bytes:
         if not self._url_allowed(url):
             raise UpdateError("insecure_url")
         request = urllib.request.Request(url, headers={"User-Agent": "Tether-Updater/" + UPDATER_VERSION})
@@ -436,9 +443,11 @@ class UpdateManager:
                 if not self._url_allowed(final_url):
                     raise UpdateError("insecure_redirect")
                 length = response.headers.get("Content-Length")
+                expected = None
                 if length:
                     try:
-                        if int(length) > limit:
+                        expected = int(length)
+                        if expected > limit:
                             raise UpdateError("download_too_large")
                     except ValueError:
                         raise UpdateError("invalid_response") from None
@@ -452,6 +461,8 @@ class UpdateManager:
                     if total > limit:
                         raise UpdateError("download_too_large")
                     chunks.append(chunk)
+                    if progress is not None:
+                        progress(total, expected)
                 return b"".join(chunks)
         except urllib.error.HTTPError as exc:
             if exc.code == 404:
@@ -825,7 +836,15 @@ class UpdateManager:
                       "rollout_paused": newer and not allowed,
                       "rollout_percent": rollout["percent"] if rollout else 100,
                       "checked_at": checked_at, "stale": self._last_stale,
-                      "manifest_source": self._last_source, "device": self.device, "error": ""}
+                      "manifest_source": self._last_source, "device": self.device,
+                      "checkout": self._checkout_info(), "error": ""}
+            if self._lock_info() is not None:
+                result["in_progress"] = True
+                result["status"] = "in_progress"
+                result["update_available"] = False
+                progress = self._read_progress()
+                if progress is not None:
+                    result["progress"] = progress
             if self.component == "plugin":
                 result["plugin"] = self.plugin_health()
             return result
@@ -899,9 +918,50 @@ class UpdateManager:
         return {"ok": False, "component": self.component, "error_code": code,
                 "error": ERROR_MESSAGES.get(code, "更新操作失败。")}
 
-    def _check_clean_checkout(self) -> None:
+    def _progress_path(self) -> Path:
+        return self.state_dir / f"progress-{self.component}.json"
+
+    def _write_progress(self, phase: str, percent: int, detail: str = "") -> None:
+        record = {"schema": 1, "component": self.component, "phase": phase,
+                  "percent": max(0, min(100, int(percent))), "detail": detail,
+                  "updated_at": time.time()}
+        try:
+            self.state_dir.mkdir(parents=True, exist_ok=True)
+            self._write_atomic(self._progress_path(),
+                               (json.dumps(record, ensure_ascii=False) + "\n").encode("utf-8"))
+        except OSError:
+            pass
+
+    def _read_progress(self, max_age: float = 600.0) -> dict[str, Any] | None:
+        try:
+            record = _json_object(self._progress_path().read_bytes())
+        except (OSError, UpdateError):
+            return None
+        updated = record.get("updated_at")
+        if type(updated) not in (int, float) or time.time() - float(updated) > max_age:
+            return None
+        if record.get("component") != self.component or not isinstance(record.get("phase"), str):
+            return None
+        return record
+
+    def _in_progress_result(self) -> dict[str, Any]:
+        result: dict[str, Any] = {"ok": True, "component": self.component,
+                                  "status": "in_progress", "in_progress": True,
+                                  "restart_required": False, "error": ""}
+        progress = self._read_progress()
+        if progress is not None:
+            result["progress"] = progress
+        return result
+
+    def checkout_state(self) -> str:
+        """Report the source checkout state without ever blocking an update.
+
+        A packaged install is not a git checkout. A development checkout may be
+        dirty; user-initiated updates intentionally keep local work and only
+        replace files contained in the signed archive.
+        """
         if not (self.root / ".git").exists():
-            return
+            return "installed"
         import subprocess
 
         try:
@@ -910,37 +970,25 @@ class UpdateManager:
                 capture_output=True, text=True, timeout=10, check=False,
             )
         except (OSError, subprocess.TimeoutExpired):
-            raise UpdateError("checkout_state_unknown") from None
+            return "unknown"
         if result.returncode != 0:
-            raise UpdateError("checkout_state_unknown")
-        if result.stdout.strip():
-            raise UpdateError("dirty_checkout")
+            return "unknown"
+        return "dirty" if result.stdout.strip() else "clean"
+
+    def _checkout_info(self) -> dict[str, Any]:
+        now = time.monotonic()
+        if self._checkout_cache is not None and now - self._checkout_cache[0] < 30.0:
+            return dict(self._checkout_cache[1])
+        state = self.checkout_state()
+        info = {"kind": "installed", "state": state} if state == "installed" else {"kind": "git", "state": state}
+        self._checkout_cache = (now, info)
+        return dict(info)
 
     def _check_plugin_targets(self) -> None:
-        import subprocess
-
         packages = self.dsh_home / "profiles" / self.profile / "node_modules"
         for package in ("tether-dsh-client", "tether-dsh-surface"):
             if not (packages / package).is_dir():
                 raise UpdateError("plugin_package_missing")
-        sources = self._plugin_source_packages()
-        checked_roots: set[Path] = set()
-        for source in sources.values():
-            repository = next((parent for parent in (source, *source.parents) if (parent / ".git").exists()), None)
-            if repository is None or repository.resolve() == self.root.resolve() or repository.resolve() in checked_roots:
-                continue
-            checked_roots.add(repository.resolve())
-            try:
-                result = subprocess.run(
-                    ["git", "-C", str(repository), "status", "--porcelain", "--untracked-files=normal"],
-                    capture_output=True, text=True, timeout=10, check=False,
-                )
-            except (OSError, subprocess.TimeoutExpired):
-                raise UpdateError("checkout_state_unknown") from None
-            if result.returncode != 0:
-                raise UpdateError("checkout_state_unknown")
-            if result.stdout.strip():
-                raise UpdateError("dirty_checkout")
 
     def _component_targets(self, path: str) -> list[tuple[Path, str]]:
         mapping = self._component_files(path)
@@ -1207,7 +1255,8 @@ class UpdateManager:
                 raise UpdateError("empty_archive")
         return staged
 
-    def _fetch_artifact(self, item: dict[str, Any]) -> bytes:
+    def _fetch_artifact(self, item: dict[str, Any],
+                        progress: Callable[[int, int | None], None] | None = None) -> bytes:
         urls: list[str] = []
         source = self._last_source
         if isinstance(source, str) and source.endswith("/releases/manifest"):
@@ -1219,7 +1268,8 @@ class UpdateManager:
         errors: list[UpdateError] = []
         for url in dict.fromkeys(urls):
             try:
-                return self._fetch(url, MAX_ARCHIVE_BYTES, timeout=ARTIFACT_CHECK_TIMEOUT)
+                return self._fetch(url, MAX_ARCHIVE_BYTES, timeout=ARTIFACT_CHECK_TIMEOUT,
+                                   progress=progress)
             except UpdateError as exc:
                 errors.append(exc)
         if errors:
@@ -1228,8 +1278,12 @@ class UpdateManager:
 
     def prepare(self) -> dict[str, Any]:
         prepared_root: Path | None = None
+        lock_fd = None
         try:
-            self._check_clean_checkout()
+            lock = self._lock()
+            if lock is None:
+                return self._in_progress_result()
+            lock_fd, _lock_file = lock
             if not self.root.is_dir():
                 raise UpdateError("target_missing")
             if self.component == "plugin":
@@ -1242,13 +1296,26 @@ class UpdateManager:
                 return self._error("no_update")
             if not _rollout_allows(item, self.component, target_version, self.device):
                 return self._error("rollout_paused")
-            archive_bytes = self._fetch_artifact(item)
+            self._write_progress("downloading", 0, target_version)
+            last_reported = -1
+
+            def download_progress(received: int, expected: int | None) -> None:
+                nonlocal last_reported
+                percent = 5 + int(55 * min(received / expected, 1.0)) if expected else 5
+                if percent != last_reported:
+                    last_reported = percent
+                    self._write_progress("downloading", percent,
+                                         f"{received}/{expected}" if expected else str(received))
+
+            archive_bytes = self._fetch_artifact(item, download_progress)
+            self._write_progress("preparing", 65, target_version)
             prepared_id = uuid.uuid4().hex
             self.state_dir.mkdir(parents=True, exist_ok=True)
             prepared_root = self.state_dir / "prepared" / prepared_id
             prepared_root.mkdir(parents=True, exist_ok=False)
             staged = self._validate_archive(archive_bytes, item, prepared_root)
             self._check_dependencies(staged)
+            self._write_progress("preparing", 90, target_version)
             record = {
                 "id": prepared_id, "component": self.component, "from_version": current,
                 "to_version": target_version, "sha256": item["sha256"], "size": item["size"],
@@ -1259,32 +1326,132 @@ class UpdateManager:
                           for entry in staged],
             }
             (prepared_root / "prepared.json").write_text(json.dumps(record, indent=2), encoding="utf-8")
+            self._write_progress("prepared", 100, prepared_id)
             return {"ok": True, "prepared_id": prepared_id, "component": self.component,
                     "from_version": current, "to_version": target_version,
                     "size": item["size"], "sha256": item["sha256"], "error": ""}
         except UpdateError as exc:
             if prepared_root is not None:
                 shutil.rmtree(prepared_root, ignore_errors=True)
+            self._write_progress("failed", 0, exc.code)
             return self._error(exc.code)
         except OSError:
             if prepared_root is not None:
                 shutil.rmtree(prepared_root, ignore_errors=True)
+            self._write_progress("failed", 0, "local_state_error")
             return self._error("local_state_error")
         except Exception:
             if prepared_root is not None:
                 shutil.rmtree(prepared_root, ignore_errors=True)
+            self._write_progress("failed", 0, "download_failed")
             return self._error("download_failed")
+        finally:
+            if lock_fd is not None:
+                self._unlock(lock_fd)
+                os.close(lock_fd)
 
-    def _lock(self) -> tuple[int, Path]:
+    def progress(self) -> dict[str, Any] | None:
+        """Return the current progress record, if a fresh run left one."""
+        return self._read_progress()
+
+    def _lock_path(self) -> Path:
         if self.component == "plugin":
-            lock = self.dsh_home / "storages" / "tether" / "update.apply.lock"
-        else:
-            lock = self.root / ".runtime" / "update.apply.lock"
+            return self.dsh_home / "storages" / "tether" / "update.apply.lock"
+        return self.root / ".runtime" / "update.apply.lock"
+
+    @staticmethod
+    def _try_lock(fd: int) -> bool:
+        try:
+            if os.name == "nt":
+                import msvcrt
+
+                # Windows byte-range locks also block reads of the locked byte.
+                # Keep the holder JSON at offset 0 and lock a padding byte so
+                # a waiting window can still report who owns the update.
+                size = os.fstat(fd).st_size
+                if size < LOCK_BYTE_OFFSET + 1:
+                    os.lseek(fd, 0, os.SEEK_END)
+                    os.write(fd, b"\n" * (LOCK_BYTE_OFFSET + 1 - size))
+                os.lseek(fd, LOCK_BYTE_OFFSET, os.SEEK_SET)
+                msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return True
+        except OSError:
+            return False
+
+    @staticmethod
+    def _unlock(fd: int) -> None:
+        try:
+            if os.name == "nt":
+                import msvcrt
+
+                os.lseek(fd, 0, os.SEEK_SET)
+                msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(fd, fcntl.LOCK_UN)
+        except OSError:
+            pass
+
+    def _lock_holder(self, lock: Path) -> dict[str, Any] | None:
+        try:
+            # Read only the record prefix: on Windows the locked padding byte
+            # makes a whole-file read fail while another updater owns the lock.
+            with lock.open("rb", buffering=0) as fh:
+                raw = fh.read(LOCK_BYTE_OFFSET)
+            data = json.loads(raw.decode("utf-8"))
+        except (OSError, ValueError, UnicodeDecodeError):
+            return None
+        return data if isinstance(data, dict) else None
+
+    def _lock_info(self) -> dict[str, Any] | None:
+        """Return the holder of the apply lock, or None when it is free.
+
+        An OS advisory lock survives a crashed process only while its PID is
+        alive, so a lock left behind by a dead updater is taken over instead of
+        blocking every later attempt.
+        """
+        lock = self._lock_path()
+        try:
+            fd = os.open(lock, os.O_RDWR)
+        except OSError:
+            return None
+        try:
+            if not self._try_lock(fd):
+                return self._lock_holder(lock) or {"pid": None}
+            self._unlock(fd)
+            return None
+        finally:
+            os.close(fd)
+
+    def _lock(self) -> tuple[int, Path] | None:
+        lock = self._lock_path()
         lock.parent.mkdir(parents=True, exist_ok=True)
         try:
-            return os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600), lock
-        except FileExistsError:
-            raise UpdateError("update_busy") from None
+            fd = os.open(lock, os.O_RDWR | os.O_CREAT, 0o600)
+        except OSError:
+            raise UpdateError("local_state_error") from None
+        if not self._try_lock(fd):
+            os.close(fd)
+            return None
+        payload = json.dumps({"pid": os.getpid(), "token": uuid.uuid4().hex,
+                              "component": self.component,
+                              "acquired_at": time.time()}).encode("utf-8")
+        try:
+            os.lseek(fd, 0, os.SEEK_SET)
+            os.write(fd, payload)
+            minimum = LOCK_BYTE_OFFSET + 1 if os.name == "nt" else 0
+            os.ftruncate(fd, max(len(payload), minimum))
+            os.fsync(fd)
+        except OSError:
+            self._unlock(fd)
+            os.close(fd)
+            raise UpdateError("local_state_error") from None
+        return fd, lock
 
     def _load_prepared(self, prepared_id: str) -> tuple[Path, dict[str, Any], list[tuple[Path, Path, str]]]:
         if not re.fullmatch(r"[a-f0-9]{32}", prepared_id):
@@ -1337,12 +1504,16 @@ class UpdateManager:
 
     def apply(self, prepared_id: str) -> dict[str, Any]:
         lock_fd = None
-        lock_path: Path | None = None
         replaced: list[tuple[Path, Path | None]] = []
         backup_dir: Path | None = None
         try:
-            lock_fd, lock_path = self._lock()
-            self._check_clean_checkout()
+            lock = self._lock()
+            if lock is None:
+                # Another live updater owns this install. A second click or a
+                # second window attaches to that run instead of failing.
+                return self._in_progress_result()
+            lock_fd, _lock_file = lock
+            self._write_progress("installing", 5)
             prepared_root, record, staged = self._load_prepared(prepared_id)
             if self.component == "plugin":
                 self._check_plugin_targets()
@@ -1365,6 +1536,7 @@ class UpdateManager:
             base = self.dsh_home if self.component == "plugin" else self.root
             backup_dir = self.state_dir / "backups" / self.component / prepared_id
             backup_dir.mkdir(parents=True, exist_ok=False)
+            total_files = max(1, len(staged))
             for target_index, (source, target, relative) in enumerate(staged):
                 safe_target = self._safe_target(target)
                 backup: Path | None = None
@@ -1374,7 +1546,10 @@ class UpdateManager:
                     shutil.copy2(safe_target, backup)
                 replaced.append((safe_target, backup))
                 self._write_atomic(safe_target, source.read_bytes())
+                self._write_progress("installing", 5 + int(85 * (target_index + 1) / total_files),
+                                     relative)
 
+            self._write_progress("installing", 92, expected_version)
             installed_path = self.state_dir / f"installed-{self.component}.json"
             applied_path = self.state_dir / f"applied-{self.component}.json"
             dsh_pid = self._dsh_host_pid() if self.component == "plugin" else None
@@ -1415,24 +1590,23 @@ class UpdateManager:
             restart_scheduled = False
             if self.component == "plugin" and dsh_pid:
                 restart_scheduled = self._spawn_dsh_restart()
+            self._write_progress("installed", 100, expected_version)
             return {"ok": True, "component": self.component, "version": expected_version,
                     "backup_dir": str(backup_dir), "restart_required": True,
                     "restart_scheduled": restart_scheduled,
                     "updated_files": len(staged), "error": ""}
         except UpdateError as exc:
             rolled_back = self._rollback(replaced)
+            self._write_progress("failed", 0, exc.code)
             return self._error("rollback_failed" if not rolled_back else exc.code)
         except Exception:
             rolled_back = self._rollback(replaced)
+            self._write_progress("failed", 0, "apply_failed")
             return self._error("apply_failed" if rolled_back else "rollback_failed")
         finally:
             if lock_fd is not None:
+                self._unlock(lock_fd)
                 os.close(lock_fd)
-                try:
-                    if lock_path is not None:
-                        lock_path.unlink()
-                except OSError:
-                    pass
 
     def _rollback(self, replaced: list[tuple[Path, Path | None]]) -> bool:
         success = True
@@ -1485,9 +1659,10 @@ class UpdateManager:
         env["PYTHONIOENCODING"] = "utf-8"
         kwargs: dict[str, Any] = {"cwd": str(self.root), "env": env,
                                   "stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL,
-                                  "stderr": subprocess.DEVNULL, "close_fds": True}
+                                  "stderr": subprocess.DEVNULL, "close_fds": True,
+                                  "windowsHide": True}
         if os.name == "nt":
-            kwargs["creationflags"] = 0x00000008 | 0x00000200
+            kwargs["creationflags"] = DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW
         else:
             kwargs["start_new_session"] = True
         try:
@@ -1562,7 +1737,15 @@ class UpdateManager:
                       "checked_at": checked_at or None, "manifest_source": latest_source,
                       "rollout_paused": rollout_paused, "device": self.device,
                       "prepared": prepared, "restart_required": restart_required,
-                      "installed_latest": installed_latest, "error": ""}
+                      "installed_latest": installed_latest, "checkout": self._checkout_info(),
+                      "error": ""}
+            if self._lock_info() is not None:
+                result["in_progress"] = True
+                result["status"] = "in_progress"
+                result["update_available"] = False
+                progress = self._read_progress()
+                if progress is not None:
+                    result["progress"] = progress
             if self.component == "plugin":
                 result["plugin"] = self.plugin_health()
             return result

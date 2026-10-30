@@ -254,6 +254,10 @@ export function createLocalPluginUpdateHandler({
     const manifestUrl = safeManifestUrl(payload.manifest_url)
     const flightKey = action === 'apply' ? 'apply:' + payload.prepared_id : action
     if (inFlight.has(flightKey)) {
+      if (action === 'apply') {
+        // A repeated click attaches to the install that is already running.
+        return { ok: true, value: { ok: true, component: 'plugin', status: 'in_progress', in_progress: true, restart_required: false, error: '' } }
+      }
       return { ok: true, value: { ok: false, component: 'plugin', error_code: 'update_busy', error: '同一个更新请求仍在执行，请稍候。' } }
     }
     const task = (async () => {

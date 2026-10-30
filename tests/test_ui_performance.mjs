@@ -49,8 +49,8 @@ test('remote device updates order node, installed plugin, then app', async () =>
   assert.deepEqual(deviceUpdateComponents({ app_version: '0.2.4' }), ['node', 'app'])
   assert.deepEqual(deviceUpdateComponents({ dsh_surface: true }), ['node', 'plugin'])
   assert.equal(updateAvailableFor({ devices: { laptop: { app: { update_available: true } } } }, 'app', 'laptop'), true)
-  assert.match(source, /await watchNodeRestart\(scope, authority\)/)
-  assert.match(source, /watchAppRestart\(scope, checkedApp\.authorityBase, expectedVersion\)/)
+  assert.match(source, /await watchNodeRestart\(scope, entry\.authority\)/)
+  assert.match(source, /await watchAppRestart\(scope, entry\.authority, entry\.checked && entry\.checked\.latest_version\)/)
 })
 
 test('hover uses an in-app tooltip and double click is guarded', () => {

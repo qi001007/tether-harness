@@ -1,6 +1,6 @@
 {
-  "version": "0.2.30",
-  "notes": "Target-computer file explorer modal for workspaces and This PC, served by the node's same-origin /tether-device-fs raw-byte API.",
+  "version": "0.2.31",
+  "notes": "Silent one-click update: downloads every component before one restart, shows determinate progress, attaches to a running install, and launches from a direct Electron shortcut without a console window.",
   "download": "https://github.com/qi001007/tether-harness",
   "install": "git pull && powershell -ExecutionPolicy Bypass -File desktop/install-plugin.ps1"
 }

@@ -1,5 +1,18 @@
 # Public client releases
 
+## v0.2.31
+
+Silent one-click update release:
+
+- One click now downloads every behind component (node, plugin, APP) before installing any of them, then restarts the APP once. The node is held for that single restart instead of restarting between plugin and APP.
+- The update card shows `正在更新` with a determinate download/install progress bar; the extra “APP 已下载 / 重启并安装” and “立即生效” dialogs are gone from the one-click path.
+- A second update surface attaches to the running install (`status: in_progress`) instead of failing with `update_busy`; a cross-process lock left by a dead process is taken over.
+- Explicit updates on a dirty git checkout install packaged files only. User edits and unrelated files are preserved; background checks still report checkout state but never block the update button.
+- Installed shortcuts and restart helpers launch the Electron executable directly with `windowsHide` and `CREATE_NO_WINDOW`; no `explorer.exe`, `.cmd`, or console window is used.
+- APP, plugin, and node are all 0.2.31.
+
+Gates: pytest 130 passed / 4 skipped (update suites 72 passed / 1 skipped), Node 204/204, `validate_versions()`. This note records the published packages only: no local or laptop installation was performed, and neither device is claimed to be running 0.2.31.
+
 ## v0.2.30
 
 Target-computer file explorer release:

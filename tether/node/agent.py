@@ -13,12 +13,10 @@ import inspect
 import json
 import os
 import platform
-import shutil
 import sqlite3
 import ssl
 import sys
 import subprocess
-import tempfile
 import time
 from pathlib import Path
 from typing import Any
@@ -97,56 +95,18 @@ def ensure_sdk_profile(home: Path) -> None:
     (profile / "cordis.patch.yml").write_text("[]\n", encoding="utf-8")
 
 
-_APP_RESTART_SCRIPT = r'''param([string]$ConfigFile)
-$ErrorActionPreference = 'Stop'
-$config = Get-Content -LiteralPath $ConfigFile -Raw | ConvertFrom-Json
-$rootPath = [IO.Path]::GetFullPath($config.root).TrimEnd('\')
-$readyFile = $config.ready_file
-$logFile = $config.log_file
-$appDir = Join-Path $rootPath 'apps\tether-app'
-$launcher = Join-Path $appDir 'Tether-App.vbs'
-if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) { $launcher = Join-Path $appDir 'Tether-App.cmd' }
-$electron = [IO.Path]::GetFullPath((Join-Path $appDir 'node_modules\electron\dist\electron.exe'))
-try {
-  if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) { throw 'APP launcher not found' }
-  Set-Content -LiteralPath $readyFile -Value 'ready' -Encoding Ascii
-  Add-Content -LiteralPath $logFile -Value ((Get-Date -Format o) + ' restart worker started')
-  Start-Sleep -Seconds 2
-  foreach ($process in Get-CimInstance Win32_Process -Filter "Name = 'electron.exe'") {
-    if (-not $process.ExecutablePath) { continue }
-    try { $processPath = [IO.Path]::GetFullPath($process.ExecutablePath) } catch { continue }
-    if ([string]::Equals($processPath, $electron, [StringComparison]::OrdinalIgnoreCase)) {
-      Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue
-    }
-  }
-  $deadline = [DateTime]::UtcNow.AddSeconds(10)
-  do {
-    Start-Sleep -Milliseconds 250
-    $remaining = @(Get-CimInstance Win32_Process -Filter "Name = 'electron.exe'" | Where-Object {
-      $_.ExecutablePath -and [string]::Equals([IO.Path]::GetFullPath($_.ExecutablePath), $electron, [StringComparison]::OrdinalIgnoreCase)
-    })
-  } while ($remaining.Count -gt 0 -and [DateTime]::UtcNow -lt $deadline)
-  Start-Process -FilePath (Join-Path $env:WINDIR 'explorer.exe') -ArgumentList @('"' + $launcher + '"')
-  Add-Content -LiteralPath $logFile -Value ((Get-Date -Format o) + ' APP launcher opened')
-} catch {
-  Add-Content -LiteralPath $logFile -Value ((Get-Date -Format o) + ' restart worker failed')
-  throw
-} finally {
-  foreach ($path in @($ConfigFile, $config.wrapper_file, $MyInvocation.MyCommand.Path, $readyFile)) {
-    Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
-  }
-}
-'''
+CREATE_NO_WINDOW = 0x08000000
+DETACHED_PROCESS = 0x00000008
+CREATE_NEW_PROCESS_GROUP = 0x00000200
 
 
 def schedule_app_restart(root: Path) -> bool:
-    """Start a restart wrapper through the existing interactive Explorer shell."""
+    """Start a windowless helper that relaunches the APP executable directly."""
     if sys.platform != "win32":
         return False
     root = Path(root).resolve()
-    launcher = root / "apps" / "tether-app" / "Tether-App.vbs"
-    if not launcher.is_file():
-        launcher = root / "apps" / "tether-app" / "Tether-App.cmd"
+    executable = (root / "apps" / "tether-app" / "node_modules" / "electron"
+                  / "dist" / "electron.exe")
     log_path = root / ".runtime" / "updates" / "remote-app-restart.log"
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -157,53 +117,26 @@ def schedule_app_restart(root: Path) -> bool:
         except OSError:
             pass
 
-    if not launcher.is_file():
-        record("APP launcher missing")
+    if not executable.is_file():
+        record("APP executable missing")
         return False
-    work_dir = Path(tempfile.mkdtemp(prefix="tether-app-restart-"))
-    script_path = work_dir / "worker.ps1"
-    wrapper_path = work_dir / "restart.cmd"
-    config_path = work_dir / "restart.json"
-    ready_path = work_dir / "worker.ready"
-    handed_off = False
+    env = os.environ.copy()
+    env.pop("ELECTRON_RUN_AS_NODE", None)
+    env["PYTHONPATH"] = str(ROOT) + os.pathsep + env.get("PYTHONPATH", "")
     try:
-        script_path.write_text(_APP_RESTART_SCRIPT, encoding="utf-8", newline="\r\n")
-        config_path.write_text(json.dumps({
-            "root": str(root), "ready_file": str(ready_path), "log_file": str(log_path),
-            "wrapper_file": str(wrapper_path),
-        }), encoding="utf-8")
-        wrapper_path.write_text(
-            '@echo off\r\n'
-            '"%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" '
-            '-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden '
-            '-File "%~dp0worker.ps1" -ConfigFile "%~dp0restart.json"\r\n',
-            encoding="utf-8",
-        )
         subprocess.Popen(
-            ["explorer.exe", str(wrapper_path)],
+            [sys.executable, "-m", "tether.node.app_restart", "--root", str(root),
+             "--log", str(log_path), "--delay", "2"],
+            cwd=str(ROOT), env=env,
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            close_fds=True,
-            creationflags=(getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
-                           | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)),
+            close_fds=True, windowsHide=True,
+            creationflags=(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW),
         )
-        deadline = time.monotonic() + 15
-        while time.monotonic() < deadline:
-            if ready_path.is_file():
-                handed_off = True
-                record("restart worker handed off through Explorer")
-                return True
-            time.sleep(0.1)
-        record("Explorer restart worker did not become ready")
-        return False
+        record("restart helper started")
+        return True
     except OSError:
-        record("Explorer restart wrapper could not be started")
+        record("restart helper could not be started")
         return False
-    finally:
-        if not handed_off:
-            try:
-                shutil.rmtree(work_dir)
-            except OSError:
-                pass
 
 
 class NodeStore:
@@ -594,6 +527,31 @@ class Node:
         except Exception:
             self.connected = False
 
+    def _update_in_progress(self, component: str) -> dict[str, Any]:
+        result: dict[str, Any] = {"ok": True, "component": component,
+                                  "status": "in_progress", "in_progress": True,
+                                  "restart_required": False, "error": ""}
+        manager = self.update_managers.get(component)
+        progress = None
+        if manager is not None:
+            try:
+                progress = manager.progress()
+            except Exception:  # noqa: BLE001 - progress is best effort
+                progress = None
+        if progress:
+            result["progress"] = progress
+        return result
+
+    def _app_update_prepared(self) -> bool:
+        manager = self.update_managers.get("app")
+        if manager is None:
+            return False
+        try:
+            status = manager.status()
+        except Exception:  # noqa: BLE001 - deferral is best effort
+            return False
+        return bool(status.get("ok") and status.get("prepared"))
+
     def _update_busy_reason(self) -> str | None:
         if any(run and run.get("state") in ACTIVE for run in self.store.all_runs()):
             return "tether_task_active"
@@ -626,15 +584,16 @@ class Node:
         component = str(component)
         applying = action == "apply"
         app_restart_scheduled = False
+        if self.update_applying:
+            # A second window or a repeated click attaches to the run that is
+            # already installing instead of failing with update_busy.
+            await self._send_update_result(
+                response_ws,
+                {"type": "update_result", "req_id": req_id,
+                 **self._update_in_progress(component)},
+            )
+            return
         if action in {"check", "status"}:
-            if self.update_applying:
-                await self._send_update_result(
-                    response_ws,
-                    {"type": "update_result", "req_id": req_id, "ok": False,
-                     "component": component, "error_code": "update_busy",
-                     "error": "update is applying"},
-                )
-                return
             manager = self.update_managers[component]
             if component == "plugin":
                 profile = self.native_surface.active_profile() or select_profile(
@@ -704,22 +663,32 @@ class Node:
                     result = await asyncio.to_thread(manager.apply, msg["prepared_id"])
                 else:
                     result = await asyncio.to_thread(getattr(manager, str(action)))
-                if result.get("ok") and component == "plugin" and action == "apply":
+                applied = (bool(result.get("ok")) and result.get("status") != "in_progress"
+                           and result.get("in_progress") is not True)
+                node_deferred = False
+                if applied and component == "plugin" and action == "apply":
                     result["restart_required"] = True
-                if applying and result.get("ok") and component == "node":
-                    self.restart_requested = True
-                    self.update_applying = True
+                if applying and applied and component == "node":
+                    node_deferred = await asyncio.to_thread(self._app_update_prepared)
+                    result["restart_required"] = True
+                    if node_deferred:
+                        # The APP apply that follows restarts this node too; it
+                        # must not bounce between the plugin and APP updates.
+                        result["restart_deferred"] = True
+                    else:
+                        self.restart_requested = True
+                        self.update_applying = True
                 response_sent = await self._send_update_result(
                     response_ws, {"type": "update_result", "req_id": req_id, **result}
                 )
-                if (applying and result.get("ok") and component == "app" and response_sent
+                if (applying and applied and component == "app" and response_sent
                         and os.environ.get("TETHER_NODE_MANAGED") == "1"):
                     app_restart_scheduled = await asyncio.to_thread(schedule_app_restart, ROOT)
                     if app_restart_scheduled:
                         self.update_applying = True
                     else:
                         log("[update] APP restart helper could not be scheduled")
-                if applying and result.get("ok") and component == "node":
+                if applying and applied and component == "node" and not node_deferred:
                     if self.ws is not None:
                         try:
                             await self.ws.close(code=1012, reason="node update applied")

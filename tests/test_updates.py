@@ -138,12 +138,12 @@ def test_check_manifest_cache_singleflights_and_prepare_fetches_fresh_manifest(
     fetched_manifests: list[str] = []
     fetched_lock = threading.Lock()
 
-    def counted_fetch(url: str, limit: int, *, timeout: float = 15.0) -> bytes:
+    def counted_fetch(url: str, limit: int, *, timeout: float = 15.0, progress=None) -> bytes:
         if url == manifest_url:
             with fetched_lock:
                 fetched_manifests.append(url)
             time.sleep(0.05)
-        return original_fetch(url, limit, timeout=timeout)
+        return original_fetch(url, limit, timeout=timeout, progress=progress)
 
     monkeypatch.setattr(manager, "_fetch", counted_fetch)
     with ThreadPoolExecutor(max_workers=5) as pool:
@@ -378,18 +378,89 @@ def test_components_share_apply_lock_even_with_different_state_dirs(tmp_path: Pa
     seed_version(root)
     first = UpdateManager(root, "app", state_dir=tmp_path / "state-a")
     second = UpdateManager(root, "node", state_dir=tmp_path / "state-b")
-    fd, lock = first._lock()
+    acquired = first._lock()
+    assert acquired is not None
+    fd, lock = acquired
     try:
-        with pytest.raises(UpdateError) as error:
-            second._lock()
-        assert error.value.code == "update_busy"
+        assert second._lock() is None
+        holder = second._lock_info()
+        assert holder is not None
+        assert holder["pid"] == os.getpid()
+        assert holder["component"] == "app"
+        attached = second.prepare()
+        assert attached["ok"] is True
+        assert attached["in_progress"] is True
+        assert attached["status"] == "in_progress"
     finally:
-        import os
+        first._unlock(fd)
         os.close(fd)
-        lock.unlink()
+    # A completed run releases the advisory lock but leaves the file behind.
+    again = second._lock()
+    assert again is not None
+    second._unlock(again[0])
+    os.close(again[0])
+    assert lock.exists()
 
 
-def test_dirty_development_checkout_is_not_updated(artifact_server: ArtifactServer, tmp_path: Path) -> None:
+def test_lock_left_by_a_dead_process_is_taken_over(tmp_path: Path) -> None:
+    root = tmp_path / "install"
+    seed_version(root)
+    manager = UpdateManager(root, "app", state_dir=tmp_path / "state")
+    lock = manager._lock_path()
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    lock.write_text(json.dumps({"pid": 2_147_483_647, "token": "dead", "component": "app",
+                                "acquired_at": 1}), encoding="utf-8")
+
+    assert manager._lock_info() is None
+    acquired = manager._lock()
+    assert acquired is not None
+    holder = manager._lock_info()
+    assert holder is not None
+    assert holder["pid"] == os.getpid()
+    manager._unlock(acquired[0])
+    os.close(acquired[0])
+
+
+def test_second_apply_attaches_to_the_live_run_instead_of_failing(
+    artifact_server: ArtifactServer, tmp_path: Path
+) -> None:
+    root = tmp_path / "install"
+    seed_version(root)
+    app = root / "apps" / "tether-app"
+    app.mkdir(parents=True)
+    (app / "main.js").write_bytes(b"old-main")
+    (app / "preload.js").write_bytes(b"old-preload")
+    (app / "package.json").write_text('{"dependencies":{},"devDependencies":{}}', encoding="utf-8")
+    url = install_manifest(artifact_server, "app", make_zip("app"))
+    holder = UpdateManager(root, "app", dsh_home=tmp_path / "empty-dsh", manifest_url=url,
+                           state_dir=tmp_path / "state")
+    worker = UpdateManager(root, "app", dsh_home=tmp_path / "empty-dsh", manifest_url=url,
+                           state_dir=tmp_path / "state")
+    prepared = worker.prepare()
+    assert prepared["ok"] is True, prepared
+    acquired = holder._lock()
+    assert acquired is not None
+    try:
+        attached = worker.apply(prepared["prepared_id"])
+        assert attached["ok"] is True
+        assert attached["status"] == "in_progress"
+        assert attached["in_progress"] is True
+        assert attached["error"] == ""
+        assert (app / "main.js").read_bytes() == b"old-main"
+    finally:
+        holder._unlock(acquired[0])
+        os.close(acquired[0])
+
+    applied = worker.apply(prepared["prepared_id"])
+    assert applied["ok"] is True, applied
+    assert (app / "main.js").read_bytes() == b"new-main"
+    assert worker.progress()["phase"] == "installed"
+    assert worker.progress()["percent"] == 100
+
+
+def test_dirty_development_checkout_accepts_an_explicit_update(
+    artifact_server: ArtifactServer, tmp_path: Path
+) -> None:
     root = tmp_path / "checkout"
     seed_version(root)
     subprocess.run(["git", "init", str(root)], capture_output=True, check=True)
@@ -398,44 +469,106 @@ def test_dirty_development_checkout_is_not_updated(artifact_server: ArtifactServ
     manager = UpdateManager(root, "node", dsh_home=tmp_path / "empty-dsh", manifest_url=url,
                             state_dir=tmp_path / "state")
 
-    result = manager.prepare()
+    checked = manager.check()
+    assert checked["checkout"] == {"kind": "git", "state": "dirty"}
+    assert checked["update_available"] is True
+    prepared = manager.prepare()
+    assert prepared["ok"] is True, prepared
+    applied = manager.apply(prepared["prepared_id"])
 
-    assert result["ok"] is False
-    assert result["error_code"] == "dirty_checkout"
+    assert applied["ok"] is True, applied
     assert (root / "user-edit.py").read_text(encoding="utf-8") == "keep"
+    assert (root / "tether" / "node" / "agent.py").read_bytes() == b"new-node"
+    assert json.loads((root / "version.json").read_text(encoding="utf-8"))["components"]["node"] == "0.2.1"
 
 
-def test_dirty_file_dependency_checkout_is_not_modified(artifact_server: ArtifactServer, tmp_path: Path) -> None:
+def test_dirty_file_dependency_checkout_updates_packaged_files_only(
+    artifact_server: ArtifactServer, tmp_path: Path
+) -> None:
     root = tmp_path / "app-root"
     seed_version(root)
-    source_packages = tmp_path / "source" / "packages"
-    source_plugin = source_packages / "dsh-plugin-tether"
-    source_plugin.mkdir(parents=True)
-    original_manifest = json.dumps({"name": "tether-dsh-plugin", "version": "0.2.1"})
-    (source_plugin / "package.json").write_text(original_manifest, encoding="utf-8")
-    subprocess.run(["git", "init", str(tmp_path / "source")], capture_output=True, check=True)
-    user_change = source_plugin / "user-edit.txt"
-    user_change.write_text("keep", encoding="utf-8")
-
     dsh_home = tmp_path / "dsh"
     profile_dir = dsh_home / "profiles" / "desktop"
     packages = profile_dir / "node_modules"
+    source_packages = tmp_path / "source" / "packages"
+    package_names = {
+        "dsh-plugin-tether": "tether-dsh-plugin",
+        "dsh-plugin-tether-client": "tether-dsh-client",
+        "tether-dsh-native-ui": "tether-dsh-native-ui",
+        "tether-dsh-surface": "tether-dsh-surface",
+    }
+    source_dependencies = {
+        "tether-dsh-plugin": {
+            "tether-dsh-client": "file:../dsh-plugin-tether-client",
+            "tether-dsh-native-ui": "file:../tether-dsh-native-ui",
+            "tether-dsh-surface": "file:../tether-dsh-surface",
+        },
+        "tether-dsh-client": {"tether-dsh-native-ui": "file:../tether-dsh-native-ui"},
+    }
     profile_dir.mkdir(parents=True)
     (profile_dir / "package.json").write_text(json.dumps({
-        "dependencies": {"tether-dsh-plugin": "file:" + os.path.relpath(source_plugin, profile_dir)},
+        "dependencies": {"tether-dsh-plugin": "file:" + os.path.relpath(
+            source_packages / "dsh-plugin-tether", profile_dir)},
     }), encoding="utf-8")
-    for package in ("tether-dsh-plugin", "tether-dsh-client", "tether-dsh-native-ui", "tether-dsh-surface"):
-        (packages / package).mkdir(parents=True)
-    url = install_manifest(artifact_server, "plugin", make_zip("plugin"))
+    for source_name, package_name in package_names.items():
+        profile_package = packages / package_name
+        profile_package.mkdir(parents=True)
+        (profile_package / "package.json").write_text(
+            json.dumps({"name": package_name, "version": "0.2.5"}), encoding="utf-8")
+        source_package = source_packages / source_name
+        (source_package / "lib").mkdir(parents=True)
+        (source_package / "package.json").write_text(json.dumps({
+            "name": package_name,
+            "version": "0.2.1",
+            "dependencies": source_dependencies.get(package_name, {}),
+        }), encoding="utf-8")
+        (source_package / "lib" / ("client.js" if source_name == "dsh-plugin-tether-client" else "index.js")).write_text(
+            "const PLUGIN_VERSION = '0.2.1'" if source_name == "dsh-plugin-tether-client" else "old source",
+            encoding="utf-8",
+        )
+    profile_client = packages / "tether-dsh-client"
+    (profile_client / "lib").mkdir()
+    (profile_client / "lib" / "client.js").write_text("const PLUGIN_VERSION = '0.2.5'", encoding="utf-8")
+    subprocess.run(["git", "init", str(tmp_path / "source")], capture_output=True, check=True)
+    user_change = source_packages / "dsh-plugin-tether" / "user-edit.txt"
+    user_change.write_text("keep", encoding="utf-8")
+
+    newer_packages = {
+        "dsh-plugin-tether/package.json": json.dumps({
+            "name": "tether-dsh-plugin", "version": "0.2.10",
+            "dependencies": source_dependencies["tether-dsh-plugin"],
+        }).encode(),
+        "dsh-plugin-tether-client/package.json": json.dumps({
+            "name": "tether-dsh-client", "version": "0.2.10",
+            "dependencies": source_dependencies["tether-dsh-client"],
+        }).encode(),
+        "tether-dsh-native-ui/package.json": json.dumps(
+            {"name": "tether-dsh-native-ui", "version": "0.2.10"}).encode(),
+        "tether-dsh-surface/package.json": json.dumps(
+            {"name": "tether-dsh-surface", "version": "0.2.10"}).encode(),
+    }
+    archive = make_zip("plugin", version="0.2.10", extra={
+        **{f"packages/{path}": value for path, value in newer_packages.items()},
+        "packages/dsh-plugin-tether-client/lib/client.js": b"const PLUGIN_VERSION = '0.2.10'",
+    })
+    url = install_manifest(artifact_server, "plugin", archive, version="0.2.10")
     manager = UpdateManager(root, "plugin", dsh_home=dsh_home, manifest_url=url,
                             state_dir=tmp_path / "state", profile="desktop")
 
     prepared = manager.prepare()
+    assert prepared["ok"] is True, prepared
+    applied = manager.apply(prepared["prepared_id"])
 
-    assert prepared["ok"] is False
-    assert prepared["error_code"] == "dirty_checkout"
+    assert applied["ok"] is True, applied
     assert user_change.read_text(encoding="utf-8") == "keep"
-    assert (source_plugin / "package.json").read_text(encoding="utf-8") == original_manifest
+    assert "0.2.10" in (source_packages / "dsh-plugin-tether-client" / "lib" / "client.js").read_text(
+        encoding="utf-8")
+    assert json.loads((source_packages / "dsh-plugin-tether" / "package.json").read_text(
+        encoding="utf-8"))["version"] == "0.2.10"
+    status = subprocess.run(
+        ["git", "-C", str(tmp_path / "source"), "status", "--porcelain", "--untracked-files=all"],
+        capture_output=True, text=True, check=True)
+    assert "user-edit.txt" in status.stdout
 
 
 def test_plugin_apply_failure_restores_previously_replaced_package_file(

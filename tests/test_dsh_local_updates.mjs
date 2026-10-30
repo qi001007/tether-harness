@@ -197,6 +197,31 @@ test('overlapping status calls are refused instead of spawning a second updater'
   assert.equal(started, 1)
 })
 
+test('a repeated plugin apply attaches to the running install instead of failing', async () => {
+  let release
+  const gate = new Promise((resolve) => { release = resolve })
+  let started = 0
+  const handler = createLocalPluginUpdateHandler({
+    env: {}, homeDir: 'C:/fixture', packageRoot: 'C:/fixture/.dsh/profiles/desktop/node_modules/tether-dsh-surface', existsSync: () => true,
+    execFileImpl: async (_file, args) => {
+      if (args[2] === 'activity') return { stdout: JSON.stringify({ ok: true, busy: false }) }
+      started += 1
+      await gate
+      return { stdout: JSON.stringify({ ok: true, component: 'plugin', status: 'installed' }) }
+    }
+  })
+  const preparedId = 'a'.repeat(32)
+  const first = handler('apply', { prepared_id: preparedId }, undefined, ownerPeer)
+  const second = await handler('apply', { prepared_id: preparedId }, undefined, ownerPeer)
+  assert.equal(second.ok, true)
+  assert.deepEqual(second.value, {
+    ok: true, component: 'plugin', status: 'in_progress', in_progress: true, restart_required: false, error: ''
+  })
+  release()
+  assert.equal((await first).ok, true)
+  assert.equal(started, 1)
+})
+
 test('a plugin replaced on disk after the host loaded it reports reload_required', async () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'tether-plugin-reload-'))
   try {

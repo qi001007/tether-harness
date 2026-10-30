@@ -50,7 +50,9 @@ async function main() {
   if (result.error) throw result.error
   let data = {}
   try { data = JSON.parse(String(result.stdout || '').trim()) } catch (_) { /* report command output below */ }
-  if (result.status !== 0 || data.ok === false) throw new Error(data.error || data.message || String(result.stderr || result.stdout || 'Update failed').trim())
+  if (result.status !== 0 || data.ok === false || data.status === 'in_progress' || data.in_progress === true) {
+    throw new Error(data.error || data.message || String(result.stderr || result.stdout || 'Update failed').trim() || 'Another updater is still installing')
+  }
   fs.writeFileSync(config.resultPath, JSON.stringify({ ok: true, version: data.version || '', completed_at: new Date().toISOString() }))
   log('apply complete version=' + (data.version || 'unknown'))
 

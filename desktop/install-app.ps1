@@ -4,17 +4,18 @@
 $ErrorActionPreference = "Stop"
 $Repo = Split-Path -Parent $PSScriptRoot
 $AppDir = Join-Path $Repo "apps\tether-app"
-$AppCmd = Join-Path $AppDir "Tether-App.cmd"
-if (-not (Test-Path $AppCmd)) {
-  throw "Tether-App.cmd not found under $AppDir"
+$Electron = Join-Path $AppDir "node_modules\electron\dist\electron.exe"
+if (-not (Test-Path $Electron)) {
+  throw "electron.exe not found under $AppDir; run npm install first"
 }
 $icon = Join-Path $Repo "assets\tether.ico"
-if (-not (Test-Path $icon)) { $icon = $AppCmd }
+if (-not (Test-Path $icon)) { $icon = $Electron }
 $shell = New-Object -ComObject WScript.Shell
 foreach ($folder in @([Environment]::GetFolderPath('Desktop'), [Environment]::GetFolderPath('Programs'))) {
   if (-not $folder) { continue }
   $lnk = $shell.CreateShortcut((Join-Path $folder "Tether APP.lnk"))
-  $lnk.TargetPath = $AppCmd
+  $lnk.TargetPath = $Electron
+  $lnk.Arguments = '"' + $AppDir + '"'
   $lnk.WorkingDirectory = $AppDir
   $lnk.IconLocation = "$icon,0"
   $lnk.Description = "Tether APP"

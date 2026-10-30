@@ -52,7 +52,8 @@ try {
   assert.equal(checked.latest_version, '0.2.1')
   assert.ok(calls[0].includes('--component') && calls[0].includes('app'))
   assert.ok(calls[0].includes('--root') && calls[0].includes(repoRoot))
-  assert.ok(calls[0].includes('--state-dir') && calls[0].includes(path.join(dataDir, 'updates')))
+  assert.ok(calls[0].includes('--state-dir') && calls[0].includes(path.join(dataDir, 'updates', 'app')),
+    'the APP shares its prepared update state with the node restart deferral')
   assert.ok(calls[0].includes('--dsh-home') && calls[0].includes('C:/Users/test/.dsh'))
   assert.ok(calls[0].includes('--manifest-url') && calls[0].includes('https://hub.test/releases/manifest'), 'the APP updater prefers the Hub mirror')
   assert.ok(calls[0].includes('--force'), 'a manual check must bypass the manifest disk cache')
@@ -74,9 +75,12 @@ try {
   assert.equal(spawnConfig.options.stdio[3], 'ipc')
   const helperConfig = JSON.parse(fs.readFileSync(path.join(userData, 'tether-update-helper.json'), 'utf8'))
   assert.equal(helperConfig.dshHome, 'C:/Users/test/.dsh')
-  assert.equal(helperConfig.stateDir, path.join(dataDir, 'updates'))
+  assert.equal(helperConfig.stateDir, path.join(dataDir, 'updates', 'app'))
   assert.deepEqual(helperConfig.launchArgs, [path.join(repoRoot, 'apps', 'tether-app')])
   assert.equal(helperConfig.env.PYTHONPATH, path.join(userData, 'update-helper-runtime'))
+  const helperSource = fs.readFileSync(path.join(projectRoot, 'apps', 'tether-app', 'update-helper.js'), 'utf8')
+  assert.ok(helperSource.includes("data.status === 'in_progress' || data.in_progress === true"),
+    'the helper must not relaunch over an installer another window already started')
 
   const pythonCandidates = [
     process.env.TETHER_TEST_PYTHON,
@@ -236,7 +240,10 @@ try {
   assert.ok(ui.includes("'Tether for DSH（插件 + Node）'"))
   assert.ok(!ui.includes('目标设备上的'), 'card titles must name the device, not "target device"')
   assert.ok(ui.includes('disabled: anyUpdateRunning || disabled || card.disabled'), 'one-click must be disabled when already current')
-  assert.ok(ui.includes("btn('稍后'") && ui.includes("btn('重启并安装'"))
+  assert.ok(ui.includes("role: 'progressbar'") && ui.includes("'aria-valuenow': percent"),
+    'a running install shows determinate progress instead of a confirm dialog')
+  assert.ok(!ui.includes("btn('稍后'") && !ui.includes("btn('重启并安装'") && !ui.includes('APP 已下载'),
+    'the extra APP restart dialog is gone from the one-click path')
   assert.ok(ui.includes('error.status = response.status'))
   assert.ok(ui.includes("'服务端不支持更新'"))
   assert.ok(ui.includes("lastUpdateToastRef"), 'update errors must be deduped through the toast layer')

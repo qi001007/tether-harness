@@ -157,13 +157,33 @@ export function updateCardState({ running = false, error = '', hasUpdate = false
   return { kind: 'checking', pill: '检查中…', tone: 'mute', action: 'none', label: '一键更新', disabled: true }
 }
 
+export function updateInfoRunning(info) {
+  return !!(info && (info.in_progress === true || info.status === 'in_progress'))
+}
+
+export function updateProgressFor(infos) {
+  const records = (infos || [])
+    .map((info) => info && info.progress)
+    .filter((progress) => progress && Number.isFinite(Number(progress.percent)))
+  if (!records.length) return null
+  return records.sort((left, right) => Number(right.percent) - Number(left.percent))[0]
+}
+
+export function updateProgressText(progress) {
+  const phase = progress && typeof progress.phase === 'string' ? progress.phase : ''
+  const labels = { downloading: '下载更新包', preparing: '校验更新包', installing: '安装更新', installed: '安装完成', failed: '更新失败' }
+  const percent = Math.max(0, Math.min(100, Math.round(Number(progress && progress.percent) || 0)))
+  return (labels[phase] || '正在更新') + ' ' + percent + '%'
+}
+
 export function updateCardStateForInfos(infos, options = {}) {
   const list = (infos || []).filter(Boolean)
   const stale = list.some(isUpdateInfoStale)
   const failed = options.failed === true || list.some((info) => !!info.check_error)
   const hasUpdate = list.some((info) => !isUpdateInfoStale(info) && info.update_available === true)
   const known = list.length > 0 && list.every((info) => info.current_version && info.latest_version && !isUpdateInfoStale(info))
-  return updateCardState({ ...options, stale, failed, hasUpdate, known })
+  const running = options.running === true || list.some(updateInfoRunning)
+  return updateCardState({ ...options, running, stale, failed, hasUpdate, known })
 }
 
 export function isVersionNewer(candidate, current) {
@@ -384,14 +404,17 @@ export async function runUpdateSequence({ check, prepare, apply, isCurrent = () 
   const checked = await check()
   if (!checked || checked.failed || checked.ok === false) return { failed: true, stage: 'check' }
   if (!isCurrent()) return { cancelled: true }
+  if (updateInfoRunning(checked)) return { attached: true, updated: false }
   if (!checked || checked.update_available !== true) return { current: true, updated: false }
   const prepared = await prepare(checked)
   if (!prepared || prepared.failed || prepared.ok === false) return { failed: true, stage: 'prepare' }
   if (!isCurrent()) return { cancelled: true }
+  if (updateInfoRunning(prepared)) return { attached: true, updated: false }
   const preparedId = prepared && (prepared.prepared_id || ((prepared.prepared || [])[0] || {}).prepared_id)
   if (!preparedId) throw new Error('更新包已准备，但未返回可安装的包标识；请重试检查更新。')
   const result = await apply(preparedId, checked)
   if (!result || result.failed || result.ok === false) return { failed: true, stage: 'apply' }
+  if (updateInfoRunning(result)) return { attached: true, updated: false }
   return isCurrent() ? { current: true, updated: true, result } : { cancelled: true }
 }
 
@@ -2410,9 +2433,6 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const appLocalDeviceRef = React.useRef('')
       const [showUpdate, setShowUpdate] = React.useState(false)
       const [updateRefreshing, setUpdateRefreshing] = React.useState(false)
-      const [pendingApp, setPendingApp] = React.useState('')
-      const [pendingDshRestart, setPendingDshRestart] = React.useState(false)
-      const [dshRestartBusy, setDshRestartBusy] = React.useState(false)
       const [updatePage, setUpdatePage] = React.useState(1)
       const [updateInfo, setUpdateInfo] = React.useState(() => ({ app: null, localPlugin: localPluginVersionSeed(host), devices: {} }))
       const [updateBusy, setUpdateBusy] = React.useState('')
@@ -2754,33 +2774,28 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         }
         return false
       }
-      const updateOneClick = async (component, fixedScope) => {
-        const scope = fixedScope === undefined ? updateScope(component) : fixedScope
-        let authority
-        const current = () => scopeIsCurrent(scope)
-        try {
-          const outcome = await runUpdateSequence({
-            isCurrent: current,
-            check: async () => {
-              const result = await updateAction(component, 'check', undefined, scope)
-              authority = result && result.authorityBase
-              return result
-            },
-            prepare: async (checked) => {
-              authority = checked.authorityBase
-              const result = await updateAction(component, 'prepare', undefined, scope, authority)
-              return result
-            },
-            apply: (id, checked) => updateAction(component, 'apply', id, scope, checked.authorityBase)
-          })
-          if (outcome.cancelled) return false
-          if (!outcome.failed && !outcome.updated) setComponentUpdateError(component, '', scope)
-          if (!outcome.failed && outcome.updated && component === 'node') await watchNodeRestart(scope, authority)
-          return !outcome.failed
-        } catch (error) {
-          setComponentUpdateError(component, updateErrorText(error), scope)
-          return false
+      const waitForUpdateSettle = async (component, scope, authority) => {
+        for (let attempt = 0; attempt < 120; attempt += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 1500))
+          if (!scopeIsCurrent(scope)) return null
+          try {
+            const status = await loadUpdateInfo(component, 'status', authority, scope)
+            if (isUsableUpdateStatus(status) && !updateInfoRunning(status)) return status
+          } catch (_) { /* another window is still installing; keep polling */ }
         }
+        return null
+      }
+      const prepareUpdateComponent = async (component, scope) => {
+        const checked = await updateAction(component, 'check', undefined, scope)
+        if (!checked || checked.ok === false) return { failed: true, checked }
+        if (updateInfoRunning(checked)) return { inProgress: true, checked }
+        if (checked.update_available !== true) return { current: true, checked }
+        const prepared = await updateAction(component, 'prepare', undefined, scope, checked.authorityBase)
+        if (!prepared || prepared.ok === false) return { failed: true, checked }
+        if (updateInfoRunning(prepared)) return { inProgress: true, checked }
+        const preparedId = prepared.prepared_id || ((prepared.prepared || [])[0] || {}).prepared_id
+        if (!preparedId) return { failed: true, checked }
+        return { checked, prepared, preparedId, authority: checked.authorityBase, scope }
       }
       const openUpdateCenter = () => {
         clearFinishedUpdateRuns()
@@ -2819,11 +2834,37 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const updateToneColor = (tone) => tone === 'red' ? C.red : tone === 'green' ? C.green : tone === 'amber' ? C.amber : C.mute
       const updateRunState = (key) => updateRuns[key] || null
       const anyUpdateRunning = Object.values(updateRuns).some((run) => run && run.state === 'running')
+      const applyDshUpdate = async () => {
+        if (!host || typeof host.localPluginUpdates !== 'function') return
+        try {
+          const result = await activateLocalDshUpdate({
+            reloadSurface: typeof host.reloadLocalPluginSurface === 'function' ? () => host.reloadLocalPluginSurface() : undefined,
+            status: () => host.localPluginUpdates('status')
+          })
+          if (result.status === 'active') setNotice('插件更新已立即生效')
+          else if (result.status === 'reload_failed') setNotice('DSH 插件未能在线重载，请手动重启 DeepSeek Harness。')
+          else setNotice('当前 DSH 无法在线重启；请手动重启一次以加载本次更新。')
+        } catch (error) {
+          setComponentUpdateError('localPlugin', shortUpdateError(error), null)
+        }
+      }
       const updateButton = (card, onRetry, onRecheck, onPrimary, disabled = false) => {
         if (card.action === 'retry') return btn('重试', onRetry, { primary: true, disabled: anyUpdateRunning || disabled })
         if (card.action === 'recheck') return btn('重试', onRecheck, { primary: true, disabled: anyUpdateRunning || disabled })
-        if (card.action === 'restart') return btn('立即生效', () => setPendingDshRestart(true), { primary: true, disabled: anyUpdateRunning || disabled })
+        if (card.action === 'restart') return btn('立即生效', applyDshUpdate, { primary: true, disabled: anyUpdateRunning || disabled })
         return btn(card.disabled ? '一键更新' : card.label, onPrimary, { primary: true, disabled: anyUpdateRunning || disabled || card.disabled })
+      }
+      const updateProgressBar = (infos, active) => {
+        if (!active) return null
+        const progress = updateProgressFor(infos)
+        const percent = Math.max(0, Math.min(100, Math.round(Number(progress && progress.percent) || 0)))
+        return h('div', { style: { marginTop: 8 } },
+          h('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 11, color: C.sub, marginBottom: 4 } },
+            h('span', null, progress ? updateProgressText(progress) : '准备更新…'),
+            h('span', { className: 'tether-num' }, percent + '%')),
+          h('div', { role: 'progressbar', 'aria-label': '更新进度', 'aria-valuemin': 0, 'aria-valuemax': 100, 'aria-valuenow': percent,
+            style: { height: 6, borderRadius: 3, background: C.line, overflow: 'hidden' } },
+            h('div', { style: { width: percent + '%', height: '100%', background: C.amber, transition: 'width 300ms ease' } })))
       }
       const productCard = (product) => {
         if (host && host.kind === 'web') return null
@@ -2850,6 +2891,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         const runtimeRestartRequired = product === 'dsh' && !isUpdateInfoStale(infos[0]) && localPluginNeedsRestart(infos[0])
         const card = updateCardStateForInfos(infos, { running, error: run?.state === 'error' ? run.message : '',
           restartRequired: runtimeRestartRequired, failed })
+        const active = card.kind === 'running'
         const versionText = versionLine(product === 'desktop' ? 'APP' : '插件',
           {
             current: product === 'desktop'
@@ -2862,11 +2904,12 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         return h('div', { key: product, style: { padding: 12, borderRadius: 8, background: C.panel, marginBottom: 10 } },
           h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 } },
             h('strong', { style: { fontSize: 13 } }, title),
-            h('span', { style: { marginLeft: 'auto' } }, running ? h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center', color: C.amber } }, h(Glyph, { name: 'refresh', size: 14 }))
+            h('span', { style: { marginLeft: 'auto' } }, active ? h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center', color: C.amber } }, h(Glyph, { name: 'refresh', size: 14 }))
               : pill(card.pill, updateToneColor(card.tone)))),
           h('div', { style: { color: C.sub, fontSize: 12, lineHeight: '19px' } }, versionText),
+          updateProgressBar(infos, active),
           h('div', { style: { marginTop: 8 } },
-            running ? btn(h('span', { className: 'tether-spin', style: { width: 16, height: 16, display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 16 })), () => {}, { primary: true, disabled: true })
+            active ? btn(h('span', { className: 'tether-spin', style: { width: 16, height: 16, display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 16 })), () => {}, { primary: true, disabled: true })
               : updateButton(card, () => runProductUpdate(product), () => refreshUpdateCenter(true), () => runProductUpdate(product))))
       }
       const deviceCard = (item) => {
@@ -2884,6 +2927,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         const card = updateCardStateForInfos(infos, { running, error: run?.state === 'error' ? run.message : '',
           restartRequired: pluginRestart, failed,
           restartPill: '插件待重启 DSH', restartAction: 'none' })
+        const active = card.kind === 'running'
         const nodeTuple = versionTuple(node.current_version || (item.capabilities && item.capabilities.node_version), node.latest_version)
         const versionRows = []
         if (hasApp) versionRows.push('APP ' + versionTuple(item.capabilities.app_version, app.latest_version) + '/Node ' + nodeTuple)
@@ -2894,12 +2938,13 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             h('strong', { style: { fontSize: 13 } }, item.name || item.device_id),
             h('span', { style: { color: C.mute, fontSize: 11 } }, item.name && item.name !== item.device_id ? item.device_id : ''),
             h('span', { style: { marginLeft: 'auto' } }, !item.online ? pill('离线', C.mute)
-              : running ? h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center', color: C.amber } }, h(Glyph, { name: 'refresh', size: 14 }))
+              : active ? h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center', color: C.amber } }, h(Glyph, { name: 'refresh', size: 14 }))
                 : pill(card.pill, updateToneColor(card.tone)))),
           h('div', { style: { color: C.sub, fontSize: 12, lineHeight: '19px' } },
             versionRows.map((text) => h('div', { key: text }, text))),
+          updateProgressBar(infos, active),
           h('div', { style: { marginTop: 8 } },
-            running ? btn(h('span', { className: 'tether-spin', style: { width: 16, height: 16, display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 16 })), () => {}, { primary: true, disabled: true })
+            active ? btn(h('span', { className: 'tether-spin', style: { width: 16, height: 16, display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 16 })), () => {}, { primary: true, disabled: true })
               : !item.online ? btn('离线', () => {}, { primary: true, disabled: true })
                 : updateButton(card, () => runDeviceUpdate(item), () => refreshUpdateCenter(true),
                   () => runDeviceUpdate(item), false)))
@@ -2911,34 +2956,61 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         setUpdateBusy('product:' + product)
         let failure = ''
         try {
-          let nodeFailure = false
-          const localNodeInfo = localId ? infoFor('node', localId) : null
-          if (localId && updateNeededFor(localNodeInfo)) {
-            const nodeOk = await updateOneClick('node', { deviceId: localId, epoch: 0 })
-            if (!nodeOk) nodeFailure = true
-          }
-          if (product === 'desktop') {
-            const checked = await updateAction('app', 'check', undefined, null)
-            if (!checked) failure = 'APP 更新检查失败'
-            else if (checked.update_available === true) {
-              const prepared = await updateAction('app', 'prepare', undefined, null)
-              const preparedId = prepared && (prepared.prepared_id || ((prepared.prepared || [])[0] || {}).prepared_id)
-              if (!preparedId) throw new Error('APP 更新包未准备好，请重试')
-              setPendingApp(preparedId)
+          const nodeScope = localId ? { deviceId: localId, epoch: 0 } : null
+          const plan = product === 'desktop'
+            ? [{ component: 'node', scope: nodeScope }, { component: 'app', scope: null }]
+            : [{ component: 'localPlugin', scope: null }, { component: 'node', scope: nodeScope }]
+          const prepared = {}
+          for (const step of plan) {
+            if (step.component === 'node' && !step.scope) {
+              prepared.node = { failed: true }
+              failure = failure || '未找到本机 Node'
+              continue
             }
-          } else {
-            const outcome = await runUpdateSequence({
-              check: () => updateAction('localPlugin', 'check', undefined, null),
-              prepare: () => updateAction('localPlugin', 'prepare', undefined, null),
-              apply: (id) => updateAction('localPlugin', 'apply', id, null)
-            })
-            if (outcome.failed) failure = '插件更新失败'
-            else if (outcome.updated && localPluginNeedsRestart(outcome.result)) {
-              if (outcome.result.restart_scheduled === true) setNotice('插件已安装，DSH 正在自动重启…')
-              else setPendingDshRestart(true)
+            try {
+              prepared[step.component] = await prepareUpdateComponent(step.component, step.scope)
+            } catch (error) {
+              prepared[step.component] = { failed: true }
+              setComponentUpdateError(step.component, shortUpdateError(error), step.scope)
+            }
+            if (prepared[step.component].failed && !failure) {
+              failure = step.component === 'app' ? 'APP 更新失败'
+                : step.component === 'node' ? 'Node 更新失败' : '插件更新失败'
             }
           }
-          if (nodeFailure && !failure) failure = 'Node 更新失败'
+          // Everything is downloaded before the first apply. Node goes first so
+          // the APP (and with it the node process) restarts exactly once.
+          const order = product === 'desktop' ? ['node', 'app'] : ['localPlugin', 'node']
+          for (const component of order) {
+            const entry = prepared[component]
+            if (!entry || entry.failed || entry.current || entry.inProgress || !entry.preparedId) continue
+            try {
+              if (component === 'app') {
+                const applied = await updateAction('app', 'apply', entry.preparedId, null)
+                if (!applied || applied.ok === false) failure = failure || 'APP 更新失败'
+                else if (!updateInfoRunning(applied)) setNotice('APP 正在重启并安装更新…')
+                continue
+              }
+              const result = await updateAction(component, 'apply', entry.preparedId, entry.scope, entry.authority)
+              if (!result || result.ok === false) {
+                failure = failure || (component === 'node' ? 'Node 更新失败' : '插件更新失败')
+                continue
+              }
+              if (updateInfoRunning(result)) {
+                await waitForUpdateSettle(component, entry.scope, entry.authority)
+                continue
+              }
+              if (component === 'node') {
+                if (result.restart_deferred !== true) await watchNodeRestart(entry.scope, entry.authority)
+              } else if (component === 'localPlugin') {
+                if (result.restart_scheduled === true) setNotice('插件已安装，DSH 正在自动重启…')
+                else await applyDshUpdate()
+              }
+            } catch (error) {
+              failure = failure || (component === 'node' ? 'Node 更新失败' : component === 'app' ? 'APP 更新失败' : '插件更新失败')
+              setComponentUpdateError(component, shortUpdateError(error), entry.scope)
+            }
+          }
         } catch (error) {
           failure = shortUpdateError(error)
           setComponentUpdateError(product === 'desktop' ? 'app' : 'localPlugin', failure, null)
@@ -2948,87 +3020,67 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           setUpdateBusy('')
         }
       }
-      const confirmDshRestart = async () => {
-        setDshRestartBusy(true)
-        try {
-          const result = await activateLocalDshUpdate({
-            reloadSurface: typeof host.reloadLocalPluginSurface === 'function' ? () => host.reloadLocalPluginSurface() : undefined,
-            status: () => host.localPluginUpdates('status')
-          })
-          setPendingDshRestart(false)
-          if (result.status === 'active') setNotice('插件更新已立即生效')
-          else if (result.status === 'reload_failed') setNotice('DSH 插件未能在线重载，请手动重启 DeepSeek Harness。')
-          else setNotice('当前 DSH 无法在线重启；请手动重启一次以加载本次更新。')
-        } catch (error) {
-          setPendingDshRestart(false)
-          setComponentUpdateError('localPlugin', shortUpdateError(error), null)
-        } finally { setDshRestartBusy(false) }
-      }
-      const transientUpdateError = (error) => {
-        const code = error && (error.code || (error.detail && error.detail.code))
-        if (code === 'device_offline' || code === 'update_busy' || code === 'surface_timeout') return true
-        const status = error && error.status
-        return !status || status === 400 || status === 408 || status === 429 || status >= 500
-      }
-      const checkUpdateWithRetry = async (component, scope, attempts = 3) => {
-        let lastError
-        for (let i = 0; i < attempts; i += 1) {
-          try { return await updateAction(component, 'check', undefined, scope) } catch (error) {
-            lastError = error
-            if (!transientUpdateError(error) || i + 1 >= attempts) break
-            await new Promise((resolve) => setTimeout(resolve, 2000))
-          }
-        }
-        throw lastError
-      }
       const runDeviceUpdate = async (item) => {
         const runKey = 'device:' + item.device_id
         setUpdateRun(runKey, { state: 'running' })
         setUpdateBusy('device:' + item.device_id)
         const failures = []
+        const scope = { deviceId: item.device_id, epoch: 0 }
         try {
-          const scope = { deviceId: item.device_id, epoch: 0 }
-          for (const component of deviceUpdateComponents(item.capabilities)) {
-            if (!updateNeededFor(infoFor(component, item.device_id))) continue
-            if (component !== 'app') {
-              try {
-                if (!await updateOneClick(component, scope)) failures.push(component)
-                else if (component === 'plugin') {
-                  const restarted = await watchPluginRestart(scope)
-                  if (!restarted) {
-                    failures.push('plugin')
-                    setComponentUpdateError('plugin', '插件已安装，目标 DSH 尚未完成重启', scope)
-                  }
-                }
-              } catch (error) {
-                failures.push(component)
-                setComponentUpdateError(component, shortUpdateError(error), scope)
-              }
-              continue
-            }
+          const components = deviceUpdateComponents(item.capabilities)
+          const prepared = {}
+          for (const component of components) {
             try {
-              const checkedApp = await checkUpdateWithRetry('app', scope)
-              if (checkedApp && checkedApp.update_available) {
-                const expectedVersion = checkedApp.latest_version
-                if (await updateOneClick('app', scope)) {
-                  const reconnected = await watchAppRestart(scope, checkedApp.authorityBase, expectedVersion)
-                  if (!reconnected) {
-                    failures.push('app')
-                    setComponentUpdateError('app', 'APP 更新后尚未重新连接，请稍后刷新', scope)
-                  }
-                } else failures.push('app')
+              prepared[component] = await prepareUpdateComponent(component, scope)
+            } catch (error) {
+              prepared[component] = { failed: true }
+              setComponentUpdateError(component, shortUpdateError(error), scope)
+            }
+            if (prepared[component].failed) failures.push(component)
+          }
+          // Download first, then install; the APP is applied last so the
+          // restarted node already carries its own update.
+          for (const component of ['plugin', 'node', 'app']) {
+            if (!components.includes(component)) continue
+            const entry = prepared[component]
+            if (!entry || entry.failed || entry.current || entry.inProgress || !entry.preparedId) continue
+            try {
+              const result = await updateAction(component, 'apply', entry.preparedId, scope, entry.authority)
+              if (!result || result.ok === false) {
+                failures.push(component)
+                continue
+              }
+              if (updateInfoRunning(result)) {
+                await waitForUpdateSettle(component, scope, entry.authority)
+                continue
+              }
+              if (component === 'plugin') {
+                const restarted = await watchPluginRestart(scope, entry.authority)
+                if (!restarted) {
+                  failures.push('plugin')
+                  setComponentUpdateError('plugin', '插件已安装，目标 DSH 尚未完成重启', scope)
+                }
+              } else if (component === 'node') {
+                if (result.restart_deferred !== true) await watchNodeRestart(scope, entry.authority)
+              } else if (component === 'app') {
+                const reconnected = await watchAppRestart(scope, entry.authority, entry.checked && entry.checked.latest_version)
+                if (!reconnected) {
+                  failures.push('app')
+                  setComponentUpdateError('app', 'APP 更新后尚未重新连接，请稍后刷新', scope)
+                }
               }
             } catch (error) {
-              failures.push('app')
-              setComponentUpdateError('app', shortUpdateError(error), scope)
+              failures.push(component)
+              setComponentUpdateError(component, shortUpdateError(error), scope)
             }
           }
         } catch (error) {
           failures.push('更新流程')
-          setComponentUpdateError('node', shortUpdateError(error), { deviceId: item.device_id, epoch: 0 })
+          setComponentUpdateError('node', shortUpdateError(error), scope)
         } finally {
           await refreshUpdateCenter(true)
-          const message = failures.length ? '部分组件未更新：' + failures.join('、') + '，可重试' : ''
+          const unique = [...new Set(failures)]
+          const message = unique.length ? '部分组件未更新：' + unique.join('、') + '，可重试' : ''
           if (message) setNotice(message)
           setUpdateRun(runKey, message ? { state: 'error', message } : { state: 'done' })
           setUpdateBusy('')
@@ -3055,6 +3107,54 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         const timer = setInterval(check, 5 * 60 * 1000)
         return () => clearInterval(timer)
       }, [deviceId, !!(state && state.devices && state.devices.find((item) => item.device_id === deviceId)?.online)])
+      const runningUpdateKey = Object.keys(updateRuns)
+        .filter((key) => updateRuns[key] && updateRuns[key].state === 'running').sort().join('|')
+      React.useEffect(() => {
+        if (!showUpdate) return undefined
+        let alive = true
+        const devicesNow = () => (stateRef.current && stateRef.current.devices) || []
+        const targets = () => {
+          const list = []
+          if (host && host.kind === 'app') list.push(['app', null])
+          if (host && host.kind === 'dsh') list.push(['localPlugin', null])
+          const local = appLocalDevice || deviceId
+          if (local) {
+            const item = devicesNow().find((device) => device.device_id === local && device.online)
+            if (item) {
+              list.push(['node', { deviceId: local, epoch: 0 }])
+              if (item.capabilities && item.capabilities.dsh_surface) list.push(['plugin', { deviceId: local, epoch: 0 }])
+              if (item.capabilities && item.capabilities.app_version) list.push(['app', { deviceId: local, epoch: 0 }])
+            }
+          }
+          for (const key of runningUpdateKey.split('|')) {
+            if (!key.startsWith('device:')) continue
+            const targetId = key.slice('device:'.length)
+            const item = devicesNow().find((device) => device.device_id === targetId)
+            if (!item) continue
+            list.push(['node', { deviceId: targetId, epoch: 0 }])
+            if (item.capabilities && item.capabilities.dsh_surface) list.push(['plugin', { deviceId: targetId, epoch: 0 }])
+            if (item.capabilities && item.capabilities.app_version) list.push(['app', { deviceId: targetId, epoch: 0 }])
+          }
+          const seen = new Set()
+          return list.filter(([component, scope]) => {
+            const key = (scope ? scope.deviceId : 'local') + ':' + component
+            if (seen.has(key)) return false
+            seen.add(key)
+            return true
+          })
+        }
+        const poll = async () => {
+          for (const [component, scope] of targets()) {
+            if (!alive) return
+            try { await loadUpdateInfo(component, 'status', undefined, scope) } catch (_) { /* restarting hosts recover on the next tick */ }
+          }
+        }
+        poll()
+        // A running install refreshes the bar quickly; an idle update center
+        // still shows what another window is doing.
+        const timer = setInterval(poll, runningUpdateKey ? 1200 : 4000)
+        return () => { alive = false; clearInterval(timer) }
+      }, [showUpdate, host, appLocalDevice, deviceId, runningUpdateKey])
       React.useEffect(() => { if (!notice) return; const t = setTimeout(() => setNotice(''), 4000); return () => clearTimeout(t) }, [notice])
       React.useEffect(() => { if (!updateToast) return; const t = setTimeout(() => setUpdateToast(''), 4000); return () => clearTimeout(t) }, [updateToast])
       React.useEffect(() => { if (!projectsError) return; const t = setTimeout(() => setProjectsError(''), 4000); return () => clearTimeout(t) }, [projectsError])
@@ -4833,32 +4933,6 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
                   pager(-1, '上一页', page <= 1), h('span', { className: 'tether-num', style: { fontSize: 11, color: C.mute } }, page + '/' + total), pager(1, '下一页', page >= total)) : null
               ]
             })()
-          )
-        ) : null,
-        pendingApp ? h('div', {
-          style: { position: 'absolute', inset: 0, background: 'rgba(16,24,40,0.35)', display: 'grid', placeItems: 'center', zIndex: 35, padding: 16 }
-        },
-          h('div', { style: { width: 360, background: C.bg, borderRadius: 10, boxShadow: C.shadow, padding: 18 } },
-            h('div', { style: { fontSize: 14, fontWeight: 'var(--tether-strong, 600)', marginBottom: 6 } }, 'APP 已下载'),
-            h('div', { style: { color: C.sub, fontSize: 12, lineHeight: '18px', marginBottom: 14 } }, '需要重启 Tether 才能完成安装。'),
-            h('div', { style: { display: 'flex', justifyContent: 'flex-end', gap: 8 } },
-              btn('稍后', () => { setPendingApp(''); setNotice('APP 已下载，下次打开更新页可继续安装') }),
-              btn('重启并安装', async () => {
-                const id = pendingApp
-                setPendingApp('')
-                try { await host.updates.apply(id); setNotice('APP 正在重启安装') } catch (error) { setComponentUpdateError('app', shortUpdateError(error), null) }
-              }, { primary: true }))
-          )
-        ) : null,
-        pendingDshRestart ? h('div', {
-          style: { position: 'absolute', inset: 0, background: 'rgba(16,24,40,0.35)', display: 'grid', placeItems: 'center', zIndex: 35, padding: 16 }
-        },
-          h('div', { role: 'dialog', 'aria-label': '应用本机 DSH 插件更新', style: { width: 360, background: C.bg, borderRadius: 10, boxShadow: C.shadow, padding: 18 } },
-            h('div', { style: { fontSize: 14, fontWeight: 'var(--tether-strong, 600)', marginBottom: 6 } }, '插件更新已安装'),
-            h('div', { style: { color: C.sub, fontSize: 12, lineHeight: '18px', marginBottom: 14 } }, '先尝试在当前 DSH 会话中在线加载新插件；若当前 profile 不支持在线重载，会提示需要重启。'),
-            h('div', { style: { display: 'flex', justifyContent: 'flex-end', gap: 8 } },
-              btn('稍后', () => setPendingDshRestart(false), { disabled: dshRestartBusy }),
-              btn(dshRestartBusy ? '正在应用…' : '立即生效', confirmDshRestart, { primary: true, disabled: dshRestartBusy }))
           )
         ) : null,
         showSettings ? h('div', {
