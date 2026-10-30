@@ -1,4 +1,5 @@
 # tether-ui backlog
+- 2026-10-30：连接抽屉的登录/修改密码/邀请码注册/配对码兑换共用 `connection-panel.js`，APP 与 DSH 插件只经 props 传默认地址、默认 token、本机设备与 `onConfigured`；自助改密必须带当前 Bearer token，成功后静默替换新 token；凭据只存 `localStorage['tether.hub']`，不写进 URL、不回显 token。新增凭据入口时保持这个单一来源。
 - 2026-10-28：notice/工作区错误改为右上角绝对定位浮层（`renderToasts`），带 `×` 关闭与“重试工作区”，不再插入文档流挤压布局。不要再把错误条放回 header 与 main 之间。
 - 2026-10-28：目录/工作区/驱动器/策略按设备缓存；`loadDir` 先显示缓存再校验并把结果回填树缓存；悬停/单点预取目录与文本/图片/PDF 预览；预览不再无条件重载父目录；`fs/list` 并发去重。目录/预览请求带 AbortController+序号，提供“停止加载”。
 - 2026-10-28：设备切换增加 `projectsDevice === deviceId` 门禁并按设备保留树缓存，修复切到新设备仍用上一台路径（`not a directory`）。

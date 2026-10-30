@@ -2,9 +2,9 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import vm from 'node:vm'
 import test from 'node:test'
+import { createWebHost } from '../packages/tether-ui/src/hosts/web.js'
 
 const clientSource = fs.readFileSync(new URL('../packages/dsh-plugin-tether-client/lib/client.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
-const webHostSource = fs.readFileSync(new URL('../packages/tether-ui/src/hosts/web.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
 
 test('native surface accepts only ticketed loopback, public ticket and same-host token URLs', () => {
   const start = clientSource.indexOf('    function isSafeNativeSurfaceUrl(value) {')
@@ -34,8 +34,13 @@ test('native surface accepts only ticketed loopback, public ticket and same-host
     'only remote surfaces go through the hub; the local device stays on the local route')
   assert.ok(clientSource.includes('localDeviceId: appLocalDevice'),
     'the panel passes the local device into the surface')
-  assert.ok(webHostSource.includes('surfaceBase: () => apiBase'),
-    'the APP/web host keeps the same-origin surface base')
+  const savedWindow = globalThis.window
+  globalThis.window = { localStorage: { getItem: () => JSON.stringify({ url: 'https://hub.example', token: 'test-secret' }) } }
+  const webHost = createWebHost({ apiBase: 'http://127.0.0.1:18892' })
+  assert.equal(webHost.surfaceBase(true), 'http://127.0.0.1:18892', 'local surface keeps the local fast path')
+  assert.equal(webHost.surfaceBase(false), 'https://hub.example', 'remote surface uses the selected Hub')
+  if (savedWindow === undefined) delete globalThis.window
+  else globalThis.window = savedWindow
 
   let plugin
   const React = { createElement() { return {} }, useState() {}, useEffect() {}, useRef() {}, useCallback() {} }
@@ -55,13 +60,14 @@ test('native surface accepts only ticketed loopback, public ticket and same-host
   const registrations = []
   const commands = []
   const injectedSlots = []
-  const readFileDrag = () => undefined
   const workspaceFiles = { list() {}, readBytes() {} }
-  plugin.apply({
+  let undeclaredFileDragReads = 0
+  const context = new Proxy({
     layout: { selectPanel(value) { selections.push(value) } },
     connection: { rpc: { call() {} } },
     remote: { workspaceFiles, pluginManager: {} },
-    fileDrag: { read: readFileDrag },
+    uiWorkspace: { startSession() {} },
+    sessions: { list: { getSnapshot: () => ({ ids: [] }) } },
     inject(services, apply) {
       assert.equal(Array.from(services).join(','), 'commandUi')
       apply({
@@ -73,14 +79,26 @@ test('native surface accepts only ticketed loopback, public ticket and same-host
       inject(name, register) { injectedSlots.push(name); register() },
       register(options, component) { registrations.push({ options, component }) }
     }
+  }, {
+    get(target, property, receiver) {
+      if (property === 'fileDrag') {
+        undeclaredFileDragReads += 1
+        throw new Error('cannot get property "fileDrag" without inject')
+      }
+      return Reflect.get(target, property, receiver)
+    }
   })
+  assert.doesNotThrow(() => plugin.apply(context))
+  assert.equal(undeclaredFileDragReads, 0, 'the plugin never reads a Cordis service it did not inject')
   assert.deepEqual(selections, [null])
   assert.deepEqual(injectedSlots, ['conversation.input.attachments'], 'native iframe may inject only its attachment slot')
   assert.equal(registrations.length, 1)
   assert.equal(registrations[0].options.name, 'conversation.input.attachments')
   assert.equal(registrations[0].options.priority, -1000)
   assert.equal(registrations[0].options.locale, 'conversation')
-  assert.equal(registrations[0].options.inject().readFileDrag, readFileDrag)
+  const injectedSession = registrations[0].options.inject('SESSION-1')
+  assert.deepEqual(Object.keys(injectedSession), ['sessionId'])
+  assert.equal(injectedSession.sessionId, 'SESSION-1')
   assert.equal(commands.length, 1)
   assert.equal(commands[0].name, 'tether-target-file')
   assert.equal(commands[0].label(), '目标设备文件')
@@ -92,7 +110,7 @@ test('native surface state is device-bound and its iframe remains mounted while 
   assert.ok(stateStart >= 0 && nativeStart > stateStart, 'device-bound surface state helpers are present')
   const helpers = vm.runInNewContext(clientSource.slice(stateStart, nativeStart) + '\n;({ nativeSurfaceStateForDevice, nativeSurfaceContainerStyle })')
 
-  const oldReady = { deviceId: 'device-a', status: 'ready', url: 'http://127.0.0.1:40001/tether-connect?ticket=a' }
+  const oldReady = { deviceId: 'device-a', status: 'document-loaded', url: 'http://127.0.0.1:40001/tether-connect?ticket=a' }
   assert.deepEqual(JSON.parse(JSON.stringify(helpers.nativeSurfaceStateForDevice(oldReady, 'device-b', true))), {
     deviceId: 'device-b', status: 'loading', url: ''
   })
@@ -102,7 +120,7 @@ test('native surface state is device-bound and its iframe remains mounted while 
   assert.deepEqual(JSON.parse(JSON.stringify(helpers.nativeSurfaceStateForDevice(oldReady, 'device-a', false))), {
     deviceId: 'device-a', status: 'offline', url: ''
   })
-  assert.equal(helpers.nativeSurfaceStateForDevice({ deviceId: 'device-b', status: 'ready', url: 'http://127.0.0.1:40002/tether-connect?ticket=b' }, 'device-b', true).status, 'ready')
+  assert.equal(helpers.nativeSurfaceStateForDevice({ deviceId: 'device-b', status: 'document-loaded', url: 'http://127.0.0.1:40002/tether-connect?ticket=b' }, 'device-b', true).status, 'document-loaded')
   assert.equal(helpers.nativeSurfaceContainerStyle(false).display, 'none')
   assert.equal(helpers.nativeSurfaceContainerStyle(true).display, 'flex')
 
@@ -118,7 +136,7 @@ test('native surface state is device-bound and its iframe remains mounted while 
 test('the native frame reloads when the DSH host pid changes', () => {
   assert.match(clientSource, /key: deviceId \+ ':' \+ \(currentState\.pid \|\| 0\)/)
   assert.match(clientSource, /pid && \(prev\.pid \|\| 0\) !== pid/)
-  assert.match(clientSource, /pid: Number\(data\.pid\) \|\| 0/)
+  assert.match(clientSource, /status: 'document-loading', url: url\.href, pid: Number\(data\.pid\) \|\| 0/)
 })
 
 
@@ -134,8 +152,20 @@ test('the DSH plugin embeds the local workspace with the current same-origin ses
 })
 
 test('the local device id participates in the surface effect dependencies', () => {
-  assert.ok(clientSource.includes('}, [deviceId, online, attempt, localDeviceId])'))
-  assert.ok(clientSource.includes('}, [deviceId, online, localDeviceId])'))
+  assert.ok(clientSource.includes('}, [deviceId, online, visible, attempt, localDeviceId, surfaceSourceKey])'))
+  assert.ok(clientSource.includes('}, [deviceId, online, visible, localDeviceId, surfaceSourceKey])'))
+})
+
+test('NativeSurface reports document readiness only after iframe onLoad and bounds retries', () => {
+  assert.match(clientSource, /status: 'document-loading', url: url\.href/)
+  assert.match(clientSource, /onLoad: \(\) => \{[\s\S]*status: 'document-loaded'/)
+  assert.match(clientSource, /NATIVE_SURFACE_DOCUMENT_RETRIES = 1/)
+  assert.match(clientSource, /NATIVE_SURFACE_DOCUMENT_TIMEOUT_MS = 30000/)
+  assert.match(clientSource, /pollFlightRef\.current/)
+  assert.match(clientSource, /document\.visibilityState === 'hidden'/)
+  assert.match(clientSource, /controller\.abort\(\)/)
+  assert.match(clientSource, /reportNativeSurfaceTiming\('descriptor'/)
+  assert.match(clientSource, /reportNativeSurfaceTiming\('document'/)
 })
 
 test('an embedded DSH page never registers the Tether plugin', () => {

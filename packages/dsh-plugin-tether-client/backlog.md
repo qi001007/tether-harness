@@ -25,3 +25,5 @@
 - 2026-10-27：将客户端包与更新提示版本统一到 0.2.1。
 - 2026-10-28：client bundle 重新生成，包含共享 UI 刷新状态、旋转图标与自动消失 toast；package/version 元数据升至 `0.2.13`。
 - 2026-10-29：客户端 package.json 与 version.json 升至 `0.2.16`，`lib/client.js` 重新生成以更新 `PLUGIN_VERSION`。
+- 2026-10-30：从共享 NativeSurface 源码重建 `lib/client.js`，采用可见时单飞轮询、过期请求取消、同来源保留工作区 iframe、文档加载提示和有界重试。
+- 2026-10-30：client 包和 version.json 升至发行候选 `0.2.29`；附加候选说明记录 auth scope、原生附件和更新竞态修复。

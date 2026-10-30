@@ -34,3 +34,4 @@
 - 2026-10-28：surface 启动失败自动恢复：main 监听子 frame 的 `web boot: N entry did not activate`，经 preload `onSurfaceBootFailed` 通知 renderer；`NativeSurface` 换新 ticket 重建 iframe（1/2/4s，最多 3 次），surface 接口的 502/504/device_offline/surface_timeout 也自动重试。
 - 2026-10-29：APP package.json 发布版本升至 `0.2.16`，等待 release gate。
 - 2026-10-29：APP 的 `check` 命令超时 45 s → 90 s：本机更新器按 Hub mirror → GitHub 逐源回退，两个源各 15 s 再加 latest API 解析会撞上 45 s，慢网下会误报检查失败。
+- 2026-10-30：APP 包、package-lock 根版本元数据统一至发行候选 `0.2.29`；不改变 Electron 依赖锁定版本。

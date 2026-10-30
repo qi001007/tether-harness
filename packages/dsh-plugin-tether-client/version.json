@@ -1,6 +1,6 @@
 {
-  "version": "0.2.28",
-  "notes": "Tether shared client and local API startup readiness.",
+  "version": "0.2.29",
+  "notes": "Tether client auth scoping, native attachment routing, and update-state race fixes.",
   "download": "https://github.com/qi001007/tether-harness",
   "install": "git pull && powershell -ExecutionPolicy Bypass -File desktop/install-plugin.ps1"
 }

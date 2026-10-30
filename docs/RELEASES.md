@@ -1,5 +1,19 @@
 # Public client releases
 
+## v0.2.29 candidate (unpublished)
+
+This candidate includes the scoped login authority fix, update/watchdog race fixes, and native Composer attachment routing. The DSH native Composer path was exercised on an isolated local Host with a QA Node: it selected a target workspace and transferred a 90-byte text file and a 4-byte binary file. The captured multipart response contained the expected bytes `00 ff 41 80`; no model request was sent.
+
+Validation reported by the parent agent: Python 125 passed / 1 skipped, Hub/server 116 passed, Node 199 passed. A local isolated Host/Node acceptance passed; physical LAPTOP-01 is not installed or re-tested. Local unsigned archives were generated and inspected offline; all three ZIP sizes and SHA-256 values match the generated unsigned manifest, and archive contents exclude `.scratch`, `.dev-harness`, private server source, and QA fixtures:
+
+| Component | Archive size | SHA-256 |
+| --- | ---: | --- |
+| APP | 1,679,519 B | `88c1eb977c0d87a31e39ac8f0b14ebdd0bdff913a4b9b3e2aab7d77e6c34bd53` |
+| Plugin | 1,311,593 B | `cc8af66be94e3af76d9fb31696c2b0bfe7444a58d74d7f773fe737b7da1fbc1c` |
+| Node | 73,559 B | `3bd105c9a37377a5e49b85917dd9cecdcb5923daeb5102bca7d434e6a7bd5ebc` |
+
+The local `tether-update.json` is 1,458 B with SHA-256 `7360e03739d71f091536a733f7fc2d2bf4d07bb898852428825e4361e5c021d8`; it has no signature. This is a release candidate record only: no public release, signature, deployment, or tag is claimed. CI signing and physical LAPTOP-01 installation remain release gates.
+
 ## v0.2.28
 
 [GitHub Release](https://github.com/qi001007/tether-harness/releases/tag/v0.2.28) · tag `v0.2.28` → `e6ce3c0` · workflow run `40918330411` · assets app 1,658,001 B / node 73,558 B / plugin 1,302,899 B / manifest 1,566 B. Published 2026-10-29T17:10:56Z.

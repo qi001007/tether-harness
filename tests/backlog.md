@@ -1,4 +1,7 @@
 # 修改记录
+- 2026-10-30：修正 `test_native_surface_client` 对 VM realm 返回对象的断言，按键和值验证注入 sessionId，保留 Proxy 对未注入 `ctx.fileDrag` 访问抛错的回归。
+- 2026-10-30：新增 DSH attachment wrapper 行为回归：Composer 隐藏 file input click 被路由到目标会话文件列表，点击远端文件读回原始字节并调用 `onAddFiles(File[])`；本机上传按钮保留原生文件选择器行为；覆盖无会话回退、多 Composer/session 隔离、无关 input 不拦截和重复 busy 请求去重。
+- 2026-10-30：新增 NativeSurface 组件 effect harness，覆盖设备请求取消、隐藏轮询中止/恢复、同来源切面板保留 iframe、iframe onLoad watchdog 清理以及一次错误重试后停止；更新 NativeSurface 状态与 effect contract 断言。
 - 2026-10-30：新增 0.2.27 更新一致性回归：latest 归一化、`updateNeededFor`、跳过当前 Node 的产品更新；全量 125 pytest / 175 mjs / 6 cjs 通过。
 - 2026-10-30：新增更新运行态、profile 版本优先、`restart_scheduled`、`dsh_restart` 打包回归；全量 125 pytest / 172 mjs / 6 cjs 通过。
 - 2026-10-29：F79 第五版回归固定行号区与代码区无人工边线、13px 留白保留，以及亮暗行号区新灰阶 `#f7f7f8` / `#232325`；定向代码视图 8/8、全量 167 mjs / 6 cjs / 123 pytest（1 skipped）通过。
@@ -97,3 +100,9 @@
 - 2026-10-29：`test_explorer_navigation` 增加预取返回响应体、`loadDir` 空值回退和覆盖式加载遮罩断言（防止再出现“双击快就报目录读取失败”与加载挤行）。
 - 2026-10-29：`test_tether_ui_shared` 增加更新灯与卡片同源、离线设备不染色、瞬时错误重试/失败不缓存、旧节点 `device_id` 缺省兼容与不匹配拒绝的用例。
 - 2026-10-29：`test_dsh_local_updates` 增加“源码 updater 与安装脚本必须带齐 `UPDATER_FILES`（含 release/ed25519）”的回归；`test_release_archive` 的源码预检 fixture 同步补齐这两个文件。
+- 2026-10-30：新增更新响应迟到仲裁、失败/缓存组件在跨组件 latest 归一化时保留陈旧状态的行为回归。
+- 2026-10-30: Added regressions for post-apply update availability and obsolete status snapshots.
+
+- 2026-10-30：DSH 附件回归覆盖 session-maybe 注入、新草稿单击创建空会话后自动续开 picker、跨会话使用新 onAddFiles 回调，以及无上下文不打开本机 file dialog。
+
+- 2026-10-30：native surface 插件回归用 Cordis Proxy 对未声明的 fileDrag 属性访问抛错；确认 slot 注册只注入 sessionId，未访问未注入 service。

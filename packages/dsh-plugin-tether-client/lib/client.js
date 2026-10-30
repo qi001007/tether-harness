@@ -5763,7 +5763,7 @@ monaco-editor/esm/vs/languages/definitions/swift/swift.js:
 
     const EditorRuntime = TetherMonacoRuntime
     const PANEL_ID = 'tether'
-    const PLUGIN_VERSION = "0.2.28"
+    const PLUGIN_VERSION = "0.2.29"
 const DSH_API_BASE = 'http://127.0.0.1:18890'
 const DSH_APP_BASE = 'http://127.0.0.1:18892'
 
@@ -5995,7 +5995,7 @@ async function addDshTargetAttachment(owner, bridge, sessionId, entry, isCurrent
   return file
 }
 
-function createDshTargetAttachments(React, Native, bridge, pickerCommand) {
+function createDshTargetAttachments(React, Native, bridge, pickerCommand, uiWorkspace, sessions) {
   const h = React.createElement
   return function DshTargetAttachments(props) {
     const [open, setOpen] = React.useState(false)
@@ -6006,6 +6006,12 @@ function createDshTargetAttachments(React, Native, bridge, pickerCommand) {
     const [error, setError] = React.useState('')
     const mounted = React.useRef(true)
     const scope = React.useRef({})
+    const busyRef = React.useRef(false)
+    const containerRef = React.useRef(null)
+    const nativePickerBypass = React.useRef(false)
+    const openPickerRef = React.useRef(null)
+    const currentProps = React.useRef(props)
+    currentProps.current = props
     const activeSession = React.useRef(props.sessionId)
     if (activeSession.current !== props.sessionId) {
       activeSession.current = props.sessionId
@@ -6018,8 +6024,56 @@ function createDshTargetAttachments(React, Native, bridge, pickerCommand) {
     React.useEffect(() => {
       setOpen(false); setRoots([]); setEntries(null); setDirectory(null); setError('')
     }, [props.sessionId])
+    React.useEffect(() => {
+      const pending = pickerCommand && pickerCommand.pendingSessionStart
+      if (!pending || !props.sessionId) return
+      if (pending.baselineIds.has(props.sessionId)) {
+        clearTimeout(pending.timeoutId)
+        pickerCommand.pendingSessionStart = null
+        return
+      }
+      clearTimeout(pending.timeoutId)
+      pickerCommand.pendingSessionStart = null
+      void openPickerRef.current?.()
+    }, [props.sessionId])
     const openPicker = async () => {
+      if (busyRef.current || pickerCommand?.pendingSessionStart) return
+      busyRef.current = true
       setOpen(true); setBusy(true); setError(''); setDirectory(null); setEntries(null)
+      if (!props.sessionId) {
+        const snapshot = sessions?.list?.getSnapshot?.()
+        const startSession = uiWorkspace && uiWorkspace.startSession
+        if (typeof startSession !== 'function' || !snapshot || !Array.isArray(snapshot.ids)) {
+          setError('当前没有目标 DSH 会话。请先在目标设备选择或创建工作区，再浏览其文件。')
+          busyRef.current = false
+          setBusy(false)
+          return
+        }
+        const pending = { baselineIds: new Set(snapshot.ids), timeoutId: null }
+        pending.timeoutId = setTimeout(() => {
+          if (pickerCommand?.pendingSessionStart === pending) {
+            pickerCommand.pendingSessionStart = null
+            if (mounted.current) setError('目标会话准备超时，请先在目标设备选择工作区后重试。')
+          }
+        }, 30_000)
+        if (pickerCommand) pickerCommand.pendingSessionStart = pending
+        setError('正在准备目标 DSH 会话…工作区就绪后会自动打开文件选择器。')
+        try { startSession.call(uiWorkspace) }
+        catch (cause) {
+          clearTimeout(pending.timeoutId)
+          if (pickerCommand?.pendingSessionStart === pending) pickerCommand.pendingSessionStart = null
+          setError(cause.message || '目标 DSH 会话创建失败，请先在目标设备选择工作区。')
+        }
+        busyRef.current = false
+        setBusy(false)
+        return
+      }
+      if (!props.canAcceptDrop) {
+        setError('当前 DSH 会话暂不接受附件。')
+        busyRef.current = false
+        setBusy(false)
+        return
+      }
       try {
         const result = await bridge.getRoots(props.sessionId)
         if (mounted.current && activeSession.current === props.sessionId) {
@@ -6027,8 +6081,34 @@ function createDshTargetAttachments(React, Native, bridge, pickerCommand) {
         }
       }
       catch (cause) { if (mounted.current) setError(cause.message || '读取目标设备目录失败') }
-      finally { if (mounted.current) setBusy(false) }
+      finally { busyRef.current = false; if (mounted.current) setBusy(false) }
     }
+    openPickerRef.current = openPicker
+    const nativeComposerInput = () => {
+      let parent = containerRef.current && containerRef.current.parentElement
+      while (parent) {
+        if (typeof parent.querySelectorAll === 'function') {
+          const inputs = [...parent.querySelectorAll('input[type="file"][hidden]')]
+          if (inputs.length) return inputs.length === 1 ? inputs[0] : null
+        }
+        parent = parent.parentElement
+      }
+      return null
+    }
+    React.useEffect(() => {
+      if (typeof document === 'undefined') return undefined
+      const interceptNativeFilePicker = (event) => {
+        const input = event.target
+        if (!input || input !== nativeComposerInput()) return
+        if (nativePickerBypass.current) { nativePickerBypass.current = false; return }
+        event.preventDefault()
+        event.stopPropagation()
+        if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation()
+        if (openPickerRef.current) void openPickerRef.current()
+      }
+      document.addEventListener('click', interceptNativeFilePicker, true)
+      return () => document.removeEventListener('click', interceptNativeFilePicker, true)
+    }, [])
     React.useEffect(() => {
       if (!pickerCommand) return undefined
       const open = () => { if (!busy && props.canAcceptDrop && props.sessionId) void openPicker() }
@@ -6058,17 +6138,28 @@ function createDshTargetAttachments(React, Native, bridge, pickerCommand) {
     const picker = open ? h('div', { role: 'dialog', 'aria-label': '选择目标设备文件', style: { position: 'relative', margin: '6px 0', padding: 10, border: '1px solid var(--dsw-alias-border-l1, #d0d5dd)', borderRadius: 8, background: 'var(--dsw-alias-bg-layer-1, #fff)', color: 'var(--dsw-alias-label-primary, #101828)', maxHeight: 260, overflow: 'auto' } },
       h('div', { style: { display: 'flex', justifyContent: 'space-between', marginBottom: 8 } },
         h('strong', null, directory ? directory.name : '目标设备文件'),
-        h('button', { type: 'button', onClick: () => { setOpen(false); scope.current = {} }, 'aria-label': '关闭文件选择器' }, '×')),
+        h('button', { type: 'button', onClick: () => {
+          setOpen(false); scope.current = {}
+          const pending = pickerCommand && pickerCommand.pendingSessionStart
+          if (pending) { clearTimeout(pending.timeoutId); pickerCommand.pendingSessionStart = null }
+        }, 'aria-label': '关闭文件选择器' }, '×')),
       directory ? h('button', { type: 'button', style: buttonStyle, onClick: () => { setDirectory(null); setEntries(null) }, disabled: busy }, '返回会话工作区') : null,
       busy ? h('div', { role: 'status', style: { padding: '8px 2px' } }, '读取中…') : null,
       error ? h('div', { role: 'alert', style: { color: 'var(--dsw-alias-state-error-primary, #b42318)', padding: '6px 2px' } }, error) : null,
       !directory ? roots.map((item, index) => h('button', { key: `${item.group}:${item.path}:${index}`, type: 'button', onClick: () => { void enterDirectory(item) }, disabled: busy, style: { ...buttonStyle, display: 'block', width: '100%', textAlign: 'left', marginTop: 5 } }, `${item.group} · ${item.name}`)) : null,
       entries ? entries.map((item) => h('button', { key: item.path, type: 'button', onClick: () => { if (item.dir) void enterDirectory(item); else void pick(item) }, disabled: busy || (item.size > DSH_TARGET_ATTACHMENT_LIMIT), style: { ...buttonStyle, display: 'block', width: '100%', textAlign: 'left', marginTop: 5, opacity: item.size > DSH_TARGET_ATTACHMENT_LIMIT ? 0.55 : 1 } }, `${item.dir ? '📁' : '📄'} ${item.name}${!item.dir && item.size > DSH_TARGET_ATTACHMENT_LIMIT ? ' · 超过 10 MiB' : ''}`)) : null,
       h('div', { style: { marginTop: 8, fontSize: 12, color: 'var(--dsw-alias-label-tertiary, #667085)' } }, '文件从当前 DSH 会话工作区读取，单个附件上限 10 MiB。')) : null
-    return h(React.Fragment, null,
+    const openLocalPicker = () => {
+      const input = typeof document !== 'undefined' && nativeComposerInput()
+      if (!input || typeof input.click !== 'function') { setError('DSH 本机文件选择器暂不可用'); return }
+      nativePickerBypass.current = true
+      try { input.click() } catch (cause) { setError(cause.message || '打开本机文件选择器失败') }
+      finally { nativePickerBypass.current = false }
+    }
+    return h('div', { ref: containerRef, style: { display: 'contents' } },
       h(Native.ComposerAttachments, { ...props, readFileDrag: props.readFileDrag }),
       h('div', { style: { display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 } },
-        h('button', { type: 'button', onClick: () => { void openPicker() }, disabled: busy || !props.canAcceptDrop || !props.sessionId, style: buttonStyle }, '目标设备文件…')),
+        h('button', { type: 'button', onClick: openLocalPicker, disabled: busy || !props.canAcceptDrop || !props.sessionId, style: buttonStyle }, '本机文件…')),
       picker)
   }
 }
@@ -6176,31 +6267,147 @@ function createConnectionPanel(React) {
   const mute = 'var(--dsw-alias-label-tertiary, #667085)'
   const bg = 'var(--dsw-alias-bg-base, #ffffff)'
   const panel = 'var(--dsw-specific-sidebar-fill, #f9fafb)'
+  const line = 'var(--dsw-alias-border-secondary, #e4e7ec)'
+  const field = { width: '100%', height: 30, boxSizing: 'border-box', border: '1px solid ' + line, borderRadius: 6, padding: '0 8px', background: bg, color: ink, fontSize: 12, font: 'inherit' }
+  const primary = { height: 28, padding: '0 10px', border: 0, borderRadius: 6, color: 'var(--dsw-alias-label-primary-inverted, #ffffff)', background: 'var(--dsw-alias-button-primary-fill, #101828)', cursor: 'pointer', fontSize: 12 }
+  const secondary = { height: 28, padding: '0 10px', border: '1px solid ' + line, borderRadius: 6, color: sub, background: 'transparent', cursor: 'pointer', fontSize: 12 }
   const safeAddress = (value) => {
     try { const url = new URL(value); return url.origin + url.pathname.replace(/\/$/, '') } catch (_) { return '未配置' }
   }
-  function ConnectionPanel({ open, onClose, info, busy, error, onProbe }) {
-    const status = info && info.status || 'unknown'
+  const cleanUrl = (value) => String(value || '').trim().replace(/\/+$/, '')
+  function ConnectionPanel({ open, onClose, info, busy, error, onProbe, defaultUrl = '', defaultToken = '', onConfigured, defaultDeviceId = '', defaultDeviceName = '', platform = 'Windows' }) {
+    const initialServer = defaultUrl || (info && /^https?:\/\//.test(info.address || '') ? info.address : '')
+    const [server, setServer] = React.useState(initialServer)
+    const [email, setEmail] = React.useState('')
+    const [password, setPassword] = React.useState('')
+    const [totp, setTotp] = React.useState('')
+    const [inviteCode, setInviteCode] = React.useState('')
+    const [inviteEmail, setInviteEmail] = React.useState('')
+    const [invitePassword, setInvitePassword] = React.useState('')
+    const [pairCode, setPairCode] = React.useState('')
+    const [pairDevice, setPairDevice] = React.useState(defaultDeviceId)
+    const [pairName, setPairName] = React.useState(defaultDeviceName || defaultDeviceId)
+    const [pairResult, setPairResult] = React.useState('')
+    const [accessToken, setAccessToken] = React.useState(defaultToken || '')
+    const [currentPassword, setCurrentPassword] = React.useState('')
+    const [newPassword, setNewPassword] = React.useState('')
+    const [formBusy, setFormBusy] = React.useState('')
+    const [message, setMessage] = React.useState('')
+    React.useEffect(() => { setAccessToken(defaultToken || '') }, [defaultToken])
     if (!open) return null
+    const status = info && info.status || 'unknown'
     const checkedAt = info && info.checkedAt ? new Date(info.checkedAt) : null
     const checked = checkedAt && [checkedAt.getHours(), checkedAt.getMinutes(), checkedAt.getSeconds()].map((part) => String(part).padStart(2, '0')).join(':')
     const row = (label, value) => h('div', { key: label, style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, height: 32, fontSize: 12.5 } },
       h('span', { style: { color: mute } }, label),
       h('span', { style: { color: ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, value))
+    const title = (text) => h('div', { style: { color: sub, fontSize: 12, fontWeight: 600, margin: '16px 0 8px' } }, text)
+    const fieldRow = (label, input) => h('label', { style: { display: 'grid', gap: 4, fontSize: 11.5, color: mute } }, label, input)
+    const post = async (path, body, headers = {}) => {
+      const base = cleanUrl(server)
+      if (!/^https?:\/\/[^/]+/.test(base)) throw new Error('先填写服务器地址')
+      const response = await fetch(base + path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify(body || {})
+      })
+      let data = {}
+      try { data = await response.json() } catch (_) { /* non-JSON error body */ }
+      if (!response.ok) throw new Error((data.detail && (data.detail.error || data.detail.code)) || data.error || ('HTTP ' + response.status))
+      return data
+    }
+    const run = async (kind, work) => {
+      setMessage('')
+      setFormBusy(kind)
+      try { await work() } catch (error) { setMessage(String(error && error.message || error)) } finally { setFormBusy('') }
+    }
+    const saveLogin = async (data, base, label) => {
+      if (typeof onConfigured === 'function') await onConfigured({ url: base, token: data.token, user: data.user })
+      setAccessToken(data.token || '')
+      setMessage(label + '成功，已保存登录凭据')
+    }
+    const login = () => run('login', async () => {
+      const data = await post('/api/auth/login', { email: email.trim(), password, totp: totp.trim() })
+      saveLogin(data, cleanUrl(server), '登录')
+    })
+    const acceptInvite = () => run('invite', async () => {
+      const data = await post('/api/auth/accept-invite', { code: inviteCode.trim(), email: inviteEmail.trim(), password: invitePassword })
+      saveLogin(data, cleanUrl(server), '邀请码注册')
+    })
+    const changePassword = () => run('password', async () => {
+      if (!accessToken) throw new Error('先登录再修改密码')
+      const data = await post('/api/auth/password', {
+        current_password: currentPassword, new_password: newPassword
+      }, { Authorization: 'Bearer ' + accessToken })
+      setAccessToken(data.token || '')
+      setCurrentPassword('')
+      setNewPassword('')
+      if (typeof onConfigured === 'function') onConfigured({ url: cleanUrl(server), token: data.token, user: data.user })
+      setMessage('密码已修改，其他设备的旧登录已失效')
+    })
+    const pair = () => run('pair', async () => {
+      const data = await post('/api/pairing/exchange', {
+        code: pairCode.trim(), device_id: pairDevice.trim(), name: pairName.trim() || pairDevice.trim(),
+        platform, capabilities: {}
+      })
+      setPairResult(data.token || '')
+      setMessage('配对成功，设备令牌已生成')
+    })
+    const copyPairToken = () => {
+      if (!pairResult) return
+      try { navigator.clipboard.writeText(pairResult); setMessage('设备令牌已复制') } catch (_) { setMessage('复制失败，请手动选择令牌') }
+    }
     return h('div', { onPointerDown: (event) => { if (event.target === event.currentTarget) onClose() }, style: { position: 'absolute', inset: 0, zIndex: 31, background: 'rgba(16,24,40,0.35)', display: 'flex', justifyContent: 'flex-end' } },
       h('section', { className: 'tether-drawer', style: { height: '100%', background: bg, display: 'flex', flexDirection: 'column', boxShadow: 'var(--dsw-elevation-panel, 0 8px 24px rgba(16,24,40,0.12))' } },
         h('header', { style: { padding: '12px 16px', background: panel, display: 'flex', alignItems: 'center' } },
           h('strong', { style: { fontSize: 14, color: ink } }, '服务器连接'),
           h('button', { onClick: onClose, title: '关闭', 'aria-label': '关闭', style: { marginLeft: 'auto', border: 0, background: 'transparent', fontSize: 18, cursor: 'pointer', color: mute } }, '×')),
         h('div', { className: 'tether-drawer-body', style: { padding: '14px 16px 24px', overflowY: 'auto' } },
-          h('div', { style: { borderRadius: 8, background: panel, padding: '4px 12px', marginBottom: 14 } },
+          h('div', { style: { borderRadius: 8, background: panel, padding: '4px 12px', marginBottom: 12 } },
             row('服务器地址', safeAddress(info && info.address)),
             row('连接状态', status === 'online' ? '已连接' : status === 'offline' ? '不可达' : '未知'),
             row('最近检测', busy ? '检测中…' : checked ? checked + ' · ' + (status === 'online' ? '成功' : status === 'offline' ? '失败' : '未知') : '尚未检测'),
             row('服务响应耗时', info && Number.isFinite(info.durationMs) ? info.durationMs + ' ms' : '—')),
-          error ? h('div', { style: { color: 'var(--dsw-alias-state-error-primary, #b42318)', fontSize: 12, marginBottom: 12 } }, error) : null,
-          h('button', { onClick: onProbe, disabled: busy, className: 'tether-press', style: { height: 28, padding: '0 10px', border: 0, borderRadius: 6, color: 'var(--dsw-alias-label-primary-inverted, #ffffff)', background: 'var(--dsw-alias-button-primary-fill, #101828)', cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.5 : 1 } }, busy ? '检测中…' : '重新检测'),
-          null))
+          error ? h('div', { style: { color: 'var(--dsw-alias-state-error-primary, #b42318)', fontSize: 12, marginBottom: 10 } }, error) : null,
+          h('button', { onClick: onProbe, disabled: busy, className: 'tether-press', style: { ...secondary, opacity: busy ? 0.5 : 1 } }, busy ? '检测中…' : '重新检测'),
+
+          title('账号登录'),
+          h('div', { style: { display: 'grid', gap: 7 } },
+            fieldRow('服务器地址', h('input', { value: server, onChange: (event) => setServer(event.target.value), placeholder: 'https://hub.example.com', spellCheck: false, style: field })),
+            fieldRow('邮箱', h('input', { value: email, onChange: (event) => setEmail(event.target.value), type: 'email', autoComplete: 'username', style: field })),
+            h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 110px', gap: 7 } },
+              fieldRow('密码', h('input', { value: password, onChange: (event) => setPassword(event.target.value), type: 'password', autoComplete: 'current-password', style: field })),
+              fieldRow('两步验证码', h('input', { value: totp, onChange: (event) => setTotp(event.target.value), inputMode: 'numeric', maxLength: 6, style: field }))),
+            h('button', { onClick: login, disabled: !!formBusy, style: { ...primary, opacity: formBusy ? 0.5 : 1, justifySelf: 'start' } }, formBusy === 'login' ? '登录中…' : '登录')),
+
+          title('修改密码'),
+          h('div', { style: { display: 'grid', gap: 7 } },
+            fieldRow('当前密码', h('input', { value: currentPassword, onChange: (event) => setCurrentPassword(event.target.value), type: 'password', autoComplete: 'current-password', style: field })),
+            fieldRow('新密码（至少 10 位）', h('input', { value: newPassword, onChange: (event) => setNewPassword(event.target.value), type: 'password', autoComplete: 'new-password', style: field })),
+            h('button', { onClick: changePassword, disabled: !!formBusy || !accessToken, title: accessToken ? '' : '先登录', style: { ...secondary, justifySelf: 'start', opacity: formBusy || !accessToken ? 0.5 : 1 } }, formBusy === 'password' ? '修改中…' : '修改密码'),
+            h('div', { style: { color: mute, fontSize: 11, lineHeight: '17px' } }, '修改后其他设备的旧登录和 API 令牌都会失效。')),
+
+          title('使用邀请码注册'),
+          h('div', { style: { display: 'grid', gap: 7 } },
+            h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7 } },
+              fieldRow('邀请码', h('input', { value: inviteCode, onChange: (event) => setInviteCode(event.target.value), spellCheck: false, maxLength: 12, style: field })),
+              fieldRow('邮箱', h('input', { value: inviteEmail, onChange: (event) => setInviteEmail(event.target.value), type: 'email', style: field }))),
+            fieldRow('密码（至少 10 位）', h('input', { value: invitePassword, onChange: (event) => setInvitePassword(event.target.value), type: 'password', autoComplete: 'new-password', style: field })),
+            h('button', { onClick: acceptInvite, disabled: !!formBusy, style: { ...secondary, justifySelf: 'start' } }, formBusy === 'invite' ? '创建中…' : '创建账号并登录')),
+
+          title('本机设备配对'),
+          h('div', { style: { display: 'grid', gap: 7 } },
+            h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7 } },
+              fieldRow('配对码', h('input', { value: pairCode, onChange: (event) => setPairCode(event.target.value), spellCheck: false, maxLength: 12, style: field })),
+              fieldRow('设备 ID', h('input', { value: pairDevice, onChange: (event) => setPairDevice(event.target.value), spellCheck: false, style: field }))),
+            fieldRow('设备名称', h('input', { value: pairName, onChange: (event) => setPairName(event.target.value), style: field })),
+            h('div', { style: { display: 'flex', gap: 8 } },
+              h('button', { onClick: pair, disabled: !!formBusy, style: { ...secondary, opacity: formBusy ? 0.5 : 1 } }, formBusy === 'pair' ? '兑换中…' : '兑换设备令牌'),
+              pairResult ? h('button', { onClick: copyPairToken, style: secondary }, '复制令牌') : null),
+            pairResult ? h('textarea', { readOnly: true, value: pairResult, rows: 2, style: { ...field, height: 'auto', padding: 8, resize: 'vertical', wordBreak: 'break-all' } }) : null,
+            h('div', { style: { color: mute, fontSize: 11, lineHeight: '17px' } }, '设备令牌只显示一次。APP 的 Node 可使用这个令牌接入；不要把令牌发到群里。')),
+
+          message ? h('div', { style: { marginTop: 12, color: message.includes('成功') || message.includes('已保存') || message.includes('已复制') || message.includes('已修改') ? 'var(--dsw-alias-state-success-primary, #16a34a)' : 'var(--dsw-alias-state-error-primary, #b42318)', fontSize: 12 } }, message) : null))
     )
   }
   function ConnectionTrigger({ onClick, status = 'unknown' }) {
@@ -6283,16 +6490,44 @@ function hubProbeErrorText(error) {
     : 'Hub 不可达或请求超时，请检查服务地址与网络后重试。'
 }
 
+function assertCurrentAuthorityGeneration(requestGeneration, currentGeneration) {
+  if (requestGeneration === currentGeneration) return
+  const error = new Error('连接配置已更改')
+  error.code = 'authority_changed'
+  throw error
+}
+
+async function fetchApiJsonForAuthority(path, init, options, requestGeneration, currentGeneration) {
+  const response = await fetchApiJson(path, init, options)
+  assertCurrentAuthorityGeneration(requestGeneration, currentGeneration())
+  return response
+}
+
+function nativeSurfaceAuthorityKey(surfaceBase, hubUrl, activeBase, generation) {
+  return [surfaceBase || '', hubUrl || '', activeBase || '', generation].join('|')
+}
+
+function apiCandidatesForAuthority(activeBase, candidates, explicitAuthority = '') {
+  return explicitAuthority ? [explicitAuthority] : [activeBase, ...(candidates || []).filter((base) => base !== activeBase)]
+}
+
 function updateAuthorityBase(updateInfo, deviceId, component) {
   const record = updateInfo && updateInfo.devices && updateInfo.devices[deviceId] && updateInfo.devices[deviceId][component]
   return record && Object.prototype.hasOwnProperty.call(record, 'authorityBase') ? record.authorityBase : undefined
 }
 
 function updateAvailableFor(updateInfo, hostKind, deviceId) {
-  if (hostKind === 'app' && updateInfo && updateInfo.app && updateInfo.app.update_available) return true
-  if (hostKind === 'dsh' && updateInfo && updateInfo.localPlugin && updateInfo.localPlugin.update_available) return true
+  if (hostKind === 'app' && updateInfo && updateInfo.app && !isUpdateInfoStale(updateInfo.app) && updateInfo.app.update_available) return true
+  if (hostKind === 'dsh' && updateInfo && updateInfo.localPlugin && !isUpdateInfoStale(updateInfo.localPlugin) && updateInfo.localPlugin.update_available) return true
   const target = updateInfo && updateInfo.devices && updateInfo.devices[deviceId]
-  return !!(deviceId && target && ((target.app && target.app.update_available) || (target.node && target.node.update_available) || (target.plugin && target.plugin.update_available)))
+  return !!(deviceId && target && ['app', 'node', 'plugin'].some((component) => {
+    const info = target[component]
+    return info && !isUpdateInfoStale(info) && info.update_available
+  }))
+}
+
+function isUpdateInfoStale(info) {
+  return !!(info && (info.stale === true || info.from_cache === true || info.check_error))
 }
 
 function updateTriggerState(updateInfo, updateErrors, refreshing = false, devices = null, running = false) {
@@ -6300,13 +6535,14 @@ function updateTriggerState(updateInfo, updateErrors, refreshing = false, device
   const statuses = []
   const add = (infos, errors) => {
     const list = (infos || []).filter(Boolean)
-    const failures = (errors || []).some(Boolean)
+    const failures = (errors || []).some(Boolean) || list.some((info) => info && info.check_error)
     if (!list.length && !failures) return
-    const needsRestart = list.some((info) => info.runtime_version && info.current_version
+    const needsRestart = list.some((info) => !isUpdateInfoStale(info) && info.runtime_version && info.current_version
       && info.runtime_version !== info.current_version)
-    if (list.some((info) => info.update_available === true) || needsRestart) statuses.push('available')
-    else if (list.length && list.every((info) => info.current_version && info.latest_version)) statuses.push('current')
+    if (list.some((info) => !isUpdateInfoStale(info) && info.update_available === true) || needsRestart) statuses.push('available')
     else if (failures) statuses.push('failed')
+    else if (list.some(isUpdateInfoStale)) statuses.push('checking')
+    else if (list.length && list.every((info) => info.current_version && info.latest_version)) statuses.push('current')
     else statuses.push('checking')
   }
   add([updateInfo && updateInfo.app], [updateErrors && updateErrors.app])
@@ -6333,10 +6569,11 @@ function updateTriggerState(updateInfo, updateErrors, refreshing = false, device
 }
 
 function updateCardState({ running = false, error = '', hasUpdate = false, restartRequired = false,
-                                   known = false, failed = false, restartPill = '待生效',
+                                   known = false, failed = false, stale = false, restartPill = '待生效',
                                    restartAction = 'restart' } = {}) {
   if (running) return { kind: 'running', pill: '正在更新', tone: 'amber', action: 'none', label: '更新中', disabled: true }
   if (error) return { kind: 'error', pill: '更新失败', tone: 'red', action: 'retry', label: '重试', disabled: false }
+  if (failed) return { kind: 'failed', pill: '检查失败', tone: 'red', action: 'recheck', label: '重试', disabled: false }
   if (hasUpdate) return { kind: 'update', pill: '有更新', tone: 'amber', action: 'update', label: '一键更新', disabled: false }
   if (restartRequired) {
     return {
@@ -6345,9 +6582,18 @@ function updateCardState({ running = false, error = '', hasUpdate = false, resta
       disabled: restartAction === 'none'
     }
   }
+  if (stale) return { kind: 'stale', pill: '上次结果', tone: 'mute', action: 'recheck', label: '检查更新', disabled: false }
   if (known) return { kind: 'current', pill: '已是最新', tone: 'green', action: 'none', label: '一键更新', disabled: true }
-  if (failed) return { kind: 'failed', pill: '检查失败', tone: 'red', action: 'recheck', label: '重试', disabled: false }
   return { kind: 'checking', pill: '检查中…', tone: 'mute', action: 'none', label: '一键更新', disabled: true }
+}
+
+function updateCardStateForInfos(infos, options = {}) {
+  const list = (infos || []).filter(Boolean)
+  const stale = list.some(isUpdateInfoStale)
+  const failed = options.failed === true || list.some((info) => !!info.check_error)
+  const hasUpdate = list.some((info) => !isUpdateInfoStale(info) && info.update_available === true)
+  const known = list.length > 0 && list.every((info) => info.current_version && info.latest_version && !isUpdateInfoStale(info))
+  return updateCardState({ ...options, stale, failed, hasUpdate, known })
 }
 
 function isVersionNewer(candidate, current) {
@@ -6362,6 +6608,7 @@ function isVersionNewer(candidate, current) {
 
 function updateNeededFor(info) {
   if (!info) return true
+  if (isUpdateInfoStale(info)) return true
   if (info.current_version && info.latest_version) return isVersionNewer(info.latest_version, info.current_version)
   if (info.update_available === true) return true
   if (info.update_available === false) return false
@@ -6371,7 +6618,7 @@ function updateNeededFor(info) {
 function normalizeUpdateLatest(updateInfo) {
   let latestVersion = ''
   const consider = (info) => {
-    if (!info || !info.latest_version) return
+    if (!info || !info.latest_version || isUpdateInfoStale(info)) return
     if (!latestVersion || isVersionNewer(info.latest_version, latestVersion)) latestVersion = info.latest_version
   }
   consider(updateInfo.app)
@@ -6380,7 +6627,7 @@ function normalizeUpdateLatest(updateInfo) {
     for (const component of ['app', 'plugin', 'node']) consider(target && target[component])
   }
   const apply = (info) => {
-    if (!info || !latestVersion) return info
+    if (!info || !latestVersion || isUpdateInfoStale(info)) return info
     const next = { ...info, latest_version: latestVersion }
     if (!info.current_version) return next
     next.update_available = info.rollout_paused === true
@@ -6399,6 +6646,87 @@ function normalizeUpdateLatest(updateInfo) {
       node: apply(target && target.node)
     }]))
   }
+}
+
+function createUpdateResponseArbiter() {
+  const latest = new Map()
+  const latestCheck = new Map()
+  let sequence = 0
+  return {
+    begin(key, authority, action = 'check') {
+      const arbiterKey = key + ':' + action
+      sequence += 1
+      if (action === 'check') latestCheck.set(key, sequence)
+      const token = { sequence, authority, action, arbiterKey, key, checkSequence: latestCheck.get(key) || 0, accepted: true }
+      latest.set(arbiterKey, { sequence, authority })
+      return token
+    },
+    isCurrent(key, request, authority) {
+      const current = request && latest.get(request.arbiterKey || key + ':' + request.action)
+      if (!request || !request.accepted || !current || request.authority !== authority) return false
+      return current.sequence === request.sequence && current.authority === authority
+        && (request.action !== 'status' || request.checkSequence === (latestCheck.get(request.key) || 0))
+    }
+  }
+}
+
+async function commitLatestUpdateResponse(arbiter, key, authority, action, request, commit, isCurrent = () => true) {
+  const token = arbiter.begin(key, authority, action)
+  try {
+    const value = await request()
+    const result = commitArbitratedUpdateValue(arbiter, key, token, authority, value, commit, isCurrent)
+    return result
+  } catch (error) {
+    const current = arbiter.isCurrent(key, token, authority) && isCurrent()
+    if (!current) return { cancelled: true }
+    throw error
+  }
+}
+
+function commitArbitratedUpdateValue(arbiter, key, token, authority, value, commit, isCurrent = () => true) {
+  if (!arbiter.isCurrent(key, token, authority) || !isCurrent()) return { cancelled: true }
+  commit(value)
+  return value
+}
+
+function isUsableUpdateStatus(status) {
+  return !!status && status.cancelled !== true && status.ok !== false
+}
+
+function updateInfoAfterCheck(info, result) {
+  if (!result || result.cancelled) return info
+  if (result.failed) return { ...info, stale: true, from_cache: false, check_error: String(result.error || '更新检查失败') }
+  const source = result.result || {}
+  const fromCache = result.from_cache === true || source.from_cache === true || source.stale === true
+    || source.source === 'disk-cache' || source.manifest_source === 'disk-cache'
+  return {
+    ...info,
+    stale: fromCache,
+    from_cache: fromCache,
+    check_error: source.check_error || undefined
+  }
+}
+
+function updateInfoAfterStatus(info) {
+  return info ? { ...info, stale: true, from_cache: true } : info
+}
+
+function mergeUpdateStatusInfo(previous, status) {
+  const next = { ...(previous || {}), ...(updateInfoAfterStatus(status) || {}) }
+  if (previous && !isUpdateInfoStale(previous)) {
+    next.latest_version = previous.latest_version
+    if (previous.update_available === true && next.current_version && previous.latest_version) {
+      next.update_available = previous.rollout_paused === true
+        ? false
+        : isVersionNewer(previous.latest_version, next.current_version)
+    } else next.update_available = previous.update_available
+    next.manifest_source = previous.manifest_source
+    next.checked_at = previous.checked_at
+    next.stale = false
+    next.from_cache = false
+    next.check_error = previous.check_error
+  }
+  return next
 }
 
 function isTransientUpdateError(error) {
@@ -6420,9 +6748,9 @@ function deviceAfterLocalIdentity(current, localDeviceId, manuallySelected) {
 async function checkUpdateAvailability(check, isCurrent = () => true) {
   try {
     const result = await check()
-    if (!isCurrent()) return { cancelled: true }
+    if (!isCurrent() || (result && result.cancelled)) return { cancelled: true }
     if (!result || result.ok === false) return { failed: true, error: result && (result.message || result.error) || '更新检查失败' }
-    return { current: true, updateAvailable: result.update_available === true, result }
+    return { current: true, updateAvailable: result.update_available === true, from_cache: result.from_cache === true, result }
   } catch (error) {
     return isCurrent() ? { failed: true, error } : { cancelled: true }
   }
@@ -6437,7 +6765,10 @@ function dedupeUpdateCheck(inFlight, key, check) {
 
 function cachedUpdateCheck(cache, key, check, { force = false, now = Date.now, ttlMs = 300_000 } = {}) {
   const cached = cache.get(key)
-  if (!force && cached && now() - cached.checkedAt < ttlMs) return Promise.resolve(cached.value)
+  if (!force && cached && now() - cached.checkedAt < ttlMs) {
+    const value = cached.value
+    return Promise.resolve(value && typeof value === 'object' ? { ...value, from_cache: true } : value)
+  }
   return Promise.resolve().then(check).then((value) => {
     if (!value || (!value.cancelled && !value.failed)) cache.set(key, { checkedAt: now(), value })
     return value
@@ -6456,6 +6787,10 @@ function withUpdateTimeout(promise, timeoutMs, message = '更新检查超时，�
 
 function updateCheckKey(component, scope) {
   return (scope ? scope.deviceId + ':' + scope.epoch : 'local') + ':' + component
+}
+
+function updateCheckCacheKey(key, authority, generation = 0) {
+  return safeServiceAddress(authority) + '@' + generation + ':' + key
 }
 
 // The plugin updater caps status/check at 20 s internally; the renderer has to
@@ -6752,24 +7087,35 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       shadow: 'var(--dsw-elevation-panel, 0 8px 24px rgba(16, 24, 40, 0.12))'
     }
 
-    const apiBaseList = host && host.apiBases ? host.apiBases() : [BASE]
+    let apiBaseList = host && host.apiBases ? host.apiBases() : [BASE]
     let ACTIVE_BASE = apiBaseList[0] || BASE
+    let ACTIVE_BASE_GENERATION = 0
+    let EXPLICIT_AUTHORITY = false
     if (host) host.activeApiBase = () => ACTIVE_BASE
     async function api(path, options, pinnedBase) {
+      const mayChangeActiveBase = pinnedBase === undefined || pinnedBase === null
+      const requestBaseGeneration = ACTIVE_BASE_GENERATION
       const init = { ...(options || {}) }
       let response
       try {
-        response = await fetchApiJson(path, init, {
+        response = await fetchApiJsonForAuthority(path, init, {
           activeBase: ACTIVE_BASE,
-          apiBaseList,
+          apiBaseList: apiCandidatesForAuthority(ACTIVE_BASE, host && host.apiBases ? host.apiBases() : apiBaseList, EXPLICIT_AUTHORITY ? ACTIVE_BASE : ''),
           pinnedBase,
           headersForBase: (base) => ({ 'Content-Type': 'application/json', ...(host && host.apiHeaders ? host.apiHeaders(base) : {}) })
-        })
+        }, requestBaseGeneration, () => ACTIVE_BASE_GENERATION)
       } catch (error) {
-        if (error && error.base) ACTIVE_BASE = error.base
+        assertCurrentAuthorityGeneration(requestBaseGeneration, ACTIVE_BASE_GENERATION)
+        if (mayChangeActiveBase && requestBaseGeneration === ACTIVE_BASE_GENERATION && error && error.base && ACTIVE_BASE !== error.base) {
+          ACTIVE_BASE = error.base
+          ACTIVE_BASE_GENERATION += 1
+        }
         throw error
       }
-      ACTIVE_BASE = response.base
+      if (mayChangeActiveBase && requestBaseGeneration === ACTIVE_BASE_GENERATION && ACTIVE_BASE !== response.base) {
+        ACTIVE_BASE = response.base
+        ACTIVE_BASE_GENERATION += 1
+      }
       return response.data
     }
     const post = (path, body, pinnedBase, extra) => api(path, { method: 'POST', body: JSON.stringify(body || {}), ...(extra || {}) }, pinnedBase)
@@ -7950,6 +8296,8 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
     }
 
     const NATIVE_SURFACE_RETRIES = 3
+    const NATIVE_SURFACE_DOCUMENT_RETRIES = 1
+    const NATIVE_SURFACE_DOCUMENT_TIMEOUT_MS = 30000
 
     function nativeSurfaceRetryDelay(attempt) {
       return Math.min(1000 * Math.pow(2, Math.max(0, attempt - 1)), 8000)
@@ -7965,16 +8313,39 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         || error.surfaceCode === 'device_offline' || error.surfaceCode === 'surface_timeout')
     }
 
+    function reportNativeSurfaceTiming(phase, startedAt) {
+      const durationMs = Math.max(0, Math.round(performance.now() - startedAt))
+      try {
+        if (host && typeof host.onSurfaceTiming === 'function') host.onSurfaceTiming({ phase, durationMs })
+      } catch (_) { /* timing is optional and must not affect surface loading */ }
+      try {
+        if (typeof performance !== 'undefined' && typeof performance.mark === 'function') {
+          performance.mark('tether-native-surface-' + phase, { detail: { durationMs } })
+        }
+      } catch (_) { /* performance marks are optional */ }
+    }
+
     function NativeSurface({ deviceId, online, visible, localDeviceId }) {
       const [state, setState] = React.useState({ deviceId, status: deviceId ? 'loading' : 'no-device', url: '' })
       const [attempt, setAttempt] = React.useState(0)
       const currentState = nativeSurfaceStateForDevice(state, deviceId, online)
       const retryCountRef = React.useRef(0)
+      const documentRetryCountRef = React.useRef(0)
       const retryTimerRef = React.useRef(null)
+      const documentTimerRef = React.useRef(null)
+      const documentStartedAtRef = React.useRef(0)
+      const pollFlightRef = React.useRef(null)
       const surfaceStateRef = React.useRef(currentState)
       surfaceStateRef.current = currentState
+      const surfaceSourceKey = (() => {
+        try {
+          const hub = host && typeof host.hubConfig === 'function' ? host.hubConfig() : null
+          const isLocal = !!(localDeviceId && deviceId === localDeviceId)
+          return nativeSurfaceAuthorityKey(host && typeof host.surfaceBase === 'function' ? host.surfaceBase(isLocal) : '', hub && hub.url || '', ACTIVE_BASE, ACTIVE_BASE_GENERATION)
+        } catch (_) { return ACTIVE_BASE }
+      })()
 
-      const fetchSurfaceDescriptor = async (id) => {
+      const fetchSurfaceDescriptor = async (id, signal) => {
         if (host && host.kind === 'dsh' && localDeviceId && id === localDeviceId
             && typeof window !== 'undefined' && window.location) {
           // The desktop host runs its own client with a preload and the DSH
@@ -8001,11 +8372,16 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           try {
             const headers = host && typeof host.apiHeaders === 'function' ? host.apiHeaders(base) : undefined
             const via = host && host.kind === 'dsh' && !isLocalTarget ? '?via=hub' : ''
-            const response = await fetch(base + '/api/devices/' + encodeURIComponent(id) + '/dsh/surface' + via, { headers, signal: AbortSignal.timeout(8000) })
+            const timeoutSignal = AbortSignal.timeout(8000)
+            const requestSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal
+            const response = await fetch(base + '/api/devices/' + encodeURIComponent(id) + '/dsh/surface' + via, { headers, signal: requestSignal })
             const data = await response.json().catch(() => ({}))
             if (!response.ok && (response.status === 502 || response.status === 504) && base !== ACTIVE_BASE) continue
             return { response, data }
-          } catch (error) { lastError = error }
+          } catch (error) {
+            if (signal && signal.aborted) throw error
+            lastError = error
+          }
         }
         throw lastError || new Error('原生 DSH 页面暂不可用')
       }
@@ -8019,11 +8395,14 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
 
       React.useEffect(() => {
         retryCountRef.current = 0
+        documentRetryCountRef.current = 0
         if (retryTimerRef.current) { clearTimeout(retryTimerRef.current); retryTimerRef.current = null }
+        if (documentTimerRef.current) { clearTimeout(documentTimerRef.current); documentTimerRef.current = null }
       }, [deviceId])
 
       React.useEffect(() => () => {
         if (retryTimerRef.current) { clearTimeout(retryTimerRef.current); retryTimerRef.current = null }
+        if (documentTimerRef.current) { clearTimeout(documentTimerRef.current); documentTimerRef.current = null }
       }, [])
 
       // DSH boots its client roster from plugin bundles fetched through the
@@ -8034,7 +8413,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         if (!deviceId || !online || !bridge || typeof bridge.onSurfaceBootFailed !== 'function') return undefined
         return bridge.onSurfaceBootFailed((detail) => {
           const current = surfaceStateRef.current
-          if (!current || current.deviceId !== deviceId || current.status !== 'ready' || !current.url) return
+          if (!current || current.deviceId !== deviceId || !['document-loading', 'document-loaded'].includes(current.status) || !current.url) return
           if (detail && detail.source) {
             if (!nativeSurfaceFailureMatches(current.url, detail.source)) return
           } else if (!visible) return
@@ -8054,11 +8433,20 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
 
       React.useEffect(() => {
         let current = true
+        const controller = new AbortController()
         if (!deviceId) { setState({ deviceId, status: 'no-device', url: '' }); return () => { current = false } }
         if (!online) { setState({ deviceId, status: 'offline', url: '' }); return () => { current = false } }
+        if (!visible) return () => { current = false; controller.abort() }
+        const existing = surfaceStateRef.current
+        if (existing && existing.deviceId === deviceId && existing.sourceKey === surfaceSourceKey
+            && ['document-loading', 'document-loaded'].includes(existing.status) && existing.url) {
+          return () => { current = false; controller.abort() }
+        }
         setState({ deviceId, status: 'loading', url: '' })
-        fetchSurfaceDescriptor(deviceId)
+        const descriptorStartedAt = performance.now()
+        fetchSurfaceDescriptor(deviceId, controller.signal)
           .then(async ({ response, data }) => {
+            reportNativeSurfaceTiming('descriptor', descriptorStartedAt)
             if (data && data.local) {
               if (current) setState({ deviceId, status: 'local', url: '', pid: 0 })
               return
@@ -8088,7 +8476,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             if (!sameHostToken && !sameOriginUrl && (parsed.hostname === '127.0.0.1' || parsed.hostname === '[::1]') && ACTIVE_BASE !== 'http://127.0.0.1:18890') {
               let localOk = false
               try {
-                const localRes = await fetch(ACTIVE_BASE + '/local-api/api/devices/' + encodeURIComponent(deviceId) + '/dsh/surface')
+                const localRes = await fetch(ACTIVE_BASE + '/local-api/api/devices/' + encodeURIComponent(deviceId) + '/dsh/surface', { signal: controller.signal })
                 if (localRes.ok) {
                   const localData = await localRes.json()
                   if (localData.available && isSafeNativeSurfaceUrl(localData.url)) { surfaceUrl = localData.url; localOk = true }
@@ -8099,7 +8487,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             const url = new URL(surfaceUrl)
             url.searchParams.set('tether_native', '1')
             await resetSurfaceAuth(url)
-            if (current) setState({ deviceId, status: 'ready', url: url.href, pid: Number(data.pid) || 0 })
+            if (current) setState({ deviceId, status: 'document-loading', url: url.href, pid: Number(data.pid) || 0, sourceKey: surfaceSourceKey })
           })
           .catch((error) => {
             if (!current) return
@@ -8114,14 +8502,18 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             }
             setState({ deviceId, status: 'error', url: '', message: error.message })
           })
-        return () => { current = false }
-      }, [deviceId, online, attempt, localDeviceId])
+        return () => { current = false; controller.abort() }
+      }, [deviceId, online, visible, attempt, localDeviceId, surfaceSourceKey])
       React.useEffect(() => {
-        if (!deviceId || !online) return undefined
+        if (!deviceId || !online || !visible || typeof document === 'undefined') return undefined
         let alive = true
-        const timer = setInterval(async () => {
+        let timer = null
+        const poll = async () => {
+          if (!alive || document.visibilityState === 'hidden' || pollFlightRef.current) return schedule()
+          const controller = new AbortController()
+          pollFlightRef.current = controller
           try {
-            const { response, data } = await fetchSurfaceDescriptor(deviceId)
+            const { response, data } = await fetchSurfaceDescriptor(deviceId, controller.signal)
             if (!response.ok) return
             if (!alive || !data.available || !isSafeNativeSurfaceUrl(data.url)) return
             const nextPid = Number(data.pid) || 0
@@ -8130,26 +8522,78 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
               try { await resetSurfaceAuth(new URL(data.url)) } catch (_) { /* best effort */ }
             }
             setState((prev) => {
-              if (prev.status !== 'ready' || !prev.url) return prev
+              if (!['document-loading', 'document-loaded'].includes(prev.status) || !prev.url) return prev
               try {
                 const fresh = new URL(data.url)
                 const current = new URL(prev.url)
                 const pid = Number(data.pid) || 0
                 if (pid && (prev.pid || 0) !== pid) {
                   fresh.searchParams.set('tether_native', '1')
-                  return { deviceId, status: 'ready', url: fresh.href, pid }
+                  documentRetryCountRef.current = 0
+                  return { deviceId, status: 'document-loading', url: fresh.href, pid, sourceKey: surfaceSourceKey }
                 }
                 const sameHostToken = fresh.pathname === '/' && !!fresh.searchParams.get('token')
                 if (sameHostToken ? fresh.searchParams.get('token') === current.searchParams.get('token')
                   : current.origin === fresh.origin) return prev
                 fresh.searchParams.set('tether_native', '1')
-                return { deviceId, status: 'ready', url: fresh.href, pid: pid || (prev.pid || 0) }
+                documentRetryCountRef.current = 0
+                return { deviceId, status: 'document-loading', url: fresh.href, pid: pid || (prev.pid || 0), sourceKey: surfaceSourceKey }
               } catch (_) { return prev }
             })
           } catch (_) { /* keep the current frame */ }
-        }, 8000)
-        return () => { alive = false; clearInterval(timer) }
-      }, [deviceId, online, localDeviceId])
+          finally { if (pollFlightRef.current === controller) pollFlightRef.current = null; schedule() }
+        }
+        const schedule = () => {
+          if (alive && document.visibilityState !== 'hidden') timer = setTimeout(poll, 8000)
+        }
+        const onVisibilityChange = () => {
+          if (document.visibilityState === 'hidden') {
+            if (timer) { clearTimeout(timer); timer = null }
+            if (pollFlightRef.current) pollFlightRef.current.abort()
+          } else if (!timer && !pollFlightRef.current) poll()
+        }
+        document.addEventListener('visibilitychange', onVisibilityChange)
+        if (document.visibilityState !== 'hidden') schedule()
+        return () => {
+          alive = false
+          if (timer) clearTimeout(timer)
+          document.removeEventListener('visibilitychange', onVisibilityChange)
+          if (pollFlightRef.current) pollFlightRef.current.abort()
+          pollFlightRef.current = null
+        }
+      }, [deviceId, online, visible, localDeviceId, surfaceSourceKey])
+
+      React.useEffect(() => {
+        if (documentTimerRef.current) { clearTimeout(documentTimerRef.current); documentTimerRef.current = null }
+        if (!visible || currentState.status !== 'document-loading' || !currentState.url) return undefined
+        documentStartedAtRef.current = performance.now()
+        documentTimerRef.current = setTimeout(() => {
+          documentTimerRef.current = null
+          if (documentRetryCountRef.current < NATIVE_SURFACE_DOCUMENT_RETRIES) {
+            documentRetryCountRef.current += 1
+            setState({ deviceId, status: 'loading', url: '', message: '原生工作区页面加载超时，正在重新获取连接…' })
+            setAttempt((value) => value + 1)
+          } else {
+            setState({ deviceId, status: 'error', url: '', message: '原生工作区页面加载超时。请检查目标设备连接后重试。' })
+          }
+        }, NATIVE_SURFACE_DOCUMENT_TIMEOUT_MS)
+        return () => { if (documentTimerRef.current) { clearTimeout(documentTimerRef.current); documentTimerRef.current = null } }
+      }, [deviceId, visible, currentState.status, currentState.url])
+
+      const retryDocument = () => {
+        documentRetryCountRef.current = 0
+        retryCountRef.current = 0
+        setState({ deviceId, status: 'loading', url: '' })
+        setAttempt((value) => value + 1)
+      }
+      const handleDocumentFailure = () => {
+        if (documentRetryCountRef.current < NATIVE_SURFACE_DOCUMENT_RETRIES) {
+          documentRetryCountRef.current += 1
+          setState({ deviceId, status: 'loading', url: '', message: '原生工作区页面加载失败，正在重新获取连接…' })
+          setAttempt((value) => value + 1)
+        }
+        else setState({ deviceId, status: 'error', url: '', message: '原生工作区页面加载失败。请检查目标设备连接后重试。' })
+      }
 
       const message = currentState.status === 'loading' ? (currentState.message || '正在连接目标设备的 DSH 原生工作区…')
         : currentState.status === 'local' ? '当前已在 DeepSeek Harness 中；本机工作区无需再嵌入，可用左侧「文件」或「连接」。'
@@ -8158,17 +8602,35 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             : currentState.status === 'error' ? currentState.message
               : ''
       return h('div', { className: 'tether-native-surface', style: nativeSurfaceContainerStyle(visible) },
-        currentState.status === 'ready' && currentState.deviceId === deviceId && online
-          ? h('iframe', {
-            key: deviceId + ':' + (currentState.pid || 0),
-            src: currentState.url,
-            title: '目标设备的 DSH 原生工作区',
-            referrerPolicy: 'no-referrer',
-            style: { flex: '1 1 auto', width: '100%', height: '100%', minWidth: 0, minHeight: 0, border: 0, background: C.bg }
-          })
+        ['document-loading', 'document-loaded'].includes(currentState.status) && currentState.deviceId === deviceId && online
+          ? h('div', { style: { position: 'relative', display: 'flex', flex: '1 1 auto', minWidth: 0, minHeight: 0 } },
+            h('iframe', {
+              key: deviceId + ':' + (currentState.pid || 0),
+              src: currentState.url,
+              onLoad: () => {
+                const loadedState = surfaceStateRef.current
+                if (!loadedState || loadedState.deviceId !== deviceId || loadedState.url !== currentState.url
+                    || loadedState.sourceKey !== currentState.sourceKey
+                    || !['document-loading', 'document-loaded'].includes(loadedState.status)) return
+                if (documentTimerRef.current) { clearTimeout(documentTimerRef.current); documentTimerRef.current = null }
+                documentRetryCountRef.current = 0
+                reportNativeSurfaceTiming('document', documentStartedAtRef.current || performance.now())
+                setState((prev) => prev.deviceId === deviceId && prev.url === currentState.url && prev.sourceKey === currentState.sourceKey
+                  ? { ...prev, status: 'document-loaded' } : prev)
+              },
+              onError: handleDocumentFailure,
+              title: '目标设备的 DSH 原生工作区',
+              referrerPolicy: 'no-referrer',
+              style: { flex: '1 1 auto', width: '100%', height: '100%', minWidth: 0, minHeight: 0, border: 0, background: C.bg }
+            }),
+            currentState.status === 'document-loading' ? h('div', {
+              role: 'status', 'aria-live': 'polite',
+              style: { position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', padding: '6px 10px', borderRadius: 6, background: 'rgba(255,255,255,.92)', color: C.sub, fontSize: 12, boxShadow: '0 1px 4px rgba(16,24,40,.12)', pointerEvents: 'none' }
+            }, '目标工作区页面正在加载…') : null
+          )
           : h('div', { style: { display: 'grid', placeItems: 'center', alignContent: 'center', gap: 12, flex: '1 1 auto', minHeight: 0, color: C.sub, textAlign: 'center', padding: 24 } },
             h('div', null, message),
-            currentState.status !== 'loading' && currentState.status !== 'local' ? btn('重试', () => { retryCountRef.current = 0; setAttempt((value) => value + 1) }) : null
+            currentState.status !== 'loading' && currentState.status !== 'local' ? btn('重试', retryDocument) : null
           )
       )
     }
@@ -8428,9 +8890,10 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           setHubError(info.status === 'offline' ? hubProbeErrorText({ status: info.errorKind === 'auth' ? 401 : undefined }) : '')
         }).catch(() => {})
         return () => { alive = false }
-      }, [host])
+      }, [host, ACTIVE_BASE_GENERATION])
 
       const fail = (e) => {
+        if (e && e.code === 'authority_changed') return
         if (e && e.code === 'node_update_required') { setNativeError('节点待更新'); return }
         // Transient list/preview failures already retry and show their own inline
         // state; a red toast on a slow remote folder is noise, not information.
@@ -8441,11 +8904,14 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const probeConfiguredHub = async ({ silent = false } = {}) => {
         if (!host || typeof host.probeConnection !== 'function') return null
         if (hubProbeRef.current) return hubProbeRef.current
+        const generation = ACTIVE_BASE_GENERATION
+        const base = ACTIVE_BASE
         if (!silent) setHubBusy(true)
         setHubError('')
         const task = (async () => {
           try {
             const result = await host.probeConnection(host.activeApiBase ? host.activeApiBase() : undefined)
+            if (generation !== ACTIVE_BASE_GENERATION || base !== ACTIVE_BASE) return null
             if (result && result.address) setHubAddress(result.address)
             const next = result && (result.state || (result.status === 'online' ? {} : null))
             setHubState(next || null)
@@ -8457,6 +8923,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
               : '')
             return result
           } catch (error) {
+            if (generation !== ACTIVE_BASE_GENERATION || base !== ACTIVE_BASE) return null
             setHubState(null)
             setHubDuration(null)
             setHubCheckedAt(new Date())
@@ -8464,7 +8931,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             setHubError(hubProbeErrorText(error))
             return null
           } finally {
-            if (!silent) setHubBusy(false)
+            if (!silent && generation === ACTIVE_BASE_GENERATION) setHubBusy(false)
           }
         })()
         hubProbeRef.current = task.finally(() => { hubProbeRef.current = null })
@@ -8487,14 +8954,17 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         : null
       const scopeIsCurrent = (scope) => !scope || !!(stateRef.current && stateRef.current.devices && stateRef.current.devices.some((item) => item.device_id === scope.deviceId))
       const updateCheckScopeIsCurrent = (scope) => scopeIsCurrent(scope) && (!scope || !!(stateRef.current && stateRef.current.devices && stateRef.current.devices.some((item) => item.device_id === scope.deviceId && item.online)))
-      const setComponentUpdateInfo = (component, value, scope) => {
+      const setComponentUpdateInfo = (component, value, scope, statusSnapshot = false) => {
         if (scope && !scopeIsCurrent(scope)) return
-        if (!scope) setUpdateInfo((current) => ({ ...current, [component]: { ...(current[component] || {}), ...(value || {}) } }))
+        const merge = (previous) => statusSnapshot
+          ? mergeUpdateStatusInfo(previous, value)
+          : { ...(previous || {}), ...(value || {}) }
+        if (!scope) setUpdateInfo((current) => ({ ...current, [component]: merge(current[component]) }))
         else setUpdateInfo((current) => ({
           ...current,
           devices: { ...current.devices, [scope.deviceId]: {
             ...(current.devices[scope.deviceId] || {}),
-            [component]: { ...((current.devices[scope.deviceId] || {})[component] || {}), ...(value || {}) }
+            [component]: merge((current.devices[scope.deviceId] || {})[component])
           } }
         }))
       }
@@ -8514,33 +8984,55 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         }))
       }
       const updatesPath = (component, targetId = deviceId) => '/api/devices/' + encodeURIComponent(targetId) + '/updates?component=' + encodeURIComponent(component)
-      const loadUpdateInfo = async (component, action, pinnedBase, fixedScope) => {
+      const updateResponseArbiterRef = React.useRef(createUpdateResponseArbiter())
+      const updateCacheAuthorityRef = React.useRef(null)
+      const updateHostIdentityRef = React.useRef({ hosts: new WeakMap(), next: 1 })
+      const commitUpdateResponse = (component, action, scope, authority, request, mapValue = (value) => value,
+        isAuthorityCurrent = () => true) =>
+        commitLatestUpdateResponse(
+          updateResponseArbiterRef.current,
+          updateCheckKey(component, scope),
+          authority,
+          action,
+          request,
+          (value) => setComponentUpdateInfo(component, mapValue(value), scope, action === 'status'),
+          () => scopeIsCurrent(scope) && (action !== 'check' || updateCheckScopeIsCurrent(scope)) && isAuthorityCurrent()
+        )
+      const loadUpdateInfo = async (component, action, pinnedBase, fixedScope, fixedAuthorityGeneration) => {
         const scope = fixedScope === undefined ? updateScope(component) : fixedScope
         if (component === 'app' && !scope) {
           if (!host || host.kind !== 'app' || !host.updates) return
-          const result = await withUpdateTimeout(action === 'status' ? host.updates.status() : host.updates.check(), 6000)
-          if (result && result.ok === false) throw new Error(result.message || result.error || (action === 'status' ? 'APP 更新状态读取失败' : 'APP 更新检查失败'))
-          setComponentUpdateInfo(component, result)
-          return result
+          const localAuthority = host
+          return commitUpdateResponse(component, action, scope, localAuthority,
+            async () => {
+              const result = await withUpdateTimeout(action === 'status' ? host.updates.status() : host.updates.check(), 6000)
+              if (result && result.ok === false) throw new Error(result.message || result.error || (action === 'status' ? 'APP 更新状态读取失败' : 'APP 更新检查失败'))
+              return result
+            }, action === 'status' ? updateInfoAfterStatus : undefined, () => host === localAuthority)
         }
         if (component === 'localPlugin') {
           if (!host || host.kind !== 'dsh' || !host.localPluginUpdates) throw new Error('当前宿主没有本机 DSH 插件更新通道。')
-          const result = await withUpdateTimeout(host.localPluginUpdates(action === 'status' ? 'status' : 'check'), localUpdateWaitMs(component))
-          if (result && result.ok === false) throw new Error(result.message || result.error || (action === 'status' ? '本机插件更新状态读取失败' : '本机插件更新检查失败'))
-          setComponentUpdateInfo(component, result)
-          return result
+          const localAuthority = host
+          return commitUpdateResponse(component, action, scope, localAuthority,
+            async () => {
+              const result = await withUpdateTimeout(host.localPluginUpdates(action === 'status' ? 'status' : 'check'), localUpdateWaitMs(component))
+              if (result && result.ok === false) throw new Error(result.message || result.error || (action === 'status' ? '本机插件更新状态读取失败' : '本机插件更新检查失败'))
+              return result
+            }, action === 'status' ? updateInfoAfterStatus : undefined, () => host === localAuthority)
         }
         if (!scope.deviceId) throw new Error('先选择目标设备')
         const requestBase = pinnedBase ?? ACTIVE_BASE
+        const requestBaseGeneration = fixedAuthorityGeneration ?? ACTIVE_BASE_GENERATION
         const statusAction = action === 'status'
         const requestPath = statusAction
           ? updatesPath(component, scope.deviceId).replace('/updates?', '/updates/status?')
           : updatesPath(component, scope.deviceId)
-        const result = await withUpdateTimeout(api(requestPath, { signal: AbortSignal.timeout(6000) }, requestBase), 6500)
-        if (result && result.ok === false) throw new Error(result.message || result.error || (statusAction ? '目标设备更新状态读取失败' : '目标设备更新检查失败'))
-        const value = { ...result, authorityBase: requestBase }
-        setComponentUpdateInfo(component, value, scope)
-        return value
+        return commitUpdateResponse(component, action, scope, requestBase, async () => {
+          const result = await withUpdateTimeout(api(requestPath, { signal: AbortSignal.timeout(6000) }, requestBase), 6500)
+          if (result && result.ok === false) throw new Error(result.message || result.error || (statusAction ? '目标设备更新状态读取失败' : '目标设备更新检查失败'))
+          return { ...result, authorityBase: requestBase }
+        }, action === 'status' ? updateInfoAfterStatus : undefined,
+        () => requestBase === ACTIVE_BASE && requestBaseGeneration === ACTIVE_BASE_GENERATION)
       }
       const updateCheckCacheRef = React.useRef(new Map())
       const retryTransientUpdate = async (run) => {
@@ -8555,15 +9047,46 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       }
       const automaticUpdateCheck = (component, scope = updateScope(component), force = false) => {
         const key = updateCheckKey(component, scope)
-        withUpdateTimeout(loadUpdateInfo(component, 'status', undefined, scope), localUpdateWaitMs(component)).catch(() => {})
-        return cachedUpdateCheck(updateCheckCacheRef.current, key,
-          () => dedupeUpdateCheck(autoUpdateChecksRef.current, key, () => checkUpdateAvailability(
-            () => retryTransientUpdate(() => withUpdateTimeout(loadUpdateInfo(component, 'check', undefined, scope), localUpdateWaitMs(component))),
-            () => updateCheckScopeIsCurrent(scope)
+        const authority = scope ? ACTIVE_BASE : host
+        const authorityGeneration = ACTIVE_BASE_GENERATION
+        let hostIdentity = 'none'
+        if (host && typeof host === 'object') {
+          hostIdentity = updateHostIdentityRef.current.hosts.get(host)
+          if (!hostIdentity) {
+            hostIdentity = updateHostIdentityRef.current.next++
+            updateHostIdentityRef.current.hosts.set(host, hostIdentity)
+          }
+        }
+        const cacheAuthority = 'connection:' + hostIdentity + '@' + String(ACTIVE_BASE) + ':' + ACTIVE_BASE_GENERATION
+        let requestAuthority = 'local:none'
+        if (scope) {
+          requestAuthority = 'hub:' + String(authority) + '@' + authorityGeneration
+        } else if (host && typeof host === 'object') {
+          requestAuthority = 'local:' + host.kind + ':' + hostIdentity
+        }
+        if (updateCacheAuthorityRef.current !== cacheAuthority) {
+          updateCheckCacheRef.current.clear()
+          autoUpdateChecksRef.current = {}
+          updateCacheAuthorityRef.current = cacheAuthority
+        }
+        const cacheKey = scope ? updateCheckCacheKey(key, authority, authorityGeneration) : requestAuthority + ':' + key
+        const metaKey = 'check:' + key
+        const metaToken = updateResponseArbiterRef.current.begin(metaKey, authority, 'check')
+        const authorityIsCurrent = () => scope
+          ? ACTIVE_BASE === authority && ACTIVE_BASE_GENERATION === authorityGeneration
+          : host === authority
+        const metadataIsCurrent = () => updateResponseArbiterRef.current.isCurrent(metaKey, metaToken, authority)
+          && authorityIsCurrent() && updateCheckScopeIsCurrent(scope)
+        return cachedUpdateCheck(updateCheckCacheRef.current, cacheKey,
+          () => dedupeUpdateCheck(autoUpdateChecksRef.current, cacheKey, () => checkUpdateAvailability(
+            () => retryTransientUpdate(() => withUpdateTimeout(loadUpdateInfo(component, 'check', scope ? authority : undefined, scope, authorityGeneration), localUpdateWaitMs(component))),
+            () => metadataIsCurrent()
           )), { force }).then((result) => {
-          if (result.cancelled) return result
-          setComponentUpdateError(component, result.failed ? shortUpdateError(result.error) : '', scope, false)
-          return result
+          return commitArbitratedUpdateValue(updateResponseArbiterRef.current, metaKey, metaToken, authority, result, (current) => {
+            if (current.cancelled) return
+            setComponentUpdateInfo(component, updateInfoAfterCheck({}, current), scope)
+            setComponentUpdateError(component, current.failed ? shortUpdateError(current.error) : '', scope, false)
+          }, metadataIsCurrent)
         })
       }
       const updateAction = async (component, action, preparedId, fixedScope, fixedAuthority) => {
@@ -8605,7 +9128,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           if (result && result.ok === false) throw new Error(result.message || result.error || (action === 'check' ? '更新检查失败' : '更新操作失败'))
           if (action === 'prepare') {
             const status = await loadUpdateInfo(component, 'status', pinnedBase, scope)
-            if (status && status.ok === false) throw new Error(status.message || status.error || '更新包状态读取失败')
+            if (!isUsableUpdateStatus(status)) throw new Error(status && (status.message || status.error) || '更新包状态读取失败')
             result = { ...(status || {}), ...(result || {}) }
           }
           return result
@@ -8624,8 +9147,8 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           const running = target && target.capabilities && target.capabilities.node_version
           try {
             const status = await loadUpdateInfo('node', 'status', authority, scope)
-            const versionOk = !!(running && status && status.ok !== false && status.latest_version && running === status.latest_version)
-            if (status && status.ok !== false && (!status.restart_required || versionOk)) {
+            const versionOk = !!(running && isUsableUpdateStatus(status) && status.latest_version && running === status.latest_version)
+            if (isUsableUpdateStatus(status) && (!status.restart_required || versionOk)) {
               if (status.restart_required) setComponentUpdateInfo('node', { ...status, restart_required: false }, scope)
               return
             }
@@ -8641,7 +9164,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             const target = ((stateRef.current && stateRef.current.devices) || []).find((item) => item.device_id === scope.deviceId)
             const running = target && target.capabilities && target.capabilities.app_version
             const status = await loadUpdateInfo('app', 'status', authority, scope)
-            if (target && target.online && running === expectedVersion && status && status.ok !== false
+            if (target && target.online && running === expectedVersion && isUsableUpdateStatus(status)
                 && status.current_version === expectedVersion) {
               setComponentUpdateInfo('app', { ...status, restart_required: false }, scope)
               return true
@@ -8656,7 +9179,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           if (!scopeIsCurrent(scope)) return false
           try {
             const status = await loadUpdateInfo('plugin', 'status', authority, scope)
-            if (status && status.ok !== false && status.restart_required !== true) return true
+            if (isUsableUpdateStatus(status) && status.restart_required !== true) return true
           } catch (_) { /* the target DSH is restarting; keep polling */ }
         }
         return false
@@ -8754,11 +9277,9 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         const productErrors = updateErrors.devices[localId] || {}
         const failed = product === 'desktop' ? !!(updateErrors.app || productErrors.node)
           : !!(updateErrors.localPlugin || productErrors.node)
-        const runtimeRestartRequired = product === 'dsh' && localPluginNeedsRestart(infos[0])
-        const hasUpdate = infos.some((info) => info && info.update_available === true)
-        const known = infos.every((info) => info && info.current_version && info.latest_version)
-        const card = updateCardState({ running, error: run?.state === 'error' ? run.message : '',
-          hasUpdate, restartRequired: runtimeRestartRequired, known, failed })
+        const runtimeRestartRequired = product === 'dsh' && !isUpdateInfoStale(infos[0]) && localPluginNeedsRestart(infos[0])
+        const card = updateCardStateForInfos(infos, { running, error: run?.state === 'error' ? run.message : '',
+          restartRequired: runtimeRestartRequired, failed })
         const versionText = versionLine(product === 'desktop' ? 'APP' : '插件',
           {
             current: product === 'desktop'
@@ -8785,14 +9306,13 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         const hasPlugin = !!(item.capabilities && item.capabilities.dsh_surface)
         const hasApp = !!(item.capabilities && item.capabilities.app_version)
         const infos = [node, ...(hasPlugin ? [plugin] : []), ...(hasApp ? [app] : [])]
-        const hasUpdate = infos.some((info) => info && info.update_available === true)
-        const known = infos.every((info) => info && info.current_version && info.latest_version)
         const run = updateRunState('device:' + item.device_id)
         const running = run?.state === 'running'
-        const failed = infos.some((_info, index) => !!(updateErrors.devices[item.device_id] || {})[['node', ...(hasPlugin ? ['plugin'] : []), ...(hasApp ? ['app'] : [])][index]])
-        const pluginRestart = !!(hasPlugin && plugin && plugin.restart_required)
-        const card = updateCardState({ running, error: run?.state === 'error' ? run.message : '',
-          hasUpdate, restartRequired: pluginRestart, known, failed,
+        const failed = infos.some((info, index) => !!(updateErrors.devices[item.device_id] || {})[['node', ...(hasPlugin ? ['plugin'] : []), ...(hasApp ? ['app'] : [])][index]]
+          || !!(info && info.check_error))
+        const pluginRestart = !!(hasPlugin && plugin && !isUpdateInfoStale(plugin) && plugin.restart_required)
+        const card = updateCardStateForInfos(infos, { running, error: run?.state === 'error' ? run.message : '',
+          restartRequired: pluginRestart, failed,
           restartPill: '插件待重启 DSH', restartAction: 'none' })
         const nodeTuple = versionTuple(node.current_version || (item.capabilities && item.capabilities.node_version), node.latest_version)
         const versionRows = []
@@ -10549,7 +11069,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           device && device.capabilities && (!device.capabilities.fs || device.capabilities.surface_protocol !== 1) ? pill('节点待更新', C.amber) : null,
           host && (host.kind === 'dsh' || host.kind === 'app') ? h(Connection.Trigger, {
             onClick: () => {
-              if (host.kind === 'dsh') {
+              if (host.kind === 'dsh' || host.kind === 'app') {
                 let saved = {}
                 try { saved = JSON.parse(window.localStorage.getItem('tether.hub') || '{}') } catch (_) { /* ignore */ }
                 setHubUrl(hubAddressForEditor(saved.url || ''))
@@ -10618,7 +11138,101 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           open: true,
           onClose: () => setShowHub(false),
           info: { address: hubAddress || '未知', status: hubStatus, checkedAt: hubCheckedAt, durationMs: hubDuration },
-          busy: hubBusy, error: hubError, onProbe: probeConfiguredHub
+          busy: hubBusy, error: hubError, onProbe: probeConfiguredHub,
+          defaultUrl: hubUrl || '',
+          defaultToken: hubToken || '',
+          defaultDeviceId: appLocalDevice || deviceId || '',
+          defaultDeviceName: ((state && state.devices || []).find((item) => item.device_id === (appLocalDevice || deviceId)) || {}).name || appLocalDevice || deviceId || '',
+          platform: (typeof navigator !== 'undefined' && navigator.platform) || 'Windows',
+          onConfigured: async ({ url, token, user }) => {
+            try { window.localStorage.setItem('tether.hub', JSON.stringify({ url, token })) } catch (_) { throw new Error('无法保存 Hub 登录凭据') }
+            ACTIVE_BASE = url
+            ACTIVE_BASE_GENERATION += 1
+            EXPLICIT_AUTHORITY = true
+            apiBaseList = host && host.apiBases ? host.apiBases() : [url]
+            if (host) host.activeApiBase = () => ACTIVE_BASE
+            treeDeviceEpochRef.current += 1
+            deviceIdRef.current = ''
+            setState(null)
+            setDeviceId('')
+            setProjects(null)
+            setProjectsDevice('')
+            setProjectsError('')
+            setProject(null)
+            projectsRef.current = null
+            projectRef.current = null
+            projectsDeviceRef.current = ''
+            setNative([])
+            setNativeError('')
+            setNativeLoaded(false)
+            setSessionId('')
+            setSessionData(null)
+            setSessionLoading(false)
+            setRunId('')
+            setRunEvents([])
+            setTask('')
+            setTreeChildren({})
+            setTreeOpen({})
+            setTreeSelected('')
+            setDrives([])
+            setPolicy(null)
+            setAudit([])
+            setAuditCount(0)
+            setAuditLoading(false)
+            setSelected(null)
+            setFile(null)
+            setHistory({ back: [], forward: [] })
+            setWorkspaceOpen({})
+            dirCacheRef.current.clear()
+            dirInflightRef.current.clear()
+            treeInflightRef.current.clear()
+            previewCacheRef.current.clear()
+            previewInflightRef.current.clear()
+            workspaceCacheRef.current.clear()
+            drivesCacheRef.current.clear()
+            policyCacheRef.current.clear()
+            if (dirAbortRef.current) dirAbortRef.current.abort()
+            if (previewAbortRef.current) previewAbortRef.current.abort()
+            setUpdateInfo({ app: null, localPlugin: localPluginVersionSeed(host), devices: {} })
+            setUpdateErrors({ app: '', localPlugin: '', devices: {} })
+            setUpdateRuns({})
+            setUpdateBusy('')
+            setUpdateToast('')
+            updateCheckCacheRef.current.clear()
+            autoUpdateChecksRef.current = {}
+            updateCacheAuthorityRef.current = ''
+            setHubStatus('unknown')
+            setHubState(null)
+            setHubError('')
+            setHubUrl(url)
+            setHubToken(token)
+            setHubAddress(url)
+            setHubBusy(true)
+            const generation = ACTIVE_BASE_GENERATION
+            try {
+              const result = await host.probeConnection(url, token)
+              if (generation !== ACTIVE_BASE_GENERATION) throw new Error('连接配置已更改，请重试')
+              if (!result || result.status !== 'online') throw new Error('Hub 连接验证失败')
+              setHubState(result.state || null)
+              setHubStatus('online')
+              setHubDuration(Number.isFinite(result.durationMs) ? result.durationMs : null)
+              setHubCheckedAt(result.checkedAt ? new Date(result.checkedAt) : new Date())
+              setHubError('')
+              setShowHub(false)
+              setNotice('登录成功' + (user && user.email ? '：' + user.email : '，已连接 Hub'))
+              loadState()
+              refreshUpdateCenter(true)
+            } catch (error) {
+              if (generation === ACTIVE_BASE_GENERATION) {
+                setHubStatus('offline')
+                setHubCheckedAt(new Date())
+                setHubError(hubProbeErrorText(error))
+              }
+              throw error
+            } finally {
+              if (generation === ACTIVE_BASE_GENERATION) setHubBusy(false)
+            }
+          }
         }) : null,        showUpdate ? h('div', {
           onPointerDown: (event) => { if (event.target === event.currentTarget) setShowUpdate(false) },
           style: { position: 'absolute', inset: 0, background: 'rgba(16,24,40,0.35)', display: 'grid', placeItems: 'center', zIndex: 30, padding: 16, boxSizing: 'border-box' }
@@ -10765,7 +11379,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       )
     }
 
-    return { App, TetherIcon }
+    return { App, TetherIcon, NativeSurface }
 }
     const tetherPanel = createTetherPanel({ React, Native, host, EditorRuntime })
     const App = tetherPanel.App
@@ -10773,7 +11387,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
 
     return {
       name: 'tether',
-      inject: ['slots', 'layout', 'connection', 'remote', 'remote.workspaceFiles', 'remote.pluginManager', 'commandUi'],
+      inject: ['slots', 'layout', 'connection', 'remote', 'remote.workspaceFiles', 'remote.pluginManager', 'commandUi', 'uiWorkspace', 'sessions'],
       apply(ctx) {
         localPluginRemote = ctx.remote
         if (ctx.connection && ctx.connection.rpc && typeof ctx.connection.rpc.call === 'function') {
@@ -10796,12 +11410,13 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           } catch (_) { /* DSH chrome stays usable if style injection is unavailable */ }
           try {
             const targetFiles = createDshTargetFilesBridge({ getRpc: () => localPluginRpc, getRemote: () => localPluginRemote })
-            const targetFilePicker = { open: null }
-            if (ctx.fileDrag && typeof ctx.fileDrag.read === 'function') {
-              const attachments = createDshTargetAttachments(React, Native, targetFiles, targetFilePicker)
+            const targetFilePicker = { open: null, pendingSessionStart: null }
+            if (ctx.connection && ctx.connection.rpc && typeof ctx.connection.rpc.call === 'function'
+                && ctx.remote && ctx.remote.workspaceFiles) {
+              const attachments = createDshTargetAttachments(React, Native, targetFiles, targetFilePicker, ctx.uiWorkspace, ctx.sessions)
               ctx.slots.inject('conversation.input.attachments', () => ctx.slots.register({
                 name: 'conversation.input.attachments', priority: -1000, locale: 'conversation',
-                inject: () => ({ readFileDrag: ctx.fileDrag.read })
+                inject: (sessionId) => ({ sessionId })
               }, attachments))
             }
             ctx.inject(['commandUi'], (scope) => {

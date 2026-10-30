@@ -18,7 +18,7 @@ test('DSH plugin bundle is up to date with the shared tether-ui source', () => {
 
 test('the shared panel body is copied byte for byte into the plugin bundle', () => {
   const start = shared.indexOf('    const C = {')
-  const end = shared.indexOf('    return { App, TetherIcon }')
+  const end = shared.indexOf('    return { App, TetherIcon, NativeSurface }')
   assert.ok(start > 0 && end > start)
   const body = shared.slice(start, end)
   assert.ok(plugin.includes(body), 'plugin bundle must embed the shared UI body unchanged')
@@ -34,14 +34,18 @@ test('remote FilesPane exposes a new-file action for the current target director
   assert.match(shared, /iconButton\('plus', '新建文件', \(\) => makeFile\(path\), !path \|\| dirLoading \|\| previewBusy\)/)
 })
 
-test('DSH plus menu keeps local upload and adds a target-device file action', () => {
+test('DSH Composer routes its file picker to the target and keeps explicit local upload', () => {
   const build = fs.readFileSync(path.resolve(root, 'packages/tether-ui/scripts/build.mjs'), 'utf8')
   const dsh = fs.readFileSync(path.resolve(root, 'packages/tether-ui/src/hosts/dsh.js'), 'utf8')
   assert.match(build, /name: 'tether-target-file'/)
   assert.match(build, /label: \(\) => '目标设备文件'/)
-  assert.match(build, /createDshTargetAttachments\(React, Native, targetFiles, targetFilePicker\)/)
+  assert.match(build, /createDshTargetAttachments\(React, Native, targetFiles, targetFilePicker, ctx\.uiWorkspace, ctx\.sessions\)/)
+  assert.match(build, /inject: \(sessionId\) => \(\{ sessionId \}\)/)
   assert.match(dsh, /pickerCommand\.open = open/)
   assert.match(dsh, /h\(Native\.ComposerAttachments/)
+  assert.match(dsh, /interceptNativeFilePicker/)
+  assert.match(dsh, /event\.preventDefault\(\)[\s\S]*openPickerRef\.current/)
+  assert.match(dsh, /本机文件…/)
 })
 
 test('remote editing pins device identity and file version before saving', () => {
@@ -105,7 +109,11 @@ test('connection panels show service checks without duplicate device totals or c
   assert.match(shared, /errorKind === 'auth' \? 401/)
   assert.match(connectionPanel, /重新检测/)
   assert.match(fs.readFileSync(path.join(root, 'packages/tether-ui/src/hosts/dsh.js'), 'utf8'), /probeConnection: async/)
-  assert.match(fs.readFileSync(path.join(root, 'packages/tether-ui/src/hosts/electron.js'), 'utf8'), /probeConnection: async/)
+  const webHost = fs.readFileSync(path.join(root, 'packages/tether-ui/src/hosts/web.js'), 'utf8')
+  const electronHost = fs.readFileSync(path.join(root, 'packages/tether-ui/src/hosts/electron.js'), 'utf8')
+  assert.match(webHost, /probeConnection: async/)
+  assert.match(electronHost, /if \(webHost\.hubConfig\(\)\) return webHost\.probeConnection\(activeBase, token\)/)
+  assert.match(electronHost, /window\.tetherApp\.probeServices\(\)/)
   const webMain = fs.readFileSync(path.join(root, 'packages/tether-ui/web/main.js'), 'utf8')
   assert.match(webMain, /createAppErrorBoundary\(React\)/)
   assert.match(webMain, /root\.render\(React\.createElement\(AppErrorBoundary, null, React\.createElement\(panel\.App\)\)\)/)
@@ -250,9 +258,9 @@ test('local DSH update reloads the surface once and reports profiles that still 
 })
 
 test('automatic update checks report availability, failures, and stale targets safely', async () => {
-  const { cachedUpdateCheck, checkUpdateAvailability, dedupeUpdateCheck, deviceAfterLocalIdentity, localPluginNeedsRestart, localPluginVersionSeed, orderNetworkDevices, shortUpdateError, updateAvailableFor, updateCheckKey, withUpdateTimeout } = await import('../packages/tether-ui/src/app.js')
+  const { cachedUpdateCheck, checkUpdateAvailability, dedupeUpdateCheck, deviceAfterLocalIdentity, localPluginNeedsRestart, localPluginVersionSeed, orderNetworkDevices, shortUpdateError, updateAvailableFor, updateCheckKey, updateCheckCacheKey, withUpdateTimeout } = await import('../packages/tether-ui/src/app.js')
   assert.deepEqual(await checkUpdateAvailability(async () => ({ update_available: true })), {
-    current: true, updateAvailable: true, result: { update_available: true }
+    current: true, updateAvailable: true, from_cache: false, result: { update_available: true }
   })
   assert.equal((await checkUpdateAvailability(async () => ({ update_available: false }))).updateAvailable, false)
   assert.equal((await checkUpdateAvailability(async () => ({ ok: false, message: 'offline' }))).failed, true)
@@ -263,7 +271,7 @@ test('automatic update checks report availability, failures, and stale targets s
   const cache = new Map()
   const cachedCheck = () => cachedUpdateCheck(cache, 'device:node', async () => ({ update_available: ++checks > 0 }), { now: () => now })
   await cachedCheck()
-  await cachedCheck()
+  assert.equal((await cachedCheck()).from_cache, true)
   assert.equal(checks, 1)
   now += 300_001
   await cachedCheck()
@@ -328,6 +336,178 @@ test('automatic update checks report availability, failures, and stale targets s
   const returnedEpoch = updateCheckKey('node', { deviceId: 'alpha', epoch: 3 })
   assert.notEqual(firstEpoch, returnedEpoch)
   assert.equal(updateCheckKey('node', { deviceId: 'alpha', epoch: 3 }), returnedEpoch)
+  assert.notEqual(updateCheckCacheKey(returnedEpoch, 'https://hub-a.example/base', 1),
+    updateCheckCacheKey(returnedEpoch, 'https://hub-b.example/base', 1))
+  assert.notEqual(updateCheckCacheKey(returnedEpoch, 'https://hub-a.example/base', 1),
+    updateCheckCacheKey(returnedEpoch, 'https://hub-a.example/base', 2))
+  assert.equal(updateCheckCacheKey(returnedEpoch, 'https://user:token@hub-a.example/base?secret=value', 1)
+    .includes('token'), false, 'cache identity contains no credentials or query secrets')
+})
+
+test('late status responses are discarded after a newer availability check', async () => {
+  const { commitLatestUpdateResponse, createUpdateResponseArbiter, mergeUpdateStatusInfo, updateInfoAfterCheck } = await import('../packages/tether-ui/src/app.js')
+  const arbiter = createUpdateResponseArbiter()
+  const commits = []
+  let info = {}
+  let resolveStatus
+  const status = commitLatestUpdateResponse(
+    arbiter, 'device-A:plugin', 'hub-A', 'status', () => new Promise((resolve) => { resolveStatus = resolve }),
+    (value) => { info = mergeUpdateStatusInfo(info, value); commits.push('status') }
+  )
+  const check = commitLatestUpdateResponse(
+    arbiter, 'device-A:plugin', 'hub-A', 'check', async () => ({ latest_version: '0.2.28', update_available: true }),
+    (value) => {
+      info = { ...info, ...value, ...updateInfoAfterCheck({}, { current: true }) }
+      commits.push('check')
+    }
+  )
+  await check
+  resolveStatus({ latest_version: '0.2.27', update_available: false, restart_required: true })
+  assert.deepEqual(await status, { cancelled: true })
+  assert.deepEqual(commits, ['check'])
+  assert.equal(info.latest_version, '0.2.28')
+  assert.equal(info.update_available, true)
+})
+
+test('status after a check refreshes operational fields without replacing check truth', async () => {
+  const { commitLatestUpdateResponse, createUpdateResponseArbiter, mergeUpdateStatusInfo, updateInfoAfterCheck } = await import('../packages/tether-ui/src/app.js')
+  const arbiter = createUpdateResponseArbiter()
+  const commits = []
+  let info = {}
+  let resolveStatus
+  const check = commitLatestUpdateResponse(
+    arbiter, 'device-A:plugin', 'hub-A', 'check', async () => ({ latest_version: '0.2.28', update_available: true }),
+    (value) => { info = { ...info, ...value, ...updateInfoAfterCheck({}, { current: true }) }; commits.push('check') }
+  )
+  const status = commitLatestUpdateResponse(
+    arbiter, 'device-A:plugin', 'hub-A', 'status', () => new Promise((resolve) => { resolveStatus = resolve }),
+    (value) => { info = mergeUpdateStatusInfo(info, value); commits.push('status') }
+  )
+  assert.deepEqual(await check, { latest_version: '0.2.28', update_available: true })
+  resolveStatus({ latest_version: '0.2.27', update_available: false })
+  assert.deepEqual(await status, { latest_version: '0.2.27', update_available: false })
+  assert.deepEqual(commits, ['check', 'status'])
+  assert.equal(info.latest_version, '0.2.28')
+  assert.equal(info.update_available, true)
+})
+
+test('a status request started before a check cannot overwrite its newer installed-version snapshot', async () => {
+  const { commitLatestUpdateResponse, createUpdateResponseArbiter } = await import('../packages/tether-ui/src/app.js')
+  const arbiter = createUpdateResponseArbiter()
+  const commits = []
+  let resolveStatus
+  const status = commitLatestUpdateResponse(arbiter, 'device-A:plugin', 'hub-A', 'status',
+    () => new Promise((resolve) => { resolveStatus = resolve }), (value) => commits.push(['status', value]))
+  const check = commitLatestUpdateResponse(arbiter, 'device-A:plugin', 'hub-A', 'check',
+    async () => ({ current_version: '0.2.28', latest_version: '0.2.28' }), (value) => commits.push(['check', value]))
+  await check
+  resolveStatus({ current_version: '0.2.27', restart_required: false })
+  assert.deepEqual(await status, { cancelled: true })
+  assert.deepEqual(commits, [['check', { current_version: '0.2.28', latest_version: '0.2.28' }]])
+})
+
+test('post-apply status narrows checked availability without granting rollout eligibility', async () => {
+  const { mergeUpdateStatusInfo } = await import('../packages/tether-ui/src/app.js')
+  const checked = { current_version: '0.2.27', latest_version: '0.2.28', update_available: true, stale: false }
+  const applied = mergeUpdateStatusInfo(checked, {
+    current_version: '0.2.28', latest_version: '0.2.27', update_available: false, restart_required: false
+  })
+  assert.equal(applied.latest_version, '0.2.28')
+  assert.equal(applied.update_available, false)
+  assert.equal(applied.current_version, '0.2.28')
+
+  const behind = mergeUpdateStatusInfo(checked, { current_version: '0.2.27', restart_required: false })
+  assert.equal(behind.update_available, true)
+  const paused = mergeUpdateStatusInfo({ ...checked, rollout_paused: true }, { current_version: '0.2.27' })
+  assert.equal(paused.update_available, false)
+})
+
+test('superseded failures and responses from a previous Hub cannot commit or set errors', async () => {
+  const { commitLatestUpdateResponse, createUpdateResponseArbiter, commitArbitratedUpdateValue } = await import('../packages/tether-ui/src/app.js')
+  const arbiter = createUpdateResponseArbiter()
+  const commits = []
+  let rejectOld
+  const oldRequest = commitLatestUpdateResponse(
+    arbiter, 'device-A:app', 'hub-A', 'check', () => new Promise((_resolve, reject) => { rejectOld = reject }),
+    (value) => commits.push(value)
+  )
+  const newRequest = commitLatestUpdateResponse(
+    arbiter, 'device-A:app', 'hub-A', 'check', async () => ({ latest_version: '0.2.29' }),
+    (value) => commits.push(value)
+  )
+  await newRequest
+  rejectOld(new Error('old Hub failed'))
+  assert.deepEqual(await oldRequest, { cancelled: true })
+
+  let activeHub = 'hub-A'
+  let resolveHubRequest
+  const hubRequest = commitLatestUpdateResponse(
+    arbiter, 'device-A:node', 'hub-A', 'check', () => new Promise((resolve) => { resolveHubRequest = resolve }),
+    (value) => commits.push(value), () => activeHub === 'hub-A'
+  )
+  activeHub = 'hub-B'
+  resolveHubRequest({ latest_version: '0.2.30' })
+  assert.deepEqual(await hubRequest, { cancelled: true }, 'same device id on a newly active Hub must reject the old response')
+
+  let activeAuthority = 'hub-A'
+  const token = arbiter.begin('check:device-A:app', activeAuthority, 'check')
+  activeAuthority = 'hub-B'
+  const staleMetadata = commitArbitratedUpdateValue(
+    arbiter, 'check:device-A:app', token, 'hub-A', { failed: true, error: 'old Hub' },
+    (value) => commits.push(value), () => activeAuthority === 'hub-A'
+  )
+  assert.deepEqual(staleMetadata, { cancelled: true })
+  assert.deepEqual(commits, [{ latest_version: '0.2.29' }])
+})
+
+test('failed or cached component checks retain stale truth without inheriting another latest version', async () => {
+  const { normalizeUpdateLatest, updateInfoAfterCheck, updateInfoAfterStatus, updateCardStateForInfos, updateAvailableFor, updateNeededFor, updateTriggerState } = await import('../packages/tether-ui/src/app.js')
+  const stalePlugin = updateInfoAfterCheck({
+    current_version: '0.2.27', latest_version: '0.2.27', update_available: false
+  }, { failed: true, error: 'offline' })
+  const normalized = normalizeUpdateLatest({
+    localPlugin: stalePlugin,
+    devices: { other: { app: { current_version: '0.2.27', latest_version: '0.2.29', update_available: true } } }
+  })
+  assert.equal(normalized.localPlugin.latest_version, '0.2.27')
+  assert.equal(normalized.localPlugin.update_available, false)
+  assert.equal(normalized.localPlugin.stale, true)
+  assert.equal(normalized.localPlugin.check_error, 'offline')
+  assert.equal(updateCardStateForInfos([stalePlugin]).pill, '检查失败')
+  assert.equal(updateTriggerState({ localPlugin: stalePlugin }, {}), 'failed')
+  assert.equal(updateAvailableFor({ localPlugin: stalePlugin }, 'dsh', ''), false)
+  assert.equal(updateNeededFor(stalePlugin), true, 'a failed check must trigger a fresh check before deciding to skip')
+
+  const cached = updateInfoAfterCheck({ current_version: '0.2.27', latest_version: '0.2.27', update_available: false },
+    { current: true, from_cache: true })
+  const normalizedCached = normalizeUpdateLatest({
+    localPlugin: cached,
+    devices: { other: { app: { current_version: '0.2.27', latest_version: '0.2.29', update_available: true } } }
+  })
+  assert.equal(normalizedCached.localPlugin.latest_version, '0.2.27')
+  assert.equal(normalizedCached.localPlugin.update_available, false)
+  assert.equal(normalizedCached.localPlugin.stale, true)
+  assert.equal(updateCardStateForInfos([cached]).pill, '上次结果')
+  assert.notEqual(updateCardStateForInfos([cached]).kind, 'current')
+  assert.equal(updateTriggerState({ localPlugin: cached }, {}), 'checking')
+
+  const backendCached = updateInfoAfterCheck({ current_version: '0.2.27', latest_version: '0.2.27', update_available: false },
+    { current: true, result: { ok: true, stale: true, manifest_source: 'disk-cache' } })
+  assert.equal(backendCached.stale, true)
+  assert.equal(updateCardStateForInfos([backendCached]).pill, '上次结果')
+  assert.equal(normalizeUpdateLatest({
+    localPlugin: backendCached,
+    devices: { other: { app: { current_version: '0.2.27', latest_version: '0.2.29', update_available: true } } }
+  }).localPlugin.update_available, false)
+
+  const status = updateInfoAfterStatus({ current_version: '0.2.27', latest_version: '0.2.27', update_available: false })
+  assert.equal(status.from_cache, true)
+  assert.equal(normalizeUpdateLatest({
+    localPlugin: status,
+    devices: { other: { app: { current_version: '0.2.27', latest_version: '0.2.29', update_available: true } } }
+  }).localPlugin.update_available, false)
+  assert.equal(updateCardStateForInfos([status]).pill, '上次结果')
+  assert.equal(updateTriggerState({ localPlugin: status }, {}), 'checking')
 })
 
 test('the shared factory accepts a DSH host and a Web host without DSH globals', async () => {
@@ -385,7 +565,7 @@ test('error toasts expire automatically and the update entry uses a stable label
   assert.match(shared, /updateStatus === 'failed' \? C\.amber/)
   assert.match(shared, /updateStatus === 'current' \? C\.green/)
   assert.doesNotMatch(shared, /\}, updateHasAvailable \? '更新 · 有新版本'/)
-  assert.match(shared, /setComponentUpdateError\(component, result\.failed \? shortUpdateError\(result\.error\) : '', scope, false\)/,
+  assert.match(shared, /setComponentUpdateError\(component, current\.failed \? shortUpdateError\(current\.error\) : '', scope, false\)/,
     'background update checks stay quiet; only explicit actions toast')
 })
 
@@ -399,7 +579,7 @@ test('connection and update triggers share deterministic status colours', async 
   assert.equal(updateTriggerState(
     { devices: { d: { node: { current_version: '0.2.24', latest_version: '0.2.24', update_available: false } } } },
     { devices: { d: { node: 'offline' } } }
-  ), 'current', 'a stale error must not turn a known-current record amber')
+  ), 'failed', 'a stale error must not report a failed refresh as current')
   assert.equal(updateTriggerState(
     { devices: { d: { node: { current_version: '0.2.24', latest_version: '0.2.24', update_available: false } } } },
     { devices: { gone: { node: 'offline' } } },
@@ -468,7 +648,9 @@ test('device and product update cards keep one running state until the run ends'
 })
 
 test('a running update and a pending plugin restart keep the update trigger honest', async () => {
-  const { updateTriggerState } = await import('../packages/tether-ui/src/app.js')
+  const { updateTriggerState, isUsableUpdateStatus } = await import('../packages/tether-ui/src/app.js')
+  assert.equal(isUsableUpdateStatus({ cancelled: true }), false, 'cancelled status polls cannot satisfy restart watchers')
+  assert.equal(isUsableUpdateStatus({ ok: true, restart_required: false }), true)
   const current = { localPlugin: { current_version: '0.2.24', latest_version: '0.2.24', update_available: false } }
   assert.equal(updateTriggerState(current, {}, false, null, true), 'checking',
     'a running device update must not flash intermediate card states')

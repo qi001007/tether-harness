@@ -229,7 +229,7 @@ export async function addDshTargetAttachment(owner, bridge, sessionId, entry, is
   return file
 }
 
-export function createDshTargetAttachments(React, Native, bridge, pickerCommand) {
+export function createDshTargetAttachments(React, Native, bridge, pickerCommand, uiWorkspace, sessions) {
   const h = React.createElement
   return function DshTargetAttachments(props) {
     const [open, setOpen] = React.useState(false)
@@ -240,6 +240,12 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand)
     const [error, setError] = React.useState('')
     const mounted = React.useRef(true)
     const scope = React.useRef({})
+    const busyRef = React.useRef(false)
+    const containerRef = React.useRef(null)
+    const nativePickerBypass = React.useRef(false)
+    const openPickerRef = React.useRef(null)
+    const currentProps = React.useRef(props)
+    currentProps.current = props
     const activeSession = React.useRef(props.sessionId)
     if (activeSession.current !== props.sessionId) {
       activeSession.current = props.sessionId
@@ -252,8 +258,56 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand)
     React.useEffect(() => {
       setOpen(false); setRoots([]); setEntries(null); setDirectory(null); setError('')
     }, [props.sessionId])
+    React.useEffect(() => {
+      const pending = pickerCommand && pickerCommand.pendingSessionStart
+      if (!pending || !props.sessionId) return
+      if (pending.baselineIds.has(props.sessionId)) {
+        clearTimeout(pending.timeoutId)
+        pickerCommand.pendingSessionStart = null
+        return
+      }
+      clearTimeout(pending.timeoutId)
+      pickerCommand.pendingSessionStart = null
+      void openPickerRef.current?.()
+    }, [props.sessionId])
     const openPicker = async () => {
+      if (busyRef.current || pickerCommand?.pendingSessionStart) return
+      busyRef.current = true
       setOpen(true); setBusy(true); setError(''); setDirectory(null); setEntries(null)
+      if (!props.sessionId) {
+        const snapshot = sessions?.list?.getSnapshot?.()
+        const startSession = uiWorkspace && uiWorkspace.startSession
+        if (typeof startSession !== 'function' || !snapshot || !Array.isArray(snapshot.ids)) {
+          setError('当前没有目标 DSH 会话。请先在目标设备选择或创建工作区，再浏览其文件。')
+          busyRef.current = false
+          setBusy(false)
+          return
+        }
+        const pending = { baselineIds: new Set(snapshot.ids), timeoutId: null }
+        pending.timeoutId = setTimeout(() => {
+          if (pickerCommand?.pendingSessionStart === pending) {
+            pickerCommand.pendingSessionStart = null
+            if (mounted.current) setError('目标会话准备超时，请先在目标设备选择工作区后重试。')
+          }
+        }, 30_000)
+        if (pickerCommand) pickerCommand.pendingSessionStart = pending
+        setError('正在准备目标 DSH 会话…工作区就绪后会自动打开文件选择器。')
+        try { startSession.call(uiWorkspace) }
+        catch (cause) {
+          clearTimeout(pending.timeoutId)
+          if (pickerCommand?.pendingSessionStart === pending) pickerCommand.pendingSessionStart = null
+          setError(cause.message || '目标 DSH 会话创建失败，请先在目标设备选择工作区。')
+        }
+        busyRef.current = false
+        setBusy(false)
+        return
+      }
+      if (!props.canAcceptDrop) {
+        setError('当前 DSH 会话暂不接受附件。')
+        busyRef.current = false
+        setBusy(false)
+        return
+      }
       try {
         const result = await bridge.getRoots(props.sessionId)
         if (mounted.current && activeSession.current === props.sessionId) {
@@ -261,8 +315,34 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand)
         }
       }
       catch (cause) { if (mounted.current) setError(cause.message || '读取目标设备目录失败') }
-      finally { if (mounted.current) setBusy(false) }
+      finally { busyRef.current = false; if (mounted.current) setBusy(false) }
     }
+    openPickerRef.current = openPicker
+    const nativeComposerInput = () => {
+      let parent = containerRef.current && containerRef.current.parentElement
+      while (parent) {
+        if (typeof parent.querySelectorAll === 'function') {
+          const inputs = [...parent.querySelectorAll('input[type="file"][hidden]')]
+          if (inputs.length) return inputs.length === 1 ? inputs[0] : null
+        }
+        parent = parent.parentElement
+      }
+      return null
+    }
+    React.useEffect(() => {
+      if (typeof document === 'undefined') return undefined
+      const interceptNativeFilePicker = (event) => {
+        const input = event.target
+        if (!input || input !== nativeComposerInput()) return
+        if (nativePickerBypass.current) { nativePickerBypass.current = false; return }
+        event.preventDefault()
+        event.stopPropagation()
+        if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation()
+        if (openPickerRef.current) void openPickerRef.current()
+      }
+      document.addEventListener('click', interceptNativeFilePicker, true)
+      return () => document.removeEventListener('click', interceptNativeFilePicker, true)
+    }, [])
     React.useEffect(() => {
       if (!pickerCommand) return undefined
       const open = () => { if (!busy && props.canAcceptDrop && props.sessionId) void openPicker() }
@@ -292,17 +372,28 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand)
     const picker = open ? h('div', { role: 'dialog', 'aria-label': '选择目标设备文件', style: { position: 'relative', margin: '6px 0', padding: 10, border: '1px solid var(--dsw-alias-border-l1, #d0d5dd)', borderRadius: 8, background: 'var(--dsw-alias-bg-layer-1, #fff)', color: 'var(--dsw-alias-label-primary, #101828)', maxHeight: 260, overflow: 'auto' } },
       h('div', { style: { display: 'flex', justifyContent: 'space-between', marginBottom: 8 } },
         h('strong', null, directory ? directory.name : '目标设备文件'),
-        h('button', { type: 'button', onClick: () => { setOpen(false); scope.current = {} }, 'aria-label': '关闭文件选择器' }, '×')),
+        h('button', { type: 'button', onClick: () => {
+          setOpen(false); scope.current = {}
+          const pending = pickerCommand && pickerCommand.pendingSessionStart
+          if (pending) { clearTimeout(pending.timeoutId); pickerCommand.pendingSessionStart = null }
+        }, 'aria-label': '关闭文件选择器' }, '×')),
       directory ? h('button', { type: 'button', style: buttonStyle, onClick: () => { setDirectory(null); setEntries(null) }, disabled: busy }, '返回会话工作区') : null,
       busy ? h('div', { role: 'status', style: { padding: '8px 2px' } }, '读取中…') : null,
       error ? h('div', { role: 'alert', style: { color: 'var(--dsw-alias-state-error-primary, #b42318)', padding: '6px 2px' } }, error) : null,
       !directory ? roots.map((item, index) => h('button', { key: `${item.group}:${item.path}:${index}`, type: 'button', onClick: () => { void enterDirectory(item) }, disabled: busy, style: { ...buttonStyle, display: 'block', width: '100%', textAlign: 'left', marginTop: 5 } }, `${item.group} · ${item.name}`)) : null,
       entries ? entries.map((item) => h('button', { key: item.path, type: 'button', onClick: () => { if (item.dir) void enterDirectory(item); else void pick(item) }, disabled: busy || (item.size > DSH_TARGET_ATTACHMENT_LIMIT), style: { ...buttonStyle, display: 'block', width: '100%', textAlign: 'left', marginTop: 5, opacity: item.size > DSH_TARGET_ATTACHMENT_LIMIT ? 0.55 : 1 } }, `${item.dir ? '📁' : '📄'} ${item.name}${!item.dir && item.size > DSH_TARGET_ATTACHMENT_LIMIT ? ' · 超过 10 MiB' : ''}`)) : null,
       h('div', { style: { marginTop: 8, fontSize: 12, color: 'var(--dsw-alias-label-tertiary, #667085)' } }, '文件从当前 DSH 会话工作区读取，单个附件上限 10 MiB。')) : null
-    return h(React.Fragment, null,
+    const openLocalPicker = () => {
+      const input = typeof document !== 'undefined' && nativeComposerInput()
+      if (!input || typeof input.click !== 'function') { setError('DSH 本机文件选择器暂不可用'); return }
+      nativePickerBypass.current = true
+      try { input.click() } catch (cause) { setError(cause.message || '打开本机文件选择器失败') }
+      finally { nativePickerBypass.current = false }
+    }
+    return h('div', { ref: containerRef, style: { display: 'contents' } },
       h(Native.ComposerAttachments, { ...props, readFileDrag: props.readFileDrag }),
       h('div', { style: { display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 } },
-        h('button', { type: 'button', onClick: () => { void openPicker() }, disabled: busy || !props.canAcceptDrop || !props.sessionId, style: buttonStyle }, '目标设备文件…')),
+        h('button', { type: 'button', onClick: openLocalPicker, disabled: busy || !props.canAcceptDrop || !props.sessionId, style: buttonStyle }, '本机文件…')),
       picker)
   }
 }

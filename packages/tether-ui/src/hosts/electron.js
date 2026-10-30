@@ -1,10 +1,12 @@
 import { createWebHost } from './web.js'
 
 export function createElectronHost({ apiBase = '' } = {}) {
+  const webHost = createWebHost({ apiBase })
   return {
-    ...createWebHost({ apiBase }),
+    ...webHost,
     kind: 'app',
-    connectionInfo: async () => {
+    connectionInfo: async (activeBase) => {
+      if (webHost.hubConfig()) return webHost.connectionInfo(activeBase)
       const state = await window.tetherApp.services()
       return {
         address: state.remoteUrl || (state.endpoints && state.endpoints.api) || '未配置',
@@ -14,7 +16,8 @@ export function createElectronHost({ apiBase = '' } = {}) {
         durationMs: state.lastProbe && state.lastProbe.durationMs
       }
     },
-    probeConnection: async () => {
+    probeConnection: async (activeBase, token) => {
+      if (webHost.hubConfig()) return webHost.probeConnection(activeBase, token)
       const state = await window.tetherApp.probeServices()
       return {
         address: state.remoteUrl || (state.endpoints && state.endpoints.api) || '未配置',
