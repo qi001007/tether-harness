@@ -334,7 +334,7 @@ class Node:
         self.dsh_sessions = DshSessionStore()
         self.native_dsh_home = self.dsh_sessions.home
         ensure_sdk_profile(self.native_dsh_home)
-        self.native_surface = NativeSurface(self.native_dsh_home)
+        self.native_surface = NativeSurface(self.native_dsh_home, device_fs=self.fs)
         update_state_dir = self.data_dir / "updates"
         manifest_url = release_manifest_url()
         plugin_profile = select_profile(Path(self.native_dsh_home), "desktop") or "desktop"

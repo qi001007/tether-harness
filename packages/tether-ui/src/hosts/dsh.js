@@ -90,141 +90,318 @@ export function createDshLocalPluginSurfaceReloadBridge(getRemote) {
 
 export const DSH_TARGET_ATTACHMENT_LIMIT = 10 * 1024 * 1024
 export const DSH_TARGET_ATTACHMENT_CHUNK = 256 * 1024
+export const DSH_TARGET_DEVICE_TIMEOUT = 15_000
+export const DSH_TARGET_SURFACE_PREFIX = '/tether-device-fs'
 
-export function createDshTargetFilesBridge({ getRpc, getRemote, makeFile = (...args) => new File(...args) } = {}) {
-  const capabilities = new Map()
+const TARGET_DEVICE_ERROR_MESSAGES = {
+  device_offline: '目标电脑不可达或已离线，请稍后重试',
+  device_not_found: '目标电脑不存在或已离线，请稍后重试',
+  host_unreachable: '目标电脑不可达，请确认目标电脑在线后重试',
+  local_unreachable: '目标电脑不可达，请确认目标电脑在线后重试',
+  surface_timeout: '目标电脑响应超时，请稍后重试',
+  node_update_required: '目标电脑的 Tether Node 版本过旧，无法浏览文件'
+}
+
+function loopbackHostname(value) {
+  return value === '127.0.0.1' || value === 'localhost' || value === '[::1]' || value === '::1'
+}
+
+// The public surface page is served by the gateway at a non-loopback origin, and
+// every request there must stay on that origin so the surface cookie applies.
+export function tetherNativeSurfaceOrigin() {
+  if (typeof window === 'undefined' || !window.location) return ''
+  const location = window.location
+  const href = typeof location.href === 'string' ? location.href : ''
+  if (href) {
+    try {
+      const parsed = new URL(href)
+      if (parsed.searchParams.has('tether_native') || !loopbackHostname(parsed.hostname)) return parsed.origin
+      return ''
+    } catch (_) { /* fall back to location.origin */ }
+  }
+  try {
+    const origin = String(location.origin || '')
+    if (!origin) return ''
+    const parsed = new URL(origin)
+    return loopbackHostname(parsed.hostname) ? '' : parsed.origin
+  } catch (_) { return '' }
+}
+
+function targetFileType(name) {
+  const extension = String(name || '').split('.').pop().toLowerCase()
+  return ({
+    png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif',
+    webp: 'image/webp', bmp: 'image/bmp', svg: 'image/svg+xml', pdf: 'application/pdf'
+  })[extension] || 'application/octet-stream'
+}
+
+function targetPathBase(value) {
+  const clean = String(value || '').replace(/[\\/]+$/, '')
+  const index = Math.max(clean.lastIndexOf('\\'), clean.lastIndexOf('/'))
+  return index >= 0 ? (clean.slice(index + 1) || clean) : clean
+}
+
+function targetParentPath(value) {
+  const clean = String(value || '').replace(/[\\/]+$/, '')
+  if (!clean) return ''
+  if (/^[A-Za-z]:$/.test(clean)) return clean + '\\'
+  const slash = Math.max(clean.lastIndexOf('\\'), clean.lastIndexOf('/'))
+  if (slash < 0) return ''
+  const parent = clean.slice(0, slash)
+  if (!parent) return '/'
+  return /^[A-Za-z]:$/.test(parent) ? parent + '\\' : parent
+}
+
+function decodeTargetBase64(value) {
+  if (typeof value !== 'string') throw new Error('目标电脑返回的文件字节不完整')
+  let binary
+  if (typeof atob === 'function') binary = atob(value)
+  else binary = globalThis.Buffer.from(value, 'base64').toString('binary')
+  const bytes = new Uint8Array(binary.length)
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index)
+  return bytes
+}
+
+function formatTargetSize(value) {
+  if (!Number.isSafeInteger(value) || value < 0) return ''
+  if (value < 1024) return value + ' B'
+  if (value < 1024 * 1024) return (value / 1024).toFixed(value < 10 * 1024 ? 1 : 0) + ' KB'
+  return (value / (1024 * 1024)).toFixed(1) + ' MB'
+}
+
+function formatTargetTime(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return ''
+  try { return new Date(value * 1000).toLocaleString('zh-CN', { hour12: false }) } catch (_) { return '' }
+}
+
+// Browses one target computer through the same /api/devices/{id}/... file API the
+// Tether resource manager uses. Identity comes from the surface owner RPC, so the
+// picker can never silently browse a different computer or the operator's local disk.
+export function createDshTargetExplorerBridge({ getRpc, getHost, fetcher = (...args) => fetch(...args), makeFile = (...args) => new File(...args) } = {}) {
+  let scope = null
+  const host = () => (typeof getHost === 'function' ? getHost() : null)
   const identity = async () => {
     const rpc = typeof getRpc === 'function' ? getRpc() : null
-    if (!rpc || typeof rpc.call !== 'function') throw new Error('当前 DSH 没有目标设备文件通道')
-    const reply = await rpc.call('/tether-identity', 'get', {})
+    if (!rpc || typeof rpc.call !== 'function') throw new Error('当前 DSH 没有目标电脑身份通道，无法浏览目标电脑文件')
+    let reply
+    try { reply = await rpc.call('/tether-identity', 'get', {}) }
+    catch (_) { throw new Error('无法确认目标电脑身份，请确认目标电脑在线后重试') }
     const value = reply && (reply.value || reply.result || reply)
     if (!value || typeof value.device_id !== 'string' || !value.device_id) {
-      throw new Error('当前 DSH 无法确认目标设备身份')
+      throw new Error('无法确认目标电脑身份，请先在目标电脑启动 Tether Node')
     }
     return value.device_id
   }
-  const scopeFor = (sessionId) => {
-    if (typeof sessionId !== 'string' || !sessionId) throw new Error('请先选择一个 DSH 会话')
-    let scope = capabilities.get(sessionId)
-    if (!scope) {
-      scope = { directories: new Set(['.']), files: new Map(), deviceId: null }
-      capabilities.set(sessionId, scope)
+  const surfaceOrigin = () => tetherNativeSurfaceOrigin()
+  const baseList = () => {
+    const value = host()
+    const bases = []
+    try {
+      if (value && typeof value.activeApiBase === 'function') {
+        const active = value.activeApiBase()
+        if (typeof active === 'string' && active) bases.push(active)
+      }
+    } catch (_) { /* active authority is optional */ }
+    try { if (value && typeof value.apiBases === 'function') bases.push(...(value.apiBases() || [])) } catch (_) { /* candidate list is optional */ }
+    bases.push(DSH_APP_BASE, DSH_API_BASE)
+    const seen = new Set()
+    return bases
+      .map((base) => String(base || '').replace(/\/+$/, ''))
+      .filter((base) => {
+        if (!base || seen.has(base)) return false
+        seen.add(base)
+        return true
+      })
+  }
+  const headersFor = (base) => {
+    const value = host()
+    try { return value && typeof value.apiHeaders === 'function' ? { ...(value.apiHeaders(base) || {}) } : {} }
+    catch (_) { return {} }
+  }
+  const deviceRoute = (deviceId, suffix) => '/api/devices/' + encodeURIComponent(deviceId) + suffix
+  const apiSuffix = (suffix) => {
+    if (suffix === '/list') return '/fs/list'
+    if (suffix === '/read') return '/fs/read'
+    return suffix
+  }
+  const request = async (deviceId, suffix, body, signal) => {
+    const origin = surfaceOrigin()
+    const init = { method: body === undefined ? 'GET' : 'POST' }
+    if (body !== undefined) {
+      init.body = JSON.stringify(origin ? { ...body, device_id: deviceId } : body)
+      init.headers = { 'Content-Type': 'application/json' }
     }
-    return scope
-  }
-  const remote = () => {
-    const value = typeof getRemote === 'function' ? getRemote() : null
-    if (!value?.workspaceFiles) throw new Error('当前 DSH 不提供会话工作区文件权限')
-    return value.workspaceFiles
-  }
-  const assertScope = async (expectedDevice) => {
-    if (await identity() !== expectedDevice) throw new Error('目标设备已切换，请重新选择文件')
-  }
-  const unwrap = (result) => {
-    if (!result || result.ok !== true) throw new Error(result?.error?.message || result?.error || 'DSH 拒绝读取此会话文件')
-    return result.value
-  }
-  const signal = () => AbortSignal.timeout(15_000)
-  const pathOf = (parent, name) => parent === '.' ? name : `${parent.replace(/\/$/, '')}/${name}`
-  const run = async (sessionId, operation) => {
-    const scope = scopeFor(sessionId)
-    const deviceId = await identity()
-    if (scope.deviceId !== null && scope.deviceId !== deviceId) {
-      scope.directories = new Set()
-      scope.files.clear()
-      scope.deviceId = null
-      throw new Error('目标设备已切换，请重新选择文件')
+    if (origin) init.credentials = 'include'
+    init.signal = signal || AbortSignal.timeout(DSH_TARGET_DEVICE_TIMEOUT)
+    const attempts = origin
+      ? [{ base: origin, url: origin + DSH_TARGET_SURFACE_PREFIX + suffix
+        + (body === undefined ? '?device_id=' + encodeURIComponent(deviceId) : '') }]
+      : baseList().map((base) => ({ base, url: base + deviceRoute(deviceId, apiSuffix(suffix)) }))
+    let lastError = null
+    for (const attempt of attempts) {
+      let response
+      try {
+        response = await fetcher(attempt.url, {
+          ...init,
+          headers: { ...(origin ? {} : headersFor(attempt.base)), ...(init.headers || {}) }
+        })
+      } catch (cause) {
+        if (signal && signal.aborted) throw cause
+        lastError = cause
+        continue
+      }
+      let data = {}
+      try { data = await response.json() } catch (_) { /* an error body may be empty */ }
+      if (!response.ok) {
+        const detail = data && data.detail
+        let code = (detail && typeof detail === 'object' && detail.code) || (data && data.code)
+        if (!code && origin && response.status === 404) code = 'node_update_required'
+        const message = (detail && typeof detail === 'object' ? detail.error || detail.message : detail)
+          || (data && data.error && data.error.message) || (data && typeof data.error === 'string' && data.error)
+          || ('HTTP ' + response.status)
+        const error = new Error(TARGET_DEVICE_ERROR_MESSAGES[code] || message || '目标电脑请求失败')
+        error.status = response.status
+        error.code = code
+        throw error
+      }
+      if (!data || typeof data !== 'object') throw new Error('目标电脑返回的数据格式无效')
+      if (data.device_id != null && data.device_id !== deviceId) throw new Error('目标电脑身份校验失败，请重新选择文件')
+      return data
     }
-    scope.deviceId = deviceId
-    const result = await operation(deviceId)
-    await assertScope(deviceId)
-    return result
+    const error = new Error('目标电脑不可达，请确认目标电脑在线后重试')
+    error.cause = lastError
+    throw error
   }
-
+  const assertDevice = async (deviceId) => {
+    if (await identity() !== deviceId) {
+      scope = null
+      throw new Error('目标电脑已切换，请重新选择文件')
+    }
+  }
+  const readDrives = async (deviceId, signal) => {
+    const data = await request(deviceId, '/drives', undefined, signal)
+    if (!Array.isArray(data.drives)) throw new Error('目标电脑磁盘列表格式无效')
+    return data.drives
+      .filter((item) => item && typeof item.path === 'string' && item.path)
+      .map((item) => ({
+        name: typeof item.name === 'string' && item.name ? item.name : targetPathBase(item.path),
+        path: item.path
+      }))
+  }
+  const readWorkspaces = async (deviceId, signal) => {
+    const data = await request(deviceId, '/workspaces', undefined, signal)
+    if (!Array.isArray(data.workspaces)) throw new Error('目标电脑工作区列表格式无效')
+    return data.workspaces
+      .filter((item) => item && typeof item.path === 'string' && item.path)
+      .map((item) => ({
+        name: typeof item.name === 'string' && item.name ? item.name : targetPathBase(item.path),
+        path: item.path,
+        kind: typeof item.kind === 'string' ? item.kind : ''
+      }))
+  }
   return {
-    async getRoots(sessionId) {
-      return run(sessionId, async (deviceId) => {
-        const listing = unwrap(await remote().list(sessionId, '.', signal()))
-        if (!Array.isArray(listing.entries)) throw new Error('DSH 工作区目录格式无效')
-        const scope = scopeFor(sessionId)
-        scope.directories = new Set(['.'])
-        scope.files.clear()
-        const entries = listing.entries.map(entry => {
-          const path = pathOf('.', entry.name)
-          if (entry.type === 'directory') scope.directories.add(path)
-          else if (entry.type === 'file' && Number.isSafeInteger(entry.size) && entry.size >= 0) {
-            scope.files.set(path, { name: entry.name, size: entry.size })
-          }
-          return { name: entry.name, path, size: entry.size, dir: entry.type === 'directory' }
-        }).filter(entry => entry.dir || scope.files.has(entry.path))
-        return { deviceId, root: { name: '当前会话工作区', path: '.', dir: true, group: '工作区' }, entries }
-      })
+    async getRoots(signal) {
+      const deviceId = await identity()
+      const [drives, workspaces] = await Promise.allSettled([
+        readDrives(deviceId, signal),
+        readWorkspaces(deviceId, signal)
+      ])
+      if (drives.status === 'rejected' && workspaces.status === 'rejected') throw drives.reason
+      await assertDevice(deviceId)
+      const driveRoots = drives.status === 'fulfilled' ? drives.value : []
+      const workspaceRoots = workspaces.status === 'fulfilled' ? workspaces.value : []
+      scope = {
+        deviceId,
+        directories: new Set([...workspaceRoots, ...driveRoots].map((item) => item.path)),
+        files: new Map()
+      }
+      const failure = drives.status === 'rejected' ? drives.reason
+        : workspaces.status === 'rejected' ? workspaces.reason : null
+      return {
+        deviceId,
+        workspaces: workspaceRoots,
+        drives: driveRoots,
+        warning: failure ? (failure.message || '部分目标电脑目录读取失败') : ''
+      }
     },
-    async listDirectory(sessionId, path) {
-      const scope = scopeFor(sessionId)
-      if (!scope.directories.has(path)) throw new Error('只能打开当前会话工作区中已列出的目录')
-      return run(sessionId, async () => {
-        const listing = unwrap(await remote().list(sessionId, path, signal()))
-        if (!Array.isArray(listing.entries)) throw new Error('DSH 目录返回格式无效')
-        const prefix = path === '.' ? '' : `${path.replace(/\/$/, '')}/`
-        for (const child of [...scope.directories]) {
-          if (child !== path && child.startsWith(prefix)) scope.directories.delete(child)
-        }
-        for (const child of scope.files.keys()) {
-          if (child.startsWith(prefix)) scope.files.delete(child)
-        }
-        const entries = listing.entries.map(entry => {
-          const childPath = pathOf(path, entry.name)
-          if (entry.type === 'directory') scope.directories.add(childPath)
-          else if (entry.type === 'file' && Number.isSafeInteger(entry.size) && entry.size >= 0) {
-            scope.files.set(childPath, { name: entry.name, size: entry.size })
-          }
-          return { name: entry.name, path: childPath, size: entry.size, dir: entry.type === 'directory' }
-        }).filter(entry => entry.dir || scope.files.has(entry.path))
-        return entries
-      })
+    async listDirectory(path, signal) {
+      if (typeof path !== 'string' || !path) throw new Error('请选择目标电脑上的目录')
+      const current = scope
+      if (!current || !current.directories.has(path)) throw new Error('只能打开目标电脑中已列出的目录')
+      const deviceId = await identity()
+      if (deviceId !== current.deviceId) {
+        scope = null
+        throw new Error('目标电脑已切换，请重新选择文件')
+      }
+      const data = await request(deviceId, '/list', { path }, signal)
+      if (!Array.isArray(data.entries)) throw new Error('目标电脑目录返回格式无效')
+      await assertDevice(deviceId)
+      const separator = path.includes('\\') ? '\\' : '/'
+      const prefix = path.replace(/[\\/]+$/, '') + separator
+      for (const child of [...current.directories]) {
+        if (child !== path && child.startsWith(prefix)) current.directories.delete(child)
+      }
+      for (const child of [...current.files.keys()]) {
+        if (child.startsWith(prefix)) current.files.delete(child)
+      }
+      const entries = []
+      for (const entry of data.entries) {
+        if (!entry || typeof entry.name !== 'string' || typeof entry.path !== 'string' || !entry.path) continue
+        const dir = entry.dir === true
+        const size = Number.isSafeInteger(entry.size) && entry.size >= 0 ? entry.size : null
+        if (!dir && size === null) continue
+        if (dir) current.directories.add(entry.path)
+        else current.files.set(entry.path, { name: entry.name, size })
+        entries.push({
+          name: entry.name, path: entry.path, dir,
+          size: dir ? null : size,
+          mtime: typeof entry.mtime === 'number' ? entry.mtime : null
+        })
+      }
+      return entries
     },
-    async readFile(sessionId, entry) {
+    async readFile(entry, signal) {
       if (!entry || entry.dir || typeof entry.path !== 'string' || !entry.path) throw new Error('请选择一个文件')
-      const scope = scopeFor(sessionId)
-      const listed = scope.files.get(entry.path)
-      if (!listed || listed.name !== entry.name || listed.size !== entry.size) throw new Error('只能读取当前工作区刚列出的文件')
+      const current = scope
+      if (!current) throw new Error('请先打开目标电脑的文件列表')
+      const listed = current.files.get(entry.path)
+      if (!listed || listed.name !== entry.name) throw new Error('只能读取目标电脑刚列出的文件')
       const size = listed.size
       if (!Number.isSafeInteger(size) || size < 0 || size > DSH_TARGET_ATTACHMENT_LIMIT) {
         throw new Error('单个附件不能超过 10 MiB')
       }
-      return run(sessionId, async () => {
-        const chunks = []
-        let version
-        let absolutePath
-        for (let offset = 0; offset < size; offset += DSH_TARGET_ATTACHMENT_CHUNK) {
-          const limit = Math.min(DSH_TARGET_ATTACHMENT_CHUNK, size - offset)
-          const data = unwrap(await remote().readBytes(sessionId, entry.path, { range: { offset, length: limit } }, signal()))
-          if (data.offset !== offset || (data.bytes !== undefined && data.bytes !== size)
-            || typeof data.version !== 'string' || typeof data.absolutePath !== 'string'
-            || (version !== undefined && (data.version !== version || data.absolutePath !== absolutePath))
-            || !(data.data instanceof Uint8Array) || data.data.length !== limit) {
-            throw new Error('DSH 返回的文件字节不完整')
-          }
-          version = data.version
-          absolutePath = data.absolutePath
-          chunks.push(data.data)
+      const deviceId = current.deviceId
+      const chunks = []
+      for (let offset = 0; offset < size; offset += DSH_TARGET_ATTACHMENT_CHUNK) {
+        const limit = Math.min(DSH_TARGET_ATTACHMENT_CHUNK, size - offset)
+        const data = await request(deviceId, '/read', { path: entry.path, offset, limit, encoding: 'base64' }, signal)
+        if (data.path !== entry.path || data.size !== size || data.offset !== offset
+            || data.truncated !== (offset + limit < size)) {
+          throw new Error('目标电脑上的文件已变化，请重新选择')
         }
-        const extension = (entry.name || entry.path).split('.').pop().toLowerCase()
-        const type = ({ png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp' })[extension]
-        return makeFile(chunks, entry.name || entry.path.split(/[\\/]/).pop() || 'attachment', {
-          type: type || 'application/octet-stream', lastModified: Date.now()
-        })
+        if (data.binary !== true || typeof data.base64 !== 'string') {
+          const error = new Error('目标电脑没有返回附件的原始字节，请更新目标电脑的 Tether Node 后重试')
+          error.code = 'node_update_required'
+          throw error
+        }
+        const bytes = decodeTargetBase64(data.base64)
+        if (bytes.length !== limit) throw new Error('目标电脑返回的文件字节不完整')
+        chunks.push(bytes)
+        await assertDevice(deviceId)
+      }
+      if (!chunks.length) await assertDevice(deviceId)
+      return makeFile(chunks, listed.name || targetPathBase(entry.path) || 'attachment', {
+        type: targetFileType(listed.name || entry.path), lastModified: Date.now()
       })
     }
   }
 }
 
-export async function addDshTargetAttachment(owner, bridge, sessionId, entry, isCurrent = () => true) {
+export async function addDshTargetAttachment(owner, bridge, entry, isCurrent = () => true) {
   const onAddFiles = owner && owner.onAddFiles
   if (typeof onAddFiles !== 'function') throw new Error('当前会话不接受附件')
-  const file = await bridge.readFile(sessionId, entry)
-  if (!isCurrent()) throw new Error('当前会话已切换，请重新选择文件')
+  const file = await bridge.readFile(entry)
+  if (!isCurrent()) throw new Error('目标电脑或会话已切换，请重新选择文件')
   onAddFiles([file])
   return file
 }
@@ -233,30 +410,31 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand,
   const h = React.createElement
   return function DshTargetAttachments(props) {
     const [open, setOpen] = React.useState(false)
-    const [roots, setRoots] = React.useState([])
+    const [device, setDevice] = React.useState('')
+    const [workspaces, setWorkspaces] = React.useState([])
+    const [drives, setDrives] = React.useState([])
+    const [root, setRoot] = React.useState('')
+    const [directory, setDirectory] = React.useState('')
     const [entries, setEntries] = React.useState(null)
-    const [directory, setDirectory] = React.useState(null)
     const [busy, setBusy] = React.useState(false)
+    const [status, setStatus] = React.useState('')
     const [error, setError] = React.useState('')
     const mounted = React.useRef(true)
-    const scope = React.useRef({})
     const busyRef = React.useRef(false)
+    const operation = React.useRef(0)
     const containerRef = React.useRef(null)
-    const nativePickerBypass = React.useRef(false)
     const openPickerRef = React.useRef(null)
     const currentProps = React.useRef(props)
     currentProps.current = props
-    const activeSession = React.useRef(props.sessionId)
-    if (activeSession.current !== props.sessionId) {
-      activeSession.current = props.sessionId
-      scope.current = {}
-    }
     React.useEffect(() => {
       mounted.current = true
-      return () => { mounted.current = false; scope.current = {} }
+      return () => { mounted.current = false }
     }, [])
     React.useEffect(() => {
-      setOpen(false); setRoots([]); setEntries(null); setDirectory(null); setError('')
+      operation.current += 1
+      busyRef.current = false
+      setOpen(false); setBusy(false); setStatus(''); setError('')
+      setDevice(''); setWorkspaces([]); setDrives([]); setRoot(''); setDirectory(''); setEntries(null)
     }, [props.sessionId])
     React.useEffect(() => {
       const pending = pickerCommand && pickerCommand.pendingSessionStart
@@ -270,54 +448,132 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand,
       pickerCommand.pendingSessionStart = null
       void openPickerRef.current?.()
     }, [props.sessionId])
+    const live = (token, sessionId) => mounted.current && token === operation.current
+      && currentProps.current.sessionId === sessionId
+    const resetExplorer = () => {
+      setDevice(''); setWorkspaces([]); setDrives([])
+      setRoot(''); setDirectory(''); setEntries(null); setStatus(''); setError('')
+    }
     const openPicker = async () => {
       if (busyRef.current || pickerCommand?.pendingSessionStart) return
       busyRef.current = true
-      setOpen(true); setBusy(true); setError(''); setDirectory(null); setEntries(null)
-      if (!props.sessionId) {
+      const token = ++operation.current
+      const sessionId = props.sessionId
+      setOpen(true); setBusy(false); resetExplorer()
+      if (!sessionId) {
         const snapshot = sessions?.list?.getSnapshot?.()
         const startSession = uiWorkspace && uiWorkspace.startSession
         if (typeof startSession !== 'function' || !snapshot || !Array.isArray(snapshot.ids)) {
-          setError('当前没有目标 DSH 会话。请先在目标设备选择或创建工作区，再浏览其文件。')
+          setError('当前没有目标 DSH 会话。请先在目标电脑选择或创建工作区，再浏览其文件。')
           busyRef.current = false
-          setBusy(false)
           return
         }
         const pending = { baselineIds: new Set(snapshot.ids), timeoutId: null }
         pending.timeoutId = setTimeout(() => {
           if (pickerCommand?.pendingSessionStart === pending) {
             pickerCommand.pendingSessionStart = null
-            if (mounted.current) setError('目标会话准备超时，请先在目标设备选择工作区后重试。')
+            if (mounted.current) {
+              setStatus('')
+              setError('目标会话准备超时，请先在目标电脑选择工作区后重试。')
+            }
           }
         }, 30_000)
         if (pickerCommand) pickerCommand.pendingSessionStart = pending
-        setError('正在准备目标 DSH 会话…工作区就绪后会自动打开文件选择器。')
+        setStatus('正在准备目标 DSH 会话…工作区就绪后会自动打开目标电脑的文件选择器。')
         try { startSession.call(uiWorkspace) }
         catch (cause) {
           clearTimeout(pending.timeoutId)
           if (pickerCommand?.pendingSessionStart === pending) pickerCommand.pendingSessionStart = null
-          setError(cause.message || '目标 DSH 会话创建失败，请先在目标设备选择工作区。')
+          setStatus('')
+          setError(cause.message || '目标 DSH 会话创建失败，请先在目标电脑选择工作区。')
         }
         busyRef.current = false
-        setBusy(false)
         return
       }
       if (!props.canAcceptDrop) {
         setError('当前 DSH 会话暂不接受附件。')
         busyRef.current = false
-        setBusy(false)
         return
       }
+      setBusy(true); setStatus('正在读取目标电脑…')
       try {
-        const result = await bridge.getRoots(props.sessionId)
-        if (mounted.current && activeSession.current === props.sessionId) {
-          setRoots([result.root]); setDirectory(result.root); setEntries(result.entries)
+        const roots = await bridge.getRoots()
+        if (!live(token, sessionId)) return
+        setDevice(roots.deviceId || '')
+        setWorkspaces(roots.workspaces || [])
+        setDrives(roots.drives || [])
+        setStatus('')
+        if (roots.warning) setError(roots.warning)
+      } catch (cause) {
+        if (live(token, sessionId)) {
+          setStatus('')
+          setError(cause.message || '读取目标电脑失败')
         }
+      } finally {
+        busyRef.current = false
+        if (mounted.current) setBusy(false)
       }
-      catch (cause) { if (mounted.current) setError(cause.message || '读取目标设备目录失败') }
-      finally { busyRef.current = false; if (mounted.current) setBusy(false) }
     }
     openPickerRef.current = openPicker
+    const close = () => {
+      operation.current += 1
+      busyRef.current = false
+      setOpen(false); setBusy(false); setStatus(''); setError('')
+      setRoot(''); setDirectory(''); setEntries(null)
+      const pending = pickerCommand && pickerCommand.pendingSessionStart
+      if (pending) {
+        clearTimeout(pending.timeoutId)
+        pickerCommand.pendingSessionStart = null
+      }
+    }
+    const enter = async (item, isRoot) => {
+      if (!item || typeof item.path !== 'string' || !item.path || busyRef.current) return
+      const token = ++operation.current
+      const sessionId = props.sessionId
+      busyRef.current = true
+      if (isRoot) setRoot(item.path)
+      setDirectory(item.path); setEntries(null)
+      setBusy(true); setStatus('正在读取目录…'); setError('')
+      try {
+        const listing = await bridge.listDirectory(item.path)
+        if (!live(token, sessionId)) return
+        setEntries(listing); setStatus('')
+      } catch (cause) {
+        if (live(token, sessionId)) {
+          setStatus('')
+          setError(cause.message || '读取目标电脑目录失败')
+        }
+      } finally {
+        busyRef.current = false
+        if (mounted.current) setBusy(false)
+      }
+    }
+    const choose = async (item) => {
+      if (!item || item.dir || busyRef.current) return
+      if (!Number.isSafeInteger(item.size) || item.size < 0 || item.size > DSH_TARGET_ATTACHMENT_LIMIT) {
+        setError('单个附件不能超过 10 MiB')
+        return
+      }
+      const token = ++operation.current
+      const sessionId = props.sessionId
+      busyRef.current = true
+      setBusy(true); setStatus('正在读取文件…'); setError('')
+      try {
+        await addDshTargetAttachment(currentProps.current, bridge, item,
+          () => mounted.current && token === operation.current && currentProps.current.sessionId === sessionId)
+        if (!mounted.current) return
+        setOpen(false); setBusy(false); setStatus('')
+        setRoot(''); setDirectory(''); setEntries(null)
+      } catch (cause) {
+        if (live(token, sessionId)) {
+          setStatus('')
+          setError(cause.message || '读取目标电脑文件失败')
+        }
+      } finally {
+        busyRef.current = false
+        if (mounted.current) setBusy(false)
+      }
+    }
     const nativeComposerInput = () => {
       let parent = containerRef.current && containerRef.current.parentElement
       while (parent) {
@@ -334,7 +590,6 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand,
       const interceptNativeFilePicker = (event) => {
         const input = event.target
         if (!input || input !== nativeComposerInput()) return
-        if (nativePickerBypass.current) { nativePickerBypass.current = false; return }
         event.preventDefault()
         event.stopPropagation()
         if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation()
@@ -345,56 +600,206 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand,
     }, [])
     React.useEffect(() => {
       if (!pickerCommand) return undefined
-      const open = () => { if (!busy && props.canAcceptDrop && props.sessionId) void openPicker() }
-      pickerCommand.open = open
-      return () => { if (pickerCommand.open === open) pickerCommand.open = null }
+      const openCommand = () => {
+        if (!busy && props.canAcceptDrop && props.sessionId) void openPickerRef.current?.()
+      }
+      pickerCommand.open = openCommand
+      return () => { if (pickerCommand.open === openCommand) pickerCommand.open = null }
     }, [busy, props.canAcceptDrop, props.sessionId])
-    const enterDirectory = async (item) => {
-      setBusy(true); setError('')
-      try {
-        const result = await bridge.listDirectory(props.sessionId, item.path)
-        if (mounted.current && activeSession.current === props.sessionId) { setDirectory(item); setEntries(result) }
+
+    const bg = 'var(--dsw-alias-bg-layer-1, #ffffff)'
+    const soft = 'var(--dsw-alias-bg-layer-2, #f9fafb)'
+    const ink = 'var(--dsw-alias-label-primary, #101828)'
+    const sub = 'var(--dsw-alias-label-secondary, #475467)'
+    const mute = 'var(--dsw-alias-label-tertiary, #667085)'
+    const line = 'var(--dsw-alias-border-l1, #eaecf0)'
+    const hover = 'var(--dsw-alias-bg-layer-3, #eef2f6)'
+    const danger = 'var(--dsw-alias-state-error-primary, #b42318)'
+    const fileIcon = (item) => {
+      if (Native && typeof Native.FileTypeIcon === 'function') {
+        return h(Native.FileTypeIcon, item.dir ? { kind: 'folder', size: 15 } : { path: item.path, size: 15 })
       }
-      catch (cause) { if (mounted.current) setError(cause.message || '读取目标目录失败') }
-      finally { if (mounted.current) setBusy(false) }
+      return h('span', {
+        'aria-hidden': true,
+        style: { width: 15, height: 15, display: 'grid', placeItems: 'center', color: mute, fontSize: 11 }
+      }, item.dir ? '▸' : '•')
     }
-    const pick = async (item) => {
-      const currentScope = scope.current
-      setBusy(true); setError('')
-      try {
-        await addDshTargetAttachment(props, bridge, props.sessionId, item,
-          () => mounted.current && activeSession.current === props.sessionId && scope.current === currentScope)
+    const mutedButton = {
+      border: '1px solid ' + line, borderRadius: 6, background: bg, color: sub,
+      padding: '4px 10px', font: 'inherit', fontSize: 12, cursor: 'pointer'
+    }
+    const rootButton = (item, group) => h('button', {
+      key: group + ':' + item.path, type: 'button', disabled: busy,
+      title: item.path, onClick: () => { void enter(item, true) },
+      style: {
+        display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 2,
+        width: '100%', padding: '6px 8px', border: 0, borderRadius: 6,
+        background: root === item.path ? hover : 'transparent', color: ink,
+        font: 'inherit', textAlign: 'left', cursor: busy ? 'default' : 'pointer'
       }
-      catch (cause) { if (mounted.current) setError(cause.message || '读取目标文件失败') }
-      finally { if (mounted.current) setBusy(false) }
+    },
+      h('span', { style: { display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, fontSize: 13 } },
+        fileIcon(item),
+        h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, item.name)),
+      h('span', {
+        style: { paddingLeft: 22, color: mute, fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
+      }, item.path))
+    const rootGroup = (label, items, empty) => h('div', { key: label, style: { marginBottom: 10 } },
+      h('div', { style: { padding: '8px 8px 4px', color: mute, fontSize: 11, fontWeight: 600, letterSpacing: 0.2 } }, label),
+      items.length
+        ? items.map((item) => rootButton(item, label))
+        : h('div', { style: { padding: '2px 8px 6px', color: mute, fontSize: 11.5 } }, empty))
+    const row = (item) => {
+      const oversized = !item.dir && item.size > DSH_TARGET_ATTACHMENT_LIMIT
+      return h('button', {
+        key: item.path, type: 'button', title: item.path,
+        disabled: busy || oversized,
+        onClick: () => { if (item.dir) void enter(item, false); else void choose(item) },
+        style: {
+          display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 132px 76px 78px', gap: 8,
+          alignItems: 'center', width: '100%', height: 32, padding: '0 14px',
+          border: 0, borderRadius: 6, background: 'transparent', color: ink,
+          font: 'inherit', fontSize: 13, textAlign: 'left',
+          cursor: busy || oversized ? 'default' : 'pointer', opacity: oversized ? 0.55 : 1
+        }
+      },
+        h('span', { style: { display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 } },
+          h('span', { style: { width: 16, height: 16, display: 'grid', placeItems: 'center', flex: '0 0 auto' } }, fileIcon(item)),
+          h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
+            item.name + (oversized ? ' · 超过 10 MiB' : ''))),
+        h('span', { style: { color: mute, fontSize: 11, whiteSpace: 'nowrap' } }, formatTargetTime(item.mtime)),
+        h('span', { style: { color: mute, fontSize: 11, whiteSpace: 'nowrap' } }, item.dir ? '文件夹' : '文件'),
+        h('span', { style: { color: mute, fontSize: 11, textAlign: 'right' } }, item.dir ? '' : formatTargetSize(item.size))
+      )
     }
-    const buttonStyle = { border: '1px solid var(--dsw-alias-border-l1, #d0d5dd)', borderRadius: 6, background: 'var(--dsw-alias-bg-layer-1, #fff)', color: 'var(--dsw-alias-label-secondary, #475467)', padding: '4px 8px', cursor: 'pointer', font: 'inherit' }
-    const picker = open ? h('div', { role: 'dialog', 'aria-label': '选择目标设备文件', style: { position: 'relative', margin: '6px 0', padding: 10, border: '1px solid var(--dsw-alias-border-l1, #d0d5dd)', borderRadius: 8, background: 'var(--dsw-alias-bg-layer-1, #fff)', color: 'var(--dsw-alias-label-primary, #101828)', maxHeight: 260, overflow: 'auto' } },
-      h('div', { style: { display: 'flex', justifyContent: 'space-between', marginBottom: 8 } },
-        h('strong', null, directory ? directory.name : '目标设备文件'),
-        h('button', { type: 'button', onClick: () => {
-          setOpen(false); scope.current = {}
-          const pending = pickerCommand && pickerCommand.pendingSessionStart
-          if (pending) { clearTimeout(pending.timeoutId); pickerCommand.pendingSessionStart = null }
-        }, 'aria-label': '关闭文件选择器' }, '×')),
-      directory ? h('button', { type: 'button', style: buttonStyle, onClick: () => { setDirectory(null); setEntries(null) }, disabled: busy }, '返回会话工作区') : null,
-      busy ? h('div', { role: 'status', style: { padding: '8px 2px' } }, '读取中…') : null,
-      error ? h('div', { role: 'alert', style: { color: 'var(--dsw-alias-state-error-primary, #b42318)', padding: '6px 2px' } }, error) : null,
-      !directory ? roots.map((item, index) => h('button', { key: `${item.group}:${item.path}:${index}`, type: 'button', onClick: () => { void enterDirectory(item) }, disabled: busy, style: { ...buttonStyle, display: 'block', width: '100%', textAlign: 'left', marginTop: 5 } }, `${item.group} · ${item.name}`)) : null,
-      entries ? entries.map((item) => h('button', { key: item.path, type: 'button', onClick: () => { if (item.dir) void enterDirectory(item); else void pick(item) }, disabled: busy || (item.size > DSH_TARGET_ATTACHMENT_LIMIT), style: { ...buttonStyle, display: 'block', width: '100%', textAlign: 'left', marginTop: 5, opacity: item.size > DSH_TARGET_ATTACHMENT_LIMIT ? 0.55 : 1 } }, `${item.dir ? '📁' : '📄'} ${item.name}${!item.dir && item.size > DSH_TARGET_ATTACHMENT_LIMIT ? ' · 超过 10 MiB' : ''}`)) : null,
-      h('div', { style: { marginTop: 8, fontSize: 12, color: 'var(--dsw-alias-label-tertiary, #667085)' } }, '文件从当前 DSH 会话工作区读取，单个附件上限 10 MiB。')) : null
-    const openLocalPicker = () => {
-      const input = typeof document !== 'undefined' && nativeComposerInput()
-      if (!input || typeof input.click !== 'function') { setError('DSH 本机文件选择器暂不可用'); return }
-      nativePickerBypass.current = true
-      try { input.click() } catch (cause) { setError(cause.message || '打开本机文件选择器失败') }
-      finally { nativePickerBypass.current = false }
+    const upTarget = targetParentPath(directory)
+    const canGoUp = !!directory && directory !== root && !!upTarget && upTarget !== directory
+    const toolbar = h('div', {
+      style: {
+        display: 'flex', alignItems: 'center', gap: 8, height: 46, padding: '0 14px',
+        borderBottom: '1px solid ' + line, flex: '0 0 auto', minWidth: 0
+      }
+    },
+      h('button', {
+        type: 'button', disabled: busy || !canGoUp, title: '上一级',
+        onClick: () => { if (canGoUp) void enter({ path: upTarget }, false) },
+        style: { ...mutedButton, opacity: busy || !canGoUp ? 0.45 : 1, cursor: busy || !canGoUp ? 'default' : 'pointer' }
+      }, '上一级'),
+      h('div', {
+        title: directory || '尚未选择位置',
+        style: {
+          flex: '1 1 auto', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap', color: sub, fontSize: 12,
+          fontFamily: 'Consolas, "Cascadia Mono", monospace'
+        }
+      }, directory || '从左侧选择工作区或磁盘'),
+      h('button', {
+        type: 'button', disabled: busy || !directory, title: '刷新',
+        onClick: () => { if (directory) void enter({ path: directory }, false) },
+        style: { ...mutedButton, opacity: busy || !directory ? 0.45 : 1, cursor: busy || !directory ? 'default' : 'pointer' }
+      }, '刷新'))
+    const listHeader = h('div', {
+      style: {
+        display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 132px 76px 78px', gap: 8,
+        alignItems: 'center', height: 28, padding: '0 14px', color: mute, fontSize: 11, flex: '0 0 auto'
+      }
+    }, h('span', null, '名称'), h('span', null, '修改日期'), h('span', null, '类型'), h('span', { style: { textAlign: 'right' } }, '大小'))
+    let body = null
+    if (!directory) {
+      body = h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', color: mute, fontSize: 12, padding: 24, textAlign: 'center' } },
+        error ? h('span', { role: 'alert', style: { color: danger } }, error) : '从左侧选择工作区或磁盘')
+    } else if (entries === null) {
+      body = h('div', {
+        style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', color: mute, fontSize: 12, padding: 24, textAlign: 'center' }
+      }, error
+        ? h('span', { role: 'alert', style: { color: danger } }, error)
+        : busy ? '正在读取目录…' : '目录暂不可用')
+    } else if (!entries.length) {
+      body = h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', color: mute, fontSize: 12 } }, '空文件夹')
+    } else {
+      body = h('div', { style: { flex: '1 1 auto', minHeight: 0, overflow: 'auto', padding: '0 8px 18px' } },
+        listHeader,
+        entries.map((item) => row(item)))
     }
+    const notice = error && directory && entries !== null
+      ? h('div', { role: 'alert', style: { padding: '6px 14px', color: danger, fontSize: 12, borderBottom: '1px solid ' + line } }, error)
+      : null
+    const busyLine = status
+      ? h('div', { role: 'status', style: { padding: '4px 14px', color: sub, fontSize: 11.5, borderBottom: '1px solid ' + line } }, status)
+      : null
+    const dialog = open ? h('div', {
+      style: {
+        position: 'fixed', inset: 0, zIndex: 2147483000, display: 'flex',
+        alignItems: 'center', justifyContent: 'center', padding: 24,
+        background: 'rgba(16, 24, 40, 0.45)'
+      },
+      onClick: (event) => { if (event && event.target === event.currentTarget) close() }
+    },
+      h('div', {
+        role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'tether-target-file-title',
+        onClick: (event) => { if (event && typeof event.stopPropagation === 'function') event.stopPropagation() },
+        style: {
+          width: 'min(880px, 100%)', height: 'min(600px, 100%)', display: 'flex', flexDirection: 'column',
+          overflow: 'hidden', background: bg, color: ink, border: '1px solid ' + line, borderRadius: 12,
+          boxShadow: 'var(--dsw-elevation-panel, 0 24px 64px rgba(16, 24, 40, 0.28))', font: 'inherit'
+        }
+      },
+        h('div', {
+          style: {
+            display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px',
+            borderBottom: '1px solid ' + line, flex: '0 0 auto'
+          }
+        },
+          h('div', { style: { minWidth: 0, flex: '1 1 auto' } },
+            h('div', { id: 'tether-target-file-title', style: { fontSize: 15, fontWeight: 600, color: ink } }, '从目标电脑选择文件'),
+            h('div', {
+              style: {
+                marginTop: 2, color: mute, fontSize: 11.5, overflow: 'hidden',
+                textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+              }
+            }, device ? '目标电脑 · ' + device : '正在确认目标电脑…')),
+          h('button', {
+            type: 'button', 'aria-label': '关闭', title: '关闭', onClick: close,
+            style: {
+              width: 28, height: 28, flex: '0 0 auto', border: 0, borderRadius: 6,
+              background: 'transparent', color: sub, fontSize: 18, lineHeight: '22px',
+              cursor: 'pointer'
+            }
+          }, '×')),
+        h('div', { style: { display: 'flex', flex: '1 1 auto', minHeight: 0 } },
+          h('div', {
+            style: {
+              width: 224, flex: '0 0 auto', overflow: 'auto', padding: '6px 8px',
+              background: soft, borderRight: '1px solid ' + line
+            }
+          },
+            rootGroup('工作区', workspaces, '未发现工作区'),
+            rootGroup('此电脑', drives, '未发现磁盘')),
+          h('div', {
+            style: { display: 'flex', flexDirection: 'column', flex: '1 1 auto', minWidth: 0, minHeight: 0, background: bg }
+          },
+            toolbar,
+            busyLine,
+            notice,
+            body)),
+        h('div', {
+          style: {
+            display: 'flex', alignItems: 'center', gap: 12, padding: '10px 18px',
+            borderTop: '1px solid ' + line, flex: '0 0 auto'
+          }
+        },
+          h('span', { style: { flex: '1 1 auto', color: mute, fontSize: 11.5 } }, '文件从目标电脑读取，单个附件上限 10 MiB。'),
+          h('button', { type: 'button', onClick: close, style: mutedButton }, '取消')))
+      ) : null
     return h('div', { ref: containerRef, style: { display: 'contents' } },
       h(Native.ComposerAttachments, { ...props, readFileDrag: props.readFileDrag }),
       h('div', { style: { display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 } },
-        h('button', { type: 'button', onClick: openLocalPicker, disabled: busy || !props.canAcceptDrop || !props.sessionId, style: buttonStyle }, '本机文件…')),
-      picker)
+        h('button', {
+          type: 'button', title: '从当前目标电脑选择文件',
+          onClick: () => { void openPicker() }, disabled: busy,
+          style: { ...mutedButton, cursor: busy ? 'default' : 'pointer' }
+        }, '目标电脑文件…')),
+      dialog)
   }
 }
 

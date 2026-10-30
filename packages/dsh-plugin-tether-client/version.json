@@ -1,6 +1,6 @@
 {
-  "version": "0.2.29",
-  "notes": "Tether client auth scoping, native attachment routing, and update-state race fixes.",
+  "version": "0.2.30",
+  "notes": "Target-computer file explorer modal for workspaces and This PC, served by the node's same-origin /tether-device-fs raw-byte API.",
   "download": "https://github.com/qi001007/tether-harness",
   "install": "git pull && powershell -ExecutionPolicy Bypass -File desktop/install-plugin.ps1"
 }

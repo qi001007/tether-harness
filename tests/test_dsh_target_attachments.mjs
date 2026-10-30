@@ -5,48 +5,115 @@ import test from 'node:test'
 import {
   addDshTargetAttachment,
   createDshTargetAttachments,
-  createDshTargetFilesBridge,
+  createDshTargetExplorerBridge,
   DSH_TARGET_ATTACHMENT_CHUNK,
   DSH_TARGET_ATTACHMENT_LIMIT
 } from '../packages/tether-ui/src/hosts/dsh.js'
 
-function fixture({ deviceIds = ['LAPTOP-01'], payload = new Uint8Array(), fileName = 'file.txt', listFailure = false, readFailure = false, versions = [] } = {}) {
+const APP_BASE = 'http://127.0.0.1:18892'
+const NODE_BASE = 'http://127.0.0.1:18890'
+
+function jsonResponse(data) {
+  return { ok: true, status: 200, async json() { return data } }
+}
+
+function errorResponse(status, data) {
+  return { ok: false, status, async json() { return data } }
+}
+
+function world(options = {}) {
+  const deviceId = options.deviceId || 'LAPTOP-01'
+  const payload = options.payload || Buffer.from('hello from the target computer')
+  const fileName = options.fileName || 'notes.txt'
+  const fileSize = Number.isSafeInteger(options.fileSize) ? options.fileSize : payload.length
+  const drives = options.drives || [
+    { name: '系统盘 (C:)', path: 'C:\\' },
+    { name: '数据盘 (D:)', path: 'D:\\' }
+  ]
+  const workspaces = options.workspaces || [
+    { id: 'default', name: 'session-workspace', path: 'C:\\work\\session-workspace', kind: 'session' },
+    { id: 'other', name: 'other-workspace', path: 'C:\\work\\other-workspace', kind: 'manual' }
+  ]
+  const listings = options.listings || {
+    'C:\\': [{ name: 'work', path: 'C:\\work', dir: true, mtime: 1725000000 }],
+    'C:\\work': [{ name: 'session-workspace', path: 'C:\\work\\session-workspace', dir: true, mtime: 1725000000 }],
+    'C:\\work\\session-workspace': [
+      { name: 'src', path: 'C:\\work\\session-workspace\\src', dir: true, mtime: 1725000000 },
+      {
+        name: fileName, path: 'C:\\work\\session-workspace\\' + fileName,
+        dir: false, size: fileSize, mtime: 1725000000
+      }
+    ],
+    'C:\\work\\other-workspace': [{ name: 'data', path: 'C:\\work\\other-workspace\\data', dir: true, mtime: 1725000000 }],
+    'D:\\': []
+  }
+  const requests = []
+  const identityCalls = []
   let identityIndex = 0
-  const lists = []
-  const reads = []
-  const getRpc = () => ({ call: async (route, action) => {
-    assert.equal(route, '/tether-identity')
-    assert.equal(action, 'get')
-    const device_id = deviceIds[Math.min(identityIndex++, deviceIds.length - 1)]
-    return { ok: true, value: { device_id } }
-  } })
-  const getRemote = () => ({ workspaceFiles: {
-    list: async (sessionId, path) => {
-      lists.push({ sessionId, path })
-      if (listFailure) return { ok: false, error: new Error('workspace denied') }
-      if (path === '.') return { ok: true, value: { entries: [
-        { name: 'src', type: 'directory' },
-        { name: fileName, type: 'file', size: payload.length }
-      ] } }
-      if (path === 'src') return { ok: true, value: { entries: [
-        { name: 'nested.txt', type: 'file', size: payload.length }
-      ] } }
-      return { ok: false, error: new Error('outside workspace') }
-    },
-    readBytes: async (sessionId, path, options) => {
-      reads.push({ sessionId, path, options })
-      if (readFailure) return { ok: false, error: new Error('read denied') }
-      const { offset, length } = options.range
-      const data = payload.slice(offset, offset + length)
-      return { ok: true, value: { absolutePath: '/workspace/file', version: versions[reads.length - 1] || 'v1', offset, bytes: payload.length, data } }
+  const getRpc = options.getRpc || (() => ({
+    call: async (route, action) => {
+      assert.equal(route, '/tether-identity')
+      assert.equal(action, 'get')
+      const index = identityIndex++
+      identityCalls.push(index)
+      let value = deviceId
+      if (typeof options.identity === 'function') value = options.identity(index)
+      if (value instanceof Error) throw value
+      return { ok: true, value: value === null ? {} : { device_id: value } }
     }
-  } })
-  const bridge = createDshTargetFilesBridge({
-    getRpc,
-    getRemote,
-    makeFile: (chunks, name, options) => ({ chunks, name, options, size: chunks.reduce((n, part) => n + part.length, 0) })
+  }))
+  const host = options.host || {
+    activeApiBase: () => APP_BASE,
+    apiBases: () => [APP_BASE, NODE_BASE],
+    apiHeaders: () => ({})
+  }
+  const fetcher = options.fetcher || (async (url, init = {}) => {
+    const parsed = new URL(url)
+    const path = parsed.pathname
+    const body = init.body ? JSON.parse(init.body) : null
+    requests.push({
+      base: parsed.origin, method: init.method || 'GET', path, body,
+      url: String(url), credentials: init.credentials, headers: init.headers || {}
+    })
+    if (options.offline) throw new TypeError('fetch failed')
+    if (path === '/api/devices/' + deviceId + '/drives' || path === '/tether-device-fs/drives') {
+      return jsonResponse({ drives, device_id: options.echoDeviceId || deviceId })
+    }
+    if (path === '/api/devices/' + deviceId + '/workspaces' || path === '/tether-device-fs/workspaces') {
+      return jsonResponse({ root: workspaces[0]?.path || '', workspaces, device_id: options.echoDeviceId || deviceId })
+    }
+    if (path === '/api/devices/' + deviceId + '/fs/list' || path === '/tether-device-fs/list') {
+      if (options.listFailure) return errorResponse(503, { detail: { code: 'device_offline', error: 'device offline' } })
+      const entries = listings[body.path]
+      if (!entries) return errorResponse(404, { detail: { code: 'not_found', error: 'directory not found' } })
+      return jsonResponse({ path: body.path, entries, writable: true, device_id: options.echoDeviceId || deviceId })
+    }
+    if (path === '/api/devices/' + deviceId + '/fs/read' || path === '/tether-device-fs/read') {
+      if (options.readFailure) return errorResponse(500, { detail: { code: 'denied', error: 'read denied' } })
+      if (options.beforeRead) await options.beforeRead(body)
+      const bytes = payload.subarray(body.offset, body.offset + body.limit)
+      const base = {
+        path: body.path, size: fileSize, offset: body.offset,
+        truncated: body.offset + bytes.length < fileSize,
+        mtime: 1725000000, device_id: options.echoDeviceId || deviceId
+      }
+      if (options.textMode) return jsonResponse({ ...base, binary: false, text: Buffer.from(bytes).toString('utf8') })
+      return jsonResponse({ ...base, binary: true, base64: Buffer.from(bytes).toString('base64') })
+    }
+    return errorResponse(404, { detail: { code: 'not_found', error: 'no route' } })
   })
-  return { bridge, lists, reads }
+  const files = []
+  const bridge = createDshTargetExplorerBridge({
+    getRpc,
+    getHost: () => host,
+    fetcher,
+    makeFile: (chunks, name, fileOptions) => {
+      const file = { chunks, name, options: fileOptions, size: chunks.reduce((total, part) => total + part.length, 0) }
+      files.push(file)
+      return file
+    }
+  })
+  return { bridge, requests, identityCalls, host, payload, files, deviceId }
 }
 
 function componentHarness(component, props, React) {
@@ -107,164 +174,188 @@ function findElement(node, predicate) {
   return null
 }
 
-test('listing and file reads use the native owner identity and active session workspace API', async () => {
-  const { bridge, lists } = fixture()
-  const root = await bridge.getRoots('SESSION-1')
-  const entries = await bridge.listDirectory('SESSION-1', 'src')
-  assert.equal(root.root.path, '.')
-  assert.equal(root.entries[0].path, 'src')
-  assert.equal(entries[0].path, 'src/nested.txt')
-  assert.deepEqual(lists, [
-    { sessionId: 'SESSION-1', path: '.' },
-    { sessionId: 'SESSION-1', path: 'src' }
-  ])
-})
-
-test('only a file returned by a scoped workspace listing can be read', async () => {
-  const { bridge, reads } = fixture({ payload: new Uint8Array([0xff]) })
-  await assert.rejects(bridge.readFile('SESSION-1', { name: 'private.txt', path: 'private.txt', size: 1 }), /刚列出的文件/)
-  assert.equal(reads.length, 0)
-  await assert.rejects(bridge.listDirectory('SESSION-1', 'C:/'), /已列出的目录/)
-  const root = await bridge.getRoots('SESSION-1')
-  await assert.rejects(bridge.readFile('SESSION-2', root.entries[1]), /刚列出的文件/)
-  assert.equal(reads.length, 0)
-})
-
-test('selected target file is delivered through onAddFiles without text decoding', async () => {
-  const payload = new Uint8Array(DSH_TARGET_ATTACHMENT_CHUNK + 7)
-  payload.fill(0x41)
-  payload[DSH_TARGET_ATTACHMENT_CHUNK - 1] = 0xe2
-  payload[DSH_TARGET_ATTACHMENT_CHUNK] = 0x82
-  payload[DSH_TARGET_ATTACHMENT_CHUNK + 1] = 0xac
-  payload[DSH_TARGET_ATTACHMENT_CHUNK + 2] = 0xff
-  const { bridge, reads } = fixture({ payload })
-  const root = await bridge.getRoots('SESSION-1')
-  const files = []
-  const file = await addDshTargetAttachment({ onAddFiles: batch => files.push(...batch) }, bridge,
-    'SESSION-1', root.entries[1])
-  const restored = Buffer.concat(file.chunks.map(part => Buffer.from(part)))
-  assert.deepEqual(restored, Buffer.from(payload))
-  assert.equal(file.name, 'file.txt')
-  assert.deepEqual(files, [file])
-  assert.deepEqual(reads.map(item => item.options.range.offset), [0, DSH_TARGET_ATTACHMENT_CHUNK])
-  assert.ok(reads.every(item => item.sessionId === 'SESSION-1' && item.path === 'file.txt'))
-})
-
-test('changed file versions across byte chunks are rejected and image MIME types are preserved', async () => {
-  const payload = new Uint8Array(DSH_TARGET_ATTACHMENT_CHUNK + 1).fill(0x89)
-  const changed = fixture({ payload, versions: ['v1', 'v2'] })
-  const changedRoot = await changed.bridge.getRoots('SESSION-1')
-  let attached = false
-  await assert.rejects(addDshTargetAttachment({ onAddFiles: () => { attached = true } }, changed.bridge,
-    'SESSION-1', changedRoot.entries[1]), /字节不完整/)
-  assert.equal(attached, false)
-
-  const image = fixture({ payload: new Uint8Array([0x89]), fileName: 'picture.PNG' })
-  const root = await image.bridge.getRoots('SESSION-1')
-  const file = await image.bridge.readFile('SESSION-1', root.entries[1])
-  assert.equal(file.options.type, 'image/png')
-})
-
-test('target picker uses the remote workspace API and retains the native attachment/drop contract', () => {
-  const buildSource = fs.readFileSync(new URL('../packages/tether-ui/scripts/build.mjs', import.meta.url), 'utf8')
-  assert.match(buildSource, /typeof ctx\.connection\.rpc\.call === 'function'[\s\S]*ctx\.remote\.workspaceFiles/)
-  assert.match(buildSource, /priority: -1000, locale: 'conversation'/)
-  assert.match(buildSource, /inject: \(sessionId\) => \(\{ sessionId \}\)/)
-  assert.match(buildSource, /'uiWorkspace', 'sessions'/)
-  assert.doesNotMatch(buildSource, /ctx\.fileDrag/)
-
-  const nativeUiPackage = JSON.parse(fs.readFileSync(new URL('../packages/tether-dsh-native-ui/package.json', import.meta.url), 'utf8'))
-  assert.equal(nativeUiPackage.dependencies['@deepseek-ai/dsh-client-ui-attachment'], undefined)
-
-  const readFileDrag = () => new File([], 'drop.txt')
-  const translate = key => key
-  const React = {
-    Fragment: 'fragment',
-    createElement: (type, props, ...children) => ({ type, props, children }),
-    useState: initial => [initial, () => {}],
-    useRef: current => ({ current }),
-    useEffect: () => {}
+function findPath(node, predicate, path = []) {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const match = findPath(child, predicate, path)
+      if (match) return match
+    }
+    return null
   }
-  const Native = { ComposerAttachments: props => ({ type: 'native-attachments', props }) }
-  const Wrapper = createDshTargetAttachments(React, Native, {})
-  const tree = Wrapper({ readFileDrag, t: translate, sessionId: undefined, canAcceptDrop: false })
-  assert.equal(tree.children[0].type, Native.ComposerAttachments)
-  assert.equal(tree.children[0].props.readFileDrag, readFileDrag)
-  assert.equal(tree.children[0].props.t, translate)
-})
+  if (!node || typeof node !== 'object') return null
+  const next = [...path, node]
+  if (predicate(node)) return next
+  for (const child of node.children || []) {
+    const match = findPath(child, predicate, next)
+    if (match) return match
+  }
+  return null
+}
 
-test('Composer plus opens the scoped remote picker and its local-file button still opens the native picker', async () => {
-  const previousDocument = globalThis.document
+function nodeText(node) {
+  if (Array.isArray(node)) return node.map(nodeText).join('')
+  if (node === null || node === undefined) return ''
+  if (typeof node !== 'object') return String(node)
+  return (node.children || []).map(nodeText).join('')
+}
+
+function buttonByText(tree, label) {
+  return findElement(tree, (node) => node.type === 'button' && nodeText(node).includes(label))
+}
+
+function buttonByTitle(tree, title) {
+  return findElement(tree, (node) => node.type === 'button' && node.props?.title === title)
+}
+
+function createReact() {
+  return {
+    Fragment: 'fragment',
+    createElement(type, props, ...children) { return { type, props: props || {}, children } }
+  }
+}
+
+function createNative() {
+  return {
+    ComposerAttachments: (props) => ({ type: 'native-attachments', props }),
+    FileTypeIcon: (props) => ({ type: 'file-type-icon', props })
+  }
+}
+
+function mount(w, options = {}) {
+  const React = createReact()
+  const Native = createNative()
+  const added = []
+  const Component = createDshTargetAttachments(
+    React, Native, w.bridge, options.pickerCommand, options.uiWorkspace, options.sessions
+  )
+  const props = {
+    sessionId: 'SESSION-1', canAcceptDrop: true, attachments: [],
+    onAddFiles: (files) => added.push(...files),
+    readFileDrag: () => null,
+    ...options.props
+  }
+  const harness = componentHarness(Component, props, React)
+  harness.render()
+  return { harness, added, React, Native, props }
+}
+
+async function flush(times = 6) {
+  for (let index = 0; index < times; index += 1) await new Promise((resolve) => setImmediate(resolve))
+}
+
+function installFakeDocument() {
   const listeners = []
-  let nativeDialogOpens = 0
-  const composerParent = { parentElement: null, querySelectorAll(selector) {
-    assert.equal(selector, 'input[type="file"][hidden]')
-    return [input]
-  } }
   const document = {
     addEventListener(type, listener, capture) { if (type === 'click' && capture) listeners.push(listener) },
     removeEventListener(type, listener) { const index = listeners.indexOf(listener); if (index >= 0) listeners.splice(index, 1) }
   }
+  return { document, listeners }
+}
+
+function makeHiddenInput(listeners) {
   const input = {
-    tagName: 'INPUT', type: 'file', hidden: true,
+    tagName: 'INPUT', type: 'file', hidden: true, opens: 0,
     click() {
       const event = {
-        target: input, defaultPrevented: false, propagationStopped: false, immediateStopped: false,
+        target: input, defaultPrevented: false,
         preventDefault() { this.defaultPrevented = true },
-        stopPropagation() { this.propagationStopped = true },
-        stopImmediatePropagation() { this.immediateStopped = true }
+        stopPropagation() {},
+        stopImmediatePropagation() {}
       }
       for (const listener of [...listeners]) listener(event)
-      if (!event.defaultPrevented) nativeDialogOpens += 1
-      this.lastClick = event
+      if (!event.defaultPrevented) input.opens += 1
+      return event
     }
   }
-  globalThis.document = document
-  const payload = new Uint8Array([0x00, 0xff, 0x41, 0x80])
-  const { bridge, lists } = fixture({ payload })
-  const added = []
-  const React = {
-    Fragment: 'fragment',
-    createElement(type, props, ...children) { return { type, props: props || {}, children } }
-  }
-  const Native = { ComposerAttachments: props => ({ type: 'native-attachments', props }) }
-  const Component = createDshTargetAttachments(React, Native, bridge)
-  const props = { sessionId: 'SESSION-1', canAcceptDrop: true, attachments: [], onAddFiles: files => added.push(...files) }
-  const harness = componentHarness(Component, props, React)
-  try {
-    harness.render()
-    const container = findElement(harness.output(), node => node.type === 'div' && node.props.ref)
-    assert.ok(container)
-    container.props.ref.current = { parentElement: composerParent }
-    input.click() // the same hidden input the native Composer plus button clicks
-    input.click() // repeated clicks while listing is busy must not duplicate the request
-    assert.equal(input.lastClick.defaultPrevented, true)
-    assert.equal(input.lastClick.immediateStopped, true)
-    const otherInput = { tagName: 'INPUT', type: 'file', hidden: true }
-    const unrelatedClick = { target: otherInput, defaultPrevented: false, preventDefault() { this.defaultPrevented = true } }
-    for (const listener of [...listeners]) listener(unrelatedClick)
-    assert.equal(unrelatedClick.defaultPrevented, false, 'other hidden file inputs keep their native behavior')
-    nativeDialogOpens += 1
-    await new Promise(resolve => setImmediate(resolve))
-    await new Promise(resolve => setImmediate(resolve))
-    let tree = harness.render()
-    assert.equal(lists.length, 1, 'repeated plus clicks while busy do not duplicate remote requests')
-    assert.equal(lists[0].path, '.', 'plus opens the remote session workspace')
-    const fileButton = findElement(tree, node => node.type === 'button' && String(node.children?.[0]).startsWith('📄 file.txt'))
-    assert.ok(fileButton, 'the real remote picker renders the listed target file: ' + JSON.stringify(tree))
-    fileButton.props.onClick()
-    await new Promise(resolve => setImmediate(resolve))
-    await new Promise(resolve => setImmediate(resolve))
-    assert.equal(added.length, 1, 'the selected target file reaches Composer onAddFiles')
-    assert.deepEqual(Buffer.concat(added[0].chunks.map(part => Buffer.from(part))), Buffer.from(payload),
-      'the remote picker preserves original bytes without text decoding')
+  return input
+}
 
+test('target explorer lists every drive and workspace, then their real directories and files', async () => {
+  const w = world()
+  const roots = await w.bridge.getRoots()
+  assert.equal(roots.deviceId, 'LAPTOP-01')
+  assert.deepEqual(roots.drives.map((drive) => drive.name), ['系统盘 (C:)', '数据盘 (D:)'])
+  assert.deepEqual(roots.workspaces.map((workspace) => workspace.path), [
+    'C:\\work\\session-workspace', 'C:\\work\\other-workspace'
+  ])
+  const other = await w.bridge.listDirectory('C:\\work\\other-workspace')
+  assert.deepEqual(other.map((entry) => [entry.name, entry.dir]), [['data', true]])
+  const drive = await w.bridge.listDirectory('C:\\')
+  assert.deepEqual(drive.map((entry) => entry.name), ['work'])
+  await assert.rejects(w.bridge.listDirectory('C:\\Windows'), /已列出的目录/)
+  await assert.rejects(w.bridge.listDirectory('C:\\work\\session-workspace\\src'), /已列出的目录/)
+  assert.deepEqual(w.requests.map((request) => request.path), [
+    '/api/devices/LAPTOP-01/drives',
+    '/api/devices/LAPTOP-01/workspaces',
+    '/api/devices/LAPTOP-01/fs/list',
+    '/api/devices/LAPTOP-01/fs/list'
+  ])
+  assert.ok(w.requests.every((request) => request.base === APP_BASE), 'the APP device proxy is used, not a local file dialog')
+  assert.deepEqual(w.requests[2].body, { path: 'C:\\work\\other-workspace' })
+})
+
+test('both composer entry points open one modal dialog showing workspaces and drives of the owning computer', async () => {
+  const previousDocument = globalThis.document
+  const { document, listeners } = installFakeDocument()
+  globalThis.document = document
+  const input = makeHiddenInput(listeners)
+  const w = world()
+  const pickerCommand = { open: null, pendingSessionStart: null }
+  const { harness } = mount(w, { pickerCommand })
+  try {
+    harness.output()
+    const container = findElement(harness.output(), (node) => node.type === 'div' && node.props.ref)
+    container.props.ref.current = { parentElement: { parentElement: null, querySelectorAll: () => [input] } }
+    assert.equal(typeof pickerCommand.open, 'function', 'the Composer plus-menu action is registered')
+    assert.equal(findElement(harness.output(), (node) => node.props?.role === 'dialog'), null)
+
+    const click = input.click()
+    assert.equal(click.defaultPrevented, true, 'the plus-menu file action is routed to the target explorer')
+    assert.equal(input.opens, 0, 'the operator local file dialog never opens')
+    await flush()
+    let tree = harness.render()
+    const path = findPath(tree, (node) => node.props?.role === 'dialog')
+    assert.ok(path, 'the plus-menu action opens the modal dialog')
+    const dialog = path[path.length - 1]
+    const overlay = path[path.length - 2]
+    assert.equal(dialog.props['aria-modal'], 'true')
+    assert.equal(dialog.props['aria-labelledby'], 'tether-target-file-title')
+    assert.equal(overlay.props.style.position, 'fixed', 'the explorer is a fixed overlay, not an inline block')
+    assert.equal(overlay.props.style.inset, 0)
+    assert.equal(dialog.props.style.position, undefined)
+    assert.match(nodeText(dialog), /从目标电脑选择文件/)
+    assert.match(nodeText(dialog), /目标电脑 · LAPTOP-01/)
+    assert.ok(findElement(dialog, (node) => node.props?.['aria-label'] === '关闭'), 'the dialog has a close control')
+    assert.match(nodeText(dialog), /工作区/)
+    assert.match(nodeText(dialog), /此电脑/)
+    assert.match(nodeText(dialog), /session-workspace/, 'the session workspace is listed')
+    assert.match(nodeText(dialog), /other-workspace/, 'every workspace on the computer is listed')
+    assert.match(nodeText(dialog), /系统盘 \(C:\)/)
+    assert.match(nodeText(dialog), /数据盘 \(D:\)/)
+    assert.match(nodeText(dialog), /单个附件上限 10 MiB/)
+    assert.doesNotMatch(nodeText(tree), /本机文件/)
+
+    const otherRoot = buttonByTitle(tree, 'C:\\work\\other-workspace')
+    assert.ok(otherRoot, 'the popup offers the workspace that is not the session default')
+    otherRoot.props.onClick()
+    await flush()
     tree = harness.render()
-    const localButton = findElement(tree, node => node.type === 'button' && node.children?.[0] === '本机文件…')
-    assert.ok(localButton, 'local upload remains as an explicit secondary action')
-    const nativeOpensBeforeLocal = nativeDialogOpens
-    localButton.props.onClick()
-    assert.equal(nativeDialogOpens, nativeOpensBeforeLocal + 1, 'the explicit local action bypasses the remote default')
+    assert.deepEqual(w.requests.at(-1).body, { path: 'C:\\work\\other-workspace' })
+    assert.ok(buttonByTitle(tree, 'C:\\work\\other-workspace\\data'), 'the popup lists directories of another workspace')
+
+    findElement(tree, (node) => node.props?.['aria-label'] === '关闭').props.onClick()
+    tree = harness.render()
+    assert.equal(findElement(tree, (node) => node.props?.role === 'dialog'), null, 'the close control dismisses the dialog')
+
+    const extra = buttonByText(tree, '目标电脑文件…')
+    assert.ok(extra, 'the extra composer button is labelled as the target computer, not the operator')
+    assert.equal(extra.props.title, '从当前目标电脑选择文件')
+    extra.props.onClick()
+    await flush()
+    tree = harness.render()
+    assert.ok(findElement(tree, (node) => node.props?.role === 'dialog'), 'the extra button opens the same modal explorer')
+    assert.equal((JSON.stringify(tree).match(/"role":"dialog"/g) || []).length, 1, 'both entry points share one dialog')
+    assert.equal(input.opens, 0)
     assert.equal(listeners.length, 1, 'the hidden input listener is installed once')
   } finally {
     harness.dispose()
@@ -273,212 +364,298 @@ test('Composer plus opens the scoped remote picker and its local-file button sti
   }
 })
 
-test('multiple Composer attachment slots stay session-bound and no-session plus clicks never fall back to native picker', async () => {
-  const previousDocument = globalThis.document
-  const listeners = []
-  globalThis.document = {
-    addEventListener(type, listener, capture) { if (type === 'click' && capture) listeners.push(listener) },
-    removeEventListener(type, listener) { const index = listeners.indexOf(listener); if (index >= 0) listeners.splice(index, 1) }
-  }
-  const makeInput = () => ({ tagName: 'INPUT', type: 'file', hidden: true, click() {
-    const event = { target: this, prevented: false, preventDefault() { this.prevented = true }, stopPropagation() {}, stopImmediatePropagation() {} }
-    for (const listener of [...listeners]) listener(event)
-    return event
-  } })
-  const React = { Fragment: 'fragment', createElement(type, props, ...children) { return { type, props: props || {}, children } } }
-  const Native = { ComposerAttachments: props => ({ type: 'native-attachments', props }) }
-  const inputs = [makeInput(), makeInput(), makeInput()]
-  const fixtures = [fixture(), fixture(), fixture()]
-  const harnesses = fixtures.map(({ bridge }, index) => {
-    const Component = createDshTargetAttachments(React, Native, bridge)
-    const harness = componentHarness(Component, { sessionId: index < 2 ? `SESSION-${index}` : undefined, canAcceptDrop: true, attachments: [], onAddFiles() {} }, React)
-    harness.render()
-    const container = findElement(harness.output(), node => node.type === 'div' && node.props.ref)
-    container.props.ref.current = { parentElement: {
-      parentElement: null,
-      querySelectorAll() { return [inputs[index]] }
-    } }
-    return harness
-  })
+test('choosing a file reads its bytes from the target device fs API and passes them to onAddFiles', async () => {
+  const payload = Buffer.alloc(DSH_TARGET_ATTACHMENT_CHUNK + 7)
+  for (let index = 0; index < payload.length; index += 1) payload[index] = (index * 31) & 0xff
+  const w = world({ payload, fileName: 'photo.PNG' })
+  const { harness, added } = mount(w)
   try {
-    const clickA = inputs[0].click()
-    assert.equal(clickA.prevented, true, 'the first mounted Composer routes its own input')
-    assert.equal(fixtures[0].lists.length, 0, 'workspace listing starts asynchronously')
-    assert.equal(fixtures[1].lists.length, 0, 'the other session receives no request')
-    const clickB = inputs[1].click()
-    assert.equal(clickB.prevented, true, 'the second mounted Composer routes its own input')
-    const clickWithoutSession = inputs[2].click()
-    assert.equal(clickWithoutSession.prevented, true, 'a composer without a session does not silently open the local picker')
-    await new Promise(resolve => setImmediate(resolve))
-    await new Promise(resolve => setImmediate(resolve))
-    assert.deepEqual(fixtures[0].lists.map(item => item.sessionId), ['SESSION-0'])
-    assert.deepEqual(fixtures[1].lists.map(item => item.sessionId), ['SESSION-1'])
-    assert.deepEqual(fixtures[2].lists, [], 'an unselected composer never reads either session workspace')
-    assert.match(JSON.stringify(harnesses[2].render()), /先在目标设备选择或创建工作区/)
+    const button = buttonByText(harness.output(), '目标电脑文件…')
+    button.props.onClick()
+    await flush()
+    let tree = harness.render()
+    buttonByTitle(tree, 'C:\\work\\session-workspace').props.onClick()
+    await flush()
+    tree = harness.render()
+    const fileRow = buttonByTitle(tree, 'C:\\work\\session-workspace\\photo.PNG')
+    assert.ok(fileRow, 'the selected directory lists its files: ' + nodeText(tree))
+    fileRow.props.onClick()
+    await flush()
+    assert.equal(added.length, 1)
+    const file = added[0]
+    assert.equal(file.name, 'photo.PNG')
+    assert.equal(file.options.type, 'image/png')
+    assert.equal(file.size, payload.length)
+    assert.deepEqual(Buffer.concat(file.chunks.map((part) => Buffer.from(part))), payload,
+      'the explorer keeps original bytes instead of text decoding')
+    const reads = w.requests.filter((request) => request.path.endsWith('/fs/read'))
+    assert.deepEqual(reads.map((request) => request.body.offset), [0, DSH_TARGET_ATTACHMENT_CHUNK])
+    assert.ok(reads.every((request) => request.body.path === 'C:\\work\\session-workspace\\photo.PNG'))
+    assert.ok(reads.every((request) => request.body.limit <= DSH_TARGET_ATTACHMENT_CHUNK))
+    assert.equal(findElement(harness.render(), (node) => node.props?.role === 'dialog'), null, 'a picked file closes the dialog')
   } finally {
-    for (const harness of harnesses) harness.dispose()
-    if (previousDocument === undefined) delete globalThis.document
-    else globalThis.document = previousDocument
+    harness.dispose()
   }
 })
 
-test('new-draft plus click creates one official blank session, then resumes the target picker with current intake callback', async () => {
-  const previousDocument = globalThis.document
-  const listeners = []
-  let nativeDialogOpens = 0
-  const input = {
-    tagName: 'INPUT', type: 'file', hidden: true,
-    click() {
-      const event = { target: input, defaultPrevented: false, preventDefault() { this.defaultPrevented = true }, stopPropagation() {}, stopImmediatePropagation() {} }
-      for (const listener of [...listeners]) listener(event)
-      if (!event.defaultPrevented) nativeDialogOpens += 1
-      return event
+test('a non-UTF-8 attachment is read as base64 and comes back byte-identical', async () => {
+  const payload = Buffer.from([0xd6, 0xd0, 0xce, 0xc4, 0xb8, 0xbd, 0xbc, 0xfe, 0x0a])
+  assert.equal(payload.includes(0), false, 'the fixture has no NUL byte and would be decoded as text by the old node')
+  const w = world({ payload, fileName: 'legacy.txt' })
+  const { harness, added } = mount(w)
+  try {
+    buttonByText(harness.output(), '目标电脑文件…').props.onClick()
+    await flush()
+    buttonByTitle(harness.render(), 'C:\\work\\session-workspace').props.onClick()
+    await flush()
+    buttonByTitle(harness.render(), 'C:\\work\\session-workspace\\legacy.txt').props.onClick()
+    await flush()
+    assert.equal(added.length, 1)
+    assert.deepEqual(Buffer.concat(added[0].chunks.map((part) => Buffer.from(part))), payload,
+      'GBK bytes survive the read unchanged')
+    const reads = w.requests.filter((request) => request.path.endsWith('/fs/read'))
+    assert.ok(reads.length > 0)
+    assert.ok(reads.every((request) => request.body.encoding === 'base64'),
+      'the attachment read asks for exact base64 bytes')
+  } finally {
+    harness.dispose()
+  }
+})
+
+test('a text-only read response is refused instead of attaching a re-encoded string', async () => {
+  const w = world({ payload: Buffer.from('plain text attachment\n'), fileName: 'notes.txt', textMode: true })
+  const { harness, added } = mount(w)
+  try {
+    buttonByText(harness.output(), '目标电脑文件…').props.onClick()
+    await flush()
+    buttonByTitle(harness.render(), 'C:\\work\\session-workspace').props.onClick()
+    await flush()
+    buttonByTitle(harness.render(), 'C:\\work\\session-workspace\\notes.txt').props.onClick()
+    await flush()
+    assert.equal(added.length, 0, 'no re-encoded string is attached')
+    assert.match(nodeText(harness.render()), /原始字节/)
+  } finally {
+    harness.dispose()
+  }
+})
+
+test('the native surface page calls only its own origin with credentials', async () => {
+  const previousWindow = globalThis.window
+  globalThis.window = {
+    location: {
+      href: 'https://g1.example/?tether_native=1',
+      origin: 'https://g1.example',
+      search: '?tether_native=1'
+    },
+    localStorage: { getItem: () => JSON.stringify({ url: 'https://hub.example', token: 'hub-secret' }) }
+  }
+  try {
+    const payload = Buffer.from([0xd6, 0xd0, 0xce, 0xc4, 0x0a])
+    const w = world({
+      payload,
+      fileName: 'legacy.txt',
+      host: {
+        activeApiBase: () => { throw new Error('the surface page must not use the Hub') },
+        apiBases: () => { throw new Error('the surface page must not use the Hub') },
+        apiHeaders: () => { throw new Error('the surface page must not use the Hub token') }
+      }
+    })
+    const roots = await w.bridge.getRoots()
+    assert.equal(roots.deviceId, 'LAPTOP-01')
+    const entries = await w.bridge.listDirectory('C:\\work\\session-workspace')
+    const file = await w.bridge.readFile(entries.find((entry) => !entry.dir))
+    assert.deepEqual(Buffer.concat(file.chunks.map((part) => Buffer.from(part))), payload)
+    assert.ok(w.requests.length >= 4)
+    for (const request of w.requests) {
+      assert.equal(request.base, 'https://g1.example')
+      assert.ok(request.url.startsWith('https://g1.example/tether-device-fs/'), request.url)
+      assert.equal(request.credentials, 'include', 'the surface cookie is sent')
+      assert.equal(request.headers.Authorization, undefined, 'the Hub token is never attached')
+      assert.doesNotMatch(request.url, /127\.0\.0\.1|hub\.example/)
     }
-  }
-  const composerParent = { parentElement: null, querySelectorAll: () => [input] }
-  globalThis.document = {
-    addEventListener(type, listener, capture) { if (type === 'click' && capture) listeners.push(listener) },
-    removeEventListener(type, listener) { const index = listeners.indexOf(listener); if (index >= 0) listeners.splice(index, 1) }
-  }
-  const payload = new Uint8Array([0, 255, 65])
-  const { bridge, lists } = fixture({ payload })
-  const React = { Fragment: 'fragment', createElement(type, props, ...children) { return { type, props: props || {}, children } } }
-  const Native = { ComposerAttachments: props => ({ type: 'native-attachments', props }) }
-  let startCalls = 0
-  const uiWorkspace = { startSession() { startCalls += 1 } }
-  const sessions = { list: { getSnapshot: () => ({ ids: ['OLD-SESSION'] }) } }
-  const pickerCommand = { pendingSessionStart: null }
-  const Component = createDshTargetAttachments(React, Native, bridge, pickerCommand, uiWorkspace, sessions)
-  const oldFiles = []
-  const newFiles = []
-  const harness = componentHarness(Component, { canAcceptDrop: true, attachments: [], onAddFiles: files => oldFiles.push(...files) }, React)
-  try {
-    let tree = harness.render()
-    findElement(tree, node => node.type === 'div' && node.props.ref).props.ref.current = { parentElement: composerParent }
-    const firstClick = input.click()
-    assert.equal(firstClick.defaultPrevented, true)
-    assert.equal(nativeDialogOpens, 0, 'the default plus path never opens the local file dialog')
-    assert.equal(startCalls, 1, 'a new-draft click asks the official DSH workspace service for one blank session')
-    assert.ok(pickerCommand.pendingSessionStart)
-    input.click()
-    assert.equal(startCalls, 1, 'repeated clicks while preparing do not create duplicate sessions')
-    assert.match(JSON.stringify(harness.render()), /正在准备目标 DSH 会话/)
-
-    harness.update({ sessionId: 'NEW-SESSION', canAcceptDrop: true, attachments: [], onAddFiles: files => newFiles.push(...files) })
-    tree = harness.render()
-    await new Promise(resolve => setImmediate(resolve))
-    await new Promise(resolve => setImmediate(resolve))
-    assert.equal(pickerCommand.pendingSessionStart, null, 'the pending open intent is consumed by the new session')
-    assert.deepEqual(lists, [{ sessionId: 'NEW-SESSION', path: '.' }], 'the new session opens its authorized workspace once')
-    tree = harness.render()
-    const fileButton = findElement(tree, node => node.type === 'button' && String(node.children?.[0]).startsWith('📄 file.txt'))
-    assert.ok(fileButton)
-    fileButton.props.onClick()
-    await new Promise(resolve => setImmediate(resolve))
-    await new Promise(resolve => setImmediate(resolve))
-    assert.equal(oldFiles.length, 0, 'the old draft callback is not retained across session creation')
-    assert.equal(newFiles.length, 1, 'the new session receives the attachment')
-    assert.deepEqual(Buffer.concat(newFiles[0].chunks.map(part => Buffer.from(part))), Buffer.from(payload))
-    assert.equal(nativeDialogOpens, 0)
+    assert.deepEqual([...new Set(w.requests.map((request) => request.path))].sort(), [
+      '/tether-device-fs/drives', '/tether-device-fs/list',
+      '/tether-device-fs/read', '/tether-device-fs/workspaces'
+    ])
+    const reads = w.requests.filter((request) => request.path.endsWith('/read'))
+    assert.ok(reads.every((request) => request.body.encoding === 'base64'))
+    assert.ok(reads.every((request) => request.body.device_id === 'LAPTOP-01'))
   } finally {
-    harness.dispose()
-    clearTimeout(pickerCommand.pendingSessionStart?.timeoutId)
-    if (previousDocument === undefined) delete globalThis.document
-    else globalThis.document = previousDocument
+    if (previousWindow === undefined) delete globalThis.window
+    else globalThis.window = previousWindow
   }
 })
 
-test('draft picker start failures and a switch to an existing session clear the pending open without local fallback', () => {
-  const previousDocument = globalThis.document
-  const listeners = []
-  let nativeDialogOpens = 0
-  const input = { tagName: 'INPUT', type: 'file', hidden: true, click() {
-    const event = { target: input, defaultPrevented: false, preventDefault() { this.defaultPrevented = true }, stopPropagation() {}, stopImmediatePropagation() {} }
-    for (const listener of [...listeners]) listener(event)
-    if (!event.defaultPrevented) nativeDialogOpens += 1
-    return event
-  } }
-  globalThis.document = {
-    addEventListener(type, listener, capture) { if (type === 'click' && capture) listeners.push(listener) },
-    removeEventListener(type, listener) { const index = listeners.indexOf(listener); if (index >= 0) listeners.splice(index, 1) }
-  }
-  const React = { Fragment: 'fragment', createElement(type, props, ...children) { return { type, props: props || {}, children } } }
-  const Native = { ComposerAttachments: props => ({ type: 'native-attachments', props }) }
-  const { bridge, lists } = fixture()
-  const sessions = { list: { getSnapshot: () => ({ ids: ['EXISTING'] }) } }
-  const pickerCommand = { pendingSessionStart: null }
-  const Component = createDshTargetAttachments(React, Native, bridge, pickerCommand, { startSession() {} }, sessions)
-  const harness = componentHarness(Component, { canAcceptDrop: true, attachments: [], onAddFiles() {} }, React)
-  try {
-    let tree = harness.render()
-    findElement(tree, node => node.type === 'div' && node.props.ref).props.ref.current = { parentElement: { parentElement: null, querySelectorAll: () => [input] } }
-    assert.equal(input.click().defaultPrevented, true)
-    assert.ok(pickerCommand.pendingSessionStart)
-    harness.update({ sessionId: 'EXISTING', canAcceptDrop: true, attachments: [], onAddFiles() {} })
-    harness.render()
-    assert.equal(pickerCommand.pendingSessionStart, null, 'switching to an unrelated pre-existing session cancels the pending draft picker')
-    assert.deepEqual(lists, [], 'the switched session does not receive a stale workspace request')
-    assert.equal(nativeDialogOpens, 0)
-
-    const failedCommand = { pendingSessionStart: null }
-    const failed = createDshTargetAttachments(React, Native, bridge, failedCommand, { startSession() { throw new Error('workspace unavailable') } }, sessions)
-    const failedHarness = componentHarness(failed, { canAcceptDrop: true, attachments: [], onAddFiles() {} }, React)
-    try {
-      tree = failedHarness.render()
-      findElement(tree, node => node.type === 'div' && node.props.ref).props.ref.current = { parentElement: { parentElement: null, querySelectorAll: () => [input] } }
-      assert.equal(input.click().defaultPrevented, true)
-      assert.equal(failedCommand.pendingSessionStart, null)
-      assert.match(JSON.stringify(failedHarness.render()), /workspace unavailable/)
-      assert.equal(nativeDialogOpens, 0, 'a failed remote start never falls back to a local file dialog')
-    } finally { failedHarness.dispose() }
-  } finally {
-    harness.dispose()
-    if (previousDocument === undefined) delete globalThis.document
-    else globalThis.document = previousDocument
-  }
-})
-
-test('oversized files and DSH permission refusals never reach the composer', async () => {
-  let attached = false
-  const tooLarge = fixture({ payload: new Uint8Array(DSH_TARGET_ATTACHMENT_LIMIT + 1) })
-  const root = await tooLarge.bridge.getRoots('SESSION-1')
-  await assert.rejects(
-    addDshTargetAttachment({ onAddFiles: () => { attached = true } }, tooLarge.bridge, 'SESSION-1', root.entries[1]),
-    /10 MiB/
-  )
-  assert.equal(tooLarge.reads.length, 0)
-
-  const denied = fixture({ payload: new Uint8Array([0xff]), readFailure: true })
-  const deniedRoot = await denied.bridge.getRoots('SESSION-1')
-  await assert.rejects(
-    addDshTargetAttachment({ onAddFiles: () => { attached = true } }, denied.bridge, 'SESSION-1', deniedRoot.entries[1]),
-    /read denied/
-  )
-  assert.equal(attached, false)
-
-  const deniedList = fixture({ listFailure: true })
-  await assert.rejects(deniedList.bridge.getRoots('SESSION-1'), /workspace denied/)
-})
-
-test('device, session, and missing-session scopes reject stale attachments', async () => {
-  const switchedDevice = fixture({
-    deviceIds: ['LAPTOP-01', 'LAPTOP-01', 'LAPTOP-01', 'DESKTOP-LOCAL'],
-    payload: new Uint8Array([0xff])
+test('a device switch during a read discards the late bytes and shows the error in the popup', async () => {
+  const payload = Buffer.alloc(DSH_TARGET_ATTACHMENT_CHUNK + 4, 0x41)
+  const w = world({
+    payload,
+    fileName: 'large.bin',
+    identity: (index) => (index >= 4 ? 'DESKTOP-LOCAL' : 'LAPTOP-01')
   })
-  const root = await switchedDevice.bridge.getRoots('SESSION-1')
-  let attached = false
-  await assert.rejects(
-    addDshTargetAttachment({ onAddFiles: () => { attached = true } }, switchedDevice.bridge, 'SESSION-1', root.entries[1]),
-    /设备已切换/
-  )
-  assert.equal(attached, false)
+  const { harness, added } = mount(w)
+  try {
+    buttonByText(harness.output(), '目标电脑文件…').props.onClick()
+    await flush()
+    buttonByTitle(harness.render(), 'C:\\work\\session-workspace').props.onClick()
+    await flush()
+    buttonByTitle(harness.render(), 'C:\\work\\session-workspace\\large.bin').props.onClick()
+    await flush()
+    const tree = harness.render()
+    assert.equal(added.length, 0, 'a read from the previous computer never reaches the Composer')
+    assert.equal(w.requests.filter((request) => request.path.endsWith('/fs/read')).length, 1,
+      'the chunk loop stops after the identity changes')
+    assert.match(nodeText(tree), /目标电脑已切换/)
+    assert.ok(findElement(tree, (node) => node.children?.some?.((child) => child?.props?.role === 'alert')
+      || node.props?.role === 'alert'), 'the popup shows the device switch error')
+  } finally {
+    harness.dispose()
+  }
+})
 
-  const sameDevice = fixture({ payload: new Uint8Array([0xff]) })
-  const sameRoot = await sameDevice.bridge.getRoots('SESSION-1')
-  await assert.rejects(
-    addDshTargetAttachment({ onAddFiles: () => { attached = true } }, sameDevice.bridge, 'SESSION-1', sameRoot.entries[1], () => false),
-    /会话已切换/
-  )
-  await assert.rejects(sameDevice.bridge.getRoots(undefined), /选择一个 DSH 会话/)
-  assert.equal(attached, false)
+test('a session switch discards an in-flight read instead of attaching it to the new session', async () => {
+  let release
+  const gate = new Promise((resolve) => { release = resolve })
+  const w = world({ payload: Buffer.from('late bytes'), beforeRead: () => gate })
+  const { harness, added, props } = mount(w)
+  try {
+    buttonByText(harness.output(), '目标电脑文件…').props.onClick()
+    await flush()
+    buttonByTitle(harness.render(), 'C:\\work\\session-workspace').props.onClick()
+    await flush()
+    buttonByTitle(harness.render(), 'C:\\work\\session-workspace\\notes.txt').props.onClick()
+    await flush(2)
+    assert.equal(w.requests.filter((request) => request.path.endsWith('/fs/read')).length, 1, 'the read is in flight')
+
+    harness.update({ ...props, sessionId: 'SESSION-2' })
+    harness.render()
+    const tree = harness.render()
+    assert.equal(findElement(tree, (node) => node.props?.role === 'dialog'), null, 'switching sessions closes the explorer')
+
+    release()
+    await flush()
+    assert.equal(added.length, 0, 'the late result is discarded')
+  } finally {
+    harness.dispose()
+  }
+})
+
+test('missing identity and unreachable devices surface errors in the popup and never open a local file input', async () => {
+  const missing = world({ identity: () => null })
+  const missingMount = mount(missing)
+  try {
+    buttonByText(missingMount.harness.output(), '目标电脑文件…').props.onClick()
+    await flush()
+    const tree = missingMount.harness.render()
+    assert.match(nodeText(tree), /无法确认目标电脑身份/)
+    assert.equal(findElement(tree, (node) => node.type === 'input'), null, 'no local file input is rendered')
+    assert.equal(missing.requests.length, 0, 'no device request is made without an identity')
+  } finally {
+    missingMount.harness.dispose()
+  }
+
+  const offline = world({ offline: true })
+  const offlineMount = mount(offline)
+  try {
+    buttonByText(offlineMount.harness.output(), '目标电脑文件…').props.onClick()
+    await flush()
+    const tree = offlineMount.harness.render()
+    assert.match(nodeText(tree), /目标电脑不可达/)
+    assert.ok(findElement(tree, (node) => node.props?.role === 'dialog'), 'the popup stays open with the error')
+    assert.equal(findElement(tree, (node) => node.type === 'input'), null)
+    assert.deepEqual([...new Set(offline.requests.map((request) => request.base))], [APP_BASE, NODE_BASE],
+      'both configured authorities are tried before reporting the device unreachable')
+    assert.equal(offlineMount.added.length, 0)
+  } finally {
+    offlineMount.harness.dispose()
+  }
+
+  const denied = world({ listFailure: true })
+  const deniedMount = mount(denied)
+  try {
+    buttonByText(deniedMount.harness.output(), '目标电脑文件…').props.onClick()
+    await flush()
+    buttonByTitle(deniedMount.harness.render(), 'C:\\work\\session-workspace').props.onClick()
+    await flush()
+    const tree = deniedMount.harness.render()
+    assert.match(nodeText(tree), /目标电脑不可达或已离线/)
+    assert.equal(findElement(tree, (node) => node.type === 'input'), null)
+  } finally {
+    deniedMount.harness.dispose()
+  }
+})
+
+test('oversized files are refused before any bytes are read', async () => {
+  const w = world({ payload: Buffer.from([1]), fileSize: DSH_TARGET_ATTACHMENT_LIMIT + 1 })
+  const roots = await w.bridge.getRoots()
+  assert.equal(roots.deviceId, 'LAPTOP-01')
+  const entries = await w.bridge.listDirectory('C:\\work\\session-workspace')
+  const oversized = entries.find((entry) => !entry.dir)
+  await assert.rejects(w.bridge.readFile(oversized), /10 MiB/)
+  assert.equal(w.requests.filter((request) => request.path.endsWith('/fs/read')).length, 0)
+
+  const { harness, added } = mount(w)
+  try {
+    buttonByText(harness.output(), '目标电脑文件…').props.onClick()
+    await flush()
+    buttonByTitle(harness.render(), 'C:\\work\\session-workspace').props.onClick()
+    await flush()
+    const tree = harness.render()
+    assert.match(nodeText(tree), /超过 10 MiB/)
+    const row = buttonByTitle(tree, 'C:\\work\\session-workspace\\notes.txt')
+    assert.equal(row.props.disabled, true)
+    assert.equal(added.length, 0)
+  } finally {
+    harness.dispose()
+  }
+})
+
+test('the picker preserves the native attachment/drop contract', () => {
+  const nativeUiPackage = JSON.parse(fs.readFileSync(new URL('../packages/tether-dsh-native-ui/package.json', import.meta.url), 'utf8'))
+  assert.equal(nativeUiPackage.dependencies['@deepseek-ai/dsh-client-ui-attachment'], undefined)
+  const readFileDrag = () => null
+  const translate = (key) => key
+  const React = {
+    Fragment: 'fragment',
+    createElement: (type, props, ...children) => ({ type, props: props || {}, children }),
+    useState: (initial) => [initial, () => {}],
+    useRef: (current) => ({ current }),
+    useEffect: () => {}
+  }
+  const Native = { ComposerAttachments: (props) => ({ type: 'native-attachments', props }) }
+  const Wrapper = createDshTargetAttachments(React, Native, {})
+  const tree = Wrapper({ readFileDrag, t: translate, sessionId: undefined, canAcceptDrop: false })
+  assert.equal(tree.children[0].type, Native.ComposerAttachments)
+  assert.equal(tree.children[0].props.readFileDrag, readFileDrag)
+  assert.equal(tree.children[0].props.t, translate)
+  assert.equal(buttonByText(tree, '目标电脑文件…').props.title, '从当前目标电脑选择文件')
+})
+
+test('DSH registration wires the device explorer and ships the modal bundle', () => {
+  const build = fs.readFileSync(new URL('../packages/tether-ui/scripts/build.mjs', import.meta.url), 'utf8')
+  assert.match(build, /createDshTargetExplorerBridge\(\{ getRpc: \(\) => localPluginRpc, getHost: \(\) => host \}\)/)
+  assert.match(build, /createDshTargetAttachments\(React, Native, targetFiles, targetFilePicker, ctx\.uiWorkspace, ctx\.sessions\)/)
+  assert.doesNotMatch(build, /remote\.workspaceFiles/)
+  assert.doesNotMatch(build, /ctx\.remote\.workspaceFiles/)
+  assert.match(build, /priority: -1000, locale: 'conversation'/)
+  assert.match(build, /inject: \(sessionId\) => \(\{ sessionId \}\)/)
+  assert.match(build, /'uiWorkspace', 'sessions'/)
+  assert.doesNotMatch(build, /ctx\.fileDrag/)
+
+  const dsh = fs.readFileSync(new URL('../packages/tether-ui/src/hosts/dsh.js', import.meta.url), 'utf8')
+  assert.match(dsh, /createDshTargetExplorerBridge/)
+  assert.match(dsh, /'\/drives'/)
+  assert.match(dsh, /'\/workspaces'/)
+  assert.match(dsh, /'\/fs\/list'/)
+  assert.match(dsh, /'\/fs\/read'/)
+  assert.match(dsh, /role: 'dialog', 'aria-modal': 'true'/)
+  assert.match(dsh, /目标电脑文件…/)
+  assert.doesNotMatch(dsh, /本机文件…/)
+  assert.doesNotMatch(dsh, /createDshTargetFilesBridge/)
+
+  const bundle = fs.readFileSync(new URL('../packages/dsh-plugin-tether-client/lib/client.js', import.meta.url), 'utf8')
+  assert.match(bundle, /createDshTargetExplorerBridge\(\{ getRpc: \(\) => localPluginRpc, getHost: \(\) => host \}\)/)
+  assert.match(bundle, /从目标电脑选择文件/)
+  assert.match(bundle, /'\/fs\/read'/)
+  assert.doesNotMatch(bundle, /本机文件…/)
 })

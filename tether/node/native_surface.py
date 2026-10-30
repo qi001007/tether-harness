@@ -22,6 +22,8 @@ from typing import Any
 import websockets
 import psutil
 
+from .fs_service import FsError
+
 MAX_BODY = 8 * 1024 * 1024
 MAX_FRAME = 8 * 1024 * 1024
 TIMEOUT = 20
@@ -36,6 +38,12 @@ ALLOWED_RESPONSE_HEADERS = {
     "last-modified", "expires", "vary", "x-content-type-options",
 }
 ALLOWED_REQUEST_HEADERS = {"content-type", "accept"}
+DEVICE_FS_PREFIX = "/tether-device-fs/"
+DEVICE_FS_ROUTES = {"drives": "GET", "workspaces": "GET", "list": "POST", "read": "POST"}
+DEVICE_FS_ERROR_STATUS = {
+    "bad_path": 400, "bad_args": 400, "bad_method": 405, "not_dir": 400, "not_file": 400,
+    "not_found": 404, "denied": 403, "too_large": 413, "conflict": 409,
+}
 NATIVE_SURFACE_STYLE = (
     b'<style id="tether-native-surface">'
     b'[class*="sidebarCol"]{border-right:0!important}'
@@ -90,8 +98,9 @@ class NativeSurfaceError(Exception):
 
 
 class NativeSurface:
-    def __init__(self, home: Path) -> None:
+    def __init__(self, home: Path, device_fs: Any = None) -> None:
         self.home = Path(home)
+        self._device_fs = device_fs
         self.descriptor = self.home / "storages" / "tether" / "native-surface.json"
         self._snapshot: tuple[int, int, str] | None = None
         self._origin = ""
@@ -323,6 +332,10 @@ class NativeSurface:
             await self._close_many(stale)
             if op == "status":
                 return {"available": bool(self._snapshot)}
+            if op == "http":
+                path = args.get("path")
+                if isinstance(path, str) and path.startswith(DEVICE_FS_PREFIX):
+                    return await asyncio.to_thread(self._device_fs_http, args)
             if not self._snapshot:
                 raise NativeSurfaceError("native DSH surface unavailable", "unavailable")
             if op == "http":
@@ -374,6 +387,77 @@ class NativeSurface:
         if op == "ws_close":
             return await self._ws_close(args)
         raise NativeSurfaceError("unknown surface operation", "bad_op")
+
+    @staticmethod
+    def _device_fs_json(status: int, payload: dict[str, Any]) -> dict[str, Any]:
+        body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        return {"status": status,
+                "headers": {"content-type": "application/json; charset=utf-8", "cache-control": "no-store"},
+                "body_base64": base64.b64encode(body).decode("ascii")}
+
+    def _device_fs_error(self, status: int, code: str, message: str) -> dict[str, Any]:
+        return self._device_fs_json(status, {"detail": {"code": code, "error": message}})
+
+    def _device_fs_http(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Serve the surface's attachment prefix from this node's own file service."""
+        service = self._device_fs
+        if service is None:
+            return self._device_fs_error(503, "unavailable", "device file service unavailable")
+        method = str(args.get("method") or "GET").upper()
+        raw = args.get("path")
+        parsed = urllib.parse.urlsplit(raw if isinstance(raw, str) else "")
+        if (not isinstance(raw, str) or not parsed.path.startswith(DEVICE_FS_PREFIX)
+                or parsed.scheme or parsed.netloc or parsed.fragment
+                or "\\" in parsed.path or "\r" in raw or "\n" in raw):
+            return self._device_fs_error(400, "bad_path", "invalid device file path")
+        suffix = parsed.path[len(DEVICE_FS_PREFIX):]
+        expected = DEVICE_FS_ROUTES.get(suffix)
+        if expected is None:
+            return self._device_fs_error(404, "not_found", "device file route not found")
+        if method != expected:
+            return self._device_fs_error(405, "bad_method", "device file method not allowed")
+        payload: dict[str, Any] = {}
+        raw_body = args.get("body_base64")
+        if raw_body is not None:
+            try:
+                body = base64.b64decode(raw_body, validate=True)
+            except Exception:
+                return self._device_fs_error(400, "bad_body", "invalid request body")
+            if len(body) > MAX_BODY:
+                return self._device_fs_error(413, "too_large", "request body too large")
+            if body:
+                try:
+                    payload = json.loads(body.decode("utf-8"))
+                except (UnicodeDecodeError, ValueError):
+                    return self._device_fs_error(400, "bad_body", "invalid request body")
+                if not isinstance(payload, dict):
+                    return self._device_fs_error(400, "bad_body", "request body must be an object")
+        query = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
+        requested = payload.get("device_id")
+        if requested is None:
+            values = query.get("device_id") or []
+            requested = values[0] if values else None
+        if requested is not None and str(requested) != str(getattr(service, "device", "")):
+            return self._device_fs_error(404, "device_not_found", "device id does not match this node")
+        try:
+            if suffix == "drives":
+                result = service.dispatch("drives", {})
+            elif suffix == "workspaces":
+                result = service.dispatch("workspaces", {})
+            elif suffix == "list":
+                result = service.dispatch("list", {"path": payload.get("path")})
+            else:
+                result = service.dispatch("read", {
+                    "path": payload.get("path"),
+                    "offset": payload.get("offset", 0),
+                    "limit": payload.get("limit"),
+                    "encoding": "base64",
+                })
+        except FsError as exc:
+            return self._device_fs_error(DEVICE_FS_ERROR_STATUS.get(exc.code, 400), exc.code, str(exc))
+        except Exception:
+            return self._device_fs_error(500, "fs_error", "device file request failed")
+        return self._device_fs_json(200, result)
 
     def _http(self, args: dict[str, Any], url: str | None = None, origin: str | None = None) -> dict[str, Any]:
         method = str(args.get("method") or "GET").upper()

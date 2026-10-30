@@ -34,18 +34,27 @@ test('remote FilesPane exposes a new-file action for the current target director
   assert.match(shared, /iconButton\('plus', '新建文件', \(\) => makeFile\(path\), !path \|\| dirLoading \|\| previewBusy\)/)
 })
 
-test('DSH Composer routes its file picker to the target and keeps explicit local upload', () => {
+test('DSH Composer routes both file entry points to the target computer modal', () => {
   const build = fs.readFileSync(path.resolve(root, 'packages/tether-ui/scripts/build.mjs'), 'utf8')
   const dsh = fs.readFileSync(path.resolve(root, 'packages/tether-ui/src/hosts/dsh.js'), 'utf8')
   assert.match(build, /name: 'tether-target-file'/)
   assert.match(build, /label: \(\) => '目标设备文件'/)
+  assert.match(build, /createDshTargetExplorerBridge\(\{ getRpc: \(\) => localPluginRpc, getHost: \(\) => host \}\)/)
   assert.match(build, /createDshTargetAttachments\(React, Native, targetFiles, targetFilePicker, ctx\.uiWorkspace, ctx\.sessions\)/)
   assert.match(build, /inject: \(sessionId\) => \(\{ sessionId \}\)/)
-  assert.match(dsh, /pickerCommand\.open = open/)
+  assert.doesNotMatch(build, /remote\.workspaceFiles/)
+  assert.match(dsh, /pickerCommand\.open = openCommand/)
   assert.match(dsh, /h\(Native\.ComposerAttachments/)
   assert.match(dsh, /interceptNativeFilePicker/)
   assert.match(dsh, /event\.preventDefault\(\)[\s\S]*openPickerRef\.current/)
-  assert.match(dsh, /本机文件…/)
+  assert.match(dsh, /createDshTargetExplorerBridge/)
+  assert.match(dsh, /'\/drives'/)
+  assert.match(dsh, /'\/workspaces'/)
+  assert.match(dsh, /'\/fs\/list'/)
+  assert.match(dsh, /'\/fs\/read'/)
+  assert.match(dsh, /role: 'dialog', 'aria-modal': 'true'/)
+  assert.match(dsh, /目标电脑文件…/)
+  assert.doesNotMatch(dsh, /本机文件…/)
 })
 
 test('remote editing pins device identity and file version before saving', () => {

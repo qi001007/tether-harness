@@ -1,6 +1,6 @@
 {
   "name": "tether-dsh-client",
-  "version": "0.2.29",
+  "version": "0.2.30",
   "description": "Tether client page for DeepSeek Harness",
   "type": "module",
   "main": "lib/index.js",

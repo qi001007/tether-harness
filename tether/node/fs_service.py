@@ -517,9 +517,10 @@ class FsService:
             fh.seek(offset)
             chunk = fh.read(limit)
         binary = b"\x00" in chunk or (p.suffix.lower() not in TEXT_SUFFIXES and b"\x00" in chunk[:1024])
+        exact = str(args.get("encoding") or "").lower() in {"base64", "binary"}
         result = {"path": str(p), "size": size, "offset": offset, "truncated": offset + len(chunk) < size,
                   "mtime": p.stat().st_mtime}
-        if binary:
+        if binary or exact:
             result.update({"binary": True, "base64": base64.b64encode(chunk).decode("ascii")})
         else:
             result.update({"binary": False, "text": chunk.decode("utf-8", errors="replace")})

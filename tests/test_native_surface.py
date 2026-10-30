@@ -11,6 +11,7 @@ import pytest
 import websockets
 
 from tether.node.native_surface import MAX_BODY, NativeSurface, NativeSurfaceError
+from tether.node.fs_service import FsService
 import tether.node.native_surface as native_surface_module
 
 GZIP_BODY = gzip.compress(b"native gzip response body" * 200, mtime=0)
@@ -217,6 +218,58 @@ def test_http_fixed_target_and_credential_filter(native_home):
     assert base64.b64decode(result["body_base64"]) == b"native"
     assert "set-cookie" not in result["headers"]
     assert "location" not in result["headers"]
+
+
+def test_device_fs_prefix_serves_this_node_files_and_raw_attachment_bytes(tmp_path):
+    workspace = tmp_path / "node-work"
+    workspace.mkdir()
+    root = tmp_path / "TetherWorkspaces"
+    root.mkdir()
+    service = FsService(device="LAPTOP-01", workspace=workspace,
+                        data_dir=tmp_path / "data", workspaces_root=root)
+    payload = "中文附件\r\n".encode("gb18030")
+    target = root / "legacy.txt"
+    target.write_bytes(payload)
+
+    async def call(method, path, body=None):
+        args = {"method": method, "path": path}
+        if body is not None:
+            args["body_base64"] = base64.b64encode(json.dumps(body).encode("utf-8")).decode("ascii")
+        return await surface.call("http", args)
+
+    surface = NativeSurface(tmp_path / "home", device_fs=service)
+
+    async def run():
+        drives = await call("GET", "/tether-device-fs/drives?device_id=LAPTOP-01")
+        assert drives["status"] == 200
+        assert isinstance(json.loads(base64.b64decode(drives["body_base64"]))["drives"], list)
+
+        listing = await call("POST", "/tether-device-fs/list",
+                             {"device_id": "LAPTOP-01", "path": str(root)})
+        assert listing["status"] == 200
+        entries = json.loads(base64.b64decode(listing["body_base64"]))["entries"]
+        assert any(entry["name"] == "legacy.txt" for entry in entries)
+
+        read = await call("POST", "/tether-device-fs/read",
+                          {"device_id": "LAPTOP-01", "path": str(target), "offset": 0, "limit": 1024})
+        result = json.loads(base64.b64decode(read["body_base64"]))
+        assert read["status"] == 200
+        assert result["device_id"] == "LAPTOP-01"
+        assert result["binary"] is True
+        assert base64.b64decode(result["base64"]) == payload
+
+        mismatch = await call("GET", "/tether-device-fs/drives?device_id=OTHER")
+        assert mismatch["status"] == 404
+        detail = json.loads(base64.b64decode(mismatch["body_base64"]))["detail"]
+        assert detail["code"] == "device_not_found"
+
+        unknown = await call("GET", "/tether-device-fs/other")
+        assert unknown["status"] == 404
+        wrong_method = await call("GET", "/tether-device-fs/read")
+        assert wrong_method["status"] == 405
+        await surface.dispose()
+
+    asyncio.run(run())
 
 
 def test_http_request_body_limit_uses_surface_constant(native_home, monkeypatch):

@@ -1,5 +1,15 @@
 # Public client releases
 
+## v0.2.30
+
+Target-computer file explorer release:
+
+- Both Composer attachment entry points now open a target-computer file modal with 工作区 (workspaces) and 此电脑 (drives) roots, so files can be picked from the device being controlled.
+- The node serves the modal through a same-origin `/tether-device-fs` API: drives, workspaces, directory listing, and a raw-byte read that returns base64 so non-UTF-8 files keep their exact bytes.
+- APP, plugin, and node are all 0.2.30. A node-only or plugin-only update leaves the other component on the old attachment path.
+
+This note records the published packages only. DESKTOP-LOCAL and LAPTOP-01 still report 0.2.29 until one-click update is run on each.
+
 ## v0.2.29 candidate (unpublished)
 
 This candidate includes the scoped login authority fix, update/watchdog race fixes, and native Composer attachment routing. The DSH native Composer path was exercised on an isolated local Host with a QA Node: it selected a target workspace and transferred a 90-byte text file and a 4-byte binary file. The captured multipart response contained the expected bytes `00 ff 41 80`; no model request was sent.

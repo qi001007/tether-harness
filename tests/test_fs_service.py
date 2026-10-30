@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 from pathlib import Path
 
@@ -208,6 +209,21 @@ def test_office_preview_reuses_converted_pdf_until_source_changes(env, monkeypat
     third = svc.dispatch("preview", {"path": str(doc)})
     assert third["kind"] == "pdf"
     assert len(calls) == 2
+
+
+def test_read_base64_returns_exact_non_utf8_bytes(env) -> None:
+    svc: FsService = env["svc"]
+    target = env["root"] / "legacy.txt"
+    payload = "中文附件\r\n".encode("gb18030")
+    assert b"\x00" not in payload
+    target.write_bytes(payload)
+
+    default = svc.dispatch("read", {"path": str(target), "offset": 0, "limit": 1024})
+    assert default["binary"] is False and "text" in default
+
+    exact = svc.dispatch("read", {"path": str(target), "offset": 0, "limit": 1024, "encoding": "base64"})
+    assert exact["binary"] is True
+    assert base64.b64decode(exact["base64"]) == payload
 
 
 def test_locked_mode_blocks_all_writes(env) -> None:
