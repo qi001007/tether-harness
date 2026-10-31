@@ -1,5 +1,16 @@
 # Public client releases
 
+## v0.2.45
+
+Plugin runtime reload verification:
+
+- A stale `native-surface.json` pid no longer hides a live DSH host: the updater checks the descriptor pid and falls back to scanning for the `dsh-desktop-host` process before scheduling the restart helper.
+- The Hub job no longer reports `done` from the installed profile alone. It waits until the plugin status clears `restart_required` (the DSH host pid changed after the restart); a host that never reloads fails the job with `restart_timeout` instead of a false success.
+- Retrying after `restart_timeout` re-runs the restart helper even when the plugin files are already at the target version.
+- APP, plugin, and node are 0.2.45.
+
+Gates: pytest 137 passed / 4 skipped, mjs 216/216, cjs 6/6, `build.mjs --check`, `validate_versions()`. Local unsigned artifacts: app 1,717,805 B, plugin 1,330,865 B, node 79,514 B. CI signing and installed acceptance are recorded after publication.
+
 ## v0.2.44
 
 Event-driven UI refresh:

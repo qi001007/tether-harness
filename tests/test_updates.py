@@ -1406,6 +1406,46 @@ def test_plugin_apply_schedules_the_dsh_restart_helper():
     assert 'exe.lower().endswith("deepseek harness.exe")' in helper_text
 
 
+def test_dsh_host_scan_ignores_a_shell_that_mentions_the_marker(monkeypatch):
+    class FakeProcess:
+        def __init__(self, pid: int, name: str, cmdline: list[str]) -> None:
+            self.info = {"pid": pid, "name": name, "cmdline": cmdline}
+
+    class FakePsutil:
+        @staticmethod
+        def process_iter(_attrs):
+            return [
+                FakeProcess(1, "bash.exe", ["bash.exe", "-c", "grep dsh-desktop-host"]),
+                FakeProcess(2, "DeepSeek Harness.exe", [
+                    "D:/DeepSeek harness/DeepSeek Harness.exe",
+                    "resources/app.asar/dsh/node_modules/@deepseek-ai/dsh-desktop-host/lib/index.js",
+                ]),
+            ]
+
+    from tether.updates import _scan_dsh_host_pid
+    monkeypatch.setattr("tether.updates.psutil.process_iter", FakePsutil.process_iter)
+    assert _scan_dsh_host_pid() == 2
+
+
+def test_host_state_scans_for_a_live_dsh_when_the_descriptor_pid_is_stale(tmp_path, monkeypatch):
+    dsh_home = tmp_path / ".dsh"
+    descriptor = dsh_home / "storages" / "tether" / "native-surface.json"
+    descriptor.parent.mkdir(parents=True)
+    descriptor.write_text(json.dumps({"pid": 2_147_483_000, "updated_at": 1_000}), encoding="utf-8")
+    manager = UpdateManager(tmp_path / "install", "plugin", dsh_home=dsh_home,
+                            state_dir=tmp_path / "state",
+                            manifest_url="https://example.invalid/manifest.json")
+    monkeypatch.setattr("tether.updates._scan_dsh_host_pid", lambda: 424242)
+    state = manager._dsh_host_state()
+    assert state["pid"] == 424242
+    assert state["updated_at"] == 1000.0
+
+    missing = UpdateManager(tmp_path / "install", "plugin", dsh_home=tmp_path / "none",
+                            state_dir=tmp_path / "state",
+                            manifest_url="https://example.invalid/manifest.json")
+    assert missing._dsh_host_state()["pid"] == 424242
+
+
 def test_latest_manifest_url_resolves_through_the_github_api(monkeypatch):
     import tether.updates as updates
 

@@ -627,8 +627,9 @@ class Node:
         action = msg.get("action")
         allowed = {"type", "req_id", "action", "component", "prepared_id"}
         if (set(msg) - allowed or not isinstance(component, str) or component not in self.update_managers
-                or not isinstance(action, str) or action not in {"check", "status", "prepare", "apply"}
-                or (action == "apply") != ("prepared_id" in msg)):
+                or not isinstance(action, str) or action not in {"check", "status", "prepare", "apply", "restart"}
+                or (action == "apply") != ("prepared_id" in msg)
+                or (action == "restart" and component != "plugin")):
             await self._send_update_result(
                 response_ws,
                 {"type": "update_result", "req_id": req_id, "ok": False,

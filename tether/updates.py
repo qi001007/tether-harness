@@ -228,6 +228,41 @@ def _restart_cleared(applied: dict[str, Any] | None, current_pid: int | None,
                 and current_updated_at >= applied_at - 5000)
 
 
+def _looks_like_dsh_host(process: psutil.Process) -> bool | None:
+    """True for the running DSH host, None when its command line is unreadable."""
+    try:
+        cmdline = process.cmdline()
+    except psutil.NoSuchProcess:
+        return False
+    except (psutil.Error, OSError):
+        return None
+    if any(isinstance(arg, str) and "dsh-desktop-host" in arg for arg in cmdline):
+        return True
+    try:
+        name = (process.name() or "").lower()
+    except (psutil.Error, OSError):
+        name = ""
+    return None if "deepseek harness" in name else False
+
+
+def _scan_dsh_host_pid() -> int | None:
+    """Find the DSH host when the descriptor is missing or holds a stale pid."""
+    for process in psutil.process_iter(["pid", "name", "cmdline"]):
+        try:
+            pid = process.info.get("pid")
+            name = str(process.info.get("name") or "").lower()
+            cmdline = process.info.get("cmdline") or []
+        except (psutil.Error, OSError):
+            continue
+        if type(pid) is not int or not any(
+                isinstance(arg, str) and "dsh-desktop-host" in arg for arg in cmdline):
+            continue
+        if "deepseek harness" in name or any(
+                isinstance(arg, str) and "deepseek harness" in arg.lower() for arg in cmdline[:1]):
+            return pid
+    return None
+
+
 def _is_newer(remote: str, current: str) -> bool:
     r = _semver(remote)
     c = _semver(current)
@@ -1630,20 +1665,24 @@ class UpdateManager:
         try:
             data = json.loads(self._dsh_descriptor().read_text(encoding="utf-8"))
         except (OSError, ValueError):
-            return {"pid": None, "updated_at": None}
-        if not isinstance(data, dict):
-            return {"pid": None, "updated_at": None}
-        pid = data.get("pid")
-        if type(pid) is not int or not 0 < pid <= 2_147_483_647:
-            pid = None
-        else:
+            data = None
+        updated = data.get("updated_at") if isinstance(data, dict) else None
+        pid = data.get("pid") if isinstance(data, dict) else None
+        host_pid = pid if type(pid) is int and 0 < pid <= 2_147_483_647 else None
+        if host_pid is not None:
             try:
-                if not psutil.pid_exists(pid):
-                    pid = None
-            except (OSError, ValueError):
-                pid = None
-        updated = data.get("updated_at")
-        return {"pid": pid,
+                host = _looks_like_dsh_host(psutil.Process(host_pid))
+            except psutil.NoSuchProcess:
+                host = False
+            except (psutil.Error, OSError):
+                host = None
+            if host is False:
+                host_pid = None
+        if host_pid is None:
+            # DSH can rewrite the surface descriptor on another profile while the
+            # host keeps running; a stale descriptor must not hide a live host.
+            host_pid = _scan_dsh_host_pid()
+        return {"pid": host_pid,
                 "updated_at": float(updated) if isinstance(updated, (int, float)) and not isinstance(updated, bool) and updated > 0 else None}
 
     def _dsh_host_pid(self) -> int | None:
@@ -1669,6 +1708,15 @@ class UpdateManager:
             return True
         except Exception:
             return False
+
+    def restart(self) -> dict[str, Any]:
+        """Re-run the DSH restart helper after a reload that did not take."""
+        if self.component != "plugin":
+            return self._error("invalid_component")
+        scheduled = self._spawn_dsh_restart()
+        return {"ok": scheduled, "component": self.component,
+                "restart_scheduled": scheduled,
+                "error": "" if scheduled else "restart_failed"}
 
     def status(self) -> dict[str, Any]:
         try:

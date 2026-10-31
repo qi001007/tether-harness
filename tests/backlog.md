@@ -111,3 +111,5 @@
 - 2026-10-30：DSH 附件回归覆盖 session-maybe 注入、新草稿单击创建空会话后自动续开 picker、跨会话使用新 onAddFiles 回调，以及无上下文不打开本机 file dialog。
 
 - 2026-10-30：native surface 插件回归用 Cordis Proxy 对未声明的 fileDrag 属性访问抛错；确认 slot 注册只注入 sessionId，未访问未注入 service。
+
+- 2026-10-31：0.2.45 覆盖 descriptor pid 失效时的 `dsh-desktop-host` 扫描（排除提到标记的 shell），以及 Hub 等待 restart_required、`restart_timeout` 报错和已更新版本的重试重启。

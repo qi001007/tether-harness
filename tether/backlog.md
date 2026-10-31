@@ -24,3 +24,4 @@
 - 2026-10-28：0.2.14 起清单默认强制 Ed25519 验签（仅 loopback 开发源与显式 `TETHER_ALLOW_UNSIGNED_RELEASE=1` 例外）；`channel` 参与校验，beta 需 `TETHER_UPDATE_CHANNEL=beta`；`apply` 用缓存清单复核 rollout（hold/排除立即生效）；签名错误码 `channel_not_selected` 进入错误优先级，避免被 `manifest_unavailable` 掩盖。
 - 2026-10-29：0.2.16 版本元数据统一：`UPDATER_VERSION` 升至 `0.2.16`；更新协议常量保持 `1`，无迁移。
 - 2026-10-29：0.2.24 插件 `restart_required` 的清除条件是“记录的 Host pid 被替换”或“apply 时没有运行中的 Host，之后有 Host 在 apply 之后发布 descriptor”；apply 记录写 `applied_at`（epoch ms），DSH 关闭时安装不再永久挂“待重启”。
+- 2026-10-31：0.2.45 插件 apply 不能只信 `native-surface.json` 的 pid：descriptor 缺失或 pid 失效时扫描 `dsh-desktop-host` 进程再记 `dsh_pid`；Hub 必须等 `restart_required` 清掉才 `done`，超时报 `restart_timeout`，重试用 `restart` 动作重跑助手。
