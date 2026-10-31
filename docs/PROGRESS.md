@@ -333,5 +333,12 @@
 - 0.2.44 已发布（CI `41227434088`，18:05:25Z，Hub 生效）；LAPTOP-01 Node+APP **16.5 秒**、插件 **15.2 秒**（真实状态/健康 0.2.44）；本机开发台重启到 0.2.44，插件 0.2.43→0.2.44 **13.7 秒**。两机三组件均 0.2.44。
 - 本机插件 apply 后 DSH 宿主仍是旧进程（01:51），公网 surface 502；运行 `tether.node.dsh_restart` 重启宿主到 33416 后，两机 surface smoke 均 200。说明插件 job 的 `done` 只代表 profile 安装，不代表 DSH 运行态已加载新插件；5 秒热重载仍未达，需要运行态握手。
 
+## 2026-10-31 插件运行态重载
+
+- 0.2.45：descriptor pid 失效时扫描 `dsh-desktop-host` 再安排重启；Hub 等 `restart_required` 清除才 done，超时报 `restart_timeout`，文件已到目标版本时重试可重跑重启助手。
+- LAPTOP-01 实测：Node+APP **16.0 秒**；插件 **19.0 秒**，其中 **11.4 秒** 是 DSH 重启窗口，`restart_required` 清除后才 done；profile/source/runtime 均 0.2.45；两机 surface smoke 200。
+- 生产 Hub 已部署 `f6062fd`，回退点 `e3c8718`（备份 `runtime-reload-20261031T182301Z`）。
+- 仍是整应用重启，5 秒热重载未达。
+
 详细部署记录、服务器地址与运行快照属于私有运维材料，不在本公开进度页重复列出。用户需求仍以 [反馈清单](FEEDBACK.md) 为准；产品目标见 [PRD](PRD.md)，公开协议与客户端边界见 [技术说明](TECHNICAL.md)。
 

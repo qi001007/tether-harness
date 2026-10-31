@@ -9,7 +9,9 @@ Plugin runtime reload verification:
 - Retrying after `restart_timeout` re-runs the restart helper even when the plugin files are already at the target version.
 - APP, plugin, and node are 0.2.45.
 
-Gates: pytest 137 passed / 4 skipped, mjs 216/216, cjs 6/6, `build.mjs --check`, `validate_versions()`. Local unsigned artifacts: app 1,717,805 B, plugin 1,330,865 B, node 79,514 B. CI signing and installed acceptance are recorded after publication.
+Gates: pytest 137 passed / 4 skipped, mjs 216/216, cjs 6/6, `build.mjs --check`, `validate_versions()`. CI run `41228715930` success; the signed manifest was verified (app 1,717,888 B, plugin 1,330,898 B, node 79,514 B) and published at 2026-10-31T18:21:15Z; the Hub mirror served 0.2.45 by 18:22Z.
+
+Installed acceptance on LAPTOP-01 through the Hub: Node+APP **16.0 s** (plugin stayed 0.2.44), then the plugin job took **19.0 s** and stayed in `restarting` for an 11.4 s DSH restart window before `restart_required` cleared and the job reported done. Real plugin status/health is 0.2.45 in profile, source and runtime packages. Production Hub deployed at `f6062fd` (backup `/opt/tether/backups/runtime-reload-20261031T182301Z`, previous commit `e3c8718`); both devices' public surface smoke returned 200. This verifies the reload is detected, but it is still a full DSH restart: the 5 s hot-reload target remains open.
 
 ## v0.2.44
 
