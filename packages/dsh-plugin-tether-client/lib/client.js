@@ -6837,7 +6837,15 @@ function createConnectionPanel(React) {
     const saveLogin = async (data, base, label) => {
       if (typeof onConfigured === 'function') await onConfigured({ url: base, token: data.token, user: data.user })
       setAccessToken(data.token || '')
-      setMessage(label + '成功，已保存登录凭据')
+      let enrolled = null
+      try {
+        if (typeof window !== 'undefined' && window.tetherApp && typeof window.tetherApp.enrollDevice === 'function') {
+          enrolled = await window.tetherApp.enrollDevice(data.token)
+        }
+      } catch (_) { /* the account is still logged in if device enrollment is unavailable */ }
+      const suffix = enrolled && enrolled.ok ? '，设备已加入账号'
+        : enrolled && enrolled.error ? '（设备未登记：' + enrolled.error + '）' : ''
+      setMessage(label + '成功，已保存登录凭据' + suffix)
     }
     const login = () => run('login', async () => {
       const data = await post('/api/auth/login', { email: email.trim(), password, totp: totp.trim() })

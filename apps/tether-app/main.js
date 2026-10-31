@@ -257,6 +257,54 @@ handleTrusted('tether:reset-surface-auth', async (_event, origin) => {
     return { ok: false, error: String(error && error.message || error) }
   }
 })
+function readHubConfig() {
+  try { return JSON.parse(fs.readFileSync(hubConfigFile, 'utf8')) || {} } catch (_) { return {} }
+}
+handleTrusted('tether:enroll-device', async (_event, userToken) => {
+  if (typeof userToken !== 'string' || !userToken || userToken.length > 4096) {
+    return { ok: false, error: 'invalid session token' }
+  }
+  const config = readHubConfig()
+  const hubUrl = String(config.url || env.TETHER_CONTROLLER_URL || '').replace(/\/+$/, '')
+  const deviceId = String(config.device || env.TETHER_DEVICE || '')
+  if (!hubUrl || !deviceId) return { ok: false, error: 'Hub or device is not configured' }
+  let response
+  try {
+    response = await fetch(hubUrl + '/api/devices/' + encodeURIComponent(deviceId) + '/enroll', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + userToken, 'Content-Type': 'application/json' },
+      body: '{}'
+    })
+  } catch (_) {
+    return { ok: false, error: 'Hub unreachable' }
+  }
+  let data = {}
+  try { data = await response.json() } catch (_) { /* error bodies may be empty */ }
+  if (!response.ok || !data.token) {
+    const detail = data && data.detail
+    return {
+      ok: false,
+      error: (detail && (detail.error || detail.message)) || (data && data.error) || ('HTTP ' + response.status),
+      code: (detail && detail.code) || (data && data.code) || ''
+    }
+  }
+  const next = { ...config, nodeToken: data.token }
+  try {
+    if (fs.existsSync(hubConfigFile)) fs.copyFileSync(hubConfigFile, hubConfigFile + '.bak-' + Date.now())
+    fs.writeFileSync(hubConfigFile + '.tmp', JSON.stringify(next, null, 2) + '\n')
+    fs.renameSync(hubConfigFile + '.tmp', hubConfigFile)
+  } catch (_) {
+    return { ok: false, error: 'could not save the device token' }
+  }
+  env.TETHER_NODE_TOKEN = data.token
+  supervisor.nodeToken = data.token
+  try {
+    await supervisor.restart()
+  } catch (_) {
+    return { ok: false, error: 'device token saved but node restart failed' }
+  }
+  return { ok: true, device_id: data.device_id }
+}, () => ({ ok: false, error: 'Untrusted IPC caller' }))
 handleTrusted('tether:updates-status', () => updates.status())
 handleTrusted('tether:updates-check', () => updates.check())
 handleTrusted('tether:updates-prepare', () => updates.prepare())

@@ -162964,7 +162964,15 @@ function createConnectionPanel(React2) {
     const saveLogin = async (data, base, label) => {
       if (typeof onConfigured === "function") await onConfigured({ url: base, token: data.token, user: data.user });
       setAccessToken(data.token || "");
-      setMessage(label + "\u6210\u529F\uFF0C\u5DF2\u4FDD\u5B58\u767B\u5F55\u51ED\u636E");
+      let enrolled = null;
+      try {
+        if (typeof window !== "undefined" && window.tetherApp && typeof window.tetherApp.enrollDevice === "function") {
+          enrolled = await window.tetherApp.enrollDevice(data.token);
+        }
+      } catch (_) {
+      }
+      const suffix = enrolled && enrolled.ok ? "\uFF0C\u8BBE\u5907\u5DF2\u52A0\u5165\u8D26\u53F7" : enrolled && enrolled.error ? "\uFF08\u8BBE\u5907\u672A\u767B\u8BB0\uFF1A" + enrolled.error + "\uFF09" : "";
+      setMessage(label + "\u6210\u529F\uFF0C\u5DF2\u4FDD\u5B58\u767B\u5F55\u51ED\u636E" + suffix);
     };
     const login = () => run("login", async () => {
       const data = await post("/api/auth/login", { email: email.trim(), password, totp: totp.trim() });

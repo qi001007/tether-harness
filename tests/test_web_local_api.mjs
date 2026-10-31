@@ -16,6 +16,27 @@ async function proxySession(base) {
   return cookie.split(';')[0]
 }
 
+test('the Hub proxy keeps an explicit user token and only injects the owner token when absent', async () => {
+  const seen = []
+  const hub = http.createServer((req, res) => {
+    seen.push(req.headers.authorization || '')
+    res.writeHead(200, { 'content-type': 'application/json' })
+    res.end('{}')
+  })
+  const hubPort = await listen(hub)
+  const app = createWebServer({ controller: 'http://127.0.0.1:' + hubPort, port: 0, accessToken: 'owner-token' })
+  const base = await app.listen()
+  const cookie = await proxySession(base)
+  try {
+    assert.equal((await fetch(base + '/api/state', { headers: { cookie } })).status, 200)
+    assert.equal((await fetch(base + '/api/state', { headers: { cookie, authorization: 'Bearer user-session' } })).status, 200)
+    assert.deepEqual(seen, ['Bearer owner-token', 'Bearer user-session'])
+  } finally {
+    await app.close()
+    hub.close()
+  }
+})
+
 test('APP web server routes the local device API, including the surface descriptor, to the local node', async () => {
   const seen = []
   const node = http.createServer((req, res) => {

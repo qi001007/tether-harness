@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('tetherApp', {
   updatesCheck: () => ipcRenderer.invoke('tether:updates-check'),
   updatesPrepare: () => ipcRenderer.invoke('tether:updates-prepare'),
   updatesApply: (preparedId) => ipcRenderer.invoke('tether:updates-apply', preparedId),
+  enrollDevice: (userToken) => ipcRenderer.invoke('tether:enroll-device', userToken),
   resetSurfaceAuth: (origin) => ipcRenderer.invoke('tether:reset-surface-auth', origin),
   openLogs: () => ipcRenderer.invoke('tether:open-logs'),
   openDataDir: () => ipcRenderer.invoke('tether:open-data'),

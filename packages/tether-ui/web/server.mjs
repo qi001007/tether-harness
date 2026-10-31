@@ -66,7 +66,7 @@ export function createWebServer({ root = import.meta.dirname, controller = 'http
     const headers = { ...req.headers, host: target.host }
     delete headers.cookie
     delete headers['x-tether-proxy-token']
-    if (accessToken) headers.authorization = 'Bearer ' + accessToken
+    if (accessToken && !headers.authorization) headers.authorization = 'Bearer ' + accessToken
     const client = target.protocol === 'https:' ? https : http
     const upstream = client.request({
       hostname: target.hostname,
