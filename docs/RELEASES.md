@@ -8,7 +8,7 @@ Event-driven UI refresh:
 - Verified in Chromium by suspending the local Node: the device card went offline at 4.47 s and the online count changed 2→1; after resume it returned online at 3.94 s with 1→2.
 - APP, plugin, and node are 0.2.44.
 
-Gates: mjs 216/216, cjs 6/6, pytest 135 passed / 4 skipped, `validate_versions()`. CI run `41227434088` success; signed manifest verified, published at 2026-10-31T18:05:25Z and served by the Hub. LAPTOP-01 Node+APP **16.5 s**, plugin job **15.2 s** with real status/health 0.2.44. The DESKTOP-LOCAL dev bench was restarted to 0.2.44 and its plugin moved 0.2.43→0.2.44 in **13.7 s**; both machines now run 0.2.44 for all three components.
+Gates: mjs 216/216, cjs 6/6, pytest 135 passed / 4 skipped, `validate_versions()`. CI run `41227434088` success; signed manifest verified, published at 2026-10-31T18:05:25Z and served by the Hub. LAPTOP-01 Node+APP **16.5 s**, plugin job **15.2 s** with real status/health 0.2.44. The DESKTOP-LOCAL dev bench was restarted to 0.2.44 and its plugin moved 0.2.43→0.2.44 in **13.7 s**; both machines now run 0.2.44 for all three components. The local DSH host did **not** restart with the plugin apply (the job marked done from the installed profile), leaving the local public surface at 502; running `tether.node.dsh_restart` restarted the host to pid 33416 and both machines' surface smoke returned 200. Plugin `done` is therefore profile installation, not a verified runtime reload; the 5 s hot-reload target remains open.
 
 ## v0.2.43
 
