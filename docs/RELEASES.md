@@ -1,5 +1,17 @@
 # Public client releases
 
+## v0.2.39
+
+Node restart control:
+
+- The device context menu on the 互联 page can request a Node restart. The Hub endpoint is tenant-scoped, audited, refuses offline devices, and the Node refuses the request while a Tether task is active.
+- A managed Node exits with code 75 and is restarted by the APP supervisor; a standalone Node re-executes itself. The control socket reconnects through the presence watchdog.
+- Includes all 0.2.38 transfer fixes. APP, plugin, and node are 0.2.39.
+
+Gates: mjs 211/211, cjs 6/6, pytest 135 passed / 4 skipped, `validate_versions()`. CI run `41221456056` success; signed manifest verified; release published at 2026-10-31T16:51:25Z and served by the Hub at 16:52:30Z.
+
+Installed acceptance on LAPTOP-01: Node+APP 0.2.39 in **16.2 s**, plugin in **16.7 s**. A restart request through the Hub took the Node offline in **0.80 s** and back online in **2.99 s**, still reporting 0.2.39.
+
 ## v0.2.38
 
 File-transfer correctness hotfix:
@@ -10,7 +22,7 @@ File-transfer correctness hotfix:
 
 Gates: mjs 211/211, cjs 6/6, pytest 135 passed / 4 skipped (0.2.37 gate), `validate_versions()`. CI run `41220473162` success; the signed manifest was verified, the release was published at 2026-10-31T16:39:50Z, and the Hub served 0.2.38 at 16:40:23Z.
 
-Installed acceptance on LAPTOP-01: Node+APP 0.2.36→0.2.38 in **16.1 s**; the plugin job finished in 17.6 s and its real status/health reported 0.2.38 (the Hub capabilities snapshot still said 0.2.37 until the next registration). A direct API transfer of a 600,000-byte file used 3 chunks in **8.5 s**; the target SHA-256 matched, a resumed transfer continued from offset 262144 with a matching hash, and writing over an existing file without overwrite returned `exists`. The transfer page renders in Chromium; a manual click-through on the installed APP remains open because the CDP-driven path input is unreliable.
+Installed acceptance on LAPTOP-01: Node+APP 0.2.36→0.2.38 in **16.1 s**; the plugin job finished in 17.6 s and its real status/health reported 0.2.38 (the Hub capabilities snapshot still said 0.2.37 until the next registration). A direct API transfer of a 600,000-byte file used 3 chunks in **8.5 s**; the target SHA-256 matched, a resumed transfer continued from offset 262144 with a matching hash, and writing over an existing file without overwrite returned `exists`. The transfer page was also exercised in Chromium with real input events: progress 0→44%→87%→100%, the 600,000-byte target matched the source SHA-256, and the target audit recorded `transfer` with `bytes=600000, result=ok`; the test files were removed.
 
 ## v0.2.37
 
