@@ -8,7 +8,9 @@ File-transfer correctness hotfix:
 - The directory browser no longer lets a late roots response overwrite a path the user just entered.
 - Includes the 0.2.37 chunked node writes and file transfer page. APP, plugin, and node are 0.2.38.
 
-Gates: mjs 211/211, cjs 6/6, pytest 135 passed / 4 skipped (0.2.37 gate), `validate_versions()`. CI run and installed acceptance are recorded after the LAPTOP-01 update.
+Gates: mjs 211/211, cjs 6/6, pytest 135 passed / 4 skipped (0.2.37 gate), `validate_versions()`. CI run `41220473162` success; the signed manifest was verified, the release was published at 2026-10-31T16:39:50Z, and the Hub served 0.2.38 at 16:40:23Z.
+
+Installed acceptance on LAPTOP-01: Node+APP 0.2.36→0.2.38 in **16.1 s**; the plugin job finished in 17.6 s and its real status/health reported 0.2.38 (the Hub capabilities snapshot still said 0.2.37 until the next registration). A direct API transfer of a 600,000-byte file used 3 chunks in **8.5 s**; the target SHA-256 matched, a resumed transfer continued from offset 262144 with a matching hash, and writing over an existing file without overwrite returned `exists`. The transfer page renders in Chromium; a manual click-through on the installed APP remains open because the CDP-driven path input is unreliable.
 
 ## v0.2.37
 
