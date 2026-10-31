@@ -1,5 +1,5 @@
 {
-  "version": "0.2.33",
+  "version": "0.2.34",
   "notes": "Silent one-click update: downloads every component before one restart, shows determinate progress, attaches to a running install, and launches from a direct Electron shortcut without a console window.",
   "download": "https://github.com/qi001007/tether-harness",
   "install": "git pull && powershell -ExecutionPolicy Bypass -File desktop/install-plugin.ps1"

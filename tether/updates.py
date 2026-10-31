@@ -1659,8 +1659,7 @@ class UpdateManager:
         env["PYTHONIOENCODING"] = "utf-8"
         kwargs: dict[str, Any] = {"cwd": str(self.root), "env": env,
                                   "stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL,
-                                  "stderr": subprocess.DEVNULL, "close_fds": True,
-                                  "windowsHide": True}
+                                  "stderr": subprocess.DEVNULL, "close_fds": True}
         if os.name == "nt":
             kwargs["creationflags"] = DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW
         else:
@@ -1668,7 +1667,7 @@ class UpdateManager:
         try:
             subprocess.Popen(args, **kwargs)
             return True
-        except OSError:
+        except Exception:
             return False
 
     def status(self) -> dict[str, Any]:

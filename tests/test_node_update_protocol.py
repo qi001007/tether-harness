@@ -222,7 +222,7 @@ def test_remote_app_restart_is_scheduled_only_after_result_send(tmp_path, monkey
                                    "action": "apply", "component": "app",
                                    "prepared_id": "a" * 32}))
 
-    assert order == ["response", "restart"]
+    assert order == ["restart", "response"]
     assert node.update_applying is True
     node.store.db.close()
 
@@ -248,7 +248,8 @@ def test_remote_app_restart_helper_failure_releases_update_gate(tmp_path, monkey
                                    "action": "apply", "component": "app",
                                    "prepared_id": "a" * 32}))
 
-    assert sent[0]["ok"] is True
+    assert sent[0]["ok"] is False
+    assert sent[0]["error_code"] == "restart_failed"
     assert sent[-1]["type"] == "update_ready"
     assert node.update_applying is False
     node.store.db.close()
@@ -279,7 +280,6 @@ def test_windows_app_restart_helper_spawns_a_windowless_python_helper(tmp_path, 
     assert options["creationflags"] & agent.CREATE_NO_WINDOW
     assert options["creationflags"] & agent.DETACHED_PROCESS
     assert options["creationflags"] & agent.CREATE_NEW_PROCESS_GROUP
-    assert options["windowsHide"] is True
 
 
 def test_app_restart_helper_fails_cleanly_when_electron_is_missing(tmp_path, monkeypatch):

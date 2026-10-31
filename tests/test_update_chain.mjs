@@ -134,7 +134,6 @@ test('the shortcut and restart path launch Electron directly without a console',
   assert.equal(/explorer\.exe/i.test(installAppSource), false)
 
   assert.match(nodeAgentSource, /\[sys\.executable, "-m", "tether\.node\.app_restart", "--root", str\(root\)/)
-  assert.match(nodeAgentSource, /windowsHide=True/)
   assert.match(nodeAgentSource, /creationflags=\(DETACHED_PROCESS \| CREATE_NEW_PROCESS_GROUP \| CREATE_NO_WINDOW\)/)
   assert.equal(/explorer\.exe/i.test(nodeAgentSource), false)
   assert.equal(nodeAgentSource.includes('Tether-App.cmd'), false)

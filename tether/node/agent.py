@@ -130,13 +130,13 @@ def schedule_app_restart(root: Path) -> bool:
              "--log", str(log_path), "--delay", "2"],
             cwd=str(ROOT), env=env,
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            close_fds=True, windowsHide=True,
+            close_fds=True,
             creationflags=(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW),
         )
         record("restart helper started")
         return True
-    except OSError:
-        record("restart helper could not be started")
+    except Exception as exc:  # noqa: BLE001 - restart failure must not crash the update reader
+        record(f"restart helper could not be started: {type(exc).__name__}: {exc}")
         return False
 
 
@@ -680,16 +680,18 @@ class Node:
                     else:
                         self.restart_requested = True
                         self.update_applying = True
-                response_sent = await self._send_update_result(
-                    response_ws, {"type": "update_result", "req_id": req_id, **result}
-                )
-                if (applying and applied and component == "app" and response_sent
-                        and os.environ.get("TETHER_NODE_MANAGED") == "1"):
+                if applying and applied and component == "app" and os.environ.get("TETHER_NODE_MANAGED") == "1":
                     app_restart_scheduled = await asyncio.to_thread(schedule_app_restart, ROOT)
                     if app_restart_scheduled:
                         self.update_applying = True
+                        result["restart_scheduled"] = True
                     else:
-                        log("[update] APP restart helper could not be scheduled")
+                        applied = False
+                        result = {"ok": False, "error_code": "restart_failed",
+                                  "error": "APP restart helper could not be started"}
+                response_sent = await self._send_update_result(
+                    response_ws, {"type": "update_result", "req_id": req_id, **result}
+                )
                 if applying and applied and component == "node" and not node_deferred:
                     if self.ws is not None:
                         try:
