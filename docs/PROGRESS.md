@@ -325,5 +325,11 @@
 - 公网 relay 基线：控制 P50 109–113 ms / P95 113–117 ms；surface 首屏约 **2121 ms**；1 MiB 传输 14.9–23.9 秒（约 40–70 KB/s，哈希一致）；2 MiB 22.1 秒（约 90 KB/s）。
 - 下一步：在 LAPTOP-01 安装 Headscale+tsnet / NetBird / Nebula 客户端后，用同一命令对比；达标前不宣称 overlay 更好。
 
+## 2026-10-31 UI 事件驱动
+
+- 新增 `/api/events` SSE 订阅：device/session 事件到达时强制刷新状态；普通 2.5 秒轮询保留作为兜底，后台/隐藏页面仍跳过普通轮询。
+- 真实 Chromium 验收：暂停本机 Node 后设备卡 **4.47 秒** 变离线、在线计数 2→1；恢复后 **3.94 秒** 回在线、计数 1→2；`/api/events` 网络响应 200 `text/event-stream`。
+- SSE 变更已提交源码/web bundle（`9a5f39c`）；0.2.43 安装版尚未包含，下一次发布带上。全量 216 mjs / 135 pytest 绿。
+
 详细部署记录、服务器地址与运行快照属于私有运维材料，不在本公开进度页重复列出。用户需求仍以 [反馈清单](FEEDBACK.md) 为准；产品目标见 [PRD](PRD.md)，公开协议与客户端边界见 [技术说明](TECHNICAL.md)。
 
