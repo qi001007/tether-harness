@@ -258,7 +258,9 @@
 - Node 新增分块写入：`write_chunk`（transfer id、offset/total、1 MiB 上限、`.tether-part.<id>` 临时文件、fsync 后原子替换）、`transfer_status`、`transfer_cancel`；完成时写一条 `transfer` 审计。回归 `test_fs_service.py` 14 passed。
 - 共享 UI 新增“文件转移”页：双设备/双目录、源文件选择、覆盖策略、进度/取消/重试；传输引擎 `transfer.js` 负责分块、断点续传、冲突与源变化检测，6 个单测通过。
 - 真实浏览器已渲染转移页并驱动到目标写入阶段；0.2.36 目标机因缺少 `write_chunk` 返回 `unknown fs op`，因此 0.2.37 发布后需在 LAPTOP-01 复验完整转移。
-- 0.2.37 版本推进完成；全量 211 mjs / 6 cjs / 135 pytest（4 skipped）通过。发布与双机验收结果在下一节补记。
+- 0.2.37 版本推进完成；全量 211 mjs / 6 cjs / 135 pytest（4 skipped）通过。
+- 0.2.37 首轮真实 UI 验收发现两个前端问题：引擎发 `transferId` 而 Node 读 `transfer_id`；根目录响应晚到会覆盖用户刚输入的路径。两处已修并进入 0.2.38；Node 分块写入本身在 0.2.37 已可用。
+- 0.2.37 Node+APP 更新实测 **17.1 秒**（prepare-first + defer 修复生效）；插件 25.2 秒。三组件到 0.2.37 后，0.2.38 仅修前端映射。
 
 详细部署记录、服务器地址与运行快照属于私有运维材料，不在本公开进度页重复列出。用户需求仍以 [反馈清单](FEEDBACK.md) 为准；产品目标见 [PRD](PRD.md)，公开协议与客户端边界见 [技术说明](TECHNICAL.md)。
 

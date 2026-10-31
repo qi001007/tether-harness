@@ -1,5 +1,15 @@
 # Public client releases
 
+## v0.2.38
+
+File-transfer correctness hotfix:
+
+- The transfer page now maps the engine's `transferId` to the node's `transfer_id` for status/write/cancel, so a real transfer no longer fails with `transfer_id must be 8-32 lowercase hex characters`.
+- The directory browser no longer lets a late roots response overwrite a path the user just entered.
+- Includes the 0.2.37 chunked node writes and file transfer page. APP, plugin, and node are 0.2.38.
+
+Gates: mjs 211/211, cjs 6/6, pytest 135 passed / 4 skipped (0.2.37 gate), `validate_versions()`. CI run and installed acceptance are recorded after the LAPTOP-01 update.
+
 ## v0.2.37
 
 Resumable file transfer release:
