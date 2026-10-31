@@ -13,6 +13,7 @@ import inspect
 import json
 import os
 import platform
+import random
 import sqlite3
 import ssl
 import sys
@@ -313,20 +314,22 @@ class Node:
 
     async def run(self) -> None:
         warm = asyncio.create_task(self._warm_updates())
-        backoff = 0.5
+        backoff = 0.1
         while True:
             if self._block_until > time.monotonic():
                 await asyncio.sleep(self._block_until - time.monotonic())
             try:
                 await self._session()
-                backoff = 0.5
+                backoff = 0.1
             except Exception as exc:  # noqa: BLE001 - reconnect forever
                 log(f"[ws] disconnected: {type(exc).__name__}: {exc}")
             self.connected = False
             if self.restart_requested:
                 return
-            await asyncio.sleep(backoff)
-            backoff = min(backoff * 2, 5.0)
+            # A phone waking from sleep or a brief network blip should reconnect
+            # immediately; repeated failures still back off to a two-second cap.
+            await asyncio.sleep(backoff * (0.8 + random.random() * 0.4))
+            backoff = min(backoff * 2, 2.0)
 
     async def _session(self) -> None:
         ssl_context = None
