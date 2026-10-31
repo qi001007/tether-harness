@@ -1,4 +1,5 @@
 # 修改记录
+- 2026-10-31：附件选择器新增面包屑/搜索/排序回归，`test_dsh_target_attachments.mjs` 13 passed；全量 205 mjs / 6 cjs / 133 pytest（4 skipped）。
 - 2026-10-31：新增 `test_electron_security.mjs`（导航拦截、新窗口拒绝、IPC senderFrame/origin、iframe sandbox）和 `test_web_local_api.mjs` 的代理鉴权/同源/路径/畸形 URL 回归。全量 204 mjs / 6 cjs / 133 pytest（4 skipped）通过。
 - 2026-10-30：修正 `test_native_surface_client` 对 VM realm 返回对象的断言，按键和值验证注入 sessionId，保留 Proxy 对未注入 `ctx.fileDrag` 访问抛错的回归。
 - 2026-10-30：新增 DSH attachment wrapper 行为回归：Composer 隐藏 file input click 被路由到目标会话文件列表，点击远端文件读回原始字节并调用 `onAddFiles(File[])`；本机上传按钮保留原生文件选择器行为；覆盖无会话回退、多 Composer/session 隔离、无关 input 不拦截和重复 busy 请求去重。
