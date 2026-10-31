@@ -5763,7 +5763,7 @@ monaco-editor/esm/vs/languages/definitions/swift/swift.js:
 
     const EditorRuntime = TetherMonacoRuntime
     const PANEL_ID = 'tether'
-    const PLUGIN_VERSION = "0.2.31"
+    const PLUGIN_VERSION = "0.2.33"
 const DSH_API_BASE = 'http://127.0.0.1:18890'
 const DSH_APP_BASE = 'http://127.0.0.1:18892'
 
@@ -7480,6 +7480,95 @@ function buildTablePreview({ name, text, sourceTruncated, rowLimit, columnLimit 
     rowLimit: rowLimit == null ? TABLE_PREVIEW_MAX_ROWS : rowLimit,
     columnLimit: columnLimit == null ? TABLE_PREVIEW_MAX_COLUMNS : columnLimit
   }
+}
+
+function MinimalUpdateButton({ React, h, api, post, deviceId, host, C }) {
+  const apiRef = React.useRef(api)
+  apiRef.current = api
+  const [summary, setSummary] = React.useState(null)
+  const [job, setJob] = React.useState(null)
+  const [error, setError] = React.useState('')
+  const hubUrl = host && typeof host.hubConfig === 'function' ? (host.hubConfig() || {}).url : ''
+  const originProduct = host && host.kind === 'dsh' ? 'plugin' : 'app'
+  const devicePath = deviceId ? '/api/devices/' + encodeURIComponent(deviceId) : ''
+  const labels = {
+    queued: '准备更新', checking: '检查版本', downloading: '下载更新',
+    applying: '安装更新', restarting: '重启并验证', done: '更新完成', error: '更新失败'
+  }
+  React.useEffect(() => {
+    if (!hubUrl || !devicePath) return undefined
+    let cancelled = false
+    const check = async () => {
+      try {
+        const data = await apiRef.current(devicePath + '/update?origin_product=' + originProduct, { method: 'GET' }, hubUrl)
+        if (cancelled) return
+        setSummary(data || null)
+        setError('')
+        if (data && data.job) setJob(data.job)
+      } catch (_) {
+        if (!cancelled) setSummary(null)
+      }
+    }
+    void check()
+    const timer = setInterval(check, 60000)
+    return () => { cancelled = true; clearInterval(timer) }
+  }, [hubUrl, devicePath, originProduct])
+  React.useEffect(() => {
+    if (!hubUrl || !devicePath || !job || ['done', 'error'].includes(job.status)) return undefined
+    let cancelled = false
+    const poll = async () => {
+      try {
+        const next = await apiRef.current(devicePath + '/update/job', { method: 'GET' }, hubUrl)
+        if (cancelled) return
+        setJob(next)
+        if (next && next.status === 'done') setTimeout(() => { try { window.location.reload() } catch (_) {} }, 800)
+        if (next && next.status === 'error') setError((next.error && (next.error.detail || next.error.code)) || '更新失败')
+      } catch (_) { /* keep the last known progress */ }
+    }
+    const timer = setInterval(poll, 1000)
+    return () => { cancelled = true; clearInterval(timer) }
+  }, [hubUrl, devicePath, job && job.job_id, job && job.status])
+  const start = async () => {
+    setError('')
+    try {
+      const created = await apiRef.current(devicePath + '/update/apply', {
+        method: 'POST', body: JSON.stringify({ origin_product: originProduct })
+      }, hubUrl)
+      setJob(created)
+    } catch (cause) {
+      setError((cause && (cause.message || cause.code)) || '更新启动失败')
+    }
+  }
+  if (!hubUrl || !devicePath) return null
+  const available = !!(summary && summary.update_available)
+  if (!available && !job) return null
+  const percent = Math.max(0, Math.min(100, Number(job && job.progress && job.progress.percent) || 0))
+  const statusText = job ? ((job.progress && job.progress.step) || labels[job.status] || '更新中') : '准备更新'
+  const overlay = job ? h('div', {
+    role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Tether 更新',
+    style: {
+      position: 'fixed', inset: 0, zIndex: 2147483000, display: 'grid', placeItems: 'center',
+      background: 'rgba(255,255,255,0.72)', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)'
+    }
+  }, h('div', { style: { width: 'min(420px, calc(100vw - 48px))', display: 'grid', gap: 14, justifyItems: 'stretch', color: C.ink } },
+    h('div', { style: { fontSize: 15, fontWeight: 600, textAlign: 'center' } }, job.status === 'error' ? '更新失败' : '正在更新 Tether'),
+    h('div', { style: { height: 6, borderRadius: 999, background: 'rgba(16,24,40,0.10)', overflow: 'hidden' } },
+      h('div', { style: { width: percent + '%', height: '100%', borderRadius: 999, background: C.blue, transition: 'width 240ms ease' } })),
+    h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, color: C.sub, fontSize: 12 } },
+      h('span', { style: { flex: '1 1 auto', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, statusText),
+      h('span', { className: 'tether-num' }, percent + '%')),
+    error ? h('div', { role: 'alert', style: { color: C.red, fontSize: 12, textAlign: 'center' } }, error) : null,
+    job.status === 'error' ? h('button', {
+      type: 'button', onClick: start,
+      style: { justifySelf: 'center', border: 0, borderRadius: 7, background: C.blue, color: '#fff', padding: '7px 18px', fontSize: 12, cursor: 'pointer' }
+    }, '重试') : null)) : null
+  return h('div', { style: { display: 'contents' } },
+    available ? h('button', {
+      type: 'button', title: '更新到 ' + ((summary && summary.target_version) || '最新版本'),
+      'aria-label': '更新到最新版本', onClick: start,
+      style: { width: 30, height: 26, display: 'grid', placeItems: 'center', border: 0, borderRadius: 7, background: C.blue, color: '#fff', fontSize: 15, cursor: 'pointer', flex: '0 0 auto' }
+    }, '↓') : null,
+    overlay)
 }
 
 function createTetherPanel({ React, Native, host, EditorRuntime }) {
@@ -11589,14 +11678,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             },
             status: hubBusy ? 'checking' : hubStatus
           }) : null,
-          h('button', {
-            onClick: openUpdateCenter,
-            title: updateStatus === 'available' ? '发现可用更新，打开更新中心'
-              : updateStatus === 'failed' ? '更新检查失败，打开后可重试'
-                : updateStatus === 'current' ? '已是最新版本' : '查看 APP、节点与插件更新状态',
-            className: 'tether-press tether-hover tether-update-trigger',
-            style: { marginLeft: 8, marginRight: 0, height: 26, padding: '0 10px', borderRadius: 999, border: 0, background: C.bg, color: C.sub, display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer', flex: '0 0 auto' }
-          }, h('span', { 'aria-label': '更新状态：' + updateStatus, style: { width: 7, height: 7, borderRadius: '50%', background: updateStatusColor, flex: '0 0 auto' } }), '更新')
+          h(MinimalUpdateButton, { React, h, api, post, deviceId, host, C })
         ),
         notice || projectsError || updateToast ? renderToasts() : null,
         h('div', { style: { display: 'flex', flex: '1 1 auto', minHeight: 0 } },

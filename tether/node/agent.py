@@ -18,6 +18,7 @@ import ssl
 import sys
 import subprocess
 import time
+import traceback
 from pathlib import Path
 from typing import Any
 
@@ -619,7 +620,8 @@ class Node:
                 else:
                     result = await asyncio.to_thread(manager.status)
             except Exception as exc:  # noqa: BLE001 - failed reads must not stop the Node reader
-                log(f"[update] {action} {component} failed: {type(exc).__name__}")
+                log(f"[update] {action} {component} failed: {type(exc).__name__}: {exc}")
+                log(traceback.format_exc())
                 await self._send_update_result(
                     response_ws,
                     {"type": "update_result", "req_id": req_id, "ok": False,
@@ -696,7 +698,8 @@ class Node:
                             pass
                     return
             except Exception as exc:  # noqa: BLE001 - updater errors do not take down the WS reader
-                log(f"[update] {action} {component} failed: {type(exc).__name__}")
+                log(f"[update] {action} {component} failed: {type(exc).__name__}: {exc}")
+                log(traceback.format_exc())
                 await self._send_update_result(
                     response_ws,
                     {"type": "update_result", "req_id": req_id, "ok": False,
@@ -877,7 +880,20 @@ class Node:
         except (OSError, ValueError):
             return ""
 
+    def _managed_plugin_version(self) -> str:
+        manager = self.update_managers.get("plugin")
+        if manager is None:
+            return ""
+        try:
+            status = manager.status()
+            return str(status.get("current_version") or "") if status.get("ok") else ""
+        except Exception:
+            return ""
+
     def capabilities(self) -> dict[str, Any]:
+        app_version = self._managed_app_version()
+        plugin_version = self._managed_plugin_version()
+        installed = [name for name, version in (("app", app_version), ("plugin", plugin_version)) if version]
         return {"os": platform.system(), "release": platform.release(), "os_label": os_label(),
                 "python": platform.python_version(),
                 "node_version": self.node_version, "update_protocol": UPDATE_PROTOCOL,
@@ -891,7 +907,9 @@ class Node:
                 "dsh_native": self.dsh_sessions.available(),
                 "native_dsh_home": str(self.dsh_sessions.home),
                 "surface_protocol": 1,
-                "app_version": self._managed_app_version(),
+                "app_version": app_version,
+                "plugin_version": plugin_version,
+                "installed_products": installed,
                 "dsh_surface": self.native_surface.available()}
 
 

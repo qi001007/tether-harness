@@ -564,16 +564,16 @@ test('refresh indicators have a sized rotation animation and track their request
   assert.match(shared, /disabled: updateRefreshing[\s\S]*updateRefreshing \? h\('span', \{ className: 'tether-spin'/)
 })
 
-test('error toasts expire automatically and the update entry uses a stable label with a status dot', () => {
+test('error toasts expire automatically and the update entry is one download action', () => {
   assert.match(shared, /setNotice\(''\), 4000/)
   assert.match(shared, /setUpdateToast\(''\), 4000/)
   assert.match(shared, /setProjectsError\(''\), 4000/)
-  assert.match(shared, /'更新状态：' \+ updateStatus/)
-  assert.match(shared, /background: updateStatusColor/)
-  assert.match(shared, /updateStatus === 'available' \? C\.red/)
-  assert.match(shared, /updateStatus === 'failed' \? C\.amber/)
-  assert.match(shared, /updateStatus === 'current' \? C\.green/)
-  assert.doesNotMatch(shared, /\}, updateHasAvailable \? '更新 · 有新版本'/)
+  assert.match(shared, /function MinimalUpdateButton/)
+  assert.match(shared, /update\?origin_product=/)
+  assert.match(shared, /update\/apply/)
+  assert.match(shared, /backdropFilter: 'blur\(18px\)'/)
+  assert.doesNotMatch(shared, /'更新状态：' \+ updateStatus/)
+  assert.doesNotMatch(shared, /updateHasAvailable \? '更新 · 有新版本'/)
   assert.match(shared, /setComponentUpdateError\(component, current\.failed \? shortUpdateError\(current\.error\) : '', scope, false\)/,
     'background update checks stay quiet; only explicit actions toast')
 })
