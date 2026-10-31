@@ -340,5 +340,11 @@
 - 生产 Hub 已部署 `f6062fd`，回退点 `e3c8718`（备份 `runtime-reload-20261031T182301Z`）。
 - 仍是整应用重启，5 秒热重载未达。
 
+## 2026-10-31 更新检查单飞修复
+
+- 0.2.46：清单单飞只允许 leader 完成共享 Future；并发强制检查不再二次 `set_result`/`set_exception`，修复 `InvalidStateError: FINISHED`（本地 `node.log` 累计 158 次，最近 01:50）。
+- A/B 实测：旧 0.2.45 本机 24 次并发强制检查失败 **18** 次；LAPTOP 与本机升到 0.2.46 后均 **24/24 ok**、`latest_version` 0.2.46、无 `update_failed`。
+- LAPTOP-01 Node+APP **17.6 秒**；CI `41230580812`，发布 18:44:27Z，Hub 镜像 18:45Z 前生效。
+
 详细部署记录、服务器地址与运行快照属于私有运维材料，不在本公开进度页重复列出。用户需求仍以 [反馈清单](FEEDBACK.md) 为准；产品目标见 [PRD](PRD.md)，公开协议与客户端边界见 [技术说明](TECHNICAL.md)。
 

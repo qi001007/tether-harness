@@ -8,7 +8,9 @@ Manifest single-flight hotfix:
 - Regression test starts two forced checks and finishes them out of order.
 - APP, plugin, and node are 0.2.46.
 
-Gates: pytest 138 passed / 4 skipped, mjs 216/216, cjs 6/6, `build.mjs --check`, `validate_versions()`. CI signing and installed acceptance are recorded after publication.
+Gates: pytest 138 passed / 4 skipped, mjs 216/216, cjs 6/6, `build.mjs --check`, `validate_versions()`. CI run `41230580812` success; the signed manifest was verified (app 1,717,917 B, plugin 1,330,930 B, node 79,543 B) and published at 2026-10-31T18:44:27Z; the Hub mirror served 0.2.46 before 18:45Z.
+
+Installed acceptance: LAPTOP-01 Node+APP **17.6 s**. A concurrent A/B on the Hub: 24 simultaneous forced checks on the old 0.2.45 DESKTOP-LOCAL produced **18 failures** (`HTTPError` from the double-completed flight); after LAPTOP-01 moved to 0.2.46 and DESKTOP-LOCAL restarted onto 0.2.46, both returned **24/24 ok** with `latest_version` 0.2.46 and no `update_failed`. This removes the observed `InvalidStateError: FINISHED` source from the Node log.
 
 ## v0.2.45
 
