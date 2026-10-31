@@ -1,5 +1,18 @@
 # Public client releases
 
+## v0.2.41
+
+Login device enrollment foundation:
+
+- After a successful account login the APP calls a trusted IPC; the main process asks the Hub to enroll the local device, rotates the device token with a 10-minute grace for the old token, writes the new token into `hub.json` (timestamped backup), and restarts the Node.
+- The Hub endpoint is session-authenticated, tenant-scoped, refuses offline devices, and audits the enrollment. Existing node-token authentication is unchanged.
+- The local 18892 Hub proxy now keeps an explicit user Authorization header instead of overwriting it with the owner token, so a logged-in member session is not silently elevated.
+- APP, plugin, and node are 0.2.41.
+
+Gates: mjs 212/212, cjs 6/6, pytest 135 passed / 4 skipped, `validate_versions()`. CI run `41223584060` success; signed manifest verified, published at 2026-10-31T17:17:56Z, Hub served 0.2.41 at 17:20:28Z. LAPTOP-01 Node+APP **16.3 s**, plugin job **15.8 s** with its real status/health at 0.2.41.
+
+The minimal update UI was visually verified in Chromium with intercepted update responses: the blue ↓ button showed `更新到 0.2.42`, and clicking it produced the white translucent overlay (`rgba(255,255,255,0.72)`, `blur(18px)`) with `正在更新 Tether / 下载 APP / 42%`. A live login→enroll acceptance with a dedicated test account remains open because the production owner credentials are not available in the environment; the server endpoint and token rotation are covered by `tests/test_device_enroll.py`.
+
 ## v0.2.40
 
 Transfer throughput experiment:

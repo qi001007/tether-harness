@@ -1,4 +1,5 @@
 # tether-app backlog
+- 2026-10-31：新增可信 IPC `tether:enroll-device`：用登录会话调 Hub 登记，轮换设备令牌（旧令牌 10 分钟宽限）、备份并写回 `hub.json`、重启 Node；preload 暴露 `enrollDevice`。
 - 2026-10-31：0.2.35 发布（tag `v0.2.35`）；含导航/IPC 加固、Python 3.13 重启修复与更新任务吞吐修正；LAPTOP-01 Node/APP 0.2.35（纯 APP 更新 20.1 秒），本机开发版重启到 0.2.35。
 - 2026-10-31：Electron 主窗口只允许本地 UI origin 导航，`setWindowOpenHandler` 拒绝新窗口（http(s) 仅交系统浏览器），所有 `tether:*` IPC 校验 `senderFrame === mainFrame` 且 origin 为本地 UI。真机验证：外站导航被阻止并记录，主 frame `tetherApp.info()` 正常，sandboxed iframe 无该 API。
 - 2026-10-30：0.2.27 热修版本元数据；更新中心 latest 归一化。
