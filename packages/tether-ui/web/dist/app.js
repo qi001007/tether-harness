@@ -165630,6 +165630,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         h2("iframe", {
           key: deviceId + ":" + (currentState.pid || 0),
           src: currentState.url,
+          sandbox: "allow-scripts allow-same-origin allow-forms allow-downloads allow-modals",
           onLoad: () => {
             const loadedState = surfaceStateRef.current;
             if (!loadedState || loadedState.deviceId !== deviceId || loadedState.url !== currentState.url || loadedState.sourceKey !== currentState.sourceKey || !["document-loading", "document-loaded"].includes(loadedState.status)) return;

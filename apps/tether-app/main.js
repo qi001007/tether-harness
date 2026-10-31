@@ -139,6 +139,26 @@ async function createWindow() {
     }
   })
   mainWindow.on('closed', () => { mainWindow = null })
+  mainWindow.webContents.on('will-navigate', (event, navigationUrl) => {
+    let allowed = false
+    try {
+      const parsed = new URL(String(navigationUrl))
+      allowed = parsed.origin === uiOrigin || parsed.href === 'about:blank'
+    } catch (_) { allowed = false }
+    if (!allowed) {
+      event.preventDefault()
+      log('blocked main-frame navigation path=' + safeRendererPath(navigationUrl))
+    }
+  })
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    try {
+      const parsed = new URL(String(url))
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+        void shell.openExternal(parsed.toString()).catch(() => {})
+      }
+    } catch (_) { /* deny malformed and non-http(s) URLs */ }
+    return { action: 'deny' }
+  })
   mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
     if (level >= 3) rendererConsoleErrors += 1
     if (level >= 3) log(rendererDiagnostic(message, sourceId, line))
@@ -209,20 +229,23 @@ async function createWindow() {
   }
 }
 
-ipcMain.handle('tether:app-info', () => ({
+function trustedIpc(event) {
+  try {
+    return !!(uiOrigin && event.senderFrame && event.senderFrame === event.sender.mainFrame
+      && new URL(event.senderFrame.url).origin === uiOrigin)
+  } catch (_) { return false }
+}
+function handleTrusted(channel, handler, fallback = () => ({ ok: false, error: 'Untrusted IPC caller' })) {
+  ipcMain.handle(channel, (event, ...args) => trustedIpc(event) ? handler(event, ...args) : fallback())
+}
+handleTrusted('tether:app-info', () => ({
   version: app.getVersion(),
   controller,
   dataDir,
   logFile,
   services: supervisor.snapshot()
-}))
-function trustedUpdateRequest(event) {
-  try {
-    return !!(uiOrigin && event.senderFrame && event.senderFrame === event.sender.mainFrame && new URL(event.senderFrame.url).origin === uiOrigin)
-  } catch (_) { return false }
-}
-ipcMain.handle('tether:reset-surface-auth', async (event, origin) => {
-  if (!trustedUpdateRequest(event)) return { ok: false, error: 'Untrusted IPC caller' }
+}), () => ({}))
+handleTrusted('tether:reset-surface-auth', async (_event, origin) => {
   let parsed
   try { parsed = new URL(String(origin)) } catch (_) { return { ok: false } }
   const loopback = parsed.protocol === 'http:' && (parsed.hostname === '127.0.0.1' || parsed.hostname === '[::1]')
@@ -234,26 +257,28 @@ ipcMain.handle('tether:reset-surface-auth', async (event, origin) => {
     return { ok: false, error: String(error && error.message || error) }
   }
 })
-ipcMain.handle('tether:updates-status', (event) => trustedUpdateRequest(event) ? updates.status() : { ok: false, error: 'Untrusted IPC caller' })
-ipcMain.handle('tether:updates-check', (event) => trustedUpdateRequest(event) ? updates.check() : { ok: false, error: 'Untrusted IPC caller' })
-ipcMain.handle('tether:updates-prepare', (event) => trustedUpdateRequest(event) ? updates.prepare() : { ok: false, error: 'Untrusted IPC caller' })
-ipcMain.handle('tether:updates-apply', async (event, preparedId) => {
-  if (!trustedUpdateRequest(event)) return { ok: false, error: 'Untrusted IPC caller' }
+handleTrusted('tether:updates-status', () => updates.status())
+handleTrusted('tether:updates-check', () => updates.check())
+handleTrusted('tether:updates-prepare', () => updates.prepare())
+handleTrusted('tether:updates-apply', async (_event, preparedId) => {
   const result = await updates.apply(preparedId)
   setTimeout(() => app.quit(), 150)
   return result
 })
-ipcMain.handle('tether:services', () => supervisor.snapshot())
-ipcMain.handle('tether:probe-services', () => supervisor.probe())
-ipcMain.handle('tether:start-services', () => supervisor.start())
-ipcMain.handle('tether:stop-services', () => supervisor.stop())
-ipcMain.handle('tether:restart-services', () => supervisor.restart())
-ipcMain.handle('tether:open-logs', () => shell.openPath(supervisor.logsDir))
-ipcMain.handle('tether:open-data', () => shell.openPath(dataDir))
-ipcMain.handle('tether:open-external', (_event, url) => {
-  if (typeof url === 'string' && /^https?:\/\//.test(url)) return shell.openExternal(url)
+handleTrusted('tether:services', () => supervisor.snapshot())
+handleTrusted('tether:probe-services', () => supervisor.probe())
+handleTrusted('tether:start-services', () => supervisor.start())
+handleTrusted('tether:stop-services', () => supervisor.stop())
+handleTrusted('tether:restart-services', () => supervisor.restart())
+handleTrusted('tether:open-logs', () => shell.openPath(supervisor.logsDir))
+handleTrusted('tether:open-data', () => shell.openPath(dataDir))
+handleTrusted('tether:open-external', (_event, url) => {
+  try {
+    const parsed = new URL(String(url))
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') return shell.openExternal(parsed.toString())
+  } catch (_) { /* reject malformed URLs */ }
   return false
-})
+}, () => false)
 
 const locked = app.requestSingleInstanceLock()
 if (!locked) {

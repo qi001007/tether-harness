@@ -2289,6 +2289,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             h('iframe', {
               key: deviceId + ':' + (currentState.pid || 0),
               src: currentState.url,
+              sandbox: 'allow-scripts allow-same-origin allow-forms allow-downloads allow-modals',
               onLoad: () => {
                 const loadedState = surfaceStateRef.current
                 if (!loadedState || loadedState.deviceId !== deviceId || loadedState.url !== currentState.url
