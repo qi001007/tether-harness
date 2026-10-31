@@ -10,7 +10,7 @@ New-device account enrollment:
 
 Gates: mjs 212/212, cjs 6/6, pytest 135 passed / 4 skipped, `validate_versions()`. CI run `41225813966` success; signed manifest verified, published at 2026-10-31T17:45:20Z and served by the Hub. LAPTOP-01 Node+APP **18.8 s**, plugin job **17.4 s**, real plugin status/health 0.2.43.
 
-A live temp Hub/Node test passed: account-token registration came online under the right owner, the device token was persisted (97 B), and a restart without the user token stayed online as the same owner. A live APP login→enroll with a real account remains open because no test account credentials are available.
+A live temp Hub/Node test passed: account-token registration came online under the right owner, the device token was persisted (97 B), and a restart without the user token stayed online as the same owner. The DESKTOP-LOCAL dev bench was also aligned to 0.2.43: Node/APP 0.2.43 from source, DSH plugin 0.2.33→0.2.43 in **10.1 s**, plugin health 0.2.43. A live APP login→enroll with a real account remains open because no test account credentials are available.
 
 ## v0.2.42
 
