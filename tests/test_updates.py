@@ -159,6 +159,59 @@ def test_check_manifest_cache_singleflights_and_prepare_fetches_fresh_manifest(
     assert fetched_manifests == [manifest_url, manifest_url]
 
 
+def test_concurrent_forced_checks_do_not_complete_the_shared_flight_twice(tmp_path, monkeypatch):
+    root = tmp_path / "install"
+    seed_version(root)
+    manager = UpdateManager(root, "app", manifest_url="https://example.invalid/manifest.json",
+                            state_dir=tmp_path / "state")
+    manifest = {"schema": 1, "channel": "stable",
+                "components": {"app": {"version": "0.2.1"}}}
+    first_entered = threading.Event()
+    second_entered = threading.Event()
+    release_first = threading.Event()
+    release_second = threading.Event()
+    calls: list[str] = []
+    calls_lock = threading.Lock()
+
+    def fake_read(url: str, timeout: float) -> dict:
+        with calls_lock:
+            index = len(calls)
+            calls.append(url)
+        manager._last_source = url
+        if index == 0:
+            first_entered.set()
+            release_first.wait(5)
+        else:
+            second_entered.set()
+            release_second.wait(5)
+        return manifest
+
+    monkeypatch.setattr(manager, "_read_manifest", fake_read)
+    results: list[dict] = []
+    errors: list[BaseException] = []
+
+    def run() -> None:
+        try:
+            results.append(manager._load_manifest(use_check_cache=True, force=True))
+        except BaseException as exc:  # noqa: BLE001 - the test records any escape
+            errors.append(exc)
+
+    first = threading.Thread(target=run)
+    first.start()
+    assert first_entered.wait(2)
+    second = threading.Thread(target=run)
+    second.start()
+    assert second_entered.wait(2)
+    release_first.set()
+    first.join(5)
+    release_second.set()
+    second.join(5)
+
+    assert not errors, errors
+    assert len(results) == 2
+    assert not first.is_alive() and not second.is_alive()
+
+
 def seed_version(root: Path) -> None:
     root.mkdir(parents=True, exist_ok=True)
     (root / "version.json").write_text(json.dumps({

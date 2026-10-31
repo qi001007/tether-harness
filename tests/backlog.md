@@ -113,3 +113,4 @@
 - 2026-10-30：native surface 插件回归用 Cordis Proxy 对未声明的 fileDrag 属性访问抛错；确认 slot 注册只注入 sessionId，未访问未注入 service。
 
 - 2026-10-31：0.2.45 覆盖 descriptor pid 失效时的 `dsh-desktop-host` 扫描（排除提到标记的 shell），以及 Hub 等待 restart_required、`restart_timeout` 报错和已更新版本的重试重启。
+- 2026-10-31：0.2.46 用两个乱序完成的强制检查复现共享清单 Future 二次完成，锁定只有 leader 能完成 flight。

@@ -1,5 +1,15 @@
 # Public client releases
 
+## v0.2.46
+
+Manifest single-flight hotfix:
+
+- Concurrent forced update checks shared one manifest `Future`, and every caller completed it. The second completion raised `InvalidStateError: FINISHED` (158 occurrences in the local Node log, latest 01:50). Only the leader now completes and clears the flight; other callers fetch and cache independently, and followers receive an `UpdateError` rather than a raw exception.
+- Regression test starts two forced checks and finishes them out of order.
+- APP, plugin, and node are 0.2.46.
+
+Gates: pytest 138 passed / 4 skipped, mjs 216/216, cjs 6/6, `build.mjs --check`, `validate_versions()`. CI signing and installed acceptance are recorded after publication.
+
 ## v0.2.45
 
 Plugin runtime reload verification:

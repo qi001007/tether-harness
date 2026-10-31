@@ -645,14 +645,17 @@ class UpdateManager:
             with _manifest_cache_lock:
                 _manifest_check_cache[self.manifest_url] = (
                     time.monotonic() + MANIFEST_CHECK_CACHE_TTL, copy.deepcopy(manifest))
-                _manifest_check_flights.pop(self.manifest_url, None)
-                flight.set_result(copy.deepcopy(manifest))
+                if leader:
+                    _manifest_check_flights.pop(self.manifest_url, None)
+                    flight.set_result(copy.deepcopy(manifest))
             return copy.deepcopy(manifest)
         except Exception as exc:
-            with _manifest_cache_lock:
-                _manifest_check_flights.pop(self.manifest_url, None)
-                if leader:
-                    flight.set_exception(exc)
+            if leader:
+                with _manifest_cache_lock:
+                    _manifest_check_flights.pop(self.manifest_url, None)
+                    if not flight.done():
+                        flight.set_exception(exc if isinstance(exc, UpdateError)
+                                             else UpdateError("download_failed"))
             if isinstance(exc, UpdateError):
                 raise
             raise UpdateError("download_failed") from None

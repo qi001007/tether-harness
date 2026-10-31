@@ -25,3 +25,4 @@
 - 2026-10-29：0.2.16 版本元数据统一：`UPDATER_VERSION` 升至 `0.2.16`；更新协议常量保持 `1`，无迁移。
 - 2026-10-29：0.2.24 插件 `restart_required` 的清除条件是“记录的 Host pid 被替换”或“apply 时没有运行中的 Host，之后有 Host 在 apply 之后发布 descriptor”；apply 记录写 `applied_at`（epoch ms），DSH 关闭时安装不再永久挂“待重启”。
 - 2026-10-31：0.2.45 插件 apply 不能只信 `native-surface.json` 的 pid：descriptor 缺失或 pid 失效时扫描 `dsh-desktop-host` 进程再记 `dsh_pid`；Hub 必须等 `restart_required` 清掉才 `done`，超时报 `restart_timeout`，重试用 `restart` 动作重跑助手。
+- 2026-10-31：0.2.46 清单单飞只允许创建 flight 的 leader 完成它；非 leader 的强制检查自行拉取并写缓存，不得 `set_result`/`set_exception` 共享 Future（二次完成会抛 `InvalidStateError: FINISHED`）。
