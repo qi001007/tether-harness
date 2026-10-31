@@ -5763,7 +5763,7 @@ monaco-editor/esm/vs/languages/definitions/swift/swift.js:
 
     const EditorRuntime = TetherMonacoRuntime
     const PANEL_ID = 'tether'
-    const PLUGIN_VERSION = "0.2.36"
+    const PLUGIN_VERSION = "0.2.37"
 const DSH_API_BASE = 'http://127.0.0.1:18890'
 const DSH_APP_BASE = 'http://127.0.0.1:18892'
 
@@ -7179,9 +7179,9 @@ function createTransferPage({ React, Glyph, api, post, C, devices = [], localDev
   const sourceItem = devices.find((item) => item.device_id === sourceDevice)
   const destItem = devices.find((item) => item.device_id === destDevice)
   const destination = sourceFile && destPath ? joinPath(destPath, sourceFile.name) : ''
+  const running = !!(job && job.state === 'running')
   const canStart = !!(sourceFile && destination && sourceItem && destItem
     && sourceItem.online && destItem.online && !running)
-  const running = !!(job && job.state === 'running')
   const start = async () => {
     if (!sourceFile || !destination) return
     const controller = new AbortController()
