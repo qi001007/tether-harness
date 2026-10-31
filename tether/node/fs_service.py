@@ -8,11 +8,13 @@ policy on its own.
 from __future__ import annotations
 
 import base64
+import binascii
 import codecs
 import hashlib
 import json
 import mimetypes
 import os
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -27,6 +29,9 @@ from typing import Any
 
 
 MAX_READ = 256 * 1024
+MAX_WRITE_CHUNK = 1024 * 1024
+MAX_TRANSFER_BYTES = 64 * 1024 * 1024 * 1024
+TRANSFER_ID_RE = re.compile(r"[a-f0-9]{8,32}")
 MAX_PREVIEW_BYTES = 8 * 1024 * 1024
 MAX_PREVIEW_TEXT = 512 * 1024
 PREVIEW_CACHE_MAX_FILES = 96
@@ -749,6 +754,91 @@ class FsService:
         return {"path": str(p), "bytes": len(data), "size": st.st_size,
                 "mtime": st.st_mtime, "version": version,
                 "encoding": encoding, "newline": newline}
+
+    def _transfer_part(self, args: dict[str, Any]) -> tuple[Path, Path, str]:
+        p = self._resolve(args.get("path"))
+        transfer = str(args.get("transfer_id") or "")
+        if not TRANSFER_ID_RE.fullmatch(transfer):
+            raise FsError("transfer_id must be 8-32 lowercase hex characters", "bad_args")
+        return p, p.with_name(p.name + ".tether-part." + transfer), transfer
+
+    def _op_transfer_status(self, args: dict[str, Any]) -> dict[str, Any]:
+        p, part, transfer = self._transfer_part(args)
+        return {"path": str(p), "transfer_id": transfer,
+                "offset": part.stat().st_size if part.exists() else 0,
+                "partial": part.exists(), "exists": p.exists()}
+
+    def _op_transfer_cancel(self, args: dict[str, Any]) -> dict[str, Any]:
+        p, part, transfer = self._transfer_part(args)
+        try:
+            part.unlink(missing_ok=True)
+        except OSError:
+            raise FsError("could not remove the partial transfer", "write_failed") from None
+        return {"path": str(p), "transfer_id": transfer, "cancelled": True}
+
+    def _op_write_chunk(self, args: dict[str, Any]) -> dict[str, Any]:
+        p, part, transfer = self._transfer_part(args)
+        try:
+            offset = int(args.get("offset"))
+            total = int(args.get("total"))
+        except (TypeError, ValueError):
+            raise FsError("offset and total are required integers", "bad_args") from None
+        encoded = args.get("base64")
+        if not isinstance(encoded, str):
+            raise FsError("base64 is required", "bad_args")
+        try:
+            data = base64.b64decode(encoded, validate=True)
+        except (binascii.Error, ValueError):
+            raise FsError("base64 is invalid", "bad_args") from None
+        if len(data) > MAX_WRITE_CHUNK:
+            raise FsError("chunk exceeds 1 MiB", "bad_args")
+        if total < 0 or total > MAX_TRANSFER_BYTES:
+            raise FsError("total is out of range", "bad_args")
+        if offset < 0 or offset + len(data) > total:
+            raise FsError("chunk exceeds the declared size", "bad_args")
+        final = args.get("final") is True
+        if not data and not final and total:
+            raise FsError("empty chunk", "bad_args")
+        if final and offset + len(data) != total:
+            raise FsError("final chunk does not complete the file", "bad_args")
+        overwrite = args.get("overwrite") is True
+        expected_version = args.get("expected_version")
+        if expected_version is not None and (not isinstance(expected_version, str) or len(expected_version) != 64):
+            raise FsError("expected_version must be a SHA-256 digest", "bad_args")
+        if offset == 0:
+            self._write_guard(p, "write", bytes=total)
+            if p.exists() and not overwrite:
+                raise FsError("file exists", "exists")
+            if part.exists() and args.get("resume") is not True:
+                part.unlink()
+        else:
+            ok, why = self.policy.can_write(p, op="write")
+            if not ok:
+                raise FsError(why, "denied")
+            if not part.exists() or part.stat().st_size != offset:
+                raise FsError("partial transfer offset does not match", "offset_mismatch")
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with part.open("r+b" if part.exists() else "wb") as handle:
+            handle.seek(offset)
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        if not final:
+            return {"path": str(p), "transfer_id": transfer, "offset": offset + len(data),
+                    "total": total, "complete": False}
+        if part.stat().st_size != total:
+            raise FsError("partial transfer is incomplete", "offset_mismatch")
+        if expected_version is not None and p.exists() and _path_version(p) != expected_version:
+            raise FsError("file changed on target device", "conflict")
+        if p.exists() and not overwrite:
+            raise FsError("file exists", "exists")
+        os.replace(part, p)
+        st = p.stat()
+        version = _path_version(p)
+        self.audit.add(op="transfer", path=str(p), mode=self.policy.data.get("mode"),
+                       phase="result", result="ok", bytes=total, version=version)
+        return {"path": str(p), "transfer_id": transfer, "offset": total, "total": total,
+                "size": st.st_size, "mtime": st.st_mtime, "version": version, "complete": True}
 
     def _op_mkdir(self, args: dict[str, Any]) -> dict[str, Any]:
         p = self._resolve(args.get("path"))

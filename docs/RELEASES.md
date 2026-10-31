@@ -1,5 +1,15 @@
 # Public client releases
 
+## v0.2.36
+
+Connection and picker release (includes all 0.2.35 security fixes):
+
+- Node reconnects immediately after a dropped control socket (0.1 s first delay, 2 s failure cap, jitter) instead of the old 0.5–5 s ladder. The Hub presence watchdog marks a half-open device offline after 4.5 s and fails its pending RPCs.
+- The DSH target-computer attachment picker gains clickable breadcrumbs, current-directory search, and name/date/size sorting, matching the resource manager's directory list more closely.
+- APP, plugin, and node are 0.2.36.
+
+Gates: pytest 133 passed / 4 skipped, mjs 205/205, cjs 6/6, `validate_versions()`. CI run `41217509435`. Installed acceptance is recorded after the LAPTOP-01 update.
+
 ## v0.2.35
 
 Security and update-throughput release (includes the 0.2.33 bridge and 0.2.34 restart fixes):

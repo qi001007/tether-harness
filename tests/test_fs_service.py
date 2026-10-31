@@ -80,6 +80,60 @@ def test_full_mode_writes_outside_but_still_protects_system_and_credentials(env,
     assert caught.value.code == "denied"
 
 
+def test_chunked_transfer_resumes_and_finalizes_atomically(env) -> None:
+    svc: FsService = env["svc"]
+    folder = env["root"] / "transfer"
+    svc.dispatch("mkdir", {"path": str(folder)})
+    target = folder / "big.bin"
+    payload = b"a" * 1000 + b"b" * 1000
+    transfer = "a1b2c3d4"
+
+    first = svc.dispatch("write_chunk", {
+        "path": str(target), "transfer_id": transfer, "offset": 0, "total": len(payload),
+        "base64": base64.b64encode(payload[:1000]).decode(),
+    })
+    assert first["offset"] == 1000 and first["complete"] is False
+    assert target.exists() is False
+    status = svc.dispatch("transfer_status", {"path": str(target), "transfer_id": transfer})
+    assert status["offset"] == 1000 and status["partial"] is True
+
+    second = svc.dispatch("write_chunk", {
+        "path": str(target), "transfer_id": transfer, "offset": 1000, "total": len(payload),
+        "base64": base64.b64encode(payload[1000:]).decode(), "final": True,
+    })
+    assert second["complete"] is True and second["size"] == len(payload)
+    assert target.read_bytes() == payload
+    assert list(folder.glob("*.tether-part.*")) == []
+    audit = svc.dispatch("audit_list", {"limit": 20})["entries"]
+    assert any(row.get("op") == "transfer" and row.get("bytes") == len(payload) for row in audit)
+
+
+def test_chunked_transfer_rejects_existing_conflicts_and_bad_offsets(env) -> None:
+    svc: FsService = env["svc"]
+    folder = env["root"] / "transfer"
+    svc.dispatch("mkdir", {"path": str(folder)})
+    target = folder / "exists.bin"
+    target.write_bytes(b"old")
+    transfer = "deadbeef"
+
+    with pytest.raises(FsError) as caught:
+        svc.dispatch("write_chunk", {
+            "path": str(target), "transfer_id": transfer, "offset": 0, "total": 3,
+            "base64": base64.b64encode(b"new").decode(), "final": True,
+        })
+    assert caught.value.code == "exists"
+
+    with pytest.raises(FsError) as caught:
+        svc.dispatch("write_chunk", {
+            "path": str(target), "transfer_id": transfer, "offset": 5, "total": 10,
+            "base64": base64.b64encode(b"x").decode(),
+        })
+    assert caught.value.code == "offset_mismatch"
+
+    cancelled = svc.dispatch("transfer_cancel", {"path": str(target), "transfer_id": transfer})
+    assert cancelled["cancelled"] is True
+
+
 def test_audit_uses_sqlite_and_pages_newest_first(env) -> None:
     svc: FsService = env["svc"]
     for index in range(12):
