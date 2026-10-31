@@ -1,4 +1,5 @@
 # Tether Python 后端变更记录
+- 2026-10-31：0.2.35 发布；版本推进到三组件 0.2.35，Node/APP/插件更新链路随 Hub 任务实测（APP 20.1 s，插件 15.3 s，DSH 重启路径）。
 - 2026-10-31：0.2.34 修复 Python 3.13 不支持 `Popen(windowsHide=...)` 导致的“更新成功但未重启”：APP/DSH restart helper 改用 `creationflags=CREATE_NO_WINDOW`，调度失败返回 `restart_failed` 并记录 traceback；Node capabilities 增加 `plugin_version`/`installed_products`。两机 Node/APP/插件均升到 0.2.34。
 - 2026-10-30：Updater 版本与三组件发行候选统一至 `0.2.29`。
 - 2026-10-30：0.2.27 热修版本元数据；更新器实现沿用 0.2.26 的 profile 基准与 `restart_scheduled`。

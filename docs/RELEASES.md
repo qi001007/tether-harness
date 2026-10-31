@@ -1,5 +1,19 @@
 # Public client releases
 
+## v0.2.35
+
+Security and update-throughput release (includes the 0.2.33 bridge and 0.2.34 restart fixes):
+
+- Electron only navigates the main window to the local UI origin; `window.open` never creates an Electron window and HTTP(S) links go to the system browser; surface iframes are sandboxed without top navigation; every `tether:*` IPC checks the main frame and local origin.
+- The 18892 local proxy requires a per-process HttpOnly `SameSite=Strict` session cookie, enforces same-origin writes and an API path allowlist, resolves static files through `realpath`, and returns 400 for malformed URLs instead of crashing the main process.
+- Restart helpers no longer pass `windowsHide` to Python 3.13 `Popen`; a helper that cannot be scheduled returns `restart_failed` instead of a false success.
+- The Hub update job now downloads and verifies every component before applying anything, applies Node first, tolerates a Node restart deferred to the APP restart, and keeps finished jobs out of the device summary so the update overlay does not return on the next page load.
+- APP, plugin, and node are 0.2.35.
+
+Gates: pytest 133 passed / 4 skipped, mjs 204/204, cjs 6/6, `validate_versions()`, CI run `41213286072` success. The draft manifest signature was verified locally, then the release was published at 2026-10-31T15:10:19Z. Assets: app 1,690,717 B `50dc9acc71d8248ab585fb44c002adde15b4c6a6343ca55c2de46b29a3219e4c`, plugin 1,319,939 B `bf08879b24027543145fd74192af6c0c67a311bc4c79f87f940bd520ded323cb`, node 77,452 B `533bb5657de761a83ab7e4127173fb12e348f93123b07be0161da6ab2f3d6a1f`.
+
+Accepted on LAPTOP-01 through the Hub job: Node+APP reached 0.2.35 (an initial deferred-restart deadlock was fixed in Hub `bc3df99`; the APP-only retry finished in **20.1 s**), plugin reached 0.2.35 (profile/source/health all 0.2.35) in **15.3 s**. The 15.3 s path still restarts DSH; the planned 5 s plugin hot-reload budget is **not met** and remains open. DESKTOP-LOCAL runs the 0.2.35 source bench (Node/APP report 0.2.35); no installed-package claim is made for it.
+
 ## v0.2.31
 
 Silent one-click update release:

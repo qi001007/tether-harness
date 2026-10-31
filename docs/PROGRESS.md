@@ -238,5 +238,13 @@
 - 本地 18892 反向代理改为每进程随机会话 cookie（HttpOnly、SameSite=Strict），校验同源、写请求 Origin 和 API 路径白名单；`/local-api/` 与本机设备路由同样受保护；静态文件经 realpath 边界检查；畸形 URL 返回 400，不再让主进程退出。
 - 回归：`node --test --test-isolation=none tests/test_electron_security.mjs` 4/4；`tests/test_web_local_api.mjs` 4/4；全量 204 mjs / 6 cjs / 133 pytest（4 skipped）通过。真机：主窗口导航到外站被阻止并写入日志，sandboxed iframe 内无 `tetherApp`，surface iframe 带 sandbox 正常显示；代理无 cookie 401、跨站写 403、无 Origin 写 403、非白名单 API 403、畸形路径 400 且服务继续可访问。
 
+## 2026-10-31 0.2.35 发布与更新验收
+
+- `v0.2.35` 已发布（tag → `d560408`；CI `41213286072` 成功；manifest 签名本地验证通过；Release 于 15:10:19Z 发布）。
+- Hub 更新任务改为“全部组件先下载校验，再按 Node → 入口产品应用”；Node 把重启推迟到 APP apply 时，Hub 在 APP apply 后统一等待 Node 新版本，修复了首轮 Node+APP 更新 90 秒超时；完成的任务不再出现在设备摘要里，避免白雾遮罩在下次打开页面时复活。
+- LAPTOP-01：Node/APP 0.2.35，纯 APP 更新 **20.1 秒**；插件 0.2.35，耗时 **15.3 秒**，profile/source/health 均为 0.2.35。插件仍走整 DSH 重启，**未达到计划中的 5 秒热重载预算**，保留为下一阶段项。
+- DESKTOP-LOCAL：源码开发版重启到 0.2.35，Node/APP 报告 0.2.35；18892 无 cookie 仍返回 401。
+- 全量门禁：133 pytest（4 skipped）/ 204 mjs / 6 cjs 通过。
+
 详细部署记录、服务器地址与运行快照属于私有运维材料，不在本公开进度页重复列出。用户需求仍以 [反馈清单](FEEDBACK.md) 为准；产品目标见 [PRD](PRD.md)，公开协议与客户端边界见 [技术说明](TECHNICAL.md)。
 
