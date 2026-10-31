@@ -126,9 +126,11 @@ test('native surface state is device-bound and its iframe remains mounted while 
 
   const mainStart = clientSource.indexOf("h('main', { className: 'tether-workbench', style: { flex: '1 1 auto', display: 'flex'")
   const nativeChild = clientSource.indexOf('h(NativeSurface, { deviceId, online: deviceOnline, visible:', mainStart)
-  const viewBranch = clientSource.indexOf("view === 'files' ? renderExplorer() : (view === 'network' ? renderNetwork() : null)", mainStart)
+  const viewBranch = clientSource.indexOf("view === 'files' ? renderExplorer() : view === 'network' ? renderNetwork()", mainStart)
+  const transferBranch = clientSource.indexOf("view === 'transfer'", viewBranch)
   assert.ok(mainStart >= 0 && nativeChild > mainStart && viewBranch > nativeChild,
-    'NativeSurface stays mounted above the file/network branch')
+    'NativeSurface stays mounted above the file/network/transfer branch')
+  assert.ok(transferBranch > viewBranch, 'the transfer page is a sibling view below NativeSurface')
   assert.equal(clientSource.includes('nativeSurfaceEnabled'), false, 'legacy Tether chat toggle is removed')
 })
 

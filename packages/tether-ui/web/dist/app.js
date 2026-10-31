@@ -14012,7 +14012,7 @@ function isPosixPathSeparator(code) {
 function isWindowsDeviceRoot(code) {
   return code >= CHAR_UPPERCASE_A && code <= CHAR_UPPERCASE_Z || code >= CHAR_LOWERCASE_A && code <= CHAR_LOWERCASE_Z;
 }
-function normalizeString(path, allowAboveRoot, separator, isPathSeparator3) {
+function normalizeString(path, allowAboveRoot, separator2, isPathSeparator3) {
   let res = "";
   let lastSegmentLength = 0;
   let lastSlash = -1;
@@ -14031,13 +14031,13 @@ function normalizeString(path, allowAboveRoot, separator, isPathSeparator3) {
       else if (dots === 2) {
         if (res.length < 2 || lastSegmentLength !== 2 || res.charCodeAt(res.length - 1) !== CHAR_DOT || res.charCodeAt(res.length - 2) !== CHAR_DOT) {
           if (res.length > 2) {
-            const lastSlashIndex = res.lastIndexOf(separator);
+            const lastSlashIndex = res.lastIndexOf(separator2);
             if (lastSlashIndex === -1) {
               res = "";
               lastSegmentLength = 0;
             } else {
               res = res.slice(0, lastSlashIndex);
-              lastSegmentLength = res.length - 1 - res.lastIndexOf(separator);
+              lastSegmentLength = res.length - 1 - res.lastIndexOf(separator2);
             }
             lastSlash = i;
             dots = 0;
@@ -14051,12 +14051,12 @@ function normalizeString(path, allowAboveRoot, separator, isPathSeparator3) {
           }
         }
         if (allowAboveRoot) {
-          res += res.length > 0 ? `${separator}..` : "..";
+          res += res.length > 0 ? `${separator2}..` : "..";
           lastSegmentLength = 2;
         }
       } else {
         if (res.length > 0) {
-          res += `${separator}${path.slice(lastSlash + 1, i)}`;
+          res += `${separator2}${path.slice(lastSlash + 1, i)}`;
         } else {
           res = path.slice(lastSlash + 1, i);
         }
@@ -29708,7 +29708,7 @@ function isUNC(path) {
   return true;
 }
 function isEqualOrParent(base, parentCandidate, ignoreCase, forcePosixSemantics = false) {
-  const separator = forcePosixSemantics ? posix.sep : sep;
+  const separator2 = forcePosixSemantics ? posix.sep : sep;
   if (base === parentCandidate) {
     return true;
   }
@@ -29731,13 +29731,13 @@ function isEqualOrParent(base, parentCandidate, ignoreCase, forcePosixSemantics 
       return true;
     }
     let sepOffset = parentCandidate.length;
-    if (parentCandidate.charAt(parentCandidate.length - 1) === separator) {
+    if (parentCandidate.charAt(parentCandidate.length - 1) === separator2) {
       sepOffset--;
     }
-    return base.charAt(sepOffset) === separator;
+    return base.charAt(sepOffset) === separator2;
   }
-  if (parentCandidate.charAt(parentCandidate.length - 1) !== separator) {
-    parentCandidate += separator;
+  if (parentCandidate.charAt(parentCandidate.length - 1) !== separator2) {
+    parentCandidate += separator2;
   }
   return base.indexOf(parentCandidate) === 0;
 }
@@ -29756,7 +29756,7 @@ var init_extpath = __esm({
 function originalFSPath(uri) {
   return uriToFsPath(uri, true);
 }
-var ExtUri, extUri, isEqual, basenameOrAuthority, basename2, extname2, dirname2, joinPath, normalizePath, relativePath, resolvePath, isEqualAuthority, hasTrailingPathSeparator, DataUri;
+var ExtUri, extUri, isEqual, basenameOrAuthority, basename2, extname2, dirname2, joinPath2, normalizePath, relativePath, resolvePath, isEqualAuthority, hasTrailingPathSeparator, DataUri;
 var init_resources = __esm({
   "node_modules/monaco-editor/esm/vs/base/common/resources.js"() {
     init_extpath();
@@ -29928,7 +29928,7 @@ var init_resources = __esm({
     basename2 = extUri.basename.bind(extUri);
     extname2 = extUri.extname.bind(extUri);
     dirname2 = extUri.dirname.bind(extUri);
-    joinPath = extUri.joinPath.bind(extUri);
+    joinPath2 = extUri.joinPath.bind(extUri);
     normalizePath = extUri.normalizePath.bind(extUri);
     relativePath = extUri.relativePath.bind(extUri);
     resolvePath = extUri.resolvePath.bind(extUri);
@@ -30197,7 +30197,7 @@ var init_log = __esm({
         return logger;
       }
       toResource(idOrResource) {
-        return isString(idOrResource) ? joinPath(this.logsHome, `${idOrResource.replace(/[\\/:\*\?"<>\|]/g, "")}.log`) : idOrResource;
+        return isString(idOrResource) ? joinPath2(this.logsHome, `${idOrResource.replace(/[\\/:\*\?"<>\|]/g, "")}.log`) : idOrResource;
       }
       setVisibility(resourceOrId, visibility) {
         const logger = this.getLoggerEntry(resourceOrId);
@@ -137471,7 +137471,7 @@ var init_highlightedLabel = __esm({
 });
 
 // node_modules/monaco-editor/esm/vs/base/browser/ui/iconLabel/iconLabel.js
-function splitMatches(labels, separator, matches) {
+function splitMatches(labels, separator2, matches) {
   if (!matches) {
     return void 0;
   }
@@ -137479,7 +137479,7 @@ function splitMatches(labels, separator, matches) {
   return labels.map((label) => {
     const labelRange = { start: labelStart, end: labelStart + label.length };
     const result = matches.map((match2) => Range2.intersect(labelRange, match2)).filter((range2) => !Range2.isEmpty(range2)).map(({ start, end }) => ({ start: start - labelStart, end: end - labelStart }));
-    labelStart = labelRange.end + separator.length;
+    labelStart = labelRange.end + separator2.length;
     return result;
   });
 }
@@ -137731,8 +137731,8 @@ var init_iconLabel = __esm({
           this.container.textContent = "";
           this.container.classList.add("multiple");
           this.singleLabel = void 0;
-          const separator = options?.separator || "/";
-          const matches = splitMatches(label, separator, options?.matches);
+          const separator2 = options?.separator || "/";
+          const matches = splitMatches(label, separator2, options?.matches);
           for (let i = 0; i < label.length; i++) {
             const l = label[i];
             const m = matches ? matches[i] : void 0;
@@ -137741,7 +137741,7 @@ var init_iconLabel = __esm({
             const highlightedLabel = this._labelDisposables.add(new HighlightedLabel(append(this.container, name)));
             highlightedLabel.set(l, m, void 0, options?.labelEscapeNewLines, supportIcons);
             if (i < label.length - 1) {
-              append(name, $("span.label-separator", void 0, separator));
+              append(name, $("span.label-separator", void 0, separator2));
             }
           }
         }
@@ -137842,10 +137842,10 @@ var init_keybindingLabel2 = __esm({
           this.renderKey(parent, keyLabel, Boolean(match2?.keyCode), "");
         }
       }
-      renderKey(parent, label, highlight, separator) {
+      renderKey(parent, label, highlight, separator2) {
         append(parent, this.createKeyElement(label, highlight ? ".highlight" : ""));
-        if (separator) {
-          append(parent, $7("span.monaco-keybinding-key-separator", void 0, separator));
+        if (separator2) {
+          append(parent, $7("span.monaco-keybinding-key-separator", void 0, separator2));
         }
       }
       renderUnbound(parent) {
@@ -138155,10 +138155,10 @@ var init_quickInputList = __esm({
       QuickPickSeparatorFocusReason2[QuickPickSeparatorFocusReason2["ACTIVE_ITEM"] = 2] = "ACTIVE_ITEM";
     })(QuickPickSeparatorFocusReason || (QuickPickSeparatorFocusReason = {}));
     QuickPickSeparatorElement = class extends BaseQuickPickItemElement {
-      constructor(index, fireSeparatorButtonTriggered, separator) {
-        super(index, false, separator);
+      constructor(index, fireSeparatorButtonTriggered, separator2) {
+        super(index, false, separator2);
         this.fireSeparatorButtonTriggered = fireSeparatorButtonTriggered;
-        this.separator = separator;
+        this.separator = separator2;
         this.children = new Array();
         this.focusInsideSeparator = QuickPickSeparatorFocusReason.NONE;
       }
@@ -138426,8 +138426,8 @@ var init_quickInputList = __esm({
       get visibleSeparators() {
         return [...this._visibleSeparatorsFrequency.keys()];
       }
-      isSeparatorVisible(separator) {
-        return this._visibleSeparatorsFrequency.has(separator);
+      isSeparatorVisible(separator2) {
+        return this._visibleSeparatorsFrequency.has(separator2);
       }
       renderElement(node, index, data) {
         const element = node.element;
@@ -138477,15 +138477,15 @@ var init_quickInputList = __esm({
         }
         super.disposeElement(element, _index, data);
       }
-      addSeparator(separator) {
-        this._visibleSeparatorsFrequency.set(separator, (this._visibleSeparatorsFrequency.get(separator) || 0) + 1);
+      addSeparator(separator2) {
+        this._visibleSeparatorsFrequency.set(separator2, (this._visibleSeparatorsFrequency.get(separator2) || 0) + 1);
       }
-      removeSeparator(separator) {
-        const frequency = this._visibleSeparatorsFrequency.get(separator) || 0;
+      removeSeparator(separator2) {
+        const frequency = this._visibleSeparatorsFrequency.get(separator2) || 0;
         if (frequency > 1) {
-          this._visibleSeparatorsFrequency.set(separator, frequency - 1);
+          this._visibleSeparatorsFrequency.set(separator2, frequency - 1);
         } else {
-          this._visibleSeparatorsFrequency.delete(separator);
+          this._visibleSeparatorsFrequency.delete(separator2);
         }
       }
     };
@@ -138714,42 +138714,42 @@ var init_quickInputList = __esm({
       _registerSeparatorActionShowingListeners() {
         this._register(this._tree.onDidChangeFocus((e) => {
           const parent = e.elements[0] ? this._tree.getParentElement(e.elements[0]) : null;
-          for (const separator of this._separatorRenderer.visibleSeparators) {
-            const value = separator === parent;
-            const currentActive = !!(separator.focusInsideSeparator & QuickPickSeparatorFocusReason.ACTIVE_ITEM);
+          for (const separator2 of this._separatorRenderer.visibleSeparators) {
+            const value = separator2 === parent;
+            const currentActive = !!(separator2.focusInsideSeparator & QuickPickSeparatorFocusReason.ACTIVE_ITEM);
             if (currentActive !== value) {
               if (value) {
-                separator.focusInsideSeparator |= QuickPickSeparatorFocusReason.ACTIVE_ITEM;
+                separator2.focusInsideSeparator |= QuickPickSeparatorFocusReason.ACTIVE_ITEM;
               } else {
-                separator.focusInsideSeparator &= ~QuickPickSeparatorFocusReason.ACTIVE_ITEM;
+                separator2.focusInsideSeparator &= ~QuickPickSeparatorFocusReason.ACTIVE_ITEM;
               }
-              this._tree.rerender(separator);
+              this._tree.rerender(separator2);
             }
           }
         }));
         this._register(this._tree.onMouseOver((e) => {
           const parent = e.element ? this._tree.getParentElement(e.element) : null;
-          for (const separator of this._separatorRenderer.visibleSeparators) {
-            if (separator !== parent) {
+          for (const separator2 of this._separatorRenderer.visibleSeparators) {
+            if (separator2 !== parent) {
               continue;
             }
-            const currentMouse = !!(separator.focusInsideSeparator & QuickPickSeparatorFocusReason.MOUSE_HOVER);
+            const currentMouse = !!(separator2.focusInsideSeparator & QuickPickSeparatorFocusReason.MOUSE_HOVER);
             if (!currentMouse) {
-              separator.focusInsideSeparator |= QuickPickSeparatorFocusReason.MOUSE_HOVER;
-              this._tree.rerender(separator);
+              separator2.focusInsideSeparator |= QuickPickSeparatorFocusReason.MOUSE_HOVER;
+              this._tree.rerender(separator2);
             }
           }
         }));
         this._register(this._tree.onMouseOut((e) => {
           const parent = e.element ? this._tree.getParentElement(e.element) : null;
-          for (const separator of this._separatorRenderer.visibleSeparators) {
-            if (separator !== parent) {
+          for (const separator2 of this._separatorRenderer.visibleSeparators) {
+            if (separator2 !== parent) {
               continue;
             }
-            const currentMouse = !!(separator.focusInsideSeparator & QuickPickSeparatorFocusReason.MOUSE_HOVER);
+            const currentMouse = !!(separator2.focusInsideSeparator & QuickPickSeparatorFocusReason.MOUSE_HOVER);
             if (currentMouse) {
-              separator.focusInsideSeparator &= ~QuickPickSeparatorFocusReason.MOUSE_HOVER;
-              this._tree.rerender(separator);
+              separator2.focusInsideSeparator &= ~QuickPickSeparatorFocusReason.MOUSE_HOVER;
+              this._tree.rerender(separator2);
             }
           }
         }));
@@ -138794,11 +138794,11 @@ var init_quickInputList = __esm({
             element = currentSeparatorElement;
           } else {
             const previous = index > 0 ? inputElements[index - 1] : void 0;
-            let separator;
+            let separator2;
             if (previous && previous.type === "separator" && !previous.buttons) {
-              separator = previous;
+              separator2 = previous;
             }
-            const qpi = new QuickPickItemElement(index, currentSeparatorElement?.children ? currentSeparatorElement.children.length : index, this._hasCheckboxes && item.pickable !== false, (e) => this._onButtonTriggered.fire(e), this._elementChecked, item, separator);
+            const qpi = new QuickPickItemElement(index, currentSeparatorElement?.children ? currentSeparatorElement.children.length : index, this._hasCheckboxes && item.pickable !== false, (e) => this._onButtonTriggered.fire(e), this._elementChecked, item, separator2);
             this._itemElements.push(qpi);
             if (currentSeparatorElement) {
               currentSeparatorElement.children.push(qpi);
@@ -163106,6 +163106,454 @@ function createConnectionPanel(React2) {
   return { Panel: ConnectionPanel, Trigger: ConnectionTrigger };
 }
 
+// src/transfer.js
+var TRANSFER_CHUNK = 256 * 1024;
+function base64Bytes(value) {
+  if (!value) return 0;
+  const padding = value.endsWith("==") ? 2 : value.endsWith("=") ? 1 : 0;
+  return Math.floor(value.length * 3 / 4) - padding;
+}
+function failure(message, code) {
+  const error = new Error(message);
+  error.code = code;
+  return error;
+}
+function newTransferId() {
+  const bytes = new Uint8Array(8);
+  if (globalThis.crypto && typeof globalThis.crypto.getRandomValues === "function") {
+    globalThis.crypto.getRandomValues(bytes);
+  } else {
+    for (let index = 0; index < bytes.length; index += 1) bytes[index] = Math.floor(Math.random() * 256);
+  }
+  return [...bytes].map((value) => value.toString(16).padStart(2, "0")).join("");
+}
+async function transferFile({
+  read,
+  write,
+  status: status2,
+  cancel,
+  source,
+  destination,
+  transferId,
+  overwrite = false,
+  resume = true,
+  onProgress = () => {
+  },
+  signal
+}) {
+  if (typeof read !== "function" || typeof write !== "function") {
+    throw new Error("transfer requires read and write functions");
+  }
+  if (!source || !destination) throw new Error("source and destination are required");
+  const id = transferId || newTransferId();
+  let offset = 0;
+  let partial = false;
+  try {
+    const state = await status2({ path: destination, transferId: id });
+    if (state && state.exists && !overwrite) throw failure("\u76EE\u6807\u8BBE\u5907\u4E0A\u5DF2\u5B58\u5728\u540C\u540D\u6587\u4EF6", "exists");
+    if (resume && state && Number.isSafeInteger(state.offset) && state.offset > 0) {
+      offset = state.offset;
+      partial = Boolean(state.partial);
+    }
+  } catch (error) {
+    if (error && error.code === "exists") throw error;
+  }
+  let total = null;
+  const report = (value) => {
+    const transferred = Math.max(0, Number(value) || 0);
+    onProgress({
+      transferred,
+      total: total || 0,
+      percent: total ? Math.min(100, Math.round(transferred / total * 100)) : total === 0 ? 100 : 0
+    });
+  };
+  if (partial && offset > 0) report(offset);
+  while (true) {
+    if (signal && signal.aborted) {
+      if (typeof cancel === "function") await cancel({ path: destination, transferId: id }).catch(() => {
+      });
+      throw failure("\u4F20\u8F93\u5DF2\u53D6\u6D88", "aborted");
+    }
+    const chunk = total !== null && offset >= total ? { size: total, offset, base64: "" } : await read({ path: source, offset, limit: TRANSFER_CHUNK });
+    if (!chunk || typeof chunk.base64 !== "string") throw failure("\u8BFB\u53D6\u6E90\u6587\u4EF6\u5931\u8D25", "read_failed");
+    const size = Number(chunk.size);
+    if (!Number.isSafeInteger(size) || size < 0) throw failure("\u6E90\u6587\u4EF6\u5927\u5C0F\u65E0\u6548", "read_failed");
+    if (total === null) total = size;
+    else if (size !== total) throw failure("\u6E90\u6587\u4EF6\u5728\u4F20\u8F93\u8FC7\u7A0B\u4E2D\u53D1\u751F\u53D8\u5316", "source_changed");
+    if (chunk.offset !== void 0 && Number(chunk.offset) !== offset) {
+      throw failure("\u6E90\u6587\u4EF6\u8BFB\u53D6\u504F\u79FB\u4E0D\u4E00\u81F4", "source_changed");
+    }
+    const bytes = base64Bytes(chunk.base64);
+    if (offset + bytes > total) throw failure("\u6E90\u6587\u4EF6\u8FD4\u56DE\u7684\u6570\u636E\u8D85\u51FA\u58F0\u660E\u5927\u5C0F", "source_changed");
+    const final = offset + bytes >= total;
+    const result = await write({
+      path: destination,
+      transferId: id,
+      offset,
+      total,
+      base64: chunk.base64,
+      final,
+      overwrite,
+      resume: offset > 0
+    });
+    if (!result || !Number.isSafeInteger(result.offset) || result.offset < offset) {
+      throw failure("\u76EE\u6807\u8BBE\u5907\u6CA1\u6709\u786E\u8BA4\u5199\u5165\u8FDB\u5EA6", "write_failed");
+    }
+    offset = result.offset;
+    report(offset);
+    if (result.complete === true || offset >= total) break;
+  }
+  if (total === 0) report(0);
+  return { path: destination, transferId: id, bytes: offset };
+}
+
+// src/transfer-page.js
+function separator(path) {
+  return String(path || "").includes("\\") ? "\\" : "/";
+}
+function joinPath(base, name) {
+  if (!base) return name;
+  return String(base).replace(/[\\/]+$/, "") + separator(base) + name;
+}
+function parentPath(path) {
+  const clean = String(path || "").replace(/[\\/]+$/, "");
+  if (!clean) return "";
+  if (/^[A-Za-z]:$/.test(clean)) return clean + "\\";
+  const slash = Math.max(clean.lastIndexOf("\\"), clean.lastIndexOf("/"));
+  if (slash < 0) return "";
+  const parent = clean.slice(0, slash);
+  return /^[A-Za-z]:$/.test(parent) ? parent + "\\" : parent;
+}
+function formatBytes(value) {
+  if (!Number.isFinite(value) || value < 0) return "";
+  if (value < 1024) return value + " B";
+  if (value < 1024 * 1024) return (value / 1024).toFixed(1) + " KB";
+  if (value < 1024 * 1024 * 1024) return (value / (1024 * 1024)).toFixed(1) + " MB";
+  return (value / (1024 * 1024 * 1024)).toFixed(2) + " GB";
+}
+var StableTransferBrowser = null;
+function createTransferPage({ React: React2, Glyph, api: api2, post, C, devices = [], localDevice = "", onNotice, onError }) {
+  const h2 = React2.createElement;
+  const field = {
+    height: 28,
+    boxSizing: "border-box",
+    border: 0,
+    borderRadius: 6,
+    background: C.soft,
+    color: C.ink,
+    fontSize: 12,
+    padding: "0 8px",
+    outline: "none"
+  };
+  const button = (label, onClick, options = {}) => h2("button", {
+    type: "button",
+    onClick,
+    disabled: options.disabled,
+    title: options.title || label,
+    className: "tether-hover",
+    style: {
+      height: 28,
+      padding: "0 10px",
+      border: 0,
+      borderRadius: 6,
+      background: options.primary ? C.blue : C.soft,
+      color: options.primary ? "#fff" : C.ink,
+      fontSize: 12,
+      cursor: options.disabled ? "default" : "pointer",
+      opacity: options.disabled ? 0.45 : 1,
+      flex: "0 0 auto"
+    }
+  }, label);
+  if (!StableTransferBrowser) {
+    StableTransferBrowser = function Browser2({ title, deviceId, onDevice, path, onPath, selectedPath, onFile }) {
+      const [roots, setRoots] = React2.useState([]);
+      const [entries2, setEntries] = React2.useState(null);
+      const [loading, setLoading] = React2.useState(false);
+      const [error, setError] = React2.useState("");
+      const [draft, setDraft] = React2.useState(path || "");
+      const run = React2.useRef(0);
+      React2.useEffect(() => {
+        let cancelled = false;
+        if (!deviceId) {
+          setRoots([]);
+          setEntries(null);
+          return void 0;
+        }
+        setLoading(true);
+        setError("");
+        Promise.all([
+          api2("/api/devices/" + encodeURIComponent(deviceId) + "/workspaces").catch(() => ({ workspaces: [] })),
+          api2("/api/devices/" + encodeURIComponent(deviceId) + "/drives").catch(() => ({ drives: [] }))
+        ]).then(([workspaceData, driveData]) => {
+          if (cancelled) return;
+          const list2 = [
+            ...(workspaceData && workspaceData.workspaces || []).map((item) => ({ name: item.name || item.path, path: item.path, kind: "workspace" })),
+            ...(driveData && driveData.drives || []).map((item) => ({ name: item.name || item.path, path: item.path, kind: "drive" }))
+          ].filter((item) => item.path);
+          setRoots(list2);
+          if (!path && list2.length) onPath(list2[0].path);
+        }).catch((cause) => {
+          if (!cancelled) setError(cause.message || "\u8BFB\u53D6\u6839\u76EE\u5F55\u5931\u8D25");
+        }).finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+        return () => {
+          cancelled = true;
+        };
+      }, [deviceId]);
+      React2.useEffect(() => {
+        setDraft(path || "");
+        if (!deviceId || !path) {
+          setEntries(null);
+          return void 0;
+        }
+        const token = ++run.current;
+        let cancelled = false;
+        setLoading(true);
+        setError("");
+        post("/api/devices/" + encodeURIComponent(deviceId) + "/fs/list", { path }).then((data) => {
+          if (cancelled || token !== run.current) return;
+          const list2 = (data && data.entries || []).filter((item) => item && item.path && item.name);
+          list2.sort((left, right) => left.dir === right.dir ? String(left.name).localeCompare(String(right.name)) : left.dir ? -1 : 1);
+          setEntries(list2);
+        }).catch((cause) => {
+          if (!cancelled && token === run.current) {
+            setEntries([]);
+            setError(cause.message || "\u8BFB\u53D6\u76EE\u5F55\u5931\u8D25");
+          }
+        }).finally(() => {
+          if (!cancelled && token === run.current) setLoading(false);
+        });
+        return () => {
+          cancelled = true;
+        };
+      }, [deviceId, path]);
+      const open = (item) => {
+        if (item.dir) onPath(item.path);
+        else if (onFile) onFile(item);
+      };
+      return h2(
+        "div",
+        { style: { flex: "1 1 0", minWidth: 0, display: "flex", flexDirection: "column", background: C.bg, borderRadius: 10, overflow: "hidden", border: 0 } },
+        h2(
+          "div",
+          { style: { display: "flex", alignItems: "center", gap: 6, padding: "10px 12px", background: C.soft, flex: "0 0 auto", minWidth: 0 } },
+          h2("span", { style: { fontSize: 12, fontWeight: 600, color: C.ink, flex: "0 0 auto" } }, title),
+          h2("select", {
+            value: deviceId || "",
+            onChange: (event) => {
+              onDevice(event.target.value);
+              onPath("");
+            },
+            style: { ...field, flex: "1 1 auto", minWidth: 0 }
+          }, devices.map((item) => h2("option", { key: item.device_id, value: item.device_id }, (item.name || item.device_id) + (item.online ? "" : " \xB7 \u79BB\u7EBF"))))
+        ),
+        h2(
+          "div",
+          { style: { display: "flex", alignItems: "center", gap: 6, padding: "7px 12px", flex: "0 0 auto", minWidth: 0 } },
+          h2(
+            "select",
+            {
+              value: "",
+              onChange: (event) => {
+                if (event.target.value) onPath(event.target.value);
+              },
+              title: "\u5DE5\u4F5C\u533A\u4E0E\u78C1\u76D8",
+              style: { ...field, width: 108, flex: "0 0 auto" }
+            },
+            h2("option", { value: "" }, "\u4F4D\u7F6E\u2026"),
+            roots.map((item) => h2("option", { key: item.kind + ":" + item.path, value: item.path }, item.name))
+          ),
+          button("\u2191", () => {
+            const up = parentPath(path);
+            if (up) onPath(up);
+          }, { title: "\u4E0A\u4E00\u7EA7", disabled: !path }),
+          h2("input", {
+            value: draft,
+            spellCheck: false,
+            "aria-label": title + "\u8DEF\u5F84",
+            onChange: (event) => setDraft(event.target.value),
+            onKeyDown: (event) => {
+              if (event.key === "Enter" && draft.trim()) onPath(draft.trim());
+            },
+            style: { ...field, flex: "1 1 auto", minWidth: 0, fontFamily: "Consolas, monospace" }
+          }),
+          button("\u5237\u65B0", () => onPath(path), { title: "\u5237\u65B0\u76EE\u5F55", disabled: !path })
+        ),
+        error ? h2("div", { role: "alert", style: { padding: "4px 12px", color: C.red, fontSize: 11.5, flex: "0 0 auto" } }, error) : null,
+        h2(
+          "div",
+          { style: { flex: "1 1 auto", minHeight: 0, overflow: "auto", padding: "0 6px 10px" } },
+          loading && !entries2 ? h2("div", { style: { padding: 16, color: C.mute, fontSize: 12 } }, "\u52A0\u8F7D\u4E2D\u2026") : null,
+          !loading && entries2 && !entries2.length ? h2("div", { style: { padding: 16, color: C.mute, fontSize: 12 } }, error ? "" : "\u7A7A\u76EE\u5F55") : null,
+          (entries2 || []).map((item) => {
+            const selected = !item.dir && selectedPath === item.path;
+            return h2(
+              "button",
+              {
+                key: item.path,
+                type: "button",
+                title: item.path,
+                onClick: () => open(item),
+                className: "tether-hover",
+                style: {
+                  display: "grid",
+                  gridTemplateColumns: "minmax(0,1fr) 150px 90px",
+                  gap: 8,
+                  alignItems: "center",
+                  width: "100%",
+                  height: 29,
+                  padding: "0 8px",
+                  border: 0,
+                  borderRadius: 6,
+                  background: selected ? C.soft : "transparent",
+                  color: C.ink,
+                  fontSize: 12.5,
+                  textAlign: "left",
+                  cursor: "pointer"
+                }
+              },
+              h2(
+                "span",
+                { style: { display: "flex", alignItems: "center", gap: 7, minWidth: 0 } },
+                h2("span", { "aria-hidden": true, style: { width: 14, color: C.mute, fontSize: 11 } }, item.dir ? "\u25B8" : "\u2022"),
+                h2("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, item.name)
+              ),
+              h2("span", { style: { color: C.mute, fontSize: 11 } }, item.mtime ? new Date(item.mtime * 1e3).toLocaleString("zh-CN", { hour12: false }) : ""),
+              h2("span", { style: { color: C.mute, fontSize: 11, textAlign: "right" } }, item.dir ? "\u6587\u4EF6\u5939" : formatBytes(Number(item.size)))
+            );
+          })
+        )
+      );
+    };
+  }
+  const Browser = StableTransferBrowser;
+  const online = devices.filter((item) => item && item.online);
+  const initialSource = localDevice && devices.some((item) => item.device_id === localDevice) ? localDevice : online[0] && online[0].device_id || "";
+  const [sourceDevice, setSourceDevice] = React2.useState(initialSource);
+  const [destDevice, setDestDevice] = React2.useState((online.find((item) => item.device_id !== initialSource) || {}).device_id || "");
+  const [sourcePath, setSourcePath] = React2.useState("");
+  const [destPath, setDestPath] = React2.useState("");
+  const [sourceFile, setSourceFile] = React2.useState(null);
+  const [overwrite, setOverwrite] = React2.useState(false);
+  const [job, setJob] = React2.useState(null);
+  const [refresh, setRefresh] = React2.useState(0);
+  const abortRef = React2.useRef(null);
+  const transferRef = React2.useRef("");
+  const sourceItem = devices.find((item) => item.device_id === sourceDevice);
+  const destItem = devices.find((item) => item.device_id === destDevice);
+  const destination = sourceFile && destPath ? joinPath(destPath, sourceFile.name) : "";
+  const canStart = !!(sourceFile && destination && sourceItem && destItem && sourceItem.online && destItem.online && !running);
+  const running = !!(job && job.state === "running");
+  const start = async () => {
+    if (!sourceFile || !destination) return;
+    const controller = new AbortController();
+    abortRef.current = controller;
+    if (!transferRef.current) transferRef.current = newTransferId();
+    const transferId = transferRef.current;
+    setJob({ state: "running", percent: 0, transferred: 0, total: Number(sourceFile.size) || 0, destination, error: "" });
+    const base = "/api/devices/" + encodeURIComponent(destDevice);
+    try {
+      const result = await transferFile({
+        source: sourceFile.path,
+        destination,
+        transferId,
+        overwrite,
+        signal: controller.signal,
+        read: (args) => post(
+          "/api/devices/" + encodeURIComponent(sourceDevice) + "/fs/read",
+          { path: args.path, offset: args.offset, limit: args.limit, encoding: "base64" }
+        ),
+        write: (args) => post(base + "/fs/write_chunk", args),
+        status: (args) => post(base + "/fs/transfer_status", args),
+        cancel: (args) => post(base + "/fs/transfer_cancel", args),
+        onProgress: (value) => setJob((current) => ({ ...current || {}, ...value, state: "running" }))
+      });
+      setJob({ state: "done", percent: 100, transferred: result.bytes, total: result.bytes, destination, error: "" });
+      transferRef.current = "";
+      setRefresh((value) => value + 1);
+      if (onNotice) onNotice("\u5DF2\u8F6C\u79FB " + sourceFile.name + "\uFF08" + formatBytes(result.bytes) + "\uFF09");
+    } catch (cause) {
+      const aborted = cause && cause.code === "aborted";
+      setJob((current) => ({ ...current || {}, state: aborted ? "cancelled" : "error", error: aborted ? "\u5DF2\u53D6\u6D88" : cause.message || "\u4F20\u8F93\u5931\u8D25", code: cause.code }));
+      if (!aborted && onError) onError(cause);
+      if (aborted) transferRef.current = "";
+    } finally {
+      abortRef.current = null;
+    }
+  };
+  const cancel = () => {
+    if (abortRef.current) abortRef.current.abort();
+  };
+  const progress = job ? Math.max(0, Math.min(100, Number(job.percent) || 0)) : 0;
+  return h2(
+    "div",
+    { style: { flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column", padding: "14px 18px 18px", gap: 12, background: C.bg } },
+    h2(
+      "div",
+      { style: { display: "flex", alignItems: "center", gap: 10, flex: "0 0 auto" } },
+      h2("div", { style: { fontSize: 18, fontWeight: 600, color: C.ink } }, "\u6587\u4EF6\u8F6C\u79FB"),
+      h2("span", { style: { color: C.mute, fontSize: 11.5 } }, "\u6E90\u6587\u4EF6\u4ECE\u6E90\u8BBE\u5907\u8BFB\u53D6\uFF0C\u5206\u5757\u5199\u5165\u76EE\u6807\u8BBE\u5907\uFF1B\u4E2D\u65AD\u540E\u53EF\u4ECE\u504F\u79FB\u7EE7\u7EED\u3002")
+    ),
+    h2(
+      "div",
+      { style: { display: "flex", gap: 12, flex: "1 1 auto", minHeight: 0 } },
+      h2(Browser, {
+        title: "\u6E90\u8BBE\u5907",
+        deviceId: sourceDevice,
+        onDevice: (id) => {
+          setSourceDevice(id);
+          setSourceFile(null);
+        },
+        path: sourcePath,
+        onPath: setSourcePath,
+        selectedPath: sourceFile && sourceFile.path,
+        onFile: (item) => setSourceFile(item)
+      }),
+      h2("div", { style: { display: "flex", flexDirection: "column", justifyContent: "center", color: C.mute, fontSize: 18, flex: "0 0 auto" } }, "\u2192"),
+      h2(Browser, {
+        key: "dest:" + refresh,
+        title: "\u76EE\u6807\u76EE\u5F55",
+        deviceId: destDevice,
+        onDevice: (id) => setDestDevice(id),
+        path: destPath,
+        onPath: setDestPath,
+        selectedPath: ""
+      })
+    ),
+    h2(
+      "div",
+      { style: { display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 9, background: C.soft, flex: "0 0 auto", minWidth: 0 } },
+      h2(
+        "div",
+        { style: { flex: "1 1 auto", minWidth: 0, fontSize: 12, color: C.sub, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
+        sourceFile ? sourceFile.name + " \xB7 " + formatBytes(Number(sourceFile.size)) + " \u2192 " + (destination || "\u9009\u62E9\u76EE\u6807\u76EE\u5F55") : "\u4ECE\u5DE6\u4FA7\u9009\u62E9\u4E00\u4E2A\u6587\u4EF6"
+      ),
+      h2(
+        "label",
+        { style: { display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: C.sub, flex: "0 0 auto" } },
+        h2("input", { type: "checkbox", checked: overwrite, onChange: (event) => setOverwrite(event.target.checked) }),
+        "\u8986\u76D6\u540C\u540D\u6587\u4EF6"
+      ),
+      running ? button("\u53D6\u6D88", cancel) : button(job && job.state === "error" ? "\u91CD\u8BD5" : "\u5F00\u59CB\u8F6C\u79FB", start, { primary: true, disabled: !canStart })
+    ),
+    job ? h2(
+      "div",
+      { style: { display: "flex", alignItems: "center", gap: 10, flex: "0 0 auto" } },
+      h2(
+        "div",
+        { style: { flex: "1 1 auto", height: 6, borderRadius: 999, background: C.soft, overflow: "hidden" } },
+        h2("div", { style: { width: progress + "%", height: "100%", background: job.state === "error" ? C.red : C.blue, transition: "width 200ms ease" } })
+      ),
+      h2(
+        "span",
+        { className: "tether-num", style: { color: job.state === "error" ? C.red : C.mute, fontSize: 11, minWidth: 150, textAlign: "right" } },
+        job.state === "error" ? job.error : (job.percent || 0) + "% \xB7 " + formatBytes(job.transferred || 0) + " / " + formatBytes(job.total || 0)
+      )
+    ) : null
+  );
+}
+
 // src/app.js
 function responseBelongsToDevice(data, expectedDevice) {
   if (!data || typeof data !== "object" || !expectedDevice) return false;
@@ -164010,7 +164458,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       ) : null
     );
   }
-  function formatBytes(n2) {
+  function formatBytes2(n2) {
     if (n2 == null) return "";
     if (n2 < 1024) return n2 + " B";
     if (n2 < 1024 * 1024) return (n2 / 1024).toFixed(1) + " KB";
@@ -164040,7 +164488,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const type = dot2 > 0 && dot2 < base.length - 1 ? base.slice(dot2 + 1) : base.startsWith(".") ? base.slice(1) : "TXT";
     return String(type || "TXT").slice(0, 4).toUpperCase();
   }
-  function joinPath2(base, name) {
+  function joinPath3(base, name) {
     return String(base || "").replace(/[\\/]+$/, "") + "\\" + String(name || "");
   }
   function pathSegments(target) {
@@ -164748,6 +165196,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const items = [
       { id: "workspaces", label: "\u539F\u751F\u5DE5\u4F5C\u533A", icon: "monitor" },
       { id: "files", label: "\u6587\u4EF6\u8D44\u6E90\u7BA1\u7406\u5668", icon: "files" },
+      { id: "transfer", label: "\u6587\u4EF6\u8F6C\u79FB", icon: "files" },
       { id: "network", label: "\u4E92\u8054", icon: "devices" }
     ];
     const button = (id, label, icon, onClick, selected) => h2("button", {
@@ -165156,13 +165605,13 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       const expanded = !isCycle && !!open[node.id];
       const cached = children[node.cacheKey];
       const kids = cached && cached.status === "loaded" ? cached.entries : void 0;
-      const parentPath = String(node.path || "").replace(/[\\/]+$/, "").replace(/[\\/][^\\/]+$/, "");
+      const parentPath2 = String(node.path || "").replace(/[\\/]+$/, "").replace(/[\\/][^\\/]+$/, "");
       const entryName = node.name || pathBasename(node.path);
       const nativeRow = Native.FileEntryRow({
-        parent: parentPath,
+        parent: parentPath2,
         entry: { name: entryName, type: isDir ? "directory" : "file" },
         tree: {
-          state: { expanded: expanded ? [node.path, parentPath + "/" + entryName, parentPath + "\\" + entryName] : [] },
+          state: { expanded: expanded ? [node.path, parentPath2 + "/" + entryName, parentPath2 + "\\" + entryName] : [] },
           onToggle: () => onToggle(node),
           onOpen: () => onOpenFile(node),
           t: (key) => key
@@ -165198,7 +165647,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           style: { display: "flex", alignItems: "center", minWidth: 0 }
         },
         row,
-        !isDir && node.size != null ? h2("span", { className: "tether-num", style: { flex: "0 0 auto", paddingRight: 10, fontSize: 10, color: C.mute } }, formatBytes(node.size)) : null
+        !isDir && node.size != null ? h2("span", { className: "tether-num", style: { flex: "0 0 auto", paddingRight: 10, fontSize: 10, color: C.mute } }, formatBytes2(node.size)) : null
       ));
       if (isDir && expanded) {
         if (!cached || cached.status === "loading") rows.push(h2("div", { key: node.id + ":loading", style: { padding: "3px " + UI.pad + "px 3px " + (UI.pad + (depth + 2) * 12) + "px", fontSize: 11.5, color: C.mute } }, "\u52A0\u8F7D\u4E2D\u2026"));
@@ -166488,7 +166937,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       const runKey = "product:" + product2;
       setUpdateRun(runKey, { state: "running" });
       setUpdateBusy("product:" + product2);
-      let failure = "";
+      let failure2 = "";
       try {
         const nodeScope = localId ? { deviceId: localId, epoch: 0 } : null;
         const plan = product2 === "desktop" ? [{ component: "node", scope: nodeScope }, { component: "app", scope: null }] : [{ component: "localPlugin", scope: null }, { component: "node", scope: nodeScope }];
@@ -166496,7 +166945,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         for (const step of plan) {
           if (step.component === "node" && !step.scope) {
             prepared.node = { failed: true };
-            failure = failure || "\u672A\u627E\u5230\u672C\u673A Node";
+            failure2 = failure2 || "\u672A\u627E\u5230\u672C\u673A Node";
             continue;
           }
           try {
@@ -166505,8 +166954,8 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
             prepared[step.component] = { failed: true };
             setComponentUpdateError(step.component, shortUpdateError(error), step.scope);
           }
-          if (prepared[step.component].failed && !failure) {
-            failure = step.component === "app" ? "APP \u66F4\u65B0\u5931\u8D25" : step.component === "node" ? "Node \u66F4\u65B0\u5931\u8D25" : "\u63D2\u4EF6\u66F4\u65B0\u5931\u8D25";
+          if (prepared[step.component].failed && !failure2) {
+            failure2 = step.component === "app" ? "APP \u66F4\u65B0\u5931\u8D25" : step.component === "node" ? "Node \u66F4\u65B0\u5931\u8D25" : "\u63D2\u4EF6\u66F4\u65B0\u5931\u8D25";
           }
         }
         const order = product2 === "desktop" ? ["node", "app"] : ["localPlugin", "node"];
@@ -166516,13 +166965,13 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           try {
             if (component === "app") {
               const applied = await updateAction("app", "apply", entry.preparedId, null);
-              if (!applied || applied.ok === false) failure = failure || "APP \u66F4\u65B0\u5931\u8D25";
+              if (!applied || applied.ok === false) failure2 = failure2 || "APP \u66F4\u65B0\u5931\u8D25";
               else if (!updateInfoRunning(applied)) setNotice("APP \u6B63\u5728\u91CD\u542F\u5E76\u5B89\u88C5\u66F4\u65B0\u2026");
               continue;
             }
             const result = await updateAction(component, "apply", entry.preparedId, entry.scope, entry.authority);
             if (!result || result.ok === false) {
-              failure = failure || (component === "node" ? "Node \u66F4\u65B0\u5931\u8D25" : "\u63D2\u4EF6\u66F4\u65B0\u5931\u8D25");
+              failure2 = failure2 || (component === "node" ? "Node \u66F4\u65B0\u5931\u8D25" : "\u63D2\u4EF6\u66F4\u65B0\u5931\u8D25");
               continue;
             }
             if (updateInfoRunning(result)) {
@@ -166536,16 +166985,16 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
               else await applyDshUpdate();
             }
           } catch (error) {
-            failure = failure || (component === "node" ? "Node \u66F4\u65B0\u5931\u8D25" : component === "app" ? "APP \u66F4\u65B0\u5931\u8D25" : "\u63D2\u4EF6\u66F4\u65B0\u5931\u8D25");
+            failure2 = failure2 || (component === "node" ? "Node \u66F4\u65B0\u5931\u8D25" : component === "app" ? "APP \u66F4\u65B0\u5931\u8D25" : "\u63D2\u4EF6\u66F4\u65B0\u5931\u8D25");
             setComponentUpdateError(component, shortUpdateError(error), entry.scope);
           }
         }
       } catch (error) {
-        failure = shortUpdateError(error);
-        setComponentUpdateError(product2 === "desktop" ? "app" : "localPlugin", failure, null);
+        failure2 = shortUpdateError(error);
+        setComponentUpdateError(product2 === "desktop" ? "app" : "localPlugin", failure2, null);
       } finally {
         await refreshUpdateCenter(true);
-        setUpdateRun(runKey, failure ? { state: "error", message: failure } : { state: "done" });
+        setUpdateRun(runKey, failure2 ? { state: "error", message: failure2 } : { state: "done" });
         setUpdateBusy("");
       }
     };
@@ -167320,7 +167769,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       if (dirInflightRef.current.has(key)) return;
       const pending = post("/api/devices/" + encodeURIComponent(requestDevice) + "/fs/list", { path: target }).then((data) => {
         if (deviceIdRef.current !== requestDevice) return data;
-        const entries2 = (data.entries || []).map((entry) => ({ ...entry, path: joinPath2(target, entry.name) }));
+        const entries2 = (data.entries || []).map((entry) => ({ ...entry, path: joinPath3(target, entry.name) }));
         rememberDir(requestDevice, target, entries2);
         return data;
       }).catch(() => {
@@ -167406,7 +167855,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       try {
         const data = await post("/api/devices/" + encodeURIComponent(requestDevice) + "/fs/list", { path: target });
         if (!treeResponseIsCurrent(requestDevice, deviceIdRef.current, requestEpoch, treeDeviceEpochRef.current)) return;
-        const entries2 = (data.entries || []).map((entry) => ({ ...entry, path: joinPath2(target, entry.name) })).filter((entry, index, all) => all.findIndex((item) => normPath(item.path) === normPath(entry.path)) === index);
+        const entries2 = (data.entries || []).map((entry) => ({ ...entry, path: joinPath3(target, entry.name) })).filter((entry, index, all) => all.findIndex((item) => normPath(item.path) === normPath(entry.path)) === index);
         cacheStore(dirCacheRef.current, key, { entries: entries2, at: Date.now() });
         setTreeChildren((current) => ({ ...current, [key]: { status: "loaded", entries: entries2 } }));
       } catch (e) {
@@ -167492,7 +167941,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         if (!data) data = await postRetry("/api/devices/" + encodeURIComponent(requestDevice) + "/fs/list", { path: requestTarget }, void 0, { signal: controller.signal });
         if (!data) throw new Error("\u76EE\u5F55\u8BFB\u53D6\u5931\u8D25");
         if (seq !== dirSeqRef.current || deviceIdRef.current !== requestDevice) return;
-        const entries2 = (data.entries || []).map((entry) => ({ ...entry, path: joinPath2(requestTarget, entry.name) }));
+        const entries2 = (data.entries || []).map((entry) => ({ ...entry, path: joinPath3(requestTarget, entry.name) }));
         cacheStore(dirCacheRef.current, key, { entries: entries2, at: Date.now() });
         if (cached) {
           setDirEntries(entries2);
@@ -167896,6 +168345,12 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         setSidebarCollapsed(true);
         return;
       }
+      if (id === "transfer") {
+        setView("transfer");
+        setActivePanel("transfer");
+        setSidebarCollapsed(true);
+        return;
+      }
       if (id === "files") {
         if (view === "files" && activePanel === "files" && !sidebarCollapsed) {
           setSidebarCollapsed(true);
@@ -168062,7 +168517,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         entry.dir && entry.mtime == null ? null : h2(
           "div",
           { style: { display: "flex", gap: 10, marginTop: 3, color: C.mute, fontSize: 10.5 } },
-          entry.dir ? null : h2("span", { className: "tether-num" }, formatBytes(entry.size)),
+          entry.dir ? null : h2("span", { className: "tether-num" }, formatBytes2(entry.size)),
           entry.mtime != null ? h2("span", { className: "tether-num" }, formatMtime(entry.mtime)) : null
         )
       );
@@ -168441,7 +168896,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
             { style: { marginLeft: "auto", display: "flex", alignItems: "center", gap: 2 } },
             tableEdit ? iconButton("eye", "\u9000\u51FA\u8868\u683C\u7F16\u8F91", cancelTableEdit, false) : tablePreview && tableView && tableCanEdit && file.writable ? iconButton("pencil", "\u7F16\u8F91\u8868\u683C", startTableEdit, false) : markdownCanToggle ? iconButton(editMode ? "eye" : "pencil", editMode ? "\u9884\u89C8 Markdown" : "\u7F16\u8F91 Markdown", () => setEditMode((value) => !value), false) : null,
             editableFile ? iconButton("save", "\u4FDD\u5B58", () => tableEdit ? saveTable() : saveFile(), !dirty && !tableEdit || busy) : null,
-            h2("span", { className: "tether-num", style: { fontSize: 10.5, color: C.mute, marginLeft: 4 } }, formatBytes(file.size))
+            h2("span", { className: "tether-num", style: { fontSize: 10.5, color: C.mute, marginLeft: 4 } }, formatBytes2(file.size))
           )
         )
       ) : null;
@@ -168507,7 +168962,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           "div",
           { style: { flex: "1 1 auto", display: "grid", placeItems: "center", alignContent: "center", gap: 6, color: C.mute, fontSize: 12, padding: 24, textAlign: "center" } },
           h2("div", null, "\u6B64\u7C7B\u578B\u6682\u4E0D\u652F\u6301\u9884\u89C8"),
-          h2("div", { className: "tether-num", style: { fontSize: 11 } }, (file.name || file.path) + " \xB7 " + formatBytes(file.size))
+          h2("div", { className: "tether-num", style: { fontSize: 11 } }, (file.name || file.path) + " \xB7 " + formatBytes2(file.size))
         );
       };
       const entries2 = filterExplorerEntries(sortExplorerEntries(dirEntries, sortKey, sortDir), search2);
@@ -168601,7 +169056,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
               ),
               h2("span", { style: { color: C.mute, fontSize: 11, whiteSpace: "nowrap" } }, formatMtime(entry.mtime)),
               h2("span", { style: { color: C.mute, fontSize: 11, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, entryTypeLabel(entry)),
-              h2("span", { className: "tether-num", style: { color: C.mute, fontSize: 11, textAlign: "right" } }, entry.dir ? "" : formatBytes(entry.size))
+              h2("span", { className: "tether-num", style: { color: C.mute, fontSize: 11, textAlign: "right" } }, entry.dir ? "" : formatBytes2(entry.size))
             ))
           ),
           dirLoading ? h2(
@@ -168850,7 +169305,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         "div",
         { style: { display: "flex", flex: "1 1 auto", minHeight: 0 } },
         h2(ActivityBar, {
-          active: view === "files" ? "files" : view === "network" ? "network" : "workspaces",
+          active: view === "files" ? "files" : view === "network" ? "network" : view === "transfer" ? "transfer" : "workspaces",
           collapsed: sidebarCollapsed,
           onSelect: selectPanel,
           onSettings: openSettings,
@@ -168889,7 +169344,17 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           "main",
           { className: "tether-workbench", style: { flex: "1 1 auto", display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0 } },
           h2(NativeSurface, { deviceId, online: deviceOnline, visible: view === "chat", localDeviceId: appLocalDevice }),
-          view === "files" ? renderExplorer() : view === "network" ? renderNetwork() : null
+          view === "files" ? renderExplorer() : view === "network" ? renderNetwork() : view === "transfer" ? h2(createTransferPage, {
+            React: React2,
+            Glyph,
+            api: api2,
+            post,
+            C,
+            devices: state && state.devices || [],
+            localDevice: appLocalDevice,
+            onNotice: setNotice,
+            onError: fail2
+          }) : null
         )
       ),
       showHub && host && (host.kind === "dsh" || host.kind === "app") ? h2(Connection.Panel, {

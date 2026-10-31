@@ -15,6 +15,8 @@ const strip = (file) => fs.readFileSync(path.join(root, 'packages/tether-ui/src'
 const shared = strip('app.js')
 const connectionPanel = strip('connection-panel.js')
 const dshHost = strip('hosts/dsh.js')
+const transferEngine = strip('transfer.js')
+const transferPage = strip('transfer-page.js')
 const monacoRuntime = await bundledMonacoRuntime()
 
 const plugin = `window.__ModuleLoader__.load({
@@ -28,6 +30,8 @@ ${monacoRuntime}
     const PLUGIN_VERSION = ${JSON.stringify(pluginVersion)}
 ${dshHost}
 ${connectionPanel}
+${transferEngine}
+${transferPage}
     let localPluginRpc = null
     let localPluginRemote = null
     const host = createDshHost({
