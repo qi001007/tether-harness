@@ -7075,6 +7075,8 @@ function createTransferPage({ React, Glyph, api, post, C, devices = [], localDev
     const [error, setError] = React.useState('')
     const [draft, setDraft] = React.useState(path || '')
     const run = React.useRef(0)
+    const pathRef = React.useRef(path)
+    pathRef.current = path
     React.useEffect(() => {
       let cancelled = false
       if (!deviceId) { setRoots([]); setEntries(null); return undefined }
@@ -7089,7 +7091,7 @@ function createTransferPage({ React, Glyph, api, post, C, devices = [], localDev
           ...((driveData && driveData.drives) || []).map((item) => ({ name: item.name || item.path, path: item.path, kind: 'drive' }))
         ].filter((item) => item.path)
         setRoots(list)
-        if (!path && list.length) onPath(list[0].path)
+        if (!pathRef.current && list.length) onPath(list[0].path)
       }).catch((cause) => { if (!cancelled) setError(cause.message || '读取根目录失败') })
         .finally(() => { if (!cancelled) setLoading(false) })
       return () => { cancelled = true }
@@ -7199,9 +7201,9 @@ function createTransferPage({ React, Glyph, api, post, C, devices = [], localDev
         signal: controller.signal,
         read: (args) => post('/api/devices/' + encodeURIComponent(sourceDevice) + '/fs/read',
           { path: args.path, offset: args.offset, limit: args.limit, encoding: 'base64' }),
-        write: (args) => post(base + '/fs/write_chunk', args),
-        status: (args) => post(base + '/fs/transfer_status', args),
-        cancel: (args) => post(base + '/fs/transfer_cancel', args),
+        write: (args) => post(base + '/fs/write_chunk', { ...args, transfer_id: args.transferId }),
+        status: (args) => post(base + '/fs/transfer_status', { path: args.path, transfer_id: args.transferId }),
+        cancel: (args) => post(base + '/fs/transfer_cancel', { path: args.path, transfer_id: args.transferId }),
         onProgress: (value) => setJob((current) => ({ ...(current || {}), ...value, state: 'running' }))
       })
       setJob({ state: 'done', percent: 100, transferred: result.bytes, total: result.bytes, destination, error: '' })

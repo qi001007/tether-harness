@@ -163272,6 +163272,8 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C, devices 
       const [error, setError] = React2.useState("");
       const [draft, setDraft] = React2.useState(path || "");
       const run = React2.useRef(0);
+      const pathRef = React2.useRef(path);
+      pathRef.current = path;
       React2.useEffect(() => {
         let cancelled = false;
         if (!deviceId) {
@@ -163291,7 +163293,7 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C, devices 
             ...(driveData && driveData.drives || []).map((item) => ({ name: item.name || item.path, path: item.path, kind: "drive" }))
           ].filter((item) => item.path);
           setRoots(list2);
-          if (!path && list2.length) onPath(list2[0].path);
+          if (!pathRef.current && list2.length) onPath(list2[0].path);
         }).catch((cause) => {
           if (!cancelled) setError(cause.message || "\u8BFB\u53D6\u6839\u76EE\u5F55\u5931\u8D25");
         }).finally(() => {
@@ -163443,8 +163445,8 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C, devices 
   const sourceItem = devices.find((item) => item.device_id === sourceDevice);
   const destItem = devices.find((item) => item.device_id === destDevice);
   const destination = sourceFile && destPath ? joinPath(destPath, sourceFile.name) : "";
-  const canStart = !!(sourceFile && destination && sourceItem && destItem && sourceItem.online && destItem.online && !running);
   const running = !!(job && job.state === "running");
+  const canStart = !!(sourceFile && destination && sourceItem && destItem && sourceItem.online && destItem.online && !running);
   const start = async () => {
     if (!sourceFile || !destination) return;
     const controller = new AbortController();
@@ -163464,9 +163466,9 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C, devices 
           "/api/devices/" + encodeURIComponent(sourceDevice) + "/fs/read",
           { path: args.path, offset: args.offset, limit: args.limit, encoding: "base64" }
         ),
-        write: (args) => post(base + "/fs/write_chunk", args),
-        status: (args) => post(base + "/fs/transfer_status", args),
-        cancel: (args) => post(base + "/fs/transfer_cancel", args),
+        write: (args) => post(base + "/fs/write_chunk", { ...args, transfer_id: args.transferId }),
+        status: (args) => post(base + "/fs/transfer_status", { path: args.path, transfer_id: args.transferId }),
+        cancel: (args) => post(base + "/fs/transfer_cancel", { path: args.path, transfer_id: args.transferId }),
         onProgress: (value) => setJob((current) => ({ ...current || {}, ...value, state: "running" }))
       });
       setJob({ state: "done", percent: 100, transferred: result.bytes, total: result.bytes, destination, error: "" });
