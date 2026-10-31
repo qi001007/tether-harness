@@ -55,6 +55,7 @@ const shotPanelDelay = Number(process.env.TETHER_APP_SHOT_PANEL_DELAY || 1500)
 
 fs.mkdirSync(dataDir, { recursive: true })
 app.setPath('userData', path.join(dataDir, 'electron'))
+const { enrollmentDecision } = require('./enrollment.js')
 const supervisor = new Supervisor({ repoRoot, dataDir, env })
 const updates = new UpdateService({ repoRoot, dataDir, python: supervisor.python, env, app })
 let uiOrigin = ''
@@ -308,24 +309,19 @@ handleTrusted('tether:enroll-device', async (_event, userToken) => {
   }
   let data = {}
   try { data = await response.json() } catch (_) { /* error bodies may be empty */ }
-  if (response.ok && data.token) {
-    return applyEnrollment(config, data.token, '')
+  const decision = enrollmentDecision(response.ok, data)
+  if (decision.mode === 'device') {
+    return applyEnrollment(config, decision.token, '')
   }
-  const detail = data && data.detail
-  const code = (detail && detail.code) || (data && data.code) || ''
-  if (code === 'device_owned') {
-    return { ok: false, code, error: '这台设备已属于其他账号' }
+  if (decision.mode === 'refuse') {
+    return { ok: false, code: decision.code, error: decision.error }
   }
-  if (code === 'device_not_found' || code === 'device_offline') {
+  if (decision.mode === 'account') {
     const result = await applyEnrollment(config, '', userToken)
     if (result.ok) result.mode = 'account'
     return result
   }
-  return {
-    ok: false,
-    error: (detail && (detail.error || detail.message)) || (data && data.error) || ('HTTP ' + response.status),
-    code
-  }
+  return { ok: false, error: decision.error || ('HTTP ' + response.status), code: decision.code }
 }, () => ({ ok: false, error: 'Untrusted IPC caller' }))
 handleTrusted('tether:updates-status', () => updates.status())
 handleTrusted('tether:updates-check', () => updates.check())
