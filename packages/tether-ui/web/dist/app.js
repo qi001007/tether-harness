@@ -169178,14 +169178,20 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         "div",
         {
           onPointerDown: (event) => event.stopPropagation(),
-          style: { position: "fixed", left: Math.max(8, Math.min(deviceMenu.x, window.innerWidth - 190)), top: Math.max(8, Math.min(deviceMenu.y, window.innerHeight - 110)), width: 178, zIndex: 60, background: C.layer1, borderRadius: 8, boxShadow: C.shadow, padding: 4, userSelect: "none" }
+          style: { position: "fixed", left: Math.max(8, Math.min(deviceMenu.x, window.innerWidth - 190)), top: Math.max(8, Math.min(deviceMenu.y, window.innerHeight - 150)), width: 178, zIndex: 60, background: C.layer1, borderRadius: 8, boxShadow: C.shadow, padding: 4, userSelect: "none" }
         },
         menuItem("monitor", "\u6253\u5F00\u539F\u751F\u5DE5\u4F5C\u533A", () => {
           const item = deviceMenu.device;
           setDeviceMenu(null);
           openDevice(item);
         }),
-        menuItem("pencil", "\u91CD\u547D\u540D", () => renameDevice(deviceMenu.device))
+        menuItem("pencil", "\u91CD\u547D\u540D", () => renameDevice(deviceMenu.device)),
+        menuItem("refresh", "\u91CD\u542F Node", () => {
+          const item = deviceMenu.device;
+          setDeviceMenu(null);
+          if (!window.confirm("\u91CD\u542F " + (item.name || item.device_id) + " \u7684 Node\uFF1F\u6B63\u5728\u8FD0\u884C\u7684\u4EFB\u52A1\u4F1A\u8BA9\u91CD\u542F\u88AB\u62D2\u7EDD\u3002")) return;
+          post("/api/devices/" + encodeURIComponent(item.device_id) + "/node/restart", {}).then(() => setNotice("\u5DF2\u8BF7\u6C42\u91CD\u542F Node")).catch(fail2);
+        })
       ) : null;
       const card = (item) => h2(
         "div",

@@ -455,6 +455,21 @@ class Node:
             task = asyncio.create_task(self._update_call(msg, self.ws))
             self.update_tasks.add(task)
             task.add_done_callback(self.update_tasks.discard)
+        elif kind == "restart_node":
+            if any(run and run.get("state") in ACTIVE for run in self.store.all_runs()):
+                await self._send({"type": "restart_denied", "reason": "tether_task_active"})
+                return
+            log("[ws] restart requested by controller")
+            self.restart_requested = True
+            try:
+                await self._send({"type": "restart_ack"})
+            except Exception:  # noqa: BLE001 - the socket may already be closing
+                pass
+            try:
+                await self.ws.close()
+            except Exception:  # noqa: BLE001 - closing is best effort
+                pass
+            return
         elif kind == "error":
             log(f"[ws] controller error: {msg.get('error')}")
 

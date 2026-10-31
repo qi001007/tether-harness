@@ -4768,10 +4768,18 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         }, h(Glyph, { name: icon, size: 15 }), h('span', null, label))
         const deviceContext = deviceMenu ? h('div', {
           onPointerDown: (event) => event.stopPropagation(),
-          style: { position: 'fixed', left: Math.max(8, Math.min(deviceMenu.x, window.innerWidth - 190)), top: Math.max(8, Math.min(deviceMenu.y, window.innerHeight - 110)), width: 178, zIndex: 60, background: C.layer1, borderRadius: 8, boxShadow: C.shadow, padding: 4, userSelect: 'none' }
+          style: { position: 'fixed', left: Math.max(8, Math.min(deviceMenu.x, window.innerWidth - 190)), top: Math.max(8, Math.min(deviceMenu.y, window.innerHeight - 150)), width: 178, zIndex: 60, background: C.layer1, borderRadius: 8, boxShadow: C.shadow, padding: 4, userSelect: 'none' }
         },
           menuItem('monitor', '打开原生工作区', () => { const item = deviceMenu.device; setDeviceMenu(null); openDevice(item) }),
-          menuItem('pencil', '重命名', () => renameDevice(deviceMenu.device))
+          menuItem('pencil', '重命名', () => renameDevice(deviceMenu.device)),
+          menuItem('refresh', '重启 Node', () => {
+            const item = deviceMenu.device
+            setDeviceMenu(null)
+            if (!window.confirm('重启 ' + (item.name || item.device_id) + ' 的 Node？正在运行的任务会让重启被拒绝。')) return
+            post('/api/devices/' + encodeURIComponent(item.device_id) + '/node/restart', {})
+              .then(() => setNotice('已请求重启 Node'))
+              .catch(fail)
+          })
         ) : null
         const card = (item) => h('div', {
           key: item.device_id, onClick: () => selectDevice(item.device_id), onDoubleClick: () => openDevice(item),
