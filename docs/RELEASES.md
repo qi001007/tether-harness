@@ -1,5 +1,17 @@
 # Public client releases
 
+## v0.2.43
+
+New-device account enrollment:
+
+- A Node with no device token can register with the logged-in account's personal token. The Hub validates the token, binds an unowned device (or the same owner's device) to the account, and returns a one-time device token; the Node persists it with owner-only permissions and uses it on later connections.
+- The APP login path first tries the existing-device enrollment endpoint; on `device_not_found`/`device_offline` it switches the local Node to account registration, `device_owned` is refused. The supervisor can start the Node with a user token instead of a pre-shared node token.
+- APP, plugin, and node are 0.2.43.
+
+Gates: mjs 212/212, cjs 6/6, pytest 135 passed / 4 skipped, `validate_versions()`. CI run `41225813966` success; signed manifest verified, published at 2026-10-31T17:45:20Z and served by the Hub. LAPTOP-01 Node+APP **18.8 s**, plugin job **17.4 s**, real plugin status/health 0.2.43.
+
+A live temp Hub/Node test passed: account-token registration came online under the right owner, the device token was persisted (97 B), and a restart without the user token stayed online as the same owner. A live APP login→enroll with a real account remains open because no test account credentials are available.
+
 ## v0.2.42
 
 Shared target file explorer:
