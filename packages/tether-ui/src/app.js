@@ -3277,8 +3277,8 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         return () => { alive = false; clearInterval(timer) }
       }, [])
 
-      const loadState = React.useCallback(async () => {
-        if (stateRef.current && typeof document !== 'undefined' && document.hidden) return
+      const loadState = React.useCallback(async (force = false) => {
+        if (!force && stateRef.current && typeof document !== 'undefined' && document.hidden) return
         try {
           const data = await api('/api/state')
           setState(data)
@@ -3297,6 +3297,67 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         const t = setInterval(loadState, 2500)
         return () => clearInterval(t)
       }, [loadState])
+
+      React.useEffect(() => {
+        if (typeof window === 'undefined' || !window.location
+            || !/^https?:/.test(String(window.location.protocol || ''))) return undefined
+        let stopped = false
+        let timer = null
+        let controller = null
+        let retry = 800
+        const schedule = () => {
+          if (stopped) return
+          if (timer) clearTimeout(timer)
+          timer = setTimeout(() => { timer = null; loadState(true) }, 120)
+        }
+        const connect = async () => {
+          if (stopped) return
+          controller = new AbortController()
+          let bases = ['']
+          try { bases = host && typeof host.apiBases === 'function' ? (host.apiBases() || ['']) : [''] } catch (_) { bases = [''] }
+          const base = bases.find((value) => typeof value === 'string' && value) || ''
+          let headers = {}
+          try { headers = host && typeof host.apiHeaders === 'function' ? (host.apiHeaders(base) || {}) : {} } catch (_) { headers = {} }
+          try {
+            const response = await fetch(base + '/api/events', {
+              headers: { ...headers, Accept: 'text/event-stream' },
+              signal: controller.signal
+            })
+            if (!response.ok || !response.body) throw new Error('event stream unavailable')
+            retry = 800
+            const reader = response.body.getReader()
+            const decoder = new TextDecoder()
+            let buffer = ''
+            while (!stopped) {
+              const chunk = await reader.read()
+              if (chunk.done) break
+              buffer += decoder.decode(chunk.value, { stream: true })
+              const parts = buffer.split('\n\n')
+              buffer = parts.pop() || ''
+              for (const part of parts) {
+                const line = part.split('\n').find((value) => value.startsWith('data:'))
+                if (!line) continue
+                try {
+                  const message = JSON.parse(line.slice(5).trim())
+                  if (message && (message.kind === 'device' || message.kind === 'session')) schedule()
+                } catch (_) { /* keepalive or malformed frames are ignored */ }
+              }
+            }
+          } catch (_) {
+            /* polling remains the fallback while the stream reconnects */
+          }
+          if (!stopped) {
+            retry = Math.min(retry * 2, 15000)
+            timer = setTimeout(connect, retry)
+          }
+        }
+        void connect()
+        return () => {
+          stopped = true
+          if (timer) clearTimeout(timer)
+          if (controller) controller.abort()
+        }
+      }, [loadState, host])
 
       React.useEffect(() => { hideHoverTip() }, [deviceId, view])
       React.useEffect(() => () => { if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current) }, [])
