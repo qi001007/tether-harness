@@ -319,5 +319,11 @@
 
 当前结论：**架构可支撑商用，功能主线已打通到“内部受控试点”**；未完成项集中在插件热重载、1 GB/overlay、真实账号验收、全量 Explorer 共享、干净安装与合规外壳。
 
+### Overlay benchmark harness
+
+- 新增 `scripts/bench_relay.py`：控制 P50/P95、surface 首屏、分块传输吞吐/哈希，同一命令用于 overlay 前后对比；不打印凭据，自动清理临时文件。
+- 公网 relay 基线：控制 P50 109–113 ms / P95 113–117 ms；surface 首屏约 **2121 ms**；1 MiB 传输 14.9–23.9 秒（约 40–70 KB/s，哈希一致）；2 MiB 22.1 秒（约 90 KB/s）。
+- 下一步：在 LAPTOP-01 安装 Headscale+tsnet / NetBird / Nebula 客户端后，用同一命令对比；达标前不宣称 overlay 更好。
+
 详细部署记录、服务器地址与运行快照属于私有运维材料，不在本公开进度页重复列出。用户需求仍以 [反馈清单](FEEDBACK.md) 为准；产品目标见 [PRD](PRD.md)，公开协议与客户端边界见 [技术说明](TECHNICAL.md)。
 

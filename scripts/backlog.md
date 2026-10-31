@@ -1,4 +1,5 @@
 # 修改记录
+- 2026-10-31：新增 `bench_relay.py`：控制 P50/P95、surface 首屏、分块传输吞吐；同一命令用于 overlay 前后对比。公网 relay 基线：控制 P50 109 ms / P95 113 ms，2 MiB 传输 22.1 秒（约 90 KB/s，哈希一致）。
 - 2026-10-30：`build_release` 插件包映射 `tether/node/dsh_restart.py`，并同步 updater 允许文件集。
 - 2026-10-28：原生 UI bridge 从当前安装的 MIT `dsh-client-ui-attachment@0.2.1-rc.2` factory 单独导出 ComposerAttachments，供原生附件 slot 包装器复用；保留上游 factory hash。
 
