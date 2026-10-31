@@ -1,5 +1,15 @@
 # Public client releases
 
+## v0.2.44
+
+Event-driven UI refresh:
+
+- The shared UI subscribes to the Hub's `/api/events` SSE stream. Device and session events force a state refresh even when the window is hidden; the ordinary 2.5 s poll remains as a fallback and still pauses in hidden windows.
+- Verified in Chromium by suspending the local Node: the device card went offline at 4.47 s and the online count changed 2→1; after resume it returned online at 3.94 s with 1→2.
+- APP, plugin, and node are 0.2.44.
+
+Gates: mjs 216/216, cjs 6/6, pytest 135 passed / 4 skipped, `validate_versions()`. CI run `41227434088` success; signed manifest verified, published at 2026-10-31T18:05:25Z and served by the Hub. LAPTOP-01 Node+APP **16.5 s**, plugin job **15.2 s** with real status/health 0.2.44. The DESKTOP-LOCAL dev bench was restarted to 0.2.44 and its plugin moved 0.2.43→0.2.44 in **13.7 s**; both machines now run 0.2.44 for all three components.
+
 ## v0.2.43
 
 New-device account enrollment:
