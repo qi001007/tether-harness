@@ -232,5 +232,11 @@
 
 已记录的自动化回归、官方下载/摘要检查和清单检查不能替代目标设备、干净安装或真实软件升级验收。当前已知限制包括：旧客户端需先手动安装一次 v0.2.1 更新基线；更新包尚无数字签名；远程 APP 更新已在 DESKTOP-LOCAL 与 LAPTOP-01 完成验收，但其他设备配置仍需按目标设备单独核验。
 
+## 2026-10-31 客户端安全加固
+
+- Electron 主窗口仅允许本地 UI origin 与 `about:blank` 导航，其他导航 `preventDefault` 并记录；`setWindowOpenHandler` 一律拒绝新窗口，仅把 http(s) 外链交给系统浏览器；surface iframe 带最小 sandbox（含 `allow-scripts allow-same-origin allow-forms allow-downloads allow-modals`，不含 top-navigation）；所有 `tether:*` IPC 在处理前校验 `senderFrame` 是主 frame 且 origin 为本地 UI origin。
+- 本地 18892 反向代理改为每进程随机会话 cookie（HttpOnly、SameSite=Strict），校验同源、写请求 Origin 和 API 路径白名单；`/local-api/` 与本机设备路由同样受保护；静态文件经 realpath 边界检查；畸形 URL 返回 400，不再让主进程退出。
+- 回归：`node --test --test-isolation=none tests/test_electron_security.mjs` 4/4；`tests/test_web_local_api.mjs` 4/4；全量 204 mjs / 6 cjs / 133 pytest（4 skipped）通过。真机：主窗口导航到外站被阻止并写入日志，sandboxed iframe 内无 `tetherApp`，surface iframe 带 sandbox 正常显示；代理无 cookie 401、跨站写 403、无 Origin 写 403、非白名单 API 403、畸形路径 400 且服务继续可访问。
+
 详细部署记录、服务器地址与运行快照属于私有运维材料，不在本公开进度页重复列出。用户需求仍以 [反馈清单](FEEDBACK.md) 为准；产品目标见 [PRD](PRD.md)，公开协议与客户端边界见 [技术说明](TECHNICAL.md)。
 

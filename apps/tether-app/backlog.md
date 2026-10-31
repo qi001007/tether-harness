@@ -1,4 +1,5 @@
 # tether-app backlog
+- 2026-10-31：Electron 主窗口只允许本地 UI origin 导航，`setWindowOpenHandler` 拒绝新窗口（http(s) 仅交系统浏览器），所有 `tether:*` IPC 校验 `senderFrame === mainFrame` 且 origin 为本地 UI。真机验证：外站导航被阻止并记录，主 frame `tetherApp.info()` 正常，sandboxed iframe 无该 API。
 - 2026-10-30：0.2.27 热修版本元数据；更新中心 latest 归一化。
 - 2026-10-30：APP/Node 一键更新卡改为单一运行态；版本元数据推进到 `0.2.26` 候选。
 - 2026-10-29：主人认可资源管理器第五版后，将 APP package 与 lock 根元数据推进到 `0.2.25`；实际发布与安装状态仍以 release/进度文档的后续验收为准。
