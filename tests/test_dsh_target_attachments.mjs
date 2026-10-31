@@ -631,6 +631,42 @@ test('the picker preserves the native attachment/drop contract', () => {
   assert.equal(buttonByText(tree, '目标电脑文件…').props.title, '从当前目标电脑选择文件')
 })
 
+test('the picker exposes breadcrumbs, directory search and sortable columns', async () => {
+  const w = world()
+  const { harness } = mount(w)
+  try {
+    buttonByText(harness.output(), '目标电脑文件…').props.onClick()
+    await flush()
+    buttonByTitle(harness.render(), 'C:\\work\\session-workspace').props.onClick()
+    await flush()
+    let tree = harness.render()
+    const dialog = findElement(tree, (node) => node.props?.role === 'dialog')
+    assert.ok(dialog)
+    buttonByTitle(tree, 'C:\\work\\session-workspace\\src').props.onClick()
+    await flush()
+    tree = harness.render()
+    assert.match(nodeText(tree), /›/, 'the path is shown as breadcrumb segments')
+    buttonByTitle(tree, 'C:\\work\\session-workspace').props.onClick()
+    await flush()
+    tree = harness.render()
+    const search = findElement(tree, (node) => node.type === 'input' && node.props?.['aria-label'] === '搜索当前目录')
+    assert.ok(search, 'the picker can search the current directory')
+    search.props.onChange({ target: { value: 'photo' } })
+    tree = harness.render()
+    assert.match(nodeText(tree), /未找到匹配/)
+    buttonByText(tree, '清除搜索').props.onClick()
+    tree = harness.render()
+    assert.ok(buttonByTitle(tree, 'C:\\work\\session-workspace\\notes.txt'))
+    const sortName = findElement(tree, (node) => node.props?.title === '按名称排序')
+    assert.ok(sortName, 'the column header sorts the listing')
+    sortName.props.onClick()
+    tree = harness.render()
+    assert.equal(findElement(tree, (node) => node.props?.title === '按名称排序').props['data-sort'], 'desc')
+  } finally {
+    harness.dispose()
+  }
+})
+
 test('DSH registration wires the device explorer and ships the modal bundle', () => {
   const build = fs.readFileSync(new URL('../packages/tether-ui/scripts/build.mjs', import.meta.url), 'utf8')
   assert.match(build, /createDshTargetExplorerBridge\(\{ getRpc: \(\) => localPluginRpc, getHost: \(\) => host \}\)/)

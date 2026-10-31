@@ -152,6 +152,40 @@ function targetParentPath(value) {
   return /^[A-Za-z]:$/.test(parent) ? parent + '\\' : parent
 }
 
+function targetBreadcrumbs(path, root) {
+  const value = String(path || '').replace(/[\\/]+$/, '')
+  if (!value) return []
+  const base = String(root || '').replace(/[\\/]+$/, '')
+  if (!base || !value.toLowerCase().startsWith(base.toLowerCase())) {
+    return [{ label: targetPathBase(value) || value, path: value }]
+  }
+  const separator = value.includes('\\') ? '\\' : '/'
+  const crumbs = [{ label: targetPathBase(base) || base, path: base }]
+  const relative = value.slice(base.length).replace(/^[\\/]+/, '')
+  let current = base
+  for (const part of relative.split(/[\\/]+/).filter(Boolean)) {
+    current = current.replace(/[\\/]+$/, '') + separator + part
+    crumbs.push({ label: part, path: current })
+  }
+  return crumbs
+}
+
+function targetSortEntries(entries, sort) {
+  const key = sort && ['name', 'mtime', 'size'].includes(sort.key) ? sort.key : 'name'
+  const direction = sort && sort.dir === 'desc' ? -1 : 1
+  return [...(entries || [])].sort((left, right) => {
+    if (left.dir !== right.dir) return left.dir ? -1 : 1
+    let a
+    let b
+    if (key === 'size') { a = Number(left.size || 0); b = Number(right.size || 0) }
+    else if (key === 'mtime') { a = Number(left.mtime || 0); b = Number(right.mtime || 0) }
+    else { a = String(left.name || '').toLowerCase(); b = String(right.name || '').toLowerCase() }
+    if (a < b) return -direction
+    if (a > b) return direction
+    return 0
+  })
+}
+
 function decodeTargetBase64(value) {
   if (typeof value !== 'string') throw new Error('目标电脑返回的文件字节不完整')
   let binary
@@ -416,6 +450,8 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand,
     const [root, setRoot] = React.useState('')
     const [directory, setDirectory] = React.useState('')
     const [entries, setEntries] = React.useState(null)
+    const [sort, setSort] = React.useState({ key: 'name', dir: 'asc' })
+    const [search, setSearch] = React.useState('')
     const [busy, setBusy] = React.useState(false)
     const [status, setStatus] = React.useState('')
     const [error, setError] = React.useState('')
@@ -532,7 +568,7 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand,
       const sessionId = props.sessionId
       busyRef.current = true
       if (isRoot) setRoot(item.path)
-      setDirectory(item.path); setEntries(null)
+      setDirectory(item.path); setEntries(null); setSearch('')
       setBusy(true); setStatus('正在读取目录…'); setError('')
       try {
         const listing = await bridge.listDirectory(item.path)
@@ -674,6 +710,7 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand,
     }
     const upTarget = targetParentPath(directory)
     const canGoUp = !!directory && directory !== root && !!upTarget && upTarget !== directory
+    const crumbs = targetBreadcrumbs(directory, root)
     const toolbar = h('div', {
       style: {
         display: 'flex', alignItems: 'center', gap: 8, height: 46, padding: '0 14px',
@@ -686,24 +723,90 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand,
         style: { ...mutedButton, opacity: busy || !canGoUp ? 0.45 : 1, cursor: busy || !canGoUp ? 'default' : 'pointer' }
       }, '上一级'),
       h('div', {
+        className: 'tether-breadcrumbs',
         title: directory || '尚未选择位置',
         style: {
-          flex: '1 1 auto', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap', color: sub, fontSize: 12,
-          fontFamily: 'Consolas, "Cascadia Mono", monospace'
+          display: 'flex', alignItems: 'center', gap: 1, flex: '1 1 auto',
+          minWidth: 0, overflow: 'hidden', height: 28
         }
-      }, directory || '从左侧选择工作区或磁盘'),
+      },
+        crumbs.length
+          ? crumbs.map((segment, index) => h(React.Fragment, { key: segment.path },
+            index ? h('span', { style: { color: mute, fontSize: 10, flex: '0 0 auto' } }, '›') : null,
+            h('button', {
+              type: 'button', title: segment.path, disabled: busy,
+              onClick: () => { if (!busy) void enter({ path: segment.path }, false) },
+              className: 'tether-hover',
+              style: {
+                border: 0, background: 'transparent', borderRadius: 5, padding: '3px 5px',
+                fontSize: 12, lineHeight: '18px',
+                color: index === crumbs.length - 1 ? ink : sub,
+                cursor: busy ? 'default' : 'pointer', whiteSpace: 'nowrap',
+                overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 190
+              }
+            }, segment.label)))
+          : h('span', { style: { color: sub, fontSize: 12 } }, '从左侧选择工作区或磁盘')),
+      directory && entries !== null ? h('div', {
+        style: {
+          display: 'flex', alignItems: 'center', gap: 5, flex: '0 1 200px',
+          minWidth: 120, height: 28, boxSizing: 'border-box',
+          padding: '0 4px 0 8px', borderRadius: 7, background: soft, color: mute
+        }
+      },
+        h('span', { 'aria-hidden': true, style: { fontSize: 12 } }, '⌕'),
+        h('input', {
+          value: search, placeholder: '搜索当前目录', 'aria-label': '搜索当前目录', spellCheck: false,
+          onChange: (event) => setSearch(event.target.value),
+          onKeyDown: (event) => {
+            if (event.key === 'Escape') { setSearch(''); event.currentTarget.blur() }
+          },
+          style: {
+            flex: '1 1 auto', minWidth: 0, height: 22, padding: 0, border: 0,
+            background: 'transparent', color: ink, fontSize: 12, outline: 'none'
+          }
+        }),
+        search ? h('button', {
+          type: 'button', title: '清除搜索', 'aria-label': '清除搜索',
+          onClick: () => setSearch(''), className: 'tether-hover',
+          style: {
+            width: 18, height: 18, flex: '0 0 auto', display: 'grid', placeItems: 'center',
+            border: 0, borderRadius: 4, background: 'transparent', color: mute,
+            fontSize: 13, lineHeight: '14px', padding: 0, cursor: 'pointer'
+          }
+        }, '×') : null) : null,
       h('button', {
         type: 'button', disabled: busy || !directory, title: '刷新',
         onClick: () => { if (directory) void enter({ path: directory }, false) },
         style: { ...mutedButton, opacity: busy || !directory ? 0.45 : 1, cursor: busy || !directory ? 'default' : 'pointer' }
       }, '刷新'))
+    const sortedEntries = targetSortEntries(entries, sort)
+    const term = search.trim().toLowerCase()
+    const visibleEntries = term
+      ? sortedEntries.filter((item) => String(item.name || '').toLowerCase().includes(term))
+      : sortedEntries
+    const sortHeader = (key, label, align) => h('button', {
+      type: 'button', title: '按' + label + '排序', 'aria-label': '按' + label + '排序',
+      'data-sort': sort.key === key ? sort.dir : undefined,
+      onClick: () => setSort((current) => current.key === key
+        ? { key, dir: current.dir === 'asc' ? 'desc' : 'asc' }
+        : { key, dir: 'asc' }),
+      className: 'tether-hover',
+      style: {
+        display: 'flex', alignItems: 'center', gap: 3,
+        justifyContent: align === 'right' ? 'flex-end' : 'flex-start',
+        minWidth: 0, height: 22, padding: '0 4px', margin: '0 -4px', border: 0,
+        borderRadius: 4, background: 'transparent',
+        color: sort.key === key ? ink : mute, fontSize: 11, cursor: 'pointer'
+      }
+    }, h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, label),
+      sort.key === key ? h('span', { 'aria-hidden': true, style: { fontSize: 9 } }, sort.dir === 'asc' ? '▲' : '▼') : null)
     const listHeader = h('div', {
       style: {
         display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 132px 76px 78px', gap: 8,
         alignItems: 'center', height: 28, padding: '0 14px', color: mute, fontSize: 11, flex: '0 0 auto'
       }
-    }, h('span', null, '名称'), h('span', null, '修改日期'), h('span', null, '类型'), h('span', { style: { textAlign: 'right' } }, '大小'))
+    }, sortHeader('name', '名称'), sortHeader('mtime', '修改日期'),
+      h('span', null, '类型'), sortHeader('size', '大小', 'right'))
     let body = null
     if (!directory) {
       body = h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', color: mute, fontSize: 12, padding: 24, textAlign: 'center' } },
@@ -714,12 +817,17 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand,
       }, error
         ? h('span', { role: 'alert', style: { color: danger } }, error)
         : busy ? '正在读取目录…' : '目录暂不可用')
-    } else if (!entries.length) {
-      body = h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', color: mute, fontSize: 12 } }, '空文件夹')
+    } else if (!visibleEntries.length) {
+      body = h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', alignContent: 'center', gap: 8, color: mute, fontSize: 12, padding: 24, textAlign: 'center' } },
+        h('span', null, term ? '未找到匹配 “' + search.trim() + '” 的项目' : '空文件夹'),
+        term ? h('button', {
+          type: 'button', onClick: () => setSearch(''), className: 'tether-hover',
+          style: { ...mutedButton, padding: '4px 10px' }
+        }, '清除搜索') : null)
     } else {
       body = h('div', { style: { flex: '1 1 auto', minHeight: 0, overflow: 'auto', padding: '0 8px 18px' } },
         listHeader,
-        entries.map((item) => row(item)))
+        visibleEntries.map((item) => row(item)))
     }
     const notice = error && directory && entries !== null
       ? h('div', { role: 'alert', style: { padding: '6px 14px', color: danger, fontSize: 12, borderBottom: '1px solid ' + line } }, error)
