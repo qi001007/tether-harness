@@ -1,5 +1,16 @@
 # Public client releases
 
+## v0.2.40
+
+Transfer throughput experiment:
+
+- Node reads and transfer chunks are now 1 MiB (was 256 KiB), reducing round trips while staying below the 48 MiB control-socket limit.
+- APP, plugin, and node are 0.2.40.
+
+Gates: mjs 211/211, cjs 6/6, pytest 135 passed / 4 skipped, `validate_versions()`. CI run `41221950421` success; signed manifest verified, published at 2026-10-31T16:58:00Z, Hub served 0.2.40 at 17:02:51Z.
+
+Installed acceptance on LAPTOP-01: Node+APP **20.7 s**, plugin **14.1 s**. A 2,000,000-byte transfer in two 1 MiB chunks took **34.4 s** with a matching SHA-256; a 10,000,000-byte transfer produced a 10,000,000-byte target (the harness timed out before printing its hash). Effective end-to-end throughput is roughly **60–70 KB/s** over the public Hub relay, so a 1 GB transfer would take hours: the 1 GB acceptance target is **not met on the current WSS relay**. This is the planned overlay decision gate; benchmark Headscale+tsnet / NetBird / Nebula against the same harness before deciding.
+
 ## v0.2.39
 
 Node restart control:
