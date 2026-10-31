@@ -6932,7 +6932,7 @@ function createConnectionPanel(React) {
   }
   return { Panel: ConnectionPanel, Trigger: ConnectionTrigger }
 }
-const TRANSFER_CHUNK = 256 * 1024
+const TRANSFER_CHUNK = 1024 * 1024
 
 function base64Bytes(value) {
   if (!value) return 0

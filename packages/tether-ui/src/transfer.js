@@ -1,4 +1,4 @@
-export const TRANSFER_CHUNK = 256 * 1024
+export const TRANSFER_CHUNK = 1024 * 1024
 
 function base64Bytes(value) {
   if (!value) return 0

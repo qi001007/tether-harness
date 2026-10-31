@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Any
 
 
-MAX_READ = 256 * 1024
+MAX_READ = 1024 * 1024
 MAX_WRITE_CHUNK = 1024 * 1024
 MAX_TRANSFER_BYTES = 64 * 1024 * 1024 * 1024
 TRANSFER_ID_RE = re.compile(r"[a-f0-9]{8,32}")

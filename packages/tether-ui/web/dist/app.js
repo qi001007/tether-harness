@@ -163107,7 +163107,7 @@ function createConnectionPanel(React2) {
 }
 
 // src/transfer.js
-var TRANSFER_CHUNK = 256 * 1024;
+var TRANSFER_CHUNK = 1024 * 1024;
 function base64Bytes(value) {
   if (!value) return 0;
   const padding = value.endsWith("==") ? 2 : value.endsWith("=") ? 1 : 0;
