@@ -1,4 +1,5 @@
 # tether-ui backlog
+- 2026-10-31：新增“文件转移”页（双设备/双目录、源文件选择、覆盖策略、进度/取消/重试）与 `transfer.js` 分块续传引擎；真实浏览器已渲染，完整目标写入待 0.2.37 安装后复验。
 - 2026-10-31：DSH 目标电脑附件选择器增加可点击面包屑、当前目录搜索、名称/修改日期/大小排序；仍是独立 UI，未抽成与 Explorer 共享的 `TargetFileExplorer`。定向 13 passed。
 - 2026-10-31：0.2.35 随客户端发布：极简更新按钮/白雾遮罩保持；服务端只在摘要返回进行中的 job，完成后刷新页面不再常驻遮罩；surface iframe sandbox 与 18892 代理鉴权一并生效。
 - 2026-10-31：本地 18892 代理加入每进程随机会话 cookie（HttpOnly/SameSite=Strict）、同源校验、写请求 Origin 要求、API 路径白名单和 realpath 静态边界；畸形 URL 返回 400 不崩进程。surface iframe 增加 sandbox（无 top-navigation）。真机代理验收：无 cookie 401、跨站写 403、非白名单 API 403、畸形路径 400。

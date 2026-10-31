@@ -1,5 +1,15 @@
 # Public client releases
 
+## v0.2.37
+
+Resumable file transfer release:
+
+- The node filesystem service accepts binary chunks (`write_chunk`) with a transfer id, offset and total size, writes to a `.tether-part.<id>` file, fsyncs, and atomically replaces the destination only on the final chunk. `transfer_status` reports the partial offset and `transfer_cancel` removes it.
+- New “文件转移” page: two device/directory panes, source-file selection, overwrite policy, progress bar, cancel and retry. It reuses the 0.2.36 resumable transfer engine and reads/writes through the existing Hub file routes; every completed destination write is audited on the target node.
+- APP, plugin, and node are 0.2.37.
+
+Gates: pytest 135 passed / 4 skipped, mjs 211/211, cjs 6/6, `validate_versions()`. CI run pending. Installed acceptance is recorded after the LAPTOP-01 update.
+
 ## v0.2.36
 
 Connection and picker release (includes all 0.2.35 security fixes):

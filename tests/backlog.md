@@ -1,4 +1,5 @@
 # 修改记录
+- 2026-10-31：新增分块传输服务端用例（续传、冲突、偏移错误、取消、审计）与 `test_transfer_engine.mjs`（顺序分块、续传、冲突、取消、源变化、空文件）；全量 211 mjs / 135 pytest。
 - 2026-10-31：附件选择器新增面包屑/搜索/排序回归，`test_dsh_target_attachments.mjs` 13 passed；全量 205 mjs / 6 cjs / 133 pytest（4 skipped）。
 - 2026-10-31：新增 `test_electron_security.mjs`（导航拦截、新窗口拒绝、IPC senderFrame/origin、iframe sandbox）和 `test_web_local_api.mjs` 的代理鉴权/同源/路径/畸形 URL 回归。全量 204 mjs / 6 cjs / 133 pytest（4 skipped）通过。
 - 2026-10-30：修正 `test_native_surface_client` 对 VM realm 返回对象的断言，按键和值验证注入 sessionId，保留 Proxy 对未注入 `ctx.fileDrag` 访问抛错的回归。
