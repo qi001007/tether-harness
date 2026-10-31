@@ -39,6 +39,7 @@ if (fs.existsSync(hubConfigFile)) {
     }
     if (cfg.accessToken) env.TETHER_ACCESS_TOKEN = cfg.accessToken
     if (cfg.nodeToken) env.TETHER_NODE_TOKEN = cfg.nodeToken
+    if (cfg.userToken) env.TETHER_USER_TOKEN = cfg.userToken
     if (cfg.device) env.TETHER_DEVICE = cfg.device
   } catch (_) { /* invalid local config is ignored */ }
 }
@@ -260,6 +261,33 @@ handleTrusted('tether:reset-surface-auth', async (_event, origin) => {
 function readHubConfig() {
   try { return JSON.parse(fs.readFileSync(hubConfigFile, 'utf8')) || {} } catch (_) { return {} }
 }
+const deviceTokenFile = path.join(dataDir, 'device-token.json')
+function writeHubConfig(next) {
+  if (fs.existsSync(hubConfigFile)) fs.copyFileSync(hubConfigFile, hubConfigFile + '.bak-' + Date.now())
+  fs.writeFileSync(hubConfigFile + '.tmp', JSON.stringify(next, null, 2) + '\n')
+  fs.renameSync(hubConfigFile + '.tmp', hubConfigFile)
+}
+function removeDeviceToken() {
+  try { fs.rmSync(deviceTokenFile, { force: true }) } catch (_) { /* missing token is fine */ }
+}
+async function applyEnrollment(config, deviceToken, userToken) {
+  try {
+    writeHubConfig({ ...config, nodeToken: deviceToken || '', userToken: userToken || '' })
+  } catch (_) {
+    return { ok: false, error: 'could not save the device credential' }
+  }
+  removeDeviceToken()
+  env.TETHER_NODE_TOKEN = deviceToken || ''
+  env.TETHER_USER_TOKEN = userToken || ''
+  supervisor.nodeToken = deviceToken || ''
+  supervisor.userToken = userToken || ''
+  try {
+    await supervisor.restart()
+  } catch (_) {
+    return { ok: false, error: 'credential saved but node restart failed' }
+  }
+  return { ok: true, device_id: String(config.device || env.TETHER_DEVICE || '') }
+}
 handleTrusted('tether:enroll-device', async (_event, userToken) => {
   if (typeof userToken !== 'string' || !userToken || userToken.length > 4096) {
     return { ok: false, error: 'invalid session token' }
@@ -280,30 +308,24 @@ handleTrusted('tether:enroll-device', async (_event, userToken) => {
   }
   let data = {}
   try { data = await response.json() } catch (_) { /* error bodies may be empty */ }
-  if (!response.ok || !data.token) {
-    const detail = data && data.detail
-    return {
-      ok: false,
-      error: (detail && (detail.error || detail.message)) || (data && data.error) || ('HTTP ' + response.status),
-      code: (detail && detail.code) || (data && data.code) || ''
-    }
+  if (response.ok && data.token) {
+    return applyEnrollment(config, data.token, '')
   }
-  const next = { ...config, nodeToken: data.token }
-  try {
-    if (fs.existsSync(hubConfigFile)) fs.copyFileSync(hubConfigFile, hubConfigFile + '.bak-' + Date.now())
-    fs.writeFileSync(hubConfigFile + '.tmp', JSON.stringify(next, null, 2) + '\n')
-    fs.renameSync(hubConfigFile + '.tmp', hubConfigFile)
-  } catch (_) {
-    return { ok: false, error: 'could not save the device token' }
+  const detail = data && data.detail
+  const code = (detail && detail.code) || (data && data.code) || ''
+  if (code === 'device_owned') {
+    return { ok: false, code, error: '这台设备已属于其他账号' }
   }
-  env.TETHER_NODE_TOKEN = data.token
-  supervisor.nodeToken = data.token
-  try {
-    await supervisor.restart()
-  } catch (_) {
-    return { ok: false, error: 'device token saved but node restart failed' }
+  if (code === 'device_not_found' || code === 'device_offline') {
+    const result = await applyEnrollment(config, '', userToken)
+    if (result.ok) result.mode = 'account'
+    return result
   }
-  return { ok: true, device_id: data.device_id }
+  return {
+    ok: false,
+    error: (detail && (detail.error || detail.message)) || (data && data.error) || ('HTTP ' + response.status),
+    code
+  }
 }, () => ({ ok: false, error: 'Untrusted IPC caller' }))
 handleTrusted('tether:updates-status', () => updates.status())
 handleTrusted('tether:updates-check', () => updates.check())

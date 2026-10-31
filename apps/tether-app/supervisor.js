@@ -27,6 +27,7 @@ class Supervisor {
     this.insecureTls = ['1', 'true', 'yes'].includes(String(env.TETHER_INSECURE_TLS || '').toLowerCase())
     this.device = env.TETHER_DEVICE || os.hostname()
     this.nodeToken = env.TETHER_NODE_TOKEN || ''
+    this.userToken = env.TETHER_USER_TOKEN || ''
     this.hubWss = env.TETHER_HUB_WSS || (this.remoteUrl ? this.remoteUrl.replace(/^http/, 'ws').replace(/\/+$/, '') + '/ws/node' : '')
     this.consolePort = Number(env.TETHER_CONSOLE_PORT || 18894)
     this.localApiToken = crypto.randomBytes(24).toString('hex')
@@ -101,7 +102,7 @@ class Supervisor {
       PYTHONIOENCODING: 'utf-8',
       TETHER_PORT: String(this.port),
       TETHER_HOST: this.baseEnv.TETHER_HOST || '0.0.0.0',
-      TETHER_NODE_TOKEN: this.baseEnv.TETHER_NODE_TOKEN || 'dev-token'
+      TETHER_NODE_TOKEN: this.baseEnv.TETHER_NODE_TOKEN || ''
     }
     if (name === 'node') {
       env.TETHER_NODE_MANAGED = '1'
@@ -153,8 +154,9 @@ class Supervisor {
       }
       this.node = { state: 'external', pid: 0, deviceOnline: this.deviceOnline(probe) }
       this.lastError = probe ? '' : '远端 Hub 不可达或请求超时'
-      if (this.nodeToken && this.hubWss) {
-        this.baseEnv.TETHER_NODE_TOKEN = this.nodeToken
+      if ((this.nodeToken || this.userToken) && this.hubWss) {
+        if (this.nodeToken) this.baseEnv.TETHER_NODE_TOKEN = this.nodeToken
+        if (this.userToken) this.baseEnv.TETHER_USER_TOKEN = this.userToken
         const node = this.spawnProcess('node', [
           '-m', 'tether.node.agent',
           '--workspace', path.join(this.repoRoot, 'work-local'),

@@ -248,9 +248,12 @@ class Node:
                  drop_after: float | None = None, drop_for: float = 0.0,
                  agent: str = "fake", dsh_home: str | None = None,
                  provider: str = "deepseek-official", model: str = "deepseek-v4-flash",
-                 workspaces_root: Path | None = None, data_dir: Path | None = None) -> None:
+                 workspaces_root: Path | None = None, data_dir: Path | None = None,
+                 user_token: str = "") -> None:
         self.url = url
         self.token = token
+        self.user_token = user_token
+        self.device_token = ""
         self.device = device
         self.workspace = workspace
         self.store = store
@@ -260,6 +263,15 @@ class Node:
         self.agent = agent
         self.dsh_home = dsh_home or str(ROOT / ".runtime" / "dsh-home")
         self.data_dir = Path(data_dir or (ROOT / ".runtime")).expanduser().resolve()
+        self.device_token_path = self.data_dir / "device-token.json"
+        try:
+            saved = json.loads(self.device_token_path.read_text(encoding="utf-8"))
+            saved_token = str(saved.get("token") or "")
+            if saved.get("device_id") == self.device and saved_token:
+                self.device_token = saved_token
+                self.token = saved_token
+        except (OSError, ValueError, TypeError):
+            pass
         self.provider = provider
         self.model = model
         self.workspaces_root = workspaces_root or default_workspaces_root()
@@ -354,12 +366,18 @@ class Node:
             connect_options["ssl"] = ssl_context
         async with websockets.connect(self.url, **connect_options) as ws:
             self.ws = ws
-            await self._send({"type": "register", "device_id": self.device, "name": self.device,
-                              "token": self.token, "platform": platform.platform(),
-                              "capabilities": self.capabilities()})
+            register = {"type": "register", "device_id": self.device, "name": self.device,
+                        "token": self.token, "platform": platform.platform(),
+                        "capabilities": self.capabilities()}
+            if self.user_token and not self.device_token:
+                register["user_token"] = self.user_token
+            await self._send(register)
             first = json.loads(await ws.recv())
             if first.get("type") != "registered":
                 raise RuntimeError(f"registration failed: {first}")
+            issued = first.get("device_token")
+            if isinstance(issued, str) and issued and not self.device_token:
+                self._persist_device_token(issued)
             self.connected = True
             log(f"[ws] registered as {self.device} at {self.url}")
             for msg in self._state_messages():
@@ -397,6 +415,23 @@ class Node:
                 await self._send({"type": "heartbeat", "ts": time.time()})
             except Exception:
                 return
+
+    def _persist_device_token(self, token: str) -> None:
+        self.device_token = token
+        self.token = token
+        try:
+            self.data_dir.mkdir(parents=True, exist_ok=True)
+            temp = self.device_token_path.with_suffix(".tmp")
+            temp.write_text(json.dumps({"schema": 1, "device_id": self.device, "token": token}),
+                            encoding="utf-8")
+            os.replace(temp, self.device_token_path)
+            try:
+                os.chmod(self.device_token_path, 0o600)
+            except OSError:
+                pass
+            log("[ws] device token issued and saved")
+        except OSError as exc:
+            log(f"[ws] could not save the device token: {exc}")
 
     async def _send(self, msg: dict[str, Any]) -> None:
         if self.ws is None:
@@ -950,6 +985,7 @@ def main() -> None:
     ap.add_argument("--workspaces-root", default=os.environ.get("TETHER_WORKSPACES_ROOT"),
                     help="root for new remote projects (default D:\\TetherWorkspaces)")
     ap.add_argument("--token", default=os.environ.get("TETHER_NODE_TOKEN", "dev-token"))
+    ap.add_argument("--user-token", default=os.environ.get("TETHER_USER_TOKEN", ""))
     ap.add_argument("--db", default=str(ROOT / ".runtime" / "node-local.db"))
     ap.add_argument("--drop-after", type=float, default=None, help="test: close the socket N seconds after the first dispatch")
     ap.add_argument("--drop-for", type=float, default=0.0, help="test: keep the socket down for N seconds")
@@ -969,7 +1005,8 @@ def main() -> None:
     node = Node(url=args.controller, token=args.token, device=args.device,
                 workspace=workspace, store=store, drop_after=args.drop_after, drop_for=args.drop_for,
                 agent=args.agent, dsh_home=args.dsh_home, provider=args.provider, model=args.model,
-                workspaces_root=workspaces_root, data_dir=Path(args.db).resolve().parent)
+                workspaces_root=workspaces_root, data_dir=Path(args.db).resolve().parent,
+                user_token=args.user_token)
     console_server = None
     try:
         console_server = local_console.start(store, args.device, args.console_port,
