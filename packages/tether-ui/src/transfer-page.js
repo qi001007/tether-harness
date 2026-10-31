@@ -1,4 +1,5 @@
 import { newTransferId, transferFile } from './transfer.js'
+import { TargetFileExplorer } from './target-file-explorer.js'
 
 function separator(path) {
   return String(path || '').includes('\\') ? '\\' : '/'
@@ -54,6 +55,8 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
     const [loading, setLoading] = React.useState(false)
     const [error, setError] = React.useState('')
     const [draft, setDraft] = React.useState(path || '')
+    const [sort, setSort] = React.useState({ key: 'name', dir: 'asc' })
+    const [search, setSearch] = React.useState('')
     const run = React.useRef(0)
     const pathRef = React.useRef(path)
     pathRef.current = path
@@ -97,6 +100,37 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
       if (item.dir) onPath(item.path)
       else if (onFile) onFile(item)
     }
+    const matchingRoot = roots
+      .filter((item) => path && String(path).toLowerCase().startsWith(String(item.path).toLowerCase()))
+      .sort((left, right) => String(right.path).length - String(left.path).length)[0]
+    const navigate = (next) => { setSearch(''); onPath(next) }
+    return TargetFileExplorer({
+      React,
+      colors: C,
+      roots,
+      rootPath: matchingRoot ? matchingRoot.path : '',
+      path,
+      entries,
+      loading,
+      error,
+      selectedPath,
+      editablePath: true,
+      pathLabel: title === '源设备' ? '源设备路径' : '目标目录路径',
+      singleClickOpens: false,
+      sort,
+      onSort: setSort,
+      search,
+      onSearch: setSearch,
+      onRoot: navigate,
+      onPath: navigate,
+      onSelect: (item) => { if (item.dir) navigate(item.path); else if (onFile) onFile(item) },
+      onOpen: (item) => { if (item.dir) navigate(item.path); else open(item) },
+      onRefresh: navigate,
+      fileIcon: (item) => h('span', { 'aria-hidden': true, style: { color: C.mute, fontSize: 11 } }, item.dir ? '▸' : '•'),
+      formatTime: (value) => value ? new Date(value * 1000).toLocaleString('zh-CN', { hour12: false }) : '',
+      formatSize: (value) => formatBytes(Number(value)),
+      limit: Number.MAX_SAFE_INTEGER
+    })
     return h('div', { style: { flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', background: C.bg, borderRadius: 10, overflow: 'hidden', border: 0 } },
       h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, padding: '10px 12px', background: C.soft, flex: '0 0 auto', minWidth: 0 } },
         h('span', { style: { fontSize: 12, fontWeight: 600, color: C.ink, flex: '0 0 auto' } }, title),

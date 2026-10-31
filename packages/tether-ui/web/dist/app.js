@@ -163215,6 +163215,480 @@ async function transferFile({
   return { path: destination, transferId: id, bytes: offset };
 }
 
+// src/target-file-explorer.js
+function parentOf(path) {
+  const clean = String(path || "").replace(/[\\/]+$/, "");
+  if (!clean) return "";
+  if (/^[A-Za-z]:$/.test(clean)) return clean + "\\";
+  const slash = Math.max(clean.lastIndexOf("\\"), clean.lastIndexOf("/"));
+  if (slash < 0) return "";
+  const parent = clean.slice(0, slash);
+  return /^[A-Za-z]:$/.test(parent) ? parent + "\\" : parent;
+}
+function crumbsFor(path, root) {
+  const value = String(path || "").replace(/[\\/]+$/, "");
+  if (!value) return [];
+  const base = String(root || "").replace(/[\\/]+$/, "");
+  if (!base || !value.toLowerCase().startsWith(base.toLowerCase())) {
+    const index = Math.max(value.lastIndexOf("\\"), value.lastIndexOf("/"));
+    return [{ label: index >= 0 ? value.slice(index + 1) || value : value, path: value }];
+  }
+  const separator2 = value.includes("\\") ? "\\" : "/";
+  const baseLabelIndex = Math.max(base.lastIndexOf("\\"), base.lastIndexOf("/"));
+  const out = [{ label: base.slice(baseLabelIndex + 1) || base, path: base }];
+  let current = base;
+  for (const part of value.slice(base.length).replace(/^[\\/]+/, "").split(/[\\/]+/).filter(Boolean)) {
+    current = current.replace(/[\\/]+$/, "") + separator2 + part;
+    out.push({ label: part, path: current });
+  }
+  return out;
+}
+function sortEntries(entries2, sort) {
+  const key = sort && ["name", "mtime", "size"].includes(sort.key) ? sort.key : "name";
+  const direction = sort && sort.dir === "desc" ? -1 : 1;
+  return [...entries2 || []].sort((left, right) => {
+    if (left.dir !== right.dir) return left.dir ? -1 : 1;
+    let a;
+    let b;
+    if (key === "size") {
+      a = Number(left.size || 0);
+      b = Number(right.size || 0);
+    } else if (key === "mtime") {
+      a = Number(left.mtime || 0);
+      b = Number(right.mtime || 0);
+    } else {
+      a = String(left.name || "").toLowerCase();
+      b = String(right.name || "").toLowerCase();
+    }
+    if (a < b) return -direction;
+    if (a > b) return direction;
+    return 0;
+  });
+}
+function TargetFileExplorer({
+  React: React2,
+  colors,
+  roots = [],
+  rootPath = "",
+  path = "",
+  entries: entries2 = null,
+  loading = false,
+  error = "",
+  selectedPath = "",
+  disabled = false,
+  onRoot,
+  onPath,
+  onSelect,
+  onOpen,
+  onRefresh,
+  singleClickOpens = false,
+  editablePath = false,
+  pathLabel = "\u8DEF\u5F84",
+  fileIcon,
+  formatTime = () => "",
+  formatSize = () => "",
+  limit = 10 * 1024 * 1024,
+  emptyText = "\u7A7A\u6587\u4EF6\u5939",
+  placeholder = "\u4ECE\u5DE6\u4FA7\u9009\u62E9\u5DE5\u4F5C\u533A\u6216\u78C1\u76D8",
+  searchPlaceholder = "\u641C\u7D22\u5F53\u524D\u76EE\u5F55",
+  sort = { key: "name", dir: "asc" },
+  onSort,
+  search: search2 = "",
+  onSearch = () => {
+  }
+}) {
+  const ReactRuntime = React2;
+  const h2 = ReactRuntime.createElement;
+  const C = colors || {};
+  const workspaces = roots.filter((item) => (item.kind || "workspace") === "workspace");
+  const drives = roots.filter((item) => item.kind === "drive");
+  const crumbs = crumbsFor(path, rootPath);
+  const up = parentOf(path);
+  const term = search2.trim().toLowerCase();
+  const visible = sortEntries(entries2, sort).filter((item) => !term || String(item.name || "").toLowerCase().includes(term));
+  const sortHeader = (key, label, align) => h2(
+    "button",
+    {
+      type: "button",
+      title: "\u6309" + label + "\u6392\u5E8F",
+      "aria-label": "\u6309" + label + "\u6392\u5E8F",
+      "data-sort": sort.key === key ? sort.dir : void 0,
+      onClick: () => {
+        if (onSort) onSort(sort.key === key ? { key, dir: sort.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" });
+      },
+      className: "tether-hover",
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 3,
+        justifyContent: align === "right" ? "flex-end" : "flex-start",
+        minWidth: 0,
+        height: 22,
+        padding: "0 4px",
+        margin: "0 -4px",
+        border: 0,
+        borderRadius: 4,
+        background: "transparent",
+        color: sort.key === key ? C.ink : C.mute,
+        fontSize: 11,
+        cursor: "pointer"
+      }
+    },
+    h2("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, label),
+    sort.key === key ? h2("span", { "aria-hidden": true, style: { fontSize: 9 } }, sort.dir === "asc" ? "\u25B2" : "\u25BC") : null
+  );
+  const rootButton = (item, group) => h2(
+    "button",
+    {
+      key: group + ":" + item.path,
+      type: "button",
+      disabled,
+      title: item.path,
+      onClick: () => {
+        if (!disabled && onRoot) onRoot(item.path);
+      },
+      className: "tether-hover",
+      style: {
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "stretch",
+        gap: 2,
+        width: "100%",
+        padding: "6px 8px",
+        border: 0,
+        borderRadius: 6,
+        background: path === item.path ? C.hover || C.soft : "transparent",
+        color: C.ink,
+        font: "inherit",
+        textAlign: "left",
+        cursor: disabled ? "default" : "pointer"
+      }
+    },
+    h2(
+      "span",
+      { style: { display: "flex", alignItems: "center", gap: 7, minWidth: 0, fontSize: 13 } },
+      fileIcon ? fileIcon({ dir: true, path: item.path, name: item.name }) : null,
+      h2("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, item.name)
+    ),
+    h2("span", { style: { paddingLeft: 22, color: C.mute, fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, item.path)
+  );
+  const rootGroup = (label, items, empty2) => h2(
+    "div",
+    { key: label, style: { marginBottom: 10 } },
+    h2("div", { style: { padding: "8px 8px 4px", color: C.mute, fontSize: 11, fontWeight: 600, letterSpacing: 0.2 } }, label),
+    items.length ? items.map((item) => rootButton(item, label)) : h2("div", { style: { padding: "2px 8px 6px", color: C.mute, fontSize: 11.5 } }, empty2)
+  );
+  const activate = (item, double) => {
+    if (disabled || !item) return;
+    if (double) {
+      if (!singleClickOpens && onOpen) onOpen(item);
+      return;
+    }
+    if (onSelect) onSelect(item);
+    if (singleClickOpens && onOpen) onOpen(item);
+  };
+  const row = (item) => {
+    const oversized = !item.dir && Number(item.size) > limit;
+    return h2(
+      "button",
+      {
+        key: item.path,
+        type: "button",
+        title: item.path,
+        disabled: disabled || oversized,
+        onClick: () => activate(item, false),
+        onDoubleClick: () => activate(item, true),
+        className: "tether-hover",
+        style: {
+          display: "grid",
+          gridTemplateColumns: "minmax(0,1fr) 132px 76px 78px",
+          gap: 8,
+          alignItems: "center",
+          width: "100%",
+          height: 32,
+          padding: "0 14px",
+          border: 0,
+          borderRadius: 6,
+          background: selectedPath === item.path ? C.soft || "transparent" : "transparent",
+          color: C.ink,
+          font: "inherit",
+          fontSize: 13,
+          textAlign: "left",
+          cursor: disabled || oversized ? "default" : "pointer",
+          opacity: oversized ? 0.55 : 1
+        }
+      },
+      h2(
+        "span",
+        { style: { display: "flex", alignItems: "center", gap: 8, minWidth: 0 } },
+        h2(
+          "span",
+          { style: { width: 16, height: 16, display: "grid", placeItems: "center", flex: "0 0 auto" } },
+          fileIcon ? fileIcon(item) : null
+        ),
+        h2(
+          "span",
+          { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
+          item.name + (oversized ? " \xB7 \u8D85\u8FC7 10 MiB" : "")
+        )
+      ),
+      h2("span", { style: { color: C.mute, fontSize: 11, whiteSpace: "nowrap" } }, formatTime(item.mtime)),
+      h2("span", { style: { color: C.mute, fontSize: 11, whiteSpace: "nowrap" } }, item.dir ? "\u6587\u4EF6\u5939" : "\u6587\u4EF6"),
+      h2("span", { style: { color: C.mute, fontSize: 11, textAlign: "right" } }, item.dir ? "" : formatSize(Number(item.size)))
+    );
+  };
+  let body;
+  if (!path) {
+    body = h2(
+      "div",
+      { style: { flex: "1 1 auto", display: "grid", placeItems: "center", color: C.mute, fontSize: 12, padding: 24, textAlign: "center" } },
+      error ? h2("span", { role: "alert", style: { color: C.red || C.danger } }, error) : placeholder
+    );
+  } else if (entries2 === null) {
+    body = h2(
+      "div",
+      { style: { flex: "1 1 auto", display: "grid", placeItems: "center", color: C.mute, fontSize: 12, padding: 24, textAlign: "center" } },
+      error ? h2("span", { role: "alert", style: { color: C.red || C.danger } }, error) : loading ? "\u6B63\u5728\u8BFB\u53D6\u76EE\u5F55\u2026" : "\u76EE\u5F55\u6682\u4E0D\u53EF\u7528"
+    );
+  } else if (!visible.length) {
+    body = h2(
+      "div",
+      { style: { flex: "1 1 auto", display: "grid", placeItems: "center", alignContent: "center", gap: 8, color: C.mute, fontSize: 12, padding: 24, textAlign: "center" } },
+      h2("span", null, term ? "\u672A\u627E\u5230\u5339\u914D \u201C" + search2.trim() + "\u201D \u7684\u9879\u76EE" : emptyText),
+      term ? h2("button", {
+        type: "button",
+        onClick: () => onSearch(""),
+        className: "tether-hover",
+        style: { border: 0, borderRadius: 6, padding: "4px 10px", background: C.soft, color: C.ink, fontSize: 12, cursor: "pointer" }
+      }, "\u6E05\u9664\u641C\u7D22") : null
+    );
+  } else {
+    body = h2(
+      "div",
+      { style: { flex: "1 1 auto", minHeight: 0, overflow: "auto", padding: "0 8px 18px" } },
+      h2(
+        "div",
+        {
+          style: {
+            display: "grid",
+            gridTemplateColumns: "minmax(0,1fr) 132px 76px 78px",
+            gap: 8,
+            alignItems: "center",
+            height: 28,
+            padding: "0 14px",
+            color: C.mute,
+            fontSize: 11,
+            flex: "0 0 auto"
+          }
+        },
+        sortHeader("name", "\u540D\u79F0"),
+        sortHeader("mtime", "\u4FEE\u6539\u65E5\u671F"),
+        h2("span", null, "\u7C7B\u578B"),
+        sortHeader("size", "\u5927\u5C0F", "right")
+      ),
+      visible.map((item) => row(item))
+    );
+  }
+  return h2(
+    "div",
+    { style: { display: "flex", flex: "1 1 auto", minHeight: 0, minWidth: 0 } },
+    h2("div", {
+      style: {
+        width: 224,
+        flex: "0 0 auto",
+        overflow: "auto",
+        padding: "6px 8px",
+        background: C.soft,
+        borderRight: C.line ? "1px solid " + C.line : 0
+      }
+    }, rootGroup("\u5DE5\u4F5C\u533A", workspaces, "\u672A\u53D1\u73B0\u5DE5\u4F5C\u533A"), rootGroup("\u6B64\u7535\u8111", drives, "\u672A\u53D1\u73B0\u78C1\u76D8")),
+    h2(
+      "div",
+      { style: { display: "flex", flexDirection: "column", flex: "1 1 auto", minWidth: 0, minHeight: 0, background: C.bg } },
+      h2(
+        "div",
+        {
+          style: {
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            height: 46,
+            padding: "0 14px",
+            borderBottom: C.line ? "1px solid " + C.line : 0,
+            flex: "0 0 auto",
+            minWidth: 0
+          }
+        },
+        h2("button", {
+          type: "button",
+          disabled: disabled || !up,
+          title: "\u4E0A\u4E00\u7EA7",
+          onClick: () => {
+            if (!disabled && up && onPath) onPath(up);
+          },
+          style: {
+            border: "1px solid " + (C.line || "transparent"),
+            borderRadius: 6,
+            background: C.bg,
+            color: C.sub,
+            padding: "4px 10px",
+            font: "inherit",
+            fontSize: 12,
+            cursor: disabled || !up ? "default" : "pointer",
+            opacity: disabled || !up ? 0.45 : 1
+          }
+        }, "\u4E0A\u4E00\u7EA7"),
+        h2(
+          "div",
+          {
+            className: "tether-breadcrumbs",
+            style: { display: "flex", alignItems: "center", gap: 1, flex: "1 1 auto", minWidth: 0, overflow: "hidden", height: 28 }
+          },
+          crumbs.length ? crumbs.map((segment, index) => h2(
+            ReactRuntime.Fragment,
+            { key: segment.path },
+            index ? h2("span", { style: { color: C.mute, fontSize: 10, flex: "0 0 auto" } }, "\u203A") : null,
+            h2("button", {
+              type: "button",
+              title: segment.path,
+              disabled,
+              onClick: () => {
+                if (!disabled && onPath) onPath(segment.path);
+              },
+              className: "tether-hover",
+              style: {
+                border: 0,
+                background: "transparent",
+                borderRadius: 5,
+                padding: "3px 5px",
+                fontSize: 12,
+                lineHeight: "18px",
+                color: index === crumbs.length - 1 ? C.ink : C.sub,
+                cursor: disabled ? "default" : "pointer",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                maxWidth: 190
+              }
+            }, segment.label)
+          )) : h2("span", { style: { color: C.sub, fontSize: 12 } }, placeholder)
+        ),
+        editablePath ? h2("input", {
+          key: path,
+          defaultValue: path || "",
+          spellCheck: false,
+          "aria-label": pathLabel,
+          onKeyDown: (event) => {
+            if (event.key === "Enter" && event.currentTarget.value.trim() && onPath) {
+              onPath(event.currentTarget.value.trim());
+            }
+          },
+          style: {
+            height: 28,
+            boxSizing: "border-box",
+            border: 0,
+            borderRadius: 6,
+            background: C.soft,
+            color: C.ink,
+            fontSize: 12,
+            padding: "0 8px",
+            outline: "none",
+            flex: "0 0 220px",
+            minWidth: 100,
+            fontFamily: "Consolas, monospace"
+          }
+        }) : null,
+        path && entries2 !== null ? h2(
+          "div",
+          {
+            style: {
+              display: "flex",
+              alignItems: "center",
+              gap: 5,
+              flex: "0 1 200px",
+              minWidth: 120,
+              height: 28,
+              boxSizing: "border-box",
+              padding: "0 4px 0 8px",
+              borderRadius: 7,
+              background: C.soft,
+              color: C.mute
+            }
+          },
+          h2("span", { "aria-hidden": true, style: { fontSize: 12 } }, "\u2315"),
+          h2("input", {
+            value: search2,
+            placeholder: searchPlaceholder,
+            "aria-label": searchPlaceholder,
+            spellCheck: false,
+            onChange: (event) => onSearch(event.target.value),
+            onKeyDown: (event) => {
+              if (event.key === "Escape") {
+                onSearch("");
+                event.currentTarget.blur();
+              }
+            },
+            style: {
+              flex: "1 1 auto",
+              minWidth: 0,
+              height: 22,
+              padding: 0,
+              border: 0,
+              background: "transparent",
+              color: C.ink,
+              fontSize: 12,
+              outline: "none"
+            }
+          }),
+          search2 ? h2("button", {
+            type: "button",
+            title: "\u6E05\u9664\u641C\u7D22",
+            "aria-label": "\u6E05\u9664\u641C\u7D22",
+            onClick: () => onSearch(""),
+            className: "tether-hover",
+            style: {
+              width: 18,
+              height: 18,
+              flex: "0 0 auto",
+              display: "grid",
+              placeItems: "center",
+              border: 0,
+              borderRadius: 4,
+              background: "transparent",
+              color: C.mute,
+              fontSize: 13,
+              lineHeight: "14px",
+              padding: 0,
+              cursor: "pointer"
+            }
+          }, "\xD7") : null
+        ) : null,
+        h2("button", {
+          type: "button",
+          disabled: disabled || !path,
+          title: "\u5237\u65B0",
+          onClick: () => {
+            if (!disabled && path && onRefresh) onRefresh(path);
+          },
+          style: {
+            border: "1px solid " + (C.line || "transparent"),
+            borderRadius: 6,
+            background: C.bg,
+            color: C.sub,
+            padding: "4px 10px",
+            font: "inherit",
+            fontSize: 12,
+            cursor: disabled || !path ? "default" : "pointer",
+            opacity: disabled || !path ? 0.45 : 1
+          }
+        }, "\u5237\u65B0")
+      ),
+      error && path && entries2 !== null ? h2("div", { role: "alert", style: { padding: "6px 14px", color: C.red || C.danger, fontSize: 12, borderBottom: C.line ? "1px solid " + C.line : 0 } }, error) : null,
+      body
+    )
+  );
+}
+
 // src/transfer-page.js
 function separator(path) {
   return String(path || "").includes("\\") ? "\\" : "/";
@@ -163279,6 +163753,8 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C, devices 
       const [loading, setLoading] = React2.useState(false);
       const [error, setError] = React2.useState("");
       const [draft, setDraft] = React2.useState(path || "");
+      const [sort, setSort] = React2.useState({ key: "name", dir: "asc" });
+      const [search2, setSearch] = React2.useState("");
       const run = React2.useRef(0);
       const pathRef = React2.useRef(path);
       pathRef.current = path;
@@ -163342,6 +163818,44 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C, devices 
         if (item.dir) onPath(item.path);
         else if (onFile) onFile(item);
       };
+      const matchingRoot = roots.filter((item) => path && String(path).toLowerCase().startsWith(String(item.path).toLowerCase())).sort((left, right) => String(right.path).length - String(left.path).length)[0];
+      const navigate = (next) => {
+        setSearch("");
+        onPath(next);
+      };
+      return TargetFileExplorer({
+        React: React2,
+        colors: C,
+        roots,
+        rootPath: matchingRoot ? matchingRoot.path : "",
+        path,
+        entries: entries2,
+        loading,
+        error,
+        selectedPath,
+        editablePath: true,
+        pathLabel: title === "\u6E90\u8BBE\u5907" ? "\u6E90\u8BBE\u5907\u8DEF\u5F84" : "\u76EE\u6807\u76EE\u5F55\u8DEF\u5F84",
+        singleClickOpens: false,
+        sort,
+        onSort: setSort,
+        search: search2,
+        onSearch: setSearch,
+        onRoot: navigate,
+        onPath: navigate,
+        onSelect: (item) => {
+          if (item.dir) navigate(item.path);
+          else if (onFile) onFile(item);
+        },
+        onOpen: (item) => {
+          if (item.dir) navigate(item.path);
+          else open(item);
+        },
+        onRefresh: navigate,
+        fileIcon: (item) => h2("span", { "aria-hidden": true, style: { color: C.mute, fontSize: 11 } }, item.dir ? "\u25B8" : "\u2022"),
+        formatTime: (value) => value ? new Date(value * 1e3).toLocaleString("zh-CN", { hour12: false }) : "",
+        formatSize: (value) => formatBytes(Number(value)),
+        limit: Number.MAX_SAFE_INTEGER
+      });
       return h2(
         "div",
         { style: { flex: "1 1 0", minWidth: 0, display: "flex", flexDirection: "column", background: C.bg, borderRadius: 10, overflow: "hidden", border: 0 } },
@@ -167829,7 +168343,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       setDirLoading(false);
       setPreviewBusy(false);
     };
-    const parentOf = (target) => {
+    const parentOf2 = (target) => {
       const clean = String(target || "").replace(/[\\/]+$/, "");
       const parent = clean.replace(/[\\/][^\\/]+$/, "");
       return parent && parent !== clean ? parent : clean;
@@ -168009,7 +168523,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           setTableEditFormat(null);
         }
         setSelected(entry);
-        const parent = parentOf(entry.path);
+        const parent = parentOf2(entry.path);
         setPath(parent);
         setPathDraft(parent);
         pathRef.current = parent;
@@ -168033,7 +168547,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         if (!usablePreviewData(data)) throw new Error("\u9884\u89C8\u6570\u636E\u65E0\u6548");
         rememberPreview(key, data);
         if (!(cached && dirty && sameFile)) apply2(data);
-        const parent = parentOf(entry.path);
+        const parent = parentOf2(entry.path);
         if (loadedDirRef.current !== requestDevice + "|" + normPath(parent)) {
           await loadDir(parent, { push: false, keepFile: true });
           if (seq === previewSeqRef.current) setSelected(entry);
@@ -168092,7 +168606,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const goUp = () => {
       const current = pathRef.current || path;
       if (!current) return;
-      const parent = parentOf(current);
+      const parent = parentOf2(current);
       if (!parent || normPath(parent) === normPath(current)) return;
       setFile(null);
       setEditMode(false);
@@ -168130,7 +168644,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         setNotice("\u5DF2\u4FDD\u5B58\u5230 " + requestDevice + " \xB7 " + requestFile.path);
         const key = previewCacheKey(requestDevice, requestFile.path);
         previewCacheRef.current.delete(key);
-        invalidateDir(requestDevice, parentOf(requestFile.path));
+        invalidateDir(requestDevice, parentOf2(requestFile.path));
         const data = await post("/api/devices/" + encodeURIComponent(requestDevice) + "/fs/preview", { path: requestFile.path });
         if (!responseBelongsToDevice(data, requestDevice)) throw new Error("\u76EE\u6807\u8BBE\u5907\u8EAB\u4EFD\u6821\u9A8C\u5931\u8D25\uFF0C\u8BF7\u91CD\u65B0\u6253\u5F00\u6587\u4EF6");
         rememberPreview(key, data);
@@ -168263,7 +168777,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       if (!target) return;
       const requestDevice = deviceIdRef.current;
       askValue("\u91CD\u547D\u540D", target.name, async (name) => {
-        const dest = parentOf(target.path) + "\\" + name;
+        const dest = parentOf2(target.path) + "\\" + name;
         try {
           const result = await post("/api/devices/" + encodeURIComponent(requestDevice) + "/fs/rename", { path: target.path, dest });
           if (!responseBelongsToDevice(result, requestDevice)) throw new Error("\u76EE\u6807\u8BBE\u5907\u8EAB\u4EFD\u6821\u9A8C\u5931\u8D25\uFF0C\u672A\u786E\u8BA4\u91CD\u547D\u540D");
@@ -168273,7 +168787,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           if (file && file.path === target.path) setFile(null);
           previewCacheRef.current.delete(previewCacheKey(requestDevice, target.path));
           previewCacheRef.current.delete(previewCacheKey(requestDevice, dest));
-          invalidateDir(requestDevice, parentOf(target.path));
+          invalidateDir(requestDevice, parentOf2(target.path));
           await loadDir(path, { push: false, keepFile: true, fresh: true });
         } catch (e) {
           fail2(e);
@@ -168290,7 +168804,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         setSelected(null);
         if (file && file.path === target.path) setFile(null);
         previewCacheRef.current.delete(previewCacheKey(deviceId, target.path));
-        invalidateDir(deviceId, parentOf(target.path));
+        invalidateDir(deviceId, parentOf2(target.path));
         await loadDir(path, { push: false, keepFile: true, fresh: true });
       } catch (e) {
         fail2(e);
@@ -168745,7 +169259,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       const crumbs = pathSegments(file ? file.path : path);
       const sortKey = EXPLORER_SORT_KEYS.includes(sort && sort.key) ? sort.key : "name";
       const sortDir = sort && sort.dir === "desc" ? "desc" : "asc";
-      const canGoUp = !!path && normPath(parentOf(path)) !== normPath(path);
+      const canGoUp = !!path && normPath(parentOf2(path)) !== normPath(path);
       const toolbar = h2(
         "div",
         { className: "tether-explorer-toolbar", style: { display: "flex", alignItems: "center", gap: 7, height: 44, padding: "0 9px", background: C.bg, flex: "0 0 auto", minWidth: 0 } },
@@ -169353,7 +169867,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           onOpenFile: openFile,
           onHoverEntry: (event, node) => showHoverTip(event, node),
           onLeaveEntry: hideHoverTip,
-          onContextMenuNode: (event, node) => openContextMenu(event, { name: node.name, path: node.path, dir: node.dir }, node.dir ? node.path : parentOf(node.path)),
+          onContextMenuNode: (event, node) => openContextMenu(event, { name: node.name, path: node.path, dir: node.dir }, node.dir ? node.path : parentOf2(node.path)),
           treeSelected
         }),
         h2(

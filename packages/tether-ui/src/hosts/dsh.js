@@ -1,3 +1,5 @@
+import { TargetFileExplorer } from '../target-file-explorer.js'
+
 export const DSH_API_BASE = 'http://127.0.0.1:18890'
 export const DSH_APP_BASE = 'http://127.0.0.1:18892'
 
@@ -874,22 +876,37 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand,
               cursor: 'pointer'
             }
           }, '×')),
-        h('div', { style: { display: 'flex', flex: '1 1 auto', minHeight: 0 } },
-          h('div', {
-            style: {
-              width: 224, flex: '0 0 auto', overflow: 'auto', padding: '6px 8px',
-              background: soft, borderRight: '1px solid ' + line
-            }
-          },
-            rootGroup('工作区', workspaces, '未发现工作区'),
-            rootGroup('此电脑', drives, '未发现磁盘')),
-          h('div', {
-            style: { display: 'flex', flexDirection: 'column', flex: '1 1 auto', minWidth: 0, minHeight: 0, background: bg }
-          },
-            toolbar,
-            busyLine,
-            notice,
-            body)),
+        h('div', { style: { display: 'flex', flexDirection: 'column', flex: '1 1 auto', minHeight: 0 } },
+          busyLine,
+          TargetFileExplorer({
+            React,
+            sort,
+            onSort: setSort,
+            search,
+            onSearch: setSearch,
+            colors: { bg, soft, ink, sub, mute, line, hover, red: danger },
+            roots: [
+              ...workspaces.map((item) => ({ name: item.name, path: item.path, kind: 'workspace' })),
+              ...drives.map((item) => ({ name: item.name, path: item.path, kind: 'drive' }))
+            ],
+            rootPath: root,
+            path: directory,
+            entries,
+            loading: busy,
+            error,
+            disabled: busy,
+            singleClickOpens: true,
+            editablePath: false,
+            onRoot: (next) => { void enter({ path: next }, true) },
+            onPath: (next) => { void enter({ path: next }, false) },
+            onSelect: () => {},
+            onOpen: (item) => { if (item.dir) void enter(item, false); else void choose(item) },
+            onRefresh: (next) => { void enter({ path: next }, false) },
+            fileIcon,
+            formatTime: formatTargetTime,
+            formatSize: formatTargetSize,
+            limit: DSH_TARGET_ATTACHMENT_LIMIT
+          })),
         h('div', {
           style: {
             display: 'flex', alignItems: 'center', gap: 12, padding: '10px 18px',
