@@ -8,7 +8,9 @@ Shared target file explorer:
 - Sorting and search state stay with the caller so the same tree is usable in the plugin, the APP and the unit harness. The full Explorer keeps its richer context menu, drag and hover interactions instead of being replaced.
 - Includes the 0.2.41 login enrollment foundation. APP, plugin, and node are 0.2.42.
 
-Gates: mjs 212/212, cjs 6/6, pytest 135 passed / 4 skipped, `validate_versions()`. CI run `41224711170` success; signed manifest verified, published at 2026-10-31T17:31:36Z, and served by the Hub immediately after. LAPTOP-01 Node+APP **20.0 s**; the plugin job finished in **16.1 s** and its real status/health is 0.2.42. The shared explorer is now installed in the APP and plugin.
+Gates: mjs 212/212, cjs 6/6, pytest 135 passed / 4 skipped, `validate_versions()`. CI run `41224711170` success; signed manifest verified, published at 2026-10-31T17:31:36Z, and served by the Hub immediately after. LAPTOP-01 Node+APP **20.0 s**; the plugin job finished in **16.1 s** and its real status/health is 0.2.42.
+
+Real Chromium acceptance after the release: the transfer page showed the shared workspace/drive groups, breadcrumb, directory search and sortable columns; a real-input 1,040-byte transfer to LAPTOP-01 produced a matching SHA-256 and a target audit row `transfer/ok`. Test files were removed.
 
 ## v0.2.41
 
