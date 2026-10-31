@@ -159,9 +159,9 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
   const sourceItem = devices.find((item) => item.device_id === sourceDevice)
   const destItem = devices.find((item) => item.device_id === destDevice)
   const destination = sourceFile && destPath ? joinPath(destPath, sourceFile.name) : ''
+  const running = !!(job && job.state === 'running')
   const canStart = !!(sourceFile && destination && sourceItem && destItem
     && sourceItem.online && destItem.online && !running)
-  const running = !!(job && job.state === 'running')
   const start = async () => {
     if (!sourceFile || !destination) return
     const controller = new AbortController()
