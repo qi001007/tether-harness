@@ -1,5 +1,16 @@
 # Public client releases
 
+## v0.2.48
+
+Login follow-ups:
+
+- The login page keeps an editable server address, so a fresh device can sign in to a different Hub without hand-editing local storage.
+- The account role returned by login is persisted with the session and shown in Settings as 所有者/成员/管理员; the login → main UI → settings → logout lifecycle was verified with a temporary local Hub.
+- Includes 0.2.47 (full-screen login, status-only connection panel, settings page, transfer redesign, hidden scrollbars, workspace slow-load reload hint).
+- APP, plugin, and node are 0.2.48.
+
+Gates: pytest 138 passed / 4 skipped, mjs 216/216, cjs 6/6, `build.mjs --check`, `validate_versions()`. Signed publication is recorded after CI.
+
 ## v0.2.47
 
 Login, connection and settings split:
