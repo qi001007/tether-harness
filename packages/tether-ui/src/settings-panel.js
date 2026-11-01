@@ -29,6 +29,7 @@ export function createSettingsPanel(React) {
     const [message, setMessage] = React.useState('')
     if (!open) return null
     const status = connection.status || 'unknown'
+    const roleLabel = accountRole === 'owner' ? '所有者' : accountRole === 'member' ? '成员' : accountRole === 'admin' ? '管理员' : accountRole || '—'
     const dotColor = status === 'online' ? 'var(--dsw-alias-state-success-primary, #16a34a)'
       : status === 'offline' ? 'var(--dsw-alias-state-error-primary, #b42318)'
         : status === 'checking' ? 'var(--dsw-alias-state-warn-primary, #b54708)' : mute
@@ -73,7 +74,7 @@ export function createSettingsPanel(React) {
       body = h('div', { style: { display: 'grid', gap: 6 } },
         sectionTitle('账号', '账号信息只在这里出现；连接状态请看顶栏的“连接”。'),
         row('邮箱', accountEmail || '未登录'),
-        row('角色', accountRole || '—'),
+        row('角色', roleLabel),
         h('div', { style: { height: 1, background: line, margin: '12px 0' } }),
         h('div', { style: { fontSize: 12.5, fontWeight: 600, marginBottom: 8 } }, '修改密码'),
         h('div', { style: { display: 'grid', gap: 8, maxWidth: 320 } },

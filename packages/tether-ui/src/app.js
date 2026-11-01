@@ -2592,6 +2592,9 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const [hubEmail, setHubEmail] = React.useState(() => {
         try { return JSON.parse(window.localStorage.getItem('tether.hub') || '{}').email || '' } catch (_) { return '' }
       })
+      const [hubRole, setHubRole] = React.useState(() => {
+        try { return JSON.parse(window.localStorage.getItem('tether.hub') || '{}').role || '' } catch (_) { return '' }
+      })
       const [hubUnsafeExistingUrl, setHubUnsafeExistingUrl] = React.useState(false)
       const [hubStatus, setHubStatus] = React.useState('unknown')
       const [hubState, setHubState] = React.useState(null)
@@ -4940,8 +4943,9 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           defaultUrl: hubAddress || hubUrl || '',
           defaultEmail: hubEmail,
           onLogin: async ({ url, token, user }) => {
-            try { window.localStorage.setItem('tether.hub', JSON.stringify({ url, token, email: (user && user.email) || '' })) } catch (_) { /* storage unavailable */ }
+            try { window.localStorage.setItem('tether.hub', JSON.stringify({ url, token, email: (user && user.email) || '', role: (user && user.role) || '' })) } catch (_) { /* storage unavailable */ }
             setHubEmail((user && user.email) || '')
+            setHubRole((user && user.role) || '')
             try {
               if (window.tetherApp && typeof window.tetherApp.enrollDevice === 'function') await window.tetherApp.enrollDevice(token)
             } catch (_) { /* enrollment retries on the next sign-in */ }
@@ -5133,6 +5137,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           open: true,
           onClose: () => setShowAppSettings(false),
           accountEmail: hubEmail,
+          accountRole: hubRole,
           server: hubAddress || hubUrl || '',
           connection: { status: hubStatus, checkedAt: hubCheckedAt, durationMs: hubDuration, token: hubToken },
           device: {

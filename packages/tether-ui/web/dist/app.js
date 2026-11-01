@@ -163102,6 +163102,7 @@ function createSettingsPanel(React2) {
     const [message, setMessage] = React2.useState("");
     if (!open) return null;
     const status2 = connection.status || "unknown";
+    const roleLabel = accountRole === "owner" ? "\u6240\u6709\u8005" : accountRole === "member" ? "\u6210\u5458" : accountRole === "admin" ? "\u7BA1\u7406\u5458" : accountRole || "\u2014";
     const dotColor = status2 === "online" ? "var(--dsw-alias-state-success-primary, #16a34a)" : status2 === "offline" ? "var(--dsw-alias-state-error-primary, #b42318)" : status2 === "checking" ? "var(--dsw-alias-state-warn-primary, #b54708)" : mute;
     const changePassword = async () => {
       if (!server) {
@@ -163157,7 +163158,7 @@ function createSettingsPanel(React2) {
         { style: { display: "grid", gap: 6 } },
         sectionTitle("\u8D26\u53F7", "\u8D26\u53F7\u4FE1\u606F\u53EA\u5728\u8FD9\u91CC\u51FA\u73B0\uFF1B\u8FDE\u63A5\u72B6\u6001\u8BF7\u770B\u9876\u680F\u7684\u201C\u8FDE\u63A5\u201D\u3002"),
         row("\u90AE\u7BB1", accountEmail || "\u672A\u767B\u5F55"),
-        row("\u89D2\u8272", accountRole || "\u2014"),
+        row("\u89D2\u8272", roleLabel),
         h2("div", { style: { height: 1, background: line, margin: "12px 0" } }),
         h2("div", { style: { fontSize: 12.5, fontWeight: 600, marginBottom: 8 } }, "\u4FEE\u6539\u5BC6\u7801"),
         h2(
@@ -166648,6 +166649,13 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         return "";
       }
     });
+    const [hubRole, setHubRole] = React2.useState(() => {
+      try {
+        return JSON.parse(window.localStorage.getItem("tether.hub") || "{}").role || "";
+      } catch (_) {
+        return "";
+      }
+    });
     const [hubUnsafeExistingUrl, setHubUnsafeExistingUrl] = React2.useState(false);
     const [hubStatus, setHubStatus] = React2.useState("unknown");
     const [hubState, setHubState] = React2.useState(null);
@@ -169628,10 +169636,11 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         defaultEmail: hubEmail,
         onLogin: async ({ url, token, user }) => {
           try {
-            window.localStorage.setItem("tether.hub", JSON.stringify({ url, token, email: user && user.email || "" }));
+            window.localStorage.setItem("tether.hub", JSON.stringify({ url, token, email: user && user.email || "", role: user && user.role || "" }));
           } catch (_) {
           }
           setHubEmail(user && user.email || "");
+          setHubRole(user && user.role || "");
           try {
             if (window.tetherApp && typeof window.tetherApp.enrollDevice === "function") await window.tetherApp.enrollDevice(token);
           } catch (_) {
@@ -169844,6 +169853,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         open: true,
         onClose: () => setShowAppSettings(false),
         accountEmail: hubEmail,
+        accountRole: hubRole,
         server: hubAddress || hubUrl || "",
         connection: { status: hubStatus, checkedAt: hubCheckedAt, durationMs: hubDuration, token: hubToken },
         device: {
