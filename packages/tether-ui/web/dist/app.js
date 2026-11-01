@@ -8097,13 +8097,13 @@ var init_platform = __esm({
     setTimeout0IsFaster = typeof $globalThis.postMessage === "function" && !$globalThis.importScripts;
     setTimeout0 = (() => {
       if (setTimeout0IsFaster) {
-        const pending = [];
+        const pending2 = [];
         $globalThis.addEventListener("message", (e) => {
           if (e.data && e.data.vscodeScheduleAsyncWork) {
-            for (let i = 0, len = pending.length; i < len; i++) {
-              const candidate = pending[i];
+            for (let i = 0, len = pending2.length; i < len; i++) {
+              const candidate = pending2[i];
               if (candidate.id === e.data.vscodeScheduleAsyncWork) {
-                pending.splice(i, 1);
+                pending2.splice(i, 1);
                 candidate.callback();
                 return;
               }
@@ -8113,7 +8113,7 @@ var init_platform = __esm({
         let lastId = 0;
         return (callback) => {
           const myId = ++lastId;
-          pending.push({
+          pending2.push({
             id: myId,
             callback
           });
@@ -8849,7 +8849,7 @@ function disposeAndRemove(result, disposables) {
   }
   result.dispose();
 }
-var _bufferLeakWarnCountThreshold, _bufferLeakWarnTimeThreshold, Event, EventProfiling, _globalLeakWarningThreshold, leakageMonitorId, LeakageMonitor, Stacktrace, ListenerLeakError, ListenerRefusalError, UniqueContainer, compactionThreshold, Emitter, createEventDeliveryQueue, EventDeliveryQueuePrivate, PauseableEmitter, DebounceEmitter, MicrotaskEmitter, EventMultiplexer, EventBufferer, Relay;
+var _bufferLeakWarnCountThreshold, _bufferLeakWarnTimeThreshold, Event2, EventProfiling, _globalLeakWarningThreshold, leakageMonitorId, LeakageMonitor, Stacktrace, ListenerLeakError, ListenerRefusalError, UniqueContainer, compactionThreshold, Emitter, createEventDeliveryQueue, EventDeliveryQueuePrivate, PauseableEmitter, DebounceEmitter, MicrotaskEmitter, EventMultiplexer, EventBufferer, Relay;
 var init_event = __esm({
   "node_modules/monaco-editor/esm/vs/base/common/event.js"() {
     init_errors();
@@ -8860,12 +8860,12 @@ var init_event = __esm({
     init_stopwatch();
     _bufferLeakWarnCountThreshold = 100;
     _bufferLeakWarnTimeThreshold = 6e4;
-    (function(Event2) {
-      Event2.None = () => Disposable.None;
+    (function(Event3) {
+      Event3.None = () => Disposable.None;
       function defer(event, flushOnListenerRemove, disposable) {
         return debounce(event, () => void 0, 0, void 0, flushOnListenerRemove ?? true, void 0, disposable);
       }
-      Event2.defer = defer;
+      Event3.defer = defer;
       function once(event) {
         return (listener, thisArgs = null, disposables) => {
           let didFire = false;
@@ -8886,37 +8886,37 @@ var init_event = __esm({
           return result;
         };
       }
-      Event2.once = once;
+      Event3.once = once;
       function onceIf(event, condition) {
-        return Event2.once(Event2.filter(event, condition));
+        return Event3.once(Event3.filter(event, condition));
       }
-      Event2.onceIf = onceIf;
+      Event3.onceIf = onceIf;
       function map(event, map2, disposable) {
         return snapshot((listener, thisArgs = null, disposables) => event((i) => listener.call(thisArgs, map2(i)), null, disposables), disposable);
       }
-      Event2.map = map;
+      Event3.map = map;
       function forEach(event, each, disposable) {
         return snapshot((listener, thisArgs = null, disposables) => event((i) => {
           each(i);
           listener.call(thisArgs, i);
         }, null, disposables), disposable);
       }
-      Event2.forEach = forEach;
+      Event3.forEach = forEach;
       function filter(event, filter2, disposable) {
         return snapshot((listener, thisArgs = null, disposables) => event((e) => filter2(e) && listener.call(thisArgs, e), null, disposables), disposable);
       }
-      Event2.filter = filter;
+      Event3.filter = filter;
       function signal(event) {
         return event;
       }
-      Event2.signal = signal;
+      Event3.signal = signal;
       function any(...events) {
         return (listener, thisArgs = null, disposables) => {
           const disposable = combinedDisposable(...events.map((event) => event((e) => listener.call(thisArgs, e))));
           return addAndReturnDisposable(disposable, disposables);
         };
       }
-      Event2.any = any;
+      Event3.any = any;
       function reduce(event, merge, initial, disposable) {
         let output = initial;
         return map(event, (e) => {
@@ -8924,7 +8924,7 @@ var init_event = __esm({
           return output;
         }, disposable);
       }
-      Event2.reduce = reduce;
+      Event3.reduce = reduce;
       function snapshot(event, disposable) {
         let listener;
         const options = {
@@ -8999,9 +8999,9 @@ var init_event = __esm({
         disposable?.add(emitter);
         return emitter.event;
       }
-      Event2.debounce = debounce;
+      Event3.debounce = debounce;
       function accumulate(event, delay = 0, flushOnListenerRemove, disposable) {
-        return Event2.debounce(event, (last, e) => {
+        return Event3.debounce(event, (last, e) => {
           if (!last) {
             return [e];
           }
@@ -9009,7 +9009,7 @@ var init_event = __esm({
           return last;
         }, delay, void 0, flushOnListenerRemove ?? true, void 0, disposable);
       }
-      Event2.accumulate = accumulate;
+      Event3.accumulate = accumulate;
       function throttle(event, merge, delay = 100, leading = true, trailing = true, leakWarningThreshold, disposable) {
         let subscription;
         let output = void 0;
@@ -9058,7 +9058,7 @@ var init_event = __esm({
         disposable?.add(emitter);
         return emitter.event;
       }
-      Event2.throttle = throttle;
+      Event3.throttle = throttle;
       function latch(event, equals5 = (a, b) => a === b, disposable) {
         let firstCall = true;
         let cache;
@@ -9069,14 +9069,14 @@ var init_event = __esm({
           return shouldEmit;
         }, disposable);
       }
-      Event2.latch = latch;
+      Event3.latch = latch;
       function split(event, isT, disposable) {
         return [
-          Event2.filter(event, isT, disposable),
-          Event2.filter(event, (e) => !isT(e), disposable)
+          Event3.filter(event, isT, disposable),
+          Event3.filter(event, (e) => !isT(e), disposable)
         ];
       }
-      Event2.split = split;
+      Event3.split = split;
       function buffer(event, debugName, flushAfterTimeout = false, _buffer = [], disposable) {
         let buffer2 = _buffer.slice();
         let bufferLeakWarningData;
@@ -9152,7 +9152,7 @@ var init_event = __esm({
         }
         return emitter.event;
       }
-      Event2.buffer = buffer;
+      Event3.buffer = buffer;
       function chain(event, sythensize) {
         const fn = (listener, thisArgs, disposables) => {
           const cs = sythensize(new ChainableSynthesis());
@@ -9165,7 +9165,7 @@ var init_event = __esm({
         };
         return fn;
       }
-      Event2.chain = chain;
+      Event3.chain = chain;
       const HaltChainable = Symbol("HaltChainable");
       class ChainableSynthesis {
         constructor() {
@@ -9222,7 +9222,7 @@ var init_event = __esm({
         const result = new Emitter({ onWillAddFirstListener: onFirstListenerAdd, onDidRemoveLastListener: onLastListenerRemove });
         return result.event;
       }
-      Event2.fromNodeEventEmitter = fromNodeEventEmitter;
+      Event3.fromNodeEventEmitter = fromNodeEventEmitter;
       function fromDOMEventEmitter(emitter, eventName, map2 = (id) => id) {
         const fn = (...args) => result.fire(map2(...args));
         const onFirstListenerAdd = () => emitter.addEventListener(eventName, fn);
@@ -9230,7 +9230,7 @@ var init_event = __esm({
         const result = new Emitter({ onWillAddFirstListener: onFirstListenerAdd, onDidRemoveLastListener: onLastListenerRemove });
         return result.event;
       }
-      Event2.fromDOMEventEmitter = fromDOMEventEmitter;
+      Event3.fromDOMEventEmitter = fromDOMEventEmitter;
       function toPromise(event, disposables) {
         let cancelRef;
         let listener;
@@ -9247,16 +9247,16 @@ var init_event = __esm({
         }
         return promise;
       }
-      Event2.toPromise = toPromise;
+      Event3.toPromise = toPromise;
       function forward(from, to) {
         return from((e) => to.fire(e));
       }
-      Event2.forward = forward;
+      Event3.forward = forward;
       function runAndSubscribe(event, handler, initial) {
         handler(initial);
         return event((e) => handler(e));
       }
-      Event2.runAndSubscribe = runAndSubscribe;
+      Event3.runAndSubscribe = runAndSubscribe;
       class EmitterObserver {
         constructor(_observable, store) {
           this._observable = _observable;
@@ -9299,7 +9299,7 @@ var init_event = __esm({
         const observer = new EmitterObserver(obs, store);
         return observer.emitter.event;
       }
-      Event2.fromObservable = fromObservable;
+      Event3.fromObservable = fromObservable;
       function fromObservableLight(observable) {
         return (listener, thisArgs, disposables) => {
           let count = 0;
@@ -9335,8 +9335,8 @@ var init_event = __esm({
           return disposable;
         };
       }
-      Event2.fromObservableLight = fromObservableLight;
-    })(Event || (Event = {}));
+      Event3.fromObservableLight = fromObservableLight;
+    })(Event2 || (Event2 = {}));
     EventProfiling = class _EventProfiling {
       static {
         this.all = /* @__PURE__ */ new Set();
@@ -9819,7 +9819,7 @@ var init_event = __esm({
     Relay = class {
       constructor() {
         this.listening = false;
-        this.inputEvent = Event.None;
+        this.inputEvent = Event2.None;
         this.inputEventListener = Disposable.None;
         this.emitter = new Emitter({
           onDidAddFirstListener: () => {
@@ -13574,7 +13574,7 @@ var init_cancellation = __esm({
       CancellationToken2.isCancellationToken = isCancellationToken;
       CancellationToken2.None = Object.freeze({
         isCancellationRequested: false,
-        onCancellationRequested: Event.None
+        onCancellationRequested: Event2.None
       });
       CancellationToken2.Cancelled = Object.freeze({
         isCancellationRequested: true,
@@ -24495,7 +24495,7 @@ var init_dom = __esm({
           ctrlKey: false,
           metaKey: false
         };
-        this._subscriptions.add(Event.runAndSubscribe(onDidRegisterWindow, ({ window: window2, disposables }) => this.registerListeners(window2, disposables), { window: mainWindow, disposables: this._subscriptions }));
+        this._subscriptions.add(Event2.runAndSubscribe(onDidRegisterWindow, ({ window: window2, disposables }) => this.registerListeners(window2, disposables), { window: mainWindow, disposables: this._subscriptions }));
       }
       registerListeners(window2, disposables) {
         disposables.add(addDisposableListener(window2, "keydown", (e) => {
@@ -24652,10 +24652,10 @@ var init_dom = __esm({
         super();
         this.name = name;
         const ctor = options?.resizeObserverCtor ?? targetWindow.ResizeObserver;
-        this.observer = new ctor((entries3, observer) => {
+        this.observer = new ctor((entries2, observer) => {
           recordDisposableResizeObserverInvocation(targetWindow, this.name);
           try {
-            callback(entries3, observer);
+            callback(entries2, observer);
           } catch (e) {
             onUnexpectedError(e);
           }
@@ -24932,7 +24932,7 @@ var init_pixelRatio = __esm({
         if (!pixelRatioMonitor) {
           pixelRatioMonitor = markAsSingleton(new PixelRatioMonitorImpl(targetWindow));
           this.mapWindowIdToPixelRatioMonitor.set(targetWindowId, pixelRatioMonitor);
-          markAsSingleton(Event.once(onDidUnregisterWindow)(({ vscodeWindowId }) => {
+          markAsSingleton(Event2.once(onDidUnregisterWindow)(({ vscodeWindowId }) => {
             if (vscodeWindowId === targetWindowId) {
               pixelRatioMonitor?.dispose();
               this.mapWindowIdToPixelRatioMonitor.delete(targetWindowId);
@@ -29480,11 +29480,11 @@ var init_map = __esm({
       }
     };
     BidirectionalMap = class {
-      constructor(entries3) {
+      constructor(entries2) {
         this._m1 = /* @__PURE__ */ new Map();
         this._m2 = /* @__PURE__ */ new Map();
-        if (entries3) {
-          for (const [key, value] of entries3) {
+        if (entries2) {
+          for (const [key, value] of entries2) {
             this.set(key, value);
           }
         }
@@ -32912,12 +32912,12 @@ var init_languageConfigurationRegistry = __esm({
        * @param priority Use a higher number for higher priority
        */
       register(languageId, configuration, priority = 0) {
-        let entries3 = this._entries.get(languageId);
-        if (!entries3) {
-          entries3 = new ComposedLanguageConfiguration(languageId);
-          this._entries.set(languageId, entries3);
+        let entries2 = this._entries.get(languageId);
+        if (!entries2) {
+          entries2 = new ComposedLanguageConfiguration(languageId);
+          this._entries.set(languageId, entries2);
         }
-        const disposable = entries3.register(configuration, priority);
+        const disposable = entries2.register(configuration, priority);
         this._onDidChange.fire(new LanguageConfigurationChangeEvent(languageId));
         return markAsSingleton(toDisposable(() => {
           disposable.dispose();
@@ -32925,8 +32925,8 @@ var init_languageConfigurationRegistry = __esm({
         }));
       }
       getLanguageConfiguration(languageId) {
-        const entries3 = this._entries.get(languageId);
-        return entries3?.getResolvedConfiguration() || null;
+        const entries2 = this._entries.get(languageId);
+        return entries2?.getResolvedConfiguration() || null;
       }
     };
     ResolvedLanguageConfiguration = class _ResolvedLanguageConfiguration {
@@ -44154,9 +44154,9 @@ var init_elementSizeObserver = __esm({
               }
             }
           };
-          this._resizeObserver = new ResizeObserver((entries3) => {
-            if (entries3 && entries3[0] && entries3[0].contentRect) {
-              observedDimension = { width: entries3[0].contentRect.width, height: entries3[0].contentRect.height };
+          this._resizeObserver = new ResizeObserver((entries2) => {
+            if (entries2 && entries2[0] && entries2[0].contentRect) {
+              observedDimension = { width: entries2[0].contentRect.width, height: entries2[0].contentRect.height };
             } else {
               observedDimension = null;
             }
@@ -48156,7 +48156,7 @@ var init_touch = __esm({
         this.activeTouches = {};
         this.handle = null;
         this._lastSetTapCountTime = 0;
-        this._register(Event.runAndSubscribe(onDidRegisterWindow, ({ window: window2, disposables }) => {
+        this._register(Event2.runAndSubscribe(onDidRegisterWindow, ({ window: window2, disposables }) => {
           disposables.add(addDisposableListener(window2.document, "touchstart", (e) => this.onTouchStart(e), { passive: false }));
           disposables.add(addDisposableListener(window2.document, "touchend", (e) => this.onTouchEnd(window2, e)));
           disposables.add(addDisposableListener(window2.document, "touchmove", (e) => this.onTouchMove(e), { passive: false }));
@@ -50983,8 +50983,8 @@ var init_dataTransfer = __esm({
     };
     UriList = Object.freeze({
       // http://amundsen.com/hypermedia/urilist/
-      create: (entries3) => {
-        return distinct(entries3.map((x) => x.toString())).join("\r\n");
+      create: (entries2) => {
+        return distinct(entries2.map((x) => x.toString())).join("\r\n");
       },
       split: (str) => {
         return str.split("\r\n");
@@ -51541,7 +51541,7 @@ var init_textAreaEditContextInput = __esm({
         if (this._accessibilityService.isScreenReaderOptimized()) {
           this.writeNativeTextAreaContent("ctor");
         }
-        this._register(Event.runAndSubscribe(this._accessibilityService.onDidChangeScreenReaderOptimized, () => {
+        this._register(Event2.runAndSubscribe(this._accessibilityService.onDidChangeScreenReaderOptimized, () => {
           if (this._accessibilityService.isScreenReaderOptimized() && !this._asyncFocusGainWriteScreenReaderContent.value) {
             this._asyncFocusGainWriteScreenReaderContent.value = new RunOnceScheduler(() => this.writeNativeTextAreaContent("asyncFocusGain"), 0);
           } else {
@@ -68160,8 +68160,8 @@ function ensureNonNullable(value) {
   return value;
 }
 function observeDevicePixelDimensions(element, parentWindow, callback) {
-  let observer = new parentWindow.ResizeObserver((entries3) => {
-    const entry = entries3.find((entry2) => entry2.target === element);
+  let observer = new parentWindow.ResizeObserver((entries2) => {
+    const entry = entries2.find((entry2) => entry2.target === element);
     if (!entry) {
       return;
     }
@@ -69117,7 +69117,7 @@ var init_textureAtlas = __esm({
         this._onDidDeleteGlyphs = this._register(new Emitter());
         this.onDidDeleteGlyphs = this._onDidDeleteGlyphs.event;
         this._allocatorType = options?.allocatorType ?? "slab";
-        this._register(Event.runAndSubscribe(this._themeService.onDidColorThemeChange, () => {
+        this._register(Event2.runAndSubscribe(this._themeService.onDidColorThemeChange, () => {
           if (this._colorMap) {
             this.clear();
           }
@@ -69420,7 +69420,7 @@ var init_objectCollectionBuffer = __esm({
         const value = new ObjectCollectionBufferEntry(this.view, this._propertySpecsMap, this._dirtyTracker, this._entries.size, data);
         const removeFromEntries = this._entries.push(value);
         const listeners = [];
-        listeners.push(Event.forward(value.onDidChange, this._onDidChange));
+        listeners.push(Event2.forward(value.onDidChange, this._onDidChange));
         listeners.push(value.onWillDispose(() => {
           const deletedEntryIndex = value.i;
           removeFromEntries();
@@ -69672,7 +69672,7 @@ var init_rectangleRenderer = __esm({
           });
         };
         this._shapeBindBuffer.value = createShapeBindBuffer();
-        this._register(Event.runAndSubscribe(this._shapeCollection.onDidChangeBuffer, () => {
+        this._register(Event2.runAndSubscribe(this._shapeCollection.onDidChangeBuffer, () => {
           this._shapeBindBuffer.value = createShapeBindBuffer();
           if (this._pipeline) {
             this._updateBindGroup(this._pipeline, layoutInfoUniformBuffer);
@@ -70091,7 +70091,7 @@ var init_viewGpuContext = __esm({
         this.maxGpuCols = 2e3;
         this.canvas = createFastDomNode(document.createElement("canvas"));
         this.canvas.setClassName("editorCanvas");
-        this._register(Event.runAndSubscribe(configurationService.onDidChangeConfiguration, (e) => {
+        this._register(Event2.runAndSubscribe(configurationService.onDidChangeConfiguration, (e) => {
           if (!e || e.affectsConfiguration("editor.scrollbar.verticalScrollbarSize")) {
             const verticalScrollbarSize = configurationService.getValue("editor").scrollbar?.verticalScrollbarSize ?? 14;
             this.canvas.domNode.style.boxSizing = "border-box";
@@ -96272,9 +96272,9 @@ var ServiceCollection;
 var init_serviceCollection = __esm({
   "node_modules/monaco-editor/esm/vs/platform/instantiation/common/serviceCollection.js"() {
     ServiceCollection = class {
-      constructor(...entries3) {
+      constructor(...entries2) {
         this._entries = /* @__PURE__ */ new Map();
-        for (const [id, service] of entries3) {
+        for (const [id, service] of entries2) {
           this.set(id, service);
         }
       }
@@ -101926,7 +101926,7 @@ function cleanArray(array) {
 }
 function clone(object) {
   const newObject = create(null);
-  for (const _ref2 of entries2(object)) {
+  for (const _ref2 of entries(object)) {
     var _ref3 = _slicedToArray(_ref2, 2);
     const property = _ref3[0];
     const value = _ref3[1];
@@ -102086,7 +102086,7 @@ function createDOMPurify() {
   const _document = document2, implementation = _document.implementation, createNodeIterator = _document.createNodeIterator, createDocumentFragment = _document.createDocumentFragment, getElementsByTagName = _document.getElementsByTagName;
   const importNode = originalDocument.importNode;
   let hooks = _createHooksMap();
-  DOMPurify.isSupported = typeof entries2 === "function" && typeof getParentNode === "function" && implementation && implementation.createHTMLDocument !== void 0;
+  DOMPurify.isSupported = typeof entries === "function" && typeof getParentNode === "function" && implementation && implementation.createHTMLDocument !== void 0;
   const MUSTACHE_EXPR$1 = MUSTACHE_EXPR, ERB_EXPR$1 = ERB_EXPR, TMPLIT_EXPR$1 = TMPLIT_EXPR, DATA_ATTR$1 = DATA_ATTR, ARIA_ATTR$1 = ARIA_ATTR, IS_SCRIPT_OR_DATA$1 = IS_SCRIPT_OR_DATA, ATTR_WHITESPACE$1 = ATTR_WHITESPACE, CUSTOM_ELEMENT$1 = CUSTOM_ELEMENT;
   let IS_ALLOWED_URI$1 = IS_ALLOWED_URI;
   let ALLOWED_TAGS = null;
@@ -103268,10 +103268,10 @@ function createDOMPurify() {
   };
   return DOMPurify;
 }
-var entries2, setPrototypeOf, isFrozen, getPrototypeOf, getOwnPropertyDescriptor, freeze, seal, create, _ref, apply, construct, arrayForEach, arrayLastIndexOf, arrayPop, arrayPush, arraySplice, arrayIsArray, stringToLowerCase, stringToString, stringMatch, stringReplace, stringIndexOf, stringTrim, numberToString, booleanToString, bigintToString, symbolToString, objectHasOwnProperty, objectToString, regExpTest, typeErrorCreate, html$1, svg$1, svgFilters, svgDisallowed, mathMl$1, mathMlDisallowed, text, html2, svg, mathMl, xml, MUSTACHE_EXPR, ERB_EXPR, TMPLIT_EXPR, DATA_ATTR, ARIA_ATTR, IS_ALLOWED_URI, IS_SCRIPT_OR_DATA, ATTR_WHITESPACE, DOCTYPE_NAME, CUSTOM_ELEMENT, ELEMENT_MARKUP_PROBE, COMMENT_MARKUP_PROBE, FALLBACK_TAG_CLOSE, SELF_CLOSING_TAG, NODE_TYPE, LITERAL_TEXT_ELEMENT_NAMES, LITERAL_TEXT_ELEMENTS, LITERAL_TEXT_CLOSE, getGlobal, _createTrustedTypesPolicy, _createHooksMap, _resolveSetOption, _resolveObjectOption, purify;
+var entries, setPrototypeOf, isFrozen, getPrototypeOf, getOwnPropertyDescriptor, freeze, seal, create, _ref, apply, construct, arrayForEach, arrayLastIndexOf, arrayPop, arrayPush, arraySplice, arrayIsArray, stringToLowerCase, stringToString, stringMatch, stringReplace, stringIndexOf, stringTrim, numberToString, booleanToString, bigintToString, symbolToString, objectHasOwnProperty, objectToString, regExpTest, typeErrorCreate, html$1, svg$1, svgFilters, svgDisallowed, mathMl$1, mathMlDisallowed, text, html2, svg, mathMl, xml, MUSTACHE_EXPR, ERB_EXPR, TMPLIT_EXPR, DATA_ATTR, ARIA_ATTR, IS_ALLOWED_URI, IS_SCRIPT_OR_DATA, ATTR_WHITESPACE, DOCTYPE_NAME, CUSTOM_ELEMENT, ELEMENT_MARKUP_PROBE, COMMENT_MARKUP_PROBE, FALLBACK_TAG_CLOSE, SELF_CLOSING_TAG, NODE_TYPE, LITERAL_TEXT_ELEMENT_NAMES, LITERAL_TEXT_ELEMENTS, LITERAL_TEXT_CLOSE, getGlobal, _createTrustedTypesPolicy, _createHooksMap, _resolveSetOption, _resolveObjectOption, purify;
 var init_dompurify = __esm({
   "node_modules/monaco-editor/esm/vs/base/browser/dompurify/dompurify.js"() {
-    entries2 = Object.entries;
+    entries = Object.entries;
     setPrototypeOf = Object.setPrototypeOf;
     isFrozen = Object.isFrozen;
     getPrototypeOf = Object.getPrototypeOf;
@@ -106562,8 +106562,8 @@ var init_hoverService = __esm({
         this._hoverStack[length - 1]?.hover.dispose();
         this._hoverStack.length = length - 1;
       }
-      _intersectionChange(entries3, hover) {
-        const entry = entries3[entries3.length - 1];
+      _intersectionChange(entries2, hover) {
+        const entry = entries2[entries2.length - 1];
         if (!entry.isIntersecting) {
           hover.dispose();
         }
@@ -108090,7 +108090,7 @@ var init_storage = __esm({
     };
     InMemoryStorageDatabase = class {
       constructor() {
-        this.onDidChangeItemsExternal = Event.None;
+        this.onDidChangeItemsExternal = Event2.None;
         this.items = /* @__PURE__ */ new Map();
       }
       async updateItems(request) {
@@ -108146,7 +108146,7 @@ var init_storage2 = __esm({
         this.flushWhenIdleScheduler = this._register(new RunOnceScheduler(() => this.doFlushWhenIdle(), options.flushInterval));
       }
       onDidChangeValue(scope, key, disposable) {
-        return Event.filter(this._onDidChangeValue.event, (e) => e.scope === scope && (key === void 0 || e.key === key), disposable);
+        return Event2.filter(this._onDidChangeValue.event, (e) => e.scope === scope && (key === void 0 || e.key === key), disposable);
       }
       doFlushWhenIdle() {
         this.runFlushWhenIdle.value = runWhenGlobalIdle(() => {
@@ -110005,9 +110005,9 @@ var init_semanticTokensProviderStyling = __esm({
         this._elements = [];
         _HashTable._nullOutEntries(this._elements, this._currentLength);
       }
-      static _nullOutEntries(entries3, length) {
+      static _nullOutEntries(entries2, length) {
         for (let i = 0; i < length; i++) {
-          entries3[i] = null;
+          entries2[i] = null;
         }
       }
       _hash2(n1, n2) {
@@ -110412,11 +110412,11 @@ var init_standaloneLayoutService = __esm({
       }
       constructor(_codeEditorService) {
         this._codeEditorService = _codeEditorService;
-        this.onDidLayoutMainContainer = Event.None;
-        this.onDidLayoutActiveContainer = Event.None;
-        this.onDidLayoutContainer = Event.None;
-        this.onDidChangeActiveContainer = Event.None;
-        this.onDidAddContainer = Event.None;
+        this.onDidLayoutMainContainer = Event2.None;
+        this.onDidLayoutActiveContainer = Event2.None;
+        this.onDidLayoutContainer = Event2.None;
+        this.onDidChangeActiveContainer = Event2.None;
+        this.onDidAddContainer = Event2.None;
         this.mainContainerOffset = { top: 0, quickPickTop: 0 };
         this.activeContainerOffset = { top: 0, quickPickTop: 0 };
       }
@@ -111255,24 +111255,24 @@ var init_menuService = __esm({
         if (hiddenByDefault) {
           hidden = !hidden;
         }
-        const entries3 = this._data[menu.id];
+        const entries2 = this._data[menu.id];
         if (!hidden) {
-          if (entries3) {
-            const idx = entries3.indexOf(commandId);
+          if (entries2) {
+            const idx = entries2.indexOf(commandId);
             if (idx >= 0) {
-              removeFastWithoutKeepingOrder(entries3, idx);
+              removeFastWithoutKeepingOrder(entries2, idx);
             }
-            if (entries3.length === 0) {
+            if (entries2.length === 0) {
               delete this._data[menu.id];
             }
           }
         } else {
-          if (!entries3) {
+          if (!entries2) {
             this._data[menu.id] = [commandId];
           } else {
-            const idx = entries3.indexOf(commandId);
+            const idx = entries2.indexOf(commandId);
             if (idx < 0) {
-              entries3.push(commandId);
+              entries2.push(commandId);
             }
           }
         }
@@ -111539,7 +111539,7 @@ var init_clipboardService = __esm({
         if (isSafari2 || isWebkitWebView) {
           this.installWebKitWriteTextWorkaround();
         }
-        this._register(Event.runAndSubscribe(onDidRegisterWindow, ({ window: window2, disposables }) => {
+        this._register(Event2.runAndSubscribe(onDidRegisterWindow, ({ window: window2, disposables }) => {
           disposables.add(addDisposableListener(window2.document, "copy", () => this.clearResourcesState()));
         }, { window: mainWindow, disposables: this._store }));
       }
@@ -111578,7 +111578,7 @@ var init_clipboardService = __esm({
             }
           });
         };
-        this._register(Event.runAndSubscribe(this.layoutService.onDidAddContainer, ({ container, disposables }) => {
+        this._register(Event2.runAndSubscribe(this.layoutService.onDidAddContainer, ({ container, disposables }) => {
           disposables.add(addDisposableListener(container, "click", handler));
           disposables.add(addDisposableListener(container, "keydown", handler));
         }, { container: this.layoutService.mainContainer, disposables: this._store }));
@@ -113383,7 +113383,7 @@ var init_contextKeyService = __esm({
         this.inputFocusedContext = InputFocusedContext.bindTo(this);
         const myContext = this._register(new ConfigAwareContextValuesContainer(this._myContextId, configurationService, this._onDidChangeContext));
         this._contexts.set(this._myContextId, myContext);
-        this._register(Event.runAndSubscribe(onDidRegisterWindow, ({ window: window2, disposables }) => {
+        this._register(Event2.runAndSubscribe(onDidRegisterWindow, ({ window: window2, disposables }) => {
           const onFocusDisposables = disposables.add(new MutableDisposable());
           disposables.add(addDisposableListener(window2, EventType.FOCUS_IN, () => {
             onFocusDisposables.value = new DisposableStore();
@@ -113399,7 +113399,7 @@ var init_contextKeyService = __esm({
         this.inputFocusedContext.set(isInputFocused);
         if (isInputFocused) {
           const tracker = disposables.add(trackFocus(ownerDocument.activeElement));
-          Event.once(tracker.onDidBlur)(() => {
+          Event2.once(tracker.onDidBlur)(() => {
             if (getActiveWindow().document === ownerDocument) {
               this.inputFocusedContext.set(activeElementIsInput());
             }
@@ -114165,7 +114165,7 @@ var init_listView = __esm({
         this.currentSelectionMovementDisposable = this.disposables.add(new MutableDisposable());
         this._onDidChangeContentHeight = this.disposables.add(new Emitter());
         this._onDidChangeContentWidth = this.disposables.add(new Emitter());
-        this.onDidChangeContentHeight = Event.latch(this._onDidChangeContentHeight.event, void 0, this.disposables);
+        this.onDidChangeContentHeight = Event2.latch(this._onDidChangeContentHeight.event, void 0, this.disposables);
         this._horizontalScrolling = false;
         if (options.horizontalScrolling && options.supportDynamicHeights) {
           throw new Error("Horizontal scrolling and dynamic heights not supported simultaneously");
@@ -114709,34 +114709,34 @@ var init_listView = __esm({
       }
       // Events
       get onMouseClick() {
-        return Event.map(this.disposables.add(new DomEmitter(this.domNode, "click")).event, (e) => this.toMouseEvent(e), this.disposables);
+        return Event2.map(this.disposables.add(new DomEmitter(this.domNode, "click")).event, (e) => this.toMouseEvent(e), this.disposables);
       }
       get onMouseDblClick() {
-        return Event.map(this.disposables.add(new DomEmitter(this.domNode, "dblclick")).event, (e) => this.toMouseEvent(e), this.disposables);
+        return Event2.map(this.disposables.add(new DomEmitter(this.domNode, "dblclick")).event, (e) => this.toMouseEvent(e), this.disposables);
       }
       get onMouseMiddleClick() {
-        return Event.filter(Event.map(this.disposables.add(new DomEmitter(this.domNode, "auxclick")).event, (e) => this.toMouseEvent(e), this.disposables), (e) => e.browserEvent.button === 1, this.disposables);
+        return Event2.filter(Event2.map(this.disposables.add(new DomEmitter(this.domNode, "auxclick")).event, (e) => this.toMouseEvent(e), this.disposables), (e) => e.browserEvent.button === 1, this.disposables);
       }
       get onMouseDown() {
-        return Event.map(this.disposables.add(new DomEmitter(this.domNode, "mousedown")).event, (e) => this.toMouseEvent(e), this.disposables);
+        return Event2.map(this.disposables.add(new DomEmitter(this.domNode, "mousedown")).event, (e) => this.toMouseEvent(e), this.disposables);
       }
       get onMouseOver() {
-        return Event.map(this.disposables.add(new DomEmitter(this.domNode, "mouseover")).event, (e) => this.toMouseEvent(e), this.disposables);
+        return Event2.map(this.disposables.add(new DomEmitter(this.domNode, "mouseover")).event, (e) => this.toMouseEvent(e), this.disposables);
       }
       get onMouseMove() {
-        return Event.map(this.disposables.add(new DomEmitter(this.domNode, "mousemove")).event, (e) => this.toMouseEvent(e), this.disposables);
+        return Event2.map(this.disposables.add(new DomEmitter(this.domNode, "mousemove")).event, (e) => this.toMouseEvent(e), this.disposables);
       }
       get onMouseOut() {
-        return Event.map(this.disposables.add(new DomEmitter(this.domNode, "mouseout")).event, (e) => this.toMouseEvent(e), this.disposables);
+        return Event2.map(this.disposables.add(new DomEmitter(this.domNode, "mouseout")).event, (e) => this.toMouseEvent(e), this.disposables);
       }
       get onContextMenu() {
-        return Event.any(Event.map(this.disposables.add(new DomEmitter(this.domNode, "contextmenu")).event, (e) => this.toMouseEvent(e), this.disposables), Event.map(this.disposables.add(new DomEmitter(this.domNode, EventType2.Contextmenu)).event, (e) => this.toGestureEvent(e), this.disposables));
+        return Event2.any(Event2.map(this.disposables.add(new DomEmitter(this.domNode, "contextmenu")).event, (e) => this.toMouseEvent(e), this.disposables), Event2.map(this.disposables.add(new DomEmitter(this.domNode, EventType2.Contextmenu)).event, (e) => this.toGestureEvent(e), this.disposables));
       }
       get onTouchStart() {
-        return Event.map(this.disposables.add(new DomEmitter(this.domNode, "touchstart")).event, (e) => this.toTouchEvent(e), this.disposables);
+        return Event2.map(this.disposables.add(new DomEmitter(this.domNode, "touchstart")).event, (e) => this.toTouchEvent(e), this.disposables);
       }
       get onTap() {
-        return Event.map(this.disposables.add(new DomEmitter(this.rowsContainer, EventType2.Tap)).event, (e) => this.toGestureEvent(e), this.disposables);
+        return Event2.map(this.disposables.add(new DomEmitter(this.rowsContainer, EventType2.Tap)).event, (e) => this.toGestureEvent(e), this.disposables);
       }
       toMouseEvent(browserEvent) {
         const index = this.getItemIndexFromEventTarget(browserEvent.target || null);
@@ -115677,7 +115677,7 @@ var init_listWidget = __esm({
     };
     KeyboardController = class {
       get onKeyDown() {
-        return Event.chain(this.disposables.add(new DomEmitter(this.view.domNode, "keydown")).event, ($12) => $12.filter((e) => !isEditableElement(e.target)).map((e) => new StandardKeyboardEvent(e)));
+        return Event2.chain(this.disposables.add(new DomEmitter(this.view.domNode, "keydown")).event, ($12) => $12.filter((e) => !isEditableElement(e.target)).map((e) => new StandardKeyboardEvent(e)));
       }
       constructor(list2, view, options) {
         this.list = list2;
@@ -115827,9 +115827,9 @@ var init_listWidget = __esm({
           return;
         }
         let typing = false;
-        const onChar = Event.chain(this.enabledDisposables.add(new DomEmitter(this.view.domNode, "keydown")).event, ($12) => $12.filter((e) => !isEditableElement(e.target)).filter(() => this.mode === TypeNavigationMode.Automatic || this.triggered).map((event) => new StandardKeyboardEvent(event)).filter((e) => typing || this.keyboardNavigationEventFilter(e)).filter((e) => this.delegate.mightProducePrintableCharacter(e)).forEach((e) => EventHelper.stop(e, true)).map((event) => event.browserEvent.key));
-        const onClear = Event.debounce(onChar, () => null, 800, void 0, void 0, void 0, this.enabledDisposables);
-        const onInput = Event.reduce(Event.any(onChar, onClear), (r, i) => i === null ? null : (r || "") + i, void 0, this.enabledDisposables);
+        const onChar = Event2.chain(this.enabledDisposables.add(new DomEmitter(this.view.domNode, "keydown")).event, ($12) => $12.filter((e) => !isEditableElement(e.target)).filter(() => this.mode === TypeNavigationMode.Automatic || this.triggered).map((event) => new StandardKeyboardEvent(event)).filter((e) => typing || this.keyboardNavigationEventFilter(e)).filter((e) => this.delegate.mightProducePrintableCharacter(e)).forEach((e) => EventHelper.stop(e, true)).map((event) => event.browserEvent.key));
+        const onClear = Event2.debounce(onChar, () => null, 800, void 0, void 0, void 0, this.enabledDisposables);
+        const onInput = Event2.reduce(Event2.any(onChar, onClear), (r, i) => i === null ? null : (r || "") + i, void 0, this.enabledDisposables);
         onInput(this.onInput, this, this.enabledDisposables);
         onClear(this.onClear, this, this.enabledDisposables);
         onChar(() => typing = true, void 0, this.enabledDisposables);
@@ -115909,8 +115909,8 @@ var init_listWidget = __esm({
         this.list = list2;
         this.view = view;
         this.disposables = new DisposableStore();
-        const onKeyDown = Event.chain(this.disposables.add(new DomEmitter(view.domNode, "keydown")).event, ($12) => $12.filter((e) => !isEditableElement(e.target)).map((e) => new StandardKeyboardEvent(e)));
-        const onTab = Event.chain(onKeyDown, ($12) => $12.filter((e) => e.keyCode === 2 && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey));
+        const onKeyDown = Event2.chain(this.disposables.add(new DomEmitter(view.domNode, "keydown")).event, ($12) => $12.filter((e) => !isEditableElement(e.target)).map((e) => new StandardKeyboardEvent(e)));
+        const onTab = Event2.chain(onKeyDown, ($12) => $12.filter((e) => e.keyCode === 2 && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey));
         onTab(this.onTab, this, this.disposables);
       }
       onTab(e) {
@@ -115964,7 +115964,7 @@ var init_listWidget = __esm({
           list2.onTouchStart(this.onMouseDown, this, this.disposables);
           this.disposables.add(Gesture.addTarget(list2.getHTMLElement()));
         }
-        Event.any(list2.onMouseClick, list2.onMouseMiddleClick, list2.onTap)(this.onViewPointer, this, this.disposables);
+        Event2.any(list2.onMouseClick, list2.onMouseMiddleClick, list2.onTap)(this.onViewPointer, this, this.disposables);
       }
       updateOptions(optionsUpdate) {
         if (optionsUpdate.multipleSelectionSupport !== void 0) {
@@ -116390,10 +116390,10 @@ var init_listWidget = __esm({
     };
     List = class {
       get onDidChangeFocus() {
-        return Event.map(this.eventBufferer.wrapEvent(this.focus.onChange), (e) => this.toListEvent(e), this.disposables);
+        return Event2.map(this.eventBufferer.wrapEvent(this.focus.onChange), (e) => this.toListEvent(e), this.disposables);
       }
       get onDidChangeSelection() {
-        return Event.map(this.eventBufferer.wrapEvent(this.selection.onChange), (e) => this.toListEvent(e), this.disposables);
+        return Event2.map(this.eventBufferer.wrapEvent(this.selection.onChange), (e) => this.toListEvent(e), this.disposables);
       }
       get domId() {
         return this.view.domId;
@@ -116440,25 +116440,25 @@ var init_listWidget = __esm({
        */
       get onContextMenu() {
         let didJustPressContextMenuKey = false;
-        const fromKeyDown = Event.chain(this.disposables.add(new DomEmitter(this.view.domNode, "keydown")).event, ($12) => $12.map((e) => new StandardKeyboardEvent(e)).filter((e) => didJustPressContextMenuKey = e.keyCode === 58 || e.shiftKey && e.keyCode === 68).map((e) => EventHelper.stop(e, true)).filter(() => false));
-        const fromKeyUp = Event.chain(this.disposables.add(new DomEmitter(this.view.domNode, "keyup")).event, ($12) => $12.forEach(() => didJustPressContextMenuKey = false).map((e) => new StandardKeyboardEvent(e)).filter((e) => e.keyCode === 58 || e.shiftKey && e.keyCode === 68).map((e) => EventHelper.stop(e, true)).map(({ browserEvent }) => {
+        const fromKeyDown = Event2.chain(this.disposables.add(new DomEmitter(this.view.domNode, "keydown")).event, ($12) => $12.map((e) => new StandardKeyboardEvent(e)).filter((e) => didJustPressContextMenuKey = e.keyCode === 58 || e.shiftKey && e.keyCode === 68).map((e) => EventHelper.stop(e, true)).filter(() => false));
+        const fromKeyUp = Event2.chain(this.disposables.add(new DomEmitter(this.view.domNode, "keyup")).event, ($12) => $12.forEach(() => didJustPressContextMenuKey = false).map((e) => new StandardKeyboardEvent(e)).filter((e) => e.keyCode === 58 || e.shiftKey && e.keyCode === 68).map((e) => EventHelper.stop(e, true)).map(({ browserEvent }) => {
           const focus = this.getFocus();
           const index = focus.length ? focus[0] : void 0;
           const element = typeof index !== "undefined" ? this.view.element(index) : void 0;
           const anchor = typeof index !== "undefined" ? this.view.domElement(index) : this.view.domNode;
           return { index, element, anchor, browserEvent };
         }));
-        const fromMouse = Event.chain(this.view.onContextMenu, ($12) => $12.filter((_) => !didJustPressContextMenuKey).map(({ element, index, browserEvent }) => ({ element, index, anchor: new StandardMouseEvent(getWindow(this.view.domNode), browserEvent), browserEvent })));
-        return Event.any(fromKeyDown, fromKeyUp, fromMouse);
+        const fromMouse = Event2.chain(this.view.onContextMenu, ($12) => $12.filter((_) => !didJustPressContextMenuKey).map(({ element, index, browserEvent }) => ({ element, index, anchor: new StandardMouseEvent(getWindow(this.view.domNode), browserEvent), browserEvent })));
+        return Event2.any(fromKeyDown, fromKeyUp, fromMouse);
       }
       get onKeyDown() {
         return this.disposables.add(new DomEmitter(this.view.domNode, "keydown")).event;
       }
       get onDidFocus() {
-        return Event.signal(this.disposables.add(new DomEmitter(this.view.domNode, "focus", true)).event);
+        return Event2.signal(this.disposables.add(new DomEmitter(this.view.domNode, "focus", true)).event);
       }
       get onDidBlur() {
-        return Event.signal(this.disposables.add(new DomEmitter(this.view.domNode, "blur", true)).event);
+        return Event2.signal(this.disposables.add(new DomEmitter(this.view.domNode, "blur", true)).event);
       }
       constructor(user, container, virtualDelegate, renderers, _options = DefaultOptions2) {
         this.user = user;
@@ -117489,44 +117489,44 @@ var init_selectBoxCustom2 = __esm({
           this.selectList.ariaLabel = this.selectBoxOptions.ariaLabel;
         }
         const onKeyDown = this._register(new DomEmitter(this.selectDropDownListContainer, "keydown"));
-        const onSelectDropDownKeyDown = Event.chain(onKeyDown.event, ($12) => $12.filter(() => this.selectList.length > 0).map((e) => new StandardKeyboardEvent(e)));
-        this._register(Event.chain(onSelectDropDownKeyDown, ($12) => $12.filter(
+        const onSelectDropDownKeyDown = Event2.chain(onKeyDown.event, ($12) => $12.filter(() => this.selectList.length > 0).map((e) => new StandardKeyboardEvent(e)));
+        this._register(Event2.chain(onSelectDropDownKeyDown, ($12) => $12.filter(
           (e) => e.keyCode === 3
           /* KeyCode.Enter */
         ))(this.onEnter, this));
-        this._register(Event.chain(onSelectDropDownKeyDown, ($12) => $12.filter(
+        this._register(Event2.chain(onSelectDropDownKeyDown, ($12) => $12.filter(
           (e) => e.keyCode === 2
           /* KeyCode.Tab */
         ))(this.onEnter, this));
-        this._register(Event.chain(onSelectDropDownKeyDown, ($12) => $12.filter(
+        this._register(Event2.chain(onSelectDropDownKeyDown, ($12) => $12.filter(
           (e) => e.keyCode === 9
           /* KeyCode.Escape */
         ))(this.onEscape, this));
-        this._register(Event.chain(onSelectDropDownKeyDown, ($12) => $12.filter(
+        this._register(Event2.chain(onSelectDropDownKeyDown, ($12) => $12.filter(
           (e) => e.keyCode === 16
           /* KeyCode.UpArrow */
         ))(this.onUpArrow, this));
-        this._register(Event.chain(onSelectDropDownKeyDown, ($12) => $12.filter(
+        this._register(Event2.chain(onSelectDropDownKeyDown, ($12) => $12.filter(
           (e) => e.keyCode === 18
           /* KeyCode.DownArrow */
         ))(this.onDownArrow, this));
-        this._register(Event.chain(onSelectDropDownKeyDown, ($12) => $12.filter(
+        this._register(Event2.chain(onSelectDropDownKeyDown, ($12) => $12.filter(
           (e) => e.keyCode === 12
           /* KeyCode.PageDown */
         ))(this.onPageDown, this));
-        this._register(Event.chain(onSelectDropDownKeyDown, ($12) => $12.filter(
+        this._register(Event2.chain(onSelectDropDownKeyDown, ($12) => $12.filter(
           (e) => e.keyCode === 11
           /* KeyCode.PageUp */
         ))(this.onPageUp, this));
-        this._register(Event.chain(onSelectDropDownKeyDown, ($12) => $12.filter(
+        this._register(Event2.chain(onSelectDropDownKeyDown, ($12) => $12.filter(
           (e) => e.keyCode === 14
           /* KeyCode.Home */
         ))(this.onHome, this));
-        this._register(Event.chain(onSelectDropDownKeyDown, ($12) => $12.filter(
+        this._register(Event2.chain(onSelectDropDownKeyDown, ($12) => $12.filter(
           (e) => e.keyCode === 13
           /* KeyCode.End */
         ))(this.onEnd, this));
-        this._register(Event.chain(onSelectDropDownKeyDown, ($12) => $12.filter((e) => e.keyCode >= 21 && e.keyCode <= 56 || e.keyCode >= 85 && e.keyCode <= 113))(this.onCharacter, this));
+        this._register(Event2.chain(onSelectDropDownKeyDown, ($12) => $12.filter((e) => e.keyCode >= 21 && e.keyCode <= 56 || e.keyCode >= 85 && e.keyCode <= 113))(this.onCharacter, this));
         this._register(addDisposableListener(this.selectList.getHTMLElement(), EventType.POINTER_UP, (e) => this.onPointerUp(e)));
         this._register(this.selectList.onMouseOver((e) => typeof e.index !== "undefined" && !e.element?.isDisabled && this.selectList.setFocus([e.index])));
         this._register(this.selectList.onDidChangeFocus((e) => this.onListFocus(e)));
@@ -122656,7 +122656,7 @@ var init_abstractKeybindingService = __esm({
     HIGH_FREQ_COMMANDS = /^(cursor|delete|undo|redo|tab|editor\.action\.clipboard)/;
     AbstractKeybindingService = class extends Disposable {
       get onDidUpdateKeybindings() {
-        return this._onDidUpdateKeybindings ? this._onDidUpdateKeybindings.event : Event.None;
+        return this._onDidUpdateKeybindings ? this._onDidUpdateKeybindings.event : Event2.None;
       }
       get inChordMode() {
         return this._currentChords.length > 0;
@@ -123360,13 +123360,13 @@ var init_listPaging = __esm({
         return this.list.onDidDispose;
       }
       get onMouseDblClick() {
-        return Event.map(this.list.onMouseDblClick, ({ element, index, browserEvent }) => ({ element: element === void 0 ? void 0 : this._model.get(element), index, browserEvent }));
+        return Event2.map(this.list.onMouseDblClick, ({ element, index, browserEvent }) => ({ element: element === void 0 ? void 0 : this._model.get(element), index, browserEvent }));
       }
       get onPointer() {
-        return Event.map(this.list.onPointer, ({ element, index, browserEvent }) => ({ element: element === void 0 ? void 0 : this._model.get(element), index, browserEvent }));
+        return Event2.map(this.list.onPointer, ({ element, index, browserEvent }) => ({ element: element === void 0 ? void 0 : this._model.get(element), index, browserEvent }));
       }
       get onDidChangeSelection() {
-        return Event.map(this.list.onDidChangeSelection, ({ elements, indexes, browserEvent }) => ({ elements: elements.map((e) => this._model.get(e)), indexes, browserEvent }));
+        return Event2.map(this.list.onDidChangeSelection, ({ elements, indexes, browserEvent }) => ({ elements: elements.map((e) => this._model.get(e)), indexes, browserEvent }));
       }
       get model() {
         return this._model;
@@ -124560,11 +124560,11 @@ var init_splitview2 = __esm({
               /* Orientation.VERTICAL */
             });
             const sashEventMapper = this.orientation === 0 ? (e) => ({ sash, start: e.startY, current: e.currentY, alt: e.altKey }) : (e) => ({ sash, start: e.startX, current: e.currentX, alt: e.altKey });
-            const onStart = Event.map(sash.onDidStart, sashEventMapper);
+            const onStart = Event2.map(sash.onDidStart, sashEventMapper);
             const onStartDisposable = onStart(this.onSashStart, this);
-            const onChange = Event.map(sash.onDidChange, sashEventMapper);
+            const onChange = Event2.map(sash.onDidChange, sashEventMapper);
             const onChangeDisposable2 = onChange(this.onSashChange, this);
-            const onEnd = Event.map(sash.onDidEnd, () => this.sashItems.findIndex((item2) => item2.sash === sash));
+            const onEnd = Event2.map(sash.onDidEnd, () => this.sashItems.findIndex((item2) => item2.sash === sash));
             const onEndDisposable = onEnd(this.onSashEnd, this);
             const onDidResetDisposable = sash.onDidReset(() => {
               const index2 = this.sashItems.findIndex((item2) => item2.sash === sash);
@@ -124925,7 +124925,7 @@ var init_tableWidget = __esm({
         return this.column.maximumWidth ?? Number.POSITIVE_INFINITY;
       }
       get onDidChange() {
-        return this.column.onDidChangeWidthConstraints ?? Event.None;
+        return this.column.onDidChangeWidthConstraints ?? Event2.None;
       }
       constructor(column, index) {
         super();
@@ -125002,7 +125002,7 @@ var init_tableWidget = __esm({
         this.splitview.el.style.lineHeight = `${virtualDelegate.headerRowHeight}px`;
         const renderer = new TableListRenderer(columns, renderers, (i) => this.splitview.getViewSize(i));
         this.list = this.disposables.add(new List(user, this.domNode, asListVirtualDelegate(virtualDelegate), [renderer], _options));
-        Event.any(...headers.map((h2) => h2.onDidLayout))(([index, size]) => renderer.layoutColumn(index, size), null, this.disposables);
+        Event2.any(...headers.map((h2) => h2.onDidLayout))(([index, size]) => renderer.layoutColumn(index, size), null, this.disposables);
         this.splitview.onDidSashReset((index) => {
           const totalWeight = columns.reduce((r, c) => r + c.weight, 0);
           const size = columns[index].weight / totalWeight * this.cachedWidth;
@@ -125834,7 +125834,7 @@ var init_inputBox2 = __esm({
           this._register(this.scrollableElement);
           this._register(this.scrollableElement.onScroll((e) => this.input.scrollTop = e.scrollTop));
           const onSelectionChange = this._register(new DomEmitter(container.ownerDocument, "selectionchange"));
-          const onAnchoredSelectionChange = Event.filter(onSelectionChange.event, () => {
+          const onAnchoredSelectionChange = Event2.filter(onSelectionChange.event, () => {
             const selection = container.ownerDocument.getSelection();
             return selection?.anchorNode === wrapper;
           });
@@ -127454,7 +127454,7 @@ var init_abstractTree = __esm({
       constructor(onDidChange, _elements = []) {
         this._elements = _elements;
         this.disposables = new DisposableStore();
-        this.onDidChange = Event.forEach(onDidChange, (elements) => this._elements = elements, this.disposables);
+        this.onDidChange = Event2.forEach(onDidChange, (elements) => this._elements = elements, this.disposables);
       }
       dispose() {
         this.disposables.dispose();
@@ -127480,7 +127480,7 @@ var init_abstractTree = __esm({
         this.disposables = new DisposableStore();
         this.templateId = renderer.templateId;
         this.updateOptions(options);
-        Event.map(onDidChangeCollapseState, (e) => e.node)(this.onDidChangeNodeTwistieState, this, this.disposables);
+        Event2.map(onDidChangeCollapseState, (e) => e.node)(this.onDidChangeNodeTwistieState, this, this.disposables);
         renderer.onDidChangeTwistieState?.(this.onDidChangeTwistieState, this, this.disposables);
       }
       updateOptions(options = {}) {
@@ -128938,25 +128938,25 @@ var init_abstractTree = __esm({
         return this.eventBufferer.wrapEvent(this.selection.onDidChange);
       }
       get onMouseDblClick() {
-        return Event.filter(Event.map(this.view.onMouseDblClick, asTreeMouseEvent), (e) => e.target !== TreeMouseEventTarget.Filter);
+        return Event2.filter(Event2.map(this.view.onMouseDblClick, asTreeMouseEvent), (e) => e.target !== TreeMouseEventTarget.Filter);
       }
       get onMouseOver() {
-        return Event.map(this.view.onMouseOver, asTreeMouseEvent);
+        return Event2.map(this.view.onMouseOver, asTreeMouseEvent);
       }
       get onMouseOut() {
-        return Event.map(this.view.onMouseOut, asTreeMouseEvent);
+        return Event2.map(this.view.onMouseOut, asTreeMouseEvent);
       }
       get onContextMenu() {
-        return Event.any(Event.filter(Event.map(this.view.onContextMenu, asTreeContextMenuEvent), (e) => !e.isStickyScroll), this.stickyScrollController?.onContextMenu ?? Event.None);
+        return Event2.any(Event2.filter(Event2.map(this.view.onContextMenu, asTreeContextMenuEvent), (e) => !e.isStickyScroll), this.stickyScrollController?.onContextMenu ?? Event2.None);
       }
       get onPointer() {
-        return Event.map(this.view.onPointer, asTreeMouseEvent);
+        return Event2.map(this.view.onPointer, asTreeMouseEvent);
       }
       get onDidFocus() {
         return this.view.onDidFocus;
       }
       get onDidChangeModel() {
-        return Event.any(this.onDidChangeModelRelay.event, this.onDidSwapModel.event);
+        return Event2.any(this.onDidChangeModelRelay.event, this.onDidSwapModel.event);
       }
       get onDidChangeCollapseState() {
         return this.onDidChangeCollapseStateRelay.event;
@@ -128974,8 +128974,8 @@ var init_abstractTree = __esm({
         this._user = _user;
         this._options = _options;
         this.eventBufferer = new EventBufferer();
-        this.onDidChangeFindOpenState = Event.None;
-        this.onDidChangeStickyScrollFocused = Event.None;
+        this.onDidChangeFindOpenState = Event2.None;
+        this.onDidChangeStickyScrollFocused = Event2.None;
         this.disposables = new DisposableStore();
         this._onDidChangeStickyScrollDomNode = this.disposables.add(new Emitter());
         this.onDidSwapModel = this.disposables.add(new Emitter());
@@ -129007,16 +129007,16 @@ var init_abstractTree = __esm({
         this.view = new TreeNodeList(_user, container, this.treeDelegate, this.renderers, this.focus, this.selection, this.anchor, { ...asListOptions(() => this.model, this.disposables, _options), tree: this, stickyScrollProvider: () => this.stickyScrollController });
         this.setupModel(this.model);
         if (_options.keyboardSupport !== false) {
-          const onKeyDown = Event.chain(this.view.onKeyDown, ($12) => $12.filter((e) => !isEditableElement(e.target)).map((e) => new StandardKeyboardEvent(e)));
-          Event.chain(onKeyDown, ($12) => $12.filter(
+          const onKeyDown = Event2.chain(this.view.onKeyDown, ($12) => $12.filter((e) => !isEditableElement(e.target)).map((e) => new StandardKeyboardEvent(e)));
+          Event2.chain(onKeyDown, ($12) => $12.filter(
             (e) => e.keyCode === 15
             /* KeyCode.LeftArrow */
           ))(this.onLeftArrow, this, this.disposables);
-          Event.chain(onKeyDown, ($12) => $12.filter(
+          Event2.chain(onKeyDown, ($12) => $12.filter(
             (e) => e.keyCode === 17
             /* KeyCode.RightArrow */
           ))(this.onRightArrow, this, this.disposables);
-          Event.chain(onKeyDown, ($12) => $12.filter(
+          Event2.chain(onKeyDown, ($12) => $12.filter(
             (e) => e.keyCode === 10
             /* KeyCode.Space */
           ))(this.onSpace, this, this.disposables);
@@ -129035,8 +129035,8 @@ var init_abstractTree = __esm({
           this.onDidChangeFindMode = this.findController.onDidChangeMode;
           this.onDidChangeFindMatchType = this.findController.onDidChangeMatchType;
         } else {
-          this.onDidChangeFindMode = Event.None;
-          this.onDidChangeFindMatchType = Event.None;
+          this.onDidChangeFindMode = Event2.None;
+          this.onDidChangeFindMatchType = Event2.None;
         }
         if (_options.enableStickyScroll) {
           this.stickyScrollController = new StickyScrollController(this, this.model, this.view, this.renderers, this.treeDelegate, _options);
@@ -129065,7 +129065,7 @@ var init_abstractTree = __esm({
           this.onDidChangeStickyScrollFocused = this.stickyScrollController.onDidChangeHasFocus;
           this._onDidChangeStickyScrollDomNode.fire(this.stickyScrollController.domNode);
         } else if (this.stickyScrollController && !this._options.enableStickyScroll) {
-          this.onDidChangeStickyScrollFocused = Event.None;
+          this.onDidChangeStickyScrollFocused = Event2.None;
           this.stickyScrollController.dispose();
           this.stickyScrollController = void 0;
           this._onDidChangeStickyScrollDomNode.fire(void 0);
@@ -129294,7 +129294,7 @@ var init_abstractTree = __esm({
       setupModel(model) {
         this.modelDisposables.clear();
         this.modelDisposables.add(model.onDidSpliceRenderedNodes(({ start, deleteCount, elements }) => this.view.splice(start, deleteCount, elements)));
-        const onDidModelSplice = Event.forEach(model.onDidSpliceModel, (e) => {
+        const onDidModelSplice = Event2.forEach(model.onDidSpliceModel, (e) => {
           this.eventBufferer.bufferEvents(() => {
             this.focus.onDidModelSplice(e);
             this.selection.onDidModelSplice(e);
@@ -129303,7 +129303,7 @@ var init_abstractTree = __esm({
         onDidModelSplice(() => null, null, this.modelDisposables);
         const activeNodesEmitter = this.modelDisposables.add(new Emitter());
         const activeNodesDebounce = this.modelDisposables.add(new Delayer(0));
-        this.modelDisposables.add(Event.any(onDidModelSplice, this.focus.onDidChange, this.selection.onDidChange)(() => {
+        this.modelDisposables.add(Event2.any(onDidModelSplice, this.focus.onDidChange, this.selection.onDidChange)(() => {
           activeNodesDebounce.trigger(() => {
             const set = /* @__PURE__ */ new Set();
             for (const node of this.focus.getNodes()) {
@@ -129316,7 +129316,7 @@ var init_abstractTree = __esm({
           });
         }));
         this.onDidChangeActiveNodesRelay.input = activeNodesEmitter.event;
-        this.onDidChangeModelRelay.input = Event.signal(model.onDidSpliceModel);
+        this.onDidChangeModelRelay.input = Event2.signal(model.onDidSpliceModel);
         this.onDidChangeCollapseStateRelay.input = model.onDidChangeCollapseState;
         this.onDidChangeRenderNodeCountRelay.input = model.onDidChangeRenderNodeCount;
         this.onDidSpliceModelRelay.input = model.onDidSpliceModel;
@@ -129864,26 +129864,26 @@ var init_compressedObjectTreeModel = __esm({
     };
     CompressibleObjectTreeModel = class {
       get onDidSpliceModel() {
-        return Event.map(this.model.onDidSpliceModel, ({ insertedNodes, deletedNodes }) => ({
+        return Event2.map(this.model.onDidSpliceModel, ({ insertedNodes, deletedNodes }) => ({
           insertedNodes: insertedNodes.map((node) => this.nodeMapper.map(node)),
           deletedNodes: deletedNodes.map((node) => this.nodeMapper.map(node))
         }));
       }
       get onDidSpliceRenderedNodes() {
-        return Event.map(this.model.onDidSpliceRenderedNodes, ({ start, deleteCount, elements }) => ({
+        return Event2.map(this.model.onDidSpliceRenderedNodes, ({ start, deleteCount, elements }) => ({
           start,
           deleteCount,
           elements: elements.map((node) => this.nodeMapper.map(node))
         }));
       }
       get onDidChangeCollapseState() {
-        return Event.map(this.model.onDidChangeCollapseState, ({ node, deep }) => ({
+        return Event2.map(this.model.onDidChangeCollapseState, ({ node, deep }) => ({
           node: this.nodeMapper.map(node),
           deep
         }));
       }
       get onDidChangeRenderNodeCount() {
-        return Event.map(this.model.onDidChangeRenderNodeCount, (node) => this.nodeMapper.map(node));
+        return Event2.map(this.model.onDidChangeRenderNodeCount, (node) => this.nodeMapper.map(node));
       }
       constructor(user, options = {}) {
         this.rootRef = null;
@@ -130480,16 +130480,16 @@ var init_asyncDataTree = __esm({
         return this.tree.onDidScroll;
       }
       get onDidChangeFocus() {
-        return Event.map(this.tree.onDidChangeFocus, asTreeEvent);
+        return Event2.map(this.tree.onDidChangeFocus, asTreeEvent);
       }
       get onDidChangeSelection() {
-        return Event.map(this.tree.onDidChangeSelection, asTreeEvent);
+        return Event2.map(this.tree.onDidChangeSelection, asTreeEvent);
       }
       get onMouseDblClick() {
-        return Event.map(this.tree.onMouseDblClick, asTreeMouseEvent2);
+        return Event2.map(this.tree.onMouseDblClick, asTreeMouseEvent2);
       }
       get onPointer() {
-        return Event.map(this.tree.onPointer, asTreeMouseEvent2);
+        return Event2.map(this.tree.onPointer, asTreeMouseEvent2);
       }
       get onDidFocus() {
         return this.tree.onDidFocus;
@@ -130636,7 +130636,7 @@ var init_asyncDataTree = __esm({
         }
         if (this.root.refreshPromise) {
           await this.root.refreshPromise;
-          await Event.toPromise(this._onDidRender.event);
+          await Event2.toPromise(this._onDidRender.event);
         }
         const node = this.getDataNode(element);
         await this.refreshAndRenderNode(node, recursive, viewStateContext, options);
@@ -130672,7 +130672,7 @@ var init_asyncDataTree = __esm({
         }
         if (this.root.refreshPromise) {
           await this.root.refreshPromise;
-          await Event.toPromise(this._onDidRender.event);
+          await Event2.toPromise(this._onDidRender.event);
         }
         const node = this.getDataNode(element);
         if (this.tree.hasElement(node) && !this.tree.isCollapsible(node)) {
@@ -130680,7 +130680,7 @@ var init_asyncDataTree = __esm({
         }
         if (node.refreshPromise) {
           await node.refreshPromise;
-          await Event.toPromise(this._onDidRender.event);
+          await Event2.toPromise(this._onDidRender.event);
         }
         if (node !== this.root && !node.refreshPromise && !this.tree.isCollapsed(node)) {
           return false;
@@ -130688,7 +130688,7 @@ var init_asyncDataTree = __esm({
         const result = this.tree.expand(node === this.root ? null : node, recursive);
         if (node.refreshPromise) {
           await node.refreshPromise;
-          await Event.toPromise(this._onDidRender.event);
+          await Event2.toPromise(this._onDidRender.event);
         }
         return result;
       }
@@ -131696,7 +131696,7 @@ var init_listService = __esm({
         this.widget = widget;
         this._onDidOpen = this._register(new Emitter());
         this.onDidOpen = this._onDidOpen.event;
-        this._register(Event.filter(this.widget.onDidChangeSelection, (e) => isKeyboardEvent(e.browserEvent))((e) => this.onSelectionFromKeyboard(e)));
+        this._register(Event2.filter(this.widget.onDidChangeSelection, (e) => isKeyboardEvent(e.browserEvent))((e) => this.onSelectionFromKeyboard(e)));
         this._register(this.widget.onPointer((e) => this.onPointer(e.element, e.browserEvent)));
         this._register(this.widget.onMouseDblClick((e) => this.onMouseDblClick(e.element, e.browserEvent)));
         if (typeof options?.openOnSingleClick !== "boolean" && options?.configurationService) {
@@ -134027,7 +134027,7 @@ var init_languageService = __esm({
     LanguageSelection = class {
       constructor(onDidChangeLanguages, selector) {
         this._value = observableFromEvent(this, onDidChangeLanguages, () => selector());
-        this.onDidChange = Event.fromObservable(this._value);
+        this.onDidChange = Event2.fromObservable(this._value);
       }
       get languageId() {
         return this._value.get();
@@ -134979,7 +134979,7 @@ var init_quickAccess2 = __esm({
         let pickPromise = void 0;
         if (pick) {
           pickPromise = new DeferredPromise();
-          disposables.add(Event.once(picker.onWillAccept)((e) => {
+          disposables.add(Event2.once(picker.onWillAccept)((e) => {
             e.veto();
             picker.hide();
           }));
@@ -134989,7 +134989,7 @@ var init_quickAccess2 = __esm({
         if (provider) {
           disposables.add(provider.provide(picker, cts.token, options?.providerOptions));
         }
-        Event.once(picker.onDidHide)(() => {
+        Event2.once(picker.onDidHide)(() => {
           if (picker.selectedItems.length === 0) {
             cts.cancel();
           }
@@ -135202,7 +135202,7 @@ function renderQuickInputDescription(description, container, actionHandler) {
       };
       const onClick = actionHandler.disposables.add(new DomEmitter(anchor, EventType.CLICK)).event;
       const onKeydown = actionHandler.disposables.add(new DomEmitter(anchor, EventType.KEY_DOWN)).event;
-      const onSpaceOrEnter = Event.chain(onKeydown, ($12) => $12.filter((e) => {
+      const onSpaceOrEnter = Event2.chain(onKeydown, ($12) => $12.filter((e) => {
         const event = new StandardKeyboardEvent(e);
         return event.equals(
           10
@@ -135214,7 +135214,7 @@ function renderQuickInputDescription(description, container, actionHandler) {
       }));
       actionHandler.disposables.add(Gesture.addTarget(anchor));
       const onTap = actionHandler.disposables.add(new DomEmitter(anchor, EventType2.Tap)).event;
-      Event.any(onClick, onTap, onSpaceOrEnter)(handleOpen, null, actionHandler.disposables);
+      Event2.any(onClick, onTap, onSpaceOrEnter)(handleOpen, null, actionHandler.disposables);
       container.appendChild(anchor);
     }
   }
@@ -138124,7 +138124,7 @@ var init_quickInputList = __esm({
         this.item = item;
         this._separator = _separator;
         this._checked = false;
-        this.onChecked = hasCheckbox ? Event.map(Event.filter(this._onChecked.event, (e) => e.element === this), (e) => e.checked) : Event.None;
+        this.onChecked = hasCheckbox ? Event2.map(Event2.filter(this._onChecked.event, (e) => e.element === this), (e) => e.checked) : Event2.None;
         this._saneDetail = item.detail;
         this._labelHighlights = item.highlights?.label;
         this._descriptionHighlights = item.highlights?.description;
@@ -138503,13 +138503,13 @@ var init_quickInputList = __esm({
         this._onLeave = this._register(new Emitter());
         this.onLeave = this._onLeave.event;
         this._visibleCountObservable = observableValue("VisibleCount", 0);
-        this.onChangedVisibleCount = Event.fromObservable(this._visibleCountObservable, this._store);
+        this.onChangedVisibleCount = Event2.fromObservable(this._visibleCountObservable, this._store);
         this._allVisibleCheckedObservable = observableValue("AllVisibleChecked", false);
-        this.onChangedAllVisibleChecked = Event.fromObservable(this._allVisibleCheckedObservable, this._store);
+        this.onChangedAllVisibleChecked = Event2.fromObservable(this._allVisibleCheckedObservable, this._store);
         this._checkedCountObservable = observableValue("CheckedCount", 0);
-        this.onChangedCheckedCount = Event.fromObservable(this._checkedCountObservable, this._store);
+        this.onChangedCheckedCount = Event2.fromObservable(this._checkedCountObservable, this._store);
         this._checkedElementsObservable = observableValueOpts({ equalsFn: equals }, new Array());
-        this.onChangedCheckedElements = Event.fromObservable(this._checkedElementsObservable, this._store);
+        this.onChangedCheckedElements = Event2.fromObservable(this._checkedElementsObservable, this._store);
         this._onButtonTriggered = this._register(new Emitter());
         this.onButtonTriggered = this._onButtonTriggered.event;
         this._onSeparatorButtonTriggered = this._register(new Emitter());
@@ -138563,10 +138563,10 @@ var init_quickInputList = __esm({
       }
       //#region public getters/setters
       get onDidChangeFocus() {
-        return Event.map(this._tree.onDidChangeFocus, (e) => e.elements.filter((e2) => e2 instanceof QuickPickItemElement).map((e2) => e2.item), this._store);
+        return Event2.map(this._tree.onDidChangeFocus, (e) => e.elements.filter((e2) => e2 instanceof QuickPickItemElement).map((e2) => e2.item), this._store);
       }
       get onDidChangeSelection() {
-        return Event.map(this._tree.onDidChangeSelection, (e) => ({
+        return Event2.map(this._tree.onDidChangeSelection, (e) => ({
           items: e.elements.filter((e2) => e2 instanceof QuickPickItemElement).map((e2) => e2.item),
           event: e.browserEvent
         }), this._store);
@@ -139549,7 +139549,7 @@ var init_quickInputTreeRenderer = __esm({
           const checkbox = templateData.checkbox;
           checkbox.domNode.style.display = "";
           checkbox.checked = quickTreeItem.checked ?? false;
-          store.add(Event.filter(this.onCheckedEvent, (e) => e.item === quickTreeItem)((e) => checkbox.checked = e.checked));
+          store.add(Event2.filter(this.onCheckedEvent, (e) => e.item === quickTreeItem)((e) => checkbox.checked = e.checked));
           if (quickTreeItem.disabled) {
             checkbox.disable();
           }
@@ -139687,7 +139687,7 @@ var init_quickInputTreeAccessibilityProvider = __esm({
           get value() {
             return element.checked === "mixed" ? "mixed" : !!element.checked;
           },
-          onDidChange: (e) => Event.filter(this.onCheckedEvent, (e2) => e2.item === element)((_) => e())
+          onDidChange: (e) => Event2.filter(this.onCheckedEvent, (e2) => e2.item === element)((_) => e())
         };
       }
     };
@@ -140136,7 +140136,7 @@ var init_quickTree = __esm({
         this._onDidChangeCheckedLeafItems = this._register(new Emitter());
         this._onDidChangeCheckboxState = this._register(new Emitter());
         this._onDidAcceptEmitter = this._register(new Emitter());
-        this.onDidAccept = Event.any(ui.onDidAccept, this._onDidAcceptEmitter.event);
+        this.onDidAccept = Event2.any(ui.onDidAccept, this._onDidAcceptEmitter.event);
         this._registerAutoruns();
         this._register(ui.tree.onDidChangeCheckedLeafItems((e) => this._onDidChangeCheckedLeafItems.fire(e)));
         this._register(ui.tree.onDidChangeCheckboxState((e) => this._onDidChangeCheckboxState.fire(e.item)));
@@ -140376,7 +140376,7 @@ var init_quickInputController = __esm({
         this.idPrefix = options.idPrefix;
         this._container = options.container;
         this.styles = options.styles;
-        this._register(Event.runAndSubscribe(onDidRegisterWindow, ({ window: window2, disposables }) => this.registerKeyModsListeners(window2, disposables), { window: mainWindow, disposables: this._store }));
+        this._register(Event2.runAndSubscribe(onDidRegisterWindow, ({ window: window2, disposables }) => this.registerKeyModsListeners(window2, disposables), { window: mainWindow, disposables: this._store }));
         this._register(onWillUnregisterWindow((window2) => {
           if (this.ui && getWindow(this.ui.container) === window2) {
             this.reparentUI(this.layoutService.mainContainer);
@@ -140786,7 +140786,7 @@ var init_quickInputController = __esm({
           }
           const input = this.createInputBox();
           const validateInput = options.validateInput || (() => Promise.resolve(void 0));
-          const onDidValueChange = Event.debounce(input.onDidChangeValue, (last, cur) => cur, 100);
+          const onDidValueChange = Event2.debounce(input.onDidChangeValue, (last, cur) => cur, 100);
           let validationValue = options.value || "";
           let validation = Promise.resolve(validateInput(validationValue));
           const disposables = [
@@ -141252,7 +141252,7 @@ var init_quickInputController = __esm({
         this._alignment.set(value ?? "custom", void 0);
       }
       _registerLayoutListener() {
-        this._register(Event.filter(this._layoutService.onDidLayoutContainer, (e) => e.container === this._container)((e) => this.layoutContainer(e.dimension)));
+        this._register(Event2.filter(this._layoutService.onDidLayoutContainer, (e) => e.container === this._container)((e) => this.layoutContainer(e.dimension)));
       }
       registerMouseListeners() {
         const dragArea = this._quickInputContainer;
@@ -141632,13 +141632,13 @@ var init_standaloneQuickInputService = __esm({
               return editor2.onDidLayoutChange;
             },
             get onDidLayoutContainer() {
-              return Event.map(editor2.onDidLayoutChange, (dimension) => ({ container: widget.getDomNode(), dimension }));
+              return Event2.map(editor2.onDidLayoutChange, (dimension) => ({ container: widget.getDomNode(), dimension }));
             },
             get onDidChangeActiveContainer() {
-              return Event.None;
+              return Event2.None;
             },
             get onDidAddContainer() {
-              return Event.None;
+              return Event2.None;
             },
             get mainContainerOffset() {
               return { top: 0, quickPickTop: 0 };
@@ -143172,7 +143172,7 @@ var init_standaloneServices = __esm({
         }]));
       }
       addDynamicKeybindings(rules) {
-        const entries3 = rules.map((rule) => {
+        const entries2 = rules.map((rule) => {
           const keybinding = decodeKeybinding(rule.keybinding, OS);
           return {
             keybinding,
@@ -143185,12 +143185,12 @@ var init_standaloneServices = __esm({
             isBuiltinExtension: false
           };
         });
-        this._dynamicKeybindings = this._dynamicKeybindings.concat(entries3);
+        this._dynamicKeybindings = this._dynamicKeybindings.concat(entries2);
         this.updateResolver();
         return toDisposable(() => {
           for (let i = 0; i < this._dynamicKeybindings.length; i++) {
-            if (this._dynamicKeybindings[i] === entries3[0]) {
-              this._dynamicKeybindings.splice(i, entries3.length);
+            if (this._dynamicKeybindings[i] === entries2[0]) {
+              this._dynamicKeybindings.splice(i, entries2.length);
               this.updateResolver();
               return;
             }
@@ -143479,7 +143479,7 @@ var init_standaloneServices = __esm({
     };
     StandaloneDefaultAccountService = class {
       constructor() {
-        this.onDidChangeDefaultAccount = Event.None;
+        this.onDidChangeDefaultAccount = Event2.None;
       }
       async getDefaultAccount() {
         return null;
@@ -149898,7 +149898,7 @@ var init_diffEditorWidget = __esm({
           const regions = this._diffModel.read(reader)?.unchangedRegions.read(reader) ?? [];
           return regions.every((r) => r.visibleLineCountTop.read(reader) + r.visibleLineCountBottom.read(reader) >= r.lineCount);
         });
-        this.onDidChangeModel = Event.fromObservableLight(this._diffModel);
+        this.onDidChangeModel = Event2.fromObservableLight(this._diffModel);
         this._contextKeyService = this._register(this._parentContextKeyService.createScoped(this._domElement));
         this._instantiationService = this._register(this._parentInstantiationService.createChild(new ServiceCollection([IContextKeyService, this._contextKeyService])));
         this._boundarySashes = observableValue(this, void 0);
@@ -149952,7 +149952,7 @@ var init_diffEditorWidget = __esm({
           };
         });
         this._diffValue = this._diffModel.map((m, r) => m?.diff.read(r));
-        this.onDidUpdateDiff = Event.fromObservableLight(this._diffValue);
+        this.onDidUpdateDiff = Event2.fromObservableLight(this._diffValue);
         this._codeEditorService.willCreateDiffEditor();
         this._contextKeyService.createKey("isInDiffEditor", true);
         this._domElement.appendChild(this.elements.root);
@@ -150091,8 +150091,8 @@ var init_diffEditorWidget = __esm({
         )).recomputeInitiallyAndOnChange(this._store, (value) => {
           this._movedBlocksLinesPart.set(value, void 0);
         });
-        this._register(Event.runAndSubscribe(this._editors.modified.onDidChangeCursorPosition, (e) => this._handleCursorPositionChange(e, true)));
-        this._register(Event.runAndSubscribe(this._editors.original.onDidChangeCursorPosition, (e) => this._handleCursorPositionChange(e, false)));
+        this._register(Event2.runAndSubscribe(this._editors.modified.onDidChangeCursorPosition, (e) => this._handleCursorPositionChange(e, true)));
+        this._register(Event2.runAndSubscribe(this._editors.original.onDidChangeCursorPosition, (e) => this._handleCursorPositionChange(e, false)));
         const isInitializingDiff = this._diffModel.map(this, (m, reader) => {
           if (!m) {
             return void 0;
@@ -150919,7 +150919,7 @@ var init_virtualizedItemManager = __esm({
         }
         const binding = this.createBinding(item, context);
         this._bindingStore.clear();
-        this._bindingStore.add(Event.once(binding.onDidDispose)(() => {
+        this._bindingStore.add(Event2.once(binding.onDidDispose)(() => {
           if (this._currentBinding.get() !== binding) {
             throw new BugIndicatingError("Disposed binding does not own its virtualized template");
           }
@@ -152498,14 +152498,14 @@ var init_multiDiffEditorWidgetImpl = __esm({
        * Navigation away from the clamped offset with unchanged dimensions cancels restoration.
        */
       _applyPendingScrollState() {
-        const pending = this._pendingScrollState;
-        if (!pending) {
+        const pending2 = this._pendingScrollState;
+        if (!pending2) {
           return;
         }
         const dimensions = this._scrollView.scrollDimensions.get();
         const current = this._scrollView.getScrollPosition();
-        const expectedTop = pending.top === void 0 ? current.scrollTop : Math.min(Math.max(0, pending.top), Math.max(0, dimensions.scrollHeight - dimensions.height));
-        const expectedLeft = pending.left === void 0 ? current.scrollLeft : Math.min(Math.max(0, pending.left), Math.max(0, dimensions.scrollWidth - dimensions.width));
+        const expectedTop = pending2.top === void 0 ? current.scrollTop : Math.min(Math.max(0, pending2.top), Math.max(0, dimensions.scrollHeight - dimensions.height));
+        const expectedLeft = pending2.left === void 0 ? current.scrollLeft : Math.min(Math.max(0, pending2.left), Math.max(0, dimensions.scrollWidth - dimensions.width));
         const previousDimensions = this._lastPendingScrollDimensions;
         const dimensionsChanged = !previousDimensions || previousDimensions.width !== dimensions.width || previousDimensions.height !== dimensions.height || previousDimensions.scrollWidth !== dimensions.scrollWidth || previousDimensions.scrollHeight !== dimensions.scrollHeight;
         if (this._hasAppliedPendingScrollState && !dimensionsChanged && (current.scrollTop !== expectedTop || current.scrollLeft !== expectedLeft)) {
@@ -152514,10 +152514,10 @@ var init_multiDiffEditorWidgetImpl = __esm({
           this._lastPendingScrollDimensions = void 0;
           return;
         }
-        this._scrollView.setScrollPosition({ scrollLeft: pending.left, scrollTop: pending.top });
+        this._scrollView.setScrollPosition({ scrollLeft: pending2.left, scrollTop: pending2.top });
         const applied = this._scrollView.getScrollPosition();
-        const topLanded = pending.top === void 0 || applied.scrollTop >= pending.top;
-        const leftLanded = pending.left === void 0 || applied.scrollLeft >= pending.left;
+        const topLanded = pending2.top === void 0 || applied.scrollTop >= pending2.top;
+        const leftLanded = pending2.left === void 0 || applied.scrollLeft >= pending2.left;
         if (topLanded && leftLanded) {
           this._pendingScrollState = void 0;
           this._hasAppliedPendingScrollState = false;
@@ -152527,7 +152527,7 @@ var init_multiDiffEditorWidgetImpl = __esm({
           this._lastPendingScrollDimensions = dimensions;
         }
         this._logger.log("applied pending scroll state", {
-          requested: pending,
+          requested: pending2,
           applied: { top: applied.scrollTop, left: applied.scrollLeft },
           landed: topLanded && leftLanded
         });
@@ -163094,12 +163094,22 @@ function createSettingsPanel(React2) {
       return "\u5C1A\u672A\u68C0\u6D4B";
     }
   };
-  function SettingsPanel({ open, onClose, accountEmail = "", accountRole = "", server = "", connection = {}, device = {}, versions = {}, onRefreshConnection, onRestartNode, onOpenPermissions, onLogout, onCheckUpdates, onPasswordChanged }) {
-    const [section, setSection] = React2.useState("account");
+  function SettingsPanel({ open, onClose, accountEmail = "", accountRole = "", accountName = "", onAccountNameChange, initialSection = "account", server = "", connection = {}, device = {}, versions = {}, onRefreshConnection, onRestartNode, onOpenPermissions, onLogout, onCheckUpdates, onPasswordChanged }) {
+    const [section, setSection] = React2.useState(initialSection);
+    React2.useEffect(() => {
+      if (open) setSection(initialSection);
+    }, [open, initialSection]);
     const [currentPassword, setCurrentPassword] = React2.useState("");
     const [newPassword, setNewPassword] = React2.useState("");
     const [busy, setBusy] = React2.useState("");
     const [message, setMessage] = React2.useState("");
+    const [keepSurfaces, setKeepSurfaces] = React2.useState(() => {
+      try {
+        return localStorage.getItem("tether.keepSurfaces") !== "0";
+      } catch (_) {
+        return true;
+      }
+    });
     if (!open) return null;
     const status2 = connection.status || "unknown";
     const roleLabel = accountRole === "owner" ? "\u6240\u6709\u8005" : accountRole === "member" ? "\u6210\u5458" : accountRole === "admin" ? "\u7BA1\u7406\u5458" : accountRole || "\u2014";
@@ -163157,6 +163167,35 @@ function createSettingsPanel(React2) {
         "div",
         { style: { display: "grid", gap: 6 } },
         sectionTitle("\u8D26\u53F7", "\u8D26\u53F7\u4FE1\u606F\u53EA\u5728\u8FD9\u91CC\u51FA\u73B0\uFF1B\u8FDE\u63A5\u72B6\u6001\u8BF7\u770B\u9876\u680F\u7684\u201C\u8FDE\u63A5\u201D\u3002"),
+        h2(
+          "div",
+          { style: { display: "flex", alignItems: "center", gap: 10, margin: "8px 0 6px" } },
+          h2(
+            "span",
+            { style: {
+              width: 38,
+              height: 38,
+              borderRadius: 999,
+              display: "grid",
+              placeItems: "center",
+              background: "color-mix(in srgb, var(--dsw-alias-state-business-primary, #1570ef) 14%, transparent)",
+              color: "var(--dsw-alias-state-business-primary, #1570ef)",
+              fontSize: 15,
+              fontWeight: 600
+            } },
+            String(accountName || accountEmail || "?").trim().charAt(0).toUpperCase()
+          ),
+          h2("span", { style: { color: mute, fontSize: 12 } }, "\u5934\u50CF\u4E0E\u663E\u793A\u540D\u79F0\u53EA\u5F71\u54CD\u672C\u673A\u663E\u793A")
+        ),
+        fieldRow("\u663E\u793A\u540D\u79F0", h2("input", {
+          value: accountName,
+          placeholder: "\u4F8B\u5982\uFF1A\u5C0F\u738B",
+          maxLength: 32,
+          onChange: (event) => {
+            if (typeof onAccountNameChange === "function") onAccountNameChange(event.target.value);
+          },
+          style: field
+        })),
         row("\u90AE\u7BB1", accountEmail || "\u672A\u767B\u5F55"),
         row("\u89D2\u8272", roleLabel),
         h2("div", { style: { height: 1, background: line, margin: "12px 0" } }),
@@ -163203,6 +163242,25 @@ function createSettingsPanel(React2) {
           { style: { marginTop: 12, display: "flex", gap: 8 } },
           h2("button", { onClick: onRefreshConnection, style: secondary }, "\u5237\u65B0\u8FDE\u63A5\u72B6\u6001"),
           h2("button", { onClick: onLogout, style: secondary }, "\u5207\u6362\u8D26\u53F7 / \u670D\u52A1\u5668")
+        ),
+        h2(
+          "label",
+          { style: { marginTop: 16, display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 12.5, color: sub } },
+          h2("input", {
+            type: "checkbox",
+            checked: keepSurfaces,
+            onChange: (event) => {
+              const next = event.target.checked;
+              setKeepSurfaces(next);
+              try {
+                localStorage.setItem("tether.keepSurfaces", next ? "1" : "0");
+              } catch (_) {
+              }
+              if (typeof window !== "undefined") window.dispatchEvent(new Event("tether-surfaces-pref"));
+            }
+          }),
+          h2("span", null, "\u4FDD\u7559\u6700\u8FD1\u8BBE\u5907\u5DE5\u4F5C\u533A\uFF08\u6700\u591A 3 \u53F0\uFF09"),
+          h2("span", { style: { color: mute, fontSize: 11.5 } }, "\u5207\u6362\u51E0\u4E4E\u5373\u65F6\uFF0C\u5173\u95ED\u540E\u4E0D\u5360\u540E\u53F0")
         )
       );
     } else if (section === "device") {
@@ -163420,10 +163478,10 @@ function crumbsFor(path, root) {
   }
   return out;
 }
-function sortEntries(entries3, sort) {
+function sortEntries(entries2, sort) {
   const key = sort && ["name", "mtime", "size"].includes(sort.key) ? sort.key : "name";
   const direction = sort && sort.dir === "desc" ? -1 : 1;
-  return [...entries3 || []].sort((left, right) => {
+  return [...entries2 || []].sort((left, right) => {
     if (left.dir !== right.dir) return left.dir ? -1 : 1;
     let a;
     let b;
@@ -163448,7 +163506,7 @@ function TargetFileExplorer({
   roots = [],
   rootPath = "",
   path = "",
-  entries: entries3 = null,
+  entries: entries2 = null,
   loading = false,
   error = "",
   selectedPath = "",
@@ -163481,7 +163539,8 @@ function TargetFileExplorer({
   selectedPaths = [],
   onSelectionChange,
   onContextMenu,
-  onDragItem
+  onDragItem,
+  onRowPointerDown
 }) {
   const ReactRuntime = React2;
   const h2 = ReactRuntime.createElement;
@@ -163491,7 +163550,7 @@ function TargetFileExplorer({
   const crumbs = crumbsFor(path, rootPath);
   const up = parentOf(path);
   const term = search2.trim().toLowerCase();
-  const visible = sortEntries(entries3, sort).filter((item) => !term || String(item.name || "").toLowerCase().includes(term));
+  const visible = sortEntries(entries2, sort).filter((item) => !term || String(item.name || "").toLowerCase().includes(term));
   const sortHeader = (key, label, align) => h2(
     "button",
     {
@@ -163673,6 +163732,9 @@ function TargetFileExplorer({
         onDragStart: (event) => {
           if (onDragItem) onDragItem(event, item);
         },
+        onPointerDown: (event) => {
+          if (onRowPointerDown) onRowPointerDown(event, item);
+        },
         onContextMenu: (event) => {
           if (onContextMenu) {
             event.preventDefault();
@@ -163738,7 +163800,7 @@ function TargetFileExplorer({
       { style: { flex: "1 1 auto", display: "grid", placeItems: "center", color: C.mute, fontSize: 12, padding: 24, textAlign: "center" } },
       error ? h2("span", { role: "alert", style: { color: C.red || C.danger } }, error) : placeholder
     );
-  } else if (entries3 === null) {
+  } else if (entries2 === null) {
     body = h2(
       "div",
       { style: { flex: "1 1 auto", display: "grid", placeItems: "center", color: C.mute, fontSize: 12, padding: 24, textAlign: "center" } },
@@ -163875,7 +163937,7 @@ function TargetFileExplorer({
             fontFamily: "Consolas, monospace"
           }
         }) : null,
-        !compact && path && entries3 !== null ? h2(
+        !compact && path && entries2 !== null ? h2(
           "div",
           {
             style: {
@@ -163944,10 +164006,89 @@ function TargetFileExplorer({
           if (path && onRefresh) onRefresh(path);
         }, disabled || !path)
       ),
-      error && path && entries3 !== null ? h2("div", { role: "alert", style: { padding: "6px 14px", color: C.red || C.danger, fontSize: 12, borderBottom: C.line ? "1px solid " + C.line : 0 } }, error) : null,
+      error && path && entries2 !== null ? h2("div", { role: "alert", style: { padding: "6px 14px", color: C.red || C.danger, fontSize: 12, borderBottom: C.line ? "1px solid " + C.line : 0 } }, error) : null,
       body
     )
   );
+}
+
+// src/file-cache.js
+var DEFAULT_TTL = 2e4;
+var MAX_DIRS = 240;
+var directories = /* @__PURE__ */ new Map();
+var pending = /* @__PURE__ */ new Map();
+function normalizeDirectoryPath(value) {
+  let text2 = String(value || "");
+  if (/^[A-Za-z]:$/.test(text2)) return text2 + "\\";
+  text2 = text2.replace(/[\\/]+$/, "") || text2;
+  if (/^[A-Za-z]:[\\/]/.test(text2)) text2 = text2.replace(/\//g, "\\");
+  return text2;
+}
+function directoryKey(deviceId, path) {
+  return String(deviceId || "") + "|" + normalizeDirectoryPath(path).toLowerCase();
+}
+function peekDirectory(deviceId, path, ttl = DEFAULT_TTL) {
+  if (!deviceId || !path) return null;
+  const key = directoryKey(deviceId, path);
+  const hit = directories.get(key);
+  if (!hit) return null;
+  if (Date.now() - hit.at > ttl) {
+    directories.delete(key);
+    return null;
+  }
+  directories.delete(key);
+  directories.set(key, hit);
+  return hit.entries;
+}
+function rememberDirectory(deviceId, path, entries2) {
+  if (!deviceId || !path || !Array.isArray(entries2)) return entries2;
+  const key = directoryKey(deviceId, path);
+  directories.delete(key);
+  directories.set(key, { entries: entries2, at: Date.now() });
+  while (directories.size > MAX_DIRS) directories.delete(directories.keys().next().value);
+  return entries2;
+}
+function clearDirectoryCache() {
+  directories.clear();
+  pending.clear();
+}
+function invalidateDirectory(deviceId, path) {
+  if (!deviceId) {
+    clearDirectoryCache();
+    return;
+  }
+  if (!path) {
+    const prefix = String(deviceId) + "|";
+    for (const key2 of [...directories.keys()]) if (key2.startsWith(prefix)) directories.delete(key2);
+    for (const key2 of [...pending.keys()]) if (key2.startsWith(prefix)) pending.delete(key2);
+    return;
+  }
+  const key = directoryKey(deviceId, path);
+  directories.delete(key);
+  pending.delete(key);
+  const childPrefixes = [key + "\\", key + "/"];
+  for (const candidate of [...directories.keys()]) {
+    if (candidate.startsWith(key) && childPrefixes.some((prefix) => candidate.startsWith(prefix))) {
+      directories.delete(candidate);
+    }
+  }
+}
+async function loadDirectory({ deviceId, path, load, fresh = false, ttl = DEFAULT_TTL }) {
+  const key = directoryKey(deviceId, path);
+  if (!fresh) {
+    const cached = peekDirectory(deviceId, path, ttl);
+    if (cached) return cached;
+    const running = pending.get(key);
+    if (running) return running;
+  }
+  const task = Promise.resolve().then(load).then((entries2) => {
+    rememberDirectory(deviceId, path, entries2);
+    return entries2;
+  }).finally(() => {
+    if (pending.get(key) === task) pending.delete(key);
+  });
+  pending.set(key, task);
+  return task;
 }
 
 // src/transfer-page.js
@@ -163970,6 +164111,21 @@ function isTextInput(target) {
   const tag2 = String(target.tagName || "").toLowerCase();
   return tag2 === "input" || tag2 === "textarea" || tag2 === "select" || target.isContentEditable === true;
 }
+function uniqueName(destination, names) {
+  const value = String(destination || "");
+  const slash = Math.max(value.lastIndexOf("\\"), value.lastIndexOf("/"));
+  const dir = slash >= 0 ? value.slice(0, slash + 1) : "";
+  const file = slash >= 0 ? value.slice(slash + 1) : value;
+  const dot = file.lastIndexOf(".");
+  const stem = dot > 0 ? file.slice(0, dot) : file;
+  const ext = dot > 0 ? file.slice(dot) : "";
+  const taken = new Set((names || []).map((name) => String(name).toLowerCase()));
+  for (let index = 2; index < 1e3; index += 1) {
+    const candidate = stem + " (" + index + ")" + ext;
+    if (!taken.has(candidate.toLowerCase())) return dir + candidate;
+  }
+  return dir + stem + " (" + Date.now() + ")" + ext;
+}
 function createTransferPage({ React: React2, Glyph, api: api2, post, C, devices = [], localDevice = "", onNotice, onError }) {
   const h2 = React2.createElement;
   const field = {
@@ -163986,6 +164142,29 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C, devices 
   const onlineDevices = devices.filter((item) => item && item.online);
   const initialLeft = localDevice && onlineDevices.some((item) => item.device_id === localDevice) ? localDevice : onlineDevices[0] && onlineDevices[0].device_id || "";
   const initialRight = (onlineDevices.find((item) => item.device_id !== initialLeft) || {}).device_id || "";
+  const iconButton = (name, label, onClick, disabled) => h2("button", {
+    type: "button",
+    title: label,
+    "aria-label": label,
+    disabled,
+    onClick: () => {
+      if (!disabled && onClick) onClick();
+    },
+    className: "tether-hover",
+    style: {
+      width: 26,
+      height: 26,
+      flex: "0 0 auto",
+      display: "grid",
+      placeItems: "center",
+      border: 0,
+      borderRadius: 6,
+      background: "transparent",
+      color: disabled ? C.mute : C.sub,
+      cursor: disabled ? "default" : "pointer",
+      opacity: disabled ? 0.4 : 1
+    }
+  }, h2(Glyph, { name, size: 15 }));
   function FilePane({
     side: side2,
     deviceId,
@@ -163996,23 +164175,30 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C, devices 
     selection,
     onSelection,
     onEntries,
-    onDragItems,
+    onPointerRow,
     onDropItems,
     onContextItem,
     active,
     onActivate,
-    refreshKey = 0
+    refreshKey: refreshKey2 = 0,
+    onNewFolder,
+    onNewFile,
+    onRename,
+    onDelete,
+    onRefresh
   }) {
     const [roots, setRoots] = React2.useState([]);
-    const [entries3, setEntries] = React2.useState(null);
+    const [entries2, setEntries] = React2.useState(null);
     const [treeChildren, setTreeChildren] = React2.useState({});
     const [expanded, setExpanded] = React2.useState({});
     const [loading, setLoading] = React2.useState(false);
     const [error, setError] = React2.useState("");
     const [sort, setSort] = React2.useState({ key: "name", dir: "asc" });
     const [search2, setSearch] = React2.useState("");
+    const [localRefresh, setLocalRefresh] = React2.useState(0);
     const run = React2.useRef(0);
     const pathRef = React2.useRef(path);
+    const lastRefreshRef = React2.useRef({ refreshKey: refreshKey2, localRefresh });
     pathRef.current = path;
     React2.useEffect(() => {
       let cancelled = false;
@@ -164053,11 +164239,17 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C, devices 
       }
       const token = ++run.current;
       let cancelled = false;
+      const fresh = lastRefreshRef.current.refreshKey !== refreshKey2 || lastRefreshRef.current.localRefresh !== localRefresh;
+      lastRefreshRef.current = { refreshKey: refreshKey2, localRefresh };
       setLoading(true);
       setError("");
-      post("/api/devices/" + encodeURIComponent(deviceId) + "/fs/list", { path }).then((data) => {
+      loadDirectory({
+        deviceId,
+        path,
+        fresh,
+        load: () => post("/api/devices/" + encodeURIComponent(deviceId) + "/fs/list", { path }).then((data) => (data && data.entries || []).filter((item) => item && item.path && item.name))
+      }).then((list2) => {
         if (cancelled || token !== run.current) return;
-        const list2 = (data && data.entries || []).filter((item) => item && item.path && item.name);
         list2.sort((left, right) => left.dir === right.dir ? String(left.name).localeCompare(String(right.name)) : left.dir ? -1 : 1);
         setEntries(list2);
         onEntries(list2);
@@ -164073,7 +164265,7 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C, devices 
       return () => {
         cancelled = true;
       };
-    }, [deviceId, path, refreshKey]);
+    }, [deviceId, path, refreshKey2, localRefresh]);
     const toggleTree = async (item) => {
       if (!item || !item.dir || !deviceId) return;
       const key = item.path;
@@ -164088,8 +164280,11 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C, devices 
       setExpanded((current) => ({ ...current, [key]: true }));
       if (treeChildren[key]) return;
       try {
-        const data = await post("/api/devices/" + encodeURIComponent(deviceId) + "/fs/list", { path: key });
-        const list2 = (data && data.entries || []).filter((entry) => entry && entry.path && entry.name);
+        const list2 = await loadDirectory({
+          deviceId,
+          path: key,
+          load: () => post("/api/devices/" + encodeURIComponent(deviceId) + "/fs/list", { path: key }).then((data) => (data && data.entries || []).filter((entry) => entry && entry.path && entry.name))
+        });
         setTreeChildren((current) => ({ ...current, [key]: list2 }));
       } catch (_) {
       }
@@ -164098,9 +164293,15 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C, devices 
       "aria-hidden": true,
       style: { width: 15, height: 15, display: "grid", placeItems: "center", color: item.dir ? "#d99a2b" : C.mute, flex: "0 0 auto" }
     }, h2(Glyph, { name: item.dir ? "folderClose" : "file", size: 14 }));
+    const refresh2 = () => {
+      if (deviceId && path) invalidateDirectory(deviceId, path);
+      setLocalRefresh((value) => value + 1);
+      if (onRefresh) onRefresh();
+    };
     return h2(
       "div",
       {
+        "data-pane": side2,
         onMouseDown: onActivate,
         onDragOver: (event) => {
           event.preventDefault();
@@ -164123,7 +164324,7 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C, devices 
       },
       h2(
         "div",
-        { style: { display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", background: C.soft, flex: "0 0 auto" } },
+        { style: { display: "flex", alignItems: "center", gap: 4, padding: "6px 8px", background: C.soft, flex: "0 0 auto" } },
         h2(
           "select",
           {
@@ -164145,7 +164346,12 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C, devices 
             value: item.device_id,
             disabled: !item.online || item.device_id === otherDeviceId
           }, (item.name || item.device_id) + (item.online ? "" : " \xB7 \u79BB\u7EBF") + (item.device_id === otherDeviceId ? " \xB7 \u5DF2\u5728\u53E6\u4E00\u4FA7" : "")))
-        )
+        ),
+        iconButton("folderPlus", "\u65B0\u5EFA\u6587\u4EF6\u5939", onNewFolder, !deviceId || !path),
+        iconButton("filePlus", "\u65B0\u5EFA\u6587\u4EF6", onNewFile, !deviceId || !path),
+        iconButton("pencil", "\u91CD\u547D\u540D", onRename, !selection.length),
+        iconButton("trash", "\u5220\u9664", onDelete, !selection.length),
+        iconButton("refresh", "\u5237\u65B0", refresh2, !deviceId || !path)
       ),
       TargetFileExplorer({
         React: React2,
@@ -164154,7 +164360,7 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C, devices 
         roots,
         rootPath: "",
         path,
-        entries: entries3,
+        entries: entries2,
         loading,
         error,
         selectedPaths: selection,
@@ -164167,13 +164373,8 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C, devices 
         onOpen: (item) => {
           if (item.dir) onPath(item.path);
         },
-        onRefresh: (next) => onPath(next),
-        onDragItem: (event, item) => {
-          const items = selection.includes(item.path) ? selection : [item.path];
-          if (onDragItems) onDragItems(items);
-          event.dataTransfer.effectAllowed = "copy";
-          event.dataTransfer.setData("text/plain", item.path);
-        },
+        onRefresh: refresh2,
+        onRowPointerDown: onPointerRow,
         onContextMenu: (item, event) => {
           if (onContextItem) onContextItem(item, event);
         },
@@ -164204,15 +164405,18 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C, devices 
   const [leftEntries, setLeftEntries] = React2.useState([]);
   const [rightEntries, setRightEntries] = React2.useState([]);
   const [activeSide, setActiveSide] = React2.useState("left");
-  const [leftRefresh, setLeftRefresh] = React2.useState(0);
-  const [rightRefresh, setRightRefresh] = React2.useState(0);
-  const [overwrite, setOverwrite] = React2.useState(false);
+  const [refreshKey, setRefreshKey] = React2.useState(0);
   const [job, setJob] = React2.useState(null);
   const [menu, setMenu] = React2.useState(null);
-  const dragRef = React2.useRef(null);
+  const [dialog, setDialog] = React2.useState(null);
+  const [dialogText, setDialogText] = React2.useState("");
+  const [drag, setDrag] = React2.useState(null);
+  const [dropSide, setDropSide] = React2.useState("");
   const clipboardRef = React2.useRef(null);
   const abortRef = React2.useRef(null);
   const queueRef = React2.useRef(null);
+  const dragRef = React2.useRef(null);
+  const dropSideRef = React2.useRef("");
   const latest = React2.useRef({});
   latest.current = {
     leftDevice,
@@ -164223,8 +164427,7 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C, devices 
     rightSelection,
     leftEntries,
     rightEntries,
-    activeSide,
-    overwrite
+    activeSide
   };
   React2.useEffect(() => {
     if (leftDevice && rightDevice && leftDevice === rightDevice) {
@@ -164235,70 +164438,89 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C, devices 
       if (onNotice) onNotice("\u4E24\u4FA7\u4E0D\u80FD\u662F\u540C\u4E00\u53F0\u7535\u8111\uFF0C\u5DF2\u5207\u6362\u53E6\u4E00\u4FA7");
     }
   }, [leftDevice, rightDevice]);
-  const side = (name) => name === "left" ? { device: leftDevice, path: leftPath, selection: leftSelection, entries: leftEntries } : { device: rightDevice, path: rightPath, selection: rightSelection, entries: rightEntries };
+  const side = (name) => name === "left" ? { device: leftDevice, path: leftPath, selection: leftSelection, entries: leftEntries, setDevice: setLeftDevice, setPath: setLeftPath, setSelection: setLeftSelection } : { device: rightDevice, path: rightPath, selection: rightSelection, entries: rightEntries, setDevice: setRightDevice, setPath: setRightPath, setSelection: setRightSelection };
   const other = (name) => name === "left" ? "right" : "left";
   const itemsFor = (name) => {
     const current = side(name);
     return current.entries.filter((item) => current.selection.includes(item.path) && !item.dir);
   };
+  const refresh = () => setRefreshKey((value) => value + 1);
+  const askConflict = (item, destination) => new Promise((resolve3) => {
+    setDialog({ kind: "conflict", item, destination, resolve: resolve3 });
+  });
   const startQueue = async (fromSide, items, targetPath, cut = false) => {
     const target2 = side(other(fromSide));
     if (!items.length || !target2.path || !target2.device) return;
     const controller = new AbortController();
     abortRef.current = controller;
     const total = items.reduce((sum, item) => sum + (Number(item.size) || 0), 0);
-    const queue = { fromSide, items, targetPath: target2.path, targetDevice: target2.device, done: 0, index: 0 };
-    queueRef.current = queue;
     setJob({ state: "running", percent: 0, transferred: 0, total, count: items.length, index: 0, error: "" });
-    let transferred = 0;
     let doneBytes = 0;
     try {
       for (let index = 0; index < items.length; index += 1) {
         const item = items[index];
-        const destination = joinPath(target2.path, item.name);
         const sourceDevice = side(fromSide).device;
-        await transferFile({
-          source: item.path,
-          destination,
-          transferId: newTransferId(),
-          overwrite: latest.current.overwrite,
-          signal: controller.signal,
-          read: (args) => post(
-            "/api/devices/" + encodeURIComponent(sourceDevice) + "/fs/read",
-            { path: args.path, offset: args.offset, limit: args.limit, encoding: "base64" }
-          ),
-          write: (args) => post(
-            "/api/devices/" + encodeURIComponent(target2.device) + "/fs/write_chunk",
-            { ...args, transfer_id: args.transferId }
-          ),
-          status: (args) => post(
-            "/api/devices/" + encodeURIComponent(target2.device) + "/fs/transfer_status",
-            { path: args.path, transfer_id: args.transferId }
-          ),
-          cancel: (args) => post(
-            "/api/devices/" + encodeURIComponent(target2.device) + "/fs/transfer_cancel",
-            { path: args.path, transfer_id: args.transferId }
-          ),
-          onProgress: (value) => {
-            const currentBytes = doneBytes + Math.max(0, Number(value && value.transferred) || 0);
-            setJob((current) => ({
-              ...current || {},
-              percent: total ? Math.min(99, Math.round(currentBytes / total * 100)) : 0,
-              transferred: currentBytes,
-              index,
-              count: items.length,
-              state: "running"
-            }));
+        let destination = joinPath(target2.path, item.name);
+        let overwrite = false;
+        while (true) {
+          try {
+            const result = await transferFile({
+              source: item.path,
+              destination,
+              transferId: newTransferId(),
+              overwrite,
+              signal: controller.signal,
+              read: (args) => post(
+                "/api/devices/" + encodeURIComponent(sourceDevice) + "/fs/read",
+                { path: args.path, offset: args.offset, limit: args.limit, encoding: "base64" }
+              ),
+              write: (args) => post(
+                "/api/devices/" + encodeURIComponent(target2.device) + "/fs/write_chunk",
+                { ...args, transfer_id: args.transferId }
+              ),
+              status: (args) => post(
+                "/api/devices/" + encodeURIComponent(target2.device) + "/fs/transfer_status",
+                { path: args.path, transfer_id: args.transferId }
+              ),
+              cancel: (args) => post(
+                "/api/devices/" + encodeURIComponent(target2.device) + "/fs/transfer_cancel",
+                { path: args.path, transfer_id: args.transferId }
+              ),
+              onProgress: (value) => {
+                const currentBytes = doneBytes + Math.max(0, Number(value && value.transferred) || 0);
+                setJob((current) => ({
+                  ...current || {},
+                  percent: total ? Math.min(99, Math.round(currentBytes / total * 100)) : 0,
+                  transferred: currentBytes,
+                  index,
+                  count: items.length,
+                  state: "running"
+                }));
+              }
+            });
+            doneBytes += Number(result.bytes) || Number(item.size) || 0;
+            break;
+          } catch (cause) {
+            if (!cause || cause.code !== "exists") throw cause;
+            const choice = await askConflict(item, destination);
+            if (choice === "cancel") throw Object.assign(new Error("\u5DF2\u53D6\u6D88"), { code: "aborted" });
+            if (choice === "overwrite") {
+              overwrite = true;
+              continue;
+            }
+            if (choice === "keep") {
+              destination = uniqueName(destination, (side(other(fromSide)).entries || []).map((entry) => entry.name));
+              overwrite = false;
+              continue;
+            }
+            throw cause;
           }
-        });
+        }
         if (cut) {
           await post("/api/devices/" + encodeURIComponent(sourceDevice) + "/fs/delete", { path: item.path }).catch(() => {
             if (onError) onError(new Error("\u5DF2\u590D\u5236\u4F46\u672A\u80FD\u5220\u9664\u6E90\u6587\u4EF6\uFF1A" + item.name));
           });
         }
-        doneBytes += Number(item.size) || 0;
-        transferred = doneBytes;
-        queue.done = index + 1;
         setJob((current) => ({
           ...current || {},
           percent: total ? Math.round(doneBytes / total * 100) : 100,
@@ -164307,10 +164529,11 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C, devices 
           state: "running"
         }));
       }
-      setJob((current) => ({ ...current || {}, state: "done", percent: 100, transferred, count: items.length }));
-      if (onNotice) onNotice("\u5DF2\u8F6C\u79FB " + items.length + " \u4E2A\u6587\u4EF6\uFF08" + formatBytes(transferred) + "\uFF09");
-      setLeftRefresh((value) => value + 1);
-      setRightRefresh((value) => value + 1);
+      setJob((current) => ({ ...current || {}, state: "done", percent: 100, transferred: doneBytes, count: items.length }));
+      if (onNotice) onNotice("\u5DF2\u8F6C\u79FB " + items.length + " \u4E2A\u6587\u4EF6\uFF08" + formatBytes(doneBytes) + "\uFF09");
+      invalidateDirectory(side(fromSide).device, side(fromSide).path);
+      invalidateDirectory(target2.device, target2.path);
+      refresh();
       setLeftSelection([]);
       setRightSelection([]);
     } catch (cause) {
@@ -164322,10 +164545,9 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C, devices 
     }
   };
   const start = () => {
-    const from = activeSide;
-    const items = itemsFor(from);
+    const items = itemsFor(activeSide);
     if (!items.length) return;
-    void startQueue(from, items, side(other(from)).path);
+    void startQueue(activeSide, items, side(other(activeSide)).path);
   };
   const cancel = () => {
     if (abortRef.current) abortRef.current.abort();
@@ -164339,8 +164561,7 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C, devices 
     setRightSelection([]);
   };
   const selectAll = (name) => {
-    const current = side(name);
-    const files = current.entries.filter((item) => !item.dir).map((item) => item.path);
+    const files = side(name).entries.filter((item) => !item.dir).map((item) => item.path);
     if (name === "left") setLeftSelection(files);
     else setRightSelection(files);
   };
@@ -164390,27 +164611,159 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C, devices 
       window.removeEventListener("keydown", close);
     };
   }, [menu]);
-  const openContext = (sideName) => (item, event) => {
+  const openDialog = (kind, name, extra = {}) => {
+    setDialog({ kind, ...extra });
+    setDialogText(name || "");
+    setTimeout(() => {
+      const input = document.getElementById("tether-explorer-name");
+      if (input) {
+        input.focus();
+        input.select();
+      }
+    }, 30);
+  };
+  const closeDialog = () => {
+    const current = dialog;
+    setDialog(null);
+    setDialogText("");
+    if (current && current.kind === "conflict" && current.resolve) current.resolve("cancel");
+  };
+  const submitName = async () => {
+    if (!dialog) return;
+    const name = dialogText.trim();
+    if (!name) return;
+    const current = side(dialog.side);
+    try {
+      if (dialog.kind === "newFolder") await post("/api/devices/" + encodeURIComponent(current.device) + "/fs/mkdir", { path: joinPath(current.path, name) });
+      else if (dialog.kind === "newFile") await post("/api/devices/" + encodeURIComponent(current.device) + "/fs/write", { path: joinPath(current.path, name), text: "", overwrite: false });
+      else if (dialog.kind === "rename") await post("/api/devices/" + encodeURIComponent(current.device) + "/fs/rename", { path: dialog.item.path, dest: joinPath(current.path, name) });
+      invalidateDirectory(current.device, current.path);
+      setDialog(null);
+      setDialogText("");
+      refresh();
+    } catch (cause) {
+      if (onError) onError(cause);
+    }
+  };
+  const deleteSelected = async (name) => {
+    const current = side(name);
+    const items = current.entries.filter((item) => current.selection.includes(item.path));
+    if (!items.length) return;
+    setDialog({ kind: "delete", side: name, items });
+  };
+  const confirmDelete = async () => {
+    if (!dialog || dialog.kind !== "delete") return;
+    const current = side(dialog.side);
+    try {
+      for (const item of dialog.items) await post("/api/devices/" + encodeURIComponent(current.device) + "/fs/delete", { path: item.path });
+      invalidateDirectory(current.device, current.path);
+      setDialog(null);
+      if (dialog.side === "left") setLeftSelection([]);
+      else setRightSelection([]);
+      refresh();
+    } catch (cause) {
+      if (onError) onError(cause);
+    }
+  };
+  const startRowDrag = (name, event, item) => {
+    if (!event || event.button !== 0 || dragRef.current) return;
+    const current = side(name);
+    const selection = current.selection.includes(item.path) ? current.selection : [item.path];
+    const items = current.entries.filter((entry) => selection.includes(entry.path));
+    if (!items.length) return;
+    const state = { side: name, items, startX: event.clientX, startY: event.clientY, active: false };
+    dragRef.current = state;
+    const move = (moveEvent) => {
+      if (!dragRef.current) return;
+      if (!state.active && Math.hypot(moveEvent.clientX - state.startX, moveEvent.clientY - state.startY) < 6) return;
+      state.active = true;
+      const element = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY);
+      const pane = element && element.closest ? element.closest("[data-pane]") : null;
+      const target2 = pane ? pane.getAttribute("data-pane") : "";
+      const nextDrop = target2 && target2 !== name ? target2 : "";
+      dropSideRef.current = nextDrop;
+      setDropSide(nextDrop);
+      setDrag({ side: name, items: state.items, x: moveEvent.clientX, y: moveEvent.clientY });
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      const target2 = dropSideRef.current;
+      const dragging = dragRef.current;
+      dragRef.current = null;
+      dropSideRef.current = "";
+      setDrag(null);
+      setDropSide("");
+      if (!dragging || !dragging.active || !target2) return;
+      const targetSide = side(target2);
+      if (!targetSide.path) return;
+      void startQueue(dragging.side, dragging.items.filter((entry) => !entry.dir), targetSide.path);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+  const openContext = (name) => (item, event) => {
     if (!item) return;
-    const current = side(sideName);
+    const current = side(name);
     if (!current.selection.includes(item.path)) {
       const next = event && (event.ctrlKey || event.metaKey) ? [...current.selection, item.path] : [item.path];
-      if (sideName === "left") setLeftSelection(next);
+      if (name === "left") setLeftSelection(next);
       else setRightSelection(next);
     }
-    setActiveSide(sideName);
-    setMenu({ x: event.clientX, y: event.clientY, side: sideName });
+    setActiveSide(name);
+    setMenu({ x: event.clientX, y: event.clientY, side: name, item });
   };
   const progress = job ? Math.max(0, Math.min(100, Number(job.percent) || 0)) : 0;
   const sourceCount = itemsFor(activeSide).length;
   const target = side(other(activeSide));
-  let footerText = "\u9009\u62E9\u6587\u4EF6\u540E\u62D6\u5230\u53E6\u4E00\u4FA7\uFF0C\u6216\u7528 Ctrl+C / Ctrl+X\u3001Ctrl+V";
+  let footerText = "\u62D6\u62FD\u6587\u4EF6\u5230\u53E6\u4E00\u4FA7\uFF0C\u6216\u7528 Ctrl+C / Ctrl+X\u3001Ctrl+V";
   if (job) {
     if (job.state === "running") footerText = "\u6B63\u5728\u8F6C\u79FB " + ((job.index || 0) + 1) + "/" + (job.count || 1);
     else if (job.state === "done") footerText = "\u5DF2\u8F6C\u79FB " + (job.count || 0) + " \u4E2A\u6587\u4EF6";
-    else if (job.state === "error") footerText = job.error;
-    else footerText = job.error || "\u5DF2\u53D6\u6D88";
+    else footerText = job.error || (job.state === "error" ? "\u4F20\u8F93\u5931\u8D25" : "\u5DF2\u53D6\u6D88");
   } else if (sourceCount) footerText = "\u5DF2\u9009 " + sourceCount + " \u4E2A\u6587\u4EF6 \u2192 " + (target.path || "\u5148\u5728\u53E6\u4E00\u4FA7\u9009\u62E9\u76EE\u5F55");
+  const sideProps = (name) => {
+    const current = side(name);
+    return {
+      side: name,
+      deviceId: current.device,
+      otherDeviceId: side(other(name)).device,
+      devices,
+      onDevice: (id) => {
+        current.setDevice(id);
+        current.setPath("");
+        current.setSelection([]);
+      },
+      path: current.path,
+      onPath: current.setPath,
+      refreshKey,
+      selection: current.selection,
+      onSelection: current.setSelection,
+      onEntries: name === "left" ? setLeftEntries : setRightEntries,
+      active: activeSide === name,
+      onActivate: () => setActiveSide(name),
+      onPointerRow: (event, item) => startRowDrag(name, event, item),
+      onContextItem: openContext(name),
+      onNewFolder: () => openDialog("newFolder", "", { side: name }),
+      onNewFile: () => openDialog("newFile", "", { side: name }),
+      onRename: () => {
+        const item = current.entries.find((entry) => entry.path === current.selection[0]);
+        if (item) openDialog("rename", item.name, { side: name, item });
+      },
+      onDelete: () => {
+        void deleteSelected(name);
+      },
+      onRefresh: refresh,
+      onDropItems: () => {
+        const dragging = dragRef.current;
+        if (!dragging || dragging.side === name) return;
+        const targetSide = side(name);
+        if (!targetSide.path) return;
+        void startQueue(dragging.side, dragging.items.filter((entry) => !entry.dir), targetSide.path);
+        dragRef.current = null;
+      }
+    };
+  };
   return h2(
     "div",
     { style: { flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column", padding: "12px 16px 14px", gap: 10, background: C.bg } },
@@ -164439,37 +164792,12 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C, devices 
     h2(
       "div",
       { style: { display: "flex", gap: 8, flex: "1 1 auto", minHeight: 0 } },
-      FilePane({
-        side: "left",
-        deviceId: leftDevice,
-        otherDeviceId: rightDevice,
-        devices,
-        onDevice: (id) => {
-          setLeftDevice(id);
-          setLeftPath("");
-          setLeftSelection([]);
-        },
-        path: leftPath,
-        onPath: setLeftPath,
-        refreshKey: leftRefresh,
-        selection: leftSelection,
-        onSelection: setLeftSelection,
-        onEntries: setLeftEntries,
-        active: activeSide === "left",
-        onActivate: () => setActiveSide("left"),
-        onDragItems: (paths) => {
-          dragRef.current = { side: "left", paths, entries };
-        },
-        onDropItems: () => {
-          const drag = dragRef.current;
-          dragRef.current = null;
-          if (!drag || drag.side === "left" || !leftPath) return;
-          const items = (drag.entries || []).filter((item) => drag.paths.includes(item.path) && !item.dir);
-          if (!items.length) return;
-          void startQueue(drag.side, items, leftPath);
-        },
-        onContextItem: openContext("left")
-      }),
+      h2(
+        "div",
+        { style: { flex: "1 1 0", minWidth: 0, display: "flex", flexDirection: "column", position: "relative", outline: dropSide === "left" ? "2px dashed " + C.blue : "none", outlineOffset: -2, borderRadius: 8 } },
+        FilePane(sideProps("left")),
+        dropSide === "left" ? h2("div", { style: { position: "absolute", inset: 0, display: "grid", placeItems: "center", background: "color-mix(in srgb, " + C.blue + " 10%, transparent)", color: C.blue, fontSize: 12, pointerEvents: "none", borderRadius: 8 } }, "\u677E\u5F00\uFF0C\u8F6C\u79FB\u5230\u8FD9\u91CC") : null
+      ),
       h2("button", {
         type: "button",
         onClick: swap,
@@ -164490,37 +164818,12 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C, devices 
           cursor: "pointer"
         }
       }, h2(Glyph, { name: "transfer", size: 14 })),
-      FilePane({
-        side: "right",
-        deviceId: rightDevice,
-        otherDeviceId: leftDevice,
-        devices,
-        onDevice: (id) => {
-          setRightDevice(id);
-          setRightPath("");
-          setRightSelection([]);
-        },
-        path: rightPath,
-        onPath: setRightPath,
-        refreshKey: rightRefresh,
-        selection: rightSelection,
-        onSelection: setRightSelection,
-        onEntries: setRightEntries,
-        active: activeSide === "right",
-        onActivate: () => setActiveSide("right"),
-        onDragItems: (paths) => {
-          dragRef.current = { side: "right", paths, entries };
-        },
-        onDropItems: () => {
-          const drag = dragRef.current;
-          dragRef.current = null;
-          if (!drag || drag.side === "right" || !rightPath) return;
-          const items = (drag.entries || []).filter((item) => drag.paths.includes(item.path) && !item.dir);
-          if (!items.length) return;
-          void startQueue(drag.side, items, rightPath);
-        },
-        onContextItem: openContext("right")
-      })
+      h2(
+        "div",
+        { style: { flex: "1 1 0", minWidth: 0, display: "flex", flexDirection: "column", position: "relative", outline: dropSide === "right" ? "2px dashed " + C.green : "none", outlineOffset: -2, borderRadius: 8 } },
+        FilePane(sideProps("right")),
+        dropSide === "right" ? h2("div", { style: { position: "absolute", inset: 0, display: "grid", placeItems: "center", background: "color-mix(in srgb, " + C.green + " 10%, transparent)", color: C.green, fontSize: 12, pointerEvents: "none", borderRadius: 8 } }, "\u677E\u5F00\uFF0C\u8F6C\u79FB\u5230\u8FD9\u91CC") : null
+      )
     ),
     h2(
       "div",
@@ -164540,29 +164843,27 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C, devices 
           h2("span", { className: "tether-num", style: { fontSize: 10.5, color: C.mute, whiteSpace: "nowrap" } }, progress + "% \xB7 " + formatBytes(job.transferred || 0) + " / " + formatBytes(job.total || 0))
         ) : null
       ),
-      h2(
-        "label",
-        { style: { display: "flex", alignItems: "center", gap: 5, fontSize: 11.5, color: C.sub, flex: "0 0 auto" } },
-        h2("input", { type: "checkbox", checked: overwrite, onChange: (event) => setOverwrite(event.target.checked) }),
-        "\u8986\u76D6\u540C\u540D"
-      ),
       job && job.state === "running" ? h2("button", { type: "button", onClick: cancel, style: { ...field, height: 28, padding: "0 12px", cursor: "pointer" } }, "\u53D6\u6D88") : h2("button", {
         type: "button",
         onClick: start,
         disabled: !sourceCount || !target.path,
+        title: "\u8F6C\u79FB\u5230\u53E6\u4E00\u4FA7",
+        "aria-label": "\u8F6C\u79FB\u5230\u53E6\u4E00\u4FA7",
         className: "tether-press",
         style: {
-          height: 28,
-          padding: "0 14px",
+          width: 32,
+          height: 32,
+          flex: "0 0 auto",
+          display: "grid",
+          placeItems: "center",
           border: 0,
-          borderRadius: 6,
+          borderRadius: 999,
           background: C.blue,
           color: "#fff",
-          fontSize: 12,
           cursor: !sourceCount || !target.path ? "not-allowed" : "pointer",
           opacity: !sourceCount || !target.path ? 0.45 : 1
         }
-      }, "\u8F6C\u79FB\u5230\u53E6\u4E00\u4FA7")
+      }, h2(Glyph, { name: "transfer", size: 16 }))
     ),
     menu ? h2(
       "div",
@@ -164574,7 +164875,7 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C, devices 
           left: menu.x,
           top: menu.y,
           zIndex: 2147483e3,
-          minWidth: 150,
+          minWidth: 160,
           padding: 4,
           background: C.bg,
           borderRadius: 8,
@@ -164583,13 +164884,20 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C, devices 
         }
       },
       [
+        ["\u65B0\u5EFA\u6587\u4EF6\u5939", () => openDialog("newFolder", "", { side: menu.side })],
+        ["\u65B0\u5EFA\u6587\u4EF6", () => openDialog("newFile", "", { side: menu.side })],
+        ["\u91CD\u547D\u540D", () => {
+          const current = side(menu.side);
+          const item = current.entries.find((entry) => entry.path === current.selection[0]);
+          if (item) openDialog("rename", item.name, { side: menu.side, item });
+        }],
+        ["\u5220\u9664", () => {
+          void deleteSelected(menu.side);
+        }],
         ["\u590D\u5236", () => copySelection(menu.side, false)],
         ["\u526A\u5207", () => copySelection(menu.side, true)],
         ["\u7C98\u8D34\u5230\u6B64\u5904", () => pasteInto(menu.side)],
-        ["\u5237\u65B0", () => {
-          if (menu.side === "left") setLeftRefresh((value) => value + 1);
-          else setRightRefresh((value) => value + 1);
-        }]
+        ["\u5237\u65B0", refresh]
       ].map(([label, action]) => h2("button", {
         key: label,
         type: "button",
@@ -164611,6 +164919,87 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C, devices 
           cursor: "pointer"
         }
       }, label))
+    ) : null,
+    drag ? h2("div", {
+      style: {
+        position: "fixed",
+        left: drag.x + 12,
+        top: drag.y + 12,
+        zIndex: 2147483e3,
+        padding: "6px 10px",
+        borderRadius: 8,
+        background: C.primary,
+        color: C.onPrimary,
+        fontSize: 12,
+        pointerEvents: "none",
+        boxShadow: "0 8px 24px rgba(16,24,40,.24)"
+      }
+    }, drag.items.length + " \u4E2A\u6587\u4EF6") : null,
+    dialog ? h2(
+      "div",
+      {
+        style: { position: "fixed", inset: 0, zIndex: 2147483e3, display: "grid", placeItems: "center", background: "rgba(16,24,40,.45)" },
+        onClick: (event) => {
+          if (event.target === event.currentTarget) closeDialog();
+        }
+      },
+      h2(
+        "div",
+        {
+          role: "dialog",
+          "aria-modal": "true",
+          onClick: (event) => event.stopPropagation(),
+          style: {
+            width: "min(380px, calc(100vw - 48px))",
+            display: "grid",
+            gap: 12,
+            padding: 16,
+            borderRadius: 10,
+            background: C.bg,
+            color: C.ink,
+            boxShadow: "0 24px 64px rgba(16,24,40,.28)"
+          }
+        },
+        h2(
+          "div",
+          { style: { fontSize: 14, fontWeight: 600 } },
+          dialog.kind === "delete" ? "\u5220\u9664" : dialog.kind === "conflict" ? "\u76EE\u6807\u4F4D\u7F6E\u5DF2\u6709\u540C\u540D\u6587\u4EF6" : dialog.kind === "rename" ? "\u91CD\u547D\u540D" : dialog.kind === "newFolder" ? "\u65B0\u5EFA\u6587\u4EF6\u5939" : "\u65B0\u5EFA\u6587\u4EF6"
+        ),
+        dialog.kind === "conflict" ? h2(
+          "div",
+          { style: { color: C.sub, fontSize: 12.5, lineHeight: "19px" } },
+          dialog.destination + " \u5DF2\u5B58\u5728\u3002\u8981\u8986\u76D6\u5B83\uFF0C\u8FD8\u662F\u4FDD\u7559\u4E24\u8005\uFF1F"
+        ) : dialog.kind === "delete" ? h2("div", { style: { color: C.sub, fontSize: 12.5, lineHeight: "19px" } }, "\u5C06 " + dialog.items.length + " \u4E2A\u9879\u76EE\u79FB\u5230 .tether-trash\uFF1F") : h2("input", {
+          id: "tether-explorer-name",
+          value: dialogText,
+          autoFocus: true,
+          onChange: (event) => setDialogText(event.target.value),
+          onKeyDown: (event) => {
+            if (event.key === "Enter") void submitName();
+            if (event.key === "Escape") closeDialog();
+          },
+          style: { ...field, height: 30, width: "100%" }
+        }),
+        h2(
+          "div",
+          { style: { display: "flex", justifyContent: "flex-end", gap: 8 } },
+          h2("button", { type: "button", onClick: closeDialog, style: { ...field, height: 28, padding: "0 12px", cursor: "pointer" } }, "\u53D6\u6D88"),
+          dialog.kind === "conflict" ? h2(
+            React2.Fragment,
+            null,
+            h2("button", { type: "button", onClick: () => {
+              const resolve3 = dialog.resolve;
+              setDialog(null);
+              resolve3("keep");
+            }, style: { ...field, height: 28, padding: "0 12px", cursor: "pointer" } }, "\u4FDD\u7559\u4E24\u8005"),
+            h2("button", { type: "button", onClick: () => {
+              const resolve3 = dialog.resolve;
+              setDialog(null);
+              resolve3("overwrite");
+            }, style: { height: 28, padding: "0 12px", border: 0, borderRadius: 6, background: C.blue, color: "#fff", fontSize: 12, cursor: "pointer" } }, "\u8986\u76D6")
+          ) : h2("button", { type: "button", onClick: dialog.kind === "delete" ? confirmDelete : submitName, style: { height: 28, padding: "0 12px", border: 0, borderRadius: 6, background: C.blue, color: "#fff", fontSize: 12, cursor: "pointer" } }, dialog.kind === "delete" ? "\u5220\u9664" : "\u786E\u5B9A")
+        )
+      )
     ) : null
   );
 }
@@ -164907,11 +165296,11 @@ async function checkUpdateAvailability(check, isCurrent = () => true) {
 }
 function dedupeUpdateCheck(inFlight, key, check) {
   if (inFlight[key]) return inFlight[key];
-  const pending = Promise.resolve().then(check).finally(() => {
+  const pending2 = Promise.resolve().then(check).finally(() => {
     delete inFlight[key];
   });
-  inFlight[key] = pending;
-  return pending;
+  inFlight[key] = pending2;
+  return pending2;
 }
 function cachedUpdateCheck(cache, key, check, { force = false, now = Date.now, ttlMs = 3e5 } = {}) {
   const cached = cache.get(key);
@@ -165017,10 +165406,10 @@ async function fetchApiJson(path, init = {}, { activeBase, apiBaseList, pinnedBa
 function usablePreviewData(data) {
   return !!data && typeof data === "object" && typeof data.kind === "string" && data.kind.length > 0;
 }
-async function resolvePreviewBody({ pending, fresh, fetchFresh, isAborted }) {
-  if (pending && !fresh) {
+async function resolvePreviewBody({ pending: pending2, fresh, fetchFresh, isAborted }) {
+  if (pending2 && !fresh) {
     try {
-      const data = await pending;
+      const data = await pending2;
       if (usablePreviewData(data)) return data;
     } catch (error) {
       if (isAborted && isAborted(error)) throw error;
@@ -165622,12 +166011,12 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const primary = key === "mtime" ? (Number(a && a.mtime) || 0) - (Number(b && b.mtime) || 0) : (Number(a && a.size) || 0) - (Number(b && b.size) || 0);
     return primary ? primary * sign : byName();
   }
-  function sortExplorerEntries(entries3, key, direction) {
-    return [...entries3 || []].sort((a, b) => compareExplorerEntries(a, b, key, direction));
+  function sortExplorerEntries(entries2, key, direction) {
+    return [...entries2 || []].sort((a, b) => compareExplorerEntries(a, b, key, direction));
   }
-  function filterExplorerEntries(entries3, query) {
+  function filterExplorerEntries(entries2, query) {
     const needle = String(query == null ? "" : query).trim().toLowerCase();
-    const list2 = entries3 || [];
+    const list2 = entries2 || [];
     if (!needle) return list2;
     return list2.filter((entry) => String(entry && entry.name || "").toLowerCase().includes(needle));
   }
@@ -166157,6 +166546,10 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       { d: "M6.7 1.6h2.6l.35 1.55.62.26 1.32-.86 1.84 1.84-.86 1.32.26.62 1.55.35v2.6l-1.55.35-.26.62.86 1.32-1.84 1.84-1.32-.86-.62.26-.35 1.55H6.7l-.35-1.55-.62-.26-1.32.86-1.84-1.84.86-1.32-.26-.62L1.6 9.3V6.7l1.55-.35.26-.62-.86-1.32 1.84-1.84 1.32.86.62-.26z" },
       { d: "M8 6.1a1.9 1.9 0 1 0 0 3.8 1.9 1.9 0 0 0 0-3.8Z" }
     ] },
+    user: { join: "round", parts: [
+      { d: "M8 7.7a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" },
+      { d: "M3.1 13.7c.4-2.5 2.3-4 4.9-4s4.5 1.5 4.9 4" }
+    ] },
     monitor: { parts: [
       { d: "M2 3.2h12v8.1H2z" },
       { d: "M6 13.8h4M8 11.3v2.5" }
@@ -166190,8 +166583,9 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       { d: "M5.8 3.2L10.6 8l-4.8 4.8" }
     ] },
     transfer: { parts: [
-      { d: "M2.4 5.6h9.2M8.8 2.8l2.8 2.8-2.8 2.8" },
-      { d: "M13.6 10.4H4.4M7.2 7.6 4.4 10.4l2.8 2.8" }
+      { d: "M8 1.4a6.6 6.6 0 1 0 0 13.2A6.6 6.6 0 0 0 8 1.4Z" },
+      { d: "M3.6 5.6h7.6M8.9 3.3l2.3 2.3-2.3 2.3" },
+      { d: "M12.4 10.4H4.8M7.1 8.1 4.8 10.4l2.3 2.3" }
     ] },
     search: { parts: [
       { d: "M7.1 12.2a5.1 5.1 0 1 0 0-10.2 5.1 5.1 0 0 0 0 10.2z" },
@@ -166233,6 +166627,16 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       { d: "M2.39868 5.5H14.0681" },
       { d: "M1.93188 10.5H13.6013" }
     ] },
+    folderPlus: { join: "round", parts: [
+      { d: "M1.8 5.2h12.4v7.2H1.8z" },
+      { d: "M1.8 5.2V3.6h4l1.4 1.6" },
+      { d: "M8 7.2v4M6 9.2h4" }
+    ] },
+    filePlus: { join: "round", parts: [
+      { d: "M3.6 2.2h5.6l3.2 3.2v8.4H3.6z" },
+      { d: "M9.2 2.2v3.4h3.2" },
+      { d: "M8 8v4M6 10h4" }
+    ] },
     file: { parts: [
       { d: "M4.9375 5.90295H11.0625" },
       { d: "M4.9375 9.02991H8.27841" },
@@ -166269,7 +166673,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       strokeLinecap: part.cap || glyph.cap || "butt"
     })));
   }
-  function ActivityBar({ active, collapsed, onSelect, onPermissions, permissionsOpen, onAppSettings, appSettingsOpen, accountEmail = "" }) {
+  function ActivityBar({ active, collapsed, onSelect, onPermissions, permissionsOpen, onAppSettings, appSettingsOpen, onAccount, accountEmail = "" }) {
     const accountInitial = String(accountEmail || "").trim().charAt(0).toUpperCase();
     const items = [
       { id: "workspaces", label: "\u539F\u751F\u5DE5\u4F5C\u533A", icon: "monitor" },
@@ -166309,13 +166713,13 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         "div",
         { style: { marginTop: "auto", display: "grid", gap: 3, justifyItems: "center" } },
         button("permissions", "\u6587\u4EF6\u6743\u9650", "shield", onPermissions, permissionsOpen),
+        button("settings", "\u8BBE\u7F6E", "gear", onAppSettings, appSettingsOpen),
         h2("button", {
           type: "button",
-          title: accountEmail ? "\u8BBE\u7F6E \xB7 " + accountEmail : "\u8BBE\u7F6E",
-          "aria-label": "\u8BBE\u7F6E",
-          onClick: onAppSettings,
+          title: accountEmail ? "\u8D26\u53F7 \xB7 " + accountEmail : "\u8D26\u53F7",
+          "aria-label": "\u8D26\u53F7",
+          onClick: onAccount,
           className: "tether-activity-button tether-press tether-hover",
-          "data-selected": appSettingsOpen ? "true" : void 0,
           style: {
             width: 36,
             height: 36,
@@ -166325,7 +166729,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
             borderRadius: UI.radius,
             cursor: "pointer",
             background: "transparent",
-            color: appSettingsOpen ? C.blue : C.mute
+            color: C.mute
           }
         }, accountInitial ? h2("span", {
           "aria-hidden": true,
@@ -166340,7 +166744,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
             fontSize: 11,
             fontWeight: 600
           }
-        }, accountInitial) : h2(Glyph, { name: "gear", size: 18 }))
+        }, accountInitial) : h2(Glyph, { name: "user", size: 18 }))
       )
     );
   }
@@ -166811,12 +167215,8 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       treeSelected,
       onHoverEntry,
       onLeaveEntry,
-      loadingTree,
-      accountEmail = "",
-      accountRole = "",
-      onOpenSettings
+      loadingTree
     } = props;
-    const accountInitial = String(accountEmail || "").trim().charAt(0).toUpperCase();
     return h2(
       "aside",
       {
@@ -166839,55 +167239,6 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           onHoverEntry,
           onLeaveEntry
         })
-      ),
-      h2(
-        "div",
-        {
-          className: "tether-account-bar",
-          style: {
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            padding: "7px 10px",
-            flex: "0 0 auto",
-            minWidth: 0,
-            borderTop: C.line ? "1px solid " + C.line : 0
-          }
-        },
-        h2("span", {
-          "aria-hidden": true,
-          style: {
-            width: 24,
-            height: 24,
-            flex: "0 0 auto",
-            borderRadius: 999,
-            display: "grid",
-            placeItems: "center",
-            background: "color-mix(in srgb, " + C.blue + " 14%, transparent)",
-            color: C.blue,
-            fontSize: 11.5,
-            fontWeight: 600
-          }
-        }, accountInitial || "?"),
-        h2(
-          "div",
-          { style: { flex: "1 1 auto", minWidth: 0, display: "grid", gap: 1 } },
-          h2("div", {
-            title: accountEmail || "\u672A\u767B\u5F55",
-            style: { fontSize: 12, color: C.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }
-          }, accountEmail || "\u672A\u767B\u5F55"),
-          h2("div", {
-            style: { fontSize: 10.5, color: C.mute, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }
-          }, accountRole === "owner" ? "\u6240\u6709\u8005" : accountRole ? "\u6210\u5458" : "\u672C\u5730\u8D26\u6237")
-        ),
-        h2("button", {
-          type: "button",
-          title: "\u8BBE\u7F6E",
-          "aria-label": "\u8BBE\u7F6E",
-          onClick: onOpenSettings,
-          className: "tether-hover",
-          style: { width: 26, height: 26, flex: "0 0 auto", display: "grid", placeItems: "center", border: 0, borderRadius: 6, background: "transparent", color: C.mute, cursor: "pointer" }
-        }, h2(Glyph, { name: "gear", size: 16 }))
       ),
       h2("div", {
         className: "tether-resizer tether-side-split",
@@ -166938,7 +167289,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     } catch (_) {
     }
   }
-  function NativeSurface({ deviceId, online, visible, localDeviceId }) {
+  function NativeSurface({ deviceId, online, visible, localDeviceId, preload = false }) {
     const [state, setState] = React2.useState({ deviceId, status: deviceId ? "loading" : "no-device", url: "" });
     const [attempt, setAttempt] = React2.useState(0);
     const [slow, setSlow] = React2.useState(false);
@@ -167062,7 +167413,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           current = false;
         };
       }
-      if (!visible) return () => {
+      if (!visible && !preload) return () => {
         current = false;
         controller.abort();
       };
@@ -167131,7 +167482,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         current = false;
         controller.abort();
       };
-    }, [deviceId, online, visible, attempt, localDeviceId, surfaceSourceKey]);
+    }, [deviceId, online, visible, preload, attempt, localDeviceId, surfaceSourceKey]);
     React2.useEffect(() => {
       if (!deviceId || !online || !visible || typeof document === "undefined") return void 0;
       let alive = true;
@@ -167301,6 +167652,74 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       )
     );
   }
+  function SurfaceDeck({ devices, deviceId, localDeviceId, visible }) {
+    const [recent, setRecent] = React2.useState(() => {
+      try {
+        const raw = JSON.parse(localStorage.getItem("tether.recentSurfaces") || "[]");
+        return Array.isArray(raw) ? raw.filter((item) => typeof item === "string" && item) : [];
+      } catch (_) {
+        return [];
+      }
+    });
+    const [keep, setKeep] = React2.useState(() => {
+      try {
+        return localStorage.getItem("tether.keepSurfaces") !== "0";
+      } catch (_) {
+        return true;
+      }
+    });
+    React2.useEffect(() => {
+      const sync = () => {
+        try {
+          setKeep(localStorage.getItem("tether.keepSurfaces") !== "0");
+        } catch (_) {
+          setKeep(true);
+        }
+      };
+      window.addEventListener("tether-surfaces-pref", sync);
+      return () => window.removeEventListener("tether-surfaces-pref", sync);
+    }, []);
+    React2.useEffect(() => {
+      if (!deviceId) return;
+      setRecent((current) => {
+        const next = [deviceId, ...current.filter((item) => item !== deviceId)].slice(0, 3);
+        try {
+          localStorage.setItem("tether.recentSurfaces", JSON.stringify(next));
+        } catch (_) {
+        }
+        return next;
+      });
+    }, [deviceId]);
+    const online = new Map((devices || []).map((item) => [item.device_id, item]));
+    const ids = [deviceId, ...keep ? recent : []].filter((item, index, all) => item && all.indexOf(item) === index).slice(0, 3);
+    if (keep) {
+      const spare = (devices || []).filter((item) => item && item.online && item.capabilities && item.capabilities.dsh_surface && !ids.includes(item.device_id)).slice(0, Math.max(0, 3 - ids.length)).map((item) => item.device_id);
+      ids.push(...spare);
+    }
+    return h2(
+      "div",
+      {
+        style: { position: "relative", flex: "1 1 auto", minWidth: 0, minHeight: 0, display: "flex" }
+      },
+      ids.map((id) => h2("div", {
+        key: id,
+        style: {
+          position: "absolute",
+          inset: 0,
+          display: visible && id === deviceId ? "flex" : "none",
+          flexDirection: "column",
+          minWidth: 0,
+          minHeight: 0
+        }
+      }, h2(NativeSurface, {
+        deviceId: id,
+        online: !!(online.get(id) && online.get(id).online),
+        visible: visible && id === deviceId,
+        preload: true,
+        localDeviceId
+      })))
+    );
+  }
   function isSafeNativeSurfaceUrl(value) {
     let url;
     try {
@@ -167316,48 +167735,6 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const sameOrigin = typeof window !== "undefined" && window.location && url.origin === window.location.origin && url.pathname === "/";
     const allowedHost = sameOrigin || url.protocol === "http:" && loopback && (ticketed || localToken) || publicSurface && ticketed;
     return allowedHost && !url.username && !url.password && Number(url.port || (url.protocol === "https:" ? 443 : 80)) > 0 && !url.hash;
-  }
-  function SurfaceWarmup({ devices, deviceId, localDeviceId }) {
-    const [warm, setWarm] = React2.useState([]);
-    const warmedRef = React2.useRef(/* @__PURE__ */ new Set());
-    React2.useEffect(() => {
-      if (!host || host.kind !== "app" || !Array.isArray(devices)) return void 0;
-      const candidates = devices.filter((item) => item && item.online && item.device_id !== deviceId && item.device_id !== localDeviceId && item.capabilities && item.capabilities.dsh_surface).slice(0, 2);
-      let cancelled = false;
-      for (const item of candidates) {
-        const key = item.device_id + "|" + (typeof host.activeApiBase === "function" ? host.activeApiBase() : "");
-        if (warmedRef.current.has(key)) continue;
-        warmedRef.current.add(key);
-        api2("/api/devices/" + encodeURIComponent(item.device_id) + "/dsh/surface").then((data) => {
-          if (cancelled || !data || !data.available || !isSafeNativeSurfaceUrl(data.url)) return;
-          const url = new URL(data.url);
-          url.searchParams.set("tether_native", "1");
-          setWarm((current) => current.some((entry) => entry.id === item.device_id) ? current : [...current, { id: item.device_id, url: url.href }]);
-        }).catch(() => {
-        });
-      }
-      return () => {
-        cancelled = true;
-      };
-    }, [devices, deviceId, localDeviceId]);
-    React2.useEffect(() => {
-      if (!warm.length) return void 0;
-      const timer = setTimeout(() => setWarm([]), 9e4);
-      return () => clearTimeout(timer);
-    }, [warm.length]);
-    if (!warm.length) return null;
-    return h2("div", {
-      "aria-hidden": true,
-      style: { position: "absolute", width: 1, height: 1, overflow: "hidden", opacity: 0, pointerEvents: "none", left: -9999, top: -9999 }
-    }, warm.map((item) => h2("iframe", {
-      key: item.id,
-      src: item.url,
-      title: "",
-      tabIndex: -1,
-      sandbox: "allow-scripts allow-same-origin allow-forms allow-downloads allow-modals",
-      onLoad: () => setTimeout(() => setWarm((current) => current.filter((entry) => entry.id !== item.id)), 45e3),
-      style: { width: 1, height: 1, border: 0 }
-    })));
   }
   function CodeEditor({ deviceId, path, value, onChange, onSave, encoding, newline: newline2, readOnly = false }) {
     const containerRef = React2.useRef(null);
@@ -167635,6 +168012,8 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         return "";
       }
     });
+    const [accountName, setAccountName] = usePersisted("tether.accountName", "");
+    const [settingsSection, setSettingsSection] = React2.useState("account");
     const [hubUnsafeExistingUrl, setHubUnsafeExistingUrl] = React2.useState(false);
     const [hubStatus, setHubStatus] = React2.useState("unknown");
     const [hubState, setHubState] = React2.useState(null);
@@ -167644,6 +168023,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const [hubCheckedAt, setHubCheckedAt] = React2.useState(null);
     const [hubAddress, setHubAddress] = React2.useState("");
     const hubProbeRef = React2.useRef(null);
+    const stateOkAtRef = React2.useRef(0);
     const formatCheckTime = (date) => date ? [date.getHours(), date.getMinutes(), date.getSeconds()].map((part) => String(part).padStart(2, "0")).join(":") : "";
     React2.useEffect(() => {
       if (!host || typeof host.connectionInfo !== "function") return void 0;
@@ -168431,10 +168811,10 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     }, [projectsError]);
     React2.useEffect(() => {
       let alive = true;
-      let pending = false;
+      let pending2 = false;
       const syncLocalDevice = async () => {
-        if (pending) return;
-        pending = true;
+        if (pending2) return;
+        pending2 = true;
         try {
           let deviceId2;
           if (host && host.kind === "dsh" && host.localDeviceId) deviceId2 = await host.localDeviceId();
@@ -168456,7 +168836,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
             setAppLocalDevice("");
           }
         } finally {
-          pending = false;
+          pending2 = false;
         }
       };
       syncLocalDevice();
@@ -168470,6 +168850,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       if (!force && stateRef.current && typeof document !== "undefined" && document.hidden) return;
       try {
         const data = await api2("/api/state");
+        stateOkAtRef.current = Date.now();
         setState(data);
         setDeviceId((current) => {
           if (current && data.devices.some((d) => d.device_id === current)) return current;
@@ -169077,14 +169458,15 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       cache.set(key, value);
       while (cache.size > (max || 240)) cache.delete(cache.keys().next().value);
     };
-    const rememberDir = (targetDevice, target, entries3) => {
-      cacheStore(dirCacheRef.current, treeCacheKey(targetDevice, target), { entries: entries3, at: Date.now() });
+    const rememberDir = (targetDevice, target, entries2) => {
+      cacheStore(dirCacheRef.current, treeCacheKey(targetDevice, target), { entries: entries2, at: Date.now() });
       if (deviceIdRef.current !== targetDevice) return;
-      setTreeChildren((current) => ({ ...current, [treeCacheKey(targetDevice, target)]: { status: "loaded", entries: entries3 } }));
+      setTreeChildren((current) => ({ ...current, [treeCacheKey(targetDevice, target)]: { status: "loaded", entries: entries2 } }));
     };
     const invalidateDir = (targetDevice, target) => {
       const key = treeCacheKey(targetDevice, target);
       dirCacheRef.current.delete(key);
+      invalidateDirectory(targetDevice, target);
       if (deviceIdRef.current === targetDevice) {
         setTreeChildren((current) => {
           if (!current[key]) return current;
@@ -169116,15 +169498,17 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       const key = treeCacheKey(requestDevice, target);
       const cached = dirCacheRef.current.get(key);
       if (cached && Date.now() - cached.at < 3e4) return;
+      if (peekDirectory(requestDevice, target, 3e4)) return;
       if (dirInflightRef.current.has(key)) return;
-      const pending = post("/api/devices/" + encodeURIComponent(requestDevice) + "/fs/list", { path: target }).then((data) => {
+      const pending2 = post("/api/devices/" + encodeURIComponent(requestDevice) + "/fs/list", { path: target }).then((data) => {
         if (deviceIdRef.current !== requestDevice) return data;
-        const entries3 = (data.entries || []).map((entry) => ({ ...entry, path: joinPath3(target, entry.name) }));
-        rememberDir(requestDevice, target, entries3);
+        const entries2 = (data.entries || []).map((entry) => ({ ...entry, path: joinPath3(target, entry.name) }));
+        rememberDir(requestDevice, target, entries2);
+        rememberDirectory(requestDevice, target, entries2);
         return data;
       }).catch(() => {
       }).finally(() => dirInflightRef.current.delete(key));
-      dirInflightRef.current.set(key, pending);
+      dirInflightRef.current.set(key, pending2);
     };
     const prefetchPreview = (entry) => {
       if (!entry || entry.dir) return;
@@ -169205,9 +169589,9 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       try {
         const data = await post("/api/devices/" + encodeURIComponent(requestDevice) + "/fs/list", { path: target });
         if (!treeResponseIsCurrent(requestDevice, deviceIdRef.current, requestEpoch, treeDeviceEpochRef.current)) return;
-        const entries3 = (data.entries || []).map((entry) => ({ ...entry, path: joinPath3(target, entry.name) })).filter((entry, index, all) => all.findIndex((item) => normPath(item.path) === normPath(entry.path)) === index);
-        cacheStore(dirCacheRef.current, key, { entries: entries3, at: Date.now() });
-        setTreeChildren((current) => ({ ...current, [key]: { status: "loaded", entries: entries3 } }));
+        const entries2 = (data.entries || []).map((entry) => ({ ...entry, path: joinPath3(target, entry.name) })).filter((entry, index, all) => all.findIndex((item) => normPath(item.path) === normPath(entry.path)) === index);
+        cacheStore(dirCacheRef.current, key, { entries: entries2, at: Date.now() });
+        setTreeChildren((current) => ({ ...current, [key]: { status: "loaded", entries: entries2 } }));
       } catch (e) {
         if (!treeResponseIsCurrent(requestDevice, deviceIdRef.current, requestEpoch, treeDeviceEpochRef.current)) return;
         setTreeChildren((current) => ({ ...current, [key]: { status: "error", entries: [] } }));
@@ -169254,19 +169638,20 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       const requestTarget = /^[A-Za-z]:[\\/]?$/.test(rawTarget) ? rawTarget.slice(0, 2) + "\\" : rawTarget;
       const nextPath = /^[A-Za-z]:[\\/]?$/.test(rawTarget) ? requestTarget : rawTarget.replace(/[\\/]+$/, "") || rawTarget;
       const key = treeCacheKey(requestDevice, nextPath);
-      const cached = opts.fresh === true ? null : dirCacheRef.current.get(key);
+      const sharedEntries = opts.fresh === true ? null : peekDirectory(requestDevice, nextPath);
+      const cached = sharedEntries ? { entries: sharedEntries, at: Date.now() } : opts.fresh === true ? null : dirCacheRef.current.get(key);
       const seq = dirSeqRef.current + 1;
       dirSeqRef.current = seq;
       if (dirAbortRef.current) dirAbortRef.current.abort();
       const controller = new AbortController();
       dirAbortRef.current = controller;
-      const enter = (entries3, push) => {
+      const enter = (entries2, push) => {
         const from = pathRef.current;
         if (from && normPath(from) !== normPath(nextPath)) {
           setSearch("");
           if (push !== false) setHistory((current) => explorerNavigate(current, from, nextPath));
         }
-        setDirEntries(entries3);
+        setDirEntries(entries2);
         setPath(nextPath);
         setPathDraft(nextPath);
         pathRef.current = nextPath;
@@ -169286,19 +169671,20 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         revealTree(nextPath, { path: nextPath, entries: cached.entries });
       }
       try {
-        const pending = dirInflightRef.current.get(key);
-        let data = pending ? await pending : null;
+        const pending2 = dirInflightRef.current.get(key);
+        let data = pending2 ? await pending2 : null;
         if (!data) data = await postRetry("/api/devices/" + encodeURIComponent(requestDevice) + "/fs/list", { path: requestTarget }, void 0, { signal: controller.signal });
         if (!data) throw new Error("\u76EE\u5F55\u8BFB\u53D6\u5931\u8D25");
         if (seq !== dirSeqRef.current || deviceIdRef.current !== requestDevice) return;
-        const entries3 = (data.entries || []).map((entry) => ({ ...entry, path: joinPath3(requestTarget, entry.name) }));
-        cacheStore(dirCacheRef.current, key, { entries: entries3, at: Date.now() });
+        const entries2 = (data.entries || []).map((entry) => ({ ...entry, path: joinPath3(requestTarget, entry.name) }));
+        cacheStore(dirCacheRef.current, key, { entries: entries2, at: Date.now() });
+        rememberDirectory(requestDevice, nextPath, entries2);
         if (cached) {
-          setDirEntries(entries3);
-          setTreeChildren((current) => ({ ...current, [key]: { status: "loaded", entries: entries3 } }));
+          setDirEntries(entries2);
+          setTreeChildren((current) => ({ ...current, [key]: { status: "loaded", entries: entries2 } }));
         } else {
-          enter(entries3, opts.push);
-          revealTree(nextPath, { path: nextPath, entries: entries3 });
+          enter(entries2, opts.push);
+          revealTree(nextPath, { path: nextPath, entries: entries2 });
         }
       } catch (e) {
         if (controller.signal.aborted || e && e.name === "AbortError") return;
@@ -170315,7 +170701,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           h2("div", { className: "tether-num", style: { fontSize: 11 } }, (file.name || file.path) + " \xB7 " + formatBytes2(file.size))
         );
       };
-      const entries3 = filterExplorerEntries(sortExplorerEntries(dirEntries, sortKey, sortDir), search2);
+      const entries2 = filterExplorerEntries(sortExplorerEntries(dirEntries, sortKey, sortDir), search2);
       const filtering = !!search2.trim();
       const columns = "minmax(0,1fr) 132px 104px 78px";
       const sortHeader = (key, label, align) => h2(
@@ -170332,7 +170718,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         sortKey === key ? h2("span", { style: { display: "grid", placeItems: "center", flex: "0 0 auto", transform: sortDir === "asc" ? "rotate(180deg)" : "none" } }, h2(Glyph, { name: "chevronDown", size: 11 })) : null
       );
       const directoryBody = () => {
-        if (dirLoading && !entries3.length) return h2(
+        if (dirLoading && !entries2.length) return h2(
           "div",
           { style: { flex: "1 1 auto", display: "grid", placeItems: "center", alignContent: "center", gap: 8, color: C.mute, fontSize: 12 } },
           h2("span", { className: "tether-spin", style: { width: 18, height: 18, display: "grid", placeItems: "center" } }, h2(Glyph, { name: "refresh", size: 18 })),
@@ -170346,13 +170732,13 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           h2("button", { onClick: refreshExplorer, className: "tether-hover", style: { border: 0, borderRadius: 6, padding: "5px 10px", background: C.soft, color: C.ink, fontSize: 12, cursor: "pointer" } }, "\u91CD\u8BD5")
         );
         if (!path) return h2("div", { style: { flex: "1 1 auto", display: "grid", placeItems: "center", color: C.mute, fontSize: 12 } }, "\u4ECE\u5DE6\u4FA7\u9009\u62E9\u5DE5\u4F5C\u533A\u6216\u78C1\u76D8");
-        if (filtering && !entries3.length) return h2(
+        if (filtering && !entries2.length) return h2(
           "div",
           { style: { flex: "1 1 auto", display: "grid", placeItems: "center", alignContent: "center", gap: 8, color: C.mute, fontSize: 12, padding: 24, textAlign: "center" } },
           h2("div", null, "\u672A\u627E\u5230\u5339\u914D \u201C" + search2.trim() + "\u201D \u7684\u9879\u76EE"),
           h2("button", { onClick: () => setSearch(""), className: "tether-hover", style: { border: 0, borderRadius: 6, padding: "5px 10px", background: C.soft, color: C.ink, fontSize: 12, cursor: "pointer" } }, "\u6E05\u9664\u641C\u7D22")
         );
-        if (!entries3.length) return h2("div", { style: { flex: "1 1 auto", display: "grid", placeItems: "center", color: C.mute, fontSize: 12 } }, "\u7A7A\u6587\u4EF6\u5939");
+        if (!entries2.length) return h2("div", { style: { flex: "1 1 auto", display: "grid", placeItems: "center", color: C.mute, fontSize: 12 } }, "\u7A7A\u6587\u4EF6\u5939");
         return h2(
           "div",
           { style: { flex: "1 1 auto", minHeight: 0, position: "relative", display: "flex" } },
@@ -170367,7 +170753,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
               h2("span", null, "\u7C7B\u578B"),
               sortHeader("size", "\u5927\u5C0F", "right")
             ),
-            entries3.map((entry) => h2(
+            entries2.map((entry) => h2(
               "div",
               {
                 key: entry.path,
@@ -170640,11 +171026,11 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         }
       });
     }
+    const liveHubStatus = hubBusy ? "checking" : stateOkAtRef.current && Date.now() - stateOkAtRef.current < 8e3 ? "online" : hubStatus === "offline" ? "offline" : "checking";
     return h2(
       "div",
       { className: "tether-root", style: { position: "relative", height: "100%", display: "flex", flexDirection: "column", background: "var(--tether-workbench-bg, " + C.bg + ")", color: C.ink, fontSize: 13, fontWeight: "var(--tether-body, 400)", overflow: "hidden" } },
       h2("style", null, SCROLL_CSS),
-      h2(SurfaceWarmup, { devices: state && state.devices || [], deviceId, localDeviceId: appLocalDevice }),
       h2(
         "div",
         { className: "tether-topbar " + (host && host.kind === "app" ? "tether-toolbar-app" : "tether-toolbar"), style: { display: "flex", alignItems: "center", gap: 10, padding: "6px 12px", borderBottom: 0, background: C.soft, position: "relative", zIndex: 2, flex: "0 0 auto" } },
@@ -170675,7 +171061,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
             if (host.connectionInfo) host.connectionInfo(host.activeApiBase && host.activeApiBase()).then((info) => setHubAddress(info.address || "")).catch(() => setHubAddress(""));
             setShowHub(true);
           },
-          status: hubBusy ? "checking" : hubStatus
+          status: liveHubStatus
         }) : null,
         h2(MinimalUpdateButton, { React: React2, h: h2, api: api2, post, deviceId, host, C })
       ),
@@ -170694,10 +171080,16 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           permissionsOpen: showSettings,
           onAppSettings: () => {
             setShowSettings(false);
+            setSettingsSection("connection");
             setShowAppSettings(true);
           },
           appSettingsOpen: showAppSettings,
-          accountEmail: hubEmail
+          onAccount: () => {
+            setShowSettings(false);
+            setSettingsSection("account");
+            setShowAppSettings(true);
+          },
+          accountEmail: accountName || hubEmail
         }),
         h2(SidePanel, {
           width: safeSidebarWidth,
@@ -170726,18 +171118,12 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           onHoverEntry: (event, node) => showHoverTip(event, node),
           onLeaveEntry: hideHoverTip,
           onContextMenuNode: (event, node) => openContextMenu(event, { name: node.name, path: node.path, dir: node.dir }, node.dir ? node.path : parentOf2(node.path)),
-          treeSelected,
-          accountEmail: hubEmail,
-          accountRole: hubRole,
-          onOpenSettings: () => {
-            setShowSettings(false);
-            setShowAppSettings(true);
-          }
+          treeSelected
         }),
         h2(
           "main",
           { className: "tether-workbench", style: { flex: "1 1 auto", display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0 } },
-          h2(NativeSurface, { deviceId, online: deviceOnline, visible: view === "chat", localDeviceId: appLocalDevice }),
+          h2(SurfaceDeck, { devices: state && state.devices || [], deviceId, localDeviceId: appLocalDevice, visible: view === "chat" }),
           view === "files" ? renderExplorer() : view === "network" ? renderNetwork() : view === "transfer" ? h2(createTransferPage, {
             React: React2,
             Glyph,
@@ -170754,7 +171140,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       showHub && host && (host.kind === "dsh" || host.kind === "app") ? h2(Connection.Panel, {
         open: true,
         onClose: () => setShowHub(false),
-        info: { address: hubAddress || "\u672A\u77E5", status: hubStatus, checkedAt: hubCheckedAt, durationMs: hubDuration },
+        info: { address: hubAddress || "\u672A\u77E5", status: liveHubStatus, checkedAt: hubCheckedAt, durationMs: hubDuration },
         busy: hubBusy,
         error: hubError,
         onProbe: probeConfiguredHub,
@@ -170861,8 +171247,11 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         onClose: () => setShowAppSettings(false),
         accountEmail: hubEmail,
         accountRole: hubRole,
+        accountName,
+        onAccountNameChange: setAccountName,
+        initialSection: settingsSection,
         server: hubAddress || hubUrl || "",
-        connection: { status: hubStatus, checkedAt: hubCheckedAt, durationMs: hubDuration, token: hubToken },
+        connection: { status: liveHubStatus, checkedAt: hubCheckedAt, durationMs: hubDuration, token: hubToken },
         device: {
           ...localDeviceRecord,
           device_id: localDeviceRecord.device_id || appLocalDevice || deviceId,

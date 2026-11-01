@@ -149,7 +149,7 @@ test('the explorer exposes sort headers, a search box with a clear action and a 
 })
 
 test('a fast folder double-click reuses the prefetched listing without a false read error', () => {
-  assert.match(source, /rememberDir\(requestDevice, target, entries\)\s*return data/)
+  assert.match(source, /rememberDir\(requestDevice, target, entries\)\s*rememberDirectory\(requestDevice, target, entries\)\s*return data/)
   assert.match(source, /let data = pending \? await pending : null/)
   assert.match(source, /if \(!data\) data = await postRetry\('\/api\/devices\/' \+ encodeURIComponent\(requestDevice\) \+ '\/fs\/list'/)
 })

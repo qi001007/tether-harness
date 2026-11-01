@@ -26,7 +26,8 @@ test('an aborted request is not retried against the next API base', async () => 
 
 test('directory navigation reuses cache, seeds the tree, and never reloads the parent after preview', () => {
   assert.match(source, /const dirCacheRef = React\.useRef\(new Map\(\)\)/)
-  assert.match(source, /const cached = opts\.fresh === true \? null : dirCacheRef\.current\.get\(key\)/)
+  assert.match(source, /const sharedEntries = opts\.fresh === true \? null : peekDirectory\(requestDevice, nextPath\)/)
+  assert.match(source, /invalidateDirectory\(targetDevice, target\)/)
   assert.match(source, /revealTree\(nextPath, \{ path: nextPath, entries: cached\.entries \}\)/)
   assert.match(source, /if \(seedKey && node\.cacheKey === seedKey\)/)
   assert.match(source, /const prefetchDir = \(target\) =>/)

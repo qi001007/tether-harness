@@ -5763,7 +5763,7 @@ monaco-editor/esm/vs/languages/definitions/swift/swift.js:
 
     const EditorRuntime = TetherMonacoRuntime
     const PANEL_ID = 'tether'
-    const PLUGIN_VERSION = "0.2.53"
+    const PLUGIN_VERSION = "0.2.54"
 function parentOf(path) {
   const clean = String(path || '').replace(/[\\/]+$/, '')
   if (!clean) return ''
@@ -5820,7 +5820,7 @@ function TargetFileExplorer({
   sort = { key: 'name', dir: 'asc' }, onSort, search = '', onSearch = () => {},
   treeChildren = null, expanded = {}, onToggleTree,
   compact = false, selectionMode = 'single', selectedPaths = [], onSelectionChange,
-  onContextMenu, onDragItem
+  onContextMenu, onDragItem, onRowPointerDown
 }) {
   const ReactRuntime = React
   const h = ReactRuntime.createElement
@@ -5926,6 +5926,7 @@ function TargetFileExplorer({
       key: item.path, type: 'button', title: item.path, disabled: disabled || oversized,
       draggable: !!onDragItem,
       onDragStart: (event) => { if (onDragItem) onDragItem(event, item) },
+      onPointerDown: (event) => { if (onRowPointerDown) onRowPointerDown(event, item) },
       onContextMenu: (event) => { if (onContextMenu) { event.preventDefault(); onContextMenu(item, event) } },
       onClick: (event) => {
         if (selectionMode === 'multiple' && onSelectionChange) {
@@ -6062,6 +6063,98 @@ function TargetFileExplorer({
         iconButton('refresh', '刷新', () => { if (path && onRefresh) onRefresh(path) }, disabled || !path)),
       error && path && entries !== null ? h('div', { role: 'alert', style: { padding: '6px 14px', color: C.red || C.danger, fontSize: 12, borderBottom: C.line ? '1px solid ' + C.line : 0 } }, error) : null,
       body))
+}
+const DEFAULT_TTL = 20_000
+const MAX_DIRS = 240
+
+const directories = new Map()
+const pending = new Map()
+
+function normalizeDirectoryPath(value) {
+  let text = String(value || '')
+  if (/^[A-Za-z]:$/.test(text)) return text + '\\'
+  text = text.replace(/[\\/]+$/, '') || text
+  if (/^[A-Za-z]:[\\/]/.test(text)) text = text.replace(/\//g, '\\')
+  return text
+}
+
+function directoryKey(deviceId, path) {
+  return String(deviceId || '') + '|' + normalizeDirectoryPath(path).toLowerCase()
+}
+
+function peekDirectory(deviceId, path, ttl = DEFAULT_TTL) {
+  if (!deviceId || !path) return null
+  const key = directoryKey(deviceId, path)
+  const hit = directories.get(key)
+  if (!hit) return null
+  if (Date.now() - hit.at > ttl) {
+    directories.delete(key)
+    return null
+  }
+  directories.delete(key)
+  directories.set(key, hit)
+  return hit.entries
+}
+
+function rememberDirectory(deviceId, path, entries) {
+  if (!deviceId || !path || !Array.isArray(entries)) return entries
+  const key = directoryKey(deviceId, path)
+  directories.delete(key)
+  directories.set(key, { entries, at: Date.now() })
+  while (directories.size > MAX_DIRS) directories.delete(directories.keys().next().value)
+  return entries
+}
+
+function clearDirectoryCache() {
+  directories.clear()
+  pending.clear()
+}
+
+function invalidateDirectory(deviceId, path) {
+  if (!deviceId) {
+    clearDirectoryCache()
+    return
+  }
+  if (!path) {
+    const prefix = String(deviceId) + '|'
+    for (const key of [...directories.keys()]) if (key.startsWith(prefix)) directories.delete(key)
+    for (const key of [...pending.keys()]) if (key.startsWith(prefix)) pending.delete(key)
+    return
+  }
+  const key = directoryKey(deviceId, path)
+  directories.delete(key)
+  pending.delete(key)
+  const childPrefixes = [key + '\\', key + '/']
+  for (const candidate of [...directories.keys()]) {
+    if (candidate.startsWith(key) && childPrefixes.some((prefix) => candidate.startsWith(prefix))) {
+      directories.delete(candidate)
+    }
+  }
+}
+
+async function loadDirectory({ deviceId, path, load, fresh = false, ttl = DEFAULT_TTL }) {
+  const key = directoryKey(deviceId, path)
+  if (!fresh) {
+    const cached = peekDirectory(deviceId, path, ttl)
+    if (cached) return cached
+    const running = pending.get(key)
+    if (running) return running
+  }
+  const task = Promise.resolve()
+    .then(load)
+    .then((entries) => {
+      rememberDirectory(deviceId, path, entries)
+      return entries
+    })
+    .finally(() => {
+      if (pending.get(key) === task) pending.delete(key)
+    })
+  pending.set(key, task)
+  return task
+}
+
+function directoryCacheStats() {
+  return { entries: directories.size, pending: pending.size }
 }
 const DSH_API_BASE = 'http://127.0.0.1:18890'
 const DSH_APP_BASE = 'http://127.0.0.1:18892'
@@ -6432,32 +6525,46 @@ function createDshTargetExplorerBridge({ getRpc, getHost, fetcher = (...args) =>
         scope = null
         throw new Error('目标电脑已切换，请重新选择文件')
       }
-      const data = await request(deviceId, '/list', { path }, signal)
-      if (!Array.isArray(data.entries)) throw new Error('目标电脑目录返回格式无效')
-      await assertDevice(deviceId)
-      const separator = path.includes('\\') ? '\\' : '/'
-      const prefix = path.replace(/[\\/]+$/, '') + separator
-      for (const child of [...current.directories]) {
-        if (child !== path && child.startsWith(prefix)) current.directories.delete(child)
+      const applyListing = (raw) => {
+        const separator = path.includes('\\') ? '\\' : '/'
+        const prefix = path.replace(/[\\/]+$/, '') + separator
+        for (const child of [...current.directories]) {
+          if (child !== path && child.startsWith(prefix)) current.directories.delete(child)
+        }
+        for (const child of [...current.files.keys()]) {
+          if (child.startsWith(prefix)) current.files.delete(child)
+        }
+        const entries = []
+        for (const entry of raw) {
+          if (!entry || typeof entry.name !== 'string' || typeof entry.path !== 'string' || !entry.path) continue
+          const dir = entry.dir === true
+          const size = Number.isSafeInteger(entry.size) && entry.size >= 0 ? entry.size : null
+          if (!dir && size === null) continue
+          if (dir) current.directories.add(entry.path)
+          else current.files.set(entry.path, { name: entry.name, size })
+          entries.push({
+            name: entry.name, path: entry.path, dir,
+            size: dir ? null : size,
+            mtime: typeof entry.mtime === 'number' ? entry.mtime : null
+          })
+        }
+        return entries
       }
-      for (const child of [...current.files.keys()]) {
-        if (child.startsWith(prefix)) current.files.delete(child)
+      const cached = peekDirectory(deviceId, path)
+      if (cached) {
+        await assertDevice(deviceId)
+        return applyListing(cached)
       }
-      const entries = []
-      for (const entry of data.entries) {
-        if (!entry || typeof entry.name !== 'string' || typeof entry.path !== 'string' || !entry.path) continue
-        const dir = entry.dir === true
-        const size = Number.isSafeInteger(entry.size) && entry.size >= 0 ? entry.size : null
-        if (!dir && size === null) continue
-        if (dir) current.directories.add(entry.path)
-        else current.files.set(entry.path, { name: entry.name, size })
-        entries.push({
-          name: entry.name, path: entry.path, dir,
-          size: dir ? null : size,
-          mtime: typeof entry.mtime === 'number' ? entry.mtime : null
-        })
-      }
-      return entries
+      const entries = await loadDirectory({
+        deviceId, path,
+        load: async () => {
+          const data = await request(deviceId, '/list', { path }, signal)
+          if (!Array.isArray(data.entries)) throw new Error('目标电脑目录返回格式无效')
+          await assertDevice(deviceId)
+          return data.entries
+        }
+      })
+      return applyListing(entries)
     },
     async readFile(entry, signal) {
       if (!entry || entry.dir || typeof entry.path !== 'string' || !entry.path) throw new Error('请选择一个文件')
@@ -6943,13 +7050,13 @@ function createDshTargetAttachments(React, Native, bridge, pickerCommand, uiWork
           }
         },
           h('div', { style: { minWidth: 0, flex: '1 1 auto' } },
-            h('div', { id: 'tether-target-file-title', style: { fontSize: 15, fontWeight: 600, color: ink } }, '从目标电脑选择文件'),
+            h('div', { id: 'tether-target-file-title', style: { height: 20, lineHeight: '20px', fontSize: 15, fontWeight: 600, color: ink } }, '资源管理器'),
             h('div', {
               style: {
-                marginTop: 2, color: mute, fontSize: 11.5, overflow: 'hidden',
+                marginTop: 2, height: 18, lineHeight: '18px', color: mute, fontSize: 11.5, overflow: 'hidden',
                 textOverflow: 'ellipsis', whiteSpace: 'nowrap'
               }
-            }, device ? '目标电脑 · ' + device : '正在确认目标电脑…')),
+            }, device || '正在连接设备…')),
           h('button', {
             type: 'button', 'aria-label': '关闭', title: '关闭', onClick: close,
             style: {
@@ -6959,7 +7066,14 @@ function createDshTargetAttachments(React, Native, bridge, pickerCommand, uiWork
             }
           }, '×')),
         h('div', { style: { display: 'flex', flexDirection: 'column', flex: '1 1 auto', minHeight: 0 } },
-          busyLine,
+          h('div', {
+            role: 'status',
+            style: {
+              height: 22, flex: '0 0 auto', display: 'flex', alignItems: 'center', padding: '0 18px',
+              borderBottom: '1px solid ' + line, color: error ? danger : sub, fontSize: 11.5,
+              overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis'
+            }
+          }, error || status || ''),
           TargetFileExplorer({
             React,
             sort,
@@ -7003,12 +7117,6 @@ function createDshTargetAttachments(React, Native, bridge, pickerCommand, uiWork
       ) : null
     return h('div', { ref: containerRef, style: { display: 'contents' } },
       h(Native.ComposerAttachments, { ...props, readFileDrag: props.readFileDrag }),
-      h('div', { style: { display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 } },
-        h('button', {
-          type: 'button', title: '从当前目标电脑选择文件',
-          onClick: () => { void openPicker() }, disabled: busy,
-          style: { ...mutedButton, cursor: busy ? 'default' : 'pointer' }
-        }, '目标电脑文件…')),
       dialog)
   }
 }
@@ -7254,12 +7362,16 @@ function createSettingsPanel(React) {
     try { const date = new Date(value); return [date.getHours(), date.getMinutes(), date.getSeconds()].map((part) => String(part).padStart(2, '0')).join(':') } catch (_) { return '尚未检测' }
   }
 
-  function SettingsPanel({ open, onClose, accountEmail = '', accountRole = '', server = '', connection = {}, device = {}, versions = {}, onRefreshConnection, onRestartNode, onOpenPermissions, onLogout, onCheckUpdates, onPasswordChanged }) {
-    const [section, setSection] = React.useState('account')
+  function SettingsPanel({ open, onClose, accountEmail = '', accountRole = '', accountName = '', onAccountNameChange, initialSection = 'account', server = '', connection = {}, device = {}, versions = {}, onRefreshConnection, onRestartNode, onOpenPermissions, onLogout, onCheckUpdates, onPasswordChanged }) {
+    const [section, setSection] = React.useState(initialSection)
+    React.useEffect(() => { if (open) setSection(initialSection) }, [open, initialSection])
     const [currentPassword, setCurrentPassword] = React.useState('')
     const [newPassword, setNewPassword] = React.useState('')
     const [busy, setBusy] = React.useState('')
     const [message, setMessage] = React.useState('')
+    const [keepSurfaces, setKeepSurfaces] = React.useState(() => {
+      try { return localStorage.getItem('tether.keepSurfaces') !== '0' } catch (_) { return true }
+    })
     if (!open) return null
     const status = connection.status || 'unknown'
     const roleLabel = accountRole === 'owner' ? '所有者' : accountRole === 'member' ? '成员' : accountRole === 'admin' ? '管理员' : accountRole || '—'
@@ -7306,6 +7418,17 @@ function createSettingsPanel(React) {
     if (section === 'account') {
       body = h('div', { style: { display: 'grid', gap: 6 } },
         sectionTitle('账号', '账号信息只在这里出现；连接状态请看顶栏的“连接”。'),
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, margin: '8px 0 6px' } },
+          h('span', { style: { width: 38, height: 38, borderRadius: 999, display: 'grid', placeItems: 'center',
+            background: 'color-mix(in srgb, var(--dsw-alias-state-business-primary, #1570ef) 14%, transparent)',
+            color: 'var(--dsw-alias-state-business-primary, #1570ef)', fontSize: 15, fontWeight: 600 } },
+          String(accountName || accountEmail || '?').trim().charAt(0).toUpperCase()),
+          h('span', { style: { color: mute, fontSize: 12 } }, '头像与显示名称只影响本机显示')),
+        fieldRow('显示名称', h('input', {
+          value: accountName, placeholder: '例如：小王', maxLength: 32,
+          onChange: (event) => { if (typeof onAccountNameChange === 'function') onAccountNameChange(event.target.value) },
+          style: field
+        })),
         row('邮箱', accountEmail || '未登录'),
         row('角色', roleLabel),
         h('div', { style: { height: 1, background: line, margin: '12px 0' } }),
@@ -7331,7 +7454,19 @@ function createSettingsPanel(React) {
           row('服务响应耗时', Number.isFinite(connection.durationMs) ? connection.durationMs + ' ms' : '—')),
         h('div', { style: { marginTop: 12, display: 'flex', gap: 8 } },
           h('button', { onClick: onRefreshConnection, style: secondary }, '刷新连接状态'),
-          h('button', { onClick: onLogout, style: secondary }, '切换账号 / 服务器')))
+          h('button', { onClick: onLogout, style: secondary }, '切换账号 / 服务器')),
+        h('label', { style: { marginTop: 16, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12.5, color: sub } },
+          h('input', {
+            type: 'checkbox', checked: keepSurfaces,
+            onChange: (event) => {
+              const next = event.target.checked
+              setKeepSurfaces(next)
+              try { localStorage.setItem('tether.keepSurfaces', next ? '1' : '0') } catch (_) { /* best effort */ }
+              if (typeof window !== 'undefined') window.dispatchEvent(new Event('tether-surfaces-pref'))
+            }
+          }),
+          h('span', null, '保留最近设备工作区（最多 3 台）'),
+          h('span', { style: { color: mute, fontSize: 11.5 } }, '切换几乎即时，关闭后不占后台')))
     } else if (section === 'device') {
       body = h('div', null,
         sectionTitle('本机设备', '本机作为目标设备时的登记信息与 Node 控制。'),
@@ -7488,6 +7623,22 @@ function isTextInput(target) {
   return tag === 'input' || tag === 'textarea' || tag === 'select' || target.isContentEditable === true
 }
 
+function uniqueName(destination, names) {
+  const value = String(destination || '')
+  const slash = Math.max(value.lastIndexOf('\\'), value.lastIndexOf('/'))
+  const dir = slash >= 0 ? value.slice(0, slash + 1) : ''
+  const file = slash >= 0 ? value.slice(slash + 1) : value
+  const dot = file.lastIndexOf('.')
+  const stem = dot > 0 ? file.slice(0, dot) : file
+  const ext = dot > 0 ? file.slice(dot) : ''
+  const taken = new Set((names || []).map((name) => String(name).toLowerCase()))
+  for (let index = 2; index < 1000; index += 1) {
+    const candidate = stem + ' (' + index + ')' + ext
+    if (!taken.has(candidate.toLowerCase())) return dir + candidate
+  }
+  return dir + stem + ' (' + Date.now() + ')' + ext
+}
+
 function createTransferPage({ React, Glyph, api, post, C, devices = [], localDevice = '', onNotice, onError }) {
   const h = React.createElement
   const field = {
@@ -7499,9 +7650,20 @@ function createTransferPage({ React, Glyph, api, post, C, devices = [], localDev
     ? localDevice
     : (onlineDevices[0] && onlineDevices[0].device_id) || ''
   const initialRight = (onlineDevices.find((item) => item.device_id !== initialLeft) || {}).device_id || ''
+  const iconButton = (name, label, onClick, disabled) => h('button', {
+    type: 'button', title: label, 'aria-label': label, disabled,
+    onClick: () => { if (!disabled && onClick) onClick() },
+    className: 'tether-hover',
+    style: {
+      width: 26, height: 26, flex: '0 0 auto', display: 'grid', placeItems: 'center',
+      border: 0, borderRadius: 6, background: 'transparent', color: disabled ? C.mute : C.sub,
+      cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.4 : 1
+    }
+  }, h(Glyph, { name, size: 15 }))
 
   function FilePane({ side, deviceId, otherDeviceId, onDevice, path, onPath, selection, onSelection, onEntries,
-    onDragItems, onDropItems, onContextItem, active, onActivate, refreshKey = 0 }) {
+    onPointerRow, onDropItems, onContextItem, active, onActivate, refreshKey = 0,
+    onNewFolder, onNewFile, onRename, onDelete, onRefresh }) {
     const [roots, setRoots] = React.useState([])
     const [entries, setEntries] = React.useState(null)
     const [treeChildren, setTreeChildren] = React.useState({})
@@ -7510,8 +7672,10 @@ function createTransferPage({ React, Glyph, api, post, C, devices = [], localDev
     const [error, setError] = React.useState('')
     const [sort, setSort] = React.useState({ key: 'name', dir: 'asc' })
     const [search, setSearch] = React.useState('')
+    const [localRefresh, setLocalRefresh] = React.useState(0)
     const run = React.useRef(0)
     const pathRef = React.useRef(path)
+    const lastRefreshRef = React.useRef({ refreshKey, localRefresh })
     pathRef.current = path
     React.useEffect(() => {
       let cancelled = false
@@ -7537,11 +7701,16 @@ function createTransferPage({ React, Glyph, api, post, C, devices = [], localDev
       if (!deviceId || !path) { setEntries(null); onEntries([]); return undefined }
       const token = ++run.current
       let cancelled = false
+      const fresh = lastRefreshRef.current.refreshKey !== refreshKey || lastRefreshRef.current.localRefresh !== localRefresh
+      lastRefreshRef.current = { refreshKey, localRefresh }
       setLoading(true); setError('')
-      post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/list', { path })
-        .then((data) => {
+      loadDirectory({
+        deviceId, path, fresh,
+        load: () => post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/list', { path })
+          .then((data) => ((data && data.entries) || []).filter((item) => item && item.path && item.name))
+      })
+        .then((list) => {
           if (cancelled || token !== run.current) return
-          const list = ((data && data.entries) || []).filter((item) => item && item.path && item.name)
           list.sort((left, right) => (left.dir === right.dir ? String(left.name).localeCompare(String(right.name)) : left.dir ? -1 : 1))
           setEntries(list)
           onEntries(list)
@@ -7551,7 +7720,7 @@ function createTransferPage({ React, Glyph, api, post, C, devices = [], localDev
         })
         .finally(() => { if (!cancelled && token === run.current) setLoading(false) })
       return () => { cancelled = true }
-    }, [deviceId, path, refreshKey])
+    }, [deviceId, path, refreshKey, localRefresh])
     const toggleTree = async (item) => {
       if (!item || !item.dir || !deviceId) return
       const key = item.path
@@ -7562,28 +7731,34 @@ function createTransferPage({ React, Glyph, api, post, C, devices = [], localDev
       setExpanded((current) => ({ ...current, [key]: true }))
       if (treeChildren[key]) return
       try {
-        const data = await post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/list', { path: key })
-        const list = ((data && data.entries) || []).filter((entry) => entry && entry.path && entry.name)
+        const list = await loadDirectory({
+          deviceId, path: key,
+          load: () => post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/list', { path: key })
+            .then((data) => ((data && data.entries) || []).filter((entry) => entry && entry.path && entry.name))
+        })
         setTreeChildren((current) => ({ ...current, [key]: list }))
-      } catch (_) { /* the right pane reports directory errors */ }
+      } catch (_) { /* the right pane shows the directory error */ }
     }
     const fileIcon = (item) => h('span', {
       'aria-hidden': true,
       style: { width: 15, height: 15, display: 'grid', placeItems: 'center', color: item.dir ? '#d99a2b' : C.mute, flex: '0 0 auto' }
     }, h(Glyph, { name: item.dir ? 'folderClose' : 'file', size: 14 }))
+    const refresh = () => {
+      if (deviceId && path) invalidateDirectory(deviceId, path)
+      setLocalRefresh((value) => value + 1)
+      if (onRefresh) onRefresh()
+    }
     return h('div', {
+      'data-pane': side,
       onMouseDown: onActivate,
       onDragOver: (event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy' },
-      onDrop: (event) => {
-        event.preventDefault()
-        if (onDropItems) onDropItems()
-      },
+      onDrop: (event) => { event.preventDefault(); if (onDropItems) onDropItems() },
       style: {
         flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', background: C.bg,
         borderRadius: 8, overflow: 'hidden', outline: active ? '1px solid ' + C.blue : '1px solid transparent'
       }
     },
-      h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', background: C.soft, flex: '0 0 auto' } },
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 4, padding: '6px 8px', background: C.soft, flex: '0 0 auto' } },
         h('select', {
           value: deviceId || '', onChange: (event) => { onDevice(event.target.value); onPath(''); onSelection([]); onActivate(); event.currentTarget.blur() },
           'aria-label': '设备', title: '选择这台电脑',
@@ -7593,7 +7768,12 @@ function createTransferPage({ React, Glyph, api, post, C, devices = [], localDev
           devices.map((item) => h('option', {
             key: item.device_id, value: item.device_id,
             disabled: !item.online || item.device_id === otherDeviceId
-          }, (item.name || item.device_id) + (item.online ? '' : ' · 离线') + (item.device_id === otherDeviceId ? ' · 已在另一侧' : ''))))),
+          }, (item.name || item.device_id) + (item.online ? '' : ' · 离线') + (item.device_id === otherDeviceId ? ' · 已在另一侧' : '')))),
+        iconButton('folderPlus', '新建文件夹', onNewFolder, !deviceId || !path),
+        iconButton('filePlus', '新建文件', onNewFile, !deviceId || !path),
+        iconButton('pencil', '重命名', onRename, !selection.length),
+        iconButton('trash', '删除', onDelete, !selection.length),
+        iconButton('refresh', '刷新', refresh, !deviceId || !path)),
       TargetFileExplorer({
         React,
         colors: { bg: C.bg, soft: C.soft, ink: C.ink, sub: C.sub, mute: C.mute, line: C.line, hover: C.soft, red: C.red },
@@ -7611,13 +7791,8 @@ function createTransferPage({ React, Glyph, api, post, C, devices = [], localDev
         onPath: (next) => onPath(next),
         onSelect: () => {},
         onOpen: (item) => { if (item.dir) onPath(item.path) },
-        onRefresh: (next) => onPath(next),
-        onDragItem: (event, item) => {
-          const items = selection.includes(item.path) ? selection : [item.path]
-          if (onDragItems) onDragItems(items)
-          event.dataTransfer.effectAllowed = 'copy'
-          event.dataTransfer.setData('text/plain', item.path)
-        },
+        onRefresh: refresh,
+        onRowPointerDown: onPointerRow,
         onContextMenu: (item, event) => { if (onContextItem) onContextItem(item, event) },
         fileIcon,
         formatTime: (value) => value ? new Date(value * 1000).toLocaleString('zh-CN', { hour12: false }) : '',
@@ -7644,18 +7819,23 @@ function createTransferPage({ React, Glyph, api, post, C, devices = [], localDev
   const [leftEntries, setLeftEntries] = React.useState([])
   const [rightEntries, setRightEntries] = React.useState([])
   const [activeSide, setActiveSide] = React.useState('left')
-  const [leftRefresh, setLeftRefresh] = React.useState(0)
-  const [rightRefresh, setRightRefresh] = React.useState(0)
-  const [overwrite, setOverwrite] = React.useState(false)
+  const [refreshKey, setRefreshKey] = React.useState(0)
   const [job, setJob] = React.useState(null)
   const [menu, setMenu] = React.useState(null)
-  const dragRef = React.useRef(null)
+  const [dialog, setDialog] = React.useState(null)
+  const [dialogText, setDialogText] = React.useState('')
+  const [drag, setDrag] = React.useState(null)
+  const [dropSide, setDropSide] = React.useState('')
   const clipboardRef = React.useRef(null)
   const abortRef = React.useRef(null)
   const queueRef = React.useRef(null)
+  const dragRef = React.useRef(null)
+  const dropSideRef = React.useRef('')
   const latest = React.useRef({})
-  latest.current = { leftDevice, rightDevice, leftPath, rightPath, leftSelection, rightSelection,
-    leftEntries, rightEntries, activeSide, overwrite }
+  latest.current = {
+    leftDevice, rightDevice, leftPath, rightPath, leftSelection, rightSelection,
+    leftEntries, rightEntries, activeSide
+  }
 
   React.useEffect(() => {
     if (leftDevice && rightDevice && leftDevice === rightDevice) {
@@ -7667,13 +7847,18 @@ function createTransferPage({ React, Glyph, api, post, C, devices = [], localDev
   }, [leftDevice, rightDevice])
 
   const side = (name) => name === 'left'
-    ? { device: leftDevice, path: leftPath, selection: leftSelection, entries: leftEntries }
-    : { device: rightDevice, path: rightPath, selection: rightSelection, entries: rightEntries }
+    ? { device: leftDevice, path: leftPath, selection: leftSelection, entries: leftEntries, setDevice: setLeftDevice, setPath: setLeftPath, setSelection: setLeftSelection }
+    : { device: rightDevice, path: rightPath, selection: rightSelection, entries: rightEntries, setDevice: setRightDevice, setPath: setRightPath, setSelection: setRightSelection }
   const other = (name) => name === 'left' ? 'right' : 'left'
   const itemsFor = (name) => {
     const current = side(name)
     return current.entries.filter((item) => current.selection.includes(item.path) && !item.dir)
   }
+  const refresh = () => setRefreshKey((value) => value + 1)
+
+  const askConflict = (item, destination) => new Promise((resolve) => {
+    setDialog({ kind: 'conflict', item, destination, resolve })
+  })
 
   const startQueue = async (fromSide, items, targetPath, cut = false) => {
     const target = side(other(fromSide))
@@ -7681,50 +7866,63 @@ function createTransferPage({ React, Glyph, api, post, C, devices = [], localDev
     const controller = new AbortController()
     abortRef.current = controller
     const total = items.reduce((sum, item) => sum + (Number(item.size) || 0), 0)
-    const queue = { fromSide, items, targetPath: target.path, targetDevice: target.device, done: 0, index: 0 }
-    queueRef.current = queue
     setJob({ state: 'running', percent: 0, transferred: 0, total, count: items.length, index: 0, error: '' })
-    let transferred = 0
     let doneBytes = 0
     try {
       for (let index = 0; index < items.length; index += 1) {
         const item = items[index]
-        const destination = joinPath(target.path, item.name)
         const sourceDevice = side(fromSide).device
-        await transferFile({
-          source: item.path,
-          destination,
-          transferId: newTransferId(),
-          overwrite: latest.current.overwrite,
-          signal: controller.signal,
-          read: (args) => post('/api/devices/' + encodeURIComponent(sourceDevice) + '/fs/read',
-            { path: args.path, offset: args.offset, limit: args.limit, encoding: 'base64' }),
-          write: (args) => post('/api/devices/' + encodeURIComponent(target.device) + '/fs/write_chunk',
-            { ...args, transfer_id: args.transferId }),
-          status: (args) => post('/api/devices/' + encodeURIComponent(target.device) + '/fs/transfer_status',
-            { path: args.path, transfer_id: args.transferId }),
-          cancel: (args) => post('/api/devices/' + encodeURIComponent(target.device) + '/fs/transfer_cancel',
-            { path: args.path, transfer_id: args.transferId }),
-          onProgress: (value) => {
-            const currentBytes = doneBytes + Math.max(0, Number(value && value.transferred) || 0)
-            setJob((current) => ({ ...(current || {}), percent: total ? Math.min(99, Math.round(currentBytes / total * 100)) : 0,
-              transferred: currentBytes, index, count: items.length, state: 'running' }))
+        let destination = joinPath(target.path, item.name)
+        let overwrite = false
+        while (true) {
+          try {
+            const result = await transferFile({
+              source: item.path,
+              destination,
+              transferId: newTransferId(),
+              overwrite,
+              signal: controller.signal,
+              read: (args) => post('/api/devices/' + encodeURIComponent(sourceDevice) + '/fs/read',
+                { path: args.path, offset: args.offset, limit: args.limit, encoding: 'base64' }),
+              write: (args) => post('/api/devices/' + encodeURIComponent(target.device) + '/fs/write_chunk',
+                { ...args, transfer_id: args.transferId }),
+              status: (args) => post('/api/devices/' + encodeURIComponent(target.device) + '/fs/transfer_status',
+                { path: args.path, transfer_id: args.transferId }),
+              cancel: (args) => post('/api/devices/' + encodeURIComponent(target.device) + '/fs/transfer_cancel',
+                { path: args.path, transfer_id: args.transferId }),
+              onProgress: (value) => {
+                const currentBytes = doneBytes + Math.max(0, Number(value && value.transferred) || 0)
+                setJob((current) => ({ ...(current || {}), percent: total ? Math.min(99, Math.round(currentBytes / total * 100)) : 0,
+                  transferred: currentBytes, index, count: items.length, state: 'running' }))
+              }
+            })
+            doneBytes += Number(result.bytes) || Number(item.size) || 0
+            break
+          } catch (cause) {
+            if (!cause || cause.code !== 'exists') throw cause
+            const choice = await askConflict(item, destination)
+            if (choice === 'cancel') throw Object.assign(new Error('已取消'), { code: 'aborted' })
+            if (choice === 'overwrite') { overwrite = true; continue }
+            if (choice === 'keep') {
+              destination = uniqueName(destination, (side(other(fromSide)).entries || []).map((entry) => entry.name))
+              overwrite = false
+              continue
+            }
+            throw cause
           }
-        })
+        }
         if (cut) {
           await post('/api/devices/' + encodeURIComponent(sourceDevice) + '/fs/delete', { path: item.path })
             .catch(() => { if (onError) onError(new Error('已复制但未能删除源文件：' + item.name)) })
         }
-        doneBytes += Number(item.size) || 0
-        transferred = doneBytes
-        queue.done = index + 1
         setJob((current) => ({ ...(current || {}), percent: total ? Math.round(doneBytes / total * 100) : 100,
           transferred: doneBytes, index, state: 'running' }))
       }
-      setJob((current) => ({ ...(current || {}), state: 'done', percent: 100, transferred, count: items.length }))
-      if (onNotice) onNotice('已转移 ' + items.length + ' 个文件（' + formatBytes(transferred) + '）')
-      setLeftRefresh((value) => value + 1)
-      setRightRefresh((value) => value + 1)
+      setJob((current) => ({ ...(current || {}), state: 'done', percent: 100, transferred: doneBytes, count: items.length }))
+      if (onNotice) onNotice('已转移 ' + items.length + ' 个文件（' + formatBytes(doneBytes) + '）')
+      invalidateDirectory(side(fromSide).device, side(fromSide).path)
+      invalidateDirectory(target.device, target.path)
+      refresh()
       setLeftSelection([]); setRightSelection([])
     } catch (cause) {
       const aborted = cause && cause.code === 'aborted'
@@ -7736,10 +7934,9 @@ function createTransferPage({ React, Glyph, api, post, C, devices = [], localDev
   }
 
   const start = () => {
-    const from = activeSide
-    const items = itemsFor(from)
+    const items = itemsFor(activeSide)
     if (!items.length) return
-    void startQueue(from, items, side(other(from)).path)
+    void startQueue(activeSide, items, side(other(activeSide)).path)
   }
   const cancel = () => { if (abortRef.current) abortRef.current.abort() }
   const swap = () => {
@@ -7748,8 +7945,7 @@ function createTransferPage({ React, Glyph, api, post, C, devices = [], localDev
     setLeftSelection([]); setRightSelection([])
   }
   const selectAll = (name) => {
-    const current = side(name)
-    const files = current.entries.filter((item) => !item.dir).map((item) => item.path)
+    const files = side(name).entries.filter((item) => !item.dir).map((item) => item.path)
     if (name === 'left') setLeftSelection(files); else setRightSelection(files)
   }
   const copySelection = (name, cut) => {
@@ -7789,27 +7985,135 @@ function createTransferPage({ React, Glyph, api, post, C, devices = [], localDev
     return () => { window.removeEventListener('mousedown', close); window.removeEventListener('keydown', close) }
   }, [menu])
 
-  const openContext = (sideName) => (item, event) => {
+  const openDialog = (kind, name, extra = {}) => {
+    setDialog({ kind, ...extra })
+    setDialogText(name || '')
+    setTimeout(() => {
+      const input = document.getElementById('tether-explorer-name')
+      if (input) { input.focus(); input.select() }
+    }, 30)
+  }
+  const closeDialog = () => {
+    const current = dialog
+    setDialog(null); setDialogText('')
+    if (current && current.kind === 'conflict' && current.resolve) current.resolve('cancel')
+  }
+  const submitName = async () => {
+    if (!dialog) return
+    const name = dialogText.trim()
+    if (!name) return
+    const current = side(dialog.side)
+    try {
+      if (dialog.kind === 'newFolder') await post('/api/devices/' + encodeURIComponent(current.device) + '/fs/mkdir', { path: joinPath(current.path, name) })
+      else if (dialog.kind === 'newFile') await post('/api/devices/' + encodeURIComponent(current.device) + '/fs/write', { path: joinPath(current.path, name), text: '', overwrite: false })
+      else if (dialog.kind === 'rename') await post('/api/devices/' + encodeURIComponent(current.device) + '/fs/rename', { path: dialog.item.path, dest: joinPath(current.path, name) })
+      invalidateDirectory(current.device, current.path)
+      setDialog(null); setDialogText('')
+      refresh()
+    } catch (cause) { if (onError) onError(cause) }
+  }
+  const deleteSelected = async (name) => {
+    const current = side(name)
+    const items = current.entries.filter((item) => current.selection.includes(item.path))
+    if (!items.length) return
+    setDialog({ kind: 'delete', side: name, items })
+  }
+  const confirmDelete = async () => {
+    if (!dialog || dialog.kind !== 'delete') return
+    const current = side(dialog.side)
+    try {
+      for (const item of dialog.items) await post('/api/devices/' + encodeURIComponent(current.device) + '/fs/delete', { path: item.path })
+      invalidateDirectory(current.device, current.path)
+      setDialog(null)
+      if (dialog.side === 'left') setLeftSelection([]); else setRightSelection([])
+      refresh()
+    } catch (cause) { if (onError) onError(cause) }
+  }
+
+  const startRowDrag = (name, event, item) => {
+    if (!event || event.button !== 0 || dragRef.current) return
+    const current = side(name)
+    const selection = current.selection.includes(item.path) ? current.selection : [item.path]
+    const items = current.entries.filter((entry) => selection.includes(entry.path))
+    if (!items.length) return
+    const state = { side: name, items, startX: event.clientX, startY: event.clientY, active: false }
+    dragRef.current = state
+    const move = (moveEvent) => {
+      if (!dragRef.current) return
+      if (!state.active && Math.hypot(moveEvent.clientX - state.startX, moveEvent.clientY - state.startY) < 6) return
+      state.active = true
+      const element = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY)
+      const pane = element && element.closest ? element.closest('[data-pane]') : null
+      const target = pane ? pane.getAttribute('data-pane') : ''
+      const nextDrop = target && target !== name ? target : ''
+      dropSideRef.current = nextDrop
+      setDropSide(nextDrop)
+      setDrag({ side: name, items: state.items, x: moveEvent.clientX, y: moveEvent.clientY })
+    }
+    const up = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      const target = dropSideRef.current
+      const dragging = dragRef.current
+      dragRef.current = null
+      dropSideRef.current = ''
+      setDrag(null); setDropSide('')
+      if (!dragging || !dragging.active || !target) return
+      const targetSide = side(target)
+      if (!targetSide.path) return
+      void startQueue(dragging.side, dragging.items.filter((entry) => !entry.dir), targetSide.path)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
+
+  const openContext = (name) => (item, event) => {
     if (!item) return
-    const current = side(sideName)
+    const current = side(name)
     if (!current.selection.includes(item.path)) {
       const next = event && (event.ctrlKey || event.metaKey) ? [...current.selection, item.path] : [item.path]
-      if (sideName === 'left') setLeftSelection(next); else setRightSelection(next)
+      if (name === 'left') setLeftSelection(next); else setRightSelection(next)
     }
-    setActiveSide(sideName)
-    setMenu({ x: event.clientX, y: event.clientY, side: sideName })
+    setActiveSide(name)
+    setMenu({ x: event.clientX, y: event.clientY, side: name, item })
   }
 
   const progress = job ? Math.max(0, Math.min(100, Number(job.percent) || 0)) : 0
   const sourceCount = itemsFor(activeSide).length
   const target = side(other(activeSide))
-  let footerText = '选择文件后拖到另一侧，或用 Ctrl+C / Ctrl+X、Ctrl+V'
+  let footerText = '拖拽文件到另一侧，或用 Ctrl+C / Ctrl+X、Ctrl+V'
   if (job) {
     if (job.state === 'running') footerText = '正在转移 ' + ((job.index || 0) + 1) + '/' + (job.count || 1)
     else if (job.state === 'done') footerText = '已转移 ' + (job.count || 0) + ' 个文件'
-    else if (job.state === 'error') footerText = job.error
-    else footerText = job.error || '已取消'
+    else footerText = job.error || (job.state === 'error' ? '传输失败' : '已取消')
   } else if (sourceCount) footerText = '已选 ' + sourceCount + ' 个文件 → ' + (target.path || '先在另一侧选择目录')
+
+  const sideProps = (name) => {
+    const current = side(name)
+    return {
+      side: name, deviceId: current.device, otherDeviceId: side(other(name)).device, devices,
+      onDevice: (id) => { current.setDevice(id); current.setPath(''); current.setSelection([]) },
+      path: current.path, onPath: current.setPath, refreshKey,
+      selection: current.selection, onSelection: current.setSelection,
+      onEntries: name === 'left' ? setLeftEntries : setRightEntries,
+      active: activeSide === name, onActivate: () => setActiveSide(name),
+      onPointerRow: (event, item) => startRowDrag(name, event, item),
+      onContextItem: openContext(name),
+      onNewFolder: () => openDialog('newFolder', '', { side: name }),
+      onNewFile: () => openDialog('newFile', '', { side: name }),
+      onRename: () => { const item = current.entries.find((entry) => entry.path === current.selection[0]); if (item) openDialog('rename', item.name, { side: name, item }) },
+      onDelete: () => { void deleteSelected(name) },
+      onRefresh: refresh,
+      onDropItems: () => {
+        const dragging = dragRef.current
+        if (!dragging || dragging.side === name) return
+        const targetSide = side(name)
+        if (!targetSide.path) return
+        void startQueue(dragging.side, dragging.items.filter((entry) => !entry.dir), targetSide.path)
+        dragRef.current = null
+      }
+    }
+  }
 
   return h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', padding: '12px 16px 14px', gap: 10, background: C.bg } },
     h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, flex: '0 0 auto' } },
@@ -7823,48 +8127,18 @@ function createTransferPage({ React, Glyph, api, post, C, devices = [], localDev
           h('span', { style: { width: 6, height: 6, borderRadius: 3, background: C.green } }),
           (devices.find((item) => item.device_id === rightDevice) || {}).name || '右侧'))),
     h('div', { style: { display: 'flex', gap: 8, flex: '1 1 auto', minHeight: 0 } },
-      FilePane({
-        side: 'left', deviceId: leftDevice, otherDeviceId: rightDevice, devices,
-        onDevice: (id) => { setLeftDevice(id); setLeftPath(''); setLeftSelection([]) },
-        path: leftPath, onPath: setLeftPath, refreshKey: leftRefresh,
-        selection: leftSelection, onSelection: setLeftSelection,
-        onEntries: setLeftEntries, active: activeSide === 'left',
-        onActivate: () => setActiveSide('left'),
-        onDragItems: (paths) => { dragRef.current = { side: 'left', paths, entries } },
-        onDropItems: () => {
-          const drag = dragRef.current
-          dragRef.current = null
-          if (!drag || drag.side === 'left' || !leftPath) return
-          const items = (drag.entries || []).filter((item) => drag.paths.includes(item.path) && !item.dir)
-          if (!items.length) return
-          void startQueue(drag.side, items, leftPath)
-        },
-        onContextItem: openContext('left')
-      }),
+      h('div', { style: { flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', position: 'relative', outline: dropSide === 'left' ? '2px dashed ' + C.blue : 'none', outlineOffset: -2, borderRadius: 8 } },
+        FilePane(sideProps('left')),
+        dropSide === 'left' ? h('div', { style: { position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', background: 'color-mix(in srgb, ' + C.blue + ' 10%, transparent)', color: C.blue, fontSize: 12, pointerEvents: 'none', borderRadius: 8 } }, '松开，转移到这里') : null),
       h('button', {
         type: 'button', onClick: swap, title: '交换两侧电脑', 'aria-label': '交换两侧电脑',
         className: 'tether-hover',
         style: { alignSelf: 'center', width: 28, height: 28, flex: '0 0 auto', display: 'grid', placeItems: 'center',
           border: 0, borderRadius: 999, background: C.soft, color: C.sub, cursor: 'pointer' }
       }, h(Glyph, { name: 'transfer', size: 14 })),
-      FilePane({
-        side: 'right', deviceId: rightDevice, otherDeviceId: leftDevice, devices,
-        onDevice: (id) => { setRightDevice(id); setRightPath(''); setRightSelection([]) },
-        path: rightPath, onPath: setRightPath, refreshKey: rightRefresh,
-        selection: rightSelection, onSelection: setRightSelection,
-        onEntries: setRightEntries, active: activeSide === 'right',
-        onActivate: () => setActiveSide('right'),
-        onDragItems: (paths) => { dragRef.current = { side: 'right', paths, entries } },
-        onDropItems: () => {
-          const drag = dragRef.current
-          dragRef.current = null
-          if (!drag || drag.side === 'right' || !rightPath) return
-          const items = (drag.entries || []).filter((item) => drag.paths.includes(item.path) && !item.dir)
-          if (!items.length) return
-          void startQueue(drag.side, items, rightPath)
-        },
-        onContextItem: openContext('right')
-      })),
+      h('div', { style: { flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', position: 'relative', outline: dropSide === 'right' ? '2px dashed ' + C.green : 'none', outlineOffset: -2, borderRadius: 8 } },
+        FilePane(sideProps('right')),
+        dropSide === 'right' ? h('div', { style: { position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', background: 'color-mix(in srgb, ' + C.green + ' 10%, transparent)', color: C.green, fontSize: 12, pointerEvents: 'none', borderRadius: 8 } }, '松开，转移到这里') : null)),
     h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, background: C.panel, flex: '0 0 auto', minWidth: 0 } },
       h('div', { style: { flex: '1 1 auto', minWidth: 0, display: 'grid', gap: 2 } },
         h('div', { style: { fontSize: 12, color: C.sub, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, footerText),
@@ -7872,34 +8146,71 @@ function createTransferPage({ React, Glyph, api, post, C, devices = [], localDev
           h('div', { style: { flex: '1 1 auto', height: 5, borderRadius: 999, background: C.soft, overflow: 'hidden' } },
             h('div', { style: { width: progress + '%', height: '100%', background: job.state === 'error' ? C.red : C.blue, transition: 'width 150ms ease' } })),
           h('span', { className: 'tether-num', style: { fontSize: 10.5, color: C.mute, whiteSpace: 'nowrap' } }, progress + '% · ' + formatBytes(job.transferred || 0) + ' / ' + formatBytes(job.total || 0))) : null),
-      h('label', { style: { display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, color: C.sub, flex: '0 0 auto' } },
-        h('input', { type: 'checkbox', checked: overwrite, onChange: (event) => setOverwrite(event.target.checked) }), '覆盖同名'),
       job && job.state === 'running'
         ? h('button', { type: 'button', onClick: cancel, style: { ...field, height: 28, padding: '0 12px', cursor: 'pointer' } }, '取消')
         : h('button', {
-          type: 'button', onClick: start, disabled: !sourceCount || !target.path,
+          type: 'button', onClick: start, disabled: !sourceCount || !target.path, title: '转移到另一侧', 'aria-label': '转移到另一侧',
           className: 'tether-press',
-          style: { height: 28, padding: '0 14px', border: 0, borderRadius: 6, background: C.blue, color: '#fff', fontSize: 12,
-            cursor: !sourceCount || !target.path ? 'not-allowed' : 'pointer', opacity: !sourceCount || !target.path ? 0.45 : 1 }
-        }, '转移到另一侧')),
+          style: { width: 32, height: 32, flex: '0 0 auto', display: 'grid', placeItems: 'center', border: 0, borderRadius: 999,
+            background: C.blue, color: '#fff', cursor: !sourceCount || !target.path ? 'not-allowed' : 'pointer',
+            opacity: !sourceCount || !target.path ? 0.45 : 1 }
+        }, h(Glyph, { name: 'transfer', size: 16 }))),
     menu ? h('div', {
-      role: 'menu',
-      onMouseDown: (event) => event.stopPropagation(),
-      style: { position: 'fixed', left: menu.x, top: menu.y, zIndex: 2147483000, minWidth: 150, padding: 4,
+      role: 'menu', onMouseDown: (event) => event.stopPropagation(),
+      style: { position: 'fixed', left: menu.x, top: menu.y, zIndex: 2147483000, minWidth: 160, padding: 4,
         background: C.bg, borderRadius: 8, boxShadow: '0 8px 24px rgba(16,24,40,.18)', border: '1px solid ' + C.line }
     },
       [
+        ['新建文件夹', () => openDialog('newFolder', '', { side: menu.side })],
+        ['新建文件', () => openDialog('newFile', '', { side: menu.side })],
+        ['重命名', () => { const current = side(menu.side); const item = current.entries.find((entry) => entry.path === current.selection[0]); if (item) openDialog('rename', item.name, { side: menu.side, item }) }],
+        ['删除', () => { void deleteSelected(menu.side) }],
         ['复制', () => copySelection(menu.side, false)],
         ['剪切', () => copySelection(menu.side, true)],
         ['粘贴到此处', () => pasteInto(menu.side)],
-        ['刷新', () => { if (menu.side === 'left') setLeftRefresh((value) => value + 1); else setRightRefresh((value) => value + 1) }]
+        ['刷新', refresh]
       ].map(([label, action]) => h('button', {
         key: label, type: 'button',
         onClick: () => { setMenu(null); action() },
         className: 'tether-hover',
         style: { display: 'block', width: '100%', padding: '6px 10px', border: 0, borderRadius: 5, background: 'transparent',
           color: C.ink, fontSize: 12, textAlign: 'left', cursor: 'pointer' }
-      }, label))) : null)
+      }, label))) : null,
+    drag ? h('div', {
+      style: { position: 'fixed', left: drag.x + 12, top: drag.y + 12, zIndex: 2147483000, padding: '6px 10px',
+        borderRadius: 8, background: C.primary, color: C.onPrimary, fontSize: 12, pointerEvents: 'none',
+        boxShadow: '0 8px 24px rgba(16,24,40,.24)' }
+    }, drag.items.length + ' 个文件') : null,
+    dialog ? h('div', {
+      style: { position: 'fixed', inset: 0, zIndex: 2147483000, display: 'grid', placeItems: 'center', background: 'rgba(16,24,40,.45)' },
+      onClick: (event) => { if (event.target === event.currentTarget) closeDialog() }
+    },
+      h('div', {
+        role: 'dialog', 'aria-modal': 'true',
+        onClick: (event) => event.stopPropagation(),
+        style: { width: 'min(380px, calc(100vw - 48px))', display: 'grid', gap: 12, padding: 16, borderRadius: 10, background: C.bg, color: C.ink,
+          boxShadow: '0 24px 64px rgba(16,24,40,.28)' }
+      },
+        h('div', { style: { fontSize: 14, fontWeight: 600 } },
+          dialog.kind === 'delete' ? '删除' : dialog.kind === 'conflict' ? '目标位置已有同名文件' : dialog.kind === 'rename' ? '重命名' : dialog.kind === 'newFolder' ? '新建文件夹' : '新建文件'),
+        dialog.kind === 'conflict'
+          ? h('div', { style: { color: C.sub, fontSize: 12.5, lineHeight: '19px' } },
+            dialog.destination + ' 已存在。要覆盖它，还是保留两者？')
+          : dialog.kind === 'delete'
+            ? h('div', { style: { color: C.sub, fontSize: 12.5, lineHeight: '19px' } }, '将 ' + dialog.items.length + ' 个项目移到 .tether-trash？')
+            : h('input', {
+              id: 'tether-explorer-name', value: dialogText, autoFocus: true,
+              onChange: (event) => setDialogText(event.target.value),
+              onKeyDown: (event) => { if (event.key === 'Enter') void submitName(); if (event.key === 'Escape') closeDialog() },
+              style: { ...field, height: 30, width: '100%' }
+            }),
+        h('div', { style: { display: 'flex', justifyContent: 'flex-end', gap: 8 } },
+          h('button', { type: 'button', onClick: closeDialog, style: { ...field, height: 28, padding: '0 12px', cursor: 'pointer' } }, '取消'),
+          dialog.kind === 'conflict'
+            ? h(React.Fragment, null,
+              h('button', { type: 'button', onClick: () => { const resolve = dialog.resolve; setDialog(null); resolve('keep') }, style: { ...field, height: 28, padding: '0 12px', cursor: 'pointer' } }, '保留两者'),
+              h('button', { type: 'button', onClick: () => { const resolve = dialog.resolve; setDialog(null); resolve('overwrite') }, style: { height: 28, padding: '0 12px', border: 0, borderRadius: 6, background: C.blue, color: '#fff', fontSize: 12, cursor: 'pointer' } }, '覆盖'))
+            : h('button', { type: 'button', onClick: dialog.kind === 'delete' ? confirmDelete : submitName, style: { height: 28, padding: '0 12px', border: 0, borderRadius: 6, background: C.blue, color: '#fff', fontSize: 12, cursor: 'pointer' } }, dialog.kind === 'delete' ? '删除' : '确定')))) : null)
 }
     let localPluginRpc = null
     let localPluginRemote = null
@@ -7913,6 +8224,7 @@ function createTransferPage({ React, Glyph, api, post, C, devices = [], localDev
 // Shared Tether panel UI. Hosts: DSH plugin (packages/dsh-plugin-tether-client/lib/client.js),
 // Electron APP and browser WebUI. Keep the 4-space body indentation: the DSH plugin bundle is
 // generated by concatenation from this file and tests locate functions by their exact indent.
+
 
 
 
@@ -9402,6 +9714,10 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         { d: 'M6.7 1.6h2.6l.35 1.55.62.26 1.32-.86 1.84 1.84-.86 1.32.26.62 1.55.35v2.6l-1.55.35-.26.62.86 1.32-1.84 1.84-1.32-.86-.62.26-.35 1.55H6.7l-.35-1.55-.62-.26-1.32.86-1.84-1.84.86-1.32-.26-.62L1.6 9.3V6.7l1.55-.35.26-.62-.86-1.32 1.84-1.84 1.32.86.62-.26z' },
         { d: 'M8 6.1a1.9 1.9 0 1 0 0 3.8 1.9 1.9 0 0 0 0-3.8Z' }
       ] },
+      user: { join: 'round', parts: [
+        { d: 'M8 7.7a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z' },
+        { d: 'M3.1 13.7c.4-2.5 2.3-4 4.9-4s4.5 1.5 4.9 4' }
+      ] },
       monitor: { parts: [
         { d: 'M2 3.2h12v8.1H2z' },
         { d: 'M6 13.8h4M8 11.3v2.5' }
@@ -9435,8 +9751,9 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         { d: 'M5.8 3.2L10.6 8l-4.8 4.8' }
       ] },
       transfer: { parts: [
-        { d: 'M2.4 5.6h9.2M8.8 2.8l2.8 2.8-2.8 2.8' },
-        { d: 'M13.6 10.4H4.4M7.2 7.6 4.4 10.4l2.8 2.8' }
+        { d: 'M8 1.4a6.6 6.6 0 1 0 0 13.2A6.6 6.6 0 0 0 8 1.4Z' },
+        { d: 'M3.6 5.6h7.6M8.9 3.3l2.3 2.3-2.3 2.3' },
+        { d: 'M12.4 10.4H4.8M7.1 8.1 4.8 10.4l2.3 2.3' }
       ] },
       search: { parts: [
         { d: 'M7.1 12.2a5.1 5.1 0 1 0 0-10.2 5.1 5.1 0 0 0 0 10.2z' },
@@ -9478,6 +9795,16 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         { d: 'M2.39868 5.5H14.0681' },
         { d: 'M1.93188 10.5H13.6013' }
       ] },
+      folderPlus: { join: 'round', parts: [
+        { d: 'M1.8 5.2h12.4v7.2H1.8z' },
+        { d: 'M1.8 5.2V3.6h4l1.4 1.6' },
+        { d: 'M8 7.2v4M6 9.2h4' }
+      ] },
+      filePlus: { join: 'round', parts: [
+        { d: 'M3.6 2.2h5.6l3.2 3.2v8.4H3.6z' },
+        { d: 'M9.2 2.2v3.4h3.2' },
+        { d: 'M8 8v4M6 10h4' }
+      ] },
       file: { parts: [
         { d: 'M4.9375 5.90295H11.0625' },
         { d: 'M4.9375 9.02991H8.27841' },
@@ -9505,7 +9832,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       })))
     }
 
-    function ActivityBar({ active, collapsed, onSelect, onPermissions, permissionsOpen, onAppSettings, appSettingsOpen, accountEmail = '' }) {
+    function ActivityBar({ active, collapsed, onSelect, onPermissions, permissionsOpen, onAppSettings, appSettingsOpen, onAccount, accountEmail = '' }) {
       const accountInitial = String(accountEmail || '').trim().charAt(0).toUpperCase()
       const items = [
         { id: 'workspaces', label: '原生工作区', icon: 'monitor' },
@@ -9529,15 +9856,14 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         items.map((item) => button(item.id, item.label, item.icon, () => onSelect(item.id), active === item.id)),
         h('div', { style: { marginTop: 'auto', display: 'grid', gap: 3, justifyItems: 'center' } },
           button('permissions', '文件权限', 'shield', onPermissions, permissionsOpen),
+          button('settings', '设置', 'gear', onAppSettings, appSettingsOpen),
           h('button', {
-            type: 'button', title: accountEmail ? '设置 · ' + accountEmail : '设置', 'aria-label': '设置',
-            onClick: onAppSettings,
+            type: 'button', title: accountEmail ? '账号 · ' + accountEmail : '账号', 'aria-label': '账号',
+            onClick: onAccount,
             className: 'tether-activity-button tether-press tether-hover',
-            'data-selected': appSettingsOpen ? 'true' : undefined,
             style: {
               width: 36, height: 36, display: 'grid', placeItems: 'center', border: 0,
-              borderRadius: UI.radius, cursor: 'pointer', background: 'transparent',
-              color: appSettingsOpen ? C.blue : C.mute
+              borderRadius: UI.radius, cursor: 'pointer', background: 'transparent', color: C.mute
             }
           }, accountInitial
             ? h('span', {
@@ -9545,7 +9871,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
               style: { width: 22, height: 22, borderRadius: 999, display: 'grid', placeItems: 'center',
                 background: 'color-mix(in srgb, ' + C.blue + ' 14%, transparent)', color: C.blue, fontSize: 11, fontWeight: 600 }
             }, accountInitial)
-            : h(Glyph, { name: 'gear', size: 18 }))
+            : h(Glyph, { name: 'user', size: 18 }))
         )
       )
     }
@@ -9897,8 +10223,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
     function SidePanel(props) {
       const { width, hidden, resizing, onResizeStart, onResetWidth, onCollapse,
         treeRoots, treeChildren, treeOpen, onToggleTree, onOpenFile, onContextMenuNode, treeSelected,
-        onHoverEntry, onLeaveEntry, loadingTree, accountEmail = '', accountRole = '', onOpenSettings } = props
-      const accountInitial = String(accountEmail || '').trim().charAt(0).toUpperCase()
+        onHoverEntry, onLeaveEntry, loadingTree } = props
       return h('aside', {
         'aria-label': '文件', className: 'tether-sidebar',
         style: { display: hidden ? 'none' : 'flex', width, flex: '0 0 auto', minHeight: 0, background: C.panel, flexDirection: 'column', position: 'relative', transition: resizing ? 'none' : 'width 180ms cubic-bezier(.2,.85,.2,1.15)', willChange: 'width' }
@@ -9910,29 +10235,6 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             onToggle: onToggleTree, onOpenFile, onContextMenuNode, onHoverEntry, onLeaveEntry
           })
         ),
-        h('div', {
-          className: 'tether-account-bar',
-          style: { display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', flex: '0 0 auto', minWidth: 0,
-            borderTop: C.line ? '1px solid ' + C.line : 0 }
-        },
-          h('span', {
-            'aria-hidden': true,
-            style: { width: 24, height: 24, flex: '0 0 auto', borderRadius: 999, display: 'grid', placeItems: 'center',
-              background: 'color-mix(in srgb, ' + C.blue + ' 14%, transparent)', color: C.blue, fontSize: 11.5, fontWeight: 600 }
-          }, accountInitial || '?'),
-          h('div', { style: { flex: '1 1 auto', minWidth: 0, display: 'grid', gap: 1 } },
-            h('div', {
-              title: accountEmail || '未登录',
-              style: { fontSize: 12, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
-            }, accountEmail || '未登录'),
-            h('div', {
-              style: { fontSize: 10.5, color: C.mute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
-            }, accountRole === 'owner' ? '所有者' : accountRole ? '成员' : '本地账户')),
-          h('button', {
-            type: 'button', title: '设置', 'aria-label': '设置', onClick: onOpenSettings,
-            className: 'tether-hover',
-            style: { width: 26, height: 26, flex: '0 0 auto', display: 'grid', placeItems: 'center', border: 0, borderRadius: 6, background: 'transparent', color: C.mute, cursor: 'pointer' }
-          }, h(Glyph, { name: 'gear', size: 16 }))),
         h('div', {
           className: 'tether-resizer tether-side-split', 'data-active': resizing ? 'true' : undefined,
           onPointerDown: onResizeStart, onDoubleClick: onResetWidth, title: '拖动调整宽度，双击复位',
@@ -9985,7 +10287,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       } catch (_) { /* performance marks are optional */ }
     }
 
-    function NativeSurface({ deviceId, online, visible, localDeviceId }) {
+    function NativeSurface({ deviceId, online, visible, localDeviceId, preload = false }) {
       const [state, setState] = React.useState({ deviceId, status: deviceId ? 'loading' : 'no-device', url: '' })
       const [attempt, setAttempt] = React.useState(0)
       const [slow, setSlow] = React.useState(false)
@@ -10097,7 +10399,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         const controller = new AbortController()
         if (!deviceId) { setState({ deviceId, status: 'no-device', url: '' }); return () => { current = false } }
         if (!online) { setState({ deviceId, status: 'offline', url: '' }); return () => { current = false } }
-        if (!visible) return () => { current = false; controller.abort() }
+        if (!visible && !preload) return () => { current = false; controller.abort() }
         const existing = surfaceStateRef.current
         if (existing && existing.deviceId === deviceId && existing.sourceKey === surfaceSourceKey
             && ['document-loading', 'document-loaded'].includes(existing.status) && existing.url) {
@@ -10164,7 +10466,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             setState({ deviceId, status: 'error', url: '', message: error.message })
           })
         return () => { current = false; controller.abort() }
-      }, [deviceId, online, visible, attempt, localDeviceId, surfaceSourceKey])
+      }, [deviceId, online, visible, preload, attempt, localDeviceId, surfaceSourceKey])
       React.useEffect(() => {
         if (!deviceId || !online || !visible || typeof document === 'undefined') return undefined
         let alive = true
@@ -10318,6 +10620,61 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       )
     }
 
+    function SurfaceDeck({ devices, deviceId, localDeviceId, visible }) {
+      const [recent, setRecent] = React.useState(() => {
+        try {
+          const raw = JSON.parse(localStorage.getItem('tether.recentSurfaces') || '[]')
+          return Array.isArray(raw) ? raw.filter((item) => typeof item === 'string' && item) : []
+        } catch (_) { return [] }
+      })
+      const [keep, setKeep] = React.useState(() => {
+        try { return localStorage.getItem('tether.keepSurfaces') !== '0' } catch (_) { return true }
+      })
+      React.useEffect(() => {
+        const sync = () => {
+          try { setKeep(localStorage.getItem('tether.keepSurfaces') !== '0') } catch (_) { setKeep(true) }
+        }
+        window.addEventListener('tether-surfaces-pref', sync)
+        return () => window.removeEventListener('tether-surfaces-pref', sync)
+      }, [])
+      React.useEffect(() => {
+        if (!deviceId) return
+        setRecent((current) => {
+          const next = [deviceId, ...current.filter((item) => item !== deviceId)].slice(0, 3)
+          try { localStorage.setItem('tether.recentSurfaces', JSON.stringify(next)) } catch (_) { /* best effort */ }
+          return next
+        })
+      }, [deviceId])
+      const online = new Map((devices || []).map((item) => [item.device_id, item]))
+      const ids = [deviceId, ...(keep ? recent : [])]
+        .filter((item, index, all) => item && all.indexOf(item) === index)
+        .slice(0, 3)
+      if (keep) {
+        const spare = (devices || [])
+          .filter((item) => item && item.online && item.capabilities && item.capabilities.dsh_surface
+            && !ids.includes(item.device_id))
+          .slice(0, Math.max(0, 3 - ids.length))
+          .map((item) => item.device_id)
+        ids.push(...spare)
+      }
+      return h('div', {
+        style: { position: 'relative', flex: '1 1 auto', minWidth: 0, minHeight: 0, display: 'flex' }
+      },
+        ids.map((id) => h('div', {
+          key: id,
+          style: {
+            position: 'absolute', inset: 0, display: visible && id === deviceId ? 'flex' : 'none',
+            flexDirection: 'column', minWidth: 0, minHeight: 0
+          }
+        }, h(NativeSurface, {
+          deviceId: id,
+          online: !!(online.get(id) && online.get(id).online),
+          visible: visible && id === deviceId,
+          preload: true,
+          localDeviceId
+        }))))
+    }
+
     function isSafeNativeSurfaceUrl(value) {
       let url
       try { url = new URL(value) } catch (_) { return false }
@@ -10331,47 +10688,6 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const allowedHost = sameOrigin || (url.protocol === 'http:' && loopback && (ticketed || localToken)) || (publicSurface && ticketed)
       return allowedHost && !url.username && !url.password &&
         Number(url.port || (url.protocol === 'https:' ? 443 : 80)) > 0 && !url.hash
-    }
-
-    function SurfaceWarmup({ devices, deviceId, localDeviceId }) {
-      const [warm, setWarm] = React.useState([])
-      const warmedRef = React.useRef(new Set())
-      React.useEffect(() => {
-        if (!host || host.kind !== 'app' || !Array.isArray(devices)) return undefined
-        const candidates = devices.filter((item) => item && item.online && item.device_id !== deviceId
-          && item.device_id !== localDeviceId && item.capabilities && item.capabilities.dsh_surface).slice(0, 2)
-        let cancelled = false
-        for (const item of candidates) {
-          const key = item.device_id + '|' + (typeof host.activeApiBase === 'function' ? host.activeApiBase() : '')
-          if (warmedRef.current.has(key)) continue
-          warmedRef.current.add(key)
-          api('/api/devices/' + encodeURIComponent(item.device_id) + '/dsh/surface')
-            .then((data) => {
-              if (cancelled || !data || !data.available || !isSafeNativeSurfaceUrl(data.url)) return
-              const url = new URL(data.url)
-              url.searchParams.set('tether_native', '1')
-              setWarm((current) => current.some((entry) => entry.id === item.device_id)
-                ? current : [...current, { id: item.device_id, url: url.href }])
-            })
-            .catch(() => { /* another device may be offline; the next state poll retries */ })
-        }
-        return () => { cancelled = true }
-      }, [devices, deviceId, localDeviceId])
-      React.useEffect(() => {
-        if (!warm.length) return undefined
-        const timer = setTimeout(() => setWarm([]), 90000)
-        return () => clearTimeout(timer)
-      }, [warm.length])
-      if (!warm.length) return null
-      return h('div', {
-        'aria-hidden': true,
-        style: { position: 'absolute', width: 1, height: 1, overflow: 'hidden', opacity: 0, pointerEvents: 'none', left: -9999, top: -9999 }
-      }, warm.map((item) => h('iframe', {
-        key: item.id, src: item.url, title: '', tabIndex: -1,
-        sandbox: 'allow-scripts allow-same-origin allow-forms allow-downloads allow-modals',
-        onLoad: () => setTimeout(() => setWarm((current) => current.filter((entry) => entry.id !== item.id)), 45000),
-        style: { width: 1, height: 1, border: 0 }
-      })))
     }
 
     function CodeEditor({ deviceId, path, value, onChange, onSave, encoding, newline, readOnly = false }) {
@@ -10603,6 +10919,8 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const [hubRole, setHubRole] = React.useState(() => {
         try { return JSON.parse(window.localStorage.getItem('tether.hub') || '{}').role || '' } catch (_) { return '' }
       })
+      const [accountName, setAccountName] = usePersisted('tether.accountName', '')
+      const [settingsSection, setSettingsSection] = React.useState('account')
       const [hubUnsafeExistingUrl, setHubUnsafeExistingUrl] = React.useState(false)
       const [hubStatus, setHubStatus] = React.useState('unknown')
       const [hubState, setHubState] = React.useState(null)
@@ -10612,6 +10930,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const [hubCheckedAt, setHubCheckedAt] = React.useState(null)
       const [hubAddress, setHubAddress] = React.useState('')
       const hubProbeRef = React.useRef(null)
+      const stateOkAtRef = React.useRef(0)
       const formatCheckTime = (date) => date ? [date.getHours(), date.getMinutes(), date.getSeconds()].map((part) => String(part).padStart(2, '0')).join(':') : ''
       React.useEffect(() => {
         if (!host || typeof host.connectionInfo !== 'function') return undefined
@@ -11347,6 +11666,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         if (!force && stateRef.current && typeof document !== 'undefined' && document.hidden) return
         try {
           const data = await api('/api/state')
+          stateOkAtRef.current = Date.now()
           setState(data)
           setDeviceId((current) => {
             if (current && data.devices.some((d) => d.device_id === current)) return current
@@ -11827,6 +12147,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const invalidateDir = (targetDevice, target) => {
         const key = treeCacheKey(targetDevice, target)
         dirCacheRef.current.delete(key)
+        invalidateDirectory(targetDevice, target)
         if (deviceIdRef.current === targetDevice) {
           setTreeChildren((current) => {
             if (!current[key]) return current
@@ -11858,12 +12179,14 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         const key = treeCacheKey(requestDevice, target)
         const cached = dirCacheRef.current.get(key)
         if (cached && Date.now() - cached.at < 30000) return
+        if (peekDirectory(requestDevice, target, 30000)) return
         if (dirInflightRef.current.has(key)) return
         const pending = post('/api/devices/' + encodeURIComponent(requestDevice) + '/fs/list', { path: target })
           .then((data) => {
             if (deviceIdRef.current !== requestDevice) return data
             const entries = (data.entries || []).map((entry) => ({ ...entry, path: joinPath(target, entry.name) }))
             rememberDir(requestDevice, target, entries)
+            rememberDirectory(requestDevice, target, entries)
             return data
           })
           .catch(() => {})
@@ -11997,7 +12320,10 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         const requestTarget = /^[A-Za-z]:[\\/]?$/.test(rawTarget) ? rawTarget.slice(0, 2) + '\\' : rawTarget
         const nextPath = /^[A-Za-z]:[\\/]?$/.test(rawTarget) ? requestTarget : (rawTarget.replace(/[\\/]+$/, '') || rawTarget)
         const key = treeCacheKey(requestDevice, nextPath)
-        const cached = opts.fresh === true ? null : dirCacheRef.current.get(key)
+        const sharedEntries = opts.fresh === true ? null : peekDirectory(requestDevice, nextPath)
+        const cached = sharedEntries
+          ? { entries: sharedEntries, at: Date.now() }
+          : (opts.fresh === true ? null : dirCacheRef.current.get(key))
         const seq = dirSeqRef.current + 1
         dirSeqRef.current = seq
         if (dirAbortRef.current) dirAbortRef.current.abort()
@@ -12029,6 +12355,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           if (seq !== dirSeqRef.current || deviceIdRef.current !== requestDevice) return
           const entries = (data.entries || []).map((entry) => ({ ...entry, path: joinPath(requestTarget, entry.name) }))
           cacheStore(dirCacheRef.current, key, { entries, at: Date.now() })
+          rememberDirectory(requestDevice, nextPath, entries)
           if (cached) {
             setDirEntries(entries)
             setTreeChildren((current) => ({ ...current, [key]: { status: 'loaded', entries } }))
@@ -12975,9 +13302,11 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         })
       }
 
+      const liveHubStatus = hubBusy ? 'checking'
+        : (stateOkAtRef.current && Date.now() - stateOkAtRef.current < 8000 ? 'online'
+          : (hubStatus === 'offline' ? 'offline' : 'checking'))
       return h('div', { className: 'tether-root', style: { position: 'relative', height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--tether-workbench-bg, ' + C.bg + ')', color: C.ink, fontSize: 13, fontWeight: 'var(--tether-body, 400)', overflow: 'hidden' } },
         h('style', null, SCROLL_CSS),
-        h(SurfaceWarmup, { devices: (state && state.devices) || [], deviceId, localDeviceId: appLocalDevice }),
         h('div', { className: 'tether-topbar ' + (host && host.kind === 'app' ? 'tether-toolbar-app' : 'tether-toolbar'), style: { display: 'flex', alignItems: 'center', gap: 10, padding: '6px 12px', borderBottom: 0, background: C.soft, position: 'relative', zIndex: 2, flex: '0 0 auto' } },
           h('strong', { style: { fontSize: 15 } }, 'Tether'),
           device ? h(DeviceSwitcher, {
@@ -13003,7 +13332,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
               if (host.connectionInfo) host.connectionInfo(host.activeApiBase && host.activeApiBase()).then((info) => setHubAddress(info.address || '')).catch(() => setHubAddress(''))
               setShowHub(true)
             },
-            status: hubBusy ? 'checking' : hubStatus
+            status: liveHubStatus
           }) : null,
           h(MinimalUpdateButton, { React, h, api, post, deviceId, host, C })
         ),
@@ -13015,9 +13344,10 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             onSelect: selectPanel,
             onPermissions: () => { setShowAppSettings(false); openSettings() },
             permissionsOpen: showSettings,
-            onAppSettings: () => { setShowSettings(false); setShowAppSettings(true) },
+            onAppSettings: () => { setShowSettings(false); setSettingsSection('connection'); setShowAppSettings(true) },
             appSettingsOpen: showAppSettings,
-            accountEmail: hubEmail
+            onAccount: () => { setShowSettings(false); setSettingsSection('account'); setShowAppSettings(true) },
+            accountEmail: accountName || hubEmail
           }),
           h(SidePanel, {
             width: safeSidebarWidth,
@@ -13044,13 +13374,10 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             onHoverEntry: (event, node) => showHoverTip(event, node),
             onLeaveEntry: hideHoverTip,
             onContextMenuNode: (event, node) => openContextMenu(event, { name: node.name, path: node.path, dir: node.dir }, node.dir ? node.path : parentOf(node.path)),
-            treeSelected,
-            accountEmail: hubEmail,
-            accountRole: hubRole,
-            onOpenSettings: () => { setShowSettings(false); setShowAppSettings(true) }
+            treeSelected
           }),
           h('main', { className: 'tether-workbench', style: { flex: '1 1 auto', display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 } },
-            h(NativeSurface, { deviceId, online: deviceOnline, visible: view === 'chat', localDeviceId: appLocalDevice }),
+            h(SurfaceDeck, { devices: (state && state.devices) || [], deviceId, localDeviceId: appLocalDevice, visible: view === 'chat' }),
             view === 'files' ? renderExplorer() : view === 'network' ? renderNetwork()
               : view === 'transfer' ? h(createTransferPage, {
                 React, Glyph, api, post, C,
@@ -13065,7 +13392,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         showHub && host && (host.kind === 'dsh' || host.kind === 'app') ? h(Connection.Panel, {
           open: true,
           onClose: () => setShowHub(false),
-          info: { address: hubAddress || '未知', status: hubStatus, checkedAt: hubCheckedAt, durationMs: hubDuration },
+          info: { address: hubAddress || '未知', status: liveHubStatus, checkedAt: hubCheckedAt, durationMs: hubDuration },
           busy: hubBusy, error: hubError, onProbe: probeConfiguredHub,
           defaultUrl: hubUrl || hubAddress || '',
           defaultToken: hubToken || '',
@@ -13166,8 +13493,11 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           onClose: () => setShowAppSettings(false),
           accountEmail: hubEmail,
           accountRole: hubRole,
+          accountName,
+          onAccountNameChange: setAccountName,
+          initialSection: settingsSection,
           server: hubAddress || hubUrl || '',
-          connection: { status: hubStatus, checkedAt: hubCheckedAt, durationMs: hubDuration, token: hubToken },
+          connection: { status: liveHubStatus, checkedAt: hubCheckedAt, durationMs: hubDuration, token: hubToken },
           device: {
             ...localDeviceRecord,
             device_id: localDeviceRecord.device_id || appLocalDevice || deviceId,
@@ -13342,15 +13672,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
                 inject: (sessionId) => ({ sessionId })
               }, attachments))
             }
-            ctx.inject(['commandUi'], (scope) => {
-              const commands = scope.get('commandUi')
-              scope.effect(() => commands.register({
-                name: 'tether-target-file', label: () => '目标设备文件', icon: TetherIcon,
-                available: () => typeof targetFilePicker.open === 'function',
-                ui: { kind: 'action', run: () => targetFilePicker.open?.() }
-              }), 'tether: target device file action')
-            })
-          } catch (_) { /* attachments are optional in an embedded surface */ }
+            } catch (_) { /* attachments are optional in an embedded surface */ }
           return
         }
         ctx.slots.inject('main', function* () {

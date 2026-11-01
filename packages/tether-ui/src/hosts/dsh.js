@@ -1,4 +1,5 @@
 import { TargetFileExplorer } from '../target-file-explorer.js'
+import { loadDirectory, peekDirectory } from '../file-cache.js'
 
 export const DSH_API_BASE = 'http://127.0.0.1:18890'
 export const DSH_APP_BASE = 'http://127.0.0.1:18892'
@@ -369,32 +370,46 @@ export function createDshTargetExplorerBridge({ getRpc, getHost, fetcher = (...a
         scope = null
         throw new Error('目标电脑已切换，请重新选择文件')
       }
-      const data = await request(deviceId, '/list', { path }, signal)
-      if (!Array.isArray(data.entries)) throw new Error('目标电脑目录返回格式无效')
-      await assertDevice(deviceId)
-      const separator = path.includes('\\') ? '\\' : '/'
-      const prefix = path.replace(/[\\/]+$/, '') + separator
-      for (const child of [...current.directories]) {
-        if (child !== path && child.startsWith(prefix)) current.directories.delete(child)
+      const applyListing = (raw) => {
+        const separator = path.includes('\\') ? '\\' : '/'
+        const prefix = path.replace(/[\\/]+$/, '') + separator
+        for (const child of [...current.directories]) {
+          if (child !== path && child.startsWith(prefix)) current.directories.delete(child)
+        }
+        for (const child of [...current.files.keys()]) {
+          if (child.startsWith(prefix)) current.files.delete(child)
+        }
+        const entries = []
+        for (const entry of raw) {
+          if (!entry || typeof entry.name !== 'string' || typeof entry.path !== 'string' || !entry.path) continue
+          const dir = entry.dir === true
+          const size = Number.isSafeInteger(entry.size) && entry.size >= 0 ? entry.size : null
+          if (!dir && size === null) continue
+          if (dir) current.directories.add(entry.path)
+          else current.files.set(entry.path, { name: entry.name, size })
+          entries.push({
+            name: entry.name, path: entry.path, dir,
+            size: dir ? null : size,
+            mtime: typeof entry.mtime === 'number' ? entry.mtime : null
+          })
+        }
+        return entries
       }
-      for (const child of [...current.files.keys()]) {
-        if (child.startsWith(prefix)) current.files.delete(child)
+      const cached = peekDirectory(deviceId, path)
+      if (cached) {
+        await assertDevice(deviceId)
+        return applyListing(cached)
       }
-      const entries = []
-      for (const entry of data.entries) {
-        if (!entry || typeof entry.name !== 'string' || typeof entry.path !== 'string' || !entry.path) continue
-        const dir = entry.dir === true
-        const size = Number.isSafeInteger(entry.size) && entry.size >= 0 ? entry.size : null
-        if (!dir && size === null) continue
-        if (dir) current.directories.add(entry.path)
-        else current.files.set(entry.path, { name: entry.name, size })
-        entries.push({
-          name: entry.name, path: entry.path, dir,
-          size: dir ? null : size,
-          mtime: typeof entry.mtime === 'number' ? entry.mtime : null
-        })
-      }
-      return entries
+      const entries = await loadDirectory({
+        deviceId, path,
+        load: async () => {
+          const data = await request(deviceId, '/list', { path }, signal)
+          if (!Array.isArray(data.entries)) throw new Error('目标电脑目录返回格式无效')
+          await assertDevice(deviceId)
+          return data.entries
+        }
+      })
+      return applyListing(entries)
     },
     async readFile(entry, signal) {
       if (!entry || entry.dir || typeof entry.path !== 'string' || !entry.path) throw new Error('请选择一个文件')
@@ -880,13 +895,13 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand,
           }
         },
           h('div', { style: { minWidth: 0, flex: '1 1 auto' } },
-            h('div', { id: 'tether-target-file-title', style: { fontSize: 15, fontWeight: 600, color: ink } }, '从目标电脑选择文件'),
+            h('div', { id: 'tether-target-file-title', style: { height: 20, lineHeight: '20px', fontSize: 15, fontWeight: 600, color: ink } }, '资源管理器'),
             h('div', {
               style: {
-                marginTop: 2, color: mute, fontSize: 11.5, overflow: 'hidden',
+                marginTop: 2, height: 18, lineHeight: '18px', color: mute, fontSize: 11.5, overflow: 'hidden',
                 textOverflow: 'ellipsis', whiteSpace: 'nowrap'
               }
-            }, device ? '目标电脑 · ' + device : '正在确认目标电脑…')),
+            }, device || '正在连接设备…')),
           h('button', {
             type: 'button', 'aria-label': '关闭', title: '关闭', onClick: close,
             style: {
@@ -896,7 +911,14 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand,
             }
           }, '×')),
         h('div', { style: { display: 'flex', flexDirection: 'column', flex: '1 1 auto', minHeight: 0 } },
-          busyLine,
+          h('div', {
+            role: 'status',
+            style: {
+              height: 22, flex: '0 0 auto', display: 'flex', alignItems: 'center', padding: '0 18px',
+              borderBottom: '1px solid ' + line, color: error ? danger : sub, fontSize: 11.5,
+              overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis'
+            }
+          }, error || status || ''),
           TargetFileExplorer({
             React,
             sort,
@@ -940,12 +962,6 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand,
       ) : null
     return h('div', { ref: containerRef, style: { display: 'contents' } },
       h(Native.ComposerAttachments, { ...props, readFileDrag: props.readFileDrag }),
-      h('div', { style: { display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 } },
-        h('button', {
-          type: 'button', title: '从当前目标电脑选择文件',
-          onClick: () => { void openPicker() }, disabled: busy,
-          style: { ...mutedButton, cursor: busy ? 'default' : 'pointer' }
-        }, '目标电脑文件…')),
       dialog)
   }
 }

@@ -21,12 +21,16 @@ export function createSettingsPanel(React) {
     try { const date = new Date(value); return [date.getHours(), date.getMinutes(), date.getSeconds()].map((part) => String(part).padStart(2, '0')).join(':') } catch (_) { return '尚未检测' }
   }
 
-  function SettingsPanel({ open, onClose, accountEmail = '', accountRole = '', server = '', connection = {}, device = {}, versions = {}, onRefreshConnection, onRestartNode, onOpenPermissions, onLogout, onCheckUpdates, onPasswordChanged }) {
-    const [section, setSection] = React.useState('account')
+  function SettingsPanel({ open, onClose, accountEmail = '', accountRole = '', accountName = '', onAccountNameChange, initialSection = 'account', server = '', connection = {}, device = {}, versions = {}, onRefreshConnection, onRestartNode, onOpenPermissions, onLogout, onCheckUpdates, onPasswordChanged }) {
+    const [section, setSection] = React.useState(initialSection)
+    React.useEffect(() => { if (open) setSection(initialSection) }, [open, initialSection])
     const [currentPassword, setCurrentPassword] = React.useState('')
     const [newPassword, setNewPassword] = React.useState('')
     const [busy, setBusy] = React.useState('')
     const [message, setMessage] = React.useState('')
+    const [keepSurfaces, setKeepSurfaces] = React.useState(() => {
+      try { return localStorage.getItem('tether.keepSurfaces') !== '0' } catch (_) { return true }
+    })
     if (!open) return null
     const status = connection.status || 'unknown'
     const roleLabel = accountRole === 'owner' ? '所有者' : accountRole === 'member' ? '成员' : accountRole === 'admin' ? '管理员' : accountRole || '—'
@@ -73,6 +77,17 @@ export function createSettingsPanel(React) {
     if (section === 'account') {
       body = h('div', { style: { display: 'grid', gap: 6 } },
         sectionTitle('账号', '账号信息只在这里出现；连接状态请看顶栏的“连接”。'),
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, margin: '8px 0 6px' } },
+          h('span', { style: { width: 38, height: 38, borderRadius: 999, display: 'grid', placeItems: 'center',
+            background: 'color-mix(in srgb, var(--dsw-alias-state-business-primary, #1570ef) 14%, transparent)',
+            color: 'var(--dsw-alias-state-business-primary, #1570ef)', fontSize: 15, fontWeight: 600 } },
+          String(accountName || accountEmail || '?').trim().charAt(0).toUpperCase()),
+          h('span', { style: { color: mute, fontSize: 12 } }, '头像与显示名称只影响本机显示')),
+        fieldRow('显示名称', h('input', {
+          value: accountName, placeholder: '例如：小王', maxLength: 32,
+          onChange: (event) => { if (typeof onAccountNameChange === 'function') onAccountNameChange(event.target.value) },
+          style: field
+        })),
         row('邮箱', accountEmail || '未登录'),
         row('角色', roleLabel),
         h('div', { style: { height: 1, background: line, margin: '12px 0' } }),
@@ -98,7 +113,19 @@ export function createSettingsPanel(React) {
           row('服务响应耗时', Number.isFinite(connection.durationMs) ? connection.durationMs + ' ms' : '—')),
         h('div', { style: { marginTop: 12, display: 'flex', gap: 8 } },
           h('button', { onClick: onRefreshConnection, style: secondary }, '刷新连接状态'),
-          h('button', { onClick: onLogout, style: secondary }, '切换账号 / 服务器')))
+          h('button', { onClick: onLogout, style: secondary }, '切换账号 / 服务器')),
+        h('label', { style: { marginTop: 16, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12.5, color: sub } },
+          h('input', {
+            type: 'checkbox', checked: keepSurfaces,
+            onChange: (event) => {
+              const next = event.target.checked
+              setKeepSurfaces(next)
+              try { localStorage.setItem('tether.keepSurfaces', next ? '1' : '0') } catch (_) { /* best effort */ }
+              if (typeof window !== 'undefined') window.dispatchEvent(new Event('tether-surfaces-pref'))
+            }
+          }),
+          h('span', null, '保留最近设备工作区（最多 3 台）'),
+          h('span', { style: { color: mute, fontSize: 11.5 } }, '切换几乎即时，关闭后不占后台')))
     } else if (section === 'device') {
       body = h('div', null,
         sectionTitle('本机设备', '本机作为目标设备时的登记信息与 Node 控制。'),

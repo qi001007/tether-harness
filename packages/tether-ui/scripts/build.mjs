@@ -16,6 +16,7 @@ const shared = strip('app.js')
 const connectionPanel = strip('connection-panel.js')
 const settingsPanel = strip('settings-panel.js')
 const targetFileExplorer = strip('target-file-explorer.js')
+const fileCache = strip('file-cache.js')
 const dshHost = strip('hosts/dsh.js')
 const transferEngine = strip('transfer.js')
 const transferPage = strip('transfer-page.js')
@@ -31,6 +32,7 @@ ${monacoRuntime}
     const PANEL_ID = 'tether'
     const PLUGIN_VERSION = ${JSON.stringify(pluginVersion)}
 ${targetFileExplorer}
+${fileCache}
 ${dshHost}
 ${connectionPanel}
 ${settingsPanel}
@@ -83,15 +85,7 @@ ${shared}
                 inject: (sessionId) => ({ sessionId })
               }, attachments))
             }
-            ctx.inject(['commandUi'], (scope) => {
-              const commands = scope.get('commandUi')
-              scope.effect(() => commands.register({
-                name: 'tether-target-file', label: () => '目标设备文件', icon: TetherIcon,
-                available: () => typeof targetFilePicker.open === 'function',
-                ui: { kind: 'action', run: () => targetFilePicker.open?.() }
-              }), 'tether: target device file action')
-            })
-          } catch (_) { /* attachments are optional in an embedded surface */ }
+            } catch (_) { /* attachments are optional in an embedded surface */ }
           return
         }
         ctx.slots.inject('main', function* () {

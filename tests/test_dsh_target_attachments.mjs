@@ -9,6 +9,7 @@ import {
   DSH_TARGET_ATTACHMENT_CHUNK,
   DSH_TARGET_ATTACHMENT_LIMIT
 } from '../packages/tether-ui/src/hosts/dsh.js'
+import { clearDirectoryCache } from '../packages/tether-ui/src/file-cache.js'
 
 const APP_BASE = 'http://127.0.0.1:18892'
 const NODE_BASE = 'http://127.0.0.1:18890'
@@ -22,6 +23,7 @@ function errorResponse(status, data) {
 }
 
 function world(options = {}) {
+  clearDirectoryCache()
   const deviceId = options.deviceId || 'LAPTOP-01'
   const payload = options.payload || Buffer.from('hello from the target computer')
   const fileName = options.fileName || 'notes.txt'
@@ -225,8 +227,9 @@ function mount(w, options = {}) {
   const React = createReact()
   const Native = createNative()
   const added = []
+  const pickerCommand = options.pickerCommand || { open: null, pendingSessionStart: null }
   const Component = createDshTargetAttachments(
-    React, Native, w.bridge, options.pickerCommand, options.uiWorkspace, options.sessions
+    React, Native, w.bridge, pickerCommand, options.uiWorkspace, options.sessions
   )
   const props = {
     sessionId: 'SESSION-1', canAcceptDrop: true, attachments: [],
@@ -235,8 +238,17 @@ function mount(w, options = {}) {
     ...options.props
   }
   const harness = componentHarness(Component, props, React)
+  harness.pickerCommand = pickerCommand
   harness.render()
-  return { harness, added, React, Native, props }
+  return { harness, added, React, Native, props, pickerCommand }
+}
+
+async function openPicker(harness) {
+  harness.render()
+  assert.equal(typeof harness.pickerCommand.open, 'function', 'the Composer plus action is registered')
+  harness.pickerCommand.open()
+  await flush()
+  return harness.render()
 }
 
 async function flush(times = 6) {
@@ -322,8 +334,10 @@ test('both composer entry points open one modal dialog showing workspaces and dr
     assert.equal(overlay.props.style.position, 'fixed', 'the explorer is a fixed overlay, not an inline block')
     assert.equal(overlay.props.style.inset, 0)
     assert.equal(dialog.props.style.position, undefined)
-    assert.match(nodeText(dialog), /从目标电脑选择文件/)
-    assert.match(nodeText(dialog), /目标电脑 · LAPTOP-01/)
+    assert.match(nodeText(dialog), /资源管理器/)
+    assert.doesNotMatch(nodeText(dialog), /从目标电脑选择文件/)
+    assert.match(nodeText(dialog), /LAPTOP-01/)
+    assert.doesNotMatch(nodeText(dialog), /目标电脑 · /)
     assert.ok(findElement(dialog, (node) => node.props?.['aria-label'] === '关闭'), 'the dialog has a close control')
     assert.match(nodeText(dialog), /工作区/)
     assert.match(nodeText(dialog), /此电脑/)
@@ -346,14 +360,13 @@ test('both composer entry points open one modal dialog showing workspaces and dr
     tree = harness.render()
     assert.equal(findElement(tree, (node) => node.props?.role === 'dialog'), null, 'the close control dismisses the dialog')
 
-    const extra = buttonByText(tree, '目标电脑文件…')
-    assert.ok(extra, 'the extra composer button is labelled as the target computer, not the operator')
-    assert.equal(extra.props.title, '从当前目标电脑选择文件')
-    extra.props.onClick()
+    pickerCommand.open()
     await flush()
     tree = harness.render()
-    assert.ok(findElement(tree, (node) => node.props?.role === 'dialog'), 'the extra button opens the same modal explorer')
+    assert.ok(findElement(tree, (node) => node.props?.role === 'dialog'), 'the native plus reopens the same modal explorer')
     assert.equal((JSON.stringify(tree).match(/"role":"dialog"/g) || []).length, 1, 'both entry points share one dialog')
+    assert.equal(findElement(tree, (node) => node.type === 'button' && /目标电脑文件/.test(nodeText(node))), null,
+      'no separate text button competes with the native plus')
     assert.equal(input.opens, 0)
     assert.equal(listeners.length, 1, 'the hidden input listener is installed once')
   } finally {
@@ -369,10 +382,7 @@ test('choosing a file reads its bytes from the target device fs API and passes t
   const w = world({ payload, fileName: 'photo.PNG' })
   const { harness, added } = mount(w)
   try {
-    const button = buttonByText(harness.output(), '目标电脑文件…')
-    button.props.onClick()
-    await flush()
-    let tree = harness.render()
+    let tree = await openPicker(harness)
     buttonByTitle(tree, 'C:\\work\\session-workspace').props.onClick()
     await flush()
     tree = harness.render()
@@ -403,7 +413,7 @@ test('a non-UTF-8 attachment is read as base64 and comes back byte-identical', a
   const w = world({ payload, fileName: 'legacy.txt' })
   const { harness, added } = mount(w)
   try {
-    buttonByText(harness.output(), '目标电脑文件…').props.onClick()
+    await openPicker(harness)
     await flush()
     buttonByTitle(harness.render(), 'C:\\work\\session-workspace').props.onClick()
     await flush()
@@ -425,7 +435,7 @@ test('a text-only read response is refused instead of attaching a re-encoded str
   const w = world({ payload: Buffer.from('plain text attachment\n'), fileName: 'notes.txt', textMode: true })
   const { harness, added } = mount(w)
   try {
-    buttonByText(harness.output(), '目标电脑文件…').props.onClick()
+    await openPicker(harness)
     await flush()
     buttonByTitle(harness.render(), 'C:\\work\\session-workspace').props.onClick()
     await flush()
@@ -494,7 +504,7 @@ test('a device switch during a read discards the late bytes and shows the error 
   })
   const { harness, added } = mount(w)
   try {
-    buttonByText(harness.output(), '目标电脑文件…').props.onClick()
+    await openPicker(harness)
     await flush()
     buttonByTitle(harness.render(), 'C:\\work\\session-workspace').props.onClick()
     await flush()
@@ -518,7 +528,7 @@ test('a session switch discards an in-flight read instead of attaching it to the
   const w = world({ payload: Buffer.from('late bytes'), beforeRead: () => gate })
   const { harness, added, props } = mount(w)
   try {
-    buttonByText(harness.output(), '目标电脑文件…').props.onClick()
+    await openPicker(harness)
     await flush()
     buttonByTitle(harness.render(), 'C:\\work\\session-workspace').props.onClick()
     await flush()
@@ -543,8 +553,7 @@ test('missing identity and unreachable devices surface errors in the popup and n
   const missing = world({ identity: () => null })
   const missingMount = mount(missing)
   try {
-    buttonByText(missingMount.harness.output(), '目标电脑文件…').props.onClick()
-    await flush()
+    await openPicker(missingMount.harness)
     const tree = missingMount.harness.render()
     assert.match(nodeText(tree), /无法确认目标电脑身份/)
     assert.equal(findElement(tree, (node) => node.type === 'input'), null, 'no local file input is rendered')
@@ -556,8 +565,7 @@ test('missing identity and unreachable devices surface errors in the popup and n
   const offline = world({ offline: true })
   const offlineMount = mount(offline)
   try {
-    buttonByText(offlineMount.harness.output(), '目标电脑文件…').props.onClick()
-    await flush()
+    await openPicker(offlineMount.harness)
     const tree = offlineMount.harness.render()
     assert.match(nodeText(tree), /目标电脑不可达/)
     assert.ok(findElement(tree, (node) => node.props?.role === 'dialog'), 'the popup stays open with the error')
@@ -572,8 +580,7 @@ test('missing identity and unreachable devices surface errors in the popup and n
   const denied = world({ listFailure: true })
   const deniedMount = mount(denied)
   try {
-    buttonByText(deniedMount.harness.output(), '目标电脑文件…').props.onClick()
-    await flush()
+    await openPicker(deniedMount.harness)
     buttonByTitle(deniedMount.harness.render(), 'C:\\work\\session-workspace').props.onClick()
     await flush()
     const tree = deniedMount.harness.render()
@@ -595,7 +602,7 @@ test('oversized files are refused before any bytes are read', async () => {
 
   const { harness, added } = mount(w)
   try {
-    buttonByText(harness.output(), '目标电脑文件…').props.onClick()
+    await openPicker(harness)
     await flush()
     buttonByTitle(harness.render(), 'C:\\work\\session-workspace').props.onClick()
     await flush()
@@ -627,14 +634,15 @@ test('the picker preserves the native attachment/drop contract', () => {
   assert.equal(tree.children[0].type, Native.ComposerAttachments)
   assert.equal(tree.children[0].props.readFileDrag, readFileDrag)
   assert.equal(tree.children[0].props.t, translate)
-  assert.equal(buttonByText(tree, '目标电脑文件…').props.title, '从当前目标电脑选择文件')
+  assert.equal(tree.children.filter(Boolean).length, 1, 'the native plus is the only Composer file entry')
+  assert.equal(buttonByText(tree, '目标电脑文件…'), null)
 })
 
 test('the picker exposes breadcrumbs, directory search and sortable columns', async () => {
   const w = world()
   const { harness } = mount(w)
   try {
-    buttonByText(harness.output(), '目标电脑文件…').props.onClick()
+    await openPicker(harness)
     await flush()
     buttonByTitle(harness.render(), 'C:\\work\\session-workspace').props.onClick()
     await flush()
@@ -684,13 +692,18 @@ test('DSH registration wires the device explorer and ships the modal bundle', ()
   assert.match(dsh, /'\/fs\/list'/)
   assert.match(dsh, /'\/fs\/read'/)
   assert.match(dsh, /role: 'dialog', 'aria-modal': 'true'/)
-  assert.match(dsh, /目标电脑文件…/)
+  assert.match(dsh, /interceptNativeFilePicker/)
+  assert.match(dsh, /资源管理器/)
+  assert.doesNotMatch(dsh, /目标电脑文件…/)
+  assert.doesNotMatch(dsh, /从目标电脑选择文件/)
   assert.doesNotMatch(dsh, /本机文件…/)
   assert.doesNotMatch(dsh, /createDshTargetFilesBridge/)
+  assert.doesNotMatch(build, /name: 'tether-target-file'/)
 
   const bundle = fs.readFileSync(new URL('../packages/dsh-plugin-tether-client/lib/client.js', import.meta.url), 'utf8')
   assert.match(bundle, /createDshTargetExplorerBridge\(\{ getRpc: \(\) => localPluginRpc, getHost: \(\) => host \}\)/)
-  assert.match(bundle, /从目标电脑选择文件/)
+  assert.match(bundle, /资源管理器/)
+  assert.doesNotMatch(bundle, /从目标电脑选择文件/)
   assert.match(bundle, /'\/fs\/read'/)
   assert.doesNotMatch(bundle, /本机文件…/)
 })

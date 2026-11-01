@@ -54,7 +54,7 @@ export function TargetFileExplorer({
   sort = { key: 'name', dir: 'asc' }, onSort, search = '', onSearch = () => {},
   treeChildren = null, expanded = {}, onToggleTree,
   compact = false, selectionMode = 'single', selectedPaths = [], onSelectionChange,
-  onContextMenu, onDragItem
+  onContextMenu, onDragItem, onRowPointerDown
 }) {
   const ReactRuntime = React
   const h = ReactRuntime.createElement
@@ -160,6 +160,7 @@ export function TargetFileExplorer({
       key: item.path, type: 'button', title: item.path, disabled: disabled || oversized,
       draggable: !!onDragItem,
       onDragStart: (event) => { if (onDragItem) onDragItem(event, item) },
+      onPointerDown: (event) => { if (onRowPointerDown) onRowPointerDown(event, item) },
       onContextMenu: (event) => { if (onContextMenu) { event.preventDefault(); onContextMenu(item, event) } },
       onClick: (event) => {
         if (selectionMode === 'multiple' && onSelectionChange) {

@@ -99,9 +99,7 @@ test('native surface accepts only ticketed loopback, public ticket and same-host
   const injectedSession = registrations[0].options.inject('SESSION-1')
   assert.deepEqual(Object.keys(injectedSession), ['sessionId'])
   assert.equal(injectedSession.sessionId, 'SESSION-1')
-  assert.equal(commands.length, 1)
-  assert.equal(commands[0].name, 'tether-target-file')
-  assert.equal(commands[0].label(), '目标设备文件')
+  assert.equal(commands.length, 0, 'the native plus is the only file entry; no duplicate command button is registered')
 })
 
 test('native surface state is device-bound and its iframe remains mounted while hidden views change', () => {
@@ -125,7 +123,7 @@ test('native surface state is device-bound and its iframe remains mounted while 
   assert.equal(helpers.nativeSurfaceContainerStyle(true).display, 'flex')
 
   const mainStart = clientSource.indexOf("h('main', { className: 'tether-workbench', style: { flex: '1 1 auto', display: 'flex'")
-  const nativeChild = clientSource.indexOf('h(NativeSurface, { deviceId, online: deviceOnline, visible:', mainStart)
+  const nativeChild = clientSource.indexOf('h(SurfaceDeck, { devices:', mainStart)
   const viewBranch = clientSource.indexOf("view === 'files' ? renderExplorer() : view === 'network' ? renderNetwork()", mainStart)
   const transferBranch = clientSource.indexOf("view === 'transfer'", viewBranch)
   assert.ok(mainStart >= 0 && nativeChild > mainStart && viewBranch > nativeChild,
@@ -154,7 +152,7 @@ test('the DSH plugin embeds the local workspace with the current same-origin ses
 })
 
 test('the local device id participates in the surface effect dependencies', () => {
-  assert.ok(clientSource.includes('}, [deviceId, online, visible, attempt, localDeviceId, surfaceSourceKey])'))
+  assert.ok(clientSource.includes('}, [deviceId, online, visible, preload, attempt, localDeviceId, surfaceSourceKey])'))
   assert.ok(clientSource.includes('}, [deviceId, online, visible, localDeviceId, surfaceSourceKey])'))
 })
 

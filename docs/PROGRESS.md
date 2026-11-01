@@ -1,5 +1,21 @@
 # 实时进度
 
+## 2026-11-02 v0.2.54 资源管理器、连接灯与设备工作区常驻
+
+本轮把主人 7 条反馈全部落进共享源码，版本元数据到 0.2.54：
+
+1. 原生加号成为唯一入口。删除了插件里额外的“目标电脑文件…”按钮和重复的 `tether-target-file` 命令；`dsh.js` 直接拦截 Composer 唯一的隐藏文件输入，打开共享资源管理器。
+2. 互传图标改成外圈加双向箭头；文件转移页补齐真实的资源管理器能力：新建文件夹/文件、重命名、删除（进 `.tether-trash`）、同名冲突“覆盖/保留两者”、指针拖拽带浮层与落点高亮、Ctrl+A/C/X/V、右键菜单、图标工具栏。
+3. 弹窗标题改为“资源管理器”，副标题只显示设备名，不再加“目标电脑 ·”；加载/错误文案放进固定 22px 状态行，列表第一行 Y 坐标加载前后不变。
+4. 三处文件浏览共用 `file-cache.js`：目录列表 20 秒内存缓存、并发去重、统一失效；资源管理器、对话框选择器、互传两侧都走同一缓存键。`dsh.js` 的桥接也读同一缓存。
+5. 连接灯改为实时：`/api/state` 成功 8 秒内直接显示绿色，Hub/Node 探测只在失败时转红；无需打开面板或点刷新。设置页连接区显示“已连接 / 168 ms / 02:20:45”实测。
+6. 设备工作区从“45 秒后卸掉预热 iframe”改为 `SurfaceDeck` 常驻：当前设备 + 最近 2 台（最多 3 台）保持挂载，切换只切显隐；设置里可关闭“保留最近设备工作区”。实测两次回切可见耗时 9–29 ms，已加载的 LAPTOP 回切 `document.readyState=complete` 38 ms；冷下载仍约 8–14 秒（4.2 MB + 1.9 MB 插件包）。
+7. 删除侧栏底部账号条；活动栏底部改为盾牌、齿轮、头像。齿轮进设置“连接”，头像进“账号”（头像/显示名称可改），不再把头像当设置入口。
+
+真机证据（DESKTOP-LOCAL，0.2.53 源码 + 0.2.54 WebUI）：互传页左侧新建 `tether-ui-check` 成功，拖 20 B 文件到 LAPTOP 弹出同名冲突，选“保留两者”生成 `tether-picker-check (2).txt` 并 100% 完成；随后两项临时文件均已删除。设置齿轮打开“连接”，头像打开“账号”；活动栏 DOM 只有 `文件权限/设置/账号` 三个底部按钮，`.tether-account-bar` 不存在。
+
+门禁：client pytest 142 passed / 1 skipped；mjs 222/222（Electron QA 隔离壳另计）；cjs 6/6；`build.mjs --check`、`build-web.mjs --check`、`validate_versions()` 通过。Electron QA 隔离壳仍受本机环境/登录态影响未通过，未用它替代真机结论。
+
 ## 2026-10-30 v0.2.29 本地发行准备（未发布）
 
 候选分支 `dev/client-auth-20261030` 的三组件版本元数据已准备到 0.2.29，包含登录 authority 作用域修复、更新/NativeSurface 迟到状态竞态处理和原生 Composer 附件路由。隔离本机 DSH Web Host + QA Node 的 Composer → 目标工作区附件链路已通过；物理 LAPTOP-01 未安装或复验。父代理报告 Python 125 passed / 1 skipped、Hub/server 116 passed、Node 199 passed。项目 venv 的 `validate_versions()` 通过；本地 unsigned APP/Plugin/Node ZIP 与清单的版本、大小及 SHA-256 匹配，离线检查确认没有 `.scratch`、`.dev-harness`、私有 server 源码或 QA fixture。当前清单无签名；CI 签名和公开 Release 尚待完成。

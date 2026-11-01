@@ -4,6 +4,7 @@
 import { createConnectionPanel } from './connection-panel.js'
 import { createSettingsPanel } from './settings-panel.js'
 import { createTransferPage } from './transfer-page.js'
+import { invalidateDirectory, peekDirectory, rememberDirectory } from './file-cache.js'
 
 export function isUpdateTargetCurrent(requestDevice, requestEpoch, currentDevice, currentEpoch) {
   return requestDevice === currentDevice && requestEpoch === currentEpoch
@@ -1490,6 +1491,10 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         { d: 'M6.7 1.6h2.6l.35 1.55.62.26 1.32-.86 1.84 1.84-.86 1.32.26.62 1.55.35v2.6l-1.55.35-.26.62.86 1.32-1.84 1.84-1.32-.86-.62.26-.35 1.55H6.7l-.35-1.55-.62-.26-1.32.86-1.84-1.84.86-1.32-.26-.62L1.6 9.3V6.7l1.55-.35.26-.62-.86-1.32 1.84-1.84 1.32.86.62-.26z' },
         { d: 'M8 6.1a1.9 1.9 0 1 0 0 3.8 1.9 1.9 0 0 0 0-3.8Z' }
       ] },
+      user: { join: 'round', parts: [
+        { d: 'M8 7.7a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z' },
+        { d: 'M3.1 13.7c.4-2.5 2.3-4 4.9-4s4.5 1.5 4.9 4' }
+      ] },
       monitor: { parts: [
         { d: 'M2 3.2h12v8.1H2z' },
         { d: 'M6 13.8h4M8 11.3v2.5' }
@@ -1523,8 +1528,9 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         { d: 'M5.8 3.2L10.6 8l-4.8 4.8' }
       ] },
       transfer: { parts: [
-        { d: 'M2.4 5.6h9.2M8.8 2.8l2.8 2.8-2.8 2.8' },
-        { d: 'M13.6 10.4H4.4M7.2 7.6 4.4 10.4l2.8 2.8' }
+        { d: 'M8 1.4a6.6 6.6 0 1 0 0 13.2A6.6 6.6 0 0 0 8 1.4Z' },
+        { d: 'M3.6 5.6h7.6M8.9 3.3l2.3 2.3-2.3 2.3' },
+        { d: 'M12.4 10.4H4.8M7.1 8.1 4.8 10.4l2.3 2.3' }
       ] },
       search: { parts: [
         { d: 'M7.1 12.2a5.1 5.1 0 1 0 0-10.2 5.1 5.1 0 0 0 0 10.2z' },
@@ -1566,6 +1572,16 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         { d: 'M2.39868 5.5H14.0681' },
         { d: 'M1.93188 10.5H13.6013' }
       ] },
+      folderPlus: { join: 'round', parts: [
+        { d: 'M1.8 5.2h12.4v7.2H1.8z' },
+        { d: 'M1.8 5.2V3.6h4l1.4 1.6' },
+        { d: 'M8 7.2v4M6 9.2h4' }
+      ] },
+      filePlus: { join: 'round', parts: [
+        { d: 'M3.6 2.2h5.6l3.2 3.2v8.4H3.6z' },
+        { d: 'M9.2 2.2v3.4h3.2' },
+        { d: 'M8 8v4M6 10h4' }
+      ] },
       file: { parts: [
         { d: 'M4.9375 5.90295H11.0625' },
         { d: 'M4.9375 9.02991H8.27841' },
@@ -1593,7 +1609,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       })))
     }
 
-    function ActivityBar({ active, collapsed, onSelect, onPermissions, permissionsOpen, onAppSettings, appSettingsOpen, accountEmail = '' }) {
+    function ActivityBar({ active, collapsed, onSelect, onPermissions, permissionsOpen, onAppSettings, appSettingsOpen, onAccount, accountEmail = '' }) {
       const accountInitial = String(accountEmail || '').trim().charAt(0).toUpperCase()
       const items = [
         { id: 'workspaces', label: '原生工作区', icon: 'monitor' },
@@ -1617,15 +1633,14 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         items.map((item) => button(item.id, item.label, item.icon, () => onSelect(item.id), active === item.id)),
         h('div', { style: { marginTop: 'auto', display: 'grid', gap: 3, justifyItems: 'center' } },
           button('permissions', '文件权限', 'shield', onPermissions, permissionsOpen),
+          button('settings', '设置', 'gear', onAppSettings, appSettingsOpen),
           h('button', {
-            type: 'button', title: accountEmail ? '设置 · ' + accountEmail : '设置', 'aria-label': '设置',
-            onClick: onAppSettings,
+            type: 'button', title: accountEmail ? '账号 · ' + accountEmail : '账号', 'aria-label': '账号',
+            onClick: onAccount,
             className: 'tether-activity-button tether-press tether-hover',
-            'data-selected': appSettingsOpen ? 'true' : undefined,
             style: {
               width: 36, height: 36, display: 'grid', placeItems: 'center', border: 0,
-              borderRadius: UI.radius, cursor: 'pointer', background: 'transparent',
-              color: appSettingsOpen ? C.blue : C.mute
+              borderRadius: UI.radius, cursor: 'pointer', background: 'transparent', color: C.mute
             }
           }, accountInitial
             ? h('span', {
@@ -1633,7 +1648,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
               style: { width: 22, height: 22, borderRadius: 999, display: 'grid', placeItems: 'center',
                 background: 'color-mix(in srgb, ' + C.blue + ' 14%, transparent)', color: C.blue, fontSize: 11, fontWeight: 600 }
             }, accountInitial)
-            : h(Glyph, { name: 'gear', size: 18 }))
+            : h(Glyph, { name: 'user', size: 18 }))
         )
       )
     }
@@ -1985,8 +2000,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
     function SidePanel(props) {
       const { width, hidden, resizing, onResizeStart, onResetWidth, onCollapse,
         treeRoots, treeChildren, treeOpen, onToggleTree, onOpenFile, onContextMenuNode, treeSelected,
-        onHoverEntry, onLeaveEntry, loadingTree, accountEmail = '', accountRole = '', onOpenSettings } = props
-      const accountInitial = String(accountEmail || '').trim().charAt(0).toUpperCase()
+        onHoverEntry, onLeaveEntry, loadingTree } = props
       return h('aside', {
         'aria-label': '文件', className: 'tether-sidebar',
         style: { display: hidden ? 'none' : 'flex', width, flex: '0 0 auto', minHeight: 0, background: C.panel, flexDirection: 'column', position: 'relative', transition: resizing ? 'none' : 'width 180ms cubic-bezier(.2,.85,.2,1.15)', willChange: 'width' }
@@ -1998,29 +2012,6 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             onToggle: onToggleTree, onOpenFile, onContextMenuNode, onHoverEntry, onLeaveEntry
           })
         ),
-        h('div', {
-          className: 'tether-account-bar',
-          style: { display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', flex: '0 0 auto', minWidth: 0,
-            borderTop: C.line ? '1px solid ' + C.line : 0 }
-        },
-          h('span', {
-            'aria-hidden': true,
-            style: { width: 24, height: 24, flex: '0 0 auto', borderRadius: 999, display: 'grid', placeItems: 'center',
-              background: 'color-mix(in srgb, ' + C.blue + ' 14%, transparent)', color: C.blue, fontSize: 11.5, fontWeight: 600 }
-          }, accountInitial || '?'),
-          h('div', { style: { flex: '1 1 auto', minWidth: 0, display: 'grid', gap: 1 } },
-            h('div', {
-              title: accountEmail || '未登录',
-              style: { fontSize: 12, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
-            }, accountEmail || '未登录'),
-            h('div', {
-              style: { fontSize: 10.5, color: C.mute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
-            }, accountRole === 'owner' ? '所有者' : accountRole ? '成员' : '本地账户')),
-          h('button', {
-            type: 'button', title: '设置', 'aria-label': '设置', onClick: onOpenSettings,
-            className: 'tether-hover',
-            style: { width: 26, height: 26, flex: '0 0 auto', display: 'grid', placeItems: 'center', border: 0, borderRadius: 6, background: 'transparent', color: C.mute, cursor: 'pointer' }
-          }, h(Glyph, { name: 'gear', size: 16 }))),
         h('div', {
           className: 'tether-resizer tether-side-split', 'data-active': resizing ? 'true' : undefined,
           onPointerDown: onResizeStart, onDoubleClick: onResetWidth, title: '拖动调整宽度，双击复位',
@@ -2073,7 +2064,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       } catch (_) { /* performance marks are optional */ }
     }
 
-    function NativeSurface({ deviceId, online, visible, localDeviceId }) {
+    function NativeSurface({ deviceId, online, visible, localDeviceId, preload = false }) {
       const [state, setState] = React.useState({ deviceId, status: deviceId ? 'loading' : 'no-device', url: '' })
       const [attempt, setAttempt] = React.useState(0)
       const [slow, setSlow] = React.useState(false)
@@ -2185,7 +2176,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         const controller = new AbortController()
         if (!deviceId) { setState({ deviceId, status: 'no-device', url: '' }); return () => { current = false } }
         if (!online) { setState({ deviceId, status: 'offline', url: '' }); return () => { current = false } }
-        if (!visible) return () => { current = false; controller.abort() }
+        if (!visible && !preload) return () => { current = false; controller.abort() }
         const existing = surfaceStateRef.current
         if (existing && existing.deviceId === deviceId && existing.sourceKey === surfaceSourceKey
             && ['document-loading', 'document-loaded'].includes(existing.status) && existing.url) {
@@ -2252,7 +2243,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             setState({ deviceId, status: 'error', url: '', message: error.message })
           })
         return () => { current = false; controller.abort() }
-      }, [deviceId, online, visible, attempt, localDeviceId, surfaceSourceKey])
+      }, [deviceId, online, visible, preload, attempt, localDeviceId, surfaceSourceKey])
       React.useEffect(() => {
         if (!deviceId || !online || !visible || typeof document === 'undefined') return undefined
         let alive = true
@@ -2406,6 +2397,61 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       )
     }
 
+    function SurfaceDeck({ devices, deviceId, localDeviceId, visible }) {
+      const [recent, setRecent] = React.useState(() => {
+        try {
+          const raw = JSON.parse(localStorage.getItem('tether.recentSurfaces') || '[]')
+          return Array.isArray(raw) ? raw.filter((item) => typeof item === 'string' && item) : []
+        } catch (_) { return [] }
+      })
+      const [keep, setKeep] = React.useState(() => {
+        try { return localStorage.getItem('tether.keepSurfaces') !== '0' } catch (_) { return true }
+      })
+      React.useEffect(() => {
+        const sync = () => {
+          try { setKeep(localStorage.getItem('tether.keepSurfaces') !== '0') } catch (_) { setKeep(true) }
+        }
+        window.addEventListener('tether-surfaces-pref', sync)
+        return () => window.removeEventListener('tether-surfaces-pref', sync)
+      }, [])
+      React.useEffect(() => {
+        if (!deviceId) return
+        setRecent((current) => {
+          const next = [deviceId, ...current.filter((item) => item !== deviceId)].slice(0, 3)
+          try { localStorage.setItem('tether.recentSurfaces', JSON.stringify(next)) } catch (_) { /* best effort */ }
+          return next
+        })
+      }, [deviceId])
+      const online = new Map((devices || []).map((item) => [item.device_id, item]))
+      const ids = [deviceId, ...(keep ? recent : [])]
+        .filter((item, index, all) => item && all.indexOf(item) === index)
+        .slice(0, 3)
+      if (keep) {
+        const spare = (devices || [])
+          .filter((item) => item && item.online && item.capabilities && item.capabilities.dsh_surface
+            && !ids.includes(item.device_id))
+          .slice(0, Math.max(0, 3 - ids.length))
+          .map((item) => item.device_id)
+        ids.push(...spare)
+      }
+      return h('div', {
+        style: { position: 'relative', flex: '1 1 auto', minWidth: 0, minHeight: 0, display: 'flex' }
+      },
+        ids.map((id) => h('div', {
+          key: id,
+          style: {
+            position: 'absolute', inset: 0, display: visible && id === deviceId ? 'flex' : 'none',
+            flexDirection: 'column', minWidth: 0, minHeight: 0
+          }
+        }, h(NativeSurface, {
+          deviceId: id,
+          online: !!(online.get(id) && online.get(id).online),
+          visible: visible && id === deviceId,
+          preload: true,
+          localDeviceId
+        }))))
+    }
+
     function isSafeNativeSurfaceUrl(value) {
       let url
       try { url = new URL(value) } catch (_) { return false }
@@ -2419,47 +2465,6 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const allowedHost = sameOrigin || (url.protocol === 'http:' && loopback && (ticketed || localToken)) || (publicSurface && ticketed)
       return allowedHost && !url.username && !url.password &&
         Number(url.port || (url.protocol === 'https:' ? 443 : 80)) > 0 && !url.hash
-    }
-
-    function SurfaceWarmup({ devices, deviceId, localDeviceId }) {
-      const [warm, setWarm] = React.useState([])
-      const warmedRef = React.useRef(new Set())
-      React.useEffect(() => {
-        if (!host || host.kind !== 'app' || !Array.isArray(devices)) return undefined
-        const candidates = devices.filter((item) => item && item.online && item.device_id !== deviceId
-          && item.device_id !== localDeviceId && item.capabilities && item.capabilities.dsh_surface).slice(0, 2)
-        let cancelled = false
-        for (const item of candidates) {
-          const key = item.device_id + '|' + (typeof host.activeApiBase === 'function' ? host.activeApiBase() : '')
-          if (warmedRef.current.has(key)) continue
-          warmedRef.current.add(key)
-          api('/api/devices/' + encodeURIComponent(item.device_id) + '/dsh/surface')
-            .then((data) => {
-              if (cancelled || !data || !data.available || !isSafeNativeSurfaceUrl(data.url)) return
-              const url = new URL(data.url)
-              url.searchParams.set('tether_native', '1')
-              setWarm((current) => current.some((entry) => entry.id === item.device_id)
-                ? current : [...current, { id: item.device_id, url: url.href }])
-            })
-            .catch(() => { /* another device may be offline; the next state poll retries */ })
-        }
-        return () => { cancelled = true }
-      }, [devices, deviceId, localDeviceId])
-      React.useEffect(() => {
-        if (!warm.length) return undefined
-        const timer = setTimeout(() => setWarm([]), 90000)
-        return () => clearTimeout(timer)
-      }, [warm.length])
-      if (!warm.length) return null
-      return h('div', {
-        'aria-hidden': true,
-        style: { position: 'absolute', width: 1, height: 1, overflow: 'hidden', opacity: 0, pointerEvents: 'none', left: -9999, top: -9999 }
-      }, warm.map((item) => h('iframe', {
-        key: item.id, src: item.url, title: '', tabIndex: -1,
-        sandbox: 'allow-scripts allow-same-origin allow-forms allow-downloads allow-modals',
-        onLoad: () => setTimeout(() => setWarm((current) => current.filter((entry) => entry.id !== item.id)), 45000),
-        style: { width: 1, height: 1, border: 0 }
-      })))
     }
 
     function CodeEditor({ deviceId, path, value, onChange, onSave, encoding, newline, readOnly = false }) {
@@ -2691,6 +2696,8 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const [hubRole, setHubRole] = React.useState(() => {
         try { return JSON.parse(window.localStorage.getItem('tether.hub') || '{}').role || '' } catch (_) { return '' }
       })
+      const [accountName, setAccountName] = usePersisted('tether.accountName', '')
+      const [settingsSection, setSettingsSection] = React.useState('account')
       const [hubUnsafeExistingUrl, setHubUnsafeExistingUrl] = React.useState(false)
       const [hubStatus, setHubStatus] = React.useState('unknown')
       const [hubState, setHubState] = React.useState(null)
@@ -2700,6 +2707,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const [hubCheckedAt, setHubCheckedAt] = React.useState(null)
       const [hubAddress, setHubAddress] = React.useState('')
       const hubProbeRef = React.useRef(null)
+      const stateOkAtRef = React.useRef(0)
       const formatCheckTime = (date) => date ? [date.getHours(), date.getMinutes(), date.getSeconds()].map((part) => String(part).padStart(2, '0')).join(':') : ''
       React.useEffect(() => {
         if (!host || typeof host.connectionInfo !== 'function') return undefined
@@ -3435,6 +3443,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         if (!force && stateRef.current && typeof document !== 'undefined' && document.hidden) return
         try {
           const data = await api('/api/state')
+          stateOkAtRef.current = Date.now()
           setState(data)
           setDeviceId((current) => {
             if (current && data.devices.some((d) => d.device_id === current)) return current
@@ -3915,6 +3924,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const invalidateDir = (targetDevice, target) => {
         const key = treeCacheKey(targetDevice, target)
         dirCacheRef.current.delete(key)
+        invalidateDirectory(targetDevice, target)
         if (deviceIdRef.current === targetDevice) {
           setTreeChildren((current) => {
             if (!current[key]) return current
@@ -3946,12 +3956,14 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         const key = treeCacheKey(requestDevice, target)
         const cached = dirCacheRef.current.get(key)
         if (cached && Date.now() - cached.at < 30000) return
+        if (peekDirectory(requestDevice, target, 30000)) return
         if (dirInflightRef.current.has(key)) return
         const pending = post('/api/devices/' + encodeURIComponent(requestDevice) + '/fs/list', { path: target })
           .then((data) => {
             if (deviceIdRef.current !== requestDevice) return data
             const entries = (data.entries || []).map((entry) => ({ ...entry, path: joinPath(target, entry.name) }))
             rememberDir(requestDevice, target, entries)
+            rememberDirectory(requestDevice, target, entries)
             return data
           })
           .catch(() => {})
@@ -4085,7 +4097,10 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         const requestTarget = /^[A-Za-z]:[\\/]?$/.test(rawTarget) ? rawTarget.slice(0, 2) + '\\' : rawTarget
         const nextPath = /^[A-Za-z]:[\\/]?$/.test(rawTarget) ? requestTarget : (rawTarget.replace(/[\\/]+$/, '') || rawTarget)
         const key = treeCacheKey(requestDevice, nextPath)
-        const cached = opts.fresh === true ? null : dirCacheRef.current.get(key)
+        const sharedEntries = opts.fresh === true ? null : peekDirectory(requestDevice, nextPath)
+        const cached = sharedEntries
+          ? { entries: sharedEntries, at: Date.now() }
+          : (opts.fresh === true ? null : dirCacheRef.current.get(key))
         const seq = dirSeqRef.current + 1
         dirSeqRef.current = seq
         if (dirAbortRef.current) dirAbortRef.current.abort()
@@ -4117,6 +4132,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           if (seq !== dirSeqRef.current || deviceIdRef.current !== requestDevice) return
           const entries = (data.entries || []).map((entry) => ({ ...entry, path: joinPath(requestTarget, entry.name) }))
           cacheStore(dirCacheRef.current, key, { entries, at: Date.now() })
+          rememberDirectory(requestDevice, nextPath, entries)
           if (cached) {
             setDirEntries(entries)
             setTreeChildren((current) => ({ ...current, [key]: { status: 'loaded', entries } }))
@@ -5063,9 +5079,11 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         })
       }
 
+      const liveHubStatus = hubBusy ? 'checking'
+        : (stateOkAtRef.current && Date.now() - stateOkAtRef.current < 8000 ? 'online'
+          : (hubStatus === 'offline' ? 'offline' : 'checking'))
       return h('div', { className: 'tether-root', style: { position: 'relative', height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--tether-workbench-bg, ' + C.bg + ')', color: C.ink, fontSize: 13, fontWeight: 'var(--tether-body, 400)', overflow: 'hidden' } },
         h('style', null, SCROLL_CSS),
-        h(SurfaceWarmup, { devices: (state && state.devices) || [], deviceId, localDeviceId: appLocalDevice }),
         h('div', { className: 'tether-topbar ' + (host && host.kind === 'app' ? 'tether-toolbar-app' : 'tether-toolbar'), style: { display: 'flex', alignItems: 'center', gap: 10, padding: '6px 12px', borderBottom: 0, background: C.soft, position: 'relative', zIndex: 2, flex: '0 0 auto' } },
           h('strong', { style: { fontSize: 15 } }, 'Tether'),
           device ? h(DeviceSwitcher, {
@@ -5091,7 +5109,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
               if (host.connectionInfo) host.connectionInfo(host.activeApiBase && host.activeApiBase()).then((info) => setHubAddress(info.address || '')).catch(() => setHubAddress(''))
               setShowHub(true)
             },
-            status: hubBusy ? 'checking' : hubStatus
+            status: liveHubStatus
           }) : null,
           h(MinimalUpdateButton, { React, h, api, post, deviceId, host, C })
         ),
@@ -5103,9 +5121,10 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             onSelect: selectPanel,
             onPermissions: () => { setShowAppSettings(false); openSettings() },
             permissionsOpen: showSettings,
-            onAppSettings: () => { setShowSettings(false); setShowAppSettings(true) },
+            onAppSettings: () => { setShowSettings(false); setSettingsSection('connection'); setShowAppSettings(true) },
             appSettingsOpen: showAppSettings,
-            accountEmail: hubEmail
+            onAccount: () => { setShowSettings(false); setSettingsSection('account'); setShowAppSettings(true) },
+            accountEmail: accountName || hubEmail
           }),
           h(SidePanel, {
             width: safeSidebarWidth,
@@ -5132,13 +5151,10 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             onHoverEntry: (event, node) => showHoverTip(event, node),
             onLeaveEntry: hideHoverTip,
             onContextMenuNode: (event, node) => openContextMenu(event, { name: node.name, path: node.path, dir: node.dir }, node.dir ? node.path : parentOf(node.path)),
-            treeSelected,
-            accountEmail: hubEmail,
-            accountRole: hubRole,
-            onOpenSettings: () => { setShowSettings(false); setShowAppSettings(true) }
+            treeSelected
           }),
           h('main', { className: 'tether-workbench', style: { flex: '1 1 auto', display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 } },
-            h(NativeSurface, { deviceId, online: deviceOnline, visible: view === 'chat', localDeviceId: appLocalDevice }),
+            h(SurfaceDeck, { devices: (state && state.devices) || [], deviceId, localDeviceId: appLocalDevice, visible: view === 'chat' }),
             view === 'files' ? renderExplorer() : view === 'network' ? renderNetwork()
               : view === 'transfer' ? h(createTransferPage, {
                 React, Glyph, api, post, C,
@@ -5153,7 +5169,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         showHub && host && (host.kind === 'dsh' || host.kind === 'app') ? h(Connection.Panel, {
           open: true,
           onClose: () => setShowHub(false),
-          info: { address: hubAddress || '未知', status: hubStatus, checkedAt: hubCheckedAt, durationMs: hubDuration },
+          info: { address: hubAddress || '未知', status: liveHubStatus, checkedAt: hubCheckedAt, durationMs: hubDuration },
           busy: hubBusy, error: hubError, onProbe: probeConfiguredHub,
           defaultUrl: hubUrl || hubAddress || '',
           defaultToken: hubToken || '',
@@ -5254,8 +5270,11 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           onClose: () => setShowAppSettings(false),
           accountEmail: hubEmail,
           accountRole: hubRole,
+          accountName,
+          onAccountNameChange: setAccountName,
+          initialSection: settingsSection,
           server: hubAddress || hubUrl || '',
-          connection: { status: hubStatus, checkedAt: hubCheckedAt, durationMs: hubDuration, token: hubToken },
+          connection: { status: liveHubStatus, checkedAt: hubCheckedAt, durationMs: hubDuration, token: hubToken },
           device: {
             ...localDeviceRecord,
             device_id: localDeviceRecord.device_id || appLocalDevice || deviceId,

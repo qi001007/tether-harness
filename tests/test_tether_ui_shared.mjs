@@ -41,8 +41,8 @@ test('remote FilesPane exposes a new-file action for the current target director
 test('DSH Composer routes both file entry points to the target computer modal', () => {
   const build = fs.readFileSync(path.resolve(root, 'packages/tether-ui/scripts/build.mjs'), 'utf8')
   const dsh = fs.readFileSync(path.resolve(root, 'packages/tether-ui/src/hosts/dsh.js'), 'utf8')
-  assert.match(build, /name: 'tether-target-file'/)
-  assert.match(build, /label: \(\) => '目标设备文件'/)
+  assert.doesNotMatch(build, /name: 'tether-target-file'/)
+  assert.doesNotMatch(build, /label: \(\) => '目标设备文件'/)
   assert.match(build, /createDshTargetExplorerBridge\(\{ getRpc: \(\) => localPluginRpc, getHost: \(\) => host \}\)/)
   assert.match(build, /createDshTargetAttachments\(React, Native, targetFiles, targetFilePicker, ctx\.uiWorkspace, ctx\.sessions\)/)
   assert.match(build, /inject: \(sessionId\) => \(\{ sessionId \}\)/)
@@ -57,7 +57,10 @@ test('DSH Composer routes both file entry points to the target computer modal', 
   assert.match(dsh, /'\/fs\/list'/)
   assert.match(dsh, /'\/fs\/read'/)
   assert.match(dsh, /role: 'dialog', 'aria-modal': 'true'/)
-  assert.match(dsh, /目标电脑文件…/)
+  assert.match(dsh, /interceptNativeFilePicker/)
+  assert.match(dsh, /资源管理器/)
+  assert.doesNotMatch(dsh, /目标电脑文件…/)
+  assert.doesNotMatch(dsh, /从目标电脑选择文件/)
   assert.doesNotMatch(dsh, /本机文件…/)
 })
 
@@ -125,8 +128,16 @@ test('connection panels show service checks without duplicate device totals or c
   assert.doesNotMatch(transferPage, /roleLabel: '(?:来源|目标)'|交换来源与目标/)
   assert.match(transferPage, /已在另一侧/)
   assert.match(transferPage, /selectionMode: 'multiple'/)
-  assert.match(transferPage, /onDragItem/)
+  assert.match(transferPage, /onRowPointerDown/)
   assert.match(transferPage, /Ctrl\+C/)
+  assert.match(transferPage, /fs\/mkdir/)
+  assert.match(transferPage, /fs\/rename/)
+  assert.match(transferPage, /fs\/delete/)
+  assert.match(transferPage, /askConflict/)
+  assert.match(transferPage, /保留两者/)
+  assert.match(transferPage, /loadDirectory/)
+  assert.match(shared, /peekDirectory/)
+  assert.match(dshHost, /loadDirectory/)
   assert.doesNotMatch(shared, /Hub 连接配置/)
   assert.match(shared, /Hub 不可达或请求超时/)
   assert.match(shared, /url\.username \|\| url\.password \|\| url\.search \|\| url\.hash/)
@@ -736,19 +747,26 @@ test('the native surface slow banner only exists while the frame is loading', ()
   assert.doesNotMatch(surface, /slow \? h\('div'/)
 })
 
-test('permissions and settings stay separate with an account footer', () => {
+test('permissions, settings and account share the activity bar footer', () => {
   assert.match(shared, /button\('permissions', '文件权限', 'shield', onPermissions, permissionsOpen\)/)
-  assert.match(shared, /tether-account-bar/)
+  assert.match(shared, /button\('settings', '设置', 'gear', onAppSettings, appSettingsOpen\)/)
+  assert.doesNotMatch(shared, /tether-account-bar/)
+  assert.match(shared, /onClick: onAccount/)
+  assert.match(shared, /setSettingsSection\('account'\)/)
+  assert.match(shared, /setSettingsSection\('connection'\)/)
   assert.match(shared, /gear: \{ join: 'round'/)
-  assert.match(shared, /onOpenSettings: \(\) => \{ setShowSettings\(false\); setShowAppSettings\(true\) \}/)
-  assert.doesNotMatch(shared, /button\('settings', '设置', 'settings'/)
 })
 
-test('the app warms the other online surfaces in a hidden frame', () => {
-  assert.match(shared, /function SurfaceWarmup/)
-  assert.match(shared, /h\(SurfaceWarmup, \{ devices:/)
-  assert.match(shared, /warmedRef/)
-  assert.match(shared, /url\.searchParams\.set\('tether_native', '1'\)/)
+test('the app keeps the three most recent surfaces mounted instead of re-downloading them', () => {
+  assert.match(shared, /function SurfaceDeck/)
+  assert.match(shared, /h\(SurfaceDeck, \{ devices:/)
+  assert.match(shared, /tether\.recentSurfaces/)
+  assert.match(shared, /preload: true/)
+  assert.match(shared, /visible && id === deviceId \? 'flex' : 'none'/)
+  assert.match(shared, /tether-surfaces-pref/)
+  assert.match(settingsPanel, /tether\.keepSurfaces/)
+  assert.match(settingsPanel, /最多 3 台/)
+  assert.doesNotMatch(shared, /function SurfaceWarmup/)
 })
 
 test('the app host reads app-context from its own origin', () => {
@@ -771,4 +789,23 @@ test('the target picker can expand the explorer tree', () => {
   assert.match(dshHost, /onToggleTree/)
   assert.match(targetExplorer, /const treeRow =/)
   assert.match(targetExplorer, /onToggleTree && item\.dir/)
+})
+
+test('one directory cache serves every explorer entry point', async () => {
+  const cache = await import('../packages/tether-ui/src/file-cache.js')
+  cache.clearDirectoryCache()
+  let calls = 0
+  const load = async () => { calls += 1; return [{ name: 'a.txt', path: 'C:\\x\\a.txt', dir: false, size: 1 }] }
+  const [first, second] = await Promise.all([
+    cache.loadDirectory({ deviceId: 'D1', path: 'C:\\x', load }),
+    cache.loadDirectory({ deviceId: 'D1', path: 'C:\\x\\', load })
+  ])
+  assert.equal(calls, 1, 'concurrent readers share one listing request')
+  assert.equal(first, second)
+  assert.equal(cache.peekDirectory('D1', 'C:/x').length, 1, 'normalized Windows paths share a key')
+  await cache.loadDirectory({ deviceId: 'D1', path: 'C:\\x', load, fresh: true })
+  assert.equal(calls, 2, 'an explicit refresh bypasses the cache')
+  cache.invalidateDirectory('D1', 'C:\\x')
+  assert.equal(cache.peekDirectory('D1', 'C:\\x'), null)
+  cache.clearDirectoryCache()
 })

@@ -33,7 +33,7 @@ async function main() {
   if (!fs.existsSync(python) || !fs.existsSync(electron)) throw new Error('Expected the project Python and Electron runtimes to be installed.')
   process.stderr.write('[qa-updates] copying isolated app sources\n')
   fs.mkdirSync(appDir, { recursive: true })
-  for (const name of ['main.js', 'preload.js', 'supervisor.js', 'update-service.js', 'update-helper.js', 'package.json']) {
+  for (const name of ['main.js', 'preload.js', 'supervisor.js', 'startup-readiness.js', 'renderer-diagnostics.js', 'enrollment.js', 'update-service.js', 'update-helper.js', 'package.json']) {
     process.stderr.write('[qa-updates] copy app/' + name + '\n')
     copy(path.join(projectRoot, 'apps', 'tether-app', name), path.join(appDir, name))
   }
@@ -85,7 +85,7 @@ async function main() {
     TETHER_UPDATE_MANIFEST_URL: 'https://127.0.0.1:1/tether-update.json'
   }
   delete env.ELECTRON_RUN_AS_NODE
-  electronProc = spawn(electron, [appDir, '--shot', '--panel=更新'], {
+  electronProc = spawn(electron, [appDir, '--user-data-dir=' + path.join(tempRoot, '.electron-user-data'), '--shot', '--panel=更新'], {
     cwd: tempRoot,
     env,
     windowsHide: true,
@@ -97,7 +97,7 @@ async function main() {
     electronProc.once('error', reject)
     const timeout = setTimeout(() => {
       try { electronProc.kill() } catch (_) { /* already gone */ }
-      reject(new Error('Isolated Electron QA timed out.'))
+      reject(new Error('Isolated Electron QA timed out.\nstdout:\n' + electronStdout + '\nstderr:\n' + electronStderr))
     }, 45000)
     electronProc.once('exit', (value) => { clearTimeout(timeout); resolve(value) })
   })
