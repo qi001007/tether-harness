@@ -357,6 +357,7 @@
 - 0.2.48 已发布（CI `41278461096`，05:54:11Z），包含登录页服务器切换与角色显示；Hub 镜像已刷新。LAPTOP-01 Node+APP **17.1 s**、插件 **14.4 s**（`restart_required` 清除，健康 0.2.48），两机 surface smoke 200；LAPTOP APP 现显示账号登录页，待所有者登录。
 - 0.2.49 已发布（CI `41280353424`，06:22:11Z），加入设置页检查更新/切换账号/会话过期回登录；Hub 镜像已刷新。LAPTOP-01 Node+APP **17.8 s**、插件 **14.6 s**（健康 0.2.49），两机 surface smoke 200。
 - 0.2.50 已发布（CI `41281139696`，06:33:39Z），插件 `restart_required` 改为只由 descriptor 新 pid 清除。LAPTOP-01 Node+APP **22.6 s**、插件 **19.2 s**；本机 0.2.49→0.2.50 在 descriptor 未刷新时正确报 `restart_timeout`（不再假 done），写新 descriptor 后重试 **4.6 s** 收敛，两机 surface 200。
+- `v0.2.50` 干净 clone 构建通过，APP/插件包均含 descriptor 门禁 updater；Hub `179c524` 在 `restart_timeout` 后自动再拉起 DSH 一次（服务端 149 passed）。
 - 真实登录闭环已用临时 Hub 测试账号跑通：登录页（服务器地址可改）→ 登录 → 自动重载主界面 → 设置显示邮箱 → 退出登录回登录页；未使用生产凭据。
 
 ## 2026-11-01 Tailscale 直连探测
