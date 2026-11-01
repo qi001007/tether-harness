@@ -25,7 +25,7 @@ Tether connects the **DeepSeek Harness (DSH)** desktop app on one machine to the
 
 > **Project status: alpha.** Tether is a working research prototype, not a production multi-tenant service. Read [Status](#status) and [Security](#security) before exposing a Hub to other people.
 
-> **Current client (2026-11-02): v0.2.52.** First launch opens a full-screen account login (Hub URL, email/password, optional TOTP; invite-code registration for new users). The device enrolls automatically after sign-in. The top-bar **连接** pill only shows Hub/Node reachability and refresh; account details and password/logout live in the explorer footer and **Settings**. v0.2.52 rebuilds the file transfer page on the shared explorer (drag, clipboard, context menu), expands folders in the target picker, separates the permission shield from settings, and keeps cold DSH surfaces alive through the first 4.2 MB plugin bundle. Download the current build below.
+> **Current client (2026-11-02): v0.2.53.** First launch opens a full-screen account login (Hub URL, email/password, optional TOTP; invite-code registration for new users). The device enrolls automatically after sign-in. The top-bar **连接** pill only shows Hub/Node reachability and refresh; account details and password/logout live in the explorer footer and **Settings**. v0.2.53 warms the other online DSH surfaces in a hidden frame after startup, so a device switch lands in about five seconds instead of waiting for the cold 4.2 MB plugin bundle. Includes the 0.2.52 shared transfer page, picker tree and surface cache fixes. Download the current build below.
 
 ## Why Tether
 
@@ -134,14 +134,14 @@ When a new version is available, a blue **↓** button appears in the top bar. C
 
 ## Download
 
-### Latest stable: v0.2.52
+### Latest stable: v0.2.53
 
 | Package | Download | Size | SHA-256 |
 |---|---|---:|---|
-| APP | [tether-app-0.2.52.zip](https://github.com/qi001007/tether-harness/releases/download/v0.2.52/tether-app-0.2.52.zip) | 1,731,946 B | `96d56084ad3ee43a94419fcec6fa1453b1be90dacf4c54d6e1f83df97d85e62c` |
-| DSH plugin | [tether-plugin-0.2.52.zip](https://github.com/qi001007/tether-harness/releases/download/v0.2.52/tether-plugin-0.2.52.zip) | 1,336,677 B | `40fb8c83d6615eff946e689f368bd9a6119445f770f717d6831a5a117bb160be` |
-| Node | [tether-node-0.2.52.zip](https://github.com/qi001007/tether-harness/releases/download/v0.2.52/tether-node-0.2.52.zip) | 79,648 B | `3ffa87e76be9eba5a701f487bf0f713b1abd7b57a4a9b842c6e6d58afc89d848` |
-| Update manifest | [tether-update.json](https://github.com/qi001007/tether-harness/releases/download/v0.2.52/tether-update.json) | — | signed in the release |
+| APP | [tether-app-0.2.53.zip](https://github.com/qi001007/tether-harness/releases/download/v0.2.53/tether-app-0.2.53.zip) | 1,733,027 B | `79d388d5687c62e00d73be0b206e8844680147e66f3c10fe2d9421badff855af` |
+| DSH plugin | [tether-plugin-0.2.53.zip](https://github.com/qi001007/tether-harness/releases/download/v0.2.53/tether-plugin-0.2.53.zip) | 1,337,207 B | `dd664bc7cc7aea53c08823b261edbc0fc92476b64822bcc361f0a81d782eb8ef` |
+| Node | [tether-node-0.2.53.zip](https://github.com/qi001007/tether-harness/releases/download/v0.2.53/tether-node-0.2.53.zip) | 79,648 B | `503ba456c118f7eebb5d4815bd85a4b7a562088cf4b74ed8186834ba28018206` |
+| Update manifest | [tether-update.json](https://github.com/qi001007/tether-harness/releases/download/v0.2.53/tether-update.json) | — | signed in the release |
 
 Sections below the download table describe the historical v0.2.1–v0.2.6 evolution unless they explicitly say otherwise; the login/connection/settings behavior above is the current client.
 
@@ -154,7 +154,7 @@ https://github.com/qi001007/tether-harness/releases/latest/download/tether-updat
 Verify a Windows download with:
 
 ```powershell
-Get-FileHash .\tether-app-0.2.52.zip -Algorithm SHA256
+Get-FileHash .\tether-app-0.2.53.zip -Algorithm SHA256
 ```
 
 These are **ZIP source packages**, not self-contained EXE installers. They do not bundle Python, Node.js, DSH, or a Hub. Packages are **unsigned**; SHA-256 checks integrity against the manifest, not publisher identity.
