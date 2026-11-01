@@ -163022,7 +163022,7 @@ function createConnectionPanel(React2) {
           h2("strong", { style: { fontSize: 22, letterSpacing: ".01em" } }, "Tether"),
           h2("span", { style: { color: mute, fontSize: 12.5 } }, "\u767B\u5F55\u540E\uFF0C\u8FD9\u53F0\u8BBE\u5907\u4F1A\u81EA\u52A8\u52A0\u5165\u4F60\u7684\u79C1\u6709\u8BBE\u5907\u7F51\u3002")
         ),
-        defaultUrl ? null : fieldRow("\u670D\u52A1\u5668\u5730\u5740", h2("input", { value: server, onChange: (event) => setServer(event.target.value), placeholder: "https://hub.example.com", spellCheck: false, style: field })),
+        fieldRow("\u670D\u52A1\u5668\u5730\u5740", h2("input", { value: server, onChange: (event) => setServer(event.target.value), placeholder: "https://hub.example.com", spellCheck: false, style: field })),
         fieldRow("\u90AE\u7BB1", h2("input", { value: email, onChange: (event) => setEmail(event.target.value), type: "email", autoComplete: "username", autoFocus: true, style: field })),
         h2(
           "div",

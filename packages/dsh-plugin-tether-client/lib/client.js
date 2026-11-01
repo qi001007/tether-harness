@@ -7135,7 +7135,7 @@ function createConnectionPanel(React) {
         h('div', { style: { display: 'grid', gap: 6, marginBottom: 4 } },
           h('strong', { style: { fontSize: 22, letterSpacing: '.01em' } }, 'Tether'),
           h('span', { style: { color: mute, fontSize: 12.5 } }, '登录后，这台设备会自动加入你的私有设备网。')),
-        defaultUrl ? null : fieldRow('服务器地址', h('input', { value: server, onChange: (event) => setServer(event.target.value), placeholder: 'https://hub.example.com', spellCheck: false, style: field })),
+        fieldRow('服务器地址', h('input', { value: server, onChange: (event) => setServer(event.target.value), placeholder: 'https://hub.example.com', spellCheck: false, style: field })),
         fieldRow('邮箱', h('input', { value: email, onChange: (event) => setEmail(event.target.value), type: 'email', autoComplete: 'username', autoFocus: true, style: field })),
         h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 108px', gap: 8 } },
           fieldRow('密码', h('input', { value: password, onChange: (event) => setPassword(event.target.value), type: 'password', autoComplete: 'current-password', style: field })),
