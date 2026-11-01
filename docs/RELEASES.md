@@ -8,7 +8,7 @@ Plugin runtime reload guard:
 - Includes 0.2.49 (settings actions, session expiry) and 0.2.48 (login server field, account role).
 - APP, plugin, and node are 0.2.50.
 
-Gates: pytest 138 passed / 4 skipped, mjs 216/216, cjs 6/6, `build.mjs --check`, `validate_versions()`. Signed publication and installed acceptance are recorded after CI.
+Gates: pytest 138 passed / 4 skipped, mjs 216/216, cjs 6/6, `build.mjs --check`, `validate_versions()`. CI run `41281139696` succeeded; the signed manifest was verified (app 1,720,428 B, plugin 1,332,625 B, node 79,560 B) and published at 2026-11-01T06:33:39Z; the Hub mirror was refreshed to **0.2.50**. LAPTOP-01 Node+APP **22.6 s**, plugin **19.2 s** with `restart_required` cleared and health 0.2.50. Local plugin 0.2.49→0.2.50 correctly failed with `restart_timeout` while the descriptor was stale (no false done); after a fresh descriptor, `/update/retry` converged in **4.6 s** and both public surfaces returned 200.
 
 ## v0.2.49
 

@@ -110,7 +110,7 @@
 - [x] F58 文件转移页视觉重做：来源/目标改为两张独立卡片（蓝/绿顶边与徽标、设备选择、紧凑路径栏），中栏提供交换按钮，底部显示已选文件/大小/目标路径与开始按钮；活动栏转移图标改为箭头，不再与资源管理器同图标。**真机验证**：两卡与来源/目标徽标、路线栏、底栏已截图；旧的双 Explorer 外观已移除。
 - [x] F59 全局滚动条：改为 6 px、浅色、默认透明、hover 才显示，覆盖连接页、权限页及所有列表；禁止原生粗滚动条。判据：真机截图对比；`.tether-root *` 滚动条规则生效；连接页/权限页无粗条。**实测通过**：账号页与文件权限页均无原生粗条，审计列表可滚动。
 - [x] F60 设置页：活动栏底部齿轮打开独立设置页，左侧分区为账号/连接/本机设备/更新/文件权限/关于；账号邮箱、修改密码、退出登录只在这里；连接状态与刷新仍由顶栏“连接”负责；文件权限从这里进入原权限/审计面板。**真机验证**：登录后账号显示 `test@tether.local` / 所有者；连接区有刷新与“切换账号 / 服务器”；更新区有“检查更新”；退出登录回到登录页。
-- [ ] F61 插件更新假完成：DSH 未发布新 descriptor 时，Node 只看扫描到的宿主 pid 就清 `restart_required`，Hub 报 done 但 surface 仍指向旧端口（本机 0.2.44→0.2.49 实测 job done 后 DESKTOP surface 502）。修复：清除条件改用 descriptor 的新 pid；扫描 pid 只用于安排重启。判据：descriptor 未刷新时 job 不得 done；出现新 descriptor 后才 done，且 surface 200。
+- [x] F61 插件更新假完成：DSH 未发布新 descriptor 时，Node 只看扫描到的宿主 pid 就清 `restart_required`，Hub 报 done 但 surface 仍指向旧端口（本机 0.2.44→0.2.49 实测 job done 后 DESKTOP surface 502）。修复：清除条件改用 descriptor 的新 pid；扫描 pid 只用于安排重启。**实测**：本地插件 0.2.49→0.2.50 在 descriptor 未刷新时 job 正确报 `restart_timeout`、`restart_required` 保持 true；手动写新 descriptor 后状态清除，`/update/retry` **4.6 s** 收敛为“已是最新”，两机 surface 200。
 
 ## 验收边界
 
