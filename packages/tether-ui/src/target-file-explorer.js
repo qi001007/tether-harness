@@ -51,7 +51,10 @@ export function TargetFileExplorer({
   fileIcon, formatTime = () => '', formatSize = () => '', limit = 10 * 1024 * 1024,
   emptyText = '空文件夹', placeholder = '从左侧选择工作区或磁盘',
   searchPlaceholder = '搜索当前目录',
-  sort = { key: 'name', dir: 'asc' }, onSort, search = '', onSearch = () => {}
+  sort = { key: 'name', dir: 'asc' }, onSort, search = '', onSearch = () => {},
+  treeChildren = null, expanded = {}, onToggleTree,
+  compact = false, selectionMode = 'single', selectedPaths = [], onSelectionChange,
+  onContextMenu, onDragItem
 }) {
   const ReactRuntime = React
   const h = ReactRuntime.createElement
@@ -81,23 +84,50 @@ export function TargetFileExplorer({
     }
   }, h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, label),
     sort.key === key ? h('span', { 'aria-hidden': true, style: { fontSize: 9 } }, sort.dir === 'asc' ? '▲' : '▼') : null)
-  const rootButton = (item, group) => h('button', {
-    key: group + ':' + item.path, type: 'button', disabled,
-    title: item.path, onClick: () => { if (!disabled && onRoot) onRoot(item.path) },
-    className: 'tether-hover',
-    style: {
-      display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 2,
-      width: '100%', padding: '6px 8px', border: 0, borderRadius: 6,
-      background: path === item.path ? (C.hover || C.soft) : 'transparent', color: C.ink,
-      font: 'inherit', textAlign: 'left', cursor: disabled ? 'default' : 'pointer'
+  const chevron = (open) => h('svg', {
+    width: 12, height: 12, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor',
+    strokeWidth: 1.4, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true
+  }, h('path', { d: open ? 'M4 6l4 4 4-4' : 'M6 4l4 4-4 4' }))
+  const treeRow = (item, group, depth = 0) => {
+    const key = group + ':' + item.path
+    const children = treeChildren && treeChildren[item.path]
+    const isOpen = !!(expanded && expanded[item.path])
+    const openRow = () => {
+      if (disabled) return
+      if (!item.dir) { if (onOpen) onOpen(item); return }
+      if (depth === 0 && onRoot) onRoot(item.path)
+      else if (onPath) onPath(item.path)
     }
-  },
-    h('span', { style: { display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, fontSize: 13 } },
-      fileIcon ? fileIcon({ dir: true, path: item.path, name: item.name }) : null,
-      h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, item.name)))
+    return h(ReactRuntime.Fragment, { key },
+      h('div', { style: { display: 'flex', alignItems: 'center', minWidth: 0, paddingLeft: depth * 14 } },
+        onToggleTree && item.dir
+          ? h('button', {
+            type: 'button', title: isOpen ? '收起' : '展开', 'aria-label': isOpen ? '收起' : '展开',
+            onClick: (event) => { event.stopPropagation(); onToggleTree(item) },
+            className: 'tether-hover',
+            style: {
+              width: 18, height: 24, flex: '0 0 auto', display: 'grid', placeItems: 'center',
+              border: 0, borderRadius: 4, background: 'transparent', color: C.mute, cursor: 'pointer'
+            }
+          }, chevron(isOpen))
+          : h('span', { 'aria-hidden': true, style: { width: 18, flex: '0 0 auto' } }),
+        h('button', {
+          type: 'button', title: item.path, disabled,
+          onClick: openRow,
+          className: 'tether-hover',
+          style: {
+            display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, flex: '1 1 auto',
+            height: 26, padding: '0 6px', border: 0, borderRadius: 5,
+            background: path === item.path ? (C.hover || C.soft) : 'transparent', color: C.ink,
+            font: 'inherit', fontSize: 13, textAlign: 'left', cursor: disabled ? 'default' : 'pointer'
+          }
+        }, fileIcon ? fileIcon(item) : null,
+          h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, item.name))),
+      isOpen && children ? children.map((child) => treeRow(child, group, depth + 1)) : null)
+  }
   const rootGroup = (label, items, empty) => h('div', { key: label, style: { marginBottom: 10 } },
     h('div', { style: { padding: '8px 8px 4px', color: C.mute, fontSize: 11, fontWeight: 600, letterSpacing: 0.2 } }, label),
-    items.length ? items.map((item) => rootButton(item, label))
+    items.length ? items.map((item) => treeRow(item, label))
       : h('div', { style: { padding: '2px 8px 6px', color: C.mute, fontSize: 11.5 } }, empty))
   const iconButton = (icon, label, onClick, disabled) => h('button', {
     type: 'button', title: label, 'aria-label': label, disabled,
@@ -123,17 +153,37 @@ export function TargetFileExplorer({
   }
   const row = (item) => {
     const oversized = !item.dir && Number(item.size) > limit
+    const selected = selectionMode === 'multiple'
+      ? (selectedPaths || []).includes(item.path)
+      : selectedPath === item.path
     return h('button', {
       key: item.path, type: 'button', title: item.path, disabled: disabled || oversized,
-      onClick: () => activate(item, false),
+      draggable: !!onDragItem,
+      onDragStart: (event) => { if (onDragItem) onDragItem(event, item) },
+      onContextMenu: (event) => { if (onContextMenu) { event.preventDefault(); onContextMenu(item, event) } },
+      onClick: (event) => {
+        if (selectionMode === 'multiple' && onSelectionChange) {
+          const current = selectedPaths || []
+          if (event && (event.ctrlKey || event.metaKey)) {
+            onSelectionChange(current.includes(item.path)
+              ? current.filter((path) => path !== item.path)
+              : [...current, item.path])
+          } else {
+            onSelectionChange([item.path])
+          }
+          if (onSelect) onSelect(item)
+          return
+        }
+        activate(item, false)
+      },
       onDoubleClick: () => activate(item, true),
       className: 'tether-hover',
       style: {
-        display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 132px 84px', gap: 8,
-        alignItems: 'center', width: '100%', height: 32, padding: '0 14px',
+        display: 'grid', gridTemplateColumns: compact ? 'minmax(0,1fr) 84px' : 'minmax(0,1fr) 132px 84px', gap: 8,
+        alignItems: 'center', width: '100%', height: compact ? 28 : 32, padding: '0 12px',
         border: 0, borderRadius: 6,
-        background: selectedPath === item.path ? (C.soft || 'transparent') : 'transparent',
-        color: C.ink, font: 'inherit', fontSize: 13, textAlign: 'left',
+        background: selected ? (C.soft || 'transparent') : 'transparent',
+        color: C.ink, font: 'inherit', fontSize: compact ? 12.5 : 13, textAlign: 'left',
         cursor: disabled || oversized ? 'default' : 'pointer', opacity: oversized ? 0.55 : 1
       }
     },
@@ -142,7 +192,7 @@ export function TargetFileExplorer({
           fileIcon ? fileIcon(item) : null),
         h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
           item.name + (oversized ? ' · 超过 10 MiB' : ''))),
-      h('span', { style: { color: C.mute, fontSize: 11, whiteSpace: 'nowrap' } }, formatTime(item.mtime)),
+      compact ? null : h('span', { style: { color: C.mute, fontSize: 11, whiteSpace: 'nowrap' } }, formatTime(item.mtime)),
       h('span', { style: { color: C.mute, fontSize: 11, textAlign: 'right' } }, item.dir ? '' : formatSize(Number(item.size))))
   }
   let body
@@ -164,17 +214,17 @@ export function TargetFileExplorer({
     body = h('div', { style: { flex: '1 1 auto', minHeight: 0, overflow: 'auto', padding: '0 8px 18px' } },
       h('div', {
         style: {
-          display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 132px 84px', gap: 8,
-          alignItems: 'center', height: 28, padding: '0 14px', color: C.mute, fontSize: 11, flex: '0 0 auto'
+          display: 'grid', gridTemplateColumns: compact ? 'minmax(0,1fr) 84px' : 'minmax(0,1fr) 132px 84px', gap: 8,
+          alignItems: 'center', height: 28, padding: '0 12px', color: C.mute, fontSize: 11, flex: '0 0 auto'
         }
-      }, sortHeader('name', '名称'), sortHeader('mtime', '修改日期'),
+      }, sortHeader('name', '名称'), compact ? null : sortHeader('mtime', '修改日期'),
         sortHeader('size', '大小', 'right')),
       visible.map((item) => row(item)))
   }
   return h('div', { style: { display: 'flex', flex: '1 1 auto', minHeight: 0, minWidth: 0 } },
     h('div', {
       style: {
-        width: 224, flex: '0 0 auto', overflow: 'auto', padding: '6px 8px',
+        width: compact ? 148 : 224, flex: '0 0 auto', overflow: 'auto', padding: '6px 8px',
         background: C.soft, borderRight: C.line ? '1px solid ' + C.line : 0
       }
     }, rootGroup('工作区', workspaces, '未发现工作区'), rootGroup('此电脑', drives, '未发现磁盘')),
@@ -217,7 +267,7 @@ export function TargetFileExplorer({
             outline: 'none', flex: '0 0 220px', minWidth: 100, fontFamily: 'Consolas, monospace'
           }
         }) : null,
-        path && entries !== null ? h('div', {
+        !compact && path && entries !== null ? h('div', {
           style: {
             display: 'flex', alignItems: 'center', gap: 5, flex: '0 1 200px',
             minWidth: 120, height: 28, boxSizing: 'border-box',

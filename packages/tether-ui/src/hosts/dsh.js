@@ -454,6 +454,8 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand,
     const [entries, setEntries] = React.useState(null)
     const [sort, setSort] = React.useState({ key: 'name', dir: 'asc' })
     const [search, setSearch] = React.useState('')
+    const [treeChildren, setTreeChildren] = React.useState({})
+    const [expanded, setExpanded] = React.useState({})
     const [busy, setBusy] = React.useState(false)
     const [status, setStatus] = React.useState('')
     const [error, setError] = React.useState('')
@@ -491,6 +493,7 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand,
     const resetExplorer = () => {
       setDevice(''); setWorkspaces([]); setDrives([])
       setRoot(''); setDirectory(''); setEntries(null); setStatus(''); setError('')
+      setTreeChildren({}); setExpanded({})
     }
     const openPicker = async () => {
       if (busyRef.current || pickerCommand?.pendingSessionStart) return
@@ -558,6 +561,7 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand,
       busyRef.current = false
       setOpen(false); setBusy(false); setStatus(''); setError('')
       setRoot(''); setDirectory(''); setEntries(null)
+      setTreeChildren({}); setExpanded({})
       const pending = pickerCommand && pickerCommand.pendingSessionStart
       if (pending) {
         clearTimeout(pending.timeoutId)
@@ -585,6 +589,24 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand,
         busyRef.current = false
         if (mounted.current) setBusy(false)
       }
+    }
+    const toggleTree = async (item) => {
+      if (!item || !item.dir) return
+      const key = item.path
+      if (expanded[key]) {
+        setExpanded((current) => {
+          const next = { ...current }
+          delete next[key]
+          return next
+        })
+        return
+      }
+      setExpanded((current) => ({ ...current, [key]: true }))
+      if (treeChildren[key]) return
+      try {
+        const listing = await bridge.listDirectory(key)
+        if (mounted.current) setTreeChildren((current) => ({ ...current, [key]: listing }))
+      } catch (_) { /* the right-hand pane reports directory errors */ }
     }
     const choose = async (item) => {
       if (!item || item.dir || busyRef.current) return
@@ -883,8 +905,8 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand,
             onSearch: setSearch,
             colors: { bg, soft, ink, sub, mute, line, hover, red: danger },
             roots: [
-              ...workspaces.map((item) => ({ name: item.name, path: item.path, kind: 'workspace' })),
-              ...drives.map((item) => ({ name: item.name, path: item.path, kind: 'drive' }))
+              ...workspaces.map((item) => ({ name: item.name, path: item.path, kind: 'workspace', dir: true })),
+              ...drives.map((item) => ({ name: item.name, path: item.path, kind: 'drive', dir: true }))
             ],
             rootPath: root,
             path: directory,
@@ -899,6 +921,9 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand,
             onSelect: () => {},
             onOpen: (item) => { if (item.dir) void enter(item, false); else void choose(item) },
             onRefresh: (next) => { void enter({ path: next }, false) },
+            treeChildren,
+            expanded,
+            onToggleTree: (item) => { void toggleTree(item) },
             fileIcon,
             formatTime: formatTargetTime,
             formatSize: formatTargetSize,

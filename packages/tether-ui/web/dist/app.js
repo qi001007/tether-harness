@@ -24652,10 +24652,10 @@ var init_dom = __esm({
         super();
         this.name = name;
         const ctor = options?.resizeObserverCtor ?? targetWindow.ResizeObserver;
-        this.observer = new ctor((entries2, observer) => {
+        this.observer = new ctor((entries3, observer) => {
           recordDisposableResizeObserverInvocation(targetWindow, this.name);
           try {
-            callback(entries2, observer);
+            callback(entries3, observer);
           } catch (e) {
             onUnexpectedError(e);
           }
@@ -29480,11 +29480,11 @@ var init_map = __esm({
       }
     };
     BidirectionalMap = class {
-      constructor(entries2) {
+      constructor(entries3) {
         this._m1 = /* @__PURE__ */ new Map();
         this._m2 = /* @__PURE__ */ new Map();
-        if (entries2) {
-          for (const [key, value] of entries2) {
+        if (entries3) {
+          for (const [key, value] of entries3) {
             this.set(key, value);
           }
         }
@@ -32912,12 +32912,12 @@ var init_languageConfigurationRegistry = __esm({
        * @param priority Use a higher number for higher priority
        */
       register(languageId, configuration, priority = 0) {
-        let entries2 = this._entries.get(languageId);
-        if (!entries2) {
-          entries2 = new ComposedLanguageConfiguration(languageId);
-          this._entries.set(languageId, entries2);
+        let entries3 = this._entries.get(languageId);
+        if (!entries3) {
+          entries3 = new ComposedLanguageConfiguration(languageId);
+          this._entries.set(languageId, entries3);
         }
-        const disposable = entries2.register(configuration, priority);
+        const disposable = entries3.register(configuration, priority);
         this._onDidChange.fire(new LanguageConfigurationChangeEvent(languageId));
         return markAsSingleton(toDisposable(() => {
           disposable.dispose();
@@ -32925,8 +32925,8 @@ var init_languageConfigurationRegistry = __esm({
         }));
       }
       getLanguageConfiguration(languageId) {
-        const entries2 = this._entries.get(languageId);
-        return entries2?.getResolvedConfiguration() || null;
+        const entries3 = this._entries.get(languageId);
+        return entries3?.getResolvedConfiguration() || null;
       }
     };
     ResolvedLanguageConfiguration = class _ResolvedLanguageConfiguration {
@@ -44154,9 +44154,9 @@ var init_elementSizeObserver = __esm({
               }
             }
           };
-          this._resizeObserver = new ResizeObserver((entries2) => {
-            if (entries2 && entries2[0] && entries2[0].contentRect) {
-              observedDimension = { width: entries2[0].contentRect.width, height: entries2[0].contentRect.height };
+          this._resizeObserver = new ResizeObserver((entries3) => {
+            if (entries3 && entries3[0] && entries3[0].contentRect) {
+              observedDimension = { width: entries3[0].contentRect.width, height: entries3[0].contentRect.height };
             } else {
               observedDimension = null;
             }
@@ -50983,8 +50983,8 @@ var init_dataTransfer = __esm({
     };
     UriList = Object.freeze({
       // http://amundsen.com/hypermedia/urilist/
-      create: (entries2) => {
-        return distinct(entries2.map((x) => x.toString())).join("\r\n");
+      create: (entries3) => {
+        return distinct(entries3.map((x) => x.toString())).join("\r\n");
       },
       split: (str) => {
         return str.split("\r\n");
@@ -68160,8 +68160,8 @@ function ensureNonNullable(value) {
   return value;
 }
 function observeDevicePixelDimensions(element, parentWindow, callback) {
-  let observer = new parentWindow.ResizeObserver((entries2) => {
-    const entry = entries2.find((entry2) => entry2.target === element);
+  let observer = new parentWindow.ResizeObserver((entries3) => {
+    const entry = entries3.find((entry2) => entry2.target === element);
     if (!entry) {
       return;
     }
@@ -96272,9 +96272,9 @@ var ServiceCollection;
 var init_serviceCollection = __esm({
   "node_modules/monaco-editor/esm/vs/platform/instantiation/common/serviceCollection.js"() {
     ServiceCollection = class {
-      constructor(...entries2) {
+      constructor(...entries3) {
         this._entries = /* @__PURE__ */ new Map();
-        for (const [id, service] of entries2) {
+        for (const [id, service] of entries3) {
           this.set(id, service);
         }
       }
@@ -101926,7 +101926,7 @@ function cleanArray(array) {
 }
 function clone(object) {
   const newObject = create(null);
-  for (const _ref2 of entries(object)) {
+  for (const _ref2 of entries2(object)) {
     var _ref3 = _slicedToArray(_ref2, 2);
     const property = _ref3[0];
     const value = _ref3[1];
@@ -102086,7 +102086,7 @@ function createDOMPurify() {
   const _document = document2, implementation = _document.implementation, createNodeIterator = _document.createNodeIterator, createDocumentFragment = _document.createDocumentFragment, getElementsByTagName = _document.getElementsByTagName;
   const importNode = originalDocument.importNode;
   let hooks = _createHooksMap();
-  DOMPurify.isSupported = typeof entries === "function" && typeof getParentNode === "function" && implementation && implementation.createHTMLDocument !== void 0;
+  DOMPurify.isSupported = typeof entries2 === "function" && typeof getParentNode === "function" && implementation && implementation.createHTMLDocument !== void 0;
   const MUSTACHE_EXPR$1 = MUSTACHE_EXPR, ERB_EXPR$1 = ERB_EXPR, TMPLIT_EXPR$1 = TMPLIT_EXPR, DATA_ATTR$1 = DATA_ATTR, ARIA_ATTR$1 = ARIA_ATTR, IS_SCRIPT_OR_DATA$1 = IS_SCRIPT_OR_DATA, ATTR_WHITESPACE$1 = ATTR_WHITESPACE, CUSTOM_ELEMENT$1 = CUSTOM_ELEMENT;
   let IS_ALLOWED_URI$1 = IS_ALLOWED_URI;
   let ALLOWED_TAGS = null;
@@ -103268,10 +103268,10 @@ function createDOMPurify() {
   };
   return DOMPurify;
 }
-var entries, setPrototypeOf, isFrozen, getPrototypeOf, getOwnPropertyDescriptor, freeze, seal, create, _ref, apply, construct, arrayForEach, arrayLastIndexOf, arrayPop, arrayPush, arraySplice, arrayIsArray, stringToLowerCase, stringToString, stringMatch, stringReplace, stringIndexOf, stringTrim, numberToString, booleanToString, bigintToString, symbolToString, objectHasOwnProperty, objectToString, regExpTest, typeErrorCreate, html$1, svg$1, svgFilters, svgDisallowed, mathMl$1, mathMlDisallowed, text, html2, svg, mathMl, xml, MUSTACHE_EXPR, ERB_EXPR, TMPLIT_EXPR, DATA_ATTR, ARIA_ATTR, IS_ALLOWED_URI, IS_SCRIPT_OR_DATA, ATTR_WHITESPACE, DOCTYPE_NAME, CUSTOM_ELEMENT, ELEMENT_MARKUP_PROBE, COMMENT_MARKUP_PROBE, FALLBACK_TAG_CLOSE, SELF_CLOSING_TAG, NODE_TYPE, LITERAL_TEXT_ELEMENT_NAMES, LITERAL_TEXT_ELEMENTS, LITERAL_TEXT_CLOSE, getGlobal, _createTrustedTypesPolicy, _createHooksMap, _resolveSetOption, _resolveObjectOption, purify;
+var entries2, setPrototypeOf, isFrozen, getPrototypeOf, getOwnPropertyDescriptor, freeze, seal, create, _ref, apply, construct, arrayForEach, arrayLastIndexOf, arrayPop, arrayPush, arraySplice, arrayIsArray, stringToLowerCase, stringToString, stringMatch, stringReplace, stringIndexOf, stringTrim, numberToString, booleanToString, bigintToString, symbolToString, objectHasOwnProperty, objectToString, regExpTest, typeErrorCreate, html$1, svg$1, svgFilters, svgDisallowed, mathMl$1, mathMlDisallowed, text, html2, svg, mathMl, xml, MUSTACHE_EXPR, ERB_EXPR, TMPLIT_EXPR, DATA_ATTR, ARIA_ATTR, IS_ALLOWED_URI, IS_SCRIPT_OR_DATA, ATTR_WHITESPACE, DOCTYPE_NAME, CUSTOM_ELEMENT, ELEMENT_MARKUP_PROBE, COMMENT_MARKUP_PROBE, FALLBACK_TAG_CLOSE, SELF_CLOSING_TAG, NODE_TYPE, LITERAL_TEXT_ELEMENT_NAMES, LITERAL_TEXT_ELEMENTS, LITERAL_TEXT_CLOSE, getGlobal, _createTrustedTypesPolicy, _createHooksMap, _resolveSetOption, _resolveObjectOption, purify;
 var init_dompurify = __esm({
   "node_modules/monaco-editor/esm/vs/base/browser/dompurify/dompurify.js"() {
-    entries = Object.entries;
+    entries2 = Object.entries;
     setPrototypeOf = Object.setPrototypeOf;
     isFrozen = Object.isFrozen;
     getPrototypeOf = Object.getPrototypeOf;
@@ -106562,8 +106562,8 @@ var init_hoverService = __esm({
         this._hoverStack[length - 1]?.hover.dispose();
         this._hoverStack.length = length - 1;
       }
-      _intersectionChange(entries2, hover) {
-        const entry = entries2[entries2.length - 1];
+      _intersectionChange(entries3, hover) {
+        const entry = entries3[entries3.length - 1];
         if (!entry.isIntersecting) {
           hover.dispose();
         }
@@ -110005,9 +110005,9 @@ var init_semanticTokensProviderStyling = __esm({
         this._elements = [];
         _HashTable._nullOutEntries(this._elements, this._currentLength);
       }
-      static _nullOutEntries(entries2, length) {
+      static _nullOutEntries(entries3, length) {
         for (let i = 0; i < length; i++) {
-          entries2[i] = null;
+          entries3[i] = null;
         }
       }
       _hash2(n1, n2) {
@@ -111255,24 +111255,24 @@ var init_menuService = __esm({
         if (hiddenByDefault) {
           hidden = !hidden;
         }
-        const entries2 = this._data[menu.id];
+        const entries3 = this._data[menu.id];
         if (!hidden) {
-          if (entries2) {
-            const idx = entries2.indexOf(commandId);
+          if (entries3) {
+            const idx = entries3.indexOf(commandId);
             if (idx >= 0) {
-              removeFastWithoutKeepingOrder(entries2, idx);
+              removeFastWithoutKeepingOrder(entries3, idx);
             }
-            if (entries2.length === 0) {
+            if (entries3.length === 0) {
               delete this._data[menu.id];
             }
           }
         } else {
-          if (!entries2) {
+          if (!entries3) {
             this._data[menu.id] = [commandId];
           } else {
-            const idx = entries2.indexOf(commandId);
+            const idx = entries3.indexOf(commandId);
             if (idx < 0) {
-              entries2.push(commandId);
+              entries3.push(commandId);
             }
           }
         }
@@ -143172,7 +143172,7 @@ var init_standaloneServices = __esm({
         }]));
       }
       addDynamicKeybindings(rules) {
-        const entries2 = rules.map((rule) => {
+        const entries3 = rules.map((rule) => {
           const keybinding = decodeKeybinding(rule.keybinding, OS);
           return {
             keybinding,
@@ -143185,12 +143185,12 @@ var init_standaloneServices = __esm({
             isBuiltinExtension: false
           };
         });
-        this._dynamicKeybindings = this._dynamicKeybindings.concat(entries2);
+        this._dynamicKeybindings = this._dynamicKeybindings.concat(entries3);
         this.updateResolver();
         return toDisposable(() => {
           for (let i = 0; i < this._dynamicKeybindings.length; i++) {
-            if (this._dynamicKeybindings[i] === entries2[0]) {
-              this._dynamicKeybindings.splice(i, entries2.length);
+            if (this._dynamicKeybindings[i] === entries3[0]) {
+              this._dynamicKeybindings.splice(i, entries3.length);
               this.updateResolver();
               return;
             }
@@ -163392,15 +163392,8 @@ async function transferFile({
   return { path: destination, transferId: id, bytes: offset };
 }
 
-// src/transfer-page.js
-function separator(path) {
-  return String(path || "").includes("\\") ? "\\" : "/";
-}
-function joinPath(base, name) {
-  if (!base) return name;
-  return String(base).replace(/[\\/]+$/, "") + separator(base) + name;
-}
-function parentPath(path) {
+// src/target-file-explorer.js
+function parentOf(path) {
   const clean = String(path || "").replace(/[\\/]+$/, "");
   if (!clean) return "";
   if (/^[A-Za-z]:$/.test(clean)) return clean + "\\";
@@ -163409,6 +163402,562 @@ function parentPath(path) {
   const parent = clean.slice(0, slash);
   return /^[A-Za-z]:$/.test(parent) ? parent + "\\" : parent;
 }
+function crumbsFor(path, root) {
+  const value = String(path || "").replace(/[\\/]+$/, "");
+  if (!value) return [];
+  const base = String(root || "").replace(/[\\/]+$/, "");
+  if (!base || !value.toLowerCase().startsWith(base.toLowerCase())) {
+    const index = Math.max(value.lastIndexOf("\\"), value.lastIndexOf("/"));
+    return [{ label: index >= 0 ? value.slice(index + 1) || value : value, path: value }];
+  }
+  const separator2 = value.includes("\\") ? "\\" : "/";
+  const baseLabelIndex = Math.max(base.lastIndexOf("\\"), base.lastIndexOf("/"));
+  const out = [{ label: base.slice(baseLabelIndex + 1) || base, path: base }];
+  let current = base;
+  for (const part of value.slice(base.length).replace(/^[\\/]+/, "").split(/[\\/]+/).filter(Boolean)) {
+    current = current.replace(/[\\/]+$/, "") + separator2 + part;
+    out.push({ label: part, path: current });
+  }
+  return out;
+}
+function sortEntries(entries3, sort) {
+  const key = sort && ["name", "mtime", "size"].includes(sort.key) ? sort.key : "name";
+  const direction = sort && sort.dir === "desc" ? -1 : 1;
+  return [...entries3 || []].sort((left, right) => {
+    if (left.dir !== right.dir) return left.dir ? -1 : 1;
+    let a;
+    let b;
+    if (key === "size") {
+      a = Number(left.size || 0);
+      b = Number(right.size || 0);
+    } else if (key === "mtime") {
+      a = Number(left.mtime || 0);
+      b = Number(right.mtime || 0);
+    } else {
+      a = String(left.name || "").toLowerCase();
+      b = String(right.name || "").toLowerCase();
+    }
+    if (a < b) return -direction;
+    if (a > b) return direction;
+    return 0;
+  });
+}
+function TargetFileExplorer({
+  React: React2,
+  colors,
+  roots = [],
+  rootPath = "",
+  path = "",
+  entries: entries3 = null,
+  loading = false,
+  error = "",
+  selectedPath = "",
+  disabled = false,
+  onRoot,
+  onPath,
+  onSelect,
+  onOpen,
+  onRefresh,
+  singleClickOpens = false,
+  editablePath = false,
+  pathLabel = "\u8DEF\u5F84",
+  fileIcon,
+  formatTime = () => "",
+  formatSize = () => "",
+  limit = 10 * 1024 * 1024,
+  emptyText = "\u7A7A\u6587\u4EF6\u5939",
+  placeholder = "\u4ECE\u5DE6\u4FA7\u9009\u62E9\u5DE5\u4F5C\u533A\u6216\u78C1\u76D8",
+  searchPlaceholder = "\u641C\u7D22\u5F53\u524D\u76EE\u5F55",
+  sort = { key: "name", dir: "asc" },
+  onSort,
+  search: search2 = "",
+  onSearch = () => {
+  },
+  treeChildren = null,
+  expanded = {},
+  onToggleTree,
+  compact = false,
+  selectionMode = "single",
+  selectedPaths = [],
+  onSelectionChange,
+  onContextMenu,
+  onDragItem
+}) {
+  const ReactRuntime = React2;
+  const h2 = ReactRuntime.createElement;
+  const C = colors || {};
+  const workspaces = roots.filter((item) => (item.kind || "workspace") === "workspace");
+  const drives = roots.filter((item) => item.kind === "drive");
+  const crumbs = crumbsFor(path, rootPath);
+  const up = parentOf(path);
+  const term = search2.trim().toLowerCase();
+  const visible = sortEntries(entries3, sort).filter((item) => !term || String(item.name || "").toLowerCase().includes(term));
+  const sortHeader = (key, label, align) => h2(
+    "button",
+    {
+      type: "button",
+      title: "\u6309" + label + "\u6392\u5E8F",
+      "aria-label": "\u6309" + label + "\u6392\u5E8F",
+      "data-sort": sort.key === key ? sort.dir : void 0,
+      onClick: () => {
+        if (onSort) onSort(sort.key === key ? { key, dir: sort.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" });
+      },
+      className: "tether-hover",
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 3,
+        justifyContent: align === "right" ? "flex-end" : "flex-start",
+        minWidth: 0,
+        height: 22,
+        padding: "0 4px",
+        margin: "0 -4px",
+        border: 0,
+        borderRadius: 4,
+        background: "transparent",
+        color: sort.key === key ? C.ink : C.mute,
+        fontSize: 11,
+        cursor: "pointer"
+      }
+    },
+    h2("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, label),
+    sort.key === key ? h2("span", { "aria-hidden": true, style: { fontSize: 9 } }, sort.dir === "asc" ? "\u25B2" : "\u25BC") : null
+  );
+  const chevron = (open) => h2("svg", {
+    width: 12,
+    height: 12,
+    viewBox: "0 0 16 16",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.4,
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+    "aria-hidden": true
+  }, h2("path", { d: open ? "M4 6l4 4 4-4" : "M6 4l4 4-4 4" }));
+  const treeRow = (item, group, depth = 0) => {
+    const key = group + ":" + item.path;
+    const children = treeChildren && treeChildren[item.path];
+    const isOpen = !!(expanded && expanded[item.path]);
+    const openRow = () => {
+      if (disabled) return;
+      if (!item.dir) {
+        if (onOpen) onOpen(item);
+        return;
+      }
+      if (depth === 0 && onRoot) onRoot(item.path);
+      else if (onPath) onPath(item.path);
+    };
+    return h2(
+      ReactRuntime.Fragment,
+      { key },
+      h2(
+        "div",
+        { style: { display: "flex", alignItems: "center", minWidth: 0, paddingLeft: depth * 14 } },
+        onToggleTree && item.dir ? h2("button", {
+          type: "button",
+          title: isOpen ? "\u6536\u8D77" : "\u5C55\u5F00",
+          "aria-label": isOpen ? "\u6536\u8D77" : "\u5C55\u5F00",
+          onClick: (event) => {
+            event.stopPropagation();
+            onToggleTree(item);
+          },
+          className: "tether-hover",
+          style: {
+            width: 18,
+            height: 24,
+            flex: "0 0 auto",
+            display: "grid",
+            placeItems: "center",
+            border: 0,
+            borderRadius: 4,
+            background: "transparent",
+            color: C.mute,
+            cursor: "pointer"
+          }
+        }, chevron(isOpen)) : h2("span", { "aria-hidden": true, style: { width: 18, flex: "0 0 auto" } }),
+        h2(
+          "button",
+          {
+            type: "button",
+            title: item.path,
+            disabled,
+            onClick: openRow,
+            className: "tether-hover",
+            style: {
+              display: "flex",
+              alignItems: "center",
+              gap: 7,
+              minWidth: 0,
+              flex: "1 1 auto",
+              height: 26,
+              padding: "0 6px",
+              border: 0,
+              borderRadius: 5,
+              background: path === item.path ? C.hover || C.soft : "transparent",
+              color: C.ink,
+              font: "inherit",
+              fontSize: 13,
+              textAlign: "left",
+              cursor: disabled ? "default" : "pointer"
+            }
+          },
+          fileIcon ? fileIcon(item) : null,
+          h2("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, item.name)
+        )
+      ),
+      isOpen && children ? children.map((child) => treeRow(child, group, depth + 1)) : null
+    );
+  };
+  const rootGroup = (label, items, empty2) => h2(
+    "div",
+    { key: label, style: { marginBottom: 10 } },
+    h2("div", { style: { padding: "8px 8px 4px", color: C.mute, fontSize: 11, fontWeight: 600, letterSpacing: 0.2 } }, label),
+    items.length ? items.map((item) => treeRow(item, label)) : h2("div", { style: { padding: "2px 8px 6px", color: C.mute, fontSize: 11.5 } }, empty2)
+  );
+  const iconButton = (icon, label, onClick, disabled2) => h2("button", {
+    type: "button",
+    title: label,
+    "aria-label": label,
+    disabled: disabled2,
+    onClick: () => {
+      if (!disabled2 && onClick) onClick();
+    },
+    className: "tether-hover",
+    style: {
+      width: 26,
+      height: 26,
+      flex: "0 0 auto",
+      display: "grid",
+      placeItems: "center",
+      border: 0,
+      borderRadius: 6,
+      background: "transparent",
+      color: C.sub,
+      cursor: disabled2 ? "default" : "pointer",
+      opacity: disabled2 ? 0.4 : 1
+    }
+  }, h2("svg", {
+    width: 15,
+    height: 15,
+    viewBox: "0 0 16 16",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.3,
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+    "aria-hidden": true
+  }, icon === "up" ? h2("path", { d: "M8 12.5V3.5M4.2 7.3 8 3.5l3.8 3.8" }) : [
+    h2("path", { key: "a", d: "M12.6 7.2A4.7 4.7 0 1 0 11.2 11.6" }),
+    h2("path", { key: "b", d: "M12.8 3.2v3.7h-3.7" })
+  ]));
+  const activate = (item, double) => {
+    if (disabled || !item) return;
+    if (double) {
+      if (!singleClickOpens && onOpen) onOpen(item);
+      return;
+    }
+    if (onSelect) onSelect(item);
+    if (singleClickOpens && onOpen) onOpen(item);
+  };
+  const row = (item) => {
+    const oversized = !item.dir && Number(item.size) > limit;
+    const selected = selectionMode === "multiple" ? (selectedPaths || []).includes(item.path) : selectedPath === item.path;
+    return h2(
+      "button",
+      {
+        key: item.path,
+        type: "button",
+        title: item.path,
+        disabled: disabled || oversized,
+        draggable: !!onDragItem,
+        onDragStart: (event) => {
+          if (onDragItem) onDragItem(event, item);
+        },
+        onContextMenu: (event) => {
+          if (onContextMenu) {
+            event.preventDefault();
+            onContextMenu(item, event);
+          }
+        },
+        onClick: (event) => {
+          if (selectionMode === "multiple" && onSelectionChange) {
+            const current = selectedPaths || [];
+            if (event && (event.ctrlKey || event.metaKey)) {
+              onSelectionChange(current.includes(item.path) ? current.filter((path2) => path2 !== item.path) : [...current, item.path]);
+            } else {
+              onSelectionChange([item.path]);
+            }
+            if (onSelect) onSelect(item);
+            return;
+          }
+          activate(item, false);
+        },
+        onDoubleClick: () => activate(item, true),
+        className: "tether-hover",
+        style: {
+          display: "grid",
+          gridTemplateColumns: compact ? "minmax(0,1fr) 84px" : "minmax(0,1fr) 132px 84px",
+          gap: 8,
+          alignItems: "center",
+          width: "100%",
+          height: compact ? 28 : 32,
+          padding: "0 12px",
+          border: 0,
+          borderRadius: 6,
+          background: selected ? C.soft || "transparent" : "transparent",
+          color: C.ink,
+          font: "inherit",
+          fontSize: compact ? 12.5 : 13,
+          textAlign: "left",
+          cursor: disabled || oversized ? "default" : "pointer",
+          opacity: oversized ? 0.55 : 1
+        }
+      },
+      h2(
+        "span",
+        { style: { display: "flex", alignItems: "center", gap: 8, minWidth: 0 } },
+        h2(
+          "span",
+          { style: { width: 16, height: 16, display: "grid", placeItems: "center", flex: "0 0 auto" } },
+          fileIcon ? fileIcon(item) : null
+        ),
+        h2(
+          "span",
+          { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
+          item.name + (oversized ? " \xB7 \u8D85\u8FC7 10 MiB" : "")
+        )
+      ),
+      compact ? null : h2("span", { style: { color: C.mute, fontSize: 11, whiteSpace: "nowrap" } }, formatTime(item.mtime)),
+      h2("span", { style: { color: C.mute, fontSize: 11, textAlign: "right" } }, item.dir ? "" : formatSize(Number(item.size)))
+    );
+  };
+  let body;
+  if (!path) {
+    body = h2(
+      "div",
+      { style: { flex: "1 1 auto", display: "grid", placeItems: "center", color: C.mute, fontSize: 12, padding: 24, textAlign: "center" } },
+      error ? h2("span", { role: "alert", style: { color: C.red || C.danger } }, error) : placeholder
+    );
+  } else if (entries3 === null) {
+    body = h2(
+      "div",
+      { style: { flex: "1 1 auto", display: "grid", placeItems: "center", color: C.mute, fontSize: 12, padding: 24, textAlign: "center" } },
+      error ? h2("span", { role: "alert", style: { color: C.red || C.danger } }, error) : loading ? "\u6B63\u5728\u8BFB\u53D6\u76EE\u5F55\u2026" : "\u76EE\u5F55\u6682\u4E0D\u53EF\u7528"
+    );
+  } else if (!visible.length) {
+    body = h2(
+      "div",
+      { style: { flex: "1 1 auto", display: "grid", placeItems: "center", alignContent: "center", gap: 8, color: C.mute, fontSize: 12, padding: 24, textAlign: "center" } },
+      h2("span", null, term ? "\u672A\u627E\u5230\u5339\u914D \u201C" + search2.trim() + "\u201D \u7684\u9879\u76EE" : emptyText),
+      term ? h2("button", {
+        type: "button",
+        onClick: () => onSearch(""),
+        className: "tether-hover",
+        style: { border: 0, borderRadius: 6, padding: "4px 10px", background: C.soft, color: C.ink, fontSize: 12, cursor: "pointer" }
+      }, "\u6E05\u9664\u641C\u7D22") : null
+    );
+  } else {
+    body = h2(
+      "div",
+      { style: { flex: "1 1 auto", minHeight: 0, overflow: "auto", padding: "0 8px 18px" } },
+      h2(
+        "div",
+        {
+          style: {
+            display: "grid",
+            gridTemplateColumns: compact ? "minmax(0,1fr) 84px" : "minmax(0,1fr) 132px 84px",
+            gap: 8,
+            alignItems: "center",
+            height: 28,
+            padding: "0 12px",
+            color: C.mute,
+            fontSize: 11,
+            flex: "0 0 auto"
+          }
+        },
+        sortHeader("name", "\u540D\u79F0"),
+        compact ? null : sortHeader("mtime", "\u4FEE\u6539\u65E5\u671F"),
+        sortHeader("size", "\u5927\u5C0F", "right")
+      ),
+      visible.map((item) => row(item))
+    );
+  }
+  return h2(
+    "div",
+    { style: { display: "flex", flex: "1 1 auto", minHeight: 0, minWidth: 0 } },
+    h2("div", {
+      style: {
+        width: compact ? 148 : 224,
+        flex: "0 0 auto",
+        overflow: "auto",
+        padding: "6px 8px",
+        background: C.soft,
+        borderRight: C.line ? "1px solid " + C.line : 0
+      }
+    }, rootGroup("\u5DE5\u4F5C\u533A", workspaces, "\u672A\u53D1\u73B0\u5DE5\u4F5C\u533A"), rootGroup("\u6B64\u7535\u8111", drives, "\u672A\u53D1\u73B0\u78C1\u76D8")),
+    h2(
+      "div",
+      { style: { display: "flex", flexDirection: "column", flex: "1 1 auto", minWidth: 0, minHeight: 0, background: C.bg } },
+      h2(
+        "div",
+        {
+          style: {
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            height: 46,
+            padding: "0 14px",
+            borderBottom: C.line ? "1px solid " + C.line : 0,
+            flex: "0 0 auto",
+            minWidth: 0
+          }
+        },
+        iconButton("up", "\u4E0A\u4E00\u7EA7", () => {
+          if (up && onPath) onPath(up);
+        }, disabled || !up),
+        h2(
+          "div",
+          {
+            className: "tether-breadcrumbs",
+            style: { display: "flex", alignItems: "center", gap: 1, flex: "1 1 auto", minWidth: 0, overflow: "hidden", height: 28 }
+          },
+          crumbs.length ? crumbs.map((segment, index) => h2(
+            ReactRuntime.Fragment,
+            { key: segment.path },
+            index ? h2("span", { style: { color: C.mute, fontSize: 10, flex: "0 0 auto" } }, "\u203A") : null,
+            h2("button", {
+              type: "button",
+              title: segment.path,
+              disabled,
+              onClick: () => {
+                if (!disabled && onPath) onPath(segment.path);
+              },
+              className: "tether-hover",
+              style: {
+                border: 0,
+                background: "transparent",
+                borderRadius: 5,
+                padding: "3px 5px",
+                fontSize: 12,
+                lineHeight: "18px",
+                color: index === crumbs.length - 1 ? C.ink : C.sub,
+                cursor: disabled ? "default" : "pointer",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                maxWidth: 190
+              }
+            }, segment.label)
+          )) : h2("span", { style: { color: C.sub, fontSize: 12 } }, placeholder)
+        ),
+        editablePath ? h2("input", {
+          key: path,
+          defaultValue: path || "",
+          spellCheck: false,
+          "aria-label": pathLabel,
+          onKeyDown: (event) => {
+            if (event.key === "Enter" && event.currentTarget.value.trim() && onPath) {
+              onPath(event.currentTarget.value.trim());
+            }
+          },
+          style: {
+            height: 28,
+            boxSizing: "border-box",
+            border: 0,
+            borderRadius: 6,
+            background: C.soft,
+            color: C.ink,
+            fontSize: 12,
+            padding: "0 8px",
+            outline: "none",
+            flex: "0 0 220px",
+            minWidth: 100,
+            fontFamily: "Consolas, monospace"
+          }
+        }) : null,
+        !compact && path && entries3 !== null ? h2(
+          "div",
+          {
+            style: {
+              display: "flex",
+              alignItems: "center",
+              gap: 5,
+              flex: "0 1 200px",
+              minWidth: 120,
+              height: 28,
+              boxSizing: "border-box",
+              padding: "0 4px 0 8px",
+              borderRadius: 7,
+              background: C.soft,
+              color: C.mute
+            }
+          },
+          h2("span", { "aria-hidden": true, style: { fontSize: 12 } }, "\u2315"),
+          h2("input", {
+            value: search2,
+            placeholder: searchPlaceholder,
+            "aria-label": searchPlaceholder,
+            spellCheck: false,
+            onChange: (event) => onSearch(event.target.value),
+            onKeyDown: (event) => {
+              if (event.key === "Escape") {
+                onSearch("");
+                event.currentTarget.blur();
+              }
+            },
+            style: {
+              flex: "1 1 auto",
+              minWidth: 0,
+              height: 22,
+              padding: 0,
+              border: 0,
+              background: "transparent",
+              color: C.ink,
+              fontSize: 12,
+              outline: "none"
+            }
+          }),
+          search2 ? h2("button", {
+            type: "button",
+            title: "\u6E05\u9664\u641C\u7D22",
+            "aria-label": "\u6E05\u9664\u641C\u7D22",
+            onClick: () => onSearch(""),
+            className: "tether-hover",
+            style: {
+              width: 18,
+              height: 18,
+              flex: "0 0 auto",
+              display: "grid",
+              placeItems: "center",
+              border: 0,
+              borderRadius: 4,
+              background: "transparent",
+              color: C.mute,
+              fontSize: 13,
+              lineHeight: "14px",
+              padding: 0,
+              cursor: "pointer"
+            }
+          }, "\xD7") : null
+        ) : null,
+        iconButton("refresh", "\u5237\u65B0", () => {
+          if (path && onRefresh) onRefresh(path);
+        }, disabled || !path)
+      ),
+      error && path && entries3 !== null ? h2("div", { role: "alert", style: { padding: "6px 14px", color: C.red || C.danger, fontSize: 12, borderBottom: C.line ? "1px solid " + C.line : 0 } }, error) : null,
+      body
+    )
+  );
+}
+
+// src/transfer-page.js
+function separator(path) {
+  return String(path || "").includes("\\") ? "\\" : "/";
+}
+function joinPath(base, name) {
+  if (!base) return name;
+  return String(base).replace(/[\\/]+$/, "") + separator(base) + name;
+}
 function formatBytes(value) {
   if (!Number.isFinite(value) || value < 0) return "";
   if (value < 1024) return value + " B";
@@ -163416,11 +163965,15 @@ function formatBytes(value) {
   if (value < 1024 * 1024 * 1024) return (value / (1024 * 1024)).toFixed(1) + " MB";
   return (value / (1024 * 1024 * 1024)).toFixed(2) + " GB";
 }
-var StableTransferBrowser = null;
+function isTextInput(target) {
+  if (!target) return false;
+  const tag2 = String(target.tagName || "").toLowerCase();
+  return tag2 === "input" || tag2 === "textarea" || tag2 === "select" || target.isContentEditable === true;
+}
 function createTransferPage({ React: React2, Glyph, api: api2, post, C, devices = [], localDevice = "", onNotice, onError }) {
   const h2 = React2.createElement;
   const field = {
-    height: 28,
+    height: 26,
     boxSizing: "border-box",
     border: 0,
     borderRadius: 6,
@@ -163430,354 +163983,634 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C, devices 
     padding: "0 8px",
     outline: "none"
   };
-  const button = (label, onClick, options = {}) => h2("button", {
-    type: "button",
-    onClick,
-    disabled: options.disabled,
-    title: options.title || label,
-    className: "tether-hover",
-    style: {
-      height: 28,
-      padding: "0 10px",
-      border: 0,
-      borderRadius: 6,
-      background: options.primary ? C.blue : C.soft,
-      color: options.primary ? "#fff" : C.ink,
-      fontSize: 12,
-      cursor: options.disabled ? "default" : "pointer",
-      opacity: options.disabled ? 0.45 : 1,
-      flex: "0 0 auto"
-    }
-  }, label);
-  if (!StableTransferBrowser) {
-    StableTransferBrowser = function Browser2({ title, roleLabel = title, accent = C.blue, deviceId, onDevice, path, onPath, selectedPath, onFile }) {
-      const [roots, setRoots] = React2.useState([]);
-      const [entries2, setEntries] = React2.useState(null);
-      const [loading, setLoading] = React2.useState(false);
-      const [error, setError] = React2.useState("");
-      const [draft, setDraft] = React2.useState(path || "");
-      const [sort, setSort] = React2.useState({ key: "name", dir: "asc" });
-      const [search2, setSearch] = React2.useState("");
-      const run = React2.useRef(0);
-      const pathRef = React2.useRef(path);
-      pathRef.current = path;
-      React2.useEffect(() => {
-        let cancelled = false;
-        if (!deviceId) {
-          setRoots([]);
-          setEntries(null);
-          return void 0;
-        }
-        setLoading(true);
-        setError("");
-        Promise.all([
-          api2("/api/devices/" + encodeURIComponent(deviceId) + "/workspaces").catch(() => ({ workspaces: [] })),
-          api2("/api/devices/" + encodeURIComponent(deviceId) + "/drives").catch(() => ({ drives: [] }))
-        ]).then(([workspaceData, driveData]) => {
-          if (cancelled) return;
-          const list2 = [
-            ...(workspaceData && workspaceData.workspaces || []).map((item) => ({ name: item.name || item.path, path: item.path, kind: "workspace" })),
-            ...(driveData && driveData.drives || []).map((item) => ({ name: item.name || item.path, path: item.path, kind: "drive" }))
-          ].filter((item) => item.path);
-          setRoots(list2);
-          if (!pathRef.current && list2.length) onPath(list2[0].path);
-        }).catch((cause) => {
-          if (!cancelled) setError(cause.message || "\u8BFB\u53D6\u6839\u76EE\u5F55\u5931\u8D25");
-        }).finally(() => {
-          if (!cancelled) setLoading(false);
-        });
-        return () => {
-          cancelled = true;
-        };
-      }, [deviceId]);
-      React2.useEffect(() => {
-        setDraft(path || "");
-        if (!deviceId || !path) {
-          setEntries(null);
-          return void 0;
-        }
-        const token = ++run.current;
-        let cancelled = false;
-        setLoading(true);
-        setError("");
-        post("/api/devices/" + encodeURIComponent(deviceId) + "/fs/list", { path }).then((data) => {
-          if (cancelled || token !== run.current) return;
-          const list2 = (data && data.entries || []).filter((item) => item && item.path && item.name);
-          list2.sort((left, right) => left.dir === right.dir ? String(left.name).localeCompare(String(right.name)) : left.dir ? -1 : 1);
-          setEntries(list2);
-        }).catch((cause) => {
-          if (!cancelled && token === run.current) {
-            setEntries([]);
-            setError(cause.message || "\u8BFB\u53D6\u76EE\u5F55\u5931\u8D25");
-          }
-        }).finally(() => {
-          if (!cancelled && token === run.current) setLoading(false);
-        });
-        return () => {
-          cancelled = true;
-        };
-      }, [deviceId, path]);
-      const open = (item) => {
-        if (item.dir) onPath(item.path);
-        else if (onFile) onFile(item);
+  const onlineDevices = devices.filter((item) => item && item.online);
+  const initialLeft = localDevice && onlineDevices.some((item) => item.device_id === localDevice) ? localDevice : onlineDevices[0] && onlineDevices[0].device_id || "";
+  const initialRight = (onlineDevices.find((item) => item.device_id !== initialLeft) || {}).device_id || "";
+  function FilePane({
+    side: side2,
+    deviceId,
+    otherDeviceId,
+    onDevice,
+    path,
+    onPath,
+    selection,
+    onSelection,
+    onEntries,
+    onDragItems,
+    onDropItems,
+    onContextItem,
+    active,
+    onActivate,
+    refreshKey = 0
+  }) {
+    const [roots, setRoots] = React2.useState([]);
+    const [entries3, setEntries] = React2.useState(null);
+    const [treeChildren, setTreeChildren] = React2.useState({});
+    const [expanded, setExpanded] = React2.useState({});
+    const [loading, setLoading] = React2.useState(false);
+    const [error, setError] = React2.useState("");
+    const [sort, setSort] = React2.useState({ key: "name", dir: "asc" });
+    const [search2, setSearch] = React2.useState("");
+    const run = React2.useRef(0);
+    const pathRef = React2.useRef(path);
+    pathRef.current = path;
+    React2.useEffect(() => {
+      let cancelled = false;
+      setTreeChildren({});
+      setExpanded({});
+      if (!deviceId) {
+        setRoots([]);
+        setEntries(null);
+        return void 0;
+      }
+      setLoading(true);
+      setError("");
+      Promise.all([
+        api2("/api/devices/" + encodeURIComponent(deviceId) + "/workspaces").catch(() => ({ workspaces: [] })),
+        api2("/api/devices/" + encodeURIComponent(deviceId) + "/drives").catch(() => ({ drives: [] }))
+      ]).then(([workspaceData, driveData]) => {
+        if (cancelled) return;
+        const list2 = [
+          ...(workspaceData && workspaceData.workspaces || []).map((item) => ({ name: item.name || item.path, path: item.path, kind: "workspace", dir: true })),
+          ...(driveData && driveData.drives || []).map((item) => ({ name: item.name || item.path, path: item.path, kind: "drive", dir: true }))
+        ].filter((item) => item.path);
+        setRoots(list2);
+        if (!pathRef.current && list2.length) onPath(list2[0].path);
+      }).catch((cause) => {
+        if (!cancelled) setError(cause.message || "\u8BFB\u53D6\u6839\u76EE\u5F55\u5931\u8D25");
+      }).finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+      return () => {
+        cancelled = true;
       };
-      const matchingRoot = roots.filter((item) => path && String(path).toLowerCase().startsWith(String(item.path).toLowerCase())).sort((left, right) => String(right.path).length - String(left.path).length)[0];
-      const navigate = (next) => {
-        setSearch("");
-        onPath(next);
+    }, [deviceId]);
+    React2.useEffect(() => {
+      if (!deviceId || !path) {
+        setEntries(null);
+        onEntries([]);
+        return void 0;
+      }
+      const token = ++run.current;
+      let cancelled = false;
+      setLoading(true);
+      setError("");
+      post("/api/devices/" + encodeURIComponent(deviceId) + "/fs/list", { path }).then((data) => {
+        if (cancelled || token !== run.current) return;
+        const list2 = (data && data.entries || []).filter((item) => item && item.path && item.name);
+        list2.sort((left, right) => left.dir === right.dir ? String(left.name).localeCompare(String(right.name)) : left.dir ? -1 : 1);
+        setEntries(list2);
+        onEntries(list2);
+      }).catch((cause) => {
+        if (!cancelled && token === run.current) {
+          setEntries([]);
+          onEntries([]);
+          setError(cause.message || "\u8BFB\u53D6\u76EE\u5F55\u5931\u8D25");
+        }
+      }).finally(() => {
+        if (!cancelled && token === run.current) setLoading(false);
+      });
+      return () => {
+        cancelled = true;
       };
-      return h2(
+    }, [deviceId, path, refreshKey]);
+    const toggleTree = async (item) => {
+      if (!item || !item.dir || !deviceId) return;
+      const key = item.path;
+      if (expanded[key]) {
+        setExpanded((current) => {
+          const next = { ...current };
+          delete next[key];
+          return next;
+        });
+        return;
+      }
+      setExpanded((current) => ({ ...current, [key]: true }));
+      if (treeChildren[key]) return;
+      try {
+        const data = await post("/api/devices/" + encodeURIComponent(deviceId) + "/fs/list", { path: key });
+        const list2 = (data && data.entries || []).filter((entry) => entry && entry.path && entry.name);
+        setTreeChildren((current) => ({ ...current, [key]: list2 }));
+      } catch (_) {
+      }
+    };
+    const fileIcon = (item) => h2("span", {
+      "aria-hidden": true,
+      style: { width: 15, height: 15, display: "grid", placeItems: "center", color: item.dir ? "#d99a2b" : C.mute, flex: "0 0 auto" }
+    }, h2(Glyph, { name: item.dir ? "folderClose" : "file", size: 14 }));
+    return h2(
+      "div",
+      {
+        onMouseDown: onActivate,
+        onDragOver: (event) => {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "copy";
+        },
+        onDrop: (event) => {
+          event.preventDefault();
+          if (onDropItems) onDropItems();
+        },
+        style: {
+          flex: "1 1 0",
+          minWidth: 0,
+          display: "flex",
+          flexDirection: "column",
+          background: C.bg,
+          borderRadius: 8,
+          overflow: "hidden",
+          outline: active ? "1px solid " + C.blue : "1px solid transparent"
+        }
+      },
+      h2(
         "div",
-        { style: { flex: "1 1 0", minWidth: 0, display: "flex", flexDirection: "column", background: C.bg, borderRadius: 10, overflow: "hidden", borderTop: "2px solid " + accent, boxShadow: "0 1px 2px rgba(16,24,40,0.06)" } },
+        { style: { display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", background: C.soft, flex: "0 0 auto" } },
         h2(
-          "div",
-          { style: { display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", background: C.soft, flex: "0 0 auto", minWidth: 0 } },
-          h2("span", { style: { flex: "0 0 auto", height: 20, padding: "0 8px", borderRadius: 999, background: "color-mix(in srgb, " + accent + " 12%, transparent)", color: accent, display: "inline-flex", alignItems: "center", fontSize: 11, fontWeight: 600 } }, roleLabel),
-          h2("select", {
+          "select",
+          {
             value: deviceId || "",
             onChange: (event) => {
               onDevice(event.target.value);
               onPath("");
+              onSelection([]);
+              onActivate();
+              event.currentTarget.blur();
             },
+            "aria-label": "\u8BBE\u5907",
+            title: "\u9009\u62E9\u8FD9\u53F0\u7535\u8111",
             style: { ...field, flex: "1 1 auto", minWidth: 0 }
-          }, devices.map((item) => h2("option", { key: item.device_id, value: item.device_id }, (item.name || item.device_id) + (item.online ? "" : " \xB7 \u79BB\u7EBF"))))
-        ),
-        h2(
-          "div",
-          { style: { display: "flex", alignItems: "center", gap: 6, padding: "7px 12px", flex: "0 0 auto", minWidth: 0 } },
-          h2(
-            "select",
-            {
-              value: "",
-              onChange: (event) => {
-                if (event.target.value) onPath(event.target.value);
-              },
-              title: "\u5DE5\u4F5C\u533A\u4E0E\u78C1\u76D8",
-              style: { ...field, width: 108, flex: "0 0 auto" }
-            },
-            h2("option", { value: "" }, "\u4F4D\u7F6E\u2026"),
-            roots.map((item) => h2("option", { key: item.kind + ":" + item.path, value: item.path }, item.name))
-          ),
-          button("\u2191", () => {
-            const up = parentPath(path);
-            if (up) onPath(up);
-          }, { title: "\u4E0A\u4E00\u7EA7", disabled: !path }),
-          h2("input", {
-            value: draft,
-            spellCheck: false,
-            "aria-label": title + "\u8DEF\u5F84",
-            onChange: (event) => setDraft(event.target.value),
-            onKeyDown: (event) => {
-              if (event.key === "Enter" && draft.trim()) onPath(draft.trim());
-            },
-            style: { ...field, flex: "1 1 auto", minWidth: 0, fontFamily: "Consolas, monospace" }
-          }),
-          button("\u5237\u65B0", () => onPath(path), { title: "\u5237\u65B0\u76EE\u5F55", disabled: !path })
-        ),
-        error ? h2("div", { role: "alert", style: { padding: "4px 12px", color: C.red, fontSize: 11.5, flex: "0 0 auto" } }, error) : null,
-        h2(
-          "div",
-          { style: { flex: "1 1 auto", minHeight: 0, overflow: "auto", padding: "0 6px 10px" } },
-          loading && !entries2 ? h2("div", { style: { padding: 16, color: C.mute, fontSize: 12 } }, "\u52A0\u8F7D\u4E2D\u2026") : null,
-          !loading && entries2 && !entries2.length ? h2("div", { style: { padding: 16, color: C.mute, fontSize: 12 } }, error ? "" : "\u7A7A\u76EE\u5F55") : null,
-          (entries2 || []).map((item) => {
-            const selected = !item.dir && selectedPath === item.path;
-            return h2(
-              "button",
-              {
-                key: item.path,
-                type: "button",
-                title: item.path,
-                onClick: () => open(item),
-                className: "tether-hover",
-                style: {
-                  display: "grid",
-                  gridTemplateColumns: "minmax(0,1fr) 150px 90px",
-                  gap: 8,
-                  alignItems: "center",
-                  width: "100%",
-                  height: 29,
-                  padding: "0 8px",
-                  border: 0,
-                  borderRadius: 6,
-                  background: selected ? C.soft : "transparent",
-                  color: C.ink,
-                  fontSize: 12.5,
-                  textAlign: "left",
-                  cursor: "pointer"
-                }
-              },
-              h2(
-                "span",
-                { style: { display: "flex", alignItems: "center", gap: 7, minWidth: 0 } },
-                h2("span", { "aria-hidden": true, style: { width: 14, color: accent, fontSize: 11 } }, item.dir ? "\u25B8" : "\u2022"),
-                h2("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, item.name)
-              ),
-              h2("span", { style: { color: C.mute, fontSize: 11 } }, item.mtime ? new Date(item.mtime * 1e3).toLocaleString("zh-CN", { hour12: false }) : ""),
-              h2("span", { style: { color: C.mute, fontSize: 11, textAlign: "right" } }, item.dir ? "\u6587\u4EF6\u5939" : formatBytes(Number(item.size)))
-            );
-          })
+          },
+          !deviceId ? h2("option", { value: "" }, "\u9009\u62E9\u8BBE\u5907\u2026") : null,
+          devices.map((item) => h2("option", {
+            key: item.device_id,
+            value: item.device_id,
+            disabled: !item.online || item.device_id === otherDeviceId
+          }, (item.name || item.device_id) + (item.online ? "" : " \xB7 \u79BB\u7EBF") + (item.device_id === otherDeviceId ? " \xB7 \u5DF2\u5728\u53E6\u4E00\u4FA7" : "")))
         )
-      );
-    };
+      ),
+      TargetFileExplorer({
+        React: React2,
+        colors: { bg: C.bg, soft: C.soft, ink: C.ink, sub: C.sub, mute: C.mute, line: C.line, hover: C.soft, red: C.red },
+        compact: true,
+        roots,
+        rootPath: "",
+        path,
+        entries: entries3,
+        loading,
+        error,
+        selectedPaths: selection,
+        selectionMode: "multiple",
+        onSelectionChange: onSelection,
+        onRoot: (next) => onPath(next),
+        onPath: (next) => onPath(next),
+        onSelect: () => {
+        },
+        onOpen: (item) => {
+          if (item.dir) onPath(item.path);
+        },
+        onRefresh: (next) => onPath(next),
+        onDragItem: (event, item) => {
+          const items = selection.includes(item.path) ? selection : [item.path];
+          if (onDragItems) onDragItems(items);
+          event.dataTransfer.effectAllowed = "copy";
+          event.dataTransfer.setData("text/plain", item.path);
+        },
+        onContextMenu: (item, event) => {
+          if (onContextItem) onContextItem(item, event);
+        },
+        fileIcon,
+        formatTime: (value) => value ? new Date(value * 1e3).toLocaleString("zh-CN", { hour12: false }) : "",
+        formatSize: (value) => formatBytes(Number(value)),
+        limit: Number.MAX_SAFE_INTEGER,
+        emptyText: "\u7A7A\u6587\u4EF6\u5939",
+        placeholder: "\u9009\u62E9\u5DE6\u4FA7\u7684\u7535\u8111\u6216\u78C1\u76D8",
+        sort,
+        onSort: setSort,
+        search: search2,
+        onSearch: setSearch,
+        treeChildren,
+        expanded,
+        onToggleTree: (item) => {
+          void toggleTree(item);
+        }
+      })
+    );
   }
-  const Browser = StableTransferBrowser;
-  const online = devices.filter((item) => item && item.online);
-  const initialSource = localDevice && devices.some((item) => item.device_id === localDevice) ? localDevice : online[0] && online[0].device_id || "";
-  const [sourceDevice, setSourceDevice] = React2.useState(initialSource);
-  const [destDevice, setDestDevice] = React2.useState((online.find((item) => item.device_id !== initialSource) || {}).device_id || "");
-  const [sourcePath, setSourcePath] = React2.useState("");
-  const [destPath, setDestPath] = React2.useState("");
-  const [sourceFile, setSourceFile] = React2.useState(null);
+  const [leftDevice, setLeftDevice] = React2.useState(initialLeft);
+  const [rightDevice, setRightDevice] = React2.useState(initialRight);
+  const [leftPath, setLeftPath] = React2.useState("");
+  const [rightPath, setRightPath] = React2.useState("");
+  const [leftSelection, setLeftSelection] = React2.useState([]);
+  const [rightSelection, setRightSelection] = React2.useState([]);
+  const [leftEntries, setLeftEntries] = React2.useState([]);
+  const [rightEntries, setRightEntries] = React2.useState([]);
+  const [activeSide, setActiveSide] = React2.useState("left");
+  const [leftRefresh, setLeftRefresh] = React2.useState(0);
+  const [rightRefresh, setRightRefresh] = React2.useState(0);
   const [overwrite, setOverwrite] = React2.useState(false);
   const [job, setJob] = React2.useState(null);
-  const [refresh, setRefresh] = React2.useState(0);
+  const [menu, setMenu] = React2.useState(null);
+  const dragRef = React2.useRef(null);
+  const clipboardRef = React2.useRef(null);
   const abortRef = React2.useRef(null);
-  const transferRef = React2.useRef("");
-  const sourceItem = devices.find((item) => item.device_id === sourceDevice);
-  const destItem = devices.find((item) => item.device_id === destDevice);
-  const destination = sourceFile && destPath ? joinPath(destPath, sourceFile.name) : "";
-  const running = !!(job && job.state === "running");
-  const canStart = !!(sourceFile && destination && sourceItem && destItem && sourceItem.online && destItem.online && !running);
-  const start = async () => {
-    if (!sourceFile || !destination) return;
+  const queueRef = React2.useRef(null);
+  const latest = React2.useRef({});
+  latest.current = {
+    leftDevice,
+    rightDevice,
+    leftPath,
+    rightPath,
+    leftSelection,
+    rightSelection,
+    leftEntries,
+    rightEntries,
+    activeSide,
+    overwrite
+  };
+  React2.useEffect(() => {
+    if (leftDevice && rightDevice && leftDevice === rightDevice) {
+      const replacement = (onlineDevices.find((item) => item.device_id !== leftDevice) || {}).device_id || "";
+      setRightDevice(replacement);
+      setRightPath("");
+      setRightSelection([]);
+      if (onNotice) onNotice("\u4E24\u4FA7\u4E0D\u80FD\u662F\u540C\u4E00\u53F0\u7535\u8111\uFF0C\u5DF2\u5207\u6362\u53E6\u4E00\u4FA7");
+    }
+  }, [leftDevice, rightDevice]);
+  const side = (name) => name === "left" ? { device: leftDevice, path: leftPath, selection: leftSelection, entries: leftEntries } : { device: rightDevice, path: rightPath, selection: rightSelection, entries: rightEntries };
+  const other = (name) => name === "left" ? "right" : "left";
+  const itemsFor = (name) => {
+    const current = side(name);
+    return current.entries.filter((item) => current.selection.includes(item.path) && !item.dir);
+  };
+  const startQueue = async (fromSide, items, targetPath, cut = false) => {
+    const target2 = side(other(fromSide));
+    if (!items.length || !target2.path || !target2.device) return;
     const controller = new AbortController();
     abortRef.current = controller;
-    if (!transferRef.current) transferRef.current = newTransferId();
-    const transferId = transferRef.current;
-    setJob({ state: "running", percent: 0, transferred: 0, total: Number(sourceFile.size) || 0, destination, error: "" });
-    const base = "/api/devices/" + encodeURIComponent(destDevice);
+    const total = items.reduce((sum, item) => sum + (Number(item.size) || 0), 0);
+    const queue = { fromSide, items, targetPath: target2.path, targetDevice: target2.device, done: 0, index: 0 };
+    queueRef.current = queue;
+    setJob({ state: "running", percent: 0, transferred: 0, total, count: items.length, index: 0, error: "" });
+    let transferred = 0;
+    let doneBytes = 0;
     try {
-      const result = await transferFile({
-        source: sourceFile.path,
-        destination,
-        transferId,
-        overwrite,
-        signal: controller.signal,
-        read: (args) => post(
-          "/api/devices/" + encodeURIComponent(sourceDevice) + "/fs/read",
-          { path: args.path, offset: args.offset, limit: args.limit, encoding: "base64" }
-        ),
-        write: (args) => post(base + "/fs/write_chunk", { ...args, transfer_id: args.transferId }),
-        status: (args) => post(base + "/fs/transfer_status", { path: args.path, transfer_id: args.transferId }),
-        cancel: (args) => post(base + "/fs/transfer_cancel", { path: args.path, transfer_id: args.transferId }),
-        onProgress: (value) => setJob((current) => ({ ...current || {}, ...value, state: "running" }))
-      });
-      setJob({ state: "done", percent: 100, transferred: result.bytes, total: result.bytes, destination, error: "" });
-      transferRef.current = "";
-      setRefresh((value) => value + 1);
-      if (onNotice) onNotice("\u5DF2\u8F6C\u79FB " + sourceFile.name + "\uFF08" + formatBytes(result.bytes) + "\uFF09");
+      for (let index = 0; index < items.length; index += 1) {
+        const item = items[index];
+        const destination = joinPath(target2.path, item.name);
+        const sourceDevice = side(fromSide).device;
+        await transferFile({
+          source: item.path,
+          destination,
+          transferId: newTransferId(),
+          overwrite: latest.current.overwrite,
+          signal: controller.signal,
+          read: (args) => post(
+            "/api/devices/" + encodeURIComponent(sourceDevice) + "/fs/read",
+            { path: args.path, offset: args.offset, limit: args.limit, encoding: "base64" }
+          ),
+          write: (args) => post(
+            "/api/devices/" + encodeURIComponent(target2.device) + "/fs/write_chunk",
+            { ...args, transfer_id: args.transferId }
+          ),
+          status: (args) => post(
+            "/api/devices/" + encodeURIComponent(target2.device) + "/fs/transfer_status",
+            { path: args.path, transfer_id: args.transferId }
+          ),
+          cancel: (args) => post(
+            "/api/devices/" + encodeURIComponent(target2.device) + "/fs/transfer_cancel",
+            { path: args.path, transfer_id: args.transferId }
+          ),
+          onProgress: (value) => {
+            const currentBytes = doneBytes + Math.max(0, Number(value && value.transferred) || 0);
+            setJob((current) => ({
+              ...current || {},
+              percent: total ? Math.min(99, Math.round(currentBytes / total * 100)) : 0,
+              transferred: currentBytes,
+              index,
+              count: items.length,
+              state: "running"
+            }));
+          }
+        });
+        if (cut) {
+          await post("/api/devices/" + encodeURIComponent(sourceDevice) + "/fs/delete", { path: item.path }).catch(() => {
+            if (onError) onError(new Error("\u5DF2\u590D\u5236\u4F46\u672A\u80FD\u5220\u9664\u6E90\u6587\u4EF6\uFF1A" + item.name));
+          });
+        }
+        doneBytes += Number(item.size) || 0;
+        transferred = doneBytes;
+        queue.done = index + 1;
+        setJob((current) => ({
+          ...current || {},
+          percent: total ? Math.round(doneBytes / total * 100) : 100,
+          transferred: doneBytes,
+          index,
+          state: "running"
+        }));
+      }
+      setJob((current) => ({ ...current || {}, state: "done", percent: 100, transferred, count: items.length }));
+      if (onNotice) onNotice("\u5DF2\u8F6C\u79FB " + items.length + " \u4E2A\u6587\u4EF6\uFF08" + formatBytes(transferred) + "\uFF09");
+      setLeftRefresh((value) => value + 1);
+      setRightRefresh((value) => value + 1);
+      setLeftSelection([]);
+      setRightSelection([]);
     } catch (cause) {
       const aborted = cause && cause.code === "aborted";
-      setJob((current) => ({ ...current || {}, state: aborted ? "cancelled" : "error", error: aborted ? "\u5DF2\u53D6\u6D88" : cause.message || "\u4F20\u8F93\u5931\u8D25", code: cause.code }));
+      setJob((current) => ({ ...current || {}, state: aborted ? "cancelled" : "error", error: aborted ? "\u5DF2\u53D6\u6D88" : cause.message || "\u4F20\u8F93\u5931\u8D25" }));
       if (!aborted && onError) onError(cause);
-      if (aborted) transferRef.current = "";
     } finally {
       abortRef.current = null;
     }
+  };
+  const start = () => {
+    const from = activeSide;
+    const items = itemsFor(from);
+    if (!items.length) return;
+    void startQueue(from, items, side(other(from)).path);
   };
   const cancel = () => {
     if (abortRef.current) abortRef.current.abort();
   };
   const swap = () => {
-    setSourceDevice(destDevice);
-    setDestDevice(sourceDevice);
-    setSourcePath(destPath);
-    setDestPath(sourcePath);
-    setSourceFile(null);
+    setLeftDevice(rightDevice);
+    setRightDevice(leftDevice);
+    setLeftPath(rightPath);
+    setRightPath(leftPath);
+    setLeftSelection([]);
+    setRightSelection([]);
+  };
+  const selectAll = (name) => {
+    const current = side(name);
+    const files = current.entries.filter((item) => !item.dir).map((item) => item.path);
+    if (name === "left") setLeftSelection(files);
+    else setRightSelection(files);
+  };
+  const copySelection = (name, cut) => {
+    const items = itemsFor(name);
+    if (!items.length) return;
+    clipboardRef.current = { side: name, items, cut: !!cut };
+    if (onNotice) onNotice((cut ? "\u5DF2\u526A\u5207 " : "\u5DF2\u590D\u5236 ") + items.length + " \u4E2A\u6587\u4EF6");
+  };
+  const pasteInto = (name) => {
+    const clip = clipboardRef.current;
+    if (!clip || !clip.items.length || clip.side === name) return;
+    void startQueue(clip.side, clip.items, side(name).path, clip.cut);
+    if (clip.cut) clipboardRef.current = null;
+  };
+  const actionsRef = React2.useRef({});
+  actionsRef.current = { selectAll, copySelection, pasteInto };
+  React2.useEffect(() => {
+    const onKey = (event) => {
+      if (!(event.ctrlKey || event.metaKey) || isTextInput(event.target)) return;
+      const key = String(event.key || "").toLowerCase();
+      const actions = actionsRef.current;
+      if (key === "a") {
+        event.preventDefault();
+        actions.selectAll(latest.current.activeSide);
+      } else if (key === "c") {
+        event.preventDefault();
+        actions.copySelection(latest.current.activeSide, false);
+      } else if (key === "x") {
+        event.preventDefault();
+        actions.copySelection(latest.current.activeSide, true);
+      } else if (key === "v") {
+        event.preventDefault();
+        actions.pasteInto(latest.current.activeSide);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  React2.useEffect(() => {
+    if (!menu) return void 0;
+    const close = () => setMenu(null);
+    window.addEventListener("mousedown", close);
+    window.addEventListener("keydown", close);
+    return () => {
+      window.removeEventListener("mousedown", close);
+      window.removeEventListener("keydown", close);
+    };
+  }, [menu]);
+  const openContext = (sideName) => (item, event) => {
+    if (!item) return;
+    const current = side(sideName);
+    if (!current.selection.includes(item.path)) {
+      const next = event && (event.ctrlKey || event.metaKey) ? [...current.selection, item.path] : [item.path];
+      if (sideName === "left") setLeftSelection(next);
+      else setRightSelection(next);
+    }
+    setActiveSide(sideName);
+    setMenu({ x: event.clientX, y: event.clientY, side: sideName });
   };
   const progress = job ? Math.max(0, Math.min(100, Number(job.percent) || 0)) : 0;
+  const sourceCount = itemsFor(activeSide).length;
+  const target = side(other(activeSide));
+  let footerText = "\u9009\u62E9\u6587\u4EF6\u540E\u62D6\u5230\u53E6\u4E00\u4FA7\uFF0C\u6216\u7528 Ctrl+C / Ctrl+X\u3001Ctrl+V";
+  if (job) {
+    if (job.state === "running") footerText = "\u6B63\u5728\u8F6C\u79FB " + ((job.index || 0) + 1) + "/" + (job.count || 1);
+    else if (job.state === "done") footerText = "\u5DF2\u8F6C\u79FB " + (job.count || 0) + " \u4E2A\u6587\u4EF6";
+    else if (job.state === "error") footerText = job.error;
+    else footerText = job.error || "\u5DF2\u53D6\u6D88";
+  } else if (sourceCount) footerText = "\u5DF2\u9009 " + sourceCount + " \u4E2A\u6587\u4EF6 \u2192 " + (target.path || "\u5148\u5728\u53E6\u4E00\u4FA7\u9009\u62E9\u76EE\u5F55");
   return h2(
     "div",
-    { style: { flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column", padding: "14px 18px 18px", gap: 12, background: C.bg } },
+    { style: { flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column", padding: "12px 16px 14px", gap: 10, background: C.bg } },
     h2(
       "div",
-      { style: { display: "flex", alignItems: "center", gap: 10, flex: "0 0 auto", minWidth: 0 } },
-      h2("div", { style: { fontSize: 18, fontWeight: 600, color: C.ink, flex: "0 0 auto" } }, "\u6587\u4EF6\u8F6C\u79FB"),
+      { style: { display: "flex", alignItems: "center", gap: 10, flex: "0 0 auto" } },
+      h2("div", { style: { fontSize: 17, fontWeight: 600, color: C.ink } }, "\u6587\u4EF6\u8F6C\u79FB"),
       h2(
         "div",
-        { style: { marginLeft: "auto", display: "flex", alignItems: "center", gap: 8, minWidth: 0, color: C.sub, fontSize: 12 } },
+        { style: { marginLeft: "auto", display: "flex", alignItems: "center", gap: 10, color: C.mute, fontSize: 11.5 } },
         h2(
           "span",
-          { style: { display: "inline-flex", alignItems: "center", gap: 6, minWidth: 0 } },
-          h2("span", { style: { width: 7, height: 7, borderRadius: 4, background: C.blue, flex: "0 0 auto" } }),
-          h2("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, sourceItem && (sourceItem.name || sourceItem.device_id) || "\u9009\u62E9\u6765\u6E90")
+          { style: { display: "inline-flex", alignItems: "center", gap: 5 } },
+          h2("span", { style: { width: 6, height: 6, borderRadius: 3, background: C.blue } }),
+          (devices.find((item) => item.device_id === leftDevice) || {}).name || "\u5DE6\u4FA7"
         ),
-        h2("span", { style: { color: C.mute } }, "\u2192"),
+        h2(Glyph, { name: "transfer", size: 14 }),
         h2(
           "span",
-          { style: { display: "inline-flex", alignItems: "center", gap: 6, minWidth: 0 } },
-          h2("span", { style: { width: 7, height: 7, borderRadius: 4, background: C.green, flex: "0 0 auto" } }),
-          h2("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, destItem && (destItem.name || destItem.device_id) || "\u9009\u62E9\u76EE\u6807")
+          { style: { display: "inline-flex", alignItems: "center", gap: 5 } },
+          h2("span", { style: { width: 6, height: 6, borderRadius: 3, background: C.green } }),
+          (devices.find((item) => item.device_id === rightDevice) || {}).name || "\u53F3\u4FA7"
         )
       )
     ),
     h2(
       "div",
-      { style: { display: "flex", gap: 12, flex: "1 1 auto", minHeight: 0 } },
-      h2(Browser, {
-        title: "\u6E90\u8BBE\u5907",
-        roleLabel: "\u6765\u6E90",
-        accent: C.blue,
-        deviceId: sourceDevice,
+      { style: { display: "flex", gap: 8, flex: "1 1 auto", minHeight: 0 } },
+      FilePane({
+        side: "left",
+        deviceId: leftDevice,
+        otherDeviceId: rightDevice,
+        devices,
         onDevice: (id) => {
-          setSourceDevice(id);
-          setSourceFile(null);
+          setLeftDevice(id);
+          setLeftPath("");
+          setLeftSelection([]);
         },
-        path: sourcePath,
-        onPath: setSourcePath,
-        selectedPath: sourceFile && sourceFile.path,
-        onFile: (item) => setSourceFile(item)
+        path: leftPath,
+        onPath: setLeftPath,
+        refreshKey: leftRefresh,
+        selection: leftSelection,
+        onSelection: setLeftSelection,
+        onEntries: setLeftEntries,
+        active: activeSide === "left",
+        onActivate: () => setActiveSide("left"),
+        onDragItems: (paths) => {
+          dragRef.current = { side: "left", paths, entries };
+        },
+        onDropItems: () => {
+          const drag = dragRef.current;
+          dragRef.current = null;
+          if (!drag || drag.side === "left" || !leftPath) return;
+          const items = (drag.entries || []).filter((item) => drag.paths.includes(item.path) && !item.dir);
+          if (!items.length) return;
+          void startQueue(drag.side, items, leftPath);
+        },
+        onContextItem: openContext("left")
       }),
       h2("button", {
         type: "button",
         onClick: swap,
-        title: "\u4EA4\u6362\u6765\u6E90\u4E0E\u76EE\u6807",
-        "aria-label": "\u4EA4\u6362\u6765\u6E90\u4E0E\u76EE\u6807",
-        style: { alignSelf: "center", width: 32, height: 32, borderRadius: 999, border: "1px solid " + C.line, background: C.bg, color: C.sub, fontSize: 15, cursor: "pointer", flex: "0 0 auto" }
-      }, "\u21C4"),
-      h2(Browser, {
-        key: "dest:" + refresh,
-        title: "\u76EE\u6807\u76EE\u5F55",
-        roleLabel: "\u76EE\u6807",
-        accent: C.green,
-        deviceId: destDevice,
-        onDevice: (id) => setDestDevice(id),
-        path: destPath,
-        onPath: setDestPath,
-        selectedPath: ""
+        title: "\u4EA4\u6362\u4E24\u4FA7\u7535\u8111",
+        "aria-label": "\u4EA4\u6362\u4E24\u4FA7\u7535\u8111",
+        className: "tether-hover",
+        style: {
+          alignSelf: "center",
+          width: 28,
+          height: 28,
+          flex: "0 0 auto",
+          display: "grid",
+          placeItems: "center",
+          border: 0,
+          borderRadius: 999,
+          background: C.soft,
+          color: C.sub,
+          cursor: "pointer"
+        }
+      }, h2(Glyph, { name: "transfer", size: 14 })),
+      FilePane({
+        side: "right",
+        deviceId: rightDevice,
+        otherDeviceId: leftDevice,
+        devices,
+        onDevice: (id) => {
+          setRightDevice(id);
+          setRightPath("");
+          setRightSelection([]);
+        },
+        path: rightPath,
+        onPath: setRightPath,
+        refreshKey: rightRefresh,
+        selection: rightSelection,
+        onSelection: setRightSelection,
+        onEntries: setRightEntries,
+        active: activeSide === "right",
+        onActivate: () => setActiveSide("right"),
+        onDragItems: (paths) => {
+          dragRef.current = { side: "right", paths, entries };
+        },
+        onDropItems: () => {
+          const drag = dragRef.current;
+          dragRef.current = null;
+          if (!drag || drag.side === "right" || !rightPath) return;
+          const items = (drag.entries || []).filter((item) => drag.paths.includes(item.path) && !item.dir);
+          if (!items.length) return;
+          void startQueue(drag.side, items, rightPath);
+        },
+        onContextItem: openContext("right")
       })
     ),
     h2(
       "div",
-      { style: { display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 10, background: C.panel, border: "1px solid " + C.line, flex: "0 0 auto", minWidth: 0 } },
+      { style: { display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 8, background: C.panel, flex: "0 0 auto", minWidth: 0 } },
       h2(
         "div",
         { style: { flex: "1 1 auto", minWidth: 0, display: "grid", gap: 2 } },
-        h2("div", { style: { fontSize: 12.5, color: sourceFile ? C.ink : C.mute, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, sourceFile ? sourceFile.name : "\u4ECE\u6765\u6E90\u4FA7\u9009\u62E9\u4E00\u4E2A\u6587\u4EF6"),
-        h2("div", { style: { fontSize: 11, color: C.mute, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, sourceFile ? formatBytes(Number(sourceFile.size)) + " \u2192 " + (destination || "\u9009\u62E9\u76EE\u6807\u76EE\u5F55") : "\u9009\u62E9\u76EE\u6807\u76EE\u5F55\u540E\u5F00\u59CB")
+        h2("div", { style: { fontSize: 12, color: C.sub, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, footerText),
+        job ? h2(
+          "div",
+          { style: { display: "flex", alignItems: "center", gap: 8 } },
+          h2(
+            "div",
+            { style: { flex: "1 1 auto", height: 5, borderRadius: 999, background: C.soft, overflow: "hidden" } },
+            h2("div", { style: { width: progress + "%", height: "100%", background: job.state === "error" ? C.red : C.blue, transition: "width 150ms ease" } })
+          ),
+          h2("span", { className: "tether-num", style: { fontSize: 10.5, color: C.mute, whiteSpace: "nowrap" } }, progress + "% \xB7 " + formatBytes(job.transferred || 0) + " / " + formatBytes(job.total || 0))
+        ) : null
       ),
       h2(
         "label",
-        { style: { display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: C.sub, flex: "0 0 auto" } },
+        { style: { display: "flex", alignItems: "center", gap: 5, fontSize: 11.5, color: C.sub, flex: "0 0 auto" } },
         h2("input", { type: "checkbox", checked: overwrite, onChange: (event) => setOverwrite(event.target.checked) }),
-        "\u8986\u76D6\u540C\u540D\u6587\u4EF6"
+        "\u8986\u76D6\u540C\u540D"
       ),
-      running ? button("\u53D6\u6D88", cancel) : button(job && job.state === "error" ? "\u91CD\u8BD5" : "\u5F00\u59CB\u8F6C\u79FB", start, { primary: true, disabled: !canStart })
+      job && job.state === "running" ? h2("button", { type: "button", onClick: cancel, style: { ...field, height: 28, padding: "0 12px", cursor: "pointer" } }, "\u53D6\u6D88") : h2("button", {
+        type: "button",
+        onClick: start,
+        disabled: !sourceCount || !target.path,
+        className: "tether-press",
+        style: {
+          height: 28,
+          padding: "0 14px",
+          border: 0,
+          borderRadius: 6,
+          background: C.blue,
+          color: "#fff",
+          fontSize: 12,
+          cursor: !sourceCount || !target.path ? "not-allowed" : "pointer",
+          opacity: !sourceCount || !target.path ? 0.45 : 1
+        }
+      }, "\u8F6C\u79FB\u5230\u53E6\u4E00\u4FA7")
     ),
-    job ? h2(
+    menu ? h2(
       "div",
-      { style: { display: "flex", alignItems: "center", gap: 10, flex: "0 0 auto" } },
-      h2(
-        "div",
-        { style: { flex: "1 1 auto", height: 6, borderRadius: 999, background: C.soft, overflow: "hidden" } },
-        h2("div", { style: { width: progress + "%", height: "100%", background: job.state === "error" ? C.red : C.blue, transition: "width 200ms ease" } })
-      ),
-      h2(
-        "span",
-        { className: "tether-num", style: { color: job.state === "error" ? C.red : C.mute, fontSize: 11, minWidth: 150, textAlign: "right" } },
-        job.state === "error" ? job.error : (job.percent || 0) + "% \xB7 " + formatBytes(job.transferred || 0) + " / " + formatBytes(job.total || 0)
-      )
+      {
+        role: "menu",
+        onMouseDown: (event) => event.stopPropagation(),
+        style: {
+          position: "fixed",
+          left: menu.x,
+          top: menu.y,
+          zIndex: 2147483e3,
+          minWidth: 150,
+          padding: 4,
+          background: C.bg,
+          borderRadius: 8,
+          boxShadow: "0 8px 24px rgba(16,24,40,.18)",
+          border: "1px solid " + C.line
+        }
+      },
+      [
+        ["\u590D\u5236", () => copySelection(menu.side, false)],
+        ["\u526A\u5207", () => copySelection(menu.side, true)],
+        ["\u7C98\u8D34\u5230\u6B64\u5904", () => pasteInto(menu.side)],
+        ["\u5237\u65B0", () => {
+          if (menu.side === "left") setLeftRefresh((value) => value + 1);
+          else setRightRefresh((value) => value + 1);
+        }]
+      ].map(([label, action]) => h2("button", {
+        key: label,
+        type: "button",
+        onClick: () => {
+          setMenu(null);
+          action();
+        },
+        className: "tether-hover",
+        style: {
+          display: "block",
+          width: "100%",
+          padding: "6px 10px",
+          border: 0,
+          borderRadius: 5,
+          background: "transparent",
+          color: C.ink,
+          fontSize: 12,
+          textAlign: "left",
+          cursor: "pointer"
+        }
+      }, label))
     ) : null
   );
 }
@@ -164789,12 +165622,12 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const primary = key === "mtime" ? (Number(a && a.mtime) || 0) - (Number(b && b.mtime) || 0) : (Number(a && a.size) || 0) - (Number(b && b.size) || 0);
     return primary ? primary * sign : byName();
   }
-  function sortExplorerEntries(entries2, key, direction) {
-    return [...entries2 || []].sort((a, b) => compareExplorerEntries(a, b, key, direction));
+  function sortExplorerEntries(entries3, key, direction) {
+    return [...entries3 || []].sort((a, b) => compareExplorerEntries(a, b, key, direction));
   }
-  function filterExplorerEntries(entries2, query) {
+  function filterExplorerEntries(entries3, query) {
     const needle = String(query == null ? "" : query).trim().toLowerCase();
-    const list2 = entries2 || [];
+    const list2 = entries3 || [];
     if (!needle) return list2;
     return list2.filter((entry) => String(entry && entry.name || "").toLowerCase().includes(needle));
   }
@@ -165356,6 +166189,10 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     forward: { parts: [
       { d: "M5.8 3.2L10.6 8l-4.8 4.8" }
     ] },
+    transfer: { parts: [
+      { d: "M2.4 5.6h9.2M8.8 2.8l2.8 2.8-2.8 2.8" },
+      { d: "M13.6 10.4H4.4M7.2 7.6 4.4 10.4l2.8 2.8" }
+    ] },
     search: { parts: [
       { d: "M7.1 12.2a5.1 5.1 0 1 0 0-10.2 5.1 5.1 0 0 0 0 10.2z" },
       { d: "M11 11l3 3" }
@@ -165437,7 +166274,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const items = [
       { id: "workspaces", label: "\u539F\u751F\u5DE5\u4F5C\u533A", icon: "monitor" },
       { id: "files", label: "\u6587\u4EF6\u8D44\u6E90\u7BA1\u7406\u5668", icon: "files" },
-      { id: "transfer", label: "\u6587\u4EF6\u8F6C\u79FB", icon: "forward" },
+      { id: "transfer", label: "\u6587\u4EF6\u8F6C\u79FB", icon: "transfer" },
       { id: "network", label: "\u4E92\u8054", icon: "devices" }
     ];
     const button = (id, label, icon, onClick, selected) => h2("button", {
@@ -165882,13 +166719,13 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       const expanded = !isCycle && !!open[node.id];
       const cached = children[node.cacheKey];
       const kids = cached && cached.status === "loaded" ? cached.entries : void 0;
-      const parentPath2 = String(node.path || "").replace(/[\\/]+$/, "").replace(/[\\/][^\\/]+$/, "");
+      const parentPath = String(node.path || "").replace(/[\\/]+$/, "").replace(/[\\/][^\\/]+$/, "");
       const entryName = node.name || pathBasename(node.path);
       const nativeRow = Native.FileEntryRow({
-        parent: parentPath2,
+        parent: parentPath,
         entry: { name: entryName, type: isDir ? "directory" : "file" },
         tree: {
-          state: { expanded: expanded ? [node.path, parentPath2 + "/" + entryName, parentPath2 + "\\" + entryName] : [] },
+          state: { expanded: expanded ? [node.path, parentPath + "/" + entryName, parentPath + "\\" + entryName] : [] },
           onToggle: () => onToggle(node),
           onOpen: () => onOpenFile(node),
           t: (key) => key
@@ -168198,10 +169035,10 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       cache.set(key, value);
       while (cache.size > (max || 240)) cache.delete(cache.keys().next().value);
     };
-    const rememberDir = (targetDevice, target, entries2) => {
-      cacheStore(dirCacheRef.current, treeCacheKey(targetDevice, target), { entries: entries2, at: Date.now() });
+    const rememberDir = (targetDevice, target, entries3) => {
+      cacheStore(dirCacheRef.current, treeCacheKey(targetDevice, target), { entries: entries3, at: Date.now() });
       if (deviceIdRef.current !== targetDevice) return;
-      setTreeChildren((current) => ({ ...current, [treeCacheKey(targetDevice, target)]: { status: "loaded", entries: entries2 } }));
+      setTreeChildren((current) => ({ ...current, [treeCacheKey(targetDevice, target)]: { status: "loaded", entries: entries3 } }));
     };
     const invalidateDir = (targetDevice, target) => {
       const key = treeCacheKey(targetDevice, target);
@@ -168240,8 +169077,8 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       if (dirInflightRef.current.has(key)) return;
       const pending = post("/api/devices/" + encodeURIComponent(requestDevice) + "/fs/list", { path: target }).then((data) => {
         if (deviceIdRef.current !== requestDevice) return data;
-        const entries2 = (data.entries || []).map((entry) => ({ ...entry, path: joinPath3(target, entry.name) }));
-        rememberDir(requestDevice, target, entries2);
+        const entries3 = (data.entries || []).map((entry) => ({ ...entry, path: joinPath3(target, entry.name) }));
+        rememberDir(requestDevice, target, entries3);
         return data;
       }).catch(() => {
       }).finally(() => dirInflightRef.current.delete(key));
@@ -168290,7 +169127,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       setDirLoading(false);
       setPreviewBusy(false);
     };
-    const parentOf = (target) => {
+    const parentOf2 = (target) => {
       const clean = String(target || "").replace(/[\\/]+$/, "");
       const parent = clean.replace(/[\\/][^\\/]+$/, "");
       return parent && parent !== clean ? parent : clean;
@@ -168326,9 +169163,9 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       try {
         const data = await post("/api/devices/" + encodeURIComponent(requestDevice) + "/fs/list", { path: target });
         if (!treeResponseIsCurrent(requestDevice, deviceIdRef.current, requestEpoch, treeDeviceEpochRef.current)) return;
-        const entries2 = (data.entries || []).map((entry) => ({ ...entry, path: joinPath3(target, entry.name) })).filter((entry, index, all) => all.findIndex((item) => normPath(item.path) === normPath(entry.path)) === index);
-        cacheStore(dirCacheRef.current, key, { entries: entries2, at: Date.now() });
-        setTreeChildren((current) => ({ ...current, [key]: { status: "loaded", entries: entries2 } }));
+        const entries3 = (data.entries || []).map((entry) => ({ ...entry, path: joinPath3(target, entry.name) })).filter((entry, index, all) => all.findIndex((item) => normPath(item.path) === normPath(entry.path)) === index);
+        cacheStore(dirCacheRef.current, key, { entries: entries3, at: Date.now() });
+        setTreeChildren((current) => ({ ...current, [key]: { status: "loaded", entries: entries3 } }));
       } catch (e) {
         if (!treeResponseIsCurrent(requestDevice, deviceIdRef.current, requestEpoch, treeDeviceEpochRef.current)) return;
         setTreeChildren((current) => ({ ...current, [key]: { status: "error", entries: [] } }));
@@ -168381,13 +169218,13 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       if (dirAbortRef.current) dirAbortRef.current.abort();
       const controller = new AbortController();
       dirAbortRef.current = controller;
-      const enter = (entries2, push) => {
+      const enter = (entries3, push) => {
         const from = pathRef.current;
         if (from && normPath(from) !== normPath(nextPath)) {
           setSearch("");
           if (push !== false) setHistory((current) => explorerNavigate(current, from, nextPath));
         }
-        setDirEntries(entries2);
+        setDirEntries(entries3);
         setPath(nextPath);
         setPathDraft(nextPath);
         pathRef.current = nextPath;
@@ -168412,14 +169249,14 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         if (!data) data = await postRetry("/api/devices/" + encodeURIComponent(requestDevice) + "/fs/list", { path: requestTarget }, void 0, { signal: controller.signal });
         if (!data) throw new Error("\u76EE\u5F55\u8BFB\u53D6\u5931\u8D25");
         if (seq !== dirSeqRef.current || deviceIdRef.current !== requestDevice) return;
-        const entries2 = (data.entries || []).map((entry) => ({ ...entry, path: joinPath3(requestTarget, entry.name) }));
-        cacheStore(dirCacheRef.current, key, { entries: entries2, at: Date.now() });
+        const entries3 = (data.entries || []).map((entry) => ({ ...entry, path: joinPath3(requestTarget, entry.name) }));
+        cacheStore(dirCacheRef.current, key, { entries: entries3, at: Date.now() });
         if (cached) {
-          setDirEntries(entries2);
-          setTreeChildren((current) => ({ ...current, [key]: { status: "loaded", entries: entries2 } }));
+          setDirEntries(entries3);
+          setTreeChildren((current) => ({ ...current, [key]: { status: "loaded", entries: entries3 } }));
         } else {
-          enter(entries2, opts.push);
-          revealTree(nextPath, { path: nextPath, entries: entries2 });
+          enter(entries3, opts.push);
+          revealTree(nextPath, { path: nextPath, entries: entries3 });
         }
       } catch (e) {
         if (controller.signal.aborted || e && e.name === "AbortError") return;
@@ -168470,7 +169307,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           setTableEditFormat(null);
         }
         setSelected(entry);
-        const parent = parentOf(entry.path);
+        const parent = parentOf2(entry.path);
         setPath(parent);
         setPathDraft(parent);
         pathRef.current = parent;
@@ -168494,7 +169331,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         if (!usablePreviewData(data)) throw new Error("\u9884\u89C8\u6570\u636E\u65E0\u6548");
         rememberPreview(key, data);
         if (!(cached && dirty && sameFile)) apply2(data);
-        const parent = parentOf(entry.path);
+        const parent = parentOf2(entry.path);
         if (loadedDirRef.current !== requestDevice + "|" + normPath(parent)) {
           await loadDir(parent, { push: false, keepFile: true });
           if (seq === previewSeqRef.current) setSelected(entry);
@@ -168553,7 +169390,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const goUp = () => {
       const current = pathRef.current || path;
       if (!current) return;
-      const parent = parentOf(current);
+      const parent = parentOf2(current);
       if (!parent || normPath(parent) === normPath(current)) return;
       setFile(null);
       setEditMode(false);
@@ -168591,7 +169428,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         setNotice("\u5DF2\u4FDD\u5B58\u5230 " + requestDevice + " \xB7 " + requestFile.path);
         const key = previewCacheKey(requestDevice, requestFile.path);
         previewCacheRef.current.delete(key);
-        invalidateDir(requestDevice, parentOf(requestFile.path));
+        invalidateDir(requestDevice, parentOf2(requestFile.path));
         const data = await post("/api/devices/" + encodeURIComponent(requestDevice) + "/fs/preview", { path: requestFile.path });
         if (!responseBelongsToDevice(data, requestDevice)) throw new Error("\u76EE\u6807\u8BBE\u5907\u8EAB\u4EFD\u6821\u9A8C\u5931\u8D25\uFF0C\u8BF7\u91CD\u65B0\u6253\u5F00\u6587\u4EF6");
         rememberPreview(key, data);
@@ -168724,7 +169561,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       if (!target) return;
       const requestDevice = deviceIdRef.current;
       askValue("\u91CD\u547D\u540D", target.name, async (name) => {
-        const dest = parentOf(target.path) + "\\" + name;
+        const dest = parentOf2(target.path) + "\\" + name;
         try {
           const result = await post("/api/devices/" + encodeURIComponent(requestDevice) + "/fs/rename", { path: target.path, dest });
           if (!responseBelongsToDevice(result, requestDevice)) throw new Error("\u76EE\u6807\u8BBE\u5907\u8EAB\u4EFD\u6821\u9A8C\u5931\u8D25\uFF0C\u672A\u786E\u8BA4\u91CD\u547D\u540D");
@@ -168734,7 +169571,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           if (file && file.path === target.path) setFile(null);
           previewCacheRef.current.delete(previewCacheKey(requestDevice, target.path));
           previewCacheRef.current.delete(previewCacheKey(requestDevice, dest));
-          invalidateDir(requestDevice, parentOf(target.path));
+          invalidateDir(requestDevice, parentOf2(target.path));
           await loadDir(path, { push: false, keepFile: true, fresh: true });
         } catch (e) {
           fail2(e);
@@ -168751,7 +169588,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         setSelected(null);
         if (file && file.path === target.path) setFile(null);
         previewCacheRef.current.delete(previewCacheKey(deviceId, target.path));
-        invalidateDir(deviceId, parentOf(target.path));
+        invalidateDir(deviceId, parentOf2(target.path));
         await loadDir(path, { push: false, keepFile: true, fresh: true });
       } catch (e) {
         fail2(e);
@@ -169206,7 +170043,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       const crumbs = pathSegments(file ? file.path : path);
       const sortKey = EXPLORER_SORT_KEYS.includes(sort && sort.key) ? sort.key : "name";
       const sortDir = sort && sort.dir === "desc" ? "desc" : "asc";
-      const canGoUp = !!path && normPath(parentOf(path)) !== normPath(path);
+      const canGoUp = !!path && normPath(parentOf2(path)) !== normPath(path);
       const toolbar = h2(
         "div",
         { className: "tether-explorer-toolbar", style: { display: "flex", alignItems: "center", gap: 7, height: 44, padding: "0 9px", background: C.bg, flex: "0 0 auto", minWidth: 0 } },
@@ -169436,7 +170273,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           h2("div", { className: "tether-num", style: { fontSize: 11 } }, (file.name || file.path) + " \xB7 " + formatBytes2(file.size))
         );
       };
-      const entries2 = filterExplorerEntries(sortExplorerEntries(dirEntries, sortKey, sortDir), search2);
+      const entries3 = filterExplorerEntries(sortExplorerEntries(dirEntries, sortKey, sortDir), search2);
       const filtering = !!search2.trim();
       const columns = "minmax(0,1fr) 132px 104px 78px";
       const sortHeader = (key, label, align) => h2(
@@ -169453,7 +170290,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         sortKey === key ? h2("span", { style: { display: "grid", placeItems: "center", flex: "0 0 auto", transform: sortDir === "asc" ? "rotate(180deg)" : "none" } }, h2(Glyph, { name: "chevronDown", size: 11 })) : null
       );
       const directoryBody = () => {
-        if (dirLoading && !entries2.length) return h2(
+        if (dirLoading && !entries3.length) return h2(
           "div",
           { style: { flex: "1 1 auto", display: "grid", placeItems: "center", alignContent: "center", gap: 8, color: C.mute, fontSize: 12 } },
           h2("span", { className: "tether-spin", style: { width: 18, height: 18, display: "grid", placeItems: "center" } }, h2(Glyph, { name: "refresh", size: 18 })),
@@ -169467,13 +170304,13 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           h2("button", { onClick: refreshExplorer, className: "tether-hover", style: { border: 0, borderRadius: 6, padding: "5px 10px", background: C.soft, color: C.ink, fontSize: 12, cursor: "pointer" } }, "\u91CD\u8BD5")
         );
         if (!path) return h2("div", { style: { flex: "1 1 auto", display: "grid", placeItems: "center", color: C.mute, fontSize: 12 } }, "\u4ECE\u5DE6\u4FA7\u9009\u62E9\u5DE5\u4F5C\u533A\u6216\u78C1\u76D8");
-        if (filtering && !entries2.length) return h2(
+        if (filtering && !entries3.length) return h2(
           "div",
           { style: { flex: "1 1 auto", display: "grid", placeItems: "center", alignContent: "center", gap: 8, color: C.mute, fontSize: 12, padding: 24, textAlign: "center" } },
           h2("div", null, "\u672A\u627E\u5230\u5339\u914D \u201C" + search2.trim() + "\u201D \u7684\u9879\u76EE"),
           h2("button", { onClick: () => setSearch(""), className: "tether-hover", style: { border: 0, borderRadius: 6, padding: "5px 10px", background: C.soft, color: C.ink, fontSize: 12, cursor: "pointer" } }, "\u6E05\u9664\u641C\u7D22")
         );
-        if (!entries2.length) return h2("div", { style: { flex: "1 1 auto", display: "grid", placeItems: "center", color: C.mute, fontSize: 12 } }, "\u7A7A\u6587\u4EF6\u5939");
+        if (!entries3.length) return h2("div", { style: { flex: "1 1 auto", display: "grid", placeItems: "center", color: C.mute, fontSize: 12 } }, "\u7A7A\u6587\u4EF6\u5939");
         return h2(
           "div",
           { style: { flex: "1 1 auto", minHeight: 0, position: "relative", display: "flex" } },
@@ -169488,7 +170325,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
               h2("span", null, "\u7C7B\u578B"),
               sortHeader("size", "\u5927\u5C0F", "right")
             ),
-            entries2.map((entry) => h2(
+            entries3.map((entry) => h2(
               "div",
               {
                 key: entry.path,
@@ -169845,7 +170682,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           onOpenFile: openFile,
           onHoverEntry: (event, node) => showHoverTip(event, node),
           onLeaveEntry: hideHoverTip,
-          onContextMenuNode: (event, node) => openContextMenu(event, { name: node.name, path: node.path, dir: node.dir }, node.dir ? node.path : parentOf(node.path)),
+          onContextMenuNode: (event, node) => openContextMenu(event, { name: node.name, path: node.path, dir: node.dir }, node.dir ? node.path : parentOf2(node.path)),
           treeSelected,
           accountEmail: hubEmail,
           accountRole: hubRole,

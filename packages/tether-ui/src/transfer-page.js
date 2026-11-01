@@ -1,4 +1,5 @@
 import { newTransferId, transferFile } from './transfer.js'
+import { TargetFileExplorer } from './target-file-explorer.js'
 
 function separator(path) {
   return String(path || '').includes('\\') ? '\\' : '/'
@@ -9,16 +10,6 @@ function joinPath(base, name) {
   return String(base).replace(/[\\/]+$/, '') + separator(base) + name
 }
 
-function parentPath(path) {
-  const clean = String(path || '').replace(/[\\/]+$/, '')
-  if (!clean) return ''
-  if (/^[A-Za-z]:$/.test(clean)) return clean + '\\'
-  const slash = Math.max(clean.lastIndexOf('\\'), clean.lastIndexOf('/'))
-  if (slash < 0) return ''
-  const parent = clean.slice(0, slash)
-  return /^[A-Za-z]:$/.test(parent) ? parent + '\\' : parent
-}
-
 function formatBytes(value) {
   if (!Number.isFinite(value) || value < 0) return ''
   if (value < 1024) return value + ' B'
@@ -27,33 +18,32 @@ function formatBytes(value) {
   return (value / (1024 * 1024 * 1024)).toFixed(2) + ' GB'
 }
 
-let StableTransferBrowser = null
+function isTextInput(target) {
+  if (!target) return false
+  const tag = String(target.tagName || '').toLowerCase()
+  return tag === 'input' || tag === 'textarea' || tag === 'select' || target.isContentEditable === true
+}
 
 export function createTransferPage({ React, Glyph, api, post, C, devices = [], localDevice = '', onNotice, onError }) {
   const h = React.createElement
   const field = {
-    height: 28, boxSizing: 'border-box', border: 0, borderRadius: 6,
+    height: 26, boxSizing: 'border-box', border: 0, borderRadius: 6,
     background: C.soft, color: C.ink, fontSize: 12, padding: '0 8px', outline: 'none'
   }
-  const button = (label, onClick, options = {}) => h('button', {
-    type: 'button', onClick, disabled: options.disabled, title: options.title || label,
-    className: 'tether-hover',
-    style: {
-      height: 28, padding: '0 10px', border: 0, borderRadius: 6,
-      background: options.primary ? C.blue : C.soft,
-      color: options.primary ? '#fff' : C.ink, fontSize: 12,
-      cursor: options.disabled ? 'default' : 'pointer',
-      opacity: options.disabled ? 0.45 : 1, flex: '0 0 auto'
-    }
-  }, label)
+  const onlineDevices = devices.filter((item) => item && item.online)
+  const initialLeft = localDevice && onlineDevices.some((item) => item.device_id === localDevice)
+    ? localDevice
+    : (onlineDevices[0] && onlineDevices[0].device_id) || ''
+  const initialRight = (onlineDevices.find((item) => item.device_id !== initialLeft) || {}).device_id || ''
 
-  if (!StableTransferBrowser) {
-    StableTransferBrowser = function Browser({ title, roleLabel = title, accent = C.blue, deviceId, onDevice, path, onPath, selectedPath, onFile }) {
+  function FilePane({ side, deviceId, otherDeviceId, onDevice, path, onPath, selection, onSelection, onEntries,
+    onDragItems, onDropItems, onContextItem, active, onActivate, refreshKey = 0 }) {
     const [roots, setRoots] = React.useState([])
     const [entries, setEntries] = React.useState(null)
+    const [treeChildren, setTreeChildren] = React.useState({})
+    const [expanded, setExpanded] = React.useState({})
     const [loading, setLoading] = React.useState(false)
     const [error, setError] = React.useState('')
-    const [draft, setDraft] = React.useState(path || '')
     const [sort, setSort] = React.useState({ key: 'name', dir: 'asc' })
     const [search, setSearch] = React.useState('')
     const run = React.useRef(0)
@@ -61,6 +51,7 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
     pathRef.current = path
     React.useEffect(() => {
       let cancelled = false
+      setTreeChildren({}); setExpanded({})
       if (!deviceId) { setRoots([]); setEntries(null); return undefined }
       setLoading(true); setError('')
       Promise.all([
@@ -69,8 +60,8 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
       ]).then(([workspaceData, driveData]) => {
         if (cancelled) return
         const list = [
-          ...((workspaceData && workspaceData.workspaces) || []).map((item) => ({ name: item.name || item.path, path: item.path, kind: 'workspace' })),
-          ...((driveData && driveData.drives) || []).map((item) => ({ name: item.name || item.path, path: item.path, kind: 'drive' }))
+          ...((workspaceData && workspaceData.workspaces) || []).map((item) => ({ name: item.name || item.path, path: item.path, kind: 'workspace', dir: true })),
+          ...((driveData && driveData.drives) || []).map((item) => ({ name: item.name || item.path, path: item.path, kind: 'drive', dir: true }))
         ].filter((item) => item.path)
         setRoots(list)
         if (!pathRef.current && list.length) onPath(list[0].path)
@@ -79,8 +70,7 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
       return () => { cancelled = true }
     }, [deviceId])
     React.useEffect(() => {
-      setDraft(path || '')
-      if (!deviceId || !path) { setEntries(null); return undefined }
+      if (!deviceId || !path) { setEntries(null); onEntries([]); return undefined }
       const token = ++run.current
       let cancelled = false
       setLoading(true); setError('')
@@ -90,167 +80,360 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
           const list = ((data && data.entries) || []).filter((item) => item && item.path && item.name)
           list.sort((left, right) => (left.dir === right.dir ? String(left.name).localeCompare(String(right.name)) : left.dir ? -1 : 1))
           setEntries(list)
+          onEntries(list)
         })
-        .catch((cause) => { if (!cancelled && token === run.current) { setEntries([]); setError(cause.message || '读取目录失败') } })
+        .catch((cause) => {
+          if (!cancelled && token === run.current) { setEntries([]); onEntries([]); setError(cause.message || '读取目录失败') }
+        })
         .finally(() => { if (!cancelled && token === run.current) setLoading(false) })
       return () => { cancelled = true }
-    }, [deviceId, path])
-    const open = (item) => {
-      if (item.dir) onPath(item.path)
-      else if (onFile) onFile(item)
+    }, [deviceId, path, refreshKey])
+    const toggleTree = async (item) => {
+      if (!item || !item.dir || !deviceId) return
+      const key = item.path
+      if (expanded[key]) {
+        setExpanded((current) => { const next = { ...current }; delete next[key]; return next })
+        return
+      }
+      setExpanded((current) => ({ ...current, [key]: true }))
+      if (treeChildren[key]) return
+      try {
+        const data = await post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/list', { path: key })
+        const list = ((data && data.entries) || []).filter((entry) => entry && entry.path && entry.name)
+        setTreeChildren((current) => ({ ...current, [key]: list }))
+      } catch (_) { /* the right pane reports directory errors */ }
     }
-    const matchingRoot = roots
-      .filter((item) => path && String(path).toLowerCase().startsWith(String(item.path).toLowerCase()))
-      .sort((left, right) => String(right.path).length - String(left.path).length)[0]
-    const navigate = (next) => { setSearch(''); onPath(next) }
-    return h('div', { style: { flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', background: C.bg, borderRadius: 10, overflow: 'hidden', borderTop: '2px solid ' + accent, boxShadow: '0 1px 2px rgba(16,24,40,0.06)' } },
-      h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', background: C.soft, flex: '0 0 auto', minWidth: 0 } },
-        h('span', { style: { flex: '0 0 auto', height: 20, padding: '0 8px', borderRadius: 999, background: 'color-mix(in srgb, ' + accent + ' 12%, transparent)', color: accent, display: 'inline-flex', alignItems: 'center', fontSize: 11, fontWeight: 600 } }, roleLabel),
+    const fileIcon = (item) => h('span', {
+      'aria-hidden': true,
+      style: { width: 15, height: 15, display: 'grid', placeItems: 'center', color: item.dir ? '#d99a2b' : C.mute, flex: '0 0 auto' }
+    }, h(Glyph, { name: item.dir ? 'folderClose' : 'file', size: 14 }))
+    return h('div', {
+      onMouseDown: onActivate,
+      onDragOver: (event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy' },
+      onDrop: (event) => {
+        event.preventDefault()
+        if (onDropItems) onDropItems()
+      },
+      style: {
+        flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', background: C.bg,
+        borderRadius: 8, overflow: 'hidden', outline: active ? '1px solid ' + C.blue : '1px solid transparent'
+      }
+    },
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', background: C.soft, flex: '0 0 auto' } },
         h('select', {
-          value: deviceId || '', onChange: (event) => { onDevice(event.target.value); onPath('') },
+          value: deviceId || '', onChange: (event) => { onDevice(event.target.value); onPath(''); onSelection([]); onActivate(); event.currentTarget.blur() },
+          'aria-label': '设备', title: '选择这台电脑',
           style: { ...field, flex: '1 1 auto', minWidth: 0 }
-        }, devices.map((item) => h('option', { key: item.device_id, value: item.device_id }, (item.name || item.device_id) + (item.online ? '' : ' · 离线'))))),
-      h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', flex: '0 0 auto', minWidth: 0 } },
-        h('select', {
-          value: '', onChange: (event) => { if (event.target.value) onPath(event.target.value) },
-          title: '工作区与磁盘', style: { ...field, width: 108, flex: '0 0 auto' }
-        }, h('option', { value: '' }, '位置…'),
-          roots.map((item) => h('option', { key: item.kind + ':' + item.path, value: item.path }, item.name))),
-        button('↑', () => { const up = parentPath(path); if (up) onPath(up) }, { title: '上一级', disabled: !path }),
-        h('input', {
-          value: draft, spellCheck: false, 'aria-label': title + '路径',
-          onChange: (event) => setDraft(event.target.value),
-          onKeyDown: (event) => { if (event.key === 'Enter' && draft.trim()) onPath(draft.trim()) },
-          style: { ...field, flex: '1 1 auto', minWidth: 0, fontFamily: 'Consolas, monospace' }
-        }),
-        button('刷新', () => onPath(path), { title: '刷新目录', disabled: !path })),
-      error ? h('div', { role: 'alert', style: { padding: '4px 12px', color: C.red, fontSize: 11.5, flex: '0 0 auto' } }, error) : null,
-      h('div', { style: { flex: '1 1 auto', minHeight: 0, overflow: 'auto', padding: '0 6px 10px' } },
-        loading && !entries ? h('div', { style: { padding: 16, color: C.mute, fontSize: 12 } }, '加载中…') : null,
-        !loading && entries && !entries.length ? h('div', { style: { padding: 16, color: C.mute, fontSize: 12 } }, error ? '' : '空目录') : null,
-        (entries || []).map((item) => {
-          const selected = !item.dir && selectedPath === item.path
-          return h('button', {
-            key: item.path, type: 'button', title: item.path,
-            onClick: () => open(item),
-            className: 'tether-hover',
-            style: {
-              display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 150px 90px', gap: 8,
-              alignItems: 'center', width: '100%', height: 29, padding: '0 8px',
-              border: 0, borderRadius: 6, background: selected ? C.soft : 'transparent',
-              color: C.ink, fontSize: 12.5, textAlign: 'left', cursor: 'pointer'
-            }
-          },
-            h('span', { style: { display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 } },
-              h('span', { 'aria-hidden': true, style: { width: 14, color: accent, fontSize: 11 } }, item.dir ? '▸' : '•'),
-              h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, item.name)),
-            h('span', { style: { color: C.mute, fontSize: 11 } }, item.mtime ? new Date(item.mtime * 1000).toLocaleString('zh-CN', { hour12: false }) : ''),
-            h('span', { style: { color: C.mute, fontSize: 11, textAlign: 'right' } }, item.dir ? '文件夹' : formatBytes(Number(item.size))))
-        })))
+        },
+          !deviceId ? h('option', { value: '' }, '选择设备…') : null,
+          devices.map((item) => h('option', {
+            key: item.device_id, value: item.device_id,
+            disabled: !item.online || item.device_id === otherDeviceId
+          }, (item.name || item.device_id) + (item.online ? '' : ' · 离线') + (item.device_id === otherDeviceId ? ' · 已在另一侧' : ''))))),
+      TargetFileExplorer({
+        React,
+        colors: { bg: C.bg, soft: C.soft, ink: C.ink, sub: C.sub, mute: C.mute, line: C.line, hover: C.soft, red: C.red },
+        compact: true,
+        roots,
+        rootPath: '',
+        path,
+        entries,
+        loading,
+        error,
+        selectedPaths: selection,
+        selectionMode: 'multiple',
+        onSelectionChange: onSelection,
+        onRoot: (next) => onPath(next),
+        onPath: (next) => onPath(next),
+        onSelect: () => {},
+        onOpen: (item) => { if (item.dir) onPath(item.path) },
+        onRefresh: (next) => onPath(next),
+        onDragItem: (event, item) => {
+          const items = selection.includes(item.path) ? selection : [item.path]
+          if (onDragItems) onDragItems(items)
+          event.dataTransfer.effectAllowed = 'copy'
+          event.dataTransfer.setData('text/plain', item.path)
+        },
+        onContextMenu: (item, event) => { if (onContextItem) onContextItem(item, event) },
+        fileIcon,
+        formatTime: (value) => value ? new Date(value * 1000).toLocaleString('zh-CN', { hour12: false }) : '',
+        formatSize: (value) => formatBytes(Number(value)),
+        limit: Number.MAX_SAFE_INTEGER,
+        emptyText: '空文件夹',
+        placeholder: '选择左侧的电脑或磁盘',
+        sort,
+        onSort: setSort,
+        search,
+        onSearch: setSearch,
+        treeChildren,
+        expanded,
+        onToggleTree: (item) => { void toggleTree(item) }
+      }))
   }
 
-  }
-  const Browser = StableTransferBrowser
-
-  const online = devices.filter((item) => item && item.online)
-  const initialSource = localDevice && devices.some((item) => item.device_id === localDevice) ? localDevice : (online[0] && online[0].device_id) || ''
-  const [sourceDevice, setSourceDevice] = React.useState(initialSource)
-  const [destDevice, setDestDevice] = React.useState((online.find((item) => item.device_id !== initialSource) || {}).device_id || '')
-  const [sourcePath, setSourcePath] = React.useState('')
-  const [destPath, setDestPath] = React.useState('')
-  const [sourceFile, setSourceFile] = React.useState(null)
+  const [leftDevice, setLeftDevice] = React.useState(initialLeft)
+  const [rightDevice, setRightDevice] = React.useState(initialRight)
+  const [leftPath, setLeftPath] = React.useState('')
+  const [rightPath, setRightPath] = React.useState('')
+  const [leftSelection, setLeftSelection] = React.useState([])
+  const [rightSelection, setRightSelection] = React.useState([])
+  const [leftEntries, setLeftEntries] = React.useState([])
+  const [rightEntries, setRightEntries] = React.useState([])
+  const [activeSide, setActiveSide] = React.useState('left')
+  const [leftRefresh, setLeftRefresh] = React.useState(0)
+  const [rightRefresh, setRightRefresh] = React.useState(0)
   const [overwrite, setOverwrite] = React.useState(false)
   const [job, setJob] = React.useState(null)
-  const [refresh, setRefresh] = React.useState(0)
+  const [menu, setMenu] = React.useState(null)
+  const dragRef = React.useRef(null)
+  const clipboardRef = React.useRef(null)
   const abortRef = React.useRef(null)
-  const transferRef = React.useRef('')
-  const sourceItem = devices.find((item) => item.device_id === sourceDevice)
-  const destItem = devices.find((item) => item.device_id === destDevice)
-  const destination = sourceFile && destPath ? joinPath(destPath, sourceFile.name) : ''
-  const running = !!(job && job.state === 'running')
-  const canStart = !!(sourceFile && destination && sourceItem && destItem
-    && sourceItem.online && destItem.online && !running)
-  const start = async () => {
-    if (!sourceFile || !destination) return
+  const queueRef = React.useRef(null)
+  const latest = React.useRef({})
+  latest.current = { leftDevice, rightDevice, leftPath, rightPath, leftSelection, rightSelection,
+    leftEntries, rightEntries, activeSide, overwrite }
+
+  React.useEffect(() => {
+    if (leftDevice && rightDevice && leftDevice === rightDevice) {
+      const replacement = (onlineDevices.find((item) => item.device_id !== leftDevice) || {}).device_id || ''
+      setRightDevice(replacement)
+      setRightPath(''); setRightSelection([])
+      if (onNotice) onNotice('两侧不能是同一台电脑，已切换另一侧')
+    }
+  }, [leftDevice, rightDevice])
+
+  const side = (name) => name === 'left'
+    ? { device: leftDevice, path: leftPath, selection: leftSelection, entries: leftEntries }
+    : { device: rightDevice, path: rightPath, selection: rightSelection, entries: rightEntries }
+  const other = (name) => name === 'left' ? 'right' : 'left'
+  const itemsFor = (name) => {
+    const current = side(name)
+    return current.entries.filter((item) => current.selection.includes(item.path) && !item.dir)
+  }
+
+  const startQueue = async (fromSide, items, targetPath, cut = false) => {
+    const target = side(other(fromSide))
+    if (!items.length || !target.path || !target.device) return
     const controller = new AbortController()
     abortRef.current = controller
-    if (!transferRef.current) transferRef.current = newTransferId()
-    const transferId = transferRef.current
-    setJob({ state: 'running', percent: 0, transferred: 0, total: Number(sourceFile.size) || 0, destination, error: '' })
-    const base = '/api/devices/' + encodeURIComponent(destDevice)
+    const total = items.reduce((sum, item) => sum + (Number(item.size) || 0), 0)
+    const queue = { fromSide, items, targetPath: target.path, targetDevice: target.device, done: 0, index: 0 }
+    queueRef.current = queue
+    setJob({ state: 'running', percent: 0, transferred: 0, total, count: items.length, index: 0, error: '' })
+    let transferred = 0
+    let doneBytes = 0
     try {
-      const result = await transferFile({
-        source: sourceFile.path,
-        destination,
-        transferId,
-        overwrite,
-        signal: controller.signal,
-        read: (args) => post('/api/devices/' + encodeURIComponent(sourceDevice) + '/fs/read',
-          { path: args.path, offset: args.offset, limit: args.limit, encoding: 'base64' }),
-        write: (args) => post(base + '/fs/write_chunk', { ...args, transfer_id: args.transferId }),
-        status: (args) => post(base + '/fs/transfer_status', { path: args.path, transfer_id: args.transferId }),
-        cancel: (args) => post(base + '/fs/transfer_cancel', { path: args.path, transfer_id: args.transferId }),
-        onProgress: (value) => setJob((current) => ({ ...(current || {}), ...value, state: 'running' }))
-      })
-      setJob({ state: 'done', percent: 100, transferred: result.bytes, total: result.bytes, destination, error: '' })
-      transferRef.current = ''
-      setRefresh((value) => value + 1)
-      if (onNotice) onNotice('已转移 ' + sourceFile.name + '（' + formatBytes(result.bytes) + '）')
+      for (let index = 0; index < items.length; index += 1) {
+        const item = items[index]
+        const destination = joinPath(target.path, item.name)
+        const sourceDevice = side(fromSide).device
+        await transferFile({
+          source: item.path,
+          destination,
+          transferId: newTransferId(),
+          overwrite: latest.current.overwrite,
+          signal: controller.signal,
+          read: (args) => post('/api/devices/' + encodeURIComponent(sourceDevice) + '/fs/read',
+            { path: args.path, offset: args.offset, limit: args.limit, encoding: 'base64' }),
+          write: (args) => post('/api/devices/' + encodeURIComponent(target.device) + '/fs/write_chunk',
+            { ...args, transfer_id: args.transferId }),
+          status: (args) => post('/api/devices/' + encodeURIComponent(target.device) + '/fs/transfer_status',
+            { path: args.path, transfer_id: args.transferId }),
+          cancel: (args) => post('/api/devices/' + encodeURIComponent(target.device) + '/fs/transfer_cancel',
+            { path: args.path, transfer_id: args.transferId }),
+          onProgress: (value) => {
+            const currentBytes = doneBytes + Math.max(0, Number(value && value.transferred) || 0)
+            setJob((current) => ({ ...(current || {}), percent: total ? Math.min(99, Math.round(currentBytes / total * 100)) : 0,
+              transferred: currentBytes, index, count: items.length, state: 'running' }))
+          }
+        })
+        if (cut) {
+          await post('/api/devices/' + encodeURIComponent(sourceDevice) + '/fs/delete', { path: item.path })
+            .catch(() => { if (onError) onError(new Error('已复制但未能删除源文件：' + item.name)) })
+        }
+        doneBytes += Number(item.size) || 0
+        transferred = doneBytes
+        queue.done = index + 1
+        setJob((current) => ({ ...(current || {}), percent: total ? Math.round(doneBytes / total * 100) : 100,
+          transferred: doneBytes, index, state: 'running' }))
+      }
+      setJob((current) => ({ ...(current || {}), state: 'done', percent: 100, transferred, count: items.length }))
+      if (onNotice) onNotice('已转移 ' + items.length + ' 个文件（' + formatBytes(transferred) + '）')
+      setLeftRefresh((value) => value + 1)
+      setRightRefresh((value) => value + 1)
+      setLeftSelection([]); setRightSelection([])
     } catch (cause) {
       const aborted = cause && cause.code === 'aborted'
-      setJob((current) => ({ ...(current || {}), state: aborted ? 'cancelled' : 'error', error: aborted ? '已取消' : (cause.message || '传输失败'), code: cause.code }))
+      setJob((current) => ({ ...(current || {}), state: aborted ? 'cancelled' : 'error', error: aborted ? '已取消' : (cause.message || '传输失败') }))
       if (!aborted && onError) onError(cause)
-      if (aborted) transferRef.current = ''
     } finally {
       abortRef.current = null
     }
   }
+
+  const start = () => {
+    const from = activeSide
+    const items = itemsFor(from)
+    if (!items.length) return
+    void startQueue(from, items, side(other(from)).path)
+  }
   const cancel = () => { if (abortRef.current) abortRef.current.abort() }
   const swap = () => {
-    setSourceDevice(destDevice)
-    setDestDevice(sourceDevice)
-    setSourcePath(destPath)
-    setDestPath(sourcePath)
-    setSourceFile(null)
+    setLeftDevice(rightDevice); setRightDevice(leftDevice)
+    setLeftPath(rightPath); setRightPath(leftPath)
+    setLeftSelection([]); setRightSelection([])
   }
+  const selectAll = (name) => {
+    const current = side(name)
+    const files = current.entries.filter((item) => !item.dir).map((item) => item.path)
+    if (name === 'left') setLeftSelection(files); else setRightSelection(files)
+  }
+  const copySelection = (name, cut) => {
+    const items = itemsFor(name)
+    if (!items.length) return
+    clipboardRef.current = { side: name, items, cut: !!cut }
+    if (onNotice) onNotice((cut ? '已剪切 ' : '已复制 ') + items.length + ' 个文件')
+  }
+  const pasteInto = (name) => {
+    const clip = clipboardRef.current
+    if (!clip || !clip.items.length || clip.side === name) return
+    void startQueue(clip.side, clip.items, side(name).path, clip.cut)
+    if (clip.cut) clipboardRef.current = null
+  }
+  const actionsRef = React.useRef({})
+  actionsRef.current = { selectAll, copySelection, pasteInto }
+
+  React.useEffect(() => {
+    const onKey = (event) => {
+      if (!(event.ctrlKey || event.metaKey) || isTextInput(event.target)) return
+      const key = String(event.key || '').toLowerCase()
+      const actions = actionsRef.current
+      if (key === 'a') { event.preventDefault(); actions.selectAll(latest.current.activeSide) }
+      else if (key === 'c') { event.preventDefault(); actions.copySelection(latest.current.activeSide, false) }
+      else if (key === 'x') { event.preventDefault(); actions.copySelection(latest.current.activeSide, true) }
+      else if (key === 'v') { event.preventDefault(); actions.pasteInto(latest.current.activeSide) }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  React.useEffect(() => {
+    if (!menu) return undefined
+    const close = () => setMenu(null)
+    window.addEventListener('mousedown', close)
+    window.addEventListener('keydown', close)
+    return () => { window.removeEventListener('mousedown', close); window.removeEventListener('keydown', close) }
+  }, [menu])
+
+  const openContext = (sideName) => (item, event) => {
+    if (!item) return
+    const current = side(sideName)
+    if (!current.selection.includes(item.path)) {
+      const next = event && (event.ctrlKey || event.metaKey) ? [...current.selection, item.path] : [item.path]
+      if (sideName === 'left') setLeftSelection(next); else setRightSelection(next)
+    }
+    setActiveSide(sideName)
+    setMenu({ x: event.clientX, y: event.clientY, side: sideName })
+  }
+
   const progress = job ? Math.max(0, Math.min(100, Number(job.percent) || 0)) : 0
-  return h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', padding: '14px 18px 18px', gap: 12, background: C.bg } },
-    h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, flex: '0 0 auto', minWidth: 0 } },
-      h('div', { style: { fontSize: 18, fontWeight: 600, color: C.ink, flex: '0 0 auto' } }, '文件转移'),
-      h('div', { style: { marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, color: C.sub, fontSize: 12 } },
-        h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 } },
-          h('span', { style: { width: 7, height: 7, borderRadius: 4, background: C.blue, flex: '0 0 auto' } }),
-          h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, (sourceItem && (sourceItem.name || sourceItem.device_id)) || '选择来源')),
-        h('span', { style: { color: C.mute } }, '→'),
-        h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 } },
-          h('span', { style: { width: 7, height: 7, borderRadius: 4, background: C.green, flex: '0 0 auto' } }),
-          h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, (destItem && (destItem.name || destItem.device_id)) || '选择目标')))),
-    h('div', { style: { display: 'flex', gap: 12, flex: '1 1 auto', minHeight: 0 } },
-      h(Browser, {
-        title: '源设备', roleLabel: '来源', accent: C.blue,
-        deviceId: sourceDevice, onDevice: (id) => { setSourceDevice(id); setSourceFile(null) },
-        path: sourcePath, onPath: setSourcePath, selectedPath: sourceFile && sourceFile.path,
-        onFile: (item) => setSourceFile(item)
+  const sourceCount = itemsFor(activeSide).length
+  const target = side(other(activeSide))
+  let footerText = '选择文件后拖到另一侧，或用 Ctrl+C / Ctrl+X、Ctrl+V'
+  if (job) {
+    if (job.state === 'running') footerText = '正在转移 ' + ((job.index || 0) + 1) + '/' + (job.count || 1)
+    else if (job.state === 'done') footerText = '已转移 ' + (job.count || 0) + ' 个文件'
+    else if (job.state === 'error') footerText = job.error
+    else footerText = job.error || '已取消'
+  } else if (sourceCount) footerText = '已选 ' + sourceCount + ' 个文件 → ' + (target.path || '先在另一侧选择目录')
+
+  return h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', padding: '12px 16px 14px', gap: 10, background: C.bg } },
+    h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, flex: '0 0 auto' } },
+      h('div', { style: { fontSize: 17, fontWeight: 600, color: C.ink } }, '文件转移'),
+      h('div', { style: { marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10, color: C.mute, fontSize: 11.5 } },
+        h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 5 } },
+          h('span', { style: { width: 6, height: 6, borderRadius: 3, background: C.blue } }),
+          (devices.find((item) => item.device_id === leftDevice) || {}).name || '左侧'),
+        h(Glyph, { name: 'transfer', size: 14 }),
+        h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 5 } },
+          h('span', { style: { width: 6, height: 6, borderRadius: 3, background: C.green } }),
+          (devices.find((item) => item.device_id === rightDevice) || {}).name || '右侧'))),
+    h('div', { style: { display: 'flex', gap: 8, flex: '1 1 auto', minHeight: 0 } },
+      FilePane({
+        side: 'left', deviceId: leftDevice, otherDeviceId: rightDevice, devices,
+        onDevice: (id) => { setLeftDevice(id); setLeftPath(''); setLeftSelection([]) },
+        path: leftPath, onPath: setLeftPath, refreshKey: leftRefresh,
+        selection: leftSelection, onSelection: setLeftSelection,
+        onEntries: setLeftEntries, active: activeSide === 'left',
+        onActivate: () => setActiveSide('left'),
+        onDragItems: (paths) => { dragRef.current = { side: 'left', paths, entries } },
+        onDropItems: () => {
+          const drag = dragRef.current
+          dragRef.current = null
+          if (!drag || drag.side === 'left' || !leftPath) return
+          const items = (drag.entries || []).filter((item) => drag.paths.includes(item.path) && !item.dir)
+          if (!items.length) return
+          void startQueue(drag.side, items, leftPath)
+        },
+        onContextItem: openContext('left')
       }),
       h('button', {
-        type: 'button', onClick: swap, title: '交换来源与目标', 'aria-label': '交换来源与目标',
-        style: { alignSelf: 'center', width: 32, height: 32, borderRadius: 999, border: '1px solid ' + C.line, background: C.bg, color: C.sub, fontSize: 15, cursor: 'pointer', flex: '0 0 auto' }
-      }, '⇄'),
-      h(Browser, {
-        key: 'dest:' + refresh, title: '目标目录', roleLabel: '目标', accent: C.green,
-        deviceId: destDevice, onDevice: (id) => setDestDevice(id),
-        path: destPath, onPath: setDestPath, selectedPath: ''
+        type: 'button', onClick: swap, title: '交换两侧电脑', 'aria-label': '交换两侧电脑',
+        className: 'tether-hover',
+        style: { alignSelf: 'center', width: 28, height: 28, flex: '0 0 auto', display: 'grid', placeItems: 'center',
+          border: 0, borderRadius: 999, background: C.soft, color: C.sub, cursor: 'pointer' }
+      }, h(Glyph, { name: 'transfer', size: 14 })),
+      FilePane({
+        side: 'right', deviceId: rightDevice, otherDeviceId: leftDevice, devices,
+        onDevice: (id) => { setRightDevice(id); setRightPath(''); setRightSelection([]) },
+        path: rightPath, onPath: setRightPath, refreshKey: rightRefresh,
+        selection: rightSelection, onSelection: setRightSelection,
+        onEntries: setRightEntries, active: activeSide === 'right',
+        onActivate: () => setActiveSide('right'),
+        onDragItems: (paths) => { dragRef.current = { side: 'right', paths, entries } },
+        onDropItems: () => {
+          const drag = dragRef.current
+          dragRef.current = null
+          if (!drag || drag.side === 'right' || !rightPath) return
+          const items = (drag.entries || []).filter((item) => drag.paths.includes(item.path) && !item.dir)
+          if (!items.length) return
+          void startQueue(drag.side, items, rightPath)
+        },
+        onContextItem: openContext('right')
       })),
-    h('div', { style: { display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 10, background: C.panel, border: '1px solid ' + C.line, flex: '0 0 auto', minWidth: 0 } },
+    h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, background: C.panel, flex: '0 0 auto', minWidth: 0 } },
       h('div', { style: { flex: '1 1 auto', minWidth: 0, display: 'grid', gap: 2 } },
-        h('div', { style: { fontSize: 12.5, color: sourceFile ? C.ink : C.mute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, sourceFile ? sourceFile.name : '从来源侧选择一个文件'),
-        h('div', { style: { fontSize: 11, color: C.mute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, sourceFile ? (formatBytes(Number(sourceFile.size)) + ' → ' + (destination || '选择目标目录')) : '选择目标目录后开始')),
-      h('label', { style: { display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: C.sub, flex: '0 0 auto' } },
-        h('input', { type: 'checkbox', checked: overwrite, onChange: (event) => setOverwrite(event.target.checked) }), '覆盖同名文件'),
-      running ? button('取消', cancel) : button(job && job.state === 'error' ? '重试' : '开始转移', start, { primary: true, disabled: !canStart })),
-    job ? h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, flex: '0 0 auto' } },
-      h('div', { style: { flex: '1 1 auto', height: 6, borderRadius: 999, background: C.soft, overflow: 'hidden' } },
-        h('div', { style: { width: progress + '%', height: '100%', background: job.state === 'error' ? C.red : C.blue, transition: 'width 200ms ease' } })),
-      h('span', { className: 'tether-num', style: { color: job.state === 'error' ? C.red : C.mute, fontSize: 11, minWidth: 150, textAlign: 'right' } },
-        job.state === 'error' ? job.error : (job.percent || 0) + '% · ' + formatBytes(job.transferred || 0) + ' / ' + formatBytes(job.total || 0))) : null)
+        h('div', { style: { fontSize: 12, color: C.sub, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, footerText),
+        job ? h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+          h('div', { style: { flex: '1 1 auto', height: 5, borderRadius: 999, background: C.soft, overflow: 'hidden' } },
+            h('div', { style: { width: progress + '%', height: '100%', background: job.state === 'error' ? C.red : C.blue, transition: 'width 150ms ease' } })),
+          h('span', { className: 'tether-num', style: { fontSize: 10.5, color: C.mute, whiteSpace: 'nowrap' } }, progress + '% · ' + formatBytes(job.transferred || 0) + ' / ' + formatBytes(job.total || 0))) : null),
+      h('label', { style: { display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, color: C.sub, flex: '0 0 auto' } },
+        h('input', { type: 'checkbox', checked: overwrite, onChange: (event) => setOverwrite(event.target.checked) }), '覆盖同名'),
+      job && job.state === 'running'
+        ? h('button', { type: 'button', onClick: cancel, style: { ...field, height: 28, padding: '0 12px', cursor: 'pointer' } }, '取消')
+        : h('button', {
+          type: 'button', onClick: start, disabled: !sourceCount || !target.path,
+          className: 'tether-press',
+          style: { height: 28, padding: '0 14px', border: 0, borderRadius: 6, background: C.blue, color: '#fff', fontSize: 12,
+            cursor: !sourceCount || !target.path ? 'not-allowed' : 'pointer', opacity: !sourceCount || !target.path ? 0.45 : 1 }
+        }, '转移到另一侧')),
+    menu ? h('div', {
+      role: 'menu',
+      onMouseDown: (event) => event.stopPropagation(),
+      style: { position: 'fixed', left: menu.x, top: menu.y, zIndex: 2147483000, minWidth: 150, padding: 4,
+        background: C.bg, borderRadius: 8, boxShadow: '0 8px 24px rgba(16,24,40,.18)', border: '1px solid ' + C.line }
+    },
+      [
+        ['复制', () => copySelection(menu.side, false)],
+        ['剪切', () => copySelection(menu.side, true)],
+        ['粘贴到此处', () => pasteInto(menu.side)],
+        ['刷新', () => { if (menu.side === 'left') setLeftRefresh((value) => value + 1); else setRightRefresh((value) => value + 1) }]
+      ].map(([label, action]) => h('button', {
+        key: label, type: 'button',
+        onClick: () => { setMenu(null); action() },
+        className: 'tether-hover',
+        style: { display: 'block', width: '100%', padding: '6px 10px', border: 0, borderRadius: 5, background: 'transparent',
+          color: C.ink, fontSize: 12, textAlign: 'left', cursor: 'pointer' }
+      }, label))) : null)
 }

@@ -1522,6 +1522,10 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       forward: { parts: [
         { d: 'M5.8 3.2L10.6 8l-4.8 4.8' }
       ] },
+      transfer: { parts: [
+        { d: 'M2.4 5.6h9.2M8.8 2.8l2.8 2.8-2.8 2.8' },
+        { d: 'M13.6 10.4H4.4M7.2 7.6 4.4 10.4l2.8 2.8' }
+      ] },
       search: { parts: [
         { d: 'M7.1 12.2a5.1 5.1 0 1 0 0-10.2 5.1 5.1 0 0 0 0 10.2z' },
         { d: 'M11 11l3 3' }
@@ -1594,7 +1598,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const items = [
         { id: 'workspaces', label: '原生工作区', icon: 'monitor' },
         { id: 'files', label: '文件资源管理器', icon: 'files' },
-        { id: 'transfer', label: '文件转移', icon: 'forward' },
+        { id: 'transfer', label: '文件转移', icon: 'transfer' },
         { id: 'network', label: '互联', icon: 'devices' }
       ]
       const button = (id, label, icon, onClick, selected) => h('button', {

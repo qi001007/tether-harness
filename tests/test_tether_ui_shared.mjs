@@ -11,6 +11,8 @@ const connectionPanel = fs.readFileSync(path.join(root, 'packages/tether-ui/src/
 const settingsPanel = fs.readFileSync(path.join(root, 'packages/tether-ui/src/settings-panel.js'), 'utf8')
 const transferPage = fs.readFileSync(path.join(root, 'packages/tether-ui/src/transfer-page.js'), 'utf8')
 const monacoRuntime = fs.readFileSync(path.join(root, 'packages/tether-ui/src/monaco-runtime.js'), 'utf8')
+const targetExplorer = fs.readFileSync(path.join(root, 'packages/tether-ui/src/target-file-explorer.js'), 'utf8')
+const dshHost = fs.readFileSync(path.join(root, 'packages/tether-ui/src/hosts/dsh.js'), 'utf8')
 
 test('DSH plugin bundle is up to date with the shared tether-ui source', () => {
   const bundledPanel = connectionPanel.replace(/^export /gm, '').trim()
@@ -120,9 +122,11 @@ test('connection panels show service checks without duplicate device totals or c
   assert.match(shared, /hubRole/)
   assert.match(shared, /e\.status === 401[\s\S]*?setLoggedIn\(false\)/)
   assert.match(connectionPanel, /服务器地址/)
-  assert.match(transferPage, /roleLabel: '来源'/)
-  assert.match(transferPage, /roleLabel: '目标'/)
-  assert.match(transferPage, /交换来源与目标/)
+  assert.doesNotMatch(transferPage, /roleLabel: '(?:来源|目标)'|交换来源与目标/)
+  assert.match(transferPage, /已在另一侧/)
+  assert.match(transferPage, /selectionMode: 'multiple'/)
+  assert.match(transferPage, /onDragItem/)
+  assert.match(transferPage, /Ctrl\+C/)
   assert.doesNotMatch(shared, /Hub 连接配置/)
   assert.match(shared, /Hub 不可达或请求超时/)
   assert.match(shared, /url\.username \|\| url\.password \|\| url\.search \|\| url\.hash/)
@@ -752,4 +756,12 @@ test('legacy node responses without device_id remain valid', async () => {
   assert.equal(responseBelongsToDevice({ path: 'x' }, 'A'), true, 'released nodes do not echo device_id')
   assert.equal(responseBelongsToDevice(null, 'A'), false)
   assert.equal(responseBelongsToDevice({}, ''), false)
+})
+
+
+test('the target picker can expand the explorer tree', () => {
+  assert.match(dshHost, /treeChildren/)
+  assert.match(dshHost, /onToggleTree/)
+  assert.match(targetExplorer, /const treeRow =/)
+  assert.match(targetExplorer, /onToggleTree && item\.dir/)
 })
