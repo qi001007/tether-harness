@@ -167317,6 +167317,48 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const allowedHost = sameOrigin || url.protocol === "http:" && loopback && (ticketed || localToken) || publicSurface && ticketed;
     return allowedHost && !url.username && !url.password && Number(url.port || (url.protocol === "https:" ? 443 : 80)) > 0 && !url.hash;
   }
+  function SurfaceWarmup({ devices, deviceId, localDeviceId }) {
+    const [warm, setWarm] = React2.useState([]);
+    const warmedRef = React2.useRef(/* @__PURE__ */ new Set());
+    React2.useEffect(() => {
+      if (!host || host.kind !== "app" || !Array.isArray(devices)) return void 0;
+      const candidates = devices.filter((item) => item && item.online && item.device_id !== deviceId && item.device_id !== localDeviceId && item.capabilities && item.capabilities.dsh_surface).slice(0, 2);
+      let cancelled = false;
+      for (const item of candidates) {
+        const key = item.device_id + "|" + (typeof host.activeApiBase === "function" ? host.activeApiBase() : "");
+        if (warmedRef.current.has(key)) continue;
+        warmedRef.current.add(key);
+        api2("/api/devices/" + encodeURIComponent(item.device_id) + "/dsh/surface").then((data) => {
+          if (cancelled || !data || !data.available || !isSafeNativeSurfaceUrl(data.url)) return;
+          const url = new URL(data.url);
+          url.searchParams.set("tether_native", "1");
+          setWarm((current) => current.some((entry) => entry.id === item.device_id) ? current : [...current, { id: item.device_id, url: url.href }]);
+        }).catch(() => {
+        });
+      }
+      return () => {
+        cancelled = true;
+      };
+    }, [devices, deviceId, localDeviceId]);
+    React2.useEffect(() => {
+      if (!warm.length) return void 0;
+      const timer = setTimeout(() => setWarm([]), 9e4);
+      return () => clearTimeout(timer);
+    }, [warm.length]);
+    if (!warm.length) return null;
+    return h2("div", {
+      "aria-hidden": true,
+      style: { position: "absolute", width: 1, height: 1, overflow: "hidden", opacity: 0, pointerEvents: "none", left: -9999, top: -9999 }
+    }, warm.map((item) => h2("iframe", {
+      key: item.id,
+      src: item.url,
+      title: "",
+      tabIndex: -1,
+      sandbox: "allow-scripts allow-same-origin allow-forms allow-downloads allow-modals",
+      onLoad: () => setTimeout(() => setWarm((current) => current.filter((entry) => entry.id !== item.id)), 45e3),
+      style: { width: 1, height: 1, border: 0 }
+    })));
+  }
   function CodeEditor({ deviceId, path, value, onChange, onSave, encoding, newline: newline2, readOnly = false }) {
     const containerRef = React2.useRef(null);
     const editorRef = React2.useRef(null);
@@ -170602,6 +170644,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       "div",
       { className: "tether-root", style: { position: "relative", height: "100%", display: "flex", flexDirection: "column", background: "var(--tether-workbench-bg, " + C.bg + ")", color: C.ink, fontSize: 13, fontWeight: "var(--tether-body, 400)", overflow: "hidden" } },
       h2("style", null, SCROLL_CSS),
+      h2(SurfaceWarmup, { devices: state && state.devices || [], deviceId, localDeviceId: appLocalDevice }),
       h2(
         "div",
         { className: "tether-topbar " + (host && host.kind === "app" ? "tether-toolbar-app" : "tether-toolbar"), style: { display: "flex", alignItems: "center", gap: 10, padding: "6px 12px", borderBottom: 0, background: C.soft, position: "relative", zIndex: 2, flex: "0 0 auto" } },

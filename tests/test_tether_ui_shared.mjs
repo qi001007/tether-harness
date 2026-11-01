@@ -744,6 +744,13 @@ test('permissions and settings stay separate with an account footer', () => {
   assert.doesNotMatch(shared, /button\('settings', '设置', 'settings'/)
 })
 
+test('the app warms the other online surfaces in a hidden frame', () => {
+  assert.match(shared, /function SurfaceWarmup/)
+  assert.match(shared, /h\(SurfaceWarmup, \{ devices:/)
+  assert.match(shared, /warmedRef/)
+  assert.match(shared, /url\.searchParams\.set\('tether_native', '1'\)/)
+})
+
 test('the app host reads app-context from its own origin', () => {
   assert.match(shared, /fetch\(BASE \+ '\/app-context'/)
   assert.doesNotMatch(shared, /fetch\(ACTIVE_BASE \+ '\/app-context'/)

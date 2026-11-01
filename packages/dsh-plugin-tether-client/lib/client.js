@@ -5763,7 +5763,7 @@ monaco-editor/esm/vs/languages/definitions/swift/swift.js:
 
     const EditorRuntime = TetherMonacoRuntime
     const PANEL_ID = 'tether'
-    const PLUGIN_VERSION = "0.2.52"
+    const PLUGIN_VERSION = "0.2.53"
 function parentOf(path) {
   const clean = String(path || '').replace(/[\\/]+$/, '')
   if (!clean) return ''
@@ -10333,6 +10333,47 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         Number(url.port || (url.protocol === 'https:' ? 443 : 80)) > 0 && !url.hash
     }
 
+    function SurfaceWarmup({ devices, deviceId, localDeviceId }) {
+      const [warm, setWarm] = React.useState([])
+      const warmedRef = React.useRef(new Set())
+      React.useEffect(() => {
+        if (!host || host.kind !== 'app' || !Array.isArray(devices)) return undefined
+        const candidates = devices.filter((item) => item && item.online && item.device_id !== deviceId
+          && item.device_id !== localDeviceId && item.capabilities && item.capabilities.dsh_surface).slice(0, 2)
+        let cancelled = false
+        for (const item of candidates) {
+          const key = item.device_id + '|' + (typeof host.activeApiBase === 'function' ? host.activeApiBase() : '')
+          if (warmedRef.current.has(key)) continue
+          warmedRef.current.add(key)
+          api('/api/devices/' + encodeURIComponent(item.device_id) + '/dsh/surface')
+            .then((data) => {
+              if (cancelled || !data || !data.available || !isSafeNativeSurfaceUrl(data.url)) return
+              const url = new URL(data.url)
+              url.searchParams.set('tether_native', '1')
+              setWarm((current) => current.some((entry) => entry.id === item.device_id)
+                ? current : [...current, { id: item.device_id, url: url.href }])
+            })
+            .catch(() => { /* another device may be offline; the next state poll retries */ })
+        }
+        return () => { cancelled = true }
+      }, [devices, deviceId, localDeviceId])
+      React.useEffect(() => {
+        if (!warm.length) return undefined
+        const timer = setTimeout(() => setWarm([]), 90000)
+        return () => clearTimeout(timer)
+      }, [warm.length])
+      if (!warm.length) return null
+      return h('div', {
+        'aria-hidden': true,
+        style: { position: 'absolute', width: 1, height: 1, overflow: 'hidden', opacity: 0, pointerEvents: 'none', left: -9999, top: -9999 }
+      }, warm.map((item) => h('iframe', {
+        key: item.id, src: item.url, title: '', tabIndex: -1,
+        sandbox: 'allow-scripts allow-same-origin allow-forms allow-downloads allow-modals',
+        onLoad: () => setTimeout(() => setWarm((current) => current.filter((entry) => entry.id !== item.id)), 45000),
+        style: { width: 1, height: 1, border: 0 }
+      })))
+    }
+
     function CodeEditor({ deviceId, path, value, onChange, onSave, encoding, newline, readOnly = false }) {
       const containerRef = React.useRef(null)
       const editorRef = React.useRef(null)
@@ -12936,6 +12977,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
 
       return h('div', { className: 'tether-root', style: { position: 'relative', height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--tether-workbench-bg, ' + C.bg + ')', color: C.ink, fontSize: 13, fontWeight: 'var(--tether-body, 400)', overflow: 'hidden' } },
         h('style', null, SCROLL_CSS),
+        h(SurfaceWarmup, { devices: (state && state.devices) || [], deviceId, localDeviceId: appLocalDevice }),
         h('div', { className: 'tether-topbar ' + (host && host.kind === 'app' ? 'tether-toolbar-app' : 'tether-toolbar'), style: { display: 'flex', alignItems: 'center', gap: 10, padding: '6px 12px', borderBottom: 0, background: C.soft, position: 'relative', zIndex: 2, flex: '0 0 auto' } },
           h('strong', { style: { fontSize: 15 } }, 'Tether'),
           device ? h(DeviceSwitcher, {

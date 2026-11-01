@@ -1,6 +1,6 @@
 {
-  "version": "0.2.52",
-  "notes": "The file transfer page uses two compact explorer panes with shared tree, drag, clipboard and context menu, the target picker expands folders in place, the activity bar keeps permissions separate from settings, and cold DSH surfaces survive the first bundle transfer.",
+  "version": "0.2.53",
+  "notes": "The APP warms the other online DSH surfaces in a hidden frame after startup, so device switches land in about five seconds instead of waiting for the cold 4.2 MB plugin bundle. Also includes 0.2.52 transfer page, picker tree and activity bar changes.",
   "download": "https://github.com/qi001007/tether-harness",
   "install": "git pull && powershell -ExecutionPolicy Bypass -File desktop/install-plugin.ps1"
 }
