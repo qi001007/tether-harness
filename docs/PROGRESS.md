@@ -372,6 +372,8 @@
 - APP 的 `/app-context` 改读自身源（`127.0.0.1:18892`），不再每 4 秒向跨源 Hub 发必被 CORS 拦截的请求。
 - 真机 Electron（源码 0.2.51）复验：DSH 页面完整渲染，含新会话按钮、工作区树、会话列表与 composer，无慢加载提示；日志无新增 `/app-context` CORS 失败。
 - 门禁：client pytest 141 passed / 1 skipped，server pytest 150 passed，mjs 218/218，cjs 6/6，`build.mjs --check`、`build-web.mjs --check` 与 `validate_versions()` 通过。
+- 0.2.51 已发布（CI `41296203842`，签名清单校验通过，10:13:22Z），Hub 镜像已刷新；LAPTOP-01 node+APP **~18 s**、插件 **41.5 s**（含 DSH 重启，`restart_required` 已清除），两机 surface bootstrap 均 **200**（1.31 s / 1.10 s）。
+- 本机桌面 surface 曾因运行的 DSH 被换成不含 Tether 插件的 `.runtime/dsh-home` profile 而 502；Node 读取的是 `~/.dsh` 描述符。用 `tether.node.dsh_restart` 拉回默认 profile 后描述符刷新到新 pid，surface 0.94 s 恢复。LAPTOP 更新期间 Node 曾每约 20 s 重注册，插件更新两次报 `device_offline`，链路稳定后重试收敛；根因待查。
 
 详细部署记录、服务器地址与运行快照属于私有运维材料，不在本公开进度页重复列出。用户需求仍以 [反馈清单](FEEDBACK.md) 为准；产品目标见 [PRD](PRD.md)，公开协议与客户端边界见 [技术说明](TECHNICAL.md)。
 

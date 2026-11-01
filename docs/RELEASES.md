@@ -11,6 +11,8 @@ Native workspace state fixes:
 
 Gates: client pytest 141 passed / 1 skipped, server pytest 150 passed, mjs 218/218, cjs 6/6, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. Real Electron: the embedded DSH page rendered with its composer and no slow banner; iframe timing TTFB 443 ms, load 1.06 s.
 
+CI run `41296203842` succeeded; the signed manifest was verified (app 1,720,676 B, plugin 1,332,698 B, node 79,561 B) and published at 2026-11-01T10:13:22Z; the Hub mirror was refreshed to **0.2.51**. LAPTOP-01 node+APP **~18 s** and plugin **41.5 s** (including the DSH restart, `restart_required` cleared); both public surfaces bootstrap **200** (DESKTOP 1.31 s, LAPTOP 1.10 s). During the LAPTOP plugin update the node reconnected every ~20 s for a few minutes and the job failed twice with `device_offline`; after it settled, the retry converged. The reconnect cause is still under investigation.
+
 ## v0.2.50
 
 Plugin runtime reload guard:

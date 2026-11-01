@@ -114,6 +114,8 @@
 
 - [x] F85 两台机器都登录成功后仍连不上服务器（UI 报 `Failed to fetch`）。根因：浏览器对带 `Authorization` 的 `/api/*` 请求先发 OPTIONS 预检，Hub 的认证中间件在预检阶段返回 401，预检失败后真正请求被浏览器拦截；Hub 侧两台设备其实都在线。修复：`/api/*`、`/admin/*` 的 OPTIONS 交给 CORS 中间件应答（服务端 `9dc93ad`），真实登录仍由紧随其后的带凭证请求鉴权。判据：生产预检 200 且返回 `Access-Control-Allow-Origin: http://127.0.0.1:18892` 与 `Authorization`；APP 连接灯绿、设备列表含 DESKTOP-LOCAL 与 LAPTOP-01、`/api/state` 200。**实测通过**，两台设备 last_seen 持续 2 秒级更新。
 
+- [ ] F86 APP 更新后 Node 控制通道周期性重注册：LAPTOP-01 升到 0.2.51 后，Hub 审计显示 `node.register` 每约 20 s 一次（10:14:32–10:17:52Z），期间 20 次 `plugin status` 全部 409 `device_offline`，插件更新连续两次在“检查版本”失败。约 2.5 分钟后自行稳定，重试后 41.5 s 完成。判据：更新/重启后保持单一稳定连接，连续 60 s 内注册次数 ≤1，任一时刻 status RPC 成功；定位重复后端、WS ping 超时或 supervisor 重启中的实际原因，并补回归。当前根因未确认。
+
 ## 验收边界
 
 离线测试、隔离 UI、单机 DSH、本机真实模型回答、干净安装、真实跨设备操作和公开发布分别记录，不能互相替代。未完成发布与实机验收前，保持对应条目未完成。
