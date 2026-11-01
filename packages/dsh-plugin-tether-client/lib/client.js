@@ -9143,8 +9143,12 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         { d: 'M7.99976 14.0889C9.23509 14.0889 10.1743 11.3629 10.1743 8.00006C10.1743 4.63739 9.23509 1.91138 7.99976 1.91138' },
         { d: 'M7.99973 14.0889C6.76445 14.0889 5.8252 11.3629 5.8252 8.00006C5.8252 4.63739 6.76445 1.91138 7.99973 1.91138' }
       ] },
-      settings: { join: 'round', parts: [
+      shield: { join: 'round', parts: [
         { d: 'M6.80132 2.14853C7.70663 1.80917 8.70422 1.80919 9.60952 2.14859L14.1296 3.84317V7.11961C14.1296 11.6089 10.7615 13.5975 8.20543 14.5779C5.64931 13.5975 2.28052 11.6089 2.28052 7.11961V3.84317L6.80132 2.14853Z' }
+      ] },
+      gear: { join: 'round', parts: [
+        { d: 'M6.7 1.6h2.6l.35 1.55.62.26 1.32-.86 1.84 1.84-.86 1.32.26.62 1.55.35v2.6l-1.55.35-.26.62.86 1.32-1.84 1.84-1.32-.86-.62.26-.35 1.55H6.7l-.35-1.55-.62-.26-1.32.86-1.84-1.84.86-1.32-.26-.62L1.6 9.3V6.7l1.55-.35.26-.62-.86-1.32 1.84-1.84 1.32.86.62-.26z' },
+        { d: 'M8 6.1a1.9 1.9 0 1 0 0 3.8 1.9 1.9 0 0 0 0-3.8Z' }
       ] },
       monitor: { parts: [
         { d: 'M2 3.2h12v8.1H2z' },
@@ -9245,7 +9249,8 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       })))
     }
 
-    function ActivityBar({ active, collapsed, onSelect, onAppSettings, appSettingsOpen }) {
+    function ActivityBar({ active, collapsed, onSelect, onPermissions, permissionsOpen, onAppSettings, appSettingsOpen, accountEmail = '' }) {
+      const accountInitial = String(accountEmail || '').trim().charAt(0).toUpperCase()
       const items = [
         { id: 'workspaces', label: '原生工作区', icon: 'monitor' },
         { id: 'files', label: '文件资源管理器', icon: 'files' },
@@ -9266,7 +9271,26 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         style: { width: UI.activity, flex: '0 0 auto', borderRight: 0, background: C.soft, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '8px 0', gap: 3 }
       },
         items.map((item) => button(item.id, item.label, item.icon, () => onSelect(item.id), active === item.id)),
-        h('div', { style: { marginTop: 'auto' } }, button('settings', '设置', 'settings', onAppSettings, appSettingsOpen))
+        h('div', { style: { marginTop: 'auto', display: 'grid', gap: 3, justifyItems: 'center' } },
+          button('permissions', '文件权限', 'shield', onPermissions, permissionsOpen),
+          h('button', {
+            type: 'button', title: accountEmail ? '设置 · ' + accountEmail : '设置', 'aria-label': '设置',
+            onClick: onAppSettings,
+            className: 'tether-activity-button tether-press tether-hover',
+            'data-selected': appSettingsOpen ? 'true' : undefined,
+            style: {
+              width: 36, height: 36, display: 'grid', placeItems: 'center', border: 0,
+              borderRadius: UI.radius, cursor: 'pointer', background: 'transparent',
+              color: appSettingsOpen ? C.blue : C.mute
+            }
+          }, accountInitial
+            ? h('span', {
+              'aria-hidden': true,
+              style: { width: 22, height: 22, borderRadius: 999, display: 'grid', placeItems: 'center',
+                background: 'color-mix(in srgb, ' + C.blue + ' 14%, transparent)', color: C.blue, fontSize: 11, fontWeight: 600 }
+            }, accountInitial)
+            : h(Glyph, { name: 'gear', size: 18 }))
+        )
       )
     }
 
@@ -9617,7 +9641,8 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
     function SidePanel(props) {
       const { width, hidden, resizing, onResizeStart, onResetWidth, onCollapse,
         treeRoots, treeChildren, treeOpen, onToggleTree, onOpenFile, onContextMenuNode, treeSelected,
-        onHoverEntry, onLeaveEntry, loadingTree } = props
+        onHoverEntry, onLeaveEntry, loadingTree, accountEmail = '', accountRole = '', onOpenSettings } = props
+      const accountInitial = String(accountEmail || '').trim().charAt(0).toUpperCase()
       return h('aside', {
         'aria-label': '文件', className: 'tether-sidebar',
         style: { display: hidden ? 'none' : 'flex', width, flex: '0 0 auto', minHeight: 0, background: C.panel, flexDirection: 'column', position: 'relative', transition: resizing ? 'none' : 'width 180ms cubic-bezier(.2,.85,.2,1.15)', willChange: 'width' }
@@ -9629,6 +9654,29 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             onToggle: onToggleTree, onOpenFile, onContextMenuNode, onHoverEntry, onLeaveEntry
           })
         ),
+        h('div', {
+          className: 'tether-account-bar',
+          style: { display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', flex: '0 0 auto', minWidth: 0,
+            borderTop: C.line ? '1px solid ' + C.line : 0 }
+        },
+          h('span', {
+            'aria-hidden': true,
+            style: { width: 24, height: 24, flex: '0 0 auto', borderRadius: 999, display: 'grid', placeItems: 'center',
+              background: 'color-mix(in srgb, ' + C.blue + ' 14%, transparent)', color: C.blue, fontSize: 11.5, fontWeight: 600 }
+          }, accountInitial || '?'),
+          h('div', { style: { flex: '1 1 auto', minWidth: 0, display: 'grid', gap: 1 } },
+            h('div', {
+              title: accountEmail || '未登录',
+              style: { fontSize: 12, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
+            }, accountEmail || '未登录'),
+            h('div', {
+              style: { fontSize: 10.5, color: C.mute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
+            }, accountRole === 'owner' ? '所有者' : accountRole ? '成员' : '本地账户')),
+          h('button', {
+            type: 'button', title: '设置', 'aria-label': '设置', onClick: onOpenSettings,
+            className: 'tether-hover',
+            style: { width: 26, height: 26, flex: '0 0 auto', display: 'grid', placeItems: 'center', border: 0, borderRadius: 6, background: 'transparent', color: C.mute, cursor: 'pointer' }
+          }, h(Glyph, { name: 'gear', size: 16 }))),
         h('div', {
           className: 'tether-resizer tether-side-split', 'data-active': resizing ? 'true' : undefined,
           onPointerDown: onResizeStart, onDoubleClick: onResetWidth, title: '拖动调整宽度，双击复位',
@@ -12664,8 +12712,11 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             active: view === 'files' ? 'files' : (view === 'network' ? 'network' : (view === 'transfer' ? 'transfer' : 'workspaces')),
             collapsed: sidebarCollapsed,
             onSelect: selectPanel,
-            onAppSettings: () => setShowAppSettings(true),
-            appSettingsOpen: showAppSettings
+            onPermissions: () => { setShowAppSettings(false); openSettings() },
+            permissionsOpen: showSettings,
+            onAppSettings: () => { setShowSettings(false); setShowAppSettings(true) },
+            appSettingsOpen: showAppSettings,
+            accountEmail: hubEmail
           }),
           h(SidePanel, {
             width: safeSidebarWidth,
@@ -12692,7 +12743,10 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             onHoverEntry: (event, node) => showHoverTip(event, node),
             onLeaveEntry: hideHoverTip,
             onContextMenuNode: (event, node) => openContextMenu(event, { name: node.name, path: node.path, dir: node.dir }, node.dir ? node.path : parentOf(node.path)),
-            treeSelected
+            treeSelected,
+            accountEmail: hubEmail,
+            accountRole: hubRole,
+            onOpenSettings: () => { setShowSettings(false); setShowAppSettings(true) }
           }),
           h('main', { className: 'tether-workbench', style: { flex: '1 1 auto', display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 } },
             h(NativeSurface, { deviceId, online: deviceOnline, visible: view === 'chat', localDeviceId: appLocalDevice }),

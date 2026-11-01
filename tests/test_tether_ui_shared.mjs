@@ -732,6 +732,14 @@ test('the native surface slow banner only exists while the frame is loading', ()
   assert.doesNotMatch(surface, /slow \? h\('div'/)
 })
 
+test('permissions and settings stay separate with an account footer', () => {
+  assert.match(shared, /button\('permissions', '文件权限', 'shield', onPermissions, permissionsOpen\)/)
+  assert.match(shared, /tether-account-bar/)
+  assert.match(shared, /gear: \{ join: 'round'/)
+  assert.match(shared, /onOpenSettings: \(\) => \{ setShowSettings\(false\); setShowAppSettings\(true\) \}/)
+  assert.doesNotMatch(shared, /button\('settings', '设置', 'settings'/)
+})
+
 test('the app host reads app-context from its own origin', () => {
   assert.match(shared, /fetch\(BASE \+ '\/app-context'/)
   assert.doesNotMatch(shared, /fetch\(ACTIVE_BASE \+ '\/app-context'/)
