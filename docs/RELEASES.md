@@ -9,7 +9,7 @@ Background surface warmup:
 - Includes 0.2.52 (shared transfer page, picker tree, activity bar/account footer, surface timeout/cache fixes).
 - APP, plugin, and node are 0.2.53.
 
-Gates: client pytest 142 passed / 1 skipped, server pytest 150 passed, mjs 221/221, cjs 6/6, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41330546926` succeeded; published at 2026-11-01T17:18:02Z (app 1,733,027 B, plugin 1,337,207 B, node 79,648 B); the Hub mirror was refreshed to **0.2.53**. The desktop source APP has the warmup; the LAPTOP APP/plugin update is pending a free moment.
+Gates: client pytest 142 passed / 1 skipped, server pytest 150 passed, mjs 221/221, cjs 6/6, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41330546926` succeeded; published at 2026-11-01T17:18:02Z (app 1,733,027 B, plugin 1,337,207 B, node 79,648 B); the Hub mirror was refreshed to **0.2.53**. LAPTOP-01 Node+APP **19.7 s**, plugin **16.6 s** (`restart_required` cleared); both machines report node/app/plugin **0.2.53**, both surfaces **200** (DESKTOP 1.55 s, LAPTOP 1.24 s).
 
 ## v0.2.52
 
