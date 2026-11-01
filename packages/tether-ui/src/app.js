@@ -1358,6 +1358,13 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       .tether-scroll::-webkit-scrollbar-thumb { background: transparent; border-radius: 3px; }
       .tether-scroll:hover::-webkit-scrollbar-thumb { background: var(--dsw-alias-scrollbar-hover-l1, #cbd5e1); }
       .tether-scroll::-webkit-scrollbar-corner { background: transparent; }
+      .tether-root * { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+      .tether-root *:hover { scrollbar-color: var(--dsw-alias-scrollbar-hover-l1, #cbd5e1) transparent; }
+      .tether-root *::-webkit-scrollbar { width: 6px; height: 6px; }
+      .tether-root *::-webkit-scrollbar-track { background: transparent; }
+      .tether-root *::-webkit-scrollbar-thumb { background: transparent; border-radius: 3px; }
+      .tether-root *:hover::-webkit-scrollbar-thumb { background: var(--dsw-alias-scrollbar-hover-l1, #cbd5e1); }
+      .tether-root *::-webkit-scrollbar-corner { background: transparent; }
       .tether-num { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum' 1; }
       .tether-spin { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
       .tether-spin > svg { display: block; transform-box: view-box; transform-origin: 50% 50%; animation: tether-refresh-rotate .8s linear infinite; }
@@ -2311,7 +2318,11 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             currentState.status === 'document-loading' ? h('div', {
               role: 'status', 'aria-live': 'polite',
               style: { position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', padding: '6px 10px', borderRadius: 6, background: 'rgba(255,255,255,.92)', color: C.sub, fontSize: 12, boxShadow: '0 1px 4px rgba(16,24,40,.12)', pointerEvents: 'none' }
-            }, '目标工作区页面正在加载…') : null
+            }, '目标工作区页面正在加载…') : null,
+            currentState.status === 'document-loaded' ? h('button', {
+              type: 'button', onClick: retryDocument, title: '重新加载目标工作区', 'aria-label': '重新加载目标工作区',
+              style: { position: 'absolute', right: 10, bottom: 10, width: 26, height: 26, border: 0, borderRadius: 999, background: 'rgba(255,255,255,.9)', color: C.sub, fontSize: 14, cursor: 'pointer', boxShadow: '0 1px 4px rgba(16,24,40,.16)' }
+            }, '↻') : null
           )
           : h('div', { style: { display: 'grid', placeItems: 'center', alignContent: 'center', gap: 12, flex: '1 1 auto', minHeight: 0, color: C.sub, textAlign: 'center', padding: 24 } },
             h('div', null, message),
@@ -2547,9 +2558,14 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const autoUpdateChecksRef = React.useRef({})
       const lastUpdateToastRef = React.useRef({})
       const [updateToast, setUpdateToast] = React.useState('')
-      const [showHub, setShowHub] = React.useState(false)
+      const [showHub, setShowHub] = React.useState(() => {
+        try { return !(JSON.parse(window.localStorage.getItem('tether.hub') || '{}').token) } catch (_) { return true }
+      })
       const [hubUrl, setHubUrl] = React.useState('')
       const [hubToken, setHubToken] = React.useState('')
+      const [hubEmail, setHubEmail] = React.useState(() => {
+        try { return JSON.parse(window.localStorage.getItem('tether.hub') || '{}').email || '' } catch (_) { return '' }
+      })
       const [hubUnsafeExistingUrl, setHubUnsafeExistingUrl] = React.useState(false)
       const [hubStatus, setHubStatus] = React.useState('unknown')
       const [hubState, setHubState] = React.useState(null)
@@ -4910,6 +4926,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
                 setHubUrl(hubAddressForEditor(saved.url || ''))
                 setHubUnsafeExistingUrl(hubUrlNeedsReplacement(saved.url || ''))
                 setHubToken(saved.token || '')
+                setHubEmail(saved.email || '')
               }
               setHubState(null)
               setHubStatus('unknown')
@@ -4975,13 +4992,11 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           onClose: () => setShowHub(false),
           info: { address: hubAddress || '未知', status: hubStatus, checkedAt: hubCheckedAt, durationMs: hubDuration },
           busy: hubBusy, error: hubError, onProbe: probeConfiguredHub,
-          defaultUrl: hubUrl || '',
+          defaultUrl: hubUrl || hubAddress || '',
           defaultToken: hubToken || '',
-          defaultDeviceId: appLocalDevice || deviceId || '',
-          defaultDeviceName: ((state && state.devices || []).find((item) => item.device_id === (appLocalDevice || deviceId)) || {}).name || appLocalDevice || deviceId || '',
-          platform: (typeof navigator !== 'undefined' && navigator.platform) || 'Windows',
+          defaultEmail: hubEmail,
           onConfigured: async ({ url, token, user }) => {
-            try { window.localStorage.setItem('tether.hub', JSON.stringify({ url, token })) } catch (_) { throw new Error('无法保存 Hub 登录凭据') }
+            try { window.localStorage.setItem('tether.hub', JSON.stringify({ url, token, email: (user && user.email) || hubEmail })) } catch (_) { throw new Error('无法保存 Hub 登录凭据') }
             ACTIVE_BASE = url
             ACTIVE_BASE_GENERATION += 1
             EXPLICIT_AUTHORITY = true
@@ -5042,6 +5057,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             setHubError('')
             setHubUrl(url)
             setHubToken(token)
+            setHubEmail((user && user.email) || hubEmail)
             setHubAddress(url)
             setHubBusy(true)
             const generation = ACTIVE_BASE_GENERATION
@@ -5111,19 +5127,6 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
               h('button', { onClick: () => setShowSettings(false), style: { marginLeft: 'auto', border: 0, background: 'transparent', fontSize: 18, cursor: 'pointer', color: C.mute } }, '×')
             ),
             h('div', { className: 'tether-drawer-body', style: { overflow: 'hidden', flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column' } },
-              host && host.kind === 'dsh' ? h('div', { style: { padding: '12px 16px', background: C.panel, borderBottom: '1px solid ' + C.line } },
-                h('strong', { style: { display: 'block', fontSize: 12, marginBottom: 8 } }, 'Hub 连接配置'),
-                h('input', { value: hubUrl, onChange: (event) => { setHubUrl(event.target.value); if (event.target.value.trim()) setHubUnsafeExistingUrl(false) }, placeholder: 'Hub URL', spellCheck: false, type: 'url', style: { width: '100%', height: 30, boxSizing: 'border-box', border: 0, borderRadius: 6, padding: '0 8px', background: C.bg, fontSize: 12, marginBottom: 6 } }),
-                hubUnsafeExistingUrl ? h('div', { style: { fontSize: 11, color: C.amber, marginBottom: 6 } }, '现有地址含附加参数，请填写安全地址后保存。') : null,
-                h('input', { value: hubToken, onChange: (event) => setHubToken(event.target.value), placeholder: '访问令牌', type: 'password', spellCheck: false, style: { width: '100%', height: 30, boxSizing: 'border-box', border: 0, borderRadius: 6, padding: '0 8px', background: C.bg, fontSize: 12, marginBottom: 8 } }),
-                btn('保存 Hub 配置', () => {
-                  let url
-                  try { url = new URL(hubUrl.trim()); if (!['http:', 'https:'].includes(url.protocol)) throw new Error() } catch (_) { setNotice('Hub URL 无效'); return }
-                  if (url.username || url.password || url.search || url.hash || !hubToken.trim()) { setNotice('请填写有效的 Hub 地址和访问令牌'); return }
-                  const cleanUrl = (url.origin + url.pathname).replace(/\/+$/, '')
-                  window.localStorage.setItem('tether.hub', JSON.stringify({ url: cleanUrl, token: hubToken.trim() }))
-                  setNotice('Hub 配置已保存，请重新打开连接页检测。')
-                }, { primary: true })) : null,
               h('div', { style: { flex: '0 0 auto', maxHeight: '58%', overflowY: 'auto' } },
               h('div', { style: { display: 'grid', gap: 6, marginBottom: 4 } },
                 [['readonly', '默认（只读 + 项目可写）', '全盘可读；只写项目根与下列目录'],

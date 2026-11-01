@@ -162901,20 +162901,17 @@ function createConnectionPanel(React2) {
     }
   };
   const cleanUrl2 = (value) => String(value || "").trim().replace(/\/+$/, "");
-  function ConnectionPanel({ open, onClose, info, busy, error, onProbe, defaultUrl = "", defaultToken = "", onConfigured, defaultDeviceId = "", defaultDeviceName = "", platform: platform3 = "Windows" }) {
-    const initialServer = defaultUrl || (info && /^https?:\/\//.test(info.address || "") ? info.address : "");
-    const [server, setServer] = React2.useState(initialServer);
-    const [email, setEmail] = React2.useState("");
+  function ConnectionPanel({ open, onClose, info, busy, error, defaultUrl = "", defaultToken = "", defaultEmail = "", onConfigured }) {
+    const [server, setServer] = React2.useState(defaultUrl || "");
+    const [email, setEmail] = React2.useState(defaultEmail || "");
     const [password, setPassword] = React2.useState("");
     const [totp, setTotp] = React2.useState("");
+    const [inviteOpen, setInviteOpen] = React2.useState(false);
     const [inviteCode, setInviteCode] = React2.useState("");
     const [inviteEmail, setInviteEmail] = React2.useState("");
     const [invitePassword, setInvitePassword] = React2.useState("");
-    const [pairCode, setPairCode] = React2.useState("");
-    const [pairDevice, setPairDevice] = React2.useState(defaultDeviceId);
-    const [pairName, setPairName] = React2.useState(defaultDeviceName || defaultDeviceId);
-    const [pairResult, setPairResult] = React2.useState("");
     const [accessToken, setAccessToken] = React2.useState(defaultToken || "");
+    const [accountEmail, setAccountEmail] = React2.useState(defaultEmail || "");
     const [currentPassword, setCurrentPassword] = React2.useState("");
     const [newPassword, setNewPassword] = React2.useState("");
     const [formBusy, setFormBusy] = React2.useState("");
@@ -162922,13 +162919,15 @@ function createConnectionPanel(React2) {
     React2.useEffect(() => {
       setAccessToken(defaultToken || "");
     }, [defaultToken]);
+    React2.useEffect(() => {
+      if (defaultUrl) setServer(defaultUrl);
+    }, [defaultUrl]);
     if (!open) return null;
     const status2 = info && info.status || "unknown";
-    const checkedAt = info && info.checkedAt ? new Date(info.checkedAt) : null;
-    const checked = checkedAt && [checkedAt.getHours(), checkedAt.getMinutes(), checkedAt.getSeconds()].map((part) => String(part).padStart(2, "0")).join(":");
+    const loggedIn = !!accessToken;
     const row = (label, value) => h2(
       "div",
-      { key: label, style: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, height: 32, fontSize: 12.5 } },
+      { key: label, style: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, height: 30, fontSize: 12.5 } },
       h2("span", { style: { color: mute } }, label),
       h2("span", { style: { color: ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, value)
     );
@@ -162962,8 +162961,10 @@ function createConnectionPanel(React2) {
       }
     };
     const saveLogin = async (data, base, label) => {
-      if (typeof onConfigured === "function") await onConfigured({ url: base, token: data.token, user: data.user });
+      const user = data.user || null;
+      if (typeof onConfigured === "function") await onConfigured({ url: base, token: data.token, user });
       setAccessToken(data.token || "");
+      setAccountEmail(user && user.email || "");
       let enrolled = null;
       try {
         if (typeof window !== "undefined" && window.tetherApp && typeof window.tetherApp.enrollDevice === "function") {
@@ -162972,7 +162973,7 @@ function createConnectionPanel(React2) {
       } catch (_) {
       }
       const suffix = enrolled && enrolled.ok ? "\uFF0C\u8BBE\u5907\u5DF2\u52A0\u5165\u8D26\u53F7" : enrolled && enrolled.error ? "\uFF08\u8BBE\u5907\u672A\u767B\u8BB0\uFF1A" + enrolled.error + "\uFF09" : "";
-      setMessage(label + "\u6210\u529F\uFF0C\u5DF2\u4FDD\u5B58\u767B\u5F55\u51ED\u636E" + suffix);
+      setMessage(label + "\u6210\u529F" + suffix);
     };
     const login = () => run("login", async () => {
       const data = await post("/api/auth/login", { email: email.trim(), password, totp: totp.trim() });
@@ -162994,26 +162995,6 @@ function createConnectionPanel(React2) {
       if (typeof onConfigured === "function") onConfigured({ url: cleanUrl2(server), token: data.token, user: data.user });
       setMessage("\u5BC6\u7801\u5DF2\u4FEE\u6539\uFF0C\u5176\u4ED6\u8BBE\u5907\u7684\u65E7\u767B\u5F55\u5DF2\u5931\u6548");
     });
-    const pair = () => run("pair", async () => {
-      const data = await post("/api/pairing/exchange", {
-        code: pairCode.trim(),
-        device_id: pairDevice.trim(),
-        name: pairName.trim() || pairDevice.trim(),
-        platform: platform3,
-        capabilities: {}
-      });
-      setPairResult(data.token || "");
-      setMessage("\u914D\u5BF9\u6210\u529F\uFF0C\u8BBE\u5907\u4EE4\u724C\u5DF2\u751F\u6210");
-    });
-    const copyPairToken = () => {
-      if (!pairResult) return;
-      try {
-        navigator.clipboard.writeText(pairResult);
-        setMessage("\u8BBE\u5907\u4EE4\u724C\u5DF2\u590D\u5236");
-      } catch (_) {
-        setMessage("\u590D\u5236\u5931\u8D25\uFF0C\u8BF7\u624B\u52A8\u9009\u62E9\u4EE4\u724C");
-      }
-    };
     return h2(
       "div",
       { onPointerDown: (event) => {
@@ -163025,79 +163006,64 @@ function createConnectionPanel(React2) {
         h2(
           "header",
           { style: { padding: "12px 16px", background: panel, display: "flex", alignItems: "center" } },
-          h2("strong", { style: { fontSize: 14, color: ink } }, "\u670D\u52A1\u5668\u8FDE\u63A5"),
+          h2("strong", { style: { fontSize: 14, color: ink } }, "\u8D26\u53F7"),
           h2("button", { onClick: onClose, title: "\u5173\u95ED", "aria-label": "\u5173\u95ED", style: { marginLeft: "auto", border: 0, background: "transparent", fontSize: 18, cursor: "pointer", color: mute } }, "\xD7")
         ),
         h2(
           "div",
-          { className: "tether-drawer-body", style: { padding: "14px 16px 24px", overflowY: "auto" } },
+          { className: "tether-drawer-body tether-scroll", style: { padding: "14px 16px 24px", overflowY: "auto" } },
           h2(
             "div",
             { style: { borderRadius: 8, background: panel, padding: "4px 12px", marginBottom: 12 } },
-            row("\u670D\u52A1\u5668\u5730\u5740", safeAddress(info && info.address)),
+            row("\u670D\u52A1\u5668", safeAddress(info && info.address)),
             row("\u8FDE\u63A5\u72B6\u6001", status2 === "online" ? "\u5DF2\u8FDE\u63A5" : status2 === "offline" ? "\u4E0D\u53EF\u8FBE" : "\u672A\u77E5"),
-            row("\u6700\u8FD1\u68C0\u6D4B", busy ? "\u68C0\u6D4B\u4E2D\u2026" : checked ? checked + " \xB7 " + (status2 === "online" ? "\u6210\u529F" : status2 === "offline" ? "\u5931\u8D25" : "\u672A\u77E5") : "\u5C1A\u672A\u68C0\u6D4B"),
-            row("\u670D\u52A1\u54CD\u5E94\u8017\u65F6", info && Number.isFinite(info.durationMs) ? info.durationMs + " ms" : "\u2014")
+            row("\u5F53\u524D\u8D26\u53F7", loggedIn ? accountEmail || "\u5DF2\u767B\u5F55" : "\u672A\u767B\u5F55")
           ),
           error ? h2("div", { style: { color: "var(--dsw-alias-state-error-primary, #b42318)", fontSize: 12, marginBottom: 10 } }, error) : null,
-          h2("button", { onClick: onProbe, disabled: busy, className: "tether-press", style: { ...secondary, opacity: busy ? 0.5 : 1 } }, busy ? "\u68C0\u6D4B\u4E2D\u2026" : "\u91CD\u65B0\u68C0\u6D4B"),
-          title("\u8D26\u53F7\u767B\u5F55"),
-          h2(
+          loggedIn ? h2(
             "div",
-            { style: { display: "grid", gap: 7 } },
-            fieldRow("\u670D\u52A1\u5668\u5730\u5740", h2("input", { value: server, onChange: (event) => setServer(event.target.value), placeholder: "https://hub.example.com", spellCheck: false, style: field })),
-            fieldRow("\u90AE\u7BB1", h2("input", { value: email, onChange: (event) => setEmail(event.target.value), type: "email", autoComplete: "username", style: field })),
+            null,
+            title("\u4FEE\u6539\u5BC6\u7801"),
             h2(
               "div",
-              { style: { display: "grid", gridTemplateColumns: "1fr 110px", gap: 7 } },
-              fieldRow("\u5BC6\u7801", h2("input", { value: password, onChange: (event) => setPassword(event.target.value), type: "password", autoComplete: "current-password", style: field })),
-              fieldRow("\u4E24\u6B65\u9A8C\u8BC1\u7801", h2("input", { value: totp, onChange: (event) => setTotp(event.target.value), inputMode: "numeric", maxLength: 6, style: field }))
-            ),
-            h2("button", { onClick: login, disabled: !!formBusy, style: { ...primary, opacity: formBusy ? 0.5 : 1, justifySelf: "start" } }, formBusy === "login" ? "\u767B\u5F55\u4E2D\u2026" : "\u767B\u5F55")
-          ),
-          title("\u4FEE\u6539\u5BC6\u7801"),
-          h2(
+              { style: { display: "grid", gap: 7 } },
+              fieldRow("\u5F53\u524D\u5BC6\u7801", h2("input", { value: currentPassword, onChange: (event) => setCurrentPassword(event.target.value), type: "password", autoComplete: "current-password", style: field })),
+              fieldRow("\u65B0\u5BC6\u7801\uFF08\u81F3\u5C11 10 \u4F4D\uFF09", h2("input", { value: newPassword, onChange: (event) => setNewPassword(event.target.value), type: "password", autoComplete: "new-password", style: field })),
+              h2("button", { onClick: changePassword, disabled: !!formBusy, style: { ...secondary, justifySelf: "start", opacity: formBusy ? 0.5 : 1 } }, formBusy === "password" ? "\u4FEE\u6539\u4E2D\u2026" : "\u4FEE\u6539\u5BC6\u7801"),
+              h2("div", { style: { color: mute, fontSize: 11, lineHeight: "17px" } }, "\u4FEE\u6539\u540E\u5176\u4ED6\u8BBE\u5907\u7684\u65E7\u767B\u5F55\u548C API \u4EE4\u724C\u90FD\u4F1A\u5931\u6548\u3002")
+            )
+          ) : h2(
             "div",
-            { style: { display: "grid", gap: 7 } },
-            fieldRow("\u5F53\u524D\u5BC6\u7801", h2("input", { value: currentPassword, onChange: (event) => setCurrentPassword(event.target.value), type: "password", autoComplete: "current-password", style: field })),
-            fieldRow("\u65B0\u5BC6\u7801\uFF08\u81F3\u5C11 10 \u4F4D\uFF09", h2("input", { value: newPassword, onChange: (event) => setNewPassword(event.target.value), type: "password", autoComplete: "new-password", style: field })),
-            h2("button", { onClick: changePassword, disabled: !!formBusy || !accessToken, title: accessToken ? "" : "\u5148\u767B\u5F55", style: { ...secondary, justifySelf: "start", opacity: formBusy || !accessToken ? 0.5 : 1 } }, formBusy === "password" ? "\u4FEE\u6539\u4E2D\u2026" : "\u4FEE\u6539\u5BC6\u7801"),
-            h2("div", { style: { color: mute, fontSize: 11, lineHeight: "17px" } }, "\u4FEE\u6539\u540E\u5176\u4ED6\u8BBE\u5907\u7684\u65E7\u767B\u5F55\u548C API \u4EE4\u724C\u90FD\u4F1A\u5931\u6548\u3002")
-          ),
-          title("\u4F7F\u7528\u9080\u8BF7\u7801\u6CE8\u518C"),
-          h2(
-            "div",
-            { style: { display: "grid", gap: 7 } },
+            null,
+            title("\u767B\u5F55\u8D26\u53F7"),
             h2(
               "div",
-              { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 7 } },
-              fieldRow("\u9080\u8BF7\u7801", h2("input", { value: inviteCode, onChange: (event) => setInviteCode(event.target.value), spellCheck: false, maxLength: 12, style: field })),
-              fieldRow("\u90AE\u7BB1", h2("input", { value: inviteEmail, onChange: (event) => setInviteEmail(event.target.value), type: "email", style: field }))
+              { style: { display: "grid", gap: 7 } },
+              defaultUrl ? null : fieldRow("\u670D\u52A1\u5668\u5730\u5740", h2("input", { value: server, onChange: (event) => setServer(event.target.value), placeholder: "https://hub.example.com", spellCheck: false, style: field })),
+              fieldRow("\u90AE\u7BB1", h2("input", { value: email, onChange: (event) => setEmail(event.target.value), type: "email", autoComplete: "username", style: field })),
+              h2(
+                "div",
+                { style: { display: "grid", gridTemplateColumns: "1fr 110px", gap: 7 } },
+                fieldRow("\u5BC6\u7801", h2("input", { value: password, onChange: (event) => setPassword(event.target.value), type: "password", autoComplete: "current-password", style: field })),
+                fieldRow("\u4E24\u6B65\u9A8C\u8BC1\u7801", h2("input", { value: totp, onChange: (event) => setTotp(event.target.value), inputMode: "numeric", maxLength: 6, style: field }))
+              ),
+              h2("button", { onClick: login, disabled: !!formBusy, style: { ...primary, opacity: formBusy ? 0.5 : 1, justifySelf: "start" } }, formBusy === "login" ? "\u767B\u5F55\u4E2D\u2026" : "\u767B\u5F55")
             ),
-            fieldRow("\u5BC6\u7801\uFF08\u81F3\u5C11 10 \u4F4D\uFF09", h2("input", { value: invitePassword, onChange: (event) => setInvitePassword(event.target.value), type: "password", autoComplete: "new-password", style: field })),
-            h2("button", { onClick: acceptInvite, disabled: !!formBusy, style: { ...secondary, justifySelf: "start" } }, formBusy === "invite" ? "\u521B\u5EFA\u4E2D\u2026" : "\u521B\u5EFA\u8D26\u53F7\u5E76\u767B\u5F55")
-          ),
-          title("\u672C\u673A\u8BBE\u5907\u914D\u5BF9"),
-          h2(
-            "div",
-            { style: { display: "grid", gap: 7 } },
-            h2(
+            h2("button", { onClick: () => setInviteOpen((value) => !value), style: { marginTop: 12, border: 0, background: "transparent", color: mute, fontSize: 11.5, cursor: "pointer", padding: 0, justifySelf: "start" } }, inviteOpen ? "\u6536\u8D77\u9080\u8BF7\u7801\u6CE8\u518C" : "\u9996\u6B21\u4F7F\u7528\uFF1F\u7528\u9080\u8BF7\u7801\u6CE8\u518C"),
+            inviteOpen ? h2(
               "div",
-              { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 7 } },
-              fieldRow("\u914D\u5BF9\u7801", h2("input", { value: pairCode, onChange: (event) => setPairCode(event.target.value), spellCheck: false, maxLength: 12, style: field })),
-              fieldRow("\u8BBE\u5907 ID", h2("input", { value: pairDevice, onChange: (event) => setPairDevice(event.target.value), spellCheck: false, style: field }))
-            ),
-            fieldRow("\u8BBE\u5907\u540D\u79F0", h2("input", { value: pairName, onChange: (event) => setPairName(event.target.value), style: field })),
-            h2(
-              "div",
-              { style: { display: "flex", gap: 8 } },
-              h2("button", { onClick: pair, disabled: !!formBusy, style: { ...secondary, opacity: formBusy ? 0.5 : 1 } }, formBusy === "pair" ? "\u5151\u6362\u4E2D\u2026" : "\u5151\u6362\u8BBE\u5907\u4EE4\u724C"),
-              pairResult ? h2("button", { onClick: copyPairToken, style: secondary }, "\u590D\u5236\u4EE4\u724C") : null
-            ),
-            pairResult ? h2("textarea", { readOnly: true, value: pairResult, rows: 2, style: { ...field, height: "auto", padding: 8, resize: "vertical", wordBreak: "break-all" } }) : null,
-            h2("div", { style: { color: mute, fontSize: 11, lineHeight: "17px" } }, "\u8BBE\u5907\u4EE4\u724C\u53EA\u663E\u793A\u4E00\u6B21\u3002APP \u7684 Node \u53EF\u4F7F\u7528\u8FD9\u4E2A\u4EE4\u724C\u63A5\u5165\uFF1B\u4E0D\u8981\u628A\u4EE4\u724C\u53D1\u5230\u7FA4\u91CC\u3002")
+              { style: { display: "grid", gap: 7, marginTop: 8 } },
+              h2(
+                "div",
+                { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 7 } },
+                fieldRow("\u9080\u8BF7\u7801", h2("input", { value: inviteCode, onChange: (event) => setInviteCode(event.target.value), spellCheck: false, maxLength: 12, style: field })),
+                fieldRow("\u90AE\u7BB1", h2("input", { value: inviteEmail, onChange: (event) => setInviteEmail(event.target.value), type: "email", style: field }))
+              ),
+              fieldRow("\u5BC6\u7801\uFF08\u81F3\u5C11 10 \u4F4D\uFF09", h2("input", { value: invitePassword, onChange: (event) => setInvitePassword(event.target.value), type: "password", autoComplete: "new-password", style: field })),
+              h2("button", { onClick: acceptInvite, disabled: !!formBusy, style: { ...secondary, justifySelf: "start" } }, formBusy === "invite" ? "\u521B\u5EFA\u4E2D\u2026" : "\u521B\u5EFA\u8D26\u53F7\u5E76\u767B\u5F55")
+            ) : null
           ),
-          message ? h2("div", { style: { marginTop: 12, color: message.includes("\u6210\u529F") || message.includes("\u5DF2\u4FDD\u5B58") || message.includes("\u5DF2\u590D\u5236") || message.includes("\u5DF2\u4FEE\u6539") ? "var(--dsw-alias-state-success-primary, #16a34a)" : "var(--dsw-alias-state-error-primary, #b42318)", fontSize: 12 } }, message) : null
+          message ? h2("div", { style: { marginTop: 12, color: message.includes("\u6210\u529F") || message.includes("\u5DF2\u4FEE\u6539") ? "var(--dsw-alias-state-success-primary, #16a34a)" : "var(--dsw-alias-state-error-primary, #b42318)", fontSize: 12 } }, message) : null
         )
       )
     );
@@ -163106,9 +163072,9 @@ function createConnectionPanel(React2) {
     const color = status2 === "online" ? "var(--dsw-alias-state-success-primary, #16a34a)" : status2 === "offline" ? "var(--dsw-alias-state-error-primary, #b42318)" : status2 === "checking" ? "var(--dsw-alias-state-warn-primary, #b54708)" : mute;
     return h2(
       "button",
-      { onClick, title: "\u670D\u52A1\u5668\u8FDE\u63A5", className: "tether-press tether-hover", style: { marginLeft: "auto", height: 26, padding: "0 10px", borderRadius: 999, border: 0, background: bg, color: sub, display: "flex", alignItems: "center", gap: 6, fontSize: 12, cursor: "pointer", flex: "0 0 auto", boxShadow: "0 1px 2px rgba(16,24,40,0.06)" } },
+      { onClick, title: "\u8D26\u53F7", className: "tether-press tether-hover", style: { marginLeft: "auto", height: 26, padding: "0 10px", borderRadius: 999, border: 0, background: bg, color: sub, display: "flex", alignItems: "center", gap: 6, fontSize: 12, cursor: "pointer", flex: "0 0 auto", boxShadow: "0 1px 2px rgba(16,24,40,0.06)" } },
       h2("span", { style: { width: 7, height: 7, borderRadius: 4, background: color, flex: "0 0 auto" } }),
-      "\u8FDE\u63A5"
+      "\u8D26\u53F7"
     );
   }
   return { Panel: ConnectionPanel, Trigger: ConnectionTrigger };
@@ -165488,6 +165454,13 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       .tether-scroll::-webkit-scrollbar-thumb { background: transparent; border-radius: 3px; }
       .tether-scroll:hover::-webkit-scrollbar-thumb { background: var(--dsw-alias-scrollbar-hover-l1, #cbd5e1); }
       .tether-scroll::-webkit-scrollbar-corner { background: transparent; }
+      .tether-root * { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+      .tether-root *:hover { scrollbar-color: var(--dsw-alias-scrollbar-hover-l1, #cbd5e1) transparent; }
+      .tether-root *::-webkit-scrollbar { width: 6px; height: 6px; }
+      .tether-root *::-webkit-scrollbar-track { background: transparent; }
+      .tether-root *::-webkit-scrollbar-thumb { background: transparent; border-radius: 3px; }
+      .tether-root *:hover::-webkit-scrollbar-thumb { background: var(--dsw-alias-scrollbar-hover-l1, #cbd5e1); }
+      .tether-root *::-webkit-scrollbar-corner { background: transparent; }
       .tether-num { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum' 1; }
       .tether-spin { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
       .tether-spin > svg { display: block; transform-box: view-box; transform-origin: 50% 50%; animation: tether-refresh-rotate .8s linear infinite; }
@@ -166624,7 +166597,14 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           role: "status",
           "aria-live": "polite",
           style: { position: "absolute", top: 12, left: "50%", transform: "translateX(-50%)", padding: "6px 10px", borderRadius: 6, background: "rgba(255,255,255,.92)", color: C.sub, fontSize: 12, boxShadow: "0 1px 4px rgba(16,24,40,.12)", pointerEvents: "none" }
-        }, "\u76EE\u6807\u5DE5\u4F5C\u533A\u9875\u9762\u6B63\u5728\u52A0\u8F7D\u2026") : null
+        }, "\u76EE\u6807\u5DE5\u4F5C\u533A\u9875\u9762\u6B63\u5728\u52A0\u8F7D\u2026") : null,
+        currentState.status === "document-loaded" ? h2("button", {
+          type: "button",
+          onClick: retryDocument,
+          title: "\u91CD\u65B0\u52A0\u8F7D\u76EE\u6807\u5DE5\u4F5C\u533A",
+          "aria-label": "\u91CD\u65B0\u52A0\u8F7D\u76EE\u6807\u5DE5\u4F5C\u533A",
+          style: { position: "absolute", right: 10, bottom: 10, width: 26, height: 26, border: 0, borderRadius: 999, background: "rgba(255,255,255,.9)", color: C.sub, fontSize: 14, cursor: "pointer", boxShadow: "0 1px 4px rgba(16,24,40,.16)" }
+        }, "\u21BB") : null
       ) : h2(
         "div",
         { style: { display: "grid", placeItems: "center", alignContent: "center", gap: 12, flex: "1 1 auto", minHeight: 0, color: C.sub, textAlign: "center", padding: 24 } },
@@ -166888,9 +166868,22 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const autoUpdateChecksRef = React2.useRef({});
     const lastUpdateToastRef = React2.useRef({});
     const [updateToast, setUpdateToast] = React2.useState("");
-    const [showHub, setShowHub] = React2.useState(false);
+    const [showHub, setShowHub] = React2.useState(() => {
+      try {
+        return !JSON.parse(window.localStorage.getItem("tether.hub") || "{}").token;
+      } catch (_) {
+        return true;
+      }
+    });
     const [hubUrl, setHubUrl] = React2.useState("");
     const [hubToken, setHubToken] = React2.useState("");
+    const [hubEmail, setHubEmail] = React2.useState(() => {
+      try {
+        return JSON.parse(window.localStorage.getItem("tether.hub") || "{}").email || "";
+      } catch (_) {
+        return "";
+      }
+    });
     const [hubUnsafeExistingUrl, setHubUnsafeExistingUrl] = React2.useState(false);
     const [hubStatus, setHubStatus] = React2.useState("unknown");
     const [hubState, setHubState] = React2.useState(null);
@@ -169889,6 +169882,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
               setHubUrl(hubAddressForEditor(saved.url || ""));
               setHubUnsafeExistingUrl(hubUrlNeedsReplacement(saved.url || ""));
               setHubToken(saved.token || "");
+              setHubEmail(saved.email || "");
             }
             setHubState(null);
             setHubStatus("unknown");
@@ -169964,14 +169958,12 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         busy: hubBusy,
         error: hubError,
         onProbe: probeConfiguredHub,
-        defaultUrl: hubUrl || "",
+        defaultUrl: hubUrl || hubAddress || "",
         defaultToken: hubToken || "",
-        defaultDeviceId: appLocalDevice || deviceId || "",
-        defaultDeviceName: ((state && state.devices || []).find((item) => item.device_id === (appLocalDevice || deviceId)) || {}).name || appLocalDevice || deviceId || "",
-        platform: typeof navigator !== "undefined" && navigator.platform || "Windows",
+        defaultEmail: hubEmail,
         onConfigured: async ({ url, token, user }) => {
           try {
-            window.localStorage.setItem("tether.hub", JSON.stringify({ url, token }));
+            window.localStorage.setItem("tether.hub", JSON.stringify({ url, token, email: user && user.email || hubEmail }));
           } catch (_) {
             throw new Error("\u65E0\u6CD5\u4FDD\u5B58 Hub \u767B\u5F55\u51ED\u636E");
           }
@@ -170035,6 +170027,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           setHubError("");
           setHubUrl(url);
           setHubToken(token);
+          setHubEmail(user && user.email || hubEmail);
           setHubAddress(url);
           setHubBusy(true);
           const generation = ACTIVE_BASE_GENERATION;
@@ -170134,34 +170127,6 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           h2(
             "div",
             { className: "tether-drawer-body", style: { overflow: "hidden", flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column" } },
-            host && host.kind === "dsh" ? h2(
-              "div",
-              { style: { padding: "12px 16px", background: C.panel, borderBottom: "1px solid " + C.line } },
-              h2("strong", { style: { display: "block", fontSize: 12, marginBottom: 8 } }, "Hub \u8FDE\u63A5\u914D\u7F6E"),
-              h2("input", { value: hubUrl, onChange: (event) => {
-                setHubUrl(event.target.value);
-                if (event.target.value.trim()) setHubUnsafeExistingUrl(false);
-              }, placeholder: "Hub URL", spellCheck: false, type: "url", style: { width: "100%", height: 30, boxSizing: "border-box", border: 0, borderRadius: 6, padding: "0 8px", background: C.bg, fontSize: 12, marginBottom: 6 } }),
-              hubUnsafeExistingUrl ? h2("div", { style: { fontSize: 11, color: C.amber, marginBottom: 6 } }, "\u73B0\u6709\u5730\u5740\u542B\u9644\u52A0\u53C2\u6570\uFF0C\u8BF7\u586B\u5199\u5B89\u5168\u5730\u5740\u540E\u4FDD\u5B58\u3002") : null,
-              h2("input", { value: hubToken, onChange: (event) => setHubToken(event.target.value), placeholder: "\u8BBF\u95EE\u4EE4\u724C", type: "password", spellCheck: false, style: { width: "100%", height: 30, boxSizing: "border-box", border: 0, borderRadius: 6, padding: "0 8px", background: C.bg, fontSize: 12, marginBottom: 8 } }),
-              btn("\u4FDD\u5B58 Hub \u914D\u7F6E", () => {
-                let url;
-                try {
-                  url = new URL(hubUrl.trim());
-                  if (!["http:", "https:"].includes(url.protocol)) throw new Error();
-                } catch (_) {
-                  setNotice("Hub URL \u65E0\u6548");
-                  return;
-                }
-                if (url.username || url.password || url.search || url.hash || !hubToken.trim()) {
-                  setNotice("\u8BF7\u586B\u5199\u6709\u6548\u7684 Hub \u5730\u5740\u548C\u8BBF\u95EE\u4EE4\u724C");
-                  return;
-                }
-                const cleanUrl2 = (url.origin + url.pathname).replace(/\/+$/, "");
-                window.localStorage.setItem("tether.hub", JSON.stringify({ url: cleanUrl2, token: hubToken.trim() }));
-                setNotice("Hub \u914D\u7F6E\u5DF2\u4FDD\u5B58\uFF0C\u8BF7\u91CD\u65B0\u6253\u5F00\u8FDE\u63A5\u9875\u68C0\u6D4B\u3002");
-              }, { primary: true })
-            ) : null,
             h2(
               "div",
               { style: { flex: "0 0 auto", maxHeight: "58%", overflowY: "auto" } },
