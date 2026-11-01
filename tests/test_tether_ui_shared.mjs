@@ -9,6 +9,7 @@ const shared = fs.readFileSync(path.join(root, 'packages/tether-ui/src/app.js'),
 const plugin = fs.readFileSync(path.join(root, 'packages/dsh-plugin-tether-client/lib/client.js'), 'utf8')
 const connectionPanel = fs.readFileSync(path.join(root, 'packages/tether-ui/src/connection-panel.js'), 'utf8')
 const settingsPanel = fs.readFileSync(path.join(root, 'packages/tether-ui/src/settings-panel.js'), 'utf8')
+const transferPage = fs.readFileSync(path.join(root, 'packages/tether-ui/src/transfer-page.js'), 'utf8')
 const monacoRuntime = fs.readFileSync(path.join(root, 'packages/tether-ui/src/monaco-runtime.js'), 'utf8')
 
 test('DSH plugin bundle is up to date with the shared tether-ui source', () => {
@@ -115,6 +116,12 @@ test('connection panels show service checks without duplicate device totals or c
   assert.doesNotMatch(connectionPanel, /设备配对|设备令牌|pairing\/exchange/)
   assert.match(settingsPanel, /本机设备/)
   assert.match(settingsPanel, /文件权限/)
+  assert.match(settingsPanel, /roleLabel/)
+  assert.match(shared, /hubRole/)
+  assert.match(connectionPanel, /服务器地址/)
+  assert.match(transferPage, /roleLabel: '来源'/)
+  assert.match(transferPage, /roleLabel: '目标'/)
+  assert.match(transferPage, /交换来源与目标/)
   assert.doesNotMatch(shared, /Hub 连接配置/)
   assert.match(shared, /Hub 不可达或请求超时/)
   assert.match(shared, /url\.username \|\| url\.password \|\| url\.search \|\| url\.hash/)
