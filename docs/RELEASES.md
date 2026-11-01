@@ -9,7 +9,7 @@ Login follow-ups:
 - Includes 0.2.47 (full-screen login, status-only connection panel, settings page, transfer redesign, hidden scrollbars, workspace slow-load reload hint).
 - APP, plugin, and node are 0.2.48.
 
-Gates: pytest 138 passed / 4 skipped, mjs 216/216, cjs 6/6, `build.mjs --check`, `validate_versions()`. Signed publication is recorded after CI.
+Gates: pytest 138 passed / 4 skipped, mjs 216/216, cjs 6/6, `build.mjs --check`, `validate_versions()`. CI run `41278461096` succeeded; the signed manifest was verified (app 1,720,014 B, plugin 1,332,412 B, node 79,543 B) and published at 2026-11-01T05:54:11Z; the Hub mirror was refreshed to **0.2.48**. LAPTOP-01 Node+APP **17.1 s**, plugin **14.4 s** with `restart_required` cleared and health 0.2.48; both public surfaces returned 200. The LAPTOP APP now shows the account login page, to be signed in by its owner.
 
 ## v0.2.47
 
