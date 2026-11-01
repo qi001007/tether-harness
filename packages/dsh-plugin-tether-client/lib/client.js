@@ -10281,6 +10281,17 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
 
       const fail = (e) => {
         if (e && e.code === 'authority_changed') return
+        if (e && (e.status === 401 || e.code === 'unauthorized' || e.code === 'invalid_session' || e.code === 'session_expired')) {
+          try {
+            const saved = JSON.parse(window.localStorage.getItem('tether.hub') || '{}')
+            window.localStorage.setItem('tether.hub', JSON.stringify({ url: saved.url || hubUrl, email: saved.email || hubEmail }))
+          } catch (_) { /* storage unavailable */ }
+          setHubToken('')
+          setHubRole('')
+          setLoggedIn(false)
+          setNotice('登录已过期，请重新登录')
+          return
+        }
         if (e && e.code === 'node_update_required') { setNativeError('节点待更新'); return }
         // Transient list/preview failures already retry and show their own inline
         // state; a red toast on a slow remote folder is noise, not information.

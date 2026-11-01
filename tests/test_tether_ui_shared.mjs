@@ -118,6 +118,7 @@ test('connection panels show service checks without duplicate device totals or c
   assert.match(settingsPanel, /文件权限/)
   assert.match(settingsPanel, /roleLabel/)
   assert.match(shared, /hubRole/)
+  assert.match(shared, /e\.status === 401[\s\S]*?setLoggedIn\(false\)/)
   assert.match(connectionPanel, /服务器地址/)
   assert.match(transferPage, /roleLabel: '来源'/)
   assert.match(transferPage, /roleLabel: '目标'/)

@@ -166690,6 +166690,18 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     }, [host, ACTIVE_BASE_GENERATION]);
     const fail2 = (e) => {
       if (e && e.code === "authority_changed") return;
+      if (e && (e.status === 401 || e.code === "unauthorized" || e.code === "invalid_session" || e.code === "session_expired")) {
+        try {
+          const saved = JSON.parse(window.localStorage.getItem("tether.hub") || "{}");
+          window.localStorage.setItem("tether.hub", JSON.stringify({ url: saved.url || hubUrl, email: saved.email || hubEmail }));
+        } catch (_) {
+        }
+        setHubToken("");
+        setHubRole("");
+        setLoggedIn(false);
+        setNotice("\u767B\u5F55\u5DF2\u8FC7\u671F\uFF0C\u8BF7\u91CD\u65B0\u767B\u5F55");
+        return;
+      }
       if (e && e.code === "node_update_required") {
         setNativeError("\u8282\u70B9\u5F85\u66F4\u65B0");
         return;
