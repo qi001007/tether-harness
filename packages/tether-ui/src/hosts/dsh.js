@@ -613,15 +613,12 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand,
       }
     }
     const nativeComposerInput = () => {
-      let parent = containerRef.current && containerRef.current.parentElement
-      while (parent) {
-        if (typeof parent.querySelectorAll === 'function') {
-          const inputs = [...parent.querySelectorAll('input[type="file"][hidden]')]
-          if (inputs.length) return inputs.length === 1 ? inputs[0] : null
-        }
-        parent = parent.parentElement
-      }
-      return null
+      if (typeof document === 'undefined') return null
+      // The plugin mounts beside the composer, not inside it, so walking up from
+      // containerRef misses the composer input. The DSH composer owns the only
+      // hidden file input; claim it so the native plus opens the target picker.
+      const inputs = [...document.querySelectorAll('input[type="file"][hidden]')]
+      return inputs.length === 1 ? inputs[0] : null
     }
     React.useEffect(() => {
       if (typeof document === 'undefined') return undefined

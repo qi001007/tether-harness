@@ -304,8 +304,7 @@ test('both composer entry points open one modal dialog showing workspaces and dr
   const { harness } = mount(w, { pickerCommand })
   try {
     harness.output()
-    const container = findElement(harness.output(), (node) => node.type === 'div' && node.props.ref)
-    container.props.ref.current = { parentElement: { parentElement: null, querySelectorAll: () => [input] } }
+    document.querySelectorAll = (selector) => selector === 'input[type="file"][hidden]' ? [input] : []
     assert.equal(typeof pickerCommand.open, 'function', 'the Composer plus-menu action is registered')
     assert.equal(findElement(harness.output(), (node) => node.props?.role === 'dialog'), null)
 

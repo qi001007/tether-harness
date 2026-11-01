@@ -5860,12 +5860,27 @@ function TargetFileExplorer({
   },
     h('span', { style: { display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, fontSize: 13 } },
       fileIcon ? fileIcon({ dir: true, path: item.path, name: item.name }) : null,
-      h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, item.name)),
-    h('span', { style: { paddingLeft: 22, color: C.mute, fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, item.path))
+      h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, item.name)))
   const rootGroup = (label, items, empty) => h('div', { key: label, style: { marginBottom: 10 } },
     h('div', { style: { padding: '8px 8px 4px', color: C.mute, fontSize: 11, fontWeight: 600, letterSpacing: 0.2 } }, label),
     items.length ? items.map((item) => rootButton(item, label))
       : h('div', { style: { padding: '2px 8px 6px', color: C.mute, fontSize: 11.5 } }, empty))
+  const iconButton = (icon, label, onClick, disabled) => h('button', {
+    type: 'button', title: label, 'aria-label': label, disabled,
+    onClick: () => { if (!disabled && onClick) onClick() },
+    className: 'tether-hover',
+    style: {
+      width: 26, height: 26, flex: '0 0 auto', display: 'grid', placeItems: 'center',
+      border: 0, borderRadius: 6, background: 'transparent', color: C.sub,
+      cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.4 : 1
+    }
+  }, h('svg', {
+    width: 15, height: 15, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor',
+    strokeWidth: 1.3, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true
+  }, icon === 'up'
+    ? h('path', { d: 'M8 12.5V3.5M4.2 7.3 8 3.5l3.8 3.8' })
+    : [h('path', { key: 'a', d: 'M12.6 7.2A4.7 4.7 0 1 0 11.2 11.6' }),
+      h('path', { key: 'b', d: 'M12.8 3.2v3.7h-3.7' })]))
   const activate = (item, double) => {
     if (disabled || !item) return
     if (double) { if (!singleClickOpens && onOpen) onOpen(item); return }
@@ -5880,7 +5895,7 @@ function TargetFileExplorer({
       onDoubleClick: () => activate(item, true),
       className: 'tether-hover',
       style: {
-        display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 132px 76px 78px', gap: 8,
+        display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 132px 84px', gap: 8,
         alignItems: 'center', width: '100%', height: 32, padding: '0 14px',
         border: 0, borderRadius: 6,
         background: selectedPath === item.path ? (C.soft || 'transparent') : 'transparent',
@@ -5894,7 +5909,6 @@ function TargetFileExplorer({
         h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
           item.name + (oversized ? ' · 超过 10 MiB' : ''))),
       h('span', { style: { color: C.mute, fontSize: 11, whiteSpace: 'nowrap' } }, formatTime(item.mtime)),
-      h('span', { style: { color: C.mute, fontSize: 11, whiteSpace: 'nowrap' } }, item.dir ? '文件夹' : '文件'),
       h('span', { style: { color: C.mute, fontSize: 11, textAlign: 'right' } }, item.dir ? '' : formatSize(Number(item.size))))
   }
   let body
@@ -5916,11 +5930,11 @@ function TargetFileExplorer({
     body = h('div', { style: { flex: '1 1 auto', minHeight: 0, overflow: 'auto', padding: '0 8px 18px' } },
       h('div', {
         style: {
-          display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 132px 76px 78px', gap: 8,
+          display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 132px 84px', gap: 8,
           alignItems: 'center', height: 28, padding: '0 14px', color: C.mute, fontSize: 11, flex: '0 0 auto'
         }
       }, sortHeader('name', '名称'), sortHeader('mtime', '修改日期'),
-        h('span', null, '类型'), sortHeader('size', '大小', 'right')),
+        sortHeader('size', '大小', 'right')),
       visible.map((item) => row(item)))
   }
   return h('div', { style: { display: 'flex', flex: '1 1 auto', minHeight: 0, minWidth: 0 } },
@@ -5937,15 +5951,7 @@ function TargetFileExplorer({
           borderBottom: C.line ? '1px solid ' + C.line : 0, flex: '0 0 auto', minWidth: 0
         }
       },
-        h('button', {
-          type: 'button', disabled: disabled || !up, title: '上一级',
-          onClick: () => { if (!disabled && up && onPath) onPath(up) },
-          style: {
-            border: '1px solid ' + (C.line || 'transparent'), borderRadius: 6, background: C.bg,
-            color: C.sub, padding: '4px 10px', font: 'inherit', fontSize: 12,
-            cursor: disabled || !up ? 'default' : 'pointer', opacity: disabled || !up ? 0.45 : 1
-          }
-        }, '上一级'),
+        iconButton('up', '上一级', () => { if (up && onPath) onPath(up) }, disabled || !up),
         h('div', {
           className: 'tether-breadcrumbs',
           style: { display: 'flex', alignItems: 'center', gap: 1, flex: '1 1 auto', minWidth: 0, overflow: 'hidden', height: 28 }
@@ -6003,15 +6009,7 @@ function TargetFileExplorer({
               fontSize: 13, lineHeight: '14px', padding: 0, cursor: 'pointer'
             }
           }, '×') : null) : null,
-        h('button', {
-          type: 'button', disabled: disabled || !path, title: '刷新',
-          onClick: () => { if (!disabled && path && onRefresh) onRefresh(path) },
-          style: {
-            border: '1px solid ' + (C.line || 'transparent'), borderRadius: 6, background: C.bg,
-            color: C.sub, padding: '4px 10px', font: 'inherit', fontSize: 12,
-            cursor: disabled || !path ? 'default' : 'pointer', opacity: disabled || !path ? 0.45 : 1
-          }
-        }, '刷新')),
+        iconButton('refresh', '刷新', () => { if (path && onRefresh) onRefresh(path) }, disabled || !path)),
       error && path && entries !== null ? h('div', { role: 'alert', style: { padding: '6px 14px', color: C.red || C.danger, fontSize: 12, borderBottom: C.line ? '1px solid ' + C.line : 0 } }, error) : null,
       body))
 }
@@ -6628,15 +6626,12 @@ function createDshTargetAttachments(React, Native, bridge, pickerCommand, uiWork
       }
     }
     const nativeComposerInput = () => {
-      let parent = containerRef.current && containerRef.current.parentElement
-      while (parent) {
-        if (typeof parent.querySelectorAll === 'function') {
-          const inputs = [...parent.querySelectorAll('input[type="file"][hidden]')]
-          if (inputs.length) return inputs.length === 1 ? inputs[0] : null
-        }
-        parent = parent.parentElement
-      }
-      return null
+      if (typeof document === 'undefined') return null
+      // The plugin mounts beside the composer, not inside it, so walking up from
+      // containerRef misses the composer input. The DSH composer owns the only
+      // hidden file input; claim it so the native plus opens the target picker.
+      const inputs = [...document.querySelectorAll('input[type="file"][hidden]')]
+      return inputs.length === 1 ? inputs[0] : null
     }
     React.useEffect(() => {
       if (typeof document === 'undefined') return undefined

@@ -375,6 +375,7 @@
 - 0.2.51 已发布（CI `41296203842`，签名清单校验通过，10:13:22Z），Hub 镜像已刷新；LAPTOP-01 node+APP **~18 s**、插件 **41.5 s**（含 DSH 重启，`restart_required` 已清除），两机 surface bootstrap 均 **200**（1.31 s / 1.10 s）。
 - 本机桌面 surface 曾因运行的 DSH 被换成不含 Tether 插件的 `.runtime/dsh-home` profile 而 502；Node 读取的是 `~/.dsh` 描述符。用 `tether.node.dsh_restart` 拉回默认 profile 后描述符刷新到新 pid，surface 0.94 s 恢复。LAPTOP 更新期间 Node 曾每约 20 s 重注册，插件更新两次报 `device_offline`，链路稳定后重试收敛；根因待查。
 - 活动栏入口归位：盾牌专用于文件权限/审计，设置改为齿轮；资源管理器底栏新增账号区（头像、邮箱、所有者、齿轮），点齿轮或活动栏头像打开设置，权限抽屉与设置页互斥。真机截图确认底栏账号区与两个入口。
+- 目标文件选择器第一批：DSH 原生加号里的“文件”改为打开 Tether 目标选择器（此前插件挂在 composer 外侧，向上找 input 找不到，interception 失效）；选择器根列表去掉重复路径行，工具栏改为上箭头/刷新图标。真机 CDP 真实鼠标点击验证；可展开文件树与文件夹选择仍待做。
 
 详细部署记录、服务器地址与运行快照属于私有运维材料，不在本公开进度页重复列出。用户需求仍以 [反馈清单](FEEDBACK.md) 为准；产品目标见 [PRD](PRD.md)，公开协议与客户端边界见 [技术说明](TECHNICAL.md)。
 
