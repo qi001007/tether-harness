@@ -1451,7 +1451,7 @@ def test_plugin_apply_schedules_the_dsh_restart_helper():
     assert 'if self.component == "plugin" and dsh_pid:' in text
     assert "self._spawn_dsh_restart()" in text
     assert '_restart_cleared(applied, self._dsh_host_pid())' not in text
-    assert '_restart_cleared(applied, host["pid"], host["updated_at"])' in text
+    assert '_restart_cleared(applied, host["descriptor_pid"], host["updated_at"])' in text
     assert '"applied_at": int(time.time() * 1000)' in text
     helper = Path(__file__).resolve().parents[1] / "tether" / "node" / "dsh_restart.py"
     helper_text = helper.read_text(encoding="utf-8")
@@ -1491,12 +1491,14 @@ def test_host_state_scans_for_a_live_dsh_when_the_descriptor_pid_is_stale(tmp_pa
     monkeypatch.setattr("tether.updates._scan_dsh_host_pid", lambda: 424242)
     state = manager._dsh_host_state()
     assert state["pid"] == 424242
+    assert state["descriptor_pid"] is None
     assert state["updated_at"] == 1000.0
 
     missing = UpdateManager(tmp_path / "install", "plugin", dsh_home=tmp_path / "none",
                             state_dir=tmp_path / "state",
                             manifest_url="https://example.invalid/manifest.json")
     assert missing._dsh_host_state()["pid"] == 424242
+    assert missing._dsh_host_state()["descriptor_pid"] is None
 
 
 def test_latest_manifest_url_resolves_through_the_github_api(monkeypatch):

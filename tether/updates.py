@@ -1681,11 +1681,12 @@ class UpdateManager:
                 host = None
             if host is False:
                 host_pid = None
+        descriptor_pid = host_pid
         if host_pid is None:
             # DSH can rewrite the surface descriptor on another profile while the
             # host keeps running; a stale descriptor must not hide a live host.
             host_pid = _scan_dsh_host_pid()
-        return {"pid": host_pid,
+        return {"pid": host_pid, "descriptor_pid": descriptor_pid,
                 "updated_at": float(updated) if isinstance(updated, (int, float)) and not isinstance(updated, bool) and updated > 0 else None}
 
     def _dsh_host_pid(self) -> int | None:
@@ -1750,7 +1751,7 @@ class UpdateManager:
                 restart_required = applied.get("component") == self.component and applied.get("restart_required") is True
                 if restart_required and self.component == "plugin":
                     host = self._dsh_host_state()
-                    if _restart_cleared(applied, host["pid"], host["updated_at"]):
+                    if _restart_cleared(applied, host["descriptor_pid"], host["updated_at"]):
                         restart_required = False
                         try:
                             applied["restart_required"] = False

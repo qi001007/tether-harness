@@ -1,5 +1,15 @@
 # Public client releases
 
+## v0.2.50
+
+Plugin runtime reload guard:
+
+- A plugin update no longer reports done from a live process scan alone. `restart_required` clears only when the DSH surface descriptor publishes a new host pid; a scanned `dsh-desktop-host` pid is used only to schedule the restart. The local 0.2.44→0.2.49 update exposed the old behavior: the job was done while `native-surface.json` still pointed at a dead port and the public surface returned 502.
+- Includes 0.2.49 (settings actions, session expiry) and 0.2.48 (login server field, account role).
+- APP, plugin, and node are 0.2.50.
+
+Gates: pytest 138 passed / 4 skipped, mjs 216/216, cjs 6/6, `build.mjs --check`, `validate_versions()`. Signed publication and installed acceptance are recorded after CI.
+
 ## v0.2.49
 
 Settings and session follow-ups:
