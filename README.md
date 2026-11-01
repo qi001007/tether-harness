@@ -25,6 +25,8 @@ Tether connects the **DeepSeek Harness (DSH)** desktop app on one machine to the
 
 > **Project status: alpha.** Tether is a working research prototype, not a production multi-tenant service. Read [Status](#status) and [Security](#security) before exposing a Hub to other people.
 
+> **Current client (2026-11-01): v0.2.50.** First launch opens a full-screen account login (Hub URL, email/password, optional TOTP; invite-code registration for new users). The device enrolls automatically after sign-in. The top-bar **连接** pill only shows Hub/Node reachability and refresh; account details and password/logout live in **Settings**. Download the current build below.
+
 ## Why Tether
 
 - **DSH-native.** The remote surface is the real DSH web UI, not a rebuilt chat page. Your plugins, account, tools, and session history stay on the target DSH Host.
@@ -62,7 +64,7 @@ For the native DSH page, the Hub creates a short-lived surface gateway and the p
 
 | Component | Runs on | What it is | What it is not |
 |---|---|---|---|
-| **APP** | A desktop | Electron client with a local supervisor; it can start a Node for the local machine and provides the update center, connection page, file explorer, permissions and interconnect views. | Not a second model backend. |
+| **APP** | A desktop | Electron client with account login, a local supervisor that can start a Node, the update button/overlay, Settings, the file explorer, transfer page and interconnect views. | Not a second model backend. |
 | **DSH plugin** | Inside DSH | The Tether panel, connection page, native surface descriptor, and local update channel. | Does not start a Node and does not make the local machine a target by itself. |
 | **Node** | A target device | The headless agent that registers the device, executes file/command/DSH-surface requests, enforces policy, writes audit records, and applies Node/plugin updates. | It has no chat UI and does not run the model. |
 | **Hub** | A server you operate | Authentication, device registry, request routing, surface gateways, and state sync. | Does not run models or write DSH sessions. |
@@ -109,37 +111,39 @@ Both would include the runtime and the surface descriptor, so both can connect, 
 | Make a laptop/headless machine a target | Node ZIP |
 | Work with remote machines from inside DSH | DSH plugin + a Hub |
 
-### 2. Connect the components to the same Hub
+### 2. Sign in to the same Hub
 
-All components must use the same Hub URL and compatible credentials.
+All components must use the same Hub URL.
 
-- **APP**: create `apps/tether-app/data/hub.json` in the extracted APP with `url`, `accessToken`, `nodeToken`, and `device` (or set the corresponding `TETHER_*` environment variables). `nodeToken` is what makes the APP start a local Node.
-- **DSH plugin**: open **Tether → 连接** and enter the Hub URL and access token. The plugin stores its connection settings in the DSH profile's local storage.
-- **Node**: create a local `.env` with `TETHER_CONTROLLER=wss://<hub>/ws/node`, `TETHER_NODE_TOKEN=<node token>`, `TETHER_DEVICE=<device name>`, then run the Node bootstrap. Nodes connect outbound; no inbound port or VPN is required.
+- **APP and DSH plugin**: on first launch, enter the Hub URL and sign in with email/password (and a TOTP code if enabled), or register with an invite code. The device is enrolled automatically; no pairing code or device token is required. The session is stored locally and later launches skip the login page.
+- **Node-only/headless**: create a local `.env` with `TETHER_CONTROLLER=wss://<hub>/ws/node`, `TETHER_NODE_TOKEN=<device token>`, `TETHER_DEVICE=<device name>`, then run the Node bootstrap. Nodes connect outbound; no inbound port or VPN is required.
+- **Advanced/operator**: the APP's `hub.json` (`url`, `accessToken`, `nodeToken`, `device`) is still read for unattended installs. Normal users should use the account login instead.
 
 Never commit tokens, `.env` files, or `hub.json` to a public repository.
 
 ### 3. Verify
 
 - Nodes expose a read-only local console; the APP-managed Node uses `http://127.0.0.1:18894`, and a standalone Node uses `18893` by default (or the configured `--console-port`).
-- The Hub connection page should show the server address, connection status, last check time, and latency.
+- Click the top-bar **连接** pill to see the Hub address, connection status, last check time and latency, and to refresh the check. Account e-mail, role, password change and logout are under **Settings**.
 - Open **Interconnect** in the APP or plugin; the local device should be listed first, followed by the other devices.
-- Open **Native workspace**; the target DSH UI should load. If a remote target stays blank, see [Status](#status).
+- Open **Native workspace**; the target DSH UI should load. After 15 seconds a “loading slowly / reload” hint appears if it stalls; see [Status](#status).
 
 ### 4. Update
 
-Open the APP's **Update center**. APP updates are downloaded and applied by the APP itself; Node and plugin updates are requested through the Hub and applied on the target device. Updates are deferred while a Tether task is active.
+When a new version is available, a blue **↓** button appears in the top bar. Clicking it updates the Node plus the product you are currently using (APP or DSH plugin); a white progress overlay shows the single job, and the other product is left untouched. Updates are deferred while a Tether task is active. There is no separate update-center page.
 
 ## Download
 
-### Latest stable: v0.2.6
+### Latest stable: v0.2.50
 
 | Package | Download | Size | SHA-256 |
 |---|---|---:|---|
-| APP | [tether-app-0.2.6.zip](https://github.com/qi001007/tether-harness/releases/download/v0.2.6/tether-app-0.2.6.zip) | 347,903 B | `40b07e125344aa13f611b314fd1aae08c1d81ad5c3a6cf4e13df235e0f4faa94` |
-| DSH plugin | [tether-plugin-0.2.6.zip](https://github.com/qi001007/tether-harness/releases/download/v0.2.6/tether-plugin-0.2.6.zip) | 370,521 B | `24b2651f335fa825712d44afb402340513eaea2160d6cabbb3703cb03f87a62c` |
-| Node | [tether-node-0.2.6.zip](https://github.com/qi001007/tether-harness/releases/download/v0.2.6/tether-node-0.2.6.zip) | 53,665 B | `70fa3abf55ce0b5613fb466a8632123255e34bdf3b74930108aa5e8db1ec79ae` |
-| Update manifest | [tether-update.json](https://github.com/qi001007/tether-harness/releases/download/v0.2.5/tether-update.json) | 997 B | — |
+| APP | [tether-app-0.2.50.zip](https://github.com/qi001007/tether-harness/releases/download/v0.2.50/tether-app-0.2.50.zip) | 1,720,428 B | `c4e7945d282274d4fde5719ec6b142dd96c05dc7ad547fcdad705b53c663383f` |
+| DSH plugin | [tether-plugin-0.2.50.zip](https://github.com/qi001007/tether-harness/releases/download/v0.2.50/tether-plugin-0.2.50.zip) | 1,332,625 B | `87b4470aa966becfdfd9e1ecd7ddcd2255e9081f56dd20c2f214ebb3c2b0b05c` |
+| Node | [tether-node-0.2.50.zip](https://github.com/qi001007/tether-harness/releases/download/v0.2.50/tether-node-0.2.50.zip) | 79,560 B | `ad770629ac791498104deffd47e0e0a4bd733aa3ff5cf6425614bc9e40610a0e` |
+| Update manifest | [tether-update.json](https://github.com/qi001007/tether-harness/releases/download/v0.2.50/tether-update.json) | — | signed in the release |
+
+Sections below the download table describe the historical v0.2.1–v0.2.6 evolution unless they explicitly say otherwise; the login/connection/settings behavior above is the current client.
 
 The manifest has a stable `latest` alias; component ZIP names include the version, so use the versioned links above for reproducible component downloads:
 
