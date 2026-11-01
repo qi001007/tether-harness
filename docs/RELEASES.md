@@ -1,5 +1,17 @@
 # Public client releases
 
+## v0.2.52
+
+Shared explorer, picker tree and surface stability:
+
+- The file transfer page is rebuilt on `TargetFileExplorer`: two compact explorer panes, one computer per side, the same node cannot be picked on both sides, no “source/target” wording, an icon-only swap, drag across panes, `Ctrl+A/C/X/V` and a context menu (copy, cut, paste here, refresh). A real 20 B copy from LAPTOP-01 to DESKTOP completed through both the clipboard and drag paths.
+- The target-file picker expands folders in place; the DSH native plus file action now opens the target picker instead of the local dialog. Root rows no longer repeat full paths and the toolbar uses icons.
+- The activity bar restores the permission/audit shield, moves settings to a gear in the explorer footer, and shows the signed-in account there.
+- Cold DSH surfaces no longer die on the first 4.2 MB plugin bundle. The surface mux read timeout is 300 s, asset caches are shared per device, nodes prewarm on registration, node asset GETs use 180 s, and the UI document watchdog is 90 s. Warm node switches measured **8.4 s**; a cold LAPTOP switch loads in 45–50 s instead of failing at 60 s. Reaching ≤15 s cold still needs a direct Tailscale surface or a smaller bundle.
+- APP, plugin, and node are 0.2.52.
+
+Gates: client pytest 142 passed / 1 skipped, server pytest 150 passed, mjs 220/220, cjs 6/6, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41325957168` succeeded; the signed manifest was published at 2026-11-01T16:54:56Z (app 1,731,946 B, plugin 1,336,677 B, node 79,648 B); the Hub mirror was refreshed to **0.2.52**. LAPTOP-01 Node+APP updated in **27.1 s**; the desktop source APP and DSH profile plugin are 0.2.52. LAPTOP plugin update is pending a free moment for its DSH restart. Both public surfaces returned 200 (desktop 1.16 s).
+
 ## v0.2.51
 
 Native workspace state fixes:

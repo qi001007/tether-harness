@@ -380,6 +380,7 @@
 - 文件转移页重做：两栏各选一台电脑，另一侧节点在下拉中标注“已在另一侧”并禁用；两栏为紧凑文件树（名称+大小），不出现“来源/目标”；中间只留双向箭头图标；活动栏图标改为双向箭头。支持拖拽、Ctrl+C/V、右键（复制/剪切/粘贴到此处/刷新），Ctrl+X 走 `.tether-trash` 删除。
 - **跨机实测**：从 LAPTOP-01 复制 `tether-picker-check.txt`（20 B）到 DESKTOP 的 default-workspace，Ctrl+V 与拖拽各成功一次，进度 100% · 20 B / 20 B，目标文件出现。
 - 原生工作区耗时定位：descriptor 854 ms、iframe 1 s；冷插件包 4.2 MB + 1.9 MB 经公网约 25 s + 14 s；mux 90 s 读超时切断导致 `Loading plugins…` 卡死。修复：mux 300 s、节点资源 180 s、Hub 缓存按设备共享 + 上线预热、UI 文档 90 s。冷切 45–50 s 可完成，热切 8.4 s；冷载 ≤15 s 仍需 Tailscale 直连或更小包。
+- 0.2.52 已发布（CI `41325957168`，16:54:56Z，Hub 镜像已刷新）；LAPTOP-01 Node+APP **27.1 s**，本机源码 APP 与 DSH profile 插件均 0.2.52，两机 surface 200（本机 1.16 s）。LAPTOP 插件更新未做，等其 DSH 空闲时再重启。
 
 详细部署记录、服务器地址与运行快照属于私有运维材料，不在本公开进度页重复列出。用户需求仍以 [反馈清单](FEEDBACK.md) 为准；产品目标见 [PRD](PRD.md)，公开协议与客户端边界见 [技术说明](TECHNICAL.md)。
 
