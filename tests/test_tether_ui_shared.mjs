@@ -722,6 +722,21 @@ test('one refresh normalizes every update card to the same latest snapshot', asy
   assert.equal(updateNeededFor({ update_available: true }), true)
 })
 
+test('the native surface slow banner only exists while the frame is loading', () => {
+  const start = shared.indexOf('function NativeSurface(')
+  const end = shared.indexOf('function isSafeNativeSurfaceUrl')
+  assert.ok(start > 0 && end > start)
+  const surface = shared.slice(start, end)
+  assert.match(surface, /currentState\.status !== 'document-loading'\) \{\r?\n\s+setSlow\(false\)/)
+  assert.match(surface, /slow && currentState\.status === 'document-loading'/)
+  assert.doesNotMatch(surface, /slow \? h\('div'/)
+})
+
+test('the app host reads app-context from its own origin', () => {
+  assert.match(shared, /fetch\(BASE \+ '\/app-context'/)
+  assert.doesNotMatch(shared, /fetch\(ACTIVE_BASE \+ '\/app-context'/)
+})
+
 test('legacy node responses without device_id remain valid', async () => {
   const { responseBelongsToDevice } = await import('../packages/tether-ui/src/app.js')
   assert.equal(responseBelongsToDevice({ device_id: 'A' }, 'A'), true)

@@ -1,5 +1,16 @@
 # Public client releases
 
+## v0.2.51
+
+Native workspace state fixes:
+
+- The “加载较慢” banner now clears as soon as the DSH frame reports loaded. It used to stay pinned after a fast load, so a working workspace looked stuck behind a permanent loading hint; it is now shown only while the frame is actually loading.
+- The APP reads `/app-context` from its own origin instead of the cross-origin Hub, removing the blocked request and CORS console noise that repeated every four seconds.
+- Includes 0.2.50 (descriptor-gated plugin reload) and 0.2.49/0.2.48/0.2.47.
+- APP, plugin, and node are 0.2.51.
+
+Gates: client pytest 141 passed / 1 skipped, server pytest 150 passed, mjs 218/218, cjs 6/6, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. Real Electron: the embedded DSH page rendered with its composer and no slow banner; iframe timing TTFB 443 ms, load 1.06 s.
+
 ## v0.2.50
 
 Plugin runtime reload guard:

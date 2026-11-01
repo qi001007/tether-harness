@@ -365,5 +365,13 @@
 - 本机与 LAPTOP（`qi`，`100.92.162.37`）已在同一 tailnet；`tailscale ping` 显示为 **direct IPv6，5 ms RTT**（经 `[2406:280:...]:41641`），而 Hub 控制 P95 约 113 ms。
 - 吞吐尚未测：LAPTOP 的 Node/DSH 只监听 loopback，没有可从 Tailscale 访问的测试端点。下一步需要临时 HTTP 端点、SSH 或 Taildrop；在拿到吞吐前不宣称 overlay 全面优于 relay。
 
+## 2026-11-01 连接恢复与原生工作区状态修复
+
+- Hub CORS 预检修复（服务端 `9dc93ad`）：带 `Authorization` 的 `/api/*` OPTIONS 预检此前被认证中间件 401 拦掉，登录成功后 UI 仍报 `Failed to fetch`。修复后生产预检 200，允许源 `http://127.0.0.1:18892` 与 `Authorization` 头；DESKTOP-LOCAL 与 LAPTOP-01 均在线，`/api/state` 200。
+- 原生工作区“加载较慢”常驻：真机 iframe 实测 `readyState=complete`、TTFB 443 ms、load 1.06 s，DSH composer 已可交互，但提示只在离开 loading 态时复位。现改为只在 `document-loading` 显示，`document-loaded` 后立即复位。
+- APP 的 `/app-context` 改读自身源（`127.0.0.1:18892`），不再每 4 秒向跨源 Hub 发必被 CORS 拦截的请求。
+- 真机 Electron（源码 0.2.51）复验：DSH 页面完整渲染，含新会话按钮、工作区树、会话列表与 composer，无慢加载提示；日志无新增 `/app-context` CORS 失败。
+- 门禁：client pytest 141 passed / 1 skipped，server pytest 150 passed，mjs 218/218，cjs 6/6，`build.mjs --check`、`build-web.mjs --check` 与 `validate_versions()` 通过。
+
 详细部署记录、服务器地址与运行快照属于私有运维材料，不在本公开进度页重复列出。用户需求仍以 [反馈清单](FEEDBACK.md) 为准；产品目标见 [PRD](PRD.md)，公开协议与客户端边界见 [技术说明](TECHNICAL.md)。
 

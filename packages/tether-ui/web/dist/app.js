@@ -166294,7 +166294,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       };
     }, [deviceId, visible, currentState.status, currentState.url]);
     React2.useEffect(() => {
-      if (!visible || !["document-loading", "document-loaded"].includes(currentState.status)) {
+      if (!visible || currentState.status !== "document-loading") {
         setSlow(false);
         return void 0;
       }
@@ -166347,7 +166347,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           "aria-live": "polite",
           style: { position: "absolute", top: 12, left: "50%", transform: "translateX(-50%)", padding: "6px 10px", borderRadius: 6, background: "rgba(255,255,255,.92)", color: C.sub, fontSize: 12, boxShadow: "0 1px 4px rgba(16,24,40,.12)", pointerEvents: "none" }
         }, "\u76EE\u6807\u5DE5\u4F5C\u533A\u9875\u9762\u6B63\u5728\u52A0\u8F7D\u2026") : null,
-        slow ? h2("div", {
+        slow && currentState.status === "document-loading" ? h2("div", {
           role: "status",
           style: { position: "absolute", bottom: 44, left: "50%", transform: "translateX(-50%)", display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", borderRadius: 8, background: "rgba(255,255,255,.95)", color: C.sub, fontSize: 12, boxShadow: "0 1px 4px rgba(16,24,40,.14)" }
         }, "\u52A0\u8F7D\u8F83\u6162", h2("button", {
@@ -167466,7 +167466,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           let deviceId2;
           if (host && host.kind === "dsh" && host.localDeviceId) deviceId2 = await host.localDeviceId();
           else {
-            const response = await fetch(ACTIVE_BASE + "/app-context", { signal: AbortSignal.timeout(1500) });
+            const response = await fetch(BASE + "/app-context", { signal: AbortSignal.timeout(1500) });
             if (response.ok) {
               const context = await response.json();
               deviceId2 = context && context.device;

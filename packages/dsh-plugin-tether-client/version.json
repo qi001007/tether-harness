@@ -1,6 +1,6 @@
 {
-  "version": "0.2.50",
-  "notes": "Silent one-click update: downloads every component before one restart, shows determinate progress, attaches to a running install, and launches from a direct Electron shortcut without a console window.",
+  "version": "0.2.51",
+  "notes": "The native DSH workspace clears its slow-load banner as soon as the frame reports loaded, and the APP reads app-context from its own origin instead of the cross-origin Hub.",
   "download": "https://github.com/qi001007/tether-harness",
   "install": "git pull && powershell -ExecutionPolicy Bypass -File desktop/install-plugin.ps1"
 }

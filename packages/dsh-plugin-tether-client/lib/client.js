@@ -5763,7 +5763,7 @@ monaco-editor/esm/vs/languages/definitions/swift/swift.js:
 
     const EditorRuntime = TetherMonacoRuntime
     const PANEL_ID = 'tether'
-    const PLUGIN_VERSION = "0.2.50"
+    const PLUGIN_VERSION = "0.2.51"
 function parentOf(path) {
   const clean = String(path || '').replace(/[\\/]+$/, '')
   if (!clean) return ''
@@ -9935,7 +9935,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       }, [deviceId, visible, currentState.status, currentState.url])
 
       React.useEffect(() => {
-        if (!visible || !['document-loading', 'document-loaded'].includes(currentState.status)) {
+        if (!visible || currentState.status !== 'document-loading') {
           setSlow(false)
           return undefined
         }
@@ -9992,7 +9992,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
               role: 'status', 'aria-live': 'polite',
               style: { position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', padding: '6px 10px', borderRadius: 6, background: 'rgba(255,255,255,.92)', color: C.sub, fontSize: 12, boxShadow: '0 1px 4px rgba(16,24,40,.12)', pointerEvents: 'none' }
             }, '目标工作区页面正在加载…') : null,
-            slow ? h('div', {
+            slow && currentState.status === 'document-loading' ? h('div', {
               role: 'status',
               style: { position: 'absolute', bottom: 44, left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 8, background: 'rgba(255,255,255,.95)', color: C.sub, fontSize: 12, boxShadow: '0 1px 4px rgba(16,24,40,.14)' }
             }, '加载较慢', h('button', {
@@ -10976,7 +10976,9 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             let deviceId
             if (host && host.kind === 'dsh' && host.localDeviceId) deviceId = await host.localDeviceId()
             else {
-              const response = await fetch(ACTIVE_BASE + '/app-context', { signal: AbortSignal.timeout(1500) })
+              // `/app-context` belongs to the page that hosts this UI. The Hub is
+              // a cross-origin API, so asking it only produced a blocked request.
+              const response = await fetch(BASE + '/app-context', { signal: AbortSignal.timeout(1500) })
               if (response.ok) { const context = await response.json(); deviceId = context && context.device }
             }
             if (!alive) return
