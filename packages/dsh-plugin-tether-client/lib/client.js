@@ -7047,14 +7047,50 @@ function createConnectionPanel(React) {
   const bg = 'var(--dsw-alias-bg-base, #ffffff)'
   const panel = 'var(--dsw-specific-sidebar-fill, #f9fafb)'
   const line = 'var(--dsw-alias-border-secondary, #e4e7ec)'
-  const field = { width: '100%', height: 30, boxSizing: 'border-box', border: '1px solid ' + line, borderRadius: 6, padding: '0 8px', background: bg, color: ink, fontSize: 12, font: 'inherit' }
-  const primary = { height: 28, padding: '0 10px', border: 0, borderRadius: 6, color: 'var(--dsw-alias-label-primary-inverted, #ffffff)', background: 'var(--dsw-alias-button-primary-fill, #101828)', cursor: 'pointer', fontSize: 12 }
-  const secondary = { height: 28, padding: '0 10px', border: '1px solid ' + line, borderRadius: 6, color: sub, background: 'transparent', cursor: 'pointer', fontSize: 12 }
+  const field = { width: '100%', height: 32, boxSizing: 'border-box', border: '1px solid ' + line, borderRadius: 7, padding: '0 9px', background: bg, color: ink, fontSize: 12.5, font: 'inherit' }
+  const primary = { height: 32, padding: '0 14px', border: 0, borderRadius: 7, color: 'var(--dsw-alias-label-primary-inverted, #ffffff)', background: 'var(--dsw-alias-button-primary-fill, #101828)', cursor: 'pointer', fontSize: 12.5 }
+  const secondary = { height: 30, padding: '0 12px', border: '1px solid ' + line, borderRadius: 7, color: sub, background: 'transparent', cursor: 'pointer', fontSize: 12 }
   const safeAddress = (value) => {
     try { const url = new URL(value); return url.origin + url.pathname.replace(/\/$/, '') } catch (_) { return '未配置' }
   }
   const cleanUrl = (value) => String(value || '').trim().replace(/\/+$/, '')
-  function ConnectionPanel({ open, onClose, info, busy, error, defaultUrl = '', defaultToken = '', defaultEmail = '', onConfigured }) {
+  const timeText = (value) => {
+    if (!value) return '尚未检测'
+    try { const date = new Date(value); return [date.getHours(), date.getMinutes(), date.getSeconds()].map((part) => String(part).padStart(2, '0')).join(':') } catch (_) { return '尚未检测' }
+  }
+  function ConnectionPanel({ open, onClose, info, busy, error, onProbe }) {
+    if (!open) return null
+    const status = info && info.status || 'unknown'
+    const dotColor = status === 'online' ? 'var(--dsw-alias-state-success-primary, #16a34a)'
+      : status === 'offline' ? 'var(--dsw-alias-state-error-primary, #b42318)'
+        : status === 'checking' ? 'var(--dsw-alias-state-warn-primary, #b54708)' : mute
+    const row = (label, value) => h('div', { key: label, style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, height: 32, fontSize: 12.5 } },
+      h('span', { style: { color: mute } }, label),
+      h('span', { style: { color: ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, value))
+    return h('div', { onPointerDown: (event) => { if (event.target === event.currentTarget) onClose() }, style: { position: 'absolute', inset: 0, zIndex: 31, background: 'rgba(16,24,40,0.35)', display: 'flex', justifyContent: 'flex-end' } },
+      h('section', { className: 'tether-drawer', style: { height: '100%', background: bg, display: 'flex', flexDirection: 'column', boxShadow: 'var(--dsw-elevation-panel, 0 8px 24px rgba(16,24,40,0.12))' } },
+        h('header', { style: { padding: '12px 16px', background: panel, display: 'flex', alignItems: 'center' } },
+          h('strong', { style: { fontSize: 14, color: ink } }, '连接'),
+          h('button', { onClick: onClose, title: '关闭', 'aria-label': '关闭', style: { marginLeft: 'auto', border: 0, background: 'transparent', fontSize: 18, cursor: 'pointer', color: mute } }, '×')),
+        h('div', { className: 'tether-drawer-body tether-scroll', style: { padding: '14px 16px 24px', overflowY: 'auto' } },
+          h('div', { style: { borderRadius: 8, background: panel, padding: '4px 12px', marginBottom: 12 } },
+            row('服务器地址', safeAddress(info && info.address)),
+            h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, height: 32, fontSize: 12.5 } },
+              h('span', { style: { color: mute } }, '连接状态'),
+              h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 6, color: ink } },
+                h('span', { style: { width: 7, height: 7, borderRadius: 4, background: dotColor, flex: '0 0 auto' } }),
+                status === 'online' ? '已连接' : status === 'offline' ? '不可达' : status === 'checking' ? '检测中' : '未知')),
+            row('最近检测', busy ? '检测中…' : timeText(info && info.checkedAt)),
+            row('服务响应耗时', info && Number.isFinite(info.durationMs) ? info.durationMs + ' ms' : '—')),
+          error ? h('div', { role: 'alert', style: { color: 'var(--dsw-alias-state-error-primary, #b42318)', fontSize: 12, marginBottom: 10 } }, error) : null,
+          h('button', { onClick: onProbe, disabled: busy, className: 'tether-press', style: { ...secondary, opacity: busy ? 0.5 : 1, display: 'inline-flex', alignItems: 'center', gap: 6 } },
+            busy ? '刷新中…' : '刷新连接状态')
+        )
+      )
+    )
+  }
+
+  function LoginScreen({ defaultUrl = '', defaultEmail = '', onLogin }) {
     const [server, setServer] = React.useState(defaultUrl || '')
     const [email, setEmail] = React.useState(defaultEmail || '')
     const [password, setPassword] = React.useState('')
@@ -7063,28 +7099,15 @@ function createConnectionPanel(React) {
     const [inviteCode, setInviteCode] = React.useState('')
     const [inviteEmail, setInviteEmail] = React.useState('')
     const [invitePassword, setInvitePassword] = React.useState('')
-    const [accessToken, setAccessToken] = React.useState(defaultToken || '')
-    const [accountEmail, setAccountEmail] = React.useState(defaultEmail || '')
-    const [currentPassword, setCurrentPassword] = React.useState('')
-    const [newPassword, setNewPassword] = React.useState('')
-    const [formBusy, setFormBusy] = React.useState('')
+    const [busy, setBusy] = React.useState('')
     const [message, setMessage] = React.useState('')
-    React.useEffect(() => { setAccessToken(defaultToken || '') }, [defaultToken])
     React.useEffect(() => { if (defaultUrl) setServer(defaultUrl) }, [defaultUrl])
-    if (!open) return null
-    const status = info && info.status || 'unknown'
-    const loggedIn = !!accessToken
-    const row = (label, value) => h('div', { key: label, style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, height: 30, fontSize: 12.5 } },
-      h('span', { style: { color: mute } }, label),
-      h('span', { style: { color: ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, value))
-    const title = (text) => h('div', { style: { color: sub, fontSize: 12, fontWeight: 600, margin: '16px 0 8px' } }, text)
-    const fieldRow = (label, input) => h('label', { style: { display: 'grid', gap: 4, fontSize: 11.5, color: mute } }, label, input)
-    const post = async (path, body, headers = {}) => {
+    const post = async (path, body) => {
       const base = cleanUrl(server)
-      if (!/^https?:\/\/[^/]+/.test(base)) throw new Error('先填写服务器地址')
+      if (!/^https?:\/\/[^/]+/.test(base)) throw new Error('请先填写服务器地址')
       const response = await fetch(base + path, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...headers },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body || {})
       })
       let data = {}
@@ -7094,90 +7117,191 @@ function createConnectionPanel(React) {
     }
     const run = async (kind, work) => {
       setMessage('')
-      setFormBusy(kind)
-      try { await work() } catch (error) { setMessage(String(error && error.message || error)) } finally { setFormBusy('') }
-    }
-    const saveLogin = async (data, base, label) => {
-      const user = data.user || null
-      if (typeof onConfigured === 'function') await onConfigured({ url: base, token: data.token, user })
-      setAccessToken(data.token || '')
-      setAccountEmail((user && user.email) || '')
-      let enrolled = null
+      setBusy(kind)
       try {
-        if (typeof window !== 'undefined' && window.tetherApp && typeof window.tetherApp.enrollDevice === 'function') {
-          enrolled = await window.tetherApp.enrollDevice(data.token)
-        }
-      } catch (_) { /* the account is still logged in if device enrollment is unavailable */ }
-      const suffix = enrolled && enrolled.ok ? '，设备已加入账号'
-        : enrolled && enrolled.error ? '（设备未登记：' + enrolled.error + '）' : ''
-      setMessage(label + '成功' + suffix)
+        const data = await work()
+        await onLogin({ url: cleanUrl(server), token: data.token, user: data.user || null })
+      } catch (error) {
+        setMessage(String(error && error.message || error))
+      } finally {
+        setBusy('')
+      }
     }
-    const login = () => run('login', async () => {
-      const data = await post('/api/auth/login', { email: email.trim(), password, totp: totp.trim() })
-      saveLogin(data, cleanUrl(server), '登录')
-    })
-    const acceptInvite = () => run('invite', async () => {
-      const data = await post('/api/auth/accept-invite', { code: inviteCode.trim(), email: inviteEmail.trim(), password: invitePassword })
-      saveLogin(data, cleanUrl(server), '邀请码注册')
-    })
-    const changePassword = () => run('password', async () => {
-      if (!accessToken) throw new Error('先登录再修改密码')
-      const data = await post('/api/auth/password', {
-        current_password: currentPassword, new_password: newPassword
-      }, { Authorization: 'Bearer ' + accessToken })
-      setAccessToken(data.token || '')
-      setCurrentPassword('')
-      setNewPassword('')
-      if (typeof onConfigured === 'function') onConfigured({ url: cleanUrl(server), token: data.token, user: data.user })
-      setMessage('密码已修改，其他设备的旧登录已失效')
-    })
-    return h('div', { onPointerDown: (event) => { if (event.target === event.currentTarget) onClose() }, style: { position: 'absolute', inset: 0, zIndex: 31, background: 'rgba(16,24,40,0.35)', display: 'flex', justifyContent: 'flex-end' } },
-      h('section', { className: 'tether-drawer', style: { height: '100%', background: bg, display: 'flex', flexDirection: 'column', boxShadow: 'var(--dsw-elevation-panel, 0 8px 24px rgba(16,24,40,0.12))' } },
-        h('header', { style: { padding: '12px 16px', background: panel, display: 'flex', alignItems: 'center' } },
-          h('strong', { style: { fontSize: 14, color: ink } }, '账号'),
-          h('button', { onClick: onClose, title: '关闭', 'aria-label': '关闭', style: { marginLeft: 'auto', border: 0, background: 'transparent', fontSize: 18, cursor: 'pointer', color: mute } }, '×')),
-        h('div', { className: 'tether-drawer-body tether-scroll', style: { padding: '14px 16px 24px', overflowY: 'auto' } },
-          h('div', { style: { borderRadius: 8, background: panel, padding: '4px 12px', marginBottom: 12 } },
-            row('服务器', safeAddress(info && info.address)),
-            row('连接状态', status === 'online' ? '已连接' : status === 'offline' ? '不可达' : '未知'),
-            row('当前账号', loggedIn ? (accountEmail || '已登录') : '未登录')),
-          error ? h('div', { style: { color: 'var(--dsw-alias-state-error-primary, #b42318)', fontSize: 12, marginBottom: 10 } }, error) : null,
-
-          loggedIn ? h('div', null,
-            title('修改密码'),
-            h('div', { style: { display: 'grid', gap: 7 } },
-              fieldRow('当前密码', h('input', { value: currentPassword, onChange: (event) => setCurrentPassword(event.target.value), type: 'password', autoComplete: 'current-password', style: field })),
-              fieldRow('新密码（至少 10 位）', h('input', { value: newPassword, onChange: (event) => setNewPassword(event.target.value), type: 'password', autoComplete: 'new-password', style: field })),
-              h('button', { onClick: changePassword, disabled: !!formBusy, style: { ...secondary, justifySelf: 'start', opacity: formBusy ? 0.5 : 1 } }, formBusy === 'password' ? '修改中…' : '修改密码'),
-              h('div', { style: { color: mute, fontSize: 11, lineHeight: '17px' } }, '修改后其他设备的旧登录和 API 令牌都会失效。')))
-            : h('div', null,
-              title('登录账号'),
-              h('div', { style: { display: 'grid', gap: 7 } },
-                defaultUrl ? null : fieldRow('服务器地址', h('input', { value: server, onChange: (event) => setServer(event.target.value), placeholder: 'https://hub.example.com', spellCheck: false, style: field })),
-                fieldRow('邮箱', h('input', { value: email, onChange: (event) => setEmail(event.target.value), type: 'email', autoComplete: 'username', style: field })),
-                h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 110px', gap: 7 } },
-                  fieldRow('密码', h('input', { value: password, onChange: (event) => setPassword(event.target.value), type: 'password', autoComplete: 'current-password', style: field })),
-                  fieldRow('两步验证码', h('input', { value: totp, onChange: (event) => setTotp(event.target.value), inputMode: 'numeric', maxLength: 6, style: field }))),
-                h('button', { onClick: login, disabled: !!formBusy, style: { ...primary, opacity: formBusy ? 0.5 : 1, justifySelf: 'start' } }, formBusy === 'login' ? '登录中…' : '登录')),
-              h('button', { onClick: () => setInviteOpen((value) => !value), style: { marginTop: 12, border: 0, background: 'transparent', color: mute, fontSize: 11.5, cursor: 'pointer', padding: 0, justifySelf: 'start' } }, inviteOpen ? '收起邀请码注册' : '首次使用？用邀请码注册'),
-              inviteOpen ? h('div', { style: { display: 'grid', gap: 7, marginTop: 8 } },
-                h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7 } },
-                  fieldRow('邀请码', h('input', { value: inviteCode, onChange: (event) => setInviteCode(event.target.value), spellCheck: false, maxLength: 12, style: field })),
-                  fieldRow('邮箱', h('input', { value: inviteEmail, onChange: (event) => setInviteEmail(event.target.value), type: 'email', style: field }))),
-                fieldRow('密码（至少 10 位）', h('input', { value: invitePassword, onChange: (event) => setInvitePassword(event.target.value), type: 'password', autoComplete: 'new-password', style: field })),
-                h('button', { onClick: acceptInvite, disabled: !!formBusy, style: { ...secondary, justifySelf: 'start' } }, formBusy === 'invite' ? '创建中…' : '创建账号并登录')) : null),
-
-          message ? h('div', { style: { marginTop: 12, color: message.includes('成功') || message.includes('已修改') ? 'var(--dsw-alias-state-success-primary, #16a34a)' : 'var(--dsw-alias-state-error-primary, #b42318)', fontSize: 12 } }, message) : null))
+    const login = () => run('login', () => post('/api/auth/login', { email: email.trim(), password, totp: totp.trim() }))
+    const acceptInvite = () => run('invite', () => post('/api/auth/accept-invite', { code: inviteCode.trim(), email: inviteEmail.trim(), password: invitePassword }))
+    const fieldRow = (label, input) => h('label', { style: { display: 'grid', gap: 5, fontSize: 12, color: sub } }, label, input)
+    return h('div', { style: { position: 'fixed', inset: 0, zIndex: 80, display: 'grid', placeItems: 'center', background: 'var(--tether-workbench-bg, #ffffff)', color: ink } },
+      h('div', { style: { width: 'min(392px, calc(100vw - 40px))', display: 'grid', gap: 14, padding: '28px 26px 24px', borderRadius: 14, background: bg, boxShadow: '0 18px 50px rgba(16,24,40,0.14)' } },
+        h('div', { style: { display: 'grid', gap: 6, marginBottom: 4 } },
+          h('strong', { style: { fontSize: 22, letterSpacing: '.01em' } }, 'Tether'),
+          h('span', { style: { color: mute, fontSize: 12.5 } }, '登录后，这台设备会自动加入你的私有设备网。')),
+        defaultUrl ? null : fieldRow('服务器地址', h('input', { value: server, onChange: (event) => setServer(event.target.value), placeholder: 'https://hub.example.com', spellCheck: false, style: field })),
+        fieldRow('邮箱', h('input', { value: email, onChange: (event) => setEmail(event.target.value), type: 'email', autoComplete: 'username', autoFocus: true, style: field })),
+        h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 108px', gap: 8 } },
+          fieldRow('密码', h('input', { value: password, onChange: (event) => setPassword(event.target.value), type: 'password', autoComplete: 'current-password', style: field })),
+          fieldRow('两步验证码', h('input', { value: totp, onChange: (event) => setTotp(event.target.value), inputMode: 'numeric', maxLength: 6, style: field }))),
+        h('button', { onClick: login, disabled: !!busy, style: { ...primary, width: '100%', opacity: busy ? 0.5 : 1 } }, busy === 'login' ? '登录中…' : '登录'),
+        message ? h('div', { role: 'alert', style: { color: 'var(--dsw-alias-state-error-primary, #b42318)', fontSize: 12 } }, message) : null,
+        h('button', { onClick: () => setInviteOpen((value) => !value), style: { border: 0, background: 'transparent', color: mute, fontSize: 11.5, cursor: 'pointer', padding: 0, justifySelf: 'center' } }, inviteOpen ? '收起邀请码注册' : '首次使用？用邀请码注册'),
+        inviteOpen ? h('div', { style: { display: 'grid', gap: 8, borderTop: '1px solid ' + line, paddingTop: 12 } },
+          h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 } },
+            fieldRow('邀请码', h('input', { value: inviteCode, onChange: (event) => setInviteCode(event.target.value), spellCheck: false, maxLength: 12, style: field })),
+            fieldRow('邮箱', h('input', { value: inviteEmail, onChange: (event) => setInviteEmail(event.target.value), type: 'email', style: field }))),
+          fieldRow('密码（至少 10 位）', h('input', { value: invitePassword, onChange: (event) => setInvitePassword(event.target.value), type: 'password', autoComplete: 'new-password', style: field })),
+          h('button', { onClick: acceptInvite, disabled: !!busy, style: { ...secondary, justifySelf: 'start' } }, busy === 'invite' ? '创建中…' : '创建账号并登录')) : null)
     )
   }
+
   function ConnectionTrigger({ onClick, status = 'unknown' }) {
     const color = status === 'online' ? 'var(--dsw-alias-state-success-primary, #16a34a)'
       : status === 'offline' ? 'var(--dsw-alias-state-error-primary, #b42318)'
         : status === 'checking' ? 'var(--dsw-alias-state-warn-primary, #b54708)' : mute
-    return h('button', { onClick, title: '账号', className: 'tether-press tether-hover', style: { marginLeft: 'auto', height: 26, padding: '0 10px', borderRadius: 999, border: 0, background: bg, color: sub, display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer', flex: '0 0 auto', boxShadow: '0 1px 2px rgba(16,24,40,0.06)' } },
-      h('span', { style: { width: 7, height: 7, borderRadius: 4, background: color, flex: '0 0 auto' } }), '账号')
+    return h('button', { onClick, title: '连接', className: 'tether-press tether-hover', style: { marginLeft: 'auto', height: 26, padding: '0 10px', borderRadius: 999, border: 0, background: bg, color: sub, display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer', flex: '0 0 auto', boxShadow: '0 1px 2px rgba(16,24,40,0.06)' } },
+      h('span', { style: { width: 7, height: 7, borderRadius: 4, background: color, flex: '0 0 auto' } }), '连接')
   }
-  return { Panel: ConnectionPanel, Trigger: ConnectionTrigger }
+  return { Panel: ConnectionPanel, Trigger: ConnectionTrigger, LoginScreen }
+}
+function createSettingsPanel(React) {
+  const h = React.createElement
+  const ink = 'var(--dsw-alias-label-primary, #101828)'
+  const sub = 'var(--dsw-alias-label-secondary, #475467)'
+  const mute = 'var(--dsw-alias-label-tertiary, #667085)'
+  const bg = 'var(--dsw-alias-bg-base, #ffffff)'
+  const panel = 'var(--dsw-specific-sidebar-fill, #f9fafb)'
+  const line = 'var(--dsw-alias-border-secondary, #e4e7ec)'
+  const field = { width: '100%', height: 32, boxSizing: 'border-box', border: '1px solid ' + line, borderRadius: 7, padding: '0 9px', background: bg, color: ink, fontSize: 12.5, font: 'inherit' }
+  const primary = { height: 30, padding: '0 12px', border: 0, borderRadius: 7, color: 'var(--dsw-alias-label-primary-inverted, #ffffff)', background: 'var(--dsw-alias-button-primary-fill, #101828)', cursor: 'pointer', fontSize: 12 }
+  const secondary = { height: 30, padding: '0 12px', border: '1px solid ' + line, borderRadius: 7, color: sub, background: 'transparent', cursor: 'pointer', fontSize: 12 }
+  const sectionTitle = (text, hint) => h('div', { style: { marginBottom: 12 } },
+    h('div', { style: { fontSize: 15, fontWeight: 600, color: ink } }, text),
+    hint ? h('div', { style: { marginTop: 4, color: mute, fontSize: 12, lineHeight: '18px' } }, hint) : null)
+  const row = (label, value) => h('div', { key: label, style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, minHeight: 34, fontSize: 12.5 } },
+    h('span', { style: { color: mute } }, label),
+    h('span', { style: { color: ink, textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, value || '—'))
+  const fieldRow = (label, input) => h('label', { style: { display: 'grid', gap: 5, fontSize: 12, color: sub } }, label, input)
+  const timeText = (value) => {
+    if (!value) return '尚未检测'
+    try { const date = new Date(value); return [date.getHours(), date.getMinutes(), date.getSeconds()].map((part) => String(part).padStart(2, '0')).join(':') } catch (_) { return '尚未检测' }
+  }
+
+  function SettingsPanel({ open, onClose, accountEmail = '', accountRole = '', server = '', connection = {}, device = {}, versions = {}, onRefreshConnection, onRestartNode, onOpenPermissions, onLogout, onPasswordChanged }) {
+    const [section, setSection] = React.useState('account')
+    const [currentPassword, setCurrentPassword] = React.useState('')
+    const [newPassword, setNewPassword] = React.useState('')
+    const [busy, setBusy] = React.useState('')
+    const [message, setMessage] = React.useState('')
+    if (!open) return null
+    const status = connection.status || 'unknown'
+    const dotColor = status === 'online' ? 'var(--dsw-alias-state-success-primary, #16a34a)'
+      : status === 'offline' ? 'var(--dsw-alias-state-error-primary, #b42318)'
+        : status === 'checking' ? 'var(--dsw-alias-state-warn-primary, #b54708)' : mute
+    const changePassword = async () => {
+      if (!server) { setMessage('未配置服务器地址'); return }
+      setMessage('')
+      setBusy('password')
+      try {
+        const response = await fetch(server.replace(/\/+$/, '') + '/api/auth/password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (connection.token || '') },
+          body: JSON.stringify({ current_password: currentPassword, new_password: newPassword })
+        })
+        const data = await response.json().catch(() => ({}))
+        if (!response.ok) throw new Error((data.detail && (data.detail.error || data.detail.code)) || data.error || ('HTTP ' + response.status))
+        setCurrentPassword('')
+        setNewPassword('')
+        if (typeof onPasswordChanged === 'function') onPasswordChanged(data)
+        setMessage('密码已修改，其他设备的旧登录已失效')
+      } catch (error) {
+        setMessage(String(error && error.message || error))
+      } finally {
+        setBusy('')
+      }
+    }
+    const sections = [
+      ['account', '账号'],
+      ['connection', '连接'],
+      ['device', '本机设备'],
+      ['updates', '更新'],
+      ['permissions', '文件权限'],
+      ['about', '关于']
+    ]
+    const nav = h('div', { style: { width: 158, flex: '0 0 auto', padding: '14px 10px', background: panel, borderRight: '1px solid ' + line, display: 'flex', flexDirection: 'column', gap: 2 } },
+      sections.map(([id, label]) => h('button', {
+        key: id, type: 'button', onClick: () => { setMessage(''); setSection(id) },
+        className: 'tether-hover',
+        style: { height: 30, padding: '0 9px', border: 0, borderRadius: 6, textAlign: 'left', background: section === id ? 'var(--dsw-alias-interactive-bg-active, rgba(38,49,72,.10))' : 'transparent', color: section === id ? ink : sub, fontSize: 12.5, cursor: 'pointer' }
+      }, label)))
+    let body = null
+    if (section === 'account') {
+      body = h('div', { style: { display: 'grid', gap: 6 } },
+        sectionTitle('账号', '账号信息只在这里出现；连接状态请看顶栏的“连接”。'),
+        row('邮箱', accountEmail || '未登录'),
+        row('角色', accountRole || '—'),
+        h('div', { style: { height: 1, background: line, margin: '12px 0' } }),
+        h('div', { style: { fontSize: 12.5, fontWeight: 600, marginBottom: 8 } }, '修改密码'),
+        h('div', { style: { display: 'grid', gap: 8, maxWidth: 320 } },
+          fieldRow('当前密码', h('input', { value: currentPassword, onChange: (event) => setCurrentPassword(event.target.value), type: 'password', autoComplete: 'current-password', style: field })),
+          fieldRow('新密码（至少 10 位）', h('input', { value: newPassword, onChange: (event) => setNewPassword(event.target.value), type: 'password', autoComplete: 'new-password', style: field })),
+          h('button', { onClick: changePassword, disabled: !!busy, style: { ...secondary, justifySelf: 'start' } }, busy === 'password' ? '修改中…' : '修改密码')),
+        message ? h('div', { style: { marginTop: 8, color: message.includes('已修改') ? 'var(--dsw-alias-state-success-primary, #16a34a)' : 'var(--dsw-alias-state-error-primary, #b42318)', fontSize: 12 } }, message) : null,
+        h('div', { style: { marginTop: 18 } },
+          h('button', { onClick: onLogout, style: { ...secondary, color: 'var(--dsw-alias-state-error-primary, #b42318)' } }, '退出登录')))
+    } else if (section === 'connection') {
+      body = h('div', null,
+        sectionTitle('连接', '连接灯只表示 Hub 可达与 Node 在线，不代表账号状态。'),
+        h('div', { style: { borderRadius: 8, background: panel, padding: '2px 12px' } },
+          row('服务器地址', server || '未配置'),
+          h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', minHeight: 34, fontSize: 12.5 } },
+            h('span', { style: { color: mute } }, '连接状态'),
+            h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 6 } },
+              h('span', { style: { width: 7, height: 7, borderRadius: 4, background: dotColor } }),
+              status === 'online' ? '已连接' : status === 'offline' ? '不可达' : status === 'checking' ? '检测中' : '未知')),
+          row('最近检测', timeText(connection.checkedAt)),
+          row('服务响应耗时', Number.isFinite(connection.durationMs) ? connection.durationMs + ' ms' : '—')),
+        h('div', { style: { marginTop: 12 } },
+          h('button', { onClick: onRefreshConnection, style: secondary }, '刷新连接状态')))
+    } else if (section === 'device') {
+      body = h('div', null,
+        sectionTitle('本机设备', '本机作为目标设备时的登记信息与 Node 控制。'),
+        h('div', { style: { borderRadius: 8, background: panel, padding: '2px 12px' } },
+          row('设备名', device.name || device.device_id || '—'),
+          row('device_id', device.device_id || '—'),
+          row('平台', device.platform || '—'),
+          row('Node', device.online ? '在线' : '离线'),
+          row('版本', [versions.node && ('Node ' + versions.node), versions.app && ('APP ' + versions.app), versions.plugin && ('插件 ' + versions.plugin)].filter(Boolean).join(' · ') || '—')),
+        h('div', { style: { marginTop: 12 } },
+          h('button', { onClick: onRestartNode, disabled: !device.online, style: { ...secondary, opacity: device.online ? 1 : 0.5 } }, '重启 Node')))
+    } else if (section === 'updates') {
+      body = h('div', null,
+        sectionTitle('更新', '有新版本时，右上角会出现蓝色下载按钮。'),
+        h('div', { style: { borderRadius: 8, background: panel, padding: '2px 12px' } },
+          row('Node', versions.node || '—'),
+          row('APP', versions.app || '—'),
+          row('DSH 插件', versions.plugin || '—')))
+    } else if (section === 'permissions') {
+      body = h('div', null,
+        sectionTitle('文件权限', '可写根目录与文件操作审计在独立面板中管理。'),
+        h('button', { onClick: onOpenPermissions, style: primary }, '打开文件权限'))
+    } else {
+      body = h('div', null,
+        sectionTitle('关于', 'Tether 客户端与服务端版本信息。'),
+        h('div', { style: { borderRadius: 8, background: panel, padding: '2px 12px' } },
+          row('客户端', versions.app || '—'),
+          row('Node', versions.node || '—'),
+          row('DSH 插件', versions.plugin || '—'),
+          row('服务器', server || '—')))
+    }
+    return h('div', { onPointerDown: (event) => { if (event.target === event.currentTarget) onClose() }, style: { position: 'absolute', inset: 0, zIndex: 40, background: 'rgba(16,24,40,0.35)', display: 'grid', placeItems: 'center', padding: 24 } },
+      h('section', { role: 'dialog', 'aria-label': '设置', style: { width: 'min(760px, 100%)', height: 'min(560px, 100%)', background: bg, borderRadius: 12, overflow: 'hidden', boxShadow: 'var(--dsw-elevation-panel, 0 18px 50px rgba(16,24,40,0.18))', display: 'flex', flexDirection: 'column' } },
+        h('header', { style: { height: 44, padding: '0 14px', display: 'flex', alignItems: 'center', background: panel, borderBottom: '1px solid ' + line } },
+          h('strong', { style: { fontSize: 14 } }, '设置'),
+          h('button', { onClick: onClose, title: '关闭', 'aria-label': '关闭', style: { marginLeft: 'auto', border: 0, background: 'transparent', fontSize: 18, cursor: 'pointer', color: mute } }, '×')),
+        h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex' } },
+          nav,
+          h('div', { className: 'tether-scroll', style: { flex: '1 1 auto', minWidth: 0, overflowY: 'auto', padding: '18px 22px' } }, body)))
+    )
+  }
+  return { SettingsPanel }
 }
 const TRANSFER_CHUNK = 1024 * 1024
 
@@ -7540,6 +7664,7 @@ function createTransferPage({ React, Glyph, api, post, C, devices = [], localDev
 // Shared Tether panel UI. Hosts: DSH plugin (packages/dsh-plugin-tether-client/lib/client.js),
 // Electron APP and browser WebUI. Keep the 4-space body indentation: the DSH plugin bundle is
 // generated by concatenation from this file and tests locate functions by their exact indent.
+
 
 
 
@@ -8279,6 +8404,7 @@ function MinimalUpdateButton({ React, h, api, post, deviceId, host, C }) {
 function createTetherPanel({ React, Native, host, EditorRuntime }) {
     const h = React.createElement
     const Connection = createConnectionPanel(React)
+    const Settings = createSettingsPanel(React)
     const PANEL_ID = 'tether'
     const BASE = host.apiBase()
 
@@ -9122,7 +9248,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       })))
     }
 
-    function ActivityBar({ active, collapsed, onSelect, onSettings, settingsOpen }) {
+    function ActivityBar({ active, collapsed, onSelect, onAppSettings, appSettingsOpen }) {
       const items = [
         { id: 'workspaces', label: '原生工作区', icon: 'monitor' },
         { id: 'files', label: '文件资源管理器', icon: 'files' },
@@ -9143,7 +9269,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         style: { width: UI.activity, flex: '0 0 auto', borderRight: 0, background: C.soft, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '8px 0', gap: 3 }
       },
         items.map((item) => button(item.id, item.label, item.icon, () => onSelect(item.id), active === item.id)),
-        h('div', { style: { marginTop: 'auto' } }, button('settings', '文件权限', 'settings', onSettings, settingsOpen))
+        h('div', { style: { marginTop: 'auto' } }, button('settings', '设置', 'settings', onAppSettings, appSettingsOpen))
       )
     }
 
@@ -10097,11 +10223,17 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const autoUpdateChecksRef = React.useRef({})
       const lastUpdateToastRef = React.useRef({})
       const [updateToast, setUpdateToast] = React.useState('')
-      const [showHub, setShowHub] = React.useState(() => {
-        try { return !(JSON.parse(window.localStorage.getItem('tether.hub') || '{}').token) } catch (_) { return true }
+      const [showHub, setShowHub] = React.useState(false)
+      const [showAppSettings, setShowAppSettings] = React.useState(false)
+      const [loggedIn, setLoggedIn] = React.useState(() => {
+        try { return !!(JSON.parse(window.localStorage.getItem('tether.hub') || '{}').token) } catch (_) { return false }
       })
-      const [hubUrl, setHubUrl] = React.useState('')
-      const [hubToken, setHubToken] = React.useState('')
+      const [hubUrl, setHubUrl] = React.useState(() => {
+        try { return JSON.parse(window.localStorage.getItem('tether.hub') || '{}').url || '' } catch (_) { return '' }
+      })
+      const [hubToken, setHubToken] = React.useState(() => {
+        try { return JSON.parse(window.localStorage.getItem('tether.hub') || '{}').token || '' } catch (_) { return '' }
+      })
       const [hubEmail, setHubEmail] = React.useState(() => {
         try { return JSON.parse(window.localStorage.getItem('tether.hub') || '{}').email || '' } catch (_) { return '' }
       })
@@ -12446,6 +12578,23 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         )
       }
 
+      const localDeviceRecord = ((state && state.devices) || []).find((item) => item.device_id === (appLocalDevice || deviceId)) || {}
+      const localCaps = localDeviceRecord.capabilities || {}
+      if (!loggedIn) {
+        return h(Connection.LoginScreen, {
+          defaultUrl: hubAddress || hubUrl || '',
+          defaultEmail: hubEmail,
+          onLogin: async ({ url, token, user }) => {
+            try { window.localStorage.setItem('tether.hub', JSON.stringify({ url, token, email: (user && user.email) || '' })) } catch (_) { /* storage unavailable */ }
+            setHubEmail((user && user.email) || '')
+            try {
+              if (window.tetherApp && typeof window.tetherApp.enrollDevice === 'function') await window.tetherApp.enrollDevice(token)
+            } catch (_) { /* enrollment retries on the next sign-in */ }
+            window.location.reload()
+          }
+        })
+      }
+
       return h('div', { className: 'tether-root', style: { position: 'relative', height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--tether-workbench-bg, ' + C.bg + ')', color: C.ink, fontSize: 13, fontWeight: 'var(--tether-body, 400)', overflow: 'hidden' } },
         h('style', null, SCROLL_CSS),
         h('div', { className: 'tether-topbar ' + (host && host.kind === 'app' ? 'tether-toolbar-app' : 'tether-toolbar'), style: { display: 'flex', alignItems: 'center', gap: 10, padding: '6px 12px', borderBottom: 0, background: C.soft, position: 'relative', zIndex: 2, flex: '0 0 auto' } },
@@ -12483,8 +12632,8 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             active: view === 'files' ? 'files' : (view === 'network' ? 'network' : (view === 'transfer' ? 'transfer' : 'workspaces')),
             collapsed: sidebarCollapsed,
             onSelect: selectPanel,
-            onSettings: openSettings,
-            settingsOpen: showSettings
+            onAppSettings: () => setShowAppSettings(true),
+            appSettingsOpen: showAppSettings
           }),
           h(SidePanel, {
             width: safeSidebarWidth,
@@ -12624,7 +12773,41 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
               if (generation === ACTIVE_BASE_GENERATION) setHubBusy(false)
             }
           }
-        }) : null,        showUpdate ? h('div', {
+        }) : null,
+        showAppSettings ? h(Settings.SettingsPanel, {
+          open: true,
+          onClose: () => setShowAppSettings(false),
+          accountEmail: hubEmail,
+          server: hubAddress || hubUrl || '',
+          connection: { status: hubStatus, checkedAt: hubCheckedAt, durationMs: hubDuration, token: hubToken },
+          device: {
+            ...localDeviceRecord,
+            device_id: localDeviceRecord.device_id || appLocalDevice || deviceId,
+            online: !!localDeviceRecord.online
+          },
+          versions: { app: localCaps.app_version, node: localCaps.node_version, plugin: localCaps.plugin_version },
+          onRefreshConnection: probeConfiguredHub,
+          onRestartNode: async () => {
+            const id = appLocalDevice || deviceId
+            if (!id) return
+            try {
+              await post('/api/devices/' + encodeURIComponent(id) + '/node/restart', {})
+              setNotice('已请求重启本机 Node')
+            } catch (error) { fail(error) }
+          },
+          onOpenPermissions: () => { setShowAppSettings(false); openSettings() },
+          onLogout: () => {
+            try { window.localStorage.removeItem('tether.hub') } catch (_) { /* storage unavailable */ }
+            window.location.reload()
+          },
+          onPasswordChanged: (data) => {
+            const next = data && data.token
+            if (!next) return
+            setHubToken(next)
+            try { window.localStorage.setItem('tether.hub', JSON.stringify({ url: hubUrl || hubAddress, token: next, email: hubEmail })) } catch (_) { /* storage unavailable */ }
+          }
+        }) : null,
+        showUpdate ? h('div', {
           onPointerDown: (event) => { if (event.target === event.currentTarget) setShowUpdate(false) },
           style: { position: 'absolute', inset: 0, background: 'rgba(16,24,40,0.35)', display: 'grid', placeItems: 'center', zIndex: 30, padding: 16, boxSizing: 'border-box' }
         },

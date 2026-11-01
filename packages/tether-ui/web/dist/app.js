@@ -162889,9 +162889,9 @@ function createConnectionPanel(React2) {
   const bg = "var(--dsw-alias-bg-base, #ffffff)";
   const panel = "var(--dsw-specific-sidebar-fill, #f9fafb)";
   const line = "var(--dsw-alias-border-secondary, #e4e7ec)";
-  const field = { width: "100%", height: 30, boxSizing: "border-box", border: "1px solid " + line, borderRadius: 6, padding: "0 8px", background: bg, color: ink, fontSize: 12, font: "inherit" };
-  const primary = { height: 28, padding: "0 10px", border: 0, borderRadius: 6, color: "var(--dsw-alias-label-primary-inverted, #ffffff)", background: "var(--dsw-alias-button-primary-fill, #101828)", cursor: "pointer", fontSize: 12 };
-  const secondary = { height: 28, padding: "0 10px", border: "1px solid " + line, borderRadius: 6, color: sub, background: "transparent", cursor: "pointer", fontSize: 12 };
+  const field = { width: "100%", height: 32, boxSizing: "border-box", border: "1px solid " + line, borderRadius: 7, padding: "0 9px", background: bg, color: ink, fontSize: 12.5, font: "inherit" };
+  const primary = { height: 32, padding: "0 14px", border: 0, borderRadius: 7, color: "var(--dsw-alias-label-primary-inverted, #ffffff)", background: "var(--dsw-alias-button-primary-fill, #101828)", cursor: "pointer", fontSize: 12.5 };
+  const secondary = { height: 30, padding: "0 12px", border: "1px solid " + line, borderRadius: 7, color: sub, background: "transparent", cursor: "pointer", fontSize: 12 };
   const safeAddress = (value) => {
     try {
       const url = new URL(value);
@@ -162901,7 +162901,71 @@ function createConnectionPanel(React2) {
     }
   };
   const cleanUrl2 = (value) => String(value || "").trim().replace(/\/+$/, "");
-  function ConnectionPanel({ open, onClose, info, busy, error, defaultUrl = "", defaultToken = "", defaultEmail = "", onConfigured }) {
+  const timeText = (value) => {
+    if (!value) return "\u5C1A\u672A\u68C0\u6D4B";
+    try {
+      const date = new Date(value);
+      return [date.getHours(), date.getMinutes(), date.getSeconds()].map((part) => String(part).padStart(2, "0")).join(":");
+    } catch (_) {
+      return "\u5C1A\u672A\u68C0\u6D4B";
+    }
+  };
+  function ConnectionPanel({ open, onClose, info, busy, error, onProbe }) {
+    if (!open) return null;
+    const status2 = info && info.status || "unknown";
+    const dotColor = status2 === "online" ? "var(--dsw-alias-state-success-primary, #16a34a)" : status2 === "offline" ? "var(--dsw-alias-state-error-primary, #b42318)" : status2 === "checking" ? "var(--dsw-alias-state-warn-primary, #b54708)" : mute;
+    const row = (label, value) => h2(
+      "div",
+      { key: label, style: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, height: 32, fontSize: 12.5 } },
+      h2("span", { style: { color: mute } }, label),
+      h2("span", { style: { color: ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, value)
+    );
+    return h2(
+      "div",
+      { onPointerDown: (event) => {
+        if (event.target === event.currentTarget) onClose();
+      }, style: { position: "absolute", inset: 0, zIndex: 31, background: "rgba(16,24,40,0.35)", display: "flex", justifyContent: "flex-end" } },
+      h2(
+        "section",
+        { className: "tether-drawer", style: { height: "100%", background: bg, display: "flex", flexDirection: "column", boxShadow: "var(--dsw-elevation-panel, 0 8px 24px rgba(16,24,40,0.12))" } },
+        h2(
+          "header",
+          { style: { padding: "12px 16px", background: panel, display: "flex", alignItems: "center" } },
+          h2("strong", { style: { fontSize: 14, color: ink } }, "\u8FDE\u63A5"),
+          h2("button", { onClick: onClose, title: "\u5173\u95ED", "aria-label": "\u5173\u95ED", style: { marginLeft: "auto", border: 0, background: "transparent", fontSize: 18, cursor: "pointer", color: mute } }, "\xD7")
+        ),
+        h2(
+          "div",
+          { className: "tether-drawer-body tether-scroll", style: { padding: "14px 16px 24px", overflowY: "auto" } },
+          h2(
+            "div",
+            { style: { borderRadius: 8, background: panel, padding: "4px 12px", marginBottom: 12 } },
+            row("\u670D\u52A1\u5668\u5730\u5740", safeAddress(info && info.address)),
+            h2(
+              "div",
+              { style: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, height: 32, fontSize: 12.5 } },
+              h2("span", { style: { color: mute } }, "\u8FDE\u63A5\u72B6\u6001"),
+              h2(
+                "span",
+                { style: { display: "inline-flex", alignItems: "center", gap: 6, color: ink } },
+                h2("span", { style: { width: 7, height: 7, borderRadius: 4, background: dotColor, flex: "0 0 auto" } }),
+                status2 === "online" ? "\u5DF2\u8FDE\u63A5" : status2 === "offline" ? "\u4E0D\u53EF\u8FBE" : status2 === "checking" ? "\u68C0\u6D4B\u4E2D" : "\u672A\u77E5"
+              )
+            ),
+            row("\u6700\u8FD1\u68C0\u6D4B", busy ? "\u68C0\u6D4B\u4E2D\u2026" : timeText(info && info.checkedAt)),
+            row("\u670D\u52A1\u54CD\u5E94\u8017\u65F6", info && Number.isFinite(info.durationMs) ? info.durationMs + " ms" : "\u2014")
+          ),
+          error ? h2("div", { role: "alert", style: { color: "var(--dsw-alias-state-error-primary, #b42318)", fontSize: 12, marginBottom: 10 } }, error) : null,
+          h2(
+            "button",
+            { onClick: onProbe, disabled: busy, className: "tether-press", style: { ...secondary, opacity: busy ? 0.5 : 1, display: "inline-flex", alignItems: "center", gap: 6 } },
+            busy ? "\u5237\u65B0\u4E2D\u2026" : "\u5237\u65B0\u8FDE\u63A5\u72B6\u6001"
+          )
+        )
+      )
+    );
+  }
+  function LoginScreen({ defaultUrl = "", defaultEmail = "", onLogin }) {
     const [server, setServer] = React2.useState(defaultUrl || "");
     const [email, setEmail] = React2.useState(defaultEmail || "");
     const [password, setPassword] = React2.useState("");
@@ -162910,35 +162974,17 @@ function createConnectionPanel(React2) {
     const [inviteCode, setInviteCode] = React2.useState("");
     const [inviteEmail, setInviteEmail] = React2.useState("");
     const [invitePassword, setInvitePassword] = React2.useState("");
-    const [accessToken, setAccessToken] = React2.useState(defaultToken || "");
-    const [accountEmail, setAccountEmail] = React2.useState(defaultEmail || "");
-    const [currentPassword, setCurrentPassword] = React2.useState("");
-    const [newPassword, setNewPassword] = React2.useState("");
-    const [formBusy, setFormBusy] = React2.useState("");
+    const [busy, setBusy] = React2.useState("");
     const [message, setMessage] = React2.useState("");
-    React2.useEffect(() => {
-      setAccessToken(defaultToken || "");
-    }, [defaultToken]);
     React2.useEffect(() => {
       if (defaultUrl) setServer(defaultUrl);
     }, [defaultUrl]);
-    if (!open) return null;
-    const status2 = info && info.status || "unknown";
-    const loggedIn = !!accessToken;
-    const row = (label, value) => h2(
-      "div",
-      { key: label, style: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, height: 30, fontSize: 12.5 } },
-      h2("span", { style: { color: mute } }, label),
-      h2("span", { style: { color: ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, value)
-    );
-    const title = (text2) => h2("div", { style: { color: sub, fontSize: 12, fontWeight: 600, margin: "16px 0 8px" } }, text2);
-    const fieldRow = (label, input) => h2("label", { style: { display: "grid", gap: 4, fontSize: 11.5, color: mute } }, label, input);
-    const post = async (path, body, headers = {}) => {
+    const post = async (path, body) => {
       const base = cleanUrl2(server);
-      if (!/^https?:\/\/[^/]+/.test(base)) throw new Error("\u5148\u586B\u5199\u670D\u52A1\u5668\u5730\u5740");
+      if (!/^https?:\/\/[^/]+/.test(base)) throw new Error("\u8BF7\u5148\u586B\u5199\u670D\u52A1\u5668\u5730\u5740");
       const response = await fetch(base + path, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...headers },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body || {})
       });
       let data = {};
@@ -162951,120 +162997,54 @@ function createConnectionPanel(React2) {
     };
     const run = async (kind, work) => {
       setMessage("");
-      setFormBusy(kind);
+      setBusy(kind);
       try {
-        await work();
-      } catch (error2) {
-        setMessage(String(error2 && error2.message || error2));
+        const data = await work();
+        await onLogin({ url: cleanUrl2(server), token: data.token, user: data.user || null });
+      } catch (error) {
+        setMessage(String(error && error.message || error));
       } finally {
-        setFormBusy("");
+        setBusy("");
       }
     };
-    const saveLogin = async (data, base, label) => {
-      const user = data.user || null;
-      if (typeof onConfigured === "function") await onConfigured({ url: base, token: data.token, user });
-      setAccessToken(data.token || "");
-      setAccountEmail(user && user.email || "");
-      let enrolled = null;
-      try {
-        if (typeof window !== "undefined" && window.tetherApp && typeof window.tetherApp.enrollDevice === "function") {
-          enrolled = await window.tetherApp.enrollDevice(data.token);
-        }
-      } catch (_) {
-      }
-      const suffix = enrolled && enrolled.ok ? "\uFF0C\u8BBE\u5907\u5DF2\u52A0\u5165\u8D26\u53F7" : enrolled && enrolled.error ? "\uFF08\u8BBE\u5907\u672A\u767B\u8BB0\uFF1A" + enrolled.error + "\uFF09" : "";
-      setMessage(label + "\u6210\u529F" + suffix);
-    };
-    const login = () => run("login", async () => {
-      const data = await post("/api/auth/login", { email: email.trim(), password, totp: totp.trim() });
-      saveLogin(data, cleanUrl2(server), "\u767B\u5F55");
-    });
-    const acceptInvite = () => run("invite", async () => {
-      const data = await post("/api/auth/accept-invite", { code: inviteCode.trim(), email: inviteEmail.trim(), password: invitePassword });
-      saveLogin(data, cleanUrl2(server), "\u9080\u8BF7\u7801\u6CE8\u518C");
-    });
-    const changePassword = () => run("password", async () => {
-      if (!accessToken) throw new Error("\u5148\u767B\u5F55\u518D\u4FEE\u6539\u5BC6\u7801");
-      const data = await post("/api/auth/password", {
-        current_password: currentPassword,
-        new_password: newPassword
-      }, { Authorization: "Bearer " + accessToken });
-      setAccessToken(data.token || "");
-      setCurrentPassword("");
-      setNewPassword("");
-      if (typeof onConfigured === "function") onConfigured({ url: cleanUrl2(server), token: data.token, user: data.user });
-      setMessage("\u5BC6\u7801\u5DF2\u4FEE\u6539\uFF0C\u5176\u4ED6\u8BBE\u5907\u7684\u65E7\u767B\u5F55\u5DF2\u5931\u6548");
-    });
+    const login = () => run("login", () => post("/api/auth/login", { email: email.trim(), password, totp: totp.trim() }));
+    const acceptInvite = () => run("invite", () => post("/api/auth/accept-invite", { code: inviteCode.trim(), email: inviteEmail.trim(), password: invitePassword }));
+    const fieldRow = (label, input) => h2("label", { style: { display: "grid", gap: 5, fontSize: 12, color: sub } }, label, input);
     return h2(
       "div",
-      { onPointerDown: (event) => {
-        if (event.target === event.currentTarget) onClose();
-      }, style: { position: "absolute", inset: 0, zIndex: 31, background: "rgba(16,24,40,0.35)", display: "flex", justifyContent: "flex-end" } },
+      { style: { position: "fixed", inset: 0, zIndex: 80, display: "grid", placeItems: "center", background: "var(--tether-workbench-bg, #ffffff)", color: ink } },
       h2(
-        "section",
-        { className: "tether-drawer", style: { height: "100%", background: bg, display: "flex", flexDirection: "column", boxShadow: "var(--dsw-elevation-panel, 0 8px 24px rgba(16,24,40,0.12))" } },
-        h2(
-          "header",
-          { style: { padding: "12px 16px", background: panel, display: "flex", alignItems: "center" } },
-          h2("strong", { style: { fontSize: 14, color: ink } }, "\u8D26\u53F7"),
-          h2("button", { onClick: onClose, title: "\u5173\u95ED", "aria-label": "\u5173\u95ED", style: { marginLeft: "auto", border: 0, background: "transparent", fontSize: 18, cursor: "pointer", color: mute } }, "\xD7")
-        ),
+        "div",
+        { style: { width: "min(392px, calc(100vw - 40px))", display: "grid", gap: 14, padding: "28px 26px 24px", borderRadius: 14, background: bg, boxShadow: "0 18px 50px rgba(16,24,40,0.14)" } },
         h2(
           "div",
-          { className: "tether-drawer-body tether-scroll", style: { padding: "14px 16px 24px", overflowY: "auto" } },
+          { style: { display: "grid", gap: 6, marginBottom: 4 } },
+          h2("strong", { style: { fontSize: 22, letterSpacing: ".01em" } }, "Tether"),
+          h2("span", { style: { color: mute, fontSize: 12.5 } }, "\u767B\u5F55\u540E\uFF0C\u8FD9\u53F0\u8BBE\u5907\u4F1A\u81EA\u52A8\u52A0\u5165\u4F60\u7684\u79C1\u6709\u8BBE\u5907\u7F51\u3002")
+        ),
+        defaultUrl ? null : fieldRow("\u670D\u52A1\u5668\u5730\u5740", h2("input", { value: server, onChange: (event) => setServer(event.target.value), placeholder: "https://hub.example.com", spellCheck: false, style: field })),
+        fieldRow("\u90AE\u7BB1", h2("input", { value: email, onChange: (event) => setEmail(event.target.value), type: "email", autoComplete: "username", autoFocus: true, style: field })),
+        h2(
+          "div",
+          { style: { display: "grid", gridTemplateColumns: "1fr 108px", gap: 8 } },
+          fieldRow("\u5BC6\u7801", h2("input", { value: password, onChange: (event) => setPassword(event.target.value), type: "password", autoComplete: "current-password", style: field })),
+          fieldRow("\u4E24\u6B65\u9A8C\u8BC1\u7801", h2("input", { value: totp, onChange: (event) => setTotp(event.target.value), inputMode: "numeric", maxLength: 6, style: field }))
+        ),
+        h2("button", { onClick: login, disabled: !!busy, style: { ...primary, width: "100%", opacity: busy ? 0.5 : 1 } }, busy === "login" ? "\u767B\u5F55\u4E2D\u2026" : "\u767B\u5F55"),
+        message ? h2("div", { role: "alert", style: { color: "var(--dsw-alias-state-error-primary, #b42318)", fontSize: 12 } }, message) : null,
+        h2("button", { onClick: () => setInviteOpen((value) => !value), style: { border: 0, background: "transparent", color: mute, fontSize: 11.5, cursor: "pointer", padding: 0, justifySelf: "center" } }, inviteOpen ? "\u6536\u8D77\u9080\u8BF7\u7801\u6CE8\u518C" : "\u9996\u6B21\u4F7F\u7528\uFF1F\u7528\u9080\u8BF7\u7801\u6CE8\u518C"),
+        inviteOpen ? h2(
+          "div",
+          { style: { display: "grid", gap: 8, borderTop: "1px solid " + line, paddingTop: 12 } },
           h2(
             "div",
-            { style: { borderRadius: 8, background: panel, padding: "4px 12px", marginBottom: 12 } },
-            row("\u670D\u52A1\u5668", safeAddress(info && info.address)),
-            row("\u8FDE\u63A5\u72B6\u6001", status2 === "online" ? "\u5DF2\u8FDE\u63A5" : status2 === "offline" ? "\u4E0D\u53EF\u8FBE" : "\u672A\u77E5"),
-            row("\u5F53\u524D\u8D26\u53F7", loggedIn ? accountEmail || "\u5DF2\u767B\u5F55" : "\u672A\u767B\u5F55")
+            { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 } },
+            fieldRow("\u9080\u8BF7\u7801", h2("input", { value: inviteCode, onChange: (event) => setInviteCode(event.target.value), spellCheck: false, maxLength: 12, style: field })),
+            fieldRow("\u90AE\u7BB1", h2("input", { value: inviteEmail, onChange: (event) => setInviteEmail(event.target.value), type: "email", style: field }))
           ),
-          error ? h2("div", { style: { color: "var(--dsw-alias-state-error-primary, #b42318)", fontSize: 12, marginBottom: 10 } }, error) : null,
-          loggedIn ? h2(
-            "div",
-            null,
-            title("\u4FEE\u6539\u5BC6\u7801"),
-            h2(
-              "div",
-              { style: { display: "grid", gap: 7 } },
-              fieldRow("\u5F53\u524D\u5BC6\u7801", h2("input", { value: currentPassword, onChange: (event) => setCurrentPassword(event.target.value), type: "password", autoComplete: "current-password", style: field })),
-              fieldRow("\u65B0\u5BC6\u7801\uFF08\u81F3\u5C11 10 \u4F4D\uFF09", h2("input", { value: newPassword, onChange: (event) => setNewPassword(event.target.value), type: "password", autoComplete: "new-password", style: field })),
-              h2("button", { onClick: changePassword, disabled: !!formBusy, style: { ...secondary, justifySelf: "start", opacity: formBusy ? 0.5 : 1 } }, formBusy === "password" ? "\u4FEE\u6539\u4E2D\u2026" : "\u4FEE\u6539\u5BC6\u7801"),
-              h2("div", { style: { color: mute, fontSize: 11, lineHeight: "17px" } }, "\u4FEE\u6539\u540E\u5176\u4ED6\u8BBE\u5907\u7684\u65E7\u767B\u5F55\u548C API \u4EE4\u724C\u90FD\u4F1A\u5931\u6548\u3002")
-            )
-          ) : h2(
-            "div",
-            null,
-            title("\u767B\u5F55\u8D26\u53F7"),
-            h2(
-              "div",
-              { style: { display: "grid", gap: 7 } },
-              defaultUrl ? null : fieldRow("\u670D\u52A1\u5668\u5730\u5740", h2("input", { value: server, onChange: (event) => setServer(event.target.value), placeholder: "https://hub.example.com", spellCheck: false, style: field })),
-              fieldRow("\u90AE\u7BB1", h2("input", { value: email, onChange: (event) => setEmail(event.target.value), type: "email", autoComplete: "username", style: field })),
-              h2(
-                "div",
-                { style: { display: "grid", gridTemplateColumns: "1fr 110px", gap: 7 } },
-                fieldRow("\u5BC6\u7801", h2("input", { value: password, onChange: (event) => setPassword(event.target.value), type: "password", autoComplete: "current-password", style: field })),
-                fieldRow("\u4E24\u6B65\u9A8C\u8BC1\u7801", h2("input", { value: totp, onChange: (event) => setTotp(event.target.value), inputMode: "numeric", maxLength: 6, style: field }))
-              ),
-              h2("button", { onClick: login, disabled: !!formBusy, style: { ...primary, opacity: formBusy ? 0.5 : 1, justifySelf: "start" } }, formBusy === "login" ? "\u767B\u5F55\u4E2D\u2026" : "\u767B\u5F55")
-            ),
-            h2("button", { onClick: () => setInviteOpen((value) => !value), style: { marginTop: 12, border: 0, background: "transparent", color: mute, fontSize: 11.5, cursor: "pointer", padding: 0, justifySelf: "start" } }, inviteOpen ? "\u6536\u8D77\u9080\u8BF7\u7801\u6CE8\u518C" : "\u9996\u6B21\u4F7F\u7528\uFF1F\u7528\u9080\u8BF7\u7801\u6CE8\u518C"),
-            inviteOpen ? h2(
-              "div",
-              { style: { display: "grid", gap: 7, marginTop: 8 } },
-              h2(
-                "div",
-                { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 7 } },
-                fieldRow("\u9080\u8BF7\u7801", h2("input", { value: inviteCode, onChange: (event) => setInviteCode(event.target.value), spellCheck: false, maxLength: 12, style: field })),
-                fieldRow("\u90AE\u7BB1", h2("input", { value: inviteEmail, onChange: (event) => setInviteEmail(event.target.value), type: "email", style: field }))
-              ),
-              fieldRow("\u5BC6\u7801\uFF08\u81F3\u5C11 10 \u4F4D\uFF09", h2("input", { value: invitePassword, onChange: (event) => setInvitePassword(event.target.value), type: "password", autoComplete: "new-password", style: field })),
-              h2("button", { onClick: acceptInvite, disabled: !!formBusy, style: { ...secondary, justifySelf: "start" } }, formBusy === "invite" ? "\u521B\u5EFA\u4E2D\u2026" : "\u521B\u5EFA\u8D26\u53F7\u5E76\u767B\u5F55")
-            ) : null
-          ),
-          message ? h2("div", { style: { marginTop: 12, color: message.includes("\u6210\u529F") || message.includes("\u5DF2\u4FEE\u6539") ? "var(--dsw-alias-state-success-primary, #16a34a)" : "var(--dsw-alias-state-error-primary, #b42318)", fontSize: 12 } }, message) : null
-        )
+          fieldRow("\u5BC6\u7801\uFF08\u81F3\u5C11 10 \u4F4D\uFF09", h2("input", { value: invitePassword, onChange: (event) => setInvitePassword(event.target.value), type: "password", autoComplete: "new-password", style: field })),
+          h2("button", { onClick: acceptInvite, disabled: !!busy, style: { ...secondary, justifySelf: "start" } }, busy === "invite" ? "\u521B\u5EFA\u4E2D\u2026" : "\u521B\u5EFA\u8D26\u53F7\u5E76\u767B\u5F55")
+        ) : null
       )
     );
   }
@@ -163072,12 +163052,236 @@ function createConnectionPanel(React2) {
     const color = status2 === "online" ? "var(--dsw-alias-state-success-primary, #16a34a)" : status2 === "offline" ? "var(--dsw-alias-state-error-primary, #b42318)" : status2 === "checking" ? "var(--dsw-alias-state-warn-primary, #b54708)" : mute;
     return h2(
       "button",
-      { onClick, title: "\u8D26\u53F7", className: "tether-press tether-hover", style: { marginLeft: "auto", height: 26, padding: "0 10px", borderRadius: 999, border: 0, background: bg, color: sub, display: "flex", alignItems: "center", gap: 6, fontSize: 12, cursor: "pointer", flex: "0 0 auto", boxShadow: "0 1px 2px rgba(16,24,40,0.06)" } },
+      { onClick, title: "\u8FDE\u63A5", className: "tether-press tether-hover", style: { marginLeft: "auto", height: 26, padding: "0 10px", borderRadius: 999, border: 0, background: bg, color: sub, display: "flex", alignItems: "center", gap: 6, fontSize: 12, cursor: "pointer", flex: "0 0 auto", boxShadow: "0 1px 2px rgba(16,24,40,0.06)" } },
       h2("span", { style: { width: 7, height: 7, borderRadius: 4, background: color, flex: "0 0 auto" } }),
-      "\u8D26\u53F7"
+      "\u8FDE\u63A5"
     );
   }
-  return { Panel: ConnectionPanel, Trigger: ConnectionTrigger };
+  return { Panel: ConnectionPanel, Trigger: ConnectionTrigger, LoginScreen };
+}
+
+// src/settings-panel.js
+function createSettingsPanel(React2) {
+  const h2 = React2.createElement;
+  const ink = "var(--dsw-alias-label-primary, #101828)";
+  const sub = "var(--dsw-alias-label-secondary, #475467)";
+  const mute = "var(--dsw-alias-label-tertiary, #667085)";
+  const bg = "var(--dsw-alias-bg-base, #ffffff)";
+  const panel = "var(--dsw-specific-sidebar-fill, #f9fafb)";
+  const line = "var(--dsw-alias-border-secondary, #e4e7ec)";
+  const field = { width: "100%", height: 32, boxSizing: "border-box", border: "1px solid " + line, borderRadius: 7, padding: "0 9px", background: bg, color: ink, fontSize: 12.5, font: "inherit" };
+  const primary = { height: 30, padding: "0 12px", border: 0, borderRadius: 7, color: "var(--dsw-alias-label-primary-inverted, #ffffff)", background: "var(--dsw-alias-button-primary-fill, #101828)", cursor: "pointer", fontSize: 12 };
+  const secondary = { height: 30, padding: "0 12px", border: "1px solid " + line, borderRadius: 7, color: sub, background: "transparent", cursor: "pointer", fontSize: 12 };
+  const sectionTitle = (text2, hint) => h2(
+    "div",
+    { style: { marginBottom: 12 } },
+    h2("div", { style: { fontSize: 15, fontWeight: 600, color: ink } }, text2),
+    hint ? h2("div", { style: { marginTop: 4, color: mute, fontSize: 12, lineHeight: "18px" } }, hint) : null
+  );
+  const row = (label, value) => h2(
+    "div",
+    { key: label, style: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, minHeight: 34, fontSize: 12.5 } },
+    h2("span", { style: { color: mute } }, label),
+    h2("span", { style: { color: ink, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, value || "\u2014")
+  );
+  const fieldRow = (label, input) => h2("label", { style: { display: "grid", gap: 5, fontSize: 12, color: sub } }, label, input);
+  const timeText = (value) => {
+    if (!value) return "\u5C1A\u672A\u68C0\u6D4B";
+    try {
+      const date = new Date(value);
+      return [date.getHours(), date.getMinutes(), date.getSeconds()].map((part) => String(part).padStart(2, "0")).join(":");
+    } catch (_) {
+      return "\u5C1A\u672A\u68C0\u6D4B";
+    }
+  };
+  function SettingsPanel({ open, onClose, accountEmail = "", accountRole = "", server = "", connection = {}, device = {}, versions = {}, onRefreshConnection, onRestartNode, onOpenPermissions, onLogout, onPasswordChanged }) {
+    const [section, setSection] = React2.useState("account");
+    const [currentPassword, setCurrentPassword] = React2.useState("");
+    const [newPassword, setNewPassword] = React2.useState("");
+    const [busy, setBusy] = React2.useState("");
+    const [message, setMessage] = React2.useState("");
+    if (!open) return null;
+    const status2 = connection.status || "unknown";
+    const dotColor = status2 === "online" ? "var(--dsw-alias-state-success-primary, #16a34a)" : status2 === "offline" ? "var(--dsw-alias-state-error-primary, #b42318)" : status2 === "checking" ? "var(--dsw-alias-state-warn-primary, #b54708)" : mute;
+    const changePassword = async () => {
+      if (!server) {
+        setMessage("\u672A\u914D\u7F6E\u670D\u52A1\u5668\u5730\u5740");
+        return;
+      }
+      setMessage("");
+      setBusy("password");
+      try {
+        const response = await fetch(server.replace(/\/+$/, "") + "/api/auth/password", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: "Bearer " + (connection.token || "") },
+          body: JSON.stringify({ current_password: currentPassword, new_password: newPassword })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.detail && (data.detail.error || data.detail.code) || data.error || "HTTP " + response.status);
+        setCurrentPassword("");
+        setNewPassword("");
+        if (typeof onPasswordChanged === "function") onPasswordChanged(data);
+        setMessage("\u5BC6\u7801\u5DF2\u4FEE\u6539\uFF0C\u5176\u4ED6\u8BBE\u5907\u7684\u65E7\u767B\u5F55\u5DF2\u5931\u6548");
+      } catch (error) {
+        setMessage(String(error && error.message || error));
+      } finally {
+        setBusy("");
+      }
+    };
+    const sections = [
+      ["account", "\u8D26\u53F7"],
+      ["connection", "\u8FDE\u63A5"],
+      ["device", "\u672C\u673A\u8BBE\u5907"],
+      ["updates", "\u66F4\u65B0"],
+      ["permissions", "\u6587\u4EF6\u6743\u9650"],
+      ["about", "\u5173\u4E8E"]
+    ];
+    const nav = h2(
+      "div",
+      { style: { width: 158, flex: "0 0 auto", padding: "14px 10px", background: panel, borderRight: "1px solid " + line, display: "flex", flexDirection: "column", gap: 2 } },
+      sections.map(([id, label]) => h2("button", {
+        key: id,
+        type: "button",
+        onClick: () => {
+          setMessage("");
+          setSection(id);
+        },
+        className: "tether-hover",
+        style: { height: 30, padding: "0 9px", border: 0, borderRadius: 6, textAlign: "left", background: section === id ? "var(--dsw-alias-interactive-bg-active, rgba(38,49,72,.10))" : "transparent", color: section === id ? ink : sub, fontSize: 12.5, cursor: "pointer" }
+      }, label))
+    );
+    let body = null;
+    if (section === "account") {
+      body = h2(
+        "div",
+        { style: { display: "grid", gap: 6 } },
+        sectionTitle("\u8D26\u53F7", "\u8D26\u53F7\u4FE1\u606F\u53EA\u5728\u8FD9\u91CC\u51FA\u73B0\uFF1B\u8FDE\u63A5\u72B6\u6001\u8BF7\u770B\u9876\u680F\u7684\u201C\u8FDE\u63A5\u201D\u3002"),
+        row("\u90AE\u7BB1", accountEmail || "\u672A\u767B\u5F55"),
+        row("\u89D2\u8272", accountRole || "\u2014"),
+        h2("div", { style: { height: 1, background: line, margin: "12px 0" } }),
+        h2("div", { style: { fontSize: 12.5, fontWeight: 600, marginBottom: 8 } }, "\u4FEE\u6539\u5BC6\u7801"),
+        h2(
+          "div",
+          { style: { display: "grid", gap: 8, maxWidth: 320 } },
+          fieldRow("\u5F53\u524D\u5BC6\u7801", h2("input", { value: currentPassword, onChange: (event) => setCurrentPassword(event.target.value), type: "password", autoComplete: "current-password", style: field })),
+          fieldRow("\u65B0\u5BC6\u7801\uFF08\u81F3\u5C11 10 \u4F4D\uFF09", h2("input", { value: newPassword, onChange: (event) => setNewPassword(event.target.value), type: "password", autoComplete: "new-password", style: field })),
+          h2("button", { onClick: changePassword, disabled: !!busy, style: { ...secondary, justifySelf: "start" } }, busy === "password" ? "\u4FEE\u6539\u4E2D\u2026" : "\u4FEE\u6539\u5BC6\u7801")
+        ),
+        message ? h2("div", { style: { marginTop: 8, color: message.includes("\u5DF2\u4FEE\u6539") ? "var(--dsw-alias-state-success-primary, #16a34a)" : "var(--dsw-alias-state-error-primary, #b42318)", fontSize: 12 } }, message) : null,
+        h2(
+          "div",
+          { style: { marginTop: 18 } },
+          h2("button", { onClick: onLogout, style: { ...secondary, color: "var(--dsw-alias-state-error-primary, #b42318)" } }, "\u9000\u51FA\u767B\u5F55")
+        )
+      );
+    } else if (section === "connection") {
+      body = h2(
+        "div",
+        null,
+        sectionTitle("\u8FDE\u63A5", "\u8FDE\u63A5\u706F\u53EA\u8868\u793A Hub \u53EF\u8FBE\u4E0E Node \u5728\u7EBF\uFF0C\u4E0D\u4EE3\u8868\u8D26\u53F7\u72B6\u6001\u3002"),
+        h2(
+          "div",
+          { style: { borderRadius: 8, background: panel, padding: "2px 12px" } },
+          row("\u670D\u52A1\u5668\u5730\u5740", server || "\u672A\u914D\u7F6E"),
+          h2(
+            "div",
+            { style: { display: "flex", alignItems: "center", justifyContent: "space-between", minHeight: 34, fontSize: 12.5 } },
+            h2("span", { style: { color: mute } }, "\u8FDE\u63A5\u72B6\u6001"),
+            h2(
+              "span",
+              { style: { display: "inline-flex", alignItems: "center", gap: 6 } },
+              h2("span", { style: { width: 7, height: 7, borderRadius: 4, background: dotColor } }),
+              status2 === "online" ? "\u5DF2\u8FDE\u63A5" : status2 === "offline" ? "\u4E0D\u53EF\u8FBE" : status2 === "checking" ? "\u68C0\u6D4B\u4E2D" : "\u672A\u77E5"
+            )
+          ),
+          row("\u6700\u8FD1\u68C0\u6D4B", timeText(connection.checkedAt)),
+          row("\u670D\u52A1\u54CD\u5E94\u8017\u65F6", Number.isFinite(connection.durationMs) ? connection.durationMs + " ms" : "\u2014")
+        ),
+        h2(
+          "div",
+          { style: { marginTop: 12 } },
+          h2("button", { onClick: onRefreshConnection, style: secondary }, "\u5237\u65B0\u8FDE\u63A5\u72B6\u6001")
+        )
+      );
+    } else if (section === "device") {
+      body = h2(
+        "div",
+        null,
+        sectionTitle("\u672C\u673A\u8BBE\u5907", "\u672C\u673A\u4F5C\u4E3A\u76EE\u6807\u8BBE\u5907\u65F6\u7684\u767B\u8BB0\u4FE1\u606F\u4E0E Node \u63A7\u5236\u3002"),
+        h2(
+          "div",
+          { style: { borderRadius: 8, background: panel, padding: "2px 12px" } },
+          row("\u8BBE\u5907\u540D", device.name || device.device_id || "\u2014"),
+          row("device_id", device.device_id || "\u2014"),
+          row("\u5E73\u53F0", device.platform || "\u2014"),
+          row("Node", device.online ? "\u5728\u7EBF" : "\u79BB\u7EBF"),
+          row("\u7248\u672C", [versions.node && "Node " + versions.node, versions.app && "APP " + versions.app, versions.plugin && "\u63D2\u4EF6 " + versions.plugin].filter(Boolean).join(" \xB7 ") || "\u2014")
+        ),
+        h2(
+          "div",
+          { style: { marginTop: 12 } },
+          h2("button", { onClick: onRestartNode, disabled: !device.online, style: { ...secondary, opacity: device.online ? 1 : 0.5 } }, "\u91CD\u542F Node")
+        )
+      );
+    } else if (section === "updates") {
+      body = h2(
+        "div",
+        null,
+        sectionTitle("\u66F4\u65B0", "\u6709\u65B0\u7248\u672C\u65F6\uFF0C\u53F3\u4E0A\u89D2\u4F1A\u51FA\u73B0\u84DD\u8272\u4E0B\u8F7D\u6309\u94AE\u3002"),
+        h2(
+          "div",
+          { style: { borderRadius: 8, background: panel, padding: "2px 12px" } },
+          row("Node", versions.node || "\u2014"),
+          row("APP", versions.app || "\u2014"),
+          row("DSH \u63D2\u4EF6", versions.plugin || "\u2014")
+        )
+      );
+    } else if (section === "permissions") {
+      body = h2(
+        "div",
+        null,
+        sectionTitle("\u6587\u4EF6\u6743\u9650", "\u53EF\u5199\u6839\u76EE\u5F55\u4E0E\u6587\u4EF6\u64CD\u4F5C\u5BA1\u8BA1\u5728\u72EC\u7ACB\u9762\u677F\u4E2D\u7BA1\u7406\u3002"),
+        h2("button", { onClick: onOpenPermissions, style: primary }, "\u6253\u5F00\u6587\u4EF6\u6743\u9650")
+      );
+    } else {
+      body = h2(
+        "div",
+        null,
+        sectionTitle("\u5173\u4E8E", "Tether \u5BA2\u6237\u7AEF\u4E0E\u670D\u52A1\u7AEF\u7248\u672C\u4FE1\u606F\u3002"),
+        h2(
+          "div",
+          { style: { borderRadius: 8, background: panel, padding: "2px 12px" } },
+          row("\u5BA2\u6237\u7AEF", versions.app || "\u2014"),
+          row("Node", versions.node || "\u2014"),
+          row("DSH \u63D2\u4EF6", versions.plugin || "\u2014"),
+          row("\u670D\u52A1\u5668", server || "\u2014")
+        )
+      );
+    }
+    return h2(
+      "div",
+      { onPointerDown: (event) => {
+        if (event.target === event.currentTarget) onClose();
+      }, style: { position: "absolute", inset: 0, zIndex: 40, background: "rgba(16,24,40,0.35)", display: "grid", placeItems: "center", padding: 24 } },
+      h2(
+        "section",
+        { role: "dialog", "aria-label": "\u8BBE\u7F6E", style: { width: "min(760px, 100%)", height: "min(560px, 100%)", background: bg, borderRadius: 12, overflow: "hidden", boxShadow: "var(--dsw-elevation-panel, 0 18px 50px rgba(16,24,40,0.18))", display: "flex", flexDirection: "column" } },
+        h2(
+          "header",
+          { style: { height: 44, padding: "0 14px", display: "flex", alignItems: "center", background: panel, borderBottom: "1px solid " + line } },
+          h2("strong", { style: { fontSize: 14 } }, "\u8BBE\u7F6E"),
+          h2("button", { onClick: onClose, title: "\u5173\u95ED", "aria-label": "\u5173\u95ED", style: { marginLeft: "auto", border: 0, background: "transparent", fontSize: 18, cursor: "pointer", color: mute } }, "\xD7")
+        ),
+        h2(
+          "div",
+          { style: { flex: "1 1 auto", minHeight: 0, display: "flex" } },
+          nav,
+          h2("div", { className: "tether-scroll", style: { flex: "1 1 auto", minWidth: 0, overflowY: "auto", padding: "18px 22px" } }, body)
+        )
+      )
+    );
+  }
+  return { SettingsPanel };
 }
 
 // src/transfer.js
@@ -164742,6 +164946,7 @@ function MinimalUpdateButton({ React: React2, h: h2, api: api2, post, deviceId, 
 function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
   const h2 = React2.createElement;
   const Connection = createConnectionPanel(React2);
+  const Settings2 = createSettingsPanel(React2);
   const PANEL_ID = "tether";
   const BASE = host.apiBase();
   const C = {
@@ -165689,7 +165894,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       strokeLinecap: part.cap || glyph.cap || "butt"
     })));
   }
-  function ActivityBar({ active, collapsed, onSelect, onSettings, settingsOpen }) {
+  function ActivityBar({ active, collapsed, onSelect, onAppSettings, appSettingsOpen }) {
     const items = [
       { id: "workspaces", label: "\u539F\u751F\u5DE5\u4F5C\u533A", icon: "monitor" },
       { id: "files", label: "\u6587\u4EF6\u8D44\u6E90\u7BA1\u7406\u5668", icon: "files" },
@@ -165724,7 +165929,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         style: { width: UI.activity, flex: "0 0 auto", borderRight: 0, background: C.soft, display: "flex", flexDirection: "column", alignItems: "center", padding: "8px 0", gap: 3 }
       },
       items.map((item) => button(item.id, item.label, item.icon, () => onSelect(item.id), active === item.id)),
-      h2("div", { style: { marginTop: "auto" } }, button("settings", "\u6587\u4EF6\u6743\u9650", "settings", onSettings, settingsOpen))
+      h2("div", { style: { marginTop: "auto" } }, button("settings", "\u8BBE\u7F6E", "settings", onAppSettings, appSettingsOpen))
     );
   }
   function SidePanelHeader({ title, action, onCollapse, loading }) {
@@ -166868,15 +167073,29 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const autoUpdateChecksRef = React2.useRef({});
     const lastUpdateToastRef = React2.useRef({});
     const [updateToast, setUpdateToast] = React2.useState("");
-    const [showHub, setShowHub] = React2.useState(() => {
+    const [showHub, setShowHub] = React2.useState(false);
+    const [showAppSettings, setShowAppSettings] = React2.useState(false);
+    const [loggedIn, setLoggedIn] = React2.useState(() => {
       try {
-        return !JSON.parse(window.localStorage.getItem("tether.hub") || "{}").token;
+        return !!JSON.parse(window.localStorage.getItem("tether.hub") || "{}").token;
       } catch (_) {
-        return true;
+        return false;
       }
     });
-    const [hubUrl, setHubUrl] = React2.useState("");
-    const [hubToken, setHubToken] = React2.useState("");
+    const [hubUrl, setHubUrl] = React2.useState(() => {
+      try {
+        return JSON.parse(window.localStorage.getItem("tether.hub") || "{}").url || "";
+      } catch (_) {
+        return "";
+      }
+    });
+    const [hubToken, setHubToken] = React2.useState(() => {
+      try {
+        return JSON.parse(window.localStorage.getItem("tether.hub") || "{}").token || "";
+      } catch (_) {
+        return "";
+      }
+    });
     const [hubEmail, setHubEmail] = React2.useState(() => {
       try {
         return JSON.parse(window.localStorage.getItem("tether.hub") || "{}").email || "";
@@ -169856,6 +170075,26 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         deviceContext
       );
     };
+    const localDeviceRecord = (state && state.devices || []).find((item) => item.device_id === (appLocalDevice || deviceId)) || {};
+    const localCaps = localDeviceRecord.capabilities || {};
+    if (!loggedIn) {
+      return h2(Connection.LoginScreen, {
+        defaultUrl: hubAddress || hubUrl || "",
+        defaultEmail: hubEmail,
+        onLogin: async ({ url, token, user }) => {
+          try {
+            window.localStorage.setItem("tether.hub", JSON.stringify({ url, token, email: user && user.email || "" }));
+          } catch (_) {
+          }
+          setHubEmail(user && user.email || "");
+          try {
+            if (window.tetherApp && typeof window.tetherApp.enrollDevice === "function") await window.tetherApp.enrollDevice(token);
+          } catch (_) {
+          }
+          window.location.reload();
+        }
+      });
+    }
     return h2(
       "div",
       { className: "tether-root", style: { position: "relative", height: "100%", display: "flex", flexDirection: "column", background: "var(--tether-workbench-bg, " + C.bg + ")", color: C.ink, fontSize: 13, fontWeight: "var(--tether-body, 400)", overflow: "hidden" } },
@@ -169902,8 +170141,8 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           active: view === "files" ? "files" : view === "network" ? "network" : view === "transfer" ? "transfer" : "workspaces",
           collapsed: sidebarCollapsed,
           onSelect: selectPanel,
-          onSettings: openSettings,
-          settingsOpen: showSettings
+          onAppSettings: () => setShowAppSettings(true),
+          appSettingsOpen: showAppSettings
         }),
         h2(SidePanel, {
           width: safeSidebarWidth,
@@ -170053,6 +170292,50 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
             throw error;
           } finally {
             if (generation === ACTIVE_BASE_GENERATION) setHubBusy(false);
+          }
+        }
+      }) : null,
+      showAppSettings ? h2(Settings2.SettingsPanel, {
+        open: true,
+        onClose: () => setShowAppSettings(false),
+        accountEmail: hubEmail,
+        server: hubAddress || hubUrl || "",
+        connection: { status: hubStatus, checkedAt: hubCheckedAt, durationMs: hubDuration, token: hubToken },
+        device: {
+          ...localDeviceRecord,
+          device_id: localDeviceRecord.device_id || appLocalDevice || deviceId,
+          online: !!localDeviceRecord.online
+        },
+        versions: { app: localCaps.app_version, node: localCaps.node_version, plugin: localCaps.plugin_version },
+        onRefreshConnection: probeConfiguredHub,
+        onRestartNode: async () => {
+          const id = appLocalDevice || deviceId;
+          if (!id) return;
+          try {
+            await post("/api/devices/" + encodeURIComponent(id) + "/node/restart", {});
+            setNotice("\u5DF2\u8BF7\u6C42\u91CD\u542F\u672C\u673A Node");
+          } catch (error) {
+            fail2(error);
+          }
+        },
+        onOpenPermissions: () => {
+          setShowAppSettings(false);
+          openSettings();
+        },
+        onLogout: () => {
+          try {
+            window.localStorage.removeItem("tether.hub");
+          } catch (_) {
+          }
+          window.location.reload();
+        },
+        onPasswordChanged: (data) => {
+          const next = data && data.token;
+          if (!next) return;
+          setHubToken(next);
+          try {
+            window.localStorage.setItem("tether.hub", JSON.stringify({ url: hubUrl || hubAddress, token: next, email: hubEmail }));
+          } catch (_) {
           }
         }
       }) : null,

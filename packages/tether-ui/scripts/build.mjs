@@ -14,6 +14,7 @@ const strip = (file) => fs.readFileSync(path.join(root, 'packages/tether-ui/src'
 
 const shared = strip('app.js')
 const connectionPanel = strip('connection-panel.js')
+const settingsPanel = strip('settings-panel.js')
 const targetFileExplorer = strip('target-file-explorer.js')
 const dshHost = strip('hosts/dsh.js')
 const transferEngine = strip('transfer.js')
@@ -32,6 +33,7 @@ ${monacoRuntime}
 ${targetFileExplorer}
 ${dshHost}
 ${connectionPanel}
+${settingsPanel}
 ${transferEngine}
 ${transferPage}
     let localPluginRpc = null
