@@ -54,7 +54,7 @@ export function TargetFileExplorer({
   sort = { key: 'name', dir: 'asc' }, onSort, search = '', onSearch = () => {},
   treeChildren = null, expanded = {}, onToggleTree,
   compact = false, selectionMode = 'single', selectedPaths = [], onSelectionChange,
-  onContextMenu, onDragItem, onRowPointerDown
+  onContextMenu, onDragItem, onRowPointerDown, onDismissError
 }) {
   const ReactRuntime = React
   const h = ReactRuntime.createElement
@@ -201,9 +201,10 @@ export function TargetFileExplorer({
     body = h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', color: C.mute, fontSize: 12, padding: 24, textAlign: 'center' } },
       error ? h('span', { role: 'alert', style: { color: C.red || C.danger } }, error) : placeholder)
   } else if (entries === null) {
-    body = h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', color: C.mute, fontSize: 12, padding: 24, textAlign: 'center' } },
-      error ? h('span', { role: 'alert', style: { color: C.red || C.danger } }, error)
-        : loading ? '正在读取目录…' : '目录暂不可用')
+    body = loading
+      ? h('div', { style: { flex: '1 1 auto' } })
+      : h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', color: C.mute, fontSize: 12, padding: 24, textAlign: 'center' } },
+        error ? h('span', { role: 'alert', style: { color: C.red || C.danger } }, error) : '目录暂不可用')
   } else if (!visible.length) {
     body = h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', alignContent: 'center', gap: 8, color: C.mute, fontSize: 12, padding: 24, textAlign: 'center' } },
       h('span', null, term ? '未找到匹配 “' + search.trim() + '” 的项目' : emptyText),
@@ -222,6 +223,33 @@ export function TargetFileExplorer({
         sortHeader('size', '大小', 'right')),
       visible.map((item) => row(item)))
   }
+  const loadingOverlay = loading ? h('div', {
+    className: 'tether-dir-loading', role: 'status', 'aria-live': 'polite', 'aria-label': '正在加载目录'
+  },
+    h('span', { className: 'tether-spin', style: { width: 20, height: 20, display: 'grid', placeItems: 'center' } },
+      h('svg', {
+        width: 18, height: 18, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor',
+        strokeWidth: 1.5, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true
+      }, h('path', { d: 'M13 8a5 5 0 1 1-1.5-3.56' }), h('path', { d: 'M13.2 2.3v3.1h-3.1' })))
+  ) : null
+  const errorToast = error && entries !== null && !loading ? h('div', {
+    role: 'alert',
+    style: {
+      position: 'absolute', left: 12, right: 12, bottom: 12, zIndex: 5, display: 'flex', alignItems: 'center', gap: 8,
+      padding: '8px 10px', borderRadius: 8, background: C.bg, color: C.red || C.danger,
+      boxShadow: '0 4px 16px rgba(16,24,40,.16)', fontSize: 12
+    }
+  },
+    h('span', { style: { flex: '1 1 auto', minWidth: 0 } }, error),
+    path && onRefresh ? h('button', {
+      type: 'button', onClick: () => onRefresh(path), className: 'tether-hover',
+      style: { border: 0, borderRadius: 6, padding: '4px 8px', background: C.soft, color: C.ink, fontSize: 11.5, cursor: 'pointer', flex: '0 0 auto' }
+    }, '重试') : null,
+    onDismissError ? h('button', {
+      type: 'button', title: '关闭', 'aria-label': '关闭', onClick: onDismissError, className: 'tether-hover',
+      style: { width: 22, height: 22, flex: '0 0 auto', border: 0, borderRadius: 5, background: 'transparent', color: C.mute, fontSize: 15, lineHeight: '22px', padding: 0, cursor: 'pointer' }
+    }, '×') : null
+  ) : null
   return h('div', { style: { display: 'flex', flex: '1 1 auto', minHeight: 0, minWidth: 0 } },
     h('div', {
       style: {
@@ -295,6 +323,10 @@ export function TargetFileExplorer({
             }
           }, '×') : null) : null,
         iconButton('refresh', '刷新', () => { if (path && onRefresh) onRefresh(path) }, disabled || !path)),
-      error && path && entries !== null ? h('div', { role: 'alert', style: { padding: '6px 14px', color: C.red || C.danger, fontSize: 12, borderBottom: C.line ? '1px solid ' + C.line : 0 } }, error) : null,
-      body))
+      h('div', {
+        style: { position: 'relative', display: 'flex', flexDirection: 'column', flex: '1 1 auto', minWidth: 0, minHeight: 0 }
+      },
+        body,
+        loadingOverlay,
+        errorToast)))
 }

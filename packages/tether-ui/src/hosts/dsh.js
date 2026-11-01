@@ -472,7 +472,6 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand,
     const [treeChildren, setTreeChildren] = React.useState({})
     const [expanded, setExpanded] = React.useState({})
     const [busy, setBusy] = React.useState(false)
-    const [status, setStatus] = React.useState('')
     const [error, setError] = React.useState('')
     const mounted = React.useRef(true)
     const busyRef = React.useRef(false)
@@ -488,7 +487,7 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand,
     React.useEffect(() => {
       operation.current += 1
       busyRef.current = false
-      setOpen(false); setBusy(false); setStatus(''); setError('')
+      setOpen(false); setBusy(false); setError('')
       setDevice(''); setWorkspaces([]); setDrives([]); setRoot(''); setDirectory(''); setEntries(null)
     }, [props.sessionId])
     React.useEffect(() => {
@@ -507,7 +506,7 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand,
       && currentProps.current.sessionId === sessionId
     const resetExplorer = () => {
       setDevice(''); setWorkspaces([]); setDrives([])
-      setRoot(''); setDirectory(''); setEntries(null); setStatus(''); setError('')
+      setRoot(''); setDirectory(''); setEntries(null); setError('')
       setTreeChildren({}); setExpanded({})
     }
     const openPicker = async () => {
@@ -529,18 +528,18 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand,
           if (pickerCommand?.pendingSessionStart === pending) {
             pickerCommand.pendingSessionStart = null
             if (mounted.current) {
-              setStatus('')
+              setBusy(false)
               setError('目标会话准备超时，请先在目标电脑选择工作区后重试。')
             }
           }
         }, 30_000)
         if (pickerCommand) pickerCommand.pendingSessionStart = pending
-        setStatus('正在准备目标 DSH 会话…工作区就绪后会自动打开目标电脑的文件选择器。')
+        setBusy(true)
         try { startSession.call(uiWorkspace) }
         catch (cause) {
           clearTimeout(pending.timeoutId)
           if (pickerCommand?.pendingSessionStart === pending) pickerCommand.pendingSessionStart = null
-          setStatus('')
+          setBusy(false)
           setError(cause.message || '目标 DSH 会话创建失败，请先在目标电脑选择工作区。')
         }
         busyRef.current = false
@@ -551,20 +550,16 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand,
         busyRef.current = false
         return
       }
-      setBusy(true); setStatus('正在读取目标电脑…')
+      setBusy(true)
       try {
         const roots = await bridge.getRoots()
         if (!live(token, sessionId)) return
         setDevice(roots.deviceId || '')
         setWorkspaces(roots.workspaces || [])
         setDrives(roots.drives || [])
-        setStatus('')
         if (roots.warning) setError(roots.warning)
       } catch (cause) {
-        if (live(token, sessionId)) {
-          setStatus('')
-          setError(cause.message || '读取目标电脑失败')
-        }
+        if (live(token, sessionId)) setError(cause.message || '读取目标电脑失败')
       } finally {
         busyRef.current = false
         if (mounted.current) setBusy(false)
@@ -574,7 +569,7 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand,
     const close = () => {
       operation.current += 1
       busyRef.current = false
-      setOpen(false); setBusy(false); setStatus(''); setError('')
+      setOpen(false); setBusy(false); setError('')
       setRoot(''); setDirectory(''); setEntries(null)
       setTreeChildren({}); setExpanded({})
       const pending = pickerCommand && pickerCommand.pendingSessionStart
@@ -589,17 +584,14 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand,
       const sessionId = props.sessionId
       busyRef.current = true
       if (isRoot) setRoot(item.path)
-      setDirectory(item.path); setEntries(null); setSearch('')
-      setBusy(true); setStatus('正在读取目录…'); setError('')
+      setDirectory(item.path); setSearch('')
+      setBusy(true); setError('')
       try {
         const listing = await bridge.listDirectory(item.path)
         if (!live(token, sessionId)) return
-        setEntries(listing); setStatus('')
+        setEntries(listing)
       } catch (cause) {
-        if (live(token, sessionId)) {
-          setStatus('')
-          setError(cause.message || '读取目标电脑目录失败')
-        }
+        if (live(token, sessionId)) setError(cause.message || '读取目标电脑目录失败')
       } finally {
         busyRef.current = false
         if (mounted.current) setBusy(false)
@@ -632,18 +624,15 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand,
       const token = ++operation.current
       const sessionId = props.sessionId
       busyRef.current = true
-      setBusy(true); setStatus('正在读取文件…'); setError('')
+      setBusy(true); setError('')
       try {
         await addDshTargetAttachment(currentProps.current, bridge, item,
           () => mounted.current && token === operation.current && currentProps.current.sessionId === sessionId)
         if (!mounted.current) return
-        setOpen(false); setBusy(false); setStatus('')
+        setOpen(false); setBusy(false)
         setRoot(''); setDirectory(''); setEntries(null)
       } catch (cause) {
-        if (live(token, sessionId)) {
-          setStatus('')
-          setError(cause.message || '读取目标电脑文件失败')
-        }
+        if (live(token, sessionId)) setError(cause.message || '读取目标电脑文件失败')
       } finally {
         busyRef.current = false
         if (mounted.current) setBusy(false)
@@ -865,12 +854,6 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand,
         listHeader,
         visibleEntries.map((item) => row(item)))
     }
-    const notice = error && directory && entries !== null
-      ? h('div', { role: 'alert', style: { padding: '6px 14px', color: danger, fontSize: 12, borderBottom: '1px solid ' + line } }, error)
-      : null
-    const busyLine = status
-      ? h('div', { role: 'status', style: { padding: '4px 14px', color: sub, fontSize: 11.5, borderBottom: '1px solid ' + line } }, status)
-      : null
     const dialog = open ? h('div', {
       style: {
         position: 'fixed', inset: 0, zIndex: 2147483000, display: 'flex',
@@ -910,16 +893,7 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand,
               cursor: 'pointer'
             }
           }, '×')),
-        h('div', { style: { display: 'flex', flexDirection: 'column', flex: '1 1 auto', minHeight: 0 } },
-          h('div', {
-            role: 'status',
-            style: {
-              height: 22, flex: '0 0 auto', display: 'flex', alignItems: 'center', padding: '0 18px',
-              borderBottom: '1px solid ' + line, color: error ? danger : sub, fontSize: 11.5,
-              overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis'
-            }
-          }, error || status || ''),
-          TargetFileExplorer({
+        TargetFileExplorer({
             React,
             sort,
             onSort: setSort,
@@ -935,6 +909,7 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand,
             entries,
             loading: busy,
             error,
+            onDismissError: () => setError(''),
             disabled: busy,
             singleClickOpens: true,
             editablePath: false,
@@ -950,15 +925,14 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand,
             formatTime: formatTargetTime,
             formatSize: formatTargetSize,
             limit: DSH_TARGET_ATTACHMENT_LIMIT
-          })),
+          }),
         h('div', {
           style: {
             display: 'flex', alignItems: 'center', gap: 12, padding: '10px 18px',
             borderTop: '1px solid ' + line, flex: '0 0 auto'
           }
         },
-          h('span', { style: { flex: '1 1 auto', color: mute, fontSize: 11.5 } }, '文件从目标电脑读取，单个附件上限 10 MiB。'),
-          h('button', { type: 'button', onClick: close, style: mutedButton }, '取消')))
+          h('button', { type: 'button', onClick: close, style: { ...mutedButton, marginLeft: 'auto' } }, '取消')))
       ) : null
     return h('div', { ref: containerRef, style: { display: 'contents' } },
       h(Native.ComposerAttachments, { ...props, readFileDrag: props.readFileDrag }),

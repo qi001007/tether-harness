@@ -119,8 +119,14 @@ test('native surface state is device-bound and its iframe remains mounted while 
     deviceId: 'device-a', status: 'offline', url: ''
   })
   assert.equal(helpers.nativeSurfaceStateForDevice({ deviceId: 'device-b', status: 'document-loaded', url: 'http://127.0.0.1:40002/tether-connect?ticket=b' }, 'device-b', true).status, 'document-loaded')
+  const hiddenLayer = helpers.nativeSurfaceContainerStyle(false, true)
+  assert.equal(hiddenLayer.display, 'flex', 'a preloaded layer keeps its box while inactive')
+  assert.equal(hiddenLayer.visibility, 'hidden')
+  assert.equal(hiddenLayer.pointerEvents, 'none')
+  assert.equal(hiddenLayer.position, 'absolute')
+  assert.equal(helpers.nativeSurfaceContainerStyle(true, true).visibility, 'visible')
+  assert.equal(helpers.nativeSurfaceContainerStyle(true, true).zIndex, 1)
   assert.equal(helpers.nativeSurfaceContainerStyle(false).display, 'none')
-  assert.equal(helpers.nativeSurfaceContainerStyle(true).display, 'flex')
 
   const mainStart = clientSource.indexOf("h('main', { className: 'tether-workbench', style: { flex: '1 1 auto', display: 'flex'")
   const nativeChild = clientSource.indexOf('h(SurfaceDeck, { devices:', mainStart)

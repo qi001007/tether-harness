@@ -163069,40 +163069,87 @@ function createSettingsPanel(React2) {
   const bg = "var(--dsw-alias-bg-base, #ffffff)";
   const panel = "var(--dsw-specific-sidebar-fill, #f9fafb)";
   const line = "var(--dsw-alias-border-secondary, #e4e7ec)";
-  const field = { width: "100%", height: 32, boxSizing: "border-box", border: "1px solid " + line, borderRadius: 7, padding: "0 9px", background: bg, color: ink, fontSize: 12.5, font: "inherit" };
-  const primary = { height: 30, padding: "0 12px", border: 0, borderRadius: 7, color: "var(--dsw-alias-label-primary-inverted, #ffffff)", background: "var(--dsw-alias-button-primary-fill, #101828)", cursor: "pointer", fontSize: 12 };
-  const secondary = { height: 30, padding: "0 12px", border: "1px solid " + line, borderRadius: 7, color: sub, background: "transparent", cursor: "pointer", fontSize: 12 };
-  const sectionTitle = (text2, hint) => h2(
-    "div",
-    { style: { marginBottom: 12 } },
-    h2("div", { style: { fontSize: 15, fontWeight: 600, color: ink } }, text2),
-    hint ? h2("div", { style: { marginTop: 4, color: mute, fontSize: 12, lineHeight: "18px" } }, hint) : null
-  );
-  const row = (label, value) => h2(
-    "div",
-    { key: label, style: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, minHeight: 34, fontSize: 12.5 } },
-    h2("span", { style: { color: mute } }, label),
-    h2("span", { style: { color: ink, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, value || "\u2014")
-  );
-  const fieldRow = (label, input) => h2("label", { style: { display: "grid", gap: 5, fontSize: 12, color: sub } }, label, input);
+  const blue = "var(--dsw-alias-state-business-primary, #1570ef)";
+  const danger = "var(--dsw-alias-state-error-primary, #b42318)";
+  const success = "var(--dsw-alias-state-success-primary, #16a34a)";
+  const field = { width: "100%", height: 32, boxSizing: "border-box", border: "1px solid " + line, borderRadius: 7, padding: "0 9px", background: bg, color: ink, fontSize: 12.5, font: "inherit", outline: "none" };
+  const primary = { height: 30, padding: "0 12px", border: 0, borderRadius: 7, color: "var(--dsw-alias-label-primary-inverted, #ffffff)", background: "var(--dsw-alias-button-primary-fill, #101828)", cursor: "pointer", fontSize: 12, font: "inherit" };
+  const secondary = { height: 30, padding: "0 12px", border: "1px solid " + line, borderRadius: 7, color: sub, background: "transparent", cursor: "pointer", fontSize: 12, font: "inherit" };
   const timeText = (value) => {
-    if (!value) return "\u5C1A\u672A\u68C0\u6D4B";
+    if (!value) return "\u2014";
     try {
       const date = new Date(value);
       return [date.getHours(), date.getMinutes(), date.getSeconds()].map((part) => String(part).padStart(2, "0")).join(":");
     } catch (_) {
-      return "\u5C1A\u672A\u68C0\u6D4B";
+      return "\u2014";
     }
   };
-  function SettingsPanel({ open, onClose, accountEmail = "", accountRole = "", accountName = "", onAccountNameChange, initialSection = "account", server = "", connection = {}, device = {}, versions = {}, onRefreshConnection, onRestartNode, onOpenPermissions, onLogout, onCheckUpdates, onPasswordChanged }) {
+  const card = (rows) => h2(
+    "div",
+    { style: { border: "1px solid " + line, borderRadius: 10, overflow: "hidden", background: bg } },
+    rows.filter(Boolean).map((row, index) => h2(
+      "div",
+      {
+        key: index,
+        style: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 18, minHeight: 40, padding: "0 14px", borderTop: index ? "1px solid " + line : 0, fontSize: 12.5 }
+      },
+      h2("span", { style: { color: mute, flex: "0 0 auto" } }, row[0]),
+      h2("span", { style: { color: ink, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "right" } }, row[1] || "\u2014")
+    ))
+  );
+  const toggle = (checked, onChange, label) => h2("button", {
+    type: "button",
+    role: "switch",
+    "aria-checked": checked,
+    "aria-label": label,
+    onClick: () => onChange(!checked),
+    style: {
+      width: 36,
+      height: 20,
+      flex: "0 0 auto",
+      border: 0,
+      borderRadius: 999,
+      padding: 2,
+      background: checked ? blue : "var(--dsw-alias-border-secondary, #d0d5dd)",
+      cursor: "pointer",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: checked ? "flex-end" : "flex-start",
+      transition: "background 140ms ease"
+    }
+  }, h2("span", {
+    "aria-hidden": true,
+    style: { width: 16, height: 16, borderRadius: 999, background: "#fff", boxShadow: "0 1px 2px rgba(16,24,40,.24)", transition: "transform 140ms ease" }
+  }));
+  function SettingsPanel({
+    open,
+    onClose,
+    Glyph,
+    accountEmail = "",
+    accountRole = "",
+    accountName = "",
+    accountAvatar = "",
+    onAvatarChange,
+    onAccountNameChange,
+    initialSection = "account",
+    server = "",
+    connection = {},
+    device = {},
+    versions = {},
+    extraSections = [],
+    onRefreshConnection,
+    onRestartNode,
+    onLogout,
+    onPasswordChanged
+  }) {
     const [section, setSection] = React2.useState(initialSection);
-    React2.useEffect(() => {
-      if (open) setSection(initialSection);
-    }, [open, initialSection]);
     const [currentPassword, setCurrentPassword] = React2.useState("");
     const [newPassword, setNewPassword] = React2.useState("");
     const [busy, setBusy] = React2.useState("");
     const [message, setMessage] = React2.useState("");
+    const [avatar, setAvatar] = React2.useState(accountAvatar || "");
+    const [refreshing, setRefreshing] = React2.useState(false);
+    const avatarInputRef = React2.useRef(null);
     const [keepSurfaces, setKeepSurfaces] = React2.useState(() => {
       try {
         return localStorage.getItem("tether.keepSurfaces") !== "0";
@@ -163110,15 +163157,26 @@ function createSettingsPanel(React2) {
         return true;
       }
     });
+    React2.useEffect(() => {
+      if (open) {
+        setSection(initialSection);
+        setMessage("");
+      }
+    }, [open, initialSection]);
+    React2.useEffect(() => {
+      setAvatar(accountAvatar || "");
+    }, [accountAvatar]);
     if (!open) return null;
     const status2 = connection.status || "unknown";
-    const roleLabel = accountRole === "owner" ? "\u6240\u6709\u8005" : accountRole === "member" ? "\u6210\u5458" : accountRole === "admin" ? "\u7BA1\u7406\u5458" : accountRole || "\u2014";
-    const dotColor = status2 === "online" ? "var(--dsw-alias-state-success-primary, #16a34a)" : status2 === "offline" ? "var(--dsw-alias-state-error-primary, #b42318)" : status2 === "checking" ? "var(--dsw-alias-state-warn-primary, #b54708)" : mute;
+    const roleLabel = accountRole === "owner" ? "\u6240\u6709\u8005" : accountRole === "member" ? "\u6210\u5458" : accountRole === "admin" ? "\u7BA1\u7406\u5458" : accountRole || "";
+    const dotColor = status2 === "online" ? success : status2 === "offline" ? danger : status2 === "checking" ? "var(--dsw-alias-state-warn-primary, #b54708)" : mute;
+    const statusLabel = status2 === "online" ? "\u5DF2\u8FDE\u63A5" : status2 === "offline" ? "\u4E0D\u53EF\u8FBE" : status2 === "checking" ? "\u68C0\u6D4B\u4E2D" : "\u672A\u77E5";
     const changePassword = async () => {
       if (!server) {
         setMessage("\u672A\u914D\u7F6E\u670D\u52A1\u5668\u5730\u5740");
         return;
       }
+      if (!currentPassword || !newPassword) return;
       setMessage("");
       setBusy("password");
       try {
@@ -163132,216 +163190,308 @@ function createSettingsPanel(React2) {
         setCurrentPassword("");
         setNewPassword("");
         if (typeof onPasswordChanged === "function") onPasswordChanged(data);
-        setMessage("\u5BC6\u7801\u5DF2\u4FEE\u6539\uFF0C\u5176\u4ED6\u8BBE\u5907\u7684\u65E7\u767B\u5F55\u5DF2\u5931\u6548");
+        setMessage("\u5BC6\u7801\u5DF2\u4FEE\u6539");
       } catch (error) {
         setMessage(String(error && error.message || error));
       } finally {
         setBusy("");
       }
     };
-    const sections = [
-      ["account", "\u8D26\u53F7"],
-      ["connection", "\u8FDE\u63A5"],
-      ["device", "\u672C\u673A\u8BBE\u5907"],
-      ["updates", "\u66F4\u65B0"],
-      ["permissions", "\u6587\u4EF6\u6743\u9650"],
-      ["about", "\u5173\u4E8E"]
-    ];
-    const nav = h2(
-      "div",
-      { style: { width: 158, flex: "0 0 auto", padding: "14px 10px", background: panel, borderRight: "1px solid " + line, display: "flex", flexDirection: "column", gap: 2 } },
-      sections.map(([id, label]) => h2("button", {
-        key: id,
+    const refreshConnection = async () => {
+      if (refreshing || typeof onRefreshConnection !== "function") return;
+      setRefreshing(true);
+      try {
+        await onRefreshConnection();
+      } finally {
+        setRefreshing(false);
+      }
+    };
+    const chooseAvatar = () => {
+      try {
+        if (avatarInputRef.current) avatarInputRef.current.click();
+      } catch (_) {
+      }
+    };
+    const loadAvatar = (event) => {
+      const file = event.target.files && event.target.files[0];
+      event.target.value = "";
+      if (!file || !/^image\//.test(file.type) || file.size > 2 * 1024 * 1024) {
+        if (file) setMessage("\u8BF7\u9009\u62E9 2 MB \u4EE5\u5185\u7684\u56FE\u7247");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        const image = new Image();
+        image.onload = () => {
+          const size = 128;
+          const canvas = document.createElement("canvas");
+          canvas.width = size;
+          canvas.height = size;
+          const context = canvas.getContext("2d");
+          const scale = Math.max(size / image.width, size / image.height);
+          const width2 = image.width * scale;
+          const height = image.height * scale;
+          context.drawImage(image, (size - width2) / 2, (size - height) / 2, width2, height);
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.86);
+          setAvatar(dataUrl);
+          if (typeof onAvatarChange === "function") onAvatarChange(dataUrl);
+        };
+        image.onerror = () => setMessage("\u65E0\u6CD5\u8BFB\u53D6\u8FD9\u5F20\u56FE\u7247");
+        image.src = String(reader.result || "");
+      };
+      reader.onerror = () => setMessage("\u65E0\u6CD5\u8BFB\u53D6\u8FD9\u5F20\u56FE\u7247");
+      reader.readAsDataURL(file);
+    };
+    const avatarView = h2(
+      "button",
+      {
         type: "button",
-        onClick: () => {
-          setMessage("");
-          setSection(id);
-        },
-        className: "tether-hover",
-        style: { height: 30, padding: "0 9px", border: 0, borderRadius: 6, textAlign: "left", background: section === id ? "var(--dsw-alias-interactive-bg-active, rgba(38,49,72,.10))" : "transparent", color: section === id ? ink : sub, fontSize: 12.5, cursor: "pointer" }
-      }, label))
+        onClick: chooseAvatar,
+        title: "\u66F4\u6362\u5934\u50CF",
+        "aria-label": "\u66F4\u6362\u5934\u50CF",
+        style: {
+          position: "relative",
+          width: 56,
+          height: 56,
+          flex: "0 0 auto",
+          padding: 0,
+          border: 0,
+          borderRadius: 999,
+          overflow: "hidden",
+          cursor: "pointer",
+          background: "color-mix(in srgb, " + blue + " 14%, transparent)",
+          color: blue
+        }
+      },
+      avatar ? h2("img", { src: avatar, alt: "", style: { width: "100%", height: "100%", objectFit: "cover", display: "block" } }) : h2(
+        "span",
+        { "aria-hidden": true, style: { display: "grid", placeItems: "center", width: "100%", height: "100%", fontSize: 19, fontWeight: 600 } },
+        String(accountName || accountEmail || "?").trim().charAt(0).toUpperCase()
+      ),
+      h2("span", {
+        "aria-hidden": true,
+        style: {
+          position: "absolute",
+          right: 0,
+          bottom: 0,
+          width: 20,
+          height: 20,
+          borderRadius: 999,
+          display: "grid",
+          placeItems: "center",
+          background: bg,
+          color: sub,
+          boxShadow: "0 0 0 1px " + line
+        }
+      }, Glyph ? h2(Glyph, { name: "pencil", size: 11 }) : "\u270E")
     );
-    let body = null;
-    if (section === "account") {
-      body = h2(
+    const accountSection = h2(
+      "div",
+      { style: { display: "grid", gap: 18 } },
+      h2("input", { ref: avatarInputRef, type: "file", accept: "image/*", onChange: loadAvatar, style: { display: "none" } }),
+      h2(
         "div",
-        { style: { display: "grid", gap: 6 } },
-        sectionTitle("\u8D26\u53F7", "\u8D26\u53F7\u4FE1\u606F\u53EA\u5728\u8FD9\u91CC\u51FA\u73B0\uFF1B\u8FDE\u63A5\u72B6\u6001\u8BF7\u770B\u9876\u680F\u7684\u201C\u8FDE\u63A5\u201D\u3002"),
+        { style: { display: "flex", alignItems: "center", gap: 14 } },
+        avatarView,
         h2(
           "div",
-          { style: { display: "flex", alignItems: "center", gap: 10, margin: "8px 0 6px" } },
-          h2(
-            "span",
-            { style: {
-              width: 38,
-              height: 38,
-              borderRadius: 999,
-              display: "grid",
-              placeItems: "center",
-              background: "color-mix(in srgb, var(--dsw-alias-state-business-primary, #1570ef) 14%, transparent)",
-              color: "var(--dsw-alias-state-business-primary, #1570ef)",
-              fontSize: 15,
-              fontWeight: 600
-            } },
-            String(accountName || accountEmail || "?").trim().charAt(0).toUpperCase()
-          ),
-          h2("span", { style: { color: mute, fontSize: 12 } }, "\u5934\u50CF\u4E0E\u663E\u793A\u540D\u79F0\u53EA\u5F71\u54CD\u672C\u673A\u663E\u793A")
-        ),
-        fieldRow("\u663E\u793A\u540D\u79F0", h2("input", {
+          { style: { minWidth: 0, display: "grid", gap: 3 } },
+          h2("div", { style: { fontSize: 13.5, fontWeight: 600, color: ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, accountEmail || "\u672A\u767B\u5F55"),
+          roleLabel ? h2("div", { style: { fontSize: 12, color: mute } }, roleLabel) : null
+        )
+      ),
+      h2(
+        "label",
+        { style: { display: "grid", gap: 6, fontSize: 12, color: sub, maxWidth: 320 } },
+        "\u663E\u793A\u540D\u79F0",
+        h2("input", {
           value: accountName,
-          placeholder: "\u4F8B\u5982\uFF1A\u5C0F\u738B",
+          placeholder: "\u672A\u8BBE\u7F6E",
           maxLength: 32,
           onChange: (event) => {
             if (typeof onAccountNameChange === "function") onAccountNameChange(event.target.value);
           },
           style: field
-        })),
-        row("\u90AE\u7BB1", accountEmail || "\u672A\u767B\u5F55"),
-        row("\u89D2\u8272", roleLabel),
-        h2("div", { style: { height: 1, background: line, margin: "12px 0" } }),
-        h2("div", { style: { fontSize: 12.5, fontWeight: 600, marginBottom: 8 } }, "\u4FEE\u6539\u5BC6\u7801"),
+        })
+      ),
+      h2("div", { style: { height: 1, background: line } }),
+      h2(
+        "div",
+        { style: { display: "grid", gap: 10, maxWidth: 320 } },
+        h2("div", { style: { fontSize: 13, fontWeight: 600, color: ink } }, "\u5BC6\u7801"),
+        h2("input", { value: currentPassword, onChange: (event) => setCurrentPassword(event.target.value), type: "password", autoComplete: "current-password", placeholder: "\u5F53\u524D\u5BC6\u7801", "aria-label": "\u5F53\u524D\u5BC6\u7801", style: field }),
+        h2("input", { value: newPassword, onChange: (event) => setNewPassword(event.target.value), type: "password", autoComplete: "new-password", placeholder: "\u65B0\u5BC6\u7801\uFF08\u81F3\u5C11 10 \u4F4D\uFF09", "aria-label": "\u65B0\u5BC6\u7801", style: field }),
+        h2("button", {
+          type: "button",
+          onClick: changePassword,
+          disabled: !!busy || !currentPassword || !newPassword,
+          style: { ...secondary, justifySelf: "start", opacity: busy || !currentPassword || !newPassword ? 0.5 : 1 }
+        }, busy === "password" ? "\u4FEE\u6539\u4E2D\u2026" : "\u4FEE\u6539\u5BC6\u7801"),
+        message ? h2("div", { role: "status", style: { color: message === "\u5BC6\u7801\u5DF2\u4FEE\u6539" ? success : danger, fontSize: 12 } }, message) : null
+      ),
+      h2("div", { style: { height: 1, background: line } }),
+      h2("button", {
+        type: "button",
+        onClick: onLogout,
+        className: "tether-hover",
+        style: { justifySelf: "start", border: 0, background: "transparent", padding: 0, color: danger, fontSize: 12.5, cursor: "pointer" }
+      }, "\u9000\u51FA\u767B\u5F55")
+    );
+    const connectionSection = h2(
+      "div",
+      { style: { display: "grid", gap: 10 } },
+      h2(
+        "div",
+        { style: { display: "flex", alignItems: "center", gap: 8, minHeight: 24 } },
+        h2("span", { style: { flex: "1 1 auto", fontSize: 12, color: mute } }, "\u670D\u52A1\u5668"),
+        h2("button", {
+          type: "button",
+          onClick: refreshConnection,
+          disabled: refreshing,
+          title: "\u91CD\u65B0\u68C0\u6D4B",
+          "aria-label": "\u91CD\u65B0\u68C0\u6D4B",
+          className: "tether-hover",
+          style: { width: 26, height: 26, display: "grid", placeItems: "center", border: 0, borderRadius: 6, background: "transparent", color: sub, cursor: refreshing ? "default" : "pointer" }
+        }, Glyph ? h2("span", { className: refreshing ? "tether-spin" : "", style: { display: "grid", placeItems: "center" } }, h2(Glyph, { name: "refresh", size: 15 })) : "\u21BB")
+      ),
+      card([
+        ["\u5730\u5740", server || "\u672A\u914D\u7F6E"],
+        ["\u72B6\u6001", h2(
+          "span",
+          { style: { display: "inline-flex", alignItems: "center", gap: 6 } },
+          h2("span", { style: { width: 7, height: 7, borderRadius: 4, background: dotColor } }),
+          statusLabel
+        )],
+        ["\u6700\u8FD1\u68C0\u6D4B", timeText(connection.checkedAt)],
+        ["\u54CD\u5E94", Number.isFinite(connection.durationMs) ? connection.durationMs + " ms" : "\u2014"]
+      ])
+    );
+    const workspaceSection = h2(
+      "div",
+      { style: { display: "grid", gap: 12 } },
+      h2(
+        "div",
+        {
+          title: "\u5207\u6362\u8BBE\u5907\u65F6\u4FDD\u7559\u6700\u8FD1\u4E09\u4E2A\u539F\u751F\u5DE5\u4F5C\u533A\uFF1B\u5173\u95ED\u540E\u91CA\u653E\u540E\u53F0\u9875\u9762",
+          style: { display: "flex", alignItems: "center", gap: 16, minHeight: 44 }
+        },
         h2(
           "div",
-          { style: { display: "grid", gap: 8, maxWidth: 320 } },
-          fieldRow("\u5F53\u524D\u5BC6\u7801", h2("input", { value: currentPassword, onChange: (event) => setCurrentPassword(event.target.value), type: "password", autoComplete: "current-password", style: field })),
-          fieldRow("\u65B0\u5BC6\u7801\uFF08\u81F3\u5C11 10 \u4F4D\uFF09", h2("input", { value: newPassword, onChange: (event) => setNewPassword(event.target.value), type: "password", autoComplete: "new-password", style: field })),
-          h2("button", { onClick: changePassword, disabled: !!busy, style: { ...secondary, justifySelf: "start" } }, busy === "password" ? "\u4FEE\u6539\u4E2D\u2026" : "\u4FEE\u6539\u5BC6\u7801")
+          { style: { flex: "1 1 auto", minWidth: 0 } },
+          h2("div", { style: { fontSize: 13, color: ink } }, "\u4FDD\u7559\u6700\u8FD1\u8BBE\u5907\u5DE5\u4F5C\u533A"),
+          h2("div", { style: { marginTop: 2, fontSize: 11.5, color: mute } }, "\u6700\u591A 3 \u53F0")
         ),
-        message ? h2("div", { style: { marginTop: 8, color: message.includes("\u5DF2\u4FEE\u6539") ? "var(--dsw-alias-state-success-primary, #16a34a)" : "var(--dsw-alias-state-error-primary, #b42318)", fontSize: 12 } }, message) : null,
-        h2(
-          "div",
-          { style: { marginTop: 18 } },
-          h2("button", { onClick: onLogout, style: { ...secondary, color: "var(--dsw-alias-state-error-primary, #b42318)" } }, "\u9000\u51FA\u767B\u5F55")
-        )
-      );
-    } else if (section === "connection") {
-      body = h2(
+        toggle(keepSurfaces, (next) => {
+          setKeepSurfaces(next);
+          try {
+            localStorage.setItem("tether.keepSurfaces", next ? "1" : "0");
+          } catch (_) {
+          }
+          if (typeof window !== "undefined") window.dispatchEvent(new Event("tether-surfaces-pref"));
+        }, "\u4FDD\u7559\u6700\u8FD1\u8BBE\u5907\u5DE5\u4F5C\u533A")
+      )
+    );
+    const deviceSection = h2(
+      "div",
+      { style: { display: "grid", gap: 12 } },
+      card([
+        ["\u8BBE\u5907\u540D", device.name || device.device_id || "\u2014"],
+        ["\u8BBE\u5907 ID", device.device_id || "\u2014"],
+        ["\u5E73\u53F0", device.capabilities && device.capabilities.os_label || device.platform || "\u2014"],
+        ["Node", device.online ? "\u5728\u7EBF" : "\u79BB\u7EBF"]
+      ]),
+      h2(
         "div",
         null,
-        sectionTitle("\u8FDE\u63A5", "\u8FDE\u63A5\u706F\u53EA\u8868\u793A Hub \u53EF\u8FBE\u4E0E Node \u5728\u7EBF\uFF0C\u4E0D\u4EE3\u8868\u8D26\u53F7\u72B6\u6001\u3002"),
-        h2(
-          "div",
-          { style: { borderRadius: 8, background: panel, padding: "2px 12px" } },
-          row("\u670D\u52A1\u5668\u5730\u5740", server || "\u672A\u914D\u7F6E"),
-          h2(
-            "div",
-            { style: { display: "flex", alignItems: "center", justifyContent: "space-between", minHeight: 34, fontSize: 12.5 } },
-            h2("span", { style: { color: mute } }, "\u8FDE\u63A5\u72B6\u6001"),
-            h2(
-              "span",
-              { style: { display: "inline-flex", alignItems: "center", gap: 6 } },
-              h2("span", { style: { width: 7, height: 7, borderRadius: 4, background: dotColor } }),
-              status2 === "online" ? "\u5DF2\u8FDE\u63A5" : status2 === "offline" ? "\u4E0D\u53EF\u8FBE" : status2 === "checking" ? "\u68C0\u6D4B\u4E2D" : "\u672A\u77E5"
-            )
-          ),
-          row("\u6700\u8FD1\u68C0\u6D4B", timeText(connection.checkedAt)),
-          row("\u670D\u52A1\u54CD\u5E94\u8017\u65F6", Number.isFinite(connection.durationMs) ? connection.durationMs + " ms" : "\u2014")
-        ),
-        h2(
-          "div",
-          { style: { marginTop: 12, display: "flex", gap: 8 } },
-          h2("button", { onClick: onRefreshConnection, style: secondary }, "\u5237\u65B0\u8FDE\u63A5\u72B6\u6001"),
-          h2("button", { onClick: onLogout, style: secondary }, "\u5207\u6362\u8D26\u53F7 / \u670D\u52A1\u5668")
-        ),
-        h2(
-          "label",
-          { style: { marginTop: 16, display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 12.5, color: sub } },
-          h2("input", {
-            type: "checkbox",
-            checked: keepSurfaces,
-            onChange: (event) => {
-              const next = event.target.checked;
-              setKeepSurfaces(next);
-              try {
-                localStorage.setItem("tether.keepSurfaces", next ? "1" : "0");
-              } catch (_) {
-              }
-              if (typeof window !== "undefined") window.dispatchEvent(new Event("tether-surfaces-pref"));
-            }
-          }),
-          h2("span", null, "\u4FDD\u7559\u6700\u8FD1\u8BBE\u5907\u5DE5\u4F5C\u533A\uFF08\u6700\u591A 3 \u53F0\uFF09"),
-          h2("span", { style: { color: mute, fontSize: 11.5 } }, "\u5207\u6362\u51E0\u4E4E\u5373\u65F6\uFF0C\u5173\u95ED\u540E\u4E0D\u5360\u540E\u53F0")
-        )
-      );
-    } else if (section === "device") {
-      body = h2(
-        "div",
-        null,
-        sectionTitle("\u672C\u673A\u8BBE\u5907", "\u672C\u673A\u4F5C\u4E3A\u76EE\u6807\u8BBE\u5907\u65F6\u7684\u767B\u8BB0\u4FE1\u606F\u4E0E Node \u63A7\u5236\u3002"),
-        h2(
-          "div",
-          { style: { borderRadius: 8, background: panel, padding: "2px 12px" } },
-          row("\u8BBE\u5907\u540D", device.name || device.device_id || "\u2014"),
-          row("device_id", device.device_id || "\u2014"),
-          row("\u5E73\u53F0", device.platform || "\u2014"),
-          row("Node", device.online ? "\u5728\u7EBF" : "\u79BB\u7EBF"),
-          row("\u7248\u672C", [versions.node && "Node " + versions.node, versions.app && "APP " + versions.app, versions.plugin && "\u63D2\u4EF6 " + versions.plugin].filter(Boolean).join(" \xB7 ") || "\u2014")
-        ),
-        h2(
-          "div",
-          { style: { marginTop: 12 } },
-          h2("button", { onClick: onRestartNode, disabled: !device.online, style: { ...secondary, opacity: device.online ? 1 : 0.5 } }, "\u91CD\u542F Node")
-        )
-      );
-    } else if (section === "updates") {
-      body = h2(
-        "div",
-        null,
-        sectionTitle("\u66F4\u65B0", "\u6709\u65B0\u7248\u672C\u65F6\uFF0C\u53F3\u4E0A\u89D2\u4F1A\u51FA\u73B0\u84DD\u8272\u4E0B\u8F7D\u6309\u94AE\u3002"),
-        h2(
-          "div",
-          { style: { borderRadius: 8, background: panel, padding: "2px 12px" } },
-          row("Node", versions.node || "\u2014"),
-          row("APP", versions.app || "\u2014"),
-          row("DSH \u63D2\u4EF6", versions.plugin || "\u2014")
-        ),
-        h2(
-          "div",
-          { style: { marginTop: 12 } },
-          h2("button", { onClick: onCheckUpdates, style: primary }, "\u68C0\u67E5\u66F4\u65B0")
-        )
-      );
-    } else if (section === "permissions") {
-      body = h2(
-        "div",
-        null,
-        sectionTitle("\u6587\u4EF6\u6743\u9650", "\u53EF\u5199\u6839\u76EE\u5F55\u4E0E\u6587\u4EF6\u64CD\u4F5C\u5BA1\u8BA1\u5728\u72EC\u7ACB\u9762\u677F\u4E2D\u7BA1\u7406\u3002"),
-        h2("button", { onClick: onOpenPermissions, style: primary }, "\u6253\u5F00\u6587\u4EF6\u6743\u9650")
-      );
-    } else {
-      body = h2(
-        "div",
-        null,
-        sectionTitle("\u5173\u4E8E", "Tether \u5BA2\u6237\u7AEF\u4E0E\u670D\u52A1\u7AEF\u7248\u672C\u4FE1\u606F\u3002"),
-        h2(
-          "div",
-          { style: { borderRadius: 8, background: panel, padding: "2px 12px" } },
-          row("\u5BA2\u6237\u7AEF", versions.app || "\u2014"),
-          row("Node", versions.node || "\u2014"),
-          row("DSH \u63D2\u4EF6", versions.plugin || "\u2014"),
-          row("\u670D\u52A1\u5668", server || "\u2014")
-        )
-      );
-    }
+        h2("button", {
+          type: "button",
+          onClick: onRestartNode,
+          disabled: !device.online,
+          style: { ...secondary, display: "inline-flex", alignItems: "center", gap: 6, opacity: device.online ? 1 : 0.5, cursor: device.online ? "pointer" : "default" }
+        }, Glyph ? h2(Glyph, { name: "refresh", size: 14 }) : null, "\u91CD\u542F Node")
+      )
+    );
+    const versionRows = [
+      ["\u5BA2\u6237\u7AEF", versions.app || "\u2014"],
+      ["Node", versions.node || "\u2014"],
+      ["DSH \u63D2\u4EF6", versions.plugin || "\u2014"]
+    ];
+    const aboutSection = h2(
+      "div",
+      { style: { display: "grid", gap: 14 } },
+      h2("div", { style: { fontSize: 17, fontWeight: 600, color: ink } }, "Tether"),
+      card(versionRows)
+    );
+    const builtIn = [
+      { id: "account", label: "\u8D26\u53F7", render: () => accountSection },
+      { id: "connection", label: "\u8FDE\u63A5", render: () => connectionSection },
+      { id: "workspace", label: "\u5DE5\u4F5C\u533A", render: () => workspaceSection },
+      { id: "device", label: "\u672C\u673A\u8BBE\u5907", render: () => deviceSection },
+      { id: "about", label: "\u5173\u4E8E", render: () => aboutSection }
+    ];
+    const sections = builtIn.concat((Array.isArray(extraSections) ? extraSections : []).filter((item) => item && item.id && item.label && typeof item.render === "function"));
+    const current = sections.find((item) => item.id === section) || sections[0];
+    const nav = h2(
+      "div",
+      {
+        style: { width: 150, flex: "0 0 auto", padding: "12px 8px", background: panel, borderRight: "1px solid " + line, display: "flex", flexDirection: "column", gap: 2 }
+      },
+      sections.map((item) => h2("button", {
+        key: item.id,
+        type: "button",
+        onClick: () => {
+          setMessage("");
+          setSection(item.id);
+        },
+        className: "tether-hover",
+        "aria-current": current.id === item.id ? "page" : void 0,
+        style: {
+          height: 30,
+          padding: "0 10px",
+          border: 0,
+          borderRadius: 6,
+          textAlign: "left",
+          background: current.id === item.id ? "var(--dsw-alias-interactive-bg-active, rgba(38,49,72,.10))" : "transparent",
+          color: current.id === item.id ? ink : sub,
+          fontSize: 12.5,
+          cursor: "pointer",
+          font: "inherit"
+        }
+      }, item.label))
+    );
     return h2(
       "div",
-      { onPointerDown: (event) => {
-        if (event.target === event.currentTarget) onClose();
-      }, style: { position: "absolute", inset: 0, zIndex: 40, background: "rgba(16,24,40,0.35)", display: "grid", placeItems: "center", padding: 24 } },
+      {
+        onPointerDown: (event) => {
+          if (event.target === event.currentTarget) onClose();
+        },
+        style: { position: "absolute", inset: 0, zIndex: 40, background: "rgba(16,24,40,0.35)", display: "grid", placeItems: "center", padding: 24 }
+      },
       h2(
         "section",
-        { role: "dialog", "aria-label": "\u8BBE\u7F6E", style: { width: "min(760px, 100%)", height: "min(560px, 100%)", background: bg, borderRadius: 12, overflow: "hidden", boxShadow: "var(--dsw-elevation-panel, 0 18px 50px rgba(16,24,40,0.18))", display: "flex", flexDirection: "column" } },
+        {
+          role: "dialog",
+          "aria-label": "\u8BBE\u7F6E",
+          style: { width: "min(760px, 100%)", height: "min(560px, 100%)", background: bg, borderRadius: 12, overflow: "hidden", boxShadow: "var(--dsw-elevation-panel, 0 18px 50px rgba(16,24,40,0.18))", display: "flex", flexDirection: "column" }
+        },
         h2(
           "header",
-          { style: { height: 44, padding: "0 14px", display: "flex", alignItems: "center", background: panel, borderBottom: "1px solid " + line } },
+          { style: { height: 44, padding: "0 14px", display: "flex", alignItems: "center", background: panel, borderBottom: "1px solid " + line, flex: "0 0 auto" } },
           h2("strong", { style: { fontSize: 14 } }, "\u8BBE\u7F6E"),
-          h2("button", { onClick: onClose, title: "\u5173\u95ED", "aria-label": "\u5173\u95ED", style: { marginLeft: "auto", border: 0, background: "transparent", fontSize: 18, cursor: "pointer", color: mute } }, "\xD7")
+          h2("button", {
+            type: "button",
+            onClick: onClose,
+            title: "\u5173\u95ED",
+            "aria-label": "\u5173\u95ED",
+            className: "tether-hover",
+            style: { marginLeft: "auto", width: 28, height: 28, border: 0, borderRadius: 6, background: "transparent", fontSize: 18, cursor: "pointer", color: mute }
+          }, "\xD7")
         ),
         h2(
           "div",
           { style: { flex: "1 1 auto", minHeight: 0, display: "flex" } },
           nav,
-          h2("div", { className: "tether-scroll", style: { flex: "1 1 auto", minWidth: 0, overflowY: "auto", padding: "18px 22px" } }, body)
+          h2("div", { className: "tether-scroll", style: { flex: "1 1 auto", minWidth: 0, overflowY: "auto", padding: "20px 24px" } }, current.render())
         )
       )
     );
@@ -163540,7 +163690,8 @@ function TargetFileExplorer({
   onSelectionChange,
   onContextMenu,
   onDragItem,
-  onRowPointerDown
+  onRowPointerDown,
+  onDismissError
 }) {
   const ReactRuntime = React2;
   const h2 = ReactRuntime.createElement;
@@ -163801,10 +163952,10 @@ function TargetFileExplorer({
       error ? h2("span", { role: "alert", style: { color: C.red || C.danger } }, error) : placeholder
     );
   } else if (entries2 === null) {
-    body = h2(
+    body = loading ? h2("div", { style: { flex: "1 1 auto" } }) : h2(
       "div",
       { style: { flex: "1 1 auto", display: "grid", placeItems: "center", color: C.mute, fontSize: 12, padding: 24, textAlign: "center" } },
-      error ? h2("span", { role: "alert", style: { color: C.red || C.danger } }, error) : loading ? "\u6B63\u5728\u8BFB\u53D6\u76EE\u5F55\u2026" : "\u76EE\u5F55\u6682\u4E0D\u53EF\u7528"
+      error ? h2("span", { role: "alert", style: { color: C.red || C.danger } }, error) : "\u76EE\u5F55\u6682\u4E0D\u53EF\u7528"
     );
   } else if (!visible.length) {
     body = h2(
@@ -163844,6 +163995,67 @@ function TargetFileExplorer({
       visible.map((item) => row(item))
     );
   }
+  const loadingOverlay = loading ? h2(
+    "div",
+    {
+      className: "tether-dir-loading",
+      role: "status",
+      "aria-live": "polite",
+      "aria-label": "\u6B63\u5728\u52A0\u8F7D\u76EE\u5F55"
+    },
+    h2(
+      "span",
+      { className: "tether-spin", style: { width: 20, height: 20, display: "grid", placeItems: "center" } },
+      h2("svg", {
+        width: 18,
+        height: 18,
+        viewBox: "0 0 16 16",
+        fill: "none",
+        stroke: "currentColor",
+        strokeWidth: 1.5,
+        strokeLinecap: "round",
+        strokeLinejoin: "round",
+        "aria-hidden": true
+      }, h2("path", { d: "M13 8a5 5 0 1 1-1.5-3.56" }), h2("path", { d: "M13.2 2.3v3.1h-3.1" }))
+    )
+  ) : null;
+  const errorToast = error && entries2 !== null && !loading ? h2(
+    "div",
+    {
+      role: "alert",
+      style: {
+        position: "absolute",
+        left: 12,
+        right: 12,
+        bottom: 12,
+        zIndex: 5,
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        padding: "8px 10px",
+        borderRadius: 8,
+        background: C.bg,
+        color: C.red || C.danger,
+        boxShadow: "0 4px 16px rgba(16,24,40,.16)",
+        fontSize: 12
+      }
+    },
+    h2("span", { style: { flex: "1 1 auto", minWidth: 0 } }, error),
+    path && onRefresh ? h2("button", {
+      type: "button",
+      onClick: () => onRefresh(path),
+      className: "tether-hover",
+      style: { border: 0, borderRadius: 6, padding: "4px 8px", background: C.soft, color: C.ink, fontSize: 11.5, cursor: "pointer", flex: "0 0 auto" }
+    }, "\u91CD\u8BD5") : null,
+    onDismissError ? h2("button", {
+      type: "button",
+      title: "\u5173\u95ED",
+      "aria-label": "\u5173\u95ED",
+      onClick: onDismissError,
+      className: "tether-hover",
+      style: { width: 22, height: 22, flex: "0 0 auto", border: 0, borderRadius: 5, background: "transparent", color: C.mute, fontSize: 15, lineHeight: "22px", padding: 0, cursor: "pointer" }
+    }, "\xD7") : null
+  ) : null;
   return h2(
     "div",
     { style: { display: "flex", flex: "1 1 auto", minHeight: 0, minWidth: 0 } },
@@ -164006,8 +164218,15 @@ function TargetFileExplorer({
           if (path && onRefresh) onRefresh(path);
         }, disabled || !path)
       ),
-      error && path && entries2 !== null ? h2("div", { role: "alert", style: { padding: "6px 14px", color: C.red || C.danger, fontSize: 12, borderBottom: C.line ? "1px solid " + C.line : 0 } }, error) : null,
-      body
+      h2(
+        "div",
+        {
+          style: { position: "relative", display: "flex", flexDirection: "column", flex: "1 1 auto", minWidth: 0, minHeight: 0 }
+        },
+        body,
+        loadingOverlay,
+        errorToast
+      )
     )
   );
 }
@@ -166673,7 +166892,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       strokeLinecap: part.cap || glyph.cap || "butt"
     })));
   }
-  function ActivityBar({ active, collapsed, onSelect, onPermissions, permissionsOpen, onAppSettings, appSettingsOpen, onAccount, accountEmail = "" }) {
+  function ActivityBar({ active, collapsed, onSelect, onPermissions, permissionsOpen, onAppSettings, appSettingsOpen, onAccount, accountEmail = "", accountAvatar = "" }) {
     const accountInitial = String(accountEmail || "").trim().charAt(0).toUpperCase();
     const items = [
       { id: "workspaces", label: "\u539F\u751F\u5DE5\u4F5C\u533A", icon: "monitor" },
@@ -166731,7 +166950,11 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
             background: "transparent",
             color: C.mute
           }
-        }, accountInitial ? h2("span", {
+        }, accountAvatar ? h2("img", {
+          src: accountAvatar,
+          alt: "",
+          style: { width: 22, height: 22, borderRadius: 999, objectFit: "cover", display: "block" }
+        }) : accountInitial ? h2("span", {
           "aria-hidden": true,
           style: {
             width: 22,
@@ -167256,8 +167479,20 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     if (state && state.deviceId === deviceId && state.status !== "offline") return state;
     return { deviceId, status: "loading", url: "" };
   }
-  function nativeSurfaceContainerStyle(visible) {
-    return { display: visible ? "flex" : "none", flex: "1 1 auto", minWidth: 0, minHeight: 0, flexDirection: "column" };
+  function nativeSurfaceContainerStyle(visible, layered) {
+    if (!layered) return { display: visible ? "flex" : "none", flex: "1 1 auto", minWidth: 0, minHeight: 0, flexDirection: "column" };
+    return {
+      position: "absolute",
+      inset: 0,
+      display: "flex",
+      flexDirection: "column",
+      minWidth: 0,
+      minHeight: 0,
+      overflow: "hidden",
+      visibility: visible ? "visible" : "hidden",
+      pointerEvents: visible ? "auto" : "none",
+      zIndex: visible ? 1 : 0
+    };
   }
   const NATIVE_SURFACE_RETRIES = 3;
   const NATIVE_SURFACE_DOCUMENT_RETRIES = 1;
@@ -167289,7 +167524,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     } catch (_) {
     }
   }
-  function NativeSurface({ deviceId, online, visible, localDeviceId, preload = false }) {
+  function NativeSurface({ deviceId, online, visible, localDeviceId, preload = false, layered = false }) {
     const [state, setState] = React2.useState({ deviceId, status: deviceId ? "loading" : "no-device", url: "" });
     const [attempt, setAttempt] = React2.useState(0);
     const [slow, setSlow] = React2.useState(false);
@@ -167600,7 +167835,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const message = currentState.status === "loading" ? currentState.message || "\u6B63\u5728\u8FDE\u63A5\u76EE\u6807\u8BBE\u5907\u7684 DSH \u539F\u751F\u5DE5\u4F5C\u533A\u2026" : currentState.status === "local" ? "\u5F53\u524D\u5DF2\u5728 DeepSeek Harness \u4E2D\uFF1B\u672C\u673A\u5DE5\u4F5C\u533A\u65E0\u9700\u518D\u5D4C\u5165\uFF0C\u53EF\u7528\u5DE6\u4FA7\u300C\u6587\u4EF6\u300D\u6216\u300C\u8FDE\u63A5\u300D\u3002" : currentState.status === "offline" ? "\u76EE\u6807\u8BBE\u5907\u79BB\u7EBF\u3002\u8BBE\u5907\u91CD\u65B0\u5728\u7EBF\u540E\u53EF\u91CD\u8BD5\u3002" : currentState.status === "no-device" ? "\u5148\u4ECE\u5DE6\u4FA7\u8BBE\u5907\u5217\u8868\u9009\u62E9\u76EE\u6807\u8BBE\u5907\u3002" : currentState.status === "error" ? currentState.message : "";
     return h2(
       "div",
-      { className: "tether-native-surface", style: nativeSurfaceContainerStyle(visible) },
+      { className: "tether-native-surface", style: nativeSurfaceContainerStyle(visible, layered) },
       ["document-loading", "document-loaded"].includes(currentState.status) && currentState.deviceId === deviceId && online ? h2(
         "div",
         { style: { position: "relative", display: "flex", flex: "1 1 auto", minWidth: 0, minHeight: 0 } },
@@ -167668,6 +167903,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         return true;
       }
     });
+    const mountedRef = React2.useRef([]);
     React2.useEffect(() => {
       const sync = () => {
         try {
@@ -167691,33 +167927,43 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       });
     }, [deviceId]);
     const online = new Map((devices || []).map((item) => [item.device_id, item]));
-    const ids = [deviceId, ...keep ? recent : []].filter((item, index, all) => item && all.indexOf(item) === index).slice(0, 3);
+    const wanted = [deviceId, ...keep ? recent : []].filter((item, index, all) => item && all.indexOf(item) === index);
+    let ids = mountedRef.current.filter((id) => wanted.includes(id));
+    if (deviceId && !ids.includes(deviceId)) {
+      ids = ids.slice(-2);
+      ids.push(deviceId);
+    }
+    for (const id of wanted) {
+      if (ids.length >= 3) break;
+      if (!ids.includes(id)) ids.push(id);
+    }
     if (keep) {
       const spare = (devices || []).filter((item) => item && item.online && item.capabilities && item.capabilities.dsh_surface && !ids.includes(item.device_id)).slice(0, Math.max(0, 3 - ids.length)).map((item) => item.device_id);
       ids.push(...spare);
     }
+    mountedRef.current = ids;
     return h2(
       "div",
       {
-        style: { position: "relative", flex: "1 1 auto", minWidth: 0, minHeight: 0, display: "flex" }
-      },
-      ids.map((id) => h2("div", {
-        key: id,
         style: {
           position: "absolute",
           inset: 0,
-          display: visible && id === deviceId ? "flex" : "none",
-          flexDirection: "column",
+          display: "flex",
           minWidth: 0,
-          minHeight: 0
+          minHeight: 0,
+          visibility: visible ? "visible" : "hidden",
+          pointerEvents: visible ? "auto" : "none"
         }
-      }, h2(NativeSurface, {
+      },
+      ids.map((id) => h2(NativeSurface, {
+        key: id,
         deviceId: id,
         online: !!(online.get(id) && online.get(id).online),
         visible: visible && id === deviceId,
         preload: true,
+        layered: true,
         localDeviceId
-      })))
+      }))
     );
   }
   function isSafeNativeSurfaceUrl(value) {
@@ -168013,6 +168259,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       }
     });
     const [accountName, setAccountName] = usePersisted("tether.accountName", "");
+    const [accountAvatar, setAccountAvatar] = usePersisted("tether.accountAvatar", "");
     const [settingsSection, setSettingsSection] = React2.useState("account");
     const [hubUnsafeExistingUrl, setHubUnsafeExistingUrl] = React2.useState(false);
     const [hubStatus, setHubStatus] = React2.useState("unknown");
@@ -171089,7 +171336,8 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
             setSettingsSection("account");
             setShowAppSettings(true);
           },
-          accountEmail: accountName || hubEmail
+          accountEmail: accountName || hubEmail,
+          accountAvatar
         }),
         h2(SidePanel, {
           width: safeSidebarWidth,
@@ -171122,7 +171370,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         }),
         h2(
           "main",
-          { className: "tether-workbench", style: { flex: "1 1 auto", display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0 } },
+          { className: "tether-workbench", style: { flex: "1 1 auto", display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0, position: "relative" } },
           h2(SurfaceDeck, { devices: state && state.devices || [], deviceId, localDeviceId: appLocalDevice, visible: view === "chat" }),
           view === "files" ? renderExplorer() : view === "network" ? renderNetwork() : view === "transfer" ? h2(createTransferPage, {
             React: React2,
@@ -171248,6 +171496,9 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         accountEmail: hubEmail,
         accountRole: hubRole,
         accountName,
+        accountAvatar,
+        Glyph,
+        onAvatarChange: setAccountAvatar,
         onAccountNameChange: setAccountName,
         initialSection: settingsSection,
         server: hubAddress || hubUrl || "",

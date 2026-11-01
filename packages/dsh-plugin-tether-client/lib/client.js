@@ -5763,7 +5763,7 @@ monaco-editor/esm/vs/languages/definitions/swift/swift.js:
 
     const EditorRuntime = TetherMonacoRuntime
     const PANEL_ID = 'tether'
-    const PLUGIN_VERSION = "0.2.54"
+    const PLUGIN_VERSION = "0.2.55"
 function parentOf(path) {
   const clean = String(path || '').replace(/[\\/]+$/, '')
   if (!clean) return ''
@@ -5820,7 +5820,7 @@ function TargetFileExplorer({
   sort = { key: 'name', dir: 'asc' }, onSort, search = '', onSearch = () => {},
   treeChildren = null, expanded = {}, onToggleTree,
   compact = false, selectionMode = 'single', selectedPaths = [], onSelectionChange,
-  onContextMenu, onDragItem, onRowPointerDown
+  onContextMenu, onDragItem, onRowPointerDown, onDismissError
 }) {
   const ReactRuntime = React
   const h = ReactRuntime.createElement
@@ -5967,9 +5967,10 @@ function TargetFileExplorer({
     body = h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', color: C.mute, fontSize: 12, padding: 24, textAlign: 'center' } },
       error ? h('span', { role: 'alert', style: { color: C.red || C.danger } }, error) : placeholder)
   } else if (entries === null) {
-    body = h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', color: C.mute, fontSize: 12, padding: 24, textAlign: 'center' } },
-      error ? h('span', { role: 'alert', style: { color: C.red || C.danger } }, error)
-        : loading ? '正在读取目录…' : '目录暂不可用')
+    body = loading
+      ? h('div', { style: { flex: '1 1 auto' } })
+      : h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', color: C.mute, fontSize: 12, padding: 24, textAlign: 'center' } },
+        error ? h('span', { role: 'alert', style: { color: C.red || C.danger } }, error) : '目录暂不可用')
   } else if (!visible.length) {
     body = h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', alignContent: 'center', gap: 8, color: C.mute, fontSize: 12, padding: 24, textAlign: 'center' } },
       h('span', null, term ? '未找到匹配 “' + search.trim() + '” 的项目' : emptyText),
@@ -5988,6 +5989,33 @@ function TargetFileExplorer({
         sortHeader('size', '大小', 'right')),
       visible.map((item) => row(item)))
   }
+  const loadingOverlay = loading ? h('div', {
+    className: 'tether-dir-loading', role: 'status', 'aria-live': 'polite', 'aria-label': '正在加载目录'
+  },
+    h('span', { className: 'tether-spin', style: { width: 20, height: 20, display: 'grid', placeItems: 'center' } },
+      h('svg', {
+        width: 18, height: 18, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor',
+        strokeWidth: 1.5, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true
+      }, h('path', { d: 'M13 8a5 5 0 1 1-1.5-3.56' }), h('path', { d: 'M13.2 2.3v3.1h-3.1' })))
+  ) : null
+  const errorToast = error && entries !== null && !loading ? h('div', {
+    role: 'alert',
+    style: {
+      position: 'absolute', left: 12, right: 12, bottom: 12, zIndex: 5, display: 'flex', alignItems: 'center', gap: 8,
+      padding: '8px 10px', borderRadius: 8, background: C.bg, color: C.red || C.danger,
+      boxShadow: '0 4px 16px rgba(16,24,40,.16)', fontSize: 12
+    }
+  },
+    h('span', { style: { flex: '1 1 auto', minWidth: 0 } }, error),
+    path && onRefresh ? h('button', {
+      type: 'button', onClick: () => onRefresh(path), className: 'tether-hover',
+      style: { border: 0, borderRadius: 6, padding: '4px 8px', background: C.soft, color: C.ink, fontSize: 11.5, cursor: 'pointer', flex: '0 0 auto' }
+    }, '重试') : null,
+    onDismissError ? h('button', {
+      type: 'button', title: '关闭', 'aria-label': '关闭', onClick: onDismissError, className: 'tether-hover',
+      style: { width: 22, height: 22, flex: '0 0 auto', border: 0, borderRadius: 5, background: 'transparent', color: C.mute, fontSize: 15, lineHeight: '22px', padding: 0, cursor: 'pointer' }
+    }, '×') : null
+  ) : null
   return h('div', { style: { display: 'flex', flex: '1 1 auto', minHeight: 0, minWidth: 0 } },
     h('div', {
       style: {
@@ -6061,8 +6089,12 @@ function TargetFileExplorer({
             }
           }, '×') : null) : null,
         iconButton('refresh', '刷新', () => { if (path && onRefresh) onRefresh(path) }, disabled || !path)),
-      error && path && entries !== null ? h('div', { role: 'alert', style: { padding: '6px 14px', color: C.red || C.danger, fontSize: 12, borderBottom: C.line ? '1px solid ' + C.line : 0 } }, error) : null,
-      body))
+      h('div', {
+        style: { position: 'relative', display: 'flex', flexDirection: 'column', flex: '1 1 auto', minWidth: 0, minHeight: 0 }
+      },
+        body,
+        loadingOverlay,
+        errorToast)))
 }
 const DEFAULT_TTL = 20_000
 const MAX_DIRS = 240
@@ -6627,7 +6659,6 @@ function createDshTargetAttachments(React, Native, bridge, pickerCommand, uiWork
     const [treeChildren, setTreeChildren] = React.useState({})
     const [expanded, setExpanded] = React.useState({})
     const [busy, setBusy] = React.useState(false)
-    const [status, setStatus] = React.useState('')
     const [error, setError] = React.useState('')
     const mounted = React.useRef(true)
     const busyRef = React.useRef(false)
@@ -6643,7 +6674,7 @@ function createDshTargetAttachments(React, Native, bridge, pickerCommand, uiWork
     React.useEffect(() => {
       operation.current += 1
       busyRef.current = false
-      setOpen(false); setBusy(false); setStatus(''); setError('')
+      setOpen(false); setBusy(false); setError('')
       setDevice(''); setWorkspaces([]); setDrives([]); setRoot(''); setDirectory(''); setEntries(null)
     }, [props.sessionId])
     React.useEffect(() => {
@@ -6662,7 +6693,7 @@ function createDshTargetAttachments(React, Native, bridge, pickerCommand, uiWork
       && currentProps.current.sessionId === sessionId
     const resetExplorer = () => {
       setDevice(''); setWorkspaces([]); setDrives([])
-      setRoot(''); setDirectory(''); setEntries(null); setStatus(''); setError('')
+      setRoot(''); setDirectory(''); setEntries(null); setError('')
       setTreeChildren({}); setExpanded({})
     }
     const openPicker = async () => {
@@ -6684,18 +6715,18 @@ function createDshTargetAttachments(React, Native, bridge, pickerCommand, uiWork
           if (pickerCommand?.pendingSessionStart === pending) {
             pickerCommand.pendingSessionStart = null
             if (mounted.current) {
-              setStatus('')
+              setBusy(false)
               setError('目标会话准备超时，请先在目标电脑选择工作区后重试。')
             }
           }
         }, 30_000)
         if (pickerCommand) pickerCommand.pendingSessionStart = pending
-        setStatus('正在准备目标 DSH 会话…工作区就绪后会自动打开目标电脑的文件选择器。')
+        setBusy(true)
         try { startSession.call(uiWorkspace) }
         catch (cause) {
           clearTimeout(pending.timeoutId)
           if (pickerCommand?.pendingSessionStart === pending) pickerCommand.pendingSessionStart = null
-          setStatus('')
+          setBusy(false)
           setError(cause.message || '目标 DSH 会话创建失败，请先在目标电脑选择工作区。')
         }
         busyRef.current = false
@@ -6706,20 +6737,16 @@ function createDshTargetAttachments(React, Native, bridge, pickerCommand, uiWork
         busyRef.current = false
         return
       }
-      setBusy(true); setStatus('正在读取目标电脑…')
+      setBusy(true)
       try {
         const roots = await bridge.getRoots()
         if (!live(token, sessionId)) return
         setDevice(roots.deviceId || '')
         setWorkspaces(roots.workspaces || [])
         setDrives(roots.drives || [])
-        setStatus('')
         if (roots.warning) setError(roots.warning)
       } catch (cause) {
-        if (live(token, sessionId)) {
-          setStatus('')
-          setError(cause.message || '读取目标电脑失败')
-        }
+        if (live(token, sessionId)) setError(cause.message || '读取目标电脑失败')
       } finally {
         busyRef.current = false
         if (mounted.current) setBusy(false)
@@ -6729,7 +6756,7 @@ function createDshTargetAttachments(React, Native, bridge, pickerCommand, uiWork
     const close = () => {
       operation.current += 1
       busyRef.current = false
-      setOpen(false); setBusy(false); setStatus(''); setError('')
+      setOpen(false); setBusy(false); setError('')
       setRoot(''); setDirectory(''); setEntries(null)
       setTreeChildren({}); setExpanded({})
       const pending = pickerCommand && pickerCommand.pendingSessionStart
@@ -6744,17 +6771,14 @@ function createDshTargetAttachments(React, Native, bridge, pickerCommand, uiWork
       const sessionId = props.sessionId
       busyRef.current = true
       if (isRoot) setRoot(item.path)
-      setDirectory(item.path); setEntries(null); setSearch('')
-      setBusy(true); setStatus('正在读取目录…'); setError('')
+      setDirectory(item.path); setSearch('')
+      setBusy(true); setError('')
       try {
         const listing = await bridge.listDirectory(item.path)
         if (!live(token, sessionId)) return
-        setEntries(listing); setStatus('')
+        setEntries(listing)
       } catch (cause) {
-        if (live(token, sessionId)) {
-          setStatus('')
-          setError(cause.message || '读取目标电脑目录失败')
-        }
+        if (live(token, sessionId)) setError(cause.message || '读取目标电脑目录失败')
       } finally {
         busyRef.current = false
         if (mounted.current) setBusy(false)
@@ -6787,18 +6811,15 @@ function createDshTargetAttachments(React, Native, bridge, pickerCommand, uiWork
       const token = ++operation.current
       const sessionId = props.sessionId
       busyRef.current = true
-      setBusy(true); setStatus('正在读取文件…'); setError('')
+      setBusy(true); setError('')
       try {
         await addDshTargetAttachment(currentProps.current, bridge, item,
           () => mounted.current && token === operation.current && currentProps.current.sessionId === sessionId)
         if (!mounted.current) return
-        setOpen(false); setBusy(false); setStatus('')
+        setOpen(false); setBusy(false)
         setRoot(''); setDirectory(''); setEntries(null)
       } catch (cause) {
-        if (live(token, sessionId)) {
-          setStatus('')
-          setError(cause.message || '读取目标电脑文件失败')
-        }
+        if (live(token, sessionId)) setError(cause.message || '读取目标电脑文件失败')
       } finally {
         busyRef.current = false
         if (mounted.current) setBusy(false)
@@ -7020,12 +7041,6 @@ function createDshTargetAttachments(React, Native, bridge, pickerCommand, uiWork
         listHeader,
         visibleEntries.map((item) => row(item)))
     }
-    const notice = error && directory && entries !== null
-      ? h('div', { role: 'alert', style: { padding: '6px 14px', color: danger, fontSize: 12, borderBottom: '1px solid ' + line } }, error)
-      : null
-    const busyLine = status
-      ? h('div', { role: 'status', style: { padding: '4px 14px', color: sub, fontSize: 11.5, borderBottom: '1px solid ' + line } }, status)
-      : null
     const dialog = open ? h('div', {
       style: {
         position: 'fixed', inset: 0, zIndex: 2147483000, display: 'flex',
@@ -7065,16 +7080,7 @@ function createDshTargetAttachments(React, Native, bridge, pickerCommand, uiWork
               cursor: 'pointer'
             }
           }, '×')),
-        h('div', { style: { display: 'flex', flexDirection: 'column', flex: '1 1 auto', minHeight: 0 } },
-          h('div', {
-            role: 'status',
-            style: {
-              height: 22, flex: '0 0 auto', display: 'flex', alignItems: 'center', padding: '0 18px',
-              borderBottom: '1px solid ' + line, color: error ? danger : sub, fontSize: 11.5,
-              overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis'
-            }
-          }, error || status || ''),
-          TargetFileExplorer({
+        TargetFileExplorer({
             React,
             sort,
             onSort: setSort,
@@ -7090,6 +7096,7 @@ function createDshTargetAttachments(React, Native, bridge, pickerCommand, uiWork
             entries,
             loading: busy,
             error,
+            onDismissError: () => setError(''),
             disabled: busy,
             singleClickOpens: true,
             editablePath: false,
@@ -7105,15 +7112,14 @@ function createDshTargetAttachments(React, Native, bridge, pickerCommand, uiWork
             formatTime: formatTargetTime,
             formatSize: formatTargetSize,
             limit: DSH_TARGET_ATTACHMENT_LIMIT
-          })),
+          }),
         h('div', {
           style: {
             display: 'flex', alignItems: 'center', gap: 12, padding: '10px 18px',
             borderTop: '1px solid ' + line, flex: '0 0 auto'
           }
         },
-          h('span', { style: { flex: '1 1 auto', color: mute, fontSize: 11.5 } }, '文件从目标电脑读取，单个附件上限 10 MiB。'),
-          h('button', { type: 'button', onClick: close, style: mutedButton }, '取消')))
+          h('button', { type: 'button', onClick: close, style: { ...mutedButton, marginLeft: 'auto' } }, '取消')))
       ) : null
     return h('div', { ref: containerRef, style: { display: 'contents' } },
       h(Native.ComposerAttachments, { ...props, readFileDrag: props.readFileDrag }),
@@ -7347,39 +7353,61 @@ function createSettingsPanel(React) {
   const bg = 'var(--dsw-alias-bg-base, #ffffff)'
   const panel = 'var(--dsw-specific-sidebar-fill, #f9fafb)'
   const line = 'var(--dsw-alias-border-secondary, #e4e7ec)'
-  const field = { width: '100%', height: 32, boxSizing: 'border-box', border: '1px solid ' + line, borderRadius: 7, padding: '0 9px', background: bg, color: ink, fontSize: 12.5, font: 'inherit' }
-  const primary = { height: 30, padding: '0 12px', border: 0, borderRadius: 7, color: 'var(--dsw-alias-label-primary-inverted, #ffffff)', background: 'var(--dsw-alias-button-primary-fill, #101828)', cursor: 'pointer', fontSize: 12 }
-  const secondary = { height: 30, padding: '0 12px', border: '1px solid ' + line, borderRadius: 7, color: sub, background: 'transparent', cursor: 'pointer', fontSize: 12 }
-  const sectionTitle = (text, hint) => h('div', { style: { marginBottom: 12 } },
-    h('div', { style: { fontSize: 15, fontWeight: 600, color: ink } }, text),
-    hint ? h('div', { style: { marginTop: 4, color: mute, fontSize: 12, lineHeight: '18px' } }, hint) : null)
-  const row = (label, value) => h('div', { key: label, style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, minHeight: 34, fontSize: 12.5 } },
-    h('span', { style: { color: mute } }, label),
-    h('span', { style: { color: ink, textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, value || '—'))
-  const fieldRow = (label, input) => h('label', { style: { display: 'grid', gap: 5, fontSize: 12, color: sub } }, label, input)
+  const blue = 'var(--dsw-alias-state-business-primary, #1570ef)'
+  const danger = 'var(--dsw-alias-state-error-primary, #b42318)'
+  const success = 'var(--dsw-alias-state-success-primary, #16a34a)'
+  const field = { width: '100%', height: 32, boxSizing: 'border-box', border: '1px solid ' + line, borderRadius: 7, padding: '0 9px', background: bg, color: ink, fontSize: 12.5, font: 'inherit', outline: 'none' }
+  const primary = { height: 30, padding: '0 12px', border: 0, borderRadius: 7, color: 'var(--dsw-alias-label-primary-inverted, #ffffff)', background: 'var(--dsw-alias-button-primary-fill, #101828)', cursor: 'pointer', fontSize: 12, font: 'inherit' }
+  const secondary = { height: 30, padding: '0 12px', border: '1px solid ' + line, borderRadius: 7, color: sub, background: 'transparent', cursor: 'pointer', fontSize: 12, font: 'inherit' }
   const timeText = (value) => {
-    if (!value) return '尚未检测'
-    try { const date = new Date(value); return [date.getHours(), date.getMinutes(), date.getSeconds()].map((part) => String(part).padStart(2, '0')).join(':') } catch (_) { return '尚未检测' }
+    if (!value) return '—'
+    try { const date = new Date(value); return [date.getHours(), date.getMinutes(), date.getSeconds()].map((part) => String(part).padStart(2, '0')).join(':') } catch (_) { return '—' }
   }
+  const card = (rows) => h('div', { style: { border: '1px solid ' + line, borderRadius: 10, overflow: 'hidden', background: bg } },
+    rows.filter(Boolean).map((row, index) => h('div', {
+      key: index,
+      style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 18, minHeight: 40, padding: '0 14px', borderTop: index ? '1px solid ' + line : 0, fontSize: 12.5 }
+    },
+      h('span', { style: { color: mute, flex: '0 0 auto' } }, row[0]),
+      h('span', { style: { color: ink, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' } }, row[1] || '—'))))
+  const toggle = (checked, onChange, label) => h('button', {
+    type: 'button', role: 'switch', 'aria-checked': checked, 'aria-label': label, onClick: () => onChange(!checked),
+    style: {
+      width: 36, height: 20, flex: '0 0 auto', border: 0, borderRadius: 999, padding: 2,
+      background: checked ? blue : 'var(--dsw-alias-border-secondary, #d0d5dd)', cursor: 'pointer',
+      display: 'flex', alignItems: 'center', justifyContent: checked ? 'flex-end' : 'flex-start',
+      transition: 'background 140ms ease'
+    }
+  }, h('span', {
+    'aria-hidden': true,
+    style: { width: 16, height: 16, borderRadius: 999, background: '#fff', boxShadow: '0 1px 2px rgba(16,24,40,.24)', transition: 'transform 140ms ease' }
+  }))
 
-  function SettingsPanel({ open, onClose, accountEmail = '', accountRole = '', accountName = '', onAccountNameChange, initialSection = 'account', server = '', connection = {}, device = {}, versions = {}, onRefreshConnection, onRestartNode, onOpenPermissions, onLogout, onCheckUpdates, onPasswordChanged }) {
+  function SettingsPanel({ open, onClose, Glyph, accountEmail = '', accountRole = '', accountName = '',
+    accountAvatar = '', onAvatarChange, onAccountNameChange, initialSection = 'account',
+    server = '', connection = {}, device = {}, versions = {}, extraSections = [],
+    onRefreshConnection, onRestartNode, onLogout, onPasswordChanged }) {
     const [section, setSection] = React.useState(initialSection)
-    React.useEffect(() => { if (open) setSection(initialSection) }, [open, initialSection])
     const [currentPassword, setCurrentPassword] = React.useState('')
     const [newPassword, setNewPassword] = React.useState('')
     const [busy, setBusy] = React.useState('')
     const [message, setMessage] = React.useState('')
+    const [avatar, setAvatar] = React.useState(accountAvatar || '')
+    const [refreshing, setRefreshing] = React.useState(false)
+    const avatarInputRef = React.useRef(null)
     const [keepSurfaces, setKeepSurfaces] = React.useState(() => {
       try { return localStorage.getItem('tether.keepSurfaces') !== '0' } catch (_) { return true }
     })
+    React.useEffect(() => { if (open) { setSection(initialSection); setMessage('') } }, [open, initialSection])
+    React.useEffect(() => { setAvatar(accountAvatar || '') }, [accountAvatar])
     if (!open) return null
     const status = connection.status || 'unknown'
-    const roleLabel = accountRole === 'owner' ? '所有者' : accountRole === 'member' ? '成员' : accountRole === 'admin' ? '管理员' : accountRole || '—'
-    const dotColor = status === 'online' ? 'var(--dsw-alias-state-success-primary, #16a34a)'
-      : status === 'offline' ? 'var(--dsw-alias-state-error-primary, #b42318)'
-        : status === 'checking' ? 'var(--dsw-alias-state-warn-primary, #b54708)' : mute
+    const roleLabel = accountRole === 'owner' ? '所有者' : accountRole === 'member' ? '成员' : accountRole === 'admin' ? '管理员' : accountRole || ''
+    const dotColor = status === 'online' ? success : status === 'offline' ? danger : status === 'checking' ? 'var(--dsw-alias-state-warn-primary, #b54708)' : mute
+    const statusLabel = status === 'online' ? '已连接' : status === 'offline' ? '不可达' : status === 'checking' ? '检测中' : '未知'
     const changePassword = async () => {
       if (!server) { setMessage('未配置服务器地址'); return }
+      if (!currentPassword || !newPassword) return
       setMessage('')
       setBusy('password')
       try {
@@ -7393,122 +7421,185 @@ function createSettingsPanel(React) {
         setCurrentPassword('')
         setNewPassword('')
         if (typeof onPasswordChanged === 'function') onPasswordChanged(data)
-        setMessage('密码已修改，其他设备的旧登录已失效')
+        setMessage('密码已修改')
       } catch (error) {
         setMessage(String(error && error.message || error))
       } finally {
         setBusy('')
       }
     }
-    const sections = [
-      ['account', '账号'],
-      ['connection', '连接'],
-      ['device', '本机设备'],
-      ['updates', '更新'],
-      ['permissions', '文件权限'],
-      ['about', '关于']
-    ]
-    const nav = h('div', { style: { width: 158, flex: '0 0 auto', padding: '14px 10px', background: panel, borderRight: '1px solid ' + line, display: 'flex', flexDirection: 'column', gap: 2 } },
-      sections.map(([id, label]) => h('button', {
-        key: id, type: 'button', onClick: () => { setMessage(''); setSection(id) },
-        className: 'tether-hover',
-        style: { height: 30, padding: '0 9px', border: 0, borderRadius: 6, textAlign: 'left', background: section === id ? 'var(--dsw-alias-interactive-bg-active, rgba(38,49,72,.10))' : 'transparent', color: section === id ? ink : sub, fontSize: 12.5, cursor: 'pointer' }
-      }, label)))
-    let body = null
-    if (section === 'account') {
-      body = h('div', { style: { display: 'grid', gap: 6 } },
-        sectionTitle('账号', '账号信息只在这里出现；连接状态请看顶栏的“连接”。'),
-        h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, margin: '8px 0 6px' } },
-          h('span', { style: { width: 38, height: 38, borderRadius: 999, display: 'grid', placeItems: 'center',
-            background: 'color-mix(in srgb, var(--dsw-alias-state-business-primary, #1570ef) 14%, transparent)',
-            color: 'var(--dsw-alias-state-business-primary, #1570ef)', fontSize: 15, fontWeight: 600 } },
+    const refreshConnection = async () => {
+      if (refreshing || typeof onRefreshConnection !== 'function') return
+      setRefreshing(true)
+      try { await onRefreshConnection() } finally { setRefreshing(false) }
+    }
+    const chooseAvatar = () => { try { if (avatarInputRef.current) avatarInputRef.current.click() } catch (_) { /* input unavailable */ } }
+    const loadAvatar = (event) => {
+      const file = event.target.files && event.target.files[0]
+      event.target.value = ''
+      if (!file || !/^image\//.test(file.type) || file.size > 2 * 1024 * 1024) {
+        if (file) setMessage('请选择 2 MB 以内的图片')
+        return
+      }
+      const reader = new FileReader()
+      reader.onload = () => {
+        const image = new Image()
+        image.onload = () => {
+          const size = 128
+          const canvas = document.createElement('canvas')
+          canvas.width = size; canvas.height = size
+          const context = canvas.getContext('2d')
+          const scale = Math.max(size / image.width, size / image.height)
+          const width = image.width * scale
+          const height = image.height * scale
+          context.drawImage(image, (size - width) / 2, (size - height) / 2, width, height)
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.86)
+          setAvatar(dataUrl)
+          if (typeof onAvatarChange === 'function') onAvatarChange(dataUrl)
+        }
+        image.onerror = () => setMessage('无法读取这张图片')
+        image.src = String(reader.result || '')
+      }
+      reader.onerror = () => setMessage('无法读取这张图片')
+      reader.readAsDataURL(file)
+    }
+    const avatarView = h('button', {
+      type: 'button', onClick: chooseAvatar, title: '更换头像', 'aria-label': '更换头像',
+      style: {
+        position: 'relative', width: 56, height: 56, flex: '0 0 auto', padding: 0, border: 0,
+        borderRadius: 999, overflow: 'hidden', cursor: 'pointer',
+        background: 'color-mix(in srgb, ' + blue + ' 14%, transparent)', color: blue
+      }
+    },
+      avatar
+        ? h('img', { src: avatar, alt: '', style: { width: '100%', height: '100%', objectFit: 'cover', display: 'block' } })
+        : h('span', { 'aria-hidden': true, style: { display: 'grid', placeItems: 'center', width: '100%', height: '100%', fontSize: 19, fontWeight: 600 } },
           String(accountName || accountEmail || '?').trim().charAt(0).toUpperCase()),
-          h('span', { style: { color: mute, fontSize: 12 } }, '头像与显示名称只影响本机显示')),
-        fieldRow('显示名称', h('input', {
-          value: accountName, placeholder: '例如：小王', maxLength: 32,
+      h('span', {
+        'aria-hidden': true,
+        style: {
+          position: 'absolute', right: 0, bottom: 0, width: 20, height: 20, borderRadius: 999,
+          display: 'grid', placeItems: 'center', background: bg, color: sub,
+          boxShadow: '0 0 0 1px ' + line
+        }
+      }, Glyph ? h(Glyph, { name: 'pencil', size: 11 }) : '✎'))
+    const accountSection = h('div', { style: { display: 'grid', gap: 18 } },
+      h('input', { ref: avatarInputRef, type: 'file', accept: 'image/*', onChange: loadAvatar, style: { display: 'none' } }),
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 14 } },
+        avatarView,
+        h('div', { style: { minWidth: 0, display: 'grid', gap: 3 } },
+          h('div', { style: { fontSize: 13.5, fontWeight: 600, color: ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, accountEmail || '未登录'),
+          roleLabel ? h('div', { style: { fontSize: 12, color: mute } }, roleLabel) : null)),
+      h('label', { style: { display: 'grid', gap: 6, fontSize: 12, color: sub, maxWidth: 320 } },
+        '显示名称',
+        h('input', {
+          value: accountName, placeholder: '未设置', maxLength: 32,
           onChange: (event) => { if (typeof onAccountNameChange === 'function') onAccountNameChange(event.target.value) },
           style: field
         })),
-        row('邮箱', accountEmail || '未登录'),
-        row('角色', roleLabel),
-        h('div', { style: { height: 1, background: line, margin: '12px 0' } }),
-        h('div', { style: { fontSize: 12.5, fontWeight: 600, marginBottom: 8 } }, '修改密码'),
-        h('div', { style: { display: 'grid', gap: 8, maxWidth: 320 } },
-          fieldRow('当前密码', h('input', { value: currentPassword, onChange: (event) => setCurrentPassword(event.target.value), type: 'password', autoComplete: 'current-password', style: field })),
-          fieldRow('新密码（至少 10 位）', h('input', { value: newPassword, onChange: (event) => setNewPassword(event.target.value), type: 'password', autoComplete: 'new-password', style: field })),
-          h('button', { onClick: changePassword, disabled: !!busy, style: { ...secondary, justifySelf: 'start' } }, busy === 'password' ? '修改中…' : '修改密码')),
-        message ? h('div', { style: { marginTop: 8, color: message.includes('已修改') ? 'var(--dsw-alias-state-success-primary, #16a34a)' : 'var(--dsw-alias-state-error-primary, #b42318)', fontSize: 12 } }, message) : null,
-        h('div', { style: { marginTop: 18 } },
-          h('button', { onClick: onLogout, style: { ...secondary, color: 'var(--dsw-alias-state-error-primary, #b42318)' } }, '退出登录')))
-    } else if (section === 'connection') {
-      body = h('div', null,
-        sectionTitle('连接', '连接灯只表示 Hub 可达与 Node 在线，不代表账号状态。'),
-        h('div', { style: { borderRadius: 8, background: panel, padding: '2px 12px' } },
-          row('服务器地址', server || '未配置'),
-          h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', minHeight: 34, fontSize: 12.5 } },
-            h('span', { style: { color: mute } }, '连接状态'),
-            h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 6 } },
-              h('span', { style: { width: 7, height: 7, borderRadius: 4, background: dotColor } }),
-              status === 'online' ? '已连接' : status === 'offline' ? '不可达' : status === 'checking' ? '检测中' : '未知')),
-          row('最近检测', timeText(connection.checkedAt)),
-          row('服务响应耗时', Number.isFinite(connection.durationMs) ? connection.durationMs + ' ms' : '—')),
-        h('div', { style: { marginTop: 12, display: 'flex', gap: 8 } },
-          h('button', { onClick: onRefreshConnection, style: secondary }, '刷新连接状态'),
-          h('button', { onClick: onLogout, style: secondary }, '切换账号 / 服务器')),
-        h('label', { style: { marginTop: 16, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12.5, color: sub } },
-          h('input', {
-            type: 'checkbox', checked: keepSurfaces,
-            onChange: (event) => {
-              const next = event.target.checked
-              setKeepSurfaces(next)
-              try { localStorage.setItem('tether.keepSurfaces', next ? '1' : '0') } catch (_) { /* best effort */ }
-              if (typeof window !== 'undefined') window.dispatchEvent(new Event('tether-surfaces-pref'))
-            }
-          }),
-          h('span', null, '保留最近设备工作区（最多 3 台）'),
-          h('span', { style: { color: mute, fontSize: 11.5 } }, '切换几乎即时，关闭后不占后台')))
-    } else if (section === 'device') {
-      body = h('div', null,
-        sectionTitle('本机设备', '本机作为目标设备时的登记信息与 Node 控制。'),
-        h('div', { style: { borderRadius: 8, background: panel, padding: '2px 12px' } },
-          row('设备名', device.name || device.device_id || '—'),
-          row('device_id', device.device_id || '—'),
-          row('平台', device.platform || '—'),
-          row('Node', device.online ? '在线' : '离线'),
-          row('版本', [versions.node && ('Node ' + versions.node), versions.app && ('APP ' + versions.app), versions.plugin && ('插件 ' + versions.plugin)].filter(Boolean).join(' · ') || '—')),
-        h('div', { style: { marginTop: 12 } },
-          h('button', { onClick: onRestartNode, disabled: !device.online, style: { ...secondary, opacity: device.online ? 1 : 0.5 } }, '重启 Node')))
-    } else if (section === 'updates') {
-      body = h('div', null,
-        sectionTitle('更新', '有新版本时，右上角会出现蓝色下载按钮。'),
-        h('div', { style: { borderRadius: 8, background: panel, padding: '2px 12px' } },
-          row('Node', versions.node || '—'),
-          row('APP', versions.app || '—'),
-          row('DSH 插件', versions.plugin || '—')),
-        h('div', { style: { marginTop: 12 } },
-          h('button', { onClick: onCheckUpdates, style: primary }, '检查更新')))
-    } else if (section === 'permissions') {
-      body = h('div', null,
-        sectionTitle('文件权限', '可写根目录与文件操作审计在独立面板中管理。'),
-        h('button', { onClick: onOpenPermissions, style: primary }, '打开文件权限'))
-    } else {
-      body = h('div', null,
-        sectionTitle('关于', 'Tether 客户端与服务端版本信息。'),
-        h('div', { style: { borderRadius: 8, background: panel, padding: '2px 12px' } },
-          row('客户端', versions.app || '—'),
-          row('Node', versions.node || '—'),
-          row('DSH 插件', versions.plugin || '—'),
-          row('服务器', server || '—')))
-    }
-    return h('div', { onPointerDown: (event) => { if (event.target === event.currentTarget) onClose() }, style: { position: 'absolute', inset: 0, zIndex: 40, background: 'rgba(16,24,40,0.35)', display: 'grid', placeItems: 'center', padding: 24 } },
-      h('section', { role: 'dialog', 'aria-label': '设置', style: { width: 'min(760px, 100%)', height: 'min(560px, 100%)', background: bg, borderRadius: 12, overflow: 'hidden', boxShadow: 'var(--dsw-elevation-panel, 0 18px 50px rgba(16,24,40,0.18))', display: 'flex', flexDirection: 'column' } },
-        h('header', { style: { height: 44, padding: '0 14px', display: 'flex', alignItems: 'center', background: panel, borderBottom: '1px solid ' + line } },
+      h('div', { style: { height: 1, background: line } }),
+      h('div', { style: { display: 'grid', gap: 10, maxWidth: 320 } },
+        h('div', { style: { fontSize: 13, fontWeight: 600, color: ink } }, '密码'),
+        h('input', { value: currentPassword, onChange: (event) => setCurrentPassword(event.target.value), type: 'password', autoComplete: 'current-password', placeholder: '当前密码', 'aria-label': '当前密码', style: field }),
+        h('input', { value: newPassword, onChange: (event) => setNewPassword(event.target.value), type: 'password', autoComplete: 'new-password', placeholder: '新密码（至少 10 位）', 'aria-label': '新密码', style: field }),
+        h('button', {
+          type: 'button', onClick: changePassword, disabled: !!busy || !currentPassword || !newPassword,
+          style: { ...secondary, justifySelf: 'start', opacity: busy || !currentPassword || !newPassword ? 0.5 : 1 }
+        }, busy === 'password' ? '修改中…' : '修改密码'),
+        message ? h('div', { role: 'status', style: { color: message === '密码已修改' ? success : danger, fontSize: 12 } }, message) : null),
+      h('div', { style: { height: 1, background: line } }),
+      h('button', {
+        type: 'button', onClick: onLogout,
+        className: 'tether-hover',
+        style: { justifySelf: 'start', border: 0, background: 'transparent', padding: 0, color: danger, fontSize: 12.5, cursor: 'pointer' }
+      }, '退出登录'))
+    const connectionSection = h('div', { style: { display: 'grid', gap: 10 } },
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, minHeight: 24 } },
+        h('span', { style: { flex: '1 1 auto', fontSize: 12, color: mute } }, '服务器'),
+        h('button', {
+          type: 'button', onClick: refreshConnection, disabled: refreshing, title: '重新检测', 'aria-label': '重新检测',
+          className: 'tether-hover',
+          style: { width: 26, height: 26, display: 'grid', placeItems: 'center', border: 0, borderRadius: 6, background: 'transparent', color: sub, cursor: refreshing ? 'default' : 'pointer' }
+        }, Glyph ? h('span', { className: refreshing ? 'tether-spin' : '', style: { display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 15 })) : '↻')),
+      card([
+        ['地址', server || '未配置'],
+        ['状态', h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 6 } },
+          h('span', { style: { width: 7, height: 7, borderRadius: 4, background: dotColor } }), statusLabel)],
+        ['最近检测', timeText(connection.checkedAt)],
+        ['响应', Number.isFinite(connection.durationMs) ? connection.durationMs + ' ms' : '—']
+      ]))
+    const workspaceSection = h('div', { style: { display: 'grid', gap: 12 } },
+      h('div', {
+        title: '切换设备时保留最近三个原生工作区；关闭后释放后台页面',
+        style: { display: 'flex', alignItems: 'center', gap: 16, minHeight: 44 }
+      },
+        h('div', { style: { flex: '1 1 auto', minWidth: 0 } },
+          h('div', { style: { fontSize: 13, color: ink } }, '保留最近设备工作区'),
+          h('div', { style: { marginTop: 2, fontSize: 11.5, color: mute } }, '最多 3 台')),
+        toggle(keepSurfaces, (next) => {
+          setKeepSurfaces(next)
+          try { localStorage.setItem('tether.keepSurfaces', next ? '1' : '0') } catch (_) { /* storage unavailable */ }
+          if (typeof window !== 'undefined') window.dispatchEvent(new Event('tether-surfaces-pref'))
+        }, '保留最近设备工作区')))
+    const deviceSection = h('div', { style: { display: 'grid', gap: 12 } },
+      card([
+        ['设备名', device.name || device.device_id || '—'],
+        ['设备 ID', device.device_id || '—'],
+        ['平台', (device.capabilities && device.capabilities.os_label) || device.platform || '—'],
+        ['Node', device.online ? '在线' : '离线']
+      ]),
+      h('div', null,
+        h('button', {
+          type: 'button', onClick: onRestartNode, disabled: !device.online,
+          style: { ...secondary, display: 'inline-flex', alignItems: 'center', gap: 6, opacity: device.online ? 1 : 0.5, cursor: device.online ? 'pointer' : 'default' }
+        }, Glyph ? h(Glyph, { name: 'refresh', size: 14 }) : null, '重启 Node')))
+    const versionRows = [
+      ['客户端', versions.app || '—'],
+      ['Node', versions.node || '—'],
+      ['DSH 插件', versions.plugin || '—']
+    ]
+    const aboutSection = h('div', { style: { display: 'grid', gap: 14 } },
+      h('div', { style: { fontSize: 17, fontWeight: 600, color: ink } }, 'Tether'),
+      card(versionRows))
+    const builtIn = [
+      { id: 'account', label: '账号', render: () => accountSection },
+      { id: 'connection', label: '连接', render: () => connectionSection },
+      { id: 'workspace', label: '工作区', render: () => workspaceSection },
+      { id: 'device', label: '本机设备', render: () => deviceSection },
+      { id: 'about', label: '关于', render: () => aboutSection }
+    ]
+    const sections = builtIn.concat((Array.isArray(extraSections) ? extraSections : [])
+      .filter((item) => item && item.id && item.label && typeof item.render === 'function'))
+    const current = sections.find((item) => item.id === section) || sections[0]
+    const nav = h('div', {
+      style: { width: 150, flex: '0 0 auto', padding: '12px 8px', background: panel, borderRight: '1px solid ' + line, display: 'flex', flexDirection: 'column', gap: 2 }
+    },
+      sections.map((item) => h('button', {
+        key: item.id, type: 'button', onClick: () => { setMessage(''); setSection(item.id) },
+        className: 'tether-hover', 'aria-current': current.id === item.id ? 'page' : undefined,
+        style: {
+          height: 30, padding: '0 10px', border: 0, borderRadius: 6, textAlign: 'left',
+          background: current.id === item.id ? 'var(--dsw-alias-interactive-bg-active, rgba(38,49,72,.10))' : 'transparent',
+          color: current.id === item.id ? ink : sub, fontSize: 12.5, cursor: 'pointer', font: 'inherit'
+        }
+      }, item.label)))
+    return h('div', {
+      onPointerDown: (event) => { if (event.target === event.currentTarget) onClose() },
+      style: { position: 'absolute', inset: 0, zIndex: 40, background: 'rgba(16,24,40,0.35)', display: 'grid', placeItems: 'center', padding: 24 }
+    },
+      h('section', {
+        role: 'dialog', 'aria-label': '设置',
+        style: { width: 'min(760px, 100%)', height: 'min(560px, 100%)', background: bg, borderRadius: 12, overflow: 'hidden', boxShadow: 'var(--dsw-elevation-panel, 0 18px 50px rgba(16,24,40,0.18))', display: 'flex', flexDirection: 'column' }
+      },
+        h('header', { style: { height: 44, padding: '0 14px', display: 'flex', alignItems: 'center', background: panel, borderBottom: '1px solid ' + line, flex: '0 0 auto' } },
           h('strong', { style: { fontSize: 14 } }, '设置'),
-          h('button', { onClick: onClose, title: '关闭', 'aria-label': '关闭', style: { marginLeft: 'auto', border: 0, background: 'transparent', fontSize: 18, cursor: 'pointer', color: mute } }, '×')),
+          h('button', {
+            type: 'button', onClick: onClose, title: '关闭', 'aria-label': '关闭', className: 'tether-hover',
+            style: { marginLeft: 'auto', width: 28, height: 28, border: 0, borderRadius: 6, background: 'transparent', fontSize: 18, cursor: 'pointer', color: mute }
+          }, '×')),
         h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex' } },
           nav,
-          h('div', { className: 'tether-scroll', style: { flex: '1 1 auto', minWidth: 0, overflowY: 'auto', padding: '18px 22px' } }, body)))
-    )
+          h('div', { className: 'tether-scroll', style: { flex: '1 1 auto', minWidth: 0, overflowY: 'auto', padding: '20px 24px' } }, current.render()))))
   }
   return { SettingsPanel }
 }
@@ -9832,7 +9923,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       })))
     }
 
-    function ActivityBar({ active, collapsed, onSelect, onPermissions, permissionsOpen, onAppSettings, appSettingsOpen, onAccount, accountEmail = '' }) {
+    function ActivityBar({ active, collapsed, onSelect, onPermissions, permissionsOpen, onAppSettings, appSettingsOpen, onAccount, accountEmail = '', accountAvatar = '' }) {
       const accountInitial = String(accountEmail || '').trim().charAt(0).toUpperCase()
       const items = [
         { id: 'workspaces', label: '原生工作区', icon: 'monitor' },
@@ -9865,7 +9956,12 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
               width: 36, height: 36, display: 'grid', placeItems: 'center', border: 0,
               borderRadius: UI.radius, cursor: 'pointer', background: 'transparent', color: C.mute
             }
-          }, accountInitial
+          }, accountAvatar
+            ? h('img', {
+              src: accountAvatar, alt: '',
+              style: { width: 22, height: 22, borderRadius: 999, objectFit: 'cover', display: 'block' }
+            })
+            : accountInitial
             ? h('span', {
               'aria-hidden': true,
               style: { width: 22, height: 22, borderRadius: 999, display: 'grid', placeItems: 'center',
@@ -10250,8 +10346,15 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       return { deviceId, status: 'loading', url: '' }
     }
 
-    function nativeSurfaceContainerStyle(visible) {
-      return { display: visible ? 'flex' : 'none', flex: '1 1 auto', minWidth: 0, minHeight: 0, flexDirection: 'column' }
+    function nativeSurfaceContainerStyle(visible, layered) {
+      if (!layered) return { display: visible ? 'flex' : 'none', flex: '1 1 auto', minWidth: 0, minHeight: 0, flexDirection: 'column' }
+      return {
+        position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+        minWidth: 0, minHeight: 0, overflow: 'hidden',
+        visibility: visible ? 'visible' : 'hidden',
+        pointerEvents: visible ? 'auto' : 'none',
+        zIndex: visible ? 1 : 0
+      }
     }
 
     const NATIVE_SURFACE_RETRIES = 3
@@ -10287,7 +10390,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       } catch (_) { /* performance marks are optional */ }
     }
 
-    function NativeSurface({ deviceId, online, visible, localDeviceId, preload = false }) {
+    function NativeSurface({ deviceId, online, visible, localDeviceId, preload = false, layered = false }) {
       const [state, setState] = React.useState({ deviceId, status: deviceId ? 'loading' : 'no-device', url: '' })
       const [attempt, setAttempt] = React.useState(0)
       const [slow, setSlow] = React.useState(false)
@@ -10574,7 +10677,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           : currentState.status === 'no-device' ? '先从左侧设备列表选择目标设备。'
             : currentState.status === 'error' ? currentState.message
               : ''
-      return h('div', { className: 'tether-native-surface', style: nativeSurfaceContainerStyle(visible) },
+      return h('div', { className: 'tether-native-surface', style: nativeSurfaceContainerStyle(visible, layered) },
         ['document-loading', 'document-loaded'].includes(currentState.status) && currentState.deviceId === deviceId && online
           ? h('div', { style: { position: 'relative', display: 'flex', flex: '1 1 auto', minWidth: 0, minHeight: 0 } },
             h('iframe', {
@@ -10630,6 +10733,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const [keep, setKeep] = React.useState(() => {
         try { return localStorage.getItem('tether.keepSurfaces') !== '0' } catch (_) { return true }
       })
+      const mountedRef = React.useRef([])
       React.useEffect(() => {
         const sync = () => {
           try { setKeep(localStorage.getItem('tether.keepSurfaces') !== '0') } catch (_) { setKeep(true) }
@@ -10646,9 +10750,17 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         })
       }, [deviceId])
       const online = new Map((devices || []).map((item) => [item.device_id, item]))
-      const ids = [deviceId, ...(keep ? recent : [])]
+      const wanted = [deviceId, ...(keep ? recent : [])]
         .filter((item, index, all) => item && all.indexOf(item) === index)
-        .slice(0, 3)
+      let ids = mountedRef.current.filter((id) => wanted.includes(id))
+      if (deviceId && !ids.includes(deviceId)) {
+        ids = ids.slice(-2)
+        ids.push(deviceId)
+      }
+      for (const id of wanted) {
+        if (ids.length >= 3) break
+        if (!ids.includes(id)) ids.push(id)
+      }
       if (keep) {
         const spare = (devices || [])
           .filter((item) => item && item.online && item.capabilities && item.capabilities.dsh_surface
@@ -10657,22 +10769,23 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           .map((item) => item.device_id)
         ids.push(...spare)
       }
+      mountedRef.current = ids
       return h('div', {
-        style: { position: 'relative', flex: '1 1 auto', minWidth: 0, minHeight: 0, display: 'flex' }
+        style: {
+          position: 'absolute', inset: 0, display: 'flex', minWidth: 0, minHeight: 0,
+          visibility: visible ? 'visible' : 'hidden',
+          pointerEvents: visible ? 'auto' : 'none'
+        }
       },
-        ids.map((id) => h('div', {
+        ids.map((id) => h(NativeSurface, {
           key: id,
-          style: {
-            position: 'absolute', inset: 0, display: visible && id === deviceId ? 'flex' : 'none',
-            flexDirection: 'column', minWidth: 0, minHeight: 0
-          }
-        }, h(NativeSurface, {
           deviceId: id,
           online: !!(online.get(id) && online.get(id).online),
           visible: visible && id === deviceId,
           preload: true,
+          layered: true,
           localDeviceId
-        }))))
+        })))
     }
 
     function isSafeNativeSurfaceUrl(value) {
@@ -10920,6 +11033,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         try { return JSON.parse(window.localStorage.getItem('tether.hub') || '{}').role || '' } catch (_) { return '' }
       })
       const [accountName, setAccountName] = usePersisted('tether.accountName', '')
+      const [accountAvatar, setAccountAvatar] = usePersisted('tether.accountAvatar', '')
       const [settingsSection, setSettingsSection] = React.useState('account')
       const [hubUnsafeExistingUrl, setHubUnsafeExistingUrl] = React.useState(false)
       const [hubStatus, setHubStatus] = React.useState('unknown')
@@ -13347,7 +13461,8 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             onAppSettings: () => { setShowSettings(false); setSettingsSection('connection'); setShowAppSettings(true) },
             appSettingsOpen: showAppSettings,
             onAccount: () => { setShowSettings(false); setSettingsSection('account'); setShowAppSettings(true) },
-            accountEmail: accountName || hubEmail
+            accountEmail: accountName || hubEmail,
+            accountAvatar
           }),
           h(SidePanel, {
             width: safeSidebarWidth,
@@ -13376,7 +13491,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             onContextMenuNode: (event, node) => openContextMenu(event, { name: node.name, path: node.path, dir: node.dir }, node.dir ? node.path : parentOf(node.path)),
             treeSelected
           }),
-          h('main', { className: 'tether-workbench', style: { flex: '1 1 auto', display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 } },
+          h('main', { className: 'tether-workbench', style: { flex: '1 1 auto', display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0, position: 'relative' } },
             h(SurfaceDeck, { devices: (state && state.devices) || [], deviceId, localDeviceId: appLocalDevice, visible: view === 'chat' }),
             view === 'files' ? renderExplorer() : view === 'network' ? renderNetwork()
               : view === 'transfer' ? h(createTransferPage, {
@@ -13494,6 +13609,9 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           accountEmail: hubEmail,
           accountRole: hubRole,
           accountName,
+          accountAvatar,
+          Glyph,
+          onAvatarChange: setAccountAvatar,
           onAccountNameChange: setAccountName,
           initialSection: settingsSection,
           server: hubAddress || hubUrl || '',

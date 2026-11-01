@@ -1609,7 +1609,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       })))
     }
 
-    function ActivityBar({ active, collapsed, onSelect, onPermissions, permissionsOpen, onAppSettings, appSettingsOpen, onAccount, accountEmail = '' }) {
+    function ActivityBar({ active, collapsed, onSelect, onPermissions, permissionsOpen, onAppSettings, appSettingsOpen, onAccount, accountEmail = '', accountAvatar = '' }) {
       const accountInitial = String(accountEmail || '').trim().charAt(0).toUpperCase()
       const items = [
         { id: 'workspaces', label: '原生工作区', icon: 'monitor' },
@@ -1642,7 +1642,12 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
               width: 36, height: 36, display: 'grid', placeItems: 'center', border: 0,
               borderRadius: UI.radius, cursor: 'pointer', background: 'transparent', color: C.mute
             }
-          }, accountInitial
+          }, accountAvatar
+            ? h('img', {
+              src: accountAvatar, alt: '',
+              style: { width: 22, height: 22, borderRadius: 999, objectFit: 'cover', display: 'block' }
+            })
+            : accountInitial
             ? h('span', {
               'aria-hidden': true,
               style: { width: 22, height: 22, borderRadius: 999, display: 'grid', placeItems: 'center',
@@ -2027,8 +2032,15 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       return { deviceId, status: 'loading', url: '' }
     }
 
-    function nativeSurfaceContainerStyle(visible) {
-      return { display: visible ? 'flex' : 'none', flex: '1 1 auto', minWidth: 0, minHeight: 0, flexDirection: 'column' }
+    function nativeSurfaceContainerStyle(visible, layered) {
+      if (!layered) return { display: visible ? 'flex' : 'none', flex: '1 1 auto', minWidth: 0, minHeight: 0, flexDirection: 'column' }
+      return {
+        position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+        minWidth: 0, minHeight: 0, overflow: 'hidden',
+        visibility: visible ? 'visible' : 'hidden',
+        pointerEvents: visible ? 'auto' : 'none',
+        zIndex: visible ? 1 : 0
+      }
     }
 
     const NATIVE_SURFACE_RETRIES = 3
@@ -2064,7 +2076,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       } catch (_) { /* performance marks are optional */ }
     }
 
-    function NativeSurface({ deviceId, online, visible, localDeviceId, preload = false }) {
+    function NativeSurface({ deviceId, online, visible, localDeviceId, preload = false, layered = false }) {
       const [state, setState] = React.useState({ deviceId, status: deviceId ? 'loading' : 'no-device', url: '' })
       const [attempt, setAttempt] = React.useState(0)
       const [slow, setSlow] = React.useState(false)
@@ -2351,7 +2363,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           : currentState.status === 'no-device' ? '先从左侧设备列表选择目标设备。'
             : currentState.status === 'error' ? currentState.message
               : ''
-      return h('div', { className: 'tether-native-surface', style: nativeSurfaceContainerStyle(visible) },
+      return h('div', { className: 'tether-native-surface', style: nativeSurfaceContainerStyle(visible, layered) },
         ['document-loading', 'document-loaded'].includes(currentState.status) && currentState.deviceId === deviceId && online
           ? h('div', { style: { position: 'relative', display: 'flex', flex: '1 1 auto', minWidth: 0, minHeight: 0 } },
             h('iframe', {
@@ -2407,6 +2419,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const [keep, setKeep] = React.useState(() => {
         try { return localStorage.getItem('tether.keepSurfaces') !== '0' } catch (_) { return true }
       })
+      const mountedRef = React.useRef([])
       React.useEffect(() => {
         const sync = () => {
           try { setKeep(localStorage.getItem('tether.keepSurfaces') !== '0') } catch (_) { setKeep(true) }
@@ -2423,9 +2436,17 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         })
       }, [deviceId])
       const online = new Map((devices || []).map((item) => [item.device_id, item]))
-      const ids = [deviceId, ...(keep ? recent : [])]
+      const wanted = [deviceId, ...(keep ? recent : [])]
         .filter((item, index, all) => item && all.indexOf(item) === index)
-        .slice(0, 3)
+      let ids = mountedRef.current.filter((id) => wanted.includes(id))
+      if (deviceId && !ids.includes(deviceId)) {
+        ids = ids.slice(-2)
+        ids.push(deviceId)
+      }
+      for (const id of wanted) {
+        if (ids.length >= 3) break
+        if (!ids.includes(id)) ids.push(id)
+      }
       if (keep) {
         const spare = (devices || [])
           .filter((item) => item && item.online && item.capabilities && item.capabilities.dsh_surface
@@ -2434,22 +2455,23 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           .map((item) => item.device_id)
         ids.push(...spare)
       }
+      mountedRef.current = ids
       return h('div', {
-        style: { position: 'relative', flex: '1 1 auto', minWidth: 0, minHeight: 0, display: 'flex' }
+        style: {
+          position: 'absolute', inset: 0, display: 'flex', minWidth: 0, minHeight: 0,
+          visibility: visible ? 'visible' : 'hidden',
+          pointerEvents: visible ? 'auto' : 'none'
+        }
       },
-        ids.map((id) => h('div', {
+        ids.map((id) => h(NativeSurface, {
           key: id,
-          style: {
-            position: 'absolute', inset: 0, display: visible && id === deviceId ? 'flex' : 'none',
-            flexDirection: 'column', minWidth: 0, minHeight: 0
-          }
-        }, h(NativeSurface, {
           deviceId: id,
           online: !!(online.get(id) && online.get(id).online),
           visible: visible && id === deviceId,
           preload: true,
+          layered: true,
           localDeviceId
-        }))))
+        })))
     }
 
     function isSafeNativeSurfaceUrl(value) {
@@ -2697,6 +2719,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         try { return JSON.parse(window.localStorage.getItem('tether.hub') || '{}').role || '' } catch (_) { return '' }
       })
       const [accountName, setAccountName] = usePersisted('tether.accountName', '')
+      const [accountAvatar, setAccountAvatar] = usePersisted('tether.accountAvatar', '')
       const [settingsSection, setSettingsSection] = React.useState('account')
       const [hubUnsafeExistingUrl, setHubUnsafeExistingUrl] = React.useState(false)
       const [hubStatus, setHubStatus] = React.useState('unknown')
@@ -5124,7 +5147,8 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             onAppSettings: () => { setShowSettings(false); setSettingsSection('connection'); setShowAppSettings(true) },
             appSettingsOpen: showAppSettings,
             onAccount: () => { setShowSettings(false); setSettingsSection('account'); setShowAppSettings(true) },
-            accountEmail: accountName || hubEmail
+            accountEmail: accountName || hubEmail,
+            accountAvatar
           }),
           h(SidePanel, {
             width: safeSidebarWidth,
@@ -5153,7 +5177,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             onContextMenuNode: (event, node) => openContextMenu(event, { name: node.name, path: node.path, dir: node.dir }, node.dir ? node.path : parentOf(node.path)),
             treeSelected
           }),
-          h('main', { className: 'tether-workbench', style: { flex: '1 1 auto', display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 } },
+          h('main', { className: 'tether-workbench', style: { flex: '1 1 auto', display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0, position: 'relative' } },
             h(SurfaceDeck, { devices: (state && state.devices) || [], deviceId, localDeviceId: appLocalDevice, visible: view === 'chat' }),
             view === 'files' ? renderExplorer() : view === 'network' ? renderNetwork()
               : view === 'transfer' ? h(createTransferPage, {
@@ -5271,6 +5295,9 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           accountEmail: hubEmail,
           accountRole: hubRole,
           accountName,
+          accountAvatar,
+          Glyph,
+          onAvatarChange: setAccountAvatar,
           onAccountNameChange: setAccountName,
           initialSection: settingsSection,
           server: hubAddress || hubUrl || '',
