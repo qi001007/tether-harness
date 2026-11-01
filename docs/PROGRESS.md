@@ -357,5 +357,10 @@
 - 0.2.48 已发布（CI `41278461096`，05:54:11Z），包含登录页服务器切换与角色显示；Hub 镜像已刷新。LAPTOP-01 Node+APP **17.1 s**、插件 **14.4 s**（`restart_required` 清除，健康 0.2.48），两机 surface smoke 200；LAPTOP APP 现显示账号登录页，待所有者登录。
 - 真实登录闭环已用临时 Hub 测试账号跑通：登录页（服务器地址可改）→ 登录 → 自动重载主界面 → 设置显示邮箱 → 退出登录回登录页；未使用生产凭据。
 
+## 2026-11-01 Tailscale 直连探测
+
+- 本机与 LAPTOP（`qi`，`100.92.162.37`）已在同一 tailnet；`tailscale ping` 显示为 **direct IPv6，5 ms RTT**（经 `[2406:280:...]:41641`），而 Hub 控制 P95 约 113 ms。
+- 吞吐尚未测：LAPTOP 的 Node/DSH 只监听 loopback，没有可从 Tailscale 访问的测试端点。下一步需要临时 HTTP 端点、SSH 或 Taildrop；在拿到吞吐前不宣称 overlay 全面优于 relay。
+
 详细部署记录、服务器地址与运行快照属于私有运维材料，不在本公开进度页重复列出。用户需求仍以 [反馈清单](FEEDBACK.md) 为准；产品目标见 [PRD](PRD.md)，公开协议与客户端边界见 [技术说明](TECHNICAL.md)。
 
