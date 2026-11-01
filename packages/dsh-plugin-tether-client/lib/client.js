@@ -9693,7 +9693,10 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
 
     const NATIVE_SURFACE_RETRIES = 3
     const NATIVE_SURFACE_DOCUMENT_RETRIES = 1
-    const NATIVE_SURFACE_DOCUMENT_TIMEOUT_MS = 30000
+    // The first cold load streams the DSH plugin bundles through the relay
+    // (4.2 MB compressed, 25-90 s). A 30 s document timeout killed a page that
+    // was still downloading and then forced a second full transfer.
+    const NATIVE_SURFACE_DOCUMENT_TIMEOUT_MS = 90000
 
     function nativeSurfaceRetryDelay(attempt) {
       return Math.min(1000 * Math.pow(2, Math.max(0, attempt - 1)), 8000)

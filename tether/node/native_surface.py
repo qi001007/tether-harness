@@ -27,6 +27,7 @@ from .fs_service import FsError
 MAX_BODY = 8 * 1024 * 1024
 MAX_FRAME = 8 * 1024 * 1024
 TIMEOUT = 20
+LONG_ASSET_TIMEOUT = 180
 MAX_HTTP_STREAMS = 8
 HTTP_STREAM_CHUNK = 48 * 1024
 HTTP_STREAM_QUEUE = 4
@@ -464,6 +465,10 @@ class NativeSurface:
         if method not in {"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"}:
             raise NativeSurfaceError("unsupported HTTP method", "bad_method")
         url = url or self._target(args.get("path"), origin=origin)
+        path_only = urllib.parse.urlsplit(url).path
+        asset_request = method in {"GET", "HEAD"} and (
+            path_only.startswith("/plugins/") or path_only.startswith("/assets/"))
+        request_timeout = LONG_ASSET_TIMEOUT if asset_request else TIMEOUT
         origin = origin or self._origin
         headers = args.get("headers") or {}
         if not isinstance(headers, dict):
@@ -494,7 +499,7 @@ class NativeSurface:
 
         def send() -> Any:
             try:
-                return opener.open(request, timeout=TIMEOUT)
+                return opener.open(request, timeout=request_timeout)
             except urllib.error.HTTPError as exc:
                 return exc
             except Exception:

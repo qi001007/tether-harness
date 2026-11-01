@@ -162,7 +162,7 @@ test('NativeSurface reports document readiness only after iframe onLoad and boun
   assert.match(clientSource, /status: 'document-loading', url: url\.href/)
   assert.match(clientSource, /onLoad: \(\) => \{[\s\S]*status: 'document-loaded'/)
   assert.match(clientSource, /NATIVE_SURFACE_DOCUMENT_RETRIES = 1/)
-  assert.match(clientSource, /NATIVE_SURFACE_DOCUMENT_TIMEOUT_MS = 30000/)
+  assert.match(clientSource, /NATIVE_SURFACE_DOCUMENT_TIMEOUT_MS = 90000/)
   assert.match(clientSource, /pollFlightRef\.current/)
   assert.match(clientSource, /document\.visibilityState === 'hidden'/)
   assert.match(clientSource, /controller\.abort\(\)/)

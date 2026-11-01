@@ -166073,7 +166073,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
   }
   const NATIVE_SURFACE_RETRIES = 3;
   const NATIVE_SURFACE_DOCUMENT_RETRIES = 1;
-  const NATIVE_SURFACE_DOCUMENT_TIMEOUT_MS = 3e4;
+  const NATIVE_SURFACE_DOCUMENT_TIMEOUT_MS = 9e4;
   function nativeSurfaceRetryDelay(attempt) {
     return Math.min(1e3 * Math.pow(2, Math.max(0, attempt - 1)), 8e3);
   }

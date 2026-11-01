@@ -144,9 +144,9 @@ test('NativeSurface cancels obsolete device requests, pauses hidden polling, and
     renderer.render()
     const refreshedFrame = walk(renderer.output(), (node) => node.type === 'iframe')
     assert.ok(refreshedFrame, 'a source change obtains a new descriptor and mounts the new document')
-    const watchdogCount = [...timers.values()].filter((value) => value.delay === 30000).length
+    const watchdogCount = [...timers.values()].filter((value) => value.delay === 90000).length
     iframe.props.onLoad()
-    assert.equal([...timers.values()].filter((value) => value.delay === 30000).length, watchdogCount,
+    assert.equal([...timers.values()].filter((value) => value.delay === 90000).length, watchdogCount,
       'a stale iframe onLoad cannot clear the new document watchdog')
     refreshedFrame.props.onLoad()
     renderer.render()

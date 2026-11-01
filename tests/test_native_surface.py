@@ -283,6 +283,38 @@ def test_http_request_body_limit_uses_surface_constant(native_home, monkeypatch)
     assert error.value.code == "too_large"
 
 
+def test_asset_gets_use_the_long_surface_timeout(native_home, monkeypatch):
+    service = NativeSurface(native_home[0])
+    service._ensure_authenticated = lambda: None
+    service._cookie_header = lambda: ""
+    monkeypatch.setattr(service, "_target", lambda path, **_: "http://127.0.0.1:1" + path)
+    seen = []
+
+    class Response:
+        code = 200
+        headers = {}
+
+        def read(self, _limit):
+            return b"ok"
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    class Opener:
+        def open(self, request, timeout=None):
+            seen.append((request.full_url, timeout))
+            return Response()
+
+    monkeypatch.setattr(native_surface_module.urllib.request, "build_opener", lambda *_, **__: Opener())
+    asyncio.run(service.call("http", {"path": "/plugins/??a/client.js", "method": "GET"}))
+    asyncio.run(service.call("http", {"path": "/api/state", "method": "GET"}))
+    assert seen[0][1] == native_surface_module.LONG_ASSET_TIMEOUT == 180
+    assert seen[1][1] == native_surface_module.TIMEOUT == 20
+
+
 def test_gzip_response_bytes_and_encoding_header_are_preserved(native_home):
     service = NativeSurface(native_home[0])
     result = asyncio.run(service.call("http", {"path": "/gzip", "headers": {
