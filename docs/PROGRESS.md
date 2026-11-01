@@ -14,7 +14,7 @@
 
 真机证据（DESKTOP-LOCAL，0.2.53 源码 + 0.2.54 WebUI）：互传页左侧新建 `tether-ui-check` 成功，拖 20 B 文件到 LAPTOP 弹出同名冲突，选“保留两者”生成 `tether-picker-check (2).txt` 并 100% 完成；随后两项临时文件均已删除。设置齿轮打开“连接”，头像打开“账号”；活动栏 DOM 只有 `文件权限/设置/账号` 三个底部按钮，`.tether-account-bar` 不存在。
 
-门禁：client pytest 142 passed / 1 skipped；mjs 222/222（Electron QA 隔离壳另计）；cjs 6/6；`build.mjs --check`、`build-web.mjs --check`、`validate_versions()` 通过。Electron QA 隔离壳仍受本机环境/登录态影响未通过，未用它替代真机结论。
+门禁：client pytest 142 passed / 1 skipped；mjs 222/222（Electron QA 隔离壳另计）；cjs 6/6；`build.mjs --check`、`build-web.mjs --check`、`validate_versions()` 通过。Electron QA 隔离壳仍受本机环境/登录态影响未通过，未用它替代真机结论。0.2.54 已发布（CI `41338266729`，签名清单验签通过），Hub mirror 已刷新；两机 app/node/plugin 均为 0.2.54，DESKTOP/LAPTOP surface 200（309 ms / 157 ms）。
 
 ## 2026-10-30 v0.2.29 本地发行准备（未发布）
 
