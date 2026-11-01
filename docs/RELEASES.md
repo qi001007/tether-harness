@@ -1,5 +1,18 @@
 # Public client releases
 
+## v0.2.54
+
+Explorer parity, shared file cache and resident surfaces:
+
+- Transfer page: create folder/file, rename, delete to `.tether-trash`, overwrite/keep-both conflict dialog, pointer drag with drop highlight, context menu and `Ctrl+A/C/X/V`. Real desktop run created a folder, dragged a 20 B file to LAPTOP, chose “保留两者”, produced `tether-picker-check (2).txt` at 100% and cleaned both temp items.
+- Composer picker: title “资源管理器”, device name only (no “目标电脑 ·”), fixed 20/18/22 px header/status rows so loading cannot shift the list; native composer plus is the only entry (extra text button and duplicate command removed).
+- One `file-cache.js` (20 s TTL, 240 dirs, in-flight dedupe, explicit invalidation) now serves the explorer, composer picker and both transfer panes.
+- Connection pill reads `/api/state`; a successful poll keeps it green for 8 s without opening a panel. Settings shows “已连接 · 168 ms”.
+- `SurfaceDeck` keeps the active + two most recent device workspaces mounted; returning switches measured 9–29 ms (already-loaded LAPTOP `readyState=complete` in 38 ms). A cold first load still takes 8–14 s for the 4.2 MB + 1.9 MB plugin bundles. A settings checkbox can disable retention.
+- Bottom account bar removed: shield/gear/avatar only; gear opens connection settings, avatar opens account (display name, password, logout).
+
+Gates: client pytest 142 passed / 1 skipped, mjs 222/222 (excluding the stale isolated Electron QA harness), cjs 6/6, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41338266729` succeeded and released at 2026-11-01T18:49:50Z (app 1,741,992 B, plugin 1,341,462 B, node 79,648 B, signed manifest verified). Hub mirror refreshed to **0.2.54** (`distribution_state: latest`). LAPTOP-01 Node+APP and plugin updated by Hub jobs; its surfaces return 200 in 157 ms. DESKTOP-LOCAL is still running the source APP 0.2.53 process with the 0.2.54 WebUI and local DSH plugin 0.2.54; the APP process version catches up on its next restart.
+
 ## v0.2.53
 
 Background surface warmup:

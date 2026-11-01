@@ -25,7 +25,7 @@ Tether connects the **DeepSeek Harness (DSH)** desktop app on one machine to the
 
 > **Project status: alpha.** Tether is a working research prototype, not a production multi-tenant service. Read [Status](#status) and [Security](#security) before exposing a Hub to other people.
 
-> **Current client (2026-11-02): v0.2.53.** First launch opens a full-screen account login (Hub URL, email/password, optional TOTP; invite-code registration for new users). The device enrolls automatically after sign-in. The top-bar **连接** pill only shows Hub/Node reachability and refresh; account details and password/logout live in the explorer footer and **Settings**. v0.2.53 warms the other online DSH surfaces in a hidden frame after startup, so a device switch lands in about five seconds instead of waiting for the cold 4.2 MB plugin bundle. Includes the 0.2.52 shared transfer page, picker tree and surface cache fixes. Download the current build below.
+> **Current client (2026-11-02): v0.2.54.** First launch opens a full-screen account login (Hub URL, email/password, optional TOTP; invite-code registration for new users). The device enrolls automatically after sign-in. The top-bar **连接** pill is live from `/api/state` and turns green without opening a panel. The transfer page now has full explorer parity (new, rename, delete, conflict keep-both, drag across panes), all three file entry points share one directory cache, the native composer plus opens the shared picker, and the activity bar ends with shield/gear/avatar (gear → settings, avatar → account). `SurfaceDeck` keeps the active and two recent device workspaces mounted so a return switch is a visibility toggle; a cold first download still takes roughly 8–14 s. Download the current build below.
 
 ## Why Tether
 
@@ -134,14 +134,14 @@ When a new version is available, a blue **↓** button appears in the top bar. C
 
 ## Download
 
-### Latest stable: v0.2.53
+### Latest stable: v0.2.54
 
 | Package | Download | Size | SHA-256 |
 |---|---|---:|---|
-| APP | [tether-app-0.2.53.zip](https://github.com/qi001007/tether-harness/releases/download/v0.2.53/tether-app-0.2.53.zip) | 1,733,027 B | `79d388d5687c62e00d73be0b206e8844680147e66f3c10fe2d9421badff855af` |
-| DSH plugin | [tether-plugin-0.2.53.zip](https://github.com/qi001007/tether-harness/releases/download/v0.2.53/tether-plugin-0.2.53.zip) | 1,337,207 B | `dd664bc7cc7aea53c08823b261edbc0fc92476b64822bcc361f0a81d782eb8ef` |
-| Node | [tether-node-0.2.53.zip](https://github.com/qi001007/tether-harness/releases/download/v0.2.53/tether-node-0.2.53.zip) | 79,648 B | `503ba456c118f7eebb5d4815bd85a4b7a562088cf4b74ed8186834ba28018206` |
-| Update manifest | [tether-update.json](https://github.com/qi001007/tether-harness/releases/download/v0.2.53/tether-update.json) | — | signed in the release |
+| APP | [tether-app-0.2.54.zip](https://github.com/qi001007/tether-harness/releases/download/v0.2.54/tether-app-0.2.54.zip) | 1,741,992 B | `8fcf153ce97fa358058b6578ad3edceb0b39e0f38cd8ad509c8d46eef921dff0` |
+| DSH plugin | [tether-plugin-0.2.54.zip](https://github.com/qi001007/tether-harness/releases/download/v0.2.54/tether-plugin-0.2.54.zip) | 1,341,462 B | `9ed65779a33454521c1cb19a79d3549e45a17644be4b455f344b06428842cd16` |
+| Node | [tether-node-0.2.54.zip](https://github.com/qi001007/tether-harness/releases/download/v0.2.54/tether-node-0.2.54.zip) | 79,648 B | `2bf67344493d6df088d7aa4c90889aa07ec0bd3522e922c86566e13c3164e4ec` |
+| Update manifest | [tether-update.json](https://github.com/qi001007/tether-harness/releases/download/v0.2.54/tether-update.json) | — | signed in the release |
 
 Sections below the download table describe the historical v0.2.1–v0.2.6 evolution unless they explicitly say otherwise; the login/connection/settings behavior above is the current client.
 

@@ -27,3 +27,4 @@
 - 2026-10-29：客户端 package.json 与 version.json 升至 `0.2.16`，`lib/client.js` 重新生成以更新 `PLUGIN_VERSION`。
 - 2026-10-30：从共享 NativeSurface 源码重建 `lib/client.js`，采用可见时单飞轮询、过期请求取消、同来源保留工作区 iframe、文档加载提示和有界重试。
 - 2026-10-30：client 包和 version.json 升至发行候选 `0.2.29`；附加候选说明记录 auth scope、原生附件和更新竞态修复。
+- 2026-11-02：client 包、version.json 与重新生成的 `lib/client.js` 升至 `0.2.54`；原生加号现在是唯一附件入口（不再注册 `tether-target-file` 命令），选择器标题“资源管理器”，桥接目录读取接入共享 `file-cache.js`。

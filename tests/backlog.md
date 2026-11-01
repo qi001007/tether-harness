@@ -115,3 +115,4 @@
 - 2026-10-31：0.2.45 覆盖 descriptor pid 失效时的 `dsh-desktop-host` 扫描（排除提到标记的 shell），以及 Hub 等待 restart_required、`restart_timeout` 报错和已更新版本的重试重启。
 - 2026-10-31：0.2.46 用两个乱序完成的强制检查复现共享清单 Future 二次完成，锁定只有 leader 能完成 flight。
 - 2026-11-01：共享 UI 契约新增“慢加载提示只在 `document-loading` 存在”和“`/app-context` 必须走 `BASE` 而非 `ACTIVE_BASE`”，防止提示残留与跨源 Hub 请求回归。
+- 2026-11-02：0.2.54 契约改为标题“资源管理器”、原生加号唯一入口、转移页完整操作/冲突、共用 `file-cache.js`、`SurfaceDeck` 常驻；Electron QA 隔离壳补拷 `startup-readiness.js`/`renderer-diagnostics.js`/`enrollment.js` 并加独立 `--user-data-dir`（当前仍被登录态挡在更新中心外）。
