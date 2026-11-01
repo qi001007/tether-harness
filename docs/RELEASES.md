@@ -1,5 +1,16 @@
 # Public client releases
 
+## v0.2.55
+
+Surface switch regression, in-place loading and settings rebuild:
+
+- Fixed returning-device white screens: `SurfaceDeck` now keeps a stable mount order and only toggles `visibility/z-index`; React no longer moves iframes in the DOM, so the expired ticket is never used for a reload. Non-chat views are covered by an absolutely positioned deck; preloaded frames keep a real 1416×829 viewport while hidden. Three DESKTOP↔LAPTOP round trips retained 720,118 / 736,068-byte documents and switched in 256 ms.
+- Removed the picker's fixed 22 px status bar, old error strip and explanatory footer. `TargetFileExplorer` now uses the explorer's absolute `tether-dir-loading` overlay, keeps the previous list visible, and reports errors as a retryable/dismissible floating notice.
+- Rebuilt settings as five sections (account / connection / workspace / device / about) with an `extraSections` extension point and no explanatory sentences. Avatars can be chosen from a local image, cropped to 128×128 JPEG, persisted in `tether.accountAvatar` and shown in the activity bar. Duplicate refresh/update/permissions/switch-account actions were removed.
+- Kept the Hub surface path for the Electron host after diagnosing that the local-loopback surface loses the local proxy session for cross-port plugin calls.
+
+Gates: mjs 222/222, cjs 6/6, client pytest 142 passed / 1 skipped, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI, signing, Hub mirror and both-machine installation are pending.
+
 ## v0.2.54
 
 Explorer parity, shared file cache and resident surfaces:

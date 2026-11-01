@@ -116,3 +116,4 @@
 - 2026-10-31：0.2.46 用两个乱序完成的强制检查复现共享清单 Future 二次完成，锁定只有 leader 能完成 flight。
 - 2026-11-01：共享 UI 契约新增“慢加载提示只在 `document-loading` 存在”和“`/app-context` 必须走 `BASE` 而非 `ACTIVE_BASE`”，防止提示残留与跨源 Hub 请求回归。
 - 2026-11-02：0.2.54 契约改为标题“资源管理器”、原生加号唯一入口、转移页完整操作/冲突、共用 `file-cache.js`、`SurfaceDeck` 常驻；Electron QA 隔离壳补拷 `startup-readiness.js`/`renderer-diagnostics.js`/`enrollment.js` 并加独立 `--user-data-dir`（当前仍被登录态挡在更新中心外）。
+- 2026-11-02：0.2.55 契约新增：`SurfaceDeck` 固定挂载顺序、预加载 frame 保持真实尺寸、非聊天页 deck 绝对定位；选择器无 22px 状态条、错误浮层可重试/关闭、加载叠层 `tether-dir-loading`；设置页含 `extraSections`、头像上传和 `role: 'switch'`，不再含解释性文案与重复入口。全量 mjs 222 / cjs 6 / pytest 142+1 通过。

@@ -45,4 +45,5 @@
 - 2026-11-01：盾牌只表示文件权限/审计，设置用齿轮；账号区（头像+邮箱+所有者+齿轮）放资源管理器底栏，活动栏底部保留权限与头像入口；权限抽屉与设置页同一时刻只能开一个。
 - 2026-11-01：DSH 插件挂在 composer 外侧，不能用 `containerRef` 向上找隐藏 file input；按文档级唯一的 `input[type=file][hidden]` 拦截，原生加号才会走目标选择器而不是本机对话框。选择器根列表不显示完整路径，工具栏用图标。
 - 2026-11-01：转移页不得再自写一套 Browser：两栏共用 `TargetFileExplorer`（紧凑模式、多选、拖拽、右键），同一节点在另一侧禁用；Ctrl+C/V 与拖拽是真机验证过的跨机路径，Ctrl+X 复制后走 `.tether-trash` 删除。选择器树的根节点必须带 `dir:true`，否则会被当成文件。
-- 2026-11-02：目录列表只走 `file-cache.js`（20 s / 240 目录 / 并发去重），资源管理器、Composer 选择器、互传两栏共用键；任何新建/重命名/删除/传输后先失效再刷新。选择器的标题/副标题/状态行必须定高，加载不得推动列表。设备工作区用 `SurfaceDeck` 常驻最近 3 台并用 `preload` 首次装载，不再 45 s 后丢弃预热 frame；设置里的 `tether.keepSurfaces` 可关闭。
+- 2026-11-02：目录列表只走 `file-cache.js`（20 s / 240 目录 / 并发去重），资源管理器、Composer 选择器、互传两栏共用键；任何新建/重命名/删除/传输后先失效再刷新。选择器的标题/副标题定高；加载只用绝对定位 `tether-dir-loading` 叠层，不得单独状态条或挤压列表。设备工作区用 `SurfaceDeck` 常驻最近 3 台并用 `preload` 首次装载，不再 45 s 后丢弃预热 frame；设置里的 `tether.keepSurfaces` 可关闭。
+- 2026-11-02：`SurfaceDeck` 的挂载顺序必须由 `mountedRef` 固定，切换设备只改 `visibility/z-index`；任何会重排 iframe DOM 的写法都会让 iframe 用过期 ticket 重载成白屏。非聊天页 deck 用绝对定位 + `visibility:hidden`，预加载 frame 必须保持真实尺寸。设置页分区由 `extraSections` 扩展，头像存 `tether.accountAvatar`，不写解释性长句。
