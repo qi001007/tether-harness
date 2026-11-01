@@ -1,5 +1,16 @@
 # Public client releases
 
+## v0.2.47
+
+Login, connection and settings split:
+
+- First run renders a full-screen account login page (email/password/TOTP, invite registration as a secondary action). The workbench is not rendered until a session token exists; login saves the session, enrolls the device, and reloads. The top-bar connection pill is status-only again: address, light, last check, latency and refresh.
+- New settings page from the activity bar: account (email, password change, logout), connection, local device (name/id/platform/versions, restart Node), updates, file permissions, about. Device pairing, device tokens and the permission drawer's manual Hub config are removed.
+- File transfer page: source/target cards with blue/green top borders and badges, device pickers, compact path bar, swap button and a selected-file footer; the transfer activity icon no longer matches the explorer.
+- Workspace reload control is always available after load, and a “loading slowly” hint appears after 15 s. Global scrollbars are 6 px, transparent until hover.
+
+Gates: pytest 138 passed / 4 skipped, mjs 216/216, cjs 6/6, `build.mjs --check`, `validate_versions()`. Real Electron checks: login page renders, a bad credential shows `invalid credentials`, connection panel shows the green light and refresh, settings shows all six sections, and the redesigned transfer page was captured. CI signing and published acceptance are recorded after publication.
+
 ## v0.2.46
 
 Manifest single-flight hotfix:
