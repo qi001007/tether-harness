@@ -2021,6 +2021,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
     function NativeSurface({ deviceId, online, visible, localDeviceId }) {
       const [state, setState] = React.useState({ deviceId, status: deviceId ? 'loading' : 'no-device', url: '' })
       const [attempt, setAttempt] = React.useState(0)
+      const [slow, setSlow] = React.useState(false)
       const currentState = nativeSurfaceStateForDevice(state, deviceId, online)
       const retryCountRef = React.useRef(0)
       const documentRetryCountRef = React.useRef(0)
@@ -2273,9 +2274,19 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         return () => { if (documentTimerRef.current) { clearTimeout(documentTimerRef.current); documentTimerRef.current = null } }
       }, [deviceId, visible, currentState.status, currentState.url])
 
+      React.useEffect(() => {
+        if (!visible || !['document-loading', 'document-loaded'].includes(currentState.status)) {
+          setSlow(false)
+          return undefined
+        }
+        const timer = setTimeout(() => setSlow(true), 15000)
+        return () => clearTimeout(timer)
+      }, [visible, currentState.status, currentState.deviceId])
+
       const retryDocument = () => {
         documentRetryCountRef.current = 0
         retryCountRef.current = 0
+        setSlow(false)
         setState({ deviceId, status: 'loading', url: '' })
         setAttempt((value) => value + 1)
       }
@@ -2321,6 +2332,13 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
               role: 'status', 'aria-live': 'polite',
               style: { position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', padding: '6px 10px', borderRadius: 6, background: 'rgba(255,255,255,.92)', color: C.sub, fontSize: 12, boxShadow: '0 1px 4px rgba(16,24,40,.12)', pointerEvents: 'none' }
             }, '目标工作区页面正在加载…') : null,
+            slow ? h('div', {
+              role: 'status',
+              style: { position: 'absolute', bottom: 44, left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 8, background: 'rgba(255,255,255,.95)', color: C.sub, fontSize: 12, boxShadow: '0 1px 4px rgba(16,24,40,.14)' }
+            }, '加载较慢', h('button', {
+              type: 'button', onClick: retryDocument,
+              style: { border: 0, background: 'transparent', color: C.blue, fontSize: 12, cursor: 'pointer', padding: 0 }
+            }, '重新加载')) : null,
             currentState.status === 'document-loaded' ? h('button', {
               type: 'button', onClick: retryDocument, title: '重新加载目标工作区', 'aria-label': '重新加载目标工作区',
               style: { position: 'absolute', right: 10, bottom: 10, width: 26, height: 26, border: 0, borderRadius: 999, background: 'rgba(255,255,255,.9)', color: C.sub, fontSize: 14, cursor: 'pointer', boxShadow: '0 1px 4px rgba(16,24,40,.16)' }

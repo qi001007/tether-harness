@@ -166003,6 +166003,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
   function NativeSurface({ deviceId, online, visible, localDeviceId }) {
     const [state, setState] = React2.useState({ deviceId, status: deviceId ? "loading" : "no-device", url: "" });
     const [attempt, setAttempt] = React2.useState(0);
+    const [slow, setSlow] = React2.useState(false);
     const currentState = nativeSurfaceStateForDevice(state, deviceId, online);
     const retryCountRef = React2.useRef(0);
     const documentRetryCountRef = React2.useRef(0);
@@ -166285,9 +166286,18 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         }
       };
     }, [deviceId, visible, currentState.status, currentState.url]);
+    React2.useEffect(() => {
+      if (!visible || !["document-loading", "document-loaded"].includes(currentState.status)) {
+        setSlow(false);
+        return void 0;
+      }
+      const timer = setTimeout(() => setSlow(true), 15e3);
+      return () => clearTimeout(timer);
+    }, [visible, currentState.status, currentState.deviceId]);
     const retryDocument = () => {
       documentRetryCountRef.current = 0;
       retryCountRef.current = 0;
+      setSlow(false);
       setState({ deviceId, status: "loading", url: "" });
       setAttempt((value) => value + 1);
     };
@@ -166330,6 +166340,14 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           "aria-live": "polite",
           style: { position: "absolute", top: 12, left: "50%", transform: "translateX(-50%)", padding: "6px 10px", borderRadius: 6, background: "rgba(255,255,255,.92)", color: C.sub, fontSize: 12, boxShadow: "0 1px 4px rgba(16,24,40,.12)", pointerEvents: "none" }
         }, "\u76EE\u6807\u5DE5\u4F5C\u533A\u9875\u9762\u6B63\u5728\u52A0\u8F7D\u2026") : null,
+        slow ? h2("div", {
+          role: "status",
+          style: { position: "absolute", bottom: 44, left: "50%", transform: "translateX(-50%)", display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", borderRadius: 8, background: "rgba(255,255,255,.95)", color: C.sub, fontSize: 12, boxShadow: "0 1px 4px rgba(16,24,40,.14)" }
+        }, "\u52A0\u8F7D\u8F83\u6162", h2("button", {
+          type: "button",
+          onClick: retryDocument,
+          style: { border: 0, background: "transparent", color: C.blue, fontSize: 12, cursor: "pointer", padding: 0 }
+        }, "\u91CD\u65B0\u52A0\u8F7D")) : null,
         currentState.status === "document-loaded" ? h2("button", {
           type: "button",
           onClick: retryDocument,
