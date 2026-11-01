@@ -1,5 +1,16 @@
 # Public client releases
 
+## v0.2.49
+
+Settings and session follow-ups:
+
+- Settings now has a working “检查更新” action and “切换账号 / 服务器” in the connection section; logging out or switching clears the stored session and returns to the full-screen login page.
+- An expired or rejected session (HTTP 401) now clears the token and returns to the login page instead of leaving the workbench in an error state.
+- Includes 0.2.48 (login server field, account role) and 0.2.47 (login/connection/settings split, transfer redesign, hidden scrollbars, workspace reload hint).
+- APP, plugin, and node are 0.2.49.
+
+Gates: pytest 138 passed / 4 skipped, mjs 216/216, cjs 6/6, `build.mjs --check`, `validate_versions()`. Signed publication and installed acceptance are recorded after CI.
+
 ## v0.2.48
 
 Login follow-ups:
