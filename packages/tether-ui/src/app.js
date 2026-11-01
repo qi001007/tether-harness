@@ -1589,7 +1589,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const items = [
         { id: 'workspaces', label: '原生工作区', icon: 'monitor' },
         { id: 'files', label: '文件资源管理器', icon: 'files' },
-        { id: 'transfer', label: '文件转移', icon: 'files' },
+        { id: 'transfer', label: '文件转移', icon: 'forward' },
         { id: 'network', label: '互联', icon: 'devices' }
       ]
       const button = (id, label, icon, onClick, selected) => h('button', {

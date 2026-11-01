@@ -1,5 +1,4 @@
 import { newTransferId, transferFile } from './transfer.js'
-import { TargetFileExplorer } from './target-file-explorer.js'
 
 function separator(path) {
   return String(path || '').includes('\\') ? '\\' : '/'
@@ -49,7 +48,7 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
   }, label)
 
   if (!StableTransferBrowser) {
-    StableTransferBrowser = function Browser({ title, deviceId, onDevice, path, onPath, selectedPath, onFile }) {
+    StableTransferBrowser = function Browser({ title, roleLabel = title, accent = C.blue, deviceId, onDevice, path, onPath, selectedPath, onFile }) {
     const [roots, setRoots] = React.useState([])
     const [entries, setEntries] = React.useState(null)
     const [loading, setLoading] = React.useState(false)
@@ -104,36 +103,9 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
       .filter((item) => path && String(path).toLowerCase().startsWith(String(item.path).toLowerCase()))
       .sort((left, right) => String(right.path).length - String(left.path).length)[0]
     const navigate = (next) => { setSearch(''); onPath(next) }
-    return TargetFileExplorer({
-      React,
-      colors: C,
-      roots,
-      rootPath: matchingRoot ? matchingRoot.path : '',
-      path,
-      entries,
-      loading,
-      error,
-      selectedPath,
-      editablePath: true,
-      pathLabel: title === '源设备' ? '源设备路径' : '目标目录路径',
-      singleClickOpens: false,
-      sort,
-      onSort: setSort,
-      search,
-      onSearch: setSearch,
-      onRoot: navigate,
-      onPath: navigate,
-      onSelect: (item) => { if (item.dir) navigate(item.path); else if (onFile) onFile(item) },
-      onOpen: (item) => { if (item.dir) navigate(item.path); else open(item) },
-      onRefresh: navigate,
-      fileIcon: (item) => h('span', { 'aria-hidden': true, style: { color: C.mute, fontSize: 11 } }, item.dir ? '▸' : '•'),
-      formatTime: (value) => value ? new Date(value * 1000).toLocaleString('zh-CN', { hour12: false }) : '',
-      formatSize: (value) => formatBytes(Number(value)),
-      limit: Number.MAX_SAFE_INTEGER
-    })
-    return h('div', { style: { flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', background: C.bg, borderRadius: 10, overflow: 'hidden', border: 0 } },
-      h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, padding: '10px 12px', background: C.soft, flex: '0 0 auto', minWidth: 0 } },
-        h('span', { style: { fontSize: 12, fontWeight: 600, color: C.ink, flex: '0 0 auto' } }, title),
+    return h('div', { style: { flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', background: C.bg, borderRadius: 10, overflow: 'hidden', borderTop: '2px solid ' + accent, boxShadow: '0 1px 2px rgba(16,24,40,0.06)' } },
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', background: C.soft, flex: '0 0 auto', minWidth: 0 } },
+        h('span', { style: { flex: '0 0 auto', height: 20, padding: '0 8px', borderRadius: 999, background: 'color-mix(in srgb, ' + accent + ' 12%, transparent)', color: accent, display: 'inline-flex', alignItems: 'center', fontSize: 11, fontWeight: 600 } }, roleLabel),
         h('select', {
           value: deviceId || '', onChange: (event) => { onDevice(event.target.value); onPath('') },
           style: { ...field, flex: '1 1 auto', minWidth: 0 }
@@ -170,7 +142,7 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
             }
           },
             h('span', { style: { display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 } },
-              h('span', { 'aria-hidden': true, style: { width: 14, color: C.mute, fontSize: 11 } }, item.dir ? '▸' : '•'),
+              h('span', { 'aria-hidden': true, style: { width: 14, color: accent, fontSize: 11 } }, item.dir ? '▸' : '•'),
               h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, item.name)),
             h('span', { style: { color: C.mute, fontSize: 11 } }, item.mtime ? new Date(item.mtime * 1000).toLocaleString('zh-CN', { hour12: false }) : ''),
             h('span', { style: { color: C.mute, fontSize: 11, textAlign: 'right' } }, item.dir ? '文件夹' : formatBytes(Number(item.size))))
@@ -234,25 +206,45 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
     }
   }
   const cancel = () => { if (abortRef.current) abortRef.current.abort() }
+  const swap = () => {
+    setSourceDevice(destDevice)
+    setDestDevice(sourceDevice)
+    setSourcePath(destPath)
+    setDestPath(sourcePath)
+    setSourceFile(null)
+  }
   const progress = job ? Math.max(0, Math.min(100, Number(job.percent) || 0)) : 0
   return h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', padding: '14px 18px 18px', gap: 12, background: C.bg } },
-    h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, flex: '0 0 auto' } },
-      h('div', { style: { fontSize: 18, fontWeight: 600, color: C.ink } }, '文件转移'),
-      h('span', { style: { color: C.mute, fontSize: 11.5 } }, '源文件从源设备读取，分块写入目标设备；中断后可从偏移继续。')),
+    h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, flex: '0 0 auto', minWidth: 0 } },
+      h('div', { style: { fontSize: 18, fontWeight: 600, color: C.ink, flex: '0 0 auto' } }, '文件转移'),
+      h('div', { style: { marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, color: C.sub, fontSize: 12 } },
+        h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 } },
+          h('span', { style: { width: 7, height: 7, borderRadius: 4, background: C.blue, flex: '0 0 auto' } }),
+          h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, (sourceItem && (sourceItem.name || sourceItem.device_id)) || '选择来源')),
+        h('span', { style: { color: C.mute } }, '→'),
+        h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 } },
+          h('span', { style: { width: 7, height: 7, borderRadius: 4, background: C.green, flex: '0 0 auto' } }),
+          h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, (destItem && (destItem.name || destItem.device_id)) || '选择目标')))),
     h('div', { style: { display: 'flex', gap: 12, flex: '1 1 auto', minHeight: 0 } },
       h(Browser, {
-        title: '源设备', deviceId: sourceDevice, onDevice: (id) => { setSourceDevice(id); setSourceFile(null) },
+        title: '源设备', roleLabel: '来源', accent: C.blue,
+        deviceId: sourceDevice, onDevice: (id) => { setSourceDevice(id); setSourceFile(null) },
         path: sourcePath, onPath: setSourcePath, selectedPath: sourceFile && sourceFile.path,
         onFile: (item) => setSourceFile(item)
       }),
-      h('div', { style: { display: 'flex', flexDirection: 'column', justifyContent: 'center', color: C.mute, fontSize: 18, flex: '0 0 auto' } }, '→'),
+      h('button', {
+        type: 'button', onClick: swap, title: '交换来源与目标', 'aria-label': '交换来源与目标',
+        style: { alignSelf: 'center', width: 32, height: 32, borderRadius: 999, border: '1px solid ' + C.line, background: C.bg, color: C.sub, fontSize: 15, cursor: 'pointer', flex: '0 0 auto' }
+      }, '⇄'),
       h(Browser, {
-        key: 'dest:' + refresh, title: '目标目录', deviceId: destDevice, onDevice: (id) => setDestDevice(id),
+        key: 'dest:' + refresh, title: '目标目录', roleLabel: '目标', accent: C.green,
+        deviceId: destDevice, onDevice: (id) => setDestDevice(id),
         path: destPath, onPath: setDestPath, selectedPath: ''
       })),
-    h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 9, background: C.soft, flex: '0 0 auto', minWidth: 0 } },
-      h('div', { style: { flex: '1 1 auto', minWidth: 0, fontSize: 12, color: C.sub, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
-        sourceFile ? (sourceFile.name + ' · ' + formatBytes(Number(sourceFile.size)) + ' → ' + (destination || '选择目标目录')) : '从左侧选择一个文件'),
+    h('div', { style: { display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 10, background: C.panel, border: '1px solid ' + C.line, flex: '0 0 auto', minWidth: 0 } },
+      h('div', { style: { flex: '1 1 auto', minWidth: 0, display: 'grid', gap: 2 } },
+        h('div', { style: { fontSize: 12.5, color: sourceFile ? C.ink : C.mute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, sourceFile ? sourceFile.name : '从来源侧选择一个文件'),
+        h('div', { style: { fontSize: 11, color: C.mute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, sourceFile ? (formatBytes(Number(sourceFile.size)) + ' → ' + (destination || '选择目标目录')) : '选择目标目录后开始')),
       h('label', { style: { display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: C.sub, flex: '0 0 auto' } },
         h('input', { type: 'checkbox', checked: overwrite, onChange: (event) => setOverwrite(event.target.checked) }), '覆盖同名文件'),
       running ? button('取消', cancel) : button(job && job.state === 'error' ? '重试' : '开始转移', start, { primary: true, disabled: !canStart })),
