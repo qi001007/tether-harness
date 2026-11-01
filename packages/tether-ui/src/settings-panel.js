@@ -21,7 +21,7 @@ export function createSettingsPanel(React) {
     try { const date = new Date(value); return [date.getHours(), date.getMinutes(), date.getSeconds()].map((part) => String(part).padStart(2, '0')).join(':') } catch (_) { return '尚未检测' }
   }
 
-  function SettingsPanel({ open, onClose, accountEmail = '', accountRole = '', server = '', connection = {}, device = {}, versions = {}, onRefreshConnection, onRestartNode, onOpenPermissions, onLogout, onPasswordChanged }) {
+  function SettingsPanel({ open, onClose, accountEmail = '', accountRole = '', server = '', connection = {}, device = {}, versions = {}, onRefreshConnection, onRestartNode, onOpenPermissions, onLogout, onCheckUpdates, onPasswordChanged }) {
     const [section, setSection] = React.useState('account')
     const [currentPassword, setCurrentPassword] = React.useState('')
     const [newPassword, setNewPassword] = React.useState('')
@@ -96,8 +96,9 @@ export function createSettingsPanel(React) {
               status === 'online' ? '已连接' : status === 'offline' ? '不可达' : status === 'checking' ? '检测中' : '未知')),
           row('最近检测', timeText(connection.checkedAt)),
           row('服务响应耗时', Number.isFinite(connection.durationMs) ? connection.durationMs + ' ms' : '—')),
-        h('div', { style: { marginTop: 12 } },
-          h('button', { onClick: onRefreshConnection, style: secondary }, '刷新连接状态')))
+        h('div', { style: { marginTop: 12, display: 'flex', gap: 8 } },
+          h('button', { onClick: onRefreshConnection, style: secondary }, '刷新连接状态'),
+          h('button', { onClick: onLogout, style: secondary }, '切换账号 / 服务器')))
     } else if (section === 'device') {
       body = h('div', null,
         sectionTitle('本机设备', '本机作为目标设备时的登记信息与 Node 控制。'),
@@ -115,7 +116,9 @@ export function createSettingsPanel(React) {
         h('div', { style: { borderRadius: 8, background: panel, padding: '2px 12px' } },
           row('Node', versions.node || '—'),
           row('APP', versions.app || '—'),
-          row('DSH 插件', versions.plugin || '—')))
+          row('DSH 插件', versions.plugin || '—')),
+        h('div', { style: { marginTop: 12 } },
+          h('button', { onClick: onCheckUpdates, style: primary }, '检查更新')))
     } else if (section === 'permissions') {
       body = h('div', null,
         sectionTitle('文件权限', '可写根目录与文件操作审计在独立面板中管理。'),

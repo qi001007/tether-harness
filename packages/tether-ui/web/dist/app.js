@@ -163094,7 +163094,7 @@ function createSettingsPanel(React2) {
       return "\u5C1A\u672A\u68C0\u6D4B";
     }
   };
-  function SettingsPanel({ open, onClose, accountEmail = "", accountRole = "", server = "", connection = {}, device = {}, versions = {}, onRefreshConnection, onRestartNode, onOpenPermissions, onLogout, onPasswordChanged }) {
+  function SettingsPanel({ open, onClose, accountEmail = "", accountRole = "", server = "", connection = {}, device = {}, versions = {}, onRefreshConnection, onRestartNode, onOpenPermissions, onLogout, onCheckUpdates, onPasswordChanged }) {
     const [section, setSection] = React2.useState("account");
     const [currentPassword, setCurrentPassword] = React2.useState("");
     const [newPassword, setNewPassword] = React2.useState("");
@@ -163200,8 +163200,9 @@ function createSettingsPanel(React2) {
         ),
         h2(
           "div",
-          { style: { marginTop: 12 } },
-          h2("button", { onClick: onRefreshConnection, style: secondary }, "\u5237\u65B0\u8FDE\u63A5\u72B6\u6001")
+          { style: { marginTop: 12, display: "flex", gap: 8 } },
+          h2("button", { onClick: onRefreshConnection, style: secondary }, "\u5237\u65B0\u8FDE\u63A5\u72B6\u6001"),
+          h2("button", { onClick: onLogout, style: secondary }, "\u5207\u6362\u8D26\u53F7 / \u670D\u52A1\u5668")
         )
       );
     } else if (section === "device") {
@@ -163235,6 +163236,11 @@ function createSettingsPanel(React2) {
           row("Node", versions.node || "\u2014"),
           row("APP", versions.app || "\u2014"),
           row("DSH \u63D2\u4EF6", versions.plugin || "\u2014")
+        ),
+        h2(
+          "div",
+          { style: { marginTop: 12 } },
+          h2("button", { onClick: onCheckUpdates, style: primary }, "\u68C0\u67E5\u66F4\u65B0")
         )
       );
     } else if (section === "permissions") {
@@ -169876,6 +169882,10 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         onOpenPermissions: () => {
           setShowAppSettings(false);
           openSettings();
+        },
+        onCheckUpdates: async () => {
+          setShowAppSettings(false);
+          await refreshUpdateCenter(true);
         },
         onLogout: () => {
           try {

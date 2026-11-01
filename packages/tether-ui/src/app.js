@@ -5156,6 +5156,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             } catch (error) { fail(error) }
           },
           onOpenPermissions: () => { setShowAppSettings(false); openSettings() },
+          onCheckUpdates: async () => { setShowAppSettings(false); await refreshUpdateCenter(true) },
           onLogout: () => {
             try { window.localStorage.removeItem('tether.hub') } catch (_) { /* storage unavailable */ }
             window.location.reload()
