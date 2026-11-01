@@ -9,7 +9,7 @@ Login, connection and settings split:
 - File transfer page: source/target cards with blue/green top borders and badges, device pickers, compact path bar, swap button and a selected-file footer; the transfer activity icon no longer matches the explorer.
 - Workspace reload control is always available after load, and a “loading slowly” hint appears after 15 s. Global scrollbars are 6 px, transparent until hover.
 
-Gates: pytest 138 passed / 4 skipped, mjs 216/216, cjs 6/6, `build.mjs --check`, `validate_versions()`. Real Electron checks: login page renders, a bad credential shows `invalid credentials`, connection panel shows the green light and refresh, settings shows all six sections, and the redesigned transfer page was captured. CI signing and published acceptance are recorded after publication.
+Gates: pytest 138 passed / 4 skipped, mjs 216/216, cjs 6/6, `build.mjs --check`, `validate_versions()`. Real Electron checks: login page renders, a bad credential shows `invalid credentials`, connection panel shows the green light and refresh, settings shows all six sections, and the redesigned transfer page was captured. CI run `41277668555` succeeded; the signed manifest was verified (app 1,719,833 B, plugin 1,332,323 B, node 79,543 B) and published at 2026-11-01T05:41:25Z. The Hub mirror was force-refreshed to **0.2.47** at 05:45Z. Installed acceptance is pending a logged-in account; devices were not auto-updated.
 
 ## v0.2.46
 
