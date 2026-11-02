@@ -5763,7 +5763,7 @@ monaco-editor/esm/vs/languages/definitions/swift/swift.js:
 
     const EditorRuntime = TetherMonacoRuntime
     const PANEL_ID = 'tether'
-    const PLUGIN_VERSION = "0.2.68"
+    const PLUGIN_VERSION = "0.2.70"
 function parentOf(path) {
   const clean = String(path || '').replace(/[\\/]+$/, '')
   if (!clean) return ''
@@ -12092,6 +12092,11 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       })
       const [accountName, setAccountName] = usePersisted('tether.accountName', '')
       const [accountAvatar, setAccountAvatar] = usePersisted('tether.accountAvatar', '')
+      const accountNameRef = React.useRef(accountName)
+      const accountAvatarRef = React.useRef(accountAvatar)
+      accountNameRef.current = accountName
+      accountAvatarRef.current = accountAvatar
+      const accountPendingRef = React.useRef(null)
       const [settingsSection, setSettingsSection] = React.useState('account')
       const [hubUnsafeExistingUrl, setHubUnsafeExistingUrl] = React.useState(false)
       const [hubStatus, setHubStatus] = React.useState('unknown')
@@ -12840,6 +12845,20 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           const data = await api('/api/state')
           stateOkAtRef.current = Date.now()
           setState(data)
+          const profile = data && data.user
+          if (profile) {
+            const pending = accountPendingRef.current
+            if (!pending || !Object.prototype.hasOwnProperty.call(pending, 'display_name')) {
+              if (Object.prototype.hasOwnProperty.call(profile, 'display_name')) {
+                setAccountName(profile.display_name || '')
+              }
+            }
+            if (!pending || !Object.prototype.hasOwnProperty.call(pending, 'avatar')) {
+              if (Object.prototype.hasOwnProperty.call(profile, 'avatar')) {
+                setAccountAvatar(profile.avatar || '')
+              }
+            }
+          }
           setDeviceId((current) => {
             if (current && data.devices.some((d) => d.device_id === current)) return current
             const local = appLocalDeviceRef.current
@@ -12849,6 +12868,28 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           })
         } catch (e) { fail(e) }
       }, [])
+
+      const saveAccountProfile = async (patch) => {
+        const previous = { display_name: accountNameRef.current, avatar: accountAvatarRef.current }
+        if (Object.prototype.hasOwnProperty.call(patch, 'display_name')) setAccountName(patch.display_name)
+        if (Object.prototype.hasOwnProperty.call(patch, 'avatar')) setAccountAvatar(patch.avatar)
+        const ticket = { ...patch, at: Date.now() }
+        accountPendingRef.current = ticket
+        try {
+          const data = await post('/api/auth/profile', patch)
+          const user = (data && data.user) || {}
+          setAccountName(user.display_name || '')
+          setAccountAvatar(user.avatar || '')
+          return true
+        } catch (error) {
+          if (Object.prototype.hasOwnProperty.call(patch, 'display_name')) setAccountName(previous.display_name)
+          if (Object.prototype.hasOwnProperty.call(patch, 'avatar')) setAccountAvatar(previous.avatar)
+          setNotice('账号资料未保存：' + String((error && error.message) || error))
+          return false
+        } finally {
+          if (accountPendingRef.current === ticket) accountPendingRef.current = null
+        }
+      }
 
       React.useEffect(() => {
         loadState()
@@ -14885,8 +14926,8 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           accountName,
           accountAvatar,
           Glyph,
-          onAvatarChange: setAccountAvatar,
-          onAccountNameChange: setAccountName,
+          onAvatarChange: (value) => { void saveAccountProfile({ avatar: value }) },
+          onAccountNameChange: (value) => { void saveAccountProfile({ display_name: value }) },
           initialSection: settingsSection,
           server: hubAddress || hubUrl || '',
           connection: { status: liveHubStatus, checkedAt: hubCheckedAt, durationMs: hubDuration, token: hubToken },

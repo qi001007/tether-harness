@@ -169535,6 +169535,11 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     });
     const [accountName, setAccountName] = usePersisted("tether.accountName", "");
     const [accountAvatar, setAccountAvatar] = usePersisted("tether.accountAvatar", "");
+    const accountNameRef = React2.useRef(accountName);
+    const accountAvatarRef = React2.useRef(accountAvatar);
+    accountNameRef.current = accountName;
+    accountAvatarRef.current = accountAvatar;
+    const accountPendingRef = React2.useRef(null);
     const [settingsSection, setSettingsSection] = React2.useState("account");
     const [hubUnsafeExistingUrl, setHubUnsafeExistingUrl] = React2.useState(false);
     const [hubStatus, setHubStatus] = React2.useState("unknown");
@@ -170374,6 +170379,20 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         const data = await api2("/api/state");
         stateOkAtRef.current = Date.now();
         setState(data);
+        const profile = data && data.user;
+        if (profile) {
+          const pending2 = accountPendingRef.current;
+          if (!pending2 || !Object.prototype.hasOwnProperty.call(pending2, "display_name")) {
+            if (Object.prototype.hasOwnProperty.call(profile, "display_name")) {
+              setAccountName(profile.display_name || "");
+            }
+          }
+          if (!pending2 || !Object.prototype.hasOwnProperty.call(pending2, "avatar")) {
+            if (Object.prototype.hasOwnProperty.call(profile, "avatar")) {
+              setAccountAvatar(profile.avatar || "");
+            }
+          }
+        }
         setDeviceId((current) => {
           if (current && data.devices.some((d) => d.device_id === current)) return current;
           const local = appLocalDeviceRef.current;
@@ -170385,6 +170404,27 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         fail2(e);
       }
     }, []);
+    const saveAccountProfile = async (patch) => {
+      const previous = { display_name: accountNameRef.current, avatar: accountAvatarRef.current };
+      if (Object.prototype.hasOwnProperty.call(patch, "display_name")) setAccountName(patch.display_name);
+      if (Object.prototype.hasOwnProperty.call(patch, "avatar")) setAccountAvatar(patch.avatar);
+      const ticket = { ...patch, at: Date.now() };
+      accountPendingRef.current = ticket;
+      try {
+        const data = await post("/api/auth/profile", patch);
+        const user = data && data.user || {};
+        setAccountName(user.display_name || "");
+        setAccountAvatar(user.avatar || "");
+        return true;
+      } catch (error) {
+        if (Object.prototype.hasOwnProperty.call(patch, "display_name")) setAccountName(previous.display_name);
+        if (Object.prototype.hasOwnProperty.call(patch, "avatar")) setAccountAvatar(previous.avatar);
+        setNotice("\u8D26\u53F7\u8D44\u6599\u672A\u4FDD\u5B58\uFF1A" + String(error && error.message || error));
+        return false;
+      } finally {
+        if (accountPendingRef.current === ticket) accountPendingRef.current = null;
+      }
+    };
     React2.useEffect(() => {
       loadState();
       const t = setInterval(loadState, 2500);
@@ -173009,8 +173049,12 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         accountName,
         accountAvatar,
         Glyph,
-        onAvatarChange: setAccountAvatar,
-        onAccountNameChange: setAccountName,
+        onAvatarChange: (value) => {
+          void saveAccountProfile({ avatar: value });
+        },
+        onAccountNameChange: (value) => {
+          void saveAccountProfile({ display_name: value });
+        },
         initialSection: settingsSection,
         server: hubAddress || hubUrl || "",
         connection: { status: liveHubStatus, checkedAt: hubCheckedAt, durationMs: hubDuration, token: hubToken },
