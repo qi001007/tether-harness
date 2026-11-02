@@ -1,5 +1,14 @@
 # Public client releases
 
+## v0.2.65
+
+Floating network detail panel:
+
+- The node detail panel is now an absolute floating card over the right side of the canvas (`top/right/bottom: 8 px`, width 300, rounded, shadow) instead of a flex column. Opening or closing it no longer resizes or shifts the graph. The network body is the positioning context.
+- Real run: the canvas stage stayed **1074 px** wide before and after opening the DESKTOP node details; the floating panel rendered with search, per-device switches and the connection manager link.
+
+Gates: mjs 231/231, cjs 6/6, client pytest 147 passed / 1 skipped, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41437443163` succeeded; published at 2026-11-02T11:34:42Z (app 1,779,140 B, plugin 1,358,108 B, node 84,818 B; signed manifest verified). Hub mirror refreshed to **0.2.65**. LAPTOP-01 Node+APP **36.9 s**; DESKTOP app/node/plugin **0.2.65**; LAPTOP app/node **0.2.65** with the plugin update job dispatched.
+
 ## v0.2.64
 
 Radial network layout and persistent node positions:

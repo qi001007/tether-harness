@@ -1,5 +1,11 @@
 # 实时进度
 
+## 2026-11-02 v0.2.65 节点详情浮层
+
+1. 节点详情从右侧 flex 列改为绝对浮层：`position:absolute; top/right/bottom:8px; width:300px; zIndex:8`，圆角、边框、阴影；互联页画布容器 `position:relative`。打开/关闭详情不再挤压画布。
+2. 真机：打开 DESKTOP 节点详情前后，画布 stage 宽度均 **1074px**；浮层含搜索、连接开关、连接管理，独立覆盖在右侧。截图 `network-detail-overlay.png`。
+3. 门禁：mjs 231/231、cjs 6/6、client pytest 147 passed / 1 skipped、`build.mjs --check`、`build-web.mjs --check`、`validate_versions()` 通过。0.2.65 已发布（CI `41437443163`，11:34:42Z，签名清单验签通过，app 1,779,140 B / plugin 1,358,108 B / node 84,818 B），Hub mirror 0.2.65；LAPTOP Node+APP 36.9 s；DESKTOP app/node/plugin 均 0.2.65，LAPTOP app/node 0.2.65、插件 0.2.64（插件更新任务已发）。
+
 ## 2026-11-02 v0.2.64 互联图环形布局与位置持久化
 
 1. 初始布局：不再把所有远端放在同一条竖直轴上。两个远端用 210°/330°，三个及以上按 360°/n 均匀分布，中心节点固定 50%/50%；节点数 >12 时默认圆点模式。真机三节点呈三角形，中心节点上方不再被一条线穿过。
