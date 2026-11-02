@@ -10,7 +10,7 @@ Editable device topology and a clearer activity selection:
 - The selected activity-bar item now has a blue 16% background and blue icon instead of a faint gray block.
 - Real run: canvas disconnect/reconnect, detail switches, and manager create/remove all hit the production Hub; the original two edges were restored. Production Hub deploy commit `e66920b6`, DB backup `edges-20261102T060941Z`, rollback point `d783681`, 90 s restart.
 
-Gates: mjs 225/225, cjs 6/6, client pytest 142 passed / 1 skipped, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI, signing, Hub mirror and both-machine installation are pending.
+Gates: mjs 225/225, cjs 6/6, client pytest 142 passed / 1 skipped, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41400940630` succeeded; published at 2026-11-02T06:39:21Z (app 1,757,366 B, plugin 1,349,837 B, node 79,669 B; signed manifest verified). Hub mirror refreshed to **0.2.59**. LAPTOP-01 Node+APP **16.0 s**, plugin **26.3 s**; DESKTOP source APP restarted and the local DSH plugin reinstalled. Both devices report app/node/plugin **0.2.59**; LAPTOP briefly reconnected after the restart. Real run: LAPTOP network page showed 2 explicit edges and the blue selected activity item; canvas/detail/manager toggles hit the production Hub and the original edges were restored.
 
 ## v0.2.58
 

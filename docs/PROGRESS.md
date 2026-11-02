@@ -7,7 +7,7 @@
 1. 服务端：私有 Hub 新增 `edges`/`edge_seeds` 表与 `GET/POST /api/edges`、批量、DELETE；`/api/state` 返回 `edges`；首次为 owner 建一棵以 `TETHER_DEVICE` 为根的星型边，新设备入网连到同一根，后续断开不被重连覆盖。生产备份 `edges-20261102T060941Z`（DB SHA-256 `ec85bd89…`），回退点 `d783681`，生产部署 commit `e66920b6`，重启 90 s；三服务 active，两机自动重连，边种子为 DESKTOP↔LAPTOP、DESKTOP↔TETHER-REMOTE-TEST。
 2. 客户端画布：只画显式边；在线实线、离线虚线、无边不画；线中点的链图标断开，右上“连接”进入两次点选建边；点节点打开详情抽屉，列出所有设备与连接开关；右上“连接管理”是可搜索的连接表格，支持新建和逐条断开。真机：画布断开→重连、详情开关、管理表格新建/断开全部生效，边已恢复为两条。
 3. 活动栏选中态：从浅灰底/深色图标改为蓝色 16% 底 + 蓝色图标，互联页选中图标清晰可见。
-4. 门禁：mjs 225/225、cjs 6/6、client pytest 142 passed / 1 skipped、`build.mjs --check`、`build-web.mjs --check`、`validate_versions()` 通过。0.2.59 发布与两机更新待执行。
+4. 门禁：mjs 225/225、cjs 6/6、client pytest 142 passed / 1 skipped、`build.mjs --check`、`build-web.mjs --check`、`validate_versions()` 通过。0.2.59 已发布（CI `41400940630`，06:39:21Z，签名清单验签通过，app 1,757,366 B / plugin 1,349,837 B / node 79,669 B），Hub mirror 0.2.59；LAPTOP Node+APP 16.0 s、插件 26.3 s，两机 app/node/plugin 均 0.2.59。LAPTOP 真机互联页显示 2 条显式边，活动栏“互联”为蓝色 16% 底 + 蓝色图标；画布/详情/连接管理切换均落到生产 Hub 并已恢复原边。
 
 ## 2026-11-02 v0.2.58 文件转移双栏根目录标识
 
