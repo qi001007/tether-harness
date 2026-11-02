@@ -134,14 +134,14 @@ When a new version is available, a blue **↓** button appears in the top bar. C
 
 ## Download
 
-### Latest stable: v0.2.54
+### Latest stable: v0.2.56
 
 | Package | Download | Size | SHA-256 |
 |---|---|---:|---|
-| APP | [tether-app-0.2.54.zip](https://github.com/qi001007/tether-harness/releases/download/v0.2.54/tether-app-0.2.54.zip) | 1,741,992 B | `8fcf153ce97fa358058b6578ad3edceb0b39e0f38cd8ad509c8d46eef921dff0` |
-| DSH plugin | [tether-plugin-0.2.54.zip](https://github.com/qi001007/tether-harness/releases/download/v0.2.54/tether-plugin-0.2.54.zip) | 1,341,462 B | `9ed65779a33454521c1cb19a79d3549e45a17644be4b455f344b06428842cd16` |
-| Node | [tether-node-0.2.54.zip](https://github.com/qi001007/tether-harness/releases/download/v0.2.54/tether-node-0.2.54.zip) | 79,648 B | `2bf67344493d6df088d7aa4c90889aa07ec0bd3522e922c86566e13c3164e4ec` |
-| Update manifest | [tether-update.json](https://github.com/qi001007/tether-harness/releases/download/v0.2.54/tether-update.json) | — | signed in the release |
+| APP | [tether-app-0.2.56.zip](https://github.com/qi001007/tether-harness/releases/download/v0.2.56/tether-app-0.2.56.zip) | 1,746,202 B | `8e51cdbf61f62f2e8d896397523cfdfbfc5b719c78b041d1e470b57dce84fc13` |
+| DSH plugin | [tether-plugin-0.2.56.zip](https://github.com/qi001007/tether-harness/releases/download/v0.2.56/tether-plugin-0.2.56.zip) | 1,343,349 B | `897b13c86235787422fd0e41cd58c3735fcf7b5fb1b28cf9453e5030d178bbaf` |
+| Node | [tether-node-0.2.56.zip](https://github.com/qi001007/tether-harness/releases/download/v0.2.56/tether-node-0.2.56.zip) | 79,648 B | `21ff549feebb7cbd1bfadf7d7e92b531b66995b869c3ac4d3975a932f110320b` |
+| Update manifest | [tether-update.json](https://github.com/qi001007/tether-harness/releases/download/v0.2.56/tether-update.json) | — | signed in the release |
 
 Sections below the download table describe the historical v0.2.1–v0.2.6 evolution unless they explicitly say otherwise; the login/connection/settings behavior above is the current client.
 
