@@ -47,3 +47,4 @@
 - 2026-11-01：转移页不得再自写一套 Browser：两栏共用 `TargetFileExplorer`（紧凑模式、多选、拖拽、右键），同一节点在另一侧禁用；Ctrl+C/V 与拖拽是真机验证过的跨机路径，Ctrl+X 复制后走 `.tether-trash` 删除。选择器树的根节点必须带 `dir:true`，否则会被当成文件。
 - 2026-11-02：目录列表只走 `file-cache.js`（20 s / 240 目录 / 并发去重），资源管理器、Composer 选择器、互传两栏共用键；任何新建/重命名/删除/传输后先失效再刷新。选择器的标题/副标题定高；加载只用绝对定位 `tether-dir-loading` 叠层，不得单独状态条或挤压列表。设备工作区用 `SurfaceDeck` 常驻最近 3 台并用 `preload` 首次装载，不再 45 s 后丢弃预热 frame；设置里的 `tether.keepSurfaces` 可关闭。
 - 2026-11-02：`SurfaceDeck` 的挂载顺序必须由 `mountedRef` 固定，切换设备只改 `visibility/z-index`；任何会重排 iframe DOM 的写法都会让 iframe 用过期 ticket 重载成白屏。非聊天页 deck 用绝对定位 + `visibility:hidden`，预加载 frame 必须保持真实尺寸。设置页分区由 `extraSections` 扩展，头像存 `tether.accountAvatar`，不写解释性长句。
+- 2026-11-02：`TargetFileExplorer` 的加载叠层不能只靠 `tether-dir-loading` 全局 CSS——DSH 内嵌页不加载共享 UI 样式，必须内联 `position:absolute; inset:0; z-index:4`，转圈用 SVG `animateTransform` 自包含；否则会退回 static 20px 落到底部。

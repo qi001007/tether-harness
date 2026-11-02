@@ -43,3 +43,4 @@
 - 2026-11-01：APP 包与 package-lock 根版本升至 `0.2.51`；本轮 APP 主进程代码未改，修复在共享 UI。
 - 2026-11-02：APP 包与 package-lock 根版本升至 `0.2.54`；共享 UI 新增常驻 `SurfaceDeck` 与设置开关，不改变 Electron 依赖或主进程窗口参数。
 - 2026-11-02：APP 包与 package-lock 根版本升至 `0.2.55`；本轮只更新共享 UI bundle（surface 层叠、选择器叠层、设置页），Electron 主进程与依赖未改。
+- 2026-11-02：APP 包与 package-lock 根版本升至 `0.2.56`；选择器叠层改为内联样式/SVG，DSH 内嵌页不再依赖共享 CSS。

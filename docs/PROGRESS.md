@@ -1,17 +1,17 @@
 # 实时进度
 
-## 2026-11-02 v0.2.55 白屏回归、加载叠层与设置页
+## 2026-11-02 v0.2.56 白屏回归、加载叠层与设置页
 
-本轮处理 0.2.54 之后主人反馈的 4 条问题，版本元数据到 0.2.55：
+本轮处理 0.2.54 之后主人反馈的 4 条问题，版本元数据到 0.2.56（0.2.55 先发布，随后补了 DSH 内联叠层修复）：
 
 1. 白屏：`SurfaceDeck` 的 `ids` 原先按 `[当前设备, ...最近]` 计算，切换设备时数组重排，React 移动 iframe DOM 节点；iframe 重新插入文档会用过期 ticket 重载并变成空文档（`<html><head></head><body></body></html>`）。改为 `mountedRef` 固定挂载顺序，切换只改 `visibility/z-index`；非聊天页 deck 改为绝对定位 + `visibility:hidden`，不再占布局。预加载 iframe 用 `visibility:hidden` 保持 1416×829 真实尺寸，不再 `display:none` 成 0×0。
-2. 选择器加载：删除 `dsh.js` 的固定 22px 状态白条、旧错误条和“文件从目标电脑读取…”页脚；`TargetFileExplorer` 用资源管理器同款绝对定位 `tether-dir-loading` 叠层，加载时保留旧列表；错误改为可重试/关闭浮层。`enter()` 不再先清空 entries，避免切换目录时列表闪空。
+2. 选择器加载：删除 `dsh.js` 的固定 22px 状态白条、旧错误条和“文件从目标电脑读取…”页脚；`TargetFileExplorer` 用资源管理器同款绝对定位 `tether-dir-loading` 叠层，加载时保留旧列表；错误改为可重试/关闭浮层。`enter()` 不再先清空 entries，避免切换目录时列表闪空。**0.2.56 补**：DSH 页面不加载共享 UI 的全局 CSS，叠层在 DSH 里曾退回 `static` 高 20px；现改为内联 `position:absolute; inset:0; z-index:4`，转圈用 SVG `animateTransform` 自包含旋转。
 3. 设置页：重做为左侧五分区（账号/连接/工作区/本机设备/关于），增加 `extraSections` 扩展接口；账号头像可点击选图，经 canvas 裁成 128×128 JPEG 存 `tether.accountAvatar`，活动栏同步显示；删除解释性长句、重复的刷新/更新/权限/切换账号入口；密码标题与按钮去重。
 4. 同时修正诊断中发现的本机 surface 路径问题：Electron host 的 `apiBase` 为空时不再尝试本地 54073 回环（该路径会让插件跨端口调用本地代理时丢会话）；保持 0.2.54 的 Hub surface 路径。后续若启用本地直连，需同时补 `credentials`/CORS 会话。
 
-真机证据（DESKTOP-LOCAL 0.2.55 源码 WebUI + 本机 DSH 插件 0.2.55）：互联页 `main` 1416×829，deck 绝对定位且不占布局；连续 3 次 DESKTOP↔LAPTOP 往返，两个 iframe 文档长度保持 720,118 / 736,068 B，标签切换 256 ms；设置页五分区、头像上传后 `tether.accountAvatar` 3,625 B、活动栏 `<img>` 22×22，测试头像已清除；转移页目录加载叠层 505×628、旧列表保留。选择器新结构已在本机 DSH 页确认：无 22px 状态条、无解释页脚，加载使用 `tether-dir-loading`。
+真机证据（DESKTOP-LOCAL WebUI + 本机 DSH 插件）：互联页 `main` 1416×829，deck 绝对定位且不占布局；连续 3 次 DESKTOP↔LAPTOP 往返，两个 iframe 文档长度保持 720,118 / 736,068 B，标签切换 256 ms；设置页五分区、头像上传后 `tether.accountAvatar` 3,625 B、活动栏 `<img>` 22×22，测试头像已清除；转移页目录加载叠层 505×628、旧列表保留。0.2.56 DSH 选择器实测：无 22px 状态条、无解释页脚；加载叠层 639×429、`position:absolute`、`inset:0`、`z-index:4`、居中 SVG 旋转，旧列表保留。
 
-门禁：mjs 222/222、cjs 6/6、client pytest 142 passed / 1 skipped、`build.mjs --check`、`build-web.mjs --check`、`validate_versions()` 全部通过。Electron QA 隔离壳仍受本机环境/登录态影响，未用它替代真机结论。0.2.55 发布与两机更新待执行。
+门禁：mjs 222/222、cjs 6/6、client pytest 142 passed / 1 skipped、`build.mjs --check`、`build-web.mjs --check`、`validate_versions()` 全部通过。Electron QA 隔离壳仍受本机环境/登录态影响，未用它替代真机结论。0.2.55 已发布（CI `41344909191`，20:07:25Z，签名清单验签通过，app 1,745,709 B / plugin 1,343,083 B / node 79,648 B）；LAPTOP-01 Node+APP 22.4 s、插件 22.2 s。0.2.56 发布与两机更新待执行。
 
 ## 2026-11-02 v0.2.54 资源管理器、连接灯与设备工作区常驻
 

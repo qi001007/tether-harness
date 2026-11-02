@@ -29,3 +29,4 @@
 - 2026-10-30：client 包和 version.json 升至发行候选 `0.2.29`；附加候选说明记录 auth scope、原生附件和更新竞态修复。
 - 2026-11-02：client 包、version.json 与重新生成的 `lib/client.js` 升至 `0.2.54`；原生加号现在是唯一附件入口（不再注册 `tether-target-file` 命令），选择器标题“资源管理器”，桥接目录读取接入共享 `file-cache.js`。
 - 2026-11-02：client 包、version.json 与 `lib/client.js` 升至 `0.2.55`；选择器去掉 22px 状态条/解释页脚，改用 `tether-dir-loading` 叠层与可重试错误浮层，设置页同步新版分区和头像。DSH 会按插件版本缓存 bundle，升级后必须让 `rev`/版本变化并等 DSH 重启完成。
+- 2026-11-02：client 包、version.json 与 `lib/client.js` 升至 `0.2.56`；选择器叠层改内联绝对定位 + SVG `animateTransform`，因为 DSH 内嵌页不加载共享 UI 的全局 CSS。DSH 的 surface bundle 会按内容 rev 变化，需等新 rev 出现后再验收。

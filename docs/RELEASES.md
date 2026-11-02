@@ -1,5 +1,15 @@
 # Public client releases
 
+## v0.2.56
+
+Self-contained picker loading overlay:
+
+- 0.2.55 replaced the picker's status strip with the explorer's `tether-dir-loading` class, but the embedded DSH page does not load the shared UI's global CSS. The element fell back to `position:static` at 20 px and the spinner landed at the lower-left. The overlay now carries inline `position:absolute; inset:0; z-index:4` and a self-contained SVG `animateTransform` spinner, so it works in the WebUI, transfer page and DSH surface alike.
+- Real DSH picker: overlay 639×429, absolute, centered; no 22 px status bar, no explanatory footer, old list retained while loading.
+- Includes all 0.2.55 surface, picker and settings changes below.
+
+Gates: mjs 222/222, cjs 6/6, client pytest 142 passed / 1 skipped, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI, signing, Hub mirror and both-machine installation are pending.
+
 ## v0.2.55
 
 Surface switch regression, in-place loading and settings rebuild:
@@ -9,7 +19,7 @@ Surface switch regression, in-place loading and settings rebuild:
 - Rebuilt settings as five sections (account / connection / workspace / device / about) with an `extraSections` extension point and no explanatory sentences. Avatars can be chosen from a local image, cropped to 128×128 JPEG, persisted in `tether.accountAvatar` and shown in the activity bar. Duplicate refresh/update/permissions/switch-account actions were removed.
 - Kept the Hub surface path for the Electron host after diagnosing that the local-loopback surface loses the local proxy session for cross-port plugin calls.
 
-Gates: mjs 222/222, cjs 6/6, client pytest 142 passed / 1 skipped, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI, signing, Hub mirror and both-machine installation are pending.
+Gates: mjs 222/222, cjs 6/6, client pytest 142 passed / 1 skipped, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41344909191` succeeded; published at 2026-11-01T20:07:25Z (app 1,745,709 B, plugin 1,343,083 B, node 79,648 B; signed manifest verified). Hub mirror refreshed to **0.2.55**. LAPTOP-01 Node+APP **22.4 s**, plugin **22.2 s**; DESKTOP source APP restarted and the local DSH plugin reinstalled. 0.2.56 supersedes the picker overlay in this release.
 
 ## v0.2.54
 
