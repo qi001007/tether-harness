@@ -1,5 +1,10 @@
 # 用户反馈与处理
 
+## 2026-11-03 笔记本 DSH 更新失败与插件隔离要求
+
+- [ ] F139：笔记本节点（LAPTOP-01）更新最新 DSH 失败，随后对应页面渲染不出来。**已查到的现场**：DSH 更新器已下载 rc.5 安装包（`C:\Users\14675\AppData\Local\@deepseek-aidsh-desktop-updater\pending\deepseek-harness-0.2.1-rc.5-win-x64.exe`，289,408,544 B，`update-info.json` 存在），但 DSH 仍是 **0.2.1-rc.3**（`D:\DeepSeek Harness\DeepSeek Harness.exe`，pid 24420）；Tether 的 `native-surface.json` 不存在，Hub capabilities 为 `dsh_surface:false`，所以页面没有可渲染的 surface。**风险点**：DSH profile `D:\DeepSeek Harness\.dsh\profiles\desktop\package.json` 仍用 `file:D:/Tether/deploy/tether-plugin-0.2.3/packages/dsh-plugin-tether` 这种旧版本路径；`tether-dsh-native-ui` 把 `@deepseek-ai/dsh-client-ui-chat` 等锁死在 `0.2.1-rc.2`，而 DSH 已到 rc.3/rc.5。**待确认**：DSH 更新失败弹窗的原文/日志（当前没有写入可读的 updater 日志），以及 Tether 插件是否在失败重启后停止发布 surface。判据：DSH 能完成 rc.3→rc.5 更新；更新后 Tether 页面要么正常渲染，要么显示明确的“插件不兼容/待更新”状态，不能白屏；DSH 本身不被 Tether 插件拖死。
+- [ ] F140：DSH 更新适配 + 插件安装隔离，需做专项测试。要求：1）DSH 更新时按 DSH 自己的更新流程走，Tether 不抢着重启/更新插件，等新 descriptor/版本出来后再校验并重建桥接；2）插件安装不能改坏本地 DSH profile 依赖，Tether 插件故障不能阻止 DSH 启动，也不能影响 Tether APP；3）第三方 DSH 插件安装测试先等主人选定插件再开始，测试要在隔离 profile/VM 做，覆盖安装、卸载、DSH 更新前后、插件损坏时 DSH 仍可启动。判据：同一台机器上 DSH 更新成功且 Tether APP 可独立运行；卸载/破坏 Tether 插件后 DSH 正常启动；第三方插件安装/卸载不影响 Tether APP。**状态：主人明确要求先不要开始安装测试，等选定插件。**
+
 ## 2026-11-03 启动黑色弹窗
 
 - [x] F137：打开 APP 时仍会闪出黑色弹窗，一次启动甚至出现多次；要求彻底查清原因。**根因**：更新检查用 `pythonw.exe` 跑 `updates_cli check`，但 `UpdateManager.checkout_state()` 里仍用 `subprocess.run(["git", ...])` 调 `git status`；`git.exe` 是控制台程序，会自己创建 `ConsoleWindowClass` 窗口。**证据**：用 20 ms 可见窗口采样单独跑更新检查，抓到 3 个可见控制台窗口（1.3 s、3.8 s、4.5 s，均为 `C:\Program Files\Git\mingw64\bin\git.exe`）；完整启动 trace 里也看到 `git.exe` + `conhost.exe` 由 Node/更新检查拉起。**修复**：`tether/updates.py` 与插件内 vendored `packages/tether-dsh-surface/updater/tether/updates.py` 的 git 调用在 Windows 上加 `CREATE_NO_WINDOW`；新增回归测试 `test_checkout_state_hides_the_git_console_on_windows`。**复测**：同一更新检查采样不再出现任何新窗口；通过桌面快捷方式启动 APP 的 20 ms 窗口采样只看到 `Tether`/`Tether WebUI` 两个同名主窗口，无 `ConsoleWindowClass`、无 conhost、无黑色弹窗。
