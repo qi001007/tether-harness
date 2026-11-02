@@ -133,6 +133,8 @@ test('connection panels show service checks without duplicate device totals or c
   assert.match(connectionPanel, /服务器地址/)
   assert.doesNotMatch(transferPage, /roleLabel: '(?:来源|目标)'|交换来源与目标/)
   assert.match(transferPage, /已在另一侧/)
+  assert.match(transferPage, /deviceName: \(devices\.find/)
+  assert.match(transferPage, /setRoots\(\[\]\); setEntries\(null\)/)
   assert.match(transferPage, /selectionMode: 'multiple'/)
   assert.match(transferPage, /onRowPointerDown/)
   assert.match(transferPage, /Ctrl\+C/)

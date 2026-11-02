@@ -164401,6 +164401,7 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C, devices 
   function FilePane({
     side: side2,
     deviceId,
+    deviceName = "",
     otherDeviceId,
     onDevice,
     path,
@@ -164437,6 +164438,8 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C, devices 
       let cancelled = false;
       setTreeChildren({});
       setExpanded({});
+      setRoots([]);
+      setEntries(null);
       if (!deviceId) {
         setRoots([]);
         setEntries(null);
@@ -164591,6 +164594,7 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C, devices 
         colors: { bg: C.bg, soft: C.soft, ink: C.ink, sub: C.sub, mute: C.mute, line: C.line, hover: C.soft, red: C.red },
         compact: true,
         roots,
+        deviceName,
         rootPath: "",
         path,
         entries: entries2,
@@ -164962,6 +164966,7 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C, devices 
       deviceId: current.device,
       otherDeviceId: side(other(name)).device,
       devices,
+      deviceName: (devices.find((item) => item.device_id === current.device) || {}).name || current.device || "",
       onDevice: (id) => {
         current.setDevice(id);
         current.setPath("");

@@ -63,7 +63,7 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
     }
   }, h(Glyph, { name, size: 15 }))
 
-  function FilePane({ side, deviceId, otherDeviceId, onDevice, path, onPath, selection, onSelection, onEntries,
+  function FilePane({ side, deviceId, deviceName = '', otherDeviceId, onDevice, path, onPath, selection, onSelection, onEntries,
     onPointerRow, onDropItems, onContextItem, active, onActivate, refreshKey = 0,
     onNewFolder, onNewFile, onRename, onDelete, onRefresh }) {
     const [roots, setRoots] = React.useState([])
@@ -81,7 +81,7 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
     pathRef.current = path
     React.useEffect(() => {
       let cancelled = false
-      setTreeChildren({}); setExpanded({})
+      setTreeChildren({}); setExpanded({}); setRoots([]); setEntries(null)
       if (!deviceId) { setRoots([]); setEntries(null); return undefined }
       setLoading(true); setError('')
       Promise.all([
@@ -181,6 +181,7 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
         colors: { bg: C.bg, soft: C.soft, ink: C.ink, sub: C.sub, mute: C.mute, line: C.line, hover: C.soft, red: C.red },
         compact: true,
         roots,
+        deviceName,
         rootPath: '',
         path,
         entries,
@@ -494,6 +495,7 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
     const current = side(name)
     return {
       side: name, deviceId: current.device, otherDeviceId: side(other(name)).device, devices,
+      deviceName: (devices.find((item) => item.device_id === current.device) || {}).name || current.device || '',
       onDevice: (id) => { current.setDevice(id); current.setPath(''); current.setSelection([]) },
       path: current.path, onPath: current.setPath, refreshKey,
       selection: current.selection, onSelection: current.setSelection,

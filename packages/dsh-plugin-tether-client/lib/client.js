@@ -5763,7 +5763,7 @@ monaco-editor/esm/vs/languages/definitions/swift/swift.js:
 
     const EditorRuntime = TetherMonacoRuntime
     const PANEL_ID = 'tether'
-    const PLUGIN_VERSION = "0.2.57"
+    const PLUGIN_VERSION = "0.2.58"
 function parentOf(path) {
   const clean = String(path || '').replace(/[\\/]+$/, '')
   if (!clean) return ''
@@ -7988,7 +7988,7 @@ function createTransferPage({ React, Glyph, api, post, C, devices = [], localDev
     }
   }, h(Glyph, { name, size: 15 }))
 
-  function FilePane({ side, deviceId, otherDeviceId, onDevice, path, onPath, selection, onSelection, onEntries,
+  function FilePane({ side, deviceId, deviceName = '', otherDeviceId, onDevice, path, onPath, selection, onSelection, onEntries,
     onPointerRow, onDropItems, onContextItem, active, onActivate, refreshKey = 0,
     onNewFolder, onNewFile, onRename, onDelete, onRefresh }) {
     const [roots, setRoots] = React.useState([])
@@ -8006,7 +8006,7 @@ function createTransferPage({ React, Glyph, api, post, C, devices = [], localDev
     pathRef.current = path
     React.useEffect(() => {
       let cancelled = false
-      setTreeChildren({}); setExpanded({})
+      setTreeChildren({}); setExpanded({}); setRoots([]); setEntries(null)
       if (!deviceId) { setRoots([]); setEntries(null); return undefined }
       setLoading(true); setError('')
       Promise.all([
@@ -8106,6 +8106,7 @@ function createTransferPage({ React, Glyph, api, post, C, devices = [], localDev
         colors: { bg: C.bg, soft: C.soft, ink: C.ink, sub: C.sub, mute: C.mute, line: C.line, hover: C.soft, red: C.red },
         compact: true,
         roots,
+        deviceName,
         rootPath: '',
         path,
         entries,
@@ -8419,6 +8420,7 @@ function createTransferPage({ React, Glyph, api, post, C, devices = [], localDev
     const current = side(name)
     return {
       side: name, deviceId: current.device, otherDeviceId: side(other(name)).device, devices,
+      deviceName: (devices.find((item) => item.device_id === current.device) || {}).name || current.device || '',
       onDevice: (id) => { current.setDevice(id); current.setPath(''); current.setSelection([]) },
       path: current.path, onPath: current.setPath, refreshKey,
       selection: current.selection, onSelection: current.setSelection,
