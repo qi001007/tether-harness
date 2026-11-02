@@ -102,15 +102,19 @@ def _stop_tree(root: psutil.Process) -> None:
         pass
 
 
-def _launch(exe: str) -> subprocess.Popen[Any]:
+def _launch(exe: str, dsh_home: Path | None = None) -> subprocess.Popen[Any]:
     env = dict(os.environ)
     # The helper can inherit this from a Node launcher; Electron then runs as a
     # plain Node process instead of starting the DSH window.
     env.pop("ELECTRON_RUN_AS_NODE", None)
-    # Tether's Node may run with a test DSH home; the desktop app must keep its
-    # own profile so the surface descriptor is published where the Node reads it.
-    env.pop("DSH_HOME", None)
+    # The installed DSH may use a non-default profile (for example a bundled
+    # D:\DeepSeek Harness\.dsh). Launch it with that exact home, not the
+    # per-user default, so the Tether plugin and descriptor stay visible.
     env.pop("TETHER_NATIVE_DSH_HOME", None)
+    if dsh_home is not None:
+        env["DSH_HOME"] = str(dsh_home)
+    else:
+        env.pop("DSH_HOME", None)
     kwargs: dict[str, Any] = {
         "cwd": str(Path(exe).parent),
         "env": env,
@@ -127,7 +131,7 @@ def _launch(exe: str) -> subprocess.Popen[Any]:
 
 
 def restart(descriptor: Path, log: Path | None, *, delay: float = 1.5, wait: float = 60.0,
-            host_pid: int | None = None) -> int:
+            host_pid: int | None = None, dsh_home: Path | None = None) -> int:
     time.sleep(max(0.0, delay))
     before = _host_pid(descriptor)
     host = None
@@ -165,7 +169,7 @@ def restart(descriptor: Path, log: Path | None, *, delay: float = 1.5, wait: flo
             if launches:
                 _log(log, "no new descriptor yet; relaunching DSH")
             try:
-                _launch(exe)
+                _launch(exe, dsh_home)
                 launches += 1
                 last_launch = time.time()
             except OSError as exc:
@@ -186,9 +190,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--delay", type=float, default=1.5)
     parser.add_argument("--wait", type=float, default=60.0)
     parser.add_argument("--host-pid", type=int, default=0)
+    parser.add_argument("--dsh-home", default="")
     args = parser.parse_args(argv)
     return restart(Path(args.descriptor), Path(args.log) if args.log else None,
-                   delay=args.delay, wait=args.wait, host_pid=args.host_pid or None)
+                   delay=args.delay, wait=args.wait, host_pid=args.host_pid or None,
+                   dsh_home=Path(args.dsh_home) if args.dsh_home else None)
 
 
 if __name__ == "__main__":

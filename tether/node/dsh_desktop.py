@@ -289,6 +289,7 @@ class DshDesktop:
             raise DshError("DSH 未安装", "dsh_not_installed")
         exe = Path(current["exe"])
         env = _app_env()
+        env["DSH_HOME"] = str(self.dsh_home)
         kwargs: dict[str, Any] = {
             "cwd": str(exe.parent),
             "env": env,
@@ -320,7 +321,8 @@ class DshDesktop:
         args = [sys.executable, "-m", "tether.node.dsh_restart",
                 "--descriptor", str(self.descriptor), "--log", str(log),
                 "--delay", "0.8", "--wait", "60",
-                "--host-pid", str(int(current.get("pid") or 0))]
+                "--host-pid", str(int(current.get("pid") or 0)),
+                "--dsh-home", str(self.dsh_home)]
         kwargs: dict[str, Any] = {
             "cwd": str(Path(__file__).resolve().parents[2]),
             "env": env,

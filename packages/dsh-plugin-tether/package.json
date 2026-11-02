@@ -1,6 +1,6 @@
 {
   "name": "tether-dsh-plugin",
-  "version": "0.2.77",
+  "version": "0.2.78",
   "description": "Tether bundle for DeepSeek Harness: installs the Tether client page",
   "type": "module",
   "main": "lib/index.js",

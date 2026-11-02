@@ -1701,7 +1701,7 @@ class UpdateManager:
         log = self.state_dir / "dsh-restart.log"
         args = [sys.executable, "-m", "tether.node.dsh_restart",
                 "--descriptor", str(self._dsh_descriptor()), "--log", str(log),
-                "--delay", "1.5", "--wait", "60"]
+                "--delay", "1.5", "--wait", "60", "--dsh-home", str(self.dsh_home)]
         env = dict(os.environ)
         env["PYTHONPATH"] = str(self.root) + ((os.pathsep + env["PYTHONPATH"]) if env.get("PYTHONPATH") else "")
         env["PYTHONIOENCODING"] = "utf-8"

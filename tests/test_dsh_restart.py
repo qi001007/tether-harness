@@ -30,6 +30,22 @@ def test_launch_strips_the_electron_node_selector(monkeypatch):
     assert captured["env"]["TETHER_TEST_MARKER"] == "kept"
 
 
+def test_launch_uses_the_detected_dsh_home(monkeypatch):
+    captured = {}
+
+    class Proc:
+        pass
+
+    def fake_popen(args, **kwargs):
+        captured["env"] = kwargs.get("env")
+        return Proc()
+
+    monkeypatch.setattr(dsh_restart.subprocess, "Popen", fake_popen)
+    monkeypatch.setenv("DSH_HOME", "C:/Users/test/.dsh")
+    dsh_restart._launch("C:/Program Files/DeepSeek Harness/DeepSeek Harness.exe", Path("D:/DeepSeek Harness/.dsh"))
+    assert captured["env"]["DSH_HOME"] == str(Path("D:/DeepSeek Harness/.dsh"))
+
+
 def test_restart_relaunches_when_the_first_attempt_never_publishes(monkeypatch, tmp_path):
     launches = []
     current = {"pid": None}
@@ -56,7 +72,7 @@ def test_restart_relaunches_when_the_first_attempt_never_publishes(monkeypatch, 
     monkeypatch.setattr(dsh_restart, "_root_of", lambda process: process)
     monkeypatch.setattr(dsh_restart, "_stop_tree", lambda _root: None)
 
-    def fake_launch(exe):
+    def fake_launch(exe, dsh_home=None):
         launches.append(exe)
         if len(launches) == 2:
             current["pid"] = 99
@@ -80,6 +96,6 @@ def test_restart_refuses_a_process_that_is_not_the_dsh_desktop_app(monkeypatch, 
     monkeypatch.setattr(dsh_restart, "_find_host", lambda: Host())
     monkeypatch.setattr(dsh_restart, "_root_of", lambda process: process)
     monkeypatch.setattr(dsh_restart, "_stop_tree", lambda _root: launches.append("stopped"))
-    monkeypatch.setattr(dsh_restart, "_launch", lambda exe: launches.append(exe))
+    monkeypatch.setattr(dsh_restart, "_launch", lambda exe, dsh_home=None: launches.append(exe))
     assert dsh_restart.restart(tmp_path / "native-surface.json", None, delay=0, wait=5) == 1
     assert launches == []

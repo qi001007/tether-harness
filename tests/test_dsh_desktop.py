@@ -69,7 +69,7 @@ def test_start_uses_a_windowless_detached_process(tmp_path, monkeypatch):
     assert flags & dsh_desktop.DETACHED_PROCESS
     assert flags & dsh_desktop.CREATE_NEW_PROCESS_GROUP
     assert flags & dsh_desktop.CREATE_NO_WINDOW
-    assert "DSH_HOME" not in captured[0][1]["env"]
+    assert captured[0][1]["env"]["DSH_HOME"] == str(tmp_path / "home")
     assert "TETHER_NATIVE_DSH_HOME" not in captured[0][1]["env"]
     assert "ELECTRON_RUN_AS_NODE" not in captured[0][1]["env"]
     assert result["started"] is True
@@ -119,4 +119,5 @@ def test_restart_schedules_a_windowless_dsh_restart_helper(tmp_path, monkeypatch
     assert "tether.node.dsh_restart" in args
     assert str(desktop.descriptor) in args
     assert "--host-pid" in args
+    assert "--dsh-home" in args
     assert kwargs["creationflags"] & dsh_desktop.CREATE_NO_WINDOW
