@@ -32,6 +32,11 @@ export function createElectronHost({ apiBase = '' } = {}) {
       check: () => window.tetherApp.updatesCheck(),
       prepare: () => window.tetherApp.updatesPrepare(),
       apply: (preparedId) => window.tetherApp.updatesApply(preparedId)
+    },
+    windowControls: {
+      action: (name) => window.tetherApp.windowControl(name),
+      state: () => window.tetherApp.windowControl('state'),
+      onState: (callback) => window.tetherApp.onWindowState(callback)
     }
   }
 }

@@ -1,0 +1,47 @@
+import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import path from 'node:path'
+import test from 'node:test'
+import { fileURLToPath } from 'node:url'
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const main = fs.readFileSync(path.join(root, 'apps/tether-app/main.js'), 'utf8')
+const preload = fs.readFileSync(path.join(root, 'apps/tether-app/preload.js'), 'utf8')
+const host = fs.readFileSync(path.join(root, 'packages/tether-ui/src/hosts/electron.js'), 'utf8')
+const shared = fs.readFileSync(path.join(root, 'packages/tether-ui/src/app.js'), 'utf8')
+
+test('the APP runs as a frameless DSH-like shell with custom window controls', () => {
+  assert.match(main, /frame: false/)
+  assert.match(main, /thickFrame: true/)
+  assert.match(main, /handleTrusted\('tether:window-control'/)
+  assert.match(preload, /windowControl: \(action\) => ipcRenderer\.invoke\('tether:window-control'/)
+  assert.match(preload, /onWindowState:/)
+  assert.match(host, /windowControls: \{/)
+  assert.match(shared, /WebkitAppRegion: 'drag'/)
+  assert.match(shared, /tether-window-control/)
+  assert.match(shared, /windowControl\('minimize'/)
+  assert.match(shared, /windowControl\('toggle-maximize'/)
+  assert.match(shared, /windowControl\('close'/)
+})
+
+test('closing the window hides it to the tray until an explicit quit', () => {
+  assert.match(main, /new Tray\(icon\)/)
+  assert.match(main, /tray\.setContextMenu/)
+  assert.match(main, /label: '打开 Tether'/)
+  assert.match(main, /label: '退出 Tether'/)
+  assert.match(main, /mainWindow\.on\('close', \(event\) => \{/)
+  assert.match(main, /event\.preventDefault\(\)/)
+  assert.match(main, /mainWindow\.hide\(\)/)
+  assert.match(main, /if \(isQuitting \|\| !tray\) app\.quit\(\)/)
+  assert.match(main, /app\.on\('second-instance', \(\) => \{/)
+})
+
+test('one icon source ships for the window, shortcut and tray', () => {
+  const ico = fs.statSync(path.join(root, 'assets/tether.ico'))
+  const png = fs.statSync(path.join(root, 'assets/tether-icon.png'))
+  assert.ok(ico.size > 1000, 'multi-size ico exists')
+  assert.ok(png.size > 1000, 'png source exists')
+  assert.match(main, /assets', 'tether\.ico'/)
+  assert.match(fs.readFileSync(path.join(root, 'desktop/install-app.ps1'), 'utf8'), /assets\\tether\.ico/)
+  assert.match(shared, /const TetherMark =/)
+})

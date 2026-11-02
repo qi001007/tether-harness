@@ -1,6 +1,6 @@
 {
-  "version": "0.2.72",
-  "notes": "The updater's git status probe now runs with CREATE_NO_WINDOW. A development checkout no longer flashes a black console window when the APP starts; the startup trace sees only the Tether window.",
+  "version": "0.2.73",
+  "notes": "The APP shell is now frameless with a DSH-like integrated top bar, custom window controls and a unified network icon. Closing the window hides it to the Windows tray; the tray can reopen or quit Tether. Desktop, taskbar, hover thumbnail and tray all use the same icon asset.",
   "download": "https://github.com/qi001007/tether-harness",
   "install": "git pull && powershell -ExecutionPolicy Bypass -File desktop/install-plugin.ps1"
 }

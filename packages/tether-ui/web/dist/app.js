@@ -163292,7 +163292,7 @@ function createConnectionPanel(React2) {
     const color = status2 === "online" ? "var(--dsw-alias-state-success-primary, #16a34a)" : status2 === "offline" ? "var(--dsw-alias-state-error-primary, #b42318)" : status2 === "checking" ? "var(--dsw-alias-state-warn-primary, #b54708)" : mute;
     return h2(
       "button",
-      { onClick, title: "\u8FDE\u63A5", className: "tether-press tether-hover", style: { marginLeft: "auto", height: 26, padding: "0 10px", borderRadius: 999, border: 0, background: bg, color: sub, display: "flex", alignItems: "center", gap: 6, fontSize: 12, cursor: "pointer", flex: "0 0 auto", boxShadow: "0 1px 2px rgba(16,24,40,0.06)" } },
+      { onClick, title: "\u8FDE\u63A5", className: "tether-press tether-hover", style: { height: 26, padding: "0 10px", borderRadius: 999, border: 0, background: bg, color: sub, display: "flex", alignItems: "center", gap: 6, fontSize: 12, cursor: "pointer", flex: "0 0 auto", boxShadow: "0 1px 2px rgba(16,24,40,0.06)" } },
       h2("span", { style: { width: 7, height: 7, borderRadius: 4, background: color, flex: "0 0 auto" } }),
       "\u8FDE\u63A5"
     );
@@ -167474,7 +167474,10 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         --tether-tabstrip: #2b2b2e;
         --tether-tab-bg: #1e1e1e;
         --tether-split: rgba(255, 255, 255, 0.12); }
-      .tether-topbar { min-height: 40px; background: var(--tether-topbar-bg) !important; }
+      .tether-topbar { min-height: 40px; background: var(--tether-topbar-bg) !important; -webkit-app-region: drag; }
+      .tether-topbar button, .tether-topbar input, .tether-topbar [role="button"], .tether-topbar a { -webkit-app-region: no-drag; }
+      .tether-window-control:hover { background: var(--tether-chrome-hover) !important; color: var(--tether-chrome-ink) !important; }
+      .tether-window-close:hover { background: #c42b1c !important; color: #ffffff !important; }
       .tether-activitybar { background: var(--tether-activity-bg) !important; }
       .tether-activity-button[data-selected=true] { color: var(--dsw-alias-state-business-primary, #1570ef) !important; background: color-mix(in srgb, var(--dsw-alias-state-business-primary, #1570ef) 16%, transparent) !important; }
       .tether-sidebar { background: var(--tether-explorer-bg) !important; }
@@ -167613,6 +167616,41 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     }, [key, value]);
     return [value, setValue];
   }
+  const TetherMark = ({ size = 22 }) => h2(
+    "svg",
+    {
+      width: size,
+      height: size,
+      viewBox: "0 0 32 32",
+      "aria-hidden": true,
+      style: { display: "block", flex: "0 0 auto" }
+    },
+    h2("rect", { x: 1, y: 1, width: 30, height: 30, rx: 8, fill: "#0b1220" }),
+    h2(
+      "g",
+      { stroke: "url(#tether-mark-line)", strokeWidth: 1.7, strokeLinecap: "round" },
+      h2("line", { x1: 16, y1: 16.5, x2: 16, y2: 7.5 }),
+      h2("line", { x1: 16, y1: 16.5, x2: 7, y2: 21 }),
+      h2("line", { x1: 16, y1: 16.5, x2: 25, y2: 20 }),
+      h2("line", { x1: 7, y1: 21, x2: 25, y2: 20 }),
+      h2("line", { x1: 16, y1: 7.5, x2: 7, y2: 21 }),
+      h2("line", { x1: 16, y1: 7.5, x2: 25, y2: 20 })
+    ),
+    h2(
+      "defs",
+      null,
+      h2(
+        "linearGradient",
+        { id: "tether-mark-line", x1: "0", y1: "0", x2: "1", y2: "1" },
+        h2("stop", { offset: "0%", stopColor: "#3b82f6" }),
+        h2("stop", { offset: "100%", stopColor: "#f59e0b" })
+      )
+    ),
+    h2("circle", { cx: 7, cy: 21, r: 2.2, fill: "#0b1220", stroke: "#3b82f6", strokeWidth: 1.3 }),
+    h2("circle", { cx: 25, cy: 20, r: 2.2, fill: "#0b1220", stroke: "#3b82f6", strokeWidth: 1.3 }),
+    h2("circle", { cx: 16, cy: 7.5, r: 2.6, fill: "#f59e0b" }),
+    h2("circle", { cx: 16, cy: 16.5, r: 2.8, fill: "#ffffff" })
+  );
   const GLYPHS2 = {
     workspace: { cap: "round", join: "round", parts: [
       { d: "M14 12.05c0 .8-.65 1.45-1.46 1.45H3.46C2.65 13.5 2 12.85 2 12.05v-8.1c0-.8.65-1.45 1.46-1.45h2.4c.49 0 .94.24 1.21.65l.5.73c.27.4.73.65 1.21.65h3.76c.8 0 1.46.65 1.46 1.45v6.02Z" },
@@ -169686,6 +169724,22 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     accountNameRef.current = accountName;
     accountAvatarRef.current = accountAvatar;
     const accountPendingRef = React2.useRef(null);
+    const [windowMaximized, setWindowMaximized] = React2.useState(false);
+    React2.useEffect(() => {
+      if (!host || !host.windowControls) return void 0;
+      let alive = true;
+      host.windowControls.state().then((state2) => {
+        if (alive) setWindowMaximized(!!(state2 && state2.maximized));
+      }).catch(() => {
+      });
+      const off = host.windowControls.onState((state2) => {
+        if (alive) setWindowMaximized(!!(state2 && state2.maximized));
+      });
+      return () => {
+        alive = false;
+        if (typeof off === "function") off();
+      };
+    }, [host]);
     const [settingsSection, setSettingsSection] = React2.useState("account");
     const [hubUnsafeExistingUrl, setHubUnsafeExistingUrl] = React2.useState(false);
     const [hubStatus, setHubStatus] = React2.useState("unknown");
@@ -172969,14 +173023,47 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         }
       };
     })();
+    const windowControlIcon = (kind) => h2(
+      "svg",
+      {
+        width: 12,
+        height: 12,
+        viewBox: "0 0 16 16",
+        fill: "none",
+        stroke: "currentColor",
+        strokeWidth: 1.2,
+        strokeLinecap: "round",
+        "aria-hidden": true
+      },
+      kind === "minimize" ? h2("path", { d: "M3 8h10" }) : null,
+      kind === "maximize" ? h2("rect", { x: 3, y: 3, width: 10, height: 10, rx: 0.5 }) : null,
+      kind === "restore" ? [h2("rect", { key: "a", x: 3, y: 5, width: 8, height: 8, rx: 0.5 }), h2("path", { key: "b", d: "M5.5 5V3.5h8v8H12" })] : null,
+      kind === "close" ? [h2("path", { key: "a", d: "M4 4l8 8" }), h2("path", { key: "b", d: "M12 4l-8 8" })] : null
+    );
+    const windowControl = (action, label, kind) => host.windowControls ? h2("button", {
+      type: "button",
+      title: label,
+      "aria-label": label,
+      className: "tether-window-control" + (action === "close" ? " tether-window-close" : ""),
+      onClick: () => {
+        host.windowControls.action(action).catch(() => {
+        });
+      },
+      style: { width: 46, height: "100%", border: 0, background: "transparent", color: C.mute, display: "grid", placeItems: "center", cursor: "default", padding: 0 }
+    }, windowControlIcon(kind)) : null;
     return h2(
       "div",
       { className: "tether-root", style: { position: "relative", height: "100%", display: "flex", flexDirection: "column", background: "var(--tether-workbench-bg, " + C.bg + ")", color: C.ink, fontSize: 13, fontWeight: "var(--tether-body, 400)", overflow: "hidden" } },
       h2("style", null, SCROLL_CSS),
       h2(
         "div",
-        { className: "tether-topbar " + (host && host.kind === "app" ? "tether-toolbar-app" : "tether-toolbar"), style: { display: "flex", alignItems: "center", gap: 10, padding: "6px 12px", borderBottom: 0, background: C.soft, position: "relative", zIndex: 2, flex: "0 0 auto" } },
-        h2("strong", { style: { fontSize: 15 } }, "Tether"),
+        { className: "tether-topbar " + (host && host.kind === "app" ? "tether-toolbar-app" : "tether-toolbar"), style: { display: "flex", alignItems: "center", gap: 10, height: 40, padding: "0 0 0 12px", borderBottom: 0, background: C.soft, position: "relative", zIndex: 2, flex: "0 0 auto", WebkitAppRegion: "drag" } },
+        h2(
+          "span",
+          { style: { display: "flex", alignItems: "center", gap: 8, flex: "0 0 auto" } },
+          h2(TetherMark, { size: 22 }),
+          h2("strong", { style: { fontSize: 15 } }, "Tether")
+        ),
         device ? h2(DeviceSwitcher, {
           devices: state && state.devices || [],
           value: deviceId,
@@ -172984,28 +173071,41 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           onOpenNetwork: () => selectPanel("network")
         }) : h2("span", { style: { color: C.mute } }, "no device"),
         device && device.capabilities && (!device.capabilities.fs || device.capabilities.surface_protocol !== 1) ? pill("\u8282\u70B9\u5F85\u66F4\u65B0", C.amber) : null,
-        host && (host.kind === "dsh" || host.kind === "app") ? h2(Connection.Trigger, {
-          onClick: () => {
-            if (host.kind === "dsh" || host.kind === "app") {
-              let saved = {};
-              try {
-                saved = JSON.parse(window.localStorage.getItem("tether.hub") || "{}");
-              } catch (_) {
+        h2(
+          "div",
+          { style: { marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, alignSelf: "stretch", flex: "0 0 auto" } },
+          host && (host.kind === "dsh" || host.kind === "app") ? h2(Connection.Trigger, {
+            onClick: () => {
+              if (host.kind === "dsh" || host.kind === "app") {
+                let saved = {};
+                try {
+                  saved = JSON.parse(window.localStorage.getItem("tether.hub") || "{}");
+                } catch (_) {
+                }
+                setHubUrl(hubAddressForEditor(saved.url || ""));
+                setHubUnsafeExistingUrl(hubUrlNeedsReplacement(saved.url || ""));
+                setHubToken(saved.token || "");
+                setHubEmail(saved.email || "");
               }
-              setHubUrl(hubAddressForEditor(saved.url || ""));
-              setHubUnsafeExistingUrl(hubUrlNeedsReplacement(saved.url || ""));
-              setHubToken(saved.token || "");
-              setHubEmail(saved.email || "");
-            }
-            setHubState(null);
-            setHubStatus("unknown");
-            setHubError("");
-            if (host.connectionInfo) host.connectionInfo(host.activeApiBase && host.activeApiBase()).then((info) => setHubAddress(info.address || "")).catch(() => setHubAddress(""));
-            setShowHub(true);
-          },
-          status: liveHubStatus
-        }) : null,
-        h2(MinimalUpdateButton, { React: React2, h: h2, api: api2, post, deviceId, host, C })
+              setHubState(null);
+              setHubStatus("unknown");
+              setHubError("");
+              if (host.connectionInfo) host.connectionInfo(host.activeApiBase && host.activeApiBase()).then((info) => setHubAddress(info.address || "")).catch(() => setHubAddress(""));
+              setShowHub(true);
+            },
+            status: liveHubStatus
+          }) : null,
+          h2(MinimalUpdateButton, { React: React2, h: h2, api: api2, post, deviceId, host, C }),
+          host && host.kind === "app" && host.windowControls ? h2(
+            "div",
+            {
+              style: { display: "flex", alignSelf: "stretch", marginLeft: 2, WebkitAppRegion: "no-drag" }
+            },
+            windowControl("minimize", "\u6700\u5C0F\u5316", "minimize"),
+            windowControl("toggle-maximize", windowMaximized ? "\u8FD8\u539F" : "\u6700\u5927\u5316", windowMaximized ? "restore" : "maximize"),
+            windowControl("close", "\u5173\u95ED", "close")
+          ) : null
+        )
       ),
       notice || projectsError || updateToast ? renderToasts() : null,
       h2(
@@ -173778,6 +173878,11 @@ function createElectronHost({ apiBase = "" } = {}) {
       check: () => window.tetherApp.updatesCheck(),
       prepare: () => window.tetherApp.updatesPrepare(),
       apply: (preparedId) => window.tetherApp.updatesApply(preparedId)
+    },
+    windowControls: {
+      action: (name) => window.tetherApp.windowControl(name),
+      state: () => window.tetherApp.windowControl("state"),
+      onState: (callback) => window.tetherApp.onWindowState(callback)
     }
   };
 }

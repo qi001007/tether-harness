@@ -16,6 +16,12 @@ contextBridge.exposeInMainWorld('tetherApp', {
   openLogs: () => ipcRenderer.invoke('tether:open-logs'),
   openDataDir: () => ipcRenderer.invoke('tether:open-data'),
   openExternal: (url) => ipcRenderer.invoke('tether:open-external', url),
+  windowControl: (action) => ipcRenderer.invoke('tether:window-control', action),
+  onWindowState: (callback) => {
+    const listener = (_event, value) => callback(value)
+    ipcRenderer.on('tether:window-state', listener)
+    return () => ipcRenderer.off('tether:window-state', listener)
+  },
   onStatus: (callback) => {
     const listener = (_event, value) => callback(value)
     ipcRenderer.on('tether:status', listener)

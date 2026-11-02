@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, session, webFrameMain } = require('electron')
+const { app, BrowserWindow, ipcMain, shell, session, webFrameMain, Tray, Menu, nativeImage } = require('electron')
 const fs = require('node:fs')
 const path = require('node:path')
 const { pathToFileURL } = require('node:url')
@@ -66,8 +66,45 @@ function log(line) {
 
 let mainWindow = null
 let webServer = null
+let tray = null
+let isQuitting = false
 let rendererConsoleErrors = 0
 let surfaceBootFailureSentAt = 0
+
+function showMainWindow() {
+  if (!mainWindow) return
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.show()
+  mainWindow.focus()
+}
+
+function sendWindowState() {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  try {
+    mainWindow.webContents.send('tether:window-state', {
+      maximized: mainWindow.isMaximized(),
+      visible: mainWindow.isVisible()
+    })
+  } catch (_) { /* renderer is between documents */ }
+}
+
+function createTray() {
+  if (tray) return tray
+  const iconPath = path.join(repoRoot, 'assets', 'tether.ico')
+  const icon = nativeImage.createFromPath(iconPath)
+  if (icon.isEmpty()) log('tray icon failed to load ' + iconPath)
+  tray = new Tray(icon)
+  tray.setToolTip('Tether')
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: '打开 Tether', click: showMainWindow },
+    { type: 'separator' },
+    { label: '退出 Tether', click: () => { isQuitting = true; app.quit() } }
+  ]))
+  tray.on('click', showMainWindow)
+  tray.on('double-click', showMainWindow)
+  log('tray created icon=' + iconPath)
+  return tray
+}
 
 function logRendererNetworkFailure(event, details) {
   const scope = rendererRequestScope(details.url, controller)
@@ -132,6 +169,8 @@ async function createWindow() {
     title: 'Tether',
     icon: path.join(repoRoot, 'assets', 'tether.ico'),
     backgroundColor: '#ffffff',
+    frame: false,
+    thickFrame: true,
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -140,7 +179,18 @@ async function createWindow() {
       sandbox: true
     }
   })
+  mainWindow.on('close', (event) => {
+    if (isQuitting) return
+    event.preventDefault()
+    mainWindow.hide()
+    createTray()
+  })
   mainWindow.on('closed', () => { mainWindow = null })
+  mainWindow.on('maximize', sendWindowState)
+  mainWindow.on('unmaximize', sendWindowState)
+  mainWindow.on('show', sendWindowState)
+  mainWindow.webContents.on('did-finish-load', sendWindowState)
+  createTray()
   mainWindow.webContents.on('will-navigate', (event, navigationUrl) => {
     let allowed = false
     try {
@@ -331,6 +381,26 @@ handleTrusted('tether:updates-apply', async (_event, preparedId) => {
   setTimeout(() => app.quit(), 150)
   return result
 })
+handleTrusted('tether:window-control', (_event, action) => {
+  if (!mainWindow || mainWindow.isDestroyed()) return { ok: false }
+  if (action === 'minimize') {
+    mainWindow.minimize()
+    return { ok: true, maximized: mainWindow.isMaximized(), visible: mainWindow.isVisible() }
+  }
+  if (action === 'toggle-maximize') {
+    if (mainWindow.isMaximized()) mainWindow.unmaximize()
+    else mainWindow.maximize()
+    return { ok: true, maximized: mainWindow.isMaximized(), visible: mainWindow.isVisible() }
+  }
+  if (action === 'close') {
+    mainWindow.close()
+    return { ok: true, visible: mainWindow.isVisible() }
+  }
+  if (action === 'state') {
+    return { ok: true, maximized: mainWindow.isMaximized(), visible: mainWindow.isVisible() }
+  }
+  return { ok: false }
+}, () => ({ ok: false }))
 handleTrusted('tether:services', () => supervisor.snapshot())
 handleTrusted('tether:probe-services', () => supervisor.probe())
 handleTrusted('tether:start-services', () => supervisor.start())
@@ -351,7 +421,7 @@ if (!locked) {
   app.quit()
 } else {
   app.on('second-instance', () => {
-    if (mainWindow) { if (mainWindow.isMinimized()) mainWindow.restore(); mainWindow.focus() }
+    showMainWindow()
   })
   app.whenReady().then(createWindow).catch((error) => {
     log('start failed ' + (error.stack || error))
@@ -359,8 +429,13 @@ if (!locked) {
   })
 }
 
-app.on('window-all-closed', () => app.quit())
+app.on('activate', () => { showMainWindow() })
+app.on('window-all-closed', () => {
+  if (isQuitting || !tray) app.quit()
+})
 app.on('before-quit', () => {
+  isQuitting = true
   supervisor.stopSync()
   if (webServer) webServer.close()
+  if (tray) { tray.destroy(); tray = null }
 })

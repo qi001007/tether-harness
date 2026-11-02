@@ -1331,7 +1331,10 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         --tether-tabstrip: #2b2b2e;
         --tether-tab-bg: #1e1e1e;
         --tether-split: rgba(255, 255, 255, 0.12); }
-      .tether-topbar { min-height: 40px; background: var(--tether-topbar-bg) !important; }
+      .tether-topbar { min-height: 40px; background: var(--tether-topbar-bg) !important; -webkit-app-region: drag; }
+      .tether-topbar button, .tether-topbar input, .tether-topbar [role="button"], .tether-topbar a { -webkit-app-region: no-drag; }
+      .tether-window-control:hover { background: var(--tether-chrome-hover) !important; color: var(--tether-chrome-ink) !important; }
+      .tether-window-close:hover { background: #c42b1c !important; color: #ffffff !important; }
       .tether-activitybar { background: var(--tether-activity-bg) !important; }
       .tether-activity-button[data-selected=true] { color: var(--dsw-alias-state-business-primary, #1570ef) !important; background: color-mix(in srgb, var(--dsw-alias-state-business-primary, #1570ef) 16%, transparent) !important; }
       .tether-sidebar { background: var(--tether-explorer-bg) !important; }
@@ -1468,6 +1471,27 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       }, [key, value])
       return [value, setValue]
     }
+
+    const TetherMark = ({ size = 22 }) => h('svg', {
+      width: size, height: size, viewBox: '0 0 32 32', 'aria-hidden': true,
+      style: { display: 'block', flex: '0 0 auto' }
+    },
+      h('rect', { x: 1, y: 1, width: 30, height: 30, rx: 8, fill: '#0b1220' }),
+      h('g', { stroke: 'url(#tether-mark-line)', strokeWidth: 1.7, strokeLinecap: 'round' },
+        h('line', { x1: 16, y1: 16.5, x2: 16, y2: 7.5 }),
+        h('line', { x1: 16, y1: 16.5, x2: 7, y2: 21 }),
+        h('line', { x1: 16, y1: 16.5, x2: 25, y2: 20 }),
+        h('line', { x1: 7, y1: 21, x2: 25, y2: 20 }),
+        h('line', { x1: 16, y1: 7.5, x2: 7, y2: 21 }),
+        h('line', { x1: 16, y1: 7.5, x2: 25, y2: 20 })),
+      h('defs', null,
+        h('linearGradient', { id: 'tether-mark-line', x1: '0', y1: '0', x2: '1', y2: '1' },
+          h('stop', { offset: '0%', stopColor: '#3b82f6' }),
+          h('stop', { offset: '100%', stopColor: '#f59e0b' }))),
+      h('circle', { cx: 7, cy: 21, r: 2.2, fill: '#0b1220', stroke: '#3b82f6', strokeWidth: 1.3 }),
+      h('circle', { cx: 25, cy: 20, r: 2.2, fill: '#0b1220', stroke: '#3b82f6', strokeWidth: 1.3 }),
+      h('circle', { cx: 16, cy: 7.5, r: 2.6, fill: '#f59e0b' }),
+      h('circle', { cx: 16, cy: 16.5, r: 2.8, fill: '#ffffff' }))
 
     const GLYPHS = {
       workspace: { cap: 'round', join: 'round', parts: [
@@ -3105,6 +3129,18 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       accountNameRef.current = accountName
       accountAvatarRef.current = accountAvatar
       const accountPendingRef = React.useRef(null)
+      const [windowMaximized, setWindowMaximized] = React.useState(false)
+      React.useEffect(() => {
+        if (!host || !host.windowControls) return undefined
+        let alive = true
+        host.windowControls.state().then((state) => {
+          if (alive) setWindowMaximized(!!(state && state.maximized))
+        }).catch(() => {})
+        const off = host.windowControls.onState((state) => {
+          if (alive) setWindowMaximized(!!(state && state.maximized))
+        })
+        return () => { alive = false; if (typeof off === 'function') off() }
+      }, [host])
       const [settingsSection, setSettingsSection] = React.useState('account')
       const [hubUnsafeExistingUrl, setHubUnsafeExistingUrl] = React.useState(false)
       const [hubStatus, setHubStatus] = React.useState('unknown')
@@ -5740,10 +5776,28 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           }
         }
       })()
+      const windowControlIcon = (kind) => h('svg', {
+        width: 12, height: 12, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor',
+        strokeWidth: 1.2, strokeLinecap: 'round', 'aria-hidden': true
+      },
+        kind === 'minimize' ? h('path', { d: 'M3 8h10' }) : null,
+        kind === 'maximize' ? h('rect', { x: 3, y: 3, width: 10, height: 10, rx: 0.5 }) : null,
+        kind === 'restore' ? [h('rect', { key: 'a', x: 3, y: 5, width: 8, height: 8, rx: 0.5 }), h('path', { key: 'b', d: 'M5.5 5V3.5h8v8H12' })] : null,
+        kind === 'close' ? [h('path', { key: 'a', d: 'M4 4l8 8' }), h('path', { key: 'b', d: 'M12 4l-8 8' })] : null)
+      const windowControl = (action, label, kind) => host.windowControls
+        ? h('button', {
+          type: 'button', title: label, 'aria-label': label,
+          className: 'tether-window-control' + (action === 'close' ? ' tether-window-close' : ''),
+          onClick: () => { host.windowControls.action(action).catch(() => {}) },
+          style: { width: 46, height: '100%', border: 0, background: 'transparent', color: C.mute, display: 'grid', placeItems: 'center', cursor: 'default', padding: 0 }
+        }, windowControlIcon(kind))
+        : null
       return h('div', { className: 'tether-root', style: { position: 'relative', height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--tether-workbench-bg, ' + C.bg + ')', color: C.ink, fontSize: 13, fontWeight: 'var(--tether-body, 400)', overflow: 'hidden' } },
         h('style', null, SCROLL_CSS),
-        h('div', { className: 'tether-topbar ' + (host && host.kind === 'app' ? 'tether-toolbar-app' : 'tether-toolbar'), style: { display: 'flex', alignItems: 'center', gap: 10, padding: '6px 12px', borderBottom: 0, background: C.soft, position: 'relative', zIndex: 2, flex: '0 0 auto' } },
-          h('strong', { style: { fontSize: 15 } }, 'Tether'),
+        h('div', { className: 'tether-topbar ' + (host && host.kind === 'app' ? 'tether-toolbar-app' : 'tether-toolbar'), style: { display: 'flex', alignItems: 'center', gap: 10, height: 40, padding: '0 0 0 12px', borderBottom: 0, background: C.soft, position: 'relative', zIndex: 2, flex: '0 0 auto', WebkitAppRegion: 'drag' } },
+          h('span', { style: { display: 'flex', alignItems: 'center', gap: 8, flex: '0 0 auto' } },
+            h(TetherMark, { size: 22 }),
+            h('strong', { style: { fontSize: 15 } }, 'Tether')),
           device ? h(DeviceSwitcher, {
             devices: (state && state.devices) || [],
             value: deviceId,
@@ -5751,25 +5805,32 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             onOpenNetwork: () => selectPanel('network')
           }) : h('span', { style: { color: C.mute } }, 'no device'),
           device && device.capabilities && (!device.capabilities.fs || device.capabilities.surface_protocol !== 1) ? pill('节点待更新', C.amber) : null,
-          host && (host.kind === 'dsh' || host.kind === 'app') ? h(Connection.Trigger, {
-            onClick: () => {
-              if (host.kind === 'dsh' || host.kind === 'app') {
-                let saved = {}
-                try { saved = JSON.parse(window.localStorage.getItem('tether.hub') || '{}') } catch (_) { /* ignore */ }
-                setHubUrl(hubAddressForEditor(saved.url || ''))
-                setHubUnsafeExistingUrl(hubUrlNeedsReplacement(saved.url || ''))
-                setHubToken(saved.token || '')
-                setHubEmail(saved.email || '')
-              }
-              setHubState(null)
-              setHubStatus('unknown')
-              setHubError('')
-              if (host.connectionInfo) host.connectionInfo(host.activeApiBase && host.activeApiBase()).then((info) => setHubAddress(info.address || '')).catch(() => setHubAddress(''))
-              setShowHub(true)
+          h('div', { style: { marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, alignSelf: 'stretch', flex: '0 0 auto' } },
+            host && (host.kind === 'dsh' || host.kind === 'app') ? h(Connection.Trigger, {
+              onClick: () => {
+                if (host.kind === 'dsh' || host.kind === 'app') {
+                  let saved = {}
+                  try { saved = JSON.parse(window.localStorage.getItem('tether.hub') || '{}') } catch (_) { /* ignore */ }
+                  setHubUrl(hubAddressForEditor(saved.url || ''))
+                  setHubUnsafeExistingUrl(hubUrlNeedsReplacement(saved.url || ''))
+                  setHubToken(saved.token || '')
+                  setHubEmail(saved.email || '')
+                }
+                setHubState(null)
+                setHubStatus('unknown')
+                setHubError('')
+                if (host.connectionInfo) host.connectionInfo(host.activeApiBase && host.activeApiBase()).then((info) => setHubAddress(info.address || '')).catch(() => setHubAddress(''))
+                setShowHub(true)
+              },
+              status: liveHubStatus
+            }) : null,
+            h(MinimalUpdateButton, { React, h, api, post, deviceId, host, C }),
+            host && host.kind === 'app' && host.windowControls ? h('div', {
+              style: { display: 'flex', alignSelf: 'stretch', marginLeft: 2, WebkitAppRegion: 'no-drag' }
             },
-            status: liveHubStatus
-          }) : null,
-          h(MinimalUpdateButton, { React, h, api, post, deviceId, host, C })
+              windowControl('minimize', '最小化', 'minimize'),
+              windowControl('toggle-maximize', windowMaximized ? '还原' : '最大化', windowMaximized ? 'restore' : 'maximize'),
+              windowControl('close', '关闭', 'close')) : null)
         ),
         notice || projectsError || updateToast ? renderToasts() : null,
         h('div', { style: { display: 'flex', flex: '1 1 auto', minHeight: 0 } },
