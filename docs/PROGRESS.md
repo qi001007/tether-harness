@@ -10,7 +10,7 @@
 4. 本地拖入保存+上传：捕获 composer `drop`，先 `onAddFiles` 上传，再后台写入目标 `D:\TetherDrop`；真机 `drop-test-2.txt` 出现附件，提示保存到 `D:\TetherDrop\drop-test-2.txt`，磁盘内容一致。
 5. 存储路径：只走 D 盘（`D:\TetherDrop`，策略拒绝时 `D:\TetherWorkspaces\TetherDrop`），不回退 C；Node 新增 `/tether-device-fs/write_chunk` 路由与测试。
 
-门禁：mjs 224/224、cjs 6/6、client pytest 142 passed / 1 skipped、`build.mjs --check`、`build-web.mjs --check`、`validate_versions()` 通过。0.2.57 发布与两机更新待执行。
+门禁：mjs 224/224、cjs 6/6、client pytest 142 passed / 1 skipped、`build.mjs --check`、`build-web.mjs --check`、`validate_versions()` 通过。0.2.57 已发布（CI `41394307331`，05:33:33Z，签名清单验签通过，app 1,748,841 B / plugin 1,345,779 B / node 79,668 B），Hub mirror 0.2.57；LAPTOP Node+APP 19.5 s、插件 19.5 s，DESKTOP 源码 APP 重启、本机插件 0.2.57。两机 app/node/plugin 均为 0.2.57。LAPTOP 真机：分组显示 `工作区 · LAPTOP-01` / `此电脑 · LAPTOP-01`；拖入 `laptop-drop-test.txt` 后附件出现、保存到 LAPTOP 自己的 `D:\TetherDrop`；远端文件与附件已清理。
 
 ## 2026-11-02 v0.2.56 白屏回归、加载叠层与设置页
 

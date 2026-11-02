@@ -10,7 +10,7 @@ Picker tree sync, folder upload and local-drop save+upload:
 - Local files dropped on the composer are uploaded immediately through the DSH attachment API and saved in the background to `D:\TetherDrop` (fallback `D:\TetherWorkspaces\TetherDrop`, never C:). Real run: `drop-test-2.txt` appeared as a 14 B attachment, the toast reported `D:\TetherDrop\drop-test-2.txt`, and the bytes on disk matched.
 - The Node device-fs surface now exposes `write_chunk` so the save path works through the Hub surface gateway; Python coverage writes and reads back the dropped bytes.
 
-Gates: mjs 224/224, cjs 6/6, client pytest 142 passed / 1 skipped, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI, signing, Hub mirror and both-machine installation are pending.
+Gates: mjs 224/224, cjs 6/6, client pytest 142 passed / 1 skipped, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41394307331` succeeded; published at 2026-11-02T05:33:33Z (app 1,748,841 B, plugin 1,345,779 B, node 79,668 B; signed manifest verified). Hub mirror refreshed to **0.2.57**. LAPTOP-01 Node+APP **19.5 s**, plugin **19.5 s**; DESKTOP source APP restarted and the local DSH plugin reinstalled. Both devices report app/node/plugin **0.2.57**. Real runs: DESKTOP tree `C:`/`Users` stayed in sync; a temporary folder uploaded `a.txt`/`b.txt` as two attachments; `drop-test-2.txt` was uploaded and saved to `D:\TetherDrop` with matching bytes. LAPTOP's picker showed `工作区 · LAPTOP-01` / `此电脑 · LAPTOP-01`, and a dropped `laptop-drop-test.txt` was uploaded and saved to its own `D:\TetherDrop`; the remote file and attachment were removed after the check.
 
 ## v0.2.56
 
