@@ -7,7 +7,7 @@ import crypto from 'node:crypto'
 const CORS = { 'access-control-allow-methods': 'GET, POST, OPTIONS', 'access-control-allow-headers': 'Content-Type, Authorization, X-Tether-Token', vary: 'Origin' }
 const ORIGIN_OK = (origin) => origin === 'dsh-app://app' || /^http:\/\/(127\.0\.0\.1|localhost):\d+$/.test(origin || '')
 const PROXY_COOKIE = 'tether_proxy'
-const API_PREFIXES = ['/api/state', '/api/sessions', '/api/runs', '/api/events', '/api/devices', '/api/releases']
+const API_PREFIXES = ['/api/state', '/api/sessions', '/api/runs', '/api/events', '/api/devices', '/api/releases', '/api/edges']
 
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.map': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png' }
 

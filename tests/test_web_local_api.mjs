@@ -30,7 +30,8 @@ test('the Hub proxy keeps an explicit user token and only injects the owner toke
   try {
     assert.equal((await fetch(base + '/api/state', { headers: { cookie } })).status, 200)
     assert.equal((await fetch(base + '/api/state', { headers: { cookie, authorization: 'Bearer user-session' } })).status, 200)
-    assert.deepEqual(seen, ['Bearer owner-token', 'Bearer user-session'])
+    assert.equal((await fetch(base + '/api/edges', { headers: { cookie } })).status, 200, 'the local proxy allows the edge API')
+    assert.deepEqual(seen, ['Bearer owner-token', 'Bearer user-session', 'Bearer owner-token'])
   } finally {
     await app.close()
     hub.close()

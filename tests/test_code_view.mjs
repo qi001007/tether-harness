@@ -49,7 +49,7 @@ test('the file workspace uses distinct colour layers without hard pane borders',
   assert.match(source, /--tether-status-bg: #ececee/)
   assert.match(source, /--tether-explorer-bg: #efeff1/)
   assert.match(source, /--tether-tree-selected: #dedfe2/)
-  assert.match(source, /\.tether-activity-button\[data-selected=true\] \{ color: var\(--tether-chrome-ink\)/)
+  assert.match(source, /\.tether-activity-button\[data-selected=true\] \{ color: var\(--dsw-alias-state-business-primary, #1570ef\) !important; background: color-mix\(/)
   assert.equal(source.includes('--tether-status-bg: #1f6feb'), false, 'light workbench has no blue status strip')
   assert.equal(source.includes('--tether-status-bg: #1158a6'), false, 'dark workbench has no blue status strip')
   assert.equal(source.includes("borderRight: '1px solid"), false, 'workspace panes stay borderless')

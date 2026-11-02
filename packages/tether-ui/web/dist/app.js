@@ -166625,7 +166625,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         --tether-split: rgba(255, 255, 255, 0.12); }
       .tether-topbar { min-height: 40px; background: var(--tether-topbar-bg) !important; }
       .tether-activitybar { background: var(--tether-activity-bg) !important; }
-      .tether-activity-button[data-selected=true] { color: var(--tether-chrome-ink) !important; background: var(--tether-chrome-hover) !important; }
+      .tether-activity-button[data-selected=true] { color: var(--dsw-alias-state-business-primary, #1570ef) !important; background: color-mix(in srgb, var(--dsw-alias-state-business-primary, #1570ef) 16%, transparent) !important; }
       .tether-sidebar { background: var(--tether-explorer-bg) !important; }
       .tether-sidebar-header { color: var(--dsw-alias-label-primary, #101828); }
       .tether-workbench { background: var(--tether-workbench-bg); }
@@ -166824,6 +166824,10 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       { d: "M8 1.4a6.6 6.6 0 1 0 0 13.2A6.6 6.6 0 0 0 8 1.4Z" },
       { d: "M3.6 5.6h7.6M8.9 3.3l2.3 2.3-2.3 2.3" },
       { d: "M12.4 10.4H4.8M7.1 8.1 4.8 10.4l2.3 2.3" }
+    ] },
+    link: { join: "round", parts: [
+      { d: "M6.4 9.6a2.5 2.5 0 0 0 3.5 0l2-2a2.5 2.5 0 1 0-3.5-3.5l-1 1" },
+      { d: "M9.6 6.4a2.5 2.5 0 0 0-3.5 0l-2 2a2.5 2.5 0 1 0 3.5 3.5l1-1" }
     ] },
     search: { parts: [
       { d: "M7.1 12.2a5.1 5.1 0 1 0 0-10.2 5.1 5.1 0 0 0 0 10.2z" },
@@ -167091,7 +167095,14 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       t: workspaceT
     });
   }
-  function NetworkGraph({ devices, localId, selectedId, onSelect, onOpen, onContextMenu }) {
+  function networkEdgeKey(left, right) {
+    return [String(left || ""), String(right || "")].sort().join("\0");
+  }
+  function networkEdgeConnected(edges, left, right) {
+    const key = networkEdgeKey(left, right);
+    return (edges || []).some((edge) => edge && networkEdgeKey(edge.from, edge.to) === key);
+  }
+  function NetworkGraph({ devices, edges = [], localId, selectedId, onSelect, onOpen, onOpenDetails, onToggleEdge, onContextMenu }) {
     const stage = React2.useRef(null);
     const nodesRef = React2.useRef([]);
     const dragRef = React2.useRef(null);
@@ -167099,8 +167110,24 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const centerIdRef = React2.useRef("");
     const [nodes, setNodes] = React2.useState([]);
     const [zoom, setZoom] = React2.useState(1);
+    const [connectMode, setConnectMode] = React2.useState(false);
+    const [connectFrom, setConnectFrom] = React2.useState("");
+    React2.useEffect(() => {
+      if (!connectMode) return void 0;
+      const onKey = (event) => {
+        if (event.key === "Escape") {
+          setConnectMode(false);
+          setConnectFrom("");
+        }
+      };
+      window.addEventListener("keydown", onKey);
+      return () => window.removeEventListener("keydown", onKey);
+    }, [connectMode]);
     const posZoom = zoom <= 1 ? 0.72 + 0.28 * zoom : zoom;
     const key = devices.map((item) => item.device_id).join("|");
+    React2.useEffect(() => {
+      if (connectFrom && !devices.some((item) => item.device_id === connectFrom)) setConnectFrom("");
+    }, [key, connectFrom]);
     const centerId = (devices.find((item) => item.device_id === localId) || devices[0] || {}).device_id || "";
     centerIdRef.current = centerId;
     const update = (next) => {
@@ -167193,13 +167220,42 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       update(list2);
       frameRef.current = moving ? requestAnimationFrame(animate2) : 0;
     }
+    const chooseConnect = (item) => {
+      if (!item) return;
+      if (onSelect) onSelect(item);
+      if (!connectFrom) {
+        setConnectFrom(item.device_id);
+        return;
+      }
+      if (connectFrom === item.device_id) {
+        setConnectFrom("");
+        return;
+      }
+      if (onToggleEdge) onToggleEdge({ from: connectFrom, to: item.device_id }, true);
+      setConnectFrom("");
+      setConnectMode(false);
+    };
     const startDrag = (event, item) => {
       if (event.button !== 0) return;
       event.preventDefault();
       event.stopPropagation();
+      if (connectMode) {
+        chooseConnect(item);
+        return;
+      }
       onSelect(item);
       const node = nodesRef.current.find((candidate) => candidate.id === item.device_id);
-      dragRef.current = { id: item.device_id, lastX: node ? node.x : 50, lastY: node ? node.y : 50, vx: 0, vy: 0 };
+      dragRef.current = {
+        id: item.device_id,
+        item,
+        lastX: node ? node.x : 50,
+        lastY: node ? node.y : 50,
+        startX: node ? node.x : 50,
+        startY: node ? node.y : 50,
+        vx: 0,
+        vy: 0,
+        moved: false
+      };
       event.currentTarget.setPointerCapture?.(event.pointerId);
       kick();
     };
@@ -167210,6 +167266,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       if (!rect.width || !rect.height) return;
       const x = clamp2(50 + ((event.clientX - rect.left) / rect.width * 100 - 50) / posZoom, 4, 96);
       const y = clamp2(50 + ((event.clientY - rect.top) / rect.height * 100 - 50) / posZoom, 7, 93);
+      if (Math.hypot(x - drag.startX, y - drag.startY) > 0.8) drag.moved = true;
       drag.vx = x - drag.lastX;
       drag.vy = y - drag.lastY;
       drag.lastX = x;
@@ -167218,8 +167275,10 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       kick();
     };
     const endDrag = () => {
-      if (!dragRef.current) return;
+      const drag = dragRef.current;
+      if (!drag) return;
       dragRef.current = null;
+      if (!drag.moved && drag.item && onOpenDetails) onOpenDetails(drag.item);
       kick();
     };
     const screen = (node) => ({ x: 50 + (node.x - 50) * posZoom, y: 50 + (node.y - 50) * posZoom });
@@ -167254,32 +167313,124 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         y2: (b.y - uy * end) / rect.height * 100
       };
     };
-    const centerItem = center ? lookup.get(center.id) : null;
+    const edgePairs = [];
+    const seenEdges = /* @__PURE__ */ new Set();
+    for (const edge of edges || []) {
+      const key2 = networkEdgeKey(edge && edge.from, edge && edge.to);
+      if (!key2 || seenEdges.has(key2)) continue;
+      const left = nodes.find((node) => node.id === edge.from);
+      const right = nodes.find((node) => node.id === edge.to);
+      if (!left || !right) continue;
+      seenEdges.add(key2);
+      const leftItem = lookup.get(edge.from);
+      const rightItem = lookup.get(edge.to);
+      edgePairs.push({
+        key: key2,
+        edge,
+        from: left,
+        to: right,
+        online: !!(leftItem && leftItem.online && rightItem && rightItem.online),
+        leftName: leftItem && (leftItem.name || leftItem.device_id) || edge.from,
+        rightName: rightItem && (rightItem.name || rightItem.device_id) || edge.to
+      });
+    }
     return h2(
       "div",
       { ref: stage, style: { position: "absolute", inset: 0, overflow: "hidden", touchAction: "none" } },
       h2("div", { style: { position: "absolute", left: 14, top: 12, fontSize: 12, color: C.mute } }, "\u7F51\u7EDC"),
+      h2("button", {
+        type: "button",
+        onClick: () => {
+          setConnectMode((value) => !value);
+          setConnectFrom("");
+        },
+        title: connectMode ? "\u53D6\u6D88\u8FDE\u63A5\u6A21\u5F0F" : "\u8FDE\u63A5\u4E24\u53F0\u8BBE\u5907",
+        "aria-label": connectMode ? "\u53D6\u6D88\u8FDE\u63A5\u6A21\u5F0F" : "\u8FDE\u63A5\u4E24\u53F0\u8BBE\u5907",
+        className: "tether-hover",
+        style: {
+          position: "absolute",
+          right: 12,
+          top: 8,
+          zIndex: 5,
+          display: "flex",
+          alignItems: "center",
+          gap: 5,
+          height: 26,
+          padding: "0 10px",
+          border: "1px solid " + (connectMode ? C.blue : C.line),
+          borderRadius: 999,
+          background: connectMode ? C.soft : C.layer1,
+          color: connectMode ? C.blue : C.sub,
+          fontSize: 11.5,
+          cursor: "pointer"
+        }
+      }, h2(Glyph, { name: "link", size: 13 }), connectMode ? "\u53D6\u6D88" : "\u8FDE\u63A5"),
       h2(
         "svg",
         { viewBox: "0 0 100 100", preserveAspectRatio: "none", style: { position: "absolute", inset: 0, width: "100%", height: "100%" } },
-        remotes.map((node) => {
-          const item = lookup.get(node.id);
-          const from = center ? screen(center) : { x: 50, y: 50 };
-          const to = screen(node);
-          const points = linkPoints(from, to, center && center.id, node.id);
+        edgePairs.map((pair) => {
+          const points = linkPoints(screen(pair.from), screen(pair.to), pair.from.id, pair.to.id);
           if (!points) return null;
-          const linked = !!(centerItem && centerItem.online && item && item.online);
-          return h2("line", {
-            key: "line:" + node.id,
-            ...points,
-            stroke: C.sub,
-            strokeWidth: zoom > 1 ? 1 : 1.2,
-            vectorEffect: "non-scaling-stroke",
-            strokeDasharray: linked ? void 0 : "4 5",
-            opacity: linked ? 0.7 : 0.4
-          });
+          return h2(
+            "g",
+            { key: "edge:" + pair.key },
+            h2("title", null, pair.leftName + " \u2194 " + pair.rightName + " \xB7 \u70B9\u51FB\u65AD\u5F00"),
+            h2("line", {
+              ...points,
+              stroke: "transparent",
+              strokeWidth: 16,
+              vectorEffect: "non-scaling-stroke",
+              style: { cursor: "pointer", pointerEvents: "stroke" },
+              onClick: (event) => {
+                event.stopPropagation();
+                if (onToggleEdge) onToggleEdge({ from: pair.from.id, to: pair.to.id }, false);
+              }
+            }),
+            h2("line", {
+              ...points,
+              stroke: C.sub,
+              strokeWidth: zoom > 1 ? 1 : 1.2,
+              vectorEffect: "non-scaling-stroke",
+              strokeDasharray: pair.online ? void 0 : "4 5",
+              opacity: pair.online ? 0.7 : 0.4,
+              style: { pointerEvents: "none" }
+            })
+          );
         })
       ),
+      edgePairs.map((pair) => {
+        const left = screen(pair.from);
+        const right = screen(pair.to);
+        return h2("button", {
+          key: "mid:" + pair.key,
+          type: "button",
+          title: "\u65AD\u5F00 " + pair.leftName + " \u2194 " + pair.rightName,
+          "aria-label": "\u65AD\u5F00 " + pair.leftName + " \u2194 " + pair.rightName,
+          onPointerDown: (event) => event.stopPropagation(),
+          onClick: (event) => {
+            event.stopPropagation();
+            if (onToggleEdge) onToggleEdge({ from: pair.from.id, to: pair.to.id }, false);
+          },
+          className: "tether-hover",
+          style: {
+            position: "absolute",
+            left: (left.x + right.x) / 2 + "%",
+            top: (left.y + right.y) / 2 + "%",
+            transform: "translate(-50%, -50%)",
+            zIndex: 4,
+            width: 18,
+            height: 18,
+            padding: 0,
+            display: "grid",
+            placeItems: "center",
+            border: "1px solid " + C.line,
+            borderRadius: 999,
+            background: C.layer1,
+            color: C.sub,
+            cursor: "pointer"
+          }
+        }, h2(Glyph, { name: "link", size: 11 }));
+      }),
       nodes.map((node) => {
         const item = lookup.get(node.id) || { device_id: node.id, name: node.id, online: false };
         const isCenter = center && center.id === node.id;
@@ -167314,8 +167465,10 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
               padding: 0,
               background: "transparent",
               opacity: item.online ? 1 : 0.46,
-              cursor: "grab",
-              userSelect: "none"
+              cursor: connectMode ? "crosshair" : "grab",
+              userSelect: "none",
+              outline: connectFrom === node.id ? "2px solid " + C.blue : "none",
+              outlineOffset: 2
             } : {
               position: "absolute",
               left: pos.x + "%",
@@ -167332,10 +167485,12 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
               fontSize: isCenter ? 12 : 11,
               boxShadow: isCenter ? C.shadow : selected ? "0 1px 3px rgba(16,24,40,0.12)" : "0 1px 2px rgba(16,24,40,0.06)",
               transition: "background-color 160ms ease",
-              cursor: "grab",
+              cursor: connectMode ? "crosshair" : "grab",
               whiteSpace: "nowrap",
               opacity: item.online ? 1 : 0.55,
-              userSelect: "none"
+              userSelect: "none",
+              outline: connectFrom === node.id ? "2px solid " + C.blue : "none",
+              outlineOffset: 2
             }
           },
           compact ? h2("span", {
@@ -167353,7 +167508,257 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         );
       }),
       h2("div", { onClick: () => setZoom(1), title: "\u91CD\u7F6E\u7F29\u653E", style: { position: "absolute", right: 12, bottom: 10, zIndex: 4, fontSize: 10, color: C.mute, background: C.layer1, borderRadius: 999, padding: "2px 7px", cursor: "pointer" } }, Math.round(zoom * 100) + "%"),
+      connectMode ? h2("div", {
+        "aria-live": "polite",
+        style: {
+          position: "absolute",
+          left: "50%",
+          bottom: 12,
+          transform: "translateX(-50%)",
+          zIndex: 4,
+          padding: "4px 9px",
+          borderRadius: 999,
+          background: C.layer1,
+          color: C.sub,
+          fontSize: 10.5,
+          pointerEvents: "none",
+          whiteSpace: "nowrap"
+        }
+      }, connectFrom ? "\u518D\u70B9\u4E00\u53F0\u8BBE\u5907\u5B8C\u6210\u8FDE\u63A5" : "\u70B9\u9009\u7B2C\u4E00\u53F0\u8BBE\u5907") : null,
       !devices.length ? h2("div", { style: { position: "absolute", inset: 0, display: "grid", placeItems: "center", color: C.mute, fontSize: 12 } }, "\u6682\u65E0\u8BBE\u5907 \xB7 \u76EE\u6807\u673A\u9700\u63A5\u5165 Hub") : null
+    );
+  }
+  function NetworkLinkSwitch({ checked, label, onChange }) {
+    return h2("button", {
+      type: "button",
+      role: "switch",
+      "aria-checked": checked,
+      "aria-label": label,
+      title: label,
+      onClick: () => onChange(!checked),
+      style: {
+        width: 30,
+        height: 18,
+        flex: "0 0 auto",
+        border: 0,
+        borderRadius: 999,
+        padding: 2,
+        background: checked ? C.blue : C.line,
+        cursor: "pointer",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: checked ? "flex-end" : "flex-start",
+        transition: "background 140ms ease"
+      }
+    }, h2("span", {
+      "aria-hidden": true,
+      style: { width: 14, height: 14, borderRadius: 999, background: "#fff", boxShadow: "0 1px 2px rgba(16,24,40,.22)" }
+    }));
+  }
+  function NetworkDetailPanel({ device, devices, edges, localId, onToggleEdge, onClose, onOpen, onOpenManager }) {
+    const [search2, setSearch] = React2.useState("");
+    const term = search2.trim().toLowerCase();
+    const others = devices.filter((item) => item.device_id !== device.device_id).filter((item) => !term || String(item.name || "").toLowerCase().includes(term) || String(item.device_id).toLowerCase().includes(term)).sort((left, right) => (right.online ? 1 : 0) - (left.online ? 1 : 0) || String(left.name || left.device_id).localeCompare(String(right.name || right.device_id)));
+    const connected = others.filter((item) => networkEdgeConnected(edges, device.device_id, item.device_id)).length;
+    return h2(
+      "aside",
+      {
+        style: {
+          width: 300,
+          flex: "0 0 auto",
+          minHeight: 0,
+          display: "flex",
+          flexDirection: "column",
+          borderLeft: "1px solid " + C.line,
+          background: C.panel
+        }
+      },
+      h2(
+        "div",
+        { style: { display: "flex", alignItems: "center", gap: 8, padding: "12px 12px 10px", flex: "0 0 auto" } },
+        dot(device.online),
+        h2(
+          "div",
+          { style: { minWidth: 0, flex: "1 1 auto" } },
+          h2("div", { style: { fontSize: 13, fontWeight: "var(--tether-strong, 600)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, device.name || device.device_id),
+          h2("div", { className: "tether-num", style: { fontSize: 10.5, color: C.mute, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, device.device_id)
+        ),
+        h2("button", {
+          type: "button",
+          title: "\u6253\u5F00\u539F\u751F\u5DE5\u4F5C\u533A",
+          "aria-label": "\u6253\u5F00\u539F\u751F\u5DE5\u4F5C\u533A",
+          onClick: () => onOpen(device),
+          className: "tether-hover",
+          style: { width: 26, height: 26, flex: "0 0 auto", display: "grid", placeItems: "center", border: 0, borderRadius: 6, background: "transparent", color: C.sub, cursor: "pointer" }
+        }, h2(Glyph, { name: "monitor", size: 15 })),
+        h2("button", {
+          type: "button",
+          title: "\u5173\u95ED",
+          "aria-label": "\u5173\u95ED",
+          onClick: onClose,
+          className: "tether-hover",
+          style: { width: 26, height: 26, flex: "0 0 auto", display: "grid", placeItems: "center", border: 0, borderRadius: 6, background: "transparent", color: C.mute, fontSize: 17, cursor: "pointer" }
+        }, "\xD7")
+      ),
+      h2(
+        "div",
+        { style: { display: "flex", alignItems: "center", gap: 6, padding: "0 12px 6px", flex: "0 0 auto" } },
+        h2("span", { style: { fontSize: 12, color: C.sub } }, "\u8FDE\u63A5"),
+        h2("span", { className: "tether-num", style: { fontSize: 10.5, color: C.mute } }, connected + " / " + others.length)
+      ),
+      h2(
+        "div",
+        { style: { padding: "0 10px 6px", flex: "0 0 auto" } },
+        h2("input", {
+          value: search2,
+          onChange: (event) => setSearch(event.target.value),
+          placeholder: "\u641C\u7D22\u8BBE\u5907",
+          "aria-label": "\u641C\u7D22\u8BBE\u5907",
+          spellCheck: false,
+          style: { width: "100%", height: 28, boxSizing: "border-box", border: "1px solid " + C.line, borderRadius: 6, padding: "0 8px", background: C.bg, color: C.ink, fontSize: 12, font: "inherit", outline: "none" }
+        })
+      ),
+      h2(
+        "div",
+        { className: "tether-scroll", style: { flex: "1 1 auto", minHeight: 0, overflowY: "auto", padding: "0 8px 10px", display: "flex", flexDirection: "column", gap: 2 } },
+        others.map((item) => {
+          const on = networkEdgeConnected(edges, device.device_id, item.device_id);
+          return h2(
+            "div",
+            {
+              key: item.device_id,
+              style: { display: "flex", alignItems: "center", gap: 8, minHeight: 38, padding: "0 6px", borderRadius: 6, background: C.bg }
+            },
+            dot(item.online),
+            h2(
+              "div",
+              { style: { minWidth: 0, flex: "1 1 auto" } },
+              h2("div", { style: { fontSize: 12, color: C.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, item.name || item.device_id),
+              h2("div", { className: "tether-num", style: { fontSize: 10, color: C.mute, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, item.device_id === localId ? "\u672C\u673A" : item.device_id)
+            ),
+            h2(NetworkLinkSwitch, {
+              checked: on,
+              label: (on ? "\u65AD\u5F00 " : "\u8FDE\u63A5 ") + (item.name || item.device_id),
+              onChange: (next) => onToggleEdge({ from: device.device_id, to: item.device_id }, next)
+            })
+          );
+        }),
+        !others.length ? h2("div", { style: { padding: 16, color: C.mute, fontSize: 12, textAlign: "center" } }, others.length ? "\u6CA1\u6709\u5339\u914D\u7684\u8BBE\u5907" : "\u6CA1\u6709\u5176\u4ED6\u8BBE\u5907") : null
+      ),
+      h2(
+        "div",
+        { style: { padding: "8px 12px", borderTop: "1px solid " + C.line, flex: "0 0 auto" } },
+        h2("button", {
+          type: "button",
+          onClick: onOpenManager,
+          className: "tether-hover",
+          style: { display: "flex", alignItems: "center", gap: 6, width: "100%", height: 30, padding: "0 8px", border: 0, borderRadius: 6, background: "transparent", color: C.sub, fontSize: 12, cursor: "pointer" }
+        }, h2(Glyph, { name: "link", size: 14 }), "\u8FDE\u63A5\u7BA1\u7406")
+      )
+    );
+  }
+  function NetworkLinksManager({ devices, edges, localId, detailId, onToggleEdge, onClose }) {
+    const [search2, setSearch] = React2.useState("");
+    const [from, setFrom] = React2.useState(detailId || localId || devices[0] && devices[0].device_id || "");
+    const [to, setTo] = React2.useState("");
+    const lookup = new Map(devices.map((item) => [item.device_id, item]));
+    React2.useEffect(() => {
+      if (!devices.some((item) => item.device_id === from)) setFrom(localId || devices[0] && devices[0].device_id || "");
+    }, [devices, localId, from]);
+    React2.useEffect(() => {
+      if (to && to !== from && devices.some((item) => item.device_id === to)) return;
+      const next = devices.find((item) => item.device_id !== from);
+      setTo(next ? next.device_id : "");
+    }, [devices, from, to]);
+    const term = search2.trim().toLowerCase();
+    const rows = (edges || []).map((edge) => ({ edge, left: lookup.get(edge.from), right: lookup.get(edge.to) })).filter((row) => row.left && row.right).filter((row) => !term || [row.left, row.right].some((item) => String(item.name || "").toLowerCase().includes(term) || String(item.device_id).toLowerCase().includes(term))).sort((a, b) => String(a.left.name || a.left.device_id).localeCompare(String(b.left.name || b.left.device_id)));
+    const pairOn = networkEdgeConnected(edges, from, to);
+    const select = (value, onChange) => h2("select", {
+      value,
+      onChange: (event) => onChange(event.target.value),
+      "aria-label": "\u9009\u62E9\u8BBE\u5907",
+      style: { flex: "1 1 0", minWidth: 0, height: 30, border: "1px solid " + C.line, borderRadius: 6, background: C.bg, color: C.ink, fontSize: 12, padding: "0 6px" }
+    }, devices.map((item) => h2("option", { key: item.device_id, value: item.device_id }, (item.name || item.device_id) + (item.online ? "" : " \xB7 \u79BB\u7EBF"))));
+    return h2(
+      "div",
+      {
+        onPointerDown: (event) => {
+          if (event.target === event.currentTarget) onClose();
+        },
+        style: { position: "absolute", inset: 0, zIndex: 80, display: "grid", placeItems: "center", padding: 24, background: "rgba(16,24,40,.35)" }
+      },
+      h2(
+        "section",
+        {
+          role: "dialog",
+          "aria-label": "\u8FDE\u63A5\u7BA1\u7406",
+          onPointerDown: (event) => event.stopPropagation(),
+          style: { width: "min(760px, 100%)", height: "min(560px, 100%)", display: "flex", flexDirection: "column", overflow: "hidden", background: C.bg, borderRadius: 12, boxShadow: C.shadow }
+        },
+        h2(
+          "header",
+          { style: { display: "flex", alignItems: "center", gap: 8, padding: "0 14px", height: 44, borderBottom: "1px solid " + C.line, flex: "0 0 auto" } },
+          h2("strong", { style: { fontSize: 14 } }, "\u8FDE\u63A5\u7BA1\u7406"),
+          h2("span", { className: "tether-num", style: { fontSize: 11, color: C.mute } }, rows.length + " \u6761\u8FDE\u63A5"),
+          h2("button", { type: "button", onClick: onClose, title: "\u5173\u95ED", "aria-label": "\u5173\u95ED", className: "tether-hover", style: { marginLeft: "auto", width: 28, height: 28, border: 0, borderRadius: 6, background: "transparent", color: C.mute, fontSize: 18, cursor: "pointer" } }, "\xD7")
+        ),
+        h2(
+          "div",
+          { style: { display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", borderBottom: "1px solid " + C.line, flex: "0 0 auto" } },
+          select(from, setFrom),
+          h2("span", { style: { color: C.mute, flex: "0 0 auto" } }, "\u2194"),
+          select(to, setTo),
+          h2("button", {
+            type: "button",
+            disabled: !from || !to || from === to,
+            onClick: () => {
+              if (from && to && from !== to) onToggleEdge({ from, to }, !pairOn);
+            },
+            style: { height: 30, padding: "0 12px", border: 0, borderRadius: 6, background: C.ink, color: C.onPrimary, fontSize: 12, cursor: from && to && from !== to ? "pointer" : "default", opacity: from && to && from !== to ? 1 : 0.45 }
+          }, pairOn ? "\u65AD\u5F00" : "\u8FDE\u63A5")
+        ),
+        h2(
+          "div",
+          { style: { padding: "8px 14px 0", flex: "0 0 auto" } },
+          h2("input", {
+            value: search2,
+            onChange: (event) => setSearch(event.target.value),
+            placeholder: "\u641C\u7D22\u8FDE\u63A5",
+            "aria-label": "\u641C\u7D22\u8FDE\u63A5",
+            spellCheck: false,
+            style: { width: "100%", height: 28, boxSizing: "border-box", border: "1px solid " + C.line, borderRadius: 6, padding: "0 8px", background: C.soft, color: C.ink, fontSize: 12, font: "inherit", outline: "none" }
+          })
+        ),
+        h2(
+          "div",
+          { style: { display: "grid", gridTemplateColumns: "1fr 1fr 64px 56px", gap: 8, padding: "10px 14px 6px", color: C.mute, fontSize: 10.5, flex: "0 0 auto" } },
+          h2("span", null, "\u8BBE\u5907 A"),
+          h2("span", null, "\u8BBE\u5907 B"),
+          h2("span", null, "\u72B6\u6001"),
+          h2("span", null, "")
+        ),
+        h2(
+          "div",
+          { className: "tether-scroll", style: { flex: "1 1 auto", minHeight: 0, overflowY: "auto", padding: "0 14px 14px" } },
+          rows.map(({ edge, left, right }) => h2(
+            "div",
+            {
+              key: networkEdgeKey(edge.from, edge.to),
+              style: { display: "grid", gridTemplateColumns: "1fr 1fr 64px 56px", gap: 8, alignItems: "center", minHeight: 36, borderTop: "1px solid " + C.line }
+            },
+            h2("span", { title: left.device_id, style: { display: "flex", alignItems: "center", gap: 6, minWidth: 0, fontSize: 12 } }, dot(left.online), h2("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, left.name || left.device_id)),
+            h2("span", { title: right.device_id, style: { display: "flex", alignItems: "center", gap: 6, minWidth: 0, fontSize: 12 } }, dot(right.online), h2("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, right.name || right.device_id)),
+            h2("span", { style: { fontSize: 10.5, color: left.online && right.online ? C.green : C.mute } }, left.online && right.online ? "\u5728\u7EBF" : "\u79BB\u7EBF"),
+            h2("button", {
+              type: "button",
+              onClick: () => onToggleEdge({ from: edge.from, to: edge.to }, false),
+              className: "tether-hover",
+              style: { height: 26, border: 0, borderRadius: 5, background: "transparent", color: C.red, fontSize: 11, cursor: "pointer" }
+            }, "\u65AD\u5F00")
+          )),
+          !rows.length ? h2("div", { style: { padding: 24, color: C.mute, fontSize: 12, textAlign: "center" } }, edges.length ? "\u6CA1\u6709\u5339\u914D\u7684\u8FDE\u63A5" : "\u5C1A\u672A\u5EFA\u7ACB\u8FDE\u63A5") : null
+        )
+      )
     );
   }
   function FileTree({ roots, children, open, onToggle, onOpenFile, onContextMenuNode, selected, onHoverEntry, onLeaveEntry }) {
@@ -168158,6 +168563,8 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const [networkListWidth, setNetworkListWidth] = usePersisted("tether.ui.network.width", 300);
     const [networkResizing, setNetworkResizing] = React2.useState(false);
     const [networkPage, setNetworkPage] = React2.useState(1);
+    const [networkDetailId, setNetworkDetailId] = React2.useState("");
+    const [showNetworkLinks, setShowNetworkLinks] = React2.useState(false);
     const [networkRefreshing, setNetworkRefreshing] = React2.useState(false);
     const [notice, setNotice] = React2.useState("");
     const [busy, setBusy] = React2.useState(false);
@@ -171128,9 +171535,27 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         context
       );
     };
+    const toggleNetworkEdge = async (edge, connected) => {
+      const from = edge && edge.from;
+      const to = edge && edge.to;
+      if (!from || !to || from === to) return;
+      const key = networkEdgeKey(from, to);
+      const previous = state && state.edges || [];
+      const optimistic = connected ? [...previous.filter((item) => networkEdgeKey(item.from, item.to) !== key), { edge_id: "optimistic:" + key, from, to }] : previous.filter((item) => networkEdgeKey(item.from, item.to) !== key);
+      setState((current) => current ? { ...current, edges: optimistic } : current);
+      try {
+        const data = await post("/api/edges", { from, to, connected });
+        setState((current) => current ? { ...current, edges: data && data.edges || [] } : current);
+      } catch (error) {
+        setState((current) => current ? { ...current, edges: previous } : current);
+        fail2(error);
+      }
+    };
     const renderNetwork = () => {
       const devices = state && state.devices || [];
+      const edges = state && state.edges || [];
       const localId = appLocalDevice;
+      const networkDetail = devices.find((item) => item.device_id === networkDetailId) || null;
       const orderedDevices = orderNetworkDevices(devices, localId);
       const online = devices.filter((item) => item.online);
       const caps = (item) => {
@@ -171197,7 +171622,10 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         "div",
         {
           key: item.device_id,
-          onClick: () => selectDevice(item.device_id),
+          onClick: () => {
+            selectDevice(item.device_id);
+            setNetworkDetailId(item.device_id);
+          },
           onDoubleClick: () => openDevice(item),
           onContextMenu: (event) => openDeviceMenu(event, item),
           title: item.capabilities && item.capabilities.surface_protocol === 1 ? "\u53CC\u51FB\u6253\u5F00\u539F\u751F\u5DE5\u4F5C\u533A" : "\u63D2\u4EF6\u7248\u672C\u8FC7\u65E7\uFF0C\u53CC\u51FB\u67E5\u770B\u8BE6\u60C5",
@@ -171231,15 +171659,24 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       ) : null;
       return h2(
         "div",
-        { style: { flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column", background: C.bg } },
+        { style: { flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column", background: C.bg, position: "relative" } },
         h2(
           "div",
           { style: { display: "flex", alignItems: "center", gap: 8, padding: "14px 18px 10px", flex: "0 0 auto" } },
           h2("div", { style: { fontSize: 18, fontWeight: "var(--tether-strong, 600)" } }, "\u4E92\u8054"),
           pill(online.length + " / " + devices.length + " \u5728\u7EBF", online.length ? C.green : C.mute),
+          pill(edges.length + " \u6761\u8FDE\u63A5", C.mute),
           h2(
             "span",
-            { style: { marginLeft: "auto" } },
+            { style: { marginLeft: "auto", display: "flex", alignItems: "center", gap: 6 } },
+            h2("button", {
+              type: "button",
+              title: "\u8FDE\u63A5\u7BA1\u7406",
+              "aria-label": "\u8FDE\u63A5\u7BA1\u7406",
+              onClick: () => setShowNetworkLinks(true),
+              className: "tether-hover",
+              style: { height: 28, padding: "0 10px", display: "flex", alignItems: "center", gap: 5, border: "1px solid " + C.line, borderRadius: 7, background: C.layer1, color: C.sub, fontSize: 11.5, cursor: "pointer" }
+            }, h2(Glyph, { name: "link", size: 13 }), "\u8FDE\u63A5\u7BA1\u7406"),
             h2(
               "button",
               { title: "\u5237\u65B0", "aria-label": "\u5237\u65B0", onClick: refreshNetwork, className: "tether-hover", style: { width: 28, height: 28, display: "grid", placeItems: "center", border: 0, borderRadius: 6, background: "transparent", color: C.mute, cursor: "pointer" } },
@@ -171265,10 +171702,38 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           h2(
             "div",
             { style: { flex: "1 1 auto", minWidth: 0, minHeight: 0, position: "relative", background: C.panel, borderRadius: 12, overflow: "hidden" } },
-            h2(NetworkGraph, { devices, localId, selectedId: deviceId, onSelect: (item) => selectDevice(item.device_id), onOpen: openDevice, onContextMenu: openDeviceMenu })
-          )
+            h2(NetworkGraph, {
+              devices,
+              edges,
+              localId,
+              selectedId: deviceId,
+              onSelect: (item) => selectDevice(item.device_id),
+              onOpen: openDevice,
+              onOpenDetails: (item) => setNetworkDetailId(item.device_id),
+              onToggleEdge: toggleNetworkEdge,
+              onContextMenu: openDeviceMenu
+            })
+          ),
+          networkDetail ? h2(NetworkDetailPanel, {
+            device: networkDetail,
+            devices,
+            edges,
+            localId,
+            onToggleEdge: toggleNetworkEdge,
+            onClose: () => setNetworkDetailId(""),
+            onOpen: openDevice,
+            onOpenManager: () => setShowNetworkLinks(true)
+          }) : null
         ),
-        deviceContext
+        deviceContext,
+        showNetworkLinks ? h2(NetworkLinksManager, {
+          devices,
+          edges,
+          localId,
+          detailId: networkDetailId,
+          onToggleEdge: toggleNetworkEdge,
+          onClose: () => setShowNetworkLinks(false)
+        }) : null
       );
     };
     const localDeviceRecord = (state && state.devices || []).find((item) => item.device_id === (appLocalDevice || deviceId)) || {};

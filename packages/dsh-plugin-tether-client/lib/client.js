@@ -5763,7 +5763,7 @@ monaco-editor/esm/vs/languages/definitions/swift/swift.js:
 
     const EditorRuntime = TetherMonacoRuntime
     const PANEL_ID = 'tether'
-    const PLUGIN_VERSION = "0.2.58"
+    const PLUGIN_VERSION = "0.2.59"
 function parentOf(path) {
   const clean = String(path || '').replace(/[\\/]+$/, '')
   if (!clean) return ''
@@ -9885,7 +9885,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         --tether-split: rgba(255, 255, 255, 0.12); }
       .tether-topbar { min-height: 40px; background: var(--tether-topbar-bg) !important; }
       .tether-activitybar { background: var(--tether-activity-bg) !important; }
-      .tether-activity-button[data-selected=true] { color: var(--tether-chrome-ink) !important; background: var(--tether-chrome-hover) !important; }
+      .tether-activity-button[data-selected=true] { color: var(--dsw-alias-state-business-primary, #1570ef) !important; background: color-mix(in srgb, var(--dsw-alias-state-business-primary, #1570ef) 16%, transparent) !important; }
       .tether-sidebar { background: var(--tether-explorer-bg) !important; }
       .tether-sidebar-header { color: var(--dsw-alias-label-primary, #101828); }
       .tether-workbench { background: var(--tether-workbench-bg); }
@@ -10084,6 +10084,10 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         { d: 'M3.6 5.6h7.6M8.9 3.3l2.3 2.3-2.3 2.3' },
         { d: 'M12.4 10.4H4.8M7.1 8.1 4.8 10.4l2.3 2.3' }
       ] },
+      link: { join: 'round', parts: [
+        { d: 'M6.4 9.6a2.5 2.5 0 0 0 3.5 0l2-2a2.5 2.5 0 1 0-3.5-3.5l-1 1' },
+        { d: 'M9.6 6.4a2.5 2.5 0 0 0-3.5 0l-2 2a2.5 2.5 0 1 0 3.5 3.5l1-1' }
+      ] },
       search: { parts: [
         { d: 'M7.1 12.2a5.1 5.1 0 1 0 0-10.2 5.1 5.1 0 0 0 0 10.2z' },
         { d: 'M11 11l3 3' }
@@ -10273,7 +10277,16 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       })
     }
 
-    function NetworkGraph({ devices, localId, selectedId, onSelect, onOpen, onContextMenu }) {
+    function networkEdgeKey(left, right) {
+      return [String(left || ''), String(right || '')].sort().join('\u0000')
+    }
+
+    function networkEdgeConnected(edges, left, right) {
+      const key = networkEdgeKey(left, right)
+      return (edges || []).some((edge) => edge && networkEdgeKey(edge.from, edge.to) === key)
+    }
+
+    function NetworkGraph({ devices, edges = [], localId, selectedId, onSelect, onOpen, onOpenDetails, onToggleEdge, onContextMenu }) {
       const stage = React.useRef(null)
       const nodesRef = React.useRef([])
       const dragRef = React.useRef(null)
@@ -10281,8 +10294,21 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const centerIdRef = React.useRef('')
       const [nodes, setNodes] = React.useState([])
       const [zoom, setZoom] = React.useState(1)
+      const [connectMode, setConnectMode] = React.useState(false)
+      const [connectFrom, setConnectFrom] = React.useState('')
+      React.useEffect(() => {
+        if (!connectMode) return undefined
+        const onKey = (event) => {
+          if (event.key === 'Escape') { setConnectMode(false); setConnectFrom('') }
+        }
+        window.addEventListener('keydown', onKey)
+        return () => window.removeEventListener('keydown', onKey)
+      }, [connectMode])
       const posZoom = zoom <= 1 ? 0.72 + 0.28 * zoom : zoom
       const key = devices.map((item) => item.device_id).join('|')
+      React.useEffect(() => {
+        if (connectFrom && !devices.some((item) => item.device_id === connectFrom)) setConnectFrom('')
+      }, [key, connectFrom])
       const centerId = (devices.find((item) => item.device_id === localId) || devices[0] || {}).device_id || ''
       centerIdRef.current = centerId
       const update = (next) => { nodesRef.current = next; setNodes(next) }
@@ -10359,12 +10385,25 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         update(list)
         frameRef.current = moving ? requestAnimationFrame(animate) : 0
       }
+      const chooseConnect = (item) => {
+        if (!item) return
+        if (onSelect) onSelect(item)
+        if (!connectFrom) { setConnectFrom(item.device_id); return }
+        if (connectFrom === item.device_id) { setConnectFrom(''); return }
+        if (onToggleEdge) onToggleEdge({ from: connectFrom, to: item.device_id }, true)
+        setConnectFrom('')
+        setConnectMode(false)
+      }
       const startDrag = (event, item) => {
         if (event.button !== 0) return
         event.preventDefault(); event.stopPropagation()
+        if (connectMode) { chooseConnect(item); return }
         onSelect(item)
         const node = nodesRef.current.find((candidate) => candidate.id === item.device_id)
-        dragRef.current = { id: item.device_id, lastX: node ? node.x : 50, lastY: node ? node.y : 50, vx: 0, vy: 0 }
+        dragRef.current = {
+          id: item.device_id, item, lastX: node ? node.x : 50, lastY: node ? node.y : 50,
+          startX: node ? node.x : 50, startY: node ? node.y : 50, vx: 0, vy: 0, moved: false
+        }
         event.currentTarget.setPointerCapture?.(event.pointerId)
         kick()
       }
@@ -10375,6 +10414,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         if (!rect.width || !rect.height) return
         const x = clamp(50 + (((event.clientX - rect.left) / rect.width * 100) - 50) / posZoom, 4, 96)
         const y = clamp(50 + (((event.clientY - rect.top) / rect.height * 100) - 50) / posZoom, 7, 93)
+        if (Math.hypot(x - drag.startX, y - drag.startY) > 0.8) drag.moved = true
         drag.vx = x - drag.lastX
         drag.vy = y - drag.lastY
         drag.lastX = x; drag.lastY = y
@@ -10382,8 +10422,10 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         kick()
       }
       const endDrag = () => {
-        if (!dragRef.current) return
+        const drag = dragRef.current
+        if (!drag) return
         dragRef.current = null
+        if (!drag.moved && drag.item && onOpenDetails) onOpenDetails(drag.item)
         kick()
       }
       const screen = (node) => ({ x: 50 + (node.x - 50) * posZoom, y: 50 + (node.y - 50) * posZoom })
@@ -10418,27 +10460,81 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           y2: (b.y - uy * end) / rect.height * 100
         }
       }
-      const centerItem = center ? lookup.get(center.id) : null
+      const edgePairs = []
+      const seenEdges = new Set()
+      for (const edge of edges || []) {
+        const key = networkEdgeKey(edge && edge.from, edge && edge.to)
+        if (!key || seenEdges.has(key)) continue
+        const left = nodes.find((node) => node.id === edge.from)
+        const right = nodes.find((node) => node.id === edge.to)
+        if (!left || !right) continue
+        seenEdges.add(key)
+        const leftItem = lookup.get(edge.from)
+        const rightItem = lookup.get(edge.to)
+        edgePairs.push({
+          key, edge,
+          from: left, to: right,
+          online: !!(leftItem && leftItem.online && rightItem && rightItem.online),
+          leftName: (leftItem && (leftItem.name || leftItem.device_id)) || edge.from,
+          rightName: (rightItem && (rightItem.name || rightItem.device_id)) || edge.to
+        })
+      }
       return h('div', { ref: stage, style: { position: 'absolute', inset: 0, overflow: 'hidden', touchAction: 'none' } },
         h('div', { style: { position: 'absolute', left: 14, top: 12, fontSize: 12, color: C.mute } }, '网络'),
+        h('button', {
+          type: 'button', onClick: () => { setConnectMode((value) => !value); setConnectFrom('') },
+          title: connectMode ? '取消连接模式' : '连接两台设备',
+          'aria-label': connectMode ? '取消连接模式' : '连接两台设备',
+          className: 'tether-hover',
+          style: {
+            position: 'absolute', right: 12, top: 8, zIndex: 5, display: 'flex', alignItems: 'center', gap: 5,
+            height: 26, padding: '0 10px', border: '1px solid ' + (connectMode ? C.blue : C.line),
+            borderRadius: 999, background: connectMode ? C.soft : C.layer1,
+            color: connectMode ? C.blue : C.sub, fontSize: 11.5, cursor: 'pointer'
+          }
+        }, h(Glyph, { name: 'link', size: 13 }), connectMode ? '取消' : '连接'),
         h('svg', { viewBox: '0 0 100 100', preserveAspectRatio: 'none', style: { position: 'absolute', inset: 0, width: '100%', height: '100%' } },
-          remotes.map((node) => {
-            const item = lookup.get(node.id)
-            const from = center ? screen(center) : { x: 50, y: 50 }
-            const to = screen(node)
-            const points = linkPoints(from, to, center && center.id, node.id)
+          edgePairs.map((pair) => {
+            const points = linkPoints(screen(pair.from), screen(pair.to), pair.from.id, pair.to.id)
             if (!points) return null
-            const linked = !!(centerItem && centerItem.online && item && item.online)
-            return h('line', {
-              key: 'line:' + node.id, ...points,
-              stroke: C.sub,
-              strokeWidth: zoom > 1 ? 1 : 1.2,
-              vectorEffect: 'non-scaling-stroke',
-              strokeDasharray: linked ? undefined : '4 5',
-              opacity: linked ? 0.7 : 0.4
-            })
+            return h('g', { key: 'edge:' + pair.key },
+              h('title', null, pair.leftName + ' ↔ ' + pair.rightName + ' · 点击断开'),
+              h('line', {
+                ...points, stroke: 'transparent', strokeWidth: 16, vectorEffect: 'non-scaling-stroke',
+                style: { cursor: 'pointer', pointerEvents: 'stroke' },
+                onClick: (event) => {
+                  event.stopPropagation()
+                  if (onToggleEdge) onToggleEdge({ from: pair.from.id, to: pair.to.id }, false)
+                }
+              }),
+              h('line', {
+                ...points, stroke: C.sub, strokeWidth: zoom > 1 ? 1 : 1.2, vectorEffect: 'non-scaling-stroke',
+                strokeDasharray: pair.online ? undefined : '4 5', opacity: pair.online ? 0.7 : 0.4,
+                style: { pointerEvents: 'none' }
+              }))
           })
         ),
+        edgePairs.map((pair) => {
+          const left = screen(pair.from)
+          const right = screen(pair.to)
+          return h('button', {
+            key: 'mid:' + pair.key, type: 'button',
+            title: '断开 ' + pair.leftName + ' ↔ ' + pair.rightName,
+            'aria-label': '断开 ' + pair.leftName + ' ↔ ' + pair.rightName,
+            onPointerDown: (event) => event.stopPropagation(),
+            onClick: (event) => {
+              event.stopPropagation()
+              if (onToggleEdge) onToggleEdge({ from: pair.from.id, to: pair.to.id }, false)
+            },
+            className: 'tether-hover',
+            style: {
+              position: 'absolute', left: ((left.x + right.x) / 2) + '%', top: ((left.y + right.y) / 2) + '%',
+              transform: 'translate(-50%, -50%)', zIndex: 4, width: 18, height: 18, padding: 0,
+              display: 'grid', placeItems: 'center', border: '1px solid ' + C.line, borderRadius: 999,
+              background: C.layer1, color: C.sub, cursor: 'pointer'
+            }
+          }, h(Glyph, { name: 'link', size: 11 }))
+        }),
         nodes.map((node) => {
           const item = lookup.get(node.id) || { device_id: node.id, name: node.id, online: false }
           const isCenter = center && center.id === node.id
@@ -10457,7 +10553,8 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
               position: 'absolute', left: pos.x + '%', top: pos.y + '%', transform: 'translate(-50%, -50%)',
               zIndex: isCenter ? 3 : 2, width: isCenter ? 22 : 16, height: isCenter ? 22 : 16,
               borderRadius: '50%', cornerShape: 'round', border: 0, padding: 0, background: 'transparent',
-              opacity: item.online ? 1 : 0.46, cursor: 'grab', userSelect: 'none'
+              opacity: item.online ? 1 : 0.46, cursor: connectMode ? 'crosshair' : 'grab', userSelect: 'none',
+              outline: connectFrom === node.id ? '2px solid ' + C.blue : 'none', outlineOffset: 2
             } : {
               position: 'absolute', left: pos.x + '%', top: pos.y + '%', transform: 'translate(-50%, -50%)',
               zIndex: isCenter ? 3 : 2, display: 'flex', alignItems: 'center', gap: 6,
@@ -10465,7 +10562,8 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
               background: isCenter ? C.ink : (selected ? C.nodeChildActive : C.nodeChild), color: isCenter ? C.onPrimary : C.ink,
               fontSize: isCenter ? 12 : 11, boxShadow: isCenter ? C.shadow : (selected ? '0 1px 3px rgba(16,24,40,0.12)' : '0 1px 2px rgba(16,24,40,0.06)'),
               transition: 'background-color 160ms ease',
-              cursor: 'grab', whiteSpace: 'nowrap', opacity: item.online ? 1 : 0.55, userSelect: 'none'
+              cursor: connectMode ? 'crosshair' : 'grab', whiteSpace: 'nowrap', opacity: item.online ? 1 : 0.55, userSelect: 'none',
+              outline: connectFrom === node.id ? '2px solid ' + C.blue : 'none', outlineOffset: 2
             }
           },
             compact
@@ -10482,8 +10580,159 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             compact ? null : (item.name || item.device_id))
         }),
         h('div', { onClick: () => setZoom(1), title: '重置缩放', style: { position: 'absolute', right: 12, bottom: 10, zIndex: 4, fontSize: 10, color: C.mute, background: C.layer1, borderRadius: 999, padding: '2px 7px', cursor: 'pointer' } }, Math.round(zoom * 100) + '%'),
+        connectMode ? h('div', {
+          'aria-live': 'polite',
+          style: {
+            position: 'absolute', left: '50%', bottom: 12, transform: 'translateX(-50%)', zIndex: 4,
+            padding: '4px 9px', borderRadius: 999, background: C.layer1, color: C.sub,
+            fontSize: 10.5, pointerEvents: 'none', whiteSpace: 'nowrap'
+          }
+        }, connectFrom ? '再点一台设备完成连接' : '点选第一台设备') : null,
         !devices.length ? h('div', { style: { position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: C.mute, fontSize: 12 } }, '暂无设备 · 目标机需接入 Hub') : null
       )
+    }
+
+    function NetworkLinkSwitch({ checked, label, onChange }) {
+      return h('button', {
+        type: 'button', role: 'switch', 'aria-checked': checked, 'aria-label': label, title: label,
+        onClick: () => onChange(!checked),
+        style: {
+          width: 30, height: 18, flex: '0 0 auto', border: 0, borderRadius: 999, padding: 2,
+          background: checked ? C.blue : C.line, cursor: 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: checked ? 'flex-end' : 'flex-start',
+          transition: 'background 140ms ease'
+        }
+      }, h('span', {
+        'aria-hidden': true,
+        style: { width: 14, height: 14, borderRadius: 999, background: '#fff', boxShadow: '0 1px 2px rgba(16,24,40,.22)' }
+      }))
+    }
+
+    function NetworkDetailPanel({ device, devices, edges, localId, onToggleEdge, onClose, onOpen, onOpenManager }) {
+      const [search, setSearch] = React.useState('')
+      const term = search.trim().toLowerCase()
+      const others = devices
+        .filter((item) => item.device_id !== device.device_id)
+        .filter((item) => !term || String(item.name || '').toLowerCase().includes(term) || String(item.device_id).toLowerCase().includes(term))
+        .sort((left, right) => (right.online ? 1 : 0) - (left.online ? 1 : 0)
+          || String(left.name || left.device_id).localeCompare(String(right.name || right.device_id)))
+      const connected = others.filter((item) => networkEdgeConnected(edges, device.device_id, item.device_id)).length
+      return h('aside', {
+        style: {
+          width: 300, flex: '0 0 auto', minHeight: 0, display: 'flex', flexDirection: 'column',
+          borderLeft: '1px solid ' + C.line, background: C.panel
+        }
+      },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '12px 12px 10px', flex: '0 0 auto' } },
+          dot(device.online),
+          h('div', { style: { minWidth: 0, flex: '1 1 auto' } },
+            h('div', { style: { fontSize: 13, fontWeight: 'var(--tether-strong, 600)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, device.name || device.device_id),
+            h('div', { className: 'tether-num', style: { fontSize: 10.5, color: C.mute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, device.device_id)),
+          h('button', {
+            type: 'button', title: '打开原生工作区', 'aria-label': '打开原生工作区', onClick: () => onOpen(device), className: 'tether-hover',
+            style: { width: 26, height: 26, flex: '0 0 auto', display: 'grid', placeItems: 'center', border: 0, borderRadius: 6, background: 'transparent', color: C.sub, cursor: 'pointer' }
+          }, h(Glyph, { name: 'monitor', size: 15 })),
+          h('button', {
+            type: 'button', title: '关闭', 'aria-label': '关闭', onClick: onClose, className: 'tether-hover',
+            style: { width: 26, height: 26, flex: '0 0 auto', display: 'grid', placeItems: 'center', border: 0, borderRadius: 6, background: 'transparent', color: C.mute, fontSize: 17, cursor: 'pointer' }
+          }, '×')),
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, padding: '0 12px 6px', flex: '0 0 auto' } },
+          h('span', { style: { fontSize: 12, color: C.sub } }, '连接'),
+          h('span', { className: 'tether-num', style: { fontSize: 10.5, color: C.mute } }, connected + ' / ' + others.length)),
+        h('div', { style: { padding: '0 10px 6px', flex: '0 0 auto' } },
+          h('input', {
+            value: search, onChange: (event) => setSearch(event.target.value), placeholder: '搜索设备', 'aria-label': '搜索设备', spellCheck: false,
+            style: { width: '100%', height: 28, boxSizing: 'border-box', border: '1px solid ' + C.line, borderRadius: 6, padding: '0 8px', background: C.bg, color: C.ink, fontSize: 12, font: 'inherit', outline: 'none' }
+          })),
+        h('div', { className: 'tether-scroll', style: { flex: '1 1 auto', minHeight: 0, overflowY: 'auto', padding: '0 8px 10px', display: 'flex', flexDirection: 'column', gap: 2 } },
+          others.map((item) => {
+            const on = networkEdgeConnected(edges, device.device_id, item.device_id)
+            return h('div', {
+              key: item.device_id,
+              style: { display: 'flex', alignItems: 'center', gap: 8, minHeight: 38, padding: '0 6px', borderRadius: 6, background: C.bg }
+            },
+              dot(item.online),
+              h('div', { style: { minWidth: 0, flex: '1 1 auto' } },
+                h('div', { style: { fontSize: 12, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, item.name || item.device_id),
+                h('div', { className: 'tether-num', style: { fontSize: 10, color: C.mute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, item.device_id === localId ? '本机' : item.device_id)),
+              h(NetworkLinkSwitch, {
+                checked: on, label: (on ? '断开 ' : '连接 ') + (item.name || item.device_id),
+                onChange: (next) => onToggleEdge({ from: device.device_id, to: item.device_id }, next)
+              }))
+          }),
+          !others.length ? h('div', { style: { padding: 16, color: C.mute, fontSize: 12, textAlign: 'center' } }, others.length ? '没有匹配的设备' : '没有其他设备') : null),
+        h('div', { style: { padding: '8px 12px', borderTop: '1px solid ' + C.line, flex: '0 0 auto' } },
+          h('button', {
+            type: 'button', onClick: onOpenManager, className: 'tether-hover',
+            style: { display: 'flex', alignItems: 'center', gap: 6, width: '100%', height: 30, padding: '0 8px', border: 0, borderRadius: 6, background: 'transparent', color: C.sub, fontSize: 12, cursor: 'pointer' }
+          }, h(Glyph, { name: 'link', size: 14 }), '连接管理')))
+    }
+
+    function NetworkLinksManager({ devices, edges, localId, detailId, onToggleEdge, onClose }) {
+      const [search, setSearch] = React.useState('')
+      const [from, setFrom] = React.useState(detailId || localId || (devices[0] && devices[0].device_id) || '')
+      const [to, setTo] = React.useState('')
+      const lookup = new Map(devices.map((item) => [item.device_id, item]))
+      React.useEffect(() => {
+        if (!devices.some((item) => item.device_id === from)) setFrom(localId || (devices[0] && devices[0].device_id) || '')
+      }, [devices, localId, from])
+      React.useEffect(() => {
+        if (to && to !== from && devices.some((item) => item.device_id === to)) return
+        const next = devices.find((item) => item.device_id !== from)
+        setTo(next ? next.device_id : '')
+      }, [devices, from, to])
+      const term = search.trim().toLowerCase()
+      const rows = (edges || [])
+        .map((edge) => ({ edge, left: lookup.get(edge.from), right: lookup.get(edge.to) }))
+        .filter((row) => row.left && row.right)
+        .filter((row) => !term || [row.left, row.right].some((item) => String(item.name || '').toLowerCase().includes(term) || String(item.device_id).toLowerCase().includes(term)))
+        .sort((a, b) => String(a.left.name || a.left.device_id).localeCompare(String(b.left.name || b.left.device_id)))
+      const pairOn = networkEdgeConnected(edges, from, to)
+      const select = (value, onChange) => h('select', {
+        value, onChange: (event) => onChange(event.target.value), 'aria-label': '选择设备',
+        style: { flex: '1 1 0', minWidth: 0, height: 30, border: '1px solid ' + C.line, borderRadius: 6, background: C.bg, color: C.ink, fontSize: 12, padding: '0 6px' }
+      }, devices.map((item) => h('option', { key: item.device_id, value: item.device_id }, (item.name || item.device_id) + (item.online ? '' : ' · 离线'))))
+      return h('div', {
+        onPointerDown: (event) => { if (event.target === event.currentTarget) onClose() },
+        style: { position: 'absolute', inset: 0, zIndex: 80, display: 'grid', placeItems: 'center', padding: 24, background: 'rgba(16,24,40,.35)' }
+      },
+        h('section', {
+          role: 'dialog', 'aria-label': '连接管理', onPointerDown: (event) => event.stopPropagation(),
+          style: { width: 'min(760px, 100%)', height: 'min(560px, 100%)', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: C.bg, borderRadius: 12, boxShadow: C.shadow }
+        },
+          h('header', { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '0 14px', height: 44, borderBottom: '1px solid ' + C.line, flex: '0 0 auto' } },
+            h('strong', { style: { fontSize: 14 } }, '连接管理'),
+            h('span', { className: 'tether-num', style: { fontSize: 11, color: C.mute } }, rows.length + ' 条连接'),
+            h('button', { type: 'button', onClick: onClose, title: '关闭', 'aria-label': '关闭', className: 'tether-hover', style: { marginLeft: 'auto', width: 28, height: 28, border: 0, borderRadius: 6, background: 'transparent', color: C.mute, fontSize: 18, cursor: 'pointer' } }, '×')),
+          h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderBottom: '1px solid ' + C.line, flex: '0 0 auto' } },
+            select(from, setFrom),
+            h('span', { style: { color: C.mute, flex: '0 0 auto' } }, '↔'),
+            select(to, setTo),
+            h('button', {
+              type: 'button', disabled: !from || !to || from === to,
+              onClick: () => { if (from && to && from !== to) onToggleEdge({ from, to }, !pairOn) },
+              style: { height: 30, padding: '0 12px', border: 0, borderRadius: 6, background: C.ink, color: C.onPrimary, fontSize: 12, cursor: from && to && from !== to ? 'pointer' : 'default', opacity: from && to && from !== to ? 1 : 0.45 }
+            }, pairOn ? '断开' : '连接')),
+          h('div', { style: { padding: '8px 14px 0', flex: '0 0 auto' } },
+            h('input', {
+              value: search, onChange: (event) => setSearch(event.target.value), placeholder: '搜索连接', 'aria-label': '搜索连接', spellCheck: false,
+              style: { width: '100%', height: 28, boxSizing: 'border-box', border: '1px solid ' + C.line, borderRadius: 6, padding: '0 8px', background: C.soft, color: C.ink, fontSize: 12, font: 'inherit', outline: 'none' }
+            })),
+          h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr 64px 56px', gap: 8, padding: '10px 14px 6px', color: C.mute, fontSize: 10.5, flex: '0 0 auto' } },
+            h('span', null, '设备 A'), h('span', null, '设备 B'), h('span', null, '状态'), h('span', null, '')),
+          h('div', { className: 'tether-scroll', style: { flex: '1 1 auto', minHeight: 0, overflowY: 'auto', padding: '0 14px 14px' } },
+            rows.map(({ edge, left, right }) => h('div', {
+              key: networkEdgeKey(edge.from, edge.to),
+              style: { display: 'grid', gridTemplateColumns: '1fr 1fr 64px 56px', gap: 8, alignItems: 'center', minHeight: 36, borderTop: '1px solid ' + C.line }
+            },
+              h('span', { title: left.device_id, style: { display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, fontSize: 12 } }, dot(left.online), h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, left.name || left.device_id)),
+              h('span', { title: right.device_id, style: { display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, fontSize: 12 } }, dot(right.online), h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, right.name || right.device_id)),
+              h('span', { style: { fontSize: 10.5, color: left.online && right.online ? C.green : C.mute } }, left.online && right.online ? '在线' : '离线'),
+              h('button', {
+                type: 'button', onClick: () => onToggleEdge({ from: edge.from, to: edge.to }, false), className: 'tether-hover',
+                style: { height: 26, border: 0, borderRadius: 5, background: 'transparent', color: C.red, fontSize: 11, cursor: 'pointer' }
+              }, '断开'))),
+            !rows.length ? h('div', { style: { padding: 24, color: C.mute, fontSize: 12, textAlign: 'center' } }, edges.length ? '没有匹配的连接' : '尚未建立连接') : null)))
     }
 
     function FileTree({ roots, children, open, onToggle, onOpenFile, onContextMenuNode, selected, onHoverEntry, onLeaveEntry }) {
@@ -11171,6 +11420,8 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const [networkListWidth, setNetworkListWidth] = usePersisted('tether.ui.network.width', 300)
       const [networkResizing, setNetworkResizing] = React.useState(false)
       const [networkPage, setNetworkPage] = React.useState(1)
+      const [networkDetailId, setNetworkDetailId] = React.useState('')
+      const [showNetworkLinks, setShowNetworkLinks] = React.useState(false)
       const [networkRefreshing, setNetworkRefreshing] = React.useState(false)
       const [notice, setNotice] = React.useState('')
       const [busy, setBusy] = React.useState(false)
@@ -13532,9 +13783,30 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         )
       }
 
+      const toggleNetworkEdge = async (edge, connected) => {
+        const from = edge && edge.from
+        const to = edge && edge.to
+        if (!from || !to || from === to) return
+        const key = networkEdgeKey(from, to)
+        const previous = (state && state.edges) || []
+        const optimistic = connected
+          ? [...previous.filter((item) => networkEdgeKey(item.from, item.to) !== key), { edge_id: 'optimistic:' + key, from, to }]
+          : previous.filter((item) => networkEdgeKey(item.from, item.to) !== key)
+        setState((current) => current ? { ...current, edges: optimistic } : current)
+        try {
+          const data = await post('/api/edges', { from, to, connected })
+          setState((current) => current ? { ...current, edges: (data && data.edges) || [] } : current)
+        } catch (error) {
+          setState((current) => current ? { ...current, edges: previous } : current)
+          fail(error)
+        }
+      }
+
       const renderNetwork = () => {
         const devices = (state && state.devices) || []
+        const edges = (state && state.edges) || []
         const localId = appLocalDevice
+        const networkDetail = devices.find((item) => item.device_id === networkDetailId) || null
         const orderedDevices = orderNetworkDevices(devices, localId)
         const online = devices.filter((item) => item.online)
         const caps = (item) => {
@@ -13588,7 +13860,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           })
         ) : null
         const card = (item) => h('div', {
-          key: item.device_id, onClick: () => selectDevice(item.device_id), onDoubleClick: () => openDevice(item),
+          key: item.device_id, onClick: () => { selectDevice(item.device_id); setNetworkDetailId(item.device_id) }, onDoubleClick: () => openDevice(item),
           onContextMenu: (event) => openDeviceMenu(event, item),
           title: item.capabilities && item.capabilities.surface_protocol === 1 ? '双击打开原生工作区' : '插件版本过旧，双击查看详情',
           style: { background: item.device_id === deviceId ? C.soft : C.panel, borderRadius: 10, padding: '10px 12px', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }
@@ -13612,14 +13884,19 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           h('span', { className: 'tether-num', style: { fontSize: 11, color: C.mute } }, page + ' / ' + totalPages),
           h('button', { title: '下一页', 'aria-label': '下一页', onClick: () => setNetworkPage(Math.min(totalPages, page + 1)), disabled: page >= totalPages, className: 'tether-hover', style: { width: 26, height: 26, display: 'grid', placeItems: 'center', border: 0, borderRadius: 6, background: 'transparent', color: page >= totalPages ? C.mute : C.sub, cursor: page >= totalPages ? 'default' : 'pointer', opacity: page >= totalPages ? 0.4 : 1 } }, h(Glyph, { name: 'chevronRight', size: 14 }))
         ) : null
-        return h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', background: C.bg } },
+        return h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', background: C.bg, position: 'relative' } },
           h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '14px 18px 10px', flex: '0 0 auto' } },
             h('div', { style: { fontSize: 18, fontWeight: 'var(--tether-strong, 600)' } }, '互联'),
             pill(online.length + ' / ' + devices.length + ' 在线', online.length ? C.green : C.mute),
-            h('span', { style: { marginLeft: 'auto' } },
+            pill(edges.length + ' 条连接', C.mute),
+            h('span', { style: { marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 } },
+              h('button', {
+                type: 'button', title: '连接管理', 'aria-label': '连接管理', onClick: () => setShowNetworkLinks(true),
+                className: 'tether-hover',
+                style: { height: 28, padding: '0 10px', display: 'flex', alignItems: 'center', gap: 5, border: '1px solid ' + C.line, borderRadius: 7, background: C.layer1, color: C.sub, fontSize: 11.5, cursor: 'pointer' }
+              }, h(Glyph, { name: 'link', size: 13 }), '连接管理'),
               h('button', { title: '刷新', 'aria-label': '刷新', onClick: refreshNetwork, className: 'tether-hover', style: { width: 28, height: 28, display: 'grid', placeItems: 'center', border: 0, borderRadius: 6, background: 'transparent', color: C.mute, cursor: 'pointer' } },
-                networkRefreshing ? h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 16 })) : h(Glyph, { name: 'refresh', size: 16 })))
-          ),
+                networkRefreshing ? h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 16 })) : h(Glyph, { name: 'refresh', size: 16 })))),
           h('div', { style: { display: 'flex', flex: '1 1 auto', minHeight: 0, padding: '0 18px 18px', alignItems: 'stretch' } },
             h('div', { style: { width: networkListWidth, flex: '0 0 auto', minHeight: 0, display: 'flex', flexDirection: 'column', transition: networkResizing ? 'none' : 'width 180ms cubic-bezier(.2,.85,.2,1.15)' } },
               h('div', { className: 'tether-scroll', style: { flex: '1 1 auto', minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8, paddingRight: 6 } },
@@ -13629,10 +13906,29 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             ),
             h('div', { className: 'tether-resizer', title: '拖动调整宽度，双击复位', onPointerDown: startNetworkResize, onDoubleClick: () => setNetworkListWidth(300), style: { width: 6, flex: '0 0 auto', cursor: 'col-resize', position: 'relative' } }),
             h('div', { style: { flex: '1 1 auto', minWidth: 0, minHeight: 0, position: 'relative', background: C.panel, borderRadius: 12, overflow: 'hidden' } },
-              h(NetworkGraph, { devices, localId, selectedId: deviceId, onSelect: (item) => selectDevice(item.device_id), onOpen: openDevice, onContextMenu: openDeviceMenu })
-            )
+              h(NetworkGraph, {
+                devices, edges, localId, selectedId: deviceId,
+                onSelect: (item) => selectDevice(item.device_id),
+                onOpen: openDevice,
+                onOpenDetails: (item) => setNetworkDetailId(item.device_id),
+                onToggleEdge: toggleNetworkEdge,
+                onContextMenu: openDeviceMenu
+              })
+            ),
+            networkDetail ? h(NetworkDetailPanel, {
+              device: networkDetail, devices, edges, localId,
+              onToggleEdge: toggleNetworkEdge,
+              onClose: () => setNetworkDetailId(''),
+              onOpen: openDevice,
+              onOpenManager: () => setShowNetworkLinks(true)
+            }) : null
           ),
-          deviceContext
+          deviceContext,
+          showNetworkLinks ? h(NetworkLinksManager, {
+            devices, edges, localId, detailId: networkDetailId,
+            onToggleEdge: toggleNetworkEdge,
+            onClose: () => setShowNetworkLinks(false)
+          }) : null
         )
       }
 

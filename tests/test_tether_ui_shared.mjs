@@ -604,6 +604,20 @@ test('refresh indicators have a sized rotation animation and track their request
   assert.match(shared, /disabled: updateRefreshing[\s\S]*updateRefreshing \? h\('span', \{ className: 'tether-spin'/)
 })
 
+test('network links are explicit and editable from canvas, node detail and manager', () => {
+  assert.match(shared, /function networkEdgeKey/)
+  assert.match(shared, /function networkEdgeConnected/)
+  assert.match(shared, /const edgePairs = \[\]/)
+  assert.match(shared, /edgePairs\.map\(\(pair\) =>/)
+  assert.match(shared, /function NetworkDetailPanel/)
+  assert.match(shared, /function NetworkLinksManager/)
+  assert.match(shared, /role: 'switch'/)
+  assert.match(shared, /post\('\/api\/edges'/)
+  assert.match(shared, /setShowNetworkLinks\(true\)/)
+  assert.match(shared, /name: 'link'/)
+  assert.doesNotMatch(shared, /remotes\.map\(\(node\) => \{[\s\S]{0,500}?linkPoints\(/, 'lines come from explicit edges, not every remote')
+})
+
 test('error toasts expire automatically and the update entry is one download action', () => {
   assert.match(shared, /setNotice\(''\), 4000/)
   assert.match(shared, /setUpdateToast\(''\), 4000/)
