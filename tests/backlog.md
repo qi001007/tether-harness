@@ -119,3 +119,4 @@
 - 2026-11-02：0.2.55 契约新增：`SurfaceDeck` 固定挂载顺序、预加载 frame 保持真实尺寸、非聊天页 deck 绝对定位；选择器无 22px 状态条、错误浮层可重试/关闭、加载叠层 `tether-dir-loading`；设置页含 `extraSections`、头像上传和 `role: 'switch'`，不再含解释性文案与重复入口。全量 mjs 222 / cjs 6 / pytest 142+1 通过。
 - 2026-11-02：0.2.56 补叠层断言：`.tether-dir-loading` 必须有内联 `position:absolute; inset:0; z-index:4` 和 SVG `animateTransform`，不能只靠可能不存在的全局 CSS；否则 DSH 内嵌页会退回 static 并落到底部。
 - 2026-11-02：0.2.57 新增选择器树统一控件、`revealTree`、文件夹“确定”递归上传、设备分组标签、本地拖入写入 `D:\TetherDrop` 的测试；native surface 覆盖 `/tether-device-fs/write_chunk`。全量 mjs 224 / cjs 6 / pytest 142+1。
+- 2026-11-02：0.2.58 断言转移页每栏传入 `deviceName` 并在设备切换时清空 `roots`/`entries`；防止同名 `default-workspace`/`Tether 工作目录` 被误读成共享树。

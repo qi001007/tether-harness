@@ -1,5 +1,15 @@
 # Public client releases
 
+## v0.2.58
+
+Transfer pane root labels and stale-root reset:
+
+- Both transfer panes already loaded `/workspaces` and `/drives` per device; the repeated `default-workspace` / `Tether 工作目录` names made the two trees look shared. Each pane now labels its groups `工作区 · <device>` and `此电脑 · <device>`.
+- Switching a pane's device clears the previous roots and entries before loading, so a slow or failed request cannot leave the other device's workspaces visible.
+- Real check: left `工作区 · DESKTOP-LOCAL` with `C:\Users\Administrator...` / `demo`; right `工作区 · LAPTOP-01` with `C:\Users\14675...` / `audit`.
+
+Gates: mjs 224/224, cjs 6/6, client pytest 142 passed / 1 skipped, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI, signing, Hub mirror and both-machine installation are pending.
+
 ## v0.2.57
 
 Picker tree sync, folder upload and local-drop save+upload:

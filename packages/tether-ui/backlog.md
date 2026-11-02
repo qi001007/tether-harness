@@ -49,3 +49,4 @@
 - 2026-11-02：`SurfaceDeck` 的挂载顺序必须由 `mountedRef` 固定，切换设备只改 `visibility/z-index`；任何会重排 iframe DOM 的写法都会让 iframe 用过期 ticket 重载成白屏。非聊天页 deck 用绝对定位 + `visibility:hidden`，预加载 frame 必须保持真实尺寸。设置页分区由 `extraSections` 扩展，头像存 `tether.accountAvatar`，不写解释性长句。
 - 2026-11-02：`TargetFileExplorer` 的加载叠层不能只靠 `tether-dir-loading` 全局 CSS——DSH 内嵌页不加载共享 UI 样式，必须内联 `position:absolute; inset:0; z-index:4`，转圈用 SVG `animateTransform` 自包含；否则会退回 static 20px 落到底部。
 - 2026-11-02：选择器树行与箭头必须是一个按钮：点文件夹同时展开并导航右侧；右侧进入目录用 `revealTree` 展开祖先。树数据由同一次 `enter` 列表回填，不能再用单独的 `toggleTree` 目录请求。文件夹“确定”用 `readFolder` 递归读取；本地拖入用 composer `drop` 捕获，先 `onAddFiles` 上传，再写目标 `D:\TetherDrop`（不回退 C）。
+- 2026-11-02：文件转移页两栏根树必须显示各自设备名（`工作区 · 设备` / `此电脑 · 设备`）；切换设备先清空 `roots`/`entries`，不能让上一台设备的树在新请求完成前继续显示。
