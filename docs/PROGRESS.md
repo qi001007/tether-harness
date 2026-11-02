@@ -1,5 +1,12 @@
 # 实时进度
 
+## 2026-11-03 v0.2.81 DSH 停止与认证排查
+
+1. `fs/dsh_stop` 改为停掉所有 `DeepSeek Harness.exe` 进程，实测停止后 `running=false`；用于重装/升级前收口。
+2. rc.5 仍报 `desktop welcome: Web authentication failed`；备份/删除凭据、重建 `profiles/desktop` 均无效，原 profile 已恢复。
+3. 尝试备份/重建 DSH 的 `%APPDATA%` 用户数据时被 Tether fs 的受保护系统路径策略拒绝；需要本机登录 DSH 或单独的受控 DSH 修复接口。
+4. 0.2.81 已发布；LAPTOP app/node 0.2.81。
+
 ## 2026-11-03 v0.2.80 启动/更新黑窗收口
 
 1. 启动 trace（桌面快捷方式，20 ms 采样）只有 Tether 主窗口，无控制台。

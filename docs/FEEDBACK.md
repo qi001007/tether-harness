@@ -6,7 +6,7 @@
 
 ## 2026-11-03 DSH surface 健康与恢复入口
 
-- [ ] F146：笔记本 DSH 更新失败后 `native-surface.json` 不存在，Tether 页面没有可渲染的 surface；要求 APP 不能白屏、要能恢复。已完成：Node `fs/dsh_restart`（live host PID、无窗口）、`fs/dsh_stop`（受控停止后重装/升级）；APP 在 surface 缺失时显示明确状态和“重启 DSH”；start/restart 显式传回 `D:\DeepSeek Harness\.dsh`。**实测**：0.2.79 在 LAPTOP 上停止 rc.3、通过官方 feed 安装 **0.2.1-rc.5** 成功并启动；但 rc.5 仍在启动时报 `desktop welcome: Web authentication failed`（崩溃日志 `crash-2026-11-02T23-07-59-083Z-host.log`），descriptor 仍不出现。**结论**：DSH 认证状态本身已坏，和 rc.3/rc.5 版本无关；必须重置 DSH 认证/profile 并在笔记本上重新登录，或恢复一份已知可用的 DSH profile。Tether 侧的 surface 健康、重启、停止/安装能力已交付；F146 仍待 DSH 认证修复。 已进一步备份并重建 `profiles/desktop`，rc.5 仍报同一认证错误，说明不是插件/UI profile 本身；原 profile 已完整恢复。
+- [ ] F146：笔记本 DSH 更新失败后 `native-surface.json` 不存在，Tether 页面没有可渲染的 surface；要求 APP 不能白屏、要能恢复。已完成：Node `fs/dsh_restart`（live host PID、无窗口）、`fs/dsh_stop`（受控停止后重装/升级）；APP 在 surface 缺失时显示明确状态和“重启 DSH”；start/restart 显式传回 `D:\DeepSeek Harness\.dsh`。**实测**：0.2.79 在 LAPTOP 上停止 rc.3、通过官方 feed 安装 **0.2.1-rc.5** 成功并启动；但 rc.5 仍在启动时报 `desktop welcome: Web authentication failed`（崩溃日志 `crash-2026-11-02T23-07-59-083Z-host.log`），descriptor 仍不出现。**结论**：DSH 认证状态本身已坏，和 rc.3/rc.5 版本无关；必须重置 DSH 认证/profile 并在笔记本上重新登录，或恢复一份已知可用的 DSH profile。Tether 侧的 surface 健康、重启、停止/安装能力已交付；F146 仍待 DSH 认证修复。 已进一步备份并重建 `profiles/desktop`，rc.5 仍报同一认证错误，说明不是插件/UI profile 本身；原 profile 已完整恢复。 另尝试备份并重建 DSH 的 Electron 用户数据，但 Tether fs 服务把 `%APPDATA%` 视为受保护系统路径，拒绝了该操作；需要本机登录 DSH 或增加受控的 DSH 修复接口。
 
 ## 2026-11-03 APP 无原生标题栏、统一图标与托盘
 
