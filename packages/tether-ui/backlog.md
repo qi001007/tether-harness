@@ -1,4 +1,5 @@
 # tether-ui backlog
+- 2026-11-02：账户昵称/头像改由 Hub 账户保存：`/api/state.user` 下发 `display_name`/`avatar`，保存走 `POST /api/auth/profile`（乐观更新、失败回滚、pending 字段不被轮询覆盖）。账户页默认收起，昵称/密码编辑用绝对定位弹窗；设置面板在收起/昵称弹窗/密码弹窗三态均为 760×560，不要再把编辑表单内联展开。
 - 2026-10-31：UI 增加 `/api/events` SSE 订阅，device/session 事件强制 `loadState(true)`，普通轮询仍尊重 `document.hidden`；真机暂停 Node 后设备卡 4.47 秒离线、恢复 3.94 秒回在线。
 - 2026-10-31：新增无 hook 的共享 `TargetFileExplorer`（root 分组/面包屑/搜索/排序/列表/空错误态），DSH 附件选择器与文件转移页共用；全量 Explorer 仍保留右键/拖拽/悬停的富交互，未强行替换。
 - 2026-10-31：0.2.41 登录后经 APP IPC 登记设备；18892 代理保留显式用户 Authorization；极简更新 UI 视觉验收（蓝色 ↓ + 白色 blur 遮罩 42%）。

@@ -1,5 +1,21 @@
 # 实时进度
 
+## 2026-11-02 v0.2.70 账户资料服务端同步
+
+1. Hub `users` 新增 `display_name`/`avatar`，旧库自动加列；新增 `GET/POST /api/auth/profile`，`/api/state.user` 下发资料；头像只收 png/jpeg/webp data URL，解码后 ≤64 KiB；审计只记字段名。
+2. 客户端资料不再只存 `localStorage`：保存时先乐观更新再写服务端，失败回滚并提示；每 2.5 s 轮询把服务端值同步到所有已登录客户端。0.2.69 的收起行与弹窗编辑保持不变。
+3. 服务端测试 155 passed；客户端 mjs 231/231、cjs 6/6、pytest 147 passed / 1 skipped、两份 build check、`validate_versions()` 通过。
+4. 生产 Hub 切到 `42940b5b`（`/opt/tether/server`），重启前备份 `profile-sync-20261102T135918Z/controller.db`（SHA-256 `d6f3a4ee…`）；`tether-hub`/`tether-surface-mux`/`caddy` 均 active，`/api/health` ok。
+5. **双客户端真机验证**：第二个 Web 客户端用独立 localStorage 登录后立即得到 `qi007` + 17,839 字符头像；在 APP 改成 `qi007-browser-sync` 后，服务端与第二客户端在 4 s 内同步；改回 `qi007` 后同样同步。头像反向验证：服务端把头像改成 118 字符 1×1 PNG，APP 3.2 s 内变为 118；恢复原头像后 3.2 s 内回到 17,839。测试后已恢复原昵称/头像并关闭第二客户端。
+6. 0.2.69 发布（CI `41450974601`，13:17:07Z，app 1,782,006 B / plugin 1,359,464 B / node 84,818 B）；0.2.70 发布（CI `41458731074`，14:09:51Z，app 1,782,898 B / plugin 1,359,927 B / node 84,817 B），签名清单验签与资产哈希通过，Hub mirror 0.2.70。DESKTOP app/plugin/node 均 0.2.70；LAPTOP app/node 0.2.70，插件仍 0.2.68，插件任务卡在“重新拉起 DSH”（92%）——已知问题，待单独处理。
+
+## 2026-11-02 v0.2.69 账户页收束与弹窗编辑
+
+1. 头像：右下角相机覆盖层；移除头像改成资料卡右上角垃圾桶图标，不再有“更换头像/移除头像”文字按钮；裁剪弹窗保留明确的“移除头像”。
+2. 昵称/密码默认收起：昵称是“标签 + 当前值 + 铅笔”，密码是“密码 + 修改密码”；编辑改为独立绝对定位弹窗，含 Enter/Escape、Caps Lock 与行内校验。
+3. 实测设置面板在收起、昵称弹窗、密码弹窗三种状态均为 **760×560**，主页面总高 881 不变；编辑不再把页面向下拉长。跨项目准则已写入 `feedback-loading-no-layout-shift.md`。
+4. 门禁：mjs 231/231、cjs 6/6、pytest 147 passed / 1 skipped、两份 build check、`validate_versions()` 通过；已发布 v0.2.69（CI `41450974601`）。
+
 ## 2026-11-02 v0.2.68 更新页版式重做
 
 1. 顶部：左侧“更新”标题，右侧刷新；不再只有孤零零的刷新图标和一段空白。

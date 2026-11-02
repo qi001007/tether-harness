@@ -1,5 +1,28 @@
 # Public client releases
 
+## v0.2.70
+
+Server-backed account profile:
+
+- Display name and avatar are now stored on the Hub account (`users.display_name` / `users.avatar`) and returned by `/api/state`, instead of living only in the device-local `localStorage`.
+- New `GET/POST /api/auth/profile` accepts partial updates. Names are trimmed and capped at 32 characters; avatars must be png/jpeg/webp data URLs of at most 64 KiB decoded. Audit entries record field names only.
+- Client saves are optimistic, roll back and report on failure, and skip server values for fields still being saved. Every other signed-in client adopts the server profile on its 2.5 s state poll.
+- Account rows stay collapsed from 0.2.69; editing still opens a modal and does not resize the 760×560 settings panel.
+
+Gates: Hub 155 passed; mjs 231/231, cjs 6/6, client pytest 147 passed / 1 skipped, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41458731074` succeeded; published at 2026-11-02T14:09:51Z (app 1,782,898 B, plugin 1,359,927 B, node 84,817 B; signed manifest verified). Hub mirror refreshed to **0.2.70**.
+
+Real run: a second web client with empty storage signed in and immediately showed `qi007` + a 17,839-character avatar. Changing the APP name to `qi007-browser-sync` reached the server and the second client within 4 s; restoring `qi007` did the same. A server-side avatar change to a 118-character 1×1 PNG reached the APP in 3.2 s, and the original 17,839-character avatar returned in 3.2 s. Test values were restored. DESKTOP app/plugin/node **0.2.70**; LAPTOP app/node **0.2.70**, plugin **0.2.68** (restart pending, known issue).
+
+## v0.2.69
+
+Account page that does not jump:
+
+- The avatar is edited through a camera overlay; removal is an icon-only trash action on the profile card. The old “更换头像 / 移除头像” text links are gone.
+- Display name and password are collapsed rows. Editing opens a focused modal (`修改昵称` / `修改密码`) with Enter/Escape, Caps Lock warning and inline validation.
+- Measured the settings panel at **760×560** in the collapsed, name-modal and password-modal states; page height stayed 881 px, so editing no longer pushes the content down.
+
+Gates: mjs 231/231, cjs 6/6, client pytest 147 passed / 1 skipped, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41450974601` succeeded; published at 2026-11-02T13:17:07Z (app 1,782,006 B, plugin 1,359,464 B, node 84,818 B; signed manifest verified). Hub mirror refreshed to **0.2.69**. LAPTOP app/node **0.2.69**; DESKTOP source checkout was restarted for 0.2.70.
+
 ## v0.2.68
 
 Redesigned settings update list:
