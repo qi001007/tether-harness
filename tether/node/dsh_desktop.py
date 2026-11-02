@@ -41,6 +41,27 @@ class DshError(Exception):
         self.code = code
 
 
+def _process_root(process: psutil.Process) -> psutil.Process:
+    root = process
+    seen = set()
+    while True:
+        try:
+            parent = root.parent()
+        except (psutil.Error, OSError):
+            break
+        if parent is None or parent.pid in seen:
+            break
+        seen.add(parent.pid)
+        try:
+            same_exe = parent.exe() == root.exe()
+        except (psutil.Error, OSError):
+            same_exe = False
+        if not same_exe:
+            break
+        root = parent
+    return root
+
+
 def _app_env() -> dict[str, str]:
     env = dict(os.environ)
     for key in ("ELECTRON_RUN_AS_NODE", "DSH_HOME", "TETHER_NATIVE_DSH_HOME",
@@ -308,27 +329,42 @@ class DshDesktop:
         return {"started": True, **self.status()}
 
     def stop(self) -> dict[str, Any]:
-        current = self.status()
-        if not current["running"]:
-            return current
-        pid = int(current.get("pid") or 0)
-        if pid:
+        targets = []
+        try:
+            for process in psutil.process_iter(["pid", "name"]):
+                try:
+                    if str(process.info.get("name") or "").lower() == EXE_NAME.lower():
+                        targets.append(psutil.Process(int(process.info["pid"])))
+                except (psutil.Error, OSError, ValueError, KeyError):
+                    continue
+        except (psutil.Error, OSError):
+            targets = []
+        roots = []
+        for process in targets:
             try:
-                root = psutil.Process(pid)
+                roots.append(_process_root(process))
+            except (psutil.Error, OSError):
+                roots.append(process)
+        seen = set()
+        for root in roots:
+            if root.pid in seen:
+                continue
+            seen.add(root.pid)
+            try:
                 children = root.children(recursive=True)
-                for process in children + [root]:
+                for item in children + [root]:
                     try:
-                        process.terminate()
+                        item.terminate()
                     except (psutil.Error, OSError):
                         pass
                 try:
                     psutil.wait_procs(children + [root], timeout=8)
                 except (psutil.Error, OSError):
                     pass
-                for process in children + [root]:
+                for item in children + [root]:
                     try:
-                        if process.is_running():
-                            process.kill()
+                        if item.is_running():
+                            item.kill()
                     except (psutil.Error, OSError):
                         pass
             except (psutil.Error, OSError):
