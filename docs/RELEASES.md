@@ -1,5 +1,17 @@
 # Public client releases
 
+## v0.2.64
+
+Radial network layout and persistent node positions:
+
+- The network canvas now starts in a radial/triangular layout. Two remotes use 210°/330°; three or more are spread at 360°/n around the local device. The old collinear vertical arrangement is gone, and link buttons within 9% of a node are hidden so they no longer sit on top of a node label.
+- Dragged node positions are stored under `tether.network.positions.v2` per local device, saved on drag end and on unmount, and restored when returning to the network page. The continuous force animation was removed so a dropped node stays where it was placed.
+- Dragging a node no longer switches the current device; only a click without movement selects the device and opens its details.
+- More than 12 devices default to compact dots until zoomed in.
+- Real run: the three-device graph formed a triangle with no line through the centre label; LAPTOP-01 was dragged from `20.2%,32.8%` to `35.1%,72.3%`, the page was switched to files and back, and the node remained at `35.11%,72.32%`. The test position was cleared afterwards.
+
+Gates: mjs 230/230, cjs 6/6, client pytest 147 passed / 1 skipped, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41434714235` succeeded; published at 2026-11-02T11:15:30Z (app 1,778,877 B, plugin 1,358,071 B, node 84,818 B; signed manifest verified). Hub mirror refreshed to **0.2.64**. LAPTOP-01 Node+APP **14.6 s**; DESKTOP app/node/plugin **0.2.64**; LAPTOP app/node **0.2.64** with the plugin update job dispatched.
+
 ## v0.2.63
 
 Login exit, a visual login panel and the default server:

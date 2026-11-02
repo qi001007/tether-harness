@@ -37,3 +37,4 @@
 - 2026-11-02：client 包、version.json 与 `lib/client.js` 升至 `0.2.61`；权限抽屉改为缓存直出 + 后台并行刷新，插件端 DSH 内嵌页同步生效。
 - 2026-11-02：client 包、version.json 与 `lib/client.js` 升至 `0.2.62`；设置更新页、DSH 启动/安装入口随共享 UI 进入插件 bundle；DSH 重启时必须保留真实 `~/.dsh` profile。
 - 2026-11-02：client 包、version.json 与 `lib/client.js` 升至 `0.2.63`；登录页支持 `host.exitPanel` 返回 DSH，使用默认服务器且不再显示地址输入。
+- 2026-11-02：client 包、version.json 与 `lib/client.js` 升至 `0.2.64`；互联图环形初始布局与拖动位置持久化随共享 UI 进入插件 bundle。
