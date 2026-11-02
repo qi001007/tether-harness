@@ -1,5 +1,13 @@
 # 实时进度
 
+## 2026-11-02 v0.2.71 登录页惯性网络与邀请码平滑切换
+
+1. 左侧视觉换成 `LoginNetwork`：4 个节点用阻尼弹簧 + 漂移 + 指针推斥做惯性运动，6 条边全部是 SVG 直线；每帧直接改 `cx/cy/x1/y1/x2/y2`，不触发 React 重渲染；`prefers-reduced-motion` 时保持静止。
+2. 登录与邀请码注册改成同一卡片内两个绝对定位视图，固定舞台 344 px；用 `opacity` 200 ms + `translateX` 280 ms 切换；错误提示预留固定 16 px 槽位，避免校验信息出现时位移。
+3. 删除底部“返回 DSH”文字入口，DSH 宿主只保留右上角 ×；APP/网页登录仍无退出按钮。
+4. **真机测量**：登录卡片切换前 `822×400`，切换后 `822×400`；两个视图均 `500×344`；登录视图 `opacity 1 / translateX 0` 对邀请码视图 `opacity 0 / translateX 16`，切换后互换；1 s 内 SVG 节点坐标发生变化，两种视图动画都持续。截图 `tether-login-view.png` / `tether-login-invite.png`。
+5. 门禁：mjs 231/231、cjs 6/6、pytest 147 passed / 1 skipped、两份 build check、`validate_versions()` 通过。0.2.71 已发布（CI `41481608258`，16:32:09Z，app 1,785,837 B / plugin 1,361,368 B / node 84,818 B），Hub mirror 0.2.71；DESKTOP app/plugin/node 均 0.2.71；LAPTOP app/node 0.2.71，插件文件已到 0.2.71 但运行态仍 0.2.70，任务卡在“重新拉起 DSH”（92%，`restart_timeout`）——与 0.2.70 相同的已知问题。
+
 ## 2026-11-02 v0.2.70 账户资料服务端同步
 
 1. Hub `users` 新增 `display_name`/`avatar`，旧库自动加列；新增 `GET/POST /api/auth/profile`，`/api/state.user` 下发资料；头像只收 png/jpeg/webp data URL，解码后 ≤64 KiB；审计只记字段名。

@@ -1,5 +1,17 @@
 # Public client releases
 
+## v0.2.71
+
+Login page motion and in-place registration:
+
+- The left visual is now an inertial network: four nodes drift with damped springs, straight SVG links and a pointer push, while `prefers-reduced-motion` keeps it static.
+- “首次使用？用邀请码注册” switches to a second panel inside the same card. Both panes are absolutely positioned in a fixed 344 px stage and cross-slide with opacity + translateX, so the card never grows or reflows. A fixed message slot prevents validation errors from moving the form.
+- The redundant “返回 DSH” text link is removed. The top-right close button remains the single exit in the DSH host; the APP relies on its window controls.
+
+Gates: mjs 231/231, cjs 6/6, client pytest 147 passed / 1 skipped, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41481608258` succeeded; published at 2026-11-02T16:32:09Z (app 1,785,837 B, plugin 1,361,368 B, node 84,818 B; signed manifest verified). Hub mirror refreshed to **0.2.71**.
+
+Real run: the login card measured **822×400** before and after switching to invite registration; both panes were **500×344**; login pane `opacity 1 / translateX 0` versus invite `opacity 0 / translateX 16`, then swapped. Sampled SVG `cx/cy` changed within 1 s in both views. Screenshots: `tether-login-view.png`, `tether-login-invite.png`.
+
 ## v0.2.70
 
 Server-backed account profile:
