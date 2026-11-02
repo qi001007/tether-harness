@@ -5763,7 +5763,7 @@ monaco-editor/esm/vs/languages/definitions/swift/swift.js:
 
     const EditorRuntime = TetherMonacoRuntime
     const PANEL_ID = 'tether'
-    const PLUGIN_VERSION = "0.2.75"
+    const PLUGIN_VERSION = "0.2.76"
 function parentOf(path) {
   const clean = String(path || '').replace(/[\\/]+$/, '')
   if (!clean) return ''
@@ -11778,9 +11778,10 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         else setState({ deviceId, status: 'error', url: '', message: '原生工作区页面加载失败。请检查目标设备连接后重试。' })
       }
 
-      const dshRelevant = currentState.status === 'error' && deviceId === localDeviceId
+      const dshRelevant = currentState.status === 'error'
         && ['descriptor_missing', 'host_unreachable', 'descriptor_invalid'].includes(currentState.code)
-      const dshWatch = deviceId === localDeviceId && visible
+      const dshWatch = visible && (deviceId === localDeviceId || dshRelevant)
+      const dshRestartPidRef = React.useRef(0)
       const [dsh, setDsh] = React.useState(null)
       const [dshBusy, setDshBusy] = React.useState('')
       const [dshError, setDshError] = React.useState('')
@@ -11799,7 +11800,14 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       }, [dshWatch, dshRelevant, deviceId, dshBusy, !!(dsh && dsh.installing)])
       React.useEffect(() => {
         if (!dshBusy) return
-        if (dsh && dsh.running) {
+        if (dshBusy === 'dsh_restart') {
+          if (dsh && dsh.running && dsh.pid && dsh.pid !== dshRestartPidRef.current) {
+            setDshBusy('')
+            setDshError('')
+            retryDocument()
+            return
+          }
+        } else if (dsh && dsh.running) {
           setDshBusy('')
           setDshError('')
           retryDocument()
@@ -11814,6 +11822,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const runDsh = async (action) => {
         setDshError('')
         setDshBusy(action)
+        if (action === 'dsh_restart') dshRestartPidRef.current = Number(dsh && dsh.pid) || 0
         try {
           const result = await post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/' + action, {})
           if (result) setDsh(result)
@@ -11823,8 +11832,13 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         }
       }
 
+      const dshSurfaceMissing = !!dshRelevant && !!dsh && dsh.running === true
+        && currentState.code === 'descriptor_missing'
       const message = currentState.status === 'error' && dshRelevant && dsh
-        ? (dsh.installed === false ? 'DSH 未安装' : dsh.running ? currentState.message : 'DSH 未启动')
+        ? (dsh.installed === false ? 'DSH 未安装'
+          : dsh.running
+            ? (dshSurfaceMissing ? 'DSH 已在运行，但 Tether 插件未加载或 surface 描述符缺失' : currentState.message)
+            : 'DSH 未启动')
         : currentState.status === 'loading' ? (currentState.message || '正在连接目标设备的 DSH 原生工作区…')
         : currentState.status === 'local' ? '当前已在 DeepSeek Harness 中；本机工作区无需再嵌入，可用左侧「文件」或「连接」。'
           : currentState.status === 'offline' ? '目标设备离线。设备重新在线后可重试。'
@@ -11878,6 +11892,10 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
                 : (dshBusy === 'dsh_start' ? '启动中…' : '启动 DSH'),
               () => runDsh(dsh.installed === false ? 'dsh_install' : 'dsh_start'),
               { primary: true, disabled: !!dshBusy || !!dsh.installing })
+              : null,
+            dshRelevant && dsh && dsh.running
+              ? btn(dshBusy === 'dsh_restart' ? '重启中…' : '重启 DSH',
+                () => runDsh('dsh_restart'), { primary: true, disabled: !!dshBusy })
               : null,
             currentState.status !== 'loading' && currentState.status !== 'local' ? btn('重试', retryDocument) : null,
             dshRelevant && dshBusy && dsh && dsh.installing

@@ -45,3 +45,10 @@ test('one icon source ships for the window, shortcut and tray', () => {
   assert.match(fs.readFileSync(path.join(root, 'desktop/install-app.ps1'), 'utf8'), /assets\\tether-app-s\.ico/)
   assert.match(shared, /const TetherMark =/)
 })
+
+test('a missing DSH surface offers an explicit restart instead of a blank frame', () => {
+  assert.match(shared, /Tether 插件未加载或 surface 描述符缺失/)
+  assert.match(shared, /runDsh\('dsh_restart'\)/)
+  assert.match(shared, /'重启 DSH'/)
+  assert.match(shared, /dshRestartPidRef/)
+})

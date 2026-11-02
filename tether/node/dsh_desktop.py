@@ -16,6 +16,7 @@ import os
 import re
 import struct
 import subprocess
+import sys
 import threading
 import time
 import urllib.parse
@@ -304,6 +305,37 @@ class DshDesktop:
             raise DshError(f"DSH 启动失败: {exc}", "dsh_start_failed") from exc
         self._status = None
         return {"started": True, **self.status()}
+
+    def restart(self) -> dict[str, Any]:
+        current = self.status()
+        if not current["installed"]:
+            raise DshError("DSH 未安装", "dsh_not_installed")
+        if not current["running"]:
+            return self.start()
+        log = self.dsh_home / "storages" / "tether" / "dsh-restart.log"
+        env = _app_env()
+        env["PYTHONPATH"] = str(Path(__file__).resolve().parents[2]) + (
+            os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
+        env["PYTHONIOENCODING"] = "utf-8"
+        args = [sys.executable, "-m", "tether.node.dsh_restart",
+                "--descriptor", str(self.descriptor), "--log", str(log),
+                "--delay", "0.8", "--wait", "60"]
+        kwargs: dict[str, Any] = {
+            "cwd": str(Path(__file__).resolve().parents[2]),
+            "env": env,
+            "stdin": subprocess.DEVNULL,
+            "stdout": subprocess.DEVNULL,
+            "stderr": subprocess.DEVNULL,
+            "close_fds": True,
+        }
+        if os.name == "nt":
+            kwargs["creationflags"] = DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW
+        try:
+            subprocess.Popen(args, **kwargs)
+        except OSError as exc:
+            raise DshError(f"DSH 重启失败: {exc}", "dsh_restart_failed") from exc
+        self._status = None
+        return {"restarting": True, **self.status()}
 
     def install(self) -> dict[str, Any]:
         current = self.status()

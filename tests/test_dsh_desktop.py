@@ -94,3 +94,28 @@ def test_fs_service_exposes_dsh_status(tmp_path, monkeypatch):
     assert result["device_id"] == "UNIT"
     assert result["installed"] is True
     assert result["version"] == "0.2.1-rc.3"
+
+def test_restart_schedules_a_windowless_dsh_restart_helper(tmp_path, monkeypatch):
+    exe = tmp_path / "DeepSeek Harness.exe"
+    exe.write_bytes(b"MZ")
+    monkeypatch.setenv("TETHER_DSH_EXE", str(exe))
+    monkeypatch.setattr(dsh_desktop, "_registry_info", lambda: {})
+    monkeypatch.setattr(DshDesktop, "_running", lambda self, path: (True, 4242))
+    captured = []
+
+    class FakeProcess:
+        pass
+
+    def popen(args, **kwargs):
+        captured.append((args, kwargs))
+        return FakeProcess()
+
+    monkeypatch.setattr(dsh_desktop.subprocess, "Popen", popen)
+    desktop = DshDesktop(tmp_path / "data", dsh_home=tmp_path / "home")
+    result = desktop.restart()
+    assert result["restarting"] is True
+    assert captured
+    args, kwargs = captured[0]
+    assert "tether.node.dsh_restart" in args
+    assert str(desktop.descriptor) in args
+    assert kwargs["creationflags"] & dsh_desktop.CREATE_NO_WINDOW
