@@ -1,5 +1,14 @@
 # 实时进度
 
+## 2026-11-02 v0.2.59 互联拓扑控制与选中态
+
+本轮把互联页从“隐式星型线”升级为可编辑拓扑：
+
+1. 服务端：私有 Hub 新增 `edges`/`edge_seeds` 表与 `GET/POST /api/edges`、批量、DELETE；`/api/state` 返回 `edges`；首次为 owner 建一棵以 `TETHER_DEVICE` 为根的星型边，新设备入网连到同一根，后续断开不被重连覆盖。生产备份 `edges-20261102T060941Z`（DB SHA-256 `ec85bd89…`），回退点 `d783681`，生产部署 commit `e66920b6`，重启 90 s；三服务 active，两机自动重连，边种子为 DESKTOP↔LAPTOP、DESKTOP↔TETHER-REMOTE-TEST。
+2. 客户端画布：只画显式边；在线实线、离线虚线、无边不画；线中点的链图标断开，右上“连接”进入两次点选建边；点节点打开详情抽屉，列出所有设备与连接开关；右上“连接管理”是可搜索的连接表格，支持新建和逐条断开。真机：画布断开→重连、详情开关、管理表格新建/断开全部生效，边已恢复为两条。
+3. 活动栏选中态：从浅灰底/深色图标改为蓝色 16% 底 + 蓝色图标，互联页选中图标清晰可见。
+4. 门禁：mjs 225/225、cjs 6/6、client pytest 142 passed / 1 skipped、`build.mjs --check`、`build-web.mjs --check`、`validate_versions()` 通过。0.2.59 发布与两机更新待执行。
+
 ## 2026-11-02 v0.2.58 文件转移双栏根目录标识
 
 文件转移页两栏的根列表本来就按设备分别请求 `/workspaces` 与 `/drives`：左栏 DESKTOP 是 `C:\Users\Administrator...`、`demo`，右栏 LAPTOP 是 `C:\Users\14675...`、`audit`；同名 `default-workspace`/`Tether 工作目录` 造成“所有工作区集中在一起”的误读。修复：`FilePane` 把设备名传给树分组，显示 `工作区 · 设备名` / `此电脑 · 设备名`；切换设备时先清空旧 `roots`/`entries` 再加载，避免短暂显示上一台设备的树。真机截图已确认左右分组分别为 `DESKTOP-LOCAL` / `LAPTOP-01`。

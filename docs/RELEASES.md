@@ -1,5 +1,17 @@
 # Public client releases
 
+## v0.2.59
+
+Editable device topology and a clearer activity selection:
+
+- The Hub now stores explicit undirected device edges (`edges`, `edge_seeds`) and exposes `GET/POST /api/edges`, `/api/edges/batch`, `DELETE /api/edges/{from}/{to}`; `/api/state` includes them. A one-time star is seeded from `TETHER_DEVICE` for each owner, and new devices join the same root without recreating user-removed edges.
+- The network canvas draws only explicit edges (solid when both online, dashed otherwise, none when absent). Each edge midpoint has a link control to disconnect; the top-right “连接” enters a two-click connect mode.
+- Clicking a canvas node (or a left device card) opens a detail drawer listing every other device with a connection switch. The header “连接管理” opens a searchable table for creating and removing connections, suitable for many nodes.
+- The selected activity-bar item now has a blue 16% background and blue icon instead of a faint gray block.
+- Real run: canvas disconnect/reconnect, detail switches, and manager create/remove all hit the production Hub; the original two edges were restored. Production Hub deploy commit `e66920b6`, DB backup `edges-20261102T060941Z`, rollback point `d783681`, 90 s restart.
+
+Gates: mjs 225/225, cjs 6/6, client pytest 142 passed / 1 skipped, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI, signing, Hub mirror and both-machine installation are pending.
+
 ## v0.2.58
 
 Transfer pane root labels and stale-root reset:

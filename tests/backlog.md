@@ -120,3 +120,4 @@
 - 2026-11-02：0.2.56 补叠层断言：`.tether-dir-loading` 必须有内联 `position:absolute; inset:0; z-index:4` 和 SVG `animateTransform`，不能只靠可能不存在的全局 CSS；否则 DSH 内嵌页会退回 static 并落到底部。
 - 2026-11-02：0.2.57 新增选择器树统一控件、`revealTree`、文件夹“确定”递归上传、设备分组标签、本地拖入写入 `D:\TetherDrop` 的测试；native surface 覆盖 `/tether-device-fs/write_chunk`。全量 mjs 224 / cjs 6 / pytest 142+1。
 - 2026-11-02：0.2.58 断言转移页每栏传入 `deviceName` 并在设备切换时清空 `roots`/`entries`；防止同名 `default-workspace`/`Tether 工作目录` 被误读成共享树。
+- 2026-11-02：0.2.59 新增显式边契约：画布只画 `edges`、节点详情/连接管理/画布连边共用 `/api/edges`；本地代理允许 `/api/edges`；活动栏选中态断言改为蓝色底/蓝图标。全量 mjs 225 / cjs 6 / pytest 142+1。

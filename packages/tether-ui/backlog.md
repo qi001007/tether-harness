@@ -50,3 +50,4 @@
 - 2026-11-02：`TargetFileExplorer` 的加载叠层不能只靠 `tether-dir-loading` 全局 CSS——DSH 内嵌页不加载共享 UI 样式，必须内联 `position:absolute; inset:0; z-index:4`，转圈用 SVG `animateTransform` 自包含；否则会退回 static 20px 落到底部。
 - 2026-11-02：选择器树行与箭头必须是一个按钮：点文件夹同时展开并导航右侧；右侧进入目录用 `revealTree` 展开祖先。树数据由同一次 `enter` 列表回填，不能再用单独的 `toggleTree` 目录请求。文件夹“确定”用 `readFolder` 递归读取；本地拖入用 composer `drop` 捕获，先 `onAddFiles` 上传，再写目标 `D:\TetherDrop`（不回退 C）。
 - 2026-11-02：文件转移页两栏根树必须显示各自设备名（`工作区 · 设备` / `此电脑 · 设备`）；切换设备先清空 `roots`/`entries`，不能让上一台设备的树在新请求完成前继续显示。
+- 2026-11-02：互联画布只画显式边，不再画本机到所有节点的隐式线；边由 Hub `/api/edges` 持久化，画布线中点断开、连接模式两次点选建边；节点详情与连接管理表格写同一套边。活动栏选中态用蓝色 16% 底 + 蓝色图标，不能再退回浅灰底。

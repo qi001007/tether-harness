@@ -32,3 +32,4 @@
 - 2026-11-02：client 包、version.json 与 `lib/client.js` 升至 `0.2.56`；选择器叠层改内联绝对定位 + SVG `animateTransform`，因为 DSH 内嵌页不加载共享 UI 的全局 CSS。DSH 的 surface bundle 会按内容 rev 变化，需等新 rev 出现后再验收。
 - 2026-11-02：client 包、version.json 与 `lib/client.js` 升至 `0.2.57`；树行统一点击、`revealTree`、文件夹递归上传、本地拖入先上传后写 `D:\TetherDrop`。拖入保存走 Node 的 `/tether-device-fs/write_chunk`，要求目标 Node 同步升级。
 - 2026-11-02：client 包、version.json 与 `lib/client.js` 升至 `0.2.58`；共享转移页增加每栏设备标识与切设备清旧根，插件端 UI 同步。
+- 2026-11-02：client 包、version.json 与 `lib/client.js` 升至 `0.2.59`；互联页画布/节点详情/连接管理接 Hub `/api/edges`，旧 Hub 会显示 404，升级时先部署 Hub。
