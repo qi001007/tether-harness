@@ -1,5 +1,18 @@
 # Public client releases
 
+## v0.2.62
+
+Settings updates, windowless launch and DSH lifecycle:
+
+- Settings has a new **更新** section. The local row follows the entry product (APP+Node or plugin+Node); other rows are limited to devices with an explicit edge to the current device. Each row shows current/latest versions and a blue circular download button when an update exists; disconnecting an edge removes that device immediately, reconnecting brings it back. The top-right update button is unchanged.
+- The APP no longer opens a console window: long-running Controller/Node processes use `pythonw.exe`, the `.cmd` launcher re-enters hidden through the VBS, bootstrap PowerShell is hidden, and the update helper relaunches the APP with `windowsHide: true`.
+- The local DSH is detected (registry/asar/process), shown with its version in Settings, and can be started or installed from the surface overlay and the device section. Starting strips Tether's `DSH_HOME` so the real desktop profile is used; installing reads DeepSeek's official HTTPS nightly feed and verifies SHA-512 before `/S`.
+- The surface embeds the real DSH web UI, so DSH plugins render as they are; the app does not reimplement DSH pages.
+- Hub fix: the update job sends `plugin restart`, but the Hub action allowlist rejected it. Production now accepts `restart` for the plugin only (120 s), commit `638b3ce8`.
+- Incident: force-stopping DSH triggered its own “Web authentication failed” recovery loop. The profile and desktop caches were backed up, and the official **same-version** rc.3 installer was used to repair DSH; sessions were preserved and the Tether plugin was reinstalled.
+
+Gates: mjs 228/228, cjs 6/6, client pytest 147 passed / 1 skipped, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41424379550` succeeded; published at 2026-11-02T09:58:35Z (app 1,777,012 B, plugin 1,357,270 B, node 84,818 B; signed manifest verified). Hub mirror refreshed to **0.2.62**. LAPTOP-01 Node+APP **30.8 s**; DESKTOP source APP restarted with the local plugin on 0.2.62. Both devices report app/node **0.2.62**; LAPTOP plugin files are **0.2.62** with a DSH runtime reload still pending (the restart action now reaches the device but exceeded the 90 s verification window).
+
 ## v0.2.61
 
 Instant permissions audit view:

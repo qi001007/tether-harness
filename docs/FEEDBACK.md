@@ -1,5 +1,13 @@
 # 用户反馈与处理
 
+## 2026-11-02 设置更新页、无终端启动与 DSH 生命周期
+
+- [x] F111：把更新页面重新加到设置里，作为独立栏目：能更新本机，也能更新已连接的其他节点；在互联页断开某个节点后，该节点不能再更新。实现：设置新增“更新”分区；本机行按当前入口显示 APP+Node 或 插件+Node；其他设备按 `/api/state.edges` 过滤，只显示与当前设备有显式连接的节点；每行显示各组件当前/最新版本，有新版本时显示蓝色圆形下载按钮，点击走现有一键更新流程（本机 `runProductUpdate`，其他节点 `runDeviceUpdate` 按对方已安装的 APP/插件/Node 全部更新）；右上角蓝色下载按钮保留，仍按当前入口更新。**真机验证**：DESKTOP 本机 APP+Node、LAPTOP 的 APP/插件/Node 正确显示；断开 DESKTOP↔LAPTOP 后 LAPTOP 从列表消失，恢复边后重新出现；用只读假最新版本验证蓝色圆形下载按钮外观与请求接线（未改真实版本）。判据：断开即不可更新、恢复即回来；有新版本才出现下载按钮；无新版本不显示按钮。边界：边过滤目前是 UI 语义，Hub 更新 API 仍只要求 owner 权限。
+- [x] F112：APP 打开/更新时不要黑色终端。实现：长期运行的 Controller/Node 子进程改用同 venv 的 `pythonw.exe`；`Tether-App.cmd` 默认通过 `Tether-App.vbs` 隐藏重入，bootstrap PowerShell 加 `-WindowStyle Hidden`；更新助手重启 APP 用 `windowsHide: true`；DSH 重启剥离 Tether 的 `DSH_HOME`/`TETHER_NATIVE_DSH_HOME`。**真机验证**：用桌面“Tether APP”快捷方式启动，Electron 主窗口正常，Node 进程为 `pythonw.exe`，`MainWindowHandle=0`（无可见控制台），Node 日志正常注册且 Hub 在线。判据：打开/更新不再出现常驻黑窗；Node 启动与重连不受影响。
+- [x] F113：DSH 未启动时提供“一键启动 DSH”；没有 DSH 时提供“一键安装 DSH”。实现：Node 新增 `tether/node/dsh_desktop.py`，从注册表/asar/进程检测安装路径、版本与运行态，`/fs/dsh_status`、`/fs/dsh_start`、`/fs/dsh_install` 暴露给客户端；启动用无窗口分离进程并清掉 Tether 的 `DSH_HOME`，安装从 DeepSeek 官方 HTTPS nightly 源读取安装包、校验 SHA-512 后静默 `/S` 安装。界面：本机 surface 检测到 DSH 未运行/未安装时覆盖显示“DSH 未启动/未安装”+“启动 DSH/安装 DSH”，启动后自动重载；设置→本机设备增加 DSH 版本/状态行与按钮。**真机验证**：检测到 `0.2.1-rc.3`；停止 DSH 后覆盖页出现并点击启动；官方同版本 rc.3 安装包静默安装成功，DSH host 正常发布描述符。判据：停止 DSH 后页面有启动按钮；安装后 host 起来、surface 恢复。边界：最终修好的 `dsh_start` 环境清理由单元测试覆盖，修复后未再次强杀 DSH 复测一键启动（DSH 最小化到托盘，强杀会触发其自身认证恢复问题）。
+- [x] F114：DSH 更新或多插件时 APP 是否还能适配。结论：Tether **不重写 DSH 页面**，而是嵌入真实的 DSH Web UI（surface iframe），所以 DSH 里装的插件、改的界面会原样呈现；Tether 只负责描述符、鉴权代理和外壳。设置→本机设备已显示 DSH 版本；DSH 重启后 surface 可重载恢复。**真机验证**：修复后的 rc.3 在 Tether 内显示完整 DSH 侧栏与插件入口。边界：未安装 rc.5，不声称已验证新版本；如果上游改了 surface 描述符协议，Tether 会显示 DSH 状态/重试/启动页，而不是白屏。rc.5 需在独立 profile 或获主人同意后实装验证。
+- [x] F115：本轮强杀 DSH 测试触发其自身“Web authentication failed”崩溃循环。处理：先备份 `~/.dsh/profiles/desktop` 与 `%APPDATA%\@deepseek-ai\dsh-desktop`，清理干净 profile/认证缓存后仍复现；最终下载官方**同版本** rc.3 安装包（274,333,696 B，SHA-256 `1e3876ba…`）静默重装，DSH host 恢复并发布新描述符；重新安装 Tether 插件后 surface 正常。旧 `D:\DeepSeek harness` 安装仍在，桌面/开始菜单已指向新的 per-user 安装。DSH 会话/数据保留。
+
 ## 2026-11-02 权限页审计加载
 
 - [x] F110：每次打开“文件权限”页，审计列表要等约 5 秒才出现；要求打开即完整显示。根因：`openSettings` 每次先 `await` 策略、再 `await` 审计，串行两次设备往返；策略虽有缓存但打开时未用于表单，审计完全没有预热或缓存。修复：策略与审计按设备缓存（`policyCacheRef`/`auditCacheRef`），切换设备时并行预取二者；打开抽屉先用缓存同步渲染策略、模式和审计，再在后台并行刷新；同一设备的并发请求共用一次进行中的 promise（`permissionInflightRef`）；冷启动无缓存时列表内显示“正在读取审计…”，不显示“暂无审计”。**真机实测**：DESKTOP 点开到 68 行审计出现 **3 ms**（此前本机两次请求实测 638 ms + 677 ms）；切到 LAPTOP 后首次点开同样 **3 ms**、103 行（此前 1,114 ms + 715 ms）。判据：有缓存时点开 50 ms 内出现完整审计行；后台刷新不阻塞、不清空已显示列表。0.2.61 已发布，两机 app/node/plugin 均为 0.2.61；重启后的 0.2.61 真机复测 19 ms、68 行。

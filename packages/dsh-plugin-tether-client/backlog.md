@@ -35,3 +35,4 @@
 - 2026-11-02：client 包、version.json 与 `lib/client.js` 升至 `0.2.59`；互联页画布/节点详情/连接管理接 Hub `/api/edges`，旧 Hub 会显示 404，升级时先部署 Hub。
 - 2026-11-02：client 包、version.json 与 `lib/client.js` 升至 `0.2.60`；账户页头像裁剪、昵称行内编辑、密码行内校验随共享 UI 进入插件 bundle，DSH 需重启加载新 rev。
 - 2026-11-02：client 包、version.json 与 `lib/client.js` 升至 `0.2.61`；权限抽屉改为缓存直出 + 后台并行刷新，插件端 DSH 内嵌页同步生效。
+- 2026-11-02：client 包、version.json 与 `lib/client.js` 升至 `0.2.62`；设置更新页、DSH 启动/安装入口随共享 UI 进入插件 bundle；DSH 重启时必须保留真实 `~/.dsh` profile。

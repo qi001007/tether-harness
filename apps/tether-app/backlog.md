@@ -49,3 +49,4 @@
 - 2026-11-02：APP 包与 package-lock 根版本升至 `0.2.59`；共享 UI 增加显式设备拓扑、节点详情/连接管理；Hub `/api/edges` 已先行部署。
 - 2026-11-02：APP 包与 package-lock 根版本升至 `0.2.60`；本轮只更新共享 UI 账户页（头像裁剪/昵称/密码），Electron 主进程与依赖未改。
 - 2026-11-02：APP 包与 package-lock 根版本升至 `0.2.61`；共享 UI 权限抽屉改为缓存直出，Electron 主进程与依赖未改。
+- 2026-11-02：APP 包与 package-lock 根版本升至 `0.2.62`；长期运行的 Controller/Node 改用 `pythonw.exe`，`.cmd` 默认经 VBS 隐藏重入，bootstrap PowerShell 隐藏，更新助手重启 APP 设置 `windowsHide: true`，确保打开/更新不再出现黑色终端。

@@ -1,5 +1,17 @@
 # 实时进度
 
+## 2026-11-02 v0.2.62 设置更新页、无终端启动与 DSH 生命周期
+
+本轮把“更新”重新作为一个设置栏目补齐，并处理 APP 启动与 DSH 生命周期：
+
+1. 设置新增“更新”：本机按当前入口显示 APP+Node 或 插件+Node；其他设备只显示与当前设备有 `edges` 的节点，版本行 + 蓝色圆形下载按钮 + 刷新。断开边后设备从列表消失，恢复后回来；用只读假版本验证了蓝色按钮外观。右上角蓝色下载按钮保留，仍按当前入口更新。
+2. APP 黑终端：长期运行的 Controller/Node 改用 `pythonw.exe`；`Tether-App.cmd` 默认经 VBS 隐藏重入，bootstrap PowerShell `-WindowStyle Hidden`；更新助手重启 APP 用 `windowsHide: true`。桌面快捷方式真机启动，Node 为 `pythonw.exe`、`MainWindowHandle=0`，日志正常注册。
+3. DSH 生命周期：新增 `tether/node/dsh_desktop.py`，注册表/asar/进程检测安装路径、版本与运行态，`/fs/dsh_status`、`/fs/dsh_start`、`/fs/dsh_install`；启动剥离 Tether 的 `DSH_HOME`；安装从官方 HTTPS nightly 源校验 SHA-512 后 `/S`。surface 在 DSH 未启动/未安装时覆盖“启动 DSH/安装 DSH”，设置→本机设备显示 DSH 版本/状态。真机检测到 rc.3，覆盖页出现并可启动；官方同版本 rc.3 安装包静默安装成功，DSH host 正常发布描述符，Tether surface 显示真实 DSH UI 与插件侧栏。
+4. 兼容性：Tether 不重写 DSH 页面，而是嵌入真实 DSH Web UI，DSH 内插件会原样呈现；设置显示 DSH 版本。未安装 rc.5，不声称已验证新版本；如果上游改 surface 描述符协议，Tether 会显示 DSH 状态/重试/启动页而不是白屏。
+5. Hub 更新修复：生产任务会发 `plugin restart`，但 Hub 的 `UPDATE_ACTION_TIMEOUTS` 没有 `restart`，远端插件出现“文件 0.2.62、运行态 0.2.61”。已在 Hub 加入 `restart`（仅 plugin，120 s）并部署生产 commit `638b3ce8`，`tether-hub` 于 18:14:57 CST 重启，三服务 active；LAPTOP 的 restart 动作已不再 `bad_action`，但该次 DSH 运行态重载 90 s 超时，插件运行态仍待 DSH 重启（已知项）。
+6. 事故与恢复：强杀 DSH 触发其自身“Web authentication failed”崩溃循环；备份 profile 与 DSH desktop 缓存后仍复现，最终用官方**同版本** rc.3 安装包（274,333,696 B，SHA-256 `1e3876ba…`）静默重装修复，DSH 会话保留；桌面/开始菜单改指 per-user 安装，重新安装 Tether 插件后 surface 恢复。
+7. 门禁：mjs 228/228、cjs 6/6、client pytest 147 passed / 1 skipped、`build.mjs --check`、`build-web.mjs --check`、`validate_versions()` 通过。0.2.62 已发布（CI `41424379550`，09:58:35Z，签名清单验签通过，app 1,777,012 B / plugin 1,357,270 B / node 84,818 B），Hub mirror 0.2.62；LAPTOP Node+APP 30.8 s，DESKTOP 源码 APP 重启、本机插件 0.2.62；DESKTOP app/node/plugin 均 0.2.62，LAPTOP app/node 0.2.62、插件文件 0.2.62（运行态待重载）。
+
 ## 2026-11-02 v0.2.61 权限页审计直出
 
 权限页每次打开都要等审计：`openSettings` 先 `await` 策略、再 `await` 审计，串行两次设备往返；策略虽然已有 `policyCacheRef`，打开时却没拿它填表单，审计则完全没有预热或缓存。修复：

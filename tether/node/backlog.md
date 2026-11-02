@@ -32,3 +32,4 @@
 - 2026-10-29：`dsh_restart` 重启时剥离继承的 `ELECTRON_RUN_AS_NODE`（否则 DSH 以纯 Node 启动，窗口永远不出现）；首次启动 20 s 内没有新 descriptor 时再补一次启动，最多两次。
 - 2026-10-31：0.2.45 `update_call` 只对 plugin 放开 `restart` 动作，调用 updater 的 `restart()` 重跑 DSH 助手；用于插件文件已到位但运行态未重载后的重试。
 - 2026-11-02：设备文件前缀新增 `write_chunk`（POST）供 DSH 侧本地拖入保存到目标 `D:\TetherDrop`；路径仍受 policy `can_write` 与系统保护目录约束，写入前会创建父目录。
+- 2026-11-02：新增 `dsh_desktop.py` 与本机 DSH 生命周期：注册表/asar/进程检测安装路径、版本与运行态，`dsh_status`/`dsh_start`/`dsh_install` 走 fs 分发；启动必须剥离 `DSH_HOME`/`TETHER_NATIVE_DSH_HOME` 与 `ELECTRON_RUN_AS_NODE`，安装只接受官方 HTTPS nightly 源并按 SHA-512 校验后 `/S`。`dsh_restart` 同步剥离 Tether 的 DSH home，避免重启到错误 profile。
