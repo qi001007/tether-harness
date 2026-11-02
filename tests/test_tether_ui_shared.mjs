@@ -815,10 +815,12 @@ test('the network detail panel floats over the canvas instead of resizing it', (
   assert.doesNotMatch(shared, /width: 300, flex: '0 0 auto'/)
 })
 
-test('the network layout is radial and keeps dragged positions across page switches', () => {
-  assert.match(shared, /tether\.network\.positions\.v2/)
+test('the network layout is radial and keeps motion state across page switches', () => {
+  assert.match(shared, /tether\.network\.positions\.v3/)
   assert.match(shared, /const angles = remotes\.length === 2\s*\n\s*\? \[210, 330\]/)
-  assert.doesNotMatch(shared, /function animate\(\)/)
+  assert.match(shared, /function animate\(\)/)
+  assert.match(shared, /vx: valid && Number\.isFinite\(saved\.vx\)/)
+  assert.match(shared, /vx: Math\.round\(\(node\.vx \|\| 0\) \* 10000\)/)
   assert.match(shared, /saveStoredPositions\(centerIdRef\.current, nodesRef\.current\)/)
   assert.match(shared, /nodes\.some\(\(node\) => Math\.hypot\(node\.x - midX, node\.y - midY\) < 9\)/)
   assert.match(shared, /devices\.length > 12/)

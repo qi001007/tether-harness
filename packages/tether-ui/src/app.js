@@ -1742,6 +1742,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const stage = React.useRef(null)
       const nodesRef = React.useRef([])
       const dragRef = React.useRef(null)
+      const frameRef = React.useRef(0)
       const centerIdRef = React.useRef('')
       const [nodes, setNodes] = React.useState([])
       const [zoom, setZoom] = React.useState(1)
@@ -1763,9 +1764,10 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const centerId = (devices.find((item) => item.device_id === localId) || devices[0] || {}).device_id || ''
       centerIdRef.current = centerId
       const update = (next) => { nodesRef.current = next; setNodes(next) }
+      const kick = () => { if (!frameRef.current) frameRef.current = requestAnimationFrame(animate) }
       const readStoredPositions = () => {
         try {
-          const all = JSON.parse(window.localStorage.getItem('tether.network.positions.v2') || '{}')
+          const all = JSON.parse(window.localStorage.getItem('tether.network.positions.v3') || '{}')
           return all && typeof all === 'object' ? all : {}
         } catch (_) { return {} }
       }
@@ -1775,9 +1777,11 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           const all = readStoredPositions()
           all[center] = Object.fromEntries(list.map((node) => [node.id, {
             x: Math.round(node.x * 100) / 100,
-            y: Math.round(node.y * 100) / 100
+            y: Math.round(node.y * 100) / 100,
+            vx: Math.round((node.vx || 0) * 10000) / 10000,
+            vy: Math.round((node.vy || 0) * 10000) / 10000
           }]))
-          window.localStorage.setItem('tether.network.positions.v2', JSON.stringify(all))
+          window.localStorage.setItem('tether.network.positions.v3', JSON.stringify(all))
         } catch (_) { /* storage is optional */ }
       }
       React.useEffect(() => {
@@ -1797,13 +1801,15 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             id: item.device_id,
             x: valid ? clamp(saved.x, 4, 96) : (index < 0 ? 50 : 50 + Math.cos(angle) * radius),
             y: valid ? clamp(saved.y, 7, 93) : (index < 0 ? 50 : 50 + Math.sin(angle) * radius),
-            vx: 0,
-            vy: 0
+            vx: valid && Number.isFinite(saved.vx) ? saved.vx : 0,
+            vy: valid && Number.isFinite(saved.vy) ? saved.vy : 0
           }
         })
         update(next)
+        kick()
       }, [key, localId])
       React.useEffect(() => () => { saveStoredPositions(centerIdRef.current, nodesRef.current) }, [])
+      React.useEffect(() => () => { if (frameRef.current) cancelAnimationFrame(frameRef.current) }, [])
       React.useEffect(() => {
         const el = stage.current
         if (!el) return undefined
@@ -1814,6 +1820,56 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         el.addEventListener('wheel', onWheel, { passive: false })
         return () => el.removeEventListener('wheel', onWheel)
       }, [])
+      function animate() {
+        const list = nodesRef.current.map((node) => ({ ...node }))
+        if (!list.length) { frameRef.current = 0; return }
+        const byId = new Map(list.map((node) => [node.id, node]))
+        const center = byId.get(centerIdRef.current)
+        const fx = new Map(list.map((node) => [node.id, 0]))
+        const fy = new Map(list.map((node) => [node.id, 0]))
+        let moving = false
+        for (const node of list) {
+          if (dragRef.current && dragRef.current.id === node.id) continue
+          if (!center || node.id === center.id) {
+            fx.set(node.id, fx.get(node.id) + (50 - node.x) * 0.0006)
+            fy.set(node.id, fy.get(node.id) + (50 - node.y) * 0.0006)
+            continue
+          }
+          const dx = center.x - node.x
+          const dy = center.y - node.y
+          const distance = Math.max(0.001, Math.hypot(dx, dy))
+          const pull = (distance - 40) * 0.0035 + Math.max(0, distance - 55) * 0.01
+          fx.set(node.id, fx.get(node.id) + dx / distance * pull)
+          fy.set(node.id, fy.get(node.id) + dy / distance * pull)
+          fx.set(center.id, fx.get(center.id) - dx / distance * pull * 0.22)
+          fy.set(center.id, fy.get(center.id) - dy / distance * pull * 0.22)
+        }
+        for (let i = 0; i < list.length; i += 1) {
+          for (let j = i + 1; j < list.length; j += 1) {
+            const dx = list[j].x - list[i].x
+            const dy = list[j].y - list[i].y
+            const distance = Math.max(0.001, Math.hypot(dx, dy))
+            if (distance >= 15) continue
+            const push = (15 - distance) * 0.004
+            fx.set(list[i].id, fx.get(list[i].id) - dx / distance * push)
+            fy.set(list[i].id, fy.get(list[i].id) - dy / distance * push)
+            fx.set(list[j].id, fx.get(list[j].id) + dx / distance * push)
+            fy.set(list[j].id, fy.get(list[j].id) + dy / distance * push)
+          }
+        }
+        for (const node of list) {
+          if (dragRef.current && dragRef.current.id === node.id) { moving = true; continue }
+          node.vx = (node.vx + fx.get(node.id)) * 0.95
+          node.vy = (node.vy + fy.get(node.id)) * 0.95
+          node.x = clamp(node.x + node.vx, 4, 96)
+          node.y = clamp(node.y + node.vy, 7, 93)
+          if (node.x <= 4 || node.x >= 96) node.vx *= -0.35
+          if (node.y <= 7 || node.y >= 93) node.vy *= -0.35
+          if (Math.abs(node.vx) + Math.abs(node.vy) > 0.002) moving = true
+        }
+        update(list)
+        frameRef.current = moving ? requestAnimationFrame(animate) : 0
+      }
       const chooseConnect = (item) => {
         if (!item) return
         if (onSelect) onSelect(item)
@@ -1833,6 +1889,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           startX: node ? node.x : 50, startY: node ? node.y : 50, vx: 0, vy: 0, moved: false
         }
         event.currentTarget.setPointerCapture?.(event.pointerId)
+        kick()
       }
       const moveDrag = (event) => {
         const drag = dragRef.current
@@ -1846,6 +1903,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         drag.vy = y - drag.lastY
         drag.lastX = x; drag.lastY = y
         update(nodesRef.current.map((node) => node.id === drag.id ? { ...node, x, y, vx: drag.vx * 0.8, vy: drag.vy * 0.8 } : node))
+        kick()
       }
       const endDrag = () => {
         const drag = dragRef.current
@@ -1856,6 +1914,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           if (onOpenDetails) onOpenDetails(drag.item)
         }
         saveStoredPositions(centerIdRef.current, nodesRef.current)
+        kick()
       }
       const screen = (node) => ({ x: 50 + (node.x - 50) * posZoom, y: 50 + (node.y - 50) * posZoom })
       const center = nodes.find((node) => node.id === centerId) || nodes[0]
