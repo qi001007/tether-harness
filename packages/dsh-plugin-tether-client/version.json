@@ -1,6 +1,6 @@
 {
-  "version": "0.2.64",
-  "notes": "The network canvas now starts in a radial/triangular layout instead of a single column, hides link buttons that would sit on a node, and persists dragged node positions per local device across page switches.",
+  "version": "0.2.65",
+  "notes": "The network detail panel is now a floating card over the canvas instead of a layout column, so opening a node no longer squeezes or shifts the graph.",
   "download": "https://github.com/qi001007/tether-harness",
   "install": "git pull && powershell -ExecutionPolicy Bypass -File desktop/install-plugin.ps1"
 }

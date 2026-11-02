@@ -809,6 +809,12 @@ test('settings exposes an edge-gated update section for local and remote devices
   assert.match(shared, /update: settingsUpdate/)
 })
 
+test('the network detail panel floats over the canvas instead of resizing it', () => {
+  assert.match(shared, /position: 'absolute', top: 8, right: 8, bottom: 8, width: 300/)
+  assert.match(shared, /alignItems: 'stretch', position: 'relative'/)
+  assert.doesNotMatch(shared, /width: 300, flex: '0 0 auto'/)
+})
+
 test('the network layout is radial and keeps dragged positions across page switches', () => {
   assert.match(shared, /tether\.network\.positions\.v2/)
   assert.match(shared, /const angles = remotes\.length === 2\s*\n\s*\? \[210, 330\]/)

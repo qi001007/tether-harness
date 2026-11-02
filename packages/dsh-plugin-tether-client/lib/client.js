@@ -5763,7 +5763,7 @@ monaco-editor/esm/vs/languages/definitions/swift/swift.js:
 
     const EditorRuntime = TetherMonacoRuntime
     const PANEL_ID = 'tether'
-    const PLUGIN_VERSION = "0.2.64"
+    const PLUGIN_VERSION = "0.2.65"
 function parentOf(path) {
   const clean = String(path || '').replace(/[\\/]+$/, '')
   if (!clean) return ''
@@ -10981,8 +10981,9 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const connected = others.filter((item) => networkEdgeConnected(edges, device.device_id, item.device_id)).length
       return h('aside', {
         style: {
-          width: 300, flex: '0 0 auto', minHeight: 0, display: 'flex', flexDirection: 'column',
-          borderLeft: '1px solid ' + C.line, background: C.panel
+          position: 'absolute', top: 8, right: 8, bottom: 8, width: 300, zIndex: 8, overflow: 'hidden',
+          display: 'flex', flexDirection: 'column', borderRadius: 12, border: '1px solid ' + C.line,
+          background: C.panel, boxShadow: '0 18px 50px rgba(16,24,40,0.22)'
         }
       },
         h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '12px 12px 10px', flex: '0 0 auto' } },
@@ -14449,7 +14450,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
               }, h(Glyph, { name: 'link', size: 13 }), '连接管理'),
               h('button', { title: '刷新', 'aria-label': '刷新', onClick: refreshNetwork, className: 'tether-hover', style: { width: 28, height: 28, display: 'grid', placeItems: 'center', border: 0, borderRadius: 6, background: 'transparent', color: C.mute, cursor: 'pointer' } },
                 networkRefreshing ? h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 16 })) : h(Glyph, { name: 'refresh', size: 16 })))),
-          h('div', { style: { display: 'flex', flex: '1 1 auto', minHeight: 0, padding: '0 18px 18px', alignItems: 'stretch' } },
+          h('div', { style: { display: 'flex', flex: '1 1 auto', minHeight: 0, padding: '0 18px 18px', alignItems: 'stretch', position: 'relative' } },
             h('div', { style: { width: networkListWidth, flex: '0 0 auto', minHeight: 0, display: 'flex', flexDirection: 'column', transition: networkResizing ? 'none' : 'width 180ms cubic-bezier(.2,.85,.2,1.15)' } },
               h('div', { className: 'tether-scroll', style: { flex: '1 1 auto', minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8, paddingRight: 6 } },
                 visible.map(card),

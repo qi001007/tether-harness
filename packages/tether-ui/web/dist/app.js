@@ -168122,13 +168122,19 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       "aside",
       {
         style: {
+          position: "absolute",
+          top: 8,
+          right: 8,
+          bottom: 8,
           width: 300,
-          flex: "0 0 auto",
-          minHeight: 0,
+          zIndex: 8,
+          overflow: "hidden",
           display: "flex",
           flexDirection: "column",
-          borderLeft: "1px solid " + C.line,
-          background: C.panel
+          borderRadius: 12,
+          border: "1px solid " + C.line,
+          background: C.panel,
+          boxShadow: "0 18px 50px rgba(16,24,40,0.22)"
         }
       },
       h2(
@@ -172444,7 +172450,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         ),
         h2(
           "div",
-          { style: { display: "flex", flex: "1 1 auto", minHeight: 0, padding: "0 18px 18px", alignItems: "stretch" } },
+          { style: { display: "flex", flex: "1 1 auto", minHeight: 0, padding: "0 18px 18px", alignItems: "stretch", position: "relative" } },
           h2(
             "div",
             { style: { width: networkListWidth, flex: "0 0 auto", minHeight: 0, display: "flex", flexDirection: "column", transition: networkResizing ? "none" : "width 180ms cubic-bezier(.2,.85,.2,1.15)" } },
