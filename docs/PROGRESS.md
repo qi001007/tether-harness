@@ -1,5 +1,11 @@
 # 实时进度
 
+## 2026-11-03 v0.2.80 启动/更新黑窗收口
+
+1. 启动 trace（桌面快捷方式，20 ms 采样）只有 Tether 主窗口，无控制台。
+2. 找到更新/退出链最后一个控制台 spawn：`supervisor.killTree()` 的 `taskkill` 缺 `windowsHide`；已加 `windowsHide: true`，并加回归断言。
+3. 0.2.80 已发布（CI `41543680968`），Hub mirror 0.2.80；DESKTOP app/node 0.2.80，LAPTOP app/node 0.2.80。
+
 ## 2026-11-03 v0.2.77/0.2.78 DSH 恢复入口与真实根因
 
 1. 0.2.76 新增 `fs/dsh_restart` 与 APP“重启 DSH”入口；0.2.77 让重启 helper 接收 live host PID（DSH 命令行不含 `dsh-desktop-host` 时也能找到）；0.2.78 让 start/restart 显式传回检测到的 `dsh_home`，避免落到默认 `C:\Users\14675\.dsh`。

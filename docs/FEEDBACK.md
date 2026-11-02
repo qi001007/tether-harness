@@ -1,5 +1,9 @@
 # 用户反馈与处理
 
+## 2026-11-03 启动/更新黑色控制台窗口
+
+- [x] F147：用户再次报告开 APP 或更新时会弹黑色窗口。**复测**：用桌面快捷方式启动并 20 ms 采样可见窗口，只有 `Tether` / `Tether WebUI` 主窗口，无 `ConsoleWindowClass`。**剩余漏点**：`apps/tether-app/supervisor.js` 的 `killTree()` 调 `taskkill` 时没有 `windowsHide`；更新重启/退出服务会走到这里，`taskkill` 是控制台程序，会闪黑窗。修复：加 `windowsHide: true`，新增 shell 回归断言。0.2.80 已发布并更新两机；启动链无控制台，更新/退出链的 `taskkill` 不再分配可见窗口。判据：启动、更新、退出全程 20 ms 窗口采样无 `ConsoleWindowClass`。
+
 ## 2026-11-03 DSH surface 健康与恢复入口
 
 - [ ] F146：笔记本 DSH 更新失败后 `native-surface.json` 不存在，Tether 页面没有可渲染的 surface；要求 APP 不能白屏、要能恢复。已完成：Node `fs/dsh_restart`（live host PID、无窗口）、`fs/dsh_stop`（受控停止后重装/升级）；APP 在 surface 缺失时显示明确状态和“重启 DSH”；start/restart 显式传回 `D:\DeepSeek Harness\.dsh`。**实测**：0.2.79 在 LAPTOP 上停止 rc.3、通过官方 feed 安装 **0.2.1-rc.5** 成功并启动；但 rc.5 仍在启动时报 `desktop welcome: Web authentication failed`（崩溃日志 `crash-2026-11-02T23-07-59-083Z-host.log`），descriptor 仍不出现。**结论**：DSH 认证状态本身已坏，和 rc.3/rc.5 版本无关；必须重置 DSH 认证/profile 并在笔记本上重新登录，或恢复一份已知可用的 DSH profile。Tether 侧的 surface 健康、重启、停止/安装能力已交付；F146 仍待 DSH 认证修复。
