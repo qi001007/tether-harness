@@ -5,7 +5,7 @@
 1. 0.2.76 新增 `fs/dsh_restart` 与 APP“重启 DSH”入口；0.2.77 让重启 helper 接收 live host PID（DSH 命令行不含 `dsh-desktop-host` 时也能找到）；0.2.78 让 start/restart 显式传回检测到的 `dsh_home`，避免落到默认 `C:\Users\14675\.dsh`。
 2. 实测 LAPTOP：重启能替换 pid（24420 → 7444 → 2800），但 DSH rc.3 启动即报 `desktop welcome: Web authentication failed`，`native-surface.json` 仍不出现。**结论**：表面缺失的第一层是 DSH 自身认证/安装坏了，Tether 插件不是首要原因；需要先修 DSH 本体。
 3. APP 侧已经做到：DSH surface 缺失时显示明确状态和“重启 DSH”，不白屏；APP 其他页面不受 DSH 影响。
-4. 0.2.76/0.2.77/0.2.78 均已发布并刷新 Hub mirror；LAPTOP Node/APP 0.2.78。下一步：用已下载的 rc.5（或同版本 rc.3）修复 DSH 认证，再验证 Tether 插件/页面。
+4. 0.2.76/0.2.77/0.2.78/0.2.79 均已发布并刷新 Hub mirror；LAPTOP Node/APP 0.2.79。已停止 rc.3 并通过官方 feed 安装 **rc.5** 成功，但 rc.5 仍报 `desktop welcome: Web authentication failed`，surface 仍缺失；下一步必须重置 DSH 认证/profile 并重新登录，而不是继续改 Tether 插件。
 
 ## 2026-11-03 v0.2.76 DSH surface 恢复入口
 
