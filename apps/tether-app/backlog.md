@@ -53,3 +53,4 @@
 - 2026-11-02：APP 包与 package-lock 根版本升至 `0.2.63`；本轮只改共享 UI 登录页，Electron 主进程未改。
 - 2026-11-02：APP 包与 package-lock 根版本升至 `0.2.64`；本轮只改共享 UI 互联图，Electron 主进程未改。
 - 2026-11-02：APP 包与 package-lock 根版本升至 `0.2.65`；本轮只改共享 UI 节点详情浮层，Electron 主进程未改。
+- 2026-11-02：APP 包与 package-lock 根版本升至 `0.2.66`；共享 UI 恢复互联图力导向流动，Electron 主进程未改。

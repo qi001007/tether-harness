@@ -127,3 +127,4 @@
 - 2026-11-02：0.2.63 新增登录契约：登录页不再有服务器地址输入、默认服务器常量、DSH `host.exitPanel`/“返回 DSH”、双栏视觉类名。全量 mjs 229 / cjs 6 / pytest 147+1。
 - 2026-11-02：0.2.64 新增互联图契约：`tether.network.positions.v2`、两远端 `[210,330]`、无 `animate()`、卸载保存、节点附近隐藏断开按钮、>12 台圆点。全量 mjs 230 / cjs 6 / pytest 147+1。
 - 2026-11-02：0.2.65 新增详情浮层契约：`position:absolute; top/right/bottom:8px; width:300`、画布容器 `position:relative`、根样式不再 `flex:0 0 auto`。全量 mjs 231 / cjs 6 / pytest 147+1。
+- 2026-11-02：0.2.66 新增力导向/接力契约：`function animate()` 必须存在、`tether.network.positions.v3` 存 `vx/vy`、布局读取保存速度、远端无中心拉力。全量 mjs 231 / cjs 6 / pytest 147+1。

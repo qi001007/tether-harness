@@ -39,3 +39,4 @@
 - 2026-11-02：client 包、version.json 与 `lib/client.js` 升至 `0.2.63`；登录页支持 `host.exitPanel` 返回 DSH，使用默认服务器且不再显示地址输入。
 - 2026-11-02：client 包、version.json 与 `lib/client.js` 升至 `0.2.64`；互联图环形初始布局与拖动位置持久化随共享 UI 进入插件 bundle。
 - 2026-11-02：client 包、version.json 与 `lib/client.js` 升至 `0.2.65`；节点详情浮层随共享 UI 进入插件 bundle。
+- 2026-11-02：client 包、version.json 与 `lib/client.js` 升至 `0.2.66`；恢复互联图力导向流动，位置+速度持久化。

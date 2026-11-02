@@ -1,5 +1,15 @@
 # Public client releases
 
+## v0.2.66
+
+Restore the fluid network layout and resume motion across page switches:
+
+- Bring back the force animation that was accidentally removed in 0.2.64. The initial state remains radial/triangular; remote nodes no longer receive the centre pull, so the flow settles into a wide triangle instead of collapsing back into a vertical line.
+- Node positions **and velocities** are stored under `tether.network.positions.v3`, saved on drag end and on unmount. Returning to the network page continues from the saved `x/y/vx/vy` state instead of resetting.
+- Real run: starting from a cleared snapshot, the nodes flowed from `20.2%,32.8%` to `15.42%,30.04%` with the centre at `50%,50.1%`; after dragging LAPTOP-01 and immediately switching to files and back, the graph resumed from the mid-motion state (`LAPTOP 13.67%,33.04%`, `TETHER 88.69%,59.87%`) rather than the initial layout. The test state was cleared afterwards.
+
+Gates: mjs 231/231, cjs 6/6, client pytest 147 passed / 1 skipped, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41440651070` succeeded; published at 2026-11-02T12:00:22Z (app 1,780,669 B, plugin 1,358,856 B, node 84,818 B; signed manifest verified). Hub mirror refreshed to **0.2.66**. DESKTOP app/node/plugin **0.2.66**; LAPTOP Node+APP update dispatched.
+
 ## v0.2.65
 
 Floating network detail panel:
