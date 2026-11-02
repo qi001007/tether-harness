@@ -1,5 +1,15 @@
 # 实时进度
 
+## 2026-11-02 v0.2.61 权限页审计直出
+
+权限页每次打开都要等审计：`openSettings` 先 `await` 策略、再 `await` 审计，串行两次设备往返；策略虽然已有 `policyCacheRef`，打开时却没拿它填表单，审计则完全没有预热或缓存。修复：
+
+1. 新增按设备保存的 `auditCacheRef`，与策略一起在切换设备时并行预取（`Promise.allSettled`），同一设备的并发请求由 `permissionInflightRef` 去重。
+2. `openSettings` 先用缓存同步填策略、模式、可写根与审计，再在后台 `Promise.all` 刷新；刷新完成不覆盖已显示列表，也不打断滚动。
+3. 冷启动无缓存时列表内显示“正在读取审计…”，不再误报“暂无审计”；保存权限与“加载更多”同步更新缓存，清空会话时一并清理。
+4. 真机实测：修复前本机策略 638 ms + 审计 677 ms（LAPTOP 1,114 ms + 715 ms），打开约需数秒；修复后 DESKTOP 点开到 68 行审计 **3 ms**，0.2.61 重启后 **19 ms**、68 行；切到 LAPTOP 后首次点开 **3 ms**、103 行。判据：有缓存时 50 ms 内出现完整审计行。
+5. 门禁：mjs 226/226、cjs 6/6、client pytest 142 passed / 1 skipped、`build.mjs --check`、`build-web.mjs --check`、`validate_versions()` 通过。0.2.61 已发布（CI `41407506570`，07:40:28Z，签名清单验签通过，app 1,765,320 B / plugin 1,353,822 B / node 79,668 B），Hub mirror 0.2.61；LAPTOP Node+APP 19.7 s、插件 27.1 s，DESKTOP 源码 APP 重启、本机插件 0.2.61；两机 app/node/plugin 均 0.2.61 且在线。
+
 ## 2026-11-02 v0.2.60 账户设置精细化
 
 先查成熟产品再写：GitHub 头像上传后进入裁剪、Google 账号照片旋转/裁剪/保存、Slack 上传后调整构图、Chrome 改密表单的 `current-password`/`new-password` 与约束、Authgear 的行内校验。账户页据此重做：

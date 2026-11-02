@@ -122,3 +122,4 @@
 - 2026-11-02：0.2.58 断言转移页每栏传入 `deviceName` 并在设备切换时清空 `roots`/`entries`；防止同名 `default-workspace`/`Tether 工作目录` 被误读成共享树。
 - 2026-11-02：0.2.59 新增显式边契约：画布只画 `edges`、节点详情/连接管理/画布连边共用 `/api/edges`；本地代理允许 `/api/edges`；活动栏选中态断言改为蓝色底/蓝图标。全量 mjs 225 / cjs 6 / pytest 142+1。
 - 2026-11-02：0.2.60 新增账户页契约：`CROP_VIEW=240`、`AVATAR_OUTPUT=256`、裁剪指针/缩放/保存、8 MB 图片上限、昵称行内编辑、密码三栏与 `passwordRules` 行内校验；表单无效提交不得发请求。全量 mjs 225 / cjs 6 / pytest 142+1。
+- 2026-11-02：0.2.61 新增权限抽屉契约：`auditCacheRef`/`permissionInflightRef`、设备切换并行预取策略与审计、`openSettings` 先套缓存再 `Promise.all` 刷新、无缓存时“正在读取审计…”。全量 mjs 226 / cjs 6 / pytest 142+1。

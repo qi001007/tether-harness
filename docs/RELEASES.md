@@ -1,5 +1,16 @@
 # Public client releases
 
+## v0.2.61
+
+Instant permissions audit view:
+
+- The 文件权限 drawer now paints from a per-device cache as soon as it opens, then refreshes policy and audit in parallel in the background. Previously every open awaited policy and then audit, two sequential device round trips.
+- Switching devices prefetches both resources; concurrent requests for the same device share one in-flight promise. A cold open without a cached snapshot shows “正在读取审计…” inside the list instead of a false “暂无审计”.
+- Saving a policy and loading more audit rows update the same cache, and the caches are cleared when the session resets.
+- Real run: opening the drawer took **3 ms** to show 68 audit rows on DESKTOP and **3 ms** for 103 rows after switching to LAPTOP; the freshly restarted 0.2.61 app showed 68 rows in **19 ms**. Before the change the two serial requests measured 638 ms + 677 ms on DESKTOP and 1,114 ms + 715 ms on LAPTOP.
+
+Gates: mjs 226/226, cjs 6/6, client pytest 142 passed / 1 skipped, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41407506570` succeeded; published at 2026-11-02T07:40:28Z (app 1,765,320 B, plugin 1,353,822 B, node 79,668 B; signed manifest verified). Hub mirror refreshed to **0.2.61**. LAPTOP-01 Node+APP **19.7 s**, plugin **27.1 s**; DESKTOP source APP restarted and the local DSH plugin reinstalled. Both devices report app/node/plugin **0.2.61** and are online.
+
 ## v0.2.60
 
 Mature account settings, built after checking mainstream products:
