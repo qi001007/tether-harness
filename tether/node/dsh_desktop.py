@@ -307,6 +307,35 @@ class DshDesktop:
         self._status = None
         return {"started": True, **self.status()}
 
+    def stop(self) -> dict[str, Any]:
+        current = self.status()
+        if not current["running"]:
+            return current
+        pid = int(current.get("pid") or 0)
+        if pid:
+            try:
+                root = psutil.Process(pid)
+                children = root.children(recursive=True)
+                for process in children + [root]:
+                    try:
+                        process.terminate()
+                    except (psutil.Error, OSError):
+                        pass
+                try:
+                    psutil.wait_procs(children + [root], timeout=8)
+                except (psutil.Error, OSError):
+                    pass
+                for process in children + [root]:
+                    try:
+                        if process.is_running():
+                            process.kill()
+                    except (psutil.Error, OSError):
+                        pass
+            except (psutil.Error, OSError):
+                pass
+        self._status = None
+        return self.status()
+
     def restart(self) -> dict[str, Any]:
         current = self.status()
         if not current["installed"]:

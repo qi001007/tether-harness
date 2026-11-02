@@ -944,6 +944,12 @@ class FsService:
                        phase="result", result="started" if result.get("running") else "requested")
         return result
 
+    def _op_dsh_stop(self, _args: dict[str, Any]) -> dict[str, Any]:
+        result = self.dsh_desktop.stop()
+        self.audit.add(op="dsh_stop", path=result.get("exe") or "", mode=self.policy.data.get("mode"),
+                       phase="result", result="stopped" if not result.get("running") else "still_running")
+        return result
+
     def _op_dsh_restart(self, _args: dict[str, Any]) -> dict[str, Any]:
         result = self.dsh_desktop.restart()
         self.audit.add(op="dsh_restart", path=result.get("exe") or "", mode=self.policy.data.get("mode"),
