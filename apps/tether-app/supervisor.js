@@ -192,7 +192,7 @@ class Supervisor {
     this.controller = { state: 'starting', pid: 0, port: this.port, managed: true }
     this.node = { state: 'starting', pid: 0, deviceOnline: false }
     this.lastError = ''
-    const serverCheck = spawnSync(this.python, ['-c', 'import importlib.util; raise SystemExit(0 if importlib.util.find_spec("tether_server.controller.app") else 1)'], {
+    const serverCheck = spawnSync(this.childPython, ['-c', 'import importlib.util; raise SystemExit(0 if importlib.util.find_spec("tether_server.controller.app") else 1)'], {
       cwd: this.repoRoot, env: this.baseEnv, encoding: 'utf8', windowsHide: true
     })
     if (serverCheck.status !== 0) {

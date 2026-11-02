@@ -57,7 +57,7 @@ fs.mkdirSync(dataDir, { recursive: true })
 app.setPath('userData', path.join(dataDir, 'electron'))
 const { enrollmentDecision } = require('./enrollment.js')
 const supervisor = new Supervisor({ repoRoot, dataDir, env })
-const updates = new UpdateService({ repoRoot, dataDir, python: supervisor.python, env, app })
+const updates = new UpdateService({ repoRoot, dataDir, python: supervisor.childPython, env, app })
 let uiOrigin = ''
 
 function log(line) {

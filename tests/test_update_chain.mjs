@@ -157,6 +157,8 @@ test('the shortcut and restart path launch Electron directly without a console',
   assert.match(supervisorSource, /this\.childPython = this\.python/)
   assert.match(supervisorSource, /pythonw\.exe/)
   assert.match(supervisorSource, /this\.spawnChild\(this\.childPython, args/)
+  assert.match(supervisorSource, /spawnSync\(this\.childPython, \['-c'/)
+  assert.match(mainSource, /new UpdateService\(\{ repoRoot, dataDir, python: supervisor\.childPython, env, app \}\)/)
   assert.match(appCmdSource, /if \/i not "%~1"=="--hidden"/)
   assert.match(appCmdSource, /wscript \/\/nologo .*Tether-App\.vbs/)
   assert.match(appCmdSource, /-WindowStyle Hidden/)

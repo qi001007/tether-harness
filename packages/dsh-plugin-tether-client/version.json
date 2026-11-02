@@ -1,6 +1,6 @@
 {
-  "version": "0.2.66",
-  "notes": "Restores the fluid force layout on the network canvas while keeping the radial initial state; node positions and velocities are saved on leave, so returning to the page continues from the state where it was left instead of resetting.",
+  "version": "0.2.67",
+  "notes": "Update checks and the local server probe now run with pythonw, eliminating the brief console window that appeared when the APP checked for a new release at startup.",
   "download": "https://github.com/qi001007/tether-harness",
   "install": "git pull && powershell -ExecutionPolicy Bypass -File desktop/install-plugin.ps1"
 }
