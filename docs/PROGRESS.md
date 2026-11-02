@@ -1,5 +1,15 @@
 # 实时进度
 
+## 2026-11-02 v0.2.67 启动更新检查无窗口
+
+启动闪窗根因：快捷方式本身是直接 `electron.exe`，但 APP 启动后自动更新检查用 `python.exe -m tether.updates_cli check`，创建了一个 `conhost`（短命控制台）。修复：
+
+1. `main.js` 把 `UpdateService` 的 python 改为 `supervisor.childPython`（venv `pythonw.exe`）。
+2. `supervisor.js` 的本地服务器探测 `spawnSync` 也改用 `childPython`。
+3. `pythonw` 的 stdout 管道已验证（`hello` 正常回传）；更新检查/助手不会因无窗口丢失 JSON。
+4. 启动监控：更新检查显示为 `pythonw.exe`，无 `python.exe`/关联 `conhost`，可见短命窗口列表为空。
+5. 门禁：mjs 231/231、cjs 6/6、pytest 147 passed / 1 skipped、两份 build check、`validate_versions()` 通过。0.2.67 已发布（CI `41442922613`，12:17:27Z，签名清单验签通过，app 1,780,821 B / plugin 1,358,859 B / node 84,818 B），Hub mirror 0.2.67；LAPTOP Node+APP 20.8 s；DESKTOP app/node/plugin 均 0.2.67，LAPTOP app/node 0.2.67、插件 0.2.65（插件更新任务已发）。
+
 ## 2026-11-02 v0.2.66 恢复互联图流动与状态接力
 
 0.2.64 为了保留拖动位置删掉了力导向动画，这个处理错了。本轮恢复：

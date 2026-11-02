@@ -1,5 +1,10 @@
 # 用户反馈与处理
 
+## 2026-11-02 启动闪窗
+
+- [x] F125：启动 APP 时会短暂闪一个看不清的窗口，怀疑是黑终端改成了“打开又飞快关闭”。排查：桌面/开始菜单快捷方式都是直接 `electron.exe`，无 `.cmd/.vbs`；启动时抓进程发现唯一 Tether 相关的新进程是 `python.exe -m tether.updates_cli check`（自动更新检查），它创建了 `conhost`；`UpdateService`/`serverCheck` 仍用 `python.exe`。修复：`main.js` 把 `UpdateService` 的 python 改为 `supervisor.childPython`（venv `pythonw.exe`）；`supervisor.js` 的本地服务器探测也改用 `childPython`。已验证 `pythonw` 通过 `execFile` 能正常回传 stdout（`hello`）。**启动监控**：更新检查现在是 `pythonw.exe`，不再出现 `python.exe` 或与之关联的 `conhost`；可见短命窗口列表为空。判据：启动/更新检查不出现控制台闪窗；更新检查仍能返回结果。
+- [x] F126：更新检查仍必须工作，不能为了无窗口牺牲协议输出。`pythonw` 的 stdout 管道测试通过；`UpdateService.run` 和 `update-helper` 的 `spawnSync` 都走同一无窗口解释器。
+
 ## 2026-11-02 恢复互联图水体流动与状态接力
 
 - [x] F123：0.2.64 为了保留拖动位置，把原来的力导向“水体流动”动画整个删掉了；主人要求恢复，并且切页回来要从离开时的状态继续，不是回到初始态。修复：恢复 `animate`/`kick` 力导向；初始仍用环形/三角，但去掉远端节点的中心拉力，避免流动后三角又被拽回一条竖线；节点位置和速度存到 `localStorage['tether.network.positions.v3']`，拖动结束、组件卸载时保存，重进时用保存的 `x/y/vx/vy` 继续。**真机验证**：清空保存后打开互联页，节点从初始 `20.2%,32.8%` 流动展开到 `15.42%,30.04%`，中心 `50%,50.1%`，三角保持；拖动 LAPTOP 后立即切文件页再回互联页，节点位置不是初始态，而是离开时的运动状态（`LAPTOP 13.67%,33.04%` / `TETHER 88.69%,59.87%`），并继续受力。测试后已清空测试状态并恢复初始流动布局。

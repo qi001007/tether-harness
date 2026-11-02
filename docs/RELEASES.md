@@ -1,5 +1,15 @@
 # Public client releases
 
+## v0.2.67
+
+Silent startup update check:
+
+- The automatic update check and the local server probe now run with `pythonw.exe` instead of `python.exe`. The update check was the source of a short-lived conhost window at APP startup; the console is gone.
+- `pythonw` stdout through `execFile` was verified (`hello`), so update JSON parsing and the updater helper keep working.
+- Startup monitor: the update check appeared as `pythonw.exe`, no `python.exe` or associated `conhost`, and the visible short-lived window list was empty.
+
+Gates: mjs 231/231, cjs 6/6, client pytest 147 passed / 1 skipped, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41442922613` succeeded; published at 2026-11-02T12:17:27Z (app 1,780,821 B, plugin 1,358,859 B, node 84,818 B; signed manifest verified). Hub mirror refreshed to **0.2.67**. LAPTOP-01 Node+APP **20.8 s**; DESKTOP app/node/plugin **0.2.67**; LAPTOP app/node **0.2.67** with the plugin update job dispatched.
+
 ## v0.2.66
 
 Restore the fluid network layout and resume motion across page switches:
