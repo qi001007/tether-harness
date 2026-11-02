@@ -1,5 +1,11 @@
 # 实时进度
 
+## 2026-11-03 v0.2.82 DSH 认证修复入口
+
+1. 新增 `dsh_repair_auth`：停全部 DSH、备份 `%APPDATA%\@deepseek-ai\dsh-desktop` 和 `.credentials.yaml`、重启 DSH。
+2. LAPTOP 实测备份成功（appdata `...bak-tether-20261103-074108`，credentials 同名备份），DSH 重启后不再产生 `Web authentication failed` 崩溃日志；但 appdata 为空、descriptor 仍缺失，当前应处于登录/初始化态。
+3. 0.2.82 已发布并刷新 mirror；LAPTOP app/node 0.2.82。下一步：本机登录 DSH，再验证 Tether 插件/页面。
+
 ## 2026-11-03 v0.2.81 DSH 停止与认证排查
 
 1. `fs/dsh_stop` 改为停掉所有 `DeepSeek Harness.exe` 进程，实测停止后 `running=false`；用于重装/升级前收口。
