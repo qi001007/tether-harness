@@ -798,6 +798,26 @@ test('the permissions drawer paints from cache and refreshes policy and audit in
   assert.ok(/Promise\.all\(\[\s*fetchPermission\(target, '\/policy'\),\s*fetchPermission\(target, '\/audit\?limit=200'\)\s*\]\)/.test(shared))
 })
 
+test('settings exposes an edge-gated update section for local and remote devices', () => {
+  assert.match(settingsPanel, /\{ id: 'update', label: '更新', render: \(\) => updateSection \}/)
+  assert.match(settingsPanel, /const updateRow = \(row\) => \{/)
+  assert.match(settingsPanel, /name: 'download'/)
+  assert.match(shared, /const settingsUpdate = \(\(\) => \{/)
+  assert.match(shared, /if \(edge\.from === localId\) connected\.add\(edge\.to\)/)
+  assert.match(shared, /if \(edge\.to === localId\) connected\.add\(edge\.from\)/)
+  assert.match(shared, /connected\.has\(item\.device_id\)/)
+  assert.match(shared, /update: settingsUpdate/)
+})
+
+test('local DSH can be started or installed from settings and the surface error state', () => {
+  assert.match(settingsPanel, /'启动 DSH'/)
+  assert.match(settingsPanel, /'安装 DSH'/)
+  assert.match(shared, /const dshRelevant =/)
+  assert.ok(shared.includes("['descriptor_missing', 'host_unreachable', 'descriptor_invalid']"))
+  assert.ok(shared.includes("'dsh_install' : 'dsh_start'"))
+  assert.match(shared, /\/fs\/' \+ action/)
+})
+
 test('the app keeps the three most recent surfaces mounted instead of re-downloading them', () => {
   assert.match(shared, /function SurfaceDeck/)
   assert.match(shared, /h\(SurfaceDeck, \{ devices:/)

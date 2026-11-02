@@ -27,6 +27,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from .dsh_desktop import DshDesktop, DshError
+
 
 MAX_READ = 1024 * 1024
 MAX_WRITE_CHUNK = 1024 * 1024
@@ -432,7 +434,8 @@ class Audit:
 
 
 class FsService:
-    def __init__(self, *, device: str, workspace: Path, data_dir: Path, workspaces_root: Path) -> None:
+    def __init__(self, *, device: str, workspace: Path, data_dir: Path, workspaces_root: Path,
+                 dsh_home: Path | None = None) -> None:
         self.device = device
         self.workspace = workspace
         self.workspaces_root = workspaces_root
@@ -440,6 +443,7 @@ class FsService:
         self.policy = Policy(data_dir / "policy.json", device=device,
                              node_workspace=workspace, workspaces_root=workspaces_root)
         self.audit = Audit(data_dir / "audit.jsonl", device=device)
+        self.dsh_desktop = DshDesktop(data_dir, dsh_home=dsh_home)
         self.preview_cache_dir = data_dir / "preview-cache"
         self.preview_cache_dir.mkdir(parents=True, exist_ok=True)
         self._office_lock = threading.Lock()
@@ -473,7 +477,10 @@ class FsService:
         handler = getattr(self, "_op_" + op, None)
         if handler is None:
             raise FsError(f"unknown fs op: {op}", "bad_op")
-        result = handler(args)
+        try:
+            result = handler(args)
+        except DshError as exc:
+            raise FsError(str(exc), exc.code) from exc
         if isinstance(result, dict):
             result.setdefault("device_id", self.policy.device)
         return result
@@ -927,3 +934,18 @@ class FsService:
 
     def _op_audit_list(self, args: dict[str, Any]) -> dict[str, Any]:
         return self.audit.page(int(args.get("limit") or 100), int(args.get("offset") or 0))
+
+    def _op_dsh_status(self, _args: dict[str, Any]) -> dict[str, Any]:
+        return self.dsh_desktop.status()
+
+    def _op_dsh_start(self, _args: dict[str, Any]) -> dict[str, Any]:
+        result = self.dsh_desktop.start()
+        self.audit.add(op="dsh_start", path=result.get("exe") or "", mode=self.policy.data.get("mode"),
+                       phase="result", result="started" if result.get("running") else "requested")
+        return result
+
+    def _op_dsh_install(self, _args: dict[str, Any]) -> dict[str, Any]:
+        result = self.dsh_desktop.install()
+        self.audit.add(op="dsh_install", path=result.get("exe") or "", mode=self.policy.data.get("mode"),
+                       phase="intent", result="started" if result.get("installing") else "skipped")
+        return result

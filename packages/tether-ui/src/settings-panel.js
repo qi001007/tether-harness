@@ -41,7 +41,8 @@ export function createSettingsPanel(React) {
 
   function SettingsPanel({ open, onClose, Glyph, accountEmail = '', accountRole = '', accountName = '',
     accountAvatar = '', onAvatarChange, onAccountNameChange, initialSection = 'account',
-    server = '', connection = {}, device = {}, versions = {}, extraSections = [],
+    server = '', connection = {}, device = {}, versions = {}, update = null, dsh = null, dshBusy = '',
+    onDshStart, onDshInstall, extraSections = [],
     onRefreshConnection, onRestartNode, onLogout, onPasswordChanged }) {
     const [section, setSection] = React.useState(initialSection)
     const [currentPassword, setCurrentPassword] = React.useState('')
@@ -88,6 +89,13 @@ export function createSettingsPanel(React) {
     React.useEffect(() => () => {
       if (cropUrlRef.current) URL.revokeObjectURL(cropUrlRef.current)
     }, [])
+    const updateRef = React.useRef(update)
+    updateRef.current = update
+    React.useEffect(() => {
+      if (!open || section !== 'update') return
+      const handler = updateRef.current && updateRef.current.onRefresh
+      if (typeof handler === 'function') handler()
+    }, [open, section])
     React.useEffect(() => {
       if (!crop) return undefined
       const onKey = (event) => {
@@ -447,14 +455,37 @@ export function createSettingsPanel(React) {
           try { localStorage.setItem('tether.keepSurfaces', next ? '1' : '0') } catch (_) { /* storage unavailable */ }
           if (typeof window !== 'undefined') window.dispatchEvent(new Event('tether-surfaces-pref'))
         }, '保留最近设备工作区')))
+    const dshKnown = !!(dsh && typeof dsh.installed === 'boolean')
+    const dshStatus = dshKnown
+      ? (dsh.installing ? '安装中 ' + (Number(dsh.progress) || 0) + '%' : dsh.running ? '运行中' : dsh.installed ? '未启动' : '未安装')
+      : '—'
+    const dshValue = dshKnown
+      ? h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 } },
+        h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis' } }, dsh.version || '—'),
+        h('span', { style: { color: dsh.running ? success : mute, fontSize: 11, flex: '0 0 auto' } }, dshStatus))
+      : '—'
+    const dshAction = dshKnown && !dsh.running
+      ? h('button', {
+        type: 'button', onClick: dsh.installed ? onDshStart : onDshInstall,
+        disabled: !!dshBusy || !!dsh.installing,
+        style: { ...secondary, display: 'inline-flex', alignItems: 'center', gap: 6, opacity: dshBusy || dsh.installing ? 0.5 : 1, cursor: dshBusy || dsh.installing ? 'default' : 'pointer' }
+      },
+        dshBusy || dsh.installing
+          ? h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center' } }, Glyph ? h(Glyph, { name: 'refresh', size: 14 }) : null)
+          : Glyph ? h(Glyph, { name: dsh.installed ? 'arrowUp' : 'download', size: 14 }) : null,
+        dsh.installing ? '安装中 ' + (Number(dsh.progress) || 0) + '%' : dsh.installed ? '启动 DSH' : '安装 DSH')
+      : null
     const deviceSection = h('div', { style: { display: 'grid', gap: 12 } },
       card([
         ['设备名', device.name || device.device_id || '—'],
         ['设备 ID', device.device_id || '—'],
         ['平台', (device.capabilities && device.capabilities.os_label) || device.platform || '—'],
+        ['DSH', dshValue],
         ['Node', device.online ? '在线' : '离线']
       ]),
-      h('div', null,
+      dshKnown && dsh.error ? h('div', { role: 'alert', style: { color: danger, fontSize: 11.5 } }, dsh.error) : null,
+      h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
+        dshAction,
         h('button', {
           type: 'button', onClick: onRestartNode, disabled: !device.online,
           style: { ...secondary, display: 'inline-flex', alignItems: 'center', gap: 6, opacity: device.online ? 1 : 0.5, cursor: device.online ? 'pointer' : 'default' }
@@ -467,9 +498,53 @@ export function createSettingsPanel(React) {
     const aboutSection = h('div', { style: { display: 'grid', gap: 14 } },
       h('div', { style: { fontSize: 17, fontWeight: 600, color: ink } }, 'Tether'),
       card(versionRows))
+    const updateRow = (row) => {
+      const versionText = (row.products || []).map((product) => {
+        const current = product.current || '—'
+        const latest = product.latest && product.latest !== current ? ' → ' + product.latest : ''
+        return product.label + ' ' + current + latest
+      }).join(' / ')
+      const action = row.running
+        ? h('span', { className: 'tether-spin', title: '更新中', 'aria-label': '更新中', style: { width: 30, height: 30, flex: '0 0 auto', display: 'grid', placeItems: 'center', color: blue } }, Glyph ? h(Glyph, { name: 'refresh', size: 15 }) : null)
+        : row.error
+          ? h('button', {
+            type: 'button', onClick: () => update && update.onUpdate(row), title: row.error,
+            style: { border: 0, background: 'transparent', color: danger, fontSize: 12, cursor: 'pointer', padding: '0 4px', flex: '0 0 auto' }
+          }, '重试')
+          : row.available && row.online
+            ? h('button', {
+              type: 'button', onClick: () => update && update.onUpdate(row), title: '更新', 'aria-label': '更新 ' + (row.name || ''),
+              className: 'tether-hover',
+              style: { width: 30, height: 30, flex: '0 0 auto', display: 'grid', placeItems: 'center', border: 0, borderRadius: 999, background: blue, color: '#fff', cursor: 'pointer' }
+            }, Glyph ? h(Glyph, { name: 'download', size: 15 }) : '↓')
+            : null
+      return h('div', {
+        key: row.key,
+        style: { display: 'flex', alignItems: 'center', gap: 10, minHeight: 52, padding: '8px 12px', border: '1px solid ' + line, borderRadius: 10, background: bg }
+      },
+        h('span', { 'aria-hidden': true, style: { width: 7, height: 7, borderRadius: 999, flex: '0 0 auto', background: row.online ? success : mute } }),
+        h('div', { style: { flex: '1 1 auto', minWidth: 0 } },
+          h('div', { style: { fontSize: 13, color: ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, row.name || '—'),
+          h('div', { className: 'tether-num', title: versionText, style: { marginTop: 3, fontSize: 11.5, color: mute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, versionText)),
+        action)
+    }
+    const updateGroups = []
+    if (update && update.local) updateGroups.push(h('div', { key: 'local', style: { display: 'grid', gap: 8 } }, groupTitle('本机'), updateRow(update.local)))
+    const updateDevices = (update && update.devices) || []
+    if (updateDevices.length) updateGroups.push(h('div', { key: 'devices', style: { display: 'grid', gap: 8 } }, groupTitle('其他设备'), updateDevices.map(updateRow)))
+    const updateSection = h('div', { style: { display: 'grid', gap: 16 } },
+      h('div', { style: { display: 'flex', alignItems: 'center', minHeight: 24 } },
+        h('span', { style: { flex: '1 1 auto' } }),
+        h('button', {
+          type: 'button', onClick: () => update && update.onRefresh && update.onRefresh(), disabled: !!(update && update.refreshing),
+          title: '刷新', 'aria-label': '刷新更新状态', className: 'tether-hover',
+          style: { width: 28, height: 28, display: 'grid', placeItems: 'center', border: 0, borderRadius: 6, background: 'transparent', color: sub, cursor: update && update.refreshing ? 'default' : 'pointer' }
+        }, Glyph ? h('span', { className: update && update.refreshing ? 'tether-spin' : '', style: { display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 16 })) : '↻')),
+      updateGroups.length ? updateGroups : h('div', { style: { fontSize: 12, color: mute } }, '没有已连接的设备'))
     const builtIn = [
       { id: 'account', label: '账号', render: () => accountSection },
       { id: 'connection', label: '连接', render: () => connectionSection },
+      { id: 'update', label: '更新', render: () => updateSection },
       { id: 'workspace', label: '工作区', render: () => workspaceSection },
       { id: 'device', label: '本机设备', render: () => deviceSection },
       { id: 'about', label: '关于', render: () => aboutSection }

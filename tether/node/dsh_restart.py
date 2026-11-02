@@ -107,6 +107,10 @@ def _launch(exe: str) -> subprocess.Popen[Any]:
     # The helper can inherit this from a Node launcher; Electron then runs as a
     # plain Node process instead of starting the DSH window.
     env.pop("ELECTRON_RUN_AS_NODE", None)
+    # Tether's Node may run with a test DSH home; the desktop app must keep its
+    # own profile so the surface descriptor is published where the Node reads it.
+    env.pop("DSH_HOME", None)
+    env.pop("TETHER_NATIVE_DSH_HOME", None)
     kwargs: dict[str, Any] = {
         "cwd": str(Path(exe).parent),
         "env": env,

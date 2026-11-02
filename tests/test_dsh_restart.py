@@ -19,10 +19,14 @@ def test_launch_strips_the_electron_node_selector(monkeypatch):
 
     monkeypatch.setattr(dsh_restart.subprocess, "Popen", fake_popen)
     monkeypatch.setenv("ELECTRON_RUN_AS_NODE", "1")
+    monkeypatch.setenv("DSH_HOME", "E:/tether/.runtime/dsh-home")
+    monkeypatch.setenv("TETHER_NATIVE_DSH_HOME", "E:/tether/.runtime/dsh-home")
     monkeypatch.setenv("TETHER_TEST_MARKER", "kept")
     dsh_restart._launch("C:/Program Files/DeepSeek Harness/DeepSeek Harness.exe")
     assert captured["args"] == ["C:/Program Files/DeepSeek Harness/DeepSeek Harness.exe"]
     assert "ELECTRON_RUN_AS_NODE" not in captured["env"]
+    assert "DSH_HOME" not in captured["env"]
+    assert "TETHER_NATIVE_DSH_HOME" not in captured["env"]
     assert captured["env"]["TETHER_TEST_MARKER"] == "kept"
 
 

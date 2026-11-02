@@ -163138,6 +163138,11 @@ function createSettingsPanel(React2) {
     connection = {},
     device = {},
     versions = {},
+    update = null,
+    dsh = null,
+    dshBusy = "",
+    onDshStart,
+    onDshInstall,
     extraSections = [],
     onRefreshConnection,
     onRestartNode,
@@ -163201,6 +163206,13 @@ function createSettingsPanel(React2) {
     React2.useEffect(() => () => {
       if (cropUrlRef.current) URL.revokeObjectURL(cropUrlRef.current);
     }, []);
+    const updateRef = React2.useRef(update);
+    updateRef.current = update;
+    React2.useEffect(() => {
+      if (!open || section !== "update") return;
+      const handler = updateRef.current && updateRef.current.onRefresh;
+      if (typeof handler === "function") handler();
+    }, [open, section]);
     React2.useEffect(() => {
       if (!crop) return void 0;
       const onKey = (event) => {
@@ -163787,6 +163799,25 @@ function createSettingsPanel(React2) {
         }, "\u4FDD\u7559\u6700\u8FD1\u8BBE\u5907\u5DE5\u4F5C\u533A")
       )
     );
+    const dshKnown = !!(dsh && typeof dsh.installed === "boolean");
+    const dshStatus = dshKnown ? dsh.installing ? "\u5B89\u88C5\u4E2D " + (Number(dsh.progress) || 0) + "%" : dsh.running ? "\u8FD0\u884C\u4E2D" : dsh.installed ? "\u672A\u542F\u52A8" : "\u672A\u5B89\u88C5" : "\u2014";
+    const dshValue = dshKnown ? h2(
+      "span",
+      { style: { display: "inline-flex", alignItems: "center", gap: 6, minWidth: 0 } },
+      h2("span", { style: { overflow: "hidden", textOverflow: "ellipsis" } }, dsh.version || "\u2014"),
+      h2("span", { style: { color: dsh.running ? success : mute, fontSize: 11, flex: "0 0 auto" } }, dshStatus)
+    ) : "\u2014";
+    const dshAction = dshKnown && !dsh.running ? h2(
+      "button",
+      {
+        type: "button",
+        onClick: dsh.installed ? onDshStart : onDshInstall,
+        disabled: !!dshBusy || !!dsh.installing,
+        style: { ...secondary, display: "inline-flex", alignItems: "center", gap: 6, opacity: dshBusy || dsh.installing ? 0.5 : 1, cursor: dshBusy || dsh.installing ? "default" : "pointer" }
+      },
+      dshBusy || dsh.installing ? h2("span", { className: "tether-spin", style: { display: "grid", placeItems: "center" } }, Glyph ? h2(Glyph, { name: "refresh", size: 14 }) : null) : Glyph ? h2(Glyph, { name: dsh.installed ? "arrowUp" : "download", size: 14 }) : null,
+      dsh.installing ? "\u5B89\u88C5\u4E2D " + (Number(dsh.progress) || 0) + "%" : dsh.installed ? "\u542F\u52A8 DSH" : "\u5B89\u88C5 DSH"
+    ) : null;
     const deviceSection = h2(
       "div",
       { style: { display: "grid", gap: 12 } },
@@ -163794,11 +163825,14 @@ function createSettingsPanel(React2) {
         ["\u8BBE\u5907\u540D", device.name || device.device_id || "\u2014"],
         ["\u8BBE\u5907 ID", device.device_id || "\u2014"],
         ["\u5E73\u53F0", device.capabilities && device.capabilities.os_label || device.platform || "\u2014"],
+        ["DSH", dshValue],
         ["Node", device.online ? "\u5728\u7EBF" : "\u79BB\u7EBF"]
       ]),
+      dshKnown && dsh.error ? h2("div", { role: "alert", style: { color: danger, fontSize: 11.5 } }, dsh.error) : null,
       h2(
         "div",
-        null,
+        { style: { display: "flex", gap: 8, flexWrap: "wrap" } },
+        dshAction,
         h2("button", {
           type: "button",
           onClick: onRestartNode,
@@ -163818,9 +163852,68 @@ function createSettingsPanel(React2) {
       h2("div", { style: { fontSize: 17, fontWeight: 600, color: ink } }, "Tether"),
       card(versionRows)
     );
+    const updateRow = (row) => {
+      const versionText = (row.products || []).map((product2) => {
+        const current2 = product2.current || "\u2014";
+        const latest = product2.latest && product2.latest !== current2 ? " \u2192 " + product2.latest : "";
+        return product2.label + " " + current2 + latest;
+      }).join(" / ");
+      const action = row.running ? h2("span", { className: "tether-spin", title: "\u66F4\u65B0\u4E2D", "aria-label": "\u66F4\u65B0\u4E2D", style: { width: 30, height: 30, flex: "0 0 auto", display: "grid", placeItems: "center", color: blue } }, Glyph ? h2(Glyph, { name: "refresh", size: 15 }) : null) : row.error ? h2("button", {
+        type: "button",
+        onClick: () => update && update.onUpdate(row),
+        title: row.error,
+        style: { border: 0, background: "transparent", color: danger, fontSize: 12, cursor: "pointer", padding: "0 4px", flex: "0 0 auto" }
+      }, "\u91CD\u8BD5") : row.available && row.online ? h2("button", {
+        type: "button",
+        onClick: () => update && update.onUpdate(row),
+        title: "\u66F4\u65B0",
+        "aria-label": "\u66F4\u65B0 " + (row.name || ""),
+        className: "tether-hover",
+        style: { width: 30, height: 30, flex: "0 0 auto", display: "grid", placeItems: "center", border: 0, borderRadius: 999, background: blue, color: "#fff", cursor: "pointer" }
+      }, Glyph ? h2(Glyph, { name: "download", size: 15 }) : "\u2193") : null;
+      return h2(
+        "div",
+        {
+          key: row.key,
+          style: { display: "flex", alignItems: "center", gap: 10, minHeight: 52, padding: "8px 12px", border: "1px solid " + line, borderRadius: 10, background: bg }
+        },
+        h2("span", { "aria-hidden": true, style: { width: 7, height: 7, borderRadius: 999, flex: "0 0 auto", background: row.online ? success : mute } }),
+        h2(
+          "div",
+          { style: { flex: "1 1 auto", minWidth: 0 } },
+          h2("div", { style: { fontSize: 13, color: ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, row.name || "\u2014"),
+          h2("div", { className: "tether-num", title: versionText, style: { marginTop: 3, fontSize: 11.5, color: mute, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, versionText)
+        ),
+        action
+      );
+    };
+    const updateGroups = [];
+    if (update && update.local) updateGroups.push(h2("div", { key: "local", style: { display: "grid", gap: 8 } }, groupTitle("\u672C\u673A"), updateRow(update.local)));
+    const updateDevices = update && update.devices || [];
+    if (updateDevices.length) updateGroups.push(h2("div", { key: "devices", style: { display: "grid", gap: 8 } }, groupTitle("\u5176\u4ED6\u8BBE\u5907"), updateDevices.map(updateRow)));
+    const updateSection = h2(
+      "div",
+      { style: { display: "grid", gap: 16 } },
+      h2(
+        "div",
+        { style: { display: "flex", alignItems: "center", minHeight: 24 } },
+        h2("span", { style: { flex: "1 1 auto" } }),
+        h2("button", {
+          type: "button",
+          onClick: () => update && update.onRefresh && update.onRefresh(),
+          disabled: !!(update && update.refreshing),
+          title: "\u5237\u65B0",
+          "aria-label": "\u5237\u65B0\u66F4\u65B0\u72B6\u6001",
+          className: "tether-hover",
+          style: { width: 28, height: 28, display: "grid", placeItems: "center", border: 0, borderRadius: 6, background: "transparent", color: sub, cursor: update && update.refreshing ? "default" : "pointer" }
+        }, Glyph ? h2("span", { className: update && update.refreshing ? "tether-spin" : "", style: { display: "grid", placeItems: "center" } }, h2(Glyph, { name: "refresh", size: 16 })) : "\u21BB")
+      ),
+      updateGroups.length ? updateGroups : h2("div", { style: { fontSize: 12, color: mute } }, "\u6CA1\u6709\u5DF2\u8FDE\u63A5\u7684\u8BBE\u5907")
+    );
     const builtIn = [
       { id: "account", label: "\u8D26\u53F7", render: () => accountSection },
       { id: "connection", label: "\u8FDE\u63A5", render: () => connectionSection },
+      { id: "update", label: "\u66F4\u65B0", render: () => updateSection },
       { id: "workspace", label: "\u5DE5\u4F5C\u533A", render: () => workspaceSection },
       { id: "device", label: "\u672C\u673A\u8BBE\u5907", render: () => deviceSection },
       { id: "about", label: "\u5173\u4E8E", render: () => aboutSection }
@@ -167211,6 +167304,10 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     arrowUp: { parts: [
       { d: "M8 13V3M3.6 7.4L8 3l4.4 4.4" }
     ] },
+    download: { parts: [
+      { d: "M8 2.2v7.4M4.8 6.8L8 10l3.2-3.2" },
+      { d: "M2.6 12.9h10.8" }
+    ] },
     back: { parts: [
       { d: "M10.2 3.2L5.4 8l4.8 4.8" }
     ] },
@@ -168532,7 +168629,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           }, nativeSurfaceRetryDelay(retryCountRef.current));
           return;
         }
-        setState({ deviceId, status: "error", url: "", message: error.message });
+        setState({ deviceId, status: "error", url: "", message: error.message, code: error.surfaceCode || "" });
       });
       return () => {
         current = false;
@@ -168653,7 +168750,57 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         setAttempt((value) => value + 1);
       } else setState({ deviceId, status: "error", url: "", message: "\u539F\u751F\u5DE5\u4F5C\u533A\u9875\u9762\u52A0\u8F7D\u5931\u8D25\u3002\u8BF7\u68C0\u67E5\u76EE\u6807\u8BBE\u5907\u8FDE\u63A5\u540E\u91CD\u8BD5\u3002" });
     };
-    const message = currentState.status === "loading" ? currentState.message || "\u6B63\u5728\u8FDE\u63A5\u76EE\u6807\u8BBE\u5907\u7684 DSH \u539F\u751F\u5DE5\u4F5C\u533A\u2026" : currentState.status === "local" ? "\u5F53\u524D\u5DF2\u5728 DeepSeek Harness \u4E2D\uFF1B\u672C\u673A\u5DE5\u4F5C\u533A\u65E0\u9700\u518D\u5D4C\u5165\uFF0C\u53EF\u7528\u5DE6\u4FA7\u300C\u6587\u4EF6\u300D\u6216\u300C\u8FDE\u63A5\u300D\u3002" : currentState.status === "offline" ? "\u76EE\u6807\u8BBE\u5907\u79BB\u7EBF\u3002\u8BBE\u5907\u91CD\u65B0\u5728\u7EBF\u540E\u53EF\u91CD\u8BD5\u3002" : currentState.status === "no-device" ? "\u5148\u4ECE\u5DE6\u4FA7\u8BBE\u5907\u5217\u8868\u9009\u62E9\u76EE\u6807\u8BBE\u5907\u3002" : currentState.status === "error" ? currentState.message : "";
+    const dshRelevant = currentState.status === "error" && deviceId === localDeviceId && ["descriptor_missing", "host_unreachable", "descriptor_invalid"].includes(currentState.code);
+    const dshWatch = deviceId === localDeviceId && visible;
+    const [dsh, setDsh] = React2.useState(null);
+    const [dshBusy, setDshBusy] = React2.useState("");
+    const [dshError, setDshError] = React2.useState("");
+    React2.useEffect(() => {
+      if (!dshWatch && !dshRelevant) {
+        setDsh(null);
+        return void 0;
+      }
+      let alive = true;
+      const load = async () => {
+        try {
+          const data = await post("/api/devices/" + encodeURIComponent(deviceId) + "/fs/dsh_status", {});
+          if (alive) setDsh(data);
+        } catch (_) {
+        }
+      };
+      void load();
+      const timer = setInterval(load, dshBusy || dsh && dsh.installing ? 1500 : 5e3);
+      return () => {
+        alive = false;
+        clearInterval(timer);
+      };
+    }, [dshWatch, dshRelevant, deviceId, dshBusy, !!(dsh && dsh.installing)]);
+    React2.useEffect(() => {
+      if (!dshBusy) return;
+      if (dsh && dsh.running) {
+        setDshBusy("");
+        setDshError("");
+        retryDocument();
+        return;
+      }
+      if (dsh && dsh.error) {
+        setDshError(dsh.error);
+        setDshBusy("");
+      }
+    }, [dsh, dshBusy]);
+    const dshBlocked = dshWatch && currentState.status !== "local" && !!dsh && !dsh.running;
+    const runDsh = async (action) => {
+      setDshError("");
+      setDshBusy(action);
+      try {
+        const result = await post("/api/devices/" + encodeURIComponent(deviceId) + "/fs/" + action, {});
+        if (result) setDsh(result);
+      } catch (error) {
+        setDshError(error.message || "\u64CD\u4F5C\u5931\u8D25");
+        setDshBusy("");
+      }
+    };
+    const message = currentState.status === "error" && dshRelevant && dsh ? dsh.installed === false ? "DSH \u672A\u5B89\u88C5" : dsh.running ? currentState.message : "DSH \u672A\u542F\u52A8" : currentState.status === "loading" ? currentState.message || "\u6B63\u5728\u8FDE\u63A5\u76EE\u6807\u8BBE\u5907\u7684 DSH \u539F\u751F\u5DE5\u4F5C\u533A\u2026" : currentState.status === "local" ? "\u5F53\u524D\u5DF2\u5728 DeepSeek Harness \u4E2D\uFF1B\u672C\u673A\u5DE5\u4F5C\u533A\u65E0\u9700\u518D\u5D4C\u5165\uFF0C\u53EF\u7528\u5DE6\u4FA7\u300C\u6587\u4EF6\u300D\u6216\u300C\u8FDE\u63A5\u300D\u3002" : currentState.status === "offline" ? "\u76EE\u6807\u8BBE\u5907\u79BB\u7EBF\u3002\u8BBE\u5907\u91CD\u65B0\u5728\u7EBF\u540E\u53EF\u91CD\u8BD5\u3002" : currentState.status === "no-device" ? "\u5148\u4ECE\u5DE6\u4FA7\u8BBE\u5907\u5217\u8868\u9009\u62E9\u76EE\u6807\u8BBE\u5907\u3002" : currentState.status === "error" ? currentState.message : "";
     return h2(
       "div",
       { className: "tether-native-surface", style: nativeSurfaceContainerStyle(visible, layered) },
@@ -168704,8 +168851,43 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         "div",
         { style: { display: "grid", placeItems: "center", alignContent: "center", gap: 12, flex: "1 1 auto", minHeight: 0, color: C.sub, textAlign: "center", padding: 24 } },
         h2("div", null, message),
-        currentState.status !== "loading" && currentState.status !== "local" ? btn("\u91CD\u8BD5", retryDocument) : null
-      )
+        dshRelevant && dsh && !dsh.running ? btn(
+          dsh.installed === false ? dshBusy === "dsh_install" || dsh.installing ? "\u5B89\u88C5\u4E2D\u2026" : "\u5B89\u88C5 DSH" : dshBusy === "dsh_start" ? "\u542F\u52A8\u4E2D\u2026" : "\u542F\u52A8 DSH",
+          () => runDsh(dsh.installed === false ? "dsh_install" : "dsh_start"),
+          { primary: true, disabled: !!dshBusy || !!dsh.installing }
+        ) : null,
+        currentState.status !== "loading" && currentState.status !== "local" ? btn("\u91CD\u8BD5", retryDocument) : null,
+        dshRelevant && dshBusy && dsh && dsh.installing ? h2("div", { style: { fontSize: 11.5, color: C.mute } }, "\u5B89\u88C5\u4E2D " + (Number(dsh.progress) || 0) + "%") : null,
+        dshError ? h2("div", { role: "alert", style: { color: C.red, fontSize: 11.5 } }, dshError) : null
+      ),
+      dshBlocked ? h2(
+        "div",
+        {
+          role: "status",
+          style: {
+            position: "absolute",
+            inset: 0,
+            zIndex: 6,
+            display: "grid",
+            placeItems: "center",
+            alignContent: "center",
+            gap: 10,
+            padding: 24,
+            background: C.bg,
+            color: C.sub,
+            textAlign: "center"
+          }
+        },
+        h2("div", { style: { fontSize: 14, color: C.ink } }, dsh.installed === false ? "DSH \u672A\u5B89\u88C5" : "DSH \u672A\u542F\u52A8"),
+        dsh.version ? h2("div", { className: "tether-num", style: { fontSize: 11.5, color: C.mute } }, dsh.version) : null,
+        dsh.installing ? h2("div", { style: { fontSize: 11.5, color: C.mute } }, "\u5B89\u88C5\u4E2D " + (Number(dsh.progress) || 0) + "%") : null,
+        btn(
+          dsh.installed === false ? dshBusy === "dsh_install" || dsh.installing ? "\u5B89\u88C5\u4E2D\u2026" : "\u5B89\u88C5 DSH" : dshBusy === "dsh_start" ? "\u542F\u52A8\u4E2D\u2026" : "\u542F\u52A8 DSH",
+          () => runDsh(dsh.installed === false ? "dsh_install" : "dsh_start"),
+          { primary: true, disabled: !!dshBusy || !!dsh.installing }
+        ),
+        dshError ? h2("div", { role: "alert", style: { color: C.red, fontSize: 11.5 } }, dshError) : null
+      ) : null
     );
   }
   function SurfaceDeck({ devices, deviceId, localDeviceId, visible }) {
@@ -169050,6 +169232,8 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const [updateToast, setUpdateToast] = React2.useState("");
     const [showHub, setShowHub] = React2.useState(false);
     const [showAppSettings, setShowAppSettings] = React2.useState(false);
+    const [localDsh, setLocalDsh] = React2.useState(null);
+    const [dshBusy, setDshBusy] = React2.useState("");
     const [loggedIn, setLoggedIn] = React2.useState(() => {
       try {
         return !!JSON.parse(window.localStorage.getItem("tether.hub") || "{}").token;
@@ -169943,6 +170127,25 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       return () => clearInterval(t);
     }, [loadState]);
     React2.useEffect(() => {
+      if (!showAppSettings) return void 0;
+      const id = appLocalDevice || deviceId;
+      if (!id) return void 0;
+      let alive = true;
+      const load = async () => {
+        try {
+          const data = await post("/api/devices/" + encodeURIComponent(id) + "/fs/dsh_status", {});
+          if (alive && data) setLocalDsh(data);
+        } catch (_) {
+        }
+      };
+      void load();
+      const timer = setInterval(load, dshBusy || localDsh && localDsh.installing ? 1500 : 8e3);
+      return () => {
+        alive = false;
+        clearInterval(timer);
+      };
+    }, [showAppSettings, appLocalDevice, deviceId, dshBusy, !!(localDsh && localDsh.installing)]);
+    React2.useEffect(() => {
       if (typeof window === "undefined" || !window.location || !/^https?:/.test(String(window.location.protocol || ""))) return void 0;
       let stopped = false;
       let timer = null;
@@ -170585,6 +170788,25 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         fail2(e);
       } finally {
         setAuditLoading(false);
+      }
+    };
+    const runLocalDsh = async (action) => {
+      const id = appLocalDevice || deviceId;
+      if (!id) return;
+      setDshBusy(action);
+      let hold = false;
+      try {
+        const result = await post("/api/devices/" + encodeURIComponent(id) + "/fs/" + action, {});
+        if (result) setLocalDsh(result);
+        hold = true;
+        setNotice(action === "dsh_install" ? "\u6B63\u5728\u5B89\u88C5 DSH\u2026" : "\u6B63\u5728\u542F\u52A8 DSH\u2026");
+      } catch (error) {
+        setNotice(shortUpdateError(error));
+      } finally {
+        if (hold) setTimeout(() => setDshBusy(""), 12e3);
+        else setDshBusy("");
+        await loadState(true).catch(() => {
+        });
       }
     };
     const fsPath = (op) => "/api/devices/" + encodeURIComponent(deviceId) + "/fs/" + op;
@@ -172230,6 +172452,67 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       });
     }
     const liveHubStatus = hubBusy ? "checking" : stateOkAtRef.current && Date.now() - stateOkAtRef.current < 8e3 ? "online" : hubStatus === "offline" ? "offline" : "checking";
+    const settingsUpdate = (() => {
+      const localId = appLocalDevice || deviceId;
+      const devices = state && state.devices || [];
+      const byId = new Map(devices.map((item) => [item.device_id, item]));
+      const localTarget = byId.get(localId);
+      const localProduct = host && host.kind === "app" ? "desktop" : host && host.kind === "dsh" ? "dsh" : "";
+      const connected = /* @__PURE__ */ new Set([localId]);
+      for (const edge of state && state.edges || []) {
+        if (!edge) continue;
+        if (edge.from === localId) connected.add(edge.to);
+        else if (edge.to === localId) connected.add(edge.from);
+      }
+      const scopedInfo = (target, component) => {
+        if (target === localId && component === "app") return updateInfo.app || {};
+        if (target === localId && component === "plugin") return updateInfo.localPlugin || {};
+        const scoped = (updateInfo.devices || {})[target];
+        return scoped && scoped[component] || {};
+      };
+      const fallbackVersion = (caps, component) => component === "app" ? caps.app_version : component === "plugin" ? caps.plugin_version : caps.node_version;
+      const makeRow = (item, local, product2) => {
+        const caps = item && item.capabilities || {};
+        const components = local ? product2 === "desktop" ? ["app", "node"] : ["plugin", "node"] : [...caps.app_version ? ["app"] : [], ...caps.plugin_version ? ["plugin"] : [], "node"];
+        const infos = components.map((component) => scopedInfo(item.device_id, component));
+        const products = components.map((component, index) => ({
+          label: component === "app" ? "APP" : component === "plugin" ? "\u63D2\u4EF6" : "Node",
+          current: infos[index].current_version || fallbackVersion(caps, component) || "",
+          latest: infos[index].latest_version || ""
+        }));
+        const key = local ? "product:" + product2 : "device:" + item.device_id;
+        const run = updateRuns[key];
+        return {
+          key,
+          id: item.device_id,
+          local,
+          product: product2,
+          name: item.name || item.device_id,
+          online: local ? true : !!item.online,
+          products,
+          available: infos.some((info) => info && info.update_available === true && !isUpdateInfoStale(info)),
+          running: !!(run && run.state === "running"),
+          error: run && run.state === "error" ? run.message || "\u66F4\u65B0\u5931\u8D25" : ""
+        };
+      };
+      return {
+        local: localProduct && localTarget ? makeRow(localTarget, true, localProduct) : null,
+        devices: devices.filter((item) => item.device_id !== localId && connected.has(item.device_id)).map((item) => makeRow(item, false, "")),
+        refreshing: updateRefreshing,
+        onRefresh: () => {
+          void refreshUpdateCenter(true);
+        },
+        onUpdate: (row) => {
+          if (!row) return;
+          if (row.local) {
+            void runProductUpdate(row.product);
+            return;
+          }
+          const target = devices.find((item) => item.device_id === row.id);
+          if (target) void runDeviceUpdate(target);
+        }
+      };
+    })();
     return h2(
       "div",
       { className: "tether-root", style: { position: "relative", height: "100%", display: "flex", flexDirection: "column", background: "var(--tether-workbench-bg, " + C.bg + ")", color: C.ink, fontSize: 13, fontWeight: "var(--tether-body, 400)", overflow: "hidden" } },
@@ -172467,6 +172750,11 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           online: !!localDeviceRecord.online
         },
         versions: { app: localCaps.app_version, node: localCaps.node_version, plugin: localCaps.plugin_version },
+        update: settingsUpdate,
+        dsh: localDsh || (localCaps && (typeof localCaps.dsh_installed === "boolean" || typeof localCaps.dsh_running === "boolean") ? { installed: localCaps.dsh_installed === true, running: localCaps.dsh_running === true, version: localCaps.dsh_version || "", installing: localCaps.dsh_installing === true, progress: 0 } : null),
+        dshBusy,
+        onDshStart: () => runLocalDsh("dsh_start"),
+        onDshInstall: () => runLocalDsh("dsh_install"),
         onRefreshConnection: probeConfiguredHub,
         onRestartNode: async () => {
           const id = appLocalDevice || deviceId;

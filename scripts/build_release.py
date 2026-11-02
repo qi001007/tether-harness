@@ -164,7 +164,7 @@ or start a server.
             add_file(archive, rel, app_prefix)
         archive.writestr(f"{app_prefix}/README-INSTALL.md", """# Tether APP (standalone)
 
-Run `apps\\tether-app\\Tether-App.cmd` (or `desktop\\install-app.ps1` for a shortcut).
+Run `apps\\tether-app\\Tether-App.vbs` (or `desktop\\install-app.ps1` for a shortcut).
 The launcher creates `.venv`, installs Python deps once, installs Electron once.
 
 This archive contains only the APP. It does not install the DSH plugin or a Hub.

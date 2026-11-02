@@ -275,11 +275,12 @@ class Node:
         self.provider = provider
         self.model = model
         self.workspaces_root = workspaces_root or default_workspaces_root()
-        self.fs = FsService(device=device, workspace=workspace,
-                            data_dir=self.data_dir,
-                            workspaces_root=self.workspaces_root)
         self.dsh_sessions = DshSessionStore()
         self.native_dsh_home = self.dsh_sessions.home
+        self.fs = FsService(device=device, workspace=workspace,
+                            data_dir=self.data_dir,
+                            workspaces_root=self.workspaces_root,
+                            dsh_home=self.native_dsh_home)
         ensure_sdk_profile(self.native_dsh_home)
         self.native_surface = NativeSurface(self.native_dsh_home, device_fs=self.fs)
         update_state_dir = self.data_dir / "updates"
@@ -950,6 +951,7 @@ class Node:
         app_version = self._managed_app_version()
         plugin_version = self._managed_plugin_version()
         installed = [name for name, version in (("app", app_version), ("plugin", plugin_version)) if version]
+        dsh_desktop = self.fs.dsh_desktop.status()
         return {"os": platform.system(), "release": platform.release(), "os_label": os_label(),
                 "python": platform.python_version(),
                 "node_version": self.node_version, "update_protocol": UPDATE_PROTOCOL,
@@ -966,6 +968,10 @@ class Node:
                 "app_version": app_version,
                 "plugin_version": plugin_version,
                 "installed_products": installed,
+                "dsh_installed": dsh_desktop["installed"],
+                "dsh_running": dsh_desktop["running"],
+                "dsh_version": dsh_desktop["version"],
+                "dsh_installing": dsh_desktop["installing"],
                 "dsh_surface": self.native_surface.available()}
 
 

@@ -1,4 +1,8 @@
 @echo off
+if /i not "%~1"=="--hidden" (
+  wscript //nologo "%~dp0Tether-App.vbs"
+  exit /b
+)
 set "ELECTRON_RUN_AS_NODE="
 cd /d "%~dp0"
 set "TETHER_PY=..\..\.venv\Scripts\python.exe"
@@ -8,7 +12,7 @@ if errorlevel 1 goto bootstrap
 goto dependencies
 :bootstrap
 echo [tether] preparing Python runtime...
-powershell -NoProfile -ExecutionPolicy Bypass -File "bootstrap-app.ps1"
+powershell -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "bootstrap-app.ps1"
 if errorlevel 1 exit /b 1
 :dependencies
 if not exist "node_modules\electron\dist\electron.exe" (

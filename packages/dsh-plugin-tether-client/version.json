@@ -1,6 +1,6 @@
 {
-  "version": "0.2.61",
-  "notes": "The permissions drawer now paints its policy and audit list from a per-device cache as soon as it opens, while policy and audit refresh in parallel; switching devices prefetches both so repeat opens are immediate instead of waiting on two sequential device round trips.",
+  "version": "0.2.62",
+  "notes": "Settings has an update section: local and edge-connected devices show current versions and one-click updates. The APP launches without console windows, detects the DSH desktop app, offers start/install when it is missing or stopped, and keeps the real DSH surface (plugins included) instead of reimplementing it.",
   "download": "https://github.com/qi001007/tether-harness",
   "install": "git pull && powershell -ExecutionPolicy Bypass -File desktop/install-plugin.ps1"
 }

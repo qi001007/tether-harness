@@ -33,6 +33,11 @@ class Supervisor {
     this.localApiToken = crypto.randomBytes(24).toString('hex')
     this.python = env.TETHER_PYTHON || path.join(repoRoot, '.venv', 'Scripts', 'python.exe')
     if (!fs.existsSync(this.python)) this.python = process.platform === 'win32' ? 'python' : 'python3'
+    this.childPython = this.python
+    if (process.platform === 'win32') {
+      const windowless = String(this.python).replace(/python\.exe$/i, 'pythonw.exe')
+      if (windowless !== this.python && fs.existsSync(windowless)) this.childPython = windowless
+    }
     this.mode = null
     this.controller = { state: 'stopped', pid: 0, port: this.port, managed: false }
     this.node = { state: 'stopped', pid: 0, deviceOnline: false }
@@ -109,7 +114,7 @@ class Supervisor {
       env.TETHER_LOCAL_API_TOKEN = this.localApiToken
     }
     this.procArgs[name] = args.slice()
-    const child = this.spawnChild(this.python, args, {
+    const child = this.spawnChild(this.childPython, args, {
       cwd: this.repoRoot,
       env,
       windowsHide: true,
