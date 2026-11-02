@@ -8,6 +8,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const main = fs.readFileSync(path.join(root, 'apps/tether-app/main.js'), 'utf8')
 const preload = fs.readFileSync(path.join(root, 'apps/tether-app/preload.js'), 'utf8')
 const host = fs.readFileSync(path.join(root, 'packages/tether-ui/src/hosts/electron.js'), 'utf8')
+const supervisor = fs.readFileSync(path.join(root, 'apps/tether-app/supervisor.js'), 'utf8')
 const shared = fs.readFileSync(path.join(root, 'packages/tether-ui/src/app.js'), 'utf8')
 
 test('the APP runs as a frameless DSH-like shell with custom window controls', () => {
@@ -22,6 +23,10 @@ test('the APP runs as a frameless DSH-like shell with custom window controls', (
   assert.match(shared, /windowControl\('minimize'/)
   assert.match(shared, /windowControl\('toggle-maximize'/)
   assert.match(shared, /windowControl\('close'/)
+})
+
+test('process cleanup never allocates a visible console', () => {
+  assert.match(supervisor, /spawnSync\('taskkill',[\s\S]*?windowsHide: true/)
 })
 
 test('closing the window hides it to the tray until an explicit quit', () => {

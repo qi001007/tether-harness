@@ -8,7 +8,7 @@ const path = require('node:path')
 
 function killTree(pid) {
   if (!pid) return
-  if (process.platform === 'win32') spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore' })
+  if (process.platform === 'win32') spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true })
   else {
     try { process.kill(-pid, 'SIGTERM') } catch (_) { try { process.kill(pid, 'SIGTERM') } catch (_) { /* gone */ } }
   }
