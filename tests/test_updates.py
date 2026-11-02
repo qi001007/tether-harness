@@ -535,6 +535,23 @@ def test_dirty_development_checkout_accepts_an_explicit_update(
     assert json.loads((root / "version.json").read_text(encoding="utf-8"))["components"]["node"] == "0.2.1"
 
 
+def test_checkout_state_hides_the_git_console_on_windows(tmp_path: Path, monkeypatch) -> None:
+    root = tmp_path / "checkout"
+    (root / ".git").mkdir(parents=True)
+    manager = UpdateManager(root, "node", dsh_home=tmp_path / "dsh", manifest_url="http://127.0.0.1:1/x",
+                            state_dir=tmp_path / "state")
+    captured = {}
+
+    def fake_run(args, **kwargs):
+        captured.update(kwargs)
+        return subprocess.CompletedProcess(args, 0, "", "")
+
+    monkeypatch.setattr("tether.updates.subprocess.run", fake_run)
+    assert manager.checkout_state() == "clean"
+    if os.name == "nt":
+        assert captured["creationflags"] & 0x08000000
+
+
 def test_dirty_file_dependency_checkout_updates_packaged_files_only(
     artifact_server: ArtifactServer, tmp_path: Path
 ) -> None:

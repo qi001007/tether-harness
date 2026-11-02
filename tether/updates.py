@@ -1002,10 +1002,15 @@ class UpdateManager:
             return "installed"
         import subprocess
 
+        kwargs = {"capture_output": True, "text": True, "timeout": 10, "check": False}
+        if os.name == "nt":
+            # git.exe is a console program; without this it allocates a visible
+            # console even when the updater itself runs under pythonw.exe.
+            kwargs["creationflags"] = CREATE_NO_WINDOW
         try:
             result = subprocess.run(
                 ["git", "-C", str(self.root), "status", "--porcelain", "--untracked-files=normal"],
-                capture_output=True, text=True, timeout=10, check=False,
+                **kwargs,
             )
         except (OSError, subprocess.TimeoutExpired):
             return "unknown"

@@ -1,6 +1,6 @@
 {
-  "version": "0.2.71",
-  "notes": "The login card now has an inertial network animation on the left with straight links, and switching to invite registration slides between two fixed-size panes instead of stretching the page. The duplicate 返回 DSH text link is gone; the top-right close button remains.",
+  "version": "0.2.72",
+  "notes": "The updater's git status probe now runs with CREATE_NO_WINDOW. A development checkout no longer flashes a black console window when the APP starts; the startup trace sees only the Tether window.",
   "download": "https://github.com/qi001007/tether-harness",
   "install": "git pull && powershell -ExecutionPolicy Bypass -File desktop/install-plugin.ps1"
 }
