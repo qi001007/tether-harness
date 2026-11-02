@@ -1,6 +1,6 @@
 {
-  "version": "0.2.60",
-  "notes": "Account settings now follow mainstream products: a circular avatar crop step with drag, zoom and reset; an inline display-name editor; and a three-field password form with show/hide, inline validation, autocomplete hints and a Caps Lock warning.",
+  "version": "0.2.61",
+  "notes": "The permissions drawer now paints its policy and audit list from a per-device cache as soon as it opens, while policy and audit refresh in parallel; switching devices prefetches both so repeat opens are immediate instead of waiting on two sequential device round trips.",
   "download": "https://github.com/qi001007/tether-harness",
   "install": "git pull && powershell -ExecutionPolicy Bypass -File desktop/install-plugin.ps1"
 }

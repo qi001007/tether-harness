@@ -168936,6 +168936,8 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const workspaceCacheRef = React2.useRef(/* @__PURE__ */ new Map());
     const drivesCacheRef = React2.useRef(/* @__PURE__ */ new Map());
     const policyCacheRef = React2.useRef(/* @__PURE__ */ new Map());
+    const auditCacheRef = React2.useRef(/* @__PURE__ */ new Map());
+    const permissionInflightRef = React2.useRef(/* @__PURE__ */ new Map());
     const hoverTimerRef = React2.useRef(null);
     const treeDeviceRef = React2.useRef("");
     if (treeDeviceRef.current !== deviceId) {
@@ -168975,6 +168977,8 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const [runEvents, setRunEvents] = React2.useState([]);
     const [task, setTask] = React2.useState("");
     const [showSettings, setShowSettings] = React2.useState(false);
+    const showSettingsRef = React2.useRef(false);
+    showSettingsRef.current = showSettings;
     const [policy, setPolicy] = React2.useState(null);
     const [audit, setAudit] = React2.useState([]);
     const [auditCount, setAuditCount] = React2.useState(0);
@@ -170034,18 +170038,47 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     }, [previewUrl]);
     const tablePreview = React2.useMemo(() => file && file.kind === "text" ? buildTablePreview({ name: file.name || file.path, text: draft, sourceTruncated: !!file.truncated }) : null, [file && file.path, file && file.name, file && file.kind, file && file.truncated, draft]);
     React2.useEffect(() => {
+      let alive = true;
       if (!deviceId) {
         setPolicy(null);
-        return;
+        setAudit([]);
+        setAuditCount(0);
+        return () => {
+          alive = false;
+        };
       }
-      const cached = policyCacheRef.current.get(deviceId);
-      if (cached) setPolicy(cached);
-      api2("/api/devices/" + encodeURIComponent(deviceId) + "/policy").then((data) => {
-        cacheStore(policyCacheRef.current, deviceId, data, 32);
-        setPolicy(data);
-      }).catch(() => {
-        if (!cached) setPolicy(null);
-      });
+      const cachedPolicy = policyCacheRef.current.get(deviceId);
+      const cachedAudit = auditCacheRef.current.get(deviceId);
+      if (cachedPolicy) setPolicy(cachedPolicy);
+      if (cachedAudit) {
+        setAudit(cachedAudit.entries || []);
+        setAuditCount(cachedAudit.count || 0);
+        setAuditRetained(cachedAudit.retained || 1e5);
+      } else {
+        setAudit([]);
+        setAuditCount(0);
+      }
+      Promise.allSettled([
+        fetchPermission(deviceId, "/policy").then((data) => {
+          cacheStore(policyCacheRef.current, deviceId, data, 32);
+          if (!alive || deviceIdRef.current !== deviceId) return;
+          setPolicy(data);
+          if (!showSettingsRef.current) {
+            setMode(data.mode);
+            setRootsText((data.allowed_roots || []).join("\n"));
+          }
+        }),
+        fetchPermission(deviceId, "/audit?limit=200").then((data) => {
+          cacheStore(auditCacheRef.current, deviceId, data, 32);
+          if (!alive || deviceIdRef.current !== deviceId) return;
+          setAudit(data.entries || []);
+          setAuditCount(data.count || 0);
+          setAuditRetained(data.retained || 1e5);
+        })
+      ]);
+      return () => {
+        alive = false;
+      };
     }, [deviceId]);
     const loadProjects = React2.useCallback(async () => {
       if (!deviceId) {
@@ -170450,6 +170483,23 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     };
     const openSettings = async () => {
       setShowSettings(true);
+      const target = deviceIdRef.current;
+      const cachedPolicy = policyCacheRef.current.get(target);
+      const cachedAudit = auditCacheRef.current.get(target);
+      if (cachedPolicy) {
+        setPolicy(cachedPolicy);
+        setMode(cachedPolicy.mode);
+        setRootsText((cachedPolicy.allowed_roots || []).join("\n"));
+      }
+      if (cachedAudit) {
+        setAudit(cachedAudit.entries || []);
+        setAuditCount(cachedAudit.count || 0);
+        setAuditRetained(cachedAudit.retained || 1e5);
+      } else {
+        setAudit([]);
+        setAuditCount(0);
+      }
+      setAuditLoading(!cachedAudit);
       if (host && host.kind === "dsh") {
         let saved = {};
         try {
@@ -170461,16 +170511,25 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         setHubToken(saved.token || "");
       }
       try {
-        const p = await api2("/api/devices/" + encodeURIComponent(deviceId) + "/policy");
+        const [p, a] = await Promise.all([
+          fetchPermission(target, "/policy"),
+          fetchPermission(target, "/audit?limit=200")
+        ]);
+        if (deviceIdRef.current !== target) return;
+        cacheStore(policyCacheRef.current, target, p, 32);
+        cacheStore(auditCacheRef.current, target, a, 32);
         setPolicy(p);
-        setMode(p.mode);
-        setRootsText((p.allowed_roots || []).join("\n"));
-        const a = await api2("/api/devices/" + encodeURIComponent(deviceId) + "/audit?limit=200");
+        if (!cachedPolicy) {
+          setMode(p.mode);
+          setRootsText((p.allowed_roots || []).join("\n"));
+        }
         setAudit(a.entries || []);
         setAuditCount(a.count || 0);
         setAuditRetained(a.retained || 1e5);
       } catch (e) {
         fail2(e);
+      } finally {
+        if (deviceIdRef.current === target) setAuditLoading(false);
       }
     };
     const rootList = () => rootsText.split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
@@ -170496,9 +170555,11 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       try {
         const roots = rootList();
         const p = await post("/api/devices/" + encodeURIComponent(deviceId) + "/policy", { mode, allowed_roots: roots });
+        cacheStore(policyCacheRef.current, deviceId, p, 32);
         setPolicy(p);
         setNotice("Policy updated: " + p.mode);
         const a = await api2("/api/devices/" + encodeURIComponent(deviceId) + "/audit?limit=200");
+        cacheStore(auditCacheRef.current, deviceId, a, 32);
         setAudit(a.entries || []);
         setAuditCount(a.count || 0);
         setAuditRetained(a.retained || 1e5);
@@ -170513,9 +170574,13 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       setAuditLoading(true);
       try {
         const a = await api2("/api/devices/" + encodeURIComponent(deviceId) + "/audit?limit=200&offset=" + audit.length);
-        setAudit((current) => [...current, ...a.entries || []]);
-        setAuditCount(a.count || 0);
-        setAuditRetained(a.retained || 1e5);
+        const entries2 = [...audit, ...a.entries || []];
+        const count = a.count || 0;
+        const retained = a.retained || 1e5;
+        setAudit(entries2);
+        setAuditCount(count);
+        setAuditRetained(retained);
+        cacheStore(auditCacheRef.current, deviceId, { entries: entries2, count, retained }, 32);
       } catch (e) {
         fail2(e);
       } finally {
@@ -170527,6 +170592,16 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       cache.delete(key);
       cache.set(key, value);
       while (cache.size > (max || 240)) cache.delete(cache.keys().next().value);
+    };
+    const fetchPermission = (target, suffix) => {
+      const key = target + "|" + suffix;
+      const active = permissionInflightRef.current.get(key);
+      if (active) return active;
+      const request = api2("/api/devices/" + encodeURIComponent(target) + suffix).finally(() => {
+        permissionInflightRef.current.delete(key);
+      });
+      permissionInflightRef.current.set(key, request);
+      return request;
     };
     const rememberDir = (targetDevice, target, entries2) => {
       cacheStore(dirCacheRef.current, treeCacheKey(targetDevice, target), { entries: entries2, at: Date.now() });
@@ -172327,6 +172402,8 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           workspaceCacheRef.current.clear();
           drivesCacheRef.current.clear();
           policyCacheRef.current.clear();
+          auditCacheRef.current.clear();
+          permissionInflightRef.current.clear();
           if (dirAbortRef.current) dirAbortRef.current.abort();
           if (previewAbortRef.current) previewAbortRef.current.abort();
           setUpdateInfo({ app: null, localPlugin: localPluginVersionSeed(host), devices: {} });
@@ -172558,7 +172635,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
                     h2("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, title: a.path }, a.path),
                     h2("span", null, a.phase === "intent" ? a.result === "denied" ? "denied" : "intent" : a.result)
                   )),
-                  !audit.length ? h2("div", { style: { padding: 10, fontSize: 11, color: C.mute } }, "\u6682\u65E0\u5BA1\u8BA1") : null
+                  !audit.length ? h2("div", { style: { padding: 10, fontSize: 11, color: C.mute } }, auditLoading ? "\u6B63\u5728\u8BFB\u53D6\u5BA1\u8BA1\u2026" : "\u6682\u65E0\u5BA1\u8BA1") : null
                 )
               ),
               audit.length < auditCount ? h2(

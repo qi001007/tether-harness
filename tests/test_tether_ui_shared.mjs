@@ -787,6 +787,17 @@ test('permissions, settings and account share the activity bar footer', () => {
   assert.match(shared, /gear: \{ join: 'round'/)
 })
 
+test('the permissions drawer paints from cache and refreshes policy and audit in parallel', () => {
+  assert.match(shared, /const auditCacheRef = React\.useRef\(new Map\(\)\)/)
+  assert.match(shared, /const permissionInflightRef = React\.useRef\(new Map\(\)\)/)
+  assert.ok(shared.includes("fetchPermission(deviceId, '/policy')"))
+  assert.ok(shared.includes("fetchPermission(deviceId, '/audit?limit=200')"))
+  assert.ok(shared.includes('const cachedAudit = auditCacheRef.current.get(target)'))
+  assert.ok(shared.includes('setAuditLoading(!cachedAudit)'))
+  assert.ok(shared.includes("auditLoading ? '正在读取审计…' : '暂无审计'"))
+  assert.ok(/Promise\.all\(\[\s*fetchPermission\(target, '\/policy'\),\s*fetchPermission\(target, '\/audit\?limit=200'\)\s*\]\)/.test(shared))
+})
+
 test('the app keeps the three most recent surfaces mounted instead of re-downloading them', () => {
   assert.match(shared, /function SurfaceDeck/)
   assert.match(shared, /h\(SurfaceDeck, \{ devices:/)
