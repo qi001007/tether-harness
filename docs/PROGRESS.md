@@ -1,5 +1,17 @@
 # 实时进度
 
+## 2026-11-02 v0.2.57 选择器树联动、文件夹上传与拖入保存
+
+本轮处理主人对目标选择器与附件链路的 5 条反馈：
+
+1. 树与右侧双向联动：`TargetFileExplorer` 的树行和箭头合并为一个按钮，点文件夹同时展开并导航右侧；右侧进入目录时 `revealTree` 展开祖先并加载。真机：点 `C:` 右侧出内容、树展开；右侧点 `Users` 后面包屑 `C: › Users`，树也展开到 `Users`。
+2. 文件夹上传：进入非磁盘根目录后底部出现“确定”，`readFolder` 递归读取（200 文件 / 100 MiB / 单文件 10 MiB，跳过 `.tether-trash`）并以 `webkitRelativePath` 交给 DSH；临时 `folder-upload-test` 的 `a.txt`/`b.txt` 上传后对话框出现两个附件。
+3. 根来源：复现确认工作区与磁盘都来自目标设备（DESKTOP 工作区 `C:\Users\Administrator...`、盘 C–G；LAPTOP 工作区 `C:\Users\14675...`、盘 C/D）；分组标题加设备名以消除误读。
+4. 本地拖入保存+上传：捕获 composer `drop`，先 `onAddFiles` 上传，再后台写入目标 `D:\TetherDrop`；真机 `drop-test-2.txt` 出现附件，提示保存到 `D:\TetherDrop\drop-test-2.txt`，磁盘内容一致。
+5. 存储路径：只走 D 盘（`D:\TetherDrop`，策略拒绝时 `D:\TetherWorkspaces\TetherDrop`），不回退 C；Node 新增 `/tether-device-fs/write_chunk` 路由与测试。
+
+门禁：mjs 224/224、cjs 6/6、client pytest 142 passed / 1 skipped、`build.mjs --check`、`build-web.mjs --check`、`validate_versions()` 通过。0.2.57 发布与两机更新待执行。
+
 ## 2026-11-02 v0.2.56 白屏回归、加载叠层与设置页
 
 本轮处理 0.2.54 之后主人反馈的 4 条问题，版本元数据到 0.2.56（0.2.55 先发布，随后补了 DSH 内联叠层修复）：

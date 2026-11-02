@@ -118,3 +118,4 @@
 - 2026-11-02：0.2.54 契约改为标题“资源管理器”、原生加号唯一入口、转移页完整操作/冲突、共用 `file-cache.js`、`SurfaceDeck` 常驻；Electron QA 隔离壳补拷 `startup-readiness.js`/`renderer-diagnostics.js`/`enrollment.js` 并加独立 `--user-data-dir`（当前仍被登录态挡在更新中心外）。
 - 2026-11-02：0.2.55 契约新增：`SurfaceDeck` 固定挂载顺序、预加载 frame 保持真实尺寸、非聊天页 deck 绝对定位；选择器无 22px 状态条、错误浮层可重试/关闭、加载叠层 `tether-dir-loading`；设置页含 `extraSections`、头像上传和 `role: 'switch'`，不再含解释性文案与重复入口。全量 mjs 222 / cjs 6 / pytest 142+1 通过。
 - 2026-11-02：0.2.56 补叠层断言：`.tether-dir-loading` 必须有内联 `position:absolute; inset:0; z-index:4` 和 SVG `animateTransform`，不能只靠可能不存在的全局 CSS；否则 DSH 内嵌页会退回 static 并落到底部。
+- 2026-11-02：0.2.57 新增选择器树统一控件、`revealTree`、文件夹“确定”递归上传、设备分组标签、本地拖入写入 `D:\TetherDrop` 的测试；native surface 覆盖 `/tether-device-fs/write_chunk`。全量 mjs 224 / cjs 6 / pytest 142+1。

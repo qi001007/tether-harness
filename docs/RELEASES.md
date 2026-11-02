@@ -1,5 +1,17 @@
 # Public client releases
 
+## v0.2.57
+
+Picker tree sync, folder upload and local-drop save+upload:
+
+- The picker tree row and its chevron are one button: clicking a folder toggles expansion and navigates the right pane; navigating from the right pane reveals and expands the same path in the tree. Real run: `C:` expanded on both sides; opening `Users` from the right moved the breadcrumb to `C: › Users` and expanded the tree to `Users`.
+- A folder can be attached with the new “确定” footer action. `readFolder` recursively reads the target folder (200 files / 100 MiB / 10 MiB per file, skips `.tether-trash`) and passes files with `webkitRelativePath` to the DSH composer. Real run: a temporary folder with two text files produced two attachment chips.
+- Workspace and drive roots are verified to come from the same target device; group labels now include the device name (`工作区 · LAPTOP-01`, `此电脑 · LAPTOP-01`).
+- Local files dropped on the composer are uploaded immediately through the DSH attachment API and saved in the background to `D:\TetherDrop` (fallback `D:\TetherWorkspaces\TetherDrop`, never C:). Real run: `drop-test-2.txt` appeared as a 14 B attachment, the toast reported `D:\TetherDrop\drop-test-2.txt`, and the bytes on disk matched.
+- The Node device-fs surface now exposes `write_chunk` so the save path works through the Hub surface gateway; Python coverage writes and reads back the dropped bytes.
+
+Gates: mjs 224/224, cjs 6/6, client pytest 142 passed / 1 skipped, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI, signing, Hub mirror and both-machine installation are pending.
+
 ## v0.2.56
 
 Self-contained picker loading overlay:

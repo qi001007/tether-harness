@@ -31,3 +31,4 @@
 - 2026-10-29：`NativeSurface._http` 遇 DSH 的 401/403 时清空 cookie jar、重新认证并重放一次（DSH 重启后旧会话失效，不能继续用旧 Cookie）；重放仍失败则原样返回 401。
 - 2026-10-29：`dsh_restart` 重启时剥离继承的 `ELECTRON_RUN_AS_NODE`（否则 DSH 以纯 Node 启动，窗口永远不出现）；首次启动 20 s 内没有新 descriptor 时再补一次启动，最多两次。
 - 2026-10-31：0.2.45 `update_call` 只对 plugin 放开 `restart` 动作，调用 updater 的 `restart()` 重跑 DSH 助手；用于插件文件已到位但运行态未重载后的重试。
+- 2026-11-02：设备文件前缀新增 `write_chunk`（POST）供 DSH 侧本地拖入保存到目标 `D:\TetherDrop`；路径仍受 policy `can_write` 与系统保护目录约束，写入前会创建父目录。

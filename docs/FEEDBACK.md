@@ -1,5 +1,13 @@
 # 用户反馈与处理
 
+## 2026-11-02 选择器树联动、文件夹上传与拖入保存
+
+- [x] F101：左侧文件树与右侧目录必须双向联动；文件夹箭头和文件夹名应是同一个控件，点箭头也要让右侧导航。实现：树行合并为一个按钮，箭头只是行内图标；点文件夹同时切换展开并导航右侧。右侧进入目录时 `revealTree` 自动展开并加载祖先。判据：点 `C:` 右侧出现 C 盘内容且树 `aria-expanded=true`；从右侧点 `Users` 后右侧面包屑为 `C: › Users`，树也展开到 `Users` 并显示其子项。**真机通过**。
+- [x] F102：进入任一文件夹后底部应有“确定”，可把当前文件夹作为附件上传。实现：底部在非磁盘根目录显示“确定”，`readFolder` 递归读取文件（200 个 / 100 MiB / 单文件 10 MiB 上限，跳过 `.tether-trash`），以 `webkitRelativePath` 传给 DSH。判据：`D:\TetherWorkspaces\folder-upload-test` 内 `a.txt`、`b.txt` 点“确定”后选择器关闭，DSH 对话框出现两个附件。**真机通过**。
+- [x] F103：工作区与“此电脑”必须属于同一台目标电脑。复现确认：DESKTOP 选择器工作区在 `C:\Users\Administrator...`、磁盘 C–G；LAPTOP 工作区在 `C:\Users\14675...`、磁盘 C/D，二者一致；截图中的 `default-workspace/audit` 与 C/D 都属于 LAPTOP-01。为避免误读，分组标题改为 `工作区 · 设备名` / `此电脑 · 设备名`。**真机通过**。
+- [x] F104：把本地文件直接拖入 DSH 对话框时，要同时保存到目标电脑并上传为会话附件。实现：捕获 composer 的 `drop`，先调用 DSH `onAddFiles` 立即上传，再在后台写入目标电脑；提示保存路径。判据：拖入 `drop-test-2.txt` 后对话框出现 `TXT 14B` 附件，提示“已保存到 `D:\TetherDrop\drop-test-2.txt`”，磁盘内容为 `drop-content-2`。**真机通过**。
+- [x] F105：保存目录放 D 盘，不占 C 盘。实现：优先 `D:\TetherDrop`，被策略拒绝时用 `D:\TetherWorkspaces\TetherDrop`，不再回退到 C 盘工作区；Node 增加 `/tether-device-fs/write_chunk` 路由。测试临时文件与文件夹已清理，保留 `D:\TetherDrop` 目录。
+
 ## 2026-11-02 白屏、加载叠层与设置页
 
 - [x] F97：修复“页面变成这样了”：互联页内容整体下移、大面积空白，资源管理器只剩标题条，Tether WebUI 主区域纯白。根因是 `SurfaceDeck` 外层在非聊天页仍以 `flex:1` 占满高度。改为绝对定位层：聊天页铺满，互联/资源管理器/转移页覆盖其上，deck 以 `visibility:hidden` 保持尺寸而不参与布局。判据：互联页 `main` 1416×829，deck 绝对定位且不挤压内容；聊天页 iframe 1416×829。**实测通过**。
