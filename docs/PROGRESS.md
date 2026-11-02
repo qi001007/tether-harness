@@ -1,5 +1,13 @@
 # 实时进度
 
+## 2026-11-02 v0.2.68 更新页版式重做
+
+1. 顶部：左侧“更新”标题，右侧刷新；不再只有孤零零的刷新图标和一段空白。
+2. 设备：本机/其他设备分组，组内用一张列表卡片；每行左边设备名和状态点，中间组件版本胶囊（APP/插件/Node 各自一个），右边固定 28px 操作位。
+3. 版本：去掉斜杠和 `→`；当前版本固定显示，不随新版本更新变长。有新版本只出现蓝色圆形下载按钮；错误时操作位显示红色重试图标。
+4. 真机：LAPTOP 行有无更新均为 `543×72`，只有按钮数量变化；截图 `tether-update-redesign.png` / `tether-update-redesign-alert.png`。
+5. 门禁：mjs 231/231、cjs 6/6、pytest 147 passed / 1 skipped、两份 build check、`validate_versions()` 通过。0.2.68 已发布（CI `41446165778`，12:41:13Z，签名清单验签通过，app 1,781,215 B / plugin 1,359,104 B / node 84,818 B），Hub mirror 0.2.68；LAPTOP Node+APP 16.9 s；DESKTOP app/node/plugin 均 0.2.68，LAPTOP app/node 0.2.68、插件 0.2.67（插件更新任务已发）。
+
 ## 2026-11-02 v0.2.67 启动更新检查无窗口
 
 启动闪窗根因：快捷方式本身是直接 `electron.exe`，但 APP 启动后自动更新检查用 `python.exe -m tether.updates_cli check`，创建了一个 `conhost`（短命控制台）。修复：

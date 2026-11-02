@@ -55,3 +55,4 @@
 - 2026-11-02：APP 包与 package-lock 根版本升至 `0.2.65`；本轮只改共享 UI 节点详情浮层，Electron 主进程未改。
 - 2026-11-02：APP 包与 package-lock 根版本升至 `0.2.66`；共享 UI 恢复互联图力导向流动，Electron 主进程未改。
 - 2026-11-02：APP 包与 package-lock 根版本升至 `0.2.67`；`UpdateService` 与本地 serverCheck 改用 `supervisor.childPython`（pythonw），消除启动更新检查的短命控制台/`conhost`；`pythonw` stdout 经 `execFile` 验证可回传。
+- 2026-11-02：APP 包与 package-lock 根版本升至 `0.2.68`；本轮只改共享 UI 更新页，Electron 主进程未改。

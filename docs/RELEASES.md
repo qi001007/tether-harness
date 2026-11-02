@@ -1,5 +1,16 @@
 # Public client releases
 
+## v0.2.68
+
+Redesigned settings update list:
+
+- The section now has a “更新” title and a refresh control at the top, followed by grouped **本机 / 其他设备** lists instead of loosely floating cards.
+- Versions are separate component chips (`APP 0.2.62`, `插件 0.2.62`, `Node 0.2.62`) with no slashes, arrows or explanatory text.
+- Each row reserves a fixed 28 px action slot. An available update only adds the blue circular download button; current version text and row width/height never change. Errors use a red retry icon in the same slot.
+- Real run: the LAPTOP row measured `543×72` both with and without an available update; only the download button count changed. Screenshots: `tether-update-redesign.png`, `tether-update-redesign-alert.png`.
+
+Gates: mjs 231/231, cjs 6/6, client pytest 147 passed / 1 skipped, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41446165778` succeeded; published at 2026-11-02T12:41:13Z (app 1,781,215 B, plugin 1,359,104 B, node 84,818 B; signed manifest verified). Hub mirror refreshed to **0.2.68**. LAPTOP-01 Node+APP **16.9 s**; DESKTOP app/node/plugin **0.2.68**; LAPTOP app/node **0.2.68** with the plugin update job dispatched.
+
 ## v0.2.67
 
 Silent startup update check:

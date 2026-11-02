@@ -129,3 +129,4 @@
 - 2026-11-02：0.2.65 新增详情浮层契约：`position:absolute; top/right/bottom:8px; width:300`、画布容器 `position:relative`、根样式不再 `flex:0 0 auto`。全量 mjs 231 / cjs 6 / pytest 147+1。
 - 2026-11-02：0.2.66 新增力导向/接力契约：`function animate()` 必须存在、`tether.network.positions.v3` 存 `vx/vy`、布局读取保存速度、远端无中心拉力。全量 mjs 231 / cjs 6 / pytest 147+1。
 - 2026-11-02：0.2.67 新增启动无窗口契约：`UpdateService` 使用 `supervisor.childPython`，serverCheck 使用 `childPython`，禁止启动更新检查再走 `python.exe`。全量 mjs 231 / cjs 6 / pytest 147+1。
+- 2026-11-02：0.2.68 新增更新页版式契约：不再有 `versionText`/` → `；组件胶囊 `chips`、行 `borderTop`、固定 28px 操作位；有/无更新行尺寸一致。全量 mjs 231 / cjs 6 / pytest 147+1。

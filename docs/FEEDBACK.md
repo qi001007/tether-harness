@@ -1,5 +1,10 @@
 # 用户反馈与处理
 
+## 2026-11-02 更新页版式重做
+
+- [x] F127：设置→更新顶部空白太多；版本信息用 `APP 0.2.62 / 插件 0.2.62 / Node 0.2.62` 和 `APP 0.2.62 → 0.2.63` 这种斜杠/箭头写法，出现新版本时文字突然变长，不符合用眼习惯。重做：顶部左侧改为“更新”标题、右侧刷新；设备行改为分组列表（本机/其他设备），版本拆成独立组件胶囊（`APP 0.2.62`、`插件 0.2.62`、`Node 0.2.62`），没有斜杠、没有箭头、没有解释句；操作位固定 28px，有新版本时只出现蓝色圆形下载按钮，当前版本文字与行宽高都不变；错误时操作位显示红色重试图标。**真机验证**：LAPTOP 行在有/无更新两种状态下均为 `543×72`，新版本只增加 1 个下载按钮；截图 `tether-update-redesign.png` / `tether-update-redesign-alert.png`。
+- [x] F128：更新页必须仍然能区分本机与已连接设备；断开边后节点不出现在列表。这部分沿用 0.2.61 的边过滤逻辑，未回归。
+
 ## 2026-11-02 启动闪窗
 
 - [x] F125：启动 APP 时会短暂闪一个看不清的窗口，怀疑是黑终端改成了“打开又飞快关闭”。排查：桌面/开始菜单快捷方式都是直接 `electron.exe`，无 `.cmd/.vbs`；启动时抓进程发现唯一 Tether 相关的新进程是 `python.exe -m tether.updates_cli check`（自动更新检查），它创建了 `conhost`；`UpdateService`/`serverCheck` 仍用 `python.exe`。修复：`main.js` 把 `UpdateService` 的 python 改为 `supervisor.childPython`（venv `pythonw.exe`）；`supervisor.js` 的本地服务器探测也改用 `childPython`。已验证 `pythonw` 通过 `execFile` 能正常回传 stdout（`hello`）。**启动监控**：更新检查现在是 `pythonw.exe`，不再出现 `python.exe` 或与之关联的 `conhost`；可见短命窗口列表为空。判据：启动/更新检查不出现控制台闪窗；更新检查仍能返回结果。

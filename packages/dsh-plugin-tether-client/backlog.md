@@ -41,3 +41,4 @@
 - 2026-11-02：client 包、version.json 与 `lib/client.js` 升至 `0.2.65`；节点详情浮层随共享 UI 进入插件 bundle。
 - 2026-11-02：client 包、version.json 与 `lib/client.js` 升至 `0.2.66`；恢复互联图力导向流动，位置+速度持久化。
 - 2026-11-02：client 包、version.json 与 `lib/client.js` 升至 `0.2.67`；启动更新检查改 pythonw，插件 bundle 仅版本元数据变化。
+- 2026-11-02：client 包、version.json 与 `lib/client.js` 升至 `0.2.68`；设置更新页分组列表与版本胶囊随共享 UI 进入插件 bundle。
