@@ -1,5 +1,16 @@
 # Public client releases
 
+## v0.2.73
+
+Frameless shell, unified icon and tray:
+
+- The native Electron title bar is gone. The Tether top bar is now the window chrome, with the brand mark, device switch and connection on the left, and custom minimize / maximize-restore / close controls on the right. The bar is draggable; controls stay clickable.
+- A new network icon replaces the old mark. The same multi-size `assets/tether.ico` drives the window, taskbar, hover thumbnail, tray, and the Desktop / Start Menu shortcuts.
+- Closing the window hides it to the Windows tray. The tray menu can reopen Tether or quit it; a second launch restores the hidden window. Only the tray quit or an update restart ends the process.
+- Real checks: no native title bar; `IsIconic=true` after minimize; `IsZoomed` toggles true/false with the maximize/restore control; close leaves the window hidden and the process alive; launching the shortcut restores it; the tray log records the new icon; the taskbar shows the new dark network mark.
+
+Gates: mjs **234/234** (3 new shell/tray/icon tests), cjs 6/6, client pytest 148 passed / 1 skipped, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41501985896` succeeded; published at 2026-11-02T18:39:29Z (app 1,932,610 B, plugin 1,362,669 B, node 84,935 B; signed manifest verified). Hub mirror refreshed to **0.2.73**.
+
 ## v0.2.72
 
 No more black console flash at startup:

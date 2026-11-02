@@ -1,5 +1,13 @@
 # 实时进度
 
+## 2026-11-03 v0.2.73 无原生标题栏、统一图标与托盘
+
+1. 窗口改为 `frame:false`，去掉 Electron 原生标题栏；Tether 顶栏变成一体化 chrome：品牌网络标记 + 设备 + 连接 + 自绘最小化/最大化/还原/关闭，整条可拖动，按钮区不可拖动。
+2. 图标按登录页网络视觉重做：1024 px 母版 + 多尺寸 `assets/tether.ico`；窗口、任务栏、悬停缩略图、托盘、桌面/开始菜单快捷方式统一使用同一 ico。
+3. 关闭改为隐藏到 Windows 托盘：`Tray` 右键“打开 Tether / 退出 Tether”；关闭事件 `preventDefault + hide`；有托盘时 `window-all-closed` 不退出；第二实例恢复窗口；只有托盘退出或更新重启才真正 `app.quit()`。
+4. **真机验证**：窗口顶部不再有原生标题栏，DSH 页面从 y=40 开始；最小化后 `IsIconic=true`；最大化后 `IsZoomed=true` 且按钮变“还原”，还原后 `IsZoomed=false`；关闭后窗口 `visible=false`、进程仍存活；再次启动快捷方式窗口恢复；托盘日志确认使用新 `tether.ico` 创建；任务栏截图显示新的深色网络图标。
+5. 门禁：mjs **234/234**（新增 3 条 shell/tray/icon 测试）、cjs 6/6、pytest 148 passed / 1 skipped、两份 build check、`validate_versions()` 通过。0.2.73 已发布（CI `41501985896`，18:39:29Z，app 1,932,610 B / plugin 1,362,669 B / node 84,935 B），Hub mirror 0.2.73；DESKTOP app/plugin/node 均 0.2.73，LAPTOP app/node 0.2.73、插件 0.2.71（DSH 运行态重载滞后）。
+
 ## 2026-11-03 v0.2.72 消除启动黑色控制台闪窗
 
 1. 根因：启动更新检查本身已是 `pythonw.exe`，但 `UpdateManager.checkout_state()` 仍用 `subprocess.run(["git", ...])` 执行 `git status`；`git.exe` 是控制台程序，会创建可见的 `ConsoleWindowClass` 窗口。

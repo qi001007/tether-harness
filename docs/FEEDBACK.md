@@ -1,5 +1,11 @@
 # 用户反馈与处理
 
+## 2026-11-03 APP 无原生标题栏、统一图标与托盘
+
+- [x] F141：APP 顶层还是 Electron 原生壳，多出一条系统标题栏，和下面页面风格不统一；要像 DSH 桌面一样一体化，但保留功能图标。实现：`BrowserWindow` 改为 `frame:false`，去掉原生标题栏；顶栏改为品牌标记 + 设备 + 连接 + 自绘最小化/最大化/还原/关闭，整条可拖动、按钮区不可拖动。**真机验证**：窗口截图顶部只剩 Tether 顶栏，DSH 页面从 y=40 开始；最小化 `IsIconic=true`；最大化后 `IsZoomed=true`，按钮变为“还原”，还原后 `IsZoomed=false`；关闭后窗口 `visible=false`、进程数仍为 5。计划：`docs/PLAN_APP_SHELL_ICON_TRAY_20261103.md`。
+- [x] F142：产品图标很丑；希望用登录页网络图重做，并统一桌面、任务栏、悬停缩略图、托盘。实现：以登录页网络视觉生成 1024 px 母版和多尺寸 `assets/tether.ico`；窗口 `icon`、Tray、桌面/开始菜单快捷方式全部指向同一个 `assets/tether.ico`。**验证**：图标母版与 ICO 已替换；任务栏实际显示深色网络标记；托盘日志 `tray created icon=...tether.ico`；桌面/开始菜单快捷方式 `IconLocation` 已指向新 ico。
+- [x] F143：程序没有隐藏到 Windows 托盘，点叉直接退出。实现：`Tray` + 右键“打开 Tether/退出 Tether”；`close` 事件 `preventDefault` 并 `hide()`；`window-all-closed` 在有托盘时不退出；第二实例恢复已有窗口。**真机验证**：关闭后进程仍在、窗口隐藏；再启动快捷方式窗口恢复；托盘菜单退出走 `isQuitting` 真正 `app.quit()`。
+
 ## 2026-11-03 笔记本 DSH 更新失败与插件隔离要求
 
 - [ ] F139：笔记本节点（LAPTOP-01）更新最新 DSH 失败，随后对应页面渲染不出来。**已查到的现场**：DSH 更新器已下载 rc.5 安装包（`C:\Users\14675\AppData\Local\@deepseek-aidsh-desktop-updater\pending\deepseek-harness-0.2.1-rc.5-win-x64.exe`，289,408,544 B，`update-info.json` 存在），但 DSH 仍是 **0.2.1-rc.3**（`D:\DeepSeek Harness\DeepSeek Harness.exe`，pid 24420）；Tether 的 `native-surface.json` 不存在，Hub capabilities 为 `dsh_surface:false`，所以页面没有可渲染的 surface。**风险点**：DSH profile `D:\DeepSeek Harness\.dsh\profiles\desktop\package.json` 仍用 `file:D:/Tether/deploy/tether-plugin-0.2.3/packages/dsh-plugin-tether` 这种旧版本路径；`tether-dsh-native-ui` 把 `@deepseek-ai/dsh-client-ui-chat` 等锁死在 `0.2.1-rc.2`，而 DSH 已到 rc.3/rc.5。**待确认**：DSH 更新失败弹窗的原文/日志（当前没有写入可读的 updater 日志），以及 Tether 插件是否在失败重启后停止发布 surface。判据：DSH 能完成 rc.3→rc.5 更新；更新后 Tether 页面要么正常渲染，要么显示明确的“插件不兼容/待更新”状态，不能白屏；DSH 本身不被 Tether 插件拖死。
