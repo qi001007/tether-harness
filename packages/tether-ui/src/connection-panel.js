@@ -49,8 +49,9 @@ export function createConnectionPanel(React) {
     )
   }
 
-  function LoginScreen({ defaultUrl = '', defaultEmail = '', onLogin }) {
-    const [server, setServer] = React.useState(defaultUrl || '')
+  function LoginScreen({ defaultUrl = '', defaultEmail = '', onLogin, onExit }) {
+    const DEFAULT_SERVER = 'https://8-220-198-26.sslip.io'
+    const server = cleanUrl(defaultUrl || DEFAULT_SERVER)
     const [email, setEmail] = React.useState(defaultEmail || '')
     const [password, setPassword] = React.useState('')
     const [totp, setTotp] = React.useState('')
@@ -60,11 +61,9 @@ export function createConnectionPanel(React) {
     const [invitePassword, setInvitePassword] = React.useState('')
     const [busy, setBusy] = React.useState('')
     const [message, setMessage] = React.useState('')
-    React.useEffect(() => { if (defaultUrl) setServer(defaultUrl) }, [defaultUrl])
     const post = async (path, body) => {
-      const base = cleanUrl(server)
-      if (!/^https?:\/\/[^/]+/.test(base)) throw new Error('请先填写服务器地址')
-      const response = await fetch(base + path, {
+      if (!/^https?:\/\/[^/]+/.test(server)) throw new Error('默认服务器地址无效')
+      const response = await fetch(server + path, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body || {})
@@ -79,7 +78,7 @@ export function createConnectionPanel(React) {
       setBusy(kind)
       try {
         const data = await work()
-        await onLogin({ url: cleanUrl(server), token: data.token, user: data.user || null })
+        await onLogin({ url: server, token: data.token, user: data.user || null })
       } catch (error) {
         setMessage(String(error && error.message || error))
       } finally {
@@ -89,25 +88,71 @@ export function createConnectionPanel(React) {
     const login = () => run('login', () => post('/api/auth/login', { email: email.trim(), password, totp: totp.trim() }))
     const acceptInvite = () => run('invite', () => post('/api/auth/accept-invite', { code: inviteCode.trim(), email: inviteEmail.trim(), password: invitePassword }))
     const fieldRow = (label, input) => h('label', { style: { display: 'grid', gap: 5, fontSize: 12, color: sub } }, label, input)
-    return h('div', { style: { position: 'fixed', inset: 0, zIndex: 80, display: 'grid', placeItems: 'center', background: 'var(--tether-workbench-bg, #ffffff)', color: ink } },
-      h('div', { style: { width: 'min(392px, calc(100vw - 40px))', display: 'grid', gap: 14, padding: '28px 26px 24px', borderRadius: 14, background: bg, boxShadow: '0 18px 50px rgba(16,24,40,0.14)' } },
-        h('div', { style: { display: 'grid', gap: 6, marginBottom: 4 } },
-          h('strong', { style: { fontSize: 22, letterSpacing: '.01em' } }, 'Tether'),
-          h('span', { style: { color: mute, fontSize: 12.5 } }, '登录后，这台设备会自动加入你的私有设备网。')),
-        fieldRow('服务器地址', h('input', { value: server, onChange: (event) => setServer(event.target.value), placeholder: 'https://hub.example.com', spellCheck: false, style: field })),
-        fieldRow('邮箱', h('input', { value: email, onChange: (event) => setEmail(event.target.value), type: 'email', autoComplete: 'username', autoFocus: true, style: field })),
-        h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 108px', gap: 8 } },
-          fieldRow('密码', h('input', { value: password, onChange: (event) => setPassword(event.target.value), type: 'password', autoComplete: 'current-password', style: field })),
-          fieldRow('两步验证码', h('input', { value: totp, onChange: (event) => setTotp(event.target.value), inputMode: 'numeric', maxLength: 6, style: field }))),
-        h('button', { onClick: login, disabled: !!busy, style: { ...primary, width: '100%', opacity: busy ? 0.5 : 1 } }, busy === 'login' ? '登录中…' : '登录'),
-        message ? h('div', { role: 'alert', style: { color: 'var(--dsw-alias-state-error-primary, #b42318)', fontSize: 12 } }, message) : null,
-        h('button', { onClick: () => setInviteOpen((value) => !value), style: { border: 0, background: 'transparent', color: mute, fontSize: 11.5, cursor: 'pointer', padding: 0, justifySelf: 'center' } }, inviteOpen ? '收起邀请码注册' : '首次使用？用邀请码注册'),
-        inviteOpen ? h('div', { style: { display: 'grid', gap: 8, borderTop: '1px solid ' + line, paddingTop: 12 } },
-          h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 } },
-            fieldRow('邀请码', h('input', { value: inviteCode, onChange: (event) => setInviteCode(event.target.value), spellCheck: false, maxLength: 12, style: field })),
-            fieldRow('邮箱', h('input', { value: inviteEmail, onChange: (event) => setInviteEmail(event.target.value), type: 'email', style: field }))),
-          fieldRow('密码（至少 10 位）', h('input', { value: invitePassword, onChange: (event) => setInvitePassword(event.target.value), type: 'password', autoComplete: 'new-password', style: field })),
-          h('button', { onClick: acceptInvite, disabled: !!busy, style: { ...secondary, justifySelf: 'start' } }, busy === 'invite' ? '创建中…' : '创建账号并登录')) : null)
+    const visual = h('div', { className: 'tether-login-visual', style: {
+      position: 'relative', padding: 28, display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+      background: 'linear-gradient(155deg, #0b1220 0%, #13233f 55%, #0b1220 100%)', overflow: 'hidden'
+    } },
+      h('div', { 'aria-hidden': true, style: { position: 'absolute', inset: 0, background: 'radial-gradient(circle at 52% 42%, rgba(59,130,246,.28), transparent 58%)', pointerEvents: 'none' } }),
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, color: '#fff', position: 'relative', zIndex: 1 } },
+        h('span', { style: { width: 28, height: 28, borderRadius: 8, background: '#fff', display: 'grid', placeItems: 'center', color: '#101828', fontWeight: 700, fontSize: 15 } }, 'T'),
+        h('span', { style: { fontSize: 13, letterSpacing: '.12em', textTransform: 'uppercase', opacity: 0.8 } }, 'Tether')),
+      h('svg', { viewBox: '0 0 320 260', 'aria-hidden': true, style: { width: '100%', height: 'auto', flex: '1 1 auto', position: 'relative', zIndex: 1 } },
+        h('defs', null,
+          h('linearGradient', { id: 'tether-login-line', x1: '0', y1: '0', x2: '1', y2: '1' },
+            h('stop', { offset: '0%', stopColor: '#3b82f6', stopOpacity: 0.9 }),
+            h('stop', { offset: '100%', stopColor: '#f59e0b', stopOpacity: 0.9 }))),
+        h('g', { stroke: 'url(#tether-login-line)', strokeWidth: 1.2, opacity: 0.72, fill: 'none' },
+          h('path', { d: 'M64 190 C 110 130, 150 120, 160 92' }),
+          h('path', { d: 'M160 92 C 190 115, 230 135, 258 176' }),
+          h('path', { d: 'M160 92 L 160 196' }),
+          h('path', { d: 'M64 190 L 160 196 L 258 176' })),
+        h('g', { fill: '#0b1220', stroke: '#3b82f6', strokeWidth: 2 },
+          h('circle', { cx: 64, cy: 190, r: 9 }),
+          h('circle', { cx: 258, cy: 176, r: 9 })),
+        h('circle', { cx: 160, cy: 92, r: 12, fill: '#f59e0b', opacity: 0.95 }),
+        h('circle', { cx: 160, cy: 196, r: 10, fill: '#fff' }),
+        h('g', { fill: 'rgba(255,255,255,.35)' },
+          h('circle', { cx: 110, cy: 130, r: 2 }), h('circle', { cx: 210, cy: 120, r: 2 }),
+          h('circle', { cx: 120, cy: 210, r: 2 }), h('circle', { cx: 230, cy: 215, r: 2 }))),
+      h('div', { style: { fontSize: 11.5, letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(255,255,255,.55)', position: 'relative', zIndex: 1 } }, '私有设备网'))
+    return h('div', { style: {
+      position: 'absolute', inset: 0, zIndex: 80, display: 'grid', placeItems: 'center', padding: 24,
+      background: 'radial-gradient(1200px 600px at 18% 8%, #eaf1ff 0%, transparent 60%), radial-gradient(900px 500px at 88% 92%, #fff4e5 0%, transparent 55%), #f7f8fb',
+      color: ink, overflow: 'auto'
+    } },
+      h('style', null, '@media (max-width: 760px){.tether-login-card{grid-template-columns:1fr!important}.tether-login-visual{display:none!important}}'),
+      h('div', { className: 'tether-login-card', style: {
+        position: 'relative', width: 'min(820px, 100%)', maxHeight: 'calc(100vh - 48px)', display: 'grid',
+        gridTemplateColumns: '320px minmax(0, 1fr)', borderRadius: 18, overflow: 'hidden', background: bg,
+        boxShadow: '0 24px 70px rgba(16,24,40,.22)', border: '1px solid rgba(16,24,40,.06)'
+      } },
+        visual,
+        h('div', { style: { position: 'relative', padding: '32px 30px 26px', display: 'grid', gap: 14, alignContent: 'center', overflowY: 'auto', minHeight: 0 } },
+          onExit ? h('button', {
+            type: 'button', onClick: onExit, title: '退出', 'aria-label': '退出', className: 'tether-hover',
+            style: { position: 'absolute', top: 12, right: 12, width: 28, height: 28, border: 0, borderRadius: 6, background: 'transparent', color: mute, fontSize: 18, cursor: 'pointer' }
+          }, '×') : null,
+          h('div', { style: { display: 'grid', gap: 6, marginBottom: 4 } },
+            h('strong', { style: { fontSize: 24, letterSpacing: '.01em' } }, 'Tether'),
+            h('span', { style: { color: mute, fontSize: 12.5 } }, '登录你的私有设备网')),
+          fieldRow('邮箱', h('input', { value: email, onChange: (event) => setEmail(event.target.value), type: 'email', autoComplete: 'username', autoFocus: true, style: field })),
+          h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 108px', gap: 8 } },
+            fieldRow('密码', h('input', { value: password, onChange: (event) => setPassword(event.target.value), type: 'password', autoComplete: 'current-password', style: field })),
+            fieldRow('两步验证码', h('input', { value: totp, onChange: (event) => setTotp(event.target.value), inputMode: 'numeric', maxLength: 6, style: field }))),
+          h('button', { onClick: login, disabled: !!busy, style: { ...primary, width: '100%', opacity: busy ? 0.5 : 1 } }, busy === 'login' ? '登录中…' : '登录'),
+          message ? h('div', { role: 'alert', style: { color: 'var(--dsw-alias-state-error-primary, #b42318)', fontSize: 12 } }, message) : null,
+          h('button', { onClick: () => setInviteOpen((value) => !value), style: { border: 0, background: 'transparent', color: mute, fontSize: 11.5, cursor: 'pointer', padding: 0, justifySelf: 'center' } }, inviteOpen ? '收起邀请码注册' : '首次使用？用邀请码注册'),
+          inviteOpen ? h('div', { style: { display: 'grid', gap: 8, borderTop: '1px solid ' + line, paddingTop: 12 } },
+            h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 } },
+              fieldRow('邀请码', h('input', { value: inviteCode, onChange: (event) => setInviteCode(event.target.value), spellCheck: false, maxLength: 12, style: field })),
+              fieldRow('邮箱', h('input', { value: inviteEmail, onChange: (event) => setInviteEmail(event.target.value), type: 'email', style: field }))),
+            fieldRow('密码（至少 10 位）', h('input', { value: invitePassword, onChange: (event) => setInvitePassword(event.target.value), type: 'password', autoComplete: 'new-password', style: field })),
+            h('button', { onClick: acceptInvite, disabled: !!busy, style: { ...secondary, justifySelf: 'start' } }, busy === 'invite' ? '创建中…' : '创建账号并登录')) : null,
+          onExit ? h('button', {
+            type: 'button', onClick: onExit,
+            style: { border: 0, background: 'transparent', color: mute, fontSize: 11.5, cursor: 'pointer', padding: 0, justifySelf: 'center' }
+          }, '返回 DSH') : null)
+      )
     )
   }
 

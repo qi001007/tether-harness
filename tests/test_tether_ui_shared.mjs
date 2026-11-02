@@ -809,6 +809,17 @@ test('settings exposes an edge-gated update section for local and remote devices
   assert.match(shared, /update: settingsUpdate/)
 })
 
+test('the login screen exits the DSH panel and hides the server override', () => {
+  assert.match(connectionPanel, /function LoginScreen\(\{ defaultUrl = '', defaultEmail = '', onLogin, onExit \}\)/)
+  assert.doesNotMatch(connectionPanel, /fieldRow\('服务器地址'/)
+  assert.match(connectionPanel, /const server = cleanUrl\(defaultUrl \|\| DEFAULT_SERVER\)/)
+  assert.match(connectionPanel, /tether-login-visual/)
+  assert.match(connectionPanel, /返回 DSH/)
+  assert.match(shared, /onExit: host && host\.kind === 'dsh'/)
+  assert.match(plugin, /host\.exitPanel = \(\) =>/)
+  assert.match(plugin, /exitPanel = \(\) =>/)
+})
+
 test('local DSH can be started or installed from settings and the surface error state', () => {
   assert.match(settingsPanel, /'启动 DSH'/)
   assert.match(settingsPanel, /'安装 DSH'/)

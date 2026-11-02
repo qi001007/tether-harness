@@ -5580,6 +5580,9 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         return h(Connection.LoginScreen, {
           defaultUrl: hubAddress || hubUrl || '',
           defaultEmail: hubEmail,
+          onExit: host && host.kind === 'dsh' && typeof host.exitPanel === 'function'
+            ? () => { try { host.exitPanel() } catch (_) { /* DSH panel may already be gone */ } }
+            : undefined,
           onLogin: async ({ url, token, user }) => {
             try { window.localStorage.setItem('tether.hub', JSON.stringify({ url, token, email: (user && user.email) || '', role: (user && user.role) || '' })) } catch (_) { /* storage unavailable */ }
             setHubEmail((user && user.email) || '')

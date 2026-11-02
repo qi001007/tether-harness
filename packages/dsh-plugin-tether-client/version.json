@@ -1,6 +1,6 @@
 {
-  "version": "0.2.62",
-  "notes": "Settings has an update section: local and edge-connected devices show current versions and one-click updates. The APP launches without console windows, detects the DSH desktop app, offers start/install when it is missing or stopped, and keeps the real DSH surface (plugins included) instead of reimplementing it.",
+  "version": "0.2.63",
+  "notes": "The login screen now has a visual brand panel, uses the default server without asking users to edit the address, and the DSH plugin shows a clear 返回 DSH / × exit so a user who does not want to sign in can leave the Tether panel.",
   "download": "https://github.com/qi001007/tether-harness",
   "install": "git pull && powershell -ExecutionPolicy Bypass -File desktop/install-plugin.ps1"
 }

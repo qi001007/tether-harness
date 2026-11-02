@@ -40,12 +40,16 @@ ${transferEngine}
 ${transferPage}
     let localPluginRpc = null
     let localPluginRemote = null
+    let exitPanel = null
     const host = createDshHost({
       pluginVersion: PLUGIN_VERSION,
       localPluginUpdates: createDshLocalPluginUpdateBridge(() => localPluginRpc),
       localDeviceIdentity: createDshLocalIdentityBridge(() => localPluginRpc),
       localPluginSurfaceReload: createDshLocalPluginSurfaceReloadBridge(() => localPluginRemote)
     })
+    host.exitPanel = () => {
+      try { if (typeof exitPanel === 'function') exitPanel() } catch (_) { /* DSH panel may already be gone */ }
+    }
 
 ${shared}
     const tetherPanel = createTetherPanel({ React, Native, host, EditorRuntime })
@@ -59,6 +63,9 @@ ${shared}
         localPluginRemote = ctx.remote
         if (ctx.connection && ctx.connection.rpc && typeof ctx.connection.rpc.call === 'function') {
           localPluginRpc = ctx.connection.rpc
+        }
+        exitPanel = () => {
+          try { ctx.layout.selectPanel(null) } catch (_) { /* DSH layout is optional in embedded surfaces */ }
         }
         const embedded = (() => { try { return window.top !== window.self } catch (_) { return true } })()
         if (embedded || new URL(window.location.href).searchParams.has('tether_native')) {
