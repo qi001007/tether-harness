@@ -944,6 +944,12 @@ class FsService:
                        phase="result", result="started" if result.get("running") else "requested")
         return result
 
+    def _op_dsh_repair_auth(self, _args: dict[str, Any]) -> dict[str, Any]:
+        result = self.dsh_desktop.repair_auth()
+        self.audit.add(op="dsh_repair_auth", path=result.get("appdata_backup") or "", mode=self.policy.data.get("mode"),
+                       phase="result", result="started")
+        return result
+
     def _op_dsh_stop(self, _args: dict[str, Any]) -> dict[str, Any]:
         result = self.dsh_desktop.stop()
         self.audit.add(op="dsh_stop", path=result.get("exe") or "", mode=self.policy.data.get("mode"),

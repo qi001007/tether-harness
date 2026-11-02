@@ -14,6 +14,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import struct
 import subprocess
 import sys
@@ -371,6 +372,41 @@ class DshDesktop:
                 pass
         self._status = None
         return self.status()
+
+    def repair_auth(self) -> dict[str, Any]:
+        current = self.status()
+        if not current["installed"]:
+            raise DshError("DSH 未安装", "dsh_not_installed")
+        stamp = time.strftime("%Y%m%d-%H%M%S")
+        appdata_root = Path(os.environ.get("APPDATA") or (Path.home() / "AppData" / "Roaming"))
+        appdata = appdata_root / "@deepseek-ai" / "dsh-desktop"
+        appdata_backup = appdata.with_name(appdata.name + ".bak-tether-" + stamp)
+        credentials = self.dsh_home / ".credentials.yaml"
+        credentials_backup = credentials.with_name(credentials.name + ".bak-tether-" + stamp)
+        self.stop()
+        try:
+            if appdata.exists():
+                if appdata_backup.exists():
+                    raise DshError("认证备份已存在", "dsh_backup_exists")
+                shutil.move(str(appdata), str(appdata_backup))
+            if credentials.exists():
+                shutil.move(str(credentials), str(credentials_backup))
+        except (OSError, shutil.Error) as exc:
+            raise DshError(f"DSH 认证备份失败: {exc}", "dsh_repair_failed") from exc
+        try:
+            started = self.start()
+        except DshError:
+            if appdata_backup.exists() and not appdata.exists():
+                shutil.move(str(appdata_backup), str(appdata))
+            if credentials_backup.exists() and not credentials.exists():
+                shutil.move(str(credentials_backup), str(credentials))
+            raise
+        return {
+            "appdata_backup": str(appdata_backup) if appdata_backup.exists() else "",
+            "credentials_backup": str(credentials_backup) if credentials_backup.exists() else "",
+            "started": True,
+            **started,
+        }
 
     def restart(self) -> dict[str, Any]:
         current = self.status()
