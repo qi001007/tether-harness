@@ -1,5 +1,16 @@
 # Public client releases
 
+## v0.2.60
+
+Mature account settings, built after checking mainstream products:
+
+- Avatar upload now opens a circular 240 px crop stage instead of cutting the raw image. Drag to reposition, zoom 1–3×, reset, then save a 256×256 JPEG; remove, cancel and save are separate actions, and images are limited to 8 MB.
+- Display name is edited inline with save/cancel and Enter/Escape, with errors next to the row.
+- Password change has current/new/confirm fields with show/hide toggles, inline rules (10-character minimum, must differ from the current password, both entries must match), `autocomplete` hints, a Caps Lock warning and inline errors. An invalid submit shows the rules without sending a request.
+- Real run on DESKTOP: an off-centre 480×320 test image opened the crop stage at `matrix(0.75,0,0,0.75,-60,0)`, dragged to `x=0`, zoomed to 1.35 and saved a 7,385 B data URL that updated the activity-bar avatar; the original avatar (9,281 B) was restored afterwards. A test display name persisted and was cleared. Invalid password submits showed the inline errors without changing the real password; the crop dialog was cancelled with data unchanged.
+
+Gates: mjs 225/225, cjs 6/6, client pytest 142 passed / 1 skipped, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41403421431` succeeded; published at 2026-11-02T07:03:27Z (app 1,764,049 B, plugin 1,353,182 B, node 79,667 B; signed manifest verified). Hub mirror refreshed to **0.2.60**. LAPTOP-01 Node+APP **27.4 s**, plugin **25.2 s**; DESKTOP source APP restarted and the local DSH plugin reinstalled. Both devices report app/node/plugin **0.2.60** and are online.
+
 ## v0.2.59
 
 Editable device topology and a clearer activity selection:
