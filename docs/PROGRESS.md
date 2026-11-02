@@ -4,7 +4,7 @@
 
 文件转移页两栏的根列表本来就按设备分别请求 `/workspaces` 与 `/drives`：左栏 DESKTOP 是 `C:\Users\Administrator...`、`demo`，右栏 LAPTOP 是 `C:\Users\14675...`、`audit`；同名 `default-workspace`/`Tether 工作目录` 造成“所有工作区集中在一起”的误读。修复：`FilePane` 把设备名传给树分组，显示 `工作区 · 设备名` / `此电脑 · 设备名`；切换设备时先清空旧 `roots`/`entries` 再加载，避免短暂显示上一台设备的树。真机截图已确认左右分组分别为 `DESKTOP-LOCAL` / `LAPTOP-01`。
 
-门禁：mjs 224/224、cjs 6/6、client pytest 142 passed / 1 skipped、`build.mjs --check`、`build-web.mjs --check`、`validate_versions()` 通过。0.2.58 发布与两机更新待执行。
+门禁：mjs 224/224、cjs 6/6、client pytest 142 passed / 1 skipped、`build.mjs --check`、`build-web.mjs --check`、`validate_versions()` 通过。0.2.58 已发布（CI `41396125195`，05:51:48Z，签名清单验签通过，app 1,749,053 B / plugin 1,345,886 B / node 79,668 B），Hub mirror 0.2.58；LAPTOP Node+APP 20.1 s、插件 28.9 s，DESKTOP 源码 APP 重启、本机插件 0.2.58；两机 app/node/plugin 均 0.2.58。转移页真机：左栏 `工作区 · DESKTOP-LOCAL`、右栏 `工作区 · LAPTOP-01`，工作区与盘符分别属于两台机器。
 
 ## 2026-11-02 v0.2.57 选择器树联动、文件夹上传与拖入保存
 

@@ -8,7 +8,7 @@ Transfer pane root labels and stale-root reset:
 - Switching a pane's device clears the previous roots and entries before loading, so a slow or failed request cannot leave the other device's workspaces visible.
 - Real check: left `工作区 · DESKTOP-LOCAL` with `C:\Users\Administrator...` / `demo`; right `工作区 · LAPTOP-01` with `C:\Users\14675...` / `audit`.
 
-Gates: mjs 224/224, cjs 6/6, client pytest 142 passed / 1 skipped, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI, signing, Hub mirror and both-machine installation are pending.
+Gates: mjs 224/224, cjs 6/6, client pytest 142 passed / 1 skipped, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41396125195` succeeded; published at 2026-11-02T05:51:48Z (app 1,749,053 B, plugin 1,345,886 B, node 79,668 B; signed manifest verified). Hub mirror refreshed to **0.2.58**. LAPTOP-01 Node+APP **20.1 s**, plugin **28.9 s**; DESKTOP source APP restarted and the local DSH plugin reinstalled. Both devices report app/node/plugin **0.2.58**. Transfer page verified: left `工作区 · DESKTOP-LOCAL` with `C:\Users\Administrator...` / `demo`, right `工作区 · LAPTOP-01` with `C:\Users\14675...` / `audit`; disks C–G vs C–D.
 
 ## v0.2.57
 
