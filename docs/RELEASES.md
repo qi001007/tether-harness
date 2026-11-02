@@ -1,5 +1,16 @@
 # Public client releases
 
+## v0.2.72
+
+No more black console flash at startup:
+
+- Root cause: the update check itself ran under `pythonw.exe`, but `UpdateManager.checkout_state()` invoked `git status` with an ordinary `subprocess.run`; `git.exe` allocated a visible `ConsoleWindowClass` window on every probe.
+- A 20 ms visible-window trace of one update check showed three console windows (at 1.3 s, 3.8 s and 4.5 s), all belonging to `C:\Program Files\Git\mingw64\bin\git.exe`.
+- The probe now passes `CREATE_NO_WINDOW` on Windows in both the source updater and the vendored plugin copy. The other spawn paths (APP/DSH restart, install, Office preview) already used hidden windows.
+- Re-test: the same update check produced no new windows; launching the APP from the desktop shortcut and sampling every 20 ms showed only the `Tether` / `Tether WebUI` main window, no console or conhost.
+
+Gates: mjs 231/231, cjs 6/6, client pytest **148 passed / 1 skipped** (including the new regression), `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41485135556` succeeded; published at 2026-11-02T16:52:03Z (app 1,786,116 B, plugin 1,361,440 B, node 84,935 B; signed manifest verified). Hub mirror refreshed to **0.2.72**.
+
 ## v0.2.71
 
 Login page motion and in-place registration:

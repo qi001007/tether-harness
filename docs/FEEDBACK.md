@@ -1,5 +1,10 @@
 # 用户反馈与处理
 
+## 2026-11-03 启动黑色弹窗
+
+- [x] F137：打开 APP 时仍会闪出黑色弹窗，一次启动甚至出现多次；要求彻底查清原因。**根因**：更新检查用 `pythonw.exe` 跑 `updates_cli check`，但 `UpdateManager.checkout_state()` 里仍用 `subprocess.run(["git", ...])` 调 `git status`；`git.exe` 是控制台程序，会自己创建 `ConsoleWindowClass` 窗口。**证据**：用 20 ms 可见窗口采样单独跑更新检查，抓到 3 个可见控制台窗口（1.3 s、3.8 s、4.5 s，均为 `C:\Program Files\Git\mingw64\bin\git.exe`）；完整启动 trace 里也看到 `git.exe` + `conhost.exe` 由 Node/更新检查拉起。**修复**：`tether/updates.py` 与插件内 vendored `packages/tether-dsh-surface/updater/tether/updates.py` 的 git 调用在 Windows 上加 `CREATE_NO_WINDOW`；新增回归测试 `test_checkout_state_hides_the_git_console_on_windows`。**复测**：同一更新检查采样不再出现任何新窗口；通过桌面快捷方式启动 APP 的 20 ms 窗口采样只看到 `Tether`/`Tether WebUI` 两个同名主窗口，无 `ConsoleWindowClass`、无 conhost、无黑色弹窗。
+- [x] F138：修完必须保证不是只修了某一条路径。核对后 `tether/node` 的 app restart、DSH start/install/restart、Office preview 都已使用 `CREATE_NO_WINDOW`/隐藏窗口；本轮补齐的是唯一遗漏的 git 探针，并把 vendored updater 同步，避免插件运行时回退到旧代码。
+
 ## 2026-11-02 登录页网络动效、邀请码切换与退出入口
 
 - [x] F134：登录页左侧示例要像真实互联画布一样有“水中惯性”动态，并把线条拉成直线。实现：新增自包含 `LoginNetwork`，4 个节点（中心/左/右/顶部）做阻尼弹簧 + 轻微漂移 + 指针推斥；节点与 6 条直线边每帧直接更新 SVG 属性，不触发 React 重渲染；`prefers-reduced-motion` 时保持静态。**真机验证**：登录页采样节点 `cx/cy`，1 s 内位置发生变化；登录视图与邀请码视图两种状态下动画都持续运动；线条全部为 `<line>` 直线。

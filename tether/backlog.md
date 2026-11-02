@@ -1,4 +1,5 @@
 # Tether Python 后端变更记录
+- 2026-11-03：`UpdateManager.checkout_state()` 的 `git status` 在 Windows 必须带 `CREATE_NO_WINDOW`；否则即使父进程是 `pythonw.exe`，`git.exe` 仍会创建 `ConsoleWindowClass` 黑色窗口。启动 trace 实测修复前 3 个可见控制台、修复后 0 个。插件的 vendored updater 同步同一修复。
 - 2026-10-31：Node 支持 `--user-token`：无设备令牌时随注册发送用户令牌，收到 `device_token` 后写入 `data/device-token.json`（0600）并改用；重启优先读设备令牌。
 - 2026-10-31：Node 新增 `restart_node` 控制消息：有活跃 Tether 任务时拒绝，否则确认、关闭控制 WS 并由 supervisor 以退出码 75 重启；0.2.39 实测 0.80 秒离线、2.99 秒重连。
 - 2026-10-31：FS 服务新增 `write_chunk`/`transfer_status`/`transfer_cancel`：分块二进制写入、断点偏移校验、临时文件 fsync 后原子替换、完成时 `transfer` 审计；`test_fs_service.py` 14 passed。

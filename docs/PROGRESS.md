@@ -1,5 +1,13 @@
 # 实时进度
 
+## 2026-11-03 v0.2.72 消除启动黑色控制台闪窗
+
+1. 根因：启动更新检查本身已是 `pythonw.exe`，但 `UpdateManager.checkout_state()` 仍用 `subprocess.run(["git", ...])` 执行 `git status`；`git.exe` 是控制台程序，会创建可见的 `ConsoleWindowClass` 窗口。
+2. 证据：单独跑更新检查并用 20 ms 采样可见窗口，修复前抓到 3 个控制台窗口（1.3 s、3.8 s、4.5 s，均为 Git 的 `git.exe`），与“闪一下、过会儿又闪”的现象一致；完整启动 trace 中可见 `git.exe` + `conhost.exe` 由 Node/更新检查拉起。
+3. 修复：Windows 上给 git 探针加 `CREATE_NO_WINDOW`；主源码与插件 vendored updater 同步；新增回归测试 `test_checkout_state_hides_the_git_console_on_windows`。核对 app restart、DSH start/install/restart、Office preview 均已使用隐藏窗口，没有第二条遗漏路径。
+4. 复测：同一更新检查采样不再出现任何新窗口；通过桌面快捷方式启动 APP 的 20 ms 窗口采样只看到 `Tether` / `Tether WebUI` 两个同名主窗口，没有 `ConsoleWindowClass`、conhost 或黑色弹窗。
+5. 门禁：mjs 231/231、cjs 6/6、pytest **148 passed / 1 skipped**（含新回归）、两份 build check、`validate_versions()` 通过。0.2.72 已发布（CI `41485135556`，16:52:03Z，app 1,786,116 B / plugin 1,361,440 B / node 84,935 B），Hub mirror 0.2.72；DESKTOP 已重启到 0.2.72，LAPTOP 更新任务已发。
+
 ## 2026-11-02 v0.2.71 登录页惯性网络与邀请码平滑切换
 
 1. 左侧视觉换成 `LoginNetwork`：4 个节点用阻尼弹簧 + 漂移 + 指针推斥做惯性运动，6 条边全部是 SVG 直线；每帧直接改 `cx/cy/x1/y1/x2/y2`，不触发 React 重渲染；`prefers-reduced-motion` 时保持静止。
