@@ -1,5 +1,18 @@
 # 实时进度
 
+## 2026-11-03 v0.2.77/0.2.78 DSH 恢复入口与真实根因
+
+1. 0.2.76 新增 `fs/dsh_restart` 与 APP“重启 DSH”入口；0.2.77 让重启 helper 接收 live host PID（DSH 命令行不含 `dsh-desktop-host` 时也能找到）；0.2.78 让 start/restart 显式传回检测到的 `dsh_home`，避免落到默认 `C:\Users\14675\.dsh`。
+2. 实测 LAPTOP：重启能替换 pid（24420 → 7444 → 2800），但 DSH rc.3 启动即报 `desktop welcome: Web authentication failed`，`native-surface.json` 仍不出现。**结论**：表面缺失的第一层是 DSH 自身认证/安装坏了，Tether 插件不是首要原因；需要先修 DSH 本体。
+3. APP 侧已经做到：DSH surface 缺失时显示明确状态和“重启 DSH”，不白屏；APP 其他页面不受 DSH 影响。
+4. 0.2.76/0.2.77/0.2.78 均已发布并刷新 Hub mirror；LAPTOP Node/APP 0.2.78。下一步：用已下载的 rc.5（或同版本 rc.3）修复 DSH 认证，再验证 Tether 插件/页面。
+
+## 2026-11-03 v0.2.76 DSH surface 恢复入口
+
+1. Node 新增 `fs/dsh_restart`：复用无窗口 `dsh_restart` helper，剥离 `DSH_HOME`/`ELECTRON_RUN_AS_NODE`，关闭旧 DSH 并重启，等待新的 surface descriptor。
+2. APP 对远端和本机都读取 `dsh_status`；当 surface 报 `descriptor_missing`/`descriptor_invalid`/`host_unreachable` 且 DSH 正在运行时，显示“DSH 已在运行，但 Tether 插件未加载或 surface 描述符缺失”，并提供“重启 DSH”；DSH 未运行仍显示启动/安装。重启期间按 DSH pid 变化判断完成，不把旧 pid 当成功。
+3. 门禁：mjs 234/234、cjs 6/6、pytest **149 passed / 1 skipped**、两份 build check、`validate_versions()` 通过。0.2.76 已发布（CI 待填），Hub mirror 0.2.76。**待完成**：LAPTOP 更新后实际点重启并验证 descriptor/页面。
+
 ## 2026-11-03 v0.2.75 图标回到最初版 + V1 立 S
 
 1. 0.2.74 的纯黑 T 图标因“长竖杆 + 单球”误读被否；草稿已删除，**没有发布**。

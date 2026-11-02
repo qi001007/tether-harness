@@ -1,5 +1,9 @@
 # 用户反馈与处理
 
+## 2026-11-03 DSH surface 健康与恢复入口
+
+- [ ] F146：笔记本 DSH 更新失败后 `native-surface.json` 不存在，Tether 页面没有可渲染的 surface；要求 APP 不能白屏、要能恢复。已完成：Node `fs/dsh_restart`（按 live host PID 无窗口重启）；APP 在 `descriptor_missing`/`descriptor_invalid`/`host_unreachable` 时显示“DSH 已在运行，但 Tether 插件未加载或 surface 描述符缺失”和“重启 DSH”；start/restart 现在显式传回检测到的 `dsh_home`（`D:\DeepSeek Harness\.dsh`），不再错误落到默认 `C:\Users\14675\.dsh`。**0.2.77/0.2.78 实测**：重启能杀掉旧 DSH 并拉新 pid，但 DSH rc.3 自身启动即报 `desktop welcome: Web authentication failed`（崩溃日志 `crash-2026-11-02T20-05-04-171Z-host.log`），所以 descriptor 仍不出现。**结论**：页面缺失的第一层是 DSH 认证/安装坏了，不是 Tether 插件；下一步必须修 DSH 本体（安装已下载的 rc.5 或同版本 rc.3），再验证 Tether 插件。APP 的不白屏与重启入口已交付，F146 仍待 DSH 修复收口。
+
 ## 2026-11-03 APP 无原生标题栏、统一图标与托盘
 
 - [x] F144：图标最终改回**最初版设计**（深海军蓝底、左上白环、右下橙环），只把中间连接线改成主人选定的 **V1 立 S**。0.2.74 的纯黑 T 版因“长竖杆 + 单球”误读被否，草稿已删除、未发布；正式资产改为 `assets/tether-app-s.svg/.png/.ico`，顶栏 `TetherMark` 同步 V1。**验证**：16/32/256 px 预览 S 形可辨；任务栏按钮实际显示 V1；托盘日志 `tray created icon=...tether-app-s.ico`。
