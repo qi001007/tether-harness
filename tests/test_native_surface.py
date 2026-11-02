@@ -220,13 +220,16 @@ def test_http_fixed_target_and_credential_filter(native_home):
     assert "location" not in result["headers"]
 
 
-def test_device_fs_prefix_serves_this_node_files_and_raw_attachment_bytes(tmp_path):
+def test_device_fs_prefix_serves_this_node_files_and_raw_attachment_bytes(tmp_path, monkeypatch):
+    monkeypatch.setenv("USERPROFILE", str(tmp_path / "home"))
+    (tmp_path / "home").mkdir()
     workspace = tmp_path / "node-work"
     workspace.mkdir()
     root = tmp_path / "TetherWorkspaces"
     root.mkdir()
     service = FsService(device="LAPTOP-01", workspace=workspace,
                         data_dir=tmp_path / "data", workspaces_root=root)
+    service.policy.update({"mode": "full"})
     payload = "中文附件\r\n".encode("gb18030")
     target = root / "legacy.txt"
     target.write_bytes(payload)
@@ -257,6 +260,16 @@ def test_device_fs_prefix_serves_this_node_files_and_raw_attachment_bytes(tmp_pa
         assert result["device_id"] == "LAPTOP-01"
         assert result["binary"] is True
         assert base64.b64decode(result["base64"]) == payload
+
+        dropped = b"dropped bytes"
+        drop_target = root / "inbox" / "drop.txt"
+        write = await call("POST", "/tether-device-fs/write_chunk", {
+            "device_id": "LAPTOP-01", "path": str(drop_target),
+            "transfer_id": "abcdef1234567890", "offset": 0, "total": len(dropped),
+            "base64": base64.b64encode(dropped).decode("ascii"), "final": True, "overwrite": False,
+        })
+        assert write["status"] == 200, write
+        assert drop_target.read_bytes() == dropped
 
         mismatch = await call("GET", "/tether-device-fs/drives?device_id=OTHER")
         assert mismatch["status"] == 404

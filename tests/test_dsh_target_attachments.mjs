@@ -102,6 +102,14 @@ function world(options = {}) {
       if (options.textMode) return jsonResponse({ ...base, binary: false, text: Buffer.from(bytes).toString('utf8') })
       return jsonResponse({ ...base, binary: true, base64: Buffer.from(bytes).toString('base64') })
     }
+    if (path === '/api/devices/' + deviceId + '/fs/write_chunk' || path === '/tether-device-fs/write_chunk') {
+      const bytes = Buffer.from(body.base64 || '', 'base64')
+      return jsonResponse({
+        path: body.path, transfer_id: body.transfer_id, offset: body.offset + bytes.length,
+        total: body.total, complete: body.final === true, size: body.total,
+        device_id: options.echoDeviceId || deviceId
+      })
+    }
     return errorResponse(404, { detail: { code: 'not_found', error: 'no route' } })
   })
   const files = []
@@ -609,8 +617,8 @@ test('oversized files are refused before any bytes are read', async () => {
     await flush()
     const tree = harness.render()
     assert.match(nodeText(tree), /超过 10 MiB/)
-    const row = buttonByTitle(tree, 'C:\\work\\session-workspace\\notes.txt')
-    assert.equal(row.props.disabled, true)
+    assert.ok(findElement(tree, (node) => node.type === 'button'
+      && node.props?.title === 'C:\\work\\session-workspace\\notes.txt' && node.props?.disabled === true))
     assert.equal(added.length, 0)
   } finally {
     harness.dispose()
@@ -673,6 +681,58 @@ test('the picker exposes breadcrumbs, directory search and sortable columns', as
   } finally {
     harness.dispose()
   }
+})
+
+test('the picker can upload the folder that is currently open', async () => {
+  const w = world({
+    payload: Buffer.from('hello'),
+    fileSize: 5,
+    listings: {
+      'C:\\work\\session-workspace': [
+        { name: 'notes.txt', path: 'C:\\work\\session-workspace\\notes.txt', dir: false, size: 5, mtime: 1725000000 },
+        { name: 'src', path: 'C:\\work\\session-workspace\\src', dir: true, mtime: 1725000000 }
+      ],
+      'C:\\work\\session-workspace\\src': [
+        { name: 'main.js', path: 'C:\\work\\session-workspace\\src\\main.js', dir: false, size: 5, mtime: 1725000000 }
+      ]
+    }
+  })
+  const { harness, added } = mount(w)
+  try {
+    await openPicker(harness)
+    await flush()
+    buttonByTitle(harness.render(), 'C:\\work\\session-workspace').props.onClick()
+    await flush()
+    const confirm = buttonByText(harness.render(), '确定')
+    assert.ok(confirm, 'a folder selection shows the confirm action')
+    confirm.props.onClick()
+    await flush()
+    assert.equal(added.length, 2, 'both files in the folder are attached')
+    assert.equal(w.files.length, 2)
+    assert.ok(added.some((file) => file.webkitRelativePath === 'session-workspace/notes.txt'))
+    assert.ok(added.some((file) => file.webkitRelativePath === 'session-workspace/src/main.js'))
+    assert.equal(findElement(harness.render(), (node) => node.props?.role === 'dialog'), null, 'the picker closes after the folder upload')
+  } finally {
+    harness.dispose()
+  }
+})
+
+test('a locally dropped file is saved to the target D: inbox', async () => {
+  const w = world()
+  const bytes = Buffer.from('dropped bytes')
+  const file = {
+    name: 'my report.txt',
+    size: bytes.length,
+    async arrayBuffer() { return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) }
+  }
+  const saved = await w.bridge.saveDroppedFile(file)
+  assert.match(saved.path, /^D:\\TetherDrop\\my report\.txt$/)
+  assert.equal(saved.size, bytes.length)
+  const write = w.requests.find((request) => request.path.endsWith('/fs/write_chunk'))
+  assert.ok(write, 'the drop is written through the target Node API')
+  assert.equal(write.body.final, true)
+  assert.equal(write.body.overwrite, false)
+  assert.equal(Buffer.from(write.body.base64, 'base64').toString('utf8'), 'dropped bytes')
 })
 
 test('DSH registration wires the device explorer and ships the modal bundle', () => {

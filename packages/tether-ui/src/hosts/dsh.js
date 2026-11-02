@@ -93,6 +93,8 @@ export function createDshLocalPluginSurfaceReloadBridge(getRemote) {
 
 export const DSH_TARGET_ATTACHMENT_LIMIT = 10 * 1024 * 1024
 export const DSH_TARGET_ATTACHMENT_CHUNK = 256 * 1024
+export const DSH_TARGET_FOLDER_LIMIT_FILES = 200
+export const DSH_TARGET_FOLDER_LIMIT_BYTES = 100 * 1024 * 1024
 export const DSH_TARGET_DEVICE_TIMEOUT = 15_000
 export const DSH_TARGET_SURFACE_PREFIX = '/tether-device-fs'
 
@@ -142,6 +144,32 @@ function targetPathBase(value) {
   const clean = String(value || '').replace(/[\\/]+$/, '')
   const index = Math.max(clean.lastIndexOf('\\'), clean.lastIndexOf('/'))
   return index >= 0 ? (clean.slice(index + 1) || clean) : clean
+}
+
+function targetSafeFileName(value) {
+  return String(value || '').replace(/[\\/:*?"<>|]+/g, '_').replace(/^\.+$/, 'file').slice(0, 180) || 'file'
+}
+
+function targetUniqueName(name, index) {
+  if (index <= 1) return name
+  const dot = name.lastIndexOf('.')
+  return dot > 0 ? name.slice(0, dot) + ' (' + index + ')' + name.slice(dot) : name + ' (' + index + ')'
+}
+
+function targetTransferId() {
+  try {
+    return Array.from(crypto.getRandomValues(new Uint8Array(12)), (byte) => byte.toString(16).padStart(2, '0')).join('')
+  } catch (_) {
+    return (Date.now().toString(16) + Math.random().toString(16).slice(2) + '000000000000').slice(0, 24)
+  }
+}
+
+function targetBase64(bytes) {
+  let binary = ''
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000))
+  }
+  return btoa(binary)
 }
 
 function targetParentPath(value) {
@@ -216,6 +244,7 @@ function formatTargetTime(value) {
 // picker can never silently browse a different computer or the operator's local disk.
 export function createDshTargetExplorerBridge({ getRpc, getHost, fetcher = (...args) => fetch(...args), makeFile = (...args) => new File(...args) } = {}) {
   let scope = null
+  let dropFolder = ''
   const host = () => (typeof getHost === 'function' ? getHost() : null)
   const identity = async () => {
     const rpc = typeof getRpc === 'function' ? getRpc() : null
@@ -259,6 +288,7 @@ export function createDshTargetExplorerBridge({ getRpc, getHost, fetcher = (...a
   const apiSuffix = (suffix) => {
     if (suffix === '/list') return '/fs/list'
     if (suffix === '/read') return '/fs/read'
+    if (suffix === '/write_chunk') return '/fs/write_chunk'
     return suffix
   }
   const request = async (deviceId, suffix, body, signal) => {
@@ -444,6 +474,85 @@ export function createDshTargetExplorerBridge({ getRpc, getHost, fetcher = (...a
       return makeFile(chunks, listed.name || targetPathBase(entry.path) || 'attachment', {
         type: targetFileType(listed.name || entry.path), lastModified: Date.now()
       })
+    },
+    async readFolder(entry, signal) {
+      if (!entry || !entry.dir || typeof entry.path !== 'string' || !entry.path) throw new Error('请选择一个文件夹')
+      const files = []
+      let total = 0
+      const visit = async (path, prefix, depth) => {
+        if (depth > 12) throw new Error('文件夹层级过深')
+        const listing = await this.listDirectory(path, signal)
+        for (const item of listing) {
+          if (!item || !item.name || item.name === '.tether-trash') continue
+          if (item.dir) {
+            await visit(item.path, prefix + item.name + '/', depth + 1)
+            continue
+          }
+          if (files.length >= DSH_TARGET_FOLDER_LIMIT_FILES) {
+            throw new Error('文件夹内文件超过 ' + DSH_TARGET_FOLDER_LIMIT_FILES + ' 个')
+          }
+          if (!Number.isSafeInteger(item.size) || item.size < 0 || item.size > DSH_TARGET_ATTACHMENT_LIMIT) {
+            throw new Error(item.name + ' 超过 10 MiB')
+          }
+          total += item.size
+          if (total > DSH_TARGET_FOLDER_LIMIT_BYTES) throw new Error('文件夹总大小超过 100 MiB')
+          const file = await this.readFile(item, signal)
+          try {
+            Object.defineProperty(file, 'webkitRelativePath', { value: prefix + item.name, configurable: true })
+          } catch (_) { /* the composer can still upload the file by name */ }
+          files.push(file)
+        }
+      }
+      await visit(entry.path, targetPathBase(entry.path) + '/', 0)
+      if (!files.length) throw new Error('文件夹内没有可上传的文件')
+      return files
+    },
+    async saveDroppedFile(file, signal) {
+      if (!file || typeof file.name !== 'string' || !file.name) throw new Error('无效的文件')
+      const size = Number(file.size)
+      if (!Number.isSafeInteger(size) || size < 0 || size > 256 * 1024 * 1024) throw new Error('文件超过 256 MiB')
+      const bytes = new Uint8Array(await file.arrayBuffer())
+      if (bytes.length !== size) throw new Error('文件读取不完整')
+      const deviceId = await identity()
+      const bases = []
+      if (dropFolder) bases.push(dropFolder)
+      else {
+        bases.push('D:\\TetherDrop', 'D:\\TetherWorkspaces\\TetherDrop')
+      }
+      const name = targetSafeFileName(file.name)
+      const write = async (path) => {
+        const transferId = targetTransferId()
+        const chunkSize = DSH_TARGET_ATTACHMENT_CHUNK
+        if (!size) {
+          await request(deviceId, '/write_chunk', {
+            path, transfer_id: transferId, offset: 0, total: 0, base64: '', final: true, overwrite: false
+          }, signal)
+          return
+        }
+        for (let offset = 0; offset < size; offset += chunkSize) {
+          const chunk = bytes.subarray(offset, Math.min(offset + chunkSize, size))
+          await request(deviceId, '/write_chunk', {
+            path, transfer_id: transferId, offset, total: size,
+            base64: targetBase64(chunk), final: offset + chunk.length === size, overwrite: false
+          }, signal)
+        }
+      }
+      let lastError = null
+      for (const folder of [...new Set(bases)]) {
+        for (let attempt = 1; attempt <= 20; attempt++) {
+          const path = folder.replace(/[\\/]+$/, '') + '\\' + targetUniqueName(name, attempt)
+          try {
+            await write(path)
+            dropFolder = folder.replace(/[\\/]+$/, '')
+            return { deviceId, path, size }
+          } catch (error) {
+            lastError = error
+            if (error && error.code === 'exists') continue
+            break
+          }
+        }
+      }
+      throw lastError || new Error('保存文件失败')
     }
   }
 }
@@ -455,6 +564,15 @@ export async function addDshTargetAttachment(owner, bridge, entry, isCurrent = (
   if (!isCurrent()) throw new Error('目标电脑或会话已切换，请重新选择文件')
   onAddFiles([file])
   return file
+}
+
+export async function addDshTargetFolder(owner, bridge, entry, isCurrent = () => true) {
+  const onAddFiles = owner && owner.onAddFiles
+  if (typeof onAddFiles !== 'function') throw new Error('当前会话不接受附件')
+  const files = await bridge.readFolder(entry)
+  if (!isCurrent()) throw new Error('目标电脑或会话已切换，请重新选择文件夹')
+  onAddFiles(files)
+  return files
 }
 
 export function createDshTargetAttachments(React, Native, bridge, pickerCommand, uiWorkspace, sessions) {
@@ -471,8 +589,11 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand,
     const [search, setSearch] = React.useState('')
     const [treeChildren, setTreeChildren] = React.useState({})
     const [expanded, setExpanded] = React.useState({})
+    const treeChildrenRef = React.useRef({})
     const [busy, setBusy] = React.useState(false)
     const [error, setError] = React.useState('')
+    const [dropNotice, setDropNotice] = React.useState('')
+    const dropNoticeTimer = React.useRef(null)
     const mounted = React.useRef(true)
     const busyRef = React.useRef(false)
     const operation = React.useRef(0)
@@ -484,6 +605,7 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand,
       mounted.current = true
       return () => { mounted.current = false }
     }, [])
+    React.useEffect(() => { treeChildrenRef.current = treeChildren }, [treeChildren])
     React.useEffect(() => {
       operation.current += 1
       busyRef.current = false
@@ -578,18 +700,48 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand,
         pickerCommand.pendingSessionStart = null
       }
     }
-    const enter = async (item, isRoot) => {
+    const revealTree = async (nextPath) => {
+      const value = String(nextPath || '')
+      if (!value) return
+      const roots = [...workspaces, ...drives]
+      const rootItem = roots.find((item) => {
+        const base = String(item.path || '').replace(/[\\/]+$/, '')
+        if (!base) return false
+        const prefix = base + (base.includes('\\') ? '\\' : '/')
+        return value === item.path || value.toLowerCase().startsWith(prefix.toLowerCase())
+      })
+      const base = rootItem ? rootItem.path : root
+      if (!base) return
+      const paths = [base, ...targetBreadcrumbs(value, base).slice(1).map((crumb) => crumb.path)]
+      setExpanded((current) => {
+        const next = { ...current }
+        for (const path of paths) next[path] = true
+        return next
+      })
+      for (const path of paths) {
+        if (treeChildrenRef.current[path]) continue
+        try {
+          const listing = await bridge.listDirectory(path)
+          if (!mounted.current) return
+          treeChildrenRef.current = { ...treeChildrenRef.current, [path]: listing }
+          setTreeChildren((current) => current[path] ? current : { ...current, [path]: listing })
+        } catch (_) { /* the right pane shows the directory error */ }
+      }
+    }
+    const enter = async (item, isRoot, opts = {}) => {
       if (!item || typeof item.path !== 'string' || !item.path || busyRef.current) return
       const token = ++operation.current
       const sessionId = props.sessionId
       busyRef.current = true
       if (isRoot) setRoot(item.path)
       setDirectory(item.path); setSearch('')
+      if (opts.fromTree !== true) void revealTree(item.path)
       setBusy(true); setError('')
       try {
         const listing = await bridge.listDirectory(item.path)
         if (!live(token, sessionId)) return
         setEntries(listing)
+        setTreeChildren((current) => current[item.path] ? current : { ...current, [item.path]: listing })
       } catch (cause) {
         if (live(token, sessionId)) setError(cause.message || '读取目标电脑目录失败')
       } finally {
@@ -597,23 +749,15 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand,
         if (mounted.current) setBusy(false)
       }
     }
-    const toggleTree = async (item) => {
+    const toggleTree = (item) => {
       if (!item || !item.dir) return
       const key = item.path
-      if (expanded[key]) {
-        setExpanded((current) => {
-          const next = { ...current }
-          delete next[key]
-          return next
-        })
-        return
-      }
-      setExpanded((current) => ({ ...current, [key]: true }))
-      if (treeChildren[key]) return
-      try {
-        const listing = await bridge.listDirectory(key)
-        if (mounted.current) setTreeChildren((current) => ({ ...current, [key]: listing }))
-      } catch (_) { /* the right-hand pane reports directory errors */ }
+      setExpanded((current) => {
+        const next = { ...current }
+        if (next[key]) delete next[key]
+        else next[key] = true
+        return next
+      })
     }
     const choose = async (item) => {
       if (!item || item.dir || busyRef.current) return
@@ -633,6 +777,30 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand,
         setRoot(''); setDirectory(''); setEntries(null)
       } catch (cause) {
         if (live(token, sessionId)) setError(cause.message || '读取目标电脑文件失败')
+      } finally {
+        busyRef.current = false
+        if (mounted.current) setBusy(false)
+      }
+    }
+    const chooseFolder = async () => {
+      if (!directory || busyRef.current) return
+      if (drives.some((item) => item.path === directory)) {
+        setError('请进入磁盘中的具体文件夹再上传')
+        return
+      }
+      const token = ++operation.current
+      const sessionId = props.sessionId
+      busyRef.current = true
+      setBusy(true); setError('')
+      try {
+        await addDshTargetFolder(currentProps.current, bridge,
+          { path: directory, name: targetPathBase(directory), dir: true },
+          () => mounted.current && token === operation.current && currentProps.current.sessionId === sessionId)
+        if (!mounted.current) return
+        setOpen(false); setBusy(false)
+        setRoot(''); setDirectory(''); setEntries(null)
+      } catch (cause) {
+        if (live(token, sessionId)) setError(cause.message || '读取目标电脑文件夹失败')
       } finally {
         busyRef.current = false
         if (mounted.current) setBusy(false)
@@ -659,6 +827,46 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand,
       document.addEventListener('click', interceptNativeFilePicker, true)
       return () => document.removeEventListener('click', interceptNativeFilePicker, true)
     }, [])
+    React.useEffect(() => {
+      if (typeof document === 'undefined') return undefined
+      const onDrop = (event) => {
+        const transfer = event.dataTransfer
+        if (!transfer || !transfer.files || !transfer.files.length) return
+        const target = event.target
+        if (!target || typeof target.closest !== 'function'
+            || !target.closest('[contenteditable="true"], [class*="uV2eYG"], [class*="composer"]')) return
+        const files = [...transfer.files].filter((file) => file && typeof file.arrayBuffer === 'function')
+        if (!files.length) return
+        event.preventDefault()
+        event.stopPropagation()
+        if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation()
+        const owner = currentProps.current
+        if (owner && typeof owner.onAddFiles === 'function') {
+          try { owner.onAddFiles(files) } catch (_) { /* the save still proceeds */ }
+        }
+        Promise.all(files.map((file) => bridge.saveDroppedFile(file)
+          .then((saved) => ({ saved }))
+          .catch((cause) => ({ cause }))))
+          .then((results) => {
+            if (!mounted.current) return
+            if (dropNoticeTimer.current) clearTimeout(dropNoticeTimer.current)
+            const saved = results.filter((result) => result.saved).map((result) => result.saved)
+            const failed = results.find((result) => result.cause)
+            if (saved.length) {
+              const folder = saved[0].path.slice(0, Math.max(saved[0].path.lastIndexOf('\\'), saved[0].path.lastIndexOf('/')))
+              setDropNotice(saved.length === 1 ? '已保存到 ' + saved[0].path : '已保存 ' + saved.length + ' 个文件到 ' + folder)
+            } else if (failed) {
+              setDropNotice('保存失败：' + (failed.cause && failed.cause.message || failed.cause))
+            }
+            dropNoticeTimer.current = setTimeout(() => setDropNotice(''), 4500)
+          })
+      }
+      document.addEventListener('drop', onDrop, true)
+      return () => {
+        document.removeEventListener('drop', onDrop, true)
+        if (dropNoticeTimer.current) clearTimeout(dropNoticeTimer.current)
+      }
+    }, [bridge])
     React.useEffect(() => {
       if (!pickerCommand) return undefined
       const openCommand = () => {
@@ -688,6 +896,11 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand,
     const mutedButton = {
       border: '1px solid ' + line, borderRadius: 6, background: bg, color: sub,
       padding: '4px 10px', font: 'inherit', fontSize: 12, cursor: 'pointer'
+    }
+    const primaryButton = {
+      border: 0, borderRadius: 6, background: 'var(--dsw-alias-button-primary-fill, #101828)',
+      color: 'var(--dsw-alias-label-primary-inverted, #ffffff)', padding: '5px 12px',
+      font: 'inherit', fontSize: 12, cursor: 'pointer'
     }
     const rootButton = (item, group) => h('button', {
       key: group + ':' + item.path, type: 'button', disabled: busy,
@@ -854,6 +1067,7 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand,
         listHeader,
         visibleEntries.map((item) => row(item)))
     }
+    const canConfirmFolder = !!directory && !drives.some((item) => item.path === directory)
     const dialog = open ? h('div', {
       style: {
         position: 'fixed', inset: 0, zIndex: 2147483000, display: 'flex',
@@ -900,6 +1114,7 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand,
             search,
             onSearch: setSearch,
             colors: { bg, soft, ink, sub, mute, line, hover, red: danger },
+            deviceName: device,
             roots: [
               ...workspaces.map((item) => ({ name: item.name, path: item.path, kind: 'workspace', dir: true })),
               ...drives.map((item) => ({ name: item.name, path: item.path, kind: 'drive', dir: true }))
@@ -913,8 +1128,8 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand,
             disabled: busy,
             singleClickOpens: true,
             editablePath: false,
-            onRoot: (next) => { void enter({ path: next }, true) },
-            onPath: (next) => { void enter({ path: next }, false) },
+            onRoot: (next, opts) => { void enter({ path: next }, true, opts) },
+            onPath: (next, opts) => { void enter({ path: next }, false, opts) },
             onSelect: () => {},
             onOpen: (item) => { if (item.dir) void enter(item, false); else void choose(item) },
             onRefresh: (next) => { void enter({ path: next }, false) },
@@ -928,14 +1143,27 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand,
           }),
         h('div', {
           style: {
-            display: 'flex', alignItems: 'center', gap: 12, padding: '10px 18px',
+            display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, padding: '10px 18px',
             borderTop: '1px solid ' + line, flex: '0 0 auto'
           }
         },
-          h('button', { type: 'button', onClick: close, style: { ...mutedButton, marginLeft: 'auto' } }, '取消')))
+          canConfirmFolder ? h('button', {
+            type: 'button', onClick: chooseFolder, disabled: busy,
+            style: { ...primaryButton, opacity: busy ? 0.6 : 1, cursor: busy ? 'default' : 'pointer' }
+          }, busy ? '上传中…' : '确定') : null,
+          h('button', { type: 'button', onClick: close, style: mutedButton }, '取消')))
       ) : null
     return h('div', { ref: containerRef, style: { display: 'contents' } },
       h(Native.ComposerAttachments, { ...props, readFileDrag: props.readFileDrag }),
+      dropNotice ? h('div', {
+        role: 'status',
+        style: {
+          position: 'fixed', right: 16, bottom: 16, zIndex: 2147483000, maxWidth: 440,
+          padding: '8px 10px', borderRadius: 8, background: 'rgba(16,24,40,.88)', color: '#fff',
+          fontSize: 12, lineHeight: '18px', boxShadow: '0 4px 16px rgba(16,24,40,.22)',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+        }
+      }, dropNotice) : null,
       dialog)
   }
 }

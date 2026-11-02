@@ -40,7 +40,7 @@ ALLOWED_RESPONSE_HEADERS = {
 }
 ALLOWED_REQUEST_HEADERS = {"content-type", "accept"}
 DEVICE_FS_PREFIX = "/tether-device-fs/"
-DEVICE_FS_ROUTES = {"drives": "GET", "workspaces": "GET", "list": "POST", "read": "POST"}
+DEVICE_FS_ROUTES = {"drives": "GET", "workspaces": "GET", "list": "POST", "read": "POST", "write_chunk": "POST"}
 DEVICE_FS_ERROR_STATUS = {
     "bad_path": 400, "bad_args": 400, "bad_method": 405, "not_dir": 400, "not_file": 400,
     "not_found": 404, "denied": 403, "too_large": 413, "conflict": 409,
@@ -447,6 +447,8 @@ class NativeSurface:
                 result = service.dispatch("workspaces", {})
             elif suffix == "list":
                 result = service.dispatch("list", {"path": payload.get("path")})
+            elif suffix == "write_chunk":
+                result = service.dispatch("write_chunk", payload)
             else:
                 result = service.dispatch("read", {
                     "path": payload.get("path"),

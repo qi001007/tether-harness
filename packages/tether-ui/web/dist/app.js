@@ -163691,7 +163691,8 @@ function TargetFileExplorer({
   onContextMenu,
   onDragItem,
   onRowPointerDown,
-  onDismissError
+  onDismissError,
+  deviceName = ""
 }) {
   const ReactRuntime = React2;
   const h2 = ReactRuntime.createElement;
@@ -163748,14 +163749,16 @@ function TargetFileExplorer({
     const key = group + ":" + item.path;
     const children = treeChildren && treeChildren[item.path];
     const isOpen = !!(expanded && expanded[item.path]);
+    const oversized = !item.dir && Number(item.size) > limit;
     const openRow = () => {
-      if (disabled) return;
+      if (disabled || oversized) return;
       if (!item.dir) {
         if (onOpen) onOpen(item);
         return;
       }
-      if (depth === 0 && onRoot) onRoot(item.path);
-      else if (onPath) onPath(item.path);
+      if (onToggleTree) onToggleTree(item);
+      if (depth === 0 && onRoot) onRoot(item.path, { fromTree: true });
+      else if (onPath) onPath(item.path, { fromTree: true });
     };
     return h2(
       ReactRuntime.Fragment,
@@ -163763,34 +163766,13 @@ function TargetFileExplorer({
       h2(
         "div",
         { style: { display: "flex", alignItems: "center", minWidth: 0, paddingLeft: depth * 14 } },
-        onToggleTree && item.dir ? h2("button", {
-          type: "button",
-          title: isOpen ? "\u6536\u8D77" : "\u5C55\u5F00",
-          "aria-label": isOpen ? "\u6536\u8D77" : "\u5C55\u5F00",
-          onClick: (event) => {
-            event.stopPropagation();
-            onToggleTree(item);
-          },
-          className: "tether-hover",
-          style: {
-            width: 18,
-            height: 24,
-            flex: "0 0 auto",
-            display: "grid",
-            placeItems: "center",
-            border: 0,
-            borderRadius: 4,
-            background: "transparent",
-            color: C.mute,
-            cursor: "pointer"
-          }
-        }, chevron(isOpen)) : h2("span", { "aria-hidden": true, style: { width: 18, flex: "0 0 auto" } }),
         h2(
           "button",
           {
             type: "button",
             title: item.path,
-            disabled,
+            disabled: disabled || oversized,
+            "aria-expanded": item.dir ? isOpen : void 0,
             onClick: openRow,
             className: "tether-hover",
             style: {
@@ -163808,11 +163790,20 @@ function TargetFileExplorer({
               font: "inherit",
               fontSize: 13,
               textAlign: "left",
-              cursor: disabled ? "default" : "pointer"
+              cursor: disabled || oversized ? "default" : "pointer",
+              opacity: oversized ? 0.55 : 1
             }
           },
+          h2("span", {
+            "aria-hidden": true,
+            style: { width: 18, height: 18, flex: "0 0 auto", display: "grid", placeItems: "center", color: C.mute }
+          }, item.dir ? chevron(isOpen) : null),
           fileIcon ? fileIcon(item) : null,
-          h2("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, item.name)
+          h2(
+            "span",
+            { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
+            item.name + (oversized ? " \xB7 \u8D85\u8FC7 10 MiB" : "")
+          )
         )
       ),
       isOpen && children ? children.map((child) => treeRow(child, group, depth + 1)) : null
@@ -163821,7 +163812,11 @@ function TargetFileExplorer({
   const rootGroup = (label, items, empty2) => h2(
     "div",
     { key: label, style: { marginBottom: 10 } },
-    h2("div", { style: { padding: "8px 8px 4px", color: C.mute, fontSize: 11, fontWeight: 600, letterSpacing: 0.2 } }, label),
+    h2(
+      "div",
+      { style: { padding: "8px 8px 4px", color: C.mute, fontSize: 11, fontWeight: 600, letterSpacing: 0.2 } },
+      deviceName ? label + " \xB7 " + deviceName : label
+    ),
     items.length ? items.map((item) => treeRow(item, label)) : h2("div", { style: { padding: "2px 8px 6px", color: C.mute, fontSize: 11.5 } }, empty2)
   );
   const iconButton = (icon, label, onClick, disabled2) => h2("button", {

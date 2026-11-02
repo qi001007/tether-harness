@@ -54,7 +54,7 @@ export function TargetFileExplorer({
   sort = { key: 'name', dir: 'asc' }, onSort, search = '', onSearch = () => {},
   treeChildren = null, expanded = {}, onToggleTree,
   compact = false, selectionMode = 'single', selectedPaths = [], onSelectionChange,
-  onContextMenu, onDragItem, onRowPointerDown, onDismissError
+  onContextMenu, onDragItem, onRowPointerDown, onDismissError, deviceName = ''
 }) {
   const ReactRuntime = React
   const h = ReactRuntime.createElement
@@ -92,41 +92,41 @@ export function TargetFileExplorer({
     const key = group + ':' + item.path
     const children = treeChildren && treeChildren[item.path]
     const isOpen = !!(expanded && expanded[item.path])
+    const oversized = !item.dir && Number(item.size) > limit
     const openRow = () => {
-      if (disabled) return
+      if (disabled || oversized) return
       if (!item.dir) { if (onOpen) onOpen(item); return }
-      if (depth === 0 && onRoot) onRoot(item.path)
-      else if (onPath) onPath(item.path)
+      if (onToggleTree) onToggleTree(item)
+      if (depth === 0 && onRoot) onRoot(item.path, { fromTree: true })
+      else if (onPath) onPath(item.path, { fromTree: true })
     }
     return h(ReactRuntime.Fragment, { key },
       h('div', { style: { display: 'flex', alignItems: 'center', minWidth: 0, paddingLeft: depth * 14 } },
-        onToggleTree && item.dir
-          ? h('button', {
-            type: 'button', title: isOpen ? '收起' : '展开', 'aria-label': isOpen ? '收起' : '展开',
-            onClick: (event) => { event.stopPropagation(); onToggleTree(item) },
-            className: 'tether-hover',
-            style: {
-              width: 18, height: 24, flex: '0 0 auto', display: 'grid', placeItems: 'center',
-              border: 0, borderRadius: 4, background: 'transparent', color: C.mute, cursor: 'pointer'
-            }
-          }, chevron(isOpen))
-          : h('span', { 'aria-hidden': true, style: { width: 18, flex: '0 0 auto' } }),
         h('button', {
-          type: 'button', title: item.path, disabled,
+          type: 'button', title: item.path, disabled: disabled || oversized,
+          'aria-expanded': item.dir ? isOpen : undefined,
           onClick: openRow,
           className: 'tether-hover',
           style: {
             display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, flex: '1 1 auto',
             height: 26, padding: '0 6px', border: 0, borderRadius: 5,
             background: path === item.path ? (C.hover || C.soft) : 'transparent', color: C.ink,
-            font: 'inherit', fontSize: 13, textAlign: 'left', cursor: disabled ? 'default' : 'pointer'
+            font: 'inherit', fontSize: 13, textAlign: 'left', cursor: disabled || oversized ? 'default' : 'pointer',
+            opacity: oversized ? 0.55 : 1
           }
-        }, fileIcon ? fileIcon(item) : null,
-          h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, item.name))),
+        },
+          h('span', {
+            'aria-hidden': true,
+            style: { width: 18, height: 18, flex: '0 0 auto', display: 'grid', placeItems: 'center', color: C.mute }
+          }, item.dir ? chevron(isOpen) : null),
+          fileIcon ? fileIcon(item) : null,
+          h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
+            item.name + (oversized ? ' · 超过 10 MiB' : '')))),
       isOpen && children ? children.map((child) => treeRow(child, group, depth + 1)) : null)
   }
   const rootGroup = (label, items, empty) => h('div', { key: label, style: { marginBottom: 10 } },
-    h('div', { style: { padding: '8px 8px 4px', color: C.mute, fontSize: 11, fontWeight: 600, letterSpacing: 0.2 } }, label),
+    h('div', { style: { padding: '8px 8px 4px', color: C.mute, fontSize: 11, fontWeight: 600, letterSpacing: 0.2 } },
+      deviceName ? label + ' · ' + deviceName : label),
     items.length ? items.map((item) => treeRow(item, label))
       : h('div', { style: { padding: '2px 8px 6px', color: C.mute, fontSize: 11.5 } }, empty))
   const iconButton = (icon, label, onClick, disabled) => h('button', {

@@ -798,7 +798,11 @@ test('the target picker can expand the explorer tree', () => {
   assert.match(dshHost, /treeChildren/)
   assert.match(dshHost, /onToggleTree/)
   assert.match(targetExplorer, /const treeRow =/)
-  assert.match(targetExplorer, /onToggleTree && item\.dir/)
+  assert.match(targetExplorer, /onToggleTree\(item\)/)
+  assert.match(targetExplorer, /onRoot\(item\.path, \{ fromTree: true \}\)/)
+  assert.doesNotMatch(targetExplorer, /onToggleTree && item\.dir/, 'the arrow is part of the unified row, not a separate button')
+  assert.match(dshHost, /const revealTree = async/)
+  assert.match(dshHost, /opts\.fromTree !== true/)
 })
 
 test('one directory cache serves every explorer entry point', async () => {
