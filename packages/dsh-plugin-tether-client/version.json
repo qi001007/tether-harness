@@ -1,6 +1,6 @@
 {
-  "version": "0.2.73",
-  "notes": "The APP shell is now frameless with a DSH-like integrated top bar, custom window controls and a unified network icon. Closing the window hides it to the Windows tray; the tray can reopen or quit Tether. Desktop, taskbar, hover thumbnail and tray all use the same icon asset.",
+  "version": "0.2.74",
+  "notes": "The product icon is now the selected T-node mark on a pure black tile. The same mark is used in the top bar, desktop shortcut, taskbar, hover thumbnail and tray.",
   "download": "https://github.com/qi001007/tether-harness",
   "install": "git pull && powershell -ExecutionPolicy Bypass -File desktop/install-plugin.ps1"
 }

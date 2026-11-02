@@ -167625,31 +167625,18 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       "aria-hidden": true,
       style: { display: "block", flex: "0 0 auto" }
     },
-    h2("rect", { x: 1, y: 1, width: 30, height: 30, rx: 8, fill: "#0b1220" }),
+    h2("rect", { x: 1, y: 1, width: 30, height: 30, rx: 8, fill: "#000000" }),
     h2(
       "g",
-      { stroke: "url(#tether-mark-line)", strokeWidth: 1.7, strokeLinecap: "round" },
-      h2("line", { x1: 16, y1: 16.5, x2: 16, y2: 7.5 }),
-      h2("line", { x1: 16, y1: 16.5, x2: 7, y2: 21 }),
-      h2("line", { x1: 16, y1: 16.5, x2: 25, y2: 20 }),
-      h2("line", { x1: 7, y1: 21, x2: 25, y2: 20 }),
-      h2("line", { x1: 16, y1: 7.5, x2: 7, y2: 21 }),
-      h2("line", { x1: 16, y1: 7.5, x2: 25, y2: 20 })
+      { strokeLinecap: "round" },
+      h2("line", { x1: 8.5, y1: 9.5, x2: 16, y2: 9.5, stroke: "#3b82f6", strokeWidth: 2.2 }),
+      h2("line", { x1: 16, y1: 9.5, x2: 23.5, y2: 9.5, stroke: "#f59e0b", strokeWidth: 2.2 }),
+      h2("line", { x1: 16, y1: 9.5, x2: 16, y2: 22, stroke: "#ffffff", strokeWidth: 2.2 })
     ),
-    h2(
-      "defs",
-      null,
-      h2(
-        "linearGradient",
-        { id: "tether-mark-line", x1: "0", y1: "0", x2: "1", y2: "1" },
-        h2("stop", { offset: "0%", stopColor: "#3b82f6" }),
-        h2("stop", { offset: "100%", stopColor: "#f59e0b" })
-      )
-    ),
-    h2("circle", { cx: 7, cy: 21, r: 2.2, fill: "#0b1220", stroke: "#3b82f6", strokeWidth: 1.3 }),
-    h2("circle", { cx: 25, cy: 20, r: 2.2, fill: "#0b1220", stroke: "#3b82f6", strokeWidth: 1.3 }),
-    h2("circle", { cx: 16, cy: 7.5, r: 2.6, fill: "#f59e0b" }),
-    h2("circle", { cx: 16, cy: 16.5, r: 2.8, fill: "#ffffff" })
+    h2("circle", { cx: 8.5, cy: 9.5, r: 3.3, fill: "#000000", stroke: "#3b82f6", strokeWidth: 1.4 }),
+    h2("circle", { cx: 23.5, cy: 9.5, r: 3.3, fill: "#000000", stroke: "#3b82f6", strokeWidth: 1.4 }),
+    h2("circle", { cx: 16, cy: 9.5, r: 3.7, fill: "#f59e0b" }),
+    h2("circle", { cx: 16, cy: 22, r: 3.5, fill: "#ffffff" })
   );
   const GLYPHS2 = {
     workspace: { cap: "round", join: "round", parts: [

@@ -1,32 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
-  <defs>
-    <linearGradient id="tether-icon-bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#0a1020"/>
-      <stop offset="58%" stop-color="#13233f"/>
-      <stop offset="100%" stop-color="#0a1020"/>
-    </linearGradient>
-    <radialGradient id="tether-icon-glow" cx="50%" cy="44%" r="58%">
-      <stop offset="0%" stop-color="#3b82f6" stop-opacity=".34"/>
-      <stop offset="100%" stop-color="#3b82f6" stop-opacity="0"/>
-    </radialGradient>
-    <linearGradient id="tether-icon-line" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#3b82f6"/>
-      <stop offset="100%" stop-color="#f59e0b"/>
-    </linearGradient>
-  </defs>
-  <rect x="48" y="48" width="928" height="928" rx="220" fill="url(#tether-icon-bg)"/>
-  <rect x="48" y="48" width="928" height="928" rx="220" fill="url(#tether-icon-glow)"/>
-  <rect x="49" y="49" width="926" height="926" rx="219" fill="none" stroke="#ffffff" stroke-opacity=".1" stroke-width="4"/>
-  <g stroke="url(#tether-icon-line)" stroke-width="30" stroke-linecap="round">
-    <line x1="512" y1="548" x2="512" y2="300"/>
-    <line x1="512" y1="548" x2="302" y2="700"/>
-    <line x1="512" y1="548" x2="722" y2="690"/>
-    <line x1="302" y1="700" x2="722" y2="690"/>
-    <line x1="512" y1="300" x2="302" y2="700"/>
-    <line x1="512" y1="300" x2="722" y2="690"/>
+  <rect x="48" y="48" width="928" height="928" rx="220" fill="#000000"/>
+  <rect x="49" y="49" width="926" height="926" rx="219" fill="none" stroke="#ffffff" stroke-opacity=".1" stroke-width="5"/>
+  <g stroke-linecap="round">
+    <line x1="280" y1="300" x2="512" y2="300" stroke="#3b82f6" stroke-width="34"/>
+    <line x1="512" y1="300" x2="744" y2="300" stroke="#f59e0b" stroke-width="34"/>
+    <line x1="512" y1="300" x2="512" y2="720" stroke="#ffffff" stroke-width="34"/>
   </g>
-  <circle cx="302" cy="700" r="76" fill="#0b1220" stroke="#3b82f6" stroke-width="28"/>
-  <circle cx="722" cy="690" r="76" fill="#0b1220" stroke="#3b82f6" stroke-width="28"/>
-  <circle cx="512" cy="300" r="86" fill="#f59e0b"/>
-  <circle cx="512" cy="548" r="90" fill="#ffffff"/>
+  <circle cx="280" cy="300" r="66" fill="#000000" stroke="#3b82f6" stroke-width="22"/>
+  <circle cx="744" cy="300" r="66" fill="#000000" stroke="#3b82f6" stroke-width="22"/>
+  <circle cx="512" cy="300" r="78" fill="#f59e0b"/>
+  <circle cx="512" cy="720" r="72" fill="#ffffff"/>
 </svg>
