@@ -118,4 +118,5 @@ def test_restart_schedules_a_windowless_dsh_restart_helper(tmp_path, monkeypatch
     args, kwargs = captured[0]
     assert "tether.node.dsh_restart" in args
     assert str(desktop.descriptor) in args
+    assert "--host-pid" in args
     assert kwargs["creationflags"] & dsh_desktop.CREATE_NO_WINDOW

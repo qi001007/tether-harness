@@ -319,7 +319,8 @@ class DshDesktop:
         env["PYTHONIOENCODING"] = "utf-8"
         args = [sys.executable, "-m", "tether.node.dsh_restart",
                 "--descriptor", str(self.descriptor), "--log", str(log),
-                "--delay", "0.8", "--wait", "60"]
+                "--delay", "0.8", "--wait", "60",
+                "--host-pid", str(int(current.get("pid") or 0))]
         kwargs: dict[str, Any] = {
             "cwd": str(Path(__file__).resolve().parents[2]),
             "env": env,

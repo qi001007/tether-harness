@@ -1,6 +1,6 @@
 {
-  "version": "0.2.76",
-  "notes": "When a running DSH fails to publish its Tether surface, the native workspace now shows an explicit state with a 重启 DSH recovery action instead of an unexplained blank frame. The icon remains the original navy V1 S mark.",
+  "version": "0.2.77",
+  "notes": "DSH restart now receives the live host PID from the node, so a running DSH that did not publish a surface can be restarted even when its command line does not contain dsh-desktop-host.",
   "download": "https://github.com/qi001007/tether-harness",
   "install": "git pull && powershell -ExecutionPolicy Bypass -File desktop/install-plugin.ps1"
 }

@@ -126,13 +126,19 @@ def _launch(exe: str) -> subprocess.Popen[Any]:
     return subprocess.Popen([exe], **kwargs)
 
 
-def restart(descriptor: Path, log: Path | None, *, delay: float = 1.5, wait: float = 60.0) -> int:
+def restart(descriptor: Path, log: Path | None, *, delay: float = 1.5, wait: float = 60.0,
+            host_pid: int | None = None) -> int:
     time.sleep(max(0.0, delay))
     before = _host_pid(descriptor)
     host = None
     if before is not None:
         try:
             host = psutil.Process(before)
+        except (psutil.Error, OSError):
+            host = None
+    if host is None and host_pid:
+        try:
+            host = psutil.Process(host_pid)
         except (psutil.Error, OSError):
             host = None
     if host is None:
@@ -179,9 +185,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--log", default="")
     parser.add_argument("--delay", type=float, default=1.5)
     parser.add_argument("--wait", type=float, default=60.0)
+    parser.add_argument("--host-pid", type=int, default=0)
     args = parser.parse_args(argv)
     return restart(Path(args.descriptor), Path(args.log) if args.log else None,
-                   delay=args.delay, wait=args.wait)
+                   delay=args.delay, wait=args.wait, host_pid=args.host_pid or None)
 
 
 if __name__ == "__main__":
