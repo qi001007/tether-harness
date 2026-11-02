@@ -1,6 +1,6 @@
 {
-  "version": "0.2.70",
-  "notes": "Display name and avatar now live on the Hub account. Edits are written through /api/auth/profile and every signed-in device converges on the next state poll. The account page keeps the 0.2.69 collapsed rows and modal editing, so the panel still never changes size.",
+  "version": "0.2.71",
+  "notes": "The login card now has an inertial network animation on the left with straight links, and switching to invite registration slides between two fixed-size panes instead of stretching the page. The duplicate 返回 DSH text link is gone; the top-right close button remains.",
   "download": "https://github.com/qi001007/tether-harness",
   "install": "git pull && powershell -ExecutionPolicy Bypass -File desktop/install-plugin.ps1"
 }

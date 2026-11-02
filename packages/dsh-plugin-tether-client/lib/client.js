@@ -5763,7 +5763,7 @@ monaco-editor/esm/vs/languages/definitions/swift/swift.js:
 
     const EditorRuntime = TetherMonacoRuntime
     const PANEL_ID = 'tether'
-    const PLUGIN_VERSION = "0.2.70"
+    const PLUGIN_VERSION = "0.2.71"
 function parentOf(path) {
   const clean = String(path || '').replace(/[\\/]+$/, '')
   if (!clean) return ''
@@ -7510,13 +7510,127 @@ function createConnectionPanel(React) {
     )
   }
 
+  function LoginNetwork() {
+    const svgRef = React.useRef(null)
+    const lineRefs = React.useRef([])
+    const nodeRefs = React.useRef([])
+    const pointerRef = React.useRef({ x: 0, y: 0, active: false })
+    React.useEffect(() => {
+      const svg = svgRef.current
+      if (!svg) return undefined
+      const nodes = [
+        { x: 160, y: 150, r: 10, phase: 0.2 },
+        { x: 70, y: 208, r: 8.5, phase: 1.7 },
+        { x: 252, y: 198, r: 8.5, phase: 3.1 },
+        { x: 160, y: 74, r: 9.5, phase: 4.4 }
+      ].map((node) => ({ ...node, ox: node.x, oy: node.y, vx: 0, vy: 0 }))
+      const edges = [[0, 1], [0, 2], [0, 3], [1, 2], [2, 3], [3, 1]]
+      const reduced = typeof window !== 'undefined' && window.matchMedia
+        && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      let frame = 0
+      let last = performance.now()
+      let running = true
+      const draw = () => {
+        edges.forEach((edge, index) => {
+          const line = lineRefs.current[index]
+          if (!line) return
+          const a = nodes[edge[0]]
+          const b = nodes[edge[1]]
+          line.setAttribute('x1', a.x.toFixed(2))
+          line.setAttribute('y1', a.y.toFixed(2))
+          line.setAttribute('x2', b.x.toFixed(2))
+          line.setAttribute('y2', b.y.toFixed(2))
+        })
+        nodes.forEach((node, index) => {
+          const circle = nodeRefs.current[index]
+          if (!circle) return
+          circle.setAttribute('cx', node.x.toFixed(2))
+          circle.setAttribute('cy', node.y.toFixed(2))
+        })
+      }
+      const step = (now) => {
+        if (!running) return
+        const dt = Math.min(34, now - last) / 16.667
+        last = now
+        const pointer = pointerRef.current
+        nodes.forEach((node) => {
+          let fx = (node.ox - node.x) * 0.014 + Math.sin(now * 0.0007 + node.phase) * 0.018
+          let fy = (node.oy - node.y) * 0.014 + Math.cos(now * 0.0006 + node.phase) * 0.022
+          if (pointer.active) {
+            const dx = node.x - pointer.x
+            const dy = node.y - pointer.y
+            const distance = Math.hypot(dx, dy)
+            if (distance > 0.1 && distance < 96) {
+              const push = (1 - distance / 96) * 0.55
+              fx += (dx / distance) * push
+              fy += (dy / distance) * push
+            }
+          }
+          node.vx = (node.vx + fx * dt) * 0.955
+          node.vy = (node.vy + fy * dt) * 0.955
+          node.x += node.vx * dt
+          node.y += node.vy * dt
+          if (node.x < node.r + 10) { node.x = node.r + 10; node.vx = Math.abs(node.vx) * 0.45 }
+          if (node.x > 310 - node.r) { node.x = 310 - node.r; node.vx = -Math.abs(node.vx) * 0.45 }
+          if (node.y < node.r + 10) { node.y = node.r + 10; node.vy = Math.abs(node.vy) * 0.45 }
+          if (node.y > 250 - node.r) { node.y = 250 - node.r; node.vy = -Math.abs(node.vy) * 0.45 }
+        })
+        draw()
+        frame = requestAnimationFrame(step)
+      }
+      const move = (event) => {
+        const ctm = svg.getScreenCTM()
+        if (!ctm) return
+        const point = svg.createSVGPoint()
+        point.x = event.clientX
+        point.y = event.clientY
+        const local = point.matrixTransform(ctm.inverse())
+        pointerRef.current = { x: local.x, y: local.y, active: true }
+      }
+      const leave = () => { pointerRef.current = { x: 0, y: 0, active: false } }
+      draw()
+      if (!reduced) frame = requestAnimationFrame(step)
+      svg.addEventListener('pointermove', move)
+      svg.addEventListener('pointerleave', leave)
+      return () => {
+        running = false
+        if (frame) cancelAnimationFrame(frame)
+        svg.removeEventListener('pointermove', move)
+        svg.removeEventListener('pointerleave', leave)
+      }
+    }, [])
+    return h('svg', {
+      ref: svgRef, viewBox: '0 0 320 260', 'aria-hidden': true,
+      style: { width: '100%', height: 'auto', flex: '1 1 auto', position: 'relative', zIndex: 1, touchAction: 'none' }
+    },
+      h('defs', null,
+        h('linearGradient', { id: 'tether-login-line', gradientUnits: 'userSpaceOnUse', x1: '40', y1: '50', x2: '280', y2: '230' },
+          h('stop', { offset: '0%', stopColor: '#3b82f6', stopOpacity: 0.95 }),
+          h('stop', { offset: '100%', stopColor: '#f59e0b', stopOpacity: 0.95 }))),
+      h('g', { stroke: 'url(#tether-login-line)', strokeWidth: 1.2, fill: 'none' },
+        [[0, 1], [0, 2], [0, 3], [1, 2], [2, 3], [3, 1]].map((edge, index) =>
+          h('line', {
+            key: 'edge-' + index,
+            ref: (element) => { lineRefs.current[index] = element },
+            opacity: index < 3 ? 0.72 : 0.34
+          }))),
+      h('g', { fill: '#0b1220', stroke: '#3b82f6', strokeWidth: 2 },
+        h('circle', { ref: (element) => { nodeRefs.current[1] = element }, r: 8.5 }),
+        h('circle', { ref: (element) => { nodeRefs.current[2] = element }, r: 8.5 })),
+      h('circle', { ref: (element) => { nodeRefs.current[3] = element }, r: 9.5, fill: '#f59e0b', opacity: 0.95 }),
+      h('circle', { ref: (element) => { nodeRefs.current[0] = element }, r: 10, fill: '#fff' }),
+      h('g', { fill: 'rgba(255,255,255,.32)' },
+        h('circle', { cx: 110, cy: 130, r: 2 }), h('circle', { cx: 210, cy: 120, r: 2 }),
+        h('circle', { cx: 120, cy: 210, r: 2 }), h('circle', { cx: 230, cy: 215, r: 2 })))
+  }
+
   function LoginScreen({ defaultUrl = '', defaultEmail = '', onLogin, onExit }) {
     const DEFAULT_SERVER = 'https://8-220-198-26.sslip.io'
     const server = cleanUrl(defaultUrl || DEFAULT_SERVER)
     const [email, setEmail] = React.useState(defaultEmail || '')
     const [password, setPassword] = React.useState('')
     const [totp, setTotp] = React.useState('')
-    const [inviteOpen, setInviteOpen] = React.useState(false)
+    const [view, setView] = React.useState('login')
     const [inviteCode, setInviteCode] = React.useState('')
     const [inviteEmail, setInviteEmail] = React.useState('')
     const [invitePassword, setInvitePassword] = React.useState('')
@@ -7548,7 +7662,44 @@ function createConnectionPanel(React) {
     }
     const login = () => run('login', () => post('/api/auth/login', { email: email.trim(), password, totp: totp.trim() }))
     const acceptInvite = () => run('invite', () => post('/api/auth/accept-invite', { code: inviteCode.trim(), email: inviteEmail.trim(), password: invitePassword }))
+    const switchView = (next) => { setMessage(''); setView(next) }
     const fieldRow = (label, input) => h('label', { style: { display: 'grid', gap: 5, fontSize: 12, color: sub } }, label, input)
+    const messageSlot = () => h('div', { key: 'message', role: message ? 'alert' : undefined, style: { minHeight: 16, lineHeight: '16px', fontSize: 12, color: 'var(--dsw-alias-state-error-primary, #b42318)' } }, message)
+    const pane = (name, active, offset, children) => h('div', {
+      'data-pane': name,
+      'aria-hidden': !active,
+      inert: active ? undefined : '',
+      style: {
+        position: 'absolute', inset: 0, padding: '0 30px', display: 'grid', alignContent: 'center', gap: 14,
+        opacity: active ? 1 : 0,
+        transform: active ? 'translateX(0)' : 'translateX(' + offset + 'px)',
+        transition: 'opacity 200ms ease, transform 280ms cubic-bezier(.22,.61,.36,1)',
+        pointerEvents: active ? 'auto' : 'none'
+      }
+    }, children)
+    const loginPane = [
+      h('div', { key: 'title', style: { display: 'grid', gap: 6, marginBottom: 4 } },
+        h('strong', { style: { fontSize: 24, letterSpacing: '.01em' } }, 'Tether'),
+        h('span', { style: { color: mute, fontSize: 12.5 } }, '登录你的私有设备网')),
+      fieldRow('邮箱', h('input', { key: 'email', value: email, onChange: (event) => setEmail(event.target.value), type: 'email', autoComplete: 'username', autoFocus: true, style: field })),
+      h('div', { key: 'credentials', style: { display: 'grid', gridTemplateColumns: '1fr 108px', gap: 8 } },
+        fieldRow('密码', h('input', { value: password, onChange: (event) => setPassword(event.target.value), type: 'password', autoComplete: 'current-password', style: field })),
+        fieldRow('两步验证码', h('input', { value: totp, onChange: (event) => setTotp(event.target.value), inputMode: 'numeric', maxLength: 6, style: field }))),
+      h('button', { key: 'login', onClick: login, disabled: !!busy, style: { ...primary, width: '100%', opacity: busy ? 0.5 : 1 } }, busy === 'login' ? '登录中…' : '登录'),
+      messageSlot(),
+      h('button', { key: 'invite', onClick: () => switchView('invite'), className: 'tether-hover', style: { border: 0, background: 'transparent', color: mute, fontSize: 11.5, cursor: 'pointer', padding: 0, justifySelf: 'center' } }, '首次使用？用邀请码注册')
+    ]
+    const invitePane = [
+      h('div', { key: 'title', style: { display: 'grid', gap: 6, marginBottom: 4 } },
+        h('strong', { style: { fontSize: 24, letterSpacing: '.01em' } }, '邀请码注册'),
+        h('span', { style: { color: mute, fontSize: 12.5 } }, '创建账号并加入私有设备网')),
+      fieldRow('邀请码', h('input', { key: 'code', value: inviteCode, onChange: (event) => setInviteCode(event.target.value), spellCheck: false, maxLength: 12, style: field })),
+      fieldRow('邮箱', h('input', { key: 'email', value: inviteEmail, onChange: (event) => setInviteEmail(event.target.value), type: 'email', autoComplete: 'username', style: field })),
+      fieldRow('密码（至少 10 位）', h('input', { key: 'password', value: invitePassword, onChange: (event) => setInvitePassword(event.target.value), type: 'password', autoComplete: 'new-password', style: field })),
+      h('button', { key: 'create', onClick: acceptInvite, disabled: !!busy, style: { ...primary, width: '100%', opacity: busy ? 0.5 : 1 } }, busy === 'invite' ? '创建中…' : '创建账号并登录'),
+      messageSlot(),
+      h('button', { key: 'back', onClick: () => switchView('login'), className: 'tether-hover', style: { border: 0, background: 'transparent', color: mute, fontSize: 11.5, cursor: 'pointer', padding: 0, justifySelf: 'center' } }, '已有账号？返回登录')
+    ]
     const visual = h('div', { className: 'tether-login-visual', style: {
       position: 'relative', padding: 28, display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
       background: 'linear-gradient(155deg, #0b1220 0%, #13233f 55%, #0b1220 100%)', overflow: 'hidden'
@@ -7557,24 +7708,7 @@ function createConnectionPanel(React) {
       h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, color: '#fff', position: 'relative', zIndex: 1 } },
         h('span', { style: { width: 28, height: 28, borderRadius: 8, background: '#fff', display: 'grid', placeItems: 'center', color: '#101828', fontWeight: 700, fontSize: 15 } }, 'T'),
         h('span', { style: { fontSize: 13, letterSpacing: '.12em', textTransform: 'uppercase', opacity: 0.8 } }, 'Tether')),
-      h('svg', { viewBox: '0 0 320 260', 'aria-hidden': true, style: { width: '100%', height: 'auto', flex: '1 1 auto', position: 'relative', zIndex: 1 } },
-        h('defs', null,
-          h('linearGradient', { id: 'tether-login-line', x1: '0', y1: '0', x2: '1', y2: '1' },
-            h('stop', { offset: '0%', stopColor: '#3b82f6', stopOpacity: 0.9 }),
-            h('stop', { offset: '100%', stopColor: '#f59e0b', stopOpacity: 0.9 }))),
-        h('g', { stroke: 'url(#tether-login-line)', strokeWidth: 1.2, opacity: 0.72, fill: 'none' },
-          h('path', { d: 'M64 190 C 110 130, 150 120, 160 92' }),
-          h('path', { d: 'M160 92 C 190 115, 230 135, 258 176' }),
-          h('path', { d: 'M160 92 L 160 196' }),
-          h('path', { d: 'M64 190 L 160 196 L 258 176' })),
-        h('g', { fill: '#0b1220', stroke: '#3b82f6', strokeWidth: 2 },
-          h('circle', { cx: 64, cy: 190, r: 9 }),
-          h('circle', { cx: 258, cy: 176, r: 9 })),
-        h('circle', { cx: 160, cy: 92, r: 12, fill: '#f59e0b', opacity: 0.95 }),
-        h('circle', { cx: 160, cy: 196, r: 10, fill: '#fff' }),
-        h('g', { fill: 'rgba(255,255,255,.35)' },
-          h('circle', { cx: 110, cy: 130, r: 2 }), h('circle', { cx: 210, cy: 120, r: 2 }),
-          h('circle', { cx: 120, cy: 210, r: 2 }), h('circle', { cx: 230, cy: 215, r: 2 }))),
+      h(LoginNetwork),
       h('div', { style: { fontSize: 11.5, letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(255,255,255,.55)', position: 'relative', zIndex: 1 } }, '私有设备网'))
     return h('div', { style: {
       position: 'absolute', inset: 0, zIndex: 80, display: 'grid', placeItems: 'center', padding: 24,
@@ -7583,36 +7717,19 @@ function createConnectionPanel(React) {
     } },
       h('style', null, '@media (max-width: 760px){.tether-login-card{grid-template-columns:1fr!important}.tether-login-visual{display:none!important}}'),
       h('div', { className: 'tether-login-card', style: {
-        position: 'relative', width: 'min(820px, 100%)', maxHeight: 'calc(100vh - 48px)', display: 'grid',
+        position: 'relative', width: 'min(820px, 100%)', display: 'grid',
         gridTemplateColumns: '320px minmax(0, 1fr)', borderRadius: 18, overflow: 'hidden', background: bg,
         boxShadow: '0 24px 70px rgba(16,24,40,.22)', border: '1px solid rgba(16,24,40,.06)'
       } },
         visual,
-        h('div', { style: { position: 'relative', padding: '32px 30px 26px', display: 'grid', gap: 14, alignContent: 'center', overflowY: 'auto', minHeight: 0 } },
+        h('div', { className: 'tether-login-stage', style: { position: 'relative', minHeight: 0, padding: '28px 0 26px', display: 'flex', flexDirection: 'column' } },
           onExit ? h('button', {
             type: 'button', onClick: onExit, title: '退出', 'aria-label': '退出', className: 'tether-hover',
-            style: { position: 'absolute', top: 12, right: 12, width: 28, height: 28, border: 0, borderRadius: 6, background: 'transparent', color: mute, fontSize: 18, cursor: 'pointer' }
+            style: { position: 'absolute', top: 12, right: 12, zIndex: 2, width: 28, height: 28, border: 0, borderRadius: 6, background: 'transparent', color: mute, fontSize: 18, cursor: 'pointer' }
           }, '×') : null,
-          h('div', { style: { display: 'grid', gap: 6, marginBottom: 4 } },
-            h('strong', { style: { fontSize: 24, letterSpacing: '.01em' } }, 'Tether'),
-            h('span', { style: { color: mute, fontSize: 12.5 } }, '登录你的私有设备网')),
-          fieldRow('邮箱', h('input', { value: email, onChange: (event) => setEmail(event.target.value), type: 'email', autoComplete: 'username', autoFocus: true, style: field })),
-          h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 108px', gap: 8 } },
-            fieldRow('密码', h('input', { value: password, onChange: (event) => setPassword(event.target.value), type: 'password', autoComplete: 'current-password', style: field })),
-            fieldRow('两步验证码', h('input', { value: totp, onChange: (event) => setTotp(event.target.value), inputMode: 'numeric', maxLength: 6, style: field }))),
-          h('button', { onClick: login, disabled: !!busy, style: { ...primary, width: '100%', opacity: busy ? 0.5 : 1 } }, busy === 'login' ? '登录中…' : '登录'),
-          message ? h('div', { role: 'alert', style: { color: 'var(--dsw-alias-state-error-primary, #b42318)', fontSize: 12 } }, message) : null,
-          h('button', { onClick: () => setInviteOpen((value) => !value), style: { border: 0, background: 'transparent', color: mute, fontSize: 11.5, cursor: 'pointer', padding: 0, justifySelf: 'center' } }, inviteOpen ? '收起邀请码注册' : '首次使用？用邀请码注册'),
-          inviteOpen ? h('div', { style: { display: 'grid', gap: 8, borderTop: '1px solid ' + line, paddingTop: 12 } },
-            h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 } },
-              fieldRow('邀请码', h('input', { value: inviteCode, onChange: (event) => setInviteCode(event.target.value), spellCheck: false, maxLength: 12, style: field })),
-              fieldRow('邮箱', h('input', { value: inviteEmail, onChange: (event) => setInviteEmail(event.target.value), type: 'email', style: field }))),
-            fieldRow('密码（至少 10 位）', h('input', { value: invitePassword, onChange: (event) => setInvitePassword(event.target.value), type: 'password', autoComplete: 'new-password', style: field })),
-            h('button', { onClick: acceptInvite, disabled: !!busy, style: { ...secondary, justifySelf: 'start' } }, busy === 'invite' ? '创建中…' : '创建账号并登录')) : null,
-          onExit ? h('button', {
-            type: 'button', onClick: onExit,
-            style: { border: 0, background: 'transparent', color: mute, fontSize: 11.5, cursor: 'pointer', padding: 0, justifySelf: 'center' }
-          }, '返回 DSH') : null)
+          h('div', { style: { position: 'relative', height: 344, flex: '0 0 auto' } },
+            pane('login', view === 'login', -16, loginPane),
+            pane('invite', view === 'invite', 16, invitePane)))
       )
     )
   }
