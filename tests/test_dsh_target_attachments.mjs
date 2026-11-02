@@ -706,6 +706,8 @@ test('DSH registration wires the device explorer and ships the modal bundle', ()
 
   const explorer = fs.readFileSync(new URL('../packages/tether-ui/src/target-file-explorer.js', import.meta.url), 'utf8')
   assert.match(explorer, /className: 'tether-dir-loading'/)
+  assert.match(explorer, /position: 'absolute', inset: 0, zIndex: 4/)
+  assert.match(explorer, /animateTransform/)
   assert.match(explorer, /'aria-label': '正在加载目录'/)
   assert.match(explorer, /errorToast/)
   assert.match(explorer, /position: 'relative', display: 'flex', flexDirection: 'column'/)

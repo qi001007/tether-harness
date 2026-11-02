@@ -5763,7 +5763,7 @@ monaco-editor/esm/vs/languages/definitions/swift/swift.js:
 
     const EditorRuntime = TetherMonacoRuntime
     const PANEL_ID = 'tether'
-    const PLUGIN_VERSION = "0.2.55"
+    const PLUGIN_VERSION = "0.2.56"
 function parentOf(path) {
   const clean = String(path || '').replace(/[\\/]+$/, '')
   if (!clean) return ''
@@ -5990,13 +5990,21 @@ function TargetFileExplorer({
       visible.map((item) => row(item)))
   }
   const loadingOverlay = loading ? h('div', {
-    className: 'tether-dir-loading', role: 'status', 'aria-live': 'polite', 'aria-label': '正在加载目录'
+    className: 'tether-dir-loading', role: 'status', 'aria-live': 'polite', 'aria-label': '正在加载目录',
+    style: {
+      position: 'absolute', inset: 0, zIndex: 4, display: 'grid', placeItems: 'center',
+      background: 'color-mix(in srgb, ' + (C.bg || '#ffffff') + ' 78%, transparent)',
+      color: C.mute || '#667085'
+    }
   },
-    h('span', { className: 'tether-spin', style: { width: 20, height: 20, display: 'grid', placeItems: 'center' } },
+    h('span', { className: 'tether-dir-loading-spinner', style: { width: 20, height: 20, display: 'grid', placeItems: 'center' } },
       h('svg', {
         width: 18, height: 18, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor',
         strokeWidth: 1.5, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true
-      }, h('path', { d: 'M13 8a5 5 0 1 1-1.5-3.56' }), h('path', { d: 'M13.2 2.3v3.1h-3.1' })))
+      },
+        h('g', null,
+          h('animateTransform', { attributeName: 'transform', type: 'rotate', from: '0 8 8', to: '360 8 8', dur: '0.8s', repeatCount: 'indefinite' }),
+          h('path', { d: 'M13 8a5 5 0 1 1-1.5-3.56' }), h('path', { d: 'M13.2 2.3v3.1h-3.1' }))))
   ) : null
   const errorToast = error && entries !== null && !loading ? h('div', {
     role: 'alert',
