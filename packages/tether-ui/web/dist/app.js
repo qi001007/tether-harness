@@ -163061,6 +163061,8 @@ function createConnectionPanel(React2) {
 }
 
 // src/settings-panel.js
+var CROP_VIEW = 240;
+var AVATAR_OUTPUT = 256;
 function createSettingsPanel(React2) {
   const h2 = React2.createElement;
   const ink = "var(--dsw-alias-label-primary, #101828)";
@@ -163145,11 +163147,26 @@ function createSettingsPanel(React2) {
     const [section, setSection] = React2.useState(initialSection);
     const [currentPassword, setCurrentPassword] = React2.useState("");
     const [newPassword, setNewPassword] = React2.useState("");
+    const [confirmPassword, setConfirmPassword] = React2.useState("");
+    const [showCurrentPassword, setShowCurrentPassword] = React2.useState(false);
+    const [showNewPassword, setShowNewPassword] = React2.useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = React2.useState(false);
+    const [passwordTouched, setPasswordTouched] = React2.useState({ current: false, next: false, confirm: false });
+    const [capsLock, setCapsLock] = React2.useState(false);
     const [busy, setBusy] = React2.useState("");
     const [message, setMessage] = React2.useState("");
     const [avatar, setAvatar] = React2.useState(accountAvatar || "");
+    const [avatarError, setAvatarError] = React2.useState("");
+    const [nameEditing, setNameEditing] = React2.useState(false);
+    const [nameDraft, setNameDraft] = React2.useState(accountName || "");
+    const [nameError, setNameError] = React2.useState("");
     const [refreshing, setRefreshing] = React2.useState(false);
+    const [crop, setCrop] = React2.useState(null);
+    const [cropError, setCropError] = React2.useState("");
     const avatarInputRef = React2.useRef(null);
+    const cropImageRef = React2.useRef(null);
+    const cropDragRef = React2.useRef(null);
+    const cropUrlRef = React2.useRef("");
     const [keepSurfaces, setKeepSurfaces] = React2.useState(() => {
       try {
         return localStorage.getItem("tether.keepSurfaces") !== "0";
@@ -163158,25 +163175,211 @@ function createSettingsPanel(React2) {
       }
     });
     React2.useEffect(() => {
-      if (open) {
-        setSection(initialSection);
-        setMessage("");
-      }
+      if (!open) return;
+      setSection(initialSection);
+      setMessage("");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setPasswordTouched({ current: false, next: false, confirm: false });
     }, [open, initialSection]);
     React2.useEffect(() => {
       setAvatar(accountAvatar || "");
     }, [accountAvatar]);
+    React2.useEffect(() => {
+      if (!nameEditing) setNameDraft(accountName || "");
+    }, [accountName, nameEditing]);
+    React2.useEffect(() => {
+      if (open) return;
+      setCrop(null);
+      setCropError("");
+      if (cropUrlRef.current) {
+        URL.revokeObjectURL(cropUrlRef.current);
+        cropUrlRef.current = "";
+      }
+    }, [open]);
+    React2.useEffect(() => () => {
+      if (cropUrlRef.current) URL.revokeObjectURL(cropUrlRef.current);
+    }, []);
+    React2.useEffect(() => {
+      if (!crop) return void 0;
+      const onKey = (event) => {
+        if (event.key !== "Escape") return;
+        setCrop(null);
+        setCropError("");
+        if (cropUrlRef.current) {
+          URL.revokeObjectURL(cropUrlRef.current);
+          cropUrlRef.current = "";
+        }
+      };
+      window.addEventListener("keydown", onKey);
+      return () => window.removeEventListener("keydown", onKey);
+    }, [crop]);
     if (!open) return null;
     const status2 = connection.status || "unknown";
     const roleLabel = accountRole === "owner" ? "\u6240\u6709\u8005" : accountRole === "member" ? "\u6210\u5458" : accountRole === "admin" ? "\u7BA1\u7406\u5458" : accountRole || "";
     const dotColor = status2 === "online" ? success : status2 === "offline" ? danger : status2 === "checking" ? "var(--dsw-alias-state-warn-primary, #b54708)" : mute;
     const statusLabel = status2 === "online" ? "\u5DF2\u8FDE\u63A5" : status2 === "offline" ? "\u4E0D\u53EF\u8FBE" : status2 === "checking" ? "\u68C0\u6D4B\u4E2D" : "\u672A\u77E5";
+    const closeCrop = () => {
+      if (cropUrlRef.current) {
+        URL.revokeObjectURL(cropUrlRef.current);
+        cropUrlRef.current = "";
+      }
+      setCrop(null);
+      setCropError("");
+    };
+    const chooseAvatar = () => {
+      try {
+        if (avatarInputRef.current) avatarInputRef.current.click();
+      } catch (_) {
+      }
+    };
+    const loadAvatar = (event) => {
+      const file = event.target.files && event.target.files[0];
+      event.target.value = "";
+      setAvatarError("");
+      if (!file) return;
+      if (!/^image\//.test(file.type) || file.size > 8 * 1024 * 1024) {
+        setAvatarError("\u8BF7\u9009\u62E9 8 MB \u4EE5\u5185\u7684\u56FE\u7247");
+        return;
+      }
+      if (cropUrlRef.current) URL.revokeObjectURL(cropUrlRef.current);
+      const url = URL.createObjectURL(file);
+      cropUrlRef.current = url;
+      setCropError("");
+      setCrop({ url, name: file.name, ready: false, imageW: 0, imageH: 0, baseScale: 1, zoom: 1, x: 0, y: 0 });
+    };
+    const onCropLoad = () => {
+      const image = cropImageRef.current;
+      if (!image) return;
+      const width2 = image.naturalWidth || image.width;
+      const height = image.naturalHeight || image.height;
+      if (!width2 || !height) {
+        setCropError("\u65E0\u6CD5\u8BFB\u53D6\u8FD9\u5F20\u56FE\u7247");
+        return;
+      }
+      const baseScale = Math.max(CROP_VIEW / width2, CROP_VIEW / height);
+      setCrop((current2) => current2 ? {
+        ...current2,
+        ready: true,
+        imageW: width2,
+        imageH: height,
+        baseScale,
+        zoom: 1,
+        x: (CROP_VIEW - width2 * baseScale) / 2,
+        y: (CROP_VIEW - height * baseScale) / 2
+      } : current2);
+    };
+    const clampCrop = (current2, x, y, zoom = current2.zoom) => {
+      const scale = current2.baseScale * zoom;
+      return {
+        x: Math.min(0, Math.max(CROP_VIEW - current2.imageW * scale, x)),
+        y: Math.min(0, Math.max(CROP_VIEW - current2.imageH * scale, y))
+      };
+    };
+    const setCropZoom = (value) => {
+      setCrop((current2) => {
+        if (!current2 || !current2.ready) return current2;
+        const zoom = Math.max(1, Math.min(3, Number(value) || 1));
+        const ratio = zoom / current2.zoom;
+        const center = CROP_VIEW / 2;
+        const x = center - (center - current2.x) * ratio;
+        const y = center - (center - current2.y) * ratio;
+        return { ...current2, zoom, ...clampCrop(current2, x, y, zoom) };
+      });
+    };
+    const resetCrop = () => {
+      setCrop((current2) => current2 && current2.ready ? {
+        ...current2,
+        zoom: 1,
+        x: (CROP_VIEW - current2.imageW * current2.baseScale) / 2,
+        y: (CROP_VIEW - current2.imageH * current2.baseScale) / 2
+      } : current2);
+    };
+    const cropPointerDown = (event) => {
+      if (!crop || !crop.ready) return;
+      event.preventDefault();
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+      cropDragRef.current = { pointerX: event.clientX, pointerY: event.clientY, originX: crop.x, originY: crop.y };
+    };
+    const cropPointerMove = (event) => {
+      const drag = cropDragRef.current;
+      if (!drag) return;
+      setCrop((current2) => {
+        if (!current2) return current2;
+        return {
+          ...current2,
+          ...clampCrop(current2, drag.originX + event.clientX - drag.pointerX, drag.originY + event.clientY - drag.pointerY)
+        };
+      });
+    };
+    const cropPointerUp = () => {
+      cropDragRef.current = null;
+    };
+    const saveCrop = () => {
+      const image = cropImageRef.current;
+      if (!crop || !crop.ready || !image) return;
+      const scale = crop.baseScale * crop.zoom;
+      const sourceSize = CROP_VIEW / scale;
+      const canvas = document.createElement("canvas");
+      canvas.width = AVATAR_OUTPUT;
+      canvas.height = AVATAR_OUTPUT;
+      const context = canvas.getContext("2d");
+      if (!context) {
+        setCropError("\u65E0\u6CD5\u4FDD\u5B58\u8FD9\u5F20\u56FE\u7247");
+        return;
+      }
+      context.drawImage(image, -crop.x / scale, -crop.y / scale, sourceSize, sourceSize, 0, 0, AVATAR_OUTPUT, AVATAR_OUTPUT);
+      let dataUrl;
+      try {
+        dataUrl = canvas.toDataURL("image/jpeg", 0.9);
+      } catch (_) {
+        setCropError("\u65E0\u6CD5\u4FDD\u5B58\u8FD9\u5F20\u56FE\u7247");
+        return;
+      }
+      setAvatar(dataUrl);
+      if (typeof onAvatarChange === "function") onAvatarChange(dataUrl);
+      closeCrop();
+    };
+    const removeAvatar = () => {
+      if (avatar && typeof window !== "undefined" && typeof window.confirm === "function" && !window.confirm("\u79FB\u9664\u5F53\u524D\u5934\u50CF\uFF1F")) return;
+      setAvatar("");
+      if (typeof onAvatarChange === "function") onAvatarChange("");
+      closeCrop();
+    };
+    const startNameEdit = () => {
+      setNameDraft(accountName || "");
+      setNameError("");
+      setNameEditing(true);
+    };
+    const saveName = () => {
+      const value = nameDraft.trim();
+      if (value.length > 32) {
+        setNameError("\u6700\u591A 32 \u4E2A\u5B57\u7B26");
+        return;
+      }
+      if (typeof onAccountNameChange === "function") onAccountNameChange(value);
+      setNameEditing(false);
+      setNameError("");
+    };
+    const cancelName = () => {
+      setNameDraft(accountName || "");
+      setNameEditing(false);
+      setNameError("");
+    };
+    const passwordRules = {
+      current: !currentPassword ? "\u8BF7\u8F93\u5165\u5F53\u524D\u5BC6\u7801" : "",
+      next: !newPassword ? "\u8BF7\u8F93\u5165\u65B0\u5BC6\u7801" : newPassword.length < 10 ? "\u65B0\u5BC6\u7801\u81F3\u5C11 10 \u4F4D" : newPassword === currentPassword ? "\u65B0\u5BC6\u7801\u4E0D\u80FD\u4E0E\u5F53\u524D\u5BC6\u7801\u76F8\u540C" : "",
+      confirm: !confirmPassword ? "\u8BF7\u518D\u6B21\u8F93\u5165\u65B0\u5BC6\u7801" : confirmPassword !== newPassword ? "\u4E24\u6B21\u8F93\u5165\u7684\u65B0\u5BC6\u7801\u4E0D\u4E00\u81F4" : ""
+    };
+    const passwordValid = !passwordRules.current && !passwordRules.next && !passwordRules.confirm;
     const changePassword = async () => {
+      setPasswordTouched({ current: true, next: true, confirm: true });
+      if (!passwordValid) return;
       if (!server) {
         setMessage("\u672A\u914D\u7F6E\u670D\u52A1\u5668\u5730\u5740");
         return;
       }
-      if (!currentPassword || !newPassword) return;
       setMessage("");
       setBusy("password");
       try {
@@ -163186,11 +163389,16 @@ function createSettingsPanel(React2) {
           body: JSON.stringify({ current_password: currentPassword, new_password: newPassword })
         });
         const data = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(data.detail && (data.detail.error || data.detail.code) || data.error || "HTTP " + response.status);
+        if (!response.ok) {
+          const detail = data.detail && (data.detail.error || data.detail.code) || data.error;
+          throw new Error(response.status === 401 ? "\u5F53\u524D\u5BC6\u7801\u4E0D\u6B63\u786E" : detail || "HTTP " + response.status);
+        }
         setCurrentPassword("");
         setNewPassword("");
+        setConfirmPassword("");
+        setPasswordTouched({ current: false, next: false, confirm: false });
         if (typeof onPasswordChanged === "function") onPasswordChanged(data);
-        setMessage("\u5BC6\u7801\u5DF2\u4FEE\u6539");
+        setMessage("\u5BC6\u7801\u5DF2\u66F4\u65B0");
       } catch (error) {
         setMessage(String(error && error.message || error));
       } finally {
@@ -163206,42 +163414,14 @@ function createSettingsPanel(React2) {
         setRefreshing(false);
       }
     };
-    const chooseAvatar = () => {
-      try {
-        if (avatarInputRef.current) avatarInputRef.current.click();
-      } catch (_) {
-      }
-    };
-    const loadAvatar = (event) => {
-      const file = event.target.files && event.target.files[0];
-      event.target.value = "";
-      if (!file || !/^image\//.test(file.type) || file.size > 2 * 1024 * 1024) {
-        if (file) setMessage("\u8BF7\u9009\u62E9 2 MB \u4EE5\u5185\u7684\u56FE\u7247");
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = () => {
-        const image = new Image();
-        image.onload = () => {
-          const size = 128;
-          const canvas = document.createElement("canvas");
-          canvas.width = size;
-          canvas.height = size;
-          const context = canvas.getContext("2d");
-          const scale = Math.max(size / image.width, size / image.height);
-          const width2 = image.width * scale;
-          const height = image.height * scale;
-          context.drawImage(image, (size - width2) / 2, (size - height) / 2, width2, height);
-          const dataUrl = canvas.toDataURL("image/jpeg", 0.86);
-          setAvatar(dataUrl);
-          if (typeof onAvatarChange === "function") onAvatarChange(dataUrl);
-        };
-        image.onerror = () => setMessage("\u65E0\u6CD5\u8BFB\u53D6\u8FD9\u5F20\u56FE\u7247");
-        image.src = String(reader.result || "");
-      };
-      reader.onerror = () => setMessage("\u65E0\u6CD5\u8BFB\u53D6\u8FD9\u5F20\u56FE\u7247");
-      reader.readAsDataURL(file);
-    };
+    const textAction = (label, onClick, color = blue) => h2("button", {
+      type: "button",
+      onClick,
+      className: "tether-hover",
+      style: { border: 0, background: "transparent", padding: 0, color, fontSize: 11.5, cursor: "pointer", font: "inherit" }
+    }, label);
+    const groupTitle = (label) => h2("div", { style: { fontSize: 12, fontWeight: 600, color: sub, letterSpacing: 0.2 } }, label);
+    const cardStyle = { border: "1px solid " + line, borderRadius: 10, background: bg, padding: 16 };
     const avatarView = h2(
       "button",
       {
@@ -163251,8 +163431,8 @@ function createSettingsPanel(React2) {
         "aria-label": "\u66F4\u6362\u5934\u50CF",
         style: {
           position: "relative",
-          width: 56,
-          height: 56,
+          width: 64,
+          height: 64,
           flex: "0 0 auto",
           padding: 0,
           border: 0,
@@ -163265,7 +163445,7 @@ function createSettingsPanel(React2) {
       },
       avatar ? h2("img", { src: avatar, alt: "", style: { width: "100%", height: "100%", objectFit: "cover", display: "block" } }) : h2(
         "span",
-        { "aria-hidden": true, style: { display: "grid", placeItems: "center", width: "100%", height: "100%", fontSize: 19, fontWeight: 600 } },
+        { "aria-hidden": true, style: { display: "grid", placeItems: "center", width: "100%", height: "100%", fontSize: 21, fontWeight: 600 } },
         String(accountName || accountEmail || "?").trim().charAt(0).toUpperCase()
       ),
       h2("span", {
@@ -163274,8 +163454,8 @@ function createSettingsPanel(React2) {
           position: "absolute",
           right: 0,
           bottom: 0,
-          width: 20,
-          height: 20,
+          width: 22,
+          height: 22,
           borderRadius: 999,
           display: "grid",
           placeItems: "center",
@@ -163283,60 +163463,276 @@ function createSettingsPanel(React2) {
           color: sub,
           boxShadow: "0 0 0 1px " + line
         }
-      }, Glyph ? h2(Glyph, { name: "pencil", size: 11 }) : "\u270E")
+      }, Glyph ? h2(Glyph, { name: "pencil", size: 12 }) : "\u270E")
     );
-    const accountSection = h2(
+    const profileCard = h2(
       "div",
-      { style: { display: "grid", gap: 18 } },
-      h2("input", { ref: avatarInputRef, type: "file", accept: "image/*", onChange: loadAvatar, style: { display: "none" } }),
+      { style: cardStyle },
       h2(
         "div",
-        { style: { display: "flex", alignItems: "center", gap: 14 } },
+        { style: { display: "flex", alignItems: "center", gap: 14, minWidth: 0 } },
         avatarView,
         h2(
           "div",
-          { style: { minWidth: 0, display: "grid", gap: 3 } },
+          { style: { minWidth: 0, display: "grid", gap: 3, flex: "1 1 auto" } },
           h2("div", { style: { fontSize: 13.5, fontWeight: 600, color: ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, accountEmail || "\u672A\u767B\u5F55"),
-          roleLabel ? h2("div", { style: { fontSize: 12, color: mute } }, roleLabel) : null
+          roleLabel ? h2("div", { style: { fontSize: 12, color: mute } }, roleLabel) : null,
+          h2(
+            "div",
+            { style: { display: "flex", alignItems: "center", gap: 12, marginTop: 4 } },
+            textAction("\u66F4\u6362\u5934\u50CF", chooseAvatar),
+            avatar ? textAction("\u79FB\u9664\u5934\u50CF", removeAvatar, danger) : null
+          )
         )
       ),
-      h2(
-        "label",
-        { style: { display: "grid", gap: 6, fontSize: 12, color: sub, maxWidth: 320 } },
-        "\u663E\u793A\u540D\u79F0",
-        h2("input", {
-          value: accountName,
-          placeholder: "\u672A\u8BBE\u7F6E",
-          maxLength: 32,
-          onChange: (event) => {
-            if (typeof onAccountNameChange === "function") onAccountNameChange(event.target.value);
-          },
-          style: field
-        })
-      ),
-      h2("div", { style: { height: 1, background: line } }),
+      avatarError ? h2("div", { role: "alert", style: { marginTop: 8, color: danger, fontSize: 11.5 } }, avatarError) : null,
+      h2("div", { style: { height: 1, background: line, margin: "14px 0" } }),
       h2(
         "div",
-        { style: { display: "grid", gap: 10, maxWidth: 320 } },
-        h2("div", { style: { fontSize: 13, fontWeight: 600, color: ink } }, "\u5BC6\u7801"),
-        h2("input", { value: currentPassword, onChange: (event) => setCurrentPassword(event.target.value), type: "password", autoComplete: "current-password", placeholder: "\u5F53\u524D\u5BC6\u7801", "aria-label": "\u5F53\u524D\u5BC6\u7801", style: field }),
-        h2("input", { value: newPassword, onChange: (event) => setNewPassword(event.target.value), type: "password", autoComplete: "new-password", placeholder: "\u65B0\u5BC6\u7801\uFF08\u81F3\u5C11 10 \u4F4D\uFF09", "aria-label": "\u65B0\u5BC6\u7801", style: field }),
+        { style: { display: "flex", alignItems: nameEditing ? "flex-start" : "center", gap: 10, minHeight: 36 } },
+        h2("span", { style: { width: 78, flex: "0 0 auto", fontSize: 12, color: mute, paddingTop: nameEditing ? 8 : 0 } }, "\u663E\u793A\u540D\u79F0"),
+        nameEditing ? h2(
+          "div",
+          { style: { display: "grid", gap: 8, flex: "1 1 auto", minWidth: 0 } },
+          h2("input", {
+            value: nameDraft,
+            onChange: (event) => setNameDraft(event.target.value),
+            maxLength: 32,
+            autoComplete: "nickname",
+            autoFocus: true,
+            "aria-label": "\u663E\u793A\u540D\u79F0",
+            onKeyDown: (event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                saveName();
+              }
+              if (event.key === "Escape") {
+                event.preventDefault();
+                cancelName();
+              }
+            },
+            style: field
+          }),
+          h2(
+            "div",
+            { style: { display: "flex", gap: 8 } },
+            h2("button", {
+              type: "button",
+              onClick: saveName,
+              disabled: nameDraft.trim() === String(accountName || "").trim(),
+              style: { ...primary, height: 28, padding: "0 10px", opacity: nameDraft.trim() === String(accountName || "").trim() ? 0.5 : 1 }
+            }, "\u4FDD\u5B58"),
+            h2("button", { type: "button", onClick: cancelName, style: { ...secondary, height: 28, padding: "0 10px" } }, "\u53D6\u6D88")
+          ),
+          nameError ? h2("div", { role: "alert", style: { color: danger, fontSize: 11.5 } }, nameError) : null
+        ) : h2(
+          "div",
+          { style: { display: "flex", alignItems: "center", gap: 6, flex: "1 1 auto", minWidth: 0 } },
+          h2("span", { style: { flex: "1 1 auto", minWidth: 0, fontSize: 13, color: accountName ? ink : mute, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, accountName || "\u672A\u8BBE\u7F6E"),
+          h2("button", {
+            type: "button",
+            onClick: startNameEdit,
+            title: "\u7F16\u8F91\u663E\u793A\u540D\u79F0",
+            "aria-label": "\u7F16\u8F91\u663E\u793A\u540D\u79F0",
+            className: "tether-hover",
+            style: { width: 26, height: 26, flex: "0 0 auto", display: "grid", placeItems: "center", border: 0, borderRadius: 6, background: "transparent", color: mute, cursor: "pointer" }
+          }, Glyph ? h2(Glyph, { name: "pencil", size: 14 }) : "\u270E")
+        )
+      )
+    );
+    const passwordInput = (key, label, value, onChange, visible, onToggle, autoComplete) => {
+      const error = passwordTouched[key] ? passwordRules[key] : "";
+      return h2(
+        "label",
+        { style: { display: "grid", gap: 6, fontSize: 12, color: sub } },
+        label,
+        h2(
+          "div",
+          { style: { position: "relative" } },
+          h2("input", {
+            type: visible ? "text" : "password",
+            value,
+            onChange: (event) => onChange(event.target.value),
+            onBlur: () => {
+              setPasswordTouched((current2) => ({ ...current2, [key]: true }));
+              setCapsLock(false);
+            },
+            onKeyUp: (event) => {
+              if (event.getModifierState) setCapsLock(event.getModifierState("CapsLock"));
+            },
+            name: autoComplete,
+            autoComplete,
+            "aria-invalid": error ? "true" : void 0,
+            "aria-describedby": error ? "pw-" + key + "-error" : void 0,
+            style: { ...field, height: 34, paddingRight: 34 }
+          }),
+          h2("button", {
+            type: "button",
+            onMouseDown: (event) => event.preventDefault(),
+            onClick: onToggle,
+            title: visible ? "\u9690\u85CF\u5BC6\u7801" : "\u663E\u793A\u5BC6\u7801",
+            "aria-label": visible ? "\u9690\u85CF\u5BC6\u7801" : "\u663E\u793A\u5BC6\u7801",
+            "aria-pressed": visible,
+            className: "tether-hover",
+            style: { position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", width: 26, height: 26, border: 0, borderRadius: 5, background: "transparent", color: visible ? blue : mute, display: "grid", placeItems: "center", cursor: "pointer" }
+          }, Glyph ? h2(Glyph, { name: "eye", size: 14 }) : null)
+        ),
+        error ? h2("div", { id: "pw-" + key + "-error", role: "alert", style: { color: danger, fontSize: 11.5 } }, error) : null
+      );
+    };
+    const securityCard = h2(
+      "div",
+      { style: cardStyle },
+      h2("div", { style: { fontSize: 13, fontWeight: 600, color: ink, marginBottom: 10 } }, "\u5BC6\u7801"),
+      h2(
+        "form",
+        {
+          onSubmit: (event) => {
+            event.preventDefault();
+            void changePassword();
+          },
+          style: { display: "grid", gap: 12, maxWidth: 360 }
+        },
+        passwordInput("current", "\u5F53\u524D\u5BC6\u7801", currentPassword, setCurrentPassword, showCurrentPassword, () => setShowCurrentPassword((value) => !value), "current-password"),
+        passwordInput("next", "\u65B0\u5BC6\u7801", newPassword, setNewPassword, showNewPassword, () => setShowNewPassword((value) => !value), "new-password"),
+        passwordInput("confirm", "\u786E\u8BA4\u65B0\u5BC6\u7801", confirmPassword, setConfirmPassword, showConfirmPassword, () => setShowConfirmPassword((value) => !value), "new-password"),
+        capsLock ? h2("div", { style: { color: "var(--dsw-alias-state-warn-primary, #b54708)", fontSize: 11.5 } }, "Caps Lock \u5DF2\u5F00\u542F") : null,
+        h2(
+          "div",
+          { style: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" } },
+          h2("button", {
+            type: "submit",
+            disabled: busy === "password",
+            style: { ...primary, opacity: busy === "password" ? 0.5 : 1, cursor: busy === "password" ? "default" : "pointer" }
+          }, busy === "password" ? "\u66F4\u65B0\u4E2D\u2026" : "\u66F4\u65B0\u5BC6\u7801"),
+          message ? h2("div", { role: "status", style: { color: message === "\u5BC6\u7801\u5DF2\u66F4\u65B0" ? success : danger, fontSize: 12 } }, message) : null
+        )
+      )
+    );
+    const accountSection = h2(
+      "div",
+      { style: { display: "grid", gap: 18, maxWidth: 520 } },
+      h2("input", { ref: avatarInputRef, type: "file", accept: "image/*", onChange: loadAvatar, style: { display: "none" } }),
+      h2("div", { style: { display: "grid", gap: 8 } }, groupTitle("\u4E2A\u4EBA\u8D44\u6599"), profileCard),
+      h2("div", { style: { display: "grid", gap: 8 } }, groupTitle("\u767B\u5F55\u4E0E\u5B89\u5168"), securityCard),
+      h2(
+        "div",
+        { style: { borderTop: "1px solid " + line, paddingTop: 14 } },
         h2("button", {
           type: "button",
-          onClick: changePassword,
-          disabled: !!busy || !currentPassword || !newPassword,
-          style: { ...secondary, justifySelf: "start", opacity: busy || !currentPassword || !newPassword ? 0.5 : 1 }
-        }, busy === "password" ? "\u4FEE\u6539\u4E2D\u2026" : "\u4FEE\u6539\u5BC6\u7801"),
-        message ? h2("div", { role: "status", style: { color: message === "\u5BC6\u7801\u5DF2\u4FEE\u6539" ? success : danger, fontSize: 12 } }, message) : null
-      ),
-      h2("div", { style: { height: 1, background: line } }),
-      h2("button", {
-        type: "button",
-        onClick: onLogout,
-        className: "tether-hover",
-        style: { justifySelf: "start", border: 0, background: "transparent", padding: 0, color: danger, fontSize: 12.5, cursor: "pointer" }
-      }, "\u9000\u51FA\u767B\u5F55")
+          onClick: onLogout,
+          className: "tether-hover",
+          style: { border: 0, background: "transparent", padding: 0, color: danger, fontSize: 12.5, cursor: "pointer" }
+        }, "\u9000\u51FA\u767B\u5F55")
+      )
     );
+    const cropModal = crop ? h2(
+      "div",
+      {
+        onPointerDown: (event) => {
+          if (event.target === event.currentTarget) closeCrop();
+        },
+        style: { position: "absolute", inset: 0, zIndex: 80, display: "grid", placeItems: "center", padding: 24, background: "rgba(16,24,40,.45)" }
+      },
+      h2(
+        "section",
+        {
+          role: "dialog",
+          "aria-label": "\u66F4\u6362\u5934\u50CF",
+          onPointerDown: (event) => event.stopPropagation(),
+          style: { width: "min(440px, 100%)", maxHeight: "100%", display: "flex", flexDirection: "column", overflow: "hidden", background: bg, borderRadius: 12, boxShadow: "var(--dsw-elevation-panel, 0 18px 50px rgba(16,24,40,.22))" }
+        },
+        h2(
+          "header",
+          { style: { height: 44, padding: "0 14px", display: "flex", alignItems: "center", borderBottom: "1px solid " + line, flex: "0 0 auto" } },
+          h2("strong", { style: { fontSize: 14 } }, "\u66F4\u6362\u5934\u50CF"),
+          h2("button", { type: "button", onClick: closeCrop, title: "\u5173\u95ED", "aria-label": "\u5173\u95ED", className: "tether-hover", style: { marginLeft: "auto", width: 28, height: 28, border: 0, borderRadius: 6, background: "transparent", color: mute, fontSize: 18, cursor: "pointer" } }, "\xD7")
+        ),
+        h2(
+          "div",
+          { style: { padding: 20, display: "grid", gap: 14, justifyItems: "center" } },
+          h2(
+            "div",
+            {
+              onPointerDown: cropPointerDown,
+              onPointerMove: cropPointerMove,
+              onPointerUp: cropPointerUp,
+              onPointerCancel: cropPointerUp,
+              onWheel: (event) => {
+                if (crop.ready) {
+                  event.preventDefault();
+                  setCropZoom(crop.zoom - event.deltaY * 15e-4);
+                }
+              },
+              style: {
+                position: "relative",
+                width: CROP_VIEW,
+                height: CROP_VIEW,
+                borderRadius: "50%",
+                overflow: "hidden",
+                background: "#111318",
+                cursor: crop.ready ? "grab" : "default",
+                touchAction: "none",
+                flex: "0 0 auto"
+              }
+            },
+            h2("img", {
+              ref: cropImageRef,
+              src: crop.url,
+              alt: "",
+              draggable: false,
+              onLoad: onCropLoad,
+              onDragStart: (event) => event.preventDefault(),
+              style: {
+                position: "absolute",
+                left: 0,
+                top: 0,
+                maxWidth: "none",
+                userSelect: "none",
+                pointerEvents: "none",
+                opacity: crop.ready ? 1 : 0,
+                transformOrigin: "0 0",
+                transform: "translate(" + crop.x + "px," + crop.y + "px) scale(" + crop.baseScale * crop.zoom + ")"
+              }
+            }),
+            h2("div", { "aria-hidden": true, style: { position: "absolute", inset: 0, borderRadius: "50%", boxShadow: "inset 0 0 0 1px rgba(255,255,255,.55)", pointerEvents: "none" } }),
+            !crop.ready && !cropError ? h2("div", { style: { position: "absolute", inset: 0, display: "grid", placeItems: "center", color: "#98a2b3", fontSize: 12 } }, "\u8BFB\u53D6\u56FE\u7247\u2026") : null
+          ),
+          crop.ready ? h2(
+            "div",
+            { style: { display: "flex", alignItems: "center", gap: 8, width: "100%" } },
+            h2("span", { "aria-hidden": true, style: { color: mute, fontSize: 14 } }, "\u2212"),
+            h2("input", {
+              type: "range",
+              min: 1,
+              max: 3,
+              step: 0.01,
+              value: crop.zoom,
+              "aria-label": "\u7F29\u653E\u5934\u50CF",
+              onChange: (event) => setCropZoom(event.target.value),
+              style: { flex: "1 1 auto", accentColor: blue }
+            }),
+            h2("span", { "aria-hidden": true, style: { color: mute, fontSize: 14 } }, "+"),
+            h2("button", {
+              type: "button",
+              onClick: resetCrop,
+              title: "\u91CD\u7F6E",
+              "aria-label": "\u91CD\u7F6E",
+              className: "tether-hover",
+              style: { width: 24, height: 24, flex: "0 0 auto", display: "grid", placeItems: "center", border: 0, borderRadius: 5, background: "transparent", color: mute, cursor: "pointer" }
+            }, Glyph ? h2(Glyph, { name: "refresh", size: 13 }) : "\u21BA")
+          ) : null,
+          cropError ? h2("div", { role: "alert", style: { color: danger, fontSize: 11.5 } }, cropError) : null
+        ),
+        h2(
+          "footer",
+          { style: { display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", borderTop: "1px solid " + line, flex: "0 0 auto" } },
+          avatar ? textAction("\u79FB\u9664\u5934\u50CF", removeAvatar, danger) : h2("span", { style: { flex: "1 1 auto" } }),
+          h2("button", { type: "button", onClick: closeCrop, style: { ...secondary, height: 28, padding: "0 10px", marginLeft: "auto" } }, "\u53D6\u6D88"),
+          h2("button", { type: "button", onClick: saveCrop, disabled: !crop.ready, style: { ...primary, height: 28, padding: "0 12px", opacity: crop.ready ? 1 : 0.5 } }, "\u4FDD\u5B58")
+        )
+      )
+    ) : null;
     const connectionSection = h2(
       "div",
       { style: { display: "grid", gap: 10 } },
@@ -163493,7 +163889,8 @@ function createSettingsPanel(React2) {
           nav,
           h2("div", { className: "tether-scroll", style: { flex: "1 1 auto", minWidth: 0, overflowY: "auto", padding: "20px 24px" } }, current.render())
         )
-      )
+      ),
+      cropModal
     );
   }
   return { SettingsPanel };

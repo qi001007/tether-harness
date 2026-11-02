@@ -1,6 +1,6 @@
 {
-  "version": "0.2.59",
-  "notes": "The APP warms the other online DSH surfaces in a hidden frame after startup, so device switches land in about five seconds instead of waiting for the cold 4.2 MB plugin bundle. Also includes 0.2.52 transfer page, picker tree and activity bar changes.",
+  "version": "0.2.60",
+  "notes": "Account settings now follow mainstream products: a circular avatar crop step with drag, zoom and reset; an inline display-name editor; and a three-field password form with show/hide, inline validation, autocomplete hints and a Caps Lock warning.",
   "download": "https://github.com/qi001007/tether-harness",
   "install": "git pull && powershell -ExecutionPolicy Bypass -File desktop/install-plugin.ps1"
 }
