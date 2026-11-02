@@ -1,6 +1,6 @@
 {
-  "version": "0.2.68",
-  "notes": "The 更新 section is now a proper settings list: a title and refresh header, grouped device rows, component version chips without slashes or arrows, and a fixed action slot. An available update only adds the blue download button, so the row does not grow or change text.",
+  "version": "0.2.69",
+  "notes": "Account settings now stay still: the avatar uses a camera overlay and an icon-only remove action, while display name and password are collapsed rows. Editing opens a focused modal over the same 760x560 settings panel instead of stretching the page.",
   "download": "https://github.com/qi001007/tether-harness",
   "install": "git pull && powershell -ExecutionPolicy Bypass -File desktop/install-plugin.ps1"
 }

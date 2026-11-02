@@ -7685,9 +7685,9 @@ function createSettingsPanel(React) {
     const [message, setMessage] = React.useState('')
     const [avatar, setAvatar] = React.useState(accountAvatar || '')
     const [avatarError, setAvatarError] = React.useState('')
-    const [nameEditing, setNameEditing] = React.useState(false)
     const [nameDraft, setNameDraft] = React.useState(accountName || '')
     const [nameError, setNameError] = React.useState('')
+    const [editModal, setEditModal] = React.useState('')
     const [refreshing, setRefreshing] = React.useState(false)
     const [crop, setCrop] = React.useState(null)
     const [cropError, setCropError] = React.useState('')
@@ -7701,16 +7701,18 @@ function createSettingsPanel(React) {
     React.useEffect(() => {
       if (!open) return
       setSection(initialSection)
+      setEditModal('')
       setMessage('')
       setCurrentPassword(''); setNewPassword(''); setConfirmPassword('')
       setPasswordTouched({ current: false, next: false, confirm: false })
     }, [open, initialSection])
     React.useEffect(() => { setAvatar(accountAvatar || '') }, [accountAvatar])
     React.useEffect(() => {
-      if (!nameEditing) setNameDraft(accountName || '')
-    }, [accountName, nameEditing])
+      if (editModal !== 'name') setNameDraft(accountName || '')
+    }, [accountName, editModal])
     React.useEffect(() => {
       if (open) return
+      setEditModal('')
       setCrop(null); setCropError('')
       if (cropUrlRef.current) { URL.revokeObjectURL(cropUrlRef.current); cropUrlRef.current = '' }
     }, [open])
@@ -7833,8 +7835,6 @@ function createSettingsPanel(React) {
       closeCrop()
     }
     const removeAvatar = () => {
-      if (avatar && typeof window !== 'undefined' && typeof window.confirm === 'function'
-          && !window.confirm('移除当前头像？')) return
       setAvatar('')
       if (typeof onAvatarChange === 'function') onAvatarChange('')
       closeCrop()
@@ -7842,19 +7842,33 @@ function createSettingsPanel(React) {
     const startNameEdit = () => {
       setNameDraft(accountName || '')
       setNameError('')
-      setNameEditing(true)
+      setEditModal('name')
     }
     const saveName = () => {
       const value = nameDraft.trim()
       if (value.length > 32) { setNameError('最多 32 个字符'); return }
       if (typeof onAccountNameChange === 'function') onAccountNameChange(value)
-      setNameEditing(false)
+      setEditModal('')
       setNameError('')
     }
     const cancelName = () => {
       setNameDraft(accountName || '')
-      setNameEditing(false)
+      setEditModal('')
       setNameError('')
+    }
+    const openPassword = () => {
+      setCurrentPassword(''); setNewPassword(''); setConfirmPassword('')
+      setPasswordTouched({ current: false, next: false, confirm: false })
+      setMessage('')
+      setCapsLock(false)
+      setEditModal('password')
+    }
+    const closePassword = () => {
+      if (busy === 'password') return
+      setEditModal('')
+      setMessage('')
+      setCurrentPassword(''); setNewPassword(''); setConfirmPassword('')
+      setPasswordTouched({ current: false, next: false, confirm: false })
     }
 
     const passwordRules = {
@@ -7884,6 +7898,10 @@ function createSettingsPanel(React) {
         setPasswordTouched({ current: false, next: false, confirm: false })
         if (typeof onPasswordChanged === 'function') onPasswordChanged(data)
         setMessage('密码已更新')
+        setTimeout(() => {
+          setEditModal('')
+          setMessage('')
+        }, 900)
       } catch (error) {
         setMessage(String(error && error.message || error))
       } finally {
@@ -7921,45 +7939,26 @@ function createSettingsPanel(React) {
           display: 'grid', placeItems: 'center', background: bg, color: sub,
           boxShadow: '0 0 0 1px ' + line
         }
-      }, Glyph ? h(Glyph, { name: 'pencil', size: 12 }) : '✎'))
-    const profileCard = h('div', { style: cardStyle },
-      h('div', { style: { display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 } },
+      }, Glyph ? h(Glyph, { name: 'camera', size: 12 }) : '✎'))
+    const profileCard = h('div', { style: { ...cardStyle, position: 'relative' } },
+      avatar ? h('button', {
+        type: 'button', onClick: removeAvatar, title: '移除头像', 'aria-label': '移除头像', className: 'tether-hover',
+        style: { position: 'absolute', top: 10, right: 10, width: 26, height: 26, display: 'grid', placeItems: 'center', border: 0, borderRadius: 6, background: 'transparent', color: mute, cursor: 'pointer' }
+      }, Glyph ? h(Glyph, { name: 'trash', size: 14 }) : '×') : null,
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 14, minWidth: 0, paddingRight: 28 } },
         avatarView,
         h('div', { style: { minWidth: 0, display: 'grid', gap: 3, flex: '1 1 auto' } },
           h('div', { style: { fontSize: 13.5, fontWeight: 600, color: ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, accountEmail || '未登录'),
-          roleLabel ? h('div', { style: { fontSize: 12, color: mute } }, roleLabel) : null,
-          h('div', { style: { display: 'flex', alignItems: 'center', gap: 12, marginTop: 4 } },
-            textAction('更换头像', chooseAvatar),
-            avatar ? textAction('移除头像', removeAvatar, danger) : null))),
+          roleLabel ? h('div', { style: { fontSize: 12, color: mute } }, roleLabel) : null)),
       avatarError ? h('div', { role: 'alert', style: { marginTop: 8, color: danger, fontSize: 11.5 } }, avatarError) : null,
       h('div', { style: { height: 1, background: line, margin: '14px 0' } }),
-      h('div', { style: { display: 'flex', alignItems: nameEditing ? 'flex-start' : 'center', gap: 10, minHeight: 36 } },
-        h('span', { style: { width: 78, flex: '0 0 auto', fontSize: 12, color: mute, paddingTop: nameEditing ? 8 : 0 } }, '显示名称'),
-        nameEditing
-          ? h('div', { style: { display: 'grid', gap: 8, flex: '1 1 auto', minWidth: 0 } },
-            h('input', {
-              value: nameDraft, onChange: (event) => setNameDraft(event.target.value), maxLength: 32,
-              autoComplete: 'nickname', autoFocus: true, 'aria-label': '显示名称',
-              onKeyDown: (event) => {
-                if (event.key === 'Enter') { event.preventDefault(); saveName() }
-                if (event.key === 'Escape') { event.preventDefault(); cancelName() }
-              },
-              style: field
-            }),
-            h('div', { style: { display: 'flex', gap: 8 } },
-              h('button', {
-                type: 'button', onClick: saveName,
-                disabled: nameDraft.trim() === String(accountName || '').trim(),
-                style: { ...primary, height: 28, padding: '0 10px', opacity: nameDraft.trim() === String(accountName || '').trim() ? 0.5 : 1 }
-              }, '保存'),
-              h('button', { type: 'button', onClick: cancelName, style: { ...secondary, height: 28, padding: '0 10px' } }, '取消')),
-            nameError ? h('div', { role: 'alert', style: { color: danger, fontSize: 11.5 } }, nameError) : null)
-          : h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, flex: '1 1 auto', minWidth: 0 } },
-            h('span', { style: { flex: '1 1 auto', minWidth: 0, fontSize: 13, color: accountName ? ink : mute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, accountName || '未设置'),
-            h('button', {
-              type: 'button', onClick: startNameEdit, title: '编辑显示名称', 'aria-label': '编辑显示名称', className: 'tether-hover',
-              style: { width: 26, height: 26, flex: '0 0 auto', display: 'grid', placeItems: 'center', border: 0, borderRadius: 6, background: 'transparent', color: mute, cursor: 'pointer' }
-            }, Glyph ? h(Glyph, { name: 'pencil', size: 14 }) : '✎'))))
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, minHeight: 36 } },
+        h('span', { style: { width: 78, flex: '0 0 auto', fontSize: 12, color: mute } }, '显示名称'),
+        h('span', { style: { flex: '1 1 auto', minWidth: 0, fontSize: 13, color: accountName ? ink : mute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, accountName || '未设置'),
+        h('button', {
+          type: 'button', onClick: startNameEdit, title: '编辑显示名称', 'aria-label': '编辑显示名称', className: 'tether-hover',
+          style: { width: 26, height: 26, flex: '0 0 auto', display: 'grid', placeItems: 'center', border: 0, borderRadius: 6, background: 'transparent', color: mute, cursor: 'pointer' }
+        }, Glyph ? h(Glyph, { name: 'pencil', size: 14 }) : '✎')))
     const passwordInput = (key, label, value, onChange, visible, onToggle, autoComplete) => {
       const error = passwordTouched[key] ? passwordRules[key] : ''
       return h('label', { style: { display: 'grid', gap: 6, fontSize: 12, color: sub } },
@@ -7982,21 +7981,12 @@ function createSettingsPanel(React) {
         error ? h('div', { id: 'pw-' + key + '-error', role: 'alert', style: { color: danger, fontSize: 11.5 } }, error) : null)
     }
     const securityCard = h('div', { style: cardStyle },
-      h('div', { style: { fontSize: 13, fontWeight: 600, color: ink, marginBottom: 10 } }, '密码'),
-      h('form', {
-        onSubmit: (event) => { event.preventDefault(); void changePassword() },
-        style: { display: 'grid', gap: 12, maxWidth: 360 }
-      },
-        passwordInput('current', '当前密码', currentPassword, setCurrentPassword, showCurrentPassword, () => setShowCurrentPassword((value) => !value), 'current-password'),
-        passwordInput('next', '新密码', newPassword, setNewPassword, showNewPassword, () => setShowNewPassword((value) => !value), 'new-password'),
-        passwordInput('confirm', '确认新密码', confirmPassword, setConfirmPassword, showConfirmPassword, () => setShowConfirmPassword((value) => !value), 'new-password'),
-        capsLock ? h('div', { style: { color: 'var(--dsw-alias-state-warn-primary, #b54708)', fontSize: 11.5 } }, 'Caps Lock 已开启') : null,
-        h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' } },
-          h('button', {
-            type: 'submit', disabled: busy === 'password',
-            style: { ...primary, opacity: busy === 'password' ? 0.5 : 1, cursor: busy === 'password' ? 'default' : 'pointer' }
-          }, busy === 'password' ? '更新中…' : '更新密码'),
-          message ? h('div', { role: 'status', style: { color: message === '密码已更新' ? success : danger, fontSize: 12 } }, message) : null)))
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 12, minHeight: 36 } },
+        h('span', { style: { flex: '1 1 auto', fontSize: 13, color: ink, fontWeight: 'var(--tether-strong, 500)' } }, '密码'),
+        h('button', {
+          type: 'button', onClick: openPassword, className: 'tether-hover',
+          style: { ...secondary, height: 28, padding: '0 10px', display: 'inline-flex', alignItems: 'center', gap: 6 }
+        }, Glyph ? h(Glyph, { name: 'pencil', size: 13 }) : null, '修改密码')))
     const accountSection = h('div', { style: { display: 'grid', gap: 18, maxWidth: 520 } },
       h('input', { ref: avatarInputRef, type: 'file', accept: 'image/*', onChange: loadAvatar, style: { display: 'none' } }),
       h('div', { style: { display: 'grid', gap: 8 } }, groupTitle('个人资料'), profileCard),
@@ -8054,6 +8044,62 @@ function createSettingsPanel(React) {
           avatar ? textAction('移除头像', removeAvatar, danger) : h('span', { style: { flex: '1 1 auto' } }),
           h('button', { type: 'button', onClick: closeCrop, style: { ...secondary, height: 28, padding: '0 10px', marginLeft: 'auto' } }, '取消'),
           h('button', { type: 'button', onClick: saveCrop, disabled: !crop.ready, style: { ...primary, height: 28, padding: '0 12px', opacity: crop.ready ? 1 : 0.5 } }, '保存'))))
+      : null
+    const nameModal = editModal === 'name' ? h('div', {
+      onPointerDown: (event) => { if (event.target === event.currentTarget) cancelName() },
+      style: { position: 'absolute', inset: 0, zIndex: 86, display: 'grid', placeItems: 'center', padding: 24, background: 'rgba(16,24,40,.45)' }
+    },
+      h('section', {
+        role: 'dialog', 'aria-label': '修改昵称', onPointerDown: (event) => event.stopPropagation(),
+        style: { width: 'min(360px, 100%)', background: bg, borderRadius: 12, boxShadow: 'var(--dsw-elevation-panel, 0 18px 50px rgba(16,24,40,.22))', overflow: 'hidden' }
+      },
+        h('header', { style: { height: 44, padding: '0 14px', display: 'flex', alignItems: 'center', borderBottom: '1px solid ' + line } },
+          h('strong', { style: { fontSize: 14 } }, '修改昵称'),
+          h('button', { type: 'button', onClick: cancelName, title: '关闭', 'aria-label': '关闭', className: 'tether-hover', style: { marginLeft: 'auto', width: 28, height: 28, border: 0, borderRadius: 6, background: 'transparent', color: mute, fontSize: 18, cursor: 'pointer' } }, '×')),
+        h('div', { style: { padding: 18, display: 'grid', gap: 10 } },
+          h('label', { style: { display: 'grid', gap: 6, fontSize: 12, color: sub } }, '显示名称',
+            h('input', {
+              value: nameDraft, onChange: (event) => setNameDraft(event.target.value), maxLength: 32,
+              autoComplete: 'nickname', autoFocus: true, 'aria-label': '显示名称',
+              onKeyDown: (event) => {
+                if (event.key === 'Enter') { event.preventDefault(); saveName() }
+                if (event.key === 'Escape') { event.preventDefault(); cancelName() }
+              },
+              style: field
+            })),
+          nameError ? h('div', { role: 'alert', style: { color: danger, fontSize: 11.5 } }, nameError) : null),
+        h('footer', { style: { display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '10px 14px', borderTop: '1px solid ' + line } },
+          h('button', { type: 'button', onClick: cancelName, style: { ...secondary, height: 28, padding: '0 10px' } }, '取消'),
+          h('button', {
+            type: 'button', onClick: saveName,
+            disabled: nameDraft.trim() === String(accountName || '').trim(),
+            style: { ...primary, height: 28, padding: '0 12px', opacity: nameDraft.trim() === String(accountName || '').trim() ? 0.5 : 1 }
+          }, '保存'))))
+      : null
+    const passwordModal = editModal === 'password' ? h('div', {
+      onPointerDown: (event) => { if (event.target === event.currentTarget) closePassword() },
+      style: { position: 'absolute', inset: 0, zIndex: 86, display: 'grid', placeItems: 'center', padding: 24, background: 'rgba(16,24,40,.45)' }
+    },
+      h('section', {
+        role: 'dialog', 'aria-label': '修改密码', onPointerDown: (event) => event.stopPropagation(),
+        style: { width: 'min(380px, 100%)', maxHeight: 'calc(100vh - 48px)', background: bg, borderRadius: 12, boxShadow: 'var(--dsw-elevation-panel, 0 18px 50px rgba(16,24,40,.22))', overflow: 'hidden', display: 'flex', flexDirection: 'column' }
+      },
+        h('header', { style: { height: 44, padding: '0 14px', display: 'flex', alignItems: 'center', borderBottom: '1px solid ' + line, flex: '0 0 auto' } },
+          h('strong', { style: { fontSize: 14 } }, '修改密码'),
+          h('button', { type: 'button', onClick: closePassword, title: '关闭', 'aria-label': '关闭', className: 'tether-hover', style: { marginLeft: 'auto', width: 28, height: 28, border: 0, borderRadius: 6, background: 'transparent', color: mute, fontSize: 18, cursor: 'pointer' } }, '×')),
+        h('form', { onSubmit: (event) => { event.preventDefault(); void changePassword() }, style: { display: 'flex', flexDirection: 'column', minHeight: 0 } },
+          h('div', { className: 'tether-scroll', style: { padding: 18, display: 'grid', gap: 12, overflowY: 'auto' } },
+            passwordInput('current', '当前密码', currentPassword, setCurrentPassword, showCurrentPassword, () => setShowCurrentPassword((value) => !value), 'current-password'),
+            passwordInput('next', '新密码', newPassword, setNewPassword, showNewPassword, () => setShowNewPassword((value) => !value), 'new-password'),
+            passwordInput('confirm', '确认新密码', confirmPassword, setConfirmPassword, showConfirmPassword, () => setShowConfirmPassword((value) => !value), 'new-password'),
+            capsLock ? h('div', { style: { color: 'var(--dsw-alias-state-warn-primary, #b54708)', fontSize: 11.5 } }, 'Caps Lock 已开启') : null,
+            message ? h('div', { role: 'status', style: { color: message === '密码已更新' ? success : danger, fontSize: 12 } }, message) : null),
+          h('footer', { style: { display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '10px 14px', borderTop: '1px solid ' + line, flex: '0 0 auto' } },
+            h('button', { type: 'button', onClick: closePassword, style: { ...secondary, height: 28, padding: '0 10px' } }, '取消'),
+            h('button', {
+              type: 'submit', disabled: busy === 'password',
+              style: { ...primary, height: 28, padding: '0 12px', opacity: busy === 'password' ? 0.5 : 1, cursor: busy === 'password' ? 'default' : 'pointer' }
+            }, busy === 'password' ? '更新中…' : '更新密码')))))
       : null
     const connectionSection = h('div', { style: { display: 'grid', gap: 10 } },
       h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, minHeight: 24 } },
@@ -8223,7 +8269,9 @@ function createSettingsPanel(React) {
         h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex' } },
           nav,
           h('div', { className: 'tether-scroll', style: { flex: '1 1 auto', minWidth: 0, overflowY: 'auto', padding: '20px 24px' } }, current.render()))),
-      cropModal)
+      cropModal,
+      nameModal,
+      passwordModal)
   }
   return { SettingsPanel }
 }
@@ -10457,6 +10505,10 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       pencil: { parts: [
         { d: 'M10.8 2.6l2.6 2.6-7.7 7.7-3.4.8.8-3.4z' },
         { d: 'M9.4 4l2.6 2.6' }
+      ] },
+      camera: { join: 'round', parts: [
+        { d: 'M2.2 5.4h2.2l1-1.6h4.2l1 1.6h2.2v7.1H2.2z' },
+        { d: 'M8 11.3a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z' }
       ] },
       trash: { parts: [
         { d: 'M2.8 4.2h10.4M6 4.2V2.6h4v1.6M4.1 4.2l.7 9.2h6.4l.7-9.2' },

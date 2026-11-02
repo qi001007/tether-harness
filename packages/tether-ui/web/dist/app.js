@@ -163256,9 +163256,9 @@ function createSettingsPanel(React2) {
     const [message, setMessage] = React2.useState("");
     const [avatar, setAvatar] = React2.useState(accountAvatar || "");
     const [avatarError, setAvatarError] = React2.useState("");
-    const [nameEditing, setNameEditing] = React2.useState(false);
     const [nameDraft, setNameDraft] = React2.useState(accountName || "");
     const [nameError, setNameError] = React2.useState("");
+    const [editModal, setEditModal] = React2.useState("");
     const [refreshing, setRefreshing] = React2.useState(false);
     const [crop, setCrop] = React2.useState(null);
     const [cropError, setCropError] = React2.useState("");
@@ -163276,6 +163276,7 @@ function createSettingsPanel(React2) {
     React2.useEffect(() => {
       if (!open) return;
       setSection(initialSection);
+      setEditModal("");
       setMessage("");
       setCurrentPassword("");
       setNewPassword("");
@@ -163286,10 +163287,11 @@ function createSettingsPanel(React2) {
       setAvatar(accountAvatar || "");
     }, [accountAvatar]);
     React2.useEffect(() => {
-      if (!nameEditing) setNameDraft(accountName || "");
-    }, [accountName, nameEditing]);
+      if (editModal !== "name") setNameDraft(accountName || "");
+    }, [accountName, editModal]);
     React2.useEffect(() => {
       if (open) return;
+      setEditModal("");
       setCrop(null);
       setCropError("");
       if (cropUrlRef.current) {
@@ -163448,7 +163450,6 @@ function createSettingsPanel(React2) {
       closeCrop();
     };
     const removeAvatar = () => {
-      if (avatar && typeof window !== "undefined" && typeof window.confirm === "function" && !window.confirm("\u79FB\u9664\u5F53\u524D\u5934\u50CF\uFF1F")) return;
       setAvatar("");
       if (typeof onAvatarChange === "function") onAvatarChange("");
       closeCrop();
@@ -163456,7 +163457,7 @@ function createSettingsPanel(React2) {
     const startNameEdit = () => {
       setNameDraft(accountName || "");
       setNameError("");
-      setNameEditing(true);
+      setEditModal("name");
     };
     const saveName = () => {
       const value = nameDraft.trim();
@@ -163465,13 +163466,31 @@ function createSettingsPanel(React2) {
         return;
       }
       if (typeof onAccountNameChange === "function") onAccountNameChange(value);
-      setNameEditing(false);
+      setEditModal("");
       setNameError("");
     };
     const cancelName = () => {
       setNameDraft(accountName || "");
-      setNameEditing(false);
+      setEditModal("");
       setNameError("");
+    };
+    const openPassword = () => {
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setPasswordTouched({ current: false, next: false, confirm: false });
+      setMessage("");
+      setCapsLock(false);
+      setEditModal("password");
+    };
+    const closePassword = () => {
+      if (busy === "password") return;
+      setEditModal("");
+      setMessage("");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setPasswordTouched({ current: false, next: false, confirm: false });
     };
     const passwordRules = {
       current: !currentPassword ? "\u8BF7\u8F93\u5165\u5F53\u524D\u5BC6\u7801" : "",
@@ -163505,6 +163524,10 @@ function createSettingsPanel(React2) {
         setPasswordTouched({ current: false, next: false, confirm: false });
         if (typeof onPasswordChanged === "function") onPasswordChanged(data);
         setMessage("\u5BC6\u7801\u5DF2\u66F4\u65B0");
+        setTimeout(() => {
+          setEditModal("");
+          setMessage("");
+        }, 900);
       } catch (error) {
         setMessage(String(error && error.message || error));
       } finally {
@@ -163569,81 +163592,45 @@ function createSettingsPanel(React2) {
           color: sub,
           boxShadow: "0 0 0 1px " + line
         }
-      }, Glyph ? h2(Glyph, { name: "pencil", size: 12 }) : "\u270E")
+      }, Glyph ? h2(Glyph, { name: "camera", size: 12 }) : "\u270E")
     );
     const profileCard = h2(
       "div",
-      { style: cardStyle },
+      { style: { ...cardStyle, position: "relative" } },
+      avatar ? h2("button", {
+        type: "button",
+        onClick: removeAvatar,
+        title: "\u79FB\u9664\u5934\u50CF",
+        "aria-label": "\u79FB\u9664\u5934\u50CF",
+        className: "tether-hover",
+        style: { position: "absolute", top: 10, right: 10, width: 26, height: 26, display: "grid", placeItems: "center", border: 0, borderRadius: 6, background: "transparent", color: mute, cursor: "pointer" }
+      }, Glyph ? h2(Glyph, { name: "trash", size: 14 }) : "\xD7") : null,
       h2(
         "div",
-        { style: { display: "flex", alignItems: "center", gap: 14, minWidth: 0 } },
+        { style: { display: "flex", alignItems: "center", gap: 14, minWidth: 0, paddingRight: 28 } },
         avatarView,
         h2(
           "div",
           { style: { minWidth: 0, display: "grid", gap: 3, flex: "1 1 auto" } },
           h2("div", { style: { fontSize: 13.5, fontWeight: 600, color: ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, accountEmail || "\u672A\u767B\u5F55"),
-          roleLabel ? h2("div", { style: { fontSize: 12, color: mute } }, roleLabel) : null,
-          h2(
-            "div",
-            { style: { display: "flex", alignItems: "center", gap: 12, marginTop: 4 } },
-            textAction("\u66F4\u6362\u5934\u50CF", chooseAvatar),
-            avatar ? textAction("\u79FB\u9664\u5934\u50CF", removeAvatar, danger) : null
-          )
+          roleLabel ? h2("div", { style: { fontSize: 12, color: mute } }, roleLabel) : null
         )
       ),
       avatarError ? h2("div", { role: "alert", style: { marginTop: 8, color: danger, fontSize: 11.5 } }, avatarError) : null,
       h2("div", { style: { height: 1, background: line, margin: "14px 0" } }),
       h2(
         "div",
-        { style: { display: "flex", alignItems: nameEditing ? "flex-start" : "center", gap: 10, minHeight: 36 } },
-        h2("span", { style: { width: 78, flex: "0 0 auto", fontSize: 12, color: mute, paddingTop: nameEditing ? 8 : 0 } }, "\u663E\u793A\u540D\u79F0"),
-        nameEditing ? h2(
-          "div",
-          { style: { display: "grid", gap: 8, flex: "1 1 auto", minWidth: 0 } },
-          h2("input", {
-            value: nameDraft,
-            onChange: (event) => setNameDraft(event.target.value),
-            maxLength: 32,
-            autoComplete: "nickname",
-            autoFocus: true,
-            "aria-label": "\u663E\u793A\u540D\u79F0",
-            onKeyDown: (event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                saveName();
-              }
-              if (event.key === "Escape") {
-                event.preventDefault();
-                cancelName();
-              }
-            },
-            style: field
-          }),
-          h2(
-            "div",
-            { style: { display: "flex", gap: 8 } },
-            h2("button", {
-              type: "button",
-              onClick: saveName,
-              disabled: nameDraft.trim() === String(accountName || "").trim(),
-              style: { ...primary, height: 28, padding: "0 10px", opacity: nameDraft.trim() === String(accountName || "").trim() ? 0.5 : 1 }
-            }, "\u4FDD\u5B58"),
-            h2("button", { type: "button", onClick: cancelName, style: { ...secondary, height: 28, padding: "0 10px" } }, "\u53D6\u6D88")
-          ),
-          nameError ? h2("div", { role: "alert", style: { color: danger, fontSize: 11.5 } }, nameError) : null
-        ) : h2(
-          "div",
-          { style: { display: "flex", alignItems: "center", gap: 6, flex: "1 1 auto", minWidth: 0 } },
-          h2("span", { style: { flex: "1 1 auto", minWidth: 0, fontSize: 13, color: accountName ? ink : mute, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, accountName || "\u672A\u8BBE\u7F6E"),
-          h2("button", {
-            type: "button",
-            onClick: startNameEdit,
-            title: "\u7F16\u8F91\u663E\u793A\u540D\u79F0",
-            "aria-label": "\u7F16\u8F91\u663E\u793A\u540D\u79F0",
-            className: "tether-hover",
-            style: { width: 26, height: 26, flex: "0 0 auto", display: "grid", placeItems: "center", border: 0, borderRadius: 6, background: "transparent", color: mute, cursor: "pointer" }
-          }, Glyph ? h2(Glyph, { name: "pencil", size: 14 }) : "\u270E")
-        )
+        { style: { display: "flex", alignItems: "center", gap: 10, minHeight: 36 } },
+        h2("span", { style: { width: 78, flex: "0 0 auto", fontSize: 12, color: mute } }, "\u663E\u793A\u540D\u79F0"),
+        h2("span", { style: { flex: "1 1 auto", minWidth: 0, fontSize: 13, color: accountName ? ink : mute, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, accountName || "\u672A\u8BBE\u7F6E"),
+        h2("button", {
+          type: "button",
+          onClick: startNameEdit,
+          title: "\u7F16\u8F91\u663E\u793A\u540D\u79F0",
+          "aria-label": "\u7F16\u8F91\u663E\u793A\u540D\u79F0",
+          className: "tether-hover",
+          style: { width: 26, height: 26, flex: "0 0 auto", display: "grid", placeItems: "center", border: 0, borderRadius: 6, background: "transparent", color: mute, cursor: "pointer" }
+        }, Glyph ? h2(Glyph, { name: "pencil", size: 14 }) : "\u270E")
       )
     );
     const passwordInput = (key, label, value, onChange, visible, onToggle, autoComplete) => {
@@ -163689,30 +163676,16 @@ function createSettingsPanel(React2) {
     const securityCard = h2(
       "div",
       { style: cardStyle },
-      h2("div", { style: { fontSize: 13, fontWeight: 600, color: ink, marginBottom: 10 } }, "\u5BC6\u7801"),
       h2(
-        "form",
-        {
-          onSubmit: (event) => {
-            event.preventDefault();
-            void changePassword();
-          },
-          style: { display: "grid", gap: 12, maxWidth: 360 }
-        },
-        passwordInput("current", "\u5F53\u524D\u5BC6\u7801", currentPassword, setCurrentPassword, showCurrentPassword, () => setShowCurrentPassword((value) => !value), "current-password"),
-        passwordInput("next", "\u65B0\u5BC6\u7801", newPassword, setNewPassword, showNewPassword, () => setShowNewPassword((value) => !value), "new-password"),
-        passwordInput("confirm", "\u786E\u8BA4\u65B0\u5BC6\u7801", confirmPassword, setConfirmPassword, showConfirmPassword, () => setShowConfirmPassword((value) => !value), "new-password"),
-        capsLock ? h2("div", { style: { color: "var(--dsw-alias-state-warn-primary, #b54708)", fontSize: 11.5 } }, "Caps Lock \u5DF2\u5F00\u542F") : null,
-        h2(
-          "div",
-          { style: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" } },
-          h2("button", {
-            type: "submit",
-            disabled: busy === "password",
-            style: { ...primary, opacity: busy === "password" ? 0.5 : 1, cursor: busy === "password" ? "default" : "pointer" }
-          }, busy === "password" ? "\u66F4\u65B0\u4E2D\u2026" : "\u66F4\u65B0\u5BC6\u7801"),
-          message ? h2("div", { role: "status", style: { color: message === "\u5BC6\u7801\u5DF2\u66F4\u65B0" ? success : danger, fontSize: 12 } }, message) : null
-        )
+        "div",
+        { style: { display: "flex", alignItems: "center", gap: 12, minHeight: 36 } },
+        h2("span", { style: { flex: "1 1 auto", fontSize: 13, color: ink, fontWeight: "var(--tether-strong, 500)" } }, "\u5BC6\u7801"),
+        h2("button", {
+          type: "button",
+          onClick: openPassword,
+          className: "tether-hover",
+          style: { ...secondary, height: 28, padding: "0 10px", display: "inline-flex", alignItems: "center", gap: 6 }
+        }, Glyph ? h2(Glyph, { name: "pencil", size: 13 }) : null, "\u4FEE\u6539\u5BC6\u7801")
       )
     );
     const accountSection = h2(
@@ -163836,6 +163809,120 @@ function createSettingsPanel(React2) {
           avatar ? textAction("\u79FB\u9664\u5934\u50CF", removeAvatar, danger) : h2("span", { style: { flex: "1 1 auto" } }),
           h2("button", { type: "button", onClick: closeCrop, style: { ...secondary, height: 28, padding: "0 10px", marginLeft: "auto" } }, "\u53D6\u6D88"),
           h2("button", { type: "button", onClick: saveCrop, disabled: !crop.ready, style: { ...primary, height: 28, padding: "0 12px", opacity: crop.ready ? 1 : 0.5 } }, "\u4FDD\u5B58")
+        )
+      )
+    ) : null;
+    const nameModal = editModal === "name" ? h2(
+      "div",
+      {
+        onPointerDown: (event) => {
+          if (event.target === event.currentTarget) cancelName();
+        },
+        style: { position: "absolute", inset: 0, zIndex: 86, display: "grid", placeItems: "center", padding: 24, background: "rgba(16,24,40,.45)" }
+      },
+      h2(
+        "section",
+        {
+          role: "dialog",
+          "aria-label": "\u4FEE\u6539\u6635\u79F0",
+          onPointerDown: (event) => event.stopPropagation(),
+          style: { width: "min(360px, 100%)", background: bg, borderRadius: 12, boxShadow: "var(--dsw-elevation-panel, 0 18px 50px rgba(16,24,40,.22))", overflow: "hidden" }
+        },
+        h2(
+          "header",
+          { style: { height: 44, padding: "0 14px", display: "flex", alignItems: "center", borderBottom: "1px solid " + line } },
+          h2("strong", { style: { fontSize: 14 } }, "\u4FEE\u6539\u6635\u79F0"),
+          h2("button", { type: "button", onClick: cancelName, title: "\u5173\u95ED", "aria-label": "\u5173\u95ED", className: "tether-hover", style: { marginLeft: "auto", width: 28, height: 28, border: 0, borderRadius: 6, background: "transparent", color: mute, fontSize: 18, cursor: "pointer" } }, "\xD7")
+        ),
+        h2(
+          "div",
+          { style: { padding: 18, display: "grid", gap: 10 } },
+          h2(
+            "label",
+            { style: { display: "grid", gap: 6, fontSize: 12, color: sub } },
+            "\u663E\u793A\u540D\u79F0",
+            h2("input", {
+              value: nameDraft,
+              onChange: (event) => setNameDraft(event.target.value),
+              maxLength: 32,
+              autoComplete: "nickname",
+              autoFocus: true,
+              "aria-label": "\u663E\u793A\u540D\u79F0",
+              onKeyDown: (event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  saveName();
+                }
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  cancelName();
+                }
+              },
+              style: field
+            })
+          ),
+          nameError ? h2("div", { role: "alert", style: { color: danger, fontSize: 11.5 } }, nameError) : null
+        ),
+        h2(
+          "footer",
+          { style: { display: "flex", justifyContent: "flex-end", gap: 8, padding: "10px 14px", borderTop: "1px solid " + line } },
+          h2("button", { type: "button", onClick: cancelName, style: { ...secondary, height: 28, padding: "0 10px" } }, "\u53D6\u6D88"),
+          h2("button", {
+            type: "button",
+            onClick: saveName,
+            disabled: nameDraft.trim() === String(accountName || "").trim(),
+            style: { ...primary, height: 28, padding: "0 12px", opacity: nameDraft.trim() === String(accountName || "").trim() ? 0.5 : 1 }
+          }, "\u4FDD\u5B58")
+        )
+      )
+    ) : null;
+    const passwordModal = editModal === "password" ? h2(
+      "div",
+      {
+        onPointerDown: (event) => {
+          if (event.target === event.currentTarget) closePassword();
+        },
+        style: { position: "absolute", inset: 0, zIndex: 86, display: "grid", placeItems: "center", padding: 24, background: "rgba(16,24,40,.45)" }
+      },
+      h2(
+        "section",
+        {
+          role: "dialog",
+          "aria-label": "\u4FEE\u6539\u5BC6\u7801",
+          onPointerDown: (event) => event.stopPropagation(),
+          style: { width: "min(380px, 100%)", maxHeight: "calc(100vh - 48px)", background: bg, borderRadius: 12, boxShadow: "var(--dsw-elevation-panel, 0 18px 50px rgba(16,24,40,.22))", overflow: "hidden", display: "flex", flexDirection: "column" }
+        },
+        h2(
+          "header",
+          { style: { height: 44, padding: "0 14px", display: "flex", alignItems: "center", borderBottom: "1px solid " + line, flex: "0 0 auto" } },
+          h2("strong", { style: { fontSize: 14 } }, "\u4FEE\u6539\u5BC6\u7801"),
+          h2("button", { type: "button", onClick: closePassword, title: "\u5173\u95ED", "aria-label": "\u5173\u95ED", className: "tether-hover", style: { marginLeft: "auto", width: 28, height: 28, border: 0, borderRadius: 6, background: "transparent", color: mute, fontSize: 18, cursor: "pointer" } }, "\xD7")
+        ),
+        h2(
+          "form",
+          { onSubmit: (event) => {
+            event.preventDefault();
+            void changePassword();
+          }, style: { display: "flex", flexDirection: "column", minHeight: 0 } },
+          h2(
+            "div",
+            { className: "tether-scroll", style: { padding: 18, display: "grid", gap: 12, overflowY: "auto" } },
+            passwordInput("current", "\u5F53\u524D\u5BC6\u7801", currentPassword, setCurrentPassword, showCurrentPassword, () => setShowCurrentPassword((value) => !value), "current-password"),
+            passwordInput("next", "\u65B0\u5BC6\u7801", newPassword, setNewPassword, showNewPassword, () => setShowNewPassword((value) => !value), "new-password"),
+            passwordInput("confirm", "\u786E\u8BA4\u65B0\u5BC6\u7801", confirmPassword, setConfirmPassword, showConfirmPassword, () => setShowConfirmPassword((value) => !value), "new-password"),
+            capsLock ? h2("div", { style: { color: "var(--dsw-alias-state-warn-primary, #b54708)", fontSize: 11.5 } }, "Caps Lock \u5DF2\u5F00\u542F") : null,
+            message ? h2("div", { role: "status", style: { color: message === "\u5BC6\u7801\u5DF2\u66F4\u65B0" ? success : danger, fontSize: 12 } }, message) : null
+          ),
+          h2(
+            "footer",
+            { style: { display: "flex", justifyContent: "flex-end", gap: 8, padding: "10px 14px", borderTop: "1px solid " + line, flex: "0 0 auto" } },
+            h2("button", { type: "button", onClick: closePassword, style: { ...secondary, height: 28, padding: "0 10px" } }, "\u53D6\u6D88"),
+            h2("button", {
+              type: "submit",
+              disabled: busy === "password",
+              style: { ...primary, height: 28, padding: "0 12px", opacity: busy === "password" ? 0.5 : 1, cursor: busy === "password" ? "default" : "pointer" }
+            }, busy === "password" ? "\u66F4\u65B0\u4E2D\u2026" : "\u66F4\u65B0\u5BC6\u7801")
+          )
         )
       )
     ) : null;
@@ -164109,7 +164196,9 @@ function createSettingsPanel(React2) {
           h2("div", { className: "tether-scroll", style: { flex: "1 1 auto", minWidth: 0, overflowY: "auto", padding: "20px 24px" } }, current.render())
         )
       ),
-      cropModal
+      cropModal,
+      nameModal,
+      passwordModal
     );
   }
   return { SettingsPanel };
@@ -167422,6 +167511,10 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     pencil: { parts: [
       { d: "M10.8 2.6l2.6 2.6-7.7 7.7-3.4.8.8-3.4z" },
       { d: "M9.4 4l2.6 2.6" }
+    ] },
+    camera: { join: "round", parts: [
+      { d: "M2.2 5.4h2.2l1-1.6h4.2l1 1.6h2.2v7.1H2.2z" },
+      { d: "M8 11.3a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z" }
     ] },
     trash: { parts: [
       { d: "M2.8 4.2h10.4M6 4.2V2.6h4v1.6M4.1 4.2l.7 9.2h6.4l.7-9.2" },

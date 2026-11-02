@@ -1514,6 +1514,10 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         { d: 'M10.8 2.6l2.6 2.6-7.7 7.7-3.4.8.8-3.4z' },
         { d: 'M9.4 4l2.6 2.6' }
       ] },
+      camera: { join: 'round', parts: [
+        { d: 'M2.2 5.4h2.2l1-1.6h4.2l1 1.6h2.2v7.1H2.2z' },
+        { d: 'M8 11.3a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z' }
+      ] },
       trash: { parts: [
         { d: 'M2.8 4.2h10.4M6 4.2V2.6h4v1.6M4.1 4.2l.7 9.2h6.4l.7-9.2' },
         { d: 'M6.8 6.7v4.6M9.2 6.7v4.6' }
