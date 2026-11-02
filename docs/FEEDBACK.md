@@ -3,9 +3,9 @@
 ## 2026-11-02 白屏、加载叠层与设置页
 
 - [x] F97：修复“页面变成这样了”：互联页内容整体下移、大面积空白，资源管理器只剩标题条，Tether WebUI 主区域纯白。根因是 `SurfaceDeck` 外层在非聊天页仍以 `flex:1` 占满高度。改为绝对定位层：聊天页铺满，互联/资源管理器/转移页覆盖其上，deck 以 `visibility:hidden` 保持尺寸而不参与布局。判据：互联页 `main` 1416×829，deck 绝对定位且不挤压内容；聊天页 iframe 1416×829。**实测通过**。
-- [x] F98：选择器加载不能单独留一条白条，也不能挤压列表；复用资源管理器处理。删除 `dsh.js` 的 22px `role=status` 状态条、旧错误条与解释性页脚；`TargetFileExplorer` 改为绝对定位 `tether-dir-loading` 叠层，加载时保留旧列表，错误改为可重试/关闭的浮层。判据：无固定状态条；叠层覆盖列表区（转移页实测 505×628），面包屑与列表不位移。**实测通过**；DSH 选择器新结构已在本机 DSH 页面确认，无状态条、无解释页脚。
+- [x] F98：选择器加载不能单独留一条白条，也不能挤压列表；复用资源管理器处理。删除 `dsh.js` 的 22px `role=status` 状态条、旧错误条与解释性页脚；`TargetFileExplorer` 改为绝对定位 `tether-dir-loading` 叠层，加载时保留旧列表，错误改为可重试/关闭的浮层。判据：无固定状态条；叠层覆盖列表区，面包屑与列表不位移。**0.2.56 DSH 实测**：叠层 639×429、`position:absolute`、`inset:0`、`z-index:4`，转圈居中；无状态条、无解释页脚，旧列表保留。0.2.55 曾因 DSH 不加载共享 CSS 而退回 static 20px，已在 0.2.56 改为内联样式与 SVG 旋转。
 - [x] F99：设置页按成熟商业软件重做，并为后续功能留接口。左侧分区改为账号/连接/工作区/本机设备/关于；`extraSections` 可追加新分区；头像可点击更换（选图→128px 裁剪→localStorage→活动栏同步）；删除“头像与显示名称只影响本机显示”“连接灯只表示…”“切换几乎即时…”等解释句，删除与顶栏/盾牌重复的刷新、检查更新、文件权限、切换账号入口。判据：头像上传后 `tether.accountAvatar` 为 data URL 且活动栏 `<img>` 出现；设置源码不再含上述解释句；Connection 仅保留图标刷新。**实测通过**（上传测试头像后已清除）。
-- [x] F100：切换异节点很快，但切回就白屏。根因是 `SurfaceDeck` 的 `ids` 随当前设备重排，React 移动了 iframe 的 DOM 位置；iframe 一旦重新插入文档就会用已过期 ticket 重载而白屏。改为 `mountedRef` 固定挂载顺序，切设备只改 `visibility/z-index`，不移动 DOM；预加载 face 用 `visibility:hidden` 保持真实尺寸而不是 `display:none`。判据：连续 3 次 DESKTOP↔LAPTOP 往返，两个 iframe 文档长度保持 720 KB / 736 KB，标签切换 256 ms，无白屏。**实测通过**。
+- [x] F100：切换异节点很快，但切回就白屏。根因是 `SurfaceDeck` 的 `ids` 随当前设备重排，React 移动了 iframe 的 DOM 位置；iframe 一旦重新插入文档就会用已过期 ticket 重载而白屏。改为 `mountedRef` 固定挂载顺序，切设备只改 `visibility/z-index`，不移动 DOM；预加载 face 用 `visibility:hidden` 保持真实尺寸而不是 `display:none`。判据：连续 3 次 DESKTOP↔LAPTOP 往返，两个 iframe 文档长度保持 720 KB / 736 KB，标签切换 256 ms，无白屏。**0.2.56 最终实测**：DESKTOP 736,068 B、LAPTOP 720,118 B 在多轮切换后保持完整；切回聊天页两个 surface 均 1416×829，无白屏。
 
 ## 2026-11-02 资源管理器/连接/性能批次
 
