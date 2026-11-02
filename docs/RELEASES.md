@@ -1,5 +1,16 @@
 # Public client releases
 
+## v0.2.63
+
+Login exit, a visual login panel and the default server:
+
+- The DSH plugin's login screen now has an explicit exit: a `×` and a “返回 DSH” action call `ctx.layout.selectPanel(null)`, so a user who does not want to sign in can return to DSH instead of being trapped in the Tether panel. The login root uses absolute positioning so it does not cover the DSH sidebar.
+- The login card is now two columns: a dark brand visual with a device-network diagram and the form on the right; the visual is hidden on narrow screens.
+- The server-address input is gone. Login uses the stored/default server, falling back to `https://8-220-198-26.sslip.io`; the connection status view still shows the address. Separate “server connection / self-built device network” choices can be added later.
+- Real run: the APP login was rendered with the two-column visual and no server field; the token was restored afterwards. The plugin exit is covered by the generated bundle contract (`host.exitPanel` / `exitPanel`).
+
+Gates: mjs 229/229, cjs 6/6, client pytest 147 passed / 1 skipped, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41430469293` succeeded; published at 2026-11-02T10:43:24Z (app 1,779,253 B, plugin 1,358,293 B, node 84,818 B; signed manifest verified). Hub mirror refreshed to **0.2.63**. LAPTOP-01 Node+APP **15.1 s**; DESKTOP app/node/plugin **0.2.63**; LAPTOP app/node **0.2.63** with the plugin update job dispatched.
+
 ## v0.2.62
 
 Settings updates, windowless launch and DSH lifecycle:

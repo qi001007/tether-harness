@@ -1,5 +1,12 @@
 # 实时进度
 
+## 2026-11-02 v0.2.63 登录退出、登录页视觉与默认服务器
+
+1. 插件退出：DSH 插件把 `ctx.layout.selectPanel(null)` 暴露为 `host.exitPanel`；登录页在插件宿主显示右上角 `×` 与底部“返回 DSH”，不想登录可以直接回 DSH。登录根从 `fixed` 改为 `absolute`，不再连 DSH 侧栏一起盖住。APP/网页登录不显示退出。
+2. 登录视觉：登录卡片改为双栏：左侧深色品牌视觉（Tether 标记 + 设备网络连线图 + 私有设备网），右侧邮箱/密码/两步验证；窄屏自动隐藏视觉。真机截图确认双栏（APP 登录临时清 token，验后已恢复）。
+3. 服务器地址：登录页移除“服务器地址”输入，固定使用已有 `defaultUrl`，没有时回退 `https://8-220-198-26.sslip.io`；连接状态页仍显示地址但不让登录时改。未来“服务器连接/自建设备网”作为独立选项再加。
+4. 门禁：mjs 229/229、cjs 6/6、client pytest 147 passed / 1 skipped、`build.mjs --check`、`build-web.mjs --check`、`validate_versions()` 通过。0.2.63 已发布（CI `41430469293`，10:43:24Z，签名清单验签通过，app 1,779,253 B / plugin 1,358,293 B / node 84,818 B），Hub mirror 0.2.63；LAPTOP Node+APP 15.1 s；DESKTOP app/node/plugin 均 0.2.63，LAPTOP app/node 0.2.63、插件更新任务已发。
+
 ## 2026-11-02 v0.2.62 设置更新页、无终端启动与 DSH 生命周期
 
 本轮把“更新”重新作为一个设置栏目补齐，并处理 APP 启动与 DSH 生命周期：

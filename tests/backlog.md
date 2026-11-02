@@ -124,3 +124,4 @@
 - 2026-11-02：0.2.60 新增账户页契约：`CROP_VIEW=240`、`AVATAR_OUTPUT=256`、裁剪指针/缩放/保存、8 MB 图片上限、昵称行内编辑、密码三栏与 `passwordRules` 行内校验；表单无效提交不得发请求。全量 mjs 225 / cjs 6 / pytest 142+1。
 - 2026-11-02：0.2.61 新增权限抽屉契约：`auditCacheRef`/`permissionInflightRef`、设备切换并行预取策略与审计、`openSettings` 先套缓存再 `Promise.all` 刷新、无缓存时“正在读取审计…”。全量 mjs 226 / cjs 6 / pytest 142+1。
 - 2026-11-02：0.2.62 新增设置更新页（边过滤、下载图标、本机/远程更新）、DSH 状态/启动/安装与 surface 覆盖层、`pythonw.exe`/隐藏启动器契约；新增 `test_dsh_desktop.py`，`dsh_restart` 增加清 `DSH_HOME` 断言。全量 mjs 228 / cjs 6 / pytest 147+1。
+- 2026-11-02：0.2.63 新增登录契约：登录页不再有服务器地址输入、默认服务器常量、DSH `host.exitPanel`/“返回 DSH”、双栏视觉类名。全量 mjs 229 / cjs 6 / pytest 147+1。
