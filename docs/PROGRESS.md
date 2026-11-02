@@ -11,7 +11,7 @@
 
 真机证据（DESKTOP-LOCAL WebUI + 本机 DSH 插件）：互联页 `main` 1416×829，deck 绝对定位且不占布局；连续 3 次 DESKTOP↔LAPTOP 往返，两个 iframe 文档长度保持 720,118 / 736,068 B，标签切换 256 ms；设置页五分区、头像上传后 `tether.accountAvatar` 3,625 B、活动栏 `<img>` 22×22，测试头像已清除；转移页目录加载叠层 505×628、旧列表保留。0.2.56 DSH 选择器实测：无 22px 状态条、无解释页脚；加载叠层 639×429、`position:absolute`、`inset:0`、`z-index:4`、居中 SVG 旋转，旧列表保留。
 
-门禁：mjs 222/222、cjs 6/6、client pytest 142 passed / 1 skipped、`build.mjs --check`、`build-web.mjs --check`、`validate_versions()` 全部通过。Electron QA 隔离壳仍受本机环境/登录态影响，未用它替代真机结论。0.2.55 已发布（CI `41344909191`，20:07:25Z，签名清单验签通过，app 1,745,709 B / plugin 1,343,083 B / node 79,648 B）；LAPTOP-01 Node+APP 22.4 s、插件 22.2 s。0.2.56 已发布（CI `41386893828`，04:12:39Z，签名清单验签通过，app 1,746,202 B / plugin 1,343,349 B / node 79,648 B），Hub mirror 0.2.56；LAPTOP Node+APP 19.5 s、插件 16.5 s，DESKTOP 源码 APP 重启到 0.2.56。最终 DESKTOP surface 文档 736,068 B、LAPTOP 720,118 B 在多轮切换中保持；互联页 1416×829；选择器 639×429 绝对叠层、无状态条。LAPTOP 状态字段仍报插件 0.2.55，但其 surface bundle 已含 0.2.56 选择器代码，待其 Node 下次重启刷新报告。
+门禁：mjs 222/222、cjs 6/6、client pytest 142 passed / 1 skipped、`build.mjs --check`、`build-web.mjs --check`、`validate_versions()` 全部通过。Electron QA 隔离壳仍受本机环境/登录态影响，未用它替代真机结论。0.2.55 已发布（CI `41344909191`，20:07:25Z，签名清单验签通过，app 1,745,709 B / plugin 1,343,083 B / node 79,648 B）；LAPTOP-01 Node+APP 22.4 s、插件 22.2 s。0.2.56 已发布（CI `41386893828`，04:12:39Z，签名清单验签通过，app 1,746,202 B / plugin 1,343,349 B / node 79,648 B），Hub mirror 0.2.56；LAPTOP Node+APP 19.5 s、插件 16.5 s，DESKTOP 源码 APP 重启到 0.2.56。最终 DESKTOP surface 文档 736,068 B、LAPTOP 720,118 B 在多轮切换中保持；互联页 1416×829；选择器 639×429 绝对叠层、无状态条。LAPTOP 状态字段曾滞后报插件 0.2.55，重启其 Node 后两机 app/node/plugin 均报告 0.2.56。
 
 ## 2026-11-02 v0.2.54 资源管理器、连接灯与设备工作区常驻
 
