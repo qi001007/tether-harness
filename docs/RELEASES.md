@@ -1,5 +1,16 @@
 # Public client releases
 
+## v0.2.75
+
+Original icon with a V1 vertical S link:
+
+- Restore the original deep-navy tile, white top-left ring and amber bottom-right ring. The only change is the middle link, now a single-cubic vertical S with the V1 curvature.
+- Move the artwork to `assets/tether-app-s.svg/.png/.ico`; the top bar mark uses the same V1 shape.
+- Force icon refreshes with a new filename, `app.setAppUserModelId('com.tether.app')` and rebuilt Desktop / Start Menu shortcuts. The taskbar button and desktop shortcut now show V1; the tray log records `tether-app-s.ico`.
+- The rejected 0.2.74 T icon was never published; its draft release was deleted.
+
+Gates: mjs 234/234, cjs 6/6, client pytest 148 passed / 1 skipped, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41509643908` succeeded; published at 2026-11-02T19:28:43Z (app 1,783,262 B, plugin 1,362,485 B, node 84,935 B; signed manifest verified). Hub mirror refreshed to **0.2.75**.
+
 ## v0.2.73
 
 Frameless shell, unified icon and tray:

@@ -5,7 +5,7 @@
 1. 0.2.74 的纯黑 T 图标因“长竖杆 + 单球”误读被否；草稿已删除，**没有发布**。
 2. 正式图标回到最初版：深海军蓝圆角底、左上白环、右下橙环；只把中间连接线改成 **V1 立 S**（单段三次曲线，控制点 `(580,150)`、`(444,874)`）。资产改为 `assets/tether-app-s.svg/.png/.ico`；顶栏 `TetherMark` 同步 V1。
 3. 修图标缓存：使用新文件名、`app.setAppUserModelId('com.tether.app')`、重建桌面/开始菜单快捷方式并刷新 Explorer 缓存；任务栏精确裁剪与托盘日志都确认使用 V1。
-4. 门禁：mjs 234/234、cjs 6/6、pytest 148 passed / 1 skipped、两份 build check、`validate_versions()` 通过。0.2.75 已发布（CI 待填），Hub mirror 0.2.75。
+4. 门禁：mjs 234/234、cjs 6/6、pytest 148 passed / 1 skipped、两份 build check、`validate_versions()` 通过。0.2.75 已发布（CI `41509643908`，19:28:43Z，app 1,783,262 B / plugin 1,362,485 B / node 84,935 B），Hub mirror 0.2.75；DESKTOP app/plugin/node 均 0.2.75；LAPTOP app/node 0.2.75、插件运行态 0.2.71（DSH 重载滞后）。
 
 ## 2026-11-03 v0.2.73 无原生标题栏、统一图标与托盘
 
