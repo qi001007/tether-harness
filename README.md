@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/tether-icon.svg" width="88" alt="Tether icon" />
+  <img src="assets/tether-app-s.svg" width="88" alt="Tether icon" />
   <h1>Tether</h1>
   <p><strong>Your DeepSeek Harness workspace, across all your devices.</strong></p>
   <p>

@@ -37,11 +37,11 @@ test('closing the window hides it to the tray until an explicit quit', () => {
 })
 
 test('one icon source ships for the window, shortcut and tray', () => {
-  const ico = fs.statSync(path.join(root, 'assets/tether.ico'))
-  const png = fs.statSync(path.join(root, 'assets/tether-icon.png'))
+  const ico = fs.statSync(path.join(root, 'assets/tether-app-s.ico'))
+  const png = fs.statSync(path.join(root, 'assets/tether-app-s.png'))
   assert.ok(ico.size > 1000, 'multi-size ico exists')
   assert.ok(png.size > 1000, 'png source exists')
-  assert.match(main, /assets', 'tether\.ico'/)
-  assert.match(fs.readFileSync(path.join(root, 'desktop/install-app.ps1'), 'utf8'), /assets\\tether\.ico/)
+  assert.match(main, /assets', 'tether-app-s\.ico'/)
+  assert.match(fs.readFileSync(path.join(root, 'desktop/install-app.ps1'), 'utf8'), /assets\\tether-app-s\.ico/)
   assert.match(shared, /const TetherMark =/)
 })

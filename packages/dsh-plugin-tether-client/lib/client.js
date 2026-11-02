@@ -5763,7 +5763,7 @@ monaco-editor/esm/vs/languages/definitions/swift/swift.js:
 
     const EditorRuntime = TetherMonacoRuntime
     const PANEL_ID = 'tether'
-    const PLUGIN_VERSION = "0.2.74"
+    const PLUGIN_VERSION = "0.2.75"
 function parentOf(path) {
   const clean = String(path || '').replace(/[\\/]+$/, '')
   if (!clean) return ''
@@ -10585,15 +10585,13 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       width: size, height: size, viewBox: '0 0 32 32', 'aria-hidden': true,
       style: { display: 'block', flex: '0 0 auto' }
     },
-      h('rect', { x: 1, y: 1, width: 30, height: 30, rx: 8, fill: '#000000' }),
-      h('g', { strokeLinecap: 'round' },
-        h('line', { x1: 8.5, y1: 9.5, x2: 16, y2: 9.5, stroke: '#3b82f6', strokeWidth: 2.2 }),
-        h('line', { x1: 16, y1: 9.5, x2: 23.5, y2: 9.5, stroke: '#f59e0b', strokeWidth: 2.2 }),
-        h('line', { x1: 16, y1: 9.5, x2: 16, y2: 22, stroke: '#ffffff', strokeWidth: 2.2 })),
-      h('circle', { cx: 8.5, cy: 9.5, r: 3.3, fill: '#000000', stroke: '#3b82f6', strokeWidth: 1.4 }),
-      h('circle', { cx: 23.5, cy: 9.5, r: 3.3, fill: '#000000', stroke: '#3b82f6', strokeWidth: 1.4 }),
-      h('circle', { cx: 16, cy: 9.5, r: 3.7, fill: '#f59e0b' }),
-      h('circle', { cx: 16, cy: 22, r: 3.5, fill: '#ffffff' }))
+      h('rect', { x: 1, y: 1, width: 30, height: 30, rx: 8, fill: '#0f172a' }),
+      h('path', {
+        d: 'M10.6 9.3 C 18.1 4.7, 13.9 27.3, 21.4 22.7',
+        fill: 'none', stroke: '#f5f7fa', strokeWidth: 2, strokeLinecap: 'round'
+      }),
+      h('circle', { cx: 10.6, cy: 9.3, r: 2.8, fill: '#0f172a', stroke: '#f5f7fa', strokeWidth: 1.7 }),
+      h('circle', { cx: 21.4, cy: 22.7, r: 2.8, fill: '#0f172a', stroke: '#f59e0b', strokeWidth: 1.7 }))
 
     const GLYPHS = {
       workspace: { cap: 'round', join: 'round', parts: [

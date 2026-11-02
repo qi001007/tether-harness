@@ -2,6 +2,9 @@
 
 ## 2026-11-03 APP 无原生标题栏、统一图标与托盘
 
+- [x] F144：图标最终改回**最初版设计**（深海军蓝底、左上白环、右下橙环），只把中间连接线改成主人选定的 **V1 立 S**。0.2.74 的纯黑 T 版因“长竖杆 + 单球”误读被否，草稿已删除、未发布；正式资产改为 `assets/tether-app-s.svg/.png/.ico`，顶栏 `TetherMark` 同步 V1。**验证**：16/32/256 px 预览 S 形可辨；任务栏按钮实际显示 V1；托盘日志 `tray created icon=...tether-app-s.ico`。
+- [x] F145：桌面图标和任务栏图标之前没跟着变。原因：快捷方式/Explorer 缓存仍指向旧 ico，任务栏还按 `electron` 身份缓存。修复：图标改用新文件名 `tether-app-s.ico`；`app.setAppUserModelId('com.tether.app')`；`desktop/install-app.ps1` 重建桌面/开始菜单快捷方式并指向新 ico；刷新 Explorer 图标缓存。任务栏精确裁剪已显示 V1。
+
 - [x] F141：APP 顶层还是 Electron 原生壳，多出一条系统标题栏，和下面页面风格不统一；要像 DSH 桌面一样一体化，但保留功能图标。实现：`BrowserWindow` 改为 `frame:false`，去掉原生标题栏；顶栏改为品牌标记 + 设备 + 连接 + 自绘最小化/最大化/还原/关闭，整条可拖动、按钮区不可拖动。**真机验证**：窗口截图顶部只剩 Tether 顶栏，DSH 页面从 y=40 开始；最小化 `IsIconic=true`；最大化后 `IsZoomed=true`，按钮变为“还原”，还原后 `IsZoomed=false`；关闭后窗口 `visible=false`、进程数仍为 5。计划：`docs/PLAN_APP_SHELL_ICON_TRAY_20261103.md`。
 - [x] F142：产品图标很丑；希望用登录页网络图重做，并统一桌面、任务栏、悬停缩略图、托盘。实现：以登录页网络视觉生成 1024 px 母版和多尺寸 `assets/tether.ico`；窗口 `icon`、Tray、桌面/开始菜单快捷方式全部指向同一个 `assets/tether.ico`。**验证**：图标母版与 ICO 已替换；任务栏实际显示深色网络标记；托盘日志 `tray created icon=...tether.ico`；桌面/开始菜单快捷方式 `IconLocation` 已指向新 ico。
 - [x] F143：程序没有隐藏到 Windows 托盘，点叉直接退出。实现：`Tray` + 右键“打开 Tether/退出 Tether”；`close` 事件 `preventDefault` 并 `hide()`；`window-all-closed` 在有托盘时不退出；第二实例恢复已有窗口。**真机验证**：关闭后进程仍在、窗口隐藏；再启动快捷方式窗口恢复；托盘菜单退出走 `isQuitting` 真正 `app.quit()`。

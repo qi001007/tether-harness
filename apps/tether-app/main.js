@@ -55,6 +55,8 @@ const shotPanelDelay = Number(process.env.TETHER_APP_SHOT_PANEL_DELAY || 1500)
 
 fs.mkdirSync(dataDir, { recursive: true })
 app.setPath('userData', path.join(dataDir, 'electron'))
+app.setName('Tether')
+if (process.platform === 'win32') app.setAppUserModelId('com.tether.app')
 const { enrollmentDecision } = require('./enrollment.js')
 const supervisor = new Supervisor({ repoRoot, dataDir, env })
 const updates = new UpdateService({ repoRoot, dataDir, python: supervisor.childPython, env, app })
@@ -90,7 +92,7 @@ function sendWindowState() {
 
 function createTray() {
   if (tray) return tray
-  const iconPath = path.join(repoRoot, 'assets', 'tether.ico')
+  const iconPath = path.join(repoRoot, 'assets', 'tether-app-s.ico')
   const icon = nativeImage.createFromPath(iconPath)
   if (icon.isEmpty()) log('tray icon failed to load ' + iconPath)
   tray = new Tray(icon)
@@ -167,7 +169,7 @@ async function createWindow() {
     minWidth: 960,
     minHeight: 640,
     title: 'Tether',
-    icon: path.join(repoRoot, 'assets', 'tether.ico'),
+    icon: path.join(repoRoot, 'assets', 'tether-app-s.ico'),
     backgroundColor: '#ffffff',
     frame: false,
     thickFrame: true,

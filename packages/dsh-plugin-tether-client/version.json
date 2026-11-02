@@ -1,6 +1,6 @@
 {
-  "version": "0.2.74",
-  "notes": "The product icon is now the selected T-node mark on a pure black tile. The same mark is used in the top bar, desktop shortcut, taskbar, hover thumbnail and tray.",
+  "version": "0.2.75",
+  "notes": "The product icon returns to the original navy two-node mark with a stronger vertical S connection (V1). The same artwork drives the top bar, desktop shortcut, taskbar, hover thumbnail and tray.",
   "download": "https://github.com/qi001007/tether-harness",
   "install": "git pull && powershell -ExecutionPolicy Bypass -File desktop/install-plugin.ps1"
 }

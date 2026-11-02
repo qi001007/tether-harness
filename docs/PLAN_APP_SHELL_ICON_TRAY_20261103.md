@@ -11,8 +11,8 @@
 ## 步骤与验收
 
 ### 1. 图标源与产物
-- 以登录页左侧网络图（深海军蓝底、蓝/橙直线、白/橙/蓝节点）为母版，做 1024×1024 PNG 源。
-- 生成多尺寸 `assets/tether.ico`（16/24/32/48/64/128/256）与 `assets/tether-icon.png`；`assets/tether-icon.svg` 保留同构矢量源。
+- 以最初版图标（深海军蓝底、白环、橙环）为母版，仅把中间连接线改成 V1 立 S，做 1024×1024 PNG 源。
+- 生成多尺寸 `assets/tether-app-s.ico`（16/24/32/48/64/128/256）与 `assets/tether-app-s.png`；`assets/tether-app-s.svg` 保留同构矢量源。
 - 验收：16×16、32×32、256×256 都能辨认是一个网络连接标记；四类图标逐字节同源（同一 ico/png）。
 
 ### 2. 无原生标题栏的 APP 壳
@@ -29,7 +29,7 @@
 - 验收：关闭后进程仍在、任务栏窗口消失、托盘图标存在；点击托盘恢复；退出后进程结束。
 
 ### 4. 快捷方式与安装脚本
-- `desktop/install-app.ps1` 继续使用 `assets/tether.ico`；本机桌面/开始菜单快捷方式的 `IconLocation` 更新到新 ico。
+- `desktop/install-app.ps1` 继续使用 `assets/tether-app-s.ico`；本机桌面/开始菜单快捷方式的 `IconLocation` 更新到新 ico。
 - 验收：桌面、开始菜单、任务栏、Alt+Tab 悬停、托盘五处视觉一致。
 
 ### 5. 门禁与发布

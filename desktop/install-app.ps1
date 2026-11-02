@@ -8,7 +8,7 @@ $Electron = Join-Path $AppDir "node_modules\electron\dist\electron.exe"
 if (-not (Test-Path $Electron)) {
   throw "electron.exe not found under $AppDir; run npm install first"
 }
-$icon = Join-Path $Repo "assets\tether.ico"
+$icon = Join-Path $Repo "assets\tether-app-s.ico"
 if (-not (Test-Path $icon)) { $icon = $Electron }
 $shell = New-Object -ComObject WScript.Shell
 foreach ($folder in @([Environment]::GetFolderPath('Desktop'), [Environment]::GetFolderPath('Programs'))) {

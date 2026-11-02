@@ -1,5 +1,5 @@
 # tether-app backlog
-- 2026-11-03：窗口改为 `frame:false` 无原生标题栏，顶栏自绘窗口控制；关闭默认隐藏到 `Tray`，只有托盘“退出”或更新重启才 `app.quit()`。`window-all-closed` 在有托盘时保持进程；第二实例恢复窗口。图标统一使用 `assets/tether.ico`。
+- 2026-11-03：窗口改为 `frame:false` 无原生标题栏，顶栏自绘窗口控制；关闭默认隐藏到 `Tray`，只有托盘“退出”或更新重启才 `app.quit()`。`window-all-closed` 在有托盘时保持进程；第二实例恢复窗口。图标统一使用 `assets/tether-app-s.ico`。
 - 2026-10-31：登记决策抽成 `enrollment.js` 纯函数（device/account/refuse/error），4 个单测覆盖；main.js 只做 fetch/写配置/重启。
 - 2026-10-31：登录登记改为两步：已有设备走 `/enroll` 轮换令牌；`device_not_found`/`device_offline` 才写 `userToken`、清 `nodeToken`、删除旧设备令牌并重启；`device_owned` 拒绝。supervisor 可在只有用户令牌时启动 Node。
 - 2026-10-31：新增可信 IPC `tether:enroll-device`：用登录会话调 Hub 登记，轮换设备令牌（旧令牌 10 分钟宽限）、备份并写回 `hub.json`、重启 Node；preload 暴露 `enrollDevice`。
