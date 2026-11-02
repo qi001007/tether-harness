@@ -163946,52 +163946,84 @@ function createSettingsPanel(React2) {
       h2("div", { style: { fontSize: 17, fontWeight: 600, color: ink } }, "Tether"),
       card(versionRows)
     );
-    const updateRow = (row) => {
-      const versionText = (row.products || []).map((product2) => {
-        const current2 = product2.current || "\u2014";
-        const latest = product2.latest && product2.latest !== current2 ? " \u2192 " + product2.latest : "";
-        return product2.label + " " + current2 + latest;
-      }).join(" / ");
-      const action = row.running ? h2("span", { className: "tether-spin", title: "\u66F4\u65B0\u4E2D", "aria-label": "\u66F4\u65B0\u4E2D", style: { width: 30, height: 30, flex: "0 0 auto", display: "grid", placeItems: "center", color: blue } }, Glyph ? h2(Glyph, { name: "refresh", size: 15 }) : null) : row.error ? h2("button", {
+    const updateRow = (row, index) => {
+      const chips = (row.products || []).map((product2) => h2(
+        "span",
+        {
+          key: product2.label,
+          title: product2.latest && product2.latest !== product2.current ? "\u6700\u65B0 " + product2.latest : "",
+          style: {
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 5,
+            height: 22,
+            padding: "0 7px",
+            borderRadius: 6,
+            background: panel,
+            color: ink,
+            fontSize: 11.5,
+            flex: "0 0 auto"
+          }
+        },
+        h2("span", { style: { color: mute } }, product2.label),
+        h2("span", { className: "tether-num" }, product2.current || "\u2014")
+      ));
+      const action = row.running ? h2("span", { className: "tether-spin", title: "\u66F4\u65B0\u4E2D", "aria-label": "\u66F4\u65B0\u4E2D", style: { display: "grid", placeItems: "center", color: blue } }, Glyph ? h2(Glyph, { name: "refresh", size: 15 }) : null) : row.error ? h2("button", {
         type: "button",
         onClick: () => update && update.onUpdate(row),
         title: row.error,
-        style: { border: 0, background: "transparent", color: danger, fontSize: 12, cursor: "pointer", padding: "0 4px", flex: "0 0 auto" }
-      }, "\u91CD\u8BD5") : row.available && row.online ? h2("button", {
+        "aria-label": "\u91CD\u8BD5",
+        className: "tether-hover",
+        style: { width: 28, height: 28, display: "grid", placeItems: "center", border: "1px solid " + danger, borderRadius: 999, background: "transparent", color: danger, cursor: "pointer" }
+      }, Glyph ? h2(Glyph, { name: "refresh", size: 14 }) : "!") : row.available && row.online ? h2("button", {
         type: "button",
         onClick: () => update && update.onUpdate(row),
         title: "\u66F4\u65B0",
         "aria-label": "\u66F4\u65B0 " + (row.name || ""),
         className: "tether-hover",
-        style: { width: 30, height: 30, flex: "0 0 auto", display: "grid", placeItems: "center", border: 0, borderRadius: 999, background: blue, color: "#fff", cursor: "pointer" }
+        style: { width: 28, height: 28, display: "grid", placeItems: "center", border: 0, borderRadius: 999, background: blue, color: "#fff", cursor: "pointer" }
       }, Glyph ? h2(Glyph, { name: "download", size: 15 }) : "\u2193") : null;
       return h2(
         "div",
         {
           key: row.key,
-          style: { display: "flex", alignItems: "center", gap: 10, minHeight: 52, padding: "8px 12px", border: "1px solid " + line, borderRadius: 10, background: bg }
+          style: {
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            minHeight: 56,
+            padding: "8px 12px",
+            borderTop: index ? "1px solid " + line : 0,
+            background: bg
+          }
         },
         h2("span", { "aria-hidden": true, style: { width: 7, height: 7, borderRadius: 999, flex: "0 0 auto", background: row.online ? success : mute } }),
         h2(
           "div",
-          { style: { flex: "1 1 auto", minWidth: 0 } },
-          h2("div", { style: { fontSize: 13, color: ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, row.name || "\u2014"),
-          h2("div", { className: "tether-num", title: versionText, style: { marginTop: 3, fontSize: 11.5, color: mute, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, versionText)
+          { style: { flex: "1 1 auto", minWidth: 0, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" } },
+          h2("span", { style: { fontSize: 13, color: ink, fontWeight: "var(--tether-strong, 500)", flex: "0 0 auto", maxWidth: "42%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, row.name || "\u2014"),
+          chips
         ),
-        action
+        h2("span", { style: { width: 28, flex: "0 0 28px", display: "grid", placeItems: "center" } }, action)
       );
     };
+    const updateGroup = (key, label, rows) => rows.length ? h2(
+      "div",
+      { key, style: { display: "grid", gap: 8 } },
+      groupTitle(label),
+      h2("div", { style: { border: "1px solid " + line, borderRadius: 10, overflow: "hidden", background: bg } }, rows.map(updateRow))
+    ) : null;
     const updateGroups = [];
-    if (update && update.local) updateGroups.push(h2("div", { key: "local", style: { display: "grid", gap: 8 } }, groupTitle("\u672C\u673A"), updateRow(update.local)));
+    if (update && update.local) updateGroups.push(updateGroup("local", "\u672C\u673A", [update.local]));
     const updateDevices = update && update.devices || [];
-    if (updateDevices.length) updateGroups.push(h2("div", { key: "devices", style: { display: "grid", gap: 8 } }, groupTitle("\u5176\u4ED6\u8BBE\u5907"), updateDevices.map(updateRow)));
+    if (updateDevices.length) updateGroups.push(updateGroup("devices", "\u5176\u4ED6\u8BBE\u5907", updateDevices));
     const updateSection = h2(
       "div",
       { style: { display: "grid", gap: 16 } },
       h2(
         "div",
-        { style: { display: "flex", alignItems: "center", minHeight: 24 } },
-        h2("span", { style: { flex: "1 1 auto" } }),
+        { style: { display: "flex", alignItems: "center", minHeight: 28 } },
+        h2("strong", { style: { fontSize: 15, color: ink, fontWeight: "var(--tether-strong, 600)" } }, "\u66F4\u65B0"),
         h2("button", {
           type: "button",
           onClick: () => update && update.onRefresh && update.onRefresh(),
@@ -163999,7 +164031,7 @@ function createSettingsPanel(React2) {
           title: "\u5237\u65B0",
           "aria-label": "\u5237\u65B0\u66F4\u65B0\u72B6\u6001",
           className: "tether-hover",
-          style: { width: 28, height: 28, display: "grid", placeItems: "center", border: 0, borderRadius: 6, background: "transparent", color: sub, cursor: update && update.refreshing ? "default" : "pointer" }
+          style: { marginLeft: "auto", width: 28, height: 28, display: "grid", placeItems: "center", border: 0, borderRadius: 6, background: "transparent", color: sub, cursor: update && update.refreshing ? "default" : "pointer" }
         }, Glyph ? h2("span", { className: update && update.refreshing ? "tether-spin" : "", style: { display: "grid", placeItems: "center" } }, h2(Glyph, { name: "refresh", size: 16 })) : "\u21BB")
       ),
       updateGroups.length ? updateGroups : h2("div", { style: { fontSize: 12, color: mute } }, "\u6CA1\u6709\u5DF2\u8FDE\u63A5\u7684\u8BBE\u5907")

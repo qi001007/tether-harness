@@ -1,6 +1,6 @@
 {
-  "version": "0.2.67",
-  "notes": "Update checks and the local server probe now run with pythonw, eliminating the brief console window that appeared when the APP checked for a new release at startup.",
+  "version": "0.2.68",
+  "notes": "The 更新 section is now a proper settings list: a title and refresh header, grouped device rows, component version chips without slashes or arrows, and a fixed action slot. An available update only adds the blue download button, so the row does not grow or change text.",
   "download": "https://github.com/qi001007/tether-harness",
   "install": "git pull && powershell -ExecutionPolicy Bypass -File desktop/install-plugin.ps1"
 }

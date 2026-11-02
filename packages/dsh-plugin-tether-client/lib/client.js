@@ -5763,7 +5763,7 @@ monaco-editor/esm/vs/languages/definitions/swift/swift.js:
 
     const EditorRuntime = TetherMonacoRuntime
     const PANEL_ID = 'tether'
-    const PLUGIN_VERSION = "0.2.67"
+    const PLUGIN_VERSION = "0.2.68"
 function parentOf(path) {
   const clean = String(path || '').replace(/[\\/]+$/, '')
   if (!clean) return ''
@@ -8126,47 +8126,61 @@ function createSettingsPanel(React) {
     const aboutSection = h('div', { style: { display: 'grid', gap: 14 } },
       h('div', { style: { fontSize: 17, fontWeight: 600, color: ink } }, 'Tether'),
       card(versionRows))
-    const updateRow = (row) => {
-      const versionText = (row.products || []).map((product) => {
-        const current = product.current || '—'
-        const latest = product.latest && product.latest !== current ? ' → ' + product.latest : ''
-        return product.label + ' ' + current + latest
-      }).join(' / ')
+    const updateRow = (row, index) => {
+      const chips = (row.products || []).map((product) => h('span', {
+        key: product.label,
+        title: product.latest && product.latest !== product.current ? '最新 ' + product.latest : '',
+        style: {
+          display: 'inline-flex', alignItems: 'center', gap: 5, height: 22, padding: '0 7px',
+          borderRadius: 6, background: panel, color: ink, fontSize: 11.5, flex: '0 0 auto'
+        }
+      },
+        h('span', { style: { color: mute } }, product.label),
+        h('span', { className: 'tether-num' }, product.current || '—')))
       const action = row.running
-        ? h('span', { className: 'tether-spin', title: '更新中', 'aria-label': '更新中', style: { width: 30, height: 30, flex: '0 0 auto', display: 'grid', placeItems: 'center', color: blue } }, Glyph ? h(Glyph, { name: 'refresh', size: 15 }) : null)
+        ? h('span', { className: 'tether-spin', title: '更新中', 'aria-label': '更新中', style: { display: 'grid', placeItems: 'center', color: blue } }, Glyph ? h(Glyph, { name: 'refresh', size: 15 }) : null)
         : row.error
           ? h('button', {
-            type: 'button', onClick: () => update && update.onUpdate(row), title: row.error,
-            style: { border: 0, background: 'transparent', color: danger, fontSize: 12, cursor: 'pointer', padding: '0 4px', flex: '0 0 auto' }
-          }, '重试')
+            type: 'button', onClick: () => update && update.onUpdate(row), title: row.error, 'aria-label': '重试',
+            className: 'tether-hover',
+            style: { width: 28, height: 28, display: 'grid', placeItems: 'center', border: '1px solid ' + danger, borderRadius: 999, background: 'transparent', color: danger, cursor: 'pointer' }
+          }, Glyph ? h(Glyph, { name: 'refresh', size: 14 }) : '!')
           : row.available && row.online
             ? h('button', {
               type: 'button', onClick: () => update && update.onUpdate(row), title: '更新', 'aria-label': '更新 ' + (row.name || ''),
               className: 'tether-hover',
-              style: { width: 30, height: 30, flex: '0 0 auto', display: 'grid', placeItems: 'center', border: 0, borderRadius: 999, background: blue, color: '#fff', cursor: 'pointer' }
+              style: { width: 28, height: 28, display: 'grid', placeItems: 'center', border: 0, borderRadius: 999, background: blue, color: '#fff', cursor: 'pointer' }
             }, Glyph ? h(Glyph, { name: 'download', size: 15 }) : '↓')
             : null
       return h('div', {
         key: row.key,
-        style: { display: 'flex', alignItems: 'center', gap: 10, minHeight: 52, padding: '8px 12px', border: '1px solid ' + line, borderRadius: 10, background: bg }
+        style: {
+          display: 'flex', alignItems: 'center', gap: 10, minHeight: 56, padding: '8px 12px',
+          borderTop: index ? '1px solid ' + line : 0, background: bg
+        }
       },
         h('span', { 'aria-hidden': true, style: { width: 7, height: 7, borderRadius: 999, flex: '0 0 auto', background: row.online ? success : mute } }),
-        h('div', { style: { flex: '1 1 auto', minWidth: 0 } },
-          h('div', { style: { fontSize: 13, color: ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, row.name || '—'),
-          h('div', { className: 'tether-num', title: versionText, style: { marginTop: 3, fontSize: 11.5, color: mute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, versionText)),
-        action)
+        h('div', { style: { flex: '1 1 auto', minWidth: 0, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' } },
+          h('span', { style: { fontSize: 13, color: ink, fontWeight: 'var(--tether-strong, 500)', flex: '0 0 auto', maxWidth: '42%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, row.name || '—'),
+          chips),
+        h('span', { style: { width: 28, flex: '0 0 28px', display: 'grid', placeItems: 'center' } }, action))
     }
+    const updateGroup = (key, label, rows) => rows.length
+      ? h('div', { key, style: { display: 'grid', gap: 8 } },
+        groupTitle(label),
+        h('div', { style: { border: '1px solid ' + line, borderRadius: 10, overflow: 'hidden', background: bg } }, rows.map(updateRow)))
+      : null
     const updateGroups = []
-    if (update && update.local) updateGroups.push(h('div', { key: 'local', style: { display: 'grid', gap: 8 } }, groupTitle('本机'), updateRow(update.local)))
+    if (update && update.local) updateGroups.push(updateGroup('local', '本机', [update.local]))
     const updateDevices = (update && update.devices) || []
-    if (updateDevices.length) updateGroups.push(h('div', { key: 'devices', style: { display: 'grid', gap: 8 } }, groupTitle('其他设备'), updateDevices.map(updateRow)))
+    if (updateDevices.length) updateGroups.push(updateGroup('devices', '其他设备', updateDevices))
     const updateSection = h('div', { style: { display: 'grid', gap: 16 } },
-      h('div', { style: { display: 'flex', alignItems: 'center', minHeight: 24 } },
-        h('span', { style: { flex: '1 1 auto' } }),
+      h('div', { style: { display: 'flex', alignItems: 'center', minHeight: 28 } },
+        h('strong', { style: { fontSize: 15, color: ink, fontWeight: 'var(--tether-strong, 600)' } }, '更新'),
         h('button', {
           type: 'button', onClick: () => update && update.onRefresh && update.onRefresh(), disabled: !!(update && update.refreshing),
           title: '刷新', 'aria-label': '刷新更新状态', className: 'tether-hover',
-          style: { width: 28, height: 28, display: 'grid', placeItems: 'center', border: 0, borderRadius: 6, background: 'transparent', color: sub, cursor: update && update.refreshing ? 'default' : 'pointer' }
+          style: { marginLeft: 'auto', width: 28, height: 28, display: 'grid', placeItems: 'center', border: 0, borderRadius: 6, background: 'transparent', color: sub, cursor: update && update.refreshing ? 'default' : 'pointer' }
         }, Glyph ? h('span', { className: update && update.refreshing ? 'tether-spin' : '', style: { display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 16 })) : '↻')),
       updateGroups.length ? updateGroups : h('div', { style: { fontSize: 12, color: mute } }, '没有已连接的设备'))
     const builtIn = [

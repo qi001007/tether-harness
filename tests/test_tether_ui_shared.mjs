@@ -800,7 +800,11 @@ test('the permissions drawer paints from cache and refreshes policy and audit in
 
 test('settings exposes an edge-gated update section for local and remote devices', () => {
   assert.match(settingsPanel, /\{ id: 'update', label: '更新', render: \(\) => updateSection \}/)
-  assert.match(settingsPanel, /const updateRow = \(row\) => \{/)
+  assert.match(settingsPanel, /const updateRow = \(row, index\) => \{/)
+  assert.match(settingsPanel, /const chips = \(row\.products \|\| \[\]\)\.map/)
+  assert.doesNotMatch(settingsPanel, /versionText/)
+  assert.doesNotMatch(settingsPanel, / → /)
+  assert.match(settingsPanel, /borderTop: index \? '1px solid ' \+ line : 0/)
   assert.match(settingsPanel, /name: 'download'/)
   assert.match(shared, /const settingsUpdate = \(\(\) => \{/)
   assert.match(shared, /if \(edge\.from === localId\) connected\.add\(edge\.to\)/)
