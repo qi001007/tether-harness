@@ -809,6 +809,15 @@ test('settings exposes an edge-gated update section for local and remote devices
   assert.match(shared, /update: settingsUpdate/)
 })
 
+test('the network layout is radial and keeps dragged positions across page switches', () => {
+  assert.match(shared, /tether\.network\.positions\.v2/)
+  assert.match(shared, /const angles = remotes\.length === 2\s*\n\s*\? \[210, 330\]/)
+  assert.doesNotMatch(shared, /function animate\(\)/)
+  assert.match(shared, /saveStoredPositions\(centerIdRef\.current, nodesRef\.current\)/)
+  assert.match(shared, /nodes\.some\(\(node\) => Math\.hypot\(node\.x - midX, node\.y - midY\) < 9\)/)
+  assert.match(shared, /devices\.length > 12/)
+})
+
 test('the login screen exits the DSH panel and hides the server override', () => {
   assert.match(connectionPanel, /function LoginScreen\(\{ defaultUrl = '', defaultEmail = '', onLogin, onExit \}\)/)
   assert.doesNotMatch(connectionPanel, /fieldRow\('服务器地址'/)

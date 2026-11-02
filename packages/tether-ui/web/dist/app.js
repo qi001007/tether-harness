@@ -167694,7 +167694,6 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const stage = React2.useRef(null);
     const nodesRef = React2.useRef([]);
     const dragRef = React2.useRef(null);
-    const frameRef = React2.useRef(0);
     const centerIdRef = React2.useRef("");
     const [nodes, setNodes] = React2.useState([]);
     const [zoom, setZoom] = React2.useState(1);
@@ -167722,25 +167721,50 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       nodesRef.current = next;
       setNodes(next);
     };
-    const kick = () => {
-      if (!frameRef.current) frameRef.current = requestAnimationFrame(animate2);
+    const readStoredPositions = () => {
+      try {
+        const all = JSON.parse(window.localStorage.getItem("tether.network.positions.v2") || "{}");
+        return all && typeof all === "object" ? all : {};
+      } catch (_) {
+        return {};
+      }
+    };
+    const saveStoredPositions = (center2, list2) => {
+      if (!center2 || !list2.length) return;
+      try {
+        const all = readStoredPositions();
+        all[center2] = Object.fromEntries(list2.map((node) => [node.id, {
+          x: Math.round(node.x * 100) / 100,
+          y: Math.round(node.y * 100) / 100
+        }]));
+        window.localStorage.setItem("tether.network.positions.v2", JSON.stringify(all));
+      } catch (_) {
+      }
     };
     React2.useEffect(() => {
       const center2 = devices.find((item) => item.device_id === localId) || devices[0];
       const remotes2 = center2 ? devices.filter((item) => item.device_id !== center2.device_id) : [];
-      const radius = Math.min(40, 34 + remotes2.length * 2);
+      const stored = center2 && readStoredPositions()[center2.device_id] || {};
+      const radius = Math.min(42, 30 + remotes2.length * 2.2);
+      const angles = remotes2.length === 2 ? [210, 330] : remotes2.map((_item, index) => -90 + index * (360 / Math.max(1, remotes2.length)));
       const next = devices.map((item) => {
         const index = remotes2.findIndex((candidate) => candidate.device_id === item.device_id);
-        const angle = index < 0 ? 0 : (-90 + index * (360 / Math.max(1, remotes2.length))) * Math.PI / 180;
-        return { id: item.device_id, x: index < 0 ? 50 : 50 + Math.cos(angle) * radius, y: index < 0 ? 50 : 50 + Math.sin(angle) * radius, vx: 0, vy: 0 };
+        const saved = stored[item.device_id];
+        const angle = index < 0 ? 0 : angles[index] * Math.PI / 180;
+        const valid = saved && Number.isFinite(saved.x) && Number.isFinite(saved.y);
+        return {
+          id: item.device_id,
+          x: valid ? clamp2(saved.x, 4, 96) : index < 0 ? 50 : 50 + Math.cos(angle) * radius,
+          y: valid ? clamp2(saved.y, 7, 93) : index < 0 ? 50 : 50 + Math.sin(angle) * radius,
+          vx: 0,
+          vy: 0
+        };
       });
       update(next);
-      if (frameRef.current) {
-        cancelAnimationFrame(frameRef.current);
-        frameRef.current = 0;
-      }
-      kick();
     }, [key, localId]);
+    React2.useEffect(() => () => {
+      saveStoredPositions(centerIdRef.current, nodesRef.current);
+    }, []);
     React2.useEffect(() => {
       const el = stage.current;
       if (!el) return void 0;
@@ -167751,63 +167775,6 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       el.addEventListener("wheel", onWheel, { passive: false });
       return () => el.removeEventListener("wheel", onWheel);
     }, []);
-    React2.useEffect(() => () => {
-      if (frameRef.current) cancelAnimationFrame(frameRef.current);
-    }, []);
-    function animate2() {
-      const list2 = nodesRef.current.map((node) => ({ ...node }));
-      if (!list2.length) {
-        frameRef.current = 0;
-        return;
-      }
-      const byId = new Map(list2.map((node) => [node.id, node]));
-      const center2 = byId.get(centerIdRef.current);
-      const fx = new Map(list2.map((node) => [node.id, 0]));
-      const fy = new Map(list2.map((node) => [node.id, 0]));
-      let moving = false;
-      for (const node of list2) {
-        if (dragRef.current && dragRef.current.id === node.id) continue;
-        fx.set(node.id, fx.get(node.id) + (50 - node.x) * 6e-4);
-        fy.set(node.id, fy.get(node.id) + (50 - node.y) * 6e-4);
-        if (!center2 || node.id === center2.id) continue;
-        const dx = center2.x - node.x;
-        const dy = center2.y - node.y;
-        const distance = Math.max(1e-3, Math.hypot(dx, dy));
-        const pull = (distance - 40) * 35e-4 + Math.max(0, distance - 55) * 0.01;
-        fx.set(node.id, fx.get(node.id) + dx / distance * pull);
-        fy.set(node.id, fy.get(node.id) + dy / distance * pull);
-        fx.set(center2.id, fx.get(center2.id) - dx / distance * pull * 0.22);
-        fy.set(center2.id, fy.get(center2.id) - dy / distance * pull * 0.22);
-      }
-      for (let i = 0; i < list2.length; i += 1) {
-        for (let j = i + 1; j < list2.length; j += 1) {
-          const dx = list2[j].x - list2[i].x;
-          const dy = list2[j].y - list2[i].y;
-          const distance = Math.max(1e-3, Math.hypot(dx, dy));
-          if (distance >= 15) continue;
-          const push = (15 - distance) * 4e-3;
-          fx.set(list2[i].id, fx.get(list2[i].id) - dx / distance * push);
-          fy.set(list2[i].id, fy.get(list2[i].id) - dy / distance * push);
-          fx.set(list2[j].id, fx.get(list2[j].id) + dx / distance * push);
-          fy.set(list2[j].id, fy.get(list2[j].id) + dy / distance * push);
-        }
-      }
-      for (const node of list2) {
-        if (dragRef.current && dragRef.current.id === node.id) {
-          moving = true;
-          continue;
-        }
-        node.vx = (node.vx + fx.get(node.id)) * 0.95;
-        node.vy = (node.vy + fy.get(node.id)) * 0.95;
-        node.x = clamp2(node.x + node.vx, 4, 96);
-        node.y = clamp2(node.y + node.vy, 7, 93);
-        if (node.x <= 4 || node.x >= 96) node.vx *= -0.35;
-        if (node.y <= 7 || node.y >= 93) node.vy *= -0.35;
-        if (Math.abs(node.vx) + Math.abs(node.vy) > 2e-3) moving = true;
-      }
-      update(list2);
-      frameRef.current = moving ? requestAnimationFrame(animate2) : 0;
-    }
     const chooseConnect = (item) => {
       if (!item) return;
       if (onSelect) onSelect(item);
@@ -167831,7 +167798,6 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         chooseConnect(item);
         return;
       }
-      onSelect(item);
       const node = nodesRef.current.find((candidate) => candidate.id === item.device_id);
       dragRef.current = {
         id: item.device_id,
@@ -167845,7 +167811,6 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         moved: false
       };
       event.currentTarget.setPointerCapture?.(event.pointerId);
-      kick();
     };
     const moveDrag = (event) => {
       const drag = dragRef.current;
@@ -167860,20 +167825,22 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       drag.lastX = x;
       drag.lastY = y;
       update(nodesRef.current.map((node) => node.id === drag.id ? { ...node, x, y, vx: drag.vx * 0.8, vy: drag.vy * 0.8 } : node));
-      kick();
     };
     const endDrag = () => {
       const drag = dragRef.current;
       if (!drag) return;
       dragRef.current = null;
-      if (!drag.moved && drag.item && onOpenDetails) onOpenDetails(drag.item);
-      kick();
+      if (!drag.moved && drag.item) {
+        if (onSelect) onSelect(drag.item);
+        if (onOpenDetails) onOpenDetails(drag.item);
+      }
+      saveStoredPositions(centerIdRef.current, nodesRef.current);
     };
     const screen = (node) => ({ x: 50 + (node.x - 50) * posZoom, y: 50 + (node.y - 50) * posZoom });
     const center = nodes.find((node) => node.id === centerId) || nodes[0];
     const remotes = center ? nodes.filter((node) => node.id !== center.id) : [];
     const lookup = new Map(devices.map((item) => [item.device_id, item]));
-    const compact = zoom < 0.72;
+    const compact = zoom < (devices.length > 12 ? 1.05 : 0.72);
     const linkPoints = (from, to, fromId, toId) => {
       const el = stage.current;
       const rect = el && el.getBoundingClientRect();
@@ -167989,6 +167956,9 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       edgePairs.map((pair) => {
         const left = screen(pair.from);
         const right = screen(pair.to);
+        const midX = (left.x + right.x) / 2;
+        const midY = (left.y + right.y) / 2;
+        if (nodes.some((node) => Math.hypot(node.x - midX, node.y - midY) < 9)) return null;
         return h2("button", {
           key: "mid:" + pair.key,
           type: "button",
@@ -168002,8 +167972,8 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           className: "tether-hover",
           style: {
             position: "absolute",
-            left: (left.x + right.x) / 2 + "%",
-            top: (left.y + right.y) / 2 + "%",
+            left: midX + "%",
+            top: midY + "%",
             transform: "translate(-50%, -50%)",
             zIndex: 4,
             width: 18,

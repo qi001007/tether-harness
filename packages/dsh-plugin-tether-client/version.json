@@ -1,6 +1,6 @@
 {
-  "version": "0.2.63",
-  "notes": "The login screen now has a visual brand panel, uses the default server without asking users to edit the address, and the DSH plugin shows a clear 返回 DSH / × exit so a user who does not want to sign in can leave the Tether panel.",
+  "version": "0.2.64",
+  "notes": "The network canvas now starts in a radial/triangular layout instead of a single column, hides link buttons that would sit on a node, and persists dragged node positions per local device across page switches.",
   "download": "https://github.com/qi001007/tether-harness",
   "install": "git pull && powershell -ExecutionPolicy Bypass -File desktop/install-plugin.ps1"
 }
