@@ -1,5 +1,12 @@
 # 实时进度
 
+## 2026-11-03 Hub 更新任务断线自动重试
+
+1. 今天 LAPTOP 的 APP 更新 job 在“检查版本”遇到一次 transient `device_offline`，只能手动重试；这是插件/APP 更新共用的可靠性缺口。
+2. Hub `UpdateJobs._call_retry` 改为最多 3 次：遇到 `device_offline` 时最多等 20 s 控制链路恢复再试，其他可重试错误指数退避。
+3. 新增回归 `test_transient_device_offline_is_retried`；Hub 全量 pytest 通过。生产部署 **`49c52e4`**，备份 `update-retry-20261103T080646Z`，回退 `3707a3f7`；三服务 active，两机 online。
+4. 插件边界按主人定稿写入 `docs/DSH_PLUGIN_BOUNDARIES.md`；0.2.90 的“DSH 版本变化自动重装”已 revert、未发版。
+
 ## 2026-11-03 插件边界定稿（主人拍板）
 
 1. Tether 只做三件事：启动 DSH、安装原版 DSH、注入 Tether 插件；除此之外不揽事。
