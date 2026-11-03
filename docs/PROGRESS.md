@@ -1,5 +1,11 @@
 # 实时进度
 
+## 2026-11-03 Linux 一键安装（WSL 实测）
+
+1. 新增 `laptop/install-node.sh`：检查 Python>=3.10/venv，下载或读取 Node ZIP，建 venv、`pip install -e`、生成 `~/.local/bin/tether-node` 与 600 权限的 `node.env`；支持 `--check`、`--install-only`、`--archive`、`--version`。
+2. WSL2 Ubuntu 实测：`--check` 用 Python 3.10.12 通过；`--archive tether-node-0.3.4.zip --install-only` 成功安装全部依赖并生成启动器；同机 `TerminalService` 的 bash PTY、`echo TETHER_LINUX_PTY_OK`、`resize`、`stop` 均通过。
+3. 说明：这是 WSL2 轻量 VM，不是完整 VirtualBox/VMware 发行版；macOS 未真机。APP 生成带 token 的安装命令、系统服务/开机自启仍未做。0.3.5 发布时会把这个脚本和 POSIX `stop()` 修复一起带出。
+
 ## 2026-11-03 Linux/POSIX 终端适配（WSL 实测）
 
 1. WSL2 Ubuntu（Python 3.11.8）直接运行 `TerminalService`：`terminal_shells` 返回 bash/sh 可用、zsh/fish 不可用，默认 bash；`terminal_start` 返回 `pty:true`，`echo TETHER_LINUX_PTY_OK` 输出、`resize` 90×24 均通过。

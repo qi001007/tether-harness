@@ -180,8 +180,8 @@ tether-harness-server component is installed. Otherwise, configure a Hub or inst
     node = OUT / f"tether-node-{VERSION}.zip"
     with zipfile.ZipFile(node, "w", zipfile.ZIP_DEFLATED) as archive:
         add_tether_runtime(archive, node_prefix)
-        for rel in ("laptop/tether-node.ps1", "laptop/bootstrap-node.ps1", "pyproject.toml",
-                    "version.json"):
+        for rel in ("laptop/tether-node.ps1", "laptop/bootstrap-node.ps1",
+                    "laptop/install-node.sh", "pyproject.toml", "version.json"):
             add_file(archive, rel, node_prefix)
         archive.writestr(f"{node_prefix}/README-INSTALL.md", """# Tether Node (standalone)
 
@@ -190,6 +190,8 @@ Install the Python dependencies listed in `pyproject.toml`, then run
 local `.env` containing `TETHER_CONTROLLER` and `TETHER_NODE_TOKEN`. Configure
 the Hub WebSocket URL to end in `/ws/node`. Existing `.env` files are kept;
 missing configuration is reported without starting against placeholders.
+On Linux or macOS run `bash laptop/install-node.sh --controller <ws-url> --token <token>`
+(the script creates its own venv and launcher).
 Device name defaults to this computer's hostname.
 
 The Node is a headless target-device agent: it has no chat UI and is controlled
