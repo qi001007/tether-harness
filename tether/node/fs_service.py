@@ -518,6 +518,12 @@ class FsService:
                 "version": _path_version(p) if p.is_file() else "",
                 "writable": self.policy.can_write(p, op="write")[0]}
 
+    def _op_direct_info(self, args: dict[str, Any]) -> dict[str, Any]:
+        direct = getattr(self, "direct", None)
+        if direct is None:
+            raise FsError("direct api unavailable", "unavailable")
+        return direct.info()
+
     def _op_read(self, args: dict[str, Any]) -> dict[str, Any]:
         p = self._resolve(args.get("path"))
         self._read_guard(p)

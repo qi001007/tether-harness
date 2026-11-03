@@ -165226,6 +165226,41 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C, devices 
   const onlineDevices = devices.filter((item) => item && item.online);
   const initialLeft = localDevice && onlineDevices.some((item) => item.device_id === localDevice) ? localDevice : onlineDevices[0] && onlineDevices[0].device_id || "";
   const initialRight = (onlineDevices.find((item) => item.device_id !== initialLeft) || {}).device_id || "";
+  const directCache = /* @__PURE__ */ new Map();
+  const directInfo = async (deviceId) => {
+    const key = String(deviceId || "");
+    if (!key) return null;
+    if (directCache.has(key)) return directCache.get(key);
+    let info = null;
+    try {
+      info = await post("/api/devices/" + encodeURIComponent(key) + "/fs/direct_info", {});
+    } catch (_) {
+      info = null;
+    }
+    const value = info && typeof info.host === "string" && info.host && Number.isInteger(info.port) && info.port > 0 && info.port <= 65535 && typeof info.token === "string" && info.token ? info : null;
+    directCache.set(key, value);
+    return value;
+  };
+  const postFs = async (deviceId, operation, body) => {
+    const info = await directInfo(deviceId);
+    if (info) {
+      try {
+        const response = await fetch("http://" + info.host + ":" + info.port + "/fs/" + operation, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: "Bearer " + info.token },
+          body: JSON.stringify(body)
+        });
+        if (response.ok) {
+          const payload = await response.json();
+          if (payload && payload.ok === true) return payload.value;
+        } else if (response.status === 401) {
+          directCache.delete(String(deviceId || ""));
+        }
+      } catch (_) {
+      }
+    }
+    return post("/api/devices/" + encodeURIComponent(deviceId) + "/fs/" + operation, body);
+  };
   const iconButton = (name, label, onClick, disabled) => h2("button", {
     type: "button",
     title: label,
@@ -165334,7 +165369,7 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C, devices 
         deviceId,
         path,
         fresh,
-        load: () => post("/api/devices/" + encodeURIComponent(deviceId) + "/fs/list", { path }).then((data) => (data && data.entries || []).filter((item) => item && item.path && item.name))
+        load: () => postFs(deviceId, "list", { path }).then((data) => (data && data.entries || []).filter((item) => item && item.path && item.name))
       }).then((list2) => {
         if (cancelled || token !== run.current) return;
         list2.sort((left, right) => left.dir === right.dir ? String(left.name).localeCompare(String(right.name)) : left.dir ? -1 : 1);
@@ -165370,7 +165405,7 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C, devices 
         const list2 = await loadDirectory({
           deviceId,
           path: key,
-          load: () => post("/api/devices/" + encodeURIComponent(deviceId) + "/fs/list", { path: key }).then((data) => (data && data.entries || []).filter((entry) => entry && entry.path && entry.name))
+          load: () => postFs(deviceId, "list", { path: key }).then((data) => (data && data.entries || []).filter((entry) => entry && entry.path && entry.name))
         });
         setTreeChildren((current) => ({ ...current, [key]: list2 }));
       } catch (_) {
@@ -165558,20 +165593,24 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C, devices 
               transferId: newTransferId(),
               overwrite,
               signal: controller.signal,
-              read: (args) => post(
-                "/api/devices/" + encodeURIComponent(sourceDevice) + "/fs/read",
+              read: (args) => postFs(
+                sourceDevice,
+                "read",
                 { path: args.path, offset: args.offset, limit: args.limit, encoding: "base64" }
               ),
-              write: (args) => post(
-                "/api/devices/" + encodeURIComponent(target2.device) + "/fs/write_chunk",
+              write: (args) => postFs(
+                target2.device,
+                "write_chunk",
                 { ...args, transfer_id: args.transferId }
               ),
-              status: (args) => post(
-                "/api/devices/" + encodeURIComponent(target2.device) + "/fs/transfer_status",
+              status: (args) => postFs(
+                target2.device,
+                "transfer_status",
                 { path: args.path, transfer_id: args.transferId }
               ),
-              cancel: (args) => post(
-                "/api/devices/" + encodeURIComponent(target2.device) + "/fs/transfer_cancel",
+              cancel: (args) => postFs(
+                target2.device,
+                "transfer_cancel",
                 { path: args.path, transfer_id: args.transferId }
               ),
               onProgress: (value) => {
@@ -165605,7 +165644,7 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C, devices 
           }
         }
         if (cut) {
-          await post("/api/devices/" + encodeURIComponent(sourceDevice) + "/fs/delete", { path: item.path }).catch(() => {
+          await postFs(sourceDevice, "delete", { path: item.path }).catch(() => {
             if (onError) onError(new Error("\u5DF2\u590D\u5236\u4F46\u672A\u80FD\u5220\u9664\u6E90\u6587\u4EF6\uFF1A" + item.name));
           });
         }
@@ -165722,9 +165761,9 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C, devices 
     if (!name) return;
     const current = side(dialog.side);
     try {
-      if (dialog.kind === "newFolder") await post("/api/devices/" + encodeURIComponent(current.device) + "/fs/mkdir", { path: joinPath(current.path, name) });
-      else if (dialog.kind === "newFile") await post("/api/devices/" + encodeURIComponent(current.device) + "/fs/write", { path: joinPath(current.path, name), text: "", overwrite: false });
-      else if (dialog.kind === "rename") await post("/api/devices/" + encodeURIComponent(current.device) + "/fs/rename", { path: dialog.item.path, dest: joinPath(current.path, name) });
+      if (dialog.kind === "newFolder") await postFs(current.device, "mkdir", { path: joinPath(current.path, name) });
+      else if (dialog.kind === "newFile") await postFs(current.device, "write", { path: joinPath(current.path, name), text: "", overwrite: false });
+      else if (dialog.kind === "rename") await postFs(current.device, "rename", { path: dialog.item.path, dest: joinPath(current.path, name) });
       invalidateDirectory(current.device, current.path);
       setDialog(null);
       setDialogText("");
@@ -165743,7 +165782,7 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C, devices 
     if (!dialog || dialog.kind !== "delete") return;
     const current = side(dialog.side);
     try {
-      for (const item of dialog.items) await post("/api/devices/" + encodeURIComponent(current.device) + "/fs/delete", { path: item.path });
+      for (const item of dialog.items) await postFs(current.device, "delete", { path: item.path });
       invalidateDirectory(current.device, current.path);
       setDialog(null);
       if (dialog.side === "left") setLeftSelection([]);

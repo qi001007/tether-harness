@@ -29,6 +29,7 @@ from dotenv import load_dotenv
 from . import console as local_console
 from .dsh_adapter import DshRun
 from .fs_service import FsError, FsService
+from .direct_api import DirectApi
 from .dsh_sessions import DshSessionStore
 from .native_surface import NativeSurface, NativeSurfaceError
 from .local_identity import remove_identity, write_identity
@@ -281,6 +282,9 @@ class Node:
                             data_dir=self.data_dir,
                             workspaces_root=self.workspaces_root,
                             dsh_home=self.native_dsh_home)
+        self.direct = DirectApi(self.fs.dispatch)
+        self._direct_started = False
+        self.fs.direct = self.direct
         ensure_sdk_profile(self.native_dsh_home)
         self.native_surface = NativeSurface(self.native_dsh_home, device_fs=self.fs)
         update_state_dir = self.data_dir / "updates"
@@ -326,6 +330,13 @@ class Node:
             await asyncio.sleep(600)
 
     async def run(self) -> None:
+        if self.direct is not None and not self._direct_started:
+            try:
+                self.direct.start()
+                self._direct_started = True
+            except OSError:
+                self.direct = None
+                self.fs.direct = None
         warm = asyncio.create_task(self._warm_updates())
         backoff = 0.1
         while True:
@@ -972,7 +983,8 @@ class Node:
                 "dsh_running": dsh_desktop["running"],
                 "dsh_version": dsh_desktop["version"],
                 "dsh_installing": dsh_desktop["installing"],
-                "dsh_surface": self.native_surface.available()}
+                "dsh_surface": self.native_surface.available(),
+                "direct_api": self.direct.info() if self.direct else None}
 
 
 def restart_node_process() -> None:

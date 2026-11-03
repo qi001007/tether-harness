@@ -52,6 +52,40 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
     ? localDevice
     : (onlineDevices[0] && onlineDevices[0].device_id) || ''
   const initialRight = (onlineDevices.find((item) => item.device_id !== initialLeft) || {}).device_id || ''
+  const directCache = new Map()
+  const directInfo = async (deviceId) => {
+    const key = String(deviceId || '')
+    if (!key) return null
+    if (directCache.has(key)) return directCache.get(key)
+    let info = null
+    try {
+      info = await post('/api/devices/' + encodeURIComponent(key) + '/fs/direct_info', {})
+    } catch (_) { info = null }
+    const value = info && typeof info.host === 'string' && info.host
+      && Number.isInteger(info.port) && info.port > 0 && info.port <= 65535
+      && typeof info.token === 'string' && info.token ? info : null
+    directCache.set(key, value)
+    return value
+  }
+  const postFs = async (deviceId, operation, body) => {
+    const info = await directInfo(deviceId)
+    if (info) {
+      try {
+        const response = await fetch('http://' + info.host + ':' + info.port + '/fs/' + operation, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + info.token },
+          body: JSON.stringify(body)
+        })
+        if (response.ok) {
+          const payload = await response.json()
+          if (payload && payload.ok === true) return payload.value
+        } else if (response.status === 401) {
+          directCache.delete(String(deviceId || ''))
+        }
+      } catch (_) { /* the mesh may be down; use the Hub */ }
+    }
+    return post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/' + operation, body)
+  }
   const iconButton = (name, label, onClick, disabled) => h('button', {
     type: 'button', title: label, 'aria-label': label, disabled,
     onClick: () => { if (!disabled && onClick) onClick() },
@@ -108,7 +142,7 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
       setLoading(true); setError('')
       loadDirectory({
         deviceId, path, fresh,
-        load: () => post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/list', { path })
+        load: () => postFs(deviceId, 'list', { path })
           .then((data) => ((data && data.entries) || []).filter((item) => item && item.path && item.name))
       })
         .then((list) => {
@@ -135,7 +169,7 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
       try {
         const list = await loadDirectory({
           deviceId, path: key,
-          load: () => post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/list', { path: key })
+          load: () => postFs(deviceId, 'list', { path: key })
             .then((data) => ((data && data.entries) || []).filter((entry) => entry && entry.path && entry.name))
         })
         setTreeChildren((current) => ({ ...current, [key]: list }))
@@ -285,13 +319,13 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
               transferId: newTransferId(),
               overwrite,
               signal: controller.signal,
-              read: (args) => post('/api/devices/' + encodeURIComponent(sourceDevice) + '/fs/read',
+              read: (args) => postFs(sourceDevice, 'read',
                 { path: args.path, offset: args.offset, limit: args.limit, encoding: 'base64' }),
-              write: (args) => post('/api/devices/' + encodeURIComponent(target.device) + '/fs/write_chunk',
+              write: (args) => postFs(target.device, 'write_chunk',
                 { ...args, transfer_id: args.transferId }),
-              status: (args) => post('/api/devices/' + encodeURIComponent(target.device) + '/fs/transfer_status',
+              status: (args) => postFs(target.device, 'transfer_status',
                 { path: args.path, transfer_id: args.transferId }),
-              cancel: (args) => post('/api/devices/' + encodeURIComponent(target.device) + '/fs/transfer_cancel',
+              cancel: (args) => postFs(target.device, 'transfer_cancel',
                 { path: args.path, transfer_id: args.transferId }),
               onProgress: (value) => {
                 const currentBytes = doneBytes + Math.max(0, Number(value && value.transferred) || 0)
@@ -315,7 +349,7 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
           }
         }
         if (cut) {
-          await post('/api/devices/' + encodeURIComponent(sourceDevice) + '/fs/delete', { path: item.path })
+          await postFs(sourceDevice, 'delete', { path: item.path })
             .catch(() => { if (onError) onError(new Error('已复制但未能删除源文件：' + item.name)) })
         }
         setJob((current) => ({ ...(current || {}), percent: total ? Math.round(doneBytes / total * 100) : 100,
@@ -407,9 +441,9 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
     if (!name) return
     const current = side(dialog.side)
     try {
-      if (dialog.kind === 'newFolder') await post('/api/devices/' + encodeURIComponent(current.device) + '/fs/mkdir', { path: joinPath(current.path, name) })
-      else if (dialog.kind === 'newFile') await post('/api/devices/' + encodeURIComponent(current.device) + '/fs/write', { path: joinPath(current.path, name), text: '', overwrite: false })
-      else if (dialog.kind === 'rename') await post('/api/devices/' + encodeURIComponent(current.device) + '/fs/rename', { path: dialog.item.path, dest: joinPath(current.path, name) })
+      if (dialog.kind === 'newFolder') await postFs(current.device, 'mkdir', { path: joinPath(current.path, name) })
+      else if (dialog.kind === 'newFile') await postFs(current.device, 'write', { path: joinPath(current.path, name), text: '', overwrite: false })
+      else if (dialog.kind === 'rename') await postFs(current.device, 'rename', { path: dialog.item.path, dest: joinPath(current.path, name) })
       invalidateDirectory(current.device, current.path)
       setDialog(null); setDialogText('')
       refresh()
@@ -425,7 +459,7 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
     if (!dialog || dialog.kind !== 'delete') return
     const current = side(dialog.side)
     try {
-      for (const item of dialog.items) await post('/api/devices/' + encodeURIComponent(current.device) + '/fs/delete', { path: item.path })
+      for (const item of dialog.items) await postFs(current.device, 'delete', { path: item.path })
       invalidateDirectory(current.device, current.path)
       setDialog(null)
       if (dialog.side === 'left') setLeftSelection([]); else setRightSelection([])
