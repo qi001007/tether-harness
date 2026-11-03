@@ -11,8 +11,9 @@
 1. 另一个冷载根因：gateway 端口随机，Hub 重启/网关重建后 public origin `g<port>` 变化，浏览器按 origin 的缓存全部作废，热载又变冷载。
 2. 改为按设备稳定 loopback 端口（`24000 + crc32(device_id) % 2000`）；端口被占用时回退 ephemeral。origin 稳定后浏览器缓存可跨 Hub 重启继续用。
 3. 实测：DESKTOP `g25660`、LAPTOP `g25800`，均等于稳定公式；两机 surface 200。Hub 全量 **157 passed**；生产部署 **`effc4eb`**，备份 `stable-gateway-20261103T083637Z`，回退 `3417bd1`。
-4. **反证**：用持久 Edge profile 冷载 82.3 s、热载 4.3 s；重启 Hub 后同一 profile 仍 **65.5 s** 冷载、3.6 s 热载。稳定 origin 没有让浏览器缓存跨 Hub 重启生效（当前 headless/资源策略下），不能据此宣称冷载已优化。
-5. 首次全新浏览器冷载仍受传输/DSH 生成限制；稳定 origin 的收益是后续 Hub 重启/APP 重启不再丢浏览器缓存（理论），但本机 headless 复测未证实。不引入 Tailscale；下一步若要继续，应查资源缓存头/DSH rev 变化或全量预热，而不是网络组件。
+4. 发现稳定端口在重启时可能处于 TIME_WAIT 而回退随机；稳定端口也开 `SO_REUSEADDR`，生产部署 **`c8bd970`**，备份 `stable-reuse-20261103T084840Z`，回退 `effc4eb`。
+5. **复测成功**：DESKTOP node 重启后仍为 `g25660`；同一持久 profile 冷载 **5.4 s**、热载 4.1 s（此前同场景 65.5 s）。首次全新浏览器冷载仍 82 s，但后续 Hub/node 重启不再重新冷载，达到“稳定 origin + 浏览器缓存”的预期。
+6. 不引入 Tailscale；所有节点同一规则。首次安装冷载仍受传输/DSH 生成限制，需另做全量预热或接受一次性成本。
 
 ## 2026-11-03 Hub 跨设备共享不可变资源缓存
 
