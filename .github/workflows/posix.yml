@@ -1,0 +1,83 @@
+name: POSIX terminal
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tether/node/terminal.py'
+      - 'tests/test_terminal_posix.py'
+      - 'laptop/install-node.sh'
+      - '.github/workflows/posix.yml'
+
+jobs:
+  posix:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - name: Install package
+        run: python -m pip install -e .
+      - name: POSIX PTY test
+        run: python -m pytest tests/test_terminal_posix.py -q
+      - name: Installer prerequisite check
+        run: bash laptop/install-node.sh --check
+      - name: Build node archive
+        run: python scripts/build_release.py
+      - name: One-shot installer smoke
+        shell: bash
+        run: |
+          version=$(python -c "import json;print(json.load(open('version.json'))['components']['app'])")
+          bash laptop/install-node.sh \
+            --archive "release/tether-node-$version.zip" \
+            --prefix "$RUNNER_TEMP/tether-node-smoke" \
+            --controller wss://example.invalid/ws/node \
+            --token dummy \
+            --install-only
+      - name: Installed POSIX terminal test
+        shell: bash
+        run: |
+          "$RUNNER_TEMP/tether-node-smoke/venv/bin/python" - <<'PY'
+          import base64
+          import os
+          import time
+          from pathlib import Path
+
+          from tether.node.terminal import TerminalService
+
+          terminal = TerminalService(Path('/tmp'))
+          catalog = terminal.dispatch('shells', {})
+          available = [item['id'] for item in catalog['shells'] if item['available']]
+          print('shells=' + ','.join(available) + ' default=' + catalog['default'])
+          assert catalog['default'] in available
+          session = terminal.start({'cwd': '/tmp', 'cols': 100, 'rows': 30})
+          assert session['pty'] is True
+          try:
+              time.sleep(1)
+              terminal.write({
+                  'session_id': session['session_id'],
+                  'data': base64.b64encode(b'echo TETHER_POSIX_CI_OK\n').decode(),
+              })
+              output = b''
+              since = 0
+              for _ in range(60):
+                  result = terminal.poll({'session_id': session['session_id'], 'since': since})
+                  since = result['next']
+                  output += base64.b64decode(result['data'])
+                  if b'TETHER_POSIX_CI_OK' in output:
+                      break
+                  time.sleep(0.1)
+              assert b'TETHER_POSIX_CI_OK' in output
+              resized = terminal.resize({'session_id': session['session_id'], 'cols': 80, 'rows': 20})
+              assert resized['cols'] == 80 and resized['rows'] == 20
+              print('installed terminal ok on ' + os.uname().sysname)
+          finally:
+              terminal.stop({'session_id': session['session_id']})
+          PY
