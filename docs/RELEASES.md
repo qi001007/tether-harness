@@ -1,5 +1,17 @@
 # Public client releases
 
+## v0.2.88
+
+Automatic repair now triggers from real surface health, not from a cached gateway URL:
+
+- `dsh_status` reports `surface` from the live descriptor pid. The APP repairs when DSH is running with `surface=false`.
+- Surface-poll errors for `descriptor_missing` / `descriptor_invalid` / `host_unreachable` also enter the repair state.
+- Ordinary DSH status polling stays limited to local or broken surfaces, preserving the descriptor polling contract.
+- Real end-to-end: local profile reset to no plugin and no `node_modules`; the APP repaired it automatically, DSH pid 18492, both iframes measured `bhn1Oq_searchInput` with a composer.
+- v0.2.87 was built but its CI caught a surface-poll contract regression and was cancelled; it was never published.
+
+Gates: mjs 238/238, cjs 7/7, pytest 158 passed / 1 skipped, build checks, `validate_versions()`. CI `41596624981`; published at 2026-11-03T07:31:56Z (app 1,791,776 B, plugin 1,363,369 B, node 91,599 B). Hub mirror 0.2.88; DESKTOP and LAPTOP app/node/plugin **0.2.88**.
+
 ## v0.2.86
 
 Fresh-profile plugin repair now waits for DSH cold start:

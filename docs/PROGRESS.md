@@ -1,5 +1,12 @@
 # 实时进度
 
+## 2026-11-03 v0.2.88 自动修复真实触发 + surface 健康判定
+
+1. 本机把 DSH profile 重置为空（无插件、无 `node_modules`），重启 APP 后 **APP 自己触发** `dsh_install_plugin`：装回 4 个 0.2.88 包 + `@deepseek-ai` 依赖树，DSH 新 pid 18492，descriptor 发布，两个 iframe 均为 `bhn1Oq_searchInput` + composer。
+2. 关键修复：Hub 的 surface 网关在旧缓存下可能仍返回 200，不能作为健康依据；Node `dsh_status` 新增 `surface`（descriptor pid 存活），APP 在 `running && surface=false` 时自动修复。surface 轮询遇到 `descriptor_missing`/`invalid`/`host_unreachable` 也会进入修复态。
+3. 轮询范围保持“本机或 surface 报错”，避免额外 descriptor 请求破坏既有可见性/请求契约（`test_native_surface_effects` 通过）。
+4. 0.2.87 CI 因该契约测试失败并卡住，已取消、未发布；0.2.88 修复后 CI `41596624981` 成功，发布 app 1,791,776 B / plugin 1,363,369 B / node 91,599 B；Hub mirror 0.2.88；DESKTOP/LAPTOP 全部 0.2.88（本地插件 pid 18492，LAPTOP 0.2.88）。
+
 ## 2026-11-03 v0.2.86 全新 profile 自动修复收口
 
 1. 真机模拟“完全缺失插件”：LAPTOP 停 DSH、备份并移走 `node_modules`、把 profile 重置为只有 DSH base/web 的 211 B `package.json`；调用 `dsh_install_plugin` 后 4 个 Tether 包与 `@deepseek-ai` 依赖树全部装好，DSH 首次冷启动超过旧 90 s 等待，install 报 `descriptor_missing`。
