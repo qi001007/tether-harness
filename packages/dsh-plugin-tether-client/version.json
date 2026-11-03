@@ -1,6 +1,6 @@
 {
-  "version": "0.2.77",
-  "notes": "DSH restart now receives the live host PID from the node, so a running DSH that did not publish a surface can be restarted even when its command line does not contain dsh-desktop-host.",
+  "version": "0.2.83",
+  "notes": "Surface gateway error pages now trigger an automatic reload, the embedded DSH SSE stream can reopen while another stream is live, and the APP repairs stale desktop/Start Menu shortcuts that launched a console.",
   "download": "https://github.com/qi001007/tether-harness",
   "install": "git pull && powershell -ExecutionPolicy Bypass -File desktop/install-plugin.ps1"
 }

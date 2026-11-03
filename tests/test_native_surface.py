@@ -185,6 +185,25 @@ def test_sse_stream_delivers_chunks_without_eof_buffering_and_closes(native_home
     asyncio.run(run())
 
 
+def test_sse_stream_reopen_works_while_another_stream_is_live(native_home):
+    async def run():
+        home, _, _ = native_home
+        service = NativeSurface(home)
+        first = await asyncio.wait_for(service.call("http_stream_open", {
+            "method": "GET", "path": "/plugins/events",
+            "headers": {"accept": "text/event-stream"},
+        }), 1)
+        second = await asyncio.wait_for(service.call("http_stream_open", {
+            "method": "GET", "path": "/plugins/events",
+            "headers": {"accept": "text/event-stream"},
+        }), 1)
+        assert first["status"] == 200 and second["status"] == 200
+        assert first["stream"] != second["stream"]
+        await service.dispose()
+
+    asyncio.run(run())
+
+
 def test_sse_stream_idle_ttl_closes_unpolled_reader(native_home, monkeypatch):
     async def run():
         home, _, _ = native_home

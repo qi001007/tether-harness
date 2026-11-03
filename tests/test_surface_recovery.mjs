@@ -34,6 +34,7 @@ test('surface boot failures reach the renderer through the preload bridge', () =
   assert.match(preloadSource, /onSurfaceBootFailed/)
   assert.match(preloadSource, /tether:surface-boot-failed/)
   assert.match(mainSource, /isSurfaceBootFailure/)
+  assert.match(mainSource, /isSurfaceErrorPage/)
   assert.match(mainSource, /tether:surface-boot-failed/)
   assert.match(clientSource, /onSurfaceBootFailed/)
   assert.match(clientSource, /nativeSurfaceFailureMatches/)

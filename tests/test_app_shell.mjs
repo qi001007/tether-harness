@@ -29,6 +29,15 @@ test('process cleanup never allocates a visible console', () => {
   assert.match(supervisor, /spawnSync\('taskkill',[\s\S]*?windowsHide: true/)
 })
 
+test('startup repairs desktop and start-menu shortcuts to launch Electron directly', () => {
+  assert.match(main, /ensureAppShortcuts\(\)/)
+  assert.match(main, /shell\.writeShortcutLink\(link, 'update', options\)/)
+  assert.match(main, /target: process\.execPath/)
+  assert.match(main, /getPath\('desktop'\)/)
+  assert.match(main, /getPath\('programs'\)/)
+  assert.match(main, /Tether APP\.lnk/)
+})
+
 test('closing the window hides it to the tray until an explicit quit', () => {
   assert.match(main, /new Tray\(icon\)/)
   assert.match(main, /tray\.setContextMenu/)

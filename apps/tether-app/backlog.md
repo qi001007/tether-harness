@@ -57,3 +57,4 @@
 - 2026-11-02：APP 包与 package-lock 根版本升至 `0.2.66`；共享 UI 恢复互联图力导向流动，Electron 主进程未改。
 - 2026-11-02：APP 包与 package-lock 根版本升至 `0.2.67`；`UpdateService` 与本地 serverCheck 改用 `supervisor.childPython`（pythonw），消除启动更新检查的短命控制台/`conhost`；`pythonw` stdout 经 `execFile` 验证可回传。
 - 2026-11-02：APP 包与 package-lock 根版本升至 `0.2.68`；本轮只改共享 UI 更新页，Electron 主进程未改。
+- 2026-11-03：APP 包与 package-lock 根版本升至 `0.2.83`；启动时 `ensureAppShortcuts()` 用 `shell.writeShortcutLink` 把桌面/开始菜单 `Tether APP.lnk` 修回 `electron.exe`（旧快捷方式指向 `.cmd` 会弹黑窗）；主进程识别 surface 网关 502 错误页并触发既有 `tether:surface-boot-failed` 重试，避免旧 iframe 永久停在错误页。

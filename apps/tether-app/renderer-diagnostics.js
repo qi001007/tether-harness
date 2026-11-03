@@ -24,9 +24,14 @@ function rendererDiagnostic(message, source, line) {
 }
 
 const SURFACE_BOOT_FAILURE = /(?:^|\n)\s*(?:Error:\s*)?web boot:\s*\d+\s+entr(?:y|ies)\s+did not activate\b/
+const SURFACE_ERROR_PAGE = /^(?:native surface request failed|invalid native surface response|blocked native surface redirect)$/
 
 function isSurfaceBootFailure(message) {
   return SURFACE_BOOT_FAILURE.test(String(message || ''))
+}
+
+function isSurfaceErrorPage(text) {
+  return SURFACE_ERROR_PAGE.test(String(text || '').trim())
 }
 
 function rendererRequestScope(value, controllerUrl) {
@@ -55,6 +60,10 @@ function rendererFrameState(frame) {
   }))()`)
 }
 
+function rendererFrameText(frame) {
+  return frame.executeJavaScript('document.body ? document.body.innerText.trim().slice(0, 200) : ""')
+}
+
 async function rendererSettledFrameState(fromId, processId, routingId, expectedUrl) {
   try {
     const frame = fromId(processId, routingId)
@@ -63,4 +72,4 @@ async function rendererSettledFrameState(fromId, processId, routingId, expectedU
   } catch (_) { return null }
 }
 
-module.exports = { isSurfaceBootFailure, rendererDiagnostic, rendererFrameState, rendererRequestScope, rendererSettledFrameState, safeRendererMessage, safeRendererPath }
+module.exports = { isSurfaceBootFailure, isSurfaceErrorPage, rendererDiagnostic, rendererFrameState, rendererFrameText, rendererRequestScope, rendererSettledFrameState, safeRendererMessage, safeRendererPath }

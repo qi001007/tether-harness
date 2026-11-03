@@ -5,7 +5,7 @@ const { pathToFileURL } = require('node:url')
 const { Supervisor } = require('./supervisor.js')
 const { waitForSupervisorStart, waitForLocalNodeApi } = require('./startup-readiness.js')
 const { UpdateService } = require('./update-service.js')
-const { rendererDiagnostic, isSurfaceBootFailure, rendererFrameState, rendererRequestScope, rendererSettledFrameState, safeRendererMessage, safeRendererPath } = require('./renderer-diagnostics.js')
+const { rendererDiagnostic, isSurfaceBootFailure, isSurfaceErrorPage, rendererFrameState, rendererFrameText, rendererRequestScope, rendererSettledFrameState, safeRendererMessage, safeRendererPath } = require('./renderer-diagnostics.js')
 
 const repoRoot = path.resolve(__dirname, '..', '..')
 const webRoot = path.join(repoRoot, 'packages', 'tether-ui', 'web')
@@ -66,6 +66,30 @@ function log(line) {
   fs.appendFileSync(logFile, new Date().toISOString() + ' ' + line + '\n')
 }
 
+function ensureAppShortcuts() {
+  if (process.platform !== 'win32' || env.TETHER_NO_SHORTCUTS === '1') return
+  const appPath = app.getAppPath()
+  const iconPath = path.join(repoRoot, 'assets', 'tether-app-s.ico')
+  const options = {
+    target: process.execPath,
+    args: '"' + appPath + '"',
+    cwd: appPath,
+    icon: fs.existsSync(iconPath) ? iconPath : process.execPath,
+    iconIndex: 0,
+    description: 'Tether APP'
+  }
+  const links = new Set()
+  try { links.add(path.join(app.getPath('desktop'), 'Tether APP.lnk')) } catch (_) { /* no desktop folder */ }
+  try { links.add(path.join(app.getPath('programs'), 'Tether APP.lnk')) } catch (_) { /* no start menu */ }
+  for (const link of links) {
+    try {
+      if (!shell.writeShortcutLink(link, 'update', options)) shell.writeShortcutLink(link, 'create', options)
+    } catch (error) {
+      log('shortcut update failed path=' + safeRendererPath(link) + ' message=' + safeRendererMessage(error && error.message))
+    }
+  }
+}
+
 let mainWindow = null
 let webServer = null
 let tray = null
@@ -124,6 +148,7 @@ function logRendererNetworkFailure(event, details) {
 }
 
 async function createWindow() {
+  ensureAppShortcuts()
   const startupResult = await waitForSupervisorStart(supervisor.start())
   if (!startupResult.completed) log('services startup wait timed out; loading UI')
   else if (startupResult.error) log('services failed ' + (startupResult.error.stack || startupResult.error))
@@ -236,6 +261,14 @@ async function createWindow() {
       if (!frame) return
       const frameUrl = frame.url
       const framePath = safeRendererPath(frameUrl)
+      if (!isMainFrame) {
+        rendererFrameText(frame).then((text) => {
+          if (!isSurfaceErrorPage(text) || Date.now() - surfaceBootFailureSentAt <= 3000) return
+          surfaceBootFailureSentAt = Date.now()
+          log('renderer surface error page path=' + framePath)
+          mainWindow.webContents.send('tether:surface-boot-failed', { source: frameUrl })
+        }).catch(() => { /* frame may have navigated away */ })
+      }
       const logFrameState = (label, state) => {
         log('renderer frame ' + label + ' main=' + !!isMainFrame + ' path=' + framePath
           + ' readyState=' + state.readyState + ' childElements=' + Number(state.childElements || 0)

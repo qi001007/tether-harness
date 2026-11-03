@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict')
 const test = require('node:test')
-const { isSurfaceBootFailure, rendererDiagnostic, rendererFrameState, rendererRequestScope, rendererSettledFrameState, safeRendererMessage, safeRendererPath } = require('../apps/tether-app/renderer-diagnostics.js')
+const { isSurfaceBootFailure, isSurfaceErrorPage, rendererDiagnostic, rendererFrameState, rendererFrameText, rendererRequestScope, rendererSettledFrameState, safeRendererMessage, safeRendererPath } = require('../apps/tether-app/renderer-diagnostics.js')
 
 test('renderer diagnostics retain source and error clues while removing credentials and URL queries', () => {
   const diagnostic = rendererDiagnostic(
@@ -38,6 +38,15 @@ test('renderer network diagnostics scope local and configured gateway requests o
   assert.equal(rendererRequestScope('https://g456.other.test/path', 'https://g123.example.test'), '')
 })
 
+test('surface gateway error pages are recognized without matching normal frames', () => {
+  assert.equal(isSurfaceErrorPage('native surface request failed'), true)
+  assert.equal(isSurfaceErrorPage('  native surface request failed\n'), true)
+  assert.equal(isSurfaceErrorPage('invalid native surface response'), true)
+  assert.equal(isSurfaceErrorPage('Loading plugins…'), false)
+  assert.equal(isSurfaceErrorPage(''), false)
+  assert.equal(isSurfaceErrorPage(undefined), false)
+})
+
 test('frame diagnostics read only DOM readiness and composer presence', async () => {
   let script = ''
   const state = await rendererFrameState({ executeJavaScript: async (value) => { script = value; return { readyState: 'complete', childElements: 2, hasComposer: true } } })
@@ -45,6 +54,11 @@ test('frame diagnostics read only DOM readiness and composer presence', async ()
   assert.match(script, /readyState/)
   assert.match(script, /hasComposer/)
   assert.doesNotMatch(script, /innerText|textContent|body\.innerHTML/)
+  let textScript = ''
+  const text = await rendererFrameText({ executeJavaScript: async (value) => { textScript = value; return 'native surface request failed' } })
+  assert.equal(text, 'native surface request failed')
+  assert.match(textScript, /innerText/)
+  assert.doesNotMatch(textScript, /innerHTML|textContent|querySelector/)
 })
 
 test('settled frame diagnostics require the same live frame URL', async () => {

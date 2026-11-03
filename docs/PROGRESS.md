@@ -1,5 +1,13 @@
 # 实时进度
 
+## 2026-11-03 v0.2.83 两机 DSH 恢复、黑窗根因与 surface 自恢复
+
+1. **LAPTOP 插件缺失**：DSH 已登录，但 `profiles/desktop/package.json` 没有 `tether-dsh-plugin`、`node_modules` 里也没有 Tether 包。受控修复：停 DSH → 备份 profile → 上传 4 个插件包并逐文件 SHA-256 校验 → 写回 bundles/dependencies → 启动 DSH。descriptor 3 s 内出现（pid 9124、origin 1871）；node 重启后能力为 app/node/plugin **0.2.82**、`dsh_native=true`、`dsh_surface=true`。LAPTOP surface 经 Hub gateway 返回 **200 / 39,514 B**；headless Edge 和真 APP iframe 都出现 composer。
+2. **本机 DSH 页面**：surface 网关本身可用；卡住的是旧的 502 iframe。新增 Electron 侧 502 错误页识别（`rendererFrameText` + `isSurfaceErrorPage`），命中后走既有 `tether:surface-boot-failed` 重试链，不再把错误页当 `document-loaded` 永久保留。两个 iframe（DESKTOP g37511 / LAPTOP g44207）复验均渲染 composer。
+3. **`/plugins/events` 重开崩溃**：`native_surface.py` 引用未定义的 `HTTP_STREAM_MAX_AGE` 与 `_HttpStream.created`，第一条 SSE 关闭后再开就会 `NameError`；补齐常量/字段并新增“已有活跃流时再开一条”回归。
+4. **黑窗真正根因**：LAPTOP 的桌面/开始菜单快捷方式指向 `Tether-App.cmd`，双击先起可见 cmd 控制台。已重建 LAPTOP 桌面快捷方式为直接启动 `electron.exe`；APP 新增 `ensureAppShortcuts()`，每次启动用 `shell.writeShortcutLink` 自愈桌面/开始菜单。开始菜单路径受 fs 保护策略限制，等 APP 在 LAPTOP 启动后由自愈逻辑修正。
+5. 门禁：mjs **237/237**、cjs **7/7**、pytest **151 passed / 1 skipped**、`build.mjs --check`、`build-web.mjs --check`、`validate_versions()` 通过。0.2.83 待发布。
+
 ## 2026-11-03 v0.2.82 DSH 认证修复入口
 
 1. 新增 `dsh_repair_auth`：停全部 DSH、备份 `%APPDATA%\@deepseek-ai\dsh-desktop` 和 `.credentials.yaml`、重启 DSH。

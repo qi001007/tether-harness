@@ -33,6 +33,7 @@ HTTP_STREAM_CHUNK = 48 * 1024
 HTTP_STREAM_QUEUE = 4
 HTTP_STREAM_POLL = 1.0
 HTTP_STREAM_IDLE_TTL = 90.0
+HTTP_STREAM_MAX_AGE = 1800.0
 HTTP_STREAM_WATCHDOG_POLL = 1.0
 ALLOWED_RESPONSE_HEADERS = {
     "content-type", "cache-control", "content-disposition", "etag", "content-encoding",
@@ -60,6 +61,7 @@ class _HttpStream:
     content_remaining: int | None = None
     current_chunk_remaining: int = 0
     last_access: float = field(default_factory=time.monotonic)
+    created: float = field(default_factory=time.monotonic)
     chunks: asyncio.Queue[tuple[str, bytes | None]] = field(
         default_factory=lambda: asyncio.Queue(maxsize=HTTP_STREAM_QUEUE))
     stop: asyncio.Event = field(default_factory=asyncio.Event)
