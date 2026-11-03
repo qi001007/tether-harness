@@ -1,5 +1,13 @@
 # 实时进度
 
+## 2026-11-03 v0.2.84 插件自动安装/修复
+
+1. Node 新增 `tether/node/dsh_plugin.py` 与 `fs/dsh_install_plugin`：下载签名清单对应的插件 ZIP 并校验 SHA-256，或使用本地包；强制 profile 的 pnpm 使用 hoisted 布局，走官方 `dsh plugin add file:` 安装 4 个插件包和 `@deepseek-ai` UI 依赖树；装前备份 profile `package.json`，装后校验包版本、bundles、依赖树，失败恢复 profile；重启 DSH 并等待新 descriptor。
+2. Electron/APP 的 surface 缺失状态新增“安装/修复插件”：检测到 `descriptor_missing` 且 DSH 正在运行时**自动执行一次** repair，成功后按新 DSH pid 重载 iframe；失败显示可重试按钮。用户不再需要手工拷包。
+3. Hub 的 `FS_ACTION_TIMEOUTS` 增加 `dsh_install_plugin: 360 s`，避免长安装被 20 s 默认超时切断。
+4. 验证：临时 DSH home 上用官方 CLI 安装成功，4 个插件包 0.2.83 且 `@deepseek-ai` 顶层依赖齐全；从 Hub 清单下载插件 ZIP 的路径也跑通。门禁：mjs **238/238**、cjs **7/7**、pytest **158 passed / 1 skipped**、两份 build check、`validate_versions()`。
+5. 0.2.84 待发布；发布后更新 LAPTOP 并实测自动修复（备份 profile 后移除插件包/依赖树，触发 repair）。
+
 ## 2026-11-03 v0.2.83 两机 DSH 恢复、黑窗根因与 surface 自恢复
 
 1. **LAPTOP 插件缺失**：DSH 已登录，但 `profiles/desktop/package.json` 没有 `tether-dsh-plugin`、`node_modules` 里也没有 Tether 包。受控修复：停 DSH → 备份 profile → 上传 4 个插件包并逐文件 SHA-256 校验 → 写回 bundles/dependencies → 启动 DSH。descriptor 3 s 内出现（pid 9124、origin 1871）；node 重启后能力为 app/node/plugin **0.2.82**、`dsh_native=true`、`dsh_surface=true`。LAPTOP surface 经 Hub gateway 返回 **200 / 39,514 B**；headless Edge 和真 APP iframe 都出现 composer。

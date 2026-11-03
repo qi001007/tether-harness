@@ -66,3 +66,10 @@ test('a missing DSH surface offers an explicit restart instead of a blank frame'
   assert.match(shared, /'重启 DSH'/)
   assert.match(shared, /dshRestartPidRef/)
 })
+
+test('a missing DSH plugin is repaired automatically without user file work', () => {
+  assert.match(shared, /dsh_install_plugin/)
+  assert.match(shared, /dshAutoRepairRef/)
+  assert.match(shared, /安装\/修复插件/)
+  assert.match(shared, /正在安装\/修复 Tether 插件/)
+})

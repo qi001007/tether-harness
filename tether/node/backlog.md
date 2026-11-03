@@ -34,3 +34,4 @@
 - 2026-11-02：设备文件前缀新增 `write_chunk`（POST）供 DSH 侧本地拖入保存到目标 `D:\TetherDrop`；路径仍受 policy `can_write` 与系统保护目录约束，写入前会创建父目录。
 - 2026-11-02：新增 `dsh_desktop.py` 与本机 DSH 生命周期：注册表/asar/进程检测安装路径、版本与运行态，`dsh_status`/`dsh_start`/`dsh_install` 走 fs 分发；启动必须剥离 `DSH_HOME`/`TETHER_NATIVE_DSH_HOME` 与 `ELECTRON_RUN_AS_NODE`，安装只接受官方 HTTPS nightly 源并按 SHA-512 校验后 `/S`。start/restart 必须显式传入检测到的 DSH home（本机 `C:\Users\Administrator\.dsh`，LAPTOP `D:\DeepSeek Harness\.dsh`），不能一律剥离成默认 home。
 - 2026-11-03：`HTTP_STREAM_MAX_AGE` 与 `_HttpStream.created` 未定义，`/plugins/events` 在已有活跃流时重开会 `NameError`；补齐 30 分钟上限与创建时间，新增“活跃流存在时再开一条”的 SSE 回归。
+- 2026-11-03：新增 `dsh_plugin.py` 与 `fs/dsh_install_plugin`：从签名清单下载插件 ZIP（SHA-256 校验）或使用本地包，确保 profile 的 pnpm 使用 hoisted 布局，走官方 `dsh plugin add file:` 安装 4 个插件包和 `@deepseek-ai` UI 依赖；备份/恢复 profile `package.json`，校验完成后再重启 DSH 等新 descriptor。

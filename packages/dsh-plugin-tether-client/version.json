@@ -1,6 +1,6 @@
 {
-  "version": "0.2.83",
-  "notes": "Surface gateway error pages now trigger an automatic reload, the embedded DSH SSE stream can reopen while another stream is live, and the APP repairs stale desktop/Start Menu shortcuts that launched a console.",
+  "version": "0.2.84",
+  "notes": "The Node now installs or repairs the Tether plugin through the official DSH CLI, including the @deepseek-ai UI dependency tree, and the APP repairs a missing plugin automatically.",
   "download": "https://github.com/qi001007/tether-harness",
   "install": "git pull && powershell -ExecutionPolicy Bypass -File desktop/install-plugin.ps1"
 }

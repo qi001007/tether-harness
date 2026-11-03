@@ -58,3 +58,4 @@
 - 2026-11-02：APP 包与 package-lock 根版本升至 `0.2.67`；`UpdateService` 与本地 serverCheck 改用 `supervisor.childPython`（pythonw），消除启动更新检查的短命控制台/`conhost`；`pythonw` stdout 经 `execFile` 验证可回传。
 - 2026-11-02：APP 包与 package-lock 根版本升至 `0.2.68`；本轮只改共享 UI 更新页，Electron 主进程未改。
 - 2026-11-03：APP 包与 package-lock 根版本升至 `0.2.83`；启动时 `ensureAppShortcuts()` 用 `shell.writeShortcutLink` 把桌面/开始菜单 `Tether APP.lnk` 修回 `electron.exe`（旧快捷方式指向 `.cmd` 会弹黑窗）；主进程识别 surface 网关 502 错误页并触发既有 `tether:surface-boot-failed` 重试，避免旧 iframe 永久停在错误页。
+- 2026-11-03：APP 包与 package-lock 根版本升至 `0.2.84`；surface 缺失且 DSH 正在运行时自动调用 `dsh_install_plugin`，成功后按新 pid 重载；失败显示“安装/修复插件”重试按钮，用户不再手工拷包。

@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any
 
 from .dsh_desktop import DshDesktop, DshError
+from .dsh_plugin import DshPluginError, install as install_dsh_plugin
 
 
 MAX_READ = 1024 * 1024
@@ -966,4 +967,10 @@ class FsService:
         result = self.dsh_desktop.install()
         self.audit.add(op="dsh_install", path=result.get("exe") or "", mode=self.policy.data.get("mode"),
                        phase="intent", result="started" if result.get("installing") else "skipped")
+        return result
+
+    def _op_dsh_install_plugin(self, _args: dict[str, Any]) -> dict[str, Any]:
+        result = install_dsh_plugin(self.dsh_desktop)
+        self.audit.add(op="dsh_install_plugin", path=result.get("profile_path") or "",
+                       mode=self.policy.data.get("mode"), phase="result", result="installed")
         return result

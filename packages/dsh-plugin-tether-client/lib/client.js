@@ -5763,7 +5763,7 @@ monaco-editor/esm/vs/languages/definitions/swift/swift.js:
 
     const EditorRuntime = TetherMonacoRuntime
     const PANEL_ID = 'tether'
-    const PLUGIN_VERSION = "0.2.83"
+    const PLUGIN_VERSION = "0.2.84"
 function parentOf(path) {
   const clean = String(path || '').replace(/[\\/]+$/, '')
   if (!clean) return ''
@@ -11782,6 +11782,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         && ['descriptor_missing', 'host_unreachable', 'descriptor_invalid'].includes(currentState.code)
       const dshWatch = visible && (deviceId === localDeviceId || dshRelevant)
       const dshRestartPidRef = React.useRef(0)
+      const dshAutoRepairRef = React.useRef(false)
       const [dsh, setDsh] = React.useState(null)
       const [dshBusy, setDshBusy] = React.useState('')
       const [dshError, setDshError] = React.useState('')
@@ -11800,7 +11801,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       }, [dshWatch, dshRelevant, deviceId, dshBusy, !!(dsh && dsh.installing)])
       React.useEffect(() => {
         if (!dshBusy) return
-        if (dshBusy === 'dsh_restart') {
+        if (dshBusy === 'dsh_restart' || dshBusy === 'dsh_install_plugin') {
           if (dsh && dsh.running && dsh.pid && dsh.pid !== dshRestartPidRef.current) {
             setDshBusy('')
             setDshError('')
@@ -11818,11 +11819,15 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           setDshBusy('')
         }
       }, [dsh, dshBusy])
+      const dshPluginMissing = !!dshRelevant && !!dsh && dsh.installed !== false
+        && dsh.running === true && currentState.code === 'descriptor_missing'
       const dshBlocked = dshWatch && currentState.status !== 'local' && !!dsh && !dsh.running
       const runDsh = async (action) => {
         setDshError('')
         setDshBusy(action)
-        if (action === 'dsh_restart') dshRestartPidRef.current = Number(dsh && dsh.pid) || 0
+        if (action === 'dsh_restart' || action === 'dsh_install_plugin') {
+          dshRestartPidRef.current = Number(dsh && dsh.pid) || 0
+        }
         try {
           const result = await post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/' + action, {})
           if (result) setDsh(result)
@@ -11831,13 +11836,20 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           setDshBusy('')
         }
       }
+      React.useEffect(() => {
+        if (!dshPluginMissing || dshBusy || dshAutoRepairRef.current) return
+        dshAutoRepairRef.current = true
+        void runDsh('dsh_install_plugin')
+      }, [dshPluginMissing, dshBusy])
 
       const dshSurfaceMissing = !!dshRelevant && !!dsh && dsh.running === true
         && currentState.code === 'descriptor_missing'
       const message = currentState.status === 'error' && dshRelevant && dsh
         ? (dsh.installed === false ? 'DSH 未安装'
           : dsh.running
-            ? (dshSurfaceMissing ? 'DSH 已在运行，但 Tether 插件未加载或 surface 描述符缺失' : currentState.message)
+            ? (dshBusy === 'dsh_install_plugin'
+              ? '正在安装/修复 Tether 插件…'
+              : (dshSurfaceMissing ? 'DSH 已在运行，但 Tether 插件未加载或 surface 描述符缺失' : currentState.message))
             : 'DSH 未启动')
         : currentState.status === 'loading' ? (currentState.message || '正在连接目标设备的 DSH 原生工作区…')
         : currentState.status === 'local' ? '当前已在 DeepSeek Harness 中；本机工作区无需再嵌入，可用左侧「文件」或「连接」。'
@@ -11894,8 +11906,13 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
               { primary: true, disabled: !!dshBusy || !!dsh.installing })
               : null,
             dshRelevant && dsh && dsh.running
+              ? btn(dshBusy === 'dsh_install_plugin' ? '修复中…' : '安装/修复插件',
+                () => { dshAutoRepairRef.current = true; runDsh('dsh_install_plugin') },
+                { primary: true, disabled: !!dshBusy })
+              : null,
+            dshRelevant && dsh && dsh.running
               ? btn(dshBusy === 'dsh_restart' ? '重启中…' : '重启 DSH',
-                () => runDsh('dsh_restart'), { primary: true, disabled: !!dshBusy })
+                () => runDsh('dsh_restart'), { disabled: !!dshBusy })
               : null,
             currentState.status !== 'loading' && currentState.status !== 'local' ? btn('重试', retryDocument) : null,
             dshRelevant && dshBusy && dsh && dsh.installing
