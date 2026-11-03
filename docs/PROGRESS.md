@@ -6,6 +6,7 @@
 2. 关键修复：Hub 的 surface 网关在旧缓存下可能仍返回 200，不能作为健康依据；Node `dsh_status` 新增 `surface`（descriptor pid 存活），APP 在 `running && surface=false` 时自动修复。surface 轮询遇到 `descriptor_missing`/`invalid`/`host_unreachable` 也会进入修复态。
 3. 轮询范围保持“本机或 surface 报错”，避免额外 descriptor 请求破坏既有可见性/请求契约（`test_native_surface_effects` 通过）。
 4. 0.2.87 CI 因该契约测试失败并卡住，已取消、未发布；0.2.88 修复后 CI `41596624981` 成功，发布 app 1,791,776 B / plugin 1,363,369 B / node 91,599 B；Hub mirror 0.2.88；DESKTOP/LAPTOP 全部 0.2.88（本地插件 pid 18492，LAPTOP 0.2.88）。
+5. 新增发布门禁 `scripts/qa_surface_styles.mjs`：无头 Edge 打开两台设备的真实 surface，等待 composer，断言搜索框/按钮计算样式为 `border 0px/none`、透明背景；实测两机 **PASS**。DSH 升级/插件安装矩阵写入 `docs/DSH_UPGRADE_MATRIX.md`。
 
 ## 2026-11-03 v0.2.86 全新 profile 自动修复收口
 
