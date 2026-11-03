@@ -168879,6 +168879,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const [state, setState] = React2.useState({ deviceId, status: deviceId ? "loading" : "no-device", url: "" });
     const [attempt, setAttempt] = React2.useState(0);
     const [slow, setSlow] = React2.useState(false);
+    const [styleBroken, setStyleBroken] = React2.useState(false);
     const currentState = nativeSurfaceStateForDevice(state, deviceId, online);
     const retryCountRef = React2.useRef(0);
     const documentRetryCountRef = React2.useRef(0);
@@ -169190,6 +169191,8 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const retryDocument = () => {
       documentRetryCountRef.current = 0;
       retryCountRef.current = 0;
+      styleRepairRef.current = false;
+      setStyleBroken(false);
       setSlow(false);
       setState({ deviceId, status: "loading", url: "" });
       setAttempt((value) => value + 1);
@@ -169205,6 +169208,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const dshWatch = visible && (deviceId === localDeviceId || dshRelevant);
     const dshRestartPidRef = React2.useRef(0);
     const dshAutoRepairRef = React2.useRef(false);
+    const styleRepairRef = React2.useRef(false);
     const [dsh, setDsh] = React2.useState(null);
     const [dshBusy, setDshBusy] = React2.useState("");
     const [dshError, setDshError] = React2.useState("");
@@ -169234,6 +169238,8 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         if (dsh && dsh.running && dsh.pid && dsh.pid !== dshRestartPidRef.current) {
           setDshBusy("");
           setDshError("");
+          styleRepairRef.current = false;
+          setStyleBroken(false);
           retryDocument();
           return;
         }
@@ -169273,6 +169279,22 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       }, 1e4);
       return () => clearTimeout(timer);
     }, [dshPluginMissing, dshBusy]);
+    React2.useEffect(() => {
+      const bridge = typeof window !== "undefined" ? window.tetherApp : void 0;
+      if (!deviceId || !bridge || typeof bridge.onSurfaceStyleBroken !== "function") return void 0;
+      return bridge.onSurfaceStyleBroken((detail) => {
+        const current = surfaceStateRef.current;
+        if (!current || current.deviceId !== deviceId || !current.url) return;
+        if (detail && detail.source && !nativeSurfaceFailureMatches(current.url, detail.source)) return;
+        if (!styleRepairRef.current) {
+          styleRepairRef.current = true;
+          setStyleBroken(false);
+          void runDsh("dsh_install_plugin");
+        } else {
+          setStyleBroken(true);
+        }
+      });
+    }, [deviceId]);
     const dshSurfaceMissing = !!dshRelevant && !!dsh && dsh.running === true && currentState.code === "descriptor_missing";
     const message = currentState.status === "error" && dshRelevant && dsh ? dsh.installed === false ? "DSH \u672A\u5B89\u88C5" : dsh.running ? dshBusy === "dsh_install_plugin" ? "\u6B63\u5728\u5B89\u88C5/\u4FEE\u590D Tether \u63D2\u4EF6\u2026" : dshSurfaceMissing ? "DSH \u5DF2\u5728\u8FD0\u884C\uFF0C\u4F46 Tether \u63D2\u4EF6\u672A\u52A0\u8F7D\u6216 surface \u63CF\u8FF0\u7B26\u7F3A\u5931" : currentState.message : "DSH \u672A\u542F\u52A8" : currentState.status === "loading" ? currentState.message || "\u6B63\u5728\u8FDE\u63A5\u76EE\u6807\u8BBE\u5907\u7684 DSH \u539F\u751F\u5DE5\u4F5C\u533A\u2026" : currentState.status === "local" ? "\u5F53\u524D\u5DF2\u5728 DeepSeek Harness \u4E2D\uFF1B\u672C\u673A\u5DE5\u4F5C\u533A\u65E0\u9700\u518D\u5D4C\u5165\uFF0C\u53EF\u7528\u5DE6\u4FA7\u300C\u6587\u4EF6\u300D\u6216\u300C\u8FDE\u63A5\u300D\u3002" : currentState.status === "offline" ? "\u76EE\u6807\u8BBE\u5907\u79BB\u7EBF\u3002\u8BBE\u5907\u91CD\u65B0\u5728\u7EBF\u540E\u53EF\u91CD\u8BD5\u3002" : currentState.status === "no-device" ? "\u5148\u4ECE\u5DE6\u4FA7\u8BBE\u5907\u5217\u8868\u9009\u62E9\u76EE\u6807\u8BBE\u5907\u3002" : currentState.status === "error" ? currentState.message : "";
     return h2(
@@ -169314,6 +169336,20 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           onClick: retryDocument,
           style: { border: 0, background: "transparent", color: C.blue, fontSize: 12, cursor: "pointer", padding: 0 }
         }, "\u91CD\u65B0\u52A0\u8F7D")) : null,
+        styleBroken ? h2(
+          "div",
+          {
+            role: "alert",
+            style: { position: "absolute", inset: 0, zIndex: 7, display: "grid", placeItems: "center", alignContent: "center", gap: 10, padding: 24, background: C.bg, textAlign: "center" }
+          },
+          h2("div", { style: { fontSize: 14, color: C.ink } }, "DSH \u754C\u9762\u6837\u5F0F\u4E0E Tether \u7248\u672C\u4E0D\u5339\u914D"),
+          h2(
+            "div",
+            { style: { maxWidth: 460, fontSize: 12, color: C.sub, lineHeight: 1.6 } },
+            "\u5DF2\u81EA\u52A8\u5C1D\u8BD5\u5B89\u88C5/\u4FEE\u590D Tether \u63D2\u4EF6\u3002\u82E5\u4ECD\u65E0\u6CD5\u6062\u590D\uFF0C\u8BF7\u7B49\u5F85 Tether \u9002\u914D\u5F53\u524D DSH \u7248\u672C\u3002"
+          ),
+          btn("\u91CD\u8BD5", retryDocument, { primary: true })
+        ) : null,
         currentState.status === "document-loaded" ? h2("button", {
           type: "button",
           onClick: retryDocument,

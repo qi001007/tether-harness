@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict')
 const test = require('node:test')
-const { isSurfaceBootFailure, isSurfaceErrorPage, rendererDiagnostic, rendererFrameState, rendererFrameText, rendererRequestScope, rendererSettledFrameState, safeRendererMessage, safeRendererPath } = require('../apps/tether-app/renderer-diagnostics.js')
+const { isSurfaceBootFailure, isSurfaceErrorPage, isSurfaceUnstyled, rendererDiagnostic, rendererFrameState, rendererFrameStyleState, rendererFrameText, rendererRequestScope, rendererSettledFrameState, safeRendererMessage, safeRendererPath } = require('../apps/tether-app/renderer-diagnostics.js')
 
 test('renderer diagnostics retain source and error clues while removing credentials and URL queries', () => {
   const diagnostic = rendererDiagnostic(
@@ -45,6 +45,19 @@ test('surface gateway error pages are recognized without matching normal frames'
   assert.equal(isSurfaceErrorPage('Loading plugins…'), false)
   assert.equal(isSurfaceErrorPage(''), false)
   assert.equal(isSurfaceErrorPage(undefined), false)
+})
+
+test('default browser controls are recognized without flagging styled DSH controls', async () => {
+  assert.equal(isSurfaceUnstyled({ input: { borderTopStyle: 'inset', backgroundColor: 'rgb(255, 255, 255)' } }), true)
+  assert.equal(isSurfaceUnstyled({ button: { borderTopStyle: 'outset', backgroundColor: 'rgb(240, 240, 240)' } }), true)
+  assert.equal(isSurfaceUnstyled({ input: { borderTopStyle: 'none', backgroundColor: 'rgba(0, 0, 0, 0)' } }), false)
+  assert.equal(isSurfaceUnstyled(null), false)
+  let script = ''
+  const state = await rendererFrameStyleState({ executeJavaScript: async (value) => { script = value; return { input: null, button: null } } })
+  assert.deepEqual(state, { input: null, button: null })
+  assert.match(script, /borderTopStyle/)
+  assert.match(script, /backgroundColor/)
+  assert.match(script, /getComputedStyle/)
 })
 
 test('frame diagnostics read only DOM readiness and composer presence', async () => {

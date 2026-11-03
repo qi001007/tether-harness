@@ -31,5 +31,10 @@ contextBridge.exposeInMainWorld('tetherApp', {
     const listener = (_event, value) => callback(value)
     ipcRenderer.on('tether:surface-boot-failed', listener)
     return () => ipcRenderer.off('tether:surface-boot-failed', listener)
+  },
+  onSurfaceStyleBroken: (callback) => {
+    const listener = (_event, value) => callback(value)
+    ipcRenderer.on('tether:surface-style-broken', listener)
+    return () => ipcRenderer.off('tether:surface-style-broken', listener)
   }
 })

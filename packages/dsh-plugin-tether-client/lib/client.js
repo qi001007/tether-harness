@@ -5763,7 +5763,7 @@ monaco-editor/esm/vs/languages/definitions/swift/swift.js:
 
     const EditorRuntime = TetherMonacoRuntime
     const PANEL_ID = 'tether'
-    const PLUGIN_VERSION = "0.2.88"
+    const PLUGIN_VERSION = "0.2.89"
 function parentOf(path) {
   const clean = String(path || '').replace(/[\\/]+$/, '')
   if (!clean) return ''
@@ -11501,6 +11501,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const [state, setState] = React.useState({ deviceId, status: deviceId ? 'loading' : 'no-device', url: '' })
       const [attempt, setAttempt] = React.useState(0)
       const [slow, setSlow] = React.useState(false)
+      const [styleBroken, setStyleBroken] = React.useState(false)
       const currentState = nativeSurfaceStateForDevice(state, deviceId, online)
       const retryCountRef = React.useRef(0)
       const documentRetryCountRef = React.useRef(0)
@@ -11778,6 +11779,8 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const retryDocument = () => {
         documentRetryCountRef.current = 0
         retryCountRef.current = 0
+        styleRepairRef.current = false
+        setStyleBroken(false)
         setSlow(false)
         setState({ deviceId, status: 'loading', url: '' })
         setAttempt((value) => value + 1)
@@ -11796,6 +11799,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const dshWatch = visible && (deviceId === localDeviceId || dshRelevant)
       const dshRestartPidRef = React.useRef(0)
       const dshAutoRepairRef = React.useRef(false)
+      const styleRepairRef = React.useRef(false)
       const [dsh, setDsh] = React.useState(null)
       const [dshBusy, setDshBusy] = React.useState('')
       const [dshError, setDshError] = React.useState('')
@@ -11818,6 +11822,8 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           if (dsh && dsh.running && dsh.pid && dsh.pid !== dshRestartPidRef.current) {
             setDshBusy('')
             setDshError('')
+            styleRepairRef.current = false
+            setStyleBroken(false)
             retryDocument()
             return
           }
@@ -11858,6 +11864,22 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         }, 10000)
         return () => clearTimeout(timer)
       }, [dshPluginMissing, dshBusy])
+      React.useEffect(() => {
+        const bridge = typeof window !== 'undefined' ? window.tetherApp : undefined
+        if (!deviceId || !bridge || typeof bridge.onSurfaceStyleBroken !== 'function') return undefined
+        return bridge.onSurfaceStyleBroken((detail) => {
+          const current = surfaceStateRef.current
+          if (!current || current.deviceId !== deviceId || !current.url) return
+          if (detail && detail.source && !nativeSurfaceFailureMatches(current.url, detail.source)) return
+          if (!styleRepairRef.current) {
+            styleRepairRef.current = true
+            setStyleBroken(false)
+            void runDsh('dsh_install_plugin')
+          } else {
+            setStyleBroken(true)
+          }
+        })
+      }, [deviceId])
 
       const dshSurfaceMissing = !!dshRelevant && !!dsh && dsh.running === true
         && currentState.code === 'descriptor_missing'
@@ -11908,6 +11930,15 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
               type: 'button', onClick: retryDocument,
               style: { border: 0, background: 'transparent', color: C.blue, fontSize: 12, cursor: 'pointer', padding: 0 }
             }, '重新加载')) : null,
+            styleBroken ? h('div', {
+              role: 'alert',
+              style: { position: 'absolute', inset: 0, zIndex: 7, display: 'grid', placeItems: 'center', alignContent: 'center', gap: 10, padding: 24, background: C.bg, textAlign: 'center' }
+            },
+              h('div', { style: { fontSize: 14, color: C.ink } }, 'DSH 界面样式与 Tether 版本不匹配'),
+              h('div', { style: { maxWidth: 460, fontSize: 12, color: C.sub, lineHeight: 1.6 } },
+                '已自动尝试安装/修复 Tether 插件。若仍无法恢复，请等待 Tether 适配当前 DSH 版本。'),
+              btn('重试', retryDocument, { primary: true })
+            ) : null,
             currentState.status === 'document-loaded' ? h('button', {
               type: 'button', onClick: retryDocument, title: '重新加载目标工作区', 'aria-label': '重新加载目标工作区',
               style: { position: 'absolute', right: 10, bottom: 10, width: 26, height: 26, border: 0, borderRadius: 999, background: 'rgba(255,255,255,.9)', color: C.sub, fontSize: 14, cursor: 'pointer', boxShadow: '0 1px 4px rgba(16,24,40,.16)' }

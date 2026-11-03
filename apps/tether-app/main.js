@@ -5,7 +5,7 @@ const { pathToFileURL } = require('node:url')
 const { Supervisor } = require('./supervisor.js')
 const { waitForSupervisorStart, waitForLocalNodeApi } = require('./startup-readiness.js')
 const { UpdateService } = require('./update-service.js')
-const { rendererDiagnostic, isSurfaceBootFailure, isSurfaceErrorPage, rendererFrameState, rendererFrameText, rendererRequestScope, rendererSettledFrameState, safeRendererMessage, safeRendererPath } = require('./renderer-diagnostics.js')
+const { rendererDiagnostic, isSurfaceBootFailure, isSurfaceErrorPage, isSurfaceUnstyled, rendererFrameState, rendererFrameStyleState, rendererFrameText, rendererRequestScope, rendererSettledFrameState, safeRendererMessage, safeRendererPath } = require('./renderer-diagnostics.js')
 
 const repoRoot = path.resolve(__dirname, '..', '..')
 const webRoot = path.join(repoRoot, 'packages', 'tether-ui', 'web')
@@ -96,6 +96,7 @@ let tray = null
 let isQuitting = false
 let rendererConsoleErrors = 0
 let surfaceBootFailureSentAt = 0
+let surfaceStyleFailureSentAt = 0
 
 function showMainWindow() {
   if (!mainWindow) return
@@ -268,6 +269,15 @@ async function createWindow() {
           log('renderer surface error page path=' + framePath)
           mainWindow.webContents.send('tether:surface-boot-failed', { source: frameUrl })
         }).catch(() => { /* frame may have navigated away */ })
+        const styleTimer = setTimeout(() => {
+          rendererFrameStyleState(frame).then((state) => {
+            if (!isSurfaceUnstyled(state) || Date.now() - surfaceStyleFailureSentAt <= 5000) return
+            surfaceStyleFailureSentAt = Date.now()
+            log('renderer surface style broken path=' + framePath)
+            mainWindow.webContents.send('tether:surface-style-broken', { source: frameUrl })
+          }).catch(() => { /* frame may have navigated away */ })
+        }, 1500)
+        if (typeof styleTimer.unref === 'function') styleTimer.unref()
       }
       const logFrameState = (label, state) => {
         log('renderer frame ' + label + ' main=' + !!isMainFrame + ' path=' + framePath

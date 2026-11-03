@@ -34,6 +34,16 @@ function isSurfaceErrorPage(text) {
   return SURFACE_ERROR_PAGE.test(String(text || '').trim())
 }
 
+function isSurfaceUnstyled(state) {
+  const input = state && state.input
+  const button = state && state.button
+  const inputDefault = !!input && input.borderTopStyle === 'inset'
+    && input.backgroundColor === 'rgb(255, 255, 255)'
+  const buttonDefault = !!button && button.borderTopStyle === 'outset'
+    && button.backgroundColor === 'rgb(240, 240, 240)'
+  return inputDefault || buttonDefault
+}
+
 function rendererRequestScope(value, controllerUrl) {
   try {
     const request = new URL(value)
@@ -64,6 +74,23 @@ function rendererFrameText(frame) {
   return frame.executeJavaScript('document.body ? document.body.innerText.trim().slice(0, 200) : ""')
 }
 
+function rendererFrameStyleState(frame) {
+  return frame.executeJavaScript(`(() => {
+    const input = document.querySelector('input[placeholder]')
+    const button = document.querySelector('button')
+    const style = (element) => {
+      if (!element) return null
+      const computed = getComputedStyle(element)
+      return {
+        borderTopWidth: computed.borderTopWidth,
+        borderTopStyle: computed.borderTopStyle,
+        backgroundColor: computed.backgroundColor
+      }
+    }
+    return { input: style(input), button: style(button) }
+  })()`)
+}
+
 async function rendererSettledFrameState(fromId, processId, routingId, expectedUrl) {
   try {
     const frame = fromId(processId, routingId)
@@ -72,4 +99,4 @@ async function rendererSettledFrameState(fromId, processId, routingId, expectedU
   } catch (_) { return null }
 }
 
-module.exports = { isSurfaceBootFailure, isSurfaceErrorPage, rendererDiagnostic, rendererFrameState, rendererFrameText, rendererRequestScope, rendererSettledFrameState, safeRendererMessage, safeRendererPath }
+module.exports = { isSurfaceBootFailure, isSurfaceErrorPage, isSurfaceUnstyled, rendererDiagnostic, rendererFrameState, rendererFrameStyleState, rendererFrameText, rendererRequestScope, rendererSettledFrameState, safeRendererMessage, safeRendererPath }

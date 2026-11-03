@@ -1,6 +1,6 @@
 {
-  "version": "0.2.88",
-  "notes": "Surface health uses the live descriptor pid; missing-plugin errors from the surface poll force the auto-repair path without broadening the ordinary DSH status polling.",
+  "version": "0.2.89",
+  "notes": "Runtime style probe: default browser controls trigger one automatic plugin repair; repeated breakage shows a covered 待适配 state instead of raw controls.",
   "download": "https://github.com/qi001007/tether-harness",
   "install": "git pull && powershell -ExecutionPolicy Bypass -File desktop/install-plugin.ps1"
 }
