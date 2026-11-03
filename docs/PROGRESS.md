@@ -809,5 +809,7 @@
 - 冷载直连评估：本 tailnet 未启用 Tailscale Serve（启用需登录管理页），HTTPS 直连资源被混合内容阻断；备选是目标 Node 在 Tailscale 上开一个 HTTP surface 端口（token/Referer 校验），但等于新增监听面，需主人批准。Tailscale 1.102.3，自机 `user-20250925jd.tailaf6f1c.ts.net`，LAPTOP `qi.tailaf6f1c.ts.net`。
 - 0.2.53：APP 启动后为其它在线节点开隐藏 iframe 后台预热（加载后保持 45 s），冷载移出用户路径；切到 LAPTOP 到 composer **5.5 s**，连续切换 5 次 **12.8 / 6.4 / 4.8 / 6.7 s**（另一次同设备无操作），全部 ≤15 s。CI `41330546926`，17:18:02Z 发布，Hub 镜像 0.2.53；LAPTOP Node+APP **19.7 s**、插件 **16.6 s**，两机 node/app/plugin 均 **0.2.53**，两机 surface **200**（1.55 s / 1.24 s）。
 
-详细部署记录、服务器地址与运行快照属于私有运维材料，不在本公开进度页重复列出。用户需求仍以 [反馈清单](FEEDBACK.md) 为准；产品目标见 [PRD](PRD.md)，公开协议与客户端边界见 [技术说明](TECHNICAL.md)。
+- 传输提速（199 MB→）：直传分片 1 MB→4 MB，读端 `MAX_READ` 同步放到 4 MB；100 MB 真机直传 **52 s→42.46 s（1.92→2.355 MiB/s）**，SHA-256 一致。实测 EasyTier peer laptop 188 ms p2p tcp6，LAPTOP WLAN 直连端口（11010/445/3389）全部被校园网客户端隔离，应用只能走 EasyTier；单请求流式上传实测 49.4 s 更慢，已删除。瓶颈在网络路径（同期 raw TCP 3.69–4.09 MiB/s），不在 base64/HTTP 层。
+- - POSIX 真机门禁已修绿：`.github/workflows/posix.yml` 的 Install 步骤缺 `pytest`，Ubuntu/macOS 两个作业都停在 `No module named pytest`（不是 PTY 代码问题）。提交 `6c6ef51` 后 CI `41689772155` 两作业全绿：PTY 测试、安装器检查、node 包构建、一次性安装、安装后终端测试均通过。
+- 详细部署记录、服务器地址与运行快照属于私有运维材料，不在本公开进度页重复列出。用户需求仍以 [反馈清单](FEEDBACK.md) 为准；产品目标见 [PRD](PRD.md)，公开协议与客户端边界见 [技术说明](TECHNICAL.md)。
 
