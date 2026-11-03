@@ -865,7 +865,7 @@ test('local DSH can be started or installed from settings and the surface error 
   assert.match(settingsPanel, /'启动 DSH'/)
   assert.match(settingsPanel, /'安装 DSH'/)
   assert.match(shared, /const dshRelevant =/)
-  assert.ok(shared.includes("['descriptor_missing', 'host_unreachable', 'descriptor_invalid']"))
+  assert.ok(shared.includes("['descriptor_missing', 'host_unreachable', 'descriptor_invalid', 'node_update_required']"))
   assert.ok(shared.includes("'dsh_install' : 'dsh_start'"))
   assert.match(shared, /\/fs\/' \+ action/)
 })

@@ -175938,6 +175938,8 @@ function createTerminalDock({ React: React2, Glyph, post, C: C2, device, cwd: cw
   const [shellMenu, setShellMenu] = React2.useState(null);
   const [status2, setStatus] = React2.useState("starting");
   const [ptyMode, setPtyMode] = React2.useState(true);
+  const [terminalUser, setTerminalUser] = React2.useState("");
+  const [privileged, setPrivileged] = React2.useState(null);
   const [error, setError] = React2.useState("");
   const [legacyOutput, setLegacyOutput] = React2.useState("");
   const [legacyInput, setLegacyInput] = React2.useState("");
@@ -176054,6 +176056,8 @@ function createTerminalDock({ React: React2, Glyph, post, C: C2, device, cwd: cw
         sessionRef.current = result.session_id;
         since = 0;
         failures = 0;
+        setTerminalUser(typeof result.user === "string" ? result.user : "");
+        setPrivileged(typeof result.privileged === "boolean" ? result.privileged : null);
         const interactive = result.pty === true;
         ptyRef.current = interactive;
         setPtyMode(interactive);
@@ -176360,6 +176364,17 @@ function createTerminalDock({ React: React2, Glyph, post, C: C2, device, cwd: cw
         h3("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, shellLabel),
         h3(Glyph, { name: "chevronDown", size: 10 })
       ),
+      terminalUser || privileged !== null ? h3("span", {
+        title: "\u7EC8\u7AEF\u8FD0\u884C\u8EAB\u4EFD",
+        style: {
+          fontSize: 10,
+          flex: "0 0 auto",
+          padding: "1px 6px",
+          borderRadius: 999,
+          color: privileged ? C2.green || "#16a34a" : C2.amber || "#b54708",
+          background: privileged ? "color-mix(in srgb, " + (C2.green || "#16a34a") + " 12%, transparent)" : "color-mix(in srgb, " + (C2.amber || "#b54708") + " 12%, transparent)"
+        }
+      }, (terminalUser || "user") + (privileged ? " \xB7 \u7BA1\u7406\u5458" : " \xB7 \u666E\u901A\u7528\u6237")) : null,
       ptyMode === false ? h3("span", { style: { fontSize: 10, color: C2.amber || "#b54708", flex: "0 0 auto" } }, "\u517C\u5BB9\u6A21\u5F0F") : null,
       h3("span", {
         title: cwd2,
@@ -180078,7 +180093,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     } catch (_2) {
     }
   }
-  function NativeSurface({ deviceId, online, visible, localDeviceId, preload = false, layered = false }) {
+  function NativeSurface({ deviceId, online, visible, localDeviceId, deviceInfo = null, preload = false, layered = false }) {
     const [state, setState] = React2.useState({ deviceId, status: deviceId ? "loading" : "no-device", url: "" });
     const [attempt, setAttempt] = React2.useState(0);
     const [slow, setSlow] = React2.useState(false);
@@ -180225,7 +180240,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         if (!response.ok) {
           const detail = data.detail || {};
           const code = detail.code;
-          const message2 = response.status === 404 ? "\u76EE\u6807\u8BBE\u5907\u4E0D\u5B58\u5728\u6216\u5DF2\u79FB\u9664" : code === "node_update_required" ? "\u76EE\u6807\u8282\u70B9\u7248\u672C\u8F83\u65E7\uFF0C\u9700\u8981\u66F4\u65B0\u540E\u624D\u80FD\u6253\u5F00\u5B8C\u6574 DSH \u5DE5\u4F5C\u533A" : code === "device_offline" ? "\u76EE\u6807\u8BBE\u5907\u79BB\u7EBF\u3002\u8BBE\u5907\u91CD\u65B0\u5728\u7EBF\u540E\u53EF\u91CD\u8BD5\u3002" : code === "descriptor_missing" ? "\u76EE\u6807\u8BBE\u5907\u7684 DeepSeek Harness \u672A\u8FD0\u884C\uFF0C\u6216\u6CA1\u6709\u5B89\u88C5 Tether surface \u7EC4\u4EF6\u3002\u8BF7\u5148\u542F\u52A8\u76EE\u6807 DSH\u3002" : code === "descriptor_invalid" ? "\u76EE\u6807\u8BBE\u5907\u7684 DSH surface \u63CF\u8FF0\u65E0\u6548\uFF0C\u8BF7\u91CD\u542F\u76EE\u6807 DSH \u6216\u91CD\u65B0\u5B89\u88C5\u63D2\u4EF6\u3002" : code === "host_unreachable" ? "\u76EE\u6807 DSH \u8FDB\u7A0B\u6CA1\u6709\u54CD\u5E94\uFF0C\u8BF7\u786E\u8BA4\u5B83\u5DF2\u542F\u52A8\u3002" : code === "auth_failed" ? "\u76EE\u6807 DSH \u7684\u767B\u5F55\u6001\u5DF2\u5931\u6548\uFF0C\u8BF7\u5728\u76EE\u6807\u673A\u91CD\u65B0\u767B\u5F55 DeepSeek Harness\u3002" : code === "surface_timeout" ? "\u76EE\u6807\u8BBE\u5907\u6CA1\u6709\u53CA\u65F6\u54CD\u5E94\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5\u3002" : "\u539F\u751F DSH \u9875\u9762\u6682\u4E0D\u53EF\u7528";
+          const message2 = response.status === 404 ? "\u76EE\u6807\u8BBE\u5907\u4E0D\u5B58\u5728\u6216\u5DF2\u79FB\u9664" : code === "node_update_required" ? "\u76EE\u6807\u8BBE\u5907\u6CA1\u6709\u53EF\u7528\u7684 DeepSeek Harness \u5DE5\u4F5C\u533A\u3002\u6587\u4EF6\u4E0E\u7EC8\u7AEF\u4ECD\u7136\u53EF\u7528\u3002" : code === "device_offline" ? "\u76EE\u6807\u8BBE\u5907\u79BB\u7EBF\u3002\u8BBE\u5907\u91CD\u65B0\u5728\u7EBF\u540E\u53EF\u91CD\u8BD5\u3002" : code === "descriptor_missing" ? "\u76EE\u6807\u8BBE\u5907\u7684 DeepSeek Harness \u672A\u8FD0\u884C\uFF0C\u6216\u6CA1\u6709\u5B89\u88C5 Tether surface \u7EC4\u4EF6\u3002\u8BF7\u5148\u542F\u52A8\u76EE\u6807 DSH\u3002" : code === "descriptor_invalid" ? "\u76EE\u6807\u8BBE\u5907\u7684 DSH surface \u63CF\u8FF0\u65E0\u6548\uFF0C\u8BF7\u91CD\u542F\u76EE\u6807 DSH \u6216\u91CD\u65B0\u5B89\u88C5\u63D2\u4EF6\u3002" : code === "host_unreachable" ? "\u76EE\u6807 DSH \u8FDB\u7A0B\u6CA1\u6709\u54CD\u5E94\uFF0C\u8BF7\u786E\u8BA4\u5B83\u5DF2\u542F\u52A8\u3002" : code === "auth_failed" ? "\u76EE\u6807 DSH \u7684\u767B\u5F55\u6001\u5DF2\u5931\u6548\uFF0C\u8BF7\u5728\u76EE\u6807\u673A\u91CD\u65B0\u767B\u5F55 DeepSeek Harness\u3002" : code === "surface_timeout" ? "\u76EE\u6807\u8BBE\u5907\u6CA1\u6709\u53CA\u65F6\u54CD\u5E94\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5\u3002" : "\u539F\u751F DSH \u9875\u9762\u6682\u4E0D\u53EF\u7528";
           const error = new Error(message2);
           error.surfaceStatus = response.status;
           error.surfaceCode = code;
@@ -180407,7 +180422,8 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         setAttempt((value) => value + 1);
       } else setState({ deviceId, status: "error", url: "", message: "\u539F\u751F\u5DE5\u4F5C\u533A\u9875\u9762\u52A0\u8F7D\u5931\u8D25\u3002\u8BF7\u68C0\u67E5\u76EE\u6807\u8BBE\u5907\u8FDE\u63A5\u540E\u91CD\u8BD5\u3002" });
     };
-    const dshRelevant = currentState.status === "error" && ["descriptor_missing", "host_unreachable", "descriptor_invalid"].includes(currentState.code);
+    const dshRelevant = currentState.status === "error" && ["descriptor_missing", "host_unreachable", "descriptor_invalid", "node_update_required"].includes(currentState.code);
+    const dshInstallSupported = !deviceInfo || !deviceInfo.capabilities || deviceInfo.capabilities.dsh_install_supported !== false;
     const dshWatch = visible && (deviceId === localDeviceId || dshRelevant);
     const dshRestartPidRef = React2.useRef(0);
     const dshAutoRepairRef = React2.useRef(false);
@@ -180607,7 +180623,11 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         h3("div", { style: { fontSize: 14, color: C2.ink } }, dsh.installed === false ? "DSH \u672A\u5B89\u88C5" : "DSH \u672A\u542F\u52A8"),
         dsh.version ? h3("div", { className: "tether-num", style: { fontSize: 11.5, color: C2.mute } }, dsh.version) : null,
         dsh.installing ? h3("div", { style: { fontSize: 11.5, color: C2.mute } }, "\u5B89\u88C5\u4E2D " + (Number(dsh.progress) || 0) + "%") : null,
-        btn(
+        dsh.installed === false && !dshInstallSupported ? h3(
+          "div",
+          { style: { maxWidth: 460, fontSize: 12, color: C2.sub, lineHeight: 1.6 } },
+          "\u5F53\u524D\u76EE\u6807\u7CFB\u7EDF\u6CA1\u6709\u5B98\u65B9 DSH \u684C\u9762\u7248\u3002\u6587\u4EF6\u3001\u7EC8\u7AEF\u548C\u8FDC\u7A0B\u5E94\u7528\u4ECD\u53EF\u6B63\u5E38\u4F7F\u7528\uFF1B\u5B8C\u6574 DSH \u5DE5\u4F5C\u533A\u9700\u8981 Windows \u76EE\u6807\u673A\u3002"
+        ) : btn(
           dsh.installed === false ? dshBusy === "dsh_install" || dsh.installing ? "\u5B89\u88C5\u4E2D\u2026" : "\u5B89\u88C5 DSH" : dshBusy === "dsh_start" ? "\u542F\u52A8\u4E2D\u2026" : "\u542F\u52A8 DSH",
           () => runDsh(dsh.installed === false ? "dsh_install" : "dsh_start"),
           { primary: true, disabled: !!dshBusy || !!dsh.installing }
@@ -180688,6 +180708,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         key: id,
         deviceId: id,
         online: !!(online.get(id) && online.get(id).online),
+        deviceInfo: online.get(id) || null,
         visible: visible && id === deviceId,
         preload: true,
         layered: true,

@@ -46,6 +46,8 @@ export function createTerminalDock({ React, Glyph, post, C, device, cwd, height 
   const [shellMenu, setShellMenu] = React.useState(null)
   const [status, setStatus] = React.useState('starting')
   const [ptyMode, setPtyMode] = React.useState(true)
+  const [terminalUser, setTerminalUser] = React.useState('')
+  const [privileged, setPrivileged] = React.useState(null)
   const [error, setError] = React.useState('')
   const [legacyOutput, setLegacyOutput] = React.useState('')
   const [legacyInput, setLegacyInput] = React.useState('')
@@ -149,6 +151,8 @@ export function createTerminalDock({ React, Glyph, post, C, device, cwd, height 
         sessionRef.current = result.session_id
         since = 0
         failures = 0
+        setTerminalUser(typeof result.user === 'string' ? result.user : '')
+        setPrivileged(typeof result.privileged === 'boolean' ? result.privileged : null)
         const interactive = result.pty === true
         ptyRef.current = interactive
         setPtyMode(interactive)
@@ -394,6 +398,14 @@ export function createTerminalDock({ React, Glyph, post, C, device, cwd, height 
       },
         h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, shellLabel),
         h(Glyph, { name: 'chevronDown', size: 10 })),
+      terminalUser || privileged !== null ? h('span', {
+        title: '终端运行身份',
+        style: {
+          fontSize: 10, flex: '0 0 auto', padding: '1px 6px', borderRadius: 999,
+          color: privileged ? (C.green || '#16a34a') : (C.amber || '#b54708'),
+          background: privileged ? 'color-mix(in srgb, ' + (C.green || '#16a34a') + ' 12%, transparent)' : 'color-mix(in srgb, ' + (C.amber || '#b54708') + ' 12%, transparent)'
+        }
+      }, (terminalUser || 'user') + (privileged ? ' · 管理员' : ' · 普通用户')) : null,
       ptyMode === false ? h('span', { style: { fontSize: 10, color: C.amber || '#b54708', flex: '0 0 auto' } }, '兼容模式') : null,
       h('span', {
         title: cwd,

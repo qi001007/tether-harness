@@ -33,6 +33,27 @@ PS_INIT = (
 )
 
 
+def _current_user() -> str:
+    try:
+        import getpass
+        return getpass.getuser()
+    except Exception:
+        return str(os.environ.get("USERNAME") or os.environ.get("USER") or "")
+
+
+def _is_privileged() -> bool:
+    if os.name == "nt":
+        try:
+            import ctypes
+            return bool(ctypes.windll.shell32.IsUserAnAdmin())
+        except Exception:
+            return False
+    try:
+        return os.geteuid() == 0
+    except AttributeError:
+        return False
+
+
 @dataclass
 class _Session:
     id: str
@@ -280,7 +301,8 @@ class TerminalService:
         self.sessions[session.id] = session
         return {"session_id": session.id, "shell": shell_id, "command": command[0],
                 "cwd": str(cwd), "pid": session.pid, "pty": session.pty_mode,
-                "cols": cols, "rows": rows}
+                "cols": cols, "rows": rows, "user": _current_user(),
+                "privileged": _is_privileged()}
 
     def _find(self, args: dict[str, Any]) -> _Session:
         session = self.sessions.get(str(args.get("session_id") or ""))

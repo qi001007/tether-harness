@@ -9453,6 +9453,8 @@ function createTerminalDock({ React, Glyph, post, C, device, cwd, height = 240, 
   const [shellMenu, setShellMenu] = React.useState(null)
   const [status, setStatus] = React.useState('starting')
   const [ptyMode, setPtyMode] = React.useState(true)
+  const [terminalUser, setTerminalUser] = React.useState('')
+  const [privileged, setPrivileged] = React.useState(null)
   const [error, setError] = React.useState('')
   const [legacyOutput, setLegacyOutput] = React.useState('')
   const [legacyInput, setLegacyInput] = React.useState('')
@@ -9556,6 +9558,8 @@ function createTerminalDock({ React, Glyph, post, C, device, cwd, height = 240, 
         sessionRef.current = result.session_id
         since = 0
         failures = 0
+        setTerminalUser(typeof result.user === 'string' ? result.user : '')
+        setPrivileged(typeof result.privileged === 'boolean' ? result.privileged : null)
         const interactive = result.pty === true
         ptyRef.current = interactive
         setPtyMode(interactive)
@@ -9801,6 +9805,14 @@ function createTerminalDock({ React, Glyph, post, C, device, cwd, height = 240, 
       },
         h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, shellLabel),
         h(Glyph, { name: 'chevronDown', size: 10 })),
+      terminalUser || privileged !== null ? h('span', {
+        title: '终端运行身份',
+        style: {
+          fontSize: 10, flex: '0 0 auto', padding: '1px 6px', borderRadius: 999,
+          color: privileged ? (C.green || '#16a34a') : (C.amber || '#b54708'),
+          background: privileged ? 'color-mix(in srgb, ' + (C.green || '#16a34a') + ' 12%, transparent)' : 'color-mix(in srgb, ' + (C.amber || '#b54708') + ' 12%, transparent)'
+        }
+      }, (terminalUser || 'user') + (privileged ? ' · 管理员' : ' · 普通用户')) : null,
       ptyMode === false ? h('span', { style: { fontSize: 10, color: C.amber || '#b54708', flex: '0 0 auto' } }, '兼容模式') : null,
       h('span', {
         title: cwd,
@@ -12837,7 +12849,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       } catch (_) { /* performance marks are optional */ }
     }
 
-    function NativeSurface({ deviceId, online, visible, localDeviceId, preload = false, layered = false }) {
+    function NativeSurface({ deviceId, online, visible, localDeviceId, deviceInfo = null, preload = false, layered = false }) {
       const [state, setState] = React.useState({ deviceId, status: deviceId ? 'loading' : 'no-device', url: '' })
       const [attempt, setAttempt] = React.useState(0)
       const [slow, setSlow] = React.useState(false)
@@ -12969,7 +12981,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
               const detail = data.detail || {}
               const code = detail.code
               const message = response.status === 404 ? '目标设备不存在或已移除'
-                : code === 'node_update_required' ? '目标节点版本较旧，需要更新后才能打开完整 DSH 工作区'
+                : code === 'node_update_required' ? '目标设备没有可用的 DeepSeek Harness 工作区。文件与终端仍然可用。'
                   : code === 'device_offline' ? '目标设备离线。设备重新在线后可重试。'
                     : code === 'descriptor_missing' ? '目标设备的 DeepSeek Harness 未运行，或没有安装 Tether surface 组件。请先启动目标 DSH。'
                       : code === 'descriptor_invalid' ? '目标设备的 DSH surface 描述无效，请重启目标 DSH 或重新安装插件。'
@@ -13135,7 +13147,9 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       }
 
       const dshRelevant = currentState.status === 'error'
-        && ['descriptor_missing', 'host_unreachable', 'descriptor_invalid'].includes(currentState.code)
+        && ['descriptor_missing', 'host_unreachable', 'descriptor_invalid', 'node_update_required'].includes(currentState.code)
+      const dshInstallSupported = !deviceInfo || !deviceInfo.capabilities
+        || deviceInfo.capabilities.dsh_install_supported !== false
       const dshWatch = visible && (deviceId === localDeviceId || dshRelevant)
       const dshRestartPidRef = React.useRef(0)
       const dshAutoRepairRef = React.useRef(false)
@@ -13318,11 +13332,14 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           h('div', { style: { fontSize: 14, color: C.ink } }, dsh.installed === false ? 'DSH 未安装' : 'DSH 未启动'),
           dsh.version ? h('div', { className: 'tether-num', style: { fontSize: 11.5, color: C.mute } }, dsh.version) : null,
           dsh.installing ? h('div', { style: { fontSize: 11.5, color: C.mute } }, '安装中 ' + (Number(dsh.progress) || 0) + '%') : null,
-          btn(dsh.installed === false
-            ? (dshBusy === 'dsh_install' || dsh.installing ? '安装中…' : '安装 DSH')
-            : (dshBusy === 'dsh_start' ? '启动中…' : '启动 DSH'),
-          () => runDsh(dsh.installed === false ? 'dsh_install' : 'dsh_start'),
-          { primary: true, disabled: !!dshBusy || !!dsh.installing }),
+          dsh.installed === false && !dshInstallSupported
+            ? h('div', { style: { maxWidth: 460, fontSize: 12, color: C.sub, lineHeight: 1.6 } },
+              '当前目标系统没有官方 DSH 桌面版。文件、终端和远程应用仍可正常使用；完整 DSH 工作区需要 Windows 目标机。')
+            : btn(dsh.installed === false
+              ? (dshBusy === 'dsh_install' || dsh.installing ? '安装中…' : '安装 DSH')
+              : (dshBusy === 'dsh_start' ? '启动中…' : '启动 DSH'),
+            () => runDsh(dsh.installed === false ? 'dsh_install' : 'dsh_start'),
+            { primary: true, disabled: !!dshBusy || !!dsh.installing }),
           dshError ? h('div', { role: 'alert', style: { color: C.red, fontSize: 11.5 } }, dshError) : null
         ) : null
       )
@@ -13386,6 +13403,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           key: id,
           deviceId: id,
           online: !!(online.get(id) && online.get(id).online),
+          deviceInfo: online.get(id) || null,
           visible: visible && id === deviceId,
           preload: true,
           layered: true,

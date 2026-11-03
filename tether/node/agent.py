@@ -1000,8 +1000,32 @@ class Node:
                 "dsh_running": dsh_desktop["running"],
                 "dsh_version": dsh_desktop["version"],
                 "dsh_installing": dsh_desktop["installing"],
+                "dsh_install_supported": platform.system() == "Windows",
+                "terminal_user": _current_user(),
+                "terminal_privileged": _is_privileged(),
                 "dsh_surface": self.native_surface.available(),
                 "direct_api": self.direct.info() if self.direct else None}
+
+
+def _current_user() -> str:
+    try:
+        import getpass
+        return getpass.getuser()
+    except Exception:
+        return str(os.environ.get("USERNAME") or os.environ.get("USER") or "")
+
+
+def _is_privileged() -> bool:
+    if os.name == "nt":
+        try:
+            import ctypes
+            return bool(ctypes.windll.shell32.IsUserAnAdmin())
+        except Exception:
+            return False
+    try:
+        return os.geteuid() == 0
+    except AttributeError:
+        return False
 
 
 def restart_node_process() -> None:

@@ -1,0 +1,99 @@
+name: Clean install smoke
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'laptop/install-node.sh'
+      - '.github/workflows/install-smoke.yml'
+
+jobs:
+  linux-clean:
+    runs-on: ubuntu-latest
+    steps:
+      - name: One-command install on a clean Ubuntu VM
+        shell: bash
+        run: |
+          curl -fsSL https://8-220-198-26.sslip.io/install.sh | bash -s -- \
+            --no-systemd --install-only --prefix "$RUNNER_TEMP/tether-node"
+      - name: Import and PTY smoke
+        shell: bash
+        run: |
+          "$RUNNER_TEMP/tether-node/venv/bin/python" - <<'PY'
+          import base64, time
+          from pathlib import Path
+          from tether.node.terminal import TerminalService
+          terminal = TerminalService(Path('/tmp'))
+          session = terminal.start({'cwd': '/tmp', 'cols': 80, 'rows': 20})
+          assert session['pty'] is True and session['privileged'] is False
+          terminal.write({'session_id': session['session_id'],
+                          'data': base64.b64encode(b'echo CLEAN_LINUX_OK\n').decode()})
+          out = b''
+          for _ in range(40):
+              result = terminal.poll({'session_id': session['session_id'], 'since': 0})
+              out += base64.b64decode(result['data'])
+              if b'CLEAN_LINUX_OK' in out:
+                  break
+              time.sleep(0.1)
+          terminal.stop({'session_id': session['session_id']})
+          assert b'CLEAN_LINUX_OK' in out
+          print('clean-linux-ok')
+          PY
+
+  macos-clean:
+    runs-on: macos-latest
+    steps:
+      - name: One-command install on a clean macOS VM
+        shell: bash
+        run: |
+          curl -fsSL https://8-220-198-26.sslip.io/install.sh | bash -s -- \
+            --no-systemd --install-only --prefix "$RUNNER_TEMP/tether-node"
+      - name: Import and PTY smoke
+        shell: bash
+        run: |
+          "$RUNNER_TEMP/tether-node/venv/bin/python" - <<'PY'
+          import base64, time
+          from pathlib import Path
+          from tether.node.terminal import TerminalService
+          terminal = TerminalService(Path('/tmp'))
+          session = terminal.start({'cwd': '/tmp', 'cols': 80, 'rows': 20})
+          assert session['pty'] is True
+          terminal.write({'session_id': session['session_id'],
+                          'data': base64.b64encode(b'echo CLEAN_MACOS_OK\n').decode()})
+          out = b''
+          for _ in range(40):
+              result = terminal.poll({'session_id': session['session_id'], 'since': 0})
+              out += base64.b64decode(result['data'])
+              if b'CLEAN_MACOS_OK' in out:
+                  break
+              time.sleep(0.1)
+          terminal.stop({'session_id': session['session_id']})
+          assert b'CLEAN_MACOS_OK' in out
+          print('clean-macos-ok')
+          PY
+
+  windows-clean:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - name: One-command install on a clean Windows VM
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          printf '#!/bin/sh\nexec python "$@"\n' > "$RUNNER_TEMP/bin/python3"
+          chmod +x "$RUNNER_TEMP/bin/python3"
+          export PATH="$RUNNER_TEMP/bin:$PATH"
+          curl -fsSL https://8-220-198-26.sslip.io/install.sh | bash -s -- \
+            --no-systemd --install-only --prefix "$RUNNER_TEMP/tether-node"
+          "$RUNNER_TEMP/tether-node/venv/Scripts/python.exe" -c "import tether.node.agent; print('clean-windows-node-ok')"
+      - name: Check published APP artifact
+        shell: pwsh
+        run: |
+          $zip = Join-Path $env:RUNNER_TEMP 'tether-app.zip'
+          Invoke-WebRequest -Uri 'https://8-220-198-26.sslip.io/install/tether-app-0.3.5.zip' -OutFile $zip
+          Expand-Archive -Path $zip -DestinationPath (Join-Path $env:RUNNER_TEMP 'app')
+          $exe = Get-ChildItem -Path (Join-Path $env:RUNNER_TEMP 'app') -Recurse -Filter 'tether-app.exe' | Select-Object -First 1
+          if (-not $exe) { throw 'tether-app.exe is missing from the published ZIP' }
+          Write-Host ('clean-windows-app-ok ' + $exe.FullName)
