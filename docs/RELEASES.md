@@ -1,5 +1,18 @@
 # Public client releases
 
+## v0.2.83
+
+Surface recovery for both devices and the real black-window source:
+
+- `/plugins/events` can reopen while another SSE stream is live; the missing `HTTP_STREAM_MAX_AGE`/`_HttpStream.created` fields raised `NameError` and the node logged `http_stream_open failed`. Added the 30-minute cap and the creation timestamp, plus a regression that opens two live streams.
+- Electron now recognizes the gateway's 502 body (`native surface request failed`) in an iframe and routes it through the existing `tether:surface-boot-failed` retry. A stale error iframe is no longer treated as `document-loaded` forever.
+- The APP repairs `Tether APP.lnk` on Desktop and Start Menu at startup with `shell.writeShortcutLink`, targeting `electron.exe`. The LAPTOP shortcut pointed at `Tether-App.cmd`, which opened a visible console on every launch.
+- LAPTOP repair: the DSH profile was logged in but had no Tether packages. Stopped DSH, backed up `profiles/desktop/package.json`, uploaded the four packages with per-file SHA-256 checks, restored bundles/dependencies and started DSH. Descriptor appeared in 3 s (pid 9124, origin 1871); after the node reconnect the device reported app/node/plugin **0.2.82**, `dsh_native=true`, `dsh_surface=true`. Gateway returned **200 / 39,514 B**; headless Edge and the real APP iframe both rendered the composer.
+- LAPTOP then updated through the Hub job to app/node/plugin **0.2.83** (`plugin` job 26 s, `app` job 17 s); its DSH restarted to pid 20892 and the surface stayed 200.
+- Cold-start trace from the Desktop shortcut: **1,100 samples at 20 ms**, only 3 new visible windows — WeType `StatusBarWnd` and two `Chrome_WidgetWin_1` (Tether); **zero `ConsoleWindowClass` / cmd / conhost**.
+
+Gates: mjs **237/237**, cjs **7/7**, client pytest **151 passed / 1 skipped**, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41585359468` succeeded; published at 2026-11-03T05:44:39Z (app 1,785,637 B, plugin 1,362,845 B, node 86,236 B; signed manifest verified). Hub mirror refreshed to **0.2.83**; DESKTOP app/node/plugin **0.2.83**, LAPTOP app/node/plugin **0.2.83**.
+
 ## v0.2.75
 
 Original icon with a V1 vertical S link:

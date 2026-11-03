@@ -6,7 +6,8 @@
 2. **本机 DSH 页面**：surface 网关本身可用；卡住的是旧的 502 iframe。新增 Electron 侧 502 错误页识别（`rendererFrameText` + `isSurfaceErrorPage`），命中后走既有 `tether:surface-boot-failed` 重试链，不再把错误页当 `document-loaded` 永久保留。两个 iframe（DESKTOP g37511 / LAPTOP g44207）复验均渲染 composer。
 3. **`/plugins/events` 重开崩溃**：`native_surface.py` 引用未定义的 `HTTP_STREAM_MAX_AGE` 与 `_HttpStream.created`，第一条 SSE 关闭后再开就会 `NameError`；补齐常量/字段并新增“已有活跃流时再开一条”回归。
 4. **黑窗真正根因**：LAPTOP 的桌面/开始菜单快捷方式指向 `Tether-App.cmd`，双击先起可见 cmd 控制台。已重建 LAPTOP 桌面快捷方式为直接启动 `electron.exe`；APP 新增 `ensureAppShortcuts()`，每次启动用 `shell.writeShortcutLink` 自愈桌面/开始菜单。开始菜单路径受 fs 保护策略限制，等 APP 在 LAPTOP 启动后由自愈逻辑修正。
-5. 门禁：mjs **237/237**、cjs **7/7**、pytest **151 passed / 1 skipped**、`build.mjs --check`、`build-web.mjs --check`、`validate_versions()` 通过。0.2.83 待发布。
+5. 门禁：mjs **237/237**、cjs **7/7**、pytest **151 passed / 1 skipped**、`build.mjs --check`、`build-web.mjs --check`、`validate_versions()` 通过。0.2.83 已发布（CI `41585359468`，05:44:39Z，app 1,785,637 B / plugin 1,362,845 B / node 86,236 B），Hub mirror 0.2.83。LAPTOP 经更新任务升到 app/node/plugin **0.2.83**（plugin job 26 s、app job 17 s），DSH pid 20892、surface 200；DESKTOP 重装本地 profile 插件到 0.2.83 并重启 DSH 到 pid 21144，两机页面均有 composer。
+6. 冷启动取证：桌面快捷方式启动，20 ms 采样 **1,100 次**，只新增 3 个可见窗口（WeType `StatusBarWnd` + 两个 Tether `Chrome_WidgetWin_1`），无 `ConsoleWindowClass`/cmd/conhost。
 
 ## 2026-11-03 v0.2.82 DSH 认证修复入口
 

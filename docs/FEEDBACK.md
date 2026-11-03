@@ -2,7 +2,7 @@
 
 ## 2026-11-03 启动/更新黑色控制台窗口
 
-- [x] F147：用户再次报告开 APP 或更新时会弹黑色窗口。**复测**：用桌面快捷方式启动并 20 ms 采样可见窗口，只有 `Tether` / `Tether WebUI` 主窗口，无 `ConsoleWindowClass`。**剩余漏点 1**：`apps/tether-app/supervisor.js` 的 `killTree()` 调 `taskkill` 时没有 `windowsHide`；更新重启/退出服务会走到这里，`taskkill` 是控制台程序，会闪黑窗。修复：加 `windowsHide: true`，新增 shell 回归断言。0.2.80 已发布并更新两机；启动链无控制台，更新/退出链的 `taskkill` 不再分配可见窗口。**剩余漏点 2（2026-11-03 找到）**：LAPTOP 的桌面/开始菜单快捷方式指向 `Tether-App.cmd` 而不是 `electron.exe`，双击必然先起一个可见 cmd 控制台；已在 LAPTOP 桌面重建为直接启动 `electron.exe`，并给 APP 增加 `ensureAppShortcuts()`，每次启动用 `shell.writeShortcutLink` 自愈桌面/开始菜单快捷方式。判据：桌面快捷方式 target=`electron.exe`、启动、更新、退出全程 20 ms 窗口采样无 `ConsoleWindowClass`。
+- [x] F147：用户再次报告开 APP 或更新时会弹黑色窗口。**复测**：用桌面快捷方式启动并 20 ms 采样可见窗口，只有 `Tether` / `Tether WebUI` 主窗口，无 `ConsoleWindowClass`。**剩余漏点 1**：`apps/tether-app/supervisor.js` 的 `killTree()` 调 `taskkill` 时没有 `windowsHide`；更新重启/退出服务会走到这里，`taskkill` 是控制台程序，会闪黑窗。修复：加 `windowsHide: true`，新增 shell 回归断言。0.2.80 已发布并更新两机；启动链无控制台，更新/退出链的 `taskkill` 不再分配可见窗口。**剩余漏点 2（2026-11-03 找到）**：LAPTOP 的桌面/开始菜单快捷方式指向 `Tether-App.cmd` 而不是 `electron.exe`，双击必然先起一个可见 cmd 控制台；已在 LAPTOP 桌面重建为直接启动 `electron.exe`，并给 APP 增加 `ensureAppShortcuts()`，每次启动用 `shell.writeShortcutLink` 自愈桌面/开始菜单快捷方式。判据：桌面快捷方式 target=`electron.exe`、启动、更新、退出全程 20 ms 窗口采样无 `ConsoleWindowClass`。 **0.2.83 复测**：桌面快捷方式冷启动 22 s、20 ms 采样 1,100 次，只新增 WeType `StatusBarWnd` 与两个 Tether `Chrome_WidgetWin_1`，无 cmd/conhost/控制台；LAPTOP 桌面快捷方式已改为 `electron.exe`，开始菜单快捷方式会在 0.2.83 APP 首次启动时由 `ensureAppShortcuts()` 自愈。
 
 ## 2026-11-03 DSH surface 健康与恢复入口
 
