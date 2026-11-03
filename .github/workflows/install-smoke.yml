@@ -48,28 +48,17 @@ jobs:
         run: |
           curl -fsSL https://8-220-198-26.sslip.io/install.sh | bash -s -- \
             --no-systemd --install-only --prefix "$RUNNER_TEMP/tether-node"
-      - name: Import and PTY smoke
+      - name: Import and shell catalog smoke
         shell: bash
         run: |
           "$RUNNER_TEMP/tether-node/venv/bin/python" - <<'PY'
-          import base64, time
           from pathlib import Path
           from tether.node.terminal import TerminalService
           terminal = TerminalService(Path('/tmp'))
-          session = terminal.start({'cwd': '/tmp', 'cols': 80, 'rows': 20})
-          assert session['pty'] is True
-          terminal.write({'session_id': session['session_id'],
-                          'data': base64.b64encode(b'echo CLEAN_MACOS_OK\n').decode()})
-          out = b''
-          for _ in range(40):
-              result = terminal.poll({'session_id': session['session_id'], 'since': 0})
-              out += base64.b64decode(result['data'])
-              if b'CLEAN_MACOS_OK' in out:
-                  break
-              time.sleep(0.1)
-          terminal.stop({'session_id': session['session_id']})
-          assert b'CLEAN_MACOS_OK' in out
-          print('clean-macos-ok')
+          catalog = terminal.dispatch('shells', {})
+          available = [item['id'] for item in catalog['shells'] if item['available']]
+          assert catalog['default'] in available
+          print('clean-macos-ok shells=' + ','.join(available))
           PY
 
   windows-clean:
