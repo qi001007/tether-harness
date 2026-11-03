@@ -53,6 +53,14 @@ bash laptop/install-node.sh \
 
 ### 一键安装（公开源，私有仓库也可用）
 
+下载页：`https://8-220-198-26.sslip.io/install/`（APP / 插件 / Node ZIP）。普通用户只需：
+
+```bash
+curl -fsSL https://8-220-198-26.sslip.io/install.sh | sudo bash
+```
+
+脚本会默认使用公共 Hub、自动装成 systemd 服务，只提示一次 Tether 账号；设备令牌保存后自动删除一次性登录令牌。开发者参数见下。
+
 Hub 暴露只读 `/install/`（Caddy 静态目录 `/srv/tether-installer`，放 `install-node.sh` 与当前 `tether-node-<version>.zip`）：
 
 ```bash

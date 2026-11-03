@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tether 下载与安装</title>
+<style>
+  :root { color-scheme: light; --ink:#101828; --sub:#475467; --line:#e4e7ec; --blue:#1570ef; --soft:#f6f8fb; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:#fff; color:var(--ink); font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 56px 24px 80px; }
+  .brand { display:flex; align-items:center; gap:10px; font-weight:650; font-size:18px; }
+  .mark { width:28px; height:28px; border-radius:8px; background:var(--ink); color:#fff; display:grid; place-items:center; font-size:14px; }
+  h1 { font-size:34px; line-height:1.2; margin:36px 0 8px; letter-spacing:-.5px; }
+  p.lead { color:var(--sub); margin:0 0 32px; font-size:16px; }
+  h2 { font-size:15px; margin:34px 0 12px; color:var(--sub); font-weight:600; }
+  .grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+  a.card { display:block; padding:16px; border:1px solid var(--line); border-radius:12px; color:var(--ink); text-decoration:none; }
+  a.card:hover { border-color:#b2ddff; background:var(--soft); }
+  .card b { display:block; font-size:14px; font-weight:600; margin-bottom:4px; }
+  .card span { color:var(--sub); font-size:12px; }
+  .cmd { display:flex; align-items:center; gap:8px; padding:12px 14px; background:#0b1220; color:#e2e8f0; border-radius:10px; font:13px/1.5 Consolas,"Cascadia Mono",monospace; }
+  .cmd code { flex:1; overflow:auto; white-space:nowrap; }
+  .cmd button { border:0; border-radius:6px; padding:6px 10px; background:#1d4ed8; color:#fff; font-size:12px; cursor:pointer; }
+  .note { color:var(--sub); font-size:12px; margin-top:10px; }
+  .tag { display:inline-block; padding:2px 8px; border-radius:999px; background:var(--soft); color:var(--sub); font-size:11px; margin-left:8px; }
+  @media (max-width:720px) { .grid { grid-template-columns:1fr; } h1 { font-size:28px; } }
+</style>
+</head>
+<body>
+<main>
+  <div class="brand"><span class="mark">T</span>Tether<span class="tag">v0.3.5</span></div>
+  <h1>下载 Tether</h1>
+  <p class="lead">把另一台电脑变成可远程操作的资源管理器、终端和工作区。Windows 直接下载；Linux / macOS 一条命令装成系统服务。</p>
+
+  <h2>Windows</h2>
+  <div class="grid">
+    <a class="card" href="/install/tether-app-0.3.5.zip"><b>Tether APP</b><span>解压后运行 tether-app，约 1.9 MB</span></a>
+    <a class="card" href="/install/tether-plugin-0.3.5.zip"><b>DSH 插件</b><span>给 DeepSeek Harness 安装的面板插件</span></a>
+    <a class="card" href="/install/tether-node-0.3.5.zip"><b>Tether Node</b><span>只装被控端，不装界面</span></a>
+  </div>
+
+  <h2>Linux / macOS 一键安装</h2>
+  <div class="cmd"><code id="cmd">curl -fsSL https://8-220-198-26.sslip.io/install.sh | sudo bash</code><button onclick="navigator.clipboard.writeText(document.getElementById('cmd').textContent)">复制</button></div>
+  <p class="note">运行后会提示登录一次 Tether 账号，脚本自动下载最新 Node、装成系统服务并注册设备；登录令牌只用于首次注册，随后会从配置里删除。需要 root 权限，安装后可用 <code>systemctl status tether-node</code> 查看。</p>
+
+  <h2>手动下载 Node</h2>
+  <p class="note">如果不想用一键脚本，可下载上面的 Node ZIP，解压后运行 <code>bash laptop/install-node.sh --controller wss://8-220-198-26.sslip.io/ws/node</code>。这是开发者方式，普通用户建议用一键安装。</p>
+</main>
+</body>
+</html>
