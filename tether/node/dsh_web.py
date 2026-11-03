@@ -151,6 +151,23 @@ class DshWeb:
         finally:
             self._systemctl("start")
 
+    def repair_plugin(self) -> dict[str, Any]:
+        if not self._installed():
+            return {**self.status(), "error": "DSH Web is not installed"}
+        with self._lock:
+            if self._installing:
+                return {**self.status(), "repairing": True}
+            self._installing = True
+        threading.Thread(target=self._repair_worker, daemon=True).start()
+        return {**self.status(), "repairing": True}
+
+    def _repair_worker(self) -> None:
+        try:
+            self._install_plugin()
+        finally:
+            with self._lock:
+                self._installing = False
+
     def _install_worker(self) -> None:
         try:
             ROOT.mkdir(parents=True, exist_ok=True)

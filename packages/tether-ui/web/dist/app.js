@@ -180851,7 +180851,22 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           () => runDsh(dsh.installed === false ? "dsh_install" : "dsh_start"),
           { primary: true, disabled: !!dshBusy || !!dsh.installing }
         ) : null,
-        dshRelevant && dsh && dsh.running ? btn(
+        dshRelevant && dshWeb && dshWeb.running ? btn(
+          dshWebBusy === "repair" ? "\u4FEE\u590D\u4E2D\u2026" : "\u4FEE\u590D DSH Web \u63D2\u4EF6",
+          () => {
+            void runDshWeb("repair");
+          },
+          { primary: true, disabled: !!dshWebBusy }
+        ) : null,
+        dshRelevant && dshWeb && dshWeb.running ? btn(
+          dshWebBusy ? "\u91CD\u542F\u4E2D\u2026" : "\u91CD\u542F DSH Web",
+          async () => {
+            await runDshWeb("stop");
+            await runDshWeb("start");
+          },
+          { disabled: !!dshWebBusy }
+        ) : null,
+        dshRelevant && dsh && dsh.running && !(dshWeb && dshWeb.running) ? btn(
           dshBusy === "dsh_install_plugin" ? "\u4FEE\u590D\u4E2D\u2026" : "\u5B89\u88C5/\u4FEE\u590D\u63D2\u4EF6",
           () => {
             dshAutoRepairRef.current = true;
@@ -180859,7 +180874,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           },
           { primary: true, disabled: !!dshBusy }
         ) : null,
-        dshRelevant && dsh && dsh.running ? btn(
+        dshRelevant && dsh && dsh.running && !(dshWeb && dshWeb.running) ? btn(
           dshBusy === "dsh_restart" ? "\u91CD\u542F\u4E2D\u2026" : "\u91CD\u542F DSH",
           () => runDsh("dsh_restart"),
           { disabled: !!dshBusy }

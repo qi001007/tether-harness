@@ -1222,6 +1222,14 @@ class FsService:
             raise FsError("DSH Web is unavailable in this node build", "unavailable")
         return self.dsh_web.stop()
 
+    def _op_dsh_web_repair(self, _args: dict[str, Any]) -> dict[str, Any]:
+        if self.dsh_web is None:
+            raise FsError("DSH Web is unavailable in this node build", "unavailable")
+        result = self.dsh_web.repair_plugin()
+        self.audit.add(op="dsh_web_repair", path="tether-dsh-plugin", mode=self.policy.data.get("mode"),
+                       phase="intent", result="started" if result.get("repairing") else "skipped")
+        return result
+
     def _op_dsh_install(self, _args: dict[str, Any]) -> dict[str, Any]:
         result = self.dsh_desktop.install()
         self.audit.add(op="dsh_install", path=result.get("exe") or "", mode=self.policy.data.get("mode"),

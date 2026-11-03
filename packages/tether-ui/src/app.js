@@ -2995,12 +2995,21 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
               () => runDsh(dsh.installed === false ? 'dsh_install' : 'dsh_start'),
               { primary: true, disabled: !!dshBusy || !!dsh.installing })
               : null,
-            dshRelevant && dsh && dsh.running
+            dshRelevant && dshWeb && dshWeb.running
+              ? btn(dshWebBusy === 'repair' ? '修复中…' : '修复 DSH Web 插件',
+                () => { void runDshWeb('repair') }, { primary: true, disabled: !!dshWebBusy })
+              : null,
+            dshRelevant && dshWeb && dshWeb.running
+              ? btn(dshWebBusy ? '重启中…' : '重启 DSH Web',
+                async () => { await runDshWeb('stop'); await runDshWeb('start') },
+                { disabled: !!dshWebBusy })
+              : null,
+            dshRelevant && dsh && dsh.running && !(dshWeb && dshWeb.running)
               ? btn(dshBusy === 'dsh_install_plugin' ? '修复中…' : '安装/修复插件',
                 () => { dshAutoRepairRef.current = true; runDsh('dsh_install_plugin') },
                 { primary: true, disabled: !!dshBusy })
               : null,
-            dshRelevant && dsh && dsh.running
+            dshRelevant && dsh && dsh.running && !(dshWeb && dshWeb.running)
               ? btn(dshBusy === 'dsh_restart' ? '重启中…' : '重启 DSH',
                 () => runDsh('dsh_restart'), { disabled: !!dshBusy })
               : null,

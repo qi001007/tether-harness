@@ -81,3 +81,4 @@
 - 2026-11-04：转移页左右设备必须在设备列表异步到达后自动补选：`useEffect([devices, localDevice, leftDevice, rightDevice])` 先保留仍在线且两侧不同的选择，否则左侧优先本机、右侧换另一台；切换时清空路径与选择。APP 重启后不再停在“选择设备…”。真机实测左 DESKTOP-LOCAL、右 LAPTOP-01，20 B 文件经 UI 复制粘贴完成后目标 SHA-256 一致。
 - 2026-11-04：DSH Web 的 `<webview>` 容器不能把 `position:absolute; inset:0` 改成 `relative` 后不管尺寸；否则缩到 webview 默认 300 px。容器同时给 `width/height:100%; flex:1 1 auto`，webview 自身 `display:flex`。实测 1432×880 填满工作区。
 - 2026-11-04：远端 DSH Web 页面的 origin 不是回环，插件读不到 `tether.hub`，登录会回退到观看端 `127.0.0.1:18892` 并因 CORS 403 报 `Failed to fetch`。APP 打开 webview 后每 1.5 s 把本机 `tether.hub` 写入 guest localStorage（仅当 guest 尚无配置）；只写 URL/token，不动其他键。实测 guest 拿到 Hub 配置，插件显示设备。
+- 2026-11-04：DSH Web 运行时的按钮改为“修复 DSH Web 插件”（`dsh_web_repair`）和“重启 DSH Web”（`dsh_web_stop` → `dsh_web_start`）；桌面 DSH 的“安装/修复插件/重启 DSH”只在非 DSH Web 模式显示，避免在 Linux 上调用不存在的桌面逻辑。
