@@ -133,6 +133,7 @@ NODE_ALLOWED = (
     "tether/",
     "laptop/tether-node.ps1",
     "laptop/bootstrap-node.ps1",
+    "laptop/install-node.sh",
     "pyproject.toml",
     "version.json",
 )
