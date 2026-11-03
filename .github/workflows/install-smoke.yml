@@ -93,4 +93,13 @@ jobs:
           $venv = Join-Path $repo '.venv\Scripts\python.exe'
           if (-not (Test-Path $electron)) { throw 'electron.exe missing after install-app.cmd' }
           if (-not (Test-Path $venv)) { throw '.venv python missing after install-app.cmd' }
-          Write-Host ('clean-windows-app-ok ' + $electron)
+          $appDir = Join-Path $repo 'apps\tether-app'
+          $proc = Start-Process -FilePath $electron -ArgumentList @($appDir, '--remote-debugging-port=9334', '--no-sandbox') -PassThru
+          Start-Sleep -Seconds 12
+          if ($proc.HasExited) { throw ('APP exited early with code ' + $proc.ExitCode) }
+          $targets = Invoke-RestMethod -Uri 'http://127.0.0.1:9334/json' -TimeoutSec 20
+          $page = $targets | Where-Object { $_.type -eq 'page' } | Select-Object -First 1
+          if (-not $page) { throw 'APP started but no renderer page was exposed' }
+          Write-Host ('clean-windows-app-ok title=' + $page.title + ' url=' + $page.url)
+          Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+          Get-Process electron -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
