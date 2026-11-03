@@ -56,6 +56,7 @@ Node 只做 ACP 客户端，按“命令模板”拉起目标机上已有的 Age
 - 真实链路：`initialize`（protocol 1）→ `session/new`（返回 sessionId）→ `session/prompt` → 流式 `agent_message_chunk` 合并为 `tether-ui-ok` → `[完成] end_turn`；会话面板在真实 Electron APP 内渲染。
 - 单元测试：假 ACP Agent 覆盖检测、握手、prompt、权限请求回执、结果与停止，5 passed。
 - 仍需补：真实工具调用的权限卡片交互、Gemini/OpenCode/Claude adapter 的真机验收、非 owner 端到端拒绝。
+- 远程握手：Hub 的 `fs` 请求超时短于 Harness 启动时间，`acp_start` 已改为异步（立即返回 `session_id`，`ready/error` 走 `acp_poll`）；LAPTOP 的 OpenCode 待 0.2.99 升级后复测。
 
 ## 非目标
 

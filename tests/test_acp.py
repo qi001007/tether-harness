@@ -53,6 +53,8 @@ def test_prompt_streams_updates_and_permission_request(tmp_path):
     started = service.start({"harness": "fake", "cwd": str(tmp_path)})
     session_id = started["session_id"]
     try:
+        _poll_until(service, session_id, lambda items: any(
+            item["event"].get("type") == "ready" for item in items))
         service.prompt({"session_id": session_id, "text": "hi"})
         events = _poll_until(service, session_id, lambda items: any(
             item["event"].get("type") == "request" for item in items))

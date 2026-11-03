@@ -166577,6 +166577,7 @@ function createAgentsPage({ React: React2, Glyph, post, C, devices = [], localDe
   const [output, setOutput] = React2.useState("");
   const [input, setInput] = React2.useState("");
   const [busy, setBusy] = React2.useState(false);
+  const [ready, setReady] = React2.useState(false);
   const [pending2, setPending] = React2.useState([]);
   const since = React2.useRef(0);
   const sessionRef = React2.useRef("");
@@ -166606,6 +166607,7 @@ function createAgentsPage({ React: React2, Glyph, post, C, devices = [], localDe
     const current = sessionRef.current;
     sessionRef.current = "";
     setSession("");
+    setReady(false);
     if (!current) return;
     try {
       await post("/api/devices/" + encodeURIComponent(device) + "/fs/acp_stop", { session_id: current });
@@ -166624,6 +166626,7 @@ function createAgentsPage({ React: React2, Glyph, post, C, devices = [], localDe
       sessionRef.current = result.session_id;
       since.current = 0;
       setPending([]);
+      setReady(false);
       setSession(result.session_id);
       setHarness(item);
       setOutput("ACP \xB7 " + (item.name || item.id) + "\n" + (result.cwd || "") + "\n\n");
@@ -166705,12 +166708,17 @@ function createAgentsPage({ React: React2, Glyph, post, C, devices = [], localDe
             const choices = options.map((option) => option.name || option.optionId).join(" / ");
             lines.push("[\u9700\u8981\u6388\u6743] " + title + "\uFF1A" + (choices || "\u65E0\u9009\u9879") + " #" + event.id);
             setPending((current) => current.some((item2) => item2.requestId === event.id) ? current : [...current, { requestId: event.id, options }]);
+          } else if (event.type === "ready") {
+            flush();
+            setReady(true);
+            lines.push("[\u5C31\u7EEA]");
           } else if (event.type === "result") {
             flush();
             const reason = event.result && event.result.stopReason || "done";
             lines.push("[\u5B8C\u6210] " + reason);
           } else if (event.type === "error") {
             flush();
+            setReady(false);
             lines.push("[\u9519\u8BEF] " + String(event.error || "ACP error"));
           } else if (event.type === "closed") {
             flush();
@@ -166903,18 +166911,18 @@ function createAgentsPage({ React: React2, Glyph, post, C, devices = [], localDe
       h2("span", { style: { color: "#7dd3fc", fontFamily: "Consolas, monospace", fontSize: 13 } }, "\u203A"),
       h2("input", {
         value: input,
-        disabled: !session,
+        disabled: !session || !ready,
         autoFocus: true,
         spellCheck: false,
         "aria-label": "Agent \u8F93\u5165",
-        placeholder: session ? "\u7ED9 Agent \u53D1\u6D88\u606F\uFF0CEnter \u53D1\u9001" : "\u5148\u9009\u62E9 Harness",
+        placeholder: session ? ready ? "\u7ED9 Agent \u53D1\u6D88\u606F\uFF0CEnter \u53D1\u9001" : "\u6B63\u5728\u542F\u52A8 Agent\u2026" : "\u5148\u9009\u62E9 Harness",
         onChange: (event) => setInput(event.target.value),
         style: { flex: "1 1 auto", minWidth: 0, border: 0, outline: "none", background: "transparent", color: "#e2e8f0", fontFamily: "Consolas, monospace", fontSize: 13 }
       }),
       h2("button", {
         type: "submit",
-        disabled: !session || !input.trim(),
-        style: { ...button, height: 26, padding: "0 12px", opacity: !session || !input.trim() ? 0.4 : 1 }
+        disabled: !session || !ready || !input.trim(),
+        style: { ...button, height: 26, padding: "0 12px", opacity: !session || !ready || !input.trim() ? 0.4 : 1 }
       }, "\u53D1\u9001")
     )
   );

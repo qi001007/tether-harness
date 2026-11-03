@@ -226,23 +226,29 @@ class AcpService:
             kwargs["creationflags"] = NO_WINDOW
         process = subprocess.Popen(launch, **kwargs)
         session = AcpSession(harness_id + "-" + str(int(time.time() * 1000)), process, cwd, command)
+        self.sessions[session.id] = session
+        threading.Thread(target=self._handshake, args=(session,), daemon=True).start()
+        return {"session_id": session.id, "harness": harness_id, "cwd": str(cwd),
+                "state": "starting"}
+
+    def _handshake(self, session: AcpSession) -> None:
         try:
             initialized = session.request("initialize", {
                 "protocolVersion": PROTOCOL_VERSION,
                 "clientInfo": {"name": "tether", "version": "1"},
                 "clientCapabilities": {},
             })
-            created = session.request("session/new", {"cwd": str(cwd), "mcpServers": [],
+            created = session.request("session/new", {"cwd": str(session.cwd), "mcpServers": [],
                                                       "additionalDirectories": []})
             session.native_id = str((created or {}).get("sessionId") or "")
             if not session.native_id:
                 raise ValueError("ACP agent did not return a session id")
-        except Exception:
+            session._record({"type": "ready", "session_id": session.id,
+                             "native_id": session.native_id,
+                             "protocol": (initialized or {}).get("protocolVersion")})
+        except Exception as exc:  # noqa: BLE001 - surfaced to the UI
+            session._record({"type": "error", "error": str(exc)})
             session.close()
-            raise
-        self.sessions[session.id] = session
-        return {"session_id": session.id, "harness": harness_id, "cwd": str(cwd),
-                "protocol": (initialized or {}).get("protocolVersion"), "native_id": session.native_id}
 
     def _find(self, args: dict[str, Any]) -> AcpSession:
         session = self.sessions.get(str(args.get("session_id") or ""))
@@ -255,6 +261,8 @@ class AcpService:
         text = str(args.get("text") or "")
         if not text.strip():
             raise ValueError("ACP prompt is empty")
+        if not session.native_id:
+            raise ValueError("ACP session is still starting")
         session.prompt(text)
         return {"session_id": session.id, "accepted": True}
 

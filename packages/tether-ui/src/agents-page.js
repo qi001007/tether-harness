@@ -12,6 +12,7 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
   const [output, setOutput] = React.useState('')
   const [input, setInput] = React.useState('')
   const [busy, setBusy] = React.useState(false)
+  const [ready, setReady] = React.useState(false)
   const [pending, setPending] = React.useState([])
   const since = React.useRef(0)
   const sessionRef = React.useRef('')
@@ -43,6 +44,7 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
     const current = sessionRef.current
     sessionRef.current = ''
     setSession('')
+    setReady(false)
     if (!current) return
     try {
       await post('/api/devices/' + encodeURIComponent(device) + '/fs/acp_stop', { session_id: current })
@@ -59,6 +61,7 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
       sessionRef.current = result.session_id
       since.current = 0
       setPending([])
+      setReady(false)
       setSession(result.session_id)
       setHarness(item)
       setOutput('ACP · ' + (item.name || item.id) + '\n' + (result.cwd || '') + '\n\n')
@@ -132,12 +135,17 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
             lines.push('[需要授权] ' + title + '：' + (choices || '无选项') + ' #' + event.id)
             setPending((current) => current.some((item) => item.requestId === event.id) ? current
               : [...current, { requestId: event.id, options }])
+          } else if (event.type === 'ready') {
+            flush()
+            setReady(true)
+            lines.push('[就绪]')
           } else if (event.type === 'result') {
             flush()
             const reason = (event.result && event.result.stopReason) || 'done'
             lines.push('[完成] ' + reason)
           } else if (event.type === 'error') {
             flush()
+            setReady(false)
             lines.push('[错误] ' + String(event.error || 'ACP error'))
           } else if (event.type === 'closed') {
             flush()
@@ -244,14 +252,14 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
     },
       h('span', { style: { color: '#7dd3fc', fontFamily: 'Consolas, monospace', fontSize: 13 } }, '›'),
       h('input', {
-        value: input, disabled: !session, autoFocus: true, spellCheck: false,
-        'aria-label': 'Agent 输入', placeholder: session ? '给 Agent 发消息，Enter 发送' : '先选择 Harness',
+        value: input, disabled: !session || !ready, autoFocus: true, spellCheck: false,
+        'aria-label': 'Agent 输入', placeholder: session ? (ready ? '给 Agent 发消息，Enter 发送' : '正在启动 Agent…') : '先选择 Harness',
         onChange: (event) => setInput(event.target.value),
         style: { flex: '1 1 auto', minWidth: 0, border: 0, outline: 'none', background: 'transparent', color: '#e2e8f0', fontFamily: 'Consolas, monospace', fontSize: 13 }
       }),
       h('button', {
-        type: 'submit', disabled: !session || !input.trim(),
-        style: { ...button, height: 26, padding: '0 12px', opacity: !session || !input.trim() ? 0.4 : 1 }
+        type: 'submit', disabled: !session || !ready || !input.trim(),
+        style: { ...button, height: 26, padding: '0 12px', opacity: !session || !ready || !input.trim() ? 0.4 : 1 }
       }, '发送')
     )
   )
