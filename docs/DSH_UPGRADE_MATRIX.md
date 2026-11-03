@@ -15,10 +15,10 @@
 | --- | --- | --- | --- |
 | 1 | 干净机器装 APP + DSH | 安装 APP → 启动 → 安装 DSH → 打开工作区 | 自动安装 Tether 插件和 `@deepseek-ai` UI 依赖；descriptor 出现；样式门禁 PASS |
 | 2 | fresh DSH profile | 停 DSH，备份并移走 `profiles/desktop/node_modules`，把 `package.json` 重置为只有 `dsh-base`/`dsh-web-app` | `dsh_status.surface=false` 后 APP 自动执行 `dsh_install_plugin`；最多 180 s 等到 descriptor；门禁 PASS |
-| 3 | DSH 版本升级 | 用 DSH 官方安装包从 rc.N 升到 rc.M，保留 profile；启动 DSH | 不并发更新插件；新 DSH 起后自动验证/重装匹配插件；descriptor 新 pid；门禁 PASS |
+| 3 | DSH 版本升级 | 用 DSH 官方安装包从 rc.N 升到 rc.M，保留 profile；启动 DSH | **不自动重装插件、不碰第三方插件**；验证带插件的真实 DSH 能映射；只有 Tether 自身 surface 缺失/损坏时才修复 Tether 自己 |
 | 4 | 插件更新 | Hub plugin job 更新 Node+插件 | 插件 4 包版本一致；依赖树存在；DSH 重启后 descriptor 新 pid；门禁 PASS |
-| 5 | 插件/依赖被破坏 | 删除/移走 `node_modules` 或 Tether 包 | APP 自动修复；失败恢复 profile 并重新拉起原 DSH；不要求用户拷文件 |
-| 6 | 第三方插件 | 主人选定插件后，在隔离 profile/VM 做 DSH 版本 × 插件安装/卸载/更新/损坏 | Tether 页面与 DSH 本体不被拖死；单独记录兼容矩阵（当前暂缓） |
+| 5 | Tether surface 被破坏 | 删除/移走 Tether 自己的包或依赖 | 自动修复 Tether；不修改其他插件；失败恢复 profile 并重新拉起原 DSH |
+| 6 | 第三方插件 | 主人选定插件后，在隔离 profile/VM 做 DSH 版本 × 插件安装/卸载/更新/损坏 | 验证映射的是带插件的真实 DSH；第三方插件坏掉只记录，不由 Tether 修 |
 
 ## 命令与证据
 
@@ -37,5 +37,6 @@ node scripts/qa_surface_styles.mjs DESKTOP-LOCAL LAPTOP-01
 ## 已知限制
 
 - 当前 DSH 最新仍是 rc.5；矩阵第 3 项目前只有“同版本重装”基线，等 DeepSeek 发布新版本后必须用同一脚本重跑。
-- Tether native UI 仍锁 `@deepseek-ai/dsh-client-ui-* rc.2`；如果 DSH 改变 UI 契约，自动修复可能只能恢复依赖而不能恢复视觉，APP 应显示“待适配”而不是裸控件页面。
+- Tether native UI 仍锁 `@deepseek-ai/dsh-client-ui-* rc.2`；如果 DSH 改变 UI 契约，Tether 可能需要发布适配版本，这不算用户要自己修的 bug。
+- **不自动重装、不管理第三方插件**；第三方插件在 DSH 更新后坏掉只记录，不由 Tether 修。
 - 第三方插件测试按主人要求暂缓，选型后再补第 6 项。

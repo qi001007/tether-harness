@@ -1,5 +1,13 @@
 # 实时进度
 
+## 2026-11-03 插件边界定稿（主人拍板）
+
+1. Tether 只做三件事：启动 DSH、安装原版 DSH、注入 Tether 插件；除此之外不揽事。
+2. **不管理、不更新、不修复第三方插件**；DSH 更新后第三方插件坏掉，不由 Tether 负责。
+3. **不在 DSH 每次更新后自动重装 Tether 插件**；0.2.90 的“版本变化自动重装”已 revert、未发版。只有 Tether 自己的 surface 缺失/损坏时才修 Tether 自己。
+4. 映射必须是带当前全部插件的真实 DSH；如果 Tether 映射导致其他插件不显示/不可用，算 Tether bug。
+5. 细则写入 `docs/DSH_PLUGIN_BOUNDARIES.md`；第三方插件实测等主人选型后按矩阵执行。
+
 ## 2026-11-03 v0.2.89 运行时样式防线
 
 1. Electron 在 iframe 载入后探测搜索框/按钮的**计算样式**；出现浏览器默认 `inset/outset` 样式时发 `tether:surface-style-broken`。
