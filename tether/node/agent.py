@@ -32,6 +32,7 @@ from .fs_service import FsError, FsService
 from .direct_api import DirectApi
 from .terminal import TerminalService
 from .apps import AppCatalog
+from .acp import AcpService
 from .dsh_sessions import DshSessionStore
 from .native_surface import NativeSurface, NativeSurfaceError
 from .local_identity import remove_identity, write_identity
@@ -291,6 +292,8 @@ class Node:
         self.fs.terminal = self.terminal
         self.apps = AppCatalog(self.data_dir)
         self.fs.apps = self.apps
+        self.acp = AcpService(self.workspace)
+        self.fs.acp = self.acp
         ensure_sdk_profile(self.native_dsh_home)
         self.native_surface = NativeSurface(self.native_dsh_home, device_fs=self.fs)
         update_state_dir = self.data_dir / "updates"
@@ -983,6 +986,7 @@ class Node:
                 "workspace": str(self.workspace), "agents": ["fake", "dsh"], "fs": True,
                 "terminal": True,
                 "apps": True,
+                "acp": True,
                 "policy_mode": self.fs.policy.data.get("mode"),
                 "workspaces_root": str(self.workspaces_root),
                 "dsh_native": self.dsh_sessions.available(),
@@ -1068,6 +1072,10 @@ def main() -> None:
         finally:
             try:
                 node.apps.stop()
+            except Exception:
+                pass
+            try:
+                node.acp.close_all()
             except Exception:
                 pass
             if refresher is not None:

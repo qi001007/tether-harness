@@ -65,3 +65,4 @@
 - 2026-11-03：`reloadLocalPluginSurface` 只允许 `setPluginEnabled(entry,true)`，禁止为了强制重启而先停用：DSH 会把 `enabled:false` 持久化到 profile，真机验证中出现过启用失败后 surface 一直停用。只改客户端文件的版本更新交给 8 秒宽限后的整宿主重启。`createDshPluginHotReloadWatch` 是页面态触发器，2 秒轮询、20 秒跨页锁。
 - 2026-11-03：新增“终端”页（`terminal-page.js`，活动栏第 4 项）：设备选择/启动/停止/200 ms 轮询/Enter 提交；真机 APP 选 LAPTOP-01 执行 `Get-Random`、`echo enter-ok` 各只显示一行。轮询必须带 `inFlight` 重入闸，否则 200 ms 间隔 + 公网 RTT 会让并发 tick 重复追加同一块；`web/dist/app.js` 由 `build-web.mjs` 单独构建，改 `src/` 后两份生成物都要重建。
 - 2026-11-03：新增“远程应用”页（`apps-page.js`，活动栏第 2 项）：设备选择/刷新/卡片/内嵌 iframe。数据来自目标 Node 的 `apps.json` 白名单（`fs/apps_list`），只转发回环 HTTP；DSH 不进这个列表，继续走原生工作区的认证 surface（通用网关拿不到 DSH 本地票据）。
+- 2026-11-03：新增“Agents”页（`agents-page.js`，活动栏第 3 项）：检测本机 ACP Harness、开始会话、流式消息、权限请求卡片、停止。消息必须按 chunk 拼接后再换行；`agent_message_chunk` 不能一块一行。会话轮询同样带 `inFlight` 闸。

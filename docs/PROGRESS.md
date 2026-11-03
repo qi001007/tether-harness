@@ -1,5 +1,12 @@
 # 实时进度
 
+## 2026-11-03 Agents（ACP）页（0.2.98）
+
+1. Node 新增 `acp.py` 与 `fs/acp_detect|start|prompt|poll|reply|cancel|stop`：按白名单拉起本机 ACP Harness，JSON-RPC 2.0 / ndjson over stdio，协议 1；owner-only。Windows 优先解析 `.cmd/.bat/.exe` 并用 `cmd /c` 启动，避免 npm 无扩展名 shim 的 `WinError 2`。
+2. UI 活动栏新增 Agents：设备检测、Harness 卡片、流式消息、权限请求卡片、停止；消息块按 chunk 拼接，不再每块换行。
+3. 真机 DESKTOP `codex-acp`：`initialize` → `session/new` → prompt → `tether-ui-ok` → `end_turn`，全程在真实 Electron APP 内完成，不切窗口。
+4. 仍未做：真实工具调用的权限卡片、Gemini/OpenCode/Claude adapter 真机、非 owner 端到端拒绝；计划见 `docs/ACP_HARNESS_PLAN.md`。
+
 ## 2026-11-03 远程应用页（0.2.97）
 
 1. Node 新增 `apps.json` 白名单与 `fs/apps_list`：把目标机 `127.0.0.1:<port>` 的 HTTP 服务经 EasyTier 虚拟 IP 转发；只绑 `10.144.0.0/24`，目标只接受回环，文件改动按 mtime 热更新。

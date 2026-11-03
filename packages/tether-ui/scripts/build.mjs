@@ -22,6 +22,7 @@ const transferEngine = strip('transfer.js')
 const transferPage = strip('transfer-page.js')
 const terminalPage = strip('terminal-page.js')
 const appsPage = strip('apps-page.js')
+const agentsPage = strip('agents-page.js')
 const monacoRuntime = await bundledMonacoRuntime()
 
 const plugin = `window.__ModuleLoader__.load({
@@ -42,6 +43,7 @@ ${transferEngine}
 ${transferPage}
 ${terminalPage}
 ${appsPage}
+${agentsPage}
     let localPluginRpc = null
     let localPluginRemote = null
     let exitPanel = null

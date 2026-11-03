@@ -166564,6 +166564,362 @@ function createAppsPage({ React: React2, Glyph, post, C, devices = [], localDevi
   );
 }
 
+// src/agents-page.js
+function createAgentsPage({ React: React2, Glyph, post, C, devices = [], localDevice = "", onError }) {
+  const h2 = React2.createElement;
+  const online = devices.filter((item) => item && item.online);
+  const initial = localDevice && online.some((item) => item.device_id === localDevice) ? localDevice : online[0] && online[0].device_id || "";
+  const [device, setDevice] = React2.useState(initial);
+  const [harnesses, setHarnesses] = React2.useState([]);
+  const [detecting, setDetecting] = React2.useState(false);
+  const [session, setSession] = React2.useState("");
+  const [harness, setHarness] = React2.useState(null);
+  const [output, setOutput] = React2.useState("");
+  const [input, setInput] = React2.useState("");
+  const [busy, setBusy] = React2.useState(false);
+  const [pending2, setPending] = React2.useState([]);
+  const since = React2.useRef(0);
+  const sessionRef = React2.useRef("");
+  const outputRef = React2.useRef(null);
+  const fail2 = (error) => {
+    const message = String(error && error.message || error || "Agents \u64CD\u4F5C\u5931\u8D25");
+    setOutput((current) => current + (current && !current.endsWith("\n") ? "\n" : "") + message + "\n");
+    if (onError) onError(error);
+  };
+  const detect = async (id) => {
+    if (!id) return;
+    setDetecting(true);
+    try {
+      const result = await post("/api/devices/" + encodeURIComponent(id) + "/fs/acp_detect", {});
+      setHarnesses(Array.isArray(result && result.harnesses) ? result.harnesses : []);
+    } catch (error) {
+      setHarnesses([]);
+      fail2(error);
+    } finally {
+      setDetecting(false);
+    }
+  };
+  React2.useEffect(() => {
+    void detect(device);
+  }, [device]);
+  const stop = async () => {
+    const current = sessionRef.current;
+    sessionRef.current = "";
+    setSession("");
+    if (!current) return;
+    try {
+      await post("/api/devices/" + encodeURIComponent(device) + "/fs/acp_stop", { session_id: current });
+    } catch (_) {
+    }
+  };
+  const start = async (item) => {
+    if (!item || busy) return;
+    setBusy(true);
+    try {
+      const result = await post(
+        "/api/devices/" + encodeURIComponent(device) + "/fs/acp_start",
+        { harness: item.id }
+      );
+      if (!result || typeof result.session_id !== "string") throw new Error("Agent \u6CA1\u6709\u8FD4\u56DE\u4F1A\u8BDD\u6807\u8BC6");
+      sessionRef.current = result.session_id;
+      since.current = 0;
+      setPending([]);
+      setSession(result.session_id);
+      setHarness(item);
+      setOutput("ACP \xB7 " + (item.name || item.id) + "\n" + (result.cwd || "") + "\n\n");
+    } catch (error) {
+      fail2(error);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const send = async (event) => {
+    if (event) event.preventDefault();
+    const text2 = input;
+    if (!session || !text2.trim()) return;
+    setInput("");
+    setOutput((current) => current + "> " + text2 + "\n");
+    try {
+      await post("/api/devices/" + encodeURIComponent(device) + "/fs/acp_prompt", {
+        session_id: session,
+        text: text2
+      });
+    } catch (error) {
+      fail2(error);
+    }
+  };
+  const reply = async (requestId, optionId) => {
+    if (!session) return;
+    setPending((current) => current.filter((item) => item.requestId !== requestId));
+    try {
+      await post("/api/devices/" + encodeURIComponent(device) + "/fs/acp_reply", {
+        session_id: session,
+        request_id: requestId,
+        outcome: { outcome: "selected", optionId }
+      });
+    } catch (error) {
+      fail2(error);
+    }
+  };
+  React2.useEffect(() => {
+    if (!session) return void 0;
+    let disposed = false;
+    let inFlight = false;
+    const tick = async () => {
+      if (disposed || document.hidden || inFlight) return;
+      inFlight = true;
+      try {
+        const result = await post(
+          "/api/devices/" + encodeURIComponent(device) + "/fs/acp_poll",
+          { session_id: session, since: since.current }
+        );
+        if (disposed || !result) return;
+        since.current = Number(result.next) || since.current;
+        const lines = [];
+        let chunk = "";
+        const flush = () => {
+          if (chunk) {
+            lines.push(chunk);
+            chunk = "";
+          }
+        };
+        for (const item of result.events || []) {
+          const event = item.event || {};
+          if (event.type === "notification" && event.method === "session/update") {
+            const update = event.params && event.params.update || {};
+            const content = update.content || {};
+            if (update.sessionUpdate === "agent_message_chunk" && content.type === "text") {
+              chunk += content.text;
+              continue;
+            }
+            flush();
+            if (update.sessionUpdate === "tool_call" && update.title) lines.push("[\u5DE5\u5177] " + update.title);
+            else if (update.sessionUpdate === "plan" && Array.isArray(update.entries)) {
+              lines.push("[\u8BA1\u5212]\n" + update.entries.map((entry) => "\xB7 " + (entry.content || entry.title || "")).join("\n"));
+            }
+          } else if (event.type === "request" && event.method === "session/request_permission") {
+            flush();
+            const params = event.params || {};
+            const title = params.toolCall && params.toolCall.title || "\u5DE5\u5177\u8C03\u7528";
+            const options = Array.isArray(params.options) ? params.options : [];
+            const choices = options.map((option) => option.name || option.optionId).join(" / ");
+            lines.push("[\u9700\u8981\u6388\u6743] " + title + "\uFF1A" + (choices || "\u65E0\u9009\u9879") + " #" + event.id);
+            setPending((current) => current.some((item2) => item2.requestId === event.id) ? current : [...current, { requestId: event.id, options }]);
+          } else if (event.type === "result") {
+            flush();
+            const reason = event.result && event.result.stopReason || "done";
+            lines.push("[\u5B8C\u6210] " + reason);
+          } else if (event.type === "error") {
+            flush();
+            lines.push("[\u9519\u8BEF] " + String(event.error || "ACP error"));
+          } else if (event.type === "closed") {
+            flush();
+            lines.push("[\u4F1A\u8BDD\u7ED3\u675F]");
+            if (sessionRef.current === session) {
+              sessionRef.current = "";
+              setSession("");
+            }
+          }
+        }
+        flush();
+        if (lines.length) setOutput((current) => current + lines.join("\n") + "\n");
+        if (result.closed && sessionRef.current === session) {
+          sessionRef.current = "";
+          setSession("");
+        }
+      } catch (error) {
+        if (!disposed) fail2(error);
+      } finally {
+        inFlight = false;
+      }
+    };
+    const timer = setInterval(tick, 250);
+    void tick();
+    return () => {
+      disposed = true;
+      clearInterval(timer);
+    };
+  }, [session, device]);
+  React2.useEffect(() => {
+    if (outputRef.current) outputRef.current.scrollTop = outputRef.current.scrollHeight;
+  }, [output]);
+  React2.useEffect(() => () => {
+    const current = sessionRef.current;
+    if (current) {
+      void post("/api/devices/" + encodeURIComponent(device) + "/fs/acp_stop", { session_id: current }).catch(() => {
+      });
+    }
+  }, []);
+  const selectDevice = async (value) => {
+    await stop();
+    setOutput("");
+    setHarness(null);
+    setDevice(value);
+  };
+  const field = {
+    height: 28,
+    boxSizing: "border-box",
+    border: "1px solid " + C.line,
+    borderRadius: 7,
+    padding: "0 9px",
+    background: C.bg,
+    color: C.ink,
+    fontSize: 12
+  };
+  const button = {
+    height: 28,
+    padding: "0 14px",
+    border: 0,
+    borderRadius: 7,
+    fontSize: 12,
+    cursor: "pointer",
+    color: "#fff",
+    background: C.blue
+  };
+  return h2(
+    "div",
+    { style: { flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column", gap: 8, padding: 10, background: C.bg } },
+    h2(
+      "div",
+      { style: { display: "flex", alignItems: "center", gap: 8, flex: "0 0 auto" } },
+      h2(
+        "select",
+        {
+          value: device,
+          "aria-label": "Agent \u76EE\u6807\u8BBE\u5907",
+          title: "\u9009\u62E9\u8981\u8FD0\u884C Agent \u7684\u7535\u8111",
+          onChange: (event) => {
+            void selectDevice(event.target.value);
+            event.currentTarget.blur();
+          },
+          style: { ...field, minWidth: 180 }
+        },
+        !online.length ? h2("option", { value: "" }, "\u6CA1\u6709\u5728\u7EBF\u8BBE\u5907") : null,
+        online.map((item) => h2("option", { key: item.device_id, value: item.device_id }, item.name || item.device_id))
+      ),
+      h2("button", {
+        type: "button",
+        onClick: () => void detect(device),
+        disabled: detecting || !device,
+        style: { ...button, padding: "0 10px", opacity: detecting || !device ? 0.5 : 1 }
+      }, detecting ? "\u68C0\u6D4B\u4E2D\u2026" : "\u5237\u65B0"),
+      h2("button", {
+        type: "button",
+        disabled: !session,
+        onClick: () => void stop(),
+        style: { ...field, cursor: session ? "pointer" : "default", opacity: session ? 1 : 0.5, background: "transparent" }
+      }, "\u505C\u6B62"),
+      h2(
+        "span",
+        { style: { marginLeft: "auto", fontSize: 11, color: session ? C.green : C.mute } },
+        session ? "\u5DF2\u8FDE\u63A5" : "\u672A\u8FDE\u63A5"
+      )
+    ),
+    !session ? h2(
+      "div",
+      {
+        style: { flex: "0 0 auto", display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" }
+      },
+      harnesses.length ? harnesses.map((item) => h2(
+        "button",
+        {
+          key: item.id,
+          type: "button",
+          onClick: () => void start(item),
+          disabled: busy,
+          className: "tether-press tether-hover",
+          style: {
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            padding: 10,
+            textAlign: "left",
+            border: "1px solid " + C.line,
+            borderRadius: 10,
+            background: C.panel || C.bg,
+            color: C.ink,
+            cursor: "pointer"
+          }
+        },
+        h2("span", { style: {
+          width: 30,
+          height: 30,
+          flex: "0 0 auto",
+          display: "grid",
+          placeItems: "center",
+          borderRadius: 8,
+          background: C.soft,
+          color: C.blue
+        } }, h2(Glyph, { name: "bot", size: 16 })),
+        h2(
+          "span",
+          { style: { minWidth: 0, display: "grid", gap: 2 } },
+          h2("span", { style: { fontSize: 13, fontWeight: 500 } }, item.name || item.id),
+          h2("span", { style: { fontSize: 11, color: C.mute } }, item.command || item.id)
+        )
+      )) : h2(
+        "div",
+        { style: { gridColumn: "1 / -1", padding: 16, color: C.mute, fontSize: 12 } },
+        detecting ? "\u6B63\u5728\u68C0\u6D4B\u672C\u673A Agent\u2026" : "\u6CA1\u6709\u68C0\u6D4B\u5230 ACP Harness\u3002\u5148\u5728\u76EE\u6807\u7535\u8111\u88C5\u597D Gemini CLI / OpenCode / Claude Code adapter / Codex adapter\u3002"
+      )
+    ) : null,
+    h2("pre", {
+      ref: outputRef,
+      style: {
+        flex: "1 1 auto",
+        minHeight: 0,
+        margin: 0,
+        overflow: "auto",
+        whiteSpace: "pre-wrap",
+        wordBreak: "break-word",
+        background: "#0b1220",
+        color: "#e2e8f0",
+        borderRadius: 8,
+        padding: "10px 12px",
+        fontFamily: 'Consolas, "Cascadia Mono", monospace',
+        fontSize: 12,
+        lineHeight: 1.55
+      }
+    }, output || "\u9009\u62E9\u4E00\u53F0\u5DF2\u5B89\u88C5 ACP Harness \u7684\u7535\u8111\uFF0C\u70B9\u51FB\u5361\u7247\u5F00\u59CB\u4F1A\u8BDD\u3002"),
+    pending2.map((item) => h2(
+      "div",
+      { key: "perm-" + item.requestId, style: { display: "flex", gap: 8, alignItems: "center", flex: "0 0 auto", flexWrap: "wrap" } },
+      h2("span", { style: { fontSize: 11, color: C.mute } }, "\u6388\u6743\u8BF7\u6C42 #" + item.requestId),
+      item.options.map((option) => h2("button", {
+        key: option.optionId,
+        type: "button",
+        onClick: () => {
+          void reply(item.requestId, option.optionId);
+        },
+        style: { ...field, cursor: "pointer" }
+      }, option.name || option.optionId))
+    )),
+    h2(
+      "form",
+      {
+        onSubmit: send,
+        style: { display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", borderRadius: 8, background: "#0b1220", flex: "0 0 auto" }
+      },
+      h2("span", { style: { color: "#7dd3fc", fontFamily: "Consolas, monospace", fontSize: 13 } }, "\u203A"),
+      h2("input", {
+        value: input,
+        disabled: !session,
+        autoFocus: true,
+        spellCheck: false,
+        "aria-label": "Agent \u8F93\u5165",
+        placeholder: session ? "\u7ED9 Agent \u53D1\u6D88\u606F\uFF0CEnter \u53D1\u9001" : "\u5148\u9009\u62E9 Harness",
+        onChange: (event) => setInput(event.target.value),
+        style: { flex: "1 1 auto", minWidth: 0, border: 0, outline: "none", background: "transparent", color: "#e2e8f0", fontFamily: "Consolas, monospace", fontSize: 13 }
+      }),
+      h2("button", {
+        type: "submit",
+        disabled: !session || !input.trim(),
+        style: { ...button, height: 26, padding: "0 12px", opacity: !session || !input.trim() ? 0.4 : 1 }
+      }, "\u53D1\u9001")
+    )
+  );
+}
+
 // src/app.js
 function responseBelongsToDevice(data, expectedDevice) {
   if (!data || typeof data !== "object" || !expectedDevice) return false;
@@ -168143,6 +168499,12 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       { d: "M2.4 9.4h4.2v4.2H2.4z" },
       { d: "M9.4 9.4h4.2v4.2H9.4z" }
     ] },
+    bot: { cap: "round", join: "round", parts: [
+      { d: "M8 2.2v2.2" },
+      { d: "M4.3 4.4h7.4v7.2H4.3z" },
+      { d: "M6.3 7.4v1.6M9.7 7.4v1.6" },
+      { d: "M6.4 13.8v-2.2M9.6 13.8v-2.2" }
+    ] },
     refresh: { parts: [
       { d: "M13 8a5 5 0 1 1-1.5-3.56" },
       { d: "M13.2 2.3v3.1h-3.1" }
@@ -168284,6 +168646,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const items = [
       { id: "workspaces", label: "\u539F\u751F\u5DE5\u4F5C\u533A", icon: "monitor" },
       { id: "apps", label: "\u8FDC\u7A0B\u5E94\u7528", icon: "apps" },
+      { id: "agents", label: "Agents", icon: "bot" },
       { id: "files", label: "\u6587\u4EF6\u8D44\u6E90\u7BA1\u7406\u5668", icon: "files" },
       { id: "transfer", label: "\u6587\u4EF6\u8F6C\u79FB", icon: "transfer" },
       { id: "terminal", label: "\u7EC8\u7AEF", icon: "terminal" },
@@ -172511,6 +172874,12 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         setSidebarCollapsed(true);
         return;
       }
+      if (id === "agents") {
+        setView("agents");
+        setActivePanel("agents");
+        setSidebarCollapsed(true);
+        return;
+      }
       if (id === "network") {
         setView("network");
         setActivePanel("network");
@@ -173683,7 +174052,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         "div",
         { style: { display: "flex", flex: "1 1 auto", minHeight: 0 } },
         h2(ActivityBar, {
-          active: view === "files" ? "files" : view === "network" ? "network" : view === "transfer" ? "transfer" : view === "terminal" ? "terminal" : view === "apps" ? "apps" : "workspaces",
+          active: view === "files" ? "files" : view === "network" ? "network" : view === "transfer" ? "transfer" : view === "terminal" ? "terminal" : view === "apps" ? "apps" : view === "agents" ? "agents" : "workspaces",
           collapsed: sidebarCollapsed,
           onSelect: selectPanel,
           onPermissions: () => {
@@ -173749,6 +174118,14 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
             onNotice: setNotice,
             onError: fail2
           }) : view === "apps" ? h2(createAppsPage, {
+            React: React2,
+            Glyph,
+            post,
+            C,
+            devices: state && state.devices || [],
+            localDevice: appLocalDevice,
+            onError: fail2
+          }) : view === "agents" ? h2(createAgentsPage, {
             React: React2,
             Glyph,
             post,

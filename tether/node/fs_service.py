@@ -557,6 +557,36 @@ class FsService:
     def _op_apps_list(self, args: dict[str, Any]) -> Any:
         return self._apps_dispatch("list", args)
 
+    def _acp_dispatch(self, action: str, args: dict[str, Any]) -> Any:
+        acp = getattr(self, "acp", None)
+        if acp is None:
+            raise FsError("acp unavailable", "unavailable")
+        try:
+            return acp.dispatch(action, args)
+        except ValueError as exc:
+            raise FsError(str(exc), "acp_error") from None
+
+    def _op_acp_detect(self, args: dict[str, Any]) -> Any:
+        return self._acp_dispatch("detect", args)
+
+    def _op_acp_start(self, args: dict[str, Any]) -> Any:
+        return self._acp_dispatch("start", args)
+
+    def _op_acp_prompt(self, args: dict[str, Any]) -> Any:
+        return self._acp_dispatch("prompt", args)
+
+    def _op_acp_poll(self, args: dict[str, Any]) -> Any:
+        return self._acp_dispatch("poll", args)
+
+    def _op_acp_reply(self, args: dict[str, Any]) -> Any:
+        return self._acp_dispatch("reply", args)
+
+    def _op_acp_cancel(self, args: dict[str, Any]) -> Any:
+        return self._acp_dispatch("cancel", args)
+
+    def _op_acp_stop(self, args: dict[str, Any]) -> Any:
+        return self._acp_dispatch("stop", args)
+
     def _op_read(self, args: dict[str, Any]) -> dict[str, Any]:
         p = self._resolve(args.get("path"))
         self._read_guard(p)
