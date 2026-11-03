@@ -32,7 +32,7 @@ REQUIRED_UI_PACKAGES = (
 )
 PROFILE_TIMEOUT = 30.0
 INSTALL_TIMEOUT = 300.0
-DESCRIPTOR_TIMEOUT = 90.0
+DESCRIPTOR_TIMEOUT = 180.0
 ROOT = Path(__file__).resolve().parents[2]
 LOCAL_PACKAGES = ROOT / "packages"
 _INSTALL_LOCK = threading.Lock()
@@ -355,11 +355,21 @@ def _descriptor_state(dsh: DshDesktop) -> tuple[int, float]:
 
 def _wait_descriptor(dsh: DshDesktop, previous_pid: int, started: float) -> dict[str, Any]:
     deadline = time.monotonic() + DESCRIPTOR_TIMEOUT
+    starts = 0
+    last_start = 0.0
     while time.monotonic() < deadline:
         status = dsh.status()
         pid, updated = _descriptor_state(dsh)
         if status.get("running") and pid and pid == int(status.get("pid") or 0) and pid != previous_pid:
             return {"pid": pid, "updated_at": updated, "status": status}
+        now = time.monotonic()
+        if not status.get("running") and starts < 3 and now - last_start > 5.0:
+            try:
+                dsh.start()
+                starts += 1
+                last_start = now
+            except DshError:
+                pass
         time.sleep(0.75)
     raise DshPluginError("插件已安装，但 DSH 没有发布新的 surface 描述符",
                          "dsh_plugin_descriptor_missing")
