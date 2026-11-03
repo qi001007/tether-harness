@@ -1,6 +1,6 @@
 {
-  "version": "0.2.87",
-  "notes": "Surface health now comes from the live descriptor pid; the APP auto-repairs when DSH is running without a surface, even if the gateway still serves a stale URL.",
+  "version": "0.2.88",
+  "notes": "Surface health uses the live descriptor pid; missing-plugin errors from the surface poll force the auto-repair path without broadening the ordinary DSH status polling.",
   "download": "https://github.com/qi001007/tether-harness",
   "install": "git pull && powershell -ExecutionPolicy Bypass -File desktop/install-plugin.ps1"
 }

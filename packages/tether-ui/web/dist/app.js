@@ -169202,7 +169202,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       } else setState({ deviceId, status: "error", url: "", message: "\u539F\u751F\u5DE5\u4F5C\u533A\u9875\u9762\u52A0\u8F7D\u5931\u8D25\u3002\u8BF7\u68C0\u67E5\u76EE\u6807\u8BBE\u5907\u8FDE\u63A5\u540E\u91CD\u8BD5\u3002" });
     };
     const dshRelevant = currentState.status === "error" && ["descriptor_missing", "host_unreachable", "descriptor_invalid"].includes(currentState.code);
-    const dshWatch = visible;
+    const dshWatch = visible && (deviceId === localDeviceId || dshRelevant);
     const dshRestartPidRef = React2.useRef(0);
     const dshAutoRepairRef = React2.useRef(false);
     const [dsh, setDsh] = React2.useState(null);

@@ -5763,7 +5763,7 @@ monaco-editor/esm/vs/languages/definitions/swift/swift.js:
 
     const EditorRuntime = TetherMonacoRuntime
     const PANEL_ID = 'tether'
-    const PLUGIN_VERSION = "0.2.87"
+    const PLUGIN_VERSION = "0.2.88"
 function parentOf(path) {
   const clean = String(path || '').replace(/[\\/]+$/, '')
   if (!clean) return ''
@@ -11793,7 +11793,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
 
       const dshRelevant = currentState.status === 'error'
         && ['descriptor_missing', 'host_unreachable', 'descriptor_invalid'].includes(currentState.code)
-      const dshWatch = visible
+      const dshWatch = visible && (deviceId === localDeviceId || dshRelevant)
       const dshRestartPidRef = React.useRef(0)
       const dshAutoRepairRef = React.useRef(false)
       const [dsh, setDsh] = React.useState(null)

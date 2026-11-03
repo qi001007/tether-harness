@@ -2684,7 +2684,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
 
       const dshRelevant = currentState.status === 'error'
         && ['descriptor_missing', 'host_unreachable', 'descriptor_invalid'].includes(currentState.code)
-      const dshWatch = visible
+      const dshWatch = visible && (deviceId === localDeviceId || dshRelevant)
       const dshRestartPidRef = React.useRef(0)
       const dshAutoRepairRef = React.useRef(false)
       const [dsh, setDsh] = React.useState(null)
