@@ -1,9 +1,11 @@
 """Restart the native DSH desktop host after a plugin update.
 
-The Node cannot swap a plugin bundle inside a running DSH host, so the plugin
-apply schedules this detached helper: it closes the desktop app, reopens the
-same executable, and waits for the new host to rewrite the surface descriptor.
-The Tether update status then sees a new host pid and clears restart_required.
+The plugin apply schedules this detached helper with the target version. When
+the running DSH loads that version in place through HMR within the grace
+window, the helper exits without touching the app; otherwise it closes the
+desktop app, reopens the same executable, and waits for the new host to rewrite
+the surface descriptor. The Tether update status then sees a new host pid or a
+matching loaded plugin version and clears restart_required.
 """
 
 from __future__ import annotations
@@ -39,6 +41,30 @@ def _descriptor(path: Path) -> dict[str, Any] | None:
     except (OSError, ValueError):
         return None
     return data if isinstance(data, dict) else None
+
+
+def _loaded_plugin_version(path: Path) -> str | None:
+    data = _descriptor(path) or {}
+    version = data.get("plugin_version")
+    pid = data.get("pid")
+    if not isinstance(version, str) or not version or type(pid) is not int:
+        return None
+    try:
+        if not psutil.pid_exists(pid):
+            return None
+    except (OSError, ValueError):
+        return None
+    return version
+
+
+def _wait_for_loaded_plugin(path: Path, expected: str, seconds: float) -> bool:
+    """Wait for the running DSH host to publish the updated plugin version."""
+    deadline = time.time() + max(0.0, seconds)
+    while time.time() < deadline:
+        if _loaded_plugin_version(path) == expected:
+            return True
+        time.sleep(0.25)
+    return False
 
 
 def _host_pid(path: Path) -> int | None:
@@ -131,8 +157,14 @@ def _launch(exe: str, dsh_home: Path | None = None) -> subprocess.Popen[Any]:
 
 
 def restart(descriptor: Path, log: Path | None, *, delay: float = 1.5, wait: float = 60.0,
-            host_pid: int | None = None, dsh_home: Path | None = None) -> int:
-    time.sleep(max(0.0, delay))
+            host_pid: int | None = None, dsh_home: Path | None = None,
+            expect_plugin_version: str = "") -> int:
+    if expect_plugin_version:
+        if _wait_for_loaded_plugin(descriptor, expect_plugin_version, delay):
+            _log(log, f"plugin {expect_plugin_version} loaded in place; no DSH restart")
+            return 0
+    else:
+        time.sleep(max(0.0, delay))
     before = _host_pid(descriptor)
     host = None
     if before is not None:
@@ -191,10 +223,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--wait", type=float, default=60.0)
     parser.add_argument("--host-pid", type=int, default=0)
     parser.add_argument("--dsh-home", default="")
+    parser.add_argument("--expect-plugin-version", default="")
     args = parser.parse_args(argv)
     return restart(Path(args.descriptor), Path(args.log) if args.log else None,
                    delay=args.delay, wait=args.wait, host_pid=args.host_pid or None,
-                   dsh_home=Path(args.dsh_home) if args.dsh_home else None)
+                   dsh_home=Path(args.dsh_home) if args.dsh_home else None,
+                   expect_plugin_version=args.expect_plugin_version)
 
 
 if __name__ == "__main__":

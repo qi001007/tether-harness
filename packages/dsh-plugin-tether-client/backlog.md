@@ -42,3 +42,4 @@
 - 2026-11-02：client 包、version.json 与 `lib/client.js` 升至 `0.2.66`；恢复互联图力导向流动，位置+速度持久化。
 - 2026-11-02：client 包、version.json 与 `lib/client.js` 升至 `0.2.67`；启动更新检查改 pythonw，插件 bundle 仅版本元数据变化。
 - 2026-11-02：client 包、version.json 与 `lib/client.js` 升至 `0.2.68`；设置更新页分组列表与版本胶囊随共享 UI 进入插件 bundle。
+- 2026-11-03：`apply` 创建的页面级 `createDshPluginHotReloadWatch` 每 2 秒读 `/tether-updates` status；`restart_required && disk_version !== runtime_version` 时用 localStorage 20 秒锁去重并调用重载桥。插件升到 `0.2.90`。

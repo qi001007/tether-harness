@@ -16,8 +16,8 @@ from pathlib import Path
 
 import pytest
 
-from tether.updates import (UpdateError, UpdateManager, _is_newer, _restart_cleared,
-                             _resolve_latest_manifest_url)
+from tether.updates import (PLUGIN_HOT_RELOAD_GRACE, UpdateError, UpdateManager, _is_newer,
+                             _restart_cleared, _resolve_latest_manifest_url, _runtime_loaded)
 
 
 class ArtifactServer:
@@ -978,12 +978,19 @@ def test_plugin_apply_reports_a_scheduled_dsh_restart(
     assert prepared["ok"] is True
 
     monkeypatch.setattr(manager, "_dsh_host_pid", lambda: 424242)
-    monkeypatch.setattr(manager, "_spawn_dsh_restart", lambda: True)
+    seen = {}
+
+    def fake_restart(**kwargs):
+        seen.update(kwargs)
+        return True
+
+    monkeypatch.setattr(manager, "_spawn_dsh_restart", fake_restart)
     result = manager.apply(prepared["prepared_id"])
 
     assert result["ok"] is True, result
     assert result["restart_required"] is True
     assert result["restart_scheduled"] is True
+    assert seen == {"delay": PLUGIN_HOT_RELOAD_GRACE, "expect_plugin_version": "0.2.1"}
 
 
 def test_plugin_apply_refuses_if_host_profile_changes_after_prepare(artifact_server: ArtifactServer, tmp_path: Path) -> None:
@@ -1451,6 +1458,65 @@ def test_restart_cleared_requires_a_different_live_host_pid():
     assert _restart_cleared(None, 11) is False
 
 
+def test_runtime_loaded_requires_the_live_descriptor_to_report_the_applied_version():
+    applied = {"restart_required": True, "version": "0.2.91"}
+    host = {"descriptor_pid": 10, "plugin_version": "0.2.91"}
+    assert _runtime_loaded(applied, host) is True
+    assert _runtime_loaded(applied, {**host, "plugin_version": "0.2.90"}) is False
+    assert _runtime_loaded(applied, {**host, "plugin_version": None}) is False
+    assert _runtime_loaded(applied, {**host, "descriptor_pid": None}) is False
+    assert _runtime_loaded({**applied, "restart_required": False}, host) is False
+    assert _runtime_loaded({**applied, "version": ""}, host) is False
+    assert _runtime_loaded(None, host) is False
+
+
+def _plugin_status_fixture(tmp_path: Path, version: str):
+    root = tmp_path / "app-root"
+    seed_version(root)
+    dsh_home = tmp_path / "dsh"
+    packages = dsh_home / "profiles" / "desktop" / "node_modules"
+    for name in ("tether-dsh-plugin", "tether-dsh-client", "tether-dsh-native-ui", "tether-dsh-surface"):
+        (packages / name / "lib").mkdir(parents=True)
+        (packages / name / "package.json").write_text(json.dumps({"name": name, "version": version}), encoding="utf-8")
+    (packages / "tether-dsh-client" / "lib" / "client.js").write_text(
+        f"const PLUGIN_VERSION = '{version}'", encoding="utf-8")
+    state = tmp_path / "state"
+    state.mkdir()
+    (state / "applied-plugin.json").write_text(json.dumps({
+        "schema": 1, "component": "plugin", "version": version,
+        "restart_required": True, "applied_at": int(time.time() * 1000), "dsh_pid": os.getpid(),
+    }), encoding="utf-8")
+    return UpdateManager(root, "plugin", dsh_home=dsh_home, manifest_url="",
+                         state_dir=state, profile="desktop"), dsh_home
+
+
+def test_plugin_status_clears_restart_when_the_running_host_loaded_the_applied_version(tmp_path, monkeypatch):
+    manager, dsh_home = _plugin_status_fixture(tmp_path, "0.2.1")
+    assert manager.status()["restart_required"] is True
+    descriptor = dsh_home / "storages" / "tether" / "native-surface.json"
+    descriptor.parent.mkdir(parents=True)
+    descriptor.write_text(json.dumps({
+        "version": 1, "pid": os.getpid(), "profile": "desktop",
+        "origin": "http://127.0.0.1:45678", "authenticated_url": "http://127.0.0.1:45678/?token=x",
+        "plugin_version": "0.2.1", "updated_at": time.time() * 1000,
+    }), encoding="utf-8")
+    monkeypatch.setattr("tether.updates._looks_like_dsh_host", lambda _process: True)
+    assert manager.status()["restart_required"] is False
+
+
+def test_plugin_status_keeps_restart_when_the_running_host_has_an_old_version(tmp_path, monkeypatch):
+    manager, dsh_home = _plugin_status_fixture(tmp_path, "0.2.1")
+    descriptor = dsh_home / "storages" / "tether" / "native-surface.json"
+    descriptor.parent.mkdir(parents=True)
+    descriptor.write_text(json.dumps({
+        "version": 1, "pid": os.getpid(), "profile": "desktop",
+        "origin": "http://127.0.0.1:45678", "authenticated_url": "http://127.0.0.1:45678/?token=x",
+        "plugin_version": "0.2.0", "updated_at": time.time() * 1000,
+    }), encoding="utf-8")
+    monkeypatch.setattr("tether.updates._looks_like_dsh_host", lambda _process: True)
+    assert manager.status()["restart_required"] is True
+
+
 def test_restart_cleared_when_dsh_was_closed_during_apply():
     applied = {"restart_required": True, "applied_at": 2_000_000}
     assert _restart_cleared(applied, 11, 2_000_100) is True
@@ -1467,8 +1533,10 @@ def test_plugin_apply_schedules_the_dsh_restart_helper():
     assert 'dsh_pid = self._dsh_host_pid() if self.component == "plugin" else None' in text
     assert 'if self.component == "plugin" and dsh_pid:' in text
     assert "self._spawn_dsh_restart()" in text
+    assert "delay=PLUGIN_HOT_RELOAD_GRACE, expect_plugin_version=expected_version" in text
     assert '_restart_cleared(applied, self._dsh_host_pid())' not in text
     assert '_restart_cleared(applied, host["descriptor_pid"], host["updated_at"])' in text
+    assert '_runtime_loaded(applied, host)' in text
     assert '"applied_at": int(time.time() * 1000)' in text
     helper = Path(__file__).resolve().parents[1] / "tether" / "node" / "dsh_restart.py"
     helper_text = helper.read_text(encoding="utf-8")

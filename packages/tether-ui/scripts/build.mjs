@@ -64,6 +64,14 @@ ${shared}
         if (ctx.connection && ctx.connection.rpc && typeof ctx.connection.rpc.call === 'function') {
           localPluginRpc = ctx.connection.rpc
         }
+        if (typeof ctx.effect === 'function') {
+          const stopHotReload = createDshPluginHotReloadWatch({
+            getRpc: () => localPluginRpc,
+            reloadSurface: () => host.reloadLocalPluginSurface(),
+            storage: (() => { try { return window.localStorage } catch (_) { return null } })()
+          })
+          ctx.effect(() => stopHotReload)
+        }
         exitPanel = () => {
           try { ctx.layout.selectPanel(null) } catch (_) { /* DSH layout is optional in embedded surfaces */ }
         }

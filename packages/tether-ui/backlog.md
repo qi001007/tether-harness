@@ -62,3 +62,4 @@
 - 2026-11-02：节点详情必须是画布上的绝对浮层（`top/right/bottom:8px; width:300; z-index:8`，圆角+阴影），不能再作为 flex 列挤压画布；互联页画布容器保持 `position:relative` 作为定位上下文。
 - 2026-11-02：互联图必须保留力导向流动（`animate`/`kick`）；初始环形/三角只是起点，不能为了持久化把动画删掉。节点位置+速度存 `tether.network.positions.v3`，卸载/拖动结束保存，重进从 `x/y/vx/vy` 继续；远端不加中心拉力，否则流动会塌回竖线。
 - 2026-11-02：更新页必须是分组设置列表：顶部“更新”标题+刷新，本机/其他设备各一张列表卡，版本用组件胶囊（无斜杠/箭头），右侧固定 28px 操作位；有新版本只出现蓝色下载按钮，不能改文字或行尺寸。
+- 2026-11-03：`reloadLocalPluginSurface` 改为先 `setPluginEnabled(entry,false)` 再 `true`（停用失败则退回单次启用；启用失败重试一次），否则“只改客户端文件”的版本更新在 HMR 下不会重启 surface。`createDshPluginHotReloadWatch` 是页面态触发器，2 秒轮询、20 秒跨页锁。

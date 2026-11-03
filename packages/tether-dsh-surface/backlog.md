@@ -25,3 +25,5 @@
 - 2026-10-29：Surface 包版本升至 `0.2.16`，与三组件发行版本一致。
 - 2026-10-29：源码 updater 补 `tether/release.py`、`tether/ed25519.py`；`local-updates.js` 的 `UPDATER_FILES` 校验现在能在源码安装的 profile 中通过，不再误报 `updater_missing`。
 - 2026-10-30：surface 包版本统一至发行候选 `0.2.29`。
+- 2026-11-03：descriptor 增加 `plugin_version`，且每次 `publish()` 都重读本包 `package.json`（不缓存模块常量），保证禁用→启用/HMR 重启后运行态版本是磁盘新值，供 Node 的 `restart_required` 握手。
+- 2026-11-03：不要在 surface 服务端定时器里调用 `pluginManager.setPluginEnabled` 重载自己：该实例若由 HMR 载入，回调继承 HMR 的 AsyncLocalStorage，会被 `HMR transactions cannot be nested` 拒绝。触发点归客户端页面。

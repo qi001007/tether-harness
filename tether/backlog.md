@@ -28,5 +28,4 @@
 - 2026-10-31：0.2.45 插件 apply 不能只信 `native-surface.json` 的 pid：descriptor 缺失或 pid 失效时扫描 `dsh-desktop-host` 进程再记 `dsh_pid`；Hub 必须等 `restart_required` 清掉才 `done`，超时报 `restart_timeout`，重试用 `restart` 动作重跑助手。
 - 2026-10-31：0.2.46 清单单飞只允许创建 flight 的 leader 完成它；非 leader 的强制检查自行拉取并写缓存，不得 `set_result`/`set_exception` 共享 Future（二次完成会抛 `InvalidStateError: FINISHED`）。
 - 2026-11-01：0.2.50 插件 `restart_required` 只能由 **descriptor 的新 pid** 清除；扫描到的 `dsh-desktop-host` pid 只用于安排重启，禁止用于判定运行态已加载（否则 surface 仍指向旧端口）。
-- 2026-11-01：DSH `pluginManager` RPC 没有 reload；只有 `listBundles/listPlugins/installBundle/removeBundle/setPluginEnabled/setBundleEnabled`。5 秒热重载的候选是“禁用再启用 tether bundle”，必须在隔离 DSH 验证；当前仍走整应用重启。
-- 2026-11-01：本机插件热重载桥已存在：`reloadLocalPluginSurface`（`setPluginEnabled(surfaceEntry, true)`）+ `activateLocalDshUpdate`（核对 `runtime_version === current_version`）。Hub 驱动的插件更新目前仍走整 DSH 重启；5 秒目标可改为“Node 安装文件后由插件 UI 调用该桥并核对运行时版本”，需新增 Hub/插件协调与实测。
+- 2026-11-03：插件更新先走 HMR：`apply` 不再立即拉起重启，而是以 `--delay 8`/`--expect-plugin-version` 安排 `dsh_restart` 助手；DSH 在宽限内发布 descriptor `plugin_version == applied.version` 时 `status()` 直接清 `restart_required`，助手也自行退出，超时才整应用重启。`setPluginEnabled` 从**被 HMR 载入的实例**调用会撞 `HMR transactions cannot be nested`（AsyncLocalStorage 继承），因此触发点只放客户端页面，不放 surface 服务端定时器。

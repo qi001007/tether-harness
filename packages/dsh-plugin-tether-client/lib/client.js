@@ -5763,7 +5763,7 @@ monaco-editor/esm/vs/languages/definitions/swift/swift.js:
 
     const EditorRuntime = TetherMonacoRuntime
     const PANEL_ID = 'tether'
-    const PLUGIN_VERSION = "0.2.89"
+    const PLUGIN_VERSION = "0.2.90"
 function parentOf(path) {
   const clean = String(path || '').replace(/[\\/]+$/, '')
   if (!clean) return ''
@@ -6260,6 +6260,15 @@ function createDshLocalIdentityBridge(getRpc) {
 }
 
 function createDshLocalPluginSurfaceReloadBridge(getRemote) {
+  const switchEnabled = async (manager, entryId, enabled) => {
+    let reply
+    try { reply = await manager.setPluginEnabled(entryId, enabled) }
+    catch (_) { throw new Error(enabled ? '应用本机 DSH 插件重载失败' : '暂停本机 DSH 插件失败') }
+    if (!reply || reply.ok !== true || !reply.value || typeof reply.value.application !== 'string') {
+      throw new Error(reply?.error?.message || reply?.error || 'DSH 插件重载没有返回有效状态')
+    }
+    return reply.value
+  }
   return async () => {
     const manager = (typeof getRemote === 'function' ? getRemote() : null)?.pluginManager
     if (!manager || typeof manager.listPlugins !== 'function' || typeof manager.setPluginEnabled !== 'function') {
@@ -6276,14 +6285,63 @@ function createDshLocalPluginSurfaceReloadBridge(getRemote) {
     if (target.enabled !== true || typeof target.entryId !== 'string' || !target.entryId) {
       throw new Error('当前 DSH 的 tether-dsh-surface 插件未启用，无法安全重载')
     }
-    let changed
-    try { changed = await manager.setPluginEnabled(target.entryId, true) }
-    catch (_) { throw new Error('应用本机 DSH 插件重载失败') }
-    if (!changed || changed.ok !== true || !changed.value || typeof changed.value.application !== 'string') {
-      throw new Error(changed?.error?.message || changed?.error || 'DSH 插件重载没有返回有效状态')
+    // Re-enabling an already enabled entry is a no-op when only client files
+    // changed; stopping it first guarantees the surface restarts from disk.
+    let stopped = false
+    try {
+      await switchEnabled(manager, target.entryId, false)
+      stopped = true
+    } catch (_) { /* enabling alone still applies changed server modules */ }
+    if (!stopped) return { application: (await switchEnabled(manager, target.entryId, true)).application }
+    try {
+      return { application: (await switchEnabled(manager, target.entryId, true)).application }
+    } catch (error) {
+      // A transient failure must not leave the surface disabled.
+      try { return { application: (await switchEnabled(manager, target.entryId, true)).application } }
+      catch (_) { throw error }
     }
-    return { application: changed.value.application }
   }
+}
+
+function createDshPluginHotReloadWatch({
+  getRpc, reloadSurface, storage = null, intervalMs = 2000, cooldownMs = 20000
+} = {}) {
+  let disposed = false
+  let running = false
+  let lastAttempt = 0
+  const tick = async () => {
+    if (disposed || running) return
+    const rpc = typeof getRpc === 'function' ? getRpc() : null
+    if (!rpc || typeof rpc.call !== 'function' || typeof reloadSurface !== 'function') return
+    running = true
+    try {
+      const reply = await rpc.call('/tether-updates', 'status', {})
+      const value = reply && (reply.value || reply.result)
+      if (!value || value.ok === false || value.restart_required !== true) return
+      const disk = value.disk_version
+      const runtime = value.runtime_version
+      if (typeof disk !== 'string' || typeof runtime !== 'string' || !disk || disk === runtime) return
+      const now = Date.now()
+      if (storage) {
+        try {
+          const key = 'tether-plugin-reload:' + disk
+          const last = Number(storage.getItem(key) || 0)
+          if (Number.isFinite(last) && now - last < cooldownMs) return
+          storage.setItem(key, String(now))
+        } catch (_) { /* private mode: attempt without a cross-page lock */ }
+      }
+      if (now - lastAttempt < 1000) return
+      lastAttempt = now
+      try { await reloadSurface() } catch (_) { /* the surface may be mid-reload; retry on the next tick */ }
+    } catch (_) {
+      /* DSH may be replacing the surface; the next tick retries */
+    } finally {
+      running = false
+    }
+  }
+  const timer = setInterval(tick, Math.max(1000, intervalMs))
+  void tick()
+  return () => { disposed = true; clearInterval(timer) }
 }
 
 const DSH_TARGET_ATTACHMENT_LIMIT = 10 * 1024 * 1024
@@ -15338,6 +15396,14 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         localPluginRemote = ctx.remote
         if (ctx.connection && ctx.connection.rpc && typeof ctx.connection.rpc.call === 'function') {
           localPluginRpc = ctx.connection.rpc
+        }
+        if (typeof ctx.effect === 'function') {
+          const stopHotReload = createDshPluginHotReloadWatch({
+            getRpc: () => localPluginRpc,
+            reloadSurface: () => host.reloadLocalPluginSurface(),
+            storage: (() => { try { return window.localStorage } catch (_) { return null } })()
+          })
+          ctx.effect(() => stopHotReload)
         }
         exitPanel = () => {
           try { ctx.layout.selectPanel(null) } catch (_) { /* DSH layout is optional in embedded surfaces */ }

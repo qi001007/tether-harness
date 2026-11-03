@@ -1,9 +1,35 @@
+import json
+import os
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from tether.node import dsh_restart
+
+
+def test_wait_for_loaded_plugin_requires_the_running_host_version(tmp_path):
+    descriptor = tmp_path / "native-surface.json"
+    descriptor.write_text(json.dumps({
+        "version": 1, "pid": os.getpid(), "plugin_version": "0.2.91"
+    }), encoding="utf-8")
+    assert dsh_restart._wait_for_loaded_plugin(descriptor, "0.2.91", 1.0) is True
+    assert dsh_restart._wait_for_loaded_plugin(descriptor, "0.2.90", 0.3) is False
+
+
+def test_restart_skips_the_app_when_the_hot_reload_handshake_landed(tmp_path, monkeypatch):
+    descriptor = tmp_path / "native-surface.json"
+    descriptor.write_text(json.dumps({
+        "version": 1, "pid": os.getpid(), "plugin_version": "0.2.91"
+    }), encoding="utf-8")
+
+    def fail(*_args, **_kwargs):
+        raise AssertionError("restart helper must not touch the app")
+
+    monkeypatch.setattr(dsh_restart, "_stop_tree", fail)
+    monkeypatch.setattr(dsh_restart, "_launch", fail)
+    assert dsh_restart.restart(descriptor, None, delay=0.5,
+                               expect_plugin_version="0.2.91") == 0
 
 
 def test_launch_strips_the_electron_node_selector(monkeypatch):

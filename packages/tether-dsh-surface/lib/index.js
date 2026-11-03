@@ -29,6 +29,15 @@ function pidIsAlive(pid) {
   try { process.kill(pid, 0); return true } catch (error) { return error.code === 'EPERM' }
 }
 
+function loadedPluginVersion() {
+  try {
+    const manifest = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8'))
+    return typeof manifest.version === 'string' && manifest.version && manifest.version.length <= 64
+      ? manifest.version : null
+  } catch (_) { return null }
+}
+
+
 function readLocalDeviceId({ directory = identityDirectory(), now = Date.now(), isPidAlive = pidIsAlive } = {}) {
   let names
   try { names = fs.readdirSync(directory) } catch (_) { return null }
@@ -62,12 +71,14 @@ function installedProfile() {
 function publish(webServer, connection) {
   const origin = webServer.getOrigin()
   if (!isLoopbackOrigin(origin)) throw new Error('tether-dsh-surface requires a plain HTTP loopback DSH listener')
+  const pluginVersion = loadedPluginVersion()
   const descriptor = {
     version: 1,
     pid: process.pid,
     profile: installedProfile(),
     origin,
     authenticated_url: connection.authenticatedUrl(origin),
+    ...(pluginVersion ? { plugin_version: pluginVersion } : {}),
     updated_at: Date.now()
   }
   const target = descriptorPath()
@@ -148,4 +159,4 @@ export function apply(ctx) {
   })
 }
 
-export const internals = { isLoopbackOrigin, descriptorPath, installedProfile, identityDirectory, readLocalDeviceId, registerRpc }
+export const internals = { isLoopbackOrigin, descriptorPath, installedProfile, identityDirectory, readLocalDeviceId, registerRpc, loadedPluginVersion }

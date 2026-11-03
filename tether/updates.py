@@ -81,6 +81,9 @@ MAX_FILE_BYTES = 32 * 1024 * 1024
 MAX_ARCHIVE_FILES = 4096
 MAX_COMPRESSION_RATIO = 150
 COMPONENTS = {"app", "plugin", "node"}
+# The plugin can load into a running DSH host through HMR; only restart the host
+# when that handshake has not landed within this window.
+PLUGIN_HOT_RELOAD_GRACE = 8.0
 MANIFEST_CHECK_CACHE_TTL = 60.0
 MANIFEST_DISK_CACHE_TTL = 600.0
 MANIFEST_DISK_MAX_AGE = 7 * 24 * 3600.0
@@ -226,6 +229,23 @@ def _restart_cleared(applied: dict[str, Any] | None, current_pid: int | None,
                 and (type(applied_at) is int or type(applied_at) is float)
                 and current_updated_at is not None
                 and current_updated_at >= applied_at - 5000)
+
+
+def _runtime_loaded(applied: dict[str, Any] | None, host: dict[str, Any] | None) -> bool:
+    """The live DSH host already runs the applied plugin bundle.
+
+    A hot reload keeps the host pid; the surface descriptor carries the version
+    of the plugin bundle the host actually loaded, so that version is the
+    handshake instead of a pid change.
+    """
+    if not isinstance(applied, dict) or applied.get("restart_required") is not True:
+        return False
+    version = applied.get("version")
+    if not isinstance(version, str) or not version:
+        return False
+    if not isinstance(host, dict) or host.get("descriptor_pid") is None:
+        return False
+    return host.get("plugin_version") == version
 
 
 def _looks_like_dsh_host(process: psutil.Process) -> bool | None:
@@ -1632,7 +1652,10 @@ class UpdateManager:
                 pass
             restart_scheduled = False
             if self.component == "plugin" and dsh_pid:
-                restart_scheduled = self._spawn_dsh_restart()
+                # Give the running DSH a short window to load the new bundle in
+                # place; the helper only restarts the host if that never lands.
+                restart_scheduled = self._spawn_dsh_restart(
+                    delay=PLUGIN_HOT_RELOAD_GRACE, expect_plugin_version=expected_version)
             self._write_progress("installed", 100, expected_version)
             return {"ok": True, "component": self.component, "version": expected_version,
                     "backup_dir": str(backup_dir), "restart_required": True,
@@ -1691,17 +1714,21 @@ class UpdateManager:
             # DSH can rewrite the surface descriptor on another profile while the
             # host keeps running; a stale descriptor must not hide a live host.
             host_pid = _scan_dsh_host_pid()
+        plugin_version = data.get("plugin_version") if isinstance(data, dict) else None
         return {"pid": host_pid, "descriptor_pid": descriptor_pid,
-                "updated_at": float(updated) if isinstance(updated, (int, float)) and not isinstance(updated, bool) and updated > 0 else None}
+                "updated_at": float(updated) if isinstance(updated, (int, float)) and not isinstance(updated, bool) and updated > 0 else None,
+                "plugin_version": plugin_version if isinstance(plugin_version, str) and 0 < len(plugin_version) <= 64 else None}
 
     def _dsh_host_pid(self) -> int | None:
         return self._dsh_host_state()["pid"]
 
-    def _spawn_dsh_restart(self) -> bool:
+    def _spawn_dsh_restart(self, delay: float = 1.5, expect_plugin_version: str = "") -> bool:
         log = self.state_dir / "dsh-restart.log"
         args = [sys.executable, "-m", "tether.node.dsh_restart",
                 "--descriptor", str(self._dsh_descriptor()), "--log", str(log),
-                "--delay", "1.5", "--wait", "60", "--dsh-home", str(self.dsh_home)]
+                "--delay", str(delay), "--wait", "60", "--dsh-home", str(self.dsh_home)]
+        if expect_plugin_version:
+            args.extend(["--expect-plugin-version", expect_plugin_version])
         env = dict(os.environ)
         env["PYTHONPATH"] = str(self.root) + ((os.pathsep + env["PYTHONPATH"]) if env.get("PYTHONPATH") else "")
         env["PYTHONIOENCODING"] = "utf-8"
@@ -1756,7 +1783,7 @@ class UpdateManager:
                 restart_required = applied.get("component") == self.component and applied.get("restart_required") is True
                 if restart_required and self.component == "plugin":
                     host = self._dsh_host_state()
-                    if _restart_cleared(applied, host["descriptor_pid"], host["updated_at"]):
+                    if _restart_cleared(applied, host["descriptor_pid"], host["updated_at"]) or _runtime_loaded(applied, host):
                         restart_required = False
                         try:
                             applied["restart_required"] = False
