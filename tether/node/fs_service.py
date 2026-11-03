@@ -29,6 +29,10 @@ from typing import Any
 
 from .dsh_desktop import DshDesktop, DshError
 from .dsh_plugin import DshPluginError, install as install_dsh_plugin
+try:
+    from .dsh_web import DshWeb
+except Exception:  # an older install may not ship the optional Linux web module
+    DshWeb = None  # type: ignore[assignment]
 
 
 MAX_READ = 4 * 1024 * 1024
@@ -434,6 +438,42 @@ class Audit:
         return self.page(limit, offset)["entries"]
 
 
+class _StreamWriter:
+    def __init__(self, service: "FsService", path: Path, part: Path,
+                 handle: Any, total: int, transfer: str) -> None:
+        self.service = service
+        self.path = path
+        self.part = part
+        self.handle = handle
+        self.total = total
+        self.transfer = transfer
+
+    def write(self, data: bytes) -> None:
+        self.handle.write(data)
+
+    def abort(self) -> None:
+        try:
+            self.handle.close()
+        except OSError:
+            pass
+
+    def finish(self) -> dict[str, Any]:
+        self.handle.flush()
+        os.fsync(self.handle.fileno())
+        self.handle.close()
+        if self.part.stat().st_size != self.total:
+            raise FsError("stream is incomplete", "offset_mismatch")
+        os.replace(self.part, self.path)
+        st = self.path.stat()
+        version = _path_version(self.path)
+        self.service.audit.add(op="transfer", path=str(self.path),
+                               mode=self.service.policy.data.get("mode"),
+                               phase="result", result="ok", bytes=self.total, version=version)
+        return {"path": str(self.path), "transfer_id": self.transfer,
+                "offset": self.total, "total": self.total, "size": st.st_size,
+                "mtime": st.st_mtime, "version": version, "complete": True}
+
+
 class FsService:
     def __init__(self, *, device: str, workspace: Path, data_dir: Path, workspaces_root: Path,
                  dsh_home: Path | None = None) -> None:
@@ -445,6 +485,7 @@ class FsService:
                              node_workspace=workspace, workspaces_root=workspaces_root)
         self.audit = Audit(data_dir / "audit.jsonl", device=device)
         self.dsh_desktop = DshDesktop(data_dir, dsh_home=dsh_home)
+        self.dsh_web = DshWeb(data_dir) if DshWeb is not None else None
         self.preview_cache_dir = data_dir / "preview-cache"
         self.preview_cache_dir.mkdir(parents=True, exist_ok=True)
         self._office_lock = threading.Lock()
@@ -927,6 +968,19 @@ class FsService:
         return {"path": str(p), "transfer_id": transfer, "offset": total, "total": total,
                 "size": st.st_size, "mtime": st.st_mtime, "version": version, "complete": True}
 
+    def open_write_stream(self, path: Any, transfer_id: Any, total: int,
+                          overwrite: bool) -> _StreamWriter:
+        p, part, transfer = self._transfer_part({"path": path, "transfer_id": transfer_id})
+        if total < 0 or total > MAX_TRANSFER_BYTES:
+            raise FsError("total is out of range", "bad_args")
+        self._write_guard(p, "write", bytes=total)
+        if p.exists() and not overwrite:
+            raise FsError("file exists", "exists")
+        p.parent.mkdir(parents=True, exist_ok=True)
+        if part.exists():
+            part.unlink()
+        return _StreamWriter(self, p, part, part.open("wb"), total, transfer)
+
     def _op_mkdir(self, args: dict[str, Any]) -> dict[str, Any]:
         p = self._resolve(args.get("path"))
         self._write_guard(p, "mkdir")
@@ -989,12 +1043,7 @@ class FsService:
 
     def _op_drives(self, _args: dict[str, Any]) -> dict[str, Any]:
         if os.name != "nt":
-            roots = []
-            for name, path in (("根目录", "/"), ("home", "/home"), ("srv", "/srv"),
-                               ("var/log", "/var/log")):
-                if Path(path).is_dir():
-                    roots.append({"name": name, "path": path})
-            return {"drives": roots}
+            return {"drives": [{"name": "根目录", "path": "/"}]}
         import string
         roots = []
         for letter in string.ascii_uppercase:
@@ -1048,6 +1097,27 @@ class FsService:
         self.audit.add(op="dsh_restart", path=result.get("exe") or "", mode=self.policy.data.get("mode"),
                        phase="result", result="requested" if result.get("restarting") else "started")
         return result
+
+    def _op_dsh_web_status(self, _args: dict[str, Any]) -> dict[str, Any]:
+        if self.dsh_web is None:
+            return {"supported": False, "installed": False, "running": False,
+                    "installing": False, "url": ""}
+        return self.dsh_web.status()
+
+    def _op_dsh_web_install(self, _args: dict[str, Any]) -> dict[str, Any]:
+        if self.dsh_web is None:
+            raise FsError("DSH Web is unavailable in this node build", "unavailable")
+        return self.dsh_web.install()
+
+    def _op_dsh_web_start(self, _args: dict[str, Any]) -> dict[str, Any]:
+        if self.dsh_web is None:
+            raise FsError("DSH Web is unavailable in this node build", "unavailable")
+        return self.dsh_web.start()
+
+    def _op_dsh_web_stop(self, _args: dict[str, Any]) -> dict[str, Any]:
+        if self.dsh_web is None:
+            raise FsError("DSH Web is unavailable in this node build", "unavailable")
+        return self.dsh_web.stop()
 
     def _op_dsh_install(self, _args: dict[str, Any]) -> dict[str, Any]:
         result = self.dsh_desktop.install()

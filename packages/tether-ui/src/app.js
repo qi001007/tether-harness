@@ -2746,6 +2746,32 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const [dsh, setDsh] = React.useState(null)
       const [dshBusy, setDshBusy] = React.useState('')
       const [dshError, setDshError] = React.useState('')
+      const [dshWeb, setDshWeb] = React.useState(null)
+      const [dshWebBusy, setDshWebBusy] = React.useState('')
+      const dshWebSupported = !!(deviceInfo && deviceInfo.capabilities
+        && deviceInfo.capabilities.dsh_web_supported)
+      React.useEffect(() => {
+        if (!dshWebSupported || dshInstallSupported) return undefined
+        let alive = true
+        const load = () => post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/dsh_web_status', {})
+          .then((data) => { if (alive) setDshWeb(data) })
+          .catch(() => {})
+        void load()
+        const timer = setInterval(load, dshWeb && dshWeb.installing ? 1500 : 4000)
+        return () => { alive = false; clearInterval(timer) }
+      }, [deviceId, dshWebSupported, dshInstallSupported, dshWeb && dshWeb.installing])
+      const runDshWeb = async (action) => {
+        setDshWebBusy(action)
+        try {
+          const data = await post('/api/devices/' + encodeURIComponent(deviceId)
+            + '/fs/dsh_web_' + action, {})
+          if (data) setDshWeb(data)
+        } catch (error) {
+          setDshWeb((current) => ({ ...(current || {}), error: error.message || '操作失败' }))
+        } finally {
+          setDshWebBusy('')
+        }
+      }
       React.useEffect(() => {
         if (!dshWatch && !dshRelevant) { setDsh(null); return undefined }
         let alive = true
@@ -2922,8 +2948,29 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           dsh.version ? h('div', { className: 'tether-num', style: { fontSize: 11.5, color: C.mute } }, dsh.version) : null,
           dsh.installing ? h('div', { style: { fontSize: 11.5, color: C.mute } }, '安装中 ' + (Number(dsh.progress) || 0) + '%') : null,
           dsh.installed === false && !dshInstallSupported
-            ? h('div', { style: { maxWidth: 460, fontSize: 12, color: C.sub, lineHeight: 1.6 } },
-              '当前目标系统没有官方 DSH 桌面版。文件、终端和远程应用仍可正常使用；完整 DSH 工作区需要 Windows 目标机。')
+            ? h(React.Fragment, null,
+              h('div', { style: { maxWidth: 480, fontSize: 12, color: C.sub, lineHeight: 1.6 } },
+                dshWeb && dshWeb.running
+                  ? 'DSH Web 已在目标机运行，可以在新窗口打开工作区。'
+                  : '当前目标系统没有官方 DSH 桌面版，可以安装 DSH Web 作为远程工作区。'),
+              dshWebSupported
+                ? (dshWeb && dshWeb.running
+                  ? btn('打开 DSH Web', () => {
+                    const url = dshWeb.url || ''
+                    if (!url) { setDshWeb((current) => ({ ...(current || {}), error: '工作区地址还没准备好，请稍后重试' })); return }
+                    const opened = window.open(url, '_blank', 'noopener')
+                    if (!opened) setDshWeb((current) => ({ ...(current || {}), error: '窗口被拦截，请允许弹出窗口后重试' }))
+                  }, { primary: true })
+                  : dshWeb && dshWeb.installed
+                    ? btn(dshWebBusy ? '启动中…' : '启动 DSH Web', () => void runDshWeb('start'),
+                      { primary: true, disabled: !!dshWebBusy })
+                    : btn(dshWebBusy || (dshWeb && dshWeb.installing) ? '安装中…' : '安装 DSH Web',
+                      () => void runDshWeb('install'),
+                      { primary: true, disabled: !!dshWebBusy || !!(dshWeb && dshWeb.installing) }))
+                : null,
+              dshWeb && dshWeb.error
+                ? h('div', { role: 'alert', style: { color: C.red, fontSize: 11.5 } }, dshWeb.error)
+                : null)
             : btn(dsh.installed === false
               ? (dshBusy === 'dsh_install' || dsh.installing ? '安装中…' : '安装 DSH')
               : (dshBusy === 'dsh_start' ? '启动中…' : '启动 DSH'),

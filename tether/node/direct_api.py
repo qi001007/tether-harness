@@ -109,6 +109,9 @@ class _Handler(BaseHTTPRequestHandler):
         if parsed.path == "/fs/write_raw":
             self._write_raw(parsed)
             return
+        if parsed.path == "/fs/write_stream":
+            self._write_stream(parsed)
+            return
         try:
             length = int(self.headers.get("Content-Length", "0"))
         except ValueError:
@@ -216,6 +219,54 @@ class _Handler(BaseHTTPRequestHandler):
             return
         self._json(200, {"ok": True, "value": value})
 
+    def _write_stream(self, parsed: Any) -> None:
+        query = parse_qs(parsed.query)
+
+        def one(name: str, default: str = "") -> str:
+            values = query.get(name)
+            return values[0] if values else default
+
+        try:
+            total = int(one("total", "0") or 0)
+            length = int(self.headers.get("Content-Length", "-1"))
+        except (TypeError, ValueError):
+            self._json(400, {"ok": False, "error": {"code": "bad_request", "message": "invalid transfer metadata"}})
+            return
+        if length != total or length < 0:
+            self._json(400, {"ok": False, "error": {"code": "bad_request", "message": "content length must match total"}})
+            return
+        stream = getattr(self.api, "stream", None)
+        if stream is None:
+            self._json(400, {"ok": False, "error": {"code": "unavailable", "message": "stream writer unavailable"}})
+            return
+        try:
+            writer = stream.open_write_stream(one("path"), one("transfer_id"), total,
+                                              one("overwrite") in {"1", "true"})
+        except FsError as error:
+            self._json(200, {"ok": False, "error": {"code": error.code, "message": str(error)}})
+            return
+        except Exception:
+            self._json(500, {"ok": False, "error": {"code": "internal", "message": "stream open failed"}})
+            return
+        remaining = length
+        try:
+            while remaining:
+                chunk = self.rfile.read(min(1024 * 1024, remaining))
+                if not chunk:
+                    raise OSError("client closed the stream")
+                writer.write(chunk)
+                remaining -= len(chunk)
+            value = writer.finish()
+        except FsError as error:
+            writer.abort()
+            self._json(200, {"ok": False, "error": {"code": error.code, "message": str(error)}})
+            return
+        except Exception:
+            writer.abort()
+            self._json(500, {"ok": False, "error": {"code": "internal", "message": "stream write failed"}})
+            return
+        self._json(200, {"ok": True, "value": value})
+
     def log_message(self, _format: str, *_args: object) -> None:
         pass
 
@@ -228,8 +279,9 @@ class _Server(socketserver.ThreadingTCPServer):
 class DirectApi:
     def __init__(self, dispatch: Callable[[str, dict[str, Any]], Any], *,
                  port: int | None = None, token: str | None = None,
-                 allowed: tuple[str, ...] = MESH + LOOPBACK) -> None:
+                 allowed: tuple[str, ...] = MESH + LOOPBACK, stream: Any = None) -> None:
         self.dispatch = dispatch
+        self.stream = stream
         self.port = port if port is not None else int(os.environ.get("TETHER_DIRECT_PORT", "18895"))
         self.token = token or secrets.token_urlsafe(32)
         self.allowed = tuple(ipaddress.ip_network(value, strict=False) for value in allowed)

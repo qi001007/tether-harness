@@ -285,7 +285,7 @@ class Node:
                             data_dir=self.data_dir,
                             workspaces_root=self.workspaces_root,
                             dsh_home=self.native_dsh_home)
-        self.direct = DirectApi(self.fs.dispatch)
+        self.direct = DirectApi(self.fs.dispatch, stream=self.fs)
         self._direct_started = False
         self.fs.direct = self.direct
         self.terminal = TerminalService(self.workspace)
@@ -1001,6 +1001,7 @@ class Node:
                 "dsh_version": dsh_desktop["version"],
                 "dsh_installing": dsh_desktop["installing"],
                 "dsh_install_supported": platform.system() == "Windows",
+                "dsh_web_supported": platform.system() == "Linux",
                 "terminal_user": _current_user(),
                 "terminal_privileged": _is_privileged(),
                 "dsh_surface": self.native_surface.available(),

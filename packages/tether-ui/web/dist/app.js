@@ -180431,6 +180431,34 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const [dsh, setDsh] = React2.useState(null);
     const [dshBusy, setDshBusy] = React2.useState("");
     const [dshError, setDshError] = React2.useState("");
+    const [dshWeb, setDshWeb] = React2.useState(null);
+    const [dshWebBusy, setDshWebBusy] = React2.useState("");
+    const dshWebSupported = !!(deviceInfo && deviceInfo.capabilities && deviceInfo.capabilities.dsh_web_supported);
+    React2.useEffect(() => {
+      if (!dshWebSupported || dshInstallSupported) return void 0;
+      let alive = true;
+      const load = () => post("/api/devices/" + encodeURIComponent(deviceId) + "/fs/dsh_web_status", {}).then((data) => {
+        if (alive) setDshWeb(data);
+      }).catch(() => {
+      });
+      void load();
+      const timer = setInterval(load, dshWeb && dshWeb.installing ? 1500 : 4e3);
+      return () => {
+        alive = false;
+        clearInterval(timer);
+      };
+    }, [deviceId, dshWebSupported, dshInstallSupported, dshWeb && dshWeb.installing]);
+    const runDshWeb = async (action) => {
+      setDshWebBusy(action);
+      try {
+        const data = await post("/api/devices/" + encodeURIComponent(deviceId) + "/fs/dsh_web_" + action, {});
+        if (data) setDshWeb(data);
+      } catch (error) {
+        setDshWeb((current) => ({ ...current || {}, error: error.message || "\u64CD\u4F5C\u5931\u8D25" }));
+      } finally {
+        setDshWebBusy("");
+      }
+    };
     React2.useEffect(() => {
       if (!dshWatch && !dshRelevant) {
         setDsh(null);
@@ -180624,9 +180652,31 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         dsh.version ? h3("div", { className: "tether-num", style: { fontSize: 11.5, color: C2.mute } }, dsh.version) : null,
         dsh.installing ? h3("div", { style: { fontSize: 11.5, color: C2.mute } }, "\u5B89\u88C5\u4E2D " + (Number(dsh.progress) || 0) + "%") : null,
         dsh.installed === false && !dshInstallSupported ? h3(
-          "div",
-          { style: { maxWidth: 460, fontSize: 12, color: C2.sub, lineHeight: 1.6 } },
-          "\u5F53\u524D\u76EE\u6807\u7CFB\u7EDF\u6CA1\u6709\u5B98\u65B9 DSH \u684C\u9762\u7248\u3002\u6587\u4EF6\u3001\u7EC8\u7AEF\u548C\u8FDC\u7A0B\u5E94\u7528\u4ECD\u53EF\u6B63\u5E38\u4F7F\u7528\uFF1B\u5B8C\u6574 DSH \u5DE5\u4F5C\u533A\u9700\u8981 Windows \u76EE\u6807\u673A\u3002"
+          React2.Fragment,
+          null,
+          h3(
+            "div",
+            { style: { maxWidth: 480, fontSize: 12, color: C2.sub, lineHeight: 1.6 } },
+            dshWeb && dshWeb.running ? "DSH Web \u5DF2\u5728\u76EE\u6807\u673A\u8FD0\u884C\uFF0C\u53EF\u4EE5\u5728\u65B0\u7A97\u53E3\u6253\u5F00\u5DE5\u4F5C\u533A\u3002" : "\u5F53\u524D\u76EE\u6807\u7CFB\u7EDF\u6CA1\u6709\u5B98\u65B9 DSH \u684C\u9762\u7248\uFF0C\u53EF\u4EE5\u5B89\u88C5 DSH Web \u4F5C\u4E3A\u8FDC\u7A0B\u5DE5\u4F5C\u533A\u3002"
+          ),
+          dshWebSupported ? dshWeb && dshWeb.running ? btn("\u6253\u5F00 DSH Web", () => {
+            const url = dshWeb.url || "";
+            if (!url) {
+              setDshWeb((current) => ({ ...current || {}, error: "\u5DE5\u4F5C\u533A\u5730\u5740\u8FD8\u6CA1\u51C6\u5907\u597D\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5" }));
+              return;
+            }
+            const opened = window.open(url, "_blank", "noopener");
+            if (!opened) setDshWeb((current) => ({ ...current || {}, error: "\u7A97\u53E3\u88AB\u62E6\u622A\uFF0C\u8BF7\u5141\u8BB8\u5F39\u51FA\u7A97\u53E3\u540E\u91CD\u8BD5" }));
+          }, { primary: true }) : dshWeb && dshWeb.installed ? btn(
+            dshWebBusy ? "\u542F\u52A8\u4E2D\u2026" : "\u542F\u52A8 DSH Web",
+            () => void runDshWeb("start"),
+            { primary: true, disabled: !!dshWebBusy }
+          ) : btn(
+            dshWebBusy || dshWeb && dshWeb.installing ? "\u5B89\u88C5\u4E2D\u2026" : "\u5B89\u88C5 DSH Web",
+            () => void runDshWeb("install"),
+            { primary: true, disabled: !!dshWebBusy || !!(dshWeb && dshWeb.installing) }
+          ) : null,
+          dshWeb && dshWeb.error ? h3("div", { role: "alert", style: { color: C2.red, fontSize: 11.5 } }, dshWeb.error) : null
         ) : btn(
           dsh.installed === false ? dshBusy === "dsh_install" || dsh.installing ? "\u5B89\u88C5\u4E2D\u2026" : "\u5B89\u88C5 DSH" : dshBusy === "dsh_start" ? "\u542F\u52A8\u4E2D\u2026" : "\u542F\u52A8 DSH",
           () => runDsh(dsh.installed === false ? "dsh_install" : "dsh_start"),
