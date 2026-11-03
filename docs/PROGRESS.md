@@ -1,10 +1,11 @@
 # 实时进度
 
-## 2026-11-03 传输直连（WIP）
+## 2026-11-03 传输直连收口
 
-1. `transfer-page.js` 修正 `/fs/direct_info` 的 `{value:{...}}` 解包；本机设备改走 `127.0.0.1`，避免 EasyTier 自环走中继。真机请求已从 Hub 的 `/fs/list` 切到 `http://127.0.0.1:18895/fs/list` 与 `http://10.144.0.3:18895/fs/list`。
-2. 直连 1 MiB 实测：read **0.83–1.99 MB/s**、write **1.71 MB/s**；Hub 中继仍是 **0.04–0.06 MB/s**。
-3. 100 MB UI 传输进度到 100%（约 242 s），但目标文件未在检查的两个 LAPTOP workspace 找到，且网络记录里 chunk 写入仍命中 Hub `/fs/write_chunk`；说明 `postFs` 的 direct `write_chunk` 仍会回退，直连吞吐不能算已验收。下一步抓首个 direct write 的响应/目标路径，修好后再复测 100 MB。
+1. `transfer-page.js` 修正 `/fs/direct_info` 的 `{value:{...}}` 解包；本机设备改走 `127.0.0.1`，避免 EasyTier 自环走中继。
+2. 100 MB 真机：DESKTOP `work-local` → LAPTOP `C:\Users\14675\Documents\deepseek-harness\default-workspace`，**52 s / 1.92 MB/s**；目标文件 **104,857,600 B** 核对一致。网络记录全程命中 `http://127.0.0.1:18895/fs/read` 与 `http://10.144.0.3:18895/fs/write_chunk`，没有再走 Hub 分块。对照 Hub 中继 0.04–0.06 MB/s。
+3. 触发方式：转移页选中源文件 → 底部 `转移到另一侧`。Ctrl+C/V 自动化曾出现未启动队列，不作为验收路径。之前 80 MB `.tether-part` 是修复前旧 bundle/回退留下的，已清理；本轮 10 MB/100 MB 测试文件也已移入两端回收站。
+4. 待发布：`0.3.4` 需要带上 `transfer-page.js` 的这两处修正，并把新的 `web/dist/app.js` 同步到 LAPTOP（其 APP 元数据仍是 0.3.1，依赖守卫仍未修）。
 
 ## 2026-11-03 0.3.3 发布与两机部署
 
