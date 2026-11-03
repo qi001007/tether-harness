@@ -33,15 +33,17 @@ def easy_tier_address() -> str:
         interfaces = psutil.net_if_addrs()
     except (psutil.Error, OSError):
         return ""
+    fallback = ""
     for name, addresses in interfaces.items():
         lowered = name.lower()
-        if not (lowered.startswith("et_") or "easytier" in lowered):
-            continue
+        preferred = lowered.startswith("et_") or "easytier" in lowered
         for address in addresses:
             value = getattr(address, "address", "")
             if getattr(address, "family", None) == 2 and value.startswith("10.144."):
-                return value
-    return ""
+                if preferred:
+                    return value
+                fallback = fallback or value
+    return fallback
 
 
 class _Handler(BaseHTTPRequestHandler):

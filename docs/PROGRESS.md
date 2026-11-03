@@ -812,5 +812,6 @@
 - 传输提速（199 MB→）：直传分片 1 MB→4 MB，读端 `MAX_READ` 同步放到 4 MB；100 MB 真机直传 **52 s→42.46 s（1.92→2.355 MiB/s）**，SHA-256 一致。实测 EasyTier peer laptop 188 ms p2p tcp6，LAPTOP WLAN 直连端口（11010/445/3389）全部被校园网客户端隔离，应用只能走 EasyTier；单请求流式上传实测 49.4 s 更慢，已删除。瓶颈在网络路径（同期 raw TCP 3.69–4.09 MiB/s），不在 base64/HTTP 层。
 - - POSIX 真机门禁已修绿：`.github/workflows/posix.yml` 的 Install 步骤缺 `pytest`，Ubuntu/macOS 两个作业都停在 `No module named pytest`（不是 PTY 代码问题）。提交 `6c6ef51` 后 CI `41689772155` 两作业全绿：PTY 测试、安装器检查、node 包构建、一次性安装、安装后终端测试均通过。
 - - 文件界面补齐原生化交互：互传双栏与资源管理器支持空白拖动框选（Ctrl 追加、不选文字），空白右键菜单为新建/粘贴/复制当前路径/刷新，文件菜单含“复制路径”且不再出现新建项；转移完成后进度条 4 s 自动收起。APP 真鼠标实测：互传框选 5 项、资源管理器框选 2 项，20 B 传输底栏 5 s 内恢复提示。
+- - 远程服务器维护节点：在 `remotestitch-hub` 以独立 `tether-node.service` 安装 `REMOTESTITCH-HUB`（root 终端、文件白名单、内存上限 384M），Hub/Caddy/EasyTier 未改动；公开 `/install/` 一键安装入口与 `--systemd/--user-token/--base-url` 安装器已实测。首尔链路 100 MB 上传 1.318 MiB/s、下载 1.590 MiB/s，4 路并发无聚合；服务器带宽 2.4 Gbps/385 Mbps，瓶颈是本地到首尔的公网路径。
 - 详细部署记录、服务器地址与运行快照属于私有运维材料，不在本公开进度页重复列出。用户需求仍以 [反馈清单](FEEDBACK.md) 为准；产品目标见 [PRD](PRD.md)，公开协议与客户端边界见 [技术说明](TECHNICAL.md)。
 
