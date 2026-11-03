@@ -1,5 +1,12 @@
 # 实时进度
 
+## 2026-11-03 v0.2.86 全新 profile 自动修复收口
+
+1. 真机模拟“完全缺失插件”：LAPTOP 停 DSH、备份并移走 `node_modules`、把 profile 重置为只有 DSH base/web 的 211 B `package.json`；调用 `dsh_install_plugin` 后 4 个 Tether 包与 `@deepseek-ai` 依赖树全部装好，DSH 首次冷启动超过旧 90 s 等待，install 报 `descriptor_missing`。
+2. 修复：descriptor 等待延长到 **180 s**，DSH 在等待期间掉下去时最多自动再拉起 3 次；0.2.86 发布（CI `41592795732`，06:57:46Z，app 1,791,387 B / plugin 1,363,210 B / node 91,575 B）。
+3. 实测：DESKTOP 重装插件 **5.31 s**，descriptor pid 41528；LAPTOP 升级 0.2.86 后 DSH pid 25992、surface 200；真 APP 两个 iframe（g38475 / g38585）均为 `bhn1Oq_searchInput` 且 composer=true。
+4. 0.2.84/0.2.85/0.2.86 连续发布；0.2.84 引入 auto install/repair，0.2.85 修 Windows 路径空格被 pnpm 拆开导致的 registry 404，0.2.86 修冷启动 descriptor 等待。Hub 生产已部署 `3707a3f7`（`dsh_install_plugin` 超时 360 s），备份 `timeout-20261103T063044Z`。
+
 ## 2026-11-03 v0.2.85 插件安装路径空格修复
 
 1. 真机 `dsh_install_plugin` 首次失败：安装源在 `D:\DeepSeek Harness\.dsh\...`，路径含空格，CLI 转发给 pnpm 时被拆开，pnpm 退回 npm registry 并报 `tether-dsh-plugin` 404。

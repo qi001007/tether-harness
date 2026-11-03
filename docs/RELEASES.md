@@ -1,5 +1,36 @@
 # Public client releases
 
+## v0.2.86
+
+Fresh-profile plugin repair now waits for DSH cold start:
+
+- Descriptor wait raised from 90 s to **180 s**; if DSH exits while waiting, the installer starts it again (up to three times).
+- Real test: LAPTOP profile reset to a 211 B manifest with no plugin and no `node_modules`; `dsh_install_plugin` installed all four Tether packages plus the `@deepseek-ai` UI tree, then DSH published a descriptor on the retry.
+- DESKTOP repair took **5.31 s** (pid 41528); LAPTOP upgraded to 0.2.86 (pid 25992). Both real APP iframes measured `bhn1Oq_searchInput` with a composer.
+
+Gates: mjs 238/238, cjs 7/7, pytest 158 passed / 1 skipped, build checks, `validate_versions()`. CI `41592795732`; published at 2026-11-03T06:57:46Z (app 1,791,387 B, plugin 1,363,210 B, node 91,575 B).
+
+## v0.2.85
+
+Fix plugin installation on Windows paths containing spaces:
+
+- The plugin source is staged under the Tether data directory instead of `D:\DeepSeek Harness\.dsh`.
+- The profile dependency and CLI argument use a Windows short-path `file:` spec, so pnpm never splits the path and falls back to the npm registry.
+- Failed installs restore the profile manifest and bring the previous DSH back up.
+
+Gates: mjs 238/238, cjs 7/7, pytest 158 passed / 1 skipped. CI `41591041890`; published at 2026-11-03T06:44:34Z (app 1,791,303 B, plugin 1,363,205 B, node 91,491 B).
+
+## v0.2.84
+
+Automatic DSH plugin install and repair:
+
+- Node gained `fs/dsh_install_plugin`: download the signed plugin archive or use a local package, force the hoisted pnpm layout, install through the official `dsh plugin add`, and verify the plugin packages plus the `@deepseek-ai` UI dependency tree.
+- Profile manifest is backed up and restored on failure.
+- The APP runs the repair automatically when the surface reports a missing plugin, then reloads on the new DSH pid.
+- Hub allows the installer RPC to run for 360 s.
+
+Gates: mjs 238/238, cjs 7/7, pytest 158 passed / 1 skipped. CI `41590200056`; published at 2026-11-03T06:32:35Z (app 1,790,629 B, plugin 1,363,234 B, node 90,817 B).
+
 ## v0.2.83
 
 Surface recovery for both devices and the real black-window source:
