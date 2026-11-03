@@ -1,5 +1,12 @@
 # 实时进度
 
+## 2026-11-03 Hub 稳定 surface origin（跨设备统一）
+
+1. 另一个冷载根因：gateway 端口随机，Hub 重启/网关重建后 public origin `g<port>` 变化，浏览器按 origin 的缓存全部作废，热载又变冷载。
+2. 改为按设备稳定 loopback 端口（`24000 + crc32(device_id) % 2000`）；端口被占用时回退 ephemeral。origin 稳定后浏览器缓存可跨 Hub 重启继续用。
+3. 实测：DESKTOP `g25660`、LAPTOP `g25800`，均等于稳定公式；两机 surface 200。Hub 全量 **157 passed**；生产部署 **`effc4eb`**，备份 `stable-gateway-20261103T083637Z`，回退 `3417bd1`。
+4. 首次全新浏览器冷载仍受传输/DSH 生成限制；稳定 origin 的收益是后续 Hub 重启/APP 重启不再丢浏览器缓存。不引入 Tailscale。
+
 ## 2026-11-03 Hub 跨设备共享不可变资源缓存
 
 1. 根因：surface mux 的缓存键是 `(device_id, path)`，同一份 DSH/插件资源每台设备各存一份；DESKTOP 热了，LAPTOP 仍要重新走公网。这是“看起来只优化单节点”的原因。
