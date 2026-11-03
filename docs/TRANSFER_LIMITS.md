@@ -9,6 +9,12 @@
 
 控制面 P50 112.3 ms / P95 115.7 ms。外推 1 GB：约 4.5–7 小时，**当前公网 Hub relay 不满足 1 GB 目标**。
 
+## 2026-11-03 EasyTier 数据面原型
+
+- 自建 EasyTier 2.6.4 共享节点（服务器 `10.144.0.1/24`，私有网络，WSS 走 443 `/easytier`）；DESKTOP 加入为 `10.144.0.2/24`，虚拟 IP 上 TCP 22 可达。
+- DESKTOP→服务器 20 MB `scp`：**82.3 s（约 0.24 MB/s）**，SHA-256 一致；是 Hub relay（0.04 MB/s）的约 6 倍，但仍是中继路径，不是同 LAN 直连。
+- 下一步：LAPTOP 加入后测 direct/relay；若 direct 达到 MB/s 级，再把 Tether 文件传输切到虚拟 IP。
+
 ## 决策（按主人约束）
 
 - **不引入 Tailscale/Headscale/NetBird/Nebula 等第三方网络组件**；所有节点继续统一走自己的 Hub。
