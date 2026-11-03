@@ -1,5 +1,12 @@
 # 实时进度
 
+## 2026-11-03 传输 overlay 决策收口
+
+1. `bench_relay.py` 实测：同机 2 MB 33.87 s（0.06 MB/s）、DESKTOP→LAPTOP 2 MB 59.36 s（0.04 MB/s），SHA-256 均一致；控制面 P50 112 ms。
+2. 1 GB 外推 4.5–7 小时，当前公网 Hub relay 不满足；同机对照证明不是分块大小，而是 relay/公网带宽与往返。
+3. 按主人约束**不引入 Tailscale 等第三方网络组件**，继续统一走 Hub；1 GB 不在当前交付中承诺。细则/后续选项：`docs/TRANSFER_LIMITS.md`。
+4. 未改 UI、未引入第二网络栈；普通文件/目录传输保持现状。
+
 ## 2026-11-03 生命周期预热（未达目标）
 
 1. Hub 在 `dsh_install_plugin` / `dsh_start` / `dsh_restart` 成功后后台触发 `NATIVE_SURFACES.prewarm`，希望第一次打开前缓存已开始填。
