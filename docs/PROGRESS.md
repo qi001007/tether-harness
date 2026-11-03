@@ -1,5 +1,14 @@
 # 实时进度
 
+## 2026-11-03 远程终端 + 100 MB 直连
+
+1. Node 0.2.95 新增 `fs/terminal_start|write|poll|stop`：在目标机器上启动持久 PowerShell/bash 会话，输出按字节增量轮询；走现有 Hub fs 受控通道，owner-only，不需要部署 Hub。
+2. 实测用终端 API 在 LAPTOP 上执行 `Test-NetConnection`、`curl` 并读回输出，全程没有再让主人输入命令；LAPTOP Node 已升到 0.2.95。
+3. 100 MB DESKTOP→LAPTOP 经 EasyTier 直连（`tcp6`，25 ms）：**25.66 s，4.09 MB/s**。对照：Hub relay 0.04–0.06 MB/s、TCP 80 中继 1.70 MB/s、本机应用网关 308 MB/s（网关不是瓶颈）。
+4. 4.09 MB/s 约 32 Mbps，与 IT之家 RustDesk 互联网档 4.1–4.7 MB/s 同档；LAPTOP 当前不在有线同 LAN（25 ms），所以没到商用 LAN 15–80 MB/s。若要 LAN 级，需要两端同 LAN/有线或 UDP 直连路径。
+5. 终端页 UI（`terminal-page.js`，活动栏第 4 项）已在真机 Electron 验收：选 `LAPTOP-01` → 新建终端 → `Get-Random` / `echo enter-ok` 各只显示一行；停止后回“未连接”、输入禁用。过程中发现 200 ms 轮询在公网 RTT 下会并发重入、同一块输出重复 3–6 次，已加 `inFlight` 单飞行闸修复并复测。
+6. 下一步：远程应用页；ACP Harness；终端的非 owner 端到端拒绝与管理员命令失败提示补验收。
+
 ## 2026-11-03 高速互联（EasyTier + 应用网关）
 
 1. 自建 EasyTier 2.6.4 共享节点（LGPL-3.0，PCL2 同款）：服务器 `10.144.0.1/24`，私有网络 + `private_mode`；公网只放行 22/80/443，Caddy HTTP 移到 8080，80/TCP 给 EasyTier。

@@ -166132,6 +166132,232 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C, devices 
   );
 }
 
+// src/terminal-page.js
+function terminalBase64(text2) {
+  const bytes = new TextEncoder().encode(String(text2 || ""));
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+function terminalText(data) {
+  const binary = atob(String(data || ""));
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return new TextDecoder().decode(bytes);
+}
+function createTerminalPage({ React: React2, Glyph, post, C, devices = [], localDevice = "", onNotice, onError }) {
+  const h2 = React2.createElement;
+  const online = devices.filter((item) => item && item.online);
+  const initial = localDevice && online.some((item) => item.device_id === localDevice) ? localDevice : online[0] && online[0].device_id || "";
+  const [device, setDevice] = React2.useState(initial);
+  const [session, setSession] = React2.useState("");
+  const [output, setOutput] = React2.useState("");
+  const [input, setInput] = React2.useState("");
+  const [busy, setBusy] = React2.useState(false);
+  const since = React2.useRef(0);
+  const sessionRef = React2.useRef("");
+  const outputRef = React2.useRef(null);
+  const fail2 = (error) => {
+    const message = String(error && error.message || error || "\u7EC8\u7AEF\u64CD\u4F5C\u5931\u8D25");
+    setOutput((current) => current + (current && !current.endsWith("\n") ? "\n" : "") + message + "\n");
+    if (onError) onError(error);
+  };
+  const stop = async () => {
+    const current = sessionRef.current;
+    sessionRef.current = "";
+    setSession("");
+    if (!current) return;
+    try {
+      await post("/api/devices/" + encodeURIComponent(device) + "/fs/terminal_stop", { session_id: current });
+    } catch (_) {
+    }
+  };
+  const start = async () => {
+    if (!device || busy) return;
+    setBusy(true);
+    try {
+      const result = await post("/api/devices/" + encodeURIComponent(device) + "/fs/terminal_start", {});
+      if (!result || typeof result.session_id !== "string") throw new Error("\u7EC8\u7AEF\u6CA1\u6709\u8FD4\u56DE\u4F1A\u8BDD\u6807\u8BC6");
+      sessionRef.current = result.session_id;
+      since.current = 0;
+      setSession(result.session_id);
+      setOutput("Tether \u7EC8\u7AEF \xB7 " + device + "\n" + (result.cwd || "") + "\n\n");
+      if (onNotice) onNotice("\u7EC8\u7AEF\u5DF2\u8FDE\u63A5\uFF1A" + device);
+    } catch (error) {
+      fail2(error);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const send = async (event) => {
+    if (event) event.preventDefault();
+    const command = input;
+    if (!session || !command.trim()) return;
+    setInput("");
+    try {
+      await post("/api/devices/" + encodeURIComponent(device) + "/fs/terminal_write", {
+        session_id: session,
+        data: terminalBase64(command + "\n")
+      });
+    } catch (error) {
+      fail2(error);
+    }
+  };
+  React2.useEffect(() => {
+    if (!session) return void 0;
+    let disposed = false;
+    let inFlight = false;
+    const tick = async () => {
+      if (disposed || document.hidden || inFlight) return;
+      inFlight = true;
+      try {
+        const result = await post(
+          "/api/devices/" + encodeURIComponent(device) + "/fs/terminal_poll",
+          { session_id: session, since: since.current }
+        );
+        if (disposed || !result) return;
+        const chunk = terminalText(result.data);
+        since.current = Number(result.next) || since.current;
+        if (chunk) {
+          setOutput((current) => result.reset ? chunk : current + chunk);
+        }
+        if (result.closed) {
+          if (sessionRef.current === session) {
+            sessionRef.current = "";
+            setSession("");
+          }
+        }
+      } catch (error) {
+        if (!disposed) fail2(error);
+      } finally {
+        inFlight = false;
+      }
+    };
+    const timer = setInterval(tick, 200);
+    void tick();
+    return () => {
+      disposed = true;
+      clearInterval(timer);
+    };
+  }, [session, device]);
+  React2.useEffect(() => {
+    if (outputRef.current) outputRef.current.scrollTop = outputRef.current.scrollHeight;
+  }, [output]);
+  React2.useEffect(() => () => {
+    const current = sessionRef.current;
+    if (current) {
+      void post("/api/devices/" + encodeURIComponent(device) + "/fs/terminal_stop", { session_id: current }).catch(() => {
+      });
+    }
+  }, []);
+  const selectDevice = async (value) => {
+    await stop();
+    setDevice(value);
+    setOutput("");
+  };
+  const field = {
+    height: 28,
+    boxSizing: "border-box",
+    border: "1px solid " + C.line,
+    borderRadius: 7,
+    padding: "0 9px",
+    background: C.bg,
+    color: C.ink,
+    fontSize: 12
+  };
+  const button = {
+    height: 28,
+    padding: "0 14px",
+    border: 0,
+    borderRadius: 7,
+    fontSize: 12,
+    cursor: "pointer",
+    color: "#fff",
+    background: C.blue
+  };
+  return h2(
+    "div",
+    { style: { flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column", gap: 8, padding: 10, background: C.bg } },
+    h2(
+      "div",
+      { style: { display: "flex", alignItems: "center", gap: 8, flex: "0 0 auto" } },
+      h2(
+        "select",
+        {
+          value: device,
+          "aria-label": "\u7EC8\u7AEF\u76EE\u6807\u8BBE\u5907",
+          title: "\u9009\u62E9\u8981\u6253\u5F00\u7EC8\u7AEF\u7684\u7535\u8111",
+          onChange: (event) => {
+            void selectDevice(event.target.value);
+            event.currentTarget.blur();
+          },
+          style: { ...field, minWidth: 180 }
+        },
+        !online.length ? h2("option", { value: "" }, "\u6CA1\u6709\u5728\u7EBF\u8BBE\u5907") : null,
+        online.map((item) => h2("option", { key: item.device_id, value: item.device_id }, item.name || item.device_id))
+      ),
+      h2("button", {
+        type: "button",
+        disabled: !device || busy,
+        onClick: start,
+        style: { ...button, opacity: !device || busy ? 0.5 : 1 }
+      }, busy ? "\u542F\u52A8\u4E2D\u2026" : "\u65B0\u5EFA\u7EC8\u7AEF"),
+      h2("button", {
+        type: "button",
+        disabled: !session,
+        onClick: () => void stop(),
+        style: { ...field, cursor: session ? "pointer" : "default", opacity: session ? 1 : 0.5, background: "transparent" }
+      }, "\u505C\u6B62"),
+      h2(
+        "span",
+        { style: { marginLeft: "auto", fontSize: 11, color: session ? C.green : C.mute } },
+        session ? "\u5DF2\u8FDE\u63A5" : "\u672A\u8FDE\u63A5"
+      )
+    ),
+    h2("pre", {
+      ref: outputRef,
+      style: {
+        flex: "1 1 auto",
+        minHeight: 0,
+        margin: 0,
+        overflow: "auto",
+        whiteSpace: "pre-wrap",
+        wordBreak: "break-word",
+        background: "#0b1220",
+        color: "#e2e8f0",
+        borderRadius: 8,
+        padding: "10px 12px",
+        fontFamily: 'Consolas, "Cascadia Mono", monospace',
+        fontSize: 12,
+        lineHeight: 1.55
+      }
+    }, output || "\u9009\u62E9\u4E00\u53F0\u8BBE\u5907\uFF0C\u70B9\u51FB\u201C\u65B0\u5EFA\u7EC8\u7AEF\u201D\u3002\n\u547D\u4EE4\u4EE5\u76EE\u6807\u8282\u70B9\u5F53\u524D\u7528\u6237\u8EAB\u4EFD\u6267\u884C\uFF0C\u4E0D\u4F1A\u81EA\u52A8\u63D0\u6743\u3002"),
+    h2(
+      "form",
+      {
+        onSubmit: send,
+        style: { display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", borderRadius: 8, background: "#0b1220", flex: "0 0 auto" }
+      },
+      h2("span", { style: { color: "#7dd3fc", fontFamily: "Consolas, monospace", fontSize: 13 } }, "$"),
+      h2("input", {
+        value: input,
+        disabled: !session,
+        autoFocus: true,
+        spellCheck: false,
+        "aria-label": "\u7EC8\u7AEF\u547D\u4EE4",
+        placeholder: session ? "\u8F93\u5165\u547D\u4EE4\uFF0CEnter \u6267\u884C" : "\u5148\u65B0\u5EFA\u7EC8\u7AEF",
+        onChange: (event) => setInput(event.target.value),
+        style: { flex: "1 1 auto", minWidth: 0, border: 0, outline: "none", background: "transparent", color: "#e2e8f0", fontFamily: "Consolas, monospace", fontSize: 13 }
+      }),
+      h2("button", {
+        type: "submit",
+        disabled: !session || !input.trim(),
+        style: { ...button, height: 26, padding: "0 12px", opacity: !session || !input.trim() ? 0.4 : 1 }
+      }, "\u53D1\u9001")
+    )
+  );
+}
+
 // src/app.js
 function responseBelongsToDevice(data, expectedDevice) {
   if (!data || typeof data !== "object" || !expectedDevice) return false;
@@ -167813,6 +168039,11 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     folderClose: { parts: [
       { d: "M1.50439 3.11059C1.50439 2.55831 1.95211 2.1106 2.50439 2.1106H5.43389C5.67773 2.1106 5.91318 2.19969 6.09593 2.36113L7.71649 3.79265C7.89924 3.95409 8.1347 4.04319 8.3785 4.04319H13.4958C14.0481 4.04319 14.4958 4.4909 14.4958 5.04319V12.8894C14.4958 13.4417 14.0481 13.8894 13.4958 13.8894H2.50439C1.95211 13.8894 1.50439 13.4417 1.50439 12.8894V4.04319V3.11059Z" },
       { d: "M3.63501 7.66614H12.3647" }
+    ] },
+    terminal: { parts: [
+      { d: "M2.5 3.5h11v9h-11z" },
+      { d: "M4.5 6l2 2-2 2" },
+      { d: "M8.5 10h3" }
     ] }
   };
   function Glyph({ name, size = 16, stroke }) {
@@ -167842,6 +168073,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       { id: "workspaces", label: "\u539F\u751F\u5DE5\u4F5C\u533A", icon: "monitor" },
       { id: "files", label: "\u6587\u4EF6\u8D44\u6E90\u7BA1\u7406\u5668", icon: "files" },
       { id: "transfer", label: "\u6587\u4EF6\u8F6C\u79FB", icon: "transfer" },
+      { id: "terminal", label: "\u7EC8\u7AEF", icon: "terminal" },
       { id: "network", label: "\u4E92\u8054", icon: "devices" }
     ];
     const button = (id, label, icon, onClick, selected) => h2("button", {
@@ -172072,6 +172304,12 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         setSidebarCollapsed(true);
         return;
       }
+      if (id === "terminal") {
+        setView("terminal");
+        setActivePanel("terminal");
+        setSidebarCollapsed(true);
+        return;
+      }
       if (id === "files") {
         if (view === "files" && activePanel === "files" && !sidebarCollapsed) {
           setSidebarCollapsed(true);
@@ -173226,7 +173464,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         "div",
         { style: { display: "flex", flex: "1 1 auto", minHeight: 0 } },
         h2(ActivityBar, {
-          active: view === "files" ? "files" : view === "network" ? "network" : view === "transfer" ? "transfer" : "workspaces",
+          active: view === "files" ? "files" : view === "network" ? "network" : view === "transfer" ? "transfer" : view === "terminal" ? "terminal" : "workspaces",
           collapsed: sidebarCollapsed,
           onSelect: selectPanel,
           onPermissions: () => {
@@ -173285,6 +173523,15 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
             React: React2,
             Glyph,
             api: api2,
+            post,
+            C,
+            devices: state && state.devices || [],
+            localDevice: appLocalDevice,
+            onNotice: setNotice,
+            onError: fail2
+          }) : view === "terminal" ? h2(createTerminalPage, {
+            React: React2,
+            Glyph,
             post,
             C,
             devices: state && state.devices || [],

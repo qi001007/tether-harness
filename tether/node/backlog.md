@@ -38,3 +38,4 @@
 - 2026-11-03：插件源必须暂存到 `data_dir/plugin-source/<version>` 并使用 `GetShortPathNameW` 的 `file:` 短路径；`D:\DeepSeek Harness\...` 的空格会让 pnpm 把参数拆开并回退 registry 404。安装失败时若原 DSH 在运行，要恢复 profile 后重新拉起 DSH。
 - 2026-11-03：`DshDesktop.status()` 增加 `surface`（descriptor pid 存活），供 APP 判断“DSH 在跑但无 surface”；不能用 surface 网关的 200/缓存当健康依据。
 - 2026-11-03：新增 `app_gateway.py`：在 EasyTier 虚拟 IP 上做透明 TCP 代理，把本机 `127.0.0.1:<port>` 暴露给白名单网段；只接受回环目标，HTTP/WebSocket/TCP 通用。实测服务器经 `10.144.0.2:18080` 取到本机 HTTP 200（262 ms），真实 DSH 经 `10.144.0.2:18081` 返回 303 并签发虚拟 IP authority 的 cookie。4 条单测。
+- 2026-11-03：新增 `terminal.py` 与 `fs/terminal_start|write|poll|stop`：目标机器上的持久 PowerShell/bash 会话，输出按字节增量轮询，走现有 Hub fs 通道；用它在 LAPTOP 上执行命令并测出 100 MB 直连 4.09 MB/s，无需用户输入。终端页面 UI 已随 0.2.96 交付。

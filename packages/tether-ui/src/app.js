@@ -4,6 +4,7 @@
 import { createConnectionPanel } from './connection-panel.js'
 import { createSettingsPanel } from './settings-panel.js'
 import { createTransferPage } from './transfer-page.js'
+import { createTerminalPage } from './terminal-page.js'
 import { invalidateDirectory, peekDirectory, rememberDirectory } from './file-cache.js'
 
 export function isUpdateTargetCurrent(requestDevice, requestEpoch, currentDevice, currentEpoch) {
@@ -1622,6 +1623,11 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       folderClose: { parts: [
         { d: 'M1.50439 3.11059C1.50439 2.55831 1.95211 2.1106 2.50439 2.1106H5.43389C5.67773 2.1106 5.91318 2.19969 6.09593 2.36113L7.71649 3.79265C7.89924 3.95409 8.1347 4.04319 8.3785 4.04319H13.4958C14.0481 4.04319 14.4958 4.4909 14.4958 5.04319V12.8894C14.4958 13.4417 14.0481 13.8894 13.4958 13.8894H2.50439C1.95211 13.8894 1.50439 13.4417 1.50439 12.8894V4.04319V3.11059Z' },
         { d: 'M3.63501 7.66614H12.3647' }
+      ] },
+      terminal: { parts: [
+        { d: 'M2.5 3.5h11v9h-11z' },
+        { d: 'M4.5 6l2 2-2 2' },
+        { d: 'M8.5 10h3' }
       ] }
     }
 
@@ -1642,6 +1648,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         { id: 'workspaces', label: '原生工作区', icon: 'monitor' },
         { id: 'files', label: '文件资源管理器', icon: 'files' },
         { id: 'transfer', label: '文件转移', icon: 'transfer' },
+        { id: 'terminal', label: '终端', icon: 'terminal' },
         { id: 'network', label: '互联', icon: 'devices' }
       ]
       const button = (id, label, icon, onClick, selected) => h('button', {
@@ -5104,6 +5111,10 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           setView('transfer'); setActivePanel('transfer'); setSidebarCollapsed(true)
           return
         }
+        if (id === 'terminal') {
+          setView('terminal'); setActivePanel('terminal'); setSidebarCollapsed(true)
+          return
+        }
         if (id === 'files') {
           if (view === 'files' && activePanel === 'files' && !sidebarCollapsed) { setSidebarCollapsed(true); return }
           const info = path ? pathInfo(path) : null
@@ -5909,7 +5920,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         notice || projectsError || updateToast ? renderToasts() : null,
         h('div', { style: { display: 'flex', flex: '1 1 auto', minHeight: 0 } },
           h(ActivityBar, {
-            active: view === 'files' ? 'files' : (view === 'network' ? 'network' : (view === 'transfer' ? 'transfer' : 'workspaces')),
+            active: view === 'files' ? 'files' : (view === 'network' ? 'network' : (view === 'transfer' ? 'transfer' : (view === 'terminal' ? 'terminal' : 'workspaces'))),
             collapsed: sidebarCollapsed,
             onSelect: selectPanel,
             onPermissions: () => { setShowAppSettings(false); openSettings() },
@@ -5952,6 +5963,13 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             view === 'files' ? renderExplorer() : view === 'network' ? renderNetwork()
               : view === 'transfer' ? h(createTransferPage, {
                 React, Glyph, api, post, C,
+                devices: (state && state.devices) || [],
+                localDevice: appLocalDevice,
+                onNotice: setNotice,
+                onError: fail
+              })
+                : view === 'terminal' ? h(createTerminalPage, {
+                React, Glyph, post, C,
                 devices: (state && state.devices) || [],
                 localDevice: appLocalDevice,
                 onNotice: setNotice,
