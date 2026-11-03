@@ -1,5 +1,13 @@
 # 实时进度
 
+## 2026-11-03 高速互联（EasyTier + 应用网关）
+
+1. 自建 EasyTier 2.6.4 共享节点（LGPL-3.0，PCL2 同款）：服务器 `10.144.0.1/24`，私有网络 + `private_mode`；公网只放行 22/80/443，Caddy HTTP 移到 8080，80/TCP 给 EasyTier。
+2. 20 MB 实测：Hub relay 0.04–0.06 MB/s；WSS 0.24 MB/s；TCP 80 **1.70 MB/s**（12.3 s），公网 SSH 直连对照 1.82 MB/s——80 中继已接近家里上行（约 14.5 Mbps）的上限。
+3. DESKTOP `10.144.0.2`、LAPTOP `10.144.0.3` 已加入；peer 显示 **direct tcp6，3.71 ms**，不是中继；同 LAN 100 MB 直连吞吐待测。
+4. 通用应用网关 `tether/node/app_gateway.py` 已跑通：服务器经 `10.144.0.2:18080` 取到本机 HTTP **200/262 ms**；真实 DSH 经 `18081` 返回 **303** 并签发虚拟 IP authority 的 cookie；单测 4 条通过（pytest 166+5 skipped）。
+5. 待办：LAPTOP 100 MB 直连数字；“远程应用”页 UI；EasyTier 安装/升级产品化；ACP Harness 适配。
+
 ## 2026-11-03 插件热重载（0.2.90–0.2.93）
 
 1. DSH HMR 实测：profile 插件的模块文件变化时，`pluginManager.setPluginEnabled(entry,true)` 触发的重组合会**原地替换 surface**（同 pid/端口，约 1 秒）；从被 HMR 载入的服务端实例自己调用会撞 `HMR transactions cannot be nested`（AsyncLocalStorage 继承），触发点只在客户端页面。

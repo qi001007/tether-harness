@@ -133,3 +133,4 @@
 - 2026-11-03：0.2.90 热重载契约：`_runtime_loaded` 用 descriptor 的 `plugin_version` 清 `restart_required`；`apply` 以 8 秒宽限+期望版本安排重启助手，助手握手成功即退出；重载桥只启用、禁止停用（DSH 持久化 `enabled:false`），客户端 watcher 2 秒轮询并去重。新增 surface/助手/桥测试；全量 mjs 243 / cjs 8 / pytest 160+4 skipped。
 - 2026-11-03：0.2.91 新增 Windows 8.3 短路径回归（`_file_dependency_path` 展开短名）；`_hot_reload_capable` 只对带 `plugin_version` 的 surface 给宽限。全量 mjs 243 / cjs 8 / pytest 161+5 skipped。
 - 2026-11-03：0.2.93 新增 Hub 更新镜像契约（`apply` 写 surface state 的 `applied-plugin.json`）与宿主扫描按 `dsh_home` 过滤；删掉禁用→启用的两条桥测试。全量 mjs 241 / cjs 8 / pytest 162+5 skipped。
+- 2026-11-03：新增 `test_app_gateway.py` 4 条：HTTP 转发、拒绝非回环目标、拒绝白名单外客户端、`--app` 解析；全量 pytest 166+5 skipped。

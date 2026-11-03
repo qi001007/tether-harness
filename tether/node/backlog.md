@@ -37,3 +37,4 @@
 - 2026-11-03：新增 `dsh_plugin.py` 与 `fs/dsh_install_plugin`：从签名清单下载插件 ZIP（SHA-256 校验）或使用本地包，确保 profile 的 pnpm 使用 hoisted 布局，走官方 `dsh plugin add file:` 安装 4 个插件包和 `@deepseek-ai` UI 依赖；备份/恢复 profile `package.json`，校验完成后再重启 DSH 等新 descriptor。
 - 2026-11-03：插件源必须暂存到 `data_dir/plugin-source/<version>` 并使用 `GetShortPathNameW` 的 `file:` 短路径；`D:\DeepSeek Harness\...` 的空格会让 pnpm 把参数拆开并回退 registry 404。安装失败时若原 DSH 在运行，要恢复 profile 后重新拉起 DSH。
 - 2026-11-03：`DshDesktop.status()` 增加 `surface`（descriptor pid 存活），供 APP 判断“DSH 在跑但无 surface”；不能用 surface 网关的 200/缓存当健康依据。
+- 2026-11-03：新增 `app_gateway.py`：在 EasyTier 虚拟 IP 上做透明 TCP 代理，把本机 `127.0.0.1:<port>` 暴露给白名单网段；只接受回环目标，HTTP/WebSocket/TCP 通用。实测服务器经 `10.144.0.2:18080` 取到本机 HTTP 200（262 ms），真实 DSH 经 `10.144.0.2:18081` 返回 303 并签发虚拟 IP authority 的 cookie。4 条单测。
