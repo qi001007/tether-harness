@@ -25,6 +25,26 @@ export function updateErrorText(value) {
     .replace(/^Error:\s*/, '')
 }
 
+async function copyText(text) {
+  const value = String(text || '')
+  if (!value) return false
+  try {
+    await navigator.clipboard.writeText(value)
+    return true
+  } catch (_) { /* fall through */ }
+  try {
+    const area = document.createElement('textarea')
+    area.value = value
+    area.style.position = 'fixed'
+    area.style.opacity = '0'
+    document.body.appendChild(area)
+    area.select()
+    const ok = document.execCommand('copy')
+    area.remove()
+    return ok
+  } catch (_) { return false }
+}
+
 export function shortUpdateError(error) {
   const code = error && error.code
   if (code === 'device_offline') return '设备离线'
@@ -3157,6 +3177,8 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       pathRef.current = path
       const [hoverTip, setHoverTip] = React.useState(null)
       const [selected, setSelected] = React.useState(null)
+      const [selectedPaths, setSelectedPaths] = React.useState([])
+      const [band, setBand] = React.useState(null)
       const [file, setFile] = React.useState(null)
       const [draft, setDraft] = React.useState('')
       const [dirty, setDirty] = React.useState(false)
@@ -4965,7 +4987,12 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const openContextMenu = (event, entry, base) => {
         event.preventDefault(); event.stopPropagation()
         hideHoverTip()
-        if (entry) setSelected(entry)
+        if (entry) {
+          setSelected(entry)
+          setSelectedPaths((current) => current.includes(entry.path) ? current : [entry.path])
+        } else {
+          setSelectedPaths([])
+        }
         setContextMenu({ x: event.clientX, y: event.clientY, entry: entry || null, base: base || path })
       }
 
@@ -5581,6 +5608,53 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         const entries = filterExplorerEntries(sortExplorerEntries(dirEntries, sortKey, sortDir), search)
         const filtering = !!search.trim()
         const columns = 'minmax(0,1fr) 132px 104px 78px'
+        const copyPathText = (list) => {
+          const paths = (list || []).map((item) => item && item.path).filter(Boolean)
+          if (!paths.length) return
+          void copyText(paths.join('\n')).then((ok) => {
+            setNotice(ok ? (paths.length > 1 ? '已复制 ' + paths.length + ' 个路径' : '已复制路径') : '复制路径失败')
+          })
+        }
+        const selectedEntries = () => entries.filter((entry) => selectedPaths.includes(entry.path))
+        const beginBand = (event) => {
+          if (event.button !== 0 || !path || file) return
+          const target = event.target
+          if (target && target.closest && target.closest('[data-row-path]')) return
+          if (target && target.closest && target.closest('button, input, select, textarea')) return
+          const host = event.currentTarget
+          const keep = !!(event.ctrlKey || event.metaKey)
+          const base = keep ? [...selectedPaths] : []
+          if (!keep) { setSelectedPaths([]); setSelected(null) }
+          const startX = event.clientX
+          const startY = event.clientY
+          let moved = false
+          const move = (moveEvent) => {
+            const dx = moveEvent.clientX - startX
+            const dy = moveEvent.clientY - startY
+            if (!moved && Math.hypot(dx, dy) < 4) return
+            moved = true
+            const rect = {
+              left: Math.min(startX, moveEvent.clientX), top: Math.min(startY, moveEvent.clientY),
+              right: Math.max(startX, moveEvent.clientX), bottom: Math.max(startY, moveEvent.clientY)
+            }
+            setBand(rect)
+            const hits = []
+            host.querySelectorAll('[data-row-path]').forEach((element) => {
+              const box = element.getBoundingClientRect()
+              if (box.right >= rect.left && box.left <= rect.right && box.bottom >= rect.top && box.top <= rect.bottom) {
+                hits.push(element.getAttribute('data-row-path'))
+              }
+            })
+            setSelectedPaths([...new Set([...base, ...hits])])
+          }
+          const up = () => {
+            window.removeEventListener('pointermove', move)
+            window.removeEventListener('pointerup', up)
+            setBand(null)
+          }
+          window.addEventListener('pointermove', move)
+          window.addEventListener('pointerup', up)
+        }
         const sortHeader = (key, label, align) => h('button', {
           onClick: () => setSort((current) => toggleExplorerSort(current, key)),
           title: '按' + label + '排序',
@@ -5606,15 +5680,31 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             h('button', { onClick: () => setSearch(''), className: 'tether-hover', style: { border: 0, borderRadius: 6, padding: '5px 10px', background: C.soft, color: C.ink, fontSize: 12, cursor: 'pointer' } }, '清除搜索'))
           if (!entries.length) return h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', color: C.mute, fontSize: 12 } }, '空文件夹')
           return h('div', { style: { flex: '1 1 auto', minHeight: 0, position: 'relative', display: 'flex' } },
-            h('div', { className: 'tether-scroll', onScroll: hideHoverTip, style: { flex: '1 1 auto', overflow: 'auto', padding: '0 10px 24px' } },
+            h('div', {
+              className: 'tether-scroll', onScroll: hideHoverTip,
+              onPointerDown: beginBand,
+              onContextMenu: (event) => {
+                const target = event.target
+                if (target && target.closest && target.closest('[data-row-path]')) return
+                openContextMenu(event, null, path)
+              },
+              style: { flex: '1 1 auto', overflow: 'auto', padding: '0 10px 24px', userSelect: 'none' }
+            },
               h('div', { style: { display: 'grid', gridTemplateColumns: columns, gap: 8, height: 28, padding: '0 8px', alignItems: 'center', fontSize: 11, color: C.mute } },
                 sortHeader('name', '名称'), sortHeader('mtime', '修改日期'), h('span', null, '类型'), sortHeader('size', '大小', 'right')),
               entries.map((entry) => h('div', {
               key: entry.path, role: 'button', tabIndex: 0,
+              'data-row-path': entry.path,
               onClick: (event) => {
                 if (event.detail > 1) return
                 hideHoverTip()
                 setSelected(entry)
+                setSelectedPaths((current) => {
+                  if (event.ctrlKey || event.metaKey) {
+                    return current.includes(entry.path) ? current.filter((path) => path !== entry.path) : [...current, entry.path]
+                  }
+                  return [entry.path]
+                })
                 if (entry.dir) prefetchDir(entry.path)
                 else prefetchPreview(entry)
               },
@@ -5624,7 +5714,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
               onContextMenu: (event) => openContextMenu(event, entry, entry.dir ? entry.path : path),
               onKeyDown: (event) => { if (event.key === 'Enter') openFile(entry) },
               className: 'tether-hover',
-              style: { display: 'grid', gridTemplateColumns: columns, gap: 8, height: 30, padding: '0 8px', alignItems: 'center', borderRadius: 6, fontSize: 13, color: C.ink, background: selected && selected.path === entry.path ? C.active : 'transparent', cursor: 'default' }
+              style: { display: 'grid', gridTemplateColumns: columns, gap: 8, height: 30, padding: '0 8px', alignItems: 'center', borderRadius: 6, fontSize: 13, color: C.ink, background: (selectedPaths.length ? selectedPaths.includes(entry.path) : !!(selected && selected.path === entry.path)) ? C.active : 'transparent', cursor: 'default', userSelect: 'none' }
             },
               h('div', { style: { display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 } },
                 h('span', { style: { width: 16, height: 16, display: 'grid', placeItems: 'center', flex: '0 0 auto' } },
@@ -5652,13 +5742,19 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           terminalAllowed && contextMenu.entry && contextMenu.entry.dir ? menuItem('terminal', '在终端中打开', () => { openTerminal(contextMenu.entry.path); setContextMenu(null) }) : null,
           terminalAllowed && contextMenu.entry && !contextMenu.entry.dir ? menuItem('terminal', '在所在目录打开终端', () => { openTerminal(parentOf(contextMenu.entry.path)); setContextMenu(null) }) : null,
           contextMenu.entry ? menuItem('file', '复制', () => { copyEntry(contextMenu.entry); setContextMenu(null) }) : null,
-          clipboard && contextMenu.base ? menuItem('file', '粘贴', () => pasteEntry(contextMenu.base)) : null,
+          contextMenu.entry ? menuItem('file', '复制路径', () => {
+            const list = selectedPaths.includes(contextMenu.entry.path) ? selectedEntries() : [contextMenu.entry]
+            setContextMenu(null)
+            copyPathText(list)
+          }) : null,
+          clipboard && contextMenu.base && !contextMenu.entry ? menuItem('file', '粘贴', () => pasteEntry(contextMenu.base)) : null,
           contextMenu.entry ? menuItem('pencil', '重命名', () => { const entry = contextMenu.entry; setContextMenu(null); renameEntry(entry) }) : null,
           contextMenu.entry ? menuItem('trash', '删除', () => { const entry = contextMenu.entry; setContextMenu(null); deleteEntry(entry) }, true) : null,
           contextMenu.entry ? h('div', { style: { height: 1, background: C.line, margin: '4px 2px' } }) : null,
           !contextMenu.entry && terminalAllowed ? menuItem('terminal', '在此打开终端', () => { openTerminal(contextMenu.base || path); setContextMenu(null) }) : null,
-          menuItem('plus', '新建文件', () => { const base = contextMenu.base; setContextMenu(null); makeFile(base) }),
-          menuItem('files', '新建文件夹', () => { const base = contextMenu.base; setContextMenu(null); makeFolder(base) }),
+          !contextMenu.entry ? menuItem('plus', '新建文件', () => { const base = contextMenu.base; setContextMenu(null); makeFile(base) }) : null,
+          !contextMenu.entry ? menuItem('files', '新建文件夹', () => { const base = contextMenu.base; setContextMenu(null); makeFolder(base) }) : null,
+          !contextMenu.entry ? menuItem('file', '复制当前路径', () => { const base = contextMenu.base || path; setContextMenu(null); copyPathText([{ path: base }]) }) : null,
           h('div', { style: { height: 1, background: C.line, margin: '4px 2px' } }),
           menuItem('refresh', '刷新', () => { setContextMenu(null); refreshExplorer() })
         ) : null
@@ -5677,7 +5773,16 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
               onClose: () => setTerminalOpen(false)
             }) : null
           ),
-          context
+          context,
+          band ? h('div', {
+            style: {
+              position: 'fixed', left: band.left, top: band.top,
+              width: Math.max(0, band.right - band.left), height: Math.max(0, band.bottom - band.top),
+              border: '1px solid ' + C.blue,
+              background: 'color-mix(in srgb, ' + C.blue + ' 12%, transparent)',
+              borderRadius: 3, pointerEvents: 'none', zIndex: 2147482000
+            }
+          }) : null
         )
       }
 

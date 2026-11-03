@@ -1,3 +1,23 @@
+async function copyText(text) {
+  const value = String(text || '')
+  if (!value) return false
+  try {
+    await navigator.clipboard.writeText(value)
+    return true
+  } catch (_) { /* fall through */ }
+  try {
+    const area = document.createElement('textarea')
+    area.value = value
+    area.style.position = 'fixed'
+    area.style.opacity = '0'
+    document.body.appendChild(area)
+    area.select()
+    const ok = document.execCommand('copy')
+    area.remove()
+    return ok
+  } catch (_) { return false }
+}
+
 function parentOf(path) {
   const clean = String(path || '').replace(/[\\/]+$/, '')
   if (!clean) return ''
@@ -54,11 +74,65 @@ export function TargetFileExplorer({
   sort = { key: 'name', dir: 'asc' }, onSort, search = '', onSearch = () => {},
   treeChildren = null, expanded = {}, onToggleTree,
   compact = false, selectionMode = 'single', selectedPaths = [], onSelectionChange,
-  onContextMenu, onDragItem, onRowPointerDown, onDismissError, deviceName = ''
+  onContextMenu, onBlankContextMenu, onDragItem, onRowPointerDown, onDismissError, deviceName = ''
 }) {
   const ReactRuntime = React
   const h = ReactRuntime.createElement
   const C = colors || {}
+  const [innerMenu, setInnerMenu] = React.useState(null)
+  const [band, setBand] = React.useState(null)
+  React.useEffect(() => {
+    if (!innerMenu) return undefined
+    const close = () => setInnerMenu(null)
+    window.addEventListener('mousedown', close)
+    window.addEventListener('keydown', close)
+    return () => { window.removeEventListener('mousedown', close); window.removeEventListener('keydown', close) }
+  }, [innerMenu])
+  const openInnerMenu = (event, item) => {
+    event.preventDefault()
+    event.stopPropagation()
+    setInnerMenu({ x: event.clientX, y: event.clientY, item: item || null })
+  }
+  const beginBand = (event) => {
+    if (disabled || selectionMode !== 'multiple' || !onSelectionChange) return
+    if (event.button !== 0) return
+    const target = event.target
+    if (target && target.closest && target.closest('[data-row-path]')) return
+    if (target && target.closest && target.closest('button, input, select, textarea')) return
+    const host = event.currentTarget
+    const keep = !!(event.ctrlKey || event.metaKey)
+    const base = keep ? [...(selectedPaths || [])] : []
+    const startX = event.clientX
+    const startY = event.clientY
+    let moved = false
+    const move = (moveEvent) => {
+      const dx = moveEvent.clientX - startX
+      const dy = moveEvent.clientY - startY
+      if (!moved && Math.hypot(dx, dy) < 4) return
+      moved = true
+      const rect = {
+        left: Math.min(startX, moveEvent.clientX), top: Math.min(startY, moveEvent.clientY),
+        right: Math.max(startX, moveEvent.clientX), bottom: Math.max(startY, moveEvent.clientY)
+      }
+      setBand(rect)
+      const hits = []
+      host.querySelectorAll('[data-row-path]').forEach((element) => {
+        const box = element.getBoundingClientRect()
+        if (box.right >= rect.left && box.left <= rect.right && box.bottom >= rect.top && box.top <= rect.bottom) {
+          hits.push(element.getAttribute('data-row-path'))
+        }
+      })
+      onSelectionChange([...new Set([...base, ...hits])])
+    }
+    const up = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      setBand(null)
+      if (!moved && !keep) { if (onSelect) onSelect(null); onSelectionChange([]) }
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
   const workspaces = roots.filter((item) => (item.kind || 'workspace') === 'workspace')
   const drives = roots.filter((item) => item.kind === 'drive')
   const crumbs = crumbsFor(path, rootPath)
@@ -158,10 +232,16 @@ export function TargetFileExplorer({
       : selectedPath === item.path
     return h('button', {
       key: item.path, type: 'button', title: item.path, disabled: disabled || oversized,
+      'data-row-path': item.path,
       draggable: !!onDragItem,
       onDragStart: (event) => { if (onDragItem) onDragItem(event, item) },
       onPointerDown: (event) => { if (onRowPointerDown) onRowPointerDown(event, item) },
-      onContextMenu: (event) => { if (onContextMenu) { event.preventDefault(); onContextMenu(item, event) } },
+      onContextMenu: (event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        if (onContextMenu) onContextMenu(item, event)
+        else openInnerMenu(event, item)
+      },
       onClick: (event) => {
         if (selectionMode === 'multiple' && onSelectionChange) {
           const current = selectedPaths || []
@@ -185,7 +265,8 @@ export function TargetFileExplorer({
         border: 0, borderRadius: 6,
         background: selected ? (C.soft || 'transparent') : 'transparent',
         color: C.ink, font: 'inherit', fontSize: compact ? 12.5 : 13, textAlign: 'left',
-        cursor: disabled || oversized ? 'default' : 'pointer', opacity: oversized ? 0.55 : 1
+        cursor: disabled || oversized ? 'default' : 'pointer', opacity: oversized ? 0.55 : 1,
+        userSelect: 'none'
       }
     },
       h('span', { style: { display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 } },
@@ -213,7 +294,16 @@ export function TargetFileExplorer({
         style: { border: 0, borderRadius: 6, padding: '4px 10px', background: C.soft, color: C.ink, fontSize: 12, cursor: 'pointer' }
       }, '清除搜索') : null)
   } else {
-    body = h('div', { style: { flex: '1 1 auto', minHeight: 0, overflow: 'auto', padding: '0 8px 18px' } },
+    body = h('div', {
+      style: { flex: '1 1 auto', minHeight: 0, overflow: 'auto', padding: '0 8px 18px', userSelect: 'none' },
+      onPointerDown: beginBand,
+      onContextMenu: (event) => {
+        const target = event.target
+        if (target && target.closest && target.closest('[data-row-path]')) return
+        if (onBlankContextMenu) { event.preventDefault(); event.stopPropagation(); onBlankContextMenu(event) }
+        else if (!onContextMenu) openInnerMenu(event, null)
+      }
+    },
       h('div', {
         style: {
           display: 'grid', gridTemplateColumns: compact ? 'minmax(0,1fr) 84px' : 'minmax(0,1fr) 132px 84px', gap: 8,
@@ -258,7 +348,8 @@ export function TargetFileExplorer({
       style: { width: 22, height: 22, flex: '0 0 auto', border: 0, borderRadius: 5, background: 'transparent', color: C.mute, fontSize: 15, lineHeight: '22px', padding: 0, cursor: 'pointer' }
     }, '×') : null
   ) : null
-  return h('div', { style: { display: 'flex', flex: '1 1 auto', minHeight: 0, minWidth: 0 } },
+  return h(ReactRuntime.Fragment, null,
+    h('div', { style: { display: 'flex', flex: '1 1 auto', minHeight: 0, minWidth: 0 } },
     h('div', {
       style: {
         width: compact ? 148 : 224, flex: '0 0 auto', overflow: 'auto', padding: '6px 8px',
@@ -336,5 +427,34 @@ export function TargetFileExplorer({
       },
         body,
         loadingOverlay,
-        errorToast)))
+        errorToast))),
+    band ? h('div', {
+      style: {
+        position: 'fixed', left: band.left, top: band.top,
+        width: Math.max(0, band.right - band.left), height: Math.max(0, band.bottom - band.top),
+        border: '1px solid ' + (C.blue || '#1677ff'),
+        background: 'color-mix(in srgb, ' + (C.blue || '#1677ff') + ' 12%, transparent)',
+        borderRadius: 3, pointerEvents: 'none', zIndex: 2147482000
+      }
+    }) : null,
+    innerMenu ? h('div', {
+      role: 'menu', onMouseDown: (event) => event.stopPropagation(),
+      style: {
+        position: 'fixed', left: Math.max(8, Math.min(innerMenu.x, window.innerWidth - 180)),
+        top: Math.max(8, Math.min(innerMenu.y, window.innerHeight - 110)),
+        zIndex: 2147483000, minWidth: 150, padding: 4, background: C.bg,
+        borderRadius: 8, boxShadow: '0 8px 24px rgba(16,24,40,.18)', border: '1px solid ' + C.line
+      }
+    }, (innerMenu.item
+      ? [['复制路径', () => copyText(innerMenu.item.path)], ['刷新', () => { if (path && onRefresh) onRefresh(path) }]]
+      : [['复制当前路径', () => copyText(path)], ['刷新', () => { if (path && onRefresh) onRefresh(path) }]]
+    ).map(([label, action]) => h('button', {
+      key: label, type: 'button',
+      onClick: () => { setInnerMenu(null); action() },
+      className: 'tether-hover',
+      style: {
+        display: 'block', width: '100%', padding: '6px 10px', border: 0, borderRadius: 5,
+        background: 'transparent', color: C.ink, fontSize: 12, textAlign: 'left', cursor: 'pointer'
+      }
+    }, label))) : null)
 }

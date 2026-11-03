@@ -5764,6 +5764,26 @@ monaco-editor/esm/vs/languages/definitions/swift/swift.js:
     const EditorRuntime = TetherMonacoRuntime
     const PANEL_ID = 'tether'
     const PLUGIN_VERSION = "0.3.5"
+async function copyText(text) {
+  const value = String(text || '')
+  if (!value) return false
+  try {
+    await navigator.clipboard.writeText(value)
+    return true
+  } catch (_) { /* fall through */ }
+  try {
+    const area = document.createElement('textarea')
+    area.value = value
+    area.style.position = 'fixed'
+    area.style.opacity = '0'
+    document.body.appendChild(area)
+    area.select()
+    const ok = document.execCommand('copy')
+    area.remove()
+    return ok
+  } catch (_) { return false }
+}
+
 function parentOf(path) {
   const clean = String(path || '').replace(/[\\/]+$/, '')
   if (!clean) return ''
@@ -5820,11 +5840,65 @@ function TargetFileExplorer({
   sort = { key: 'name', dir: 'asc' }, onSort, search = '', onSearch = () => {},
   treeChildren = null, expanded = {}, onToggleTree,
   compact = false, selectionMode = 'single', selectedPaths = [], onSelectionChange,
-  onContextMenu, onDragItem, onRowPointerDown, onDismissError, deviceName = ''
+  onContextMenu, onBlankContextMenu, onDragItem, onRowPointerDown, onDismissError, deviceName = ''
 }) {
   const ReactRuntime = React
   const h = ReactRuntime.createElement
   const C = colors || {}
+  const [innerMenu, setInnerMenu] = React.useState(null)
+  const [band, setBand] = React.useState(null)
+  React.useEffect(() => {
+    if (!innerMenu) return undefined
+    const close = () => setInnerMenu(null)
+    window.addEventListener('mousedown', close)
+    window.addEventListener('keydown', close)
+    return () => { window.removeEventListener('mousedown', close); window.removeEventListener('keydown', close) }
+  }, [innerMenu])
+  const openInnerMenu = (event, item) => {
+    event.preventDefault()
+    event.stopPropagation()
+    setInnerMenu({ x: event.clientX, y: event.clientY, item: item || null })
+  }
+  const beginBand = (event) => {
+    if (disabled || selectionMode !== 'multiple' || !onSelectionChange) return
+    if (event.button !== 0) return
+    const target = event.target
+    if (target && target.closest && target.closest('[data-row-path]')) return
+    if (target && target.closest && target.closest('button, input, select, textarea')) return
+    const host = event.currentTarget
+    const keep = !!(event.ctrlKey || event.metaKey)
+    const base = keep ? [...(selectedPaths || [])] : []
+    const startX = event.clientX
+    const startY = event.clientY
+    let moved = false
+    const move = (moveEvent) => {
+      const dx = moveEvent.clientX - startX
+      const dy = moveEvent.clientY - startY
+      if (!moved && Math.hypot(dx, dy) < 4) return
+      moved = true
+      const rect = {
+        left: Math.min(startX, moveEvent.clientX), top: Math.min(startY, moveEvent.clientY),
+        right: Math.max(startX, moveEvent.clientX), bottom: Math.max(startY, moveEvent.clientY)
+      }
+      setBand(rect)
+      const hits = []
+      host.querySelectorAll('[data-row-path]').forEach((element) => {
+        const box = element.getBoundingClientRect()
+        if (box.right >= rect.left && box.left <= rect.right && box.bottom >= rect.top && box.top <= rect.bottom) {
+          hits.push(element.getAttribute('data-row-path'))
+        }
+      })
+      onSelectionChange([...new Set([...base, ...hits])])
+    }
+    const up = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      setBand(null)
+      if (!moved && !keep) { if (onSelect) onSelect(null); onSelectionChange([]) }
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
   const workspaces = roots.filter((item) => (item.kind || 'workspace') === 'workspace')
   const drives = roots.filter((item) => item.kind === 'drive')
   const crumbs = crumbsFor(path, rootPath)
@@ -5924,10 +5998,16 @@ function TargetFileExplorer({
       : selectedPath === item.path
     return h('button', {
       key: item.path, type: 'button', title: item.path, disabled: disabled || oversized,
+      'data-row-path': item.path,
       draggable: !!onDragItem,
       onDragStart: (event) => { if (onDragItem) onDragItem(event, item) },
       onPointerDown: (event) => { if (onRowPointerDown) onRowPointerDown(event, item) },
-      onContextMenu: (event) => { if (onContextMenu) { event.preventDefault(); onContextMenu(item, event) } },
+      onContextMenu: (event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        if (onContextMenu) onContextMenu(item, event)
+        else openInnerMenu(event, item)
+      },
       onClick: (event) => {
         if (selectionMode === 'multiple' && onSelectionChange) {
           const current = selectedPaths || []
@@ -5951,7 +6031,8 @@ function TargetFileExplorer({
         border: 0, borderRadius: 6,
         background: selected ? (C.soft || 'transparent') : 'transparent',
         color: C.ink, font: 'inherit', fontSize: compact ? 12.5 : 13, textAlign: 'left',
-        cursor: disabled || oversized ? 'default' : 'pointer', opacity: oversized ? 0.55 : 1
+        cursor: disabled || oversized ? 'default' : 'pointer', opacity: oversized ? 0.55 : 1,
+        userSelect: 'none'
       }
     },
       h('span', { style: { display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 } },
@@ -5979,7 +6060,16 @@ function TargetFileExplorer({
         style: { border: 0, borderRadius: 6, padding: '4px 10px', background: C.soft, color: C.ink, fontSize: 12, cursor: 'pointer' }
       }, '清除搜索') : null)
   } else {
-    body = h('div', { style: { flex: '1 1 auto', minHeight: 0, overflow: 'auto', padding: '0 8px 18px' } },
+    body = h('div', {
+      style: { flex: '1 1 auto', minHeight: 0, overflow: 'auto', padding: '0 8px 18px', userSelect: 'none' },
+      onPointerDown: beginBand,
+      onContextMenu: (event) => {
+        const target = event.target
+        if (target && target.closest && target.closest('[data-row-path]')) return
+        if (onBlankContextMenu) { event.preventDefault(); event.stopPropagation(); onBlankContextMenu(event) }
+        else if (!onContextMenu) openInnerMenu(event, null)
+      }
+    },
       h('div', {
         style: {
           display: 'grid', gridTemplateColumns: compact ? 'minmax(0,1fr) 84px' : 'minmax(0,1fr) 132px 84px', gap: 8,
@@ -6024,7 +6114,8 @@ function TargetFileExplorer({
       style: { width: 22, height: 22, flex: '0 0 auto', border: 0, borderRadius: 5, background: 'transparent', color: C.mute, fontSize: 15, lineHeight: '22px', padding: 0, cursor: 'pointer' }
     }, '×') : null
   ) : null
-  return h('div', { style: { display: 'flex', flex: '1 1 auto', minHeight: 0, minWidth: 0 } },
+  return h(ReactRuntime.Fragment, null,
+    h('div', { style: { display: 'flex', flex: '1 1 auto', minHeight: 0, minWidth: 0 } },
     h('div', {
       style: {
         width: compact ? 148 : 224, flex: '0 0 auto', overflow: 'auto', padding: '6px 8px',
@@ -6102,7 +6193,36 @@ function TargetFileExplorer({
       },
         body,
         loadingOverlay,
-        errorToast)))
+        errorToast))),
+    band ? h('div', {
+      style: {
+        position: 'fixed', left: band.left, top: band.top,
+        width: Math.max(0, band.right - band.left), height: Math.max(0, band.bottom - band.top),
+        border: '1px solid ' + (C.blue || '#1677ff'),
+        background: 'color-mix(in srgb, ' + (C.blue || '#1677ff') + ' 12%, transparent)',
+        borderRadius: 3, pointerEvents: 'none', zIndex: 2147482000
+      }
+    }) : null,
+    innerMenu ? h('div', {
+      role: 'menu', onMouseDown: (event) => event.stopPropagation(),
+      style: {
+        position: 'fixed', left: Math.max(8, Math.min(innerMenu.x, window.innerWidth - 180)),
+        top: Math.max(8, Math.min(innerMenu.y, window.innerHeight - 110)),
+        zIndex: 2147483000, minWidth: 150, padding: 4, background: C.bg,
+        borderRadius: 8, boxShadow: '0 8px 24px rgba(16,24,40,.18)', border: '1px solid ' + C.line
+      }
+    }, (innerMenu.item
+      ? [['复制路径', () => copyText(innerMenu.item.path)], ['刷新', () => { if (path && onRefresh) onRefresh(path) }]]
+      : [['复制当前路径', () => copyText(path)], ['刷新', () => { if (path && onRefresh) onRefresh(path) }]]
+    ).map(([label, action]) => h('button', {
+      key: label, type: 'button',
+      onClick: () => { setInnerMenu(null); action() },
+      className: 'tether-hover',
+      style: {
+        display: 'block', width: '100%', padding: '6px 10px', border: 0, borderRadius: 5,
+        background: 'transparent', color: C.ink, fontSize: 12, textAlign: 'left', cursor: 'pointer'
+      }
+    }, label))) : null)
 }
 const DEFAULT_TTL = 20_000
 const MAX_DIRS = 240
@@ -8434,12 +8554,20 @@ function createSettingsPanel(React) {
   }
   return { SettingsPanel }
 }
-const TRANSFER_CHUNK = 1024 * 1024
+const TRANSFER_CHUNK = 4 * 1024 * 1024
 
 function base64Bytes(value) {
   if (!value) return 0
   const padding = value.endsWith('==') ? 2 : value.endsWith('=') ? 1 : 0
   return Math.floor(value.length * 3 / 4) - padding
+}
+
+function bytesToBase64(bytes) {
+  let binary = ''
+  for (let index = 0; index < bytes.length; index += 0x8000) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(index, index + 0x8000))
+  }
+  return btoa(binary)
 }
 
 function failure(message, code) {
@@ -8459,7 +8587,7 @@ function newTransferId() {
 }
 
 async function transferFile({
-  read, write, status, cancel, source, destination,
+  read, write, readBytes, writeBytes, status, cancel, source, destination,
   transferId, overwrite = false, resume = true, onProgress = () => {}, signal
 }) {
   if (typeof read !== 'function' || typeof write !== 'function') {
@@ -8494,10 +8622,20 @@ async function transferFile({
       if (typeof cancel === 'function') await cancel({ path: destination, transferId: id }).catch(() => {})
       throw failure('传输已取消', 'aborted')
     }
-    const chunk = total !== null && offset >= total
-      ? { size: total, offset, base64: '' }
-      : await read({ path: source, offset, limit: TRANSFER_CHUNK })
-    if (!chunk || typeof chunk.base64 !== 'string') throw failure('读取源文件失败', 'read_failed')
+    let chunk = null
+    let binary = false
+    if (total !== null && offset >= total) {
+      chunk = { size: total, offset, base64: '' }
+    } else {
+      if (typeof readBytes === 'function') {
+        try {
+          chunk = await readBytes({ path: source, offset, limit: TRANSFER_CHUNK })
+          binary = !!chunk && chunk.bytes instanceof Uint8Array
+        } catch (_) { chunk = null; binary = false }
+      }
+      if (!binary) chunk = await read({ path: source, offset, limit: TRANSFER_CHUNK })
+    }
+    if (!chunk) throw failure('读取源文件失败', 'read_failed')
     const size = Number(chunk.size)
     if (!Number.isSafeInteger(size) || size < 0) throw failure('源文件大小无效', 'read_failed')
     if (total === null) total = size
@@ -8505,13 +8643,26 @@ async function transferFile({
     if (chunk.offset !== undefined && Number(chunk.offset) !== offset) {
       throw failure('源文件读取偏移不一致', 'source_changed')
     }
-    const bytes = base64Bytes(chunk.base64)
+    const bytes = binary ? chunk.bytes.length : base64Bytes(chunk.base64)
+    if (!bytes && offset < total) throw failure('源文件读取到空数据', 'read_failed')
     if (offset + bytes > total) throw failure('源文件返回的数据超出声明大小', 'source_changed')
     const final = offset + bytes >= total
-    const result = await write({
-      path: destination, transferId: id, offset, total, base64: chunk.base64,
-      final, overwrite, resume: offset > 0
-    })
+    let result = null
+    if (binary && typeof writeBytes === 'function') {
+      try {
+        result = await writeBytes({
+          path: destination, transferId: id, offset, total, bytes: chunk.bytes,
+          final, overwrite, resume: offset > 0
+        })
+      } catch (_) { result = null }
+    }
+    if (!result) {
+      const encoded = binary ? bytesToBase64(chunk.bytes) : chunk.base64
+      result = await write({
+        path: destination, transferId: id, offset, total, base64: encoded,
+        final, overwrite, resume: offset > 0
+      })
+    }
     if (!result || !Number.isSafeInteger(result.offset) || result.offset < offset) {
       throw failure('目标设备没有确认写入进度', 'write_failed')
     }
@@ -8537,6 +8688,26 @@ function formatBytes(value) {
   if (value < 1024 * 1024) return (value / 1024).toFixed(1) + ' KB'
   if (value < 1024 * 1024 * 1024) return (value / (1024 * 1024)).toFixed(1) + ' MB'
   return (value / (1024 * 1024 * 1024)).toFixed(2) + ' GB'
+}
+
+async function copyText(text) {
+  const value = String(text || '')
+  if (!value) return false
+  try {
+    await navigator.clipboard.writeText(value)
+    return true
+  } catch (_) { /* fall through */ }
+  try {
+    const area = document.createElement('textarea')
+    area.value = value
+    area.style.position = 'fixed'
+    area.style.opacity = '0'
+    document.body.appendChild(area)
+    area.select()
+    const ok = document.execCommand('copy')
+    area.remove()
+    return ok
+  } catch (_) { return false }
 }
 
 function isTextInput(target) {
@@ -8610,6 +8781,46 @@ function createTransferPage({ React, Glyph, api, post, C, devices = [], localDev
     }
     return post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/' + operation, body)
   }
+  const directRead = async (deviceId, args) => {
+    const info = await directInfo(deviceId)
+    if (!info) return null
+    try {
+      const response = await fetch('http://' + info.host + ':' + info.port + '/fs/read_raw', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + info.token },
+        body: JSON.stringify({ path: args.path, offset: args.offset, limit: args.limit })
+      })
+      if (!response.ok) return null
+      const buffer = await response.arrayBuffer()
+      const size = Number(response.headers.get('X-Tether-Size'))
+      const offset = Number(response.headers.get('X-Tether-Offset'))
+      return {
+        bytes: new Uint8Array(buffer),
+        size: Number.isFinite(size) ? size : 0,
+        offset: Number.isFinite(offset) ? offset : args.offset,
+        reset: response.headers.get('X-Tether-Reset') === '1'
+      }
+    } catch (_) { return null }
+  }
+  const directWrite = async (deviceId, args) => {
+    const info = await directInfo(deviceId)
+    if (!info) return null
+    try {
+      const query = new URLSearchParams({
+        path: args.path, transfer_id: args.transferId, offset: String(args.offset),
+        total: String(args.total), final: args.final ? '1' : '0',
+        overwrite: args.overwrite ? '1' : '0', resume: args.resume ? '1' : '0'
+      })
+      const response = await fetch('http://' + info.host + ':' + info.port + '/fs/write_raw?' + query.toString(), {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + info.token },
+        body: args.bytes
+      })
+      if (!response.ok) return null
+      const payload = await response.json()
+      return payload && payload.ok === true ? payload.value : null
+    } catch (_) { return null }
+  }
   const iconButton = (name, label, onClick, disabled) => h('button', {
     type: 'button', title: label, 'aria-label': label, disabled,
     onClick: () => { if (!disabled && onClick) onClick() },
@@ -8622,7 +8833,7 @@ function createTransferPage({ React, Glyph, api, post, C, devices = [], localDev
   }, h(Glyph, { name, size: 15 }))
 
   function FilePane({ side, deviceId, deviceName = '', otherDeviceId, onDevice, path, onPath, selection, onSelection, onEntries,
-    onPointerRow, onDropItems, onContextItem, active, onActivate, refreshKey = 0,
+    onPointerRow, onDropItems, onContextItem, onBlankContextItem, active, onActivate, refreshKey = 0,
     onNewFolder, onNewFile, onRename, onDelete, onRefresh }) {
     const [roots, setRoots] = React.useState([])
     const [entries, setEntries] = React.useState(null)
@@ -8755,6 +8966,7 @@ function createTransferPage({ React, Glyph, api, post, C, devices = [], localDev
         onRefresh: refresh,
         onRowPointerDown: onPointerRow,
         onContextMenu: (item, event) => { if (onContextItem) onContextItem(item, event) },
+        onBlankContextMenu: (event) => { if (onBlankContextItem) onBlankContextItem(null, event) },
         fileIcon,
         formatTime: (value) => value ? new Date(value * 1000).toLocaleString('zh-CN', { hour12: false }) : '',
         formatSize: (value) => formatBytes(Number(value)),
@@ -8845,6 +9057,8 @@ function createTransferPage({ React, Glyph, api, post, C, devices = [], localDev
               signal: controller.signal,
               read: (args) => postFs(sourceDevice, 'read',
                 { path: args.path, offset: args.offset, limit: args.limit, encoding: 'base64' }),
+              readBytes: (args) => directRead(sourceDevice, args),
+              writeBytes: (args) => directWrite(target.device, args),
               write: (args) => postFs(target.device, 'write_chunk',
                 { ...args, transfer_id: args.transferId }),
               status: (args) => postFs(target.device, 'transfer_status',
@@ -9029,15 +9243,26 @@ function createTransferPage({ React, Glyph, api, post, C, devices = [], localDev
   }
 
   const openContext = (name) => (item, event) => {
-    if (!item) return
+    if (!event) return
+    event.preventDefault(); event.stopPropagation()
     const current = side(name)
-    if (!current.selection.includes(item.path)) {
-      const next = event && (event.ctrlKey || event.metaKey) ? [...current.selection, item.path] : [item.path]
-      if (name === 'left') setLeftSelection(next); else setRightSelection(next)
+    if (item) {
+      if (!current.selection.includes(item.path)) {
+        const next = event.ctrlKey || event.metaKey ? [...current.selection, item.path] : [item.path]
+        if (name === 'left') setLeftSelection(next); else setRightSelection(next)
+      }
+    } else if (current.selection.length) {
+      if (name === 'left') setLeftSelection([]); else setRightSelection([])
     }
     setActiveSide(name)
-    setMenu({ x: event.clientX, y: event.clientY, side: name, item })
+    setMenu({ x: event.clientX, y: event.clientY, side: name, item: item || null })
   }
+
+  React.useEffect(() => {
+    if (!job || job.state === 'running') return undefined
+    const timer = setTimeout(() => setJob(null), job.state === 'done' ? 4000 : 8000)
+    return () => clearTimeout(timer)
+  }, [job && job.state])
 
   const progress = job ? Math.max(0, Math.min(100, Number(job.percent) || 0)) : 0
   const sourceCount = itemsFor(activeSide).length
@@ -9061,6 +9286,7 @@ function createTransferPage({ React, Glyph, api, post, C, devices = [], localDev
       active: activeSide === name, onActivate: () => setActiveSide(name),
       onPointerRow: (event, item) => startRowDrag(name, event, item),
       onContextItem: openContext(name),
+      onBlankContextItem: openContext(name),
       onNewFolder: () => openDialog('newFolder', '', { side: name }),
       onNewFile: () => openDialog('newFile', '', { side: name }),
       onRename: () => { const item = current.entries.find((entry) => entry.path === current.selection[0]); if (item) openDialog('rename', item.name, { side: name, item }) },
@@ -9110,28 +9336,33 @@ function createTransferPage({ React, Glyph, api, post, C, devices = [], localDev
           h('span', { className: 'tether-num', style: { fontSize: 10.5, color: C.mute, whiteSpace: 'nowrap' } }, progress + '% · ' + formatBytes(job.transferred || 0) + ' / ' + formatBytes(job.total || 0))) : null),
       job && job.state === 'running'
         ? h('button', { type: 'button', onClick: cancel, style: { ...field, height: 28, padding: '0 12px', cursor: 'pointer' } }, '取消')
-        : h('button', {
-          type: 'button', onClick: start, disabled: !sourceCount || !target.path, title: '转移到另一侧', 'aria-label': '转移到另一侧',
-          className: 'tether-press',
-          style: { width: 32, height: 32, flex: '0 0 auto', display: 'grid', placeItems: 'center', border: 0, borderRadius: 999,
-            background: C.blue, color: '#fff', cursor: !sourceCount || !target.path ? 'not-allowed' : 'pointer',
-            opacity: !sourceCount || !target.path ? 0.45 : 1 }
-        }, h(Glyph, { name: 'transfer', size: 16 }))),
+        : !job && sourceCount && target.path
+          ? h('button', {
+            type: 'button', onClick: start, title: '转移到另一侧', 'aria-label': '转移到另一侧',
+            className: 'tether-press',
+            style: { width: 32, height: 32, flex: '0 0 auto', display: 'grid', placeItems: 'center', border: 0, borderRadius: 999,
+              background: C.blue, color: '#fff', cursor: 'pointer' }
+          }, h(Glyph, { name: 'transfer', size: 16 }))
+          : null),
     menu ? h('div', {
       role: 'menu', onMouseDown: (event) => event.stopPropagation(),
       style: { position: 'fixed', left: menu.x, top: menu.y, zIndex: 2147483000, minWidth: 160, padding: 4,
         background: C.bg, borderRadius: 8, boxShadow: '0 8px 24px rgba(16,24,40,.18)', border: '1px solid ' + C.line }
     },
-      [
-        ['新建文件夹', () => openDialog('newFolder', '', { side: menu.side })],
-        ['新建文件', () => openDialog('newFile', '', { side: menu.side })],
-        ['重命名', () => { const current = side(menu.side); const item = current.entries.find((entry) => entry.path === current.selection[0]); if (item) openDialog('rename', item.name, { side: menu.side, item }) }],
-        ['删除', () => { void deleteSelected(menu.side) }],
+      (menu.item ? [
         ['复制', () => copySelection(menu.side, false)],
         ['剪切', () => copySelection(menu.side, true)],
-        ['粘贴到此处', () => pasteInto(menu.side)],
+        ['复制路径', () => { void copyText(menu.item.path).then((ok) => { if (onNotice) onNotice(ok ? '已复制路径' : '复制路径失败') }) }],
+        ['重命名', () => { const current = side(menu.side); const item = current.entries.find((entry) => entry.path === current.selection[0]); if (item) openDialog('rename', item.name, { side: menu.side, item }) }],
+        ['删除', () => { void deleteSelected(menu.side) }],
         ['刷新', refresh]
-      ].map(([label, action]) => h('button', {
+      ] : [
+        ['新建文件夹', () => openDialog('newFolder', '', { side: menu.side })],
+        ['新建文件', () => openDialog('newFile', '', { side: menu.side })],
+        clipboardRef.current ? ['粘贴到此处', () => pasteInto(menu.side)] : null,
+        ['复制当前路径', () => { void copyText(side(menu.side).path).then((ok) => { if (onNotice) onNotice(ok ? '已复制当前路径' : '复制路径失败') }) }],
+        ['刷新', refresh]
+      ]).filter(Boolean).map(([label, action]) => h('button', {
         key: label, type: 'button',
         onClick: () => { setMenu(null); action() },
         className: 'tether-hover',
@@ -10191,6 +10422,26 @@ function updateErrorText(value) {
   return String((value && value.message) || value || '更新失败')
     .replace(/^Error invoking remote method ['"]tether:[^'"]+['"]:\s*/, '')
     .replace(/^Error:\s*/, '')
+}
+
+async function copyText(text) {
+  const value = String(text || '')
+  if (!value) return false
+  try {
+    await navigator.clipboard.writeText(value)
+    return true
+  } catch (_) { /* fall through */ }
+  try {
+    const area = document.createElement('textarea')
+    area.value = value
+    area.style.position = 'fixed'
+    area.style.opacity = '0'
+    document.body.appendChild(area)
+    area.select()
+    const ok = document.execCommand('copy')
+    area.remove()
+    return ok
+  } catch (_) { return false }
 }
 
 function shortUpdateError(error) {
@@ -13325,6 +13576,8 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       pathRef.current = path
       const [hoverTip, setHoverTip] = React.useState(null)
       const [selected, setSelected] = React.useState(null)
+      const [selectedPaths, setSelectedPaths] = React.useState([])
+      const [band, setBand] = React.useState(null)
       const [file, setFile] = React.useState(null)
       const [draft, setDraft] = React.useState('')
       const [dirty, setDirty] = React.useState(false)
@@ -15133,7 +15386,12 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const openContextMenu = (event, entry, base) => {
         event.preventDefault(); event.stopPropagation()
         hideHoverTip()
-        if (entry) setSelected(entry)
+        if (entry) {
+          setSelected(entry)
+          setSelectedPaths((current) => current.includes(entry.path) ? current : [entry.path])
+        } else {
+          setSelectedPaths([])
+        }
         setContextMenu({ x: event.clientX, y: event.clientY, entry: entry || null, base: base || path })
       }
 
@@ -15749,6 +16007,53 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         const entries = filterExplorerEntries(sortExplorerEntries(dirEntries, sortKey, sortDir), search)
         const filtering = !!search.trim()
         const columns = 'minmax(0,1fr) 132px 104px 78px'
+        const copyPathText = (list) => {
+          const paths = (list || []).map((item) => item && item.path).filter(Boolean)
+          if (!paths.length) return
+          void copyText(paths.join('\n')).then((ok) => {
+            setNotice(ok ? (paths.length > 1 ? '已复制 ' + paths.length + ' 个路径' : '已复制路径') : '复制路径失败')
+          })
+        }
+        const selectedEntries = () => entries.filter((entry) => selectedPaths.includes(entry.path))
+        const beginBand = (event) => {
+          if (event.button !== 0 || !path || file) return
+          const target = event.target
+          if (target && target.closest && target.closest('[data-row-path]')) return
+          if (target && target.closest && target.closest('button, input, select, textarea')) return
+          const host = event.currentTarget
+          const keep = !!(event.ctrlKey || event.metaKey)
+          const base = keep ? [...selectedPaths] : []
+          if (!keep) { setSelectedPaths([]); setSelected(null) }
+          const startX = event.clientX
+          const startY = event.clientY
+          let moved = false
+          const move = (moveEvent) => {
+            const dx = moveEvent.clientX - startX
+            const dy = moveEvent.clientY - startY
+            if (!moved && Math.hypot(dx, dy) < 4) return
+            moved = true
+            const rect = {
+              left: Math.min(startX, moveEvent.clientX), top: Math.min(startY, moveEvent.clientY),
+              right: Math.max(startX, moveEvent.clientX), bottom: Math.max(startY, moveEvent.clientY)
+            }
+            setBand(rect)
+            const hits = []
+            host.querySelectorAll('[data-row-path]').forEach((element) => {
+              const box = element.getBoundingClientRect()
+              if (box.right >= rect.left && box.left <= rect.right && box.bottom >= rect.top && box.top <= rect.bottom) {
+                hits.push(element.getAttribute('data-row-path'))
+              }
+            })
+            setSelectedPaths([...new Set([...base, ...hits])])
+          }
+          const up = () => {
+            window.removeEventListener('pointermove', move)
+            window.removeEventListener('pointerup', up)
+            setBand(null)
+          }
+          window.addEventListener('pointermove', move)
+          window.addEventListener('pointerup', up)
+        }
         const sortHeader = (key, label, align) => h('button', {
           onClick: () => setSort((current) => toggleExplorerSort(current, key)),
           title: '按' + label + '排序',
@@ -15774,15 +16079,31 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             h('button', { onClick: () => setSearch(''), className: 'tether-hover', style: { border: 0, borderRadius: 6, padding: '5px 10px', background: C.soft, color: C.ink, fontSize: 12, cursor: 'pointer' } }, '清除搜索'))
           if (!entries.length) return h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', color: C.mute, fontSize: 12 } }, '空文件夹')
           return h('div', { style: { flex: '1 1 auto', minHeight: 0, position: 'relative', display: 'flex' } },
-            h('div', { className: 'tether-scroll', onScroll: hideHoverTip, style: { flex: '1 1 auto', overflow: 'auto', padding: '0 10px 24px' } },
+            h('div', {
+              className: 'tether-scroll', onScroll: hideHoverTip,
+              onPointerDown: beginBand,
+              onContextMenu: (event) => {
+                const target = event.target
+                if (target && target.closest && target.closest('[data-row-path]')) return
+                openContextMenu(event, null, path)
+              },
+              style: { flex: '1 1 auto', overflow: 'auto', padding: '0 10px 24px', userSelect: 'none' }
+            },
               h('div', { style: { display: 'grid', gridTemplateColumns: columns, gap: 8, height: 28, padding: '0 8px', alignItems: 'center', fontSize: 11, color: C.mute } },
                 sortHeader('name', '名称'), sortHeader('mtime', '修改日期'), h('span', null, '类型'), sortHeader('size', '大小', 'right')),
               entries.map((entry) => h('div', {
               key: entry.path, role: 'button', tabIndex: 0,
+              'data-row-path': entry.path,
               onClick: (event) => {
                 if (event.detail > 1) return
                 hideHoverTip()
                 setSelected(entry)
+                setSelectedPaths((current) => {
+                  if (event.ctrlKey || event.metaKey) {
+                    return current.includes(entry.path) ? current.filter((path) => path !== entry.path) : [...current, entry.path]
+                  }
+                  return [entry.path]
+                })
                 if (entry.dir) prefetchDir(entry.path)
                 else prefetchPreview(entry)
               },
@@ -15792,7 +16113,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
               onContextMenu: (event) => openContextMenu(event, entry, entry.dir ? entry.path : path),
               onKeyDown: (event) => { if (event.key === 'Enter') openFile(entry) },
               className: 'tether-hover',
-              style: { display: 'grid', gridTemplateColumns: columns, gap: 8, height: 30, padding: '0 8px', alignItems: 'center', borderRadius: 6, fontSize: 13, color: C.ink, background: selected && selected.path === entry.path ? C.active : 'transparent', cursor: 'default' }
+              style: { display: 'grid', gridTemplateColumns: columns, gap: 8, height: 30, padding: '0 8px', alignItems: 'center', borderRadius: 6, fontSize: 13, color: C.ink, background: (selectedPaths.length ? selectedPaths.includes(entry.path) : !!(selected && selected.path === entry.path)) ? C.active : 'transparent', cursor: 'default', userSelect: 'none' }
             },
               h('div', { style: { display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 } },
                 h('span', { style: { width: 16, height: 16, display: 'grid', placeItems: 'center', flex: '0 0 auto' } },
@@ -15820,13 +16141,19 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           terminalAllowed && contextMenu.entry && contextMenu.entry.dir ? menuItem('terminal', '在终端中打开', () => { openTerminal(contextMenu.entry.path); setContextMenu(null) }) : null,
           terminalAllowed && contextMenu.entry && !contextMenu.entry.dir ? menuItem('terminal', '在所在目录打开终端', () => { openTerminal(parentOf(contextMenu.entry.path)); setContextMenu(null) }) : null,
           contextMenu.entry ? menuItem('file', '复制', () => { copyEntry(contextMenu.entry); setContextMenu(null) }) : null,
-          clipboard && contextMenu.base ? menuItem('file', '粘贴', () => pasteEntry(contextMenu.base)) : null,
+          contextMenu.entry ? menuItem('file', '复制路径', () => {
+            const list = selectedPaths.includes(contextMenu.entry.path) ? selectedEntries() : [contextMenu.entry]
+            setContextMenu(null)
+            copyPathText(list)
+          }) : null,
+          clipboard && contextMenu.base && !contextMenu.entry ? menuItem('file', '粘贴', () => pasteEntry(contextMenu.base)) : null,
           contextMenu.entry ? menuItem('pencil', '重命名', () => { const entry = contextMenu.entry; setContextMenu(null); renameEntry(entry) }) : null,
           contextMenu.entry ? menuItem('trash', '删除', () => { const entry = contextMenu.entry; setContextMenu(null); deleteEntry(entry) }, true) : null,
           contextMenu.entry ? h('div', { style: { height: 1, background: C.line, margin: '4px 2px' } }) : null,
           !contextMenu.entry && terminalAllowed ? menuItem('terminal', '在此打开终端', () => { openTerminal(contextMenu.base || path); setContextMenu(null) }) : null,
-          menuItem('plus', '新建文件', () => { const base = contextMenu.base; setContextMenu(null); makeFile(base) }),
-          menuItem('files', '新建文件夹', () => { const base = contextMenu.base; setContextMenu(null); makeFolder(base) }),
+          !contextMenu.entry ? menuItem('plus', '新建文件', () => { const base = contextMenu.base; setContextMenu(null); makeFile(base) }) : null,
+          !contextMenu.entry ? menuItem('files', '新建文件夹', () => { const base = contextMenu.base; setContextMenu(null); makeFolder(base) }) : null,
+          !contextMenu.entry ? menuItem('file', '复制当前路径', () => { const base = contextMenu.base || path; setContextMenu(null); copyPathText([{ path: base }]) }) : null,
           h('div', { style: { height: 1, background: C.line, margin: '4px 2px' } }),
           menuItem('refresh', '刷新', () => { setContextMenu(null); refreshExplorer() })
         ) : null
@@ -15845,7 +16172,16 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
               onClose: () => setTerminalOpen(false)
             }) : null
           ),
-          context
+          context,
+          band ? h('div', {
+            style: {
+              position: 'fixed', left: band.left, top: band.top,
+              width: Math.max(0, band.right - band.left), height: Math.max(0, band.bottom - band.top),
+              border: '1px solid ' + C.blue,
+              background: 'color-mix(in srgb, ' + C.blue + ' 12%, transparent)',
+              borderRadius: 3, pointerEvents: 'none', zIndex: 2147482000
+            }
+          }) : null
         )
       }
 

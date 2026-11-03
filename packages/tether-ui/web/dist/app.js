@@ -173931,6 +173931,28 @@ async function transferFile({
 }
 
 // src/target-file-explorer.js
+async function copyText(text2) {
+  const value = String(text2 || "");
+  if (!value) return false;
+  try {
+    await navigator.clipboard.writeText(value);
+    return true;
+  } catch (_2) {
+  }
+  try {
+    const area = document.createElement("textarea");
+    area.value = value;
+    area.style.position = "fixed";
+    area.style.opacity = "0";
+    document.body.appendChild(area);
+    area.select();
+    const ok2 = document.execCommand("copy");
+    area.remove();
+    return ok2;
+  } catch (_2) {
+    return false;
+  }
+}
 function parentOf(path) {
   const clean = String(path || "").replace(/[\\/]+$/, "");
   if (!clean) return "";
@@ -174019,6 +174041,7 @@ function TargetFileExplorer({
   selectedPaths = [],
   onSelectionChange,
   onContextMenu,
+  onBlankContextMenu,
   onDragItem,
   onRowPointerDown,
   onDismissError,
@@ -174027,6 +174050,68 @@ function TargetFileExplorer({
   const ReactRuntime = React2;
   const h3 = ReactRuntime.createElement;
   const C2 = colors || {};
+  const [innerMenu, setInnerMenu] = React2.useState(null);
+  const [band, setBand] = React2.useState(null);
+  React2.useEffect(() => {
+    if (!innerMenu) return void 0;
+    const close = () => setInnerMenu(null);
+    window.addEventListener("mousedown", close);
+    window.addEventListener("keydown", close);
+    return () => {
+      window.removeEventListener("mousedown", close);
+      window.removeEventListener("keydown", close);
+    };
+  }, [innerMenu]);
+  const openInnerMenu = (event, item) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setInnerMenu({ x: event.clientX, y: event.clientY, item: item || null });
+  };
+  const beginBand = (event) => {
+    if (disabled || selectionMode !== "multiple" || !onSelectionChange) return;
+    if (event.button !== 0) return;
+    const target = event.target;
+    if (target && target.closest && target.closest("[data-row-path]")) return;
+    if (target && target.closest && target.closest("button, input, select, textarea")) return;
+    const host = event.currentTarget;
+    const keep = !!(event.ctrlKey || event.metaKey);
+    const base = keep ? [...selectedPaths || []] : [];
+    const startX = event.clientX;
+    const startY = event.clientY;
+    let moved = false;
+    const move = (moveEvent) => {
+      const dx = moveEvent.clientX - startX;
+      const dy = moveEvent.clientY - startY;
+      if (!moved && Math.hypot(dx, dy) < 4) return;
+      moved = true;
+      const rect = {
+        left: Math.min(startX, moveEvent.clientX),
+        top: Math.min(startY, moveEvent.clientY),
+        right: Math.max(startX, moveEvent.clientX),
+        bottom: Math.max(startY, moveEvent.clientY)
+      };
+      setBand(rect);
+      const hits = [];
+      host.querySelectorAll("[data-row-path]").forEach((element) => {
+        const box = element.getBoundingClientRect();
+        if (box.right >= rect.left && box.left <= rect.right && box.bottom >= rect.top && box.top <= rect.bottom) {
+          hits.push(element.getAttribute("data-row-path"));
+        }
+      });
+      onSelectionChange([.../* @__PURE__ */ new Set([...base, ...hits])]);
+    };
+    const up2 = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up2);
+      setBand(null);
+      if (!moved && !keep) {
+        if (onSelect) onSelect(null);
+        onSelectionChange([]);
+      }
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up2);
+  };
   const workspaces = roots.filter((item) => (item.kind || "workspace") === "workspace");
   const drives = roots.filter((item) => item.kind === "drive");
   const crumbs = crumbsFor(path, rootPath);
@@ -174204,6 +174289,7 @@ function TargetFileExplorer({
         type: "button",
         title: item.path,
         disabled: disabled || oversized,
+        "data-row-path": item.path,
         draggable: !!onDragItem,
         onDragStart: (event) => {
           if (onDragItem) onDragItem(event, item);
@@ -174212,10 +174298,10 @@ function TargetFileExplorer({
           if (onRowPointerDown) onRowPointerDown(event, item);
         },
         onContextMenu: (event) => {
-          if (onContextMenu) {
-            event.preventDefault();
-            onContextMenu(item, event);
-          }
+          event.preventDefault();
+          event.stopPropagation();
+          if (onContextMenu) onContextMenu(item, event);
+          else openInnerMenu(event, item);
         },
         onClick: (event) => {
           if (selectionMode === "multiple" && onSelectionChange) {
@@ -174248,7 +174334,8 @@ function TargetFileExplorer({
           fontSize: compact ? 12.5 : 13,
           textAlign: "left",
           cursor: disabled || oversized ? "default" : "pointer",
-          opacity: oversized ? 0.55 : 1
+          opacity: oversized ? 0.55 : 1,
+          userSelect: "none"
         }
       },
       h3(
@@ -174297,7 +174384,19 @@ function TargetFileExplorer({
   } else {
     body = h3(
       "div",
-      { style: { flex: "1 1 auto", minHeight: 0, overflow: "auto", padding: "0 8px 18px" } },
+      {
+        style: { flex: "1 1 auto", minHeight: 0, overflow: "auto", padding: "0 8px 18px", userSelect: "none" },
+        onPointerDown: beginBand,
+        onContextMenu: (event) => {
+          const target = event.target;
+          if (target && target.closest && target.closest("[data-row-path]")) return;
+          if (onBlankContextMenu) {
+            event.preventDefault();
+            event.stopPropagation();
+            onBlankContextMenu(event);
+          } else if (!onContextMenu) openInnerMenu(event, null);
+        }
+      },
       h3(
         "div",
         {
@@ -174401,177 +174500,235 @@ function TargetFileExplorer({
     }, "\xD7") : null
   ) : null;
   return h3(
-    "div",
-    { style: { display: "flex", flex: "1 1 auto", minHeight: 0, minWidth: 0 } },
-    h3("div", {
-      style: {
-        width: compact ? 148 : 224,
-        flex: "0 0 auto",
-        overflow: "auto",
-        padding: "6px 8px",
-        background: C2.soft,
-        borderRight: C2.line ? "1px solid " + C2.line : 0
-      }
-    }, rootGroup("\u5DE5\u4F5C\u533A", workspaces, "\u672A\u53D1\u73B0\u5DE5\u4F5C\u533A"), rootGroup("\u6B64\u7535\u8111", drives, "\u672A\u53D1\u73B0\u78C1\u76D8")),
+    ReactRuntime.Fragment,
+    null,
     h3(
       "div",
-      { style: { display: "flex", flexDirection: "column", flex: "1 1 auto", minWidth: 0, minHeight: 0, background: C2.bg } },
+      { style: { display: "flex", flex: "1 1 auto", minHeight: 0, minWidth: 0 } },
+      h3("div", {
+        style: {
+          width: compact ? 148 : 224,
+          flex: "0 0 auto",
+          overflow: "auto",
+          padding: "6px 8px",
+          background: C2.soft,
+          borderRight: C2.line ? "1px solid " + C2.line : 0
+        }
+      }, rootGroup("\u5DE5\u4F5C\u533A", workspaces, "\u672A\u53D1\u73B0\u5DE5\u4F5C\u533A"), rootGroup("\u6B64\u7535\u8111", drives, "\u672A\u53D1\u73B0\u78C1\u76D8")),
       h3(
         "div",
-        {
-          style: {
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            height: 46,
-            padding: "0 14px",
-            borderBottom: C2.line ? "1px solid " + C2.line : 0,
-            flex: "0 0 auto",
-            minWidth: 0
-          }
-        },
-        iconButton("up", "\u4E0A\u4E00\u7EA7", () => {
-          if (up && onPath) onPath(up);
-        }, disabled || !up),
+        { style: { display: "flex", flexDirection: "column", flex: "1 1 auto", minWidth: 0, minHeight: 0, background: C2.bg } },
         h3(
-          "div",
-          {
-            className: "tether-breadcrumbs",
-            style: { display: "flex", alignItems: "center", gap: 1, flex: "1 1 auto", minWidth: 0, overflow: "hidden", height: 28 }
-          },
-          crumbs.length ? crumbs.map((segment, index) => h3(
-            ReactRuntime.Fragment,
-            { key: segment.path },
-            index ? h3("span", { style: { color: C2.mute, fontSize: 10, flex: "0 0 auto" } }, "\u203A") : null,
-            h3("button", {
-              type: "button",
-              title: segment.path,
-              disabled,
-              onClick: () => {
-                if (!disabled && onPath) onPath(segment.path);
-              },
-              className: "tether-hover",
-              style: {
-                border: 0,
-                background: "transparent",
-                borderRadius: 5,
-                padding: "3px 5px",
-                fontSize: 12,
-                lineHeight: "18px",
-                color: index === crumbs.length - 1 ? C2.ink : C2.sub,
-                cursor: disabled ? "default" : "pointer",
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                maxWidth: 190
-              }
-            }, segment.label)
-          )) : h3("span", { style: { color: C2.sub, fontSize: 12 } }, placeholder)
-        ),
-        editablePath ? h3("input", {
-          key: path,
-          defaultValue: path || "",
-          spellCheck: false,
-          "aria-label": pathLabel,
-          onKeyDown: (event) => {
-            if (event.key === "Enter" && event.currentTarget.value.trim() && onPath) {
-              onPath(event.currentTarget.value.trim());
-            }
-          },
-          style: {
-            height: 28,
-            boxSizing: "border-box",
-            border: 0,
-            borderRadius: 6,
-            background: C2.soft,
-            color: C2.ink,
-            fontSize: 12,
-            padding: "0 8px",
-            outline: "none",
-            flex: "0 0 220px",
-            minWidth: 100,
-            fontFamily: "Consolas, monospace"
-          }
-        }) : null,
-        !compact && path && entries2 !== null ? h3(
           "div",
           {
             style: {
               display: "flex",
               alignItems: "center",
-              gap: 5,
-              flex: "0 1 200px",
-              minWidth: 120,
-              height: 28,
-              boxSizing: "border-box",
-              padding: "0 4px 0 8px",
-              borderRadius: 7,
-              background: C2.soft,
-              color: C2.mute
+              gap: 8,
+              height: 46,
+              padding: "0 14px",
+              borderBottom: C2.line ? "1px solid " + C2.line : 0,
+              flex: "0 0 auto",
+              minWidth: 0
             }
           },
-          h3("span", { "aria-hidden": true, style: { fontSize: 12 } }, "\u2315"),
-          h3("input", {
-            value: search2,
-            placeholder: searchPlaceholder,
-            "aria-label": searchPlaceholder,
+          iconButton("up", "\u4E0A\u4E00\u7EA7", () => {
+            if (up && onPath) onPath(up);
+          }, disabled || !up),
+          h3(
+            "div",
+            {
+              className: "tether-breadcrumbs",
+              style: { display: "flex", alignItems: "center", gap: 1, flex: "1 1 auto", minWidth: 0, overflow: "hidden", height: 28 }
+            },
+            crumbs.length ? crumbs.map((segment, index) => h3(
+              ReactRuntime.Fragment,
+              { key: segment.path },
+              index ? h3("span", { style: { color: C2.mute, fontSize: 10, flex: "0 0 auto" } }, "\u203A") : null,
+              h3("button", {
+                type: "button",
+                title: segment.path,
+                disabled,
+                onClick: () => {
+                  if (!disabled && onPath) onPath(segment.path);
+                },
+                className: "tether-hover",
+                style: {
+                  border: 0,
+                  background: "transparent",
+                  borderRadius: 5,
+                  padding: "3px 5px",
+                  fontSize: 12,
+                  lineHeight: "18px",
+                  color: index === crumbs.length - 1 ? C2.ink : C2.sub,
+                  cursor: disabled ? "default" : "pointer",
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  maxWidth: 190
+                }
+              }, segment.label)
+            )) : h3("span", { style: { color: C2.sub, fontSize: 12 } }, placeholder)
+          ),
+          editablePath ? h3("input", {
+            key: path,
+            defaultValue: path || "",
             spellCheck: false,
-            onChange: (event) => onSearch(event.target.value),
+            "aria-label": pathLabel,
             onKeyDown: (event) => {
-              if (event.key === "Escape") {
-                onSearch("");
-                event.currentTarget.blur();
+              if (event.key === "Enter" && event.currentTarget.value.trim() && onPath) {
+                onPath(event.currentTarget.value.trim());
               }
             },
             style: {
-              flex: "1 1 auto",
-              minWidth: 0,
-              height: 22,
-              padding: 0,
+              height: 28,
+              boxSizing: "border-box",
               border: 0,
-              background: "transparent",
+              borderRadius: 6,
+              background: C2.soft,
               color: C2.ink,
               fontSize: 12,
-              outline: "none"
+              padding: "0 8px",
+              outline: "none",
+              flex: "0 0 220px",
+              minWidth: 100,
+              fontFamily: "Consolas, monospace"
             }
-          }),
-          search2 ? h3("button", {
-            type: "button",
-            title: "\u6E05\u9664\u641C\u7D22",
-            "aria-label": "\u6E05\u9664\u641C\u7D22",
-            onClick: () => onSearch(""),
-            className: "tether-hover",
-            style: {
-              width: 18,
-              height: 18,
-              flex: "0 0 auto",
-              display: "grid",
-              placeItems: "center",
-              border: 0,
-              borderRadius: 4,
-              background: "transparent",
-              color: C2.mute,
-              fontSize: 13,
-              lineHeight: "14px",
-              padding: 0,
-              cursor: "pointer"
-            }
-          }, "\xD7") : null
-        ) : null,
-        iconButton("refresh", "\u5237\u65B0", () => {
-          if (path && onRefresh) onRefresh(path);
-        }, disabled || !path)
-      ),
-      h3(
-        "div",
-        {
-          style: { position: "relative", display: "flex", flexDirection: "column", flex: "1 1 auto", minWidth: 0, minHeight: 0 }
-        },
-        body,
-        loadingOverlay,
-        errorToast
+          }) : null,
+          !compact && path && entries2 !== null ? h3(
+            "div",
+            {
+              style: {
+                display: "flex",
+                alignItems: "center",
+                gap: 5,
+                flex: "0 1 200px",
+                minWidth: 120,
+                height: 28,
+                boxSizing: "border-box",
+                padding: "0 4px 0 8px",
+                borderRadius: 7,
+                background: C2.soft,
+                color: C2.mute
+              }
+            },
+            h3("span", { "aria-hidden": true, style: { fontSize: 12 } }, "\u2315"),
+            h3("input", {
+              value: search2,
+              placeholder: searchPlaceholder,
+              "aria-label": searchPlaceholder,
+              spellCheck: false,
+              onChange: (event) => onSearch(event.target.value),
+              onKeyDown: (event) => {
+                if (event.key === "Escape") {
+                  onSearch("");
+                  event.currentTarget.blur();
+                }
+              },
+              style: {
+                flex: "1 1 auto",
+                minWidth: 0,
+                height: 22,
+                padding: 0,
+                border: 0,
+                background: "transparent",
+                color: C2.ink,
+                fontSize: 12,
+                outline: "none"
+              }
+            }),
+            search2 ? h3("button", {
+              type: "button",
+              title: "\u6E05\u9664\u641C\u7D22",
+              "aria-label": "\u6E05\u9664\u641C\u7D22",
+              onClick: () => onSearch(""),
+              className: "tether-hover",
+              style: {
+                width: 18,
+                height: 18,
+                flex: "0 0 auto",
+                display: "grid",
+                placeItems: "center",
+                border: 0,
+                borderRadius: 4,
+                background: "transparent",
+                color: C2.mute,
+                fontSize: 13,
+                lineHeight: "14px",
+                padding: 0,
+                cursor: "pointer"
+              }
+            }, "\xD7") : null
+          ) : null,
+          iconButton("refresh", "\u5237\u65B0", () => {
+            if (path && onRefresh) onRefresh(path);
+          }, disabled || !path)
+        ),
+        h3(
+          "div",
+          {
+            style: { position: "relative", display: "flex", flexDirection: "column", flex: "1 1 auto", minWidth: 0, minHeight: 0 }
+          },
+          body,
+          loadingOverlay,
+          errorToast
+        )
       )
-    )
+    ),
+    band ? h3("div", {
+      style: {
+        position: "fixed",
+        left: band.left,
+        top: band.top,
+        width: Math.max(0, band.right - band.left),
+        height: Math.max(0, band.bottom - band.top),
+        border: "1px solid " + (C2.blue || "#1677ff"),
+        background: "color-mix(in srgb, " + (C2.blue || "#1677ff") + " 12%, transparent)",
+        borderRadius: 3,
+        pointerEvents: "none",
+        zIndex: 2147482e3
+      }
+    }) : null,
+    innerMenu ? h3("div", {
+      role: "menu",
+      onMouseDown: (event) => event.stopPropagation(),
+      style: {
+        position: "fixed",
+        left: Math.max(8, Math.min(innerMenu.x, window.innerWidth - 180)),
+        top: Math.max(8, Math.min(innerMenu.y, window.innerHeight - 110)),
+        zIndex: 2147483e3,
+        minWidth: 150,
+        padding: 4,
+        background: C2.bg,
+        borderRadius: 8,
+        boxShadow: "0 8px 24px rgba(16,24,40,.18)",
+        border: "1px solid " + C2.line
+      }
+    }, (innerMenu.item ? [["\u590D\u5236\u8DEF\u5F84", () => copyText(innerMenu.item.path)], ["\u5237\u65B0", () => {
+      if (path && onRefresh) onRefresh(path);
+    }]] : [["\u590D\u5236\u5F53\u524D\u8DEF\u5F84", () => copyText(path)], ["\u5237\u65B0", () => {
+      if (path && onRefresh) onRefresh(path);
+    }]]).map(([label, action]) => h3("button", {
+      key: label,
+      type: "button",
+      onClick: () => {
+        setInnerMenu(null);
+        action();
+      },
+      className: "tether-hover",
+      style: {
+        display: "block",
+        width: "100%",
+        padding: "6px 10px",
+        border: 0,
+        borderRadius: 5,
+        background: "transparent",
+        color: C2.ink,
+        fontSize: 12,
+        textAlign: "left",
+        cursor: "pointer"
+      }
+    }, label))) : null
   );
 }
 
@@ -174668,6 +174825,28 @@ function formatBytes(value) {
   if (value < 1024 * 1024) return (value / 1024).toFixed(1) + " KB";
   if (value < 1024 * 1024 * 1024) return (value / (1024 * 1024)).toFixed(1) + " MB";
   return (value / (1024 * 1024 * 1024)).toFixed(2) + " GB";
+}
+async function copyText2(text2) {
+  const value = String(text2 || "");
+  if (!value) return false;
+  try {
+    await navigator.clipboard.writeText(value);
+    return true;
+  } catch (_2) {
+  }
+  try {
+    const area = document.createElement("textarea");
+    area.value = value;
+    area.style.position = "fixed";
+    area.style.opacity = "0";
+    document.body.appendChild(area);
+    area.select();
+    const ok2 = document.execCommand("copy");
+    area.remove();
+    return ok2;
+  } catch (_2) {
+    return false;
+  }
 }
 function isTextInput(target) {
   if (!target) return false;
@@ -174827,6 +175006,7 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C: C2, devi
     onPointerRow,
     onDropItems,
     onContextItem,
+    onBlankContextItem,
     active,
     onActivate,
     refreshKey: refreshKey2 = 0,
@@ -175029,6 +175209,9 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C: C2, devi
         onRowPointerDown: onPointerRow,
         onContextMenu: (item, event) => {
           if (onContextItem) onContextItem(item, event);
+        },
+        onBlankContextMenu: (event) => {
+          if (onBlankContextItem) onBlankContextItem(null, event);
         },
         fileIcon,
         formatTime: (value) => value ? new Date(value * 1e3).toLocaleString("zh-CN", { hour12: false }) : "",
@@ -175361,16 +175544,28 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C: C2, devi
     window.addEventListener("pointerup", up);
   };
   const openContext = (name) => (item, event) => {
-    if (!item) return;
+    if (!event) return;
+    event.preventDefault();
+    event.stopPropagation();
     const current = side(name);
-    if (!current.selection.includes(item.path)) {
-      const next = event && (event.ctrlKey || event.metaKey) ? [...current.selection, item.path] : [item.path];
-      if (name === "left") setLeftSelection(next);
-      else setRightSelection(next);
+    if (item) {
+      if (!current.selection.includes(item.path)) {
+        const next = event.ctrlKey || event.metaKey ? [...current.selection, item.path] : [item.path];
+        if (name === "left") setLeftSelection(next);
+        else setRightSelection(next);
+      }
+    } else if (current.selection.length) {
+      if (name === "left") setLeftSelection([]);
+      else setRightSelection([]);
     }
     setActiveSide(name);
-    setMenu({ x: event.clientX, y: event.clientY, side: name, item });
+    setMenu({ x: event.clientX, y: event.clientY, side: name, item: item || null });
   };
+  React2.useEffect(() => {
+    if (!job || job.state === "running") return void 0;
+    const timer = setTimeout(() => setJob(null), job.state === "done" ? 4e3 : 8e3);
+    return () => clearTimeout(timer);
+  }, [job && job.state]);
   const progress = job ? Math.max(0, Math.min(100, Number(job.percent) || 0)) : 0;
   const sourceCount = itemsFor(activeSide).length;
   const target = side(other(activeSide));
@@ -175403,6 +175598,7 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C: C2, devi
       onActivate: () => setActiveSide(name),
       onPointerRow: (event, item) => startRowDrag(name, event, item),
       onContextItem: openContext(name),
+      onBlankContextItem: openContext(name),
       onNewFolder: () => openDialog("newFolder", "", { side: name }),
       onNewFile: () => openDialog("newFile", "", { side: name }),
       onRename: () => {
@@ -175502,10 +175698,9 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C: C2, devi
           h3("span", { className: "tether-num", style: { fontSize: 10.5, color: C2.mute, whiteSpace: "nowrap" } }, progress + "% \xB7 " + formatBytes(job.transferred || 0) + " / " + formatBytes(job.total || 0))
         ) : null
       ),
-      job && job.state === "running" ? h3("button", { type: "button", onClick: cancel, style: { ...field, height: 28, padding: "0 12px", cursor: "pointer" } }, "\u53D6\u6D88") : h3("button", {
+      job && job.state === "running" ? h3("button", { type: "button", onClick: cancel, style: { ...field, height: 28, padding: "0 12px", cursor: "pointer" } }, "\u53D6\u6D88") : !job && sourceCount && target.path ? h3("button", {
         type: "button",
         onClick: start,
-        disabled: !sourceCount || !target.path,
         title: "\u8F6C\u79FB\u5230\u53E6\u4E00\u4FA7",
         "aria-label": "\u8F6C\u79FB\u5230\u53E6\u4E00\u4FA7",
         className: "tether-press",
@@ -175519,10 +175714,9 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C: C2, devi
           borderRadius: 999,
           background: C2.blue,
           color: "#fff",
-          cursor: !sourceCount || !target.path ? "not-allowed" : "pointer",
-          opacity: !sourceCount || !target.path ? 0.45 : 1
+          cursor: "pointer"
         }
-      }, h3(Glyph, { name: "transfer", size: 16 }))
+      }, h3(Glyph, { name: "transfer", size: 16 })) : null
     ),
     menu ? h3(
       "div",
@@ -175542,9 +175736,14 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C: C2, devi
           border: "1px solid " + C2.line
         }
       },
-      [
-        ["\u65B0\u5EFA\u6587\u4EF6\u5939", () => openDialog("newFolder", "", { side: menu.side })],
-        ["\u65B0\u5EFA\u6587\u4EF6", () => openDialog("newFile", "", { side: menu.side })],
+      (menu.item ? [
+        ["\u590D\u5236", () => copySelection(menu.side, false)],
+        ["\u526A\u5207", () => copySelection(menu.side, true)],
+        ["\u590D\u5236\u8DEF\u5F84", () => {
+          void copyText2(menu.item.path).then((ok2) => {
+            if (onNotice) onNotice(ok2 ? "\u5DF2\u590D\u5236\u8DEF\u5F84" : "\u590D\u5236\u8DEF\u5F84\u5931\u8D25");
+          });
+        }],
         ["\u91CD\u547D\u540D", () => {
           const current = side(menu.side);
           const item = current.entries.find((entry) => entry.path === current.selection[0]);
@@ -175553,11 +175752,18 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C: C2, devi
         ["\u5220\u9664", () => {
           void deleteSelected(menu.side);
         }],
-        ["\u590D\u5236", () => copySelection(menu.side, false)],
-        ["\u526A\u5207", () => copySelection(menu.side, true)],
-        ["\u7C98\u8D34\u5230\u6B64\u5904", () => pasteInto(menu.side)],
         ["\u5237\u65B0", refresh]
-      ].map(([label, action]) => h3("button", {
+      ] : [
+        ["\u65B0\u5EFA\u6587\u4EF6\u5939", () => openDialog("newFolder", "", { side: menu.side })],
+        ["\u65B0\u5EFA\u6587\u4EF6", () => openDialog("newFile", "", { side: menu.side })],
+        clipboardRef.current ? ["\u7C98\u8D34\u5230\u6B64\u5904", () => pasteInto(menu.side)] : null,
+        ["\u590D\u5236\u5F53\u524D\u8DEF\u5F84", () => {
+          void copyText2(side(menu.side).path).then((ok2) => {
+            if (onNotice) onNotice(ok2 ? "\u5DF2\u590D\u5236\u5F53\u524D\u8DEF\u5F84" : "\u590D\u5236\u8DEF\u5F84\u5931\u8D25");
+          });
+        }],
+        ["\u5237\u65B0", refresh]
+      ]).filter(Boolean).map(([label, action]) => h3("button", {
         key: label,
         type: "button",
         onClick: () => {
@@ -177048,6 +177254,28 @@ function responseBelongsToDevice(data, expectedDevice) {
 }
 function updateErrorText(value) {
   return String(value && value.message || value || "\u66F4\u65B0\u5931\u8D25").replace(/^Error invoking remote method ['"]tether:[^'"]+['"]:\s*/, "").replace(/^Error:\s*/, "");
+}
+async function copyText3(text2) {
+  const value = String(text2 || "");
+  if (!value) return false;
+  try {
+    await navigator.clipboard.writeText(value);
+    return true;
+  } catch (_2) {
+  }
+  try {
+    const area = document.createElement("textarea");
+    area.value = value;
+    area.style.position = "fixed";
+    area.style.opacity = "0";
+    document.body.appendChild(area);
+    area.select();
+    const ok2 = document.execCommand("copy");
+    area.remove();
+    return ok2;
+  } catch (_2) {
+    return false;
+  }
 }
 function shortUpdateError(error) {
   const code = error && error.code;
@@ -180678,6 +180906,8 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     pathRef.current = path;
     const [hoverTip, setHoverTip] = React2.useState(null);
     const [selected, setSelected] = React2.useState(null);
+    const [selectedPaths, setSelectedPaths] = React2.useState([]);
+    const [band, setBand] = React2.useState(null);
     const [file, setFile] = React2.useState(null);
     const [draft, setDraft] = React2.useState("");
     const [dirty, setDirty] = React2.useState(false);
@@ -182759,7 +182989,12 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       event.preventDefault();
       event.stopPropagation();
       hideHoverTip();
-      if (entry) setSelected(entry);
+      if (entry) {
+        setSelected(entry);
+        setSelectedPaths((current) => current.includes(entry.path) ? current : [entry.path]);
+      } else {
+        setSelectedPaths([]);
+      }
       setContextMenu({ x: event.clientX, y: event.clientY, entry: entry || null, base: base || path });
     };
     const saveFile = async (overrideText) => {
@@ -183649,6 +183884,58 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       const entries2 = filterExplorerEntries(sortExplorerEntries(dirEntries, sortKey, sortDir), search2);
       const filtering = !!search2.trim();
       const columns = "minmax(0,1fr) 132px 104px 78px";
+      const copyPathText = (list2) => {
+        const paths = (list2 || []).map((item) => item && item.path).filter(Boolean);
+        if (!paths.length) return;
+        void copyText3(paths.join("\n")).then((ok2) => {
+          setNotice(ok2 ? paths.length > 1 ? "\u5DF2\u590D\u5236 " + paths.length + " \u4E2A\u8DEF\u5F84" : "\u5DF2\u590D\u5236\u8DEF\u5F84" : "\u590D\u5236\u8DEF\u5F84\u5931\u8D25");
+        });
+      };
+      const selectedEntries = () => entries2.filter((entry) => selectedPaths.includes(entry.path));
+      const beginBand = (event) => {
+        if (event.button !== 0 || !path || file) return;
+        const target = event.target;
+        if (target && target.closest && target.closest("[data-row-path]")) return;
+        if (target && target.closest && target.closest("button, input, select, textarea")) return;
+        const host2 = event.currentTarget;
+        const keep = !!(event.ctrlKey || event.metaKey);
+        const base = keep ? [...selectedPaths] : [];
+        if (!keep) {
+          setSelectedPaths([]);
+          setSelected(null);
+        }
+        const startX = event.clientX;
+        const startY = event.clientY;
+        let moved = false;
+        const move = (moveEvent) => {
+          const dx = moveEvent.clientX - startX;
+          const dy = moveEvent.clientY - startY;
+          if (!moved && Math.hypot(dx, dy) < 4) return;
+          moved = true;
+          const rect = {
+            left: Math.min(startX, moveEvent.clientX),
+            top: Math.min(startY, moveEvent.clientY),
+            right: Math.max(startX, moveEvent.clientX),
+            bottom: Math.max(startY, moveEvent.clientY)
+          };
+          setBand(rect);
+          const hits = [];
+          host2.querySelectorAll("[data-row-path]").forEach((element) => {
+            const box = element.getBoundingClientRect();
+            if (box.right >= rect.left && box.left <= rect.right && box.bottom >= rect.top && box.top <= rect.bottom) {
+              hits.push(element.getAttribute("data-row-path"));
+            }
+          });
+          setSelectedPaths([.../* @__PURE__ */ new Set([...base, ...hits])]);
+        };
+        const up = () => {
+          window.removeEventListener("pointermove", move);
+          window.removeEventListener("pointerup", up);
+          setBand(null);
+        };
+        window.addEventListener("pointermove", move);
+        window.addEventListener("pointerup", up);
+      };
       const sortHeader = (key, label, align) => h3(
         "button",
         {
@@ -183689,7 +183976,17 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           { style: { flex: "1 1 auto", minHeight: 0, position: "relative", display: "flex" } },
           h3(
             "div",
-            { className: "tether-scroll", onScroll: hideHoverTip, style: { flex: "1 1 auto", overflow: "auto", padding: "0 10px 24px" } },
+            {
+              className: "tether-scroll",
+              onScroll: hideHoverTip,
+              onPointerDown: beginBand,
+              onContextMenu: (event) => {
+                const target = event.target;
+                if (target && target.closest && target.closest("[data-row-path]")) return;
+                openContextMenu(event, null, path);
+              },
+              style: { flex: "1 1 auto", overflow: "auto", padding: "0 10px 24px", userSelect: "none" }
+            },
             h3(
               "div",
               { style: { display: "grid", gridTemplateColumns: columns, gap: 8, height: 28, padding: "0 8px", alignItems: "center", fontSize: 11, color: C2.mute } },
@@ -183704,10 +184001,17 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
                 key: entry.path,
                 role: "button",
                 tabIndex: 0,
+                "data-row-path": entry.path,
                 onClick: (event) => {
                   if (event.detail > 1) return;
                   hideHoverTip();
                   setSelected(entry);
+                  setSelectedPaths((current) => {
+                    if (event.ctrlKey || event.metaKey) {
+                      return current.includes(entry.path) ? current.filter((path2) => path2 !== entry.path) : [...current, entry.path];
+                    }
+                    return [entry.path];
+                  });
                   if (entry.dir) prefetchDir(entry.path);
                   else prefetchPreview(entry);
                 },
@@ -183723,7 +184027,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
                   if (event.key === "Enter") openFile(entry);
                 },
                 className: "tether-hover",
-                style: { display: "grid", gridTemplateColumns: columns, gap: 8, height: 30, padding: "0 8px", alignItems: "center", borderRadius: 6, fontSize: 13, color: C2.ink, background: selected && selected.path === entry.path ? C2.active : "transparent", cursor: "default" }
+                style: { display: "grid", gridTemplateColumns: columns, gap: 8, height: 30, padding: "0 8px", alignItems: "center", borderRadius: 6, fontSize: 13, color: C2.ink, background: (selectedPaths.length ? selectedPaths.includes(entry.path) : !!(selected && selected.path === entry.path)) ? C2.active : "transparent", cursor: "default", userSelect: "none" }
               },
               h3(
                 "div",
@@ -183774,7 +184078,12 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           copyEntry(contextMenu.entry);
           setContextMenu(null);
         }) : null,
-        clipboard && contextMenu.base ? menuItem("file", "\u7C98\u8D34", () => pasteEntry(contextMenu.base)) : null,
+        contextMenu.entry ? menuItem("file", "\u590D\u5236\u8DEF\u5F84", () => {
+          const list2 = selectedPaths.includes(contextMenu.entry.path) ? selectedEntries() : [contextMenu.entry];
+          setContextMenu(null);
+          copyPathText(list2);
+        }) : null,
+        clipboard && contextMenu.base && !contextMenu.entry ? menuItem("file", "\u7C98\u8D34", () => pasteEntry(contextMenu.base)) : null,
         contextMenu.entry ? menuItem("pencil", "\u91CD\u547D\u540D", () => {
           const entry = contextMenu.entry;
           setContextMenu(null);
@@ -183790,16 +184099,21 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           openTerminal(contextMenu.base || path);
           setContextMenu(null);
         }) : null,
-        menuItem("plus", "\u65B0\u5EFA\u6587\u4EF6", () => {
+        !contextMenu.entry ? menuItem("plus", "\u65B0\u5EFA\u6587\u4EF6", () => {
           const base = contextMenu.base;
           setContextMenu(null);
           makeFile(base);
-        }),
-        menuItem("files", "\u65B0\u5EFA\u6587\u4EF6\u5939", () => {
+        }) : null,
+        !contextMenu.entry ? menuItem("files", "\u65B0\u5EFA\u6587\u4EF6\u5939", () => {
           const base = contextMenu.base;
           setContextMenu(null);
           makeFolder(base);
-        }),
+        }) : null,
+        !contextMenu.entry ? menuItem("file", "\u590D\u5236\u5F53\u524D\u8DEF\u5F84", () => {
+          const base = contextMenu.base || path;
+          setContextMenu(null);
+          copyPathText([{ path: base }]);
+        }) : null,
         h3("div", { style: { height: 1, background: C2.line, margin: "4px 2px" } }),
         menuItem("refresh", "\u5237\u65B0", () => {
           setContextMenu(null);
@@ -183832,7 +184146,21 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
             onClose: () => setTerminalOpen(false)
           }) : null
         ),
-        context
+        context,
+        band ? h3("div", {
+          style: {
+            position: "fixed",
+            left: band.left,
+            top: band.top,
+            width: Math.max(0, band.right - band.left),
+            height: Math.max(0, band.bottom - band.top),
+            border: "1px solid " + C2.blue,
+            background: "color-mix(in srgb, " + C2.blue + " 12%, transparent)",
+            borderRadius: 3,
+            pointerEvents: "none",
+            zIndex: 2147482e3
+          }
+        }) : null
       );
     };
     const toggleNetworkEdge = async (edge, connected) => {

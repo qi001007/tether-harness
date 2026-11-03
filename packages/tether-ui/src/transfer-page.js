@@ -19,6 +19,26 @@ function formatBytes(value) {
   return (value / (1024 * 1024 * 1024)).toFixed(2) + ' GB'
 }
 
+async function copyText(text) {
+  const value = String(text || '')
+  if (!value) return false
+  try {
+    await navigator.clipboard.writeText(value)
+    return true
+  } catch (_) { /* fall through */ }
+  try {
+    const area = document.createElement('textarea')
+    area.value = value
+    area.style.position = 'fixed'
+    area.style.opacity = '0'
+    document.body.appendChild(area)
+    area.select()
+    const ok = document.execCommand('copy')
+    area.remove()
+    return ok
+  } catch (_) { return false }
+}
+
 function isTextInput(target) {
   if (!target) return false
   const tag = String(target.tagName || '').toLowerCase()
@@ -142,7 +162,7 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
   }, h(Glyph, { name, size: 15 }))
 
   function FilePane({ side, deviceId, deviceName = '', otherDeviceId, onDevice, path, onPath, selection, onSelection, onEntries,
-    onPointerRow, onDropItems, onContextItem, active, onActivate, refreshKey = 0,
+    onPointerRow, onDropItems, onContextItem, onBlankContextItem, active, onActivate, refreshKey = 0,
     onNewFolder, onNewFile, onRename, onDelete, onRefresh }) {
     const [roots, setRoots] = React.useState([])
     const [entries, setEntries] = React.useState(null)
@@ -275,6 +295,7 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
         onRefresh: refresh,
         onRowPointerDown: onPointerRow,
         onContextMenu: (item, event) => { if (onContextItem) onContextItem(item, event) },
+        onBlankContextMenu: (event) => { if (onBlankContextItem) onBlankContextItem(null, event) },
         fileIcon,
         formatTime: (value) => value ? new Date(value * 1000).toLocaleString('zh-CN', { hour12: false }) : '',
         formatSize: (value) => formatBytes(Number(value)),
@@ -551,15 +572,26 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
   }
 
   const openContext = (name) => (item, event) => {
-    if (!item) return
+    if (!event) return
+    event.preventDefault(); event.stopPropagation()
     const current = side(name)
-    if (!current.selection.includes(item.path)) {
-      const next = event && (event.ctrlKey || event.metaKey) ? [...current.selection, item.path] : [item.path]
-      if (name === 'left') setLeftSelection(next); else setRightSelection(next)
+    if (item) {
+      if (!current.selection.includes(item.path)) {
+        const next = event.ctrlKey || event.metaKey ? [...current.selection, item.path] : [item.path]
+        if (name === 'left') setLeftSelection(next); else setRightSelection(next)
+      }
+    } else if (current.selection.length) {
+      if (name === 'left') setLeftSelection([]); else setRightSelection([])
     }
     setActiveSide(name)
-    setMenu({ x: event.clientX, y: event.clientY, side: name, item })
+    setMenu({ x: event.clientX, y: event.clientY, side: name, item: item || null })
   }
+
+  React.useEffect(() => {
+    if (!job || job.state === 'running') return undefined
+    const timer = setTimeout(() => setJob(null), job.state === 'done' ? 4000 : 8000)
+    return () => clearTimeout(timer)
+  }, [job && job.state])
 
   const progress = job ? Math.max(0, Math.min(100, Number(job.percent) || 0)) : 0
   const sourceCount = itemsFor(activeSide).length
@@ -583,6 +615,7 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
       active: activeSide === name, onActivate: () => setActiveSide(name),
       onPointerRow: (event, item) => startRowDrag(name, event, item),
       onContextItem: openContext(name),
+      onBlankContextItem: openContext(name),
       onNewFolder: () => openDialog('newFolder', '', { side: name }),
       onNewFile: () => openDialog('newFile', '', { side: name }),
       onRename: () => { const item = current.entries.find((entry) => entry.path === current.selection[0]); if (item) openDialog('rename', item.name, { side: name, item }) },
@@ -632,28 +665,33 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
           h('span', { className: 'tether-num', style: { fontSize: 10.5, color: C.mute, whiteSpace: 'nowrap' } }, progress + '% · ' + formatBytes(job.transferred || 0) + ' / ' + formatBytes(job.total || 0))) : null),
       job && job.state === 'running'
         ? h('button', { type: 'button', onClick: cancel, style: { ...field, height: 28, padding: '0 12px', cursor: 'pointer' } }, '取消')
-        : h('button', {
-          type: 'button', onClick: start, disabled: !sourceCount || !target.path, title: '转移到另一侧', 'aria-label': '转移到另一侧',
-          className: 'tether-press',
-          style: { width: 32, height: 32, flex: '0 0 auto', display: 'grid', placeItems: 'center', border: 0, borderRadius: 999,
-            background: C.blue, color: '#fff', cursor: !sourceCount || !target.path ? 'not-allowed' : 'pointer',
-            opacity: !sourceCount || !target.path ? 0.45 : 1 }
-        }, h(Glyph, { name: 'transfer', size: 16 }))),
+        : !job && sourceCount && target.path
+          ? h('button', {
+            type: 'button', onClick: start, title: '转移到另一侧', 'aria-label': '转移到另一侧',
+            className: 'tether-press',
+            style: { width: 32, height: 32, flex: '0 0 auto', display: 'grid', placeItems: 'center', border: 0, borderRadius: 999,
+              background: C.blue, color: '#fff', cursor: 'pointer' }
+          }, h(Glyph, { name: 'transfer', size: 16 }))
+          : null),
     menu ? h('div', {
       role: 'menu', onMouseDown: (event) => event.stopPropagation(),
       style: { position: 'fixed', left: menu.x, top: menu.y, zIndex: 2147483000, minWidth: 160, padding: 4,
         background: C.bg, borderRadius: 8, boxShadow: '0 8px 24px rgba(16,24,40,.18)', border: '1px solid ' + C.line }
     },
-      [
-        ['新建文件夹', () => openDialog('newFolder', '', { side: menu.side })],
-        ['新建文件', () => openDialog('newFile', '', { side: menu.side })],
-        ['重命名', () => { const current = side(menu.side); const item = current.entries.find((entry) => entry.path === current.selection[0]); if (item) openDialog('rename', item.name, { side: menu.side, item }) }],
-        ['删除', () => { void deleteSelected(menu.side) }],
+      (menu.item ? [
         ['复制', () => copySelection(menu.side, false)],
         ['剪切', () => copySelection(menu.side, true)],
-        ['粘贴到此处', () => pasteInto(menu.side)],
+        ['复制路径', () => { void copyText(menu.item.path).then((ok) => { if (onNotice) onNotice(ok ? '已复制路径' : '复制路径失败') }) }],
+        ['重命名', () => { const current = side(menu.side); const item = current.entries.find((entry) => entry.path === current.selection[0]); if (item) openDialog('rename', item.name, { side: menu.side, item }) }],
+        ['删除', () => { void deleteSelected(menu.side) }],
         ['刷新', refresh]
-      ].map(([label, action]) => h('button', {
+      ] : [
+        ['新建文件夹', () => openDialog('newFolder', '', { side: menu.side })],
+        ['新建文件', () => openDialog('newFile', '', { side: menu.side })],
+        clipboardRef.current ? ['粘贴到此处', () => pasteInto(menu.side)] : null,
+        ['复制当前路径', () => { void copyText(side(menu.side).path).then((ok) => { if (onNotice) onNotice(ok ? '已复制当前路径' : '复制路径失败') }) }],
+        ['刷新', refresh]
+      ]).filter(Boolean).map(([label, action]) => h('button', {
         key: label, type: 'button',
         onClick: () => { setMenu(null); action() },
         className: 'tether-hover',
