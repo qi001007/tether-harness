@@ -1,5 +1,17 @@
 # Public client releases
 
+## v0.3.3
+
+Native interactive terminal and themed shell menu:
+
+- Node `terminal.py` now prefers a real PTY (pywinpty/ConPTY on Windows, `pty(3)` on POSIX). `terminal_start` returns `pty` + cols/rows; `terminal_resize` was added. PowerShell/pwsh set `chcp 65001` plus UTF-8 input/output before the prompt; cmd uses `/K chcp 65001`; Git Bash uses `-i -l`. Nodes without pywinpty fall back to the pipe session and report `pty:false`.
+- The APP terminal dock uses xterm.js + FitAddon: native prompt, colours, selection, Ctrl+Shift+C/V, Enter/arrow keys, 60 ms polling with a write queue. The terminal theme follows `body[data-ds-dark-theme]`; the viewport is transparent (no black strip).
+- Shell selection is a self-drawn `[role=listbox]` menu (`C.layer1`/`C.shadow`, selected `C.blue` + ✓) instead of a native `<select>`; the menu opens above/below the button based on viewport space.
+- File hover cards no longer cover context/device menus: `hoverTip` is cleared when a menu opens and menus are raised to z-index 120.
+- Tests: pytest **189 passed / 2 skipped** (PTY + resize boundary); plugin/web builds and UI tests pass. Real APP checks: PowerShell prompt, `echo TETHER_NATIVE`, Git Bash prompt/command, menu hit-test, no renderer exceptions.
+- Published at 2026-11-03T16:35:56Z; CI `41675286538`; assets app 1,940,850 B, plugin 1,377,885 B, node 107,621 B.
+- LAPTOP's Node was staged manually from the node ZIP because the installed updater rejects the pywinpty dependency change (`dependency_change_requires_manual_install`); its APP/plugin UI remains 0.3.1/0.3.0. `terminal_start` on LAPTOP returns `pty:true` and `echo LAPTOP_PTY_OK` succeeded.
+
 ## v0.2.93
 
 Real-machine hot reload for Hub-driven plugin updates:

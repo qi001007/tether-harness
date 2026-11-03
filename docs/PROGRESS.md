@@ -1,5 +1,12 @@
 # 实时进度
 
+## 2026-11-03 0.3.3 发布与两机部署
+
+1. `v0.3.3` 已发布：CI **41675286538** success，release id **432954597**，发布于 **2026-11-03T16:35:56Z**；资产 `tether-app-0.3.3.zip` 1,940,850 B、`tether-plugin-0.3.3.zip` 1,377,885 B、`tether-node-0.3.3.zip` 107,621 B。Hub 镜像在约 5 分钟后变为 0.3.3。
+2. DESKTOP 真机：APP 加载新 UI，Node 运行 0.3.3 代码；终端 PTY 提示符/命令/中文输出通过，Git Bash 切换通过，右键菜单遮挡与自绘 shell 菜单通过。
+3. LAPTOP 部署：app venv 安装 `pywinpty 3.1.2`；因 updater 的 `dependency_change_requires_manual_install` 拦截 pyproject 依赖变化，按错误提示手动把 `tether-node-0.3.3.zip` 的 `terminal.py`/`fs_service.py`/`pyproject.toml` 覆盖到 `D:\Tether\deploy\tether-app-0.2.3`，并把 `version.json` 的 node 标为 0.3.3；通过 Hub `POST /api/devices/LAPTOP-01/node/restart` 重启 Node。真机 `terminal_start` 返回 `pty:true`（120×30），`echo LAPTOP_PTY_OK` 输出成功。
+4. 仍未做：LAPTOP 的 APP/插件 UI 仍为 0.3.1/0.3.0（依赖守卫阻止整包更新，未强制覆盖）；0.3.3 的安装包/依赖变化守卫需要后续修成可自动安装 Python 依赖，或提供显式的手动升级包说明。
+
 ## 2026-11-03 原生终端与弹层层级（0.3.3）
 
 1. 终端改为真 PTY：Node `terminal.py` 在 Windows 用 `pywinpty`/ConPTY，POSIX 用 `pty(3)`；`start` 返回 `pty` + cols/rows，新增 `terminal_resize`。PowerShell/PowerShell 7 启动时 `chcp 65001` + 输入/输出 UTF-8，cmd 用 `/K chcp 65001`，Git Bash 用 `-i -l`；无 PTY 后端时保留管道兼容模式。`pyproject.toml` 增加 `pywinpty; sys_platform == 'win32'`。
