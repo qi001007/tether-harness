@@ -819,3 +819,15 @@
 - 网络上限复测（主机校园网 ↔ 笔记本流量）：EasyTier 走 relay(2)、257 ms；100 MB 单流 160.63 s（0.623 MiB/s），4×25 MB 并发 216.78 s（0.461 MiB/s，无聚合）。笔记本无全局 IPv6，Tailscale 也只能走 DERP(HKG) 170 ms，NAT 直连失败；服务器带宽 2.4 Gbps/385 Mbps，瓶颈是跨境中转路径，应用层无法把这条路径拉到 10 MB/s，需国内中转或同网直连。
 - 详细部署记录、服务器地址与运行快照属于私有运维材料，不在本公开进度页重复列出。用户需求仍以 [反馈清单](FEEDBACK.md) 为准；产品目标见 [PRD](PRD.md)，公开协议与客户端边界见 [技术说明](TECHNICAL.md)。
 
+
+## 2026-11-04 0.3.6 收尾（当前状态）
+
+- 传输：croc 11.6.3 + 自建 relay 为主引擎；随机 100 MB 上传 **26 s**（croc 报 105 MB/18 s，峰值 5.5 MB/s）、服务器→本机下载 **106.28 s**（峰值 1.9 MB/s），两端 SHA-256 一致。croc 子进程已剔除 `HTTP(S)_PROXY`（系统代理抖动曾使 1 MB 也挂死）；`CrocTransfer()` 默认平台改用 `sys.platform`，干净 Linux/macOS 节点能选中随包二进制。
+- 转移页：设备异步到达后自动补选左右设备；正反两个方向都做过真实 UI 传输（本机→LAPTOP 20 B、服务器→本机 33 B），目标 SHA 与源一致。
+- Linux 文件树：`joinPath` 反斜杠与根 spinner 已修，`/lost+found`、`/srv` 不再报红；真机可浏览整个根目录。
+- 终端：资源管理器“在终端中打开”停在当前目录，服务器头部显示 `bash · root · 管理员`；同会话 `id -u`/`whoami`/`pwd` 返回 `0`/`root`/`/srv/tether-admin`。
+- DSH Web：APP 内 `<webview>` 满幅（1432×880）加载 `10.144.0.1:37301`，无外部窗口；Tether 插件持久安装在 `/opt/tether-node/dsh-plugin/0.3.6`，侧栏入口、面板登录、一键“修复 DSH Web 插件”和“重启 DSH Web”均真机验证；服务重启后 APP 自动恢复“DSH Web 已就绪”并可重开工作区。插件包随 Node 归档分发，`dsh_web.py` 首次安装会自动注册。
+- 安全：Node DirectApi 不再监听 `0.0.0.0`，只绑 `127.0.0.1` + EasyTier 地址；服务器与 Windows 本机均实测只剩两个监听。
+- 安装：`install.sh` 默认 latest；隔离前缀 `--install-only --archive` 安装最终 0.3.6 成功，`node.env` 600，随包 croc 与 `repair_plugin` 均在；GitHub 干净 runner 三平台安装/启动已通过（`41726702888`）。
+- 发布口径：`/install/version.json` 与服务器资产为 0.3.6；GitHub release 仍是 **draft** `433272811`，Hub `/releases/manifest` 仍是已签名的 0.3.5，所以 APP 内更新不会提供 0.3.6，直到所有者发布草稿并切换清单。
+- 仍欠：GitHub 0.3.6 公开发布、DSH 自身 DeepSeek 登录/composer、干净 VM 全业务链、100 MB 10 s（需要国内中转或同网路径）。
