@@ -1,4 +1,10 @@
 # tether-app backlog
+- 2026-11-03：窗口改为 `frame:false` 无原生标题栏，顶栏自绘窗口控制；关闭默认隐藏到 `Tray`，只有托盘“退出”或更新重启才 `app.quit()`。`window-all-closed` 在有托盘时保持进程；第二实例恢复窗口。图标统一使用 `assets/tether-app-s.ico`。
+- 2026-10-31：登记决策抽成 `enrollment.js` 纯函数（device/account/refuse/error），4 个单测覆盖；main.js 只做 fetch/写配置/重启。
+- 2026-10-31：登录登记改为两步：已有设备走 `/enroll` 轮换令牌；`device_not_found`/`device_offline` 才写 `userToken`、清 `nodeToken`、删除旧设备令牌并重启；`device_owned` 拒绝。supervisor 可在只有用户令牌时启动 Node。
+- 2026-10-31：新增可信 IPC `tether:enroll-device`：用登录会话调 Hub 登记，轮换设备令牌（旧令牌 10 分钟宽限）、备份并写回 `hub.json`、重启 Node；preload 暴露 `enrollDevice`。
+- 2026-10-31：0.2.35 发布（tag `v0.2.35`）；含导航/IPC 加固、Python 3.13 重启修复与更新任务吞吐修正；LAPTOP-01 Node/APP 0.2.35（纯 APP 更新 20.1 秒），本机开发版重启到 0.2.35。
+- 2026-10-31：Electron 主窗口只允许本地 UI origin 导航，`setWindowOpenHandler` 拒绝新窗口（http(s) 仅交系统浏览器），所有 `tether:*` IPC 校验 `senderFrame === mainFrame` 且 origin 为本地 UI。真机验证：外站导航被阻止并记录，主 frame `tetherApp.info()` 正常，sandboxed iframe 无该 API。
 - 2026-10-30：0.2.27 热修版本元数据；更新中心 latest 归一化。
 - 2026-10-30：APP/Node 一键更新卡改为单一运行态；版本元数据推进到 `0.2.26` 候选。
 - 2026-10-29：主人认可资源管理器第五版后，将 APP package 与 lock 根元数据推进到 `0.2.25`；实际发布与安装状态仍以 release/进度文档的后续验收为准。
@@ -35,3 +41,24 @@
 - 2026-10-29：APP package.json 发布版本升至 `0.2.16`，等待 release gate。
 - 2026-10-29：APP 的 `check` 命令超时 45 s → 90 s：本机更新器按 Hub mirror → GitHub 逐源回退，两个源各 15 s 再加 latest API 解析会撞上 45 s，慢网下会误报检查失败。
 - 2026-10-30：APP 包、package-lock 根版本元数据统一至发行候选 `0.2.29`；不改变 Electron 依赖锁定版本。
+- 2026-11-01：APP 包与 package-lock 根版本升至 `0.2.51`；本轮 APP 主进程代码未改，修复在共享 UI。
+- 2026-11-02：APP 包与 package-lock 根版本升至 `0.2.54`；共享 UI 新增常驻 `SurfaceDeck` 与设置开关，不改变 Electron 依赖或主进程窗口参数。
+- 2026-11-02：APP 包与 package-lock 根版本升至 `0.2.55`；本轮只更新共享 UI bundle（surface 层叠、选择器叠层、设置页），Electron 主进程与依赖未改。
+- 2026-11-02：APP 包与 package-lock 根版本升至 `0.2.56`；选择器叠层改为内联样式/SVG，DSH 内嵌页不再依赖共享 CSS。
+- 2026-11-02：APP 包与 package-lock 根版本升至 `0.2.57`；本轮共享 UI 增加树联动、文件夹上传、本地拖入保存；Electron 主进程未改。
+- 2026-11-02：APP 包与 package-lock 根版本升至 `0.2.58`；共享 UI 只增加转移页设备分组标识与切设备清旧根。
+- 2026-11-02：APP 包与 package-lock 根版本升至 `0.2.59`；共享 UI 增加显式设备拓扑、节点详情/连接管理；Hub `/api/edges` 已先行部署。
+- 2026-11-02：APP 包与 package-lock 根版本升至 `0.2.60`；本轮只更新共享 UI 账户页（头像裁剪/昵称/密码），Electron 主进程与依赖未改。
+- 2026-11-02：APP 包与 package-lock 根版本升至 `0.2.61`；共享 UI 权限抽屉改为缓存直出，Electron 主进程与依赖未改。
+- 2026-11-02：APP 包与 package-lock 根版本升至 `0.2.62`；长期运行的 Controller/Node 改用 `pythonw.exe`，`.cmd` 默认经 VBS 隐藏重入，bootstrap PowerShell 隐藏，更新助手重启 APP 设置 `windowsHide: true`，确保打开/更新不再出现黑色终端。
+- 2026-11-02：APP 包与 package-lock 根版本升至 `0.2.63`；本轮只改共享 UI 登录页，Electron 主进程未改。
+- 2026-11-02：APP 包与 package-lock 根版本升至 `0.2.64`；本轮只改共享 UI 互联图，Electron 主进程未改。
+- 2026-11-02：APP 包与 package-lock 根版本升至 `0.2.65`；本轮只改共享 UI 节点详情浮层，Electron 主进程未改。
+- 2026-11-02：APP 包与 package-lock 根版本升至 `0.2.66`；共享 UI 恢复互联图力导向流动，Electron 主进程未改。
+- 2026-11-02：APP 包与 package-lock 根版本升至 `0.2.67`；`UpdateService` 与本地 serverCheck 改用 `supervisor.childPython`（pythonw），消除启动更新检查的短命控制台/`conhost`；`pythonw` stdout 经 `execFile` 验证可回传。
+- 2026-11-02：APP 包与 package-lock 根版本升至 `0.2.68`；本轮只改共享 UI 更新页，Electron 主进程未改。
+- 2026-11-03：APP 包与 package-lock 根版本升至 `0.2.83`；启动时 `ensureAppShortcuts()` 用 `shell.writeShortcutLink` 把桌面/开始菜单 `Tether APP.lnk` 修回 `electron.exe`（旧快捷方式指向 `.cmd` 会弹黑窗）；主进程识别 surface 网关 502 错误页并触发既有 `tether:surface-boot-failed` 重试，避免旧 iframe 永久停在错误页。
+- 2026-11-03：APP 包与 package-lock 根版本升至 `0.2.84`；surface 缺失且 DSH 正在运行时自动调用 `dsh_install_plugin`，成功后按新 pid 重载；失败显示“安装/修复插件”重试按钮，用户不再手工拷包。
+- 2026-11-03：APP 包与 package-lock 根版本升至 `0.2.88`；自动修复改用 `dsh_status.surface`（descriptor pid 存活）判断，surface 轮询的插件缺失错误也进入修复态；本机空 profile 已实测 APP 自动装回并渲染。
+- 2026-11-03：APP 包与 package-lock 根版本升至 `0.2.89`；iframe 载入后探测默认控件样式，命中后自动修复一次，再次命中显示“DSH 界面样式与 Tether 版本不匹配”遮罩，避免裸控件页面。
+- 2026-11-04：主窗口开启 `webviewTag` 供 Linux DSH Web 顶层内嵌；`will-attach-webview` 删除 guest preload、强制 sandbox/contextIsolation/webSecurity，只允许回环与 RFC1918 地址；`did-attach-webview` 拒绝新窗口并把 guest 导航锁在首次 origin。DSH 外部 `window.open` 已删除；真机 webview 与插件自动安装仍待验。

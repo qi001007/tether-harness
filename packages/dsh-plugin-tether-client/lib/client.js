@@ -5763,7 +5763,560 @@ monaco-editor/esm/vs/languages/definitions/swift/swift.js:
 
     const EditorRuntime = TetherMonacoRuntime
     const PANEL_ID = 'tether'
-    const PLUGIN_VERSION = "0.2.29"
+    const PLUGIN_VERSION = "0.3.6"
+async function copyText(text) {
+  const value = String(text || '')
+  if (!value) return false
+  try {
+    await navigator.clipboard.writeText(value)
+    return true
+  } catch (_) { /* fall through */ }
+  try {
+    const area = document.createElement('textarea')
+    area.value = value
+    area.style.position = 'fixed'
+    area.style.opacity = '0'
+    document.body.appendChild(area)
+    area.select()
+    const ok = document.execCommand('copy')
+    area.remove()
+    return ok
+  } catch (_) { return false }
+}
+
+function parentOf(path) {
+  const clean = String(path || '').replace(/[\\/]+$/, '')
+  if (!clean) return ''
+  if (/^[A-Za-z]:$/.test(clean)) return clean + '\\'
+  const slash = Math.max(clean.lastIndexOf('\\'), clean.lastIndexOf('/'))
+  if (slash < 0) return ''
+  if (slash === 0 && clean.startsWith('/')) return '/'
+  const parent = clean.slice(0, slash)
+  return /^[A-Za-z]:$/.test(parent) ? parent + '\\' : parent
+}
+
+function crumbsFor(path, root) {
+  const value = String(path || '').replace(/[\\/]+$/, '')
+  if (!value) return []
+  const base = String(root || '').replace(/[\\/]+$/, '')
+  if (!base || !value.toLowerCase().startsWith(base.toLowerCase())) {
+    const index = Math.max(value.lastIndexOf('\\'), value.lastIndexOf('/'))
+    return [{ label: index >= 0 ? value.slice(index + 1) || value : value, path: value }]
+  }
+  const separator = value.includes('\\') ? '\\' : '/'
+  const baseLabelIndex = Math.max(base.lastIndexOf('\\'), base.lastIndexOf('/'))
+  const out = [{ label: base.slice(baseLabelIndex + 1) || base, path: base }]
+  let current = base
+  for (const part of value.slice(base.length).replace(/^[\\/]+/, '').split(/[\\/]+/).filter(Boolean)) {
+    current = current.replace(/[\\/]+$/, '') + separator + part
+    out.push({ label: part, path: current })
+  }
+  return out
+}
+
+function sortEntries(entries, sort) {
+  const key = sort && ['name', 'mtime', 'size'].includes(sort.key) ? sort.key : 'name'
+  const direction = sort && sort.dir === 'desc' ? -1 : 1
+  return [...(entries || [])].sort((left, right) => {
+    if (left.dir !== right.dir) return left.dir ? -1 : 1
+    let a
+    let b
+    if (key === 'size') { a = Number(left.size || 0); b = Number(right.size || 0) }
+    else if (key === 'mtime') { a = Number(left.mtime || 0); b = Number(right.mtime || 0) }
+    else { a = String(left.name || '').toLowerCase(); b = String(right.name || '').toLowerCase() }
+    if (a < b) return -direction
+    if (a > b) return direction
+    return 0
+  })
+}
+
+function TargetFileExplorer({
+  React, colors, roots = [], rootPath = '', path = '', entries = null,
+  loading = false, error = '', selectedPath = '', disabled = false,
+  onRoot, onPath, onSelect, onOpen, onRefresh,
+  singleClickOpens = false, editablePath = false, pathLabel = '路径',
+  fileIcon, formatTime = () => '', formatSize = () => '', limit = 10 * 1024 * 1024,
+  emptyText = '空文件夹', placeholder = '从左侧选择工作区或磁盘',
+  searchPlaceholder = '搜索当前目录',
+  sort = { key: 'name', dir: 'asc' }, onSort, search = '', onSearch = () => {},
+  treeChildren = null, expanded = {}, onToggleTree,
+  compact = false, selectionMode = 'single', selectedPaths = [], onSelectionChange,
+  onContextMenu, onBlankContextMenu, onDragItem, onRowPointerDown, onDismissError, deviceName = ''
+}) {
+  const ReactRuntime = React
+  const h = ReactRuntime.createElement
+  const C = colors || {}
+  const [innerMenu, setInnerMenu] = React.useState(null)
+  const [band, setBand] = React.useState(null)
+  React.useEffect(() => {
+    if (!innerMenu) return undefined
+    const close = () => setInnerMenu(null)
+    window.addEventListener('mousedown', close)
+    window.addEventListener('keydown', close)
+    return () => { window.removeEventListener('mousedown', close); window.removeEventListener('keydown', close) }
+  }, [innerMenu])
+  const openInnerMenu = (event, item) => {
+    event.preventDefault()
+    event.stopPropagation()
+    setInnerMenu({ x: event.clientX, y: event.clientY, item: item || null })
+  }
+  const beginBand = (event) => {
+    if (disabled || selectionMode !== 'multiple' || !onSelectionChange) return
+    if (event.button !== 0) return
+    const target = event.target
+    if (target && target.closest && target.closest('[data-row-path]')) return
+    if (target && target.closest && target.closest('button, input, select, textarea')) return
+    const host = event.currentTarget
+    const keep = !!(event.ctrlKey || event.metaKey)
+    const base = keep ? [...(selectedPaths || [])] : []
+    const startX = event.clientX
+    const startY = event.clientY
+    let moved = false
+    const move = (moveEvent) => {
+      const dx = moveEvent.clientX - startX
+      const dy = moveEvent.clientY - startY
+      if (!moved && Math.hypot(dx, dy) < 4) return
+      moved = true
+      const rect = {
+        left: Math.min(startX, moveEvent.clientX), top: Math.min(startY, moveEvent.clientY),
+        right: Math.max(startX, moveEvent.clientX), bottom: Math.max(startY, moveEvent.clientY)
+      }
+      setBand(rect)
+      const hits = []
+      host.querySelectorAll('[data-row-path]').forEach((element) => {
+        const box = element.getBoundingClientRect()
+        if (box.right >= rect.left && box.left <= rect.right && box.bottom >= rect.top && box.top <= rect.bottom) {
+          hits.push(element.getAttribute('data-row-path'))
+        }
+      })
+      onSelectionChange([...new Set([...base, ...hits])])
+    }
+    const up = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      setBand(null)
+      if (!moved && !keep) { if (onSelect) onSelect(null); onSelectionChange([]) }
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
+  const workspaces = roots.filter((item) => (item.kind || 'workspace') === 'workspace')
+  const drives = roots.filter((item) => item.kind === 'drive')
+  const crumbs = crumbsFor(path, rootPath)
+  const up = parentOf(path)
+  const term = search.trim().toLowerCase()
+  const visible = sortEntries(entries, sort)
+    .filter((item) => !term || String(item.name || '').toLowerCase().includes(term))
+  const sortHeader = (key, label, align) => h('button', {
+    type: 'button', title: '按' + label + '排序', 'aria-label': '按' + label + '排序',
+    'data-sort': sort.key === key ? sort.dir : undefined,
+    onClick: () => {
+      if (onSort) onSort(sort.key === key
+        ? { key, dir: sort.dir === 'asc' ? 'desc' : 'asc' }
+        : { key, dir: 'asc' })
+    },
+    className: 'tether-hover',
+    style: {
+      display: 'flex', alignItems: 'center', gap: 3,
+      justifyContent: align === 'right' ? 'flex-end' : 'flex-start',
+      minWidth: 0, height: 22, padding: '0 4px', margin: '0 -4px', border: 0,
+      borderRadius: 4, background: 'transparent',
+      color: sort.key === key ? C.ink : C.mute, fontSize: 11, cursor: 'pointer'
+    }
+  }, h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, label),
+    sort.key === key ? h('span', { 'aria-hidden': true, style: { fontSize: 9 } }, sort.dir === 'asc' ? '▲' : '▼') : null)
+  const chevron = (open) => h('svg', {
+    width: 12, height: 12, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor',
+    strokeWidth: 1.4, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true
+  }, h('path', { d: open ? 'M4 6l4 4 4-4' : 'M6 4l4 4-4 4' }))
+  const treeRow = (item, group, depth = 0) => {
+    const key = group + ':' + item.path
+    const children = treeChildren && treeChildren[item.path]
+    const isOpen = !!(expanded && expanded[item.path])
+    const oversized = !item.dir && Number(item.size) > limit
+    const openRow = () => {
+      if (disabled || oversized) return
+      if (!item.dir) { if (onOpen) onOpen(item); return }
+      if (onToggleTree) onToggleTree(item)
+      if (depth === 0 && onRoot) onRoot(item.path, { fromTree: true })
+      else if (onPath) onPath(item.path, { fromTree: true })
+    }
+    return h(ReactRuntime.Fragment, { key },
+      h('div', { style: { display: 'flex', alignItems: 'center', minWidth: 0, paddingLeft: depth * 14 } },
+        h('button', {
+          type: 'button', title: item.path, disabled: disabled || oversized,
+          'aria-expanded': item.dir ? isOpen : undefined,
+          onClick: openRow,
+          className: 'tether-hover',
+          style: {
+            display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, flex: '1 1 auto',
+            height: 26, padding: '0 6px', border: 0, borderRadius: 5,
+            background: path === item.path ? (C.hover || C.soft) : 'transparent', color: C.ink,
+            font: 'inherit', fontSize: 13, textAlign: 'left', cursor: disabled || oversized ? 'default' : 'pointer',
+            opacity: oversized ? 0.55 : 1
+          }
+        },
+          h('span', {
+            'aria-hidden': true,
+            style: { width: 18, height: 18, flex: '0 0 auto', display: 'grid', placeItems: 'center', color: C.mute }
+          }, item.dir ? chevron(isOpen) : null),
+          fileIcon ? fileIcon(item) : null,
+          h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
+            item.name + (oversized ? ' · 超过 10 MiB' : '')))),
+      isOpen && children ? children.map((child) => treeRow(child, group, depth + 1)) : null)
+  }
+  const rootGroup = (label, items, empty) => h('div', { key: label, style: { marginBottom: 10 } },
+    h('div', { style: { padding: '8px 8px 4px', color: C.mute, fontSize: 11, fontWeight: 600, letterSpacing: 0.2 } },
+      deviceName ? label + ' · ' + deviceName : label),
+    items.length ? items.map((item) => treeRow(item, label))
+      : h('div', { style: { padding: '2px 8px 6px', color: C.mute, fontSize: 11.5 } }, empty))
+  const iconButton = (icon, label, onClick, disabled) => h('button', {
+    type: 'button', title: label, 'aria-label': label, disabled,
+    onClick: () => { if (!disabled && onClick) onClick() },
+    className: 'tether-hover',
+    style: {
+      width: 26, height: 26, flex: '0 0 auto', display: 'grid', placeItems: 'center',
+      border: 0, borderRadius: 6, background: 'transparent', color: C.sub,
+      cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.4 : 1
+    }
+  }, h('svg', {
+    width: 15, height: 15, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor',
+    strokeWidth: 1.3, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true
+  }, icon === 'up'
+    ? h('path', { d: 'M8 12.5V3.5M4.2 7.3 8 3.5l3.8 3.8' })
+    : [h('path', { key: 'a', d: 'M12.6 7.2A4.7 4.7 0 1 0 11.2 11.6' }),
+      h('path', { key: 'b', d: 'M12.8 3.2v3.7h-3.7' })]))
+  const activate = (item, double) => {
+    if (disabled || !item) return
+    if (double) { if (!singleClickOpens && onOpen) onOpen(item); return }
+    if (onSelect) onSelect(item)
+    if (singleClickOpens && onOpen) onOpen(item)
+  }
+  const row = (item) => {
+    const oversized = !item.dir && Number(item.size) > limit
+    const selected = selectionMode === 'multiple'
+      ? (selectedPaths || []).includes(item.path)
+      : selectedPath === item.path
+    return h('button', {
+      key: item.path, type: 'button', title: item.path, disabled: disabled || oversized,
+      'data-row-path': item.path,
+      draggable: !!onDragItem,
+      onDragStart: (event) => { if (onDragItem) onDragItem(event, item) },
+      onPointerDown: (event) => { if (onRowPointerDown) onRowPointerDown(event, item) },
+      onContextMenu: (event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        if (onContextMenu) onContextMenu(item, event)
+        else openInnerMenu(event, item)
+      },
+      onClick: (event) => {
+        if (selectionMode === 'multiple' && onSelectionChange) {
+          const current = selectedPaths || []
+          if (event && (event.ctrlKey || event.metaKey)) {
+            onSelectionChange(current.includes(item.path)
+              ? current.filter((path) => path !== item.path)
+              : [...current, item.path])
+          } else {
+            onSelectionChange([item.path])
+          }
+          if (onSelect) onSelect(item)
+          return
+        }
+        activate(item, false)
+      },
+      onDoubleClick: () => activate(item, true),
+      className: 'tether-hover',
+      style: {
+        display: 'grid', gridTemplateColumns: compact ? 'minmax(0,1fr) 84px' : 'minmax(0,1fr) 132px 84px', gap: 8,
+        alignItems: 'center', width: '100%', height: compact ? 28 : 32, padding: '0 12px',
+        border: 0, borderRadius: 6,
+        background: selected ? (C.soft || 'transparent') : 'transparent',
+        color: C.ink, font: 'inherit', fontSize: compact ? 12.5 : 13, textAlign: 'left',
+        cursor: disabled || oversized ? 'default' : 'pointer', opacity: oversized ? 0.55 : 1,
+        userSelect: 'none'
+      }
+    },
+      h('span', { style: { display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 } },
+        h('span', { style: { width: 16, height: 16, display: 'grid', placeItems: 'center', flex: '0 0 auto' } },
+          fileIcon ? fileIcon(item) : null),
+        h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
+          item.name + (oversized ? ' · 超过 10 MiB' : ''))),
+      compact ? null : h('span', { style: { color: C.mute, fontSize: 11, whiteSpace: 'nowrap' } }, formatTime(item.mtime)),
+      h('span', { style: { color: C.mute, fontSize: 11, textAlign: 'right' } }, item.dir ? '' : formatSize(Number(item.size))))
+  }
+  let body
+  if (!path) {
+    body = h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', color: C.mute, fontSize: 12, padding: 24, textAlign: 'center' } },
+      error ? h('span', { role: 'alert', style: { color: C.red || C.danger } }, error) : placeholder)
+  } else if (entries === null) {
+    body = loading
+      ? h('div', { style: { flex: '1 1 auto' } })
+      : h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', color: C.mute, fontSize: 12, padding: 24, textAlign: 'center' } },
+        error ? h('span', { role: 'alert', style: { color: C.red || C.danger } }, error) : '目录暂不可用')
+  } else if (!visible.length) {
+    body = h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', alignContent: 'center', gap: 8, color: C.mute, fontSize: 12, padding: 24, textAlign: 'center' } },
+      h('span', null, term ? '未找到匹配 “' + search.trim() + '” 的项目' : emptyText),
+      term ? h('button', {
+        type: 'button', onClick: () => onSearch(''), className: 'tether-hover',
+        style: { border: 0, borderRadius: 6, padding: '4px 10px', background: C.soft, color: C.ink, fontSize: 12, cursor: 'pointer' }
+      }, '清除搜索') : null)
+  } else {
+    body = h('div', {
+      style: { flex: '1 1 auto', minHeight: 0, overflow: 'auto', padding: '0 8px 18px', userSelect: 'none' },
+      onPointerDown: beginBand,
+      onContextMenu: (event) => {
+        const target = event.target
+        if (target && target.closest && target.closest('[data-row-path]')) return
+        if (onBlankContextMenu) { event.preventDefault(); event.stopPropagation(); onBlankContextMenu(event) }
+        else if (!onContextMenu) openInnerMenu(event, null)
+      }
+    },
+      h('div', {
+        style: {
+          display: 'grid', gridTemplateColumns: compact ? 'minmax(0,1fr) 84px' : 'minmax(0,1fr) 132px 84px', gap: 8,
+          alignItems: 'center', height: 28, padding: '0 12px', color: C.mute, fontSize: 11, flex: '0 0 auto'
+        }
+      }, sortHeader('name', '名称'), compact ? null : sortHeader('mtime', '修改日期'),
+        sortHeader('size', '大小', 'right')),
+      visible.map((item) => row(item)))
+  }
+  const loadingOverlay = loading ? h('div', {
+    className: 'tether-dir-loading', role: 'status', 'aria-live': 'polite', 'aria-label': '正在加载目录',
+    style: {
+      position: 'absolute', inset: 0, zIndex: 4, display: 'grid', placeItems: 'center',
+      background: 'color-mix(in srgb, ' + (C.bg || '#ffffff') + ' 78%, transparent)',
+      color: C.mute || '#667085'
+    }
+  },
+    h('span', { className: 'tether-dir-loading-spinner', style: { width: 20, height: 20, display: 'grid', placeItems: 'center' } },
+      h('svg', {
+        width: 18, height: 18, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor',
+        strokeWidth: 1.5, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true
+      },
+        h('g', null,
+          h('animateTransform', { attributeName: 'transform', type: 'rotate', from: '0 8 8', to: '360 8 8', dur: '0.8s', repeatCount: 'indefinite' }),
+          h('path', { d: 'M13 8a5 5 0 1 1-1.5-3.56' }), h('path', { d: 'M13.2 2.3v3.1h-3.1' }))))
+  ) : null
+  const errorToast = error && entries !== null && !loading ? h('div', {
+    role: 'alert',
+    style: {
+      position: 'absolute', left: 12, right: 12, bottom: 12, zIndex: 5, display: 'flex', alignItems: 'center', gap: 8,
+      padding: '8px 10px', borderRadius: 8, background: C.bg, color: C.red || C.danger,
+      boxShadow: '0 4px 16px rgba(16,24,40,.16)', fontSize: 12
+    }
+  },
+    h('span', { style: { flex: '1 1 auto', minWidth: 0 } }, error),
+    path && onRefresh ? h('button', {
+      type: 'button', onClick: () => onRefresh(path), className: 'tether-hover',
+      style: { border: 0, borderRadius: 6, padding: '4px 8px', background: C.soft, color: C.ink, fontSize: 11.5, cursor: 'pointer', flex: '0 0 auto' }
+    }, '重试') : null,
+    onDismissError ? h('button', {
+      type: 'button', title: '关闭', 'aria-label': '关闭', onClick: onDismissError, className: 'tether-hover',
+      style: { width: 22, height: 22, flex: '0 0 auto', border: 0, borderRadius: 5, background: 'transparent', color: C.mute, fontSize: 15, lineHeight: '22px', padding: 0, cursor: 'pointer' }
+    }, '×') : null
+  ) : null
+  return h(ReactRuntime.Fragment, null,
+    h('div', { style: { display: 'flex', flex: '1 1 auto', minHeight: 0, minWidth: 0 } },
+    h('div', {
+      style: {
+        width: compact ? 148 : 224, flex: '0 0 auto', overflow: 'auto', padding: '6px 8px',
+        background: C.soft, borderRight: C.line ? '1px solid ' + C.line : 0
+      }
+    }, rootGroup('工作区', workspaces, '未发现工作区'), rootGroup('此电脑', drives, '未发现磁盘')),
+    h('div', { style: { display: 'flex', flexDirection: 'column', flex: '1 1 auto', minWidth: 0, minHeight: 0, background: C.bg } },
+      h('div', {
+        style: {
+          display: 'flex', alignItems: 'center', gap: 8, height: 46, padding: '0 14px',
+          borderBottom: C.line ? '1px solid ' + C.line : 0, flex: '0 0 auto', minWidth: 0
+        }
+      },
+        iconButton('up', '上一级', () => { if (up && onPath) onPath(up) }, disabled || !up),
+        h('div', {
+          className: 'tether-breadcrumbs',
+          style: { display: 'flex', alignItems: 'center', gap: 1, flex: '1 1 auto', minWidth: 0, overflow: 'hidden', height: 28 }
+        },
+          crumbs.length ? crumbs.map((segment, index) => h(ReactRuntime.Fragment, { key: segment.path },
+            index ? h('span', { style: { color: C.mute, fontSize: 10, flex: '0 0 auto' } }, '›') : null,
+            h('button', {
+              type: 'button', title: segment.path, disabled,
+              onClick: () => { if (!disabled && onPath) onPath(segment.path) },
+              className: 'tether-hover',
+              style: {
+                border: 0, background: 'transparent', borderRadius: 5, padding: '3px 5px',
+                fontSize: 12, lineHeight: '18px', color: index === crumbs.length - 1 ? C.ink : C.sub,
+                cursor: disabled ? 'default' : 'pointer', whiteSpace: 'nowrap',
+                overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 190
+              }
+            }, segment.label)))
+            : h('span', { style: { color: C.sub, fontSize: 12 } }, placeholder)),
+        editablePath ? h('input', {
+          key: path, defaultValue: path || '', spellCheck: false, 'aria-label': pathLabel,
+          onKeyDown: (event) => {
+            if (event.key === 'Enter' && event.currentTarget.value.trim() && onPath) {
+              onPath(event.currentTarget.value.trim())
+            }
+          },
+          style: {
+            height: 28, boxSizing: 'border-box', border: 0, borderRadius: 6,
+            background: C.soft, color: C.ink, fontSize: 12, padding: '0 8px',
+            outline: 'none', flex: '0 0 220px', minWidth: 100, fontFamily: 'Consolas, monospace'
+          }
+        }) : null,
+        !compact && path && entries !== null ? h('div', {
+          style: {
+            display: 'flex', alignItems: 'center', gap: 5, flex: '0 1 200px',
+            minWidth: 120, height: 28, boxSizing: 'border-box',
+            padding: '0 4px 0 8px', borderRadius: 7, background: C.soft, color: C.mute
+          }
+        },
+          h('span', { 'aria-hidden': true, style: { fontSize: 12 } }, '⌕'),
+          h('input', {
+            value: search, placeholder: searchPlaceholder, 'aria-label': searchPlaceholder, spellCheck: false,
+            onChange: (event) => onSearch(event.target.value),
+            onKeyDown: (event) => { if (event.key === 'Escape') { onSearch(''); event.currentTarget.blur() } },
+            style: {
+              flex: '1 1 auto', minWidth: 0, height: 22, padding: 0, border: 0,
+              background: 'transparent', color: C.ink, fontSize: 12, outline: 'none'
+            }
+          }),
+          search ? h('button', {
+            type: 'button', title: '清除搜索', 'aria-label': '清除搜索',
+            onClick: () => onSearch(''), className: 'tether-hover',
+            style: {
+              width: 18, height: 18, flex: '0 0 auto', display: 'grid', placeItems: 'center',
+              border: 0, borderRadius: 4, background: 'transparent', color: C.mute,
+              fontSize: 13, lineHeight: '14px', padding: 0, cursor: 'pointer'
+            }
+          }, '×') : null) : null,
+        iconButton('refresh', '刷新', () => { if (path && onRefresh) onRefresh(path) }, disabled || !path)),
+      h('div', {
+        style: { position: 'relative', display: 'flex', flexDirection: 'column', flex: '1 1 auto', minWidth: 0, minHeight: 0 }
+      },
+        body,
+        loadingOverlay,
+        errorToast))),
+    band ? h('div', {
+      style: {
+        position: 'fixed', left: band.left, top: band.top,
+        width: Math.max(0, band.right - band.left), height: Math.max(0, band.bottom - band.top),
+        border: '1px solid ' + (C.blue || '#1677ff'),
+        background: 'color-mix(in srgb, ' + (C.blue || '#1677ff') + ' 12%, transparent)',
+        borderRadius: 3, pointerEvents: 'none', zIndex: 2147482000
+      }
+    }) : null,
+    innerMenu ? h('div', {
+      role: 'menu', onMouseDown: (event) => event.stopPropagation(),
+      style: {
+        position: 'fixed', left: Math.max(8, Math.min(innerMenu.x, window.innerWidth - 180)),
+        top: Math.max(8, Math.min(innerMenu.y, window.innerHeight - 110)),
+        zIndex: 2147483000, minWidth: 150, padding: 4, background: C.bg,
+        borderRadius: 8, boxShadow: '0 8px 24px rgba(16,24,40,.18)', border: '1px solid ' + C.line
+      }
+    }, (innerMenu.item
+      ? [['复制路径', () => copyText(innerMenu.item.path)], ['刷新', () => { if (path && onRefresh) onRefresh(path) }]]
+      : [['复制当前路径', () => copyText(path)], ['刷新', () => { if (path && onRefresh) onRefresh(path) }]]
+    ).map(([label, action]) => h('button', {
+      key: label, type: 'button',
+      onClick: () => { setInnerMenu(null); action() },
+      className: 'tether-hover',
+      style: {
+        display: 'block', width: '100%', padding: '6px 10px', border: 0, borderRadius: 5,
+        background: 'transparent', color: C.ink, fontSize: 12, textAlign: 'left', cursor: 'pointer'
+      }
+    }, label))) : null)
+}
+const DEFAULT_TTL = 20_000
+const MAX_DIRS = 240
+
+const directories = new Map()
+const pending = new Map()
+
+function normalizeDirectoryPath(value) {
+  let text = String(value || '')
+  if (/^[A-Za-z]:$/.test(text)) return text + '\\'
+  text = text.replace(/[\\/]+$/, '') || text
+  if (/^[A-Za-z]:[\\/]/.test(text)) text = text.replace(/\//g, '\\')
+  return text
+}
+
+function directoryKey(deviceId, path) {
+  return String(deviceId || '') + '|' + normalizeDirectoryPath(path).toLowerCase()
+}
+
+function peekDirectory(deviceId, path, ttl = DEFAULT_TTL) {
+  if (!deviceId || !path) return null
+  const key = directoryKey(deviceId, path)
+  const hit = directories.get(key)
+  if (!hit) return null
+  if (Date.now() - hit.at > ttl) {
+    directories.delete(key)
+    return null
+  }
+  directories.delete(key)
+  directories.set(key, hit)
+  return hit.entries
+}
+
+function rememberDirectory(deviceId, path, entries) {
+  if (!deviceId || !path || !Array.isArray(entries)) return entries
+  const key = directoryKey(deviceId, path)
+  directories.delete(key)
+  directories.set(key, { entries, at: Date.now() })
+  while (directories.size > MAX_DIRS) directories.delete(directories.keys().next().value)
+  return entries
+}
+
+function clearDirectoryCache() {
+  directories.clear()
+  pending.clear()
+}
+
+function invalidateDirectory(deviceId, path) {
+  if (!deviceId) {
+    clearDirectoryCache()
+    return
+  }
+  if (!path) {
+    const prefix = String(deviceId) + '|'
+    for (const key of [...directories.keys()]) if (key.startsWith(prefix)) directories.delete(key)
+    for (const key of [...pending.keys()]) if (key.startsWith(prefix)) pending.delete(key)
+    return
+  }
+  const key = directoryKey(deviceId, path)
+  directories.delete(key)
+  pending.delete(key)
+  const childPrefixes = [key + '\\', key + '/']
+  for (const candidate of [...directories.keys()]) {
+    if (candidate.startsWith(key) && childPrefixes.some((prefix) => candidate.startsWith(prefix))) {
+      directories.delete(candidate)
+    }
+  }
+}
+
+async function loadDirectory({ deviceId, path, load, fresh = false, ttl = DEFAULT_TTL }) {
+  const key = directoryKey(deviceId, path)
+  if (!fresh) {
+    const cached = peekDirectory(deviceId, path, ttl)
+    if (cached) return cached
+    const running = pending.get(key)
+    if (running) return running
+  }
+  const task = Promise.resolve()
+    .then(load)
+    .then((entries) => {
+      rememberDirectory(deviceId, path, entries)
+      return entries
+    })
+    .finally(() => {
+      if (pending.get(key) === task) pending.delete(key)
+    })
+  pending.set(key, task)
+  return task
+}
+
+function directoryCacheStats() {
+  return { entries: directories.size, pending: pending.size }
+}
 const DSH_API_BASE = 'http://127.0.0.1:18890'
 const DSH_APP_BASE = 'http://127.0.0.1:18892'
 
@@ -5854,175 +6407,567 @@ function createDshLocalPluginSurfaceReloadBridge(getRemote) {
   }
 }
 
+function createDshPluginHotReloadWatch({
+  getRpc, reloadSurface, storage = null, intervalMs = 2000, cooldownMs = 20000
+} = {}) {
+  let disposed = false
+  let running = false
+  let lastAttempt = 0
+  const tick = async () => {
+    if (disposed || running) return
+    const rpc = typeof getRpc === 'function' ? getRpc() : null
+    if (!rpc || typeof rpc.call !== 'function' || typeof reloadSurface !== 'function') return
+    running = true
+    try {
+      const reply = await rpc.call('/tether-updates', 'status', {})
+      const value = reply && (reply.value || reply.result)
+      if (!value || value.ok === false || value.restart_required !== true) return
+      const disk = value.disk_version
+      const runtime = value.runtime_version
+      if (typeof disk !== 'string' || typeof runtime !== 'string' || !disk || disk === runtime) return
+      const now = Date.now()
+      if (storage) {
+        try {
+          const key = 'tether-plugin-reload:' + disk
+          const last = Number(storage.getItem(key) || 0)
+          if (Number.isFinite(last) && now - last < cooldownMs) return
+          storage.setItem(key, String(now))
+        } catch (_) { /* private mode: attempt without a cross-page lock */ }
+      }
+      if (now - lastAttempt < 1000) return
+      lastAttempt = now
+      try { await reloadSurface() } catch (_) { /* the surface may be mid-reload; retry on the next tick */ }
+    } catch (_) {
+      /* DSH may be replacing the surface; the next tick retries */
+    } finally {
+      running = false
+    }
+  }
+  const timer = setInterval(tick, Math.max(1000, intervalMs))
+  void tick()
+  return () => { disposed = true; clearInterval(timer) }
+}
+
 const DSH_TARGET_ATTACHMENT_LIMIT = 10 * 1024 * 1024
 const DSH_TARGET_ATTACHMENT_CHUNK = 256 * 1024
+const DSH_TARGET_FOLDER_LIMIT_FILES = 200
+const DSH_TARGET_FOLDER_LIMIT_BYTES = 100 * 1024 * 1024
+const DSH_TARGET_DEVICE_TIMEOUT = 15_000
+const DSH_TARGET_SURFACE_PREFIX = '/tether-device-fs'
 
-function createDshTargetFilesBridge({ getRpc, getRemote, makeFile = (...args) => new File(...args) } = {}) {
-  const capabilities = new Map()
+const TARGET_DEVICE_ERROR_MESSAGES = {
+  device_offline: '目标电脑不可达或已离线，请稍后重试',
+  device_not_found: '目标电脑不存在或已离线，请稍后重试',
+  host_unreachable: '目标电脑不可达，请确认目标电脑在线后重试',
+  local_unreachable: '目标电脑不可达，请确认目标电脑在线后重试',
+  surface_timeout: '目标电脑响应超时，请稍后重试',
+  node_update_required: '目标电脑的 Tether Node 版本过旧，无法浏览文件'
+}
+
+function loopbackHostname(value) {
+  return value === '127.0.0.1' || value === 'localhost' || value === '[::1]' || value === '::1'
+}
+
+// The public surface page is served by the gateway at a non-loopback origin, and
+// every request there must stay on that origin so the surface cookie applies.
+function tetherNativeSurfaceOrigin() {
+  if (typeof window === 'undefined' || !window.location) return ''
+  const location = window.location
+  const href = typeof location.href === 'string' ? location.href : ''
+  if (href) {
+    try {
+      const parsed = new URL(href)
+      if (parsed.searchParams.has('tether_native') || !loopbackHostname(parsed.hostname)) return parsed.origin
+      return ''
+    } catch (_) { /* fall back to location.origin */ }
+  }
+  try {
+    const origin = String(location.origin || '')
+    if (!origin) return ''
+    const parsed = new URL(origin)
+    return loopbackHostname(parsed.hostname) ? '' : parsed.origin
+  } catch (_) { return '' }
+}
+
+function targetFileType(name) {
+  const extension = String(name || '').split('.').pop().toLowerCase()
+  return ({
+    png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif',
+    webp: 'image/webp', bmp: 'image/bmp', svg: 'image/svg+xml', pdf: 'application/pdf'
+  })[extension] || 'application/octet-stream'
+}
+
+function targetPathBase(value) {
+  const clean = String(value || '').replace(/[\\/]+$/, '')
+  const index = Math.max(clean.lastIndexOf('\\'), clean.lastIndexOf('/'))
+  return index >= 0 ? (clean.slice(index + 1) || clean) : clean
+}
+
+function targetSafeFileName(value) {
+  return String(value || '').replace(/[\\/:*?"<>|]+/g, '_').replace(/^\.+$/, 'file').slice(0, 180) || 'file'
+}
+
+function targetUniqueName(name, index) {
+  if (index <= 1) return name
+  const dot = name.lastIndexOf('.')
+  return dot > 0 ? name.slice(0, dot) + ' (' + index + ')' + name.slice(dot) : name + ' (' + index + ')'
+}
+
+function targetTransferId() {
+  try {
+    return Array.from(crypto.getRandomValues(new Uint8Array(12)), (byte) => byte.toString(16).padStart(2, '0')).join('')
+  } catch (_) {
+    return (Date.now().toString(16) + Math.random().toString(16).slice(2) + '000000000000').slice(0, 24)
+  }
+}
+
+function targetBase64(bytes) {
+  let binary = ''
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000))
+  }
+  return btoa(binary)
+}
+
+function targetParentPath(value) {
+  const clean = String(value || '').replace(/[\\/]+$/, '')
+  if (!clean) return ''
+  if (/^[A-Za-z]:$/.test(clean)) return clean + '\\'
+  const slash = Math.max(clean.lastIndexOf('\\'), clean.lastIndexOf('/'))
+  if (slash < 0) return ''
+  const parent = clean.slice(0, slash)
+  if (!parent) return '/'
+  return /^[A-Za-z]:$/.test(parent) ? parent + '\\' : parent
+}
+
+function targetBreadcrumbs(path, root) {
+  const value = String(path || '').replace(/[\\/]+$/, '')
+  if (!value) return []
+  const base = String(root || '').replace(/[\\/]+$/, '')
+  if (!base || !value.toLowerCase().startsWith(base.toLowerCase())) {
+    return [{ label: targetPathBase(value) || value, path: value }]
+  }
+  const separator = value.includes('\\') ? '\\' : '/'
+  const crumbs = [{ label: targetPathBase(base) || base, path: base }]
+  const relative = value.slice(base.length).replace(/^[\\/]+/, '')
+  let current = base
+  for (const part of relative.split(/[\\/]+/).filter(Boolean)) {
+    current = current.replace(/[\\/]+$/, '') + separator + part
+    crumbs.push({ label: part, path: current })
+  }
+  return crumbs
+}
+
+function targetSortEntries(entries, sort) {
+  const key = sort && ['name', 'mtime', 'size'].includes(sort.key) ? sort.key : 'name'
+  const direction = sort && sort.dir === 'desc' ? -1 : 1
+  return [...(entries || [])].sort((left, right) => {
+    if (left.dir !== right.dir) return left.dir ? -1 : 1
+    let a
+    let b
+    if (key === 'size') { a = Number(left.size || 0); b = Number(right.size || 0) }
+    else if (key === 'mtime') { a = Number(left.mtime || 0); b = Number(right.mtime || 0) }
+    else { a = String(left.name || '').toLowerCase(); b = String(right.name || '').toLowerCase() }
+    if (a < b) return -direction
+    if (a > b) return direction
+    return 0
+  })
+}
+
+function decodeTargetBase64(value) {
+  if (typeof value !== 'string') throw new Error('目标电脑返回的文件字节不完整')
+  let binary
+  if (typeof atob === 'function') binary = atob(value)
+  else binary = globalThis.Buffer.from(value, 'base64').toString('binary')
+  const bytes = new Uint8Array(binary.length)
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index)
+  return bytes
+}
+
+function formatTargetSize(value) {
+  if (!Number.isSafeInteger(value) || value < 0) return ''
+  if (value < 1024) return value + ' B'
+  if (value < 1024 * 1024) return (value / 1024).toFixed(value < 10 * 1024 ? 1 : 0) + ' KB'
+  return (value / (1024 * 1024)).toFixed(1) + ' MB'
+}
+
+function formatTargetTime(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return ''
+  try { return new Date(value * 1000).toLocaleString('zh-CN', { hour12: false }) } catch (_) { return '' }
+}
+
+// Browses one target computer through the same /api/devices/{id}/... file API the
+// Tether resource manager uses. Identity comes from the surface owner RPC, so the
+// picker can never silently browse a different computer or the operator's local disk.
+function createDshTargetExplorerBridge({ getRpc, getHost, fetcher = (...args) => fetch(...args), makeFile = (...args) => new File(...args) } = {}) {
+  let scope = null
+  let dropFolder = ''
+  const host = () => (typeof getHost === 'function' ? getHost() : null)
   const identity = async () => {
     const rpc = typeof getRpc === 'function' ? getRpc() : null
-    if (!rpc || typeof rpc.call !== 'function') throw new Error('当前 DSH 没有目标设备文件通道')
-    const reply = await rpc.call('/tether-identity', 'get', {})
+    if (!rpc || typeof rpc.call !== 'function') throw new Error('当前 DSH 没有目标电脑身份通道，无法浏览目标电脑文件')
+    let reply
+    try { reply = await rpc.call('/tether-identity', 'get', {}) }
+    catch (_) { throw new Error('无法确认目标电脑身份，请确认目标电脑在线后重试') }
     const value = reply && (reply.value || reply.result || reply)
     if (!value || typeof value.device_id !== 'string' || !value.device_id) {
-      throw new Error('当前 DSH 无法确认目标设备身份')
+      throw new Error('无法确认目标电脑身份，请先在目标电脑启动 Tether Node')
     }
     return value.device_id
   }
-  const scopeFor = (sessionId) => {
-    if (typeof sessionId !== 'string' || !sessionId) throw new Error('请先选择一个 DSH 会话')
-    let scope = capabilities.get(sessionId)
-    if (!scope) {
-      scope = { directories: new Set(['.']), files: new Map(), deviceId: null }
-      capabilities.set(sessionId, scope)
+  const surfaceOrigin = () => tetherNativeSurfaceOrigin()
+  const baseList = () => {
+    const value = host()
+    const bases = []
+    try {
+      if (value && typeof value.activeApiBase === 'function') {
+        const active = value.activeApiBase()
+        if (typeof active === 'string' && active) bases.push(active)
+      }
+    } catch (_) { /* active authority is optional */ }
+    try { if (value && typeof value.apiBases === 'function') bases.push(...(value.apiBases() || [])) } catch (_) { /* candidate list is optional */ }
+    bases.push(DSH_APP_BASE, DSH_API_BASE)
+    const seen = new Set()
+    return bases
+      .map((base) => String(base || '').replace(/\/+$/, ''))
+      .filter((base) => {
+        if (!base || seen.has(base)) return false
+        seen.add(base)
+        return true
+      })
+  }
+  const headersFor = (base) => {
+    const value = host()
+    try { return value && typeof value.apiHeaders === 'function' ? { ...(value.apiHeaders(base) || {}) } : {} }
+    catch (_) { return {} }
+  }
+  const deviceRoute = (deviceId, suffix) => '/api/devices/' + encodeURIComponent(deviceId) + suffix
+  const apiSuffix = (suffix) => {
+    if (suffix === '/list') return '/fs/list'
+    if (suffix === '/read') return '/fs/read'
+    if (suffix === '/write_chunk') return '/fs/write_chunk'
+    return suffix
+  }
+  const request = async (deviceId, suffix, body, signal) => {
+    const origin = surfaceOrigin()
+    const init = { method: body === undefined ? 'GET' : 'POST' }
+    if (body !== undefined) {
+      init.body = JSON.stringify(origin ? { ...body, device_id: deviceId } : body)
+      init.headers = { 'Content-Type': 'application/json' }
     }
-    return scope
-  }
-  const remote = () => {
-    const value = typeof getRemote === 'function' ? getRemote() : null
-    if (!value?.workspaceFiles) throw new Error('当前 DSH 不提供会话工作区文件权限')
-    return value.workspaceFiles
-  }
-  const assertScope = async (expectedDevice) => {
-    if (await identity() !== expectedDevice) throw new Error('目标设备已切换，请重新选择文件')
-  }
-  const unwrap = (result) => {
-    if (!result || result.ok !== true) throw new Error(result?.error?.message || result?.error || 'DSH 拒绝读取此会话文件')
-    return result.value
-  }
-  const signal = () => AbortSignal.timeout(15_000)
-  const pathOf = (parent, name) => parent === '.' ? name : `${parent.replace(/\/$/, '')}/${name}`
-  const run = async (sessionId, operation) => {
-    const scope = scopeFor(sessionId)
-    const deviceId = await identity()
-    if (scope.deviceId !== null && scope.deviceId !== deviceId) {
-      scope.directories = new Set()
-      scope.files.clear()
-      scope.deviceId = null
-      throw new Error('目标设备已切换，请重新选择文件')
+    if (origin) init.credentials = 'include'
+    init.signal = signal || AbortSignal.timeout(DSH_TARGET_DEVICE_TIMEOUT)
+    const attempts = origin
+      ? [{ base: origin, url: origin + DSH_TARGET_SURFACE_PREFIX + suffix
+        + (body === undefined ? '?device_id=' + encodeURIComponent(deviceId) : '') }]
+      : baseList().map((base) => ({ base, url: base + deviceRoute(deviceId, apiSuffix(suffix)) }))
+    let lastError = null
+    for (const attempt of attempts) {
+      let response
+      try {
+        response = await fetcher(attempt.url, {
+          ...init,
+          headers: { ...(origin ? {} : headersFor(attempt.base)), ...(init.headers || {}) }
+        })
+      } catch (cause) {
+        if (signal && signal.aborted) throw cause
+        lastError = cause
+        continue
+      }
+      let data = {}
+      try { data = await response.json() } catch (_) { /* an error body may be empty */ }
+      if (!response.ok) {
+        const detail = data && data.detail
+        let code = (detail && typeof detail === 'object' && detail.code) || (data && data.code)
+        if (!code && origin && response.status === 404) code = 'node_update_required'
+        const message = (detail && typeof detail === 'object' ? detail.error || detail.message : detail)
+          || (data && data.error && data.error.message) || (data && typeof data.error === 'string' && data.error)
+          || ('HTTP ' + response.status)
+        const error = new Error(TARGET_DEVICE_ERROR_MESSAGES[code] || message || '目标电脑请求失败')
+        error.status = response.status
+        error.code = code
+        throw error
+      }
+      if (!data || typeof data !== 'object') throw new Error('目标电脑返回的数据格式无效')
+      if (data.device_id != null && data.device_id !== deviceId) throw new Error('目标电脑身份校验失败，请重新选择文件')
+      return data
     }
-    scope.deviceId = deviceId
-    const result = await operation(deviceId)
-    await assertScope(deviceId)
-    return result
+    const error = new Error('目标电脑不可达，请确认目标电脑在线后重试')
+    error.cause = lastError
+    throw error
   }
-
+  const assertDevice = async (deviceId) => {
+    if (await identity() !== deviceId) {
+      scope = null
+      throw new Error('目标电脑已切换，请重新选择文件')
+    }
+  }
+  const readDrives = async (deviceId, signal) => {
+    const data = await request(deviceId, '/drives', undefined, signal)
+    if (!Array.isArray(data.drives)) throw new Error('目标电脑磁盘列表格式无效')
+    return data.drives
+      .filter((item) => item && typeof item.path === 'string' && item.path)
+      .map((item) => ({
+        name: typeof item.name === 'string' && item.name ? item.name : targetPathBase(item.path),
+        path: item.path
+      }))
+  }
+  const readWorkspaces = async (deviceId, signal) => {
+    const data = await request(deviceId, '/workspaces', undefined, signal)
+    if (!Array.isArray(data.workspaces)) throw new Error('目标电脑工作区列表格式无效')
+    return data.workspaces
+      .filter((item) => item && typeof item.path === 'string' && item.path)
+      .map((item) => ({
+        name: typeof item.name === 'string' && item.name ? item.name : targetPathBase(item.path),
+        path: item.path,
+        kind: typeof item.kind === 'string' ? item.kind : ''
+      }))
+  }
   return {
-    async getRoots(sessionId) {
-      return run(sessionId, async (deviceId) => {
-        const listing = unwrap(await remote().list(sessionId, '.', signal()))
-        if (!Array.isArray(listing.entries)) throw new Error('DSH 工作区目录格式无效')
-        const scope = scopeFor(sessionId)
-        scope.directories = new Set(['.'])
-        scope.files.clear()
-        const entries = listing.entries.map(entry => {
-          const path = pathOf('.', entry.name)
-          if (entry.type === 'directory') scope.directories.add(path)
-          else if (entry.type === 'file' && Number.isSafeInteger(entry.size) && entry.size >= 0) {
-            scope.files.set(path, { name: entry.name, size: entry.size })
-          }
-          return { name: entry.name, path, size: entry.size, dir: entry.type === 'directory' }
-        }).filter(entry => entry.dir || scope.files.has(entry.path))
-        return { deviceId, root: { name: '当前会话工作区', path: '.', dir: true, group: '工作区' }, entries }
-      })
+    async getRoots(signal) {
+      const deviceId = await identity()
+      const [drives, workspaces] = await Promise.allSettled([
+        readDrives(deviceId, signal),
+        readWorkspaces(deviceId, signal)
+      ])
+      if (drives.status === 'rejected' && workspaces.status === 'rejected') throw drives.reason
+      await assertDevice(deviceId)
+      const driveRoots = drives.status === 'fulfilled' ? drives.value : []
+      const workspaceRoots = workspaces.status === 'fulfilled' ? workspaces.value : []
+      scope = {
+        deviceId,
+        directories: new Set([...workspaceRoots, ...driveRoots].map((item) => item.path)),
+        files: new Map()
+      }
+      const failure = drives.status === 'rejected' ? drives.reason
+        : workspaces.status === 'rejected' ? workspaces.reason : null
+      return {
+        deviceId,
+        workspaces: workspaceRoots,
+        drives: driveRoots,
+        warning: failure ? (failure.message || '部分目标电脑目录读取失败') : ''
+      }
     },
-    async listDirectory(sessionId, path) {
-      const scope = scopeFor(sessionId)
-      if (!scope.directories.has(path)) throw new Error('只能打开当前会话工作区中已列出的目录')
-      return run(sessionId, async () => {
-        const listing = unwrap(await remote().list(sessionId, path, signal()))
-        if (!Array.isArray(listing.entries)) throw new Error('DSH 目录返回格式无效')
-        const prefix = path === '.' ? '' : `${path.replace(/\/$/, '')}/`
-        for (const child of [...scope.directories]) {
-          if (child !== path && child.startsWith(prefix)) scope.directories.delete(child)
+    async listDirectory(path, signal) {
+      if (typeof path !== 'string' || !path) throw new Error('请选择目标电脑上的目录')
+      const current = scope
+      if (!current || !current.directories.has(path)) throw new Error('只能打开目标电脑中已列出的目录')
+      const deviceId = await identity()
+      if (deviceId !== current.deviceId) {
+        scope = null
+        throw new Error('目标电脑已切换，请重新选择文件')
+      }
+      const applyListing = (raw) => {
+        const separator = path.includes('\\') ? '\\' : '/'
+        const prefix = path.replace(/[\\/]+$/, '') + separator
+        for (const child of [...current.directories]) {
+          if (child !== path && child.startsWith(prefix)) current.directories.delete(child)
         }
-        for (const child of scope.files.keys()) {
-          if (child.startsWith(prefix)) scope.files.delete(child)
+        for (const child of [...current.files.keys()]) {
+          if (child.startsWith(prefix)) current.files.delete(child)
         }
-        const entries = listing.entries.map(entry => {
-          const childPath = pathOf(path, entry.name)
-          if (entry.type === 'directory') scope.directories.add(childPath)
-          else if (entry.type === 'file' && Number.isSafeInteger(entry.size) && entry.size >= 0) {
-            scope.files.set(childPath, { name: entry.name, size: entry.size })
-          }
-          return { name: entry.name, path: childPath, size: entry.size, dir: entry.type === 'directory' }
-        }).filter(entry => entry.dir || scope.files.has(entry.path))
+        const entries = []
+        for (const entry of raw) {
+          if (!entry || typeof entry.name !== 'string' || typeof entry.path !== 'string' || !entry.path) continue
+          const dir = entry.dir === true
+          const size = Number.isSafeInteger(entry.size) && entry.size >= 0 ? entry.size : null
+          if (!dir && size === null) continue
+          if (dir) current.directories.add(entry.path)
+          else current.files.set(entry.path, { name: entry.name, size })
+          entries.push({
+            name: entry.name, path: entry.path, dir,
+            size: dir ? null : size,
+            mtime: typeof entry.mtime === 'number' ? entry.mtime : null
+          })
+        }
         return entries
+      }
+      const cached = peekDirectory(deviceId, path)
+      if (cached) {
+        await assertDevice(deviceId)
+        return applyListing(cached)
+      }
+      const entries = await loadDirectory({
+        deviceId, path,
+        load: async () => {
+          const data = await request(deviceId, '/list', { path }, signal)
+          if (!Array.isArray(data.entries)) throw new Error('目标电脑目录返回格式无效')
+          await assertDevice(deviceId)
+          return data.entries
+        }
       })
+      return applyListing(entries)
     },
-    async readFile(sessionId, entry) {
+    async readFile(entry, signal) {
       if (!entry || entry.dir || typeof entry.path !== 'string' || !entry.path) throw new Error('请选择一个文件')
-      const scope = scopeFor(sessionId)
-      const listed = scope.files.get(entry.path)
-      if (!listed || listed.name !== entry.name || listed.size !== entry.size) throw new Error('只能读取当前工作区刚列出的文件')
+      const current = scope
+      if (!current) throw new Error('请先打开目标电脑的文件列表')
+      const listed = current.files.get(entry.path)
+      if (!listed || listed.name !== entry.name) throw new Error('只能读取目标电脑刚列出的文件')
       const size = listed.size
       if (!Number.isSafeInteger(size) || size < 0 || size > DSH_TARGET_ATTACHMENT_LIMIT) {
         throw new Error('单个附件不能超过 10 MiB')
       }
-      return run(sessionId, async () => {
-        const chunks = []
-        let version
-        let absolutePath
-        for (let offset = 0; offset < size; offset += DSH_TARGET_ATTACHMENT_CHUNK) {
-          const limit = Math.min(DSH_TARGET_ATTACHMENT_CHUNK, size - offset)
-          const data = unwrap(await remote().readBytes(sessionId, entry.path, { range: { offset, length: limit } }, signal()))
-          if (data.offset !== offset || (data.bytes !== undefined && data.bytes !== size)
-            || typeof data.version !== 'string' || typeof data.absolutePath !== 'string'
-            || (version !== undefined && (data.version !== version || data.absolutePath !== absolutePath))
-            || !(data.data instanceof Uint8Array) || data.data.length !== limit) {
-            throw new Error('DSH 返回的文件字节不完整')
-          }
-          version = data.version
-          absolutePath = data.absolutePath
-          chunks.push(data.data)
+      const deviceId = current.deviceId
+      const chunks = []
+      for (let offset = 0; offset < size; offset += DSH_TARGET_ATTACHMENT_CHUNK) {
+        const limit = Math.min(DSH_TARGET_ATTACHMENT_CHUNK, size - offset)
+        const data = await request(deviceId, '/read', { path: entry.path, offset, limit, encoding: 'base64' }, signal)
+        if (data.path !== entry.path || data.size !== size || data.offset !== offset
+            || data.truncated !== (offset + limit < size)) {
+          throw new Error('目标电脑上的文件已变化，请重新选择')
         }
-        const extension = (entry.name || entry.path).split('.').pop().toLowerCase()
-        const type = ({ png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp' })[extension]
-        return makeFile(chunks, entry.name || entry.path.split(/[\\/]/).pop() || 'attachment', {
-          type: type || 'application/octet-stream', lastModified: Date.now()
-        })
+        if (data.binary !== true || typeof data.base64 !== 'string') {
+          const error = new Error('目标电脑没有返回附件的原始字节，请更新目标电脑的 Tether Node 后重试')
+          error.code = 'node_update_required'
+          throw error
+        }
+        const bytes = decodeTargetBase64(data.base64)
+        if (bytes.length !== limit) throw new Error('目标电脑返回的文件字节不完整')
+        chunks.push(bytes)
+        await assertDevice(deviceId)
+      }
+      if (!chunks.length) await assertDevice(deviceId)
+      return makeFile(chunks, listed.name || targetPathBase(entry.path) || 'attachment', {
+        type: targetFileType(listed.name || entry.path), lastModified: Date.now()
       })
+    },
+    async readFolder(entry, signal) {
+      if (!entry || !entry.dir || typeof entry.path !== 'string' || !entry.path) throw new Error('请选择一个文件夹')
+      const files = []
+      let total = 0
+      const visit = async (path, prefix, depth) => {
+        if (depth > 12) throw new Error('文件夹层级过深')
+        const listing = await this.listDirectory(path, signal)
+        for (const item of listing) {
+          if (!item || !item.name || item.name === '.tether-trash') continue
+          if (item.dir) {
+            await visit(item.path, prefix + item.name + '/', depth + 1)
+            continue
+          }
+          if (files.length >= DSH_TARGET_FOLDER_LIMIT_FILES) {
+            throw new Error('文件夹内文件超过 ' + DSH_TARGET_FOLDER_LIMIT_FILES + ' 个')
+          }
+          if (!Number.isSafeInteger(item.size) || item.size < 0 || item.size > DSH_TARGET_ATTACHMENT_LIMIT) {
+            throw new Error(item.name + ' 超过 10 MiB')
+          }
+          total += item.size
+          if (total > DSH_TARGET_FOLDER_LIMIT_BYTES) throw new Error('文件夹总大小超过 100 MiB')
+          const file = await this.readFile(item, signal)
+          try {
+            Object.defineProperty(file, 'webkitRelativePath', { value: prefix + item.name, configurable: true })
+          } catch (_) { /* the composer can still upload the file by name */ }
+          files.push(file)
+        }
+      }
+      await visit(entry.path, targetPathBase(entry.path) + '/', 0)
+      if (!files.length) throw new Error('文件夹内没有可上传的文件')
+      return files
+    },
+    async saveDroppedFile(file, signal) {
+      if (!file || typeof file.name !== 'string' || !file.name) throw new Error('无效的文件')
+      const size = Number(file.size)
+      if (!Number.isSafeInteger(size) || size < 0 || size > 256 * 1024 * 1024) throw new Error('文件超过 256 MiB')
+      const bytes = new Uint8Array(await file.arrayBuffer())
+      if (bytes.length !== size) throw new Error('文件读取不完整')
+      const deviceId = await identity()
+      const bases = []
+      if (dropFolder) bases.push(dropFolder)
+      else {
+        bases.push('D:\\TetherDrop', 'D:\\TetherWorkspaces\\TetherDrop')
+      }
+      const name = targetSafeFileName(file.name)
+      const write = async (path) => {
+        const transferId = targetTransferId()
+        const chunkSize = DSH_TARGET_ATTACHMENT_CHUNK
+        if (!size) {
+          await request(deviceId, '/write_chunk', {
+            path, transfer_id: transferId, offset: 0, total: 0, base64: '', final: true, overwrite: false
+          }, signal)
+          return
+        }
+        for (let offset = 0; offset < size; offset += chunkSize) {
+          const chunk = bytes.subarray(offset, Math.min(offset + chunkSize, size))
+          await request(deviceId, '/write_chunk', {
+            path, transfer_id: transferId, offset, total: size,
+            base64: targetBase64(chunk), final: offset + chunk.length === size, overwrite: false
+          }, signal)
+        }
+      }
+      let lastError = null
+      for (const folder of [...new Set(bases)]) {
+        for (let attempt = 1; attempt <= 20; attempt++) {
+          const path = folder.replace(/[\\/]+$/, '') + '\\' + targetUniqueName(name, attempt)
+          try {
+            await write(path)
+            dropFolder = folder.replace(/[\\/]+$/, '')
+            return { deviceId, path, size }
+          } catch (error) {
+            lastError = error
+            if (error && error.code === 'exists') continue
+            break
+          }
+        }
+      }
+      throw lastError || new Error('保存文件失败')
     }
   }
 }
 
-async function addDshTargetAttachment(owner, bridge, sessionId, entry, isCurrent = () => true) {
+async function addDshTargetAttachment(owner, bridge, entry, isCurrent = () => true) {
   const onAddFiles = owner && owner.onAddFiles
   if (typeof onAddFiles !== 'function') throw new Error('当前会话不接受附件')
-  const file = await bridge.readFile(sessionId, entry)
-  if (!isCurrent()) throw new Error('当前会话已切换，请重新选择文件')
+  const file = await bridge.readFile(entry)
+  if (!isCurrent()) throw new Error('目标电脑或会话已切换，请重新选择文件')
   onAddFiles([file])
   return file
+}
+
+async function addDshTargetFolder(owner, bridge, entry, isCurrent = () => true) {
+  const onAddFiles = owner && owner.onAddFiles
+  if (typeof onAddFiles !== 'function') throw new Error('当前会话不接受附件')
+  const files = await bridge.readFolder(entry)
+  if (!isCurrent()) throw new Error('目标电脑或会话已切换，请重新选择文件夹')
+  onAddFiles(files)
+  return files
 }
 
 function createDshTargetAttachments(React, Native, bridge, pickerCommand, uiWorkspace, sessions) {
   const h = React.createElement
   return function DshTargetAttachments(props) {
     const [open, setOpen] = React.useState(false)
-    const [roots, setRoots] = React.useState([])
+    const [device, setDevice] = React.useState('')
+    const [workspaces, setWorkspaces] = React.useState([])
+    const [drives, setDrives] = React.useState([])
+    const [root, setRoot] = React.useState('')
+    const [directory, setDirectory] = React.useState('')
     const [entries, setEntries] = React.useState(null)
-    const [directory, setDirectory] = React.useState(null)
+    const [sort, setSort] = React.useState({ key: 'name', dir: 'asc' })
+    const [search, setSearch] = React.useState('')
+    const [treeChildren, setTreeChildren] = React.useState({})
+    const [expanded, setExpanded] = React.useState({})
+    const treeChildrenRef = React.useRef({})
     const [busy, setBusy] = React.useState(false)
     const [error, setError] = React.useState('')
+    const [dropNotice, setDropNotice] = React.useState('')
+    const dropNoticeTimer = React.useRef(null)
     const mounted = React.useRef(true)
-    const scope = React.useRef({})
     const busyRef = React.useRef(false)
+    const operation = React.useRef(0)
     const containerRef = React.useRef(null)
-    const nativePickerBypass = React.useRef(false)
     const openPickerRef = React.useRef(null)
     const currentProps = React.useRef(props)
     currentProps.current = props
-    const activeSession = React.useRef(props.sessionId)
-    if (activeSession.current !== props.sessionId) {
-      activeSession.current = props.sessionId
-      scope.current = {}
-    }
     React.useEffect(() => {
       mounted.current = true
-      return () => { mounted.current = false; scope.current = {} }
+      return () => { mounted.current = false }
     }, [])
+    React.useEffect(() => { treeChildrenRef.current = treeChildren }, [treeChildren])
     React.useEffect(() => {
-      setOpen(false); setRoots([]); setEntries(null); setDirectory(null); setError('')
+      operation.current += 1
+      busyRef.current = false
+      setOpen(false); setBusy(false); setError('')
+      setDevice(''); setWorkspaces([]); setDrives([]); setRoot(''); setDirectory(''); setEntries(null)
     }, [props.sessionId])
     React.useEffect(() => {
       const pending = pickerCommand && pickerCommand.pendingSessionStart
@@ -6036,71 +6981,201 @@ function createDshTargetAttachments(React, Native, bridge, pickerCommand, uiWork
       pickerCommand.pendingSessionStart = null
       void openPickerRef.current?.()
     }, [props.sessionId])
+    const live = (token, sessionId) => mounted.current && token === operation.current
+      && currentProps.current.sessionId === sessionId
+    const resetExplorer = () => {
+      setDevice(''); setWorkspaces([]); setDrives([])
+      setRoot(''); setDirectory(''); setEntries(null); setError('')
+      setTreeChildren({}); setExpanded({})
+    }
     const openPicker = async () => {
       if (busyRef.current || pickerCommand?.pendingSessionStart) return
       busyRef.current = true
-      setOpen(true); setBusy(true); setError(''); setDirectory(null); setEntries(null)
-      if (!props.sessionId) {
+      const token = ++operation.current
+      const sessionId = props.sessionId
+      setOpen(true); setBusy(false); resetExplorer()
+      if (!sessionId) {
         const snapshot = sessions?.list?.getSnapshot?.()
         const startSession = uiWorkspace && uiWorkspace.startSession
         if (typeof startSession !== 'function' || !snapshot || !Array.isArray(snapshot.ids)) {
-          setError('当前没有目标 DSH 会话。请先在目标设备选择或创建工作区，再浏览其文件。')
+          setError('当前没有目标 DSH 会话。请先在目标电脑选择或创建工作区，再浏览其文件。')
           busyRef.current = false
-          setBusy(false)
           return
         }
         const pending = { baselineIds: new Set(snapshot.ids), timeoutId: null }
         pending.timeoutId = setTimeout(() => {
           if (pickerCommand?.pendingSessionStart === pending) {
             pickerCommand.pendingSessionStart = null
-            if (mounted.current) setError('目标会话准备超时，请先在目标设备选择工作区后重试。')
+            if (mounted.current) {
+              setBusy(false)
+              setError('目标会话准备超时，请先在目标电脑选择工作区后重试。')
+            }
           }
         }, 30_000)
         if (pickerCommand) pickerCommand.pendingSessionStart = pending
-        setError('正在准备目标 DSH 会话…工作区就绪后会自动打开文件选择器。')
+        setBusy(true)
         try { startSession.call(uiWorkspace) }
         catch (cause) {
           clearTimeout(pending.timeoutId)
           if (pickerCommand?.pendingSessionStart === pending) pickerCommand.pendingSessionStart = null
-          setError(cause.message || '目标 DSH 会话创建失败，请先在目标设备选择工作区。')
+          setBusy(false)
+          setError(cause.message || '目标 DSH 会话创建失败，请先在目标电脑选择工作区。')
         }
         busyRef.current = false
-        setBusy(false)
         return
       }
       if (!props.canAcceptDrop) {
         setError('当前 DSH 会话暂不接受附件。')
         busyRef.current = false
-        setBusy(false)
         return
       }
+      setBusy(true)
       try {
-        const result = await bridge.getRoots(props.sessionId)
-        if (mounted.current && activeSession.current === props.sessionId) {
-          setRoots([result.root]); setDirectory(result.root); setEntries(result.entries)
-        }
+        const roots = await bridge.getRoots()
+        if (!live(token, sessionId)) return
+        setDevice(roots.deviceId || '')
+        setWorkspaces(roots.workspaces || [])
+        setDrives(roots.drives || [])
+        if (roots.warning) setError(roots.warning)
+      } catch (cause) {
+        if (live(token, sessionId)) setError(cause.message || '读取目标电脑失败')
+      } finally {
+        busyRef.current = false
+        if (mounted.current) setBusy(false)
       }
-      catch (cause) { if (mounted.current) setError(cause.message || '读取目标设备目录失败') }
-      finally { busyRef.current = false; if (mounted.current) setBusy(false) }
     }
     openPickerRef.current = openPicker
-    const nativeComposerInput = () => {
-      let parent = containerRef.current && containerRef.current.parentElement
-      while (parent) {
-        if (typeof parent.querySelectorAll === 'function') {
-          const inputs = [...parent.querySelectorAll('input[type="file"][hidden]')]
-          if (inputs.length) return inputs.length === 1 ? inputs[0] : null
-        }
-        parent = parent.parentElement
+    const close = () => {
+      operation.current += 1
+      busyRef.current = false
+      setOpen(false); setBusy(false); setError('')
+      setRoot(''); setDirectory(''); setEntries(null)
+      setTreeChildren({}); setExpanded({})
+      const pending = pickerCommand && pickerCommand.pendingSessionStart
+      if (pending) {
+        clearTimeout(pending.timeoutId)
+        pickerCommand.pendingSessionStart = null
       }
-      return null
+    }
+    const revealTree = async (nextPath) => {
+      const value = String(nextPath || '')
+      if (!value) return
+      const roots = [...workspaces, ...drives]
+      const rootItem = roots.find((item) => {
+        const base = String(item.path || '').replace(/[\\/]+$/, '')
+        if (!base) return false
+        const prefix = base + (base.includes('\\') ? '\\' : '/')
+        return value === item.path || value.toLowerCase().startsWith(prefix.toLowerCase())
+      })
+      const base = rootItem ? rootItem.path : root
+      if (!base) return
+      const paths = [base, ...targetBreadcrumbs(value, base).slice(1).map((crumb) => crumb.path)]
+      setExpanded((current) => {
+        const next = { ...current }
+        for (const path of paths) next[path] = true
+        return next
+      })
+      for (const path of paths) {
+        if (treeChildrenRef.current[path]) continue
+        try {
+          const listing = await bridge.listDirectory(path)
+          if (!mounted.current) return
+          treeChildrenRef.current = { ...treeChildrenRef.current, [path]: listing }
+          setTreeChildren((current) => current[path] ? current : { ...current, [path]: listing })
+        } catch (_) { /* the right pane shows the directory error */ }
+      }
+    }
+    const enter = async (item, isRoot, opts = {}) => {
+      if (!item || typeof item.path !== 'string' || !item.path || busyRef.current) return
+      const token = ++operation.current
+      const sessionId = props.sessionId
+      busyRef.current = true
+      if (isRoot) setRoot(item.path)
+      setDirectory(item.path); setSearch('')
+      if (opts.fromTree !== true) void revealTree(item.path)
+      setBusy(true); setError('')
+      try {
+        const listing = await bridge.listDirectory(item.path)
+        if (!live(token, sessionId)) return
+        setEntries(listing)
+        setTreeChildren((current) => current[item.path] ? current : { ...current, [item.path]: listing })
+      } catch (cause) {
+        if (live(token, sessionId)) setError(cause.message || '读取目标电脑目录失败')
+      } finally {
+        busyRef.current = false
+        if (mounted.current) setBusy(false)
+      }
+    }
+    const toggleTree = (item) => {
+      if (!item || !item.dir) return
+      const key = item.path
+      setExpanded((current) => {
+        const next = { ...current }
+        if (next[key]) delete next[key]
+        else next[key] = true
+        return next
+      })
+    }
+    const choose = async (item) => {
+      if (!item || item.dir || busyRef.current) return
+      if (!Number.isSafeInteger(item.size) || item.size < 0 || item.size > DSH_TARGET_ATTACHMENT_LIMIT) {
+        setError('单个附件不能超过 10 MiB')
+        return
+      }
+      const token = ++operation.current
+      const sessionId = props.sessionId
+      busyRef.current = true
+      setBusy(true); setError('')
+      try {
+        await addDshTargetAttachment(currentProps.current, bridge, item,
+          () => mounted.current && token === operation.current && currentProps.current.sessionId === sessionId)
+        if (!mounted.current) return
+        setOpen(false); setBusy(false)
+        setRoot(''); setDirectory(''); setEntries(null)
+      } catch (cause) {
+        if (live(token, sessionId)) setError(cause.message || '读取目标电脑文件失败')
+      } finally {
+        busyRef.current = false
+        if (mounted.current) setBusy(false)
+      }
+    }
+    const chooseFolder = async () => {
+      if (!directory || busyRef.current) return
+      if (drives.some((item) => item.path === directory)) {
+        setError('请进入磁盘中的具体文件夹再上传')
+        return
+      }
+      const token = ++operation.current
+      const sessionId = props.sessionId
+      busyRef.current = true
+      setBusy(true); setError('')
+      try {
+        await addDshTargetFolder(currentProps.current, bridge,
+          { path: directory, name: targetPathBase(directory), dir: true },
+          () => mounted.current && token === operation.current && currentProps.current.sessionId === sessionId)
+        if (!mounted.current) return
+        setOpen(false); setBusy(false)
+        setRoot(''); setDirectory(''); setEntries(null)
+      } catch (cause) {
+        if (live(token, sessionId)) setError(cause.message || '读取目标电脑文件夹失败')
+      } finally {
+        busyRef.current = false
+        if (mounted.current) setBusy(false)
+      }
+    }
+    const nativeComposerInput = () => {
+      if (typeof document === 'undefined') return null
+      // The plugin mounts beside the composer, not inside it, so walking up from
+      // containerRef misses the composer input. The DSH composer owns the only
+      // hidden file input; claim it so the native plus opens the target picker.
+      const inputs = [...document.querySelectorAll('input[type="file"][hidden]')]
+      return inputs.length === 1 ? inputs[0] : null
     }
     React.useEffect(() => {
       if (typeof document === 'undefined') return undefined
       const interceptNativeFilePicker = (event) => {
         const input = event.target
         if (!input || input !== nativeComposerInput()) return
-        if (nativePickerBypass.current) { nativePickerBypass.current = false; return }
         event.preventDefault()
         event.stopPropagation()
         if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation()
@@ -6110,57 +7185,343 @@ function createDshTargetAttachments(React, Native, bridge, pickerCommand, uiWork
       return () => document.removeEventListener('click', interceptNativeFilePicker, true)
     }, [])
     React.useEffect(() => {
+      if (typeof document === 'undefined') return undefined
+      const onDrop = (event) => {
+        const transfer = event.dataTransfer
+        if (!transfer || !transfer.files || !transfer.files.length) return
+        const target = event.target
+        if (!target || typeof target.closest !== 'function'
+            || !target.closest('[contenteditable="true"], [class*="uV2eYG"], [class*="composer"]')) return
+        const files = [...transfer.files].filter((file) => file && typeof file.arrayBuffer === 'function')
+        if (!files.length) return
+        event.preventDefault()
+        event.stopPropagation()
+        if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation()
+        const owner = currentProps.current
+        if (owner && typeof owner.onAddFiles === 'function') {
+          try { owner.onAddFiles(files) } catch (_) { /* the save still proceeds */ }
+        }
+        Promise.all(files.map((file) => bridge.saveDroppedFile(file)
+          .then((saved) => ({ saved }))
+          .catch((cause) => ({ cause }))))
+          .then((results) => {
+            if (!mounted.current) return
+            if (dropNoticeTimer.current) clearTimeout(dropNoticeTimer.current)
+            const saved = results.filter((result) => result.saved).map((result) => result.saved)
+            const failed = results.find((result) => result.cause)
+            if (saved.length) {
+              const folder = saved[0].path.slice(0, Math.max(saved[0].path.lastIndexOf('\\'), saved[0].path.lastIndexOf('/')))
+              setDropNotice(saved.length === 1 ? '已保存到 ' + saved[0].path : '已保存 ' + saved.length + ' 个文件到 ' + folder)
+            } else if (failed) {
+              setDropNotice('保存失败：' + (failed.cause && failed.cause.message || failed.cause))
+            }
+            dropNoticeTimer.current = setTimeout(() => setDropNotice(''), 4500)
+          })
+      }
+      document.addEventListener('drop', onDrop, true)
+      return () => {
+        document.removeEventListener('drop', onDrop, true)
+        if (dropNoticeTimer.current) clearTimeout(dropNoticeTimer.current)
+      }
+    }, [bridge])
+    React.useEffect(() => {
       if (!pickerCommand) return undefined
-      const open = () => { if (!busy && props.canAcceptDrop && props.sessionId) void openPicker() }
-      pickerCommand.open = open
-      return () => { if (pickerCommand.open === open) pickerCommand.open = null }
+      const openCommand = () => {
+        if (!busy && props.canAcceptDrop && props.sessionId) void openPickerRef.current?.()
+      }
+      pickerCommand.open = openCommand
+      return () => { if (pickerCommand.open === openCommand) pickerCommand.open = null }
     }, [busy, props.canAcceptDrop, props.sessionId])
-    const enterDirectory = async (item) => {
-      setBusy(true); setError('')
-      try {
-        const result = await bridge.listDirectory(props.sessionId, item.path)
-        if (mounted.current && activeSession.current === props.sessionId) { setDirectory(item); setEntries(result) }
+
+    const bg = 'var(--dsw-alias-bg-layer-1, #ffffff)'
+    const soft = 'var(--dsw-alias-bg-layer-2, #f9fafb)'
+    const ink = 'var(--dsw-alias-label-primary, #101828)'
+    const sub = 'var(--dsw-alias-label-secondary, #475467)'
+    const mute = 'var(--dsw-alias-label-tertiary, #667085)'
+    const line = 'var(--dsw-alias-border-l1, #eaecf0)'
+    const hover = 'var(--dsw-alias-bg-layer-3, #eef2f6)'
+    const danger = 'var(--dsw-alias-state-error-primary, #b42318)'
+    const fileIcon = (item) => {
+      if (Native && typeof Native.FileTypeIcon === 'function') {
+        return h(Native.FileTypeIcon, item.dir ? { kind: 'folder', size: 15 } : { path: item.path, size: 15 })
       }
-      catch (cause) { if (mounted.current) setError(cause.message || '读取目标目录失败') }
-      finally { if (mounted.current) setBusy(false) }
+      return h('span', {
+        'aria-hidden': true,
+        style: { width: 15, height: 15, display: 'grid', placeItems: 'center', color: mute, fontSize: 11 }
+      }, item.dir ? '▸' : '•')
     }
-    const pick = async (item) => {
-      const currentScope = scope.current
-      setBusy(true); setError('')
-      try {
-        await addDshTargetAttachment(props, bridge, props.sessionId, item,
-          () => mounted.current && activeSession.current === props.sessionId && scope.current === currentScope)
+    const mutedButton = {
+      border: '1px solid ' + line, borderRadius: 6, background: bg, color: sub,
+      padding: '4px 10px', font: 'inherit', fontSize: 12, cursor: 'pointer'
+    }
+    const primaryButton = {
+      border: 0, borderRadius: 6, background: 'var(--dsw-alias-button-primary-fill, #101828)',
+      color: 'var(--dsw-alias-label-primary-inverted, #ffffff)', padding: '5px 12px',
+      font: 'inherit', fontSize: 12, cursor: 'pointer'
+    }
+    const rootButton = (item, group) => h('button', {
+      key: group + ':' + item.path, type: 'button', disabled: busy,
+      title: item.path, onClick: () => { void enter(item, true) },
+      style: {
+        display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 2,
+        width: '100%', padding: '6px 8px', border: 0, borderRadius: 6,
+        background: root === item.path ? hover : 'transparent', color: ink,
+        font: 'inherit', textAlign: 'left', cursor: busy ? 'default' : 'pointer'
       }
-      catch (cause) { if (mounted.current) setError(cause.message || '读取目标文件失败') }
-      finally { if (mounted.current) setBusy(false) }
+    },
+      h('span', { style: { display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, fontSize: 13 } },
+        fileIcon(item),
+        h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, item.name)),
+      h('span', {
+        style: { paddingLeft: 22, color: mute, fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
+      }, item.path))
+    const rootGroup = (label, items, empty) => h('div', { key: label, style: { marginBottom: 10 } },
+      h('div', { style: { padding: '8px 8px 4px', color: mute, fontSize: 11, fontWeight: 600, letterSpacing: 0.2 } }, label),
+      items.length
+        ? items.map((item) => rootButton(item, label))
+        : h('div', { style: { padding: '2px 8px 6px', color: mute, fontSize: 11.5 } }, empty))
+    const row = (item) => {
+      const oversized = !item.dir && item.size > DSH_TARGET_ATTACHMENT_LIMIT
+      return h('button', {
+        key: item.path, type: 'button', title: item.path,
+        disabled: busy || oversized,
+        onClick: () => { if (item.dir) void enter(item, false); else void choose(item) },
+        style: {
+          display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 132px 76px 78px', gap: 8,
+          alignItems: 'center', width: '100%', height: 32, padding: '0 14px',
+          border: 0, borderRadius: 6, background: 'transparent', color: ink,
+          font: 'inherit', fontSize: 13, textAlign: 'left',
+          cursor: busy || oversized ? 'default' : 'pointer', opacity: oversized ? 0.55 : 1
+        }
+      },
+        h('span', { style: { display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 } },
+          h('span', { style: { width: 16, height: 16, display: 'grid', placeItems: 'center', flex: '0 0 auto' } }, fileIcon(item)),
+          h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
+            item.name + (oversized ? ' · 超过 10 MiB' : ''))),
+        h('span', { style: { color: mute, fontSize: 11, whiteSpace: 'nowrap' } }, formatTargetTime(item.mtime)),
+        h('span', { style: { color: mute, fontSize: 11, whiteSpace: 'nowrap' } }, item.dir ? '文件夹' : '文件'),
+        h('span', { style: { color: mute, fontSize: 11, textAlign: 'right' } }, item.dir ? '' : formatTargetSize(item.size))
+      )
     }
-    const buttonStyle = { border: '1px solid var(--dsw-alias-border-l1, #d0d5dd)', borderRadius: 6, background: 'var(--dsw-alias-bg-layer-1, #fff)', color: 'var(--dsw-alias-label-secondary, #475467)', padding: '4px 8px', cursor: 'pointer', font: 'inherit' }
-    const picker = open ? h('div', { role: 'dialog', 'aria-label': '选择目标设备文件', style: { position: 'relative', margin: '6px 0', padding: 10, border: '1px solid var(--dsw-alias-border-l1, #d0d5dd)', borderRadius: 8, background: 'var(--dsw-alias-bg-layer-1, #fff)', color: 'var(--dsw-alias-label-primary, #101828)', maxHeight: 260, overflow: 'auto' } },
-      h('div', { style: { display: 'flex', justifyContent: 'space-between', marginBottom: 8 } },
-        h('strong', null, directory ? directory.name : '目标设备文件'),
-        h('button', { type: 'button', onClick: () => {
-          setOpen(false); scope.current = {}
-          const pending = pickerCommand && pickerCommand.pendingSessionStart
-          if (pending) { clearTimeout(pending.timeoutId); pickerCommand.pendingSessionStart = null }
-        }, 'aria-label': '关闭文件选择器' }, '×')),
-      directory ? h('button', { type: 'button', style: buttonStyle, onClick: () => { setDirectory(null); setEntries(null) }, disabled: busy }, '返回会话工作区') : null,
-      busy ? h('div', { role: 'status', style: { padding: '8px 2px' } }, '读取中…') : null,
-      error ? h('div', { role: 'alert', style: { color: 'var(--dsw-alias-state-error-primary, #b42318)', padding: '6px 2px' } }, error) : null,
-      !directory ? roots.map((item, index) => h('button', { key: `${item.group}:${item.path}:${index}`, type: 'button', onClick: () => { void enterDirectory(item) }, disabled: busy, style: { ...buttonStyle, display: 'block', width: '100%', textAlign: 'left', marginTop: 5 } }, `${item.group} · ${item.name}`)) : null,
-      entries ? entries.map((item) => h('button', { key: item.path, type: 'button', onClick: () => { if (item.dir) void enterDirectory(item); else void pick(item) }, disabled: busy || (item.size > DSH_TARGET_ATTACHMENT_LIMIT), style: { ...buttonStyle, display: 'block', width: '100%', textAlign: 'left', marginTop: 5, opacity: item.size > DSH_TARGET_ATTACHMENT_LIMIT ? 0.55 : 1 } }, `${item.dir ? '📁' : '📄'} ${item.name}${!item.dir && item.size > DSH_TARGET_ATTACHMENT_LIMIT ? ' · 超过 10 MiB' : ''}`)) : null,
-      h('div', { style: { marginTop: 8, fontSize: 12, color: 'var(--dsw-alias-label-tertiary, #667085)' } }, '文件从当前 DSH 会话工作区读取，单个附件上限 10 MiB。')) : null
-    const openLocalPicker = () => {
-      const input = typeof document !== 'undefined' && nativeComposerInput()
-      if (!input || typeof input.click !== 'function') { setError('DSH 本机文件选择器暂不可用'); return }
-      nativePickerBypass.current = true
-      try { input.click() } catch (cause) { setError(cause.message || '打开本机文件选择器失败') }
-      finally { nativePickerBypass.current = false }
+    const upTarget = targetParentPath(directory)
+    const canGoUp = !!directory && directory !== root && !!upTarget && upTarget !== directory
+    const crumbs = targetBreadcrumbs(directory, root)
+    const toolbar = h('div', {
+      style: {
+        display: 'flex', alignItems: 'center', gap: 8, height: 46, padding: '0 14px',
+        borderBottom: '1px solid ' + line, flex: '0 0 auto', minWidth: 0
+      }
+    },
+      h('button', {
+        type: 'button', disabled: busy || !canGoUp, title: '上一级',
+        onClick: () => { if (canGoUp) void enter({ path: upTarget }, false) },
+        style: { ...mutedButton, opacity: busy || !canGoUp ? 0.45 : 1, cursor: busy || !canGoUp ? 'default' : 'pointer' }
+      }, '上一级'),
+      h('div', {
+        className: 'tether-breadcrumbs',
+        title: directory || '尚未选择位置',
+        style: {
+          display: 'flex', alignItems: 'center', gap: 1, flex: '1 1 auto',
+          minWidth: 0, overflow: 'hidden', height: 28
+        }
+      },
+        crumbs.length
+          ? crumbs.map((segment, index) => h(React.Fragment, { key: segment.path },
+            index ? h('span', { style: { color: mute, fontSize: 10, flex: '0 0 auto' } }, '›') : null,
+            h('button', {
+              type: 'button', title: segment.path, disabled: busy,
+              onClick: () => { if (!busy) void enter({ path: segment.path }, false) },
+              className: 'tether-hover',
+              style: {
+                border: 0, background: 'transparent', borderRadius: 5, padding: '3px 5px',
+                fontSize: 12, lineHeight: '18px',
+                color: index === crumbs.length - 1 ? ink : sub,
+                cursor: busy ? 'default' : 'pointer', whiteSpace: 'nowrap',
+                overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 190
+              }
+            }, segment.label)))
+          : h('span', { style: { color: sub, fontSize: 12 } }, '从左侧选择工作区或磁盘')),
+      directory && entries !== null ? h('div', {
+        style: {
+          display: 'flex', alignItems: 'center', gap: 5, flex: '0 1 200px',
+          minWidth: 120, height: 28, boxSizing: 'border-box',
+          padding: '0 4px 0 8px', borderRadius: 7, background: soft, color: mute
+        }
+      },
+        h('span', { 'aria-hidden': true, style: { fontSize: 12 } }, '⌕'),
+        h('input', {
+          value: search, placeholder: '搜索当前目录', 'aria-label': '搜索当前目录', spellCheck: false,
+          onChange: (event) => setSearch(event.target.value),
+          onKeyDown: (event) => {
+            if (event.key === 'Escape') { setSearch(''); event.currentTarget.blur() }
+          },
+          style: {
+            flex: '1 1 auto', minWidth: 0, height: 22, padding: 0, border: 0,
+            background: 'transparent', color: ink, fontSize: 12, outline: 'none'
+          }
+        }),
+        search ? h('button', {
+          type: 'button', title: '清除搜索', 'aria-label': '清除搜索',
+          onClick: () => setSearch(''), className: 'tether-hover',
+          style: {
+            width: 18, height: 18, flex: '0 0 auto', display: 'grid', placeItems: 'center',
+            border: 0, borderRadius: 4, background: 'transparent', color: mute,
+            fontSize: 13, lineHeight: '14px', padding: 0, cursor: 'pointer'
+          }
+        }, '×') : null) : null,
+      h('button', {
+        type: 'button', disabled: busy || !directory, title: '刷新',
+        onClick: () => { if (directory) void enter({ path: directory }, false) },
+        style: { ...mutedButton, opacity: busy || !directory ? 0.45 : 1, cursor: busy || !directory ? 'default' : 'pointer' }
+      }, '刷新'))
+    const sortedEntries = targetSortEntries(entries, sort)
+    const term = search.trim().toLowerCase()
+    const visibleEntries = term
+      ? sortedEntries.filter((item) => String(item.name || '').toLowerCase().includes(term))
+      : sortedEntries
+    const sortHeader = (key, label, align) => h('button', {
+      type: 'button', title: '按' + label + '排序', 'aria-label': '按' + label + '排序',
+      'data-sort': sort.key === key ? sort.dir : undefined,
+      onClick: () => setSort((current) => current.key === key
+        ? { key, dir: current.dir === 'asc' ? 'desc' : 'asc' }
+        : { key, dir: 'asc' }),
+      className: 'tether-hover',
+      style: {
+        display: 'flex', alignItems: 'center', gap: 3,
+        justifyContent: align === 'right' ? 'flex-end' : 'flex-start',
+        minWidth: 0, height: 22, padding: '0 4px', margin: '0 -4px', border: 0,
+        borderRadius: 4, background: 'transparent',
+        color: sort.key === key ? ink : mute, fontSize: 11, cursor: 'pointer'
+      }
+    }, h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, label),
+      sort.key === key ? h('span', { 'aria-hidden': true, style: { fontSize: 9 } }, sort.dir === 'asc' ? '▲' : '▼') : null)
+    const listHeader = h('div', {
+      style: {
+        display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 132px 76px 78px', gap: 8,
+        alignItems: 'center', height: 28, padding: '0 14px', color: mute, fontSize: 11, flex: '0 0 auto'
+      }
+    }, sortHeader('name', '名称'), sortHeader('mtime', '修改日期'),
+      h('span', null, '类型'), sortHeader('size', '大小', 'right'))
+    let body = null
+    if (!directory) {
+      body = h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', color: mute, fontSize: 12, padding: 24, textAlign: 'center' } },
+        error ? h('span', { role: 'alert', style: { color: danger } }, error) : '从左侧选择工作区或磁盘')
+    } else if (entries === null) {
+      body = h('div', {
+        style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', color: mute, fontSize: 12, padding: 24, textAlign: 'center' }
+      }, error
+        ? h('span', { role: 'alert', style: { color: danger } }, error)
+        : busy ? '正在读取目录…' : '目录暂不可用')
+    } else if (!visibleEntries.length) {
+      body = h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', alignContent: 'center', gap: 8, color: mute, fontSize: 12, padding: 24, textAlign: 'center' } },
+        h('span', null, term ? '未找到匹配 “' + search.trim() + '” 的项目' : '空文件夹'),
+        term ? h('button', {
+          type: 'button', onClick: () => setSearch(''), className: 'tether-hover',
+          style: { ...mutedButton, padding: '4px 10px' }
+        }, '清除搜索') : null)
+    } else {
+      body = h('div', { style: { flex: '1 1 auto', minHeight: 0, overflow: 'auto', padding: '0 8px 18px' } },
+        listHeader,
+        visibleEntries.map((item) => row(item)))
     }
+    const canConfirmFolder = !!directory && !drives.some((item) => item.path === directory)
+    const dialog = open ? h('div', {
+      style: {
+        position: 'fixed', inset: 0, zIndex: 2147483000, display: 'flex',
+        alignItems: 'center', justifyContent: 'center', padding: 24,
+        background: 'rgba(16, 24, 40, 0.45)'
+      },
+      onClick: (event) => { if (event && event.target === event.currentTarget) close() }
+    },
+      h('div', {
+        role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'tether-target-file-title',
+        onClick: (event) => { if (event && typeof event.stopPropagation === 'function') event.stopPropagation() },
+        style: {
+          width: 'min(880px, 100%)', height: 'min(600px, 100%)', display: 'flex', flexDirection: 'column',
+          overflow: 'hidden', background: bg, color: ink, border: '1px solid ' + line, borderRadius: 12,
+          boxShadow: 'var(--dsw-elevation-panel, 0 24px 64px rgba(16, 24, 40, 0.28))', font: 'inherit'
+        }
+      },
+        h('div', {
+          style: {
+            display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px',
+            borderBottom: '1px solid ' + line, flex: '0 0 auto'
+          }
+        },
+          h('div', { style: { minWidth: 0, flex: '1 1 auto' } },
+            h('div', { id: 'tether-target-file-title', style: { height: 20, lineHeight: '20px', fontSize: 15, fontWeight: 600, color: ink } }, '资源管理器'),
+            h('div', {
+              style: {
+                marginTop: 2, height: 18, lineHeight: '18px', color: mute, fontSize: 11.5, overflow: 'hidden',
+                textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+              }
+            }, device || '正在连接设备…')),
+          h('button', {
+            type: 'button', 'aria-label': '关闭', title: '关闭', onClick: close,
+            style: {
+              width: 28, height: 28, flex: '0 0 auto', border: 0, borderRadius: 6,
+              background: 'transparent', color: sub, fontSize: 18, lineHeight: '22px',
+              cursor: 'pointer'
+            }
+          }, '×')),
+        TargetFileExplorer({
+            React,
+            sort,
+            onSort: setSort,
+            search,
+            onSearch: setSearch,
+            colors: { bg, soft, ink, sub, mute, line, hover, red: danger },
+            deviceName: device,
+            roots: [
+              ...workspaces.map((item) => ({ name: item.name, path: item.path, kind: 'workspace', dir: true })),
+              ...drives.map((item) => ({ name: item.name, path: item.path, kind: 'drive', dir: true }))
+            ],
+            rootPath: root,
+            path: directory,
+            entries,
+            loading: busy,
+            error,
+            onDismissError: () => setError(''),
+            disabled: busy,
+            singleClickOpens: true,
+            editablePath: false,
+            onRoot: (next, opts) => { void enter({ path: next }, true, opts) },
+            onPath: (next, opts) => { void enter({ path: next }, false, opts) },
+            onSelect: () => {},
+            onOpen: (item) => { if (item.dir) void enter(item, false); else void choose(item) },
+            onRefresh: (next) => { void enter({ path: next }, false) },
+            treeChildren,
+            expanded,
+            onToggleTree: (item) => { void toggleTree(item) },
+            fileIcon,
+            formatTime: formatTargetTime,
+            formatSize: formatTargetSize,
+            limit: DSH_TARGET_ATTACHMENT_LIMIT
+          }),
+        h('div', {
+          style: {
+            display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, padding: '10px 18px',
+            borderTop: '1px solid ' + line, flex: '0 0 auto'
+          }
+        },
+          canConfirmFolder ? h('button', {
+            type: 'button', onClick: chooseFolder, disabled: busy,
+            style: { ...primaryButton, opacity: busy ? 0.6 : 1, cursor: busy ? 'default' : 'pointer' }
+          }, busy ? '上传中…' : '确定') : null,
+          h('button', { type: 'button', onClick: close, style: mutedButton }, '取消')))
+      ) : null
     return h('div', { ref: containerRef, style: { display: 'contents' } },
       h(Native.ComposerAttachments, { ...props, readFileDrag: props.readFileDrag }),
-      h('div', { style: { display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 } },
-        h('button', { type: 'button', onClick: openLocalPicker, disabled: busy || !props.canAcceptDrop || !props.sessionId, style: buttonStyle }, '本机文件…')),
-      picker)
+      dropNotice ? h('div', {
+        role: 'status',
+        style: {
+          position: 'fixed', right: 16, bottom: 16, zIndex: 2147483000, maxWidth: 440,
+          padding: '8px 10px', borderRadius: 8, background: 'rgba(16,24,40,.88)', color: '#fff',
+          fontSize: 12, lineHeight: '18px', boxShadow: '0 4px 16px rgba(16,24,40,.22)',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+        }
+      }, dropNotice) : null,
+      dialog)
   }
 }
 
@@ -6268,47 +7629,180 @@ function createConnectionPanel(React) {
   const bg = 'var(--dsw-alias-bg-base, #ffffff)'
   const panel = 'var(--dsw-specific-sidebar-fill, #f9fafb)'
   const line = 'var(--dsw-alias-border-secondary, #e4e7ec)'
-  const field = { width: '100%', height: 30, boxSizing: 'border-box', border: '1px solid ' + line, borderRadius: 6, padding: '0 8px', background: bg, color: ink, fontSize: 12, font: 'inherit' }
-  const primary = { height: 28, padding: '0 10px', border: 0, borderRadius: 6, color: 'var(--dsw-alias-label-primary-inverted, #ffffff)', background: 'var(--dsw-alias-button-primary-fill, #101828)', cursor: 'pointer', fontSize: 12 }
-  const secondary = { height: 28, padding: '0 10px', border: '1px solid ' + line, borderRadius: 6, color: sub, background: 'transparent', cursor: 'pointer', fontSize: 12 }
+  const field = { width: '100%', height: 32, boxSizing: 'border-box', border: '1px solid ' + line, borderRadius: 7, padding: '0 9px', background: bg, color: ink, fontSize: 12.5, font: 'inherit' }
+  const primary = { height: 32, padding: '0 14px', border: 0, borderRadius: 7, color: 'var(--dsw-alias-label-primary-inverted, #ffffff)', background: 'var(--dsw-alias-button-primary-fill, #101828)', cursor: 'pointer', fontSize: 12.5 }
+  const secondary = { height: 30, padding: '0 12px', border: '1px solid ' + line, borderRadius: 7, color: sub, background: 'transparent', cursor: 'pointer', fontSize: 12 }
   const safeAddress = (value) => {
     try { const url = new URL(value); return url.origin + url.pathname.replace(/\/$/, '') } catch (_) { return '未配置' }
   }
   const cleanUrl = (value) => String(value || '').trim().replace(/\/+$/, '')
-  function ConnectionPanel({ open, onClose, info, busy, error, onProbe, defaultUrl = '', defaultToken = '', onConfigured, defaultDeviceId = '', defaultDeviceName = '', platform = 'Windows' }) {
-    const initialServer = defaultUrl || (info && /^https?:\/\//.test(info.address || '') ? info.address : '')
-    const [server, setServer] = React.useState(initialServer)
-    const [email, setEmail] = React.useState('')
-    const [password, setPassword] = React.useState('')
-    const [totp, setTotp] = React.useState('')
-    const [inviteCode, setInviteCode] = React.useState('')
-    const [inviteEmail, setInviteEmail] = React.useState('')
-    const [invitePassword, setInvitePassword] = React.useState('')
-    const [pairCode, setPairCode] = React.useState('')
-    const [pairDevice, setPairDevice] = React.useState(defaultDeviceId)
-    const [pairName, setPairName] = React.useState(defaultDeviceName || defaultDeviceId)
-    const [pairResult, setPairResult] = React.useState('')
-    const [accessToken, setAccessToken] = React.useState(defaultToken || '')
-    const [currentPassword, setCurrentPassword] = React.useState('')
-    const [newPassword, setNewPassword] = React.useState('')
-    const [formBusy, setFormBusy] = React.useState('')
-    const [message, setMessage] = React.useState('')
-    React.useEffect(() => { setAccessToken(defaultToken || '') }, [defaultToken])
+  const timeText = (value) => {
+    if (!value) return '尚未检测'
+    try { const date = new Date(value); return [date.getHours(), date.getMinutes(), date.getSeconds()].map((part) => String(part).padStart(2, '0')).join(':') } catch (_) { return '尚未检测' }
+  }
+  function ConnectionPanel({ open, onClose, info, busy, error, onProbe }) {
     if (!open) return null
     const status = info && info.status || 'unknown'
-    const checkedAt = info && info.checkedAt ? new Date(info.checkedAt) : null
-    const checked = checkedAt && [checkedAt.getHours(), checkedAt.getMinutes(), checkedAt.getSeconds()].map((part) => String(part).padStart(2, '0')).join(':')
+    const dotColor = status === 'online' ? 'var(--dsw-alias-state-success-primary, #16a34a)'
+      : status === 'offline' ? 'var(--dsw-alias-state-error-primary, #b42318)'
+        : status === 'checking' ? 'var(--dsw-alias-state-warn-primary, #b54708)' : mute
     const row = (label, value) => h('div', { key: label, style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, height: 32, fontSize: 12.5 } },
       h('span', { style: { color: mute } }, label),
       h('span', { style: { color: ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, value))
-    const title = (text) => h('div', { style: { color: sub, fontSize: 12, fontWeight: 600, margin: '16px 0 8px' } }, text)
-    const fieldRow = (label, input) => h('label', { style: { display: 'grid', gap: 4, fontSize: 11.5, color: mute } }, label, input)
-    const post = async (path, body, headers = {}) => {
-      const base = cleanUrl(server)
-      if (!/^https?:\/\/[^/]+/.test(base)) throw new Error('先填写服务器地址')
-      const response = await fetch(base + path, {
+    return h('div', { onPointerDown: (event) => { if (event.target === event.currentTarget) onClose() }, style: { position: 'absolute', inset: 0, zIndex: 31, background: 'rgba(16,24,40,0.35)', display: 'flex', justifyContent: 'flex-end' } },
+      h('section', { className: 'tether-drawer', style: { height: '100%', background: bg, display: 'flex', flexDirection: 'column', boxShadow: 'var(--dsw-elevation-panel, 0 8px 24px rgba(16,24,40,0.12))' } },
+        h('header', { style: { padding: '12px 16px', background: panel, display: 'flex', alignItems: 'center' } },
+          h('strong', { style: { fontSize: 14, color: ink } }, '连接'),
+          h('button', { onClick: onClose, title: '关闭', 'aria-label': '关闭', style: { marginLeft: 'auto', border: 0, background: 'transparent', fontSize: 18, cursor: 'pointer', color: mute } }, '×')),
+        h('div', { className: 'tether-drawer-body tether-scroll', style: { padding: '14px 16px 24px', overflowY: 'auto' } },
+          h('div', { style: { borderRadius: 8, background: panel, padding: '4px 12px', marginBottom: 12 } },
+            row('服务器地址', safeAddress(info && info.address)),
+            h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, height: 32, fontSize: 12.5 } },
+              h('span', { style: { color: mute } }, '连接状态'),
+              h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 6, color: ink } },
+                h('span', { style: { width: 7, height: 7, borderRadius: 4, background: dotColor, flex: '0 0 auto' } }),
+                status === 'online' ? '已连接' : status === 'offline' ? '不可达' : status === 'checking' ? '检测中' : '未知')),
+            row('最近检测', busy ? '检测中…' : timeText(info && info.checkedAt)),
+            row('服务响应耗时', info && Number.isFinite(info.durationMs) ? info.durationMs + ' ms' : '—')),
+          error ? h('div', { role: 'alert', style: { color: 'var(--dsw-alias-state-error-primary, #b42318)', fontSize: 12, marginBottom: 10 } }, error) : null,
+          h('button', { onClick: onProbe, disabled: busy, className: 'tether-press', style: { ...secondary, opacity: busy ? 0.5 : 1, display: 'inline-flex', alignItems: 'center', gap: 6 } },
+            busy ? '刷新中…' : '刷新连接状态')
+        )
+      )
+    )
+  }
+
+  function LoginNetwork() {
+    const svgRef = React.useRef(null)
+    const lineRefs = React.useRef([])
+    const nodeRefs = React.useRef([])
+    const pointerRef = React.useRef({ x: 0, y: 0, active: false })
+    React.useEffect(() => {
+      const svg = svgRef.current
+      if (!svg) return undefined
+      const nodes = [
+        { x: 160, y: 150, r: 10, phase: 0.2 },
+        { x: 70, y: 208, r: 8.5, phase: 1.7 },
+        { x: 252, y: 198, r: 8.5, phase: 3.1 },
+        { x: 160, y: 74, r: 9.5, phase: 4.4 }
+      ].map((node) => ({ ...node, ox: node.x, oy: node.y, vx: 0, vy: 0 }))
+      const edges = [[0, 1], [0, 2], [0, 3], [1, 2], [2, 3], [3, 1]]
+      const reduced = typeof window !== 'undefined' && window.matchMedia
+        && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      let frame = 0
+      let last = performance.now()
+      let running = true
+      const draw = () => {
+        edges.forEach((edge, index) => {
+          const line = lineRefs.current[index]
+          if (!line) return
+          const a = nodes[edge[0]]
+          const b = nodes[edge[1]]
+          line.setAttribute('x1', a.x.toFixed(2))
+          line.setAttribute('y1', a.y.toFixed(2))
+          line.setAttribute('x2', b.x.toFixed(2))
+          line.setAttribute('y2', b.y.toFixed(2))
+        })
+        nodes.forEach((node, index) => {
+          const circle = nodeRefs.current[index]
+          if (!circle) return
+          circle.setAttribute('cx', node.x.toFixed(2))
+          circle.setAttribute('cy', node.y.toFixed(2))
+        })
+      }
+      const step = (now) => {
+        if (!running) return
+        const dt = Math.min(34, now - last) / 16.667
+        last = now
+        const pointer = pointerRef.current
+        nodes.forEach((node) => {
+          let fx = (node.ox - node.x) * 0.014 + Math.sin(now * 0.0007 + node.phase) * 0.018
+          let fy = (node.oy - node.y) * 0.014 + Math.cos(now * 0.0006 + node.phase) * 0.022
+          if (pointer.active) {
+            const dx = node.x - pointer.x
+            const dy = node.y - pointer.y
+            const distance = Math.hypot(dx, dy)
+            if (distance > 0.1 && distance < 96) {
+              const push = (1 - distance / 96) * 0.55
+              fx += (dx / distance) * push
+              fy += (dy / distance) * push
+            }
+          }
+          node.vx = (node.vx + fx * dt) * 0.955
+          node.vy = (node.vy + fy * dt) * 0.955
+          node.x += node.vx * dt
+          node.y += node.vy * dt
+          if (node.x < node.r + 10) { node.x = node.r + 10; node.vx = Math.abs(node.vx) * 0.45 }
+          if (node.x > 310 - node.r) { node.x = 310 - node.r; node.vx = -Math.abs(node.vx) * 0.45 }
+          if (node.y < node.r + 10) { node.y = node.r + 10; node.vy = Math.abs(node.vy) * 0.45 }
+          if (node.y > 250 - node.r) { node.y = 250 - node.r; node.vy = -Math.abs(node.vy) * 0.45 }
+        })
+        draw()
+        frame = requestAnimationFrame(step)
+      }
+      const move = (event) => {
+        const ctm = svg.getScreenCTM()
+        if (!ctm) return
+        const point = svg.createSVGPoint()
+        point.x = event.clientX
+        point.y = event.clientY
+        const local = point.matrixTransform(ctm.inverse())
+        pointerRef.current = { x: local.x, y: local.y, active: true }
+      }
+      const leave = () => { pointerRef.current = { x: 0, y: 0, active: false } }
+      draw()
+      if (!reduced) frame = requestAnimationFrame(step)
+      svg.addEventListener('pointermove', move)
+      svg.addEventListener('pointerleave', leave)
+      return () => {
+        running = false
+        if (frame) cancelAnimationFrame(frame)
+        svg.removeEventListener('pointermove', move)
+        svg.removeEventListener('pointerleave', leave)
+      }
+    }, [])
+    return h('svg', {
+      ref: svgRef, viewBox: '0 0 320 260', 'aria-hidden': true,
+      style: { width: '100%', height: 'auto', flex: '1 1 auto', position: 'relative', zIndex: 1, touchAction: 'none' }
+    },
+      h('defs', null,
+        h('linearGradient', { id: 'tether-login-line', gradientUnits: 'userSpaceOnUse', x1: '40', y1: '50', x2: '280', y2: '230' },
+          h('stop', { offset: '0%', stopColor: '#3b82f6', stopOpacity: 0.95 }),
+          h('stop', { offset: '100%', stopColor: '#f59e0b', stopOpacity: 0.95 }))),
+      h('g', { stroke: 'url(#tether-login-line)', strokeWidth: 1.2, fill: 'none' },
+        [[0, 1], [0, 2], [0, 3], [1, 2], [2, 3], [3, 1]].map((edge, index) =>
+          h('line', {
+            key: 'edge-' + index,
+            ref: (element) => { lineRefs.current[index] = element },
+            opacity: index < 3 ? 0.72 : 0.34
+          }))),
+      h('g', { fill: '#0b1220', stroke: '#3b82f6', strokeWidth: 2 },
+        h('circle', { ref: (element) => { nodeRefs.current[1] = element }, r: 8.5 }),
+        h('circle', { ref: (element) => { nodeRefs.current[2] = element }, r: 8.5 })),
+      h('circle', { ref: (element) => { nodeRefs.current[3] = element }, r: 9.5, fill: '#f59e0b', opacity: 0.95 }),
+      h('circle', { ref: (element) => { nodeRefs.current[0] = element }, r: 10, fill: '#fff' }),
+      h('g', { fill: 'rgba(255,255,255,.32)' },
+        h('circle', { cx: 110, cy: 130, r: 2 }), h('circle', { cx: 210, cy: 120, r: 2 }),
+        h('circle', { cx: 120, cy: 210, r: 2 }), h('circle', { cx: 230, cy: 215, r: 2 })))
+  }
+
+  function LoginScreen({ defaultUrl = '', defaultEmail = '', onLogin, onExit, embedded = false }) {
+    const DEFAULT_SERVER = 'https://8-220-198-26.sslip.io'
+    const server = cleanUrl(defaultUrl || DEFAULT_SERVER)
+    const [email, setEmail] = React.useState(defaultEmail || '')
+    const [password, setPassword] = React.useState('')
+    const [totp, setTotp] = React.useState('')
+    const [view, setView] = React.useState('login')
+    const [inviteCode, setInviteCode] = React.useState('')
+    const [inviteEmail, setInviteEmail] = React.useState('')
+    const [invitePassword, setInvitePassword] = React.useState('')
+    const [busy, setBusy] = React.useState('')
+    const [message, setMessage] = React.useState('')
+    const post = async (path, body) => {
+      if (!/^https?:\/\/[^/]+/.test(server)) throw new Error('默认服务器地址无效')
+      const response = await fetch(server + path, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...headers },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body || {})
       })
       let data = {}
@@ -6318,119 +7812,2714 @@ function createConnectionPanel(React) {
     }
     const run = async (kind, work) => {
       setMessage('')
-      setFormBusy(kind)
-      try { await work() } catch (error) { setMessage(String(error && error.message || error)) } finally { setFormBusy('') }
+      setBusy(kind)
+      try {
+        const data = await work()
+        await onLogin({ url: server, token: data.token, user: data.user || null })
+      } catch (error) {
+        setMessage(String(error && error.message || error))
+      } finally {
+        setBusy('')
+      }
     }
-    const saveLogin = async (data, base, label) => {
-      if (typeof onConfigured === 'function') await onConfigured({ url: base, token: data.token, user: data.user })
-      setAccessToken(data.token || '')
-      setMessage(label + '成功，已保存登录凭据')
-    }
-    const login = () => run('login', async () => {
-      const data = await post('/api/auth/login', { email: email.trim(), password, totp: totp.trim() })
-      saveLogin(data, cleanUrl(server), '登录')
-    })
-    const acceptInvite = () => run('invite', async () => {
-      const data = await post('/api/auth/accept-invite', { code: inviteCode.trim(), email: inviteEmail.trim(), password: invitePassword })
-      saveLogin(data, cleanUrl(server), '邀请码注册')
-    })
-    const changePassword = () => run('password', async () => {
-      if (!accessToken) throw new Error('先登录再修改密码')
-      const data = await post('/api/auth/password', {
-        current_password: currentPassword, new_password: newPassword
-      }, { Authorization: 'Bearer ' + accessToken })
-      setAccessToken(data.token || '')
-      setCurrentPassword('')
-      setNewPassword('')
-      if (typeof onConfigured === 'function') onConfigured({ url: cleanUrl(server), token: data.token, user: data.user })
-      setMessage('密码已修改，其他设备的旧登录已失效')
-    })
-    const pair = () => run('pair', async () => {
-      const data = await post('/api/pairing/exchange', {
-        code: pairCode.trim(), device_id: pairDevice.trim(), name: pairName.trim() || pairDevice.trim(),
-        platform, capabilities: {}
-      })
-      setPairResult(data.token || '')
-      setMessage('配对成功，设备令牌已生成')
-    })
-    const copyPairToken = () => {
-      if (!pairResult) return
-      try { navigator.clipboard.writeText(pairResult); setMessage('设备令牌已复制') } catch (_) { setMessage('复制失败，请手动选择令牌') }
-    }
-    return h('div', { onPointerDown: (event) => { if (event.target === event.currentTarget) onClose() }, style: { position: 'absolute', inset: 0, zIndex: 31, background: 'rgba(16,24,40,0.35)', display: 'flex', justifyContent: 'flex-end' } },
-      h('section', { className: 'tether-drawer', style: { height: '100%', background: bg, display: 'flex', flexDirection: 'column', boxShadow: 'var(--dsw-elevation-panel, 0 8px 24px rgba(16,24,40,0.12))' } },
-        h('header', { style: { padding: '12px 16px', background: panel, display: 'flex', alignItems: 'center' } },
-          h('strong', { style: { fontSize: 14, color: ink } }, '服务器连接'),
-          h('button', { onClick: onClose, title: '关闭', 'aria-label': '关闭', style: { marginLeft: 'auto', border: 0, background: 'transparent', fontSize: 18, cursor: 'pointer', color: mute } }, '×')),
-        h('div', { className: 'tether-drawer-body', style: { padding: '14px 16px 24px', overflowY: 'auto' } },
-          h('div', { style: { borderRadius: 8, background: panel, padding: '4px 12px', marginBottom: 12 } },
-            row('服务器地址', safeAddress(info && info.address)),
-            row('连接状态', status === 'online' ? '已连接' : status === 'offline' ? '不可达' : '未知'),
-            row('最近检测', busy ? '检测中…' : checked ? checked + ' · ' + (status === 'online' ? '成功' : status === 'offline' ? '失败' : '未知') : '尚未检测'),
-            row('服务响应耗时', info && Number.isFinite(info.durationMs) ? info.durationMs + ' ms' : '—')),
-          error ? h('div', { style: { color: 'var(--dsw-alias-state-error-primary, #b42318)', fontSize: 12, marginBottom: 10 } }, error) : null,
-          h('button', { onClick: onProbe, disabled: busy, className: 'tether-press', style: { ...secondary, opacity: busy ? 0.5 : 1 } }, busy ? '检测中…' : '重新检测'),
-
-          title('账号登录'),
-          h('div', { style: { display: 'grid', gap: 7 } },
-            fieldRow('服务器地址', h('input', { value: server, onChange: (event) => setServer(event.target.value), placeholder: 'https://hub.example.com', spellCheck: false, style: field })),
-            fieldRow('邮箱', h('input', { value: email, onChange: (event) => setEmail(event.target.value), type: 'email', autoComplete: 'username', style: field })),
-            h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 110px', gap: 7 } },
-              fieldRow('密码', h('input', { value: password, onChange: (event) => setPassword(event.target.value), type: 'password', autoComplete: 'current-password', style: field })),
-              fieldRow('两步验证码', h('input', { value: totp, onChange: (event) => setTotp(event.target.value), inputMode: 'numeric', maxLength: 6, style: field }))),
-            h('button', { onClick: login, disabled: !!formBusy, style: { ...primary, opacity: formBusy ? 0.5 : 1, justifySelf: 'start' } }, formBusy === 'login' ? '登录中…' : '登录')),
-
-          title('修改密码'),
-          h('div', { style: { display: 'grid', gap: 7 } },
-            fieldRow('当前密码', h('input', { value: currentPassword, onChange: (event) => setCurrentPassword(event.target.value), type: 'password', autoComplete: 'current-password', style: field })),
-            fieldRow('新密码（至少 10 位）', h('input', { value: newPassword, onChange: (event) => setNewPassword(event.target.value), type: 'password', autoComplete: 'new-password', style: field })),
-            h('button', { onClick: changePassword, disabled: !!formBusy || !accessToken, title: accessToken ? '' : '先登录', style: { ...secondary, justifySelf: 'start', opacity: formBusy || !accessToken ? 0.5 : 1 } }, formBusy === 'password' ? '修改中…' : '修改密码'),
-            h('div', { style: { color: mute, fontSize: 11, lineHeight: '17px' } }, '修改后其他设备的旧登录和 API 令牌都会失效。')),
-
-          title('使用邀请码注册'),
-          h('div', { style: { display: 'grid', gap: 7 } },
-            h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7 } },
-              fieldRow('邀请码', h('input', { value: inviteCode, onChange: (event) => setInviteCode(event.target.value), spellCheck: false, maxLength: 12, style: field })),
-              fieldRow('邮箱', h('input', { value: inviteEmail, onChange: (event) => setInviteEmail(event.target.value), type: 'email', style: field }))),
-            fieldRow('密码（至少 10 位）', h('input', { value: invitePassword, onChange: (event) => setInvitePassword(event.target.value), type: 'password', autoComplete: 'new-password', style: field })),
-            h('button', { onClick: acceptInvite, disabled: !!formBusy, style: { ...secondary, justifySelf: 'start' } }, formBusy === 'invite' ? '创建中…' : '创建账号并登录')),
-
-          title('本机设备配对'),
-          h('div', { style: { display: 'grid', gap: 7 } },
-            h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7 } },
-              fieldRow('配对码', h('input', { value: pairCode, onChange: (event) => setPairCode(event.target.value), spellCheck: false, maxLength: 12, style: field })),
-              fieldRow('设备 ID', h('input', { value: pairDevice, onChange: (event) => setPairDevice(event.target.value), spellCheck: false, style: field }))),
-            fieldRow('设备名称', h('input', { value: pairName, onChange: (event) => setPairName(event.target.value), style: field })),
-            h('div', { style: { display: 'flex', gap: 8 } },
-              h('button', { onClick: pair, disabled: !!formBusy, style: { ...secondary, opacity: formBusy ? 0.5 : 1 } }, formBusy === 'pair' ? '兑换中…' : '兑换设备令牌'),
-              pairResult ? h('button', { onClick: copyPairToken, style: secondary }, '复制令牌') : null),
-            pairResult ? h('textarea', { readOnly: true, value: pairResult, rows: 2, style: { ...field, height: 'auto', padding: 8, resize: 'vertical', wordBreak: 'break-all' } }) : null,
-            h('div', { style: { color: mute, fontSize: 11, lineHeight: '17px' } }, '设备令牌只显示一次。APP 的 Node 可使用这个令牌接入；不要把令牌发到群里。')),
-
-          message ? h('div', { style: { marginTop: 12, color: message.includes('成功') || message.includes('已保存') || message.includes('已复制') || message.includes('已修改') ? 'var(--dsw-alias-state-success-primary, #16a34a)' : 'var(--dsw-alias-state-error-primary, #b42318)', fontSize: 12 } }, message) : null))
+    const login = () => run('login', () => post('/api/auth/login', { email: email.trim(), password, totp: totp.trim() }))
+    const acceptInvite = () => run('invite', () => post('/api/auth/accept-invite', { code: inviteCode.trim(), email: inviteEmail.trim(), password: invitePassword }))
+    const switchView = (next) => { setMessage(''); setView(next) }
+    const fieldRow = (label, input) => h('label', { style: { display: 'grid', gap: 5, fontSize: 12, color: sub } }, label, input)
+    const messageSlot = () => h('div', { key: 'message', role: message ? 'alert' : undefined, style: { minHeight: 16, lineHeight: '16px', fontSize: 12, color: 'var(--dsw-alias-state-error-primary, #b42318)' } }, message)
+    const pane = (name, active, offset, children) => h('div', {
+      'data-pane': name,
+      'aria-hidden': !active,
+      inert: active ? undefined : '',
+      style: {
+        position: 'absolute', inset: 0, padding: '0 30px', display: 'grid', alignContent: 'center', gap: 14,
+        opacity: active ? 1 : 0,
+        transform: active ? 'translateX(0)' : 'translateX(' + offset + 'px)',
+        transition: 'opacity 200ms ease, transform 280ms cubic-bezier(.22,.61,.36,1)',
+        pointerEvents: active ? 'auto' : 'none'
+      }
+    }, children)
+    const loginPane = [
+      h('div', { key: 'title', style: { display: 'grid', gap: 6, marginBottom: 4 } },
+        h('strong', { style: { fontSize: 24, letterSpacing: '.01em' } }, 'Tether'),
+        h('span', { style: { color: mute, fontSize: 12.5 } }, '登录你的私有设备网')),
+      fieldRow('邮箱', h('input', { key: 'email', value: email, onChange: (event) => setEmail(event.target.value), type: 'email', autoComplete: 'username', autoFocus: true, style: field })),
+      h('div', { key: 'credentials', style: { display: 'grid', gridTemplateColumns: '1fr 108px', gap: 8 } },
+        fieldRow('密码', h('input', { value: password, onChange: (event) => setPassword(event.target.value), type: 'password', autoComplete: 'current-password', style: field })),
+        fieldRow('两步验证码', h('input', { value: totp, onChange: (event) => setTotp(event.target.value), inputMode: 'numeric', maxLength: 6, style: field }))),
+      h('button', { key: 'login', onClick: login, disabled: !!busy, style: { ...primary, width: '100%', opacity: busy ? 0.5 : 1 } }, busy === 'login' ? '登录中…' : '登录'),
+      messageSlot(),
+      h('button', { key: 'invite', onClick: () => switchView('invite'), className: 'tether-hover', style: { border: 0, background: 'transparent', color: mute, fontSize: 11.5, cursor: 'pointer', padding: 0, justifySelf: 'center' } }, '首次使用？用邀请码注册')
+    ]
+    const invitePane = [
+      h('div', { key: 'title', style: { display: 'grid', gap: 6, marginBottom: 4 } },
+        h('strong', { style: { fontSize: 24, letterSpacing: '.01em' } }, '邀请码注册'),
+        h('span', { style: { color: mute, fontSize: 12.5 } }, '创建账号并加入私有设备网')),
+      fieldRow('邀请码', h('input', { key: 'code', value: inviteCode, onChange: (event) => setInviteCode(event.target.value), spellCheck: false, maxLength: 12, style: field })),
+      fieldRow('邮箱', h('input', { key: 'email', value: inviteEmail, onChange: (event) => setInviteEmail(event.target.value), type: 'email', autoComplete: 'username', style: field })),
+      fieldRow('密码（至少 10 位）', h('input', { key: 'password', value: invitePassword, onChange: (event) => setInvitePassword(event.target.value), type: 'password', autoComplete: 'new-password', style: field })),
+      h('button', { key: 'create', onClick: acceptInvite, disabled: !!busy, style: { ...primary, width: '100%', opacity: busy ? 0.5 : 1 } }, busy === 'invite' ? '创建中…' : '创建账号并登录'),
+      messageSlot(),
+      h('button', { key: 'back', onClick: () => switchView('login'), className: 'tether-hover', style: { border: 0, background: 'transparent', color: mute, fontSize: 11.5, cursor: 'pointer', padding: 0, justifySelf: 'center' } }, '已有账号？返回登录')
+    ]
+    const visual = h('div', { className: 'tether-login-visual', style: {
+      position: 'relative', padding: 28, display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+      background: 'linear-gradient(155deg, #0b1220 0%, #13233f 55%, #0b1220 100%)', overflow: 'hidden'
+    } },
+      h('div', { 'aria-hidden': true, style: { position: 'absolute', inset: 0, background: 'radial-gradient(circle at 52% 42%, rgba(59,130,246,.28), transparent 58%)', pointerEvents: 'none' } }),
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, color: '#fff', position: 'relative', zIndex: 1 } },
+        h('span', { style: { width: 28, height: 28, borderRadius: 8, background: '#fff', display: 'grid', placeItems: 'center', color: '#101828', fontWeight: 700, fontSize: 15 } }, 'T'),
+        h('span', { style: { fontSize: 13, letterSpacing: '.12em', textTransform: 'uppercase', opacity: 0.8 } }, 'Tether')),
+      h(LoginNetwork),
+      h('div', { style: { fontSize: 11.5, letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(255,255,255,.55)', position: 'relative', zIndex: 1 } }, '私有设备网'))
+    return h('div', { style: {
+      position: embedded ? 'relative' : 'absolute', inset: embedded ? undefined : 0, zIndex: 80,
+      minHeight: embedded ? '100%' : undefined, display: 'grid', placeItems: 'center', padding: 24,
+      background: 'radial-gradient(1200px 600px at 18% 8%, #eaf1ff 0%, transparent 60%), radial-gradient(900px 500px at 88% 92%, #fff4e5 0%, transparent 55%), #f7f8fb',
+      color: ink, overflow: 'auto'
+    } },
+      h('style', null, '@media (max-width: 760px){.tether-login-card{grid-template-columns:1fr!important}.tether-login-visual{display:none!important}}'),
+      h('div', { className: 'tether-login-card', style: {
+        position: 'relative', width: 'min(820px, 100%)', display: 'grid',
+        gridTemplateColumns: '320px minmax(0, 1fr)', borderRadius: 18, overflow: 'hidden', background: bg,
+        boxShadow: '0 24px 70px rgba(16,24,40,.22)', border: '1px solid rgba(16,24,40,.06)'
+      } },
+        visual,
+        h('div', { className: 'tether-login-stage', style: { position: 'relative', minHeight: 0, padding: '28px 0 26px', display: 'flex', flexDirection: 'column' } },
+          onExit ? h('button', {
+            type: 'button', onClick: onExit, title: '退出', 'aria-label': '退出', className: 'tether-hover',
+            style: { position: 'absolute', top: 12, right: 12, zIndex: 2, width: 28, height: 28, border: 0, borderRadius: 6, background: 'transparent', color: mute, fontSize: 18, cursor: 'pointer' }
+          }, '×') : null,
+          h('div', { style: { position: 'relative', height: 344, flex: '0 0 auto' } },
+            pane('login', view === 'login', -16, loginPane),
+            pane('invite', view === 'invite', 16, invitePane)))
+      )
     )
   }
+
   function ConnectionTrigger({ onClick, status = 'unknown' }) {
     const color = status === 'online' ? 'var(--dsw-alias-state-success-primary, #16a34a)'
       : status === 'offline' ? 'var(--dsw-alias-state-error-primary, #b42318)'
         : status === 'checking' ? 'var(--dsw-alias-state-warn-primary, #b54708)' : mute
-    return h('button', { onClick, title: '服务器连接', className: 'tether-press tether-hover', style: { marginLeft: 'auto', height: 26, padding: '0 10px', borderRadius: 999, border: 0, background: bg, color: sub, display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer', flex: '0 0 auto', boxShadow: '0 1px 2px rgba(16,24,40,0.06)' } },
+    return h('button', { onClick, title: '连接', className: 'tether-press tether-hover', style: { height: 26, padding: '0 10px', borderRadius: 999, border: 0, background: bg, color: sub, display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer', flex: '0 0 auto', boxShadow: '0 1px 2px rgba(16,24,40,0.06)' } },
       h('span', { style: { width: 7, height: 7, borderRadius: 4, background: color, flex: '0 0 auto' } }), '连接')
   }
-  return { Panel: ConnectionPanel, Trigger: ConnectionTrigger }
+  return { Panel: ConnectionPanel, Trigger: ConnectionTrigger, LoginScreen }
+}
+const CROP_VIEW = 240
+const AVATAR_OUTPUT = 256
+
+function createSettingsPanel(React) {
+  const h = React.createElement
+  const ink = 'var(--dsw-alias-label-primary, #101828)'
+  const sub = 'var(--dsw-alias-label-secondary, #475467)'
+  const mute = 'var(--dsw-alias-label-tertiary, #667085)'
+  const bg = 'var(--dsw-alias-bg-base, #ffffff)'
+  const panel = 'var(--dsw-specific-sidebar-fill, #f9fafb)'
+  const line = 'var(--dsw-alias-border-secondary, #e4e7ec)'
+  const blue = 'var(--dsw-alias-state-business-primary, #1570ef)'
+  const danger = 'var(--dsw-alias-state-error-primary, #b42318)'
+  const success = 'var(--dsw-alias-state-success-primary, #16a34a)'
+  const field = { width: '100%', height: 32, boxSizing: 'border-box', border: '1px solid ' + line, borderRadius: 7, padding: '0 9px', background: bg, color: ink, fontSize: 12.5, font: 'inherit', outline: 'none' }
+  const primary = { height: 30, padding: '0 12px', border: 0, borderRadius: 7, color: 'var(--dsw-alias-label-primary-inverted, #ffffff)', background: 'var(--dsw-alias-button-primary-fill, #101828)', cursor: 'pointer', fontSize: 12, font: 'inherit' }
+  const secondary = { height: 30, padding: '0 12px', border: '1px solid ' + line, borderRadius: 7, color: sub, background: 'transparent', cursor: 'pointer', fontSize: 12, font: 'inherit' }
+  const timeText = (value) => {
+    if (!value) return '—'
+    try { const date = new Date(value); return [date.getHours(), date.getMinutes(), date.getSeconds()].map((part) => String(part).padStart(2, '0')).join(':') } catch (_) { return '—' }
+  }
+  const card = (rows) => h('div', { style: { border: '1px solid ' + line, borderRadius: 10, overflow: 'hidden', background: bg } },
+    rows.filter(Boolean).map((row, index) => h('div', {
+      key: index,
+      style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 18, minHeight: 40, padding: '0 14px', borderTop: index ? '1px solid ' + line : 0, fontSize: 12.5 }
+    },
+      h('span', { style: { color: mute, flex: '0 0 auto' } }, row[0]),
+      h('span', { style: { color: ink, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' } }, row[1] || '—'))))
+  const toggle = (checked, onChange, label) => h('button', {
+    type: 'button', role: 'switch', 'aria-checked': checked, 'aria-label': label, onClick: () => onChange(!checked),
+    style: {
+      width: 36, height: 20, flex: '0 0 auto', border: 0, borderRadius: 999, padding: 2,
+      background: checked ? blue : 'var(--dsw-alias-border-secondary, #d0d5dd)', cursor: 'pointer',
+      display: 'flex', alignItems: 'center', justifyContent: checked ? 'flex-end' : 'flex-start',
+      transition: 'background 140ms ease'
+    }
+  }, h('span', {
+    'aria-hidden': true,
+    style: { width: 16, height: 16, borderRadius: 999, background: '#fff', boxShadow: '0 1px 2px rgba(16,24,40,.24)', transition: 'transform 140ms ease' }
+  }))
+
+  function SettingsPanel({ open, onClose, Glyph, accountEmail = '', accountRole = '', accountName = '',
+    accountAvatar = '', onAvatarChange, onAccountNameChange, initialSection = 'account',
+    server = '', connection = {}, device = {}, versions = {}, update = null, dsh = null, dshBusy = '',
+    onDshStart, onDshInstall, extraSections = [],
+    onRefreshConnection, onRestartNode, onLogout, onPasswordChanged }) {
+    const [section, setSection] = React.useState(initialSection)
+    const [currentPassword, setCurrentPassword] = React.useState('')
+    const [newPassword, setNewPassword] = React.useState('')
+    const [confirmPassword, setConfirmPassword] = React.useState('')
+    const [showCurrentPassword, setShowCurrentPassword] = React.useState(false)
+    const [showNewPassword, setShowNewPassword] = React.useState(false)
+    const [showConfirmPassword, setShowConfirmPassword] = React.useState(false)
+    const [passwordTouched, setPasswordTouched] = React.useState({ current: false, next: false, confirm: false })
+    const [capsLock, setCapsLock] = React.useState(false)
+    const [busy, setBusy] = React.useState('')
+    const [message, setMessage] = React.useState('')
+    const [avatar, setAvatar] = React.useState(accountAvatar || '')
+    const [avatarError, setAvatarError] = React.useState('')
+    const [nameDraft, setNameDraft] = React.useState(accountName || '')
+    const [nameError, setNameError] = React.useState('')
+    const [editModal, setEditModal] = React.useState('')
+    const [refreshing, setRefreshing] = React.useState(false)
+    const [crop, setCrop] = React.useState(null)
+    const [cropError, setCropError] = React.useState('')
+    const avatarInputRef = React.useRef(null)
+    const cropImageRef = React.useRef(null)
+    const cropDragRef = React.useRef(null)
+    const cropUrlRef = React.useRef('')
+    const [keepSurfaces, setKeepSurfaces] = React.useState(() => {
+      try { return localStorage.getItem('tether.keepSurfaces') !== '0' } catch (_) { return true }
+    })
+    React.useEffect(() => {
+      if (!open) return
+      setSection(initialSection)
+      setEditModal('')
+      setMessage('')
+      setCurrentPassword(''); setNewPassword(''); setConfirmPassword('')
+      setPasswordTouched({ current: false, next: false, confirm: false })
+    }, [open, initialSection])
+    React.useEffect(() => { setAvatar(accountAvatar || '') }, [accountAvatar])
+    React.useEffect(() => {
+      if (editModal !== 'name') setNameDraft(accountName || '')
+    }, [accountName, editModal])
+    React.useEffect(() => {
+      if (open) return
+      setEditModal('')
+      setCrop(null); setCropError('')
+      if (cropUrlRef.current) { URL.revokeObjectURL(cropUrlRef.current); cropUrlRef.current = '' }
+    }, [open])
+    React.useEffect(() => () => {
+      if (cropUrlRef.current) URL.revokeObjectURL(cropUrlRef.current)
+    }, [])
+    const updateRef = React.useRef(update)
+    updateRef.current = update
+    React.useEffect(() => {
+      if (!open || section !== 'update') return
+      const handler = updateRef.current && updateRef.current.onRefresh
+      if (typeof handler === 'function') handler()
+    }, [open, section])
+    React.useEffect(() => {
+      if (!crop) return undefined
+      const onKey = (event) => {
+        if (event.key !== 'Escape') return
+        setCrop(null); setCropError('')
+        if (cropUrlRef.current) { URL.revokeObjectURL(cropUrlRef.current); cropUrlRef.current = '' }
+      }
+      window.addEventListener('keydown', onKey)
+      return () => window.removeEventListener('keydown', onKey)
+    }, [crop])
+    if (!open) return null
+    const status = connection.status || 'unknown'
+    const roleLabel = accountRole === 'owner' ? '所有者' : accountRole === 'member' ? '成员' : accountRole === 'admin' ? '管理员' : accountRole || ''
+    const dotColor = status === 'online' ? success : status === 'offline' ? danger : status === 'checking' ? 'var(--dsw-alias-state-warn-primary, #b54708)' : mute
+    const statusLabel = status === 'online' ? '已连接' : status === 'offline' ? '不可达' : status === 'checking' ? '检测中' : '未知'
+
+    const closeCrop = () => {
+      if (cropUrlRef.current) { URL.revokeObjectURL(cropUrlRef.current); cropUrlRef.current = '' }
+      setCrop(null)
+      setCropError('')
+    }
+    const chooseAvatar = () => { try { if (avatarInputRef.current) avatarInputRef.current.click() } catch (_) { /* input unavailable */ } }
+    const loadAvatar = (event) => {
+      const file = event.target.files && event.target.files[0]
+      event.target.value = ''
+      setAvatarError('')
+      if (!file) return
+      if (!/^image\//.test(file.type) || file.size > 8 * 1024 * 1024) {
+        setAvatarError('请选择 8 MB 以内的图片')
+        return
+      }
+      if (cropUrlRef.current) URL.revokeObjectURL(cropUrlRef.current)
+      const url = URL.createObjectURL(file)
+      cropUrlRef.current = url
+      setCropError('')
+      setCrop({ url, name: file.name, ready: false, imageW: 0, imageH: 0, baseScale: 1, zoom: 1, x: 0, y: 0 })
+    }
+    const onCropLoad = () => {
+      const image = cropImageRef.current
+      if (!image) return
+      const width = image.naturalWidth || image.width
+      const height = image.naturalHeight || image.height
+      if (!width || !height) { setCropError('无法读取这张图片'); return }
+      const baseScale = Math.max(CROP_VIEW / width, CROP_VIEW / height)
+      setCrop((current) => current ? {
+        ...current, ready: true, imageW: width, imageH: height, baseScale, zoom: 1,
+        x: (CROP_VIEW - width * baseScale) / 2, y: (CROP_VIEW - height * baseScale) / 2
+      } : current)
+    }
+    const clampCrop = (current, x, y, zoom = current.zoom) => {
+      const scale = current.baseScale * zoom
+      return {
+        x: Math.min(0, Math.max(CROP_VIEW - current.imageW * scale, x)),
+        y: Math.min(0, Math.max(CROP_VIEW - current.imageH * scale, y))
+      }
+    }
+    const setCropZoom = (value) => {
+      setCrop((current) => {
+        if (!current || !current.ready) return current
+        const zoom = Math.max(1, Math.min(3, Number(value) || 1))
+        const ratio = zoom / current.zoom
+        const center = CROP_VIEW / 2
+        const x = center - (center - current.x) * ratio
+        const y = center - (center - current.y) * ratio
+        return { ...current, zoom, ...clampCrop(current, x, y, zoom) }
+      })
+    }
+    const resetCrop = () => {
+      setCrop((current) => current && current.ready ? {
+        ...current, zoom: 1,
+        x: (CROP_VIEW - current.imageW * current.baseScale) / 2,
+        y: (CROP_VIEW - current.imageH * current.baseScale) / 2
+      } : current)
+    }
+    const cropPointerDown = (event) => {
+      if (!crop || !crop.ready) return
+      event.preventDefault()
+      event.currentTarget.setPointerCapture?.(event.pointerId)
+      cropDragRef.current = { pointerX: event.clientX, pointerY: event.clientY, originX: crop.x, originY: crop.y }
+    }
+    const cropPointerMove = (event) => {
+      const drag = cropDragRef.current
+      if (!drag) return
+      setCrop((current) => {
+        if (!current) return current
+        return {
+          ...current,
+          ...clampCrop(current, drag.originX + event.clientX - drag.pointerX, drag.originY + event.clientY - drag.pointerY)
+        }
+      })
+    }
+    const cropPointerUp = () => { cropDragRef.current = null }
+    const saveCrop = () => {
+      const image = cropImageRef.current
+      if (!crop || !crop.ready || !image) return
+      const scale = crop.baseScale * crop.zoom
+      const sourceSize = CROP_VIEW / scale
+      const canvas = document.createElement('canvas')
+      canvas.width = AVATAR_OUTPUT; canvas.height = AVATAR_OUTPUT
+      const context = canvas.getContext('2d')
+      if (!context) { setCropError('无法保存这张图片'); return }
+      context.drawImage(image, -crop.x / scale, -crop.y / scale, sourceSize, sourceSize, 0, 0, AVATAR_OUTPUT, AVATAR_OUTPUT)
+      let dataUrl
+      try { dataUrl = canvas.toDataURL('image/jpeg', 0.9) } catch (_) { setCropError('无法保存这张图片'); return }
+      setAvatar(dataUrl)
+      if (typeof onAvatarChange === 'function') onAvatarChange(dataUrl)
+      closeCrop()
+    }
+    const removeAvatar = () => {
+      setAvatar('')
+      if (typeof onAvatarChange === 'function') onAvatarChange('')
+      closeCrop()
+    }
+    const startNameEdit = () => {
+      setNameDraft(accountName || '')
+      setNameError('')
+      setEditModal('name')
+    }
+    const saveName = () => {
+      const value = nameDraft.trim()
+      if (value.length > 32) { setNameError('最多 32 个字符'); return }
+      if (typeof onAccountNameChange === 'function') onAccountNameChange(value)
+      setEditModal('')
+      setNameError('')
+    }
+    const cancelName = () => {
+      setNameDraft(accountName || '')
+      setEditModal('')
+      setNameError('')
+    }
+    const openPassword = () => {
+      setCurrentPassword(''); setNewPassword(''); setConfirmPassword('')
+      setPasswordTouched({ current: false, next: false, confirm: false })
+      setMessage('')
+      setCapsLock(false)
+      setEditModal('password')
+    }
+    const closePassword = () => {
+      if (busy === 'password') return
+      setEditModal('')
+      setMessage('')
+      setCurrentPassword(''); setNewPassword(''); setConfirmPassword('')
+      setPasswordTouched({ current: false, next: false, confirm: false })
+    }
+
+    const passwordRules = {
+      current: !currentPassword ? '请输入当前密码' : '',
+      next: !newPassword ? '请输入新密码' : newPassword.length < 10 ? '新密码至少 10 位' : newPassword === currentPassword ? '新密码不能与当前密码相同' : '',
+      confirm: !confirmPassword ? '请再次输入新密码' : confirmPassword !== newPassword ? '两次输入的新密码不一致' : ''
+    }
+    const passwordValid = !passwordRules.current && !passwordRules.next && !passwordRules.confirm
+    const changePassword = async () => {
+      setPasswordTouched({ current: true, next: true, confirm: true })
+      if (!passwordValid) return
+      if (!server) { setMessage('未配置服务器地址'); return }
+      setMessage('')
+      setBusy('password')
+      try {
+        const response = await fetch(server.replace(/\/+$/, '') + '/api/auth/password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (connection.token || '') },
+          body: JSON.stringify({ current_password: currentPassword, new_password: newPassword })
+        })
+        const data = await response.json().catch(() => ({}))
+        if (!response.ok) {
+          const detail = data.detail && (data.detail.error || data.detail.code) || data.error
+          throw new Error(response.status === 401 ? '当前密码不正确' : detail || ('HTTP ' + response.status))
+        }
+        setCurrentPassword(''); setNewPassword(''); setConfirmPassword('')
+        setPasswordTouched({ current: false, next: false, confirm: false })
+        if (typeof onPasswordChanged === 'function') onPasswordChanged(data)
+        setMessage('密码已更新')
+        setTimeout(() => {
+          setEditModal('')
+          setMessage('')
+        }, 900)
+      } catch (error) {
+        setMessage(String(error && error.message || error))
+      } finally {
+        setBusy('')
+      }
+    }
+    const refreshConnection = async () => {
+      if (refreshing || typeof onRefreshConnection !== 'function') return
+      setRefreshing(true)
+      try { await onRefreshConnection() } finally { setRefreshing(false) }
+    }
+
+    const textAction = (label, onClick, color = blue) => h('button', {
+      type: 'button', onClick, className: 'tether-hover',
+      style: { border: 0, background: 'transparent', padding: 0, color, fontSize: 11.5, cursor: 'pointer', font: 'inherit' }
+    }, label)
+    const groupTitle = (label) => h('div', { style: { fontSize: 12, fontWeight: 600, color: sub, letterSpacing: 0.2 } }, label)
+    const cardStyle = { border: '1px solid ' + line, borderRadius: 10, background: bg, padding: 16 }
+    const avatarView = h('button', {
+      type: 'button', onClick: chooseAvatar, title: '更换头像', 'aria-label': '更换头像',
+      style: {
+        position: 'relative', width: 64, height: 64, flex: '0 0 auto', padding: 0, border: 0,
+        borderRadius: 999, overflow: 'hidden', cursor: 'pointer',
+        background: 'color-mix(in srgb, ' + blue + ' 14%, transparent)', color: blue
+      }
+    },
+      avatar
+        ? h('img', { src: avatar, alt: '', style: { width: '100%', height: '100%', objectFit: 'cover', display: 'block' } })
+        : h('span', { 'aria-hidden': true, style: { display: 'grid', placeItems: 'center', width: '100%', height: '100%', fontSize: 21, fontWeight: 600 } },
+          String(accountName || accountEmail || '?').trim().charAt(0).toUpperCase()),
+      h('span', {
+        'aria-hidden': true,
+        style: {
+          position: 'absolute', right: 0, bottom: 0, width: 22, height: 22, borderRadius: 999,
+          display: 'grid', placeItems: 'center', background: bg, color: sub,
+          boxShadow: '0 0 0 1px ' + line
+        }
+      }, Glyph ? h(Glyph, { name: 'camera', size: 12 }) : '✎'))
+    const profileCard = h('div', { style: { ...cardStyle, position: 'relative' } },
+      avatar ? h('button', {
+        type: 'button', onClick: removeAvatar, title: '移除头像', 'aria-label': '移除头像', className: 'tether-hover',
+        style: { position: 'absolute', top: 10, right: 10, width: 26, height: 26, display: 'grid', placeItems: 'center', border: 0, borderRadius: 6, background: 'transparent', color: mute, cursor: 'pointer' }
+      }, Glyph ? h(Glyph, { name: 'trash', size: 14 }) : '×') : null,
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 14, minWidth: 0, paddingRight: 28 } },
+        avatarView,
+        h('div', { style: { minWidth: 0, display: 'grid', gap: 3, flex: '1 1 auto' } },
+          h('div', { style: { fontSize: 13.5, fontWeight: 600, color: ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, accountEmail || '未登录'),
+          roleLabel ? h('div', { style: { fontSize: 12, color: mute } }, roleLabel) : null)),
+      avatarError ? h('div', { role: 'alert', style: { marginTop: 8, color: danger, fontSize: 11.5 } }, avatarError) : null,
+      h('div', { style: { height: 1, background: line, margin: '14px 0' } }),
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, minHeight: 36 } },
+        h('span', { style: { width: 78, flex: '0 0 auto', fontSize: 12, color: mute } }, '显示名称'),
+        h('span', { style: { flex: '1 1 auto', minWidth: 0, fontSize: 13, color: accountName ? ink : mute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, accountName || '未设置'),
+        h('button', {
+          type: 'button', onClick: startNameEdit, title: '编辑显示名称', 'aria-label': '编辑显示名称', className: 'tether-hover',
+          style: { width: 26, height: 26, flex: '0 0 auto', display: 'grid', placeItems: 'center', border: 0, borderRadius: 6, background: 'transparent', color: mute, cursor: 'pointer' }
+        }, Glyph ? h(Glyph, { name: 'pencil', size: 14 }) : '✎')))
+    const passwordInput = (key, label, value, onChange, visible, onToggle, autoComplete) => {
+      const error = passwordTouched[key] ? passwordRules[key] : ''
+      return h('label', { style: { display: 'grid', gap: 6, fontSize: 12, color: sub } },
+        label,
+        h('div', { style: { position: 'relative' } },
+          h('input', {
+            type: visible ? 'text' : 'password', value, onChange: (event) => onChange(event.target.value),
+            onBlur: () => { setPasswordTouched((current) => ({ ...current, [key]: true })); setCapsLock(false) },
+            onKeyUp: (event) => { if (event.getModifierState) setCapsLock(event.getModifierState('CapsLock')) },
+            name: autoComplete, autoComplete, 'aria-invalid': error ? 'true' : undefined,
+            'aria-describedby': error ? 'pw-' + key + '-error' : undefined,
+            style: { ...field, height: 34, paddingRight: 34 }
+          }),
+          h('button', {
+            type: 'button', onMouseDown: (event) => event.preventDefault(), onClick: onToggle,
+            title: visible ? '隐藏密码' : '显示密码', 'aria-label': visible ? '隐藏密码' : '显示密码',
+            'aria-pressed': visible, className: 'tether-hover',
+            style: { position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', width: 26, height: 26, border: 0, borderRadius: 5, background: 'transparent', color: visible ? blue : mute, display: 'grid', placeItems: 'center', cursor: 'pointer' }
+          }, Glyph ? h(Glyph, { name: 'eye', size: 14 }) : null)),
+        error ? h('div', { id: 'pw-' + key + '-error', role: 'alert', style: { color: danger, fontSize: 11.5 } }, error) : null)
+    }
+    const securityCard = h('div', { style: cardStyle },
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 12, minHeight: 36 } },
+        h('span', { style: { flex: '1 1 auto', fontSize: 13, color: ink, fontWeight: 'var(--tether-strong, 500)' } }, '密码'),
+        h('button', {
+          type: 'button', onClick: openPassword, className: 'tether-hover',
+          style: { ...secondary, height: 28, padding: '0 10px', display: 'inline-flex', alignItems: 'center', gap: 6 }
+        }, Glyph ? h(Glyph, { name: 'pencil', size: 13 }) : null, '修改密码')))
+    const accountSection = h('div', { style: { display: 'grid', gap: 18, maxWidth: 520 } },
+      h('input', { ref: avatarInputRef, type: 'file', accept: 'image/*', onChange: loadAvatar, style: { display: 'none' } }),
+      h('div', { style: { display: 'grid', gap: 8 } }, groupTitle('个人资料'), profileCard),
+      h('div', { style: { display: 'grid', gap: 8 } }, groupTitle('登录与安全'), securityCard),
+      h('div', { style: { borderTop: '1px solid ' + line, paddingTop: 14 } },
+        h('button', {
+          type: 'button', onClick: onLogout, className: 'tether-hover',
+          style: { border: 0, background: 'transparent', padding: 0, color: danger, fontSize: 12.5, cursor: 'pointer' }
+        }, '退出登录')))
+    const cropModal = crop ? h('div', {
+      onPointerDown: (event) => { if (event.target === event.currentTarget) closeCrop() },
+      style: { position: 'absolute', inset: 0, zIndex: 80, display: 'grid', placeItems: 'center', padding: 24, background: 'rgba(16,24,40,.45)' }
+    },
+      h('section', {
+        role: 'dialog', 'aria-label': '更换头像', onPointerDown: (event) => event.stopPropagation(),
+        style: { width: 'min(440px, 100%)', maxHeight: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: bg, borderRadius: 12, boxShadow: 'var(--dsw-elevation-panel, 0 18px 50px rgba(16,24,40,.22))' }
+      },
+        h('header', { style: { height: 44, padding: '0 14px', display: 'flex', alignItems: 'center', borderBottom: '1px solid ' + line, flex: '0 0 auto' } },
+          h('strong', { style: { fontSize: 14 } }, '更换头像'),
+          h('button', { type: 'button', onClick: closeCrop, title: '关闭', 'aria-label': '关闭', className: 'tether-hover', style: { marginLeft: 'auto', width: 28, height: 28, border: 0, borderRadius: 6, background: 'transparent', color: mute, fontSize: 18, cursor: 'pointer' } }, '×')),
+        h('div', { style: { padding: 20, display: 'grid', gap: 14, justifyItems: 'center' } },
+          h('div', {
+            onPointerDown: cropPointerDown, onPointerMove: cropPointerMove, onPointerUp: cropPointerUp, onPointerCancel: cropPointerUp,
+            onWheel: (event) => { if (crop.ready) { event.preventDefault(); setCropZoom(crop.zoom - event.deltaY * 0.0015) } },
+            style: {
+              position: 'relative', width: CROP_VIEW, height: CROP_VIEW, borderRadius: '50%', overflow: 'hidden',
+              background: '#111318', cursor: crop.ready ? 'grab' : 'default', touchAction: 'none', flex: '0 0 auto'
+            }
+          },
+            h('img', {
+              ref: cropImageRef, src: crop.url, alt: '', draggable: false, onLoad: onCropLoad,
+              onDragStart: (event) => event.preventDefault(),
+              style: {
+                position: 'absolute', left: 0, top: 0, maxWidth: 'none', userSelect: 'none', pointerEvents: 'none',
+                opacity: crop.ready ? 1 : 0, transformOrigin: '0 0',
+                transform: 'translate(' + crop.x + 'px,' + crop.y + 'px) scale(' + (crop.baseScale * crop.zoom) + ')'
+              }
+            }),
+            h('div', { 'aria-hidden': true, style: { position: 'absolute', inset: 0, borderRadius: '50%', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,.55)', pointerEvents: 'none' } }),
+            !crop.ready && !cropError ? h('div', { style: { position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: '#98a2b3', fontSize: 12 } }, '读取图片…') : null),
+          crop.ready ? h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, width: '100%' } },
+            h('span', { 'aria-hidden': true, style: { color: mute, fontSize: 14 } }, '−'),
+            h('input', {
+              type: 'range', min: 1, max: 3, step: 0.01, value: crop.zoom, 'aria-label': '缩放头像',
+              onChange: (event) => setCropZoom(event.target.value),
+              style: { flex: '1 1 auto', accentColor: blue }
+            }),
+            h('span', { 'aria-hidden': true, style: { color: mute, fontSize: 14 } }, '+'),
+            h('button', {
+              type: 'button', onClick: resetCrop, title: '重置', 'aria-label': '重置', className: 'tether-hover',
+              style: { width: 24, height: 24, flex: '0 0 auto', display: 'grid', placeItems: 'center', border: 0, borderRadius: 5, background: 'transparent', color: mute, cursor: 'pointer' }
+            }, Glyph ? h(Glyph, { name: 'refresh', size: 13 }) : '↺')) : null,
+          cropError ? h('div', { role: 'alert', style: { color: danger, fontSize: 11.5 } }, cropError) : null),
+        h('footer', { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderTop: '1px solid ' + line, flex: '0 0 auto' } },
+          avatar ? textAction('移除头像', removeAvatar, danger) : h('span', { style: { flex: '1 1 auto' } }),
+          h('button', { type: 'button', onClick: closeCrop, style: { ...secondary, height: 28, padding: '0 10px', marginLeft: 'auto' } }, '取消'),
+          h('button', { type: 'button', onClick: saveCrop, disabled: !crop.ready, style: { ...primary, height: 28, padding: '0 12px', opacity: crop.ready ? 1 : 0.5 } }, '保存'))))
+      : null
+    const nameModal = editModal === 'name' ? h('div', {
+      onPointerDown: (event) => { if (event.target === event.currentTarget) cancelName() },
+      style: { position: 'absolute', inset: 0, zIndex: 86, display: 'grid', placeItems: 'center', padding: 24, background: 'rgba(16,24,40,.45)' }
+    },
+      h('section', {
+        role: 'dialog', 'aria-label': '修改昵称', onPointerDown: (event) => event.stopPropagation(),
+        style: { width: 'min(360px, 100%)', background: bg, borderRadius: 12, boxShadow: 'var(--dsw-elevation-panel, 0 18px 50px rgba(16,24,40,.22))', overflow: 'hidden' }
+      },
+        h('header', { style: { height: 44, padding: '0 14px', display: 'flex', alignItems: 'center', borderBottom: '1px solid ' + line } },
+          h('strong', { style: { fontSize: 14 } }, '修改昵称'),
+          h('button', { type: 'button', onClick: cancelName, title: '关闭', 'aria-label': '关闭', className: 'tether-hover', style: { marginLeft: 'auto', width: 28, height: 28, border: 0, borderRadius: 6, background: 'transparent', color: mute, fontSize: 18, cursor: 'pointer' } }, '×')),
+        h('div', { style: { padding: 18, display: 'grid', gap: 10 } },
+          h('label', { style: { display: 'grid', gap: 6, fontSize: 12, color: sub } }, '显示名称',
+            h('input', {
+              value: nameDraft, onChange: (event) => setNameDraft(event.target.value), maxLength: 32,
+              autoComplete: 'nickname', autoFocus: true, 'aria-label': '显示名称',
+              onKeyDown: (event) => {
+                if (event.key === 'Enter') { event.preventDefault(); saveName() }
+                if (event.key === 'Escape') { event.preventDefault(); cancelName() }
+              },
+              style: field
+            })),
+          nameError ? h('div', { role: 'alert', style: { color: danger, fontSize: 11.5 } }, nameError) : null),
+        h('footer', { style: { display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '10px 14px', borderTop: '1px solid ' + line } },
+          h('button', { type: 'button', onClick: cancelName, style: { ...secondary, height: 28, padding: '0 10px' } }, '取消'),
+          h('button', {
+            type: 'button', onClick: saveName,
+            disabled: nameDraft.trim() === String(accountName || '').trim(),
+            style: { ...primary, height: 28, padding: '0 12px', opacity: nameDraft.trim() === String(accountName || '').trim() ? 0.5 : 1 }
+          }, '保存'))))
+      : null
+    const passwordModal = editModal === 'password' ? h('div', {
+      onPointerDown: (event) => { if (event.target === event.currentTarget) closePassword() },
+      style: { position: 'absolute', inset: 0, zIndex: 86, display: 'grid', placeItems: 'center', padding: 24, background: 'rgba(16,24,40,.45)' }
+    },
+      h('section', {
+        role: 'dialog', 'aria-label': '修改密码', onPointerDown: (event) => event.stopPropagation(),
+        style: { width: 'min(380px, 100%)', maxHeight: 'calc(100vh - 48px)', background: bg, borderRadius: 12, boxShadow: 'var(--dsw-elevation-panel, 0 18px 50px rgba(16,24,40,.22))', overflow: 'hidden', display: 'flex', flexDirection: 'column' }
+      },
+        h('header', { style: { height: 44, padding: '0 14px', display: 'flex', alignItems: 'center', borderBottom: '1px solid ' + line, flex: '0 0 auto' } },
+          h('strong', { style: { fontSize: 14 } }, '修改密码'),
+          h('button', { type: 'button', onClick: closePassword, title: '关闭', 'aria-label': '关闭', className: 'tether-hover', style: { marginLeft: 'auto', width: 28, height: 28, border: 0, borderRadius: 6, background: 'transparent', color: mute, fontSize: 18, cursor: 'pointer' } }, '×')),
+        h('form', { onSubmit: (event) => { event.preventDefault(); void changePassword() }, style: { display: 'flex', flexDirection: 'column', minHeight: 0 } },
+          h('div', { className: 'tether-scroll', style: { padding: 18, display: 'grid', gap: 12, overflowY: 'auto' } },
+            passwordInput('current', '当前密码', currentPassword, setCurrentPassword, showCurrentPassword, () => setShowCurrentPassword((value) => !value), 'current-password'),
+            passwordInput('next', '新密码', newPassword, setNewPassword, showNewPassword, () => setShowNewPassword((value) => !value), 'new-password'),
+            passwordInput('confirm', '确认新密码', confirmPassword, setConfirmPassword, showConfirmPassword, () => setShowConfirmPassword((value) => !value), 'new-password'),
+            capsLock ? h('div', { style: { color: 'var(--dsw-alias-state-warn-primary, #b54708)', fontSize: 11.5 } }, 'Caps Lock 已开启') : null,
+            message ? h('div', { role: 'status', style: { color: message === '密码已更新' ? success : danger, fontSize: 12 } }, message) : null),
+          h('footer', { style: { display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '10px 14px', borderTop: '1px solid ' + line, flex: '0 0 auto' } },
+            h('button', { type: 'button', onClick: closePassword, style: { ...secondary, height: 28, padding: '0 10px' } }, '取消'),
+            h('button', {
+              type: 'submit', disabled: busy === 'password',
+              style: { ...primary, height: 28, padding: '0 12px', opacity: busy === 'password' ? 0.5 : 1, cursor: busy === 'password' ? 'default' : 'pointer' }
+            }, busy === 'password' ? '更新中…' : '更新密码')))))
+      : null
+    const connectionSection = h('div', { style: { display: 'grid', gap: 10 } },
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, minHeight: 24 } },
+        h('span', { style: { flex: '1 1 auto', fontSize: 12, color: mute } }, '服务器'),
+        h('button', {
+          type: 'button', onClick: refreshConnection, disabled: refreshing, title: '重新检测', 'aria-label': '重新检测',
+          className: 'tether-hover',
+          style: { width: 26, height: 26, display: 'grid', placeItems: 'center', border: 0, borderRadius: 6, background: 'transparent', color: sub, cursor: refreshing ? 'default' : 'pointer' }
+        }, Glyph ? h('span', { className: refreshing ? 'tether-spin' : '', style: { display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 15 })) : '↻')),
+      card([
+        ['地址', server || '未配置'],
+        ['状态', h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 6 } },
+          h('span', { style: { width: 7, height: 7, borderRadius: 4, background: dotColor } }), statusLabel)],
+        ['最近检测', timeText(connection.checkedAt)],
+        ['响应', Number.isFinite(connection.durationMs) ? connection.durationMs + ' ms' : '—']
+      ]))
+    const workspaceSection = h('div', { style: { display: 'grid', gap: 12 } },
+      h('div', {
+        title: '切换设备时保留最近三个原生工作区；关闭后释放后台页面',
+        style: { display: 'flex', alignItems: 'center', gap: 16, minHeight: 44 }
+      },
+        h('div', { style: { flex: '1 1 auto', minWidth: 0 } },
+          h('div', { style: { fontSize: 13, color: ink } }, '保留最近设备工作区'),
+          h('div', { style: { marginTop: 2, fontSize: 11.5, color: mute } }, '最多 3 台')),
+        toggle(keepSurfaces, (next) => {
+          setKeepSurfaces(next)
+          try { localStorage.setItem('tether.keepSurfaces', next ? '1' : '0') } catch (_) { /* storage unavailable */ }
+          if (typeof window !== 'undefined') window.dispatchEvent(new Event('tether-surfaces-pref'))
+        }, '保留最近设备工作区')))
+    const dshKnown = !!(dsh && typeof dsh.installed === 'boolean')
+    const dshStatus = dshKnown
+      ? (dsh.installing ? '安装中 ' + (Number(dsh.progress) || 0) + '%' : dsh.running ? '运行中' : dsh.installed ? '未启动' : '未安装')
+      : '—'
+    const dshValue = dshKnown
+      ? h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 } },
+        h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis' } }, dsh.version || '—'),
+        h('span', { style: { color: dsh.running ? success : mute, fontSize: 11, flex: '0 0 auto' } }, dshStatus))
+      : '—'
+    const dshAction = dshKnown && !dsh.running
+      ? h('button', {
+        type: 'button', onClick: dsh.installed ? onDshStart : onDshInstall,
+        disabled: !!dshBusy || !!dsh.installing,
+        style: { ...secondary, display: 'inline-flex', alignItems: 'center', gap: 6, opacity: dshBusy || dsh.installing ? 0.5 : 1, cursor: dshBusy || dsh.installing ? 'default' : 'pointer' }
+      },
+        dshBusy || dsh.installing
+          ? h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center' } }, Glyph ? h(Glyph, { name: 'refresh', size: 14 }) : null)
+          : Glyph ? h(Glyph, { name: dsh.installed ? 'arrowUp' : 'download', size: 14 }) : null,
+        dsh.installing ? '安装中 ' + (Number(dsh.progress) || 0) + '%' : dsh.installed ? '启动 DSH' : '安装 DSH')
+      : null
+    const deviceSection = h('div', { style: { display: 'grid', gap: 12 } },
+      card([
+        ['设备名', device.name || device.device_id || '—'],
+        ['设备 ID', device.device_id || '—'],
+        ['平台', (device.capabilities && device.capabilities.os_label) || device.platform || '—'],
+        ['DSH', dshValue],
+        ['Node', device.online ? '在线' : '离线']
+      ]),
+      dshKnown && dsh.error ? h('div', { role: 'alert', style: { color: danger, fontSize: 11.5 } }, dsh.error) : null,
+      h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
+        dshAction,
+        h('button', {
+          type: 'button', onClick: onRestartNode, disabled: !device.online,
+          style: { ...secondary, display: 'inline-flex', alignItems: 'center', gap: 6, opacity: device.online ? 1 : 0.5, cursor: device.online ? 'pointer' : 'default' }
+        }, Glyph ? h(Glyph, { name: 'refresh', size: 14 }) : null, '重启 Node')))
+    const versionRows = [
+      ['客户端', versions.app || '—'],
+      ['Node', versions.node || '—'],
+      ['DSH 插件', versions.plugin || '—']
+    ]
+    const aboutSection = h('div', { style: { display: 'grid', gap: 14 } },
+      h('div', { style: { fontSize: 17, fontWeight: 600, color: ink } }, 'Tether'),
+      card(versionRows))
+    const updateRow = (row, index) => {
+      const chips = (row.products || []).map((product) => h('span', {
+        key: product.label,
+        title: product.latest && product.latest !== product.current ? '最新 ' + product.latest : '',
+        style: {
+          display: 'inline-flex', alignItems: 'center', gap: 5, height: 22, padding: '0 7px',
+          borderRadius: 6, background: panel, color: ink, fontSize: 11.5, flex: '0 0 auto'
+        }
+      },
+        h('span', { style: { color: mute } }, product.label),
+        h('span', { className: 'tether-num' }, product.current || '—')))
+      const action = row.running
+        ? h('span', { className: 'tether-spin', title: '更新中', 'aria-label': '更新中', style: { display: 'grid', placeItems: 'center', color: blue } }, Glyph ? h(Glyph, { name: 'refresh', size: 15 }) : null)
+        : row.error
+          ? h('button', {
+            type: 'button', onClick: () => update && update.onUpdate(row), title: row.error, 'aria-label': '重试',
+            className: 'tether-hover',
+            style: { width: 28, height: 28, display: 'grid', placeItems: 'center', border: '1px solid ' + danger, borderRadius: 999, background: 'transparent', color: danger, cursor: 'pointer' }
+          }, Glyph ? h(Glyph, { name: 'refresh', size: 14 }) : '!')
+          : row.available && row.online
+            ? h('button', {
+              type: 'button', onClick: () => update && update.onUpdate(row), title: '更新', 'aria-label': '更新 ' + (row.name || ''),
+              className: 'tether-hover',
+              style: { width: 28, height: 28, display: 'grid', placeItems: 'center', border: 0, borderRadius: 999, background: blue, color: '#fff', cursor: 'pointer' }
+            }, Glyph ? h(Glyph, { name: 'download', size: 15 }) : '↓')
+            : null
+      return h('div', {
+        key: row.key,
+        style: {
+          display: 'flex', alignItems: 'center', gap: 10, minHeight: 56, padding: '8px 12px',
+          borderTop: index ? '1px solid ' + line : 0, background: bg
+        }
+      },
+        h('span', { 'aria-hidden': true, style: { width: 7, height: 7, borderRadius: 999, flex: '0 0 auto', background: row.online ? success : mute } }),
+        h('div', { style: { flex: '1 1 auto', minWidth: 0, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' } },
+          h('span', { style: { fontSize: 13, color: ink, fontWeight: 'var(--tether-strong, 500)', flex: '0 0 auto', maxWidth: '42%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, row.name || '—'),
+          chips),
+        h('span', { style: { width: 28, flex: '0 0 28px', display: 'grid', placeItems: 'center' } }, action))
+    }
+    const updateGroup = (key, label, rows) => rows.length
+      ? h('div', { key, style: { display: 'grid', gap: 8 } },
+        groupTitle(label),
+        h('div', { style: { border: '1px solid ' + line, borderRadius: 10, overflow: 'hidden', background: bg } }, rows.map(updateRow)))
+      : null
+    const updateGroups = []
+    if (update && update.local) updateGroups.push(updateGroup('local', '本机', [update.local]))
+    const updateDevices = (update && update.devices) || []
+    if (updateDevices.length) updateGroups.push(updateGroup('devices', '其他设备', updateDevices))
+    const updateSection = h('div', { style: { display: 'grid', gap: 16 } },
+      h('div', { style: { display: 'flex', alignItems: 'center', minHeight: 28 } },
+        h('strong', { style: { fontSize: 15, color: ink, fontWeight: 'var(--tether-strong, 600)' } }, '更新'),
+        h('button', {
+          type: 'button', onClick: () => update && update.onRefresh && update.onRefresh(), disabled: !!(update && update.refreshing),
+          title: '刷新', 'aria-label': '刷新更新状态', className: 'tether-hover',
+          style: { marginLeft: 'auto', width: 28, height: 28, display: 'grid', placeItems: 'center', border: 0, borderRadius: 6, background: 'transparent', color: sub, cursor: update && update.refreshing ? 'default' : 'pointer' }
+        }, Glyph ? h('span', { className: update && update.refreshing ? 'tether-spin' : '', style: { display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 16 })) : '↻')),
+      updateGroups.length ? updateGroups : h('div', { style: { fontSize: 12, color: mute } }, '没有已连接的设备'))
+    const builtIn = [
+      { id: 'account', label: '账号', render: () => accountSection },
+      { id: 'connection', label: '连接', render: () => connectionSection },
+      { id: 'update', label: '更新', render: () => updateSection },
+      { id: 'workspace', label: '工作区', render: () => workspaceSection },
+      { id: 'device', label: '本机设备', render: () => deviceSection },
+      { id: 'about', label: '关于', render: () => aboutSection }
+    ]
+    const sections = builtIn.concat((Array.isArray(extraSections) ? extraSections : [])
+      .filter((item) => item && item.id && item.label && typeof item.render === 'function'))
+    const current = sections.find((item) => item.id === section) || sections[0]
+    const nav = h('div', {
+      style: { width: 150, flex: '0 0 auto', padding: '12px 8px', background: panel, borderRight: '1px solid ' + line, display: 'flex', flexDirection: 'column', gap: 2 }
+    },
+      sections.map((item) => h('button', {
+        key: item.id, type: 'button', onClick: () => { setMessage(''); setSection(item.id) },
+        className: 'tether-hover', 'aria-current': current.id === item.id ? 'page' : undefined,
+        style: {
+          height: 30, padding: '0 10px', border: 0, borderRadius: 6, textAlign: 'left',
+          background: current.id === item.id ? 'var(--dsw-alias-interactive-bg-active, rgba(38,49,72,.10))' : 'transparent',
+          color: current.id === item.id ? ink : sub, fontSize: 12.5, cursor: 'pointer', font: 'inherit'
+        }
+      }, item.label)))
+    return h('div', {
+      onPointerDown: (event) => { if (event.target === event.currentTarget) onClose() },
+      style: { position: 'absolute', inset: 0, zIndex: 40, background: 'rgba(16,24,40,0.35)', display: 'grid', placeItems: 'center', padding: 24 }
+    },
+      h('section', {
+        role: 'dialog', 'aria-label': '设置',
+        style: { width: 'min(760px, 100%)', height: 'min(560px, 100%)', background: bg, borderRadius: 12, overflow: 'hidden', boxShadow: 'var(--dsw-elevation-panel, 0 18px 50px rgba(16,24,40,0.18))', display: 'flex', flexDirection: 'column' }
+      },
+        h('header', { style: { height: 44, padding: '0 14px', display: 'flex', alignItems: 'center', background: panel, borderBottom: '1px solid ' + line, flex: '0 0 auto' } },
+          h('strong', { style: { fontSize: 14 } }, '设置'),
+          h('button', {
+            type: 'button', onClick: onClose, title: '关闭', 'aria-label': '关闭', className: 'tether-hover',
+            style: { marginLeft: 'auto', width: 28, height: 28, border: 0, borderRadius: 6, background: 'transparent', fontSize: 18, cursor: 'pointer', color: mute }
+          }, '×')),
+        h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex' } },
+          nav,
+          h('div', { className: 'tether-scroll', style: { flex: '1 1 auto', minWidth: 0, overflowY: 'auto', padding: '20px 24px' } }, current.render()))),
+      cropModal,
+      nameModal,
+      passwordModal)
+  }
+  return { SettingsPanel }
+}
+const TRANSFER_CHUNK = 4 * 1024 * 1024
+
+function base64Bytes(value) {
+  if (!value) return 0
+  const padding = value.endsWith('==') ? 2 : value.endsWith('=') ? 1 : 0
+  return Math.floor(value.length * 3 / 4) - padding
+}
+
+function bytesToBase64(bytes) {
+  let binary = ''
+  for (let index = 0; index < bytes.length; index += 0x8000) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(index, index + 0x8000))
+  }
+  return btoa(binary)
+}
+
+function failure(message, code) {
+  const error = new Error(message)
+  error.code = code
+  return error
+}
+
+function newTransferId() {
+  const bytes = new Uint8Array(8)
+  if (globalThis.crypto && typeof globalThis.crypto.getRandomValues === 'function') {
+    globalThis.crypto.getRandomValues(bytes)
+  } else {
+    for (let index = 0; index < bytes.length; index += 1) bytes[index] = Math.floor(Math.random() * 256)
+  }
+  return [...bytes].map((value) => value.toString(16).padStart(2, '0')).join('')
+}
+
+function newTransferCode() {
+  return 'tether-' + newTransferId()
+}
+
+async function transferFileCroc({
+  send, receive, status, finish, cancel, cancelSend,
+  source, destination, name, transferId, overwrite = false, onProgress = () => {}, signal
+}) {
+  const id = transferId || newTransferId()
+  const code = newTransferCode()
+  let sendStarted = false
+  let receiveStarted = false
+  try {
+    await send({ path: source, code, transfers: 8 })
+    sendStarted = true
+    await receive({ path: destination, code, transfer_id: id })
+    receiveStarted = true
+    while (true) {
+      if (signal && signal.aborted) throw failure('传输已取消', 'aborted')
+      const state = await status({ transfer_id: id })
+      const percent = Math.max(0, Math.min(100, Number(state && state.percent) || 0))
+      onProgress({ transferred: 0, total: 0, percent, speed: Number(state && state.speed) || 0 })
+      if (state && state.state === 'completed') break
+      if (state && (state.state === 'failed' || state.state === 'cancelled')) {
+        throw failure((state && state.error) || '传输失败', 'croc_failed')
+      }
+      await new Promise((resolve) => setTimeout(resolve, 350))
+    }
+    const result = await finish({ transfer_id: id, overwrite: !!overwrite, name })
+    return { path: result.path, transferId: id, bytes: Number(result.bytes) || 0 }
+  } catch (error) {
+    const cleanups = []
+    if (receiveStarted) cleanups.push(cancel({ transfer_id: id }))
+    if (sendStarted) cleanups.push(cancelSend({}))
+    await Promise.allSettled(cleanups)
+    throw error
+  }
+}
+
+async function transferFile({
+  read, write, readBytes, writeBytes, status, cancel, source, destination,
+  transferId, overwrite = false, resume = true, onProgress = () => {}, signal
+}) {
+  if (typeof read !== 'function' || typeof write !== 'function') {
+    throw new Error('transfer requires read and write functions')
+  }
+  if (!source || !destination) throw new Error('source and destination are required')
+  const id = transferId || newTransferId()
+  let offset = 0
+  let partial = false
+  try {
+    const state = await status({ path: destination, transferId: id })
+    if (state && state.exists && !overwrite) throw failure('目标设备上已存在同名文件', 'exists')
+    if (resume && state && Number.isSafeInteger(state.offset) && state.offset > 0) {
+      offset = state.offset
+      partial = Boolean(state.partial)
+    }
+  } catch (error) {
+    if (error && error.code === 'exists') throw error
+  }
+  let total = null
+  const report = (value) => {
+    const transferred = Math.max(0, Number(value) || 0)
+    onProgress({
+      transferred,
+      total: total || 0,
+      percent: total ? Math.min(100, Math.round(transferred / total * 100)) : (total === 0 ? 100 : 0)
+    })
+  }
+  if (partial && offset > 0) report(offset)
+  const readChunk = async (at) => {
+    let chunk = null
+    let binary = false
+    const limit = total === null ? TRANSFER_CHUNK : Math.min(TRANSFER_CHUNK, Math.max(0, total - at))
+    if (limit === 0) return { chunk: { size: total, offset: at, base64: '' }, binary: false }
+    if (typeof readBytes === 'function') {
+      try {
+        chunk = await readBytes({ path: source, offset: at, limit })
+        binary = !!chunk && chunk.bytes instanceof Uint8Array
+      } catch (_) { chunk = null; binary = false }
+    }
+    if (!binary) chunk = await read({ path: source, offset: at, limit })
+    return { chunk, binary }
+  }
+  let pending = readChunk(offset)
+  while (true) {
+    if (signal && signal.aborted) {
+      if (typeof cancel === 'function') await cancel({ path: destination, transferId: id }).catch(() => {})
+      throw failure('传输已取消', 'aborted')
+    }
+    const current = await pending
+    pending = null
+    const chunk = current.chunk
+    const binary = current.binary
+    if (!chunk) throw failure('读取源文件失败', 'read_failed')
+    const size = Number(chunk.size)
+    if (!Number.isSafeInteger(size) || size < 0) throw failure('源文件大小无效', 'read_failed')
+    if (total === null) total = size
+    else if (size !== total) throw failure('源文件在传输过程中发生变化', 'source_changed')
+    if (chunk.offset !== undefined && Number(chunk.offset) !== offset) {
+      throw failure('源文件读取偏移不一致', 'source_changed')
+    }
+    const bytes = binary ? chunk.bytes.length : base64Bytes(chunk.base64)
+    if (!bytes && offset < total) throw failure('源文件读取到空数据', 'read_failed')
+    if (offset + bytes > total) throw failure('源文件返回的数据超出声明大小', 'source_changed')
+    const final = offset + bytes >= total
+    const expected = offset + bytes
+    if (!final) { pending = readChunk(expected); pending.catch(() => {}) }
+    let result = null
+    if (binary && typeof writeBytes === 'function') {
+      try {
+        result = await writeBytes({
+          path: destination, transferId: id, offset, total, bytes: chunk.bytes,
+          final, overwrite, resume: offset > 0
+        })
+      } catch (_) { result = null }
+    }
+    if (!result) {
+      const encoded = binary ? bytesToBase64(chunk.bytes) : chunk.base64
+      result = await write({
+        path: destination, transferId: id, offset, total, base64: encoded,
+        final, overwrite, resume: offset > 0
+      })
+    }
+    if (!result || !Number.isSafeInteger(result.offset) || result.offset < offset) {
+      if (pending) pending.catch(() => {})
+      throw failure('目标设备没有确认写入进度', 'write_failed')
+    }
+    offset = result.offset
+    report(offset)
+    if (result.complete === true || offset >= total) break
+    if (pending && offset !== expected) {
+      pending.catch(() => {})
+      pending = readChunk(offset)
+    } else if (!pending) {
+      pending = readChunk(offset)
+    }
+  }
+  if (total === 0) report(0)
+  return { path: destination, transferId: id, bytes: offset }
+}
+function separator(path) {
+  return String(path || '').includes('\\') ? '\\' : '/'
+}
+
+function joinPath(base, name) {
+  if (!base) return name
+  return String(base).replace(/[\\/]+$/, '') + separator(base) + name
+}
+
+function formatBytes(value) {
+  if (!Number.isFinite(value) || value < 0) return ''
+  if (value < 1024) return value + ' B'
+  if (value < 1024 * 1024) return (value / 1024).toFixed(1) + ' KB'
+  if (value < 1024 * 1024 * 1024) return (value / (1024 * 1024)).toFixed(1) + ' MB'
+  return (value / (1024 * 1024 * 1024)).toFixed(2) + ' GB'
+}
+
+async function copyText(text) {
+  const value = String(text || '')
+  if (!value) return false
+  try {
+    await navigator.clipboard.writeText(value)
+    return true
+  } catch (_) { /* fall through */ }
+  try {
+    const area = document.createElement('textarea')
+    area.value = value
+    area.style.position = 'fixed'
+    area.style.opacity = '0'
+    document.body.appendChild(area)
+    area.select()
+    const ok = document.execCommand('copy')
+    area.remove()
+    return ok
+  } catch (_) { return false }
+}
+
+function isTextInput(target) {
+  if (!target) return false
+  const tag = String(target.tagName || '').toLowerCase()
+  return tag === 'input' || tag === 'textarea' || tag === 'select' || target.isContentEditable === true
+}
+
+function uniqueName(destination, names) {
+  const value = String(destination || '')
+  const slash = Math.max(value.lastIndexOf('\\'), value.lastIndexOf('/'))
+  const dir = slash >= 0 ? value.slice(0, slash + 1) : ''
+  const file = slash >= 0 ? value.slice(slash + 1) : value
+  const dot = file.lastIndexOf('.')
+  const stem = dot > 0 ? file.slice(0, dot) : file
+  const ext = dot > 0 ? file.slice(dot) : ''
+  const taken = new Set((names || []).map((name) => String(name).toLowerCase()))
+  for (let index = 2; index < 1000; index += 1) {
+    const candidate = stem + ' (' + index + ')' + ext
+    if (!taken.has(candidate.toLowerCase())) return dir + candidate
+  }
+  return dir + stem + ' (' + Date.now() + ')' + ext
+}
+
+function createTransferPage({ React, Glyph, api, post, C, devices = [], localDevice = '', onNotice, onError }) {
+  const h = React.createElement
+  const field = {
+    height: 26, boxSizing: 'border-box', border: 0, borderRadius: 6,
+    background: C.soft, color: C.ink, fontSize: 12, padding: '0 8px', outline: 'none'
+  }
+  const onlineDevices = devices.filter((item) => item && item.online)
+  const initialLeft = localDevice && onlineDevices.some((item) => item.device_id === localDevice)
+    ? localDevice
+    : (onlineDevices[0] && onlineDevices[0].device_id) || ''
+  const initialRight = (onlineDevices.find((item) => item.device_id !== initialLeft) || {}).device_id || ''
+  const directCache = new Map()
+  const directInfo = async (deviceId) => {
+    const key = String(deviceId || '')
+    if (!key) return null
+    if (directCache.has(key)) return directCache.get(key)
+    let info = null
+    try {
+      const response = await post('/api/devices/' + encodeURIComponent(key) + '/fs/direct_info', {})
+      info = response && response.value && typeof response.value === 'object' ? response.value : response
+    } catch (_) { info = null }
+    const value = info && typeof info.host === 'string' && info.host
+      && Number.isInteger(info.port) && info.port > 0 && info.port <= 65535
+      && typeof info.token === 'string' && info.token ? info : null
+    const normalized = value && key === String(localDevice || '')
+      ? { ...value, host: '127.0.0.1' }
+      : value
+    directCache.set(key, normalized)
+    return normalized
+  }
+  const postFs = async (deviceId, operation, body) => {
+    const info = await directInfo(deviceId)
+    if (info) {
+      try {
+        const response = await fetch('http://' + info.host + ':' + info.port + '/fs/' + operation, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + info.token },
+          body: JSON.stringify(body)
+        })
+        if (response.ok) {
+          const payload = await response.json()
+          if (payload && payload.ok === true) return payload.value
+        } else if (response.status === 401) {
+          directCache.delete(String(deviceId || ''))
+        }
+      } catch (_) { /* the mesh may be down; use the Hub */ }
+    }
+    return post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/' + operation, body)
+  }
+  const directRead = async (deviceId, args) => {
+    const info = await directInfo(deviceId)
+    if (!info) return null
+    try {
+      const response = await fetch('http://' + info.host + ':' + info.port + '/fs/read_raw', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + info.token },
+        body: JSON.stringify({ path: args.path, offset: args.offset, limit: args.limit })
+      })
+      if (!response.ok) return null
+      const buffer = await response.arrayBuffer()
+      const size = Number(response.headers.get('X-Tether-Size'))
+      const offset = Number(response.headers.get('X-Tether-Offset'))
+      return {
+        bytes: new Uint8Array(buffer),
+        size: Number.isFinite(size) ? size : 0,
+        offset: Number.isFinite(offset) ? offset : args.offset,
+        reset: response.headers.get('X-Tether-Reset') === '1'
+      }
+    } catch (_) { return null }
+  }
+  const directWrite = async (deviceId, args) => {
+    const info = await directInfo(deviceId)
+    if (!info) return null
+    try {
+      const query = new URLSearchParams({
+        path: args.path, transfer_id: args.transferId, offset: String(args.offset),
+        total: String(args.total), final: args.final ? '1' : '0',
+        overwrite: args.overwrite ? '1' : '0', resume: args.resume ? '1' : '0'
+      })
+      const response = await fetch('http://' + info.host + ':' + info.port + '/fs/write_raw?' + query.toString(), {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + info.token },
+        body: args.bytes
+      })
+      if (!response.ok) return null
+      const payload = await response.json()
+      return payload && payload.ok === true ? payload.value : null
+    } catch (_) { return null }
+  }
+  const iconButton = (name, label, onClick, disabled) => h('button', {
+    type: 'button', title: label, 'aria-label': label, disabled,
+    onClick: () => { if (!disabled && onClick) onClick() },
+    className: 'tether-hover',
+    style: {
+      width: 26, height: 26, flex: '0 0 auto', display: 'grid', placeItems: 'center',
+      border: 0, borderRadius: 6, background: 'transparent', color: disabled ? C.mute : C.sub,
+      cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.4 : 1
+    }
+  }, h(Glyph, { name, size: 15 }))
+
+  function FilePane({ side, deviceId, deviceName = '', otherDeviceId, onDevice, path, onPath, selection, onSelection, onEntries,
+    onPointerRow, onDropItems, onContextItem, onBlankContextItem, active, onActivate, refreshKey = 0,
+    onNewFolder, onNewFile, onRename, onDelete, onRefresh }) {
+    const [roots, setRoots] = React.useState([])
+    const [entries, setEntries] = React.useState(null)
+    const [treeChildren, setTreeChildren] = React.useState({})
+    const [expanded, setExpanded] = React.useState({})
+    const [loading, setLoading] = React.useState(false)
+    const [error, setError] = React.useState('')
+    const [sort, setSort] = React.useState({ key: 'name', dir: 'asc' })
+    const [search, setSearch] = React.useState('')
+    const [localRefresh, setLocalRefresh] = React.useState(0)
+    const run = React.useRef(0)
+    const pathRef = React.useRef(path)
+    const lastRefreshRef = React.useRef({ refreshKey, localRefresh })
+    pathRef.current = path
+    React.useEffect(() => {
+      let cancelled = false
+      setTreeChildren({}); setExpanded({}); setRoots([]); setEntries(null)
+      if (!deviceId) { setRoots([]); setEntries(null); return undefined }
+      setLoading(true); setError('')
+      Promise.all([
+        api('/api/devices/' + encodeURIComponent(deviceId) + '/workspaces').catch(() => ({ workspaces: [] })),
+        api('/api/devices/' + encodeURIComponent(deviceId) + '/drives').catch(() => ({ drives: [] }))
+      ]).then(([workspaceData, driveData]) => {
+        if (cancelled) return
+        const list = [
+          ...((workspaceData && workspaceData.workspaces) || []).map((item) => ({ name: item.name || item.path, path: item.path, kind: 'workspace', dir: true })),
+          ...((driveData && driveData.drives) || []).map((item) => ({ name: item.name || item.path, path: item.path, kind: 'drive', dir: true }))
+        ].filter((item) => item.path)
+        setRoots(list)
+        if (!pathRef.current && list.length) onPath(list[0].path)
+      }).catch((cause) => { if (!cancelled) setError(cause.message || '读取根目录失败') })
+        .finally(() => { if (!cancelled) setLoading(false) })
+      return () => { cancelled = true }
+    }, [deviceId])
+    React.useEffect(() => {
+      if (!deviceId || !path) { setEntries(null); onEntries([]); return undefined }
+      const token = ++run.current
+      let cancelled = false
+      const fresh = lastRefreshRef.current.refreshKey !== refreshKey || lastRefreshRef.current.localRefresh !== localRefresh
+      lastRefreshRef.current = { refreshKey, localRefresh }
+      setLoading(true); setError('')
+      loadDirectory({
+        deviceId, path, fresh,
+        load: () => postFs(deviceId, 'list', { path })
+          .then((data) => ((data && data.entries) || []).filter((item) => item && item.path && item.name))
+      })
+        .then((list) => {
+          if (cancelled || token !== run.current) return
+          list.sort((left, right) => (left.dir === right.dir ? String(left.name).localeCompare(String(right.name)) : left.dir ? -1 : 1))
+          setEntries(list)
+          onEntries(list)
+        })
+        .catch((cause) => {
+          if (!cancelled && token === run.current) { setEntries([]); onEntries([]); setError(cause.message || '读取目录失败') }
+        })
+        .finally(() => { if (!cancelled && token === run.current) setLoading(false) })
+      return () => { cancelled = true }
+    }, [deviceId, path, refreshKey, localRefresh])
+    const toggleTree = async (item) => {
+      if (!item || !item.dir || !deviceId) return
+      const key = item.path
+      if (expanded[key]) {
+        setExpanded((current) => { const next = { ...current }; delete next[key]; return next })
+        return
+      }
+      setExpanded((current) => ({ ...current, [key]: true }))
+      if (treeChildren[key]) return
+      try {
+        const list = await loadDirectory({
+          deviceId, path: key,
+          load: () => postFs(deviceId, 'list', { path: key })
+            .then((data) => ((data && data.entries) || []).filter((entry) => entry && entry.path && entry.name))
+        })
+        setTreeChildren((current) => ({ ...current, [key]: list }))
+      } catch (_) { /* the right pane shows the directory error */ }
+    }
+    const fileIcon = (item) => h('span', {
+      'aria-hidden': true,
+      style: { width: 15, height: 15, display: 'grid', placeItems: 'center', color: item.dir ? '#d99a2b' : C.mute, flex: '0 0 auto' }
+    }, h(Glyph, { name: item.dir ? 'folderClose' : 'file', size: 14 }))
+    const refresh = () => {
+      if (deviceId && path) invalidateDirectory(deviceId, path)
+      setLocalRefresh((value) => value + 1)
+      if (onRefresh) onRefresh()
+    }
+    return h('div', {
+      'data-pane': side,
+      onMouseDown: onActivate,
+      onDragOver: (event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy' },
+      onDrop: (event) => { event.preventDefault(); if (onDropItems) onDropItems() },
+      style: {
+        flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', background: C.bg,
+        borderRadius: 8, overflow: 'hidden', outline: active ? '1px solid ' + C.blue : '1px solid transparent'
+      }
+    },
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 4, padding: '6px 8px', background: C.soft, flex: '0 0 auto' } },
+        h('select', {
+          value: deviceId || '', onChange: (event) => { onDevice(event.target.value); onPath(''); onSelection([]); onActivate(); event.currentTarget.blur() },
+          'aria-label': '设备', title: '选择这台电脑',
+          style: { ...field, flex: '1 1 auto', minWidth: 0 }
+        },
+          !deviceId ? h('option', { value: '' }, '选择设备…') : null,
+          devices.map((item) => h('option', {
+            key: item.device_id, value: item.device_id,
+            disabled: !item.online || item.device_id === otherDeviceId
+          }, (item.name || item.device_id) + (item.online ? '' : ' · 离线') + (item.device_id === otherDeviceId ? ' · 已在另一侧' : '')))),
+        iconButton('folderPlus', '新建文件夹', onNewFolder, !deviceId || !path),
+        iconButton('filePlus', '新建文件', onNewFile, !deviceId || !path),
+        iconButton('pencil', '重命名', onRename, !selection.length),
+        iconButton('trash', '删除', onDelete, !selection.length),
+        iconButton('refresh', '刷新', refresh, !deviceId || !path)),
+      TargetFileExplorer({
+        React,
+        colors: { bg: C.bg, soft: C.soft, ink: C.ink, sub: C.sub, mute: C.mute, line: C.line, hover: C.soft, red: C.red },
+        compact: true,
+        roots,
+        deviceName,
+        rootPath: '',
+        path,
+        entries,
+        loading,
+        error,
+        selectedPaths: selection,
+        selectionMode: 'multiple',
+        onSelectionChange: onSelection,
+        onRoot: (next) => onPath(next),
+        onPath: (next) => onPath(next),
+        onSelect: () => {},
+        onOpen: (item) => { if (item.dir) onPath(item.path) },
+        onRefresh: refresh,
+        onRowPointerDown: onPointerRow,
+        onContextMenu: (item, event) => { if (onContextItem) onContextItem(item, event) },
+        onBlankContextMenu: (event) => { if (onBlankContextItem) onBlankContextItem(null, event) },
+        fileIcon,
+        formatTime: (value) => value ? new Date(value * 1000).toLocaleString('zh-CN', { hour12: false }) : '',
+        formatSize: (value) => formatBytes(Number(value)),
+        limit: Number.MAX_SAFE_INTEGER,
+        emptyText: '空文件夹',
+        placeholder: '选择左侧的电脑或磁盘',
+        sort,
+        onSort: setSort,
+        search,
+        onSearch: setSearch,
+        treeChildren,
+        expanded,
+        onToggleTree: (item) => { void toggleTree(item) }
+      }))
+  }
+
+  const [leftDevice, setLeftDevice] = React.useState(initialLeft)
+  const [rightDevice, setRightDevice] = React.useState(initialRight)
+  const [leftPath, setLeftPath] = React.useState('')
+  const [rightPath, setRightPath] = React.useState('')
+  const [leftSelection, setLeftSelection] = React.useState([])
+  const [rightSelection, setRightSelection] = React.useState([])
+  const [leftEntries, setLeftEntries] = React.useState([])
+  const [rightEntries, setRightEntries] = React.useState([])
+  const [activeSide, setActiveSide] = React.useState('left')
+  const [refreshKey, setRefreshKey] = React.useState(0)
+  const [job, setJob] = React.useState(null)
+  const [menu, setMenu] = React.useState(null)
+  const [dialog, setDialog] = React.useState(null)
+  const [dialogText, setDialogText] = React.useState('')
+  const [drag, setDrag] = React.useState(null)
+  const [dropSide, setDropSide] = React.useState('')
+  const clipboardRef = React.useRef(null)
+  const abortRef = React.useRef(null)
+  const queueRef = React.useRef(null)
+  const dragRef = React.useRef(null)
+  const dropSideRef = React.useRef('')
+  const latest = React.useRef({})
+  latest.current = {
+    leftDevice, rightDevice, leftPath, rightPath, leftSelection, rightSelection,
+    leftEntries, rightEntries, activeSide
+  }
+
+  React.useEffect(() => {
+    if (leftDevice && rightDevice && leftDevice === rightDevice) {
+      const replacement = (onlineDevices.find((item) => item.device_id !== leftDevice) || {}).device_id || ''
+      setRightDevice(replacement)
+      setRightPath(''); setRightSelection([])
+      if (onNotice) onNotice('两侧不能是同一台电脑，已切换另一侧')
+    }
+  }, [leftDevice, rightDevice])
+
+  const side = (name) => name === 'left'
+    ? { device: leftDevice, path: leftPath, selection: leftSelection, entries: leftEntries, setDevice: setLeftDevice, setPath: setLeftPath, setSelection: setLeftSelection }
+    : { device: rightDevice, path: rightPath, selection: rightSelection, entries: rightEntries, setDevice: setRightDevice, setPath: setRightPath, setSelection: setRightSelection }
+  const other = (name) => name === 'left' ? 'right' : 'left'
+  const itemsFor = (name) => {
+    const current = side(name)
+    return current.entries.filter((item) => current.selection.includes(item.path) && !item.dir)
+  }
+  const refresh = () => setRefreshKey((value) => value + 1)
+
+  const askConflict = (item, destination) => new Promise((resolve) => {
+    setDialog({ kind: 'conflict', item, destination, resolve })
+  })
+
+  const startQueue = async (fromSide, items, targetPath, cut = false) => {
+    const target = side(other(fromSide))
+    if (!items.length || !target.path || !target.device) return
+    const controller = new AbortController()
+    abortRef.current = controller
+    const total = items.reduce((sum, item) => sum + (Number(item.size) || 0), 0)
+    setJob({ state: 'running', percent: 0, transferred: 0, total, count: items.length, index: 0, error: '' })
+    let doneBytes = 0
+    let useCroc = false
+    try {
+      const [sourceInfo, targetInfo] = await Promise.all([
+        postFs(side(fromSide).device, 'transfer_info', {}),
+        postFs(target.device, 'transfer_info', {})
+      ])
+      useCroc = !!(sourceInfo && sourceInfo.available && sourceInfo.relay
+        && targetInfo && targetInfo.available && targetInfo.relay)
+    } catch (_) { useCroc = false }
+    try {
+      for (let index = 0; index < items.length; index += 1) {
+        const item = items[index]
+        const sourceDevice = side(fromSide).device
+        if (useCroc) {
+          let name = item.name
+          let overwrite = false
+          if ((target.entries || []).some((entry) => entry.name === name)) {
+            const choice = await askConflict(item, joinPath(target.path, name))
+            if (choice === 'cancel') throw Object.assign(new Error('已取消'), { code: 'aborted' })
+            if (choice === 'overwrite') overwrite = true
+            else if (choice === 'keep') name = uniqueName(item.name, (target.entries || []).map((entry) => entry.name))
+          }
+          const result = await transferFileCroc({
+            source: item.path,
+            destination: target.path,
+            name,
+            transferId: newTransferId(),
+            overwrite,
+            signal: controller.signal,
+            send: (args) => postFs(sourceDevice, 'transfer_send', args),
+            receive: (args) => postFs(target.device, 'transfer_receive', args),
+            status: (args) => postFs(target.device, 'transfer_status', args),
+            finish: (args) => postFs(target.device, 'transfer_finish', args),
+            cancel: (args) => postFs(target.device, 'transfer_cancel', args),
+            cancelSend: (args) => postFs(sourceDevice, 'transfer_cancel', args),
+            onProgress: (value) => {
+              const percent = Number(value && value.percent) || 0
+              const currentBytes = doneBytes + (Number(item.size) || 0) * percent / 100
+              setJob((current) => ({ ...(current || {}), percent: total ? Math.min(99, Math.round(currentBytes / total * 100)) : 0,
+                transferred: currentBytes, index, count: items.length, state: 'running' }))
+            }
+          })
+          doneBytes += Number(result.bytes) || Number(item.size) || 0
+          if (cut) {
+            await postFs(sourceDevice, 'delete', { path: item.path })
+              .catch(() => { if (onError) onError(new Error('已复制但未能删除源文件：' + item.name)) })
+          }
+          setJob((current) => ({ ...(current || {}), percent: total ? Math.round(doneBytes / total * 100) : 100,
+            transferred: doneBytes, index, state: 'running' }))
+          continue
+        }
+        let destination = joinPath(target.path, item.name)
+        let overwrite = false
+        while (true) {
+          try {
+            const result = await transferFile({
+              source: item.path,
+              destination,
+              transferId: newTransferId(),
+              overwrite,
+              signal: controller.signal,
+              read: (args) => postFs(sourceDevice, 'read',
+                { path: args.path, offset: args.offset, limit: args.limit, encoding: 'base64' }),
+              readBytes: (args) => directRead(sourceDevice, args),
+              writeBytes: (args) => directWrite(target.device, args),
+              write: (args) => postFs(target.device, 'write_chunk',
+                { ...args, transfer_id: args.transferId }),
+              status: (args) => postFs(target.device, 'transfer_status',
+                { path: args.path, transfer_id: args.transferId }),
+              cancel: (args) => postFs(target.device, 'transfer_cancel',
+                { path: args.path, transfer_id: args.transferId }),
+              onProgress: (value) => {
+                const currentBytes = doneBytes + Math.max(0, Number(value && value.transferred) || 0)
+                setJob((current) => ({ ...(current || {}), percent: total ? Math.min(99, Math.round(currentBytes / total * 100)) : 0,
+                  transferred: currentBytes, index, count: items.length, state: 'running' }))
+              }
+            })
+            doneBytes += Number(result.bytes) || Number(item.size) || 0
+            break
+          } catch (cause) {
+            if (!cause || cause.code !== 'exists') throw cause
+            const choice = await askConflict(item, destination)
+            if (choice === 'cancel') throw Object.assign(new Error('已取消'), { code: 'aborted' })
+            if (choice === 'overwrite') { overwrite = true; continue }
+            if (choice === 'keep') {
+              destination = uniqueName(destination, (side(other(fromSide)).entries || []).map((entry) => entry.name))
+              overwrite = false
+              continue
+            }
+            throw cause
+          }
+        }
+        if (cut) {
+          await postFs(sourceDevice, 'delete', { path: item.path })
+            .catch(() => { if (onError) onError(new Error('已复制但未能删除源文件：' + item.name)) })
+        }
+        setJob((current) => ({ ...(current || {}), percent: total ? Math.round(doneBytes / total * 100) : 100,
+          transferred: doneBytes, index, state: 'running' }))
+      }
+      setJob((current) => ({ ...(current || {}), state: 'done', percent: 100, transferred: doneBytes, count: items.length }))
+      if (onNotice) onNotice('已转移 ' + items.length + ' 个文件（' + formatBytes(doneBytes) + '）')
+      invalidateDirectory(side(fromSide).device, side(fromSide).path)
+      invalidateDirectory(target.device, target.path)
+      refresh()
+      setLeftSelection([]); setRightSelection([])
+    } catch (cause) {
+      const aborted = cause && cause.code === 'aborted'
+      setJob((current) => ({ ...(current || {}), state: aborted ? 'cancelled' : 'error', error: aborted ? '已取消' : (cause.message || '传输失败') }))
+      if (!aborted && onError) onError(cause)
+    } finally {
+      abortRef.current = null
+    }
+  }
+
+  const start = () => {
+    const items = itemsFor(activeSide)
+    if (!items.length) return
+    void startQueue(activeSide, items, side(other(activeSide)).path)
+  }
+  const cancel = () => { if (abortRef.current) abortRef.current.abort() }
+  const swap = () => {
+    setLeftDevice(rightDevice); setRightDevice(leftDevice)
+    setLeftPath(rightPath); setRightPath(leftPath)
+    setLeftSelection([]); setRightSelection([])
+  }
+  const selectAll = (name) => {
+    const files = side(name).entries.filter((item) => !item.dir).map((item) => item.path)
+    if (name === 'left') setLeftSelection(files); else setRightSelection(files)
+  }
+  const copySelection = (name, cut) => {
+    const items = itemsFor(name)
+    if (!items.length) return
+    clipboardRef.current = { side: name, items, cut: !!cut }
+    if (onNotice) onNotice((cut ? '已剪切 ' : '已复制 ') + items.length + ' 个文件')
+  }
+  const pasteInto = (name) => {
+    const clip = clipboardRef.current
+    if (!clip || !clip.items.length || clip.side === name) return
+    void startQueue(clip.side, clip.items, side(name).path, clip.cut)
+    if (clip.cut) clipboardRef.current = null
+  }
+  const actionsRef = React.useRef({})
+  actionsRef.current = { selectAll, copySelection, pasteInto }
+
+  React.useEffect(() => {
+    const onKey = (event) => {
+      if (!(event.ctrlKey || event.metaKey) || isTextInput(event.target)) return
+      const key = String(event.key || '').toLowerCase()
+      const actions = actionsRef.current
+      if (key === 'a') { event.preventDefault(); actions.selectAll(latest.current.activeSide) }
+      else if (key === 'c') { event.preventDefault(); actions.copySelection(latest.current.activeSide, false) }
+      else if (key === 'x') { event.preventDefault(); actions.copySelection(latest.current.activeSide, true) }
+      else if (key === 'v') { event.preventDefault(); actions.pasteInto(latest.current.activeSide) }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  React.useEffect(() => {
+    if (!menu) return undefined
+    const close = () => setMenu(null)
+    window.addEventListener('mousedown', close)
+    window.addEventListener('keydown', close)
+    return () => { window.removeEventListener('mousedown', close); window.removeEventListener('keydown', close) }
+  }, [menu])
+
+  const openDialog = (kind, name, extra = {}) => {
+    setDialog({ kind, ...extra })
+    setDialogText(name || '')
+    setTimeout(() => {
+      const input = document.getElementById('tether-explorer-name')
+      if (input) { input.focus(); input.select() }
+    }, 30)
+  }
+  const closeDialog = () => {
+    const current = dialog
+    setDialog(null); setDialogText('')
+    if (current && current.kind === 'conflict' && current.resolve) current.resolve('cancel')
+  }
+  const submitName = async () => {
+    if (!dialog) return
+    const name = dialogText.trim()
+    if (!name) return
+    const current = side(dialog.side)
+    try {
+      if (dialog.kind === 'newFolder') await postFs(current.device, 'mkdir', { path: joinPath(current.path, name) })
+      else if (dialog.kind === 'newFile') await postFs(current.device, 'write', { path: joinPath(current.path, name), text: '', overwrite: false })
+      else if (dialog.kind === 'rename') await postFs(current.device, 'rename', { path: dialog.item.path, dest: joinPath(current.path, name) })
+      invalidateDirectory(current.device, current.path)
+      setDialog(null); setDialogText('')
+      refresh()
+    } catch (cause) { if (onError) onError(cause) }
+  }
+  const deleteSelected = async (name) => {
+    const current = side(name)
+    const items = current.entries.filter((item) => current.selection.includes(item.path))
+    if (!items.length) return
+    setDialog({ kind: 'delete', side: name, items })
+  }
+  const confirmDelete = async () => {
+    if (!dialog || dialog.kind !== 'delete') return
+    const current = side(dialog.side)
+    try {
+      for (const item of dialog.items) await postFs(current.device, 'delete', { path: item.path })
+      invalidateDirectory(current.device, current.path)
+      setDialog(null)
+      if (dialog.side === 'left') setLeftSelection([]); else setRightSelection([])
+      refresh()
+    } catch (cause) { if (onError) onError(cause) }
+  }
+
+  const startRowDrag = (name, event, item) => {
+    if (!event || event.button !== 0 || dragRef.current) return
+    const current = side(name)
+    const selection = current.selection.includes(item.path) ? current.selection : [item.path]
+    const items = current.entries.filter((entry) => selection.includes(entry.path))
+    if (!items.length) return
+    const state = { side: name, items, startX: event.clientX, startY: event.clientY, active: false }
+    dragRef.current = state
+    const move = (moveEvent) => {
+      if (!dragRef.current) return
+      if (!state.active && Math.hypot(moveEvent.clientX - state.startX, moveEvent.clientY - state.startY) < 6) return
+      state.active = true
+      const element = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY)
+      const pane = element && element.closest ? element.closest('[data-pane]') : null
+      const target = pane ? pane.getAttribute('data-pane') : ''
+      const nextDrop = target && target !== name ? target : ''
+      dropSideRef.current = nextDrop
+      setDropSide(nextDrop)
+      setDrag({ side: name, items: state.items, x: moveEvent.clientX, y: moveEvent.clientY })
+    }
+    const up = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      const target = dropSideRef.current
+      const dragging = dragRef.current
+      dragRef.current = null
+      dropSideRef.current = ''
+      setDrag(null); setDropSide('')
+      if (!dragging || !dragging.active || !target) return
+      const targetSide = side(target)
+      if (!targetSide.path) return
+      void startQueue(dragging.side, dragging.items.filter((entry) => !entry.dir), targetSide.path)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
+
+  const openContext = (name) => (item, event) => {
+    if (!event) return
+    event.preventDefault(); event.stopPropagation()
+    const current = side(name)
+    if (item) {
+      if (!current.selection.includes(item.path)) {
+        const next = event.ctrlKey || event.metaKey ? [...current.selection, item.path] : [item.path]
+        if (name === 'left') setLeftSelection(next); else setRightSelection(next)
+      }
+    } else if (current.selection.length) {
+      if (name === 'left') setLeftSelection([]); else setRightSelection([])
+    }
+    setActiveSide(name)
+    setMenu({ x: event.clientX, y: event.clientY, side: name, item: item || null })
+  }
+
+  React.useEffect(() => {
+    if (!job || job.state === 'running') return undefined
+    const timer = setTimeout(() => setJob(null), job.state === 'done' ? 4000 : 8000)
+    return () => clearTimeout(timer)
+  }, [job && job.state])
+
+  const progress = job ? Math.max(0, Math.min(100, Number(job.percent) || 0)) : 0
+  const sourceCount = itemsFor(activeSide).length
+  const target = side(other(activeSide))
+  let footerText = '拖拽文件到另一侧，或用 Ctrl+C / Ctrl+X、Ctrl+V'
+  if (job) {
+    if (job.state === 'running') footerText = '正在转移 ' + ((job.index || 0) + 1) + '/' + (job.count || 1)
+    else if (job.state === 'done') footerText = '已转移 ' + (job.count || 0) + ' 个文件'
+    else footerText = job.error || (job.state === 'error' ? '传输失败' : '已取消')
+  } else if (sourceCount) footerText = '已选 ' + sourceCount + ' 个文件 → ' + (target.path || '先在另一侧选择目录')
+
+  const sideProps = (name) => {
+    const current = side(name)
+    return {
+      side: name, deviceId: current.device, otherDeviceId: side(other(name)).device, devices,
+      deviceName: (devices.find((item) => item.device_id === current.device) || {}).name || current.device || '',
+      onDevice: (id) => { current.setDevice(id); current.setPath(''); current.setSelection([]) },
+      path: current.path, onPath: current.setPath, refreshKey,
+      selection: current.selection, onSelection: current.setSelection,
+      onEntries: name === 'left' ? setLeftEntries : setRightEntries,
+      active: activeSide === name, onActivate: () => setActiveSide(name),
+      onPointerRow: (event, item) => startRowDrag(name, event, item),
+      onContextItem: openContext(name),
+      onBlankContextItem: openContext(name),
+      onNewFolder: () => openDialog('newFolder', '', { side: name }),
+      onNewFile: () => openDialog('newFile', '', { side: name }),
+      onRename: () => { const item = current.entries.find((entry) => entry.path === current.selection[0]); if (item) openDialog('rename', item.name, { side: name, item }) },
+      onDelete: () => { void deleteSelected(name) },
+      onRefresh: refresh,
+      onDropItems: () => {
+        const dragging = dragRef.current
+        if (!dragging || dragging.side === name) return
+        const targetSide = side(name)
+        if (!targetSide.path) return
+        void startQueue(dragging.side, dragging.items.filter((entry) => !entry.dir), targetSide.path)
+        dragRef.current = null
+      }
+    }
+  }
+
+  return h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', padding: '12px 16px 14px', gap: 10, background: C.bg } },
+    h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, flex: '0 0 auto' } },
+      h('div', { style: { fontSize: 17, fontWeight: 600, color: C.ink } }, '文件转移'),
+      h('div', { style: { marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10, color: C.mute, fontSize: 11.5 } },
+        h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 5 } },
+          h('span', { style: { width: 6, height: 6, borderRadius: 3, background: C.blue } }),
+          (devices.find((item) => item.device_id === leftDevice) || {}).name || '左侧'),
+        h(Glyph, { name: 'transfer', size: 14 }),
+        h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 5 } },
+          h('span', { style: { width: 6, height: 6, borderRadius: 3, background: C.green } }),
+          (devices.find((item) => item.device_id === rightDevice) || {}).name || '右侧'))),
+    h('div', { style: { display: 'flex', gap: 8, flex: '1 1 auto', minHeight: 0 } },
+      h('div', { style: { flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', position: 'relative', outline: dropSide === 'left' ? '2px dashed ' + C.blue : 'none', outlineOffset: -2, borderRadius: 8 } },
+        FilePane(sideProps('left')),
+        dropSide === 'left' ? h('div', { style: { position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', background: 'color-mix(in srgb, ' + C.blue + ' 10%, transparent)', color: C.blue, fontSize: 12, pointerEvents: 'none', borderRadius: 8 } }, '松开，转移到这里') : null),
+      h('button', {
+        type: 'button', onClick: swap, title: '交换两侧电脑', 'aria-label': '交换两侧电脑',
+        className: 'tether-hover',
+        style: { alignSelf: 'center', width: 28, height: 28, flex: '0 0 auto', display: 'grid', placeItems: 'center',
+          border: 0, borderRadius: 999, background: C.soft, color: C.sub, cursor: 'pointer' }
+      }, h(Glyph, { name: 'transfer', size: 14 })),
+      h('div', { style: { flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', position: 'relative', outline: dropSide === 'right' ? '2px dashed ' + C.green : 'none', outlineOffset: -2, borderRadius: 8 } },
+        FilePane(sideProps('right')),
+        dropSide === 'right' ? h('div', { style: { position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', background: 'color-mix(in srgb, ' + C.green + ' 10%, transparent)', color: C.green, fontSize: 12, pointerEvents: 'none', borderRadius: 8 } }, '松开，转移到这里') : null)),
+    h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, background: C.panel, flex: '0 0 auto', minWidth: 0 } },
+      h('div', { style: { flex: '1 1 auto', minWidth: 0, display: 'grid', gap: 2 } },
+        h('div', { style: { fontSize: 12, color: C.sub, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, footerText),
+        job ? h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+          h('div', { style: { flex: '1 1 auto', height: 5, borderRadius: 999, background: C.soft, overflow: 'hidden' } },
+            h('div', { style: { width: progress + '%', height: '100%', background: job.state === 'error' ? C.red : C.blue, transition: 'width 150ms ease' } })),
+          h('span', { className: 'tether-num', style: { fontSize: 10.5, color: C.mute, whiteSpace: 'nowrap' } }, progress + '% · ' + formatBytes(job.transferred || 0) + ' / ' + formatBytes(job.total || 0))) : null),
+      job && job.state === 'running'
+        ? h('button', { type: 'button', onClick: cancel, style: { ...field, height: 28, padding: '0 12px', cursor: 'pointer' } }, '取消')
+        : !job && sourceCount && target.path
+          ? h('button', {
+            type: 'button', onClick: start, title: '转移到另一侧', 'aria-label': '转移到另一侧',
+            className: 'tether-press',
+            style: { width: 32, height: 32, flex: '0 0 auto', display: 'grid', placeItems: 'center', border: 0, borderRadius: 999,
+              background: C.blue, color: '#fff', cursor: 'pointer' }
+          }, h(Glyph, { name: 'transfer', size: 16 }))
+          : null),
+    menu ? h('div', {
+      role: 'menu', onMouseDown: (event) => event.stopPropagation(),
+      style: { position: 'fixed', left: menu.x, top: menu.y, zIndex: 2147483000, minWidth: 160, padding: 4,
+        background: C.bg, borderRadius: 8, boxShadow: '0 8px 24px rgba(16,24,40,.18)', border: '1px solid ' + C.line }
+    },
+      (menu.item ? [
+        ['复制', () => copySelection(menu.side, false)],
+        ['剪切', () => copySelection(menu.side, true)],
+        ['复制路径', () => { void copyText(menu.item.path).then((ok) => { if (onNotice) onNotice(ok ? '已复制路径' : '复制路径失败') }) }],
+        ['重命名', () => { const current = side(menu.side); const item = current.entries.find((entry) => entry.path === current.selection[0]); if (item) openDialog('rename', item.name, { side: menu.side, item }) }],
+        ['删除', () => { void deleteSelected(menu.side) }],
+        ['刷新', refresh]
+      ] : [
+        ['新建文件夹', () => openDialog('newFolder', '', { side: menu.side })],
+        ['新建文件', () => openDialog('newFile', '', { side: menu.side })],
+        clipboardRef.current ? ['粘贴到此处', () => pasteInto(menu.side)] : null,
+        ['复制当前路径', () => { void copyText(side(menu.side).path).then((ok) => { if (onNotice) onNotice(ok ? '已复制当前路径' : '复制路径失败') }) }],
+        ['刷新', refresh]
+      ]).filter(Boolean).map(([label, action]) => h('button', {
+        key: label, type: 'button',
+        onClick: () => { setMenu(null); action() },
+        className: 'tether-hover',
+        style: { display: 'block', width: '100%', padding: '6px 10px', border: 0, borderRadius: 5, background: 'transparent',
+          color: C.ink, fontSize: 12, textAlign: 'left', cursor: 'pointer' }
+      }, label))) : null,
+    drag ? h('div', {
+      style: { position: 'fixed', left: drag.x + 12, top: drag.y + 12, zIndex: 2147483000, padding: '6px 10px',
+        borderRadius: 8, background: C.primary, color: C.onPrimary, fontSize: 12, pointerEvents: 'none',
+        boxShadow: '0 8px 24px rgba(16,24,40,.24)' }
+    }, drag.items.length + ' 个文件') : null,
+    dialog ? h('div', {
+      style: { position: 'fixed', inset: 0, zIndex: 2147483000, display: 'grid', placeItems: 'center', background: 'rgba(16,24,40,.45)' },
+      onClick: (event) => { if (event.target === event.currentTarget) closeDialog() }
+    },
+      h('div', {
+        role: 'dialog', 'aria-modal': 'true',
+        onClick: (event) => event.stopPropagation(),
+        style: { width: 'min(380px, calc(100vw - 48px))', display: 'grid', gap: 12, padding: 16, borderRadius: 10, background: C.bg, color: C.ink,
+          boxShadow: '0 24px 64px rgba(16,24,40,.28)' }
+      },
+        h('div', { style: { fontSize: 14, fontWeight: 600 } },
+          dialog.kind === 'delete' ? '删除' : dialog.kind === 'conflict' ? '目标位置已有同名文件' : dialog.kind === 'rename' ? '重命名' : dialog.kind === 'newFolder' ? '新建文件夹' : '新建文件'),
+        dialog.kind === 'conflict'
+          ? h('div', { style: { color: C.sub, fontSize: 12.5, lineHeight: '19px' } },
+            dialog.destination + ' 已存在。要覆盖它，还是保留两者？')
+          : dialog.kind === 'delete'
+            ? h('div', { style: { color: C.sub, fontSize: 12.5, lineHeight: '19px' } }, '将 ' + dialog.items.length + ' 个项目移到 .tether-trash？')
+            : h('input', {
+              id: 'tether-explorer-name', value: dialogText, autoFocus: true,
+              onChange: (event) => setDialogText(event.target.value),
+              onKeyDown: (event) => { if (event.key === 'Enter') void submitName(); if (event.key === 'Escape') closeDialog() },
+              style: { ...field, height: 30, width: '100%' }
+            }),
+        h('div', { style: { display: 'flex', justifyContent: 'flex-end', gap: 8 } },
+          h('button', { type: 'button', onClick: closeDialog, style: { ...field, height: 28, padding: '0 12px', cursor: 'pointer' } }, '取消'),
+          dialog.kind === 'conflict'
+            ? h(React.Fragment, null,
+              h('button', { type: 'button', onClick: () => { const resolve = dialog.resolve; setDialog(null); resolve('keep') }, style: { ...field, height: 28, padding: '0 12px', cursor: 'pointer' } }, '保留两者'),
+              h('button', { type: 'button', onClick: () => { const resolve = dialog.resolve; setDialog(null); resolve('overwrite') }, style: { height: 28, padding: '0 12px', border: 0, borderRadius: 6, background: C.blue, color: '#fff', fontSize: 12, cursor: 'pointer' } }, '覆盖'))
+            : h('button', { type: 'button', onClick: dialog.kind === 'delete' ? confirmDelete : submitName, style: { height: 28, padding: '0 12px', border: 0, borderRadius: 6, background: C.blue, color: '#fff', fontSize: 12, cursor: 'pointer' } }, dialog.kind === 'delete' ? '删除' : '确定')))) : null)
+}
+function terminalBase64(text) {
+  const bytes = new TextEncoder().encode(String(text || ''))
+  let binary = ''
+  for (const byte of bytes) binary += String.fromCharCode(byte)
+  return btoa(binary)
+}
+
+function terminalBytes(data) {
+  const binary = atob(String(data || ''))
+  const bytes = new Uint8Array(binary.length)
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index)
+  return bytes
+}
+
+const TERM_FONT = '"Cascadia Mono", "Cascadia Code", Consolas, "Courier New", monospace'
+
+const LIGHT_THEME = {
+  background: '#ffffff', foreground: '#333333', cursor: '#333333',
+  selectionBackground: 'rgba(0, 120, 212, 0.18)',
+  black: '#000000', red: '#cd3131', green: '#107c10', yellow: '#949800',
+  blue: '#0451a5', magenta: '#bc05bc', cyan: '#0598bc', white: '#555555',
+  brightBlack: '#666666', brightRed: '#cd3131', brightGreen: '#14ce14',
+  brightYellow: '#b5ba00', brightBlue: '#0451a5', brightMagenta: '#bc05bc',
+  brightCyan: '#0598bc', brightWhite: '#a5a5a5'
+}
+
+const DARK_THEME = {
+  background: '#1e1e1e', foreground: '#cccccc', cursor: '#cccccc',
+  selectionBackground: 'rgba(255, 255, 255, 0.22)',
+  black: '#000000', red: '#cd3131', green: '#0dbc79', yellow: '#e5e510',
+  blue: '#2472c8', magenta: '#bc3fbc', cyan: '#11a8cd', white: '#e5e5e5',
+  brightBlack: '#666666', brightRed: '#f14c4c', brightGreen: '#23d18b',
+  brightYellow: '#f5f543', brightBlue: '#3b8eea', brightMagenta: '#d670d6',
+  brightCyan: '#29b8db', brightWhite: '#e5e5e5'
+}
+
+function isDarkTheme() {
+  return !!(typeof document !== 'undefined' && document.body && document.body.hasAttribute('data-ds-dark-theme'))
+}
+
+function createTerminalDock({ React, Glyph, post, C, device, cwd, height = 240, onHeight, onClose }) {
+  const h = React.createElement
+  const runtime = typeof window !== 'undefined' ? window.TetherTerminalRuntime : null
+  const [shells, setShells] = React.useState([])
+  const [shell, setShell] = React.useState('')
+  const [shellMenu, setShellMenu] = React.useState(null)
+  const [status, setStatus] = React.useState('starting')
+  const [ptyMode, setPtyMode] = React.useState(true)
+  const [terminalUser, setTerminalUser] = React.useState('')
+  const [privileged, setPrivileged] = React.useState(null)
+  const [error, setError] = React.useState('')
+  const [legacyOutput, setLegacyOutput] = React.useState('')
+  const [legacyInput, setLegacyInput] = React.useState('')
+  const [dark, setDark] = React.useState(isDarkTheme)
+  const hostRef = React.useRef(null)
+  const termRef = React.useRef(null)
+  const sessionRef = React.useRef('')
+  const shellRef = React.useRef('')
+  const ptyRef = React.useRef(true)
+  const deviceRef = React.useRef(device)
+  const postRef = React.useRef(post)
+  const actionsRef = React.useRef({ restart: () => {}, changeShell: () => {}, stop: () => {} })
+  deviceRef.current = device
+  shellRef.current = shell
+  postRef.current = post
+
+  React.useEffect(() => {
+    if (typeof MutationObserver === 'undefined' || !document.body) return undefined
+    const read = () => setDark(isDarkTheme())
+    read()
+    const observer = new MutationObserver(read)
+    observer.observe(document.body, { attributes: true, attributeFilter: ['data-ds-dark-theme', 'class', 'style'] })
+    return () => observer.disconnect()
+  }, [])
+
+  React.useEffect(() => {
+    if (termRef.current) termRef.current.options.theme = dark ? DARK_THEME : LIGHT_THEME
+  }, [dark])
+
+  React.useEffect(() => {
+    if (!shellMenu) return undefined
+    const onKey = (event) => { if (event.key === 'Escape') setShellMenu(null) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [shellMenu])
+
+  React.useEffect(() => {
+    if (!runtime || !hostRef.current) {
+      setStatus('error')
+      setError('当前宿主不支持交互终端')
+      return undefined
+    }
+    let disposed = false
+    let since = 0
+    let inFlight = false
+    let failures = 0
+    let pending = []
+    let sending = false
+    let writeTimer = null
+    let resizeTimer = null
+    let timer = null
+    const decoder = new TextDecoder()
+
+    const term = new runtime.Terminal({
+      cursorBlink: true,
+      cursorStyle: 'bar',
+      fontFamily: TERM_FONT,
+      fontSize: 12,
+      lineHeight: 1.35,
+      scrollback: 5000,
+      allowTransparency: false,
+      theme: dark ? DARK_THEME : LIGHT_THEME
+    })
+    const fit = runtime.FitAddon ? new runtime.FitAddon() : null
+    if (fit) term.loadAddon(fit)
+    term.open(hostRef.current)
+    termRef.current = term
+    if (fit) {
+      try { fit.fit() } catch (_) { /* the dock may still be laying out */ }
+    }
+
+    const url = (suffix) => '/api/devices/' + encodeURIComponent(device) + '/fs/' + suffix
+    const fitNow = () => {
+      if (!fit || !hostRef.current || disposed) return
+      if (!hostRef.current.clientWidth || !hostRef.current.clientHeight) return
+      try { fit.fit() } catch (_) { /* keep the last good size */ }
+    }
+    const stopSession = async () => {
+      const current = sessionRef.current
+      sessionRef.current = ''
+      pending = []
+      if (writeTimer) { clearTimeout(writeTimer); writeTimer = null }
+      if (!current) return
+      try {
+        await postRef.current(url('terminal_stop'), { session_id: current })
+      } catch (_) { /* node may already have closed it */ }
+    }
+    const startSession = async (shellId) => {
+      fitNow()
+      setStatus('starting')
+      setError('')
+      try {
+        const result = await postRef.current(url('terminal_start'), {
+          cwd, shell: shellId || undefined, cols: term.cols || 120, rows: term.rows || 30
+        })
+        if (disposed) {
+          if (result && result.session_id) void postRef.current(url('terminal_stop'), { session_id: result.session_id }).catch(() => {})
+          return
+        }
+        if (!result || typeof result.session_id !== 'string') throw new Error('终端没有返回会话标识')
+        sessionRef.current = result.session_id
+        since = 0
+        failures = 0
+        setTerminalUser(typeof result.user === 'string' ? result.user : '')
+        setPrivileged(typeof result.privileged === 'boolean' ? result.privileged : null)
+        const interactive = result.pty === true
+        ptyRef.current = interactive
+        setPtyMode(interactive)
+        setLegacyOutput('')
+        setStatus('ready')
+        try { term.reset() } catch (_) { /* first open */ }
+        term.focus()
+        if (fit) {
+          try { fit.fit() } catch (_) {}
+          void postRef.current(url('terminal_resize'), {
+            session_id: result.session_id, cols: term.cols, rows: term.rows
+          }).catch(() => {})
+        }
+      } catch (cause) {
+        if (disposed) return
+        setStatus('error')
+        setError(String((cause && (cause.message || cause.code)) || '终端启动失败'))
+      }
+    }
+    const pump = async () => {
+      if (sending || disposed) return
+      sending = true
+      while (pending.length && !disposed) {
+        const current = sessionRef.current
+        if (!current) { pending = []; break }
+        const data = pending.join('')
+        pending = []
+        try {
+          await postRef.current(url('terminal_write'), { session_id: current, data: terminalBase64(data) })
+        } catch (cause) {
+          if (!disposed) {
+            setStatus('error')
+            setError(String((cause && (cause.message || cause.code)) || '命令发送失败'))
+          }
+          pending = []
+          break
+        }
+      }
+      sending = false
+    }
+    const queueInput = (data) => {
+      if (!ptyRef.current || !sessionRef.current || !data) return
+      pending.push(data)
+      if (!writeTimer) writeTimer = setTimeout(() => { writeTimer = null; void pump() }, 15)
+    }
+    const tick = async () => {
+      if (disposed || document.hidden || inFlight) return
+      const current = sessionRef.current
+      if (!current) return
+      inFlight = true
+      try {
+        const result = await postRef.current(url('terminal_poll'), { session_id: current, since })
+        if (disposed || !result) return
+        failures = 0
+        since = Number(result.next) || since
+        const chunk = terminalBytes(result.data)
+        if (chunk.length) {
+          if (ptyRef.current) term.write(chunk)
+          else setLegacyOutput((text) => (result.reset ? '' : text) + decoder.decode(chunk, { stream: true }))
+        }
+        if (result.closed) {
+          if (sessionRef.current === current) {
+            sessionRef.current = ''
+            setStatus('ended')
+            if (ptyRef.current) term.write('\r\n\x1b[90m[进程已退出]\x1b[0m\r\n')
+          }
+        }
+      } catch (cause) {
+        failures += 1
+        if (failures >= 3 && !disposed) {
+          sessionRef.current = ''
+          setStatus('error')
+          setError(String((cause && (cause.message || cause.code)) || '终端输出读取失败'))
+        }
+      } finally {
+        inFlight = false
+      }
+    }
+    const applyResize = () => {
+      fitNow()
+      if (resizeTimer) clearTimeout(resizeTimer)
+      resizeTimer = setTimeout(() => {
+        const current = sessionRef.current
+        if (!current || disposed) return
+        void postRef.current(url('terminal_resize'), {
+          session_id: current, cols: term.cols, rows: term.rows
+        }).catch(() => {})
+      }, 120)
+    }
+    const dataSub = term.onData(queueInput)
+    const clickFocus = () => term.focus()
+    const host = hostRef.current
+    host.addEventListener('pointerdown', clickFocus)
+    term.attachCustomKeyEventHandler((event) => {
+      if (event.type !== 'keydown' || !event.ctrlKey || !event.shiftKey) return true
+      if (event.code === 'KeyC') {
+        const selection = term.getSelection()
+        if (selection && navigator.clipboard) void navigator.clipboard.writeText(selection).catch(() => {})
+        return false
+      }
+      if (event.code === 'KeyV' && navigator.clipboard) {
+        void navigator.clipboard.readText().then((text) => { if (text) term.paste(text) }).catch(() => {})
+        return false
+      }
+      return true
+    })
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(applyResize) : null
+    if (observer) observer.observe(host)
+
+    actionsRef.current = {
+      restart: () => { const current = shellRef.current; void stopSession().then(() => startSession(current)) },
+      changeShell: (next) => {
+        setShell(next)
+        shellRef.current = next
+        void stopSession().then(() => startSession(next))
+      },
+      stop: () => { void stopSession() }
+    }
+
+    const boot = async () => {
+      try {
+        const catalog = await postRef.current(url('terminal_shells'), {})
+        if (disposed) return
+        const list = (catalog && Array.isArray(catalog.shells) ? catalog.shells : [])
+          .filter((item) => item && item.available)
+        setShells(list)
+        const preferred = (list.find((item) => item.default) || list[0] || {}).id || ''
+        setShell(preferred)
+        shellRef.current = preferred
+        await startSession(preferred)
+      } catch (cause) {
+        if (!disposed) {
+          setStatus('error')
+          setError(String((cause && (cause.message || cause.code)) || '无法读取终端类型'))
+        }
+      }
+    }
+    void boot()
+    timer = setInterval(tick, 60)
+    void tick()
+
+    return () => {
+      disposed = true
+      if (timer) clearInterval(timer)
+      if (writeTimer) clearTimeout(writeTimer)
+      if (resizeTimer) clearTimeout(resizeTimer)
+      if (observer) observer.disconnect()
+      dataSub.dispose()
+      host.removeEventListener('pointerdown', clickFocus)
+      const current = sessionRef.current
+      sessionRef.current = ''
+      if (current) void postRef.current(url('terminal_stop'), { session_id: current }).catch(() => {})
+      termRef.current = null
+      try { term.dispose() } catch (_) {}
+    }
+  }, [device, cwd])
+
+  const sendLegacy = async (event) => {
+    event.preventDefault()
+    const current = sessionRef.current
+    const command = legacyInput
+    if (!current || !command.trim()) return
+    setLegacyInput('')
+    const name = (shells.find((item) => item.id === shell) || {}).name || shell || 'shell'
+    setLegacyOutput((text) => text + name + '> ' + command + '\n')
+    try {
+      await post('/api/devices/' + encodeURIComponent(deviceRef.current) + '/fs/terminal_write', {
+        session_id: current, data: terminalBase64(command + '\n')
+      })
+    } catch (cause) {
+      setStatus('error')
+      setError(String((cause && (cause.message || cause.code)) || '命令发送失败'))
+    }
+  }
+
+  const beginResize = (event) => {
+    if (!onHeight) return
+    event.preventDefault()
+    const startY = event.clientY
+    const startHeight = height
+    const move = (ev) => onHeight(Math.max(160, Math.min(window.innerHeight * 0.7, startHeight + (startY - ev.clientY))))
+    const done = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', done)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', done)
+  }
+
+  const shellLabel = (shells.find((item) => item.id === shell) || {}).name || shell || '终端'
+  const openShellMenu = (event) => {
+    if (!shells.length) return
+    const rect = event.currentTarget.getBoundingClientRect()
+    const width = Math.max(176, Math.ceil(rect.width))
+    const height = shells.length * 30 + 8
+    const openUp = window.innerHeight - rect.bottom < height + 8
+    setShellMenu({
+      left: Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)),
+      top: Math.max(8, openUp ? rect.top - height - 4 : rect.bottom + 4),
+      width
+    })
+  }
+
+  const palette = dark
+    ? { term: '#1e1e1e', chrome: '#252526', ink: '#d4d4d4', mute: '#9da0a6', line: 'rgba(255,255,255,.07)', hover: 'rgba(255,255,255,.08)' }
+    : { term: '#ffffff', chrome: '#f4f4f5', ink: '#2f3033', mute: '#77787c', line: 'rgba(0,0,0,.07)', hover: 'rgba(0,0,0,.06)' }
+  const menuBg = dark ? '#2b2b2e' : '#ffffff'
+  const menuShadow = dark ? '0 10px 28px rgba(0, 0, 0, 0.5)' : (C.shadow || '0 8px 24px rgba(16, 24, 40, 0.12)')
+  const dot = status === 'ready' ? (C.green || '#16a34a')
+    : status === 'starting' ? (C.amber || '#b54708')
+      : (status === 'ended' ? (C.mute || '#667085') : (C.red || '#b42318'))
+  const statusLabel = status === 'ready' ? '已连接' : status === 'starting' ? '正在启动' : status === 'ended' ? '已退出' : '连接失败'
+  const iconButton = {
+    width: 22, height: 22, display: 'grid', placeItems: 'center', border: 0, borderRadius: 5,
+    background: 'transparent', color: palette.mute, cursor: 'pointer', padding: 0, flex: '0 0 auto'
+  }
+
+  return h('div', {
+    style: {
+      flex: '0 0 auto', height, minHeight: 160, display: 'flex', flexDirection: 'column',
+      position: 'relative', overflow: 'hidden', borderRadius: '8px 8px 0 0',
+      background: palette.term, boxShadow: 'inset 0 1px 0 ' + palette.line
+    }
+  },
+    h('div', {
+      onPointerDown: beginResize, title: '拖动调整高度',
+      style: { height: 6, flex: '0 0 auto', cursor: 'row-resize', display: 'flex', alignItems: 'center', justifyContent: 'center', background: palette.chrome }
+    }, h('div', { style: { width: 36, height: 2, borderRadius: 2, background: palette.line } })),
+    h('div', {
+      style: { display: 'flex', alignItems: 'center', gap: 6, height: 28, padding: '0 6px 0 8px', flex: '0 0 auto', background: palette.chrome, color: palette.ink }
+    },
+      h('span', { style: { display: 'grid', placeItems: 'center', color: palette.mute, flex: '0 0 auto' } },
+        h(Glyph, { name: 'terminal', size: 13 })),
+      h('button', {
+        type: 'button', 'aria-label': '终端类型', 'aria-haspopup': 'listbox', 'aria-expanded': !!shellMenu,
+        title: '目标机可用的终端类型', disabled: !shells.length,
+        onClick: openShellMenu, className: 'tether-hover',
+        style: {
+          height: 20, maxWidth: 160, border: 0, borderRadius: 4, padding: '0 3px',
+          background: 'transparent', color: palette.ink, fontSize: 11.5,
+          cursor: shells.length ? 'pointer' : 'default', display: 'flex', alignItems: 'center', gap: 2, flex: '0 0 auto'
+        }
+      },
+        h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, shellLabel),
+        h(Glyph, { name: 'chevronDown', size: 10 })),
+      terminalUser || privileged !== null ? h('span', {
+        title: '终端运行身份',
+        style: {
+          fontSize: 10, flex: '0 0 auto', padding: '1px 6px', borderRadius: 999,
+          color: privileged ? (C.green || '#16a34a') : (C.amber || '#b54708'),
+          background: privileged ? 'color-mix(in srgb, ' + (C.green || '#16a34a') + ' 12%, transparent)' : 'color-mix(in srgb, ' + (C.amber || '#b54708') + ' 12%, transparent)'
+        }
+      }, (terminalUser || 'user') + (privileged ? ' · 管理员' : ' · 普通用户')) : null,
+      ptyMode === false ? h('span', { style: { fontSize: 10, color: C.amber || '#b54708', flex: '0 0 auto' } }, '兼容模式') : null,
+      h('span', {
+        title: cwd,
+        style: { flex: '1 1 auto', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11, color: palette.mute }
+      }, cwd || ''),
+      h('span', { title: statusLabel, 'aria-label': statusLabel, style: { width: 6, height: 6, borderRadius: 99, background: dot, flex: '0 0 auto' } }),
+      h('button', {
+        type: 'button', title: '在此目录重启终端', 'aria-label': '在此目录重启终端',
+        onClick: () => actionsRef.current.restart(),
+        style: iconButton
+      }, h(Glyph, { name: 'refresh', size: 13 })),
+      h('button', {
+        type: 'button', title: '关闭终端', 'aria-label': '关闭终端',
+        onClick: () => { actionsRef.current.stop(); if (onClose) onClose() },
+        style: { ...iconButton, color: palette.ink, fontSize: 16, lineHeight: 1 }
+      }, '×')
+    ),
+    shellMenu ? h('div', {
+      onPointerDown: () => setShellMenu(null),
+      style: { position: 'fixed', inset: 0, zIndex: 129 }
+    }) : null,
+    shellMenu ? h('div', {
+      role: 'listbox', 'aria-label': '终端类型',
+      onPointerDown: (event) => event.stopPropagation(),
+      style: {
+        position: 'fixed', left: shellMenu.left, top: shellMenu.top, width: shellMenu.width, zIndex: 130,
+        padding: 4, borderRadius: 8, background: menuBg, boxShadow: menuShadow,
+        border: '1px solid ' + palette.line
+      }
+    }, shells.map((item) => h('button', {
+      key: item.id, type: 'button', role: 'option', 'aria-selected': item.id === shell,
+      className: 'tether-hover',
+      onClick: () => { setShellMenu(null); if (item.id !== shell) actionsRef.current.changeShell(item.id) },
+      style: {
+        display: 'flex', alignItems: 'center', gap: 6, width: '100%', height: 30,
+        padding: '0 8px', border: 0, borderRadius: 5, fontSize: 12.5, textAlign: 'left', cursor: 'pointer',
+        background: item.id === shell ? (dark ? 'rgba(255,255,255,.06)' : 'rgba(21,112,239,.08)') : 'transparent',
+        color: item.id === shell ? (C.blue || '#1570ef') : palette.ink
+      }
+    },
+      h('span', { style: { flex: '1 1 auto', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, item.name),
+      item.id === shell ? h('span', { style: { fontSize: 11, color: C.blue || '#1570ef' } }, '✓') : null
+    ))) : null,
+    error ? h('div', {
+      style: { flex: '0 0 auto', padding: '3px 10px', fontSize: 11, color: C.red || '#b42318', background: dark ? 'rgba(244,63,94,.10)' : 'rgba(180,35,24,.06)' }
+    }, error) : null,
+    h('div', { className: 'tether-term-body', style: { flex: '1 1 auto', minHeight: 0, padding: '4px 6px 4px', background: palette.term } },
+      h('div', { ref: hostRef, className: 'tether-term', style: { width: '100%', height: '100%' } })
+    ),
+    ptyMode === false ? h('div', { style: { flex: '0 0 auto', background: palette.term, color: dark ? '#cccccc' : '#333333' } },
+      h('pre', {
+        style: {
+          margin: 0, padding: '0 10px 4px', maxHeight: 120, overflow: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+          fontFamily: TERM_FONT, fontSize: 12, lineHeight: 1.5
+        }
+      }, legacyOutput || '兼容模式：节点尚未提供交互式伪终端。'),
+      h('form', { onSubmit: sendLegacy, style: { display: 'flex', alignItems: 'center', gap: 6, padding: '0 8px 6px' } },
+        h('span', { style: { color: palette.mute, fontFamily: TERM_FONT, fontSize: 12 } }, '>'),
+        h('input', {
+          value: legacyInput, spellCheck: false, 'aria-label': '终端命令', placeholder: '输入命令，Enter 执行',
+          onChange: (event) => setLegacyInput(event.target.value),
+          style: {
+            flex: '1 1 auto', minWidth: 0, height: 26, border: 0, outline: 'none', padding: '0 4px',
+            background: 'transparent', color: 'inherit', fontFamily: TERM_FONT, fontSize: 12
+          }
+        })
+      )
+    ) : null
+  )
+}
+function createAppsPage({ React, Glyph, post, C, devices = [], localDevice = '', onError }) {
+  const h = React.createElement
+  const online = devices.filter((item) => item && item.online)
+  const initial = localDevice && online.some((item) => item.device_id === localDevice)
+    ? localDevice
+    : (online[0] && online[0].device_id) || ''
+  const [device, setDevice] = React.useState(initial)
+  const [apps, setApps] = React.useState([])
+  const [reason, setReason] = React.useState('')
+  const [loading, setLoading] = React.useState(false)
+  const [open, setOpen] = React.useState(null)
+  const [frameKey, setFrameKey] = React.useState(0)
+  const requestRef = React.useRef(0)
+
+  const load = async (id) => {
+    if (!id) return
+    const seq = ++requestRef.current
+    setLoading(true)
+    try {
+      const result = await post('/api/devices/' + encodeURIComponent(id) + '/fs/apps_list', {})
+      if (seq !== requestRef.current) return
+      setApps(Array.isArray(result && result.apps) ? result.apps : [])
+      setReason(String((result && result.reason) || ''))
+    } catch (error) {
+      if (seq !== requestRef.current) return
+      setApps([])
+      setReason('')
+      if (onError) onError(error)
+    } finally {
+      if (seq === requestRef.current) setLoading(false)
+    }
+  }
+
+  React.useEffect(() => { void load(device) }, [device])
+
+  const selectDevice = (value) => {
+    setOpen(null)
+    setApps([])
+    setDevice(value)
+  }
+
+  const field = {
+    height: 28, boxSizing: 'border-box', border: '1px solid ' + C.line,
+    borderRadius: 7, padding: '0 9px', background: C.bg, color: C.ink, fontSize: 12
+  }
+  const button = {
+    height: 28, padding: '0 14px', border: 0, borderRadius: 7, fontSize: 12,
+    cursor: 'pointer', color: '#fff', background: C.blue
+  }
+  const hint = reason === 'mesh_unavailable' ? '目标电脑未接入虚拟内网，暂时无法转发本机应用'
+    : reason === 'no_apps' ? '目标电脑没有登记可打开的应用'
+    : reason === 'bind_failed' ? '目标电脑无法绑定虚拟内网端口'
+    : '只转发目标电脑上登记的回环 HTTP 服务'
+  return h('div', { style: { flex: '1 1 auto', minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column', gap: 10, padding: 12, background: C.bg } },
+    h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flex: '0 0 auto' } },
+      h('select', {
+        value: device, 'aria-label': '应用目标设备', title: '选择要打开应用的电脑',
+        onChange: (event) => { selectDevice(event.target.value); event.currentTarget.blur() },
+        style: { ...field, minWidth: 180 }
+      },
+        !online.length ? h('option', { value: '' }, '没有在线设备') : null,
+        online.map((item) => h('option', { key: item.device_id, value: item.device_id }, item.name || item.device_id))
+      ),
+      h('button', { type: 'button', onClick: () => void load(device), disabled: loading || !device,
+        title: '刷新应用列表', 'aria-label': '刷新应用列表',
+        style: { ...button, padding: '0 10px', opacity: loading || !device ? 0.5 : 1 } }, '刷新'),
+      h('span', { style: { marginLeft: 'auto', fontSize: 11, color: C.mute } }, hint)
+    ),
+    loading && !apps.length
+      ? h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', color: C.mute, fontSize: 12 } }, '正在读取应用…')
+      : h('div', {
+        style: { flex: '1 1 auto', minHeight: 0, overflow: 'auto', display: 'grid', gap: 10, alignContent: 'start',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(235px, 1fr))' }
+      },
+        apps.length ? apps.map((app) => h('button', {
+          key: app.id, type: 'button', onClick: () => { setOpen(app); setFrameKey((value) => value + 1) },
+          className: 'tether-press tether-hover',
+          style: { display: 'flex', alignItems: 'center', gap: 10, padding: 12, textAlign: 'left',
+            border: '1px solid ' + C.line, borderRadius: 10, background: C.panel || C.bg, color: C.ink, cursor: 'pointer' }
+        },
+          h('span', { style: { width: 34, height: 34, flex: '0 0 auto', display: 'grid', placeItems: 'center',
+            borderRadius: 9, background: C.soft, color: C.blue } }, h(Glyph, { name: app.kind === 'dsh' ? 'monitor' : 'apps', size: 18 })),
+          h('span', { style: { minWidth: 0, display: 'grid', gap: 2 } },
+            h('span', { style: { fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, app.name),
+            h('span', { style: { fontSize: 11, color: C.mute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
+              app.kind === 'dsh' ? '本机 DSH' : String(app.url || '').replace(/^https?:\/\//, ''))
+          )
+        )) : h('div', { style: { gridColumn: '1 / -1', padding: 24, textAlign: 'center', color: C.mute, fontSize: 12 } },
+          online.length ? '没有可打开的应用。在目标电脑的 apps.json 里登记 name、port 与 path 后刷新；DSH 请用“原生工作区”。' : '没有在线设备')
+      ),
+    open ? h('div', {
+      style: { position: 'absolute', inset: 0, zIndex: 8, display: 'flex', flexDirection: 'column',
+        background: C.bg, borderRadius: 10, border: '1px solid ' + C.line, overflow: 'hidden' }
+    },
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderBottom: '1px solid ' + C.line, flex: '0 0 auto' } },
+        h('span', { style: { fontSize: 12, fontWeight: 500, color: C.ink } }, open.name),
+        h('span', { style: { fontSize: 11, color: C.mute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
+          String(open.url || '').replace(/^https?:\/\//, '') + (open.path || '/')),
+        h('span', { style: { marginLeft: 'auto', display: 'flex', gap: 6 } },
+          h('button', { type: 'button', onClick: () => setFrameKey((value) => value + 1), title: '重新加载应用', 'aria-label': '重新加载应用',
+            style: { ...field, cursor: 'pointer', background: 'transparent' } }, '刷新'),
+          h('button', { type: 'button', onClick: () => setOpen(null), title: '关闭应用', 'aria-label': '关闭应用',
+            style: { ...field, cursor: 'pointer', background: 'transparent' } }, '关闭')
+        )
+      ),
+      h('iframe', {
+        key: frameKey, title: open.name, src: (open.url || '') + (open.path || '/'),
+        style: { flex: '1 1 auto', width: '100%', minHeight: 0, border: 0, background: '#fff' },
+        sandbox: 'allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-downloads'
+      })
+    ) : null
+  )
+}
+function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '', onError }) {
+  const h = React.createElement
+  const online = devices.filter((item) => item && item.online)
+  const initial = localDevice && online.some((item) => item.device_id === localDevice)
+    ? localDevice
+    : (online[0] && online[0].device_id) || ''
+  const [device, setDevice] = React.useState(initial)
+  const [harnesses, setHarnesses] = React.useState([])
+  const [detecting, setDetecting] = React.useState(false)
+  const [session, setSession] = React.useState('')
+  const [harness, setHarness] = React.useState(null)
+  const [output, setOutput] = React.useState('')
+  const [input, setInput] = React.useState('')
+  const [busy, setBusy] = React.useState(false)
+  const [ready, setReady] = React.useState(false)
+  const [agent, setAgent] = React.useState(null)
+  const [models, setModels] = React.useState([])
+  const [model, setModel] = React.useState('')
+  const [commands, setCommands] = React.useState([])
+  const [pending, setPending] = React.useState([])
+  const [tabs, setTabs] = React.useState([])
+  const [picking, setPicking] = React.useState(false)
+  const since = React.useRef(0)
+  const sessionRef = React.useRef('')
+  const tabCache = React.useRef({})
+  const outputRef = React.useRef(null)
+
+  const updateTab = (id, patch) => setTabs((current) => current.map((tab) => tab.id === id ? { ...tab, ...patch } : tab))
+  const saveTab = () => {
+    const id = sessionRef.current
+    if (!id) return
+    tabCache.current[id] = { output, ready, agent, models, model, commands, pending, since: since.current }
+  }
+  const loadTab = (id) => {
+    const cached = tabCache.current[id] || {}
+    sessionRef.current = id
+    setSession(id)
+    setOutput(cached.output || '')
+    setReady(!!cached.ready)
+    setAgent(cached.agent || null)
+    setModels(cached.models || [])
+    setModel(cached.model || '')
+    setCommands(cached.commands || [])
+    setPending(cached.pending || [])
+    setInput('')
+    since.current = Number(cached.since) || 0
+    setPicking(false)
+  }
+  const clearSession = () => {
+    sessionRef.current = ''
+    setSession('')
+    setReady(false)
+    setAgent(null)
+    setModels([])
+    setModel('')
+    setCommands([])
+    setPending([])
+    setOutput('')
+    setInput('')
+    since.current = 0
+  }
+  const tabColor = (status) => status === 'ready' ? 'var(--dsw-alias-state-success-primary, #16a34a)'
+    : status === 'error' ? 'var(--dsw-alias-state-error-primary, #b42318)'
+      : status === 'ended' ? C.mute : 'var(--dsw-alias-state-warn-primary, #b54708)'
+
+  const fail = (error) => {
+    const message = String((error && error.message) || error || 'Agents 操作失败')
+    setOutput((current) => current + (current && !current.endsWith('\n') ? '\n' : '') + message + '\n')
+    if (onError) onError(error)
+  }
+
+  const detect = async (id) => {
+    if (!id) return
+    setDetecting(true)
+    try {
+      const result = await post('/api/devices/' + encodeURIComponent(id) + '/fs/acp_detect', {})
+      setHarnesses(Array.isArray(result && result.harnesses) ? result.harnesses : [])
+    } catch (error) {
+      setHarnesses([])
+      fail(error)
+    } finally {
+      setDetecting(false)
+    }
+  }
+
+  React.useEffect(() => { void detect(device) }, [device])
+
+  const closeTab = async (id) => {
+    if (!id) return
+    const remaining = tabs.filter((tab) => tab.id !== id)
+    delete tabCache.current[id]
+    setTabs(remaining)
+    if (sessionRef.current === id) {
+      if (remaining.length) loadTab(remaining[remaining.length - 1].id)
+      else clearSession()
+    }
+    try {
+      await post('/api/devices/' + encodeURIComponent(device) + '/fs/acp_stop', { session_id: id })
+    } catch (_) { /* node may have already closed the session */ }
+  }
+
+  const stop = async () => { await closeTab(sessionRef.current) }
+
+  const selectTab = (id) => {
+    if (!id || id === sessionRef.current) return
+    saveTab()
+    loadTab(id)
+  }
+
+  const start = async (item) => {
+    if (!item || busy) return
+    saveTab()
+    setBusy(true)
+    try {
+      const result = await post('/api/devices/' + encodeURIComponent(device) + '/fs/acp_start',
+        { harness: item.id })
+      if (!result || typeof result.session_id !== 'string') throw new Error('Agent 没有返回会话标识')
+      const name = item.name || item.id
+      sessionRef.current = result.session_id
+      since.current = 0
+      setPending([])
+      setReady(false)
+      setAgent(null)
+      setModels([])
+      setModel('')
+      setCommands([])
+      setSession(result.session_id)
+      setHarness(item)
+      setInput('')
+      setPicking(false)
+      setOutput('ACP · ' + name + '\n' + (result.cwd || '') + '\n\n')
+      setTabs((current) => [...current, { id: result.session_id, name, harness: item.id, status: 'starting' }])
+    } catch (error) {
+      fail(error)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const send = async (event) => {
+    if (event) event.preventDefault()
+    const text = input
+    if (!session || !text.trim()) return
+    setInput('')
+    setOutput((current) => current + '> ' + text + '\n')
+    try {
+      await post('/api/devices/' + encodeURIComponent(device) + '/fs/acp_prompt', {
+        session_id: session, text
+      })
+    } catch (error) {
+      fail(error)
+    }
+  }
+
+  const reply = async (requestId, optionId) => {
+    if (!session) return
+    setPending((current) => current.filter((item) => item.requestId !== requestId))
+    try {
+      await post('/api/devices/' + encodeURIComponent(device) + '/fs/acp_reply', {
+        session_id: session, request_id: requestId,
+        outcome: { outcome: 'selected', optionId }
+      })
+    } catch (error) {
+      fail(error)
+    }
+  }
+
+  const changeModel = async (modelId) => {
+    if (!session || !modelId) return
+    setModel(modelId)
+    try {
+      await post('/api/devices/' + encodeURIComponent(device) + '/fs/acp_set_model', {
+        session_id: session, model: modelId
+      })
+      setOutput((current) => current + '[模型] ' + modelId + '\n')
+    } catch (error) {
+      fail(error)
+    }
+  }
+
+  React.useEffect(() => {
+    if (!session) return undefined
+    let disposed = false
+    let inFlight = false
+    const tick = async () => {
+      if (disposed || document.hidden || inFlight) return
+      inFlight = true
+      try {
+        const result = await post('/api/devices/' + encodeURIComponent(device) + '/fs/acp_poll',
+          { session_id: session, since: since.current })
+        if (disposed || !result) return
+        since.current = Number(result.next) || since.current
+        const lines = []
+        let chunk = ''
+        const flush = () => { if (chunk) { lines.push(chunk); chunk = '' } }
+        for (const item of result.events || []) {
+          const event = item.event || {}
+          if (event.type === 'notification' && event.method === 'session/update') {
+            const update = (event.params && event.params.update) || {}
+            const content = update.content || {}
+            if (update.sessionUpdate === 'agent_message_chunk' && content.type === 'text') { chunk += content.text; continue }
+            flush()
+            if (update.sessionUpdate === 'available_commands_update' && Array.isArray(update.availableCommands)) {
+              setCommands(update.availableCommands.filter((item) => item && item.name).slice(0, 12))
+            } else if (update.sessionUpdate === 'tool_call' && update.title) lines.push('[工具] ' + update.title)
+            else if (update.sessionUpdate === 'plan' && Array.isArray(update.entries)) {
+              lines.push('[计划]\n' + update.entries.map((entry) => '· ' + (entry.content || entry.title || '')).join('\n'))
+            }
+          } else if (event.type === 'request' && event.method === 'session/request_permission') {
+            flush()
+            const params = event.params || {}
+            const title = (params.toolCall && params.toolCall.title) || '工具调用'
+            const options = Array.isArray(params.options) ? params.options : []
+            const choices = options.map((option) => option.name || option.optionId).join(' / ')
+            lines.push('[需要授权] ' + title + '：' + (choices || '无选项') + ' #' + event.id)
+            setPending((current) => current.some((item) => item.requestId === event.id) ? current
+              : [...current, { requestId: event.id, options }])
+          } else if (event.type === 'ready') {
+            flush()
+            setReady(true)
+            setAgent(event.agent || null)
+            const available = (event.models && event.models.availableModels) || []
+            setModels(available)
+            setModel((event.models && (event.models.currentModelId || event.models.currentModel)) || (available[0] && available[0].modelId) || '')
+            const label = event.agent && (event.agent.title || event.agent.name)
+            updateTab(session, label ? { status: 'ready', name: label } : { status: 'ready' })
+            lines.push('[就绪]')
+          } else if (event.type === 'result') {
+            flush()
+            const reason = (event.result && event.result.stopReason) || 'done'
+            lines.push('[完成] ' + reason)
+          } else if (event.type === 'error') {
+            flush()
+            setReady(false)
+            updateTab(session, { status: 'error' })
+            lines.push('[错误] ' + String(event.error || 'ACP error'))
+          } else if (event.type === 'closed') {
+            flush()
+            updateTab(session, { status: 'ended' })
+            setReady(false)
+            lines.push('[会话结束]')
+          }
+        }
+        flush()
+        if (lines.length) setOutput((current) => current + lines.join('\n') + '\n')
+        if (result.closed && sessionRef.current === session) {
+          setReady(false)
+          updateTab(session, { status: 'ended' })
+        }
+      } catch (error) {
+        if (!disposed) fail(error)
+      } finally {
+        inFlight = false
+      }
+    }
+    const timer = setInterval(tick, 250)
+    void tick()
+    return () => { disposed = true; clearInterval(timer) }
+  }, [session, device])
+
+  React.useEffect(() => {
+    if (session) tabCache.current[session] = { output, ready, agent, models, model, commands, pending, since: since.current }
+  }, [session, output, ready, agent, models, model, commands, pending])
+
+  React.useEffect(() => {
+    if (outputRef.current) outputRef.current.scrollTop = outputRef.current.scrollHeight
+  }, [output])
+
+  React.useEffect(() => () => {
+    const ids = new Set(Object.keys(tabCache.current))
+    if (sessionRef.current) ids.add(sessionRef.current)
+    for (const id of ids) {
+      void post('/api/devices/' + encodeURIComponent(device) + '/fs/acp_stop', { session_id: id }).catch(() => {})
+    }
+  }, [])
+
+  const selectDevice = async (value) => {
+    const ids = tabs.map((tab) => tab.id)
+    setTabs([])
+    tabCache.current = {}
+    clearSession()
+    setHarness(null)
+    setPicking(false)
+    setDevice(value)
+    for (const id of ids) {
+      try { await post('/api/devices/' + encodeURIComponent(device) + '/fs/acp_stop', { session_id: id }) } catch (_) { /* already closed */ }
+    }
+  }
+
+  const field = {
+    height: 28, boxSizing: 'border-box', border: '1px solid ' + C.line,
+    borderRadius: 7, padding: '0 9px', background: C.bg, color: C.ink, fontSize: 12
+  }
+  const button = {
+    height: 28, padding: '0 14px', border: 0, borderRadius: 7, fontSize: 12,
+    cursor: 'pointer', color: '#fff', background: C.blue
+  }
+  return h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', gap: 8, padding: 10, background: C.bg } },
+    h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flex: '0 0 auto' } },
+      h('select', {
+        value: device, 'aria-label': 'Agent 目标设备', title: '选择要运行 Agent 的电脑',
+        onChange: (event) => { void selectDevice(event.target.value); event.currentTarget.blur() },
+        style: { ...field, minWidth: 180 }
+      },
+        !online.length ? h('option', { value: '' }, '没有在线设备') : null,
+        online.map((item) => h('option', { key: item.device_id, value: item.device_id }, item.name || item.device_id))
+      ),
+      h('button', { type: 'button', onClick: () => void detect(device), disabled: detecting || !device,
+        style: { ...button, padding: '0 10px', opacity: detecting || !device ? 0.5 : 1 } }, detecting ? '检测中…' : '刷新'),
+      h('button', { type: 'button', disabled: !session, onClick: () => void stop(),
+        style: { ...field, cursor: session ? 'pointer' : 'default', opacity: session ? 1 : 0.5, background: 'transparent' } }, '停止'),
+      h('span', { style: { marginLeft: 'auto', fontSize: 11, color: session ? C.green : C.mute } },
+        session ? '已连接' : '未连接'),
+      session && agent ? h('span', { style: { display: 'flex', alignItems: 'center', gap: 5, padding: '0 8px', height: 24,
+        borderRadius: 999, background: C.soft, color: C.ink, fontSize: 11 } },
+        h(Glyph, { name: 'bot', size: 14 }),
+        h('span', null, (agent.title || agent.name || 'Agent') + (agent.version ? ' ' + agent.version : ''))) : null,
+      session && models.length ? h('select', {
+        value: model, 'aria-label': '模型', title: '切换模型',
+        onChange: (event) => void changeModel(event.target.value),
+        style: { ...field, maxWidth: 230 }
+      }, models.map((item) => h('option', { key: item.modelId, value: item.modelId, title: item.description || '' },
+        item.name || item.modelId))) : null
+    ),
+    tabs.length ? h('div', { style: { display: 'flex', alignItems: 'center', gap: 4, flex: '0 0 auto', overflowX: 'auto' } },
+      tabs.map((tab) => h('div', {
+        key: tab.id, role: 'tab', 'aria-selected': tab.id === session ? 'true' : 'false',
+        onClick: () => selectTab(tab.id),
+        style: { display: 'flex', alignItems: 'center', gap: 6, height: 26, padding: '0 5px 0 9px', borderRadius: 7,
+          cursor: 'pointer', background: tab.id === session ? C.soft : 'transparent', color: tab.id === session ? C.ink : C.sub,
+          border: '1px solid ' + (tab.id === session ? C.line : 'transparent'), whiteSpace: 'nowrap' }
+      },
+        h('span', { style: { width: 6, height: 6, borderRadius: 3, background: tabColor(tab.status), flex: '0 0 auto' } }),
+        h('span', { style: { fontSize: 11 } }, tab.name),
+        h('button', {
+          type: 'button', title: '关闭 ' + tab.name, 'aria-label': '关闭 ' + tab.name,
+          onClick: (event) => { event.stopPropagation(); void closeTab(tab.id) },
+          style: { width: 18, height: 18, display: 'grid', placeItems: 'center', border: 0, borderRadius: 4,
+            background: 'transparent', color: C.mute, fontSize: 12, cursor: 'pointer', padding: 0 }
+        }, '×')
+      )),
+      h('button', { type: 'button', title: '再开一个 Agent', 'aria-label': '再开一个 Agent',
+        onClick: () => setPicking(true),
+        style: { ...field, height: 26, padding: '0 9px', cursor: 'pointer' } }, '+')
+    ) : null,
+    !session || picking ? h('div', {
+      style: { flex: '0 0 auto', display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }
+    },
+      harnesses.length ? harnesses.map((item) => h('button', {
+        key: item.id, type: 'button', onClick: () => void start(item), disabled: busy,
+        className: 'tether-press tether-hover',
+        style: { display: 'flex', alignItems: 'center', gap: 10, padding: 10, textAlign: 'left',
+          border: '1px solid ' + C.line, borderRadius: 10, background: C.panel || C.bg, color: C.ink, cursor: 'pointer' }
+      },
+        h('span', { style: { width: 30, height: 30, flex: '0 0 auto', display: 'grid', placeItems: 'center',
+          borderRadius: 8, background: C.soft, color: C.blue } }, h(Glyph, { name: 'bot', size: 16 })),
+        h('span', { style: { minWidth: 0, display: 'grid', gap: 2 } },
+          h('span', { style: { fontSize: 13, fontWeight: 500 } }, item.name || item.id),
+          h('span', { style: { fontSize: 11, color: C.mute } }, item.command || item.id))
+      )) : h('div', { style: { gridColumn: '1 / -1', padding: 16, color: C.mute, fontSize: 12 } },
+        detecting ? '正在检测本机 Agent…' : '没有检测到 ACP Harness。先在目标电脑装好 Gemini CLI / OpenCode / Claude Code adapter / Codex adapter。')
+    ) : null,
+    h('pre', {
+      ref: outputRef,
+      style: { flex: '1 1 auto', minHeight: 0, margin: 0, overflow: 'auto', whiteSpace: 'pre-wrap',
+        wordBreak: 'break-word', background: '#0b1220', color: '#e2e8f0', borderRadius: 8,
+        padding: '10px 12px', fontFamily: 'Consolas, "Cascadia Mono", monospace', fontSize: 12, lineHeight: 1.55 }
+    }, output || '选择一台已安装 ACP Harness 的电脑，点击卡片开始会话。'),
+    pending.map((item) => h('div', { key: 'perm-' + item.requestId, style: { display: 'flex', gap: 8, alignItems: 'center', flex: '0 0 auto', flexWrap: 'wrap' } },
+      h('span', { style: { fontSize: 11, color: C.mute } }, '授权请求 #' + item.requestId),
+      item.options.map((option) => h('button', {
+        key: option.optionId, type: 'button', onClick: () => { void reply(item.requestId, option.optionId) },
+        style: { ...field, cursor: 'pointer' }
+      }, option.name || option.optionId))
+    )),
+    session && commands.length ? h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap', flex: '0 0 auto' } },
+      commands.map((command) => h('button', {
+        key: command.name, type: 'button', title: command.description || command.name,
+        onClick: () => setInput('/' + command.name + ' '),
+        style: { ...field, height: 22, cursor: 'pointer' }
+      }, '/' + command.name))
+    ) : null,
+    h('form', {
+      onSubmit: send,
+      style: { display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 8, background: '#0b1220', flex: '0 0 auto' }
+    },
+      h('span', { style: { color: '#7dd3fc', fontFamily: 'Consolas, monospace', fontSize: 13 } }, '›'),
+      h('input', {
+        value: input, disabled: !session || !ready, autoFocus: true, spellCheck: false,
+        'aria-label': 'Agent 输入', placeholder: session ? (ready ? '给 Agent 发消息，Enter 发送' : '正在启动 Agent…') : '先选择 Harness',
+        onChange: (event) => setInput(event.target.value),
+        style: { flex: '1 1 auto', minWidth: 0, border: 0, outline: 'none', background: 'transparent', color: '#e2e8f0', fontFamily: 'Consolas, monospace', fontSize: 13 }
+      }),
+      h('button', {
+        type: 'submit', disabled: !session || !ready || !input.trim(),
+        style: { ...button, height: 26, padding: '0 12px', opacity: !session || !ready || !input.trim() ? 0.4 : 1 }
+      }, '发送')
+    )
+  )
 }
     let localPluginRpc = null
     let localPluginRemote = null
+    let exitPanel = null
     const host = createDshHost({
       pluginVersion: PLUGIN_VERSION,
       localPluginUpdates: createDshLocalPluginUpdateBridge(() => localPluginRpc),
       localDeviceIdentity: createDshLocalIdentityBridge(() => localPluginRpc),
       localPluginSurfaceReload: createDshLocalPluginSurfaceReloadBridge(() => localPluginRemote)
     })
+    host.exitPanel = () => {
+      try { if (typeof exitPanel === 'function') exitPanel() } catch (_) { /* DSH panel may already be gone */ }
+    }
 
 // Shared Tether panel UI. Hosts: DSH plugin (packages/dsh-plugin-tether-client/lib/client.js),
 // Electron APP and browser WebUI. Keep the 4-space body indentation: the DSH plugin bundle is
 // generated by concatenation from this file and tests locate functions by their exact indent.
+
+
+
+
+
+
 
 
 function isUpdateTargetCurrent(requestDevice, requestEpoch, currentDevice, currentEpoch) {
@@ -6447,6 +10536,26 @@ function updateErrorText(value) {
   return String((value && value.message) || value || '更新失败')
     .replace(/^Error invoking remote method ['"]tether:[^'"]+['"]:\s*/, '')
     .replace(/^Error:\s*/, '')
+}
+
+async function copyText(text) {
+  const value = String(text || '')
+  if (!value) return false
+  try {
+    await navigator.clipboard.writeText(value)
+    return true
+  } catch (_) { /* fall through */ }
+  try {
+    const area = document.createElement('textarea')
+    area.value = value
+    area.style.position = 'fixed'
+    area.style.opacity = '0'
+    document.body.appendChild(area)
+    area.select()
+    const ok = document.execCommand('copy')
+    area.remove()
+    return ok
+  } catch (_) { return false }
 }
 
 function shortUpdateError(error) {
@@ -6587,13 +10696,33 @@ function updateCardState({ running = false, error = '', hasUpdate = false, resta
   return { kind: 'checking', pill: '检查中…', tone: 'mute', action: 'none', label: '一键更新', disabled: true }
 }
 
+function updateInfoRunning(info) {
+  return !!(info && (info.in_progress === true || info.status === 'in_progress'))
+}
+
+function updateProgressFor(infos) {
+  const records = (infos || [])
+    .map((info) => info && info.progress)
+    .filter((progress) => progress && Number.isFinite(Number(progress.percent)))
+  if (!records.length) return null
+  return records.sort((left, right) => Number(right.percent) - Number(left.percent))[0]
+}
+
+function updateProgressText(progress) {
+  const phase = progress && typeof progress.phase === 'string' ? progress.phase : ''
+  const labels = { downloading: '下载更新包', preparing: '校验更新包', installing: '安装更新', installed: '安装完成', failed: '更新失败' }
+  const percent = Math.max(0, Math.min(100, Math.round(Number(progress && progress.percent) || 0)))
+  return (labels[phase] || '正在更新') + ' ' + percent + '%'
+}
+
 function updateCardStateForInfos(infos, options = {}) {
   const list = (infos || []).filter(Boolean)
   const stale = list.some(isUpdateInfoStale)
   const failed = options.failed === true || list.some((info) => !!info.check_error)
   const hasUpdate = list.some((info) => !isUpdateInfoStale(info) && info.update_available === true)
   const known = list.length > 0 && list.every((info) => info.current_version && info.latest_version && !isUpdateInfoStale(info))
-  return updateCardState({ ...options, stale, failed, hasUpdate, known })
+  const running = options.running === true || list.some(updateInfoRunning)
+  return updateCardState({ ...options, running, stale, failed, hasUpdate, known })
 }
 
 function isVersionNewer(candidate, current) {
@@ -6814,14 +10943,17 @@ async function runUpdateSequence({ check, prepare, apply, isCurrent = () => true
   const checked = await check()
   if (!checked || checked.failed || checked.ok === false) return { failed: true, stage: 'check' }
   if (!isCurrent()) return { cancelled: true }
+  if (updateInfoRunning(checked)) return { attached: true, updated: false }
   if (!checked || checked.update_available !== true) return { current: true, updated: false }
   const prepared = await prepare(checked)
   if (!prepared || prepared.failed || prepared.ok === false) return { failed: true, stage: 'prepare' }
   if (!isCurrent()) return { cancelled: true }
+  if (updateInfoRunning(prepared)) return { attached: true, updated: false }
   const preparedId = prepared && (prepared.prepared_id || ((prepared.prepared || [])[0] || {}).prepared_id)
   if (!preparedId) throw new Error('更新包已准备，但未返回可安装的包标识；请重试检查更新。')
   const result = await apply(preparedId, checked)
   if (!result || result.failed || result.ok === false) return { failed: true, stage: 'apply' }
+  if (updateInfoRunning(result)) return { attached: true, updated: false }
   return isCurrent() ? { current: true, updated: true, result } : { cancelled: true }
 }
 
@@ -7054,9 +11186,99 @@ function buildTablePreview({ name, text, sourceTruncated, rowLimit, columnLimit 
   }
 }
 
+function MinimalUpdateButton({ React, h, api, post, deviceId, host, C }) {
+  const apiRef = React.useRef(api)
+  apiRef.current = api
+  const [summary, setSummary] = React.useState(null)
+  const [job, setJob] = React.useState(null)
+  const [error, setError] = React.useState('')
+  const hubUrl = host && typeof host.hubConfig === 'function' ? (host.hubConfig() || {}).url : ''
+  const originProduct = host && host.kind === 'dsh' ? 'plugin' : 'app'
+  const devicePath = deviceId ? '/api/devices/' + encodeURIComponent(deviceId) : ''
+  const labels = {
+    queued: '准备更新', checking: '检查版本', downloading: '下载更新',
+    applying: '安装更新', restarting: '重启并验证', done: '更新完成', error: '更新失败'
+  }
+  React.useEffect(() => {
+    if (!hubUrl || !devicePath) return undefined
+    let cancelled = false
+    const check = async () => {
+      try {
+        const data = await apiRef.current(devicePath + '/update?origin_product=' + originProduct, { method: 'GET' }, hubUrl)
+        if (cancelled) return
+        setSummary(data || null)
+        setError('')
+        if (data && data.job) setJob(data.job)
+      } catch (_) {
+        if (!cancelled) setSummary(null)
+      }
+    }
+    void check()
+    const timer = setInterval(check, 60000)
+    return () => { cancelled = true; clearInterval(timer) }
+  }, [hubUrl, devicePath, originProduct])
+  React.useEffect(() => {
+    if (!hubUrl || !devicePath || !job || ['done', 'error'].includes(job.status)) return undefined
+    let cancelled = false
+    const poll = async () => {
+      try {
+        const next = await apiRef.current(devicePath + '/update/job', { method: 'GET' }, hubUrl)
+        if (cancelled) return
+        setJob(next)
+        if (next && next.status === 'done') setTimeout(() => { try { window.location.reload() } catch (_) {} }, 800)
+        if (next && next.status === 'error') setError((next.error && (next.error.detail || next.error.code)) || '更新失败')
+      } catch (_) { /* keep the last known progress */ }
+    }
+    const timer = setInterval(poll, 1000)
+    return () => { cancelled = true; clearInterval(timer) }
+  }, [hubUrl, devicePath, job && job.job_id, job && job.status])
+  const start = async () => {
+    setError('')
+    try {
+      const created = await apiRef.current(devicePath + '/update/apply', {
+        method: 'POST', body: JSON.stringify({ origin_product: originProduct })
+      }, hubUrl)
+      setJob(created)
+    } catch (cause) {
+      setError((cause && (cause.message || cause.code)) || '更新启动失败')
+    }
+  }
+  if (!hubUrl || !devicePath) return null
+  const available = !!(summary && summary.update_available)
+  if (!available && !job) return null
+  const percent = Math.max(0, Math.min(100, Number(job && job.progress && job.progress.percent) || 0))
+  const statusText = job ? ((job.progress && job.progress.step) || labels[job.status] || '更新中') : '准备更新'
+  const overlay = job ? h('div', {
+    role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Tether 更新',
+    style: {
+      position: 'fixed', inset: 0, zIndex: 2147483000, display: 'grid', placeItems: 'center',
+      background: 'rgba(255,255,255,0.72)', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)'
+    }
+  }, h('div', { style: { width: 'min(420px, calc(100vw - 48px))', display: 'grid', gap: 14, justifyItems: 'stretch', color: C.ink } },
+    h('div', { style: { fontSize: 15, fontWeight: 600, textAlign: 'center' } }, job.status === 'error' ? '更新失败' : '正在更新 Tether'),
+    h('div', { style: { height: 6, borderRadius: 999, background: 'rgba(16,24,40,0.10)', overflow: 'hidden' } },
+      h('div', { style: { width: percent + '%', height: '100%', borderRadius: 999, background: C.blue, transition: 'width 240ms ease' } })),
+    h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, color: C.sub, fontSize: 12 } },
+      h('span', { style: { flex: '1 1 auto', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, statusText),
+      h('span', { className: 'tether-num' }, percent + '%')),
+    error ? h('div', { role: 'alert', style: { color: C.red, fontSize: 12, textAlign: 'center' } }, error) : null,
+    job.status === 'error' ? h('button', {
+      type: 'button', onClick: start,
+      style: { justifySelf: 'center', border: 0, borderRadius: 7, background: C.blue, color: '#fff', padding: '7px 18px', fontSize: 12, cursor: 'pointer' }
+    }, '重试') : null)) : null
+  return h('div', { style: { display: 'contents' } },
+    available ? h('button', {
+      type: 'button', title: '更新到 ' + ((summary && summary.target_version) || '最新版本'),
+      'aria-label': '更新到最新版本', onClick: start,
+      style: { width: 30, height: 26, display: 'grid', placeItems: 'center', border: 0, borderRadius: 7, background: C.blue, color: '#fff', fontSize: 15, cursor: 'pointer', flex: '0 0 auto' }
+    }, '↓') : null,
+    overlay)
+}
+
 function createTetherPanel({ React, Native, host, EditorRuntime }) {
     const h = React.createElement
     const Connection = createConnectionPanel(React)
+    const Settings = createSettingsPanel(React)
     const PANEL_ID = 'tether'
     const BASE = host.apiBase()
 
@@ -7250,20 +11472,34 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const type = dot > 0 && dot < base.length - 1 ? base.slice(dot + 1) : (base.startsWith('.') ? base.slice(1) : 'TXT')
       return String(type || 'TXT').slice(0, 4).toUpperCase()
     }
-    function joinPath(base, name) { return String(base || '').replace(/[\\/]+$/, '') + '\\' + String(name || '') }
+    function joinPath(base, name) {
+      const raw = String(base || '')
+      const value = String(name || '')
+      if (!raw) return value
+      const separator = raw.includes('\\') || /^[A-Za-z]:$/.test(raw) ? '\\' : '/'
+      const clean = raw.replace(/[\\/]+$/, '')
+      return clean ? clean + separator + value : separator + value
+    }
     function pathSegments(target) {
       const clean = String(target || '').replace(/[\\/]+$/, '')
       if (!clean) return []
       const drive = clean.match(/^([A-Za-z]:)(.*)$/)
+      const posix = !drive && clean.startsWith('/')
+      const separator = drive || clean.includes('\\') ? '\\' : '/'
       const out = []
       let cursor = ''
       if (drive) {
         cursor = drive[1] + '\\'
         out.push({ label: drive[1], path: cursor })
+      } else if (posix) {
+        cursor = '/'
+        out.push({ label: '/', path: cursor })
       }
       const rest = drive ? drive[2] : clean
       rest.split(/[\\/]+/).filter(Boolean).forEach((part) => {
-        cursor = cursor ? cursor.replace(/[\\/]+$/, '') + '\\' + part : part
+        if (!cursor) cursor = part
+        else if (cursor === separator) cursor = separator + part
+        else cursor = cursor.replace(/[\\/]+$/, '') + separator + part
         out.push({ label: part, path: cursor })
       })
       return out
@@ -7645,9 +11881,12 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         --tether-tabstrip: #2b2b2e;
         --tether-tab-bg: #1e1e1e;
         --tether-split: rgba(255, 255, 255, 0.12); }
-      .tether-topbar { min-height: 40px; background: var(--tether-topbar-bg) !important; }
+      .tether-topbar { min-height: 40px; background: var(--tether-topbar-bg) !important; -webkit-app-region: drag; }
+      .tether-topbar button, .tether-topbar input, .tether-topbar [role="button"], .tether-topbar a { -webkit-app-region: no-drag; }
+      .tether-window-control:hover { background: var(--tether-chrome-hover) !important; color: var(--tether-chrome-ink) !important; }
+      .tether-window-close:hover { background: #c42b1c !important; color: #ffffff !important; }
       .tether-activitybar { background: var(--tether-activity-bg) !important; }
-      .tether-activity-button[data-selected=true] { color: var(--tether-chrome-ink) !important; background: var(--tether-chrome-hover) !important; }
+      .tether-activity-button[data-selected=true] { color: var(--dsw-alias-state-business-primary, #1570ef) !important; background: color-mix(in srgb, var(--dsw-alias-state-business-primary, #1570ef) 16%, transparent) !important; }
       .tether-sidebar { background: var(--tether-explorer-bg) !important; }
       .tether-sidebar-header { color: var(--dsw-alias-label-primary, #101828); }
       .tether-workbench { background: var(--tether-workbench-bg); }
@@ -7675,6 +11914,19 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       .tether-scroll::-webkit-scrollbar-thumb { background: transparent; border-radius: 3px; }
       .tether-scroll:hover::-webkit-scrollbar-thumb { background: var(--dsw-alias-scrollbar-hover-l1, #cbd5e1); }
       .tether-scroll::-webkit-scrollbar-corner { background: transparent; }
+      .tether-root * { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+      .tether-root *:hover { scrollbar-color: var(--dsw-alias-scrollbar-hover-l1, #cbd5e1) transparent; }
+      .tether-root *::-webkit-scrollbar { width: 6px; height: 6px; }
+      .tether-root *::-webkit-scrollbar-track { background: transparent; }
+      .tether-root *::-webkit-scrollbar-thumb { background: transparent; border-radius: 3px; }
+      .tether-root *:hover::-webkit-scrollbar-thumb { background: var(--dsw-alias-scrollbar-hover-l1, #cbd5e1); }
+      .tether-root *::-webkit-scrollbar-corner { background: transparent; }
+      .tether-term .xterm { height: 100%; }
+      .tether-term .xterm-viewport { background: transparent !important; scrollbar-width: thin; scrollbar-color: transparent transparent; }
+      .tether-term .xterm-viewport::-webkit-scrollbar { width: 6px; height: 6px; }
+      .tether-term .xterm-viewport::-webkit-scrollbar-track { background: transparent; }
+      .tether-term .xterm-viewport::-webkit-scrollbar-thumb { background: transparent; border-radius: 3px; }
+      .tether-term:hover .xterm-viewport::-webkit-scrollbar-thumb { background: rgba(120, 120, 120, 0.35); }
       .tether-num { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum' 1; }
       .tether-spin { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
       .tether-spin > svg { display: block; transform-box: view-box; transform-origin: 50% 50%; animation: tether-refresh-rotate .8s linear infinite; }
@@ -7776,6 +12028,18 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       return [value, setValue]
     }
 
+    const TetherMark = ({ size = 22 }) => h('svg', {
+      width: size, height: size, viewBox: '0 0 32 32', 'aria-hidden': true,
+      style: { display: 'block', flex: '0 0 auto' }
+    },
+      h('rect', { x: 1, y: 1, width: 30, height: 30, rx: 8, fill: '#0f172a' }),
+      h('path', {
+        d: 'M10.6 9.3 C 18.1 4.7, 13.9 27.3, 21.4 22.7',
+        fill: 'none', stroke: '#f5f7fa', strokeWidth: 2, strokeLinecap: 'round'
+      }),
+      h('circle', { cx: 10.6, cy: 9.3, r: 2.8, fill: '#0f172a', stroke: '#f5f7fa', strokeWidth: 1.7 }),
+      h('circle', { cx: 21.4, cy: 22.7, r: 2.8, fill: '#0f172a', stroke: '#f59e0b', strokeWidth: 1.7 }))
+
     const GLYPHS = {
       workspace: { cap: 'round', join: 'round', parts: [
         { d: 'M14 12.05c0 .8-.65 1.45-1.46 1.45H3.46C2.65 13.5 2 12.85 2 12.05v-8.1c0-.8.65-1.45 1.46-1.45h2.4c.49 0 .94.24 1.21.65l.5.73c.27.4.73.65 1.21.65h3.76c.8 0 1.46.65 1.46 1.45v6.02Z' },
@@ -7791,12 +12055,34 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         { d: 'M7.99976 14.0889C9.23509 14.0889 10.1743 11.3629 10.1743 8.00006C10.1743 4.63739 9.23509 1.91138 7.99976 1.91138' },
         { d: 'M7.99973 14.0889C6.76445 14.0889 5.8252 11.3629 5.8252 8.00006C5.8252 4.63739 6.76445 1.91138 7.99973 1.91138' }
       ] },
-      settings: { join: 'round', parts: [
+      shield: { join: 'round', parts: [
         { d: 'M6.80132 2.14853C7.70663 1.80917 8.70422 1.80919 9.60952 2.14859L14.1296 3.84317V7.11961C14.1296 11.6089 10.7615 13.5975 8.20543 14.5779C5.64931 13.5975 2.28052 11.6089 2.28052 7.11961V3.84317L6.80132 2.14853Z' }
+      ] },
+      gear: { join: 'round', parts: [
+        { d: 'M6.7 1.6h2.6l.35 1.55.62.26 1.32-.86 1.84 1.84-.86 1.32.26.62 1.55.35v2.6l-1.55.35-.26.62.86 1.32-1.84 1.84-1.32-.86-.62.26-.35 1.55H6.7l-.35-1.55-.62-.26-1.32.86-1.84-1.84.86-1.32-.26-.62L1.6 9.3V6.7l1.55-.35.26-.62-.86-1.32 1.84-1.84 1.32.86.62-.26z' },
+        { d: 'M8 6.1a1.9 1.9 0 1 0 0 3.8 1.9 1.9 0 0 0 0-3.8Z' }
+      ] },
+      user: { join: 'round', parts: [
+        { d: 'M8 7.7a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z' },
+        { d: 'M3.1 13.7c.4-2.5 2.3-4 4.9-4s4.5 1.5 4.9 4' }
       ] },
       monitor: { parts: [
         { d: 'M2 3.2h12v8.1H2z' },
         { d: 'M6 13.8h4M8 11.3v2.5' }
+      ] },
+      apps: { cap: 'round', join: 'round', parts: [
+        { d: 'M2.4 2.4h4.2v4.2H2.4z' },
+        { d: 'M9.4 2.4h4.2v4.2H9.4z' },
+        { d: 'M2.4 9.4h4.2v4.2H2.4z' },
+        { d: 'M9.4 9.4h4.2v4.2H9.4z' }
+      ] },
+      bot: { cap: 'round', join: 'round', parts: [
+        { d: 'M8 2.4v1.3' },
+        { d: 'M6.9 2.4h2.2' },
+        { d: 'M5 3.7h6a2.2 2.2 0 0 1 2.2 2.2v4.3A2.2 2.2 0 0 1 11 12.4H5a2.2 2.2 0 0 1-2.2-2.2V5.9A2.2 2.2 0 0 1 5 3.7Z' },
+        { d: 'M2.8 6.3H1.9v2.8h.9M13.2 6.3h.9v2.8h-.9' },
+        { d: 'M6.1 7.2v1.5M9.9 7.2v1.5' },
+        { d: 'M3.6 13.8h8.8' }
       ] },
       refresh: { parts: [
         { d: 'M13 8a5 5 0 1 1-1.5-3.56' },
@@ -7813,6 +12099,10 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         { d: 'M10.8 2.6l2.6 2.6-7.7 7.7-3.4.8.8-3.4z' },
         { d: 'M9.4 4l2.6 2.6' }
       ] },
+      camera: { join: 'round', parts: [
+        { d: 'M2.2 5.4h2.2l1-1.6h4.2l1 1.6h2.2v7.1H2.2z' },
+        { d: 'M8 11.3a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z' }
+      ] },
       trash: { parts: [
         { d: 'M2.8 4.2h10.4M6 4.2V2.6h4v1.6M4.1 4.2l.7 9.2h6.4l.7-9.2' },
         { d: 'M6.8 6.7v4.6M9.2 6.7v4.6' }
@@ -7820,11 +12110,24 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       arrowUp: { parts: [
         { d: 'M8 13V3M3.6 7.4L8 3l4.4 4.4' }
       ] },
+      download: { parts: [
+        { d: 'M8 2.2v7.4M4.8 6.8L8 10l3.2-3.2' },
+        { d: 'M2.6 12.9h10.8' }
+      ] },
       back: { parts: [
         { d: 'M10.2 3.2L5.4 8l4.8 4.8' }
       ] },
       forward: { parts: [
         { d: 'M5.8 3.2L10.6 8l-4.8 4.8' }
+      ] },
+      transfer: { parts: [
+        { d: 'M8 1.4a6.6 6.6 0 1 0 0 13.2A6.6 6.6 0 0 0 8 1.4Z' },
+        { d: 'M3.6 5.6h7.6M8.9 3.3l2.3 2.3-2.3 2.3' },
+        { d: 'M12.4 10.4H4.8M7.1 8.1 4.8 10.4l2.3 2.3' }
+      ] },
+      link: { join: 'round', parts: [
+        { d: 'M6.4 9.6a2.5 2.5 0 0 0 3.5 0l2-2a2.5 2.5 0 1 0-3.5-3.5l-1 1' },
+        { d: 'M9.6 6.4a2.5 2.5 0 0 0-3.5 0l-2 2a2.5 2.5 0 1 0 3.5 3.5l1-1' }
       ] },
       search: { parts: [
         { d: 'M7.1 12.2a5.1 5.1 0 1 0 0-10.2 5.1 5.1 0 0 0 0 10.2z' },
@@ -7866,6 +12169,16 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         { d: 'M2.39868 5.5H14.0681' },
         { d: 'M1.93188 10.5H13.6013' }
       ] },
+      folderPlus: { join: 'round', parts: [
+        { d: 'M1.8 5.2h12.4v7.2H1.8z' },
+        { d: 'M1.8 5.2V3.6h4l1.4 1.6' },
+        { d: 'M8 7.2v4M6 9.2h4' }
+      ] },
+      filePlus: { join: 'round', parts: [
+        { d: 'M3.6 2.2h5.6l3.2 3.2v8.4H3.6z' },
+        { d: 'M9.2 2.2v3.4h3.2' },
+        { d: 'M8 8v4M6 10h4' }
+      ] },
       file: { parts: [
         { d: 'M4.9375 5.90295H11.0625' },
         { d: 'M4.9375 9.02991H8.27841' },
@@ -7879,6 +12192,11 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       folderClose: { parts: [
         { d: 'M1.50439 3.11059C1.50439 2.55831 1.95211 2.1106 2.50439 2.1106H5.43389C5.67773 2.1106 5.91318 2.19969 6.09593 2.36113L7.71649 3.79265C7.89924 3.95409 8.1347 4.04319 8.3785 4.04319H13.4958C14.0481 4.04319 14.4958 4.4909 14.4958 5.04319V12.8894C14.4958 13.4417 14.0481 13.8894 13.4958 13.8894H2.50439C1.95211 13.8894 1.50439 13.4417 1.50439 12.8894V4.04319V3.11059Z' },
         { d: 'M3.63501 7.66614H12.3647' }
+      ] },
+      terminal: { parts: [
+        { d: 'M2.5 3.5h11v9h-11z' },
+        { d: 'M4.5 6l2 2-2 2' },
+        { d: 'M8.5 10h3' }
       ] }
     }
 
@@ -7893,10 +12211,14 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       })))
     }
 
-    function ActivityBar({ active, collapsed, onSelect, onSettings, settingsOpen }) {
+    function ActivityBar({ active, collapsed, onSelect, onPermissions, permissionsOpen, onAppSettings, appSettingsOpen, onAccount, accountEmail = '', accountAvatar = '' }) {
+      const accountInitial = String(accountEmail || '').trim().charAt(0).toUpperCase()
       const items = [
         { id: 'workspaces', label: '原生工作区', icon: 'monitor' },
+        { id: 'apps', label: '远程应用', icon: 'apps' },
+        { id: 'agents', label: 'Agents', icon: 'bot' },
         { id: 'files', label: '文件资源管理器', icon: 'files' },
+        { id: 'transfer', label: '文件转移', icon: 'transfer' },
         { id: 'network', label: '互联', icon: 'devices' }
       ]
       const button = (id, label, icon, onClick, selected) => h('button', {
@@ -7913,7 +12235,30 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         style: { width: UI.activity, flex: '0 0 auto', borderRight: 0, background: C.soft, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '8px 0', gap: 3 }
       },
         items.map((item) => button(item.id, item.label, item.icon, () => onSelect(item.id), active === item.id)),
-        h('div', { style: { marginTop: 'auto' } }, button('settings', '文件权限', 'settings', onSettings, settingsOpen))
+        h('div', { style: { marginTop: 'auto', display: 'grid', gap: 3, justifyItems: 'center' } },
+          button('permissions', '文件权限', 'shield', onPermissions, permissionsOpen),
+          button('settings', '设置', 'gear', onAppSettings, appSettingsOpen),
+          h('button', {
+            type: 'button', title: accountEmail ? '账号 · ' + accountEmail : '账号', 'aria-label': '账号',
+            onClick: onAccount,
+            className: 'tether-activity-button tether-press tether-hover',
+            style: {
+              width: 36, height: 36, display: 'grid', placeItems: 'center', border: 0,
+              borderRadius: UI.radius, cursor: 'pointer', background: 'transparent', color: C.mute
+            }
+          }, accountAvatar
+            ? h('img', {
+              src: accountAvatar, alt: '',
+              style: { width: 22, height: 22, borderRadius: 999, objectFit: 'cover', display: 'block' }
+            })
+            : accountInitial
+            ? h('span', {
+              'aria-hidden': true,
+              style: { width: 22, height: 22, borderRadius: 999, display: 'grid', placeItems: 'center',
+                background: 'color-mix(in srgb, ' + C.blue + ' 14%, transparent)', color: C.blue, fontSize: 11, fontWeight: 600 }
+            }, accountInitial)
+            : h(Glyph, { name: 'user', size: 18 }))
+        )
       )
     }
 
@@ -7980,7 +12325,16 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       })
     }
 
-    function NetworkGraph({ devices, localId, selectedId, onSelect, onOpen, onContextMenu }) {
+    function networkEdgeKey(left, right) {
+      return [String(left || ''), String(right || '')].sort().join('\u0000')
+    }
+
+    function networkEdgeConnected(edges, left, right) {
+      const key = networkEdgeKey(left, right)
+      return (edges || []).some((edge) => edge && networkEdgeKey(edge.from, edge.to) === key)
+    }
+
+    function NetworkGraph({ devices, edges = [], localId, selectedId, onSelect, onOpen, onOpenDetails, onToggleEdge, onContextMenu }) {
       const stage = React.useRef(null)
       const nodesRef = React.useRef([])
       const dragRef = React.useRef(null)
@@ -7988,25 +12342,70 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const centerIdRef = React.useRef('')
       const [nodes, setNodes] = React.useState([])
       const [zoom, setZoom] = React.useState(1)
+      const [connectMode, setConnectMode] = React.useState(false)
+      const [connectFrom, setConnectFrom] = React.useState('')
+      React.useEffect(() => {
+        if (!connectMode) return undefined
+        const onKey = (event) => {
+          if (event.key === 'Escape') { setConnectMode(false); setConnectFrom('') }
+        }
+        window.addEventListener('keydown', onKey)
+        return () => window.removeEventListener('keydown', onKey)
+      }, [connectMode])
       const posZoom = zoom <= 1 ? 0.72 + 0.28 * zoom : zoom
       const key = devices.map((item) => item.device_id).join('|')
+      React.useEffect(() => {
+        if (connectFrom && !devices.some((item) => item.device_id === connectFrom)) setConnectFrom('')
+      }, [key, connectFrom])
       const centerId = (devices.find((item) => item.device_id === localId) || devices[0] || {}).device_id || ''
       centerIdRef.current = centerId
       const update = (next) => { nodesRef.current = next; setNodes(next) }
       const kick = () => { if (!frameRef.current) frameRef.current = requestAnimationFrame(animate) }
+      const readStoredPositions = () => {
+        try {
+          const all = JSON.parse(window.localStorage.getItem('tether.network.positions.v3') || '{}')
+          return all && typeof all === 'object' ? all : {}
+        } catch (_) { return {} }
+      }
+      const saveStoredPositions = (center, list) => {
+        if (!center || !list.length) return
+        try {
+          const all = readStoredPositions()
+          all[center] = Object.fromEntries(list.map((node) => [node.id, {
+            x: Math.round(node.x * 100) / 100,
+            y: Math.round(node.y * 100) / 100,
+            vx: Math.round((node.vx || 0) * 10000) / 10000,
+            vy: Math.round((node.vy || 0) * 10000) / 10000
+          }]))
+          window.localStorage.setItem('tether.network.positions.v3', JSON.stringify(all))
+        } catch (_) { /* storage is optional */ }
+      }
       React.useEffect(() => {
         const center = devices.find((item) => item.device_id === localId) || devices[0]
         const remotes = center ? devices.filter((item) => item.device_id !== center.device_id) : []
-        const radius = Math.min(40, 34 + remotes.length * 2)
+        const stored = (center && readStoredPositions()[center.device_id]) || {}
+        const radius = Math.min(42, 30 + remotes.length * 2.2)
+        const angles = remotes.length === 2
+          ? [210, 330]
+          : remotes.map((_item, index) => -90 + index * (360 / Math.max(1, remotes.length)))
         const next = devices.map((item) => {
           const index = remotes.findIndex((candidate) => candidate.device_id === item.device_id)
-          const angle = index < 0 ? 0 : (-90 + index * (360 / Math.max(1, remotes.length))) * Math.PI / 180
-          return { id: item.device_id, x: index < 0 ? 50 : 50 + Math.cos(angle) * radius, y: index < 0 ? 50 : 50 + Math.sin(angle) * radius, vx: 0, vy: 0 }
+          const saved = stored[item.device_id]
+          const angle = index < 0 ? 0 : angles[index] * Math.PI / 180
+          const valid = saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)
+          return {
+            id: item.device_id,
+            x: valid ? clamp(saved.x, 4, 96) : (index < 0 ? 50 : 50 + Math.cos(angle) * radius),
+            y: valid ? clamp(saved.y, 7, 93) : (index < 0 ? 50 : 50 + Math.sin(angle) * radius),
+            vx: valid && Number.isFinite(saved.vx) ? saved.vx : 0,
+            vy: valid && Number.isFinite(saved.vy) ? saved.vy : 0
+          }
         })
         update(next)
-        if (frameRef.current) { cancelAnimationFrame(frameRef.current); frameRef.current = 0 }
         kick()
       }, [key, localId])
+      React.useEffect(() => () => { saveStoredPositions(centerIdRef.current, nodesRef.current) }, [])
+      React.useEffect(() => () => { if (frameRef.current) cancelAnimationFrame(frameRef.current) }, [])
       React.useEffect(() => {
         const el = stage.current
         if (!el) return undefined
@@ -8017,7 +12416,6 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         el.addEventListener('wheel', onWheel, { passive: false })
         return () => el.removeEventListener('wheel', onWheel)
       }, [])
-      React.useEffect(() => () => { if (frameRef.current) cancelAnimationFrame(frameRef.current) }, [])
       function animate() {
         const list = nodesRef.current.map((node) => ({ ...node }))
         if (!list.length) { frameRef.current = 0; return }
@@ -8028,9 +12426,11 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         let moving = false
         for (const node of list) {
           if (dragRef.current && dragRef.current.id === node.id) continue
-          fx.set(node.id, fx.get(node.id) + (50 - node.x) * 0.0006)
-          fy.set(node.id, fy.get(node.id) + (50 - node.y) * 0.0006)
-          if (!center || node.id === center.id) continue
+          if (!center || node.id === center.id) {
+            fx.set(node.id, fx.get(node.id) + (50 - node.x) * 0.0006)
+            fy.set(node.id, fy.get(node.id) + (50 - node.y) * 0.0006)
+            continue
+          }
           const dx = center.x - node.x
           const dy = center.y - node.y
           const distance = Math.max(0.001, Math.hypot(dx, dy))
@@ -8066,12 +12466,24 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         update(list)
         frameRef.current = moving ? requestAnimationFrame(animate) : 0
       }
+      const chooseConnect = (item) => {
+        if (!item) return
+        if (onSelect) onSelect(item)
+        if (!connectFrom) { setConnectFrom(item.device_id); return }
+        if (connectFrom === item.device_id) { setConnectFrom(''); return }
+        if (onToggleEdge) onToggleEdge({ from: connectFrom, to: item.device_id }, true)
+        setConnectFrom('')
+        setConnectMode(false)
+      }
       const startDrag = (event, item) => {
         if (event.button !== 0) return
         event.preventDefault(); event.stopPropagation()
-        onSelect(item)
+        if (connectMode) { chooseConnect(item); return }
         const node = nodesRef.current.find((candidate) => candidate.id === item.device_id)
-        dragRef.current = { id: item.device_id, lastX: node ? node.x : 50, lastY: node ? node.y : 50, vx: 0, vy: 0 }
+        dragRef.current = {
+          id: item.device_id, item, lastX: node ? node.x : 50, lastY: node ? node.y : 50,
+          startX: node ? node.x : 50, startY: node ? node.y : 50, vx: 0, vy: 0, moved: false
+        }
         event.currentTarget.setPointerCapture?.(event.pointerId)
         kick()
       }
@@ -8082,6 +12494,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         if (!rect.width || !rect.height) return
         const x = clamp(50 + (((event.clientX - rect.left) / rect.width * 100) - 50) / posZoom, 4, 96)
         const y = clamp(50 + (((event.clientY - rect.top) / rect.height * 100) - 50) / posZoom, 7, 93)
+        if (Math.hypot(x - drag.startX, y - drag.startY) > 0.8) drag.moved = true
         drag.vx = x - drag.lastX
         drag.vy = y - drag.lastY
         drag.lastX = x; drag.lastY = y
@@ -8089,15 +12502,21 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         kick()
       }
       const endDrag = () => {
-        if (!dragRef.current) return
+        const drag = dragRef.current
+        if (!drag) return
         dragRef.current = null
+        if (!drag.moved && drag.item) {
+          if (onSelect) onSelect(drag.item)
+          if (onOpenDetails) onOpenDetails(drag.item)
+        }
+        saveStoredPositions(centerIdRef.current, nodesRef.current)
         kick()
       }
       const screen = (node) => ({ x: 50 + (node.x - 50) * posZoom, y: 50 + (node.y - 50) * posZoom })
       const center = nodes.find((node) => node.id === centerId) || nodes[0]
       const remotes = center ? nodes.filter((node) => node.id !== center.id) : []
       const lookup = new Map(devices.map((item) => [item.device_id, item]))
-      const compact = zoom < 0.72
+      const compact = zoom < (devices.length > 12 ? 1.05 : 0.72)
       const linkPoints = (from, to, fromId, toId) => {
         const el = stage.current
         const rect = el && el.getBoundingClientRect()
@@ -8125,27 +12544,84 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           y2: (b.y - uy * end) / rect.height * 100
         }
       }
-      const centerItem = center ? lookup.get(center.id) : null
+      const edgePairs = []
+      const seenEdges = new Set()
+      for (const edge of edges || []) {
+        const key = networkEdgeKey(edge && edge.from, edge && edge.to)
+        if (!key || seenEdges.has(key)) continue
+        const left = nodes.find((node) => node.id === edge.from)
+        const right = nodes.find((node) => node.id === edge.to)
+        if (!left || !right) continue
+        seenEdges.add(key)
+        const leftItem = lookup.get(edge.from)
+        const rightItem = lookup.get(edge.to)
+        edgePairs.push({
+          key, edge,
+          from: left, to: right,
+          online: !!(leftItem && leftItem.online && rightItem && rightItem.online),
+          leftName: (leftItem && (leftItem.name || leftItem.device_id)) || edge.from,
+          rightName: (rightItem && (rightItem.name || rightItem.device_id)) || edge.to
+        })
+      }
       return h('div', { ref: stage, style: { position: 'absolute', inset: 0, overflow: 'hidden', touchAction: 'none' } },
         h('div', { style: { position: 'absolute', left: 14, top: 12, fontSize: 12, color: C.mute } }, '网络'),
+        h('button', {
+          type: 'button', onClick: () => { setConnectMode((value) => !value); setConnectFrom('') },
+          title: connectMode ? '取消连接模式' : '连接两台设备',
+          'aria-label': connectMode ? '取消连接模式' : '连接两台设备',
+          className: 'tether-hover',
+          style: {
+            position: 'absolute', right: 12, top: 8, zIndex: 5, display: 'flex', alignItems: 'center', gap: 5,
+            height: 26, padding: '0 10px', border: '1px solid ' + (connectMode ? C.blue : C.line),
+            borderRadius: 999, background: connectMode ? C.soft : C.layer1,
+            color: connectMode ? C.blue : C.sub, fontSize: 11.5, cursor: 'pointer'
+          }
+        }, h(Glyph, { name: 'link', size: 13 }), connectMode ? '取消' : '连接'),
         h('svg', { viewBox: '0 0 100 100', preserveAspectRatio: 'none', style: { position: 'absolute', inset: 0, width: '100%', height: '100%' } },
-          remotes.map((node) => {
-            const item = lookup.get(node.id)
-            const from = center ? screen(center) : { x: 50, y: 50 }
-            const to = screen(node)
-            const points = linkPoints(from, to, center && center.id, node.id)
+          edgePairs.map((pair) => {
+            const points = linkPoints(screen(pair.from), screen(pair.to), pair.from.id, pair.to.id)
             if (!points) return null
-            const linked = !!(centerItem && centerItem.online && item && item.online)
-            return h('line', {
-              key: 'line:' + node.id, ...points,
-              stroke: C.sub,
-              strokeWidth: zoom > 1 ? 1 : 1.2,
-              vectorEffect: 'non-scaling-stroke',
-              strokeDasharray: linked ? undefined : '4 5',
-              opacity: linked ? 0.7 : 0.4
-            })
+            return h('g', { key: 'edge:' + pair.key },
+              h('title', null, pair.leftName + ' ↔ ' + pair.rightName + ' · 点击断开'),
+              h('line', {
+                ...points, stroke: 'transparent', strokeWidth: 16, vectorEffect: 'non-scaling-stroke',
+                style: { cursor: 'pointer', pointerEvents: 'stroke' },
+                onClick: (event) => {
+                  event.stopPropagation()
+                  if (onToggleEdge) onToggleEdge({ from: pair.from.id, to: pair.to.id }, false)
+                }
+              }),
+              h('line', {
+                ...points, stroke: C.sub, strokeWidth: zoom > 1 ? 1 : 1.2, vectorEffect: 'non-scaling-stroke',
+                strokeDasharray: pair.online ? undefined : '4 5', opacity: pair.online ? 0.7 : 0.4,
+                style: { pointerEvents: 'none' }
+              }))
           })
         ),
+        edgePairs.map((pair) => {
+          const left = screen(pair.from)
+          const right = screen(pair.to)
+          const midX = (left.x + right.x) / 2
+          const midY = (left.y + right.y) / 2
+          if (nodes.some((node) => Math.hypot(node.x - midX, node.y - midY) < 9)) return null
+          return h('button', {
+            key: 'mid:' + pair.key, type: 'button',
+            title: '断开 ' + pair.leftName + ' ↔ ' + pair.rightName,
+            'aria-label': '断开 ' + pair.leftName + ' ↔ ' + pair.rightName,
+            onPointerDown: (event) => event.stopPropagation(),
+            onClick: (event) => {
+              event.stopPropagation()
+              if (onToggleEdge) onToggleEdge({ from: pair.from.id, to: pair.to.id }, false)
+            },
+            className: 'tether-hover',
+            style: {
+              position: 'absolute', left: midX + '%', top: midY + '%',
+              transform: 'translate(-50%, -50%)', zIndex: 4, width: 18, height: 18, padding: 0,
+              display: 'grid', placeItems: 'center', border: '1px solid ' + C.line, borderRadius: 999,
+              background: C.layer1, color: C.sub, cursor: 'pointer'
+            }
+          }, h(Glyph, { name: 'link', size: 11 }))
+        }),
         nodes.map((node) => {
           const item = lookup.get(node.id) || { device_id: node.id, name: node.id, online: false }
           const isCenter = center && center.id === node.id
@@ -8164,7 +12640,8 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
               position: 'absolute', left: pos.x + '%', top: pos.y + '%', transform: 'translate(-50%, -50%)',
               zIndex: isCenter ? 3 : 2, width: isCenter ? 22 : 16, height: isCenter ? 22 : 16,
               borderRadius: '50%', cornerShape: 'round', border: 0, padding: 0, background: 'transparent',
-              opacity: item.online ? 1 : 0.46, cursor: 'grab', userSelect: 'none'
+              opacity: item.online ? 1 : 0.46, cursor: connectMode ? 'crosshair' : 'grab', userSelect: 'none',
+              outline: connectFrom === node.id ? '2px solid ' + C.blue : 'none', outlineOffset: 2
             } : {
               position: 'absolute', left: pos.x + '%', top: pos.y + '%', transform: 'translate(-50%, -50%)',
               zIndex: isCenter ? 3 : 2, display: 'flex', alignItems: 'center', gap: 6,
@@ -8172,7 +12649,8 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
               background: isCenter ? C.ink : (selected ? C.nodeChildActive : C.nodeChild), color: isCenter ? C.onPrimary : C.ink,
               fontSize: isCenter ? 12 : 11, boxShadow: isCenter ? C.shadow : (selected ? '0 1px 3px rgba(16,24,40,0.12)' : '0 1px 2px rgba(16,24,40,0.06)'),
               transition: 'background-color 160ms ease',
-              cursor: 'grab', whiteSpace: 'nowrap', opacity: item.online ? 1 : 0.55, userSelect: 'none'
+              cursor: connectMode ? 'crosshair' : 'grab', whiteSpace: 'nowrap', opacity: item.online ? 1 : 0.55, userSelect: 'none',
+              outline: connectFrom === node.id ? '2px solid ' + C.blue : 'none', outlineOffset: 2
             }
           },
             compact
@@ -8189,8 +12667,160 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             compact ? null : (item.name || item.device_id))
         }),
         h('div', { onClick: () => setZoom(1), title: '重置缩放', style: { position: 'absolute', right: 12, bottom: 10, zIndex: 4, fontSize: 10, color: C.mute, background: C.layer1, borderRadius: 999, padding: '2px 7px', cursor: 'pointer' } }, Math.round(zoom * 100) + '%'),
+        connectMode ? h('div', {
+          'aria-live': 'polite',
+          style: {
+            position: 'absolute', left: '50%', bottom: 12, transform: 'translateX(-50%)', zIndex: 4,
+            padding: '4px 9px', borderRadius: 999, background: C.layer1, color: C.sub,
+            fontSize: 10.5, pointerEvents: 'none', whiteSpace: 'nowrap'
+          }
+        }, connectFrom ? '再点一台设备完成连接' : '点选第一台设备') : null,
         !devices.length ? h('div', { style: { position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: C.mute, fontSize: 12 } }, '暂无设备 · 目标机需接入 Hub') : null
       )
+    }
+
+    function NetworkLinkSwitch({ checked, label, onChange }) {
+      return h('button', {
+        type: 'button', role: 'switch', 'aria-checked': checked, 'aria-label': label, title: label,
+        onClick: () => onChange(!checked),
+        style: {
+          width: 30, height: 18, flex: '0 0 auto', border: 0, borderRadius: 999, padding: 2,
+          background: checked ? C.blue : C.line, cursor: 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: checked ? 'flex-end' : 'flex-start',
+          transition: 'background 140ms ease'
+        }
+      }, h('span', {
+        'aria-hidden': true,
+        style: { width: 14, height: 14, borderRadius: 999, background: '#fff', boxShadow: '0 1px 2px rgba(16,24,40,.22)' }
+      }))
+    }
+
+    function NetworkDetailPanel({ device, devices, edges, localId, onToggleEdge, onClose, onOpen, onOpenManager }) {
+      const [search, setSearch] = React.useState('')
+      const term = search.trim().toLowerCase()
+      const others = devices
+        .filter((item) => item.device_id !== device.device_id)
+        .filter((item) => !term || String(item.name || '').toLowerCase().includes(term) || String(item.device_id).toLowerCase().includes(term))
+        .sort((left, right) => (right.online ? 1 : 0) - (left.online ? 1 : 0)
+          || String(left.name || left.device_id).localeCompare(String(right.name || right.device_id)))
+      const connected = others.filter((item) => networkEdgeConnected(edges, device.device_id, item.device_id)).length
+      return h('aside', {
+        style: {
+          position: 'absolute', top: 8, right: 8, bottom: 8, width: 300, zIndex: 8, overflow: 'hidden',
+          display: 'flex', flexDirection: 'column', borderRadius: 12, border: '1px solid ' + C.line,
+          background: C.panel, boxShadow: '0 18px 50px rgba(16,24,40,0.22)'
+        }
+      },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '12px 12px 10px', flex: '0 0 auto' } },
+          dot(device.online),
+          h('div', { style: { minWidth: 0, flex: '1 1 auto' } },
+            h('div', { style: { fontSize: 13, fontWeight: 'var(--tether-strong, 600)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, device.name || device.device_id),
+            h('div', { className: 'tether-num', style: { fontSize: 10.5, color: C.mute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, device.device_id)),
+          h('button', {
+            type: 'button', title: '打开原生工作区', 'aria-label': '打开原生工作区', onClick: () => onOpen(device), className: 'tether-hover',
+            style: { width: 26, height: 26, flex: '0 0 auto', display: 'grid', placeItems: 'center', border: 0, borderRadius: 6, background: 'transparent', color: C.sub, cursor: 'pointer' }
+          }, h(Glyph, { name: 'monitor', size: 15 })),
+          h('button', {
+            type: 'button', title: '关闭', 'aria-label': '关闭', onClick: onClose, className: 'tether-hover',
+            style: { width: 26, height: 26, flex: '0 0 auto', display: 'grid', placeItems: 'center', border: 0, borderRadius: 6, background: 'transparent', color: C.mute, fontSize: 17, cursor: 'pointer' }
+          }, '×')),
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, padding: '0 12px 6px', flex: '0 0 auto' } },
+          h('span', { style: { fontSize: 12, color: C.sub } }, '连接'),
+          h('span', { className: 'tether-num', style: { fontSize: 10.5, color: C.mute } }, connected + ' / ' + others.length)),
+        h('div', { style: { padding: '0 10px 6px', flex: '0 0 auto' } },
+          h('input', {
+            value: search, onChange: (event) => setSearch(event.target.value), placeholder: '搜索设备', 'aria-label': '搜索设备', spellCheck: false,
+            style: { width: '100%', height: 28, boxSizing: 'border-box', border: '1px solid ' + C.line, borderRadius: 6, padding: '0 8px', background: C.bg, color: C.ink, fontSize: 12, font: 'inherit', outline: 'none' }
+          })),
+        h('div', { className: 'tether-scroll', style: { flex: '1 1 auto', minHeight: 0, overflowY: 'auto', padding: '0 8px 10px', display: 'flex', flexDirection: 'column', gap: 2 } },
+          others.map((item) => {
+            const on = networkEdgeConnected(edges, device.device_id, item.device_id)
+            return h('div', {
+              key: item.device_id,
+              style: { display: 'flex', alignItems: 'center', gap: 8, minHeight: 38, padding: '0 6px', borderRadius: 6, background: C.bg }
+            },
+              dot(item.online),
+              h('div', { style: { minWidth: 0, flex: '1 1 auto' } },
+                h('div', { style: { fontSize: 12, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, item.name || item.device_id),
+                h('div', { className: 'tether-num', style: { fontSize: 10, color: C.mute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, item.device_id === localId ? '本机' : item.device_id)),
+              h(NetworkLinkSwitch, {
+                checked: on, label: (on ? '断开 ' : '连接 ') + (item.name || item.device_id),
+                onChange: (next) => onToggleEdge({ from: device.device_id, to: item.device_id }, next)
+              }))
+          }),
+          !others.length ? h('div', { style: { padding: 16, color: C.mute, fontSize: 12, textAlign: 'center' } }, others.length ? '没有匹配的设备' : '没有其他设备') : null),
+        h('div', { style: { padding: '8px 12px', borderTop: '1px solid ' + C.line, flex: '0 0 auto' } },
+          h('button', {
+            type: 'button', onClick: onOpenManager, className: 'tether-hover',
+            style: { display: 'flex', alignItems: 'center', gap: 6, width: '100%', height: 30, padding: '0 8px', border: 0, borderRadius: 6, background: 'transparent', color: C.sub, fontSize: 12, cursor: 'pointer' }
+          }, h(Glyph, { name: 'link', size: 14 }), '连接管理')))
+    }
+
+    function NetworkLinksManager({ devices, edges, localId, detailId, onToggleEdge, onClose }) {
+      const [search, setSearch] = React.useState('')
+      const [from, setFrom] = React.useState(detailId || localId || (devices[0] && devices[0].device_id) || '')
+      const [to, setTo] = React.useState('')
+      const lookup = new Map(devices.map((item) => [item.device_id, item]))
+      React.useEffect(() => {
+        if (!devices.some((item) => item.device_id === from)) setFrom(localId || (devices[0] && devices[0].device_id) || '')
+      }, [devices, localId, from])
+      React.useEffect(() => {
+        if (to && to !== from && devices.some((item) => item.device_id === to)) return
+        const next = devices.find((item) => item.device_id !== from)
+        setTo(next ? next.device_id : '')
+      }, [devices, from, to])
+      const term = search.trim().toLowerCase()
+      const rows = (edges || [])
+        .map((edge) => ({ edge, left: lookup.get(edge.from), right: lookup.get(edge.to) }))
+        .filter((row) => row.left && row.right)
+        .filter((row) => !term || [row.left, row.right].some((item) => String(item.name || '').toLowerCase().includes(term) || String(item.device_id).toLowerCase().includes(term)))
+        .sort((a, b) => String(a.left.name || a.left.device_id).localeCompare(String(b.left.name || b.left.device_id)))
+      const pairOn = networkEdgeConnected(edges, from, to)
+      const select = (value, onChange) => h('select', {
+        value, onChange: (event) => onChange(event.target.value), 'aria-label': '选择设备',
+        style: { flex: '1 1 0', minWidth: 0, height: 30, border: '1px solid ' + C.line, borderRadius: 6, background: C.bg, color: C.ink, fontSize: 12, padding: '0 6px' }
+      }, devices.map((item) => h('option', { key: item.device_id, value: item.device_id }, (item.name || item.device_id) + (item.online ? '' : ' · 离线'))))
+      return h('div', {
+        onPointerDown: (event) => { if (event.target === event.currentTarget) onClose() },
+        style: { position: 'absolute', inset: 0, zIndex: 80, display: 'grid', placeItems: 'center', padding: 24, background: 'rgba(16,24,40,.35)' }
+      },
+        h('section', {
+          role: 'dialog', 'aria-label': '连接管理', onPointerDown: (event) => event.stopPropagation(),
+          style: { width: 'min(760px, 100%)', height: 'min(560px, 100%)', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: C.bg, borderRadius: 12, boxShadow: C.shadow }
+        },
+          h('header', { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '0 14px', height: 44, borderBottom: '1px solid ' + C.line, flex: '0 0 auto' } },
+            h('strong', { style: { fontSize: 14 } }, '连接管理'),
+            h('span', { className: 'tether-num', style: { fontSize: 11, color: C.mute } }, rows.length + ' 条连接'),
+            h('button', { type: 'button', onClick: onClose, title: '关闭', 'aria-label': '关闭', className: 'tether-hover', style: { marginLeft: 'auto', width: 28, height: 28, border: 0, borderRadius: 6, background: 'transparent', color: C.mute, fontSize: 18, cursor: 'pointer' } }, '×')),
+          h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderBottom: '1px solid ' + C.line, flex: '0 0 auto' } },
+            select(from, setFrom),
+            h('span', { style: { color: C.mute, flex: '0 0 auto' } }, '↔'),
+            select(to, setTo),
+            h('button', {
+              type: 'button', disabled: !from || !to || from === to,
+              onClick: () => { if (from && to && from !== to) onToggleEdge({ from, to }, !pairOn) },
+              style: { height: 30, padding: '0 12px', border: 0, borderRadius: 6, background: C.ink, color: C.onPrimary, fontSize: 12, cursor: from && to && from !== to ? 'pointer' : 'default', opacity: from && to && from !== to ? 1 : 0.45 }
+            }, pairOn ? '断开' : '连接')),
+          h('div', { style: { padding: '8px 14px 0', flex: '0 0 auto' } },
+            h('input', {
+              value: search, onChange: (event) => setSearch(event.target.value), placeholder: '搜索连接', 'aria-label': '搜索连接', spellCheck: false,
+              style: { width: '100%', height: 28, boxSizing: 'border-box', border: '1px solid ' + C.line, borderRadius: 6, padding: '0 8px', background: C.soft, color: C.ink, fontSize: 12, font: 'inherit', outline: 'none' }
+            })),
+          h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr 64px 56px', gap: 8, padding: '10px 14px 6px', color: C.mute, fontSize: 10.5, flex: '0 0 auto' } },
+            h('span', null, '设备 A'), h('span', null, '设备 B'), h('span', null, '状态'), h('span', null, '')),
+          h('div', { className: 'tether-scroll', style: { flex: '1 1 auto', minHeight: 0, overflowY: 'auto', padding: '0 14px 14px' } },
+            rows.map(({ edge, left, right }) => h('div', {
+              key: networkEdgeKey(edge.from, edge.to),
+              style: { display: 'grid', gridTemplateColumns: '1fr 1fr 64px 56px', gap: 8, alignItems: 'center', minHeight: 36, borderTop: '1px solid ' + C.line }
+            },
+              h('span', { title: left.device_id, style: { display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, fontSize: 12 } }, dot(left.online), h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, left.name || left.device_id)),
+              h('span', { title: right.device_id, style: { display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, fontSize: 12 } }, dot(right.online), h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, right.name || right.device_id)),
+              h('span', { style: { fontSize: 10.5, color: left.online && right.online ? C.green : C.mute } }, left.online && right.online ? '在线' : '离线'),
+              h('button', {
+                type: 'button', onClick: () => onToggleEdge({ from: edge.from, to: edge.to }, false), className: 'tether-hover',
+                style: { height: 26, border: 0, borderRadius: 5, background: 'transparent', color: C.red, fontSize: 11, cursor: 'pointer' }
+              }, '断开'))),
+            !rows.length ? h('div', { style: { padding: 24, color: C.mute, fontSize: 12, textAlign: 'center' } }, edges.length ? '没有匹配的连接' : '尚未建立连接') : null)))
     }
 
     function FileTree({ roots, children, open, onToggle, onOpenFile, onContextMenuNode, selected, onHoverEntry, onLeaveEntry }) {
@@ -8234,6 +12864,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         ))
         if (isDir && expanded) {
           if (!cached || cached.status === 'loading') rows.push(h('div', { key: node.id + ':loading', style: { padding: '3px ' + UI.pad + 'px 3px ' + (UI.pad + (depth + 2) * 12) + 'px', fontSize: 11.5, color: C.mute } }, '加载中…'))
+          else if (cached.status === 'denied') rows.push(h('button', { key: node.id + ':denied', title: cached.reason || '当前节点没有读取该目录的权限', onClick: (ev) => { ev.stopPropagation(); onToggle(node, true) }, style: { border: 0, background: 'transparent', padding: '3px ' + UI.pad + 'px 3px ' + (UI.pad + (depth + 2) * 12) + 'px', color: C.mute, fontSize: 11.5, cursor: 'pointer' } }, '无权限，点击重试'))
           else if (cached.status === 'error') rows.push(h('button', { key: node.id + ':error', onClick: (ev) => { ev.stopPropagation(); onToggle(node, true) }, style: { border: 0, background: 'transparent', padding: '3px ' + UI.pad + 'px 3px ' + (UI.pad + (depth + 2) * 12) + 'px', color: C.red, fontSize: 11.5, cursor: 'pointer' } }, '加载失败，点击重试'))
           else if (!kids.length) rows.push(h('div', { key: node.id + ':empty', style: { padding: '3px ' + UI.pad + 'px 3px ' + (UI.pad + (depth + 2) * 12) + 'px', fontSize: 11.5, color: C.mute } }, '空文件夹'))
           else {
@@ -8291,13 +12922,23 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       return { deviceId, status: 'loading', url: '' }
     }
 
-    function nativeSurfaceContainerStyle(visible) {
-      return { display: visible ? 'flex' : 'none', flex: '1 1 auto', minWidth: 0, minHeight: 0, flexDirection: 'column' }
+    function nativeSurfaceContainerStyle(visible, layered) {
+      if (!layered) return { display: visible ? 'flex' : 'none', flex: '1 1 auto', minWidth: 0, minHeight: 0, flexDirection: 'column' }
+      return {
+        position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+        minWidth: 0, minHeight: 0, overflow: 'hidden',
+        visibility: visible ? 'visible' : 'hidden',
+        pointerEvents: visible ? 'auto' : 'none',
+        zIndex: visible ? 1 : 0
+      }
     }
 
     const NATIVE_SURFACE_RETRIES = 3
     const NATIVE_SURFACE_DOCUMENT_RETRIES = 1
-    const NATIVE_SURFACE_DOCUMENT_TIMEOUT_MS = 30000
+    // The first cold load streams the DSH plugin bundles through the relay
+    // (4.2 MB compressed, 25-90 s). A 30 s document timeout killed a page that
+    // was still downloading and then forced a second full transfer.
+    const NATIVE_SURFACE_DOCUMENT_TIMEOUT_MS = 90000
 
     function nativeSurfaceRetryDelay(attempt) {
       return Math.min(1000 * Math.pow(2, Math.max(0, attempt - 1)), 8000)
@@ -8325,9 +12966,11 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       } catch (_) { /* performance marks are optional */ }
     }
 
-    function NativeSurface({ deviceId, online, visible, localDeviceId }) {
+    function NativeSurface({ deviceId, online, visible, localDeviceId, deviceInfo = null, preload = false, layered = false }) {
       const [state, setState] = React.useState({ deviceId, status: deviceId ? 'loading' : 'no-device', url: '' })
       const [attempt, setAttempt] = React.useState(0)
+      const [slow, setSlow] = React.useState(false)
+      const [styleBroken, setStyleBroken] = React.useState(false)
       const currentState = nativeSurfaceStateForDevice(state, deviceId, online)
       const retryCountRef = React.useRef(0)
       const documentRetryCountRef = React.useRef(0)
@@ -8436,7 +13079,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         const controller = new AbortController()
         if (!deviceId) { setState({ deviceId, status: 'no-device', url: '' }); return () => { current = false } }
         if (!online) { setState({ deviceId, status: 'offline', url: '' }); return () => { current = false } }
-        if (!visible) return () => { current = false; controller.abort() }
+        if (!visible && !preload) return () => { current = false; controller.abort() }
         const existing = surfaceStateRef.current
         if (existing && existing.deviceId === deviceId && existing.sourceKey === surfaceSourceKey
             && ['document-loading', 'document-loaded'].includes(existing.status) && existing.url) {
@@ -8455,7 +13098,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
               const detail = data.detail || {}
               const code = detail.code
               const message = response.status === 404 ? '目标设备不存在或已移除'
-                : code === 'node_update_required' ? '目标节点版本较旧，需要更新后才能打开完整 DSH 工作区'
+                : code === 'node_update_required' ? '目标设备没有可用的 DeepSeek Harness 工作区。文件与终端仍然可用。'
                   : code === 'device_offline' ? '目标设备离线。设备重新在线后可重试。'
                     : code === 'descriptor_missing' ? '目标设备的 DeepSeek Harness 未运行，或没有安装 Tether surface 组件。请先启动目标 DSH。'
                       : code === 'descriptor_invalid' ? '目标设备的 DSH surface 描述无效，请重启目标 DSH 或重新安装插件。'
@@ -8500,10 +13143,10 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
               }, nativeSurfaceRetryDelay(retryCountRef.current))
               return
             }
-            setState({ deviceId, status: 'error', url: '', message: error.message })
+            setState({ deviceId, status: 'error', url: '', message: error.message, code: error.surfaceCode || '' })
           })
         return () => { current = false; controller.abort() }
-      }, [deviceId, online, visible, attempt, localDeviceId, surfaceSourceKey])
+      }, [deviceId, online, visible, preload, attempt, localDeviceId, surfaceSourceKey])
       React.useEffect(() => {
         if (!deviceId || !online || !visible || typeof document === 'undefined') return undefined
         let alive = true
@@ -8514,7 +13157,20 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           pollFlightRef.current = controller
           try {
             const { response, data } = await fetchSurfaceDescriptor(deviceId, controller.signal)
-            if (!response.ok) return
+            if (!response.ok) {
+              const detail = data && data.detail ? data.detail : {}
+              const code = detail.code
+              if (['descriptor_missing', 'descriptor_invalid', 'host_unreachable'].includes(code)) {
+                setState((prev) => {
+                  if (prev.deviceId !== deviceId) return prev
+                  if (!['document-loading', 'document-loaded', 'error'].includes(prev.status)) return prev
+                  if (prev.status === 'error' && prev.code === code) return prev
+                  return { deviceId, status: 'error', url: '', code,
+                    message: 'DSH 运行中，但 Tether 插件或 surface 描述符缺失，正在尝试修复…' }
+                })
+              }
+              return
+            }
             if (!alive || !data.available || !isSafeNativeSurfaceUrl(data.url)) return
             const nextPid = Number(data.pid) || 0
             const previous = surfaceStateRef.current
@@ -8580,9 +13236,21 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         return () => { if (documentTimerRef.current) { clearTimeout(documentTimerRef.current); documentTimerRef.current = null } }
       }, [deviceId, visible, currentState.status, currentState.url])
 
+      React.useEffect(() => {
+        if (!visible || currentState.status !== 'document-loading') {
+          setSlow(false)
+          return undefined
+        }
+        const timer = setTimeout(() => setSlow(true), 15000)
+        return () => clearTimeout(timer)
+      }, [visible, currentState.status, currentState.deviceId])
+
       const retryDocument = () => {
         documentRetryCountRef.current = 0
         retryCountRef.current = 0
+        styleRepairRef.current = false
+        setStyleBroken(false)
+        setSlow(false)
         setState({ deviceId, status: 'loading', url: '' })
         setAttempt((value) => value + 1)
       }
@@ -8595,18 +13263,172 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         else setState({ deviceId, status: 'error', url: '', message: '原生工作区页面加载失败。请检查目标设备连接后重试。' })
       }
 
-      const message = currentState.status === 'loading' ? (currentState.message || '正在连接目标设备的 DSH 原生工作区…')
+      const dshRelevant = currentState.status === 'error'
+        && ['descriptor_missing', 'host_unreachable', 'descriptor_invalid', 'node_update_required'].includes(currentState.code)
+      const deviceOs = String((deviceInfo && (deviceInfo.os || deviceInfo.os_label
+        || (deviceInfo.capabilities && (deviceInfo.capabilities.os || deviceInfo.capabilities.os_label)))) || '')
+      const linuxDevice = /linux/i.test(deviceOs)
+      const dshInstallSupported = !linuxDevice && (!deviceInfo || !deviceInfo.capabilities
+        || deviceInfo.capabilities.dsh_install_supported !== false)
+      const dshWatch = visible && (deviceId === localDeviceId || dshRelevant)
+      const dshRestartPidRef = React.useRef(0)
+      const dshAutoRepairRef = React.useRef(false)
+      const styleRepairRef = React.useRef(false)
+      const [dsh, setDsh] = React.useState(null)
+      const [dshBusy, setDshBusy] = React.useState('')
+      const [dshError, setDshError] = React.useState('')
+      const [dshWeb, setDshWeb] = React.useState(null)
+      const [dshWebBusy, setDshWebBusy] = React.useState('')
+      const [dshWebOpen, setDshWebOpen] = React.useState(false)
+      const dshWebRef = React.useRef(null)
+      React.useEffect(() => { setDshWebOpen(false) }, [deviceId])
+      const dshWebSupported = linuxDevice || !!(deviceInfo && deviceInfo.capabilities
+        && deviceInfo.capabilities.dsh_web_supported)
+      const dshWebEnabled = dshWebSupported || !!(dshWeb && dshWeb.supported)
+      const dshWebValue = (data) => (data && data.value && typeof data.value === 'object' ? data.value : data)
+      React.useEffect(() => {
+        if (!deviceId) return undefined
+        let alive = true
+        const load = () => post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/dsh_web_status', {})
+          .then((data) => { if (alive) setDshWeb(dshWebValue(data)) })
+          .catch(() => {})
+        void load()
+        const timer = setInterval(load, dshWeb && dshWeb.installing ? 1500 : 4000)
+        return () => { alive = false; clearInterval(timer) }
+      }, [deviceId, dshWeb && dshWeb.installing])
+      const runDshWeb = async (action) => {
+        setDshWebBusy(action)
+        try {
+          const data = await post('/api/devices/' + encodeURIComponent(deviceId)
+            + '/fs/dsh_web_' + action, {})
+          if (data) setDshWeb(dshWebValue(data))
+        } catch (error) {
+          setDshWeb((current) => ({ ...(current || {}), error: error.message || '操作失败' }))
+        } finally {
+          setDshWebBusy('')
+        }
+      }
+      React.useEffect(() => {
+        if (!dshWatch && !dshRelevant) { setDsh(null); return undefined }
+        let alive = true
+        const load = async () => {
+          try {
+            const data = await post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/dsh_status', {})
+            if (alive) setDsh(data)
+          } catch (_) { /* the status endpoint needs a current node */ }
+        }
+        void load()
+        const timer = setInterval(load, dshBusy || (dsh && dsh.installing) ? 1500 : 5000)
+        return () => { alive = false; clearInterval(timer) }
+      }, [dshWatch, dshRelevant, deviceId, dshBusy, !!(dsh && dsh.installing)])
+      React.useEffect(() => {
+        if (!dshBusy) return
+        if (dshBusy === 'dsh_restart' || dshBusy === 'dsh_install_plugin') {
+          if (dsh && dsh.running && dsh.pid && dsh.pid !== dshRestartPidRef.current) {
+            setDshBusy('')
+            setDshError('')
+            styleRepairRef.current = false
+            setStyleBroken(false)
+            retryDocument()
+            return
+          }
+        } else if (dsh && dsh.running) {
+          setDshBusy('')
+          setDshError('')
+          retryDocument()
+          return
+        }
+        if (dsh && dsh.error) {
+          setDshError(dsh.error)
+          setDshBusy('')
+        }
+      }, [dsh, dshBusy])
+      const dshPluginMissing = !!dsh && dsh.installed !== false && dsh.running === true
+        && (dsh.surface === false || (dshRelevant && currentState.code === 'descriptor_missing'))
+      const dshBlocked = dshWatch && currentState.status !== 'local' && !!dsh && !dsh.running
+      const runDsh = async (action) => {
+        setDshError('')
+        setDshBusy(action)
+        if (action === 'dsh_restart' || action === 'dsh_install_plugin') {
+          dshRestartPidRef.current = Number(dsh && dsh.pid) || 0
+        }
+        try {
+          const result = await post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/' + action, {})
+          if (result) setDsh(result)
+        } catch (error) {
+          setDshError(error.message || '操作失败')
+          setDshBusy('')
+        }
+      }
+      React.useEffect(() => {
+        if (!dshPluginMissing || dshBusy || dshAutoRepairRef.current) return undefined
+        const timer = setTimeout(() => {
+          if (dshAutoRepairRef.current) return
+          dshAutoRepairRef.current = true
+          void runDsh('dsh_install_plugin')
+        }, 10000)
+        return () => clearTimeout(timer)
+      }, [dshPluginMissing, dshBusy])
+      React.useEffect(() => {
+        const bridge = typeof window !== 'undefined' ? window.tetherApp : undefined
+        if (!deviceId || !bridge || typeof bridge.onSurfaceStyleBroken !== 'function') return undefined
+        return bridge.onSurfaceStyleBroken((detail) => {
+          const current = surfaceStateRef.current
+          if (!current || current.deviceId !== deviceId || !current.url) return
+          if (detail && detail.source && !nativeSurfaceFailureMatches(current.url, detail.source)) return
+          if (!styleRepairRef.current) {
+            styleRepairRef.current = true
+            setStyleBroken(false)
+            void runDsh('dsh_install_plugin')
+          } else {
+            setStyleBroken(true)
+          }
+        })
+      }, [deviceId])
+
+      const dshSurfaceMissing = !!dshRelevant && !!dsh && dsh.running === true
+        && currentState.code === 'descriptor_missing'
+      const message = currentState.status === 'error' && dshRelevant && dsh
+        ? (dsh.installed === false ? 'DSH 未安装'
+          : dsh.running
+            ? (dshBusy === 'dsh_install_plugin'
+              ? '正在安装/修复 Tether 插件…'
+              : (dshSurfaceMissing ? 'DSH 已在运行，但 Tether 插件未加载或 surface 描述符缺失' : currentState.message))
+            : 'DSH 未启动')
+        : currentState.status === 'loading' ? (currentState.message || '正在连接目标设备的 DSH 原生工作区…')
         : currentState.status === 'local' ? '当前已在 DeepSeek Harness 中；本机工作区无需再嵌入，可用左侧「文件」或「连接」。'
           : currentState.status === 'offline' ? '目标设备离线。设备重新在线后可重试。'
           : currentState.status === 'no-device' ? '先从左侧设备列表选择目标设备。'
             : currentState.status === 'error' ? currentState.message
               : ''
-      return h('div', { className: 'tether-native-surface', style: nativeSurfaceContainerStyle(visible) },
+      const dshWebUrl = dshWeb && dshWeb.running ? String(dshWeb.url || '') : ''
+      if (dshWebOpen && dshWebUrl && host.kind === 'app') {
+        return h('div', { className: 'tether-native-surface', style: { ...nativeSurfaceContainerStyle(visible, layered), position: 'relative' } },
+          h('webview', {
+            ref: dshWebRef,
+            src: dshWebUrl,
+            style: { flex: '1 1 auto', width: '100%', height: '100%', minWidth: 0, minHeight: 0, border: 0, background: C.bg }
+          }),
+          h('div', { style: { position: 'absolute', top: 10, right: 10, display: 'flex', gap: 6, zIndex: 2 } },
+            h('button', {
+              type: 'button', className: 'tether-hover',
+              onClick: () => { try { if (dshWebRef.current) dshWebRef.current.reload() } catch (_) { /* guest may still be loading */ } },
+              style: { height: 28, padding: '0 10px', border: 0, borderRadius: 6, background: 'rgba(255,255,255,.94)', color: C.sub, fontSize: 12, cursor: 'pointer', boxShadow: '0 1px 4px rgba(16,24,40,.16)' }
+            }, '重新加载'),
+            h('button', {
+              type: 'button', className: 'tether-hover', onClick: () => setDshWebOpen(false),
+              style: { height: 28, padding: '0 10px', border: 0, borderRadius: 6, background: 'rgba(255,255,255,.94)', color: C.sub, fontSize: 12, cursor: 'pointer', boxShadow: '0 1px 4px rgba(16,24,40,.16)' }
+            }, '关闭')
+          )
+        )
+      }
+      return h('div', { className: 'tether-native-surface', style: nativeSurfaceContainerStyle(visible, layered) },
         ['document-loading', 'document-loaded'].includes(currentState.status) && currentState.deviceId === deviceId && online
           ? h('div', { style: { position: 'relative', display: 'flex', flex: '1 1 auto', minWidth: 0, minHeight: 0 } },
             h('iframe', {
               key: deviceId + ':' + (currentState.pid || 0),
               src: currentState.url,
+              sandbox: 'allow-scripts allow-same-origin allow-forms allow-downloads allow-modals',
               onLoad: () => {
                 const loadedState = surfaceStateRef.current
                 if (!loadedState || loadedState.deviceId !== deviceId || loadedState.url !== currentState.url
@@ -8626,13 +13448,169 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             currentState.status === 'document-loading' ? h('div', {
               role: 'status', 'aria-live': 'polite',
               style: { position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', padding: '6px 10px', borderRadius: 6, background: 'rgba(255,255,255,.92)', color: C.sub, fontSize: 12, boxShadow: '0 1px 4px rgba(16,24,40,.12)', pointerEvents: 'none' }
-            }, '目标工作区页面正在加载…') : null
+            }, '目标工作区页面正在加载…') : null,
+            slow && currentState.status === 'document-loading' ? h('div', {
+              role: 'status',
+              style: { position: 'absolute', bottom: 44, left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 8, background: 'rgba(255,255,255,.95)', color: C.sub, fontSize: 12, boxShadow: '0 1px 4px rgba(16,24,40,.14)' }
+            }, '加载较慢', h('button', {
+              type: 'button', onClick: retryDocument,
+              style: { border: 0, background: 'transparent', color: C.blue, fontSize: 12, cursor: 'pointer', padding: 0 }
+            }, '重新加载')) : null,
+            styleBroken ? h('div', {
+              role: 'alert',
+              style: { position: 'absolute', inset: 0, zIndex: 7, display: 'grid', placeItems: 'center', alignContent: 'center', gap: 10, padding: 24, background: C.bg, textAlign: 'center' }
+            },
+              h('div', { style: { fontSize: 14, color: C.ink } }, 'DSH 界面样式与 Tether 版本不匹配'),
+              h('div', { style: { maxWidth: 460, fontSize: 12, color: C.sub, lineHeight: 1.6 } },
+                '已自动尝试安装/修复 Tether 插件。若仍无法恢复，请等待 Tether 适配当前 DSH 版本。'),
+              btn('重试', retryDocument, { primary: true })
+            ) : null,
+            currentState.status === 'document-loaded' ? h('button', {
+              type: 'button', onClick: retryDocument, title: '重新加载目标工作区', 'aria-label': '重新加载目标工作区',
+              style: { position: 'absolute', right: 10, bottom: 10, width: 26, height: 26, border: 0, borderRadius: 999, background: 'rgba(255,255,255,.9)', color: C.sub, fontSize: 14, cursor: 'pointer', boxShadow: '0 1px 4px rgba(16,24,40,.16)' }
+            }, '↻') : null
           )
           : h('div', { style: { display: 'grid', placeItems: 'center', alignContent: 'center', gap: 12, flex: '1 1 auto', minHeight: 0, color: C.sub, textAlign: 'center', padding: 24 } },
             h('div', null, message),
-            currentState.status !== 'loading' && currentState.status !== 'local' ? btn('重试', retryDocument) : null
-          )
+            dshWeb && dshWeb.running
+              ? btn(host.kind === 'app' ? '打开工作区' : '请在桌面 APP 内打开', () => {
+                if (host.kind !== 'app') return
+                const url = dshWeb.url || ''
+                if (!url) { setDshWeb((current) => ({ ...(current || {}), error: '工作区地址还没准备好，请稍后重试' })); return }
+                setDshWebOpen(true)
+              }, { primary: true, disabled: host.kind !== 'app' })
+              : null,
+            dshRelevant && dsh && !dsh.running
+              ? btn(dsh.installed === false
+                ? (dshBusy === 'dsh_install' || dsh.installing ? '安装中…' : '安装 DSH')
+                : (dshBusy === 'dsh_start' ? '启动中…' : '启动 DSH'),
+              () => runDsh(dsh.installed === false ? 'dsh_install' : 'dsh_start'),
+              { primary: true, disabled: !!dshBusy || !!dsh.installing })
+              : null,
+            dshRelevant && dsh && dsh.running
+              ? btn(dshBusy === 'dsh_install_plugin' ? '修复中…' : '安装/修复插件',
+                () => { dshAutoRepairRef.current = true; runDsh('dsh_install_plugin') },
+                { primary: true, disabled: !!dshBusy })
+              : null,
+            dshRelevant && dsh && dsh.running
+              ? btn(dshBusy === 'dsh_restart' ? '重启中…' : '重启 DSH',
+                () => runDsh('dsh_restart'), { disabled: !!dshBusy })
+              : null,
+            currentState.status !== 'loading' && currentState.status !== 'local' ? btn('重试', retryDocument) : null,
+            dshRelevant && dshBusy && dsh && dsh.installing
+              ? h('div', { style: { fontSize: 11.5, color: C.mute } }, '安装中 ' + (Number(dsh.progress) || 0) + '%')
+              : null,
+            dshError ? h('div', { role: 'alert', style: { color: C.red, fontSize: 11.5 } }, dshError) : null
+          ),
+        dshBlocked ? h('div', {
+          role: 'status',
+          style: {
+            position: 'absolute', inset: 0, zIndex: 6, display: 'grid', placeItems: 'center',
+            alignContent: 'center', gap: 10, padding: 24, background: C.bg, color: C.sub, textAlign: 'center'
+          }
+        },
+          h('div', { style: { fontSize: 14, color: C.ink } }, dsh.installed === false ? 'DSH 未安装' : 'DSH 未启动'),
+          dsh.version ? h('div', { className: 'tether-num', style: { fontSize: 11.5, color: C.mute } }, dsh.version) : null,
+          dsh.installing ? h('div', { style: { fontSize: 11.5, color: C.mute } }, '安装中 ' + (Number(dsh.progress) || 0) + '%') : null,
+          dsh.installed === false && (!dshInstallSupported || (dshWeb && dshWeb.running))
+            ? h(React.Fragment, null,
+              h('div', { style: { maxWidth: 480, fontSize: 12, color: C.sub, lineHeight: 1.6 } },
+                dshWeb && dshWeb.running
+                  ? 'DSH Web 已在目标机运行，可在 Tether 内打开工作区。'
+                  : '当前目标系统没有官方 DSH 桌面版，可以安装 DSH Web 作为远程工作区。'),
+              dshWebEnabled
+                ? (dshWeb && dshWeb.running
+                  ? (host.kind === 'app'
+                    ? btn('打开工作区', () => {
+                      const url = dshWeb.url || ''
+                      if (!url) { setDshWeb((current) => ({ ...(current || {}), error: '工作区地址还没准备好，请稍后重试' })); return }
+                      setDshWebOpen(true)
+                    }, { primary: true })
+                    : btn('请在桌面 APP 内打开', () => {}, { disabled: true }))
+                  : dshWeb && dshWeb.installed
+                    ? btn(dshWebBusy ? '启动中…' : '启动 DSH Web', () => void runDshWeb('start'),
+                      { primary: true, disabled: !!dshWebBusy })
+                    : btn(dshWebBusy || (dshWeb && dshWeb.installing) ? '安装中…' : '安装 DSH Web',
+                      () => void runDshWeb('install'),
+                      { primary: true, disabled: !!dshWebBusy || !!(dshWeb && dshWeb.installing) }))
+                : null,
+              dshWeb && dshWeb.error
+                ? h('div', { role: 'alert', style: { color: C.red, fontSize: 11.5 } }, dshWeb.error)
+                : null)
+            : btn(dsh.installed === false
+              ? (dshBusy === 'dsh_install' || dsh.installing ? '安装中…' : '安装 DSH')
+              : (dshBusy === 'dsh_start' ? '启动中…' : '启动 DSH'),
+            () => runDsh(dsh.installed === false ? 'dsh_install' : 'dsh_start'),
+            { primary: true, disabled: !!dshBusy || !!dsh.installing }),
+          dshError ? h('div', { role: 'alert', style: { color: C.red, fontSize: 11.5 } }, dshError) : null
+        ) : null
       )
+    }
+
+    function SurfaceDeck({ devices, deviceId, localDeviceId, visible }) {
+      const [recent, setRecent] = React.useState(() => {
+        try {
+          const raw = JSON.parse(localStorage.getItem('tether.recentSurfaces') || '[]')
+          return Array.isArray(raw) ? raw.filter((item) => typeof item === 'string' && item) : []
+        } catch (_) { return [] }
+      })
+      const [keep, setKeep] = React.useState(() => {
+        try { return localStorage.getItem('tether.keepSurfaces') !== '0' } catch (_) { return true }
+      })
+      const mountedRef = React.useRef([])
+      React.useEffect(() => {
+        const sync = () => {
+          try { setKeep(localStorage.getItem('tether.keepSurfaces') !== '0') } catch (_) { setKeep(true) }
+        }
+        window.addEventListener('tether-surfaces-pref', sync)
+        return () => window.removeEventListener('tether-surfaces-pref', sync)
+      }, [])
+      React.useEffect(() => {
+        if (!deviceId) return
+        setRecent((current) => {
+          const next = [deviceId, ...current.filter((item) => item !== deviceId)].slice(0, 3)
+          try { localStorage.setItem('tether.recentSurfaces', JSON.stringify(next)) } catch (_) { /* best effort */ }
+          return next
+        })
+      }, [deviceId])
+      const online = new Map((devices || []).map((item) => [item.device_id, item]))
+      const wanted = [deviceId, ...(keep ? recent : [])]
+        .filter((item, index, all) => item && all.indexOf(item) === index)
+      let ids = mountedRef.current.filter((id) => wanted.includes(id))
+      if (deviceId && !ids.includes(deviceId)) {
+        ids = ids.slice(-2)
+        ids.push(deviceId)
+      }
+      for (const id of wanted) {
+        if (ids.length >= 3) break
+        if (!ids.includes(id)) ids.push(id)
+      }
+      if (keep) {
+        const spare = (devices || [])
+          .filter((item) => item && item.online && item.capabilities && item.capabilities.dsh_surface
+            && !ids.includes(item.device_id))
+          .slice(0, Math.max(0, 3 - ids.length))
+          .map((item) => item.device_id)
+        ids.push(...spare)
+      }
+      mountedRef.current = ids
+      return h('div', {
+        style: {
+          position: 'absolute', inset: 0, display: 'flex', minWidth: 0, minHeight: 0,
+          visibility: visible ? 'visible' : 'hidden',
+          pointerEvents: visible ? 'auto' : 'none'
+        }
+      },
+        ids.map((id) => h(NativeSurface, {
+          key: id,
+          deviceId: id,
+          online: !!(online.get(id) && online.get(id).online),
+          deviceInfo: online.get(id) || null,
+          visible: visible && id === deviceId,
+          preload: true,
+          layered: true,
+          localDeviceId
+        })))
     }
 
     function isSafeNativeSurfaceUrl(value) {
@@ -8756,6 +13734,8 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const workspaceCacheRef = React.useRef(new Map())
       const drivesCacheRef = React.useRef(new Map())
       const policyCacheRef = React.useRef(new Map())
+      const auditCacheRef = React.useRef(new Map())
+      const permissionInflightRef = React.useRef(new Map())
       const hoverTimerRef = React.useRef(null)
       const treeDeviceRef = React.useRef('')
       if (treeDeviceRef.current !== deviceId) {
@@ -8773,6 +13753,11 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       projectsRef.current = projects
       projectRef.current = project
       const [view, setView] = React.useState('chat')
+      const [terminalOpen, setTerminalOpen] = React.useState(false)
+      const [terminalCwd, setTerminalCwd] = React.useState('')
+      React.useEffect(() => { setTerminalCwd('') }, [deviceId])
+      const [terminalHeight, setTerminalHeight] = React.useState(220)
+      const [terminalKey, setTerminalKey] = React.useState(0)
       const [activePanel, setActivePanel] = usePersisted('tether.ui.panel.v2', 'workspaces')
       const [sidebarCollapsed, setSidebarCollapsed] = usePersisted('tether.ui.panelCollapsed', false)
       const [sidebarWidth, setSidebarWidth] = usePersisted('tether.ui.panelWidth.v2', UI.defaultSide)
@@ -8780,6 +13765,8 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const [networkListWidth, setNetworkListWidth] = usePersisted('tether.ui.network.width', 300)
       const [networkResizing, setNetworkResizing] = React.useState(false)
       const [networkPage, setNetworkPage] = React.useState(1)
+      const [networkDetailId, setNetworkDetailId] = React.useState('')
+      const [showNetworkLinks, setShowNetworkLinks] = React.useState(false)
       const [networkRefreshing, setNetworkRefreshing] = React.useState(false)
       const [notice, setNotice] = React.useState('')
       const [busy, setBusy] = React.useState(false)
@@ -8793,6 +13780,8 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const [runEvents, setRunEvents] = React.useState([])
       const [task, setTask] = React.useState('')
       const [showSettings, setShowSettings] = React.useState(false)
+      const showSettingsRef = React.useRef(false)
+      showSettingsRef.current = showSettings
       const [policy, setPolicy] = React.useState(null)
       const [audit, setAudit] = React.useState([])
       const [auditCount, setAuditCount] = React.useState(0)
@@ -8808,6 +13797,8 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       pathRef.current = path
       const [hoverTip, setHoverTip] = React.useState(null)
       const [selected, setSelected] = React.useState(null)
+      const [selectedPaths, setSelectedPaths] = React.useState([])
+      const [band, setBand] = React.useState(null)
       const [file, setFile] = React.useState(null)
       const [draft, setDraft] = React.useState('')
       const [dirty, setDirty] = React.useState(false)
@@ -8840,9 +13831,6 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const appLocalDeviceRef = React.useRef('')
       const [showUpdate, setShowUpdate] = React.useState(false)
       const [updateRefreshing, setUpdateRefreshing] = React.useState(false)
-      const [pendingApp, setPendingApp] = React.useState('')
-      const [pendingDshRestart, setPendingDshRestart] = React.useState(false)
-      const [dshRestartBusy, setDshRestartBusy] = React.useState(false)
       const [updatePage, setUpdatePage] = React.useState(1)
       const [updateInfo, setUpdateInfo] = React.useState(() => ({ app: null, localPlugin: localPluginVersionSeed(host), devices: {} }))
       const [updateBusy, setUpdateBusy] = React.useState('')
@@ -8866,8 +13854,44 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const lastUpdateToastRef = React.useRef({})
       const [updateToast, setUpdateToast] = React.useState('')
       const [showHub, setShowHub] = React.useState(false)
-      const [hubUrl, setHubUrl] = React.useState('')
-      const [hubToken, setHubToken] = React.useState('')
+      const [showAppSettings, setShowAppSettings] = React.useState(false)
+      const [localDsh, setLocalDsh] = React.useState(null)
+      const [dshBusy, setDshBusy] = React.useState('')
+      const [loggedIn, setLoggedIn] = React.useState(() => {
+        try { return !!(JSON.parse(window.localStorage.getItem('tether.hub') || '{}').token) } catch (_) { return false }
+      })
+      const [hubUrl, setHubUrl] = React.useState(() => {
+        try { return JSON.parse(window.localStorage.getItem('tether.hub') || '{}').url || '' } catch (_) { return '' }
+      })
+      const [hubToken, setHubToken] = React.useState(() => {
+        try { return JSON.parse(window.localStorage.getItem('tether.hub') || '{}').token || '' } catch (_) { return '' }
+      })
+      const [hubEmail, setHubEmail] = React.useState(() => {
+        try { return JSON.parse(window.localStorage.getItem('tether.hub') || '{}').email || '' } catch (_) { return '' }
+      })
+      const [hubRole, setHubRole] = React.useState(() => {
+        try { return JSON.parse(window.localStorage.getItem('tether.hub') || '{}').role || '' } catch (_) { return '' }
+      })
+      const [accountName, setAccountName] = usePersisted('tether.accountName', '')
+      const [accountAvatar, setAccountAvatar] = usePersisted('tether.accountAvatar', '')
+      const accountNameRef = React.useRef(accountName)
+      const accountAvatarRef = React.useRef(accountAvatar)
+      accountNameRef.current = accountName
+      accountAvatarRef.current = accountAvatar
+      const accountPendingRef = React.useRef(null)
+      const [windowMaximized, setWindowMaximized] = React.useState(false)
+      React.useEffect(() => {
+        if (!host || !host.windowControls) return undefined
+        let alive = true
+        host.windowControls.state().then((state) => {
+          if (alive) setWindowMaximized(!!(state && state.maximized))
+        }).catch(() => {})
+        const off = host.windowControls.onState((state) => {
+          if (alive) setWindowMaximized(!!(state && state.maximized))
+        })
+        return () => { alive = false; if (typeof off === 'function') off() }
+      }, [host])
+      const [settingsSection, setSettingsSection] = React.useState('account')
       const [hubUnsafeExistingUrl, setHubUnsafeExistingUrl] = React.useState(false)
       const [hubStatus, setHubStatus] = React.useState('unknown')
       const [hubState, setHubState] = React.useState(null)
@@ -8877,6 +13901,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const [hubCheckedAt, setHubCheckedAt] = React.useState(null)
       const [hubAddress, setHubAddress] = React.useState('')
       const hubProbeRef = React.useRef(null)
+      const stateOkAtRef = React.useRef(0)
       const formatCheckTime = (date) => date ? [date.getHours(), date.getMinutes(), date.getSeconds()].map((part) => String(part).padStart(2, '0')).join(':') : ''
       React.useEffect(() => {
         if (!host || typeof host.connectionInfo !== 'function') return undefined
@@ -8894,6 +13919,17 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
 
       const fail = (e) => {
         if (e && e.code === 'authority_changed') return
+        if (e && (e.status === 401 || e.code === 'unauthorized' || e.code === 'invalid_session' || e.code === 'session_expired')) {
+          try {
+            const saved = JSON.parse(window.localStorage.getItem('tether.hub') || '{}')
+            window.localStorage.setItem('tether.hub', JSON.stringify({ url: saved.url || hubUrl, email: saved.email || hubEmail }))
+          } catch (_) { /* storage unavailable */ }
+          setHubToken('')
+          setHubRole('')
+          setLoggedIn(false)
+          setNotice('登录已过期，请重新登录')
+          return
+        }
         if (e && e.code === 'node_update_required') { setNativeError('节点待更新'); return }
         // Transient list/preview failures already retry and show their own inline
         // state; a red toast on a slow remote folder is noise, not information.
@@ -9184,33 +14220,28 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         }
         return false
       }
-      const updateOneClick = async (component, fixedScope) => {
-        const scope = fixedScope === undefined ? updateScope(component) : fixedScope
-        let authority
-        const current = () => scopeIsCurrent(scope)
-        try {
-          const outcome = await runUpdateSequence({
-            isCurrent: current,
-            check: async () => {
-              const result = await updateAction(component, 'check', undefined, scope)
-              authority = result && result.authorityBase
-              return result
-            },
-            prepare: async (checked) => {
-              authority = checked.authorityBase
-              const result = await updateAction(component, 'prepare', undefined, scope, authority)
-              return result
-            },
-            apply: (id, checked) => updateAction(component, 'apply', id, scope, checked.authorityBase)
-          })
-          if (outcome.cancelled) return false
-          if (!outcome.failed && !outcome.updated) setComponentUpdateError(component, '', scope)
-          if (!outcome.failed && outcome.updated && component === 'node') await watchNodeRestart(scope, authority)
-          return !outcome.failed
-        } catch (error) {
-          setComponentUpdateError(component, updateErrorText(error), scope)
-          return false
+      const waitForUpdateSettle = async (component, scope, authority) => {
+        for (let attempt = 0; attempt < 120; attempt += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 1500))
+          if (!scopeIsCurrent(scope)) return null
+          try {
+            const status = await loadUpdateInfo(component, 'status', authority, scope)
+            if (isUsableUpdateStatus(status) && !updateInfoRunning(status)) return status
+          } catch (_) { /* another window is still installing; keep polling */ }
         }
+        return null
+      }
+      const prepareUpdateComponent = async (component, scope) => {
+        const checked = await updateAction(component, 'check', undefined, scope)
+        if (!checked || checked.ok === false) return { failed: true, checked }
+        if (updateInfoRunning(checked)) return { inProgress: true, checked }
+        if (checked.update_available !== true) return { current: true, checked }
+        const prepared = await updateAction(component, 'prepare', undefined, scope, checked.authorityBase)
+        if (!prepared || prepared.ok === false) return { failed: true, checked }
+        if (updateInfoRunning(prepared)) return { inProgress: true, checked }
+        const preparedId = prepared.prepared_id || ((prepared.prepared || [])[0] || {}).prepared_id
+        if (!preparedId) return { failed: true, checked }
+        return { checked, prepared, preparedId, authority: checked.authorityBase, scope }
       }
       const openUpdateCenter = () => {
         clearFinishedUpdateRuns()
@@ -9249,11 +14280,37 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const updateToneColor = (tone) => tone === 'red' ? C.red : tone === 'green' ? C.green : tone === 'amber' ? C.amber : C.mute
       const updateRunState = (key) => updateRuns[key] || null
       const anyUpdateRunning = Object.values(updateRuns).some((run) => run && run.state === 'running')
+      const applyDshUpdate = async () => {
+        if (!host || typeof host.localPluginUpdates !== 'function') return
+        try {
+          const result = await activateLocalDshUpdate({
+            reloadSurface: typeof host.reloadLocalPluginSurface === 'function' ? () => host.reloadLocalPluginSurface() : undefined,
+            status: () => host.localPluginUpdates('status')
+          })
+          if (result.status === 'active') setNotice('插件更新已立即生效')
+          else if (result.status === 'reload_failed') setNotice('DSH 插件未能在线重载，请手动重启 DeepSeek Harness。')
+          else setNotice('当前 DSH 无法在线重启；请手动重启一次以加载本次更新。')
+        } catch (error) {
+          setComponentUpdateError('localPlugin', shortUpdateError(error), null)
+        }
+      }
       const updateButton = (card, onRetry, onRecheck, onPrimary, disabled = false) => {
         if (card.action === 'retry') return btn('重试', onRetry, { primary: true, disabled: anyUpdateRunning || disabled })
         if (card.action === 'recheck') return btn('重试', onRecheck, { primary: true, disabled: anyUpdateRunning || disabled })
-        if (card.action === 'restart') return btn('立即生效', () => setPendingDshRestart(true), { primary: true, disabled: anyUpdateRunning || disabled })
+        if (card.action === 'restart') return btn('立即生效', applyDshUpdate, { primary: true, disabled: anyUpdateRunning || disabled })
         return btn(card.disabled ? '一键更新' : card.label, onPrimary, { primary: true, disabled: anyUpdateRunning || disabled || card.disabled })
+      }
+      const updateProgressBar = (infos, active) => {
+        if (!active) return null
+        const progress = updateProgressFor(infos)
+        const percent = Math.max(0, Math.min(100, Math.round(Number(progress && progress.percent) || 0)))
+        return h('div', { style: { marginTop: 8 } },
+          h('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 11, color: C.sub, marginBottom: 4 } },
+            h('span', null, progress ? updateProgressText(progress) : '准备更新…'),
+            h('span', { className: 'tether-num' }, percent + '%')),
+          h('div', { role: 'progressbar', 'aria-label': '更新进度', 'aria-valuemin': 0, 'aria-valuemax': 100, 'aria-valuenow': percent,
+            style: { height: 6, borderRadius: 3, background: C.line, overflow: 'hidden' } },
+            h('div', { style: { width: percent + '%', height: '100%', background: C.amber, transition: 'width 300ms ease' } })))
       }
       const productCard = (product) => {
         if (host && host.kind === 'web') return null
@@ -9280,6 +14337,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         const runtimeRestartRequired = product === 'dsh' && !isUpdateInfoStale(infos[0]) && localPluginNeedsRestart(infos[0])
         const card = updateCardStateForInfos(infos, { running, error: run?.state === 'error' ? run.message : '',
           restartRequired: runtimeRestartRequired, failed })
+        const active = card.kind === 'running'
         const versionText = versionLine(product === 'desktop' ? 'APP' : '插件',
           {
             current: product === 'desktop'
@@ -9292,11 +14350,12 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         return h('div', { key: product, style: { padding: 12, borderRadius: 8, background: C.panel, marginBottom: 10 } },
           h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 } },
             h('strong', { style: { fontSize: 13 } }, title),
-            h('span', { style: { marginLeft: 'auto' } }, running ? h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center', color: C.amber } }, h(Glyph, { name: 'refresh', size: 14 }))
+            h('span', { style: { marginLeft: 'auto' } }, active ? h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center', color: C.amber } }, h(Glyph, { name: 'refresh', size: 14 }))
               : pill(card.pill, updateToneColor(card.tone)))),
           h('div', { style: { color: C.sub, fontSize: 12, lineHeight: '19px' } }, versionText),
+          updateProgressBar(infos, active),
           h('div', { style: { marginTop: 8 } },
-            running ? btn(h('span', { className: 'tether-spin', style: { width: 16, height: 16, display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 16 })), () => {}, { primary: true, disabled: true })
+            active ? btn(h('span', { className: 'tether-spin', style: { width: 16, height: 16, display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 16 })), () => {}, { primary: true, disabled: true })
               : updateButton(card, () => runProductUpdate(product), () => refreshUpdateCenter(true), () => runProductUpdate(product))))
       }
       const deviceCard = (item) => {
@@ -9314,6 +14373,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         const card = updateCardStateForInfos(infos, { running, error: run?.state === 'error' ? run.message : '',
           restartRequired: pluginRestart, failed,
           restartPill: '插件待重启 DSH', restartAction: 'none' })
+        const active = card.kind === 'running'
         const nodeTuple = versionTuple(node.current_version || (item.capabilities && item.capabilities.node_version), node.latest_version)
         const versionRows = []
         if (hasApp) versionRows.push('APP ' + versionTuple(item.capabilities.app_version, app.latest_version) + '/Node ' + nodeTuple)
@@ -9324,12 +14384,13 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             h('strong', { style: { fontSize: 13 } }, item.name || item.device_id),
             h('span', { style: { color: C.mute, fontSize: 11 } }, item.name && item.name !== item.device_id ? item.device_id : ''),
             h('span', { style: { marginLeft: 'auto' } }, !item.online ? pill('离线', C.mute)
-              : running ? h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center', color: C.amber } }, h(Glyph, { name: 'refresh', size: 14 }))
+              : active ? h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center', color: C.amber } }, h(Glyph, { name: 'refresh', size: 14 }))
                 : pill(card.pill, updateToneColor(card.tone)))),
           h('div', { style: { color: C.sub, fontSize: 12, lineHeight: '19px' } },
             versionRows.map((text) => h('div', { key: text }, text))),
+          updateProgressBar(infos, active),
           h('div', { style: { marginTop: 8 } },
-            running ? btn(h('span', { className: 'tether-spin', style: { width: 16, height: 16, display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 16 })), () => {}, { primary: true, disabled: true })
+            active ? btn(h('span', { className: 'tether-spin', style: { width: 16, height: 16, display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 16 })), () => {}, { primary: true, disabled: true })
               : !item.online ? btn('离线', () => {}, { primary: true, disabled: true })
                 : updateButton(card, () => runDeviceUpdate(item), () => refreshUpdateCenter(true),
                   () => runDeviceUpdate(item), false)))
@@ -9341,34 +14402,61 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         setUpdateBusy('product:' + product)
         let failure = ''
         try {
-          let nodeFailure = false
-          const localNodeInfo = localId ? infoFor('node', localId) : null
-          if (localId && updateNeededFor(localNodeInfo)) {
-            const nodeOk = await updateOneClick('node', { deviceId: localId, epoch: 0 })
-            if (!nodeOk) nodeFailure = true
-          }
-          if (product === 'desktop') {
-            const checked = await updateAction('app', 'check', undefined, null)
-            if (!checked) failure = 'APP 更新检查失败'
-            else if (checked.update_available === true) {
-              const prepared = await updateAction('app', 'prepare', undefined, null)
-              const preparedId = prepared && (prepared.prepared_id || ((prepared.prepared || [])[0] || {}).prepared_id)
-              if (!preparedId) throw new Error('APP 更新包未准备好，请重试')
-              setPendingApp(preparedId)
+          const nodeScope = localId ? { deviceId: localId, epoch: 0 } : null
+          const plan = product === 'desktop'
+            ? [{ component: 'node', scope: nodeScope }, { component: 'app', scope: null }]
+            : [{ component: 'localPlugin', scope: null }, { component: 'node', scope: nodeScope }]
+          const prepared = {}
+          for (const step of plan) {
+            if (step.component === 'node' && !step.scope) {
+              prepared.node = { failed: true }
+              failure = failure || '未找到本机 Node'
+              continue
             }
-          } else {
-            const outcome = await runUpdateSequence({
-              check: () => updateAction('localPlugin', 'check', undefined, null),
-              prepare: () => updateAction('localPlugin', 'prepare', undefined, null),
-              apply: (id) => updateAction('localPlugin', 'apply', id, null)
-            })
-            if (outcome.failed) failure = '插件更新失败'
-            else if (outcome.updated && localPluginNeedsRestart(outcome.result)) {
-              if (outcome.result.restart_scheduled === true) setNotice('插件已安装，DSH 正在自动重启…')
-              else setPendingDshRestart(true)
+            try {
+              prepared[step.component] = await prepareUpdateComponent(step.component, step.scope)
+            } catch (error) {
+              prepared[step.component] = { failed: true }
+              setComponentUpdateError(step.component, shortUpdateError(error), step.scope)
+            }
+            if (prepared[step.component].failed && !failure) {
+              failure = step.component === 'app' ? 'APP 更新失败'
+                : step.component === 'node' ? 'Node 更新失败' : '插件更新失败'
             }
           }
-          if (nodeFailure && !failure) failure = 'Node 更新失败'
+          // Everything is downloaded before the first apply. Node goes first so
+          // the APP (and with it the node process) restarts exactly once.
+          const order = product === 'desktop' ? ['node', 'app'] : ['localPlugin', 'node']
+          for (const component of order) {
+            const entry = prepared[component]
+            if (!entry || entry.failed || entry.current || entry.inProgress || !entry.preparedId) continue
+            try {
+              if (component === 'app') {
+                const applied = await updateAction('app', 'apply', entry.preparedId, null)
+                if (!applied || applied.ok === false) failure = failure || 'APP 更新失败'
+                else if (!updateInfoRunning(applied)) setNotice('APP 正在重启并安装更新…')
+                continue
+              }
+              const result = await updateAction(component, 'apply', entry.preparedId, entry.scope, entry.authority)
+              if (!result || result.ok === false) {
+                failure = failure || (component === 'node' ? 'Node 更新失败' : '插件更新失败')
+                continue
+              }
+              if (updateInfoRunning(result)) {
+                await waitForUpdateSettle(component, entry.scope, entry.authority)
+                continue
+              }
+              if (component === 'node') {
+                if (result.restart_deferred !== true) await watchNodeRestart(entry.scope, entry.authority)
+              } else if (component === 'localPlugin') {
+                if (result.restart_scheduled === true) setNotice('插件已安装，DSH 正在自动重启…')
+                else await applyDshUpdate()
+              }
+            } catch (error) {
+              failure = failure || (component === 'node' ? 'Node 更新失败' : component === 'app' ? 'APP 更新失败' : '插件更新失败')
+              setComponentUpdateError(component, shortUpdateError(error), entry.scope)
+            }
+          }
         } catch (error) {
           failure = shortUpdateError(error)
           setComponentUpdateError(product === 'desktop' ? 'app' : 'localPlugin', failure, null)
@@ -9378,87 +14466,67 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           setUpdateBusy('')
         }
       }
-      const confirmDshRestart = async () => {
-        setDshRestartBusy(true)
-        try {
-          const result = await activateLocalDshUpdate({
-            reloadSurface: typeof host.reloadLocalPluginSurface === 'function' ? () => host.reloadLocalPluginSurface() : undefined,
-            status: () => host.localPluginUpdates('status')
-          })
-          setPendingDshRestart(false)
-          if (result.status === 'active') setNotice('插件更新已立即生效')
-          else if (result.status === 'reload_failed') setNotice('DSH 插件未能在线重载，请手动重启 DeepSeek Harness。')
-          else setNotice('当前 DSH 无法在线重启；请手动重启一次以加载本次更新。')
-        } catch (error) {
-          setPendingDshRestart(false)
-          setComponentUpdateError('localPlugin', shortUpdateError(error), null)
-        } finally { setDshRestartBusy(false) }
-      }
-      const transientUpdateError = (error) => {
-        const code = error && (error.code || (error.detail && error.detail.code))
-        if (code === 'device_offline' || code === 'update_busy' || code === 'surface_timeout') return true
-        const status = error && error.status
-        return !status || status === 400 || status === 408 || status === 429 || status >= 500
-      }
-      const checkUpdateWithRetry = async (component, scope, attempts = 3) => {
-        let lastError
-        for (let i = 0; i < attempts; i += 1) {
-          try { return await updateAction(component, 'check', undefined, scope) } catch (error) {
-            lastError = error
-            if (!transientUpdateError(error) || i + 1 >= attempts) break
-            await new Promise((resolve) => setTimeout(resolve, 2000))
-          }
-        }
-        throw lastError
-      }
       const runDeviceUpdate = async (item) => {
         const runKey = 'device:' + item.device_id
         setUpdateRun(runKey, { state: 'running' })
         setUpdateBusy('device:' + item.device_id)
         const failures = []
+        const scope = { deviceId: item.device_id, epoch: 0 }
         try {
-          const scope = { deviceId: item.device_id, epoch: 0 }
-          for (const component of deviceUpdateComponents(item.capabilities)) {
-            if (!updateNeededFor(infoFor(component, item.device_id))) continue
-            if (component !== 'app') {
-              try {
-                if (!await updateOneClick(component, scope)) failures.push(component)
-                else if (component === 'plugin') {
-                  const restarted = await watchPluginRestart(scope)
-                  if (!restarted) {
-                    failures.push('plugin')
-                    setComponentUpdateError('plugin', '插件已安装，目标 DSH 尚未完成重启', scope)
-                  }
-                }
-              } catch (error) {
-                failures.push(component)
-                setComponentUpdateError(component, shortUpdateError(error), scope)
-              }
-              continue
-            }
+          const components = deviceUpdateComponents(item.capabilities)
+          const prepared = {}
+          for (const component of components) {
             try {
-              const checkedApp = await checkUpdateWithRetry('app', scope)
-              if (checkedApp && checkedApp.update_available) {
-                const expectedVersion = checkedApp.latest_version
-                if (await updateOneClick('app', scope)) {
-                  const reconnected = await watchAppRestart(scope, checkedApp.authorityBase, expectedVersion)
-                  if (!reconnected) {
-                    failures.push('app')
-                    setComponentUpdateError('app', 'APP 更新后尚未重新连接，请稍后刷新', scope)
-                  }
-                } else failures.push('app')
+              prepared[component] = await prepareUpdateComponent(component, scope)
+            } catch (error) {
+              prepared[component] = { failed: true }
+              setComponentUpdateError(component, shortUpdateError(error), scope)
+            }
+            if (prepared[component].failed) failures.push(component)
+          }
+          // Download first, then install; the APP is applied last so the
+          // restarted node already carries its own update.
+          for (const component of ['plugin', 'node', 'app']) {
+            if (!components.includes(component)) continue
+            const entry = prepared[component]
+            if (!entry || entry.failed || entry.current || entry.inProgress || !entry.preparedId) continue
+            try {
+              const result = await updateAction(component, 'apply', entry.preparedId, scope, entry.authority)
+              if (!result || result.ok === false) {
+                failures.push(component)
+                continue
+              }
+              if (updateInfoRunning(result)) {
+                await waitForUpdateSettle(component, scope, entry.authority)
+                continue
+              }
+              if (component === 'plugin') {
+                const restarted = await watchPluginRestart(scope, entry.authority)
+                if (!restarted) {
+                  failures.push('plugin')
+                  setComponentUpdateError('plugin', '插件已安装，目标 DSH 尚未完成重启', scope)
+                }
+              } else if (component === 'node') {
+                if (result.restart_deferred !== true) await watchNodeRestart(scope, entry.authority)
+              } else if (component === 'app') {
+                const reconnected = await watchAppRestart(scope, entry.authority, entry.checked && entry.checked.latest_version)
+                if (!reconnected) {
+                  failures.push('app')
+                  setComponentUpdateError('app', 'APP 更新后尚未重新连接，请稍后刷新', scope)
+                }
               }
             } catch (error) {
-              failures.push('app')
-              setComponentUpdateError('app', shortUpdateError(error), scope)
+              failures.push(component)
+              setComponentUpdateError(component, shortUpdateError(error), scope)
             }
           }
         } catch (error) {
           failures.push('更新流程')
-          setComponentUpdateError('node', shortUpdateError(error), { deviceId: item.device_id, epoch: 0 })
+          setComponentUpdateError('node', shortUpdateError(error), scope)
         } finally {
           await refreshUpdateCenter(true)
-          const message = failures.length ? '部分组件未更新：' + failures.join('、') + '，可重试' : ''
+          const unique = [...new Set(failures)]
+          const message = unique.length ? '部分组件未更新：' + unique.join('、') + '，可重试' : ''
           if (message) setNotice(message)
           setUpdateRun(runKey, message ? { state: 'error', message } : { state: 'done' })
           setUpdateBusy('')
@@ -9485,6 +14553,54 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         const timer = setInterval(check, 5 * 60 * 1000)
         return () => clearInterval(timer)
       }, [deviceId, !!(state && state.devices && state.devices.find((item) => item.device_id === deviceId)?.online)])
+      const runningUpdateKey = Object.keys(updateRuns)
+        .filter((key) => updateRuns[key] && updateRuns[key].state === 'running').sort().join('|')
+      React.useEffect(() => {
+        if (!showUpdate) return undefined
+        let alive = true
+        const devicesNow = () => (stateRef.current && stateRef.current.devices) || []
+        const targets = () => {
+          const list = []
+          if (host && host.kind === 'app') list.push(['app', null])
+          if (host && host.kind === 'dsh') list.push(['localPlugin', null])
+          const local = appLocalDevice || deviceId
+          if (local) {
+            const item = devicesNow().find((device) => device.device_id === local && device.online)
+            if (item) {
+              list.push(['node', { deviceId: local, epoch: 0 }])
+              if (item.capabilities && item.capabilities.dsh_surface) list.push(['plugin', { deviceId: local, epoch: 0 }])
+              if (item.capabilities && item.capabilities.app_version) list.push(['app', { deviceId: local, epoch: 0 }])
+            }
+          }
+          for (const key of runningUpdateKey.split('|')) {
+            if (!key.startsWith('device:')) continue
+            const targetId = key.slice('device:'.length)
+            const item = devicesNow().find((device) => device.device_id === targetId)
+            if (!item) continue
+            list.push(['node', { deviceId: targetId, epoch: 0 }])
+            if (item.capabilities && item.capabilities.dsh_surface) list.push(['plugin', { deviceId: targetId, epoch: 0 }])
+            if (item.capabilities && item.capabilities.app_version) list.push(['app', { deviceId: targetId, epoch: 0 }])
+          }
+          const seen = new Set()
+          return list.filter(([component, scope]) => {
+            const key = (scope ? scope.deviceId : 'local') + ':' + component
+            if (seen.has(key)) return false
+            seen.add(key)
+            return true
+          })
+        }
+        const poll = async () => {
+          for (const [component, scope] of targets()) {
+            if (!alive) return
+            try { await loadUpdateInfo(component, 'status', undefined, scope) } catch (_) { /* restarting hosts recover on the next tick */ }
+          }
+        }
+        poll()
+        // A running install refreshes the bar quickly; an idle update center
+        // still shows what another window is doing.
+        const timer = setInterval(poll, runningUpdateKey ? 1200 : 4000)
+        return () => { alive = false; clearInterval(timer) }
+      }, [showUpdate, host, appLocalDevice, deviceId, runningUpdateKey])
       React.useEffect(() => { if (!notice) return; const t = setTimeout(() => setNotice(''), 4000); return () => clearTimeout(t) }, [notice])
       React.useEffect(() => { if (!updateToast) return; const t = setTimeout(() => setUpdateToast(''), 4000); return () => clearTimeout(t) }, [updateToast])
       React.useEffect(() => { if (!projectsError) return; const t = setTimeout(() => setProjectsError(''), 4000); return () => clearTimeout(t) }, [projectsError])
@@ -9498,7 +14614,9 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             let deviceId
             if (host && host.kind === 'dsh' && host.localDeviceId) deviceId = await host.localDeviceId()
             else {
-              const response = await fetch(ACTIVE_BASE + '/app-context', { signal: AbortSignal.timeout(1500) })
+              // `/app-context` belongs to the page that hosts this UI. The Hub is
+              // a cross-origin API, so asking it only produced a blocked request.
+              const response = await fetch(BASE + '/app-context', { signal: AbortSignal.timeout(1500) })
               if (response.ok) { const context = await response.json(); deviceId = context && context.device }
             }
             if (!alive) return
@@ -9515,11 +14633,26 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         return () => { alive = false; clearInterval(timer) }
       }, [])
 
-      const loadState = React.useCallback(async () => {
-        if (stateRef.current && typeof document !== 'undefined' && document.hidden) return
+      const loadState = React.useCallback(async (force = false) => {
+        if (!force && stateRef.current && typeof document !== 'undefined' && document.hidden) return
         try {
           const data = await api('/api/state')
+          stateOkAtRef.current = Date.now()
           setState(data)
+          const profile = data && data.user
+          if (profile) {
+            const pending = accountPendingRef.current
+            if (!pending || !Object.prototype.hasOwnProperty.call(pending, 'display_name')) {
+              if (Object.prototype.hasOwnProperty.call(profile, 'display_name')) {
+                setAccountName(profile.display_name || '')
+              }
+            }
+            if (!pending || !Object.prototype.hasOwnProperty.call(pending, 'avatar')) {
+              if (Object.prototype.hasOwnProperty.call(profile, 'avatar')) {
+                setAccountAvatar(profile.avatar || '')
+              }
+            }
+          }
           setDeviceId((current) => {
             if (current && data.devices.some((d) => d.device_id === current)) return current
             const local = appLocalDeviceRef.current
@@ -9530,11 +14663,110 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         } catch (e) { fail(e) }
       }, [])
 
+      const saveAccountProfile = async (patch) => {
+        const previous = { display_name: accountNameRef.current, avatar: accountAvatarRef.current }
+        if (Object.prototype.hasOwnProperty.call(patch, 'display_name')) setAccountName(patch.display_name)
+        if (Object.prototype.hasOwnProperty.call(patch, 'avatar')) setAccountAvatar(patch.avatar)
+        const ticket = { ...patch, at: Date.now() }
+        accountPendingRef.current = ticket
+        try {
+          const data = await post('/api/auth/profile', patch)
+          const user = (data && data.user) || {}
+          setAccountName(user.display_name || '')
+          setAccountAvatar(user.avatar || '')
+          return true
+        } catch (error) {
+          if (Object.prototype.hasOwnProperty.call(patch, 'display_name')) setAccountName(previous.display_name)
+          if (Object.prototype.hasOwnProperty.call(patch, 'avatar')) setAccountAvatar(previous.avatar)
+          setNotice('账号资料未保存：' + String((error && error.message) || error))
+          return false
+        } finally {
+          if (accountPendingRef.current === ticket) accountPendingRef.current = null
+        }
+      }
+
       React.useEffect(() => {
         loadState()
         const t = setInterval(loadState, 2500)
         return () => clearInterval(t)
       }, [loadState])
+
+      React.useEffect(() => {
+        if (!showAppSettings) return undefined
+        const id = appLocalDevice || deviceId
+        if (!id) return undefined
+        let alive = true
+        const load = async () => {
+          try {
+            const data = await post('/api/devices/' + encodeURIComponent(id) + '/fs/dsh_status', {})
+            if (alive && data) setLocalDsh(data)
+          } catch (_) { /* older nodes do not report DSH status */ }
+        }
+        void load()
+        const timer = setInterval(load, dshBusy || (localDsh && localDsh.installing) ? 1500 : 8000)
+        return () => { alive = false; clearInterval(timer) }
+      }, [showAppSettings, appLocalDevice, deviceId, dshBusy, !!(localDsh && localDsh.installing)])
+
+      React.useEffect(() => {
+        if (typeof window === 'undefined' || !window.location
+            || !/^https?:/.test(String(window.location.protocol || ''))) return undefined
+        let stopped = false
+        let timer = null
+        let controller = null
+        let retry = 800
+        const schedule = () => {
+          if (stopped) return
+          if (timer) clearTimeout(timer)
+          timer = setTimeout(() => { timer = null; loadState(true) }, 120)
+        }
+        const connect = async () => {
+          if (stopped) return
+          controller = new AbortController()
+          let bases = ['']
+          try { bases = host && typeof host.apiBases === 'function' ? (host.apiBases() || ['']) : [''] } catch (_) { bases = [''] }
+          const base = bases.find((value) => typeof value === 'string' && value) || ''
+          let headers = {}
+          try { headers = host && typeof host.apiHeaders === 'function' ? (host.apiHeaders(base) || {}) : {} } catch (_) { headers = {} }
+          try {
+            const response = await fetch(base + '/api/events', {
+              headers: { ...headers, Accept: 'text/event-stream' },
+              signal: controller.signal
+            })
+            if (!response.ok || !response.body) throw new Error('event stream unavailable')
+            retry = 800
+            const reader = response.body.getReader()
+            const decoder = new TextDecoder()
+            let buffer = ''
+            while (!stopped) {
+              const chunk = await reader.read()
+              if (chunk.done) break
+              buffer += decoder.decode(chunk.value, { stream: true })
+              const parts = buffer.split('\n\n')
+              buffer = parts.pop() || ''
+              for (const part of parts) {
+                const line = part.split('\n').find((value) => value.startsWith('data:'))
+                if (!line) continue
+                try {
+                  const message = JSON.parse(line.slice(5).trim())
+                  if (message && (message.kind === 'device' || message.kind === 'session')) schedule()
+                } catch (_) { /* keepalive or malformed frames are ignored */ }
+              }
+            }
+          } catch (_) {
+            /* polling remains the fallback while the stream reconnects */
+          }
+          if (!stopped) {
+            retry = Math.min(retry * 2, 15000)
+            timer = setTimeout(connect, retry)
+          }
+        }
+        void connect()
+        return () => {
+          stopped = true
+          if (timer) clearTimeout(timer)
+          if (controller) controller.abort()
+        }
+      }, [loadState, host])
 
       React.useEffect(() => { hideHoverTip() }, [deviceId, view])
       React.useEffect(() => () => { if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current) }, [])
@@ -9560,12 +14792,43 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         : null), [file && file.path, file && file.name, file && file.kind, file && file.truncated, draft])
 
       React.useEffect(() => {
-        if (!deviceId) { setPolicy(null); return }
-        const cached = policyCacheRef.current.get(deviceId)
-        if (cached) setPolicy(cached)
-        api('/api/devices/' + encodeURIComponent(deviceId) + '/policy')
-          .then((data) => { cacheStore(policyCacheRef.current, deviceId, data, 32); setPolicy(data) })
-          .catch(() => { if (!cached) setPolicy(null) })
+        let alive = true
+        if (!deviceId) {
+          setPolicy(null)
+          setAudit([])
+          setAuditCount(0)
+          return () => { alive = false }
+        }
+        const cachedPolicy = policyCacheRef.current.get(deviceId)
+        const cachedAudit = auditCacheRef.current.get(deviceId)
+        if (cachedPolicy) setPolicy(cachedPolicy)
+        if (cachedAudit) {
+          setAudit(cachedAudit.entries || [])
+          setAuditCount(cachedAudit.count || 0)
+          setAuditRetained(cachedAudit.retained || 100000)
+        } else {
+          setAudit([])
+          setAuditCount(0)
+        }
+        Promise.allSettled([
+          fetchPermission(deviceId, '/policy').then((data) => {
+            cacheStore(policyCacheRef.current, deviceId, data, 32)
+            if (!alive || deviceIdRef.current !== deviceId) return
+            setPolicy(data)
+            if (!showSettingsRef.current) {
+              setMode(data.mode)
+              setRootsText((data.allowed_roots || []).join('\n'))
+            }
+          }),
+          fetchPermission(deviceId, '/audit?limit=200').then((data) => {
+            cacheStore(auditCacheRef.current, deviceId, data, 32)
+            if (!alive || deviceIdRef.current !== deviceId) return
+            setAudit(data.entries || [])
+            setAuditCount(data.count || 0)
+            setAuditRetained(data.retained || 100000)
+          })
+        ])
+        return () => { alive = false }
       }, [deviceId])
 
       const loadProjects = React.useCallback(async () => {
@@ -9874,6 +15137,23 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
 
       const openSettings = async () => {
         setShowSettings(true)
+        const target = deviceIdRef.current
+        const cachedPolicy = policyCacheRef.current.get(target)
+        const cachedAudit = auditCacheRef.current.get(target)
+        if (cachedPolicy) {
+          setPolicy(cachedPolicy)
+          setMode(cachedPolicy.mode)
+          setRootsText((cachedPolicy.allowed_roots || []).join('\n'))
+        }
+        if (cachedAudit) {
+          setAudit(cachedAudit.entries || [])
+          setAuditCount(cachedAudit.count || 0)
+          setAuditRetained(cachedAudit.retained || 100000)
+        } else {
+          setAudit([])
+          setAuditCount(0)
+        }
+        setAuditLoading(!cachedAudit)
         if (host && host.kind === 'dsh') {
           let saved = {}
           try { saved = JSON.parse(window.localStorage.getItem('tether.hub') || '{}') } catch (_) { /* ignore malformed config */ }
@@ -9882,11 +15162,22 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           setHubToken(saved.token || '')
         }
         try {
-          const p = await api('/api/devices/' + encodeURIComponent(deviceId) + '/policy')
-          setPolicy(p); setMode(p.mode); setRootsText((p.allowed_roots || []).join('\n'))
-          const a = await api('/api/devices/' + encodeURIComponent(deviceId) + '/audit?limit=200')
-          setAudit(a.entries || []); setAuditCount(a.count || 0); setAuditRetained(a.retained || 100000)
-        } catch (e) { fail(e) }
+          const [p, a] = await Promise.all([
+            fetchPermission(target, '/policy'),
+            fetchPermission(target, '/audit?limit=200')
+          ])
+          if (deviceIdRef.current !== target) return
+          cacheStore(policyCacheRef.current, target, p, 32)
+          cacheStore(auditCacheRef.current, target, a, 32)
+          setPolicy(p)
+          if (!cachedPolicy) {
+            setMode(p.mode)
+            setRootsText((p.allowed_roots || []).join('\n'))
+          }
+          setAudit(a.entries || [])
+          setAuditCount(a.count || 0)
+          setAuditRetained(a.retained || 100000)
+        } catch (e) { fail(e) } finally { if (deviceIdRef.current === target) setAuditLoading(false) }
       }
       const rootList = () => rootsText.split(/\r?\n/).map((item) => item.trim()).filter(Boolean)
       const editRoot = (index) => {
@@ -9909,8 +15200,10 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         try {
           const roots = rootList()
           const p = await post('/api/devices/' + encodeURIComponent(deviceId) + '/policy', { mode, allowed_roots: roots })
+          cacheStore(policyCacheRef.current, deviceId, p, 32)
           setPolicy(p); setNotice('Policy updated: ' + p.mode)
           const a = await api('/api/devices/' + encodeURIComponent(deviceId) + '/audit?limit=200')
+          cacheStore(auditCacheRef.current, deviceId, a, 32)
           setAudit(a.entries || []); setAuditCount(a.count || 0); setAuditRetained(a.retained || 100000)
         } catch (e) { fail(e) } finally { setBusy(false) }
       }
@@ -9919,9 +15212,32 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         setAuditLoading(true)
         try {
           const a = await api('/api/devices/' + encodeURIComponent(deviceId) + '/audit?limit=200&offset=' + audit.length)
-          setAudit((current) => [...current, ...(a.entries || [])])
-          setAuditCount(a.count || 0); setAuditRetained(a.retained || 100000)
+          const entries = [...audit, ...(a.entries || [])]
+          const count = a.count || 0
+          const retained = a.retained || 100000
+          setAudit(entries)
+          setAuditCount(count); setAuditRetained(retained)
+          cacheStore(auditCacheRef.current, deviceId, { entries, count, retained }, 32)
         } catch (e) { fail(e) } finally { setAuditLoading(false) }
+      }
+
+      const runLocalDsh = async (action) => {
+        const id = appLocalDevice || deviceId
+        if (!id) return
+        setDshBusy(action)
+        let hold = false
+        try {
+          const result = await post('/api/devices/' + encodeURIComponent(id) + '/fs/' + action, {})
+          if (result) setLocalDsh(result)
+          hold = true
+          setNotice(action === 'dsh_install' ? '正在安装 DSH…' : '正在启动 DSH…')
+        } catch (error) {
+          setNotice(shortUpdateError(error))
+        } finally {
+          if (hold) setTimeout(() => setDshBusy(''), 12000)
+          else setDshBusy('')
+          await loadState(true).catch(() => {})
+        }
       }
 
       const fsPath = (op) => '/api/devices/' + encodeURIComponent(deviceId) + '/fs/' + op
@@ -9929,6 +15245,15 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         cache.delete(key)
         cache.set(key, value)
         while (cache.size > (max || 240)) cache.delete(cache.keys().next().value)
+      }
+      const fetchPermission = (target, suffix) => {
+        const key = target + '|' + suffix
+        const active = permissionInflightRef.current.get(key)
+        if (active) return active
+        const request = api('/api/devices/' + encodeURIComponent(target) + suffix)
+          .finally(() => { permissionInflightRef.current.delete(key) })
+        permissionInflightRef.current.set(key, request)
+        return request
       }
       const rememberDir = (targetDevice, target, entries) => {
         cacheStore(dirCacheRef.current, treeCacheKey(targetDevice, target), { entries, at: Date.now() })
@@ -9938,6 +15263,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const invalidateDir = (targetDevice, target) => {
         const key = treeCacheKey(targetDevice, target)
         dirCacheRef.current.delete(key)
+        invalidateDirectory(targetDevice, target)
         if (deviceIdRef.current === targetDevice) {
           setTreeChildren((current) => {
             if (!current[key]) return current
@@ -9969,12 +15295,14 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         const key = treeCacheKey(requestDevice, target)
         const cached = dirCacheRef.current.get(key)
         if (cached && Date.now() - cached.at < 30000) return
+        if (peekDirectory(requestDevice, target, 30000)) return
         if (dirInflightRef.current.has(key)) return
         const pending = post('/api/devices/' + encodeURIComponent(requestDevice) + '/fs/list', { path: target })
           .then((data) => {
             if (deviceIdRef.current !== requestDevice) return data
             const entries = (data.entries || []).map((entry) => ({ ...entry, path: joinPath(target, entry.name) }))
             rememberDir(requestDevice, target, entries)
+            rememberDirectory(requestDevice, target, entries)
             return data
           })
           .catch(() => {})
@@ -10027,7 +15355,10 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const parentOf = (target) => {
         const clean = String(target || '').replace(/[\\/]+$/, '')
         const parent = clean.replace(/[\\/][^\\/]+$/, '')
-        return parent && parent !== clean ? parent : clean
+        if (parent && parent !== clean) return parent
+        if (/^[A-Za-z]:$/.test(clean)) return clean + '\\'
+        if (clean.startsWith('/')) return '/'
+        return clean
       }
       const pathInfo = (target) => {
         const norm = normPath(target)
@@ -10064,7 +15395,8 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           setTreeChildren((current) => ({ ...current, [key]: { status: 'loaded', entries } }))
         } catch (e) {
           if (!treeResponseIsCurrent(requestDevice, deviceIdRef.current, requestEpoch, treeDeviceEpochRef.current)) return
-          setTreeChildren((current) => ({ ...current, [key]: { status: 'error', entries: [] } }))
+          const denied = !!e && (e.code === 'denied' || e.status === 403)
+          setTreeChildren((current) => ({ ...current, [key]: { status: denied ? 'denied' : 'error', entries: [], reason: String((e && e.message) || '') } }))
         } finally { treeInflightRef.current.delete(key) }
       }
 
@@ -10080,7 +15412,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           const relative = String(target).slice(String(info.root).length).replace(/^[\\/]+/, '')
           for (const part of relative.split(/[\\/]+/)) {
             if (!part) continue
-            cursor += '\\' + part
+            cursor = joinPath(cursor, part)
             paths.push(cursor)
           }
         }
@@ -10108,7 +15440,10 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         const requestTarget = /^[A-Za-z]:[\\/]?$/.test(rawTarget) ? rawTarget.slice(0, 2) + '\\' : rawTarget
         const nextPath = /^[A-Za-z]:[\\/]?$/.test(rawTarget) ? requestTarget : (rawTarget.replace(/[\\/]+$/, '') || rawTarget)
         const key = treeCacheKey(requestDevice, nextPath)
-        const cached = opts.fresh === true ? null : dirCacheRef.current.get(key)
+        const sharedEntries = opts.fresh === true ? null : peekDirectory(requestDevice, nextPath)
+        const cached = sharedEntries
+          ? { entries: sharedEntries, at: Date.now() }
+          : (opts.fresh === true ? null : dirCacheRef.current.get(key))
         const seq = dirSeqRef.current + 1
         dirSeqRef.current = seq
         if (dirAbortRef.current) dirAbortRef.current.abort()
@@ -10140,9 +15475,10 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           if (seq !== dirSeqRef.current || deviceIdRef.current !== requestDevice) return
           const entries = (data.entries || []).map((entry) => ({ ...entry, path: joinPath(requestTarget, entry.name) }))
           cacheStore(dirCacheRef.current, key, { entries, at: Date.now() })
+          rememberDirectory(requestDevice, nextPath, entries)
+          setTreeChildren((current) => ({ ...current, [key]: { status: 'loaded', entries } }))
           if (cached) {
             setDirEntries(entries)
-            setTreeChildren((current) => ({ ...current, [key]: { status: 'loaded', entries } }))
           } else {
             enter(entries, opts.push)
             revealTree(nextPath, { path: nextPath, entries })
@@ -10151,8 +15487,10 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           if (controller.signal.aborted || (e && e.name === 'AbortError')) return
           if (deviceIdRef.current !== requestDevice || seq !== dirSeqRef.current) return
           if (!cached) {
-            setDirError(String(e.message || e)); setDirEntries([])
-            setTreeChildren((current) => ({ ...current, [key]: { status: 'error', entries: [] } }))
+            const denied = !!e && (e.code === 'denied' || e.status === 403)
+            setDirError(denied ? '当前节点没有读取该目录的权限。请用管理员权限运行节点，或在设置中调整权限。' : String(e.message || e))
+            setDirEntries([])
+            setTreeChildren((current) => ({ ...current, [key]: { status: denied ? 'denied' : 'error', entries: [], reason: String((e && e.message) || '') } }))
           }
         } finally { if (seq === dirSeqRef.current) setDirLoading(false) }
       }
@@ -10274,7 +15612,13 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
 
       const openContextMenu = (event, entry, base) => {
         event.preventDefault(); event.stopPropagation()
-        if (entry) setSelected(entry)
+        hideHoverTip()
+        if (entry) {
+          setSelected(entry)
+          setSelectedPaths((current) => current.includes(entry.path) ? current : [entry.path])
+        } else {
+          setSelectedPaths([])
+        }
         setContextMenu({ x: event.clientX, y: event.clientY, entry: entry || null, base: base || path })
       }
 
@@ -10380,12 +15724,12 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         return () => { alive = false; window.clearInterval(timer); window.removeEventListener('focus', check) }
       }, [deviceId, file && file.path, file && file.version])
       const askValue = (title, value, onOk) => setAsk({ title, value: value || '', onOk })
-      const makeFolder = (base) => askValue('新建文件夹', '', async (name) => { try { await post(fsPath('mkdir'), { path: String(base).replace(/[\\/]+$/, '') + '\\' + name }); setContextMenu(null); invalidateDir(deviceId, base); await loadDir(base, { push: false, keepFile: true, fresh: true }) } catch (e) { fail(e) } })
+      const makeFolder = (base) => askValue('新建文件夹', '', async (name) => { try { await post(fsPath('mkdir'), { path: joinPath(base, name) }); setContextMenu(null); invalidateDir(deviceId, base); await loadDir(base, { push: false, keepFile: true, fresh: true }) } catch (e) { fail(e) } })
       const makeFile = (base) => {
         const requestDevice = deviceIdRef.current
         return askValue('新建文件', '', async (name) => {
           if (!requestDevice || deviceIdRef.current !== requestDevice) { fail(new Error('目标设备已切换，请重新选择目录')); return }
-          const target = String(base).replace(/[\\/]+$/, '') + '\\' + name
+          const target = joinPath(base, name)
           try {
             const result = await post('/api/devices/' + encodeURIComponent(requestDevice) + '/fs/write', { path: target, text: '', overwrite: false })
             if (!responseBelongsToDevice(result, requestDevice)) throw new Error('目标设备身份校验失败，未确认新建文件')
@@ -10396,7 +15740,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           } catch (e) { fail(e) }
         })
       }
-      const renameEntry = (entry) => { const target = entry || selected; if (!target) return; const requestDevice = deviceIdRef.current; askValue('重命名', target.name, async (name) => { const dest = parentOf(target.path) + '\\' + name; try { const result = await post('/api/devices/' + encodeURIComponent(requestDevice) + '/fs/rename', { path: target.path, dest }); if (!responseBelongsToDevice(result, requestDevice)) throw new Error('目标设备身份校验失败，未确认重命名'); if (deviceIdRef.current !== requestDevice) return; setContextMenu(null); setSelected(null); if (file && file.path === target.path) setFile(null); previewCacheRef.current.delete(previewCacheKey(requestDevice, target.path)); previewCacheRef.current.delete(previewCacheKey(requestDevice, dest)); invalidateDir(requestDevice, parentOf(target.path)); await loadDir(path, { push: false, keepFile: true, fresh: true }) } catch (e) { fail(e) } }) }
+      const renameEntry = (entry) => { const target = entry || selected; if (!target) return; const requestDevice = deviceIdRef.current; askValue('重命名', target.name, async (name) => { const dest = joinPath(parentOf(target.path), name); try { const result = await post('/api/devices/' + encodeURIComponent(requestDevice) + '/fs/rename', { path: target.path, dest }); if (!responseBelongsToDevice(result, requestDevice)) throw new Error('目标设备身份校验失败，未确认重命名'); if (deviceIdRef.current !== requestDevice) return; setContextMenu(null); setSelected(null); if (file && file.path === target.path) setFile(null); previewCacheRef.current.delete(previewCacheKey(requestDevice, target.path)); previewCacheRef.current.delete(previewCacheKey(requestDevice, dest)); invalidateDir(requestDevice, parentOf(target.path)); await loadDir(path, { push: false, keepFile: true, fresh: true }) } catch (e) { fail(e) } }) }
       const deleteEntry = async (entry) => {
         const target = entry || selected
         if (!target) return
@@ -10407,7 +15751,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         if (!projects) return
         askValue('新建工作区（' + projects.root + '）', '', async (name) => {
           try {
-            const target = projects.root + '\\' + name
+            const target = joinPath(projects.root, name)
             await post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/mkdir', { path: target })
             await post('/api/devices/' + encodeURIComponent(deviceId) + '/dsh/workspaces/register', { path: target, title: name }).catch(() => {})
             await loadProjects()
@@ -10440,8 +15784,20 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           setView('chat'); setActivePanel('workspaces'); setSidebarCollapsed(true)
           return
         }
+        if (id === 'apps') {
+          setView('apps'); setActivePanel('apps'); setSidebarCollapsed(true)
+          return
+        }
+        if (id === 'agents') {
+          setView('agents'); setActivePanel('agents'); setSidebarCollapsed(true)
+          return
+        }
         if (id === 'network') {
           setView('network'); setActivePanel('network'); setSidebarCollapsed(true)
+          return
+        }
+        if (id === 'transfer') {
+          setView('transfer'); setActivePanel('transfer'); setSidebarCollapsed(true)
           return
         }
         if (id === 'files') {
@@ -10561,7 +15917,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       }, [view, ask, history, path])
 
       const renderHoverTip = () => {
-        if (!hoverTip) return null
+        if (!hoverTip || contextMenu || deviceMenu) return null
         const entry = hoverTip.entry
         const width = 340
         const viewWidth = typeof window !== 'undefined' ? window.innerWidth : 1200
@@ -10709,7 +16065,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           }
           try {
             const result = await post('/api/devices/' + encodeURIComponent(requestDevice) + '/fs/copy', {
-              path: source.path, dest: targetBase + '\\' + source.name
+              path: source.path, dest: joinPath(targetBase, source.name)
             })
             if (!responseBelongsToDevice(result, requestDevice)) throw new Error('目标设备身份校验失败，未确认粘贴')
             if (deviceIdRef.current !== requestDevice) return
@@ -10724,6 +16080,12 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           className: 'tether-command tether-hover tether-press',
           style: { width: 28, height: 28, display: 'grid', placeItems: 'center', border: 0, borderRadius: 6, background: 'transparent', color: disabled ? C.mute : C.sub, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.45 : 1, flex: '0 0 auto' }
         }, spinning ? h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 16 })) : h(Glyph, { name, size: 16 }))
+        const terminalAllowed = !(host && host.kind === 'dsh')
+        const openTerminal = (target) => {
+          setTerminalCwd(target || path || '')
+          setTerminalOpen(true)
+          setTerminalKey((value) => value + 1)
+        }
         const crumbs = pathSegments(file ? file.path : path)
         const sortKey = EXPLORER_SORT_KEYS.includes(sort && sort.key) ? sort.key : 'name'
         const sortDir = sort && sort.dir === 'desc' ? 'desc' : 'asc'
@@ -10733,7 +16095,8 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             iconButton('back', '后退 (Alt+←)', goBack, !history.back.length),
             iconButton('forward', '前进 (Alt+→)', goForward, !history.forward.length),
             iconButton('arrowUp', '上级目录 (Alt+↑)', goUp, !canGoUp),
-            iconButton('refresh', '刷新', refreshExplorer, !path, dirLoading || previewBusy)
+            iconButton('refresh', '刷新', refreshExplorer, !path, dirLoading || previewBusy),
+            terminalAllowed ? iconButton('terminal', '在终端中打开', () => openTerminal(file ? parentOf(file.path) : path), !path) : null
           ),
           h('div', {
             className: 'tether-breadcrumbs',
@@ -10871,6 +16234,53 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         const entries = filterExplorerEntries(sortExplorerEntries(dirEntries, sortKey, sortDir), search)
         const filtering = !!search.trim()
         const columns = 'minmax(0,1fr) 132px 104px 78px'
+        const copyPathText = (list) => {
+          const paths = (list || []).map((item) => item && item.path).filter(Boolean)
+          if (!paths.length) return
+          void copyText(paths.join('\n')).then((ok) => {
+            setNotice(ok ? (paths.length > 1 ? '已复制 ' + paths.length + ' 个路径' : '已复制路径') : '复制路径失败')
+          })
+        }
+        const selectedEntries = () => entries.filter((entry) => selectedPaths.includes(entry.path))
+        const beginBand = (event) => {
+          if (event.button !== 0 || !path || file) return
+          const target = event.target
+          if (target && target.closest && target.closest('[data-row-path]')) return
+          if (target && target.closest && target.closest('button, input, select, textarea')) return
+          const host = event.currentTarget
+          const keep = !!(event.ctrlKey || event.metaKey)
+          const base = keep ? [...selectedPaths] : []
+          if (!keep) { setSelectedPaths([]); setSelected(null) }
+          const startX = event.clientX
+          const startY = event.clientY
+          let moved = false
+          const move = (moveEvent) => {
+            const dx = moveEvent.clientX - startX
+            const dy = moveEvent.clientY - startY
+            if (!moved && Math.hypot(dx, dy) < 4) return
+            moved = true
+            const rect = {
+              left: Math.min(startX, moveEvent.clientX), top: Math.min(startY, moveEvent.clientY),
+              right: Math.max(startX, moveEvent.clientX), bottom: Math.max(startY, moveEvent.clientY)
+            }
+            setBand(rect)
+            const hits = []
+            host.querySelectorAll('[data-row-path]').forEach((element) => {
+              const box = element.getBoundingClientRect()
+              if (box.right >= rect.left && box.left <= rect.right && box.bottom >= rect.top && box.top <= rect.bottom) {
+                hits.push(element.getAttribute('data-row-path'))
+              }
+            })
+            setSelectedPaths([...new Set([...base, ...hits])])
+          }
+          const up = () => {
+            window.removeEventListener('pointermove', move)
+            window.removeEventListener('pointerup', up)
+            setBand(null)
+          }
+          window.addEventListener('pointermove', move)
+          window.addEventListener('pointerup', up)
+        }
         const sortHeader = (key, label, align) => h('button', {
           onClick: () => setSort((current) => toggleExplorerSort(current, key)),
           title: '按' + label + '排序',
@@ -10896,15 +16306,31 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             h('button', { onClick: () => setSearch(''), className: 'tether-hover', style: { border: 0, borderRadius: 6, padding: '5px 10px', background: C.soft, color: C.ink, fontSize: 12, cursor: 'pointer' } }, '清除搜索'))
           if (!entries.length) return h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', color: C.mute, fontSize: 12 } }, '空文件夹')
           return h('div', { style: { flex: '1 1 auto', minHeight: 0, position: 'relative', display: 'flex' } },
-            h('div', { className: 'tether-scroll', onScroll: hideHoverTip, style: { flex: '1 1 auto', overflow: 'auto', padding: '0 10px 24px' } },
+            h('div', {
+              className: 'tether-scroll', onScroll: hideHoverTip,
+              onPointerDown: beginBand,
+              onContextMenu: (event) => {
+                const target = event.target
+                if (target && target.closest && target.closest('[data-row-path]')) return
+                openContextMenu(event, null, path)
+              },
+              style: { flex: '1 1 auto', overflow: 'auto', padding: '0 10px 24px', userSelect: 'none' }
+            },
               h('div', { style: { display: 'grid', gridTemplateColumns: columns, gap: 8, height: 28, padding: '0 8px', alignItems: 'center', fontSize: 11, color: C.mute } },
                 sortHeader('name', '名称'), sortHeader('mtime', '修改日期'), h('span', null, '类型'), sortHeader('size', '大小', 'right')),
               entries.map((entry) => h('div', {
               key: entry.path, role: 'button', tabIndex: 0,
+              'data-row-path': entry.path,
               onClick: (event) => {
                 if (event.detail > 1) return
                 hideHoverTip()
                 setSelected(entry)
+                setSelectedPaths((current) => {
+                  if (event.ctrlKey || event.metaKey) {
+                    return current.includes(entry.path) ? current.filter((path) => path !== entry.path) : [...current, entry.path]
+                  }
+                  return [entry.path]
+                })
                 if (entry.dir) prefetchDir(entry.path)
                 else prefetchPreview(entry)
               },
@@ -10914,7 +16340,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
               onContextMenu: (event) => openContextMenu(event, entry, entry.dir ? entry.path : path),
               onKeyDown: (event) => { if (event.key === 'Enter') openFile(entry) },
               className: 'tether-hover',
-              style: { display: 'grid', gridTemplateColumns: columns, gap: 8, height: 30, padding: '0 8px', alignItems: 'center', borderRadius: 6, fontSize: 13, color: C.ink, background: selected && selected.path === entry.path ? C.active : 'transparent', cursor: 'default' }
+              style: { display: 'grid', gridTemplateColumns: columns, gap: 8, height: 30, padding: '0 8px', alignItems: 'center', borderRadius: 6, fontSize: 13, color: C.ink, background: (selectedPaths.length ? selectedPaths.includes(entry.path) : !!(selected && selected.path === entry.path)) ? C.active : 'transparent', cursor: 'default', userSelect: 'none' }
             },
               h('div', { style: { display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 } },
                 h('span', { style: { width: 16, height: 16, display: 'grid', placeItems: 'center', flex: '0 0 auto' } },
@@ -10936,16 +16362,25 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         }, h(Glyph, { name: icon, size: 15 }), h('span', null, label))
         const context = contextMenu ? h('div', {
           onPointerDown: (event) => event.stopPropagation(),
-          style: { position: 'fixed', left: Math.max(8, Math.min(contextMenu.x, window.innerWidth - 190)), top: Math.max(8, Math.min(contextMenu.y, window.innerHeight - 250)), width: 178, zIndex: 60, background: C.layer1, borderRadius: 8, boxShadow: C.shadow, padding: 4, userSelect: 'none' }
+          style: { position: 'fixed', left: Math.max(8, Math.min(contextMenu.x, window.innerWidth - 190)), top: Math.max(8, Math.min(contextMenu.y, window.innerHeight - 250)), width: 178, zIndex: 120, background: C.layer1, borderRadius: 8, boxShadow: C.shadow, padding: 4, userSelect: 'none' }
         },
           contextMenu.entry ? menuItem('file', '打开', () => { setContextMenu(null); openFile(contextMenu.entry) }) : null,
+          terminalAllowed && contextMenu.entry && contextMenu.entry.dir ? menuItem('terminal', '在终端中打开', () => { openTerminal(contextMenu.entry.path); setContextMenu(null) }) : null,
+          terminalAllowed && contextMenu.entry && !contextMenu.entry.dir ? menuItem('terminal', '在所在目录打开终端', () => { openTerminal(parentOf(contextMenu.entry.path)); setContextMenu(null) }) : null,
           contextMenu.entry ? menuItem('file', '复制', () => { copyEntry(contextMenu.entry); setContextMenu(null) }) : null,
-          clipboard && contextMenu.base ? menuItem('file', '粘贴', () => pasteEntry(contextMenu.base)) : null,
+          contextMenu.entry ? menuItem('file', '复制路径', () => {
+            const list = selectedPaths.includes(contextMenu.entry.path) ? selectedEntries() : [contextMenu.entry]
+            setContextMenu(null)
+            copyPathText(list)
+          }) : null,
+          clipboard && contextMenu.base && !contextMenu.entry ? menuItem('file', '粘贴', () => pasteEntry(contextMenu.base)) : null,
           contextMenu.entry ? menuItem('pencil', '重命名', () => { const entry = contextMenu.entry; setContextMenu(null); renameEntry(entry) }) : null,
           contextMenu.entry ? menuItem('trash', '删除', () => { const entry = contextMenu.entry; setContextMenu(null); deleteEntry(entry) }, true) : null,
           contextMenu.entry ? h('div', { style: { height: 1, background: C.line, margin: '4px 2px' } }) : null,
-          menuItem('plus', '新建文件', () => { const base = contextMenu.base; setContextMenu(null); makeFile(base) }),
-          menuItem('files', '新建文件夹', () => { const base = contextMenu.base; setContextMenu(null); makeFolder(base) }),
+          !contextMenu.entry && terminalAllowed ? menuItem('terminal', '在此打开终端', () => { openTerminal(contextMenu.base || path); setContextMenu(null) }) : null,
+          !contextMenu.entry ? menuItem('plus', '新建文件', () => { const base = contextMenu.base; setContextMenu(null); makeFile(base) }) : null,
+          !contextMenu.entry ? menuItem('files', '新建文件夹', () => { const base = contextMenu.base; setContextMenu(null); makeFolder(base) }) : null,
+          !contextMenu.entry ? menuItem('file', '复制当前路径', () => { const base = contextMenu.base || path; setContextMenu(null); copyPathText([{ path: base }]) }) : null,
           h('div', { style: { height: 1, background: C.line, margin: '4px 2px' } }),
           menuItem('refresh', '刷新', () => { setContextMenu(null); refreshExplorer() })
         ) : null
@@ -10955,14 +16390,52 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           style: { display: 'flex', flexDirection: 'column', flex: '1 1 auto', minHeight: 0, background: 'var(--tether-workbench-bg, ' + C.bg + ')' }
         },
           toolbar,
-          file ? h('div', { style: { display: 'flex', flexDirection: 'column', flex: '1 1 auto', minHeight: 0 } }, fileTabBar, previewBody()) : directoryBody(),
-          context
+          h('div', { style: { display: 'flex', flexDirection: 'column', flex: '1 1 auto', minHeight: 0 } },
+            file ? h('div', { style: { display: 'flex', flexDirection: 'column', flex: '1 1 auto', minHeight: 0 } }, fileTabBar, previewBody()) : directoryBody(),
+            terminalOpen && terminalAllowed ? h(createTerminalDock, {
+              key: 'terminal-' + deviceId + '-' + terminalKey,
+              React, Glyph, post, C, device: deviceId, cwd: terminalCwd || path,
+              height: terminalHeight, onHeight: setTerminalHeight,
+              onClose: () => setTerminalOpen(false)
+            }) : null
+          ),
+          context,
+          band ? h('div', {
+            style: {
+              position: 'fixed', left: band.left, top: band.top,
+              width: Math.max(0, band.right - band.left), height: Math.max(0, band.bottom - band.top),
+              border: '1px solid ' + C.blue,
+              background: 'color-mix(in srgb, ' + C.blue + ' 12%, transparent)',
+              borderRadius: 3, pointerEvents: 'none', zIndex: 2147482000
+            }
+          }) : null
         )
+      }
+
+      const toggleNetworkEdge = async (edge, connected) => {
+        const from = edge && edge.from
+        const to = edge && edge.to
+        if (!from || !to || from === to) return
+        const key = networkEdgeKey(from, to)
+        const previous = (state && state.edges) || []
+        const optimistic = connected
+          ? [...previous.filter((item) => networkEdgeKey(item.from, item.to) !== key), { edge_id: 'optimistic:' + key, from, to }]
+          : previous.filter((item) => networkEdgeKey(item.from, item.to) !== key)
+        setState((current) => current ? { ...current, edges: optimistic } : current)
+        try {
+          const data = await post('/api/edges', { from, to, connected })
+          setState((current) => current ? { ...current, edges: (data && data.edges) || [] } : current)
+        } catch (error) {
+          setState((current) => current ? { ...current, edges: previous } : current)
+          fail(error)
+        }
       }
 
       const renderNetwork = () => {
         const devices = (state && state.devices) || []
+        const edges = (state && state.edges) || []
         const localId = appLocalDevice
+        const networkDetail = devices.find((item) => item.device_id === networkDetailId) || null
         const orderedDevices = orderNetworkDevices(devices, localId)
         const online = devices.filter((item) => item.online)
         const caps = (item) => {
@@ -10993,6 +16466,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         const openDeviceMenu = (event, item) => {
           event.preventDefault()
           event.stopPropagation()
+          hideHoverTip()
           selectDevice(item.device_id)
           setDeviceMenu({ x: event.clientX, y: event.clientY, device: item })
         }
@@ -11002,13 +16476,21 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         }, h(Glyph, { name: icon, size: 15 }), h('span', null, label))
         const deviceContext = deviceMenu ? h('div', {
           onPointerDown: (event) => event.stopPropagation(),
-          style: { position: 'fixed', left: Math.max(8, Math.min(deviceMenu.x, window.innerWidth - 190)), top: Math.max(8, Math.min(deviceMenu.y, window.innerHeight - 110)), width: 178, zIndex: 60, background: C.layer1, borderRadius: 8, boxShadow: C.shadow, padding: 4, userSelect: 'none' }
+          style: { position: 'fixed', left: Math.max(8, Math.min(deviceMenu.x, window.innerWidth - 190)), top: Math.max(8, Math.min(deviceMenu.y, window.innerHeight - 150)), width: 178, zIndex: 120, background: C.layer1, borderRadius: 8, boxShadow: C.shadow, padding: 4, userSelect: 'none' }
         },
           menuItem('monitor', '打开原生工作区', () => { const item = deviceMenu.device; setDeviceMenu(null); openDevice(item) }),
-          menuItem('pencil', '重命名', () => renameDevice(deviceMenu.device))
+          menuItem('pencil', '重命名', () => renameDevice(deviceMenu.device)),
+          menuItem('refresh', '重启 Node', () => {
+            const item = deviceMenu.device
+            setDeviceMenu(null)
+            if (!window.confirm('重启 ' + (item.name || item.device_id) + ' 的 Node？正在运行的任务会让重启被拒绝。')) return
+            post('/api/devices/' + encodeURIComponent(item.device_id) + '/node/restart', {})
+              .then(() => setNotice('已请求重启 Node'))
+              .catch(fail)
+          })
         ) : null
         const card = (item) => h('div', {
-          key: item.device_id, onClick: () => selectDevice(item.device_id), onDoubleClick: () => openDevice(item),
+          key: item.device_id, onClick: () => { selectDevice(item.device_id); setNetworkDetailId(item.device_id) }, onDoubleClick: () => openDevice(item),
           onContextMenu: (event) => openDeviceMenu(event, item),
           title: item.capabilities && item.capabilities.surface_protocol === 1 ? '双击打开原生工作区' : '插件版本过旧，双击查看详情',
           style: { background: item.device_id === deviceId ? C.soft : C.panel, borderRadius: 10, padding: '10px 12px', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }
@@ -11032,15 +16514,20 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           h('span', { className: 'tether-num', style: { fontSize: 11, color: C.mute } }, page + ' / ' + totalPages),
           h('button', { title: '下一页', 'aria-label': '下一页', onClick: () => setNetworkPage(Math.min(totalPages, page + 1)), disabled: page >= totalPages, className: 'tether-hover', style: { width: 26, height: 26, display: 'grid', placeItems: 'center', border: 0, borderRadius: 6, background: 'transparent', color: page >= totalPages ? C.mute : C.sub, cursor: page >= totalPages ? 'default' : 'pointer', opacity: page >= totalPages ? 0.4 : 1 } }, h(Glyph, { name: 'chevronRight', size: 14 }))
         ) : null
-        return h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', background: C.bg } },
+        return h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', background: C.bg, position: 'relative' } },
           h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '14px 18px 10px', flex: '0 0 auto' } },
             h('div', { style: { fontSize: 18, fontWeight: 'var(--tether-strong, 600)' } }, '互联'),
             pill(online.length + ' / ' + devices.length + ' 在线', online.length ? C.green : C.mute),
-            h('span', { style: { marginLeft: 'auto' } },
+            pill(edges.length + ' 条连接', C.mute),
+            h('span', { style: { marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 } },
+              h('button', {
+                type: 'button', title: '连接管理', 'aria-label': '连接管理', onClick: () => setShowNetworkLinks(true),
+                className: 'tether-hover',
+                style: { height: 28, padding: '0 10px', display: 'flex', alignItems: 'center', gap: 5, border: '1px solid ' + C.line, borderRadius: 7, background: C.layer1, color: C.sub, fontSize: 11.5, cursor: 'pointer' }
+              }, h(Glyph, { name: 'link', size: 13 }), '连接管理'),
               h('button', { title: '刷新', 'aria-label': '刷新', onClick: refreshNetwork, className: 'tether-hover', style: { width: 28, height: 28, display: 'grid', placeItems: 'center', border: 0, borderRadius: 6, background: 'transparent', color: C.mute, cursor: 'pointer' } },
-                networkRefreshing ? h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 16 })) : h(Glyph, { name: 'refresh', size: 16 })))
-          ),
-          h('div', { style: { display: 'flex', flex: '1 1 auto', minHeight: 0, padding: '0 18px 18px', alignItems: 'stretch' } },
+                networkRefreshing ? h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 16 })) : h(Glyph, { name: 'refresh', size: 16 })))),
+          h('div', { style: { display: 'flex', flex: '1 1 auto', minHeight: 0, padding: '0 18px 18px', alignItems: 'stretch', position: 'relative' } },
             h('div', { style: { width: networkListWidth, flex: '0 0 auto', minHeight: 0, display: 'flex', flexDirection: 'column', transition: networkResizing ? 'none' : 'width 180ms cubic-bezier(.2,.85,.2,1.15)' } },
               h('div', { className: 'tether-scroll', style: { flex: '1 1 auto', minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8, paddingRight: 6 } },
                 visible.map(card),
@@ -11049,17 +16536,138 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             ),
             h('div', { className: 'tether-resizer', title: '拖动调整宽度，双击复位', onPointerDown: startNetworkResize, onDoubleClick: () => setNetworkListWidth(300), style: { width: 6, flex: '0 0 auto', cursor: 'col-resize', position: 'relative' } }),
             h('div', { style: { flex: '1 1 auto', minWidth: 0, minHeight: 0, position: 'relative', background: C.panel, borderRadius: 12, overflow: 'hidden' } },
-              h(NetworkGraph, { devices, localId, selectedId: deviceId, onSelect: (item) => selectDevice(item.device_id), onOpen: openDevice, onContextMenu: openDeviceMenu })
-            )
+              h(NetworkGraph, {
+                devices, edges, localId, selectedId: deviceId,
+                onSelect: (item) => selectDevice(item.device_id),
+                onOpen: openDevice,
+                onOpenDetails: (item) => setNetworkDetailId(item.device_id),
+                onToggleEdge: toggleNetworkEdge,
+                onContextMenu: openDeviceMenu
+              })
+            ),
+            networkDetail ? h(NetworkDetailPanel, {
+              device: networkDetail, devices, edges, localId,
+              onToggleEdge: toggleNetworkEdge,
+              onClose: () => setNetworkDetailId(''),
+              onOpen: openDevice,
+              onOpenManager: () => setShowNetworkLinks(true)
+            }) : null
           ),
-          deviceContext
+          deviceContext,
+          showNetworkLinks ? h(NetworkLinksManager, {
+            devices, edges, localId, detailId: networkDetailId,
+            onToggleEdge: toggleNetworkEdge,
+            onClose: () => setShowNetworkLinks(false)
+          }) : null
         )
       }
 
+      const localDeviceRecord = ((state && state.devices) || []).find((item) => item.device_id === (appLocalDevice || deviceId)) || {}
+      const localCaps = localDeviceRecord.capabilities || {}
+      if (!loggedIn) {
+        return h(Connection.LoginScreen, {
+          defaultUrl: hubAddress || hubUrl || '',
+          defaultEmail: hubEmail,
+          embedded: !!(host && host.kind === 'dsh'),
+          onExit: host && host.kind === 'dsh' && typeof host.exitPanel === 'function'
+            ? () => { try { host.exitPanel() } catch (_) { /* DSH panel may already be gone */ } }
+            : host && host.kind === 'app' && host.windowControls
+              ? () => { try { host.windowControls.action('close').catch(() => {}) } catch (_) { /* window may be closing */ } }
+              : undefined,
+          onLogin: async ({ url, token, user }) => {
+            try { window.localStorage.setItem('tether.hub', JSON.stringify({ url, token, email: (user && user.email) || '', role: (user && user.role) || '' })) } catch (_) { /* storage unavailable */ }
+            setHubEmail((user && user.email) || '')
+            setHubRole((user && user.role) || '')
+            try {
+              if (window.tetherApp && typeof window.tetherApp.enrollDevice === 'function') await window.tetherApp.enrollDevice(token)
+            } catch (_) { /* enrollment retries on the next sign-in */ }
+            window.location.reload()
+          }
+        })
+      }
+
+      const liveHubStatus = hubBusy ? 'checking'
+        : (stateOkAtRef.current && Date.now() - stateOkAtRef.current < 8000 ? 'online'
+          : (hubStatus === 'offline' ? 'offline' : 'checking'))
+      const settingsUpdate = (() => {
+        const localId = appLocalDevice || deviceId
+        const devices = (state && state.devices) || []
+        const byId = new Map(devices.map((item) => [item.device_id, item]))
+        const localTarget = byId.get(localId)
+        const localProduct = host && host.kind === 'app' ? 'desktop' : host && host.kind === 'dsh' ? 'dsh' : ''
+        const connected = new Set([localId])
+        for (const edge of (state && state.edges) || []) {
+          if (!edge) continue
+          if (edge.from === localId) connected.add(edge.to)
+          else if (edge.to === localId) connected.add(edge.from)
+        }
+        const scopedInfo = (target, component) => {
+          if (target === localId && component === 'app') return updateInfo.app || {}
+          if (target === localId && component === 'plugin') return updateInfo.localPlugin || {}
+          const scoped = (updateInfo.devices || {})[target]
+          return (scoped && scoped[component]) || {}
+        }
+        const fallbackVersion = (caps, component) => component === 'app' ? caps.app_version : component === 'plugin' ? caps.plugin_version : caps.node_version
+        const makeRow = (item, local, product) => {
+          const caps = (item && item.capabilities) || {}
+          const components = local
+            ? (product === 'desktop' ? ['app', 'node'] : ['plugin', 'node'])
+            : [...(caps.app_version ? ['app'] : []), ...(caps.plugin_version ? ['plugin'] : []), 'node']
+          const infos = components.map((component) => scopedInfo(item.device_id, component))
+          const products = components.map((component, index) => ({
+            label: component === 'app' ? 'APP' : component === 'plugin' ? '插件' : 'Node',
+            current: infos[index].current_version || fallbackVersion(caps, component) || '',
+            latest: infos[index].latest_version || ''
+          }))
+          const key = local ? 'product:' + product : 'device:' + item.device_id
+          const run = updateRuns[key]
+          return {
+            key, id: item.device_id, local, product,
+            name: item.name || item.device_id,
+            online: local ? true : !!item.online,
+            products,
+            available: infos.some((info) => info && info.update_available === true && !isUpdateInfoStale(info)),
+            running: !!(run && run.state === 'running'),
+            error: run && run.state === 'error' ? (run.message || '更新失败') : ''
+          }
+        }
+        return {
+          local: localProduct && localTarget ? makeRow(localTarget, true, localProduct) : null,
+          devices: devices
+            .filter((item) => item.device_id !== localId && connected.has(item.device_id))
+            .map((item) => makeRow(item, false, '')),
+          refreshing: updateRefreshing,
+          onRefresh: () => { void refreshUpdateCenter(true) },
+          onUpdate: (row) => {
+            if (!row) return
+            if (row.local) { void runProductUpdate(row.product); return }
+            const target = devices.find((item) => item.device_id === row.id)
+            if (target) void runDeviceUpdate(target)
+          }
+        }
+      })()
+      const windowControlIcon = (kind) => h('svg', {
+        width: 12, height: 12, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor',
+        strokeWidth: 1.2, strokeLinecap: 'round', 'aria-hidden': true
+      },
+        kind === 'minimize' ? h('path', { d: 'M3 8h10' }) : null,
+        kind === 'maximize' ? h('rect', { x: 3, y: 3, width: 10, height: 10, rx: 0.5 }) : null,
+        kind === 'restore' ? [h('rect', { key: 'a', x: 3, y: 5, width: 8, height: 8, rx: 0.5 }), h('path', { key: 'b', d: 'M5.5 5V3.5h8v8H12' })] : null,
+        kind === 'close' ? [h('path', { key: 'a', d: 'M4 4l8 8' }), h('path', { key: 'b', d: 'M12 4l-8 8' })] : null)
+      const windowControl = (action, label, kind) => host.windowControls
+        ? h('button', {
+          type: 'button', title: label, 'aria-label': label,
+          className: 'tether-window-control' + (action === 'close' ? ' tether-window-close' : ''),
+          onClick: () => { host.windowControls.action(action).catch(() => {}) },
+          style: { width: 46, height: '100%', border: 0, background: 'transparent', color: C.mute, display: 'grid', placeItems: 'center', cursor: 'default', padding: 0 }
+        }, windowControlIcon(kind))
+        : null
       return h('div', { className: 'tether-root', style: { position: 'relative', height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--tether-workbench-bg, ' + C.bg + ')', color: C.ink, fontSize: 13, fontWeight: 'var(--tether-body, 400)', overflow: 'hidden' } },
         h('style', null, SCROLL_CSS),
-        h('div', { className: 'tether-topbar ' + (host && host.kind === 'app' ? 'tether-toolbar-app' : 'tether-toolbar'), style: { display: 'flex', alignItems: 'center', gap: 10, padding: '6px 12px', borderBottom: 0, background: C.soft, position: 'relative', zIndex: 2, flex: '0 0 auto' } },
-          h('strong', { style: { fontSize: 15 } }, 'Tether'),
+        h('div', { className: 'tether-topbar ' + (host && host.kind === 'app' ? 'tether-toolbar-app' : 'tether-toolbar'), style: { display: 'flex', alignItems: 'center', gap: 10, height: 40, padding: '0 0 0 12px', borderBottom: 0, background: C.soft, position: 'relative', zIndex: 2, flex: '0 0 auto', WebkitAppRegion: 'drag' } },
+          h('span', { style: { display: 'flex', alignItems: 'center', gap: 8, flex: '0 0 auto' } },
+            h(TetherMark, { size: 22 }),
+            h('strong', { style: { fontSize: 15 } }, 'Tether')),
           device ? h(DeviceSwitcher, {
             devices: (state && state.devices) || [],
             value: deviceId,
@@ -11067,40 +16675,46 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             onOpenNetwork: () => selectPanel('network')
           }) : h('span', { style: { color: C.mute } }, 'no device'),
           device && device.capabilities && (!device.capabilities.fs || device.capabilities.surface_protocol !== 1) ? pill('节点待更新', C.amber) : null,
-          host && (host.kind === 'dsh' || host.kind === 'app') ? h(Connection.Trigger, {
-            onClick: () => {
-              if (host.kind === 'dsh' || host.kind === 'app') {
-                let saved = {}
-                try { saved = JSON.parse(window.localStorage.getItem('tether.hub') || '{}') } catch (_) { /* ignore */ }
-                setHubUrl(hubAddressForEditor(saved.url || ''))
-                setHubUnsafeExistingUrl(hubUrlNeedsReplacement(saved.url || ''))
-                setHubToken(saved.token || '')
-              }
-              setHubState(null)
-              setHubStatus('unknown')
-              setHubError('')
-              if (host.connectionInfo) host.connectionInfo(host.activeApiBase && host.activeApiBase()).then((info) => setHubAddress(info.address || '')).catch(() => setHubAddress(''))
-              setShowHub(true)
+          h('div', { style: { marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, alignSelf: 'stretch', flex: '0 0 auto' } },
+            host && (host.kind === 'dsh' || host.kind === 'app') ? h(Connection.Trigger, {
+              onClick: () => {
+                if (host.kind === 'dsh' || host.kind === 'app') {
+                  let saved = {}
+                  try { saved = JSON.parse(window.localStorage.getItem('tether.hub') || '{}') } catch (_) { /* ignore */ }
+                  setHubUrl(hubAddressForEditor(saved.url || ''))
+                  setHubUnsafeExistingUrl(hubUrlNeedsReplacement(saved.url || ''))
+                  setHubToken(saved.token || '')
+                  setHubEmail(saved.email || '')
+                }
+                setHubState(null)
+                setHubStatus('unknown')
+                setHubError('')
+                if (host.connectionInfo) host.connectionInfo(host.activeApiBase && host.activeApiBase()).then((info) => setHubAddress(info.address || '')).catch(() => setHubAddress(''))
+                setShowHub(true)
+              },
+              status: liveHubStatus
+            }) : null,
+            h(MinimalUpdateButton, { React, h, api, post, deviceId, host, C }),
+            host && host.kind === 'app' && host.windowControls ? h('div', {
+              style: { display: 'flex', alignSelf: 'stretch', marginLeft: 2, WebkitAppRegion: 'no-drag' }
             },
-            status: hubBusy ? 'checking' : hubStatus
-          }) : null,
-          h('button', {
-            onClick: openUpdateCenter,
-            title: updateStatus === 'available' ? '发现可用更新，打开更新中心'
-              : updateStatus === 'failed' ? '更新检查失败，打开后可重试'
-                : updateStatus === 'current' ? '已是最新版本' : '查看 APP、节点与插件更新状态',
-            className: 'tether-press tether-hover tether-update-trigger',
-            style: { marginLeft: 8, marginRight: 0, height: 26, padding: '0 10px', borderRadius: 999, border: 0, background: C.bg, color: C.sub, display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer', flex: '0 0 auto' }
-          }, h('span', { 'aria-label': '更新状态：' + updateStatus, style: { width: 7, height: 7, borderRadius: '50%', background: updateStatusColor, flex: '0 0 auto' } }), '更新')
+              windowControl('minimize', '最小化', 'minimize'),
+              windowControl('toggle-maximize', windowMaximized ? '还原' : '最大化', windowMaximized ? 'restore' : 'maximize'),
+              windowControl('close', '关闭', 'close')) : null)
         ),
         notice || projectsError || updateToast ? renderToasts() : null,
         h('div', { style: { display: 'flex', flex: '1 1 auto', minHeight: 0 } },
           h(ActivityBar, {
-            active: view === 'files' ? 'files' : (view === 'network' ? 'network' : 'workspaces'),
+            active: view === 'files' ? 'files' : (view === 'network' ? 'network' : (view === 'transfer' ? 'transfer' : (view === 'apps' ? 'apps' : (view === 'agents' ? 'agents' : 'workspaces')))),
             collapsed: sidebarCollapsed,
             onSelect: selectPanel,
-            onSettings: openSettings,
-            settingsOpen: showSettings
+            onPermissions: () => { setShowAppSettings(false); openSettings() },
+            permissionsOpen: showSettings,
+            onAppSettings: () => { setShowSettings(false); setSettingsSection('connection'); setShowAppSettings(true) },
+            appSettingsOpen: showAppSettings,
+            onAccount: () => { setShowSettings(false); setSettingsSection('account'); setShowAppSettings(true) },
+            accountEmail: accountName || hubEmail,
+            accountAvatar
           }),
           h(SidePanel, {
             width: safeSidebarWidth,
@@ -11129,23 +16743,41 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             onContextMenuNode: (event, node) => openContextMenu(event, { name: node.name, path: node.path, dir: node.dir }, node.dir ? node.path : parentOf(node.path)),
             treeSelected
           }),
-          h('main', { className: 'tether-workbench', style: { flex: '1 1 auto', display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 } },
-            h(NativeSurface, { deviceId, online: deviceOnline, visible: view === 'chat', localDeviceId: appLocalDevice }),
-            view === 'files' ? renderExplorer() : (view === 'network' ? renderNetwork() : null)
+          h('main', { className: 'tether-workbench', style: { flex: '1 1 auto', display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0, position: 'relative' } },
+            h(SurfaceDeck, { devices: (state && state.devices) || [], deviceId, localDeviceId: appLocalDevice, visible: view === 'chat' }),
+            view === 'files' ? renderExplorer() : view === 'network' ? renderNetwork()
+              : view === 'transfer' ? h(createTransferPage, {
+                React, Glyph, api, post, C,
+                devices: (state && state.devices) || [],
+                localDevice: appLocalDevice,
+                onNotice: setNotice,
+                onError: fail
+              })
+                : view === 'apps' ? h(createAppsPage, {
+                React, Glyph, post, C,
+                devices: (state && state.devices) || [],
+                localDevice: appLocalDevice,
+                onError: fail
+              })
+                : view === 'agents' ? h(createAgentsPage, {
+                React, Glyph, post, C,
+                devices: (state && state.devices) || [],
+                localDevice: appLocalDevice,
+                onError: fail
+              })
+                : null
         ),
         ),
         showHub && host && (host.kind === 'dsh' || host.kind === 'app') ? h(Connection.Panel, {
           open: true,
           onClose: () => setShowHub(false),
-          info: { address: hubAddress || '未知', status: hubStatus, checkedAt: hubCheckedAt, durationMs: hubDuration },
+          info: { address: hubAddress || '未知', status: liveHubStatus, checkedAt: hubCheckedAt, durationMs: hubDuration },
           busy: hubBusy, error: hubError, onProbe: probeConfiguredHub,
-          defaultUrl: hubUrl || '',
+          defaultUrl: hubUrl || hubAddress || '',
           defaultToken: hubToken || '',
-          defaultDeviceId: appLocalDevice || deviceId || '',
-          defaultDeviceName: ((state && state.devices || []).find((item) => item.device_id === (appLocalDevice || deviceId)) || {}).name || appLocalDevice || deviceId || '',
-          platform: (typeof navigator !== 'undefined' && navigator.platform) || 'Windows',
+          defaultEmail: hubEmail,
           onConfigured: async ({ url, token, user }) => {
-            try { window.localStorage.setItem('tether.hub', JSON.stringify({ url, token })) } catch (_) { throw new Error('无法保存 Hub 登录凭据') }
+            try { window.localStorage.setItem('tether.hub', JSON.stringify({ url, token, email: (user && user.email) || hubEmail })) } catch (_) { throw new Error('无法保存 Hub 登录凭据') }
             ACTIVE_BASE = url
             ACTIVE_BASE_GENERATION += 1
             EXPLICIT_AUTHORITY = true
@@ -11191,6 +16823,8 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             workspaceCacheRef.current.clear()
             drivesCacheRef.current.clear()
             policyCacheRef.current.clear()
+            auditCacheRef.current.clear()
+            permissionInflightRef.current.clear()
             if (dirAbortRef.current) dirAbortRef.current.abort()
             if (previewAbortRef.current) previewAbortRef.current.abort()
             setUpdateInfo({ app: null, localPlugin: localPluginVersionSeed(host), devices: {} })
@@ -11206,6 +16840,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             setHubError('')
             setHubUrl(url)
             setHubToken(token)
+            setHubEmail((user && user.email) || hubEmail)
             setHubAddress(url)
             setHubBusy(true)
             const generation = ACTIVE_BASE_GENERATION
@@ -11233,7 +16868,56 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
               if (generation === ACTIVE_BASE_GENERATION) setHubBusy(false)
             }
           }
-        }) : null,        showUpdate ? h('div', {
+        }) : null,
+        showAppSettings ? h(Settings.SettingsPanel, {
+          open: true,
+          onClose: () => setShowAppSettings(false),
+          accountEmail: hubEmail,
+          accountRole: hubRole,
+          accountName,
+          accountAvatar,
+          Glyph,
+          onAvatarChange: (value) => { void saveAccountProfile({ avatar: value }) },
+          onAccountNameChange: (value) => { void saveAccountProfile({ display_name: value }) },
+          initialSection: settingsSection,
+          server: hubAddress || hubUrl || '',
+          connection: { status: liveHubStatus, checkedAt: hubCheckedAt, durationMs: hubDuration, token: hubToken },
+          device: {
+            ...localDeviceRecord,
+            device_id: localDeviceRecord.device_id || appLocalDevice || deviceId,
+            online: !!localDeviceRecord.online
+          },
+          versions: { app: localCaps.app_version, node: localCaps.node_version, plugin: localCaps.plugin_version },
+          update: settingsUpdate,
+          dsh: localDsh || (localCaps && (typeof localCaps.dsh_installed === 'boolean' || typeof localCaps.dsh_running === 'boolean')
+            ? { installed: localCaps.dsh_installed === true, running: localCaps.dsh_running === true, version: localCaps.dsh_version || '', installing: localCaps.dsh_installing === true, progress: 0 }
+            : null),
+          dshBusy,
+          onDshStart: () => runLocalDsh('dsh_start'),
+          onDshInstall: () => runLocalDsh('dsh_install'),
+          onRefreshConnection: probeConfiguredHub,
+          onRestartNode: async () => {
+            const id = appLocalDevice || deviceId
+            if (!id) return
+            try {
+              await post('/api/devices/' + encodeURIComponent(id) + '/node/restart', {})
+              setNotice('已请求重启本机 Node')
+            } catch (error) { fail(error) }
+          },
+          onOpenPermissions: () => { setShowAppSettings(false); openSettings() },
+          onCheckUpdates: async () => { setShowAppSettings(false); await refreshUpdateCenter(true) },
+          onLogout: () => {
+            try { window.localStorage.removeItem('tether.hub') } catch (_) { /* storage unavailable */ }
+            window.location.reload()
+          },
+          onPasswordChanged: (data) => {
+            const next = data && data.token
+            if (!next) return
+            setHubToken(next)
+            try { window.localStorage.setItem('tether.hub', JSON.stringify({ url: hubUrl || hubAddress, token: next, email: hubEmail })) } catch (_) { /* storage unavailable */ }
+          }
+        }) : null,
+        showUpdate ? h('div', {
           onPointerDown: (event) => { if (event.target === event.currentTarget) setShowUpdate(false) },
           style: { position: 'absolute', inset: 0, background: 'rgba(16,24,40,0.35)', display: 'grid', placeItems: 'center', zIndex: 30, padding: 16, boxSizing: 'border-box' }
         },
@@ -11265,32 +16949,6 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             })()
           )
         ) : null,
-        pendingApp ? h('div', {
-          style: { position: 'absolute', inset: 0, background: 'rgba(16,24,40,0.35)', display: 'grid', placeItems: 'center', zIndex: 35, padding: 16 }
-        },
-          h('div', { style: { width: 360, background: C.bg, borderRadius: 10, boxShadow: C.shadow, padding: 18 } },
-            h('div', { style: { fontSize: 14, fontWeight: 'var(--tether-strong, 600)', marginBottom: 6 } }, 'APP 已下载'),
-            h('div', { style: { color: C.sub, fontSize: 12, lineHeight: '18px', marginBottom: 14 } }, '需要重启 Tether 才能完成安装。'),
-            h('div', { style: { display: 'flex', justifyContent: 'flex-end', gap: 8 } },
-              btn('稍后', () => { setPendingApp(''); setNotice('APP 已下载，下次打开更新页可继续安装') }),
-              btn('重启并安装', async () => {
-                const id = pendingApp
-                setPendingApp('')
-                try { await host.updates.apply(id); setNotice('APP 正在重启安装') } catch (error) { setComponentUpdateError('app', shortUpdateError(error), null) }
-              }, { primary: true }))
-          )
-        ) : null,
-        pendingDshRestart ? h('div', {
-          style: { position: 'absolute', inset: 0, background: 'rgba(16,24,40,0.35)', display: 'grid', placeItems: 'center', zIndex: 35, padding: 16 }
-        },
-          h('div', { role: 'dialog', 'aria-label': '应用本机 DSH 插件更新', style: { width: 360, background: C.bg, borderRadius: 10, boxShadow: C.shadow, padding: 18 } },
-            h('div', { style: { fontSize: 14, fontWeight: 'var(--tether-strong, 600)', marginBottom: 6 } }, '插件更新已安装'),
-            h('div', { style: { color: C.sub, fontSize: 12, lineHeight: '18px', marginBottom: 14 } }, '先尝试在当前 DSH 会话中在线加载新插件；若当前 profile 不支持在线重载，会提示需要重启。'),
-            h('div', { style: { display: 'flex', justifyContent: 'flex-end', gap: 8 } },
-              btn('稍后', () => setPendingDshRestart(false), { disabled: dshRestartBusy }),
-              btn(dshRestartBusy ? '正在应用…' : '立即生效', confirmDshRestart, { primary: true, disabled: dshRestartBusy }))
-          )
-        ) : null,
         showSettings ? h('div', {
           onPointerDown: (event) => { if (event.target === event.currentTarget) setShowSettings(false) },
           style: { position: 'absolute', inset: 0, background: 'rgba(16,24,40,0.35)', display: 'flex', justifyContent: 'flex-end', zIndex: 20 }
@@ -11301,19 +16959,6 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
               h('button', { onClick: () => setShowSettings(false), style: { marginLeft: 'auto', border: 0, background: 'transparent', fontSize: 18, cursor: 'pointer', color: C.mute } }, '×')
             ),
             h('div', { className: 'tether-drawer-body', style: { overflow: 'hidden', flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column' } },
-              host && host.kind === 'dsh' ? h('div', { style: { padding: '12px 16px', background: C.panel, borderBottom: '1px solid ' + C.line } },
-                h('strong', { style: { display: 'block', fontSize: 12, marginBottom: 8 } }, 'Hub 连接配置'),
-                h('input', { value: hubUrl, onChange: (event) => { setHubUrl(event.target.value); if (event.target.value.trim()) setHubUnsafeExistingUrl(false) }, placeholder: 'Hub URL', spellCheck: false, type: 'url', style: { width: '100%', height: 30, boxSizing: 'border-box', border: 0, borderRadius: 6, padding: '0 8px', background: C.bg, fontSize: 12, marginBottom: 6 } }),
-                hubUnsafeExistingUrl ? h('div', { style: { fontSize: 11, color: C.amber, marginBottom: 6 } }, '现有地址含附加参数，请填写安全地址后保存。') : null,
-                h('input', { value: hubToken, onChange: (event) => setHubToken(event.target.value), placeholder: '访问令牌', type: 'password', spellCheck: false, style: { width: '100%', height: 30, boxSizing: 'border-box', border: 0, borderRadius: 6, padding: '0 8px', background: C.bg, fontSize: 12, marginBottom: 8 } }),
-                btn('保存 Hub 配置', () => {
-                  let url
-                  try { url = new URL(hubUrl.trim()); if (!['http:', 'https:'].includes(url.protocol)) throw new Error() } catch (_) { setNotice('Hub URL 无效'); return }
-                  if (url.username || url.password || url.search || url.hash || !hubToken.trim()) { setNotice('请填写有效的 Hub 地址和访问令牌'); return }
-                  const cleanUrl = (url.origin + url.pathname).replace(/\/+$/, '')
-                  window.localStorage.setItem('tether.hub', JSON.stringify({ url: cleanUrl, token: hubToken.trim() }))
-                  setNotice('Hub 配置已保存，请重新打开连接页检测。')
-                }, { primary: true })) : null,
               h('div', { style: { flex: '0 0 auto', maxHeight: '58%', overflowY: 'auto' } },
               h('div', { style: { display: 'grid', gap: 6, marginBottom: 4 } },
                 [['readonly', '默认（只读 + 项目可写）', '全盘可读；只写项目根与下列目录'],
@@ -11348,7 +16993,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
                     h('span', null, a.op), h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, title: a.path }, a.path),
                     h('span', null, a.phase === 'intent' ? (a.result === 'denied' ? 'denied' : 'intent') : a.result)
                   )),
-                  !audit.length ? h('div', { style: { padding: 10, fontSize: 11, color: C.mute } }, '暂无审计') : null
+                  !audit.length ? h('div', { style: { padding: 10, fontSize: 11, color: C.mute } }, auditLoading ? '正在读取审计…' : '暂无审计') : null
                 )
               ),
               audit.length < auditCount ? h('div', { style: { textAlign: 'center', paddingTop: 8, flex: '0 0 auto' } },
@@ -11387,11 +17032,22 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
 
     return {
       name: 'tether',
-      inject: ['slots', 'layout', 'connection', 'remote', 'remote.workspaceFiles', 'remote.pluginManager', 'commandUi', 'uiWorkspace', 'sessions'],
+      inject: ['slots', 'layout', 'connection', 'remote', 'remote.pluginManager', 'commandUi', 'uiWorkspace', 'sessions'],
       apply(ctx) {
         localPluginRemote = ctx.remote
         if (ctx.connection && ctx.connection.rpc && typeof ctx.connection.rpc.call === 'function') {
           localPluginRpc = ctx.connection.rpc
+        }
+        if (typeof ctx.effect === 'function') {
+          const stopHotReload = createDshPluginHotReloadWatch({
+            getRpc: () => localPluginRpc,
+            reloadSurface: () => host.reloadLocalPluginSurface(),
+            storage: (() => { try { return window.localStorage } catch (_) { return null } })()
+          })
+          ctx.effect(() => stopHotReload)
+        }
+        exitPanel = () => {
+          try { ctx.layout.selectPanel(null) } catch (_) { /* DSH layout is optional in embedded surfaces */ }
         }
         const embedded = (() => { try { return window.top !== window.self } catch (_) { return true } })()
         if (embedded || new URL(window.location.href).searchParams.has('tether_native')) {
@@ -11409,25 +17065,16 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             }
           } catch (_) { /* DSH chrome stays usable if style injection is unavailable */ }
           try {
-            const targetFiles = createDshTargetFilesBridge({ getRpc: () => localPluginRpc, getRemote: () => localPluginRemote })
+            const targetFiles = createDshTargetExplorerBridge({ getRpc: () => localPluginRpc, getHost: () => host })
             const targetFilePicker = { open: null, pendingSessionStart: null }
-            if (ctx.connection && ctx.connection.rpc && typeof ctx.connection.rpc.call === 'function'
-                && ctx.remote && ctx.remote.workspaceFiles) {
+            if (ctx.connection && ctx.connection.rpc && typeof ctx.connection.rpc.call === 'function') {
               const attachments = createDshTargetAttachments(React, Native, targetFiles, targetFilePicker, ctx.uiWorkspace, ctx.sessions)
               ctx.slots.inject('conversation.input.attachments', () => ctx.slots.register({
                 name: 'conversation.input.attachments', priority: -1000, locale: 'conversation',
                 inject: (sessionId) => ({ sessionId })
               }, attachments))
             }
-            ctx.inject(['commandUi'], (scope) => {
-              const commands = scope.get('commandUi')
-              scope.effect(() => commands.register({
-                name: 'tether-target-file', label: () => '目标设备文件', icon: TetherIcon,
-                available: () => typeof targetFilePicker.open === 'function',
-                ui: { kind: 'action', run: () => targetFilePicker.open?.() }
-              }), 'tether: target device file action')
-            })
-          } catch (_) { /* attachments are optional in an embedded surface */ }
+            } catch (_) { /* attachments are optional in an embedded surface */ }
           return
         }
         ctx.slots.inject('main', function* () {

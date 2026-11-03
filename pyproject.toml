@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tether-harness"
-version = "0.2.29"
+version = "0.3.6"
 description = "MCP/ACP multi-device Agent Harness client (interview prototype)"
 requires-python = ">=3.10"
 dependencies = [
@@ -14,6 +14,7 @@ dependencies = [
   "deepseek-harness-sdk==0.2.1rc2",
   "mcp>=2.3",
   "zstandard>=0.22",
+  "pywinpty>=2.0; sys_platform == 'win32'",
 ]
 
 [tool.setuptools.packages.find]

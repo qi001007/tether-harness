@@ -1,5 +1,642 @@
 # Public client releases
 
+## v0.3.6 (local candidate, not published)
+
+croc transfer engine and POSIX file-tree fixes:
+
+- Node/APP now bundle croc 11.6.3 for Windows x64 and Linux x64 in `tether/node/bin/`; `build_release.py` includes `node/bin` in both the Node and APP archives.
+- `tether/node/croc_transfer.py` is a thin adapter only: it starts croc, parses progress, and exposes send/receive/status/cancel/finish; no custom chunk protocol is added.
+- `tether-croc-relay.service` runs on the server's EasyTier address `10.144.0.1:19009–19016` (8 transfer ports, private network only).
+- 100 MB random-data transfer, Windows `10.144.0.2` ↔ server `10.144.0.1`:
+  - Windows → server: 8 ports, **51.43 s** (~2.04 MB/s), SHA-256 matched.
+  - server → Windows: 8 ports, **82.43 s** (~1.27 MB/s), same SHA matched.
+  - Earlier zero-filled 5.74/17.69 s values were compression artifacts and are withdrawn. Raw TCP 8-stream was 53.9 s; croc is at the path ceiling, not the 10 s target.
+- Local 0.3.6 assets were built successfully (unsigned development manifest): APP 38,741,660 B, plugin 1,384,395 B, Node 36,897,237 B; Node/APP archives contain Windows `croc.exe`, Linux `croc-linux-x64`, macOS `croc-darwin-x64` and `croc-darwin-arm64`.
+- Server-hosted install assets updated to 0.3.6; `/install/version.json` reports node `0.3.6`; all three ZIP links return HTTP 200 and their SHA-256 match `release/tether-update.json`. `install-node.sh` defaults to `latest`, resolves node from `version.json`, and derives the version from an archive filename in `--archive` mode.
+- Second isolated Linux install (`--install-only --archive`, prefix `/tmp/tether-install-036b`): succeeded; `CrocTransfer(platform="linux")` selected `croc-linux-x64`, reported `11.6.3`, relay true, and auto-chmodded the bundled binary.
+- Not done: publish/upload assets to GitHub, official HTTPS install/upgrade, laptop mobile-network direction, clean VM matrix, macOS croc binary. Do not treat this section as a published release.
+
+## v0.3.5
+
+POSIX terminal fix and a one-shot Linux/macOS Node installer:
+
+- POSIX PTY reader no longer dereferences `session.fd` after `stop()` (the old path raised `TypeError` in the reader thread). The reader captures the fd and `stop` marks the session closed before closing it.
+- `laptop/install-node.sh` is now shipped inside `tether-node-0.3.5.zip` and accepts `--controller/--token/--device`, `--archive`, `--check`, `--install-only`, `--prefix`, `--version`. It creates a venv, installs dependencies, writes a mode-600 `node.env`, and creates `~/.local/bin/tether-node`.
+- WSL2 Ubuntu test: the raw v0.3.5 installer passed `--check` and installed from the release ZIP (37 deps, launcher/env created). The installed venv's `TerminalService` returned `pty:true`, ran `echo TETHER_INSTALLED_LINUX_OK`, resized to 80×20, and stopped cleanly; shell catalog was bash/sh available, zsh/fish unavailable, default bash.
+- Still untested: a full VirtualBox/VMware desktop Linux VM, real macOS, and an APP-generated token command/system service. WSL2 is a lightweight VM, not a desktop distribution.
+- Gates: pytest **189 passed / 3 skipped**, bundle check. CI `41684185090`; published at 2026-11-03T17:29:28Z; assets app 1,941,046 B, plugin 1,377,973 B, node 109,596 B.
+
+## v0.3.4
+
+Direct-mesh bulk transfers instead of the Hub relay:
+
+- The transfer page now unwraps the Hub's `/fs/direct_info` response (`{value:{...}}`) and rewrites the **local** device to `127.0.0.1` so EasyTier does not loop the source read through the relay.
+- Real 100 MB transfer DESKTOP `work-local` → LAPTOP `C:\Users\14675\Documents\deepseek-harness\default-workspace`: **52 s / 1.92 MB/s**, target **104,857,600 B**; network trace used `http://127.0.0.1:18895/fs/read` and `http://10.144.0.3:18895/fs/write_chunk` with no Hub chunk relay. Previous Hub relay: 0.04–0.06 MB/s.
+- A 10 MB smoke transfer completed in ~3 s via the same direct endpoints. The UI trigger is selecting the source file and pressing `转移到另一侧`; Ctrl+C/V automation is not a reliable verification path.
+- Gates: pytest **189 passed / 2 skipped**, bundle check, UI tests. CI `41682125666`; published at 2026-11-03T17:16:44Z; assets app 1,941,010 B, plugin 1,377,963 B, node 107,621 B.
+- LAPTOP's `web/dist/app.js` was replaced with the 0.3.4 bundle (8,037,246 B, contains `127.0.0.1` and `direct_info`), effective on the next APP reload. Its metadata remains 0.3.1/0.3.0 because the updater still rejects the pywinpty dependency change.
+
+## v0.3.3
+
+Native interactive terminal and themed shell menu:
+
+- Node `terminal.py` now prefers a real PTY (pywinpty/ConPTY on Windows, `pty(3)` on POSIX). `terminal_start` returns `pty` + cols/rows; `terminal_resize` was added. PowerShell/pwsh set `chcp 65001` plus UTF-8 input/output before the prompt; cmd uses `/K chcp 65001`; Git Bash uses `-i -l`. Nodes without pywinpty fall back to the pipe session and report `pty:false`.
+- The APP terminal dock uses xterm.js + FitAddon: native prompt, colours, selection, Ctrl+Shift+C/V, Enter/arrow keys, 60 ms polling with a write queue. The terminal theme follows `body[data-ds-dark-theme]`; the viewport is transparent (no black strip).
+- Shell selection is a self-drawn `[role=listbox]` menu (`C.layer1`/`C.shadow`, selected `C.blue` + ✓) instead of a native `<select>`; the menu opens above/below the button based on viewport space.
+- File hover cards no longer cover context/device menus: `hoverTip` is cleared when a menu opens and menus are raised to z-index 120.
+- Tests: pytest **189 passed / 2 skipped** (PTY + resize boundary); plugin/web builds and UI tests pass. Real APP checks: PowerShell prompt, `echo TETHER_NATIVE`, Git Bash prompt/command, menu hit-test, no renderer exceptions.
+- Published at 2026-11-03T16:35:56Z; CI `41675286538`; assets app 1,940,850 B, plugin 1,377,885 B, node 107,621 B.
+- LAPTOP's Node was staged manually from the node ZIP because the installed updater rejects the pywinpty dependency change (`dependency_change_requires_manual_install`); its APP/plugin metadata remains 0.3.1/0.3.0, but the 0.3.3 `web/dist/app.js` (8,037,010 B, `TetherTerminalRuntime`/`listbox`) was extracted directly into its install root and loads on the next APP reload. `terminal_start` on LAPTOP returns `pty:true` and `echo LAPTOP_PTY_OK` succeeded.
+
+## v0.2.93
+
+Real-machine hot reload for Hub-driven plugin updates:
+
+- The Hub applies the plugin through the Node's updater state, which the surface never read. `apply` now mirrors the same `applied-plugin.json` into `dsh_home/storages/tether/updates/`; the page watcher sees `restart_required && disk_version != runtime_version` and enables the unique surface entry.
+- The surface descriptor advertises `hot_reload: true` and its module file changed, so DSH HMR replaces it in place. The reload bridge is enable-only: a stop/start cycle persists `enabled:false` in the profile and left the surface disabled in a real run.
+- `_scan_dsh_host_pid` is scoped to the requested DSH home; it never restarts a host from another installation (or a test fixture).
+- Real hot reload on DESKTOP: plugin job 0.2.92→0.2.93 reached `applying` at 7 s, `verifying` at 8 s, `done` at 9 s; DSH pid **40564 unchanged**, descriptor `plugin_version` became 0.2.93 at 1793705487.280. Job total 14.3 s including download/prepare; no DSH restart.
+- LAPTOP 0.2.91→0.2.93 Node+plugin job **54.6 s**; no DSH page was open, so the 8-second grace expired and the helper restarted DSH (plugin phase 14 s). APP 0.2.91→0.2.93 took **29 s**.
+- Both devices app/node/plugin **0.2.93**. Computed-style gate PASS: DESKTOP boot 6.9 s / warm 3.9 s, LAPTOP boot 77.6 s / warm 5.7 s; input `bhn1Oq_searchInput`, composer present.
+
+Gates: mjs 241/241, cjs 8/8, pytest 162 passed / 5 skipped, bundle check, artifact audit PASS. CI `41627321273`; published at 2026-11-03T11:28:03Z (app 1,795,302 B, plugin 1,366,561 B, node 93,132 B).
+
+## v0.2.92
+
+Keep the reload non-destructive:
+
+- Surface reload only enables the unique Tether entry; never disables it first. A real run showed a concurrent stop/start leaves `enabled:false` persisted in the DSH profile and the surface off after the host restart.
+- Descriptor adds `hot_reload: true` and the module file changed so HMR has a replacement to apply.
+- Real run exposed the state-dir split (Node apply vs surface status) that v0.2.93 fixes.
+
+Gates: mjs 241/241, cjs 8/8, pytest 162 passed / 5 skipped, bundle check. CI `41625074769`; published at 2026-11-03T11:11:35Z. Hub mirror 0.2.92; DESKTOP plugin reached 0.2.92, LAPTOP skipped to 0.2.93.
+
+## v0.2.91
+
+Fix Windows 8.3 `file:` specs and keep the first upgrade fast:
+
+- DSH saves the installer's short file: spec (`DSH-PL~1`) into the profile; `_file_dependency_path` now expands Windows 8.3 components with `GetLongPathNameW` without resolving links.
+- Only surfaces that broadcast `plugin_version` get the 8-second hot-reload grace; older surfaces keep the immediate 1.5 s restart.
+- First rollout (DESKTOP plugin, LAPTOP Node+plugin, LAPTOP APP) succeeded; LAPTOP Node+plugin job **24.6 s**, APP **15 s**.
+
+Gates: mjs 243/243, cjs 8/8, pytest 161 passed / 5 skipped, bundle check, artifact audit PASS. CI `41619553549`; published at 2026-11-03T10:31:33Z (app 1,795,090 B, plugin 1,366,153 B, node 92,704 B).
+
+## v0.2.90
+
+First hot-reload attempt; superseded before rollout:
+
+- Plugin apply schedules the restart helper with an 8-second grace and the expected version; the descriptor's `plugin_version` is the runtime handshake.
+- The DESKTOP job failed with `plugin_source_unavailable`: pnpm had saved the 8.3 short path, so the package-name check saw `DSH-PL~1`. Fixed in 0.2.91.
+
+Gates: mjs 243/243, cjs 8/8, pytest 160 passed / 4 skipped. CI `41618213671`; published at 2026-11-03T10:21:47Z (app 1,794,722 B, plugin 1,365,784 B, node 92,335 B). Not rolled out.
+
+## v0.2.89
+
+Runtime defense against unstyled DSH controls:
+
+- Electron probes the embedded DSH frame for browser-default input/button styles (inset/outset borders, white/240-gray backgrounds).
+- A default-styled surface triggers one automatic plugin install/repair; if it breaks again, the APP covers the frame with a clear “DSH 界面样式与 Tether 版本不匹配” state instead of showing raw controls.
+- Added `scripts/qa_surface_styles.mjs`, a release gate that loads both devices' real surfaces in headless Edge and asserts computed styles (`border 0px/none`, transparent background, composer present). Both devices PASS.
+- The DSH upgrade/plugin-install matrix lives in `docs/DSH_UPGRADE_MATRIX.md`.
+- Update-restart trace: the same `app_restart` helper used by updates restarted the APP; 30 s of 20 ms sampling produced **1** new window (`Chrome_WidgetWin_1`, Tether) and **no console**. 
+
+Gates: mjs 238/238, cjs 7/7, pytest 158 passed / 1 skipped, build checks, `validate_versions()`, computed-style gate PASS both devices. CI `41598308564`; published at 2026-11-03T07:47:59Z (app 1,792,944 B, plugin 1,363,707 B, node 91,599 B). Hub mirror 0.2.89; DESKTOP and LAPTOP app/node/plugin **0.2.89**.
+
+## v0.2.88
+
+Automatic repair now triggers from real surface health, not from a cached gateway URL:
+
+- `dsh_status` reports `surface` from the live descriptor pid. The APP repairs when DSH is running with `surface=false`.
+- Surface-poll errors for `descriptor_missing` / `descriptor_invalid` / `host_unreachable` also enter the repair state.
+- Ordinary DSH status polling stays limited to local or broken surfaces, preserving the descriptor polling contract.
+- Real end-to-end: local profile reset to no plugin and no `node_modules`; the APP repaired it automatically, DSH pid 18492, both iframes measured `bhn1Oq_searchInput` with a composer.
+- v0.2.87 was built but its CI caught a surface-poll contract regression and was cancelled; it was never published.
+
+Gates: mjs 238/238, cjs 7/7, pytest 158 passed / 1 skipped, build checks, `validate_versions()`. CI `41596624981`; published at 2026-11-03T07:31:56Z (app 1,791,776 B, plugin 1,363,369 B, node 91,599 B). Hub mirror 0.2.88; DESKTOP and LAPTOP app/node/plugin **0.2.88**.
+
+## v0.2.86
+
+Fresh-profile plugin repair now waits for DSH cold start:
+
+- Descriptor wait raised from 90 s to **180 s**; if DSH exits while waiting, the installer starts it again (up to three times).
+- Real test: LAPTOP profile reset to a 211 B manifest with no plugin and no `node_modules`; `dsh_install_plugin` installed all four Tether packages plus the `@deepseek-ai` UI tree, then DSH published a descriptor on the retry.
+- DESKTOP repair took **5.31 s** (pid 41528); LAPTOP upgraded to 0.2.86 (pid 25992). Both real APP iframes measured `bhn1Oq_searchInput` with a composer.
+
+Gates: mjs 238/238, cjs 7/7, pytest 158 passed / 1 skipped, build checks, `validate_versions()`. CI `41592795732`; published at 2026-11-03T06:57:46Z (app 1,791,387 B, plugin 1,363,210 B, node 91,575 B).
+
+## v0.2.85
+
+Fix plugin installation on Windows paths containing spaces:
+
+- The plugin source is staged under the Tether data directory instead of `D:\DeepSeek Harness\.dsh`.
+- The profile dependency and CLI argument use a Windows short-path `file:` spec, so pnpm never splits the path and falls back to the npm registry.
+- Failed installs restore the profile manifest and bring the previous DSH back up.
+
+Gates: mjs 238/238, cjs 7/7, pytest 158 passed / 1 skipped. CI `41591041890`; published at 2026-11-03T06:44:34Z (app 1,791,303 B, plugin 1,363,205 B, node 91,491 B).
+
+## v0.2.84
+
+Automatic DSH plugin install and repair:
+
+- Node gained `fs/dsh_install_plugin`: download the signed plugin archive or use a local package, force the hoisted pnpm layout, install through the official `dsh plugin add`, and verify the plugin packages plus the `@deepseek-ai` UI dependency tree.
+- Profile manifest is backed up and restored on failure.
+- The APP runs the repair automatically when the surface reports a missing plugin, then reloads on the new DSH pid.
+- Hub allows the installer RPC to run for 360 s.
+
+Gates: mjs 238/238, cjs 7/7, pytest 158 passed / 1 skipped. CI `41590200056`; published at 2026-11-03T06:32:35Z (app 1,790,629 B, plugin 1,363,234 B, node 90,817 B).
+
+## v0.2.83
+
+Surface recovery for both devices and the real black-window source:
+
+- `/plugins/events` can reopen while another SSE stream is live; the missing `HTTP_STREAM_MAX_AGE`/`_HttpStream.created` fields raised `NameError` and the node logged `http_stream_open failed`. Added the 30-minute cap and the creation timestamp, plus a regression that opens two live streams.
+- Electron now recognizes the gateway's 502 body (`native surface request failed`) in an iframe and routes it through the existing `tether:surface-boot-failed` retry. A stale error iframe is no longer treated as `document-loaded` forever.
+- The APP repairs `Tether APP.lnk` on Desktop and Start Menu at startup with `shell.writeShortcutLink`, targeting `electron.exe`. The LAPTOP shortcut pointed at `Tether-App.cmd`, which opened a visible console on every launch.
+- LAPTOP repair: the DSH profile was logged in but had no Tether packages. Stopped DSH, backed up `profiles/desktop/package.json`, uploaded the four packages with per-file SHA-256 checks, restored bundles/dependencies and started DSH. Descriptor appeared in 3 s (pid 9124, origin 1871); after the node reconnect the device reported app/node/plugin **0.2.82**, `dsh_native=true`, `dsh_surface=true`. Gateway returned **200 / 39,514 B**; headless Edge and the real APP iframe both rendered the composer.
+- LAPTOP then updated through the Hub job to app/node/plugin **0.2.83** (`plugin` job 26 s, `app` job 17 s); its DSH restarted to pid 20892 and the surface stayed 200.
+- Cold-start trace from the Desktop shortcut: **1,100 samples at 20 ms**, only 3 new visible windows — WeType `StatusBarWnd` and two `Chrome_WidgetWin_1` (Tether); **zero `ConsoleWindowClass` / cmd / conhost**.
+
+Gates: mjs **237/237**, cjs **7/7**, client pytest **151 passed / 1 skipped**, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41585359468` succeeded; published at 2026-11-03T05:44:39Z (app 1,785,637 B, plugin 1,362,845 B, node 86,236 B; signed manifest verified). Hub mirror refreshed to **0.2.83**; DESKTOP app/node/plugin **0.2.83**, LAPTOP app/node/plugin **0.2.83**.
+
+## v0.2.75
+
+Original icon with a V1 vertical S link:
+
+- Restore the original deep-navy tile, white top-left ring and amber bottom-right ring. The only change is the middle link, now a single-cubic vertical S with the V1 curvature.
+- Move the artwork to `assets/tether-app-s.svg/.png/.ico`; the top bar mark uses the same V1 shape.
+- Force icon refreshes with a new filename, `app.setAppUserModelId('com.tether.app')` and rebuilt Desktop / Start Menu shortcuts. The taskbar button and desktop shortcut now show V1; the tray log records `tether-app-s.ico`.
+- The rejected 0.2.74 T icon was never published; its draft release was deleted.
+
+Gates: mjs 234/234, cjs 6/6, client pytest 148 passed / 1 skipped, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41509643908` succeeded; published at 2026-11-02T19:28:43Z (app 1,783,262 B, plugin 1,362,485 B, node 84,935 B; signed manifest verified). Hub mirror refreshed to **0.2.75**.
+
+## v0.2.73
+
+Frameless shell, unified icon and tray:
+
+- The native Electron title bar is gone. The Tether top bar is now the window chrome, with the brand mark, device switch and connection on the left, and custom minimize / maximize-restore / close controls on the right. The bar is draggable; controls stay clickable.
+- A new network icon replaces the old mark. The same multi-size `assets/tether.ico` drives the window, taskbar, hover thumbnail, tray, and the Desktop / Start Menu shortcuts.
+- Closing the window hides it to the Windows tray. The tray menu can reopen Tether or quit it; a second launch restores the hidden window. Only the tray quit or an update restart ends the process.
+- Real checks: no native title bar; `IsIconic=true` after minimize; `IsZoomed` toggles true/false with the maximize/restore control; close leaves the window hidden and the process alive; launching the shortcut restores it; the tray log records the new icon; the taskbar shows the new dark network mark.
+
+Gates: mjs **234/234** (3 new shell/tray/icon tests), cjs 6/6, client pytest 148 passed / 1 skipped, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41501985896` succeeded; published at 2026-11-02T18:39:29Z (app 1,932,610 B, plugin 1,362,669 B, node 84,935 B; signed manifest verified). Hub mirror refreshed to **0.2.73**.
+
+## v0.2.72
+
+No more black console flash at startup:
+
+- Root cause: the update check itself ran under `pythonw.exe`, but `UpdateManager.checkout_state()` invoked `git status` with an ordinary `subprocess.run`; `git.exe` allocated a visible `ConsoleWindowClass` window on every probe.
+- A 20 ms visible-window trace of one update check showed three console windows (at 1.3 s, 3.8 s and 4.5 s), all belonging to `C:\Program Files\Git\mingw64\bin\git.exe`.
+- The probe now passes `CREATE_NO_WINDOW` on Windows in both the source updater and the vendored plugin copy. The other spawn paths (APP/DSH restart, install, Office preview) already used hidden windows.
+- Re-test: the same update check produced no new windows; launching the APP from the desktop shortcut and sampling every 20 ms showed only the `Tether` / `Tether WebUI` main window, no console or conhost.
+
+Gates: mjs 231/231, cjs 6/6, client pytest **148 passed / 1 skipped** (including the new regression), `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41485135556` succeeded; published at 2026-11-02T16:52:03Z (app 1,786,116 B, plugin 1,361,440 B, node 84,935 B; signed manifest verified). Hub mirror refreshed to **0.2.72**.
+
+## v0.2.71
+
+Login page motion and in-place registration:
+
+- The left visual is now an inertial network: four nodes drift with damped springs, straight SVG links and a pointer push, while `prefers-reduced-motion` keeps it static.
+- “首次使用？用邀请码注册” switches to a second panel inside the same card. Both panes are absolutely positioned in a fixed 344 px stage and cross-slide with opacity + translateX, so the card never grows or reflows. A fixed message slot prevents validation errors from moving the form.
+- The redundant “返回 DSH” text link is removed. The top-right close button remains the single exit in the DSH host; the APP relies on its window controls.
+
+Gates: mjs 231/231, cjs 6/6, client pytest 147 passed / 1 skipped, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41481608258` succeeded; published at 2026-11-02T16:32:09Z (app 1,785,837 B, plugin 1,361,368 B, node 84,818 B; signed manifest verified). Hub mirror refreshed to **0.2.71**.
+
+Real run: the login card measured **822×400** before and after switching to invite registration; both panes were **500×344**; login pane `opacity 1 / translateX 0` versus invite `opacity 0 / translateX 16`, then swapped. Sampled SVG `cx/cy` changed within 1 s in both views. Screenshots: `tether-login-view.png`, `tether-login-invite.png`.
+
+## v0.2.70
+
+Server-backed account profile:
+
+- Display name and avatar are now stored on the Hub account (`users.display_name` / `users.avatar`) and returned by `/api/state`, instead of living only in the device-local `localStorage`.
+- New `GET/POST /api/auth/profile` accepts partial updates. Names are trimmed and capped at 32 characters; avatars must be png/jpeg/webp data URLs of at most 64 KiB decoded. Audit entries record field names only.
+- Client saves are optimistic, roll back and report on failure, and skip server values for fields still being saved. Every other signed-in client adopts the server profile on its 2.5 s state poll.
+- Account rows stay collapsed from 0.2.69; editing still opens a modal and does not resize the 760×560 settings panel.
+
+Gates: Hub 155 passed; mjs 231/231, cjs 6/6, client pytest 147 passed / 1 skipped, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41458731074` succeeded; published at 2026-11-02T14:09:51Z (app 1,782,898 B, plugin 1,359,927 B, node 84,817 B; signed manifest verified). Hub mirror refreshed to **0.2.70**.
+
+Real run: a second web client with empty storage signed in and immediately showed `qi007` + a 17,839-character avatar. Changing the APP name to `qi007-browser-sync` reached the server and the second client within 4 s; restoring `qi007` did the same. A server-side avatar change to a 118-character 1×1 PNG reached the APP in 3.2 s, and the original 17,839-character avatar returned in 3.2 s. Test values were restored. DESKTOP app/plugin/node **0.2.70**; LAPTOP app/node **0.2.70**, plugin **0.2.68** (restart pending, known issue).
+
+## v0.2.69
+
+Account page that does not jump:
+
+- The avatar is edited through a camera overlay; removal is an icon-only trash action on the profile card. The old “更换头像 / 移除头像” text links are gone.
+- Display name and password are collapsed rows. Editing opens a focused modal (`修改昵称` / `修改密码`) with Enter/Escape, Caps Lock warning and inline validation.
+- Measured the settings panel at **760×560** in the collapsed, name-modal and password-modal states; page height stayed 881 px, so editing no longer pushes the content down.
+
+Gates: mjs 231/231, cjs 6/6, client pytest 147 passed / 1 skipped, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41450974601` succeeded; published at 2026-11-02T13:17:07Z (app 1,782,006 B, plugin 1,359,464 B, node 84,818 B; signed manifest verified). Hub mirror refreshed to **0.2.69**. LAPTOP app/node **0.2.69**; DESKTOP source checkout was restarted for 0.2.70.
+
+## v0.2.68
+
+Redesigned settings update list:
+
+- The section now has a “更新” title and a refresh control at the top, followed by grouped **本机 / 其他设备** lists instead of loosely floating cards.
+- Versions are separate component chips (`APP 0.2.62`, `插件 0.2.62`, `Node 0.2.62`) with no slashes, arrows or explanatory text.
+- Each row reserves a fixed 28 px action slot. An available update only adds the blue circular download button; current version text and row width/height never change. Errors use a red retry icon in the same slot.
+- Real run: the LAPTOP row measured `543×72` both with and without an available update; only the download button count changed. Screenshots: `tether-update-redesign.png`, `tether-update-redesign-alert.png`.
+
+Gates: mjs 231/231, cjs 6/6, client pytest 147 passed / 1 skipped, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41446165778` succeeded; published at 2026-11-02T12:41:13Z (app 1,781,215 B, plugin 1,359,104 B, node 84,818 B; signed manifest verified). Hub mirror refreshed to **0.2.68**. LAPTOP-01 Node+APP **16.9 s**; DESKTOP app/node/plugin **0.2.68**; LAPTOP app/node **0.2.68** with the plugin update job dispatched.
+
+## v0.2.67
+
+Silent startup update check:
+
+- The automatic update check and the local server probe now run with `pythonw.exe` instead of `python.exe`. The update check was the source of a short-lived conhost window at APP startup; the console is gone.
+- `pythonw` stdout through `execFile` was verified (`hello`), so update JSON parsing and the updater helper keep working.
+- Startup monitor: the update check appeared as `pythonw.exe`, no `python.exe` or associated `conhost`, and the visible short-lived window list was empty.
+
+Gates: mjs 231/231, cjs 6/6, client pytest 147 passed / 1 skipped, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41442922613` succeeded; published at 2026-11-02T12:17:27Z (app 1,780,821 B, plugin 1,358,859 B, node 84,818 B; signed manifest verified). Hub mirror refreshed to **0.2.67**. LAPTOP-01 Node+APP **20.8 s**; DESKTOP app/node/plugin **0.2.67**; LAPTOP app/node **0.2.67** with the plugin update job dispatched.
+
+## v0.2.66
+
+Restore the fluid network layout and resume motion across page switches:
+
+- Bring back the force animation that was accidentally removed in 0.2.64. The initial state remains radial/triangular; remote nodes no longer receive the centre pull, so the flow settles into a wide triangle instead of collapsing back into a vertical line.
+- Node positions **and velocities** are stored under `tether.network.positions.v3`, saved on drag end and on unmount. Returning to the network page continues from the saved `x/y/vx/vy` state instead of resetting.
+- Real run: starting from a cleared snapshot, the nodes flowed from `20.2%,32.8%` to `15.42%,30.04%` with the centre at `50%,50.1%`; after dragging LAPTOP-01 and immediately switching to files and back, the graph resumed from the mid-motion state (`LAPTOP 13.67%,33.04%`, `TETHER 88.69%,59.87%`) rather than the initial layout. The test state was cleared afterwards.
+
+Gates: mjs 231/231, cjs 6/6, client pytest 147 passed / 1 skipped, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41440651070` succeeded; published at 2026-11-02T12:00:22Z (app 1,780,669 B, plugin 1,358,856 B, node 84,818 B; signed manifest verified). Hub mirror refreshed to **0.2.66**. DESKTOP app/node/plugin **0.2.66**; LAPTOP Node+APP update dispatched.
+
+## v0.2.65
+
+Floating network detail panel:
+
+- The node detail panel is now an absolute floating card over the right side of the canvas (`top/right/bottom: 8 px`, width 300, rounded, shadow) instead of a flex column. Opening or closing it no longer resizes or shifts the graph. The network body is the positioning context.
+- Real run: the canvas stage stayed **1074 px** wide before and after opening the DESKTOP node details; the floating panel rendered with search, per-device switches and the connection manager link.
+
+Gates: mjs 231/231, cjs 6/6, client pytest 147 passed / 1 skipped, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41437443163` succeeded; published at 2026-11-02T11:34:42Z (app 1,779,140 B, plugin 1,358,108 B, node 84,818 B; signed manifest verified). Hub mirror refreshed to **0.2.65**. LAPTOP-01 Node+APP **36.9 s**; DESKTOP app/node/plugin **0.2.65**; LAPTOP app/node **0.2.65** with the plugin update job dispatched.
+
+## v0.2.64
+
+Radial network layout and persistent node positions:
+
+- The network canvas now starts in a radial/triangular layout. Two remotes use 210°/330°; three or more are spread at 360°/n around the local device. The old collinear vertical arrangement is gone, and link buttons within 9% of a node are hidden so they no longer sit on top of a node label.
+- Dragged node positions are stored under `tether.network.positions.v2` per local device, saved on drag end and on unmount, and restored when returning to the network page. The continuous force animation was removed so a dropped node stays where it was placed.
+- Dragging a node no longer switches the current device; only a click without movement selects the device and opens its details.
+- More than 12 devices default to compact dots until zoomed in.
+- Real run: the three-device graph formed a triangle with no line through the centre label; LAPTOP-01 was dragged from `20.2%,32.8%` to `35.1%,72.3%`, the page was switched to files and back, and the node remained at `35.11%,72.32%`. The test position was cleared afterwards.
+
+Gates: mjs 230/230, cjs 6/6, client pytest 147 passed / 1 skipped, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41434714235` succeeded; published at 2026-11-02T11:15:30Z (app 1,778,877 B, plugin 1,358,071 B, node 84,818 B; signed manifest verified). Hub mirror refreshed to **0.2.64**. LAPTOP-01 Node+APP **14.6 s**; DESKTOP app/node/plugin **0.2.64**; LAPTOP app/node **0.2.64** with the plugin update job dispatched.
+
+## v0.2.63
+
+Login exit, a visual login panel and the default server:
+
+- The DSH plugin's login screen now has an explicit exit: a `×` and a “返回 DSH” action call `ctx.layout.selectPanel(null)`, so a user who does not want to sign in can return to DSH instead of being trapped in the Tether panel. The login root uses absolute positioning so it does not cover the DSH sidebar.
+- The login card is now two columns: a dark brand visual with a device-network diagram and the form on the right; the visual is hidden on narrow screens.
+- The server-address input is gone. Login uses the stored/default server, falling back to `https://8-220-198-26.sslip.io`; the connection status view still shows the address. Separate “server connection / self-built device network” choices can be added later.
+- Real run: the APP login was rendered with the two-column visual and no server field; the token was restored afterwards. The plugin exit is covered by the generated bundle contract (`host.exitPanel` / `exitPanel`).
+
+Gates: mjs 229/229, cjs 6/6, client pytest 147 passed / 1 skipped, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41430469293` succeeded; published at 2026-11-02T10:43:24Z (app 1,779,253 B, plugin 1,358,293 B, node 84,818 B; signed manifest verified). Hub mirror refreshed to **0.2.63**. LAPTOP-01 Node+APP **15.1 s**; DESKTOP app/node/plugin **0.2.63**; LAPTOP app/node **0.2.63** with the plugin update job dispatched.
+
+## v0.2.62
+
+Settings updates, windowless launch and DSH lifecycle:
+
+- Settings has a new **更新** section. The local row follows the entry product (APP+Node or plugin+Node); other rows are limited to devices with an explicit edge to the current device. Each row shows current/latest versions and a blue circular download button when an update exists; disconnecting an edge removes that device immediately, reconnecting brings it back. The top-right update button is unchanged.
+- The APP no longer opens a console window: long-running Controller/Node processes use `pythonw.exe`, the `.cmd` launcher re-enters hidden through the VBS, bootstrap PowerShell is hidden, and the update helper relaunches the APP with `windowsHide: true`.
+- The local DSH is detected (registry/asar/process), shown with its version in Settings, and can be started or installed from the surface overlay and the device section. Starting strips Tether's `DSH_HOME` so the real desktop profile is used; installing reads DeepSeek's official HTTPS nightly feed and verifies SHA-512 before `/S`.
+- The surface embeds the real DSH web UI, so DSH plugins render as they are; the app does not reimplement DSH pages.
+- Hub fix: the update job sends `plugin restart`, but the Hub action allowlist rejected it. Production now accepts `restart` for the plugin only (120 s), commit `638b3ce8`.
+- Incident: force-stopping DSH triggered its own “Web authentication failed” recovery loop. The profile and desktop caches were backed up, and the official **same-version** rc.3 installer was used to repair DSH; sessions were preserved and the Tether plugin was reinstalled.
+
+Gates: mjs 228/228, cjs 6/6, client pytest 147 passed / 1 skipped, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41424379550` succeeded; published at 2026-11-02T09:58:35Z (app 1,777,012 B, plugin 1,357,270 B, node 84,818 B; signed manifest verified). Hub mirror refreshed to **0.2.62**. LAPTOP-01 Node+APP **30.8 s**; DESKTOP source APP restarted with the local plugin on 0.2.62. Both devices report app/node **0.2.62**; LAPTOP plugin files are **0.2.62** with a DSH runtime reload still pending (the restart action now reaches the device but exceeded the 90 s verification window).
+
+## v0.2.61
+
+Instant permissions audit view:
+
+- The 文件权限 drawer now paints from a per-device cache as soon as it opens, then refreshes policy and audit in parallel in the background. Previously every open awaited policy and then audit, two sequential device round trips.
+- Switching devices prefetches both resources; concurrent requests for the same device share one in-flight promise. A cold open without a cached snapshot shows “正在读取审计…” inside the list instead of a false “暂无审计”.
+- Saving a policy and loading more audit rows update the same cache, and the caches are cleared when the session resets.
+- Real run: opening the drawer took **3 ms** to show 68 audit rows on DESKTOP and **3 ms** for 103 rows after switching to LAPTOP; the freshly restarted 0.2.61 app showed 68 rows in **19 ms**. Before the change the two serial requests measured 638 ms + 677 ms on DESKTOP and 1,114 ms + 715 ms on LAPTOP.
+
+Gates: mjs 226/226, cjs 6/6, client pytest 142 passed / 1 skipped, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41407506570` succeeded; published at 2026-11-02T07:40:28Z (app 1,765,320 B, plugin 1,353,822 B, node 79,668 B; signed manifest verified). Hub mirror refreshed to **0.2.61**. LAPTOP-01 Node+APP **19.7 s**, plugin **27.1 s**; DESKTOP source APP restarted and the local DSH plugin reinstalled. Both devices report app/node/plugin **0.2.61** and are online.
+
+## v0.2.60
+
+Mature account settings, built after checking mainstream products:
+
+- Avatar upload now opens a circular 240 px crop stage instead of cutting the raw image. Drag to reposition, zoom 1–3×, reset, then save a 256×256 JPEG; remove, cancel and save are separate actions, and images are limited to 8 MB.
+- Display name is edited inline with save/cancel and Enter/Escape, with errors next to the row.
+- Password change has current/new/confirm fields with show/hide toggles, inline rules (10-character minimum, must differ from the current password, both entries must match), `autocomplete` hints, a Caps Lock warning and inline errors. An invalid submit shows the rules without sending a request.
+- Real run on DESKTOP: an off-centre 480×320 test image opened the crop stage at `matrix(0.75,0,0,0.75,-60,0)`, dragged to `x=0`, zoomed to 1.35 and saved a 7,385 B data URL that updated the activity-bar avatar; the original avatar (9,281 B) was restored afterwards. A test display name persisted and was cleared. Invalid password submits showed the inline errors without changing the real password; the crop dialog was cancelled with data unchanged.
+
+Gates: mjs 225/225, cjs 6/6, client pytest 142 passed / 1 skipped, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41403421431` succeeded; published at 2026-11-02T07:03:27Z (app 1,764,049 B, plugin 1,353,182 B, node 79,667 B; signed manifest verified). Hub mirror refreshed to **0.2.60**. LAPTOP-01 Node+APP **27.4 s**, plugin **25.2 s**; DESKTOP source APP restarted and the local DSH plugin reinstalled. Both devices report app/node/plugin **0.2.60** and are online.
+
+## v0.2.59
+
+Editable device topology and a clearer activity selection:
+
+- The Hub now stores explicit undirected device edges (`edges`, `edge_seeds`) and exposes `GET/POST /api/edges`, `/api/edges/batch`, `DELETE /api/edges/{from}/{to}`; `/api/state` includes them. A one-time star is seeded from `TETHER_DEVICE` for each owner, and new devices join the same root without recreating user-removed edges.
+- The network canvas draws only explicit edges (solid when both online, dashed otherwise, none when absent). Each edge midpoint has a link control to disconnect; the top-right “连接” enters a two-click connect mode.
+- Clicking a canvas node (or a left device card) opens a detail drawer listing every other device with a connection switch. The header “连接管理” opens a searchable table for creating and removing connections, suitable for many nodes.
+- The selected activity-bar item now has a blue 16% background and blue icon instead of a faint gray block.
+- Real run: canvas disconnect/reconnect, detail switches, and manager create/remove all hit the production Hub; the original two edges were restored. Production Hub deploy commit `e66920b6`, DB backup `edges-20261102T060941Z`, rollback point `d783681`, 90 s restart.
+
+Gates: mjs 225/225, cjs 6/6, client pytest 142 passed / 1 skipped, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41400940630` succeeded; published at 2026-11-02T06:39:21Z (app 1,757,366 B, plugin 1,349,837 B, node 79,669 B; signed manifest verified). Hub mirror refreshed to **0.2.59**. LAPTOP-01 Node+APP **16.0 s**, plugin **26.3 s**; DESKTOP source APP restarted and the local DSH plugin reinstalled. Both devices report app/node/plugin **0.2.59**; LAPTOP briefly reconnected after the restart. Real run: LAPTOP network page showed 2 explicit edges and the blue selected activity item; canvas/detail/manager toggles hit the production Hub and the original edges were restored.
+
+## v0.2.58
+
+Transfer pane root labels and stale-root reset:
+
+- Both transfer panes already loaded `/workspaces` and `/drives` per device; the repeated `default-workspace` / `Tether 工作目录` names made the two trees look shared. Each pane now labels its groups `工作区 · <device>` and `此电脑 · <device>`.
+- Switching a pane's device clears the previous roots and entries before loading, so a slow or failed request cannot leave the other device's workspaces visible.
+- Real check: left `工作区 · DESKTOP-LOCAL` with `C:\Users\Administrator...` / `demo`; right `工作区 · LAPTOP-01` with `C:\Users\14675...` / `audit`.
+
+Gates: mjs 224/224, cjs 6/6, client pytest 142 passed / 1 skipped, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41396125195` succeeded; published at 2026-11-02T05:51:48Z (app 1,749,053 B, plugin 1,345,886 B, node 79,668 B; signed manifest verified). Hub mirror refreshed to **0.2.58**. LAPTOP-01 Node+APP **20.1 s**, plugin **28.9 s**; DESKTOP source APP restarted and the local DSH plugin reinstalled. Both devices report app/node/plugin **0.2.58**. Transfer page verified: left `工作区 · DESKTOP-LOCAL` with `C:\Users\Administrator...` / `demo`, right `工作区 · LAPTOP-01` with `C:\Users\14675...` / `audit`; disks C–G vs C–D.
+
+## v0.2.57
+
+Picker tree sync, folder upload and local-drop save+upload:
+
+- The picker tree row and its chevron are one button: clicking a folder toggles expansion and navigates the right pane; navigating from the right pane reveals and expands the same path in the tree. Real run: `C:` expanded on both sides; opening `Users` from the right moved the breadcrumb to `C: › Users` and expanded the tree to `Users`.
+- A folder can be attached with the new “确定” footer action. `readFolder` recursively reads the target folder (200 files / 100 MiB / 10 MiB per file, skips `.tether-trash`) and passes files with `webkitRelativePath` to the DSH composer. Real run: a temporary folder with two text files produced two attachment chips.
+- Workspace and drive roots are verified to come from the same target device; group labels now include the device name (`工作区 · LAPTOP-01`, `此电脑 · LAPTOP-01`).
+- Local files dropped on the composer are uploaded immediately through the DSH attachment API and saved in the background to `D:\TetherDrop` (fallback `D:\TetherWorkspaces\TetherDrop`, never C:). Real run: `drop-test-2.txt` appeared as a 14 B attachment, the toast reported `D:\TetherDrop\drop-test-2.txt`, and the bytes on disk matched.
+- The Node device-fs surface now exposes `write_chunk` so the save path works through the Hub surface gateway; Python coverage writes and reads back the dropped bytes.
+
+Gates: mjs 224/224, cjs 6/6, client pytest 142 passed / 1 skipped, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41394307331` succeeded; published at 2026-11-02T05:33:33Z (app 1,748,841 B, plugin 1,345,779 B, node 79,668 B; signed manifest verified). Hub mirror refreshed to **0.2.57**. LAPTOP-01 Node+APP **19.5 s**, plugin **19.5 s**; DESKTOP source APP restarted and the local DSH plugin reinstalled. Both devices report app/node/plugin **0.2.57**. Real runs: DESKTOP tree `C:`/`Users` stayed in sync; a temporary folder uploaded `a.txt`/`b.txt` as two attachments; `drop-test-2.txt` was uploaded and saved to `D:\TetherDrop` with matching bytes. LAPTOP's picker showed `工作区 · LAPTOP-01` / `此电脑 · LAPTOP-01`, and a dropped `laptop-drop-test.txt` was uploaded and saved to its own `D:\TetherDrop`; the remote file and attachment were removed after the check.
+
+## v0.2.56
+
+Self-contained picker loading overlay:
+
+- 0.2.55 replaced the picker's status strip with the explorer's `tether-dir-loading` class, but the embedded DSH page does not load the shared UI's global CSS. The element fell back to `position:static` at 20 px and the spinner landed at the lower-left. The overlay now carries inline `position:absolute; inset:0; z-index:4` and a self-contained SVG `animateTransform` spinner, so it works in the WebUI, transfer page and DSH surface alike.
+- Real DSH picker: overlay 639×429, absolute, centered; no 22 px status bar, no explanatory footer, old list retained while loading.
+- Includes all 0.2.55 surface, picker and settings changes below.
+
+Gates: mjs 222/222, cjs 6/6, client pytest 142 passed / 1 skipped, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41386893828` succeeded; published at 2026-11-02T04:12:39Z (app 1,746,202 B, plugin 1,343,349 B, node 79,648 B; signed manifest verified). Hub mirror refreshed to **0.2.56**. LAPTOP-01 Node+APP **19.5 s**, plugin **16.5 s**; DESKTOP source APP restarted and the local DSH plugin reinstalled. Final DESKTOP surface document 736,068 B and hidden LAPTOP surface 720,118 B remained intact through repeated device switches; the network page stayed 1416×829; the real DSH picker rendered a 639×429 absolute overlay with no status strip. A LAPTOP Node restart cleared the stale plugin version report; both machines now report app/node/plugin **0.2.56**.
+
+## v0.2.55
+
+Surface switch regression, in-place loading and settings rebuild:
+
+- Fixed returning-device white screens: `SurfaceDeck` now keeps a stable mount order and only toggles `visibility/z-index`; React no longer moves iframes in the DOM, so the expired ticket is never used for a reload. Non-chat views are covered by an absolutely positioned deck; preloaded frames keep a real 1416×829 viewport while hidden. Three DESKTOP↔LAPTOP round trips retained 720,118 / 736,068-byte documents and switched in 256 ms.
+- Removed the picker's fixed 22 px status bar, old error strip and explanatory footer. `TargetFileExplorer` now uses the explorer's absolute `tether-dir-loading` overlay, keeps the previous list visible, and reports errors as a retryable/dismissible floating notice.
+- Rebuilt settings as five sections (account / connection / workspace / device / about) with an `extraSections` extension point and no explanatory sentences. Avatars can be chosen from a local image, cropped to 128×128 JPEG, persisted in `tether.accountAvatar` and shown in the activity bar. Duplicate refresh/update/permissions/switch-account actions were removed.
+- Kept the Hub surface path for the Electron host after diagnosing that the local-loopback surface loses the local proxy session for cross-port plugin calls.
+
+Gates: mjs 222/222, cjs 6/6, client pytest 142 passed / 1 skipped, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41344909191` succeeded; published at 2026-11-01T20:07:25Z (app 1,745,709 B, plugin 1,343,083 B, node 79,648 B; signed manifest verified). Hub mirror refreshed to **0.2.55**. LAPTOP-01 Node+APP **22.4 s**, plugin **22.2 s**; DESKTOP source APP restarted and the local DSH plugin reinstalled. 0.2.56 supersedes the picker overlay in this release.
+
+## v0.2.54
+
+Explorer parity, shared file cache and resident surfaces:
+
+- Transfer page: create folder/file, rename, delete to `.tether-trash`, overwrite/keep-both conflict dialog, pointer drag with drop highlight, context menu and `Ctrl+A/C/X/V`. Real desktop run created a folder, dragged a 20 B file to LAPTOP, chose “保留两者”, produced `tether-picker-check (2).txt` at 100% and cleaned both temp items.
+- Composer picker: title “资源管理器”, device name only (no “目标电脑 ·”), fixed 20/18/22 px header/status rows so loading cannot shift the list; native composer plus is the only entry (extra text button and duplicate command removed).
+- One `file-cache.js` (20 s TTL, 240 dirs, in-flight dedupe, explicit invalidation) now serves the explorer, composer picker and both transfer panes.
+- Connection pill reads `/api/state`; a successful poll keeps it green for 8 s without opening a panel. Settings shows “已连接 · 168 ms”.
+- `SurfaceDeck` keeps the active + two most recent device workspaces mounted; returning switches measured 9–29 ms (already-loaded LAPTOP `readyState=complete` in 38 ms). A cold first load still takes 8–14 s for the 4.2 MB + 1.9 MB plugin bundles. A settings checkbox can disable retention.
+- Bottom account bar removed: shield/gear/avatar only; gear opens connection settings, avatar opens account (display name, password, logout).
+
+Gates: client pytest 142 passed / 1 skipped, mjs 222/222 (excluding the stale isolated Electron QA harness), cjs 6/6, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41338266729` succeeded and released at 2026-11-01T18:49:50Z (app 1,741,992 B, plugin 1,341,462 B, node 79,648 B, signed manifest verified). Hub mirror refreshed to **0.2.54** (`distribution_state: latest`). Both machines were updated to **0.2.54** (LAPTOP via Hub Node+APP then plugin jobs; DESKTOP source APP restarted and local DSH plugin reinstalled). Final `/api/state`: both devices report app/node/plugin 0.2.54; DESKTOP and LAPTOP surfaces return 200 in 309 ms / 157 ms.
+
+## v0.2.53
+
+Background surface warmup:
+
+- After startup the APP opens a hidden frame for each other online DSH surface and keeps it for 45 s, so the cold 4.2 MB plugin bundle finishes outside the user's switch. Switching to LAPTOP reached the composer in **5.5 s**; five alternating switches measured **12.8 / 6.4 / 4.8 / 6.7 s** (the remaining run was a no-op on the same device), all within the 15 s WAN target.
+- The cold load itself is still about 45 s and happens in the background; a direct Tailscale asset path remains an optional future optimization.
+- Includes 0.2.52 (shared transfer page, picker tree, activity bar/account footer, surface timeout/cache fixes).
+- APP, plugin, and node are 0.2.53.
+
+Gates: client pytest 142 passed / 1 skipped, server pytest 150 passed, mjs 221/221, cjs 6/6, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41330546926` succeeded; published at 2026-11-01T17:18:02Z (app 1,733,027 B, plugin 1,337,207 B, node 79,648 B); the Hub mirror was refreshed to **0.2.53**. LAPTOP-01 Node+APP **19.7 s**, plugin **16.6 s** (`restart_required` cleared); both machines report node/app/plugin **0.2.53**, both surfaces **200** (DESKTOP 1.55 s, LAPTOP 1.24 s).
+
+## v0.2.52
+
+Shared explorer, picker tree and surface stability:
+
+- The file transfer page is rebuilt on `TargetFileExplorer`: two compact explorer panes, one computer per side, the same node cannot be picked on both sides, no “source/target” wording, an icon-only swap, drag across panes, `Ctrl+A/C/X/V` and a context menu (copy, cut, paste here, refresh). A real 20 B copy from LAPTOP-01 to DESKTOP completed through both the clipboard and drag paths.
+- The target-file picker expands folders in place; the DSH native plus file action now opens the target picker instead of the local dialog. Root rows no longer repeat full paths and the toolbar uses icons.
+- The activity bar restores the permission/audit shield, moves settings to a gear in the explorer footer, and shows the signed-in account there.
+- Cold DSH surfaces no longer die on the first 4.2 MB plugin bundle. The surface mux read timeout is 300 s, asset caches are shared per device, nodes prewarm on registration, node asset GETs use 180 s, and the UI document watchdog is 90 s. Warm node switches measured **8.4 s**; a cold LAPTOP switch loads in 45–50 s instead of failing at 60 s. Reaching ≤15 s cold still needs a direct Tailscale surface or a smaller bundle.
+- APP, plugin, and node are 0.2.52.
+
+Gates: client pytest 142 passed / 1 skipped, server pytest 150 passed, mjs 220/220, cjs 6/6, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. CI run `41325957168` succeeded; the signed manifest was published at 2026-11-01T16:54:56Z (app 1,731,946 B, plugin 1,336,677 B, node 79,648 B); the Hub mirror was refreshed to **0.2.52**. LAPTOP-01 Node+APP updated in **27.1 s**; the desktop source APP and DSH profile plugin are 0.2.52. LAPTOP plugin update is pending a free moment for its DSH restart. Both public surfaces returned 200 (desktop 1.16 s).
+
+## v0.2.51
+
+Native workspace state fixes:
+
+- The “加载较慢” banner now clears as soon as the DSH frame reports loaded. It used to stay pinned after a fast load, so a working workspace looked stuck behind a permanent loading hint; it is now shown only while the frame is actually loading.
+- The APP reads `/app-context` from its own origin instead of the cross-origin Hub, removing the blocked request and CORS console noise that repeated every four seconds.
+- Includes 0.2.50 (descriptor-gated plugin reload) and 0.2.49/0.2.48/0.2.47.
+- APP, plugin, and node are 0.2.51.
+
+Gates: client pytest 141 passed / 1 skipped, server pytest 150 passed, mjs 218/218, cjs 6/6, `build.mjs --check`, `build-web.mjs --check`, `validate_versions()`. Real Electron: the embedded DSH page rendered with its composer and no slow banner; iframe timing TTFB 443 ms, load 1.06 s.
+
+CI run `41296203842` succeeded; the signed manifest was verified (app 1,720,676 B, plugin 1,332,698 B, node 79,561 B) and published at 2026-11-01T10:13:22Z; the Hub mirror was refreshed to **0.2.51**. LAPTOP-01 node+APP **~18 s** and plugin **41.5 s** (including the DSH restart, `restart_required` cleared); both public surfaces bootstrap **200** (DESKTOP 1.31 s, LAPTOP 1.10 s). During the LAPTOP plugin update the node reconnected every ~20 s for a few minutes and the job failed twice with `device_offline`; after it settled, the retry converged. The reconnect cause is still under investigation.
+
+## v0.2.50
+
+Plugin runtime reload guard:
+
+- A plugin update no longer reports done from a live process scan alone. `restart_required` clears only when the DSH surface descriptor publishes a new host pid; a scanned `dsh-desktop-host` pid is used only to schedule the restart. The local 0.2.44→0.2.49 update exposed the old behavior: the job was done while `native-surface.json` still pointed at a dead port and the public surface returned 502.
+- Includes 0.2.49 (settings actions, session expiry) and 0.2.48 (login server field, account role).
+- APP, plugin, and node are 0.2.50.
+
+Gates: pytest 138 passed / 4 skipped, mjs 216/216, cjs 6/6, `build.mjs --check`, `validate_versions()`. CI run `41281139696` succeeded; the signed manifest was verified (app 1,720,428 B, plugin 1,332,625 B, node 79,560 B) and published at 2026-11-01T06:33:39Z; the Hub mirror was refreshed to **0.2.50**. LAPTOP-01 Node+APP **22.6 s**, plugin **19.2 s** with `restart_required` cleared and health 0.2.50. Local plugin 0.2.49→0.2.50 correctly failed with `restart_timeout` while the descriptor was stale (no false done); after a fresh descriptor, `/update/retry` converged in **4.6 s** and both public surfaces returned 200.
+
+Clean-clone check: a fresh clone of tag `v0.2.50` builds publishable archives and both APP and plugin archives contain the descriptor-gated updater. Local app zip 1,728,036 B vs CI 1,720,428 B (the committed web bundle vs the CI rebuild); plugin 1,332,628 B vs 1,332,625 B.
+
+## v0.2.49
+
+Settings and session follow-ups:
+
+- Settings now has a working “检查更新” action and “切换账号 / 服务器” in the connection section; logging out or switching clears the stored session and returns to the full-screen login page.
+- An expired or rejected session (HTTP 401) now clears the token and returns to the login page instead of leaving the workbench in an error state.
+- Includes 0.2.48 (login server field, account role) and 0.2.47 (login/connection/settings split, transfer redesign, hidden scrollbars, workspace reload hint).
+- APP, plugin, and node are 0.2.49.
+
+Gates: pytest 138 passed / 4 skipped, mjs 216/216, cjs 6/6, `build.mjs --check`, `validate_versions()`. CI run `41280353424` succeeded; the signed manifest was verified (app 1,720,412 B, plugin 1,332,610 B, node 79,544 B) and published at 2026-11-01T06:22:11Z; the Hub mirror was refreshed to **0.2.49**. LAPTOP-01 Node+APP **17.8 s**, plugin **14.6 s** with `restart_required` cleared and health 0.2.49; both public surfaces returned 200.
+
+## v0.2.48
+
+Login follow-ups:
+
+- The login page keeps an editable server address, so a fresh device can sign in to a different Hub without hand-editing local storage.
+- The account role returned by login is persisted with the session and shown in Settings as 所有者/成员/管理员; the login → main UI → settings → logout lifecycle was verified with a temporary local Hub.
+- Includes 0.2.47 (full-screen login, status-only connection panel, settings page, transfer redesign, hidden scrollbars, workspace slow-load reload hint).
+- APP, plugin, and node are 0.2.48.
+
+Gates: pytest 138 passed / 4 skipped, mjs 216/216, cjs 6/6, `build.mjs --check`, `validate_versions()`. CI run `41278461096` succeeded; the signed manifest was verified (app 1,720,014 B, plugin 1,332,412 B, node 79,543 B) and published at 2026-11-01T05:54:11Z; the Hub mirror was refreshed to **0.2.48**. LAPTOP-01 Node+APP **17.1 s**, plugin **14.4 s** with `restart_required` cleared and health 0.2.48; both public surfaces returned 200. The LAPTOP APP now shows the account login page, to be signed in by its owner.
+
+## v0.2.47
+
+Login, connection and settings split:
+
+- First run renders a full-screen account login page (email/password/TOTP, invite registration as a secondary action). The workbench is not rendered until a session token exists; login saves the session, enrolls the device, and reloads. The top-bar connection pill is status-only again: address, light, last check, latency and refresh.
+- New settings page from the activity bar: account (email, password change, logout), connection, local device (name/id/platform/versions, restart Node), updates, file permissions, about. Device pairing, device tokens and the permission drawer's manual Hub config are removed.
+- File transfer page: source/target cards with blue/green top borders and badges, device pickers, compact path bar, swap button and a selected-file footer; the transfer activity icon no longer matches the explorer.
+- Workspace reload control is always available after load, and a “loading slowly” hint appears after 15 s. Global scrollbars are 6 px, transparent until hover.
+
+Gates: pytest 138 passed / 4 skipped, mjs 216/216, cjs 6/6, `build.mjs --check`, `validate_versions()`. Real Electron checks: login page renders, a bad credential shows `invalid credentials`, connection panel shows the green light and refresh, settings shows all six sections, and the redesigned transfer page was captured. CI run `41277668555` succeeded; the signed manifest was verified (app 1,719,833 B, plugin 1,332,323 B, node 79,543 B) and published at 2026-11-01T05:41:25Z. The Hub mirror was force-refreshed to **0.2.47** at 05:45Z. Installed acceptance is pending a logged-in account; devices were not auto-updated.
+
+## v0.2.46
+
+Manifest single-flight hotfix:
+
+- Concurrent forced update checks shared one manifest `Future`, and every caller completed it. The second completion raised `InvalidStateError: FINISHED` (158 occurrences in the local Node log, latest 01:50). Only the leader now completes and clears the flight; other callers fetch and cache independently, and followers receive an `UpdateError` rather than a raw exception.
+- Regression test starts two forced checks and finishes them out of order.
+- APP, plugin, and node are 0.2.46.
+
+Gates: pytest 138 passed / 4 skipped, mjs 216/216, cjs 6/6, `build.mjs --check`, `validate_versions()`. CI run `41230580812` success; the signed manifest was verified (app 1,717,917 B, plugin 1,330,930 B, node 79,543 B) and published at 2026-10-31T18:44:27Z; the Hub mirror served 0.2.46 before 18:45Z.
+
+Installed acceptance: LAPTOP-01 Node+APP **17.6 s**. A concurrent A/B on the Hub: 24 simultaneous forced checks on the old 0.2.45 DESKTOP-LOCAL produced **18 failures** (`HTTPError` from the double-completed flight); after LAPTOP-01 moved to 0.2.46 and DESKTOP-LOCAL restarted onto 0.2.46, both returned **24/24 ok** with `latest_version` 0.2.46 and no `update_failed`. This removes the observed `InvalidStateError: FINISHED` source from the Node log.
+
+## v0.2.45
+
+Plugin runtime reload verification:
+
+- A stale `native-surface.json` pid no longer hides a live DSH host: the updater checks the descriptor pid and falls back to scanning for the `dsh-desktop-host` process before scheduling the restart helper.
+- The Hub job no longer reports `done` from the installed profile alone. It waits until the plugin status clears `restart_required` (the DSH host pid changed after the restart); a host that never reloads fails the job with `restart_timeout` instead of a false success.
+- Retrying after `restart_timeout` re-runs the restart helper even when the plugin files are already at the target version.
+- APP, plugin, and node are 0.2.45.
+
+Gates: pytest 137 passed / 4 skipped, mjs 216/216, cjs 6/6, `build.mjs --check`, `validate_versions()`. CI run `41228715930` success; the signed manifest was verified (app 1,717,888 B, plugin 1,330,898 B, node 79,514 B) and published at 2026-10-31T18:21:15Z; the Hub mirror served 0.2.45 by 18:22Z.
+
+Installed acceptance on LAPTOP-01 through the Hub: Node+APP **16.0 s** (plugin stayed 0.2.44), then the plugin job took **19.0 s** and stayed in `restarting` for an 11.4 s DSH restart window before `restart_required` cleared and the job reported done. Real plugin status/health is 0.2.45 in profile, source and runtime packages. Production Hub deployed at `f6062fd` (backup `/opt/tether/backups/runtime-reload-20261031T182301Z`, previous commit `e3c8718`); both devices' public surface smoke returned 200. This verifies the reload is detected, but it is still a full DSH restart: the 5 s hot-reload target remains open.
+
+## v0.2.44
+
+Event-driven UI refresh:
+
+- The shared UI subscribes to the Hub's `/api/events` SSE stream. Device and session events force a state refresh even when the window is hidden; the ordinary 2.5 s poll remains as a fallback and still pauses in hidden windows.
+- Verified in Chromium by suspending the local Node: the device card went offline at 4.47 s and the online count changed 2→1; after resume it returned online at 3.94 s with 1→2.
+- APP, plugin, and node are 0.2.44.
+
+Gates: mjs 216/216, cjs 6/6, pytest 135 passed / 4 skipped, `validate_versions()`. CI run `41227434088` success; signed manifest verified, published at 2026-10-31T18:05:25Z and served by the Hub. LAPTOP-01 Node+APP **16.5 s**, plugin job **15.2 s** with real status/health 0.2.44. The DESKTOP-LOCAL dev bench was restarted to 0.2.44 and its plugin moved 0.2.43→0.2.44 in **13.7 s**; both machines now run 0.2.44 for all three components. The local DSH host did **not** restart with the plugin apply (the job marked done from the installed profile), leaving the local public surface at 502; running `tether.node.dsh_restart` restarted the host to pid 33416 and both machines' surface smoke returned 200. Plugin `done` is therefore profile installation, not a verified runtime reload; the 5 s hot-reload target remains open.
+
+## v0.2.43
+
+New-device account enrollment:
+
+- A Node with no device token can register with the logged-in account's personal token. The Hub validates the token, binds an unowned device (or the same owner's device) to the account, and returns a one-time device token; the Node persists it with owner-only permissions and uses it on later connections.
+- The APP login path first tries the existing-device enrollment endpoint; on `device_not_found`/`device_offline` it switches the local Node to account registration, `device_owned` is refused. The supervisor can start the Node with a user token instead of a pre-shared node token.
+- APP, plugin, and node are 0.2.43.
+
+Gates: mjs 212/212, cjs 6/6, pytest 135 passed / 4 skipped, `validate_versions()`. CI run `41225813966` success; signed manifest verified, published at 2026-10-31T17:45:20Z and served by the Hub. LAPTOP-01 Node+APP **18.8 s**, plugin job **17.4 s**, real plugin status/health 0.2.43.
+
+A live temp Hub/Node test passed: account-token registration came online under the right owner, the device token was persisted (97 B), and a restart without the user token stayed online as the same owner. The DESKTOP-LOCAL dev bench was also aligned to 0.2.43: Node/APP 0.2.43 from source, DSH plugin 0.2.33→0.2.43 in **10.1 s**, plugin health 0.2.43. A live APP login→enroll with a real account remains open because no test account credentials are available.
+
+## v0.2.42
+
+Shared target file explorer:
+
+- A hook-free `TargetFileExplorer` now provides the root groups, breadcrumb, up/refresh, directory search, sortable columns, selection and loading/error/empty states for both the DSH attachment picker and the file-transfer page.
+- Sorting and search state stay with the caller so the same tree is usable in the plugin, the APP and the unit harness. The full Explorer keeps its richer context menu, drag and hover interactions instead of being replaced.
+- Includes the 0.2.41 login enrollment foundation. APP, plugin, and node are 0.2.42.
+
+Gates: mjs 212/212, cjs 6/6, pytest 135 passed / 4 skipped, `validate_versions()`. CI run `41224711170` success; signed manifest verified, published at 2026-10-31T17:31:36Z, and served by the Hub immediately after. LAPTOP-01 Node+APP **20.0 s**; the plugin job finished in **16.1 s** and its real status/health is 0.2.42.
+
+Real Chromium acceptance after the release: the transfer page showed the shared workspace/drive groups, breadcrumb, directory search and sortable columns; a real-input 1,040-byte transfer to LAPTOP-01 produced a matching SHA-256 and a target audit row `transfer/ok`. Test files were removed.
+
+## v0.2.41
+
+Login device enrollment foundation:
+
+- After a successful account login the APP calls a trusted IPC; the main process asks the Hub to enroll the local device, rotates the device token with a 10-minute grace for the old token, writes the new token into `hub.json` (timestamped backup), and restarts the Node.
+- The Hub endpoint is session-authenticated, tenant-scoped, refuses offline devices, and audits the enrollment. Existing node-token authentication is unchanged.
+- The local 18892 Hub proxy now keeps an explicit user Authorization header instead of overwriting it with the owner token, so a logged-in member session is not silently elevated.
+- APP, plugin, and node are 0.2.41.
+
+Gates: mjs 212/212, cjs 6/6, pytest 135 passed / 4 skipped, `validate_versions()`. CI run `41223584060` success; signed manifest verified, published at 2026-10-31T17:17:56Z, Hub served 0.2.41 at 17:20:28Z. LAPTOP-01 Node+APP **16.3 s**, plugin job **15.8 s** with its real status/health at 0.2.41.
+
+The minimal update UI was visually verified in Chromium with intercepted update responses: the blue ↓ button showed `更新到 0.2.42`, and clicking it produced the white translucent overlay (`rgba(255,255,255,0.72)`, `blur(18px)`) with `正在更新 Tether / 下载 APP / 42%`. A live login→enroll acceptance with a dedicated test account remains open because the production owner credentials are not available in the environment; the server endpoint and token rotation are covered by `tests/test_device_enroll.py`.
+
+## v0.2.40
+
+Transfer throughput experiment:
+
+- Node reads and transfer chunks are now 1 MiB (was 256 KiB), reducing round trips while staying below the 48 MiB control-socket limit.
+- APP, plugin, and node are 0.2.40.
+
+Gates: mjs 211/211, cjs 6/6, pytest 135 passed / 4 skipped, `validate_versions()`. CI run `41221950421` success; signed manifest verified, published at 2026-10-31T16:58:00Z, Hub served 0.2.40 at 17:02:51Z.
+
+Installed acceptance on LAPTOP-01: Node+APP **20.7 s**, plugin **14.1 s**. A 2,000,000-byte transfer in two 1 MiB chunks took **34.4 s** with a matching SHA-256; a 10,000,000-byte transfer produced a 10,000,000-byte target (the harness timed out before printing its hash). Effective end-to-end throughput is roughly **60–70 KB/s** over the public Hub relay, so a 1 GB transfer would take hours: the 1 GB acceptance target is **not met on the current WSS relay**. This is the planned overlay decision gate; benchmark Headscale+tsnet / NetBird / Nebula against the same harness before deciding.
+
+## v0.2.39
+
+Node restart control:
+
+- The device context menu on the 互联 page can request a Node restart. The Hub endpoint is tenant-scoped, audited, refuses offline devices, and the Node refuses the request while a Tether task is active.
+- A managed Node exits with code 75 and is restarted by the APP supervisor; a standalone Node re-executes itself. The control socket reconnects through the presence watchdog.
+- Includes all 0.2.38 transfer fixes. APP, plugin, and node are 0.2.39.
+
+Gates: mjs 211/211, cjs 6/6, pytest 135 passed / 4 skipped, `validate_versions()`. CI run `41221456056` success; signed manifest verified; release published at 2026-10-31T16:51:25Z and served by the Hub at 16:52:30Z.
+
+Installed acceptance on LAPTOP-01: Node+APP 0.2.39 in **16.2 s**, plugin in **16.7 s**. A restart request through the Hub took the Node offline in **0.80 s** and back online in **2.99 s**, still reporting 0.2.39.
+
+## v0.2.38
+
+File-transfer correctness hotfix:
+
+- The transfer page now maps the engine's `transferId` to the node's `transfer_id` for status/write/cancel, so a real transfer no longer fails with `transfer_id must be 8-32 lowercase hex characters`.
+- The directory browser no longer lets a late roots response overwrite a path the user just entered.
+- Includes the 0.2.37 chunked node writes and file transfer page. APP, plugin, and node are 0.2.38.
+
+Gates: mjs 211/211, cjs 6/6, pytest 135 passed / 4 skipped (0.2.37 gate), `validate_versions()`. CI run `41220473162` success; the signed manifest was verified, the release was published at 2026-10-31T16:39:50Z, and the Hub served 0.2.38 at 16:40:23Z.
+
+Installed acceptance on LAPTOP-01: Node+APP 0.2.36→0.2.38 in **16.1 s**; the plugin job finished in 17.6 s and its real status/health reported 0.2.38 (the Hub capabilities snapshot still said 0.2.37 until the next registration). A direct API transfer of a 600,000-byte file used 3 chunks in **8.5 s**; the target SHA-256 matched, a resumed transfer continued from offset 262144 with a matching hash, and writing over an existing file without overwrite returned `exists`. The transfer page was also exercised in Chromium with real input events: progress 0→44%→87%→100%, the 600,000-byte target matched the source SHA-256, and the target audit recorded `transfer` with `bytes=600000, result=ok`; the test files were removed.
+
+## v0.2.37
+
+Resumable file transfer release:
+
+- The node filesystem service accepts binary chunks (`write_chunk`) with a transfer id, offset and total size, writes to a `.tether-part.<id>` file, fsyncs, and atomically replaces the destination only on the final chunk. `transfer_status` reports the partial offset and `transfer_cancel` removes it.
+- New “文件转移” page: two device/directory panes, source-file selection, overwrite policy, progress bar, cancel and retry. It reuses the 0.2.36 resumable transfer engine and reads/writes through the existing Hub file routes; every completed destination write is audited on the target node.
+- APP, plugin, and node are 0.2.37.
+
+Gates: pytest 135 passed / 4 skipped, mjs 211/211, cjs 6/6, `validate_versions()`. CI run pending. Installed acceptance is recorded after the LAPTOP-01 update.
+
+## v0.2.36
+
+Connection and picker release (includes all 0.2.35 security fixes):
+
+- Node reconnects immediately after a dropped control socket (0.1 s first delay, 2 s failure cap, jitter) instead of the old 0.5–5 s ladder. The Hub presence watchdog marks a half-open device offline after 4.5 s and fails its pending RPCs.
+- The DSH target-computer attachment picker gains clickable breadcrumbs, current-directory search, and name/date/size sorting, matching the resource manager's directory list more closely.
+- APP, plugin, and node are 0.2.36.
+
+Gates: pytest 133 passed / 4 skipped, mjs 205/205, cjs 6/6, `validate_versions()`. CI run `41217509435`. Installed acceptance is recorded after the LAPTOP-01 update.
+
+## v0.2.35
+
+Security and update-throughput release (includes the 0.2.33 bridge and 0.2.34 restart fixes):
+
+- Electron only navigates the main window to the local UI origin; `window.open` never creates an Electron window and HTTP(S) links go to the system browser; surface iframes are sandboxed without top navigation; every `tether:*` IPC checks the main frame and local origin.
+- The 18892 local proxy requires a per-process HttpOnly `SameSite=Strict` session cookie, enforces same-origin writes and an API path allowlist, resolves static files through `realpath`, and returns 400 for malformed URLs instead of crashing the main process.
+- Restart helpers no longer pass `windowsHide` to Python 3.13 `Popen`; a helper that cannot be scheduled returns `restart_failed` instead of a false success.
+- The Hub update job now downloads and verifies every component before applying anything, applies Node first, tolerates a Node restart deferred to the APP restart, and keeps finished jobs out of the device summary so the update overlay does not return on the next page load.
+- APP, plugin, and node are 0.2.35.
+
+Gates: pytest 133 passed / 4 skipped, mjs 204/204, cjs 6/6, `validate_versions()`, CI run `41213286072` success. The draft manifest signature was verified locally, then the release was published at 2026-10-31T15:10:19Z. Assets: app 1,690,717 B `50dc9acc71d8248ab585fb44c002adde15b4c6a6343ca55c2de46b29a3219e4c`, plugin 1,319,939 B `bf08879b24027543145fd74192af6c0c67a311bc4c79f87f940bd520ded323cb`, node 77,452 B `533bb5657de761a83ab7e4127173fb12e348f93123b07be0161da6ab2f3d6a1f`.
+
+Accepted on LAPTOP-01 through the Hub job: Node+APP reached 0.2.35 (an initial deferred-restart deadlock was fixed in Hub `bc3df99`; the APP-only retry finished in **20.1 s**), plugin reached 0.2.35 (profile/source/health all 0.2.35) in **15.3 s**. The 15.3 s path still restarts DSH; the planned 5 s plugin hot-reload budget is **not met** and remains open. DESKTOP-LOCAL runs the 0.2.35 source bench (Node/APP report 0.2.35); no installed-package claim is made for it.
+
+## v0.2.31
+
+Silent one-click update release:
+
+- One click now downloads every behind component (node, plugin, APP) before installing any of them, then restarts the APP once. The node is held for that single restart instead of restarting between plugin and APP.
+- The update card shows `正在更新` with a determinate download/install progress bar; the extra “APP 已下载 / 重启并安装” and “立即生效” dialogs are gone from the one-click path.
+- A second update surface attaches to the running install (`status: in_progress`) instead of failing with `update_busy`; a cross-process lock left by a dead process is taken over.
+- Explicit updates on a dirty git checkout install packaged files only. User edits and unrelated files are preserved; background checks still report checkout state but never block the update button.
+- Installed shortcuts and restart helpers launch the Electron executable directly with `windowsHide` and `CREATE_NO_WINDOW`; no `explorer.exe`, `.cmd`, or console window is used.
+- APP, plugin, and node are all 0.2.31.
+
+Gates: pytest 130 passed / 4 skipped (update suites 72 passed / 1 skipped), Node 204/204, `validate_versions()`. This note records the published packages only: no local or laptop installation was performed, and neither device is claimed to be running 0.2.31.
+
+## v0.2.30
+
+Target-computer file explorer release:
+
+- Both Composer attachment entry points now open a target-computer file modal with 工作区 (workspaces) and 此电脑 (drives) roots, so files can be picked from the device being controlled.
+- The node serves the modal through a same-origin `/tether-device-fs` API: drives, workspaces, directory listing, and a raw-byte read that returns base64 so non-UTF-8 files keep their exact bytes.
+- APP, plugin, and node are all 0.2.30. A node-only or plugin-only update leaves the other component on the old attachment path.
+
+This note records the published packages only. DESKTOP-LOCAL and LAPTOP-01 still report 0.2.29 until one-click update is run on each.
+
 ## v0.2.29 candidate (unpublished)
 
 This candidate includes the scoped login authority fix, update/watchdog race fixes, and native Composer attachment routing. The DSH native Composer path was exercised on an isolated local Host with a QA Node: it selected a target workspace and transferred a 90-byte text file and a 4-byte binary file. The captured multipart response contained the expected bytes `00 ff 41 80`; no model request was sent.

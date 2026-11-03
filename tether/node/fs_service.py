@@ -8,11 +8,14 @@ policy on its own.
 from __future__ import annotations
 
 import base64
+import binascii
 import codecs
 import hashlib
 import json
 import mimetypes
 import os
+import re
+import secrets
 import shutil
 import sqlite3
 import subprocess
@@ -25,8 +28,18 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from .dsh_desktop import DshDesktop, DshError
+from .dsh_plugin import DshPluginError, install as install_dsh_plugin
+try:
+    from .dsh_web import DshWeb
+except Exception:  # an older install may not ship the optional Linux web module
+    DshWeb = None  # type: ignore[assignment]
 
-MAX_READ = 256 * 1024
+
+MAX_READ = 4 * 1024 * 1024
+MAX_WRITE_CHUNK = 4 * 1024 * 1024
+MAX_TRANSFER_BYTES = 64 * 1024 * 1024 * 1024
+TRANSFER_ID_RE = re.compile(r"[a-f0-9]{8,32}")
 MAX_PREVIEW_BYTES = 8 * 1024 * 1024
 MAX_PREVIEW_TEXT = 512 * 1024
 PREVIEW_CACHE_MAX_FILES = 96
@@ -426,8 +439,45 @@ class Audit:
         return self.page(limit, offset)["entries"]
 
 
+class _StreamWriter:
+    def __init__(self, service: "FsService", path: Path, part: Path,
+                 handle: Any, total: int, transfer: str) -> None:
+        self.service = service
+        self.path = path
+        self.part = part
+        self.handle = handle
+        self.total = total
+        self.transfer = transfer
+
+    def write(self, data: bytes) -> None:
+        self.handle.write(data)
+
+    def abort(self) -> None:
+        try:
+            self.handle.close()
+        except OSError:
+            pass
+
+    def finish(self) -> dict[str, Any]:
+        self.handle.flush()
+        os.fsync(self.handle.fileno())
+        self.handle.close()
+        if self.part.stat().st_size != self.total:
+            raise FsError("stream is incomplete", "offset_mismatch")
+        os.replace(self.part, self.path)
+        st = self.path.stat()
+        version = _path_version(self.path)
+        self.service.audit.add(op="transfer", path=str(self.path),
+                               mode=self.service.policy.data.get("mode"),
+                               phase="result", result="ok", bytes=self.total, version=version)
+        return {"path": str(self.path), "transfer_id": self.transfer,
+                "offset": self.total, "total": self.total, "size": st.st_size,
+                "mtime": st.st_mtime, "version": version, "complete": True}
+
+
 class FsService:
-    def __init__(self, *, device: str, workspace: Path, data_dir: Path, workspaces_root: Path) -> None:
+    def __init__(self, *, device: str, workspace: Path, data_dir: Path, workspaces_root: Path,
+                 dsh_home: Path | None = None) -> None:
         self.device = device
         self.workspace = workspace
         self.workspaces_root = workspaces_root
@@ -435,9 +485,13 @@ class FsService:
         self.policy = Policy(data_dir / "policy.json", device=device,
                              node_workspace=workspace, workspaces_root=workspaces_root)
         self.audit = Audit(data_dir / "audit.jsonl", device=device)
+        self.dsh_desktop = DshDesktop(data_dir, dsh_home=dsh_home)
+        self.dsh_web = DshWeb(data_dir) if DshWeb is not None else None
         self.preview_cache_dir = data_dir / "preview-cache"
         self.preview_cache_dir.mkdir(parents=True, exist_ok=True)
         self._office_lock = threading.Lock()
+        self.croc = None
+        self._croc_context: dict[str, Any] = {}
 
     def _resolve(self, raw: str | None) -> Path:
         if not raw:
@@ -468,7 +522,10 @@ class FsService:
         handler = getattr(self, "_op_" + op, None)
         if handler is None:
             raise FsError(f"unknown fs op: {op}", "bad_op")
-        result = handler(args)
+        try:
+            result = handler(args)
+        except DshError as exc:
+            raise FsError(str(exc), exc.code) from exc
         if isinstance(result, dict):
             result.setdefault("device_id", self.policy.device)
         return result
@@ -505,6 +562,198 @@ class FsService:
                 "version": _path_version(p) if p.is_file() else "",
                 "writable": self.policy.can_write(p, op="write")[0]}
 
+    def _op_direct_info(self, args: dict[str, Any]) -> dict[str, Any]:
+        direct = getattr(self, "direct", None)
+        if direct is None:
+            raise FsError("direct api unavailable", "unavailable")
+        return direct.info()
+
+    def _croc_engine(self):
+        croc = getattr(self, "croc", None)
+        if croc is None or not croc.available():
+            raise FsError("croc transfer engine is not available", "croc_missing")
+        return croc
+
+    def _croc_status(self) -> dict[str, Any]:
+        croc = getattr(self, "croc", None)
+        if croc is None:
+            return {"engine": "croc", "state": "idle"}
+        status = {**croc.status(), "engine": "croc"}
+        context = self._croc_context
+        if context:
+            status.update({"transfer_id": context.get("transfer_id"),
+                           "direction": context.get("direction"),
+                           "staging": context.get("staging", ""),
+                           "destination": context.get("destination", "")})
+        return status
+
+    def _op_transfer_send(self, args: dict[str, Any]) -> dict[str, Any]:
+        croc = self._croc_engine()
+        source = self._resolve(args.get("path"))
+        self._read_guard(source)
+        try:
+            job = croc.send(str(source), str(args.get("code") or ""),
+                            transfers=int(args.get("transfers") or 4))
+        except Exception as exc:
+            raise FsError(str(exc), getattr(exc, "code", "croc_error")) from exc
+        self._croc_context = {"transfer_id": secrets.token_hex(8), "direction": "send",
+                              "source": str(source), "job": job}
+        return self._croc_status()
+
+    def _op_transfer_receive(self, args: dict[str, Any]) -> dict[str, Any]:
+        croc = self._croc_engine()
+        destination = self._resolve(args.get("path"))
+        if destination.exists() and not destination.is_dir():
+            destination = destination.parent
+        self._write_guard(destination, "write")
+        destination.mkdir(parents=True, exist_ok=True)
+        transfer_id = str(args.get("transfer_id") or secrets.token_hex(8))
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", transfer_id):
+            raise FsError("invalid transfer id", "bad_args")
+        staging = self.workspace / ".tether-incoming" / transfer_id
+        staging.mkdir(parents=True, exist_ok=True)
+        try:
+            job = croc.receive(str(args.get("code") or ""), str(staging))
+        except Exception as exc:
+            raise FsError(str(exc), getattr(exc, "code", "croc_error")) from exc
+        self._croc_context = {"transfer_id": transfer_id, "direction": "receive",
+                              "staging": str(staging), "destination": str(destination), "job": job}
+        return self._croc_status()
+
+    def _op_transfer_info(self, args: dict[str, Any]) -> dict[str, Any]:
+        croc = getattr(self, "croc", None)
+        if croc is None:
+            return {"engine": "croc", "available": False, "version": "", "relay": False}
+        return {"engine": "croc", **croc.info()}
+
+    def _op_transfer_status(self, args: dict[str, Any]) -> dict[str, Any]:
+        if not self._croc_context and args.get("path"):
+            p, part, transfer = self._transfer_part(args)
+            return {"path": str(p), "transfer_id": transfer,
+                    "offset": part.stat().st_size if part.exists() else 0,
+                    "partial": part.exists(), "exists": p.exists()}
+        return self._croc_status()
+
+    def _op_transfer_cancel(self, args: dict[str, Any]) -> dict[str, Any]:
+        if not self._croc_context and args.get("path"):
+            p, part, transfer = self._transfer_part(args)
+            try:
+                part.unlink(missing_ok=True)
+            except OSError:
+                raise FsError("could not remove the partial transfer", "write_failed") from None
+            return {"path": str(p), "transfer_id": transfer, "cancelled": True}
+        croc = getattr(self, "croc", None)
+        if croc is None:
+            return {"engine": "croc", "state": "idle"}
+        status = croc.job.cancel() if croc.job else {"state": "idle"}
+        staging = self._croc_context.get("staging")
+        if staging:
+            shutil.rmtree(staging, ignore_errors=True)
+        self._croc_context = {}
+        return {**status, "engine": "croc"}
+
+    def _op_transfer_finish(self, args: dict[str, Any]) -> dict[str, Any]:
+        context = self._croc_context
+        if not context or context.get("direction") != "receive":
+            raise FsError("no receive transfer", "croc_no_transfer")
+        status = self._croc_status()
+        if status.get("state") != "completed":
+            raise FsError("transfer is not complete", "croc_not_complete")
+        staging = Path(context["staging"])
+        entries = [entry for entry in staging.iterdir() if not entry.name.startswith(".")]
+        if len(entries) != 1:
+            raise FsError("expected exactly one received item", "croc_result_ambiguous")
+        source = entries[0]
+        destination = Path(context["destination"])
+        self._write_guard(destination, "write")
+        name = str(args.get("name") or source.name)
+        if name != Path(name).name or name in (".", ".."):
+            raise FsError("invalid destination name", "bad_args")
+        target = destination / name
+        if target.exists():
+            if args.get("overwrite") is not True:
+                raise FsError("destination already exists", "exists")
+            if target.is_dir() or source.is_dir():
+                raise FsError("cannot overwrite a directory", "exists")
+            target.unlink()
+        self._write_guard(target, "write")
+        shutil.move(str(source), str(target))
+        shutil.rmtree(staging, ignore_errors=True)
+        self._croc_context = {}
+        return {"path": str(target), "bytes": target.stat().st_size, "engine": "croc"}
+
+    def _terminal_dispatch(self, action: str, args: dict[str, Any]) -> Any:
+        terminal = getattr(self, "terminal", None)
+        if terminal is None:
+            raise FsError("terminal unavailable", "unavailable")
+        try:
+            return terminal.dispatch(action, args)
+        except ValueError as exc:
+            raise FsError(str(exc), "terminal_error") from None
+
+    def _op_terminal_start(self, args: dict[str, Any]) -> Any:
+        return self._terminal_dispatch("start", args)
+
+    def _op_terminal_shells(self, args: dict[str, Any]) -> Any:
+        return self._terminal_dispatch("shells", args)
+
+    def _op_terminal_write(self, args: dict[str, Any]) -> Any:
+        return self._terminal_dispatch("write", args)
+
+    def _op_terminal_poll(self, args: dict[str, Any]) -> Any:
+        return self._terminal_dispatch("poll", args)
+
+    def _op_terminal_resize(self, args: dict[str, Any]) -> Any:
+        return self._terminal_dispatch("resize", args)
+
+    def _op_terminal_stop(self, args: dict[str, Any]) -> Any:
+        return self._terminal_dispatch("stop", args)
+
+    def _apps_dispatch(self, action: str, args: dict[str, Any]) -> Any:
+        apps = getattr(self, "apps", None)
+        if apps is None:
+            raise FsError("apps unavailable", "unavailable")
+        try:
+            return apps.dispatch(action, args)
+        except ValueError as exc:
+            raise FsError(str(exc), "apps_error") from None
+
+    def _op_apps_list(self, args: dict[str, Any]) -> Any:
+        return self._apps_dispatch("list", args)
+
+    def _acp_dispatch(self, action: str, args: dict[str, Any]) -> Any:
+        acp = getattr(self, "acp", None)
+        if acp is None:
+            raise FsError("acp unavailable", "unavailable")
+        try:
+            return acp.dispatch(action, args)
+        except ValueError as exc:
+            raise FsError(str(exc), "acp_error") from None
+
+    def _op_acp_detect(self, args: dict[str, Any]) -> Any:
+        return self._acp_dispatch("detect", args)
+
+    def _op_acp_start(self, args: dict[str, Any]) -> Any:
+        return self._acp_dispatch("start", args)
+
+    def _op_acp_prompt(self, args: dict[str, Any]) -> Any:
+        return self._acp_dispatch("prompt", args)
+
+    def _op_acp_poll(self, args: dict[str, Any]) -> Any:
+        return self._acp_dispatch("poll", args)
+
+    def _op_acp_reply(self, args: dict[str, Any]) -> Any:
+        return self._acp_dispatch("reply", args)
+
+    def _op_acp_cancel(self, args: dict[str, Any]) -> Any:
+        return self._acp_dispatch("cancel", args)
+
+    def _op_acp_stop(self, args: dict[str, Any]) -> Any:
+        return self._acp_dispatch("stop", args)
+
+    def _op_acp_set_model(self, args: dict[str, Any]) -> Any:
+        return self._acp_dispatch("set_model", args)
+
     def _op_read(self, args: dict[str, Any]) -> dict[str, Any]:
         p = self._resolve(args.get("path"))
         self._read_guard(p)
@@ -517,9 +766,10 @@ class FsService:
             fh.seek(offset)
             chunk = fh.read(limit)
         binary = b"\x00" in chunk or (p.suffix.lower() not in TEXT_SUFFIXES and b"\x00" in chunk[:1024])
+        exact = str(args.get("encoding") or "").lower() in {"base64", "binary"}
         result = {"path": str(p), "size": size, "offset": offset, "truncated": offset + len(chunk) < size,
                   "mtime": p.stat().st_mtime}
-        if binary:
+        if binary or exact:
             result.update({"binary": True, "base64": base64.b64encode(chunk).decode("ascii")})
         else:
             result.update({"binary": False, "text": chunk.decode("utf-8", errors="replace")})
@@ -749,6 +999,91 @@ class FsService:
                 "mtime": st.st_mtime, "version": version,
                 "encoding": encoding, "newline": newline}
 
+    def _transfer_part(self, args: dict[str, Any]) -> tuple[Path, Path, str]:
+        p = self._resolve(args.get("path"))
+        transfer = str(args.get("transfer_id") or "")
+        if not TRANSFER_ID_RE.fullmatch(transfer):
+            raise FsError("transfer_id must be 8-32 lowercase hex characters", "bad_args")
+        return p, p.with_name(p.name + ".tether-part." + transfer), transfer
+
+    def _op_write_chunk(self, args: dict[str, Any]) -> dict[str, Any]:
+        p, part, transfer = self._transfer_part(args)
+        try:
+            offset = int(args.get("offset"))
+            total = int(args.get("total"))
+        except (TypeError, ValueError):
+            raise FsError("offset and total are required integers", "bad_args") from None
+        encoded = args.get("base64")
+        if not isinstance(encoded, str):
+            raise FsError("base64 is required", "bad_args")
+        try:
+            data = base64.b64decode(encoded, validate=True)
+        except (binascii.Error, ValueError):
+            raise FsError("base64 is invalid", "bad_args") from None
+        if len(data) > MAX_WRITE_CHUNK:
+            raise FsError("chunk exceeds 1 MiB", "bad_args")
+        if total < 0 or total > MAX_TRANSFER_BYTES:
+            raise FsError("total is out of range", "bad_args")
+        if offset < 0 or offset + len(data) > total:
+            raise FsError("chunk exceeds the declared size", "bad_args")
+        final = args.get("final") is True
+        if not data and not final and total:
+            raise FsError("empty chunk", "bad_args")
+        if final and offset + len(data) != total:
+            raise FsError("final chunk does not complete the file", "bad_args")
+        overwrite = args.get("overwrite") is True
+        expected_version = args.get("expected_version")
+        if expected_version is not None and (not isinstance(expected_version, str) or len(expected_version) != 64):
+            raise FsError("expected_version must be a SHA-256 digest", "bad_args")
+        if offset == 0:
+            self._write_guard(p, "write", bytes=total)
+            if p.exists() and not overwrite:
+                raise FsError("file exists", "exists")
+            if part.exists() and args.get("resume") is not True:
+                part.unlink()
+        else:
+            ok, why = self.policy.can_write(p, op="write")
+            if not ok:
+                raise FsError(why, "denied")
+            if not part.exists() or part.stat().st_size != offset:
+                raise FsError("partial transfer offset does not match", "offset_mismatch")
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with part.open("r+b" if part.exists() else "wb") as handle:
+            handle.seek(offset)
+            handle.write(data)
+            handle.flush()
+            if final:
+                os.fsync(handle.fileno())
+        if not final:
+            return {"path": str(p), "transfer_id": transfer, "offset": offset + len(data),
+                    "total": total, "complete": False}
+        if part.stat().st_size != total:
+            raise FsError("partial transfer is incomplete", "offset_mismatch")
+        if expected_version is not None and p.exists() and _path_version(p) != expected_version:
+            raise FsError("file changed on target device", "conflict")
+        if p.exists() and not overwrite:
+            raise FsError("file exists", "exists")
+        os.replace(part, p)
+        st = p.stat()
+        version = _path_version(p)
+        self.audit.add(op="transfer", path=str(p), mode=self.policy.data.get("mode"),
+                       phase="result", result="ok", bytes=total, version=version)
+        return {"path": str(p), "transfer_id": transfer, "offset": total, "total": total,
+                "size": st.st_size, "mtime": st.st_mtime, "version": version, "complete": True}
+
+    def open_write_stream(self, path: Any, transfer_id: Any, total: int,
+                          overwrite: bool) -> _StreamWriter:
+        p, part, transfer = self._transfer_part({"path": path, "transfer_id": transfer_id})
+        if total < 0 or total > MAX_TRANSFER_BYTES:
+            raise FsError("total is out of range", "bad_args")
+        self._write_guard(p, "write", bytes=total)
+        if p.exists() and not overwrite:
+            raise FsError("file exists", "exists")
+        p.parent.mkdir(parents=True, exist_ok=True)
+        if part.exists():
+            part.unlink()
+        return _StreamWriter(self, p, part, part.open("wb"), total, transfer)
+
     def _op_mkdir(self, args: dict[str, Any]) -> dict[str, Any]:
         p = self._resolve(args.get("path"))
         self._write_guard(p, "mkdir")
@@ -810,6 +1145,8 @@ class FsService:
         return {"path": str(p), "trash": str(target)}
 
     def _op_drives(self, _args: dict[str, Any]) -> dict[str, Any]:
+        if os.name != "nt":
+            return {"drives": [{"name": "根目录", "path": "/"}]}
         import string
         roots = []
         for letter in string.ascii_uppercase:
@@ -836,3 +1173,63 @@ class FsService:
 
     def _op_audit_list(self, args: dict[str, Any]) -> dict[str, Any]:
         return self.audit.page(int(args.get("limit") or 100), int(args.get("offset") or 0))
+
+    def _op_dsh_status(self, _args: dict[str, Any]) -> dict[str, Any]:
+        return self.dsh_desktop.status()
+
+    def _op_dsh_start(self, _args: dict[str, Any]) -> dict[str, Any]:
+        result = self.dsh_desktop.start()
+        self.audit.add(op="dsh_start", path=result.get("exe") or "", mode=self.policy.data.get("mode"),
+                       phase="result", result="started" if result.get("running") else "requested")
+        return result
+
+    def _op_dsh_repair_auth(self, _args: dict[str, Any]) -> dict[str, Any]:
+        result = self.dsh_desktop.repair_auth()
+        self.audit.add(op="dsh_repair_auth", path=result.get("appdata_backup") or "", mode=self.policy.data.get("mode"),
+                       phase="result", result="started")
+        return result
+
+    def _op_dsh_stop(self, _args: dict[str, Any]) -> dict[str, Any]:
+        result = self.dsh_desktop.stop()
+        self.audit.add(op="dsh_stop", path=result.get("exe") or "", mode=self.policy.data.get("mode"),
+                       phase="result", result="stopped" if not result.get("running") else "still_running")
+        return result
+
+    def _op_dsh_restart(self, _args: dict[str, Any]) -> dict[str, Any]:
+        result = self.dsh_desktop.restart()
+        self.audit.add(op="dsh_restart", path=result.get("exe") or "", mode=self.policy.data.get("mode"),
+                       phase="result", result="requested" if result.get("restarting") else "started")
+        return result
+
+    def _op_dsh_web_status(self, _args: dict[str, Any]) -> dict[str, Any]:
+        if self.dsh_web is None:
+            return {"supported": False, "installed": False, "running": False,
+                    "installing": False, "url": ""}
+        return self.dsh_web.status()
+
+    def _op_dsh_web_install(self, _args: dict[str, Any]) -> dict[str, Any]:
+        if self.dsh_web is None:
+            raise FsError("DSH Web is unavailable in this node build", "unavailable")
+        return self.dsh_web.install()
+
+    def _op_dsh_web_start(self, _args: dict[str, Any]) -> dict[str, Any]:
+        if self.dsh_web is None:
+            raise FsError("DSH Web is unavailable in this node build", "unavailable")
+        return self.dsh_web.start()
+
+    def _op_dsh_web_stop(self, _args: dict[str, Any]) -> dict[str, Any]:
+        if self.dsh_web is None:
+            raise FsError("DSH Web is unavailable in this node build", "unavailable")
+        return self.dsh_web.stop()
+
+    def _op_dsh_install(self, _args: dict[str, Any]) -> dict[str, Any]:
+        result = self.dsh_desktop.install()
+        self.audit.add(op="dsh_install", path=result.get("exe") or "", mode=self.policy.data.get("mode"),
+                       phase="intent", result="started" if result.get("installing") else "skipped")
+        return result
+
+    def _op_dsh_install_plugin(self, _args: dict[str, Any]) -> dict[str, Any]:
+        result = install_dsh_plugin(self.dsh_desktop)
+        self.audit.add(op="dsh_install_plugin", path=result.get("profile_path") or "",
+                       mode=self.policy.data.get("mode"), phase="result", result="installed")
+        return result

@@ -13,13 +13,13 @@ import inspect
 import json
 import os
 import platform
-import shutil
+import random
 import sqlite3
 import ssl
 import sys
 import subprocess
-import tempfile
 import time
+import traceback
 from pathlib import Path
 from typing import Any
 
@@ -29,8 +29,13 @@ from dotenv import load_dotenv
 from . import console as local_console
 from .dsh_adapter import DshRun
 from .fs_service import FsError, FsService
+from .direct_api import DirectApi
+from .terminal import TerminalService
+from .apps import AppCatalog
+from .acp import AcpService
 from .dsh_sessions import DshSessionStore
 from .native_surface import NativeSurface, NativeSurfaceError
+from .croc_transfer import CrocTransfer
 from .local_identity import remove_identity, write_identity
 from ..updates import MAX_UPDATE_PROTOCOL, MIN_UPDATE_PROTOCOL, UPDATE_PROTOCOL, UpdateManager, select_profile
 
@@ -97,56 +102,18 @@ def ensure_sdk_profile(home: Path) -> None:
     (profile / "cordis.patch.yml").write_text("[]\n", encoding="utf-8")
 
 
-_APP_RESTART_SCRIPT = r'''param([string]$ConfigFile)
-$ErrorActionPreference = 'Stop'
-$config = Get-Content -LiteralPath $ConfigFile -Raw | ConvertFrom-Json
-$rootPath = [IO.Path]::GetFullPath($config.root).TrimEnd('\')
-$readyFile = $config.ready_file
-$logFile = $config.log_file
-$appDir = Join-Path $rootPath 'apps\tether-app'
-$launcher = Join-Path $appDir 'Tether-App.vbs'
-if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) { $launcher = Join-Path $appDir 'Tether-App.cmd' }
-$electron = [IO.Path]::GetFullPath((Join-Path $appDir 'node_modules\electron\dist\electron.exe'))
-try {
-  if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) { throw 'APP launcher not found' }
-  Set-Content -LiteralPath $readyFile -Value 'ready' -Encoding Ascii
-  Add-Content -LiteralPath $logFile -Value ((Get-Date -Format o) + ' restart worker started')
-  Start-Sleep -Seconds 2
-  foreach ($process in Get-CimInstance Win32_Process -Filter "Name = 'electron.exe'") {
-    if (-not $process.ExecutablePath) { continue }
-    try { $processPath = [IO.Path]::GetFullPath($process.ExecutablePath) } catch { continue }
-    if ([string]::Equals($processPath, $electron, [StringComparison]::OrdinalIgnoreCase)) {
-      Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue
-    }
-  }
-  $deadline = [DateTime]::UtcNow.AddSeconds(10)
-  do {
-    Start-Sleep -Milliseconds 250
-    $remaining = @(Get-CimInstance Win32_Process -Filter "Name = 'electron.exe'" | Where-Object {
-      $_.ExecutablePath -and [string]::Equals([IO.Path]::GetFullPath($_.ExecutablePath), $electron, [StringComparison]::OrdinalIgnoreCase)
-    })
-  } while ($remaining.Count -gt 0 -and [DateTime]::UtcNow -lt $deadline)
-  Start-Process -FilePath (Join-Path $env:WINDIR 'explorer.exe') -ArgumentList @('"' + $launcher + '"')
-  Add-Content -LiteralPath $logFile -Value ((Get-Date -Format o) + ' APP launcher opened')
-} catch {
-  Add-Content -LiteralPath $logFile -Value ((Get-Date -Format o) + ' restart worker failed')
-  throw
-} finally {
-  foreach ($path in @($ConfigFile, $config.wrapper_file, $MyInvocation.MyCommand.Path, $readyFile)) {
-    Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
-  }
-}
-'''
+CREATE_NO_WINDOW = 0x08000000
+DETACHED_PROCESS = 0x00000008
+CREATE_NEW_PROCESS_GROUP = 0x00000200
 
 
 def schedule_app_restart(root: Path) -> bool:
-    """Start a restart wrapper through the existing interactive Explorer shell."""
+    """Start a windowless helper that relaunches the APP executable directly."""
     if sys.platform != "win32":
         return False
     root = Path(root).resolve()
-    launcher = root / "apps" / "tether-app" / "Tether-App.vbs"
-    if not launcher.is_file():
-        launcher = root / "apps" / "tether-app" / "Tether-App.cmd"
+    executable = (root / "apps" / "tether-app" / "node_modules" / "electron"
+                  / "dist" / "electron.exe")
     log_path = root / ".runtime" / "updates" / "remote-app-restart.log"
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -157,53 +124,26 @@ def schedule_app_restart(root: Path) -> bool:
         except OSError:
             pass
 
-    if not launcher.is_file():
-        record("APP launcher missing")
+    if not executable.is_file():
+        record("APP executable missing")
         return False
-    work_dir = Path(tempfile.mkdtemp(prefix="tether-app-restart-"))
-    script_path = work_dir / "worker.ps1"
-    wrapper_path = work_dir / "restart.cmd"
-    config_path = work_dir / "restart.json"
-    ready_path = work_dir / "worker.ready"
-    handed_off = False
+    env = os.environ.copy()
+    env.pop("ELECTRON_RUN_AS_NODE", None)
+    env["PYTHONPATH"] = str(ROOT) + os.pathsep + env.get("PYTHONPATH", "")
     try:
-        script_path.write_text(_APP_RESTART_SCRIPT, encoding="utf-8", newline="\r\n")
-        config_path.write_text(json.dumps({
-            "root": str(root), "ready_file": str(ready_path), "log_file": str(log_path),
-            "wrapper_file": str(wrapper_path),
-        }), encoding="utf-8")
-        wrapper_path.write_text(
-            '@echo off\r\n'
-            '"%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" '
-            '-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden '
-            '-File "%~dp0worker.ps1" -ConfigFile "%~dp0restart.json"\r\n',
-            encoding="utf-8",
-        )
         subprocess.Popen(
-            ["explorer.exe", str(wrapper_path)],
+            [sys.executable, "-m", "tether.node.app_restart", "--root", str(root),
+             "--log", str(log_path), "--delay", "2"],
+            cwd=str(ROOT), env=env,
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             close_fds=True,
-            creationflags=(getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
-                           | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)),
+            creationflags=(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW),
         )
-        deadline = time.monotonic() + 15
-        while time.monotonic() < deadline:
-            if ready_path.is_file():
-                handed_off = True
-                record("restart worker handed off through Explorer")
-                return True
-            time.sleep(0.1)
-        record("Explorer restart worker did not become ready")
+        record("restart helper started")
+        return True
+    except Exception as exc:  # noqa: BLE001 - restart failure must not crash the update reader
+        record(f"restart helper could not be started: {type(exc).__name__}: {exc}")
         return False
-    except OSError:
-        record("Explorer restart wrapper could not be started")
-        return False
-    finally:
-        if not handed_off:
-            try:
-                shutil.rmtree(work_dir)
-            except OSError:
-                pass
 
 
 class NodeStore:
@@ -313,9 +253,12 @@ class Node:
                  drop_after: float | None = None, drop_for: float = 0.0,
                  agent: str = "fake", dsh_home: str | None = None,
                  provider: str = "deepseek-official", model: str = "deepseek-v4-flash",
-                 workspaces_root: Path | None = None, data_dir: Path | None = None) -> None:
+                 workspaces_root: Path | None = None, data_dir: Path | None = None,
+                 user_token: str = "") -> None:
         self.url = url
         self.token = token
+        self.user_token = user_token
+        self.device_token = ""
         self.device = device
         self.workspace = workspace
         self.store = store
@@ -325,16 +268,37 @@ class Node:
         self.agent = agent
         self.dsh_home = dsh_home or str(ROOT / ".runtime" / "dsh-home")
         self.data_dir = Path(data_dir or (ROOT / ".runtime")).expanduser().resolve()
+        self.device_token_path = self.data_dir / "device-token.json"
+        try:
+            saved = json.loads(self.device_token_path.read_text(encoding="utf-8"))
+            saved_token = str(saved.get("token") or "")
+            if saved.get("device_id") == self.device and saved_token:
+                self.device_token = saved_token
+                self.token = saved_token
+        except (OSError, ValueError, TypeError):
+            pass
         self.provider = provider
         self.model = model
         self.workspaces_root = workspaces_root or default_workspaces_root()
-        self.fs = FsService(device=device, workspace=workspace,
-                            data_dir=self.data_dir,
-                            workspaces_root=self.workspaces_root)
         self.dsh_sessions = DshSessionStore()
         self.native_dsh_home = self.dsh_sessions.home
+        self.fs = FsService(device=device, workspace=workspace,
+                            data_dir=self.data_dir,
+                            workspaces_root=self.workspaces_root,
+                            dsh_home=self.native_dsh_home)
+        self.direct = DirectApi(self.fs.dispatch, stream=self.fs)
+        self._direct_started = False
+        self.fs.direct = self.direct
+        self.terminal = TerminalService(self.workspace)
+        self.fs.terminal = self.terminal
+        self.apps = AppCatalog(self.data_dir)
+        self.fs.apps = self.apps
+        self.acp = AcpService(self.workspace)
+        self.fs.acp = self.acp
+        self.croc = CrocTransfer()
+        self.fs.croc = self.croc
         ensure_sdk_profile(self.native_dsh_home)
-        self.native_surface = NativeSurface(self.native_dsh_home)
+        self.native_surface = NativeSurface(self.native_dsh_home, device_fs=self.fs)
         update_state_dir = self.data_dir / "updates"
         manifest_url = release_manifest_url()
         plugin_profile = select_profile(Path(self.native_dsh_home), "desktop") or "desktop"
@@ -378,21 +342,34 @@ class Node:
             await asyncio.sleep(600)
 
     async def run(self) -> None:
+        if self.direct is not None and not self._direct_started:
+            try:
+                self.direct.start()
+                self._direct_started = True
+            except OSError:
+                self.direct = None
+                self.fs.direct = None
+        try:
+            await asyncio.to_thread(self.apps.ensure)
+        except Exception:
+            pass
         warm = asyncio.create_task(self._warm_updates())
-        backoff = 0.5
+        backoff = 0.1
         while True:
             if self._block_until > time.monotonic():
                 await asyncio.sleep(self._block_until - time.monotonic())
             try:
                 await self._session()
-                backoff = 0.5
+                backoff = 0.1
             except Exception as exc:  # noqa: BLE001 - reconnect forever
                 log(f"[ws] disconnected: {type(exc).__name__}: {exc}")
             self.connected = False
             if self.restart_requested:
                 return
-            await asyncio.sleep(backoff)
-            backoff = min(backoff * 2, 5.0)
+            # A phone waking from sleep or a brief network blip should reconnect
+            # immediately; repeated failures still back off to a two-second cap.
+            await asyncio.sleep(backoff * (0.8 + random.random() * 0.4))
+            backoff = min(backoff * 2, 2.0)
 
     async def _session(self) -> None:
         ssl_context = None
@@ -417,12 +394,18 @@ class Node:
             connect_options["ssl"] = ssl_context
         async with websockets.connect(self.url, **connect_options) as ws:
             self.ws = ws
-            await self._send({"type": "register", "device_id": self.device, "name": self.device,
-                              "token": self.token, "platform": platform.platform(),
-                              "capabilities": self.capabilities()})
+            register = {"type": "register", "device_id": self.device, "name": self.device,
+                        "token": self.token, "platform": platform.platform(),
+                        "capabilities": self.capabilities()}
+            if self.user_token and not self.device_token:
+                register["user_token"] = self.user_token
+            await self._send(register)
             first = json.loads(await ws.recv())
             if first.get("type") != "registered":
                 raise RuntimeError(f"registration failed: {first}")
+            issued = first.get("device_token")
+            if isinstance(issued, str) and issued and not self.device_token:
+                self._persist_device_token(issued)
             self.connected = True
             log(f"[ws] registered as {self.device} at {self.url}")
             for msg in self._state_messages():
@@ -460,6 +443,23 @@ class Node:
                 await self._send({"type": "heartbeat", "ts": time.time()})
             except Exception:
                 return
+
+    def _persist_device_token(self, token: str) -> None:
+        self.device_token = token
+        self.token = token
+        try:
+            self.data_dir.mkdir(parents=True, exist_ok=True)
+            temp = self.device_token_path.with_suffix(".tmp")
+            temp.write_text(json.dumps({"schema": 1, "device_id": self.device, "token": token}),
+                            encoding="utf-8")
+            os.replace(temp, self.device_token_path)
+            try:
+                os.chmod(self.device_token_path, 0o600)
+            except OSError:
+                pass
+            log("[ws] device token issued and saved")
+        except OSError as exc:
+            log(f"[ws] could not save the device token: {exc}")
 
     async def _send(self, msg: dict[str, Any]) -> None:
         if self.ws is None:
@@ -518,6 +518,21 @@ class Node:
             task = asyncio.create_task(self._update_call(msg, self.ws))
             self.update_tasks.add(task)
             task.add_done_callback(self.update_tasks.discard)
+        elif kind == "restart_node":
+            if any(run and run.get("state") in ACTIVE for run in self.store.all_runs()):
+                await self._send({"type": "restart_denied", "reason": "tether_task_active"})
+                return
+            log("[ws] restart requested by controller")
+            self.restart_requested = True
+            try:
+                await self._send({"type": "restart_ack"})
+            except Exception:  # noqa: BLE001 - the socket may already be closing
+                pass
+            try:
+                await self.ws.close()
+            except Exception:  # noqa: BLE001 - closing is best effort
+                pass
+            return
         elif kind == "error":
             log(f"[ws] controller error: {msg.get('error')}")
 
@@ -594,6 +609,31 @@ class Node:
         except Exception:
             self.connected = False
 
+    def _update_in_progress(self, component: str) -> dict[str, Any]:
+        result: dict[str, Any] = {"ok": True, "component": component,
+                                  "status": "in_progress", "in_progress": True,
+                                  "restart_required": False, "error": ""}
+        manager = self.update_managers.get(component)
+        progress = None
+        if manager is not None:
+            try:
+                progress = manager.progress()
+            except Exception:  # noqa: BLE001 - progress is best effort
+                progress = None
+        if progress:
+            result["progress"] = progress
+        return result
+
+    def _app_update_prepared(self) -> bool:
+        manager = self.update_managers.get("app")
+        if manager is None:
+            return False
+        try:
+            status = manager.status()
+        except Exception:  # noqa: BLE001 - deferral is best effort
+            return False
+        return bool(status.get("ok") and status.get("prepared"))
+
     def _update_busy_reason(self) -> str | None:
         if any(run and run.get("state") in ACTIVE for run in self.store.all_runs()):
             return "tether_task_active"
@@ -615,8 +655,9 @@ class Node:
         action = msg.get("action")
         allowed = {"type", "req_id", "action", "component", "prepared_id"}
         if (set(msg) - allowed or not isinstance(component, str) or component not in self.update_managers
-                or not isinstance(action, str) or action not in {"check", "status", "prepare", "apply"}
-                or (action == "apply") != ("prepared_id" in msg)):
+                or not isinstance(action, str) or action not in {"check", "status", "prepare", "apply", "restart"}
+                or (action == "apply") != ("prepared_id" in msg)
+                or (action == "restart" and component != "plugin")):
             await self._send_update_result(
                 response_ws,
                 {"type": "update_result", "req_id": req_id, "ok": False,
@@ -626,15 +667,16 @@ class Node:
         component = str(component)
         applying = action == "apply"
         app_restart_scheduled = False
+        if self.update_applying:
+            # A second window or a repeated click attaches to the run that is
+            # already installing instead of failing with update_busy.
+            await self._send_update_result(
+                response_ws,
+                {"type": "update_result", "req_id": req_id,
+                 **self._update_in_progress(component)},
+            )
+            return
         if action in {"check", "status"}:
-            if self.update_applying:
-                await self._send_update_result(
-                    response_ws,
-                    {"type": "update_result", "req_id": req_id, "ok": False,
-                     "component": component, "error_code": "update_busy",
-                     "error": "update is applying"},
-                )
-                return
             manager = self.update_managers[component]
             if component == "plugin":
                 profile = self.native_surface.active_profile() or select_profile(
@@ -660,7 +702,8 @@ class Node:
                 else:
                     result = await asyncio.to_thread(manager.status)
             except Exception as exc:  # noqa: BLE001 - failed reads must not stop the Node reader
-                log(f"[update] {action} {component} failed: {type(exc).__name__}")
+                log(f"[update] {action} {component} failed: {type(exc).__name__}: {exc}")
+                log(traceback.format_exc())
                 await self._send_update_result(
                     response_ws,
                     {"type": "update_result", "req_id": req_id, "ok": False,
@@ -704,22 +747,34 @@ class Node:
                     result = await asyncio.to_thread(manager.apply, msg["prepared_id"])
                 else:
                     result = await asyncio.to_thread(getattr(manager, str(action)))
-                if result.get("ok") and component == "plugin" and action == "apply":
+                applied = (bool(result.get("ok")) and result.get("status") != "in_progress"
+                           and result.get("in_progress") is not True)
+                node_deferred = False
+                if applied and component == "plugin" and action == "apply":
                     result["restart_required"] = True
-                if applying and result.get("ok") and component == "node":
-                    self.restart_requested = True
-                    self.update_applying = True
-                response_sent = await self._send_update_result(
-                    response_ws, {"type": "update_result", "req_id": req_id, **result}
-                )
-                if (applying and result.get("ok") and component == "app" and response_sent
-                        and os.environ.get("TETHER_NODE_MANAGED") == "1"):
+                if applying and applied and component == "node":
+                    node_deferred = await asyncio.to_thread(self._app_update_prepared)
+                    result["restart_required"] = True
+                    if node_deferred:
+                        # The APP apply that follows restarts this node too; it
+                        # must not bounce between the plugin and APP updates.
+                        result["restart_deferred"] = True
+                    else:
+                        self.restart_requested = True
+                        self.update_applying = True
+                if applying and applied and component == "app" and os.environ.get("TETHER_NODE_MANAGED") == "1":
                     app_restart_scheduled = await asyncio.to_thread(schedule_app_restart, ROOT)
                     if app_restart_scheduled:
                         self.update_applying = True
+                        result["restart_scheduled"] = True
                     else:
-                        log("[update] APP restart helper could not be scheduled")
-                if applying and result.get("ok") and component == "node":
+                        applied = False
+                        result = {"ok": False, "error_code": "restart_failed",
+                                  "error": "APP restart helper could not be started"}
+                response_sent = await self._send_update_result(
+                    response_ws, {"type": "update_result", "req_id": req_id, **result}
+                )
+                if applying and applied and component == "node" and not node_deferred:
                     if self.ws is not None:
                         try:
                             await self.ws.close(code=1012, reason="node update applied")
@@ -727,7 +782,8 @@ class Node:
                             pass
                     return
             except Exception as exc:  # noqa: BLE001 - updater errors do not take down the WS reader
-                log(f"[update] {action} {component} failed: {type(exc).__name__}")
+                log(f"[update] {action} {component} failed: {type(exc).__name__}: {exc}")
+                log(traceback.format_exc())
                 await self._send_update_result(
                     response_ws,
                     {"type": "update_result", "req_id": req_id, "ok": False,
@@ -908,7 +964,21 @@ class Node:
         except (OSError, ValueError):
             return ""
 
+    def _managed_plugin_version(self) -> str:
+        manager = self.update_managers.get("plugin")
+        if manager is None:
+            return ""
+        try:
+            status = manager.status()
+            return str(status.get("current_version") or "") if status.get("ok") else ""
+        except Exception:
+            return ""
+
     def capabilities(self) -> dict[str, Any]:
+        app_version = self._managed_app_version()
+        plugin_version = self._managed_plugin_version()
+        installed = [name for name, version in (("app", app_version), ("plugin", plugin_version)) if version]
+        dsh_desktop = self.fs.dsh_desktop.status()
         return {"os": platform.system(), "release": platform.release(), "os_label": os_label(),
                 "python": platform.python_version(),
                 "node_version": self.node_version, "update_protocol": UPDATE_PROTOCOL,
@@ -917,13 +987,51 @@ class Node:
                 "update_features": ["check", "prepare", "apply", "app_restart", "plugin_profile_fallback"],
                 "update_manifest": "hub-or-github",
                 "workspace": str(self.workspace), "agents": ["fake", "dsh"], "fs": True,
+                "terminal": True,
+                "terminal_shells": self.terminal.shells(),
+                "apps": True,
+                "acp": True,
                 "policy_mode": self.fs.policy.data.get("mode"),
                 "workspaces_root": str(self.workspaces_root),
                 "dsh_native": self.dsh_sessions.available(),
                 "native_dsh_home": str(self.dsh_sessions.home),
                 "surface_protocol": 1,
-                "app_version": self._managed_app_version(),
-                "dsh_surface": self.native_surface.available()}
+                "app_version": app_version,
+                "plugin_version": plugin_version,
+                "installed_products": installed,
+                "dsh_installed": dsh_desktop["installed"],
+                "dsh_running": dsh_desktop["running"],
+                "dsh_version": dsh_desktop["version"],
+                "dsh_installing": dsh_desktop["installing"],
+                "dsh_install_supported": platform.system() == "Windows",
+                "dsh_web_supported": platform.system() == "Linux",
+                "terminal_user": _current_user(),
+                "terminal_privileged": _is_privileged(),
+                "dsh_surface": self.native_surface.available(),
+                "transfer_engine": "croc",
+                "croc": self.croc.info(),
+                "direct_api": self.direct.info() if self.direct else None}
+
+
+def _current_user() -> str:
+    try:
+        import getpass
+        return getpass.getuser()
+    except Exception:
+        return str(os.environ.get("USERNAME") or os.environ.get("USER") or "")
+
+
+def _is_privileged() -> bool:
+    if os.name == "nt":
+        try:
+            import ctypes
+            return bool(ctypes.windll.shell32.IsUserAnAdmin())
+        except Exception:
+            return False
+    try:
+        return os.geteuid() == 0
+    except AttributeError:
+        return False
 
 
 def restart_node_process() -> None:
@@ -943,6 +1051,7 @@ def main() -> None:
     ap.add_argument("--workspaces-root", default=os.environ.get("TETHER_WORKSPACES_ROOT"),
                     help="root for new remote projects (default D:\\TetherWorkspaces)")
     ap.add_argument("--token", default=os.environ.get("TETHER_NODE_TOKEN", "dev-token"))
+    ap.add_argument("--user-token", default=os.environ.get("TETHER_USER_TOKEN", ""))
     ap.add_argument("--db", default=str(ROOT / ".runtime" / "node-local.db"))
     ap.add_argument("--drop-after", type=float, default=None, help="test: close the socket N seconds after the first dispatch")
     ap.add_argument("--drop-for", type=float, default=0.0, help="test: keep the socket down for N seconds")
@@ -962,7 +1071,8 @@ def main() -> None:
     node = Node(url=args.controller, token=args.token, device=args.device,
                 workspace=workspace, store=store, drop_after=args.drop_after, drop_for=args.drop_for,
                 agent=args.agent, dsh_home=args.dsh_home, provider=args.provider, model=args.model,
-                workspaces_root=workspaces_root, data_dir=Path(args.db).resolve().parent)
+                workspaces_root=workspaces_root, data_dir=Path(args.db).resolve().parent,
+                user_token=args.user_token)
     console_server = None
     try:
         console_server = local_console.start(store, args.device, args.console_port,
@@ -991,6 +1101,14 @@ def main() -> None:
         try:
             await node.run()
         finally:
+            try:
+                node.apps.stop()
+            except Exception:
+                pass
+            try:
+                node.acp.close_all()
+            except Exception:
+                pass
             if refresher is not None:
                 refresher.cancel()
                 await asyncio.gather(refresher, return_exceptions=True)

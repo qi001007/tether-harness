@@ -1,0 +1,106 @@
+name: Clean install smoke
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'laptop/install-node.sh'
+      - '.github/workflows/install-smoke.yml'
+
+jobs:
+  linux-clean:
+    runs-on: ubuntu-latest
+    steps:
+      - name: One-command install on a clean Ubuntu VM
+        shell: bash
+        run: |
+          curl -fsSL https://8-220-198-26.sslip.io/install.sh | bash -s -- \
+            --no-systemd --install-only --prefix "$RUNNER_TEMP/tether-node"
+      - name: Import and PTY smoke
+        shell: bash
+        run: |
+          "$RUNNER_TEMP/tether-node/venv/bin/python" - <<'PY'
+          import base64, time
+          from pathlib import Path
+          from tether.node.terminal import TerminalService
+          terminal = TerminalService(Path('/tmp'))
+          session = terminal.start({'cwd': '/tmp', 'cols': 80, 'rows': 20})
+          assert session['pty'] is True and session['privileged'] is False
+          terminal.write({'session_id': session['session_id'],
+                          'data': base64.b64encode(b'echo CLEAN_LINUX_OK\n').decode()})
+          out = b''
+          for _ in range(40):
+              result = terminal.poll({'session_id': session['session_id'], 'since': 0})
+              out += base64.b64decode(result['data'])
+              if b'CLEAN_LINUX_OK' in out:
+                  break
+              time.sleep(0.1)
+          terminal.stop({'session_id': session['session_id']})
+          assert b'CLEAN_LINUX_OK' in out
+          print('clean-linux-ok')
+          PY
+
+  macos-clean:
+    runs-on: macos-latest
+    steps:
+      - name: One-command install on a clean macOS VM
+        shell: bash
+        run: |
+          curl -fsSL https://8-220-198-26.sslip.io/install.sh | bash -s -- \
+            --no-systemd --install-only --prefix "$RUNNER_TEMP/tether-node"
+      - name: Import and shell catalog smoke
+        shell: bash
+        run: |
+          "$RUNNER_TEMP/tether-node/venv/bin/python" - <<'PY'
+          from pathlib import Path
+          from tether.node.terminal import TerminalService
+          terminal = TerminalService(Path('/tmp'))
+          catalog = terminal.dispatch('shells', {})
+          available = [item['id'] for item in catalog['shells'] if item['available']]
+          assert catalog['default'] in available
+          print('clean-macos-ok shells=' + ','.join(available))
+          PY
+
+  windows-clean:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - name: One-command install on a clean Windows VM
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          printf '#!/bin/sh\nexec python "$@"\n' > "$RUNNER_TEMP/bin/python3"
+          chmod +x "$RUNNER_TEMP/bin/python3"
+          export PATH="$RUNNER_TEMP/bin:$PATH"
+          curl -fsSL https://8-220-198-26.sslip.io/install.sh | bash -s -- \
+            --no-systemd --install-only --prefix "$RUNNER_TEMP/tether-node"
+          "$RUNNER_TEMP/tether-node/venv/Scripts/python.exe" -c "import tether.node.agent; print('clean-windows-node-ok')"
+      - name: Install the published APP on a clean Windows VM
+        shell: pwsh
+        timeout-minutes: 20
+        run: |
+          $version = (Invoke-RestMethod -Uri 'https://8-220-198-26.sslip.io/install/version.json').components.app
+          $zip = Join-Path $env:RUNNER_TEMP 'tether-app.zip'
+          Invoke-WebRequest -Uri ('https://8-220-198-26.sslip.io/install/tether-app-' + $version + '.zip') -OutFile $zip
+          $app = Join-Path $env:RUNNER_TEMP 'app'
+          Expand-Archive -Path $zip -DestinationPath $app
+          $install = Get-ChildItem -Path $app -Recurse -Filter 'install-app.cmd' | Select-Object -First 1
+          if (-not $install) { throw 'install-app.cmd is missing from the published ZIP' }
+          & $install.FullName
+          $repo = Split-Path -Parent (Split-Path -Parent $install.FullName)
+          $electron = Join-Path $repo 'apps\tether-app\node_modules\electron\dist\electron.exe'
+          $venv = Join-Path $repo '.venv\Scripts\python.exe'
+          if (-not (Test-Path $electron)) { throw 'electron.exe missing after install-app.cmd' }
+          if (-not (Test-Path $venv)) { throw '.venv python missing after install-app.cmd' }
+          $appDir = Join-Path $repo 'apps\tether-app'
+          $proc = Start-Process -FilePath $electron -ArgumentList @($appDir, '--remote-debugging-port=9334', '--no-sandbox') -PassThru
+          Start-Sleep -Seconds 12
+          if ($proc.HasExited) { throw ('APP exited early with code ' + $proc.ExitCode) }
+          $targets = Invoke-RestMethod -Uri 'http://127.0.0.1:9334/json' -TimeoutSec 20
+          $page = $targets | Where-Object { $_.type -eq 'page' } | Select-Object -First 1
+          if (-not $page) { throw 'APP started but no renderer page was exposed' }
+          Write-Host ('clean-windows-app-ok title=' + $page.title + ' url=' + $page.url)
+          Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+          Get-Process electron -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue

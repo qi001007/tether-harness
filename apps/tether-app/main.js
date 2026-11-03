@@ -1,11 +1,11 @@
-const { app, BrowserWindow, ipcMain, shell, session, webFrameMain } = require('electron')
+const { app, BrowserWindow, ipcMain, shell, session, webFrameMain, Tray, Menu, nativeImage } = require('electron')
 const fs = require('node:fs')
 const path = require('node:path')
 const { pathToFileURL } = require('node:url')
 const { Supervisor } = require('./supervisor.js')
 const { waitForSupervisorStart, waitForLocalNodeApi } = require('./startup-readiness.js')
 const { UpdateService } = require('./update-service.js')
-const { rendererDiagnostic, isSurfaceBootFailure, rendererFrameState, rendererRequestScope, rendererSettledFrameState, safeRendererMessage, safeRendererPath } = require('./renderer-diagnostics.js')
+const { rendererDiagnostic, isSurfaceBootFailure, isSurfaceErrorPage, isSurfaceUnstyled, rendererFrameState, rendererFrameStyleState, rendererFrameText, rendererRequestScope, rendererSettledFrameState, safeRendererMessage, safeRendererPath } = require('./renderer-diagnostics.js')
 
 const repoRoot = path.resolve(__dirname, '..', '..')
 const webRoot = path.join(repoRoot, 'packages', 'tether-ui', 'web')
@@ -39,6 +39,7 @@ if (fs.existsSync(hubConfigFile)) {
     }
     if (cfg.accessToken) env.TETHER_ACCESS_TOKEN = cfg.accessToken
     if (cfg.nodeToken) env.TETHER_NODE_TOKEN = cfg.nodeToken
+    if (cfg.userToken) env.TETHER_USER_TOKEN = cfg.userToken
     if (cfg.device) env.TETHER_DEVICE = cfg.device
   } catch (_) { /* invalid local config is ignored */ }
 }
@@ -52,20 +53,95 @@ const row = rowArg ? rowArg.slice('--row='.length) : ''
 const shotDelay = Number(process.env.TETHER_APP_SHOT_DELAY || 2500)
 const shotPanelDelay = Number(process.env.TETHER_APP_SHOT_PANEL_DELAY || 1500)
 
+function dshViewUrlAllowed(value) {
+  try {
+    const parsed = new URL(String(value || ''))
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false
+    const host = parsed.hostname
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1'
+      || /^10\./.test(host) || /^192\.168\./.test(host) || /^172\.(1[6-9]|2\d|3[01])\./.test(host)
+  } catch (_) { return false }
+}
+
 fs.mkdirSync(dataDir, { recursive: true })
 app.setPath('userData', path.join(dataDir, 'electron'))
+app.setName('Tether')
+if (process.platform === 'win32') app.setAppUserModelId('com.tether.app')
+const { enrollmentDecision } = require('./enrollment.js')
 const supervisor = new Supervisor({ repoRoot, dataDir, env })
-const updates = new UpdateService({ repoRoot, dataDir, python: supervisor.python, env, app })
+const updates = new UpdateService({ repoRoot, dataDir, python: supervisor.childPython, env, app })
 let uiOrigin = ''
 
 function log(line) {
   fs.appendFileSync(logFile, new Date().toISOString() + ' ' + line + '\n')
 }
 
+function ensureAppShortcuts() {
+  if (process.platform !== 'win32' || env.TETHER_NO_SHORTCUTS === '1') return
+  const appPath = app.getAppPath()
+  const iconPath = path.join(repoRoot, 'assets', 'tether-app-s.ico')
+  const options = {
+    target: process.execPath,
+    args: '"' + appPath + '"',
+    cwd: appPath,
+    icon: fs.existsSync(iconPath) ? iconPath : process.execPath,
+    iconIndex: 0,
+    description: 'Tether APP'
+  }
+  const links = new Set()
+  try { links.add(path.join(app.getPath('desktop'), 'Tether APP.lnk')) } catch (_) { /* no desktop folder */ }
+  try { links.add(path.join(app.getPath('programs'), 'Tether APP.lnk')) } catch (_) { /* no start menu */ }
+  for (const link of links) {
+    try {
+      if (!shell.writeShortcutLink(link, 'update', options)) shell.writeShortcutLink(link, 'create', options)
+    } catch (error) {
+      log('shortcut update failed path=' + safeRendererPath(link) + ' message=' + safeRendererMessage(error && error.message))
+    }
+  }
+}
+
 let mainWindow = null
 let webServer = null
+let tray = null
+let isQuitting = false
 let rendererConsoleErrors = 0
 let surfaceBootFailureSentAt = 0
+let surfaceStyleFailureSentAt = 0
+
+function showMainWindow() {
+  if (!mainWindow) return
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.show()
+  mainWindow.focus()
+}
+
+function sendWindowState() {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  try {
+    mainWindow.webContents.send('tether:window-state', {
+      maximized: mainWindow.isMaximized(),
+      visible: mainWindow.isVisible()
+    })
+  } catch (_) { /* renderer is between documents */ }
+}
+
+function createTray() {
+  if (tray) return tray
+  const iconPath = path.join(repoRoot, 'assets', 'tether-app-s.ico')
+  const icon = nativeImage.createFromPath(iconPath)
+  if (icon.isEmpty()) log('tray icon failed to load ' + iconPath)
+  tray = new Tray(icon)
+  tray.setToolTip('Tether')
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: '打开 Tether', click: showMainWindow },
+    { type: 'separator' },
+    { label: '退出 Tether', click: () => { isQuitting = true; app.quit() } }
+  ]))
+  tray.on('click', showMainWindow)
+  tray.on('double-click', showMainWindow)
+  log('tray created icon=' + iconPath)
+  return tray
+}
 
 function logRendererNetworkFailure(event, details) {
   const scope = rendererRequestScope(details.url, controller)
@@ -83,6 +159,7 @@ function logRendererNetworkFailure(event, details) {
 }
 
 async function createWindow() {
+  ensureAppShortcuts()
   const startupResult = await waitForSupervisorStart(supervisor.start())
   if (!startupResult.completed) log('services startup wait timed out; loading UI')
   else if (startupResult.error) log('services failed ' + (startupResult.error.stack || startupResult.error))
@@ -128,17 +205,76 @@ async function createWindow() {
     minWidth: 960,
     minHeight: 640,
     title: 'Tether',
-    icon: path.join(repoRoot, 'assets', 'tether.ico'),
+    icon: path.join(repoRoot, 'assets', 'tether-app-s.ico'),
     backgroundColor: '#ffffff',
+    frame: false,
+    thickFrame: true,
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
+      sandbox: true,
+      webviewTag: true
     }
   })
+  mainWindow.on('close', (event) => {
+    if (isQuitting) return
+    event.preventDefault()
+    mainWindow.hide()
+    createTray()
+  })
+  mainWindow.webContents.on('will-attach-webview', (event, webPreferences, params) => {
+    delete webPreferences.preload
+    webPreferences.nodeIntegration = false
+    webPreferences.contextIsolation = true
+    webPreferences.sandbox = true
+    webPreferences.webSecurity = true
+    webPreferences.allowRunningInsecureContent = false
+    if (!dshViewUrlAllowed(params.src)) {
+      event.preventDefault()
+      log('blocked webview attach')
+    }
+  })
+  mainWindow.webContents.on('did-attach-webview', (_event, contents) => {
+    let origin = ''
+    try { origin = new URL(contents.getURL()).origin } catch (_) { /* blocked below */ }
+    contents.setWindowOpenHandler(() => ({ action: 'deny' }))
+    contents.on('will-navigate', (event, target) => {
+      try {
+        if (!origin || new URL(target).origin !== origin) {
+          event.preventDefault()
+          log('blocked webview navigation host=' + new URL(target).host)
+        }
+      } catch (_) { event.preventDefault() }
+    })
+  })
   mainWindow.on('closed', () => { mainWindow = null })
+  mainWindow.on('maximize', sendWindowState)
+  mainWindow.on('unmaximize', sendWindowState)
+  mainWindow.on('show', sendWindowState)
+  mainWindow.webContents.on('did-finish-load', sendWindowState)
+  createTray()
+  mainWindow.webContents.on('will-navigate', (event, navigationUrl) => {
+    let allowed = false
+    try {
+      const parsed = new URL(String(navigationUrl))
+      allowed = parsed.origin === uiOrigin || parsed.href === 'about:blank'
+    } catch (_) { allowed = false }
+    if (!allowed) {
+      event.preventDefault()
+      log('blocked main-frame navigation path=' + safeRendererPath(navigationUrl))
+    }
+  })
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    try {
+      const parsed = new URL(String(url))
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+        void shell.openExternal(parsed.toString()).catch(() => {})
+      }
+    } catch (_) { /* deny malformed and non-http(s) URLs */ }
+    return { action: 'deny' }
+  })
   mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
     if (level >= 3) rendererConsoleErrors += 1
     if (level >= 3) log(rendererDiagnostic(message, sourceId, line))
@@ -162,6 +298,23 @@ async function createWindow() {
       if (!frame) return
       const frameUrl = frame.url
       const framePath = safeRendererPath(frameUrl)
+      if (!isMainFrame) {
+        rendererFrameText(frame).then((text) => {
+          if (!isSurfaceErrorPage(text) || Date.now() - surfaceBootFailureSentAt <= 3000) return
+          surfaceBootFailureSentAt = Date.now()
+          log('renderer surface error page path=' + framePath)
+          mainWindow.webContents.send('tether:surface-boot-failed', { source: frameUrl })
+        }).catch(() => { /* frame may have navigated away */ })
+        const styleTimer = setTimeout(() => {
+          rendererFrameStyleState(frame).then((state) => {
+            if (!isSurfaceUnstyled(state) || Date.now() - surfaceStyleFailureSentAt <= 5000) return
+            surfaceStyleFailureSentAt = Date.now()
+            log('renderer surface style broken path=' + framePath)
+            mainWindow.webContents.send('tether:surface-style-broken', { source: frameUrl })
+          }).catch(() => { /* frame may have navigated away */ })
+        }, 1500)
+        if (typeof styleTimer.unref === 'function') styleTimer.unref()
+      }
       const logFrameState = (label, state) => {
         log('renderer frame ' + label + ' main=' + !!isMainFrame + ' path=' + framePath
           + ' readyState=' + state.readyState + ' childElements=' + Number(state.childElements || 0)
@@ -209,20 +362,23 @@ async function createWindow() {
   }
 }
 
-ipcMain.handle('tether:app-info', () => ({
+function trustedIpc(event) {
+  try {
+    return !!(uiOrigin && event.senderFrame && event.senderFrame === event.sender.mainFrame
+      && new URL(event.senderFrame.url).origin === uiOrigin)
+  } catch (_) { return false }
+}
+function handleTrusted(channel, handler, fallback = () => ({ ok: false, error: 'Untrusted IPC caller' })) {
+  ipcMain.handle(channel, (event, ...args) => trustedIpc(event) ? handler(event, ...args) : fallback())
+}
+handleTrusted('tether:app-info', () => ({
   version: app.getVersion(),
   controller,
   dataDir,
   logFile,
   services: supervisor.snapshot()
-}))
-function trustedUpdateRequest(event) {
-  try {
-    return !!(uiOrigin && event.senderFrame && event.senderFrame === event.sender.mainFrame && new URL(event.senderFrame.url).origin === uiOrigin)
-  } catch (_) { return false }
-}
-ipcMain.handle('tether:reset-surface-auth', async (event, origin) => {
-  if (!trustedUpdateRequest(event)) return { ok: false, error: 'Untrusted IPC caller' }
+}), () => ({}))
+handleTrusted('tether:reset-surface-auth', async (_event, origin) => {
   let parsed
   try { parsed = new URL(String(origin)) } catch (_) { return { ok: false } }
   const loopback = parsed.protocol === 'http:' && (parsed.hostname === '127.0.0.1' || parsed.hostname === '[::1]')
@@ -234,33 +390,119 @@ ipcMain.handle('tether:reset-surface-auth', async (event, origin) => {
     return { ok: false, error: String(error && error.message || error) }
   }
 })
-ipcMain.handle('tether:updates-status', (event) => trustedUpdateRequest(event) ? updates.status() : { ok: false, error: 'Untrusted IPC caller' })
-ipcMain.handle('tether:updates-check', (event) => trustedUpdateRequest(event) ? updates.check() : { ok: false, error: 'Untrusted IPC caller' })
-ipcMain.handle('tether:updates-prepare', (event) => trustedUpdateRequest(event) ? updates.prepare() : { ok: false, error: 'Untrusted IPC caller' })
-ipcMain.handle('tether:updates-apply', async (event, preparedId) => {
-  if (!trustedUpdateRequest(event)) return { ok: false, error: 'Untrusted IPC caller' }
+function readHubConfig() {
+  try { return JSON.parse(fs.readFileSync(hubConfigFile, 'utf8')) || {} } catch (_) { return {} }
+}
+const deviceTokenFile = path.join(dataDir, 'device-token.json')
+function writeHubConfig(next) {
+  if (fs.existsSync(hubConfigFile)) fs.copyFileSync(hubConfigFile, hubConfigFile + '.bak-' + Date.now())
+  fs.writeFileSync(hubConfigFile + '.tmp', JSON.stringify(next, null, 2) + '\n')
+  fs.renameSync(hubConfigFile + '.tmp', hubConfigFile)
+}
+function removeDeviceToken() {
+  try { fs.rmSync(deviceTokenFile, { force: true }) } catch (_) { /* missing token is fine */ }
+}
+async function applyEnrollment(config, deviceToken, userToken) {
+  try {
+    writeHubConfig({ ...config, nodeToken: deviceToken || '', userToken: userToken || '' })
+  } catch (_) {
+    return { ok: false, error: 'could not save the device credential' }
+  }
+  removeDeviceToken()
+  env.TETHER_NODE_TOKEN = deviceToken || ''
+  env.TETHER_USER_TOKEN = userToken || ''
+  supervisor.nodeToken = deviceToken || ''
+  supervisor.userToken = userToken || ''
+  try {
+    await supervisor.restart()
+  } catch (_) {
+    return { ok: false, error: 'credential saved but node restart failed' }
+  }
+  return { ok: true, device_id: String(config.device || env.TETHER_DEVICE || '') }
+}
+handleTrusted('tether:enroll-device', async (_event, userToken) => {
+  if (typeof userToken !== 'string' || !userToken || userToken.length > 4096) {
+    return { ok: false, error: 'invalid session token' }
+  }
+  const config = readHubConfig()
+  const hubUrl = String(config.url || env.TETHER_CONTROLLER_URL || '').replace(/\/+$/, '')
+  const deviceId = String(config.device || env.TETHER_DEVICE || '')
+  if (!hubUrl || !deviceId) return { ok: false, error: 'Hub or device is not configured' }
+  let response
+  try {
+    response = await fetch(hubUrl + '/api/devices/' + encodeURIComponent(deviceId) + '/enroll', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + userToken, 'Content-Type': 'application/json' },
+      body: '{}'
+    })
+  } catch (_) {
+    return { ok: false, error: 'Hub unreachable' }
+  }
+  let data = {}
+  try { data = await response.json() } catch (_) { /* error bodies may be empty */ }
+  const decision = enrollmentDecision(response.ok, data)
+  if (decision.mode === 'device') {
+    return applyEnrollment(config, decision.token, '')
+  }
+  if (decision.mode === 'refuse') {
+    return { ok: false, code: decision.code, error: decision.error }
+  }
+  if (decision.mode === 'account') {
+    const result = await applyEnrollment(config, '', userToken)
+    if (result.ok) result.mode = 'account'
+    return result
+  }
+  return { ok: false, error: decision.error || ('HTTP ' + response.status), code: decision.code }
+}, () => ({ ok: false, error: 'Untrusted IPC caller' }))
+handleTrusted('tether:updates-status', () => updates.status())
+handleTrusted('tether:updates-check', () => updates.check())
+handleTrusted('tether:updates-prepare', () => updates.prepare())
+handleTrusted('tether:updates-apply', async (_event, preparedId) => {
   const result = await updates.apply(preparedId)
   setTimeout(() => app.quit(), 150)
   return result
 })
-ipcMain.handle('tether:services', () => supervisor.snapshot())
-ipcMain.handle('tether:probe-services', () => supervisor.probe())
-ipcMain.handle('tether:start-services', () => supervisor.start())
-ipcMain.handle('tether:stop-services', () => supervisor.stop())
-ipcMain.handle('tether:restart-services', () => supervisor.restart())
-ipcMain.handle('tether:open-logs', () => shell.openPath(supervisor.logsDir))
-ipcMain.handle('tether:open-data', () => shell.openPath(dataDir))
-ipcMain.handle('tether:open-external', (_event, url) => {
-  if (typeof url === 'string' && /^https?:\/\//.test(url)) return shell.openExternal(url)
+handleTrusted('tether:window-control', (_event, action) => {
+  if (!mainWindow || mainWindow.isDestroyed()) return { ok: false }
+  if (action === 'minimize') {
+    mainWindow.minimize()
+    return { ok: true, maximized: mainWindow.isMaximized(), visible: mainWindow.isVisible() }
+  }
+  if (action === 'toggle-maximize') {
+    if (mainWindow.isMaximized()) mainWindow.unmaximize()
+    else mainWindow.maximize()
+    return { ok: true, maximized: mainWindow.isMaximized(), visible: mainWindow.isVisible() }
+  }
+  if (action === 'close') {
+    mainWindow.close()
+    return { ok: true, visible: mainWindow.isVisible() }
+  }
+  if (action === 'state') {
+    return { ok: true, maximized: mainWindow.isMaximized(), visible: mainWindow.isVisible() }
+  }
+  return { ok: false }
+}, () => ({ ok: false }))
+handleTrusted('tether:services', () => supervisor.snapshot())
+handleTrusted('tether:probe-services', () => supervisor.probe())
+handleTrusted('tether:start-services', () => supervisor.start())
+handleTrusted('tether:stop-services', () => supervisor.stop())
+handleTrusted('tether:restart-services', () => supervisor.restart())
+handleTrusted('tether:open-logs', () => shell.openPath(supervisor.logsDir))
+handleTrusted('tether:open-data', () => shell.openPath(dataDir))
+handleTrusted('tether:open-external', (_event, url) => {
+  try {
+    const parsed = new URL(String(url))
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') return shell.openExternal(parsed.toString())
+  } catch (_) { /* reject malformed URLs */ }
   return false
-})
+}, () => false)
 
 const locked = app.requestSingleInstanceLock()
 if (!locked) {
   app.quit()
 } else {
   app.on('second-instance', () => {
-    if (mainWindow) { if (mainWindow.isMinimized()) mainWindow.restore(); mainWindow.focus() }
+    showMainWindow()
   })
   app.whenReady().then(createWindow).catch((error) => {
     log('start failed ' + (error.stack || error))
@@ -268,8 +510,13 @@ if (!locked) {
   })
 }
 
-app.on('window-all-closed', () => app.quit())
+app.on('activate', () => { showMainWindow() })
+app.on('window-all-closed', () => {
+  if (isQuitting || !tray) app.quit()
+})
 app.on('before-quit', () => {
+  isQuitting = true
   supervisor.stopSync()
   if (webServer) webServer.close()
+  if (tray) { tray.destroy(); tray = null }
 })

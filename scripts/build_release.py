@@ -61,7 +61,8 @@ def add_tether_runtime(archive: zipfile.ZipFile, prefix: str) -> None:
         add_file(archive, rel, prefix)
     node = ROOT / "tether" / "node"
     for path in node.rglob("*"):
-        if path.is_file() and not path.is_symlink() and path.suffix in {".py", ".html"}:
+        if path.is_file() and not path.is_symlink() and (
+                path.suffix in {".py", ".html"} or "bin" in path.relative_to(node).parts):
             rel = path.relative_to(ROOT).as_posix()
             if "__pycache__" not in path.parts:
                 archive.write(path, f"{prefix}/{rel}")
@@ -160,11 +161,11 @@ or start a server.
         add_tree(archive, ROOT / "packages" / "tether-ui", app_prefix)
         add_tether_runtime(archive, app_prefix)
         add_tree(archive, ROOT / "assets", app_prefix)
-        for rel in ("pyproject.toml", ".env.example", "version.json", "desktop/install-app.ps1"):
+        for rel in ("pyproject.toml", ".env.example", "version.json", "desktop/install-app.ps1", "desktop/install-app.cmd"):
             add_file(archive, rel, app_prefix)
         archive.writestr(f"{app_prefix}/README-INSTALL.md", """# Tether APP (standalone)
 
-Run `apps\\tether-app\\Tether-App.cmd` (or `desktop\\install-app.ps1` for a shortcut).
+Run `apps\\tether-app\\Tether-App.vbs` (or `desktop\\install-app.ps1` for a shortcut).
 The launcher creates `.venv`, installs Python deps once, installs Electron once.
 
 This archive contains only the APP. It does not install the DSH plugin or a Hub.
@@ -180,8 +181,8 @@ tether-harness-server component is installed. Otherwise, configure a Hub or inst
     node = OUT / f"tether-node-{VERSION}.zip"
     with zipfile.ZipFile(node, "w", zipfile.ZIP_DEFLATED) as archive:
         add_tether_runtime(archive, node_prefix)
-        for rel in ("laptop/tether-node.ps1", "laptop/bootstrap-node.ps1", "pyproject.toml",
-                    "version.json"):
+        for rel in ("laptop/tether-node.ps1", "laptop/bootstrap-node.ps1",
+                    "laptop/install-node.sh", "pyproject.toml", "version.json"):
             add_file(archive, rel, node_prefix)
         archive.writestr(f"{node_prefix}/README-INSTALL.md", """# Tether Node (standalone)
 
@@ -190,6 +191,8 @@ Install the Python dependencies listed in `pyproject.toml`, then run
 local `.env` containing `TETHER_CONTROLLER` and `TETHER_NODE_TOKEN`. Configure
 the Hub WebSocket URL to end in `/ws/node`. Existing `.env` files are kept;
 missing configuration is reported without starting against placeholders.
+On Linux or macOS run `bash laptop/install-node.sh --controller <ws-url> --token <token>`
+(the script creates its own venv and launcher).
 Device name defaults to this computer's hostname.
 
 The Node is a headless target-device agent: it has no chat UI and is controlled

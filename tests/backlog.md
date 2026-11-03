@@ -1,4 +1,9 @@
 # 修改记录
+- 2026-10-31：新增 `test_app_enrollment.mjs` 覆盖设备令牌/账号注册/他人设备拒绝/普通错误；全量 216 mjs。
+- 2026-10-31：新增 18892 代理“显式用户令牌优先、缺省注入 owner”回归；全量 212 mjs。
+- 2026-10-31：新增分块传输服务端用例（续传、冲突、偏移错误、取消、审计）与 `test_transfer_engine.mjs`（顺序分块、续传、冲突、取消、源变化、空文件）；全量 211 mjs / 135 pytest。
+- 2026-10-31：附件选择器新增面包屑/搜索/排序回归，`test_dsh_target_attachments.mjs` 13 passed；全量 205 mjs / 6 cjs / 133 pytest（4 skipped）。
+- 2026-10-31：新增 `test_electron_security.mjs`（导航拦截、新窗口拒绝、IPC senderFrame/origin、iframe sandbox）和 `test_web_local_api.mjs` 的代理鉴权/同源/路径/畸形 URL 回归。全量 204 mjs / 6 cjs / 133 pytest（4 skipped）通过。
 - 2026-10-30：修正 `test_native_surface_client` 对 VM realm 返回对象的断言，按键和值验证注入 sessionId，保留 Proxy 对未注入 `ctx.fileDrag` 访问抛错的回归。
 - 2026-10-30：新增 DSH attachment wrapper 行为回归：Composer 隐藏 file input click 被路由到目标会话文件列表，点击远端文件读回原始字节并调用 `onAddFiles(File[])`；本机上传按钮保留原生文件选择器行为；覆盖无会话回退、多 Composer/session 隔离、无关 input 不拦截和重复 busy 请求去重。
 - 2026-10-30：新增 NativeSurface 组件 effect harness，覆盖设备请求取消、隐藏轮询中止/恢复、同来源切面板保留 iframe、iframe onLoad watchdog 清理以及一次错误重试后停止；更新 NativeSurface 状态与 effect contract 断言。
@@ -106,3 +111,30 @@
 - 2026-10-30：DSH 附件回归覆盖 session-maybe 注入、新草稿单击创建空会话后自动续开 picker、跨会话使用新 onAddFiles 回调，以及无上下文不打开本机 file dialog。
 
 - 2026-10-30：native surface 插件回归用 Cordis Proxy 对未声明的 fileDrag 属性访问抛错；确认 slot 注册只注入 sessionId，未访问未注入 service。
+
+- 2026-10-31：0.2.45 覆盖 descriptor pid 失效时的 `dsh-desktop-host` 扫描（排除提到标记的 shell），以及 Hub 等待 restart_required、`restart_timeout` 报错和已更新版本的重试重启。
+- 2026-10-31：0.2.46 用两个乱序完成的强制检查复现共享清单 Future 二次完成，锁定只有 leader 能完成 flight。
+- 2026-11-01：共享 UI 契约新增“慢加载提示只在 `document-loading` 存在”和“`/app-context` 必须走 `BASE` 而非 `ACTIVE_BASE`”，防止提示残留与跨源 Hub 请求回归。
+- 2026-11-02：0.2.54 契约改为标题“资源管理器”、原生加号唯一入口、转移页完整操作/冲突、共用 `file-cache.js`、`SurfaceDeck` 常驻；Electron QA 隔离壳补拷 `startup-readiness.js`/`renderer-diagnostics.js`/`enrollment.js` 并加独立 `--user-data-dir`（当前仍被登录态挡在更新中心外）。
+- 2026-11-02：0.2.55 契约新增：`SurfaceDeck` 固定挂载顺序、预加载 frame 保持真实尺寸、非聊天页 deck 绝对定位；选择器无 22px 状态条、错误浮层可重试/关闭、加载叠层 `tether-dir-loading`；设置页含 `extraSections`、头像上传和 `role: 'switch'`，不再含解释性文案与重复入口。全量 mjs 222 / cjs 6 / pytest 142+1 通过。
+- 2026-11-02：0.2.56 补叠层断言：`.tether-dir-loading` 必须有内联 `position:absolute; inset:0; z-index:4` 和 SVG `animateTransform`，不能只靠可能不存在的全局 CSS；否则 DSH 内嵌页会退回 static 并落到底部。
+- 2026-11-02：0.2.57 新增选择器树统一控件、`revealTree`、文件夹“确定”递归上传、设备分组标签、本地拖入写入 `D:\TetherDrop` 的测试；native surface 覆盖 `/tether-device-fs/write_chunk`。全量 mjs 224 / cjs 6 / pytest 142+1。
+- 2026-11-02：0.2.58 断言转移页每栏传入 `deviceName` 并在设备切换时清空 `roots`/`entries`；防止同名 `default-workspace`/`Tether 工作目录` 被误读成共享树。
+- 2026-11-02：0.2.59 新增显式边契约：画布只画 `edges`、节点详情/连接管理/画布连边共用 `/api/edges`；本地代理允许 `/api/edges`；活动栏选中态断言改为蓝色底/蓝图标。全量 mjs 225 / cjs 6 / pytest 142+1。
+- 2026-11-02：0.2.60 新增账户页契约：`CROP_VIEW=240`、`AVATAR_OUTPUT=256`、裁剪指针/缩放/保存、8 MB 图片上限、昵称行内编辑、密码三栏与 `passwordRules` 行内校验；表单无效提交不得发请求。全量 mjs 225 / cjs 6 / pytest 142+1。
+- 2026-11-02：0.2.61 新增权限抽屉契约：`auditCacheRef`/`permissionInflightRef`、设备切换并行预取策略与审计、`openSettings` 先套缓存再 `Promise.all` 刷新、无缓存时“正在读取审计…”。全量 mjs 226 / cjs 6 / pytest 142+1。
+- 2026-11-02：0.2.62 新增设置更新页（边过滤、下载图标、本机/远程更新）、DSH 状态/启动/安装与 surface 覆盖层、`pythonw.exe`/隐藏启动器契约；新增 `test_dsh_desktop.py`，`dsh_restart` 增加清 `DSH_HOME` 断言。全量 mjs 228 / cjs 6 / pytest 147+1。
+- 2026-11-02：0.2.63 新增登录契约：登录页不再有服务器地址输入、默认服务器常量、DSH `host.exitPanel`/“返回 DSH”、双栏视觉类名。全量 mjs 229 / cjs 6 / pytest 147+1。
+- 2026-11-02：0.2.64 新增互联图契约：`tether.network.positions.v2`、两远端 `[210,330]`、无 `animate()`、卸载保存、节点附近隐藏断开按钮、>12 台圆点。全量 mjs 230 / cjs 6 / pytest 147+1。
+- 2026-11-02：0.2.65 新增详情浮层契约：`position:absolute; top/right/bottom:8px; width:300`、画布容器 `position:relative`、根样式不再 `flex:0 0 auto`。全量 mjs 231 / cjs 6 / pytest 147+1。
+- 2026-11-02：0.2.66 新增力导向/接力契约：`function animate()` 必须存在、`tether.network.positions.v3` 存 `vx/vy`、布局读取保存速度、远端无中心拉力。全量 mjs 231 / cjs 6 / pytest 147+1。
+- 2026-11-02：0.2.67 新增启动无窗口契约：`UpdateService` 使用 `supervisor.childPython`，serverCheck 使用 `childPython`，禁止启动更新检查再走 `python.exe`。全量 mjs 231 / cjs 6 / pytest 147+1。
+- 2026-11-02：0.2.68 新增更新页版式契约：不再有 `versionText`/` → `；组件胶囊 `chips`、行 `borderTop`、固定 28px 操作位；有/无更新行尺寸一致。全量 mjs 231 / cjs 6 / pytest 147+1。
+- 2026-11-03：0.2.90 热重载契约：`_runtime_loaded` 用 descriptor 的 `plugin_version` 清 `restart_required`；`apply` 以 8 秒宽限+期望版本安排重启助手，助手握手成功即退出；重载桥只启用、禁止停用（DSH 持久化 `enabled:false`），客户端 watcher 2 秒轮询并去重。新增 surface/助手/桥测试；全量 mjs 243 / cjs 8 / pytest 160+4 skipped。
+- 2026-11-03：0.2.91 新增 Windows 8.3 短路径回归（`_file_dependency_path` 展开短名）；`_hot_reload_capable` 只对带 `plugin_version` 的 surface 给宽限。全量 mjs 243 / cjs 8 / pytest 161+5 skipped。
+- 2026-11-03：0.2.93 新增 Hub 更新镜像契约（`apply` 写 surface state 的 `applied-plugin.json`）与宿主扫描按 `dsh_home` 过滤；删掉禁用→启用的两条桥测试。全量 mjs 241 / cjs 8 / pytest 162+5 skipped。
+- 2026-11-03：新增 `test_app_gateway.py` 4 条：HTTP 转发、拒绝非回环目标、拒绝白名单外客户端、`--app` 解析；全量 pytest 166+5 skipped。
+- 2026-11-04：新增 `test_posix_paths.mjs`：POSIX/Windows `joinPath`、面包屑、根目录上级；`test_transfer_engine.mjs` 增加“下一块读取与当前块写入重叠”断言。与 `test_file_tree.mjs` 合计 22 条通过。
+- 2026-11-04：新增 `test_croc_transfer.py` 5 条：send 的 `--relay/--code/--transfers/--no-local/--transport relay` 参数、receive 的 code 只走 `CROC_SECRET`、缺 relay/短 code/缺源文件拒绝、取消状态；真实 croc 11.6.3 在本机 relay 上 16 MiB 收发成功，仅证明引擎可用，不作为链路速度验收。
+- 2026-11-04：新增 `test_fs_croc.py` 5 条：send 校验源路径、receive+finish 移出暂存、未完成/无任务拒绝、cancel 清暂存、缺 croc 报错；与 adapter 合计 10 条通过。真实端到端 8 MiB 经 Node fs API 完成，SHA-256 一致；`--ignore-stdin` 必须有，否则管道 stdin 会被 croc 当发送源。
+- 2026-11-04：`test_transfer_engine.mjs` 增加 `transferFileCroc` 编排断言：一次性 `tether-` code、send→receive→status→finish 顺序、finish 改名；mjs 23 条通过。

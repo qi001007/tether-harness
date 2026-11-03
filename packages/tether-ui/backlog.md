@@ -1,4 +1,16 @@
 # tether-ui backlog
+- 2026-11-03：顶栏增加 `TetherMark` 网络标记和 `host.windowControls` 自绘窗口控制（仅 APP host）；顶栏整体 `-webkit-app-region: drag`，按钮 `no-drag`。连接按钮移入右侧组，避免和 `marginLeft:auto` 抢空间；`TetherMark` 图标与 `assets/tether-app-s.ico` 同构。
+- 2026-11-02：登录页左侧改为 `LoginNetwork` 惯性 SVG 动效（直线边、指针推斥、减少动态时静止）；登录/邀请码注册是同一卡片内两个绝对定位视图（固定舞台 344 px、opacity+translateX），不要再条件展开表单；底部“返回 DSH”已删，退出只保留右上角 ×。
+- 2026-11-02：账户昵称/头像改由 Hub 账户保存：`/api/state.user` 下发 `display_name`/`avatar`，保存走 `POST /api/auth/profile`（乐观更新、失败回滚、pending 字段不被轮询覆盖）。账户页默认收起，昵称/密码编辑用绝对定位弹窗；设置面板在收起/昵称弹窗/密码弹窗三态均为 760×560，不要再把编辑表单内联展开。
+- 2026-10-31：UI 增加 `/api/events` SSE 订阅，device/session 事件强制 `loadState(true)`，普通轮询仍尊重 `document.hidden`；真机暂停 Node 后设备卡 4.47 秒离线、恢复 3.94 秒回在线。
+- 2026-10-31：新增无 hook 的共享 `TargetFileExplorer`（root 分组/面包屑/搜索/排序/列表/空错误态），DSH 附件选择器与文件转移页共用；全量 Explorer 仍保留右键/拖拽/悬停的富交互，未强行替换。
+- 2026-10-31：0.2.41 登录后经 APP IPC 登记设备；18892 代理保留显式用户 Authorization；极简更新 UI 视觉验收（蓝色 ↓ + 白色 blur 遮罩 42%）。
+- 2026-10-31：传输块提到 1 MiB；2 MB/34.4 秒、10 MB 目标已生成，吞吐约 60–70 KB/s，1 GB 需 overlay/direct path，不能靠继续加大块解决。
+- 2026-10-31：互联页设备右键菜单新增“重启 Node”（确认 + Hub 端点）；实测离线 0.80 秒、重连 2.99 秒。
+- 2026-10-31：新增“文件转移”页（双设备/双目录、源文件选择、覆盖策略、进度/取消/重试）与 `transfer.js` 分块续传引擎；真实浏览器已渲染，完整目标写入待 0.2.37 安装后复验。
+- 2026-10-31：DSH 目标电脑附件选择器增加可点击面包屑、当前目录搜索、名称/修改日期/大小排序；仍是独立 UI，未抽成与 Explorer 共享的 `TargetFileExplorer`。定向 13 passed。
+- 2026-10-31：0.2.35 随客户端发布：极简更新按钮/白雾遮罩保持；服务端只在摘要返回进行中的 job，完成后刷新页面不再常驻遮罩；surface iframe sandbox 与 18892 代理鉴权一并生效。
+- 2026-10-31：本地 18892 代理加入每进程随机会话 cookie（HttpOnly/SameSite=Strict）、同源校验、写请求 Origin 要求、API 路径白名单和 realpath 静态边界；畸形 URL 返回 400 不崩进程。surface iframe 增加 sandbox（无 top-navigation）。真机代理验收：无 cookie 401、跨站写 403、非白名单 API 403、畸形路径 400。
 - 2026-10-30：连接抽屉的登录/修改密码/邀请码注册/配对码兑换共用 `connection-panel.js`，APP 与 DSH 插件只经 props 传默认地址、默认 token、本机设备与 `onConfigured`；自助改密必须带当前 Bearer token，成功后静默替换新 token；凭据只存 `localStorage['tether.hub']`，不写进 URL、不回显 token。新增凭据入口时保持这个单一来源。
 - 2026-10-28：notice/工作区错误改为右上角绝对定位浮层（`renderToasts`），带 `×` 关闭与“重试工作区”，不再插入文档流挤压布局。不要再把错误条放回 header 与 main 之间。
 - 2026-10-28：目录/工作区/驱动器/策略按设备缓存；`loadDir` 先显示缓存再校验并把结果回填树缓存；悬停/单点预取目录与文本/图片/PDF 预览；预览不再无条件重载父目录；`fs/list` 并发去重。目录/预览请求带 AbortController+序号，提供“停止加载”。
@@ -30,3 +42,39 @@
 - 2026-10-28：用锁定的 esbuild 0.25.12 从 `web/main.js` 重建 `web/dist/app.js`，提交生成物以保证拉取即用；共享源码字节契约复核通过。
 - 2026-10-28：更新中心刷新按钮绑定完整请求状态并显示旋转图标；刷新项不再并发重入。
 - 2026-10-28：旋转动画改到 `.tether-spin > svg` 自身（`transform-box: view-box`），外壳不再固定 `1em`——图标 14–18px 时旧写法让图标溢出旋转盒、看起来不绕圆心。更新错误补充 405/501/401/403 短句；本机插件检查等待 22s 以覆盖子进程 20s 上限。
+- 2026-11-01：连接、登录、设置三者分离：顶栏“连接”只做状态灯/地址/刷新；无本地凭据时启动渲染全屏登录页（登录后自动登记），账号与改密/退出只在设置页（账号/连接/本机设备/更新/文件权限/关于）。设备配对、令牌、权限页 Hub 配置一律删除；滚动条全局 6px 透明 hover 显示；工作区右下角常驻重载按钮。
+- 2026-11-01：转移页不得再复用完整 Explorer 外观：来源/目标各自带蓝/绿顶边、徽标、设备选择、紧凑路径栏与交换按钮；活动栏转移图标用 `forward`，与 `files` 区分。
+- 2026-11-01：“加载较慢”只能在 `document-loading` 显示，`document-loaded` 必须立即复位；DSH 可能 1 s 内已可交互，残留提示会被误读成加载失败。`/app-context` 属于宿主页面自身源，APP 不得把它发到跨源 Hub。
+- 2026-11-01：盾牌只表示文件权限/审计，设置用齿轮；账号区（头像+邮箱+所有者+齿轮）放资源管理器底栏，活动栏底部保留权限与头像入口；权限抽屉与设置页同一时刻只能开一个。
+- 2026-11-01：DSH 插件挂在 composer 外侧，不能用 `containerRef` 向上找隐藏 file input；按文档级唯一的 `input[type=file][hidden]` 拦截，原生加号才会走目标选择器而不是本机对话框。选择器根列表不显示完整路径，工具栏用图标。
+- 2026-11-01：转移页不得再自写一套 Browser：两栏共用 `TargetFileExplorer`（紧凑模式、多选、拖拽、右键），同一节点在另一侧禁用；Ctrl+C/V 与拖拽是真机验证过的跨机路径，Ctrl+X 复制后走 `.tether-trash` 删除。选择器树的根节点必须带 `dir:true`，否则会被当成文件。
+- 2026-11-02：目录列表只走 `file-cache.js`（20 s / 240 目录 / 并发去重），资源管理器、Composer 选择器、互传两栏共用键；任何新建/重命名/删除/传输后先失效再刷新。选择器的标题/副标题定高；加载只用绝对定位 `tether-dir-loading` 叠层，不得单独状态条或挤压列表。设备工作区用 `SurfaceDeck` 常驻最近 3 台并用 `preload` 首次装载，不再 45 s 后丢弃预热 frame；设置里的 `tether.keepSurfaces` 可关闭。
+- 2026-11-02：`SurfaceDeck` 的挂载顺序必须由 `mountedRef` 固定，切换设备只改 `visibility/z-index`；任何会重排 iframe DOM 的写法都会让 iframe 用过期 ticket 重载成白屏。非聊天页 deck 用绝对定位 + `visibility:hidden`，预加载 frame 必须保持真实尺寸。设置页分区由 `extraSections` 扩展，头像存 `tether.accountAvatar`，不写解释性长句。
+- 2026-11-02：`TargetFileExplorer` 的加载叠层不能只靠 `tether-dir-loading` 全局 CSS——DSH 内嵌页不加载共享 UI 样式，必须内联 `position:absolute; inset:0; z-index:4`，转圈用 SVG `animateTransform` 自包含；否则会退回 static 20px 落到底部。
+- 2026-11-02：选择器树行与箭头必须是一个按钮：点文件夹同时展开并导航右侧；右侧进入目录用 `revealTree` 展开祖先。树数据由同一次 `enter` 列表回填，不能再用单独的 `toggleTree` 目录请求。文件夹“确定”用 `readFolder` 递归读取；本地拖入用 composer `drop` 捕获，先 `onAddFiles` 上传，再写目标 `D:\TetherDrop`（不回退 C）。
+- 2026-11-02：文件转移页两栏根树必须显示各自设备名（`工作区 · 设备` / `此电脑 · 设备`）；切换设备先清空 `roots`/`entries`，不能让上一台设备的树在新请求完成前继续显示。
+- 2026-11-02：互联画布只画显式边，不再画本机到所有节点的隐式线；边由 Hub `/api/edges` 持久化，画布线中点断开、连接模式两次点选建边；节点详情与连接管理表格写同一套边。活动栏选中态用蓝色 16% 底 + 蓝色图标，不能再退回浅灰底。
+- 2026-11-02：账户页按成熟产品重做：选图后必须先进入圆形 240 px 裁剪框（拖动/1–3 倍缩放/复位），输出 256×256 JPEG；昵称行内编辑；密码三栏行内校验、显示切换、`autocomplete`、Caps Lock 提示。头像改动同步活动栏，验后恢复原值。
+- 2026-11-02：权限抽屉必须先用 `policyCacheRef`/`auditCacheRef` 同步渲染，再后台并行刷新；切设备时预取策略与审计，并发请求由 `permissionInflightRef` 去重。禁止再在 `openSettings` 里串行等待两次设备往返，否则会退回数秒空白。
+- 2026-11-02：设置新增“更新”分区：本机行按入口显示 APP+Node/插件+Node，其他设备只显示与当前设备有 `edges` 连接的节点；版本行 + 蓝色圆形下载按钮 + 刷新，断开边即移除。DSH 未运行/未安装时 surface 覆盖层给“启动 DSH/安装 DSH”，设置→本机设备显示 DSH 版本/状态。
+- 2026-11-02：登录页不再提供服务器地址输入；默认用 `defaultUrl` 或生产 Hub。DSH 插件必须通过 `host.exitPanel` 给登录页“返回 DSH”/× 出口，登录根用 `absolute` 而不是 `fixed`，避免连 DSH 侧栏一起盖住。登录页视觉为左品牌网络图 + 右表单。
+- 2026-11-02：互联图初始布局必须按远端数生成环形/三角，两远端用 210°/330°，不能退化成一条竖线；节点位置按本机设备存 `tether.network.positions.v2`，拖动结束/卸载保存，重进恢复；不要再用持续力导向把拖过的节点拉回。拖节点不得 `onSelect` 切换当前设备，只有点击不拖动才选中并打开详情。
+- 2026-11-02：节点详情必须是画布上的绝对浮层（`top/right/bottom:8px; width:300; z-index:8`，圆角+阴影），不能再作为 flex 列挤压画布；互联页画布容器保持 `position:relative` 作为定位上下文。
+- 2026-11-02：互联图必须保留力导向流动（`animate`/`kick`）；初始环形/三角只是起点，不能为了持久化把动画删掉。节点位置+速度存 `tether.network.positions.v3`，卸载/拖动结束保存，重进从 `x/y/vx/vy` 继续；远端不加中心拉力，否则流动会塌回竖线。
+- 2026-11-02：更新页必须是分组设置列表：顶部“更新”标题+刷新，本机/其他设备各一张列表卡，版本用组件胶囊（无斜杠/箭头），右侧固定 28px 操作位；有新版本只出现蓝色下载按钮，不能改文字或行尺寸。
+- 2026-11-03：`reloadLocalPluginSurface` 只允许 `setPluginEnabled(entry,true)`，禁止为了强制重启而先停用：DSH 会把 `enabled:false` 持久化到 profile，真机验证中出现过启用失败后 surface 一直停用。只改客户端文件的版本更新交给 8 秒宽限后的整宿主重启。`createDshPluginHotReloadWatch` 是页面态触发器，2 秒轮询、20 秒跨页锁。
+- 2026-11-03：新增“终端”页（`terminal-page.js`，活动栏第 4 项）：设备选择/启动/停止/200 ms 轮询/Enter 提交；真机 APP 选 LAPTOP-01 执行 `Get-Random`、`echo enter-ok` 各只显示一行。轮询必须带 `inFlight` 重入闸，否则 200 ms 间隔 + 公网 RTT 会让并发 tick 重复追加同一块；`web/dist/app.js` 由 `build-web.mjs` 单独构建，改 `src/` 后两份生成物都要重建。
+- 2026-11-03：新增“远程应用”页（`apps-page.js`，活动栏第 2 项）：设备选择/刷新/卡片/内嵌 iframe。数据来自目标 Node 的 `apps.json` 白名单（`fs/apps_list`），只转发回环 HTTP；DSH 不进这个列表，继续走原生工作区的认证 surface（通用网关拿不到 DSH 本地票据）。
+- 2026-11-03：新增“Agents”页（`agents-page.js`，活动栏第 3 项）：检测本机 ACP Harness、开始会话、流式消息、权限请求卡片、停止。消息必须按 chunk 拼接后再换行；`agent_message_chunk` 不能一块一行。`acp_start` 是异步握手：输入框要等 `ready` 事件后再启用，轮询带 `inFlight` 闸。
+- 2026-11-03：终端不再是独立页面：`terminal-dock.js` 停靠在资源管理器底部（可拖高、可关），目录右键/工具栏“在终端中打开”把 cwd 设为当前目录；shell 下拉由目标机 `terminal_shells` 决定。登录页在 APP 必须有 ×（关闭到托盘），DSH 用 `embedded` 相对布局保留宿主侧栏。Agents 页用 `session/set_model` 切换模型，命令 chip 只填输入框不自动发送。
+- 2026-11-03：Tether 终端只在 APP/WebUI 出现；`host.kind === 'dsh'` 时隐藏终端入口、右键项和 dock，避免和 DSH 原生终端混淆。不要修改 DSH 自身的终端页面或宿主源码。
+- 2026-11-03：Agents 页支持多会话标签（`+` 新开、标签切换、单标签关闭、状态点）。每标签的 output/ready/model/commands/pending/since 缓存在 `tabCache`；切换时保存当前、加载目标，非活动会话仍在服务端跑。切设备/卸载必须停掉全部标签，不能只停当前。
+- 2026-11-03：终端交互必须走 xterm + 目标机 PTY，不能再用“输出预 + 输入框 + 发送按钮”冒充终端。shell 下拉不能用原生 `<select>`（Windows 弹层是系统白底/蓝高亮，无法跟随主题），改为 dock 内自绘 `[role=listbox]`（`C.layer1`/`C.shadow`，选中 `C.blue` + ✓，zIndex 130）；终端 viewport 背景必须透明，否则 xterm 默认黑色会露出底部黑条。打开右键/设备菜单时清 `hoverTip` 并把菜单提到 120，避免悬浮卡盖住菜单。
+- 2026-11-04：传输分片 4 MB；100 MB 真机直传 52 s→**42.46 s（1.92→2.355 MiB/s）**。瓶颈是 EasyTier 路径（188 ms，校园网隔离无法局域网直连），不是 base64/HTTP 层；再加单请求流式反而更慢。
+- 2026-11-04：终端 cwd 必须按设备归属：切换设备时清空 `terminalCwd`，服务端 cwd 失效时回退到 workspace；否则 Linux 路径会被带进 Windows 终端并报 `terminal cwd is not a directory`。终端头部显示运行身份（root/普通用户）。
+- 2026-11-04：Linux 文件管理器不能只列盘符；`drives` 在 POSIX 返回 `/`、`/home`、`/srv`、`/var/log`，否则“此电脑”为空、看不到服务器全部文件。
+- 2026-11-04：文件界面按原生资源管理器补细节：`TargetFileExplorer` 与资源管理器支持空白拖动框选（Ctrl 追加、拖动不选文字）、空白右键菜单（新建/粘贴/复制当前路径/刷新）、文件菜单“复制路径”且不再出现新建项；转移页完成后 4 s 自动收起进度，未选中时不显示转移按钮；选择器无自定义菜单时内置复制路径。APP 真鼠标验证：互传框选 5 项、资源管理器框选 2 项，20 B 传输底栏 5 s 复位。
+- 2026-11-04：Linux 文件树“加载失败”的根因不是权限，而是 `app.js` 的 `joinPath` 永远拼反斜杠：`/srv` 变成 `\srv`，被 Node 判成“非绝对路径”。`joinPath`/`pathSegments`/`parentOf`/新建/重命名/粘贴全部改为按分隔符拼接；POSIX 面包屑从 `/` 开始，根目录上级返回 `/`；不可读目录在树上显示“无权限，点击重试”（灰），只有真实 I/O 错误才标红。回归：`tests/test_posix_paths.mjs` 与 `test_file_tree.mjs` 共 15 条通过。
+- 2026-11-04：`transfer.js` 改为双缓冲流水线：读完第 N 块后先发起第 N+1 块读取，再写第 N 块；写入偏移与预取不一致时丢弃预取重读；取消/失败路径给预取挂空 catch，避免未处理拒绝。回归：`tests/test_transfer_engine.mjs` 新增“下一块读取与当前块写入重叠”，7 条全过；真机 100 MB 吞吐仍待两机复测，不能把单测当速度验收。
+- 2026-11-04：Linux DSH Web 禁止外部打开；APP 用 `<webview>` 顶层内嵌（不是 iframe，避开 SameSite），未运行/未安装仍走原来的安装/启动按钮。`webview` 的地址、导航、弹窗由主进程限制在回环/私有网段与首次 origin；WebUI/DSH 宿主只提示“请在桌面 APP 内打开”。真机内嵌与自动装插件仍待验。
+- 2026-11-04：转移页接入 croc：先并行查两端 `transfer_info`，只有双方 `available && relay` 才走 croc；否则保留旧分片回退。croc 分支生成一次性 code，源 `transfer_send`、目标 `transfer_receive`，350 ms 轮询 `transfer_status`，完成后 `transfer_finish`（支持改名）；冲突先查目标 entries。单测覆盖 code/顺序/finish；croc 二进制尚未随发布包提供，当前安装节点会回退旧路径。
