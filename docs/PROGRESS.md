@@ -1,5 +1,12 @@
 # 实时进度
 
+## 2026-11-03 商用质量外壳（EULA/隐私/SBOM/签名）
+
+1. 新增 `scripts/generate_sbom.py`，从 npm lockfile、pyproject 和首方版本生成 CycloneDX 1.5 SBOM；当前 **115 components**，输出 `docs/sbom.cdx.json`。
+2. 新增草案 `docs/EULA.md`、`docs/PRIVACY.md`（标注需法务复核，不冒充正式法律文本）。
+3. 新增 `docs/SIGNING.md`：发布 manifest 已有 Ed25519 签名；Windows Authenticode **未完成**，需要 OV/EV 证书/云 HSM，不能用自签名冒充。
+4. 发布制品审计已覆盖签名、哈希、必需文件和禁止泄露项；真实干净机安装仍未执行。
+
 ## 2026-11-03 传输 overlay 决策收口
 
 1. `bench_relay.py` 实测：同机 2 MB 33.87 s（0.06 MB/s）、DESKTOP→LAPTOP 2 MB 59.36 s（0.04 MB/s），SHA-256 均一致；控制面 P50 112 ms。

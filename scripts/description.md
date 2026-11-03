@@ -4,3 +4,4 @@
 `build_release.py` 生成独立 APP、插件、Node 压缩包和带 SHA-256 的更新清单；构建前校验 `version.json`、Python 工程及插件/APP package 版本一致，更新器最低版本独立于制品版本，插件归档同时带有桥生成器和可离线使用的预生成桥模块。
 `qa_surface_styles.mjs` 是发布前的真实页面门禁：用无头 Edge 打开每台设备的 native surface，等待 composer 出现，断言工作区搜索框和按钮的**计算样式**（`border 0px/none`、透明背景），不是只看页面文字；DSH 升级后必须对两台设备重跑。
 `qa_release_artifacts.py` 是发布制品的干净安装审计：从 Hub manifest 下载当前三件套，验签、校验 SHA-256/大小，解包检查必需文件，并拒绝 `node_modules/data/__pycache__/.env/hub.json/.credentials.yaml` 等泄露项。
+`generate_sbom.py` 从 npm lockfile、pyproject 和首方版本生成 CycloneDX 1.5 SBOM（`docs/sbom.cdx.json`），用于发布合规检查。
