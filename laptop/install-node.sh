@@ -150,8 +150,11 @@ fi
 
 say "creating venv and installing dependencies..."
 python3 -m venv "$PREFIX/venv"
-"$PREFIX/venv/bin/python" -m pip install --upgrade pip >/dev/null
-"$PREFIX/venv/bin/python" -m pip install -e "$ROOT"
+VENV_PY="$PREFIX/venv/bin/python"
+[ -x "$VENV_PY" ] || VENV_PY="$PREFIX/venv/Scripts/python.exe"
+[ -x "$VENV_PY" ] || fail "venv python not found under $PREFIX/venv"
+"$VENV_PY" -m pip install --upgrade pip >/dev/null
+"$VENV_PY" -m pip install -e "$ROOT"
 
 mkdir -p "$PREFIX/workspace"
 ENV_FILE="$PREFIX/node.env"
@@ -172,7 +175,7 @@ cat > "$LAUNCHER" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
 . "$ENV_FILE"
-exec "$PREFIX/venv/bin/python" -m tether.node.agent \\
+exec "$VENV_PY" -m tether.node.agent \\
   --workspace "$PREFIX/workspace" --workspaces-root "\${TETHER_WORKSPACES_ROOT:-$PREFIX/workspace}" \\
   --agent "\${TETHER_AGENT}" --device "\${TETHER_DEVICE}" --controller "\${TETHER_CONTROLLER}" \\
   --console-port "\${TETHER_CONSOLE_PORT}" --db "$PREFIX/node.db"
