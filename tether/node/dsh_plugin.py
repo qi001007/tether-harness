@@ -413,6 +413,7 @@ def install(dsh: DshDesktop, *, restart: bool = True) -> dict[str, Any]:
             "ok": True,
             "installed": final.get("installed", True),
             "running": final.get("running", False),
+            "surface": final.get("surface", False),
             "pid": final.get("pid", 0),
             "version": final.get("version", ""),
             "version_plugin": version,

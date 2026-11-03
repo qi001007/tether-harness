@@ -290,6 +290,7 @@ class DshDesktop:
         result = {
             "installed": exe is not None,
             "running": running,
+            "surface": bool(self._descriptor_pid()),
             "version": version,
             "exe": str(exe) if exe else "",
             "home": str(self.dsh_home),

@@ -1,6 +1,6 @@
 {
-  "version": "0.2.86",
-  "notes": "The installer waits up to three minutes for a fresh DSH cold start and relaunches DSH if it exits before publishing the surface descriptor.",
+  "version": "0.2.87",
+  "notes": "Surface health now comes from the live descriptor pid; the APP auto-repairs when DSH is running without a surface, even if the gateway still serves a stale URL.",
   "download": "https://github.com/qi001007/tether-harness",
   "install": "git pull && powershell -ExecutionPolicy Bypass -File desktop/install-plugin.ps1"
 }

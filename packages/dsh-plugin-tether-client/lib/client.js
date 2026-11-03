@@ -5763,7 +5763,7 @@ monaco-editor/esm/vs/languages/definitions/swift/swift.js:
 
     const EditorRuntime = TetherMonacoRuntime
     const PANEL_ID = 'tether'
-    const PLUGIN_VERSION = "0.2.86"
+    const PLUGIN_VERSION = "0.2.87"
 function parentOf(path) {
   const clean = String(path || '').replace(/[\\/]+$/, '')
   if (!clean) return ''
@@ -11687,7 +11687,20 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           pollFlightRef.current = controller
           try {
             const { response, data } = await fetchSurfaceDescriptor(deviceId, controller.signal)
-            if (!response.ok) return
+            if (!response.ok) {
+              const detail = data && data.detail ? data.detail : {}
+              const code = detail.code
+              if (['descriptor_missing', 'descriptor_invalid', 'host_unreachable'].includes(code)) {
+                setState((prev) => {
+                  if (prev.deviceId !== deviceId) return prev
+                  if (!['document-loading', 'document-loaded', 'error'].includes(prev.status)) return prev
+                  if (prev.status === 'error' && prev.code === code) return prev
+                  return { deviceId, status: 'error', url: '', code,
+                    message: 'DSH 运行中，但 Tether 插件或 surface 描述符缺失，正在尝试修复…' }
+                })
+              }
+              return
+            }
             if (!alive || !data.available || !isSafeNativeSurfaceUrl(data.url)) return
             const nextPid = Number(data.pid) || 0
             const previous = surfaceStateRef.current
@@ -11780,7 +11793,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
 
       const dshRelevant = currentState.status === 'error'
         && ['descriptor_missing', 'host_unreachable', 'descriptor_invalid'].includes(currentState.code)
-      const dshWatch = visible && (deviceId === localDeviceId || dshRelevant)
+      const dshWatch = visible
       const dshRestartPidRef = React.useRef(0)
       const dshAutoRepairRef = React.useRef(false)
       const [dsh, setDsh] = React.useState(null)
@@ -11819,8 +11832,8 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           setDshBusy('')
         }
       }, [dsh, dshBusy])
-      const dshPluginMissing = !!dshRelevant && !!dsh && dsh.installed !== false
-        && dsh.running === true && currentState.code === 'descriptor_missing'
+      const dshPluginMissing = !!dsh && dsh.installed !== false && dsh.running === true
+        && (dsh.surface === false || (dshRelevant && currentState.code === 'descriptor_missing'))
       const dshBlocked = dshWatch && currentState.status !== 'local' && !!dsh && !dsh.running
       const runDsh = async (action) => {
         setDshError('')
@@ -11837,9 +11850,13 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         }
       }
       React.useEffect(() => {
-        if (!dshPluginMissing || dshBusy || dshAutoRepairRef.current) return
-        dshAutoRepairRef.current = true
-        void runDsh('dsh_install_plugin')
+        if (!dshPluginMissing || dshBusy || dshAutoRepairRef.current) return undefined
+        const timer = setTimeout(() => {
+          if (dshAutoRepairRef.current) return
+          dshAutoRepairRef.current = true
+          void runDsh('dsh_install_plugin')
+        }, 10000)
+        return () => clearTimeout(timer)
       }, [dshPluginMissing, dshBusy])
 
       const dshSurfaceMissing = !!dshRelevant && !!dsh && dsh.running === true
