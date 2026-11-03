@@ -2691,6 +2691,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const dshRestartPidRef = React.useRef(0)
       const dshAutoRepairRef = React.useRef(false)
       const styleRepairRef = React.useRef(false)
+      const dshVersionRef = React.useRef('')
       const [dsh, setDsh] = React.useState(null)
       const [dshBusy, setDshBusy] = React.useState('')
       const [dshError, setDshError] = React.useState('')
@@ -2771,6 +2772,14 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           }
         })
       }, [deviceId])
+      React.useEffect(() => {
+        if (!dsh || !dsh.running || !dsh.version) return
+        const previous = dshVersionRef.current
+        dshVersionRef.current = dsh.version
+        if (!previous || previous === dsh.version || dshAutoRepairRef.current) return
+        dshAutoRepairRef.current = true
+        void runDsh('dsh_install_plugin')
+      }, [dsh])
 
       const dshSurfaceMissing = !!dshRelevant && !!dsh && dsh.running === true
         && currentState.code === 'descriptor_missing'
