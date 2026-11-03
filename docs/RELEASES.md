@@ -1,5 +1,16 @@
 # Public client releases
 
+## v0.2.89
+
+Runtime defense against unstyled DSH controls:
+
+- Electron probes the embedded DSH frame for browser-default input/button styles (inset/outset borders, white/240-gray backgrounds).
+- A default-styled surface triggers one automatic plugin install/repair; if it breaks again, the APP covers the frame with a clear “DSH 界面样式与 Tether 版本不匹配” state instead of showing raw controls.
+- Added `scripts/qa_surface_styles.mjs`, a release gate that loads both devices' real surfaces in headless Edge and asserts computed styles (`border 0px/none`, transparent background, composer present). Both devices PASS.
+- The DSH upgrade/plugin-install matrix lives in `docs/DSH_UPGRADE_MATRIX.md`.
+
+Gates: mjs 238/238, cjs 7/7, pytest 158 passed / 1 skipped, build checks, `validate_versions()`, computed-style gate PASS both devices. CI `41598308564`; published at 2026-11-03T07:47:59Z (app 1,792,944 B, plugin 1,363,707 B, node 91,599 B). Hub mirror 0.2.89; DESKTOP and LAPTOP app/node/plugin **0.2.89**.
+
 ## v0.2.88
 
 Automatic repair now triggers from real surface health, not from a cached gateway URL:

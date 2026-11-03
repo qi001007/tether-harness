@@ -1,5 +1,13 @@
 # 实时进度
 
+## 2026-11-03 v0.2.89 运行时样式防线
+
+1. Electron 在 iframe 载入后探测搜索框/按钮的**计算样式**；出现浏览器默认 `inset/outset` 样式时发 `tether:surface-style-broken`。
+2. APP 收到后自动执行一次 `dsh_install_plugin`；如果再次出现，则用“DSH 界面样式与 Tether 版本不匹配”遮罩盖住整块画布，不再显示裸控件，并提供重试。
+3. 发布 0.2.89（CI `41598308564`，app 1,792,944 B / plugin 1,363,707 B / node 91,599 B），Hub mirror 0.2.89；LAPTOP 0.2.89，本地插件 0.2.89（pid 43440）。
+4. 计算样式门禁 `node scripts/qa_surface_styles.mjs DESKTOP-LOCAL LAPTOP-01` 两机 **PASS**（`bhn1Oq_searchInput`、`border 0px/none`、composer=true）。
+5. 仍未完成：DSH 新版本升级矩阵（当前只有 rc.5 同版本基线）、第三方插件测试、5 秒热重载。
+
 ## 2026-11-03 v0.2.88 自动修复真实触发 + surface 健康判定
 
 1. 本机把 DSH profile 重置为空（无插件、无 `node_modules`），重启 APP 后 **APP 自己触发** `dsh_install_plugin`：装回 4 个 0.2.88 包 + `@deepseek-ai` 依赖树，DSH 新 pid 18492，descriptor 发布，两个 iframe 均为 `bhn1Oq_searchInput` + composer。

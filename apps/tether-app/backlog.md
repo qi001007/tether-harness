@@ -60,3 +60,4 @@
 - 2026-11-03：APP 包与 package-lock 根版本升至 `0.2.83`；启动时 `ensureAppShortcuts()` 用 `shell.writeShortcutLink` 把桌面/开始菜单 `Tether APP.lnk` 修回 `electron.exe`（旧快捷方式指向 `.cmd` 会弹黑窗）；主进程识别 surface 网关 502 错误页并触发既有 `tether:surface-boot-failed` 重试，避免旧 iframe 永久停在错误页。
 - 2026-11-03：APP 包与 package-lock 根版本升至 `0.2.84`；surface 缺失且 DSH 正在运行时自动调用 `dsh_install_plugin`，成功后按新 pid 重载；失败显示“安装/修复插件”重试按钮，用户不再手工拷包。
 - 2026-11-03：APP 包与 package-lock 根版本升至 `0.2.88`；自动修复改用 `dsh_status.surface`（descriptor pid 存活）判断，surface 轮询的插件缺失错误也进入修复态；本机空 profile 已实测 APP 自动装回并渲染。
+- 2026-11-03：APP 包与 package-lock 根版本升至 `0.2.89`；iframe 载入后探测默认控件样式，命中后自动修复一次，再次命中显示“DSH 界面样式与 Tether 版本不匹配”遮罩，避免裸控件页面。
