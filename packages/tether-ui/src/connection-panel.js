@@ -163,7 +163,7 @@ export function createConnectionPanel(React) {
         h('circle', { cx: 120, cy: 210, r: 2 }), h('circle', { cx: 230, cy: 215, r: 2 })))
   }
 
-  function LoginScreen({ defaultUrl = '', defaultEmail = '', onLogin, onExit }) {
+  function LoginScreen({ defaultUrl = '', defaultEmail = '', onLogin, onExit, embedded = false }) {
     const DEFAULT_SERVER = 'https://8-220-198-26.sslip.io'
     const server = cleanUrl(defaultUrl || DEFAULT_SERVER)
     const [email, setEmail] = React.useState(defaultEmail || '')
@@ -250,7 +250,8 @@ export function createConnectionPanel(React) {
       h(LoginNetwork),
       h('div', { style: { fontSize: 11.5, letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(255,255,255,.55)', position: 'relative', zIndex: 1 } }, '私有设备网'))
     return h('div', { style: {
-      position: 'absolute', inset: 0, zIndex: 80, display: 'grid', placeItems: 'center', padding: 24,
+      position: embedded ? 'relative' : 'absolute', inset: embedded ? undefined : 0, zIndex: 80,
+      minHeight: embedded ? '100%' : undefined, display: 'grid', placeItems: 'center', padding: 24,
       background: 'radial-gradient(1200px 600px at 18% 8%, #eaf1ff 0%, transparent 60%), radial-gradient(900px 500px at 88% 92%, #fff4e5 0%, transparent 55%), #f7f8fb',
       color: ink, overflow: 'auto'
     } },

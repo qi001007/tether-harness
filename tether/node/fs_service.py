@@ -536,6 +536,9 @@ class FsService:
     def _op_terminal_start(self, args: dict[str, Any]) -> Any:
         return self._terminal_dispatch("start", args)
 
+    def _op_terminal_shells(self, args: dict[str, Any]) -> Any:
+        return self._terminal_dispatch("shells", args)
+
     def _op_terminal_write(self, args: dict[str, Any]) -> Any:
         return self._terminal_dispatch("write", args)
 
@@ -586,6 +589,9 @@ class FsService:
 
     def _op_acp_stop(self, args: dict[str, Any]) -> Any:
         return self._acp_dispatch("stop", args)
+
+    def _op_acp_set_model(self, args: dict[str, Any]) -> Any:
+        return self._acp_dispatch("set_model", args)
 
     def _op_read(self, args: dict[str, Any]) -> dict[str, Any]:
         p = self._resolve(args.get("path"))

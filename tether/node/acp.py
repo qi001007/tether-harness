@@ -56,6 +56,8 @@ class AcpSession:
         self.next_id = 1
         self.closed = False
         self.native_id = ""
+        self.agent: dict[str, Any] = {}
+        self.models: dict[str, Any] = {}
         self.reader = threading.Thread(target=self._read, daemon=True)
         self.reader.start()
 
@@ -243,9 +245,12 @@ class AcpService:
             session.native_id = str((created or {}).get("sessionId") or "")
             if not session.native_id:
                 raise ValueError("ACP agent did not return a session id")
+            session.agent = (initialized or {}).get("agentInfo") or {}
+            session.models = (created or {}).get("models") or {}
             session._record({"type": "ready", "session_id": session.id,
                              "native_id": session.native_id,
-                             "protocol": (initialized or {}).get("protocolVersion")})
+                             "protocol": (initialized or {}).get("protocolVersion"),
+                             "agent": session.agent, "models": session.models})
         except Exception as exc:  # noqa: BLE001 - surfaced to the UI
             session._record({"type": "error", "error": str(exc)})
             session.close()
@@ -288,6 +293,18 @@ class AcpService:
         session.notify("session/cancel", {"sessionId": session.native_id})
         return {"session_id": session.id, "cancelled": True}
 
+    def set_model(self, args: dict[str, Any]) -> dict[str, Any]:
+        session = self._find(args)
+        model = str(args.get("model") or "")
+        if not model:
+            raise ValueError("ACP model id is required")
+        if not session.native_id:
+            raise ValueError("ACP session is still starting")
+        result = session.request("session/set_model", {"sessionId": session.native_id,
+                                                       "modelId": model}, timeout=30.0)
+        session._record({"type": "model", "session_id": session.id, "model": model})
+        return {"session_id": session.id, "model": model, "result": result}
+
     def stop(self, args: dict[str, Any]) -> dict[str, Any]:
         session = self.sessions.pop(str(args.get("session_id") or ""), None)
         if session is None:
@@ -302,6 +319,6 @@ class AcpService:
 
     def dispatch(self, action: str, args: dict[str, Any]) -> Any:
         handler = getattr(self, action, None)
-        if action not in {"detect", "start", "prompt", "poll", "reply", "cancel", "stop"} or not callable(handler):
+        if action not in {"detect", "start", "prompt", "poll", "reply", "cancel", "stop", "set_model"} or not callable(handler):
             raise ValueError("unsupported acp action")
         return handler(args)

@@ -66,3 +66,4 @@
 - 2026-11-03：新增“终端”页（`terminal-page.js`，活动栏第 4 项）：设备选择/启动/停止/200 ms 轮询/Enter 提交；真机 APP 选 LAPTOP-01 执行 `Get-Random`、`echo enter-ok` 各只显示一行。轮询必须带 `inFlight` 重入闸，否则 200 ms 间隔 + 公网 RTT 会让并发 tick 重复追加同一块；`web/dist/app.js` 由 `build-web.mjs` 单独构建，改 `src/` 后两份生成物都要重建。
 - 2026-11-03：新增“远程应用”页（`apps-page.js`，活动栏第 2 项）：设备选择/刷新/卡片/内嵌 iframe。数据来自目标 Node 的 `apps.json` 白名单（`fs/apps_list`），只转发回环 HTTP；DSH 不进这个列表，继续走原生工作区的认证 surface（通用网关拿不到 DSH 本地票据）。
 - 2026-11-03：新增“Agents”页（`agents-page.js`，活动栏第 3 项）：检测本机 ACP Harness、开始会话、流式消息、权限请求卡片、停止。消息必须按 chunk 拼接后再换行；`agent_message_chunk` 不能一块一行。`acp_start` 是异步握手：输入框要等 `ready` 事件后再启用，轮询带 `inFlight` 闸。
+- 2026-11-03：终端不再是独立页面：`terminal-dock.js` 停靠在资源管理器底部（可拖高、可关），目录右键/工具栏“在终端中打开”把 cwd 设为当前目录；shell 下拉由目标机 `terminal_shells` 决定。登录页在 APP 必须有 ×（关闭到托盘），DSH 用 `embedded` 相对布局保留宿主侧栏。Agents 页用 `session/set_model` 切换模型，命令 chip 只填输入框不自动发送。

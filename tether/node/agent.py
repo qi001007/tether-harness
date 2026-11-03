@@ -985,6 +985,7 @@ class Node:
                 "update_manifest": "hub-or-github",
                 "workspace": str(self.workspace), "agents": ["fake", "dsh"], "fs": True,
                 "terminal": True,
+                "terminal_shells": self.terminal.shells(),
                 "apps": True,
                 "acp": True,
                 "policy_mode": self.fs.policy.data.get("mode"),

@@ -843,7 +843,7 @@ test('the network layout is radial and keeps motion state across page switches',
 })
 
 test('the login screen exits the DSH panel and hides the server override', () => {
-  assert.match(connectionPanel, /function LoginScreen\(\{ defaultUrl = '', defaultEmail = '', onLogin, onExit \}\)/)
+  assert.match(connectionPanel, /function LoginScreen\(\{ defaultUrl = '', defaultEmail = '', onLogin, onExit(?:, embedded = false)? \}\)/)
   assert.doesNotMatch(connectionPanel, /fieldRow\('服务器地址'/)
   assert.match(connectionPanel, /const server = cleanUrl\(defaultUrl \|\| DEFAULT_SERVER\)/)
   assert.match(connectionPanel, /tether-login-visual/)

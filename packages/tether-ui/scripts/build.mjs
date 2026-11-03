@@ -20,7 +20,7 @@ const fileCache = strip('file-cache.js')
 const dshHost = strip('hosts/dsh.js')
 const transferEngine = strip('transfer.js')
 const transferPage = strip('transfer-page.js')
-const terminalPage = strip('terminal-page.js')
+const terminalDock = strip('terminal-dock.js')
 const appsPage = strip('apps-page.js')
 const agentsPage = strip('agents-page.js')
 const monacoRuntime = await bundledMonacoRuntime()
@@ -41,7 +41,7 @@ ${connectionPanel}
 ${settingsPanel}
 ${transferEngine}
 ${transferPage}
-${terminalPage}
+${terminalDock}
 ${appsPage}
 ${agentsPage}
     let localPluginRpc = null

@@ -31,3 +31,10 @@
 1. 升级 Hub 服务器带宽并重跑同一 bench；目标 ≥1 MB/s 再谈 1 GB。
 2. Tether 自研 Hub 原生流式传输（HTTP/2 或裸 TCP 中转），仍不引入第三方组件。
 3. 接受 1 GB 目标降级，只保留现有 relay 能力并明确 UI 提示。
+
+## 2026-11-03 当前 overlay 复测（p2p tcp6）
+
+- EasyTier `peer`：LAPTOP cost=`p2p`、lat **101.46 ms**、tunnel **tcp6**；relay `10.144.0.1` 为 172.40 ms。
+- LAPTOP 经 `10.144.0.2:18080` 拉 DESKTOP 的 100 MB：**104,857,600 B / 28.80 s = 3,640,449 B/s（3.64 MB/s）**。
+- 两台机器的局域网 IPv4 是 `10.68.37.100` 与 `10.68.68.241`，但 ICMP/TCP 探测不可达（客户端隔离/防火墙），EasyTier 实际走 tcp6 公网直连；因此这是**跨网 p2p**，不是同 LAN 档。
+- 结论：同 LAN 15–80 MB/s 仍未复现；需要同交换机/AP 且关闭客户端隔离，或 EasyTier UDP 直连。当前跨网 p2p 3.64 MB/s；Hub relay 仍为 0.04–0.06 MB/s、TCP80 中继 1.70 MB/s。

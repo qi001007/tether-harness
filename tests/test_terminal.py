@@ -57,3 +57,27 @@ def test_terminal_rejects_unknown_sessions_and_actions(tmp_path) -> None:
         terminal.poll({"session_id": "missing"})
     with pytest.raises(ValueError):
         terminal.dispatch("restart", {})
+
+
+def test_terminal_lists_shells_and_starts_in_requested_cwd(tmp_path) -> None:
+    terminal = TerminalService(tmp_path)
+    catalog = terminal.dispatch("shells", {})
+    ids = [item["id"] for item in catalog["shells"]]
+    assert catalog["default"] in ids
+    assert any(item["available"] for item in catalog["shells"])
+    nested = tmp_path / "nested"
+    nested.mkdir()
+    session = terminal.start({"cwd": str(nested)})
+    try:
+        assert session["cwd"].endswith("nested")
+        assert session["shell"] == catalog["default"]
+    finally:
+        terminal.stop({"session_id": session["session_id"]})
+
+
+def test_terminal_rejects_bad_cwd_and_shell(tmp_path) -> None:
+    terminal = TerminalService(tmp_path)
+    with pytest.raises(ValueError):
+        terminal.start({"cwd": str(tmp_path / "missing")})
+    with pytest.raises(ValueError):
+        terminal.start({"shell": "tether-no-such-shell"})

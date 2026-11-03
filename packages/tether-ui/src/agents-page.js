@@ -13,6 +13,10 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
   const [input, setInput] = React.useState('')
   const [busy, setBusy] = React.useState(false)
   const [ready, setReady] = React.useState(false)
+  const [agent, setAgent] = React.useState(null)
+  const [models, setModels] = React.useState([])
+  const [model, setModel] = React.useState('')
+  const [commands, setCommands] = React.useState([])
   const [pending, setPending] = React.useState([])
   const since = React.useRef(0)
   const sessionRef = React.useRef('')
@@ -62,6 +66,10 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
       since.current = 0
       setPending([])
       setReady(false)
+      setAgent(null)
+      setModels([])
+      setModel('')
+      setCommands([])
       setSession(result.session_id)
       setHarness(item)
       setOutput('ACP · ' + (item.name || item.id) + '\n' + (result.cwd || '') + '\n\n')
@@ -100,6 +108,19 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
     }
   }
 
+  const changeModel = async (modelId) => {
+    if (!session || !modelId) return
+    setModel(modelId)
+    try {
+      await post('/api/devices/' + encodeURIComponent(device) + '/fs/acp_set_model', {
+        session_id: session, model: modelId
+      })
+      setOutput((current) => current + '[模型] ' + modelId + '\n')
+    } catch (error) {
+      fail(error)
+    }
+  }
+
   React.useEffect(() => {
     if (!session) return undefined
     let disposed = false
@@ -122,7 +143,9 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
             const content = update.content || {}
             if (update.sessionUpdate === 'agent_message_chunk' && content.type === 'text') { chunk += content.text; continue }
             flush()
-            if (update.sessionUpdate === 'tool_call' && update.title) lines.push('[工具] ' + update.title)
+            if (update.sessionUpdate === 'available_commands_update' && Array.isArray(update.availableCommands)) {
+              setCommands(update.availableCommands.filter((item) => item && item.name).slice(0, 12))
+            } else if (update.sessionUpdate === 'tool_call' && update.title) lines.push('[工具] ' + update.title)
             else if (update.sessionUpdate === 'plan' && Array.isArray(update.entries)) {
               lines.push('[计划]\n' + update.entries.map((entry) => '· ' + (entry.content || entry.title || '')).join('\n'))
             }
@@ -138,6 +161,10 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
           } else if (event.type === 'ready') {
             flush()
             setReady(true)
+            setAgent(event.agent || null)
+            const available = (event.models && event.models.availableModels) || []
+            setModels(available)
+            setModel((event.models && (event.models.currentModelId || event.models.currentModel)) || (available[0] && available[0].modelId) || '')
             lines.push('[就绪]')
           } else if (event.type === 'result') {
             flush()
@@ -214,7 +241,17 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
       h('button', { type: 'button', disabled: !session, onClick: () => void stop(),
         style: { ...field, cursor: session ? 'pointer' : 'default', opacity: session ? 1 : 0.5, background: 'transparent' } }, '停止'),
       h('span', { style: { marginLeft: 'auto', fontSize: 11, color: session ? C.green : C.mute } },
-        session ? '已连接' : '未连接')
+        session ? '已连接' : '未连接'),
+      session && agent ? h('span', { style: { display: 'flex', alignItems: 'center', gap: 5, padding: '0 8px', height: 24,
+        borderRadius: 999, background: C.soft, color: C.ink, fontSize: 11 } },
+        h(Glyph, { name: 'bot', size: 14 }),
+        h('span', null, (agent.title || agent.name || 'Agent') + (agent.version ? ' ' + agent.version : ''))) : null,
+      session && models.length ? h('select', {
+        value: model, 'aria-label': '模型', title: '切换模型',
+        onChange: (event) => void changeModel(event.target.value),
+        style: { ...field, maxWidth: 230 }
+      }, models.map((item) => h('option', { key: item.modelId, value: item.modelId, title: item.description || '' },
+        item.name || item.modelId))) : null
     ),
     !session ? h('div', {
       style: { flex: '0 0 auto', display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }
@@ -246,6 +283,13 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
         style: { ...field, cursor: 'pointer' }
       }, option.name || option.optionId))
     )),
+    session && commands.length ? h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap', flex: '0 0 auto' } },
+      commands.map((command) => h('button', {
+        key: command.name, type: 'button', title: command.description || command.name,
+        onClick: () => setInput('/' + command.name + ' '),
+        style: { ...field, height: 22, cursor: 'pointer' }
+      }, '/' + command.name))
+    ) : null,
     h('form', {
       onSubmit: send,
       style: { display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 8, background: '#0b1220', flex: '0 0 auto' }
