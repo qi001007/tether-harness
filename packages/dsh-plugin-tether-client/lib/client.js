@@ -5763,7 +5763,7 @@ monaco-editor/esm/vs/languages/definitions/swift/swift.js:
 
     const EditorRuntime = TetherMonacoRuntime
     const PANEL_ID = 'tether'
-    const PLUGIN_VERSION = "0.3.1"
+    const PLUGIN_VERSION = "0.3.2"
 function parentOf(path) {
   const clean = String(path || '').replace(/[\\/]+$/, '')
   if (!clean) return ''
@@ -15295,6 +15295,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           className: 'tether-command tether-hover tether-press',
           style: { width: 28, height: 28, display: 'grid', placeItems: 'center', border: 0, borderRadius: 6, background: 'transparent', color: disabled ? C.mute : C.sub, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.45 : 1, flex: '0 0 auto' }
         }, spinning ? h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 16 })) : h(Glyph, { name, size: 16 }))
+        const terminalAllowed = !(host && host.kind === 'dsh')
         const openTerminal = (target) => {
           setTerminalCwd(target || path || '')
           setTerminalOpen(true)
@@ -15310,7 +15311,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             iconButton('forward', '前进 (Alt+→)', goForward, !history.forward.length),
             iconButton('arrowUp', '上级目录 (Alt+↑)', goUp, !canGoUp),
             iconButton('refresh', '刷新', refreshExplorer, !path, dirLoading || previewBusy),
-            iconButton('terminal', '在终端中打开', () => openTerminal(file ? parentOf(file.path) : path), !path)
+            terminalAllowed ? iconButton('terminal', '在终端中打开', () => openTerminal(file ? parentOf(file.path) : path), !path) : null
           ),
           h('div', {
             className: 'tether-breadcrumbs',
@@ -15516,14 +15517,14 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           style: { position: 'fixed', left: Math.max(8, Math.min(contextMenu.x, window.innerWidth - 190)), top: Math.max(8, Math.min(contextMenu.y, window.innerHeight - 250)), width: 178, zIndex: 60, background: C.layer1, borderRadius: 8, boxShadow: C.shadow, padding: 4, userSelect: 'none' }
         },
           contextMenu.entry ? menuItem('file', '打开', () => { setContextMenu(null); openFile(contextMenu.entry) }) : null,
-          contextMenu.entry && contextMenu.entry.dir ? menuItem('terminal', '在终端中打开', () => { openTerminal(contextMenu.entry.path); setContextMenu(null) }) : null,
-          contextMenu.entry && !contextMenu.entry.dir ? menuItem('terminal', '在所在目录打开终端', () => { openTerminal(parentOf(contextMenu.entry.path)); setContextMenu(null) }) : null,
+          terminalAllowed && contextMenu.entry && contextMenu.entry.dir ? menuItem('terminal', '在终端中打开', () => { openTerminal(contextMenu.entry.path); setContextMenu(null) }) : null,
+          terminalAllowed && contextMenu.entry && !contextMenu.entry.dir ? menuItem('terminal', '在所在目录打开终端', () => { openTerminal(parentOf(contextMenu.entry.path)); setContextMenu(null) }) : null,
           contextMenu.entry ? menuItem('file', '复制', () => { copyEntry(contextMenu.entry); setContextMenu(null) }) : null,
           clipboard && contextMenu.base ? menuItem('file', '粘贴', () => pasteEntry(contextMenu.base)) : null,
           contextMenu.entry ? menuItem('pencil', '重命名', () => { const entry = contextMenu.entry; setContextMenu(null); renameEntry(entry) }) : null,
           contextMenu.entry ? menuItem('trash', '删除', () => { const entry = contextMenu.entry; setContextMenu(null); deleteEntry(entry) }, true) : null,
           contextMenu.entry ? h('div', { style: { height: 1, background: C.line, margin: '4px 2px' } }) : null,
-          !contextMenu.entry ? menuItem('terminal', '在此打开终端', () => { openTerminal(contextMenu.base || path); setContextMenu(null) }) : null,
+          !contextMenu.entry && terminalAllowed ? menuItem('terminal', '在此打开终端', () => { openTerminal(contextMenu.base || path); setContextMenu(null) }) : null,
           menuItem('plus', '新建文件', () => { const base = contextMenu.base; setContextMenu(null); makeFile(base) }),
           menuItem('files', '新建文件夹', () => { const base = contextMenu.base; setContextMenu(null); makeFolder(base) }),
           h('div', { style: { height: 1, background: C.line, margin: '4px 2px' } }),
@@ -15537,7 +15538,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           toolbar,
           h('div', { style: { display: 'flex', flexDirection: 'column', flex: '1 1 auto', minHeight: 0 } },
             file ? h('div', { style: { display: 'flex', flexDirection: 'column', flex: '1 1 auto', minHeight: 0 } }, fileTabBar, previewBody()) : directoryBody(),
-            terminalOpen ? h(createTerminalDock, {
+            terminalOpen && terminalAllowed ? h(createTerminalDock, {
               key: 'terminal-' + deviceId + '-' + terminalKey,
               React, Glyph, post, C, device: deviceId, cwd: terminalCwd || path,
               height: terminalHeight, onHeight: setTerminalHeight,

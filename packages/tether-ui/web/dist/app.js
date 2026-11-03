@@ -173492,6 +173492,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         className: "tether-command tether-hover tether-press",
         style: { width: 28, height: 28, display: "grid", placeItems: "center", border: 0, borderRadius: 6, background: "transparent", color: disabled ? C.mute : C.sub, cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.45 : 1, flex: "0 0 auto" }
       }, spinning ? h2("span", { className: "tether-spin", style: { display: "grid", placeItems: "center" } }, h2(Glyph, { name: "refresh", size: 16 })) : h2(Glyph, { name, size: 16 }));
+      const terminalAllowed = !(host && host.kind === "dsh");
       const openTerminal = (target) => {
         setTerminalCwd(target || path || "");
         setTerminalOpen(true);
@@ -173511,7 +173512,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           iconButton("forward", "\u524D\u8FDB (Alt+\u2192)", goForward, !history.forward.length),
           iconButton("arrowUp", "\u4E0A\u7EA7\u76EE\u5F55 (Alt+\u2191)", goUp, !canGoUp),
           iconButton("refresh", "\u5237\u65B0", refreshExplorer, !path, dirLoading || previewBusy),
-          iconButton("terminal", "\u5728\u7EC8\u7AEF\u4E2D\u6253\u5F00", () => openTerminal(file ? parentOf2(file.path) : path), !path)
+          terminalAllowed ? iconButton("terminal", "\u5728\u7EC8\u7AEF\u4E2D\u6253\u5F00", () => openTerminal(file ? parentOf2(file.path) : path), !path) : null
         ),
         h2(
           "div",
@@ -173847,11 +173848,11 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           setContextMenu(null);
           openFile(contextMenu.entry);
         }) : null,
-        contextMenu.entry && contextMenu.entry.dir ? menuItem("terminal", "\u5728\u7EC8\u7AEF\u4E2D\u6253\u5F00", () => {
+        terminalAllowed && contextMenu.entry && contextMenu.entry.dir ? menuItem("terminal", "\u5728\u7EC8\u7AEF\u4E2D\u6253\u5F00", () => {
           openTerminal(contextMenu.entry.path);
           setContextMenu(null);
         }) : null,
-        contextMenu.entry && !contextMenu.entry.dir ? menuItem("terminal", "\u5728\u6240\u5728\u76EE\u5F55\u6253\u5F00\u7EC8\u7AEF", () => {
+        terminalAllowed && contextMenu.entry && !contextMenu.entry.dir ? menuItem("terminal", "\u5728\u6240\u5728\u76EE\u5F55\u6253\u5F00\u7EC8\u7AEF", () => {
           openTerminal(parentOf2(contextMenu.entry.path));
           setContextMenu(null);
         }) : null,
@@ -173871,7 +173872,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           deleteEntry(entry);
         }, true) : null,
         contextMenu.entry ? h2("div", { style: { height: 1, background: C.line, margin: "4px 2px" } }) : null,
-        !contextMenu.entry ? menuItem("terminal", "\u5728\u6B64\u6253\u5F00\u7EC8\u7AEF", () => {
+        !contextMenu.entry && terminalAllowed ? menuItem("terminal", "\u5728\u6B64\u6253\u5F00\u7EC8\u7AEF", () => {
           openTerminal(contextMenu.base || path);
           setContextMenu(null);
         }) : null,
@@ -173904,7 +173905,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           "div",
           { style: { display: "flex", flexDirection: "column", flex: "1 1 auto", minHeight: 0 } },
           file ? h2("div", { style: { display: "flex", flexDirection: "column", flex: "1 1 auto", minHeight: 0 } }, fileTabBar, previewBody()) : directoryBody(),
-          terminalOpen ? h2(createTerminalDock, {
+          terminalOpen && terminalAllowed ? h2(createTerminalDock, {
             key: "terminal-" + deviceId + "-" + terminalKey,
             React: React2,
             Glyph,
