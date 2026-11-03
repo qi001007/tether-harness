@@ -68,6 +68,8 @@ function installedProfile() {
   return selectedProfile(packageRoot, root) || null
 }
 
+// DSH replaces this module in place when the profile files change, so the
+// descriptor always reports the version the running host actually loaded.
 function publish(webServer, connection) {
   const origin = webServer.getOrigin()
   if (!isLoopbackOrigin(origin)) throw new Error('tether-dsh-surface requires a plain HTTP loopback DSH listener')

@@ -777,6 +777,10 @@ def test_plugin_maps_zip_sources_to_existing_profile_packages(artifact_server: A
     assert "0.2.1" in (packages / "tether-dsh-client" / "lib" / "client.js").read_text(encoding="utf-8")
     assert json.loads((root / "version.json").read_text(encoding="utf-8"))["components"]["plugin"] == "0.2.0"
     assert manager.status()["current_version"] == "0.2.1"
+    mirrored = json.loads((dsh_home / "storages" / "tether" / "updates" / "applied-plugin.json")
+                          .read_text(encoding="utf-8"))
+    assert mirrored["version"] == "0.2.1"
+    assert mirrored["restart_required"] is True
 
 
 @pytest.mark.parametrize("fail_source_write", [False, True])
@@ -1476,6 +1480,12 @@ def test_restart_cleared_requires_a_different_live_host_pid():
     assert _restart_cleared(None, 11) is False
 
 
+def test_dsh_host_scan_ignores_hosts_from_other_homes(tmp_path):
+    from tether.updates import _scan_dsh_host_pid
+
+    assert _scan_dsh_host_pid(tmp_path) is None
+
+
 def test_runtime_loaded_requires_the_live_descriptor_to_report_the_applied_version():
     applied = {"restart_required": True, "version": "0.2.91"}
     host = {"descriptor_pid": 10, "plugin_version": "0.2.91"}
@@ -1602,7 +1612,7 @@ def test_host_state_scans_for_a_live_dsh_when_the_descriptor_pid_is_stale(tmp_pa
     manager = UpdateManager(tmp_path / "install", "plugin", dsh_home=dsh_home,
                             state_dir=tmp_path / "state",
                             manifest_url="https://example.invalid/manifest.json")
-    monkeypatch.setattr("tether.updates._scan_dsh_host_pid", lambda: 424242)
+    monkeypatch.setattr("tether.updates._scan_dsh_host_pid", lambda *_args: 424242)
     state = manager._dsh_host_state()
     assert state["pid"] == 424242
     assert state["descriptor_pid"] is None

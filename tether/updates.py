@@ -283,8 +283,13 @@ def _looks_like_dsh_host(process: psutil.Process) -> bool | None:
     return None if "deepseek harness" in name else False
 
 
-def _scan_dsh_host_pid() -> int | None:
-    """Find the DSH host when the descriptor is missing or holds a stale pid."""
+def _scan_dsh_host_pid(dsh_home: Path | None = None) -> int | None:
+    """Find the DSH host when the descriptor is missing or holds a stale pid.
+
+    With a home, only a host whose profile lives below that home counts; the
+    scanner must never pick an unrelated DSH installation or a test fixture.
+    """
+    root = Path(dsh_home).resolve() if dsh_home is not None else None
     for process in psutil.process_iter(["pid", "name", "cmdline"]):
         try:
             pid = process.info.get("pid")
@@ -295,9 +300,26 @@ def _scan_dsh_host_pid() -> int | None:
         if type(pid) is not int or not any(
                 isinstance(arg, str) and "dsh-desktop-host" in arg for arg in cmdline):
             continue
-        if "deepseek harness" in name or any(
-                isinstance(arg, str) and "deepseek harness" in arg.lower() for arg in cmdline[:1]):
-            return pid
+        if not ("deepseek harness" in name or any(
+                isinstance(arg, str) and "deepseek harness" in arg.lower() for arg in cmdline[:1])):
+            continue
+        if root is not None:
+            profile = next((arg for arg in cmdline
+                            if isinstance(arg, str) and os.path.isabs(arg)
+                            and os.path.basename(os.path.dirname(arg)) == "profiles"), None)
+            if profile is None:
+                try:
+                    home = process.environ().get("DSH_HOME")
+                except (psutil.Error, OSError):
+                    home = None
+                if not home:
+                    continue
+                profile = os.path.join(home, "profiles", "desktop")
+            try:
+                Path(profile).resolve().relative_to(root)
+            except (ValueError, OSError):
+                continue
+        return pid
     return None
 
 
@@ -1653,6 +1675,22 @@ class UpdateManager:
                 replaced.append((path, backup))
                 self._write_atomic(path, (json.dumps(content, indent=2) + "\n").encode("utf-8"))
 
+            if self.component == "plugin":
+                # The surface's local updater owns this record; mirror the node's
+                # apply there so the running page can see the pending reload and
+                # load the new bundle through HMR instead of waiting for a restart.
+                surface_applied = (self.dsh_home / "storages" / "tether" / "updates"
+                                   / "applied-plugin.json")
+                surface_applied.parent.mkdir(parents=True, exist_ok=True)
+                surface_backup: Path | None = None
+                if surface_applied.exists():
+                    surface_backup = backup_dir / "surface-state" / surface_applied.name
+                    surface_backup.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(surface_applied, surface_backup)
+                replaced.append((surface_applied, surface_backup))
+                self._write_atomic(surface_applied,
+                                   (json.dumps(applied_record, indent=2) + "\n").encode("utf-8"))
+
             if self.component != "plugin":
                 versions = self._versions()
                 versions[self.component] = expected_version
@@ -1734,7 +1772,7 @@ class UpdateManager:
         if host_pid is None:
             # DSH can rewrite the surface descriptor on another profile while the
             # host keeps running; a stale descriptor must not hide a live host.
-            host_pid = _scan_dsh_host_pid()
+            host_pid = _scan_dsh_host_pid(self.dsh_home)
         plugin_version = data.get("plugin_version") if isinstance(data, dict) else None
         return {"pid": host_pid, "descriptor_pid": descriptor_pid,
                 "updated_at": float(updated) if isinstance(updated, (int, float)) and not isinstance(updated, bool) and updated > 0 else None,
