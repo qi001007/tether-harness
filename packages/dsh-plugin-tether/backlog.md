@@ -14,3 +14,4 @@
 - 2026-10-28：bundle 插件 package.json 发布版本升至 `0.2.13`。
 - 2026-10-29：bundle 插件 package.json 发布版本升至 `0.2.16`，与三组件版本一致。
 - 2026-10-30：DSH 插件 bundle 包版本统一至发行候选 `0.2.29`。
+- 2026-11-03：插件安装必须同时安装 `tether-dsh-native-ui` 的 `@deepseek-ai/dsh-client-ui-*` 依赖树；只拷 4 个 Tether 包会让 DSH 侧栏组件退回另一套 CSS Module 类名（`GAkraW_*` vs `bhn1Oq_*`），控件显示成浏览器默认样式。一键安装应走官方 `dsh plugin add` 或显式补齐依赖。

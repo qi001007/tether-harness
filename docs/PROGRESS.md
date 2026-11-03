@@ -8,6 +8,7 @@
 4. **黑窗真正根因**：LAPTOP 的桌面/开始菜单快捷方式指向 `Tether-App.cmd`，双击先起可见 cmd 控制台。已重建 LAPTOP 桌面快捷方式为直接启动 `electron.exe`；APP 新增 `ensureAppShortcuts()`，每次启动用 `shell.writeShortcutLink` 自愈桌面/开始菜单。开始菜单路径受 fs 保护策略限制，等 APP 在 LAPTOP 启动后由自愈逻辑修正。
 5. 门禁：mjs **237/237**、cjs **7/7**、pytest **151 passed / 1 skipped**、`build.mjs --check`、`build-web.mjs --check`、`validate_versions()` 通过。0.2.83 已发布（CI `41585359468`，05:44:39Z，app 1,785,637 B / plugin 1,362,845 B / node 86,236 B），Hub mirror 0.2.83。LAPTOP 经更新任务升到 app/node/plugin **0.2.83**（plugin job 26 s、app job 17 s），DSH pid 20892、surface 200；DESKTOP 重装本地 profile 插件到 0.2.83 并重启 DSH 到 pid 21144，两机页面均有 composer。
 6. 冷启动取证：桌面快捷方式启动，20 ms 采样 **1,100 次**，只新增 3 个可见窗口（WeType `StatusBarWnd` + 两个 Tether `Chrome_WidgetWin_1`），无 `ConsoleWindowClass`/cmd/conhost。
+7. **LAPTOP 侧栏样式退化**：页面能出侧栏，但工作区搜索框/按钮是浏览器默认样式。原因是手工拷包绕过了 `dsh plugin add`，profile 缺 `@deepseek-ai/dsh-client-ui-*` 依赖树；LAPTOP 组件类名为 `GAkraW_*`，静态 CSS 只匹配 DESKTOP 的 `bhn1Oq_*`。补齐 30 个 `@deepseek-ai` 运行文件（SHA-256 校验）并重启 DSH 后，类名恢复为 `bhn1Oq_searchInput`、`border: 0`，真 APP 的 LAPTOP iframe 复验通过。
 
 ## 2026-11-03 v0.2.82 DSH 认证修复入口
 
