@@ -52,8 +52,14 @@ class AppCatalog:
             path = str(item.get("path") or "/")
             if not name or not 1 <= port <= 65535 or not path.startswith("/"):
                 continue
+            try:
+                listen_port = int(item.get("listen_port") or 0)
+            except (TypeError, ValueError):
+                listen_port = 0
+            if not 0 <= listen_port <= 65535:
+                listen_port = 0
             apps.append({"id": "app-%d" % len(apps), "name": name[:80], "kind": "web",
-                         "target_port": port, "path": path})
+                         "listen_port": listen_port, "target_port": port, "path": path})
         return apps
 
     def entries(self) -> list[dict[str, Any]]:
@@ -73,7 +79,8 @@ class AppCatalog:
             return {"ok": True, "mesh": host, "apps": [], "reason": "no_apps"}
         try:
             gateway = Gateway(
-                [AppRoute(app["name"], host, 0, "127.0.0.1", app["target_port"])
+                [AppRoute(app["name"], host, app.get("listen_port", 0),
+                          "127.0.0.1", app["target_port"])
                  for app in entries],
                 MESH,
             )
