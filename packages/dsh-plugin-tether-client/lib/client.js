@@ -13553,6 +13553,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const [view, setView] = React.useState('chat')
       const [terminalOpen, setTerminalOpen] = React.useState(false)
       const [terminalCwd, setTerminalCwd] = React.useState('')
+      React.useEffect(() => { setTerminalCwd('') }, [deviceId])
       const [terminalHeight, setTerminalHeight] = React.useState(220)
       const [terminalKey, setTerminalKey] = React.useState(0)
       const [activePanel, setActivePanel] = usePersisted('tether.ui.panel.v2', 'workspaces')

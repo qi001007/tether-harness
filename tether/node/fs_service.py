@@ -988,6 +988,13 @@ class FsService:
         return {"path": str(p), "trash": str(target)}
 
     def _op_drives(self, _args: dict[str, Any]) -> dict[str, Any]:
+        if os.name != "nt":
+            roots = []
+            for name, path in (("根目录", "/"), ("home", "/home"), ("srv", "/srv"),
+                               ("var/log", "/var/log")):
+                if Path(path).is_dir():
+                    roots.append({"name": name, "path": path})
+            return {"drives": roots}
         import string
         roots = []
         for letter in string.ascii_uppercase:

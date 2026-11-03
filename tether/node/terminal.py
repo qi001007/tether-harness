@@ -268,6 +268,9 @@ class TerminalService:
     def start(self, args: dict[str, Any]) -> dict[str, Any]:
         cwd = Path(str(args.get("cwd") or self.cwd)).expanduser()
         if not cwd.is_dir():
+            fallback = Path(self.cwd).expanduser()
+            cwd = fallback if fallback.is_dir() else Path.home()
+        if not cwd.is_dir():
             raise ValueError("terminal cwd is not a directory")
         shell_id, command = self._resolve_shell(args.get("shell"))
         try:

@@ -94,6 +94,6 @@ jobs:
           $zip = Join-Path $env:RUNNER_TEMP 'tether-app.zip'
           Invoke-WebRequest -Uri 'https://8-220-198-26.sslip.io/install/tether-app-0.3.5.zip' -OutFile $zip
           Expand-Archive -Path $zip -DestinationPath (Join-Path $env:RUNNER_TEMP 'app')
-          $exe = Get-ChildItem -Path (Join-Path $env:RUNNER_TEMP 'app') -Recurse -Filter 'tether-app.exe' | Select-Object -First 1
-          if (-not $exe) { throw 'tether-app.exe is missing from the published ZIP' }
-          Write-Host ('clean-windows-app-ok ' + $exe.FullName)
+          $bootstrap = Get-ChildItem -Path (Join-Path $env:RUNNER_TEMP 'app') -Recurse -Filter 'bootstrap-app.ps1' | Select-Object -First 1
+          if (-not $bootstrap) { throw 'bootstrap-app.ps1 is missing from the published ZIP' }
+          Write-Host ('clean-windows-app-ok ' + $bootstrap.FullName)
