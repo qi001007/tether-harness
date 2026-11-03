@@ -1,5 +1,15 @@
 # Public client releases
 
+## v0.3.5
+
+POSIX terminal fix and a one-shot Linux/macOS Node installer:
+
+- POSIX PTY reader no longer dereferences `session.fd` after `stop()` (the old path raised `TypeError` in the reader thread). The reader captures the fd and `stop` marks the session closed before closing it.
+- `laptop/install-node.sh` is now shipped inside `tether-node-0.3.5.zip` and accepts `--controller/--token/--device`, `--archive`, `--check`, `--install-only`, `--prefix`, `--version`. It creates a venv, installs dependencies, writes a mode-600 `node.env`, and creates `~/.local/bin/tether-node`.
+- WSL2 Ubuntu test: the raw v0.3.5 installer passed `--check` and installed from the release ZIP (37 deps, launcher/env created). The installed venv's `TerminalService` returned `pty:true`, ran `echo TETHER_INSTALLED_LINUX_OK`, resized to 80×20, and stopped cleanly; shell catalog was bash/sh available, zsh/fish unavailable, default bash.
+- Still untested: a full VirtualBox/VMware desktop Linux VM, real macOS, and an APP-generated token command/system service. WSL2 is a lightweight VM, not a desktop distribution.
+- Gates: pytest **189 passed / 3 skipped**, bundle check. CI `41684185090`; published at 2026-11-03T17:29:28Z; assets app 1,941,046 B, plugin 1,377,973 B, node 109,596 B.
+
 ## v0.3.4
 
 Direct-mesh bulk transfers instead of the Hub relay:

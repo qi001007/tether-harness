@@ -3,8 +3,9 @@
 ## 2026-11-03 Linux 一键安装（WSL 实测）
 
 1. 新增 `laptop/install-node.sh`：检查 Python>=3.10/venv，下载或读取 Node ZIP，建 venv、`pip install -e`、生成 `~/.local/bin/tether-node` 与 600 权限的 `node.env`；支持 `--check`、`--install-only`、`--archive`、`--version`。
-2. WSL2 Ubuntu 实测：`--check` 用 Python 3.10.12 通过；`--archive tether-node-0.3.4.zip --install-only` 成功安装全部依赖并生成启动器；同机 `TerminalService` 的 bash PTY、`echo TETHER_LINUX_PTY_OK`、`resize`、`stop` 均通过。
-3. 说明：这是 WSL2 轻量 VM，不是完整 VirtualBox/VMware 发行版；macOS 未真机。APP 生成带 token 的安装命令、系统服务/开机自启仍未做。0.3.5 发布时会把这个脚本和 POSIX `stop()` 修复一起带出。
+2. WSL2 Ubuntu 实测：`--check` 用 Python 3.10.12 通过；先以 0.3.4 包跑通完整安装，0.3.5 正式发布后又从 tag 的 raw 脚本重跑：下载 0.3.5 Node ZIP、安装全部依赖、生成启动器；安装后的 venv 运行 `TerminalService`，bash PTY、`echo TETHER_INSTALLED_LINUX_OK`、resize 80×20、stop 均通过（无读线程异常）。
+3. **0.3.5 已发布**（CI `41684185090`，2026-11-03T17:29:28Z），Node ZIP 内含 `laptop/install-node.sh`，updater 的 `NODE_ALLOWED` 已加入该路径；一键命令：`curl -fsSL https://raw.githubusercontent.com/qi001007/tether-harness/v0.3.5/laptop/install-node.sh | bash -s -- --controller ... --token ...`。
+4. 仍未做：完整 VirtualBox/VMware 桌面 Linux VM、macOS 真机、APP 一键生成带 token 的安装命令、系统服务/开机自启。WSL2 是轻量 VM，不等同完整发行版。
 
 ## 2026-11-03 Linux/POSIX 终端适配（WSL 实测）
 
