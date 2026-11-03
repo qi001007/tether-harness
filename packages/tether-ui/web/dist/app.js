@@ -180629,6 +180629,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     }, [dshWebOpen]);
     const dshWebSupported = linuxDevice || !!(deviceInfo && deviceInfo.capabilities && deviceInfo.capabilities.dsh_web_supported);
     const dshWebEnabled = dshWebSupported || !!(dshWeb && dshWeb.supported);
+    const dshWebActive = !!(dshWeb && (dshWeb.running || dshWeb.installing || dshWebBusy));
     const dshWebValue = (data) => data && data.value && typeof data.value === "object" ? data.value : data;
     React2.useEffect(() => {
       if (!deviceId) return void 0;
@@ -180649,6 +180650,15 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       try {
         const data = await post("/api/devices/" + encodeURIComponent(deviceId) + "/fs/dsh_web_" + action, {});
         if (data) setDshWeb(dshWebValue(data));
+        if (action === "install" || action === "repair") {
+          for (let i = 0; i < 150; i += 1) {
+            await new Promise((resolve3) => setTimeout(resolve3, 2e3));
+            const next = await post("/api/devices/" + encodeURIComponent(deviceId) + "/fs/dsh_web_status", {});
+            const value = dshWebValue(next);
+            if (value) setDshWeb(value);
+            if (!value || !value.installing) break;
+          }
+        }
       } catch (error) {
         setDshWeb((current) => ({ ...current || {}, error: error.message || "\u64CD\u4F5C\u5931\u8D25" }));
       } finally {
@@ -180739,7 +180749,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       });
     }, [deviceId]);
     const dshSurfaceMissing = !!dshRelevant && !!dsh && dsh.running === true && currentState.code === "descriptor_missing";
-    const message = currentState.status === "error" && dshRelevant && dsh ? dshWeb && dshWeb.running ? "DSH Web \u5DF2\u5C31\u7EEA" : dsh.installed === false ? "DSH \u672A\u5B89\u88C5" : dsh.running ? dshBusy === "dsh_install_plugin" ? "\u6B63\u5728\u5B89\u88C5/\u4FEE\u590D Tether \u63D2\u4EF6\u2026" : dshSurfaceMissing ? "DSH \u5DF2\u5728\u8FD0\u884C\uFF0C\u4F46 Tether \u63D2\u4EF6\u672A\u52A0\u8F7D\u6216 surface \u63CF\u8FF0\u7B26\u7F3A\u5931" : currentState.message : "DSH \u672A\u542F\u52A8" : currentState.status === "loading" ? currentState.message || "\u6B63\u5728\u8FDE\u63A5\u76EE\u6807\u8BBE\u5907\u7684 DSH \u539F\u751F\u5DE5\u4F5C\u533A\u2026" : currentState.status === "local" ? "\u5F53\u524D\u5DF2\u5728 DeepSeek Harness \u4E2D\uFF1B\u672C\u673A\u5DE5\u4F5C\u533A\u65E0\u9700\u518D\u5D4C\u5165\uFF0C\u53EF\u7528\u5DE6\u4FA7\u300C\u6587\u4EF6\u300D\u6216\u300C\u8FDE\u63A5\u300D\u3002" : currentState.status === "offline" ? "\u76EE\u6807\u8BBE\u5907\u79BB\u7EBF\u3002\u8BBE\u5907\u91CD\u65B0\u5728\u7EBF\u540E\u53EF\u91CD\u8BD5\u3002" : currentState.status === "no-device" ? "\u5148\u4ECE\u5DE6\u4FA7\u8BBE\u5907\u5217\u8868\u9009\u62E9\u76EE\u6807\u8BBE\u5907\u3002" : currentState.status === "error" ? currentState.message : "";
+    const message = currentState.status === "error" && dshRelevant && dsh ? dshWebActive ? "DSH Web \u5DF2\u5C31\u7EEA" : dsh.installed === false ? "DSH \u672A\u5B89\u88C5" : dsh.running ? dshBusy === "dsh_install_plugin" ? "\u6B63\u5728\u5B89\u88C5/\u4FEE\u590D Tether \u63D2\u4EF6\u2026" : dshSurfaceMissing ? "DSH \u5DF2\u5728\u8FD0\u884C\uFF0C\u4F46 Tether \u63D2\u4EF6\u672A\u52A0\u8F7D\u6216 surface \u63CF\u8FF0\u7B26\u7F3A\u5931" : currentState.message : "DSH \u672A\u542F\u52A8" : currentState.status === "loading" ? currentState.message || "\u6B63\u5728\u8FDE\u63A5\u76EE\u6807\u8BBE\u5907\u7684 DSH \u539F\u751F\u5DE5\u4F5C\u533A\u2026" : currentState.status === "local" ? "\u5F53\u524D\u5DF2\u5728 DeepSeek Harness \u4E2D\uFF1B\u672C\u673A\u5DE5\u4F5C\u533A\u65E0\u9700\u518D\u5D4C\u5165\uFF0C\u53EF\u7528\u5DE6\u4FA7\u300C\u6587\u4EF6\u300D\u6216\u300C\u8FDE\u63A5\u300D\u3002" : currentState.status === "offline" ? "\u76EE\u6807\u8BBE\u5907\u79BB\u7EBF\u3002\u8BBE\u5907\u91CD\u65B0\u5728\u7EBF\u540E\u53EF\u91CD\u8BD5\u3002" : currentState.status === "no-device" ? "\u5148\u4ECE\u5DE6\u4FA7\u8BBE\u5907\u5217\u8868\u9009\u62E9\u76EE\u6807\u8BBE\u5907\u3002" : currentState.status === "error" ? currentState.message : "";
     const dshWebUrl = dshWeb && dshWeb.running ? String(dshWeb.url || "") : "";
     if (dshWebOpen && dshWebUrl && host.kind === "app") {
       return h3(
@@ -180851,22 +180861,22 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           () => runDsh(dsh.installed === false ? "dsh_install" : "dsh_start"),
           { primary: true, disabled: !!dshBusy || !!dsh.installing }
         ) : null,
-        dshRelevant && dshWeb && dshWeb.running ? btn(
+        dshRelevant && dshWebActive ? btn(
           dshWebBusy === "repair" ? "\u4FEE\u590D\u4E2D\u2026" : "\u4FEE\u590D DSH Web \u63D2\u4EF6",
           () => {
             void runDshWeb("repair");
           },
           { primary: true, disabled: !!dshWebBusy }
         ) : null,
-        dshRelevant && dshWeb && dshWeb.running ? btn(
-          dshWebBusy ? "\u91CD\u542F\u4E2D\u2026" : "\u91CD\u542F DSH Web",
+        dshRelevant && dshWebActive ? btn(
+          dshWebBusy === "stop" || dshWebBusy === "start" ? "\u91CD\u542F\u4E2D\u2026" : "\u91CD\u542F DSH Web",
           async () => {
             await runDshWeb("stop");
             await runDshWeb("start");
           },
           { disabled: !!dshWebBusy }
         ) : null,
-        dshRelevant && dsh && dsh.running && !(dshWeb && dshWeb.running) ? btn(
+        dshRelevant && dsh && dsh.running && !dshWebActive ? btn(
           dshBusy === "dsh_install_plugin" ? "\u4FEE\u590D\u4E2D\u2026" : "\u5B89\u88C5/\u4FEE\u590D\u63D2\u4EF6",
           () => {
             dshAutoRepairRef.current = true;
@@ -180874,7 +180884,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           },
           { primary: true, disabled: !!dshBusy }
         ) : null,
-        dshRelevant && dsh && dsh.running && !(dshWeb && dshWeb.running) ? btn(
+        dshRelevant && dsh && dsh.running && !dshWebActive ? btn(
           dshBusy === "dsh_restart" ? "\u91CD\u542F\u4E2D\u2026" : "\u91CD\u542F DSH",
           () => runDsh("dsh_restart"),
           { disabled: !!dshBusy }
@@ -180901,7 +180911,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
             textAlign: "center"
           }
         },
-        h3("div", { style: { fontSize: 14, color: C2.ink } }, dshWeb && dshWeb.running ? "DSH Web \u5DF2\u5C31\u7EEA" : dsh.installed === false ? "DSH \u672A\u5B89\u88C5" : "DSH \u672A\u542F\u52A8"),
+        h3("div", { style: { fontSize: 14, color: C2.ink } }, dshWebActive ? "DSH Web \u5DF2\u5C31\u7EEA" : dsh.installed === false ? "DSH \u672A\u5B89\u88C5" : "DSH \u672A\u542F\u52A8"),
         dsh.version ? h3("div", { className: "tether-num", style: { fontSize: 11.5, color: C2.mute } }, dsh.version) : null,
         dsh.installing ? h3("div", { style: { fontSize: 11.5, color: C2.mute } }, "\u5B89\u88C5\u4E2D " + (Number(dsh.progress) || 0) + "%") : null,
         dsh.installed === false && (!dshInstallSupported || dshWeb && dshWeb.running) ? h3(
