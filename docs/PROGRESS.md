@@ -1,5 +1,11 @@
 # 实时进度
 
+## 2026-11-03 发布制品干净安装审计
+
+1. 新增 `scripts/qa_release_artifacts.py`：从 Hub manifest 下载当前三件套，验证签名、SHA-256、大小，解包检查必需文件（主进程、Node `dsh_plugin.py`、Tether 四包、安装脚本、`version.json`），并拒绝 `node_modules/data/__pycache__/.env/hub.json/.credentials.yaml` 等泄露项。
+2. 对已发布 **0.2.89** 实跑：app 1,792,944 B、node 91,599 B、plugin 1,363,707 B，**PASS**。
+3. 这是“干净安装/签名”门禁的制品层；真实 Windows 干净机安装仍需单独执行。
+
 ## 2026-11-03 Hub 稳定 surface origin（跨设备统一）
 
 1. 另一个冷载根因：gateway 端口随机，Hub 重启/网关重建后 public origin `g<port>` 变化，浏览器按 origin 的缓存全部作废，热载又变冷载。
