@@ -524,6 +524,27 @@ class FsService:
             raise FsError("direct api unavailable", "unavailable")
         return direct.info()
 
+    def _terminal_dispatch(self, action: str, args: dict[str, Any]) -> Any:
+        terminal = getattr(self, "terminal", None)
+        if terminal is None:
+            raise FsError("terminal unavailable", "unavailable")
+        try:
+            return terminal.dispatch(action, args)
+        except ValueError as exc:
+            raise FsError(str(exc), "terminal_error") from None
+
+    def _op_terminal_start(self, args: dict[str, Any]) -> Any:
+        return self._terminal_dispatch("start", args)
+
+    def _op_terminal_write(self, args: dict[str, Any]) -> Any:
+        return self._terminal_dispatch("write", args)
+
+    def _op_terminal_poll(self, args: dict[str, Any]) -> Any:
+        return self._terminal_dispatch("poll", args)
+
+    def _op_terminal_stop(self, args: dict[str, Any]) -> Any:
+        return self._terminal_dispatch("stop", args)
+
     def _op_read(self, args: dict[str, Any]) -> dict[str, Any]:
         p = self._resolve(args.get("path"))
         self._read_guard(p)

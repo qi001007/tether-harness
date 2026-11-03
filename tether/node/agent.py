@@ -30,6 +30,7 @@ from . import console as local_console
 from .dsh_adapter import DshRun
 from .fs_service import FsError, FsService
 from .direct_api import DirectApi
+from .terminal import TerminalService
 from .dsh_sessions import DshSessionStore
 from .native_surface import NativeSurface, NativeSurfaceError
 from .local_identity import remove_identity, write_identity
@@ -285,6 +286,8 @@ class Node:
         self.direct = DirectApi(self.fs.dispatch)
         self._direct_started = False
         self.fs.direct = self.direct
+        self.terminal = TerminalService(self.workspace)
+        self.fs.terminal = self.terminal
         ensure_sdk_profile(self.native_dsh_home)
         self.native_surface = NativeSurface(self.native_dsh_home, device_fs=self.fs)
         update_state_dir = self.data_dir / "updates"
@@ -971,6 +974,7 @@ class Node:
                 "update_features": ["check", "prepare", "apply", "app_restart", "plugin_profile_fallback"],
                 "update_manifest": "hub-or-github",
                 "workspace": str(self.workspace), "agents": ["fake", "dsh"], "fs": True,
+                "terminal": True,
                 "policy_mode": self.fs.policy.data.get("mode"),
                 "workspaces_root": str(self.workspaces_root),
                 "dsh_native": self.dsh_sessions.available(),
