@@ -127,6 +127,7 @@ APP_ALLOWED = (
     "tether/release.py",
     "tether/ed25519.py",
     "desktop/install-app.ps1",
+    "desktop/install-app.cmd",
     "version.json",
 )
 NODE_ALLOWED = (

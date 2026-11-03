@@ -160,7 +160,7 @@ or start a server.
         add_tree(archive, ROOT / "packages" / "tether-ui", app_prefix)
         add_tether_runtime(archive, app_prefix)
         add_tree(archive, ROOT / "assets", app_prefix)
-        for rel in ("pyproject.toml", ".env.example", "version.json", "desktop/install-app.ps1"):
+        for rel in ("pyproject.toml", ".env.example", "version.json", "desktop/install-app.ps1", "desktop/install-app.cmd"):
             add_file(archive, rel, app_prefix)
         archive.writestr(f"{app_prefix}/README-INSTALL.md", """# Tether APP (standalone)
 
