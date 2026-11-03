@@ -83,11 +83,11 @@ EasyTier 数据面（自建共享节点在主人的服务器）
 
 ## M0 进展（2026-11-03）
 
-- 服务器已装 EasyTier 2.6.4：`/opt/easytier`，systemd `easytier-tether`，虚拟 IP `10.144.0.1/24`，`private_mode` + `relay_all_peer_rpc`，WSS 监听 `127.0.0.1:11011`；Caddyfile 备份 `Caddyfile.bak-20261103-easytier`。
-- 公网 `11010/tcp` 实测不通（云安全组），因此节点走 `wss://8-220-198-26.sslip.io/easytier`；Hub 仍走原 443 根路径，未改动。
-- DESKTOP 已加入：`10.144.0.2/24`，TUN `et_5_*`，WSS peer 已建立；从 DESKTOP `Test-NetConnection 10.144.0.1 -Port 22` 成功。
-- 20 MB scp over WSS relay：**82.3 s（约 0.24 MB/s）**，SHA-256 一致；是 Hub relay（0.04 MB/s）的约 6 倍，但仍是中继路径，不是 LAN 直连。
-- LAPTOP 引导文件已写入 `D:\TetherWorkspaces\easytier-bootstrap\`；等待一次管理员运行，加入后测直连/中继与 100 MB。
+- 服务器已装 EasyTier 2.6.4：`/opt/easytier`，systemd `easytier-tether`，虚拟 IP `10.144.0.1/24`，`private_mode` + `relay_all_peer_rpc`；Caddyfile 备份 `Caddyfile.bak-20261103-easytier` / `Caddyfile.bak-20261103-http80`。
+- 公网 `11010` 不通（云安全组只放行 22/80/443）。先走 443 WSS；后来把 Caddy 的 HTTP 端口移到 `8080`，把 **80/TCP 让给 EasyTier TCP 中继**，Hub 仍在 443 根路径，HTTPS 正常（`/api/health` 401 属鉴权预期）。
+- DESKTOP 已加入：`10.144.0.2/24`，TUN `et_5_*`；peer 列表显示 `tunnel=tcp`。
+- 20 MB scp 实测：WSS relay **82.3 s（0.24 MB/s）**；TCP 80 relay **12.3 s（1.70 MB/s）**，SHA-256 均一致。公网 SSH 直连对照 **11.5 s（1.82 MB/s）**；TCP 80 已接近链路上限，是 Hub relay 的约 42 倍。
+- LAPTOP 引导文件已写入 `D:\TetherWorkspaces\easytier-bootstrap\`（`run-bootstrap.cmd` 双击、一次 UAC）；引导已切到 TCP 80 + WSS 兜底。等待加入后测 direct/relay 与 100 MB。
 
 ## 下一步（M0 收尾）
 

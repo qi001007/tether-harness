@@ -12,8 +12,12 @@
 ## 2026-11-03 EasyTier 数据面原型
 
 - 自建 EasyTier 2.6.4 共享节点（服务器 `10.144.0.1/24`，私有网络，WSS 走 443 `/easytier`）；DESKTOP 加入为 `10.144.0.2/24`，虚拟 IP 上 TCP 22 可达。
-- DESKTOP→服务器 20 MB `scp`：**82.3 s（约 0.24 MB/s）**，SHA-256 一致；是 Hub relay（0.04 MB/s）的约 6 倍，但仍是中继路径，不是同 LAN 直连。
-- 下一步：LAPTOP 加入后测 direct/relay；若 direct 达到 MB/s 级，再把 Tether 文件传输切到虚拟 IP。
+- DESKTOP→服务器 20 MB `scp`（经 EasyTier WSS 中继）：**82.3 s（约 0.24 MB/s）**，SHA-256 一致；是 Hub relay（0.04 MB/s）的约 6 倍，但仍是中继路径。
+- 同一文件走公网 SSH 直连（不经 EasyTier）：**11.5 s（约 1.82 MB/s）**。说明家里上行不是瓶颈，**WSS 中继路径把速度压掉了约 7.5 倍**。
+- 把 Caddy 的 HTTP 移到 8080、把 80/TCP 让给 EasyTier TCP 中继后，同一 20 MB：**12.3 s（约 1.70 MB/s）**，已接近 SSH 直连的 1.82 MB/s，是 Hub relay 的约 42 倍。
+- 服务器安全组只放行 22/80/443；11010 TCP/UDP 从外网不通。80/TCP 中继已绕过该限制，不要求改云安全组。
+- DESKTOP 的 NAT 类型是 `Symmetric`；跨网 P2P 打洞可能失败，同 LAN 直连是最稳的快速路径。
+- 下一步：LAPTOP 运行 `run-bootstrap.cmd`（一次 UAC）加入后测 direct/relay；若 direct 达到 MB/s 级，再把 Tether 文件传输切到虚拟 IP。
 
 ## 决策（按主人约束）
 
