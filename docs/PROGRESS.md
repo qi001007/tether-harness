@@ -7,6 +7,7 @@
 3. 发布 0.2.89（CI `41598308564`，app 1,792,944 B / plugin 1,363,707 B / node 91,599 B），Hub mirror 0.2.89；LAPTOP 0.2.89，本地插件 0.2.89（pid 43440）。
 4. 计算样式门禁 `node scripts/qa_surface_styles.mjs DESKTOP-LOCAL LAPTOP-01` 两机 **PASS**（`bhn1Oq_searchInput`、`border 0px/none`、composer=true）。
 5. 仍未完成：DSH 新版本升级矩阵（当前只有 rc.5 同版本基线）、第三方插件测试、5 秒热重载。
+6. 黑窗复测：用更新同款 `python -m tether.node.app_restart` 重启 APP，30 s / 20 ms 采样 **1,500 次**，只新增 1 个 `Chrome_WidgetWin_1`（Tether 主窗口），无 cmd/conhost/`ConsoleWindowClass`。
 
 ## 2026-11-03 v0.2.88 自动修复真实触发 + surface 健康判定
 

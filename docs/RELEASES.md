@@ -8,6 +8,7 @@ Runtime defense against unstyled DSH controls:
 - A default-styled surface triggers one automatic plugin install/repair; if it breaks again, the APP covers the frame with a clear “DSH 界面样式与 Tether 版本不匹配” state instead of showing raw controls.
 - Added `scripts/qa_surface_styles.mjs`, a release gate that loads both devices' real surfaces in headless Edge and asserts computed styles (`border 0px/none`, transparent background, composer present). Both devices PASS.
 - The DSH upgrade/plugin-install matrix lives in `docs/DSH_UPGRADE_MATRIX.md`.
+- Update-restart trace: the same `app_restart` helper used by updates restarted the APP; 30 s of 20 ms sampling produced **1** new window (`Chrome_WidgetWin_1`, Tether) and **no console**. 
 
 Gates: mjs 238/238, cjs 7/7, pytest 158 passed / 1 skipped, build checks, `validate_versions()`, computed-style gate PASS both devices. CI `41598308564`; published at 2026-11-03T07:47:59Z (app 1,792,944 B, plugin 1,363,707 B, node 91,599 B). Hub mirror 0.2.89; DESKTOP and LAPTOP app/node/plugin **0.2.89**.
 
