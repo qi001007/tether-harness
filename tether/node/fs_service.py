@@ -545,6 +545,9 @@ class FsService:
     def _op_terminal_poll(self, args: dict[str, Any]) -> Any:
         return self._terminal_dispatch("poll", args)
 
+    def _op_terminal_resize(self, args: dict[str, Any]) -> Any:
+        return self._terminal_dispatch("resize", args)
+
     def _op_terminal_stop(self, args: dict[str, Any]) -> Any:
         return self._terminal_dispatch("stop", args)
 

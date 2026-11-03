@@ -1,10 +1,15 @@
 import React from 'react'
 import { createRoot } from 'react-dom/client'
+import { Terminal } from '@xterm/xterm'
+import { FitAddon } from '@xterm/addon-fit'
+import '@xterm/xterm/css/xterm.css'
 import { createTetherPanel } from '../src/app.js'
 import { createWebHost, createWebNative } from '../src/hosts/web.js'
 import { createElectronHost } from '../src/hosts/electron.js'
 import { createAppErrorBoundary } from './app-error-boundary.js'
 import * as EditorRuntime from '../src/monaco-runtime.js'
+
+if (typeof window !== 'undefined') window.TetherTerminalRuntime = { Terminal, FitAddon }
 
 function fail(error) {
   const box = document.getElementById('root')

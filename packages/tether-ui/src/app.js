@@ -1374,6 +1374,12 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       .tether-root *::-webkit-scrollbar-thumb { background: transparent; border-radius: 3px; }
       .tether-root *:hover::-webkit-scrollbar-thumb { background: var(--dsw-alias-scrollbar-hover-l1, #cbd5e1); }
       .tether-root *::-webkit-scrollbar-corner { background: transparent; }
+      .tether-term .xterm { height: 100%; }
+      .tether-term .xterm-viewport { background: transparent !important; scrollbar-width: thin; scrollbar-color: transparent transparent; }
+      .tether-term .xterm-viewport::-webkit-scrollbar { width: 6px; height: 6px; }
+      .tether-term .xterm-viewport::-webkit-scrollbar-track { background: transparent; }
+      .tether-term .xterm-viewport::-webkit-scrollbar-thumb { background: transparent; border-radius: 3px; }
+      .tether-term:hover .xterm-viewport::-webkit-scrollbar-thumb { background: rgba(120, 120, 120, 0.35); }
       .tether-num { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum' 1; }
       .tether-spin { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
       .tether-spin > svg { display: block; transform-box: view-box; transform-origin: 50% 50%; animation: tether-refresh-rotate .8s linear infinite; }
@@ -4958,6 +4964,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
 
       const openContextMenu = (event, entry, base) => {
         event.preventDefault(); event.stopPropagation()
+        hideHoverTip()
         if (entry) setSelected(entry)
         setContextMenu({ x: event.clientX, y: event.clientY, entry: entry || null, base: base || path })
       }
@@ -5257,7 +5264,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       }, [view, ask, history, path])
 
       const renderHoverTip = () => {
-        if (!hoverTip) return null
+        if (!hoverTip || contextMenu || deviceMenu) return null
         const entry = hoverTip.entry
         const width = 340
         const viewWidth = typeof window !== 'undefined' ? window.innerWidth : 1200
@@ -5639,7 +5646,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         }, h(Glyph, { name: icon, size: 15 }), h('span', null, label))
         const context = contextMenu ? h('div', {
           onPointerDown: (event) => event.stopPropagation(),
-          style: { position: 'fixed', left: Math.max(8, Math.min(contextMenu.x, window.innerWidth - 190)), top: Math.max(8, Math.min(contextMenu.y, window.innerHeight - 250)), width: 178, zIndex: 60, background: C.layer1, borderRadius: 8, boxShadow: C.shadow, padding: 4, userSelect: 'none' }
+          style: { position: 'fixed', left: Math.max(8, Math.min(contextMenu.x, window.innerWidth - 190)), top: Math.max(8, Math.min(contextMenu.y, window.innerHeight - 250)), width: 178, zIndex: 120, background: C.layer1, borderRadius: 8, boxShadow: C.shadow, padding: 4, userSelect: 'none' }
         },
           contextMenu.entry ? menuItem('file', '打开', () => { setContextMenu(null); openFile(contextMenu.entry) }) : null,
           terminalAllowed && contextMenu.entry && contextMenu.entry.dir ? menuItem('terminal', '在终端中打开', () => { openTerminal(contextMenu.entry.path); setContextMenu(null) }) : null,
@@ -5728,6 +5735,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         const openDeviceMenu = (event, item) => {
           event.preventDefault()
           event.stopPropagation()
+          hideHoverTip()
           selectDevice(item.device_id)
           setDeviceMenu({ x: event.clientX, y: event.clientY, device: item })
         }
@@ -5737,7 +5745,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         }, h(Glyph, { name: icon, size: 15 }), h('span', null, label))
         const deviceContext = deviceMenu ? h('div', {
           onPointerDown: (event) => event.stopPropagation(),
-          style: { position: 'fixed', left: Math.max(8, Math.min(deviceMenu.x, window.innerWidth - 190)), top: Math.max(8, Math.min(deviceMenu.y, window.innerHeight - 150)), width: 178, zIndex: 60, background: C.layer1, borderRadius: 8, boxShadow: C.shadow, padding: 4, userSelect: 'none' }
+          style: { position: 'fixed', left: Math.max(8, Math.min(deviceMenu.x, window.innerWidth - 190)), top: Math.max(8, Math.min(deviceMenu.y, window.innerHeight - 150)), width: 178, zIndex: 120, background: C.layer1, borderRadius: 8, boxShadow: C.shadow, padding: 4, userSelect: 'none' }
         },
           menuItem('monitor', '打开原生工作区', () => { const item = deviceMenu.device; setDeviceMenu(null); openDevice(item) }),
           menuItem('pencil', '重命名', () => renameDevice(deviceMenu.device)),

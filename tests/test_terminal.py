@@ -81,3 +81,19 @@ def test_terminal_rejects_bad_cwd_and_shell(tmp_path) -> None:
         terminal.start({"cwd": str(tmp_path / "missing")})
     with pytest.raises(ValueError):
         terminal.start({"shell": "tether-no-such-shell"})
+
+
+def test_terminal_reports_pty_and_resizes(tmp_path) -> None:
+    if os.name == "nt":
+        pytest.importorskip("winpty")
+    terminal = TerminalService(tmp_path)
+    session = terminal.start({})
+    try:
+        assert session["pty"] is True
+        result = terminal.resize({"session_id": session["session_id"], "cols": 92, "rows": 26})
+        assert result["cols"] == 92
+        assert result["rows"] == 26
+        with pytest.raises(ValueError):
+            terminal.resize({"session_id": session["session_id"], "cols": 0, "rows": 0})
+    finally:
+        terminal.stop({"session_id": session["session_id"]})

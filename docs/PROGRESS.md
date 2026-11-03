@@ -1,5 +1,14 @@
 # 实时进度
 
+## 2026-11-03 原生终端与弹层层级（0.3.3）
+
+1. 终端改为真 PTY：Node `terminal.py` 在 Windows 用 `pywinpty`/ConPTY，POSIX 用 `pty(3)`；`start` 返回 `pty` + cols/rows，新增 `terminal_resize`。PowerShell/PowerShell 7 启动时 `chcp 65001` + 输入/输出 UTF-8，cmd 用 `/K chcp 65001`，Git Bash 用 `-i -l`；无 PTY 后端时保留管道兼容模式。`pyproject.toml` 增加 `pywinpty; sys_platform == 'win32'`。
+2. UI 换成 xterm.js（`@xterm/xterm` + FitAddon）。真机 APP 内 PowerShell 提示符 `PS C:\Users\Administrator\Documents\deepseek-harness\default-workspace>` 可见，输入 `echo TETHER_NATIVE` 输出单行；切 Git Bash 后显示 bash 提示符并可执行命令；背景/前景/光标/ANSI 色随 `body[data-ds-dark-theme]` 切换，终端底部黑条已修（viewport 透明）。
+3. 终端 dock 外观贴合工作台：顶栏 `#f4f4f5` / 内容白底（暗色 `#252526` / `#1e1e1e`），仅顶部圆角 + 1px 内阴影，去掉粗边框/发送按钮；shell 下拉改自绘菜单（白底/暗底、8px 圆角、阴影、选中勾、`C.blue`），不再使用原生 `<select>`；拖拽调高保留。
+4. 遮挡修复：文件悬浮卡不再压右键菜单；打开右键/设备菜单时清除悬浮卡，菜单提升到 `zIndex 120`。真机验证右键后 `[role=tooltip]` 不存在、菜单首个命中元素为“打开”。
+5. DSH 原生终端仍未修改；`host.kind === 'dsh'` 隐藏 Tether 终端入口，Tether 终端只在 APP/WebUI 提供。
+6. 门禁：`tests/test_terminal.py` 6 条通过（新增 PTY + resize 边界）；`build.mjs --check`、`test_tether_ui_shared.mjs`、真机 Electron 无 renderer 异常。全量 pytest 与 0.3.3 两机部署见后续条目。
+
 ## 2026-11-03 终端/Agents/登录体验（0.3.0）
 
 1. 终端并入资源管理器：底部可调高度 dock、目录右键/工具栏入口、cwd=当前目录；移除独立“终端”活动页。真机：`D:\TetherWorkspaces\demo` → PowerShell `Get-Location` 返回同路径；切“命令提示符”后提示符仍在同目录。**DSH 宿主不显示 Tether 终端入口与停靠（`host.kind === 'dsh'` 隐藏），DSH 原生终端未被修改**；Tether 终端只在 APP/WebUI 提供。
