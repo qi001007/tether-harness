@@ -286,8 +286,16 @@ class DirectApi:
         self.token = token or secrets.token_urlsafe(32)
         self.allowed = tuple(ipaddress.ip_network(value, strict=False) for value in allowed)
         self.host = ""
-        self._server: _Server | None = None
-        self._thread: threading.Thread | None = None
+        self._servers: list[_Server] = []
+        self._threads: list[threading.Thread] = []
+
+    def _start_server(self, host: str, port: int, handler: type) -> _Server:
+        server = _Server((host, port), handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self._servers.append(server)
+        self._threads.append(thread)
+        return server
 
     def start(self) -> None:
         handler = type("_DirectHandler", (_Handler,), {
@@ -296,19 +304,25 @@ class DirectApi:
             "allowed": self.allowed,
             "api": self,
         })
-        server = _Server(("0.0.0.0", self.port), handler)
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        self._server, self._thread = server, thread
-        self.port = server.server_address[1]
-        self.host = easy_tier_address()
+        loopback = self._start_server("127.0.0.1", self.port, handler)
+        self.port = loopback.server_address[1]
+        mesh = easy_tier_address()
+        if mesh and mesh != "127.0.0.1":
+            try:
+                self._start_server(mesh, self.port, handler)
+            except OSError:
+                pass
+        self.host = mesh
 
     def stop(self) -> None:
-        if self._server is not None:
-            self._server.shutdown()
-            self._server.server_close()
-            self._server = None
+        for server in self._servers:
+            server.shutdown()
+            server.server_close()
+        self._servers = []
+        self._threads = []
 
     def info(self) -> dict[str, Any]:
-        self.host = easy_tier_address()
+        mesh = easy_tier_address()
+        if mesh:
+            self.host = mesh
         return {"host": self.host, "port": self.port, "token": self.token}
