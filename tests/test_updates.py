@@ -739,6 +739,20 @@ def test_mid_apply_failure_rolls_back_replaced_files(artifact_server: ArtifactSe
     assert json.loads((root / "version.json").read_text(encoding="utf-8"))["components"]["app"] == "0.2.0"
 
 
+@pytest.mark.skipif(os.name != "nt", reason="Windows 8.3 aliases only")
+def test_file_dependency_expands_windows_short_paths(tmp_path: Path) -> None:
+    import ctypes
+
+    package = tmp_path / "tether-dsh-surface"
+    package.mkdir()
+    buffer = ctypes.create_unicode_buffer(32768)
+    assert ctypes.windll.kernel32.GetShortPathNameW(str(package), buffer, 32768)
+    if buffer.value == str(package):
+        pytest.skip("8.3 names are disabled on this volume")
+    expanded = UpdateManager._file_dependency_path("file:" + buffer.value, tmp_path)
+    assert expanded == Path(os.path.abspath(package))
+
+
 def test_plugin_maps_zip_sources_to_existing_profile_packages(artifact_server: ArtifactServer, tmp_path: Path) -> None:
     root = tmp_path / "app-root"
     seed_version(root)
@@ -977,6 +991,10 @@ def test_plugin_apply_reports_a_scheduled_dsh_restart(
     prepared = manager.prepare()
     assert prepared["ok"] is True
 
+    descriptor = dsh_home / "storages" / "tether" / "native-surface.json"
+    descriptor.parent.mkdir(parents=True, exist_ok=True)
+    descriptor.write_text(json.dumps({"version": 1, "pid": 424242, "plugin_version": "0.2.0"}),
+                          encoding="utf-8")
     monkeypatch.setattr(manager, "_dsh_host_pid", lambda: 424242)
     seen = {}
 
@@ -1490,6 +1508,16 @@ def _plugin_status_fixture(tmp_path: Path, version: str):
                          state_dir=state, profile="desktop"), dsh_home
 
 
+def test_hot_reload_capability_requires_the_surface_version_field(tmp_path):
+    manager, dsh_home = _plugin_status_fixture(tmp_path, "0.2.1")
+    assert manager._hot_reload_capable() is False
+    descriptor = dsh_home / "storages" / "tether" / "native-surface.json"
+    descriptor.parent.mkdir(parents=True)
+    descriptor.write_text(json.dumps({"version": 1, "pid": 1, "plugin_version": "0.2.0"}),
+                          encoding="utf-8")
+    assert manager._hot_reload_capable() is True
+
+
 def test_plugin_status_clears_restart_when_the_running_host_loaded_the_applied_version(tmp_path, monkeypatch):
     manager, dsh_home = _plugin_status_fixture(tmp_path, "0.2.1")
     assert manager.status()["restart_required"] is True
@@ -1533,7 +1561,8 @@ def test_plugin_apply_schedules_the_dsh_restart_helper():
     assert 'dsh_pid = self._dsh_host_pid() if self.component == "plugin" else None' in text
     assert 'if self.component == "plugin" and dsh_pid:' in text
     assert "self._spawn_dsh_restart()" in text
-    assert "delay=PLUGIN_HOT_RELOAD_GRACE, expect_plugin_version=expected_version" in text
+    assert "delay = PLUGIN_HOT_RELOAD_GRACE if self._hot_reload_capable() else 1.5" in text
+    assert "expect_plugin_version=expected_version" in text
     assert '_restart_cleared(applied, self._dsh_host_pid())' not in text
     assert '_restart_cleared(applied, host["descriptor_pid"], host["updated_at"])' in text
     assert '_runtime_loaded(applied, host)' in text

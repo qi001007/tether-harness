@@ -131,3 +131,4 @@
 - 2026-11-02：0.2.67 新增启动无窗口契约：`UpdateService` 使用 `supervisor.childPython`，serverCheck 使用 `childPython`，禁止启动更新检查再走 `python.exe`。全量 mjs 231 / cjs 6 / pytest 147+1。
 - 2026-11-02：0.2.68 新增更新页版式契约：不再有 `versionText`/` → `；组件胶囊 `chips`、行 `borderTop`、固定 28px 操作位；有/无更新行尺寸一致。全量 mjs 231 / cjs 6 / pytest 147+1。
 - 2026-11-03：0.2.90 热重载契约：`_runtime_loaded` 用 descriptor 的 `plugin_version` 清 `restart_required`；`apply` 以 8 秒宽限+期望版本安排重启助手，助手握手成功即退出；重载桥必须“禁用→启用”，客户端 watcher 2 秒轮询并去重。新增 surface/助手/桥测试；全量 mjs 243 / cjs 8 / pytest 160+4 skipped。
+- 2026-11-03：0.2.91 新增 Windows 8.3 短路径回归（`_file_dependency_path` 展开短名）；`_hot_reload_capable` 只对带 `plugin_version` 的 surface 给宽限。全量 mjs 243 / cjs 8 / pytest 161+5 skipped。

@@ -211,6 +211,24 @@ def _semver(value: Any) -> tuple[int, int, int, tuple[str, ...]]:
     return major, minor, patch, prerelease
 
 
+def _long_path(path: Path) -> Path:
+    """Expand Windows 8.3 components without resolving links in the path."""
+    if os.name != "nt":
+        return path
+    try:
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        size = kernel32.GetLongPathNameW(str(path), None, 0)
+        if not size:
+            return path
+        buffer = ctypes.create_unicode_buffer(size)
+        if not kernel32.GetLongPathNameW(str(path), buffer, size):
+            return path
+        return Path(buffer.value)
+    except (AttributeError, OSError, ValueError):
+        return path
+
+
 def _restart_cleared(applied: dict[str, Any] | None, current_pid: int | None,
                      current_updated_at: float | None = None) -> bool:
     """Clear restart_required once a DSH host has loaded the new plugin bundle.
@@ -804,7 +822,9 @@ class UpdateManager:
         candidate = Path(raw)
         # Normalize traversal without following links so the caller can reject
         # symlinks in every component before reading or writing package files.
-        return Path(os.path.abspath(candidate if candidate.is_absolute() else package_dir / candidate))
+        # DSH/pnpm can save a short-path file: spec; expand 8.3 names so the
+        # package-name and layout checks see the real directory name.
+        return _long_path(Path(os.path.abspath(candidate if candidate.is_absolute() else package_dir / candidate)))
 
     def _plugin_source_packages(self) -> dict[str, Path]:
         """Resolve explicitly configured workspace file dependencies for this DSH profile."""
@@ -1652,10 +1672,11 @@ class UpdateManager:
                 pass
             restart_scheduled = False
             if self.component == "plugin" and dsh_pid:
-                # Give the running DSH a short window to load the new bundle in
-                # place; the helper only restarts the host if that never lands.
+                # Give a hot-reload-capable host a short window to load the new
+                # bundle in place; older surfaces keep the immediate restart.
+                delay = PLUGIN_HOT_RELOAD_GRACE if self._hot_reload_capable() else 1.5
                 restart_scheduled = self._spawn_dsh_restart(
-                    delay=PLUGIN_HOT_RELOAD_GRACE, expect_plugin_version=expected_version)
+                    delay=delay, expect_plugin_version=expected_version)
             self._write_progress("installed", 100, expected_version)
             return {"ok": True, "component": self.component, "version": expected_version,
                     "backup_dir": str(backup_dir), "restart_required": True,
@@ -1721,6 +1742,15 @@ class UpdateManager:
 
     def _dsh_host_pid(self) -> int | None:
         return self._dsh_host_state()["pid"]
+
+    def _hot_reload_capable(self) -> bool:
+        """The running surface advertises the version it loaded, so HMR can be confirmed."""
+        try:
+            data = json.loads(self._dsh_descriptor().read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return False
+        version = data.get("plugin_version") if isinstance(data, dict) else None
+        return isinstance(version, str) and bool(version)
 
     def _spawn_dsh_restart(self, delay: float = 1.5, expect_plugin_version: str = "") -> bool:
         log = self.state_dir / "dsh-restart.log"
