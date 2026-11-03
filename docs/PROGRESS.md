@@ -1,5 +1,13 @@
 # 实时进度
 
+## 2026-11-03 v0.2.85 插件安装路径空格修复
+
+1. 真机 `dsh_install_plugin` 首次失败：安装源在 `D:\DeepSeek Harness\.dsh\...`，路径含空格，CLI 转发给 pnpm 时被拆开，pnpm 退回 npm registry 并报 `tether-dsh-plugin` 404。
+2. 修复：插件包统一暂存到 `data_dir/plugin-source/<version>`（部署路径无空格），profile 依赖写入 `file:` 短路径（`GetShortPathNameW`），CLI 参数使用同一短路径；安装前先把 profile 的 `tether-dsh-plugin` 依赖改成该 file spec，避免 pnpm 先解析旧版本号。
+3. 安装失败时恢复 profile 并在原先 DSH 正在运行的情况下重新拉起 DSH，避免修复失败后页面没有 DSH。
+4. 临时 profile 实测安装 0.2.85 成功（4 个包 + `@deepseek-ai` 依赖树）；门禁：mjs 238/238、cjs 7/7、pytest 158 passed / 1 skipped、build check、`validate_versions()`。
+5. 0.2.85 待发布；发布后在 LAPTOP 再次调用 install/repair 验证真实 descriptor。
+
 ## 2026-11-03 v0.2.84 插件自动安装/修复
 
 1. Node 新增 `tether/node/dsh_plugin.py` 与 `fs/dsh_install_plugin`：下载签名清单对应的插件 ZIP 并校验 SHA-256，或使用本地包；强制 profile 的 pnpm 使用 hoisted 布局，走官方 `dsh plugin add file:` 安装 4 个插件包和 `@deepseek-ai` UI 依赖树；装前备份 profile `package.json`，装后校验包版本、bundles、依赖树，失败恢复 profile；重启 DSH 并等待新 descriptor。

@@ -21,6 +21,8 @@ from .dsh_desktop import CREATE_NO_WINDOW, DshDesktop, DshError
 PROFILE = "desktop"
 PLUGIN_PACKAGE = "tether-dsh-plugin"
 PLUGIN_PACKAGES = ("tether-dsh-plugin", "tether-dsh-client", "tether-dsh-surface", "tether-dsh-native-ui")
+PLUGIN_SOURCE_DIRS = ("dsh-plugin-tether", "dsh-plugin-tether-client",
+                      "tether-dsh-native-ui", "tether-dsh-surface")
 REQUIRED_UI_PACKAGES = (
     "dsh-client-ui-chat",
     "dsh-client-ui-conversation",
@@ -160,11 +162,35 @@ def _extract_plugin_archive(archive: bytes, target: Path) -> Path:
         raise
 
 
+def _stage_local_packages(source: Path, version: str, stage_root: Path) -> Path:
+    target = stage_root / version
+    if (target / "packages" / "dsh-plugin-tether" / "package.json").is_file():
+        return target
+    temp = target.with_name(target.name + ".tmp-" + uuid.uuid4().hex[:8])
+    shutil.rmtree(temp, ignore_errors=True)
+    temp.mkdir(parents=True, exist_ok=True)
+    ignore = shutil.ignore_patterns("node_modules", "__pycache__", ".git", ".pytest_cache")
+    try:
+        for name in PLUGIN_SOURCE_DIRS:
+            origin = source / name
+            if not (origin / "package.json").is_file():
+                raise DshPluginError(f"本地插件包不完整: {name}", "plugin_source_invalid")
+            shutil.copytree(origin, temp / "packages" / name, ignore=ignore)
+        shutil.rmtree(target, ignore_errors=True)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        os.replace(temp, target)
+        return target
+    except Exception:
+        shutil.rmtree(temp, ignore_errors=True)
+        raise
+
+
 def _staged_packages(dsh: DshDesktop) -> tuple[Path, str]:
+    stage_root = dsh.data_dir / "plugin-source"
     local_package = LOCAL_PACKAGES / "dsh-plugin-tether" / "package.json"
     if local_package.is_file():
         version = _package_version(LOCAL_PACKAGES / "dsh-plugin-tether")
-        return LOCAL_PACKAGES, version
+        return _stage_local_packages(LOCAL_PACKAGES, version, stage_root) / "packages", version
     from ..updates import UpdateError, UpdateManager
     manager = UpdateManager(
         root=ROOT,
@@ -184,8 +210,7 @@ def _staged_packages(dsh: DshDesktop) -> tuple[Path, str]:
                              error_code=exc.code) from exc
     if not version or hashlib.sha256(archive).hexdigest() != item.get("sha256"):
         raise DshPluginError("Tether 插件包校验失败", "plugin_archive_invalid")
-    target = dsh.dsh_home / "storages" / "tether" / "plugin-source" / version
-    root = _extract_plugin_archive(archive, target)
+    root = _extract_plugin_archive(archive, stage_root / version)
     return root / "packages", version
 
 
@@ -200,6 +225,56 @@ def _restore_profile(profile: Path, backup: Path) -> None:
     try:
         shutil.copy2(backup, profile / "package.json")
     except OSError:
+        pass
+
+
+def _file_spec(path: Path) -> str:
+    value = str(path)
+    if os.name == "nt":
+        try:
+            import ctypes
+            buffer = ctypes.create_unicode_buffer(32768)
+            if ctypes.windll.kernel32.GetShortPathNameW(value, buffer, 32768):
+                value = buffer.value or value
+        except Exception:
+            pass
+    return "file:" + Path(value).as_posix()
+
+
+def _prepare_profile_dependency(profile: Path, plugin_path: Path) -> None:
+    package = _read_json(profile / "package.json")
+    dependencies = package.get("dependencies")
+    if not isinstance(dependencies, dict):
+        dependencies = {}
+    dependencies[PLUGIN_PACKAGE] = _file_spec(plugin_path)
+    package["dependencies"] = dependencies
+    dsh = package.get("dsh")
+    if not isinstance(dsh, dict):
+        dsh = {}
+    profile_config = dsh.get("profile")
+    if not isinstance(profile_config, dict):
+        profile_config = {}
+    bundles = profile_config.get("bundles")
+    if not isinstance(bundles, list):
+        bundles = []
+    if PLUGIN_PACKAGE not in bundles:
+        bundles.append(PLUGIN_PACKAGE)
+    profile_config["bundles"] = bundles
+    dsh["profile"] = profile_config
+    package["dsh"] = dsh
+    temp = profile / "package.json.tether-tmp"
+    temp.write_text(json.dumps(package, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    os.replace(temp, profile / "package.json")
+
+
+def _restart_after_failure(dsh: DshDesktop, previous_running: bool, previous_pid: int,
+                           started: float) -> None:
+    if not previous_running:
+        return
+    try:
+        dsh.start()
+        _wait_descriptor(dsh, previous_pid, started)
+    except Exception:
         pass
 
 
@@ -298,6 +373,7 @@ def install(dsh: DshDesktop, *, restart: bool = True) -> dict[str, Any]:
         if not status.get("installed"):
             raise DshPluginError("DSH 未安装", "dsh_not_installed")
         previous_pid = int(status.get("pid") or 0)
+        previous_running = bool(status.get("running"))
         if status.get("running"):
             dsh.stop()
         profile = _ensure_profile(dsh)
@@ -306,13 +382,17 @@ def install(dsh: DshDesktop, *, restart: bool = True) -> dict[str, Any]:
         cli = _find_cli(str(status.get("exe") or ""))
         if cli is None:
             _restore_profile(profile, backup)
+            _restart_after_failure(dsh, previous_running, previous_pid, started)
             raise DshPluginError("找不到 DSH CLI，无法安装插件", "dsh_cli_missing")
         plugin_path = packages / "dsh-plugin-tether"
         try:
-            _run_cli(cli, dsh.dsh_home, ["plugin", "--profile", PROFILE, "add", f"file:{plugin_path}"])
+            _prepare_profile_dependency(profile, plugin_path)
+            _run_cli(cli, dsh.dsh_home,
+                     ["plugin", "--profile", PROFILE, "add", _file_spec(plugin_path)])
             verified = _verify_profile(profile)
         except Exception:
             _restore_profile(profile, backup)
+            _restart_after_failure(dsh, previous_running, previous_pid, started)
             raise
         descriptor: dict[str, Any] = {}
         if restart:

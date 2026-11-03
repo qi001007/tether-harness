@@ -1,6 +1,6 @@
 {
-  "version": "0.2.84",
-  "notes": "The Node now installs or repairs the Tether plugin through the official DSH CLI, including the @deepseek-ai UI dependency tree, and the APP repairs a missing plugin automatically.",
+  "version": "0.2.85",
+  "notes": "The installer stages the plugin in a no-space data directory and writes a short file spec so pnpm does not split Windows paths with spaces.",
   "download": "https://github.com/qi001007/tether-harness",
   "install": "git pull && powershell -ExecutionPolicy Bypass -File desktop/install-plugin.ps1"
 }
