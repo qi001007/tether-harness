@@ -1,5 +1,13 @@
 # 实时进度
 
+## 2026-11-03 干净目录安装验证（0.2.89）
+
+1. 从 GitHub 下载 `tether-app-0.2.89.zip`，解到独立临时目录，不用仓库源码/`.venv`/`node_modules`。
+2. `bootstrap-app.ps1` 创建独立 Python venv 并 `pip install -e .` 成功；`npm ci` 70 packages、**7 s**（缓存命中）。
+3. 独立端口 18992/18990 启动：HTTP **200**，`app start 0.2.89`、托盘图标 V1，登录页完整渲染；未配置 Hub 时本地 API 502 属预期。
+4. 限制：本机仍有 Python/npm，不是干净 Win11；DSH 安装/插件注入/登录后 Hub/更新链/Authenticode 未覆盖。步骤与结果：`docs/CLEAN_INSTALL.md`。
+5. 临时安装目录和进程已清理，未触碰现有安装。
+
 ## 2026-11-03 商用质量外壳（EULA/隐私/SBOM/签名）
 
 1. 新增 `scripts/generate_sbom.py`，从 npm lockfile、pyproject 和首方版本生成 CycloneDX 1.5 SBOM；当前 **115 components**，输出 `docs/sbom.cdx.json`。
