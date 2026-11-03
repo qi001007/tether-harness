@@ -881,3 +881,4 @@ The 0.3.6 assets were rebuilt after the transfer-page device reselect, DSH Web f
 - Plugin 1,384,563 B SHA-256 `cc9518416e51baaa98bea6b7379679ff65a035e8f24fcb05fa46374c4e3967a5`
 - All three re-uploaded to `/srv/tether-installer` over the self-hosted croc relay (40 MB in 16 s, ~2.4 MB/s); server hashes match the local manifest.
 - GitHub draft `433272811` still holds the earlier 0.3.6 binaries; replacing its assets is pending owner approval before publishing.
+- Final label-fix rebuild (2026-11-04): APP 38,750,736 B `c7dd04eea349d38ed7af217d388ce71c39e83066388553dfcc5d989f0e506b4a`; Node 38,249,765 B `8e1372a92a5038f3cd52811a32f07e81d5aa57b6bd42cd8be4ff94e4aaec1527`; Plugin 1,384,798 B `3b0fa711b77880526d0ed99c7fe4e4fa9cbc71adfbb868d31114b6e230ed31c8`. Server assets re-uploaded via croc: 78 MB in 17 s (up to 7.5 MB/s); hashes match.

@@ -13294,6 +13294,26 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const [dshWebOpen, setDshWebOpen] = React.useState(false)
       const dshWebRef = React.useRef(null)
       React.useEffect(() => { setDshWebOpen(false) }, [deviceId])
+      React.useEffect(() => {
+        if (!dshWebOpen || host.kind !== 'app') return undefined
+        let stopped = false
+        const seed = () => {
+          if (stopped) return
+          try {
+            const raw = window.localStorage.getItem('tether.hub')
+            const hub = raw ? JSON.parse(raw) : null
+            const guest = dshWebRef.current
+            if (!hub || typeof hub.url !== 'string' || typeof hub.token !== 'string'
+                || !guest || typeof guest.executeJavaScript !== 'function') return
+            void guest.executeJavaScript(
+              'try { if (!localStorage.getItem("tether.hub")) localStorage.setItem("tether.hub", ' + JSON.stringify(JSON.stringify(hub)) + ') } catch (_) {}'
+            ).catch(() => {})
+          } catch (_) { /* guest may not be ready */ }
+        }
+        const timer = setInterval(seed, 1500)
+        seed()
+        return () => { stopped = true; clearInterval(timer) }
+      }, [dshWebOpen])
       const dshWebSupported = linuxDevice || !!(deviceInfo && deviceInfo.capabilities
         && deviceInfo.capabilities.dsh_web_supported)
       const dshWebEnabled = dshWebSupported || !!(dshWeb && dshWeb.supported)
@@ -13401,7 +13421,8 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const dshSurfaceMissing = !!dshRelevant && !!dsh && dsh.running === true
         && currentState.code === 'descriptor_missing'
       const message = currentState.status === 'error' && dshRelevant && dsh
-        ? (dsh.installed === false ? 'DSH 未安装'
+        ? (dshWeb && dshWeb.running ? 'DSH Web 已就绪'
+          : dsh.installed === false ? 'DSH 未安装'
           : dsh.running
             ? (dshBusy === 'dsh_install_plugin'
               ? '正在安装/修复 Tether 插件…'
@@ -13415,7 +13436,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
               : ''
       const dshWebUrl = dshWeb && dshWeb.running ? String(dshWeb.url || '') : ''
       if (dshWebOpen && dshWebUrl && host.kind === 'app') {
-        return h('div', { className: 'tether-native-surface', style: { ...nativeSurfaceContainerStyle(visible, layered), position: 'relative' } },
+        return h('div', { className: 'tether-native-surface', style: { ...nativeSurfaceContainerStyle(visible, layered), position: 'relative', width: '100%', height: '100%', flex: '1 1 auto' } },
           h('webview', {
             ref: dshWebRef,
             src: dshWebUrl,
@@ -13521,7 +13542,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             alignContent: 'center', gap: 10, padding: 24, background: C.bg, color: C.sub, textAlign: 'center'
           }
         },
-          h('div', { style: { fontSize: 14, color: C.ink } }, dsh.installed === false ? 'DSH 未安装' : 'DSH 未启动'),
+          h('div', { style: { fontSize: 14, color: C.ink } }, dshWeb && dshWeb.running ? 'DSH Web 已就绪' : dsh.installed === false ? 'DSH 未安装' : 'DSH 未启动'),
           dsh.version ? h('div', { className: 'tether-num', style: { fontSize: 11.5, color: C.mute } }, dsh.version) : null,
           dsh.installing ? h('div', { style: { fontSize: 11.5, color: C.mute } }, '安装中 ' + (Number(dsh.progress) || 0) + '%') : null,
           dsh.installed === false && (!dshInstallSupported || (dshWeb && dshWeb.running))

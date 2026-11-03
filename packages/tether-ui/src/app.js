@@ -2896,7 +2896,8 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const dshSurfaceMissing = !!dshRelevant && !!dsh && dsh.running === true
         && currentState.code === 'descriptor_missing'
       const message = currentState.status === 'error' && dshRelevant && dsh
-        ? (dsh.installed === false ? 'DSH 未安装'
+        ? (dshWeb && dshWeb.running ? 'DSH Web 已就绪'
+          : dsh.installed === false ? 'DSH 未安装'
           : dsh.running
             ? (dshBusy === 'dsh_install_plugin'
               ? '正在安装/修复 Tether 插件…'
@@ -3016,7 +3017,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             alignContent: 'center', gap: 10, padding: 24, background: C.bg, color: C.sub, textAlign: 'center'
           }
         },
-          h('div', { style: { fontSize: 14, color: C.ink } }, dsh.installed === false ? 'DSH 未安装' : 'DSH 未启动'),
+          h('div', { style: { fontSize: 14, color: C.ink } }, dshWeb && dshWeb.running ? 'DSH Web 已就绪' : dsh.installed === false ? 'DSH 未安装' : 'DSH 未启动'),
           dsh.version ? h('div', { className: 'tether-num', style: { fontSize: 11.5, color: C.mute } }, dsh.version) : null,
           dsh.installing ? h('div', { style: { fontSize: 11.5, color: C.mute } }, '安装中 ' + (Number(dsh.progress) || 0) + '%') : null,
           dsh.installed === false && (!dshInstallSupported || (dshWeb && dshWeb.running))
