@@ -1,6 +1,7 @@
 import base64
 import os
 import time
+from pathlib import Path
 
 import pytest
 
@@ -75,10 +76,13 @@ def test_terminal_lists_shells_and_starts_in_requested_cwd(tmp_path) -> None:
         terminal.stop({"session_id": session["session_id"]})
 
 
-def test_terminal_rejects_bad_cwd_and_shell(tmp_path) -> None:
+def test_terminal_falls_back_for_bad_cwd_and_rejects_bad_shell(tmp_path) -> None:
     terminal = TerminalService(tmp_path)
-    with pytest.raises(ValueError):
-        terminal.start({"cwd": str(tmp_path / "missing")})
+    session = terminal.start({"cwd": str(tmp_path / "missing")})
+    try:
+        assert Path(session["cwd"]).resolve() == tmp_path.resolve()
+    finally:
+        terminal.stop({"session_id": session["session_id"]})
     with pytest.raises(ValueError):
         terminal.start({"shell": "tether-no-such-shell"})
 

@@ -15,6 +15,7 @@ import json
 import mimetypes
 import os
 import re
+import secrets
 import shutil
 import sqlite3
 import subprocess
@@ -489,6 +490,8 @@ class FsService:
         self.preview_cache_dir = data_dir / "preview-cache"
         self.preview_cache_dir.mkdir(parents=True, exist_ok=True)
         self._office_lock = threading.Lock()
+        self.croc = None
+        self._croc_context: dict[str, Any] = {}
 
     def _resolve(self, raw: str | None) -> Path:
         if not raw:
@@ -564,6 +567,120 @@ class FsService:
         if direct is None:
             raise FsError("direct api unavailable", "unavailable")
         return direct.info()
+
+    def _croc_engine(self):
+        croc = getattr(self, "croc", None)
+        if croc is None or not croc.available():
+            raise FsError("croc transfer engine is not available", "croc_missing")
+        return croc
+
+    def _croc_status(self) -> dict[str, Any]:
+        croc = getattr(self, "croc", None)
+        if croc is None:
+            return {"engine": "croc", "state": "idle"}
+        status = {**croc.status(), "engine": "croc"}
+        context = self._croc_context
+        if context:
+            status.update({"transfer_id": context.get("transfer_id"),
+                           "direction": context.get("direction"),
+                           "staging": context.get("staging", ""),
+                           "destination": context.get("destination", "")})
+        return status
+
+    def _op_transfer_send(self, args: dict[str, Any]) -> dict[str, Any]:
+        croc = self._croc_engine()
+        source = self._resolve(args.get("path"))
+        self._read_guard(source)
+        try:
+            job = croc.send(str(source), str(args.get("code") or ""),
+                            transfers=int(args.get("transfers") or 4))
+        except Exception as exc:
+            raise FsError(str(exc), getattr(exc, "code", "croc_error")) from exc
+        self._croc_context = {"transfer_id": secrets.token_hex(8), "direction": "send",
+                              "source": str(source), "job": job}
+        return self._croc_status()
+
+    def _op_transfer_receive(self, args: dict[str, Any]) -> dict[str, Any]:
+        croc = self._croc_engine()
+        destination = self._resolve(args.get("path"))
+        if destination.exists() and not destination.is_dir():
+            destination = destination.parent
+        self._write_guard(destination, "write")
+        destination.mkdir(parents=True, exist_ok=True)
+        transfer_id = str(args.get("transfer_id") or secrets.token_hex(8))
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", transfer_id):
+            raise FsError("invalid transfer id", "bad_args")
+        staging = self.workspace / ".tether-incoming" / transfer_id
+        staging.mkdir(parents=True, exist_ok=True)
+        try:
+            job = croc.receive(str(args.get("code") or ""), str(staging))
+        except Exception as exc:
+            raise FsError(str(exc), getattr(exc, "code", "croc_error")) from exc
+        self._croc_context = {"transfer_id": transfer_id, "direction": "receive",
+                              "staging": str(staging), "destination": str(destination), "job": job}
+        return self._croc_status()
+
+    def _op_transfer_info(self, args: dict[str, Any]) -> dict[str, Any]:
+        croc = getattr(self, "croc", None)
+        if croc is None:
+            return {"engine": "croc", "available": False, "version": "", "relay": False}
+        return {"engine": "croc", **croc.info()}
+
+    def _op_transfer_status(self, args: dict[str, Any]) -> dict[str, Any]:
+        if not self._croc_context and args.get("path"):
+            p, part, transfer = self._transfer_part(args)
+            return {"path": str(p), "transfer_id": transfer,
+                    "offset": part.stat().st_size if part.exists() else 0,
+                    "partial": part.exists(), "exists": p.exists()}
+        return self._croc_status()
+
+    def _op_transfer_cancel(self, args: dict[str, Any]) -> dict[str, Any]:
+        if not self._croc_context and args.get("path"):
+            p, part, transfer = self._transfer_part(args)
+            try:
+                part.unlink(missing_ok=True)
+            except OSError:
+                raise FsError("could not remove the partial transfer", "write_failed") from None
+            return {"path": str(p), "transfer_id": transfer, "cancelled": True}
+        croc = getattr(self, "croc", None)
+        if croc is None:
+            return {"engine": "croc", "state": "idle"}
+        status = croc.job.cancel() if croc.job else {"state": "idle"}
+        staging = self._croc_context.get("staging")
+        if staging:
+            shutil.rmtree(staging, ignore_errors=True)
+        self._croc_context = {}
+        return {**status, "engine": "croc"}
+
+    def _op_transfer_finish(self, args: dict[str, Any]) -> dict[str, Any]:
+        context = self._croc_context
+        if not context or context.get("direction") != "receive":
+            raise FsError("no receive transfer", "croc_no_transfer")
+        status = self._croc_status()
+        if status.get("state") != "completed":
+            raise FsError("transfer is not complete", "croc_not_complete")
+        staging = Path(context["staging"])
+        entries = [entry for entry in staging.iterdir() if not entry.name.startswith(".")]
+        if len(entries) != 1:
+            raise FsError("expected exactly one received item", "croc_result_ambiguous")
+        source = entries[0]
+        destination = Path(context["destination"])
+        self._write_guard(destination, "write")
+        name = str(args.get("name") or source.name)
+        if name != Path(name).name or name in (".", ".."):
+            raise FsError("invalid destination name", "bad_args")
+        target = destination / name
+        if target.exists():
+            if args.get("overwrite") is not True:
+                raise FsError("destination already exists", "exists")
+            if target.is_dir() or source.is_dir():
+                raise FsError("cannot overwrite a directory", "exists")
+            target.unlink()
+        self._write_guard(target, "write")
+        shutil.move(str(source), str(target))
+        shutil.rmtree(staging, ignore_errors=True)
+        self._croc_context = {}
+        return {"path": str(target), "bytes": target.stat().st_size, "engine": "croc"}
 
     def _terminal_dispatch(self, action: str, args: dict[str, Any]) -> Any:
         terminal = getattr(self, "terminal", None)
@@ -888,20 +1005,6 @@ class FsService:
         if not TRANSFER_ID_RE.fullmatch(transfer):
             raise FsError("transfer_id must be 8-32 lowercase hex characters", "bad_args")
         return p, p.with_name(p.name + ".tether-part." + transfer), transfer
-
-    def _op_transfer_status(self, args: dict[str, Any]) -> dict[str, Any]:
-        p, part, transfer = self._transfer_part(args)
-        return {"path": str(p), "transfer_id": transfer,
-                "offset": part.stat().st_size if part.exists() else 0,
-                "partial": part.exists(), "exists": p.exists()}
-
-    def _op_transfer_cancel(self, args: dict[str, Any]) -> dict[str, Any]:
-        p, part, transfer = self._transfer_part(args)
-        try:
-            part.unlink(missing_ok=True)
-        except OSError:
-            raise FsError("could not remove the partial transfer", "write_failed") from None
-        return {"path": str(p), "transfer_id": transfer, "cancelled": True}
 
     def _op_write_chunk(self, args: dict[str, Any]) -> dict[str, Any]:
         p, part, transfer = self._transfer_part(args)

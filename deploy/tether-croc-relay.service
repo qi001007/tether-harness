@@ -1,0 +1,18 @@
+[Unit]
+Description=Tether croc relay (EasyTier private address)
+After=network-online.target easytier-tether.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=TETHER_CROC_RELAY_HOST=10.144.0.1
+Environment=TETHER_CROC_RELAY_PORT=19009
+Environment=TETHER_CROC_RELAY_TRANSFERS=8
+ExecStart=/opt/tether-tools/croc/croc relay --host ${TETHER_CROC_RELAY_HOST} --port ${TETHER_CROC_RELAY_PORT} --transfers ${TETHER_CROC_RELAY_TRANSFERS}
+Restart=always
+RestartSec=3
+MemoryHigh=80M
+MemoryMax=160M
+
+[Install]
+WantedBy=multi-user.target

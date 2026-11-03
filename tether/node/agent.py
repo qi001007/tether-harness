@@ -35,6 +35,7 @@ from .apps import AppCatalog
 from .acp import AcpService
 from .dsh_sessions import DshSessionStore
 from .native_surface import NativeSurface, NativeSurfaceError
+from .croc_transfer import CrocTransfer
 from .local_identity import remove_identity, write_identity
 from ..updates import MAX_UPDATE_PROTOCOL, MIN_UPDATE_PROTOCOL, UPDATE_PROTOCOL, UpdateManager, select_profile
 
@@ -294,6 +295,8 @@ class Node:
         self.fs.apps = self.apps
         self.acp = AcpService(self.workspace)
         self.fs.acp = self.acp
+        self.croc = CrocTransfer()
+        self.fs.croc = self.croc
         ensure_sdk_profile(self.native_dsh_home)
         self.native_surface = NativeSurface(self.native_dsh_home, device_fs=self.fs)
         update_state_dir = self.data_dir / "updates"
@@ -1005,6 +1008,8 @@ class Node:
                 "terminal_user": _current_user(),
                 "terminal_privileged": _is_privileged(),
                 "dsh_surface": self.native_surface.available(),
+                "transfer_engine": "croc",
+                "croc": self.croc.info(),
                 "direct_api": self.direct.info() if self.direct else None}
 
 

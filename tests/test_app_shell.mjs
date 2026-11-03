@@ -75,3 +75,13 @@ test('a missing DSH plugin is repaired automatically without user file work', ()
   assert.match(shared, /onSurfaceStyleBroken/)
   assert.match(shared, /DSH 界面样式与 Tether 版本不匹配/)
 })
+
+test('Linux DSH web is embedded in the APP, never opened in an external window', () => {
+  assert.match(main, /webviewTag: true/)
+  assert.match(main, /will-attach-webview/)
+  assert.match(main, /dshViewUrlAllowed/)
+  assert.match(main, /did-attach-webview/)
+  assert.match(shared, /h\('webview'/)
+  assert.match(shared, /打开工作区/)
+  assert.doesNotMatch(shared, /window\.open\(url, '_blank'/)
+})

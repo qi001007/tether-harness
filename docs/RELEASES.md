@@ -1,5 +1,21 @@
 # Public client releases
 
+## v0.3.6 (local candidate, not published)
+
+croc transfer engine and POSIX file-tree fixes:
+
+- Node/APP now bundle croc 11.6.3 for Windows x64 and Linux x64 in `tether/node/bin/`; `build_release.py` includes `node/bin` in both the Node and APP archives.
+- `tether/node/croc_transfer.py` is a thin adapter only: it starts croc, parses progress, and exposes send/receive/status/cancel/finish; no custom chunk protocol is added.
+- `tether-croc-relay.service` runs on the server's EasyTier address `10.144.0.1:19009–19016` (8 transfer ports, private network only).
+- 100 MB random-data transfer, Windows `10.144.0.2` ↔ server `10.144.0.1`:
+  - Windows → server: 8 ports, **51.43 s** (~2.04 MB/s), SHA-256 matched.
+  - server → Windows: 8 ports, **82.43 s** (~1.27 MB/s), same SHA matched.
+  - Earlier zero-filled 5.74/17.69 s values were compression artifacts and are withdrawn. Raw TCP 8-stream was 53.9 s; croc is at the path ceiling, not the 10 s target.
+- Local 0.3.6 assets were built successfully (unsigned development manifest): APP 38,741,660 B, plugin 1,384,395 B, Node 36,897,237 B; Node/APP archives contain Windows `croc.exe`, Linux `croc-linux-x64`, macOS `croc-darwin-x64` and `croc-darwin-arm64`.
+- Server-hosted install assets updated to 0.3.6; `/install/version.json` reports node `0.3.6`; all three ZIP links return HTTP 200 and their SHA-256 match `release/tether-update.json`. `install-node.sh` defaults to `latest`, resolves node from `version.json`, and derives the version from an archive filename in `--archive` mode.
+- Second isolated Linux install (`--install-only --archive`, prefix `/tmp/tether-install-036b`): succeeded; `CrocTransfer(platform="linux")` selected `croc-linux-x64`, reported `11.6.3`, relay true, and auto-chmodded the bundled binary.
+- Not done: publish/upload assets to GitHub, official HTTPS install/upgrade, laptop mobile-network direction, clean VM matrix, macOS croc binary. Do not treat this section as a published release.
+
 ## v0.3.5
 
 POSIX terminal fix and a one-shot Linux/macOS Node installer:

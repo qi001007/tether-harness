@@ -24,6 +24,7 @@ function parentOf(path) {
   if (/^[A-Za-z]:$/.test(clean)) return clean + '\\'
   const slash = Math.max(clean.lastIndexOf('\\'), clean.lastIndexOf('/'))
   if (slash < 0) return ''
+  if (slash === 0 && clean.startsWith('/')) return '/'
   const parent = clean.slice(0, slash)
   return /^[A-Za-z]:$/.test(parent) ? parent + '\\' : parent
 }

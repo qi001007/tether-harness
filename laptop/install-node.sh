@@ -2,7 +2,7 @@
 # One-shot Tether Node installer for Linux and macOS.
 set -euo pipefail
 
-VERSION="${TETHER_NODE_VERSION:-0.3.5}"
+VERSION="${TETHER_NODE_VERSION:-latest}"
 PREFIX="${TETHER_NODE_PREFIX:-$HOME/.local/share/tether-node}"
 HUB_URL="${TETHER_HUB_URL:-https://8-220-198-26.sslip.io}"
 CONTROLLER="${TETHER_CONTROLLER:-wss://8-220-198-26.sslip.io/ws/node}"
@@ -28,7 +28,7 @@ Usage: install-node.sh [options]
   --device NAME      Device id (default: hostname)
   --port PORT        Local console port (default: 18894)
   --archive PATH     Install from a local tether-node ZIP
-  --version VERSION  Release version when downloading (default: 0.3.4)
+  --version VERSION  Release version when downloading (default: latest)
   --prefix PATH      Install root (default: ~/.local/share/tether-node)
   --user-token TOKEN One-time account token used for first enrollment
   --base-url URL     Release mirror base (default: GitHub releases)
@@ -93,6 +93,21 @@ if [ "$CHECK_ONLY" = 1 ]; then
 fi
 
 command -v curl >/dev/null 2>&1 || { [ -n "$ARCHIVE" ] || fail "curl is required"; }
+if [ -n "$ARCHIVE" ] && [ "$VERSION" = latest ]; then
+  VERSION=$(basename "$ARCHIVE" | sed -n 's/^tether-node-\(.*\)\.zip$/\1/p')
+  [ -n "$VERSION" ] || fail "could not derive version from archive name: $ARCHIVE"
+fi
+if [ "$VERSION" = latest ] && [ -z "$ARCHIVE" ]; then
+  if [ -n "$BASE_URL" ]; then
+    META_URL="${BASE_URL%/}/version.json"
+  else
+    META_URL="https://raw.githubusercontent.com/qi001007/tether-harness/main/version.json"
+  fi
+  VERSION=$(curl -fsSL --retry 2 "$META_URL" | python3 -c 'import json,sys; print(json.load(sys.stdin)["components"]["node"])') \
+    || fail "could not resolve latest node version from $META_URL"
+  [ -n "$VERSION" ] && [ "$VERSION" != latest ] || fail "latest node version is empty"
+  say "latest node version: $VERSION"
+fi
 [ -n "$ARCHIVE" ] || [ -n "$CONTROLLER" ] || fail "--controller is required (or set TETHER_CONTROLLER)"
 
 mkdir -p "$PREFIX" "$HOME/.local/bin"

@@ -74,3 +74,7 @@
 - 2026-11-04：终端 cwd 必须按设备归属：切换设备时清空 `terminalCwd`，服务端 cwd 失效时回退到 workspace；否则 Linux 路径会被带进 Windows 终端并报 `terminal cwd is not a directory`。终端头部显示运行身份（root/普通用户）。
 - 2026-11-04：Linux 文件管理器不能只列盘符；`drives` 在 POSIX 返回 `/`、`/home`、`/srv`、`/var/log`，否则“此电脑”为空、看不到服务器全部文件。
 - 2026-11-04：文件界面按原生资源管理器补细节：`TargetFileExplorer` 与资源管理器支持空白拖动框选（Ctrl 追加、拖动不选文字）、空白右键菜单（新建/粘贴/复制当前路径/刷新）、文件菜单“复制路径”且不再出现新建项；转移页完成后 4 s 自动收起进度，未选中时不显示转移按钮；选择器无自定义菜单时内置复制路径。APP 真鼠标验证：互传框选 5 项、资源管理器框选 2 项，20 B 传输底栏 5 s 复位。
+- 2026-11-04：Linux 文件树“加载失败”的根因不是权限，而是 `app.js` 的 `joinPath` 永远拼反斜杠：`/srv` 变成 `\srv`，被 Node 判成“非绝对路径”。`joinPath`/`pathSegments`/`parentOf`/新建/重命名/粘贴全部改为按分隔符拼接；POSIX 面包屑从 `/` 开始，根目录上级返回 `/`；不可读目录在树上显示“无权限，点击重试”（灰），只有真实 I/O 错误才标红。回归：`tests/test_posix_paths.mjs` 与 `test_file_tree.mjs` 共 15 条通过。
+- 2026-11-04：`transfer.js` 改为双缓冲流水线：读完第 N 块后先发起第 N+1 块读取，再写第 N 块；写入偏移与预取不一致时丢弃预取重读；取消/失败路径给预取挂空 catch，避免未处理拒绝。回归：`tests/test_transfer_engine.mjs` 新增“下一块读取与当前块写入重叠”，7 条全过；真机 100 MB 吞吐仍待两机复测，不能把单测当速度验收。
+- 2026-11-04：Linux DSH Web 禁止外部打开；APP 用 `<webview>` 顶层内嵌（不是 iframe，避开 SameSite），未运行/未安装仍走原来的安装/启动按钮。`webview` 的地址、导航、弹窗由主进程限制在回环/私有网段与首次 origin；WebUI/DSH 宿主只提示“请在桌面 APP 内打开”。真机内嵌与自动装插件仍待验。
+- 2026-11-04：转移页接入 croc：先并行查两端 `transfer_info`，只有双方 `available && relay` 才走 croc；否则保留旧分片回退。croc 分支生成一次性 code，源 `transfer_send`、目标 `transfer_receive`，350 ms 轮询 `transfer_status`，完成后 `transfer_finish`（支持改名）；冲突先查目标 entries。单测覆盖 code/顺序/finish；croc 二进制尚未随发布包提供，当前安装节点会回退旧路径。

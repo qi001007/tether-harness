@@ -959,20 +959,34 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const type = dot > 0 && dot < base.length - 1 ? base.slice(dot + 1) : (base.startsWith('.') ? base.slice(1) : 'TXT')
       return String(type || 'TXT').slice(0, 4).toUpperCase()
     }
-    function joinPath(base, name) { return String(base || '').replace(/[\\/]+$/, '') + '\\' + String(name || '') }
+    function joinPath(base, name) {
+      const raw = String(base || '')
+      const value = String(name || '')
+      if (!raw) return value
+      const separator = raw.includes('\\') || /^[A-Za-z]:$/.test(raw) ? '\\' : '/'
+      const clean = raw.replace(/[\\/]+$/, '')
+      return clean ? clean + separator + value : separator + value
+    }
     function pathSegments(target) {
       const clean = String(target || '').replace(/[\\/]+$/, '')
       if (!clean) return []
       const drive = clean.match(/^([A-Za-z]:)(.*)$/)
+      const posix = !drive && clean.startsWith('/')
+      const separator = drive || clean.includes('\\') ? '\\' : '/'
       const out = []
       let cursor = ''
       if (drive) {
         cursor = drive[1] + '\\'
         out.push({ label: drive[1], path: cursor })
+      } else if (posix) {
+        cursor = '/'
+        out.push({ label: '/', path: cursor })
       }
       const rest = drive ? drive[2] : clean
       rest.split(/[\\/]+/).filter(Boolean).forEach((part) => {
-        cursor = cursor ? cursor.replace(/[\\/]+$/, '') + '\\' + part : part
+        if (!cursor) cursor = part
+        else if (cursor === separator) cursor = separator + part
+        else cursor = cursor.replace(/[\\/]+$/, '') + separator + part
         out.push({ label: part, path: cursor })
       })
       return out
@@ -2337,6 +2351,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         ))
         if (isDir && expanded) {
           if (!cached || cached.status === 'loading') rows.push(h('div', { key: node.id + ':loading', style: { padding: '3px ' + UI.pad + 'px 3px ' + (UI.pad + (depth + 2) * 12) + 'px', fontSize: 11.5, color: C.mute } }, '加载中…'))
+          else if (cached.status === 'denied') rows.push(h('button', { key: node.id + ':denied', title: cached.reason || '当前节点没有读取该目录的权限', onClick: (ev) => { ev.stopPropagation(); onToggle(node, true) }, style: { border: 0, background: 'transparent', padding: '3px ' + UI.pad + 'px 3px ' + (UI.pad + (depth + 2) * 12) + 'px', color: C.mute, fontSize: 11.5, cursor: 'pointer' } }, '无权限，点击重试'))
           else if (cached.status === 'error') rows.push(h('button', { key: node.id + ':error', onClick: (ev) => { ev.stopPropagation(); onToggle(node, true) }, style: { border: 0, background: 'transparent', padding: '3px ' + UI.pad + 'px 3px ' + (UI.pad + (depth + 2) * 12) + 'px', color: C.red, fontSize: 11.5, cursor: 'pointer' } }, '加载失败，点击重试'))
           else if (!kids.length) rows.push(h('div', { key: node.id + ':empty', style: { padding: '3px ' + UI.pad + 'px 3px ' + (UI.pad + (depth + 2) * 12) + 'px', fontSize: 11.5, color: C.mute } }, '空文件夹'))
           else {
@@ -2737,8 +2752,11 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
 
       const dshRelevant = currentState.status === 'error'
         && ['descriptor_missing', 'host_unreachable', 'descriptor_invalid', 'node_update_required'].includes(currentState.code)
-      const dshInstallSupported = !deviceInfo || !deviceInfo.capabilities
-        || deviceInfo.capabilities.dsh_install_supported !== false
+      const deviceOs = String((deviceInfo && (deviceInfo.os || deviceInfo.os_label
+        || (deviceInfo.capabilities && (deviceInfo.capabilities.os || deviceInfo.capabilities.os_label)))) || '')
+      const linuxDevice = /linux/i.test(deviceOs)
+      const dshInstallSupported = !linuxDevice && (!deviceInfo || !deviceInfo.capabilities
+        || deviceInfo.capabilities.dsh_install_supported !== false)
       const dshWatch = visible && (deviceId === localDeviceId || dshRelevant)
       const dshRestartPidRef = React.useRef(0)
       const dshAutoRepairRef = React.useRef(false)
@@ -2748,24 +2766,29 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const [dshError, setDshError] = React.useState('')
       const [dshWeb, setDshWeb] = React.useState(null)
       const [dshWebBusy, setDshWebBusy] = React.useState('')
-      const dshWebSupported = !!(deviceInfo && deviceInfo.capabilities
+      const [dshWebOpen, setDshWebOpen] = React.useState(false)
+      const dshWebRef = React.useRef(null)
+      React.useEffect(() => { setDshWebOpen(false) }, [deviceId])
+      const dshWebSupported = linuxDevice || !!(deviceInfo && deviceInfo.capabilities
         && deviceInfo.capabilities.dsh_web_supported)
+      const dshWebEnabled = dshWebSupported || !!(dshWeb && dshWeb.supported)
+      const dshWebValue = (data) => (data && data.value && typeof data.value === 'object' ? data.value : data)
       React.useEffect(() => {
-        if (!dshWebSupported || dshInstallSupported) return undefined
+        if (!deviceId) return undefined
         let alive = true
         const load = () => post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/dsh_web_status', {})
-          .then((data) => { if (alive) setDshWeb(data) })
+          .then((data) => { if (alive) setDshWeb(dshWebValue(data)) })
           .catch(() => {})
         void load()
         const timer = setInterval(load, dshWeb && dshWeb.installing ? 1500 : 4000)
         return () => { alive = false; clearInterval(timer) }
-      }, [deviceId, dshWebSupported, dshInstallSupported, dshWeb && dshWeb.installing])
+      }, [deviceId, dshWeb && dshWeb.installing])
       const runDshWeb = async (action) => {
         setDshWebBusy(action)
         try {
           const data = await post('/api/devices/' + encodeURIComponent(deviceId)
             + '/fs/dsh_web_' + action, {})
-          if (data) setDshWeb(data)
+          if (data) setDshWeb(dshWebValue(data))
         } catch (error) {
           setDshWeb((current) => ({ ...(current || {}), error: error.message || '操作失败' }))
         } finally {
@@ -2865,6 +2888,27 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           : currentState.status === 'no-device' ? '先从左侧设备列表选择目标设备。'
             : currentState.status === 'error' ? currentState.message
               : ''
+      const dshWebUrl = dshWeb && dshWeb.running ? String(dshWeb.url || '') : ''
+      if (dshWebOpen && dshWebUrl && host.kind === 'app') {
+        return h('div', { className: 'tether-native-surface', style: { ...nativeSurfaceContainerStyle(visible, layered), position: 'relative' } },
+          h('webview', {
+            ref: dshWebRef,
+            src: dshWebUrl,
+            style: { flex: '1 1 auto', width: '100%', height: '100%', minWidth: 0, minHeight: 0, border: 0, background: C.bg }
+          }),
+          h('div', { style: { position: 'absolute', top: 10, right: 10, display: 'flex', gap: 6, zIndex: 2 } },
+            h('button', {
+              type: 'button', className: 'tether-hover',
+              onClick: () => { try { if (dshWebRef.current) dshWebRef.current.reload() } catch (_) { /* guest may still be loading */ } },
+              style: { height: 28, padding: '0 10px', border: 0, borderRadius: 6, background: 'rgba(255,255,255,.94)', color: C.sub, fontSize: 12, cursor: 'pointer', boxShadow: '0 1px 4px rgba(16,24,40,.16)' }
+            }, '重新加载'),
+            h('button', {
+              type: 'button', className: 'tether-hover', onClick: () => setDshWebOpen(false),
+              style: { height: 28, padding: '0 10px', border: 0, borderRadius: 6, background: 'rgba(255,255,255,.94)', color: C.sub, fontSize: 12, cursor: 'pointer', boxShadow: '0 1px 4px rgba(16,24,40,.16)' }
+            }, '关闭')
+          )
+        )
+      }
       return h('div', { className: 'tether-native-surface', style: nativeSurfaceContainerStyle(visible, layered) },
         ['document-loading', 'document-loaded'].includes(currentState.status) && currentState.deviceId === deviceId && online
           ? h('div', { style: { position: 'relative', display: 'flex', flex: '1 1 auto', minWidth: 0, minHeight: 0 } },
@@ -2915,6 +2959,14 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           )
           : h('div', { style: { display: 'grid', placeItems: 'center', alignContent: 'center', gap: 12, flex: '1 1 auto', minHeight: 0, color: C.sub, textAlign: 'center', padding: 24 } },
             h('div', null, message),
+            dshWeb && dshWeb.running
+              ? btn(host.kind === 'app' ? '打开工作区' : '请在桌面 APP 内打开', () => {
+                if (host.kind !== 'app') return
+                const url = dshWeb.url || ''
+                if (!url) { setDshWeb((current) => ({ ...(current || {}), error: '工作区地址还没准备好，请稍后重试' })); return }
+                setDshWebOpen(true)
+              }, { primary: true, disabled: host.kind !== 'app' })
+              : null,
             dshRelevant && dsh && !dsh.running
               ? btn(dsh.installed === false
                 ? (dshBusy === 'dsh_install' || dsh.installing ? '安装中…' : '安装 DSH')
@@ -2947,20 +2999,21 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           h('div', { style: { fontSize: 14, color: C.ink } }, dsh.installed === false ? 'DSH 未安装' : 'DSH 未启动'),
           dsh.version ? h('div', { className: 'tether-num', style: { fontSize: 11.5, color: C.mute } }, dsh.version) : null,
           dsh.installing ? h('div', { style: { fontSize: 11.5, color: C.mute } }, '安装中 ' + (Number(dsh.progress) || 0) + '%') : null,
-          dsh.installed === false && !dshInstallSupported
+          dsh.installed === false && (!dshInstallSupported || (dshWeb && dshWeb.running))
             ? h(React.Fragment, null,
               h('div', { style: { maxWidth: 480, fontSize: 12, color: C.sub, lineHeight: 1.6 } },
                 dshWeb && dshWeb.running
-                  ? 'DSH Web 已在目标机运行，可以在新窗口打开工作区。'
+                  ? 'DSH Web 已在目标机运行，可在 Tether 内打开工作区。'
                   : '当前目标系统没有官方 DSH 桌面版，可以安装 DSH Web 作为远程工作区。'),
-              dshWebSupported
+              dshWebEnabled
                 ? (dshWeb && dshWeb.running
-                  ? btn('打开 DSH Web', () => {
-                    const url = dshWeb.url || ''
-                    if (!url) { setDshWeb((current) => ({ ...(current || {}), error: '工作区地址还没准备好，请稍后重试' })); return }
-                    const opened = window.open(url, '_blank', 'noopener')
-                    if (!opened) setDshWeb((current) => ({ ...(current || {}), error: '窗口被拦截，请允许弹出窗口后重试' }))
-                  }, { primary: true })
+                  ? (host.kind === 'app'
+                    ? btn('打开工作区', () => {
+                      const url = dshWeb.url || ''
+                      if (!url) { setDshWeb((current) => ({ ...(current || {}), error: '工作区地址还没准备好，请稍后重试' })); return }
+                      setDshWebOpen(true)
+                    }, { primary: true })
+                    : btn('请在桌面 APP 内打开', () => {}, { disabled: true }))
                   : dshWeb && dshWeb.installed
                     ? btn(dshWebBusy ? '启动中…' : '启动 DSH Web', () => void runDshWeb('start'),
                       { primary: true, disabled: !!dshWebBusy })
@@ -4789,7 +4842,10 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const parentOf = (target) => {
         const clean = String(target || '').replace(/[\\/]+$/, '')
         const parent = clean.replace(/[\\/][^\\/]+$/, '')
-        return parent && parent !== clean ? parent : clean
+        if (parent && parent !== clean) return parent
+        if (/^[A-Za-z]:$/.test(clean)) return clean + '\\'
+        if (clean.startsWith('/')) return '/'
+        return clean
       }
       const pathInfo = (target) => {
         const norm = normPath(target)
@@ -4826,7 +4882,8 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           setTreeChildren((current) => ({ ...current, [key]: { status: 'loaded', entries } }))
         } catch (e) {
           if (!treeResponseIsCurrent(requestDevice, deviceIdRef.current, requestEpoch, treeDeviceEpochRef.current)) return
-          setTreeChildren((current) => ({ ...current, [key]: { status: 'error', entries: [] } }))
+          const denied = !!e && (e.code === 'denied' || e.status === 403)
+          setTreeChildren((current) => ({ ...current, [key]: { status: denied ? 'denied' : 'error', entries: [], reason: String((e && e.message) || '') } }))
         } finally { treeInflightRef.current.delete(key) }
       }
 
@@ -4842,7 +4899,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           const relative = String(target).slice(String(info.root).length).replace(/^[\\/]+/, '')
           for (const part of relative.split(/[\\/]+/)) {
             if (!part) continue
-            cursor += '\\' + part
+            cursor = joinPath(cursor, part)
             paths.push(cursor)
           }
         }
@@ -4906,9 +4963,9 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           const entries = (data.entries || []).map((entry) => ({ ...entry, path: joinPath(requestTarget, entry.name) }))
           cacheStore(dirCacheRef.current, key, { entries, at: Date.now() })
           rememberDirectory(requestDevice, nextPath, entries)
+          setTreeChildren((current) => ({ ...current, [key]: { status: 'loaded', entries } }))
           if (cached) {
             setDirEntries(entries)
-            setTreeChildren((current) => ({ ...current, [key]: { status: 'loaded', entries } }))
           } else {
             enter(entries, opts.push)
             revealTree(nextPath, { path: nextPath, entries })
@@ -4917,8 +4974,10 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           if (controller.signal.aborted || (e && e.name === 'AbortError')) return
           if (deviceIdRef.current !== requestDevice || seq !== dirSeqRef.current) return
           if (!cached) {
-            setDirError(String(e.message || e)); setDirEntries([])
-            setTreeChildren((current) => ({ ...current, [key]: { status: 'error', entries: [] } }))
+            const denied = !!e && (e.code === 'denied' || e.status === 403)
+            setDirError(denied ? '当前节点没有读取该目录的权限。请用管理员权限运行节点，或在设置中调整权限。' : String(e.message || e))
+            setDirEntries([])
+            setTreeChildren((current) => ({ ...current, [key]: { status: denied ? 'denied' : 'error', entries: [], reason: String((e && e.message) || '') } }))
           }
         } finally { if (seq === dirSeqRef.current) setDirLoading(false) }
       }
@@ -5152,12 +5211,12 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         return () => { alive = false; window.clearInterval(timer); window.removeEventListener('focus', check) }
       }, [deviceId, file && file.path, file && file.version])
       const askValue = (title, value, onOk) => setAsk({ title, value: value || '', onOk })
-      const makeFolder = (base) => askValue('新建文件夹', '', async (name) => { try { await post(fsPath('mkdir'), { path: String(base).replace(/[\\/]+$/, '') + '\\' + name }); setContextMenu(null); invalidateDir(deviceId, base); await loadDir(base, { push: false, keepFile: true, fresh: true }) } catch (e) { fail(e) } })
+      const makeFolder = (base) => askValue('新建文件夹', '', async (name) => { try { await post(fsPath('mkdir'), { path: joinPath(base, name) }); setContextMenu(null); invalidateDir(deviceId, base); await loadDir(base, { push: false, keepFile: true, fresh: true }) } catch (e) { fail(e) } })
       const makeFile = (base) => {
         const requestDevice = deviceIdRef.current
         return askValue('新建文件', '', async (name) => {
           if (!requestDevice || deviceIdRef.current !== requestDevice) { fail(new Error('目标设备已切换，请重新选择目录')); return }
-          const target = String(base).replace(/[\\/]+$/, '') + '\\' + name
+          const target = joinPath(base, name)
           try {
             const result = await post('/api/devices/' + encodeURIComponent(requestDevice) + '/fs/write', { path: target, text: '', overwrite: false })
             if (!responseBelongsToDevice(result, requestDevice)) throw new Error('目标设备身份校验失败，未确认新建文件')
@@ -5168,7 +5227,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           } catch (e) { fail(e) }
         })
       }
-      const renameEntry = (entry) => { const target = entry || selected; if (!target) return; const requestDevice = deviceIdRef.current; askValue('重命名', target.name, async (name) => { const dest = parentOf(target.path) + '\\' + name; try { const result = await post('/api/devices/' + encodeURIComponent(requestDevice) + '/fs/rename', { path: target.path, dest }); if (!responseBelongsToDevice(result, requestDevice)) throw new Error('目标设备身份校验失败，未确认重命名'); if (deviceIdRef.current !== requestDevice) return; setContextMenu(null); setSelected(null); if (file && file.path === target.path) setFile(null); previewCacheRef.current.delete(previewCacheKey(requestDevice, target.path)); previewCacheRef.current.delete(previewCacheKey(requestDevice, dest)); invalidateDir(requestDevice, parentOf(target.path)); await loadDir(path, { push: false, keepFile: true, fresh: true }) } catch (e) { fail(e) } }) }
+      const renameEntry = (entry) => { const target = entry || selected; if (!target) return; const requestDevice = deviceIdRef.current; askValue('重命名', target.name, async (name) => { const dest = joinPath(parentOf(target.path), name); try { const result = await post('/api/devices/' + encodeURIComponent(requestDevice) + '/fs/rename', { path: target.path, dest }); if (!responseBelongsToDevice(result, requestDevice)) throw new Error('目标设备身份校验失败，未确认重命名'); if (deviceIdRef.current !== requestDevice) return; setContextMenu(null); setSelected(null); if (file && file.path === target.path) setFile(null); previewCacheRef.current.delete(previewCacheKey(requestDevice, target.path)); previewCacheRef.current.delete(previewCacheKey(requestDevice, dest)); invalidateDir(requestDevice, parentOf(target.path)); await loadDir(path, { push: false, keepFile: true, fresh: true }) } catch (e) { fail(e) } }) }
       const deleteEntry = async (entry) => {
         const target = entry || selected
         if (!target) return
@@ -5179,7 +5238,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         if (!projects) return
         askValue('新建工作区（' + projects.root + '）', '', async (name) => {
           try {
-            const target = projects.root + '\\' + name
+            const target = joinPath(projects.root, name)
             await post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/mkdir', { path: target })
             await post('/api/devices/' + encodeURIComponent(deviceId) + '/dsh/workspaces/register', { path: target, title: name }).catch(() => {})
             await loadProjects()
@@ -5493,7 +5552,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           }
           try {
             const result = await post('/api/devices/' + encodeURIComponent(requestDevice) + '/fs/copy', {
-              path: source.path, dest: targetBase + '\\' + source.name
+              path: source.path, dest: joinPath(targetBase, source.name)
             })
             if (!responseBelongsToDevice(result, requestDevice)) throw new Error('目标设备身份校验失败，未确认粘贴')
             if (deviceIdRef.current !== requestDevice) return

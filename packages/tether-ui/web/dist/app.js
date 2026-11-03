@@ -173812,6 +173812,55 @@ function newTransferId() {
   }
   return [...bytes].map((value) => value.toString(16).padStart(2, "0")).join("");
 }
+function newTransferCode() {
+  return "tether-" + newTransferId();
+}
+async function transferFileCroc({
+  send,
+  receive,
+  status: status2,
+  finish,
+  cancel,
+  cancelSend,
+  source,
+  destination,
+  name,
+  transferId,
+  overwrite = false,
+  onProgress = () => {
+  },
+  signal
+}) {
+  const id = transferId || newTransferId();
+  const code = newTransferCode();
+  let sendStarted = false;
+  let receiveStarted = false;
+  try {
+    await send({ path: source, code, transfers: 8 });
+    sendStarted = true;
+    await receive({ path: destination, code, transfer_id: id });
+    receiveStarted = true;
+    while (true) {
+      if (signal && signal.aborted) throw failure("\u4F20\u8F93\u5DF2\u53D6\u6D88", "aborted");
+      const state = await status2({ transfer_id: id });
+      const percent = Math.max(0, Math.min(100, Number(state && state.percent) || 0));
+      onProgress({ transferred: 0, total: 0, percent, speed: Number(state && state.speed) || 0 });
+      if (state && state.state === "completed") break;
+      if (state && (state.state === "failed" || state.state === "cancelled")) {
+        throw failure(state && state.error || "\u4F20\u8F93\u5931\u8D25", "croc_failed");
+      }
+      await new Promise((resolve3) => setTimeout(resolve3, 350));
+    }
+    const result = await finish({ transfer_id: id, overwrite: !!overwrite, name });
+    return { path: result.path, transferId: id, bytes: Number(result.bytes) || 0 };
+  } catch (error) {
+    const cleanups = [];
+    if (receiveStarted) cleanups.push(cancel({ transfer_id: id }));
+    if (sendStarted) cleanups.push(cancelSend({}));
+    await Promise.allSettled(cleanups);
+    throw error;
+  }
+}
 async function transferFile({
   read,
   write,
@@ -173855,28 +173904,34 @@ async function transferFile({
     });
   };
   if (partial && offset > 0) report(offset);
+  const readChunk = async (at2) => {
+    let chunk = null;
+    let binary = false;
+    const limit = total === null ? TRANSFER_CHUNK : Math.min(TRANSFER_CHUNK, Math.max(0, total - at2));
+    if (limit === 0) return { chunk: { size: total, offset: at2, base64: "" }, binary: false };
+    if (typeof readBytes === "function") {
+      try {
+        chunk = await readBytes({ path: source, offset: at2, limit });
+        binary = !!chunk && chunk.bytes instanceof Uint8Array;
+      } catch (_2) {
+        chunk = null;
+        binary = false;
+      }
+    }
+    if (!binary) chunk = await read({ path: source, offset: at2, limit });
+    return { chunk, binary };
+  };
+  let pending2 = readChunk(offset);
   while (true) {
     if (signal && signal.aborted) {
       if (typeof cancel === "function") await cancel({ path: destination, transferId: id }).catch(() => {
       });
       throw failure("\u4F20\u8F93\u5DF2\u53D6\u6D88", "aborted");
     }
-    let chunk = null;
-    let binary = false;
-    if (total !== null && offset >= total) {
-      chunk = { size: total, offset, base64: "" };
-    } else {
-      if (typeof readBytes === "function") {
-        try {
-          chunk = await readBytes({ path: source, offset, limit: TRANSFER_CHUNK });
-          binary = !!chunk && chunk.bytes instanceof Uint8Array;
-        } catch (_2) {
-          chunk = null;
-          binary = false;
-        }
-      }
-      if (!binary) chunk = await read({ path: source, offset, limit: TRANSFER_CHUNK });
-    }
+    const current = await pending2;
+    pending2 = null;
+    const chunk = current.chunk;
+    const binary = current.binary;
     if (!chunk) throw failure("\u8BFB\u53D6\u6E90\u6587\u4EF6\u5931\u8D25", "read_failed");
     const size = Number(chunk.size);
     if (!Number.isSafeInteger(size) || size < 0) throw failure("\u6E90\u6587\u4EF6\u5927\u5C0F\u65E0\u6548", "read_failed");
@@ -173889,6 +173944,12 @@ async function transferFile({
     if (!bytes && offset < total) throw failure("\u6E90\u6587\u4EF6\u8BFB\u53D6\u5230\u7A7A\u6570\u636E", "read_failed");
     if (offset + bytes > total) throw failure("\u6E90\u6587\u4EF6\u8FD4\u56DE\u7684\u6570\u636E\u8D85\u51FA\u58F0\u660E\u5927\u5C0F", "source_changed");
     const final = offset + bytes >= total;
+    const expected = offset + bytes;
+    if (!final) {
+      pending2 = readChunk(expected);
+      pending2.catch(() => {
+      });
+    }
     let result = null;
     if (binary && typeof writeBytes === "function") {
       try {
@@ -173920,11 +173981,20 @@ async function transferFile({
       });
     }
     if (!result || !Number.isSafeInteger(result.offset) || result.offset < offset) {
+      if (pending2) pending2.catch(() => {
+      });
       throw failure("\u76EE\u6807\u8BBE\u5907\u6CA1\u6709\u786E\u8BA4\u5199\u5165\u8FDB\u5EA6", "write_failed");
     }
     offset = result.offset;
     report(offset);
     if (result.complete === true || offset >= total) break;
+    if (pending2 && offset !== expected) {
+      pending2.catch(() => {
+      });
+      pending2 = readChunk(offset);
+    } else if (!pending2) {
+      pending2 = readChunk(offset);
+    }
   }
   if (total === 0) report(0);
   return { path: destination, transferId: id, bytes: offset };
@@ -173959,6 +174029,7 @@ function parentOf(path) {
   if (/^[A-Za-z]:$/.test(clean)) return clean + "\\";
   const slash = Math.max(clean.lastIndexOf("\\"), clean.lastIndexOf("/"));
   if (slash < 0) return "";
+  if (slash === 0 && clean.startsWith("/")) return "/";
   const parent = clean.slice(0, slash);
   return /^[A-Za-z]:$/.test(parent) ? parent + "\\" : parent;
 }
@@ -175291,10 +175362,70 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C: C2, devi
     const total = items.reduce((sum, item) => sum + (Number(item.size) || 0), 0);
     setJob({ state: "running", percent: 0, transferred: 0, total, count: items.length, index: 0, error: "" });
     let doneBytes = 0;
+    let useCroc = false;
+    try {
+      const [sourceInfo, targetInfo] = await Promise.all([
+        postFs(side(fromSide).device, "transfer_info", {}),
+        postFs(target2.device, "transfer_info", {})
+      ]);
+      useCroc = !!(sourceInfo && sourceInfo.available && sourceInfo.relay && targetInfo && targetInfo.available && targetInfo.relay);
+    } catch (_2) {
+      useCroc = false;
+    }
     try {
       for (let index = 0; index < items.length; index += 1) {
         const item = items[index];
         const sourceDevice = side(fromSide).device;
+        if (useCroc) {
+          let name = item.name;
+          let overwrite2 = false;
+          if ((target2.entries || []).some((entry) => entry.name === name)) {
+            const choice = await askConflict(item, joinPath(target2.path, name));
+            if (choice === "cancel") throw Object.assign(new Error("\u5DF2\u53D6\u6D88"), { code: "aborted" });
+            if (choice === "overwrite") overwrite2 = true;
+            else if (choice === "keep") name = uniqueName(item.name, (target2.entries || []).map((entry) => entry.name));
+          }
+          const result = await transferFileCroc({
+            source: item.path,
+            destination: target2.path,
+            name,
+            transferId: newTransferId(),
+            overwrite: overwrite2,
+            signal: controller.signal,
+            send: (args) => postFs(sourceDevice, "transfer_send", args),
+            receive: (args) => postFs(target2.device, "transfer_receive", args),
+            status: (args) => postFs(target2.device, "transfer_status", args),
+            finish: (args) => postFs(target2.device, "transfer_finish", args),
+            cancel: (args) => postFs(target2.device, "transfer_cancel", args),
+            cancelSend: (args) => postFs(sourceDevice, "transfer_cancel", args),
+            onProgress: (value) => {
+              const percent = Number(value && value.percent) || 0;
+              const currentBytes = doneBytes + (Number(item.size) || 0) * percent / 100;
+              setJob((current) => ({
+                ...current || {},
+                percent: total ? Math.min(99, Math.round(currentBytes / total * 100)) : 0,
+                transferred: currentBytes,
+                index,
+                count: items.length,
+                state: "running"
+              }));
+            }
+          });
+          doneBytes += Number(result.bytes) || Number(item.size) || 0;
+          if (cut) {
+            await postFs(sourceDevice, "delete", { path: item.path }).catch(() => {
+              if (onError) onError(new Error("\u5DF2\u590D\u5236\u4F46\u672A\u80FD\u5220\u9664\u6E90\u6587\u4EF6\uFF1A" + item.name));
+            });
+          }
+          setJob((current) => ({
+            ...current || {},
+            percent: total ? Math.round(doneBytes / total * 100) : 100,
+            transferred: doneBytes,
+            index,
+            state: "running"
+          }));
+          continue;
+        }
         let destination = joinPath(target2.path, item.name);
         let overwrite = false;
         while (true) {
@@ -178220,21 +178351,33 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     return String(type || "TXT").slice(0, 4).toUpperCase();
   }
   function joinPath3(base, name) {
-    return String(base || "").replace(/[\\/]+$/, "") + "\\" + String(name || "");
+    const raw = String(base || "");
+    const value = String(name || "");
+    if (!raw) return value;
+    const separator2 = raw.includes("\\") || /^[A-Za-z]:$/.test(raw) ? "\\" : "/";
+    const clean = raw.replace(/[\\/]+$/, "");
+    return clean ? clean + separator2 + value : separator2 + value;
   }
   function pathSegments(target) {
     const clean = String(target || "").replace(/[\\/]+$/, "");
     if (!clean) return [];
     const drive = clean.match(/^([A-Za-z]:)(.*)$/);
+    const posix2 = !drive && clean.startsWith("/");
+    const separator2 = drive || clean.includes("\\") ? "\\" : "/";
     const out = [];
     let cursor = "";
     if (drive) {
       cursor = drive[1] + "\\";
       out.push({ label: drive[1], path: cursor });
+    } else if (posix2) {
+      cursor = "/";
+      out.push({ label: "/", path: cursor });
     }
     const rest = drive ? drive[2] : clean;
     rest.split(/[\\/]+/).filter(Boolean).forEach((part) => {
-      cursor = cursor ? cursor.replace(/[\\/]+$/, "") + "\\" + part : part;
+      if (!cursor) cursor = part;
+      else if (cursor === separator2) cursor = separator2 + part;
+      else cursor = cursor.replace(/[\\/]+$/, "") + separator2 + part;
       out.push({ label: part, path: cursor });
     });
     return out;
@@ -179961,6 +180104,10 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       ));
       if (isDir && expanded) {
         if (!cached || cached.status === "loading") rows.push(h3("div", { key: node.id + ":loading", style: { padding: "3px " + UI.pad + "px 3px " + (UI.pad + (depth + 2) * 12) + "px", fontSize: 11.5, color: C2.mute } }, "\u52A0\u8F7D\u4E2D\u2026"));
+        else if (cached.status === "denied") rows.push(h3("button", { key: node.id + ":denied", title: cached.reason || "\u5F53\u524D\u8282\u70B9\u6CA1\u6709\u8BFB\u53D6\u8BE5\u76EE\u5F55\u7684\u6743\u9650", onClick: (ev) => {
+          ev.stopPropagation();
+          onToggle(node, true);
+        }, style: { border: 0, background: "transparent", padding: "3px " + UI.pad + "px 3px " + (UI.pad + (depth + 2) * 12) + "px", color: C2.mute, fontSize: 11.5, cursor: "pointer" } }, "\u65E0\u6743\u9650\uFF0C\u70B9\u51FB\u91CD\u8BD5"));
         else if (cached.status === "error") rows.push(h3("button", { key: node.id + ":error", onClick: (ev) => {
           ev.stopPropagation();
           onToggle(node, true);
@@ -180423,7 +180570,9 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       } else setState({ deviceId, status: "error", url: "", message: "\u539F\u751F\u5DE5\u4F5C\u533A\u9875\u9762\u52A0\u8F7D\u5931\u8D25\u3002\u8BF7\u68C0\u67E5\u76EE\u6807\u8BBE\u5907\u8FDE\u63A5\u540E\u91CD\u8BD5\u3002" });
     };
     const dshRelevant = currentState.status === "error" && ["descriptor_missing", "host_unreachable", "descriptor_invalid", "node_update_required"].includes(currentState.code);
-    const dshInstallSupported = !deviceInfo || !deviceInfo.capabilities || deviceInfo.capabilities.dsh_install_supported !== false;
+    const deviceOs2 = String(deviceInfo && (deviceInfo.os || deviceInfo.os_label || deviceInfo.capabilities && (deviceInfo.capabilities.os || deviceInfo.capabilities.os_label)) || "");
+    const linuxDevice = /linux/i.test(deviceOs2);
+    const dshInstallSupported = !linuxDevice && (!deviceInfo || !deviceInfo.capabilities || deviceInfo.capabilities.dsh_install_supported !== false);
     const dshWatch = visible && (deviceId === localDeviceId || dshRelevant);
     const dshRestartPidRef = React2.useRef(0);
     const dshAutoRepairRef = React2.useRef(false);
@@ -180433,12 +180582,19 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const [dshError, setDshError] = React2.useState("");
     const [dshWeb, setDshWeb] = React2.useState(null);
     const [dshWebBusy, setDshWebBusy] = React2.useState("");
-    const dshWebSupported = !!(deviceInfo && deviceInfo.capabilities && deviceInfo.capabilities.dsh_web_supported);
+    const [dshWebOpen, setDshWebOpen] = React2.useState(false);
+    const dshWebRef = React2.useRef(null);
     React2.useEffect(() => {
-      if (!dshWebSupported || dshInstallSupported) return void 0;
+      setDshWebOpen(false);
+    }, [deviceId]);
+    const dshWebSupported = linuxDevice || !!(deviceInfo && deviceInfo.capabilities && deviceInfo.capabilities.dsh_web_supported);
+    const dshWebEnabled = dshWebSupported || !!(dshWeb && dshWeb.supported);
+    const dshWebValue = (data) => data && data.value && typeof data.value === "object" ? data.value : data;
+    React2.useEffect(() => {
+      if (!deviceId) return void 0;
       let alive = true;
       const load = () => post("/api/devices/" + encodeURIComponent(deviceId) + "/fs/dsh_web_status", {}).then((data) => {
-        if (alive) setDshWeb(data);
+        if (alive) setDshWeb(dshWebValue(data));
       }).catch(() => {
       });
       void load();
@@ -180447,12 +180603,12 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         alive = false;
         clearInterval(timer);
       };
-    }, [deviceId, dshWebSupported, dshInstallSupported, dshWeb && dshWeb.installing]);
+    }, [deviceId, dshWeb && dshWeb.installing]);
     const runDshWeb = async (action) => {
       setDshWebBusy(action);
       try {
         const data = await post("/api/devices/" + encodeURIComponent(deviceId) + "/fs/dsh_web_" + action, {});
-        if (data) setDshWeb(data);
+        if (data) setDshWeb(dshWebValue(data));
       } catch (error) {
         setDshWeb((current) => ({ ...current || {}, error: error.message || "\u64CD\u4F5C\u5931\u8D25" }));
       } finally {
@@ -180544,6 +180700,39 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     }, [deviceId]);
     const dshSurfaceMissing = !!dshRelevant && !!dsh && dsh.running === true && currentState.code === "descriptor_missing";
     const message = currentState.status === "error" && dshRelevant && dsh ? dsh.installed === false ? "DSH \u672A\u5B89\u88C5" : dsh.running ? dshBusy === "dsh_install_plugin" ? "\u6B63\u5728\u5B89\u88C5/\u4FEE\u590D Tether \u63D2\u4EF6\u2026" : dshSurfaceMissing ? "DSH \u5DF2\u5728\u8FD0\u884C\uFF0C\u4F46 Tether \u63D2\u4EF6\u672A\u52A0\u8F7D\u6216 surface \u63CF\u8FF0\u7B26\u7F3A\u5931" : currentState.message : "DSH \u672A\u542F\u52A8" : currentState.status === "loading" ? currentState.message || "\u6B63\u5728\u8FDE\u63A5\u76EE\u6807\u8BBE\u5907\u7684 DSH \u539F\u751F\u5DE5\u4F5C\u533A\u2026" : currentState.status === "local" ? "\u5F53\u524D\u5DF2\u5728 DeepSeek Harness \u4E2D\uFF1B\u672C\u673A\u5DE5\u4F5C\u533A\u65E0\u9700\u518D\u5D4C\u5165\uFF0C\u53EF\u7528\u5DE6\u4FA7\u300C\u6587\u4EF6\u300D\u6216\u300C\u8FDE\u63A5\u300D\u3002" : currentState.status === "offline" ? "\u76EE\u6807\u8BBE\u5907\u79BB\u7EBF\u3002\u8BBE\u5907\u91CD\u65B0\u5728\u7EBF\u540E\u53EF\u91CD\u8BD5\u3002" : currentState.status === "no-device" ? "\u5148\u4ECE\u5DE6\u4FA7\u8BBE\u5907\u5217\u8868\u9009\u62E9\u76EE\u6807\u8BBE\u5907\u3002" : currentState.status === "error" ? currentState.message : "";
+    const dshWebUrl = dshWeb && dshWeb.running ? String(dshWeb.url || "") : "";
+    if (dshWebOpen && dshWebUrl && host.kind === "app") {
+      return h3(
+        "div",
+        { className: "tether-native-surface", style: { ...nativeSurfaceContainerStyle(visible, layered), position: "relative" } },
+        h3("webview", {
+          ref: dshWebRef,
+          src: dshWebUrl,
+          style: { flex: "1 1 auto", width: "100%", height: "100%", minWidth: 0, minHeight: 0, border: 0, background: C2.bg }
+        }),
+        h3(
+          "div",
+          { style: { position: "absolute", top: 10, right: 10, display: "flex", gap: 6, zIndex: 2 } },
+          h3("button", {
+            type: "button",
+            className: "tether-hover",
+            onClick: () => {
+              try {
+                if (dshWebRef.current) dshWebRef.current.reload();
+              } catch (_2) {
+              }
+            },
+            style: { height: 28, padding: "0 10px", border: 0, borderRadius: 6, background: "rgba(255,255,255,.94)", color: C2.sub, fontSize: 12, cursor: "pointer", boxShadow: "0 1px 4px rgba(16,24,40,.16)" }
+          }, "\u91CD\u65B0\u52A0\u8F7D"),
+          h3("button", {
+            type: "button",
+            className: "tether-hover",
+            onClick: () => setDshWebOpen(false),
+            style: { height: 28, padding: "0 10px", border: 0, borderRadius: 6, background: "rgba(255,255,255,.94)", color: C2.sub, fontSize: 12, cursor: "pointer", boxShadow: "0 1px 4px rgba(16,24,40,.16)" }
+          }, "\u5173\u95ED")
+        )
+      );
+    }
     return h3(
       "div",
       { className: "tether-native-surface", style: nativeSurfaceContainerStyle(visible, layered) },
@@ -180608,6 +180797,15 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         "div",
         { style: { display: "grid", placeItems: "center", alignContent: "center", gap: 12, flex: "1 1 auto", minHeight: 0, color: C2.sub, textAlign: "center", padding: 24 } },
         h3("div", null, message),
+        dshWeb && dshWeb.running ? btn(host.kind === "app" ? "\u6253\u5F00\u5DE5\u4F5C\u533A" : "\u8BF7\u5728\u684C\u9762 APP \u5185\u6253\u5F00", () => {
+          if (host.kind !== "app") return;
+          const url = dshWeb.url || "";
+          if (!url) {
+            setDshWeb((current) => ({ ...current || {}, error: "\u5DE5\u4F5C\u533A\u5730\u5740\u8FD8\u6CA1\u51C6\u5907\u597D\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5" }));
+            return;
+          }
+          setDshWebOpen(true);
+        }, { primary: true, disabled: host.kind !== "app" }) : null,
         dshRelevant && dsh && !dsh.running ? btn(
           dsh.installed === false ? dshBusy === "dsh_install" || dsh.installing ? "\u5B89\u88C5\u4E2D\u2026" : "\u5B89\u88C5 DSH" : dshBusy === "dsh_start" ? "\u542F\u52A8\u4E2D\u2026" : "\u542F\u52A8 DSH",
           () => runDsh(dsh.installed === false ? "dsh_install" : "dsh_start"),
@@ -180651,23 +180849,23 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         h3("div", { style: { fontSize: 14, color: C2.ink } }, dsh.installed === false ? "DSH \u672A\u5B89\u88C5" : "DSH \u672A\u542F\u52A8"),
         dsh.version ? h3("div", { className: "tether-num", style: { fontSize: 11.5, color: C2.mute } }, dsh.version) : null,
         dsh.installing ? h3("div", { style: { fontSize: 11.5, color: C2.mute } }, "\u5B89\u88C5\u4E2D " + (Number(dsh.progress) || 0) + "%") : null,
-        dsh.installed === false && !dshInstallSupported ? h3(
+        dsh.installed === false && (!dshInstallSupported || dshWeb && dshWeb.running) ? h3(
           React2.Fragment,
           null,
           h3(
             "div",
             { style: { maxWidth: 480, fontSize: 12, color: C2.sub, lineHeight: 1.6 } },
-            dshWeb && dshWeb.running ? "DSH Web \u5DF2\u5728\u76EE\u6807\u673A\u8FD0\u884C\uFF0C\u53EF\u4EE5\u5728\u65B0\u7A97\u53E3\u6253\u5F00\u5DE5\u4F5C\u533A\u3002" : "\u5F53\u524D\u76EE\u6807\u7CFB\u7EDF\u6CA1\u6709\u5B98\u65B9 DSH \u684C\u9762\u7248\uFF0C\u53EF\u4EE5\u5B89\u88C5 DSH Web \u4F5C\u4E3A\u8FDC\u7A0B\u5DE5\u4F5C\u533A\u3002"
+            dshWeb && dshWeb.running ? "DSH Web \u5DF2\u5728\u76EE\u6807\u673A\u8FD0\u884C\uFF0C\u53EF\u5728 Tether \u5185\u6253\u5F00\u5DE5\u4F5C\u533A\u3002" : "\u5F53\u524D\u76EE\u6807\u7CFB\u7EDF\u6CA1\u6709\u5B98\u65B9 DSH \u684C\u9762\u7248\uFF0C\u53EF\u4EE5\u5B89\u88C5 DSH Web \u4F5C\u4E3A\u8FDC\u7A0B\u5DE5\u4F5C\u533A\u3002"
           ),
-          dshWebSupported ? dshWeb && dshWeb.running ? btn("\u6253\u5F00 DSH Web", () => {
+          dshWebEnabled ? dshWeb && dshWeb.running ? host.kind === "app" ? btn("\u6253\u5F00\u5DE5\u4F5C\u533A", () => {
             const url = dshWeb.url || "";
             if (!url) {
               setDshWeb((current) => ({ ...current || {}, error: "\u5DE5\u4F5C\u533A\u5730\u5740\u8FD8\u6CA1\u51C6\u5907\u597D\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5" }));
               return;
             }
-            const opened = window.open(url, "_blank", "noopener");
-            if (!opened) setDshWeb((current) => ({ ...current || {}, error: "\u7A97\u53E3\u88AB\u62E6\u622A\uFF0C\u8BF7\u5141\u8BB8\u5F39\u51FA\u7A97\u53E3\u540E\u91CD\u8BD5" }));
-          }, { primary: true }) : dshWeb && dshWeb.installed ? btn(
+            setDshWebOpen(true);
+          }, { primary: true }) : btn("\u8BF7\u5728\u684C\u9762 APP \u5185\u6253\u5F00", () => {
+          }, { disabled: true }) : dshWeb && dshWeb.installed ? btn(
             dshWebBusy ? "\u542F\u52A8\u4E2D\u2026" : "\u542F\u52A8 DSH Web",
             () => void runDshWeb("start"),
             { primary: true, disabled: !!dshWebBusy }
@@ -182785,7 +182983,10 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const parentOf2 = (target) => {
       const clean = String(target || "").replace(/[\\/]+$/, "");
       const parent = clean.replace(/[\\/][^\\/]+$/, "");
-      return parent && parent !== clean ? parent : clean;
+      if (parent && parent !== clean) return parent;
+      if (/^[A-Za-z]:$/.test(clean)) return clean + "\\";
+      if (clean.startsWith("/")) return "/";
+      return clean;
     };
     const pathInfo = (target) => {
       const norm = normPath(target);
@@ -182823,7 +183024,8 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         setTreeChildren((current) => ({ ...current, [key]: { status: "loaded", entries: entries2 } }));
       } catch (e) {
         if (!treeResponseIsCurrent(requestDevice, deviceIdRef.current, requestEpoch, treeDeviceEpochRef.current)) return;
-        setTreeChildren((current) => ({ ...current, [key]: { status: "error", entries: [] } }));
+        const denied = !!e && (e.code === "denied" || e.status === 403);
+        setTreeChildren((current) => ({ ...current, [key]: { status: denied ? "denied" : "error", entries: [], reason: String(e && e.message || "") } }));
       } finally {
         treeInflightRef.current.delete(key);
       }
@@ -182840,7 +183042,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         const relative2 = String(target).slice(String(info.root).length).replace(/^[\\/]+/, "");
         for (const part of relative2.split(/[\\/]+/)) {
           if (!part) continue;
-          cursor += "\\" + part;
+          cursor = joinPath3(cursor, part);
           paths.push(cursor);
         }
       }
@@ -182908,9 +183110,9 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         const entries2 = (data.entries || []).map((entry) => ({ ...entry, path: joinPath3(requestTarget, entry.name) }));
         cacheStore(dirCacheRef.current, key, { entries: entries2, at: Date.now() });
         rememberDirectory(requestDevice, nextPath, entries2);
+        setTreeChildren((current) => ({ ...current, [key]: { status: "loaded", entries: entries2 } }));
         if (cached) {
           setDirEntries(entries2);
-          setTreeChildren((current) => ({ ...current, [key]: { status: "loaded", entries: entries2 } }));
         } else {
           enter(entries2, opts.push);
           revealTree(nextPath, { path: nextPath, entries: entries2 });
@@ -182919,9 +183121,10 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         if (controller.signal.aborted || e && e.name === "AbortError") return;
         if (deviceIdRef.current !== requestDevice || seq !== dirSeqRef.current) return;
         if (!cached) {
-          setDirError(String(e.message || e));
+          const denied = !!e && (e.code === "denied" || e.status === 403);
+          setDirError(denied ? "\u5F53\u524D\u8282\u70B9\u6CA1\u6709\u8BFB\u53D6\u8BE5\u76EE\u5F55\u7684\u6743\u9650\u3002\u8BF7\u7528\u7BA1\u7406\u5458\u6743\u9650\u8FD0\u884C\u8282\u70B9\uFF0C\u6216\u5728\u8BBE\u7F6E\u4E2D\u8C03\u6574\u6743\u9650\u3002" : String(e.message || e));
           setDirEntries([]);
-          setTreeChildren((current) => ({ ...current, [key]: { status: "error", entries: [] } }));
+          setTreeChildren((current) => ({ ...current, [key]: { status: denied ? "denied" : "error", entries: [], reason: String(e && e.message || "") } }));
         }
       } finally {
         if (seq === dirSeqRef.current) setDirLoading(false);
@@ -183190,7 +183393,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const askValue = (title, value, onOk) => setAsk({ title, value: value || "", onOk });
     const makeFolder = (base) => askValue("\u65B0\u5EFA\u6587\u4EF6\u5939", "", async (name) => {
       try {
-        await post(fsPath("mkdir"), { path: String(base).replace(/[\\/]+$/, "") + "\\" + name });
+        await post(fsPath("mkdir"), { path: joinPath3(base, name) });
         setContextMenu(null);
         invalidateDir(deviceId, base);
         await loadDir(base, { push: false, keepFile: true, fresh: true });
@@ -183205,7 +183408,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           fail2(new Error("\u76EE\u6807\u8BBE\u5907\u5DF2\u5207\u6362\uFF0C\u8BF7\u91CD\u65B0\u9009\u62E9\u76EE\u5F55"));
           return;
         }
-        const target = String(base).replace(/[\\/]+$/, "") + "\\" + name;
+        const target = joinPath3(base, name);
         try {
           const result = await post("/api/devices/" + encodeURIComponent(requestDevice) + "/fs/write", { path: target, text: "", overwrite: false });
           if (!responseBelongsToDevice(result, requestDevice)) throw new Error("\u76EE\u6807\u8BBE\u5907\u8EAB\u4EFD\u6821\u9A8C\u5931\u8D25\uFF0C\u672A\u786E\u8BA4\u65B0\u5EFA\u6587\u4EF6");
@@ -183224,7 +183427,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       if (!target) return;
       const requestDevice = deviceIdRef.current;
       askValue("\u91CD\u547D\u540D", target.name, async (name) => {
-        const dest = parentOf2(target.path) + "\\" + name;
+        const dest = joinPath3(parentOf2(target.path), name);
         try {
           const result = await post("/api/devices/" + encodeURIComponent(requestDevice) + "/fs/rename", { path: target.path, dest });
           if (!responseBelongsToDevice(result, requestDevice)) throw new Error("\u76EE\u6807\u8BBE\u5907\u8EAB\u4EFD\u6821\u9A8C\u5931\u8D25\uFF0C\u672A\u786E\u8BA4\u91CD\u547D\u540D");
@@ -183261,7 +183464,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       if (!projects) return;
       askValue("\u65B0\u5EFA\u5DE5\u4F5C\u533A\uFF08" + projects.root + "\uFF09", "", async (name) => {
         try {
-          const target = projects.root + "\\" + name;
+          const target = joinPath3(projects.root, name);
           await post("/api/devices/" + encodeURIComponent(deviceId) + "/fs/mkdir", { path: target });
           await post("/api/devices/" + encodeURIComponent(deviceId) + "/dsh/workspaces/register", { path: target, title: name }).catch(() => {
           });
@@ -183695,7 +183898,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         try {
           const result = await post("/api/devices/" + encodeURIComponent(requestDevice) + "/fs/copy", {
             path: source.path,
-            dest: targetBase + "\\" + source.name
+            dest: joinPath3(targetBase, source.name)
           });
           if (!responseBelongsToDevice(result, requestDevice)) throw new Error("\u76EE\u6807\u8BBE\u5907\u8EAB\u4EFD\u6821\u9A8C\u5931\u8D25\uFF0C\u672A\u786E\u8BA4\u7C98\u8D34");
           if (deviceIdRef.current !== requestDevice) return;

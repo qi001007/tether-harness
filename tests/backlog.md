@@ -134,3 +134,7 @@
 - 2026-11-03：0.2.91 新增 Windows 8.3 短路径回归（`_file_dependency_path` 展开短名）；`_hot_reload_capable` 只对带 `plugin_version` 的 surface 给宽限。全量 mjs 243 / cjs 8 / pytest 161+5 skipped。
 - 2026-11-03：0.2.93 新增 Hub 更新镜像契约（`apply` 写 surface state 的 `applied-plugin.json`）与宿主扫描按 `dsh_home` 过滤；删掉禁用→启用的两条桥测试。全量 mjs 241 / cjs 8 / pytest 162+5 skipped。
 - 2026-11-03：新增 `test_app_gateway.py` 4 条：HTTP 转发、拒绝非回环目标、拒绝白名单外客户端、`--app` 解析；全量 pytest 166+5 skipped。
+- 2026-11-04：新增 `test_posix_paths.mjs`：POSIX/Windows `joinPath`、面包屑、根目录上级；`test_transfer_engine.mjs` 增加“下一块读取与当前块写入重叠”断言。与 `test_file_tree.mjs` 合计 22 条通过。
+- 2026-11-04：新增 `test_croc_transfer.py` 5 条：send 的 `--relay/--code/--transfers/--no-local/--transport relay` 参数、receive 的 code 只走 `CROC_SECRET`、缺 relay/短 code/缺源文件拒绝、取消状态；真实 croc 11.6.3 在本机 relay 上 16 MiB 收发成功，仅证明引擎可用，不作为链路速度验收。
+- 2026-11-04：新增 `test_fs_croc.py` 5 条：send 校验源路径、receive+finish 移出暂存、未完成/无任务拒绝、cancel 清暂存、缺 croc 报错；与 adapter 合计 10 条通过。真实端到端 8 MiB 经 Node fs API 完成，SHA-256 一致；`--ignore-stdin` 必须有，否则管道 stdin 会被 croc 当发送源。
+- 2026-11-04：`test_transfer_engine.mjs` 增加 `transferFileCroc` 编排断言：一次性 `tether-` code、send→receive→status→finish 顺序、finish 改名；mjs 23 条通过。

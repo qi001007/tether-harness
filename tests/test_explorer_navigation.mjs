@@ -158,5 +158,5 @@ test('directory loading overlays the list instead of shifting it', () => {
   assert.equal(source.includes("'正在刷新…'"), false, 'no inline refresh row')
   assert.match(source, /className: 'tether-dir-loading'/)
   assert.match(source, /\.tether-dir-loading \{ position: absolute; inset: 0;/)
-  assert.match(source, /position: 'relative', display: 'flex' \} \},\s*h\('div', \{ className: 'tether-scroll'/)
+  assert.match(source, /position: 'relative', display: 'flex'[\s\S]{0,240}className: 'tether-scroll'/)
 })

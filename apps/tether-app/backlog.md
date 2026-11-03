@@ -61,3 +61,4 @@
 - 2026-11-03：APP 包与 package-lock 根版本升至 `0.2.84`；surface 缺失且 DSH 正在运行时自动调用 `dsh_install_plugin`，成功后按新 pid 重载；失败显示“安装/修复插件”重试按钮，用户不再手工拷包。
 - 2026-11-03：APP 包与 package-lock 根版本升至 `0.2.88`；自动修复改用 `dsh_status.surface`（descriptor pid 存活）判断，surface 轮询的插件缺失错误也进入修复态；本机空 profile 已实测 APP 自动装回并渲染。
 - 2026-11-03：APP 包与 package-lock 根版本升至 `0.2.89`；iframe 载入后探测默认控件样式，命中后自动修复一次，再次命中显示“DSH 界面样式与 Tether 版本不匹配”遮罩，避免裸控件页面。
+- 2026-11-04：主窗口开启 `webviewTag` 供 Linux DSH Web 顶层内嵌；`will-attach-webview` 删除 guest preload、强制 sandbox/contextIsolation/webSecurity，只允许回环与 RFC1918 地址；`did-attach-webview` 拒绝新窗口并把 guest 导航锁在首次 origin。DSH 外部 `window.open` 已删除；真机 webview 与插件自动安装仍待验。

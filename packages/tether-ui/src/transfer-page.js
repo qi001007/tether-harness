@@ -1,4 +1,4 @@
-import { newTransferId, transferFile } from './transfer.js'
+import { newTransferId, transferFile, transferFileCroc } from './transfer.js'
 import { TargetFileExplorer } from './target-file-explorer.js'
 import { invalidateDirectory, loadDirectory } from './file-cache.js'
 
@@ -370,10 +370,57 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
     const total = items.reduce((sum, item) => sum + (Number(item.size) || 0), 0)
     setJob({ state: 'running', percent: 0, transferred: 0, total, count: items.length, index: 0, error: '' })
     let doneBytes = 0
+    let useCroc = false
+    try {
+      const [sourceInfo, targetInfo] = await Promise.all([
+        postFs(side(fromSide).device, 'transfer_info', {}),
+        postFs(target.device, 'transfer_info', {})
+      ])
+      useCroc = !!(sourceInfo && sourceInfo.available && sourceInfo.relay
+        && targetInfo && targetInfo.available && targetInfo.relay)
+    } catch (_) { useCroc = false }
     try {
       for (let index = 0; index < items.length; index += 1) {
         const item = items[index]
         const sourceDevice = side(fromSide).device
+        if (useCroc) {
+          let name = item.name
+          let overwrite = false
+          if ((target.entries || []).some((entry) => entry.name === name)) {
+            const choice = await askConflict(item, joinPath(target.path, name))
+            if (choice === 'cancel') throw Object.assign(new Error('已取消'), { code: 'aborted' })
+            if (choice === 'overwrite') overwrite = true
+            else if (choice === 'keep') name = uniqueName(item.name, (target.entries || []).map((entry) => entry.name))
+          }
+          const result = await transferFileCroc({
+            source: item.path,
+            destination: target.path,
+            name,
+            transferId: newTransferId(),
+            overwrite,
+            signal: controller.signal,
+            send: (args) => postFs(sourceDevice, 'transfer_send', args),
+            receive: (args) => postFs(target.device, 'transfer_receive', args),
+            status: (args) => postFs(target.device, 'transfer_status', args),
+            finish: (args) => postFs(target.device, 'transfer_finish', args),
+            cancel: (args) => postFs(target.device, 'transfer_cancel', args),
+            cancelSend: (args) => postFs(sourceDevice, 'transfer_cancel', args),
+            onProgress: (value) => {
+              const percent = Number(value && value.percent) || 0
+              const currentBytes = doneBytes + (Number(item.size) || 0) * percent / 100
+              setJob((current) => ({ ...(current || {}), percent: total ? Math.min(99, Math.round(currentBytes / total * 100)) : 0,
+                transferred: currentBytes, index, count: items.length, state: 'running' }))
+            }
+          })
+          doneBytes += Number(result.bytes) || Number(item.size) || 0
+          if (cut) {
+            await postFs(sourceDevice, 'delete', { path: item.path })
+              .catch(() => { if (onError) onError(new Error('已复制但未能删除源文件：' + item.name)) })
+          }
+          setJob((current) => ({ ...(current || {}), percent: total ? Math.round(doneBytes / total * 100) : 100,
+            transferred: doneBytes, index, state: 'running' }))
+          continue
+        }
         let destination = joinPath(target.path, item.name)
         let overwrite = false
         while (true) {

@@ -1,0 +1,15 @@
+[Unit]
+Description=Tether DSH Web gateway (EasyTier private address)
+After=network-online.target tether-dsh-web.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/opt/tether-node/venv/bin/python -m tether.node.app_gateway --listen 10.144.0.1 --app "DSH Web:37301:127.0.0.1:3080"
+Restart=always
+RestartSec=3
+MemoryHigh=80M
+MemoryMax=160M
+
+[Install]
+WantedBy=multi-user.target

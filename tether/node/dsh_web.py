@@ -25,6 +25,7 @@ NODE = NODE_DIR / "bin" / "node"
 NPM = NODE_DIR / "bin" / "npm"
 ENTRY = ROOT / "node_modules" / "@deepseek-ai" / "dsh" / "lib" / "bin.js"
 UNIT = Path("/etc/systemd/system/tether-dsh-web.service")
+GATEWAY_UNIT = Path("/etc/systemd/system/tether-dsh-gateway.service")
 APP_PORT = 3080
 GATEWAY_PORT = 37301
 
@@ -127,8 +128,17 @@ class DshWeb:
                 f"ExecStart=/usr/bin/python3 {ROOT / 'run.py'}\n"
                 "Restart=always\nRestartSec=3\nMemoryHigh=300M\nMemoryMax=600M\n\n"
                 "[Install]\nWantedBy=multi-user.target\n", encoding="utf-8")
+            GATEWAY_UNIT.write_text(
+                "[Unit]\nDescription=Tether DSH Web gateway (EasyTier private address)\n"
+                "After=network-online.target tether-dsh-web.service\n"
+                "Wants=network-online.target\n\n[Service]\nType=simple\n"
+                "ExecStart=/opt/tether-node/venv/bin/python -m tether.node.app_gateway "
+                "--listen 10.144.0.1 --app \"DSH Web:37301:127.0.0.1:3080\"\n"
+                "Restart=always\nRestartSec=3\nMemoryHigh=80M\nMemoryMax=160M\n\n"
+                "[Install]\nWantedBy=multi-user.target\n", encoding="utf-8")
             _run(["systemctl", "daemon-reload"])
             _run(["systemctl", "enable", "--now", "tether-dsh-web"])
+            _run(["systemctl", "enable", "--now", "tether-dsh-gateway"])
         except Exception:
             pass
         finally:

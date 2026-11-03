@@ -61,7 +61,8 @@ def add_tether_runtime(archive: zipfile.ZipFile, prefix: str) -> None:
         add_file(archive, rel, prefix)
     node = ROOT / "tether" / "node"
     for path in node.rglob("*"):
-        if path.is_file() and not path.is_symlink() and path.suffix in {".py", ".html"}:
+        if path.is_file() and not path.is_symlink() and (
+                path.suffix in {".py", ".html"} or "bin" in path.relative_to(node).parts):
             rel = path.relative_to(ROOT).as_posix()
             if "__pycache__" not in path.parts:
                 archive.write(path, f"{prefix}/{rel}")

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { TRANSFER_CHUNK, newTransferId, transferFile } from '../packages/tether-ui/src/transfer.js'
+import { TRANSFER_CHUNK, newTransferId, transferFile, transferFileCroc } from '../packages/tether-ui/src/transfer.js'
 
 function world(payload, options = {}) {
   let written = Buffer.from(payload.subarray(0, options.partial || 0))
@@ -99,6 +99,49 @@ test('a changing source aborts instead of writing mixed bytes', async () => {
     transferFile({ read: w.read, write: w.write, status: w.status, source: 'C:\\a', destination: 'D:\\a', overwrite: true }),
     (error) => error.code === 'source_changed'
   )
+})
+
+test('next chunk is read while the current chunk is still writing', async () => {
+  const payload = Buffer.alloc(TRANSFER_CHUNK * 2, 0x5a)
+  let releaseWrite
+  let writeStartedResolve
+  const writeGate = new Promise((resolve) => { releaseWrite = resolve })
+  const writeStarted = new Promise((resolve) => { writeStartedResolve = resolve })
+  const w = world(payload)
+  const write = w.write
+  w.write = async (request) => {
+    writeStartedResolve()
+    await writeGate
+    return write(request)
+  }
+  const transfer = transferFile({
+    read: w.read, write: w.write, status: w.status, cancel: w.cancel,
+    source: 'C:\\source.bin', destination: 'D:\\dest.bin', overwrite: true
+  })
+  await writeStarted
+  assert.equal(w.reads.length, 2, 'the next read starts before the first write resolves')
+  releaseWrite()
+  await transfer
+  assert.deepEqual(w.written, payload)
+})
+
+test('croc transfer sends a one-time code, polls, then finishes by name', async () => {
+  const calls = []
+  const result = await transferFileCroc({
+    source: 'C:\\source.bin', destination: 'D:\\target', name: 'renamed.bin',
+    send: async (args) => { calls.push(['send', args]) },
+    receive: async (args) => { calls.push(['receive', args]) },
+    status: async () => ({ state: 'completed', percent: 100, speed: 1024 }),
+    finish: async (args) => { calls.push(['finish', args]); return { path: 'D:\\target\\renamed.bin', bytes: 9 } },
+    cancel: async () => {}, cancelSend: async () => {}, onProgress: () => {}
+  })
+  assert.equal(result.bytes, 9)
+  assert.equal(calls[0][0], 'send')
+  assert.match(calls[0][1].code, /^tether-/)
+  assert.equal(calls[1][0], 'receive')
+  assert.equal(calls[1][1].transfer_id, result.transferId)
+  assert.equal(calls[2][0], 'finish')
+  assert.equal(calls[2][1].name, 'renamed.bin')
 })
 
 test('an empty file creates a finished empty destination', async () => {

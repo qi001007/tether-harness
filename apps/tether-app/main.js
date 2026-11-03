@@ -53,6 +53,16 @@ const row = rowArg ? rowArg.slice('--row='.length) : ''
 const shotDelay = Number(process.env.TETHER_APP_SHOT_DELAY || 2500)
 const shotPanelDelay = Number(process.env.TETHER_APP_SHOT_PANEL_DELAY || 1500)
 
+function dshViewUrlAllowed(value) {
+  try {
+    const parsed = new URL(String(value || ''))
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false
+    const host = parsed.hostname
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1'
+      || /^10\./.test(host) || /^192\.168\./.test(host) || /^172\.(1[6-9]|2\d|3[01])\./.test(host)
+  } catch (_) { return false }
+}
+
 fs.mkdirSync(dataDir, { recursive: true })
 app.setPath('userData', path.join(dataDir, 'electron'))
 app.setName('Tether')
@@ -204,7 +214,8 @@ async function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
+      sandbox: true,
+      webviewTag: true
     }
   })
   mainWindow.on('close', (event) => {
@@ -212,6 +223,31 @@ async function createWindow() {
     event.preventDefault()
     mainWindow.hide()
     createTray()
+  })
+  mainWindow.webContents.on('will-attach-webview', (event, webPreferences, params) => {
+    delete webPreferences.preload
+    webPreferences.nodeIntegration = false
+    webPreferences.contextIsolation = true
+    webPreferences.sandbox = true
+    webPreferences.webSecurity = true
+    webPreferences.allowRunningInsecureContent = false
+    if (!dshViewUrlAllowed(params.src)) {
+      event.preventDefault()
+      log('blocked webview attach')
+    }
+  })
+  mainWindow.webContents.on('did-attach-webview', (_event, contents) => {
+    let origin = ''
+    try { origin = new URL(contents.getURL()).origin } catch (_) { /* blocked below */ }
+    contents.setWindowOpenHandler(() => ({ action: 'deny' }))
+    contents.on('will-navigate', (event, target) => {
+      try {
+        if (!origin || new URL(target).origin !== origin) {
+          event.preventDefault()
+          log('blocked webview navigation host=' + new URL(target).host)
+        }
+      } catch (_) { event.preventDefault() }
+    })
   })
   mainWindow.on('closed', () => { mainWindow = null })
   mainWindow.on('maximize', sendWindowState)
