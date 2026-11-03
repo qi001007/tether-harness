@@ -1,5 +1,12 @@
 # 实时进度
 
+## 2026-11-03 远程应用页（0.2.97）
+
+1. Node 新增 `apps.json` 白名单与 `fs/apps_list`：把目标机 `127.0.0.1:<port>` 的 HTTP 服务经 EasyTier 虚拟 IP 转发；只绑 `10.144.0.0/24`，目标只接受回环，文件改动按 mtime 热更新。
+2. UI 活动栏新增“远程应用”：设备选择/刷新/应用卡片/工作区内嵌 iframe（刷新、关闭）；DSH 不在此列表，继续走原生工作区。
+3. 真机 Electron 验收：`Gateway Demo`（19001）经 `http://10.144.0.2:<ephemeral>/` 内嵌渲染；关闭返回列表；Hub `fs/apps_list` 返回 mesh 与应用 URL。
+4. 非目标：不启动应用；GUI 软件属 M3 远程控制；CLI Agent 先用终端页，ACP 后续。
+
 ## 2026-11-03 远程终端 + 100 MB 直连
 
 1. Node 0.2.95 新增 `fs/terminal_start|write|poll|stop`：在目标机器上启动持久 PowerShell/bash 会话，输出按字节增量轮询；走现有 Hub fs 受控通道，owner-only，不需要部署 Hub。

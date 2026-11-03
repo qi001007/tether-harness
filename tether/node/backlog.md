@@ -39,3 +39,4 @@
 - 2026-11-03：`DshDesktop.status()` 增加 `surface`（descriptor pid 存活），供 APP 判断“DSH 在跑但无 surface”；不能用 surface 网关的 200/缓存当健康依据。
 - 2026-11-03：新增 `app_gateway.py`：在 EasyTier 虚拟 IP 上做透明 TCP 代理，把本机 `127.0.0.1:<port>` 暴露给白名单网段；只接受回环目标，HTTP/WebSocket/TCP 通用。实测服务器经 `10.144.0.2:18080` 取到本机 HTTP 200（262 ms），真实 DSH 经 `10.144.0.2:18081` 返回 303 并签发虚拟 IP authority 的 cookie。4 条单测。
 - 2026-11-03：新增 `terminal.py` 与 `fs/terminal_start|write|poll|stop`：目标机器上的持久 PowerShell/bash 会话，输出按字节增量轮询，走现有 Hub fs 通道；用它在 LAPTOP 上执行命令并测出 100 MB 直连 4.09 MB/s，无需用户输入。终端页面 UI 已随 0.2.96 交付。
+- 2026-11-03：新增 `apps.py` 与 `fs/apps_list`：读数据目录 `apps.json`（name/port/path），用 `Gateway` 把本机回环 HTTP 服务挂在 EasyTier 虚拟 IP 的临时端口上；只允许 `10.144.0.0/24`，按 mtime 热重建。DSH 不进这个目录，避免通用网关拿不到 DSH 本地票据；任何新增暴露面都要走显式白名单，不做端口扫描。

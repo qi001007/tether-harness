@@ -545,6 +545,18 @@ class FsService:
     def _op_terminal_stop(self, args: dict[str, Any]) -> Any:
         return self._terminal_dispatch("stop", args)
 
+    def _apps_dispatch(self, action: str, args: dict[str, Any]) -> Any:
+        apps = getattr(self, "apps", None)
+        if apps is None:
+            raise FsError("apps unavailable", "unavailable")
+        try:
+            return apps.dispatch(action, args)
+        except ValueError as exc:
+            raise FsError(str(exc), "apps_error") from None
+
+    def _op_apps_list(self, args: dict[str, Any]) -> Any:
+        return self._apps_dispatch("list", args)
+
     def _op_read(self, args: dict[str, Any]) -> dict[str, Any]:
         p = self._resolve(args.get("path"))
         self._read_guard(p)

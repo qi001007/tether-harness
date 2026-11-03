@@ -21,6 +21,7 @@ const dshHost = strip('hosts/dsh.js')
 const transferEngine = strip('transfer.js')
 const transferPage = strip('transfer-page.js')
 const terminalPage = strip('terminal-page.js')
+const appsPage = strip('apps-page.js')
 const monacoRuntime = await bundledMonacoRuntime()
 
 const plugin = `window.__ModuleLoader__.load({
@@ -40,6 +41,7 @@ ${settingsPanel}
 ${transferEngine}
 ${transferPage}
 ${terminalPage}
+${appsPage}
     let localPluginRpc = null
     let localPluginRemote = null
     let exitPanel = null

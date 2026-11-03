@@ -31,6 +31,7 @@ from .dsh_adapter import DshRun
 from .fs_service import FsError, FsService
 from .direct_api import DirectApi
 from .terminal import TerminalService
+from .apps import AppCatalog
 from .dsh_sessions import DshSessionStore
 from .native_surface import NativeSurface, NativeSurfaceError
 from .local_identity import remove_identity, write_identity
@@ -288,6 +289,8 @@ class Node:
         self.fs.direct = self.direct
         self.terminal = TerminalService(self.workspace)
         self.fs.terminal = self.terminal
+        self.apps = AppCatalog(self.data_dir)
+        self.fs.apps = self.apps
         ensure_sdk_profile(self.native_dsh_home)
         self.native_surface = NativeSurface(self.native_dsh_home, device_fs=self.fs)
         update_state_dir = self.data_dir / "updates"
@@ -340,6 +343,10 @@ class Node:
             except OSError:
                 self.direct = None
                 self.fs.direct = None
+        try:
+            await asyncio.to_thread(self.apps.ensure)
+        except Exception:
+            pass
         warm = asyncio.create_task(self._warm_updates())
         backoff = 0.1
         while True:
@@ -975,6 +982,7 @@ class Node:
                 "update_manifest": "hub-or-github",
                 "workspace": str(self.workspace), "agents": ["fake", "dsh"], "fs": True,
                 "terminal": True,
+                "apps": True,
                 "policy_mode": self.fs.policy.data.get("mode"),
                 "workspaces_root": str(self.workspaces_root),
                 "dsh_native": self.dsh_sessions.available(),
@@ -1058,6 +1066,10 @@ def main() -> None:
         try:
             await node.run()
         finally:
+            try:
+                node.apps.stop()
+            except Exception:
+                pass
             if refresher is not None:
                 refresher.cancel()
                 await asyncio.gather(refresher, return_exceptions=True)

@@ -166358,6 +166358,212 @@ function createTerminalPage({ React: React2, Glyph, post, C, devices = [], local
   );
 }
 
+// src/apps-page.js
+function createAppsPage({ React: React2, Glyph, post, C, devices = [], localDevice = "", onError }) {
+  const h2 = React2.createElement;
+  const online = devices.filter((item) => item && item.online);
+  const initial = localDevice && online.some((item) => item.device_id === localDevice) ? localDevice : online[0] && online[0].device_id || "";
+  const [device, setDevice] = React2.useState(initial);
+  const [apps, setApps] = React2.useState([]);
+  const [reason, setReason] = React2.useState("");
+  const [loading, setLoading] = React2.useState(false);
+  const [open, setOpen] = React2.useState(null);
+  const [frameKey, setFrameKey] = React2.useState(0);
+  const requestRef = React2.useRef(0);
+  const load = async (id) => {
+    if (!id) return;
+    const seq = ++requestRef.current;
+    setLoading(true);
+    try {
+      const result = await post("/api/devices/" + encodeURIComponent(id) + "/fs/apps_list", {});
+      if (seq !== requestRef.current) return;
+      setApps(Array.isArray(result && result.apps) ? result.apps : []);
+      setReason(String(result && result.reason || ""));
+    } catch (error) {
+      if (seq !== requestRef.current) return;
+      setApps([]);
+      setReason("");
+      if (onError) onError(error);
+    } finally {
+      if (seq === requestRef.current) setLoading(false);
+    }
+  };
+  React2.useEffect(() => {
+    void load(device);
+  }, [device]);
+  const selectDevice = (value) => {
+    setOpen(null);
+    setApps([]);
+    setDevice(value);
+  };
+  const field = {
+    height: 28,
+    boxSizing: "border-box",
+    border: "1px solid " + C.line,
+    borderRadius: 7,
+    padding: "0 9px",
+    background: C.bg,
+    color: C.ink,
+    fontSize: 12
+  };
+  const button = {
+    height: 28,
+    padding: "0 14px",
+    border: 0,
+    borderRadius: 7,
+    fontSize: 12,
+    cursor: "pointer",
+    color: "#fff",
+    background: C.blue
+  };
+  const hint = reason === "mesh_unavailable" ? "\u76EE\u6807\u7535\u8111\u672A\u63A5\u5165\u865A\u62DF\u5185\u7F51\uFF0C\u6682\u65F6\u65E0\u6CD5\u8F6C\u53D1\u672C\u673A\u5E94\u7528" : reason === "no_apps" ? "\u76EE\u6807\u7535\u8111\u6CA1\u6709\u767B\u8BB0\u53EF\u6253\u5F00\u7684\u5E94\u7528" : reason === "bind_failed" ? "\u76EE\u6807\u7535\u8111\u65E0\u6CD5\u7ED1\u5B9A\u865A\u62DF\u5185\u7F51\u7AEF\u53E3" : "\u53EA\u8F6C\u53D1\u76EE\u6807\u7535\u8111\u4E0A\u767B\u8BB0\u7684\u56DE\u73AF HTTP \u670D\u52A1";
+  return h2(
+    "div",
+    { style: { flex: "1 1 auto", minHeight: 0, position: "relative", display: "flex", flexDirection: "column", gap: 10, padding: 12, background: C.bg } },
+    h2(
+      "div",
+      { style: { display: "flex", alignItems: "center", gap: 8, flex: "0 0 auto" } },
+      h2(
+        "select",
+        {
+          value: device,
+          "aria-label": "\u5E94\u7528\u76EE\u6807\u8BBE\u5907",
+          title: "\u9009\u62E9\u8981\u6253\u5F00\u5E94\u7528\u7684\u7535\u8111",
+          onChange: (event) => {
+            selectDevice(event.target.value);
+            event.currentTarget.blur();
+          },
+          style: { ...field, minWidth: 180 }
+        },
+        !online.length ? h2("option", { value: "" }, "\u6CA1\u6709\u5728\u7EBF\u8BBE\u5907") : null,
+        online.map((item) => h2("option", { key: item.device_id, value: item.device_id }, item.name || item.device_id))
+      ),
+      h2("button", {
+        type: "button",
+        onClick: () => void load(device),
+        disabled: loading || !device,
+        title: "\u5237\u65B0\u5E94\u7528\u5217\u8868",
+        "aria-label": "\u5237\u65B0\u5E94\u7528\u5217\u8868",
+        style: { ...button, padding: "0 10px", opacity: loading || !device ? 0.5 : 1 }
+      }, "\u5237\u65B0"),
+      h2("span", { style: { marginLeft: "auto", fontSize: 11, color: C.mute } }, hint)
+    ),
+    loading && !apps.length ? h2("div", { style: { flex: "1 1 auto", display: "grid", placeItems: "center", color: C.mute, fontSize: 12 } }, "\u6B63\u5728\u8BFB\u53D6\u5E94\u7528\u2026") : h2(
+      "div",
+      {
+        style: {
+          flex: "1 1 auto",
+          minHeight: 0,
+          overflow: "auto",
+          display: "grid",
+          gap: 10,
+          alignContent: "start",
+          gridTemplateColumns: "repeat(auto-fill, minmax(235px, 1fr))"
+        }
+      },
+      apps.length ? apps.map((app) => h2(
+        "button",
+        {
+          key: app.id,
+          type: "button",
+          onClick: () => {
+            setOpen(app);
+            setFrameKey((value) => value + 1);
+          },
+          className: "tether-press tether-hover",
+          style: {
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            padding: 12,
+            textAlign: "left",
+            border: "1px solid " + C.line,
+            borderRadius: 10,
+            background: C.panel || C.bg,
+            color: C.ink,
+            cursor: "pointer"
+          }
+        },
+        h2("span", { style: {
+          width: 34,
+          height: 34,
+          flex: "0 0 auto",
+          display: "grid",
+          placeItems: "center",
+          borderRadius: 9,
+          background: C.soft,
+          color: C.blue
+        } }, h2(Glyph, { name: app.kind === "dsh" ? "monitor" : "apps", size: 18 })),
+        h2(
+          "span",
+          { style: { minWidth: 0, display: "grid", gap: 2 } },
+          h2("span", { style: { fontSize: 13, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, app.name),
+          h2(
+            "span",
+            { style: { fontSize: 11, color: C.mute, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
+            app.kind === "dsh" ? "\u672C\u673A DSH" : String(app.url || "").replace(/^https?:\/\//, "")
+          )
+        )
+      )) : h2(
+        "div",
+        { style: { gridColumn: "1 / -1", padding: 24, textAlign: "center", color: C.mute, fontSize: 12 } },
+        online.length ? "\u6CA1\u6709\u53EF\u6253\u5F00\u7684\u5E94\u7528\u3002\u5728\u76EE\u6807\u7535\u8111\u7684 apps.json \u91CC\u767B\u8BB0 name\u3001port \u4E0E path \u540E\u5237\u65B0\uFF1BDSH \u8BF7\u7528\u201C\u539F\u751F\u5DE5\u4F5C\u533A\u201D\u3002" : "\u6CA1\u6709\u5728\u7EBF\u8BBE\u5907"
+      )
+    ),
+    open ? h2(
+      "div",
+      {
+        style: {
+          position: "absolute",
+          inset: 0,
+          zIndex: 8,
+          display: "flex",
+          flexDirection: "column",
+          background: C.bg,
+          borderRadius: 10,
+          border: "1px solid " + C.line,
+          overflow: "hidden"
+        }
+      },
+      h2(
+        "div",
+        { style: { display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderBottom: "1px solid " + C.line, flex: "0 0 auto" } },
+        h2("span", { style: { fontSize: 12, fontWeight: 500, color: C.ink } }, open.name),
+        h2(
+          "span",
+          { style: { fontSize: 11, color: C.mute, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
+          String(open.url || "").replace(/^https?:\/\//, "") + (open.path || "/")
+        ),
+        h2(
+          "span",
+          { style: { marginLeft: "auto", display: "flex", gap: 6 } },
+          h2("button", {
+            type: "button",
+            onClick: () => setFrameKey((value) => value + 1),
+            title: "\u91CD\u65B0\u52A0\u8F7D\u5E94\u7528",
+            "aria-label": "\u91CD\u65B0\u52A0\u8F7D\u5E94\u7528",
+            style: { ...field, cursor: "pointer", background: "transparent" }
+          }, "\u5237\u65B0"),
+          h2("button", {
+            type: "button",
+            onClick: () => setOpen(null),
+            title: "\u5173\u95ED\u5E94\u7528",
+            "aria-label": "\u5173\u95ED\u5E94\u7528",
+            style: { ...field, cursor: "pointer", background: "transparent" }
+          }, "\u5173\u95ED")
+        )
+      ),
+      h2("iframe", {
+        key: frameKey,
+        title: open.name,
+        src: (open.url || "") + (open.path || "/"),
+        style: { flex: "1 1 auto", width: "100%", minHeight: 0, border: 0, background: "#fff" },
+        sandbox: "allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-downloads"
+      })
+    ) : null
+  );
+}
+
 // src/app.js
 function responseBelongsToDevice(data, expectedDevice) {
   if (!data || typeof data !== "object" || !expectedDevice) return false;
@@ -167931,6 +168137,12 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       { d: "M2 3.2h12v8.1H2z" },
       { d: "M6 13.8h4M8 11.3v2.5" }
     ] },
+    apps: { cap: "round", join: "round", parts: [
+      { d: "M2.4 2.4h4.2v4.2H2.4z" },
+      { d: "M9.4 2.4h4.2v4.2H9.4z" },
+      { d: "M2.4 9.4h4.2v4.2H2.4z" },
+      { d: "M9.4 9.4h4.2v4.2H9.4z" }
+    ] },
     refresh: { parts: [
       { d: "M13 8a5 5 0 1 1-1.5-3.56" },
       { d: "M13.2 2.3v3.1h-3.1" }
@@ -168071,6 +168283,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const accountInitial = String(accountEmail || "").trim().charAt(0).toUpperCase();
     const items = [
       { id: "workspaces", label: "\u539F\u751F\u5DE5\u4F5C\u533A", icon: "monitor" },
+      { id: "apps", label: "\u8FDC\u7A0B\u5E94\u7528", icon: "apps" },
       { id: "files", label: "\u6587\u4EF6\u8D44\u6E90\u7BA1\u7406\u5668", icon: "files" },
       { id: "transfer", label: "\u6587\u4EF6\u8F6C\u79FB", icon: "transfer" },
       { id: "terminal", label: "\u7EC8\u7AEF", icon: "terminal" },
@@ -172292,6 +172505,12 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         setSidebarCollapsed(true);
         return;
       }
+      if (id === "apps") {
+        setView("apps");
+        setActivePanel("apps");
+        setSidebarCollapsed(true);
+        return;
+      }
       if (id === "network") {
         setView("network");
         setActivePanel("network");
@@ -173464,7 +173683,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         "div",
         { style: { display: "flex", flex: "1 1 auto", minHeight: 0 } },
         h2(ActivityBar, {
-          active: view === "files" ? "files" : view === "network" ? "network" : view === "transfer" ? "transfer" : view === "terminal" ? "terminal" : "workspaces",
+          active: view === "files" ? "files" : view === "network" ? "network" : view === "transfer" ? "transfer" : view === "terminal" ? "terminal" : view === "apps" ? "apps" : "workspaces",
           collapsed: sidebarCollapsed,
           onSelect: selectPanel,
           onPermissions: () => {
@@ -173528,6 +173747,14 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
             devices: state && state.devices || [],
             localDevice: appLocalDevice,
             onNotice: setNotice,
+            onError: fail2
+          }) : view === "apps" ? h2(createAppsPage, {
+            React: React2,
+            Glyph,
+            post,
+            C,
+            devices: state && state.devices || [],
+            localDevice: appLocalDevice,
             onError: fail2
           }) : view === "terminal" ? h2(createTerminalPage, {
             React: React2,

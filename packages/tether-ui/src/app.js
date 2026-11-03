@@ -5,6 +5,7 @@ import { createConnectionPanel } from './connection-panel.js'
 import { createSettingsPanel } from './settings-panel.js'
 import { createTransferPage } from './transfer-page.js'
 import { createTerminalPage } from './terminal-page.js'
+import { createAppsPage } from './apps-page.js'
 import { invalidateDirectory, peekDirectory, rememberDirectory } from './file-cache.js'
 
 export function isUpdateTargetCurrent(requestDevice, requestEpoch, currentDevice, currentEpoch) {
@@ -1515,6 +1516,12 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         { d: 'M2 3.2h12v8.1H2z' },
         { d: 'M6 13.8h4M8 11.3v2.5' }
       ] },
+      apps: { cap: 'round', join: 'round', parts: [
+        { d: 'M2.4 2.4h4.2v4.2H2.4z' },
+        { d: 'M9.4 2.4h4.2v4.2H9.4z' },
+        { d: 'M2.4 9.4h4.2v4.2H2.4z' },
+        { d: 'M9.4 9.4h4.2v4.2H9.4z' }
+      ] },
       refresh: { parts: [
         { d: 'M13 8a5 5 0 1 1-1.5-3.56' },
         { d: 'M13.2 2.3v3.1h-3.1' }
@@ -1646,6 +1653,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const accountInitial = String(accountEmail || '').trim().charAt(0).toUpperCase()
       const items = [
         { id: 'workspaces', label: '原生工作区', icon: 'monitor' },
+        { id: 'apps', label: '远程应用', icon: 'apps' },
         { id: 'files', label: '文件资源管理器', icon: 'files' },
         { id: 'transfer', label: '文件转移', icon: 'transfer' },
         { id: 'terminal', label: '终端', icon: 'terminal' },
@@ -5103,6 +5111,10 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           setView('chat'); setActivePanel('workspaces'); setSidebarCollapsed(true)
           return
         }
+        if (id === 'apps') {
+          setView('apps'); setActivePanel('apps'); setSidebarCollapsed(true)
+          return
+        }
         if (id === 'network') {
           setView('network'); setActivePanel('network'); setSidebarCollapsed(true)
           return
@@ -5920,7 +5932,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         notice || projectsError || updateToast ? renderToasts() : null,
         h('div', { style: { display: 'flex', flex: '1 1 auto', minHeight: 0 } },
           h(ActivityBar, {
-            active: view === 'files' ? 'files' : (view === 'network' ? 'network' : (view === 'transfer' ? 'transfer' : (view === 'terminal' ? 'terminal' : 'workspaces'))),
+            active: view === 'files' ? 'files' : (view === 'network' ? 'network' : (view === 'transfer' ? 'transfer' : (view === 'terminal' ? 'terminal' : (view === 'apps' ? 'apps' : 'workspaces')))),
             collapsed: sidebarCollapsed,
             onSelect: selectPanel,
             onPermissions: () => { setShowAppSettings(false); openSettings() },
@@ -5966,6 +5978,12 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
                 devices: (state && state.devices) || [],
                 localDevice: appLocalDevice,
                 onNotice: setNotice,
+                onError: fail
+              })
+                : view === 'apps' ? h(createAppsPage, {
+                React, Glyph, post, C,
+                devices: (state && state.devices) || [],
+                localDevice: appLocalDevice,
                 onError: fail
               })
                 : view === 'terminal' ? h(createTerminalPage, {
