@@ -172,10 +172,14 @@ class TerminalService:
             session.closed = True
 
     def _read_pty_posix(self, session: _Session) -> None:
+        fd = session.fd
+        if fd is None:
+            session.closed = True
+            return
         try:
-            while True:
+            while not session.closed:
                 try:
-                    data = os.read(session.fd, 65536)
+                    data = os.read(fd, 65536)
                 except OSError:
                     break
                 if not data:
@@ -391,19 +395,20 @@ class TerminalService:
     def stop(self, args: dict[str, Any]) -> dict[str, Any]:
         session = self._find(args)
         self.sessions.pop(session.id, None)
+        session.closed = True
         if session.pty is not None:
             try:
                 session.pty.cancel_io()
             except Exception:
                 pass
         if session.fd is not None:
+            fd = session.fd
+            session.fd = None
             try:
-                os.close(session.fd)
+                os.close(fd)
             except OSError:
                 pass
-            session.fd = None
         self._kill(session.process, session.pid)
-        session.closed = True
         return {"session_id": session.id, "stopped": True}
 
     @staticmethod

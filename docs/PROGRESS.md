@@ -1,5 +1,11 @@
 # 实时进度
 
+## 2026-11-03 Linux/POSIX 终端适配（WSL 实测）
+
+1. WSL2 Ubuntu（Python 3.11.8）直接运行 `TerminalService`：`terminal_shells` 返回 bash/sh 可用、zsh/fish 不可用，默认 bash；`terminal_start` 返回 `pty:true`，`echo TETHER_LINUX_PTY_OK` 输出、`resize` 90×24 均通过。
+2. 发现并修复 POSIX 读线程在 `stop()` 时读到 `session.fd=None` 的 `TypeError`：读线程先捕获 fd，`stop` 先置 `closed` 再关闭 fd；Windows 终端测试 6 条回归通过。
+3. 新增 `tests/test_terminal_posix.py`（非 Windows 才跑，当前 Windows 上 skip）。下一步仍是用真正的 Linux VM 做一次 Node 安装/连接/终端 UI 端到端，并补一键安装脚本。
+
 ## 2026-11-03 传输直连收口
 
 1. `transfer-page.js` 修正 `/fs/direct_info` 的 `{value:{...}}` 解包；本机设备改走 `127.0.0.1`，避免 EasyTier 自环走中继。
