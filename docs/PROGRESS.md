@@ -3,7 +3,7 @@
 ## 2026-11-03 终端/Agents/登录体验（0.3.0）
 
 1. 终端并入资源管理器：底部可调高度 dock、目录右键/工具栏入口、cwd=当前目录；移除独立“终端”活动页。真机：`D:\TetherWorkspaces\demo` → PowerShell `Get-Location` 返回同路径；切“命令提示符”后提示符仍在同目录。
-2. Node shell 适配：`terminal_shells` 能力 + `terminal_start{cwd,shell}`；Windows 支持 PowerShell/PowerShell 7/cmd/Git Bash，POSIX 预留 bash/zsh/sh/fish；后续 VM 只需补映射。
+2. Node shell 适配：`terminal_shells` 能力 + `terminal_start{cwd,shell}`；Windows 支持 PowerShell/PowerShell 7/cmd/Git Bash，POSIX 预留 bash/zsh/sh/fish；后续 VM 只需补映射。LAPTOP-01 真机返回 PowerShell（默认）/cmd/Git Bash（PowerShell 7 不可用），用 cmd 在 `D:\Tether\deploy\tether-app-0.2.3\work-local` 开会话成功。
 3. APP 登录页增加 ×（关闭到托盘）并真机验证；DSH 登录改为面板内相对布局，不再绝对铺满（待插件升级后真机复验）。
 4. Agents 页：新机器人图标、Codex 2.5.0 品牌块、46 个模型下拉可切换（`session/set_model`）、可点击命令 chip；真机切换 6.1 Sol high→low 成功并写入 `[模型] gpt-6.1-sol[low]`。
 5. 传输复测：跨网 p2p tcp6 101 ms，100 MB **28.80 s / 3.64 MB/s**；同 LAN 未复现（两端 10.68.x 客户端隔离）。
