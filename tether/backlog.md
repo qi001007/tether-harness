@@ -31,3 +31,4 @@
 - 2026-11-03：插件更新先走 HMR：`apply` 不再立即拉起重启，而是以 `--delay 8`/`--expect-plugin-version` 安排 `dsh_restart` 助手；DSH 在宽限内发布 descriptor `plugin_version == applied.version` 时 `status()` 直接清 `restart_required`，助手也自行退出，超时才整应用重启。`setPluginEnabled` 从**被 HMR 载入的实例**调用会撞 `HMR transactions cannot be nested`（AsyncLocalStorage 继承），因此触发点只放客户端页面，不放 surface 服务端定时器。
 - 2026-11-03：`apply` 只在运行 surface 已广播 `plugin_version`（`_hot_reload_capable()`）时给 8 秒宽限，旧 surface 仍 1.5 秒重启，避免首次升级变慢。
 - 2026-11-03：DSH/pnpm 会把 `file:` 源码依赖存成 Windows 8.3 短路径；`_file_dependency_path` 必须用 `GetLongPathNameW` 展开短名（不跟随符号链接），否则 `Path.name` 是 `DSH-PL~1`，更新报 `plugin_source_unavailable`。0.2.90 真机升级即撞此错，0.2.91 修复。
+- 2026-11-03：真机验证“禁用→启用”会持久化 `enabled:false`：两页面并发启用失败时 surface 一直停用，只能手动恢复。重载桥已回退为只启用；hot reload 只适用于 surface 模块文件变化的发行，其余靠 8 秒宽限后的重启。

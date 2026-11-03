@@ -65,15 +65,6 @@ export function createDshLocalIdentityBridge(getRpc) {
 }
 
 export function createDshLocalPluginSurfaceReloadBridge(getRemote) {
-  const switchEnabled = async (manager, entryId, enabled) => {
-    let reply
-    try { reply = await manager.setPluginEnabled(entryId, enabled) }
-    catch (_) { throw new Error(enabled ? '应用本机 DSH 插件重载失败' : '暂停本机 DSH 插件失败') }
-    if (!reply || reply.ok !== true || !reply.value || typeof reply.value.application !== 'string') {
-      throw new Error(reply?.error?.message || reply?.error || 'DSH 插件重载没有返回有效状态')
-    }
-    return reply.value
-  }
   return async () => {
     const manager = (typeof getRemote === 'function' ? getRemote() : null)?.pluginManager
     if (!manager || typeof manager.listPlugins !== 'function' || typeof manager.setPluginEnabled !== 'function') {
@@ -90,21 +81,13 @@ export function createDshLocalPluginSurfaceReloadBridge(getRemote) {
     if (target.enabled !== true || typeof target.entryId !== 'string' || !target.entryId) {
       throw new Error('当前 DSH 的 tether-dsh-surface 插件未启用，无法安全重载')
     }
-    // Re-enabling an already enabled entry is a no-op when only client files
-    // changed; stopping it first guarantees the surface restarts from disk.
-    let stopped = false
-    try {
-      await switchEnabled(manager, target.entryId, false)
-      stopped = true
-    } catch (_) { /* enabling alone still applies changed server modules */ }
-    if (!stopped) return { application: (await switchEnabled(manager, target.entryId, true)).application }
-    try {
-      return { application: (await switchEnabled(manager, target.entryId, true)).application }
-    } catch (error) {
-      // A transient failure must not leave the surface disabled.
-      try { return { application: (await switchEnabled(manager, target.entryId, true)).application } }
-      catch (_) { throw error }
+    let changed
+    try { changed = await manager.setPluginEnabled(target.entryId, true) }
+    catch (_) { throw new Error('应用本机 DSH 插件重载失败') }
+    if (!changed || changed.ok !== true || !changed.value || typeof changed.value.application !== 'string') {
+      throw new Error(changed?.error?.message || changed?.error || 'DSH 插件重载没有返回有效状态')
     }
+    return { application: changed.value.application }
   }
 }
 

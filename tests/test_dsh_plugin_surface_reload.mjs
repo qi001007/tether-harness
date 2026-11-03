@@ -13,7 +13,7 @@ test('surface reload applies only the unique enabled surface entry', async () =>
     setPluginEnabled: async (...args) => { calls.push(args); return { ok: true, value: { application: 'applied' } } }
   } }))
   assert.deepEqual(await reload(), { application: 'applied' })
-  assert.deepEqual(calls, [['entry-surface', false], ['entry-surface', true]])
+  assert.deepEqual(calls, [['entry-surface', true]])
 })
 
 test('ambiguous surface entries fail closed without applying any entry', async () => {
@@ -37,39 +37,6 @@ test('restart-required is returned as a non-applied result for the caller to han
     setPluginEnabled: async () => ({ ok: true, value: { application: 'restart-required' } })
   } }))
   assert.deepEqual(await reload(), { application: 'restart-required' })
-})
-
-test('reload still enables the surface when the stop call fails', async () => {
-  const calls = []
-  const reload = createDshLocalPluginSurfaceReloadBridge(() => ({ pluginManager: {
-    listPlugins: async () => ({ ok: true, value: [
-      { moduleName: 'tether-dsh-surface', entryId: 'entry-surface', enabled: true }
-    ] }),
-    setPluginEnabled: async (id, enabled) => {
-      calls.push([id, enabled])
-      if (!enabled) return { ok: false, error: { message: 'busy' } }
-      return { ok: true, value: { application: 'applied' } }
-    }
-  } }))
-  assert.deepEqual(await reload(), { application: 'applied' })
-  assert.deepEqual(calls, [['entry-surface', false], ['entry-surface', true]])
-})
-
-test('reload retries the enable once instead of leaving the surface disabled', async () => {
-  let enables = 0
-  const reload = createDshLocalPluginSurfaceReloadBridge(() => ({ pluginManager: {
-    listPlugins: async () => ({ ok: true, value: [
-      { moduleName: 'tether-dsh-surface', entryId: 'entry-surface', enabled: true }
-    ] }),
-    setPluginEnabled: async (_id, enabled) => {
-      if (!enabled) return { ok: true, value: { application: 'applied' } }
-      enables += 1
-      if (enables === 1) throw new Error('transient')
-      return { ok: true, value: { application: 'applied' } }
-    }
-  } }))
-  assert.deepEqual(await reload(), { application: 'applied' })
-  assert.equal(enables, 2)
 })
 
 test('hot reload watch applies a pending on-disk plugin version once', async () => {

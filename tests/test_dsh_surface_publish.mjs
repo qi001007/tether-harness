@@ -43,6 +43,7 @@ test('surface publishes its descriptor with the current connection API and resol
     assert.equal(descriptor.authenticated_url, 'http://127.0.0.1:34567/?token=fixture')
     const manifest = JSON.parse(fs.readFileSync(new URL('../packages/tether-dsh-surface/package.json', import.meta.url), 'utf8'))
     assert.equal(descriptor.plugin_version, manifest.version)
+    assert.equal(descriptor.hot_reload, true)
     cleanup()
     assert.equal(fs.existsSync(internals.descriptorPath()), false)
   } finally {

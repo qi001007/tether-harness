@@ -79,6 +79,7 @@ function publish(webServer, connection) {
     origin,
     authenticated_url: connection.authenticatedUrl(origin),
     ...(pluginVersion ? { plugin_version: pluginVersion } : {}),
+    hot_reload: true,
     updated_at: Date.now()
   }
   const target = descriptorPath()
