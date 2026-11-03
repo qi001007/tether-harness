@@ -141,3 +141,12 @@ def test_cancel_marks_the_job_and_stops_the_process(monkeypatch):
     job.cancel()
     assert process.terminated is True
     assert job.status()["state"] == "cancelled"
+
+
+def test_default_platform_uses_sys_platform_and_maps_posix(monkeypatch):
+    monkeypatch.setattr(croc_transfer.sys, "platform", "linux")
+    assert croc_transfer.CrocTransfer(binary="croc", relay="r:1").platform == "linux"
+    monkeypatch.setattr(croc_transfer.sys, "platform", "darwin")
+    assert croc_transfer.CrocTransfer(binary="croc", relay="r:1").platform == "darwin"
+    monkeypatch.setattr(croc_transfer.sys, "platform", "win32")
+    assert croc_transfer.CrocTransfer(binary="croc", relay="r:1").platform == "nt"

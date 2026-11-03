@@ -12,6 +12,7 @@ import re
 import secrets
 import shutil
 import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -123,7 +124,15 @@ class CrocTransfer:
                  platform: str | None = None) -> None:
         self._binary = binary or os.environ.get("TETHER_CROC") or ""
         self.relay = (relay or os.environ.get("TETHER_CROC_RELAY") or "").strip()
-        self.platform = platform or os.name
+        raw = (platform or sys.platform or os.name).lower()
+        if raw.startswith("linux"):
+            self.platform = "linux"
+        elif raw.startswith("darwin") or raw == "macos":
+            self.platform = "darwin"
+        elif raw in ("nt", "win32", "windows"):
+            self.platform = "nt"
+        else:
+            self.platform = raw
         self._version: str | None = None
         self._probe_lock = threading.Lock()
         self.job: CrocJob | None = None
