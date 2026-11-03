@@ -5,7 +5,7 @@
 1. `v0.3.3` 已发布：CI **41675286538** success，release id **432954597**，发布于 **2026-11-03T16:35:56Z**；资产 `tether-app-0.3.3.zip` 1,940,850 B、`tether-plugin-0.3.3.zip` 1,377,885 B、`tether-node-0.3.3.zip` 107,621 B。Hub 镜像在约 5 分钟后变为 0.3.3。
 2. DESKTOP 真机：APP 加载新 UI，Node 运行 0.3.3 代码；终端 PTY 提示符/命令/中文输出通过，Git Bash 切换通过，右键菜单遮挡与自绘 shell 菜单通过。
 3. LAPTOP 部署：app venv 安装 `pywinpty 3.1.2`；因 updater 的 `dependency_change_requires_manual_install` 拦截 pyproject 依赖变化，按错误提示手动把 `tether-node-0.3.3.zip` 的 `terminal.py`/`fs_service.py`/`pyproject.toml` 覆盖到 `D:\Tether\deploy\tether-app-0.2.3`，并把 `version.json` 的 node 标为 0.3.3；通过 Hub `POST /api/devices/LAPTOP-01/node/restart` 重启 Node。真机 `terminal_start` 返回 `pty:true`（120×30），`echo LAPTOP_PTY_OK` 输出成功。
-4. 仍未做：LAPTOP 的 APP/插件 UI 仍为 0.3.1/0.3.0（依赖守卫阻止整包更新，未强制覆盖）；0.3.3 的安装包/依赖变化守卫需要后续修成可自动安装 Python 依赖，或提供显式的手动升级包说明。
+4. LAPTOP 的 APP UI：已从 `tether-app-0.3.3.zip` 直接抽取 `packages/tether-ui/web/dist/app.js` 覆盖到 `D:\Tether\deploy\tether-app-0.2.3`（8,037,010 B，含 `TetherTerminalRuntime` 与 `listbox`），下次 APP 重载/重启后生效；APP/插件元数据仍显示 0.3.1/0.3.0，未强制重启 APP。安装器的依赖守卫仍阻止整包更新，后续需修成可自动安装 Python 依赖或提供显式升级包说明。
 
 ## 2026-11-03 原生终端与弹层层级（0.3.3）
 

@@ -10,7 +10,7 @@ Native interactive terminal and themed shell menu:
 - File hover cards no longer cover context/device menus: `hoverTip` is cleared when a menu opens and menus are raised to z-index 120.
 - Tests: pytest **189 passed / 2 skipped** (PTY + resize boundary); plugin/web builds and UI tests pass. Real APP checks: PowerShell prompt, `echo TETHER_NATIVE`, Git Bash prompt/command, menu hit-test, no renderer exceptions.
 - Published at 2026-11-03T16:35:56Z; CI `41675286538`; assets app 1,940,850 B, plugin 1,377,885 B, node 107,621 B.
-- LAPTOP's Node was staged manually from the node ZIP because the installed updater rejects the pywinpty dependency change (`dependency_change_requires_manual_install`); its APP/plugin UI remains 0.3.1/0.3.0. `terminal_start` on LAPTOP returns `pty:true` and `echo LAPTOP_PTY_OK` succeeded.
+- LAPTOP's Node was staged manually from the node ZIP because the installed updater rejects the pywinpty dependency change (`dependency_change_requires_manual_install`); its APP/plugin metadata remains 0.3.1/0.3.0, but the 0.3.3 `web/dist/app.js` (8,037,010 B, `TetherTerminalRuntime`/`listbox`) was extracted directly into its install root and loads on the next APP reload. `terminal_start` on LAPTOP returns `pty:true` and `echo LAPTOP_PTY_OK` succeeded.
 
 ## v0.2.93
 
