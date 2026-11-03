@@ -38,3 +38,8 @@
 - LAPTOP 经 `10.144.0.2:18080` 拉 DESKTOP 的 100 MB：**104,857,600 B / 28.80 s = 3,640,449 B/s（3.64 MB/s）**。
 - 两台机器的局域网 IPv4 是 `10.68.37.100` 与 `10.68.68.241`，但 ICMP/TCP 探测不可达（客户端隔离/防火墙），EasyTier 实际走 tcp6 公网直连；因此这是**跨网 p2p**，不是同 LAN 档。
 - 结论：同 LAN 15–80 MB/s 仍未复现；需要同交换机/AP 且关闭客户端隔离，或 EasyTier UDP 直连。当前跨网 p2p 3.64 MB/s；Hub relay 仍为 0.04–0.06 MB/s、TCP80 中继 1.70 MB/s。
+
+## 2026-11-03 打洞开关对照
+
+- DESKTOP 侧加 `--disable-tcp-hole-punching true` 后：latency 在 7–53 ms 间波动，100 MB **37.21 s / 2.82 MB/s**，低于原始参数下的 **28.80 s / 3.64 MB/s**。
+- 结论：瓶颈不在 TCP 打洞本身，更像 EasyTier 单流/TUN 吞吐或本机 TCP 窗口；关闭打洞无收益。两端 EasyTier 已恢复原始启动参数，未保留实验配置。
