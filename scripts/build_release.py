@@ -181,6 +181,9 @@ tether-harness-server component is installed. Otherwise, configure a Hub or inst
     node = OUT / f"tether-node-{VERSION}.zip"
     with zipfile.ZipFile(node, "w", zipfile.ZIP_DEFLATED) as archive:
         add_tether_runtime(archive, node_prefix)
+        for package in ("dsh-plugin-tether", "dsh-plugin-tether-client",
+                        "tether-dsh-native-ui", "tether-dsh-surface"):
+            add_tree(archive, ROOT / "packages" / package, node_prefix)
         for rel in ("laptop/tether-node.ps1", "laptop/bootstrap-node.ps1",
                     "laptop/install-node.sh", "pyproject.toml", "version.json"):
             add_file(archive, rel, node_prefix)

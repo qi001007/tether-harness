@@ -78,3 +78,6 @@
 - 2026-11-04：`transfer.js` 改为双缓冲流水线：读完第 N 块后先发起第 N+1 块读取，再写第 N 块；写入偏移与预取不一致时丢弃预取重读；取消/失败路径给预取挂空 catch，避免未处理拒绝。回归：`tests/test_transfer_engine.mjs` 新增“下一块读取与当前块写入重叠”，7 条全过；真机 100 MB 吞吐仍待两机复测，不能把单测当速度验收。
 - 2026-11-04：Linux DSH Web 禁止外部打开；APP 用 `<webview>` 顶层内嵌（不是 iframe，避开 SameSite），未运行/未安装仍走原来的安装/启动按钮。`webview` 的地址、导航、弹窗由主进程限制在回环/私有网段与首次 origin；WebUI/DSH 宿主只提示“请在桌面 APP 内打开”。真机内嵌与自动装插件仍待验。
 - 2026-11-04：转移页接入 croc：先并行查两端 `transfer_info`，只有双方 `available && relay` 才走 croc；否则保留旧分片回退。croc 分支生成一次性 code，源 `transfer_send`、目标 `transfer_receive`，350 ms 轮询 `transfer_status`，完成后 `transfer_finish`（支持改名）；冲突先查目标 entries。单测覆盖 code/顺序/finish；croc 二进制尚未随发布包提供，当前安装节点会回退旧路径。
+- 2026-11-04：转移页左右设备必须在设备列表异步到达后自动补选：`useEffect([devices, localDevice, leftDevice, rightDevice])` 先保留仍在线且两侧不同的选择，否则左侧优先本机、右侧换另一台；切换时清空路径与选择。APP 重启后不再停在“选择设备…”。真机实测左 DESKTOP-LOCAL、右 LAPTOP-01，20 B 文件经 UI 复制粘贴完成后目标 SHA-256 一致。
+- 2026-11-04：DSH Web 的 `<webview>` 容器不能把 `position:absolute; inset:0` 改成 `relative` 后不管尺寸；否则缩到 webview 默认 300 px。容器同时给 `width/height:100%; flex:1 1 auto`，webview 自身 `display:flex`。实测 1432×880 填满工作区。
+- 2026-11-04：远端 DSH Web 页面的 origin 不是回环，插件读不到 `tether.hub`，登录会回退到观看端 `127.0.0.1:18892` 并因 CORS 403 报 `Failed to fetch`。APP 打开 webview 后每 1.5 s 把本机 `tether.hub` 写入 guest localStorage（仅当 guest 尚无配置）；只写 URL/token，不动其他键。实测 guest 拿到 Hub 配置，插件显示设备。

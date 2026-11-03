@@ -62,3 +62,4 @@
 - 2026-11-03：APP 包与 package-lock 根版本升至 `0.2.88`；自动修复改用 `dsh_status.surface`（descriptor pid 存活）判断，surface 轮询的插件缺失错误也进入修复态；本机空 profile 已实测 APP 自动装回并渲染。
 - 2026-11-03：APP 包与 package-lock 根版本升至 `0.2.89`；iframe 载入后探测默认控件样式，命中后自动修复一次，再次命中显示“DSH 界面样式与 Tether 版本不匹配”遮罩，避免裸控件页面。
 - 2026-11-04：主窗口开启 `webviewTag` 供 Linux DSH Web 顶层内嵌；`will-attach-webview` 删除 guest preload、强制 sandbox/contextIsolation/webSecurity，只允许回环与 RFC1918 地址；`did-attach-webview` 拒绝新窗口并把 guest 导航锁在首次 origin。DSH 外部 `window.open` 已删除；真机 webview 与插件自动安装仍待验。
+- 2026-11-04：APP 默认直接连接 Hub 与 mesh，不跟随系统代理：`main.js` 在 ready 前 `appendSwitch('no-proxy-server')`，只有 `TETHER_USE_SYSTEM_PROXY=1` 才保留系统代理。实测系统代理故障时 Python 节点仍能注册 Hub，但 Electron 渲染器访问 `/api/state` 全部 ERR_FAILED、界面显示 0 台设备；切换直连后 example.com 与 Hub 都可达，设备恢复。不要再在 `whenReady` 里用 `setProxy({mode:'system'})` 覆盖该开关。

@@ -14,6 +14,7 @@ import shutil
 import subprocess
 import tarfile
 import threading
+import time
 import urllib.request
 from pathlib import Path
 from typing import Any
@@ -26,6 +27,10 @@ NPM = NODE_DIR / "bin" / "npm"
 ENTRY = ROOT / "node_modules" / "@deepseek-ai" / "dsh" / "lib" / "bin.js"
 UNIT = Path("/etc/systemd/system/tether-dsh-web.service")
 GATEWAY_UNIT = Path("/etc/systemd/system/tether-dsh-gateway.service")
+PLUGIN_ROOT = Path("/opt/tether-node/dsh-plugin")
+DSH_PROFILE = Path("/root/.dsh/profiles/web")
+PLUGIN_PACKAGES = ("dsh-plugin-tether", "dsh-plugin-tether-client",
+                   "tether-dsh-native-ui", "tether-dsh-surface")
 APP_PORT = 3080
 GATEWAY_PORT = 37301
 
@@ -103,6 +108,49 @@ class DshWeb:
         threading.Thread(target=self._install_worker, daemon=True).start()
         return self.status()
 
+    def _install_plugin(self) -> None:
+        packages = Path(__file__).resolve().parents[2] / "packages"
+        if not (packages / "dsh-plugin-tether" / "package.json").is_file():
+            return
+        try:
+            version = json.loads((packages / "dsh-plugin-tether" / "package.json")
+                                 .read_text(encoding="utf-8")).get("version") or "0"
+        except (OSError, ValueError):
+            return
+        target = PLUGIN_ROOT / str(version)
+        if not (target / "packages" / "dsh-plugin-tether" / "package.json").is_file():
+            temp = target.with_name(target.name + ".tmp-" + str(os.getpid()))
+            shutil.rmtree(temp, ignore_errors=True)
+            try:
+                (temp / "packages").mkdir(parents=True, exist_ok=True)
+                for name in PLUGIN_PACKAGES:
+                    shutil.copytree(packages / name, temp / "packages" / name,
+                                    ignore=shutil.ignore_patterns("node_modules", "__pycache__"))
+                PLUGIN_ROOT.mkdir(parents=True, exist_ok=True)
+                shutil.rmtree(target, ignore_errors=True)
+                os.replace(temp, target)
+            finally:
+                shutil.rmtree(temp, ignore_errors=True)
+        deadline = time.monotonic() + 150
+        while time.monotonic() < deadline and not (DSH_PROFILE / "package.json").is_file():
+            time.sleep(3)
+        if not (DSH_PROFILE / "package.json").is_file():
+            return
+        self._systemctl("stop")
+        env = os.environ.copy()
+        env["HOME"] = "/root"
+        env["PATH"] = str(NODE_DIR / "bin") + ":/usr/local/bin:/usr/bin:/bin"
+        try:
+            subprocess.run(
+                [str(NODE), str(ENTRY), "plugin", "--profile", "web", "add",
+                 "file:" + str(target / "packages" / "dsh-plugin-tether")],
+                cwd=str(ROOT), env=env, timeout=600,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+        except Exception:
+            pass
+        finally:
+            self._systemctl("start")
+
     def _install_worker(self) -> None:
         try:
             ROOT.mkdir(parents=True, exist_ok=True)
@@ -139,6 +187,7 @@ class DshWeb:
             _run(["systemctl", "daemon-reload"])
             _run(["systemctl", "enable", "--now", "tether-dsh-web"])
             _run(["systemctl", "enable", "--now", "tether-dsh-gateway"])
+            self._install_plugin()
         except Exception:
             pass
         finally:

@@ -67,6 +67,9 @@ fs.mkdirSync(dataDir, { recursive: true })
 app.setPath('userData', path.join(dataDir, 'electron'))
 app.setName('Tether')
 if (process.platform === 'win32') app.setAppUserModelId('com.tether.app')
+// Hub and mesh endpoints must be reached directly; a system proxy can silently
+// break them while leaving ordinary browsing intact.
+if (env.TETHER_USE_SYSTEM_PROXY !== '1') app.commandLine.appendSwitch('no-proxy-server')
 const { enrollmentDecision } = require('./enrollment.js')
 const supervisor = new Supervisor({ repoRoot, dataDir, env })
 const updates = new UpdateService({ repoRoot, dataDir, python: supervisor.childPython, env, app })

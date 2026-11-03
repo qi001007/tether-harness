@@ -2769,6 +2769,26 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const [dshWebOpen, setDshWebOpen] = React.useState(false)
       const dshWebRef = React.useRef(null)
       React.useEffect(() => { setDshWebOpen(false) }, [deviceId])
+      React.useEffect(() => {
+        if (!dshWebOpen || host.kind !== 'app') return undefined
+        let stopped = false
+        const seed = () => {
+          if (stopped) return
+          try {
+            const raw = window.localStorage.getItem('tether.hub')
+            const hub = raw ? JSON.parse(raw) : null
+            const guest = dshWebRef.current
+            if (!hub || typeof hub.url !== 'string' || typeof hub.token !== 'string'
+                || !guest || typeof guest.executeJavaScript !== 'function') return
+            void guest.executeJavaScript(
+              'try { if (!localStorage.getItem("tether.hub")) localStorage.setItem("tether.hub", ' + JSON.stringify(JSON.stringify(hub)) + ') } catch (_) {}'
+            ).catch(() => {})
+          } catch (_) { /* guest may not be ready */ }
+        }
+        const timer = setInterval(seed, 1500)
+        seed()
+        return () => { stopped = true; clearInterval(timer) }
+      }, [dshWebOpen])
       const dshWebSupported = linuxDevice || !!(deviceInfo && deviceInfo.capabilities
         && deviceInfo.capabilities.dsh_web_supported)
       const dshWebEnabled = dshWebSupported || !!(dshWeb && dshWeb.supported)
@@ -2890,11 +2910,11 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
               : ''
       const dshWebUrl = dshWeb && dshWeb.running ? String(dshWeb.url || '') : ''
       if (dshWebOpen && dshWebUrl && host.kind === 'app') {
-        return h('div', { className: 'tether-native-surface', style: { ...nativeSurfaceContainerStyle(visible, layered), position: 'relative' } },
+        return h('div', { className: 'tether-native-surface', style: { ...nativeSurfaceContainerStyle(visible, layered), position: 'relative', width: '100%', height: '100%', flex: '1 1 auto' } },
           h('webview', {
             ref: dshWebRef,
             src: dshWebUrl,
-            style: { flex: '1 1 auto', width: '100%', height: '100%', minWidth: 0, minHeight: 0, border: 0, background: C.bg }
+            style: { display: 'flex', flex: '1 1 auto', width: '100%', height: '100%', minWidth: 0, minHeight: 0, border: 0, background: C.bg }
           }),
           h('div', { style: { position: 'absolute', top: 10, right: 10, display: 'flex', gap: 6, zIndex: 2 } },
             h('button', {

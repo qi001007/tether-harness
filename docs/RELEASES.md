@@ -14,7 +14,8 @@ croc transfer engine and POSIX file-tree fixes:
 - Local 0.3.6 assets were built successfully (unsigned development manifest): APP 38,741,660 B, plugin 1,384,395 B, Node 36,897,237 B; Node/APP archives contain Windows `croc.exe`, Linux `croc-linux-x64`, macOS `croc-darwin-x64` and `croc-darwin-arm64`.
 - Server-hosted install assets updated to 0.3.6; `/install/version.json` reports node `0.3.6`; all three ZIP links return HTTP 200 and their SHA-256 match `release/tether-update.json`. `install-node.sh` defaults to `latest`, resolves node from `version.json`, and derives the version from an archive filename in `--archive` mode.
 - Second isolated Linux install (`--install-only --archive`, prefix `/tmp/tether-install-036b`): succeeded; `CrocTransfer(platform="linux")` selected `croc-linux-x64`, reported `11.6.3`, relay true, and auto-chmodded the bundled binary.
-- Not done: publish/upload assets to GitHub, official HTTPS install/upgrade, laptop mobile-network direction, clean VM matrix, macOS croc binary. Do not treat this section as a published release.
+- Draft GitHub release created: id `433272811`, tag `v0.3.6`, target commit `e529c7aa2119`; assets uploaded and `state=uploaded` (APP 38,748,554 B, Node 36,904,135 B, plugin 1,384,395 B). URL is draft-only; not public until the owner publishes it.
+- Not done: publish the draft, official HTTPS install/upgrade, laptop mobile-network direction, clean VM business chain, macOS croc validation. Do not treat this section as a published release.
 
 ## v0.3.5
 
@@ -870,3 +871,13 @@ The [release workflow](https://github.com/qi001007/tether-harness/actions/runs/4
 ## Release procedure
 
 Pin the intended source commit, run the release workflow to create a draft, inspect all three ZIPs and the manifest (URLs, sizes, and SHA-256), publish the draft, then download the official HTTPS assets and recheck size and SHA-256. Record installation, upgrade, rollback, and service-side acceptance separately.
+
+## v0.3.6 rebuild (2026-11-04, same version)
+
+The 0.3.6 assets were rebuilt after the transfer-page device reselect, DSH Web full-width webview, guest Hub seeding, direct-network default, and persistent DSH plugin install changes:
+
+- APP 38,749,958 B SHA-256 `ad01fa401f544a200b608b16f1909ccbd3fb1fe008446618fec4e2362785254d`
+- Node 38,249,530 B SHA-256 `2b0117e1e3c699351a66fa81927e0907e12dc4f199c37cab5dbf0e02830fb88c` (now also ships the four plugin packages under `packages/`)
+- Plugin 1,384,563 B SHA-256 `cc9518416e51baaa98bea6b7379679ff65a035e8f24fcb05fa46374c4e3967a5`
+- All three re-uploaded to `/srv/tether-installer` over the self-hosted croc relay (40 MB in 16 s, ~2.4 MB/s); server hashes match the local manifest.
+- GitHub draft `433272811` still holds the earlier 0.3.6 binaries; replacing its assets is pending owner approval before publishing.

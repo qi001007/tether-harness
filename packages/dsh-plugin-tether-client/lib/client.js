@@ -9046,6 +9046,18 @@ function createTransferPage({ React, Glyph, api, post, C, devices = [], localDev
   const [rightSelection, setRightSelection] = React.useState([])
   const [leftEntries, setLeftEntries] = React.useState([])
   const [rightEntries, setRightEntries] = React.useState([])
+  React.useEffect(() => {
+    const ids = onlineDevices.map((item) => item.device_id)
+    if (!ids.length) return
+    const nextLeft = leftDevice && ids.includes(leftDevice)
+      ? leftDevice
+      : (localDevice && ids.includes(localDevice) ? localDevice : ids[0])
+    const nextRight = rightDevice && ids.includes(rightDevice) && rightDevice !== nextLeft
+      ? rightDevice
+      : (ids.find((id) => id !== nextLeft) || '')
+    if (nextLeft !== leftDevice) { setLeftDevice(nextLeft); setLeftPath(''); setLeftSelection([]) }
+    if (nextRight !== rightDevice) { setRightDevice(nextRight); setRightPath(''); setRightSelection([]) }
+  }, [devices, localDevice, leftDevice, rightDevice])
   const [activeSide, setActiveSide] = React.useState('left')
   const [refreshKey, setRefreshKey] = React.useState(0)
   const [job, setJob] = React.useState(null)
@@ -13407,7 +13419,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           h('webview', {
             ref: dshWebRef,
             src: dshWebUrl,
-            style: { flex: '1 1 auto', width: '100%', height: '100%', minWidth: 0, minHeight: 0, border: 0, background: C.bg }
+            style: { display: 'flex', flex: '1 1 auto', width: '100%', height: '100%', minWidth: 0, minHeight: 0, border: 0, background: C.bg }
           }),
           h('div', { style: { position: 'absolute', top: 10, right: 10, display: 'flex', gap: 6, zIndex: 2 } },
             h('button', {

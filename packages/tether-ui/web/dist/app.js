@@ -175310,6 +175310,22 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C: C2, devi
   const [rightSelection, setRightSelection] = React2.useState([]);
   const [leftEntries, setLeftEntries] = React2.useState([]);
   const [rightEntries, setRightEntries] = React2.useState([]);
+  React2.useEffect(() => {
+    const ids = onlineDevices.map((item) => item.device_id);
+    if (!ids.length) return;
+    const nextLeft = leftDevice && ids.includes(leftDevice) ? leftDevice : localDevice && ids.includes(localDevice) ? localDevice : ids[0];
+    const nextRight = rightDevice && ids.includes(rightDevice) && rightDevice !== nextLeft ? rightDevice : ids.find((id) => id !== nextLeft) || "";
+    if (nextLeft !== leftDevice) {
+      setLeftDevice(nextLeft);
+      setLeftPath("");
+      setLeftSelection([]);
+    }
+    if (nextRight !== rightDevice) {
+      setRightDevice(nextRight);
+      setRightPath("");
+      setRightSelection([]);
+    }
+  }, [devices, localDevice, leftDevice, rightDevice]);
   const [activeSide, setActiveSide] = React2.useState("left");
   const [refreshKey, setRefreshKey] = React2.useState(0);
   const [job, setJob] = React2.useState(null);
@@ -180587,6 +180603,30 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     React2.useEffect(() => {
       setDshWebOpen(false);
     }, [deviceId]);
+    React2.useEffect(() => {
+      if (!dshWebOpen || host.kind !== "app") return void 0;
+      let stopped = false;
+      const seed = () => {
+        if (stopped) return;
+        try {
+          const raw = window.localStorage.getItem("tether.hub");
+          const hub = raw ? JSON.parse(raw) : null;
+          const guest = dshWebRef.current;
+          if (!hub || typeof hub.url !== "string" || typeof hub.token !== "string" || !guest || typeof guest.executeJavaScript !== "function") return;
+          void guest.executeJavaScript(
+            'try { if (!localStorage.getItem("tether.hub")) localStorage.setItem("tether.hub", ' + JSON.stringify(JSON.stringify(hub)) + ") } catch (_) {}"
+          ).catch(() => {
+          });
+        } catch (_2) {
+        }
+      };
+      const timer = setInterval(seed, 1500);
+      seed();
+      return () => {
+        stopped = true;
+        clearInterval(timer);
+      };
+    }, [dshWebOpen]);
     const dshWebSupported = linuxDevice || !!(deviceInfo && deviceInfo.capabilities && deviceInfo.capabilities.dsh_web_supported);
     const dshWebEnabled = dshWebSupported || !!(dshWeb && dshWeb.supported);
     const dshWebValue = (data) => data && data.value && typeof data.value === "object" ? data.value : data;
@@ -180704,11 +180744,11 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     if (dshWebOpen && dshWebUrl && host.kind === "app") {
       return h3(
         "div",
-        { className: "tether-native-surface", style: { ...nativeSurfaceContainerStyle(visible, layered), position: "relative" } },
+        { className: "tether-native-surface", style: { ...nativeSurfaceContainerStyle(visible, layered), position: "relative", width: "100%", height: "100%", flex: "1 1 auto" } },
         h3("webview", {
           ref: dshWebRef,
           src: dshWebUrl,
-          style: { flex: "1 1 auto", width: "100%", height: "100%", minWidth: 0, minHeight: 0, border: 0, background: C2.bg }
+          style: { display: "flex", flex: "1 1 auto", width: "100%", height: "100%", minWidth: 0, minHeight: 0, border: 0, background: C2.bg }
         }),
         h3(
           "div",
