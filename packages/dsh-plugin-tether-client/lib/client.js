@@ -5763,7 +5763,7 @@ monaco-editor/esm/vs/languages/definitions/swift/swift.js:
 
     const EditorRuntime = TetherMonacoRuntime
     const PANEL_ID = 'tether'
-    const PLUGIN_VERSION = "0.3.2"
+    const PLUGIN_VERSION = "0.3.3"
 function parentOf(path) {
   const clean = String(path || '').replace(/[\\/]+$/, '')
   if (!clean) return ''
@@ -8579,13 +8579,17 @@ function createTransferPage({ React, Glyph, api, post, C, devices = [], localDev
     if (directCache.has(key)) return directCache.get(key)
     let info = null
     try {
-      info = await post('/api/devices/' + encodeURIComponent(key) + '/fs/direct_info', {})
+      const response = await post('/api/devices/' + encodeURIComponent(key) + '/fs/direct_info', {})
+      info = response && response.value && typeof response.value === 'object' ? response.value : response
     } catch (_) { info = null }
     const value = info && typeof info.host === 'string' && info.host
       && Number.isInteger(info.port) && info.port > 0 && info.port <= 65535
       && typeof info.token === 'string' && info.token ? info : null
-    directCache.set(key, value)
-    return value
+    const normalized = value && key === String(localDevice || '')
+      ? { ...value, host: '127.0.0.1' }
+      : value
+    directCache.set(key, normalized)
+    return normalized
   }
   const postFs = async (deviceId, operation, body) => {
     const info = await directInfo(deviceId)

@@ -1,5 +1,11 @@
 # 实时进度
 
+## 2026-11-03 传输直连（WIP）
+
+1. `transfer-page.js` 修正 `/fs/direct_info` 的 `{value:{...}}` 解包；本机设备改走 `127.0.0.1`，避免 EasyTier 自环走中继。真机请求已从 Hub 的 `/fs/list` 切到 `http://127.0.0.1:18895/fs/list` 与 `http://10.144.0.3:18895/fs/list`。
+2. 直连 1 MiB 实测：read **0.83–1.99 MB/s**、write **1.71 MB/s**；Hub 中继仍是 **0.04–0.06 MB/s**。
+3. 100 MB UI 传输进度到 100%（约 242 s），但目标文件未在检查的两个 LAPTOP workspace 找到，且网络记录里 chunk 写入仍命中 Hub `/fs/write_chunk`；说明 `postFs` 的 direct `write_chunk` 仍会回退，直连吞吐不能算已验收。下一步抓首个 direct write 的响应/目标路径，修好后再复测 100 MB。
+
 ## 2026-11-03 0.3.3 发布与两机部署
 
 1. `v0.3.3` 已发布：CI **41675286538** success，release id **432954597**，发布于 **2026-11-03T16:35:56Z**；资产 `tether-app-0.3.3.zip` 1,940,850 B、`tether-plugin-0.3.3.zip` 1,377,885 B、`tether-node-0.3.3.zip` 107,621 B。Hub 镜像在约 5 分钟后变为 0.3.3。

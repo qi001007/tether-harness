@@ -174667,13 +174667,15 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C: C2, devi
     if (directCache.has(key)) return directCache.get(key);
     let info = null;
     try {
-      info = await post("/api/devices/" + encodeURIComponent(key) + "/fs/direct_info", {});
+      const response = await post("/api/devices/" + encodeURIComponent(key) + "/fs/direct_info", {});
+      info = response && response.value && typeof response.value === "object" ? response.value : response;
     } catch (_2) {
       info = null;
     }
     const value = info && typeof info.host === "string" && info.host && Number.isInteger(info.port) && info.port > 0 && info.port <= 65535 && typeof info.token === "string" && info.token ? info : null;
-    directCache.set(key, value);
-    return value;
+    const normalized = value && key === String(localDevice || "") ? { ...value, host: "127.0.0.1" } : value;
+    directCache.set(key, normalized);
+    return normalized;
   };
   const postFs = async (deviceId, operation, body) => {
     const info = await directInfo(deviceId);
