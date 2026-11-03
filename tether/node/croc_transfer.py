@@ -194,6 +194,11 @@ class CrocTransfer:
 
     def _popen(self, args: list[str], env: dict[str, str] | None = None) -> subprocess.Popen[str]:
         merged = os.environ.copy()
+        # croc turns HTTP_PROXY into --connect and sends relay traffic through
+        # the proxy; a stale system proxy then hangs the whole transfer.
+        for name in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY",
+                     "http_proxy", "https_proxy", "all_proxy"):
+            merged.pop(name, None)
         if env:
             merged.update(env)
         return subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,

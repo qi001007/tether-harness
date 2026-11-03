@@ -111,6 +111,7 @@ def test_receive_passes_code_only_through_environment(tmp_path, monkeypatch):
 
 
 def test_a_relay_is_required_and_short_codes_are_rejected(tmp_path, monkeypatch):
+    monkeypatch.delenv("TETHER_CROC_RELAY", raising=False)
     transfer = croc_transfer.CrocTransfer(binary="croc", relay="")
     source = tmp_path / "payload.bin"
     source.write_bytes(b"x")

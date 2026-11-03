@@ -132,6 +132,10 @@ APP_ALLOWED = (
 )
 NODE_ALLOWED = (
     "tether/",
+    "packages/dsh-plugin-tether/",
+    "packages/dsh-plugin-tether-client/",
+    "packages/tether-dsh-native-ui/",
+    "packages/tether-dsh-surface/",
     "laptop/tether-node.ps1",
     "laptop/bootstrap-node.ps1",
     "laptop/install-node.sh",
