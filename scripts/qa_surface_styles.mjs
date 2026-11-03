@@ -168,7 +168,11 @@ async function main() {
   const hub = readHub()
   const devices = process.argv.slice(2)
   if (!devices.length) devices.push('DESKTOP-LOCAL', 'LAPTOP-01')
-  const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'tether-style-gate-'))
+  const keepProfile = Boolean(process.env.TETHER_STYLE_PROFILE)
+  const profile = keepProfile
+    ? path.resolve(process.env.TETHER_STYLE_PROFILE)
+    : fs.mkdtempSync(path.join(os.tmpdir(), 'tether-style-gate-'))
+  if (keepProfile) fs.mkdirSync(profile, { recursive: true })
   const edge = spawn(findEdge(), [
     '--headless=new', '--no-sandbox', '--disable-gpu',
     `--remote-debugging-port=${PORT}`, `--user-data-dir=${profile}`,
@@ -199,7 +203,7 @@ async function main() {
       ])
     }
     try {
-      fs.rmSync(profile, { recursive: true, force: true })
+      if (!keepProfile) fs.rmSync(profile, { recursive: true, force: true })
     } catch (_) {
       // Edge may still hold the profile briefly; the temp directory is safe to retry later.
     }
