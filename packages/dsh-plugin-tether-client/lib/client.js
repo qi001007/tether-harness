@@ -5763,7 +5763,7 @@ monaco-editor/esm/vs/languages/definitions/swift/swift.js:
 
     const EditorRuntime = TetherMonacoRuntime
     const PANEL_ID = 'tether'
-    const PLUGIN_VERSION = "0.3.0"
+    const PLUGIN_VERSION = "0.3.1"
 function parentOf(path) {
   const clean = String(path || '').replace(/[\\/]+$/, '')
   if (!clean) return ''
@@ -9480,9 +9480,50 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
   const [model, setModel] = React.useState('')
   const [commands, setCommands] = React.useState([])
   const [pending, setPending] = React.useState([])
+  const [tabs, setTabs] = React.useState([])
+  const [picking, setPicking] = React.useState(false)
   const since = React.useRef(0)
   const sessionRef = React.useRef('')
+  const tabCache = React.useRef({})
   const outputRef = React.useRef(null)
+
+  const updateTab = (id, patch) => setTabs((current) => current.map((tab) => tab.id === id ? { ...tab, ...patch } : tab))
+  const saveTab = () => {
+    const id = sessionRef.current
+    if (!id) return
+    tabCache.current[id] = { output, ready, agent, models, model, commands, pending, since: since.current }
+  }
+  const loadTab = (id) => {
+    const cached = tabCache.current[id] || {}
+    sessionRef.current = id
+    setSession(id)
+    setOutput(cached.output || '')
+    setReady(!!cached.ready)
+    setAgent(cached.agent || null)
+    setModels(cached.models || [])
+    setModel(cached.model || '')
+    setCommands(cached.commands || [])
+    setPending(cached.pending || [])
+    setInput('')
+    since.current = Number(cached.since) || 0
+    setPicking(false)
+  }
+  const clearSession = () => {
+    sessionRef.current = ''
+    setSession('')
+    setReady(false)
+    setAgent(null)
+    setModels([])
+    setModel('')
+    setCommands([])
+    setPending([])
+    setOutput('')
+    setInput('')
+    since.current = 0
+  }
+  const tabColor = (status) => status === 'ready' ? 'var(--dsw-alias-state-success-primary, #16a34a)'
+    : status === 'error' ? 'var(--dsw-alias-state-error-primary, #b42318)'
+      : status === 'ended' ? C.mute : 'var(--dsw-alias-state-warn-primary, #b54708)'
 
   const fail = (error) => {
     const message = String((error && error.message) || error || 'Agents 操作失败')
@@ -9506,24 +9547,37 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
 
   React.useEffect(() => { void detect(device) }, [device])
 
-  const stop = async () => {
-    const current = sessionRef.current
-    sessionRef.current = ''
-    setSession('')
-    setReady(false)
-    if (!current) return
+  const closeTab = async (id) => {
+    if (!id) return
+    const remaining = tabs.filter((tab) => tab.id !== id)
+    delete tabCache.current[id]
+    setTabs(remaining)
+    if (sessionRef.current === id) {
+      if (remaining.length) loadTab(remaining[remaining.length - 1].id)
+      else clearSession()
+    }
     try {
-      await post('/api/devices/' + encodeURIComponent(device) + '/fs/acp_stop', { session_id: current })
+      await post('/api/devices/' + encodeURIComponent(device) + '/fs/acp_stop', { session_id: id })
     } catch (_) { /* node may have already closed the session */ }
+  }
+
+  const stop = async () => { await closeTab(sessionRef.current) }
+
+  const selectTab = (id) => {
+    if (!id || id === sessionRef.current) return
+    saveTab()
+    loadTab(id)
   }
 
   const start = async (item) => {
     if (!item || busy) return
+    saveTab()
     setBusy(true)
     try {
       const result = await post('/api/devices/' + encodeURIComponent(device) + '/fs/acp_start',
         { harness: item.id })
       if (!result || typeof result.session_id !== 'string') throw new Error('Agent 没有返回会话标识')
+      const name = item.name || item.id
       sessionRef.current = result.session_id
       since.current = 0
       setPending([])
@@ -9534,7 +9588,10 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
       setCommands([])
       setSession(result.session_id)
       setHarness(item)
-      setOutput('ACP · ' + (item.name || item.id) + '\n' + (result.cwd || '') + '\n\n')
+      setInput('')
+      setPicking(false)
+      setOutput('ACP · ' + name + '\n' + (result.cwd || '') + '\n\n')
+      setTabs((current) => [...current, { id: result.session_id, name, harness: item.id, status: 'starting' }])
     } catch (error) {
       fail(error)
     } finally {
@@ -9627,6 +9684,8 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
             const available = (event.models && event.models.availableModels) || []
             setModels(available)
             setModel((event.models && (event.models.currentModelId || event.models.currentModel)) || (available[0] && available[0].modelId) || '')
+            const label = event.agent && (event.agent.title || event.agent.name)
+            updateTab(session, label ? { status: 'ready', name: label } : { status: 'ready' })
             lines.push('[就绪]')
           } else if (event.type === 'result') {
             flush()
@@ -9635,21 +9694,20 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
           } else if (event.type === 'error') {
             flush()
             setReady(false)
+            updateTab(session, { status: 'error' })
             lines.push('[错误] ' + String(event.error || 'ACP error'))
           } else if (event.type === 'closed') {
             flush()
+            updateTab(session, { status: 'ended' })
+            setReady(false)
             lines.push('[会话结束]')
-            if (sessionRef.current === session) {
-              sessionRef.current = ''
-              setSession('')
-            }
           }
         }
         flush()
         if (lines.length) setOutput((current) => current + lines.join('\n') + '\n')
         if (result.closed && sessionRef.current === session) {
-          sessionRef.current = ''
-          setSession('')
+          setReady(false)
+          updateTab(session, { status: 'ended' })
         }
       } catch (error) {
         if (!disposed) fail(error)
@@ -9663,21 +9721,32 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
   }, [session, device])
 
   React.useEffect(() => {
+    if (session) tabCache.current[session] = { output, ready, agent, models, model, commands, pending, since: since.current }
+  }, [session, output, ready, agent, models, model, commands, pending])
+
+  React.useEffect(() => {
     if (outputRef.current) outputRef.current.scrollTop = outputRef.current.scrollHeight
   }, [output])
 
   React.useEffect(() => () => {
-    const current = sessionRef.current
-    if (current) {
-      void post('/api/devices/' + encodeURIComponent(device) + '/fs/acp_stop', { session_id: current }).catch(() => {})
+    const ids = new Set(Object.keys(tabCache.current))
+    if (sessionRef.current) ids.add(sessionRef.current)
+    for (const id of ids) {
+      void post('/api/devices/' + encodeURIComponent(device) + '/fs/acp_stop', { session_id: id }).catch(() => {})
     }
   }, [])
 
   const selectDevice = async (value) => {
-    await stop()
-    setOutput('')
+    const ids = tabs.map((tab) => tab.id)
+    setTabs([])
+    tabCache.current = {}
+    clearSession()
     setHarness(null)
+    setPicking(false)
     setDevice(value)
+    for (const id of ids) {
+      try { await post('/api/devices/' + encodeURIComponent(device) + '/fs/acp_stop', { session_id: id }) } catch (_) { /* already closed */ }
+    }
   }
 
   const field = {
@@ -9715,7 +9784,28 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
       }, models.map((item) => h('option', { key: item.modelId, value: item.modelId, title: item.description || '' },
         item.name || item.modelId))) : null
     ),
-    !session ? h('div', {
+    tabs.length ? h('div', { style: { display: 'flex', alignItems: 'center', gap: 4, flex: '0 0 auto', overflowX: 'auto' } },
+      tabs.map((tab) => h('div', {
+        key: tab.id, role: 'tab', 'aria-selected': tab.id === session ? 'true' : 'false',
+        onClick: () => selectTab(tab.id),
+        style: { display: 'flex', alignItems: 'center', gap: 6, height: 26, padding: '0 5px 0 9px', borderRadius: 7,
+          cursor: 'pointer', background: tab.id === session ? C.soft : 'transparent', color: tab.id === session ? C.ink : C.sub,
+          border: '1px solid ' + (tab.id === session ? C.line : 'transparent'), whiteSpace: 'nowrap' }
+      },
+        h('span', { style: { width: 6, height: 6, borderRadius: 3, background: tabColor(tab.status), flex: '0 0 auto' } }),
+        h('span', { style: { fontSize: 11 } }, tab.name),
+        h('button', {
+          type: 'button', title: '关闭 ' + tab.name, 'aria-label': '关闭 ' + tab.name,
+          onClick: (event) => { event.stopPropagation(); void closeTab(tab.id) },
+          style: { width: 18, height: 18, display: 'grid', placeItems: 'center', border: 0, borderRadius: 4,
+            background: 'transparent', color: C.mute, fontSize: 12, cursor: 'pointer', padding: 0 }
+        }, '×')
+      )),
+      h('button', { type: 'button', title: '再开一个 Agent', 'aria-label': '再开一个 Agent',
+        onClick: () => setPicking(true),
+        style: { ...field, height: 26, padding: '0 9px', cursor: 'pointer' } }, '+')
+    ) : null,
+    !session || picking ? h('div', {
       style: { flex: '0 0 auto', display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }
     },
       harnesses.length ? harnesses.map((item) => h('button', {

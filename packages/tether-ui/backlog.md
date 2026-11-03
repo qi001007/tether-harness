@@ -67,3 +67,4 @@
 - 2026-11-03：新增“远程应用”页（`apps-page.js`，活动栏第 2 项）：设备选择/刷新/卡片/内嵌 iframe。数据来自目标 Node 的 `apps.json` 白名单（`fs/apps_list`），只转发回环 HTTP；DSH 不进这个列表，继续走原生工作区的认证 surface（通用网关拿不到 DSH 本地票据）。
 - 2026-11-03：新增“Agents”页（`agents-page.js`，活动栏第 3 项）：检测本机 ACP Harness、开始会话、流式消息、权限请求卡片、停止。消息必须按 chunk 拼接后再换行；`agent_message_chunk` 不能一块一行。`acp_start` 是异步握手：输入框要等 `ready` 事件后再启用，轮询带 `inFlight` 闸。
 - 2026-11-03：终端不再是独立页面：`terminal-dock.js` 停靠在资源管理器底部（可拖高、可关），目录右键/工具栏“在终端中打开”把 cwd 设为当前目录；shell 下拉由目标机 `terminal_shells` 决定。登录页在 APP 必须有 ×（关闭到托盘），DSH 用 `embedded` 相对布局保留宿主侧栏。Agents 页用 `session/set_model` 切换模型，命令 chip 只填输入框不自动发送。
+- 2026-11-03：Agents 页支持多会话标签（`+` 新开、标签切换、单标签关闭、状态点）。每标签的 output/ready/model/commands/pending/since 缓存在 `tabCache`；切换时保存当前、加载目标，非活动会话仍在服务端跑。切设备/卸载必须停掉全部标签，不能只停当前。

@@ -166599,9 +166599,47 @@ function createAgentsPage({ React: React2, Glyph, post, C, devices = [], localDe
   const [model, setModel] = React2.useState("");
   const [commands, setCommands] = React2.useState([]);
   const [pending2, setPending] = React2.useState([]);
+  const [tabs, setTabs] = React2.useState([]);
+  const [picking, setPicking] = React2.useState(false);
   const since = React2.useRef(0);
   const sessionRef = React2.useRef("");
+  const tabCache = React2.useRef({});
   const outputRef = React2.useRef(null);
+  const updateTab = (id, patch) => setTabs((current) => current.map((tab) => tab.id === id ? { ...tab, ...patch } : tab));
+  const saveTab = () => {
+    const id = sessionRef.current;
+    if (!id) return;
+    tabCache.current[id] = { output, ready, agent, models, model, commands, pending: pending2, since: since.current };
+  };
+  const loadTab = (id) => {
+    const cached = tabCache.current[id] || {};
+    sessionRef.current = id;
+    setSession(id);
+    setOutput(cached.output || "");
+    setReady(!!cached.ready);
+    setAgent(cached.agent || null);
+    setModels(cached.models || []);
+    setModel(cached.model || "");
+    setCommands(cached.commands || []);
+    setPending(cached.pending || []);
+    setInput("");
+    since.current = Number(cached.since) || 0;
+    setPicking(false);
+  };
+  const clearSession = () => {
+    sessionRef.current = "";
+    setSession("");
+    setReady(false);
+    setAgent(null);
+    setModels([]);
+    setModel("");
+    setCommands([]);
+    setPending([]);
+    setOutput("");
+    setInput("");
+    since.current = 0;
+  };
+  const tabColor = (status2) => status2 === "ready" ? "var(--dsw-alias-state-success-primary, #16a34a)" : status2 === "error" ? "var(--dsw-alias-state-error-primary, #b42318)" : status2 === "ended" ? C.mute : "var(--dsw-alias-state-warn-primary, #b54708)";
   const fail2 = (error) => {
     const message = String(error && error.message || error || "Agents \u64CD\u4F5C\u5931\u8D25");
     setOutput((current) => current + (current && !current.endsWith("\n") ? "\n" : "") + message + "\n");
@@ -166623,19 +166661,31 @@ function createAgentsPage({ React: React2, Glyph, post, C, devices = [], localDe
   React2.useEffect(() => {
     void detect(device);
   }, [device]);
-  const stop = async () => {
-    const current = sessionRef.current;
-    sessionRef.current = "";
-    setSession("");
-    setReady(false);
-    if (!current) return;
+  const closeTab = async (id) => {
+    if (!id) return;
+    const remaining = tabs.filter((tab) => tab.id !== id);
+    delete tabCache.current[id];
+    setTabs(remaining);
+    if (sessionRef.current === id) {
+      if (remaining.length) loadTab(remaining[remaining.length - 1].id);
+      else clearSession();
+    }
     try {
-      await post("/api/devices/" + encodeURIComponent(device) + "/fs/acp_stop", { session_id: current });
+      await post("/api/devices/" + encodeURIComponent(device) + "/fs/acp_stop", { session_id: id });
     } catch (_) {
     }
   };
+  const stop = async () => {
+    await closeTab(sessionRef.current);
+  };
+  const selectTab = (id) => {
+    if (!id || id === sessionRef.current) return;
+    saveTab();
+    loadTab(id);
+  };
   const start = async (item) => {
     if (!item || busy) return;
+    saveTab();
     setBusy(true);
     try {
       const result = await post(
@@ -166643,6 +166693,7 @@ function createAgentsPage({ React: React2, Glyph, post, C, devices = [], localDe
         { harness: item.id }
       );
       if (!result || typeof result.session_id !== "string") throw new Error("Agent \u6CA1\u6709\u8FD4\u56DE\u4F1A\u8BDD\u6807\u8BC6");
+      const name = item.name || item.id;
       sessionRef.current = result.session_id;
       since.current = 0;
       setPending([]);
@@ -166653,7 +166704,10 @@ function createAgentsPage({ React: React2, Glyph, post, C, devices = [], localDe
       setCommands([]);
       setSession(result.session_id);
       setHarness(item);
-      setOutput("ACP \xB7 " + (item.name || item.id) + "\n" + (result.cwd || "") + "\n\n");
+      setInput("");
+      setPicking(false);
+      setOutput("ACP \xB7 " + name + "\n" + (result.cwd || "") + "\n\n");
+      setTabs((current) => [...current, { id: result.session_id, name, harness: item.id, status: "starting" }]);
     } catch (error) {
       fail2(error);
     } finally {
@@ -166754,6 +166808,8 @@ function createAgentsPage({ React: React2, Glyph, post, C, devices = [], localDe
             const available = event.models && event.models.availableModels || [];
             setModels(available);
             setModel(event.models && (event.models.currentModelId || event.models.currentModel) || available[0] && available[0].modelId || "");
+            const label = event.agent && (event.agent.title || event.agent.name);
+            updateTab(session, label ? { status: "ready", name: label } : { status: "ready" });
             lines.push("[\u5C31\u7EEA]");
           } else if (event.type === "result") {
             flush();
@@ -166762,21 +166818,20 @@ function createAgentsPage({ React: React2, Glyph, post, C, devices = [], localDe
           } else if (event.type === "error") {
             flush();
             setReady(false);
+            updateTab(session, { status: "error" });
             lines.push("[\u9519\u8BEF] " + String(event.error || "ACP error"));
           } else if (event.type === "closed") {
             flush();
+            updateTab(session, { status: "ended" });
+            setReady(false);
             lines.push("[\u4F1A\u8BDD\u7ED3\u675F]");
-            if (sessionRef.current === session) {
-              sessionRef.current = "";
-              setSession("");
-            }
           }
         }
         flush();
         if (lines.length) setOutput((current) => current + lines.join("\n") + "\n");
         if (result.closed && sessionRef.current === session) {
-          sessionRef.current = "";
-          setSession("");
+          setReady(false);
+          updateTab(session, { status: "ended" });
         }
       } catch (error) {
         if (!disposed) fail2(error);
@@ -166792,20 +166847,33 @@ function createAgentsPage({ React: React2, Glyph, post, C, devices = [], localDe
     };
   }, [session, device]);
   React2.useEffect(() => {
+    if (session) tabCache.current[session] = { output, ready, agent, models, model, commands, pending: pending2, since: since.current };
+  }, [session, output, ready, agent, models, model, commands, pending2]);
+  React2.useEffect(() => {
     if (outputRef.current) outputRef.current.scrollTop = outputRef.current.scrollHeight;
   }, [output]);
   React2.useEffect(() => () => {
-    const current = sessionRef.current;
-    if (current) {
-      void post("/api/devices/" + encodeURIComponent(device) + "/fs/acp_stop", { session_id: current }).catch(() => {
+    const ids = new Set(Object.keys(tabCache.current));
+    if (sessionRef.current) ids.add(sessionRef.current);
+    for (const id of ids) {
+      void post("/api/devices/" + encodeURIComponent(device) + "/fs/acp_stop", { session_id: id }).catch(() => {
       });
     }
   }, []);
   const selectDevice = async (value) => {
-    await stop();
-    setOutput("");
+    const ids = tabs.map((tab) => tab.id);
+    setTabs([]);
+    tabCache.current = {};
+    clearSession();
     setHarness(null);
+    setPicking(false);
     setDevice(value);
+    for (const id of ids) {
+      try {
+        await post("/api/devices/" + encodeURIComponent(device) + "/fs/acp_stop", { session_id: id });
+      } catch (_) {
+      }
+    }
   };
   const field = {
     height: 28,
@@ -166893,7 +166961,64 @@ function createAgentsPage({ React: React2, Glyph, post, C, devices = [], localDe
         item.name || item.modelId
       ))) : null
     ),
-    !session ? h2(
+    tabs.length ? h2(
+      "div",
+      { style: { display: "flex", alignItems: "center", gap: 4, flex: "0 0 auto", overflowX: "auto" } },
+      tabs.map((tab) => h2(
+        "div",
+        {
+          key: tab.id,
+          role: "tab",
+          "aria-selected": tab.id === session ? "true" : "false",
+          onClick: () => selectTab(tab.id),
+          style: {
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            height: 26,
+            padding: "0 5px 0 9px",
+            borderRadius: 7,
+            cursor: "pointer",
+            background: tab.id === session ? C.soft : "transparent",
+            color: tab.id === session ? C.ink : C.sub,
+            border: "1px solid " + (tab.id === session ? C.line : "transparent"),
+            whiteSpace: "nowrap"
+          }
+        },
+        h2("span", { style: { width: 6, height: 6, borderRadius: 3, background: tabColor(tab.status), flex: "0 0 auto" } }),
+        h2("span", { style: { fontSize: 11 } }, tab.name),
+        h2("button", {
+          type: "button",
+          title: "\u5173\u95ED " + tab.name,
+          "aria-label": "\u5173\u95ED " + tab.name,
+          onClick: (event) => {
+            event.stopPropagation();
+            void closeTab(tab.id);
+          },
+          style: {
+            width: 18,
+            height: 18,
+            display: "grid",
+            placeItems: "center",
+            border: 0,
+            borderRadius: 4,
+            background: "transparent",
+            color: C.mute,
+            fontSize: 12,
+            cursor: "pointer",
+            padding: 0
+          }
+        }, "\xD7")
+      )),
+      h2("button", {
+        type: "button",
+        title: "\u518D\u5F00\u4E00\u4E2A Agent",
+        "aria-label": "\u518D\u5F00\u4E00\u4E2A Agent",
+        onClick: () => setPicking(true),
+        style: { ...field, height: 26, padding: "0 9px", cursor: "pointer" }
+      }, "+")
+    ) : null,
+    !session || picking ? h2(
       "div",
       {
         style: { flex: "0 0 auto", display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" }
