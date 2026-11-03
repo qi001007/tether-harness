@@ -1,5 +1,13 @@
 # 实时进度
 
+## 2026-11-03 Hub 跨设备共享不可变资源缓存
+
+1. 根因：surface mux 的缓存键是 `(device_id, path)`，同一份 DSH/插件资源每台设备各存一份；DESKTOP 热了，LAPTOP 仍要重新走公网。这是“看起来只优化单节点”的原因。
+2. 改为统一 Hub 路径：对带内容哈希的 `/assets/*-<hash>.*` 和带 `rev=` 的 `/plugins/…` 使用跨设备 `("shared", path)` 缓存键；其他路径仍按设备隔离；缓存查找仍在 cookie 鉴权之后。
+3. Hub 测试 **156 passed**；生产部署 **`3417bd1`**，备份 `shared-assets-20261103T082351Z`，回退 `49c52e4`；三服务 active，两机 online。
+4. 实测（全新浏览器，先 DESKTOP 再 LAPTOP）：LAPTOP 冷载 **38.1 s**（此前 45.9–73.4 s），热载 4.5 s；DESKTOP 重试 51.2 s、热载 4.1 s。仍有波动，8–14 s 未达；瓶颈是首次资源传输/DSH 生成，不是页面渲染。
+5. 不引入 Tailscale；下一步在 Hub/APP 侧做全量预热或启动预加载，所有节点同一套逻辑。
+
 ## 2026-11-03 冷载基线（真实 surface）
 
 1. 门禁 `qa_surface_styles.mjs` 增加 `boot`（冷启动到 composer）和 `warm`（同浏览器重载）计时。
