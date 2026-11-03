@@ -96,11 +96,12 @@ async function checkDevice(hub, deviceId, browser) {
   const client = await connect(page.webSocketDebuggerUrl)
   try {
     await client.send('Page.enable')
+    const bootStarted = Date.now()
     await client.send('Page.navigate', { url: surfaceData.url })
     const deadline = Date.now() + WAIT_MS
     let probe = null
     while (Date.now() < deadline) {
-      await sleep(2000)
+      await sleep(500)
       const result = await client.send('Runtime.evaluate', {
         expression: `(() => {
           const input = document.querySelector('input[placeholder*="搜索"]')
@@ -127,15 +128,36 @@ async function checkDevice(hub, deviceId, browser) {
       probe = JSON.parse(result.result.result.value)
       if (probe.composer && probe.input) break
     }
+    const bootMs = Date.now() - bootStarted
     if (!probe || !probe.composer || !probe.input) {
-      return { deviceId, ok: false, error: 'surface did not finish booting', probe }
+      return { deviceId, ok: false, error: 'surface did not finish booting', probe, bootMs }
     }
     const inputStyled = probe.input.borderTopWidth === '0px'
       && probe.input.borderTopStyle === 'none'
       && probe.input.backgroundColor === 'rgba(0, 0, 0, 0)'
     const buttonStyled = !probe.button || (probe.button.borderTopWidth === '0px'
       && probe.button.borderTopStyle === 'none')
-    return { deviceId, ok: inputStyled && buttonStyled, probe }
+    let warmMs = null
+    try {
+      const warmStarted = Date.now()
+      await client.send('Page.reload', { ignoreCache: false })
+      const warmDeadline = Date.now() + WAIT_MS
+      while (Date.now() < warmDeadline) {
+        await sleep(500)
+        const result = await client.send('Runtime.evaluate', {
+          expression: `JSON.stringify({composer: !!document.querySelector('textarea,[contenteditable="true"]'), input: !!document.querySelector('input[placeholder*="搜索"]')})`,
+          returnByValue: true
+        })
+        const state = JSON.parse(result.result.result.value)
+        if (state.composer && state.input) {
+          warmMs = Date.now() - warmStarted
+          break
+        }
+      }
+    } catch (_) {
+      // A one-time ticket can refuse reload; the cold measurement is still valid.
+    }
+    return { deviceId, ok: inputStyled && buttonStyled, probe, bootMs, warmMs }
   } finally {
     await client.send('Target.closeTarget', { targetId })
     client.ws.close()
@@ -161,7 +183,7 @@ async function main() {
       const result = await checkDevice(hub, deviceId, browser)
       if (!result.ok) failed = true
       const summary = result.probe
-        ? ` input=${result.probe.inputClass || '(missing)'} border=${result.probe.input?.borderTopWidth}/${result.probe.input?.borderTopStyle} button=${result.probe.button?.borderTopWidth}/${result.probe.button?.borderTopStyle} composer=${result.probe.composer}`
+        ? ` boot=${(result.bootMs / 1000).toFixed(1)}s warm=${result.warmMs == null ? 'n/a' : (result.warmMs / 1000).toFixed(1) + 's'} input=${result.probe.inputClass || '(missing)'} border=${result.probe.input?.borderTopWidth}/${result.probe.input?.borderTopStyle} button=${result.probe.button?.borderTopWidth}/${result.probe.button?.borderTopStyle} composer=${result.probe.composer}`
         : ''
       console.log(`${result.ok ? 'PASS' : 'FAIL'} ${deviceId}${summary}${result.error ? ' error=' + JSON.stringify(result.error) : ''}`)
     }

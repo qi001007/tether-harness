@@ -1,5 +1,13 @@
 # 实时进度
 
+## 2026-11-03 冷载基线（真实 surface）
+
+1. 门禁 `qa_surface_styles.mjs` 增加 `boot`（冷启动到 composer）和 `warm`（同浏览器重载）计时。
+2. 第一次全新浏览器：DESKTOP **58.7 s**、LAPTOP **45.9 s**；同浏览器热重载 **4.1 s / 4.9 s**。
+3. Hub 资产缓存热后第二次全新浏览器：DESKTOP **9.2 s**（达到 8–14 s 目标），LAPTOP **73.4 s**（公网波动）。热重载 3.2 / 5.7 s。
+4. 结论：瓶颈是 LAPTOP 首次资源经公网 Hub 的传输，不是页面渲染；下一档杠杆是本机直连/Tailscale Serve（需主人确认是否开放监听）或更激进预热；不改 DSH 插件集。
+5. 两机样式仍 PASS。
+
 ## 2026-11-03 Hub 更新任务断线自动重试
 
 1. 今天 LAPTOP 的 APP 更新 job 在“检查版本”遇到一次 transient `device_offline`，只能手动重试；这是插件/APP 更新共用的可靠性缺口。
