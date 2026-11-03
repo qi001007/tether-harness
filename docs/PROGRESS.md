@@ -1,5 +1,14 @@
 # 实时进度
 
+## 2026-11-03 插件热重载（0.2.90–0.2.93）
+
+1. DSH HMR 实测：profile 插件的模块文件变化时，`pluginManager.setPluginEnabled(entry,true)` 触发的重组合会**原地替换 surface**（同 pid/端口，约 1 秒）；从被 HMR 载入的服务端实例自己调用会撞 `HMR transactions cannot be nested`（AsyncLocalStorage 继承），触发点只在客户端页面。
+2. 完整链路：Node `apply` 把 `applied-plugin.json` 镜像到 `dsh_home/storages/tether/updates/` → 页面 watcher 每 2 秒读 `/tether-updates` status → 只启用 surface（禁止停用）→ surface 发布新 `plugin_version` → Node `status()` 清 `restart_required`；8 秒内没握手则 `dsh_restart` 助手兜底。
+3. 真机：DESKTOP 插件 0.2.92→0.2.93，job **9 秒**到 done（含下载/安装共 **14.3 秒**），DSH **pid 40564 不变**，descriptor 在 apply 后约 **1 秒**变为 0.2.93。LAPTOP 0.2.91→0.2.93：Node+插件 **54.6 秒**、APP **29 秒**；该机当时无打开的 DSH 页面，插件阶段走 8 秒兜底重启。
+4. 三个真机缺陷与修复：0.2.90 的 8.3 短路径 `DSH-PL~1` → `plugin_source_unavailable`（0.2.91 用 `GetLongPathNameW` 展开）；禁用→启用把 `enabled:false` 持久化，真机上 surface 一直停用（0.2.92 改成只启用）；Hub 更新写 Node 的 state dir、surface 读自己的 state dir，页面看不到待重载（0.2.93 镜像）。
+5. 门禁：mjs **241**、cjs **8**、pytest **162+5 skipped**、bundle check、制品审计 PASS；两机计算样式门禁 PASS（DESKTOP warm 3.9 s、LAPTOP warm 5.7 s）。两机 app/node/plugin 均 **0.2.93**。
+6. 限制：热重载要求 surface 模块文件变化且有 DSH 页面在跑；只有客户端文件变化或无页面时，8 秒后仍整宿主重启。1 GB 传输、DSH 新版本实测、第三方插件测试、Authenticode、干净 Win11 安装仍未完成。
+
 ## 2026-11-03 干净目录安装验证（0.2.89）
 
 1. 从 GitHub 下载 `tether-app-0.2.89.zip`，解到独立临时目录，不用仓库源码/`.venv`/`node_modules`。
@@ -81,7 +90,7 @@
 2. APP 收到后自动执行一次 `dsh_install_plugin`；如果再次出现，则用“DSH 界面样式与 Tether 版本不匹配”遮罩盖住整块画布，不再显示裸控件，并提供重试。
 3. 发布 0.2.89（CI `41598308564`，app 1,792,944 B / plugin 1,363,707 B / node 91,599 B），Hub mirror 0.2.89；LAPTOP 0.2.89，本地插件 0.2.89（pid 43440）。
 4. 计算样式门禁 `node scripts/qa_surface_styles.mjs DESKTOP-LOCAL LAPTOP-01` 两机 **PASS**（`bhn1Oq_searchInput`、`border 0px/none`、composer=true）。
-5. 仍未完成：DSH 新版本升级矩阵（当前只有 rc.5 同版本基线）、第三方插件测试、5 秒热重载。
+5. 仍未完成：DSH 新版本升级矩阵（当前只有 rc.5 同版本基线）、第三方插件测试。热重载见 `2026-11-03 插件热重载（0.2.90–0.2.93）`。
 6. 黑窗复测：用更新同款 `python -m tether.node.app_restart` 重启 APP，30 s / 20 ms 采样 **1,500 次**，只新增 1 个 `Chrome_WidgetWin_1`（Tether 主窗口），无 cmd/conhost/`ConsoleWindowClass`。
 
 ## 2026-11-03 v0.2.88 自动修复真实触发 + surface 健康判定

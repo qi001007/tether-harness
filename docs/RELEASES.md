@@ -1,5 +1,47 @@
 # Public client releases
 
+## v0.2.93
+
+Real-machine hot reload for Hub-driven plugin updates:
+
+- The Hub applies the plugin through the Node's updater state, which the surface never read. `apply` now mirrors the same `applied-plugin.json` into `dsh_home/storages/tether/updates/`; the page watcher sees `restart_required && disk_version != runtime_version` and enables the unique surface entry.
+- The surface descriptor advertises `hot_reload: true` and its module file changed, so DSH HMR replaces it in place. The reload bridge is enable-only: a stop/start cycle persists `enabled:false` in the profile and left the surface disabled in a real run.
+- `_scan_dsh_host_pid` is scoped to the requested DSH home; it never restarts a host from another installation (or a test fixture).
+- Real hot reload on DESKTOP: plugin job 0.2.92→0.2.93 reached `applying` at 7 s, `verifying` at 8 s, `done` at 9 s; DSH pid **40564 unchanged**, descriptor `plugin_version` became 0.2.93 at 1793705487.280. Job total 14.3 s including download/prepare; no DSH restart.
+- LAPTOP 0.2.91→0.2.93 Node+plugin job **54.6 s**; no DSH page was open, so the 8-second grace expired and the helper restarted DSH (plugin phase 14 s). APP 0.2.91→0.2.93 took **29 s**.
+- Both devices app/node/plugin **0.2.93**. Computed-style gate PASS: DESKTOP boot 6.9 s / warm 3.9 s, LAPTOP boot 77.6 s / warm 5.7 s; input `bhn1Oq_searchInput`, composer present.
+
+Gates: mjs 241/241, cjs 8/8, pytest 162 passed / 5 skipped, bundle check, artifact audit PASS. CI `41627321273`; published at 2026-11-03T11:28:03Z (app 1,795,302 B, plugin 1,366,561 B, node 93,132 B).
+
+## v0.2.92
+
+Keep the reload non-destructive:
+
+- Surface reload only enables the unique Tether entry; never disables it first. A real run showed a concurrent stop/start leaves `enabled:false` persisted in the DSH profile and the surface off after the host restart.
+- Descriptor adds `hot_reload: true` and the module file changed so HMR has a replacement to apply.
+- Real run exposed the state-dir split (Node apply vs surface status) that v0.2.93 fixes.
+
+Gates: mjs 241/241, cjs 8/8, pytest 162 passed / 5 skipped, bundle check. CI `41625074769`; published at 2026-11-03T11:11:35Z. Hub mirror 0.2.92; DESKTOP plugin reached 0.2.92, LAPTOP skipped to 0.2.93.
+
+## v0.2.91
+
+Fix Windows 8.3 `file:` specs and keep the first upgrade fast:
+
+- DSH saves the installer's short file: spec (`DSH-PL~1`) into the profile; `_file_dependency_path` now expands Windows 8.3 components with `GetLongPathNameW` without resolving links.
+- Only surfaces that broadcast `plugin_version` get the 8-second hot-reload grace; older surfaces keep the immediate 1.5 s restart.
+- First rollout (DESKTOP plugin, LAPTOP Node+plugin, LAPTOP APP) succeeded; LAPTOP Node+plugin job **24.6 s**, APP **15 s**.
+
+Gates: mjs 243/243, cjs 8/8, pytest 161 passed / 5 skipped, bundle check, artifact audit PASS. CI `41619553549`; published at 2026-11-03T10:31:33Z (app 1,795,090 B, plugin 1,366,153 B, node 92,704 B).
+
+## v0.2.90
+
+First hot-reload attempt; superseded before rollout:
+
+- Plugin apply schedules the restart helper with an 8-second grace and the expected version; the descriptor's `plugin_version` is the runtime handshake.
+- The DESKTOP job failed with `plugin_source_unavailable`: pnpm had saved the 8.3 short path, so the package-name check saw `DSH-PL~1`. Fixed in 0.2.91.
+
+Gates: mjs 243/243, cjs 8/8, pytest 160 passed / 4 skipped. CI `41618213671`; published at 2026-11-03T10:21:47Z (app 1,794,722 B, plugin 1,365,784 B, node 92,335 B). Not rolled out.
+
 ## v0.2.89
 
 Runtime defense against unstyled DSH controls:
