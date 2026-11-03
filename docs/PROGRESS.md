@@ -1,5 +1,12 @@
 # 实时进度
 
+## 2026-11-03 生命周期预热（未达目标）
+
+1. Hub 在 `dsh_install_plugin` / `dsh_start` / `dsh_restart` 成功后后台触发 `NATIVE_SURFACES.prewarm`，希望第一次打开前缓存已开始填。
+2. 部署 **`6f1964e`**，备份 `prewarm-lifecycle-20261103T090510Z`，回退 `c8bd970`；Hub 157 passed。
+3. 实测：安装后等 70 s，用全新浏览器冷载仍 **76.7 s**（热载 4.3 s）。原因：prewarm 只抓 HTML 首屏 `./assets` 和 `plugins/??` 引用，覆盖不到 DSH 运行时动态加载的全部插件资源。
+4. 结论：生命周期预热不是首次冷载的解；下一步若要继续，必须记录真实资源请求并批量预热，或接受首次一次性成本。当前不再盲目加预热。
+
 ## 2026-11-03 发布制品干净安装审计
 
 1. 新增 `scripts/qa_release_artifacts.py`：从 Hub manifest 下载当前三件套，验证签名、SHA-256、大小，解包检查必需文件（主进程、Node `dsh_plugin.py`、Tether 四包、安装脚本、`version.json`），并拒绝 `node_modules/data/__pycache__/.env/hub.json/.credentials.yaml` 等泄露项。
