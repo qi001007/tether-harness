@@ -5,7 +5,7 @@
 1. `transfer-page.js` 修正 `/fs/direct_info` 的 `{value:{...}}` 解包；本机设备改走 `127.0.0.1`，避免 EasyTier 自环走中继。
 2. 100 MB 真机：DESKTOP `work-local` → LAPTOP `C:\Users\14675\Documents\deepseek-harness\default-workspace`，**52 s / 1.92 MB/s**；目标文件 **104,857,600 B** 核对一致。网络记录全程命中 `http://127.0.0.1:18895/fs/read` 与 `http://10.144.0.3:18895/fs/write_chunk`，没有再走 Hub 分块。对照 Hub 中继 0.04–0.06 MB/s。
 3. 触发方式：转移页选中源文件 → 底部 `转移到另一侧`。Ctrl+C/V 自动化曾出现未启动队列，不作为验收路径。之前 80 MB `.tether-part` 是修复前旧 bundle/回退留下的，已清理；本轮 10 MB/100 MB 测试文件也已移入两端回收站。
-4. 待发布：`0.3.4` 需要带上 `transfer-page.js` 的这两处修正，并把新的 `web/dist/app.js` 同步到 LAPTOP（其 APP 元数据仍是 0.3.1，依赖守卫仍未修）。
+4. 已发布 **0.3.4**（CI `41682125666`，发布于 2026-11-03T17:16:44Z）：包含这两处传输修正；LAPTOP 的 `web/dist/app.js` 已替换为 0.3.4 包内 bundle（8,037,246 B，含 `127.0.0.1`/`direct_info`），下次 APP 重载生效。LAPTOP 的 APP/插件元数据仍是 0.3.1/0.3.0，依赖守卫仍未修。
 
 ## 2026-11-03 0.3.3 发布与两机部署
 

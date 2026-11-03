@@ -1,5 +1,15 @@
 # Public client releases
 
+## v0.3.4
+
+Direct-mesh bulk transfers instead of the Hub relay:
+
+- The transfer page now unwraps the Hub's `/fs/direct_info` response (`{value:{...}}`) and rewrites the **local** device to `127.0.0.1` so EasyTier does not loop the source read through the relay.
+- Real 100 MB transfer DESKTOP `work-local` → LAPTOP `C:\Users\14675\Documents\deepseek-harness\default-workspace`: **52 s / 1.92 MB/s**, target **104,857,600 B**; network trace used `http://127.0.0.1:18895/fs/read` and `http://10.144.0.3:18895/fs/write_chunk` with no Hub chunk relay. Previous Hub relay: 0.04–0.06 MB/s.
+- A 10 MB smoke transfer completed in ~3 s via the same direct endpoints. The UI trigger is selecting the source file and pressing `转移到另一侧`; Ctrl+C/V automation is not a reliable verification path.
+- Gates: pytest **189 passed / 2 skipped**, bundle check, UI tests. CI `41682125666`; published at 2026-11-03T17:16:44Z; assets app 1,941,010 B, plugin 1,377,963 B, node 107,621 B.
+- LAPTOP's `web/dist/app.js` was replaced with the 0.3.4 bundle (8,037,246 B, contains `127.0.0.1` and `direct_info`), effective on the next APP reload. Its metadata remains 0.3.1/0.3.0 because the updater still rejects the pywinpty dependency change.
+
 ## v0.3.3
 
 Native interactive terminal and themed shell menu:
