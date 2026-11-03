@@ -31,8 +31,8 @@ from .dsh_desktop import DshDesktop, DshError
 from .dsh_plugin import DshPluginError, install as install_dsh_plugin
 
 
-MAX_READ = 1024 * 1024
-MAX_WRITE_CHUNK = 1024 * 1024
+MAX_READ = 4 * 1024 * 1024
+MAX_WRITE_CHUNK = 4 * 1024 * 1024
 MAX_TRANSFER_BYTES = 64 * 1024 * 1024 * 1024
 TRANSFER_ID_RE = re.compile(r"[a-f0-9]{8,32}")
 MAX_PREVIEW_BYTES = 8 * 1024 * 1024
@@ -908,7 +908,8 @@ class FsService:
             handle.seek(offset)
             handle.write(data)
             handle.flush()
-            os.fsync(handle.fileno())
+            if final:
+                os.fsync(handle.fileno())
         if not final:
             return {"path": str(p), "transfer_id": transfer, "offset": offset + len(data),
                     "total": total, "complete": False}

@@ -173785,11 +173785,18 @@ function createSettingsPanel(React2) {
 }
 
 // src/transfer.js
-var TRANSFER_CHUNK = 1024 * 1024;
+var TRANSFER_CHUNK = 4 * 1024 * 1024;
 function base64Bytes(value) {
   if (!value) return 0;
   const padding = value.endsWith("==") ? 2 : value.endsWith("=") ? 1 : 0;
   return Math.floor(value.length * 3 / 4) - padding;
+}
+function bytesToBase64(bytes) {
+  let binary = "";
+  for (let index = 0; index < bytes.length; index += 32768) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(index, index + 32768));
+  }
+  return btoa(binary);
 }
 function failure(message, code) {
   const error = new Error(message);
@@ -173808,6 +173815,8 @@ function newTransferId() {
 async function transferFile({
   read,
   write,
+  readBytes,
+  writeBytes,
   status: status2,
   cancel,
   source,
@@ -173852,8 +173861,23 @@ async function transferFile({
       });
       throw failure("\u4F20\u8F93\u5DF2\u53D6\u6D88", "aborted");
     }
-    const chunk = total !== null && offset >= total ? { size: total, offset, base64: "" } : await read({ path: source, offset, limit: TRANSFER_CHUNK });
-    if (!chunk || typeof chunk.base64 !== "string") throw failure("\u8BFB\u53D6\u6E90\u6587\u4EF6\u5931\u8D25", "read_failed");
+    let chunk = null;
+    let binary = false;
+    if (total !== null && offset >= total) {
+      chunk = { size: total, offset, base64: "" };
+    } else {
+      if (typeof readBytes === "function") {
+        try {
+          chunk = await readBytes({ path: source, offset, limit: TRANSFER_CHUNK });
+          binary = !!chunk && chunk.bytes instanceof Uint8Array;
+        } catch (_2) {
+          chunk = null;
+          binary = false;
+        }
+      }
+      if (!binary) chunk = await read({ path: source, offset, limit: TRANSFER_CHUNK });
+    }
+    if (!chunk) throw failure("\u8BFB\u53D6\u6E90\u6587\u4EF6\u5931\u8D25", "read_failed");
     const size = Number(chunk.size);
     if (!Number.isSafeInteger(size) || size < 0) throw failure("\u6E90\u6587\u4EF6\u5927\u5C0F\u65E0\u6548", "read_failed");
     if (total === null) total = size;
@@ -173861,19 +173885,40 @@ async function transferFile({
     if (chunk.offset !== void 0 && Number(chunk.offset) !== offset) {
       throw failure("\u6E90\u6587\u4EF6\u8BFB\u53D6\u504F\u79FB\u4E0D\u4E00\u81F4", "source_changed");
     }
-    const bytes = base64Bytes(chunk.base64);
+    const bytes = binary ? chunk.bytes.length : base64Bytes(chunk.base64);
+    if (!bytes && offset < total) throw failure("\u6E90\u6587\u4EF6\u8BFB\u53D6\u5230\u7A7A\u6570\u636E", "read_failed");
     if (offset + bytes > total) throw failure("\u6E90\u6587\u4EF6\u8FD4\u56DE\u7684\u6570\u636E\u8D85\u51FA\u58F0\u660E\u5927\u5C0F", "source_changed");
     const final = offset + bytes >= total;
-    const result = await write({
-      path: destination,
-      transferId: id,
-      offset,
-      total,
-      base64: chunk.base64,
-      final,
-      overwrite,
-      resume: offset > 0
-    });
+    let result = null;
+    if (binary && typeof writeBytes === "function") {
+      try {
+        result = await writeBytes({
+          path: destination,
+          transferId: id,
+          offset,
+          total,
+          bytes: chunk.bytes,
+          final,
+          overwrite,
+          resume: offset > 0
+        });
+      } catch (_2) {
+        result = null;
+      }
+    }
+    if (!result) {
+      const encoded = binary ? bytesToBase64(chunk.bytes) : chunk.base64;
+      result = await write({
+        path: destination,
+        transferId: id,
+        offset,
+        total,
+        base64: encoded,
+        final,
+        overwrite,
+        resume: offset > 0
+      });
+    }
     if (!result || !Number.isSafeInteger(result.offset) || result.offset < offset) {
       throw failure("\u76EE\u6807\u8BBE\u5907\u6CA1\u6709\u786E\u8BA4\u5199\u5165\u8FDB\u5EA6", "write_failed");
     }
@@ -174697,6 +174742,54 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C: C2, devi
     }
     return post("/api/devices/" + encodeURIComponent(deviceId) + "/fs/" + operation, body);
   };
+  const directRead = async (deviceId, args) => {
+    const info = await directInfo(deviceId);
+    if (!info) return null;
+    try {
+      const response = await fetch("http://" + info.host + ":" + info.port + "/fs/read_raw", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + info.token },
+        body: JSON.stringify({ path: args.path, offset: args.offset, limit: args.limit })
+      });
+      if (!response.ok) return null;
+      const buffer = await response.arrayBuffer();
+      const size = Number(response.headers.get("X-Tether-Size"));
+      const offset = Number(response.headers.get("X-Tether-Offset"));
+      return {
+        bytes: new Uint8Array(buffer),
+        size: Number.isFinite(size) ? size : 0,
+        offset: Number.isFinite(offset) ? offset : args.offset,
+        reset: response.headers.get("X-Tether-Reset") === "1"
+      };
+    } catch (_2) {
+      return null;
+    }
+  };
+  const directWrite = async (deviceId, args) => {
+    const info = await directInfo(deviceId);
+    if (!info) return null;
+    try {
+      const query = new URLSearchParams({
+        path: args.path,
+        transfer_id: args.transferId,
+        offset: String(args.offset),
+        total: String(args.total),
+        final: args.final ? "1" : "0",
+        overwrite: args.overwrite ? "1" : "0",
+        resume: args.resume ? "1" : "0"
+      });
+      const response = await fetch("http://" + info.host + ":" + info.port + "/fs/write_raw?" + query.toString(), {
+        method: "POST",
+        headers: { Authorization: "Bearer " + info.token },
+        body: args.bytes
+      });
+      if (!response.ok) return null;
+      const payload = await response.json();
+      return payload && payload.ok === true ? payload.value : null;
+    } catch (_2) {
+      return null;
+    }
+  };
   const iconButton = (name, label, onClick, disabled) => h3("button", {
     type: "button",
     title: label,
@@ -175034,6 +175127,8 @@ function createTransferPage({ React: React2, Glyph, api: api2, post, C: C2, devi
                 "read",
                 { path: args.path, offset: args.offset, limit: args.limit, encoding: "base64" }
               ),
+              readBytes: (args) => directRead(sourceDevice, args),
+              writeBytes: (args) => directWrite(target2.device, args),
               write: (args) => postFs(
                 target2.device,
                 "write_chunk",

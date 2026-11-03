@@ -90,6 +90,46 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
     }
     return post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/' + operation, body)
   }
+  const directRead = async (deviceId, args) => {
+    const info = await directInfo(deviceId)
+    if (!info) return null
+    try {
+      const response = await fetch('http://' + info.host + ':' + info.port + '/fs/read_raw', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + info.token },
+        body: JSON.stringify({ path: args.path, offset: args.offset, limit: args.limit })
+      })
+      if (!response.ok) return null
+      const buffer = await response.arrayBuffer()
+      const size = Number(response.headers.get('X-Tether-Size'))
+      const offset = Number(response.headers.get('X-Tether-Offset'))
+      return {
+        bytes: new Uint8Array(buffer),
+        size: Number.isFinite(size) ? size : 0,
+        offset: Number.isFinite(offset) ? offset : args.offset,
+        reset: response.headers.get('X-Tether-Reset') === '1'
+      }
+    } catch (_) { return null }
+  }
+  const directWrite = async (deviceId, args) => {
+    const info = await directInfo(deviceId)
+    if (!info) return null
+    try {
+      const query = new URLSearchParams({
+        path: args.path, transfer_id: args.transferId, offset: String(args.offset),
+        total: String(args.total), final: args.final ? '1' : '0',
+        overwrite: args.overwrite ? '1' : '0', resume: args.resume ? '1' : '0'
+      })
+      const response = await fetch('http://' + info.host + ':' + info.port + '/fs/write_raw?' + query.toString(), {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + info.token },
+        body: args.bytes
+      })
+      if (!response.ok) return null
+      const payload = await response.json()
+      return payload && payload.ok === true ? payload.value : null
+    } catch (_) { return null }
+  }
   const iconButton = (name, label, onClick, disabled) => h('button', {
     type: 'button', title: label, 'aria-label': label, disabled,
     onClick: () => { if (!disabled && onClick) onClick() },
@@ -325,6 +365,8 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
               signal: controller.signal,
               read: (args) => postFs(sourceDevice, 'read',
                 { path: args.path, offset: args.offset, limit: args.limit, encoding: 'base64' }),
+              readBytes: (args) => directRead(sourceDevice, args),
+              writeBytes: (args) => directWrite(target.device, args),
               write: (args) => postFs(target.device, 'write_chunk',
                 { ...args, transfer_id: args.transferId }),
               status: (args) => postFs(target.device, 'transfer_status',

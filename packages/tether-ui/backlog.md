@@ -70,3 +70,4 @@
 - 2026-11-03：Tether 终端只在 APP/WebUI 出现；`host.kind === 'dsh'` 时隐藏终端入口、右键项和 dock，避免和 DSH 原生终端混淆。不要修改 DSH 自身的终端页面或宿主源码。
 - 2026-11-03：Agents 页支持多会话标签（`+` 新开、标签切换、单标签关闭、状态点）。每标签的 output/ready/model/commands/pending/since 缓存在 `tabCache`；切换时保存当前、加载目标，非活动会话仍在服务端跑。切设备/卸载必须停掉全部标签，不能只停当前。
 - 2026-11-03：终端交互必须走 xterm + 目标机 PTY，不能再用“输出预 + 输入框 + 发送按钮”冒充终端。shell 下拉不能用原生 `<select>`（Windows 弹层是系统白底/蓝高亮，无法跟随主题），改为 dock 内自绘 `[role=listbox]`（`C.layer1`/`C.shadow`，选中 `C.blue` + ✓，zIndex 130）；终端 viewport 背景必须透明，否则 xterm 默认黑色会露出底部黑条。打开右键/设备菜单时清 `hoverTip` 并把菜单提到 120，避免悬浮卡盖住菜单。
+- 2026-11-04：传输分片 4 MB；100 MB 真机直传 52 s→**42.46 s（1.92→2.355 MiB/s）**。瓶颈是 EasyTier 路径（188 ms，校园网隔离无法局域网直连），不是 base64/HTTP 层；再加单请求流式反而更慢。

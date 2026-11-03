@@ -1,9 +1,17 @@
-export const TRANSFER_CHUNK = 1024 * 1024
+export const TRANSFER_CHUNK = 4 * 1024 * 1024
 
 function base64Bytes(value) {
   if (!value) return 0
   const padding = value.endsWith('==') ? 2 : value.endsWith('=') ? 1 : 0
   return Math.floor(value.length * 3 / 4) - padding
+}
+
+function bytesToBase64(bytes) {
+  let binary = ''
+  for (let index = 0; index < bytes.length; index += 0x8000) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(index, index + 0x8000))
+  }
+  return btoa(binary)
 }
 
 function failure(message, code) {
@@ -23,7 +31,7 @@ export function newTransferId() {
 }
 
 export async function transferFile({
-  read, write, status, cancel, source, destination,
+  read, write, readBytes, writeBytes, status, cancel, source, destination,
   transferId, overwrite = false, resume = true, onProgress = () => {}, signal
 }) {
   if (typeof read !== 'function' || typeof write !== 'function') {
@@ -58,10 +66,20 @@ export async function transferFile({
       if (typeof cancel === 'function') await cancel({ path: destination, transferId: id }).catch(() => {})
       throw failure('传输已取消', 'aborted')
     }
-    const chunk = total !== null && offset >= total
-      ? { size: total, offset, base64: '' }
-      : await read({ path: source, offset, limit: TRANSFER_CHUNK })
-    if (!chunk || typeof chunk.base64 !== 'string') throw failure('读取源文件失败', 'read_failed')
+    let chunk = null
+    let binary = false
+    if (total !== null && offset >= total) {
+      chunk = { size: total, offset, base64: '' }
+    } else {
+      if (typeof readBytes === 'function') {
+        try {
+          chunk = await readBytes({ path: source, offset, limit: TRANSFER_CHUNK })
+          binary = !!chunk && chunk.bytes instanceof Uint8Array
+        } catch (_) { chunk = null; binary = false }
+      }
+      if (!binary) chunk = await read({ path: source, offset, limit: TRANSFER_CHUNK })
+    }
+    if (!chunk) throw failure('读取源文件失败', 'read_failed')
     const size = Number(chunk.size)
     if (!Number.isSafeInteger(size) || size < 0) throw failure('源文件大小无效', 'read_failed')
     if (total === null) total = size
@@ -69,13 +87,26 @@ export async function transferFile({
     if (chunk.offset !== undefined && Number(chunk.offset) !== offset) {
       throw failure('源文件读取偏移不一致', 'source_changed')
     }
-    const bytes = base64Bytes(chunk.base64)
+    const bytes = binary ? chunk.bytes.length : base64Bytes(chunk.base64)
+    if (!bytes && offset < total) throw failure('源文件读取到空数据', 'read_failed')
     if (offset + bytes > total) throw failure('源文件返回的数据超出声明大小', 'source_changed')
     const final = offset + bytes >= total
-    const result = await write({
-      path: destination, transferId: id, offset, total, base64: chunk.base64,
-      final, overwrite, resume: offset > 0
-    })
+    let result = null
+    if (binary && typeof writeBytes === 'function') {
+      try {
+        result = await writeBytes({
+          path: destination, transferId: id, offset, total, bytes: chunk.bytes,
+          final, overwrite, resume: offset > 0
+        })
+      } catch (_) { result = null }
+    }
+    if (!result) {
+      const encoded = binary ? bytesToBase64(chunk.bytes) : chunk.base64
+      result = await write({
+        path: destination, transferId: id, offset, total, base64: encoded,
+        final, overwrite, resume: offset > 0
+      })
+    }
     if (!result || !Number.isSafeInteger(result.offset) || result.offset < offset) {
       throw failure('目标设备没有确认写入进度', 'write_failed')
     }
