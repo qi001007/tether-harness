@@ -8,7 +8,7 @@ const toDraft = (agent) => ({
   enabled: agent.enabled !== false
 })
 
-export function AgentCatalogView({ React, Glyph, post, C, device, onClose }) {
+export function AgentCatalogView({ React, Glyph, post, C, device, onClose, onLoginTerminal }) {
   const h = React.createElement
   const [catalog, setCatalog] = React.useState(() => readCatalog(device))
   const [busy, setBusy] = React.useState(false)
@@ -263,7 +263,7 @@ export function AgentCatalogView({ React, Glyph, post, C, device, onClose }) {
         h('button', { type: 'button', onClick: () => setDraft({ ...draft, envRows: [...envRows, { k: '', v: '' }] }),
           style: { ...field, width: 'fit-content', padding: '0 10px', cursor: 'pointer', background: 'transparent' } }, '+ 变量'))),
       selected.accounts ? group('账号', h('div', { style: { padding: '10px 12px', display: 'grid', gap: 8 } },
-        h(AgentAccountsPanel, { React, Glyph, post, C, device, agent: selected }))) : null,
+        h(AgentAccountsPanel, { React, Glyph, post, C, device, agent: selected, onLoginTerminal }))) : null,
       group('诊断', h('div', { style: { padding: '10px 12px', display: 'grid', gap: 8 } },
         h('button', { type: 'button', disabled: testing || !selected.available, onClick: () => void test(),
           style: { ...field, width: 'fit-content', padding: '0 10px', cursor: testing || !selected.available ? 'default' : 'pointer',

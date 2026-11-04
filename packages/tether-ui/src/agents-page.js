@@ -826,6 +826,7 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
     headerRow,
     catalogOpen ? h(AgentCatalogView, {
       React, Glyph, post, C, device,
+      onLoginTerminal: (agent, command, argv) => openLogin(agent, command, argv),
       onClose: () => setCatalogOpen(false)
     }) : h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', gap: 6 } },
       surfaceTabs,

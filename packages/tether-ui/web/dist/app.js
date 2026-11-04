@@ -177706,7 +177706,7 @@ var toDraft = (agent) => ({
   envRows: Object.entries(agent.env || {}).map(([k, v2]) => ({ k, v: v2 })),
   enabled: agent.enabled !== false
 });
-function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose }) {
+function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose, onLoginTerminal }) {
   const h3 = React2.createElement;
   const [catalog, setCatalog] = React2.useState(() => readCatalog(device));
   const [busy, setBusy] = React2.useState(false);
@@ -178074,7 +178074,7 @@ function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose }
       selected.accounts ? group("\u8D26\u53F7", h3(
         "div",
         { style: { padding: "10px 12px", display: "grid", gap: 8 } },
-        h3(AgentAccountsPanel, { React: React2, Glyph, post, C: C2, device, agent: selected })
+        h3(AgentAccountsPanel, { React: React2, Glyph, post, C: C2, device, agent: selected, onLoginTerminal })
       )) : null,
       group("\u8BCA\u65AD", h3(
         "div",
@@ -179999,6 +179999,7 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
       post,
       C: C2,
       device,
+      onLoginTerminal: (agent2, command, argv) => openLogin(agent2, command, argv),
       onClose: () => setCatalogOpen(false)
     }) : h3(
       "div",
