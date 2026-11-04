@@ -32,6 +32,7 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
   const [catalogBusy, setCatalogBusy] = React.useState(false)
   const [catalogError, setCatalogError] = React.useState('')
   const [installing, setInstalling] = React.useState('')
+  const [herdrAvailable, setHerdrAvailable] = React.useState(true)
   const [panes, setPanes] = React.useState([])
   const [activePane, setActivePane] = React.useState('')
   const [workspaceOpen, setWorkspaceOpen] = React.useState(false)
@@ -121,12 +122,18 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
     setCatalogBusy(true)
     setCatalogError('')
     try {
-      const result = await post('/api/devices/' + encodeURIComponent(device) + '/fs/agents_catalog',
-        { fresh: force === true })
+      let result = null
+      try {
+        result = await post('/api/devices/' + encodeURIComponent(device) + '/fs/agents_catalog',
+          { fresh: force === true })
+      } catch (_) {
+        await new Promise((resolve) => setTimeout(resolve, 400))
+        result = await post('/api/devices/' + encodeURIComponent(device) + '/fs/agents_catalog',
+          { fresh: false })
+      }
       setCatalog(result || null)
     } catch (error) {
-      setCatalog(null)
-      setCatalogError(String((error && (error.message || error.code)) || '读取 Agent 目录失败'))
+      setCatalogError(String((error && (error.message || error.code)) || '读取失败'))
     } finally {
       setCatalogBusy(false)
     }
@@ -134,6 +141,18 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
 
   React.useEffect(() => { void detect(device) }, [device])
   React.useEffect(() => { void loadCatalog(false) }, [device])
+  React.useEffect(() => {
+    let cancelled = false
+    if (!device) return undefined
+    void post('/api/devices/' + encodeURIComponent(device) + '/fs/terminal_shells', {})
+      .then((result) => {
+        if (cancelled) return
+        const list = (result && Array.isArray(result.shells) ? result.shells : [])
+        setHerdrAvailable(list.some((item) => item.id === 'herdr' && item.available))
+      })
+      .catch(() => { if (!cancelled) setHerdrAvailable(false) })
+    return () => { cancelled = true }
+  }, [device])
 
   React.useEffect(() => {
     if (!modelOpen) return undefined
@@ -390,6 +409,7 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
   }
 
   const openHerdr = () => {
+    if (!herdrAvailable) { fail(new Error('此节点没有 Herdr')); return }
     addPane({ key: 'herdr', kind: 'terminal', shell: 'herdr', title: 'Herdr', icon: 'bot', dark: true })
   }
 
@@ -485,64 +505,57 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
       onClose: () => setCatalogOpen(false)
     })
   }
+  const headerRow = h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flex: '0 0 auto' } },
+    h('div', { style: { position: 'relative' } },
+      h('button', {
+        type: 'button', title: '选择目标设备', 'aria-label': 'Agent 目标设备',
+        'aria-haspopup': 'listbox', 'aria-expanded': deviceMenu,
+        onClick: () => setDeviceMenu((value) => !value), className: 'tether-hover tether-press',
+        style: { ...field, minWidth: 180, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', textAlign: 'left' }
+      },
+        h('span', { style: { flex: '1 1 auto', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
+          (online.find((item) => item.device_id === device) || {}).name || device || '没有在线设备'),
+        h(Glyph, { name: 'chevronDown', size: 12 })),
+      deviceMenu ? h('div', {
+        onPointerDown: (event) => { event.preventDefault(); setDeviceMenu(false) },
+        style: { position: 'fixed', inset: 0, zIndex: 70, background: 'transparent' }
+      }) : null,
+      deviceMenu ? h('div', { role: 'listbox', style: { position: 'absolute', top: 32, left: 0, minWidth: 200, maxHeight: 300, overflow: 'auto', zIndex: 80,
+        background: C.layer1, borderRadius: 9, boxShadow: C.shadow, padding: 4 } },
+        online.length ? online.map((item) => h('button', {
+          key: item.device_id, type: 'button', role: 'option', 'aria-selected': item.device_id === device,
+          onClick: () => { setDeviceMenu(false); void selectDevice(item.device_id) }, className: 'tether-hover',
+          style: { display: 'flex', width: '100%', alignItems: 'center', gap: 8, height: 32, padding: '0 8px', border: 0, borderRadius: 6,
+            background: item.device_id === device ? C.soft : 'transparent', color: C.ink, fontSize: 12.5, textAlign: 'left', cursor: 'pointer' }
+        }, item.name || item.device_id)) : h('div', { style: { padding: '8px 10px', fontSize: 12, color: C.mute } }, '没有在线设备')
+      ) : null),
+    h('button', { type: 'button', onClick: () => { void detect(device); void loadCatalog(true) }, disabled: detecting || !device,
+      title: '刷新', 'aria-label': '刷新',
+      style: { ...field, padding: '0 9px', opacity: detecting || !device ? 0.5 : 1 } }, detecting ? '…' : '刷新'),
+    session ? h('button', { type: 'button', onClick: () => void stop(),
+      style: { ...field, cursor: 'pointer', background: 'transparent' } }, '停止') : null,
+    herdrAvailable ? h('button', {
+      type: 'button', title: 'Herdr', 'aria-label': 'Herdr 工作区',
+      onClick: openHerdr,
+      style: { ...field, display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }
+    }, h(Glyph, { name: 'terminal', size: 13 }), 'Herdr') : null,
+    panes.length ? h('button', {
+      type: 'button', title: '工作区', 'aria-label': '工作区',
+      onClick: () => {
+        setWorkspaceOpen(true)
+        setActivePane((current) => current || (panes[0] || {}).key || '')
+      },
+      style: { ...field, display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }
+    }, '工作区 ' + panes.length) : null,
+    h('button', {
+      type: 'button', title: 'Agent 目录', 'aria-label': 'Agent 目录',
+      onClick: () => setCatalogOpen(true),
+      style: { ...field, display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }
+    }, h(Glyph, { name: 'apps', size: 13 }), '目录'))
   const baseContent = h('div', {
     key: 'base',
-    style: { flex: '1 1 auto', minHeight: 0, display: workspaceOpen ? 'none' : 'flex', flexDirection: 'column', gap: 8, padding: 10, background: C.bg }
+    style: { flex: '1 1 auto', minHeight: 0, display: workspaceOpen ? 'none' : 'flex', flexDirection: 'column', gap: 8 }
   },
-    h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flex: '0 0 auto' } },
-      h('div', { style: { position: 'relative' } },
-        h('button', {
-          type: 'button', title: '选择要运行 Agent 的电脑', 'aria-label': 'Agent 目标设备',
-          'aria-haspopup': 'listbox', 'aria-expanded': deviceMenu,
-          onClick: () => setDeviceMenu((value) => !value), className: 'tether-hover tether-press',
-          style: { ...field, minWidth: 180, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', textAlign: 'left' }
-        },
-          h('span', { style: { flex: '1 1 auto', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
-            (online.find((item) => item.device_id === device) || {}).name || device || '没有在线设备'),
-          h(Glyph, { name: 'chevronDown', size: 12 })),
-        deviceMenu ? h('div', {
-          onPointerDown: (event) => { event.preventDefault(); setDeviceMenu(false) },
-          style: { position: 'fixed', inset: 0, zIndex: 70, background: 'transparent' }
-        }) : null,
-        deviceMenu ? h('div', { role: 'listbox', style: { position: 'absolute', top: 32, left: 0, minWidth: 200, maxHeight: 300, overflow: 'auto', zIndex: 80,
-          background: C.layer1, borderRadius: 9, boxShadow: C.shadow, padding: 4 } },
-          online.length ? online.map((item) => h('button', {
-            key: item.device_id, type: 'button', role: 'option', 'aria-selected': item.device_id === device,
-            onClick: () => { setDeviceMenu(false); void selectDevice(item.device_id) }, className: 'tether-hover',
-            style: { display: 'flex', width: '100%', alignItems: 'center', gap: 8, height: 32, padding: '0 8px', border: 0, borderRadius: 6,
-              background: item.device_id === device ? C.soft : 'transparent', color: C.ink, fontSize: 12.5, textAlign: 'left', cursor: 'pointer' }
-          }, item.name || item.device_id)) : h('div', { style: { padding: '8px 10px', fontSize: 12, color: C.mute } }, '没有在线设备')
-        ) : null),
-      h('button', { type: 'button', onClick: () => void detect(device), disabled: detecting || !device,
-        style: { ...button, padding: '0 10px', opacity: detecting || !device ? 0.5 : 1 } }, detecting ? '检测中…' : '刷新'),
-      h('button', { type: 'button', disabled: !session, onClick: () => void stop(),
-        style: { ...field, cursor: session ? 'pointer' : 'default', opacity: session ? 1 : 0.5, background: 'transparent' } }, '停止'),
-      h('button', {
-        type: 'button', title: 'Herdr 工作区', 'aria-label': 'Herdr 工作区',
-        onClick: openHerdr,
-        style: { ...field, display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }
-      }, h(Glyph, { name: 'terminal', size: 13 }), 'Herdr'),
-      panes.length ? h('button', {
-        type: 'button', title: '打开多终端工作区', 'aria-label': '工作区',
-        onClick: () => {
-          setWorkspaceOpen(true)
-          setActivePane((current) => current || (panes[0] || {}).key || '')
-        },
-        style: { ...field, display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }
-      }, '工作区 ' + panes.length) : null,
-      h('button', {
-        type: 'button', title: 'Agent 目录', 'aria-label': 'Agent 目录',
-        onClick: () => setCatalogOpen(true),
-        style: { ...field, display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }
-      }, h(Glyph, { name: 'apps', size: 13 }), '目录'),
-      h('span', { style: { marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: session ? C.green : C.mute } },
-        h('span', { style: { width: 7, height: 7, borderRadius: 4, background: session ? C.green : C.mute } }),
-        session ? (ready ? '已就绪' : '启动中…') : '未连接'),
-      session && agent ? h('span', { style: { display: 'flex', alignItems: 'center', gap: 5, padding: '0 8px', height: 24,
-        borderRadius: 999, background: C.soft, color: C.ink, fontSize: 11 } },
-        h(Glyph, { name: 'bot', size: 14 }),
-        h('span', null, (agent.title || agent.name || 'Agent') + (agent.version ? ' ' + agent.version : ''))) : null
-    ),
     tabs.length ? h('div', { style: { display: 'flex', alignItems: 'center', gap: 4, flex: '0 0 auto', overflowX: 'auto' } },
       tabs.map((tab) => h('div', {
         key: tab.id, role: 'tab', 'aria-selected': tab.id === session ? 'true' : 'false',
@@ -670,7 +683,7 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
     : h(createTerminalDock, {
       key: pane.key, React, Glyph, post, C, device, cwd: '',
       initialAgent: pane.agentId || '', initialShell: pane.shell || '', label: pane.title,
-      themeMode: 'dark',
+      themeMode: 'dark', fill: true,
       height: Math.max(420, (typeof window !== 'undefined' ? window.innerHeight : 900) - 168),
       onClose: () => closePane(pane.key)
     })
@@ -700,12 +713,18 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
           style: { width: 18, height: 18, display: 'grid', placeItems: 'center', border: 0, borderRadius: 4,
             background: 'transparent', color: C.mute, fontSize: 12, cursor: 'pointer', padding: 0 }
         }, '×'))),
-      h('span', { style: { marginLeft: 'auto', fontSize: 11, color: C.mute, whiteSpace: 'nowrap' } }, device)),
+      h('span', { style: { marginLeft: 'auto' } })),
     h('div', { style: { flex: '1 1 auto', minHeight: 0, position: 'relative', display: 'flex' } },
       ...panes.map((pane) => h('div', {
         key: pane.key,
         style: { position: 'absolute', inset: 0, display: pane.key === activePane ? 'flex' : 'none', flexDirection: 'column', minWidth: 0, minHeight: 0 }
       }, paneBody(pane)))))
     : null
-  return [baseContent, workspace]
+  return h('div', {
+    style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', gap: 8, padding: 10, background: C.bg }
+  },
+    headerRow,
+    h('div', { style: { flex: '1 1 auto', minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column' } },
+      baseContent,
+      workspace))
 }

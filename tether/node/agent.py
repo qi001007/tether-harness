@@ -18,6 +18,7 @@ import sqlite3
 import ssl
 import sys
 import subprocess
+import threading
 import time
 import traceback
 from pathlib import Path
@@ -293,6 +294,7 @@ class Node:
         self.fs.terminal = self.terminal
         self.apps = AppCatalog(self.data_dir)
         self.fs.apps = self.apps
+        threading.Thread(target=self.fs.agents.catalog, kwargs={'force': True}, daemon=True).start()
         self.acp = AcpService(self.workspace)
         self.fs.acp = self.acp
         self.croc = CrocTransfer()

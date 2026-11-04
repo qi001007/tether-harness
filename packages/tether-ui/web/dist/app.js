@@ -176077,7 +176077,7 @@ var DARK_THEME = {
 function isDarkTheme() {
   return !!(typeof document !== "undefined" && document.body && document.body.hasAttribute("data-ds-dark-theme"));
 }
-function createTerminalDock({ React: React2, Glyph, post, C: C2, device, cwd: cwd2, height = 240, initialShell = "", initialAgent = "", label = "", themeMode = "auto", onHeight, onClose }) {
+function createTerminalDock({ React: React2, Glyph, post, C: C2, device, cwd: cwd2, height = 240, initialShell = "", initialAgent = "", label = "", themeMode = "auto", fill = false, onHeight, onClose }) {
   const h3 = React2.createElement;
   const runtime = typeof window !== "undefined" ? window.TetherTerminalRuntime : null;
   const [shells, setShells] = React2.useState([]);
@@ -176462,9 +176462,9 @@ function createTerminalDock({ React: React2, Glyph, post, C: C2, device, cwd: cw
     "div",
     {
       style: {
-        flex: "0 0 auto",
-        height,
-        minHeight: 160,
+        flex: fill ? "1 1 auto" : "0 0 auto",
+        height: fill ? "100%" : height,
+        minHeight: 0,
         display: "flex",
         flexDirection: "column",
         position: "relative",
@@ -176959,16 +176959,13 @@ function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose }
   const h3 = React2.createElement;
   const [catalog, setCatalog] = React2.useState(null);
   const [busy, setBusy] = React2.useState(false);
+  const [installing, setInstalling] = React2.useState("");
   const [error, setError] = React2.useState("");
   const [selectedId, setSelectedId] = React2.useState("");
   const [draft, setDraft] = React2.useState(null);
   const [editor2, setEditor] = React2.useState(null);
-  const colors = catalog && catalog.colors || ["#2563eb", "#d97706", "#7c3aed", "#0f766e", "#c2410c", "#0891b2", "#be185d", "#111827"];
-  const kinds = [["app-server", "App Server"], ["acp", "ACP"], ["web", "\u539F\u751F Web"], ["cli", "\u7EC8\u7AEF"]];
   const agents = catalog && catalog.agents || [];
   const selected = agents.find((item) => item.id === selectedId) || null;
-  const transportLabel = (value) => ({ web: "\u539F\u751F Web", workbench: "\u5DE5\u4F5C\u53F0", "app-server": "App Server", acp: "ACP", terminal: "\u7EC8\u7AEF" })[value] || value;
-  const sourceLabel = (value) => ({ detected: "\u81EA\u52A8\u53D1\u73B0", manual: "\u624B\u52A8\u767B\u8BB0", overridden: "\u624B\u52A8\u8986\u76D6", service: "\u672C\u673A\u670D\u52A1", builtin: "\u672A\u53D1\u73B0" })[value] || value;
   const applyCatalog = (data, keepSelected) => {
     setCatalog(data);
     const list2 = data && data.agents || [];
@@ -176979,8 +176976,6 @@ function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose }
         name: next.name,
         command: next.command,
         argsText: (next.args || []).join(" "),
-        kind: next.kind,
-        color: next.color,
         enabled: next.enabled !== false
       });
     } else {
@@ -176992,10 +176987,16 @@ function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose }
     setBusy(true);
     setError("");
     try {
-      const data = await post("/api/devices/" + encodeURIComponent(device) + "/fs/agents_catalog", { fresh: fresh === true });
+      let data = null;
+      try {
+        data = await post("/api/devices/" + encodeURIComponent(device) + "/fs/agents_catalog", { fresh: fresh === true });
+      } catch (_2) {
+        await new Promise((resolve3) => setTimeout(resolve3, 400));
+        data = await post("/api/devices/" + encodeURIComponent(device) + "/fs/agents_catalog", { fresh: false });
+      }
       applyCatalog(data, keepSelected || selectedId);
     } catch (cause) {
-      setError(String(cause && cause.message || cause || "\u8BFB\u53D6 Agent \u76EE\u5F55\u5931\u8D25"));
+      setError(String(cause && cause.message || cause || "\u8BFB\u53D6\u5931\u8D25"));
     } finally {
       setBusy(false);
     }
@@ -177011,11 +177012,23 @@ function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose }
       name: agent.name,
       command: agent.command,
       argsText: (agent.args || []).join(" "),
-      kind: agent.kind,
-      color: agent.color,
       enabled: agent.enabled !== false
     });
     setError("");
+  };
+  const install = async (agent) => {
+    if (!agent || installing) return;
+    setInstalling(agent.id);
+    setError("");
+    try {
+      const result = await post("/api/devices/" + encodeURIComponent(device) + "/fs/agents_install", { id: agent.id });
+      if (result && result.catalog) applyCatalog(result.catalog, agent.id);
+      else await load(true, agent.id);
+    } catch (cause) {
+      setError(String(cause && cause.message || cause || "\u5B89\u88C5\u5931\u8D25"));
+    } finally {
+      setInstalling("");
+    }
   };
   const saveDraft = async () => {
     if (!selected || !draft) return;
@@ -177027,8 +177040,8 @@ function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose }
         name: draft.name,
         command: draft.command,
         args: draft.argsText.split(/\s+/).filter(Boolean),
-        kind: draft.kind,
-        color: draft.color,
+        kind: selected.kind,
+        color: selected.color,
         enabled: draft.enabled
       });
       applyCatalog(data, selected.id);
@@ -177052,7 +177065,7 @@ function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose }
     }
   };
   const openAdd = () => {
-    setEditor({ name: "", command: "", argsText: "", kind: "acp", color: colors[0], enabled: true });
+    setEditor({ name: "", command: "", argsText: "" });
     setError("");
   };
   const saveAdd = async (event) => {
@@ -177065,9 +177078,8 @@ function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose }
         name: editor2.name,
         command: editor2.command,
         args: editor2.argsText.split(/\s+/).filter(Boolean),
-        kind: editor2.kind,
-        color: editor2.color,
-        enabled: editor2.enabled
+        kind: "cli",
+        enabled: true
       });
       setEditor(null);
       applyCatalog(data, "");
@@ -177098,7 +177110,7 @@ function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose }
     color: "#fff",
     background: C2.blue
   };
-  const iconFor = (agent) => AGENT_ICONS[agent.id] ? h3("img", { src: AGENT_ICONS[agent.id], alt: "", "aria-hidden": true, style: { width: 18, height: 18, flex: "0 0 auto", objectFit: "contain" } }) : h3("span", { style: { width: 18, height: 18, flex: "0 0 auto", display: "grid", placeItems: "center", borderRadius: 5, background: C2.soft, color: C2.sub } }, h3(Glyph, { name: "bot", size: 12 }));
+  const iconFor = (agent) => AGENT_ICONS[agent.icon] ? h3("img", { src: AGENT_ICONS[agent.icon], alt: "", "aria-hidden": true, style: { width: 18, height: 18, flex: "0 0 auto", objectFit: "contain" } }) : h3("span", { style: { width: 18, height: 18, flex: "0 0 auto", display: "grid", placeItems: "center", borderRadius: 5, background: C2.soft, color: C2.sub } }, h3(Glyph, { name: "bot", size: 12 }));
   const statusBadge = (agent, compact) => {
     const tone = agent.available ? { border: "rgba(22,163,74,.4)", bg: "rgba(22,163,74,.08)", color: C2.green } : { border: "rgba(180,35,24,.35)", bg: "rgba(180,35,24,.06)", color: C2.red };
     return h3(
@@ -177106,7 +177118,6 @@ function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose }
       { style: {
         display: "inline-flex",
         alignItems: "center",
-        gap: 4,
         height: 22,
         padding: compact ? "0 6px" : "0 8px",
         borderRadius: 6,
@@ -177116,28 +177127,7 @@ function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose }
         fontSize: 10.5,
         whiteSpace: "nowrap"
       } },
-      agent.available ? "\u53EF\u7528" : "\u672A\u5B89\u88C5",
-      h3("button", {
-        type: "button",
-        title: "\u91CD\u65B0\u68C0\u67E5",
-        "aria-label": "\u91CD\u65B0\u68C0\u67E5 " + agent.name,
-        onClick: (event) => {
-          event.stopPropagation();
-          void load(true, selectedId);
-        },
-        style: {
-          width: 14,
-          height: 14,
-          display: "grid",
-          placeItems: "center",
-          border: 0,
-          borderRadius: 3,
-          padding: 0,
-          background: "transparent",
-          color: "inherit",
-          cursor: "pointer"
-        }
-      }, h3(Glyph, { name: "refresh", size: 10 }))
+      agent.available ? "\u53EF\u7528" : "\u672A\u5B89\u88C5"
     );
   };
   const switchControl = (checked, onChange, label) => h3("button", {
@@ -177162,23 +177152,6 @@ function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose }
       transition: "background 140ms ease"
     }
   }, h3("span", { style: { width: 14, height: 14, borderRadius: 7, background: "#fff", boxShadow: "0 1px 2px rgba(16,24,40,.2)" } }));
-  const settingCard = (title, description, control) => h3(
-    "div",
-    {
-      style: { border: "1px solid " + C2.line, borderRadius: 9, background: C2.panel || C2.bg, padding: 11, display: "grid", gap: 7 }
-    },
-    h3(
-      "div",
-      { style: { display: "flex", alignItems: "center", gap: 8 } },
-      h3(
-        "div",
-        { style: { minWidth: 0 } },
-        h3("div", { style: { fontSize: 12, fontWeight: 500 } }, title),
-        description ? h3("div", { style: { fontSize: 10.5, color: C2.mute, marginTop: 1 } }, description) : null
-      ),
-      control ? h3("span", { style: { marginLeft: "auto" } }, control) : null
-    )
-  );
   const row = (agent) => h3(
     "button",
     {
@@ -177191,8 +177164,8 @@ function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose }
         alignItems: "center",
         gap: 8,
         width: "100%",
-        minHeight: 42,
-        padding: "5px 8px",
+        minHeight: 40,
+        padding: "4px 8px",
         borderRadius: 8,
         border: 0,
         cursor: "pointer",
@@ -177205,21 +177178,12 @@ function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose }
     h3(
       "span",
       { style: { minWidth: 0, display: "grid", gap: 1 } },
-      h3(
-        "span",
-        { style: { display: "flex", alignItems: "center", gap: 6, minWidth: 0 } },
-        h3("span", { style: { fontSize: 12.5, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, agent.name),
-        agent.enabled !== false && agent.available ? h3("span", { style: { width: 6, height: 6, borderRadius: 3, background: C2.green, flex: "0 0 auto" } }) : null
-      ),
-      h3(
-        "span",
-        { style: { fontSize: 10, color: C2.mute, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
-        (agent.version || "\u7248\u672C\u672A\u77E5") + " \xB7 " + sourceLabel(agent.source)
-      )
+      h3("span", { style: { fontSize: 12.5, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, agent.name),
+      agent.version ? h3("span", { style: { fontSize: 10, color: C2.mute, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, agent.version) : null
     ),
     h3("span", { style: { marginLeft: "auto", flex: "0 0 auto" } }, statusBadge(agent, true))
   );
-  const rowCard = (title, description, control) => h3(
+  const rowCard = (title, control) => h3(
     "div",
     {
       style: {
@@ -177232,36 +177196,38 @@ function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose }
         gap: 12
       }
     },
-    h3(
-      "div",
-      { style: { minWidth: 140, flex: "1 1 auto" } },
-      h3("div", { style: { fontSize: 12.5, fontWeight: 500 } }, title),
-      description ? h3("div", { style: { fontSize: 10.5, color: C2.mute, marginTop: 2, lineHeight: 1.45 } }, description) : null
-    ),
-    h3("div", { style: { flex: "0 0 52%", maxWidth: 440, minWidth: 0, display: "flex", justifyContent: "flex-end" } }, control)
+    h3("div", { style: { minWidth: 100, flex: "1 1 auto", fontSize: 12.5, fontWeight: 500 } }, title),
+    h3("div", { style: { flex: "0 0 55%", maxWidth: 440, minWidth: 0, display: "flex", justifyContent: "flex-end" } }, control)
   );
+  const installable = selected && !selected.available && selected.install && selected.install.kind === "npm";
   const detail = selected && draft ? h3(
     "div",
     { style: { display: "flex", flexDirection: "column", minHeight: 0, height: "100%" } },
     h3(
       "div",
-      { style: { display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", borderBottom: "1px solid " + C2.line } },
+      { style: { display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderBottom: "1px solid " + C2.line } },
       h3("span", { style: { width: 26, display: "grid", placeItems: "center" } }, iconFor(selected)),
       h3(
         "div",
         { style: { minWidth: 0 } },
         h3("div", { style: { fontSize: 14, fontWeight: 600 } }, selected.name),
-        h3(
-          "div",
-          { style: { fontSize: 10.5, color: C2.mute, marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
-          (selected.version || "\u7248\u672C\u672A\u77E5") + " \xB7 " + sourceLabel(selected.source) + " \xB7 " + (selected.transports || []).map(transportLabel).join(" / ")
-        )
+        selected.version ? h3("div", { style: { fontSize: 10.5, color: C2.mute, marginTop: 1 } }, selected.version) : null
       ),
       h3(
         "span",
         { style: { marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 } },
+        installable ? h3(
+          "button",
+          {
+            type: "button",
+            disabled: installing === selected.id,
+            onClick: () => void install(selected),
+            style: { ...primary, opacity: installing === selected.id ? 0.5 : 1 }
+          },
+          installing === selected.id ? "\u5B89\u88C5\u4E2D\u2026" : "\u5B89\u88C5"
+        ) : null,
         statusBadge(selected, false),
-        switchControl(draft.enabled, (value) => setDraft({ ...draft, enabled: value }), "\u542F\u7528 " + selected.name)
+        selected.available ? switchControl(draft.enabled, (value) => setDraft({ ...draft, enabled: value }), "\u542F\u7528 " + selected.name) : null
       )
     ),
     h3(
@@ -177269,67 +177235,21 @@ function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose }
       { className: "tether-scroll", style: { flex: "1 1 auto", minHeight: 0, overflow: "auto", padding: "12px 14px 14px", display: "grid", gap: 8, alignContent: "start" } },
       rowCard(
         "\u547D\u4EE4 / \u53EF\u6267\u884C\u6587\u4EF6",
-        "\u542F\u52A8\u8BE5 Agent \u7684\u7A0B\u5E8F\uFF1B\u53EF\u5199 PATH \u4E2D\u7684\u547D\u4EE4\u6216\u7EDD\u5BF9\u8DEF\u5F84",
         h3("input", {
           value: draft.command,
           onChange: (event) => setDraft({ ...draft, command: event.target.value }),
-          placeholder: "codex \u6216 C:pathagent.exe",
+          placeholder: "",
           style: { ...field, width: "100%", fontFamily: "Consolas, monospace" }
         })
       ),
       rowCard(
         "\u542F\u52A8\u53C2\u6570",
-        "\u7A7A\u683C\u5206\u9694\uFF0C\u4F8B\u5982 --acp",
         h3("input", {
           value: draft.argsText,
           onChange: (event) => setDraft({ ...draft, argsText: event.target.value }),
           placeholder: "--acp",
           style: { ...field, width: "100%", fontFamily: "Consolas, monospace" }
         })
-      ),
-      rowCard(
-        "\u63A5\u5165\u65B9\u5F0F",
-        "\u51B3\u5B9A Tether \u4F7F\u7528\u54EA\u6761\u901A\u9053\u6E32\u67D3\u8FD9\u4E2A Agent",
-        h3(
-          "div",
-          { style: { display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" } },
-          kinds.map(([value, label]) => h3("button", {
-            key: value,
-            type: "button",
-            onClick: () => setDraft({ ...draft, kind: value }),
-            style: {
-              height: 27,
-              padding: "0 10px",
-              borderRadius: 6,
-              fontSize: 11.5,
-              cursor: "pointer",
-              border: "1px solid " + (draft.kind === value ? C2.blue : C2.line),
-              background: draft.kind === value ? C2.blue : C2.bg,
-              color: draft.kind === value ? "#fff" : C2.sub
-            }
-          }, label))
-        )
-      ),
-      rowCard(
-        "\u56FE\u6807\u989C\u8272",
-        "\u4EC5\u7528\u4E8E\u76EE\u5F55\u4E2D\u7684\u8BC6\u522B\u8272",
-        h3(
-          "div",
-          { style: { display: "flex", gap: 7, justifyContent: "flex-end" } },
-          colors.map((color) => h3("button", {
-            key: color,
-            type: "button",
-            onClick: () => setDraft({ ...draft, color }),
-            style: {
-              width: 24,
-              height: 24,
-              borderRadius: 7,
-              cursor: "pointer",
-              background: color,
-              border: draft.color === color ? "2px solid " + C2.ink : "2px solid transparent"
-            }
-          }))
-        )
       ),
       error ? h3("div", { style: { color: C2.red, fontSize: 11.5 } }, error) : null
     ),
@@ -177352,7 +177272,7 @@ function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose }
         busy ? "\u4FDD\u5B58\u4E2D\u2026" : "\u4FDD\u5B58"
       )
     )
-  ) : h3("div", { style: { margin: "auto", color: C2.mute, fontSize: 12 } }, "\u9009\u62E9\u5DE6\u4FA7\u7684 Agent \u67E5\u770B\u914D\u7F6E");
+  ) : h3("div", { style: { margin: "auto", color: C2.mute, fontSize: 12 } }, "\u9009\u62E9\u5DE6\u4FA7\u7684 Agent");
   const modal = editor2 ? h3(
     "div",
     {
@@ -177364,7 +177284,7 @@ function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose }
     h3(
       "form",
       { onSubmit: saveAdd, style: {
-        width: 540,
+        width: 520,
         maxWidth: "calc(100vw - 32px)",
         maxHeight: "calc(100vh - 80px)",
         overflow: "auto",
@@ -177375,12 +177295,7 @@ function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose }
         display: "grid",
         gap: 12
       } },
-      h3(
-        "div",
-        null,
-        h3("div", { style: { fontSize: 15, fontWeight: 600 } }, "\u6DFB\u52A0\u81EA\u5B9A\u4E49 Agent"),
-        h3("div", { style: { fontSize: 11, color: C2.mute, marginTop: 2 } }, "\u767B\u8BB0\u672A\u81EA\u52A8\u53D1\u73B0\u7684 Agent\uFF1B\u4FDD\u5B58\u540E\u4F1A\u51FA\u73B0\u5728\u5DE6\u4FA7\u5217\u8868\u3002")
-      ),
+      h3("div", { style: { fontSize: 15, fontWeight: 600 } }, "\u6DFB\u52A0 Agent"),
       h3(
         "label",
         { style: { display: "grid", gap: 4, fontSize: 11.5, color: C2.sub } },
@@ -177389,55 +177304,31 @@ function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose }
           value: editor2.name,
           autoFocus: true,
           onChange: (event) => setEditor({ ...editor2, name: event.target.value }),
-          placeholder: "\u4F8B\u5982 Codex",
+          placeholder: "Codex",
           style: { ...field, height: 32, fontSize: 13 }
         })
       ),
       h3(
         "label",
         { style: { display: "grid", gap: 4, fontSize: 11.5, color: C2.sub } },
-        "\u547D\u4EE4 / \u53EF\u6267\u884C\u6587\u4EF6",
+        "\u547D\u4EE4",
         h3("input", {
           value: editor2.command,
           onChange: (event) => setEditor({ ...editor2, command: event.target.value }),
-          placeholder: "codex \u6216 C:\\path\\agent.exe",
+          placeholder: "codex",
           style: { ...field, height: 32, fontSize: 13, fontFamily: "Consolas, monospace" }
         })
       ),
       h3(
         "label",
         { style: { display: "grid", gap: 4, fontSize: 11.5, color: C2.sub } },
-        "\u542F\u52A8\u53C2\u6570\uFF08\u7A7A\u683C\u5206\u9694\uFF0C\u53EF\u9009\uFF09",
+        "\u53C2\u6570",
         h3("input", {
           value: editor2.argsText,
           onChange: (event) => setEditor({ ...editor2, argsText: event.target.value }),
           placeholder: "--acp",
           style: { ...field, height: 32, fontSize: 12, fontFamily: "Consolas, monospace" }
         })
-      ),
-      h3(
-        "div",
-        { style: { display: "grid", gap: 4, fontSize: 11.5, color: C2.sub } },
-        "\u63A5\u5165\u65B9\u5F0F",
-        h3(
-          "div",
-          { style: { display: "flex", gap: 6, flexWrap: "wrap" } },
-          kinds.map(([value, label]) => h3("button", {
-            key: value,
-            type: "button",
-            onClick: () => setEditor({ ...editor2, kind: value }),
-            style: {
-              height: 28,
-              padding: "0 11px",
-              borderRadius: 7,
-              fontSize: 11.5,
-              cursor: "pointer",
-              border: "1px solid " + (editor2.kind === value ? C2.blue : C2.line),
-              background: editor2.kind === value ? C2.blue : C2.bg,
-              color: editor2.kind === value ? "#fff" : C2.sub
-            }
-          }, label))
-        )
       ),
       h3(
         "div",
@@ -177456,7 +177347,7 @@ function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose }
     { style: { flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column", padding: 12, gap: 10, background: C2.bg } },
     h3(
       "div",
-      { style: { display: "flex", alignItems: "flex-start", gap: 10, flex: "0 0 auto" } },
+      { style: { display: "flex", alignItems: "center", gap: 8, flex: "0 0 auto" } },
       h3("button", {
         type: "button",
         title: "\u8FD4\u56DE",
@@ -177464,17 +177355,14 @@ function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose }
         onClick: onClose,
         style: { ...field, width: 28, padding: 0, display: "grid", placeItems: "center", cursor: "pointer" }
       }, h3(Glyph, { name: "chevronLeft", size: 14 })),
-      h3(
-        "div",
-        null,
-        h3("div", { style: { fontSize: 16, fontWeight: 600 } }, "Agents"),
-        h3("div", { style: { fontSize: 11, color: C2.mute, marginTop: 2 } }, device + " \xB7 \u81EA\u52A8\u53D1\u73B0 + \u624B\u52A8\u767B\u8BB0\uFF1BDSH \u662F\u9ED8\u8BA4\u5DE5\u4F5C\u53F0\uFF0C\u5176\u4ED6 Agent \u6309\u9700\u63A5\u5165")
-      ),
-      h3("span", { style: { marginLeft: "auto", fontSize: 11, color: C2.mute } }, agents.filter((item) => item.available).length + " \u4E2A\u53EF\u7528"),
+      h3("div", { style: { fontSize: 16, fontWeight: 600 } }, "Agent \u76EE\u5F55"),
+      h3("span", { style: { marginLeft: "auto" } }),
       h3(
         "button",
         {
           type: "button",
+          title: "\u5237\u65B0",
+          "aria-label": "\u5237\u65B0",
           onClick: () => void load(true, selectedId),
           disabled: busy,
           style: { ...field, display: "flex", alignItems: "center", gap: 5, cursor: "pointer", opacity: busy ? 0.5 : 1 }
@@ -177495,7 +177383,6 @@ function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose }
       h3(
         "div",
         { style: { minHeight: 0, minWidth: 0, border: "1px solid " + C2.line, borderRadius: 10, background: C2.panel || C2.bg, display: "flex", flexDirection: "column", overflow: "hidden" } },
-        h3("div", { style: { padding: "8px 11px", borderBottom: "1px solid " + C2.line, fontSize: 11.5, fontWeight: 500, color: C2.sub } }, "Agent \u5217\u8868"),
         h3(
           "div",
           { className: "tether-scroll", style: { flex: "1 1 auto", minHeight: 0, overflow: "auto", padding: 7, display: "flex", flexDirection: "column", gap: 2 } },
@@ -177608,19 +177495,11 @@ function AgentHome({
         h3("span", { style: { fontSize: 13.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, agent.name),
         h3("span", { title: "\u53EF\u7528", style: { width: 6, height: 6, borderRadius: 3, background: C2.green || "#16a34a", flex: "0 0 auto" } })
       ),
-      h3(
+      agent.version ? h3(
         "span",
         { style: { fontSize: 10.5, color: C2.mute, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
-        (agent.version || "\u7248\u672C\u672A\u77E5") + " \xB7 " + (agent.source === "service" ? "\u672C\u673A\u670D\u52A1" : agent.source === "manual" ? "\u624B\u52A8\u767B\u8BB0" : "\u81EA\u52A8\u53D1\u73B0")
-      ),
-      h3(
-        "span",
-        { style: { display: "flex", gap: 4, flexWrap: "wrap", marginTop: 2 } },
-        ...(agent.transports || []).map((value) => h3("span", {
-          key: value,
-          style: { padding: "1px 6px", borderRadius: 999, background: C2.soft, color: C2.sub, fontSize: 10 }
-        }, { web: "Web", workbench: "\u5DE5\u4F5C\u53F0", terminal: "\u7EC8\u7AEF", acp: "ACP", "app-server": "App Server" }[value] || value))
-      )
+        agent.version
+      ) : null
     )
   );
   const missingRow = (agent) => h3(
@@ -177643,9 +177522,9 @@ function AgentHome({
       "span",
       { style: { minWidth: 0, flex: "1 1 auto", display: "grid", gap: 1 } },
       h3("span", { style: { fontSize: 12.5, color: C2.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, agent.name),
-      h3("span", { style: { fontSize: 10, color: C2.mute } }, agent.install && agent.install.kind === "npm" ? "npm \u5B89\u88C5\u5230 " + (catalog && catalog.home || "Agent Home") : "\u9700\u5B98\u65B9\u5B89\u88C5\u5668")
+      agent.version ? h3("span", { style: { fontSize: 10, color: C2.mute } }, agent.version) : null
     ),
-    h3("button", {
+    agent.install && agent.install.kind === "npm" ? h3("button", {
       type: "button",
       disabled: installing === agent.id,
       onClick: () => onInstall && onInstall(agent),
@@ -177658,7 +177537,7 @@ function AgentHome({
         flex: "0 0 auto",
         background: "transparent"
       }
-    }, installing === agent.id ? "\u5B89\u88C5\u4E2D\u2026" : "\u5B89\u88C5")
+    }, installing === agent.id ? "\u5B89\u88C5\u4E2D\u2026" : "\u5B89\u88C5") : null
   );
   const closeMenu = () => setMenu(null);
   return h3(
@@ -177668,7 +177547,6 @@ function AgentHome({
       "div",
       { style: { display: "flex", alignItems: "center", gap: 8, flex: "0 0 auto", flexWrap: "wrap" } },
       h3("span", { style: { fontSize: 14, fontWeight: 600, color: C2.ink } }, "\u672C\u673A Agent"),
-      h3("span", { style: { fontSize: 11, color: C2.mute } }, installed.length + " \u53EF\u7528 \xB7 " + missing.length + " \u672A\u5B89\u88C5"),
       h3("input", {
         value: query,
         onChange: (event) => setQuery(event.target.value),
@@ -177692,7 +177570,7 @@ function AgentHome({
       missing.filter(match2).length ? h3(
         "div",
         { style: { display: "grid", gap: 8, marginTop: 4 } },
-        h3("div", { style: { fontSize: 11.5, color: C2.mute, marginTop: 4 } }, "\u672A\u5B89\u88C5"),
+        h3("div", { style: { fontSize: 11.5, color: C2.mute } }, "\u672A\u5B89\u88C5"),
         h3(
           "div",
           { style: { display: "grid", gap: 6, gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))" } },
@@ -177782,6 +177660,7 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
   const [catalogBusy, setCatalogBusy] = React2.useState(false);
   const [catalogError, setCatalogError] = React2.useState("");
   const [installing, setInstalling] = React2.useState("");
+  const [herdrAvailable, setHerdrAvailable] = React2.useState(true);
   const [panes, setPanes] = React2.useState([]);
   const [activePane, setActivePane] = React2.useState("");
   const [workspaceOpen, setWorkspaceOpen] = React2.useState(false);
@@ -177864,14 +177743,22 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
     setCatalogBusy(true);
     setCatalogError("");
     try {
-      const result = await post(
-        "/api/devices/" + encodeURIComponent(device) + "/fs/agents_catalog",
-        { fresh: force === true }
-      );
+      let result = null;
+      try {
+        result = await post(
+          "/api/devices/" + encodeURIComponent(device) + "/fs/agents_catalog",
+          { fresh: force === true }
+        );
+      } catch (_2) {
+        await new Promise((resolve3) => setTimeout(resolve3, 400));
+        result = await post(
+          "/api/devices/" + encodeURIComponent(device) + "/fs/agents_catalog",
+          { fresh: false }
+        );
+      }
       setCatalog(result || null);
     } catch (error) {
-      setCatalog(null);
-      setCatalogError(String(error && (error.message || error.code) || "\u8BFB\u53D6 Agent \u76EE\u5F55\u5931\u8D25"));
+      setCatalogError(String(error && (error.message || error.code) || "\u8BFB\u53D6\u5931\u8D25"));
     } finally {
       setCatalogBusy(false);
     }
@@ -177881,6 +177768,20 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
   }, [device]);
   React2.useEffect(() => {
     void loadCatalog(false);
+  }, [device]);
+  React2.useEffect(() => {
+    let cancelled = false;
+    if (!device) return void 0;
+    void post("/api/devices/" + encodeURIComponent(device) + "/fs/terminal_shells", {}).then((result) => {
+      if (cancelled) return;
+      const list2 = result && Array.isArray(result.shells) ? result.shells : [];
+      setHerdrAvailable(list2.some((item) => item.id === "herdr" && item.available));
+    }).catch(() => {
+      if (!cancelled) setHerdrAvailable(false);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [device]);
   React2.useEffect(() => {
     if (!modelOpen) return void 0;
@@ -178143,6 +178044,10 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
     });
   };
   const openHerdr = () => {
+    if (!herdrAvailable) {
+      fail2(new Error("\u6B64\u8282\u70B9\u6CA1\u6709 Herdr"));
+      return;
+    }
     addPane({ key: "herdr", kind: "terminal", shell: "herdr", title: "Herdr", icon: "bot", dark: true });
   };
   const openWeb = async (agent2) => {
@@ -178325,146 +178230,128 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
       onClose: () => setCatalogOpen(false)
     });
   }
+  const headerRow = h3(
+    "div",
+    { style: { display: "flex", alignItems: "center", gap: 8, flex: "0 0 auto" } },
+    h3(
+      "div",
+      { style: { position: "relative" } },
+      h3(
+        "button",
+        {
+          type: "button",
+          title: "\u9009\u62E9\u76EE\u6807\u8BBE\u5907",
+          "aria-label": "Agent \u76EE\u6807\u8BBE\u5907",
+          "aria-haspopup": "listbox",
+          "aria-expanded": deviceMenu,
+          onClick: () => setDeviceMenu((value) => !value),
+          className: "tether-hover tether-press",
+          style: { ...field, minWidth: 180, display: "flex", alignItems: "center", gap: 6, cursor: "pointer", textAlign: "left" }
+        },
+        h3(
+          "span",
+          { style: { flex: "1 1 auto", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
+          (online.find((item) => item.device_id === device) || {}).name || device || "\u6CA1\u6709\u5728\u7EBF\u8BBE\u5907"
+        ),
+        h3(Glyph, { name: "chevronDown", size: 12 })
+      ),
+      deviceMenu ? h3("div", {
+        onPointerDown: (event) => {
+          event.preventDefault();
+          setDeviceMenu(false);
+        },
+        style: { position: "fixed", inset: 0, zIndex: 70, background: "transparent" }
+      }) : null,
+      deviceMenu ? h3(
+        "div",
+        { role: "listbox", style: {
+          position: "absolute",
+          top: 32,
+          left: 0,
+          minWidth: 200,
+          maxHeight: 300,
+          overflow: "auto",
+          zIndex: 80,
+          background: C2.layer1,
+          borderRadius: 9,
+          boxShadow: C2.shadow,
+          padding: 4
+        } },
+        online.length ? online.map((item) => h3("button", {
+          key: item.device_id,
+          type: "button",
+          role: "option",
+          "aria-selected": item.device_id === device,
+          onClick: () => {
+            setDeviceMenu(false);
+            void selectDevice(item.device_id);
+          },
+          className: "tether-hover",
+          style: {
+            display: "flex",
+            width: "100%",
+            alignItems: "center",
+            gap: 8,
+            height: 32,
+            padding: "0 8px",
+            border: 0,
+            borderRadius: 6,
+            background: item.device_id === device ? C2.soft : "transparent",
+            color: C2.ink,
+            fontSize: 12.5,
+            textAlign: "left",
+            cursor: "pointer"
+          }
+        }, item.name || item.device_id)) : h3("div", { style: { padding: "8px 10px", fontSize: 12, color: C2.mute } }, "\u6CA1\u6709\u5728\u7EBF\u8BBE\u5907")
+      ) : null
+    ),
+    h3("button", {
+      type: "button",
+      onClick: () => {
+        void detect(device);
+        void loadCatalog(true);
+      },
+      disabled: detecting || !device,
+      title: "\u5237\u65B0",
+      "aria-label": "\u5237\u65B0",
+      style: { ...field, padding: "0 9px", opacity: detecting || !device ? 0.5 : 1 }
+    }, detecting ? "\u2026" : "\u5237\u65B0"),
+    session ? h3("button", {
+      type: "button",
+      onClick: () => void stop(),
+      style: { ...field, cursor: "pointer", background: "transparent" }
+    }, "\u505C\u6B62") : null,
+    herdrAvailable ? h3("button", {
+      type: "button",
+      title: "Herdr",
+      "aria-label": "Herdr \u5DE5\u4F5C\u533A",
+      onClick: openHerdr,
+      style: { ...field, display: "flex", alignItems: "center", gap: 5, cursor: "pointer" }
+    }, h3(Glyph, { name: "terminal", size: 13 }), "Herdr") : null,
+    panes.length ? h3("button", {
+      type: "button",
+      title: "\u5DE5\u4F5C\u533A",
+      "aria-label": "\u5DE5\u4F5C\u533A",
+      onClick: () => {
+        setWorkspaceOpen(true);
+        setActivePane((current) => current || (panes[0] || {}).key || "");
+      },
+      style: { ...field, display: "flex", alignItems: "center", gap: 5, cursor: "pointer" }
+    }, "\u5DE5\u4F5C\u533A " + panes.length) : null,
+    h3("button", {
+      type: "button",
+      title: "Agent \u76EE\u5F55",
+      "aria-label": "Agent \u76EE\u5F55",
+      onClick: () => setCatalogOpen(true),
+      style: { ...field, display: "flex", alignItems: "center", gap: 5, cursor: "pointer" }
+    }, h3(Glyph, { name: "apps", size: 13 }), "\u76EE\u5F55")
+  );
   const baseContent = h3(
     "div",
     {
       key: "base",
-      style: { flex: "1 1 auto", minHeight: 0, display: workspaceOpen ? "none" : "flex", flexDirection: "column", gap: 8, padding: 10, background: C2.bg }
+      style: { flex: "1 1 auto", minHeight: 0, display: workspaceOpen ? "none" : "flex", flexDirection: "column", gap: 8 }
     },
-    h3(
-      "div",
-      { style: { display: "flex", alignItems: "center", gap: 8, flex: "0 0 auto" } },
-      h3(
-        "div",
-        { style: { position: "relative" } },
-        h3(
-          "button",
-          {
-            type: "button",
-            title: "\u9009\u62E9\u8981\u8FD0\u884C Agent \u7684\u7535\u8111",
-            "aria-label": "Agent \u76EE\u6807\u8BBE\u5907",
-            "aria-haspopup": "listbox",
-            "aria-expanded": deviceMenu,
-            onClick: () => setDeviceMenu((value) => !value),
-            className: "tether-hover tether-press",
-            style: { ...field, minWidth: 180, display: "flex", alignItems: "center", gap: 6, cursor: "pointer", textAlign: "left" }
-          },
-          h3(
-            "span",
-            { style: { flex: "1 1 auto", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
-            (online.find((item) => item.device_id === device) || {}).name || device || "\u6CA1\u6709\u5728\u7EBF\u8BBE\u5907"
-          ),
-          h3(Glyph, { name: "chevronDown", size: 12 })
-        ),
-        deviceMenu ? h3("div", {
-          onPointerDown: (event) => {
-            event.preventDefault();
-            setDeviceMenu(false);
-          },
-          style: { position: "fixed", inset: 0, zIndex: 70, background: "transparent" }
-        }) : null,
-        deviceMenu ? h3(
-          "div",
-          { role: "listbox", style: {
-            position: "absolute",
-            top: 32,
-            left: 0,
-            minWidth: 200,
-            maxHeight: 300,
-            overflow: "auto",
-            zIndex: 80,
-            background: C2.layer1,
-            borderRadius: 9,
-            boxShadow: C2.shadow,
-            padding: 4
-          } },
-          online.length ? online.map((item) => h3("button", {
-            key: item.device_id,
-            type: "button",
-            role: "option",
-            "aria-selected": item.device_id === device,
-            onClick: () => {
-              setDeviceMenu(false);
-              void selectDevice(item.device_id);
-            },
-            className: "tether-hover",
-            style: {
-              display: "flex",
-              width: "100%",
-              alignItems: "center",
-              gap: 8,
-              height: 32,
-              padding: "0 8px",
-              border: 0,
-              borderRadius: 6,
-              background: item.device_id === device ? C2.soft : "transparent",
-              color: C2.ink,
-              fontSize: 12.5,
-              textAlign: "left",
-              cursor: "pointer"
-            }
-          }, item.name || item.device_id)) : h3("div", { style: { padding: "8px 10px", fontSize: 12, color: C2.mute } }, "\u6CA1\u6709\u5728\u7EBF\u8BBE\u5907")
-        ) : null
-      ),
-      h3("button", {
-        type: "button",
-        onClick: () => void detect(device),
-        disabled: detecting || !device,
-        style: { ...button, padding: "0 10px", opacity: detecting || !device ? 0.5 : 1 }
-      }, detecting ? "\u68C0\u6D4B\u4E2D\u2026" : "\u5237\u65B0"),
-      h3("button", {
-        type: "button",
-        disabled: !session,
-        onClick: () => void stop(),
-        style: { ...field, cursor: session ? "pointer" : "default", opacity: session ? 1 : 0.5, background: "transparent" }
-      }, "\u505C\u6B62"),
-      h3("button", {
-        type: "button",
-        title: "Herdr \u5DE5\u4F5C\u533A",
-        "aria-label": "Herdr \u5DE5\u4F5C\u533A",
-        onClick: openHerdr,
-        style: { ...field, display: "flex", alignItems: "center", gap: 5, cursor: "pointer" }
-      }, h3(Glyph, { name: "terminal", size: 13 }), "Herdr"),
-      panes.length ? h3("button", {
-        type: "button",
-        title: "\u6253\u5F00\u591A\u7EC8\u7AEF\u5DE5\u4F5C\u533A",
-        "aria-label": "\u5DE5\u4F5C\u533A",
-        onClick: () => {
-          setWorkspaceOpen(true);
-          setActivePane((current) => current || (panes[0] || {}).key || "");
-        },
-        style: { ...field, display: "flex", alignItems: "center", gap: 5, cursor: "pointer" }
-      }, "\u5DE5\u4F5C\u533A " + panes.length) : null,
-      h3("button", {
-        type: "button",
-        title: "Agent \u76EE\u5F55",
-        "aria-label": "Agent \u76EE\u5F55",
-        onClick: () => setCatalogOpen(true),
-        style: { ...field, display: "flex", alignItems: "center", gap: 5, cursor: "pointer" }
-      }, h3(Glyph, { name: "apps", size: 13 }), "\u76EE\u5F55"),
-      h3(
-        "span",
-        { style: { marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: session ? C2.green : C2.mute } },
-        h3("span", { style: { width: 7, height: 7, borderRadius: 4, background: session ? C2.green : C2.mute } }),
-        session ? ready ? "\u5DF2\u5C31\u7EEA" : "\u542F\u52A8\u4E2D\u2026" : "\u672A\u8FDE\u63A5"
-      ),
-      session && agent ? h3(
-        "span",
-        { style: {
-          display: "flex",
-          alignItems: "center",
-          gap: 5,
-          padding: "0 8px",
-          height: 24,
-          borderRadius: 999,
-          background: C2.soft,
-          color: C2.ink,
-          fontSize: 11
-        } },
-        h3(Glyph, { name: "bot", size: 14 }),
-        h3("span", null, (agent.title || agent.name || "Agent") + (agent.version ? " " + agent.version : ""))
-      ) : null
-    ),
     tabs.length ? h3(
       "div",
       { style: { display: "flex", alignItems: "center", gap: 4, flex: "0 0 auto", overflowX: "auto" } },
@@ -178790,6 +178677,7 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
     initialShell: pane.shell || "",
     label: pane.title,
     themeMode: "dark",
+    fill: true,
     height: Math.max(420, (typeof window !== "undefined" ? window.innerHeight : 900) - 168),
     onClose: () => closePane(pane.key)
   });
@@ -178854,7 +178742,7 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
           }
         }, "\xD7")
       )),
-      h3("span", { style: { marginLeft: "auto", fontSize: 11, color: C2.mute, whiteSpace: "nowrap" } }, device)
+      h3("span", { style: { marginLeft: "auto" } })
     ),
     h3(
       "div",
@@ -178865,7 +178753,19 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
       }, paneBody(pane)))
     )
   ) : null;
-  return [baseContent, workspace];
+  return h3(
+    "div",
+    {
+      style: { flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column", gap: 8, padding: 10, background: C2.bg }
+    },
+    headerRow,
+    h3(
+      "div",
+      { style: { flex: "1 1 auto", minHeight: 0, position: "relative", display: "flex", flexDirection: "column" } },
+      baseContent,
+      workspace
+    )
+  );
 }
 
 // src/app.js

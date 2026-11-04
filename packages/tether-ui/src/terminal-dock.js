@@ -38,7 +38,7 @@ function isDarkTheme() {
   return !!(typeof document !== 'undefined' && document.body && document.body.hasAttribute('data-ds-dark-theme'))
 }
 
-export function createTerminalDock({ React, Glyph, post, C, device, cwd, height = 240, initialShell = '', initialAgent = '', label = '', themeMode = 'auto', onHeight, onClose }) {
+export function createTerminalDock({ React, Glyph, post, C, device, cwd, height = 240, initialShell = '', initialAgent = '', label = '', themeMode = 'auto', fill = false, onHeight, onClose }) {
   const h = React.createElement
   const runtime = typeof window !== 'undefined' ? window.TetherTerminalRuntime : null
   const [shells, setShells] = React.useState([])
@@ -383,7 +383,7 @@ export function createTerminalDock({ React, Glyph, post, C, device, cwd, height 
 
   return h('div', {
     style: {
-      flex: '0 0 auto', height, minHeight: 160, display: 'flex', flexDirection: 'column',
+      flex: fill ? '1 1 auto' : '0 0 auto', height: fill ? '100%' : height, minHeight: 0, display: 'flex', flexDirection: 'column',
       position: 'relative', overflow: 'hidden', borderRadius: '8px 8px 0 0',
       background: palette.term, boxShadow: 'inset 0 1px 0 ' + palette.line
     }

@@ -14,13 +14,14 @@ import shutil
 import subprocess
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
 from .acp import resolve_executable
 
 NO_WINDOW = 0x08000000
-VERSION_TIMEOUT = 4.0
+VERSION_TIMEOUT = 1.5
 CACHE_TTL = 30.0
 INSTALL_TIMEOUT = 600.0
 KINDS = ("app-server", "acp", "web", "cli")
@@ -179,7 +180,7 @@ class AgentRegistry:
                     "transports": list(spec["transports"]), "available": True,
                     "install": self._install_info(spec),
                 }
-                record["version"] = self._version(path)
+                record["version"] = ""
                 return record
         return None
 
@@ -205,7 +206,7 @@ class AgentRegistry:
             "transports": transports,
             "available": bool(resolved and (Path(resolved).is_file() if Path(resolved).is_absolute() else resolve_executable(resolved))),
         }
-        record["version"] = self._version(resolved) if record["available"] else ""
+        record["version"] = ""
         return record
 
     def catalog(self, force: bool = False) -> dict[str, Any]:
@@ -239,6 +240,13 @@ class AgentRegistry:
                 if agent_id in seen or not isinstance(entry, dict):
                     continue
                 records.append(self._manual_record(agent_id, entry))
+            targets = [item for item in records if item.get("available") and item.get("command")]
+            if targets:
+                with ThreadPoolExecutor(max_workers=min(8, len(targets))) as pool:
+                    versions = list(pool.map(lambda item: self._version(str(item["command"])), targets))
+                for item, version in zip(targets, versions):
+                    item["version"] = "" if ("requires an explicit DSH_HOME" in version
+                                              or version.lower().startswith("error")) else version
             records.sort(key=lambda item: (not item["available"], item["name"].lower()))
             payload = {"agents": records, "path": str(self.path), "kinds": list(KINDS),
                        "colors": list(COLORS), "home": str(agent_home())}

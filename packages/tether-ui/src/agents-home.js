@@ -55,12 +55,8 @@ export function AgentHome({ React, Glyph, C, catalog, harnesses = [], loading = 
       h('span', { style: { display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 } },
         h('span', { style: { fontSize: 13.5, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, agent.name),
         h('span', { title: '可用', style: { width: 6, height: 6, borderRadius: 3, background: C.green || '#16a34a', flex: '0 0 auto' } })),
-      h('span', { style: { fontSize: 10.5, color: C.mute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
-        (agent.version || '版本未知') + ' · ' + (agent.source === 'service' ? '本机服务' : agent.source === 'manual' ? '手动登记' : '自动发现')),
-      h('span', { style: { display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 2 } },
-        ...(agent.transports || []).map((value) => h('span', {
-          key: value, style: { padding: '1px 6px', borderRadius: 999, background: C.soft, color: C.sub, fontSize: 10 }
-        }, ({ web: 'Web', workbench: '工作台', terminal: '终端', acp: 'ACP', 'app-server': 'App Server' })[value] || value)))))
+      agent.version ? h('span', { style: { fontSize: 10.5, color: C.mute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
+        agent.version) : null))
   const missingRow = (agent) => h('div', {
     key: agent.id,
     style: { display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', borderRadius: 9,
@@ -69,18 +65,18 @@ export function AgentHome({ React, Glyph, C, catalog, harnesses = [], loading = 
     icon(agent, 24),
     h('span', { style: { minWidth: 0, flex: '1 1 auto', display: 'grid', gap: 1 } },
       h('span', { style: { fontSize: 12.5, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, agent.name),
-      h('span', { style: { fontSize: 10, color: C.mute } }, (agent.install && agent.install.kind === 'npm') ? 'npm 安装到 ' + ((catalog && catalog.home) || 'Agent Home') : '需官方安装器')),
-    h('button', {
-      type: 'button', disabled: installing === agent.id,
-      onClick: () => onInstall && onInstall(agent),
-      style: { ...field, height: 24, padding: '0 9px', cursor: installing === agent.id ? 'default' : 'pointer',
-        opacity: installing === agent.id ? 0.5 : 1, flex: '0 0 auto', background: 'transparent' }
-    }, installing === agent.id ? '安装中…' : '安装'))
+      agent.version ? h('span', { style: { fontSize: 10, color: C.mute } }, agent.version) : null),
+    agent.install && agent.install.kind === 'npm'
+      ? h('button', {
+        type: 'button', disabled: installing === agent.id,
+        onClick: () => onInstall && onInstall(agent),
+        style: { ...field, height: 24, padding: '0 9px', cursor: installing === agent.id ? 'default' : 'pointer',
+          opacity: installing === agent.id ? 0.5 : 1, flex: '0 0 auto', background: 'transparent' }
+      }, installing === agent.id ? '安装中…' : '安装') : null)
   const closeMenu = () => setMenu(null)
   return h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', gap: 8 } },
     h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flex: '0 0 auto', flexWrap: 'wrap' } },
       h('span', { style: { fontSize: 14, fontWeight: 600, color: C.ink } }, '本机 Agent'),
-      h('span', { style: { fontSize: 11, color: C.mute } }, installed.length + ' 可用 · ' + missing.length + ' 未安装'),
       h('input', {
         value: query, onChange: (event) => setQuery(event.target.value), placeholder: '搜索 Agent',
         style: { ...field, marginLeft: 'auto', width: 180 }
@@ -91,7 +87,7 @@ export function AgentHome({ React, Glyph, C, catalog, harnesses = [], loading = 
         ...installed.filter(match).map(card)) : h('div', { style: { color: C.mute, fontSize: 12, padding: 8 } },
         loading ? '正在读取 Agent 目录…' : '这台电脑还没有可用的 Agent'),
       missing.filter(match).length ? h('div', { style: { display: 'grid', gap: 8, marginTop: 4 } },
-        h('div', { style: { fontSize: 11.5, color: C.mute, marginTop: 4 } }, '未安装'),
+        h('div', { style: { fontSize: 11.5, color: C.mute } }, '未安装'),
         h('div', { style: { display: 'grid', gap: 6, gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' } },
           ...missing.filter(match).map(missingRow))) : null),
     menu ? h('div', {

@@ -90,3 +90,4 @@
 - 2026-11-04：Agents 主页直接列目标节点目录：已装卡片点开按 `transports` 给“终端 / 原生 Web / DSH 工作台 / 结构化”，未装行给“安装”（npm 装到 `D:\Tether\agents`）。不要在页头放任何全局 Agent 按钮（例如 OpenCode）；每台机器有什么才显示什么。
 - 2026-11-04：多表面用标签页并存：每个 `terminal`/`web` 表面保持挂载，只切 `display`，关闭标签才卸载并 `terminal_stop`；Herdr 是其中一个 `shell=herdr` 标签，强制深色，不允许打开 Herdr 时把其它终端卸载。新增终端类型时给 `initialAgent`/`label`，启动走 `/fs/terminal_start {agent}`，不要在前端拼命令。
 - 2026-11-04：设备切换先清空 `catalog` 再请求，否则会短暂显示上一台机器的 Agent 列表；远程应用页与 Agents 页的设备选择都跟随全局设备 + 自绘下拉，不要再加原生 `<select>`。
+- 2026-11-04：Agents/目录不再写解释性文案：删掉字幕、来源、通道标签、计数、接入方式、图标颜色；列表只留名称+版本+可用/未安装。主页面板头必须常驻，工作区只在其下加标签栏；终端用 `fill` 铺满，不再固定高度留白。未装 npm Agent 在右侧给“安装”，system 类不给假按钮。

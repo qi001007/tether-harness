@@ -269,6 +269,8 @@
 
 - [x] F111 Agents 主页要按目标节点“有什么用什么”，并把 Codeg 的 Agent 生态补全；不能在每台机器上都放一个 OpenCode 按钮。判据：已装/未装分栏；点已装 Agent 按它支持的能力给出终端/原生 Web/工作台；Codex/Qoder 是原生 TUI；OpenCode 可选 Web 或 CLI；DSH 打开原生工作台；Herdr 自动启动且与 Codex 多标签并存；未装 Agent 安装默认落 D 盘。**实测 2026-11-04**：内置 21 个（Codeg 20 + DSH + Copilot），图标取自 Codeg；本机检测出 Codex 0.163.0、Qoder 1.1.81、OpenCode 1.19.5、DSH 0.2.1-rc.2；点 Codex 在 APP 内起原生 Codex TUI，点 Qoder 起原生 Qoder CLI，点 OpenCode 可选 `Web`/`CLI`，点 DSH 切到原生工作台。`npm install -g --prefix D:\Tether\agents opencode-ai` 实际落盘 766 MB，目录刷新后 OpenCode 1.19.5 变为可用；未装 17 个保留安装按钮。多表面：Codex TUI + OpenCode Web + OpenCode TUI + Herdr 四个标签并存，切回 Codex 屏幕内容仍在；Herdr 直接自动启动，深色原生界面。LAPTOP-01 同版本部署后 Codex TUI 与 OpenCode Web 均真机通过。**仍缺**：system 类 Agent（Cursor/Kiro/Trae 等）只给官网入口，未做二进制自动下载；Windows 安装体积未做清理策略。
 
+- [x] F112 Agents 页要简洁、可快速加载，并且已装/未装都有明确动作。判据：去掉解释性小字与来源/通道标签；目录只显示名称、版本、可用/未安装；未安装的 npm Agent 有安装按钮；扫描不阻塞；Herdr 进出一致、终端铺满高度。**实测 2026-11-04**：去掉页头说明、`N 个可用`、`自动发现/手动登记`、`接入方式`、`图标颜色`；目录加载改为并行版本探测（上限 1.5 s）+ 节点启动预扫描 + 30 s 缓存，本机缓存命中 0.45 s、强制扫描 1.6 s；未装 npm Agent 右侧出现“安装”。第二个包实测：Gemini `npm install --prefix D:\Tether\agents` 31.2 s，检测到 `D:\Tether\agents\gemini.cmd`，版本 0.66.0。Herdr 标签改为固定页头 + 内容区标签栏，终端 `fill` 铺满，不再因进入 Herdr 隐藏整条顶栏；本机验证 Codex → Herdr 切换时页头不动、Codex 会话仍在。**LAPTOP-01 回归未完成**：部署后重启，设备从 17:44 起离线，mesh ping 不通（疑似休眠/网络），需唤醒后重验 Herdr 原生界面与安装按钮。
+
 ## 验收边界
 
 离线测试、隔离 UI、单机 DSH、本机真实模型回答、干净安装、真实跨设备操作和公开发布分别记录，不能互相替代。未完成发布与实机验收前，保持对应条目未完成。
