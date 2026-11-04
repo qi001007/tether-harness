@@ -890,10 +890,10 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       return 'other'
     }
     const DEVICE_OS_THEME = {
-      windows: { color: '#2563eb', soft: 'rgba(37,99,235,.10)', label: 'Windows' },
-      linux: { color: '#d97706', soft: 'rgba(217,119,6,.12)', label: 'Linux' },
-      mac: { color: '#7c3aed', soft: 'rgba(124,58,237,.12)', label: 'macOS' },
-      other: { color: '#98a2b3', soft: 'rgba(152,162,179,.12)', label: '其他' }
+      windows: { color: '#2563eb', soft: '#e8f0fe', label: 'Windows' },
+      linux: { color: '#d97706', soft: '#fff4e5', label: 'Linux' },
+      mac: { color: '#7c3aed', soft: '#f4ecff', label: 'macOS' },
+      other: { color: '#98a2b3', soft: '#f2f4f7', label: '其他' }
     }
     function deviceOsTheme(device) { return DEVICE_OS_THEME[deviceOsKind(device)] || DEVICE_OS_THEME.other }
 
@@ -2161,9 +2161,8 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
               zIndex: isCenter ? 3 : 2, display: 'flex', alignItems: 'center', gap: 6,
               padding: isCenter ? '8px 12px' : '6px 9px', borderRadius: 999,
               background: isCenter ? C.ink : deviceOsTheme(item).soft,
-              border: isCenter ? 0 : '1px solid ' + deviceOsTheme(item).color,
               color: isCenter ? C.onPrimary : C.ink,
-              fontSize: isCenter ? 12 : 11, boxShadow: isCenter ? ('0 0 0 2px ' + deviceOsTheme(item).color + ', ' + C.shadow) : (selected ? '0 1px 3px rgba(16,24,40,0.12)' : '0 1px 2px rgba(16,24,40,0.06)'),
+              fontSize: isCenter ? 12 : 11, boxShadow: isCenter ? C.shadow : (selected ? '0 1px 3px rgba(16,24,40,0.12)' : '0 1px 2px rgba(16,24,40,0.06)'),
               transition: 'background-color 160ms ease',
               cursor: connectMode ? 'crosshair' : 'grab', whiteSpace: 'nowrap', opacity: item.online ? 1 : 0.55, userSelect: 'none',
               outline: connectFrom === node.id ? '2px solid ' + C.blue : 'none', outlineOffset: 2
@@ -6050,8 +6049,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           onContextMenu: (event) => openDeviceMenu(event, item),
           title: item.capabilities && item.capabilities.surface_protocol === 1 ? '双击打开原生工作区' : '插件版本过旧，双击查看详情',
           style: { background: item.device_id === deviceId ? C.soft : deviceOsTheme(item).soft, borderRadius: 10,
-            borderLeft: '3px solid ' + deviceOsTheme(item).color, padding: '10px 12px', cursor: 'pointer',
-            display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }
+            padding: '10px 12px', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }
         },
           h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 } },
             dot(item.online),

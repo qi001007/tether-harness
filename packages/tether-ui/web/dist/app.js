@@ -178484,10 +178484,10 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     return "other";
   }
   const DEVICE_OS_THEME = {
-    windows: { color: "#2563eb", soft: "rgba(37,99,235,.10)", label: "Windows" },
-    linux: { color: "#d97706", soft: "rgba(217,119,6,.12)", label: "Linux" },
-    mac: { color: "#7c3aed", soft: "rgba(124,58,237,.12)", label: "macOS" },
-    other: { color: "#98a2b3", soft: "rgba(152,162,179,.12)", label: "\u5176\u4ED6" }
+    windows: { color: "#2563eb", soft: "#e8f0fe", label: "Windows" },
+    linux: { color: "#d97706", soft: "#fff4e5", label: "Linux" },
+    mac: { color: "#7c3aed", soft: "#f4ecff", label: "macOS" },
+    other: { color: "#98a2b3", soft: "#f2f4f7", label: "\u5176\u4ED6" }
   };
   function deviceOsTheme(device) {
     return DEVICE_OS_THEME[deviceOsKind(device)] || DEVICE_OS_THEME.other;
@@ -180042,10 +180042,9 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
               padding: isCenter ? "8px 12px" : "6px 9px",
               borderRadius: 999,
               background: isCenter ? C2.ink : deviceOsTheme(item).soft,
-              border: isCenter ? 0 : "1px solid " + deviceOsTheme(item).color,
               color: isCenter ? C2.onPrimary : C2.ink,
               fontSize: isCenter ? 12 : 11,
-              boxShadow: isCenter ? "0 0 0 2px " + deviceOsTheme(item).color + ", " + C2.shadow : selected ? "0 1px 3px rgba(16,24,40,0.12)" : "0 1px 2px rgba(16,24,40,0.06)",
+              boxShadow: isCenter ? C2.shadow : selected ? "0 1px 3px rgba(16,24,40,0.12)" : "0 1px 2px rgba(16,24,40,0.06)",
               transition: "background-color 160ms ease",
               cursor: connectMode ? "crosshair" : "grab",
               whiteSpace: "nowrap",
@@ -184867,7 +184866,6 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           style: {
             background: item.device_id === deviceId ? C2.soft : deviceOsTheme(item).soft,
             borderRadius: 10,
-            borderLeft: "3px solid " + deviceOsTheme(item).color,
             padding: "10px 12px",
             cursor: "pointer",
             display: "flex",
