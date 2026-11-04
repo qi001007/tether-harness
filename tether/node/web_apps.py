@@ -27,7 +27,7 @@ class OpenCodeWeb:
         self.process: subprocess.Popen[bytes] | None = None
         self.external_pid = 0
         self.port = 0
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()
 
     def _binary(self) -> str:
         return resolve_executable("opencode")
@@ -154,15 +154,16 @@ class OpenCodeWeb:
             self._write_apps(data)
 
     def status(self) -> dict[str, Any]:
-        self._adopt()
-        running = self._is_running()
-        if not running:
-            self.process = None
-            self.external_pid = 0
-            self.port = 0
-            self._clear_state()
-            if self._has_entry():
-                self._unregister()
+        with self.lock:
+            self._adopt()
+            running = self._is_running()
+            if not running:
+                self.process = None
+                self.external_pid = 0
+                self.port = 0
+                self._clear_state()
+                if self._has_entry():
+                    self._unregister()
         return {"engine": "opencode", "available": bool(self._binary()), "installed": bool(self._binary()),
                 "running": running, "port": self.port if running else 0,
                 "url": "http://127.0.0.1:%d/" % self.port if running else ""}
