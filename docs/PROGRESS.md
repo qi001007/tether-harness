@@ -830,4 +830,5 @@
 - 安全：Node DirectApi 不再监听 `0.0.0.0`，只绑 `127.0.0.1` + EasyTier 地址；服务器与 Windows 本机均实测只剩两个监听。
 - 安装：`install.sh` 默认 latest；隔离前缀 `--install-only --archive` 安装最终 0.3.6 成功，`node.env` 600，随包 croc 与 `repair_plugin` 均在；GitHub 干净 runner 三平台安装/启动已通过（`41726702888`）。
 - 发布口径：`/install/version.json` 与服务器资产为 0.3.6；GitHub release 仍是 **draft** `433272811`，Hub `/releases/manifest` 仍是已签名的 0.3.5，所以 APP 内更新不会提供 0.3.6，直到所有者发布草稿并切换清单。
+- OpenCode 原生工作台：Node 用 `opencode serve` 起本机服务并注册到 mesh 网关；Agents 页一键打开原生 Web（LAPTOP-01 `4096 → 43075`、重启后再启 `4097 → 30667`，网关均 200）；停止会清空 `apps.json`，状态文件用于节点重启后接管。远程应用页跟随全局设备并改用自绘下拉。Node 能力尚未打进发布包。
 - 仍欠：GitHub 0.3.6 公开发布、DSH 自身 DeepSeek 登录/composer、干净 VM 全业务链、100 MB 10 s（需要国内中转或同网路径）。

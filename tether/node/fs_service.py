@@ -31,6 +31,7 @@ from typing import Any
 from .dsh_desktop import DshDesktop, DshError
 from .dsh_plugin import DshPluginError, install as install_dsh_plugin
 from .agent_registry import AgentRegistry
+from .web_apps import OpenCodeWeb
 try:
     from .dsh_web import DshWeb
 except Exception:  # an older install may not ship the optional Linux web module
@@ -495,6 +496,7 @@ class FsService:
         self.croc = None
         self._croc_context: dict[str, Any] = {}
         self.agents = AgentRegistry(data_dir)
+        self.opencode = OpenCodeWeb(data_dir, workspace)
 
     def _resolve(self, raw: str | None) -> Path:
         if not raw:
@@ -735,6 +737,45 @@ class FsService:
             return acp.dispatch(action, args)
         except ValueError as exc:
             raise FsError(str(exc), "acp_error") from None
+
+    def _opencode_surface(self, result: dict[str, Any]) -> dict[str, Any]:
+        if not result.get("running"):
+            return result
+        apps = getattr(self, "apps", None)
+        if apps is None:
+            return result
+        try:
+            listing = apps.list({})
+        except Exception:
+            return result
+        for item in listing.get("apps") or []:
+            if item.get("name") != "OpenCode":
+                continue
+            base = str(item.get("url") or "").rstrip("/")
+            path = str(item.get("path") or "/")
+            if base:
+                result["url"] = base + (path if path.startswith("/") else "/" + path)
+            break
+        return result
+
+    def _op_opencode_status(self, _args: dict[str, Any]) -> Any:
+        return self._opencode_surface(self.opencode.status())
+
+    def _op_opencode_start(self, _args: dict[str, Any]) -> Any:
+        try:
+            result = self.opencode.start()
+        except ValueError as exc:
+            raise FsError(str(exc), "opencode_error") from None
+        result = self._opencode_surface(result)
+        self.audit.add(op="opencode_start", path=str(self.opencode.workspace), mode=self.policy.data.get("mode"),
+                       phase="result", result="ok" if result.get("running") else "failed")
+        return result
+
+    def _op_opencode_stop(self, _args: dict[str, Any]) -> Any:
+        result = self.opencode.stop()
+        self.audit.add(op="opencode_stop", path=str(self.opencode.workspace), mode=self.policy.data.get("mode"),
+                       phase="result", result="ok")
+        return result
 
     def _op_agents_catalog(self, args: dict[str, Any]) -> Any:
         payload = self.agents.catalog(force=args.get("fresh") is True)

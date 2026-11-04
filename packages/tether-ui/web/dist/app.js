@@ -176650,15 +176650,17 @@ function createTerminalDock({ React: React2, Glyph, post, C: C2, device, cwd: cw
 }
 
 // src/apps-page.js
-function createAppsPage({ React: React2, Glyph, post, C: C2, devices = [], localDevice = "", onError }) {
+function createAppsPage({ React: React2, Glyph, post, C: C2, devices = [], localDevice = "", activeDevice = "", onDeviceChange, onError }) {
   const h3 = React2.createElement;
   const online = devices.filter((item) => item && item.online);
-  const initial = localDevice && online.some((item) => item.device_id === localDevice) ? localDevice : online[0] && online[0].device_id || "";
+  const pick = (value) => value && online.some((item) => item.device_id === value) ? value : "";
+  const initial = pick(activeDevice) || pick(localDevice) || online[0] && online[0].device_id || "";
   const [device, setDevice] = React2.useState(initial);
   const [apps, setApps] = React2.useState([]);
   const [reason, setReason] = React2.useState("");
   const [loading, setLoading] = React2.useState(false);
   const [open, setOpen] = React2.useState(null);
+  const [menu, setMenu] = React2.useState(false);
   const [frameKey, setFrameKey] = React2.useState(0);
   const requestRef = React2.useRef(0);
   const load = async (id) => {
@@ -176682,10 +176684,19 @@ function createAppsPage({ React: React2, Glyph, post, C: C2, devices = [], local
   React2.useEffect(() => {
     void load(device);
   }, [device]);
-  const selectDevice = (value) => {
+  React2.useEffect(() => {
+    const next = pick(activeDevice);
+    if (!next || next === device) return;
     setOpen(null);
     setApps([]);
+    setDevice(next);
+  }, [activeDevice]);
+  const selectDevice = (value) => {
+    setOpen(null);
+    setMenu(false);
+    setApps([]);
     setDevice(value);
+    if (onDeviceChange) onDeviceChange(value);
   };
   const field = {
     height: 28,
@@ -176715,19 +176726,73 @@ function createAppsPage({ React: React2, Glyph, post, C: C2, devices = [], local
       "div",
       { style: { display: "flex", alignItems: "center", gap: 8, flex: "0 0 auto" } },
       h3(
-        "select",
-        {
-          value: device,
-          "aria-label": "\u5E94\u7528\u76EE\u6807\u8BBE\u5907",
-          title: "\u9009\u62E9\u8981\u6253\u5F00\u5E94\u7528\u7684\u7535\u8111",
-          onChange: (event) => {
-            selectDevice(event.target.value);
-            event.currentTarget.blur();
+        "div",
+        { style: { position: "relative" } },
+        h3(
+          "button",
+          {
+            type: "button",
+            title: "\u9009\u62E9\u8981\u6253\u5F00\u5E94\u7528\u7684\u7535\u8111",
+            "aria-label": "\u5E94\u7528\u76EE\u6807\u8BBE\u5907",
+            "aria-haspopup": "listbox",
+            "aria-expanded": menu,
+            onClick: () => setMenu((value) => !value),
+            className: "tether-hover tether-press",
+            style: { ...field, minWidth: 180, display: "flex", alignItems: "center", gap: 6, cursor: "pointer", textAlign: "left" }
           },
-          style: { ...field, minWidth: 180 }
-        },
-        !online.length ? h3("option", { value: "" }, "\u6CA1\u6709\u5728\u7EBF\u8BBE\u5907") : null,
-        online.map((item) => h3("option", { key: item.device_id, value: item.device_id }, item.name || item.device_id))
+          h3(
+            "span",
+            { style: { flex: "1 1 auto", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
+            (online.find((item) => item.device_id === device) || {}).name || device || "\u6CA1\u6709\u5728\u7EBF\u8BBE\u5907"
+          ),
+          h3(Glyph, { name: "chevronDown", size: 12 })
+        ),
+        menu ? h3("div", {
+          onPointerDown: (event) => {
+            event.preventDefault();
+            setMenu(false);
+          },
+          style: { position: "fixed", inset: 0, zIndex: 70, background: "transparent" }
+        }) : null,
+        menu ? h3(
+          "div",
+          { role: "listbox", style: {
+            position: "absolute",
+            top: 32,
+            left: 0,
+            minWidth: 200,
+            maxHeight: 300,
+            overflow: "auto",
+            zIndex: 80,
+            background: C2.layer1,
+            borderRadius: 9,
+            boxShadow: C2.shadow,
+            padding: 4
+          } },
+          online.length ? online.map((item) => h3("button", {
+            key: item.device_id,
+            type: "button",
+            role: "option",
+            "aria-selected": item.device_id === device,
+            onClick: () => selectDevice(item.device_id),
+            className: "tether-hover",
+            style: {
+              display: "flex",
+              width: "100%",
+              alignItems: "center",
+              gap: 8,
+              height: 32,
+              padding: "0 8px",
+              border: 0,
+              borderRadius: 6,
+              background: item.device_id === device ? C2.soft : "transparent",
+              color: C2.ink,
+              fontSize: 12.5,
+              textAlign: "left",
+              cursor: "pointer"
+            }
+          }, item.name || item.device_id)) : h3("div", { style: { padding: "8px 10px", fontSize: 12, color: C2.mute } }, "\u6CA1\u6709\u5728\u7EBF\u8BBE\u5907")
+        ) : null
       ),
       h3("button", {
         type: "button",
@@ -177445,6 +177510,11 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
   const [modelOpen, setModelOpen] = React2.useState(false);
   const [catalogOpen, setCatalogOpen] = React2.useState(false);
   const [herdrOpen, setHerdrOpen] = React2.useState(false);
+  const [opencodeOpen, setOpencodeOpen] = React2.useState(false);
+  const [opencodeUrl, setOpencodeUrl] = React2.useState("");
+  const [opencodeBusy, setOpencodeBusy] = React2.useState(false);
+  const [opencodeFrame, setOpencodeFrame] = React2.useState(0);
+  const [deviceMenu, setDeviceMenu] = React2.useState(false);
   const since = React2.useRef(0);
   const sessionRef = React2.useRef("");
   const tabCache = React2.useRef({});
@@ -177732,6 +177802,8 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
     clearSession();
     setPicking(false);
     setHerdrOpen(false);
+    setOpencodeOpen(false);
+    setOpencodeUrl("");
     setDevice(activeDevice);
   }, [activeDevice]);
   const selectDevice = async (value) => {
@@ -177741,6 +177813,8 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
     clearSession();
     setPicking(false);
     setHerdrOpen(false);
+    setOpencodeOpen(false);
+    setOpencodeUrl("");
     setDevice(value);
     if (onDeviceChange) onDeviceChange(value);
     for (const id of ids) {
@@ -177748,6 +177822,44 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
         await post("/api/devices/" + encodeURIComponent(device) + "/fs/acp_stop", { session_id: id });
       } catch (_2) {
       }
+    }
+  };
+  const openOpenCode = async () => {
+    if (!device || opencodeBusy) return;
+    setOpencodeBusy(true);
+    const base = "/api/devices/" + encodeURIComponent(device) + "/fs/";
+    const show2 = (url) => {
+      setOpencodeUrl(String(url));
+      setOpencodeFrame((value) => value + 1);
+      setOpencodeOpen(true);
+    };
+    try {
+      let result = null;
+      try {
+        result = await post(base + "opencode_status", {});
+      } catch (_2) {
+      }
+      if (result && result.running && result.url) {
+        show2(result.url);
+        return;
+      }
+      try {
+        result = await post(base + "opencode_start", {});
+      } catch (error) {
+        const listing = await post(base + "apps_list", {});
+        const app = (listing && Array.isArray(listing.apps) ? listing.apps : []).find((item) => item && item.name === "OpenCode");
+        if (!app || !app.url) throw error;
+        show2(String(app.url).replace(/\/+$/, "") + (app.path || "/"));
+        return;
+      }
+      if (!result || !result.running || !result.url) {
+        throw new Error(result && result.available === false ? "\u76EE\u6807\u7535\u8111\u6CA1\u6709\u5B89\u88C5 OpenCode" : "OpenCode \u6CA1\u6709\u8FD4\u56DE\u53EF\u5D4C\u5165\u5730\u5740");
+      }
+      show2(result.url);
+    } catch (error) {
+      fail2(error);
+    } finally {
+      setOpencodeBusy(false);
     }
   };
   const field = {
@@ -177869,6 +177981,50 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
   };
   const currentModel = models.find((item) => item.modelId === model) || models[0];
   const modelLabel = currentModel ? currentModel.name || currentModel.modelId : model || "\u6A21\u578B";
+  if (opencodeOpen && opencodeUrl) {
+    return h3(
+      "div",
+      { style: { flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column", background: C2.bg } },
+      h3(
+        "div",
+        { style: { display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderBottom: "1px solid " + C2.line, flex: "0 0 auto" } },
+        h3("span", { style: { fontSize: 13, fontWeight: 600, color: C2.ink } }, "OpenCode"),
+        h3(
+          "span",
+          { style: { fontSize: 11, color: C2.mute, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
+          device + " \xB7 " + String(opencodeUrl).replace(/^https?:\/\//, "")
+        ),
+        h3(
+          "span",
+          { style: { marginLeft: "auto", display: "flex", gap: 6 } },
+          h3("button", {
+            type: "button",
+            title: "\u91CD\u65B0\u52A0\u8F7D OpenCode",
+            "aria-label": "\u91CD\u65B0\u52A0\u8F7D OpenCode",
+            onClick: () => setOpencodeFrame((value) => value + 1),
+            style: { ...field, cursor: "pointer", background: "transparent" }
+          }, "\u5237\u65B0"),
+          h3("button", {
+            type: "button",
+            title: "\u5173\u95ED OpenCode",
+            "aria-label": "\u5173\u95ED OpenCode",
+            onClick: () => {
+              setOpencodeOpen(false);
+              setOpencodeUrl("");
+            },
+            style: { ...field, cursor: "pointer", background: "transparent" }
+          }, "\u5173\u95ED")
+        )
+      ),
+      h3("iframe", {
+        key: opencodeFrame,
+        title: "OpenCode",
+        src: opencodeUrl,
+        style: { flex: "1 1 auto", width: "100%", minHeight: 0, border: 0, background: "#fff" },
+        sandbox: "allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-downloads"
+      })
+    );
+  }
   if (herdrOpen) {
     return h3(
       "div",
@@ -177903,19 +178059,76 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
       "div",
       { style: { display: "flex", alignItems: "center", gap: 8, flex: "0 0 auto" } },
       h3(
-        "select",
-        {
-          value: device,
-          "aria-label": "Agent \u76EE\u6807\u8BBE\u5907",
-          title: "\u9009\u62E9\u8981\u8FD0\u884C Agent \u7684\u7535\u8111",
-          onChange: (event) => {
-            void selectDevice(event.target.value);
-            event.currentTarget.blur();
+        "div",
+        { style: { position: "relative" } },
+        h3(
+          "button",
+          {
+            type: "button",
+            title: "\u9009\u62E9\u8981\u8FD0\u884C Agent \u7684\u7535\u8111",
+            "aria-label": "Agent \u76EE\u6807\u8BBE\u5907",
+            "aria-haspopup": "listbox",
+            "aria-expanded": deviceMenu,
+            onClick: () => setDeviceMenu((value) => !value),
+            className: "tether-hover tether-press",
+            style: { ...field, minWidth: 180, display: "flex", alignItems: "center", gap: 6, cursor: "pointer", textAlign: "left" }
           },
-          style: { ...field, minWidth: 180 }
-        },
-        !online.length ? h3("option", { value: "" }, "\u6CA1\u6709\u5728\u7EBF\u8BBE\u5907") : null,
-        online.map((item) => h3("option", { key: item.device_id, value: item.device_id }, item.name || item.device_id))
+          h3(
+            "span",
+            { style: { flex: "1 1 auto", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
+            (online.find((item) => item.device_id === device) || {}).name || device || "\u6CA1\u6709\u5728\u7EBF\u8BBE\u5907"
+          ),
+          h3(Glyph, { name: "chevronDown", size: 12 })
+        ),
+        deviceMenu ? h3("div", {
+          onPointerDown: (event) => {
+            event.preventDefault();
+            setDeviceMenu(false);
+          },
+          style: { position: "fixed", inset: 0, zIndex: 70, background: "transparent" }
+        }) : null,
+        deviceMenu ? h3(
+          "div",
+          { role: "listbox", style: {
+            position: "absolute",
+            top: 32,
+            left: 0,
+            minWidth: 200,
+            maxHeight: 300,
+            overflow: "auto",
+            zIndex: 80,
+            background: C2.layer1,
+            borderRadius: 9,
+            boxShadow: C2.shadow,
+            padding: 4
+          } },
+          online.length ? online.map((item) => h3("button", {
+            key: item.device_id,
+            type: "button",
+            role: "option",
+            "aria-selected": item.device_id === device,
+            onClick: () => {
+              setDeviceMenu(false);
+              void selectDevice(item.device_id);
+            },
+            className: "tether-hover",
+            style: {
+              display: "flex",
+              width: "100%",
+              alignItems: "center",
+              gap: 8,
+              height: 32,
+              padding: "0 8px",
+              border: 0,
+              borderRadius: 6,
+              background: item.device_id === device ? C2.soft : "transparent",
+              color: C2.ink,
+              fontSize: 12.5,
+              textAlign: "left",
+              cursor: "pointer"
+            }
+          }, item.name || item.device_id)) : h3("div", { style: { padding: "8px 10px", fontSize: 12, color: C2.mute } }, "\u6CA1\u6709\u5728\u7EBF\u8BBE\u5907")
+        ) : null
       ),
       h3("button", {
         type: "button",
@@ -177929,6 +178142,14 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
         onClick: () => void stop(),
         style: { ...field, cursor: session ? "pointer" : "default", opacity: session ? 1 : 0.5, background: "transparent" }
       }, "\u505C\u6B62"),
+      h3("button", {
+        type: "button",
+        title: "\u6253\u5F00 OpenCode \u539F\u751F\u5DE5\u4F5C\u53F0",
+        "aria-label": "OpenCode \u5DE5\u4F5C\u53F0",
+        onClick: () => void openOpenCode(),
+        disabled: opencodeBusy || !device,
+        style: { ...field, display: "flex", alignItems: "center", gap: 5, cursor: "pointer", opacity: opencodeBusy || !device ? 0.5 : 1 }
+      }, h3(Glyph, { name: "apps", size: 13 }), opencodeBusy ? "\u542F\u52A8\u4E2D\u2026" : "OpenCode"),
       h3("button", {
         type: "button",
         title: "Herdr \u5DE5\u4F5C\u533A",
@@ -185858,6 +186079,8 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
             C: C2,
             devices: state && state.devices || [],
             localDevice: appLocalDevice,
+            activeDevice: deviceId,
+            onDeviceChange: selectDevice,
             onError: fail2
           }) : view === "agents" ? h3(createAgentsPage, {
             React: React2,

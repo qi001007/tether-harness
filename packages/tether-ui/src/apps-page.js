@@ -1,14 +1,14 @@
-export function createAppsPage({ React, Glyph, post, C, devices = [], localDevice = '', onError }) {
+export function createAppsPage({ React, Glyph, post, C, devices = [], localDevice = '', activeDevice = '', onDeviceChange, onError }) {
   const h = React.createElement
   const online = devices.filter((item) => item && item.online)
-  const initial = localDevice && online.some((item) => item.device_id === localDevice)
-    ? localDevice
-    : (online[0] && online[0].device_id) || ''
+  const pick = (value) => value && online.some((item) => item.device_id === value) ? value : ''
+  const initial = pick(activeDevice) || pick(localDevice) || (online[0] && online[0].device_id) || ''
   const [device, setDevice] = React.useState(initial)
   const [apps, setApps] = React.useState([])
   const [reason, setReason] = React.useState('')
   const [loading, setLoading] = React.useState(false)
   const [open, setOpen] = React.useState(null)
+  const [menu, setMenu] = React.useState(false)
   const [frameKey, setFrameKey] = React.useState(0)
   const requestRef = React.useRef(0)
 
@@ -33,10 +33,20 @@ export function createAppsPage({ React, Glyph, post, C, devices = [], localDevic
 
   React.useEffect(() => { void load(device) }, [device])
 
-  const selectDevice = (value) => {
+  React.useEffect(() => {
+    const next = pick(activeDevice)
+    if (!next || next === device) return
     setOpen(null)
     setApps([])
+    setDevice(next)
+  }, [activeDevice])
+
+  const selectDevice = (value) => {
+    setOpen(null)
+    setMenu(false)
+    setApps([])
     setDevice(value)
+    if (onDeviceChange) onDeviceChange(value)
   }
 
   const field = {
@@ -53,14 +63,29 @@ export function createAppsPage({ React, Glyph, post, C, devices = [], localDevic
     : '只转发目标电脑上登记的回环 HTTP 服务'
   return h('div', { style: { flex: '1 1 auto', minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column', gap: 10, padding: 12, background: C.bg } },
     h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flex: '0 0 auto' } },
-      h('select', {
-        value: device, 'aria-label': '应用目标设备', title: '选择要打开应用的电脑',
-        onChange: (event) => { selectDevice(event.target.value); event.currentTarget.blur() },
-        style: { ...field, minWidth: 180 }
-      },
-        !online.length ? h('option', { value: '' }, '没有在线设备') : null,
-        online.map((item) => h('option', { key: item.device_id, value: item.device_id }, item.name || item.device_id))
-      ),
+      h('div', { style: { position: 'relative' } },
+        h('button', {
+          type: 'button', title: '选择要打开应用的电脑', 'aria-label': '应用目标设备',
+          'aria-haspopup': 'listbox', 'aria-expanded': menu,
+          onClick: () => setMenu((value) => !value), className: 'tether-hover tether-press',
+          style: { ...field, minWidth: 180, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', textAlign: 'left' }
+        },
+          h('span', { style: { flex: '1 1 auto', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
+            (online.find((item) => item.device_id === device) || {}).name || device || '没有在线设备'),
+          h(Glyph, { name: 'chevronDown', size: 12 })),
+        menu ? h('div', {
+          onPointerDown: (event) => { event.preventDefault(); setMenu(false) },
+          style: { position: 'fixed', inset: 0, zIndex: 70, background: 'transparent' }
+        }) : null,
+        menu ? h('div', { role: 'listbox', style: { position: 'absolute', top: 32, left: 0, minWidth: 200, maxHeight: 300, overflow: 'auto', zIndex: 80,
+          background: C.layer1, borderRadius: 9, boxShadow: C.shadow, padding: 4 } },
+          online.length ? online.map((item) => h('button', {
+            key: item.device_id, type: 'button', role: 'option', 'aria-selected': item.device_id === device,
+            onClick: () => selectDevice(item.device_id), className: 'tether-hover',
+            style: { display: 'flex', width: '100%', alignItems: 'center', gap: 8, height: 32, padding: '0 8px', border: 0, borderRadius: 6,
+              background: item.device_id === device ? C.soft : 'transparent', color: C.ink, fontSize: 12.5, textAlign: 'left', cursor: 'pointer' }
+          }, item.name || item.device_id)) : h('div', { style: { padding: '8px 10px', fontSize: 12, color: C.mute } }, '没有在线设备')
+        ) : null),
       h('button', { type: 'button', onClick: () => void load(device), disabled: loading || !device,
         title: '刷新应用列表', 'aria-label': '刷新应用列表',
         style: { ...button, padding: '0 10px', opacity: loading || !device ? 0.5 : 1 } }, '刷新'),

@@ -265,6 +265,8 @@
 - [x] F100 Agent 选配必须照 Codeg 的结构，不再自创卡片网格。判据：左列表 + 右配置；品牌图标；状态徽标；增删改。**实测 2026-11-04**：Codeg `docs/images/agents` 图标已内置，左侧 Codex/DSH/Qoder 等列表与可用徽标，右侧命令/参数/接入方式/颜色/保存；本机 3 个可用，手动添加/删除 Python Helper 通过。
 - [x] F101 Herdr 打包进 Node 并在 APP 内运行。判据：Windows/Linux 能启动；终端可用；状态隔离不污染用户 Herdr。**实测 2026-11-04**：Windows 显示 `Herdr 工作区 · Administrator · 管理员` 与 TUI，Linux 服务器显示 `root · 管理员` 与 `tether-admin` workspace；Herdr 0.9.5，PTY 模式，无“Saved directory unavailable”。
 
+- [x] F110 OpenCode 必须像 DSH 一样用原生页面嵌入，而不是终端转播。判据：APP 内打开 OpenCode 原生 Web；未运行时一键启动；关闭后进程可停；节点重启后能恢复或重新启动；不打开外部浏览器。**实测 2026-11-04**：节点 `OpenCodeWeb` 用 `opencode serve --hostname 127.0.0.1 --port <4096–4195>`，注册进 `apps.json` 后由 mesh 网关暴露；`opencode_status/start/stop` 返回可嵌入 `url`。LAPTOP-01 实测 start → `4096 → http://10.144.0.3:43075/`，stop → `apps=[]`，再 start → `4097 → http://10.144.0.3:38246/`，网关均 `200 text/html` 且 `<title>OpenCode</title>`；重启 APP 后再 start → `30667`，APP 的 Agents 页与远程应用页都能满幅渲染 OpenCode。`tests/test_web_apps.py` 5 条覆盖注册/停止/启动失败/网关 URL/重启接管。启动状态存 `<data_dir>/opencode.json`，节点重启后若进程仍活着则接管而不是再起一个。**仍缺**：该 Node 能力尚未打进发布包；OpenCode 内真实模型对话未跑（需主人授权）。同时 F110 修复远程应用页：跟随全局设备、去掉原生 `<select>` 改为主题内自绘菜单。
+
 ## 验收边界
 
 离线测试、隔离 UI、单机 DSH、本机真实模型回答、干净安装、真实跨设备操作和公开发布分别记录，不能互相替代。未完成发布与实机验收前，保持对应条目未完成。
