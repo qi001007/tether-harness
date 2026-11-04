@@ -23,6 +23,8 @@ const transferPage = strip('transfer-page.js')
 const terminalDock = strip('terminal-dock.js')
 const appsPage = strip('apps-page.js')
 const agentIcons = strip('agent-icons.js')
+const agentCache = strip('agent-cache.js')
+const agentAccountCache = strip('agent-account-cache.js')
 const agentAccountsPanel = strip('agent-accounts-panel.js')
 const agentCatalog = strip('agent-catalog.js')
 const agentsHome = strip('agents-home.js')
@@ -48,6 +50,8 @@ ${transferPage}
 ${terminalDock}
 ${appsPage}
 ${agentIcons}
+${agentCache}
+${agentAccountCache}
 ${agentAccountsPanel}
 ${agentCatalog}
 ${agentsHome}

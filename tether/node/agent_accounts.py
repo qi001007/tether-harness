@@ -255,7 +255,7 @@ class AgentAccounts:
             "active": profile_id == active,
         }
 
-    def list(self, agent: str) -> dict[str, Any]:
+    def list(self, agent: str, fresh: bool = False) -> dict[str, Any]:
         if agent not in GROUPS:
             raise ValueError("this agent has no account files")
         data = self._load(agent)
@@ -279,7 +279,7 @@ class AgentAccounts:
                 if usage.get("checkedAt") and time.time() - float(usage["checkedAt"]) < 90:
                     continue
                 pending.append((index, home))
-            if pending:
+            if pending and fresh:
                 with ThreadPoolExecutor(max_workers=3) as pool:
                     futures = {index: pool.submit(self._probe_codex, home) for index, home in pending}
                     for index, future in futures.items():

@@ -10194,6 +10194,92 @@ const AGENT_ICONS = {
   'command-code': 'data:image/svg+xml;base64,PHN2ZyBoZWlnaHQ9IjY0IiB2aWV3Qm94PSIwIDAgMTQ0IDE0NCIgd2lkdGg9IjY0IiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjx0aXRsZT5Db21tYW5kIENvZGU8L3RpdGxlPjxwYXRoIGZpbGw9IiMwMDAwMDAiIGQ9Ik0xMC4zMTkzIDEwLjMxOTNDMCAyMC42Mzg3IDAgMzcuMjQ3NCAwIDcwLjQ2NDhWNzMuMTM5OEMwIDEwNi4zNTcgMCAxMjIuOTY2IDEwLjMxOTMgMTMzLjI4NUMyMC42Mzg3IDE0My42MDUgMzcuMjQ3NCAxNDMuNjA1IDcwLjQ2NDggMTQzLjYwNUg3My4xMzk4QzEwNi4zNTcgMTQzLjYwNSAxMjIuOTY2IDE0My42MDUgMTMzLjI4NSAxMzMuMjg1QzE0My42MDUgMTIyLjk2NiAxNDMuNjA1IDEwNi4zNTcgMTQzLjYwNSA3My4xMzk5VjcwLjQ2NDhDMTQzLjYwNSAzNy4yNDc0IDE0My42MDUgMjAuNjM4NyAxMzMuMjg1IDEwLjMxOTNDMTIyLjk2NiAwIDEwNi4zNTcgMCA3My4xMzk5IDBINzAuNDY0OEMzNy4yNDc0IDAgMjAuNjM4NyAwIDEwLjMxOTMgMTAuMzE5M1oiPjwvcGF0aD48cGF0aCBmaWxsPSIjRkZGRkZGIiBkPSJNOTguODA0OSAyNy42MTYzQzg5LjMyOTUgMjcuNjE2MyA4MS42MjE0IDM1LjMyNDMgODEuNjIxNCA0NC43OTk3VjUyLjE2NDFINjEuOTgzMlY0NC43OTk3QzYxLjk4MzIgMzUuMzI0MyA1NC4yNzUyIDI3LjYxNjMgNDQuNzk5NyAyNy42MTYzQzM1LjMyNDMgMjcuNjE2MyAyNy42MTYzIDM1LjMyNDMgMjcuNjE2MyA0NC43OTk3QzI3LjYxNjMgNTQuMjc1MiAzNS4zMjQzIDYxLjk4MzIgNDQuNzk5NyA2MS45ODMySDUyLjE2NDFWODEuNjIxNEg0NC43OTk3QzM1LjMyNDMgODEuNjIxNCAyNy42MTYzIDg5LjMyOTUgMjcuNjE2MyA5OC44MDQ5QzI3LjYxNjMgMTA4LjI4IDM1LjMyNDMgMTE1Ljk4OCA0NC43OTk3IDExNS45ODhDNTQuMjc1MiAxMTUuOTg4IDYxLjk4MzIgMTA4LjI4IDYxLjk4MzIgOTguODA0OVY5MS40NDA2SDgxLjYyMTRWOTguODA0OUM4MS42MjE0IDEwOC4yOCA4OS4zMjk1IDExNS45ODggOTguODA0OSAxMTUuOTg4QzEwOC4yOCAxMTUuOTg4IDExNS45ODggMTA4LjI4IDExNS45ODggOTguODA0OUMxMTUuOTg4IDg5LjMyOTUgMTA4LjI4IDgxLjYyMTQgOTguODA0OSA4MS42MjE0SDkxLjQ0MDZWNjEuOTgzMkg5OC44MDQ5QzEwOC4yOCA2MS45ODMyIDExNS45ODggNTQuMjc1MiAxMTUuOTg4IDQ0Ljc5OTdDMTE1Ljk4OCAzNS4zMjQzIDEwOC4yOCAyNy42MTYzIDk4LjgwNDkgMjcuNjE2M1pNOTEuNDQwNiA1Mi4xNjQxVjQ0Ljc5OTdDOTEuNDQwNiA0MC43MjQ4IDk0LjczIDM3LjQzNTQgOTguODA0OSAzNy40MzU0QzEwMi44OCAzNy40MzU0IDEwNi4xNjkgNDAuNzI0OCAxMDYuMTY5IDQ0Ljc5OTdDMTA2LjE2OSA0OC44NzQ3IDEwMi44OCA1Mi4xNjQxIDk4LjgwNDkgNTIuMTY0MUg5MS40NDA2Wk00NC43OTk3IDUyLjE2NDFDNDAuNzI0OCA1Mi4xNjQxIDM3LjQzNTQgNDguODc0NyAzNy40MzU0IDQ0Ljc5OTdDMzcuNDM1NCA0MC43MjQ4IDQwLjcyNDggMzcuNDM1NCA0NC43OTk3IDM3LjQzNTRDNDguODc0NyAzNy40MzU0IDUyLjE2NDEgNDAuNzI0OCA1Mi4xNjQxIDQ0Ljc5OTdWNTIuMTY0MUg0NC43OTk3Wk02MS45ODMyIDgxLjYyMTRWNjEuOTgzMkg4MS42MjE0VjgxLjYyMTRINjEuOTgzMlpNOTguODA0OSAxMDYuMTY5Qzk0LjczIDEwNi4xNjkgOTEuNDQwNiAxMDIuODggOTEuNDQwNiA5OC44MDQ5VjkxLjQ0MDZIOTguODA0OUMxMDIuODggOTEuNDQwNiAxMDYuMTY5IDk0LjczIDEwNi4xNjkgOTguODA0OUMxMDYuMTY5IDEwMi44OCAxMDIuODggMTA2LjE2OSA5OC44MDQ5IDEwNi4xNjlaTTQ0Ljc5OTcgMTA2LjE2OUM0MC43MjQ4IDEwNi4xNjkgMzcuNDM1NCAxMDIuODggMzcuNDM1NCA5OC44MDQ5QzM3LjQzNTQgOTQuNzMgNDAuNzI0OCA5MS40NDA2IDQ0Ljc5OTcgOTEuNDQwNkg1Mi4xNjQxVjk4LjgwNDlDNTIuMTY0MSAxMDIuODggNDguODc0NyAxMDYuMTY5IDQ0Ljc5OTcgMTA2LjE2OVoiPjwvcGF0aD48L3N2Zz4NCg==',
   minimax: 'data:image/svg+xml;base64,PHN2ZyBoZWlnaHQ9IjY0IiB2aWV3Qm94PSIwIDAgMjQgMjQiIHdpZHRoPSI2NCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48dGl0bGU+TWluaU1heCBDb2RlPC90aXRsZT48cmVjdCB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHJ4PSI2IiBmaWxsPSIjRjIzRjVEIj48L3JlY3Q+PHBhdGggZD0iTTUgMTdWN2gzbDQgNiA0LTZoM3YxMGgtM3YtNWwtNCA2LTQtNnY1SDVaIiBmaWxsPSIjRkZGRkZGIj48L3BhdGg+PC9zdmc+DQo=',
 }
+const KEY = 'tether-agent-cache-v1'
+const catalogs = new Map()
+const harnesses = new Map()
+
+function load() {
+  try {
+    if (typeof localStorage === 'undefined') return
+    const raw = localStorage.getItem(KEY)
+    if (!raw) return
+    const data = JSON.parse(raw)
+    if (!data || typeof data !== 'object') return
+    for (const [device, value] of Object.entries(data.catalogs || {})) catalogs.set(device, value)
+    for (const [device, value] of Object.entries(data.harnesses || {})) {
+      if (Array.isArray(value)) harnesses.set(device, value)
+    }
+  } catch (_) { /* private mode or corrupt cache */ }
+}
+
+function persist() {
+  try {
+    if (typeof localStorage === 'undefined') return
+    localStorage.setItem(KEY, JSON.stringify({
+      catalogs: Object.fromEntries(catalogs),
+      harnesses: Object.fromEntries(harnesses)
+    }))
+  } catch (_) { /* storage quota or private mode */ }
+}
+
+load()
+
+function readCatalog(device) {
+  return device ? (catalogs.get(device) || null) : null
+}
+
+function writeCatalog(device, data) {
+  if (!device || !data) return
+  catalogs.set(device, data)
+  persist()
+}
+
+function readHarnesses(device) {
+  return device ? (harnesses.get(device) || null) : null
+}
+
+function writeHarnesses(device, data) {
+  if (!device || !Array.isArray(data)) return
+  harnesses.set(device, data)
+  persist()
+}
+const KEY = 'tether-account-cache-v1'
+const memory = new Map()
+
+function load() {
+  try {
+    if (typeof localStorage === 'undefined') return
+    const raw = localStorage.getItem(KEY)
+    if (!raw) return
+    const data = JSON.parse(raw)
+    if (!data || typeof data !== 'object') return
+    for (const [key, value] of Object.entries(data)) memory.set(key, value)
+  } catch (_) { /* private mode or corrupt cache */ }
+}
+
+function persist() {
+  try {
+    if (typeof localStorage === 'undefined') return
+    const data = {}
+    for (const [key, value] of memory) data[key] = value
+    localStorage.setItem(KEY, JSON.stringify(data))
+  } catch (_) { /* storage quota or private mode */ }
+}
+
+load()
+
+const cacheKey = (device, agent) => String(device || '') + '|' + String(agent || '')
+
+function readAccount(device, agent) {
+  if (!device || !agent) return null
+  return memory.get(cacheKey(device, agent)) || null
+}
+
+function writeAccount(device, agent, data) {
+  if (!device || !agent || !data) return
+  memory.set(cacheKey(device, agent), data)
+  persist()
+}
 const PLAN_LABELS = { plus: 'Plus', pro: 'Pro', free: 'Free', team: 'Team', business: 'Business' }
 
 function planLabel(plan) {
@@ -10233,7 +10319,7 @@ function quotaColor(percent) {
 
 function AgentAccountsPanel({ React, Glyph, post, C, device, agent, onOpenTerminal, onLoginTerminal, compact = true }) {
   const h = React.createElement
-  const [data, setData] = React.useState(null)
+  const [data, setData] = React.useState(() => agent && agent.accounts ? readAccount(device, agent.id) : null)
   const [busy, setBusy] = React.useState('')
   const [error, setError] = React.useState('')
   const [notice, setNotice] = React.useState('')
@@ -10247,24 +10333,31 @@ function AgentAccountsPanel({ React, Glyph, post, C, device, agent, onOpenTermin
     borderRadius: 7, padding: '0 9px', background: C.bg, color: C.ink, fontSize: 12, outline: 'none'
   }
 
-  const load = React.useCallback(async () => {
-    if (!enabled) { setData(null); return }
+  const load = React.useCallback(async (fresh) => {
+    if (!enabled) { setData(null); return null }
     try {
-      const result = await post('/api/devices/' + encodeURIComponent(device) + '/fs/agents_accounts', { id: agent.id })
+      const result = await post('/api/devices/' + encodeURIComponent(device) + '/fs/agents_accounts',
+        { id: agent.id, fresh: fresh === true })
       setData(result || null)
+      writeAccount(device, agent.id, result)
       setError('')
+      return result
     } catch (cause) {
       setError(String((cause && (cause.message || cause.code)) || '读取失败'))
+      return null
     }
   }, [device, agent && agent.id, enabled, post])
 
   React.useEffect(() => {
-    setData(null)
+    const cached = agent && agent.accounts ? readAccount(device, agent.id) : null
+    setData(cached || null)
     setError('')
     setNotice('')
     setOpen(false)
     setLogin(null)
-    void load()
+    void load(false)
+    const timer = setTimeout(() => { void load(true) }, 350)
+    return () => clearTimeout(timer)
   }, [device, agent && agent.id, enabled])
 
   React.useEffect(() => {
@@ -10293,7 +10386,7 @@ function AgentAccountsPanel({ React, Glyph, post, C, device, agent, onOpenTermin
     setError('')
     try {
       const result = await post('/api/devices/' + encodeURIComponent(device) + '/fs/' + op, { id: agent.id, ...body })
-      if (result) setData(result)
+      if (result) { setData(result); writeAccount(device, agent.id, result) }
       return result
     } catch (cause) {
       setError(String((cause && (cause.message || cause.code)) || cause || '操作失败'))
@@ -11060,17 +11153,22 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
   const [panes, setPanes] = React.useState([])
   const [activePane, setActivePane] = React.useState('')
   const [workspaceOpen, setWorkspaceOpen] = React.useState(false)
+  const [homeOpen, setHomeOpen] = React.useState(false)
+  const [detailsOpen, setDetailsOpen] = React.useState(false)
+  const [stepOpen, setStepOpen] = React.useState({})
+  const [cwd, setCwd] = React.useState('')
   const since = React.useRef(0)
   const sessionRef = React.useRef('')
   const tabCache = React.useRef({})
   const transcriptRef = React.useRef(null)
   const modelRef = React.useRef(null)
+  const prefetchedAccounts = React.useRef('')
 
   const updateTab = (id, patch) => setTabs((current) => current.map((tab) => tab.id === id ? { ...tab, ...patch } : tab))
   const saveTab = () => {
     const id = sessionRef.current
     if (!id) return
-    tabCache.current[id] = { items, ready, agent, models, model, commands, pending, since: since.current }
+    tabCache.current[id] = { items, ready, agent, models, model, commands, pending, cwd, since: since.current }
   }
   const loadTab = (id) => {
     const cached = tabCache.current[id] || {}
@@ -11083,6 +11181,7 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
     setModel(cached.model || '')
     setCommands(cached.commands || [])
     setPending(cached.pending || [])
+    setCwd(cached.cwd || '')
     setInput('')
     setModelOpen(false)
     since.current = Number(cached.since) || 0
@@ -11098,6 +11197,7 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
     setCommands([])
     setPending([])
     setItems([])
+    setCwd('')
     setInput('')
     setModelOpen(false)
     since.current = 0
@@ -11106,20 +11206,20 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
     : status === 'error' ? 'var(--dsw-alias-state-error-primary, #b42318)'
       : status === 'ended' ? C.mute : 'var(--dsw-alias-state-warn-primary, #b54708)'
 
-  const addItem = (item) => setItems((current) => [...current, item])
+  const addItem = (item) => setItems((current) => [...current, { at: Date.now(), ...item }])
   const appendAssistant = (text) => setItems((current) => {
     const last = current[current.length - 1]
     if (last && last.kind === 'assistant' && last.streaming) {
       return [...current.slice(0, -1), { ...last, text: last.text + text }]
     }
-    return [...current, { kind: 'assistant', text, streaming: true }]
+    return [...current, { kind: 'assistant', text, streaming: true, at: Date.now() }]
   })
   const appendThought = (text) => setItems((current) => {
     const last = current[current.length - 1]
     if (last && last.kind === 'thought' && last.streaming) {
       return [...current.slice(0, -1), { ...last, text: last.text + text }]
     }
-    return [...current, { kind: 'thought', text, streaming: true }]
+    return [...current, { kind: 'thought', text, streaming: true, at: Date.now() }]
   })
   const finishStreaming = () => setItems((current) => {
     let next = current
@@ -11210,6 +11310,20 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
     return () => document.removeEventListener('pointerdown', close)
   }, [modelOpen])
 
+  React.useEffect(() => {
+    if (!device || !catalog) return
+    const agents = (catalog.agents || []).filter((item) => item && item.available && item.accounts)
+    if (!agents.length) return
+    const key = device + ':' + agents.map((item) => item.id).join(',')
+    if (prefetchedAccounts.current === key) return
+    prefetchedAccounts.current = key
+    for (const item of agents.slice(0, 8)) {
+      void post('/api/devices/' + encodeURIComponent(device) + '/fs/agents_accounts', { id: item.id, fresh: false })
+        .then((result) => { if (result) writeAccount(device, item.id, result) })
+        .catch(() => {})
+    }
+  }, [device, catalog])
+
   const closeTab = async (id) => {
     if (!id) return
     const remaining = tabs.filter((tab) => tab.id !== id)
@@ -11217,7 +11331,7 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
     setTabs(remaining)
     if (sessionRef.current === id) {
       if (remaining.length) loadTab(remaining[remaining.length - 1].id)
-      else clearSession()
+      else { clearSession(); setHomeOpen(true) }
     }
     try {
       await post('/api/devices/' + encodeURIComponent(device) + '/fs/acp_stop', { session_id: id })
@@ -11227,7 +11341,9 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
   const stop = async () => { await closeTab(sessionRef.current) }
 
   const selectTab = (id) => {
-    if (!id || id === sessionRef.current) return
+    if (!id) return
+    setHomeOpen(false)
+    if (id === sessionRef.current) return
     saveTab()
     loadTab(id)
   }
@@ -11250,6 +11366,8 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
       setModel('')
       setCommands([])
       setSession(result.session_id)
+      setCwd(result.cwd || '')
+      setHomeOpen(false)
       setInput('')
       setPicking(false)
       setModelOpen(false)
@@ -11518,7 +11636,7 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
   const openAgent = (agent, surface, harness) => {
     if (surface === 'workbench') { if (onOpenWorkbench) onOpenWorkbench(); return }
     if (surface === 'web') { void openWeb(agent); return }
-    if (surface === 'acp' && harness) { void start(harness); setWorkspaceOpen(false); return }
+    if (surface === 'acp' && harness) { setHomeOpen(false); void start(harness); setWorkspaceOpen(false); return }
     openTerminal(agent)
   }
 
@@ -11563,60 +11681,143 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
       wordBreak: 'break-word' } }, block.replace(FENCE_LANG, ''))
     : h('div', { key: index, style: { display: 'grid', gap: 2 } },
       block.split(CRLF).map((line, lineIndex) => h('div', { key: lineIndex, style: { minHeight: line ? undefined : 7 } }, ...inlineMarkdown(line)))))
-  const renderItem = (item, index) => {
-    if (item.kind === 'user') return h('div', { key: index, style: { display: 'flex', justifyContent: 'flex-end' } },
-      h('div', { style: { maxWidth: '78%', padding: '8px 12px', borderRadius: '12px 12px 4px 12px',
-        background: C.soft, color: C.ink, fontSize: 13, lineHeight: 1.65, whiteSpace: 'pre-wrap', wordBreak: 'break-word' } }, item.text))
-    if (item.kind === 'assistant') {
-      return h('div', { key: index, style: { display: 'flex', alignItems: 'flex-start', gap: 8 } },
-        h('span', { style: { width: 26, height: 26, flex: '0 0 auto', display: 'grid', placeItems: 'center', borderRadius: 8, background: C.soft, color: C.blue } },
-          h(Glyph, { name: 'bot', size: 14 })),
-        h('div', { style: { maxWidth: '82%', padding: '9px 12px', borderRadius: '12px 12px 12px 4px',
-          background: C.panel || C.bg, border: '1px solid ' + C.line, color: C.ink,
-          fontSize: 13, lineHeight: 1.65, wordBreak: 'break-word' } }, renderMarkdown(item.text || (item.streaming ? '…' : ''))))
-    }
-    if (item.kind === 'thought') {
-      const open = thoughtOpen[index] != null ? thoughtOpen[index] : !!item.streaming
-      return h('div', { key: index, style: { alignSelf: 'flex-start', maxWidth: '82%', padding: '7px 10px', borderRadius: 9,
-        borderLeft: '2px solid #d97706', background: 'rgba(217,119,6,.06)' } },
-        h('button', { type: 'button',
-          onClick: () => setThoughtOpen((current) => ({ ...current, [index]: !open })),
-          style: { display: 'flex', alignItems: 'center', gap: 6, border: 0, background: 'transparent', color: C.sub,
-            fontSize: 11.5, cursor: 'pointer', padding: 0 } },
-          h(Glyph, { name: 'think', size: 13 }), '思考',
-          h(Glyph, { name: 'chevronDown', size: 11 })),
-        open ? h('div', { style: { marginTop: 5, fontSize: 12.5, color: C.sub, lineHeight: 1.6, whiteSpace: 'pre-wrap',
-          wordBreak: 'break-word' } }, item.text) : null)
-    }
-    if (item.kind === 'tool') {
-      const color = item.status === 'completed' ? C.green : item.status === 'failed' ? C.red : C.sub
-      const open = !!toolOpen[index]
-      return h('div', { key: index, style: { alignSelf: 'flex-start', maxWidth: '82%', display: 'grid', gap: 6,
-        padding: '7px 10px', borderRadius: 10, background: C.soft, border: '1px solid ' + C.line } },
-        h('button', { type: 'button', onClick: () => setToolOpen((current) => ({ ...current, [index]: !open })),
-          style: { display: 'flex', alignItems: 'center', gap: 8, border: 0, background: 'transparent', padding: 0,
-            color: C.ink, cursor: item.detail ? 'pointer' : 'default', textAlign: 'left' } },
-          h('span', { style: { width: 22, height: 22, flex: '0 0 auto', display: 'grid', placeItems: 'center', borderRadius: 6,
-            background: C.bg, color: C.sub } }, h(Glyph, { name: 'tool', size: 13 })),
-          h('span', { style: { minWidth: 0, fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, item.title),
-          h('span', { style: { fontSize: 11, color, marginLeft: 'auto', whiteSpace: 'nowrap' } },
-            item.status === 'completed' ? '完成' : item.status === 'failed' ? '失败' : '运行中')),
-        open && item.detail ? h('pre', { style: { margin: 0, padding: 8, borderRadius: 7, background: 'rgba(9,30,66,.05)',
-          fontFamily: 'Consolas, monospace', fontSize: 10.5, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-          maxHeight: 220, overflow: 'auto' } }, item.detail) : null)
-    }
-    if (item.kind === 'plan') {
-      return h('div', { key: index, style: { alignSelf: 'flex-start', maxWidth: '82%', padding: '9px 12px', borderRadius: 10,
-        background: C.soft, border: '1px solid ' + C.line, display: 'grid', gap: 5 } },
-        h('div', { style: { display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: C.sub } },
-          h(Glyph, { name: 'think', size: 13 }), '执行计划'),
-        ...item.entries.map((entry, entryIndex) => h('div', { key: entryIndex, style: { fontSize: 12.5, color: C.ink, lineHeight: 1.55 } }, '· ' + entry)))
-    }
-    if (item.kind === 'error') return h('div', { key: index, style: { alignSelf: 'center', maxWidth: '88%', padding: '6px 10px', borderRadius: 8,
-      background: 'rgba(180,35,24,.08)', color: C.red, fontSize: 12, textAlign: 'center' } }, item.text)
-    return h('div', { key: index, style: { alignSelf: 'center', color: C.mute, fontSize: 11.5, textAlign: 'center', padding: '1px 0' } }, item.text)
+  const elapsedLabel = (ms) => {
+    if (!ms || ms < 1200) return ''
+    const seconds = Math.round(ms / 1000)
+    if (seconds < 60) return seconds + 's'
+    return Math.floor(seconds / 60) + 'm' + (seconds % 60 ? ' ' + (seconds % 60) + 's' : '')
   }
-
+  const toolIconName = (title) => {
+    const text = String(title || '').toLowerCase()
+    if (/shell|command|bash|powershell|cmd|pty|terminal|^(get|set|new|remove|start|stop|invoke|test)-/.test(text)) return 'terminal'
+    if (/read|write|edit|file|image|patch|diff/.test(text)) return 'files'
+    if (/search|grep|glob|find|query/.test(text)) return 'tool'
+    if (/agent|subagent|task|delegate/.test(text)) return 'bot'
+    return 'tool'
+  }
+  const toolKindLabel = (title) => {
+    const icon = toolIconName(title)
+    if (icon === 'terminal') return '终端'
+    if (icon === 'files') return '文件'
+    if (icon === 'bot') return 'Agent'
+    return '工具'
+  }
+  const buildTurns = (list) => {
+    const turns = []
+    let current = null
+    const ensure = () => {
+      if (current) return current
+      current = { user: null, steps: [], answers: [], errors: [], notes: [], streaming: false }
+      turns.push(current)
+      return current
+    }
+    for (const item of list) {
+      if (item.kind === 'user') {
+        current = { user: item, steps: [], answers: [], errors: [], notes: [], streaming: false }
+        turns.push(current)
+        continue
+      }
+      if (item.kind === 'system') {
+        const text = String(item.text || '')
+        if (/^已连接|^正在启动|^[A-Za-z]:[\\/]|^\//.test(text)) continue
+        ensure().errors.push(item)
+        continue
+      }
+      const turn = ensure()
+      if (item.kind === 'assistant') {
+        if (/^Warning: Exceeded skills context budget/.test(String(item.text || '').trim())) {
+          turn.notes.push(item)
+          continue
+        }
+        turn.answers.push(item)
+        if (item.streaming) turn.streaming = true
+      } else if (item.kind === 'thought' || item.kind === 'tool' || item.kind === 'plan') {
+        turn.steps.push(item)
+        if (item.streaming) turn.streaming = true
+      } else if (item.kind === 'error') {
+        turn.errors.push(item)
+      }
+    }
+    return turns
+  }
+  const renderStep = (step, turnIndex, stepIndex) => {
+    const key = turnIndex + ':' + stepIndex
+    const open = !!stepOpen[key]
+    const detail = step.kind === 'plan' ? null : (step.kind === 'tool' ? (step.detail || '') : (step.text || ''))
+    const label = step.kind === 'thought' ? '思考' : step.kind === 'plan' ? '计划' : toolKindLabel(step.title)
+    const title = step.kind === 'thought'
+      ? String(step.text || '').split(String.fromCharCode(10))[0].slice(0, 120)
+      : step.kind === 'plan'
+        ? (step.entries || []).length + ' 项'
+        : (step.title || '工具调用')
+    const icon = step.kind === 'thought' || step.kind === 'plan' ? 'think' : toolIconName(step.title)
+    const status = step.kind === 'tool'
+      ? (step.status === 'completed' ? '完成' : step.status === 'failed' ? '失败' : '运行中')
+      : (step.streaming ? '进行中' : '')
+    const expandable = step.kind === 'plan' ? !!((step.entries || []).length) : !!detail
+    return h('div', { key, style: { position: 'relative', paddingLeft: 28, minWidth: 0 } },
+      h('span', { style: { position: 'absolute', left: 0, top: 1, width: 18, height: 18, display: 'grid', placeItems: 'center',
+        borderRadius: 9, background: C.bg, border: '1px solid ' + C.line, color: C.sub } }, h(Glyph, { name: icon, size: 10 })),
+      h('button', {
+        type: 'button', disabled: !expandable,
+        onClick: () => expandable && setStepOpen((current) => ({ ...current, [key]: !open })),
+        style: { display: 'flex', alignItems: 'center', gap: 7, width: '100%', minHeight: 22, padding: 0,
+          border: 0, background: 'transparent', textAlign: 'left', cursor: expandable ? 'pointer' : 'default', minWidth: 0 }
+      },
+        h('span', { style: { flex: '0 0 auto', fontSize: 12.5, fontWeight: 500, color: step.kind === 'thought' ? C.sub : C.ink } }, label),
+        h('span', { style: { flex: '1 1 auto', minWidth: 0, fontSize: 12.5, color: C.sub, overflow: 'hidden',
+          textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, title),
+        status ? h('span', { style: { flex: '0 0 auto', fontSize: 10.5, color: step.kind === 'tool' && step.status === 'failed' ? C.red : C.mute } }, status) : null,
+        expandable ? h('span', { style: { flex: '0 0 auto', color: C.mute, display: 'grid', placeItems: 'center',
+          transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s ease' } }, h(Glyph, { name: 'chevronDown', size: 10 })) : null),
+      open && expandable ? (step.kind === 'plan'
+        ? h('div', { style: { marginTop: 5, padding: '7px 9px', borderRadius: 8, background: C.soft, display: 'grid', gap: 3 } },
+          ...(step.entries || []).map((entry, entryIndex) => h('div', { key: entryIndex, style: { fontSize: 12, color: C.sub, lineHeight: 1.55 } }, '· ' + entry)))
+        : h('pre', { style: { margin: '5px 0 0', padding: '8px 10px', borderRadius: 8, background: C.soft, color: C.sub,
+          fontFamily: step.kind === 'tool' ? 'Consolas, monospace' : 'inherit', fontSize: step.kind === 'tool' ? 11 : 12.5,
+          lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 260, overflow: 'auto' } }, detail)) : null)
+  }
+  const renderTurn = (turn, index) => {
+    const answerText = turn.answers.map((item) => item.text || '').filter(Boolean)
+      .join(String.fromCharCode(10, 10))
+      .split(String.fromCharCode(10))
+      .filter((line) => !/^Warning: Exceeded skills context budget/.test(line.trim()))
+      .join(String.fromCharCode(10))
+      .trim()
+    const streaming = turn.streaming
+    const times = [...turn.steps, ...turn.answers].map((item) => item.at).filter((value) => typeof value === 'number')
+    const elapsed = times.length ? elapsedLabel((streaming ? Date.now() : Math.max(...times)) - Math.min(...times)) : ''
+    const defaultOpen = streaming || !answerText
+    const open = stepOpen['turn:' + index] != null ? stepOpen['turn:' + index] : defaultOpen
+    const toggle = () => setStepOpen((current) => ({ ...current, ['turn:' + index]: !open }))
+    return h('div', { key: index, style: { width: '100%', maxWidth: 860, margin: '0 auto', display: 'grid', gap: 9, padding: '5px 0' } },
+      turn.user ? h('div', { style: { display: 'flex', justifyContent: 'flex-end' } },
+        h('div', { style: { maxWidth: '78%', padding: '9px 13px', borderRadius: 16, background: C.soft, color: C.ink,
+          fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-word' } }, turn.user.text)) : null,
+      turn.steps.length ? h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+        h('button', { type: 'button', onClick: toggle, style: { display: 'inline-flex', alignItems: 'center', gap: 6, height: 30,
+          padding: '0 12px', border: 0, borderRadius: 999, background: C.soft, color: streaming ? C.blue : C.sub,
+          fontSize: 11.5, cursor: 'pointer', width: 'fit-content' } },
+          h(Glyph, { name: streaming ? 'refresh' : 'tool', size: 12 }),
+          streaming ? '正在执行' : '执行过程',
+          h('span', { style: { color: C.mute } }, ' · ' + turn.steps.length + ' 步'),
+          elapsed ? h('span', { style: { color: C.mute } }, ' · ' + elapsed) : null,
+          h('span', { style: { display: 'grid', placeItems: 'center', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s ease' } },
+            h(Glyph, { name: 'chevronDown', size: 10 })))) : null,
+      turn.steps.length && open ? h('div', { style: { position: 'relative', display: 'grid', gap: 6, paddingLeft: 0 } },
+        h('span', { style: { position: 'absolute', left: 9, top: 8, bottom: 8, width: 1, background: C.line } }),
+        ...turn.steps.map((step, stepIndex) => renderStep(step, index, stepIndex))) : null,
+      answerText ? h('div', { style: { fontSize: 13.5, lineHeight: 1.75, color: C.ink, wordBreak: 'break-word' } },
+        ...renderMarkdown(answerText)) : null,
+      streaming && !answerText ? h('div', { style: { display: 'flex', alignItems: 'center', gap: 7, color: C.mute, fontSize: 11.5 } },
+        h('span', { className: 'tether-spin', style: { width: 13, height: 13, borderRadius: '50%', border: '1.5px solid ' + C.line,
+          borderTopColor: C.blue, display: 'inline-block' } }), 'Agent 正在工作…') : null,
+      ...turn.errors.map((item, errorIndex) => h('div', { key: 'err' + errorIndex, style: { padding: '7px 10px', borderRadius: 8,
+        background: 'rgba(180,35,24,.07)', color: C.red, fontSize: 12, lineHeight: 1.5 } }, item.text)),
+      ...turn.notes.map((item, noteIndex) => h('div', { key: 'note' + noteIndex, style: { fontSize: 10.5, color: C.mute,
+        lineHeight: 1.5, paddingLeft: 2 } }, item.text)))
+  }
+  const turns = buildTurns(items)
   const currentModel = models.find((item) => item.modelId === model) || models[0]
   const modelLabel = currentModel ? (currentModel.name || currentModel.modelId) : (model || '模型')
 
@@ -11662,15 +11863,20 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
     }, h(Glyph, { name: 'apps', size: 13 }), '目录'))
   const baseContent = h('div', {
     key: 'base',
-    style: { flex: '1 1 auto', minHeight: 0, display: workspaceOpen ? 'none' : 'flex', flexDirection: 'column', gap: 8 }
+    style: { flex: '1 1 auto', minHeight: 0, position: 'relative', display: workspaceOpen ? 'none' : 'flex', flexDirection: 'column', gap: 8 }
   },
-    tabs.length ? h('div', { style: { display: 'flex', alignItems: 'center', gap: 4, flex: '0 0 auto', overflowX: 'auto' } },
+    tabs.length || picking ? h('div', { style: { display: 'flex', alignItems: 'center', gap: 4, flex: '0 0 auto', overflowX: 'auto' } },
+      h('button', { key: 'home', type: 'button', title: '主页', 'aria-label': '主页', onClick: () => setHomeOpen(true),
+        style: { ...field, height: 26, padding: '0 9px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5,
+          background: homeOpen ? C.soft : 'transparent', color: homeOpen ? C.ink : C.sub,
+          border: '1px solid ' + (homeOpen ? C.line : 'transparent') } },
+        h(Glyph, { name: 'apps', size: 12 }), '主页'),
       tabs.map((tab) => h('div', {
         key: tab.id, role: 'tab', 'aria-selected': tab.id === session ? 'true' : 'false',
         onClick: () => selectTab(tab.id),
         style: { display: 'flex', alignItems: 'center', gap: 6, height: 26, padding: '0 5px 0 9px', borderRadius: 7,
-          cursor: 'pointer', background: tab.id === session ? C.soft : 'transparent', color: tab.id === session ? C.ink : C.sub,
-          border: '1px solid ' + (tab.id === session ? C.line : 'transparent'), whiteSpace: 'nowrap' }
+          cursor: 'pointer', background: !homeOpen && tab.id === session ? C.soft : 'transparent', color: !homeOpen && tab.id === session ? C.ink : C.sub,
+          border: '1px solid ' + (!homeOpen && tab.id === session ? C.line : 'transparent'), whiteSpace: 'nowrap' }
       },
         h('span', { style: { width: 6, height: 6, borderRadius: 3, background: tabColor(tab.status), flex: '0 0 auto' } }),
         h('span', { style: { fontSize: 11 } }, tab.name),
@@ -11682,10 +11888,10 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
         }, '×')
       )),
       h('button', { type: 'button', title: '再开一个 Agent', 'aria-label': '再开一个 Agent',
-        onClick: () => setPicking(true),
+        onClick: () => { setHomeOpen(false); setPicking(true) },
         style: { ...field, height: 26, padding: '0 9px', cursor: 'pointer' } }, '+')
     ) : null,
-    !session && !picking ? h(AgentHome, {
+    (homeOpen || (!session && !picking)) && !picking ? h(AgentHome, {
       key: 'home', React, Glyph, C, post, device, catalog, harnesses, panes,
       loading: catalogBusy, error: catalogError,
       installing, onInstall: (agent) => void installAgent(agent),
@@ -11711,16 +11917,32 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
       )) : h('div', { style: { gridColumn: '1 / -1', padding: 16, color: C.mute, fontSize: 12 } },
         detecting ? '正在检测本机 Agent…' : '没有检测到 ACP Harness。先在目标电脑装好 Gemini CLI / OpenCode / Claude Code adapter / Codex adapter。')
     ) : null,
-    session || picking ? h('div', {
+    !homeOpen && (session || picking) ? h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flex: '0 0 auto', padding: '2px 2px 0' } },
+      h('button', { type: 'button', title: '返回主页', 'aria-label': '返回主页', onClick: () => setHomeOpen(true),
+        className: 'tether-hover', style: { ...field, height: 30, padding: '0 9px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 } },
+        h('span', { style: { fontSize: 16, lineHeight: 1 } }, '‹'), '主页'),
+      h('div', { style: { minWidth: 0, flex: '1 1 auto', display: 'grid', gap: 1 } },
+        h('div', { style: { fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
+          (agent && (agent.title || agent.name)) || 'Agent'),
+        h('div', { style: { fontSize: 11, color: C.mute } },
+          (ready ? '已连接' : '正在启动') + (modelLabel ? ' · ' + modelLabel : ''))),
+      h('button', { type: 'button', title: '会话详情', 'aria-label': '会话详情', onClick: () => setDetailsOpen((value) => !value),
+        className: 'tether-hover', style: { ...field, width: 30, padding: 0, display: 'grid', placeItems: 'center', cursor: 'pointer',
+          background: detailsOpen ? C.soft : 'transparent' } }, h(Glyph, { name: 'files', size: 14 })),
+      session ? h('button', { type: 'button', onClick: () => void stop(), className: 'tether-hover',
+        style: { ...field, height: 30, padding: '0 10px', cursor: 'pointer' } }, '停止') : null) : null,
+    !homeOpen && (session || picking) ? h('div', {
       key: 'transcript',
       ref: transcriptRef,
       className: 'tether-scroll',
-      style: { flex: '1 1 auto', minHeight: 0, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 10, padding: '6px 4px 10px' }
+      style: { flex: '1 1 auto', minHeight: 0, overflow: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column', padding: '0',
+        paddingRight: detailsOpen ? 310 : 0 }
     },
-      items.length ? items.map(renderItem) : h('div', { style: { margin: 'auto', color: C.mute, fontSize: 12, textAlign: 'center' } },
-        session ? '等待 Agent 输出…' : '选择一台已安装 ACP Harness 的电脑，点击卡片开始会话。')
+      h('div', { style: { width: '100%', maxWidth: '100%', boxSizing: 'border-box', minWidth: 0, display: 'grid', gap: 2, padding: '10px 22px 16px' } },
+        turns.length ? turns.map(renderTurn) : h('div', { style: { padding: '46px 0', textAlign: 'center', color: C.mute, fontSize: 12 } },
+          session ? '等待 Agent 输出…' : '选择一台已安装 ACP Harness 的电脑，点击卡片开始会话。'))
     ) : null,
-    pending.map((item) => h('div', { key: 'perm-' + item.requestId, style: { display: 'flex', gap: 8, alignItems: 'center', flex: '0 0 auto', flexWrap: 'wrap',
+    !homeOpen ? pending.map((item) => h('div', { key: 'perm-' + item.requestId, style: { display: 'flex', gap: 8, alignItems: 'center', flex: '0 0 auto', flexWrap: 'wrap',
       padding: '8px 10px', borderRadius: 10, border: '1px solid ' + C.line, background: C.soft } },
       h('span', { style: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: C.sub } },
         h(Glyph, { name: 'shield', size: 13 }), '需要授权 · ' + (item.title || ('#' + item.requestId))),
@@ -11728,15 +11950,15 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
         key: option.optionId, type: 'button', onClick: () => { void reply(item.requestId, option.optionId) },
         style: { ...field, height: 24, cursor: 'pointer' }
       }, option.name || option.optionId))
-    )),
-    session && commands.length ? h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap', flex: '0 0 auto' } },
+    )) : null,
+    !homeOpen && session && commands.length ? h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap', flex: '0 0 auto' } },
       commands.map((command) => h('button', {
         key: command.name, type: 'button', title: command.description || command.name,
         onClick: () => setInput('/' + command.name + ' '),
         style: { ...field, height: 22, cursor: 'pointer', color: C.sub }
       }, '/' + command.name))
     ) : null,
-    session || picking ? h('form', {
+    !homeOpen && (session || picking) ? h('form', {
       onSubmit: send,
       style: { display: 'flex', alignItems: 'center', gap: 8, padding: '7px 9px', borderRadius: 12,
         border: '1px solid ' + C.line, background: C.panel || C.bg, boxShadow: '0 1px 3px rgba(16,24,40,.06)', flex: '0 0 auto' }
@@ -11781,7 +12003,21 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
           background: C.blue, color: '#fff', cursor: !session || !ready || !input.trim() ? 'default' : 'pointer',
           opacity: !session || !ready || !input.trim() ? 0.4 : 1 }
       }, h(Glyph, { name: 'arrowUp', size: 15 }))
-    ) : null
+    ) : null,
+    detailsOpen && !homeOpen && (session || picking) ? h('div', { style: { position: 'absolute', top: 76, right: 8, bottom: 88, width: 300,
+      zIndex: 35, background: C.bg, border: '1px solid ' + C.line, borderRadius: 12, boxShadow: '0 12px 36px rgba(16,24,40,.16)',
+      padding: 12, overflow: 'auto', display: 'grid', gap: 10, alignContent: 'start' } },
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+        h('div', { style: { flex: '1 1 auto', fontSize: 12.5, fontWeight: 600 } }, '对话详情'),
+        h('button', { type: 'button', title: '关闭详情', 'aria-label': '关闭详情', onClick: () => setDetailsOpen(false),
+          style: { width: 24, height: 24, border: 0, borderRadius: 6, background: 'transparent', color: C.mute, cursor: 'pointer', fontSize: 15 } }, '×')),
+      ...[['状态', ready ? '已连接' : '正在启动'], ['Agent', (agent && (agent.title || agent.name)) || '—'],
+        ['模型', modelLabel || '—'], ['工作目录', cwd || '—'], ['会话', session ? session.slice(0, 8) : '—'],
+        ['步骤', String(turns.reduce((sum, turn) => sum + turn.steps.length, 0))],
+        ['消息', String(turns.reduce((sum, turn) => sum + turn.answers.length, 0))]].map((row) =>
+        h('div', { key: row[0], style: { display: 'grid', gap: 2, paddingBottom: 7, borderBottom: '1px solid ' + C.line } },
+          h('div', { style: { fontSize: 10.5, color: C.mute } }, row[0]),
+          h('div', { style: { fontSize: 12, color: C.ink, wordBreak: 'break-all', lineHeight: 1.5 } }, row[1])))) : null
   )
 
   const paneBody = (pane) => pane.kind === 'web'

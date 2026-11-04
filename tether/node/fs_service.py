@@ -819,7 +819,7 @@ class FsService:
 
     def _op_agents_accounts(self, args: dict[str, Any]) -> Any:
         try:
-            return self.accounts.list(str(args.get("id") or ""))
+            return self.accounts.list(str(args.get("id") or ""), fresh=args.get("fresh") is True)
         except ValueError as exc:
             raise FsError(str(exc), "accounts_error") from None
 

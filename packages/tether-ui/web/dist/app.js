@@ -11180,7 +11180,7 @@ var init_editorOptions = __esm({
         const minimapLineCount = Math.floor(input.viewLineCount / desiredRatio);
         return { typicalViewportLineCount, extraLinesBeforeFirstLine, extraLinesBeyondLastLine, desiredRatio, minimapLineCount };
       }
-      static _computeMinimapLayout(input, memory) {
+      static _computeMinimapLayout(input, memory2) {
         const outerWidth = input.outerWidth;
         const outerHeight = input.outerHeight;
         const pixelRatio = input.pixelRatio;
@@ -11199,7 +11199,7 @@ var init_editorOptions = __esm({
             minimapCanvasOuterHeight: outerHeight
           };
         }
-        const stableMinimapLayoutInput = memory.stableMinimapLayoutInput;
+        const stableMinimapLayoutInput = memory2.stableMinimapLayoutInput;
         const couldUseMemory = stableMinimapLayoutInput && input.outerHeight === stableMinimapLayoutInput.outerHeight && input.lineHeight === stableMinimapLayoutInput.lineHeight && input.typicalHalfwidthCharacterWidth === stableMinimapLayoutInput.typicalHalfwidthCharacterWidth && input.pixelRatio === stableMinimapLayoutInput.pixelRatio && input.scrollBeyondLastLine === stableMinimapLayoutInput.scrollBeyondLastLine && input.paddingTop === stableMinimapLayoutInput.paddingTop && input.paddingBottom === stableMinimapLayoutInput.paddingBottom && input.minimap.enabled === stableMinimapLayoutInput.minimap.enabled && input.minimap.side === stableMinimapLayoutInput.minimap.side && input.minimap.size === stableMinimapLayoutInput.minimap.size && input.minimap.showSlider === stableMinimapLayoutInput.minimap.showSlider && input.minimap.renderCharacters === stableMinimapLayoutInput.minimap.renderCharacters && input.minimap.maxColumn === stableMinimapLayoutInput.minimap.maxColumn && input.minimap.scale === stableMinimapLayoutInput.minimap.scale && input.verticalScrollbarWidth === stableMinimapLayoutInput.verticalScrollbarWidth && input.isViewportWrapping === stableMinimapLayoutInput.isViewportWrapping;
         const lineHeight = input.lineHeight;
         const typicalHalfwidthCharacterWidth = input.typicalHalfwidthCharacterWidth;
@@ -11243,9 +11243,9 @@ var init_editorOptions = __esm({
             let maxMinimapScale = minimapScale + 1;
             if (minimapSize === "fit") {
               const effectiveMinimapHeight = Math.ceil((extraLinesBeforeFirstLine + viewLineCount + extraLinesBeyondLastLine) * minimapLineHeight);
-              if (isViewportWrapping && couldUseMemory && remainingWidth <= memory.stableFitRemainingWidth) {
+              if (isViewportWrapping && couldUseMemory && remainingWidth <= memory2.stableFitRemainingWidth) {
                 fitBecomesFill = true;
-                maxMinimapScale = memory.stableFitMaxMinimapScale;
+                maxMinimapScale = memory2.stableFitMaxMinimapScale;
               } else {
                 fitBecomesFill = effectiveMinimapHeight > minimapCanvasInnerHeight;
               }
@@ -11254,8 +11254,8 @@ var init_editorOptions = __esm({
               minimapHeightIsEditorHeight = true;
               const configuredMinimapScale = minimapScale;
               minimapLineHeight = Math.min(lineHeight * pixelRatio, Math.max(1, Math.floor(1 / desiredRatio)));
-              if (isViewportWrapping && couldUseMemory && remainingWidth <= memory.stableFitRemainingWidth) {
-                maxMinimapScale = memory.stableFitMaxMinimapScale;
+              if (isViewportWrapping && couldUseMemory && remainingWidth <= memory2.stableFitRemainingWidth) {
+                maxMinimapScale = memory2.stableFitMaxMinimapScale;
               }
               minimapScale = Math.min(maxMinimapScale, Math.max(1, Math.floor(minimapLineHeight / baseCharHeight)));
               if (minimapScale > configuredMinimapScale) {
@@ -11264,12 +11264,12 @@ var init_editorOptions = __esm({
               minimapCharWidth = minimapScale / pixelRatio / minimapWidthMultiplier;
               minimapCanvasInnerHeight = Math.ceil(Math.max(typicalViewportLineCount, extraLinesBeforeFirstLine + viewLineCount + extraLinesBeyondLastLine) * minimapLineHeight);
               if (isViewportWrapping) {
-                memory.stableMinimapLayoutInput = input;
-                memory.stableFitRemainingWidth = remainingWidth;
-                memory.stableFitMaxMinimapScale = minimapScale;
+                memory2.stableMinimapLayoutInput = input;
+                memory2.stableFitRemainingWidth = remainingWidth;
+                memory2.stableFitMaxMinimapScale = minimapScale;
               } else {
-                memory.stableMinimapLayoutInput = null;
-                memory.stableFitRemainingWidth = 0;
+                memory2.stableMinimapLayoutInput = null;
+                memory2.stableFitRemainingWidth = 0;
               }
             }
           }
@@ -48064,15 +48064,15 @@ var init_mouseTarget = __esm({
         this._canvas = document.createElement("canvas");
       }
       getCharWidth(char, font) {
-        const cacheKey = char + font;
-        if (this._cache[cacheKey]) {
-          return this._cache[cacheKey];
+        const cacheKey2 = char + font;
+        if (this._cache[cacheKey2]) {
+          return this._cache[cacheKey2];
         }
         const context = this._canvas.getContext("2d");
         context.font = font;
         const metrics = context.measureText(char);
         const width2 = metrics.width;
-        this._cache[cacheKey] = width2;
+        this._cache[cacheKey2] = width2;
         return width2;
       }
     };
@@ -94933,8 +94933,8 @@ var init_glyphLanesModel = __esm({
       get requiredLanes() {
         return this._requiredLanes;
       }
-      push(lane, range2, persist) {
-        if (persist) {
+      push(lane, range2, persist3) {
+        if (persist3) {
           this.persist |= 1 << lane - 1;
         }
         for (let i = range2.startLineNumber; i <= range2.endLineNumber; i++) {
@@ -108871,7 +108871,7 @@ function parseRegExp(pattern) {
   }
   return regEx;
 }
-function parsePattern(arg1, options, cacheKey) {
+function parsePattern(arg1, options, cacheKey2) {
   if (!arg1) {
     return NULL;
   }
@@ -108894,7 +108894,7 @@ function parsePattern(arg1, options, cacheKey) {
       /* preserve old behaviour for when option is not adopted */
     )
   };
-  const patternKey = `${cacheKey === void 0 ? `default:${ignoreCase ? pattern.toLowerCase() : pattern}` : `custom:${cacheKey}`}_${!!options.trimForExclusions}_${ignoreCase}`;
+  const patternKey = `${cacheKey2 === void 0 ? `default:${ignoreCase ? pattern.toLowerCase() : pattern}` : `custom:${cacheKey2}`}_${!!options.trimForExclusions}_${ignoreCase}`;
   let parsedPattern = CACHE.get(patternKey);
   if (parsedPattern) {
     return wrapRelativePattern(parsedPattern, arg1, internalOptions);
@@ -174864,7 +174864,7 @@ function invalidateDirectory(deviceId, path) {
     }
   }
 }
-async function loadDirectory({ deviceId, path, load, fresh = false, ttl = DEFAULT_TTL }) {
+async function loadDirectory({ deviceId, path, load: load3, fresh = false, ttl = DEFAULT_TTL }) {
   const key = directoryKey(deviceId, path);
   if (!fresh) {
     const cached = peekDirectory(deviceId, path, ttl);
@@ -174872,7 +174872,7 @@ async function loadDirectory({ deviceId, path, load, fresh = false, ttl = DEFAUL
     const running = pending.get(key);
     if (running) return running;
   }
-  const task = Promise.resolve().then(load).then((entries2) => {
+  const task = Promise.resolve().then(load3).then((entries2) => {
     rememberDirectory(deviceId, path, entries2);
     return entries2;
   }).finally(() => {
@@ -176686,7 +176686,7 @@ function createAppsPage({ React: React2, Glyph, post, C: C2, devices = [], local
   const [menu, setMenu] = React2.useState(false);
   const [frameKey, setFrameKey] = React2.useState(0);
   const requestRef = React2.useRef(0);
-  const load = async (id) => {
+  const load3 = async (id) => {
     if (!id) return;
     const seq = ++requestRef.current;
     setLoading(true);
@@ -176705,7 +176705,7 @@ function createAppsPage({ React: React2, Glyph, post, C: C2, devices = [], local
     }
   };
   React2.useEffect(() => {
-    void load(device);
+    void load3(device);
   }, [device]);
   React2.useEffect(() => {
     const next = pick(activeDevice);
@@ -176821,7 +176821,7 @@ function createAppsPage({ React: React2, Glyph, post, C: C2, devices = [], local
         "button",
         {
           type: "button",
-          onClick: () => void load(device),
+          onClick: () => void load3(device),
           disabled: loading || !device,
           title: "\u5237\u65B0\u5E94\u7528\u5217\u8868",
           "aria-label": "\u5237\u65B0\u5E94\u7528\u5217\u8868",
@@ -176910,7 +176910,7 @@ function createAppsPage({ React: React2, Glyph, post, C: C2, devices = [], local
         h3("span", null, online.length ? "\u6CA1\u6709\u53EF\u6253\u5F00\u7684\u5E94\u7528" : "\u6CA1\u6709\u5728\u7EBF\u8BBE\u5907"),
         online.length ? h3("button", {
           type: "button",
-          onClick: () => void load(device),
+          onClick: () => void load3(device),
           title: "\u5237\u65B0\u5E94\u7528\u5217\u8868",
           "aria-label": "\u5237\u65B0\u5E94\u7528\u5217\u8868",
           className: "tether-hover",
@@ -177031,19 +177031,84 @@ var AGENT_ICONS = {
 };
 
 // src/agent-cache.js
+var KEY = "tether-agent-cache-v1";
 var catalogs = /* @__PURE__ */ new Map();
 var harnesses = /* @__PURE__ */ new Map();
+function load() {
+  try {
+    if (typeof localStorage === "undefined") return;
+    const raw = localStorage.getItem(KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    if (!data || typeof data !== "object") return;
+    for (const [device, value] of Object.entries(data.catalogs || {})) catalogs.set(device, value);
+    for (const [device, value] of Object.entries(data.harnesses || {})) {
+      if (Array.isArray(value)) harnesses.set(device, value);
+    }
+  } catch (_2) {
+  }
+}
+function persist() {
+  try {
+    if (typeof localStorage === "undefined") return;
+    localStorage.setItem(KEY, JSON.stringify({
+      catalogs: Object.fromEntries(catalogs),
+      harnesses: Object.fromEntries(harnesses)
+    }));
+  } catch (_2) {
+  }
+}
+load();
 function readCatalog(device) {
   return device ? catalogs.get(device) || null : null;
 }
 function writeCatalog(device, data) {
-  if (device && data) catalogs.set(device, data);
+  if (!device || !data) return;
+  catalogs.set(device, data);
+  persist();
 }
 function readHarnesses(device) {
   return device ? harnesses.get(device) || null : null;
 }
 function writeHarnesses(device, data) {
-  if (device && Array.isArray(data)) harnesses.set(device, data);
+  if (!device || !Array.isArray(data)) return;
+  harnesses.set(device, data);
+  persist();
+}
+
+// src/agent-account-cache.js
+var KEY2 = "tether-account-cache-v1";
+var memory = /* @__PURE__ */ new Map();
+function load2() {
+  try {
+    if (typeof localStorage === "undefined") return;
+    const raw = localStorage.getItem(KEY2);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    if (!data || typeof data !== "object") return;
+    for (const [key, value] of Object.entries(data)) memory.set(key, value);
+  } catch (_2) {
+  }
+}
+function persist2() {
+  try {
+    if (typeof localStorage === "undefined") return;
+    const data = {};
+    for (const [key, value] of memory) data[key] = value;
+    localStorage.setItem(KEY2, JSON.stringify(data));
+  } catch (_2) {
+  }
+}
+load2();
+var cacheKey = (device, agent) => String(device || "") + "|" + String(agent || "");
+function readAccount(device, agent) {
+  if (!device || !agent) return null;
+  return memory.get(cacheKey(device, agent)) || null;
+}
+function writeAccount(device, agent, data) {
+  if (!device || !agent || !data) return;
+  memory.set(cacheKey(device, agent), data);
+  persist2();
 }
 
 // src/agent-accounts-panel.js
@@ -177081,7 +177146,7 @@ function quotaColor(percent) {
 }
 function AgentAccountsPanel({ React: React2, Glyph, post, C: C2, device, agent, onOpenTerminal, onLoginTerminal, compact = true }) {
   const h3 = React2.createElement;
-  const [data, setData] = React2.useState(null);
+  const [data, setData] = React2.useState(() => agent && agent.accounts ? readAccount(device, agent.id) : null);
   const [busy, setBusy] = React2.useState("");
   const [error, setError] = React2.useState("");
   const [notice, setNotice] = React2.useState("");
@@ -177101,26 +177166,37 @@ function AgentAccountsPanel({ React: React2, Glyph, post, C: C2, device, agent, 
     fontSize: 12,
     outline: "none"
   };
-  const load = React2.useCallback(async () => {
+  const load3 = React2.useCallback(async (fresh) => {
     if (!enabled) {
       setData(null);
-      return;
+      return null;
     }
     try {
-      const result = await post("/api/devices/" + encodeURIComponent(device) + "/fs/agents_accounts", { id: agent.id });
+      const result = await post(
+        "/api/devices/" + encodeURIComponent(device) + "/fs/agents_accounts",
+        { id: agent.id, fresh: fresh === true }
+      );
       setData(result || null);
+      writeAccount(device, agent.id, result);
       setError("");
+      return result;
     } catch (cause) {
       setError(String(cause && (cause.message || cause.code) || "\u8BFB\u53D6\u5931\u8D25"));
+      return null;
     }
   }, [device, agent && agent.id, enabled, post]);
   React2.useEffect(() => {
-    setData(null);
+    const cached = agent && agent.accounts ? readAccount(device, agent.id) : null;
+    setData(cached || null);
     setError("");
     setNotice("");
     setOpen(false);
     setLogin(null);
-    void load();
+    void load3(false);
+    const timer = setTimeout(() => {
+      void load3(true);
+    }, 350);
+    return () => clearTimeout(timer);
   }, [device, agent && agent.id, enabled]);
   React2.useEffect(() => {
     if (!login || login.status !== "pending" || !login.loginId) return void 0;
@@ -177134,7 +177210,7 @@ function AgentAccountsPanel({ React: React2, Glyph, post, C: C2, device, agent, 
         if (status2.status === "success") {
           setLogin(null);
           setNotice("\u8D26\u53F7\u5DF2\u6DFB\u52A0");
-          await load();
+          await load3();
         } else if (status2.status !== "pending") {
           setLogin({ ...login, ...status2 });
         }
@@ -177143,13 +177219,16 @@ function AgentAccountsPanel({ React: React2, Glyph, post, C: C2, device, agent, 
       }
     }, 1200);
     return () => clearInterval(timer);
-  }, [login && login.loginId, login && login.status, device, post, load]);
+  }, [login && login.loginId, login && login.status, device, post, load3]);
   const call = async (op, body, tag2) => {
     setBusy(tag2);
     setError("");
     try {
       const result = await post("/api/devices/" + encodeURIComponent(device) + "/fs/" + op, { id: agent.id, ...body });
-      if (result) setData(result);
+      if (result) {
+        setData(result);
+        writeAccount(device, agent.id, result);
+      }
       return result;
     } catch (cause) {
       setError(String(cause && (cause.message || cause.code) || cause || "\u64CD\u4F5C\u5931\u8D25"));
@@ -177735,7 +177814,7 @@ function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose, 
     }
     setTestOutput("");
   };
-  const load = async (fresh, keepSelected) => {
+  const load3 = async (fresh, keepSelected) => {
     const cached = readCatalog(device);
     if (cached) {
       setCatalog(cached);
@@ -177767,7 +177846,7 @@ function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose, 
   React2.useEffect(() => {
     setSelectedId("");
     setDraft(null);
-    void load(false, "");
+    void load3(false, "");
   }, [device]);
   React2.useEffect(() => {
     if (!catalog) return;
@@ -177792,7 +177871,7 @@ function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose, 
     try {
       const result = await post("/api/devices/" + encodeURIComponent(device) + "/fs/agents_install", { id: agent.id });
       if (result && result.catalog) applyCatalog(result.catalog, agent.id);
-      else await load(true, agent.id);
+      else await load3(true, agent.id);
     } catch (cause) {
       setError(String(cause && cause.message || cause || "\u5B89\u88C5\u5931\u8D25"));
     } finally {
@@ -178215,7 +178294,7 @@ function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose, 
           type: "button",
           title: "\u5237\u65B0",
           "aria-label": "\u5237\u65B0",
-          onClick: () => void load(true, selectedId),
+          onClick: () => void load3(true, selectedId),
           disabled: busy,
           style: { ...field, width: 30, padding: 0, display: "grid", placeItems: "center", cursor: "pointer", opacity: busy ? 0.5 : 1 }
         },
@@ -178684,16 +178763,21 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
   const [panes, setPanes] = React2.useState([]);
   const [activePane, setActivePane] = React2.useState("");
   const [workspaceOpen, setWorkspaceOpen] = React2.useState(false);
+  const [homeOpen, setHomeOpen] = React2.useState(false);
+  const [detailsOpen, setDetailsOpen] = React2.useState(false);
+  const [stepOpen, setStepOpen] = React2.useState({});
+  const [cwd2, setCwd] = React2.useState("");
   const since = React2.useRef(0);
   const sessionRef = React2.useRef("");
   const tabCache = React2.useRef({});
   const transcriptRef = React2.useRef(null);
   const modelRef = React2.useRef(null);
+  const prefetchedAccounts = React2.useRef("");
   const updateTab = (id, patch) => setTabs((current) => current.map((tab) => tab.id === id ? { ...tab, ...patch } : tab));
   const saveTab = () => {
     const id = sessionRef.current;
     if (!id) return;
-    tabCache.current[id] = { items, ready, agent, models, model, commands, pending: pending2, since: since.current };
+    tabCache.current[id] = { items, ready, agent, models, model, commands, pending: pending2, cwd: cwd2, since: since.current };
   };
   const loadTab = (id) => {
     const cached = tabCache.current[id] || {};
@@ -178706,6 +178790,7 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
     setModel(cached.model || "");
     setCommands(cached.commands || []);
     setPending(cached.pending || []);
+    setCwd(cached.cwd || "");
     setInput("");
     setModelOpen(false);
     since.current = Number(cached.since) || 0;
@@ -178721,25 +178806,26 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
     setCommands([]);
     setPending([]);
     setItems([]);
+    setCwd("");
     setInput("");
     setModelOpen(false);
     since.current = 0;
   };
   const tabColor = (status2) => status2 === "ready" ? "var(--dsw-alias-state-success-primary, #16a34a)" : status2 === "error" ? "var(--dsw-alias-state-error-primary, #b42318)" : status2 === "ended" ? C2.mute : "var(--dsw-alias-state-warn-primary, #b54708)";
-  const addItem = (item) => setItems((current) => [...current, item]);
+  const addItem = (item) => setItems((current) => [...current, { at: Date.now(), ...item }]);
   const appendAssistant = (text2) => setItems((current) => {
     const last = current[current.length - 1];
     if (last && last.kind === "assistant" && last.streaming) {
       return [...current.slice(0, -1), { ...last, text: last.text + text2 }];
     }
-    return [...current, { kind: "assistant", text: text2, streaming: true }];
+    return [...current, { kind: "assistant", text: text2, streaming: true, at: Date.now() }];
   });
   const appendThought = (text2) => setItems((current) => {
     const last = current[current.length - 1];
     if (last && last.kind === "thought" && last.streaming) {
       return [...current.slice(0, -1), { ...last, text: last.text + text2 }];
     }
-    return [...current, { kind: "thought", text: text2, streaming: true }];
+    return [...current, { kind: "thought", text: text2, streaming: true, at: Date.now() }];
   });
   const finishStreaming = () => setItems((current) => {
     let next = current;
@@ -178834,6 +178920,20 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
     document.addEventListener("pointerdown", close);
     return () => document.removeEventListener("pointerdown", close);
   }, [modelOpen]);
+  React2.useEffect(() => {
+    if (!device || !catalog) return;
+    const agents = (catalog.agents || []).filter((item) => item && item.available && item.accounts);
+    if (!agents.length) return;
+    const key = device + ":" + agents.map((item) => item.id).join(",");
+    if (prefetchedAccounts.current === key) return;
+    prefetchedAccounts.current = key;
+    for (const item of agents.slice(0, 8)) {
+      void post("/api/devices/" + encodeURIComponent(device) + "/fs/agents_accounts", { id: item.id, fresh: false }).then((result) => {
+        if (result) writeAccount(device, item.id, result);
+      }).catch(() => {
+      });
+    }
+  }, [device, catalog]);
   const closeTab = async (id) => {
     if (!id) return;
     const remaining = tabs.filter((tab) => tab.id !== id);
@@ -178841,7 +178941,10 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
     setTabs(remaining);
     if (sessionRef.current === id) {
       if (remaining.length) loadTab(remaining[remaining.length - 1].id);
-      else clearSession();
+      else {
+        clearSession();
+        setHomeOpen(true);
+      }
     }
     try {
       await post("/api/devices/" + encodeURIComponent(device) + "/fs/acp_stop", { session_id: id });
@@ -178852,7 +178955,9 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
     await closeTab(sessionRef.current);
   };
   const selectTab = (id) => {
-    if (!id || id === sessionRef.current) return;
+    if (!id) return;
+    setHomeOpen(false);
+    if (id === sessionRef.current) return;
     saveTab();
     loadTab(id);
   };
@@ -178876,6 +178981,8 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
       setModel("");
       setCommands([]);
       setSession(result.session_id);
+      setCwd(result.cwd || "");
+      setHomeOpen(false);
       setInput("");
       setPicking(false);
       setModelOpen(false);
@@ -179172,6 +179279,7 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
       return;
     }
     if (surface === "acp" && harness) {
+      setHomeOpen(false);
       void start(harness);
       setWorkspaceOpen(false);
       return;
@@ -179248,185 +179356,247 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
     { key: index, style: { display: "grid", gap: 2 } },
     block2.split(CRLF).map((line, lineIndex) => h3("div", { key: lineIndex, style: { minHeight: line ? void 0 : 7 } }, ...inlineMarkdown(line)))
   ));
-  const renderItem = (item, index) => {
-    if (item.kind === "user") return h3(
-      "div",
-      { key: index, style: { display: "flex", justifyContent: "flex-end" } },
-      h3("div", { style: {
-        maxWidth: "78%",
-        padding: "8px 12px",
-        borderRadius: "12px 12px 4px 12px",
-        background: C2.soft,
-        color: C2.ink,
-        fontSize: 13,
-        lineHeight: 1.65,
-        whiteSpace: "pre-wrap",
-        wordBreak: "break-word"
-      } }, item.text)
-    );
-    if (item.kind === "assistant") {
-      return h3(
-        "div",
-        { key: index, style: { display: "flex", alignItems: "flex-start", gap: 8 } },
-        h3(
-          "span",
-          { style: { width: 26, height: 26, flex: "0 0 auto", display: "grid", placeItems: "center", borderRadius: 8, background: C2.soft, color: C2.blue } },
-          h3(Glyph, { name: "bot", size: 14 })
-        ),
-        h3("div", { style: {
-          maxWidth: "82%",
-          padding: "9px 12px",
-          borderRadius: "12px 12px 12px 4px",
-          background: C2.panel || C2.bg,
-          border: "1px solid " + C2.line,
-          color: C2.ink,
-          fontSize: 13,
-          lineHeight: 1.65,
-          wordBreak: "break-word"
-        } }, renderMarkdown2(item.text || (item.streaming ? "\u2026" : "")))
-      );
+  const elapsedLabel = (ms2) => {
+    if (!ms2 || ms2 < 1200) return "";
+    const seconds = Math.round(ms2 / 1e3);
+    if (seconds < 60) return seconds + "s";
+    return Math.floor(seconds / 60) + "m" + (seconds % 60 ? " " + seconds % 60 + "s" : "");
+  };
+  const toolIconName = (title) => {
+    const text2 = String(title || "").toLowerCase();
+    if (/shell|command|bash|powershell|cmd|pty|terminal|^(get|set|new|remove|start|stop|invoke|test)-/.test(text2)) return "terminal";
+    if (/read|write|edit|file|image|patch|diff/.test(text2)) return "files";
+    if (/search|grep|glob|find|query/.test(text2)) return "tool";
+    if (/agent|subagent|task|delegate/.test(text2)) return "bot";
+    return "tool";
+  };
+  const toolKindLabel = (title) => {
+    const icon = toolIconName(title);
+    if (icon === "terminal") return "\u7EC8\u7AEF";
+    if (icon === "files") return "\u6587\u4EF6";
+    if (icon === "bot") return "Agent";
+    return "\u5DE5\u5177";
+  };
+  const buildTurns = (list2) => {
+    const turns2 = [];
+    let current = null;
+    const ensure = () => {
+      if (current) return current;
+      current = { user: null, steps: [], answers: [], errors: [], notes: [], streaming: false };
+      turns2.push(current);
+      return current;
+    };
+    for (const item of list2) {
+      if (item.kind === "user") {
+        current = { user: item, steps: [], answers: [], errors: [], notes: [], streaming: false };
+        turns2.push(current);
+        continue;
+      }
+      if (item.kind === "system") {
+        const text2 = String(item.text || "");
+        if (/^已连接|^正在启动|^[A-Za-z]:[\\/]|^\//.test(text2)) continue;
+        ensure().errors.push(item);
+        continue;
+      }
+      const turn = ensure();
+      if (item.kind === "assistant") {
+        if (/^Warning: Exceeded skills context budget/.test(String(item.text || "").trim())) {
+          turn.notes.push(item);
+          continue;
+        }
+        turn.answers.push(item);
+        if (item.streaming) turn.streaming = true;
+      } else if (item.kind === "thought" || item.kind === "tool" || item.kind === "plan") {
+        turn.steps.push(item);
+        if (item.streaming) turn.streaming = true;
+      } else if (item.kind === "error") {
+        turn.errors.push(item);
+      }
     }
-    if (item.kind === "thought") {
-      const open = thoughtOpen[index] != null ? thoughtOpen[index] : !!item.streaming;
-      return h3(
-        "div",
-        { key: index, style: {
-          alignSelf: "flex-start",
-          maxWidth: "82%",
-          padding: "7px 10px",
-          borderRadius: 9,
-          borderLeft: "2px solid #d97706",
-          background: "rgba(217,119,6,.06)"
-        } },
-        h3(
-          "button",
-          {
-            type: "button",
-            onClick: () => setThoughtOpen((current) => ({ ...current, [index]: !open })),
-            style: {
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              border: 0,
-              background: "transparent",
-              color: C2.sub,
-              fontSize: 11.5,
-              cursor: "pointer",
-              padding: 0
-            }
-          },
-          h3(Glyph, { name: "think", size: 13 }),
-          "\u601D\u8003",
-          h3(Glyph, { name: "chevronDown", size: 11 })
-        ),
-        open ? h3("div", { style: {
-          marginTop: 5,
+    return turns2;
+  };
+  const renderStep = (step, turnIndex, stepIndex) => {
+    const key = turnIndex + ":" + stepIndex;
+    const open = !!stepOpen[key];
+    const detail = step.kind === "plan" ? null : step.kind === "tool" ? step.detail || "" : step.text || "";
+    const label = step.kind === "thought" ? "\u601D\u8003" : step.kind === "plan" ? "\u8BA1\u5212" : toolKindLabel(step.title);
+    const title = step.kind === "thought" ? String(step.text || "").split(String.fromCharCode(10))[0].slice(0, 120) : step.kind === "plan" ? (step.entries || []).length + " \u9879" : step.title || "\u5DE5\u5177\u8C03\u7528";
+    const icon = step.kind === "thought" || step.kind === "plan" ? "think" : toolIconName(step.title);
+    const status2 = step.kind === "tool" ? step.status === "completed" ? "\u5B8C\u6210" : step.status === "failed" ? "\u5931\u8D25" : "\u8FD0\u884C\u4E2D" : step.streaming ? "\u8FDB\u884C\u4E2D" : "";
+    const expandable = step.kind === "plan" ? !!(step.entries || []).length : !!detail;
+    return h3(
+      "div",
+      { key, style: { position: "relative", paddingLeft: 28, minWidth: 0 } },
+      h3("span", { style: {
+        position: "absolute",
+        left: 0,
+        top: 1,
+        width: 18,
+        height: 18,
+        display: "grid",
+        placeItems: "center",
+        borderRadius: 9,
+        background: C2.bg,
+        border: "1px solid " + C2.line,
+        color: C2.sub
+      } }, h3(Glyph, { name: icon, size: 10 })),
+      h3(
+        "button",
+        {
+          type: "button",
+          disabled: !expandable,
+          onClick: () => expandable && setStepOpen((current) => ({ ...current, [key]: !open })),
+          style: {
+            display: "flex",
+            alignItems: "center",
+            gap: 7,
+            width: "100%",
+            minHeight: 22,
+            padding: 0,
+            border: 0,
+            background: "transparent",
+            textAlign: "left",
+            cursor: expandable ? "pointer" : "default",
+            minWidth: 0
+          }
+        },
+        h3("span", { style: { flex: "0 0 auto", fontSize: 12.5, fontWeight: 500, color: step.kind === "thought" ? C2.sub : C2.ink } }, label),
+        h3("span", { style: {
+          flex: "1 1 auto",
+          minWidth: 0,
           fontSize: 12.5,
           color: C2.sub,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap"
+        } }, title),
+        status2 ? h3("span", { style: { flex: "0 0 auto", fontSize: 10.5, color: step.kind === "tool" && step.status === "failed" ? C2.red : C2.mute } }, status2) : null,
+        expandable ? h3("span", { style: {
+          flex: "0 0 auto",
+          color: C2.mute,
+          display: "grid",
+          placeItems: "center",
+          transform: open ? "rotate(180deg)" : "none",
+          transition: "transform .15s ease"
+        } }, h3(Glyph, { name: "chevronDown", size: 10 })) : null
+      ),
+      open && expandable ? step.kind === "plan" ? h3(
+        "div",
+        { style: { marginTop: 5, padding: "7px 9px", borderRadius: 8, background: C2.soft, display: "grid", gap: 3 } },
+        ...(step.entries || []).map((entry, entryIndex) => h3("div", { key: entryIndex, style: { fontSize: 12, color: C2.sub, lineHeight: 1.55 } }, "\xB7 " + entry))
+      ) : h3("pre", { style: {
+        margin: "5px 0 0",
+        padding: "8px 10px",
+        borderRadius: 8,
+        background: C2.soft,
+        color: C2.sub,
+        fontFamily: step.kind === "tool" ? "Consolas, monospace" : "inherit",
+        fontSize: step.kind === "tool" ? 11 : 12.5,
+        lineHeight: 1.6,
+        whiteSpace: "pre-wrap",
+        wordBreak: "break-word",
+        maxHeight: 260,
+        overflow: "auto"
+      } }, detail) : null
+    );
+  };
+  const renderTurn = (turn, index) => {
+    const answerText = turn.answers.map((item) => item.text || "").filter(Boolean).join(String.fromCharCode(10, 10)).split(String.fromCharCode(10)).filter((line) => !/^Warning: Exceeded skills context budget/.test(line.trim())).join(String.fromCharCode(10)).trim();
+    const streaming = turn.streaming;
+    const times = [...turn.steps, ...turn.answers].map((item) => item.at).filter((value) => typeof value === "number");
+    const elapsed = times.length ? elapsedLabel((streaming ? Date.now() : Math.max(...times)) - Math.min(...times)) : "";
+    const defaultOpen = streaming || !answerText;
+    const open = stepOpen["turn:" + index] != null ? stepOpen["turn:" + index] : defaultOpen;
+    const toggle = () => setStepOpen((current) => ({ ...current, ["turn:" + index]: !open }));
+    return h3(
+      "div",
+      { key: index, style: { width: "100%", maxWidth: 860, margin: "0 auto", display: "grid", gap: 9, padding: "5px 0" } },
+      turn.user ? h3(
+        "div",
+        { style: { display: "flex", justifyContent: "flex-end" } },
+        h3("div", { style: {
+          maxWidth: "78%",
+          padding: "9px 13px",
+          borderRadius: 16,
+          background: C2.soft,
+          color: C2.ink,
+          fontSize: 13,
           lineHeight: 1.6,
           whiteSpace: "pre-wrap",
           wordBreak: "break-word"
-        } }, item.text) : null
-      );
-    }
-    if (item.kind === "tool") {
-      const color = item.status === "completed" ? C2.green : item.status === "failed" ? C2.red : C2.sub;
-      const open = !!toolOpen[index];
-      return h3(
+        } }, turn.user.text)
+      ) : null,
+      turn.steps.length ? h3(
         "div",
-        { key: index, style: {
-          alignSelf: "flex-start",
-          maxWidth: "82%",
-          display: "grid",
-          gap: 6,
-          padding: "7px 10px",
-          borderRadius: 10,
-          background: C2.soft,
-          border: "1px solid " + C2.line
-        } },
+        { style: { display: "flex", alignItems: "center", gap: 8 } },
         h3(
           "button",
-          {
-            type: "button",
-            onClick: () => setToolOpen((current) => ({ ...current, [index]: !open })),
-            style: {
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              border: 0,
-              background: "transparent",
-              padding: 0,
-              color: C2.ink,
-              cursor: item.detail ? "pointer" : "default",
-              textAlign: "left"
-            }
-          },
-          h3("span", { style: {
-            width: 22,
-            height: 22,
-            flex: "0 0 auto",
-            display: "grid",
-            placeItems: "center",
-            borderRadius: 6,
-            background: C2.bg,
-            color: C2.sub
-          } }, h3(Glyph, { name: "tool", size: 13 })),
-          h3("span", { style: { minWidth: 0, fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, item.title),
+          { type: "button", onClick: toggle, style: {
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            height: 30,
+            padding: "0 12px",
+            border: 0,
+            borderRadius: 999,
+            background: C2.soft,
+            color: streaming ? C2.blue : C2.sub,
+            fontSize: 11.5,
+            cursor: "pointer",
+            width: "fit-content"
+          } },
+          h3(Glyph, { name: streaming ? "refresh" : "tool", size: 12 }),
+          streaming ? "\u6B63\u5728\u6267\u884C" : "\u6267\u884C\u8FC7\u7A0B",
+          h3("span", { style: { color: C2.mute } }, " \xB7 " + turn.steps.length + " \u6B65"),
+          elapsed ? h3("span", { style: { color: C2.mute } }, " \xB7 " + elapsed) : null,
           h3(
             "span",
-            { style: { fontSize: 11, color, marginLeft: "auto", whiteSpace: "nowrap" } },
-            item.status === "completed" ? "\u5B8C\u6210" : item.status === "failed" ? "\u5931\u8D25" : "\u8FD0\u884C\u4E2D"
+            { style: { display: "grid", placeItems: "center", transform: open ? "rotate(180deg)" : "none", transition: "transform .15s ease" } },
+            h3(Glyph, { name: "chevronDown", size: 10 })
           )
-        ),
-        open && item.detail ? h3("pre", { style: {
-          margin: 0,
-          padding: 8,
-          borderRadius: 7,
-          background: "rgba(9,30,66,.05)",
-          fontFamily: "Consolas, monospace",
-          fontSize: 10.5,
-          lineHeight: 1.5,
-          whiteSpace: "pre-wrap",
-          wordBreak: "break-word",
-          maxHeight: 220,
-          overflow: "auto"
-        } }, item.detail) : null
-      );
-    }
-    if (item.kind === "plan") {
-      return h3(
+        )
+      ) : null,
+      turn.steps.length && open ? h3(
         "div",
-        { key: index, style: {
-          alignSelf: "flex-start",
-          maxWidth: "82%",
-          padding: "9px 12px",
-          borderRadius: 10,
-          background: C2.soft,
-          border: "1px solid " + C2.line,
-          display: "grid",
-          gap: 5
-        } },
-        h3(
-          "div",
-          { style: { display: "flex", alignItems: "center", gap: 7, fontSize: 12, color: C2.sub } },
-          h3(Glyph, { name: "think", size: 13 }),
-          "\u6267\u884C\u8BA1\u5212"
-        ),
-        ...item.entries.map((entry, entryIndex) => h3("div", { key: entryIndex, style: { fontSize: 12.5, color: C2.ink, lineHeight: 1.55 } }, "\xB7 " + entry))
-      );
-    }
-    if (item.kind === "error") return h3("div", { key: index, style: {
-      alignSelf: "center",
-      maxWidth: "88%",
-      padding: "6px 10px",
-      borderRadius: 8,
-      background: "rgba(180,35,24,.08)",
-      color: C2.red,
-      fontSize: 12,
-      textAlign: "center"
-    } }, item.text);
-    return h3("div", { key: index, style: { alignSelf: "center", color: C2.mute, fontSize: 11.5, textAlign: "center", padding: "1px 0" } }, item.text);
+        { style: { position: "relative", display: "grid", gap: 6, paddingLeft: 0 } },
+        h3("span", { style: { position: "absolute", left: 9, top: 8, bottom: 8, width: 1, background: C2.line } }),
+        ...turn.steps.map((step, stepIndex) => renderStep(step, index, stepIndex))
+      ) : null,
+      answerText ? h3(
+        "div",
+        { style: { fontSize: 13.5, lineHeight: 1.75, color: C2.ink, wordBreak: "break-word" } },
+        ...renderMarkdown2(answerText)
+      ) : null,
+      streaming && !answerText ? h3(
+        "div",
+        { style: { display: "flex", alignItems: "center", gap: 7, color: C2.mute, fontSize: 11.5 } },
+        h3("span", { className: "tether-spin", style: {
+          width: 13,
+          height: 13,
+          borderRadius: "50%",
+          border: "1.5px solid " + C2.line,
+          borderTopColor: C2.blue,
+          display: "inline-block"
+        } }),
+        "Agent \u6B63\u5728\u5DE5\u4F5C\u2026"
+      ) : null,
+      ...turn.errors.map((item, errorIndex) => h3("div", { key: "err" + errorIndex, style: {
+        padding: "7px 10px",
+        borderRadius: 8,
+        background: "rgba(180,35,24,.07)",
+        color: C2.red,
+        fontSize: 12,
+        lineHeight: 1.5
+      } }, item.text)),
+      ...turn.notes.map((item, noteIndex) => h3("div", { key: "note" + noteIndex, style: {
+        fontSize: 10.5,
+        color: C2.mute,
+        lineHeight: 1.5,
+        paddingLeft: 2
+      } }, item.text))
+    );
   };
+  const turns = buildTurns(items);
   const currentModel = models.find((item) => item.modelId === model) || models[0];
   const modelLabel = currentModel ? currentModel.name || currentModel.modelId : model || "\u6A21\u578B";
   const headerRow = h3(
@@ -179546,11 +179716,35 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
     "div",
     {
       key: "base",
-      style: { flex: "1 1 auto", minHeight: 0, display: workspaceOpen ? "none" : "flex", flexDirection: "column", gap: 8 }
+      style: { flex: "1 1 auto", minHeight: 0, position: "relative", display: workspaceOpen ? "none" : "flex", flexDirection: "column", gap: 8 }
     },
-    tabs.length ? h3(
+    tabs.length || picking ? h3(
       "div",
       { style: { display: "flex", alignItems: "center", gap: 4, flex: "0 0 auto", overflowX: "auto" } },
+      h3(
+        "button",
+        {
+          key: "home",
+          type: "button",
+          title: "\u4E3B\u9875",
+          "aria-label": "\u4E3B\u9875",
+          onClick: () => setHomeOpen(true),
+          style: {
+            ...field,
+            height: 26,
+            padding: "0 9px",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: 5,
+            background: homeOpen ? C2.soft : "transparent",
+            color: homeOpen ? C2.ink : C2.sub,
+            border: "1px solid " + (homeOpen ? C2.line : "transparent")
+          }
+        },
+        h3(Glyph, { name: "apps", size: 12 }),
+        "\u4E3B\u9875"
+      ),
       tabs.map((tab) => h3(
         "div",
         {
@@ -179566,9 +179760,9 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
             padding: "0 5px 0 9px",
             borderRadius: 7,
             cursor: "pointer",
-            background: tab.id === session ? C2.soft : "transparent",
-            color: tab.id === session ? C2.ink : C2.sub,
-            border: "1px solid " + (tab.id === session ? C2.line : "transparent"),
+            background: !homeOpen && tab.id === session ? C2.soft : "transparent",
+            color: !homeOpen && tab.id === session ? C2.ink : C2.sub,
+            border: "1px solid " + (!homeOpen && tab.id === session ? C2.line : "transparent"),
             whiteSpace: "nowrap"
           }
         },
@@ -179601,11 +179795,14 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
         type: "button",
         title: "\u518D\u5F00\u4E00\u4E2A Agent",
         "aria-label": "\u518D\u5F00\u4E00\u4E2A Agent",
-        onClick: () => setPicking(true),
+        onClick: () => {
+          setHomeOpen(false);
+          setPicking(true);
+        },
         style: { ...field, height: 26, padding: "0 9px", cursor: "pointer" }
       }, "+")
     ) : null,
-    !session && !picking ? h3(AgentHome, {
+    (homeOpen || !session && !picking) && !picking ? h3(AgentHome, {
       key: "home",
       React: React2,
       Glyph,
@@ -179676,21 +179873,87 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
         detecting ? "\u6B63\u5728\u68C0\u6D4B\u672C\u673A Agent\u2026" : "\u6CA1\u6709\u68C0\u6D4B\u5230 ACP Harness\u3002\u5148\u5728\u76EE\u6807\u7535\u8111\u88C5\u597D Gemini CLI / OpenCode / Claude Code adapter / Codex adapter\u3002"
       )
     ) : null,
-    session || picking ? h3(
+    !homeOpen && (session || picking) ? h3(
+      "div",
+      { style: { display: "flex", alignItems: "center", gap: 8, flex: "0 0 auto", padding: "2px 2px 0" } },
+      h3(
+        "button",
+        {
+          type: "button",
+          title: "\u8FD4\u56DE\u4E3B\u9875",
+          "aria-label": "\u8FD4\u56DE\u4E3B\u9875",
+          onClick: () => setHomeOpen(true),
+          className: "tether-hover",
+          style: { ...field, height: 30, padding: "0 9px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }
+        },
+        h3("span", { style: { fontSize: 16, lineHeight: 1 } }, "\u2039"),
+        "\u4E3B\u9875"
+      ),
+      h3(
+        "div",
+        { style: { minWidth: 0, flex: "1 1 auto", display: "grid", gap: 1 } },
+        h3(
+          "div",
+          { style: { fontSize: 14, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
+          agent && (agent.title || agent.name) || "Agent"
+        ),
+        h3(
+          "div",
+          { style: { fontSize: 11, color: C2.mute } },
+          (ready ? "\u5DF2\u8FDE\u63A5" : "\u6B63\u5728\u542F\u52A8") + (modelLabel ? " \xB7 " + modelLabel : "")
+        )
+      ),
+      h3("button", {
+        type: "button",
+        title: "\u4F1A\u8BDD\u8BE6\u60C5",
+        "aria-label": "\u4F1A\u8BDD\u8BE6\u60C5",
+        onClick: () => setDetailsOpen((value) => !value),
+        className: "tether-hover",
+        style: {
+          ...field,
+          width: 30,
+          padding: 0,
+          display: "grid",
+          placeItems: "center",
+          cursor: "pointer",
+          background: detailsOpen ? C2.soft : "transparent"
+        }
+      }, h3(Glyph, { name: "files", size: 14 })),
+      session ? h3("button", {
+        type: "button",
+        onClick: () => void stop(),
+        className: "tether-hover",
+        style: { ...field, height: 30, padding: "0 10px", cursor: "pointer" }
+      }, "\u505C\u6B62") : null
+    ) : null,
+    !homeOpen && (session || picking) ? h3(
       "div",
       {
         key: "transcript",
         ref: transcriptRef,
         className: "tether-scroll",
-        style: { flex: "1 1 auto", minHeight: 0, overflow: "auto", display: "flex", flexDirection: "column", gap: 10, padding: "6px 4px 10px" }
+        style: {
+          flex: "1 1 auto",
+          minHeight: 0,
+          overflow: "auto",
+          overflowX: "hidden",
+          display: "flex",
+          flexDirection: "column",
+          padding: "0",
+          paddingRight: detailsOpen ? 310 : 0
+        }
       },
-      items.length ? items.map(renderItem) : h3(
+      h3(
         "div",
-        { style: { margin: "auto", color: C2.mute, fontSize: 12, textAlign: "center" } },
-        session ? "\u7B49\u5F85 Agent \u8F93\u51FA\u2026" : "\u9009\u62E9\u4E00\u53F0\u5DF2\u5B89\u88C5 ACP Harness \u7684\u7535\u8111\uFF0C\u70B9\u51FB\u5361\u7247\u5F00\u59CB\u4F1A\u8BDD\u3002"
+        { style: { width: "100%", maxWidth: "100%", boxSizing: "border-box", minWidth: 0, display: "grid", gap: 2, padding: "10px 22px 16px" } },
+        turns.length ? turns.map(renderTurn) : h3(
+          "div",
+          { style: { padding: "46px 0", textAlign: "center", color: C2.mute, fontSize: 12 } },
+          session ? "\u7B49\u5F85 Agent \u8F93\u51FA\u2026" : "\u9009\u62E9\u4E00\u53F0\u5DF2\u5B89\u88C5 ACP Harness \u7684\u7535\u8111\uFF0C\u70B9\u51FB\u5361\u7247\u5F00\u59CB\u4F1A\u8BDD\u3002"
+        )
       )
     ) : null,
-    pending2.map((item) => h3(
+    !homeOpen ? pending2.map((item) => h3(
       "div",
       { key: "perm-" + item.requestId, style: {
         display: "flex",
@@ -179717,8 +179980,8 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
         },
         style: { ...field, height: 24, cursor: "pointer" }
       }, option.name || option.optionId))
-    )),
-    session && commands.length ? h3(
+    )) : null,
+    !homeOpen && session && commands.length ? h3(
       "div",
       { style: { display: "flex", gap: 6, flexWrap: "wrap", flex: "0 0 auto" } },
       commands.map((command) => h3("button", {
@@ -179729,7 +179992,7 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
         style: { ...field, height: 22, cursor: "pointer", color: C2.sub }
       }, "/" + command.name))
     ) : null,
-    session || picking ? h3(
+    !homeOpen && (session || picking) ? h3(
       "form",
       {
         onSubmit: send,
@@ -179855,6 +180118,52 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
           opacity: !session || !ready || !input.trim() ? 0.4 : 1
         }
       }, h3(Glyph, { name: "arrowUp", size: 15 }))
+    ) : null,
+    detailsOpen && !homeOpen && (session || picking) ? h3(
+      "div",
+      { style: {
+        position: "absolute",
+        top: 76,
+        right: 8,
+        bottom: 88,
+        width: 300,
+        zIndex: 35,
+        background: C2.bg,
+        border: "1px solid " + C2.line,
+        borderRadius: 12,
+        boxShadow: "0 12px 36px rgba(16,24,40,.16)",
+        padding: 12,
+        overflow: "auto",
+        display: "grid",
+        gap: 10,
+        alignContent: "start"
+      } },
+      h3(
+        "div",
+        { style: { display: "flex", alignItems: "center", gap: 8 } },
+        h3("div", { style: { flex: "1 1 auto", fontSize: 12.5, fontWeight: 600 } }, "\u5BF9\u8BDD\u8BE6\u60C5"),
+        h3("button", {
+          type: "button",
+          title: "\u5173\u95ED\u8BE6\u60C5",
+          "aria-label": "\u5173\u95ED\u8BE6\u60C5",
+          onClick: () => setDetailsOpen(false),
+          style: { width: 24, height: 24, border: 0, borderRadius: 6, background: "transparent", color: C2.mute, cursor: "pointer", fontSize: 15 }
+        }, "\xD7")
+      ),
+      ...[
+        ["\u72B6\u6001", ready ? "\u5DF2\u8FDE\u63A5" : "\u6B63\u5728\u542F\u52A8"],
+        ["Agent", agent && (agent.title || agent.name) || "\u2014"],
+        ["\u6A21\u578B", modelLabel || "\u2014"],
+        ["\u5DE5\u4F5C\u76EE\u5F55", cwd2 || "\u2014"],
+        ["\u4F1A\u8BDD", session ? session.slice(0, 8) : "\u2014"],
+        ["\u6B65\u9AA4", String(turns.reduce((sum, turn) => sum + turn.steps.length, 0))],
+        ["\u6D88\u606F", String(turns.reduce((sum, turn) => sum + turn.answers.length, 0))]
+      ].map((row) => h3(
+        "div",
+        { key: row[0], style: { display: "grid", gap: 2, paddingBottom: 7, borderBottom: "1px solid " + C2.line } },
+        h3("div", { style: { fontSize: 10.5, color: C2.mute } }, row[0]),
+        h3("div", { style: { fontSize: 12, color: C2.ink, wordBreak: "break-all", lineHeight: 1.5 } }, row[1])
+      ))
     ) : null
   );
   const paneBody = (pane) => pane.kind === "web" ? pane.url ? h3("iframe", {
@@ -183281,12 +183590,12 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     React2.useEffect(() => {
       if (!deviceId) return void 0;
       let alive = true;
-      const load = () => post("/api/devices/" + encodeURIComponent(deviceId) + "/fs/dsh_web_status", {}).then((data) => {
+      const load3 = () => post("/api/devices/" + encodeURIComponent(deviceId) + "/fs/dsh_web_status", {}).then((data) => {
         if (alive) setDshWeb(dshWebValue(data));
       }).catch(() => {
       });
-      void load();
-      const timer = setInterval(load, dshWeb && dshWeb.installing ? 1500 : 4e3);
+      void load3();
+      const timer = setInterval(load3, dshWeb && dshWeb.installing ? 1500 : 4e3);
       return () => {
         alive = false;
         clearInterval(timer);
@@ -183318,15 +183627,15 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         return void 0;
       }
       let alive = true;
-      const load = async () => {
+      const load3 = async () => {
         try {
           const data = await post("/api/devices/" + encodeURIComponent(deviceId) + "/fs/dsh_status", {});
           if (alive) setDsh(data);
         } catch (_2) {
         }
       };
-      void load();
-      const timer = setInterval(load, dshBusy || dsh && dsh.installing ? 1500 : 5e3);
+      void load3();
+      const timer = setInterval(load3, dshBusy || dsh && dsh.installing ? 1500 : 5e3);
       return () => {
         alive = false;
         clearInterval(timer);
@@ -184242,15 +184551,15 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         autoUpdateChecksRef.current = {};
         updateCacheAuthorityRef.current = cacheAuthority;
       }
-      const cacheKey = scope ? updateCheckCacheKey(key, authority, authorityGeneration) : requestAuthority + ":" + key;
+      const cacheKey2 = scope ? updateCheckCacheKey(key, authority, authorityGeneration) : requestAuthority + ":" + key;
       const metaKey = "check:" + key;
       const metaToken = updateResponseArbiterRef.current.begin(metaKey, authority, "check");
       const authorityIsCurrent = () => scope ? ACTIVE_BASE === authority && ACTIVE_BASE_GENERATION === authorityGeneration : host === authority;
       const metadataIsCurrent = () => updateResponseArbiterRef.current.isCurrent(metaKey, metaToken, authority) && authorityIsCurrent() && updateCheckScopeIsCurrent(scope);
       return cachedUpdateCheck(
         updateCheckCacheRef.current,
-        cacheKey,
-        () => dedupeUpdateCheck(autoUpdateChecksRef.current, cacheKey, () => checkUpdateAvailability(
+        cacheKey2,
+        () => dedupeUpdateCheck(autoUpdateChecksRef.current, cacheKey2, () => checkUpdateAvailability(
           () => retryTransientUpdate(() => withUpdateTimeout(loadUpdateInfo(component, "check", scope ? authority : void 0, scope, authorityGeneration), localUpdateWaitMs(component))),
           () => metadataIsCurrent()
         )),
@@ -184904,15 +185213,15 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       const id = appLocalDevice || deviceId;
       if (!id) return void 0;
       let alive = true;
-      const load = async () => {
+      const load3 = async () => {
         try {
           const data = await post("/api/devices/" + encodeURIComponent(id) + "/fs/dsh_status", {});
           if (alive && data) setLocalDsh(data);
         } catch (_2) {
         }
       };
-      void load();
-      const timer = setInterval(load, dshBusy || localDsh && localDsh.installing ? 1500 : 8e3);
+      void load3();
+      const timer = setInterval(load3, dshBusy || localDsh && localDsh.installing ? 1500 : 8e3);
       return () => {
         alive = false;
         clearInterval(timer);
@@ -185267,7 +185576,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         return;
       }
       let live = true;
-      const load = async () => {
+      const load3 = async () => {
         setSessionLoading(true);
         try {
           const data = await api2("/api/devices/" + encodeURIComponent(deviceId) + "/dsh/sessions/" + encodeURIComponent(sessionId));
@@ -185282,8 +185591,8 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           }
         }
       };
-      load();
-      const t = setInterval(load, 1500);
+      load3();
+      const t = setInterval(load3, 1500);
       return () => {
         live = false;
         clearInterval(t);
@@ -185338,15 +185647,15 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         return;
       }
       let live = true;
-      const load = async () => {
+      const load3 = async () => {
         try {
           const data = await api2("/api/runs/" + encodeURIComponent(runId) + "/events?after_seq=0");
           if (live) setRunEvents(data.events || []);
         } catch (_2) {
         }
       };
-      load();
-      const t = setInterval(load, 1e3);
+      load3();
+      const t = setInterval(load3, 1e3);
       return () => {
         live = false;
         clearInterval(t);

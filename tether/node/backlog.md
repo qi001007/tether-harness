@@ -67,3 +67,4 @@
 - 2026-11-04：账号快照只允许内置组（codex/claude/gemini/opencode/qoder），文件路径写死、不接收用户路径；profile id 必须 `[a-z0-9]{8,32}`，写入 600，切换前不改动未在 profile 里的文件。`agents_test` 用 `--version` 并带 cwd/env，返回码与输出都回传。
 - 2026-11-04：账号 `current` 继续按 live 文件 SHA 指纹判断，不写 active 指针（真实换号后自然只有匹配的那份为当前）；`save` 发现实时指纹与已有档案完全一致时直接返回现有列表，避免同一账号重复生成多份“当前”档案。
 - 2026-11-04：账号管理接 Codex app-server：`account/read`/`login/start`（device code）/`logout`/`rateLimits/read`；每个档案是一个独立 `CODEX_HOME`（`<data>/agent-accounts/codex/<id>/home`，只放 auth.json/config.toml），添加/重登在档案内做，切换只覆盖 live `~/.codex` 的 auth/config，不碰 sessions。列表首次自动导入 live 账号，`imported` 标记防止删除后又被自动导入；`current` 优先按 JWT 的 account_id 匹配，fake/旧档案回退 SHA 指纹。非 Codex 用 `login_command` + registry 解析后的 executable 生成 argv，由 UI 直接起 PTY；Codex 之外不提供 logout（避免误删 live 文件）。
+- 2026-11-04：`agent_accounts.list(fresh=False)` 只返回已有元数据，不启动 Codex app-server probe；只有 `fresh=true` 才并行探测额度/套餐。UI 打开账号先读缓存，再后台 fresh 刷新；目录和账号都写 localStorage，避免每次进页面重扫。

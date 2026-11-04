@@ -1,4 +1,5 @@
 import { AGENT_ICONS } from './agent-icons.js'
+import { readAccount, writeAccount } from './agent-account-cache.js'
 
 const PLAN_LABELS = { plus: 'Plus', pro: 'Pro', free: 'Free', team: 'Team', business: 'Business' }
 
@@ -39,7 +40,7 @@ function quotaColor(percent) {
 
 export function AgentAccountsPanel({ React, Glyph, post, C, device, agent, onOpenTerminal, onLoginTerminal, compact = true }) {
   const h = React.createElement
-  const [data, setData] = React.useState(null)
+  const [data, setData] = React.useState(() => agent && agent.accounts ? readAccount(device, agent.id) : null)
   const [busy, setBusy] = React.useState('')
   const [error, setError] = React.useState('')
   const [notice, setNotice] = React.useState('')
@@ -53,24 +54,31 @@ export function AgentAccountsPanel({ React, Glyph, post, C, device, agent, onOpe
     borderRadius: 7, padding: '0 9px', background: C.bg, color: C.ink, fontSize: 12, outline: 'none'
   }
 
-  const load = React.useCallback(async () => {
-    if (!enabled) { setData(null); return }
+  const load = React.useCallback(async (fresh) => {
+    if (!enabled) { setData(null); return null }
     try {
-      const result = await post('/api/devices/' + encodeURIComponent(device) + '/fs/agents_accounts', { id: agent.id })
+      const result = await post('/api/devices/' + encodeURIComponent(device) + '/fs/agents_accounts',
+        { id: agent.id, fresh: fresh === true })
       setData(result || null)
+      writeAccount(device, agent.id, result)
       setError('')
+      return result
     } catch (cause) {
       setError(String((cause && (cause.message || cause.code)) || '读取失败'))
+      return null
     }
   }, [device, agent && agent.id, enabled, post])
 
   React.useEffect(() => {
-    setData(null)
+    const cached = agent && agent.accounts ? readAccount(device, agent.id) : null
+    setData(cached || null)
     setError('')
     setNotice('')
     setOpen(false)
     setLogin(null)
-    void load()
+    void load(false)
+    const timer = setTimeout(() => { void load(true) }, 350)
+    return () => clearTimeout(timer)
   }, [device, agent && agent.id, enabled])
 
   React.useEffect(() => {
@@ -99,7 +107,7 @@ export function AgentAccountsPanel({ React, Glyph, post, C, device, agent, onOpe
     setError('')
     try {
       const result = await post('/api/devices/' + encodeURIComponent(device) + '/fs/' + op, { id: agent.id, ...body })
-      if (result) setData(result)
+      if (result) { setData(result); writeAccount(device, agent.id, result) }
       return result
     } catch (cause) {
       setError(String((cause && (cause.message || cause.code)) || cause || '操作失败'))
