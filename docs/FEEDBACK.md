@@ -258,6 +258,9 @@
 
 - [x] F96 Agents 页按 Herdr/Codex 形态可真实起会话：设备下拉、刷新/停止、`Codex CLI · codex-acp` 卡片、模型列表、工作区路径、`[就绪]` 状态、斜杠命令与 composer。**实测 2026-11-04**：APP 点 Agents → 点 Codex 卡片，出现 `ACP · Codex CLI`、`E:\遥望科技实习项目	ether\work-local`、模型 6 Luna / 5.6 Sol / 5.6 Terra 全列表与 `/plan /mcp /skills /status ...` 命令；未发送消息（不消耗真实模型额度）。
 
+- [x] F97 Agents 会话页必须是可用的 Codex/OpenCode 式聊天界面，而不是裸终端日志。判据：消息气泡、工具/计划卡片、输入框、模型切换、图标齐全；启动/就绪/错误有状态；最小化后会话继续。**实测 2026-11-04**：ACP 事件改为结构化 transcript；Codex 2.5.0 会话显示 `已就绪`、发送输入框、自绘模型菜单（46 个模型、描述、✓）、`/plan /mcp …` 命令条；窗口隐藏时轮询不再停。
+- [x] F98 Linux 文件必须能看懂是什么、文本文件能打开。判据：无后缀文件显示真实类型；文本可预览；二进制明确说明不支持且不伪装成 TXT。**实测 2026-11-04**：`/srv/tether-admin` 列表显示 `addr2line → ELF 可执行`、`NOTES → 文本`、`preview-test.txt → TXT 文件`；双击 NOTES 打开内容；addr2line 标签为 ELF，提示 `ELF 可执行 · 暂不支持预览`。
+
 ## 验收边界
 
 离线测试、隔离 UI、单机 DSH、本机真实模型回答、干净安装、真实跨设备操作和公开发布分别记录，不能互相替代。未完成发布与实机验收前，保持对应条目未完成。

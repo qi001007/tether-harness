@@ -543,9 +543,12 @@ class FsService:
         for child in sorted(children, key=lambda c: (not c.is_dir(), c.name.lower())):
             try:
                 st = child.stat()
-                items.append({"name": child.name, "path": str(child), "dir": child.is_dir(),
-                              "size": st.st_size, "mtime": st.st_mtime,
-                              "hidden": child.name.startswith(".")})
+                item = {"name": child.name, "path": str(child), "dir": child.is_dir(),
+                        "size": st.st_size, "mtime": st.st_mtime,
+                        "hidden": child.name.startswith(".")}
+                if not child.is_dir() and not child.suffix:
+                    item.update(self._file_format(child))
+                items.append(item)
             except OSError:
                 continue
         writable = self.policy.can_write(p, op="write")[0]
@@ -775,6 +778,35 @@ class FsService:
             result.update({"binary": False, "text": chunk.decode("utf-8", errors="replace")})
         return result
 
+    def _file_format(self, path: Path) -> dict[str, Any]:
+        try:
+            with path.open("rb") as stream:
+                head = stream.read(512)
+        except OSError:
+            return {}
+        checks = (
+            (b"\x7fELF", "ELF 可执行", "application/x-elf"),
+            (b"\x89PNG\r\n\x1a\n", "PNG 图片", "image/png"),
+            (b"\xff\xd8\xff", "JPEG 图片", "image/jpeg"),
+            (b"GIF87a", "GIF 图片", "image/gif"),
+            (b"GIF89a", "GIF 图片", "image/gif"),
+            (b"%PDF", "PDF 文档", "application/pdf"),
+            (b"PK\x03\x04", "ZIP 压缩包", "application/zip"),
+            (b"\x1f\x8b", "GZIP 压缩包", "application/gzip"),
+        )
+        for magic, label, mime in checks:
+            if head.startswith(magic):
+                return {"format": label, "mime": mime, "binary": True}
+        if head.startswith(b"#!"):
+            return {"format": "脚本", "mime": "text/x-script", "binary": False}
+        if b"\x00" not in head:
+            try:
+                head.decode("utf-8")
+                return {"format": "文本", "mime": "text/plain", "binary": False}
+            except UnicodeDecodeError:
+                pass
+        return {"format": "二进制", "mime": "application/octet-stream", "binary": True}
+
     def _op_preview(self, args: dict[str, Any]) -> dict[str, Any]:
         p = self._resolve(args.get("path"))
         self._read_guard(p)
@@ -857,7 +889,9 @@ class FsService:
                                "newline": newline, "truncated": truncated,
                                "editable": writable and not truncated})
                 return result
-        result.update({"kind": "unsupported", "mime": mimetypes.guess_type(str(p))[0] or ""})
+        detected = self._file_format(p)
+        result.update({"kind": "unsupported", "mime": mimetypes.guess_type(str(p))[0] or "",
+                       "format": detected.get("format") or "二进制"})
         return result
 
     def _xlsx_rows(self, source: Path) -> list[str]:

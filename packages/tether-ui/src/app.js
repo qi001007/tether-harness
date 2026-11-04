@@ -950,14 +950,20 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       return requestDevice === currentDevice && requestEpoch === currentEpoch
     }
     function pathBasename(path) { return String(path || '').replace(/[\\/]+$/, '').split(/[\\/]/).pop() || String(path || '') }
-    function fileTypeMark(name) {
+    function fileTypeMark(name, format, kind) {
       const base = pathBasename(name)
       const lower = base.toLowerCase()
       if (lower === 'dockerfile') return 'DK'
       if (lower === 'makefile') return 'MK'
       const dot = base.lastIndexOf('.')
-      const type = dot > 0 && dot < base.length - 1 ? base.slice(dot + 1) : (base.startsWith('.') ? base.slice(1) : 'TXT')
-      return String(type || 'TXT').slice(0, 4).toUpperCase()
+      if (dot > 0 && dot < base.length - 1) return String(base.slice(dot + 1)).slice(0, 4).toUpperCase()
+      if (kind === 'text' || kind === 'markdown') return 'TXT'
+      const marks = {
+        'ELF 可执行': 'ELF', '脚本': 'SH', '文本': 'TXT', '二进制': 'BIN',
+        'PNG 图片': 'PNG', 'JPEG 图片': 'JPG', 'GIF 图片': 'GIF',
+        'PDF 文档': 'PDF', 'ZIP 压缩包': 'ZIP', 'GZIP 压缩包': 'GZ'
+      }
+      return marks[format] || (base.startsWith('.') ? base.slice(1, 5).toUpperCase() : 'FILE')
     }
     function joinPath(base, name) {
       const raw = String(base || '')
@@ -1000,7 +1006,8 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
     function entryTypeLabel(entry) {
       if (entry.dir) return '文件夹'
       const suffix = String(entry.name || '').split('.').pop()
-      return suffix && suffix !== entry.name ? suffix.toUpperCase() + ' 文件' : '文件'
+      if (suffix && suffix !== entry.name) return suffix.toUpperCase() + ' 文件'
+      return entry.format || '文件'
     }
     const EXPLORER_SORT_KEYS = ['name', 'mtime', 'size']
     function explorerHistory(history) {
@@ -5694,7 +5701,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             className: 'tether-tab', title: file.path, 'data-dirty': dirty ? 'true' : undefined,
             style: { display: 'flex', alignItems: 'center', gap: 7, height: 31, boxSizing: 'border-box', padding: '0 6px 0 7px', background: 'var(--tether-tab-bg, ' + C.bg + ')', maxWidth: 280, minWidth: 0, position: 'relative', flex: '0 0 auto' }
           },
-            h('span', { className: 'tether-file-badge', 'aria-hidden': true }, fileTypeMark(file.name || file.path)),
+            h('span', { className: 'tether-file-badge', 'aria-hidden': true }, fileTypeMark(file.name || file.path, file.format, file.kind)),
             h('span', { className: 'tether-tab-title' }, file.name || pathBasename(file.path)),
             dirty ? h('span', { className: 'tether-tab-dirty', title: '未保存', style: { width: 6, height: 6, borderRadius: '50%', background: 'var(--tether-chrome-ink)', flex: '0 0 auto' } }) : null,
             file.writable ? null : pill('只读', C.amber),
@@ -5754,7 +5761,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             ? h('embed', { src: previewUrl, type: 'application/pdf', style: { flex: '1 1 auto', width: '100%', height: '100%', minHeight: 0, border: 0, background: C.panel } })
             : h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', color: C.mute, fontSize: 12 } }, 'PDF 预览失败')
           return h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', alignContent: 'center', gap: 6, color: C.mute, fontSize: 12, padding: 24, textAlign: 'center' } },
-            h('div', null, '此类型暂不支持预览'),
+            h('div', null, file.format ? file.format + ' · 暂不支持预览' : '此类型暂不支持预览'),
             h('div', { className: 'tether-num', style: { fontSize: 11 } }, (file.name || file.path) + ' · ' + formatBytes(file.size)))
         }
 

@@ -10120,8 +10120,7 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
   const [harnesses, setHarnesses] = React.useState([])
   const [detecting, setDetecting] = React.useState(false)
   const [session, setSession] = React.useState('')
-  const [harness, setHarness] = React.useState(null)
-  const [output, setOutput] = React.useState('')
+  const [items, setItems] = React.useState([])
   const [input, setInput] = React.useState('')
   const [busy, setBusy] = React.useState(false)
   const [ready, setReady] = React.useState(false)
@@ -10132,22 +10131,24 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
   const [pending, setPending] = React.useState([])
   const [tabs, setTabs] = React.useState([])
   const [picking, setPicking] = React.useState(false)
+  const [modelOpen, setModelOpen] = React.useState(false)
   const since = React.useRef(0)
   const sessionRef = React.useRef('')
   const tabCache = React.useRef({})
-  const outputRef = React.useRef(null)
+  const transcriptRef = React.useRef(null)
+  const modelRef = React.useRef(null)
 
   const updateTab = (id, patch) => setTabs((current) => current.map((tab) => tab.id === id ? { ...tab, ...patch } : tab))
   const saveTab = () => {
     const id = sessionRef.current
     if (!id) return
-    tabCache.current[id] = { output, ready, agent, models, model, commands, pending, since: since.current }
+    tabCache.current[id] = { items, ready, agent, models, model, commands, pending, since: since.current }
   }
   const loadTab = (id) => {
     const cached = tabCache.current[id] || {}
     sessionRef.current = id
     setSession(id)
-    setOutput(cached.output || '')
+    setItems(cached.items || [])
     setReady(!!cached.ready)
     setAgent(cached.agent || null)
     setModels(cached.models || [])
@@ -10155,6 +10156,7 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
     setCommands(cached.commands || [])
     setPending(cached.pending || [])
     setInput('')
+    setModelOpen(false)
     since.current = Number(cached.since) || 0
     setPicking(false)
   }
@@ -10167,17 +10169,33 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
     setModel('')
     setCommands([])
     setPending([])
-    setOutput('')
+    setItems([])
     setInput('')
+    setModelOpen(false)
     since.current = 0
   }
   const tabColor = (status) => status === 'ready' ? 'var(--dsw-alias-state-success-primary, #16a34a)'
     : status === 'error' ? 'var(--dsw-alias-state-error-primary, #b42318)'
       : status === 'ended' ? C.mute : 'var(--dsw-alias-state-warn-primary, #b54708)'
 
+  const addItem = (item) => setItems((current) => [...current, item])
+  const appendAssistant = (text) => setItems((current) => {
+    const last = current[current.length - 1]
+    if (last && last.kind === 'assistant' && last.streaming) {
+      return [...current.slice(0, -1), { ...last, text: last.text + text }]
+    }
+    return [...current, { kind: 'assistant', text, streaming: true }]
+  })
+  const finishStreaming = () => setItems((current) => {
+    const last = current[current.length - 1]
+    if (!last || last.kind !== 'assistant' || !last.streaming) return current
+    return [...current.slice(0, -1), { ...last, streaming: false }]
+  })
+
   const fail = (error) => {
     const message = String((error && error.message) || error || 'Agents 操作失败')
-    setOutput((current) => current + (current && !current.endsWith('\n') ? '\n' : '') + message + '\n')
+    finishStreaming()
+    addItem({ kind: 'error', text: message })
     if (onError) onError(error)
   }
 
@@ -10196,6 +10214,15 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
   }
 
   React.useEffect(() => { void detect(device) }, [device])
+
+  React.useEffect(() => {
+    if (!modelOpen) return undefined
+    const close = (event) => {
+      if (modelRef.current && !modelRef.current.contains(event.target)) setModelOpen(false)
+    }
+    document.addEventListener('pointerdown', close)
+    return () => document.removeEventListener('pointerdown', close)
+  }, [modelOpen])
 
   const closeTab = async (id) => {
     if (!id) return
@@ -10237,10 +10264,13 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
       setModel('')
       setCommands([])
       setSession(result.session_id)
-      setHarness(item)
       setInput('')
       setPicking(false)
-      setOutput('ACP · ' + name + '\n' + (result.cwd || '') + '\n\n')
+      setModelOpen(false)
+      setItems([
+        { kind: 'system', text: '正在启动 ' + name + '…' },
+        ...(result.cwd ? [{ kind: 'system', text: result.cwd }] : [])
+      ])
       setTabs((current) => [...current, { id: result.session_id, name, harness: item.id, status: 'starting' }])
     } catch (error) {
       fail(error)
@@ -10254,7 +10284,8 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
     const text = input
     if (!session || !text.trim()) return
     setInput('')
-    setOutput((current) => current + '> ' + text + '\n')
+    finishStreaming()
+    addItem({ kind: 'user', text })
     try {
       await post('/api/devices/' + encodeURIComponent(device) + '/fs/acp_prompt', {
         session_id: session, text
@@ -10280,11 +10311,14 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
   const changeModel = async (modelId) => {
     if (!session || !modelId) return
     setModel(modelId)
+    setModelOpen(false)
+    finishStreaming()
+    const label = (models.find((item) => item.modelId === modelId) || {}).name || modelId
+    addItem({ kind: 'system', text: '模型切换为 ' + label })
     try {
       await post('/api/devices/' + encodeURIComponent(device) + '/fs/acp_set_model', {
         session_id: session, model: modelId
       })
-      setOutput((current) => current + '[模型] ' + modelId + '\n')
     } catch (error) {
       fail(error)
     }
@@ -10295,40 +10329,38 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
     let disposed = false
     let inFlight = false
     const tick = async () => {
-      if (disposed || document.hidden || inFlight) return
+      if (disposed || inFlight) return
       inFlight = true
       try {
         const result = await post('/api/devices/' + encodeURIComponent(device) + '/fs/acp_poll',
           { session_id: session, since: since.current })
         if (disposed || !result) return
         since.current = Number(result.next) || since.current
-        const lines = []
-        let chunk = ''
-        const flush = () => { if (chunk) { lines.push(chunk); chunk = '' } }
         for (const item of result.events || []) {
           const event = item.event || {}
           if (event.type === 'notification' && event.method === 'session/update') {
             const update = (event.params && event.params.update) || {}
             const content = update.content || {}
-            if (update.sessionUpdate === 'agent_message_chunk' && content.type === 'text') { chunk += content.text; continue }
-            flush()
-            if (update.sessionUpdate === 'available_commands_update' && Array.isArray(update.availableCommands)) {
-              setCommands(update.availableCommands.filter((item) => item && item.name).slice(0, 12))
-            } else if (update.sessionUpdate === 'tool_call' && update.title) lines.push('[工具] ' + update.title)
-            else if (update.sessionUpdate === 'plan' && Array.isArray(update.entries)) {
-              lines.push('[计划]\n' + update.entries.map((entry) => '· ' + (entry.content || entry.title || '')).join('\n'))
+            if (update.sessionUpdate === 'agent_message_chunk' && content.type === 'text') {
+              appendAssistant(content.text)
+            } else if (update.sessionUpdate === 'available_commands_update' && Array.isArray(update.availableCommands)) {
+              setCommands(update.availableCommands.filter((entry) => entry && entry.name).slice(0, 12))
+            } else if (update.sessionUpdate === 'tool_call') {
+              finishStreaming()
+              addItem({ kind: 'tool', title: update.title || '工具调用', status: update.status || 'running' })
+            } else if (update.sessionUpdate === 'plan' && Array.isArray(update.entries)) {
+              finishStreaming()
+              addItem({ kind: 'plan', entries: update.entries.map((entry) => entry.content || entry.title || '').filter(Boolean) })
             }
           } else if (event.type === 'request' && event.method === 'session/request_permission') {
-            flush()
+            finishStreaming()
             const params = event.params || {}
             const title = (params.toolCall && params.toolCall.title) || '工具调用'
             const options = Array.isArray(params.options) ? params.options : []
-            const choices = options.map((option) => option.name || option.optionId).join(' / ')
-            lines.push('[需要授权] ' + title + '：' + (choices || '无选项') + ' #' + event.id)
-            setPending((current) => current.some((item) => item.requestId === event.id) ? current
-              : [...current, { requestId: event.id, options }])
+            setPending((current) => current.some((entry) => entry.requestId === event.id) ? current
+              : [...current, { requestId: event.id, title, options }])
           } else if (event.type === 'ready') {
-            flush()
+            finishStreaming()
             setReady(true)
             setAgent(event.agent || null)
             const available = (event.models && event.models.availableModels) || []
@@ -10336,25 +10368,22 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
             setModel((event.models && (event.models.currentModelId || event.models.currentModel)) || (available[0] && available[0].modelId) || '')
             const label = event.agent && (event.agent.title || event.agent.name)
             updateTab(session, label ? { status: 'ready', name: label } : { status: 'ready' })
-            lines.push('[就绪]')
+            addItem({ kind: 'system', text: '已连接' + (label ? ' · ' + label : '') })
           } else if (event.type === 'result') {
-            flush()
-            const reason = (event.result && event.result.stopReason) || 'done'
-            lines.push('[完成] ' + reason)
+            finishStreaming()
+            addItem({ kind: 'system', text: '本轮完成 · ' + ((event.result && event.result.stopReason) || 'done') })
           } else if (event.type === 'error') {
-            flush()
+            finishStreaming()
             setReady(false)
             updateTab(session, { status: 'error' })
-            lines.push('[错误] ' + String(event.error || 'ACP error'))
+            addItem({ kind: 'error', text: String(event.error || 'ACP error') })
           } else if (event.type === 'closed') {
-            flush()
+            finishStreaming()
             updateTab(session, { status: 'ended' })
             setReady(false)
-            lines.push('[会话结束]')
+            addItem({ kind: 'system', text: '会话结束' })
           }
         }
-        flush()
-        if (lines.length) setOutput((current) => current + lines.join('\n') + '\n')
         if (result.closed && sessionRef.current === session) {
           setReady(false)
           updateTab(session, { status: 'ended' })
@@ -10371,12 +10400,13 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
   }, [session, device])
 
   React.useEffect(() => {
-    if (session) tabCache.current[session] = { output, ready, agent, models, model, commands, pending, since: since.current }
-  }, [session, output, ready, agent, models, model, commands, pending])
+    if (session) tabCache.current[session] = { items, ready, agent, models, model, commands, pending, since: since.current }
+  }, [session, items, ready, agent, models, model, commands, pending])
 
   React.useEffect(() => {
-    if (outputRef.current) outputRef.current.scrollTop = outputRef.current.scrollHeight
-  }, [output])
+    const node = transcriptRef.current
+    if (node) node.scrollTop = node.scrollHeight
+  }, [items])
 
   React.useEffect(() => () => {
     const ids = new Set(Object.keys(tabCache.current))
@@ -10391,7 +10421,6 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
     setTabs([])
     tabCache.current = {}
     clearSession()
-    setHarness(null)
     setPicking(false)
     setDevice(value)
     for (const id of ids) {
@@ -10407,6 +10436,43 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
     height: 28, padding: '0 14px', border: 0, borderRadius: 7, fontSize: 12,
     cursor: 'pointer', color: '#fff', background: C.blue
   }
+
+  const renderItem = (item, index) => {
+    if (item.kind === 'user') return h('div', { key: index, style: { display: 'flex', justifyContent: 'flex-end' } },
+      h('div', { style: { maxWidth: '78%', padding: '8px 12px', borderRadius: '12px 12px 4px 12px',
+        background: C.soft, color: C.ink, fontSize: 13, lineHeight: 1.65, whiteSpace: 'pre-wrap', wordBreak: 'break-word' } }, item.text))
+    if (item.kind === 'assistant') {
+      return h('div', { key: index, style: { display: 'flex', alignItems: 'flex-start', gap: 8 } },
+        h('span', { style: { width: 26, height: 26, flex: '0 0 auto', display: 'grid', placeItems: 'center', borderRadius: 8, background: C.soft, color: C.blue } },
+          h(Glyph, { name: 'bot', size: 14 })),
+        h('div', { style: { maxWidth: '82%', padding: '9px 12px', borderRadius: '12px 12px 12px 4px',
+          background: C.panel || C.bg, border: '1px solid ' + C.line, color: C.ink,
+          fontSize: 13, lineHeight: 1.65, whiteSpace: 'pre-wrap', wordBreak: 'break-word' } }, item.text || (item.streaming ? '…' : '')))
+    }
+    if (item.kind === 'tool') {
+      const color = item.status === 'completed' ? C.green : item.status === 'failed' ? C.red : C.sub
+      return h('div', { key: index, style: { display: 'flex', alignItems: 'center', gap: 8, alignSelf: 'flex-start', maxWidth: '82%',
+        padding: '7px 10px', borderRadius: 10, background: C.soft, border: '1px solid ' + C.line } },
+        h('span', { style: { width: 22, height: 22, flex: '0 0 auto', display: 'grid', placeItems: 'center', borderRadius: 6, background: C.bg, color: C.sub } },
+          h(Glyph, { name: 'tool', size: 13 })),
+        h('span', { style: { minWidth: 0, fontSize: 12.5, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, item.title),
+        h('span', { style: { fontSize: 11, color, marginLeft: 'auto', whiteSpace: 'nowrap' } }, item.status === 'completed' ? '完成' : item.status === 'failed' ? '失败' : '运行中'))
+    }
+    if (item.kind === 'plan') {
+      return h('div', { key: index, style: { alignSelf: 'flex-start', maxWidth: '82%', padding: '9px 12px', borderRadius: 10,
+        background: C.soft, border: '1px solid ' + C.line, display: 'grid', gap: 5 } },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: C.sub } },
+          h(Glyph, { name: 'think', size: 13 }), '执行计划'),
+        ...item.entries.map((entry, entryIndex) => h('div', { key: entryIndex, style: { fontSize: 12.5, color: C.ink, lineHeight: 1.55 } }, '· ' + entry)))
+    }
+    if (item.kind === 'error') return h('div', { key: index, style: { alignSelf: 'center', maxWidth: '88%', padding: '6px 10px', borderRadius: 8,
+      background: 'rgba(180,35,24,.08)', color: C.red, fontSize: 12, textAlign: 'center' } }, item.text)
+    return h('div', { key: index, style: { alignSelf: 'center', color: C.mute, fontSize: 11.5, textAlign: 'center', padding: '1px 0' } }, item.text)
+  }
+
+  const currentModel = models.find((item) => item.modelId === model) || models[0]
+  const modelLabel = currentModel ? (currentModel.name || currentModel.modelId) : (model || '模型')
+
   return h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', gap: 8, padding: 10, background: C.bg } },
     h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flex: '0 0 auto' } },
       h('select', {
@@ -10421,18 +10487,13 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
         style: { ...button, padding: '0 10px', opacity: detecting || !device ? 0.5 : 1 } }, detecting ? '检测中…' : '刷新'),
       h('button', { type: 'button', disabled: !session, onClick: () => void stop(),
         style: { ...field, cursor: session ? 'pointer' : 'default', opacity: session ? 1 : 0.5, background: 'transparent' } }, '停止'),
-      h('span', { style: { marginLeft: 'auto', fontSize: 11, color: session ? C.green : C.mute } },
-        session ? '已连接' : '未连接'),
+      h('span', { style: { marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: session ? C.green : C.mute } },
+        h('span', { style: { width: 7, height: 7, borderRadius: 4, background: session ? C.green : C.mute } }),
+        session ? (ready ? '已就绪' : '启动中…') : '未连接'),
       session && agent ? h('span', { style: { display: 'flex', alignItems: 'center', gap: 5, padding: '0 8px', height: 24,
         borderRadius: 999, background: C.soft, color: C.ink, fontSize: 11 } },
         h(Glyph, { name: 'bot', size: 14 }),
-        h('span', null, (agent.title || agent.name || 'Agent') + (agent.version ? ' ' + agent.version : ''))) : null,
-      session && models.length ? h('select', {
-        value: model, 'aria-label': '模型', title: '切换模型',
-        onChange: (event) => void changeModel(event.target.value),
-        style: { ...field, maxWidth: 230 }
-      }, models.map((item) => h('option', { key: item.modelId, value: item.modelId, title: item.description || '' },
-        item.name || item.modelId))) : null
+        h('span', null, (agent.title || agent.name || 'Agent') + (agent.version ? ' ' + agent.version : ''))) : null
     ),
     tabs.length ? h('div', { style: { display: 'flex', alignItems: 'center', gap: 4, flex: '0 0 auto', overflowX: 'auto' } },
       tabs.map((tab) => h('div', {
@@ -10472,41 +10533,75 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
       )) : h('div', { style: { gridColumn: '1 / -1', padding: 16, color: C.mute, fontSize: 12 } },
         detecting ? '正在检测本机 Agent…' : '没有检测到 ACP Harness。先在目标电脑装好 Gemini CLI / OpenCode / Claude Code adapter / Codex adapter。')
     ) : null,
-    h('pre', {
-      ref: outputRef,
-      style: { flex: '1 1 auto', minHeight: 0, margin: 0, overflow: 'auto', whiteSpace: 'pre-wrap',
-        wordBreak: 'break-word', background: '#0b1220', color: '#e2e8f0', borderRadius: 8,
-        padding: '10px 12px', fontFamily: 'Consolas, "Cascadia Mono", monospace', fontSize: 12, lineHeight: 1.55 }
-    }, output || '选择一台已安装 ACP Harness 的电脑，点击卡片开始会话。'),
-    pending.map((item) => h('div', { key: 'perm-' + item.requestId, style: { display: 'flex', gap: 8, alignItems: 'center', flex: '0 0 auto', flexWrap: 'wrap' } },
-      h('span', { style: { fontSize: 11, color: C.mute } }, '授权请求 #' + item.requestId),
+    h('div', {
+      ref: transcriptRef,
+      className: 'tether-scroll',
+      style: { flex: '1 1 auto', minHeight: 0, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 10, padding: '6px 4px 10px' }
+    },
+      items.length ? items.map(renderItem) : h('div', { style: { margin: 'auto', color: C.mute, fontSize: 12, textAlign: 'center' } },
+        session ? '等待 Agent 输出…' : '选择一台已安装 ACP Harness 的电脑，点击卡片开始会话。')
+    ),
+    pending.map((item) => h('div', { key: 'perm-' + item.requestId, style: { display: 'flex', gap: 8, alignItems: 'center', flex: '0 0 auto', flexWrap: 'wrap',
+      padding: '8px 10px', borderRadius: 10, border: '1px solid ' + C.line, background: C.soft } },
+      h('span', { style: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: C.sub } },
+        h(Glyph, { name: 'shield', size: 13 }), '需要授权 · ' + (item.title || ('#' + item.requestId))),
       item.options.map((option) => h('button', {
         key: option.optionId, type: 'button', onClick: () => { void reply(item.requestId, option.optionId) },
-        style: { ...field, cursor: 'pointer' }
+        style: { ...field, height: 24, cursor: 'pointer' }
       }, option.name || option.optionId))
     )),
     session && commands.length ? h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap', flex: '0 0 auto' } },
       commands.map((command) => h('button', {
         key: command.name, type: 'button', title: command.description || command.name,
         onClick: () => setInput('/' + command.name + ' '),
-        style: { ...field, height: 22, cursor: 'pointer' }
+        style: { ...field, height: 22, cursor: 'pointer', color: C.sub }
       }, '/' + command.name))
     ) : null,
     h('form', {
       onSubmit: send,
-      style: { display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 8, background: '#0b1220', flex: '0 0 auto' }
+      style: { display: 'flex', alignItems: 'center', gap: 8, padding: '7px 9px', borderRadius: 12,
+        border: '1px solid ' + C.line, background: C.panel || C.bg, boxShadow: '0 1px 3px rgba(16,24,40,.06)', flex: '0 0 auto' }
     },
-      h('span', { style: { color: '#7dd3fc', fontFamily: 'Consolas, monospace', fontSize: 13 } }, '›'),
+      models.length ? h('span', { ref: modelRef, style: { position: 'relative', flex: '0 0 auto' } },
+        h('button', {
+          type: 'button', title: '切换模型', 'aria-label': '切换模型',
+          onClick: () => setModelOpen((value) => !value),
+          style: { display: 'flex', alignItems: 'center', gap: 5, height: 26, maxWidth: 170, padding: '0 8px',
+            border: '1px solid ' + C.line, borderRadius: 8, background: C.bg, color: C.sub, fontSize: 11.5, cursor: 'pointer' }
+        },
+          h(Glyph, { name: 'think', size: 13 }),
+          h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, modelLabel),
+          h(Glyph, { name: 'chevronDown', size: 12 })),
+        modelOpen ? h('div', {
+          role: 'listbox', 'aria-label': '模型列表',
+          style: { position: 'absolute', left: 0, bottom: 'calc(100% + 6px)', minWidth: 250, maxHeight: 280, overflow: 'auto',
+            padding: 6, borderRadius: 10, border: '1px solid ' + C.line, background: C.panel || C.bg,
+            boxShadow: '0 10px 30px rgba(16,24,40,.18)', zIndex: 60 }
+        },
+          models.map((item) => h('button', {
+            key: item.modelId, type: 'button', role: 'option', 'aria-selected': item.modelId === model ? 'true' : 'false',
+            onClick: () => void changeModel(item.modelId),
+            style: { display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 8px', border: 0, borderRadius: 7,
+              background: item.modelId === model ? C.soft : 'transparent', color: C.ink, cursor: 'pointer', textAlign: 'left' }
+          },
+            h('span', { style: { minWidth: 0, display: 'grid', gap: 2 } },
+              h('span', { style: { fontSize: 12.5 } }, item.name || item.modelId),
+              item.description ? h('span', { style: { fontSize: 11, color: C.mute } }, item.description) : null),
+            item.modelId === model ? h('span', { style: { marginLeft: 'auto', color: C.blue, fontSize: 12 } }, '✓') : null))
+        ) : null
+      ) : null,
       h('input', {
         value: input, disabled: !session || !ready, autoFocus: true, spellCheck: false,
         'aria-label': 'Agent 输入', placeholder: session ? (ready ? '给 Agent 发消息，Enter 发送' : '正在启动 Agent…') : '先选择 Harness',
         onChange: (event) => setInput(event.target.value),
-        style: { flex: '1 1 auto', minWidth: 0, border: 0, outline: 'none', background: 'transparent', color: '#e2e8f0', fontFamily: 'Consolas, monospace', fontSize: 13 }
+        style: { flex: '1 1 auto', minWidth: 0, height: 28, border: 0, outline: 'none', background: 'transparent', color: C.ink, fontSize: 13 }
       }),
       h('button', {
-        type: 'submit', disabled: !session || !ready || !input.trim(),
-        style: { ...button, height: 26, padding: '0 12px', opacity: !session || !ready || !input.trim() ? 0.4 : 1 }
-      }, '发送')
+        type: 'submit', disabled: !session || !ready || !input.trim(), title: '发送', 'aria-label': '发送',
+        style: { width: 30, height: 30, flex: '0 0 auto', display: 'grid', placeItems: 'center', border: 0, borderRadius: 9,
+          background: C.blue, color: '#fff', cursor: !session || !ready || !input.trim() ? 'default' : 'pointer',
+          opacity: !session || !ready || !input.trim() ? 0.4 : 1 }
+      }, h(Glyph, { name: 'arrowUp', size: 15 }))
     )
   )
 }
@@ -11475,14 +11570,20 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       return requestDevice === currentDevice && requestEpoch === currentEpoch
     }
     function pathBasename(path) { return String(path || '').replace(/[\\/]+$/, '').split(/[\\/]/).pop() || String(path || '') }
-    function fileTypeMark(name) {
+    function fileTypeMark(name, format, kind) {
       const base = pathBasename(name)
       const lower = base.toLowerCase()
       if (lower === 'dockerfile') return 'DK'
       if (lower === 'makefile') return 'MK'
       const dot = base.lastIndexOf('.')
-      const type = dot > 0 && dot < base.length - 1 ? base.slice(dot + 1) : (base.startsWith('.') ? base.slice(1) : 'TXT')
-      return String(type || 'TXT').slice(0, 4).toUpperCase()
+      if (dot > 0 && dot < base.length - 1) return String(base.slice(dot + 1)).slice(0, 4).toUpperCase()
+      if (kind === 'text' || kind === 'markdown') return 'TXT'
+      const marks = {
+        'ELF 可执行': 'ELF', '脚本': 'SH', '文本': 'TXT', '二进制': 'BIN',
+        'PNG 图片': 'PNG', 'JPEG 图片': 'JPG', 'GIF 图片': 'GIF',
+        'PDF 文档': 'PDF', 'ZIP 压缩包': 'ZIP', 'GZIP 压缩包': 'GZ'
+      }
+      return marks[format] || (base.startsWith('.') ? base.slice(1, 5).toUpperCase() : 'FILE')
     }
     function joinPath(base, name) {
       const raw = String(base || '')
@@ -11525,7 +11626,8 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
     function entryTypeLabel(entry) {
       if (entry.dir) return '文件夹'
       const suffix = String(entry.name || '').split('.').pop()
-      return suffix && suffix !== entry.name ? suffix.toUpperCase() + ' 文件' : '文件'
+      if (suffix && suffix !== entry.name) return suffix.toUpperCase() + ' 文件'
+      return entry.format || '文件'
     }
     const EXPLORER_SORT_KEYS = ['name', 'mtime', 'size']
     function explorerHistory(history) {
@@ -16219,7 +16321,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             className: 'tether-tab', title: file.path, 'data-dirty': dirty ? 'true' : undefined,
             style: { display: 'flex', alignItems: 'center', gap: 7, height: 31, boxSizing: 'border-box', padding: '0 6px 0 7px', background: 'var(--tether-tab-bg, ' + C.bg + ')', maxWidth: 280, minWidth: 0, position: 'relative', flex: '0 0 auto' }
           },
-            h('span', { className: 'tether-file-badge', 'aria-hidden': true }, fileTypeMark(file.name || file.path)),
+            h('span', { className: 'tether-file-badge', 'aria-hidden': true }, fileTypeMark(file.name || file.path, file.format, file.kind)),
             h('span', { className: 'tether-tab-title' }, file.name || pathBasename(file.path)),
             dirty ? h('span', { className: 'tether-tab-dirty', title: '未保存', style: { width: 6, height: 6, borderRadius: '50%', background: 'var(--tether-chrome-ink)', flex: '0 0 auto' } }) : null,
             file.writable ? null : pill('只读', C.amber),
@@ -16279,7 +16381,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             ? h('embed', { src: previewUrl, type: 'application/pdf', style: { flex: '1 1 auto', width: '100%', height: '100%', minHeight: 0, border: 0, background: C.panel } })
             : h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', color: C.mute, fontSize: 12 } }, 'PDF 预览失败')
           return h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', alignContent: 'center', gap: 6, color: C.mute, fontSize: 12, padding: 24, textAlign: 'center' } },
-            h('div', null, '此类型暂不支持预览'),
+            h('div', null, file.format ? file.format + ' · 暂不支持预览' : '此类型暂不支持预览'),
             h('div', { className: 'tether-num', style: { fontSize: 11 } }, (file.name || file.path) + ' · ' + formatBytes(file.size)))
         }
 

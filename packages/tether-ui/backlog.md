@@ -83,3 +83,5 @@
 - 2026-11-04：远端 DSH Web 页面的 origin 不是回环，插件读不到 `tether.hub`，登录会回退到观看端 `127.0.0.1:18892` 并因 CORS 403 报 `Failed to fetch`。APP 打开 webview 后每 1.5 s 把本机 `tether.hub` 写入 guest localStorage（仅当 guest 尚无配置）；只写 URL/token，不动其他键。实测 guest 拿到 Hub 配置，插件显示设备。
 - 2026-11-04：DSH Web 运行时的按钮改为“修复 DSH Web 插件”（`dsh_web_repair`）和“重启 DSH Web”（`dsh_web_stop` → `dsh_web_start`）；桌面 DSH 的“安装/修复插件/重启 DSH”只在非 DSH Web 模式显示，避免在 Linux 上调用不存在的桌面逻辑。
 - 2026-11-04：DSH Web 修复/重启期间不能掉回桌面版面板：引入 `dshWebActive = running || installing || dshWebBusy` 控制标题与按钮；`runDshWeb('repair'|'install')` 在 POST 后轮询 `dsh_web_status` 直到 `installing=false`，按钮持续显示“修复中…”。真机点击后“修复中…”保持到服务重启完成，随后恢复“修复 DSH Web 插件/重启 DSH Web”。
+- 2026-11-04：Agents 会话不再用 `<pre>` 拼日志：ACP 事件改为结构化 `items`（user/assistant/tool/plan/system/error），聊天区用气泡、工具卡、计划卡；模型切换挪进 composer 的自绘菜单（46 个模型可选，带描述与勾选），发送按钮用图标。ACP 轮询不再因 `document.hidden` 暂停，最小化后仍同步。真机：Codex 2.5.0 会话显示 `已就绪`、`6.1 Sol (high)` 模型 chip 与输入框。
+- 2026-11-04：无后缀文件不能一律标 `TXT`：`fileTypeMark(name, format, kind)`，文本/扩展名缺失时用 `TXT`，ELF/二进制用 Node 返回的 `format` 短标签；预览不支持时显示 `ELF 可执行 · 暂不支持预览`，并在列表“类型”列显示 `ELF 可执行`/`文本`。

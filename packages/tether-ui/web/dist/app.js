@@ -176864,8 +176864,7 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
   const [harnesses, setHarnesses] = React2.useState([]);
   const [detecting, setDetecting] = React2.useState(false);
   const [session, setSession] = React2.useState("");
-  const [harness, setHarness] = React2.useState(null);
-  const [output, setOutput] = React2.useState("");
+  const [items, setItems] = React2.useState([]);
   const [input, setInput] = React2.useState("");
   const [busy, setBusy] = React2.useState(false);
   const [ready, setReady] = React2.useState(false);
@@ -176876,21 +176875,23 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
   const [pending2, setPending] = React2.useState([]);
   const [tabs, setTabs] = React2.useState([]);
   const [picking, setPicking] = React2.useState(false);
+  const [modelOpen, setModelOpen] = React2.useState(false);
   const since = React2.useRef(0);
   const sessionRef = React2.useRef("");
   const tabCache = React2.useRef({});
-  const outputRef = React2.useRef(null);
+  const transcriptRef = React2.useRef(null);
+  const modelRef = React2.useRef(null);
   const updateTab = (id, patch) => setTabs((current) => current.map((tab) => tab.id === id ? { ...tab, ...patch } : tab));
   const saveTab = () => {
     const id = sessionRef.current;
     if (!id) return;
-    tabCache.current[id] = { output, ready, agent, models, model, commands, pending: pending2, since: since.current };
+    tabCache.current[id] = { items, ready, agent, models, model, commands, pending: pending2, since: since.current };
   };
   const loadTab = (id) => {
     const cached = tabCache.current[id] || {};
     sessionRef.current = id;
     setSession(id);
-    setOutput(cached.output || "");
+    setItems(cached.items || []);
     setReady(!!cached.ready);
     setAgent(cached.agent || null);
     setModels(cached.models || []);
@@ -176898,6 +176899,7 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
     setCommands(cached.commands || []);
     setPending(cached.pending || []);
     setInput("");
+    setModelOpen(false);
     since.current = Number(cached.since) || 0;
     setPicking(false);
   };
@@ -176910,14 +176912,29 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
     setModel("");
     setCommands([]);
     setPending([]);
-    setOutput("");
+    setItems([]);
     setInput("");
+    setModelOpen(false);
     since.current = 0;
   };
   const tabColor = (status2) => status2 === "ready" ? "var(--dsw-alias-state-success-primary, #16a34a)" : status2 === "error" ? "var(--dsw-alias-state-error-primary, #b42318)" : status2 === "ended" ? C2.mute : "var(--dsw-alias-state-warn-primary, #b54708)";
+  const addItem = (item) => setItems((current) => [...current, item]);
+  const appendAssistant = (text2) => setItems((current) => {
+    const last = current[current.length - 1];
+    if (last && last.kind === "assistant" && last.streaming) {
+      return [...current.slice(0, -1), { ...last, text: last.text + text2 }];
+    }
+    return [...current, { kind: "assistant", text: text2, streaming: true }];
+  });
+  const finishStreaming = () => setItems((current) => {
+    const last = current[current.length - 1];
+    if (!last || last.kind !== "assistant" || !last.streaming) return current;
+    return [...current.slice(0, -1), { ...last, streaming: false }];
+  });
   const fail2 = (error) => {
     const message = String(error && error.message || error || "Agents \u64CD\u4F5C\u5931\u8D25");
-    setOutput((current) => current + (current && !current.endsWith("\n") ? "\n" : "") + message + "\n");
+    finishStreaming();
+    addItem({ kind: "error", text: message });
     if (onError) onError(error);
   };
   const detect = async (id) => {
@@ -176936,6 +176953,14 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
   React2.useEffect(() => {
     void detect(device);
   }, [device]);
+  React2.useEffect(() => {
+    if (!modelOpen) return void 0;
+    const close = (event) => {
+      if (modelRef.current && !modelRef.current.contains(event.target)) setModelOpen(false);
+    };
+    document.addEventListener("pointerdown", close);
+    return () => document.removeEventListener("pointerdown", close);
+  }, [modelOpen]);
   const closeTab = async (id) => {
     if (!id) return;
     const remaining = tabs.filter((tab) => tab.id !== id);
@@ -176978,10 +177003,13 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
       setModel("");
       setCommands([]);
       setSession(result.session_id);
-      setHarness(item);
       setInput("");
       setPicking(false);
-      setOutput("ACP \xB7 " + name + "\n" + (result.cwd || "") + "\n\n");
+      setModelOpen(false);
+      setItems([
+        { kind: "system", text: "\u6B63\u5728\u542F\u52A8 " + name + "\u2026" },
+        ...result.cwd ? [{ kind: "system", text: result.cwd }] : []
+      ]);
       setTabs((current) => [...current, { id: result.session_id, name, harness: item.id, status: "starting" }]);
     } catch (error) {
       fail2(error);
@@ -176994,7 +177022,8 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
     const text2 = input;
     if (!session || !text2.trim()) return;
     setInput("");
-    setOutput((current) => current + "> " + text2 + "\n");
+    finishStreaming();
+    addItem({ kind: "user", text: text2 });
     try {
       await post("/api/devices/" + encodeURIComponent(device) + "/fs/acp_prompt", {
         session_id: session,
@@ -177020,12 +177049,15 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
   const changeModel = async (modelId) => {
     if (!session || !modelId) return;
     setModel(modelId);
+    setModelOpen(false);
+    finishStreaming();
+    const label = (models.find((item) => item.modelId === modelId) || {}).name || modelId;
+    addItem({ kind: "system", text: "\u6A21\u578B\u5207\u6362\u4E3A " + label });
     try {
       await post("/api/devices/" + encodeURIComponent(device) + "/fs/acp_set_model", {
         session_id: session,
         model: modelId
       });
-      setOutput((current) => current + "[\u6A21\u578B] " + modelId + "\n");
     } catch (error) {
       fail2(error);
     }
@@ -177035,7 +177067,7 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
     let disposed = false;
     let inFlight = false;
     const tick = async () => {
-      if (disposed || document.hidden || inFlight) return;
+      if (disposed || inFlight) return;
       inFlight = true;
       try {
         const result = await post(
@@ -177044,40 +177076,30 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
         );
         if (disposed || !result) return;
         since.current = Number(result.next) || since.current;
-        const lines = [];
-        let chunk = "";
-        const flush = () => {
-          if (chunk) {
-            lines.push(chunk);
-            chunk = "";
-          }
-        };
         for (const item of result.events || []) {
           const event = item.event || {};
           if (event.type === "notification" && event.method === "session/update") {
             const update = event.params && event.params.update || {};
             const content = update.content || {};
             if (update.sessionUpdate === "agent_message_chunk" && content.type === "text") {
-              chunk += content.text;
-              continue;
-            }
-            flush();
-            if (update.sessionUpdate === "available_commands_update" && Array.isArray(update.availableCommands)) {
-              setCommands(update.availableCommands.filter((item2) => item2 && item2.name).slice(0, 12));
-            } else if (update.sessionUpdate === "tool_call" && update.title) lines.push("[\u5DE5\u5177] " + update.title);
-            else if (update.sessionUpdate === "plan" && Array.isArray(update.entries)) {
-              lines.push("[\u8BA1\u5212]\n" + update.entries.map((entry) => "\xB7 " + (entry.content || entry.title || "")).join("\n"));
+              appendAssistant(content.text);
+            } else if (update.sessionUpdate === "available_commands_update" && Array.isArray(update.availableCommands)) {
+              setCommands(update.availableCommands.filter((entry) => entry && entry.name).slice(0, 12));
+            } else if (update.sessionUpdate === "tool_call") {
+              finishStreaming();
+              addItem({ kind: "tool", title: update.title || "\u5DE5\u5177\u8C03\u7528", status: update.status || "running" });
+            } else if (update.sessionUpdate === "plan" && Array.isArray(update.entries)) {
+              finishStreaming();
+              addItem({ kind: "plan", entries: update.entries.map((entry) => entry.content || entry.title || "").filter(Boolean) });
             }
           } else if (event.type === "request" && event.method === "session/request_permission") {
-            flush();
+            finishStreaming();
             const params = event.params || {};
             const title = params.toolCall && params.toolCall.title || "\u5DE5\u5177\u8C03\u7528";
             const options = Array.isArray(params.options) ? params.options : [];
-            const choices = options.map((option) => option.name || option.optionId).join(" / ");
-            lines.push("[\u9700\u8981\u6388\u6743] " + title + "\uFF1A" + (choices || "\u65E0\u9009\u9879") + " #" + event.id);
-            setPending((current) => current.some((item2) => item2.requestId === event.id) ? current : [...current, { requestId: event.id, options }]);
+            setPending((current) => current.some((entry) => entry.requestId === event.id) ? current : [...current, { requestId: event.id, title, options }]);
           } else if (event.type === "ready") {
-            flush();
+            finishStreaming();
             setReady(true);
             setAgent(event.agent || null);
             const available = event.models && event.models.availableModels || [];
@@ -177085,25 +177107,22 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
             setModel(event.models && (event.models.currentModelId || event.models.currentModel) || available[0] && available[0].modelId || "");
             const label = event.agent && (event.agent.title || event.agent.name);
             updateTab(session, label ? { status: "ready", name: label } : { status: "ready" });
-            lines.push("[\u5C31\u7EEA]");
+            addItem({ kind: "system", text: "\u5DF2\u8FDE\u63A5" + (label ? " \xB7 " + label : "") });
           } else if (event.type === "result") {
-            flush();
-            const reason = event.result && event.result.stopReason || "done";
-            lines.push("[\u5B8C\u6210] " + reason);
+            finishStreaming();
+            addItem({ kind: "system", text: "\u672C\u8F6E\u5B8C\u6210 \xB7 " + (event.result && event.result.stopReason || "done") });
           } else if (event.type === "error") {
-            flush();
+            finishStreaming();
             setReady(false);
             updateTab(session, { status: "error" });
-            lines.push("[\u9519\u8BEF] " + String(event.error || "ACP error"));
+            addItem({ kind: "error", text: String(event.error || "ACP error") });
           } else if (event.type === "closed") {
-            flush();
+            finishStreaming();
             updateTab(session, { status: "ended" });
             setReady(false);
-            lines.push("[\u4F1A\u8BDD\u7ED3\u675F]");
+            addItem({ kind: "system", text: "\u4F1A\u8BDD\u7ED3\u675F" });
           }
         }
-        flush();
-        if (lines.length) setOutput((current) => current + lines.join("\n") + "\n");
         if (result.closed && sessionRef.current === session) {
           setReady(false);
           updateTab(session, { status: "ended" });
@@ -177122,11 +177141,12 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
     };
   }, [session, device]);
   React2.useEffect(() => {
-    if (session) tabCache.current[session] = { output, ready, agent, models, model, commands, pending: pending2, since: since.current };
-  }, [session, output, ready, agent, models, model, commands, pending2]);
+    if (session) tabCache.current[session] = { items, ready, agent, models, model, commands, pending: pending2, since: since.current };
+  }, [session, items, ready, agent, models, model, commands, pending2]);
   React2.useEffect(() => {
-    if (outputRef.current) outputRef.current.scrollTop = outputRef.current.scrollHeight;
-  }, [output]);
+    const node = transcriptRef.current;
+    if (node) node.scrollTop = node.scrollHeight;
+  }, [items]);
   React2.useEffect(() => () => {
     const ids = new Set(Object.keys(tabCache.current));
     if (sessionRef.current) ids.add(sessionRef.current);
@@ -177140,7 +177160,6 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
     setTabs([]);
     tabCache.current = {};
     clearSession();
-    setHarness(null);
     setPicking(false);
     setDevice(value);
     for (const id of ids) {
@@ -177170,6 +177189,105 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
     color: "#fff",
     background: C2.blue
   };
+  const renderItem = (item, index) => {
+    if (item.kind === "user") return h3(
+      "div",
+      { key: index, style: { display: "flex", justifyContent: "flex-end" } },
+      h3("div", { style: {
+        maxWidth: "78%",
+        padding: "8px 12px",
+        borderRadius: "12px 12px 4px 12px",
+        background: C2.soft,
+        color: C2.ink,
+        fontSize: 13,
+        lineHeight: 1.65,
+        whiteSpace: "pre-wrap",
+        wordBreak: "break-word"
+      } }, item.text)
+    );
+    if (item.kind === "assistant") {
+      return h3(
+        "div",
+        { key: index, style: { display: "flex", alignItems: "flex-start", gap: 8 } },
+        h3(
+          "span",
+          { style: { width: 26, height: 26, flex: "0 0 auto", display: "grid", placeItems: "center", borderRadius: 8, background: C2.soft, color: C2.blue } },
+          h3(Glyph, { name: "bot", size: 14 })
+        ),
+        h3("div", { style: {
+          maxWidth: "82%",
+          padding: "9px 12px",
+          borderRadius: "12px 12px 12px 4px",
+          background: C2.panel || C2.bg,
+          border: "1px solid " + C2.line,
+          color: C2.ink,
+          fontSize: 13,
+          lineHeight: 1.65,
+          whiteSpace: "pre-wrap",
+          wordBreak: "break-word"
+        } }, item.text || (item.streaming ? "\u2026" : ""))
+      );
+    }
+    if (item.kind === "tool") {
+      const color = item.status === "completed" ? C2.green : item.status === "failed" ? C2.red : C2.sub;
+      return h3(
+        "div",
+        { key: index, style: {
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          alignSelf: "flex-start",
+          maxWidth: "82%",
+          padding: "7px 10px",
+          borderRadius: 10,
+          background: C2.soft,
+          border: "1px solid " + C2.line
+        } },
+        h3(
+          "span",
+          { style: { width: 22, height: 22, flex: "0 0 auto", display: "grid", placeItems: "center", borderRadius: 6, background: C2.bg, color: C2.sub } },
+          h3(Glyph, { name: "tool", size: 13 })
+        ),
+        h3("span", { style: { minWidth: 0, fontSize: 12.5, color: C2.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, item.title),
+        h3("span", { style: { fontSize: 11, color, marginLeft: "auto", whiteSpace: "nowrap" } }, item.status === "completed" ? "\u5B8C\u6210" : item.status === "failed" ? "\u5931\u8D25" : "\u8FD0\u884C\u4E2D")
+      );
+    }
+    if (item.kind === "plan") {
+      return h3(
+        "div",
+        { key: index, style: {
+          alignSelf: "flex-start",
+          maxWidth: "82%",
+          padding: "9px 12px",
+          borderRadius: 10,
+          background: C2.soft,
+          border: "1px solid " + C2.line,
+          display: "grid",
+          gap: 5
+        } },
+        h3(
+          "div",
+          { style: { display: "flex", alignItems: "center", gap: 7, fontSize: 12, color: C2.sub } },
+          h3(Glyph, { name: "think", size: 13 }),
+          "\u6267\u884C\u8BA1\u5212"
+        ),
+        ...item.entries.map((entry, entryIndex) => h3("div", { key: entryIndex, style: { fontSize: 12.5, color: C2.ink, lineHeight: 1.55 } }, "\xB7 " + entry))
+      );
+    }
+    if (item.kind === "error") return h3("div", { key: index, style: {
+      alignSelf: "center",
+      maxWidth: "88%",
+      padding: "6px 10px",
+      borderRadius: 8,
+      background: "rgba(180,35,24,.08)",
+      color: C2.red,
+      fontSize: 12,
+      textAlign: "center"
+    } }, item.text);
+    return h3("div", { key: index, style: { alignSelf: "center", color: C2.mute, fontSize: 11.5, textAlign: "center", padding: "1px 0" } }, item.text);
+  };
+  const currentModel = models.find((item) => item.modelId === model) || models[0];
+  const modelLabel = currentModel ? currentModel.name || currentModel.modelId : model || "\u6A21\u578B";
   return h3(
     "div",
     { style: { flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column", gap: 8, padding: 10, background: C2.bg } },
@@ -177205,8 +177323,9 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
       }, "\u505C\u6B62"),
       h3(
         "span",
-        { style: { marginLeft: "auto", fontSize: 11, color: session ? C2.green : C2.mute } },
-        session ? "\u5DF2\u8FDE\u63A5" : "\u672A\u8FDE\u63A5"
+        { style: { marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: session ? C2.green : C2.mute } },
+        h3("span", { style: { width: 7, height: 7, borderRadius: 4, background: session ? C2.green : C2.mute } }),
+        session ? ready ? "\u5DF2\u5C31\u7EEA" : "\u542F\u52A8\u4E2D\u2026" : "\u672A\u8FDE\u63A5"
       ),
       session && agent ? h3(
         "span",
@@ -177223,18 +177342,7 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
         } },
         h3(Glyph, { name: "bot", size: 14 }),
         h3("span", null, (agent.title || agent.name || "Agent") + (agent.version ? " " + agent.version : ""))
-      ) : null,
-      session && models.length ? h3("select", {
-        value: model,
-        "aria-label": "\u6A21\u578B",
-        title: "\u5207\u6362\u6A21\u578B",
-        onChange: (event) => void changeModel(event.target.value),
-        style: { ...field, maxWidth: 230 }
-      }, models.map((item) => h3(
-        "option",
-        { key: item.modelId, value: item.modelId, title: item.description || "" },
-        item.name || item.modelId
-      ))) : null
+      ) : null
     ),
     tabs.length ? h3(
       "div",
@@ -177341,35 +177449,45 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
         detecting ? "\u6B63\u5728\u68C0\u6D4B\u672C\u673A Agent\u2026" : "\u6CA1\u6709\u68C0\u6D4B\u5230 ACP Harness\u3002\u5148\u5728\u76EE\u6807\u7535\u8111\u88C5\u597D Gemini CLI / OpenCode / Claude Code adapter / Codex adapter\u3002"
       )
     ) : null,
-    h3("pre", {
-      ref: outputRef,
-      style: {
-        flex: "1 1 auto",
-        minHeight: 0,
-        margin: 0,
-        overflow: "auto",
-        whiteSpace: "pre-wrap",
-        wordBreak: "break-word",
-        background: "#0b1220",
-        color: "#e2e8f0",
-        borderRadius: 8,
-        padding: "10px 12px",
-        fontFamily: 'Consolas, "Cascadia Mono", monospace',
-        fontSize: 12,
-        lineHeight: 1.55
-      }
-    }, output || "\u9009\u62E9\u4E00\u53F0\u5DF2\u5B89\u88C5 ACP Harness \u7684\u7535\u8111\uFF0C\u70B9\u51FB\u5361\u7247\u5F00\u59CB\u4F1A\u8BDD\u3002"),
+    h3(
+      "div",
+      {
+        ref: transcriptRef,
+        className: "tether-scroll",
+        style: { flex: "1 1 auto", minHeight: 0, overflow: "auto", display: "flex", flexDirection: "column", gap: 10, padding: "6px 4px 10px" }
+      },
+      items.length ? items.map(renderItem) : h3(
+        "div",
+        { style: { margin: "auto", color: C2.mute, fontSize: 12, textAlign: "center" } },
+        session ? "\u7B49\u5F85 Agent \u8F93\u51FA\u2026" : "\u9009\u62E9\u4E00\u53F0\u5DF2\u5B89\u88C5 ACP Harness \u7684\u7535\u8111\uFF0C\u70B9\u51FB\u5361\u7247\u5F00\u59CB\u4F1A\u8BDD\u3002"
+      )
+    ),
     pending2.map((item) => h3(
       "div",
-      { key: "perm-" + item.requestId, style: { display: "flex", gap: 8, alignItems: "center", flex: "0 0 auto", flexWrap: "wrap" } },
-      h3("span", { style: { fontSize: 11, color: C2.mute } }, "\u6388\u6743\u8BF7\u6C42 #" + item.requestId),
+      { key: "perm-" + item.requestId, style: {
+        display: "flex",
+        gap: 8,
+        alignItems: "center",
+        flex: "0 0 auto",
+        flexWrap: "wrap",
+        padding: "8px 10px",
+        borderRadius: 10,
+        border: "1px solid " + C2.line,
+        background: C2.soft
+      } },
+      h3(
+        "span",
+        { style: { display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: C2.sub } },
+        h3(Glyph, { name: "shield", size: 13 }),
+        "\u9700\u8981\u6388\u6743 \xB7 " + (item.title || "#" + item.requestId)
+      ),
       item.options.map((option) => h3("button", {
         key: option.optionId,
         type: "button",
         onClick: () => {
           void reply(item.requestId, option.optionId);
         },
-        style: { ...field, cursor: "pointer" }
+        style: { ...field, height: 24, cursor: "pointer" }
       }, option.name || option.optionId))
     )),
     session && commands.length ? h3(
@@ -177380,16 +177498,106 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
         type: "button",
         title: command.description || command.name,
         onClick: () => setInput("/" + command.name + " "),
-        style: { ...field, height: 22, cursor: "pointer" }
+        style: { ...field, height: 22, cursor: "pointer", color: C2.sub }
       }, "/" + command.name))
     ) : null,
     h3(
       "form",
       {
         onSubmit: send,
-        style: { display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", borderRadius: 8, background: "#0b1220", flex: "0 0 auto" }
+        style: {
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "7px 9px",
+          borderRadius: 12,
+          border: "1px solid " + C2.line,
+          background: C2.panel || C2.bg,
+          boxShadow: "0 1px 3px rgba(16,24,40,.06)",
+          flex: "0 0 auto"
+        }
       },
-      h3("span", { style: { color: "#7dd3fc", fontFamily: "Consolas, monospace", fontSize: 13 } }, "\u203A"),
+      models.length ? h3(
+        "span",
+        { ref: modelRef, style: { position: "relative", flex: "0 0 auto" } },
+        h3(
+          "button",
+          {
+            type: "button",
+            title: "\u5207\u6362\u6A21\u578B",
+            "aria-label": "\u5207\u6362\u6A21\u578B",
+            onClick: () => setModelOpen((value) => !value),
+            style: {
+              display: "flex",
+              alignItems: "center",
+              gap: 5,
+              height: 26,
+              maxWidth: 170,
+              padding: "0 8px",
+              border: "1px solid " + C2.line,
+              borderRadius: 8,
+              background: C2.bg,
+              color: C2.sub,
+              fontSize: 11.5,
+              cursor: "pointer"
+            }
+          },
+          h3(Glyph, { name: "think", size: 13 }),
+          h3("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, modelLabel),
+          h3(Glyph, { name: "chevronDown", size: 12 })
+        ),
+        modelOpen ? h3(
+          "div",
+          {
+            role: "listbox",
+            "aria-label": "\u6A21\u578B\u5217\u8868",
+            style: {
+              position: "absolute",
+              left: 0,
+              bottom: "calc(100% + 6px)",
+              minWidth: 250,
+              maxHeight: 280,
+              overflow: "auto",
+              padding: 6,
+              borderRadius: 10,
+              border: "1px solid " + C2.line,
+              background: C2.panel || C2.bg,
+              boxShadow: "0 10px 30px rgba(16,24,40,.18)",
+              zIndex: 60
+            }
+          },
+          models.map((item) => h3(
+            "button",
+            {
+              key: item.modelId,
+              type: "button",
+              role: "option",
+              "aria-selected": item.modelId === model ? "true" : "false",
+              onClick: () => void changeModel(item.modelId),
+              style: {
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                width: "100%",
+                padding: "7px 8px",
+                border: 0,
+                borderRadius: 7,
+                background: item.modelId === model ? C2.soft : "transparent",
+                color: C2.ink,
+                cursor: "pointer",
+                textAlign: "left"
+              }
+            },
+            h3(
+              "span",
+              { style: { minWidth: 0, display: "grid", gap: 2 } },
+              h3("span", { style: { fontSize: 12.5 } }, item.name || item.modelId),
+              item.description ? h3("span", { style: { fontSize: 11, color: C2.mute } }, item.description) : null
+            ),
+            item.modelId === model ? h3("span", { style: { marginLeft: "auto", color: C2.blue, fontSize: 12 } }, "\u2713") : null
+          ))
+        ) : null
+      ) : null,
       h3("input", {
         value: input,
         disabled: !session || !ready,
@@ -177398,13 +177606,27 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
         "aria-label": "Agent \u8F93\u5165",
         placeholder: session ? ready ? "\u7ED9 Agent \u53D1\u6D88\u606F\uFF0CEnter \u53D1\u9001" : "\u6B63\u5728\u542F\u52A8 Agent\u2026" : "\u5148\u9009\u62E9 Harness",
         onChange: (event) => setInput(event.target.value),
-        style: { flex: "1 1 auto", minWidth: 0, border: 0, outline: "none", background: "transparent", color: "#e2e8f0", fontFamily: "Consolas, monospace", fontSize: 13 }
+        style: { flex: "1 1 auto", minWidth: 0, height: 28, border: 0, outline: "none", background: "transparent", color: C2.ink, fontSize: 13 }
       }),
       h3("button", {
         type: "submit",
         disabled: !session || !ready || !input.trim(),
-        style: { ...button, height: 26, padding: "0 12px", opacity: !session || !ready || !input.trim() ? 0.4 : 1 }
-      }, "\u53D1\u9001")
+        title: "\u53D1\u9001",
+        "aria-label": "\u53D1\u9001",
+        style: {
+          width: 30,
+          height: 30,
+          flex: "0 0 auto",
+          display: "grid",
+          placeItems: "center",
+          border: 0,
+          borderRadius: 9,
+          background: C2.blue,
+          color: "#fff",
+          cursor: !session || !ready || !input.trim() ? "default" : "pointer",
+          opacity: !session || !ready || !input.trim() ? 0.4 : 1
+        }
+      }, h3(Glyph, { name: "arrowUp", size: 15 }))
     )
   );
 }
@@ -178357,14 +178579,27 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
   function pathBasename(path) {
     return String(path || "").replace(/[\\/]+$/, "").split(/[\\/]/).pop() || String(path || "");
   }
-  function fileTypeMark(name) {
+  function fileTypeMark(name, format2, kind) {
     const base = pathBasename(name);
     const lower = base.toLowerCase();
     if (lower === "dockerfile") return "DK";
     if (lower === "makefile") return "MK";
     const dot2 = base.lastIndexOf(".");
-    const type = dot2 > 0 && dot2 < base.length - 1 ? base.slice(dot2 + 1) : base.startsWith(".") ? base.slice(1) : "TXT";
-    return String(type || "TXT").slice(0, 4).toUpperCase();
+    if (dot2 > 0 && dot2 < base.length - 1) return String(base.slice(dot2 + 1)).slice(0, 4).toUpperCase();
+    if (kind === "text" || kind === "markdown") return "TXT";
+    const marks = {
+      "ELF \u53EF\u6267\u884C": "ELF",
+      "\u811A\u672C": "SH",
+      "\u6587\u672C": "TXT",
+      "\u4E8C\u8FDB\u5236": "BIN",
+      "PNG \u56FE\u7247": "PNG",
+      "JPEG \u56FE\u7247": "JPG",
+      "GIF \u56FE\u7247": "GIF",
+      "PDF \u6587\u6863": "PDF",
+      "ZIP \u538B\u7F29\u5305": "ZIP",
+      "GZIP \u538B\u7F29\u5305": "GZ"
+    };
+    return marks[format2] || (base.startsWith(".") ? base.slice(1, 5).toUpperCase() : "FILE");
   }
   function joinPath3(base, name) {
     const raw = String(base || "");
@@ -178406,7 +178641,8 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
   function entryTypeLabel(entry) {
     if (entry.dir) return "\u6587\u4EF6\u5939";
     const suffix = String(entry.name || "").split(".").pop();
-    return suffix && suffix !== entry.name ? suffix.toUpperCase() + " \u6587\u4EF6" : "\u6587\u4EF6";
+    if (suffix && suffix !== entry.name) return suffix.toUpperCase() + " \u6587\u4EF6";
+    return entry.format || "\u6587\u4EF6";
   }
   const EXPLORER_SORT_KEYS = ["name", "mtime", "size"];
   function explorerHistory(history) {
@@ -184124,7 +184360,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
             "data-dirty": dirty ? "true" : void 0,
             style: { display: "flex", alignItems: "center", gap: 7, height: 31, boxSizing: "border-box", padding: "0 6px 0 7px", background: "var(--tether-tab-bg, " + C2.bg + ")", maxWidth: 280, minWidth: 0, position: "relative", flex: "0 0 auto" }
           },
-          h3("span", { className: "tether-file-badge", "aria-hidden": true }, fileTypeMark(file.name || file.path)),
+          h3("span", { className: "tether-file-badge", "aria-hidden": true }, fileTypeMark(file.name || file.path, file.format, file.kind)),
           h3("span", { className: "tether-tab-title" }, file.name || pathBasename(file.path)),
           dirty ? h3("span", { className: "tether-tab-dirty", title: "\u672A\u4FDD\u5B58", style: { width: 6, height: 6, borderRadius: "50%", background: "var(--tether-chrome-ink)", flex: "0 0 auto" } }) : null,
           file.writable ? null : pill("\u53EA\u8BFB", C2.amber),
@@ -184219,7 +184455,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         return h3(
           "div",
           { style: { flex: "1 1 auto", display: "grid", placeItems: "center", alignContent: "center", gap: 6, color: C2.mute, fontSize: 12, padding: 24, textAlign: "center" } },
-          h3("div", null, "\u6B64\u7C7B\u578B\u6682\u4E0D\u652F\u6301\u9884\u89C8"),
+          h3("div", null, file.format ? file.format + " \xB7 \u6682\u4E0D\u652F\u6301\u9884\u89C8" : "\u6B64\u7C7B\u578B\u6682\u4E0D\u652F\u6301\u9884\u89C8"),
           h3("div", { className: "tether-num", style: { fontSize: 11 } }, (file.name || file.path) + " \xB7 " + formatBytes2(file.size))
         );
       };
