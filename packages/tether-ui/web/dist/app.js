@@ -178033,6 +178033,51 @@ function AgentHome({
       ...installed.map(quickRow)
     )
   ) : null;
+  const overview = agents.length ? h3(
+    "div",
+    { style: { ...card, gridColumn: "1 / -1", padding: 12, display: "grid", gap: 8 } },
+    h3(
+      "div",
+      { style: { display: "flex", alignItems: "center", gap: 12 } },
+      h3("span", { style: { fontSize: 10.5, color: C2.mute } }, "\u603B\u89C8"),
+      h3("span", { style: { fontSize: 10.5, color: C2.mute } }, installed.length + " / " + agents.length + " \u53EF\u7528"),
+      h3("span", { style: { fontSize: 10.5, color: C2.mute } }, panes.length + " \u8FD0\u884C\u4E2D")
+    ),
+    h3(
+      "div",
+      { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(126px, 1fr))", gap: 6 } },
+      ...agents.map((agent) => h3(
+        "button",
+        {
+          key: agent.id,
+          type: "button",
+          title: agent.name,
+          onClick: () => setSelectedId(agent.id),
+          className: "tether-hover",
+          style: {
+            display: "flex",
+            alignItems: "center",
+            gap: 7,
+            padding: "6px 8px",
+            border: 0,
+            borderRadius: 8,
+            background: selected && agent.id === selected.id ? C2.soft : "transparent",
+            opacity: agent.available ? 1 : 0.5,
+            cursor: "pointer",
+            minWidth: 0,
+            textAlign: "left"
+          }
+        },
+        icon(agent, 22),
+        h3(
+          "span",
+          { style: { minWidth: 0, display: "grid", gap: 1 } },
+          h3("span", { style: { fontSize: 11.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, agent.name),
+          h3("span", { style: { fontSize: 9.5, color: C2.mute } }, agent.available ? "\u53EF\u7528" : "\u672A\u88C5")
+        )
+      ))
+    )
+  ) : null;
   return h3(
     "div",
     { style: { flex: "1 1 auto", minHeight: 0, display: "flex", gap: 12 } },
@@ -178068,7 +178113,8 @@ function AgentHome({
       hero,
       accounts,
       running,
-      quick
+      quick,
+      overview
     ),
     error ? h3("div", { style: { position: "absolute", left: 260, bottom: 20, color: C2.red, fontSize: 11.5 } }, error) : null
   );

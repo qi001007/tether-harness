@@ -834,5 +834,5 @@
 - Agent 生态：目录扩到 21 个（Codeg 20 + DSH + Copilot），按节点显示已装/未装；已装点开按能力给终端（Codex/Qoder 原生 TUI）、OpenCode Web/CLI、DSH 工作台；未装 npm 安装默认落 `D:\Tether\agents`（OpenCode 实测 766 MB）。Codex、OpenCode Web、OpenCode CLI、Herdr 四标签并存，Herdr 自动启动且深色。LAPTOP-01 与 DESKTOP 均实测。
 - Agents IA 重组：App 顶栏只切主页面，Agents 页内用“主页/表面”标签；主页为左侧垂直 Agent 列表 + 右侧详情/账号/快速启动，不再用横向图标条或水印；目录页嵌在常驻顶栏下，右栏分“启动/环境变量/账号/诊断”，支持 cwd/env、账号档案和测试启动。客户端按设备缓存先渲染，返回页面不再等网络。
 - Herdr 识别：Windows 包装器显式设置隔离状态与 PATH，`D:\Tether\agents` 已追加到用户 PATH（有备份）；Herdr 新 pane 可识别并用 `herdr agent start gemini` 启动 Tether 安装的 Gemini。LAPTOP-01 本轮离线，未复核。
-- Agent 工作台复测（2026-11-04）：主页为左列表（21 个）+ 右详情/账号 + 快速启动；刷新纯图标；目录页可直接切活动栏。标签溢出在 500px 视口下 `522/432`，滚轮 `0→90→10`，悬停滚动条可见；Herdr 分屏边界真实拖动 `0.50→0.6959`（86→119 列），侧栏是固定宽度不可拖。账号快照新增重复保存去重；Codex 结构化无提示词启动到“已连接 · Codex”，模型 `6.1 Sol (high)` 与 slash 命令可用；DSH 插件构建补入 `agents-home.js`/`agent-accounts-panel.js`；全量 214 passed / 3 skipped。
+- Agent 工作台复测（2026-11-04）：主页为左列表（21 个）+ 右详情/账号 + 快速启动 + 底部 21 个 Agent 总览画廊；刷新纯图标；目录页可直接切活动栏。标签溢出在 500px 视口下 `522/432`，滚轮 `0→90→10`，悬停滚动条可见；Herdr 分屏边界真实拖动 `0.50→0.6959`（86→119 列），侧栏是固定宽度不可拖。账号快照新增重复保存去重；Codex 结构化无提示词启动到“已连接 · Codex”，模型 `6.1 Sol (high)` 与 slash 命令可用；DSH 插件构建补入 `agents-home.js`/`agent-accounts-panel.js`；全量 214 passed / 3 skipped。
 - 仍欠：GitHub 0.3.6 公开发布、DSH 自身 DeepSeek 登录/composer、干净 VM 全业务链、100 MB 10 s（需要国内中转或同网路径）。

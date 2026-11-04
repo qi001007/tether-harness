@@ -10711,6 +10711,22 @@ function AgentHome({ React, Glyph, C, post, device, catalog, harnesses = [], pan
     h('div', { style: { fontSize: 10.5, color: C.mute } }, '快速启动'),
     h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 6 } },
       ...installed.map(quickRow))) : null
+  const overview = agents.length ? h('div', { style: { ...card, gridColumn: '1 / -1', padding: 12, display: 'grid', gap: 8 } },
+    h('div', { style: { display: 'flex', alignItems: 'center', gap: 12 } },
+      h('span', { style: { fontSize: 10.5, color: C.mute } }, '总览'),
+      h('span', { style: { fontSize: 10.5, color: C.mute } }, installed.length + ' / ' + agents.length + ' 可用'),
+      h('span', { style: { fontSize: 10.5, color: C.mute } }, panes.length + ' 运行中')),
+    h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(126px, 1fr))', gap: 6 } },
+      ...agents.map((agent) => h('button', {
+        key: agent.id, type: 'button', title: agent.name, onClick: () => setSelectedId(agent.id),
+        className: 'tether-hover', style: { display: 'flex', alignItems: 'center', gap: 7, padding: '6px 8px',
+          border: 0, borderRadius: 8, background: selected && agent.id === selected.id ? C.soft : 'transparent',
+          opacity: agent.available ? 1 : 0.5, cursor: 'pointer', minWidth: 0, textAlign: 'left' }
+      },
+        icon(agent, 22),
+        h('span', { style: { minWidth: 0, display: 'grid', gap: 1 } },
+          h('span', { style: { fontSize: 11.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, agent.name),
+          h('span', { style: { fontSize: 9.5, color: C.mute } }, agent.available ? '可用' : '未装')))))) : null
   return h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex', gap: 12 } },
     h('div', { style: { width: 240, flex: '0 0 auto', border: line, borderRadius: 12, background: C.panel || C.bg,
       display: 'flex', flexDirection: 'column', overflow: 'hidden' } },
@@ -10718,7 +10734,7 @@ function AgentHome({ React, Glyph, C, post, device, catalog, harnesses = [], pan
         agents.map(listRow))),
     h('div', { style: { flex: '1 1 auto', minWidth: 0, display: 'grid', gap: 12, alignContent: 'start', alignItems: 'start',
       gridTemplateColumns: accounts ? 'minmax(0, 1.25fr) minmax(270px, .75fr)' : '1fr' } },
-      hero, accounts, running, quick),
+      hero, accounts, running, quick, overview),
     error ? h('div', { style: { position: 'absolute', left: 260, bottom: 20, color: C.red, fontSize: 11.5 } }, error) : null)
 }
 function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '', activeDevice = '', onDeviceChange, onOpenWorkbench, onError }) {
