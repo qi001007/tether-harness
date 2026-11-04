@@ -85,3 +85,4 @@
 - 2026-11-04：DSH Web 修复/重启期间不能掉回桌面版面板：引入 `dshWebActive = running || installing || dshWebBusy` 控制标题与按钮；`runDshWeb('repair'|'install')` 在 POST 后轮询 `dsh_web_status` 直到 `installing=false`，按钮持续显示“修复中…”。真机点击后“修复中…”保持到服务重启完成，随后恢复“修复 DSH Web 插件/重启 DSH Web”。
 - 2026-11-04：Agents 会话不再用 `<pre>` 拼日志：ACP 事件改为结构化 `items`（user/assistant/tool/plan/system/error），聊天区用气泡、工具卡、计划卡；模型切换挪进 composer 的自绘菜单（46 个模型可选，带描述与勾选），发送按钮用图标。ACP 轮询不再因 `document.hidden` 暂停，最小化后仍同步。真机：Codex 2.5.0 会话显示 `已就绪`、`6.1 Sol (high)` 模型 chip 与输入框。
 - 2026-11-04：无后缀文件不能一律标 `TXT`：`fileTypeMark(name, format, kind)`，文本/扩展名缺失时用 `TXT`，ELF/二进制用 Node 返回的 `format` 短标签；预览不支持时显示 `ELF 可执行 · 暂不支持预览`，并在列表“类型”列显示 `ELF 可执行`/`文本`。
+- 2026-11-04：Agents 页新增“Agent 目录”（自动发现 + 手动登记/编辑/删除，Coze 风格卡片）；目录跟随全局设备切换，修复 Agents 页自持旧 device 导致切到服务器仍显示本机 Agent 的问题；DSH Web 以“本机服务”来源展示。

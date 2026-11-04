@@ -30,6 +30,7 @@ from typing import Any
 
 from .dsh_desktop import DshDesktop, DshError
 from .dsh_plugin import DshPluginError, install as install_dsh_plugin
+from .agent_registry import AgentRegistry
 try:
     from .dsh_web import DshWeb
 except Exception:  # an older install may not ship the optional Linux web module
@@ -480,6 +481,7 @@ class FsService:
                  dsh_home: Path | None = None) -> None:
         self.device = device
         self.workspace = workspace
+        self.data_dir = data_dir
         self.workspaces_root = workspaces_root
         self.workspaces_root.mkdir(parents=True, exist_ok=True)
         self.policy = Policy(data_dir / "policy.json", device=device,
@@ -492,6 +494,7 @@ class FsService:
         self._office_lock = threading.Lock()
         self.croc = None
         self._croc_context: dict[str, Any] = {}
+        self.agents = AgentRegistry(data_dir)
 
     def _resolve(self, raw: str | None) -> Path:
         if not raw:
@@ -732,6 +735,31 @@ class FsService:
             return acp.dispatch(action, args)
         except ValueError as exc:
             raise FsError(str(exc), "acp_error") from None
+
+    def _op_agents_catalog(self, args: dict[str, Any]) -> Any:
+        payload = self.agents.catalog(force=args.get("fresh") is True)
+        dsh = next((item for item in payload.get("agents") or [] if item.get("id") == "dsh"), None)
+        if dsh is not None and self.dsh_web is not None:
+            status = self.dsh_web.status()
+            if status.get("running"):
+                dsh.update({"available": True, "kind": "web", "transports": ["web"],
+                            "version": dsh.get("version") or "DSH Web", "source": "service"})
+        return payload
+
+    def _op_agents_save(self, args: dict[str, Any]) -> Any:
+        try:
+            result = self.agents.save(args)
+        except ValueError as exc:
+            raise FsError(str(exc), "bad_args") from None
+        self.audit.add(op="agents_save", path=str(self.agents.path), mode=self.policy.data.get("mode"),
+                       phase="result", result="ok", agent=str(args.get("id") or args.get("name") or ""))
+        return result
+
+    def _op_agents_delete(self, args: dict[str, Any]) -> Any:
+        result = self.agents.remove(str(args.get("id") or ""))
+        self.audit.add(op="agents_delete", path=str(self.agents.path), mode=self.policy.data.get("mode"),
+                       phase="result", result="ok", agent=str(args.get("id") or ""))
+        return result
 
     def _op_acp_detect(self, args: dict[str, Any]) -> Any:
         return self._acp_dispatch("detect", args)

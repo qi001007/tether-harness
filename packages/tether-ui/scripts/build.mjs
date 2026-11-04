@@ -22,6 +22,7 @@ const transferEngine = strip('transfer.js')
 const transferPage = strip('transfer-page.js')
 const terminalDock = strip('terminal-dock.js')
 const appsPage = strip('apps-page.js')
+const agentCatalog = strip('agent-catalog.js')
 const agentsPage = strip('agents-page.js')
 const monacoRuntime = await bundledMonacoRuntime()
 
@@ -43,6 +44,7 @@ ${transferEngine}
 ${transferPage}
 ${terminalDock}
 ${appsPage}
+${agentCatalog}
 ${agentsPage}
     let localPluginRpc = null
     let localPluginRemote = null

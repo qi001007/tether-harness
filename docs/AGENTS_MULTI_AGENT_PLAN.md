@@ -115,3 +115,10 @@ Codex 终端里的 ASCII logo、`? for shortcuts`、Esc 中断、斜杠面板，
 3. 多 Agent 交互是“可见的协调者 Agent + @ 委派”，还是只提供 MCP 工具给任意 Agent？
 4. 是否要 worktree 隔离（更安全但更重）？
 5. Herdr 只借设计，还是允许在 Tether 里额外开一个“Herdr 工作区”标签直接跑它的二进制？
+
+## 2026-11-04 决策修订：DSH 是工作台，不是固定 Router
+
+- DSH 的定位是**每个节点上的可交互工作台**（原生浏览器、终端、文件预览、插件），不是团队里固定的指挥者；团队谁做 Router 由 Herdr/Codex 的 skill 决定，DSH 的 CLI 也可以作为 Herdr 里的一个 Worker。
+- 接入分层：原生 Web（DSH、OpenCode）→ Codex app-server（thread/turn/item 协议，自绘同款 UI）→ ACP（Qoder/Claude/Gemini 等）→ Herdr 终端（所有 CLI 的兜底）→ 不做窗口串流。
+- 每节点 Agent 目录已落地：自动扫描 PATH + 手动登记/编辑/删除，配置存 `<node data>/agents.json`；DSH Web 运行中会以“本机服务”显示为可用。
+- 下一步：把 Herdr 打包进 Node，机器人页变成 Herdr 工作区（Agent 列表 + pane + 一键启动），OpenCode 作为第二个原生 Web；Codeg 只复用 adapter/会话/设置骨架。

@@ -176855,11 +176855,389 @@ function createAppsPage({ React: React2, Glyph, post, C: C2, devices = [], local
   );
 }
 
+// src/agent-catalog.js
+function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose }) {
+  const h3 = React2.createElement;
+  const [catalog, setCatalog] = React2.useState(null);
+  const [busy, setBusy] = React2.useState(false);
+  const [error, setError] = React2.useState("");
+  const [editor2, setEditor] = React2.useState(null);
+  const colors = catalog && catalog.colors || ["#2563eb", "#d97706", "#7c3aed", "#0f766e", "#c2410c", "#0891b2", "#be185d", "#111827"];
+  const kinds = [["app-server", "App Server"], ["acp", "ACP"], ["web", "\u539F\u751F Web"], ["cli", "\u7EC8\u7AEF"]];
+  const load = async (fresh) => {
+    setBusy(true);
+    setError("");
+    try {
+      const data = await post("/api/devices/" + encodeURIComponent(device) + "/fs/agents_catalog", { fresh: fresh === true });
+      setCatalog(data);
+    } catch (cause) {
+      setError(String(cause && cause.message || cause || "\u8BFB\u53D6 Agent \u76EE\u5F55\u5931\u8D25"));
+    } finally {
+      setBusy(false);
+    }
+  };
+  React2.useEffect(() => {
+    void load(false);
+  }, [device]);
+  const openEditor = (record) => {
+    setEditor({
+      id: record && record.source !== "builtin" && record.source !== "detected" ? record.id : "",
+      name: record && record.name || "",
+      command: record && record.command || "",
+      argsText: (record && record.args || []).join(" "),
+      kind: record && record.kind || "cli",
+      color: record && record.color || colors[0],
+      enabled: !record || record.enabled !== false
+    });
+    setError("");
+  };
+  const save = async (event) => {
+    if (event) event.preventDefault();
+    if (!editor2) return;
+    setBusy(true);
+    setError("");
+    try {
+      const data = await post("/api/devices/" + encodeURIComponent(device) + "/fs/agents_save", {
+        id: editor2.id || void 0,
+        name: editor2.name,
+        command: editor2.command,
+        args: editor2.argsText.split(/\s+/).filter(Boolean),
+        kind: editor2.kind,
+        color: editor2.color,
+        enabled: editor2.enabled
+      });
+      setCatalog(data);
+      setEditor(null);
+    } catch (cause) {
+      setError(String(cause && cause.message || cause || "\u4FDD\u5B58\u5931\u8D25"));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const remove = async (id) => {
+    setBusy(true);
+    setError("");
+    try {
+      const data = await post("/api/devices/" + encodeURIComponent(device) + "/fs/agents_delete", { id });
+      setCatalog(data);
+    } catch (cause) {
+      setError(String(cause && cause.message || cause || "\u5220\u9664\u5931\u8D25"));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const field = {
+    height: 30,
+    boxSizing: "border-box",
+    border: "1px solid " + C2.line,
+    borderRadius: 7,
+    padding: "0 9px",
+    background: C2.bg,
+    color: C2.ink,
+    fontSize: 12
+  };
+  const primary = {
+    height: 30,
+    padding: "0 12px",
+    border: 0,
+    borderRadius: 7,
+    fontSize: 12,
+    cursor: "pointer",
+    color: "#fff",
+    background: C2.blue
+  };
+  const transportLabel = (value) => ({ web: "\u539F\u751F Web", "app-server": "App Server", acp: "ACP", terminal: "\u7EC8\u7AEF" })[value] || value;
+  const sourceLabel = (value) => ({ detected: "\u81EA\u52A8\u53D1\u73B0", manual: "\u624B\u52A8\u767B\u8BB0", overridden: "\u624B\u52A8\u8986\u76D6", service: "\u672C\u673A\u670D\u52A1", builtin: "\u672A\u53D1\u73B0" })[value] || value;
+  const chip = (text2) => h3("span", { style: { padding: "1px 7px", borderRadius: 999, background: C2.soft, color: C2.sub, fontSize: 10.5, whiteSpace: "nowrap" } }, text2);
+  const agents = catalog && catalog.agents || [];
+  const card = (agent) => h3(
+    "div",
+    {
+      key: agent.id,
+      style: {
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+        padding: 12,
+        borderRadius: 12,
+        border: "1px solid " + C2.line,
+        background: C2.panel || C2.bg,
+        minWidth: 0
+      }
+    },
+    h3(
+      "div",
+      { style: { display: "flex", alignItems: "center", gap: 9, minWidth: 0 } },
+      h3("span", { style: {
+        width: 36,
+        height: 36,
+        flex: "0 0 auto",
+        display: "grid",
+        placeItems: "center",
+        borderRadius: 10,
+        background: agent.color || C2.soft,
+        color: "#fff"
+      } }, h3(Glyph, { name: "bot", size: 18 })),
+      h3(
+        "div",
+        { style: { minWidth: 0, display: "grid", gap: 1 } },
+        h3("div", { style: { fontSize: 13.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, agent.name),
+        h3(
+          "div",
+          { style: { fontSize: 10.5, color: C2.mute, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
+          (agent.version || "\u7248\u672C\u672A\u77E5") + " \xB7 " + sourceLabel(agent.source)
+        )
+      ),
+      h3(
+        "span",
+        { style: { marginLeft: "auto", display: "flex", alignItems: "center", gap: 5, fontSize: 10.5, color: agent.available ? C2.green : C2.mute, whiteSpace: "nowrap" } },
+        h3("span", { style: { width: 6, height: 6, borderRadius: 3, background: agent.available ? C2.green : C2.mute } }),
+        agent.available ? "\u53EF\u7528" : "\u672A\u5B89\u88C5"
+      )
+    ),
+    h3(
+      "div",
+      { style: { display: "flex", gap: 4, flexWrap: "wrap" } },
+      ...(agent.transports || []).map((value) => chip(transportLabel(value)))
+    ),
+    agent.command ? h3("div", { title: agent.command, style: {
+      fontFamily: "Consolas, monospace",
+      fontSize: 10.5,
+      color: C2.mute,
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      whiteSpace: "nowrap"
+    } }, agent.command) : null,
+    h3(
+      "div",
+      { style: { display: "flex", gap: 6, marginTop: "auto" } },
+      h3("button", {
+        type: "button",
+        onClick: () => openEditor(agent),
+        style: {
+          height: 25,
+          padding: "0 9px",
+          border: "1px solid " + C2.line,
+          borderRadius: 6,
+          background: C2.bg,
+          color: C2.sub,
+          fontSize: 11.5,
+          cursor: "pointer"
+        }
+      }, "\u7F16\u8F91"),
+      agent.source === "manual" || agent.source === "overridden" ? h3("button", {
+        type: "button",
+        onClick: () => void remove(agent.id),
+        style: {
+          height: 25,
+          padding: "0 9px",
+          border: 0,
+          borderRadius: 6,
+          background: "transparent",
+          color: C2.red,
+          fontSize: 11.5,
+          cursor: "pointer"
+        }
+      }, "\u5220\u9664") : null
+    )
+  );
+  const addCard = h3(
+    "button",
+    {
+      key: "add-agent",
+      type: "button",
+      onClick: () => openEditor(null),
+      className: "tether-hover",
+      style: {
+        minHeight: 150,
+        display: "grid",
+        placeItems: "center",
+        alignContent: "center",
+        gap: 7,
+        border: "1px dashed " + C2.line,
+        borderRadius: 12,
+        background: "transparent",
+        color: C2.mute,
+        cursor: "pointer"
+      }
+    },
+    h3("span", { style: { width: 34, height: 34, display: "grid", placeItems: "center", borderRadius: 10, background: C2.soft, color: C2.sub } }, h3(Glyph, { name: "plus", size: 17 })),
+    h3("span", { style: { fontSize: 12 } }, "\u624B\u52A8\u6DFB\u52A0 Agent")
+  );
+  const modal = editor2 ? h3(
+    "div",
+    {
+      style: { position: "fixed", inset: 0, zIndex: 120, display: "grid", placeItems: "center", background: "rgba(16,24,40,.35)" },
+      onPointerDown: (event) => {
+        if (event.target === event.currentTarget) setEditor(null);
+      }
+    },
+    h3(
+      "form",
+      { onSubmit: save, style: {
+        width: 520,
+        maxWidth: "calc(100vw - 32px)",
+        maxHeight: "calc(100vh - 80px)",
+        overflow: "auto",
+        background: C2.layer1 || C2.bg,
+        borderRadius: 14,
+        boxShadow: C2.shadow,
+        padding: 18,
+        display: "grid",
+        gap: 12
+      } },
+      h3(
+        "div",
+        { style: { display: "flex", alignItems: "center" } },
+        h3("div", { style: { fontSize: 15, fontWeight: 600 } }, editor2.id ? "\u7F16\u8F91 Agent" : "\u6DFB\u52A0 Agent"),
+        h3("button", { type: "button", onClick: () => setEditor(null), style: { marginLeft: "auto", width: 26, height: 26, border: 0, borderRadius: 6, background: C2.soft, color: C2.sub, cursor: "pointer" } }, "\xD7")
+      ),
+      h3(
+        "label",
+        { style: { display: "grid", gap: 4, fontSize: 11.5, color: C2.sub } },
+        "\u540D\u79F0",
+        h3("input", {
+          value: editor2.name,
+          autoFocus: true,
+          onChange: (event) => setEditor({ ...editor2, name: event.target.value }),
+          placeholder: "\u4F8B\u5982 Codex",
+          style: { ...field, height: 32, fontSize: 13 }
+        })
+      ),
+      h3(
+        "label",
+        { style: { display: "grid", gap: 4, fontSize: 11.5, color: C2.sub } },
+        "\u547D\u4EE4 / \u53EF\u6267\u884C\u6587\u4EF6",
+        h3("input", {
+          value: editor2.command,
+          onChange: (event) => setEditor({ ...editor2, command: event.target.value }),
+          placeholder: "codex \u6216 C:\\path\\agent.exe",
+          style: { ...field, height: 32, fontSize: 13, fontFamily: "Consolas, monospace" }
+        })
+      ),
+      h3(
+        "label",
+        { style: { display: "grid", gap: 4, fontSize: 11.5, color: C2.sub } },
+        "\u542F\u52A8\u53C2\u6570\uFF08\u7A7A\u683C\u5206\u9694\uFF0C\u53EF\u9009\uFF09",
+        h3("input", {
+          value: editor2.argsText,
+          onChange: (event) => setEditor({ ...editor2, argsText: event.target.value }),
+          placeholder: "--acp",
+          style: { ...field, height: 32, fontSize: 12, fontFamily: "Consolas, monospace" }
+        })
+      ),
+      h3(
+        "div",
+        { style: { display: "grid", gap: 4, fontSize: 11.5, color: C2.sub } },
+        "\u63A5\u5165\u65B9\u5F0F",
+        h3(
+          "div",
+          { style: { display: "flex", gap: 6, flexWrap: "wrap" } },
+          kinds.map(([value, label]) => h3("button", {
+            key: value,
+            type: "button",
+            onClick: () => setEditor({ ...editor2, kind: value }),
+            style: {
+              height: 28,
+              padding: "0 11px",
+              borderRadius: 7,
+              fontSize: 11.5,
+              cursor: "pointer",
+              border: "1px solid " + (editor2.kind === value ? C2.blue : C2.line),
+              background: editor2.kind === value ? C2.blue : C2.bg,
+              color: editor2.kind === value ? "#fff" : C2.sub
+            }
+          }, label))
+        )
+      ),
+      h3(
+        "div",
+        { style: { display: "grid", gap: 4, fontSize: 11.5, color: C2.sub } },
+        "\u56FE\u6807\u989C\u8272",
+        h3(
+          "div",
+          { style: { display: "flex", gap: 7 } },
+          colors.map((color) => h3("button", {
+            key: color,
+            type: "button",
+            onClick: () => setEditor({ ...editor2, color }),
+            style: {
+              width: 24,
+              height: 24,
+              borderRadius: 7,
+              cursor: "pointer",
+              background: color,
+              border: editor2.color === color ? "2px solid " + C2.ink : "2px solid transparent"
+            }
+          }))
+        )
+      ),
+      error ? h3("div", { style: { color: C2.red, fontSize: 11.5 } }, error) : null,
+      h3(
+        "div",
+        { style: { display: "flex", justifyContent: "flex-end", gap: 8 } },
+        h3("button", { type: "button", onClick: () => setEditor(null), style: { ...field, cursor: "pointer" } }, "\u53D6\u6D88"),
+        h3("button", {
+          type: "submit",
+          disabled: busy || !editor2.name.trim() || !editor2.command.trim(),
+          style: { ...primary, opacity: busy || !editor2.name.trim() || !editor2.command.trim() ? 0.5 : 1 }
+        }, busy ? "\u4FDD\u5B58\u4E2D\u2026" : "\u4FDD\u5B58")
+      )
+    )
+  ) : null;
+  return h3(
+    "div",
+    { style: { flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column", background: C2.bg } },
+    h3(
+      "div",
+      { style: { display: "flex", alignItems: "center", gap: 8, padding: "10px 12px 8px", flex: "0 0 auto" } },
+      h3("button", {
+        type: "button",
+        title: "\u8FD4\u56DE",
+        "aria-label": "\u8FD4\u56DE",
+        onClick: onClose,
+        style: { ...field, width: 28, padding: 0, display: "grid", placeItems: "center", cursor: "pointer" }
+      }, h3(Glyph, { name: "chevronLeft", size: 14 })),
+      h3(
+        "div",
+        null,
+        h3("div", { style: { fontSize: 16, fontWeight: 600 } }, "Agent \u76EE\u5F55"),
+        h3("div", { style: { fontSize: 11, color: C2.mute } }, device + " \xB7 \u81EA\u52A8\u53D1\u73B0 + \u624B\u52A8\u767B\u8BB0\uFF1BDSH \u662F\u9ED8\u8BA4\u5DE5\u4F5C\u53F0\uFF0C\u5176\u4ED6 Agent \u6309\u9700\u63A5\u5165")
+      ),
+      h3("span", { style: { marginLeft: "auto", fontSize: 11, color: C2.mute } }, agents.filter((item) => item.available).length + " \u4E2A\u53EF\u7528"),
+      h3("button", {
+        type: "button",
+        onClick: () => void load(true),
+        disabled: busy,
+        style: { ...field, cursor: "pointer", opacity: busy ? 0.5 : 1 }
+      }, busy ? "\u5237\u65B0\u4E2D\u2026" : "\u5237\u65B0"),
+      h3("button", {
+        type: "button",
+        onClick: () => openEditor(null),
+        style: { ...primary, display: "flex", alignItems: "center", gap: 5 }
+      }, h3(Glyph, { name: "plus", size: 13 }), "\u6DFB\u52A0")
+    ),
+    error && !editor2 ? h3("div", { style: { padding: "0 14px 8px", color: C2.red, fontSize: 11.5 } }, error) : null,
+    h3(
+      "div",
+      { className: "tether-scroll", style: { flex: "1 1 auto", minHeight: 0, overflow: "auto", padding: "2px 12px 16px" } },
+      h3(
+        "div",
+        { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: 10 } },
+        ...agents.map(card),
+        addCard
+      )
+    ),
+    modal
+  );
+}
+
 // src/agents-page.js
-function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], localDevice = "", onError }) {
+function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], localDevice = "", activeDevice = "", onDeviceChange, onError }) {
   const h3 = React2.createElement;
   const online = devices.filter((item) => item && item.online);
-  const initial = localDevice && online.some((item) => item.device_id === localDevice) ? localDevice : online[0] && online[0].device_id || "";
+  const preferred = activeDevice && online.some((item) => item.device_id === activeDevice) ? activeDevice : localDevice;
+  const initial = preferred && online.some((item) => item.device_id === preferred) ? preferred : online[0] && online[0].device_id || "";
   const [device, setDevice] = React2.useState(initial);
   const [harnesses, setHarnesses] = React2.useState([]);
   const [detecting, setDetecting] = React2.useState(false);
@@ -176876,6 +177254,7 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
   const [tabs, setTabs] = React2.useState([]);
   const [picking, setPicking] = React2.useState(false);
   const [modelOpen, setModelOpen] = React2.useState(false);
+  const [catalogOpen, setCatalogOpen] = React2.useState(false);
   const since = React2.useRef(0);
   const sessionRef = React2.useRef("");
   const tabCache = React2.useRef({});
@@ -177155,6 +177534,15 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
       });
     }
   }, []);
+  React2.useEffect(() => {
+    if (!activeDevice || activeDevice === device) return;
+    if (!online.some((item) => item.device_id === activeDevice)) return;
+    setTabs([]);
+    tabCache.current = {};
+    clearSession();
+    setPicking(false);
+    setDevice(activeDevice);
+  }, [activeDevice]);
   const selectDevice = async (value) => {
     const ids = tabs.map((tab) => tab.id);
     setTabs([]);
@@ -177162,6 +177550,7 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
     clearSession();
     setPicking(false);
     setDevice(value);
+    if (onDeviceChange) onDeviceChange(value);
     for (const id of ids) {
       try {
         await post("/api/devices/" + encodeURIComponent(device) + "/fs/acp_stop", { session_id: id });
@@ -177288,6 +177677,16 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
   };
   const currentModel = models.find((item) => item.modelId === model) || models[0];
   const modelLabel = currentModel ? currentModel.name || currentModel.modelId : model || "\u6A21\u578B";
+  if (catalogOpen) {
+    return h3(AgentCatalogView, {
+      React: React2,
+      Glyph,
+      post,
+      C: C2,
+      device,
+      onClose: () => setCatalogOpen(false)
+    });
+  }
   return h3(
     "div",
     { style: { flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column", gap: 8, padding: 10, background: C2.bg } },
@@ -177321,6 +177720,13 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
         onClick: () => void stop(),
         style: { ...field, cursor: session ? "pointer" : "default", opacity: session ? 1 : 0.5, background: "transparent" }
       }, "\u505C\u6B62"),
+      h3("button", {
+        type: "button",
+        title: "Agent \u76EE\u5F55",
+        "aria-label": "Agent \u76EE\u5F55",
+        onClick: () => setCatalogOpen(true),
+        style: { ...field, display: "flex", alignItems: "center", gap: 5, cursor: "pointer" }
+      }, h3(Glyph, { name: "apps", size: 13 }), "\u76EE\u5F55"),
       h3(
         "span",
         { style: { marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: session ? C2.green : C2.mute } },
@@ -185244,6 +185650,8 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
             C: C2,
             devices: state && state.devices || [],
             localDevice: appLocalDevice,
+            activeDevice: deviceId,
+            onDeviceChange: selectDevice,
             onError: fail2
           }) : null
         )

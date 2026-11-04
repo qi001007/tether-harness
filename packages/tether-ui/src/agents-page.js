@@ -1,8 +1,12 @@
-export function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '', onError }) {
+import { AgentCatalogView } from './agent-catalog.js'
+export function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '', activeDevice = '', onDeviceChange, onError }) {
   const h = React.createElement
   const online = devices.filter((item) => item && item.online)
-  const initial = localDevice && online.some((item) => item.device_id === localDevice)
-    ? localDevice
+  const preferred = activeDevice && online.some((item) => item.device_id === activeDevice)
+    ? activeDevice
+    : localDevice
+  const initial = preferred && online.some((item) => item.device_id === preferred)
+    ? preferred
     : (online[0] && online[0].device_id) || ''
   const [device, setDevice] = React.useState(initial)
   const [harnesses, setHarnesses] = React.useState([])
@@ -20,6 +24,7 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
   const [tabs, setTabs] = React.useState([])
   const [picking, setPicking] = React.useState(false)
   const [modelOpen, setModelOpen] = React.useState(false)
+  const [catalogOpen, setCatalogOpen] = React.useState(false)
   const since = React.useRef(0)
   const sessionRef = React.useRef('')
   const tabCache = React.useRef({})
@@ -304,6 +309,16 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
     }
   }, [])
 
+  React.useEffect(() => {
+    if (!activeDevice || activeDevice === device) return
+    if (!online.some((item) => item.device_id === activeDevice)) return
+    setTabs([])
+    tabCache.current = {}
+    clearSession()
+    setPicking(false)
+    setDevice(activeDevice)
+  }, [activeDevice])
+
   const selectDevice = async (value) => {
     const ids = tabs.map((tab) => tab.id)
     setTabs([])
@@ -311,6 +326,7 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
     clearSession()
     setPicking(false)
     setDevice(value)
+    if (onDeviceChange) onDeviceChange(value)
     for (const id of ids) {
       try { await post('/api/devices/' + encodeURIComponent(device) + '/fs/acp_stop', { session_id: id }) } catch (_) { /* already closed */ }
     }
@@ -361,6 +377,12 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
   const currentModel = models.find((item) => item.modelId === model) || models[0]
   const modelLabel = currentModel ? (currentModel.name || currentModel.modelId) : (model || '模型')
 
+  if (catalogOpen) {
+    return h(AgentCatalogView, {
+      React, Glyph, post, C, device,
+      onClose: () => setCatalogOpen(false)
+    })
+  }
   return h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', gap: 8, padding: 10, background: C.bg } },
     h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flex: '0 0 auto' } },
       h('select', {
@@ -375,6 +397,11 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
         style: { ...button, padding: '0 10px', opacity: detecting || !device ? 0.5 : 1 } }, detecting ? '检测中…' : '刷新'),
       h('button', { type: 'button', disabled: !session, onClick: () => void stop(),
         style: { ...field, cursor: session ? 'pointer' : 'default', opacity: session ? 1 : 0.5, background: 'transparent' } }, '停止'),
+      h('button', {
+        type: 'button', title: 'Agent 目录', 'aria-label': 'Agent 目录',
+        onClick: () => setCatalogOpen(true),
+        style: { ...field, display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }
+      }, h(Glyph, { name: 'apps', size: 13 }), '目录'),
       h('span', { style: { marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: session ? C.green : C.mute } },
         h('span', { style: { width: 7, height: 7, borderRadius: 4, background: session ? C.green : C.mute } }),
         session ? (ready ? '已就绪' : '启动中…') : '未连接'),

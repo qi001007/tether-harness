@@ -6319,6 +6319,8 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
                 React, Glyph, post, C,
                 devices: (state && state.devices) || [],
                 localDevice: appLocalDevice,
+                activeDevice: deviceId,
+                onDeviceChange: selectDevice,
                 onError: fail
               })
                 : null
