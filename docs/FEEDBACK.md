@@ -271,6 +271,8 @@
 
 - [x] F112 Agents 页要简洁、可快速加载，并且已装/未装都有明确动作。判据：去掉解释性小字与来源/通道标签；目录只显示名称、版本、可用/未安装；未安装的 npm Agent 有安装按钮；扫描不阻塞；Herdr 进出一致、终端铺满高度。**实测 2026-11-04**：去掉页头说明、`N 个可用`、`自动发现/手动登记`、`接入方式`、`图标颜色`；目录加载改为并行版本探测（上限 1.5 s）+ 节点启动预扫描 + 30 s 缓存，本机缓存命中 0.45 s、强制扫描 1.6 s；未装 npm Agent 右侧出现“安装”。第二个包实测：Gemini `npm install --prefix D:\Tether\agents` 31.2 s，检测到 `D:\Tether\agents\gemini.cmd`，版本 0.66.0。Herdr 标签改为固定页头 + 内容区标签栏，终端 `fill` 铺满，不再因进入 Herdr 隐藏整条顶栏；本机验证 Codex → Herdr 切换时页头不动、Codex 会话仍在。**LAPTOP-01 回归未完成**：部署后重启，设备从 17:44 起离线，mesh ping 不通（疑似休眠/网络），需唤醒后重验 Herdr 原生界面与安装按钮。
 
+- [x] F113 Agents 的导航与设置要按软件逻辑重组，延迟要低，Herdr 要能看到 Tether 装的 Agent。判据：全局顶栏不出现“工作区 N”；表面切换是 Agents 页面内的标签；主页与表面来回切不卸载会话；目录设置分组且能测启动；页面返回用缓存即时渲染；Herdr 的 pane 能识别并启动 `D:\Tether\agents` 里的 Agent。**实测 2026-11-04**：顶栏去掉“工作区”，标签栏移到 Agents 页面内（`主页 | Codex × | Herdr ×`），Codex 终端在主页往返后内容仍在；主页改为 Codeg 图的横向图标条 + 单 Agent 主面板，不再堆卡片；目录右栏分为“启动 / 环境变量 / 诊断”，支持工作目录、环境变量、`测试启动`（Codex 返回 `codex-cli 0.163.0`）。客户端加按设备缓存，Files→Agents 返回时缓存列表立即渲染；服务端并行版本探测 + 预扫描，本机缓存 0.45 s / 全量 1.6 s。Herdr 隔离脚本改为自带 `HERDR_HOME/XDG/APPDATA/PATH`，并把 `D:\Tether\agents` 追加到用户 PATH（备份 `C:\Users\Administrator\.tether\env-path-backup-20261104.txt`，原值 288 字符）；新 pane 的 PATH 已含该目录，`herdr agent start gemini --kind gemini` 成功返回 `interactive_ready:true`。**仍缺**：LAPTOP-01 自 17:44 离线（mesh 不通，疑似休眠），本轮无法远程复核；Herdr 的鼠标拖拽分栏未自动化验证。
+
 ## 验收边界
 
 离线测试、隔离 UI、单机 DSH、本机真实模型回答、干净安装、真实跨设备操作和公开发布分别记录，不能互相替代。未完成发布与实机验收前，保持对应条目未完成。

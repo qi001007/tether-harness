@@ -707,6 +707,10 @@ class FsService:
                 raise FsError("agent is not installed on this node", "agent_unavailable")
             command = [str(record["command"])] + [str(item) for item in (record.get("args") or [])]
             args = {**args, "command": command, "shell": "agent"}
+            if record.get("cwd"):
+                args["cwd"] = record["cwd"]
+            if record.get("env"):
+                args["env"] = record["env"]
         return self._terminal_dispatch("start", args)
 
     def _op_terminal_shells(self, args: dict[str, Any]) -> Any:
@@ -807,6 +811,13 @@ class FsService:
         result = self.agents.remove(str(args.get("id") or ""))
         self.audit.add(op="agents_delete", path=str(self.agents.path), mode=self.policy.data.get("mode"),
                        phase="result", result="ok", agent=str(args.get("id") or ""))
+        return result
+
+    def _op_agents_test(self, args: dict[str, Any]) -> Any:
+        try:
+            result = self.agents.test(str(args.get("id") or ""))
+        except ValueError as exc:
+            raise FsError(str(exc), "agent_test") from None
         return result
 
     def _op_agents_install(self, args: dict[str, Any]) -> Any:

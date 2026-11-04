@@ -832,4 +832,6 @@
 - 发布口径：`/install/version.json` 与服务器资产为 0.3.6；GitHub release 仍是 **draft** `433272811`，Hub `/releases/manifest` 仍是已签名的 0.3.5，所以 APP 内更新不会提供 0.3.6，直到所有者发布草稿并切换清单。
 - OpenCode 原生工作台：Node 用 `opencode serve` 起本机服务并注册到 mesh 网关；Agents 页一键打开原生 Web（LAPTOP-01 `4096 → 43075`、重启后再启 `4097 → 30667`，网关均 200）；停止会清空 `apps.json`，状态文件用于节点重启后接管。远程应用页跟随全局设备并改用自绘下拉。Node 能力尚未打进发布包。
 - Agent 生态：目录扩到 21 个（Codeg 20 + DSH + Copilot），按节点显示已装/未装；已装点开按能力给终端（Codex/Qoder 原生 TUI）、OpenCode Web/CLI、DSH 工作台；未装 npm 安装默认落 `D:\Tether\agents`（OpenCode 实测 766 MB）。Codex、OpenCode Web、OpenCode CLI、Herdr 四标签并存，Herdr 自动启动且深色。LAPTOP-01 与 DESKTOP 均实测。
+- Agents IA 重组：App 顶栏只切主页面，Agents 页内用“主页/表面”标签；主页为横向 Agent 图标条 + 单 Agent 主面板；目录页嵌在常驻顶栏下，右栏分“启动/环境变量/诊断”，支持 cwd/env 和测试启动。客户端按设备缓存先渲染，返回页面不再等网络。
+- Herdr 识别：Windows 包装器显式设置隔离状态与 PATH，`D:\Tether\agents` 已追加到用户 PATH（有备份）；Herdr 新 pane 可识别并用 `herdr agent start gemini` 启动 Tether 安装的 Gemini。LAPTOP-01 本轮离线，未复核。
 - 仍欠：GitHub 0.3.6 公开发布、DSH 自身 DeepSeek 登录/composer、干净 VM 全业务链、100 MB 10 s（需要国内中转或同网路径）。

@@ -100,6 +100,33 @@ _ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 _EXECUTABLE_SUFFIXES = (".exe", ".cmd", ".bat", ".com")
 
 
+def _ensure_user_path(home: Path) -> None:
+    if os.name != "nt":
+        return
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Environment", 0,
+                            winreg.KEY_READ | winreg.KEY_SET_VALUE) as key:
+            try:
+                current, _ = winreg.QueryValueEx(key, "Path")
+            except FileNotFoundError:
+                current = ""
+            parts = [item for item in str(current).split(";") if item.strip()]
+            if str(home) in parts:
+                return
+            backup = Path.home() / ".tether" / "env-path-backup.txt"
+            try:
+                if not backup.exists():
+                    backup.parent.mkdir(parents=True, exist_ok=True)
+                    backup.write_text(str(current), encoding="utf-8")
+            except OSError:
+                pass
+            updated = ";".join(parts + [str(home)])
+            winreg.SetValueEx(key, "Path", 0, winreg.REG_EXPAND_SZ, updated)
+    except OSError:
+        return
+
+
 def agent_home() -> Path:
     raw = str(os.environ.get("TETHER_AGENT_HOME") or "").strip()
     if raw:
@@ -175,7 +202,7 @@ class AgentRegistry:
                 record = {
                     "id": spec["id"], "name": spec["name"], "kind": spec["kind"],
                     "command": path, "args": [str(item) for item in (spec.get("args") or [])],
-                    "enabled": True, "source": "detected",
+                    "enabled": True, "source": "detected", "cwd": "", "env": {},
                     "icon": spec.get("icon") or spec["id"], "color": spec.get("color") or COLORS[0],
                     "transports": list(spec["transports"]), "available": True,
                     "install": self._install_info(spec),
@@ -202,6 +229,7 @@ class AgentRegistry:
             "id": agent_id, "name": str(entry.get("name") or agent_id), "kind": kind,
             "command": resolved, "args": [str(item) for item in (entry.get("args") or [])],
             "enabled": entry.get("enabled") is not False, "source": "manual",
+            "cwd": str(entry.get("cwd") or ""), "env": dict(entry.get("env") or {}),
             "icon": str(entry.get("icon") or "bot"), "color": str(entry.get("color") or COLORS[0]),
             "transports": transports,
             "available": bool(resolved and (Path(resolved).is_file() if Path(resolved).is_absolute() else resolve_executable(resolved))),
@@ -300,9 +328,33 @@ class AgentRegistry:
         output = (result.stdout or "").strip()
         if result.returncode != 0:
             raise ValueError("安装失败：" + output[-600:])
+        _ensure_user_path(home)
         self._cache = None
         return {"ok": True, "installed": True, "package": package, "home": str(home),
                 "output": output[-600:], "catalog": self.catalog(force=True)}
+
+    def test(self, agent_id: str) -> dict[str, Any]:
+        record = self.get(agent_id)
+        if not record or not record.get("available") or not record.get("command"):
+            raise ValueError("agent is not installed on this node")
+        argv = [str(record["command"])] + [str(item) for item in (record.get("args") or [])] + ["--version"]
+        if os.name == "nt" and argv[0].lower().endswith((".cmd", ".bat")):
+            argv = ["cmd.exe", "/d", "/s", "/c", subprocess.list2cmdline(argv)]
+        kwargs: dict[str, Any] = {
+            "stdin": subprocess.DEVNULL, "stdout": subprocess.PIPE, "stderr": subprocess.STDOUT,
+            "text": True, "encoding": "utf-8", "errors": "replace", "timeout": 6,
+            "cwd": record.get("cwd") or None, "env": {**os.environ, **(record.get("env") or {})},
+        }
+        if os.name == "nt":
+            kwargs["creationflags"] = NO_WINDOW
+        try:
+            result = subprocess.run(argv, **kwargs)
+        except subprocess.TimeoutExpired:
+            return {"ok": False, "exit": -1, "output": "timeout"}
+        except OSError as exc:
+            return {"ok": False, "exit": -1, "output": str(exc)}
+        output = (result.stdout or "").strip()
+        return {"ok": result.returncode == 0, "exit": result.returncode, "output": output[-1200:]}
 
     def save(self, args: dict[str, Any]) -> dict[str, Any]:
         agent_id = str(args.get("id") or "").strip().lower()
@@ -329,11 +381,22 @@ class AgentRegistry:
             raw_args = [item for item in raw_args.split(" ") if item]
         if not isinstance(raw_args, list) or not all(isinstance(item, str) for item in raw_args):
             raise ValueError("args must be a list of strings")
+        raw_env = args.get("env") or {}
+        if not isinstance(raw_env, dict):
+            raise ValueError("env must be an object")
+        env = {}
+        for key, value in raw_env.items():
+            key = str(key).strip()
+            if not key or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,63}", key):
+                raise ValueError("env names must be shell identifiers")
+            env[key] = str(value)
+        cwd = str(args.get("cwd") or "").strip()
         with self.lock:
             configured = self._load()
             configured[agent_id] = {
                 "name": name, "command": command, "args": raw_args, "kind": kind,
                 "enabled": args.get("enabled") is not False,
+                "cwd": cwd, "env": env,
                 "icon": str(args.get("icon") or "bot"),
                 "color": str(args.get("color") or COLORS[0]),
                 "source": "manual",

@@ -176954,37 +176954,62 @@ var AGENT_ICONS = {
   minimax: "data:image/svg+xml;base64,PHN2ZyBoZWlnaHQ9IjY0IiB2aWV3Qm94PSIwIDAgMjQgMjQiIHdpZHRoPSI2NCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48dGl0bGU+TWluaU1heCBDb2RlPC90aXRsZT48cmVjdCB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHJ4PSI2IiBmaWxsPSIjRjIzRjVEIj48L3JlY3Q+PHBhdGggZD0iTTUgMTdWN2gzbDQgNiA0LTZoM3YxMGgtM3YtNWwtNCA2LTQtNnY1SDVaIiBmaWxsPSIjRkZGRkZGIj48L3BhdGg+PC9zdmc+DQo="
 };
 
+// src/agent-cache.js
+var catalogs = /* @__PURE__ */ new Map();
+var harnesses = /* @__PURE__ */ new Map();
+function readCatalog(device) {
+  return device ? catalogs.get(device) || null : null;
+}
+function writeCatalog(device, data) {
+  if (device && data) catalogs.set(device, data);
+}
+function readHarnesses(device) {
+  return device ? harnesses.get(device) || null : null;
+}
+function writeHarnesses(device, data) {
+  if (device && Array.isArray(data)) harnesses.set(device, data);
+}
+
 // src/agent-catalog.js
 function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose }) {
   const h3 = React2.createElement;
-  const [catalog, setCatalog] = React2.useState(null);
+  const [catalog, setCatalog] = React2.useState(() => readCatalog(device));
   const [busy, setBusy] = React2.useState(false);
   const [installing, setInstalling] = React2.useState("");
+  const [testing, setTesting] = React2.useState(false);
+  const [testOutput, setTestOutput] = React2.useState("");
   const [error, setError] = React2.useState("");
   const [selectedId, setSelectedId] = React2.useState("");
   const [draft, setDraft] = React2.useState(null);
   const [editor2, setEditor] = React2.useState(null);
   const agents = catalog && catalog.agents || [];
   const selected = agents.find((item) => item.id === selectedId) || null;
+  const toDraft = (agent) => ({
+    name: agent.name,
+    command: agent.command,
+    argsText: (agent.args || []).join(" "),
+    cwd: agent.cwd || "",
+    envRows: Object.entries(agent.env || {}).map(([k, v2]) => ({ k, v: v2 })),
+    enabled: agent.enabled !== false
+  });
   const applyCatalog = (data, keepSelected) => {
     setCatalog(data);
+    writeCatalog(device, data);
     const list2 = data && data.agents || [];
     const next = list2.find((item) => item.id === keepSelected) || list2.find((item) => item.available) || list2[0];
     if (next) {
       setSelectedId(next.id);
-      setDraft({
-        name: next.name,
-        command: next.command,
-        argsText: (next.args || []).join(" "),
-        enabled: next.enabled !== false
-      });
+      setDraft(toDraft(next));
     } else {
       setSelectedId("");
       setDraft(null);
     }
+    setTestOutput("");
   };
   const load = async (fresh, keepSelected) => {
-    setBusy(true);
+    const cached = readCatalog(device);
+    if (cached) setCatalog(cached);
+    else setBusy(true);
     setError("");
     try {
       let data = null;
@@ -176996,7 +177021,7 @@ function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose }
       }
       applyCatalog(data, keepSelected || selectedId);
     } catch (cause) {
-      setError(String(cause && cause.message || cause || "\u8BFB\u53D6\u5931\u8D25"));
+      if (!cached) setError(String(cause && cause.message || cause || "\u8BFB\u53D6\u5931\u8D25"));
     } finally {
       setBusy(false);
     }
@@ -177008,12 +177033,8 @@ function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose }
   }, [device]);
   const selectAgent = (agent) => {
     setSelectedId(agent.id);
-    setDraft({
-      name: agent.name,
-      command: agent.command,
-      argsText: (agent.args || []).join(" "),
-      enabled: agent.enabled !== false
-    });
+    setDraft(toDraft(agent));
+    setTestOutput("");
     setError("");
   };
   const install = async (agent) => {
@@ -177030,6 +177051,14 @@ function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose }
       setInstalling("");
     }
   };
+  const envObject = (rows) => {
+    const out = {};
+    for (const row2 of rows || []) {
+      const key = String(row2.k || "").trim();
+      if (key) out[key] = String(row2.v || "");
+    }
+    return out;
+  };
   const saveDraft = async () => {
     if (!selected || !draft) return;
     setBusy(true);
@@ -177042,13 +177071,28 @@ function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose }
         args: draft.argsText.split(/\s+/).filter(Boolean),
         kind: selected.kind,
         color: selected.color,
-        enabled: draft.enabled
+        enabled: draft.enabled,
+        cwd: draft.cwd,
+        env: envObject(draft.envRows)
       });
       applyCatalog(data, selected.id);
     } catch (cause) {
       setError(String(cause && cause.message || cause || "\u4FDD\u5B58\u5931\u8D25"));
     } finally {
       setBusy(false);
+    }
+  };
+  const test = async () => {
+    if (!selected || testing) return;
+    setTesting(true);
+    setTestOutput("");
+    try {
+      const result = await post("/api/devices/" + encodeURIComponent(device) + "/fs/agents_test", { id: selected.id });
+      setTestOutput(String(result && result.output || "").trim() || "(no output)");
+    } catch (cause) {
+      setTestOutput(String(cause && cause.message || cause || "\u6D4B\u8BD5\u5931\u8D25"));
+    } finally {
+      setTesting(false);
     }
   };
   const remove = async (agent) => {
@@ -177092,7 +177136,7 @@ function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose }
   const field = {
     height: 30,
     boxSizing: "border-box",
-    border: "1px solid " + C2.line,
+    border: "1px solid rgba(9,30,66,.14)",
     borderRadius: 7,
     padding: "0 9px",
     background: C2.bg,
@@ -177111,26 +177155,22 @@ function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose }
     background: C2.blue
   };
   const iconFor = (agent) => AGENT_ICONS[agent.icon] ? h3("img", { src: AGENT_ICONS[agent.icon], alt: "", "aria-hidden": true, style: { width: 18, height: 18, flex: "0 0 auto", objectFit: "contain" } }) : h3("span", { style: { width: 18, height: 18, flex: "0 0 auto", display: "grid", placeItems: "center", borderRadius: 5, background: C2.soft, color: C2.sub } }, h3(Glyph, { name: "bot", size: 12 }));
-  const statusBadge = (agent, compact) => {
-    const tone = agent.available ? { border: "rgba(22,163,74,.4)", bg: "rgba(22,163,74,.08)", color: C2.green } : { border: "rgba(180,35,24,.35)", bg: "rgba(180,35,24,.06)", color: C2.red };
-    return h3(
-      "span",
-      { style: {
-        display: "inline-flex",
-        alignItems: "center",
-        height: 22,
-        padding: compact ? "0 6px" : "0 8px",
-        borderRadius: 6,
-        border: "1px solid " + tone.border,
-        background: tone.bg,
-        color: tone.color,
-        fontSize: 10.5,
-        whiteSpace: "nowrap"
-      } },
-      agent.available ? "\u53EF\u7528" : "\u672A\u5B89\u88C5"
-    );
-  };
-  const switchControl = (checked, onChange, label) => h3("button", {
+  const badge = (agent) => h3(
+    "span",
+    { style: {
+      display: "inline-flex",
+      alignItems: "center",
+      height: 22,
+      padding: "0 8px",
+      borderRadius: 6,
+      fontSize: 10.5,
+      whiteSpace: "nowrap",
+      color: agent.available ? C2.blue || "#1570ef" : "#d97706",
+      background: agent.available ? "rgba(21,112,239,.08)" : "rgba(217,119,6,.10)"
+    } },
+    agent.available ? "\u53EF\u7528" : "\u672A\u5B89\u88C5"
+  );
+  const toggle = (checked, onChange, label) => h3("button", {
     type: "button",
     role: "switch",
     "aria-checked": checked,
@@ -177144,7 +177184,7 @@ function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose }
       border: 0,
       borderRadius: 999,
       padding: 2,
-      background: checked ? C2.blue : C2.line,
+      background: checked ? C2.blue : "rgba(9,30,66,.18)",
       cursor: "pointer",
       display: "flex",
       alignItems: "center",
@@ -177181,81 +177221,143 @@ function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose }
       h3("span", { style: { fontSize: 12.5, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, agent.name),
       agent.version ? h3("span", { style: { fontSize: 10, color: C2.mute, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, agent.version) : null
     ),
-    h3("span", { style: { marginLeft: "auto", flex: "0 0 auto" } }, statusBadge(agent, true))
+    h3("span", { style: { marginLeft: "auto", flex: "0 0 auto" } }, badge(agent))
   );
-  const rowCard = (title, control) => h3(
+  const group = (title, children) => h3(
+    "div",
+    { style: { display: "grid", gap: 8 } },
+    h3("div", { style: { fontSize: 11, fontWeight: 600, color: C2.sub, letterSpacing: ".4px" } }, title),
+    h3("div", { style: { border: "1px solid rgba(9,30,66,.12)", borderRadius: 10, background: C2.panel || C2.bg, overflow: "hidden" } }, children)
+  );
+  const settingRow = (title, control) => h3(
     "div",
     {
-      style: {
-        border: "1px solid " + C2.line,
-        borderRadius: 9,
-        background: C2.panel || C2.bg,
-        padding: "10px 12px",
-        display: "flex",
-        alignItems: "center",
-        gap: 12
-      }
+      style: { display: "flex", alignItems: "center", gap: 12, minHeight: 46, padding: "8px 12px", borderBottom: "1px solid rgba(9,30,66,.07)" }
     },
-    h3("div", { style: { minWidth: 100, flex: "1 1 auto", fontSize: 12.5, fontWeight: 500 } }, title),
-    h3("div", { style: { flex: "0 0 55%", maxWidth: 440, minWidth: 0, display: "flex", justifyContent: "flex-end" } }, control)
+    h3("div", { style: { width: 120, flex: "0 0 auto", fontSize: 12, color: C2.sub } }, title),
+    h3("div", { style: { flex: "1 1 auto", minWidth: 0, display: "flex", justifyContent: "flex-end" } }, control)
   );
   const installable = selected && !selected.available && selected.install && selected.install.kind === "npm";
+  const envRows = draft && draft.envRows || [];
   const detail = selected && draft ? h3(
     "div",
     { style: { display: "flex", flexDirection: "column", minHeight: 0, height: "100%" } },
     h3(
       "div",
-      { style: { display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderBottom: "1px solid " + C2.line } },
-      h3("span", { style: { width: 26, display: "grid", placeItems: "center" } }, iconFor(selected)),
+      { style: { display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderBottom: "1px solid rgba(9,30,66,.10)" } },
+      h3("span", { style: {
+        width: 44,
+        height: 44,
+        flex: "0 0 auto",
+        display: "grid",
+        placeItems: "center",
+        borderRadius: 12,
+        background: C2.bg,
+        boxShadow: "0 1px 4px rgba(16,24,40,.12)"
+      } }, AGENT_ICONS[selected.icon] ? h3("img", { src: AGENT_ICONS[selected.icon], alt: "", style: { width: 28, height: 28 } }) : h3(Glyph, { name: "bot", size: 24 })),
       h3(
         "div",
-        { style: { minWidth: 0 } },
-        h3("div", { style: { fontSize: 14, fontWeight: 600 } }, selected.name),
-        selected.version ? h3("div", { style: { fontSize: 10.5, color: C2.mute, marginTop: 1 } }, selected.version) : null
+        { style: { minWidth: 0, display: "grid", gap: 2 } },
+        h3("div", { style: { fontSize: 16, fontWeight: 600 } }, selected.name),
+        selected.version ? h3("div", { style: { fontSize: 10.5, color: C2.mute } }, selected.version) : null
       ),
       h3(
         "span",
         { style: { marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 } },
-        installable ? h3(
-          "button",
-          {
-            type: "button",
-            disabled: installing === selected.id,
-            onClick: () => void install(selected),
-            style: { ...primary, opacity: installing === selected.id ? 0.5 : 1 }
-          },
-          installing === selected.id ? "\u5B89\u88C5\u4E2D\u2026" : "\u5B89\u88C5"
-        ) : null,
-        statusBadge(selected, false),
-        selected.available ? switchControl(draft.enabled, (value) => setDraft({ ...draft, enabled: value }), "\u542F\u7528 " + selected.name) : null
+        installable ? h3("button", {
+          type: "button",
+          disabled: installing === selected.id,
+          onClick: () => void install(selected),
+          style: { ...primary, opacity: installing === selected.id ? 0.5 : 1 }
+        }, installing === selected.id ? "\u5B89\u88C5\u4E2D\u2026" : "\u5B89\u88C5") : null,
+        badge(selected),
+        selected.available ? toggle(draft.enabled, (value) => setDraft({ ...draft, enabled: value }), "\u542F\u7528 " + selected.name) : null
       )
     ),
     h3(
       "div",
-      { className: "tether-scroll", style: { flex: "1 1 auto", minHeight: 0, overflow: "auto", padding: "12px 14px 14px", display: "grid", gap: 8, alignContent: "start" } },
-      rowCard(
-        "\u547D\u4EE4 / \u53EF\u6267\u884C\u6587\u4EF6",
-        h3("input", {
+      { className: "tether-scroll", style: { flex: "1 1 auto", minHeight: 0, overflow: "auto", padding: "14px 14px 18px", display: "grid", gap: 16, alignContent: "start" } },
+      group("\u542F\u52A8", h3(
+        "div",
+        null,
+        settingRow("\u547D\u4EE4", h3("input", {
           value: draft.command,
           onChange: (event) => setDraft({ ...draft, command: event.target.value }),
-          placeholder: "",
           style: { ...field, width: "100%", fontFamily: "Consolas, monospace" }
-        })
-      ),
-      rowCard(
-        "\u542F\u52A8\u53C2\u6570",
-        h3("input", {
+        })),
+        settingRow("\u53C2\u6570", h3("input", {
           value: draft.argsText,
           onChange: (event) => setDraft({ ...draft, argsText: event.target.value }),
-          placeholder: "--acp",
           style: { ...field, width: "100%", fontFamily: "Consolas, monospace" }
-        })
-      ),
+        })),
+        settingRow("\u5DE5\u4F5C\u76EE\u5F55", h3("input", {
+          value: draft.cwd,
+          placeholder: "",
+          onChange: (event) => setDraft({ ...draft, cwd: event.target.value }),
+          style: { ...field, width: "100%", fontFamily: "Consolas, monospace" }
+        }))
+      )),
+      group("\u73AF\u5883\u53D8\u91CF", h3(
+        "div",
+        { style: { padding: "10px 12px", display: "grid", gap: 8 } },
+        ...envRows.map((entry, index) => h3(
+          "div",
+          { key: index, style: { display: "flex", gap: 8 } },
+          h3("input", { value: entry.k, placeholder: "KEY", onChange: (event) => {
+            const next = envRows.slice();
+            next[index] = { ...entry, k: event.target.value };
+            setDraft({ ...draft, envRows: next });
+          }, style: { ...field, width: 160, fontFamily: "Consolas, monospace" } }),
+          h3("input", { value: entry.v, placeholder: "value", onChange: (event) => {
+            const next = envRows.slice();
+            next[index] = { ...entry, v: event.target.value };
+            setDraft({ ...draft, envRows: next });
+          }, style: { ...field, flex: "1 1 auto", fontFamily: "Consolas, monospace" } }),
+          h3("button", { type: "button", title: "\u5220\u9664", onClick: () => {
+            setDraft({ ...draft, envRows: envRows.filter((_2, i) => i !== index) });
+          }, style: { ...field, width: 30, padding: 0, cursor: "pointer", background: "transparent", color: C2.mute } }, "\xD7")
+        )),
+        h3("button", {
+          type: "button",
+          onClick: () => setDraft({ ...draft, envRows: [...envRows, { k: "", v: "" }] }),
+          style: { ...field, width: "fit-content", padding: "0 10px", cursor: "pointer", background: "transparent" }
+        }, "+ \u53D8\u91CF")
+      )),
+      group("\u8BCA\u65AD", h3(
+        "div",
+        { style: { padding: "10px 12px", display: "grid", gap: 8 } },
+        h3("button", {
+          type: "button",
+          disabled: testing || !selected.available,
+          onClick: () => void test(),
+          style: {
+            ...field,
+            width: "fit-content",
+            padding: "0 10px",
+            cursor: testing || !selected.available ? "default" : "pointer",
+            background: "transparent",
+            opacity: testing || !selected.available ? 0.5 : 1
+          }
+        }, testing ? "\u6D4B\u8BD5\u4E2D\u2026" : "\u6D4B\u8BD5\u542F\u52A8"),
+        testOutput ? h3("pre", { style: {
+          margin: 0,
+          padding: 10,
+          borderRadius: 8,
+          background: "rgba(9,30,66,.04)",
+          color: C2.sub,
+          fontSize: 11,
+          lineHeight: 1.5,
+          whiteSpace: "pre-wrap",
+          wordBreak: "break-word",
+          maxHeight: 160,
+          overflow: "auto"
+        } }, testOutput) : null
+      )),
       error ? h3("div", { style: { color: C2.red, fontSize: 11.5 } }, error) : null
     ),
     h3(
       "div",
-      { style: { display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", borderTop: "1px solid " + C2.line } },
+      { style: { display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", borderTop: "1px solid rgba(9,30,66,.10)" } },
       selected.source === "manual" || selected.source === "overridden" ? h3("button", {
         type: "button",
         onClick: () => void remove(selected),
@@ -177272,7 +177374,7 @@ function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose }
         busy ? "\u4FDD\u5B58\u4E2D\u2026" : "\u4FDD\u5B58"
       )
     )
-  ) : h3("div", { style: { margin: "auto", color: C2.mute, fontSize: 12 } }, "\u9009\u62E9\u5DE6\u4FA7\u7684 Agent");
+  ) : h3("div", { style: { margin: "auto", color: C2.mute, fontSize: 12 } }, "");
   const modal = editor2 ? h3(
     "div",
     {
@@ -177304,7 +177406,6 @@ function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose }
           value: editor2.name,
           autoFocus: true,
           onChange: (event) => setEditor({ ...editor2, name: event.target.value }),
-          placeholder: "Codex",
           style: { ...field, height: 32, fontSize: 13 }
         })
       ),
@@ -177315,7 +177416,6 @@ function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose }
         h3("input", {
           value: editor2.command,
           onChange: (event) => setEditor({ ...editor2, command: event.target.value }),
-          placeholder: "codex",
           style: { ...field, height: 32, fontSize: 13, fontFamily: "Consolas, monospace" }
         })
       ),
@@ -177326,7 +177426,6 @@ function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose }
         h3("input", {
           value: editor2.argsText,
           onChange: (event) => setEditor({ ...editor2, argsText: event.target.value }),
-          placeholder: "--acp",
           style: { ...field, height: 32, fontSize: 12, fontFamily: "Consolas, monospace" }
         })
       ),
@@ -177344,7 +177443,7 @@ function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose }
   ) : null;
   return h3(
     "div",
-    { style: { flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column", padding: 12, gap: 10, background: C2.bg } },
+    { style: { flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column", gap: 10, background: C2.bg } },
     h3(
       "div",
       { style: { display: "flex", alignItems: "center", gap: 8, flex: "0 0 auto" } },
@@ -177379,17 +177478,17 @@ function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose }
     error && !editor2 ? h3("div", { style: { padding: "0 2px", color: C2.red, fontSize: 11.5 } }, error) : null,
     h3(
       "div",
-      { style: { flex: "1 1 auto", minHeight: 0, display: "grid", gap: 10, gridTemplateColumns: "minmax(230px, 280px) 1fr" } },
+      { style: { flex: "1 1 auto", minHeight: 0, display: "grid", gap: 10, gridTemplateColumns: "minmax(210px, 250px) 1fr" } },
       h3(
         "div",
-        { style: { minHeight: 0, minWidth: 0, border: "1px solid " + C2.line, borderRadius: 10, background: C2.panel || C2.bg, display: "flex", flexDirection: "column", overflow: "hidden" } },
+        { style: { minHeight: 0, minWidth: 0, border: "1px solid rgba(9,30,66,.12)", borderRadius: 10, background: C2.panel || C2.bg, display: "flex", flexDirection: "column", overflow: "hidden" } },
         h3(
           "div",
           { className: "tether-scroll", style: { flex: "1 1 auto", minHeight: 0, overflow: "auto", padding: 7, display: "flex", flexDirection: "column", gap: 2 } },
           agents.map(row)
         )
       ),
-      h3("div", { style: { minHeight: 0, minWidth: 0, border: "1px solid " + C2.line, borderRadius: 10, background: C2.panel || C2.bg, overflow: "hidden" } }, detail)
+      h3("div", { style: { minHeight: 0, minWidth: 0, border: "1px solid rgba(9,30,66,.12)", borderRadius: 10, background: C2.panel || C2.bg, overflow: "hidden" } }, detail)
     ),
     modal
   );
@@ -177401,234 +177500,192 @@ function AgentHome({
   Glyph,
   C: C2,
   catalog,
-  harnesses = [],
+  harnesses: harnesses2 = [],
   loading = false,
   error = "",
   installing = "",
-  onRefresh,
   onInstall,
   onOpen
 }) {
   const h3 = React2.createElement;
-  const [menu, setMenu] = React2.useState(null);
-  const [query, setQuery] = React2.useState("");
   const agents = catalog && catalog.agents || [];
   const installed = agents.filter((agent) => agent.available);
-  const missing = agents.filter((agent) => !agent.available);
-  const text2 = query.trim().toLowerCase();
-  const match2 = (agent) => !text2 || String(agent.name || "").toLowerCase().includes(text2) || String(agent.id || "").toLowerCase().includes(text2);
-  const harnessFor = (agent) => (harnesses || []).find((item) => {
+  const first = (installed[0] || agents[0] || {}).id || "";
+  const [selectedId, setSelectedId] = React2.useState(first);
+  const selected = agents.find((agent) => agent.id === selectedId) || agents[0] || null;
+  React2.useEffect(() => {
+    if (!agents.length) return;
+    if (!agents.some((agent) => agent.id === selectedId)) setSelectedId(first);
+  }, [catalog]);
+  const icon = (agent, size) => {
+    const src = AGENT_ICONS[agent.icon];
+    return src ? h3("img", { src, alt: "", draggable: false, style: { width: size, height: size, objectFit: "contain" } }) : h3("span", { style: {
+      width: size,
+      height: size,
+      display: "grid",
+      placeItems: "center",
+      borderRadius: Math.round(size / 3),
+      background: agent.color || C2.soft,
+      color: "#fff"
+    } }, h3(Glyph, { name: "bot", size: Math.round(size * 0.55) }));
+  };
+  const dot = (agent) => h3("span", { style: {
+    position: "absolute",
+    right: -1,
+    bottom: -1,
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    background: agent.available ? C2.blue || "#1570ef" : "#d97706",
+    boxShadow: "0 0 0 1.5px " + C2.bg
+  } });
+  const railItem = (agent) => {
+    const active = selected && agent.id === selected.id;
+    return h3(
+      "button",
+      {
+        key: agent.id,
+        type: "button",
+        title: agent.name,
+        onClick: () => setSelectedId(agent.id),
+        className: "tether-hover tether-press",
+        style: {
+          display: "flex",
+          alignItems: "center",
+          gap: 7,
+          height: 34,
+          flex: "0 0 auto",
+          padding: active ? "0 12px 0 8px" : "0 8px",
+          border: 0,
+          borderRadius: 999,
+          background: active ? C2.panel || C2.bg : "transparent",
+          color: C2.ink,
+          cursor: "pointer",
+          opacity: agent.available ? 1 : 0.55,
+          boxShadow: active ? "0 1px 3px rgba(16,24,40,.14)" : "none"
+        }
+      },
+      h3("span", { style: { width: 22, height: 22, position: "relative", display: "grid", placeItems: "center" } }, icon(agent, 20), dot(agent)),
+      active ? h3("span", { style: { fontSize: 12.5, fontWeight: 500, whiteSpace: "nowrap" } }, agent.name) : null
+    );
+  };
+  const harnessFor = (agent) => (harnesses2 || []).find((item) => {
     const hay = (String(item.id || "") + " " + String(item.name || "") + " " + String(item.command || "")).toLowerCase();
     return hay.includes(String(agent.id || "").toLowerCase()) || hay.includes(String(agent.name || "").toLowerCase());
   });
-  const icon = (agent, size = 34) => {
-    const src = AGENT_ICONS[agent.icon];
-    return h3(
-      "span",
-      { style: { width: size, height: size, flex: "0 0 auto", display: "grid", placeItems: "center" } },
-      src ? h3("img", { src, alt: "", draggable: false, style: { width: size, height: size, objectFit: "contain" } }) : h3("span", { style: {
-        width: size,
-        height: size,
+  const actions = (agent) => {
+    if (!agent) return [];
+    if (!agent.available) {
+      return agent.install && agent.install.kind === "npm" ? [{ id: "install", label: installing === agent.id ? "\u5B89\u88C5\u4E2D\u2026" : "\u5B89\u88C5", primary: true }] : [];
+    }
+    const list2 = [];
+    if ((agent.transports || []).includes("workbench")) list2.push({ id: "workbench", label: "\u5DE5\u4F5C\u53F0", primary: true });
+    if ((agent.transports || []).includes("terminal")) list2.push({ id: "terminal", label: "\u7EC8\u7AEF", primary: list2.length === 0 });
+    if ((agent.transports || []).includes("web")) list2.push({ id: "web", label: "Web", primary: list2.length === 0 });
+    const harness = harnessFor(agent);
+    if (harness) list2.push({ id: "acp", label: "\u7ED3\u6784\u5316", harness, primary: list2.length === 0 });
+    return list2;
+  };
+  const fieldPrimary = { height: 32, padding: "0 16px", border: 0, borderRadius: 8, fontSize: 12.5, cursor: "pointer", color: "#fff", background: C2.blue };
+  const fieldGhost = {
+    height: 32,
+    padding: "0 14px",
+    border: "1px solid rgba(9,30,66,.14)",
+    borderRadius: 8,
+    fontSize: 12.5,
+    cursor: "pointer",
+    color: C2.ink,
+    background: C2.bg
+  };
+  const hero = selected ? h3(
+    "div",
+    { style: { flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column", gap: 14, padding: "6px 2px" } },
+    h3(
+      "div",
+      { style: { display: "flex", alignItems: "center", gap: 14, minWidth: 0 } },
+      h3("span", { style: {
+        width: 54,
+        height: 54,
+        flex: "0 0 auto",
         display: "grid",
         placeItems: "center",
-        borderRadius: 9,
-        background: agent.color || C2.soft,
-        color: "#fff"
-      } }, h3(Glyph, { name: "bot", size: Math.round(size * 0.5) }))
-    );
-  };
-  const field = {
-    height: 28,
-    boxSizing: "border-box",
-    border: "1px solid " + C2.line,
-    borderRadius: 7,
-    padding: "0 9px",
-    background: C2.bg,
-    color: C2.ink,
-    fontSize: 12
-  };
-  const openMenu = (event, agent) => {
-    if (event) event.stopPropagation();
-    const rect = event.currentTarget.getBoundingClientRect();
-    const actions = [];
-    if ((agent.transports || []).includes("workbench")) actions.push({ id: "workbench", label: "DSH \u5DE5\u4F5C\u53F0", hint: "\u539F\u751F Web" });
-    if ((agent.transports || []).includes("terminal")) actions.push({ id: "terminal", label: "\u7EC8\u7AEF", hint: "\u539F\u751F TUI" });
-    if ((agent.transports || []).includes("web")) actions.push({ id: "web", label: "\u539F\u751F Web", hint: "\u672C\u673A\u754C\u9762" });
-    const harness = harnessFor(agent);
-    if (harness) actions.push({ id: "acp", label: "\u7ED3\u6784\u5316\u4F1A\u8BDD", hint: harness.name || harness.id, harness });
-    setMenu({
-      agent,
-      harness,
-      left: Math.max(8, Math.min(rect.left, window.innerWidth - 210)),
-      top: Math.max(8, Math.min(rect.bottom + 4, window.innerHeight - actions.length * 34 - 16)),
-      actions
-    });
-  };
-  const card = (agent) => h3(
-    "button",
-    {
-      key: agent.id,
-      type: "button",
-      onClick: (event) => openMenu(event, agent),
-      className: "tether-hover tether-press",
-      style: {
-        display: "flex",
-        alignItems: "flex-start",
-        gap: 10,
-        padding: 12,
-        textAlign: "left",
-        border: "1px solid " + C2.line,
-        borderRadius: 11,
+        borderRadius: 13,
         background: C2.panel || C2.bg,
-        color: C2.ink,
-        cursor: "pointer",
-        minWidth: 0
-      }
-    },
-    icon(agent),
-    h3(
-      "span",
-      { style: { minWidth: 0, display: "grid", gap: 3, flex: "1 1 auto" } },
+        boxShadow: "0 1px 4px rgba(16,24,40,.12)"
+      } }, icon(selected, 34)),
       h3(
-        "span",
-        { style: { display: "flex", alignItems: "center", gap: 6, minWidth: 0 } },
-        h3("span", { style: { fontSize: 13.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, agent.name),
-        h3("span", { title: "\u53EF\u7528", style: { width: 6, height: 6, borderRadius: 3, background: C2.green || "#16a34a", flex: "0 0 auto" } })
-      ),
-      agent.version ? h3(
-        "span",
-        { style: { fontSize: 10.5, color: C2.mute, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
-        agent.version
-      ) : null
-    )
-  );
-  const missingRow = (agent) => h3(
-    "div",
-    {
-      key: agent.id,
-      style: {
-        display: "flex",
-        alignItems: "center",
-        gap: 9,
-        padding: "8px 10px",
-        borderRadius: 9,
-        border: "1px solid " + C2.line,
-        background: "transparent",
-        minWidth: 0
-      }
-    },
-    icon(agent, 24),
-    h3(
-      "span",
-      { style: { minWidth: 0, flex: "1 1 auto", display: "grid", gap: 1 } },
-      h3("span", { style: { fontSize: 12.5, color: C2.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, agent.name),
-      agent.version ? h3("span", { style: { fontSize: 10, color: C2.mute } }, agent.version) : null
-    ),
-    agent.install && agent.install.kind === "npm" ? h3("button", {
-      type: "button",
-      disabled: installing === agent.id,
-      onClick: () => onInstall && onInstall(agent),
-      style: {
-        ...field,
-        height: 24,
-        padding: "0 9px",
-        cursor: installing === agent.id ? "default" : "pointer",
-        opacity: installing === agent.id ? 0.5 : 1,
-        flex: "0 0 auto",
-        background: "transparent"
-      }
-    }, installing === agent.id ? "\u5B89\u88C5\u4E2D\u2026" : "\u5B89\u88C5") : null
-  );
-  const closeMenu = () => setMenu(null);
-  return h3(
-    "div",
-    { style: { flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column", gap: 8 } },
-    h3(
-      "div",
-      { style: { display: "flex", alignItems: "center", gap: 8, flex: "0 0 auto", flexWrap: "wrap" } },
-      h3("span", { style: { fontSize: 14, fontWeight: 600, color: C2.ink } }, "\u672C\u673A Agent"),
-      h3("input", {
-        value: query,
-        onChange: (event) => setQuery(event.target.value),
-        placeholder: "\u641C\u7D22 Agent",
-        style: { ...field, marginLeft: "auto", width: 180 }
-      })
-    ),
-    error ? h3("div", { style: { color: C2.red, fontSize: 11.5 } }, error) : null,
-    h3(
-      "div",
-      { className: "tether-scroll", style: { flex: "1 1 auto", minHeight: 0, overflow: "auto", display: "grid", gap: 10, alignContent: "start" } },
-      installed.length ? h3(
         "div",
-        { style: { display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))" } },
-        ...installed.filter(match2).map(card)
-      ) : h3(
-        "div",
-        { style: { color: C2.mute, fontSize: 12, padding: 8 } },
-        loading ? "\u6B63\u5728\u8BFB\u53D6 Agent \u76EE\u5F55\u2026" : "\u8FD9\u53F0\u7535\u8111\u8FD8\u6CA1\u6709\u53EF\u7528\u7684 Agent"
-      ),
-      missing.filter(match2).length ? h3(
-        "div",
-        { style: { display: "grid", gap: 8, marginTop: 4 } },
-        h3("div", { style: { fontSize: 11.5, color: C2.mute } }, "\u672A\u5B89\u88C5"),
+        { style: { minWidth: 0, display: "grid", gap: 3 } },
         h3(
           "div",
-          { style: { display: "grid", gap: 6, gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))" } },
-          ...missing.filter(match2).map(missingRow)
-        )
-      ) : null
+          { style: { display: "flex", alignItems: "center", gap: 8, minWidth: 0 } },
+          h3("span", { style: { fontSize: 20, fontWeight: 600, letterSpacing: "-.2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, selected.name),
+          h3(
+            "span",
+            { style: {
+              height: 22,
+              display: "inline-flex",
+              alignItems: "center",
+              padding: "0 8px",
+              borderRadius: 6,
+              fontSize: 10.5,
+              color: selected.available ? C2.blue || "#1570ef" : "#d97706",
+              background: selected.available ? "rgba(21,112,239,.08)" : "rgba(217,119,6,.10)"
+            } },
+            selected.available ? "\u53EF\u7528" : "\u672A\u5B89\u88C5"
+          )
+        ),
+        selected.version ? h3("span", { style: { fontSize: 11.5, color: C2.mute } }, selected.version) : null
+      ),
+      h3("span", { style: { marginLeft: "auto" } })
     ),
-    menu ? h3("div", {
-      onPointerDown: (event) => {
-        event.preventDefault();
-        closeMenu();
-      },
-      style: { position: "fixed", inset: 0, zIndex: 90, background: "transparent" }
-    }) : null,
-    menu ? h3(
+    h3(
       "div",
-      { role: "menu", style: {
-        position: "fixed",
-        left: menu.left,
-        top: menu.top,
-        width: 202,
-        zIndex: 100,
-        background: C2.layer1,
-        borderRadius: 9,
-        boxShadow: C2.shadow,
-        padding: 4
-      } },
-      menu.actions.map((action) => h3(
-        "button",
-        {
-          key: action.id,
-          type: "button",
-          className: "tether-hover",
-          onClick: () => {
-            const current = menu;
-            closeMenu();
-            if (onOpen) onOpen(current.agent, action.id, action.harness);
-          },
-          style: {
-            display: "flex",
-            width: "100%",
-            alignItems: "center",
-            gap: 8,
-            height: 32,
-            padding: "0 8px",
-            border: 0,
-            borderRadius: 6,
-            background: "transparent",
-            color: C2.ink,
-            fontSize: 12.5,
-            textAlign: "left",
-            cursor: "pointer"
-          }
+      { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" } },
+      ...actions(selected).map((action) => h3("button", {
+        key: action.id,
+        type: "button",
+        disabled: action.id === "install" && installing === selected.id,
+        onClick: () => {
+          if (action.id === "install") {
+            if (onInstall) onInstall(selected);
+          } else if (onOpen) onOpen(selected, action.id, action.harness);
         },
-        h3("span", null, action.label),
-        h3("span", { style: { marginLeft: "auto", fontSize: 10.5, color: C2.mute } }, action.hint)
-      ))
-    ) : null
+        style: { ...action.primary ? fieldPrimary : fieldGhost, opacity: action.id === "install" && installing === selected.id ? 0.5 : 1 }
+      }, action.label))
+    ),
+    selected.command ? h3("div", { style: {
+      fontFamily: "Consolas, monospace",
+      fontSize: 10.5,
+      color: C2.mute,
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      whiteSpace: "nowrap"
+    } }, selected.command) : null,
+    h3("div", { style: { flex: "1 1 auto", minHeight: 0 } })
+  ) : h3(
+    "div",
+    { style: { flex: "1 1 auto", display: "grid", placeItems: "center", color: C2.mute, fontSize: 12 } },
+    loading ? "\u2026" : ""
+  );
+  return h3(
+    "div",
+    { style: { flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column", gap: 10 } },
+    h3(
+      "div",
+      { className: "tether-scroll", style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 4,
+        flex: "0 0 auto",
+        overflowX: "auto",
+        padding: "2px 0 6px",
+        borderBottom: "1px solid rgba(9,30,66,.10)"
+      } },
+      agents.map(railItem)
+    ),
+    error ? h3("div", { style: { color: C2.red, fontSize: 11.5 } }, error) : null,
+    hero
   );
 }
 
@@ -177639,7 +177696,7 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
   const preferred = activeDevice && online.some((item) => item.device_id === activeDevice) ? activeDevice : localDevice;
   const initial = preferred && online.some((item) => item.device_id === preferred) ? preferred : online[0] && online[0].device_id || "";
   const [device, setDevice] = React2.useState(initial);
-  const [harnesses, setHarnesses] = React2.useState([]);
+  const [harnesses2, setHarnesses] = React2.useState(() => readHarnesses(initial) || []);
   const [detecting, setDetecting] = React2.useState(false);
   const [session, setSession] = React2.useState("");
   const [items, setItems] = React2.useState([]);
@@ -177656,7 +177713,7 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
   const [modelOpen, setModelOpen] = React2.useState(false);
   const [catalogOpen, setCatalogOpen] = React2.useState(false);
   const [deviceMenu, setDeviceMenu] = React2.useState(false);
-  const [catalog, setCatalog] = React2.useState(null);
+  const [catalog, setCatalog] = React2.useState(() => readCatalog(initial));
   const [catalogBusy, setCatalogBusy] = React2.useState(false);
   const [catalogError, setCatalogError] = React2.useState("");
   const [installing, setInstalling] = React2.useState("");
@@ -177727,12 +177784,16 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
   };
   const detect = async (id) => {
     if (!id) return;
-    setDetecting(true);
+    const cached = readHarnesses(id);
+    if (cached) setHarnesses(cached);
+    else setDetecting(true);
     try {
       const result = await post("/api/devices/" + encodeURIComponent(id) + "/fs/acp_detect", {});
-      setHarnesses(Array.isArray(result && result.harnesses) ? result.harnesses : []);
+      const list2 = Array.isArray(result && result.harnesses) ? result.harnesses : [];
+      setHarnesses(list2);
+      writeHarnesses(id, list2);
     } catch (error) {
-      setHarnesses([]);
+      if (!cached) setHarnesses([]);
       fail2(error);
     } finally {
       setDetecting(false);
@@ -177740,7 +177801,9 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
   };
   const loadCatalog = async (force) => {
     if (!device) return;
-    setCatalogBusy(true);
+    const cached = readCatalog(device);
+    if (cached) setCatalog(cached);
+    else setCatalogBusy(true);
     setCatalogError("");
     try {
       let result = null;
@@ -177756,9 +177819,12 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
           { fresh: false }
         );
       }
-      setCatalog(result || null);
+      if (result) {
+        setCatalog(result);
+        writeCatalog(device, result);
+      }
     } catch (error) {
-      setCatalogError(String(error && (error.message || error.code) || "\u8BFB\u53D6\u5931\u8D25"));
+      if (!cached) setCatalogError(String(error && (error.message || error.code) || "\u8BFB\u53D6\u5931\u8D25"));
     } finally {
       setCatalogBusy(false);
     }
@@ -178220,16 +178286,6 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
   };
   const currentModel = models.find((item) => item.modelId === model) || models[0];
   const modelLabel = currentModel ? currentModel.name || currentModel.modelId : model || "\u6A21\u578B";
-  if (catalogOpen) {
-    return h3(AgentCatalogView, {
-      React: React2,
-      Glyph,
-      post,
-      C: C2,
-      device,
-      onClose: () => setCatalogOpen(false)
-    });
-  }
   const headerRow = h3(
     "div",
     { style: { display: "flex", alignItems: "center", gap: 8, flex: "0 0 auto" } },
@@ -178328,16 +178384,6 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
       onClick: openHerdr,
       style: { ...field, display: "flex", alignItems: "center", gap: 5, cursor: "pointer" }
     }, h3(Glyph, { name: "terminal", size: 13 }), "Herdr") : null,
-    panes.length ? h3("button", {
-      type: "button",
-      title: "\u5DE5\u4F5C\u533A",
-      "aria-label": "\u5DE5\u4F5C\u533A",
-      onClick: () => {
-        setWorkspaceOpen(true);
-        setActivePane((current) => current || (panes[0] || {}).key || "");
-      },
-      style: { ...field, display: "flex", alignItems: "center", gap: 5, cursor: "pointer" }
-    }, "\u5DE5\u4F5C\u533A " + panes.length) : null,
     h3("button", {
       type: "button",
       title: "Agent \u76EE\u5F55",
@@ -178415,7 +178461,7 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
       Glyph,
       C: C2,
       catalog,
-      harnesses,
+      harnesses: harnesses2,
       loading: catalogBusy,
       error: catalogError,
       installing,
@@ -178431,7 +178477,7 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
       {
         style: { flex: "0 0 auto", display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" }
       },
-      harnesses.length ? harnesses.map((item) => h3(
+      harnesses2.length ? harnesses2.map((item) => h3(
         "button",
         {
           key: item.id,
@@ -178681,69 +178727,93 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
     height: Math.max(420, (typeof window !== "undefined" ? window.innerHeight : 900) - 168),
     onClose: () => closePane(pane.key)
   });
+  const surfaceTabs = panes.length ? h3(
+    "div",
+    {
+      key: "tabs",
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 4,
+        paddingBottom: 2,
+        borderBottom: "1px solid rgba(9,30,66,.10)",
+        flex: "0 0 auto",
+        overflowX: "auto"
+      }
+    },
+    h3("button", {
+      type: "button",
+      title: "\u4E3B\u9875",
+      "aria-label": "\u4E3B\u9875",
+      onClick: () => setWorkspaceOpen(false),
+      style: {
+        ...field,
+        height: 26,
+        padding: "0 10px",
+        cursor: "pointer",
+        flex: "0 0 auto",
+        background: workspaceOpen ? "transparent" : C2.soft,
+        border: "1px solid " + (workspaceOpen ? "transparent" : C2.line)
+      }
+    }, "\u4E3B\u9875"),
+    ...panes.map((pane) => h3(
+      "div",
+      {
+        key: pane.key,
+        role: "tab",
+        "aria-selected": workspaceOpen && pane.key === activePane ? "true" : "false",
+        onClick: () => {
+          setWorkspaceOpen(true);
+          setActivePane(pane.key);
+        },
+        style: {
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          height: 26,
+          padding: "0 4px 0 8px",
+          borderRadius: 7,
+          cursor: "pointer",
+          flex: "0 0 auto",
+          whiteSpace: "nowrap",
+          background: workspaceOpen && pane.key === activePane ? C2.soft : "transparent",
+          color: workspaceOpen && pane.key === activePane ? C2.ink : C2.sub,
+          border: "1px solid " + (workspaceOpen && pane.key === activePane ? C2.line : "transparent")
+        }
+      },
+      h3("span", { style: { width: 6, height: 6, borderRadius: 3, background: pane.kind === "web" ? C2.blue : "#d97706", flex: "0 0 auto" } }),
+      h3("span", { style: { fontSize: 11.5 } }, pane.title),
+      h3("button", {
+        type: "button",
+        title: "\u5173\u95ED " + pane.title,
+        "aria-label": "\u5173\u95ED " + pane.title,
+        onClick: (event) => {
+          event.stopPropagation();
+          closePane(pane.key);
+        },
+        style: {
+          width: 18,
+          height: 18,
+          display: "grid",
+          placeItems: "center",
+          border: 0,
+          borderRadius: 4,
+          background: "transparent",
+          color: C2.mute,
+          fontSize: 12,
+          cursor: "pointer",
+          padding: 0
+        }
+      }, "\xD7")
+    )),
+    h3("span", { style: { marginLeft: "auto" } })
+  ) : null;
   const workspace = panes.length ? h3(
     "div",
     {
       key: "workspace",
       style: { flex: "1 1 auto", minHeight: 0, display: workspaceOpen ? "flex" : "none", flexDirection: "column", background: C2.bg }
     },
-    h3(
-      "div",
-      { style: { display: "flex", alignItems: "center", gap: 4, padding: "6px 10px 4px", borderBottom: "1px solid " + C2.line, flex: "0 0 auto", overflowX: "auto" } },
-      h3("button", {
-        type: "button",
-        onClick: () => setWorkspaceOpen(false),
-        style: { ...field, height: 26, padding: "0 9px", cursor: "pointer", background: "transparent", flex: "0 0 auto" }
-      }, "Agents"),
-      ...panes.map((pane) => h3(
-        "div",
-        {
-          key: pane.key,
-          role: "tab",
-          "aria-selected": pane.key === activePane ? "true" : "false",
-          onClick: () => setActivePane(pane.key),
-          style: {
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            height: 26,
-            padding: "0 4px 0 8px",
-            borderRadius: 7,
-            cursor: "pointer",
-            flex: "0 0 auto",
-            whiteSpace: "nowrap",
-            background: pane.key === activePane ? C2.soft : "transparent",
-            color: pane.key === activePane ? C2.ink : C2.sub,
-            border: "1px solid " + (pane.key === activePane ? C2.line : "transparent")
-          }
-        },
-        h3("span", { style: { width: 6, height: 6, borderRadius: 3, background: pane.kind === "web" ? C2.blue : C2.green || "#16a34a", flex: "0 0 auto" } }),
-        h3("span", { style: { fontSize: 11.5 } }, pane.title),
-        h3("button", {
-          type: "button",
-          title: "\u5173\u95ED " + pane.title,
-          "aria-label": "\u5173\u95ED " + pane.title,
-          onClick: (event) => {
-            event.stopPropagation();
-            closePane(pane.key);
-          },
-          style: {
-            width: 18,
-            height: 18,
-            display: "grid",
-            placeItems: "center",
-            border: 0,
-            borderRadius: 4,
-            background: "transparent",
-            color: C2.mute,
-            fontSize: 12,
-            cursor: "pointer",
-            padding: 0
-          }
-        }, "\xD7")
-      )),
-      h3("span", { style: { marginLeft: "auto" } })
-    ),
     h3(
       "div",
       { style: { flex: "1 1 auto", minHeight: 0, position: "relative", display: "flex" } },
@@ -178759,11 +178829,23 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
       style: { flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column", gap: 8, padding: 10, background: C2.bg }
     },
     headerRow,
-    h3(
+    catalogOpen ? h3(AgentCatalogView, {
+      React: React2,
+      Glyph,
+      post,
+      C: C2,
+      device,
+      onClose: () => setCatalogOpen(false)
+    }) : h3(
       "div",
-      { style: { flex: "1 1 auto", minHeight: 0, position: "relative", display: "flex", flexDirection: "column" } },
-      baseContent,
-      workspace
+      { style: { flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column", gap: 6 } },
+      surfaceTabs,
+      h3(
+        "div",
+        { style: { flex: "1 1 auto", minHeight: 0, position: "relative", display: "flex", flexDirection: "column" } },
+        baseContent,
+        workspace
+      )
     )
   );
 }

@@ -1,6 +1,7 @@
 import { createTerminalDock } from './terminal-dock.js'
 import { AgentCatalogView } from './agent-catalog.js'
 import { AgentHome } from './agents-home.js'
+import { readCatalog, writeCatalog, readHarnesses, writeHarnesses } from './agent-cache.js'
 export function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '', activeDevice = '', onDeviceChange, onOpenWorkbench, onError }) {
   const h = React.createElement
   const online = devices.filter((item) => item && item.online)
@@ -11,7 +12,7 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
     ? preferred
     : (online[0] && online[0].device_id) || ''
   const [device, setDevice] = React.useState(initial)
-  const [harnesses, setHarnesses] = React.useState([])
+  const [harnesses, setHarnesses] = React.useState(() => readHarnesses(initial) || [])
   const [detecting, setDetecting] = React.useState(false)
   const [session, setSession] = React.useState('')
   const [items, setItems] = React.useState([])
@@ -28,7 +29,7 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
   const [modelOpen, setModelOpen] = React.useState(false)
   const [catalogOpen, setCatalogOpen] = React.useState(false)
   const [deviceMenu, setDeviceMenu] = React.useState(false)
-  const [catalog, setCatalog] = React.useState(null)
+  const [catalog, setCatalog] = React.useState(() => readCatalog(initial))
   const [catalogBusy, setCatalogBusy] = React.useState(false)
   const [catalogError, setCatalogError] = React.useState('')
   const [installing, setInstalling] = React.useState('')
@@ -105,21 +106,27 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
 
   const detect = async (id) => {
     if (!id) return
-    setDetecting(true)
+    const cached = readHarnesses(id)
+    if (cached) setHarnesses(cached)
+    else setDetecting(true)
     try {
       const result = await post('/api/devices/' + encodeURIComponent(id) + '/fs/acp_detect', {})
-      setHarnesses(Array.isArray(result && result.harnesses) ? result.harnesses : [])
+      const list = Array.isArray(result && result.harnesses) ? result.harnesses : []
+      setHarnesses(list)
+      writeHarnesses(id, list)
     } catch (error) {
-      setHarnesses([])
+      if (!cached) setHarnesses([])
       fail(error)
     } finally {
       setDetecting(false)
     }
   }
 
-    const loadCatalog = async (force) => {
+  const loadCatalog = async (force) => {
     if (!device) return
-    setCatalogBusy(true)
+    const cached = readCatalog(device)
+    if (cached) setCatalog(cached)
+    else setCatalogBusy(true)
     setCatalogError('')
     try {
       let result = null
@@ -131,9 +138,12 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
         result = await post('/api/devices/' + encodeURIComponent(device) + '/fs/agents_catalog',
           { fresh: false })
       }
-      setCatalog(result || null)
+      if (result) {
+        setCatalog(result)
+        writeCatalog(device, result)
+      }
     } catch (error) {
-      setCatalogError(String((error && (error.message || error.code)) || '读取失败'))
+      if (!cached) setCatalogError(String((error && (error.message || error.code)) || '读取失败'))
     } finally {
       setCatalogBusy(false)
     }
@@ -499,12 +509,6 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
   const currentModel = models.find((item) => item.modelId === model) || models[0]
   const modelLabel = currentModel ? (currentModel.name || currentModel.modelId) : (model || '模型')
 
-  if (catalogOpen) {
-    return h(AgentCatalogView, {
-      React, Glyph, post, C, device,
-      onClose: () => setCatalogOpen(false)
-    })
-  }
   const headerRow = h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flex: '0 0 auto' } },
     h('div', { style: { position: 'relative' } },
       h('button', {
@@ -539,14 +543,6 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
       onClick: openHerdr,
       style: { ...field, display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }
     }, h(Glyph, { name: 'terminal', size: 13 }), 'Herdr') : null,
-    panes.length ? h('button', {
-      type: 'button', title: '工作区', 'aria-label': '工作区',
-      onClick: () => {
-        setWorkspaceOpen(true)
-        setActivePane((current) => current || (panes[0] || {}).key || '')
-      },
-      style: { ...field, display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }
-    }, '工作区 ' + panes.length) : null,
     h('button', {
       type: 'button', title: 'Agent 目录', 'aria-label': 'Agent 目录',
       onClick: () => setCatalogOpen(true),
@@ -687,33 +683,39 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
       height: Math.max(420, (typeof window !== 'undefined' ? window.innerHeight : 900) - 168),
       onClose: () => closePane(pane.key)
     })
+  const surfaceTabs = panes.length ? h('div', {
+    key: 'tabs',
+    style: { display: 'flex', alignItems: 'center', gap: 4, paddingBottom: 2, borderBottom: '1px solid rgba(9,30,66,.10)',
+      flex: '0 0 auto', overflowX: 'auto' }
+  },
+    h('button', {
+      type: 'button', title: '主页', 'aria-label': '主页', onClick: () => setWorkspaceOpen(false),
+      style: { ...field, height: 26, padding: '0 10px', cursor: 'pointer', flex: '0 0 auto',
+        background: workspaceOpen ? 'transparent' : C.soft,
+        border: '1px solid ' + (workspaceOpen ? 'transparent' : C.line) }
+    }, '主页'),
+    ...panes.map((pane) => h('div', {
+      key: pane.key, role: 'tab', 'aria-selected': workspaceOpen && pane.key === activePane ? 'true' : 'false',
+      onClick: () => { setWorkspaceOpen(true); setActivePane(pane.key) },
+      style: { display: 'flex', alignItems: 'center', gap: 6, height: 26, padding: '0 4px 0 8px', borderRadius: 7,
+        cursor: 'pointer', flex: '0 0 auto', whiteSpace: 'nowrap',
+        background: workspaceOpen && pane.key === activePane ? C.soft : 'transparent',
+        color: workspaceOpen && pane.key === activePane ? C.ink : C.sub,
+        border: '1px solid ' + (workspaceOpen && pane.key === activePane ? C.line : 'transparent') }
+    },
+      h('span', { style: { width: 6, height: 6, borderRadius: 3, background: pane.kind === 'web' ? C.blue : '#d97706', flex: '0 0 auto' } }),
+      h('span', { style: { fontSize: 11.5 } }, pane.title),
+      h('button', {
+        type: 'button', title: '关闭 ' + pane.title, 'aria-label': '关闭 ' + pane.title,
+        onClick: (event) => { event.stopPropagation(); closePane(pane.key) },
+        style: { width: 18, height: 18, display: 'grid', placeItems: 'center', border: 0, borderRadius: 4,
+          background: 'transparent', color: C.mute, fontSize: 12, cursor: 'pointer', padding: 0 }
+      }, '×'))),
+    h('span', { style: { marginLeft: 'auto' } })) : null
   const workspace = panes.length ? h('div', {
     key: 'workspace',
     style: { flex: '1 1 auto', minHeight: 0, display: workspaceOpen ? 'flex' : 'none', flexDirection: 'column', background: C.bg }
   },
-    h('div', { style: { display: 'flex', alignItems: 'center', gap: 4, padding: '6px 10px 4px', borderBottom: '1px solid ' + C.line, flex: '0 0 auto', overflowX: 'auto' } },
-      h('button', {
-        type: 'button', onClick: () => setWorkspaceOpen(false),
-        style: { ...field, height: 26, padding: '0 9px', cursor: 'pointer', background: 'transparent', flex: '0 0 auto' }
-      }, 'Agents'),
-      ...panes.map((pane) => h('div', {
-        key: pane.key, role: 'tab', 'aria-selected': pane.key === activePane ? 'true' : 'false',
-        onClick: () => setActivePane(pane.key),
-        style: { display: 'flex', alignItems: 'center', gap: 6, height: 26, padding: '0 4px 0 8px', borderRadius: 7,
-          cursor: 'pointer', flex: '0 0 auto', whiteSpace: 'nowrap',
-          background: pane.key === activePane ? C.soft : 'transparent',
-          color: pane.key === activePane ? C.ink : C.sub,
-          border: '1px solid ' + (pane.key === activePane ? C.line : 'transparent') }
-      },
-        h('span', { style: { width: 6, height: 6, borderRadius: 3, background: pane.kind === 'web' ? C.blue : (C.green || '#16a34a'), flex: '0 0 auto' } }),
-        h('span', { style: { fontSize: 11.5 } }, pane.title),
-        h('button', {
-          type: 'button', title: '关闭 ' + pane.title, 'aria-label': '关闭 ' + pane.title,
-          onClick: (event) => { event.stopPropagation(); closePane(pane.key) },
-          style: { width: 18, height: 18, display: 'grid', placeItems: 'center', border: 0, borderRadius: 4,
-            background: 'transparent', color: C.mute, fontSize: 12, cursor: 'pointer', padding: 0 }
-        }, '×'))),
-      h('span', { style: { marginLeft: 'auto' } })),
     h('div', { style: { flex: '1 1 auto', minHeight: 0, position: 'relative', display: 'flex' } },
       ...panes.map((pane) => h('div', {
         key: pane.key,
@@ -724,7 +726,12 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
     style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', gap: 8, padding: 10, background: C.bg }
   },
     headerRow,
-    h('div', { style: { flex: '1 1 auto', minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column' } },
-      baseContent,
-      workspace))
+    catalogOpen ? h(AgentCatalogView, {
+      React, Glyph, post, C, device,
+      onClose: () => setCatalogOpen(false)
+    }) : h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', gap: 6 } },
+      surfaceTabs,
+      h('div', { style: { flex: '1 1 auto', minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column' } },
+        baseContent,
+        workspace)))
 }

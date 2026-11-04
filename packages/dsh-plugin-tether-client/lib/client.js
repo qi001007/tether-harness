@@ -10174,9 +10174,11 @@ const AGENT_ICONS = {
 }
 function AgentCatalogView({ React, Glyph, post, C, device, onClose }) {
   const h = React.createElement
-  const [catalog, setCatalog] = React.useState(null)
+  const [catalog, setCatalog] = React.useState(() => readCatalog(device))
   const [busy, setBusy] = React.useState(false)
   const [installing, setInstalling] = React.useState('')
+  const [testing, setTesting] = React.useState(false)
+  const [testOutput, setTestOutput] = React.useState('')
   const [error, setError] = React.useState('')
   const [selectedId, setSelectedId] = React.useState('')
   const [draft, setDraft] = React.useState(null)
@@ -10184,24 +10186,30 @@ function AgentCatalogView({ React, Glyph, post, C, device, onClose }) {
   const agents = (catalog && catalog.agents) || []
   const selected = agents.find((item) => item.id === selectedId) || null
 
+  const toDraft = (agent) => ({
+    name: agent.name, command: agent.command, argsText: (agent.args || []).join(' '),
+    cwd: agent.cwd || '', envRows: Object.entries(agent.env || {}).map(([k, v]) => ({ k, v })),
+    enabled: agent.enabled !== false
+  })
   const applyCatalog = (data, keepSelected) => {
     setCatalog(data)
+    writeCatalog(device, data)
     const list = (data && data.agents) || []
     const next = list.find((item) => item.id === keepSelected) || list.find((item) => item.available) || list[0]
     if (next) {
       setSelectedId(next.id)
-      setDraft({
-        name: next.name, command: next.command, argsText: (next.args || []).join(' '),
-        enabled: next.enabled !== false
-      })
+      setDraft(toDraft(next))
     } else {
       setSelectedId('')
       setDraft(null)
     }
+    setTestOutput('')
   }
 
   const load = async (fresh, keepSelected) => {
-    setBusy(true)
+    const cached = readCatalog(device)
+    if (cached) setCatalog(cached)
+    else setBusy(true)
     setError('')
     try {
       let data = null
@@ -10213,7 +10221,7 @@ function AgentCatalogView({ React, Glyph, post, C, device, onClose }) {
       }
       applyCatalog(data, keepSelected || selectedId)
     } catch (cause) {
-      setError(String((cause && cause.message) || cause || '读取失败'))
+      if (!cached) setError(String((cause && cause.message) || cause || '读取失败'))
     } finally {
       setBusy(false)
     }
@@ -10226,10 +10234,8 @@ function AgentCatalogView({ React, Glyph, post, C, device, onClose }) {
 
   const selectAgent = (agent) => {
     setSelectedId(agent.id)
-    setDraft({
-      name: agent.name, command: agent.command, argsText: (agent.args || []).join(' '),
-      enabled: agent.enabled !== false
-    })
+    setDraft(toDraft(agent))
+    setTestOutput('')
     setError('')
   }
 
@@ -10248,6 +10254,15 @@ function AgentCatalogView({ React, Glyph, post, C, device, onClose }) {
     }
   }
 
+  const envObject = (rows) => {
+    const out = {}
+    for (const row of rows || []) {
+      const key = String(row.k || '').trim()
+      if (key) out[key] = String(row.v || '')
+    }
+    return out
+  }
+
   const saveDraft = async () => {
     if (!selected || !draft) return
     setBusy(true)
@@ -10256,13 +10271,28 @@ function AgentCatalogView({ React, Glyph, post, C, device, onClose }) {
       const data = await post('/api/devices/' + encodeURIComponent(device) + '/fs/agents_save', {
         id: selected.id, name: draft.name, command: draft.command,
         args: draft.argsText.split(/\s+/).filter(Boolean), kind: selected.kind,
-        color: selected.color, enabled: draft.enabled
+        color: selected.color, enabled: draft.enabled,
+        cwd: draft.cwd, env: envObject(draft.envRows)
       })
       applyCatalog(data, selected.id)
     } catch (cause) {
       setError(String((cause && cause.message) || cause || '保存失败'))
     } finally {
       setBusy(false)
+    }
+  }
+
+  const test = async () => {
+    if (!selected || testing) return
+    setTesting(true)
+    setTestOutput('')
+    try {
+      const result = await post('/api/devices/' + encodeURIComponent(device) + '/fs/agents_test', { id: selected.id })
+      setTestOutput(String((result && result.output) || '').trim() || '(no output)')
+    } catch (cause) {
+      setTestOutput(String((cause && cause.message) || cause || '测试失败'))
+    } finally {
+      setTesting(false)
     }
   }
 
@@ -10304,7 +10334,7 @@ function AgentCatalogView({ React, Glyph, post, C, device, onClose }) {
   }
 
   const field = {
-    height: 30, boxSizing: 'border-box', border: '1px solid ' + C.line,
+    height: 30, boxSizing: 'border-box', border: '1px solid rgba(9,30,66,.14)',
     borderRadius: 7, padding: '0 9px', background: C.bg, color: C.ink, fontSize: 12, outline: 'none'
   }
   const primary = {
@@ -10314,19 +10344,16 @@ function AgentCatalogView({ React, Glyph, post, C, device, onClose }) {
   const iconFor = (agent) => AGENT_ICONS[agent.icon]
     ? h('img', { src: AGENT_ICONS[agent.icon], alt: '', 'aria-hidden': true, style: { width: 18, height: 18, flex: '0 0 auto', objectFit: 'contain' } })
     : h('span', { style: { width: 18, height: 18, flex: '0 0 auto', display: 'grid', placeItems: 'center', borderRadius: 5, background: C.soft, color: C.sub } }, h(Glyph, { name: 'bot', size: 12 }))
-  const statusBadge = (agent, compact) => {
-    const tone = agent.available
-      ? { border: 'rgba(22,163,74,.4)', bg: 'rgba(22,163,74,.08)', color: C.green }
-      : { border: 'rgba(180,35,24,.35)', bg: 'rgba(180,35,24,.06)', color: C.red }
-    return h('span', { style: { display: 'inline-flex', alignItems: 'center', height: 22, padding: compact ? '0 6px' : '0 8px',
-      borderRadius: 6, border: '1px solid ' + tone.border, background: tone.bg, color: tone.color, fontSize: 10.5, whiteSpace: 'nowrap' } },
-      agent.available ? '可用' : '未安装')
-  }
-  const switchControl = (checked, onChange, label) => h('button', {
+  const badge = (agent) => h('span', { style: { display: 'inline-flex', alignItems: 'center', height: 22, padding: '0 8px', borderRadius: 6,
+    fontSize: 10.5, whiteSpace: 'nowrap',
+    color: agent.available ? (C.blue || '#1570ef') : '#d97706',
+    background: agent.available ? 'rgba(21,112,239,.08)' : 'rgba(217,119,6,.10)' } },
+    agent.available ? '可用' : '未安装')
+  const toggle = (checked, onChange, label) => h('button', {
     type: 'button', role: 'switch', 'aria-checked': checked, 'aria-label': label, title: label,
     onClick: () => onChange(!checked),
     style: { width: 30, height: 18, flex: '0 0 auto', border: 0, borderRadius: 999, padding: 2,
-      background: checked ? C.blue : C.line, cursor: 'pointer', display: 'flex', alignItems: 'center',
+      background: checked ? C.blue : 'rgba(9,30,66,.18)', cursor: 'pointer', display: 'flex', alignItems: 'center',
       justifyContent: checked ? 'flex-end' : 'flex-start', transition: 'background 140ms ease' }
   }, h('span', { style: { width: 14, height: 14, borderRadius: 7, background: '#fff', boxShadow: '0 1px 2px rgba(16,24,40,.2)' } }))
 
@@ -10341,45 +10368,69 @@ function AgentCatalogView({ React, Glyph, post, C, device, onClose }) {
     h('span', { style: { minWidth: 0, display: 'grid', gap: 1 } },
       h('span', { style: { fontSize: 12.5, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, agent.name),
       agent.version ? h('span', { style: { fontSize: 10, color: C.mute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, agent.version) : null),
-    h('span', { style: { marginLeft: 'auto', flex: '0 0 auto' } }, statusBadge(agent, true)))
+    h('span', { style: { marginLeft: 'auto', flex: '0 0 auto' } }, badge(agent)))
 
-  const rowCard = (title, control) => h('div', {
-    style: { border: '1px solid ' + C.line, borderRadius: 9, background: C.panel || C.bg,
-      padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 12 }
+  const group = (title, children) => h('div', { style: { display: 'grid', gap: 8 } },
+    h('div', { style: { fontSize: 11, fontWeight: 600, color: C.sub, letterSpacing: '.4px' } }, title),
+    h('div', { style: { border: '1px solid rgba(9,30,66,.12)', borderRadius: 10, background: C.panel || C.bg, overflow: 'hidden' } }, children))
+  const settingRow = (title, control) => h('div', {
+    style: { display: 'flex', alignItems: 'center', gap: 12, minHeight: 46, padding: '8px 12px', borderBottom: '1px solid rgba(9,30,66,.07)' }
   },
-    h('div', { style: { minWidth: 100, flex: '1 1 auto', fontSize: 12.5, fontWeight: 500 } }, title),
-    h('div', { style: { flex: '0 0 55%', maxWidth: 440, minWidth: 0, display: 'flex', justifyContent: 'flex-end' } }, control))
+    h('div', { style: { width: 120, flex: '0 0 auto', fontSize: 12, color: C.sub } }, title),
+    h('div', { style: { flex: '1 1 auto', minWidth: 0, display: 'flex', justifyContent: 'flex-end' } }, control))
 
   const installable = selected && !selected.available && selected.install && selected.install.kind === 'npm'
+  const envRows = (draft && draft.envRows) || []
   const detail = selected && draft ? h('div', { style: { display: 'flex', flexDirection: 'column', minHeight: 0, height: '100%' } },
-    h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: '1px solid ' + C.line } },
-      h('span', { style: { width: 26, display: 'grid', placeItems: 'center' } }, iconFor(selected)),
-      h('div', { style: { minWidth: 0 } },
-        h('div', { style: { fontSize: 14, fontWeight: 600 } }, selected.name),
-        selected.version ? h('div', { style: { fontSize: 10.5, color: C.mute, marginTop: 1 } }, selected.version) : null),
+    h('div', { style: { display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderBottom: '1px solid rgba(9,30,66,.10)' } },
+      h('span', { style: { width: 44, height: 44, flex: '0 0 auto', display: 'grid', placeItems: 'center', borderRadius: 12,
+        background: C.bg, boxShadow: '0 1px 4px rgba(16,24,40,.12)' } }, AGENT_ICONS[selected.icon]
+        ? h('img', { src: AGENT_ICONS[selected.icon], alt: '', style: { width: 28, height: 28 } })
+        : h(Glyph, { name: 'bot', size: 24 })),
+      h('div', { style: { minWidth: 0, display: 'grid', gap: 2 } },
+        h('div', { style: { fontSize: 16, fontWeight: 600 } }, selected.name),
+        selected.version ? h('div', { style: { fontSize: 10.5, color: C.mute } }, selected.version) : null),
       h('span', { style: { marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 } },
-        installable ? h('button', { type: 'button', disabled: installing === selected.id,
-          onClick: () => void install(selected),
-          style: { ...primary, opacity: installing === selected.id ? 0.5 : 1 } },
-          installing === selected.id ? '安装中…' : '安装') : null,
-        statusBadge(selected, false),
-        selected.available ? switchControl(draft.enabled, (value) => setDraft({ ...draft, enabled: value }), '启用 ' + selected.name) : null)),
-    h('div', { className: 'tether-scroll', style: { flex: '1 1 auto', minHeight: 0, overflow: 'auto', padding: '12px 14px 14px', display: 'grid', gap: 8, alignContent: 'start' } },
-      rowCard('命令 / 可执行文件',
-        h('input', { value: draft.command, onChange: (event) => setDraft({ ...draft, command: event.target.value }),
-          placeholder: '', style: { ...field, width: '100%', fontFamily: 'Consolas, monospace' } })),
-      rowCard('启动参数',
-        h('input', { value: draft.argsText, onChange: (event) => setDraft({ ...draft, argsText: event.target.value }),
-          placeholder: '--acp', style: { ...field, width: '100%', fontFamily: 'Consolas, monospace' } })),
+        installable ? h('button', { type: 'button', disabled: installing === selected.id, onClick: () => void install(selected),
+          style: { ...primary, opacity: installing === selected.id ? 0.5 : 1 } }, installing === selected.id ? '安装中…' : '安装') : null,
+        badge(selected),
+        selected.available ? toggle(draft.enabled, (value) => setDraft({ ...draft, enabled: value }), '启用 ' + selected.name) : null)),
+    h('div', { className: 'tether-scroll', style: { flex: '1 1 auto', minHeight: 0, overflow: 'auto', padding: '14px 14px 18px', display: 'grid', gap: 16, alignContent: 'start' } },
+      group('启动', h('div', null,
+        settingRow('命令', h('input', { value: draft.command, onChange: (event) => setDraft({ ...draft, command: event.target.value }),
+          style: { ...field, width: '100%', fontFamily: 'Consolas, monospace' } })),
+        settingRow('参数', h('input', { value: draft.argsText, onChange: (event) => setDraft({ ...draft, argsText: event.target.value }),
+          style: { ...field, width: '100%', fontFamily: 'Consolas, monospace' } })),
+        settingRow('工作目录', h('input', { value: draft.cwd, placeholder: '', onChange: (event) => setDraft({ ...draft, cwd: event.target.value }),
+          style: { ...field, width: '100%', fontFamily: 'Consolas, monospace' } })))),
+      group('环境变量', h('div', { style: { padding: '10px 12px', display: 'grid', gap: 8 } },
+        ...envRows.map((entry, index) => h('div', { key: index, style: { display: 'flex', gap: 8 } },
+          h('input', { value: entry.k, placeholder: 'KEY', onChange: (event) => {
+            const next = envRows.slice(); next[index] = { ...entry, k: event.target.value }; setDraft({ ...draft, envRows: next })
+          }, style: { ...field, width: 160, fontFamily: 'Consolas, monospace' } }),
+          h('input', { value: entry.v, placeholder: 'value', onChange: (event) => {
+            const next = envRows.slice(); next[index] = { ...entry, v: event.target.value }; setDraft({ ...draft, envRows: next })
+          }, style: { ...field, flex: '1 1 auto', fontFamily: 'Consolas, monospace' } }),
+          h('button', { type: 'button', title: '删除', onClick: () => {
+            setDraft({ ...draft, envRows: envRows.filter((_, i) => i !== index) })
+          }, style: { ...field, width: 30, padding: 0, cursor: 'pointer', background: 'transparent', color: C.mute } }, '×'))),
+        h('button', { type: 'button', onClick: () => setDraft({ ...draft, envRows: [...envRows, { k: '', v: '' }] }),
+          style: { ...field, width: 'fit-content', padding: '0 10px', cursor: 'pointer', background: 'transparent' } }, '+ 变量'))),
+      group('诊断', h('div', { style: { padding: '10px 12px', display: 'grid', gap: 8 } },
+        h('button', { type: 'button', disabled: testing || !selected.available, onClick: () => void test(),
+          style: { ...field, width: 'fit-content', padding: '0 10px', cursor: testing || !selected.available ? 'default' : 'pointer',
+            background: 'transparent', opacity: testing || !selected.available ? 0.5 : 1 } }, testing ? '测试中…' : '测试启动'),
+        testOutput ? h('pre', { style: { margin: 0, padding: 10, borderRadius: 8, background: 'rgba(9,30,66,.04)',
+          color: C.sub, fontSize: 11, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 160, overflow: 'auto' } }, testOutput) : null)),
       error ? h('div', { style: { color: C.red, fontSize: 11.5 } }, error) : null),
-    h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderTop: '1px solid ' + C.line } },
+    h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderTop: '1px solid rgba(9,30,66,.10)' } },
       selected.source === 'manual' || selected.source === 'overridden'
         ? h('button', { type: 'button', onClick: () => void remove(selected),
           style: { ...field, border: 0, background: 'transparent', color: C.red, cursor: 'pointer' } }, '删除 Agent')
         : null,
       h('button', { type: 'button', onClick: () => void saveDraft(), disabled: busy || !draft.name.trim() || !draft.command.trim(),
         style: { ...primary, marginLeft: 'auto', opacity: busy || !draft.name.trim() || !draft.command.trim() ? 0.5 : 1 } },
-        busy ? '保存中…' : '保存'))) : h('div', { style: { margin: 'auto', color: C.mute, fontSize: 12 } }, '选择左侧的 Agent')
+        busy ? '保存中…' : '保存'))) : h('div', { style: { margin: 'auto', color: C.mute, fontSize: 12 } }, '')
 
   const modal = editor ? h('div', {
     style: { position: 'fixed', inset: 0, zIndex: 120, display: 'grid', placeItems: 'center', background: 'rgba(16,24,40,.35)' },
@@ -10390,19 +10441,19 @@ function AgentCatalogView({ React, Glyph, post, C, device, onClose }) {
       h('div', { style: { fontSize: 15, fontWeight: 600 } }, '添加 Agent'),
       h('label', { style: { display: 'grid', gap: 4, fontSize: 11.5, color: C.sub } }, '名称',
         h('input', { value: editor.name, autoFocus: true, onChange: (event) => setEditor({ ...editor, name: event.target.value }),
-          placeholder: 'Codex', style: { ...field, height: 32, fontSize: 13 } })),
+          style: { ...field, height: 32, fontSize: 13 } })),
       h('label', { style: { display: 'grid', gap: 4, fontSize: 11.5, color: C.sub } }, '命令',
         h('input', { value: editor.command, onChange: (event) => setEditor({ ...editor, command: event.target.value }),
-          placeholder: 'codex', style: { ...field, height: 32, fontSize: 13, fontFamily: 'Consolas, monospace' } })),
+          style: { ...field, height: 32, fontSize: 13, fontFamily: 'Consolas, monospace' } })),
       h('label', { style: { display: 'grid', gap: 4, fontSize: 11.5, color: C.sub } }, '参数',
         h('input', { value: editor.argsText, onChange: (event) => setEditor({ ...editor, argsText: event.target.value }),
-          placeholder: '--acp', style: { ...field, height: 32, fontSize: 12, fontFamily: 'Consolas, monospace' } })),
+          style: { ...field, height: 32, fontSize: 12, fontFamily: 'Consolas, monospace' } })),
       h('div', { style: { display: 'flex', justifyContent: 'flex-end', gap: 8 } },
         h('button', { type: 'button', onClick: () => setEditor(null), style: { ...field, cursor: 'pointer' } }, '取消'),
         h('button', { type: 'submit', disabled: busy || !editor.name.trim() || !editor.command.trim(),
           style: { ...primary, opacity: busy || !editor.name.trim() || !editor.command.trim() ? 0.5 : 1 } }, busy ? '保存中…' : '保存')))) : null
 
-  return h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', padding: 12, gap: 10, background: C.bg } },
+  return h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', gap: 10, background: C.bg } },
     h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flex: '0 0 auto' } },
       h('button', { type: 'button', title: '返回', 'aria-label': '返回', onClick: onClose,
         style: { ...field, width: 28, padding: 0, display: 'grid', placeItems: 'center', cursor: 'pointer' } }, h(Glyph, { name: 'chevronLeft', size: 14 })),
@@ -10414,11 +10465,11 @@ function AgentCatalogView({ React, Glyph, post, C, device, onClose }) {
       h('button', { type: 'button', onClick: openAdd,
         style: { ...primary, display: 'flex', alignItems: 'center', gap: 5 } }, h(Glyph, { name: 'plus', size: 13 }), '添加 Agent')),
     error && !editor ? h('div', { style: { padding: '0 2px', color: C.red, fontSize: 11.5 } }, error) : null,
-    h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'grid', gap: 10, gridTemplateColumns: 'minmax(230px, 280px) 1fr' } },
-      h('div', { style: { minHeight: 0, minWidth: 0, border: '1px solid ' + C.line, borderRadius: 10, background: C.panel || C.bg, display: 'flex', flexDirection: 'column', overflow: 'hidden' } },
+    h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'grid', gap: 10, gridTemplateColumns: 'minmax(210px, 250px) 1fr' } },
+      h('div', { style: { minHeight: 0, minWidth: 0, border: '1px solid rgba(9,30,66,.12)', borderRadius: 10, background: C.panel || C.bg, display: 'flex', flexDirection: 'column', overflow: 'hidden' } },
         h('div', { className: 'tether-scroll', style: { flex: '1 1 auto', minHeight: 0, overflow: 'auto', padding: 7, display: 'flex', flexDirection: 'column', gap: 2 } },
           agents.map(row))),
-      h('div', { style: { minHeight: 0, minWidth: 0, border: '1px solid ' + C.line, borderRadius: 10, background: C.panel || C.bg, overflow: 'hidden' } }, detail)),
+      h('div', { style: { minHeight: 0, minWidth: 0, border: '1px solid rgba(9,30,66,.12)', borderRadius: 10, background: C.panel || C.bg, overflow: 'hidden' } }, detail)),
     modal)
 }
 function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '', activeDevice = '', onDeviceChange, onOpenWorkbench, onError }) {
@@ -10431,7 +10482,7 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
     ? preferred
     : (online[0] && online[0].device_id) || ''
   const [device, setDevice] = React.useState(initial)
-  const [harnesses, setHarnesses] = React.useState([])
+  const [harnesses, setHarnesses] = React.useState(() => readHarnesses(initial) || [])
   const [detecting, setDetecting] = React.useState(false)
   const [session, setSession] = React.useState('')
   const [items, setItems] = React.useState([])
@@ -10448,7 +10499,7 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
   const [modelOpen, setModelOpen] = React.useState(false)
   const [catalogOpen, setCatalogOpen] = React.useState(false)
   const [deviceMenu, setDeviceMenu] = React.useState(false)
-  const [catalog, setCatalog] = React.useState(null)
+  const [catalog, setCatalog] = React.useState(() => readCatalog(initial))
   const [catalogBusy, setCatalogBusy] = React.useState(false)
   const [catalogError, setCatalogError] = React.useState('')
   const [installing, setInstalling] = React.useState('')
@@ -10525,21 +10576,27 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
 
   const detect = async (id) => {
     if (!id) return
-    setDetecting(true)
+    const cached = readHarnesses(id)
+    if (cached) setHarnesses(cached)
+    else setDetecting(true)
     try {
       const result = await post('/api/devices/' + encodeURIComponent(id) + '/fs/acp_detect', {})
-      setHarnesses(Array.isArray(result && result.harnesses) ? result.harnesses : [])
+      const list = Array.isArray(result && result.harnesses) ? result.harnesses : []
+      setHarnesses(list)
+      writeHarnesses(id, list)
     } catch (error) {
-      setHarnesses([])
+      if (!cached) setHarnesses([])
       fail(error)
     } finally {
       setDetecting(false)
     }
   }
 
-    const loadCatalog = async (force) => {
+  const loadCatalog = async (force) => {
     if (!device) return
-    setCatalogBusy(true)
+    const cached = readCatalog(device)
+    if (cached) setCatalog(cached)
+    else setCatalogBusy(true)
     setCatalogError('')
     try {
       let result = null
@@ -10551,9 +10608,12 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
         result = await post('/api/devices/' + encodeURIComponent(device) + '/fs/agents_catalog',
           { fresh: false })
       }
-      setCatalog(result || null)
+      if (result) {
+        setCatalog(result)
+        writeCatalog(device, result)
+      }
     } catch (error) {
-      setCatalogError(String((error && (error.message || error.code)) || '读取失败'))
+      if (!cached) setCatalogError(String((error && (error.message || error.code)) || '读取失败'))
     } finally {
       setCatalogBusy(false)
     }
@@ -10919,12 +10979,6 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
   const currentModel = models.find((item) => item.modelId === model) || models[0]
   const modelLabel = currentModel ? (currentModel.name || currentModel.modelId) : (model || '模型')
 
-  if (catalogOpen) {
-    return h(AgentCatalogView, {
-      React, Glyph, post, C, device,
-      onClose: () => setCatalogOpen(false)
-    })
-  }
   const headerRow = h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flex: '0 0 auto' } },
     h('div', { style: { position: 'relative' } },
       h('button', {
@@ -10959,14 +11013,6 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
       onClick: openHerdr,
       style: { ...field, display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }
     }, h(Glyph, { name: 'terminal', size: 13 }), 'Herdr') : null,
-    panes.length ? h('button', {
-      type: 'button', title: '工作区', 'aria-label': '工作区',
-      onClick: () => {
-        setWorkspaceOpen(true)
-        setActivePane((current) => current || (panes[0] || {}).key || '')
-      },
-      style: { ...field, display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }
-    }, '工作区 ' + panes.length) : null,
     h('button', {
       type: 'button', title: 'Agent 目录', 'aria-label': 'Agent 目录',
       onClick: () => setCatalogOpen(true),
@@ -11107,33 +11153,39 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
       height: Math.max(420, (typeof window !== 'undefined' ? window.innerHeight : 900) - 168),
       onClose: () => closePane(pane.key)
     })
+  const surfaceTabs = panes.length ? h('div', {
+    key: 'tabs',
+    style: { display: 'flex', alignItems: 'center', gap: 4, paddingBottom: 2, borderBottom: '1px solid rgba(9,30,66,.10)',
+      flex: '0 0 auto', overflowX: 'auto' }
+  },
+    h('button', {
+      type: 'button', title: '主页', 'aria-label': '主页', onClick: () => setWorkspaceOpen(false),
+      style: { ...field, height: 26, padding: '0 10px', cursor: 'pointer', flex: '0 0 auto',
+        background: workspaceOpen ? 'transparent' : C.soft,
+        border: '1px solid ' + (workspaceOpen ? 'transparent' : C.line) }
+    }, '主页'),
+    ...panes.map((pane) => h('div', {
+      key: pane.key, role: 'tab', 'aria-selected': workspaceOpen && pane.key === activePane ? 'true' : 'false',
+      onClick: () => { setWorkspaceOpen(true); setActivePane(pane.key) },
+      style: { display: 'flex', alignItems: 'center', gap: 6, height: 26, padding: '0 4px 0 8px', borderRadius: 7,
+        cursor: 'pointer', flex: '0 0 auto', whiteSpace: 'nowrap',
+        background: workspaceOpen && pane.key === activePane ? C.soft : 'transparent',
+        color: workspaceOpen && pane.key === activePane ? C.ink : C.sub,
+        border: '1px solid ' + (workspaceOpen && pane.key === activePane ? C.line : 'transparent') }
+    },
+      h('span', { style: { width: 6, height: 6, borderRadius: 3, background: pane.kind === 'web' ? C.blue : '#d97706', flex: '0 0 auto' } }),
+      h('span', { style: { fontSize: 11.5 } }, pane.title),
+      h('button', {
+        type: 'button', title: '关闭 ' + pane.title, 'aria-label': '关闭 ' + pane.title,
+        onClick: (event) => { event.stopPropagation(); closePane(pane.key) },
+        style: { width: 18, height: 18, display: 'grid', placeItems: 'center', border: 0, borderRadius: 4,
+          background: 'transparent', color: C.mute, fontSize: 12, cursor: 'pointer', padding: 0 }
+      }, '×'))),
+    h('span', { style: { marginLeft: 'auto' } })) : null
   const workspace = panes.length ? h('div', {
     key: 'workspace',
     style: { flex: '1 1 auto', minHeight: 0, display: workspaceOpen ? 'flex' : 'none', flexDirection: 'column', background: C.bg }
   },
-    h('div', { style: { display: 'flex', alignItems: 'center', gap: 4, padding: '6px 10px 4px', borderBottom: '1px solid ' + C.line, flex: '0 0 auto', overflowX: 'auto' } },
-      h('button', {
-        type: 'button', onClick: () => setWorkspaceOpen(false),
-        style: { ...field, height: 26, padding: '0 9px', cursor: 'pointer', background: 'transparent', flex: '0 0 auto' }
-      }, 'Agents'),
-      ...panes.map((pane) => h('div', {
-        key: pane.key, role: 'tab', 'aria-selected': pane.key === activePane ? 'true' : 'false',
-        onClick: () => setActivePane(pane.key),
-        style: { display: 'flex', alignItems: 'center', gap: 6, height: 26, padding: '0 4px 0 8px', borderRadius: 7,
-          cursor: 'pointer', flex: '0 0 auto', whiteSpace: 'nowrap',
-          background: pane.key === activePane ? C.soft : 'transparent',
-          color: pane.key === activePane ? C.ink : C.sub,
-          border: '1px solid ' + (pane.key === activePane ? C.line : 'transparent') }
-      },
-        h('span', { style: { width: 6, height: 6, borderRadius: 3, background: pane.kind === 'web' ? C.blue : (C.green || '#16a34a'), flex: '0 0 auto' } }),
-        h('span', { style: { fontSize: 11.5 } }, pane.title),
-        h('button', {
-          type: 'button', title: '关闭 ' + pane.title, 'aria-label': '关闭 ' + pane.title,
-          onClick: (event) => { event.stopPropagation(); closePane(pane.key) },
-          style: { width: 18, height: 18, display: 'grid', placeItems: 'center', border: 0, borderRadius: 4,
-            background: 'transparent', color: C.mute, fontSize: 12, cursor: 'pointer', padding: 0 }
-        }, '×'))),
-      h('span', { style: { marginLeft: 'auto' } })),
     h('div', { style: { flex: '1 1 auto', minHeight: 0, position: 'relative', display: 'flex' } },
       ...panes.map((pane) => h('div', {
         key: pane.key,
@@ -11144,9 +11196,14 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
     style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', gap: 8, padding: 10, background: C.bg }
   },
     headerRow,
-    h('div', { style: { flex: '1 1 auto', minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column' } },
-      baseContent,
-      workspace))
+    catalogOpen ? h(AgentCatalogView, {
+      React, Glyph, post, C, device,
+      onClose: () => setCatalogOpen(false)
+    }) : h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', gap: 6 } },
+      surfaceTabs,
+      h('div', { style: { flex: '1 1 auto', minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column' } },
+        baseContent,
+        workspace)))
 }
     let localPluginRpc = null
     let localPluginRemote = null

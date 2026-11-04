@@ -1,112 +1,95 @@
 import { AGENT_ICONS } from './agent-icons.js'
 
 export function AgentHome({ React, Glyph, C, catalog, harnesses = [], loading = false, error = '',
-  installing = '', onRefresh, onInstall, onOpen }) {
+  installing = '', onInstall, onOpen }) {
   const h = React.createElement
-  const [menu, setMenu] = React.useState(null)
-  const [query, setQuery] = React.useState('')
   const agents = (catalog && catalog.agents) || []
   const installed = agents.filter((agent) => agent.available)
-  const missing = agents.filter((agent) => !agent.available)
-  const text = query.trim().toLowerCase()
-  const match = (agent) => !text || String(agent.name || '').toLowerCase().includes(text)
-    || String(agent.id || '').toLowerCase().includes(text)
+  const first = (installed[0] || agents[0] || {}).id || ''
+  const [selectedId, setSelectedId] = React.useState(first)
+  const selected = agents.find((agent) => agent.id === selectedId) || agents[0] || null
+  React.useEffect(() => {
+    if (!agents.length) return
+    if (!agents.some((agent) => agent.id === selectedId)) setSelectedId(first)
+  }, [catalog])
+  const icon = (agent, size) => {
+    const src = AGENT_ICONS[agent.icon]
+    return src
+      ? h('img', { src, alt: '', draggable: false, style: { width: size, height: size, objectFit: 'contain' } })
+      : h('span', { style: { width: size, height: size, display: 'grid', placeItems: 'center', borderRadius: Math.round(size / 3),
+        background: agent.color || C.soft, color: '#fff' } }, h(Glyph, { name: 'bot', size: Math.round(size * 0.55) }))
+  }
+  const dot = (agent) => h('span', { style: { position: 'absolute', right: -1, bottom: -1, width: 7, height: 7, borderRadius: 4,
+    background: agent.available ? (C.blue || '#1570ef') : '#d97706', boxShadow: '0 0 0 1.5px ' + C.bg } })
+  const railItem = (agent) => {
+    const active = selected && agent.id === selected.id
+    return h('button', {
+      key: agent.id, type: 'button', title: agent.name, onClick: () => setSelectedId(agent.id),
+      className: 'tether-hover tether-press',
+      style: { display: 'flex', alignItems: 'center', gap: 7, height: 34, flex: '0 0 auto',
+        padding: active ? '0 12px 0 8px' : '0 8px', border: 0, borderRadius: 999,
+        background: active ? (C.panel || C.bg) : 'transparent', color: C.ink, cursor: 'pointer',
+        opacity: agent.available ? 1 : 0.55,
+        boxShadow: active ? '0 1px 3px rgba(16,24,40,.14)' : 'none' }
+    },
+      h('span', { style: { width: 22, height: 22, position: 'relative', display: 'grid', placeItems: 'center' } }, icon(agent, 20), dot(agent)),
+      active ? h('span', { style: { fontSize: 12.5, fontWeight: 500, whiteSpace: 'nowrap' } }, agent.name) : null)
+  }
   const harnessFor = (agent) => (harnesses || []).find((item) => {
     const hay = (String(item.id || '') + ' ' + String(item.name || '') + ' ' + String(item.command || '')).toLowerCase()
-    return hay.includes(String(agent.id || '').toLowerCase())
-      || hay.includes(String(agent.name || '').toLowerCase())
+    return hay.includes(String(agent.id || '').toLowerCase()) || hay.includes(String(agent.name || '').toLowerCase())
   })
-  const icon = (agent, size = 34) => {
-    const src = AGENT_ICONS[agent.icon]
-    return h('span', { style: { width: size, height: size, flex: '0 0 auto', display: 'grid', placeItems: 'center' } },
-      src
-        ? h('img', { src, alt: '', draggable: false, style: { width: size, height: size, objectFit: 'contain' } })
-        : h('span', { style: { width: size, height: size, display: 'grid', placeItems: 'center', borderRadius: 9,
-          background: agent.color || C.soft, color: '#fff' } }, h(Glyph, { name: 'bot', size: Math.round(size * 0.5) })))
-  }
-  const field = {
-    height: 28, boxSizing: 'border-box', border: '1px solid ' + C.line,
-    borderRadius: 7, padding: '0 9px', background: C.bg, color: C.ink, fontSize: 12
-  }
-  const openMenu = (event, agent) => {
-    if (event) event.stopPropagation()
-    const rect = event.currentTarget.getBoundingClientRect()
-    const actions = []
-    if ((agent.transports || []).includes('workbench')) actions.push({ id: 'workbench', label: 'DSH 工作台', hint: '原生 Web' })
-    if ((agent.transports || []).includes('terminal')) actions.push({ id: 'terminal', label: '终端', hint: '原生 TUI' })
-    if ((agent.transports || []).includes('web')) actions.push({ id: 'web', label: '原生 Web', hint: '本机界面' })
+  const actions = (agent) => {
+    if (!agent) return []
+    if (!agent.available) {
+      return agent.install && agent.install.kind === 'npm'
+        ? [{ id: 'install', label: installing === agent.id ? '安装中…' : '安装', primary: true }]
+        : []
+    }
+    const list = []
+    if ((agent.transports || []).includes('workbench')) list.push({ id: 'workbench', label: '工作台', primary: true })
+    if ((agent.transports || []).includes('terminal')) list.push({ id: 'terminal', label: '终端', primary: list.length === 0 })
+    if ((agent.transports || []).includes('web')) list.push({ id: 'web', label: 'Web', primary: list.length === 0 })
     const harness = harnessFor(agent)
-    if (harness) actions.push({ id: 'acp', label: '结构化会话', hint: harness.name || harness.id, harness })
-    setMenu({
-      agent, harness,
-      left: Math.max(8, Math.min(rect.left, window.innerWidth - 210)),
-      top: Math.max(8, Math.min(rect.bottom + 4, window.innerHeight - actions.length * 34 - 16)),
-      actions
-    })
+    if (harness) list.push({ id: 'acp', label: '结构化', harness, primary: list.length === 0 })
+    return list
   }
-  const card = (agent) => h('button', {
-    key: agent.id, type: 'button', onClick: (event) => openMenu(event, agent),
-    className: 'tether-hover tether-press',
-    style: { display: 'flex', alignItems: 'flex-start', gap: 10, padding: 12, textAlign: 'left',
-      border: '1px solid ' + C.line, borderRadius: 11, background: C.panel || C.bg, color: C.ink, cursor: 'pointer', minWidth: 0 }
-  },
-    icon(agent),
-    h('span', { style: { minWidth: 0, display: 'grid', gap: 3, flex: '1 1 auto' } },
-      h('span', { style: { display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 } },
-        h('span', { style: { fontSize: 13.5, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, agent.name),
-        h('span', { title: '可用', style: { width: 6, height: 6, borderRadius: 3, background: C.green || '#16a34a', flex: '0 0 auto' } })),
-      agent.version ? h('span', { style: { fontSize: 10.5, color: C.mute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
-        agent.version) : null))
-  const missingRow = (agent) => h('div', {
-    key: agent.id,
-    style: { display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', borderRadius: 9,
-      border: '1px solid ' + C.line, background: 'transparent', minWidth: 0 }
-  },
-    icon(agent, 24),
-    h('span', { style: { minWidth: 0, flex: '1 1 auto', display: 'grid', gap: 1 } },
-      h('span', { style: { fontSize: 12.5, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, agent.name),
-      agent.version ? h('span', { style: { fontSize: 10, color: C.mute } }, agent.version) : null),
-    agent.install && agent.install.kind === 'npm'
-      ? h('button', {
-        type: 'button', disabled: installing === agent.id,
-        onClick: () => onInstall && onInstall(agent),
-        style: { ...field, height: 24, padding: '0 9px', cursor: installing === agent.id ? 'default' : 'pointer',
-          opacity: installing === agent.id ? 0.5 : 1, flex: '0 0 auto', background: 'transparent' }
-      }, installing === agent.id ? '安装中…' : '安装') : null)
-  const closeMenu = () => setMenu(null)
-  return h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', gap: 8 } },
-    h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flex: '0 0 auto', flexWrap: 'wrap' } },
-      h('span', { style: { fontSize: 14, fontWeight: 600, color: C.ink } }, '本机 Agent'),
-      h('input', {
-        value: query, onChange: (event) => setQuery(event.target.value), placeholder: '搜索 Agent',
-        style: { ...field, marginLeft: 'auto', width: 180 }
-      })),
-    error ? h('div', { style: { color: C.red, fontSize: 11.5 } }, error) : null,
-    h('div', { className: 'tether-scroll', style: { flex: '1 1 auto', minHeight: 0, overflow: 'auto', display: 'grid', gap: 10, alignContent: 'start' } },
-      installed.length ? h('div', { style: { display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))' } },
-        ...installed.filter(match).map(card)) : h('div', { style: { color: C.mute, fontSize: 12, padding: 8 } },
-        loading ? '正在读取 Agent 目录…' : '这台电脑还没有可用的 Agent'),
-      missing.filter(match).length ? h('div', { style: { display: 'grid', gap: 8, marginTop: 4 } },
-        h('div', { style: { fontSize: 11.5, color: C.mute } }, '未安装'),
-        h('div', { style: { display: 'grid', gap: 6, gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' } },
-          ...missing.filter(match).map(missingRow))) : null),
-    menu ? h('div', {
-      onPointerDown: (event) => { event.preventDefault(); closeMenu() },
-      style: { position: 'fixed', inset: 0, zIndex: 90, background: 'transparent' }
-    }) : null,
-    menu ? h('div', { role: 'menu', style: { position: 'fixed', left: menu.left, top: menu.top, width: 202, zIndex: 100,
-      background: C.layer1, borderRadius: 9, boxShadow: C.shadow, padding: 4 } },
-      menu.actions.map((action) => h('button', {
-        key: action.id, type: 'button', className: 'tether-hover',
+  const fieldPrimary = { height: 32, padding: '0 16px', border: 0, borderRadius: 8, fontSize: 12.5, cursor: 'pointer', color: '#fff', background: C.blue }
+  const fieldGhost = { height: 32, padding: '0 14px', border: '1px solid rgba(9,30,66,.14)', borderRadius: 8, fontSize: 12.5,
+    cursor: 'pointer', color: C.ink, background: C.bg }
+  const hero = selected ? h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', gap: 14, padding: '6px 2px' } },
+    h('div', { style: { display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 } },
+      h('span', { style: { width: 54, height: 54, flex: '0 0 auto', display: 'grid', placeItems: 'center', borderRadius: 13,
+        background: C.panel || C.bg, boxShadow: '0 1px 4px rgba(16,24,40,.12)' } }, icon(selected, 34)),
+      h('div', { style: { minWidth: 0, display: 'grid', gap: 3 } },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 } },
+          h('span', { style: { fontSize: 20, fontWeight: 600, letterSpacing: '-.2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, selected.name),
+          h('span', { style: { height: 22, display: 'inline-flex', alignItems: 'center', padding: '0 8px', borderRadius: 6, fontSize: 10.5,
+            color: selected.available ? (C.blue || '#1570ef') : '#d97706',
+            background: selected.available ? 'rgba(21,112,239,.08)' : 'rgba(217,119,6,.10)' } },
+            selected.available ? '可用' : '未安装')),
+        selected.version ? h('span', { style: { fontSize: 11.5, color: C.mute } }, selected.version) : null),
+      h('span', { style: { marginLeft: 'auto' } })),
+    h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' } },
+      ...actions(selected).map((action) => h('button', {
+        key: action.id, type: 'button',
+        disabled: action.id === 'install' && installing === selected.id,
         onClick: () => {
-          const current = menu
-          closeMenu()
-          if (onOpen) onOpen(current.agent, action.id, action.harness)
+          if (action.id === 'install') { if (onInstall) onInstall(selected) }
+          else if (onOpen) onOpen(selected, action.id, action.harness)
         },
-        style: { display: 'flex', width: '100%', alignItems: 'center', gap: 8, height: 32, padding: '0 8px',
-          border: 0, borderRadius: 6, background: 'transparent', color: C.ink, fontSize: 12.5, textAlign: 'left', cursor: 'pointer' }
-      },
-        h('span', null, action.label),
-        h('span', { style: { marginLeft: 'auto', fontSize: 10.5, color: C.mute } }, action.hint)))
-    ) : null)
+        style: { ...(action.primary ? fieldPrimary : fieldGhost), opacity: action.id === 'install' && installing === selected.id ? 0.5 : 1 }
+      }, action.label))),
+    selected.command ? h('div', { style: { fontFamily: 'Consolas, monospace', fontSize: 10.5, color: C.mute,
+      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, selected.command) : null,
+    h('div', { style: { flex: '1 1 auto', minHeight: 0 } })
+  ) : h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', color: C.mute, fontSize: 12 } },
+    loading ? '…' : '')
+
+  return h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', gap: 10 } },
+    h('div', { className: 'tether-scroll', style: { display: 'flex', alignItems: 'center', gap: 4, flex: '0 0 auto',
+      overflowX: 'auto', padding: '2px 0 6px', borderBottom: '1px solid rgba(9,30,66,.10)' } },
+      agents.map(railItem)),
+    error ? h('div', { style: { color: C.red, fontSize: 11.5 } }, error) : null,
+    hero)
 }

@@ -100,6 +100,33 @@ def _herdr_binary() -> str:
     return shutil.which("herdr") or ""
 
 
+def _herdr_wrapper(herdr: str) -> str:
+    from .agent_registry import agent_home
+    home = agent_home()
+    wrapper = Path.home() / ".tether" / "herdr" / "herdr.cmd"
+    try:
+        wrapper.parent.mkdir(parents=True, exist_ok=True)
+        local = wrapper.parent / "herdr.exe"
+        if not local.is_file() or local.stat().st_size != Path(herdr).stat().st_size:
+            import shutil as _shutil
+            _shutil.copy2(herdr, local)
+        state = wrapper.parent
+        lines = [
+            "@echo off",
+            'set "HERDR_HOME=' + str(state) + '"',
+            'set "XDG_CONFIG_HOME=' + str(state / "config") + '"',
+            'set "XDG_STATE_HOME=' + str(state / "state") + '"',
+            'set "APPDATA=' + str(state / "appdata") + '"',
+            'set "PATH=' + str(home) + ';' + str(home / "node_modules" / ".bin") + ';%PATH%"',
+            '"%~dp0herdr.exe" --session tether %*',
+            "",
+        ]
+        wrapper.write_text(chr(10).join(lines), encoding="ascii")
+    except OSError:
+        return herdr
+    return str(wrapper)
+
+
 def _windows_shells() -> dict[str, tuple[str, list[str], str]]:
     specs = {
         "powershell": ("Windows PowerShell",
@@ -112,7 +139,7 @@ def _windows_shells() -> dict[str, tuple[str, list[str], str]]:
     }
     herdr = _herdr_binary()
     if herdr:
-        specs["herdr"] = ("Herdr 工作区", [herdr, "--session", "tether"], herdr)
+        specs["herdr"] = ("Herdr 工作区", ["cmd.exe", "/d", "/s", "/c", _herdr_wrapper(herdr)], herdr)
     return specs
 
 
@@ -136,7 +163,7 @@ def _windows_pty_command(shell_id: str, command: list[str]) -> list[str]:
             return ["cmd.exe", "/d", "/s", "/c", subprocess.list2cmdline(command)]
         return list(command)
     if shell_id == "herdr":
-        return [exe]
+        return list(command)
     if shell_id in {"powershell", "pwsh"}:
         return [exe, "-NoLogo", "-NoExit", "-Command", PS_INIT]
     if shell_id == "cmd":
@@ -269,9 +296,18 @@ class TerminalService:
         finally:
             session.closed = True
 
-    def _session_env(self, shell_id: str) -> dict[str, str]:
+    def _session_env(self, shell_id: str, extra: dict[str, str] | None = None) -> dict[str, str]:
         env = dict(self.env)
+        if extra:
+            env.update({str(key): str(value) for key, value in extra.items()})
         if shell_id == "herdr":
+            try:
+                from .agent_registry import agent_home
+                home = agent_home()
+                parts = [str(home), str(home / "node_modules" / ".bin")]
+                env["PATH"] = os.pathsep.join(parts + [env.get("PATH", "")])
+            except Exception:
+                pass
             home = Path.home() / ".tether" / "herdr"
             for name in ("config", "state", "appdata"):
                 try:
@@ -285,7 +321,7 @@ class TerminalService:
         return env
 
     def _start_pty(self, command: list[str], shell_id: str, cwd: Path,
-                   cols: int, rows: int) -> _Session | None:
+                   cols: int, rows: int, extra_env: dict[str, str] | None = None) -> _Session | None:
         if os.name == "nt":
             try:
                 from winpty import PTY
@@ -296,7 +332,7 @@ class TerminalService:
                 pty = PTY(cols, rows)
                 cmdline = subprocess.list2cmdline(pty_command[1:])
                 saved = {}
-                scoped = self._session_env(shell_id) if shell_id == "herdr" else {}
+                scoped = self._session_env(shell_id, extra_env) if (shell_id == "herdr" or extra_env) else {}
                 for key, value in scoped.items():
                     saved[key] = os.environ.get(key)
                     os.environ[key] = value
@@ -325,7 +361,7 @@ class TerminalService:
         try:
             master, slave = pty_module.openpty()
             fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
-            env = self._session_env(shell_id)
+            env = self._session_env(shell_id, extra_env)
             env.setdefault("TERM", "xterm-256color")
             env.setdefault("COLORTERM", "truecolor")
             pty_command = _posix_pty_command(command)
@@ -356,11 +392,13 @@ class TerminalService:
             rows = max(1, min(300, int(args.get("rows") or DEFAULT_ROWS)))
         except (TypeError, ValueError):
             cols, rows = DEFAULT_COLS, DEFAULT_ROWS
-        session = self._start_pty(command, shell_id, cwd, cols, rows)
+        raw_env = args.get("env")
+        extra_env = {str(k): str(v) for k, v in raw_env.items()} if isinstance(raw_env, dict) else None
+        session = self._start_pty(command, shell_id, cwd, cols, rows, extra_env)
         if session is None:
             kwargs: dict[str, Any] = {
                 "cwd": str(cwd),
-                "env": self._session_env(shell_id),
+                "env": self._session_env(shell_id, extra_env),
                 "stdin": subprocess.PIPE,
                 "stdout": subprocess.PIPE,
                 "stderr": subprocess.STDOUT,
