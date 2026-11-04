@@ -10069,10 +10069,8 @@ function createAppsPage({ React, Glyph, post, C, devices = [], localDevice = '',
     height: 28, padding: '0 14px', border: 0, borderRadius: 7, fontSize: 12,
     cursor: 'pointer', color: '#fff', background: C.blue
   }
-  const hint = reason === 'mesh_unavailable' ? '目标电脑未接入虚拟内网，暂时无法转发本机应用'
-    : reason === 'no_apps' ? '目标电脑没有登记可打开的应用'
-    : reason === 'bind_failed' ? '目标电脑无法绑定虚拟内网端口'
-    : '只转发目标电脑上登记的回环 HTTP 服务'
+  const reasonHint = reason === 'mesh_unavailable' ? '虚拟内网未接通'
+    : reason === 'no_apps' ? '' : reason === 'bind_failed' ? '端口绑定失败' : ''
   return h('div', { style: { flex: '1 1 auto', minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column', gap: 10, padding: 12, background: C.bg } },
     h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flex: '0 0 auto' } },
       h('div', { style: { position: 'relative' } },
@@ -10099,9 +10097,12 @@ function createAppsPage({ React, Glyph, post, C, devices = [], localDevice = '',
           }, item.name || item.device_id)) : h('div', { style: { padding: '8px 10px', fontSize: 12, color: C.mute } }, '没有在线设备')
         ) : null),
       h('button', { type: 'button', onClick: () => void load(device), disabled: loading || !device,
-        title: '刷新应用列表', 'aria-label': '刷新应用列表',
-        style: { ...button, padding: '0 10px', opacity: loading || !device ? 0.5 : 1 } }, '刷新'),
-      h('span', { style: { marginLeft: 'auto', fontSize: 11, color: C.mute } }, hint)
+        title: '刷新应用列表', 'aria-label': '刷新应用列表', className: 'tether-hover',
+        style: { width: 28, height: 28, display: 'grid', placeItems: 'center', border: 0, borderRadius: 7,
+          background: 'transparent', color: C.sub, cursor: loading || !device ? 'default' : 'pointer',
+          opacity: loading || !device ? 0.5 : 1 } },
+        loading ? h('span', { className: 'tether-spin' }, h(Glyph, { name: 'refresh', size: 15 })) : h(Glyph, { name: 'refresh', size: 15 })),
+      reasonHint ? h('span', { style: { marginLeft: 'auto', fontSize: 11, color: C.mute } }, reasonHint) : null
     ),
     loading && !apps.length
       ? h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', color: C.mute, fontSize: 12 } }, '正在读取应用…')
@@ -10122,9 +10123,14 @@ function createAppsPage({ React, Glyph, post, C, devices = [], localDevice = '',
             h('span', { style: { fontSize: 11, color: C.mute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
               app.kind === 'dsh' ? '本机 DSH' : String(app.url || '').replace(/^https?:\/\//, ''))
           )
-        )) : h('div', { style: { gridColumn: '1 / -1', padding: 24, textAlign: 'center', color: C.mute, fontSize: 12 } },
-          online.length ? '没有可打开的应用。在目标电脑的 apps.json 里登记 name、port 与 path 后刷新；DSH 请用“原生工作区”。' : '没有在线设备')
-      ),
+        )) : h('div', { style: { gridColumn: '1 / -1', padding: '52px 24px', display: 'grid', justifyItems: 'center', gap: 10, color: C.mute, fontSize: 12 } },
+          h('span', { style: { width: 40, height: 40, display: 'grid', placeItems: 'center', borderRadius: 11, background: C.soft, color: C.sub } },
+            h(Glyph, { name: 'apps', size: 19 })),
+          h('span', null, online.length ? '没有可打开的应用' : '没有在线设备'),
+          online.length ? h('button', { type: 'button', onClick: () => void load(device), title: '刷新应用列表', 'aria-label': '刷新应用列表',
+            className: 'tether-hover', style: { width: 28, height: 28, display: 'grid', placeItems: 'center', border: 0, borderRadius: 7,
+              background: 'transparent', color: C.sub, cursor: 'pointer' } }, h(Glyph, { name: 'refresh', size: 15 })) : null
+        )),
     open ? h('div', {
       style: { position: 'absolute', inset: 0, zIndex: 8, display: 'flex', flexDirection: 'column',
         background: C.bg, borderRadius: 10, border: '1px solid ' + C.line, overflow: 'hidden' }
@@ -10135,9 +10141,11 @@ function createAppsPage({ React, Glyph, post, C, devices = [], localDevice = '',
           String(open.url || '').replace(/^https?:\/\//, '') + (open.path || '/')),
         h('span', { style: { marginLeft: 'auto', display: 'flex', gap: 6 } },
           h('button', { type: 'button', onClick: () => setFrameKey((value) => value + 1), title: '重新加载应用', 'aria-label': '重新加载应用',
-            style: { ...field, cursor: 'pointer', background: 'transparent' } }, '刷新'),
+            className: 'tether-hover', style: { width: 26, height: 26, display: 'grid', placeItems: 'center', border: 0, borderRadius: 6,
+              background: 'transparent', color: C.sub, cursor: 'pointer' } }, h(Glyph, { name: 'refresh', size: 14 })),
           h('button', { type: 'button', onClick: () => setOpen(null), title: '关闭应用', 'aria-label': '关闭应用',
-            style: { ...field, cursor: 'pointer', background: 'transparent' } }, '关闭')
+            className: 'tether-hover', style: { width: 26, height: 26, display: 'grid', placeItems: 'center', border: 0, borderRadius: 6,
+              background: 'transparent', color: C.sub, cursor: 'pointer', fontSize: 15, padding: 0 } }, '×')
         )
       ),
       h('iframe', {
@@ -10171,6 +10179,85 @@ const AGENT_ICONS = {
   trae: 'data:image/svg+xml;base64,PHN2ZyBoZWlnaHQ9IjY0IiB2aWV3Qm94PSIwIDAgMjQgMjQiIHdpZHRoPSI2NCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48dGl0bGU+VFJBRSBDTEk8L3RpdGxlPjxyZWN0IHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgcng9IjUuMyIgZmlsbD0iIzAwMDAwMCI+PC9yZWN0PjxwYXRoIHRyYW5zZm9ybT0idHJhbnNsYXRlKDMuNiAzLjYyKSBzY2FsZSgwLjcpIiBmaWxsPSIjMzJGMDhDIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiIGQ9Ik0yNCAyMC41NDFIMy40Mjh2LTMuNDI2SDBWMy40aDI0VjIwLjU0ek0zLjQyOCAxNy4xMTVoMTcuMTQ0VjYuODI3SDMuNDI4djEwLjI4OHptOC41NzMtNS4xOTZsLTIuNDI1IDIuNDI0LTIuNDI0LTIuNDI0IDIuNDI0LTIuNDI0IDIuNDI1IDIuNDI0em02Ljg1Ny0uMDAxbC0yLjQyNCAyLjQyMy0yLjQyNS0yLjQyMyAyLjQyNS0yLjQyNSAyLjQyNCAyLjQyNXoiPjwvcGF0aD48L3N2Zz4NCg==',
   'command-code': 'data:image/svg+xml;base64,PHN2ZyBoZWlnaHQ9IjY0IiB2aWV3Qm94PSIwIDAgMTQ0IDE0NCIgd2lkdGg9IjY0IiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjx0aXRsZT5Db21tYW5kIENvZGU8L3RpdGxlPjxwYXRoIGZpbGw9IiMwMDAwMDAiIGQ9Ik0xMC4zMTkzIDEwLjMxOTNDMCAyMC42Mzg3IDAgMzcuMjQ3NCAwIDcwLjQ2NDhWNzMuMTM5OEMwIDEwNi4zNTcgMCAxMjIuOTY2IDEwLjMxOTMgMTMzLjI4NUMyMC42Mzg3IDE0My42MDUgMzcuMjQ3NCAxNDMuNjA1IDcwLjQ2NDggMTQzLjYwNUg3My4xMzk4QzEwNi4zNTcgMTQzLjYwNSAxMjIuOTY2IDE0My42MDUgMTMzLjI4NSAxMzMuMjg1QzE0My42MDUgMTIyLjk2NiAxNDMuNjA1IDEwNi4zNTcgMTQzLjYwNSA3My4xMzk5VjcwLjQ2NDhDMTQzLjYwNSAzNy4yNDc0IDE0My42MDUgMjAuNjM4NyAxMzMuMjg1IDEwLjMxOTNDMTIyLjk2NiAwIDEwNi4zNTcgMCA3My4xMzk5IDBINzAuNDY0OEMzNy4yNDc0IDAgMjAuNjM4NyAwIDEwLjMxOTMgMTAuMzE5M1oiPjwvcGF0aD48cGF0aCBmaWxsPSIjRkZGRkZGIiBkPSJNOTguODA0OSAyNy42MTYzQzg5LjMyOTUgMjcuNjE2MyA4MS42MjE0IDM1LjMyNDMgODEuNjIxNCA0NC43OTk3VjUyLjE2NDFINjEuOTgzMlY0NC43OTk3QzYxLjk4MzIgMzUuMzI0MyA1NC4yNzUyIDI3LjYxNjMgNDQuNzk5NyAyNy42MTYzQzM1LjMyNDMgMjcuNjE2MyAyNy42MTYzIDM1LjMyNDMgMjcuNjE2MyA0NC43OTk3QzI3LjYxNjMgNTQuMjc1MiAzNS4zMjQzIDYxLjk4MzIgNDQuNzk5NyA2MS45ODMySDUyLjE2NDFWODEuNjIxNEg0NC43OTk3QzM1LjMyNDMgODEuNjIxNCAyNy42MTYzIDg5LjMyOTUgMjcuNjE2MyA5OC44MDQ5QzI3LjYxNjMgMTA4LjI4IDM1LjMyNDMgMTE1Ljk4OCA0NC43OTk3IDExNS45ODhDNTQuMjc1MiAxMTUuOTg4IDYxLjk4MzIgMTA4LjI4IDYxLjk4MzIgOTguODA0OVY5MS40NDA2SDgxLjYyMTRWOTguODA0OUM4MS42MjE0IDEwOC4yOCA4OS4zMjk1IDExNS45ODggOTguODA0OSAxMTUuOTg4QzEwOC4yOCAxMTUuOTg4IDExNS45ODggMTA4LjI4IDExNS45ODggOTguODA0OUMxMTUuOTg4IDg5LjMyOTUgMTA4LjI4IDgxLjYyMTQgOTguODA0OSA4MS42MjE0SDkxLjQ0MDZWNjEuOTgzMkg5OC44MDQ5QzEwOC4yOCA2MS45ODMyIDExNS45ODggNTQuMjc1MiAxMTUuOTg4IDQ0Ljc5OTdDMTE1Ljk4OCAzNS4zMjQzIDEwOC4yOCAyNy42MTYzIDk4LjgwNDkgMjcuNjE2M1pNOTEuNDQwNiA1Mi4xNjQxVjQ0Ljc5OTdDOTEuNDQwNiA0MC43MjQ4IDk0LjczIDM3LjQzNTQgOTguODA0OSAzNy40MzU0QzEwMi44OCAzNy40MzU0IDEwNi4xNjkgNDAuNzI0OCAxMDYuMTY5IDQ0Ljc5OTdDMTA2LjE2OSA0OC44NzQ3IDEwMi44OCA1Mi4xNjQxIDk4LjgwNDkgNTIuMTY0MUg5MS40NDA2Wk00NC43OTk3IDUyLjE2NDFDNDAuNzI0OCA1Mi4xNjQxIDM3LjQzNTQgNDguODc0NyAzNy40MzU0IDQ0Ljc5OTdDMzcuNDM1NCA0MC43MjQ4IDQwLjcyNDggMzcuNDM1NCA0NC43OTk3IDM3LjQzNTRDNDguODc0NyAzNy40MzU0IDUyLjE2NDEgNDAuNzI0OCA1Mi4xNjQxIDQ0Ljc5OTdWNTIuMTY0MUg0NC43OTk3Wk02MS45ODMyIDgxLjYyMTRWNjEuOTgzMkg4MS42MjE0VjgxLjYyMTRINjEuOTgzMlpNOTguODA0OSAxMDYuMTY5Qzk0LjczIDEwNi4xNjkgOTEuNDQwNiAxMDIuODggOTEuNDQwNiA5OC44MDQ5VjkxLjQ0MDZIOTguODA0OUMxMDIuODggOTEuNDQwNiAxMDYuMTY5IDk0LjczIDEwNi4xNjkgOTguODA0OUMxMDYuMTY5IDEwMi44OCAxMDIuODggMTA2LjE2OSA5OC44MDQ5IDEwNi4xNjlaTTQ0Ljc5OTcgMTA2LjE2OUM0MC43MjQ4IDEwNi4xNjkgMzcuNDM1NCAxMDIuODggMzcuNDM1NCA5OC44MDQ5QzM3LjQzNTQgOTQuNzMgNDAuNzI0OCA5MS40NDA2IDQ0Ljc5OTcgOTEuNDQwNkg1Mi4xNjQxVjk4LjgwNDlDNTIuMTY0MSAxMDIuODggNDguODc0NyAxMDYuMTY5IDQ0Ljc5OTcgMTA2LjE2OVoiPjwvcGF0aD48L3N2Zz4NCg==',
   minimax: 'data:image/svg+xml;base64,PHN2ZyBoZWlnaHQ9IjY0IiB2aWV3Qm94PSIwIDAgMjQgMjQiIHdpZHRoPSI2NCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48dGl0bGU+TWluaU1heCBDb2RlPC90aXRsZT48cmVjdCB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHJ4PSI2IiBmaWxsPSIjRjIzRjVEIj48L3JlY3Q+PHBhdGggZD0iTTUgMTdWN2gzbDQgNiA0LTZoM3YxMGgtM3YtNWwtNCA2LTQtNnY1SDVaIiBmaWxsPSIjRkZGRkZGIj48L3BhdGg+PC9zdmc+DQo=',
+}
+function AgentAccountsPanel({ React, Glyph, post, C, device, agent, autoFocus = false }) {
+  const h = React.createElement
+  const [data, setData] = React.useState(null)
+  const [name, setName] = React.useState('')
+  const [busy, setBusy] = React.useState('')
+  const [error, setError] = React.useState('')
+  const enabled = !!(agent && agent.accounts)
+
+  const call = async (op, body) => {
+    setBusy(op)
+    setError('')
+    try {
+      const result = await post('/api/devices/' + encodeURIComponent(device) + '/fs/' + op,
+        { id: agent.id, ...body })
+      setData(result || null)
+    } catch (cause) {
+      setError(String((cause && (cause.message || cause.code)) || cause || '操作失败'))
+    } finally {
+      setBusy('')
+    }
+  }
+  React.useEffect(() => {
+    if (!enabled) { setData(null); return }
+    let cancelled = false
+    setData(null)
+    setError('')
+    void post('/api/devices/' + encodeURIComponent(device) + '/fs/agents_accounts', { id: agent.id })
+      .then((result) => { if (!cancelled) setData(result || null) })
+      .catch((cause) => { if (!cancelled) setError(String((cause && (cause.message || cause.code)) || '读取失败')) })
+    return () => { cancelled = true }
+  }, [device, agent && agent.id, enabled])
+
+  if (!enabled) return null
+  const profiles = (data && data.profiles) || []
+  const field = {
+    height: 30, boxSizing: 'border-box', border: '1px solid rgba(9,30,66,.14)',
+    borderRadius: 7, padding: '0 9px', background: C.bg, color: C.ink, fontSize: 12, outline: 'none'
+  }
+  const save = async () => {
+    const label = name.trim() || ('账号 ' + (profiles.length + 1))
+    await call('agents_account_save', { name: label })
+    setName('')
+  }
+  const live = (data && data.live) || []
+  return h('div', { style: { display: 'flex', flexDirection: 'column', minHeight: 0, gap: 8 } },
+    live.length ? h('div', { style: { display: 'grid', gap: 3 } },
+      live.map((rel) => h('div', { key: rel, style: { display: 'flex', alignItems: 'center', gap: 7, fontSize: 10.5, color: C.mute } },
+        h(Glyph, { name: 'shield', size: 11 }),
+        h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, rel)))) : null,
+    profiles.length
+      ? h('div', { className: 'tether-scroll', style: { display: 'flex', flexDirection: 'column', gap: 4, overflow: 'auto', minHeight: 0 } },
+        profiles.map((profile) => h('div', {
+          key: profile.id,
+          style: { display: 'flex', alignItems: 'center', gap: 8, minHeight: 34, padding: '0 8px', borderRadius: 8,
+            background: profile.current ? 'rgba(21,112,239,.07)' : 'transparent' }
+        },
+          h('span', { style: { width: 6, height: 6, borderRadius: 3, flex: '0 0 auto',
+            background: profile.current ? C.blue : 'rgba(9,30,66,.22)' } }),
+          h('span', { style: { minWidth: 0, flex: '1 1 auto', fontSize: 12.5, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, profile.name),
+          profile.current
+            ? h('span', { style: { fontSize: 10.5, color: C.blue } }, '当前')
+            : h('button', { type: 'button', disabled: busy === 'agents_account_switch',
+              onClick: () => void call('agents_account_switch', { profile: profile.id }),
+              style: { ...field, height: 24, padding: '0 8px', cursor: 'pointer', background: 'transparent', flex: '0 0 auto' } }, '切换'),
+          h('button', { type: 'button', title: '删除', disabled: !!busy,
+            onClick: () => void call('agents_account_delete', { profile: profile.id }),
+            style: { width: 22, height: 22, border: 0, borderRadius: 5, background: 'transparent', color: C.mute, cursor: 'pointer', flex: '0 0 auto' } }, '×'))))
+      : h('div', { style: { fontSize: 11.5, color: C.mute, padding: '2px 0' } }, busy ? '…' : ''),
+    h('div', { style: { display: 'flex', gap: 6, marginTop: 'auto' } },
+      h('input', {
+        value: name, autoFocus, placeholder: '账号名称', onChange: (event) => setName(event.target.value),
+        onKeyDown: (event) => { if (event.key === 'Enter') { event.preventDefault(); void save() } },
+        style: { ...field, flex: '1 1 auto', minWidth: 0 }
+      }),
+      h('button', { type: 'button', disabled: !!busy, onClick: () => void save(),
+        style: { ...field, height: 30, padding: '0 10px', cursor: busy ? 'default' : 'pointer', background: 'transparent', flex: '0 0 auto' } },
+        busy === 'agents_account_save' ? '…' : '保存当前')),
+    error ? h('div', { style: { fontSize: 11, color: C.red } }, error) : null)
 }
 const toDraft = (agent) => ({
   name: agent.name, command: agent.command, argsText: (agent.args || []).join(' '),
@@ -10489,6 +10576,150 @@ function AgentCatalogView({ React, Glyph, post, C, device, onClose }) {
           agents.map(row))),
       h('div', { style: { minHeight: 0, minWidth: 0, border: '1px solid rgba(9,30,66,.12)', borderRadius: 10, background: C.panel || C.bg, overflow: 'hidden' } }, detail)),
     modal)
+}
+function AgentHome({ React, Glyph, C, post, device, catalog, harnesses = [], panes = [], loading = false, error = '',
+  installing = '', onInstall, onOpen, onOpenCatalog, onOpenPane, onClosePane }) {
+  const h = React.createElement
+  const agents = (catalog && catalog.agents) || []
+  const installed = agents.filter((agent) => agent.available)
+  const first = (installed[0] || agents[0] || {}).id || ''
+  const [selectedId, setSelectedId] = React.useState(first)
+  const selected = agents.find((agent) => agent.id === selectedId) || agents[0] || null
+  React.useEffect(() => {
+    if (!agents.length) return
+    if (!agents.some((agent) => agent.id === selectedId)) setSelectedId(first)
+  }, [catalog])
+  const icon = (agent, size) => {
+    const src = AGENT_ICONS[agent.icon]
+    return src
+      ? h('img', { src, alt: '', draggable: false, style: { width: size, height: size, objectFit: 'contain' } })
+      : h('span', { style: { width: size, height: size, display: 'grid', placeItems: 'center', borderRadius: Math.round(size / 3),
+        background: agent.color || C.soft, color: '#fff' } }, h(Glyph, { name: 'bot', size: Math.round(size * 0.55) }))
+  }
+  const harnessFor = (agent) => (harnesses || []).find((item) => {
+    const hay = (String(item.id || '') + ' ' + String(item.name || '') + ' ' + String(item.command || '')).toLowerCase()
+    return hay.includes(String(agent.id || '').toLowerCase()) || hay.includes(String(agent.name || '').toLowerCase())
+  })
+  const actions = (agent) => {
+    if (!agent) return []
+    if (!agent.available) {
+      return agent.install && agent.install.kind === 'npm'
+        ? [{ id: 'install', label: '安装', icon: 'plus', primary: true }] : []
+    }
+    const list = []
+    if ((agent.transports || []).includes('workbench')) list.push({ id: 'workbench', label: '工作台', icon: 'monitor', primary: true })
+    if ((agent.transports || []).includes('terminal')) list.push({ id: 'terminal', label: '终端', icon: 'terminal', primary: list.length === 0 })
+    if ((agent.transports || []).includes('web')) list.push({ id: 'web', label: 'Web', icon: 'apps', primary: list.length === 0 })
+    const harness = harnessFor(agent)
+    if (harness) list.push({ id: 'acp', label: '结构化', icon: 'bot', harness, primary: list.length === 0 })
+    return list
+  }
+  const line = '1px solid rgba(9,30,66,.12)'
+  const card = { border: line, borderRadius: 12, background: C.panel || C.bg, minWidth: 0, minHeight: 0 }
+  const primary = { height: 34, padding: '0 16px', border: 0, borderRadius: 8, fontSize: 12.5, cursor: 'pointer', color: '#fff', background: C.blue }
+  const ghost = { height: 34, padding: '0 14px', border: '1px solid rgba(9,30,66,.14)', borderRadius: 8, fontSize: 12.5,
+    cursor: 'pointer', color: C.ink, background: C.bg }
+  const listRow = (agent) => {
+    const active = selected && agent.id === selected.id
+    return h('button', {
+      key: agent.id, type: 'button', onClick: () => setSelectedId(agent.id),
+      className: 'tether-hover', title: agent.name,
+      style: { display: 'flex', alignItems: 'center', gap: 9, width: '100%', minHeight: 40, padding: '5px 8px',
+        border: 0, borderRadius: 8, cursor: 'pointer', textAlign: 'left',
+        background: active ? C.soft : 'transparent', color: C.ink, opacity: agent.available ? 1 : 0.6 }
+    },
+      h('span', { style: { width: 24, height: 24, flex: '0 0 auto', display: 'grid', placeItems: 'center', position: 'relative' } },
+        icon(agent, 22),
+        h('span', { style: { position: 'absolute', right: -1, bottom: -1, width: 7, height: 7, borderRadius: 4,
+          background: agent.available ? (C.blue || '#1570ef') : '#d97706', boxShadow: '0 0 0 1.5px ' + C.bg } })),
+      h('span', { style: { minWidth: 0, display: 'grid', gap: 1, flex: '1 1 auto' } },
+        h('span', { style: { fontSize: 12.5, fontWeight: active ? 600 : 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, agent.name),
+        agent.version ? h('span', { style: { fontSize: 10, color: C.mute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, agent.version) : null),
+      agent.available ? null : h('span', { style: { fontSize: 10, color: '#d97706', flex: '0 0 auto' } }, '未装'))
+  }
+  const actionTile = (agent, action) => h('button', {
+    key: action.id, type: 'button',
+    disabled: action.id === 'install' && installing === agent.id,
+    onClick: () => {
+      if (action.id === 'install') { if (onInstall) onInstall(agent) }
+      else if (onOpen) onOpen(agent, action.id, action.harness)
+    },
+    className: 'tether-hover tether-press',
+    style: { display: 'flex', alignItems: 'center', gap: 9, minHeight: 42, padding: '0 13px', borderRadius: 10,
+      border: '1px solid ' + (action.primary ? 'transparent' : 'rgba(9,30,66,.14)'),
+      background: action.primary ? C.blue : C.bg, color: action.primary ? '#fff' : C.ink,
+      fontSize: 12.5, fontWeight: 500, cursor: 'pointer', opacity: action.id === 'install' && installing === agent.id ? 0.5 : 1 }
+  }, h(Glyph, { name: action.icon, size: 15 }), action.label)
+  const info = (label, value, mono) => h('div', { style: { border: '1px solid rgba(9,30,66,.10)', borderRadius: 9, padding: '8px 10px', display: 'grid', gap: 3, minWidth: 0 } },
+    h('span', { style: { fontSize: 10.5, color: C.mute } }, label),
+    h('span', { style: { fontSize: 12.5, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      fontFamily: mono ? 'Consolas, monospace' : undefined } }, value))
+  const running = panes.length ? h('div', { style: { ...card, gridColumn: '1 / -1', padding: 12, display: 'grid', gap: 8, minHeight: 0 } },
+    h('div', { style: { fontSize: 10.5, color: C.mute } }, '运行中'),
+    h('div', { className: 'tether-scroll', style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 6, overflow: 'auto', maxHeight: 160, minHeight: 0 } },
+      ...panes.map((pane) => h('div', { key: pane.key, style: { display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px',
+        borderRadius: 8, background: C.soft } },
+        h('span', { style: { width: 6, height: 6, borderRadius: 3, background: pane.kind === 'web' ? C.blue : '#d97706' } }),
+        h('span', { style: { minWidth: 0, flex: '1 1 auto', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, pane.title),
+        h('button', { type: 'button', onClick: () => onOpenPane && onOpenPane(pane.key),
+          style: { ...ghost, height: 24, padding: '0 8px', cursor: 'pointer' } }, '打开'),
+        h('button', { type: 'button', title: '关闭', onClick: () => onClosePane && onClosePane(pane.key),
+          style: { width: 22, height: 22, border: 0, borderRadius: 5, background: 'transparent', color: C.mute, cursor: 'pointer' } }, '×'))))
+  ) : null
+  const hero = selected ? h('div', { style: { ...card, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 } },
+    h('div', { style: { display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 } },
+      h('span', { style: { width: 48, height: 48, flex: '0 0 auto', display: 'grid', placeItems: 'center', borderRadius: 12,
+        background: C.bg, boxShadow: '0 1px 4px rgba(16,24,40,.12)' } }, icon(selected, 32)),
+      h('div', { style: { minWidth: 0 } },
+        h('div', { style: { fontSize: 19, fontWeight: 600 } }, selected.name),
+        h('div', { style: { fontSize: 11, color: C.mute } }, selected.version || '—')),
+      h('button', { type: 'button', title: 'Agent 目录', 'aria-label': 'Agent 设置', onClick: onOpenCatalog,
+        style: { ...ghost, height: 30, width: 30, padding: 0, marginLeft: 'auto', display: 'grid', placeItems: 'center', flex: '0 0 auto' } },
+        h(Glyph, { name: 'gear', size: 14 }))),
+    h('div', { style: { display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))' } },
+      ...actions(selected).map((action) => actionTile(selected, action))),
+    h('div', { style: { display: 'grid', gap: 8, gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' } },
+      info('版本', selected.version || '—'),
+      info('工作目录', selected.cwd || '默认工作区', true),
+      info('来源', selected.source === 'detected' ? '已检测' : selected.source === 'builtin' ? '内置' : (selected.source || '—')),
+      info('账号', selected.accounts ? '多账号' : '—'),
+      h('div', { style: { gridColumn: '1 / -1' } }, info('命令', selected.command || '—', true)))) : h('div', { style: { ...card, display: 'grid', placeItems: 'center', color: C.mute, fontSize: 12 } },
+    loading ? '…' : '')
+  const accounts = selected && selected.accounts
+    ? h('div', { style: { ...card, padding: 14, display: 'flex', flexDirection: 'column', gap: 10, minHeight: 0 } },
+      h('div', { style: { fontSize: 12, fontWeight: 600, color: C.sub } }, '账号'),
+      h(AgentAccountsPanel, { React, Glyph, post, C, device, agent: selected }))
+    : null
+  const quickAction = (agent, action) => h('button', {
+    key: action.id, type: 'button', title: action.label, 'aria-label': action.label,
+    disabled: action.id === 'install' && installing === agent.id,
+    onClick: () => {
+      if (action.id === 'install') { if (onInstall) onInstall(agent) }
+      else if (onOpen) onOpen(agent, action.id, action.harness)
+    },
+    className: 'tether-hover', style: { width: 26, height: 26, flex: '0 0 auto', display: 'grid', placeItems: 'center',
+      border: 0, borderRadius: 6, background: C.bg, color: action.primary ? C.blue : C.sub, cursor: 'pointer', padding: 0 }
+  }, h(Glyph, { name: action.icon, size: 14 }))
+  const quickRow = (agent) => h('div', { key: agent.id, style: { display: 'flex', alignItems: 'center', gap: 8,
+    padding: '6px 8px', borderRadius: 9, background: C.soft, minWidth: 0 } },
+    icon(agent, 18),
+    h('span', { style: { minWidth: 0, flex: '1 1 auto', display: 'grid', gap: 1 } },
+      h('span', { style: { fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, agent.name),
+      agent.version ? h('span', { style: { fontSize: 9.5, color: C.mute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, agent.version) : null),
+    ...actions(agent).slice(0, 3).map((action) => quickAction(agent, action)))
+  const quick = installed.length ? h('div', { style: { ...card, gridColumn: '1 / -1', padding: 12, display: 'grid', gap: 8 } },
+    h('div', { style: { fontSize: 10.5, color: C.mute } }, '快速启动'),
+    h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 6 } },
+      ...installed.map(quickRow))) : null
+  return h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex', gap: 12 } },
+    h('div', { style: { width: 240, flex: '0 0 auto', border: line, borderRadius: 12, background: C.panel || C.bg,
+      display: 'flex', flexDirection: 'column', overflow: 'hidden' } },
+      h('div', { className: 'tether-scroll', style: { flex: '1 1 auto', overflow: 'auto', padding: '7px 7px 14px', display: 'flex', flexDirection: 'column', gap: 2 } },
+        agents.map(listRow))),
+    h('div', { style: { flex: '1 1 auto', minWidth: 0, display: 'grid', gap: 12, alignContent: 'start', alignItems: 'start',
+      gridTemplateColumns: accounts ? 'minmax(0, 1.25fr) minmax(270px, .75fr)' : '1fr' } },
+      hero, accounts, running, quick),
+    error ? h('div', { style: { position: 'absolute', left: 260, bottom: 20, color: C.red, fontSize: 11.5 } }, error) : null)
 }
 function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '', activeDevice = '', onDeviceChange, onOpenWorkbench, onError }) {
   const h = React.createElement
@@ -10829,7 +11060,14 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
             setModel((event.models && (event.models.currentModelId || event.models.currentModel)) || (available[0] && available[0].modelId) || '')
             const label = event.agent && (event.agent.title || event.agent.name)
             updateTab(session, label ? { status: 'ready', name: label } : { status: 'ready' })
-            addItem({ kind: 'system', text: '已连接' + (label ? ' · ' + label : '') })
+            const readyText = '已连接' + (label ? ' · ' + label : '')
+            setItems((current) => {
+              const index = current.findIndex((item) => item.kind === 'system' && String(item.text || '').startsWith('正在启动'))
+              if (index < 0) return [...current, { kind: 'system', text: readyText }]
+              const next = current.slice()
+              next[index] = { ...next[index], text: readyText }
+              return next
+            })
           } else if (event.type === 'result') {
             finishStreaming()
             addItem({ kind: 'system', text: '本轮完成 · ' + ((event.result && event.result.stopReason) || 'done') })
@@ -15531,11 +15769,12 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             }
           }
           setDeviceId((current) => {
-            if (current && data.devices.some((d) => d.device_id === current)) return current
+            const devices = Array.isArray(data && data.devices) ? data.devices : []
+            if (current && devices.some((d) => d.device_id === current)) return current
             const local = appLocalDeviceRef.current
-            if (local && data.devices.some((d) => d.device_id === local)) return local
-            const online = data.devices.find((d) => d.online)
-            return (online && online.device_id) || ((data.devices[0] || {}).device_id || '')
+            if (local && devices.some((d) => d.device_id === local)) return local
+            const online = devices.find((d) => d.online)
+            return (online && online.device_id) || ((devices[0] || {}).device_id || '')
           })
         } catch (e) { fail(e) }
       }, [])

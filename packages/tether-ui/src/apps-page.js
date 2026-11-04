@@ -57,10 +57,8 @@ export function createAppsPage({ React, Glyph, post, C, devices = [], localDevic
     height: 28, padding: '0 14px', border: 0, borderRadius: 7, fontSize: 12,
     cursor: 'pointer', color: '#fff', background: C.blue
   }
-  const hint = reason === 'mesh_unavailable' ? '目标电脑未接入虚拟内网，暂时无法转发本机应用'
-    : reason === 'no_apps' ? '目标电脑没有登记可打开的应用'
-    : reason === 'bind_failed' ? '目标电脑无法绑定虚拟内网端口'
-    : '只转发目标电脑上登记的回环 HTTP 服务'
+  const reasonHint = reason === 'mesh_unavailable' ? '虚拟内网未接通'
+    : reason === 'no_apps' ? '' : reason === 'bind_failed' ? '端口绑定失败' : ''
   return h('div', { style: { flex: '1 1 auto', minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column', gap: 10, padding: 12, background: C.bg } },
     h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flex: '0 0 auto' } },
       h('div', { style: { position: 'relative' } },
@@ -87,9 +85,12 @@ export function createAppsPage({ React, Glyph, post, C, devices = [], localDevic
           }, item.name || item.device_id)) : h('div', { style: { padding: '8px 10px', fontSize: 12, color: C.mute } }, '没有在线设备')
         ) : null),
       h('button', { type: 'button', onClick: () => void load(device), disabled: loading || !device,
-        title: '刷新应用列表', 'aria-label': '刷新应用列表',
-        style: { ...button, padding: '0 10px', opacity: loading || !device ? 0.5 : 1 } }, '刷新'),
-      h('span', { style: { marginLeft: 'auto', fontSize: 11, color: C.mute } }, hint)
+        title: '刷新应用列表', 'aria-label': '刷新应用列表', className: 'tether-hover',
+        style: { width: 28, height: 28, display: 'grid', placeItems: 'center', border: 0, borderRadius: 7,
+          background: 'transparent', color: C.sub, cursor: loading || !device ? 'default' : 'pointer',
+          opacity: loading || !device ? 0.5 : 1 } },
+        loading ? h('span', { className: 'tether-spin' }, h(Glyph, { name: 'refresh', size: 15 })) : h(Glyph, { name: 'refresh', size: 15 })),
+      reasonHint ? h('span', { style: { marginLeft: 'auto', fontSize: 11, color: C.mute } }, reasonHint) : null
     ),
     loading && !apps.length
       ? h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', color: C.mute, fontSize: 12 } }, '正在读取应用…')
@@ -110,9 +111,14 @@ export function createAppsPage({ React, Glyph, post, C, devices = [], localDevic
             h('span', { style: { fontSize: 11, color: C.mute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
               app.kind === 'dsh' ? '本机 DSH' : String(app.url || '').replace(/^https?:\/\//, ''))
           )
-        )) : h('div', { style: { gridColumn: '1 / -1', padding: 24, textAlign: 'center', color: C.mute, fontSize: 12 } },
-          online.length ? '没有可打开的应用。在目标电脑的 apps.json 里登记 name、port 与 path 后刷新；DSH 请用“原生工作区”。' : '没有在线设备')
-      ),
+        )) : h('div', { style: { gridColumn: '1 / -1', padding: '52px 24px', display: 'grid', justifyItems: 'center', gap: 10, color: C.mute, fontSize: 12 } },
+          h('span', { style: { width: 40, height: 40, display: 'grid', placeItems: 'center', borderRadius: 11, background: C.soft, color: C.sub } },
+            h(Glyph, { name: 'apps', size: 19 })),
+          h('span', null, online.length ? '没有可打开的应用' : '没有在线设备'),
+          online.length ? h('button', { type: 'button', onClick: () => void load(device), title: '刷新应用列表', 'aria-label': '刷新应用列表',
+            className: 'tether-hover', style: { width: 28, height: 28, display: 'grid', placeItems: 'center', border: 0, borderRadius: 7,
+              background: 'transparent', color: C.sub, cursor: 'pointer' } }, h(Glyph, { name: 'refresh', size: 15 })) : null
+        )),
     open ? h('div', {
       style: { position: 'absolute', inset: 0, zIndex: 8, display: 'flex', flexDirection: 'column',
         background: C.bg, borderRadius: 10, border: '1px solid ' + C.line, overflow: 'hidden' }
@@ -123,9 +129,11 @@ export function createAppsPage({ React, Glyph, post, C, devices = [], localDevic
           String(open.url || '').replace(/^https?:\/\//, '') + (open.path || '/')),
         h('span', { style: { marginLeft: 'auto', display: 'flex', gap: 6 } },
           h('button', { type: 'button', onClick: () => setFrameKey((value) => value + 1), title: '重新加载应用', 'aria-label': '重新加载应用',
-            style: { ...field, cursor: 'pointer', background: 'transparent' } }, '刷新'),
+            className: 'tether-hover', style: { width: 26, height: 26, display: 'grid', placeItems: 'center', border: 0, borderRadius: 6,
+              background: 'transparent', color: C.sub, cursor: 'pointer' } }, h(Glyph, { name: 'refresh', size: 14 })),
           h('button', { type: 'button', onClick: () => setOpen(null), title: '关闭应用', 'aria-label': '关闭应用',
-            style: { ...field, cursor: 'pointer', background: 'transparent' } }, '关闭')
+            className: 'tether-hover', style: { width: 26, height: 26, display: 'grid', placeItems: 'center', border: 0, borderRadius: 6,
+              background: 'transparent', color: C.sub, cursor: 'pointer', fontSize: 15, padding: 0 } }, '×')
         )
       ),
       h('iframe', {

@@ -65,3 +65,4 @@
 - 2026-11-04：目录扫描不能串行跑 `--version`：并行（最多 8 路、单次 1.5 s）+ 节点启动后台预热 + 30 s 缓存；本机缓存命中 0.45 s、强制扫描 1.6 s。DSH 的 `--version` 输出是错误提示（缺 DSH_HOME），版本字段置空，不要把报错当版本显示。
 - 2026-11-04：Herdr 必须能看见 Tether 安装的 Agent：Windows 的 winpty 不把改动后的 os.environ 带给 Herdr 服务/子 shell，靠 `_session_env` 注入 PATH 无效。改成 `~/.tether/herdr/herdr.cmd` 包装器（ASCII 路径、复制 `herdr.exe` 到本地、显式设置 `HERDR_HOME/XDG/APPDATA/PATH` 再启动），并把 `D:\Tethergents` 追加到用户 PATH（安装时也自动追加，含备份）。Herdr 新建 pane 从用户注册表读 PATH，实测 `herdr agent start gemini` 成功。不要依赖 Herdr 进程环境给 pane 传 PATH。
 - 2026-11-04：账号快照只允许内置组（codex/claude/gemini/opencode/qoder），文件路径写死、不接收用户路径；profile id 必须 `[a-z0-9]{8,32}`，写入 600，切换前不改动未在 profile 里的文件。`agents_test` 用 `--version` 并带 cwd/env，返回码与输出都回传。
+- 2026-11-04：账号 `current` 继续按 live 文件 SHA 指纹判断，不写 active 指针（真实换号后自然只有匹配的那份为当前）；`save` 发现实时指纹与已有档案完全一致时直接返回现有列表，避免同一账号重复生成多份“当前”档案。

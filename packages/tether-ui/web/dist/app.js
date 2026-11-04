@@ -176728,7 +176728,7 @@ function createAppsPage({ React: React2, Glyph, post, C: C2, devices = [], local
     color: "#fff",
     background: C2.blue
   };
-  const hint = reason === "mesh_unavailable" ? "\u76EE\u6807\u7535\u8111\u672A\u63A5\u5165\u865A\u62DF\u5185\u7F51\uFF0C\u6682\u65F6\u65E0\u6CD5\u8F6C\u53D1\u672C\u673A\u5E94\u7528" : reason === "no_apps" ? "\u76EE\u6807\u7535\u8111\u6CA1\u6709\u767B\u8BB0\u53EF\u6253\u5F00\u7684\u5E94\u7528" : reason === "bind_failed" ? "\u76EE\u6807\u7535\u8111\u65E0\u6CD5\u7ED1\u5B9A\u865A\u62DF\u5185\u7F51\u7AEF\u53E3" : "\u53EA\u8F6C\u53D1\u76EE\u6807\u7535\u8111\u4E0A\u767B\u8BB0\u7684\u56DE\u73AF HTTP \u670D\u52A1";
+  const reasonHint = reason === "mesh_unavailable" ? "\u865A\u62DF\u5185\u7F51\u672A\u63A5\u901A" : reason === "no_apps" ? "" : reason === "bind_failed" ? "\u7AEF\u53E3\u7ED1\u5B9A\u5931\u8D25" : "";
   return h3(
     "div",
     { style: { flex: "1 1 auto", minHeight: 0, position: "relative", display: "flex", flexDirection: "column", gap: 10, padding: 12, background: C2.bg } },
@@ -176804,15 +176804,31 @@ function createAppsPage({ React: React2, Glyph, post, C: C2, devices = [], local
           }, item.name || item.device_id)) : h3("div", { style: { padding: "8px 10px", fontSize: 12, color: C2.mute } }, "\u6CA1\u6709\u5728\u7EBF\u8BBE\u5907")
         ) : null
       ),
-      h3("button", {
-        type: "button",
-        onClick: () => void load(device),
-        disabled: loading || !device,
-        title: "\u5237\u65B0\u5E94\u7528\u5217\u8868",
-        "aria-label": "\u5237\u65B0\u5E94\u7528\u5217\u8868",
-        style: { ...button, padding: "0 10px", opacity: loading || !device ? 0.5 : 1 }
-      }, "\u5237\u65B0"),
-      h3("span", { style: { marginLeft: "auto", fontSize: 11, color: C2.mute } }, hint)
+      h3(
+        "button",
+        {
+          type: "button",
+          onClick: () => void load(device),
+          disabled: loading || !device,
+          title: "\u5237\u65B0\u5E94\u7528\u5217\u8868",
+          "aria-label": "\u5237\u65B0\u5E94\u7528\u5217\u8868",
+          className: "tether-hover",
+          style: {
+            width: 28,
+            height: 28,
+            display: "grid",
+            placeItems: "center",
+            border: 0,
+            borderRadius: 7,
+            background: "transparent",
+            color: C2.sub,
+            cursor: loading || !device ? "default" : "pointer",
+            opacity: loading || !device ? 0.5 : 1
+          }
+        },
+        loading ? h3("span", { className: "tether-spin" }, h3(Glyph, { name: "refresh", size: 15 })) : h3(Glyph, { name: "refresh", size: 15 })
+      ),
+      reasonHint ? h3("span", { style: { marginLeft: "auto", fontSize: 11, color: C2.mute } }, reasonHint) : null
     ),
     loading && !apps.length ? h3("div", { style: { flex: "1 1 auto", display: "grid", placeItems: "center", color: C2.mute, fontSize: 12 } }, "\u6B63\u5728\u8BFB\u53D6\u5E94\u7528\u2026") : h3(
       "div",
@@ -176872,8 +176888,31 @@ function createAppsPage({ React: React2, Glyph, post, C: C2, devices = [], local
         )
       )) : h3(
         "div",
-        { style: { gridColumn: "1 / -1", padding: 24, textAlign: "center", color: C2.mute, fontSize: 12 } },
-        online.length ? "\u6CA1\u6709\u53EF\u6253\u5F00\u7684\u5E94\u7528\u3002\u5728\u76EE\u6807\u7535\u8111\u7684 apps.json \u91CC\u767B\u8BB0 name\u3001port \u4E0E path \u540E\u5237\u65B0\uFF1BDSH \u8BF7\u7528\u201C\u539F\u751F\u5DE5\u4F5C\u533A\u201D\u3002" : "\u6CA1\u6709\u5728\u7EBF\u8BBE\u5907"
+        { style: { gridColumn: "1 / -1", padding: "52px 24px", display: "grid", justifyItems: "center", gap: 10, color: C2.mute, fontSize: 12 } },
+        h3(
+          "span",
+          { style: { width: 40, height: 40, display: "grid", placeItems: "center", borderRadius: 11, background: C2.soft, color: C2.sub } },
+          h3(Glyph, { name: "apps", size: 19 })
+        ),
+        h3("span", null, online.length ? "\u6CA1\u6709\u53EF\u6253\u5F00\u7684\u5E94\u7528" : "\u6CA1\u6709\u5728\u7EBF\u8BBE\u5907"),
+        online.length ? h3("button", {
+          type: "button",
+          onClick: () => void load(device),
+          title: "\u5237\u65B0\u5E94\u7528\u5217\u8868",
+          "aria-label": "\u5237\u65B0\u5E94\u7528\u5217\u8868",
+          className: "tether-hover",
+          style: {
+            width: 28,
+            height: 28,
+            display: "grid",
+            placeItems: "center",
+            border: 0,
+            borderRadius: 7,
+            background: "transparent",
+            color: C2.sub,
+            cursor: "pointer"
+          }
+        }, h3(Glyph, { name: "refresh", size: 15 })) : null
       )
     ),
     open ? h3(
@@ -176908,15 +176947,39 @@ function createAppsPage({ React: React2, Glyph, post, C: C2, devices = [], local
             onClick: () => setFrameKey((value) => value + 1),
             title: "\u91CD\u65B0\u52A0\u8F7D\u5E94\u7528",
             "aria-label": "\u91CD\u65B0\u52A0\u8F7D\u5E94\u7528",
-            style: { ...field, cursor: "pointer", background: "transparent" }
-          }, "\u5237\u65B0"),
+            className: "tether-hover",
+            style: {
+              width: 26,
+              height: 26,
+              display: "grid",
+              placeItems: "center",
+              border: 0,
+              borderRadius: 6,
+              background: "transparent",
+              color: C2.sub,
+              cursor: "pointer"
+            }
+          }, h3(Glyph, { name: "refresh", size: 14 })),
           h3("button", {
             type: "button",
             onClick: () => setOpen(null),
             title: "\u5173\u95ED\u5E94\u7528",
             "aria-label": "\u5173\u95ED\u5E94\u7528",
-            style: { ...field, cursor: "pointer", background: "transparent" }
-          }, "\u5173\u95ED")
+            className: "tether-hover",
+            style: {
+              width: 26,
+              height: 26,
+              display: "grid",
+              placeItems: "center",
+              border: 0,
+              borderRadius: 6,
+              background: "transparent",
+              color: C2.sub,
+              cursor: "pointer",
+              fontSize: 15,
+              padding: 0
+            }
+          }, "\xD7")
         )
       ),
       h3("iframe", {
@@ -177824,11 +177887,11 @@ function AgentHome({
   );
   const running = panes.length ? h3(
     "div",
-    { style: { display: "grid", gap: 4, minHeight: 0 } },
+    { style: { ...card, gridColumn: "1 / -1", padding: 12, display: "grid", gap: 8, minHeight: 0 } },
     h3("div", { style: { fontSize: 10.5, color: C2.mute } }, "\u8FD0\u884C\u4E2D"),
     h3(
       "div",
-      { className: "tether-scroll", style: { display: "grid", gap: 3, overflow: "auto", minHeight: 0 } },
+      { className: "tether-scroll", style: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 6, overflow: "auto", maxHeight: 160, minHeight: 0 } },
       ...panes.map((pane) => h3(
         "div",
         { key: pane.key, style: {
@@ -177857,7 +177920,7 @@ function AgentHome({
   ) : null;
   const hero = selected ? h3(
     "div",
-    { style: { ...card, flex: "1 1 auto", padding: 16, display: "flex", flexDirection: "column", gap: 12, overflow: "hidden" } },
+    { style: { ...card, padding: 16, display: "flex", flexDirection: "column", gap: 12 } },
     h3(
       "div",
       { style: { display: "flex", alignItems: "center", gap: 12, minWidth: 0 } },
@@ -177899,10 +177962,10 @@ function AgentHome({
       { style: { display: "grid", gap: 8, gridTemplateColumns: "repeat(2, minmax(0, 1fr))" } },
       info("\u7248\u672C", selected.version || "\u2014"),
       info("\u5DE5\u4F5C\u76EE\u5F55", selected.cwd || "\u9ED8\u8BA4\u5DE5\u4F5C\u533A", true),
+      info("\u6765\u6E90", selected.source === "detected" ? "\u5DF2\u68C0\u6D4B" : selected.source === "builtin" ? "\u5185\u7F6E" : selected.source || "\u2014"),
+      info("\u8D26\u53F7", selected.accounts ? "\u591A\u8D26\u53F7" : "\u2014"),
       h3("div", { style: { gridColumn: "1 / -1" } }, info("\u547D\u4EE4", selected.command || "\u2014", true))
-    ),
-    running,
-    h3("div", { style: { flex: "1 1 auto", minHeight: 0 } })
+    )
   ) : h3(
     "div",
     { style: { ...card, display: "grid", placeItems: "center", color: C2.mute, fontSize: 12 } },
@@ -177912,8 +177975,63 @@ function AgentHome({
     "div",
     { style: { ...card, padding: 14, display: "flex", flexDirection: "column", gap: 10, minHeight: 0 } },
     h3("div", { style: { fontSize: 12, fontWeight: 600, color: C2.sub } }, "\u8D26\u53F7"),
-    h3(AgentAccountsPanel, { React: React2, Glyph, post, C: C2, device, agent: selected }),
-    h3("div", { style: { flex: "1 1 auto", minHeight: 0 } })
+    h3(AgentAccountsPanel, { React: React2, Glyph, post, C: C2, device, agent: selected })
+  ) : null;
+  const quickAction = (agent, action) => h3("button", {
+    key: action.id,
+    type: "button",
+    title: action.label,
+    "aria-label": action.label,
+    disabled: action.id === "install" && installing === agent.id,
+    onClick: () => {
+      if (action.id === "install") {
+        if (onInstall) onInstall(agent);
+      } else if (onOpen) onOpen(agent, action.id, action.harness);
+    },
+    className: "tether-hover",
+    style: {
+      width: 26,
+      height: 26,
+      flex: "0 0 auto",
+      display: "grid",
+      placeItems: "center",
+      border: 0,
+      borderRadius: 6,
+      background: C2.bg,
+      color: action.primary ? C2.blue : C2.sub,
+      cursor: "pointer",
+      padding: 0
+    }
+  }, h3(Glyph, { name: action.icon, size: 14 }));
+  const quickRow = (agent) => h3(
+    "div",
+    { key: agent.id, style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 8,
+      padding: "6px 8px",
+      borderRadius: 9,
+      background: C2.soft,
+      minWidth: 0
+    } },
+    icon(agent, 18),
+    h3(
+      "span",
+      { style: { minWidth: 0, flex: "1 1 auto", display: "grid", gap: 1 } },
+      h3("span", { style: { fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, agent.name),
+      agent.version ? h3("span", { style: { fontSize: 9.5, color: C2.mute, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, agent.version) : null
+    ),
+    ...actions(agent).slice(0, 3).map((action) => quickAction(agent, action))
+  );
+  const quick = installed.length ? h3(
+    "div",
+    { style: { ...card, gridColumn: "1 / -1", padding: 12, display: "grid", gap: 8 } },
+    h3("div", { style: { fontSize: 10.5, color: C2.mute } }, "\u5FEB\u901F\u542F\u52A8"),
+    h3(
+      "div",
+      { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 6 } },
+      ...installed.map(quickRow)
+    )
   ) : null;
   return h3(
     "div",
@@ -177932,7 +178050,7 @@ function AgentHome({
       } },
       h3(
         "div",
-        { className: "tether-scroll", style: { flex: "1 1 auto", overflow: "auto", padding: 7, display: "flex", flexDirection: "column", gap: 2 } },
+        { className: "tether-scroll", style: { flex: "1 1 auto", overflow: "auto", padding: "7px 7px 14px", display: "flex", flexDirection: "column", gap: 2 } },
         agents.map(listRow)
       )
     ),
@@ -177943,10 +178061,14 @@ function AgentHome({
         minWidth: 0,
         display: "grid",
         gap: 12,
+        alignContent: "start",
+        alignItems: "start",
         gridTemplateColumns: accounts ? "minmax(0, 1.25fr) minmax(270px, .75fr)" : "1fr"
       } },
       hero,
-      accounts
+      accounts,
+      running,
+      quick
     ),
     error ? h3("div", { style: { position: "absolute", left: 260, bottom: 20, color: C2.red, fontSize: 11.5 } }, error) : null
   );
@@ -178297,7 +178419,14 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
             setModel(event.models && (event.models.currentModelId || event.models.currentModel) || available[0] && available[0].modelId || "");
             const label = event.agent && (event.agent.title || event.agent.name);
             updateTab(session, label ? { status: "ready", name: label } : { status: "ready" });
-            addItem({ kind: "system", text: "\u5DF2\u8FDE\u63A5" + (label ? " \xB7 " + label : "") });
+            const readyText = "\u5DF2\u8FDE\u63A5" + (label ? " \xB7 " + label : "");
+            setItems((current) => {
+              const index = current.findIndex((item2) => item2.kind === "system" && String(item2.text || "").startsWith("\u6B63\u5728\u542F\u52A8"));
+              if (index < 0) return [...current, { kind: "system", text: readyText }];
+              const next = current.slice();
+              next[index] = { ...next[index], text: readyText };
+              return next;
+            });
           } else if (event.type === "result") {
             finishStreaming();
             addItem({ kind: "system", text: "\u672C\u8F6E\u5B8C\u6210 \xB7 " + (event.result && event.result.stopReason || "done") });
@@ -184141,11 +184270,12 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           }
         }
         setDeviceId((current) => {
-          if (current && data.devices.some((d) => d.device_id === current)) return current;
+          const devices = Array.isArray(data && data.devices) ? data.devices : [];
+          if (current && devices.some((d) => d.device_id === current)) return current;
           const local = appLocalDeviceRef.current;
-          if (local && data.devices.some((d) => d.device_id === local)) return local;
-          const online = data.devices.find((d) => d.online);
-          return online && online.device_id || ((data.devices[0] || {}).device_id || "");
+          if (local && devices.some((d) => d.device_id === local)) return local;
+          const online = devices.find((d) => d.online);
+          return online && online.device_id || ((devices[0] || {}).device_id || "");
         });
       } catch (e) {
         fail2(e);

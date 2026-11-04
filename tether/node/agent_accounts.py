@@ -115,6 +115,14 @@ class AgentAccounts:
             present = self._present(agent)
             if not present:
                 raise ValueError("no account files found on this node")
+            live = self._fingerprint(agent)
+            data = self._load(agent)
+            data["profiles"] = [item for item in data["profiles"] if isinstance(item, dict)]
+            for item in data["profiles"]:
+                stored = {entry.get("rel"): entry.get("sha256") for entry in item.get("files") or []
+                          if isinstance(entry, dict)}
+                if stored and stored == live:
+                    return self.list(agent)
             profile_id = hashlib.sha256((label + str(time.time())).encode()).hexdigest()[:12]
             folder = self.root / agent / profile_id / "files"
             entries = []
@@ -127,8 +135,6 @@ class AgentAccounts:
                 except OSError:
                     pass
                 entries.append({"rel": rel, "sha256": _sha(path), "size": path.stat().st_size})
-            data = self._load(agent)
-            data["profiles"] = [item for item in data["profiles"] if isinstance(item, dict)]
             data["profiles"].append({"id": profile_id, "name": label,
                                      "created": time.time(), "files": entries})
             self._save(agent, data)

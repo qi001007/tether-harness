@@ -341,7 +341,14 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
             setModel((event.models && (event.models.currentModelId || event.models.currentModel)) || (available[0] && available[0].modelId) || '')
             const label = event.agent && (event.agent.title || event.agent.name)
             updateTab(session, label ? { status: 'ready', name: label } : { status: 'ready' })
-            addItem({ kind: 'system', text: '已连接' + (label ? ' · ' + label : '') })
+            const readyText = '已连接' + (label ? ' · ' + label : '')
+            setItems((current) => {
+              const index = current.findIndex((item) => item.kind === 'system' && String(item.text || '').startsWith('正在启动'))
+              if (index < 0) return [...current, { kind: 'system', text: readyText }]
+              const next = current.slice()
+              next[index] = { ...next[index], text: readyText }
+              return next
+            })
           } else if (event.type === 'result') {
             finishStreaming()
             addItem({ kind: 'system', text: '本轮完成 · ' + ((event.result && event.result.stopReason) || 'done') })

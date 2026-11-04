@@ -4209,11 +4209,12 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             }
           }
           setDeviceId((current) => {
-            if (current && data.devices.some((d) => d.device_id === current)) return current
+            const devices = Array.isArray(data && data.devices) ? data.devices : []
+            if (current && devices.some((d) => d.device_id === current)) return current
             const local = appLocalDeviceRef.current
-            if (local && data.devices.some((d) => d.device_id === local)) return local
-            const online = data.devices.find((d) => d.online)
-            return (online && online.device_id) || ((data.devices[0] || {}).device_id || '')
+            if (local && devices.some((d) => d.device_id === local)) return local
+            const online = devices.find((d) => d.online)
+            return (online && online.device_id) || ((devices[0] || {}).device_id || '')
           })
         } catch (e) { fail(e) }
       }, [])
