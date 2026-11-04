@@ -6,7 +6,7 @@
     <a href="https://github.com/qi001007/tether-harness/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/qi001007/tether-harness?sort=semver" /></a>
     <a href="https://github.com/qi001007/tether-harness/actions/workflows/release.yml"><img alt="Release workflow" src="https://github.com/qi001007/tether-harness/actions/workflows/release.yml/badge.svg" /></a>
     <a href="https://github.com/qi001007/tether-harness/blob/main/LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg" /></a>
-    <img alt="Platform: Windows 11+" src="https://img.shields.io/badge/platform-Windows%2011%2B-0078D4" />
+    <img alt="Platform: Windows 11+" src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-2563eb" />
     <img alt="Status: alpha" src="https://img.shields.io/badge/status-alpha-orange" />
   </p>
   <p>
@@ -25,7 +25,7 @@ Tether connects the **DeepSeek Harness (DSH)** desktop app on one machine to the
 
 > **Project status: alpha.** Tether is a working research prototype, not a production multi-tenant service. Read [Status](#status) and [Security](#security) before exposing a Hub to other people.
 
-> **Current client (2026-11-03): v0.2.80.** First launch opens a full-screen account login with an inertial network animation and invite-code registration that slides in without resizing the card; the DSH plugin mode uses the default Hub and keeps the top-right close as its single exit without forcing a sign-in. Device switching keeps a stable iframe mount order, so returning to a device reuses its live workspace. The network page stores explicit device links in a fluid radial layout, resumes node motion from the state where it was left, and shows node details as a floating card that never resizes the canvas. Settings → 更新 shows a grouped device list with component version chips and a fixed action slot; a new release only adds the blue download button, so the row never changes size. The target picker keeps its tree and right pane in sync, labels both root groups with the target device, and the transfer page does the same per pane. Account settings keep display name and password collapsed; editing opens a modal instead of stretching the 760×560 panel. Display name and avatar are stored on the Hub account and reach every signed-in client on its next state poll; avatar updates still start with a circular crop. The APP window is frameless with a DSH-like integrated top bar and custom window controls; closing hides it to the Windows tray instead of quitting. Desktop, taskbar, hover thumbnail and tray share one navy V1 S-link icon. The APP starts without a console window, including its startup update check and the updater's `git status` probe. The local DSH is detected with its version and can be started or installed from the surface overlay. The DSH surface embeds the real DSH web UI, so installed DSH plugins render as they are. A cold first download still takes roughly 8–14 s. Download the current build below.
+> **Current client (2026-11-04): v0.3.6.** croc 11.6.3 is the transfer engine (100 MB random data: 26 s upload / 106 s download on the current Seoul path, SHA matched). Linux DSH Web is embedded full-width in the APP, with a persistent Tether sidebar, one-click plugin repair/restart, and restart recovery. The Linux file explorer labels extensionless files by real format (ELF/text/binary), the terminal shows `root · 管理员`, and Agents is a structured chat UI (messages, tool/plan cards, model menu, composer) instead of a raw terminal. The install matrix for Windows/Linux/macOS is in [`docs/INSTALL_MATRIX.md`](docs/INSTALL_MATRIX.md); the GitHub v0.3.6 release is still a draft.
 
 ## Why Tether
 
@@ -97,7 +97,7 @@ Both would include the runtime and the surface descriptor, so both can connect, 
 
 ### Prerequisites
 
-- Windows 11 or later.
+- Windows 11, Linux x64, or macOS (experimental; Node-only on macOS for now — see [`docs/INSTALL_MATRIX.md`](docs/INSTALL_MATRIX.md)).
 - The DeepSeek Harness desktop app installed and signed in on the device that will run the DSH Host.
 - Python 3.11+ and Node.js 24 LTS with `npm` on `PATH` for the client packages.
 - A reachable, compatible Tether Hub. The public repository does not include the Hub; use an operator-provided Hub or a self-hosted deployment you are authorized to run.
@@ -134,30 +134,32 @@ When a new version is available, a blue **↓** button appears in the top bar. C
 
 ## Download
 
-### Latest stable: v0.2.80
+### Latest stable: v0.3.6 (server mirror)
 
-| Package | Download | Size | SHA-256 |
-|---|---|---:|---|
-| APP | [tether-app-0.2.80.zip](https://github.com/qi001007/tether-harness/releases/download/v0.2.80/tether-app-0.2.80.zip) | 1,784,318 B | `ac82202f8b6674f619b329a06c8a6cf6e82796035c5c9a899fa99af0660abd93` |
-| DSH plugin | [tether-plugin-0.2.80.zip](https://github.com/qi001007/tether-harness/releases/download/v0.2.80/tether-plugin-0.2.80.zip) | 1,362,826 B | `4d8b8c6491d77c0dbe413e862d545bb7eaef99ced22b2c7bb6642157cc651e75` |
-| Node | [tether-node-0.2.80.zip](https://github.com/qi001007/tether-harness/releases/download/v0.2.80/tether-node-0.2.80.zip) | 85,585 B | `84699ca4194650b536254c190648c0f7b1dbf55b7d33d964bfd24c5ce257e3ed` |
-| Update manifest | [tether-update.json](https://github.com/qi001007/tether-harness/releases/download/v0.2.80/tether-update.json) | — | signed in the release |
+| Package | OS | Download | Size | SHA-256 |
+|---|---|---|---:|---|
+| APP | Windows x64 | [tether-app-0.3.6.zip](https://8-220-198-26.sslip.io/install/tether-app-0.3.6.zip) | 38,755,354 B | `ac3240ed2b860cc2c88420c32676c779fb09bbc6edc9d22a2ca6e950d4433df5` |
+| DSH plugin | Windows / Linux | [tether-plugin-0.3.6.zip](https://8-220-198-26.sslip.io/install/tether-plugin-0.3.6.zip) | 1,392,056 B | `f64bcf28f2778284fb40d865dadc4f4d22ab67ed679298c29d970312954a68e7` |
+| Node | Windows / Linux / macOS | [tether-node-0.3.6.zip](https://8-220-198-26.sslip.io/install/tether-node-0.3.6.zip) | 38,252,310 B | `6491b944144c8a6e3650dcddbb86ebe9df28ae9fcb77d9c1ddef038a56758a14` |
+| Update manifest | all | [version.json](https://8-220-198-26.sslip.io/install/version.json) | — | — |
 
-Sections below the download table describe the historical v0.2.1–v0.2.6 evolution unless they explicitly say otherwise; the login/connection/settings behavior above is the current client.
-
-The manifest has a stable `latest` alias; component ZIP names include the version, so use the versioned links above for reproducible component downloads:
+The GitHub `v0.3.6` release is still a draft; these are the same binaries served by the install mirror. Platform-specific install commands, gaps (macOS APP/plugin) and the test matrix are in [`docs/INSTALL_MATRIX.md`](docs/INSTALL_MATRIX.md).
 
 ```text
-https://github.com/qi001007/tether-harness/releases/latest/download/tether-update.json
+Windows APP:   download the ZIP, extract, run install-app.cmd
+Windows Node:  extract, run laptopootstrap-node.ps1 -ControllerUrl wss://<hub>/ws/node -Token <node-token>
+Linux:         curl -fsSL https://8-220-198-26.sslip.io/install.sh | sudo bash
+macOS (exp.):   extract the Node ZIP, run bash laptop/install-node.sh --no-systemd --prefix "$HOME/.local/share/tether-node" ...
+DSH plugin:    Windows desktop/install-plugin.ps1; Linux DSH Web is installed by the Node's one-click DSH flow
 ```
 
-Verify a Windows download with:
+Verify any download with:
 
-```powershell
-Get-FileHash .\tether-app-0.2.53.zip -Algorithm SHA256
+```bash
+sha256sum tether-app-0.3.6.zip tether-node-0.3.6.zip tether-plugin-0.3.6.zip
 ```
 
-These are **ZIP source packages**, not self-contained EXE installers. They do not bundle Python, Node.js, DSH, or a Hub. Packages are **unsigned**; SHA-256 checks integrity against the manifest, not publisher identity.
+These are **ZIP source packages**, not self-contained EXE installers. They do not bundle Python, Node.js, DSH, or a Hub. Packages are **unsigned**; SHA-256 checks integrity against the mirror, not publisher identity.
 
 ### Package contents
 

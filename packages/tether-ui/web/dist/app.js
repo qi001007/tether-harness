@@ -178475,6 +178475,23 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     }
     return raw || "Unknown";
   }
+  function deviceOsKind(device) {
+    const caps = device && device.capabilities || {};
+    const raw = String(caps.os_label || device && device.platform || "").toLowerCase();
+    if (/windows|win32|win-/.test(raw)) return "windows";
+    if (/mac|darwin|osx|os x/.test(raw)) return "mac";
+    if (/linux|ubuntu|debian|centos|fedora|alpine|posix/.test(raw)) return "linux";
+    return "other";
+  }
+  const DEVICE_OS_THEME = {
+    windows: { color: "#2563eb", soft: "rgba(37,99,235,.10)", label: "Windows" },
+    linux: { color: "#d97706", soft: "rgba(217,119,6,.12)", label: "Linux" },
+    mac: { color: "#7c3aed", soft: "rgba(124,58,237,.12)", label: "macOS" },
+    other: { color: "#98a2b3", soft: "rgba(152,162,179,.12)", label: "\u5176\u4ED6" }
+  };
+  function deviceOsTheme(device) {
+    return DEVICE_OS_THEME[deviceOsKind(device)] || DEVICE_OS_THEME.other;
+  }
   function DeviceSwitcher({ devices, value, onChange, onOpenNetwork }) {
     const [open, setOpen] = React2.useState(false);
     const root = React2.useRef(null);
@@ -178513,7 +178530,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         "span",
         { style: { minWidth: 0, display: "flex", flexDirection: "column", gap: 1, overflow: "hidden" } },
         h3("span", { style: { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, device.name || device.device_id),
-        h3("span", { style: { fontSize: 10.5, color: C2.mute, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, deviceOs(device))
+        h3("span", { style: { fontSize: 10.5, color: deviceOsTheme(device).color, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, deviceOs(device))
       ),
       h3("span", { style: { marginLeft: "auto", fontSize: 10.5, color: device.online ? C2.green : C2.mute, whiteSpace: "nowrap" } }, device.online ? "\u5728\u7EBF" : "\u79BB\u7EBF")
     );
@@ -179868,7 +179885,17 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     return h3(
       "div",
       { ref: stage, style: { position: "absolute", inset: 0, overflow: "hidden", touchAction: "none" } },
-      h3("div", { style: { position: "absolute", left: 14, top: 12, fontSize: 12, color: C2.mute } }, "\u7F51\u7EDC"),
+      h3(
+        "div",
+        { style: { position: "absolute", left: 14, top: 12, display: "flex", alignItems: "center", gap: 14, fontSize: 12, color: C2.mute, pointerEvents: "none" } },
+        h3("span", null, "\u7F51\u7EDC"),
+        ["windows", "linux", "mac"].map((kind) => h3(
+          "span",
+          { key: kind, style: { display: "flex", alignItems: "center", gap: 5, fontSize: 10.5, color: C2.mute } },
+          h3("span", { style: { width: 7, height: 7, borderRadius: 4, background: DEVICE_OS_THEME[kind].color } }),
+          DEVICE_OS_THEME[kind].label
+        ))
+      ),
       h3("button", {
         type: "button",
         onClick: () => {
@@ -180014,10 +180041,11 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
               gap: 6,
               padding: isCenter ? "8px 12px" : "6px 9px",
               borderRadius: 999,
-              background: isCenter ? C2.ink : selected ? C2.nodeChildActive : C2.nodeChild,
+              background: isCenter ? C2.ink : deviceOsTheme(item).soft,
+              border: isCenter ? 0 : "1px solid " + deviceOsTheme(item).color,
               color: isCenter ? C2.onPrimary : C2.ink,
               fontSize: isCenter ? 12 : 11,
-              boxShadow: isCenter ? C2.shadow : selected ? "0 1px 3px rgba(16,24,40,0.12)" : "0 1px 2px rgba(16,24,40,0.06)",
+              boxShadow: isCenter ? "0 0 0 2px " + deviceOsTheme(item).color + ", " + C2.shadow : selected ? "0 1px 3px rgba(16,24,40,0.12)" : "0 1px 2px rgba(16,24,40,0.06)",
               transition: "background-color 160ms ease",
               cursor: connectMode ? "crosshair" : "grab",
               whiteSpace: "nowrap",
@@ -180032,12 +180060,12 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
             "data-center": isCenter ? "true" : void 0,
             "data-selected": selected ? "true" : void 0,
             style: {
-              background: isCenter ? C2.ink : selected ? C2.nodeChildActive : C2.nodeChild,
+              background: isCenter ? C2.ink : deviceOsTheme(item).color,
               borderRadius: "50%",
               cornerShape: "round",
               pointerEvents: "none"
             }
-          }) : h3("span", { style: { width: 7, height: 7, borderRadius: 4, background: item.online ? C2.green : C2.mute, display: "inline-block", flex: "0 0 auto" } }),
+          }) : h3("span", { style: { width: 7, height: 7, borderRadius: 4, background: deviceOsTheme(item).color, display: "inline-block", flex: "0 0 auto" } }),
           compact ? null : item.name || item.device_id
         );
       }),
@@ -184836,7 +184864,17 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           onDoubleClick: () => openDevice(item),
           onContextMenu: (event) => openDeviceMenu(event, item),
           title: item.capabilities && item.capabilities.surface_protocol === 1 ? "\u53CC\u51FB\u6253\u5F00\u539F\u751F\u5DE5\u4F5C\u533A" : "\u63D2\u4EF6\u7248\u672C\u8FC7\u65E7\uFF0C\u53CC\u51FB\u67E5\u770B\u8BE6\u60C5",
-          style: { background: item.device_id === deviceId ? C2.soft : C2.panel, borderRadius: 10, padding: "10px 12px", cursor: "pointer", display: "flex", flexDirection: "column", gap: 5, minWidth: 0 }
+          style: {
+            background: item.device_id === deviceId ? C2.soft : deviceOsTheme(item).soft,
+            borderRadius: 10,
+            borderLeft: "3px solid " + deviceOsTheme(item).color,
+            padding: "10px 12px",
+            cursor: "pointer",
+            display: "flex",
+            flexDirection: "column",
+            gap: 5,
+            minWidth: 0
+          }
         },
         h3(
           "div",
@@ -184846,7 +184884,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           item.device_id === localId ? pill("\u672C\u673A", C2.mute) : null,
           h3("span", { style: { marginLeft: "auto", fontSize: 10.5, color: item.online ? C2.green : C2.mute } }, item.online ? "\u5728\u7EBF" : "\u79BB\u7EBF")
         ),
-        h3("div", { style: { fontSize: 11, color: C2.mute, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, deviceOs(item)),
+        h3("div", { style: { fontSize: 11, color: deviceOsTheme(item).color, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, deviceOs(item)),
         h3(
           "div",
           { style: { display: "flex", gap: 4, flexWrap: "wrap" } },
