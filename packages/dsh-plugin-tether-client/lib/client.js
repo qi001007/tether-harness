@@ -10172,6 +10172,12 @@ const AGENT_ICONS = {
   'command-code': 'data:image/svg+xml;base64,PHN2ZyBoZWlnaHQ9IjY0IiB2aWV3Qm94PSIwIDAgMTQ0IDE0NCIgd2lkdGg9IjY0IiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjx0aXRsZT5Db21tYW5kIENvZGU8L3RpdGxlPjxwYXRoIGZpbGw9IiMwMDAwMDAiIGQ9Ik0xMC4zMTkzIDEwLjMxOTNDMCAyMC42Mzg3IDAgMzcuMjQ3NCAwIDcwLjQ2NDhWNzMuMTM5OEMwIDEwNi4zNTcgMCAxMjIuOTY2IDEwLjMxOTMgMTMzLjI4NUMyMC42Mzg3IDE0My42MDUgMzcuMjQ3NCAxNDMuNjA1IDcwLjQ2NDggMTQzLjYwNUg3My4xMzk4QzEwNi4zNTcgMTQzLjYwNSAxMjIuOTY2IDE0My42MDUgMTMzLjI4NSAxMzMuMjg1QzE0My42MDUgMTIyLjk2NiAxNDMuNjA1IDEwNi4zNTcgMTQzLjYwNSA3My4xMzk5VjcwLjQ2NDhDMTQzLjYwNSAzNy4yNDc0IDE0My42MDUgMjAuNjM4NyAxMzMuMjg1IDEwLjMxOTNDMTIyLjk2NiAwIDEwNi4zNTcgMCA3My4xMzk5IDBINzAuNDY0OEMzNy4yNDc0IDAgMjAuNjM4NyAwIDEwLjMxOTMgMTAuMzE5M1oiPjwvcGF0aD48cGF0aCBmaWxsPSIjRkZGRkZGIiBkPSJNOTguODA0OSAyNy42MTYzQzg5LjMyOTUgMjcuNjE2MyA4MS42MjE0IDM1LjMyNDMgODEuNjIxNCA0NC43OTk3VjUyLjE2NDFINjEuOTgzMlY0NC43OTk3QzYxLjk4MzIgMzUuMzI0MyA1NC4yNzUyIDI3LjYxNjMgNDQuNzk5NyAyNy42MTYzQzM1LjMyNDMgMjcuNjE2MyAyNy42MTYzIDM1LjMyNDMgMjcuNjE2MyA0NC43OTk3QzI3LjYxNjMgNTQuMjc1MiAzNS4zMjQzIDYxLjk4MzIgNDQuNzk5NyA2MS45ODMySDUyLjE2NDFWODEuNjIxNEg0NC43OTk3QzM1LjMyNDMgODEuNjIxNCAyNy42MTYzIDg5LjMyOTUgMjcuNjE2MyA5OC44MDQ5QzI3LjYxNjMgMTA4LjI4IDM1LjMyNDMgMTE1Ljk4OCA0NC43OTk3IDExNS45ODhDNTQuMjc1MiAxMTUuOTg4IDYxLjk4MzIgMTA4LjI4IDYxLjk4MzIgOTguODA0OVY5MS40NDA2SDgxLjYyMTRWOTguODA0OUM4MS42MjE0IDEwOC4yOCA4OS4zMjk1IDExNS45ODggOTguODA0OSAxMTUuOTg4QzEwOC4yOCAxMTUuOTg4IDExNS45ODggMTA4LjI4IDExNS45ODggOTguODA0OUMxMTUuOTg4IDg5LjMyOTUgMTA4LjI4IDgxLjYyMTQgOTguODA0OSA4MS42MjE0SDkxLjQ0MDZWNjEuOTgzMkg5OC44MDQ5QzEwOC4yOCA2MS45ODMyIDExNS45ODggNTQuMjc1MiAxMTUuOTg4IDQ0Ljc5OTdDMTE1Ljk4OCAzNS4zMjQzIDEwOC4yOCAyNy42MTYzIDk4LjgwNDkgMjcuNjE2M1pNOTEuNDQwNiA1Mi4xNjQxVjQ0Ljc5OTdDOTEuNDQwNiA0MC43MjQ4IDk0LjczIDM3LjQzNTQgOTguODA0OSAzNy40MzU0QzEwMi44OCAzNy40MzU0IDEwNi4xNjkgNDAuNzI0OCAxMDYuMTY5IDQ0Ljc5OTdDMTA2LjE2OSA0OC44NzQ3IDEwMi44OCA1Mi4xNjQxIDk4LjgwNDkgNTIuMTY0MUg5MS40NDA2Wk00NC43OTk3IDUyLjE2NDFDNDAuNzI0OCA1Mi4xNjQxIDM3LjQzNTQgNDguODc0NyAzNy40MzU0IDQ0Ljc5OTdDMzcuNDM1NCA0MC43MjQ4IDQwLjcyNDggMzcuNDM1NCA0NC43OTk3IDM3LjQzNTRDNDguODc0NyAzNy40MzU0IDUyLjE2NDEgNDAuNzI0OCA1Mi4xNjQxIDQ0Ljc5OTdWNTIuMTY0MUg0NC43OTk3Wk02MS45ODMyIDgxLjYyMTRWNjEuOTgzMkg4MS42MjE0VjgxLjYyMTRINjEuOTgzMlpNOTguODA0OSAxMDYuMTY5Qzk0LjczIDEwNi4xNjkgOTEuNDQwNiAxMDIuODggOTEuNDQwNiA5OC44MDQ5VjkxLjQ0MDZIOTguODA0OUMxMDIuODggOTEuNDQwNiAxMDYuMTY5IDk0LjczIDEwNi4xNjkgOTguODA0OUMxMDYuMTY5IDEwMi44OCAxMDIuODggMTA2LjE2OSA5OC44MDQ5IDEwNi4xNjlaTTQ0Ljc5OTcgMTA2LjE2OUM0MC43MjQ4IDEwNi4xNjkgMzcuNDM1NCAxMDIuODggMzcuNDM1NCA5OC44MDQ5QzM3LjQzNTQgOTQuNzMgNDAuNzI0OCA5MS40NDA2IDQ0Ljc5OTcgOTEuNDQwNkg1Mi4xNjQxVjk4LjgwNDlDNTIuMTY0MSAxMDIuODggNDguODc0NyAxMDYuMTY5IDQ0Ljc5OTcgMTA2LjE2OVoiPjwvcGF0aD48L3N2Zz4NCg==',
   minimax: 'data:image/svg+xml;base64,PHN2ZyBoZWlnaHQ9IjY0IiB2aWV3Qm94PSIwIDAgMjQgMjQiIHdpZHRoPSI2NCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48dGl0bGU+TWluaU1heCBDb2RlPC90aXRsZT48cmVjdCB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHJ4PSI2IiBmaWxsPSIjRjIzRjVEIj48L3JlY3Q+PHBhdGggZD0iTTUgMTdWN2gzbDQgNiA0LTZoM3YxMGgtM3YtNWwtNCA2LTQtNnY1SDVaIiBmaWxsPSIjRkZGRkZGIj48L3BhdGg+PC9zdmc+DQo=',
 }
+const toDraft = (agent) => ({
+  name: agent.name, command: agent.command, argsText: (agent.args || []).join(' '),
+  cwd: agent.cwd || '', envRows: Object.entries(agent.env || {}).map(([k, v]) => ({ k, v })),
+  enabled: agent.enabled !== false
+})
+
 function AgentCatalogView({ React, Glyph, post, C, device, onClose }) {
   const h = React.createElement
   const [catalog, setCatalog] = React.useState(() => readCatalog(device))
@@ -10180,17 +10186,14 @@ function AgentCatalogView({ React, Glyph, post, C, device, onClose }) {
   const [testing, setTesting] = React.useState(false)
   const [testOutput, setTestOutput] = React.useState('')
   const [error, setError] = React.useState('')
-  const [selectedId, setSelectedId] = React.useState('')
-  const [draft, setDraft] = React.useState(null)
+  const seedList = ((readCatalog(device) || {}).agents) || []
+  const seedAgent = seedList.find((item) => item.available) || seedList[0] || null
+  const [selectedId, setSelectedId] = React.useState(seedAgent ? seedAgent.id : '')
+  const [draft, setDraft] = React.useState(seedAgent ? toDraft(seedAgent) : null)
   const [editor, setEditor] = React.useState(null)
   const agents = (catalog && catalog.agents) || []
   const selected = agents.find((item) => item.id === selectedId) || null
 
-  const toDraft = (agent) => ({
-    name: agent.name, command: agent.command, argsText: (agent.args || []).join(' '),
-    cwd: agent.cwd || '', envRows: Object.entries(agent.env || {}).map(([k, v]) => ({ k, v })),
-    enabled: agent.enabled !== false
-  })
   const applyCatalog = (data, keepSelected) => {
     setCatalog(data)
     writeCatalog(device, data)
@@ -10208,8 +10211,14 @@ function AgentCatalogView({ React, Glyph, post, C, device, onClose }) {
 
   const load = async (fresh, keepSelected) => {
     const cached = readCatalog(device)
-    if (cached) setCatalog(cached)
-    else setBusy(true)
+    if (cached) {
+      setCatalog(cached)
+      if (!selectedId) {
+        const list = cached.agents || []
+        const first = list.find((item) => item.available) || list[0]
+        if (first) { setSelectedId(first.id); setDraft(toDraft(first)) }
+      }
+    } else setBusy(true)
     setError('')
     try {
       let data = null
@@ -10231,6 +10240,13 @@ function AgentCatalogView({ React, Glyph, post, C, device, onClose }) {
     setDraft(null)
     void load(false, '')
   }, [device])
+  React.useEffect(() => {
+    if (!catalog) return
+    const list = catalog.agents || []
+    if (list.some((item) => item.id === selectedId)) return
+    const first = list.find((item) => item.available) || list[0]
+    if (first) { setSelectedId(first.id); setDraft(toDraft(first)) }
+  }, [catalog])
 
   const selectAgent = (agent) => {
     setSelectedId(agent.id)

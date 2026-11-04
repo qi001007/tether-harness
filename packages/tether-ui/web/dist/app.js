@@ -176971,6 +176971,14 @@ function writeHarnesses(device, data) {
 }
 
 // src/agent-catalog.js
+var toDraft = (agent) => ({
+  name: agent.name,
+  command: agent.command,
+  argsText: (agent.args || []).join(" "),
+  cwd: agent.cwd || "",
+  envRows: Object.entries(agent.env || {}).map(([k, v2]) => ({ k, v: v2 })),
+  enabled: agent.enabled !== false
+});
 function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose }) {
   const h3 = React2.createElement;
   const [catalog, setCatalog] = React2.useState(() => readCatalog(device));
@@ -176979,19 +176987,13 @@ function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose }
   const [testing, setTesting] = React2.useState(false);
   const [testOutput, setTestOutput] = React2.useState("");
   const [error, setError] = React2.useState("");
-  const [selectedId, setSelectedId] = React2.useState("");
-  const [draft, setDraft] = React2.useState(null);
+  const seedList = (readCatalog(device) || {}).agents || [];
+  const seedAgent = seedList.find((item) => item.available) || seedList[0] || null;
+  const [selectedId, setSelectedId] = React2.useState(seedAgent ? seedAgent.id : "");
+  const [draft, setDraft] = React2.useState(seedAgent ? toDraft(seedAgent) : null);
   const [editor2, setEditor] = React2.useState(null);
   const agents = catalog && catalog.agents || [];
   const selected = agents.find((item) => item.id === selectedId) || null;
-  const toDraft = (agent) => ({
-    name: agent.name,
-    command: agent.command,
-    argsText: (agent.args || []).join(" "),
-    cwd: agent.cwd || "",
-    envRows: Object.entries(agent.env || {}).map(([k, v2]) => ({ k, v: v2 })),
-    enabled: agent.enabled !== false
-  });
   const applyCatalog = (data, keepSelected) => {
     setCatalog(data);
     writeCatalog(device, data);
@@ -177008,8 +177010,17 @@ function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose }
   };
   const load = async (fresh, keepSelected) => {
     const cached = readCatalog(device);
-    if (cached) setCatalog(cached);
-    else setBusy(true);
+    if (cached) {
+      setCatalog(cached);
+      if (!selectedId) {
+        const list2 = cached.agents || [];
+        const first = list2.find((item) => item.available) || list2[0];
+        if (first) {
+          setSelectedId(first.id);
+          setDraft(toDraft(first));
+        }
+      }
+    } else setBusy(true);
     setError("");
     try {
       let data = null;
@@ -177031,6 +177042,16 @@ function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose }
     setDraft(null);
     void load(false, "");
   }, [device]);
+  React2.useEffect(() => {
+    if (!catalog) return;
+    const list2 = catalog.agents || [];
+    if (list2.some((item) => item.id === selectedId)) return;
+    const first = list2.find((item) => item.available) || list2[0];
+    if (first) {
+      setSelectedId(first.id);
+      setDraft(toDraft(first));
+    }
+  }, [catalog]);
   const selectAgent = (agent) => {
     setSelectedId(agent.id);
     setDraft(toDraft(agent));
