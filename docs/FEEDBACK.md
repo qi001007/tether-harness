@@ -279,3 +279,5 @@
 
 离线测试、隔离 UI、单机 DSH、本机真实模型回答、干净安装、真实跨设备操作和公开发布分别记录，不能互相替代。未完成发布与实机验收前，保持对应条目未完成。
 
+
+- [x] F120：账号管理要像 Codex/CC Switch，不是文件快照输入框。判据：Codex 多账号列表显示邮箱/套餐/当前、5h/7d 额度与重置时间；能一键切换、重新登录、添加其他账号/设备码、退出登录；DSH/OpenCode/Qoder 等有账号的 Agent 也要能管理或走原生登录。**实现 2026-11-04**：接入 Codex app-server 的 `account/read`、`account/login/start`（`chatgptDeviceCode`）、`account/logout`、`account/rateLimits/read`；每个账号一个独立 `CODEX_HOME` 档案，添加/重登在档案内完成，切换只复制 `auth.json/config.toml` 到 `~/.codex`；首次列表自动导入当前账号；账号卡改为“邮箱 + Plus + 当前 + 5h/7d 额度条 + 重新登录 + ×”，弹层支持“添加其他账号/退出当前登录”。DSH 自动导入 `.dsh/.credentials.yaml` 并可快照/切换；OpenCode/Qoder 的“添加账号”用解析后的可执行路径直接在该 Agent 的终端里启动登录命令（实测 OpenCode 出现 `Add credential / Select provider` 原生 TUI），登录后保存当前。**实测**：Codex 当前账号 `13709469250@163.com` / Plus / 5h 0%（4h58m 后重置）/ 7d 1%（6d 后重置）；设备码流程真实返回 `auth.openai.com/codex/device` + 8 位码（已取消，不代替主人完成 OAuth）；`tests/test_agent_accounts.py` 6 passed，全量 216 passed / 3 skipped。**仍缺**：第二个 Codex 账号未完成真实 OAuth（需主人在浏览器放行）；Gemini/Claude/Qoder 的登录 UI 未逐个实跑；切换后正在运行的 Codex 会话需重启才使用新账号。

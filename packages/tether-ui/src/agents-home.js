@@ -2,7 +2,7 @@ import { AGENT_ICONS } from './agent-icons.js'
 import { AgentAccountsPanel } from './agent-accounts-panel.js'
 
 export function AgentHome({ React, Glyph, C, post, device, catalog, harnesses = [], panes = [], loading = false, error = '',
-  installing = '', onInstall, onOpen, onOpenCatalog, onOpenPane, onClosePane }) {
+  installing = '', onInstall, onOpen, onOpenCatalog, onOpenPane, onClosePane, onLoginTerminal }) {
   const h = React.createElement
   const agents = (catalog && catalog.agents) || []
   const installed = agents.filter((agent) => agent.available)
@@ -111,8 +111,8 @@ export function AgentHome({ React, Glyph, C, post, device, catalog, harnesses = 
     loading ? '…' : '')
   const accounts = selected && selected.accounts
     ? h('div', { style: { ...card, padding: 14, display: 'flex', flexDirection: 'column', gap: 10, minHeight: 0 } },
-      h('div', { style: { fontSize: 12, fontWeight: 600, color: C.sub } }, '账号'),
-      h(AgentAccountsPanel, { React, Glyph, post, C, device, agent: selected }))
+      h(AgentAccountsPanel, { key: selected.id, React, Glyph, post, C, device, agent: selected,
+        onLoginTerminal: (target, command, argv) => onLoginTerminal && onLoginTerminal(target, command, argv) }))
     : null
   const quickAction = (agent, action) => h('button', {
     key: action.id, type: 'button', title: action.label, 'aria-label': action.label,

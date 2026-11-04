@@ -9559,7 +9559,7 @@ function isDarkTheme() {
   return !!(typeof document !== 'undefined' && document.body && document.body.hasAttribute('data-ds-dark-theme'))
 }
 
-function createTerminalDock({ React, Glyph, post, C, device, cwd, height = 240, initialShell = '', initialAgent = '', label = '', themeMode = 'auto', fill = false, onHeight, onClose }) {
+function createTerminalDock({ React, Glyph, post, C, device, cwd, height = 240, initialShell = '', initialAgent = '', initialCommand = '', initialArgv = null, label = '', themeMode = 'auto', fill = false, onHeight, onClose }) {
   const h = React.createElement
   const runtime = typeof window !== 'undefined' ? window.TetherTerminalRuntime : null
   const [shells, setShells] = React.useState([])
@@ -9662,10 +9662,11 @@ function createTerminalDock({ React, Glyph, post, C, device, cwd, height = 240, 
       setStatus('starting')
       setError('')
       try {
-        const result = await postRef.current(url('terminal_start'), {
-          cwd, shell: agentId ? undefined : (shellId || undefined), agent: agentId || undefined,
-          cols: term.cols || 120, rows: term.rows || 30
-        })
+        const payload = { cwd, cols: term.cols || 120, rows: term.rows || 30 }
+        if (agentId) payload.agent = agentId
+        else if (Array.isArray(initialArgv) && initialArgv.length) payload.command = initialArgv
+        else payload.shell = shellId || undefined
+        const result = await postRef.current(url('terminal_start'), payload)
         if (disposed) {
           if (result && result.session_id) void postRef.current(url('terminal_stop'), { session_id: result.session_id }).catch(() => {})
           return
@@ -9809,12 +9810,25 @@ function createTerminalDock({ React, Glyph, post, C, device, cwd, height = 240, 
           setShell(initialAgent)
           shellRef.current = initialAgent
           await startSession(initialAgent, initialAgent)
-          return
+        } else if (Array.isArray(initialArgv) && initialArgv.length) {
+          setShell('')
+          shellRef.current = ''
+          await startSession('', '')
+        } else {
+          const preferred = (initialShell && list.some((item) => item.id === initialShell) ? initialShell : ((list.find((item) => item.default) || list[0] || {}).id || ''))
+          setShell(preferred)
+          shellRef.current = preferred
+          await startSession(preferred)
         }
-        const preferred = (initialShell && list.some((item) => item.id === initialShell) ? initialShell : ((list.find((item) => item.default) || list[0] || {}).id || ''))
-        setShell(preferred)
-        shellRef.current = preferred
-        await startSession(preferred)
+        if (initialCommand && !(Array.isArray(initialArgv) && initialArgv.length)) {
+          setTimeout(() => {
+            const current = sessionRef.current
+            if (disposed || !current) return
+            void postRef.current(url('terminal_write'), {
+              session_id: current, data: terminalBase64(initialCommand + String.fromCharCode(13))
+            }).catch(() => {})
+          }, 1200)
+        }
       } catch (cause) {
         if (!disposed) {
           setStatus('error')
@@ -10180,84 +10194,356 @@ const AGENT_ICONS = {
   'command-code': 'data:image/svg+xml;base64,PHN2ZyBoZWlnaHQ9IjY0IiB2aWV3Qm94PSIwIDAgMTQ0IDE0NCIgd2lkdGg9IjY0IiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjx0aXRsZT5Db21tYW5kIENvZGU8L3RpdGxlPjxwYXRoIGZpbGw9IiMwMDAwMDAiIGQ9Ik0xMC4zMTkzIDEwLjMxOTNDMCAyMC42Mzg3IDAgMzcuMjQ3NCAwIDcwLjQ2NDhWNzMuMTM5OEMwIDEwNi4zNTcgMCAxMjIuOTY2IDEwLjMxOTMgMTMzLjI4NUMyMC42Mzg3IDE0My42MDUgMzcuMjQ3NCAxNDMuNjA1IDcwLjQ2NDggMTQzLjYwNUg3My4xMzk4QzEwNi4zNTcgMTQzLjYwNSAxMjIuOTY2IDE0My42MDUgMTMzLjI4NSAxMzMuMjg1QzE0My42MDUgMTIyLjk2NiAxNDMuNjA1IDEwNi4zNTcgMTQzLjYwNSA3My4xMzk5VjcwLjQ2NDhDMTQzLjYwNSAzNy4yNDc0IDE0My42MDUgMjAuNjM4NyAxMzMuMjg1IDEwLjMxOTNDMTIyLjk2NiAwIDEwNi4zNTcgMCA3My4xMzk5IDBINzAuNDY0OEMzNy4yNDc0IDAgMjAuNjM4NyAwIDEwLjMxOTMgMTAuMzE5M1oiPjwvcGF0aD48cGF0aCBmaWxsPSIjRkZGRkZGIiBkPSJNOTguODA0OSAyNy42MTYzQzg5LjMyOTUgMjcuNjE2MyA4MS42MjE0IDM1LjMyNDMgODEuNjIxNCA0NC43OTk3VjUyLjE2NDFINjEuOTgzMlY0NC43OTk3QzYxLjk4MzIgMzUuMzI0MyA1NC4yNzUyIDI3LjYxNjMgNDQuNzk5NyAyNy42MTYzQzM1LjMyNDMgMjcuNjE2MyAyNy42MTYzIDM1LjMyNDMgMjcuNjE2MyA0NC43OTk3QzI3LjYxNjMgNTQuMjc1MiAzNS4zMjQzIDYxLjk4MzIgNDQuNzk5NyA2MS45ODMySDUyLjE2NDFWODEuNjIxNEg0NC43OTk3QzM1LjMyNDMgODEuNjIxNCAyNy42MTYzIDg5LjMyOTUgMjcuNjE2MyA5OC44MDQ5QzI3LjYxNjMgMTA4LjI4IDM1LjMyNDMgMTE1Ljk4OCA0NC43OTk3IDExNS45ODhDNTQuMjc1MiAxMTUuOTg4IDYxLjk4MzIgMTA4LjI4IDYxLjk4MzIgOTguODA0OVY5MS40NDA2SDgxLjYyMTRWOTguODA0OUM4MS42MjE0IDEwOC4yOCA4OS4zMjk1IDExNS45ODggOTguODA0OSAxMTUuOTg4QzEwOC4yOCAxMTUuOTg4IDExNS45ODggMTA4LjI4IDExNS45ODggOTguODA0OUMxMTUuOTg4IDg5LjMyOTUgMTA4LjI4IDgxLjYyMTQgOTguODA0OSA4MS42MjE0SDkxLjQ0MDZWNjEuOTgzMkg5OC44MDQ5QzEwOC4yOCA2MS45ODMyIDExNS45ODggNTQuMjc1MiAxMTUuOTg4IDQ0Ljc5OTdDMTE1Ljk4OCAzNS4zMjQzIDEwOC4yOCAyNy42MTYzIDk4LjgwNDkgMjcuNjE2M1pNOTEuNDQwNiA1Mi4xNjQxVjQ0Ljc5OTdDOTEuNDQwNiA0MC43MjQ4IDk0LjczIDM3LjQzNTQgOTguODA0OSAzNy40MzU0QzEwMi44OCAzNy40MzU0IDEwNi4xNjkgNDAuNzI0OCAxMDYuMTY5IDQ0Ljc5OTdDMTA2LjE2OSA0OC44NzQ3IDEwMi44OCA1Mi4xNjQxIDk4LjgwNDkgNTIuMTY0MUg5MS40NDA2Wk00NC43OTk3IDUyLjE2NDFDNDAuNzI0OCA1Mi4xNjQxIDM3LjQzNTQgNDguODc0NyAzNy40MzU0IDQ0Ljc5OTdDMzcuNDM1NCA0MC43MjQ4IDQwLjcyNDggMzcuNDM1NCA0NC43OTk3IDM3LjQzNTRDNDguODc0NyAzNy40MzU0IDUyLjE2NDEgNDAuNzI0OCA1Mi4xNjQxIDQ0Ljc5OTdWNTIuMTY0MUg0NC43OTk3Wk02MS45ODMyIDgxLjYyMTRWNjEuOTgzMkg4MS42MjE0VjgxLjYyMTRINjEuOTgzMlpNOTguODA0OSAxMDYuMTY5Qzk0LjczIDEwNi4xNjkgOTEuNDQwNiAxMDIuODggOTEuNDQwNiA5OC44MDQ5VjkxLjQ0MDZIOTguODA0OUMxMDIuODggOTEuNDQwNiAxMDYuMTY5IDk0LjczIDEwNi4xNjkgOTguODA0OUMxMDYuMTY5IDEwMi44OCAxMDIuODggMTA2LjE2OSA5OC44MDQ5IDEwNi4xNjlaTTQ0Ljc5OTcgMTA2LjE2OUM0MC43MjQ4IDEwNi4xNjkgMzcuNDM1NCAxMDIuODggMzcuNDM1NCA5OC44MDQ5QzM3LjQzNTQgOTQuNzMgNDAuNzI0OCA5MS40NDA2IDQ0Ljc5OTcgOTEuNDQwNkg1Mi4xNjQxVjk4LjgwNDlDNTIuMTY0MSAxMDIuODggNDguODc0NyAxMDYuMTY5IDQ0Ljc5OTcgMTA2LjE2OVoiPjwvcGF0aD48L3N2Zz4NCg==',
   minimax: 'data:image/svg+xml;base64,PHN2ZyBoZWlnaHQ9IjY0IiB2aWV3Qm94PSIwIDAgMjQgMjQiIHdpZHRoPSI2NCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48dGl0bGU+TWluaU1heCBDb2RlPC90aXRsZT48cmVjdCB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHJ4PSI2IiBmaWxsPSIjRjIzRjVEIj48L3JlY3Q+PHBhdGggZD0iTTUgMTdWN2gzbDQgNiA0LTZoM3YxMGgtM3YtNWwtNCA2LTQtNnY1SDVaIiBmaWxsPSIjRkZGRkZGIj48L3BhdGg+PC9zdmc+DQo=',
 }
-function AgentAccountsPanel({ React, Glyph, post, C, device, agent, autoFocus = false }) {
+const PLAN_LABELS = { plus: 'Plus', pro: 'Pro', free: 'Free', team: 'Team', business: 'Business' }
+
+function planLabel(plan) {
+  const key = String(plan || '').toLowerCase()
+  return PLAN_LABELS[key] || (key ? key.charAt(0).toUpperCase() + key.slice(1) : '')
+}
+
+function resetText(resetsAt) {
+  if (!resetsAt) return ''
+  const seconds = Math.max(0, Number(resetsAt) - Math.floor(Date.now() / 1000))
+  if (seconds < 60) return '即将重置'
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return minutes + 'm 后重置'
+  if (minutes >= 1440) {
+    const days = Math.floor(minutes / 1440)
+    const hours = Math.floor((minutes % 1440) / 60)
+    return days + 'd' + (hours ? hours + 'h' : '') + ' 后重置'
+  }
+  const hours = Math.floor(minutes / 60)
+  const rest = minutes % 60
+  return hours + 'h' + (rest ? rest + 'm' : '') + ' 后重置'
+}
+
+function windowLabel(mins) {
+  const value = Number(mins) || 0
+  if (value === 300) return '5 小时'
+  if (value === 10080) return '7 天'
+  if (value >= 1440) return Math.round(value / 1440) + ' 天'
+  return Math.round(value / 60) + ' 小时'
+}
+
+function quotaColor(percent) {
+  if (percent >= 80) return 'var(--dsw-alias-state-error-primary, #dc2626)'
+  if (percent >= 50) return 'var(--dsw-alias-state-warning-primary, #d97706)'
+  return 'var(--dsw-alias-state-success-primary, #16a34a)'
+}
+
+function AgentAccountsPanel({ React, Glyph, post, C, device, agent, onOpenTerminal, onLoginTerminal, compact = true }) {
   const h = React.createElement
   const [data, setData] = React.useState(null)
-  const [name, setName] = React.useState('')
   const [busy, setBusy] = React.useState('')
   const [error, setError] = React.useState('')
+  const [notice, setNotice] = React.useState('')
+  const [open, setOpen] = React.useState(false)
+  const [login, setLogin] = React.useState(null)
+  const [deleteId, setDeleteId] = React.useState('')
   const enabled = !!(agent && agent.accounts)
-
-  const call = async (op, body) => {
-    setBusy(op)
-    setError('')
-    try {
-      const result = await post('/api/devices/' + encodeURIComponent(device) + '/fs/' + op,
-        { id: agent.id, ...body })
-      setData(result || null)
-    } catch (cause) {
-      setError(String((cause && (cause.message || cause.code)) || cause || '操作失败'))
-    } finally {
-      setBusy('')
-    }
-  }
-  React.useEffect(() => {
-    if (!enabled) { setData(null); return }
-    let cancelled = false
-    setData(null)
-    setError('')
-    void post('/api/devices/' + encodeURIComponent(device) + '/fs/agents_accounts', { id: agent.id })
-      .then((result) => { if (!cancelled) setData(result || null) })
-      .catch((cause) => { if (!cancelled) setError(String((cause && (cause.message || cause.code)) || '读取失败')) })
-    return () => { cancelled = true }
-  }, [device, agent && agent.id, enabled])
-
-  if (!enabled) return null
-  const profiles = (data && data.profiles) || []
+  const iconSrc = agent ? AGENT_ICONS[agent.icon] : ''
   const field = {
     height: 30, boxSizing: 'border-box', border: '1px solid rgba(9,30,66,.14)',
     borderRadius: 7, padding: '0 9px', background: C.bg, color: C.ink, fontSize: 12, outline: 'none'
   }
-  const save = async () => {
-    const label = name.trim() || ('账号 ' + (profiles.length + 1))
-    await call('agents_account_save', { name: label })
-    setName('')
+
+  const load = React.useCallback(async () => {
+    if (!enabled) { setData(null); return }
+    try {
+      const result = await post('/api/devices/' + encodeURIComponent(device) + '/fs/agents_accounts', { id: agent.id })
+      setData(result || null)
+      setError('')
+    } catch (cause) {
+      setError(String((cause && (cause.message || cause.code)) || '读取失败'))
+    }
+  }, [device, agent && agent.id, enabled, post])
+
+  React.useEffect(() => {
+    setData(null)
+    setError('')
+    setNotice('')
+    setOpen(false)
+    setLogin(null)
+    void load()
+  }, [device, agent && agent.id, enabled])
+
+  React.useEffect(() => {
+    if (!login || login.status !== 'pending' || !login.loginId) return undefined
+    const timer = setInterval(async () => {
+      try {
+        const status = await post('/api/devices/' + encodeURIComponent(device) + '/fs/agents_account_login_status',
+          { login_id: login.loginId })
+        if (!status || !status.status) return
+        if (status.status === 'success') {
+          setLogin(null)
+          setNotice('账号已添加')
+          await load()
+        } else if (status.status !== 'pending') {
+          setLogin({ ...login, ...status })
+        }
+      } catch (cause) {
+        setLogin({ ...login, status: 'error', error: String((cause && cause.message) || cause) })
+      }
+    }, 1200)
+    return () => clearInterval(timer)
+  }, [login && login.loginId, login && login.status, device, post, load])
+
+  const call = async (op, body, tag) => {
+    setBusy(tag)
+    setError('')
+    try {
+      const result = await post('/api/devices/' + encodeURIComponent(device) + '/fs/' + op, { id: agent.id, ...body })
+      if (result) setData(result)
+      return result
+    } catch (cause) {
+      setError(String((cause && (cause.message || cause.code)) || cause || '操作失败'))
+      return null
+    } finally {
+      setBusy('')
+    }
   }
-  const live = (data && data.live) || []
-  return h('div', { style: { display: 'flex', flexDirection: 'column', minHeight: 0, gap: 8 } },
-    live.length ? h('div', { style: { display: 'grid', gap: 3 } },
-      live.map((rel) => h('div', { key: rel, style: { display: 'flex', alignItems: 'center', gap: 7, fontSize: 10.5, color: C.mute } },
-        h(Glyph, { name: 'shield', size: 11 }),
-        h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, rel)))) : null,
-    profiles.length
-      ? h('div', { className: 'tether-scroll', style: { display: 'flex', flexDirection: 'column', gap: 4, overflow: 'auto', minHeight: 0 } },
-        profiles.map((profile) => h('div', {
-          key: profile.id,
-          style: { display: 'flex', alignItems: 'center', gap: 8, minHeight: 34, padding: '0 8px', borderRadius: 8,
-            background: profile.current ? 'rgba(21,112,239,.07)' : 'transparent' }
-        },
-          h('span', { style: { width: 6, height: 6, borderRadius: 3, flex: '0 0 auto',
-            background: profile.current ? C.blue : 'rgba(9,30,66,.22)' } }),
-          h('span', { style: { minWidth: 0, flex: '1 1 auto', fontSize: 12.5, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, profile.name),
-          profile.current
-            ? h('span', { style: { fontSize: 10.5, color: C.blue } }, '当前')
-            : h('button', { type: 'button', disabled: busy === 'agents_account_switch',
-              onClick: () => void call('agents_account_switch', { profile: profile.id }),
-              style: { ...field, height: 24, padding: '0 8px', cursor: 'pointer', background: 'transparent', flex: '0 0 auto' } }, '切换'),
-          h('button', { type: 'button', title: '删除', disabled: !!busy,
-            onClick: () => void call('agents_account_delete', { profile: profile.id }),
-            style: { width: 22, height: 22, border: 0, borderRadius: 5, background: 'transparent', color: C.mute, cursor: 'pointer', flex: '0 0 auto' } }, '×'))))
-      : h('div', { style: { fontSize: 11.5, color: C.mute, padding: '2px 0' } }, busy ? '…' : ''),
-    h('div', { style: { display: 'flex', gap: 6, marginTop: 'auto' } },
-      h('input', {
-        value: name, autoFocus, placeholder: '账号名称', onChange: (event) => setName(event.target.value),
-        onKeyDown: (event) => { if (event.key === 'Enter') { event.preventDefault(); void save() } },
-        style: { ...field, flex: '1 1 auto', minWidth: 0 }
-      }),
-      h('button', { type: 'button', disabled: !!busy, onClick: () => void save(),
-        style: { ...field, height: 30, padding: '0 10px', cursor: busy ? 'default' : 'pointer', background: 'transparent', flex: '0 0 auto' } },
-        busy === 'agents_account_save' ? '…' : '保存当前')),
-    error ? h('div', { style: { fontSize: 11, color: C.red } }, error) : null)
+
+  const startLogin = async (profileId) => {
+    setBusy('login')
+    setError('')
+    try {
+      const result = await post('/api/devices/' + encodeURIComponent(device) + '/fs/agents_account_login_start',
+        { id: agent.id, profile: profileId || '' })
+      if (!result) return
+      if (result.mode === 'device' || result.loginId) {
+        setLogin({ ...result, status: 'pending' })
+      } else if (result.mode === 'command') {
+        setLogin({ ...result, status: 'command' })
+        if (onLoginTerminal) onLoginTerminal(agent, result.command, result.argv)
+        else if (onOpenTerminal) onOpenTerminal(agent)
+      }
+    } catch (cause) {
+      setError(String((cause && (cause.message || cause.code)) || cause || '登录启动失败'))
+    } finally {
+      setBusy('')
+    }
+  }
+
+  const cancelLogin = async () => {
+    if (login && login.loginId) {
+      try {
+        await post('/api/devices/' + encodeURIComponent(device) + '/fs/agents_account_login_cancel',
+          { login_id: login.loginId })
+      } catch (_) { /* already cancelled */ }
+    }
+    setLogin(null)
+  }
+
+  const switchProfile = async (profile) => {
+    const result = await call('agents_account_switch', { profile: profile.id }, 'switch')
+    if (result) setNotice('已切换到 ' + (profile.email || profile.name) + '，重启当前 Agent 会话后生效')
+  }
+
+  const removeProfile = async (profile) => {
+    if (deleteId !== profile.id) { setDeleteId(profile.id); return }
+    setDeleteId('')
+    await call('agents_account_delete', { profile: profile.id }, 'delete')
+  }
+
+  const logout = async () => {
+    await call('agents_account_logout', {}, 'logout')
+    setNotice('已退出当前登录，存档账号仍保留')
+  }
+
+  if (!enabled) return null
+  const profiles = (data && data.profiles) || []
+  const current = profiles.find((profile) => profile.current) || null
+  const title = (data && data.title) || (agent.id === 'codex' ? 'ChatGPT (Codex OAuth)' : '账号')
+  const count = profiles.length
+  const loginMode = (data && data.loginMode) || 'snapshot'
+
+  const avatar = (size) => iconSrc
+    ? h('img', { src: iconSrc, alt: '', draggable: false, style: { width: size, height: size, objectFit: 'contain' } })
+    : h('span', { style: { width: size, height: size, display: 'grid', placeItems: 'center', borderRadius: Math.round(size / 3),
+      background: agent.color || C.soft, color: '#fff', fontSize: Math.round(size * 0.45) } },
+      h(Glyph, { name: 'bot', size: Math.round(size * 0.55) }))
+
+  const quotaBar = (profile, key, label) => {
+    const usage = profile.usage || {}
+    const window = usage[key]
+    if (!window || typeof window.usedPercent !== 'number') return null
+    const percent = Math.max(0, Math.min(100, window.usedPercent))
+    return h('div', { key, style: { display: 'grid', gridTemplateColumns: '52px minmax(0, 1fr) 132px', alignItems: 'center', gap: 8 } },
+      h('span', { style: { fontSize: 10.5, color: C.mute } }, label || windowLabel(window.windowMins)),
+      h('div', { style: { height: 5, borderRadius: 3, background: C.soft, overflow: 'hidden' } },
+        h('div', { style: { height: '100%', width: Math.max(2, percent) + '%', borderRadius: 3, background: quotaColor(percent) } })),
+      h('span', { style: { fontSize: 10.5, color: C.sub, textAlign: 'right', whiteSpace: 'nowrap' } },
+        Math.round(percent) + '% · ' + resetText(window.resetsAt)))
+  }
+
+  const quotaLines = (profile) => {
+    const usage = profile.usage || {}
+    const primary = quotaBar(profile, 'primary')
+    const secondary = quotaBar(profile, 'secondary')
+    if (!primary && !secondary) return null
+    return h('div', { style: { display: 'grid', gap: 6, padding: '8px 10px', border: '1px solid ' + C.line,
+      borderRadius: 9, background: C.bg } },
+      primary, secondary)
+  }
+
+  const badge = (text, color, bg) => h('span', { style: { fontSize: 10, padding: '1px 6px', borderRadius: 999,
+    color, background: bg, whiteSpace: 'nowrap' } }, text)
+
+  const accountRow = (profile) => h('div', { key: profile.id, style: { display: 'grid', gap: 9, padding: 12,
+    borderRadius: 12, border: '1px solid ' + (profile.current ? 'rgba(21,112,239,.32)' : C.line),
+    background: profile.current ? 'rgba(21,112,239,.045)' : C.bg } },
+    h('div', { style: { display: 'flex', alignItems: 'center', gap: 9, minWidth: 0 } },
+      h('span', { style: { width: 30, height: 30, flex: '0 0 auto', display: 'grid', placeItems: 'center', borderRadius: 8,
+        background: C.soft } }, avatar(22)),
+      h('div', { style: { minWidth: 0, flex: '1 1 auto', display: 'grid', gap: 2 } },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 } },
+          h('span', { style: { fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
+            profile.email || profile.name || profile.id),
+          profile.current ? badge('当前', C.blue, 'rgba(21,112,239,.10)') : null,
+          profile.plan ? badge(planLabel(profile.plan), C.sub, C.soft) : null),
+        profile.email && profile.name && profile.name !== profile.email
+          ? h('span', { style: { fontSize: 10.5, color: C.mute } }, profile.name) : null),
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 4, flex: '0 0 auto' } },
+        !profile.current ? h('button', {
+          type: 'button', disabled: !!busy, onClick: () => switchProfile(profile), className: 'tether-hover',
+          style: { ...field, height: 26, padding: '0 9px', cursor: 'pointer', background: 'transparent', color: C.blue }
+        }, busy === 'switch' ? '…' : '切换') : null,
+        h('button', {
+          type: 'button', disabled: !!busy, title: '重新登录', 'aria-label': '重新登录',
+          onClick: () => startLogin(profile.id), className: 'tether-hover',
+          style: { height: 26, padding: '0 8px', border: '1px solid ' + C.line, borderRadius: 7,
+            background: 'transparent', color: C.sub, fontSize: 11, cursor: 'pointer' }
+        }, busy === 'login' ? '…' : '重新登录'),
+        h('button', {
+          type: 'button', title: deleteId === profile.id ? '确认删除' : '删除账号', 'aria-label': '删除账号',
+          disabled: !!busy, onClick: () => removeProfile(profile), className: 'tether-hover',
+          style: { height: 26, minWidth: deleteId === profile.id ? 56 : 26, padding: '0 7px', border: 0, borderRadius: 6,
+            background: deleteId === profile.id ? 'rgba(220,38,38,.08)' : 'transparent',
+            color: deleteId === profile.id ? C.red : C.mute, fontSize: 11, cursor: 'pointer' }
+        }, deleteId === profile.id ? '确认' : '×'))),
+    quotaLines(profile))
+
+  const modal = open ? h('div', {
+    style: { position: 'fixed', inset: 0, zIndex: 70, background: 'rgba(15,23,42,.28)',
+      display: 'grid', placeItems: 'center', padding: 24 }, onMouseDown: (event) => { if (event.target === event.currentTarget) setOpen(false) }
+  },
+    h('div', { role: 'dialog', 'aria-label': '账号管理', style: { width: 'min(780px, 94vw)', maxHeight: 'min(84vh, 820px)',
+      overflow: 'auto', background: C.bg, borderRadius: 16, boxShadow: C.shadow, padding: '18px 20px 16px',
+      display: 'grid', gap: 12, alignContent: 'start' } },
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 10 } },
+        h('span', { style: { width: 34, height: 34, display: 'grid', placeItems: 'center', borderRadius: 9, background: C.soft } }, avatar(24)),
+        h('div', { style: { minWidth: 0, flex: '1 1 auto', display: 'grid', gap: 1 } },
+          h('div', { style: { fontSize: 15, fontWeight: 600 } }, title),
+          h('div', { style: { fontSize: 11, color: C.mute } }, agent.id === 'codex' ? '管理 ChatGPT 账号' : '管理登录账号')),
+        count ? badge(count + ' 个账号', '#15803d', 'rgba(22,163,74,.10)') : null,
+        h('button', { type: 'button', title: '关闭', 'aria-label': '关闭账号管理', onClick: () => setOpen(false),
+          style: { width: 30, height: 30, border: 0, borderRadius: 7, background: 'transparent', color: C.mute,
+            cursor: 'pointer', fontSize: 18 } }, '×')),
+      h('div', { style: { display: 'grid', gap: 8 } }, ...profiles.map(accountRow)),
+      profiles.length ? null : h('div', { style: { padding: '26px 0', textAlign: 'center', color: C.mute, fontSize: 12 } },
+        '还没有登录账号'),
+      loginMode === 'snapshot' ? h('button', {
+        type: 'button', disabled: !!busy, onClick: () => call('agents_account_save', {}, 'save'), className: 'tether-hover',
+        style: { height: 38, border: '1px dashed rgba(21,112,239,.45)', borderRadius: 10, background: 'transparent',
+          color: C.blue, fontSize: 12.5, cursor: 'pointer' }
+      }, busy === 'save' ? '正在保存…' : '+ 保存当前账号') : h('button', {
+        type: 'button', disabled: !!busy, onClick: () => startLogin(''), className: 'tether-hover',
+        style: { height: 38, border: '1px dashed rgba(21,112,239,.45)', borderRadius: 10, background: 'transparent',
+          color: C.blue, fontSize: 12.5, cursor: 'pointer' }
+      }, busy === 'login' ? '正在启动登录…' : '+ 添加其他账号'),
+      count && agent.id === 'codex' ? h('button', {
+        type: 'button', disabled: !!busy, onClick: logout, className: 'tether-hover',
+        style: { height: 32, border: 0, borderRadius: 8, background: 'transparent', color: C.red,
+          fontSize: 11.5, cursor: 'pointer', justifySelf: 'start' }
+      }, '退出当前登录') : null,
+      error ? h('div', { style: { fontSize: 11, color: C.red } }, error) : null,
+      notice ? h('div', { style: { fontSize: 11, color: C.sub } }, notice) : null,
+      login ? loginOverlay() : null
+    )) : null
+
+  function loginOverlay() {
+    if (!login) return null
+    const device = login.status !== 'command'
+    return h('div', { style: { position: 'fixed', inset: 0, zIndex: 90, background: 'rgba(15,23,42,.32)',
+      display: 'grid', placeItems: 'center', padding: 24 } },
+      h('div', { style: { width: 'min(430px, 92vw)', background: C.bg, borderRadius: 14, boxShadow: C.shadow,
+        padding: 18, display: 'grid', gap: 12 } },
+        h('div', { style: { fontSize: 14, fontWeight: 600 } }, device ? '登录 ChatGPT 账号' : '在终端完成登录'),
+        device ? h('div', { style: { fontSize: 11.5, color: C.sub, lineHeight: 1.6 } },
+          '在浏览器打开下面的地址，输入设备码完成登录：') : null,
+        device ? h('input', { readOnly: true, value: login.url || '', onFocus: (event) => event.target.select(),
+          style: { ...field, height: 32, width: '100%', fontFamily: 'Consolas, monospace', fontSize: 11 } }) : null,
+        device ? h('div', { style: { display: 'flex', alignItems: 'center', gap: 10 } },
+          h('span', { style: { flex: '1 1 auto', padding: '10px 12px', borderRadius: 9, background: C.soft,
+            fontFamily: 'Consolas, monospace', fontSize: 20, letterSpacing: 3, textAlign: 'center' } }, login.code || ''),
+          h('button', { type: 'button', onClick: () => copyText(login.code || ''), className: 'tether-hover',
+            style: { ...field, height: 32, cursor: 'pointer', background: 'transparent' } }, '复制')) : null,
+        device ? h('div', { style: { display: 'flex', gap: 8 } },
+          h('button', { type: 'button', onClick: () => openUrl(login.url || ''), className: 'tether-hover',
+            style: { flex: '1 1 auto', height: 34, border: 0, borderRadius: 8, background: C.blue, color: '#fff',
+              fontSize: 12, cursor: 'pointer' } }, '在浏览器打开'),
+          h('button', { type: 'button', onClick: cancelLogin, className: 'tether-hover',
+            style: { ...field, height: 34, cursor: 'pointer', background: 'transparent' } }, '取消')) : null,
+        !device ? h('div', { style: { fontSize: 11.5, color: C.sub, lineHeight: 1.6 } },
+          '在终端执行下面的命令，完成后回到这里点“保存当前账号”。') : null,
+        !device ? h('div', { style: { ...field, height: 'auto', padding: '8px 10px', fontFamily: 'Consolas, monospace',
+          fontSize: 11, wordBreak: 'break-all' } }, login.command || '') : null,
+        device && login.status === 'pending' ? h('div', { style: { fontSize: 11, color: C.sub } }, '等待浏览器完成登录…') : null,
+        login.status === 'error' ? h('div', { style: { fontSize: 11, color: C.red } }, login.error || '登录失败') : null,
+        !device ? h('button', { type: 'button', onClick: () => setLogin(null), className: 'tether-hover',
+          style: { ...field, height: 32, cursor: 'pointer', background: 'transparent' } }, '关闭') : null))
+  }
+
+  const compactCard = () => h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 } },
+    h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+      h('div', { style: { fontSize: 12, fontWeight: 600, color: C.sub, flex: '1 1 auto' } }, '账号'),
+      count ? h('span', { style: { fontSize: 10.5, color: C.mute } }, count + ' 个') : null,
+      h('button', { type: 'button', onClick: () => setOpen(true), className: 'tether-hover',
+        style: { ...field, height: 26, padding: '0 9px', cursor: 'pointer', background: 'transparent', color: C.blue } }, '管理')),
+    current ? h('div', { style: { display: 'grid', gap: 7, padding: '9px 10px', borderRadius: 9, background: C.soft } },
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 } },
+        h('span', { style: { width: 24, height: 24, display: 'grid', placeItems: 'center', borderRadius: 7, background: C.bg } }, avatar(17)),
+        h('span', { style: { minWidth: 0, flex: '1 1 auto', fontSize: 12, fontWeight: 500, overflow: 'hidden',
+          textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, current.email || current.name),
+        current.plan ? badge(planLabel(current.plan), C.sub, C.bg) : null),
+      (current.usage && (current.usage.primary || current.usage.secondary))
+        ? h('div', { style: { display: 'flex', gap: 10, fontSize: 10.5, color: C.mute } },
+          current.usage.primary ? h('span', null, '5h ' + Math.round(current.usage.primary.usedPercent) + '%') : null,
+          current.usage.secondary ? h('span', null, '7d ' + Math.round(current.usage.secondary.usedPercent) + '%') : null) : null)
+      : h('div', { style: { fontSize: 11.5, color: C.mute } }, '未登录'),
+    h('div', { style: { display: 'flex', gap: 6 } },
+      loginMode === 'snapshot'
+        ? h('button', { type: 'button', disabled: !!busy, onClick: () => call('agents_account_save', {}, 'save'),
+            className: 'tether-hover tether-press',
+            style: { flex: '1 1 auto', height: 30, border: 0, borderRadius: 8, background: C.blue, color: '#fff',
+              fontSize: 11.5, cursor: 'pointer' } }, busy === 'save' ? '…' : '保存当前')
+        : h('button', { type: 'button', disabled: !!busy, onClick: () => startLogin(''), className: 'tether-hover tether-press',
+            style: { flex: '1 1 auto', height: 30, border: 0, borderRadius: 8, background: C.blue, color: '#fff',
+              fontSize: 11.5, cursor: 'pointer' } }, busy === 'login' ? '…' : '添加账号'),
+      loginMode === 'command' ? h('button', { type: 'button', disabled: !!busy, onClick: () => call('agents_account_save', {}, 'save'),
+        className: 'tether-hover', style: { ...field, height: 30, cursor: 'pointer', background: 'transparent' } },
+        busy === 'save' ? '…' : '保存当前') : null),
+    error ? h('div', { style: { fontSize: 10.5, color: C.red } }, error) : null,
+    notice ? h('div', { style: { fontSize: 10.5, color: C.sub } }, notice) : null)
+
+  return h(React.Fragment, null, compactCard(), modal)
+}
+
+function copyText(text) {
+  try {
+    if (navigator.clipboard && text) navigator.clipboard.writeText(text)
+  } catch (_) { /* clipboard unavailable */ }
+}
+
+function openUrl(url) {
+  if (!url) return
+  try {
+    if (window.tetherApp && typeof window.tetherApp.openExternal === 'function') {
+      window.tetherApp.openExternal(url)
+      return
+    }
+  } catch (_) { /* fall through */ }
+  try { window.open(url, '_blank', 'noopener,noreferrer') } catch (_) { /* blocked */ }
 }
 const toDraft = (agent) => ({
   name: agent.name, command: agent.command, argsText: (agent.args || []).join(' '),
@@ -10578,7 +10864,7 @@ function AgentCatalogView({ React, Glyph, post, C, device, onClose }) {
     modal)
 }
 function AgentHome({ React, Glyph, C, post, device, catalog, harnesses = [], panes = [], loading = false, error = '',
-  installing = '', onInstall, onOpen, onOpenCatalog, onOpenPane, onClosePane }) {
+  installing = '', onInstall, onOpen, onOpenCatalog, onOpenPane, onClosePane, onLoginTerminal }) {
   const h = React.createElement
   const agents = (catalog && catalog.agents) || []
   const installed = agents.filter((agent) => agent.available)
@@ -10687,8 +10973,8 @@ function AgentHome({ React, Glyph, C, post, device, catalog, harnesses = [], pan
     loading ? '…' : '')
   const accounts = selected && selected.accounts
     ? h('div', { style: { ...card, padding: 14, display: 'flex', flexDirection: 'column', gap: 10, minHeight: 0 } },
-      h('div', { style: { fontSize: 12, fontWeight: 600, color: C.sub } }, '账号'),
-      h(AgentAccountsPanel, { React, Glyph, post, C, device, agent: selected }))
+      h(AgentAccountsPanel, { key: selected.id, React, Glyph, post, C, device, agent: selected,
+        onLoginTerminal: (target, command, argv) => onLoginTerminal && onLoginTerminal(target, command, argv) }))
     : null
   const quickAction = (agent, action) => h('button', {
     key: action.id, type: 'button', title: action.label, 'aria-label': action.label,
@@ -11184,6 +11470,12 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
       title: agent.name, icon: agent.icon, color: agent.color, dark: true })
   }
 
+  const openLogin = (agent, command, argv) => {
+    if (!agent || (!command && !(Array.isArray(argv) && argv.length))) return
+    addPane({ key: 'login:' + agent.id, kind: 'terminal', title: '登录 ' + agent.name,
+      icon: agent.icon, dark: true, initialCommand: command, initialArgv: argv })
+  }
+
   const openHerdr = () => {
     if (!herdrAvailable) { fail(new Error('此节点没有 Herdr')); return }
     addPane({ key: 'herdr', kind: 'terminal', shell: 'herdr', title: 'Herdr', icon: 'bot', dark: true })
@@ -11399,6 +11691,7 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
       installing, onInstall: (agent) => void installAgent(agent),
       onOpen: openAgent, onOpenCatalog: () => setCatalogOpen(true),
       onOpenPane: (key) => { setWorkspaceOpen(true); setActivePane(key) },
+      onLoginTerminal: (agent, command, argv) => openLogin(agent, command, argv),
       onClosePane: closePane
     }) : null,
     picking ? h('div', {
@@ -11500,7 +11793,7 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
       '正在启动 ' + pane.title + '…'))
     : h(createTerminalDock, {
       key: pane.key, React, Glyph, post, C, device, cwd: '',
-      initialAgent: pane.agentId || '', initialShell: pane.shell || '', label: pane.title,
+      initialAgent: pane.agentId || '', initialShell: pane.shell || '', initialCommand: pane.initialCommand || '', initialArgv: pane.initialArgv || null, label: pane.title,
       themeMode: 'dark', fill: true,
       height: Math.max(420, (typeof window !== 'undefined' ? window.innerHeight : 900) - 168),
       onClose: () => closePane(pane.key)

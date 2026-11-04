@@ -38,7 +38,7 @@ function isDarkTheme() {
   return !!(typeof document !== 'undefined' && document.body && document.body.hasAttribute('data-ds-dark-theme'))
 }
 
-export function createTerminalDock({ React, Glyph, post, C, device, cwd, height = 240, initialShell = '', initialAgent = '', label = '', themeMode = 'auto', fill = false, onHeight, onClose }) {
+export function createTerminalDock({ React, Glyph, post, C, device, cwd, height = 240, initialShell = '', initialAgent = '', initialCommand = '', initialArgv = null, label = '', themeMode = 'auto', fill = false, onHeight, onClose }) {
   const h = React.createElement
   const runtime = typeof window !== 'undefined' ? window.TetherTerminalRuntime : null
   const [shells, setShells] = React.useState([])
@@ -141,10 +141,11 @@ export function createTerminalDock({ React, Glyph, post, C, device, cwd, height 
       setStatus('starting')
       setError('')
       try {
-        const result = await postRef.current(url('terminal_start'), {
-          cwd, shell: agentId ? undefined : (shellId || undefined), agent: agentId || undefined,
-          cols: term.cols || 120, rows: term.rows || 30
-        })
+        const payload = { cwd, cols: term.cols || 120, rows: term.rows || 30 }
+        if (agentId) payload.agent = agentId
+        else if (Array.isArray(initialArgv) && initialArgv.length) payload.command = initialArgv
+        else payload.shell = shellId || undefined
+        const result = await postRef.current(url('terminal_start'), payload)
         if (disposed) {
           if (result && result.session_id) void postRef.current(url('terminal_stop'), { session_id: result.session_id }).catch(() => {})
           return
@@ -288,12 +289,25 @@ export function createTerminalDock({ React, Glyph, post, C, device, cwd, height 
           setShell(initialAgent)
           shellRef.current = initialAgent
           await startSession(initialAgent, initialAgent)
-          return
+        } else if (Array.isArray(initialArgv) && initialArgv.length) {
+          setShell('')
+          shellRef.current = ''
+          await startSession('', '')
+        } else {
+          const preferred = (initialShell && list.some((item) => item.id === initialShell) ? initialShell : ((list.find((item) => item.default) || list[0] || {}).id || ''))
+          setShell(preferred)
+          shellRef.current = preferred
+          await startSession(preferred)
         }
-        const preferred = (initialShell && list.some((item) => item.id === initialShell) ? initialShell : ((list.find((item) => item.default) || list[0] || {}).id || ''))
-        setShell(preferred)
-        shellRef.current = preferred
-        await startSession(preferred)
+        if (initialCommand && !(Array.isArray(initialArgv) && initialArgv.length)) {
+          setTimeout(() => {
+            const current = sessionRef.current
+            if (disposed || !current) return
+            void postRef.current(url('terminal_write'), {
+              session_id: current, data: terminalBase64(initialCommand + String.fromCharCode(13))
+            }).catch(() => {})
+          }, 1200)
+        }
       } catch (cause) {
         if (!disposed) {
           setStatus('error')

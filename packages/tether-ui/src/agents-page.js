@@ -449,6 +449,12 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
       title: agent.name, icon: agent.icon, color: agent.color, dark: true })
   }
 
+  const openLogin = (agent, command, argv) => {
+    if (!agent || (!command && !(Array.isArray(argv) && argv.length))) return
+    addPane({ key: 'login:' + agent.id, kind: 'terminal', title: '登录 ' + agent.name,
+      icon: agent.icon, dark: true, initialCommand: command, initialArgv: argv })
+  }
+
   const openHerdr = () => {
     if (!herdrAvailable) { fail(new Error('此节点没有 Herdr')); return }
     addPane({ key: 'herdr', kind: 'terminal', shell: 'herdr', title: 'Herdr', icon: 'bot', dark: true })
@@ -664,6 +670,7 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
       installing, onInstall: (agent) => void installAgent(agent),
       onOpen: openAgent, onOpenCatalog: () => setCatalogOpen(true),
       onOpenPane: (key) => { setWorkspaceOpen(true); setActivePane(key) },
+      onLoginTerminal: (agent, command, argv) => openLogin(agent, command, argv),
       onClosePane: closePane
     }) : null,
     picking ? h('div', {
@@ -765,7 +772,7 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
       '正在启动 ' + pane.title + '…'))
     : h(createTerminalDock, {
       key: pane.key, React, Glyph, post, C, device, cwd: '',
-      initialAgent: pane.agentId || '', initialShell: pane.shell || '', label: pane.title,
+      initialAgent: pane.agentId || '', initialShell: pane.shell || '', initialCommand: pane.initialCommand || '', initialArgv: pane.initialArgv || null, label: pane.title,
       themeMode: 'dark', fill: true,
       height: Math.max(420, (typeof window !== 'undefined' ? window.innerHeight : 900) - 168),
       onClose: () => closePane(pane.key)

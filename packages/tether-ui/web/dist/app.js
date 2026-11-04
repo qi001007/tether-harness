@@ -176077,7 +176077,7 @@ var DARK_THEME = {
 function isDarkTheme() {
   return !!(typeof document !== "undefined" && document.body && document.body.hasAttribute("data-ds-dark-theme"));
 }
-function createTerminalDock({ React: React2, Glyph, post, C: C2, device, cwd: cwd2, height = 240, initialShell = "", initialAgent = "", label = "", themeMode = "auto", fill = false, onHeight, onClose }) {
+function createTerminalDock({ React: React2, Glyph, post, C: C2, device, cwd: cwd2, height = 240, initialShell = "", initialAgent = "", initialCommand = "", initialArgv = null, label = "", themeMode = "auto", fill = false, onHeight, onClose }) {
   const h3 = React2.createElement;
   const runtime = typeof window !== "undefined" ? window.TetherTerminalRuntime : null;
   const [shells, setShells] = React2.useState([]);
@@ -176189,13 +176189,11 @@ function createTerminalDock({ React: React2, Glyph, post, C: C2, device, cwd: cw
       setStatus("starting");
       setError("");
       try {
-        const result = await postRef.current(url("terminal_start"), {
-          cwd: cwd2,
-          shell: agentId ? void 0 : shellId || void 0,
-          agent: agentId || void 0,
-          cols: term.cols || 120,
-          rows: term.rows || 30
-        });
+        const payload = { cwd: cwd2, cols: term.cols || 120, rows: term.rows || 30 };
+        if (agentId) payload.agent = agentId;
+        else if (Array.isArray(initialArgv) && initialArgv.length) payload.command = initialArgv;
+        else payload.shell = shellId || void 0;
+        const result = await postRef.current(url("terminal_start"), payload);
         if (disposed) {
           if (result && result.session_id) void postRef.current(url("terminal_stop"), { session_id: result.session_id }).catch(() => {
           });
@@ -176361,12 +176359,27 @@ function createTerminalDock({ React: React2, Glyph, post, C: C2, device, cwd: cw
           setShell(initialAgent);
           shellRef.current = initialAgent;
           await startSession(initialAgent, initialAgent);
-          return;
+        } else if (Array.isArray(initialArgv) && initialArgv.length) {
+          setShell("");
+          shellRef.current = "";
+          await startSession("", "");
+        } else {
+          const preferred = initialShell && list2.some((item) => item.id === initialShell) ? initialShell : (list2.find((item) => item.default) || list2[0] || {}).id || "";
+          setShell(preferred);
+          shellRef.current = preferred;
+          await startSession(preferred);
         }
-        const preferred = initialShell && list2.some((item) => item.id === initialShell) ? initialShell : (list2.find((item) => item.default) || list2[0] || {}).id || "";
-        setShell(preferred);
-        shellRef.current = preferred;
-        await startSession(preferred);
+        if (initialCommand && !(Array.isArray(initialArgv) && initialArgv.length)) {
+          setTimeout(() => {
+            const current = sessionRef.current;
+            if (disposed || !current) return;
+            void postRef.current(url("terminal_write"), {
+              session_id: current,
+              data: terminalBase64(initialCommand + String.fromCharCode(13))
+            }).catch(() => {
+            });
+          }, 1200);
+        }
       } catch (cause) {
         if (!disposed) {
           setStatus("error");
@@ -177034,47 +177047,49 @@ function writeHarnesses(device, data) {
 }
 
 // src/agent-accounts-panel.js
-function AgentAccountsPanel({ React: React2, Glyph, post, C: C2, device, agent, autoFocus = false }) {
+var PLAN_LABELS = { plus: "Plus", pro: "Pro", free: "Free", team: "Team", business: "Business" };
+function planLabel(plan) {
+  const key = String(plan || "").toLowerCase();
+  return PLAN_LABELS[key] || (key ? key.charAt(0).toUpperCase() + key.slice(1) : "");
+}
+function resetText(resetsAt) {
+  if (!resetsAt) return "";
+  const seconds = Math.max(0, Number(resetsAt) - Math.floor(Date.now() / 1e3));
+  if (seconds < 60) return "\u5373\u5C06\u91CD\u7F6E";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return minutes + "m \u540E\u91CD\u7F6E";
+  if (minutes >= 1440) {
+    const days = Math.floor(minutes / 1440);
+    const hours2 = Math.floor(minutes % 1440 / 60);
+    return days + "d" + (hours2 ? hours2 + "h" : "") + " \u540E\u91CD\u7F6E";
+  }
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return hours + "h" + (rest ? rest + "m" : "") + " \u540E\u91CD\u7F6E";
+}
+function windowLabel(mins) {
+  const value = Number(mins) || 0;
+  if (value === 300) return "5 \u5C0F\u65F6";
+  if (value === 10080) return "7 \u5929";
+  if (value >= 1440) return Math.round(value / 1440) + " \u5929";
+  return Math.round(value / 60) + " \u5C0F\u65F6";
+}
+function quotaColor(percent) {
+  if (percent >= 80) return "var(--dsw-alias-state-error-primary, #dc2626)";
+  if (percent >= 50) return "var(--dsw-alias-state-warning-primary, #d97706)";
+  return "var(--dsw-alias-state-success-primary, #16a34a)";
+}
+function AgentAccountsPanel({ React: React2, Glyph, post, C: C2, device, agent, onOpenTerminal, onLoginTerminal, compact = true }) {
   const h3 = React2.createElement;
   const [data, setData] = React2.useState(null);
-  const [name, setName] = React2.useState("");
   const [busy, setBusy] = React2.useState("");
   const [error, setError] = React2.useState("");
+  const [notice, setNotice] = React2.useState("");
+  const [open, setOpen] = React2.useState(false);
+  const [login, setLogin] = React2.useState(null);
+  const [deleteId, setDeleteId] = React2.useState("");
   const enabled = !!(agent && agent.accounts);
-  const call = async (op, body) => {
-    setBusy(op);
-    setError("");
-    try {
-      const result = await post(
-        "/api/devices/" + encodeURIComponent(device) + "/fs/" + op,
-        { id: agent.id, ...body }
-      );
-      setData(result || null);
-    } catch (cause) {
-      setError(String(cause && (cause.message || cause.code) || cause || "\u64CD\u4F5C\u5931\u8D25"));
-    } finally {
-      setBusy("");
-    }
-  };
-  React2.useEffect(() => {
-    if (!enabled) {
-      setData(null);
-      return;
-    }
-    let cancelled = false;
-    setData(null);
-    setError("");
-    void post("/api/devices/" + encodeURIComponent(device) + "/fs/agents_accounts", { id: agent.id }).then((result) => {
-      if (!cancelled) setData(result || null);
-    }).catch((cause) => {
-      if (!cancelled) setError(String(cause && (cause.message || cause.code) || "\u8BFB\u53D6\u5931\u8D25"));
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [device, agent && agent.id, enabled]);
-  if (!enabled) return null;
-  const profiles = data && data.profiles || [];
+  const iconSrc = agent ? AGENT_ICONS[agent.icon] : "";
   const field = {
     height: 30,
     boxSizing: "border-box",
@@ -177086,94 +177101,600 @@ function AgentAccountsPanel({ React: React2, Glyph, post, C: C2, device, agent, 
     fontSize: 12,
     outline: "none"
   };
-  const save = async () => {
-    const label = name.trim() || "\u8D26\u53F7 " + (profiles.length + 1);
-    await call("agents_account_save", { name: label });
-    setName("");
+  const load = React2.useCallback(async () => {
+    if (!enabled) {
+      setData(null);
+      return;
+    }
+    try {
+      const result = await post("/api/devices/" + encodeURIComponent(device) + "/fs/agents_accounts", { id: agent.id });
+      setData(result || null);
+      setError("");
+    } catch (cause) {
+      setError(String(cause && (cause.message || cause.code) || "\u8BFB\u53D6\u5931\u8D25"));
+    }
+  }, [device, agent && agent.id, enabled, post]);
+  React2.useEffect(() => {
+    setData(null);
+    setError("");
+    setNotice("");
+    setOpen(false);
+    setLogin(null);
+    void load();
+  }, [device, agent && agent.id, enabled]);
+  React2.useEffect(() => {
+    if (!login || login.status !== "pending" || !login.loginId) return void 0;
+    const timer = setInterval(async () => {
+      try {
+        const status2 = await post(
+          "/api/devices/" + encodeURIComponent(device) + "/fs/agents_account_login_status",
+          { login_id: login.loginId }
+        );
+        if (!status2 || !status2.status) return;
+        if (status2.status === "success") {
+          setLogin(null);
+          setNotice("\u8D26\u53F7\u5DF2\u6DFB\u52A0");
+          await load();
+        } else if (status2.status !== "pending") {
+          setLogin({ ...login, ...status2 });
+        }
+      } catch (cause) {
+        setLogin({ ...login, status: "error", error: String(cause && cause.message || cause) });
+      }
+    }, 1200);
+    return () => clearInterval(timer);
+  }, [login && login.loginId, login && login.status, device, post, load]);
+  const call = async (op, body, tag2) => {
+    setBusy(tag2);
+    setError("");
+    try {
+      const result = await post("/api/devices/" + encodeURIComponent(device) + "/fs/" + op, { id: agent.id, ...body });
+      if (result) setData(result);
+      return result;
+    } catch (cause) {
+      setError(String(cause && (cause.message || cause.code) || cause || "\u64CD\u4F5C\u5931\u8D25"));
+      return null;
+    } finally {
+      setBusy("");
+    }
   };
-  const live = data && data.live || [];
-  return h3(
+  const startLogin = async (profileId) => {
+    setBusy("login");
+    setError("");
+    try {
+      const result = await post(
+        "/api/devices/" + encodeURIComponent(device) + "/fs/agents_account_login_start",
+        { id: agent.id, profile: profileId || "" }
+      );
+      if (!result) return;
+      if (result.mode === "device" || result.loginId) {
+        setLogin({ ...result, status: "pending" });
+      } else if (result.mode === "command") {
+        setLogin({ ...result, status: "command" });
+        if (onLoginTerminal) onLoginTerminal(agent, result.command, result.argv);
+        else if (onOpenTerminal) onOpenTerminal(agent);
+      }
+    } catch (cause) {
+      setError(String(cause && (cause.message || cause.code) || cause || "\u767B\u5F55\u542F\u52A8\u5931\u8D25"));
+    } finally {
+      setBusy("");
+    }
+  };
+  const cancelLogin = async () => {
+    if (login && login.loginId) {
+      try {
+        await post(
+          "/api/devices/" + encodeURIComponent(device) + "/fs/agents_account_login_cancel",
+          { login_id: login.loginId }
+        );
+      } catch (_2) {
+      }
+    }
+    setLogin(null);
+  };
+  const switchProfile = async (profile) => {
+    const result = await call("agents_account_switch", { profile: profile.id }, "switch");
+    if (result) setNotice("\u5DF2\u5207\u6362\u5230 " + (profile.email || profile.name) + "\uFF0C\u91CD\u542F\u5F53\u524D Agent \u4F1A\u8BDD\u540E\u751F\u6548");
+  };
+  const removeProfile = async (profile) => {
+    if (deleteId !== profile.id) {
+      setDeleteId(profile.id);
+      return;
+    }
+    setDeleteId("");
+    await call("agents_account_delete", { profile: profile.id }, "delete");
+  };
+  const logout = async () => {
+    await call("agents_account_logout", {}, "logout");
+    setNotice("\u5DF2\u9000\u51FA\u5F53\u524D\u767B\u5F55\uFF0C\u5B58\u6863\u8D26\u53F7\u4ECD\u4FDD\u7559");
+  };
+  if (!enabled) return null;
+  const profiles = data && data.profiles || [];
+  const current = profiles.find((profile) => profile.current) || null;
+  const title = data && data.title || (agent.id === "codex" ? "ChatGPT (Codex OAuth)" : "\u8D26\u53F7");
+  const count = profiles.length;
+  const loginMode = data && data.loginMode || "snapshot";
+  const avatar = (size) => iconSrc ? h3("img", { src: iconSrc, alt: "", draggable: false, style: { width: size, height: size, objectFit: "contain" } }) : h3(
+    "span",
+    { style: {
+      width: size,
+      height: size,
+      display: "grid",
+      placeItems: "center",
+      borderRadius: Math.round(size / 3),
+      background: agent.color || C2.soft,
+      color: "#fff",
+      fontSize: Math.round(size * 0.45)
+    } },
+    h3(Glyph, { name: "bot", size: Math.round(size * 0.55) })
+  );
+  const quotaBar = (profile, key, label) => {
+    const usage = profile.usage || {};
+    const window2 = usage[key];
+    if (!window2 || typeof window2.usedPercent !== "number") return null;
+    const percent = Math.max(0, Math.min(100, window2.usedPercent));
+    return h3(
+      "div",
+      { key, style: { display: "grid", gridTemplateColumns: "52px minmax(0, 1fr) 132px", alignItems: "center", gap: 8 } },
+      h3("span", { style: { fontSize: 10.5, color: C2.mute } }, label || windowLabel(window2.windowMins)),
+      h3(
+        "div",
+        { style: { height: 5, borderRadius: 3, background: C2.soft, overflow: "hidden" } },
+        h3("div", { style: { height: "100%", width: Math.max(2, percent) + "%", borderRadius: 3, background: quotaColor(percent) } })
+      ),
+      h3(
+        "span",
+        { style: { fontSize: 10.5, color: C2.sub, textAlign: "right", whiteSpace: "nowrap" } },
+        Math.round(percent) + "% \xB7 " + resetText(window2.resetsAt)
+      )
+    );
+  };
+  const quotaLines = (profile) => {
+    const usage = profile.usage || {};
+    const primary = quotaBar(profile, "primary");
+    const secondary = quotaBar(profile, "secondary");
+    if (!primary && !secondary) return null;
+    return h3(
+      "div",
+      { style: {
+        display: "grid",
+        gap: 6,
+        padding: "8px 10px",
+        border: "1px solid " + C2.line,
+        borderRadius: 9,
+        background: C2.bg
+      } },
+      primary,
+      secondary
+    );
+  };
+  const badge = (text2, color, bg) => h3("span", { style: {
+    fontSize: 10,
+    padding: "1px 6px",
+    borderRadius: 999,
+    color,
+    background: bg,
+    whiteSpace: "nowrap"
+  } }, text2);
+  const accountRow = (profile) => h3(
     "div",
-    { style: { display: "flex", flexDirection: "column", minHeight: 0, gap: 8 } },
-    live.length ? h3(
-      "div",
-      { style: { display: "grid", gap: 3 } },
-      live.map((rel) => h3(
-        "div",
-        { key: rel, style: { display: "flex", alignItems: "center", gap: 7, fontSize: 10.5, color: C2.mute } },
-        h3(Glyph, { name: "shield", size: 11 }),
-        h3("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, rel)
-      ))
-    ) : null,
-    profiles.length ? h3(
-      "div",
-      { className: "tether-scroll", style: { display: "flex", flexDirection: "column", gap: 4, overflow: "auto", minHeight: 0 } },
-      profiles.map((profile) => h3(
-        "div",
-        {
-          key: profile.id,
-          style: {
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            minHeight: 34,
-            padding: "0 8px",
-            borderRadius: 8,
-            background: profile.current ? "rgba(21,112,239,.07)" : "transparent"
-          }
-        },
-        h3("span", { style: {
-          width: 6,
-          height: 6,
-          borderRadius: 3,
-          flex: "0 0 auto",
-          background: profile.current ? C2.blue : "rgba(9,30,66,.22)"
-        } }),
-        h3("span", { style: { minWidth: 0, flex: "1 1 auto", fontSize: 12.5, color: C2.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, profile.name),
-        profile.current ? h3("span", { style: { fontSize: 10.5, color: C2.blue } }, "\u5F53\u524D") : h3("button", {
-          type: "button",
-          disabled: busy === "agents_account_switch",
-          onClick: () => void call("agents_account_switch", { profile: profile.id }),
-          style: { ...field, height: 24, padding: "0 8px", cursor: "pointer", background: "transparent", flex: "0 0 auto" }
-        }, "\u5207\u6362"),
-        h3("button", {
-          type: "button",
-          title: "\u5220\u9664",
-          disabled: !!busy,
-          onClick: () => void call("agents_account_delete", { profile: profile.id }),
-          style: { width: 22, height: 22, border: 0, borderRadius: 5, background: "transparent", color: C2.mute, cursor: "pointer", flex: "0 0 auto" }
-        }, "\xD7")
-      ))
-    ) : h3("div", { style: { fontSize: 11.5, color: C2.mute, padding: "2px 0" } }, busy ? "\u2026" : ""),
+    { key: profile.id, style: {
+      display: "grid",
+      gap: 9,
+      padding: 12,
+      borderRadius: 12,
+      border: "1px solid " + (profile.current ? "rgba(21,112,239,.32)" : C2.line),
+      background: profile.current ? "rgba(21,112,239,.045)" : C2.bg
+    } },
     h3(
       "div",
-      { style: { display: "flex", gap: 6, marginTop: "auto" } },
-      h3("input", {
-        value: name,
-        autoFocus,
-        placeholder: "\u8D26\u53F7\u540D\u79F0",
-        onChange: (event) => setName(event.target.value),
-        onKeyDown: (event) => {
-          if (event.key === "Enter") {
-            event.preventDefault();
-            void save();
-          }
-        },
-        style: { ...field, flex: "1 1 auto", minWidth: 0 }
-      }),
+      { style: { display: "flex", alignItems: "center", gap: 9, minWidth: 0 } },
+      h3("span", { style: {
+        width: 30,
+        height: 30,
+        flex: "0 0 auto",
+        display: "grid",
+        placeItems: "center",
+        borderRadius: 8,
+        background: C2.soft
+      } }, avatar(22)),
       h3(
+        "div",
+        { style: { minWidth: 0, flex: "1 1 auto", display: "grid", gap: 2 } },
+        h3(
+          "div",
+          { style: { display: "flex", alignItems: "center", gap: 6, minWidth: 0 } },
+          h3(
+            "span",
+            { style: { fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
+            profile.email || profile.name || profile.id
+          ),
+          profile.current ? badge("\u5F53\u524D", C2.blue, "rgba(21,112,239,.10)") : null,
+          profile.plan ? badge(planLabel(profile.plan), C2.sub, C2.soft) : null
+        ),
+        profile.email && profile.name && profile.name !== profile.email ? h3("span", { style: { fontSize: 10.5, color: C2.mute } }, profile.name) : null
+      ),
+      h3(
+        "div",
+        { style: { display: "flex", alignItems: "center", gap: 4, flex: "0 0 auto" } },
+        !profile.current ? h3("button", {
+          type: "button",
+          disabled: !!busy,
+          onClick: () => switchProfile(profile),
+          className: "tether-hover",
+          style: { ...field, height: 26, padding: "0 9px", cursor: "pointer", background: "transparent", color: C2.blue }
+        }, busy === "switch" ? "\u2026" : "\u5207\u6362") : null,
+        h3("button", {
+          type: "button",
+          disabled: !!busy,
+          title: "\u91CD\u65B0\u767B\u5F55",
+          "aria-label": "\u91CD\u65B0\u767B\u5F55",
+          onClick: () => startLogin(profile.id),
+          className: "tether-hover",
+          style: {
+            height: 26,
+            padding: "0 8px",
+            border: "1px solid " + C2.line,
+            borderRadius: 7,
+            background: "transparent",
+            color: C2.sub,
+            fontSize: 11,
+            cursor: "pointer"
+          }
+        }, busy === "login" ? "\u2026" : "\u91CD\u65B0\u767B\u5F55"),
+        h3("button", {
+          type: "button",
+          title: deleteId === profile.id ? "\u786E\u8BA4\u5220\u9664" : "\u5220\u9664\u8D26\u53F7",
+          "aria-label": "\u5220\u9664\u8D26\u53F7",
+          disabled: !!busy,
+          onClick: () => removeProfile(profile),
+          className: "tether-hover",
+          style: {
+            height: 26,
+            minWidth: deleteId === profile.id ? 56 : 26,
+            padding: "0 7px",
+            border: 0,
+            borderRadius: 6,
+            background: deleteId === profile.id ? "rgba(220,38,38,.08)" : "transparent",
+            color: deleteId === profile.id ? C2.red : C2.mute,
+            fontSize: 11,
+            cursor: "pointer"
+          }
+        }, deleteId === profile.id ? "\u786E\u8BA4" : "\xD7")
+      )
+    ),
+    quotaLines(profile)
+  );
+  const modal = open ? h3(
+    "div",
+    {
+      style: {
+        position: "fixed",
+        inset: 0,
+        zIndex: 70,
+        background: "rgba(15,23,42,.28)",
+        display: "grid",
+        placeItems: "center",
+        padding: 24
+      },
+      onMouseDown: (event) => {
+        if (event.target === event.currentTarget) setOpen(false);
+      }
+    },
+    h3(
+      "div",
+      { role: "dialog", "aria-label": "\u8D26\u53F7\u7BA1\u7406", style: {
+        width: "min(780px, 94vw)",
+        maxHeight: "min(84vh, 820px)",
+        overflow: "auto",
+        background: C2.bg,
+        borderRadius: 16,
+        boxShadow: C2.shadow,
+        padding: "18px 20px 16px",
+        display: "grid",
+        gap: 12,
+        alignContent: "start"
+      } },
+      h3(
+        "div",
+        { style: { display: "flex", alignItems: "center", gap: 10 } },
+        h3("span", { style: { width: 34, height: 34, display: "grid", placeItems: "center", borderRadius: 9, background: C2.soft } }, avatar(24)),
+        h3(
+          "div",
+          { style: { minWidth: 0, flex: "1 1 auto", display: "grid", gap: 1 } },
+          h3("div", { style: { fontSize: 15, fontWeight: 600 } }, title),
+          h3("div", { style: { fontSize: 11, color: C2.mute } }, agent.id === "codex" ? "\u7BA1\u7406 ChatGPT \u8D26\u53F7" : "\u7BA1\u7406\u767B\u5F55\u8D26\u53F7")
+        ),
+        count ? badge(count + " \u4E2A\u8D26\u53F7", "#15803d", "rgba(22,163,74,.10)") : null,
+        h3("button", {
+          type: "button",
+          title: "\u5173\u95ED",
+          "aria-label": "\u5173\u95ED\u8D26\u53F7\u7BA1\u7406",
+          onClick: () => setOpen(false),
+          style: {
+            width: 30,
+            height: 30,
+            border: 0,
+            borderRadius: 7,
+            background: "transparent",
+            color: C2.mute,
+            cursor: "pointer",
+            fontSize: 18
+          }
+        }, "\xD7")
+      ),
+      h3("div", { style: { display: "grid", gap: 8 } }, ...profiles.map(accountRow)),
+      profiles.length ? null : h3(
+        "div",
+        { style: { padding: "26px 0", textAlign: "center", color: C2.mute, fontSize: 12 } },
+        "\u8FD8\u6CA1\u6709\u767B\u5F55\u8D26\u53F7"
+      ),
+      loginMode === "snapshot" ? h3("button", {
+        type: "button",
+        disabled: !!busy,
+        onClick: () => call("agents_account_save", {}, "save"),
+        className: "tether-hover",
+        style: {
+          height: 38,
+          border: "1px dashed rgba(21,112,239,.45)",
+          borderRadius: 10,
+          background: "transparent",
+          color: C2.blue,
+          fontSize: 12.5,
+          cursor: "pointer"
+        }
+      }, busy === "save" ? "\u6B63\u5728\u4FDD\u5B58\u2026" : "+ \u4FDD\u5B58\u5F53\u524D\u8D26\u53F7") : h3("button", {
+        type: "button",
+        disabled: !!busy,
+        onClick: () => startLogin(""),
+        className: "tether-hover",
+        style: {
+          height: 38,
+          border: "1px dashed rgba(21,112,239,.45)",
+          borderRadius: 10,
+          background: "transparent",
+          color: C2.blue,
+          fontSize: 12.5,
+          cursor: "pointer"
+        }
+      }, busy === "login" ? "\u6B63\u5728\u542F\u52A8\u767B\u5F55\u2026" : "+ \u6DFB\u52A0\u5176\u4ED6\u8D26\u53F7"),
+      count && agent.id === "codex" ? h3("button", {
+        type: "button",
+        disabled: !!busy,
+        onClick: logout,
+        className: "tether-hover",
+        style: {
+          height: 32,
+          border: 0,
+          borderRadius: 8,
+          background: "transparent",
+          color: C2.red,
+          fontSize: 11.5,
+          cursor: "pointer",
+          justifySelf: "start"
+        }
+      }, "\u9000\u51FA\u5F53\u524D\u767B\u5F55") : null,
+      error ? h3("div", { style: { fontSize: 11, color: C2.red } }, error) : null,
+      notice ? h3("div", { style: { fontSize: 11, color: C2.sub } }, notice) : null,
+      login ? loginOverlay() : null
+    )
+  ) : null;
+  function loginOverlay() {
+    if (!login) return null;
+    const device2 = login.status !== "command";
+    return h3(
+      "div",
+      { style: {
+        position: "fixed",
+        inset: 0,
+        zIndex: 90,
+        background: "rgba(15,23,42,.32)",
+        display: "grid",
+        placeItems: "center",
+        padding: 24
+      } },
+      h3(
+        "div",
+        { style: {
+          width: "min(430px, 92vw)",
+          background: C2.bg,
+          borderRadius: 14,
+          boxShadow: C2.shadow,
+          padding: 18,
+          display: "grid",
+          gap: 12
+        } },
+        h3("div", { style: { fontSize: 14, fontWeight: 600 } }, device2 ? "\u767B\u5F55 ChatGPT \u8D26\u53F7" : "\u5728\u7EC8\u7AEF\u5B8C\u6210\u767B\u5F55"),
+        device2 ? h3(
+          "div",
+          { style: { fontSize: 11.5, color: C2.sub, lineHeight: 1.6 } },
+          "\u5728\u6D4F\u89C8\u5668\u6253\u5F00\u4E0B\u9762\u7684\u5730\u5740\uFF0C\u8F93\u5165\u8BBE\u5907\u7801\u5B8C\u6210\u767B\u5F55\uFF1A"
+        ) : null,
+        device2 ? h3("input", {
+          readOnly: true,
+          value: login.url || "",
+          onFocus: (event) => event.target.select(),
+          style: { ...field, height: 32, width: "100%", fontFamily: "Consolas, monospace", fontSize: 11 }
+        }) : null,
+        device2 ? h3(
+          "div",
+          { style: { display: "flex", alignItems: "center", gap: 10 } },
+          h3("span", { style: {
+            flex: "1 1 auto",
+            padding: "10px 12px",
+            borderRadius: 9,
+            background: C2.soft,
+            fontFamily: "Consolas, monospace",
+            fontSize: 20,
+            letterSpacing: 3,
+            textAlign: "center"
+          } }, login.code || ""),
+          h3("button", {
+            type: "button",
+            onClick: () => copyText3(login.code || ""),
+            className: "tether-hover",
+            style: { ...field, height: 32, cursor: "pointer", background: "transparent" }
+          }, "\u590D\u5236")
+        ) : null,
+        device2 ? h3(
+          "div",
+          { style: { display: "flex", gap: 8 } },
+          h3("button", {
+            type: "button",
+            onClick: () => openUrl(login.url || ""),
+            className: "tether-hover",
+            style: {
+              flex: "1 1 auto",
+              height: 34,
+              border: 0,
+              borderRadius: 8,
+              background: C2.blue,
+              color: "#fff",
+              fontSize: 12,
+              cursor: "pointer"
+            }
+          }, "\u5728\u6D4F\u89C8\u5668\u6253\u5F00"),
+          h3("button", {
+            type: "button",
+            onClick: cancelLogin,
+            className: "tether-hover",
+            style: { ...field, height: 34, cursor: "pointer", background: "transparent" }
+          }, "\u53D6\u6D88")
+        ) : null,
+        !device2 ? h3(
+          "div",
+          { style: { fontSize: 11.5, color: C2.sub, lineHeight: 1.6 } },
+          "\u5728\u7EC8\u7AEF\u6267\u884C\u4E0B\u9762\u7684\u547D\u4EE4\uFF0C\u5B8C\u6210\u540E\u56DE\u5230\u8FD9\u91CC\u70B9\u201C\u4FDD\u5B58\u5F53\u524D\u8D26\u53F7\u201D\u3002"
+        ) : null,
+        !device2 ? h3("div", { style: {
+          ...field,
+          height: "auto",
+          padding: "8px 10px",
+          fontFamily: "Consolas, monospace",
+          fontSize: 11,
+          wordBreak: "break-all"
+        } }, login.command || "") : null,
+        device2 && login.status === "pending" ? h3("div", { style: { fontSize: 11, color: C2.sub } }, "\u7B49\u5F85\u6D4F\u89C8\u5668\u5B8C\u6210\u767B\u5F55\u2026") : null,
+        login.status === "error" ? h3("div", { style: { fontSize: 11, color: C2.red } }, login.error || "\u767B\u5F55\u5931\u8D25") : null,
+        !device2 ? h3("button", {
+          type: "button",
+          onClick: () => setLogin(null),
+          className: "tether-hover",
+          style: { ...field, height: 32, cursor: "pointer", background: "transparent" }
+        }, "\u5173\u95ED") : null
+      )
+    );
+  }
+  const compactCard = () => h3(
+    "div",
+    { style: { display: "flex", flexDirection: "column", gap: 8, minHeight: 0 } },
+    h3(
+      "div",
+      { style: { display: "flex", alignItems: "center", gap: 8 } },
+      h3("div", { style: { fontSize: 12, fontWeight: 600, color: C2.sub, flex: "1 1 auto" } }, "\u8D26\u53F7"),
+      count ? h3("span", { style: { fontSize: 10.5, color: C2.mute } }, count + " \u4E2A") : null,
+      h3("button", {
+        type: "button",
+        onClick: () => setOpen(true),
+        className: "tether-hover",
+        style: { ...field, height: 26, padding: "0 9px", cursor: "pointer", background: "transparent", color: C2.blue }
+      }, "\u7BA1\u7406")
+    ),
+    current ? h3(
+      "div",
+      { style: { display: "grid", gap: 7, padding: "9px 10px", borderRadius: 9, background: C2.soft } },
+      h3(
+        "div",
+        { style: { display: "flex", alignItems: "center", gap: 7, minWidth: 0 } },
+        h3("span", { style: { width: 24, height: 24, display: "grid", placeItems: "center", borderRadius: 7, background: C2.bg } }, avatar(17)),
+        h3("span", { style: {
+          minWidth: 0,
+          flex: "1 1 auto",
+          fontSize: 12,
+          fontWeight: 500,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap"
+        } }, current.email || current.name),
+        current.plan ? badge(planLabel(current.plan), C2.sub, C2.bg) : null
+      ),
+      current.usage && (current.usage.primary || current.usage.secondary) ? h3(
+        "div",
+        { style: { display: "flex", gap: 10, fontSize: 10.5, color: C2.mute } },
+        current.usage.primary ? h3("span", null, "5h " + Math.round(current.usage.primary.usedPercent) + "%") : null,
+        current.usage.secondary ? h3("span", null, "7d " + Math.round(current.usage.secondary.usedPercent) + "%") : null
+      ) : null
+    ) : h3("div", { style: { fontSize: 11.5, color: C2.mute } }, "\u672A\u767B\u5F55"),
+    h3(
+      "div",
+      { style: { display: "flex", gap: 6 } },
+      loginMode === "snapshot" ? h3("button", {
+        type: "button",
+        disabled: !!busy,
+        onClick: () => call("agents_account_save", {}, "save"),
+        className: "tether-hover tether-press",
+        style: {
+          flex: "1 1 auto",
+          height: 30,
+          border: 0,
+          borderRadius: 8,
+          background: C2.blue,
+          color: "#fff",
+          fontSize: 11.5,
+          cursor: "pointer"
+        }
+      }, busy === "save" ? "\u2026" : "\u4FDD\u5B58\u5F53\u524D") : h3("button", {
+        type: "button",
+        disabled: !!busy,
+        onClick: () => startLogin(""),
+        className: "tether-hover tether-press",
+        style: {
+          flex: "1 1 auto",
+          height: 30,
+          border: 0,
+          borderRadius: 8,
+          background: C2.blue,
+          color: "#fff",
+          fontSize: 11.5,
+          cursor: "pointer"
+        }
+      }, busy === "login" ? "\u2026" : "\u6DFB\u52A0\u8D26\u53F7"),
+      loginMode === "command" ? h3(
         "button",
         {
           type: "button",
           disabled: !!busy,
-          onClick: () => void save(),
-          style: { ...field, height: 30, padding: "0 10px", cursor: busy ? "default" : "pointer", background: "transparent", flex: "0 0 auto" }
+          onClick: () => call("agents_account_save", {}, "save"),
+          className: "tether-hover",
+          style: { ...field, height: 30, cursor: "pointer", background: "transparent" }
         },
-        busy === "agents_account_save" ? "\u2026" : "\u4FDD\u5B58\u5F53\u524D"
-      )
+        busy === "save" ? "\u2026" : "\u4FDD\u5B58\u5F53\u524D"
+      ) : null
     ),
-    error ? h3("div", { style: { fontSize: 11, color: C2.red } }, error) : null
+    error ? h3("div", { style: { fontSize: 10.5, color: C2.red } }, error) : null,
+    notice ? h3("div", { style: { fontSize: 10.5, color: C2.sub } }, notice) : null
   );
+  return h3(React2.Fragment, null, compactCard(), modal);
+}
+function copyText3(text2) {
+  try {
+    if (navigator.clipboard && text2) navigator.clipboard.writeText(text2);
+  } catch (_2) {
+  }
+}
+function openUrl(url) {
+  if (!url) return;
+  try {
+    if (window.tetherApp && typeof window.tetherApp.openExternal === "function") {
+      window.tetherApp.openExternal(url);
+      return;
+    }
+  } catch (_2) {
+  }
+  try {
+    window.open(url, "_blank", "noopener,noreferrer");
+  } catch (_2) {
+  }
 }
 
 // src/agent-catalog.js
@@ -177742,7 +178263,8 @@ function AgentHome({
   onOpen,
   onOpenCatalog,
   onOpenPane,
-  onClosePane
+  onClosePane,
+  onLoginTerminal
 }) {
   const h3 = React2.createElement;
   const agents = catalog && catalog.agents || [];
@@ -177974,8 +178496,16 @@ function AgentHome({
   const accounts = selected && selected.accounts ? h3(
     "div",
     { style: { ...card, padding: 14, display: "flex", flexDirection: "column", gap: 10, minHeight: 0 } },
-    h3("div", { style: { fontSize: 12, fontWeight: 600, color: C2.sub } }, "\u8D26\u53F7"),
-    h3(AgentAccountsPanel, { React: React2, Glyph, post, C: C2, device, agent: selected })
+    h3(AgentAccountsPanel, {
+      key: selected.id,
+      React: React2,
+      Glyph,
+      post,
+      C: C2,
+      device,
+      agent: selected,
+      onLoginTerminal: (target, command, argv) => onLoginTerminal && onLoginTerminal(target, command, argv)
+    })
   ) : null;
   const quickAction = (agent, action) => h3("button", {
     key: action.id,
@@ -178578,6 +179108,18 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
       dark: true
     });
   };
+  const openLogin = (agent2, command, argv) => {
+    if (!agent2 || !command && !(Array.isArray(argv) && argv.length)) return;
+    addPane({
+      key: "login:" + agent2.id,
+      kind: "terminal",
+      title: "\u767B\u5F55 " + agent2.name,
+      icon: agent2.icon,
+      dark: true,
+      initialCommand: command,
+      initialArgv: argv
+    });
+  };
   const openHerdr = () => {
     if (!herdrAvailable) {
       fail2(new Error("\u6B64\u8282\u70B9\u6CA1\u6709 Herdr"));
@@ -179083,6 +179625,7 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
         setWorkspaceOpen(true);
         setActivePane(key);
       },
+      onLoginTerminal: (agent2, command, argv) => openLogin(agent2, command, argv),
       onClosePane: closePane
     }) : null,
     picking ? h3(
@@ -179334,6 +179877,8 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
     cwd: "",
     initialAgent: pane.agentId || "",
     initialShell: pane.shell || "",
+    initialCommand: pane.initialCommand || "",
+    initialArgv: pane.initialArgv || null,
     label: pane.title,
     themeMode: "dark",
     fill: true,
@@ -179477,7 +180022,7 @@ function responseBelongsToDevice(data, expectedDevice) {
 function updateErrorText(value) {
   return String(value && value.message || value || "\u66F4\u65B0\u5931\u8D25").replace(/^Error invoking remote method ['"]tether:[^'"]+['"]:\s*/, "").replace(/^Error:\s*/, "");
 }
-async function copyText3(text2) {
+async function copyText4(text2) {
   const value = String(text2 || "");
   if (!value) return false;
   try {
@@ -186331,7 +186876,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       const copyPathText = (list2) => {
         const paths = (list2 || []).map((item) => item && item.path).filter(Boolean);
         if (!paths.length) return;
-        void copyText3(paths.join("\n")).then((ok2) => {
+        void copyText4(paths.join("\n")).then((ok2) => {
           setNotice(ok2 ? paths.length > 1 ? "\u5DF2\u590D\u5236 " + paths.length + " \u4E2A\u8DEF\u5F84" : "\u5DF2\u590D\u5236\u8DEF\u5F84" : "\u590D\u5236\u8DEF\u5F84\u5931\u8D25");
         });
       };

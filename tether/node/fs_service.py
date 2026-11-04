@@ -852,6 +852,45 @@ class FsService:
                        profile=str(args.get("profile") or ""))
         return result
 
+    def _op_agents_account_login_start(self, args: dict[str, Any]) -> Any:
+        try:
+            agent_id = str(args.get("id") or "")
+            record = self.agents.get(agent_id) or {}
+            result = self.accounts.login_start(agent_id, str(args.get("profile") or ""),
+                                               str(record.get("command") or ""))
+        except ValueError as exc:
+            raise FsError(str(exc), "accounts_error") from None
+        except RuntimeError as exc:
+            raise FsError(str(exc), "accounts_login") from None
+        self.audit.add(op="agents_account_login_start", path=str(self.accounts.root),
+                       mode=self.policy.data.get("mode"), phase="result", result="ok",
+                       agent=str(args.get("id") or ""), profile=str(args.get("profile") or ""))
+        return result
+
+    def _op_agents_account_login_status(self, args: dict[str, Any]) -> Any:
+        return self.accounts.login_status(str(args.get("login_id") or ""))
+
+    def _op_agents_account_login_cancel(self, args: dict[str, Any]) -> Any:
+        return self.accounts.login_cancel(str(args.get("login_id") or ""))
+
+    def _op_agents_account_logout(self, args: dict[str, Any]) -> Any:
+        try:
+            result = self.accounts.logout(str(args.get("id") or ""))
+        except ValueError as exc:
+            raise FsError(str(exc), "accounts_error") from None
+        except RuntimeError as exc:
+            raise FsError(str(exc), "accounts_logout") from None
+        self.audit.add(op="agents_account_logout", path=str(self.accounts.root),
+                       mode=self.policy.data.get("mode"), phase="result", result="ok",
+                       agent=str(args.get("id") or ""))
+        return result
+
+    def _op_agents_account_probe(self, args: dict[str, Any]) -> Any:
+        try:
+            return self.accounts.probe(str(args.get("id") or ""), str(args.get("profile") or ""))
+        except ValueError as exc:
+            raise FsError(str(exc), "accounts_error") from None
+
     def _op_agents_test(self, args: dict[str, Any]) -> Any:
         try:
             result = self.agents.test(str(args.get("id") or ""))
