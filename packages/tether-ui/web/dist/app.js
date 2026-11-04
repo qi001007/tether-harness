@@ -176970,6 +176970,149 @@ function writeHarnesses(device, data) {
   if (device && Array.isArray(data)) harnesses.set(device, data);
 }
 
+// src/agent-accounts-panel.js
+function AgentAccountsPanel({ React: React2, Glyph, post, C: C2, device, agent, autoFocus = false }) {
+  const h3 = React2.createElement;
+  const [data, setData] = React2.useState(null);
+  const [name, setName] = React2.useState("");
+  const [busy, setBusy] = React2.useState("");
+  const [error, setError] = React2.useState("");
+  const enabled = !!(agent && agent.accounts);
+  const call = async (op, body) => {
+    setBusy(op);
+    setError("");
+    try {
+      const result = await post(
+        "/api/devices/" + encodeURIComponent(device) + "/fs/" + op,
+        { id: agent.id, ...body }
+      );
+      setData(result || null);
+    } catch (cause) {
+      setError(String(cause && (cause.message || cause.code) || cause || "\u64CD\u4F5C\u5931\u8D25"));
+    } finally {
+      setBusy("");
+    }
+  };
+  React2.useEffect(() => {
+    if (!enabled) {
+      setData(null);
+      return;
+    }
+    let cancelled = false;
+    setData(null);
+    setError("");
+    void post("/api/devices/" + encodeURIComponent(device) + "/fs/agents_accounts", { id: agent.id }).then((result) => {
+      if (!cancelled) setData(result || null);
+    }).catch((cause) => {
+      if (!cancelled) setError(String(cause && (cause.message || cause.code) || "\u8BFB\u53D6\u5931\u8D25"));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [device, agent && agent.id, enabled]);
+  if (!enabled) return null;
+  const profiles = data && data.profiles || [];
+  const field = {
+    height: 30,
+    boxSizing: "border-box",
+    border: "1px solid rgba(9,30,66,.14)",
+    borderRadius: 7,
+    padding: "0 9px",
+    background: C2.bg,
+    color: C2.ink,
+    fontSize: 12,
+    outline: "none"
+  };
+  const save = async () => {
+    const label = name.trim() || "\u8D26\u53F7 " + (profiles.length + 1);
+    await call("agents_account_save", { name: label });
+    setName("");
+  };
+  const live = data && data.live || [];
+  return h3(
+    "div",
+    { style: { display: "flex", flexDirection: "column", minHeight: 0, gap: 8 } },
+    live.length ? h3(
+      "div",
+      { style: { display: "grid", gap: 3 } },
+      live.map((rel) => h3(
+        "div",
+        { key: rel, style: { display: "flex", alignItems: "center", gap: 7, fontSize: 10.5, color: C2.mute } },
+        h3(Glyph, { name: "shield", size: 11 }),
+        h3("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, rel)
+      ))
+    ) : null,
+    profiles.length ? h3(
+      "div",
+      { className: "tether-scroll", style: { display: "flex", flexDirection: "column", gap: 4, overflow: "auto", minHeight: 0 } },
+      profiles.map((profile) => h3(
+        "div",
+        {
+          key: profile.id,
+          style: {
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            minHeight: 34,
+            padding: "0 8px",
+            borderRadius: 8,
+            background: profile.current ? "rgba(21,112,239,.07)" : "transparent"
+          }
+        },
+        h3("span", { style: {
+          width: 6,
+          height: 6,
+          borderRadius: 3,
+          flex: "0 0 auto",
+          background: profile.current ? C2.blue : "rgba(9,30,66,.22)"
+        } }),
+        h3("span", { style: { minWidth: 0, flex: "1 1 auto", fontSize: 12.5, color: C2.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, profile.name),
+        profile.current ? h3("span", { style: { fontSize: 10.5, color: C2.blue } }, "\u5F53\u524D") : h3("button", {
+          type: "button",
+          disabled: busy === "agents_account_switch",
+          onClick: () => void call("agents_account_switch", { profile: profile.id }),
+          style: { ...field, height: 24, padding: "0 8px", cursor: "pointer", background: "transparent", flex: "0 0 auto" }
+        }, "\u5207\u6362"),
+        h3("button", {
+          type: "button",
+          title: "\u5220\u9664",
+          disabled: !!busy,
+          onClick: () => void call("agents_account_delete", { profile: profile.id }),
+          style: { width: 22, height: 22, border: 0, borderRadius: 5, background: "transparent", color: C2.mute, cursor: "pointer", flex: "0 0 auto" }
+        }, "\xD7")
+      ))
+    ) : h3("div", { style: { fontSize: 11.5, color: C2.mute, padding: "2px 0" } }, busy ? "\u2026" : ""),
+    h3(
+      "div",
+      { style: { display: "flex", gap: 6, marginTop: "auto" } },
+      h3("input", {
+        value: name,
+        autoFocus,
+        placeholder: "\u8D26\u53F7\u540D\u79F0",
+        onChange: (event) => setName(event.target.value),
+        onKeyDown: (event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            void save();
+          }
+        },
+        style: { ...field, flex: "1 1 auto", minWidth: 0 }
+      }),
+      h3(
+        "button",
+        {
+          type: "button",
+          disabled: !!busy,
+          onClick: () => void save(),
+          style: { ...field, height: 30, padding: "0 10px", cursor: busy ? "default" : "pointer", background: "transparent", flex: "0 0 auto" }
+        },
+        busy === "agents_account_save" ? "\u2026" : "\u4FDD\u5B58\u5F53\u524D"
+      )
+    ),
+    error ? h3("div", { style: { fontSize: 11, color: C2.red } }, error) : null
+  );
+}
+
 // src/agent-catalog.js
 var toDraft = (agent) => ({
   name: agent.name,
@@ -177344,6 +177487,11 @@ function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose }
           style: { ...field, width: "fit-content", padding: "0 10px", cursor: "pointer", background: "transparent" }
         }, "+ \u53D8\u91CF")
       )),
+      selected.accounts ? group("\u8D26\u53F7", h3(
+        "div",
+        { style: { padding: "10px 12px", display: "grid", gap: 8 } },
+        h3(AgentAccountsPanel, { React: React2, Glyph, post, C: C2, device, agent: selected })
+      )) : null,
       group("\u8BCA\u65AD", h3(
         "div",
         { style: { padding: "10px 12px", display: "grid", gap: 8 } },
@@ -177485,10 +177633,9 @@ function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose }
           "aria-label": "\u5237\u65B0",
           onClick: () => void load(true, selectedId),
           disabled: busy,
-          style: { ...field, display: "flex", alignItems: "center", gap: 5, cursor: "pointer", opacity: busy ? 0.5 : 1 }
+          style: { ...field, width: 30, padding: 0, display: "grid", placeItems: "center", cursor: "pointer", opacity: busy ? 0.5 : 1 }
         },
-        h3(Glyph, { name: "refresh", size: 12 }),
-        busy ? "\u5237\u65B0\u4E2D\u2026" : "\u5237\u65B0"
+        h3(Glyph, { name: "refresh", size: 13 })
       ),
       h3("button", {
         type: "button",
@@ -177520,13 +177667,19 @@ function AgentHome({
   React: React2,
   Glyph,
   C: C2,
+  post,
+  device,
   catalog,
   harnesses: harnesses2 = [],
+  panes = [],
   loading = false,
   error = "",
   installing = "",
   onInstall,
-  onOpen
+  onOpen,
+  onOpenCatalog,
+  onOpenPane,
+  onClosePane
 }) {
   const h3 = React2.createElement;
   const agents = catalog && catalog.agents || [];
@@ -177550,46 +177703,6 @@ function AgentHome({
       color: "#fff"
     } }, h3(Glyph, { name: "bot", size: Math.round(size * 0.55) }));
   };
-  const dot = (agent) => h3("span", { style: {
-    position: "absolute",
-    right: -1,
-    bottom: -1,
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    background: agent.available ? C2.blue || "#1570ef" : "#d97706",
-    boxShadow: "0 0 0 1.5px " + C2.bg
-  } });
-  const railItem = (agent) => {
-    const active = selected && agent.id === selected.id;
-    return h3(
-      "button",
-      {
-        key: agent.id,
-        type: "button",
-        title: agent.name,
-        onClick: () => setSelectedId(agent.id),
-        className: "tether-hover tether-press",
-        style: {
-          display: "flex",
-          alignItems: "center",
-          gap: 7,
-          height: 34,
-          flex: "0 0 auto",
-          padding: active ? "0 12px 0 8px" : "0 8px",
-          border: 0,
-          borderRadius: 999,
-          background: active ? C2.panel || C2.bg : "transparent",
-          color: C2.ink,
-          cursor: "pointer",
-          opacity: agent.available ? 1 : 0.55,
-          boxShadow: active ? "0 1px 3px rgba(16,24,40,.14)" : "none"
-        }
-      },
-      h3("span", { style: { width: 22, height: 22, position: "relative", display: "grid", placeItems: "center" } }, icon(agent, 20), dot(agent)),
-      active ? h3("span", { style: { fontSize: 12.5, fontWeight: 500, whiteSpace: "nowrap" } }, agent.name) : null
-    );
-  };
   const harnessFor = (agent) => (harnesses2 || []).find((item) => {
     const hay = (String(item.id || "") + " " + String(item.name || "") + " " + String(item.command || "")).toLowerCase();
     return hay.includes(String(agent.id || "").toLowerCase()) || hay.includes(String(agent.name || "").toLowerCase());
@@ -177597,19 +177710,21 @@ function AgentHome({
   const actions = (agent) => {
     if (!agent) return [];
     if (!agent.available) {
-      return agent.install && agent.install.kind === "npm" ? [{ id: "install", label: installing === agent.id ? "\u5B89\u88C5\u4E2D\u2026" : "\u5B89\u88C5", primary: true }] : [];
+      return agent.install && agent.install.kind === "npm" ? [{ id: "install", label: "\u5B89\u88C5", icon: "plus", primary: true }] : [];
     }
     const list2 = [];
-    if ((agent.transports || []).includes("workbench")) list2.push({ id: "workbench", label: "\u5DE5\u4F5C\u53F0", primary: true });
-    if ((agent.transports || []).includes("terminal")) list2.push({ id: "terminal", label: "\u7EC8\u7AEF", primary: list2.length === 0 });
-    if ((agent.transports || []).includes("web")) list2.push({ id: "web", label: "Web", primary: list2.length === 0 });
+    if ((agent.transports || []).includes("workbench")) list2.push({ id: "workbench", label: "\u5DE5\u4F5C\u53F0", icon: "monitor", primary: true });
+    if ((agent.transports || []).includes("terminal")) list2.push({ id: "terminal", label: "\u7EC8\u7AEF", icon: "terminal", primary: list2.length === 0 });
+    if ((agent.transports || []).includes("web")) list2.push({ id: "web", label: "Web", icon: "apps", primary: list2.length === 0 });
     const harness = harnessFor(agent);
-    if (harness) list2.push({ id: "acp", label: "\u7ED3\u6784\u5316", harness, primary: list2.length === 0 });
+    if (harness) list2.push({ id: "acp", label: "\u7ED3\u6784\u5316", icon: "bot", harness, primary: list2.length === 0 });
     return list2;
   };
-  const fieldPrimary = { height: 32, padding: "0 16px", border: 0, borderRadius: 8, fontSize: 12.5, cursor: "pointer", color: "#fff", background: C2.blue };
-  const fieldGhost = {
-    height: 32,
+  const line = "1px solid rgba(9,30,66,.12)";
+  const card = { border: line, borderRadius: 12, background: C2.panel || C2.bg, minWidth: 0, minHeight: 0 };
+  const primary = { height: 34, padding: "0 16px", border: 0, borderRadius: 8, fontSize: 12.5, cursor: "pointer", color: "#fff", background: C2.blue };
+  const ghost = {
+    height: 34,
     padding: "0 14px",
     border: "1px solid rgba(9,30,66,.14)",
     borderRadius: 8,
@@ -177618,95 +177733,222 @@ function AgentHome({
     color: C2.ink,
     background: C2.bg
   };
-  const hero = selected ? h3(
+  const listRow = (agent) => {
+    const active = selected && agent.id === selected.id;
+    return h3(
+      "button",
+      {
+        key: agent.id,
+        type: "button",
+        onClick: () => setSelectedId(agent.id),
+        className: "tether-hover",
+        title: agent.name,
+        style: {
+          display: "flex",
+          alignItems: "center",
+          gap: 9,
+          width: "100%",
+          minHeight: 40,
+          padding: "5px 8px",
+          border: 0,
+          borderRadius: 8,
+          cursor: "pointer",
+          textAlign: "left",
+          background: active ? C2.soft : "transparent",
+          color: C2.ink,
+          opacity: agent.available ? 1 : 0.6
+        }
+      },
+      h3(
+        "span",
+        { style: { width: 24, height: 24, flex: "0 0 auto", display: "grid", placeItems: "center", position: "relative" } },
+        icon(agent, 22),
+        h3("span", { style: {
+          position: "absolute",
+          right: -1,
+          bottom: -1,
+          width: 7,
+          height: 7,
+          borderRadius: 4,
+          background: agent.available ? C2.blue || "#1570ef" : "#d97706",
+          boxShadow: "0 0 0 1.5px " + C2.bg
+        } })
+      ),
+      h3(
+        "span",
+        { style: { minWidth: 0, display: "grid", gap: 1, flex: "1 1 auto" } },
+        h3("span", { style: { fontSize: 12.5, fontWeight: active ? 600 : 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, agent.name),
+        agent.version ? h3("span", { style: { fontSize: 10, color: C2.mute, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, agent.version) : null
+      ),
+      agent.available ? null : h3("span", { style: { fontSize: 10, color: "#d97706", flex: "0 0 auto" } }, "\u672A\u88C5")
+    );
+  };
+  const actionTile = (agent, action) => h3("button", {
+    key: action.id,
+    type: "button",
+    disabled: action.id === "install" && installing === agent.id,
+    onClick: () => {
+      if (action.id === "install") {
+        if (onInstall) onInstall(agent);
+      } else if (onOpen) onOpen(agent, action.id, action.harness);
+    },
+    className: "tether-hover tether-press",
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 9,
+      minHeight: 42,
+      padding: "0 13px",
+      borderRadius: 10,
+      border: "1px solid " + (action.primary ? "transparent" : "rgba(9,30,66,.14)"),
+      background: action.primary ? C2.blue : C2.bg,
+      color: action.primary ? "#fff" : C2.ink,
+      fontSize: 12.5,
+      fontWeight: 500,
+      cursor: "pointer",
+      opacity: action.id === "install" && installing === agent.id ? 0.5 : 1
+    }
+  }, h3(Glyph, { name: action.icon, size: 15 }), action.label);
+  const info = (label, value, mono) => h3(
     "div",
-    { style: { flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column", gap: 14, padding: "6px 2px" } },
+    { style: { border: "1px solid rgba(9,30,66,.10)", borderRadius: 9, padding: "8px 10px", display: "grid", gap: 3, minWidth: 0 } },
+    h3("span", { style: { fontSize: 10.5, color: C2.mute } }, label),
+    h3("span", { style: {
+      fontSize: 12.5,
+      color: C2.ink,
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      whiteSpace: "nowrap",
+      fontFamily: mono ? "Consolas, monospace" : void 0
+    } }, value)
+  );
+  const running = panes.length ? h3(
+    "div",
+    { style: { display: "grid", gap: 4, minHeight: 0 } },
+    h3("div", { style: { fontSize: 10.5, color: C2.mute } }, "\u8FD0\u884C\u4E2D"),
     h3(
       "div",
-      { style: { display: "flex", alignItems: "center", gap: 14, minWidth: 0 } },
+      { className: "tether-scroll", style: { display: "grid", gap: 3, overflow: "auto", minHeight: 0 } },
+      ...panes.map((pane) => h3(
+        "div",
+        { key: pane.key, style: {
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "6px 8px",
+          borderRadius: 8,
+          background: C2.soft
+        } },
+        h3("span", { style: { width: 6, height: 6, borderRadius: 3, background: pane.kind === "web" ? C2.blue : "#d97706" } }),
+        h3("span", { style: { minWidth: 0, flex: "1 1 auto", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, pane.title),
+        h3("button", {
+          type: "button",
+          onClick: () => onOpenPane && onOpenPane(pane.key),
+          style: { ...ghost, height: 24, padding: "0 8px", cursor: "pointer" }
+        }, "\u6253\u5F00"),
+        h3("button", {
+          type: "button",
+          title: "\u5173\u95ED",
+          onClick: () => onClosePane && onClosePane(pane.key),
+          style: { width: 22, height: 22, border: 0, borderRadius: 5, background: "transparent", color: C2.mute, cursor: "pointer" }
+        }, "\xD7")
+      ))
+    )
+  ) : null;
+  const hero = selected ? h3(
+    "div",
+    { style: { ...card, flex: "1 1 auto", padding: 16, display: "flex", flexDirection: "column", gap: 12, overflow: "hidden" } },
+    h3(
+      "div",
+      { style: { display: "flex", alignItems: "center", gap: 12, minWidth: 0 } },
       h3("span", { style: {
-        width: 54,
-        height: 54,
+        width: 48,
+        height: 48,
         flex: "0 0 auto",
         display: "grid",
         placeItems: "center",
-        borderRadius: 13,
-        background: C2.panel || C2.bg,
+        borderRadius: 12,
+        background: C2.bg,
         boxShadow: "0 1px 4px rgba(16,24,40,.12)"
-      } }, icon(selected, 34)),
+      } }, icon(selected, 32)),
       h3(
         "div",
-        { style: { minWidth: 0, display: "grid", gap: 3 } },
-        h3(
-          "div",
-          { style: { display: "flex", alignItems: "center", gap: 8, minWidth: 0 } },
-          h3("span", { style: { fontSize: 20, fontWeight: 600, letterSpacing: "-.2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, selected.name),
-          h3(
-            "span",
-            { style: {
-              height: 22,
-              display: "inline-flex",
-              alignItems: "center",
-              padding: "0 8px",
-              borderRadius: 6,
-              fontSize: 10.5,
-              color: selected.available ? C2.blue || "#1570ef" : "#d97706",
-              background: selected.available ? "rgba(21,112,239,.08)" : "rgba(217,119,6,.10)"
-            } },
-            selected.available ? "\u53EF\u7528" : "\u672A\u5B89\u88C5"
-          )
-        ),
-        selected.version ? h3("span", { style: { fontSize: 11.5, color: C2.mute } }, selected.version) : null
+        { style: { minWidth: 0 } },
+        h3("div", { style: { fontSize: 19, fontWeight: 600 } }, selected.name),
+        h3("div", { style: { fontSize: 11, color: C2.mute } }, selected.version || "\u2014")
       ),
-      h3("span", { style: { marginLeft: "auto" } })
+      h3(
+        "button",
+        {
+          type: "button",
+          title: "Agent \u76EE\u5F55",
+          "aria-label": "Agent \u8BBE\u7F6E",
+          onClick: onOpenCatalog,
+          style: { ...ghost, height: 30, width: 30, padding: 0, marginLeft: "auto", display: "grid", placeItems: "center", flex: "0 0 auto" }
+        },
+        h3(Glyph, { name: "gear", size: 14 })
+      )
     ),
     h3(
       "div",
-      { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" } },
-      ...actions(selected).map((action) => h3("button", {
-        key: action.id,
-        type: "button",
-        disabled: action.id === "install" && installing === selected.id,
-        onClick: () => {
-          if (action.id === "install") {
-            if (onInstall) onInstall(selected);
-          } else if (onOpen) onOpen(selected, action.id, action.harness);
-        },
-        style: { ...action.primary ? fieldPrimary : fieldGhost, opacity: action.id === "install" && installing === selected.id ? 0.5 : 1 }
-      }, action.label))
+      { style: { display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))" } },
+      ...actions(selected).map((action) => actionTile(selected, action))
     ),
-    selected.command ? h3("div", { style: {
-      fontFamily: "Consolas, monospace",
-      fontSize: 10.5,
-      color: C2.mute,
-      overflow: "hidden",
-      textOverflow: "ellipsis",
-      whiteSpace: "nowrap"
-    } }, selected.command) : null,
+    h3(
+      "div",
+      { style: { display: "grid", gap: 8, gridTemplateColumns: "repeat(2, minmax(0, 1fr))" } },
+      info("\u7248\u672C", selected.version || "\u2014"),
+      info("\u5DE5\u4F5C\u76EE\u5F55", selected.cwd || "\u9ED8\u8BA4\u5DE5\u4F5C\u533A", true),
+      h3("div", { style: { gridColumn: "1 / -1" } }, info("\u547D\u4EE4", selected.command || "\u2014", true))
+    ),
+    running,
     h3("div", { style: { flex: "1 1 auto", minHeight: 0 } })
   ) : h3(
     "div",
-    { style: { flex: "1 1 auto", display: "grid", placeItems: "center", color: C2.mute, fontSize: 12 } },
+    { style: { ...card, display: "grid", placeItems: "center", color: C2.mute, fontSize: 12 } },
     loading ? "\u2026" : ""
   );
+  const accounts = selected && selected.accounts ? h3(
+    "div",
+    { style: { ...card, padding: 14, display: "flex", flexDirection: "column", gap: 10, minHeight: 0 } },
+    h3("div", { style: { fontSize: 12, fontWeight: 600, color: C2.sub } }, "\u8D26\u53F7"),
+    h3(AgentAccountsPanel, { React: React2, Glyph, post, C: C2, device, agent: selected }),
+    h3("div", { style: { flex: "1 1 auto", minHeight: 0 } })
+  ) : null;
   return h3(
     "div",
-    { style: { flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column", gap: 10 } },
+    { style: { flex: "1 1 auto", minHeight: 0, display: "flex", gap: 12 } },
     h3(
       "div",
-      { className: "tether-scroll", style: {
-        display: "flex",
-        alignItems: "center",
-        gap: 4,
+      { style: {
+        width: 240,
         flex: "0 0 auto",
-        overflowX: "auto",
-        padding: "2px 0 6px",
-        borderBottom: "1px solid rgba(9,30,66,.10)"
+        border: line,
+        borderRadius: 12,
+        background: C2.panel || C2.bg,
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden"
       } },
-      agents.map(railItem)
+      h3(
+        "div",
+        { className: "tether-scroll", style: { flex: "1 1 auto", overflow: "auto", padding: 7, display: "flex", flexDirection: "column", gap: 2 } },
+        agents.map(listRow)
+      )
     ),
-    error ? h3("div", { style: { color: C2.red, fontSize: 11.5 } }, error) : null,
-    hero
+    h3(
+      "div",
+      { style: {
+        flex: "1 1 auto",
+        minWidth: 0,
+        display: "grid",
+        gap: 12,
+        gridTemplateColumns: accounts ? "minmax(0, 1.25fr) minmax(270px, .75fr)" : "1fr"
+      } },
+      hero,
+      accounts
+    ),
+    error ? h3("div", { style: { position: "absolute", left: 260, bottom: 20, color: C2.red, fontSize: 11.5 } }, error) : null
   );
 }
 
@@ -177732,6 +177974,8 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
   const [tabs, setTabs] = React2.useState([]);
   const [picking, setPicking] = React2.useState(false);
   const [modelOpen, setModelOpen] = React2.useState(false);
+  const [thoughtOpen, setThoughtOpen] = React2.useState({});
+  const [toolOpen, setToolOpen] = React2.useState({});
   const [catalogOpen, setCatalogOpen] = React2.useState(false);
   const [deviceMenu, setDeviceMenu] = React2.useState(false);
   const [catalog, setCatalog] = React2.useState(() => readCatalog(initial));
@@ -177792,10 +178036,24 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
     }
     return [...current, { kind: "assistant", text: text2, streaming: true }];
   });
-  const finishStreaming = () => setItems((current) => {
+  const appendThought = (text2) => setItems((current) => {
     const last = current[current.length - 1];
-    if (!last || last.kind !== "assistant" || !last.streaming) return current;
-    return [...current.slice(0, -1), { ...last, streaming: false }];
+    if (last && last.kind === "thought" && last.streaming) {
+      return [...current.slice(0, -1), { ...last, text: last.text + text2 }];
+    }
+    return [...current, { kind: "thought", text: text2, streaming: true }];
+  });
+  const finishStreaming = () => setItems((current) => {
+    let next = current;
+    const last = next[next.length - 1];
+    if (last && last.kind === "assistant" && last.streaming) {
+      next = [...next.slice(0, -1), { ...last, streaming: false }];
+    }
+    const tail2 = next[next.length - 1];
+    if (tail2 && tail2.kind === "thought" && tail2.streaming) {
+      next = [...next.slice(0, -1), { ...tail2, streaming: false }];
+    }
+    return next;
   });
   const fail2 = (error) => {
     const message = String(error && error.message || error || "Agents \u64CD\u4F5C\u5931\u8D25");
@@ -178000,11 +178258,26 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
             const content = update.content || {};
             if (update.sessionUpdate === "agent_message_chunk" && content.type === "text") {
               appendAssistant(content.text);
+            } else if (update.sessionUpdate === "agent_thought_chunk" && content.type === "text") {
+              appendThought(content.text);
             } else if (update.sessionUpdate === "available_commands_update" && Array.isArray(update.availableCommands)) {
               setCommands(update.availableCommands.filter((entry) => entry && entry.name).slice(0, 12));
             } else if (update.sessionUpdate === "tool_call") {
               finishStreaming();
-              addItem({ kind: "tool", title: update.title || "\u5DE5\u5177\u8C03\u7528", status: update.status || "running" });
+              addItem({
+                kind: "tool",
+                id: update.toolCallId,
+                title: update.title || "\u5DE5\u5177\u8C03\u7528",
+                status: update.status || "running",
+                detail: toolDetail(update)
+              });
+            } else if (update.sessionUpdate === "tool_call_update") {
+              setItems((current) => current.map((item2) => item2.kind === "tool" && item2.id === update.toolCallId ? {
+                ...item2,
+                status: update.status || item2.status,
+                title: update.title || item2.title,
+                detail: toolDetail(update) || item2.detail
+              } : item2));
             } else if (update.sessionUpdate === "plan" && Array.isArray(update.entries)) {
               finishStreaming();
               addItem({ kind: "plan", entries: update.entries.map((entry) => entry.content || entry.title || "").filter(Boolean) });
@@ -178208,6 +178481,56 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
     color: "#fff",
     background: C2.blue
   };
+  const toolDetail = (update) => {
+    const parts = [];
+    const content = update && update.content;
+    if (Array.isArray(content)) {
+      for (const entry of content) {
+        if (!entry || typeof entry !== "object") continue;
+        if (entry.type === "text" && entry.text) parts.push(entry.text);
+        else if (entry.type === "content" && entry.content && entry.content.text) parts.push(entry.content.text);
+      }
+    } else if (content && typeof content === "object" && content.text) {
+      parts.push(content.text);
+    }
+    if (update && update.rawInput) {
+      try {
+        parts.push(JSON.stringify(update.rawInput, null, 2));
+      } catch (_2) {
+      }
+    }
+    return parts.join(String.fromCharCode(10)).slice(0, 4e3);
+  };
+  const inlineMarkdown = (text2) => String(text2 || "").split(/(\*\*[^*]+\*\*|`[^`]+`)/g).filter(Boolean).map((part, index) => {
+    if (/^\*\*[^*]+\*\*$/.test(part)) return h3("strong", { key: index }, part.slice(2, -2));
+    if (/^`[^`]+`$/.test(part)) return h3("code", { key: index, style: {
+      fontFamily: "Consolas, monospace",
+      fontSize: 12,
+      padding: "1px 4px",
+      borderRadius: 4,
+      background: "rgba(9,30,66,.06)"
+    } }, part.slice(1, -1));
+    return part;
+  });
+  const NEWLINE = String.fromCharCode(10);
+  const CRLF = new RegExp("[" + String.fromCharCode(13) + String.fromCharCode(10) + "]");
+  const FENCE_LANG = new RegExp("^[a-zA-Z0-9_-]+[" + String.fromCharCode(13) + String.fromCharCode(10) + "]+");
+  const renderMarkdown2 = (text2) => String(text2 || "").split(/```/).map((block2, index) => index % 2 ? h3("pre", { key: index, style: {
+    margin: "6px 0",
+    padding: 10,
+    borderRadius: 8,
+    background: "rgba(9,30,66,.05)",
+    fontFamily: "Consolas, monospace",
+    fontSize: 11.5,
+    lineHeight: 1.5,
+    overflowX: "auto",
+    whiteSpace: "pre-wrap",
+    wordBreak: "break-word"
+  } }, block2.replace(FENCE_LANG, "")) : h3(
+    "div",
+    { key: index, style: { display: "grid", gap: 2 } },
+    block2.split(CRLF).map((line, lineIndex) => h3("div", { key: lineIndex, style: { minHeight: line ? void 0 : 7 } }, ...inlineMarkdown(line)))
+  ));
   const renderItem = (item, index) => {
     if (item.kind === "user") return h3(
       "div",
@@ -178242,33 +178565,115 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
           color: C2.ink,
           fontSize: 13,
           lineHeight: 1.65,
+          wordBreak: "break-word"
+        } }, renderMarkdown2(item.text || (item.streaming ? "\u2026" : "")))
+      );
+    }
+    if (item.kind === "thought") {
+      const open = thoughtOpen[index] != null ? thoughtOpen[index] : !!item.streaming;
+      return h3(
+        "div",
+        { key: index, style: {
+          alignSelf: "flex-start",
+          maxWidth: "82%",
+          padding: "7px 10px",
+          borderRadius: 9,
+          borderLeft: "2px solid #d97706",
+          background: "rgba(217,119,6,.06)"
+        } },
+        h3(
+          "button",
+          {
+            type: "button",
+            onClick: () => setThoughtOpen((current) => ({ ...current, [index]: !open })),
+            style: {
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              border: 0,
+              background: "transparent",
+              color: C2.sub,
+              fontSize: 11.5,
+              cursor: "pointer",
+              padding: 0
+            }
+          },
+          h3(Glyph, { name: "think", size: 13 }),
+          "\u601D\u8003",
+          h3(Glyph, { name: "chevronDown", size: 11 })
+        ),
+        open ? h3("div", { style: {
+          marginTop: 5,
+          fontSize: 12.5,
+          color: C2.sub,
+          lineHeight: 1.6,
           whiteSpace: "pre-wrap",
           wordBreak: "break-word"
-        } }, item.text || (item.streaming ? "\u2026" : ""))
+        } }, item.text) : null
       );
     }
     if (item.kind === "tool") {
       const color = item.status === "completed" ? C2.green : item.status === "failed" ? C2.red : C2.sub;
+      const open = !!toolOpen[index];
       return h3(
         "div",
         { key: index, style: {
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
           alignSelf: "flex-start",
           maxWidth: "82%",
+          display: "grid",
+          gap: 6,
           padding: "7px 10px",
           borderRadius: 10,
           background: C2.soft,
           border: "1px solid " + C2.line
         } },
         h3(
-          "span",
-          { style: { width: 22, height: 22, flex: "0 0 auto", display: "grid", placeItems: "center", borderRadius: 6, background: C2.bg, color: C2.sub } },
-          h3(Glyph, { name: "tool", size: 13 })
+          "button",
+          {
+            type: "button",
+            onClick: () => setToolOpen((current) => ({ ...current, [index]: !open })),
+            style: {
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              border: 0,
+              background: "transparent",
+              padding: 0,
+              color: C2.ink,
+              cursor: item.detail ? "pointer" : "default",
+              textAlign: "left"
+            }
+          },
+          h3("span", { style: {
+            width: 22,
+            height: 22,
+            flex: "0 0 auto",
+            display: "grid",
+            placeItems: "center",
+            borderRadius: 6,
+            background: C2.bg,
+            color: C2.sub
+          } }, h3(Glyph, { name: "tool", size: 13 })),
+          h3("span", { style: { minWidth: 0, fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, item.title),
+          h3(
+            "span",
+            { style: { fontSize: 11, color, marginLeft: "auto", whiteSpace: "nowrap" } },
+            item.status === "completed" ? "\u5B8C\u6210" : item.status === "failed" ? "\u5931\u8D25" : "\u8FD0\u884C\u4E2D"
+          )
         ),
-        h3("span", { style: { minWidth: 0, fontSize: 12.5, color: C2.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, item.title),
-        h3("span", { style: { fontSize: 11, color, marginLeft: "auto", whiteSpace: "nowrap" } }, item.status === "completed" ? "\u5B8C\u6210" : item.status === "failed" ? "\u5931\u8D25" : "\u8FD0\u884C\u4E2D")
+        open && item.detail ? h3("pre", { style: {
+          margin: 0,
+          padding: 8,
+          borderRadius: 7,
+          background: "rgba(9,30,66,.05)",
+          fontFamily: "Consolas, monospace",
+          fontSize: 10.5,
+          lineHeight: 1.5,
+          whiteSpace: "pre-wrap",
+          wordBreak: "break-word",
+          maxHeight: 220,
+          overflow: "auto"
+        } }, item.detail) : null
       );
     }
     if (item.kind === "plan") {
@@ -178391,8 +178796,15 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
       disabled: detecting || !device,
       title: "\u5237\u65B0",
       "aria-label": "\u5237\u65B0",
-      style: { ...field, padding: "0 9px", opacity: detecting || !device ? 0.5 : 1 }
-    }, detecting ? "\u2026" : "\u5237\u65B0"),
+      style: {
+        ...field,
+        width: 30,
+        padding: 0,
+        display: "grid",
+        placeItems: "center",
+        opacity: detecting || !device ? 0.5 : 1
+      }
+    }, h3(Glyph, { name: "refresh", size: 14 })),
     session ? h3("button", {
       type: "button",
       onClick: () => void stop(),
@@ -178481,17 +178893,22 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
       React: React2,
       Glyph,
       C: C2,
+      post,
+      device,
       catalog,
       harnesses: harnesses2,
+      panes,
       loading: catalogBusy,
       error: catalogError,
       installing,
-      onRefresh: () => {
-        void detect(device);
-        void loadCatalog(true);
-      },
       onInstall: (agent2) => void installAgent(agent2),
-      onOpen: openAgent
+      onOpen: openAgent,
+      onOpenCatalog: () => setCatalogOpen(true),
+      onOpenPane: (key) => {
+        setWorkspaceOpen(true);
+        setActivePane(key);
+      },
+      onClosePane: closePane
     }) : null,
     picking ? h3(
       "div",
@@ -178752,6 +179169,10 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
     "div",
     {
       key: "tabs",
+      className: "tether-scroll tether-agent-tabs",
+      onWheel: (event) => {
+        if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) event.currentTarget.scrollLeft += event.deltaY;
+      },
       style: {
         display: "flex",
         alignItems: "center",
@@ -178759,7 +179180,9 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
         paddingBottom: 2,
         borderBottom: "1px solid rgba(9,30,66,.10)",
         flex: "0 0 auto",
-        overflowX: "auto"
+        overflowX: "auto",
+        overflowY: "hidden",
+        whiteSpace: "nowrap"
       }
     },
     h3("button", {

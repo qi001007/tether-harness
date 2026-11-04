@@ -273,6 +273,8 @@
 
 - [x] F113 Agents 的导航与设置要按软件逻辑重组，延迟要低，Herdr 要能看到 Tether 装的 Agent。判据：全局顶栏不出现“工作区 N”；表面切换是 Agents 页面内的标签；主页与表面来回切不卸载会话；目录设置分组且能测启动；页面返回用缓存即时渲染；Herdr 的 pane 能识别并启动 `D:\Tether\agents` 里的 Agent。**实测 2026-11-04**：顶栏去掉“工作区”，标签栏移到 Agents 页面内（`主页 | Codex × | Herdr ×`），Codex 终端在主页往返后内容仍在；主页改为 Codeg 图的横向图标条 + 单 Agent 主面板，不再堆卡片；目录右栏分为“启动 / 环境变量 / 诊断”，支持工作目录、环境变量、`测试启动`（Codex 返回 `codex-cli 0.163.0`）。客户端加按设备缓存，Files→Agents 返回时缓存列表立即渲染；服务端并行版本探测 + 预扫描，本机缓存 0.45 s / 全量 1.6 s。Herdr 隔离脚本改为自带 `HERDR_HOME/XDG/APPDATA/PATH`，并把 `D:\Tether\agents` 追加到用户 PATH（备份 `C:\Users\Administrator\.tether\env-path-backup-20261104.txt`，原值 288 字符）；新 pane 的 PATH 已含该目录，`herdr agent start gemini --kind gemini` 成功返回 `interactive_ready:true`。**仍缺**：LAPTOP-01 自 17:44 离线（mesh 不通，疑似休眠），本轮无法远程复核；Herdr 的鼠标拖拽分栏未自动化验证。
 
+- [ ] F114 Agents 前端要重做：减少空白、刷新用图标、顶栏常驻且目录/表面可切换、标签溢出可横向滚动、结构化会话要像 Codex（思考过程/工具/代码块）。判据：主页无大片空白；刷新只有图标；在目录页可直接点活动栏切走；标签过多时有隐藏滑块+滚轮横移；思考块可折叠、工具卡可展开、代码块正常渲染。**进展 2026-11-04**：主页改成左侧 21 个 Agent 垂直列表 + 右侧详情/账号，去掉横向图标条和巨幅水印；刷新按钮改为图标；目录嵌在常驻工具栏下；标签栏加 `tether-agent-tabs`，使用 `tether-scroll` 的“悬停才显示 6px 滑块”并支持 `wheel` 纵向转横向；结构化会话新增 `agent_thought_chunk` 思考块、`tool_call_update` 状态/详情、工具输出展开、助理 Markdown（代码块/行内代码/加粗）。账号管理落地：快照当前 Agent 凭证/配置到数据目录，支持保存/切换/删除，实测 Codex 切换前后 `auth.json` SHA 不变；`tests/test_agent_accounts.py` 4 条通过；全量 211 passed。21 个 Agent 图标 naturalWidth 全部非 0。**仍缺**：标签横向滚动只在 760px 最小窗口下验证到 6 个标签恰好铺满，未制造真实溢出；Herdr 侧栏/分栏鼠标拖动在窗口可见时仍未改变 ratio（需继续查 Herdr 鼠标模式）；LAPTOP-01 仍离线。
+
 ## 验收边界
 
 离线测试、隔离 UI、单机 DSH、本机真实模型回答、干净安装、真实跨设备操作和公开发布分别记录，不能互相替代。未完成发布与实机验收前，保持对应条目未完成。

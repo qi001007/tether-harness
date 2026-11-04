@@ -31,6 +31,7 @@ from typing import Any
 from .dsh_desktop import DshDesktop, DshError
 from .dsh_plugin import DshPluginError, install as install_dsh_plugin
 from .agent_registry import AgentRegistry
+from .agent_accounts import AgentAccounts
 from .web_apps import OpenCodeWeb
 try:
     from .dsh_web import DshWeb
@@ -496,6 +497,7 @@ class FsService:
         self.croc = None
         self._croc_context: dict[str, Any] = {}
         self.agents = AgentRegistry(data_dir)
+        self.accounts = AgentAccounts(data_dir)
         self.opencode = OpenCodeWeb(data_dir, workspace)
 
     def _resolve(self, raw: str | None) -> Path:
@@ -790,6 +792,8 @@ class FsService:
 
     def _op_agents_catalog(self, args: dict[str, Any]) -> Any:
         payload = self.agents.catalog(force=args.get("fresh") is True)
+        for item in payload.get("agents") or []:
+            item["accounts"] = self.accounts.supports(str(item.get("id") or ""))
         dsh = next((item for item in payload.get("agents") or [] if item.get("id") == "dsh"), None)
         if dsh is not None and self.dsh_web is not None:
             status = self.dsh_web.status()
@@ -811,6 +815,41 @@ class FsService:
         result = self.agents.remove(str(args.get("id") or ""))
         self.audit.add(op="agents_delete", path=str(self.agents.path), mode=self.policy.data.get("mode"),
                        phase="result", result="ok", agent=str(args.get("id") or ""))
+        return result
+
+    def _op_agents_accounts(self, args: dict[str, Any]) -> Any:
+        try:
+            return self.accounts.list(str(args.get("id") or ""))
+        except ValueError as exc:
+            raise FsError(str(exc), "accounts_error") from None
+
+    def _op_agents_account_save(self, args: dict[str, Any]) -> Any:
+        try:
+            result = self.accounts.save(str(args.get("id") or ""), str(args.get("name") or ""))
+        except ValueError as exc:
+            raise FsError(str(exc), "accounts_error") from None
+        self.audit.add(op="agents_account_save", path=str(self.accounts.root), mode=self.policy.data.get("mode"),
+                       phase="result", result="ok", agent=str(args.get("id") or ""))
+        return result
+
+    def _op_agents_account_switch(self, args: dict[str, Any]) -> Any:
+        try:
+            result = self.accounts.switch(str(args.get("id") or ""), str(args.get("profile") or ""))
+        except ValueError as exc:
+            raise FsError(str(exc), "accounts_error") from None
+        self.audit.add(op="agents_account_switch", path=str(self.accounts.root), mode=self.policy.data.get("mode"),
+                       phase="result", result="ok", agent=str(args.get("id") or ""),
+                       profile=str(args.get("profile") or ""))
+        return result
+
+    def _op_agents_account_delete(self, args: dict[str, Any]) -> Any:
+        try:
+            result = self.accounts.delete(str(args.get("id") or ""), str(args.get("profile") or ""))
+        except ValueError as exc:
+            raise FsError(str(exc), "accounts_error") from None
+        self.audit.add(op="agents_account_delete", path=str(self.accounts.root), mode=self.policy.data.get("mode"),
+                       phase="result", result="ok", agent=str(args.get("id") or ""),
+                       profile=str(args.get("profile") or ""))
         return result
 
     def _op_agents_test(self, args: dict[str, Any]) -> Any:

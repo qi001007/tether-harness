@@ -27,6 +27,8 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
   const [tabs, setTabs] = React.useState([])
   const [picking, setPicking] = React.useState(false)
   const [modelOpen, setModelOpen] = React.useState(false)
+  const [thoughtOpen, setThoughtOpen] = React.useState({})
+  const [toolOpen, setToolOpen] = React.useState({})
   const [catalogOpen, setCatalogOpen] = React.useState(false)
   const [deviceMenu, setDeviceMenu] = React.useState(false)
   const [catalog, setCatalog] = React.useState(() => readCatalog(initial))
@@ -91,10 +93,24 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
     }
     return [...current, { kind: 'assistant', text, streaming: true }]
   })
-  const finishStreaming = () => setItems((current) => {
+  const appendThought = (text) => setItems((current) => {
     const last = current[current.length - 1]
-    if (!last || last.kind !== 'assistant' || !last.streaming) return current
-    return [...current.slice(0, -1), { ...last, streaming: false }]
+    if (last && last.kind === 'thought' && last.streaming) {
+      return [...current.slice(0, -1), { ...last, text: last.text + text }]
+    }
+    return [...current, { kind: 'thought', text, streaming: true }]
+  })
+  const finishStreaming = () => setItems((current) => {
+    let next = current
+    const last = next[next.length - 1]
+    if (last && last.kind === 'assistant' && last.streaming) {
+      next = [...next.slice(0, -1), { ...last, streaming: false }]
+    }
+    const tail = next[next.length - 1]
+    if (tail && tail.kind === 'thought' && tail.streaming) {
+      next = [...next.slice(0, -1), { ...tail, streaming: false }]
+    }
+    return next
   })
 
   const fail = (error) => {
@@ -292,11 +308,19 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
             const content = update.content || {}
             if (update.sessionUpdate === 'agent_message_chunk' && content.type === 'text') {
               appendAssistant(content.text)
+            } else if (update.sessionUpdate === 'agent_thought_chunk' && content.type === 'text') {
+              appendThought(content.text)
             } else if (update.sessionUpdate === 'available_commands_update' && Array.isArray(update.availableCommands)) {
               setCommands(update.availableCommands.filter((entry) => entry && entry.name).slice(0, 12))
             } else if (update.sessionUpdate === 'tool_call') {
               finishStreaming()
-              addItem({ kind: 'tool', title: update.title || '工具调用', status: update.status || 'running' })
+              addItem({ kind: 'tool', id: update.toolCallId, title: update.title || '工具调用',
+                status: update.status || 'running', detail: toolDetail(update) })
+            } else if (update.sessionUpdate === 'tool_call_update') {
+              setItems((current) => current.map((item) => item.kind === 'tool' && item.id === update.toolCallId
+                ? { ...item, status: update.status || item.status, title: update.title || item.title,
+                    detail: toolDetail(update) || item.detail }
+                : item))
             } else if (update.sessionUpdate === 'plan' && Array.isArray(update.entries)) {
               finishStreaming()
               addItem({ kind: 'plan', entries: update.entries.map((entry) => entry.content || entry.title || '').filter(Boolean) })
@@ -473,6 +497,38 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
     cursor: 'pointer', color: '#fff', background: C.blue
   }
 
+  const toolDetail = (update) => {
+    const parts = []
+    const content = update && update.content
+    if (Array.isArray(content)) {
+      for (const entry of content) {
+        if (!entry || typeof entry !== 'object') continue
+        if (entry.type === 'text' && entry.text) parts.push(entry.text)
+        else if (entry.type === 'content' && entry.content && entry.content.text) parts.push(entry.content.text)
+      }
+    } else if (content && typeof content === 'object' && content.text) {
+      parts.push(content.text)
+    }
+    if (update && update.rawInput) {
+      try { parts.push(JSON.stringify(update.rawInput, null, 2)) } catch (_) {}
+    }
+    return parts.join(String.fromCharCode(10)).slice(0, 4000)
+  }
+  const inlineMarkdown = (text) => String(text || '').split(/(\*\*[^*]+\*\*|`[^`]+`)/g).filter(Boolean).map((part, index) => {
+    if (/^\*\*[^*]+\*\*$/.test(part)) return h('strong', { key: index }, part.slice(2, -2))
+    if (/^`[^`]+`$/.test(part)) return h('code', { key: index, style: { fontFamily: 'Consolas, monospace', fontSize: 12,
+      padding: '1px 4px', borderRadius: 4, background: 'rgba(9,30,66,.06)' } }, part.slice(1, -1))
+    return part
+  })
+  const NEWLINE = String.fromCharCode(10)
+  const CRLF = new RegExp('[' + String.fromCharCode(13) + String.fromCharCode(10) + ']')
+  const FENCE_LANG = new RegExp('^[a-zA-Z0-9_-]+[' + String.fromCharCode(13) + String.fromCharCode(10) + ']+')
+  const renderMarkdown = (text) => String(text || '').split(/```/).map((block, index) => index % 2
+    ? h('pre', { key: index, style: { margin: '6px 0', padding: 10, borderRadius: 8, background: 'rgba(9,30,66,.05)',
+      fontFamily: 'Consolas, monospace', fontSize: 11.5, lineHeight: 1.5, overflowX: 'auto', whiteSpace: 'pre-wrap',
+      wordBreak: 'break-word' } }, block.replace(FENCE_LANG, ''))
+    : h('div', { key: index, style: { display: 'grid', gap: 2 } },
+      block.split(CRLF).map((line, lineIndex) => h('div', { key: lineIndex, style: { minHeight: line ? undefined : 7 } }, ...inlineMarkdown(line)))))
   const renderItem = (item, index) => {
     if (item.kind === 'user') return h('div', { key: index, style: { display: 'flex', justifyContent: 'flex-end' } },
       h('div', { style: { maxWidth: '78%', padding: '8px 12px', borderRadius: '12px 12px 4px 12px',
@@ -483,16 +539,37 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
           h(Glyph, { name: 'bot', size: 14 })),
         h('div', { style: { maxWidth: '82%', padding: '9px 12px', borderRadius: '12px 12px 12px 4px',
           background: C.panel || C.bg, border: '1px solid ' + C.line, color: C.ink,
-          fontSize: 13, lineHeight: 1.65, whiteSpace: 'pre-wrap', wordBreak: 'break-word' } }, item.text || (item.streaming ? '…' : '')))
+          fontSize: 13, lineHeight: 1.65, wordBreak: 'break-word' } }, renderMarkdown(item.text || (item.streaming ? '…' : ''))))
+    }
+    if (item.kind === 'thought') {
+      const open = thoughtOpen[index] != null ? thoughtOpen[index] : !!item.streaming
+      return h('div', { key: index, style: { alignSelf: 'flex-start', maxWidth: '82%', padding: '7px 10px', borderRadius: 9,
+        borderLeft: '2px solid #d97706', background: 'rgba(217,119,6,.06)' } },
+        h('button', { type: 'button',
+          onClick: () => setThoughtOpen((current) => ({ ...current, [index]: !open })),
+          style: { display: 'flex', alignItems: 'center', gap: 6, border: 0, background: 'transparent', color: C.sub,
+            fontSize: 11.5, cursor: 'pointer', padding: 0 } },
+          h(Glyph, { name: 'think', size: 13 }), '思考',
+          h(Glyph, { name: 'chevronDown', size: 11 })),
+        open ? h('div', { style: { marginTop: 5, fontSize: 12.5, color: C.sub, lineHeight: 1.6, whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word' } }, item.text) : null)
     }
     if (item.kind === 'tool') {
       const color = item.status === 'completed' ? C.green : item.status === 'failed' ? C.red : C.sub
-      return h('div', { key: index, style: { display: 'flex', alignItems: 'center', gap: 8, alignSelf: 'flex-start', maxWidth: '82%',
+      const open = !!toolOpen[index]
+      return h('div', { key: index, style: { alignSelf: 'flex-start', maxWidth: '82%', display: 'grid', gap: 6,
         padding: '7px 10px', borderRadius: 10, background: C.soft, border: '1px solid ' + C.line } },
-        h('span', { style: { width: 22, height: 22, flex: '0 0 auto', display: 'grid', placeItems: 'center', borderRadius: 6, background: C.bg, color: C.sub } },
-          h(Glyph, { name: 'tool', size: 13 })),
-        h('span', { style: { minWidth: 0, fontSize: 12.5, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, item.title),
-        h('span', { style: { fontSize: 11, color, marginLeft: 'auto', whiteSpace: 'nowrap' } }, item.status === 'completed' ? '完成' : item.status === 'failed' ? '失败' : '运行中'))
+        h('button', { type: 'button', onClick: () => setToolOpen((current) => ({ ...current, [index]: !open })),
+          style: { display: 'flex', alignItems: 'center', gap: 8, border: 0, background: 'transparent', padding: 0,
+            color: C.ink, cursor: item.detail ? 'pointer' : 'default', textAlign: 'left' } },
+          h('span', { style: { width: 22, height: 22, flex: '0 0 auto', display: 'grid', placeItems: 'center', borderRadius: 6,
+            background: C.bg, color: C.sub } }, h(Glyph, { name: 'tool', size: 13 })),
+          h('span', { style: { minWidth: 0, fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, item.title),
+          h('span', { style: { fontSize: 11, color, marginLeft: 'auto', whiteSpace: 'nowrap' } },
+            item.status === 'completed' ? '完成' : item.status === 'failed' ? '失败' : '运行中')),
+        open && item.detail ? h('pre', { style: { margin: 0, padding: 8, borderRadius: 7, background: 'rgba(9,30,66,.05)',
+          fontFamily: 'Consolas, monospace', fontSize: 10.5, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+          maxHeight: 220, overflow: 'auto' } }, item.detail) : null)
     }
     if (item.kind === 'plan') {
       return h('div', { key: index, style: { alignSelf: 'flex-start', maxWidth: '82%', padding: '9px 12px', borderRadius: 10,
@@ -535,7 +612,8 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
       ) : null),
     h('button', { type: 'button', onClick: () => { void detect(device); void loadCatalog(true) }, disabled: detecting || !device,
       title: '刷新', 'aria-label': '刷新',
-      style: { ...field, padding: '0 9px', opacity: detecting || !device ? 0.5 : 1 } }, detecting ? '…' : '刷新'),
+      style: { ...field, width: 30, padding: 0, display: 'grid', placeItems: 'center',
+        opacity: detecting || !device ? 0.5 : 1 } }, h(Glyph, { name: 'refresh', size: 14 })),
     session ? h('button', { type: 'button', onClick: () => void stop(),
       style: { ...field, cursor: 'pointer', background: 'transparent' } }, '停止') : null,
     herdrAvailable ? h('button', {
@@ -574,10 +652,12 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
         style: { ...field, height: 26, padding: '0 9px', cursor: 'pointer' } }, '+')
     ) : null,
     !session && !picking ? h(AgentHome, {
-      key: 'home', React, Glyph, C, catalog, harnesses, loading: catalogBusy, error: catalogError,
-      installing, onRefresh: () => { void detect(device); void loadCatalog(true) },
-      onInstall: (agent) => void installAgent(agent),
-      onOpen: openAgent
+      key: 'home', React, Glyph, C, post, device, catalog, harnesses, panes,
+      loading: catalogBusy, error: catalogError,
+      installing, onInstall: (agent) => void installAgent(agent),
+      onOpen: openAgent, onOpenCatalog: () => setCatalogOpen(true),
+      onOpenPane: (key) => { setWorkspaceOpen(true); setActivePane(key) },
+      onClosePane: closePane
     }) : null,
     picking ? h('div', {
       style: { flex: '0 0 auto', display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }
@@ -685,8 +765,12 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
     })
   const surfaceTabs = panes.length ? h('div', {
     key: 'tabs',
+    className: 'tether-scroll tether-agent-tabs',
+    onWheel: (event) => {
+      if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) event.currentTarget.scrollLeft += event.deltaY
+    },
     style: { display: 'flex', alignItems: 'center', gap: 4, paddingBottom: 2, borderBottom: '1px solid rgba(9,30,66,.10)',
-      flex: '0 0 auto', overflowX: 'auto' }
+      flex: '0 0 auto', overflowX: 'auto', overflowY: 'hidden', whiteSpace: 'nowrap' }
   },
     h('button', {
       type: 'button', title: '主页', 'aria-label': '主页', onClick: () => setWorkspaceOpen(false),

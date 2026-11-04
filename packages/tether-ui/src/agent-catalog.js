@@ -1,5 +1,6 @@
 import { AGENT_ICONS } from './agent-icons.js'
 import { readCatalog, writeCatalog } from './agent-cache.js'
+import { AgentAccountsPanel } from './agent-accounts-panel.js'
 
 const toDraft = (agent) => ({
   name: agent.name, command: agent.command, argsText: (agent.args || []).join(' '),
@@ -261,6 +262,8 @@ export function AgentCatalogView({ React, Glyph, post, C, device, onClose }) {
           }, style: { ...field, width: 30, padding: 0, cursor: 'pointer', background: 'transparent', color: C.mute } }, '×'))),
         h('button', { type: 'button', onClick: () => setDraft({ ...draft, envRows: [...envRows, { k: '', v: '' }] }),
           style: { ...field, width: 'fit-content', padding: '0 10px', cursor: 'pointer', background: 'transparent' } }, '+ 变量'))),
+      selected.accounts ? group('账号', h('div', { style: { padding: '10px 12px', display: 'grid', gap: 8 } },
+        h(AgentAccountsPanel, { React, Glyph, post, C, device, agent: selected }))) : null,
       group('诊断', h('div', { style: { padding: '10px 12px', display: 'grid', gap: 8 } },
         h('button', { type: 'button', disabled: testing || !selected.available, onClick: () => void test(),
           style: { ...field, width: 'fit-content', padding: '0 10px', cursor: testing || !selected.available ? 'default' : 'pointer',
@@ -305,8 +308,8 @@ export function AgentCatalogView({ React, Glyph, post, C, device, onClose }) {
       h('div', { style: { fontSize: 16, fontWeight: 600 } }, 'Agent 目录'),
       h('span', { style: { marginLeft: 'auto' } }),
       h('button', { type: 'button', title: '刷新', 'aria-label': '刷新', onClick: () => void load(true, selectedId), disabled: busy,
-        style: { ...field, display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', opacity: busy ? 0.5 : 1 } },
-        h(Glyph, { name: 'refresh', size: 12 }), busy ? '刷新中…' : '刷新'),
+        style: { ...field, width: 30, padding: 0, display: 'grid', placeItems: 'center', cursor: 'pointer', opacity: busy ? 0.5 : 1 } },
+        h(Glyph, { name: 'refresh', size: 13 })),
       h('button', { type: 'button', onClick: openAdd,
         style: { ...primary, display: 'flex', alignItems: 'center', gap: 5 } }, h(Glyph, { name: 'plus', size: 13 }), '添加 Agent')),
     error && !editor ? h('div', { style: { padding: '0 2px', color: C.red, fontSize: 11.5 } }, error) : null,
