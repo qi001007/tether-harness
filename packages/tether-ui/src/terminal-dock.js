@@ -38,7 +38,7 @@ function isDarkTheme() {
   return !!(typeof document !== 'undefined' && document.body && document.body.hasAttribute('data-ds-dark-theme'))
 }
 
-export function createTerminalDock({ React, Glyph, post, C, device, cwd, height = 240, initialShell = '', onHeight, onClose }) {
+export function createTerminalDock({ React, Glyph, post, C, device, cwd, height = 240, initialShell = '', initialAgent = '', label = '', themeMode = 'auto', onHeight, onClose }) {
   const h = React.createElement
   const runtime = typeof window !== 'undefined' ? window.TetherTerminalRuntime : null
   const [shells, setShells] = React.useState([])
@@ -52,6 +52,7 @@ export function createTerminalDock({ React, Glyph, post, C, device, cwd, height 
   const [legacyOutput, setLegacyOutput] = React.useState('')
   const [legacyInput, setLegacyInput] = React.useState('')
   const [dark, setDark] = React.useState(isDarkTheme)
+  const useDark = themeMode === 'dark' || dark
   const hostRef = React.useRef(null)
   const termRef = React.useRef(null)
   const sessionRef = React.useRef('')
@@ -74,7 +75,7 @@ export function createTerminalDock({ React, Glyph, post, C, device, cwd, height 
   }, [])
 
   React.useEffect(() => {
-    if (termRef.current) termRef.current.options.theme = dark ? DARK_THEME : LIGHT_THEME
+    if (termRef.current) termRef.current.options.theme = useDark ? DARK_THEME : LIGHT_THEME
   }, [dark])
 
   React.useEffect(() => {
@@ -109,7 +110,7 @@ export function createTerminalDock({ React, Glyph, post, C, device, cwd, height 
       lineHeight: 1.35,
       scrollback: 5000,
       allowTransparency: false,
-      theme: dark ? DARK_THEME : LIGHT_THEME
+      theme: useDark ? DARK_THEME : LIGHT_THEME
     })
     const fit = runtime.FitAddon ? new runtime.FitAddon() : null
     if (fit) term.loadAddon(fit)
@@ -135,13 +136,14 @@ export function createTerminalDock({ React, Glyph, post, C, device, cwd, height 
         await postRef.current(url('terminal_stop'), { session_id: current })
       } catch (_) { /* node may already have closed it */ }
     }
-    const startSession = async (shellId) => {
+    const startSession = async (shellId, agentId) => {
       fitNow()
       setStatus('starting')
       setError('')
       try {
         const result = await postRef.current(url('terminal_start'), {
-          cwd, shell: shellId || undefined, cols: term.cols || 120, rows: term.rows || 30
+          cwd, shell: agentId ? undefined : (shellId || undefined), agent: agentId || undefined,
+          cols: term.cols || 120, rows: term.rows || 30
         })
         if (disposed) {
           if (result && result.session_id) void postRef.current(url('terminal_stop'), { session_id: result.session_id }).catch(() => {})
@@ -263,7 +265,10 @@ export function createTerminalDock({ React, Glyph, post, C, device, cwd, height 
     if (observer) observer.observe(host)
 
     actionsRef.current = {
-      restart: () => { const current = shellRef.current; void stopSession().then(() => startSession(current)) },
+      restart: () => {
+        const current = shellRef.current
+        void stopSession().then(() => startSession(current, initialAgent || undefined))
+      },
       changeShell: (next) => {
         setShell(next)
         shellRef.current = next
@@ -279,6 +284,12 @@ export function createTerminalDock({ React, Glyph, post, C, device, cwd, height 
         const list = (catalog && Array.isArray(catalog.shells) ? catalog.shells : [])
           .filter((item) => item && item.available)
         setShells(list)
+        if (initialAgent) {
+          setShell(initialAgent)
+          shellRef.current = initialAgent
+          await startSession(initialAgent, initialAgent)
+          return
+        }
         const preferred = (initialShell && list.some((item) => item.id === initialShell) ? initialShell : ((list.find((item) => item.default) || list[0] || {}).id || ''))
         setShell(preferred)
         shellRef.current = preferred
@@ -342,7 +353,7 @@ export function createTerminalDock({ React, Glyph, post, C, device, cwd, height 
     window.addEventListener('pointerup', done)
   }
 
-  const shellLabel = (shells.find((item) => item.id === shell) || {}).name || shell || '终端'
+  const shellLabel = label || (shells.find((item) => item.id === shell) || {}).name || shell || '终端'
   const openShellMenu = (event) => {
     if (!shells.length) return
     const rect = event.currentTarget.getBoundingClientRect()
@@ -356,11 +367,11 @@ export function createTerminalDock({ React, Glyph, post, C, device, cwd, height 
     })
   }
 
-  const palette = dark
+  const palette = useDark
     ? { term: '#1e1e1e', chrome: '#252526', ink: '#d4d4d4', mute: '#9da0a6', line: 'rgba(255,255,255,.07)', hover: 'rgba(255,255,255,.08)' }
     : { term: '#ffffff', chrome: '#f4f4f5', ink: '#2f3033', mute: '#77787c', line: 'rgba(0,0,0,.07)', hover: 'rgba(0,0,0,.06)' }
-  const menuBg = dark ? '#2b2b2e' : '#ffffff'
-  const menuShadow = dark ? '0 10px 28px rgba(0, 0, 0, 0.5)' : (C.shadow || '0 8px 24px rgba(16, 24, 40, 0.12)')
+  const menuBg = useDark ? '#2b2b2e' : '#ffffff'
+  const menuShadow = useDark ? '0 10px 28px rgba(0, 0, 0, 0.5)' : (C.shadow || '0 8px 24px rgba(16, 24, 40, 0.12)')
   const dot = status === 'ready' ? (C.green || '#16a34a')
     : status === 'starting' ? (C.amber || '#b54708')
       : (status === 'ended' ? (C.mute || '#667085') : (C.red || '#b42318'))
@@ -386,7 +397,9 @@ export function createTerminalDock({ React, Glyph, post, C, device, cwd, height 
     },
       h('span', { style: { display: 'grid', placeItems: 'center', color: palette.mute, flex: '0 0 auto' } },
         h(Glyph, { name: 'terminal', size: 13 })),
-      h('button', {
+      initialAgent ? h('span', {
+        style: { height: 20, maxWidth: 160, display: 'flex', alignItems: 'center', color: palette.ink, fontSize: 11.5, flex: '0 0 auto' }
+      }, label || initialAgent) : h('button', {
         type: 'button', 'aria-label': '终端类型', 'aria-haspopup': 'listbox', 'aria-expanded': !!shellMenu,
         title: '目标机可用的终端类型', disabled: !shells.length,
         onClick: openShellMenu, className: 'tether-hover',
@@ -442,7 +455,7 @@ export function createTerminalDock({ React, Glyph, post, C, device, cwd, height 
       style: {
         display: 'flex', alignItems: 'center', gap: 6, width: '100%', height: 30,
         padding: '0 8px', border: 0, borderRadius: 5, fontSize: 12.5, textAlign: 'left', cursor: 'pointer',
-        background: item.id === shell ? (dark ? 'rgba(255,255,255,.06)' : 'rgba(21,112,239,.08)') : 'transparent',
+        background: item.id === shell ? (useDark ? 'rgba(255,255,255,.06)' : 'rgba(21,112,239,.08)') : 'transparent',
         color: item.id === shell ? (C.blue || '#1570ef') : palette.ink
       }
     },
@@ -450,12 +463,12 @@ export function createTerminalDock({ React, Glyph, post, C, device, cwd, height 
       item.id === shell ? h('span', { style: { fontSize: 11, color: C.blue || '#1570ef' } }, '✓') : null
     ))) : null,
     error ? h('div', {
-      style: { flex: '0 0 auto', padding: '3px 10px', fontSize: 11, color: C.red || '#b42318', background: dark ? 'rgba(244,63,94,.10)' : 'rgba(180,35,24,.06)' }
+      style: { flex: '0 0 auto', padding: '3px 10px', fontSize: 11, color: C.red || '#b42318', background: useDark ? 'rgba(244,63,94,.10)' : 'rgba(180,35,24,.06)' }
     }, error) : null,
     h('div', { className: 'tether-term-body', style: { flex: '1 1 auto', minHeight: 0, padding: '4px 6px 4px', background: palette.term } },
       h('div', { ref: hostRef, className: 'tether-term', style: { width: '100%', height: '100%' } })
     ),
-    ptyMode === false ? h('div', { style: { flex: '0 0 auto', background: palette.term, color: dark ? '#cccccc' : '#333333' } },
+    ptyMode === false ? h('div', { style: { flex: '0 0 auto', background: palette.term, color: useDark ? '#cccccc' : '#333333' } },
       h('pre', {
         style: {
           margin: 0, padding: '0 10px 4px', maxHeight: 120, overflow: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word',

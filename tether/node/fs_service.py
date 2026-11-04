@@ -700,6 +700,13 @@ class FsService:
             raise FsError(str(exc), "terminal_error") from None
 
     def _op_terminal_start(self, args: dict[str, Any]) -> Any:
+        agent_id = str(args.get("agent") or "").strip()
+        if agent_id:
+            record = self.agents.get(agent_id)
+            if not record or not record.get("available") or not record.get("command"):
+                raise FsError("agent is not installed on this node", "agent_unavailable")
+            command = [str(record["command"])] + [str(item) for item in (record.get("args") or [])]
+            args = {**args, "command": command, "shell": "agent"}
         return self._terminal_dispatch("start", args)
 
     def _op_terminal_shells(self, args: dict[str, Any]) -> Any:
@@ -783,8 +790,8 @@ class FsService:
         if dsh is not None and self.dsh_web is not None:
             status = self.dsh_web.status()
             if status.get("running"):
-                dsh.update({"available": True, "kind": "web", "transports": ["web"],
-                            "version": dsh.get("version") or "DSH Web", "source": "service"})
+                dsh.update({"available": True, "kind": "web", "transports": ["workbench"],
+                            "version": dsh.get("version") or "DSH", "source": "service"})
         return payload
 
     def _op_agents_save(self, args: dict[str, Any]) -> Any:
@@ -800,6 +807,16 @@ class FsService:
         result = self.agents.remove(str(args.get("id") or ""))
         self.audit.add(op="agents_delete", path=str(self.agents.path), mode=self.policy.data.get("mode"),
                        phase="result", result="ok", agent=str(args.get("id") or ""))
+        return result
+
+    def _op_agents_install(self, args: dict[str, Any]) -> Any:
+        try:
+            result = self.agents.install(str(args.get("id") or ""))
+        except ValueError as exc:
+            raise FsError(str(exc), "agent_install") from None
+        self.audit.add(op="agents_install", path=str(self.agents.path), mode=self.policy.data.get("mode"),
+                       phase="result", result="ok" if result.get("installed") else "manual",
+                       agent=str(args.get("id") or ""))
         return result
 
     def _op_acp_detect(self, args: dict[str, Any]) -> Any:

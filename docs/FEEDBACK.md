@@ -267,6 +267,8 @@
 
 - [x] F110 OpenCode 必须像 DSH 一样用原生页面嵌入，而不是终端转播。判据：APP 内打开 OpenCode 原生 Web；未运行时一键启动；关闭后进程可停；节点重启后能恢复或重新启动；不打开外部浏览器。**实测 2026-11-04**：节点 `OpenCodeWeb` 用 `opencode serve --hostname 127.0.0.1 --port <4096–4195>`，注册进 `apps.json` 后由 mesh 网关暴露；`opencode_status/start/stop` 返回可嵌入 `url`。LAPTOP-01 实测 start → `4096 → http://10.144.0.3:43075/`，stop → `apps=[]`，再 start → `4097 → http://10.144.0.3:38246/`，网关均 `200 text/html` 且 `<title>OpenCode</title>`；重启 APP 后再 start → `30667`，APP 的 Agents 页与远程应用页都能满幅渲染 OpenCode。`tests/test_web_apps.py` 5 条覆盖注册/停止/启动失败/网关 URL/重启接管。启动状态存 `<data_dir>/opencode.json`，节点重启后若进程仍活着则接管而不是再起一个。**仍缺**：该 Node 能力尚未打进发布包；OpenCode 内真实模型对话未跑（需主人授权）。同时 F110 修复远程应用页：跟随全局设备、去掉原生 `<select>` 改为主题内自绘菜单。
 
+- [x] F111 Agents 主页要按目标节点“有什么用什么”，并把 Codeg 的 Agent 生态补全；不能在每台机器上都放一个 OpenCode 按钮。判据：已装/未装分栏；点已装 Agent 按它支持的能力给出终端/原生 Web/工作台；Codex/Qoder 是原生 TUI；OpenCode 可选 Web 或 CLI；DSH 打开原生工作台；Herdr 自动启动且与 Codex 多标签并存；未装 Agent 安装默认落 D 盘。**实测 2026-11-04**：内置 21 个（Codeg 20 + DSH + Copilot），图标取自 Codeg；本机检测出 Codex 0.163.0、Qoder 1.1.81、OpenCode 1.19.5、DSH 0.2.1-rc.2；点 Codex 在 APP 内起原生 Codex TUI，点 Qoder 起原生 Qoder CLI，点 OpenCode 可选 `Web`/`CLI`，点 DSH 切到原生工作台。`npm install -g --prefix D:\Tether\agents opencode-ai` 实际落盘 766 MB，目录刷新后 OpenCode 1.19.5 变为可用；未装 17 个保留安装按钮。多表面：Codex TUI + OpenCode Web + OpenCode TUI + Herdr 四个标签并存，切回 Codex 屏幕内容仍在；Herdr 直接自动启动，深色原生界面。LAPTOP-01 同版本部署后 Codex TUI 与 OpenCode Web 均真机通过。**仍缺**：system 类 Agent（Cursor/Kiro/Trae 等）只给官网入口，未做二进制自动下载；Windows 安装体积未做清理策略。
+
 ## 验收边界
 
 离线测试、隔离 UI、单机 DSH、本机真实模型回答、干净安装、真实跨设备操作和公开发布分别记录，不能互相替代。未完成发布与实机验收前，保持对应条目未完成。

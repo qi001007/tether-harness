@@ -22,32 +22,104 @@ from .acp import resolve_executable
 NO_WINDOW = 0x08000000
 VERSION_TIMEOUT = 4.0
 CACHE_TTL = 30.0
+INSTALL_TIMEOUT = 600.0
 KINDS = ("app-server", "acp", "web", "cli")
 
+# Codeg's built-in list (https://github.com/xintaofei/codeg, Apache-2.0) plus
+# DeepSeek Harness and GitHub Copilot CLI. `install` is only used for explicit
+# user actions; detection never installs anything on its own.
 BUILTINS: tuple[dict[str, Any], ...] = (
+    {"id": "claude", "name": "Claude Code", "commands": ("claude",), "kind": "acp",
+     "transports": ("acp", "terminal"), "icon": "claude", "color": "#c2410c",
+     "install": {"kind": "npm", "package": "@anthropic-ai/claude-code"}},
     {"id": "codex", "name": "Codex", "commands": ("codex",), "kind": "app-server",
-     "transports": ("app-server", "acp", "terminal"), "icon": "codex", "color": "#111827"},
+     "transports": ("app-server", "acp", "terminal"), "icon": "codex", "color": "#111827",
+     "install": {"kind": "npm", "package": "@openai/codex"}},
     {"id": "opencode", "name": "OpenCode", "commands": ("opencode",), "kind": "web",
-     "transports": ("web", "acp", "terminal"), "icon": "opencode", "color": "#0f766e"},
-    {"id": "qoder", "name": "Qoder", "commands": ("qodercli", "qoder"), "kind": "acp",
-     "transports": ("acp", "terminal"), "icon": "qoder", "color": "#7c3aed"},
-    {"id": "claude", "name": "Claude Code", "commands": ("claude", "claude-code-acp"), "kind": "acp",
-     "transports": ("acp", "terminal"), "icon": "claude", "color": "#c2410c"},
+     "transports": ("web", "acp", "terminal"), "icon": "opencode", "color": "#0f766e",
+     "install": {"kind": "npm", "package": "opencode-ai"}},
     {"id": "gemini", "name": "Gemini CLI", "commands": ("gemini",), "kind": "acp",
-     "transports": ("acp", "terminal"), "icon": "gemini", "color": "#2563eb"},
+     "transports": ("acp", "terminal"), "icon": "gemini", "color": "#2563eb",
+     "install": {"kind": "npm", "package": "@google/gemini-cli"}},
+    {"id": "openclaw", "name": "OpenClaw", "commands": ("openclaw",), "kind": "acp",
+     "transports": ("acp", "terminal"), "icon": "openclaw", "color": "#b91c1c",
+     "install": {"kind": "npm", "package": "openclaw"}},
+    {"id": "cline", "name": "Cline", "commands": ("cline",), "kind": "acp",
+     "transports": ("acp", "terminal"), "icon": "cline", "color": "#1f2937",
+     "install": {"kind": "npm", "package": "cline"}},
+    {"id": "hermes", "name": "Hermes Agent", "commands": ("hermes",), "kind": "acp",
+     "transports": ("acp", "terminal"), "icon": "hermes", "color": "#7c3aed",
+     "install": {"kind": "npm", "package": "hermes-agent"}},
+    {"id": "codebuddy", "name": "CodeBuddy", "commands": ("codebuddy",), "kind": "acp",
+     "transports": ("acp", "terminal"), "icon": "codebuddy", "color": "#0891b2",
+     "install": {"kind": "npm", "package": "@tencent-ai/codebuddy-code"}},
+    {"id": "kimi", "name": "Kimi Code", "commands": ("kimi",), "kind": "acp",
+     "transports": ("acp", "terminal"), "icon": "kimi", "color": "#be185d",
+     "install": {"kind": "npm", "package": "@moonshot-ai/kimi-code"}},
+    {"id": "pi", "name": "Pi", "commands": ("pi",), "kind": "acp",
+     "transports": ("acp", "terminal"), "icon": "pi", "color": "#4d7c0f",
+     "install": {"kind": "system", "url": "https://github.com/badlogic/pi-mono"}},
+    {"id": "grok", "name": "Grok", "commands": ("grok",), "kind": "acp",
+     "transports": ("acp", "terminal"), "icon": "grok", "color": "#0f172a",
+     "install": {"kind": "npm", "package": "@xai-official/grok"}},
     {"id": "cursor", "name": "Cursor Agent", "commands": ("cursor-agent",), "kind": "acp",
-     "transports": ("acp", "terminal"), "icon": "cursor", "color": "#0f172a"},
-    {"id": "copilot", "name": "Copilot CLI", "commands": ("copilot",), "kind": "acp",
-     "transports": ("acp", "terminal"), "icon": "copilot", "color": "#0891b2"},
-    {"id": "kimi", "name": "Kimi CLI", "commands": ("kimi",), "kind": "acp",
-     "transports": ("acp", "terminal"), "icon": "kimi", "color": "#be185d"},
-    {"id": "dsh", "name": "DeepSeek Harness", "commands": ("dsh",), "kind": "web",
-     "transports": ("web", "terminal"), "icon": "dsh", "color": "#1d4ed8"},
+     "transports": ("acp", "terminal"), "icon": "cursor", "color": "#0f172a",
+     "install": {"kind": "system", "url": "https://cursor.com/cli"}},
+    {"id": "dsh", "name": "DeepSeek Harness", "commands": ("dsh", "dsh-cli"), "kind": "web",
+     "transports": ("workbench",), "icon": "dsh", "color": "#1d4ed8",
+     "install": {"kind": "system", "url": "https://deepseek.com/harness"}},
+    {"id": "qoder", "name": "Qoder", "commands": ("qodercli", "qoder", "qoder-cli"), "kind": "acp",
+     "transports": ("acp", "terminal"), "icon": "qoder", "color": "#7c3aed",
+     "install": {"kind": "npm", "package": "@qoder-ai/qodercli"}},
+    {"id": "antigravity", "name": "Google Antigravity", "commands": ("agy_acp_server",), "kind": "acp",
+     "transports": ("acp", "terminal"), "icon": "antigravity", "color": "#4285f4",
+     "install": {"kind": "system", "url": "https://antigravity.google"}},
+    {"id": "kiro", "name": "Kiro CLI", "commands": ("kiro-cli",), "kind": "acp",
+     "transports": ("acp", "terminal"), "icon": "kiro", "color": "#6d28d9",
+     "install": {"kind": "system", "url": "https://kiro.dev"}},
+    {"id": "zcode", "name": "ZCode", "commands": ("zcode", "zcode-acp-server"), "kind": "acp",
+     "transports": ("acp", "terminal"), "icon": "zcode", "color": "#0f766e",
+     "install": {"kind": "system", "url": "https://zcode.dev"}},
+    {"id": "trae", "name": "TRAE CLI", "commands": ("traecli", "trae"), "kind": "acp",
+     "transports": ("acp", "terminal"), "icon": "trae", "color": "#2563eb",
+     "install": {"kind": "system", "url": "https://trae.ai"}},
+    {"id": "command-code", "name": "Command Code", "commands": ("command-code",), "kind": "acp",
+     "transports": ("acp", "terminal"), "icon": "command-code", "color": "#111827",
+     "install": {"kind": "npm", "package": "command-code"}},
+    {"id": "minimax", "name": "MiniMax Code", "commands": ("mcode",), "kind": "acp",
+     "transports": ("acp", "terminal"), "icon": "minimax", "color": "#dc2626",
+     "install": {"kind": "system", "url": "https://www.minimaxi.com"}},
+    {"id": "copilot", "name": "GitHub Copilot CLI", "commands": ("copilot",), "kind": "acp",
+     "transports": ("acp", "terminal"), "icon": "copilot", "color": "#0891b2",
+     "install": {"kind": "npm", "package": "@github/copilot"}},
 )
 
 COLORS = ("#2563eb", "#d97706", "#7c3aed", "#0f766e", "#c2410c", "#0891b2", "#be185d", "#111827")
 _ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 _EXECUTABLE_SUFFIXES = (".exe", ".cmd", ".bat", ".com")
+
+
+def agent_home() -> Path:
+    raw = str(os.environ.get("TETHER_AGENT_HOME") or "").strip()
+    if raw:
+        return Path(raw).expanduser()
+    return Path("D:/Tether/agents") if os.name == "nt" else Path("/opt/tether/agents")
+
+
+def resolve_agent_executable(name: str) -> str:
+    """PATH first, then the user-level Agent Home used by the install button."""
+    found = resolve_executable(name)
+    if found:
+        return found
+    home = agent_home()
+    suffixes = _EXECUTABLE_SUFFIXES + ("",) if os.name == "nt" else ("",)
+    roots = (home, home / "bin", home / "node_modules" / ".bin")
+    for root in roots:
+        for suffix in suffixes:
+            candidate = root / (name + suffix)
+            if candidate.is_file():
+                return str(candidate)
+    return ""
 
 
 class AgentRegistry:
@@ -92,15 +164,20 @@ class AgentRegistry:
         line = (result.stdout or "").strip().splitlines()
         return line[0].strip()[:80] if line else ""
 
+    def _install_info(self, spec: dict[str, Any]) -> dict[str, Any]:
+        return dict(spec.get("install") or {})
+
     def _detected(self, spec: dict[str, Any]) -> dict[str, Any] | None:
         for name in spec["commands"]:
-            path = resolve_executable(name)
+            path = resolve_agent_executable(name)
             if path:
                 record = {
                     "id": spec["id"], "name": spec["name"], "kind": spec["kind"],
-                    "command": path, "args": [], "enabled": True, "source": "detected",
+                    "command": path, "args": [str(item) for item in (spec.get("args") or [])],
+                    "enabled": True, "source": "detected",
                     "icon": spec.get("icon") or spec["id"], "color": spec.get("color") or COLORS[0],
                     "transports": list(spec["transports"]), "available": True,
+                    "install": self._install_info(spec),
                 }
                 record["version"] = self._version(path)
                 return record
@@ -145,6 +222,7 @@ class AgentRegistry:
                     record = self._manual_record(spec["id"], entry)
                     record["name"] = str(entry.get("name") or spec["name"])
                     record["source"] = "overridden"
+                    record["install"] = self._install_info(spec)
                 else:
                     record = self._detected(spec)
                     if record is None:
@@ -153,6 +231,7 @@ class AgentRegistry:
                             "command": "", "args": [], "enabled": True, "source": "builtin",
                             "icon": spec.get("icon") or spec["id"], "color": spec.get("color") or COLORS[0],
                             "transports": list(spec["transports"]), "available": False, "version": "",
+                            "install": self._install_info(spec),
                         }
                 records.append(record)
                 seen.add(spec["id"])
@@ -161,10 +240,61 @@ class AgentRegistry:
                     continue
                 records.append(self._manual_record(agent_id, entry))
             records.sort(key=lambda item: (not item["available"], item["name"].lower()))
-            payload = {"agents": records, "path": str(self.path), "kinds": list(KINDS), "colors": list(COLORS)}
+            payload = {"agents": records, "path": str(self.path), "kinds": list(KINDS),
+                       "colors": list(COLORS), "home": str(agent_home())}
             self._cache = payload
             self._cache_at = now
             return payload
+
+    def get(self, agent_id: str) -> dict[str, Any] | None:
+        return next((item for item in self.catalog(force=True)["agents"]
+                     if item.get("id") == str(agent_id or "")), None)
+
+    def install(self, agent_id: str) -> dict[str, Any]:
+        spec = next((item for item in BUILTINS if item["id"] == str(agent_id or "")), None)
+        if spec is None:
+            raise ValueError("unknown built-in agent")
+        info = self._install_info(spec)
+        kind = str(info.get("kind") or "")
+        if kind == "system":
+            return {"ok": True, "installed": False, "action": "manual",
+                    "url": str(info.get("url") or ""),
+                    "message": "该 Agent 需要官方安装器，请使用官网安装后刷新"}
+        if kind != "npm":
+            raise ValueError("this agent has no automatic installer")
+        package = str(info.get("package") or "").strip()
+        if not package or not re.fullmatch(r"[@a-zA-Z0-9._/-]+", package):
+            raise ValueError("invalid install package")
+        npm = resolve_executable("npm")
+        if not npm:
+            raise ValueError("npm is not installed on this node")
+        home = agent_home()
+        home.mkdir(parents=True, exist_ok=True)
+        env = {**os.environ,
+               "npm_config_prefix": str(home), "npm_config_cache": str(home / "cache")}
+        argv = [npm, "install", "-g", "--prefix", str(home), "--cache", str(home / "cache"),
+                "--no-fund", "--no-audit", package]
+        if os.name == "nt" and npm.lower().endswith((".cmd", ".bat")):
+            argv = ["cmd.exe", "/d", "/s", "/c", subprocess.list2cmdline(argv)]
+        kwargs: dict[str, Any] = {
+            "stdin": subprocess.DEVNULL, "stdout": subprocess.PIPE, "stderr": subprocess.STDOUT,
+            "text": True, "encoding": "utf-8", "errors": "replace", "timeout": INSTALL_TIMEOUT,
+            "env": env, "cwd": str(home),
+        }
+        if os.name == "nt":
+            kwargs["creationflags"] = NO_WINDOW
+        try:
+            result = subprocess.run(argv, **kwargs)
+        except subprocess.TimeoutExpired:
+            raise ValueError("安装超时") from None
+        except OSError as exc:
+            raise ValueError("无法运行 npm: " + str(exc)) from None
+        output = (result.stdout or "").strip()
+        if result.returncode != 0:
+            raise ValueError("安装失败：" + output[-600:])
+        self._cache = None
+        return {"ok": True, "installed": True, "package": package, "home": str(home),
+                "output": output[-600:], "catalog": self.catalog(force=True)}
 
     def save(self, args: dict[str, Any]) -> dict[str, Any]:
         agent_id = str(args.get("id") or "").strip().lower()

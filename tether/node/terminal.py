@@ -131,6 +131,10 @@ def _posix_shells() -> dict[str, tuple[str, list[str], str]]:
 
 def _windows_pty_command(shell_id: str, command: list[str]) -> list[str]:
     exe = command[0]
+    if shell_id == "agent":
+        if exe.lower().endswith((".cmd", ".bat")):
+            return ["cmd.exe", "/d", "/s", "/c", subprocess.list2cmdline(command)]
+        return list(command)
     if shell_id == "herdr":
         return [exe]
     if shell_id in {"powershell", "pwsh"}:
@@ -342,7 +346,11 @@ class TerminalService:
             cwd = fallback if fallback.is_dir() else Path.home()
         if not cwd.is_dir():
             raise ValueError("terminal cwd is not a directory")
-        shell_id, command = self._resolve_shell(args.get("shell"))
+        raw_command = args.get("command")
+        if isinstance(raw_command, list) and raw_command and all(isinstance(item, str) for item in raw_command):
+            shell_id, command = "agent", list(raw_command)
+        else:
+            shell_id, command = self._resolve_shell(args.get("shell"))
         try:
             cols = max(2, min(500, int(args.get("cols") or DEFAULT_COLS)))
             rows = max(1, min(300, int(args.get("rows") or DEFAULT_ROWS)))

@@ -6323,6 +6323,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
                 localDevice: appLocalDevice,
                 activeDevice: deviceId,
                 onDeviceChange: selectDevice,
+                onOpenWorkbench: () => { setView('chat'); setActivePanel('workspaces'); setSidebarCollapsed(true) },
                 onError: fail
               })
                 : null

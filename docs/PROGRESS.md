@@ -831,4 +831,5 @@
 - 安装：`install.sh` 默认 latest；隔离前缀 `--install-only --archive` 安装最终 0.3.6 成功，`node.env` 600，随包 croc 与 `repair_plugin` 均在；GitHub 干净 runner 三平台安装/启动已通过（`41726702888`）。
 - 发布口径：`/install/version.json` 与服务器资产为 0.3.6；GitHub release 仍是 **draft** `433272811`，Hub `/releases/manifest` 仍是已签名的 0.3.5，所以 APP 内更新不会提供 0.3.6，直到所有者发布草稿并切换清单。
 - OpenCode 原生工作台：Node 用 `opencode serve` 起本机服务并注册到 mesh 网关；Agents 页一键打开原生 Web（LAPTOP-01 `4096 → 43075`、重启后再启 `4097 → 30667`，网关均 200）；停止会清空 `apps.json`，状态文件用于节点重启后接管。远程应用页跟随全局设备并改用自绘下拉。Node 能力尚未打进发布包。
+- Agent 生态：目录扩到 21 个（Codeg 20 + DSH + Copilot），按节点显示已装/未装；已装点开按能力给终端（Codex/Qoder 原生 TUI）、OpenCode Web/CLI、DSH 工作台；未装 npm 安装默认落 `D:\Tether\agents`（OpenCode 实测 766 MB）。Codex、OpenCode Web、OpenCode CLI、Herdr 四标签并存，Herdr 自动启动且深色。LAPTOP-01 与 DESKTOP 均实测。
 - 仍欠：GitHub 0.3.6 公开发布、DSH 自身 DeepSeek 登录/composer、干净 VM 全业务链、100 MB 10 s（需要国内中转或同网路径）。

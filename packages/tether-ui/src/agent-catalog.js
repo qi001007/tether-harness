@@ -12,7 +12,7 @@ export function AgentCatalogView({ React, Glyph, post, C, device, onClose }) {
   const kinds = [['app-server', 'App Server'], ['acp', 'ACP'], ['web', '原生 Web'], ['cli', '终端']]
   const agents = (catalog && catalog.agents) || []
   const selected = agents.find((item) => item.id === selectedId) || null
-  const transportLabel = (value) => ({ web: '原生 Web', 'app-server': 'App Server', acp: 'ACP', terminal: '终端' }[value] || value)
+  const transportLabel = (value) => ({ web: '原生 Web', workbench: '工作台', 'app-server': 'App Server', acp: 'ACP', terminal: '终端' }[value] || value)
   const sourceLabel = (value) => ({ detected: '自动发现', manual: '手动登记', overridden: '手动覆盖', service: '本机服务', builtin: '未发现' }[value] || value)
 
   const applyCatalog = (data, keepSelected) => {

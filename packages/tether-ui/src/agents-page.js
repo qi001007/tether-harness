@@ -1,6 +1,7 @@
 import { createTerminalDock } from './terminal-dock.js'
 import { AgentCatalogView } from './agent-catalog.js'
-export function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '', activeDevice = '', onDeviceChange, onError }) {
+import { AgentHome } from './agents-home.js'
+export function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '', activeDevice = '', onDeviceChange, onOpenWorkbench, onError }) {
   const h = React.createElement
   const online = devices.filter((item) => item && item.online)
   const preferred = activeDevice && online.some((item) => item.device_id === activeDevice)
@@ -26,12 +27,14 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
   const [picking, setPicking] = React.useState(false)
   const [modelOpen, setModelOpen] = React.useState(false)
   const [catalogOpen, setCatalogOpen] = React.useState(false)
-  const [herdrOpen, setHerdrOpen] = React.useState(false)
-  const [opencodeOpen, setOpencodeOpen] = React.useState(false)
-  const [opencodeUrl, setOpencodeUrl] = React.useState('')
-  const [opencodeBusy, setOpencodeBusy] = React.useState(false)
-  const [opencodeFrame, setOpencodeFrame] = React.useState(0)
   const [deviceMenu, setDeviceMenu] = React.useState(false)
+  const [catalog, setCatalog] = React.useState(null)
+  const [catalogBusy, setCatalogBusy] = React.useState(false)
+  const [catalogError, setCatalogError] = React.useState('')
+  const [installing, setInstalling] = React.useState('')
+  const [panes, setPanes] = React.useState([])
+  const [activePane, setActivePane] = React.useState('')
+  const [workspaceOpen, setWorkspaceOpen] = React.useState(false)
   const since = React.useRef(0)
   const sessionRef = React.useRef('')
   const tabCache = React.useRef({})
@@ -113,7 +116,24 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
     }
   }
 
+    const loadCatalog = async (force) => {
+    if (!device) return
+    setCatalogBusy(true)
+    setCatalogError('')
+    try {
+      const result = await post('/api/devices/' + encodeURIComponent(device) + '/fs/agents_catalog',
+        { fresh: force === true })
+      setCatalog(result || null)
+    } catch (error) {
+      setCatalog(null)
+      setCatalogError(String((error && (error.message || error.code)) || '读取 Agent 目录失败'))
+    } finally {
+      setCatalogBusy(false)
+    }
+  }
+
   React.useEffect(() => { void detect(device) }, [device])
+  React.useEffect(() => { void loadCatalog(false) }, [device])
 
   React.useEffect(() => {
     if (!modelOpen) return undefined
@@ -323,9 +343,11 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
     tabCache.current = {}
     clearSession()
     setPicking(false)
-    setHerdrOpen(false)
-    setOpencodeOpen(false)
-    setOpencodeUrl('')
+    setPanes([])
+    setActivePane('')
+    setWorkspaceOpen(false)
+    setCatalog(null)
+    setCatalogError('')
     setDevice(activeDevice)
   }, [activeDevice])
 
@@ -335,9 +357,11 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
     tabCache.current = {}
     clearSession()
     setPicking(false)
-    setHerdrOpen(false)
-    setOpencodeOpen(false)
-    setOpencodeUrl('')
+    setPanes([])
+    setActivePane('')
+    setWorkspaceOpen(false)
+    setCatalog(null)
+    setCatalogError('')
     setDevice(value)
     if (onDeviceChange) onDeviceChange(value)
     for (const id of ids) {
@@ -345,41 +369,69 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
     }
   }
 
-  const openOpenCode = async () => {
-    if (!device || opencodeBusy) return
-    setOpencodeBusy(true)
+  const addPane = (pane) => {
+    setPanes((current) => current.some((item) => item.key === pane.key) ? current : [...current, pane])
+    setActivePane(pane.key)
+    setWorkspaceOpen(true)
+  }
+
+  const closePane = (key) => {
+    setPanes((current) => {
+      const next = current.filter((item) => item.key !== key)
+      setActivePane((active) => active === key ? ((next[next.length - 1] || {}).key || '') : active)
+      if (!next.length) setWorkspaceOpen(false)
+      return next
+    })
+  }
+
+  const openTerminal = (agent) => {
+    addPane({ key: 'term:' + agent.id, kind: 'terminal', agentId: agent.id,
+      title: agent.name, icon: agent.icon, color: agent.color, dark: true })
+  }
+
+  const openHerdr = () => {
+    addPane({ key: 'herdr', kind: 'terminal', shell: 'herdr', title: 'Herdr', icon: 'bot', dark: true })
+  }
+
+  const openWeb = async (agent) => {
+    const key = 'web:' + agent.id
+    addPane({ key, kind: 'web', url: '', title: agent.name + ' Web', icon: agent.icon, color: agent.color })
     const base = '/api/devices/' + encodeURIComponent(device) + '/fs/'
-    const show = (url) => {
-      setOpencodeUrl(String(url))
-      setOpencodeFrame((value) => value + 1)
-      setOpencodeOpen(true)
-    }
     try {
       let result = null
       try { result = await post(base + 'opencode_status', {}) } catch (_) { /* node without the op */ }
-      if (result && result.running && result.url) { show(result.url); return }
-      try {
-        result = await post(base + 'opencode_start', {})
-      } catch (error) {
-        // Older nodes cannot start OpenCode themselves; use an app registered by hand.
-        const listing = await post(base + 'apps_list', {})
-        const app = (listing && Array.isArray(listing.apps) ? listing.apps : [])
-          .find((item) => item && item.name === 'OpenCode')
-        if (!app || !app.url) throw error
-        show(String(app.url).replace(/\/+$/, '') + (app.path || '/'))
-        return
+      if (!result || !result.running || !result.url) result = await post(base + 'opencode_start', {})
+      if (!result || !result.running || !result.url) throw new Error('OpenCode 没有返回可嵌入地址')
+      const url = String(result.url)
+      setPanes((current) => current.map((pane) => pane.key === key ? { ...pane, url } : pane))
+    } catch (error) {
+      setPanes((current) => current.filter((pane) => pane.key !== key))
+      setActivePane((current) => current === key ? '' : current)
+      fail(error)
+    }
+  }
+
+  const installAgent = async (agent) => {
+    if (!device || installing) return
+    setInstalling(agent.id)
+    try {
+      const result = await post('/api/devices/' + encodeURIComponent(device) + '/fs/agents_install', { id: agent.id })
+      if (result && result.catalog) setCatalog(result.catalog)
+      if (result && result.action === 'manual') {
+        throw new Error((result.message || '需要官方安装器') + (result.url ? '：' + result.url : ''))
       }
-      if (!result || !result.running || !result.url) {
-        throw new Error(result && result.available === false
-          ? '目标电脑没有安装 OpenCode'
-          : 'OpenCode 没有返回可嵌入地址')
-      }
-      show(result.url)
     } catch (error) {
       fail(error)
     } finally {
-      setOpencodeBusy(false)
+      setInstalling('')
     }
+  }
+
+  const openAgent = (agent, surface, harness) => {
+    if (surface === 'workbench') { if (onOpenWorkbench) onOpenWorkbench(); return }
+    if (surface === 'web') { void openWeb(agent); return }
+    if (surface === 'acp' && harness) { void start(harness); setWorkspaceOpen(false); return }
+    openTerminal(agent)
   }
 
   const field = {
@@ -427,40 +479,16 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
   const currentModel = models.find((item) => item.modelId === model) || models[0]
   const modelLabel = currentModel ? (currentModel.name || currentModel.modelId) : (model || '模型')
 
-  if (opencodeOpen && opencodeUrl) {
-    return h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', background: C.bg } },
-      h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderBottom: '1px solid ' + C.line, flex: '0 0 auto' } },
-        h('span', { style: { fontSize: 13, fontWeight: 600, color: C.ink } }, 'OpenCode'),
-        h('span', { style: { fontSize: 11, color: C.mute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
-          device + ' · ' + String(opencodeUrl).replace(/^https?:\/\//, '')),
-        h('span', { style: { marginLeft: 'auto', display: 'flex', gap: 6 } },
-          h('button', { type: 'button', title: '重新加载 OpenCode', 'aria-label': '重新加载 OpenCode',
-            onClick: () => setOpencodeFrame((value) => value + 1),
-            style: { ...field, cursor: 'pointer', background: 'transparent' } }, '刷新'),
-          h('button', { type: 'button', title: '关闭 OpenCode', 'aria-label': '关闭 OpenCode',
-            onClick: () => { setOpencodeOpen(false); setOpencodeUrl('') },
-            style: { ...field, cursor: 'pointer', background: 'transparent' } }, '关闭'))),
-      h('iframe', {
-        key: opencodeFrame, title: 'OpenCode', src: opencodeUrl,
-        style: { flex: '1 1 auto', width: '100%', minHeight: 0, border: 0, background: '#fff' },
-        sandbox: 'allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-downloads'
-      }))
-  }
-  if (herdrOpen) {
-    return h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', background: C.bg } },
-      h(createTerminalDock, {
-        React, Glyph, post, C, device, cwd: '', initialShell: 'herdr',
-        height: Math.max(420, (typeof window !== 'undefined' ? window.innerHeight : 900) - 120),
-        onClose: () => setHerdrOpen(false)
-      }))
-  }
   if (catalogOpen) {
     return h(AgentCatalogView, {
       React, Glyph, post, C, device,
       onClose: () => setCatalogOpen(false)
     })
   }
-  return h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', gap: 8, padding: 10, background: C.bg } },
+  const baseContent = h('div', {
+    key: 'base',
+    style: { flex: '1 1 auto', minHeight: 0, display: workspaceOpen ? 'none' : 'flex', flexDirection: 'column', gap: 8, padding: 10, background: C.bg }
+  },
     h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flex: '0 0 auto' } },
       h('div', { style: { position: 'relative' } },
         h('button', {
@@ -490,15 +518,18 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
       h('button', { type: 'button', disabled: !session, onClick: () => void stop(),
         style: { ...field, cursor: session ? 'pointer' : 'default', opacity: session ? 1 : 0.5, background: 'transparent' } }, '停止'),
       h('button', {
-        type: 'button', title: '打开 OpenCode 原生工作台', 'aria-label': 'OpenCode 工作台',
-        onClick: () => void openOpenCode(), disabled: opencodeBusy || !device,
-        style: { ...field, display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', opacity: opencodeBusy || !device ? 0.5 : 1 }
-      }, h(Glyph, { name: 'apps', size: 13 }), opencodeBusy ? '启动中…' : 'OpenCode'),
-      h('button', {
         type: 'button', title: 'Herdr 工作区', 'aria-label': 'Herdr 工作区',
-        onClick: () => setHerdrOpen(true),
+        onClick: openHerdr,
         style: { ...field, display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }
       }, h(Glyph, { name: 'terminal', size: 13 }), 'Herdr'),
+      panes.length ? h('button', {
+        type: 'button', title: '打开多终端工作区', 'aria-label': '工作区',
+        onClick: () => {
+          setWorkspaceOpen(true)
+          setActivePane((current) => current || (panes[0] || {}).key || '')
+        },
+        style: { ...field, display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }
+      }, '工作区 ' + panes.length) : null,
       h('button', {
         type: 'button', title: 'Agent 目录', 'aria-label': 'Agent 目录',
         onClick: () => setCatalogOpen(true),
@@ -533,7 +564,13 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
         onClick: () => setPicking(true),
         style: { ...field, height: 26, padding: '0 9px', cursor: 'pointer' } }, '+')
     ) : null,
-    !session || picking ? h('div', {
+    !session && !picking ? h(AgentHome, {
+      key: 'home', React, Glyph, C, catalog, harnesses, loading: catalogBusy, error: catalogError,
+      installing, onRefresh: () => { void detect(device); void loadCatalog(true) },
+      onInstall: (agent) => void installAgent(agent),
+      onOpen: openAgent
+    }) : null,
+    picking ? h('div', {
       style: { flex: '0 0 auto', display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }
     },
       harnesses.length ? harnesses.map((item) => h('button', {
@@ -550,14 +587,15 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
       )) : h('div', { style: { gridColumn: '1 / -1', padding: 16, color: C.mute, fontSize: 12 } },
         detecting ? '正在检测本机 Agent…' : '没有检测到 ACP Harness。先在目标电脑装好 Gemini CLI / OpenCode / Claude Code adapter / Codex adapter。')
     ) : null,
-    h('div', {
+    session || picking ? h('div', {
+      key: 'transcript',
       ref: transcriptRef,
       className: 'tether-scroll',
       style: { flex: '1 1 auto', minHeight: 0, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 10, padding: '6px 4px 10px' }
     },
       items.length ? items.map(renderItem) : h('div', { style: { margin: 'auto', color: C.mute, fontSize: 12, textAlign: 'center' } },
         session ? '等待 Agent 输出…' : '选择一台已安装 ACP Harness 的电脑，点击卡片开始会话。')
-    ),
+    ) : null,
     pending.map((item) => h('div', { key: 'perm-' + item.requestId, style: { display: 'flex', gap: 8, alignItems: 'center', flex: '0 0 auto', flexWrap: 'wrap',
       padding: '8px 10px', borderRadius: 10, border: '1px solid ' + C.line, background: C.soft } },
       h('span', { style: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: C.sub } },
@@ -574,7 +612,7 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
         style: { ...field, height: 22, cursor: 'pointer', color: C.sub }
       }, '/' + command.name))
     ) : null,
-    h('form', {
+    session || picking ? h('form', {
       onSubmit: send,
       style: { display: 'flex', alignItems: 'center', gap: 8, padding: '7px 9px', borderRadius: 12,
         border: '1px solid ' + C.line, background: C.panel || C.bg, boxShadow: '0 1px 3px rgba(16,24,40,.06)', flex: '0 0 auto' }
@@ -619,6 +657,55 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
           background: C.blue, color: '#fff', cursor: !session || !ready || !input.trim() ? 'default' : 'pointer',
           opacity: !session || !ready || !input.trim() ? 0.4 : 1 }
       }, h(Glyph, { name: 'arrowUp', size: 15 }))
-    )
+    ) : null
   )
+
+  const paneBody = (pane) => pane.kind === 'web'
+    ? (pane.url ? h('iframe', {
+      key: pane.key, title: pane.title, src: pane.url,
+      style: { flex: '1 1 auto', width: '100%', minHeight: 0, border: 0, background: '#fff' },
+      sandbox: 'allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-downloads'
+    }) : h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', color: C.mute, fontSize: 12, background: C.bg } },
+      '正在启动 ' + pane.title + '…'))
+    : h(createTerminalDock, {
+      key: pane.key, React, Glyph, post, C, device, cwd: '',
+      initialAgent: pane.agentId || '', initialShell: pane.shell || '', label: pane.title,
+      themeMode: 'dark',
+      height: Math.max(420, (typeof window !== 'undefined' ? window.innerHeight : 900) - 168),
+      onClose: () => closePane(pane.key)
+    })
+  const workspace = panes.length ? h('div', {
+    key: 'workspace',
+    style: { flex: '1 1 auto', minHeight: 0, display: workspaceOpen ? 'flex' : 'none', flexDirection: 'column', background: C.bg }
+  },
+    h('div', { style: { display: 'flex', alignItems: 'center', gap: 4, padding: '6px 10px 4px', borderBottom: '1px solid ' + C.line, flex: '0 0 auto', overflowX: 'auto' } },
+      h('button', {
+        type: 'button', onClick: () => setWorkspaceOpen(false),
+        style: { ...field, height: 26, padding: '0 9px', cursor: 'pointer', background: 'transparent', flex: '0 0 auto' }
+      }, 'Agents'),
+      ...panes.map((pane) => h('div', {
+        key: pane.key, role: 'tab', 'aria-selected': pane.key === activePane ? 'true' : 'false',
+        onClick: () => setActivePane(pane.key),
+        style: { display: 'flex', alignItems: 'center', gap: 6, height: 26, padding: '0 4px 0 8px', borderRadius: 7,
+          cursor: 'pointer', flex: '0 0 auto', whiteSpace: 'nowrap',
+          background: pane.key === activePane ? C.soft : 'transparent',
+          color: pane.key === activePane ? C.ink : C.sub,
+          border: '1px solid ' + (pane.key === activePane ? C.line : 'transparent') }
+      },
+        h('span', { style: { width: 6, height: 6, borderRadius: 3, background: pane.kind === 'web' ? C.blue : (C.green || '#16a34a'), flex: '0 0 auto' } }),
+        h('span', { style: { fontSize: 11.5 } }, pane.title),
+        h('button', {
+          type: 'button', title: '关闭 ' + pane.title, 'aria-label': '关闭 ' + pane.title,
+          onClick: (event) => { event.stopPropagation(); closePane(pane.key) },
+          style: { width: 18, height: 18, display: 'grid', placeItems: 'center', border: 0, borderRadius: 4,
+            background: 'transparent', color: C.mute, fontSize: 12, cursor: 'pointer', padding: 0 }
+        }, '×'))),
+      h('span', { style: { marginLeft: 'auto', fontSize: 11, color: C.mute, whiteSpace: 'nowrap' } }, device)),
+    h('div', { style: { flex: '1 1 auto', minHeight: 0, position: 'relative', display: 'flex' } },
+      ...panes.map((pane) => h('div', {
+        key: pane.key,
+        style: { position: 'absolute', inset: 0, display: pane.key === activePane ? 'flex' : 'none', flexDirection: 'column', minWidth: 0, minHeight: 0 }
+      }, paneBody(pane)))))
+    : null
+  return [baseContent, workspace]
 }

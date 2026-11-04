@@ -12,7 +12,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from .acp import resolve_executable
+from .agent_registry import resolve_agent_executable
 
 NO_WINDOW = 0x08000000
 BASE_PORT = 4096
@@ -30,7 +30,7 @@ class OpenCodeWeb:
         self.lock = threading.RLock()
 
     def _binary(self) -> str:
-        return resolve_executable("opencode")
+        return resolve_agent_executable("opencode")
 
     def _argv(self, binary: str, port: int) -> list[str]:
         # `serve` is the headless flavor of `web`: same native UI, no browser launch.

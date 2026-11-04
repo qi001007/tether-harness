@@ -87,4 +87,6 @@
 - 2026-11-04：无后缀文件不能一律标 `TXT`：`fileTypeMark(name, format, kind)`，文本/扩展名缺失时用 `TXT`，ELF/二进制用 Node 返回的 `format` 短标签；预览不支持时显示 `ELF 可执行 · 暂不支持预览`，并在列表“类型”列显示 `ELF 可执行`/`文本`。
 - 2026-11-04：Agents 页新增“Agent 目录”（自动发现 + 手动登记/编辑/删除，Coze 风格卡片）；目录跟随全局设备切换，修复 Agents 页自持旧 device 导致切到服务器仍显示本机 Agent 的问题；DSH Web 以“本机服务”来源展示。
 - 2026-11-04：Agent 目录改成 Codeg 的选配结构：左侧 Agent 列表（品牌图标、启用点、可用状态与刷新）+ 右侧 SettingRow 式配置（命令、参数、接入方式、颜色、保存/删除）；图标直接取自 Codeg（Apache-2.0，见 `src/agent-icons/NOTICE.md`）。同时新增 Herdr 工作区入口，直接嵌 xterm 运行 bundled Herdr。
-- 2026-11-04：Agents 页头部加 `OpenCode`：先 `opencode_status`，未运行再 `opencode_start`，拿 `url` 直接 `<iframe>` 满幅；节点没有该 op 时退回 `apps_list` 找手动登记的 OpenCode。远程应用页与 Agents 页的设备选择改为跟随全局设备 + 自绘下拉，不要再加原生 `<select>`。
+- 2026-11-04：Agents 主页直接列目标节点目录：已装卡片点开按 `transports` 给“终端 / 原生 Web / DSH 工作台 / 结构化”，未装行给“安装”（npm 装到 `D:\Tether\agents`）。不要在页头放任何全局 Agent 按钮（例如 OpenCode）；每台机器有什么才显示什么。
+- 2026-11-04：多表面用标签页并存：每个 `terminal`/`web` 表面保持挂载，只切 `display`，关闭标签才卸载并 `terminal_stop`；Herdr 是其中一个 `shell=herdr` 标签，强制深色，不允许打开 Herdr 时把其它终端卸载。新增终端类型时给 `initialAgent`/`label`，启动走 `/fs/terminal_start {agent}`，不要在前端拼命令。
+- 2026-11-04：设备切换先清空 `catalog` 再请求，否则会短暂显示上一台机器的 Agent 列表；远程应用页与 Agents 页的设备选择都跟随全局设备 + 自绘下拉，不要再加原生 `<select>`。
