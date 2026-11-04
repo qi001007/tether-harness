@@ -86,3 +86,4 @@
 - 2026-11-04：Agents 会话不再用 `<pre>` 拼日志：ACP 事件改为结构化 `items`（user/assistant/tool/plan/system/error），聊天区用气泡、工具卡、计划卡；模型切换挪进 composer 的自绘菜单（46 个模型可选，带描述与勾选），发送按钮用图标。ACP 轮询不再因 `document.hidden` 暂停，最小化后仍同步。真机：Codex 2.5.0 会话显示 `已就绪`、`6.1 Sol (high)` 模型 chip 与输入框。
 - 2026-11-04：无后缀文件不能一律标 `TXT`：`fileTypeMark(name, format, kind)`，文本/扩展名缺失时用 `TXT`，ELF/二进制用 Node 返回的 `format` 短标签；预览不支持时显示 `ELF 可执行 · 暂不支持预览`，并在列表“类型”列显示 `ELF 可执行`/`文本`。
 - 2026-11-04：Agents 页新增“Agent 目录”（自动发现 + 手动登记/编辑/删除，Coze 风格卡片）；目录跟随全局设备切换，修复 Agents 页自持旧 device 导致切到服务器仍显示本机 Agent 的问题；DSH Web 以“本机服务”来源展示。
+- 2026-11-04：Agent 目录改成 Codeg 的选配结构：左侧 Agent 列表（品牌图标、启用点、可用状态与刷新）+ 右侧 SettingRow 式配置（命令、参数、接入方式、颜色、保存/删除）；图标直接取自 Codeg（Apache-2.0，见 `src/agent-icons/NOTICE.md`）。同时新增 Herdr 工作区入口，直接嵌 xterm 运行 bundled Herdr。

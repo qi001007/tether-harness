@@ -262,6 +262,9 @@
 - [x] F98 Linux 文件必须能看懂是什么、文本文件能打开。判据：无后缀文件显示真实类型；文本可预览；二进制明确说明不支持且不伪装成 TXT。**实测 2026-11-04**：`/srv/tether-admin` 列表显示 `addr2line → ELF 可执行`、`NOTES → 文本`、`preview-test.txt → TXT 文件`；双击 NOTES 打开内容；addr2line 标签为 ELF，提示 `ELF 可执行 · 暂不支持预览`。
 
 - [x] F99 每个节点的 Agent 必须能自动发现，也能像 Coze 一样手动登记/编辑/删除。判据：目录按设备独立；显示版本/路径/接入方式；未安装的 Agent 不隐藏；配置重启后保留；DSH Web 运行中显示“本机服务/可用”。**实测 2026-11-04**：本机目录 3 个可用（Codex 0.163.0 App Server/ACP/终端、Qoder 1.1.81 ACP、DSH CLI），手动添加 Python Helper（Python 3.11.4 终端）后保存成功、删除后 `agents.json` 为空；服务器目录只显示 DSH Web 可用（1 个可用），切换设备后目录同步。
+- [x] F100 Agent 选配必须照 Codeg 的结构，不再自创卡片网格。判据：左列表 + 右配置；品牌图标；状态徽标；增删改。**实测 2026-11-04**：Codeg `docs/images/agents` 图标已内置，左侧 Codex/DSH/Qoder 等列表与可用徽标，右侧命令/参数/接入方式/颜色/保存；本机 3 个可用，手动添加/删除 Python Helper 通过。
+- [x] F101 Herdr 打包进 Node 并在 APP 内运行。判据：Windows/Linux 能启动；终端可用；状态隔离不污染用户 Herdr。**实测 2026-11-04**：Windows 显示 `Herdr 工作区 · Administrator · 管理员` 与 TUI，Linux 服务器显示 `root · 管理员` 与 `tether-admin` workspace；Herdr 0.9.5，PTY 模式，无“Saved directory unavailable”。
+
 ## 验收边界
 
 离线测试、隔离 UI、单机 DSH、本机真实模型回答、干净安装、真实跨设备操作和公开发布分别记录，不能互相替代。未完成发布与实机验收前，保持对应条目未完成。

@@ -187,6 +187,7 @@ tether-harness-server component is installed. Otherwise, configure a Hub or inst
         for rel in ("laptop/tether-node.ps1", "laptop/bootstrap-node.ps1",
                     "laptop/install-node.sh", "pyproject.toml", "version.json"):
             add_file(archive, rel, node_prefix)
+        add_file(archive, "THIRD_PARTY_NOTICES.md", node_prefix)
         archive.writestr(f"{node_prefix}/README-INSTALL.md", """# Tether Node (standalone)
 
 Install the Python dependencies listed in `pyproject.toml`, then run

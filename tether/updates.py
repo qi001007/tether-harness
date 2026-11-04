@@ -141,6 +141,7 @@ NODE_ALLOWED = (
     "laptop/install-node.sh",
     "pyproject.toml",
     "version.json",
+    "THIRD_PARTY_NOTICES.md",
 )
 EXCLUDED_PARTS = {
     ".env", ".git", ".venv", "node_modules", "data", ".runtime", "work-local",

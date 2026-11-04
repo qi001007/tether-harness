@@ -25,7 +25,7 @@ Tether connects the **DeepSeek Harness (DSH)** desktop app on one machine to the
 
 > **Project status: alpha.** Tether is a working research prototype, not a production multi-tenant service. Read [Status](#status) and [Security](#security) before exposing a Hub to other people.
 
-> **Current client (2026-11-04): v0.3.6.** croc 11.6.3 is the transfer engine (100 MB random data: 26 s upload / 106 s download on the current Seoul path, SHA matched). Linux DSH Web is embedded full-width in the APP, with a persistent Tether sidebar, one-click plugin repair/restart, and restart recovery. The Linux file explorer labels extensionless files by real format (ELF/text/binary), the terminal shows `root · 管理员`, and Agents is a structured chat UI (messages, tool/plan cards, model menu, composer) instead of a raw terminal. The install matrix for Windows/Linux/macOS is in [`docs/INSTALL_MATRIX.md`](docs/INSTALL_MATRIX.md); the GitHub v0.3.6 release is still a draft.
+> **Current client (2026-11-04): v0.3.6.** croc 11.6.3 is the transfer engine (100 MB random data: 26 s upload / 106 s download on the current Seoul path, SHA matched). Linux DSH Web is embedded full-width in the APP, with a persistent Tether sidebar, one-click plugin repair/restart, and restart recovery. The Linux file explorer labels extensionless files by real format (ELF/text/binary), the terminal shows `root · 管理员`, and Agents is a structured chat UI with a Codeg-style per-node agent catalog (list + settings panel, brand icons, auto-detection and manual registration); Herdr 0.9.5 is bundled into the Node and runs as an embedded workspace on Windows and Linux. The install matrix for Windows/Linux/macOS is in [`docs/INSTALL_MATRIX.md`](docs/INSTALL_MATRIX.md); the GitHub v0.3.6 release is still a draft.
 
 ## Why Tether
 
@@ -138,9 +138,9 @@ When a new version is available, a blue **↓** button appears in the top bar. C
 
 | Package | OS | Download | Size | SHA-256 |
 |---|---|---|---:|---|
-| APP | Windows x64 | [tether-app-0.3.6.zip](https://8-220-198-26.sslip.io/install/tether-app-0.3.6.zip) | 38,767,159 B | `07178f3cdad6ef019443144e1446757c6ec075ed46ce8028ea900578a3d320a8` |
-| DSH plugin | Windows / Linux | [tether-plugin-0.3.6.zip](https://8-220-198-26.sslip.io/install/tether-plugin-0.3.6.zip) | 1,389,674 B | `03be7fc944aaa3381558395ebba2eab75bb8f77932e543c3aee27598486c8cbc` |
-| Node | Windows / Linux / macOS | [tether-node-0.3.6.zip](https://8-220-198-26.sslip.io/install/tether-node-0.3.6.zip) | 38,259,075 B | `53044c4173cc5834817ed7e8e0f4a964af0da8eef335c5008879db7032ff0006` |
+| APP | Windows x64 | [tether-app-0.3.6.zip](https://8-220-198-26.sslip.io/install/tether-app-0.3.6.zip) | 77,058,912 B | `397ab616eb7b54fbf270635b0bc1012143a01f18aec13e1b0717ef9257a91535` |
+| DSH plugin | Windows / Linux | [tether-plugin-0.3.6.zip](https://8-220-198-26.sslip.io/install/tether-plugin-0.3.6.zip) | 1,396,081 B | `3f76d2cc980c34ff48ea7336bf8610ed49b6ce3fcb04713dce4836a1d1a15014` |
+| Node | Windows / Linux / macOS | [tether-node-0.3.6.zip](https://8-220-198-26.sslip.io/install/tether-node-0.3.6.zip) | 76,539,292 B | `b80bd369d6df3d3944baa37785bc4f5742ddbe33960486696b5611ab7a18aa92` |
 | Update manifest | all | [version.json](https://8-220-198-26.sslip.io/install/version.json) | — | — |
 
 The GitHub `v0.3.6` release is still a draft; these are the same binaries served by the install mirror. Platform-specific install commands, gaps (macOS APP/plugin) and the test matrix are in [`docs/INSTALL_MATRIX.md`](docs/INSTALL_MATRIX.md).

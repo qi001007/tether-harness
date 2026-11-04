@@ -1,3 +1,4 @@
+import { createTerminalDock } from './terminal-dock.js'
 import { AgentCatalogView } from './agent-catalog.js'
 export function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '', activeDevice = '', onDeviceChange, onError }) {
   const h = React.createElement
@@ -25,6 +26,7 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
   const [picking, setPicking] = React.useState(false)
   const [modelOpen, setModelOpen] = React.useState(false)
   const [catalogOpen, setCatalogOpen] = React.useState(false)
+  const [herdrOpen, setHerdrOpen] = React.useState(false)
   const since = React.useRef(0)
   const sessionRef = React.useRef('')
   const tabCache = React.useRef({})
@@ -316,6 +318,7 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
     tabCache.current = {}
     clearSession()
     setPicking(false)
+    setHerdrOpen(false)
     setDevice(activeDevice)
   }, [activeDevice])
 
@@ -325,6 +328,7 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
     tabCache.current = {}
     clearSession()
     setPicking(false)
+    setHerdrOpen(false)
     setDevice(value)
     if (onDeviceChange) onDeviceChange(value)
     for (const id of ids) {
@@ -377,6 +381,14 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
   const currentModel = models.find((item) => item.modelId === model) || models[0]
   const modelLabel = currentModel ? (currentModel.name || currentModel.modelId) : (model || '模型')
 
+  if (herdrOpen) {
+    return h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', background: C.bg } },
+      h(createTerminalDock, {
+        React, Glyph, post, C, device, cwd: '', initialShell: 'herdr',
+        height: Math.max(420, (typeof window !== 'undefined' ? window.innerHeight : 900) - 120),
+        onClose: () => setHerdrOpen(false)
+      }))
+  }
   if (catalogOpen) {
     return h(AgentCatalogView, {
       React, Glyph, post, C, device,
@@ -397,6 +409,11 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
         style: { ...button, padding: '0 10px', opacity: detecting || !device ? 0.5 : 1 } }, detecting ? '检测中…' : '刷新'),
       h('button', { type: 'button', disabled: !session, onClick: () => void stop(),
         style: { ...field, cursor: session ? 'pointer' : 'default', opacity: session ? 1 : 0.5, background: 'transparent' } }, '停止'),
+      h('button', {
+        type: 'button', title: 'Herdr 工作区', 'aria-label': 'Herdr 工作区',
+        onClick: () => setHerdrOpen(true),
+        style: { ...field, display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }
+      }, h(Glyph, { name: 'terminal', size: 13 }), 'Herdr'),
       h('button', {
         type: 'button', title: 'Agent 目录', 'aria-label': 'Agent 目录',
         onClick: () => setCatalogOpen(true),

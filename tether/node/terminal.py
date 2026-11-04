@@ -78,8 +78,30 @@ class _Session:
         return self.process.pid if self.process is not None else None
 
 
+def _herdr_binary() -> str:
+    import platform
+    name = ""
+    if os.name == "nt":
+        name = "herdr.exe"
+    else:
+        machine = platform.machine().lower()
+        if machine in ("arm64", "aarch64"):
+            name = "herdr-macos-aarch64" if platform.system() == "Darwin" else "herdr-linux-aarch64"
+        else:
+            name = "herdr-macos-x86_64" if platform.system() == "Darwin" else "herdr-linux-x86_64"
+    bundled = Path(__file__).with_name("bin") / name
+    if bundled.is_file():
+        if os.name != "nt":
+            try:
+                os.chmod(bundled, 0o755)
+            except OSError:
+                pass
+        return str(bundled)
+    return shutil.which("herdr") or ""
+
+
 def _windows_shells() -> dict[str, tuple[str, list[str], str]]:
-    return {
+    specs = {
         "powershell": ("Windows PowerShell",
                        ["powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", "-"],
                        "powershell.exe"),
@@ -88,19 +110,29 @@ def _windows_shells() -> dict[str, tuple[str, list[str], str]]:
         "cmd": ("命令提示符", ["cmd.exe", "/Q"], "cmd.exe"),
         "bash": ("Git Bash", ["bash.exe", "--noprofile", "--norc"], "bash.exe"),
     }
+    herdr = _herdr_binary()
+    if herdr:
+        specs["herdr"] = ("Herdr 工作区", [herdr, "--session", "tether"], herdr)
+    return specs
 
 
 def _posix_shells() -> dict[str, tuple[str, list[str], str]]:
-    return {
+    specs = {
         "bash": ("bash", ["/bin/bash"], "/bin/bash"),
         "zsh": ("zsh", ["/bin/zsh"], "/bin/zsh"),
         "sh": ("sh", ["/bin/sh"], "/bin/sh"),
         "fish": ("fish", ["/usr/bin/fish"], "fish"),
     }
+    herdr = _herdr_binary()
+    if herdr:
+        specs["herdr"] = ("Herdr 工作区", [herdr, "--session", "tether"], herdr)
+    return specs
 
 
 def _windows_pty_command(shell_id: str, command: list[str]) -> list[str]:
     exe = command[0]
+    if shell_id == "herdr":
+        return [exe]
     if shell_id in {"powershell", "pwsh"}:
         return [exe, "-NoLogo", "-NoExit", "-Command", PS_INIT]
     if shell_id == "cmd":
@@ -126,9 +158,19 @@ class TerminalService:
         self.specs = shells or (_windows_shells() if os.name == "nt" else _posix_shells())
         self.forced_shell = list(shell) if shell else None
         self.sessions: dict[str, _Session] = {}
+        if "herdr" in self.specs:
+            home = Path.home() / ".tether" / "herdr"
+            try:
+                home.mkdir(parents=True, exist_ok=True)
+            except OSError:
+                pass
+            os.environ.setdefault("HERDR_HOME", str(home))
 
     def _available(self, spec: tuple[str, list[str], str]) -> bool:
-        return bool(shutil.which(spec[2]))
+        candidate = spec[2]
+        if os.path.isabs(candidate):
+            return Path(candidate).is_file()
+        return bool(shutil.which(candidate))
 
     def shells(self) -> list[dict[str, Any]]:
         default = self.default_shell_id()
@@ -223,6 +265,21 @@ class TerminalService:
         finally:
             session.closed = True
 
+    def _session_env(self, shell_id: str) -> dict[str, str]:
+        env = dict(self.env)
+        if shell_id == "herdr":
+            home = Path.home() / ".tether" / "herdr"
+            for name in ("config", "state", "appdata"):
+                try:
+                    (home / name).mkdir(parents=True, exist_ok=True)
+                except OSError:
+                    pass
+            env.update({"HERDR_HOME": str(home), "XDG_CONFIG_HOME": str(home / "config"),
+                        "XDG_STATE_HOME": str(home / "state")})
+            if os.name == "nt":
+                env["APPDATA"] = str(home / "appdata")
+        return env
+
     def _start_pty(self, command: list[str], shell_id: str, cwd: Path,
                    cols: int, rows: int) -> _Session | None:
         if os.name == "nt":
@@ -234,7 +291,20 @@ class TerminalService:
             try:
                 pty = PTY(cols, rows)
                 cmdline = subprocess.list2cmdline(pty_command[1:])
-                if not pty.spawn(pty_command[0], cmdline, cwd=str(cwd), env=None):
+                saved = {}
+                scoped = self._session_env(shell_id) if shell_id == "herdr" else {}
+                for key, value in scoped.items():
+                    saved[key] = os.environ.get(key)
+                    os.environ[key] = value
+                try:
+                    ok = pty.spawn(pty_command[0], cmdline, cwd=str(cwd), env=None)
+                finally:
+                    for key, value in saved.items():
+                        if value is None:
+                            os.environ.pop(key, None)
+                        else:
+                            os.environ[key] = value
+                if not ok:
                     return None
             except Exception:
                 return None
@@ -251,7 +321,7 @@ class TerminalService:
         try:
             master, slave = pty_module.openpty()
             fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
-            env = dict(self.env)
+            env = self._session_env(shell_id)
             env.setdefault("TERM", "xterm-256color")
             env.setdefault("COLORTERM", "truecolor")
             pty_command = _posix_pty_command(command)
@@ -282,7 +352,7 @@ class TerminalService:
         if session is None:
             kwargs: dict[str, Any] = {
                 "cwd": str(cwd),
-                "env": self.env,
+                "env": self._session_env(shell_id),
                 "stdin": subprocess.PIPE,
                 "stdout": subprocess.PIPE,
                 "stderr": subprocess.STDOUT,

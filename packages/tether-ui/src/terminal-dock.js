@@ -38,7 +38,7 @@ function isDarkTheme() {
   return !!(typeof document !== 'undefined' && document.body && document.body.hasAttribute('data-ds-dark-theme'))
 }
 
-export function createTerminalDock({ React, Glyph, post, C, device, cwd, height = 240, onHeight, onClose }) {
+export function createTerminalDock({ React, Glyph, post, C, device, cwd, height = 240, initialShell = '', onHeight, onClose }) {
   const h = React.createElement
   const runtime = typeof window !== 'undefined' ? window.TetherTerminalRuntime : null
   const [shells, setShells] = React.useState([])
@@ -279,7 +279,7 @@ export function createTerminalDock({ React, Glyph, post, C, device, cwd, height 
         const list = (catalog && Array.isArray(catalog.shells) ? catalog.shells : [])
           .filter((item) => item && item.available)
         setShells(list)
-        const preferred = (list.find((item) => item.default) || list[0] || {}).id || ''
+        const preferred = (initialShell && list.some((item) => item.id === initialShell) ? initialShell : ((list.find((item) => item.default) || list[0] || {}).id || ''))
         setShell(preferred)
         shellRef.current = preferred
         await startSession(preferred)
