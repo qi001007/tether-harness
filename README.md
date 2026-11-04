@@ -138,9 +138,9 @@ When a new version is available, a blue **↓** button appears in the top bar. C
 
 | Package | OS | Download | Size | SHA-256 |
 |---|---|---|---:|---|
-| APP | Windows x64 | [tether-app-0.3.6.zip](https://8-220-198-26.sslip.io/install/tether-app-0.3.6.zip) | 38,755,354 B | `ac3240ed2b860cc2c88420c32676c779fb09bbc6edc9d22a2ca6e950d4433df5` |
-| DSH plugin | Windows / Linux | [tether-plugin-0.3.6.zip](https://8-220-198-26.sslip.io/install/tether-plugin-0.3.6.zip) | 1,392,056 B | `f64bcf28f2778284fb40d865dadc4f4d22ab67ed679298c29d970312954a68e7` |
-| Node | Windows / Linux / macOS | [tether-node-0.3.6.zip](https://8-220-198-26.sslip.io/install/tether-node-0.3.6.zip) | 38,252,310 B | `6491b944144c8a6e3650dcddbb86ebe9df28ae9fcb77d9c1ddef038a56758a14` |
+| APP | Windows x64 | [tether-app-0.3.6.zip](https://8-220-198-26.sslip.io/install/tether-app-0.3.6.zip) | 38,756,696 B | `cc79de063b335c5c1d6e78d7837053cf5a0f085f02122f906c56893c8966e591` |
+| DSH plugin | Windows / Linux | [tether-plugin-0.3.6.zip](https://8-220-198-26.sslip.io/install/tether-plugin-0.3.6.zip) | 1,386,879 B | `04bb9b1146725346464dfebbf2a3e8f94799a89cfe6bb997c2b4e6af6efaef35` |
+| Node | Windows / Linux / macOS | [tether-node-0.3.6.zip](https://8-220-198-26.sslip.io/install/tether-node-0.3.6.zip) | 38,252,795 B | `33847a7843f0c63c196cf7adfcd83e84f32264a1d745883e75f92f18b5ea62d4` |
 | Update manifest | all | [version.json](https://8-220-198-26.sslip.io/install/version.json) | — | — |
 
 The GitHub `v0.3.6` release is still a draft; these are the same binaries served by the install mirror. Platform-specific install commands, gaps (macOS APP/plugin) and the test matrix are in [`docs/INSTALL_MATRIX.md`](docs/INSTALL_MATRIX.md).
