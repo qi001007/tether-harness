@@ -841,3 +841,4 @@
 - 笔记本诊断包（2026-11-06）：`tether/tools/Tether-Diagnostics.cmd` 双击后在桌面生成脱敏 zip，只读采集进程/端口/服务/安装目录/最新日志；发布在 `https://8-220-198-26.sslip.io/install/Tether-Diagnostics.zip`（HTTP 200）。LAPTOP 仍待该 zip 定位 node 启动崩溃。
 - 笔记本一键修复包（2026-11-06）：`Repair-LAPTOP.cmd` 从旧 `hub.json`/`device-token.json` 读取 token（不打印），安装 0.3.6 headless node 到 `D:\Tether\node-0.3.6`，隐藏启动并注册登录任务；本机 dry-run 已找到 64 位 token。发布 `https://8-220-198-26.sslip.io/install/Tether-Laptop-Repair.zip`（HTTP 200，内含 cmd+ps1）。
 - 修复包 v2（2026-11-06）：若笔记本 PATH 无 Node/npm，自动从 nodejs.org 下载最新 Node 24 便携版并注入 PATH，再跑 bootstrap；避免卡在 Node 检查。发布包已更新（HTTP 200）。
+- 修复包沙箱验证（2026-11-06）：本机假 token/假控制器跑通 bootstrap（Python 3.11 venv + Node v24.12 + 615 npm 包），`tether-node.ps1` 成功监听 18893/18895 并持续重连假控制器；测试目录已删除。真实笔记本只差运行修复包。
