@@ -5,4 +5,5 @@
 - `Tether-Diagnostics.cmd`：双击运行。
 - `tether-laptop-diagnostics.ps1`：实际采集脚本；不杀进程、不改配置。
 - `Tether-Diagnostics.zip`：上面两个文件的发布包，托管在 Hub `/install/Tether-Diagnostics.zip`。
-- `Repair-LAPTOP.cmd` / `repair-laptop-node.ps1`：复用旧 APP 的 node token，安装并启动 0.3.6 headless node，注册登录启动；失败时打印 node 日志。
+- `Repair-LAPTOP.cmd`：单文件一键修复，下载后直接双击；自行申请管理员权限，联网取 `repair-laptop-node.ps1` 并执行，不需要解压。
+- `repair-laptop-node.ps1`：复用旧 APP 的 node token，安装并启动 0.3.6 headless node，注册登录启动；失败时打印 node 日志。
