@@ -839,3 +839,4 @@
 - 结构化对话页（2026-11-04）：参考 Codeg（`xintaofei/codeg`，Apache-2.0）重做 ACP 页——用户气泡、执行过程胶囊、左侧步骤轨道（思考/工具/计划）、最终 Markdown、回主页 tab、右侧会话详情卡。目录打开 14ms；账号弹层 60ms 内出现；账号 `fresh=false` 快速返回元数据、后台刷新额度。全量 216 passed / 3 skipped。真实 Codex 模型容量导致未抓到实时思考/工具流，轨道用本地演示数据验收后已删。
 - 仍欠：GitHub 0.3.6 公开发布、DSH 自身 DeepSeek 登录/composer、干净 VM 全业务链、100 MB 10 s（需要国内中转或同网路径）。
 - 笔记本诊断包（2026-11-06）：`tether/tools/Tether-Diagnostics.cmd` 双击后在桌面生成脱敏 zip，只读采集进程/端口/服务/安装目录/最新日志；发布在 `https://8-220-198-26.sslip.io/install/Tether-Diagnostics.zip`（HTTP 200）。LAPTOP 仍待该 zip 定位 node 启动崩溃。
+- 笔记本一键修复包（2026-11-06）：`Repair-LAPTOP.cmd` 从旧 `hub.json`/`device-token.json` 读取 token（不打印），安装 0.3.6 headless node 到 `D:\Tether\node-0.3.6`，隐藏启动并注册登录任务；本机 dry-run 已找到 64 位 token。发布 `https://8-220-198-26.sslip.io/install/Tether-Laptop-Repair.zip`（HTTP 200，内含 cmd+ps1）。
