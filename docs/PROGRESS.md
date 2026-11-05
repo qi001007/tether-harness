@@ -838,3 +838,4 @@
 - 账号管理（2026-11-04）：Codex 接 app-server 原生设备码登录、`account/rateLimits/read` 5h/7d 额度、每账号独立 `CODEX_HOME` 档案、自动导入当前账号、弹层一键切换/重新登录/删除/退出；DSH 自动导入 `.dsh/.credentials.yaml` 并可快照切换；OpenCode/Qoder 添加账号时在终端直接跑解析后的登录命令（OpenCode 原生 `Add credential / Select provider` 已见）。`tests/test_agent_accounts.py` 6 passed；全量 216 passed / 3 skipped。仍在用 Codex 会话切换账号后需重启才生效。
 - 结构化对话页（2026-11-04）：参考 Codeg（`xintaofei/codeg`，Apache-2.0）重做 ACP 页——用户气泡、执行过程胶囊、左侧步骤轨道（思考/工具/计划）、最终 Markdown、回主页 tab、右侧会话详情卡。目录打开 14ms；账号弹层 60ms 内出现；账号 `fresh=false` 快速返回元数据、后台刷新额度。全量 216 passed / 3 skipped。真实 Codex 模型容量导致未抓到实时思考/工具流，轨道用本地演示数据验收后已删。
 - 仍欠：GitHub 0.3.6 公开发布、DSH 自身 DeepSeek 登录/composer、干净 VM 全业务链、100 MB 10 s（需要国内中转或同网路径）。
+- 笔记本诊断包（2026-11-06）：`tether/tools/Tether-Diagnostics.cmd` 双击后在桌面生成脱敏 zip，只读采集进程/端口/服务/安装目录/最新日志；发布在 `https://8-220-198-26.sslip.io/install/Tether-Diagnostics.zip`（HTTP 200）。LAPTOP 仍待该 zip 定位 node 启动崩溃。
