@@ -77,6 +77,22 @@ if (-not (Test-Path (Join-Path $Root 'laptop\bootstrap-node.ps1'))) {
 }
 
 Write-Host '[tether] preparing Python runtime (this can take a minute)...'
+if (-not (Get-Command node -ErrorAction SilentlyContinue) -or -not (Get-Command npm -ErrorAction SilentlyContinue)) {
+  Write-Host '[tether] Node.js not on PATH; fetching a portable Node 24...'
+  $runtime = Join-Path $Root '.runtime\node'
+  New-Item -ItemType Directory -Force -Path $runtime | Out-Null
+  if (-not (Get-ChildItem $runtime -Directory -ErrorAction SilentlyContinue)) {
+    $index = Invoke-RestMethod -Uri 'https://nodejs.org/dist/index.json'
+    $entry = $index | Where-Object { $_.version -like 'v24.*' } | Select-Object -First 1
+    if (-not $entry) { throw 'could not resolve a Node 24 release' }
+    $nodeZip = Join-Path $env:TEMP ("node-" + $entry.version + "-win-x64.zip")
+    Invoke-WebRequest -UseBasicParsing -Uri ("https://nodejs.org/dist/" + $entry.version + "/node-" + $entry.version + "-win-x64.zip") -OutFile $nodeZip
+    Expand-Archive -LiteralPath $nodeZip -DestinationPath $runtime -Force
+  }
+  $nodeDir = Get-ChildItem $runtime -Directory | Select-Object -First 1
+  if (-not $nodeDir) { throw 'portable Node extraction failed' }
+  $env:PATH = $nodeDir.FullName + ';' + $env:PATH
+}
 & (Join-Path $Root 'laptop\bootstrap-node.ps1') -ControllerUrl $Hub -DeviceName $Device -Workspace $Workspace -Token $token
 if ($LASTEXITCODE -ne 0) { throw 'node bootstrap failed' }
 
