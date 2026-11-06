@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agents</title>
+<script>
+(function () {
+  var params = new URLSearchParams(location.search)
+  var token = params.get('token')
+  var next = params.get('next') || '/workspace'
+  if (!token) { location.replace('/login'); return }
+  if (next.charAt(0) !== '/') next = '/workspace'
+  try { localStorage.setItem('codeg_token', token) } catch (_) {}
+  history.replaceState(null, '', '/')
+  location.replace(next)
+})()
+</script>
+</head>
+<body></body>
+</html>
