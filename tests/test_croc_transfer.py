@@ -153,6 +153,9 @@ def test_default_platform_uses_sys_platform_and_maps_posix(monkeypatch):
 
 
 def test_bundled_binary_matches_host_arch(monkeypatch):
+    bundled = croc_transfer.Path(croc_transfer.__file__).with_name("bin")
+    if not (bundled / "croc-darwin-arm64").is_file():
+        pytest.skip("bundled croc assets are shipped separately from the source checkout")
     monkeypatch.setattr(croc_transfer.host_platform, "machine", lambda: "arm64")
     assert croc_transfer.CrocTransfer(relay="r:1", platform="darwin").binary().endswith("croc-darwin-arm64")
     monkeypatch.setattr(croc_transfer.host_platform, "machine", lambda: "x86_64")
