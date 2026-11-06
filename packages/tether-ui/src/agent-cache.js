@@ -1,11 +1,11 @@
-const KEY = 'tether-agent-cache-v1'
+const AGENT_CACHE_KEY = 'tether-agent-cache-v1'
 const catalogs = new Map()
 const harnesses = new Map()
 
 function load() {
   try {
     if (typeof localStorage === 'undefined') return
-    const raw = localStorage.getItem(KEY)
+    const raw = localStorage.getItem(AGENT_CACHE_KEY)
     if (!raw) return
     const data = JSON.parse(raw)
     if (!data || typeof data !== 'object') return
@@ -19,7 +19,7 @@ function load() {
 function persist() {
   try {
     if (typeof localStorage === 'undefined') return
-    localStorage.setItem(KEY, JSON.stringify({
+    localStorage.setItem(AGENT_CACHE_KEY, JSON.stringify({
       catalogs: Object.fromEntries(catalogs),
       harnesses: Object.fromEntries(harnesses)
     }))

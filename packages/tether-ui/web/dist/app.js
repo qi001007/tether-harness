@@ -177031,13 +177031,13 @@ var AGENT_ICONS = {
 };
 
 // src/agent-cache.js
-var KEY = "tether-agent-cache-v1";
+var AGENT_CACHE_KEY = "tether-agent-cache-v1";
 var catalogs = /* @__PURE__ */ new Map();
 var harnesses = /* @__PURE__ */ new Map();
 function load() {
   try {
     if (typeof localStorage === "undefined") return;
-    const raw = localStorage.getItem(KEY);
+    const raw = localStorage.getItem(AGENT_CACHE_KEY);
     if (!raw) return;
     const data = JSON.parse(raw);
     if (!data || typeof data !== "object") return;
@@ -177051,7 +177051,7 @@ function load() {
 function persist() {
   try {
     if (typeof localStorage === "undefined") return;
-    localStorage.setItem(KEY, JSON.stringify({
+    localStorage.setItem(AGENT_CACHE_KEY, JSON.stringify({
       catalogs: Object.fromEntries(catalogs),
       harnesses: Object.fromEntries(harnesses)
     }));
@@ -177077,12 +177077,12 @@ function writeHarnesses(device, data) {
 }
 
 // src/agent-account-cache.js
-var KEY2 = "tether-account-cache-v1";
+var ACCOUNT_CACHE_KEY = "tether-account-cache-v1";
 var memory = /* @__PURE__ */ new Map();
 function load2() {
   try {
     if (typeof localStorage === "undefined") return;
-    const raw = localStorage.getItem(KEY2);
+    const raw = localStorage.getItem(ACCOUNT_CACHE_KEY);
     if (!raw) return;
     const data = JSON.parse(raw);
     if (!data || typeof data !== "object") return;
@@ -177095,7 +177095,7 @@ function persist2() {
     if (typeof localStorage === "undefined") return;
     const data = {};
     for (const [key, value] of memory) data[key] = value;
-    localStorage.setItem(KEY2, JSON.stringify(data));
+    localStorage.setItem(ACCOUNT_CACHE_KEY, JSON.stringify(data));
   } catch (_2) {
   }
 }

@@ -1,10 +1,10 @@
-const KEY = 'tether-account-cache-v1'
+const ACCOUNT_CACHE_KEY = 'tether-account-cache-v1'
 const memory = new Map()
 
 function load() {
   try {
     if (typeof localStorage === 'undefined') return
-    const raw = localStorage.getItem(KEY)
+    const raw = localStorage.getItem(ACCOUNT_CACHE_KEY)
     if (!raw) return
     const data = JSON.parse(raw)
     if (!data || typeof data !== 'object') return
@@ -17,7 +17,7 @@ function persist() {
     if (typeof localStorage === 'undefined') return
     const data = {}
     for (const [key, value] of memory) data[key] = value
-    localStorage.setItem(KEY, JSON.stringify(data))
+    localStorage.setItem(ACCOUNT_CACHE_KEY, JSON.stringify(data))
   } catch (_) { /* storage quota or private mode */ }
 }
 

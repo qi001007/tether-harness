@@ -5763,7 +5763,7 @@ monaco-editor/esm/vs/languages/definitions/swift/swift.js:
 
     const EditorRuntime = TetherMonacoRuntime
     const PANEL_ID = 'tether'
-    const PLUGIN_VERSION = "0.3.6"
+    const PLUGIN_VERSION = "0.4.0"
 async function copyText(text) {
   const value = String(text || '')
   if (!value) return false
@@ -10194,14 +10194,14 @@ const AGENT_ICONS = {
   'command-code': 'data:image/svg+xml;base64,PHN2ZyBoZWlnaHQ9IjY0IiB2aWV3Qm94PSIwIDAgMTQ0IDE0NCIgd2lkdGg9IjY0IiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjx0aXRsZT5Db21tYW5kIENvZGU8L3RpdGxlPjxwYXRoIGZpbGw9IiMwMDAwMDAiIGQ9Ik0xMC4zMTkzIDEwLjMxOTNDMCAyMC42Mzg3IDAgMzcuMjQ3NCAwIDcwLjQ2NDhWNzMuMTM5OEMwIDEwNi4zNTcgMCAxMjIuOTY2IDEwLjMxOTMgMTMzLjI4NUMyMC42Mzg3IDE0My42MDUgMzcuMjQ3NCAxNDMuNjA1IDcwLjQ2NDggMTQzLjYwNUg3My4xMzk4QzEwNi4zNTcgMTQzLjYwNSAxMjIuOTY2IDE0My42MDUgMTMzLjI4NSAxMzMuMjg1QzE0My42MDUgMTIyLjk2NiAxNDMuNjA1IDEwNi4zNTcgMTQzLjYwNSA3My4xMzk5VjcwLjQ2NDhDMTQzLjYwNSAzNy4yNDc0IDE0My42MDUgMjAuNjM4NyAxMzMuMjg1IDEwLjMxOTNDMTIyLjk2NiAwIDEwNi4zNTcgMCA3My4xMzk5IDBINzAuNDY0OEMzNy4yNDc0IDAgMjAuNjM4NyAwIDEwLjMxOTMgMTAuMzE5M1oiPjwvcGF0aD48cGF0aCBmaWxsPSIjRkZGRkZGIiBkPSJNOTguODA0OSAyNy42MTYzQzg5LjMyOTUgMjcuNjE2MyA4MS42MjE0IDM1LjMyNDMgODEuNjIxNCA0NC43OTk3VjUyLjE2NDFINjEuOTgzMlY0NC43OTk3QzYxLjk4MzIgMzUuMzI0MyA1NC4yNzUyIDI3LjYxNjMgNDQuNzk5NyAyNy42MTYzQzM1LjMyNDMgMjcuNjE2MyAyNy42MTYzIDM1LjMyNDMgMjcuNjE2MyA0NC43OTk3QzI3LjYxNjMgNTQuMjc1MiAzNS4zMjQzIDYxLjk4MzIgNDQuNzk5NyA2MS45ODMySDUyLjE2NDFWODEuNjIxNEg0NC43OTk3QzM1LjMyNDMgODEuNjIxNCAyNy42MTYzIDg5LjMyOTUgMjcuNjE2MyA5OC44MDQ5QzI3LjYxNjMgMTA4LjI4IDM1LjMyNDMgMTE1Ljk4OCA0NC43OTk3IDExNS45ODhDNTQuMjc1MiAxMTUuOTg4IDYxLjk4MzIgMTA4LjI4IDYxLjk4MzIgOTguODA0OVY5MS40NDA2SDgxLjYyMTRWOTguODA0OUM4MS42MjE0IDEwOC4yOCA4OS4zMjk1IDExNS45ODggOTguODA0OSAxMTUuOTg4QzEwOC4yOCAxMTUuOTg4IDExNS45ODggMTA4LjI4IDExNS45ODggOTguODA0OUMxMTUuOTg4IDg5LjMyOTUgMTA4LjI4IDgxLjYyMTQgOTguODA0OSA4MS42MjE0SDkxLjQ0MDZWNjEuOTgzMkg5OC44MDQ5QzEwOC4yOCA2MS45ODMyIDExNS45ODggNTQuMjc1MiAxMTUuOTg4IDQ0Ljc5OTdDMTE1Ljk4OCAzNS4zMjQzIDEwOC4yOCAyNy42MTYzIDk4LjgwNDkgMjcuNjE2M1pNOTEuNDQwNiA1Mi4xNjQxVjQ0Ljc5OTdDOTEuNDQwNiA0MC43MjQ4IDk0LjczIDM3LjQzNTQgOTguODA0OSAzNy40MzU0QzEwMi44OCAzNy40MzU0IDEwNi4xNjkgNDAuNzI0OCAxMDYuMTY5IDQ0Ljc5OTdDMTA2LjE2OSA0OC44NzQ3IDEwMi44OCA1Mi4xNjQxIDk4LjgwNDkgNTIuMTY0MUg5MS40NDA2Wk00NC43OTk3IDUyLjE2NDFDNDAuNzI0OCA1Mi4xNjQxIDM3LjQzNTQgNDguODc0NyAzNy40MzU0IDQ0Ljc5OTdDMzcuNDM1NCA0MC43MjQ4IDQwLjcyNDggMzcuNDM1NCA0NC43OTk3IDM3LjQzNTRDNDguODc0NyAzNy40MzU0IDUyLjE2NDEgNDAuNzI0OCA1Mi4xNjQxIDQ0Ljc5OTdWNTIuMTY0MUg0NC43OTk3Wk02MS45ODMyIDgxLjYyMTRWNjEuOTgzMkg4MS42MjE0VjgxLjYyMTRINjEuOTgzMlpNOTguODA0OSAxMDYuMTY5Qzk0LjczIDEwNi4xNjkgOTEuNDQwNiAxMDIuODggOTEuNDQwNiA5OC44MDQ5VjkxLjQ0MDZIOTguODA0OUMxMDIuODggOTEuNDQwNiAxMDYuMTY5IDk0LjczIDEwNi4xNjkgOTguODA0OUMxMDYuMTY5IDEwMi44OCAxMDIuODggMTA2LjE2OSA5OC44MDQ5IDEwNi4xNjlaTTQ0Ljc5OTcgMTA2LjE2OUM0MC43MjQ4IDEwNi4xNjkgMzcuNDM1NCAxMDIuODggMzcuNDM1NCA5OC44MDQ5QzM3LjQzNTQgOTQuNzMgNDAuNzI0OCA5MS40NDA2IDQ0Ljc5OTcgOTEuNDQwNkg1Mi4xNjQxVjk4LjgwNDlDNTIuMTY0MSAxMDIuODggNDguODc0NyAxMDYuMTY5IDQ0Ljc5OTcgMTA2LjE2OVoiPjwvcGF0aD48L3N2Zz4NCg==',
   minimax: 'data:image/svg+xml;base64,PHN2ZyBoZWlnaHQ9IjY0IiB2aWV3Qm94PSIwIDAgMjQgMjQiIHdpZHRoPSI2NCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48dGl0bGU+TWluaU1heCBDb2RlPC90aXRsZT48cmVjdCB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHJ4PSI2IiBmaWxsPSIjRjIzRjVEIj48L3JlY3Q+PHBhdGggZD0iTTUgMTdWN2gzbDQgNiA0LTZoM3YxMGgtM3YtNWwtNCA2LTQtNnY1SDVaIiBmaWxsPSIjRkZGRkZGIj48L3BhdGg+PC9zdmc+DQo=',
 }
-const KEY = 'tether-agent-cache-v1'
+const AGENT_CACHE_KEY = 'tether-agent-cache-v1'
 const catalogs = new Map()
 const harnesses = new Map()
 
 function load() {
   try {
     if (typeof localStorage === 'undefined') return
-    const raw = localStorage.getItem(KEY)
+    const raw = localStorage.getItem(AGENT_CACHE_KEY)
     if (!raw) return
     const data = JSON.parse(raw)
     if (!data || typeof data !== 'object') return
@@ -10215,7 +10215,7 @@ function load() {
 function persist() {
   try {
     if (typeof localStorage === 'undefined') return
-    localStorage.setItem(KEY, JSON.stringify({
+    localStorage.setItem(AGENT_CACHE_KEY, JSON.stringify({
       catalogs: Object.fromEntries(catalogs),
       harnesses: Object.fromEntries(harnesses)
     }))
@@ -10243,13 +10243,13 @@ function writeHarnesses(device, data) {
   harnesses.set(device, data)
   persist()
 }
-const KEY = 'tether-account-cache-v1'
+const ACCOUNT_CACHE_KEY = 'tether-account-cache-v1'
 const memory = new Map()
 
 function load() {
   try {
     if (typeof localStorage === 'undefined') return
-    const raw = localStorage.getItem(KEY)
+    const raw = localStorage.getItem(ACCOUNT_CACHE_KEY)
     if (!raw) return
     const data = JSON.parse(raw)
     if (!data || typeof data !== 'object') return
@@ -10262,7 +10262,7 @@ function persist() {
     if (typeof localStorage === 'undefined') return
     const data = {}
     for (const [key, value] of memory) data[key] = value
-    localStorage.setItem(KEY, JSON.stringify(data))
+    localStorage.setItem(ACCOUNT_CACHE_KEY, JSON.stringify(data))
   } catch (_) { /* storage quota or private mode */ }
 }
 

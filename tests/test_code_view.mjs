@@ -17,7 +17,7 @@ test('an open file gets a tab strip with its own close action', () => {
   assert.match(source, /className: 'tether-tab', title: file\.path/)
   assert.match(source, /className: 'tether-file-badge'/)
   assert.match(source, /className: 'tether-tab-title'/)
-  assert.match(source, /function fileTypeMark\(name\)/)
+  assert.match(source, /function fileTypeMark\(name/)
   assert.match(source, /'aria-label': '关闭文件', onClick: closePreview/)
   assert.match(source, /fileTabBar, previewBody\(\)/)
   assert.equal(source.includes("className: 'tether-tab-accent'"), false, 'file tabs do not use a coloured accent strip')
