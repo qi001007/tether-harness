@@ -177776,555 +177776,6 @@ function openUrl(url) {
   }
 }
 
-// src/agent-catalog.js
-var toDraft = (agent) => ({
-  name: agent.name,
-  command: agent.command,
-  argsText: (agent.args || []).join(" "),
-  cwd: agent.cwd || "",
-  envRows: Object.entries(agent.env || {}).map(([k, v2]) => ({ k, v: v2 })),
-  enabled: agent.enabled !== false
-});
-function AgentCatalogView({ React: React2, Glyph, post, C: C2, device, onClose, onLoginTerminal }) {
-  const h3 = React2.createElement;
-  const [catalog, setCatalog] = React2.useState(() => readCatalog(device));
-  const [busy, setBusy] = React2.useState(false);
-  const [installing, setInstalling] = React2.useState("");
-  const [testing, setTesting] = React2.useState(false);
-  const [testOutput, setTestOutput] = React2.useState("");
-  const [error, setError] = React2.useState("");
-  const seedList = (readCatalog(device) || {}).agents || [];
-  const seedAgent = seedList.find((item) => item.available) || seedList[0] || null;
-  const [selectedId, setSelectedId] = React2.useState(seedAgent ? seedAgent.id : "");
-  const [draft, setDraft] = React2.useState(seedAgent ? toDraft(seedAgent) : null);
-  const [editor2, setEditor] = React2.useState(null);
-  const agents = catalog && catalog.agents || [];
-  const selected = agents.find((item) => item.id === selectedId) || null;
-  const applyCatalog = (data, keepSelected) => {
-    setCatalog(data);
-    writeCatalog(device, data);
-    const list2 = data && data.agents || [];
-    const next = list2.find((item) => item.id === keepSelected) || list2.find((item) => item.available) || list2[0];
-    if (next) {
-      setSelectedId(next.id);
-      setDraft(toDraft(next));
-    } else {
-      setSelectedId("");
-      setDraft(null);
-    }
-    setTestOutput("");
-  };
-  const load3 = async (fresh, keepSelected) => {
-    const cached = readCatalog(device);
-    if (cached) {
-      setCatalog(cached);
-      if (!selectedId) {
-        const list2 = cached.agents || [];
-        const first = list2.find((item) => item.available) || list2[0];
-        if (first) {
-          setSelectedId(first.id);
-          setDraft(toDraft(first));
-        }
-      }
-    } else setBusy(true);
-    setError("");
-    try {
-      let data = null;
-      try {
-        data = await post("/api/devices/" + encodeURIComponent(device) + "/fs/agents_catalog", { fresh: fresh === true });
-      } catch (_2) {
-        await new Promise((resolve3) => setTimeout(resolve3, 400));
-        data = await post("/api/devices/" + encodeURIComponent(device) + "/fs/agents_catalog", { fresh: false });
-      }
-      applyCatalog(data, keepSelected || selectedId);
-    } catch (cause) {
-      if (!cached) setError(String(cause && cause.message || cause || "\u8BFB\u53D6\u5931\u8D25"));
-    } finally {
-      setBusy(false);
-    }
-  };
-  React2.useEffect(() => {
-    setSelectedId("");
-    setDraft(null);
-    void load3(false, "");
-  }, [device]);
-  React2.useEffect(() => {
-    if (!catalog) return;
-    const list2 = catalog.agents || [];
-    if (list2.some((item) => item.id === selectedId)) return;
-    const first = list2.find((item) => item.available) || list2[0];
-    if (first) {
-      setSelectedId(first.id);
-      setDraft(toDraft(first));
-    }
-  }, [catalog]);
-  const selectAgent = (agent) => {
-    setSelectedId(agent.id);
-    setDraft(toDraft(agent));
-    setTestOutput("");
-    setError("");
-  };
-  const install = async (agent) => {
-    if (!agent || installing) return;
-    setInstalling(agent.id);
-    setError("");
-    try {
-      const result = await post("/api/devices/" + encodeURIComponent(device) + "/fs/agents_install", { id: agent.id });
-      if (result && result.catalog) applyCatalog(result.catalog, agent.id);
-      else await load3(true, agent.id);
-    } catch (cause) {
-      setError(String(cause && cause.message || cause || "\u5B89\u88C5\u5931\u8D25"));
-    } finally {
-      setInstalling("");
-    }
-  };
-  const envObject = (rows) => {
-    const out = {};
-    for (const row2 of rows || []) {
-      const key = String(row2.k || "").trim();
-      if (key) out[key] = String(row2.v || "");
-    }
-    return out;
-  };
-  const saveDraft = async () => {
-    if (!selected || !draft) return;
-    setBusy(true);
-    setError("");
-    try {
-      const data = await post("/api/devices/" + encodeURIComponent(device) + "/fs/agents_save", {
-        id: selected.id,
-        name: draft.name,
-        command: draft.command,
-        args: draft.argsText.split(/\s+/).filter(Boolean),
-        kind: selected.kind,
-        color: selected.color,
-        enabled: draft.enabled,
-        cwd: draft.cwd,
-        env: envObject(draft.envRows)
-      });
-      applyCatalog(data, selected.id);
-    } catch (cause) {
-      setError(String(cause && cause.message || cause || "\u4FDD\u5B58\u5931\u8D25"));
-    } finally {
-      setBusy(false);
-    }
-  };
-  const test = async () => {
-    if (!selected || testing) return;
-    setTesting(true);
-    setTestOutput("");
-    try {
-      const result = await post("/api/devices/" + encodeURIComponent(device) + "/fs/agents_test", { id: selected.id });
-      setTestOutput(String(result && result.output || "").trim() || "(no output)");
-    } catch (cause) {
-      setTestOutput(String(cause && cause.message || cause || "\u6D4B\u8BD5\u5931\u8D25"));
-    } finally {
-      setTesting(false);
-    }
-  };
-  const remove = async (agent) => {
-    if (!agent) return;
-    setBusy(true);
-    setError("");
-    try {
-      const data = await post("/api/devices/" + encodeURIComponent(device) + "/fs/agents_delete", { id: agent.id });
-      applyCatalog(data, "");
-    } catch (cause) {
-      setError(String(cause && cause.message || cause || "\u5220\u9664\u5931\u8D25"));
-    } finally {
-      setBusy(false);
-    }
-  };
-  const openAdd = () => {
-    setEditor({ name: "", command: "", argsText: "" });
-    setError("");
-  };
-  const saveAdd = async (event) => {
-    if (event) event.preventDefault();
-    if (!editor2) return;
-    setBusy(true);
-    setError("");
-    try {
-      const data = await post("/api/devices/" + encodeURIComponent(device) + "/fs/agents_save", {
-        name: editor2.name,
-        command: editor2.command,
-        args: editor2.argsText.split(/\s+/).filter(Boolean),
-        kind: "cli",
-        enabled: true
-      });
-      setEditor(null);
-      applyCatalog(data, "");
-    } catch (cause) {
-      setError(String(cause && cause.message || cause || "\u4FDD\u5B58\u5931\u8D25"));
-    } finally {
-      setBusy(false);
-    }
-  };
-  const field = {
-    height: 30,
-    boxSizing: "border-box",
-    border: "1px solid rgba(9,30,66,.14)",
-    borderRadius: 7,
-    padding: "0 9px",
-    background: C2.bg,
-    color: C2.ink,
-    fontSize: 12,
-    outline: "none"
-  };
-  const primary = {
-    height: 30,
-    padding: "0 12px",
-    border: 0,
-    borderRadius: 7,
-    fontSize: 12,
-    cursor: "pointer",
-    color: "#fff",
-    background: C2.blue
-  };
-  const iconFor = (agent) => AGENT_ICONS[agent.icon] ? h3("img", { src: AGENT_ICONS[agent.icon], alt: "", "aria-hidden": true, style: { width: 18, height: 18, flex: "0 0 auto", objectFit: "contain" } }) : h3("span", { style: { width: 18, height: 18, flex: "0 0 auto", display: "grid", placeItems: "center", borderRadius: 5, background: C2.soft, color: C2.sub } }, h3(Glyph, { name: "bot", size: 12 }));
-  const badge = (agent) => h3(
-    "span",
-    { style: {
-      display: "inline-flex",
-      alignItems: "center",
-      height: 22,
-      padding: "0 8px",
-      borderRadius: 6,
-      fontSize: 10.5,
-      whiteSpace: "nowrap",
-      color: agent.available ? C2.blue || "#1570ef" : "#d97706",
-      background: agent.available ? "rgba(21,112,239,.08)" : "rgba(217,119,6,.10)"
-    } },
-    agent.available ? "\u53EF\u7528" : "\u672A\u5B89\u88C5"
-  );
-  const toggle = (checked, onChange, label) => h3("button", {
-    type: "button",
-    role: "switch",
-    "aria-checked": checked,
-    "aria-label": label,
-    title: label,
-    onClick: () => onChange(!checked),
-    style: {
-      width: 30,
-      height: 18,
-      flex: "0 0 auto",
-      border: 0,
-      borderRadius: 999,
-      padding: 2,
-      background: checked ? C2.blue : "rgba(9,30,66,.18)",
-      cursor: "pointer",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: checked ? "flex-end" : "flex-start",
-      transition: "background 140ms ease"
-    }
-  }, h3("span", { style: { width: 14, height: 14, borderRadius: 7, background: "#fff", boxShadow: "0 1px 2px rgba(16,24,40,.2)" } }));
-  const row = (agent) => h3(
-    "button",
-    {
-      key: agent.id,
-      type: "button",
-      onClick: () => selectAgent(agent),
-      className: "tether-hover",
-      style: {
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-        width: "100%",
-        minHeight: 40,
-        padding: "4px 8px",
-        borderRadius: 8,
-        border: 0,
-        cursor: "pointer",
-        textAlign: "left",
-        background: selectedId === agent.id ? C2.soft : "transparent",
-        color: C2.ink
-      }
-    },
-    h3("span", { style: { width: 22, flex: "0 0 auto", display: "grid", placeItems: "center" } }, iconFor(agent)),
-    h3(
-      "span",
-      { style: { minWidth: 0, display: "grid", gap: 1 } },
-      h3("span", { style: { fontSize: 12.5, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, agent.name),
-      agent.version ? h3("span", { style: { fontSize: 10, color: C2.mute, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, agent.version) : null
-    ),
-    h3("span", { style: { marginLeft: "auto", flex: "0 0 auto" } }, badge(agent))
-  );
-  const group = (title, children) => h3(
-    "div",
-    { style: { display: "grid", gap: 8 } },
-    h3("div", { style: { fontSize: 11, fontWeight: 600, color: C2.sub, letterSpacing: ".4px" } }, title),
-    h3("div", { style: { border: "1px solid rgba(9,30,66,.12)", borderRadius: 10, background: C2.panel || C2.bg, overflow: "hidden" } }, children)
-  );
-  const settingRow = (title, control) => h3(
-    "div",
-    {
-      style: { display: "flex", alignItems: "center", gap: 12, minHeight: 46, padding: "8px 12px", borderBottom: "1px solid rgba(9,30,66,.07)" }
-    },
-    h3("div", { style: { width: 120, flex: "0 0 auto", fontSize: 12, color: C2.sub } }, title),
-    h3("div", { style: { flex: "1 1 auto", minWidth: 0, display: "flex", justifyContent: "flex-end" } }, control)
-  );
-  const installable = selected && !selected.available && selected.install && selected.install.kind === "npm";
-  const envRows = draft && draft.envRows || [];
-  const detail = selected && draft ? h3(
-    "div",
-    { style: { display: "flex", flexDirection: "column", minHeight: 0, height: "100%" } },
-    h3(
-      "div",
-      { style: { display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderBottom: "1px solid rgba(9,30,66,.10)" } },
-      h3("span", { style: {
-        width: 44,
-        height: 44,
-        flex: "0 0 auto",
-        display: "grid",
-        placeItems: "center",
-        borderRadius: 12,
-        background: C2.bg,
-        boxShadow: "0 1px 4px rgba(16,24,40,.12)"
-      } }, AGENT_ICONS[selected.icon] ? h3("img", { src: AGENT_ICONS[selected.icon], alt: "", style: { width: 28, height: 28 } }) : h3(Glyph, { name: "bot", size: 24 })),
-      h3(
-        "div",
-        { style: { minWidth: 0, display: "grid", gap: 2 } },
-        h3("div", { style: { fontSize: 16, fontWeight: 600 } }, selected.name),
-        selected.version ? h3("div", { style: { fontSize: 10.5, color: C2.mute } }, selected.version) : null
-      ),
-      h3(
-        "span",
-        { style: { marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 } },
-        installable ? h3("button", {
-          type: "button",
-          disabled: installing === selected.id,
-          onClick: () => void install(selected),
-          style: { ...primary, opacity: installing === selected.id ? 0.5 : 1 }
-        }, installing === selected.id ? "\u5B89\u88C5\u4E2D\u2026" : "\u5B89\u88C5") : null,
-        badge(selected),
-        selected.available ? toggle(draft.enabled, (value) => setDraft({ ...draft, enabled: value }), "\u542F\u7528 " + selected.name) : null
-      )
-    ),
-    h3(
-      "div",
-      { className: "tether-scroll", style: { flex: "1 1 auto", minHeight: 0, overflow: "auto", padding: "14px 14px 18px", display: "grid", gap: 16, alignContent: "start" } },
-      group("\u542F\u52A8", h3(
-        "div",
-        null,
-        settingRow("\u547D\u4EE4", h3("input", {
-          value: draft.command,
-          onChange: (event) => setDraft({ ...draft, command: event.target.value }),
-          style: { ...field, width: "100%", fontFamily: "Consolas, monospace" }
-        })),
-        settingRow("\u53C2\u6570", h3("input", {
-          value: draft.argsText,
-          onChange: (event) => setDraft({ ...draft, argsText: event.target.value }),
-          style: { ...field, width: "100%", fontFamily: "Consolas, monospace" }
-        })),
-        settingRow("\u5DE5\u4F5C\u76EE\u5F55", h3("input", {
-          value: draft.cwd,
-          placeholder: "",
-          onChange: (event) => setDraft({ ...draft, cwd: event.target.value }),
-          style: { ...field, width: "100%", fontFamily: "Consolas, monospace" }
-        }))
-      )),
-      group("\u73AF\u5883\u53D8\u91CF", h3(
-        "div",
-        { style: { padding: "10px 12px", display: "grid", gap: 8 } },
-        ...envRows.map((entry, index) => h3(
-          "div",
-          { key: index, style: { display: "flex", gap: 8 } },
-          h3("input", { value: entry.k, placeholder: "KEY", onChange: (event) => {
-            const next = envRows.slice();
-            next[index] = { ...entry, k: event.target.value };
-            setDraft({ ...draft, envRows: next });
-          }, style: { ...field, width: 160, fontFamily: "Consolas, monospace" } }),
-          h3("input", { value: entry.v, placeholder: "value", onChange: (event) => {
-            const next = envRows.slice();
-            next[index] = { ...entry, v: event.target.value };
-            setDraft({ ...draft, envRows: next });
-          }, style: { ...field, flex: "1 1 auto", fontFamily: "Consolas, monospace" } }),
-          h3("button", { type: "button", title: "\u5220\u9664", onClick: () => {
-            setDraft({ ...draft, envRows: envRows.filter((_2, i) => i !== index) });
-          }, style: { ...field, width: 30, padding: 0, cursor: "pointer", background: "transparent", color: C2.mute } }, "\xD7")
-        )),
-        h3("button", {
-          type: "button",
-          onClick: () => setDraft({ ...draft, envRows: [...envRows, { k: "", v: "" }] }),
-          style: { ...field, width: "fit-content", padding: "0 10px", cursor: "pointer", background: "transparent" }
-        }, "+ \u53D8\u91CF")
-      )),
-      selected.accounts ? group("\u8D26\u53F7", h3(
-        "div",
-        { style: { padding: "10px 12px", display: "grid", gap: 8 } },
-        h3(AgentAccountsPanel, { React: React2, Glyph, post, C: C2, device, agent: selected, onLoginTerminal })
-      )) : null,
-      group("\u8BCA\u65AD", h3(
-        "div",
-        { style: { padding: "10px 12px", display: "grid", gap: 8 } },
-        h3("button", {
-          type: "button",
-          disabled: testing || !selected.available,
-          onClick: () => void test(),
-          style: {
-            ...field,
-            width: "fit-content",
-            padding: "0 10px",
-            cursor: testing || !selected.available ? "default" : "pointer",
-            background: "transparent",
-            opacity: testing || !selected.available ? 0.5 : 1
-          }
-        }, testing ? "\u6D4B\u8BD5\u4E2D\u2026" : "\u6D4B\u8BD5\u542F\u52A8"),
-        testOutput ? h3("pre", { style: {
-          margin: 0,
-          padding: 10,
-          borderRadius: 8,
-          background: "rgba(9,30,66,.04)",
-          color: C2.sub,
-          fontSize: 11,
-          lineHeight: 1.5,
-          whiteSpace: "pre-wrap",
-          wordBreak: "break-word",
-          maxHeight: 160,
-          overflow: "auto"
-        } }, testOutput) : null
-      )),
-      error ? h3("div", { style: { color: C2.red, fontSize: 11.5 } }, error) : null
-    ),
-    h3(
-      "div",
-      { style: { display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", borderTop: "1px solid rgba(9,30,66,.10)" } },
-      selected.source === "manual" || selected.source === "overridden" ? h3("button", {
-        type: "button",
-        onClick: () => void remove(selected),
-        style: { ...field, border: 0, background: "transparent", color: C2.red, cursor: "pointer" }
-      }, "\u5220\u9664 Agent") : null,
-      h3(
-        "button",
-        {
-          type: "button",
-          onClick: () => void saveDraft(),
-          disabled: busy || !draft.name.trim() || !draft.command.trim(),
-          style: { ...primary, marginLeft: "auto", opacity: busy || !draft.name.trim() || !draft.command.trim() ? 0.5 : 1 }
-        },
-        busy ? "\u4FDD\u5B58\u4E2D\u2026" : "\u4FDD\u5B58"
-      )
-    )
-  ) : h3("div", { style: { margin: "auto", color: C2.mute, fontSize: 12 } }, "");
-  const modal = editor2 ? h3(
-    "div",
-    {
-      style: { position: "fixed", inset: 0, zIndex: 120, display: "grid", placeItems: "center", background: "rgba(16,24,40,.35)" },
-      onPointerDown: (event) => {
-        if (event.target === event.currentTarget) setEditor(null);
-      }
-    },
-    h3(
-      "form",
-      { onSubmit: saveAdd, style: {
-        width: 520,
-        maxWidth: "calc(100vw - 32px)",
-        maxHeight: "calc(100vh - 80px)",
-        overflow: "auto",
-        background: C2.layer1 || C2.bg,
-        borderRadius: 14,
-        boxShadow: C2.shadow,
-        padding: 18,
-        display: "grid",
-        gap: 12
-      } },
-      h3("div", { style: { fontSize: 15, fontWeight: 600 } }, "\u6DFB\u52A0 Agent"),
-      h3(
-        "label",
-        { style: { display: "grid", gap: 4, fontSize: 11.5, color: C2.sub } },
-        "\u540D\u79F0",
-        h3("input", {
-          value: editor2.name,
-          autoFocus: true,
-          onChange: (event) => setEditor({ ...editor2, name: event.target.value }),
-          style: { ...field, height: 32, fontSize: 13 }
-        })
-      ),
-      h3(
-        "label",
-        { style: { display: "grid", gap: 4, fontSize: 11.5, color: C2.sub } },
-        "\u547D\u4EE4",
-        h3("input", {
-          value: editor2.command,
-          onChange: (event) => setEditor({ ...editor2, command: event.target.value }),
-          style: { ...field, height: 32, fontSize: 13, fontFamily: "Consolas, monospace" }
-        })
-      ),
-      h3(
-        "label",
-        { style: { display: "grid", gap: 4, fontSize: 11.5, color: C2.sub } },
-        "\u53C2\u6570",
-        h3("input", {
-          value: editor2.argsText,
-          onChange: (event) => setEditor({ ...editor2, argsText: event.target.value }),
-          style: { ...field, height: 32, fontSize: 12, fontFamily: "Consolas, monospace" }
-        })
-      ),
-      h3(
-        "div",
-        { style: { display: "flex", justifyContent: "flex-end", gap: 8 } },
-        h3("button", { type: "button", onClick: () => setEditor(null), style: { ...field, cursor: "pointer" } }, "\u53D6\u6D88"),
-        h3("button", {
-          type: "submit",
-          disabled: busy || !editor2.name.trim() || !editor2.command.trim(),
-          style: { ...primary, opacity: busy || !editor2.name.trim() || !editor2.command.trim() ? 0.5 : 1 }
-        }, busy ? "\u4FDD\u5B58\u4E2D\u2026" : "\u4FDD\u5B58")
-      )
-    )
-  ) : null;
-  return h3(
-    "div",
-    { style: { flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column", gap: 10, background: C2.bg } },
-    h3(
-      "div",
-      { style: { display: "flex", alignItems: "center", gap: 8, flex: "0 0 auto" } },
-      h3("button", {
-        type: "button",
-        title: "\u8FD4\u56DE",
-        "aria-label": "\u8FD4\u56DE",
-        onClick: onClose,
-        style: { ...field, width: 28, padding: 0, display: "grid", placeItems: "center", cursor: "pointer" }
-      }, h3(Glyph, { name: "chevronLeft", size: 14 })),
-      h3("div", { style: { fontSize: 16, fontWeight: 600 } }, "Agent \u76EE\u5F55"),
-      h3("span", { style: { marginLeft: "auto" } }),
-      h3(
-        "button",
-        {
-          type: "button",
-          title: "\u5237\u65B0",
-          "aria-label": "\u5237\u65B0",
-          onClick: () => void load3(true, selectedId),
-          disabled: busy,
-          style: { ...field, width: 30, padding: 0, display: "grid", placeItems: "center", cursor: "pointer", opacity: busy ? 0.5 : 1 }
-        },
-        h3(Glyph, { name: "refresh", size: 13 })
-      ),
-      h3("button", {
-        type: "button",
-        onClick: openAdd,
-        style: { ...primary, display: "flex", alignItems: "center", gap: 5 }
-      }, h3(Glyph, { name: "plus", size: 13 }), "\u6DFB\u52A0 Agent")
-    ),
-    error && !editor2 ? h3("div", { style: { padding: "0 2px", color: C2.red, fontSize: 11.5 } }, error) : null,
-    h3(
-      "div",
-      { style: { flex: "1 1 auto", minHeight: 0, display: "grid", gap: 10, gridTemplateColumns: "minmax(210px, 250px) 1fr" } },
-      h3(
-        "div",
-        { style: { minHeight: 0, minWidth: 0, border: "1px solid rgba(9,30,66,.12)", borderRadius: 10, background: C2.panel || C2.bg, display: "flex", flexDirection: "column", overflow: "hidden" } },
-        h3(
-          "div",
-          { className: "tether-scroll", style: { flex: "1 1 auto", minHeight: 0, overflow: "auto", padding: 7, display: "flex", flexDirection: "column", gap: 2 } },
-          agents.map(row)
-        )
-      ),
-      h3("div", { style: { minHeight: 0, minWidth: 0, border: "1px solid rgba(9,30,66,.12)", borderRadius: 10, background: C2.panel || C2.bg, overflow: "hidden" } }, detail)
-    ),
-    modal
-  );
-}
-
 // src/agents-home.js
 function AgentHome({
   React: React2,
@@ -179158,6 +178609,11 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
     }
   }, []);
   React2.useEffect(() => {
+    if (device) return;
+    const preferred2 = activeDevice && online.some((item) => item.device_id === activeDevice) ? activeDevice : localDevice && online.some((item) => item.device_id === localDevice) ? localDevice : online[0] && online[0].device_id || "";
+    if (preferred2) setDevice(preferred2);
+  }, [device, activeDevice, localDevice, devices]);
+  React2.useEffect(() => {
     if (!activeDevice || activeDevice === device) return;
     if (!online.some((item) => item.device_id === activeDevice)) return;
     setTabs([]);
@@ -179197,6 +178653,7 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
     setWorkspaceOpen(true);
   };
   const closePane = (key) => {
+    if (key === "codeg:home") return;
     setPanes((current) => {
       const next = current.filter((item) => item.key !== key);
       setActivePane((active) => active === key ? (next[next.length - 1] || {}).key || "" : active);
@@ -179234,6 +178691,25 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
     }
     addPane({ key: "herdr", kind: "terminal", shell: "herdr", title: "Herdr", icon: "bot", dark: true });
   };
+  React2.useEffect(() => {
+    const open = () => {
+      if (herdrAvailable) openHerdr();
+    };
+    if (typeof window !== "undefined" && window.__tetherHerdrPending) {
+      window.__tetherHerdrPending = false;
+      open();
+    }
+    const onMessage = (event) => {
+      const data = event && event.data;
+      if (data && data.type === "tether:open-herdr") open();
+    };
+    window.addEventListener("message", onMessage);
+    window.addEventListener("tether:open-herdr", open);
+    return () => {
+      window.removeEventListener("message", onMessage);
+      window.removeEventListener("tether:open-herdr", open);
+    };
+  }, [herdrAvailable, device]);
   const openWeb = async (agent2) => {
     const key = "web:" + agent2.id;
     addPane({ key, kind: "web", url: "", title: agent2.name + " Web", icon: agent2.icon, color: agent2.color });
@@ -179254,6 +178730,39 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
       fail2(error);
     }
   };
+  const homeOpenedRef = React2.useRef("");
+  React2.useEffect(() => {
+    if (!device || catalogOpen) return void 0;
+    if (homeOpenedRef.current === device) return void 0;
+    homeOpenedRef.current = device;
+    let alive = true;
+    const openHome = async () => {
+      const base = "/api/devices/" + encodeURIComponent(device) + "/fs/";
+      try {
+        let result = null;
+        try {
+          result = await post(base + "agents_runtime_status", {});
+        } catch (_2) {
+        }
+        if (!result || !result.running) result = await post(base + "agents_runtime_start", {});
+        if (!result || !result.running || !result.url) throw new Error("Agents runtime \u6CA1\u6709\u8FD4\u56DE\u53EF\u5D4C\u5165\u5730\u5740");
+        const url = String(result.url);
+        if (!alive) return;
+        setPanes((current) => current.some((pane) => pane.key === "codeg:home") ? current : [...current, { key: "codeg:home", kind: "web", title: "\u4E3B\u9875", url: url + (url.includes("?") ? "&" : "?") + "next=" + encodeURIComponent("/workspace?tether_home=1") }]);
+        setActivePane((current) => current || "codeg:home");
+        setWorkspaceOpen(true);
+      } catch (error) {
+        if (alive) {
+          homeOpenedRef.current = "";
+          fail2(error);
+        }
+      }
+    };
+    void openHome();
+    return () => {
+      alive = false;
+    };
+  }, [device, catalogOpen]);
   const installAgent = async (agent2) => {
     if (!device || installing) return;
     setInstalling(agent2.id);
@@ -180194,93 +179703,6 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
     height: Math.max(420, (typeof window !== "undefined" ? window.innerHeight : 900) - 168),
     onClose: () => closePane(pane.key)
   });
-  const surfaceTabs = panes.length ? h3(
-    "div",
-    {
-      key: "tabs",
-      className: "tether-scroll tether-agent-tabs",
-      onWheel: (event) => {
-        if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) event.currentTarget.scrollLeft += event.deltaY;
-      },
-      style: {
-        display: "flex",
-        alignItems: "center",
-        gap: 4,
-        paddingBottom: 2,
-        borderBottom: "1px solid rgba(9,30,66,.10)",
-        flex: "0 0 auto",
-        overflowX: "auto",
-        overflowY: "hidden",
-        whiteSpace: "nowrap"
-      }
-    },
-    h3("button", {
-      type: "button",
-      title: "\u4E3B\u9875",
-      "aria-label": "\u4E3B\u9875",
-      onClick: () => setWorkspaceOpen(false),
-      style: {
-        ...field,
-        height: 26,
-        padding: "0 10px",
-        cursor: "pointer",
-        flex: "0 0 auto",
-        background: workspaceOpen ? "transparent" : C2.soft,
-        border: "1px solid " + (workspaceOpen ? "transparent" : C2.line)
-      }
-    }, "\u4E3B\u9875"),
-    ...panes.map((pane) => h3(
-      "div",
-      {
-        key: pane.key,
-        role: "tab",
-        "aria-selected": workspaceOpen && pane.key === activePane ? "true" : "false",
-        onClick: () => {
-          setWorkspaceOpen(true);
-          setActivePane(pane.key);
-        },
-        style: {
-          display: "flex",
-          alignItems: "center",
-          gap: 6,
-          height: 26,
-          padding: "0 4px 0 8px",
-          borderRadius: 7,
-          cursor: "pointer",
-          flex: "0 0 auto",
-          whiteSpace: "nowrap",
-          background: workspaceOpen && pane.key === activePane ? C2.soft : "transparent",
-          color: workspaceOpen && pane.key === activePane ? C2.ink : C2.sub,
-          border: "1px solid " + (workspaceOpen && pane.key === activePane ? C2.line : "transparent")
-        }
-      },
-      h3("span", { style: { width: 6, height: 6, borderRadius: 3, background: pane.kind === "web" ? C2.blue : "#d97706", flex: "0 0 auto" } }),
-      h3("span", { style: { fontSize: 11.5 } }, pane.title),
-      h3("button", {
-        type: "button",
-        title: "\u5173\u95ED " + pane.title,
-        "aria-label": "\u5173\u95ED " + pane.title,
-        onClick: (event) => {
-          event.stopPropagation();
-          closePane(pane.key);
-        },
-        style: {
-          width: 18,
-          height: 18,
-          display: "grid",
-          placeItems: "center",
-          border: 0,
-          borderRadius: 4,
-          background: "transparent",
-          color: C2.mute,
-          fontSize: 12,
-          cursor: "pointer",
-          padding: 0
-        }
-      }, "\xD7")
-    )),
-    h3("span", { style: { marginLeft: "auto" } })
-  ) : null;
   const workspace = panes.length ? h3(
     "div",
     {
@@ -180290,6 +179712,29 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
     h3(
       "div",
       { style: { flex: "1 1 auto", minHeight: 0, position: "relative", display: "flex" } },
+      activePane && activePane !== "codeg:home" ? h3("button", {
+        key: "back-to-codeg",
+        type: "button",
+        onClick: () => setActivePane("codeg:home"),
+        style: {
+          position: "absolute",
+          top: 10,
+          left: 10,
+          zIndex: 9,
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 6,
+          height: 28,
+          padding: "0 10px",
+          border: "1px solid " + C2.line,
+          borderRadius: 8,
+          background: "rgba(255,255,255,.94)",
+          color: C2.ink,
+          fontSize: 11.5,
+          cursor: "pointer",
+          boxShadow: "0 2px 8px rgba(9,30,66,.10)"
+        }
+      }, "\u2190 \u8FD4\u56DE Codeg") : null,
       ...panes.map((pane) => h3("div", {
         key: pane.key,
         style: { position: "absolute", inset: 0, display: pane.key === activePane ? "flex" : "none", flexDirection: "column", minWidth: 0, minHeight: 0 }
@@ -180299,28 +179744,15 @@ function createAgentsPage({ React: React2, Glyph, post, C: C2, devices = [], loc
   return h3(
     "div",
     {
-      style: { flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column", gap: 8, padding: 10, background: C2.bg }
+      style: { flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column", background: C2.bg }
     },
-    headerRow,
-    catalogOpen ? h3(AgentCatalogView, {
-      React: React2,
-      Glyph,
-      post,
-      C: C2,
-      device,
-      onLoginTerminal: (agent2, command, argv) => openLogin(agent2, command, argv),
-      onClose: () => setCatalogOpen(false)
-    }) : h3(
+    workspace,
+    !panes.length ? h3(
       "div",
-      { style: { flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column", gap: 6 } },
-      surfaceTabs,
-      h3(
-        "div",
-        { style: { flex: "1 1 auto", minHeight: 0, position: "relative", display: "flex", flexDirection: "column" } },
-        baseContent,
-        workspace
-      )
-    )
+      { style: { display: "grid", placeItems: "center", alignContent: "center", gap: 10, flex: "1 1 auto", color: C2.mute, fontSize: 12 } },
+      h3("span", { className: "tether-spin", style: { display: "grid", placeItems: "center" } }, h3(Glyph, { name: "refresh", size: 18 })),
+      "\u6B63\u5728\u6253\u5F00 Agent \u4E3B\u9875\u2026"
+    ) : null
   );
 }
 
@@ -181157,16 +180589,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     }, label);
   }
   function deviceOs(device) {
-    const caps = device.capabilities || {};
-    if (caps.os_label) return caps.os_label;
-    const raw = String(device.platform || "");
-    const match2 = raw.match(/Windows-(?:\d+)-([\d.]+)/);
-    if (match2) {
-      const build = match2[1].split(".").pop();
-      if (build && Number(build) >= 22e3) return "Windows 11 \xB7 " + build;
-      if (build) return "Windows 10 \xB7 " + build;
-    }
-    return raw || "Unknown";
+    return { windows: "Windows", linux: "Linux", mac: "macOS", other: "\u5176\u4ED6" }[deviceOsKind(device)];
   }
   function deviceOsKind(device) {
     const caps = device && device.capabilities || {};
@@ -181223,7 +180646,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         "span",
         { style: { minWidth: 0, display: "flex", flexDirection: "column", gap: 1, overflow: "hidden" } },
         h3("span", { style: { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, device.name || device.device_id),
-        h3("span", { style: { fontSize: 10.5, color: deviceOsTheme(device).color, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, deviceOs(device))
+        h3("span", { style: { fontSize: 10.5, color: C2.mute, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, deviceOs(device))
       ),
       h3("span", { style: { marginLeft: "auto", fontSize: 10.5, color: device.online ? C2.green : C2.mute, whiteSpace: "nowrap" } }, device.online ? "\u5728\u7EBF" : "\u79BB\u7EBF")
     );
@@ -181862,11 +181285,12 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       .tether-root button:focus-visible, .tether-root [role=button]:focus-visible { outline: 1px solid var(--tether-focus); outline-offset: 1px; }
       .tether-hover:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(38,49,72,.06)) !important; }
       .tether-resizer { position: relative; }
-      .tether-drawer { width: min(480px, 100%); }
+      .tether-drawer { width: min(760px, calc(100vw - 32px)); }
       .tether-drawer-body { padding: 16px; }
       .tether-service-short { display: none; }
-      .tether-audit-head { display: grid; grid-template-columns: 54px minmax(0, 1fr) 64px; gap: 6px; padding: 5px 8px; background: var(--dsw-alias-interactive-bg-hover, rgba(38, 49, 72, 0.06)); font-size: 10px; color: var(--dsw-alias-label-tertiary, #667085); }
-      .tether-audit-row { display: grid; grid-template-columns: 54px minmax(0, 1fr) 64px; gap: 6px; padding: 4px 8px; font-size: 10.5px; }
+      .tether-audit-head { display: grid; grid-template-columns: 72px minmax(0, 1fr) 64px; gap: 8px; padding: 6px 10px; background: var(--dsw-alias-interactive-bg-hover, rgba(38, 49, 72, 0.06)); font-size: 11px; color: var(--dsw-alias-label-tertiary, #667085); }
+      .tether-audit-row { display: grid; grid-template-columns: 72px minmax(0, 1fr) 64px; gap: 8px; align-items: center; padding: 6px 10px; font-size: 11.5px; line-height: 18px; }
+      .tether-audit-row > span, .tether-audit-head > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       @media (max-width: 760px) {
         .tether-drawer { width: 100%; }
         .tether-drawer-body { padding: 12px; }
@@ -182124,6 +181548,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       { id: "workspaces", label: "\u539F\u751F\u5DE5\u4F5C\u533A", icon: "monitor" },
       { id: "apps", label: "\u8FDC\u7A0B\u5E94\u7528", icon: "apps" },
       { id: "agents", label: "Agents", icon: "bot" },
+      { id: "herdr", label: "Herdr", icon: "terminal" },
       { id: "files", label: "\u6587\u4EF6\u8D44\u6E90\u7BA1\u7406\u5668", icon: "files" },
       { id: "transfer", label: "\u6587\u4EF6\u8F6C\u79FB", icon: "transfer" },
       { id: "network", label: "\u4E92\u8054", icon: "devices" }
@@ -183217,7 +182642,16 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const [attempt, setAttempt] = React2.useState(0);
     const [slow, setSlow] = React2.useState(false);
     const [styleBroken, setStyleBroken] = React2.useState(false);
-    const currentState = nativeSurfaceStateForDevice(state, deviceId, online);
+    const lastOnlineRef = React2.useRef(0);
+    const [, setOfflineTick] = React2.useState(0);
+    if (online) lastOnlineRef.current = Date.now();
+    const offlineGrace = !online && state.status !== "offline" && state.deviceId === deviceId && Date.now() - lastOnlineRef.current < 2e4;
+    React2.useEffect(() => {
+      if (online || state.status === "offline") return void 0;
+      const timer = setTimeout(() => setOfflineTick((value) => value + 1), 2e4);
+      return () => clearTimeout(timer);
+    }, [online, state.status, deviceId]);
+    const currentState = offlineGrace ? state : nativeSurfaceStateForDevice(state, deviceId, online);
     const retryCountRef = React2.useRef(0);
     const documentRetryCountRef = React2.useRef(0);
     const retryTimerRef = React2.useRef(null);
@@ -183635,7 +183069,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         }
       };
       void load3();
-      const timer = setInterval(load3, dshBusy || dsh && dsh.installing ? 1500 : 5e3);
+      const timer = setInterval(load3, dshBusy ? 2500 : dsh && (dsh.installing || dsh.running && !dsh.surface) ? 2500 : 8e3);
       return () => {
         alive = false;
         clearInterval(timer);
@@ -183664,7 +183098,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       }
     }, [dsh, dshBusy]);
     const dshPluginMissing = !!dsh && dsh.installed !== false && dsh.running === true && (dsh.surface === false || dshRelevant && currentState.code === "descriptor_missing");
-    const dshBlocked = dshWatch && currentState.status !== "local" && !!dsh && !dsh.running;
+    const dshActionBusy = dshBusy === "dsh_start" || dshBusy === "dsh_install" || dshBusy === "dsh_restart" || dshBusy === "dsh_install_plugin";
     const runDsh = async (action) => {
       setDshError("");
       setDshBusy(action);
@@ -183705,7 +183139,21 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       });
     }, [deviceId]);
     const dshSurfaceMissing = !!dshRelevant && !!dsh && dsh.running === true && currentState.code === "descriptor_missing";
-    const message = currentState.status === "error" && dshRelevant && dsh ? dshWebActive ? "DSH Web \u5DF2\u5C31\u7EEA" : dsh.installed === false ? "DSH \u672A\u5B89\u88C5" : dsh.running ? dshBusy === "dsh_install_plugin" ? "\u6B63\u5728\u5B89\u88C5/\u4FEE\u590D Tether \u63D2\u4EF6\u2026" : dshSurfaceMissing ? "DSH \u5DF2\u5728\u8FD0\u884C\uFF0C\u4F46 Tether \u63D2\u4EF6\u672A\u52A0\u8F7D\u6216 surface \u63CF\u8FF0\u7B26\u7F3A\u5931" : currentState.message : "DSH \u672A\u542F\u52A8" : currentState.status === "loading" ? currentState.message || "\u6B63\u5728\u8FDE\u63A5\u76EE\u6807\u8BBE\u5907\u7684 DSH \u539F\u751F\u5DE5\u4F5C\u533A\u2026" : currentState.status === "local" ? "\u5F53\u524D\u5DF2\u5728 DeepSeek Harness \u4E2D\uFF1B\u672C\u673A\u5DE5\u4F5C\u533A\u65E0\u9700\u518D\u5D4C\u5165\uFF0C\u53EF\u7528\u5DE6\u4FA7\u300C\u6587\u4EF6\u300D\u6216\u300C\u8FDE\u63A5\u300D\u3002" : currentState.status === "offline" ? "\u76EE\u6807\u8BBE\u5907\u79BB\u7EBF\u3002\u8BBE\u5907\u91CD\u65B0\u5728\u7EBF\u540E\u53EF\u91CD\u8BD5\u3002" : currentState.status === "no-device" ? "\u5148\u4ECE\u5DE6\u4FA7\u8BBE\u5907\u5217\u8868\u9009\u62E9\u76EE\u6807\u8BBE\u5907\u3002" : currentState.status === "error" ? currentState.message : "";
+    const message = currentState.status === "error" && dshRelevant && dsh ? dshWebActive ? "DSH Web \u5DF2\u5C31\u7EEA" : dsh.installed === false ? "DSH \u672A\u5B89\u88C5" : dsh.running ? dshBusy === "dsh_install_plugin" ? "\u6B63\u5728\u5B89\u88C5/\u4FEE\u590D Tether \u63D2\u4EF6\u2026" : dshSurfaceMissing ? "DSH \u5DF2\u5728\u8FD0\u884C\uFF0C\u4F46 Tether \u63D2\u4EF6\u672A\u52A0\u8F7D\u6216 surface \u63CF\u8FF0\u7B26\u7F3A\u5931" : currentState.message : "DSH \u672A\u542F\u52A8" : currentState.status === "loading" ? currentState.message || "\u6B63\u5728\u8FDE\u63A5\u76EE\u6807\u8BBE\u5907\u7684 DSH \u539F\u751F\u5DE5\u4F5C\u533A\u2026" : currentState.status === "local" ? "\u5F53\u524D\u5DF2\u5728 DeepSeek Harness \u4E2D\uFF1B\u672C\u673A\u5DE5\u4F5C\u533A\u65E0\u9700\u518D\u5D4C\u5165\uFF0C\u53EF\u7528\u5DE6\u4FA7\u300C\u6587\u4EF6\u300D\u6216\u300C\u8FDE\u63A5\u300D\u3002" : currentState.status === "offline" ? "\u8282\u70B9\u6682\u65F6\u79BB\u7EBF\uFF0C\u6B63\u5728\u81EA\u52A8\u91CD\u8FDE\uFF1B\u6062\u590D\u540E\u4F1A\u7EE7\u7EED\u8F7D\u5165\u5DE5\u4F5C\u533A\u3002" : currentState.status === "no-device" ? "\u5148\u4ECE\u5DE6\u4FA7\u8BBE\u5907\u5217\u8868\u9009\u62E9\u76EE\u6807\u8BBE\u5907\u3002" : currentState.status === "error" ? currentState.message : "";
+    const dshRunning = !!(dsh && dsh.running) || dshWebActive;
+    const dshStarting = dshActionBusy || !!(dsh && dsh.installing) || dshWebBusy === "start" || dshWebBusy === "install" || !!(dshWeb && dshWeb.installing) || dshRunning && ["loading", "document-loading"].includes(currentState.status);
+    const dshStartingLabel = dshBusy === "dsh_install" || dsh && dsh.installing ? "\u6B63\u5728\u5B89\u88C5 DSH\u2026" : dshBusy === "dsh_restart" ? "\u6B63\u5728\u91CD\u542F DSH\u2026" : dshBusy === "dsh_install_plugin" ? "\u6B63\u5728\u51C6\u5907\u5DE5\u4F5C\u533A\u2026" : dshRunning ? "\u6B63\u5728\u8F7D\u5165\u5DE5\u4F5C\u533A\u2026" : dsh && dsh.installed === false ? "\u6B63\u5728\u5B89\u88C5 DSH\u2026" : "\u6B63\u5728\u542F\u52A8 DSH\u2026";
+    const dshStalled = !dshStarting && dshRunning && !dshWebActive && (currentState.status === "error" || dshSurfaceMissing);
+    const dshStopped = dshWatch && !!dsh && dsh.running === false;
+    const dshSurfaceError = dshRelevant || dshStopped;
+    const dshDetecting = dshWatch && !dsh && currentState.status === "error";
+    const [dshStalledReady, setDshStalledReady] = React2.useState(false);
+    React2.useEffect(() => {
+      setDshStalledReady(false);
+      if (!dshStalled) return void 0;
+      const timer = setTimeout(() => setDshStalledReady(true), 12e3);
+      return () => clearTimeout(timer);
+    }, [dshStalled, deviceId]);
     const dshWebUrl = dshWeb && dshWeb.running ? String(dshWeb.url || "") : "";
     if (dshWebOpen && dshWebUrl && host.kind === "app") {
       return h3(
@@ -183742,7 +183190,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     return h3(
       "div",
       { className: "tether-native-surface", style: nativeSurfaceContainerStyle(visible, layered) },
-      ["document-loading", "document-loaded"].includes(currentState.status) && currentState.deviceId === deviceId && online ? h3(
+      ["document-loading", "document-loaded"].includes(currentState.status) && currentState.deviceId === deviceId && online && !dshStopped ? h3(
         "div",
         { style: { position: "relative", display: "flex", flex: "1 1 auto", minWidth: 0, minHeight: 0 } },
         h3("iframe", {
@@ -183799,110 +183247,62 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           "aria-label": "\u91CD\u65B0\u52A0\u8F7D\u76EE\u6807\u5DE5\u4F5C\u533A",
           style: { position: "absolute", right: 10, bottom: 10, width: 26, height: 26, border: 0, borderRadius: 999, background: "rgba(255,255,255,.9)", color: C2.sub, fontSize: 14, cursor: "pointer", boxShadow: "0 1px 4px rgba(16,24,40,.16)" }
         }, "\u21BB") : null
+      ) : dshStarting ? h3(
+        "div",
+        { style: { display: "grid", placeItems: "center", alignContent: "center", gap: 12, flex: "1 1 auto", minHeight: 0, color: C2.sub, textAlign: "center", padding: 24 } },
+        h3("span", { className: "tether-spin", style: { display: "grid", placeItems: "center", color: C2.mute } }, h3(Glyph, { name: "refresh", size: 20 })),
+        h3("div", { role: "status", "aria-live": "polite", style: { fontSize: 13, color: C2.sub } }, dshStartingLabel),
+        dsh && dsh.installing ? h3("div", { className: "tether-num", style: { fontSize: 11.5, color: C2.mute } }, (Number(dsh.progress) || 0) + "%") : null
+      ) : dshRelevant && dshRunning ? dshStalled ? h3(
+        "div",
+        { style: { display: "grid", placeItems: "center", alignContent: "center", gap: 12, flex: "1 1 auto", minHeight: 0, color: C2.sub, textAlign: "center", padding: 24 } },
+        h3("div", { style: { fontSize: 14, color: C2.ink } }, "\u5DE5\u4F5C\u533A\u8FD8\u6CA1\u6709\u51C6\u5907\u597D"),
+        h3("div", { style: { maxWidth: 460, fontSize: 12, color: C2.mute, lineHeight: 1.6 } }, "DSH \u5DF2\u5728\u8FD0\u884C\uFF0C\u4F46 Tether \u5DE5\u4F5C\u533A\u7EC4\u4EF6\u6682\u65F6\u6CA1\u6709\u54CD\u5E94\u3002"),
+        h3(
+          "div",
+          { style: { display: "flex", gap: 8 } },
+          btn(dshBusy === "dsh_install_plugin" ? "\u4FEE\u590D\u4E2D\u2026" : "\u4FEE\u590D\u5DE5\u4F5C\u533A", () => {
+            dshAutoRepairRef.current = true;
+            runDsh("dsh_install_plugin");
+          }, { primary: true, disabled: !!dshBusy }),
+          btn(dshBusy === "dsh_restart" ? "\u91CD\u542F\u4E2D\u2026" : "\u91CD\u542F DSH", () => runDsh("dsh_restart"), { disabled: !!dshBusy })
+        )
       ) : h3(
         "div",
         { style: { display: "grid", placeItems: "center", alignContent: "center", gap: 12, flex: "1 1 auto", minHeight: 0, color: C2.sub, textAlign: "center", padding: 24 } },
-        h3("div", null, message),
-        dshWeb && dshWeb.running ? btn(host.kind === "app" ? "\u6253\u5F00\u5DE5\u4F5C\u533A" : "\u8BF7\u5728\u684C\u9762 APP \u5185\u6253\u5F00", () => {
-          if (host.kind !== "app") return;
-          const url = dshWeb.url || "";
-          if (!url) {
-            setDshWeb((current) => ({ ...current || {}, error: "\u5DE5\u4F5C\u533A\u5730\u5740\u8FD8\u6CA1\u51C6\u5907\u597D\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5" }));
-            return;
-          }
-          setDshWebOpen(true);
-        }, { primary: true, disabled: host.kind !== "app" }) : null,
-        dshRelevant && dsh && !dsh.running ? btn(
-          dsh.installed === false ? dshBusy === "dsh_install" || dsh.installing ? "\u5B89\u88C5\u4E2D\u2026" : "\u5B89\u88C5 DSH" : dshBusy === "dsh_start" ? "\u542F\u52A8\u4E2D\u2026" : "\u542F\u52A8 DSH",
-          () => runDsh(dsh.installed === false ? "dsh_install" : "dsh_start"),
-          { primary: true, disabled: !!dshBusy || !!dsh.installing }
-        ) : null,
-        dshRelevant && dshWebActive ? btn(
-          dshWebBusy === "repair" ? "\u4FEE\u590D\u4E2D\u2026" : "\u4FEE\u590D DSH Web \u63D2\u4EF6",
-          () => {
-            void runDshWeb("repair");
-          },
-          { primary: true, disabled: !!dshWebBusy }
-        ) : null,
-        dshRelevant && dshWebActive ? btn(
-          dshWebBusy === "stop" || dshWebBusy === "start" ? "\u91CD\u542F\u4E2D\u2026" : "\u91CD\u542F DSH Web",
-          async () => {
-            await runDshWeb("stop");
-            await runDshWeb("start");
-          },
-          { disabled: !!dshWebBusy }
-        ) : null,
-        dshRelevant && dsh && dsh.running && !dshWebActive ? btn(
-          dshBusy === "dsh_install_plugin" ? "\u4FEE\u590D\u4E2D\u2026" : "\u5B89\u88C5/\u4FEE\u590D\u63D2\u4EF6",
-          () => {
-            dshAutoRepairRef.current = true;
-            runDsh("dsh_install_plugin");
-          },
-          { primary: true, disabled: !!dshBusy }
-        ) : null,
-        dshRelevant && dsh && dsh.running && !dshWebActive ? btn(
-          dshBusy === "dsh_restart" ? "\u91CD\u542F\u4E2D\u2026" : "\u91CD\u542F DSH",
-          () => runDsh("dsh_restart"),
-          { disabled: !!dshBusy }
-        ) : null,
-        currentState.status !== "loading" && currentState.status !== "local" ? btn("\u91CD\u8BD5", retryDocument) : null,
-        dshRelevant && dshBusy && dsh && dsh.installing ? h3("div", { style: { fontSize: 11.5, color: C2.mute } }, "\u5B89\u88C5\u4E2D " + (Number(dsh.progress) || 0) + "%") : null,
-        dshError ? h3("div", { role: "alert", style: { color: C2.red, fontSize: 11.5 } }, dshError) : null
-      ),
-      dshBlocked ? h3(
+        h3("span", { className: "tether-spin", style: { display: "grid", placeItems: "center", color: C2.mute } }, h3(Glyph, { name: "refresh", size: 20 })),
+        h3("div", { role: "status", "aria-live": "polite", style: { fontSize: 13, color: C2.sub } }, "\u6B63\u5728\u8F7D\u5165\u5DE5\u4F5C\u533A\u2026")
+      ) : dshDetecting || dshRelevant && !dsh ? h3(
         "div",
-        {
-          role: "status",
-          style: {
-            position: "absolute",
-            inset: 0,
-            zIndex: 6,
-            display: "grid",
-            placeItems: "center",
-            alignContent: "center",
-            gap: 10,
-            padding: 24,
-            background: C2.bg,
-            color: C2.sub,
-            textAlign: "center"
-          }
-        },
-        h3("div", { style: { fontSize: 14, color: C2.ink } }, dshWebActive ? "DSH Web \u5DF2\u5C31\u7EEA" : dsh.installed === false ? "DSH \u672A\u5B89\u88C5" : "DSH \u672A\u542F\u52A8"),
-        dsh.version ? h3("div", { className: "tether-num", style: { fontSize: 11.5, color: C2.mute } }, dsh.version) : null,
-        dsh.installing ? h3("div", { style: { fontSize: 11.5, color: C2.mute } }, "\u5B89\u88C5\u4E2D " + (Number(dsh.progress) || 0) + "%") : null,
-        dsh.installed === false && (!dshInstallSupported || dshWeb && dshWeb.running) ? h3(
+        { style: { display: "grid", placeItems: "center", alignContent: "center", gap: 12, flex: "1 1 auto", minHeight: 0, color: C2.sub, textAlign: "center", padding: 24 } },
+        h3("span", { className: "tether-spin", style: { display: "grid", placeItems: "center", color: C2.mute } }, h3(Glyph, { name: "refresh", size: 20 })),
+        h3("div", { role: "status", "aria-live": "polite", style: { fontSize: 13, color: C2.sub } }, "\u6B63\u5728\u68C0\u6D4B DSH\u2026")
+      ) : h3(
+        "div",
+        { style: { display: "grid", placeItems: "center", alignContent: "center", gap: 12, flex: "1 1 auto", minHeight: 0, color: C2.sub, textAlign: "center", padding: 24 } },
+        dshSurfaceError ? h3(
           React2.Fragment,
           null,
-          h3(
-            "div",
-            { style: { maxWidth: 480, fontSize: 12, color: C2.sub, lineHeight: 1.6 } },
-            dshWeb && dshWeb.running ? "DSH Web \u5DF2\u5728\u76EE\u6807\u673A\u8FD0\u884C\uFF0C\u53EF\u5728 Tether \u5185\u6253\u5F00\u5DE5\u4F5C\u533A\u3002" : "\u5F53\u524D\u76EE\u6807\u7CFB\u7EDF\u6CA1\u6709\u5B98\u65B9 DSH \u684C\u9762\u7248\uFF0C\u53EF\u4EE5\u5B89\u88C5 DSH Web \u4F5C\u4E3A\u8FDC\u7A0B\u5DE5\u4F5C\u533A\u3002"
-          ),
-          dshWebEnabled ? dshWeb && dshWeb.running ? host.kind === "app" ? btn("\u6253\u5F00\u5DE5\u4F5C\u533A", () => {
+          h3("div", { style: { fontSize: 14, color: C2.ink } }, dshWebActive ? dshWeb && dshWeb.running ? "DSH Web \u5DF2\u5C31\u7EEA" : "DSH Web \u672A\u542F\u52A8" : dsh && dsh.installed === false ? "DSH \u672A\u5B89\u88C5" : "DSH \u672A\u542F\u52A8"),
+          dsh && dsh.version ? h3("div", { className: "tether-num", style: { fontSize: 11.5, color: C2.mute } }, dsh.version) : null,
+          dshWebActive ? dshWeb && dshWeb.running ? host.kind === "app" ? btn("\u6253\u5F00\u5DE5\u4F5C\u533A", () => {
             const url = dshWeb.url || "";
             if (!url) {
-              setDshWeb((current) => ({ ...current || {}, error: "\u5DE5\u4F5C\u533A\u5730\u5740\u8FD8\u6CA1\u51C6\u5907\u597D\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5" }));
+              setDshWeb((current) => ({ ...current || {}, error: "\u5DE5\u4F5C\u533A\u5730\u5740\u8FD8\u6CA1\u51C6\u5907\u597D" }));
               return;
             }
             setDshWebOpen(true);
           }, { primary: true }) : btn("\u8BF7\u5728\u684C\u9762 APP \u5185\u6253\u5F00", () => {
-          }, { disabled: true }) : dshWeb && dshWeb.installed ? btn(
-            dshWebBusy ? "\u542F\u52A8\u4E2D\u2026" : "\u542F\u52A8 DSH Web",
-            () => void runDshWeb("start"),
-            { primary: true, disabled: !!dshWebBusy }
-          ) : btn(
-            dshWebBusy || dshWeb && dshWeb.installing ? "\u5B89\u88C5\u4E2D\u2026" : "\u5B89\u88C5 DSH Web",
-            () => void runDshWeb("install"),
-            { primary: true, disabled: !!dshWebBusy || !!(dshWeb && dshWeb.installing) }
-          ) : null,
-          dshWeb && dshWeb.error ? h3("div", { role: "alert", style: { color: C2.red, fontSize: 11.5 } }, dshWeb.error) : null
-        ) : btn(
-          dsh.installed === false ? dshBusy === "dsh_install" || dsh.installing ? "\u5B89\u88C5\u4E2D\u2026" : "\u5B89\u88C5 DSH" : dshBusy === "dsh_start" ? "\u542F\u52A8\u4E2D\u2026" : "\u542F\u52A8 DSH",
-          () => runDsh(dsh.installed === false ? "dsh_install" : "dsh_start"),
-          { primary: true, disabled: !!dshBusy || !!dsh.installing }
-        ),
-        dshError ? h3("div", { role: "alert", style: { color: C2.red, fontSize: 11.5 } }, dshError) : null
-      ) : null
+          }, { disabled: true }) : dshWeb && dshWeb.installed ? btn(dshWebBusy ? "\u542F\u52A8\u4E2D\u2026" : "\u542F\u52A8 DSH Web", () => void runDshWeb("start"), { primary: true, disabled: !!dshWebBusy }) : btn(dshWebBusy || dshWeb && dshWeb.installing ? "\u5B89\u88C5\u4E2D\u2026" : "\u5B89\u88C5 DSH Web", () => void runDshWeb("install"), { primary: true, disabled: !!dshWebBusy || !!(dshWeb && dshWeb.installing) }) : dsh && dsh.installed === false && !dshInstallSupported ? h3(
+            React2.Fragment,
+            null,
+            h3("div", { style: { maxWidth: 480, fontSize: 12, color: C2.sub, lineHeight: 1.6 } }, "\u5F53\u524D\u76EE\u6807\u7CFB\u7EDF\u6CA1\u6709\u5B98\u65B9 DSH \u684C\u9762\u7248\uFF0C\u53EF\u4EE5\u5B89\u88C5 DSH Web \u4F5C\u4E3A\u8FDC\u7A0B\u5DE5\u4F5C\u533A\u3002"),
+            dshWebEnabled ? btn(dshWebBusy || dshWeb && dshWeb.installing ? "\u5B89\u88C5\u4E2D\u2026" : "\u5B89\u88C5 DSH Web", () => void runDshWeb("install"), { primary: true, disabled: !!dshWebBusy || !!(dshWeb && dshWeb.installing) }) : null
+          ) : dsh ? btn(dsh.installed === false ? "\u5B89\u88C5 DSH" : "\u542F\u52A8 DSH", () => runDsh(dsh.installed === false ? "dsh_install" : "dsh_start"), { primary: true }) : null
+        ) : h3("div", null, message),
+        dshError ? h3("div", { role: "status", style: { maxWidth: 460, fontSize: 12, color: C2.mute } }, dshError) : null,
+        !dshSurfaceError && currentState.status !== "loading" && currentState.status !== "local" ? btn("\u91CD\u65B0\u52A0\u8F7D", retryDocument) : null
+      )
     );
   }
   function SurfaceDeck({ devices, deviceId, localDeviceId, visible }) {
@@ -184182,6 +183582,50 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const [runEvents, setRunEvents] = React2.useState([]);
     const [task, setTask] = React2.useState("");
     const [showSettings, setShowSettings] = React2.useState(false);
+    const [permissionsWidth, setPermissionsWidth] = React2.useState(() => {
+      try {
+        const saved = Number(window.localStorage.getItem("tether.permissionsWidth"));
+        if (Number.isFinite(saved) && saved >= 480) return saved;
+      } catch (_2) {
+      }
+      return Math.round(Math.min(880, Math.max(620, window.innerWidth * 0.52)));
+    });
+    const permissionsWidthRef = React2.useRef(permissionsWidth);
+    permissionsWidthRef.current = permissionsWidth;
+    const permissionsDraggingRef = React2.useRef(false);
+    const startPermissionsResize = (event) => {
+      if (permissionsDraggingRef.current) return;
+      permissionsDraggingRef.current = true;
+      event.preventDefault();
+      const startX = event.clientX;
+      const startWidth = permissionsWidthRef.current;
+      const move = (ev) => {
+        setPermissionsWidth(Math.max(480, Math.min(window.innerWidth - 48, startWidth + startX - ev.clientX)));
+      };
+      const stop = () => {
+        permissionsDraggingRef.current = false;
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("mousemove", move);
+        window.removeEventListener("pointerup", stop);
+        window.removeEventListener("mouseup", stop);
+        try {
+          window.localStorage.setItem("tether.permissionsWidth", String(permissionsWidthRef.current));
+        } catch (_2) {
+        }
+      };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("mousemove", move);
+      window.addEventListener("pointerup", stop);
+      window.addEventListener("mouseup", stop);
+    };
+    React2.useEffect(() => {
+      if (!showSettings) return void 0;
+      const onKey = (event) => {
+        if (event.key === "Escape") setShowSettings(false);
+      };
+      window.addEventListener("keydown", onKey);
+      return () => window.removeEventListener("keydown", onKey);
+    }, [showSettings]);
     const showSettingsRef = React2.useRef(false);
     showSettingsRef.current = showSettings;
     const [policy, setPolicy] = React2.useState(null);
@@ -186547,6 +185991,14 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         setSidebarCollapsed(true);
         return;
       }
+      if (id === "herdr") {
+        window.__tetherHerdrPending = true;
+        setView("agents");
+        setActivePanel("agents");
+        setSidebarCollapsed(true);
+        window.dispatchEvent(new Event("tether:open-herdr"));
+        return;
+      }
       if (id === "network") {
         setView("network");
         setActivePanel("network");
@@ -187576,7 +187028,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           item.device_id === localId ? pill("\u672C\u673A", C2.mute) : null,
           h3("span", { style: { marginLeft: "auto", fontSize: 10.5, color: item.online ? C2.green : C2.mute } }, item.online ? "\u5728\u7EBF" : "\u79BB\u7EBF")
         ),
-        h3("div", { style: { fontSize: 11, color: deviceOsTheme(item).color, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, deviceOs(item)),
+        h3("div", { style: { fontSize: 11, color: C2.mute, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, deviceOs(item)),
         h3(
           "div",
           { style: { display: "flex", gap: 4, flexWrap: "wrap" } },
@@ -188178,17 +187630,31 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           onPointerDown: (event) => {
             if (event.target === event.currentTarget) setShowSettings(false);
           },
-          style: { position: "absolute", inset: 0, background: "rgba(16,24,40,0.35)", display: "flex", justifyContent: "flex-end", zIndex: 20 }
+          style: { position: "absolute", top: 40, left: 0, right: 0, bottom: 0, background: "rgba(16,24,40,0.35)", display: "flex", justifyContent: "flex-end", zIndex: 20 }
         },
         h3(
           "div",
-          { className: "tether-drawer", style: { height: "100%", background: C2.bg, borderLeft: 0, display: "flex", flexDirection: "column", boxShadow: C2.shadow } },
+          { className: "tether-drawer", style: { position: "relative", width: "min(" + permissionsWidth + "px, calc(100vw - 32px))", height: "100%", background: C2.bg, borderLeft: 0, display: "flex", flexDirection: "column", boxShadow: C2.shadow } },
+          h3("div", {
+            title: "\u62D6\u52A8\u8C03\u6574\u5BBD\u5EA6",
+            role: "separator",
+            "aria-orientation": "vertical",
+            tabIndex: 0,
+            onPointerDown: startPermissionsResize,
+            onMouseDown: startPermissionsResize,
+            onKeyDown: (event) => {
+              if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+              event.preventDefault();
+              const delta = event.key === "ArrowLeft" ? 32 : -32;
+              setPermissionsWidth((current) => Math.max(480, Math.min(window.innerWidth - 48, current + delta)));
+            },
+            style: { position: "absolute", top: 0, bottom: 0, left: -3, width: 9, cursor: "col-resize", zIndex: 3 }
+          }),
           h3(
             "div",
             { style: { padding: "12px 16px", borderBottom: 0, background: C2.panel, display: "flex", alignItems: "center" } },
             h3("strong", null, "\u6587\u4EF6\u6743\u9650"),
-            device ? h3("span", { style: { marginLeft: 8, fontSize: 12, color: C2.mute } }, device.name) : null,
-            h3("button", { onClick: () => setShowSettings(false), style: { marginLeft: "auto", border: 0, background: "transparent", fontSize: 18, cursor: "pointer", color: C2.mute } }, "\xD7")
+            device ? h3("span", { style: { marginLeft: 8, fontSize: 12, color: C2.mute } }, device.name) : null
           ),
           h3(
             "div",

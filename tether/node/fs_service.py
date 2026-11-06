@@ -19,6 +19,7 @@ import secrets
 import shutil
 import sqlite3
 import subprocess
+import time
 import tempfile
 import threading
 import zipfile
@@ -33,6 +34,7 @@ from .dsh_plugin import DshPluginError, install as install_dsh_plugin
 from .agent_registry import AgentRegistry
 from .agent_accounts import AgentAccounts
 from .web_apps import OpenCodeWeb
+from .agents_runtime import AgentsRuntime
 try:
     from .dsh_web import DshWeb
 except Exception:  # an older install may not ship the optional Linux web module
@@ -499,6 +501,7 @@ class FsService:
         self.agents = AgentRegistry(data_dir)
         self.accounts = AgentAccounts(data_dir)
         self.opencode = OpenCodeWeb(data_dir, workspace)
+        self.agents_runtime = AgentsRuntime(data_dir, workspace)
 
     def _resolve(self, raw: str | None) -> Path:
         if not raw:
@@ -788,6 +791,53 @@ class FsService:
         result = self.opencode.stop()
         self.audit.add(op="opencode_stop", path=str(self.opencode.workspace), mode=self.policy.data.get("mode"),
                        phase="result", result="ok")
+        return result
+
+    def _agents_runtime_surface(self, result: dict[str, Any]) -> dict[str, Any]:
+        if not result.get("running"):
+            return result
+        apps = getattr(self, "apps", None)
+        base = ""
+        if apps is not None:
+            listing = None
+            for _ in range(6):
+                try:
+                    listing = apps.list({})
+                except Exception:
+                    listing = None
+                if listing and any(isinstance(item, dict) and item.get("name") == "Agents"
+                                   for item in listing.get("apps") or []):
+                    break
+                time.sleep(0.25)
+            for item in (listing or {}).get("apps") or []:
+                if isinstance(item, dict) and item.get("name") == "Agents":
+                    base = str(item.get("url") or "").rstrip("/")
+                    break
+        if not base:
+            base = str(result.get("url") or "").rstrip("/")
+        if base:
+            result["url"] = self.agents_runtime.surface_url(base)
+            result.pop("token", None)
+        return result
+
+    def _op_agents_runtime_status(self, _args: dict[str, Any]) -> Any:
+        return self._agents_runtime_surface(self.agents_runtime.status())
+
+    def _op_agents_runtime_start(self, args: dict[str, Any]) -> Any:
+        try:
+            result = self.agents_runtime.start(str(args.get("agent") or ""))
+        except ValueError as exc:
+            raise FsError(str(exc), "agents_runtime_error") from None
+        result = self._agents_runtime_surface(result)
+        self.audit.add(op="agents_runtime_start", path=str(self.agents_runtime.workspace),
+                       mode=self.policy.data.get("mode"),
+                       phase="result", result="ok" if result.get("running") else "failed")
+        return result
+
+    def _op_agents_runtime_stop(self, _args: dict[str, Any]) -> Any:
+        result = self.agents_runtime.stop()
+        self.audit.add(op="agents_runtime_stop", path=str(self.agents_runtime.workspace),
+                       mode=self.policy.data.get("mode"), phase="result", result="ok")
         return result
 
     def _op_agents_catalog(self, args: dict[str, Any]) -> Any:

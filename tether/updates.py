@@ -75,11 +75,11 @@ def _resolve_latest_manifest_url(url: str) -> str:
         resolved = url
     _LATEST_RESOLVE_CACHE[url] = (now + _LATEST_RESOLVE_TTL, resolved)
     return resolved
-MAX_ARCHIVE_BYTES = 100 * 1024 * 1024
-MAX_UNPACKED_BYTES = 256 * 1024 * 1024
-MAX_FILE_BYTES = 32 * 1024 * 1024
-MAX_ARCHIVE_FILES = 4096
-MAX_COMPRESSION_RATIO = 150
+MAX_ARCHIVE_BYTES = 180 * 1024 * 1024
+MAX_UNPACKED_BYTES = 640 * 1024 * 1024
+MAX_FILE_BYTES = 128 * 1024 * 1024
+MAX_ARCHIVE_FILES = 8192
+MAX_COMPRESSION_RATIO = 200
 COMPONENTS = {"app", "plugin", "node"}
 # The plugin can load into a running DSH host through HMR; only restart the host
 # when that handshake has not landed within this window.

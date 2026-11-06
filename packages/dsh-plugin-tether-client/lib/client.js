@@ -11536,6 +11536,16 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
   }, [])
 
   React.useEffect(() => {
+    if (device) return
+    const preferred = activeDevice && online.some((item) => item.device_id === activeDevice)
+      ? activeDevice
+      : localDevice && online.some((item) => item.device_id === localDevice)
+        ? localDevice
+        : (online[0] && online[0].device_id) || ''
+    if (preferred) setDevice(preferred)
+  }, [device, activeDevice, localDevice, devices])
+
+  React.useEffect(() => {
     if (!activeDevice || activeDevice === device) return
     if (!online.some((item) => item.device_id === activeDevice)) return
     setTabs([])
@@ -11575,6 +11585,7 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
   }
 
   const closePane = (key) => {
+    if (key === 'codeg:home') return
     setPanes((current) => {
       const next = current.filter((item) => item.key !== key)
       setActivePane((active) => active === key ? ((next[next.length - 1] || {}).key || '') : active)
@@ -11599,6 +11610,24 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
     addPane({ key: 'herdr', kind: 'terminal', shell: 'herdr', title: 'Herdr', icon: 'bot', dark: true })
   }
 
+  React.useEffect(() => {
+    const open = () => { if (herdrAvailable) openHerdr() }
+    if (typeof window !== 'undefined' && window.__tetherHerdrPending) {
+      window.__tetherHerdrPending = false
+      open()
+    }
+    const onMessage = (event) => {
+      const data = event && event.data
+      if (data && data.type === 'tether:open-herdr') open()
+    }
+    window.addEventListener('message', onMessage)
+    window.addEventListener('tether:open-herdr', open)
+    return () => {
+      window.removeEventListener('message', onMessage)
+      window.removeEventListener('tether:open-herdr', open)
+    }
+  }, [herdrAvailable, device])
+
   const openWeb = async (agent) => {
     const key = 'web:' + agent.id
     addPane({ key, kind: 'web', url: '', title: agent.name + ' Web', icon: agent.icon, color: agent.color })
@@ -11616,6 +11645,34 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
       fail(error)
     }
   }
+
+  const homeOpenedRef = React.useRef('')
+  React.useEffect(() => {
+    if (!device || catalogOpen) return undefined
+    if (homeOpenedRef.current === device) return undefined
+    homeOpenedRef.current = device
+    let alive = true
+    const openHome = async () => {
+      const base = '/api/devices/' + encodeURIComponent(device) + '/fs/'
+      try {
+        let result = null
+        try { result = await post(base + 'agents_runtime_status', {}) } catch (_) { /* node may need a start */ }
+        if (!result || !result.running) result = await post(base + 'agents_runtime_start', {})
+        if (!result || !result.running || !result.url) throw new Error('Agents runtime 没有返回可嵌入地址')
+        const url = String(result.url)
+        if (!alive) return
+        setPanes((current) => current.some((pane) => pane.key === 'codeg:home')
+          ? current
+          : [...current, { key: 'codeg:home', kind: 'web', title: '主页', url: url + (url.includes('?') ? '&' : '?') + 'next=' + encodeURIComponent('/workspace?tether_home=1') }])
+        setActivePane((current) => current || 'codeg:home')
+        setWorkspaceOpen(true)
+      } catch (error) {
+        if (alive) { homeOpenedRef.current = ''; fail(error) }
+      }
+    }
+    void openHome()
+    return () => { alive = false }
+  }, [device, catalogOpen])
 
   const installAgent = async (agent) => {
     if (!device || installing) return
@@ -12034,62 +12091,30 @@ function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '
       height: Math.max(420, (typeof window !== 'undefined' ? window.innerHeight : 900) - 168),
       onClose: () => closePane(pane.key)
     })
-  const surfaceTabs = panes.length ? h('div', {
-    key: 'tabs',
-    className: 'tether-scroll tether-agent-tabs',
-    onWheel: (event) => {
-      if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) event.currentTarget.scrollLeft += event.deltaY
-    },
-    style: { display: 'flex', alignItems: 'center', gap: 4, paddingBottom: 2, borderBottom: '1px solid rgba(9,30,66,.10)',
-      flex: '0 0 auto', overflowX: 'auto', overflowY: 'hidden', whiteSpace: 'nowrap' }
-  },
-    h('button', {
-      type: 'button', title: '主页', 'aria-label': '主页', onClick: () => setWorkspaceOpen(false),
-      style: { ...field, height: 26, padding: '0 10px', cursor: 'pointer', flex: '0 0 auto',
-        background: workspaceOpen ? 'transparent' : C.soft,
-        border: '1px solid ' + (workspaceOpen ? 'transparent' : C.line) }
-    }, '主页'),
-    ...panes.map((pane) => h('div', {
-      key: pane.key, role: 'tab', 'aria-selected': workspaceOpen && pane.key === activePane ? 'true' : 'false',
-      onClick: () => { setWorkspaceOpen(true); setActivePane(pane.key) },
-      style: { display: 'flex', alignItems: 'center', gap: 6, height: 26, padding: '0 4px 0 8px', borderRadius: 7,
-        cursor: 'pointer', flex: '0 0 auto', whiteSpace: 'nowrap',
-        background: workspaceOpen && pane.key === activePane ? C.soft : 'transparent',
-        color: workspaceOpen && pane.key === activePane ? C.ink : C.sub,
-        border: '1px solid ' + (workspaceOpen && pane.key === activePane ? C.line : 'transparent') }
-    },
-      h('span', { style: { width: 6, height: 6, borderRadius: 3, background: pane.kind === 'web' ? C.blue : '#d97706', flex: '0 0 auto' } }),
-      h('span', { style: { fontSize: 11.5 } }, pane.title),
-      h('button', {
-        type: 'button', title: '关闭 ' + pane.title, 'aria-label': '关闭 ' + pane.title,
-        onClick: (event) => { event.stopPropagation(); closePane(pane.key) },
-        style: { width: 18, height: 18, display: 'grid', placeItems: 'center', border: 0, borderRadius: 4,
-          background: 'transparent', color: C.mute, fontSize: 12, cursor: 'pointer', padding: 0 }
-      }, '×'))),
-    h('span', { style: { marginLeft: 'auto' } })) : null
   const workspace = panes.length ? h('div', {
     key: 'workspace',
     style: { flex: '1 1 auto', minHeight: 0, display: workspaceOpen ? 'flex' : 'none', flexDirection: 'column', background: C.bg }
   },
     h('div', { style: { flex: '1 1 auto', minHeight: 0, position: 'relative', display: 'flex' } },
+      activePane && activePane !== 'codeg:home' ? h('button', {
+        key: 'back-to-codeg', type: 'button',
+        onClick: () => setActivePane('codeg:home'),
+        style: { position: 'absolute', top: 10, left: 10, zIndex: 9, display: 'inline-flex', alignItems: 'center', gap: 6,
+          height: 28, padding: '0 10px', border: '1px solid ' + C.line, borderRadius: 8, background: 'rgba(255,255,255,.94)',
+          color: C.ink, fontSize: 11.5, cursor: 'pointer', boxShadow: '0 2px 8px rgba(9,30,66,.10)' }
+      }, '← 返回 Codeg') : null,
       ...panes.map((pane) => h('div', {
         key: pane.key,
         style: { position: 'absolute', inset: 0, display: pane.key === activePane ? 'flex' : 'none', flexDirection: 'column', minWidth: 0, minHeight: 0 }
       }, paneBody(pane)))))
     : null
   return h('div', {
-    style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', gap: 8, padding: 10, background: C.bg }
+    style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', background: C.bg }
   },
-    headerRow,
-    catalogOpen ? h(AgentCatalogView, {
-      React, Glyph, post, C, device,
-      onLoginTerminal: (agent, command, argv) => openLogin(agent, command, argv),
-      onClose: () => setCatalogOpen(false)
-    }) : h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', gap: 6 } },
-      surfaceTabs,
-      h('div', { style: { flex: '1 1 auto', minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column' } },
-        baseContent,
-        workspace)))
+    workspace,
+    !panes.length ? h('div', { style: { display: 'grid', placeItems: 'center', alignContent: 'center', gap: 10, flex: '1 1 auto', color: C.mute, fontSize: 12 } },
+      h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 18 })),
+      '正在打开 Agent 主页…') : null)
 }
     let localPluginRpc = null
     let localPluginRemote = null
@@ -12975,16 +13000,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       }, label)
     }
     function deviceOs(device) {
-      const caps = device.capabilities || {}
-      if (caps.os_label) return caps.os_label
-      const raw = String(device.platform || '')
-      const match = raw.match(/Windows-(?:\d+)-([\d.]+)/)
-      if (match) {
-        const build = match[1].split('.').pop()
-        if (build && Number(build) >= 22000) return 'Windows 11 · ' + build
-        if (build) return 'Windows 10 · ' + build
-      }
-      return raw || 'Unknown'
+      return { windows: 'Windows', linux: 'Linux', mac: 'macOS', other: '其他' }[deviceOsKind(device)]
     }
 
     function deviceOsKind(device) {
@@ -13030,7 +13046,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         dot(device.online),
         h('span', { style: { minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1, overflow: 'hidden' } },
           h('span', { style: { minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, device.name || device.device_id),
-          h('span', { style: { fontSize: 10.5, color: deviceOsTheme(device).color, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, deviceOs(device))
+          h('span', { style: { fontSize: 10.5, color: C.mute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, deviceOs(device))
         ),
         h('span', { style: { marginLeft: 'auto', fontSize: 10.5, color: device.online ? C.green : C.mute, whiteSpace: 'nowrap' } }, device.online ? '在线' : '离线')
       )
@@ -13589,11 +13605,12 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       .tether-root button:focus-visible, .tether-root [role=button]:focus-visible { outline: 1px solid var(--tether-focus); outline-offset: 1px; }
       .tether-hover:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(38,49,72,.06)) !important; }
       .tether-resizer { position: relative; }
-      .tether-drawer { width: min(480px, 100%); }
+      .tether-drawer { width: min(760px, calc(100vw - 32px)); }
       .tether-drawer-body { padding: 16px; }
       .tether-service-short { display: none; }
-      .tether-audit-head { display: grid; grid-template-columns: 54px minmax(0, 1fr) 64px; gap: 6px; padding: 5px 8px; background: var(--dsw-alias-interactive-bg-hover, rgba(38, 49, 72, 0.06)); font-size: 10px; color: var(--dsw-alias-label-tertiary, #667085); }
-      .tether-audit-row { display: grid; grid-template-columns: 54px minmax(0, 1fr) 64px; gap: 6px; padding: 4px 8px; font-size: 10.5px; }
+      .tether-audit-head { display: grid; grid-template-columns: 72px minmax(0, 1fr) 64px; gap: 8px; padding: 6px 10px; background: var(--dsw-alias-interactive-bg-hover, rgba(38, 49, 72, 0.06)); font-size: 11px; color: var(--dsw-alias-label-tertiary, #667085); }
+      .tether-audit-row { display: grid; grid-template-columns: 72px minmax(0, 1fr) 64px; gap: 8px; align-items: center; padding: 6px 10px; font-size: 11.5px; line-height: 18px; }
+      .tether-audit-row > span, .tether-audit-head > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       @media (max-width: 760px) {
         .tether-drawer { width: 100%; }
         .tether-drawer-body { padding: 12px; }
@@ -13833,6 +13850,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         { id: 'workspaces', label: '原生工作区', icon: 'monitor' },
         { id: 'apps', label: '远程应用', icon: 'apps' },
         { id: 'agents', label: 'Agents', icon: 'bot' },
+        { id: 'herdr', label: 'Herdr', icon: 'terminal' },
         { id: 'files', label: '文件资源管理器', icon: 'files' },
         { id: 'transfer', label: '文件转移', icon: 'transfer' },
         { id: 'network', label: '互联', icon: 'devices' }
@@ -14592,7 +14610,20 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const [attempt, setAttempt] = React.useState(0)
       const [slow, setSlow] = React.useState(false)
       const [styleBroken, setStyleBroken] = React.useState(false)
-      const currentState = nativeSurfaceStateForDevice(state, deviceId, online)
+      const lastOnlineRef = React.useRef(0)
+      const [, setOfflineTick] = React.useState(0)
+      if (online) lastOnlineRef.current = Date.now()
+      // The controller presence channel can blip for a few seconds (the node
+      // reconnects on its own). Do not tear a loaded DSH document down for a
+      // brief 409: keep the last state during a short grace window.
+      const offlineGrace = !online && state.status !== 'offline'
+        && state.deviceId === deviceId && Date.now() - lastOnlineRef.current < 20000
+      React.useEffect(() => {
+        if (online || state.status === 'offline') return undefined
+        const timer = setTimeout(() => setOfflineTick((value) => value + 1), 20000)
+        return () => clearTimeout(timer)
+      }, [online, state.status, deviceId])
+      const currentState = offlineGrace ? state : nativeSurfaceStateForDevice(state, deviceId, online)
       const retryCountRef = React.useRef(0)
       const documentRetryCountRef = React.useRef(0)
       const retryTimerRef = React.useRef(null)
@@ -14969,7 +15000,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           } catch (_) { /* the status endpoint needs a current node */ }
         }
         void load()
-        const timer = setInterval(load, dshBusy || (dsh && dsh.installing) ? 1500 : 5000)
+        const timer = setInterval(load, dshBusy ? 2500 : (dsh && (dsh.installing || (dsh.running && !dsh.surface))) ? 2500 : 8000)
         return () => { alive = false; clearInterval(timer) }
       }, [dshWatch, dshRelevant, deviceId, dshBusy, !!(dsh && dsh.installing)])
       React.useEffect(() => {
@@ -14996,7 +15027,8 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       }, [dsh, dshBusy])
       const dshPluginMissing = !!dsh && dsh.installed !== false && dsh.running === true
         && (dsh.surface === false || (dshRelevant && currentState.code === 'descriptor_missing'))
-      const dshBlocked = dshWatch && currentState.status !== 'local' && !!dsh && !dsh.running
+      const dshActionBusy = dshBusy === 'dsh_start' || dshBusy === 'dsh_install'
+        || dshBusy === 'dsh_restart' || dshBusy === 'dsh_install_plugin'
       const runDsh = async (action) => {
         setDshError('')
         setDshBusy(action)
@@ -15049,10 +15081,32 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             : 'DSH 未启动')
         : currentState.status === 'loading' ? (currentState.message || '正在连接目标设备的 DSH 原生工作区…')
         : currentState.status === 'local' ? '当前已在 DeepSeek Harness 中；本机工作区无需再嵌入，可用左侧「文件」或「连接」。'
-          : currentState.status === 'offline' ? '目标设备离线。设备重新在线后可重试。'
+          : currentState.status === 'offline' ? '节点暂时离线，正在自动重连；恢复后会继续载入工作区。'
           : currentState.status === 'no-device' ? '先从左侧设备列表选择目标设备。'
             : currentState.status === 'error' ? currentState.message
               : ''
+      const dshRunning = !!(dsh && dsh.running) || dshWebActive
+      const dshStarting = dshActionBusy
+        || !!(dsh && dsh.installing)
+        || dshWebBusy === 'start' || dshWebBusy === 'install' || !!(dshWeb && dshWeb.installing)
+        || (dshRunning && ['loading', 'document-loading'].includes(currentState.status))
+      const dshStartingLabel = dshBusy === 'dsh_install' || (dsh && dsh.installing) ? '正在安装 DSH…'
+        : dshBusy === 'dsh_restart' ? '正在重启 DSH…'
+          : dshBusy === 'dsh_install_plugin' ? '正在准备工作区…'
+            : dshRunning ? '正在载入工作区…'
+              : dsh && dsh.installed === false ? '正在安装 DSH…' : '正在启动 DSH…'
+      const dshStalled = !dshStarting && dshRunning && !dshWebActive
+        && (currentState.status === 'error' || dshSurfaceMissing)
+      const dshStopped = dshWatch && !!dsh && dsh.running === false
+      const dshSurfaceError = dshRelevant || dshStopped
+      const dshDetecting = dshWatch && !dsh && currentState.status === 'error'
+      const [dshStalledReady, setDshStalledReady] = React.useState(false)
+      React.useEffect(() => {
+        setDshStalledReady(false)
+        if (!dshStalled) return undefined
+        const timer = setTimeout(() => setDshStalledReady(true), 12000)
+        return () => clearTimeout(timer)
+      }, [dshStalled, deviceId])
       const dshWebUrl = dshWeb && dshWeb.running ? String(dshWeb.url || '') : ''
       if (dshWebOpen && dshWebUrl && host.kind === 'app') {
         return h('div', { className: 'tether-native-surface', style: { ...nativeSurfaceContainerStyle(visible, layered), position: 'relative', width: '100%', height: '100%', flex: '1 1 auto' } },
@@ -15075,7 +15129,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         )
       }
       return h('div', { className: 'tether-native-surface', style: nativeSurfaceContainerStyle(visible, layered) },
-        ['document-loading', 'document-loaded'].includes(currentState.status) && currentState.deviceId === deviceId && online
+        ['document-loading', 'document-loaded'].includes(currentState.status) && currentState.deviceId === deviceId && online && !dshStopped
           ? h('div', { style: { position: 'relative', display: 'flex', flex: '1 1 auto', minWidth: 0, minHeight: 0 } },
             h('iframe', {
               key: deviceId + ':' + (currentState.pid || 0),
@@ -15122,89 +15176,57 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
               style: { position: 'absolute', right: 10, bottom: 10, width: 26, height: 26, border: 0, borderRadius: 999, background: 'rgba(255,255,255,.9)', color: C.sub, fontSize: 14, cursor: 'pointer', boxShadow: '0 1px 4px rgba(16,24,40,.16)' }
             }, '↻') : null
           )
-          : h('div', { style: { display: 'grid', placeItems: 'center', alignContent: 'center', gap: 12, flex: '1 1 auto', minHeight: 0, color: C.sub, textAlign: 'center', padding: 24 } },
-            h('div', null, message),
-            dshWeb && dshWeb.running
-              ? btn(host.kind === 'app' ? '打开工作区' : '请在桌面 APP 内打开', () => {
-                if (host.kind !== 'app') return
-                const url = dshWeb.url || ''
-                if (!url) { setDshWeb((current) => ({ ...(current || {}), error: '工作区地址还没准备好，请稍后重试' })); return }
-                setDshWebOpen(true)
-              }, { primary: true, disabled: host.kind !== 'app' })
-              : null,
-            dshRelevant && dsh && !dsh.running
-              ? btn(dsh.installed === false
-                ? (dshBusy === 'dsh_install' || dsh.installing ? '安装中…' : '安装 DSH')
-                : (dshBusy === 'dsh_start' ? '启动中…' : '启动 DSH'),
-              () => runDsh(dsh.installed === false ? 'dsh_install' : 'dsh_start'),
-              { primary: true, disabled: !!dshBusy || !!dsh.installing })
-              : null,
-            dshRelevant && dshWebActive
-              ? btn(dshWebBusy === 'repair' ? '修复中…' : '修复 DSH Web 插件',
-                () => { void runDshWeb('repair') }, { primary: true, disabled: !!dshWebBusy })
-              : null,
-            dshRelevant && dshWebActive
-              ? btn(dshWebBusy === 'stop' || dshWebBusy === 'start' ? '重启中…' : '重启 DSH Web',
-                async () => { await runDshWeb('stop'); await runDshWeb('start') },
-                { disabled: !!dshWebBusy })
-              : null,
-            dshRelevant && dsh && dsh.running && !dshWebActive
-              ? btn(dshBusy === 'dsh_install_plugin' ? '修复中…' : '安装/修复插件',
-                () => { dshAutoRepairRef.current = true; runDsh('dsh_install_plugin') },
-                { primary: true, disabled: !!dshBusy })
-              : null,
-            dshRelevant && dsh && dsh.running && !dshWebActive
-              ? btn(dshBusy === 'dsh_restart' ? '重启中…' : '重启 DSH',
-                () => runDsh('dsh_restart'), { disabled: !!dshBusy })
-              : null,
-            currentState.status !== 'loading' && currentState.status !== 'local' ? btn('重试', retryDocument) : null,
-            dshRelevant && dshBusy && dsh && dsh.installing
-              ? h('div', { style: { fontSize: 11.5, color: C.mute } }, '安装中 ' + (Number(dsh.progress) || 0) + '%')
-              : null,
-            dshError ? h('div', { role: 'alert', style: { color: C.red, fontSize: 11.5 } }, dshError) : null
-          ),
-        dshBlocked ? h('div', {
-          role: 'status',
-          style: {
-            position: 'absolute', inset: 0, zIndex: 6, display: 'grid', placeItems: 'center',
-            alignContent: 'center', gap: 10, padding: 24, background: C.bg, color: C.sub, textAlign: 'center'
-          }
-        },
-          h('div', { style: { fontSize: 14, color: C.ink } }, dshWebActive ? 'DSH Web 已就绪' : dsh.installed === false ? 'DSH 未安装' : 'DSH 未启动'),
-          dsh.version ? h('div', { className: 'tether-num', style: { fontSize: 11.5, color: C.mute } }, dsh.version) : null,
-          dsh.installing ? h('div', { style: { fontSize: 11.5, color: C.mute } }, '安装中 ' + (Number(dsh.progress) || 0) + '%') : null,
-          dsh.installed === false && (!dshInstallSupported || (dshWeb && dshWeb.running))
-            ? h(React.Fragment, null,
-              h('div', { style: { maxWidth: 480, fontSize: 12, color: C.sub, lineHeight: 1.6 } },
-                dshWeb && dshWeb.running
-                  ? 'DSH Web 已在目标机运行，可在 Tether 内打开工作区。'
-                  : '当前目标系统没有官方 DSH 桌面版，可以安装 DSH Web 作为远程工作区。'),
-              dshWebEnabled
-                ? (dshWeb && dshWeb.running
-                  ? (host.kind === 'app'
-                    ? btn('打开工作区', () => {
-                      const url = dshWeb.url || ''
-                      if (!url) { setDshWeb((current) => ({ ...(current || {}), error: '工作区地址还没准备好，请稍后重试' })); return }
-                      setDshWebOpen(true)
-                    }, { primary: true })
-                    : btn('请在桌面 APP 内打开', () => {}, { disabled: true }))
-                  : dshWeb && dshWeb.installed
-                    ? btn(dshWebBusy ? '启动中…' : '启动 DSH Web', () => void runDshWeb('start'),
-                      { primary: true, disabled: !!dshWebBusy })
-                    : btn(dshWebBusy || (dshWeb && dshWeb.installing) ? '安装中…' : '安装 DSH Web',
-                      () => void runDshWeb('install'),
-                      { primary: true, disabled: !!dshWebBusy || !!(dshWeb && dshWeb.installing) }))
-                : null,
-              dshWeb && dshWeb.error
-                ? h('div', { role: 'alert', style: { color: C.red, fontSize: 11.5 } }, dshWeb.error)
-                : null)
-            : btn(dsh.installed === false
-              ? (dshBusy === 'dsh_install' || dsh.installing ? '安装中…' : '安装 DSH')
-              : (dshBusy === 'dsh_start' ? '启动中…' : '启动 DSH'),
-            () => runDsh(dsh.installed === false ? 'dsh_install' : 'dsh_start'),
-            { primary: true, disabled: !!dshBusy || !!dsh.installing }),
-          dshError ? h('div', { role: 'alert', style: { color: C.red, fontSize: 11.5 } }, dshError) : null
-        ) : null
+          : dshStarting
+            ? h('div', { style: { display: 'grid', placeItems: 'center', alignContent: 'center', gap: 12, flex: '1 1 auto', minHeight: 0, color: C.sub, textAlign: 'center', padding: 24 } },
+              h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center', color: C.mute } }, h(Glyph, { name: 'refresh', size: 20 })),
+              h('div', { role: 'status', 'aria-live': 'polite', style: { fontSize: 13, color: C.sub } }, dshStartingLabel),
+              dsh && dsh.installing ? h('div', { className: 'tether-num', style: { fontSize: 11.5, color: C.mute } }, (Number(dsh.progress) || 0) + '%') : null)
+            : dshRelevant && dshRunning ? (dshStalled
+              ? h('div', { style: { display: 'grid', placeItems: 'center', alignContent: 'center', gap: 12, flex: '1 1 auto', minHeight: 0, color: C.sub, textAlign: 'center', padding: 24 } },
+                h('div', { style: { fontSize: 14, color: C.ink } }, '工作区还没有准备好'),
+                h('div', { style: { maxWidth: 460, fontSize: 12, color: C.mute, lineHeight: 1.6 } }, 'DSH 已在运行，但 Tether 工作区组件暂时没有响应。'),
+                h('div', { style: { display: 'flex', gap: 8 } },
+                  btn(dshBusy === 'dsh_install_plugin' ? '修复中…' : '修复工作区', () => { dshAutoRepairRef.current = true; runDsh('dsh_install_plugin') }, { primary: true, disabled: !!dshBusy }),
+                  btn(dshBusy === 'dsh_restart' ? '重启中…' : '重启 DSH', () => runDsh('dsh_restart'), { disabled: !!dshBusy })))
+              : h('div', { style: { display: 'grid', placeItems: 'center', alignContent: 'center', gap: 12, flex: '1 1 auto', minHeight: 0, color: C.sub, textAlign: 'center', padding: 24 } },
+                h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center', color: C.mute } }, h(Glyph, { name: 'refresh', size: 20 })),
+                h('div', { role: 'status', 'aria-live': 'polite', style: { fontSize: 13, color: C.sub } }, '正在载入工作区…')))
+              : dshDetecting || (dshRelevant && !dsh)
+                ? h('div', { style: { display: 'grid', placeItems: 'center', alignContent: 'center', gap: 12, flex: '1 1 auto', minHeight: 0, color: C.sub, textAlign: 'center', padding: 24 } },
+                  h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center', color: C.mute } }, h(Glyph, { name: 'refresh', size: 20 })),
+                  h('div', { role: 'status', 'aria-live': 'polite', style: { fontSize: 13, color: C.sub } }, '正在检测 DSH…'))
+                : h('div', { style: { display: 'grid', placeItems: 'center', alignContent: 'center', gap: 12, flex: '1 1 auto', minHeight: 0, color: C.sub, textAlign: 'center', padding: 24 } },
+                  dshSurfaceError
+                    ? h(React.Fragment, null,
+                      h('div', { style: { fontSize: 14, color: C.ink } }, dshWebActive
+                        ? (dshWeb && dshWeb.running ? 'DSH Web 已就绪' : 'DSH Web 未启动')
+                        : dsh && dsh.installed === false ? 'DSH 未安装' : 'DSH 未启动'),
+                      dsh && dsh.version ? h('div', { className: 'tether-num', style: { fontSize: 11.5, color: C.mute } }, dsh.version) : null,
+                      dshWebActive
+                        ? (dshWeb && dshWeb.running
+                          ? (host.kind === 'app'
+                            ? btn('打开工作区', () => {
+                              const url = dshWeb.url || ''
+                              if (!url) { setDshWeb((current) => ({ ...(current || {}), error: '工作区地址还没准备好' })); return }
+                              setDshWebOpen(true)
+                            }, { primary: true })
+                            : btn('请在桌面 APP 内打开', () => {}, { disabled: true }))
+                          : dshWeb && dshWeb.installed
+                            ? btn(dshWebBusy ? '启动中…' : '启动 DSH Web', () => void runDshWeb('start'), { primary: true, disabled: !!dshWebBusy })
+                            : btn(dshWebBusy || (dshWeb && dshWeb.installing) ? '安装中…' : '安装 DSH Web', () => void runDshWeb('install'), { primary: true, disabled: !!dshWebBusy || !!(dshWeb && dshWeb.installing) }))
+                        : dsh && dsh.installed === false && !dshInstallSupported
+                          ? h(React.Fragment, null,
+                            h('div', { style: { maxWidth: 480, fontSize: 12, color: C.sub, lineHeight: 1.6 } }, '当前目标系统没有官方 DSH 桌面版，可以安装 DSH Web 作为远程工作区。'),
+                            dshWebEnabled
+                              ? btn(dshWebBusy || (dshWeb && dshWeb.installing) ? '安装中…' : '安装 DSH Web', () => void runDshWeb('install'), { primary: true, disabled: !!dshWebBusy || !!(dshWeb && dshWeb.installing) })
+                              : null)
+                          : dsh
+                            ? btn(dsh.installed === false ? '安装 DSH' : '启动 DSH', () => runDsh(dsh.installed === false ? 'dsh_install' : 'dsh_start'), { primary: true })
+                            : null)
+                    : h('div', null, message),
+                  dshError ? h('div', { role: 'status', style: { maxWidth: 460, fontSize: 12, color: C.mute } }, dshError) : null,
+                  !dshSurfaceError && currentState.status !== 'loading' && currentState.status !== 'local'
+                    ? btn('重新加载', retryDocument) : null)
       )
     }
 
@@ -15441,6 +15463,44 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const [runEvents, setRunEvents] = React.useState([])
       const [task, setTask] = React.useState('')
       const [showSettings, setShowSettings] = React.useState(false)
+      const [permissionsWidth, setPermissionsWidth] = React.useState(() => {
+        try {
+          const saved = Number(window.localStorage.getItem('tether.permissionsWidth'))
+          if (Number.isFinite(saved) && saved >= 480) return saved
+        } catch (_) { /* storage unavailable */ }
+        return Math.round(Math.min(880, Math.max(620, window.innerWidth * 0.52)))
+      })
+      const permissionsWidthRef = React.useRef(permissionsWidth)
+      permissionsWidthRef.current = permissionsWidth
+      const permissionsDraggingRef = React.useRef(false)
+      const startPermissionsResize = (event) => {
+        if (permissionsDraggingRef.current) return
+        permissionsDraggingRef.current = true
+        event.preventDefault()
+        const startX = event.clientX
+        const startWidth = permissionsWidthRef.current
+        const move = (ev) => {
+          setPermissionsWidth(Math.max(480, Math.min(window.innerWidth - 48, startWidth + startX - ev.clientX)))
+        }
+        const stop = () => {
+          permissionsDraggingRef.current = false
+          window.removeEventListener('pointermove', move)
+          window.removeEventListener('mousemove', move)
+          window.removeEventListener('pointerup', stop)
+          window.removeEventListener('mouseup', stop)
+          try { window.localStorage.setItem('tether.permissionsWidth', String(permissionsWidthRef.current)) } catch (_) { /* storage unavailable */ }
+        }
+        window.addEventListener('pointermove', move)
+        window.addEventListener('mousemove', move)
+        window.addEventListener('pointerup', stop)
+        window.addEventListener('mouseup', stop)
+      }
+      React.useEffect(() => {
+        if (!showSettings) return undefined
+        const onKey = (event) => { if (event.key === 'Escape') setShowSettings(false) }
+        window.addEventListener('keydown', onKey)
+        return () => window.removeEventListener('keydown', onKey)
+      }, [showSettings])
       const showSettingsRef = React.useRef(false)
       showSettingsRef.current = showSettings
       const [policy, setPolicy] = React.useState(null)
@@ -17454,6 +17514,12 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
           setView('agents'); setActivePanel('agents'); setSidebarCollapsed(true)
           return
         }
+        if (id === 'herdr') {
+          window.__tetherHerdrPending = true
+          setView('agents'); setActivePanel('agents'); setSidebarCollapsed(true)
+          window.dispatchEvent(new Event('tether:open-herdr'))
+          return
+        }
         if (id === 'network') {
           setView('network'); setActivePanel('network'); setSidebarCollapsed(true)
           return
@@ -18164,7 +18230,7 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
             item.device_id === localId ? pill('本机', C.mute) : null,
             h('span', { style: { marginLeft: 'auto', fontSize: 10.5, color: item.online ? C.green : C.mute } }, item.online ? '在线' : '离线')
           ),
-          h('div', { style: { fontSize: 11, color: deviceOsTheme(item).color, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, deviceOs(item)),
+          h('div', { style: { fontSize: 11, color: C.mute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, deviceOs(item)),
           h('div', { style: { display: 'flex', gap: 4, flexWrap: 'wrap' } },
             caps(item).map((label) => pill(label, /过旧|缺失|受损|异常/.test(label) ? C.amber : C.mute)))
         )
@@ -18619,12 +18685,22 @@ function createTetherPanel({ React, Native, host, EditorRuntime }) {
         ) : null,
         showSettings ? h('div', {
           onPointerDown: (event) => { if (event.target === event.currentTarget) setShowSettings(false) },
-          style: { position: 'absolute', inset: 0, background: 'rgba(16,24,40,0.35)', display: 'flex', justifyContent: 'flex-end', zIndex: 20 }
+          style: { position: 'absolute', top: 40, left: 0, right: 0, bottom: 0, background: 'rgba(16,24,40,0.35)', display: 'flex', justifyContent: 'flex-end', zIndex: 20 }
         },
-          h('div', { className: 'tether-drawer', style: { height: '100%', background: C.bg, borderLeft: 0, display: 'flex', flexDirection: 'column', boxShadow: C.shadow } },
+          h('div', { className: 'tether-drawer', style: { position: 'relative', width: 'min(' + permissionsWidth + 'px, calc(100vw - 32px))', height: '100%', background: C.bg, borderLeft: 0, display: 'flex', flexDirection: 'column', boxShadow: C.shadow } },
+            h('div', {
+              title: '拖动调整宽度', role: 'separator', 'aria-orientation': 'vertical', tabIndex: 0,
+              onPointerDown: startPermissionsResize, onMouseDown: startPermissionsResize,
+              onKeyDown: (event) => {
+                if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+                event.preventDefault()
+                const delta = event.key === 'ArrowLeft' ? 32 : -32
+                setPermissionsWidth((current) => Math.max(480, Math.min(window.innerWidth - 48, current + delta)))
+              },
+              style: { position: 'absolute', top: 0, bottom: 0, left: -3, width: 9, cursor: 'col-resize', zIndex: 3 }
+            }),
             h('div', { style: { padding: '12px 16px', borderBottom: 0, background: C.panel, display: 'flex', alignItems: 'center' } },
-              h('strong', null, '文件权限'), device ? h('span', { style: { marginLeft: 8, fontSize: 12, color: C.mute } }, device.name) : null,
-              h('button', { onClick: () => setShowSettings(false), style: { marginLeft: 'auto', border: 0, background: 'transparent', fontSize: 18, cursor: 'pointer', color: C.mute } }, '×')
+              h('strong', null, '文件权限'), device ? h('span', { style: { marginLeft: 8, fontSize: 12, color: C.mute } }, device.name) : null
             ),
             h('div', { className: 'tether-drawer-body', style: { overflow: 'hidden', flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column' } },
               h('div', { style: { flex: '0 0 auto', maxHeight: '58%', overflowY: 'auto' } },

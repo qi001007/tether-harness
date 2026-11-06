@@ -215,6 +215,7 @@ class DshDesktop:
         self.installer_dir = self.data_dir / "dsh-installer"
         self.state_path = self.data_dir / "dsh-desktop-state.json"
         self._lock = threading.Lock()
+        self._scan_lock = threading.Lock()
         self._status_at = 0.0
         self._status: dict[str, Any] | None = None
         self._state = self._read_state()
@@ -284,25 +285,32 @@ class DshDesktop:
         now = time.monotonic()
         if self._status is not None and now - self._status_at < 4:
             return dict(self._status)
-        exe, version = self._find_exe()
-        running, pid = self._running(exe)
-        installing = self._state.get("installing") is True
-        result = {
-            "installed": exe is not None,
-            "running": running,
-            "surface": bool(self._descriptor_pid()),
-            "version": version,
-            "exe": str(exe) if exe else "",
-            "home": str(self.dsh_home),
-            "pid": pid,
-            "installing": installing,
-            "stage": str(self._state.get("stage") or ""),
-            "progress": int(self._state.get("progress") or 0),
-            "error": str(self._state.get("error") or ""),
-        }
-        self._status = result
-        self._status_at = now
-        return dict(result)
+        # The UI polls status from several surfaces at once. Serialise the scan
+        # and re-check the cache inside the lock so a burst of requests while
+        # DSH is booting costs one process scan, not one per caller.
+        with self._scan_lock:
+            now = time.monotonic()
+            if self._status is not None and now - self._status_at < 4:
+                return dict(self._status)
+            exe, version = self._find_exe()
+            running, pid = self._running(exe)
+            installing = self._state.get("installing") is True
+            result = {
+                "installed": exe is not None,
+                "running": running,
+                "surface": bool(self._descriptor_pid()),
+                "version": version,
+                "exe": str(exe) if exe else "",
+                "home": str(self.dsh_home),
+                "pid": pid,
+                "installing": installing,
+                "stage": str(self._state.get("stage") or ""),
+                "progress": int(self._state.get("progress") or 0),
+                "error": str(self._state.get("error") or ""),
+            }
+            self._status = result
+            self._status_at = now
+            return dict(result)
 
     def start(self) -> dict[str, Any]:
         current = self.status()
@@ -328,7 +336,14 @@ class DshDesktop:
         except OSError as exc:
             raise DshError(f"DSH 启动失败: {exc}", "dsh_start_failed") from exc
         self._status = None
-        return {"started": True, **self.status()}
+        current = dict(current)
+        current.update({"started": True, "running": True, "surface": False, "pid": 0})
+        # Serve this answer for a moment: the first psutil scan while the
+        # desktop is still spawning is the expensive one, and several UI
+        # surfaces poll at once.
+        self._status = dict(current)
+        self._status_at = time.monotonic()
+        return current
 
     def stop(self) -> dict[str, Any]:
         targets = []

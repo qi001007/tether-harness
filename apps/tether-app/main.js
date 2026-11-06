@@ -63,6 +63,18 @@ function dshViewUrlAllowed(value) {
   } catch (_) { return false }
 }
 
+const BROWSER_WEBVIEW_PARTITION = 'persist:tether-browser'
+
+function webviewAttachAllowed(params) {
+  if (params.partition !== BROWSER_WEBVIEW_PARTITION) return dshViewUrlAllowed(params.src)
+  const src = String(params.src || '')
+  if (src === 'about:blank') return true
+  try {
+    const parsed = new URL(src)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+  } catch (_) { return false }
+}
+
 fs.mkdirSync(dataDir, { recursive: true })
 app.setPath('userData', path.join(dataDir, 'electron'))
 app.setName('Tether')
@@ -234,15 +246,25 @@ async function createWindow() {
     webPreferences.sandbox = true
     webPreferences.webSecurity = true
     webPreferences.allowRunningInsecureContent = false
-    if (!dshViewUrlAllowed(params.src)) {
+    if (!webviewAttachAllowed(params)) {
       event.preventDefault()
       log('blocked webview attach')
     }
   })
   mainWindow.webContents.on('did-attach-webview', (_event, contents) => {
+    const browserView = contents.session === session.fromPartition(BROWSER_WEBVIEW_PARTITION)
     let origin = ''
     try { origin = new URL(contents.getURL()).origin } catch (_) { /* blocked below */ }
-    contents.setWindowOpenHandler(() => ({ action: 'deny' }))
+    contents.setWindowOpenHandler(({ url }) => {
+      if (browserView) {
+        try {
+          const target = new URL(String(url))
+          if (target.protocol === 'http:' || target.protocol === 'https:') void contents.loadURL(target.toString())
+        } catch (_) { /* deny malformed and non-http(s) URLs */ }
+      }
+      return { action: 'deny' }
+    })
+    if (browserView) return
     contents.on('will-navigate', (event, target) => {
       try {
         if (!origin || new URL(target).origin !== origin) {

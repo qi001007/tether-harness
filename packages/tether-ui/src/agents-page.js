@@ -423,6 +423,16 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
   }, [])
 
   React.useEffect(() => {
+    if (device) return
+    const preferred = activeDevice && online.some((item) => item.device_id === activeDevice)
+      ? activeDevice
+      : localDevice && online.some((item) => item.device_id === localDevice)
+        ? localDevice
+        : (online[0] && online[0].device_id) || ''
+    if (preferred) setDevice(preferred)
+  }, [device, activeDevice, localDevice, devices])
+
+  React.useEffect(() => {
     if (!activeDevice || activeDevice === device) return
     if (!online.some((item) => item.device_id === activeDevice)) return
     setTabs([])
@@ -462,6 +472,7 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
   }
 
   const closePane = (key) => {
+    if (key === 'codeg:home') return
     setPanes((current) => {
       const next = current.filter((item) => item.key !== key)
       setActivePane((active) => active === key ? ((next[next.length - 1] || {}).key || '') : active)
@@ -486,6 +497,24 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
     addPane({ key: 'herdr', kind: 'terminal', shell: 'herdr', title: 'Herdr', icon: 'bot', dark: true })
   }
 
+  React.useEffect(() => {
+    const open = () => { if (herdrAvailable) openHerdr() }
+    if (typeof window !== 'undefined' && window.__tetherHerdrPending) {
+      window.__tetherHerdrPending = false
+      open()
+    }
+    const onMessage = (event) => {
+      const data = event && event.data
+      if (data && data.type === 'tether:open-herdr') open()
+    }
+    window.addEventListener('message', onMessage)
+    window.addEventListener('tether:open-herdr', open)
+    return () => {
+      window.removeEventListener('message', onMessage)
+      window.removeEventListener('tether:open-herdr', open)
+    }
+  }, [herdrAvailable, device])
+
   const openWeb = async (agent) => {
     const key = 'web:' + agent.id
     addPane({ key, kind: 'web', url: '', title: agent.name + ' Web', icon: agent.icon, color: agent.color })
@@ -503,6 +532,34 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
       fail(error)
     }
   }
+
+  const homeOpenedRef = React.useRef('')
+  React.useEffect(() => {
+    if (!device || catalogOpen) return undefined
+    if (homeOpenedRef.current === device) return undefined
+    homeOpenedRef.current = device
+    let alive = true
+    const openHome = async () => {
+      const base = '/api/devices/' + encodeURIComponent(device) + '/fs/'
+      try {
+        let result = null
+        try { result = await post(base + 'agents_runtime_status', {}) } catch (_) { /* node may need a start */ }
+        if (!result || !result.running) result = await post(base + 'agents_runtime_start', {})
+        if (!result || !result.running || !result.url) throw new Error('Agents runtime 没有返回可嵌入地址')
+        const url = String(result.url)
+        if (!alive) return
+        setPanes((current) => current.some((pane) => pane.key === 'codeg:home')
+          ? current
+          : [...current, { key: 'codeg:home', kind: 'web', title: '主页', url: url + (url.includes('?') ? '&' : '?') + 'next=' + encodeURIComponent('/workspace?tether_home=1') }])
+        setActivePane((current) => current || 'codeg:home')
+        setWorkspaceOpen(true)
+      } catch (error) {
+        if (alive) { homeOpenedRef.current = ''; fail(error) }
+      }
+    }
+    void openHome()
+    return () => { alive = false }
+  }, [device, catalogOpen])
 
   const installAgent = async (agent) => {
     if (!device || installing) return
@@ -921,60 +978,28 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
       height: Math.max(420, (typeof window !== 'undefined' ? window.innerHeight : 900) - 168),
       onClose: () => closePane(pane.key)
     })
-  const surfaceTabs = panes.length ? h('div', {
-    key: 'tabs',
-    className: 'tether-scroll tether-agent-tabs',
-    onWheel: (event) => {
-      if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) event.currentTarget.scrollLeft += event.deltaY
-    },
-    style: { display: 'flex', alignItems: 'center', gap: 4, paddingBottom: 2, borderBottom: '1px solid rgba(9,30,66,.10)',
-      flex: '0 0 auto', overflowX: 'auto', overflowY: 'hidden', whiteSpace: 'nowrap' }
-  },
-    h('button', {
-      type: 'button', title: '主页', 'aria-label': '主页', onClick: () => setWorkspaceOpen(false),
-      style: { ...field, height: 26, padding: '0 10px', cursor: 'pointer', flex: '0 0 auto',
-        background: workspaceOpen ? 'transparent' : C.soft,
-        border: '1px solid ' + (workspaceOpen ? 'transparent' : C.line) }
-    }, '主页'),
-    ...panes.map((pane) => h('div', {
-      key: pane.key, role: 'tab', 'aria-selected': workspaceOpen && pane.key === activePane ? 'true' : 'false',
-      onClick: () => { setWorkspaceOpen(true); setActivePane(pane.key) },
-      style: { display: 'flex', alignItems: 'center', gap: 6, height: 26, padding: '0 4px 0 8px', borderRadius: 7,
-        cursor: 'pointer', flex: '0 0 auto', whiteSpace: 'nowrap',
-        background: workspaceOpen && pane.key === activePane ? C.soft : 'transparent',
-        color: workspaceOpen && pane.key === activePane ? C.ink : C.sub,
-        border: '1px solid ' + (workspaceOpen && pane.key === activePane ? C.line : 'transparent') }
-    },
-      h('span', { style: { width: 6, height: 6, borderRadius: 3, background: pane.kind === 'web' ? C.blue : '#d97706', flex: '0 0 auto' } }),
-      h('span', { style: { fontSize: 11.5 } }, pane.title),
-      h('button', {
-        type: 'button', title: '关闭 ' + pane.title, 'aria-label': '关闭 ' + pane.title,
-        onClick: (event) => { event.stopPropagation(); closePane(pane.key) },
-        style: { width: 18, height: 18, display: 'grid', placeItems: 'center', border: 0, borderRadius: 4,
-          background: 'transparent', color: C.mute, fontSize: 12, cursor: 'pointer', padding: 0 }
-      }, '×'))),
-    h('span', { style: { marginLeft: 'auto' } })) : null
   const workspace = panes.length ? h('div', {
     key: 'workspace',
     style: { flex: '1 1 auto', minHeight: 0, display: workspaceOpen ? 'flex' : 'none', flexDirection: 'column', background: C.bg }
   },
     h('div', { style: { flex: '1 1 auto', minHeight: 0, position: 'relative', display: 'flex' } },
+      activePane && activePane !== 'codeg:home' ? h('button', {
+        key: 'back-to-codeg', type: 'button',
+        onClick: () => setActivePane('codeg:home'),
+        style: { position: 'absolute', top: 10, left: 10, zIndex: 9, display: 'inline-flex', alignItems: 'center', gap: 6,
+          height: 28, padding: '0 10px', border: '1px solid ' + C.line, borderRadius: 8, background: 'rgba(255,255,255,.94)',
+          color: C.ink, fontSize: 11.5, cursor: 'pointer', boxShadow: '0 2px 8px rgba(9,30,66,.10)' }
+      }, '← 返回 Codeg') : null,
       ...panes.map((pane) => h('div', {
         key: pane.key,
         style: { position: 'absolute', inset: 0, display: pane.key === activePane ? 'flex' : 'none', flexDirection: 'column', minWidth: 0, minHeight: 0 }
       }, paneBody(pane)))))
     : null
   return h('div', {
-    style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', gap: 8, padding: 10, background: C.bg }
+    style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', background: C.bg }
   },
-    headerRow,
-    catalogOpen ? h(AgentCatalogView, {
-      React, Glyph, post, C, device,
-      onLoginTerminal: (agent, command, argv) => openLogin(agent, command, argv),
-      onClose: () => setCatalogOpen(false)
-    }) : h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', gap: 6 } },
-      surfaceTabs,
-      h('div', { style: { flex: '1 1 auto', minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column' } },
-        baseContent,
-        workspace)))
+    workspace,
+    !panes.length ? h('div', { style: { display: 'grid', placeItems: 'center', alignContent: 'center', gap: 10, flex: '1 1 auto', color: C.mute, fontSize: 12 } },
+      h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 18 })),
+      '正在打开 Agent 主页…') : null)
 }

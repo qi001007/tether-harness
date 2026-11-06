@@ -25,6 +25,7 @@ HARNESSES: dict[str, dict[str, Any]] = {
     "opencode": {"name": "OpenCode", "command": ["opencode", "acp"]},
     "claude": {"name": "Claude Code", "command": ["claude-code-acp"]},
     "codex": {"name": "Codex CLI", "command": ["codex-acp"]},
+    "qoder": {"name": "Qoder", "command": ["qoder", "--acp"]},
     "cursor": {"name": "Cursor Agent", "command": ["cursor-agent", "acp"]},
 }
 
