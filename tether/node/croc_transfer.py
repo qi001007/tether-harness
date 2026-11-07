@@ -237,7 +237,7 @@ class CrocTransfer:
             # croc v11 refuses command-line codes on UNIX; use the environment.
             env = {"CROC_SECRET": code}
         args += ["--transfers", str(max(1, min(8, transfers))),
-                 "--no-local", "--transport", transport, str(source)]
+                 "--transport", transport, str(source)]
         self.job = CrocJob(self._popen(args, env), direction="send")
         return self.job
 

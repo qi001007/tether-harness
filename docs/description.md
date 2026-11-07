@@ -2,6 +2,8 @@
 
 保存公开产品需求、验收进度、用户反馈、技术边界、恢复门禁和简明发行流程。逐次过程记录和已撤出仓库的资料由维护备份按清单保存；私有服务运维资料不进入公开文档。
 
+入口依次为 `PRD.md`（需求）、`PROGRESS.md`（当前实机进度）、`FEEDBACK.md`（待修问题）与 `TECHNICAL.md`（现行架构）。`AGENTS_MULTI_AGENT_PLAN.md`、`ACP_HARNESS_PLAN.md` 和 `CORE_RECOVERY_PLAN.md` 含早期方案或历史状态，阅读时先看顶部的适用范围，不据旧状态重建已迁移的能力。
+
 # 变更记录
 
 ## 2026-10-28

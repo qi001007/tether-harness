@@ -1,5 +1,7 @@
 # Agents 多 Agent 终端方案（Herdr / Codeg 借鉴）
 
+> 历史方案，保留原评审内容。当前实现复用 Codeg 前后端与 Herdr，不按下文新增自写 AgentSession 或编排引擎。当前架构见 [TECHNICAL.md](TECHNICAL.md)，构建入口见 [codeg-runtime-rebuild.md](codeg-runtime-rebuild.md)，实际验收状态见 [PROGRESS.md](PROGRESS.md)。
+
 状态：方案评审稿，未实现。日期：2026-11-04。
 
 ## 1. 为什么现在的 Agents 页不像 Codex TUI

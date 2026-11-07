@@ -1,4 +1,5 @@
 # 修改记录
+- 2026-11-07：Croc send 保留自有 relay 与 relay transport，同时允许本机 relay/接口候选探索（移除 `--no-local`），使接收端可尝试可达的发送端本机路径；尚未做真实传输或吞吐验收。
 - 2026-11-07：Node按可信本机APP绑定root/state管理APP更新；heartbeat携带短字段app_version/app_installed，外置APP重启不延迟/停止独立Node，managed同root行为沿用。
 - 2026-11-07：补齐从 Codeg 固定上游提交重放 Agents 前端所需的完整源码改动。
 - 2026-11-07：Herdr 终端清单声明项目会话能力，失效项目路径在启动前报错。

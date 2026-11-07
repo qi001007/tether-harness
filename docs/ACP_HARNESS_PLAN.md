@@ -1,5 +1,7 @@
 # Agent Harness（ACP）接入计划
 
+> 历史接入方案。保留协议与早期适配经验；当前 Agents 页面以 Codeg 运行时为实现基线，不按本稿重做前端或另建 Agent 引擎。当前入口和边界见 [TECHNICAL.md](TECHNICAL.md)、[codeg-runtime-rebuild.md](codeg-runtime-rebuild.md) 与 [PROGRESS.md](PROGRESS.md)。
+
 2026-11-03。目标：让 Tether 在“终端”之外，用结构化协议驱动目标电脑上已装好的编码 Agent（Gemini CLI、OpenCode、Claude Code、Codex CLI、Cursor 等），而不是为每个 CLI 各写一套私有适配。
 
 ## 协议事实

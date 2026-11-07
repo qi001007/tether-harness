@@ -1,4 +1,5 @@
 # 修改记录
+- 2026-11-07：实机 0.4.7 复现已缓存目录的后台 `/fs/list` 失败时仍显示旧行、没有错误/重试（证据 `tether-047-directory-cached-background-failure.png`）；显式刷新会显示原有错误，验证后已恢复自有 QA 目录。源码增加缓存失败提示并保留旧行、空缓存失败显示错误重试态，待 0.4.8 用同一路径实机复验。现有 hook renderer 对 MinimalUpdateButton 覆盖远端完成不整页重载、本机身份匹配仍重载和目标切换时忽略迟到完成回调；该行为测试不替代目录失败的实机验收。
 - 2026-11-07：新增APP安装绑定记录与凭据/root/过期PID校验、Node同根/外置/无APP状态、APP磁盘更新但旧运行版本保持待重启及同版本重试、缺少历史from_version时运行版本未知、组件版本隔离和UI安装能力门禁回归。
 - 2026-11-07：验证更新器读取带 UTF-8 BOM 的 version.json，并覆盖 Hub APP 外部 Node 模式不 spawn 第二个 Node、localApi token 仅注入自管 Node。
 - 2026-11-07：覆盖其他有效安装快捷方式保护与失效链接修复，更新中心隔离 Electron 测试禁用系统快捷方式写入。

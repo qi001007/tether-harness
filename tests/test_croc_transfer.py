@@ -52,8 +52,11 @@ def test_send_uses_official_croc_flags_and_parses_progress(tmp_path, monkeypatch
         ])
 
     monkeypatch.setattr(croc_transfer.subprocess, "Popen", fake_popen)
-    transfer = croc_transfer.CrocTransfer(binary="croc", relay="127.0.0.1:19009")
-    job = transfer.send(str(source), "tether-code-123", transfers=6)
+    for name in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY",
+                 "http_proxy", "https_proxy", "all_proxy"):
+        monkeypatch.setenv(name, "proxy.invalid:1234")
+    transfer = croc_transfer.CrocTransfer(binary="croc", relay="127.0.0.1:19009", platform="nt")
+    job = transfer.send(str(source), "tether-code-123", transfers=99)
     status = wait_for_state(job, "completed")
 
     args, kwargs = calls[0]
@@ -61,9 +64,12 @@ def test_send_uses_official_croc_flags_and_parses_progress(tmp_path, monkeypatch
     assert "127.0.0.1:19009" in args
     assert "send" in args
     assert "--code" in args and "tether-code-123" in args
-    assert "--transfers" in args and "6" in args
-    assert "--no-local" in args
+    assert "--transfers" in args and "8" in args
+    assert "--no-local" not in args
     assert "--transport" in args and "relay" in args
+    assert kwargs["env"].get("CROC_SECRET") is None
+    assert not {"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY",
+                "http_proxy", "https_proxy", "all_proxy"}.intersection(kwargs["env"])
     assert "--ignore-stdin" in args
     assert kwargs["creationflags"] == getattr(croc_transfer.subprocess, "CREATE_NO_WINDOW", 0)
     assert status["percent"] == 100
@@ -86,6 +92,7 @@ def test_posix_send_passes_code_through_environment(tmp_path, monkeypatch):
     wait_for_state(job, "completed")
     args, kwargs = calls[0]
     assert "--code" not in args
+    assert "long-enough-code" not in args
     assert kwargs["env"]["CROC_SECRET"] == "long-enough-code"
 
 

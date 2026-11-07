@@ -1,11 +1,36 @@
 # 用户反馈与处理
 
-## 2026-11-07 APP 稳定性与插件收缩
+## 2026-11-07 当前跟进：0.4.8 候选
 
+- [ ] 远端更新后保留操作上下文。已定位顶栏 `MinimalUpdateButton` 的完成回调无条件刷新整页；候选只对已知本机自更新保留刷新，远端更新改为刷新目标状态，并保护迟到的异步结果。组件行为检查通过，待 0.4.8 实机联合更新验收后勾选。
+- [ ] 缓存目录读取失败须明确反馈。已在真实 0.4.7 APP 的路径面包屑后台重读分支复现：目录已不存在，仍显示旧行且无错误。候选保留旧行并提示失败/重试；空缓存失败显示错误，待安装后复验。手动 fresh 刷新原先已有错误态，不计为本次新增修复。
+- [x] 生产多 Agent 基本委派闭环。实际 APP 新建父 Codex 会话，经正式 Codeg 工具创建一个独立子 Codex，取得 task ID、completed 及与目标文件一致的随机 nonce；父结果、完成卡和子会话只读执行过程可见。验证只读任务，不修改产品源码或模型账户；不替代跨引擎/远端节点/复杂并行协作验收。
+- [ ] 直连优先与吞吐。源码确认原发送参数禁掉了 Croc 本机 relay 和候选接口探索；候选仅去掉 `--no-local`，保留自有 relay 和既有 transport。合同检查通过，实际传输与速度待验，笔记本 relay 尚未配置的缺口单独保留。
+- [ ] 手机真机映射、跨设备多 Agent 完整流程与持续连接验证。
+
+## 0.4.7 实机反馈快照（此前记录）
+
+- 现网状态：DESKTOP-LOCAL、LAPTOP-01、REMOTESTITCH-HUB 三台 Node 和主机/笔记本 APP 均运行 0.4.7；更新中心三台在线，无 spinner/retry，Node 与 APP `restart_required=false`。旧测试设备 TETHER-REMOTE-TEST 0.2.3 离线为历史记录。
+- 主机 APP 更新完成：Node 普通 RPC apply 返回 `restart_deferred=true`，APP RPC apply 返回 `restart_scheduled=true`；新 APP 窗口启动后 Hub Node current/runtime 与 APP current/installed 均为 0.4.7，均无待重启状态。LAPTOP APP+Node GUI 联合更新、云端 Node 普通 RPC 更新也均完成。
+- 更新 UX 待处理：远端 LAPTOP-01 更新结束后，主机 APP 页面回到了 DESKTOP-LOCAL 原生 DSH，而不是保留 LAPTOP-01 文件页/当前目标设备；需在后续修复中保留用户操作上下文并实机复验。
+- 文件页和 DSH 实机验收：主机 work-local 45 行与 Hub `/fs/list` 45 项一致；切 LAPTOP 默认工作区 6 项，侧栏只显示 LAPTOP 的 3 个 workspace 与 C/D 盘，无旧主机未分组路径。主机 DSH Hub 映射、搜索/输入框与 composer 可见，未发送模型消息。
+- Agents 实机验收：LAPTOP Agent 列表与 Codex 可用卡渲染成功；主机 Agent 列表和 3 条既有历史可见，无断开弹层。既有“简单中文问候”历史包含用户 `你好`、完成回复、执行过程/完成时间，状态显示“智能体连接：已连接”。未发送新任务或模型消息。
+- 潜在目录反馈风险：空目录缓存加后续 `/fs/list` 失败时，可能继续显示空缓存且错误提示较弱；本次 0.4.7 主机成功显示 45 行，未复现该失败条件，不据此宣称根因已全面修复。
+- 插件发行通路继续引用并保留官方 0.2.93 冻结资产；实际 DSH 宿主安装版本为 0.4.2，本轮没有强制降级或重启。
+- 隔离 APP 0.4.6 使用空 Electron profile，未包含 `tether.hub` localStorage 登录项，所以停在登录页。安全只读结果为 app-context device=DESKTOP-LOCAL、hub=true、无 localApi；其 main renderer ready/settled，但 `hasComposer=false`，app.log 没有 preload/renderer 错误记录。它没有登录、没有完成 DSH/Agents 渲染验收，不能当作产品认证或 DSH 回归证据。
+- 升级前 90 秒同步只读观察：`/api/health` 与 `/api/state` 均每 2 秒采样，共 46 组；当时三台目标 Node 均 0.4.6、全程在线。heartbeat 相邻更新时间范围：主机 1.911–2.117 秒、笔记本 1.895–4.000 秒、云端 2.000–2.003 秒。Node 进程树观察前后均为 2 个 launcher/interpreter 进程、一个 DESKTOP-LOCAL `--db` 身份；隔离 QA Electron 树已停、54898 端口已关闭，实际 APP 29972 仍在运行。
+
+- [x] 三端正式更新：三台 Node 和两台 APP 均运行 0.4.7；Hub status 无 `restart_required`，更新中心无 spinner/retry。
+- [ ] 更新 UX 上下文：远端更新结束后主 APP 回到 DESKTOP-LOCAL 原生 DSH，而不是原 LAPTOP 文件页；待修并通过实际 GUI 验收。
+- [x] 文件/DSH 基础验收：0.4.7 主机 work-local 显示 45 行，LAPTOP 默认工作区显示 6 项，侧栏不残留其他设备 native 路径；主机 DSH 映射、搜索、输入与 composer 可见。旧 APP 4.5 的空列表和未分组路径本次未重现。
+- [x] Agents 基础渲染：两端 Agent 列表/目标工作区可见；主机 3 条历史和既有完成对话可读，连接已连接且无断开弹层。没有提交新任务。
+- [ ] 多 Agent 协作完整任务流程、手机真机映射和全面吞吐优化仍未验收。
+- [ ] 潜在目录错误反馈：空缓存遇后续 `/fs/list` 失败时可能保留空结果并弱化错误提示；本次未触发，后续观察确认。
+- [ ] 多 Agent 协作完整任务流程、手机真机映射和全面吞吐优化尚未完成。
 - [ ] 推进方式：主会话管理更新主线和实际部署，子 Agent 分别推进 UI、兼容契约与云端迁移；每批以实际节点版本、重连和可见界面为交付，已有检查通过后不反复扩大本地测试。
-- [ ] 本轮现场补漏：设备网进程未随系统重启恢复时，Agents 仅长时间转圈。原有私网已恢复，登录维护任务已运行；页面明确失败/重试与自动恢复已修源码，待签名包部署。
+- [x] 本轮现场补漏：系统重启后未启动的设备网已恢复，登录维护任务已运行；Agents 明确失败/重试与恢复、更新旧错误清理、资源首次目录失败重试已随签名 0.4.5 安装到两台 APP。
 
-- [ ] 主机可逐台更新三节点。已将原签名 0.4.4 缓存并固定为生产 Hub 的当前分发版本，三台 Node 均已实际升级并保持在线；主机 APP 也已升级。笔记本另有一套 APP 0.3.1，与独立 Node 分离安装，需在避免双实例抢占设备身份的前提下升级该 APP；该项尚未整体结项。
+- [x] 真实制品落地：生产 Hub 分发原签名 0.4.5；主机和笔记本 APP、三台 Node 均已实际升级。三 Node 当前/最新均 0.4.5、在线、无可用更新；笔记本旧 APP 0.3.1 已升级并复用独立 Node。云端正常更新因旧 MemoryHigh 220 MiB 回收阻塞的问题已原位调整为 320 MiB，保留 384 MiB 硬上限。
 - [ ] DSH 冷启动与跨节点连接保持稳定。云端测试消息已送达 DSH，模型调用因缺少 API key 结束。Windows 真机点击启动后进程运行，本机直连正常，但 Hub 映射未在 70 秒内得到输入框，伴随 Node 心跳超时重连。云端 DSH Web 的两次独立冷启动均通过鉴权。待修复 Hub 冷启动映射，复验云端模型回复与 iPhone 真机映射。
 - [ ] APP 中使用 Codeg 与 Herdr。隔离的真实 APP 通过 `@` 选择确定性 ACP 测试 Agent，经 Codeg 取得委派完成状态和精确子回复。修复 Agent 主页遮挡后，从侧栏重开父、子会话均读回对应结果。真实 Codex → OpenCode 2.2.0 → 本机 Qwen 的委派也取得任务 ID、终态及精确回复，并核对了 OpenCode 原生数据库。隔离 APP 验证旧 Node 的 Herdr 门禁及重试，云端隔离 0.4.4 Node 验证两个项目使用不同会话并返回各自的实际目录。待逐台升级后，经生产 Hub 验收远端 Herdr 与 Agent 路径。
 - [ ] 插件冻结在具备 DSH 映射、资源管理和设备图的可用版本。构建/签名清单、Hub UPDATE_COMPONENTS、Node RPC 与 UI 独立入口仍完整保留三组件更新能力；新清单引用原官方 0.2.93 插件资产，不发布业务功能新版。现场已装插件仍为 0.4.2，本次未强制降级或重启宿主。稳定插件运行态三个入口和 iPhone 映射仍待验收。

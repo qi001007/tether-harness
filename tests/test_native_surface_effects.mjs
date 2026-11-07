@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { createTetherPanel, dshWebGuestSameOrigin } from '../packages/tether-ui/src/app.js'
+import { createTetherPanel, dshWebGuestSameOrigin, MinimalUpdateButton } from '../packages/tether-ui/src/app.js'
 import { createWebNative } from '../packages/tether-ui/src/hosts/web.js'
 
 function createHookRenderer(initialProps) {
@@ -66,6 +66,93 @@ const walk = (node, predicate) => {
   }
   return null
 }
+
+test('remote update completion keeps this page while local completion reloads it', async () => {
+  const previous = {
+    window: globalThis.window,
+    setTimeout: globalThis.setTimeout,
+    clearTimeout: globalThis.clearTimeout,
+    setInterval: globalThis.setInterval,
+    clearInterval: globalThis.clearInterval
+  }
+  let timerId = 0
+  const timeouts = new Map()
+  const intervals = new Map()
+  globalThis.window = { location: { reloadCount: 0, reload() { this.reloadCount += 1 } } }
+  globalThis.setTimeout = (callback, delay) => { const id = ++timerId; timeouts.set(id, { callback, delay }); return id }
+  globalThis.clearTimeout = (id) => timeouts.delete(id)
+  globalThis.setInterval = (callback, delay) => { const id = ++timerId; intervals.set(id, { callback, delay }); return id }
+  globalThis.clearInterval = (id) => intervals.delete(id)
+
+  const renderUpdate = async (localDeviceId, switchDeviceBeforeDone = false) => {
+    let refreshed = 0
+    let summaryChecks = 0
+    globalThis.window.location.reloadCount = 0
+    const api = async (path, options) => {
+      if (path.endsWith('/update/apply')) return { job_id: 'job-047', status: 'running' }
+      if (path.endsWith('/update/job')) return { job_id: 'job-047', status: 'done' }
+      if (path.includes('/update?')) return { update_available: summaryChecks++ === 0, target_version: '0.4.7' }
+      throw new Error('unexpected update request: ' + path + ' ' + JSON.stringify(options))
+    }
+    const initialProps = {
+      React: null,
+      h: null,
+      api,
+      deviceId: 'LAPTOP-01',
+      localDeviceId,
+      onRemoteDone: async () => { refreshed += 1 },
+      host: { kind: 'app', hubConfig: () => ({ url: 'https://hub.example' }) },
+      C: { ink: '#111', blue: '#08f', sub: '#666', red: '#d00' }
+    }
+    const renderer = createHookRenderer(initialProps)
+    const props = rendererProps => ({ ...rendererProps, React: renderer.React, h: renderer.React.createElement })
+    renderer.setComponent((rendererProps) => MinimalUpdateButton(props(rendererProps)))
+    renderer.render()
+    await tick()
+    renderer.render()
+    const updateButton = walk(renderer.output(), (node) => node.type === 'button' && node.props['aria-label'] === '更新到最新版本')
+    assert.ok(updateButton)
+    await updateButton.props.onClick()
+    renderer.render()
+    await tick()
+    const poll = [...intervals.values()].find((timer) => timer.delay === 1000)
+    assert.ok(poll)
+    await poll.callback()
+    await tick()
+    renderer.render()
+    const [doneTimerId, doneTimer] = [...timeouts.entries()].find(([, timer]) => timer.delay === 800) || []
+    assert.ok(doneTimer)
+    timeouts.delete(doneTimerId)
+    if (switchDeviceBeforeDone) {
+      renderer.update({ ...initialProps, deviceId: 'OTHER-DEVICE', localDeviceId: 'DESKTOP-LOCAL' })
+      await tick()
+      renderer.render()
+    }
+    await doneTimer.callback()
+    await tick()
+    renderer.render()
+    const reloadCount = globalThis.window.location.reloadCount
+    renderer.dispose()
+    return { refreshed, reloadCount, output: renderer.output() }
+  }
+
+  try {
+    const remote = await renderUpdate('DESKTOP-LOCAL')
+    assert.equal(remote.reloadCount, 0)
+    assert.equal(remote.refreshed, 1)
+    assert.equal(walk(remote.output, (node) => node.props && node.props.role === 'dialog'), null)
+
+    const local = await renderUpdate('LAPTOP-01')
+    assert.equal(local.reloadCount, 1)
+    assert.equal(local.refreshed, 0)
+
+    const switched = await renderUpdate('DESKTOP-LOCAL', true)
+    assert.equal(switched.reloadCount, 0)
+    assert.equal(switched.refreshed, 0)
+  } finally {
+    for (const [key, value] of Object.entries(previous)) globalThis[key] = value
+  }
+})
 
 test('NativeSurface cancels obsolete device requests, pauses hidden polling, and waits for iframe load', async () => {
   const previous = {

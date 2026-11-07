@@ -693,15 +693,28 @@ export function buildTablePreview({ name, text, sourceTruncated, rowLimit, colum
   }
 }
 
-function MinimalUpdateButton({ React, h, api, post, deviceId, host, C }) {
+export function MinimalUpdateButton({ React, h, api, post, deviceId, localDeviceId, onRemoteDone, host, C }) {
   const apiRef = React.useRef(api)
   apiRef.current = api
+  const mountedRef = React.useRef(true)
+  const doneJobRef = React.useRef('')
   const [summary, setSummary] = React.useState(null)
   const [job, setJob] = React.useState(null)
   const [error, setError] = React.useState('')
   const hubUrl = host && typeof host.hubConfig === 'function' ? (host.hubConfig() || {}).url : ''
   const originProduct = host && host.kind === 'dsh' ? 'plugin' : 'app'
   const devicePath = deviceId ? '/api/devices/' + encodeURIComponent(deviceId) : ''
+  const scopeRef = React.useRef(null)
+  scopeRef.current = { deviceId, localDeviceId, onRemoteDone, hubUrl, originProduct }
+  React.useEffect(() => {
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
+  React.useEffect(() => {
+    setSummary(null)
+    setJob(null)
+    setError('')
+  }, [devicePath])
   const labels = {
     queued: '准备更新', checking: '检查版本', downloading: '下载更新',
     applying: '安装更新', restarting: '重启并验证', done: '更新完成', error: '更新失败'
@@ -732,7 +745,38 @@ function MinimalUpdateButton({ React, h, api, post, deviceId, host, C }) {
         const next = await apiRef.current(devicePath + '/update/job', { method: 'GET' }, hubUrl)
         if (cancelled) return
         setJob(next)
-        if (next && next.status === 'done') setTimeout(() => { try { window.location.reload() } catch (_) {} }, 800)
+        const doneKey = devicePath + ':' + String((next && next.job_id) || (job && job.job_id) || '')
+        if (next && next.status === 'done' && doneJobRef.current !== doneKey) {
+          doneJobRef.current = doneKey
+          const doneScope = { deviceId, hubUrl, originProduct }
+          const isCurrentScope = () => mountedRef.current
+            && scopeRef.current.deviceId === doneScope.deviceId
+            && scopeRef.current.hubUrl === doneScope.hubUrl
+            && scopeRef.current.originProduct === doneScope.originProduct
+          setTimeout(() => {
+            if (!isCurrentScope()) return
+            const current = scopeRef.current
+            if (current.localDeviceId && doneScope.deviceId === current.localDeviceId) {
+              try { window.location.reload() } catch (_) {}
+              return
+            }
+            setJob(null)
+            void (async () => {
+              try {
+                const status = await apiRef.current(devicePath + '/update?origin_product=' + originProduct, { method: 'GET' }, hubUrl)
+                if (!isCurrentScope()) return
+                setSummary(status || null)
+              } catch (_) {
+                if (!isCurrentScope()) return
+                setSummary(null)
+              }
+              const callback = scopeRef.current.onRemoteDone
+              if (isCurrentScope() && typeof callback === 'function') {
+                try { await callback() } catch (_) { /* keep the completed update result visible */ }
+              }
+            })()
+          }, 800)
+        }
         if (next && next.status === 'error') setError((next.error && (next.error.detail || next.error.code)) || '更新失败')
       } catch (_) { /* keep the last known progress */ }
     }
@@ -5252,9 +5296,12 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         } catch (e) {
           if (controller.signal.aborted || (e && e.name === 'AbortError')) return
           if (deviceIdRef.current !== requestDevice || seq !== dirSeqRef.current) return
+          const denied = !!e && (e.code === 'denied' || e.status === 403)
+          const message = denied ? '当前节点没有读取该目录的权限。请用管理员权限运行节点，或在设置中调整权限。' : String((e && e.message) || e)
+          setDirError(cached
+            ? (cached.entries.length ? '刷新失败，当前显示上次读取的内容。' : '刷新失败，缓存内容为空。') + message + '，可重试。'
+            : message)
           if (!cached) {
-            const denied = !!e && (e.code === 'denied' || e.status === 403)
-            setDirError(denied ? '当前节点没有读取该目录的权限。请用管理员权限运行节点，或在设置中调整权限。' : String(e.message || e))
             setDirEntries([])
             setTreeChildren((current) => ({ ...current, [key]: { status: denied ? 'denied' : 'error', entries: [], reason: String((e && e.message) || '') } }))
           }
@@ -6073,7 +6120,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             h('span', { className: 'tether-spin', style: { width: 18, height: 18, display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 18 })),
             h('span', null, '加载中…'),
             h('button', { onClick: stopLoading, className: 'tether-hover', style: { border: 0, borderRadius: 6, padding: '4px 10px', background: C.soft, color: C.ink, fontSize: 11.5, cursor: 'pointer' } }, '停止加载'))
-          if (dirError) return h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', alignContent: 'center', gap: 8, color: C.red, fontSize: 12, padding: 24, textAlign: 'center' } },
+          if (dirError && !entries.length) return h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', alignContent: 'center', gap: 8, color: C.red, fontSize: 12, padding: 24, textAlign: 'center' } },
             h('div', null, dirError),
             h('button', { onClick: refreshExplorer, className: 'tether-hover', style: { border: 0, borderRadius: 6, padding: '5px 10px', background: C.soft, color: C.ink, fontSize: 12, cursor: 'pointer' } }, '重试'))
           if (!path) return h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', color: C.mute, fontSize: 12 } }, '从左侧选择工作区或磁盘')
@@ -6092,6 +6139,9 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
               },
               style: { flex: '1 1 auto', overflow: 'auto', padding: '0 10px 24px', userSelect: 'none' }
             },
+              dirError ? h('div', { role: 'alert', style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, margin: '8px 0', padding: '7px 10px', borderRadius: 6, background: C.redSoft || C.soft, color: C.red, fontSize: 11.5 } },
+                h('span', null, dirError),
+                h('button', { onClick: refreshExplorer, className: 'tether-hover', style: { border: 0, borderRadius: 5, padding: '4px 8px', background: C.layer1, color: C.ink, fontSize: 11.5, cursor: 'pointer', flex: '0 0 auto' } }, '重试')) : null,
               h('div', { style: { display: 'grid', gridTemplateColumns: columns, gap: 8, height: 28, padding: '0 8px', alignItems: 'center', fontSize: 11, color: C.mute } },
                 sortHeader('name', '名称'), sortHeader('mtime', '修改日期'), h('span', null, '类型'), sortHeader('size', '大小', 'right')),
               entries.map((entry) => h('div', {
@@ -6471,7 +6521,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
               },
               status: liveHubStatus
             }) : null,
-            h(MinimalUpdateButton, { React, h, api, post, deviceId, host, C }),
+            h(MinimalUpdateButton, { React, h, api, post, deviceId, localDeviceId: appLocalDevice, onRemoteDone: async () => { await loadState(true); await refreshUpdateCenter(true) }, host, C }),
             host && host.kind === 'app' && host.windowControls ? h('div', {
               style: { display: 'flex', alignSelf: 'stretch', marginLeft: 2, WebkitAppRegion: 'no-drag' }
             },
