@@ -75,6 +75,32 @@ def test_start_uses_a_windowless_detached_process(tmp_path, monkeypatch):
     assert result["started"] is True
 
 
+def test_status_observes_surface_after_the_start_snapshot_cache_expires(tmp_path, monkeypatch):
+    exe = tmp_path / "DeepSeek Harness.exe"
+    exe.write_bytes(b"MZ")
+    monkeypatch.setenv("TETHER_DSH_EXE", str(exe))
+    monkeypatch.setattr(dsh_desktop, "_registry_info", lambda: {})
+    monkeypatch.setattr(dsh_desktop.psutil, "process_iter", lambda *_: [])
+    monkeypatch.setattr(dsh_desktop.psutil, "pid_exists", lambda pid: pid == 4242)
+    clock = [10.0]
+    monkeypatch.setattr(dsh_desktop.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(dsh_desktop.subprocess, "Popen", lambda *_args, **_kwargs: object())
+    desktop = DshDesktop(tmp_path / "data", dsh_home=tmp_path / "home")
+
+    started = desktop.start()
+    assert started["running"] is True
+    assert started["surface"] is False
+
+    desktop.descriptor.parent.mkdir(parents=True)
+    desktop.descriptor.write_text('{"pid": 4242}', encoding="utf-8")
+    clock[0] += 3.9
+    assert desktop.status()["surface"] is False, "the short post-spawn snapshot avoids duplicate process scans"
+    clock[0] += 0.2
+    status = desktop.status()
+    assert status["surface"] is True
+    assert status["pid"] == 4242
+
+
 def test_feed_rejects_a_non_https_override(tmp_path, monkeypatch):
     monkeypatch.setenv("TETHER_DSH_FEED_URL", "http://download.deepseek.com/dsh-desk/feeds/win-x64/nightly.yml")
     desktop = DshDesktop(tmp_path / "data", dsh_home=tmp_path / "home")

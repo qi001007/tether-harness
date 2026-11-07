@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from tether.node.fs_service import FsService, FsError
+from tether.node.croc_transfer import CrocJob
 
 
 class FakeJob:
@@ -43,6 +44,21 @@ class FakeCroc:
 
     def status(self):
         return self.job.status() if self.job else {"state": "idle"}
+
+
+def test_croc_job_reports_fresh_activity_sequence():
+    class Process:
+        pid = 123
+        stdout = iter(["0% 10MB/s\n", "0% 11MB/s\n", "1% 11MB/s\n"])
+
+        def wait(self):
+            return 1
+
+    job = CrocJob(Process(), direction="receive")
+    job._reader.join(timeout=1)
+    status = job.status()
+    assert status["progress_seq"] >= 3
+    assert status["percent"] == 1
 
 
 @pytest.fixture
@@ -110,6 +126,31 @@ def test_cancel_removes_staging(service):
     cancelled = service.dispatch("transfer_cancel", {})
     assert cancelled["state"] == "cancelled"
     assert not staging.exists()
+
+
+def test_cancel_with_transfer_id_only_cancels_matching_owned_job(service):
+    destination = service.workspace
+    started = service.dispatch("transfer_receive", {
+        "path": str(destination), "code": "long-enough-code", "transfer_id": "owned-transfer"
+    })
+    owned_job = service._croc_context["job"]
+    newer_job = FakeJob("running")
+    service.croc.job = newer_job
+    cancelled = service.dispatch("transfer_cancel", {"transfer_id": started["transfer_id"]})
+    assert cancelled["state"] == "cancelled"
+    assert owned_job.state == "cancelled"
+    assert newer_job.state == "running"
+    assert service._croc_context == {}
+
+
+def test_cancel_with_stale_transfer_id_does_not_touch_current_job(service):
+    job = FakeJob("running")
+    service.croc.job = job
+    service._croc_context = {"transfer_id": "current", "direction": "send", "job": job}
+    cancelled = service.dispatch("transfer_cancel", {"transfer_id": "stale"})
+    assert cancelled["cancelled"] is False
+    assert job.state == "running"
+    assert service._croc_context["transfer_id"] == "current"
 
 
 def test_missing_croc_engine_is_reported(service, tmp_path):

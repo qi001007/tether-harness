@@ -64,6 +64,14 @@ export function safeServiceAddress(value) {
   } catch (_) { return '未配置' }
 }
 
+export function dshWebGuestSameOrigin(approvedUrl, guestUrl) {
+  try {
+    const approved = new URL(String(approvedUrl || ''))
+    const guest = new URL(String(guestUrl || ''))
+    return ['http:', 'https:'].includes(approved.protocol) && approved.origin === guest.origin
+  } catch (_) { return false }
+}
+
 export function hubAddressForEditor(value) {
   if (!value) return ''
   try {
@@ -456,7 +464,7 @@ export async function activateLocalDshUpdate({ reloadSurface, status }) {
 }
 
 export function deviceUpdateComponents(capabilities = {}) {
-  return ['node', ...(capabilities.dsh_surface ? ['plugin'] : []), ...(capabilities.app_version ? ['app'] : [])]
+  return ['node', ...(capabilities.app_version ? ['app'] : [])]
 }
 
 export function localPluginNeedsRestart(info) {
@@ -2494,6 +2502,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       }, [online, state.status, deviceId])
       const currentState = offlineGrace ? state : nativeSurfaceStateForDevice(state, deviceId, online)
       const retryCountRef = React.useRef(0)
+      const descriptorRetryCountRef = React.useRef(0)
       const documentRetryCountRef = React.useRef(0)
       const retryTimerRef = React.useRef(null)
       const documentTimerRef = React.useRef(null)
@@ -2559,6 +2568,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
 
       React.useEffect(() => {
         retryCountRef.current = 0
+        descriptorRetryCountRef.current = 0
         documentRetryCountRef.current = 0
         if (retryTimerRef.current) { clearTimeout(retryTimerRef.current); retryTimerRef.current = null }
         if (documentTimerRef.current) { clearTimeout(documentTimerRef.current); documentTimerRef.current = null }
@@ -2632,6 +2642,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
               error.surfaceCode = code
               throw error
             }
+            descriptorRetryCountRef.current = 0
             if (!data.available || !isSafeNativeSurfaceUrl(data.url)) throw new Error('Controller 返回了无效或非 loopback 的原生页面地址')
             let surfaceUrl = data.url
             const parsed = new URL(data.url)
@@ -2655,6 +2666,16 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           })
           .catch((error) => {
             if (!current) return
+            if (error.surfaceCode === 'descriptor_missing'
+                && descriptorRetryCountRef.current < 6) {
+              descriptorRetryCountRef.current += 1
+              setState({ deviceId, status: 'loading', url: '', message: 'DSH 正在启动，等待工作区描述符就绪…' })
+              retryTimerRef.current = setTimeout(() => {
+                retryTimerRef.current = null
+                setAttempt((value) => value + 1)
+              }, 4000)
+              return
+            }
             if (nativeSurfaceTransientError(error) && !retryTimerRef.current && retryCountRef.current < NATIVE_SURFACE_RETRIES) {
               retryCountRef.current += 1
               setState({ deviceId, status: 'loading', url: '', message: '目标设备连接中断，正在自动重连…' })
@@ -2681,7 +2702,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             if (!response.ok) {
               const detail = data && data.detail ? data.detail : {}
               const code = detail.code
-              if (['descriptor_missing', 'descriptor_invalid', 'host_unreachable'].includes(code)) {
+              if (['descriptor_invalid', 'host_unreachable'].includes(code)) {
                 setState((prev) => {
                   if (prev.deviceId !== deviceId) return prev
                   if (!['document-loading', 'document-loaded', 'error'].includes(prev.status)) return prev
@@ -2801,8 +2822,39 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const [dshWeb, setDshWeb] = React.useState(null)
       const [dshWebBusy, setDshWebBusy] = React.useState('')
       const [dshWebOpen, setDshWebOpen] = React.useState(false)
+      const [dshWebLoad, setDshWebLoad] = React.useState({ status: 'idle', attempt: 0, error: '' })
+      const [dshWebGuestReady, setDshWebGuestReady] = React.useState(false)
       const dshWebRef = React.useRef(null)
-      React.useEffect(() => { setDshWebOpen(false) }, [deviceId])
+      const dshWebRefCallback = React.useRef(null)
+      if (!dshWebRefCallback.current) dshWebRefCallback.current = (guest) => {
+        if (dshWebRef.current === guest) return
+        dshWebRef.current = guest
+        setDshWebGuestReady(!!guest)
+      }
+      const dshWebLoadAttemptRef = React.useRef(0)
+      const dshWebLoadTimerRef = React.useRef(null)
+      const clearDshWebLoadTimer = () => {
+        if (dshWebLoadTimerRef.current) clearTimeout(dshWebLoadTimerRef.current)
+        dshWebLoadTimerRef.current = null
+      }
+      const beginDshWebLoad = () => {
+        const attempt = dshWebLoadAttemptRef.current + 1
+        dshWebLoadAttemptRef.current = attempt
+        clearDshWebLoadTimer()
+        setDshWebLoad({ status: 'loading', attempt, error: '' })
+        dshWebLoadTimerRef.current = setTimeout(() => {
+          if (dshWebLoadAttemptRef.current !== attempt) return
+          setDshWebLoad({ status: 'error', attempt, error: 'DSH Web 连接超时，请检查服务后重试。' })
+        }, 20000)
+        return attempt
+      }
+      const closeDshWeb = () => {
+        dshWebLoadAttemptRef.current += 1
+        clearDshWebLoadTimer()
+        setDshWebLoad({ status: 'idle', attempt: dshWebLoadAttemptRef.current, error: '' })
+        setDshWebOpen(false)
+      }
+      React.useEffect(() => { closeDshWeb() }, [deviceId])
       React.useEffect(() => {
         if (!dshWebOpen || host.kind !== 'app') return undefined
         let stopped = false
@@ -2813,7 +2865,9 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             const hub = raw ? JSON.parse(raw) : null
             const guest = dshWebRef.current
             if (!hub || typeof hub.url !== 'string' || typeof hub.token !== 'string'
-                || !guest || typeof guest.executeJavaScript !== 'function') return
+                || !guest || typeof guest.executeJavaScript !== 'function'
+                || typeof guest.getURL !== 'function'
+                || !dshWebGuestSameOrigin(dshWeb && dshWeb.url, guest.getURL())) return
             void guest.executeJavaScript(
               'try { if (!localStorage.getItem("tether.hub")) localStorage.setItem("tether.hub", ' + JSON.stringify(JSON.stringify(hub)) + ') } catch (_) {}'
             ).catch(() => {})
@@ -2822,7 +2876,11 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         const timer = setInterval(seed, 1500)
         seed()
         return () => { stopped = true; clearInterval(timer) }
-      }, [dshWebOpen])
+      }, [dshWebOpen, dshWeb && dshWeb.url])
+      React.useEffect(() => () => {
+        dshWebLoadAttemptRef.current += 1
+        clearDshWebLoadTimer()
+      }, [deviceId])
       const dshWebSupported = linuxDevice || !!(deviceInfo && deviceInfo.capabilities
         && deviceInfo.capabilities.dsh_web_supported)
       const dshWebEnabled = dshWebSupported || !!(dshWeb && dshWeb.supported)
@@ -2883,7 +2941,8 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             retryDocument()
             return
           }
-        } else if (dsh && dsh.running) {
+        } else if (dsh && dsh.running && dsh.surface
+            && ['document-loaded', 'local'].includes(currentState.status)) {
           setDshBusy('')
           setDshError('')
           retryDocument()
@@ -2912,15 +2971,6 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           setDshBusy('')
         }
       }
-      React.useEffect(() => {
-        if (!dshPluginMissing || dshBusy || dshAutoRepairRef.current) return undefined
-        const timer = setTimeout(() => {
-          if (dshAutoRepairRef.current) return
-          dshAutoRepairRef.current = true
-          void runDsh('dsh_install_plugin')
-        }, 10000)
-        return () => clearTimeout(timer)
-      }, [dshPluginMissing, dshBusy])
       React.useEffect(() => {
         const bridge = typeof window !== 'undefined' ? window.tetherApp : undefined
         if (!deviceId || !bridge || typeof bridge.onSurfaceStyleBroken !== 'function') return undefined
@@ -2977,21 +3027,73 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         return () => clearTimeout(timer)
       }, [dshStalled, deviceId])
       const dshWebUrl = dshWeb && dshWeb.running ? String(dshWeb.url || '') : ''
+      const dshWebOpenable = host.kind === 'app' && !!dshWebUrl
+      const dshWebLoadAttempt = dshWebLoad.attempt
+      const isCurrentDshWebGuest = (guest, attempt) => !!(guest && guest === dshWebRef.current
+        && dshWebLoadAttemptRef.current === attempt)
+      const finishDshWebLoad = (attempt, error = '') => {
+        if (dshWebLoadAttemptRef.current !== attempt) return
+        clearDshWebLoadTimer()
+        setDshWebLoad({ status: error ? 'error' : 'loaded', attempt, error })
+      }
+      React.useEffect(() => {
+        const guest = dshWebRef.current
+        if (!dshWebOpen || host.kind !== 'app' || !guest || typeof guest.addEventListener !== 'function') return undefined
+        const attempt = dshWebLoadAttempt
+        const onStart = (event) => {
+          if (!isCurrentDshWebGuest(guest, attempt) || !event.isMainFrame) return
+          clearDshWebLoadTimer()
+          dshWebLoadTimerRef.current = setTimeout(() => {
+            if (dshWebLoadAttemptRef.current !== attempt) return
+            setDshWebLoad({ status: 'error', attempt, error: 'DSH Web 连接超时，请检查服务后重试。' })
+          }, 20000)
+          setDshWebLoad({ status: 'loading', attempt, error: '' })
+        }
+        const onFinish = () => {
+          if (!isCurrentDshWebGuest(guest, attempt) || typeof guest.getURL !== 'function'
+              || !dshWebGuestSameOrigin(dshWebUrl, guest.getURL())) return
+          finishDshWebLoad(attempt)
+        }
+        const onFail = (event) => {
+          if (!isCurrentDshWebGuest(guest, attempt) || !event.isMainFrame || event.errorCode === -3) return
+          finishDshWebLoad(attempt, 'DSH Web 加载失败，请检查服务后重试。')
+        }
+        guest.addEventListener('did-start-navigation', onStart)
+        guest.addEventListener('did-finish-load', onFinish)
+        guest.addEventListener('did-fail-load', onFail)
+        return () => {
+          guest.removeEventListener('did-start-navigation', onStart)
+          guest.removeEventListener('did-finish-load', onFinish)
+          guest.removeEventListener('did-fail-load', onFail)
+        }
+      }, [dshWebOpen, dshWebGuestReady, dshWebLoadAttempt, dshWebUrl, host.kind])
       if (dshWebOpen && dshWebUrl && host.kind === 'app') {
+        const dshWebLoadOverlay = dshWebLoad.status === 'loading'
+          ? h('div', { role: 'status', 'aria-live': 'polite', style: { position: 'absolute', inset: 0, zIndex: 1,
+            display: 'grid', placeItems: 'center', background: 'rgba(255,255,255,.84)', color: C.sub, fontSize: 13 } },
+          '正在连接 DSH Web…')
+          : dshWebLoad.status === 'error'
+            ? h('div', { style: { position: 'absolute', inset: 0, zIndex: 1, display: 'grid', placeItems: 'center',
+              alignContent: 'center', gap: 10, padding: 24, background: 'rgba(255,255,255,.94)', color: C.sub, textAlign: 'center' } },
+              h('div', { role: 'alert', style: { fontSize: 13 } }, dshWebLoad.error || 'DSH Web 暂时无法连接。'),
+              btn('重试', beginDshWebLoad, { primary: true }))
+            : null
         return h('div', { className: 'tether-native-surface', style: { ...nativeSurfaceContainerStyle(visible, layered), position: 'relative', width: '100%', height: '100%', flex: '1 1 auto' } },
           h('webview', {
-            ref: dshWebRef,
+            key: deviceId + ':' + dshWebLoadAttempt,
+            ref: dshWebRefCallback.current,
             src: dshWebUrl,
             style: { display: 'flex', flex: '1 1 auto', width: '100%', height: '100%', minWidth: 0, minHeight: 0, border: 0, background: C.bg }
           }),
+          dshWebLoadOverlay,
           h('div', { style: { position: 'absolute', top: 10, right: 10, display: 'flex', gap: 6, zIndex: 2 } },
             h('button', {
               type: 'button', className: 'tether-hover',
-              onClick: () => { try { if (dshWebRef.current) dshWebRef.current.reload() } catch (_) { /* guest may still be loading */ } },
+              onClick: beginDshWebLoad,
               style: { height: 28, padding: '0 10px', border: 0, borderRadius: 6, background: 'rgba(255,255,255,.94)', color: C.sub, fontSize: 12, cursor: 'pointer', boxShadow: '0 1px 4px rgba(16,24,40,.16)' }
             }, '重新加载'),
             h('button', {
-              type: 'button', className: 'tether-hover', onClick: () => setDshWebOpen(false),
+              type: 'button', className: 'tether-hover', onClick: closeDshWeb,
               style: { height: 28, padding: '0 10px', border: 0, borderRadius: 6, background: 'rgba(255,255,255,.94)', color: C.sub, fontSize: 12, cursor: 'pointer', boxShadow: '0 1px 4px rgba(16,24,40,.16)' }
             }, '关闭')
           )
@@ -3050,7 +3152,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
               h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center', color: C.mute } }, h(Glyph, { name: 'refresh', size: 20 })),
               h('div', { role: 'status', 'aria-live': 'polite', style: { fontSize: 13, color: C.sub } }, dshStartingLabel),
               dsh && dsh.installing ? h('div', { className: 'tether-num', style: { fontSize: 11.5, color: C.mute } }, (Number(dsh.progress) || 0) + '%') : null)
-            : dshRelevant && dshRunning ? (dshStalled
+            : dshRelevant && dshRunning && !dshWebOpenable ? (dshStalled
               ? h('div', { style: { display: 'grid', placeItems: 'center', alignContent: 'center', gap: 12, flex: '1 1 auto', minHeight: 0, color: C.sub, textAlign: 'center', padding: 24 } },
                 h('div', { style: { fontSize: 14, color: C.ink } }, '工作区还没有准备好'),
                 h('div', { style: { maxWidth: 460, fontSize: 12, color: C.mute, lineHeight: 1.6 } }, 'DSH 已在运行，但 Tether 工作区组件暂时没有响应。'),
@@ -3060,7 +3162,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
               : h('div', { style: { display: 'grid', placeItems: 'center', alignContent: 'center', gap: 12, flex: '1 1 auto', minHeight: 0, color: C.sub, textAlign: 'center', padding: 24 } },
                 h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center', color: C.mute } }, h(Glyph, { name: 'refresh', size: 20 })),
                 h('div', { role: 'status', 'aria-live': 'polite', style: { fontSize: 13, color: C.sub } }, '正在载入工作区…')))
-              : dshDetecting || (dshRelevant && !dsh)
+              : (dshDetecting || (dshRelevant && !dsh)) && !dshWebOpenable
                 ? h('div', { style: { display: 'grid', placeItems: 'center', alignContent: 'center', gap: 12, flex: '1 1 auto', minHeight: 0, color: C.sub, textAlign: 'center', padding: 24 } },
                   h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center', color: C.mute } }, h(Glyph, { name: 'refresh', size: 20 })),
                   h('div', { role: 'status', 'aria-live': 'polite', style: { fontSize: 13, color: C.sub } }, '正在检测 DSH…'))
@@ -3077,6 +3179,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
                             ? btn('打开工作区', () => {
                               const url = dshWeb.url || ''
                               if (!url) { setDshWeb((current) => ({ ...(current || {}), error: '工作区地址还没准备好' })); return }
+                              beginDshWebLoad()
                               setDshWebOpen(true)
                             }, { primary: true })
                             : btn('请在桌面 APP 内打开', () => {}, { disabled: true }))
@@ -3447,6 +3550,9 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const [showAppSettings, setShowAppSettings] = React.useState(false)
       const [localDsh, setLocalDsh] = React.useState(null)
       const [dshBusy, setDshBusy] = React.useState('')
+      const localDshTargetRef = React.useRef('')
+      const localDshActionRef = React.useRef(0)
+      localDshTargetRef.current = appLocalDevice || deviceId || ''
       const [loggedIn, setLoggedIn] = React.useState(() => {
         try { return !!(JSON.parse(window.localStorage.getItem('tether.hub') || '{}').token) } catch (_) { return false }
       })
@@ -3765,7 +3871,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           return null
         } finally { setUpdateBusy((current) => current === key ? '' : current) }
       }
-      const watchNodeRestart = async (scope, authority) => {
+      const watchNodeRestart = async (scope, authority, expectedVersion) => {
         for (let attempt = 0; attempt < 90; attempt += 1) {
           await new Promise((resolve) => setTimeout(resolve, 2000))
           if (!scopeIsCurrent(scope)) return
@@ -3773,13 +3879,13 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           const running = target && target.capabilities && target.capabilities.node_version
           try {
             const status = await loadUpdateInfo('node', 'status', authority, scope)
-            const versionOk = !!(running && isUsableUpdateStatus(status) && status.latest_version && running === status.latest_version)
-            if (isUsableUpdateStatus(status) && (!status.restart_required || versionOk)) {
-              if (status.restart_required) setComponentUpdateInfo('node', { ...status, restart_required: false }, scope)
-              return
+            const versionOk = !!(running && expectedVersion && running === expectedVersion)
+            if (target && target.online && versionOk && isUsableUpdateStatus(status) && !status.restart_required) {
+              return true
             }
           } catch (_) { /* the node is restarting; keep polling */ }
         }
+        return false
       }
       const watchAppRestart = async (scope, authority, expectedVersion) => {
         for (let attempt = 0; attempt < 90; attempt += 1) {
@@ -3799,17 +3905,14 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         }
         return false
       }
-      const watchPluginRestart = async (scope, authority) => {
-        for (let attempt = 0; attempt < 30; attempt += 1) {
-          await new Promise((resolve) => setTimeout(resolve, 2000))
-          if (!scopeIsCurrent(scope)) return false
-          try {
-            const status = await loadUpdateInfo('plugin', 'status', authority, scope)
-            if (isUsableUpdateStatus(status) && status.restart_required !== true) return true
-          } catch (_) { /* the target DSH is restarting; keep polling */ }
-        }
-        return false
+      const nodeRestartIsPending = (scope, status) => {
+        const target = ((stateRef.current && stateRef.current.devices) || []).find((item) => item.device_id === scope.deviceId)
+        const running = target && target.capabilities && target.capabilities.node_version
+        const installed = status && status.current_version
+        return !!(status && status.restart_required === true)
+          || !!(target && target.online && running && installed && running !== installed)
       }
+      const nodeRestartManualMessage = 'Node 需要重启才能加载已安装版本；请在设备菜单中选择“重启 Node”'
       const waitForUpdateSettle = async (component, scope, authority) => {
         for (let attempt = 0; attempt < 120; attempt += 1) {
           await new Promise((resolve) => setTimeout(resolve, 1500))
@@ -3825,13 +3928,22 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         const checked = await updateAction(component, 'check', undefined, scope)
         if (!checked || checked.ok === false) return { failed: true, checked }
         if (updateInfoRunning(checked)) return { inProgress: true, checked }
-        if (checked.update_available !== true) return { current: true, checked }
+        if (checked.update_available !== true) {
+          if (component !== 'node') return { current: true, checked }
+          const status = await updateAction('node', 'status', undefined, scope, checked.authorityBase)
+          if (!status || status.ok === false) return { failed: true, checked }
+          return { current: true, checked, status,
+            expectedVersion: status.current_version || checked.current_version,
+            restartPending: nodeRestartIsPending(scope, status) }
+        }
         const prepared = await updateAction(component, 'prepare', undefined, scope, checked.authorityBase)
         if (!prepared || prepared.ok === false) return { failed: true, checked }
         if (updateInfoRunning(prepared)) return { inProgress: true, checked }
         const preparedId = prepared.prepared_id || ((prepared.prepared || [])[0] || {}).prepared_id
         if (!preparedId) return { failed: true, checked }
-        return { checked, prepared, preparedId, authority: checked.authorityBase, scope }
+        const preparedRow = (prepared.prepared || []).find((item) => item && item.prepared_id === preparedId)
+        const expectedVersion = prepared.to_version || (preparedRow && preparedRow.to_version) || checked.latest_version
+        return { checked, prepared, preparedId, expectedVersion, authority: checked.authorityBase, scope }
       }
       const openUpdateCenter = () => {
         clearFinishedUpdateRuns()
@@ -3906,7 +4018,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         if (host && host.kind === 'web') return null
         const localId = appLocalDevice || deviceId
         const localDevice = ((state && state.devices) || []).find((item) => item.device_id === localId)
-        const components = product === 'desktop' ? ['app', 'node'] : ['localPlugin', 'node']
+        const components = product === 'desktop' ? ['app', 'node'] : ['localPlugin']
         const infos = components.map((component) => {
           const info = infoFor(component, component === 'node' ? localId : '')
           if (component === 'localPlugin' && !info.latest_version && localId) {
@@ -3928,15 +4040,11 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         const card = updateCardStateForInfos(infos, { running, error: run?.state === 'error' ? run.message : '',
           restartRequired: runtimeRestartRequired, failed })
         const active = card.kind === 'running'
-        const versionText = versionLine(product === 'desktop' ? 'APP' : '插件',
-          {
-            current: product === 'desktop'
-              ? infos[0].current_version
-              : (infos[0].runtime_version || infos[0].current_version),
-            latest: infos[0].latest_version
-          },
-          { current: infos[1].current_version, latest: infos[1].latest_version })
-        const title = product === 'desktop' ? 'Tether Desktop（APP + Node）' : 'Tether for DSH（插件 + Node）'
+        const versionText = product === 'desktop'
+          ? versionLine('APP', { current: infos[0].current_version, latest: infos[0].latest_version },
+            { current: infos[1].current_version, latest: infos[1].latest_version })
+          : '插件 ' + versionTuple(infos[0].runtime_version || infos[0].current_version, infos[0].latest_version)
+        const title = product === 'desktop' ? 'Tether Desktop（APP + Node）' : 'Tether for DSH（插件）'
         return h('div', { key: product, style: { padding: 12, borderRadius: 8, background: C.panel, marginBottom: 10 } },
           h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 } },
             h('strong', { style: { fontSize: 13 } }, title),
@@ -3950,24 +4058,18 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       }
       const deviceCard = (item) => {
         const node = infoFor('node', item.device_id)
-        const plugin = infoFor('plugin', item.device_id)
         const app = infoFor('app', item.device_id)
-        const hasPlugin = !!(item.capabilities && item.capabilities.dsh_surface)
         const hasApp = !!(item.capabilities && item.capabilities.app_version)
-        const infos = [node, ...(hasPlugin ? [plugin] : []), ...(hasApp ? [app] : [])]
+        const infos = [node, ...(hasApp ? [app] : [])]
         const run = updateRunState('device:' + item.device_id)
         const running = run?.state === 'running'
-        const failed = infos.some((info, index) => !!(updateErrors.devices[item.device_id] || {})[['node', ...(hasPlugin ? ['plugin'] : []), ...(hasApp ? ['app'] : [])][index]]
+        const failed = infos.some((info, index) => !!(updateErrors.devices[item.device_id] || {})[['node', ...(hasApp ? ['app'] : [])][index]]
           || !!(info && info.check_error))
-        const pluginRestart = !!(hasPlugin && plugin && !isUpdateInfoStale(plugin) && plugin.restart_required)
-        const card = updateCardStateForInfos(infos, { running, error: run?.state === 'error' ? run.message : '',
-          restartRequired: pluginRestart, failed,
-          restartPill: '插件待重启 DSH', restartAction: 'none' })
+        const card = updateCardStateForInfos(infos, { running, error: run?.state === 'error' ? run.message : '', failed })
         const active = card.kind === 'running'
         const nodeTuple = versionTuple(node.current_version || (item.capabilities && item.capabilities.node_version), node.latest_version)
         const versionRows = []
         if (hasApp) versionRows.push('APP ' + versionTuple(item.capabilities.app_version, app.latest_version) + '/Node ' + nodeTuple)
-        if (hasPlugin) versionRows.push('插件 ' + versionTuple(plugin.current_version, plugin.latest_version) + '/Node ' + nodeTuple)
         if (!versionRows.length) versionRows.push('Node ' + nodeTuple)
         return h('div', { key: 'device:' + item.device_id, style: { padding: 12, borderRadius: 8, background: C.panel, marginBottom: 10, opacity: item.online ? 1 : 0.6 } },
           h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 } },
@@ -3995,7 +4097,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           const nodeScope = localId ? { deviceId: localId, epoch: 0 } : null
           const plan = product === 'desktop'
             ? [{ component: 'node', scope: nodeScope }, { component: 'app', scope: null }]
-            : [{ component: 'localPlugin', scope: null }, { component: 'node', scope: nodeScope }]
+            : [{ component: 'localPlugin', scope: null }]
           const prepared = {}
           for (const step of plan) {
             if (step.component === 'node' && !step.scope) {
@@ -4014,17 +4116,35 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
                 : step.component === 'node' ? 'Node 更新失败' : '插件更新失败'
             }
           }
+          if (!failure && Object.values(prepared).some((entry) => entry && entry.inProgress)) failure = '有组件正在更新，请完成后重试'
+          if (!failure && prepared.node && prepared.node.restartPending
+              && !(prepared.app && prepared.app.preparedId)) {
+            failure = nodeRestartManualMessage
+            setComponentUpdateError('node', nodeRestartManualMessage, nodeScope)
+          }
           // Everything is downloaded before the first apply. Node goes first so
           // the APP (and with it the node process) restarts exactly once.
-          const order = product === 'desktop' ? ['node', 'app'] : ['localPlugin', 'node']
-          for (const component of order) {
+          const order = product === 'desktop' ? ['node', 'app'] : ['localPlugin']
+          if (!failure) for (const component of order) {
             const entry = prepared[component]
             if (!entry || entry.failed || entry.current || entry.inProgress || !entry.preparedId) continue
             try {
               if (component === 'app') {
                 const applied = await updateAction('app', 'apply', entry.preparedId, null)
                 if (!applied || applied.ok === false) failure = failure || 'APP 更新失败'
-                else if (!updateInfoRunning(applied)) setNotice('APP 正在重启并安装更新…')
+                else {
+                  setNotice('APP 正在重启并安装更新…')
+                  if (updateInfoRunning(applied)) {
+                    const settled = await waitForUpdateSettle('app', null, entry.authority)
+                    if (!settled) failure = failure || 'APP 更新仍在进行，尚未确认完成'
+                  }
+                  const reconnected = await watchAppRestart(nodeScope, entry.authority, entry.expectedVersion)
+                  if (!reconnected) failure = failure || 'APP 更新后尚未重新连接，请稍后刷新'
+                  else if (prepared.node && (prepared.node.applied || prepared.node.restartPending)) {
+                    const nodeReady = await watchNodeRestart(nodeScope, entry.authority, prepared.node.expectedVersion)
+                    if (!nodeReady) failure = failure || 'Node 更新后尚未确认重启完成'
+                  }
+                }
                 continue
               }
               const result = await updateAction(component, 'apply', entry.preparedId, entry.scope, entry.authority)
@@ -4032,12 +4152,20 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
                 failure = failure || (component === 'node' ? 'Node 更新失败' : '插件更新失败')
                 continue
               }
+              entry.applied = true
               if (updateInfoRunning(result)) {
-                await waitForUpdateSettle(component, entry.scope, entry.authority)
-                continue
+                const settled = await waitForUpdateSettle(component, entry.scope, entry.authority)
+                if (!settled) { failure = failure || component + ' 更新仍在进行，尚未确认完成'; continue }
               }
               if (component === 'node') {
-                if (result.restart_deferred !== true) await watchNodeRestart(entry.scope, entry.authority)
+                if (result.restart_deferred === true) {
+                  if (!prepared.app || !prepared.app.preparedId) {
+                    failure = failure || nodeRestartManualMessage
+                    setComponentUpdateError('node', nodeRestartManualMessage, entry.scope)
+                  }
+                } else if (!await watchNodeRestart(entry.scope, entry.authority, entry.expectedVersion)) {
+                  failure = failure || 'Node 更新后尚未确认重启完成'
+                }
               } else if (component === 'localPlugin') {
                 if (result.restart_scheduled === true) setNotice('插件已安装，DSH 正在自动重启…')
                 else await applyDshUpdate()
@@ -4076,7 +4204,14 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           }
           // Download first, then install; the APP is applied last so the
           // restarted node already carries its own update.
-          for (const component of ['plugin', 'node', 'app']) {
+          if (!failures.length && Object.values(prepared).some((entry) => entry && entry.inProgress)) failures.push('有组件正在更新，请完成后重试')
+          if (!failures.length && prepared.node && prepared.node.restartPending
+              && !(prepared.app && prepared.app.preparedId)) {
+            failures.push(nodeRestartManualMessage)
+            setComponentUpdateError('node', nodeRestartManualMessage, scope)
+          }
+          for (const component of ['node', 'app']) {
+            if (failures.length) break
             if (!components.includes(component)) continue
             const entry = prepared[component]
             if (!entry || entry.failed || entry.current || entry.inProgress || !entry.preparedId) continue
@@ -4086,23 +4221,32 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
                 failures.push(component)
                 continue
               }
+              entry.applied = true
               if (updateInfoRunning(result)) {
-                await waitForUpdateSettle(component, scope, entry.authority)
-                continue
+                const settled = await waitForUpdateSettle(component, scope, entry.authority)
+                if (!settled) { failures.push(component); setComponentUpdateError(component, '更新仍在进行，尚未确认完成', scope) }
               }
-              if (component === 'plugin') {
-                const restarted = await watchPluginRestart(scope, entry.authority)
-                if (!restarted) {
-                  failures.push('plugin')
-                  setComponentUpdateError('plugin', '插件已安装，目标 DSH 尚未完成重启', scope)
+              if (component === 'node') {
+                if (result.restart_deferred === true) {
+                  if (!prepared.app || !prepared.app.preparedId) {
+                    failures.push(nodeRestartManualMessage)
+                    setComponentUpdateError('node', nodeRestartManualMessage, scope)
+                  }
+                } else if (!await watchNodeRestart(scope, entry.authority, entry.expectedVersion)) {
+                  failures.push('node')
+                  setComponentUpdateError('node', 'Node 更新后尚未确认重启完成', scope)
                 }
-              } else if (component === 'node') {
-                if (result.restart_deferred !== true) await watchNodeRestart(scope, entry.authority)
               } else if (component === 'app') {
-                const reconnected = await watchAppRestart(scope, entry.authority, entry.checked && entry.checked.latest_version)
+                const reconnected = await watchAppRestart(scope, entry.authority, entry.expectedVersion)
                 if (!reconnected) {
                   failures.push('app')
                   setComponentUpdateError('app', 'APP 更新后尚未重新连接，请稍后刷新', scope)
+                } else if (prepared.node && (prepared.node.applied || prepared.node.restartPending)) {
+                  const nodeReady = await watchNodeRestart(scope, entry.authority, prepared.node.expectedVersion)
+                  if (!nodeReady) {
+                    failures.push('node')
+                    setComponentUpdateError('node', 'Node 更新后尚未确认重启完成', scope)
+                  }
                 }
               }
             } catch (error) {
@@ -4290,7 +4434,12 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         const load = async () => {
           try {
             const data = await post('/api/devices/' + encodeURIComponent(id) + '/fs/dsh_status', {})
-            if (alive && data) setLocalDsh(data)
+            if (alive && data) {
+              setLocalDsh(data)
+              if ((data.error && !data.installing)
+                  || (dshBusy === 'dsh_start' && data.running && data.surface)
+                  || (dshBusy === 'dsh_install' && data.installed && !data.installing)) setDshBusy('')
+            }
           } catch (_) { /* older nodes do not report DSH status */ }
         }
         void load()
@@ -4815,19 +4964,21 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const runLocalDsh = async (action) => {
         const id = appLocalDevice || deviceId
         if (!id) return
+        const requestId = ++localDshActionRef.current
+        const isCurrent = () => localDshTargetRef.current === id && localDshActionRef.current === requestId
         setDshBusy(action)
         let hold = false
         try {
           const result = await post('/api/devices/' + encodeURIComponent(id) + '/fs/' + action, {})
+          if (!isCurrent()) return
           if (result) setLocalDsh(result)
           hold = true
           setNotice(action === 'dsh_install' ? '正在安装 DSH…' : '正在启动 DSH…')
         } catch (error) {
-          setNotice(shortUpdateError(error))
+          if (isCurrent()) setNotice(shortUpdateError(error))
         } finally {
-          if (hold) setTimeout(() => setDshBusy(''), 12000)
-          else setDshBusy('')
-          await loadState(true).catch(() => {})
+          if (!hold && isCurrent()) setDshBusy('')
+          if (isCurrent()) await loadState(true).catch(() => {})
         }
       }
 
@@ -5380,6 +5531,10 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           return
         }
         if (id === 'agents') {
+          if (view === 'agents') {
+            const frame = Array.from(document.querySelectorAll('iframe')).find((item) => /token\.html|\/workspace/.test(item.src))
+            if (frame && frame.contentWindow) frame.contentWindow.postMessage({ type: 'tether:show-home' }, '*')
+          }
           setView('agents'); setActivePanel('agents'); setSidebarCollapsed(true)
           return
         }
@@ -6209,8 +6364,8 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         const makeRow = (item, local, product) => {
           const caps = (item && item.capabilities) || {}
           const components = local
-            ? (product === 'desktop' ? ['app', 'node'] : ['plugin', 'node'])
-            : [...(caps.app_version ? ['app'] : []), ...(caps.plugin_version ? ['plugin'] : []), 'node']
+            ? (product === 'desktop' ? ['app', 'node'] : ['plugin'])
+            : [...(caps.app_version ? ['app'] : []), 'node']
           const infos = components.map((component) => scopedInfo(item.device_id, component))
           const products = components.map((component, index) => ({
             label: component === 'app' ? 'APP' : component === 'plugin' ? '插件' : 'Node',

@@ -47,6 +47,7 @@ class CrocJob:
         self.total = total
         self.started_at = time.time()
         self.percent = 0
+        self.progress_seq = 0
         self.speed = 0
         self.line = ""
         self.error = ""
@@ -67,10 +68,14 @@ class CrocJob:
                 self.line = line[:300]
                 match = PERCENT.search(line)
                 if match:
-                    self.percent = max(0, min(100, int(match.group(1))))
+                    percent = max(0, min(100, int(match.group(1))))
+                    if percent > self.percent:
+                        self.progress_seq += 1
+                    self.percent = percent
                 speed = _units(line)
                 if speed:
                     self.speed = speed
+                    self.progress_seq += 1
                 if "error" in line.lower() or "failed" in line.lower():
                     self.error = line[:300]
         return_code = self.process.wait()
@@ -92,6 +97,7 @@ class CrocJob:
                 "state": self.state,
                 "direction": self.direction,
                 "percent": self.percent,
+                "progress_seq": self.progress_seq,
                 "speed": self.speed,
                 "bytes_per_second": self.speed,
                 "elapsed": round(elapsed, 2),

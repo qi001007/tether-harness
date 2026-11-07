@@ -159,8 +159,14 @@ test('connection panels show service checks without duplicate device totals or c
   assert.match(transferPage, /postFs\(current\.device, 'rename'/)
   assert.match(transferPage, /postFs\(current\.device, 'delete'/)
   assert.match(transferPage, /direct_info/)
+  assert.match(transferPage, /directApplicationError/)
+  assert.match(transferPage, /X-Tether-Size/)
+  assert.match(transferPage, /isDirectTransportStatus\(response\.status\)/)
   assert.match(transferPage, /postFs\(sourceDevice, 'read'/)
   assert.match(transferPage, /postFs\(target\.device, 'write_chunk'/)
+  assert.match(transferPage, /body: args\.bytes,[\s\S]*signal: args\.signal/)
+  assert.match(transferPage, /body: JSON\.stringify\(\{ path: args\.path, offset: args\.offset, limit: args\.limit \}\),[\s\S]*signal: args\.signal/)
+  assert.match(transferPage, /isTransferAbort\(error, args\.signal\)/)
   assert.match(transferPage, /askConflict/)
   assert.match(transferPage, /保留两者/)
   assert.match(transferPage, /loadDirectory/)
@@ -823,6 +829,15 @@ test('settings exposes an edge-gated update section for local and remote devices
   assert.match(shared, /if \(edge\.to === localId\) connected\.add\(edge\.from\)/)
   assert.match(shared, /connected\.has\(item\.device_id\)/)
   assert.match(shared, /update: settingsUpdate/)
+  assert.match(shared, /product === 'desktop' \? \['app', 'node'\] : \['plugin'\]/)
+  assert.match(shared, /\.\.\.\(caps\.app_version \? \['app'\] : \[\]\), 'node'/)
+})
+
+test('APP-facing device updates exclude the separately managed DSH plugin', async () => {
+  const { deviceUpdateComponents } = await import('../packages/tether-ui/src/app.js')
+  assert.deepEqual(deviceUpdateComponents({ dsh_surface: true, app_version: '0.4.2' }), ['node', 'app'])
+  assert.deepEqual(deviceUpdateComponents({ dsh_surface: true }), ['node'])
+  assert.match(shared, /const infos = \[node, \.\.\.\(hasApp \? \[app\] : \[\]\)\]/)
 })
 
 test('the network detail panel floats over the canvas instead of resizing it', () => {

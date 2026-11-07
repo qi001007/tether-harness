@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
+import vm from 'node:vm'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const main = fs.readFileSync(path.join(root, 'apps/tether-app/main.js'), 'utf8')
@@ -36,6 +37,42 @@ test('startup repairs desktop and start-menu shortcuts to launch Electron direct
   assert.match(main, /getPath\('desktop'\)/)
   assert.match(main, /getPath\('programs'\)/)
   assert.match(main, /Tether APP\.lnk/)
+})
+
+test('startup preserves a usable shortcut for a different Tether installation', () => {
+  const desktop = 'C:/Desktop'
+  const programs = 'C:/Programs'
+  const appPath = 'C:/QA/Tether App'
+  const installed = 'C:/Stable/Tether App'
+  const target = path.win32.join(installed, 'electron.exe')
+  const desktopLink = path.win32.join(desktop, 'Tether APP.lnk')
+  const programsLink = path.win32.join(programs, 'Tether APP.lnk')
+  const entries = new Map([
+    [desktopLink, { cwd: installed, target }],
+    [programsLink, { cwd: appPath.toUpperCase(), target: 'C:/QA/electron.exe' }]
+  ])
+  const exists = new Set([installed, target])
+  const written = []
+  const fn = main.match(/^function ensureAppShortcuts\(\) \{[\s\S]*?^\}/m)[0]
+  const context = {
+    app: { getPath: key => ({ desktop, programs })[key], getAppPath: () => appPath },
+    env: {},
+    fs: { existsSync: value => exists.has(value) },
+    path: path.win32,
+    process: { platform: 'win32', execPath: 'C:/QA/electron.exe' },
+    repoRoot: 'C:/QA',
+    shell: {
+      readShortcutLink: link => entries.get(link),
+      writeShortcutLink: (link, mode) => { written.push([link, mode]); return true }
+    }
+  }
+  vm.runInNewContext(fn + '\nensureAppShortcuts()', context)
+  assert.deepEqual(written, [[programsLink, 'update']])
+
+  exists.delete(installed)
+  written.length = 0
+  vm.runInNewContext('ensureAppShortcuts()', context)
+  assert.deepEqual(written, [[desktopLink, 'update'], [programsLink, 'update']])
 })
 
 test('closing the window hides it to the tray until an explicit quit', () => {

@@ -11,6 +11,7 @@ import hashlib
 import json
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from .app_gateway import AppRoute, Gateway
 from .direct_api import easy_tier_address
@@ -59,7 +60,8 @@ class AppCatalog:
             if not 0 <= listen_port <= 65535:
                 listen_port = 0
             apps.append({"id": "app-%d" % len(apps), "name": name[:80], "kind": "web",
-                         "listen_port": listen_port, "target_port": port, "path": path})
+                         "listen_port": listen_port, "target_port": port, "path": path,
+                         "explicit_url": str(item.get("url") or "")})
         return apps
 
     def entries(self) -> list[dict[str, Any]]:
@@ -70,36 +72,59 @@ class AppCatalog:
         if not host:
             self.stop()
             return {"ok": True, "mesh": "", "apps": [], "reason": "mesh_unavailable"}
-        if self.gateway is not None and self.host == host and self._fingerprint == self._current_fingerprint():
+        if self.host == host and self._fingerprint == self._current_fingerprint():
             return self._result()
         self.stop()
         entries = self.entries()
         if not entries:
             self._fingerprint = self._current_fingerprint()
             return {"ok": True, "mesh": host, "apps": [], "reason": "no_apps"}
-        try:
-            gateway = Gateway(
-                [AppRoute(app["name"], host, app.get("listen_port", 0),
-                          "127.0.0.1", app["target_port"])
-                 for app in entries],
-                MESH,
-            )
-        except OSError:
-            return {"ok": True, "mesh": host, "apps": [], "reason": "bind_failed"}
+        reused = {app["id"]: self._trusted_explicit_url(app, host) for app in entries}
+        managed = [app for app in entries if not reused[app["id"]]]
+        gateway = None
+        if managed:
+            try:
+                gateway = Gateway(
+                    [AppRoute(app["name"], host, app.get("listen_port", 0),
+                              "127.0.0.1", app["target_port"])
+                     for app in managed],
+                    MESH,
+                )
+            except OSError:
+                self._apps = [{"id": app["id"], "name": app["name"], "kind": app["kind"],
+                               "url": reused[app["id"]], "path": app["path"]}
+                              for app in entries if reused[app["id"]]]
+                return {"ok": True, "mesh": host, "apps": list(self._apps), "reason": "bind_failed"}
+        routes = {app["id"]: route for app, route in zip(managed, gateway.routes if gateway else [])}
         self.gateway = gateway
         self.host = host
         self._fingerprint = self._current_fingerprint()
         self._apps = []
-        for app, route in zip(entries, gateway.routes):
-            listen = str(route.get("listen") or "")
-            port = listen.rsplit(":", 1)[-1] if ":" in listen else ""
-            if not port:
-                continue
-            self._apps.append({
-                "id": app["id"], "name": app["name"], "kind": app["kind"],
-                "url": "http://%s:%s" % (host, port), "path": app["path"],
-            })
+        for app in entries:
+            url = reused[app["id"]]
+            if not url:
+                listen = str(routes[app["id"]].get("listen") or "")
+                port = listen.rsplit(":", 1)[-1] if ":" in listen else ""
+                url = "http://%s:%s" % (host, port) if port else ""
+            if url:
+                self._apps.append({"id": app["id"], "name": app["name"], "kind": app["kind"],
+                                   "url": url, "path": app["path"]})
         return self._result()
+
+    @staticmethod
+    def _trusted_explicit_url(app: dict[str, Any], host: str) -> str:
+        value = app.get("explicit_url")
+        if not value or not app.get("listen_port"):
+            return ""
+        try:
+            parsed = urlsplit(value)
+            if (parsed.scheme != "http" or parsed.hostname != host or
+                    parsed.port != app["listen_port"] or parsed.username or parsed.password or
+                    parsed.query or parsed.fragment or parsed.path not in ("", "/")):
+                return ""
+        except ValueError:
+            return ""
+        return "http://%s:%d" % (host, app["listen_port"])
 
     def _result(self) -> dict[str, Any]:
         return {"ok": True, "mesh": self.host, "apps": list(self._apps), "reason": ""}

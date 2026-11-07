@@ -15,7 +15,7 @@ INSTALL_ONLY=0
 USER_TOKEN="${TETHER_USER_TOKEN:-}"
 SYSTEMD=0
 NO_SYSTEMD=0
-BASE_URL="${TETHER_ASSET_BASE:-$HUB_URL/install}"
+BASE_URL="${TETHER_ASSET_BASE:-}"
 ALLOWED_ROOTS="${TETHER_ALLOWED_ROOTS:-}"
 WORKSPACES_ROOT="${TETHER_WORKSPACES_ROOT:-}"
 AGENT="${TETHER_AGENT:-dsh}"
@@ -100,11 +100,13 @@ fi
 if [ "$VERSION" = latest ] && [ -z "$ARCHIVE" ]; then
   if [ -n "$BASE_URL" ]; then
     META_URL="${BASE_URL%/}/version.json"
+    VERSION=$(curl -fsSL --retry 2 "$META_URL" | python3 -c 'import json,sys; node=json.load(sys.stdin)["components"]["node"]; print(node["version"] if isinstance(node,dict) else node)') \
+      || fail "could not resolve latest node version from $META_URL"
   else
-    META_URL="https://raw.githubusercontent.com/qi001007/tether-harness/main/version.json"
+    META_URL="https://github.com/qi001007/tether-harness/releases/latest/download/tether-update.json"
+    VERSION=$(curl -fsSL --retry 2 "$META_URL" | python3 -c 'import json,sys; print(json.load(sys.stdin)["components"]["node"]["version"])') \
+      || fail "could not resolve latest node version from $META_URL"
   fi
-  VERSION=$(curl -fsSL --retry 2 "$META_URL" | python3 -c 'import json,sys; print(json.load(sys.stdin)["components"]["node"])') \
-    || fail "could not resolve latest node version from $META_URL"
   [ -n "$VERSION" ] && [ "$VERSION" != latest ] || fail "latest node version is empty"
   say "latest node version: $VERSION"
 fi
@@ -120,7 +122,30 @@ if [ -z "$ZIP" ]; then
     ASSET_URL="https://github.com/qi001007/tether-harness/releases/download/v$VERSION/tether-node-$VERSION.zip"
   fi
   say "downloading tether-node $VERSION from $ASSET_URL ..."
-  curl -fL --retry 2 -o "$ZIP" "$ASSET_URL"
+  DOWNLOAD_TMP=$(mktemp "${ZIP}.tmp.XXXXXX") || fail "could not create temporary archive beside $ZIP"
+  trap 'if [ -n "${DOWNLOAD_TMP:-}" ]; then rm -f "$DOWNLOAD_TMP"; fi' EXIT
+  DOWNLOAD_OK=0
+  for ATTEMPT in 1 2 3; do
+    if curl -fL -o "$DOWNLOAD_TMP" "$ASSET_URL"; then
+      if python3 -m zipfile -t "$DOWNLOAD_TMP" >/dev/null 2>&1; then
+        mv -f "$DOWNLOAD_TMP" "$ZIP" || fail "could not promote downloaded archive to $ZIP"
+        DOWNLOAD_TMP=""
+        DOWNLOAD_OK=1
+        break
+      fi
+      say "download attempt $ATTEMPT/3 returned an invalid ZIP"
+    else
+      CURL_STATUS=$?
+      say "download attempt $ATTEMPT/3 failed (curl exit $CURL_STATUS)"
+      case "$CURL_STATUS" in
+        18|56) ;;
+        *) fail "download request failed (curl exit $CURL_STATUS): $ASSET_URL" ;;
+      esac
+    fi
+    if [ "$ATTEMPT" -lt 3 ]; then sleep 1; fi
+  done
+  [ "$DOWNLOAD_OK" = 1 ] || fail "could not download a complete valid archive after 3 attempts: $ASSET_URL"
+  trap - EXIT
 fi
 [ -f "$ZIP" ] || fail "archive not found: $ZIP"
 

@@ -1647,6 +1647,11 @@ class UpdateManager:
             self._check_dependencies(staged)
             base = self.dsh_home if self.component == "plugin" else self.root
             backup_dir = self.state_dir / "backups" / self.component / prepared_id
+            if backup_dir.exists():
+                # A failed attempt keeps its backups for manual recovery; a
+                # retry must not reuse the directory or mkdir(exist_ok=False)
+                # turns every retry into apply_failed.
+                backup_dir.rename(backup_dir.with_name(backup_dir.name + f"-{int(time.time())}-{uuid.uuid4().hex}"))
             backup_dir.mkdir(parents=True, exist_ok=False)
             total_files = max(1, len(staged))
             for target_index, (source, target, relative) in enumerate(staged):

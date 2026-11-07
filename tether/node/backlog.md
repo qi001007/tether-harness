@@ -1,4 +1,16 @@
 # 修改记录
+- 2026-11-07：补齐从 Codeg 固定上游提交重放 Agents 前端所需的完整源码改动。
+- 2026-11-07：Herdr 终端清单声明项目会话能力，失效项目路径在启动前报错。
+- 2026-11-07：Codeg 主页按上游版本规则区分 OpenCode 旧版的终端入口和 2.x 的结构化入口。
+- 2026-11-07：Codeg 已有会话标签直接显示历史。新建会话仍显示 Agent 主页，避免主页盖住持久化回复。
+- 2026-11-07：`transfer_info` 声明 Croc 按任务 ID 取消能力；`transfer_cancel` 有 ID 时仅取消当前匹配上下文捕获的 job，并只清理该上下文，旧客户端无 ID 时保留既有节点级兼容行为。
+- 2026-11-07：记录 Codeg `v0.42.0` / `e3171d69d208bdf37697b15e8b14f8c9b70825bf` 上游 pin 与 Herdr cwd 源码补丁；见 `agents-runtime-codeg.patch` 和 `docs/codeg-runtime-rebuild.md`。
+- 2026-11-07：追踪原 Tether Codeg 静态导出缺失 token bootstrap 时，构建后从 `agents-runtime-token.html` 恢复；导出保持应用网关根路径。
+- 2026-11-07：重建 Codeg 静态资源时通过 TypeScript 门禁；补丁删除 ConversationTabView 中失效的外层 details state 引用，并桥接每个 tab 自己的工作目录到 Herdr 消息。
+- 2026-11-07：Linux x86_64 首次启动按固定官方 URL/SHA/归档长度单飞后台下载 Codeg，立即返回 installing 状态，状态轮询不重试失败；显式 start 才重试。原子安装 server、codeg-mcp、computer-helper；有效下载缓存到安装成功，部分下载清理。空白运行时首次启动读取并按需开启 delegation，保留其他设置和后续用户偏好。继续复用打包的 Tether Web，不把 Linux 可执行文件加入共享跨平台 Node zip。占用默认端口时选择 `_free_port()` 返回端口，认证就绪后登记真实端口；过期鉴权撤销路由但保留活进程。
+- 2026-11-07：AppCatalog 对 `apps.json` 中显式 URL 仅在协议、当前 mesh 主机和 listen_port 完全匹配时复用，避免重复绑定独立 DSH mesh listener；其余应用仍由原单个 Gateway 发布，监听失败保留可重试。Gateway 中途绑定异常时关闭已创建的 socket。
+- 2026-11-07：`terminal_start {herdr_project:true}` 按已校验 cwd 得到确定性散列会话；Windows wrapper 接收仅该调用的 session 环境变量，普通 Herdr 继续使用 `tether`。
+- 2026-11-07：归档 42 个未跟踪的 Agents Web 构建文件。它们既不在当前 Codeg 导出内，也没有被运行时资源引用。
 - 2026-10-29：文件预览/状态/写入返回目标 `device_id` 与 SHA-256 版本；文本识别保留 UTF-8 BOM/UTF-16/GB18030 和 CRLF/LF，完整可解码文本才可编辑；写入使用 `expected_version` 拒绝覆盖目标端外部修改。
 - 2026-10-29：P0 WebSocket 稳定性候选修复：Node 控制面连接不再继承桌面通用 HTTP/SOCKS 代理；每个更新请求的结果绑定原接收 WebSocket，断线后的旧任务不得跨重连发送，关闭态发送不再误报为更新器失败。
 - 2026-10-28：v0.2.10 候选将 APP 重启代理改为 Explorer→临时 CMD→隐藏 PowerShell worker，避免依赖 Task Scheduler；保留按实际安装根路径匹配 Electron、等待回包和重连日志。
@@ -68,3 +80,6 @@
 - 2026-11-04：账号 `current` 继续按 live 文件 SHA 指纹判断，不写 active 指针（真实换号后自然只有匹配的那份为当前）；`save` 发现实时指纹与已有档案完全一致时直接返回现有列表，避免同一账号重复生成多份“当前”档案。
 - 2026-11-04：账号管理接 Codex app-server：`account/read`/`login/start`（device code）/`logout`/`rateLimits/read`；每个档案是一个独立 `CODEX_HOME`（`<data>/agent-accounts/codex/<id>/home`，只放 auth.json/config.toml），添加/重登在档案内做，切换只覆盖 live `~/.codex` 的 auth/config，不碰 sessions。列表首次自动导入 live 账号，`imported` 标记防止删除后又被自动导入；`current` 优先按 JWT 的 account_id 匹配，fake/旧档案回退 SHA 指纹。非 Codex 用 `login_command` + registry 解析后的 executable 生成 argv，由 UI 直接起 PTY；Codex 之外不提供 logout（避免误删 live 文件）。
 - 2026-11-04：`agent_accounts.list(fresh=False)` 只返回已有元数据，不启动 Codex app-server probe；只有 `fresh=true` 才并行探测额度/套餐。UI 打开账号先读缓存，再后台 fresh 刷新；目录和账号都写 localStorage，避免每次进页面重扫。
+- 2026-11-07：Agents runtime 状态若缺少目标节点的 APP 网关路由，返回空嵌入地址并移除 token；不再把目标节点的 127.0.0.1 地址暴露给远程 APP 浏览器。
+- 2026-11-07：Agents runtime 启动与状态以带 Bearer 的 `/api/health` JSON `status=ok` 作为就绪条件；认证探测失败时保留仍存活的进程句柄，避免瞬态超时造成孤儿进程。
+- 2026-11-07：Linux DSH Web 安装生成的 worker unit 将 `MemoryHigh` 从 `300M` 提至 `384M`，硬上限保持 `600M`；网关 unit 的 `80M/160M` 配额保持不变。

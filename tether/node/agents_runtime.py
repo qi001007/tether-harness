@@ -3,20 +3,34 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
+import platform
 import secrets
+import shutil
 import socket
 import subprocess
+import tarfile
+import tempfile
 import threading
 import time
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
+from urllib.request import Request, urlopen
 
 NO_WINDOW = 0x08000000
 BASE_PORT = 4200
 PORT_SPAN = 100
 NAME = "Agents"
+LINUX_SERVER_URL = "https://github.com/xintaofei/codeg/releases/download/v0.42.0/codeg-server-linux-x64.tar.gz"
+LINUX_SERVER_SHA256 = "35928d4b93b5fc65bfc4d330f4d653c738af0b033307cf9d59173539d49bf679"
+LINUX_SERVER_ARCHIVE_SIZE = 77466977
+LINUX_RUNTIME_MEMBERS = {
+    "codeg-server-linux-x64/codeg-server": ("codeg-server", 95337352),
+    "codeg-server-linux-x64/codeg-mcp": ("codeg-mcp", 10819192),
+    "codeg-server-linux-x64/codeg-computer-helper": ("codeg-computer-helper", 9780696),
+}
 
 
 def _runtime_dir() -> Path:
@@ -36,15 +50,117 @@ class AgentsRuntime:
         self.port = 0
         self.token = ""
         self.lock = threading.RLock()
-        try:
-            self._ensure_entry()
-        except OSError:
-            pass
+        self.install_thread: threading.Thread | None = None
+        self.installing = False
+        self.install_error = ""
 
     def _binary(self) -> str:
         name = "codeg-server.exe" if os.name == "nt" else "codeg-server"
         path = self.root / name
-        return str(path) if path.is_file() else ""
+        if path.is_file():
+            return str(path)
+        if platform.system().lower() == "linux" and platform.machine().lower() in {"x86_64", "amd64"}:
+            installed = self.data_dir.parent / "agents-runtime-linux" / "bin" / "codeg-server"
+            return str(installed) if installed.is_file() else ""
+        return ""
+
+    def _install_linux_binary(self, archive_path: Path | None = None) -> str:
+        if platform.system().lower() != "linux" or platform.machine().lower() not in {"x86_64", "amd64"}:
+            raise ValueError("the pinned Agents runtime binary is available for Linux x86_64 only")
+        runtime_root = self.data_dir.parent / "agents-runtime-linux"
+        target = runtime_root / "bin" / "codeg-server"
+        if all((runtime_root / "bin" / executable).is_file()
+               for executable, _size in LINUX_RUNTIME_MEMBERS.values()):
+            return str(target)
+        self.data_dir.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="agents-runtime-", dir=self.data_dir) as staging:
+            stage = Path(staging)
+            downloaded = archive_path
+            downloaded_by_us = downloaded is None
+            if downloaded is None:
+                downloaded = runtime_root / "download" / "codeg-server-linux-x64.tar.gz"
+                if not downloaded.is_file():
+                    downloaded.parent.mkdir(parents=True, exist_ok=True)
+                    partial = downloaded.with_suffix(".part")
+                    request = Request(LINUX_SERVER_URL, headers={"User-Agent": "Tether-Node"})
+                    try:
+                        with urlopen(request, timeout=300) as response, partial.open("wb") as output:
+                            written = 0
+                            while True:
+                                block = response.read(min(1024 * 1024, LINUX_SERVER_ARCHIVE_SIZE + 1 - written))
+                                if not block:
+                                    break
+                                written += len(block)
+                                if written > LINUX_SERVER_ARCHIVE_SIZE:
+                                    raise ValueError("pinned Agents runtime archive exceeds its expected size")
+                                output.write(block)
+                        os.replace(partial, downloaded)
+                    except (OSError, ValueError) as exc:
+                        try:
+                            partial.unlink()
+                        except OSError:
+                            pass
+                        if isinstance(exc, ValueError):
+                            raise
+                        raise ValueError("could not download the pinned Agents runtime") from exc
+            if downloaded.stat().st_size != LINUX_SERVER_ARCHIVE_SIZE:
+                if downloaded_by_us:
+                    downloaded.unlink(missing_ok=True)
+                raise ValueError("pinned Agents runtime archive has an unexpected size")
+            digest = hashlib.sha256()
+            with downloaded.open("rb") as source:
+                for block in iter(lambda: source.read(1024 * 1024), b""):
+                    digest.update(block)
+            if digest.hexdigest() != LINUX_SERVER_SHA256:
+                if downloaded_by_us:
+                    downloaded.unlink(missing_ok=True)
+                raise ValueError("pinned Agents runtime archive failed SHA-256 verification")
+            staged_root = stage / "runtime"
+            staged_bin = staged_root / "bin"
+            staged_bin.mkdir(parents=True)
+            try:
+                with tarfile.open(downloaded, mode="r:gz") as archive:
+                    members = {member.name: member for member in archive.getmembers()}
+                    for member_name, (executable, expected_size) in LINUX_RUNTIME_MEMBERS.items():
+                        member = members.get(member_name)
+                        if member is None or not member.isfile() or member.size != expected_size:
+                            raise ValueError("pinned Agents runtime archive is missing a required executable")
+                        source = archive.extractfile(member)
+                        if source is None:
+                            raise ValueError("pinned Agents runtime executable is unreadable")
+                        staged_binary = staged_bin / executable
+                        with source, staged_binary.open("wb") as output:
+                            shutil.copyfileobj(source, output)
+                        if staged_binary.stat().st_size != expected_size:
+                            raise ValueError("pinned Agents runtime executable is incomplete")
+                        staged_binary.chmod(0o755)
+            except (tarfile.TarError, OSError) as exc:
+                raise ValueError("pinned Agents runtime archive is invalid") from exc
+            runtime_root.parent.mkdir(parents=True, exist_ok=True)
+            replacement = runtime_root.with_name(runtime_root.name + ".new")
+            if replacement.exists():
+                shutil.rmtree(replacement)
+            os.replace(staged_root, replacement)
+            backup = runtime_root.with_name(runtime_root.name + ".previous")
+            if backup.exists():
+                shutil.rmtree(backup)
+            try:
+                if runtime_root.exists():
+                    os.replace(runtime_root, backup)
+                os.replace(replacement, runtime_root)
+            except OSError:
+                if backup.exists() and not runtime_root.exists():
+                    os.replace(backup, runtime_root)
+                raise
+            if backup.exists():
+                shutil.rmtree(backup)
+            if downloaded_by_us:
+                try:
+                    downloaded.unlink()
+                    downloaded.parent.rmdir()
+                except OSError:
+                    pass
+        return str(target)
 
     def _web_dir(self) -> str:
         path = self.root / "web"
@@ -95,6 +211,19 @@ class AgentsRuntime:
         except OSError:
             return False
 
+    def _authenticated_ready(self, port: int, token: str) -> bool:
+        import urllib.request
+        request = urllib.request.Request(
+            "http://127.0.0.1:%d/api/health" % port, data=b"{}",
+            headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"},
+            method="POST")
+        try:
+            with urllib.request.urlopen(request, timeout=0.8) as response:
+                payload = json.loads(response.read(512).decode("utf-8"))
+                return response.status == 200 and isinstance(payload, dict) and payload.get("status") == "ok"
+        except Exception:
+            return False
+
     def _is_running(self) -> bool:
         if self.process is not None and self.process.poll() is None:
             return True
@@ -109,11 +238,15 @@ class AgentsRuntime:
         token = str(state.get("token") or "")
         if pid and port and token and self._pid_matches(pid) and self._port_open(port):
             self.external_pid, self.port, self.token = pid, port, token
-            self._ensure_entry()
             return
         self.external_pid = 0
         if pid or port:
+            if port and self._entry_port() == port:
+                self._unregister()
             self._clear_state()
+        self.process = None
+        self.port = 0
+        self.token = ""
 
     def _free_port(self) -> int:
         for port in range(BASE_PORT, BASE_PORT + PORT_SPAN):
@@ -156,22 +289,6 @@ class AgentsRuntime:
         temp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         os.replace(temp, self._apps_path())
 
-    def _ensure_entry(self) -> None:
-        data = self._read_apps()
-        for item in data["apps"]:
-            if isinstance(item, dict) and str(item.get("name")) == NAME:
-                try:
-                    port = int(item.get("port") or 0)
-                except (TypeError, ValueError):
-                    port = 0
-                if port != BASE_PORT:
-                    item["port"] = BASE_PORT
-                    item["path"] = "/"
-                    self._write_apps(data)
-                return
-        data["apps"].append({"name": NAME, "port": BASE_PORT, "path": "/"})
-        self._write_apps(data)
-
     def _register(self, port: int) -> None:
         data = self._read_apps()
         data["apps"] = [item for item in data["apps"]
@@ -203,8 +320,15 @@ class AgentsRuntime:
     def status(self) -> dict[str, Any]:
         with self.lock:
             self._adopt()
-            running = self._is_running()
-            if not running:
+            alive = self._is_running()
+            running = alive and self._authenticated_ready(self.port, self.token)
+            if running and self._entry_port() != self.port:
+                self._register(self.port)
+            elif alive and not running and self._entry_port() == self.port:
+                self._unregister()
+            if not alive:
+                if self._entry_port() == self.port:
+                    self._unregister()
                 self.process = None
                 self.external_pid = 0
                 self.port = 0
@@ -212,6 +336,8 @@ class AgentsRuntime:
                 self._clear_state()
             return {"engine": "agents", "available": bool(self._binary()) and bool(self._web_dir()),
                     "installed": bool(self._binary()) and bool(self._web_dir()),
+                    "installing": getattr(self, "installing", False),
+                    "install_error": getattr(self, "install_error", ""),
                     "running": running, "port": self.port if running else 0,
                     "token": self.token if running else "",
                     "url": "http://127.0.0.1:%d/" % self.port if running else ""}
@@ -240,6 +366,73 @@ class AgentsRuntime:
         except Exception:
             pass
 
+    def _bootstrap_new_runtime_delegation(self, is_new_state: bool) -> None:
+        marker = self.data_dir / "delegation-bootstrap.json"
+        if marker.exists():
+            return
+        pending = self.data_dir / "delegation-bootstrap-pending.json"
+        pending_new = False
+        try:
+            pending_new = json.loads(pending.read_text(encoding="utf-8")).get("new_state") is True
+        except (OSError, ValueError, AttributeError):
+            pass
+        enable_for_new_state = is_new_state or pending_new
+        if is_new_state and not pending.exists():
+            pending.parent.mkdir(parents=True, exist_ok=True)
+            pending.write_text(json.dumps({"new_state": True}) + "\n", encoding="utf-8")
+        import urllib.request
+
+        headers = {"Authorization": "Bearer " + self.token,
+                   "Content-Type": "application/json"}
+        try:
+            request = urllib.request.Request(
+                "http://127.0.0.1:%d/api/get_delegation_settings" % self.port,
+                data=b"{}", headers=headers, method="POST")
+            with urllib.request.urlopen(request, timeout=10) as response:
+                settings = json.loads(response.read().decode("utf-8"))
+            if not isinstance(settings, dict):
+                return
+            if enable_for_new_state and settings.get("enabled") is False:
+                updated = dict(settings)
+                updated["enabled"] = True
+                body = json.dumps({"settings": updated}).encode("utf-8")
+                request = urllib.request.Request(
+                    "http://127.0.0.1:%d/api/set_delegation_settings" % self.port,
+                    data=body, headers=headers, method="POST")
+                with urllib.request.urlopen(request, timeout=10) as response:
+                    json.loads(response.read().decode("utf-8"))
+            marker.parent.mkdir(parents=True, exist_ok=True)
+            marker.write_text(json.dumps({"checked": True}) + "\n", encoding="utf-8")
+            pending.unlink(missing_ok=True)
+        except Exception:
+            # Keep the marker absent so the next start can retry the authenticated bootstrap.
+            return
+
+    def _queue_linux_install(self, agent: str, is_new_state: bool) -> dict[str, Any]:
+        if self.installing:
+            return self.status()
+        self.installing = True
+        self.install_error = ""
+
+        def install() -> None:
+            try:
+                self._install_linux_binary()
+                result = self.start(agent, _is_new_state=is_new_state, _install_completed=True)
+                if not result.get("running"):
+                    raise ValueError("Agents runtime did not become ready after installation")
+                with self.lock:
+                    self.installing = False
+            except Exception as exc:
+                with self.lock:
+                    self.installing = False
+                    self.install_error = str(exc)[:500]
+
+        self.install_thread = threading.Thread(target=install, name="agents-runtime-install", daemon=True)
+        self.install_thread.start()
+        return {"engine": "agents", "available": bool(self._web_dir()), "installed": False,
+                "installing": True, "install_error": "", "running": False,
+                "port": 0, "token": "", "url": ""}
+
     def surface_url(self, base: str) -> str:
         if not self.port or not self.token:
             return ""
@@ -248,20 +441,31 @@ class AgentsRuntime:
             return ""
         return root + "/token.html?token=" + quote(self.token, safe="")
 
-    def start(self, agent: str = "") -> dict[str, Any]:
+    def start(self, agent: str = "", *, _is_new_state: bool | None = None,
+              _install_completed: bool = False) -> dict[str, Any]:
         with self.lock:
             self._adopt()
+            if getattr(self, "installing", False) and not _install_completed:
+                return self.status()
             if self._is_running():
+                if not self._authenticated_ready(self.port, self.token):
+                    if self._entry_port() == self.port:
+                        self._unregister()
+                    raise ValueError("Agents runtime is running but failed authenticated readiness")
                 if agent:
                     self._seed_workspace(agent)
                 return self.status()
+            is_new_state = (_is_new_state if _is_new_state is not None else
+                            not self.data_dir.exists() or not any(self.data_dir.iterdir()))
             binary = self._binary()
             static = self._web_dir()
-            if not binary or not static:
+            if not static:
+                raise ValueError("Agents runtime web assets are not installed on this node")
+            if not binary and platform.system().lower() == "linux" and not _install_completed:
+                return self._queue_linux_install(agent, is_new_state)
+            if not binary:
                 raise ValueError("Agents runtime is not installed on this node")
-            if self._port_open(BASE_PORT):
-                raise ValueError("Agents runtime port is already in use")
-            port = BASE_PORT
+            port = self._free_port()
             token = secrets.token_urlsafe(32)
             self.data_dir.mkdir(parents=True, exist_ok=True)
             extra_paths: list[str] = []
@@ -294,14 +498,24 @@ class AgentsRuntime:
                 kwargs["creationflags"] = NO_WINDOW
             process = subprocess.Popen([binary], **kwargs)
             self.process, self.port, self.token = process, port, token
-            if not self._wait_port(port):
+            deadline = time.monotonic() + 30.0
+            ready = False
+            while time.monotonic() < deadline:
+                if process.poll() is not None:
+                    break
+                if self._authenticated_ready(port, token):
+                    ready = True
+                    break
+                time.sleep(0.25)
+            if not ready:
                 try:
                     process.terminate()
                 except OSError:
                     pass
                 self.process, self.port, self.token = None, 0, ""
                 raise ValueError("Agents runtime did not start")
-            self._ensure_entry()
+            self._register(port)
+            self._bootstrap_new_runtime_delegation(is_new_state)
             self._write_state()
             self._seed_workspace(agent or "codex")
             return self.status()
@@ -326,6 +540,8 @@ class AgentsRuntime:
                     proc.wait(timeout=5)
                 except Exception:
                     pass
+            if self.port and self._entry_port() == self.port:
+                self._unregister()
             self.process, self.external_pid, self.port, self.token = None, 0, 0, ""
             self._clear_state()
             return self.status()

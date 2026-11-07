@@ -1,6 +1,8 @@
-name: Draft release
+name: Signed release build
 on:
   push:
+    branches:
+      - 'release-candidate/v*'
     tags:
       - 'v*'
   workflow_dispatch:
@@ -10,11 +12,50 @@ on:
         required: true
         type: string
 permissions:
-  contents: write
+  contents: read
 
 jobs:
+  build-codeg:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Check out pinned Codeg source
+        uses: actions/checkout@v6
+        with:
+          repository: xintaofei/codeg
+          ref: e3171d69d208bdf37697b15e8b14f8c9b70825bf
+          path: .runtime/codeg-source
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.12.0'
+      - name: Install locked Codeg dependencies
+        working-directory: .runtime/codeg-source
+        env:
+          COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+        run: corepack pnpm install --frozen-lockfile
+      - name: Build Tether Codeg web runtime
+        shell: pwsh
+        env:
+          CODEG_GALLERY: '0'
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: ./scripts/build_codeg_runtime.ps1 -ExportDirectory .runtime/codeg-built
+      - uses: actions/upload-artifact@v7
+        with:
+          name: codeg-web
+          path: .runtime/codeg-built/
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 1
+
   build-and-draft:
+    needs: build-codeg
     runs-on: windows-latest
+    permissions:
+      contents: write
     steps:
       - name: Check out the requested source
         uses: actions/checkout@v6
@@ -35,13 +76,24 @@ jobs:
           INPUT_TAG: ${{ inputs.tag }}
         run: |
           $ErrorActionPreference = 'Stop'
+          $createTagAllowed = $false
           if ($env:GITHUB_EVENT_NAME -eq 'workflow_dispatch') {
             if ($env:GITHUB_REF_TYPE -ne 'branch' -or $env:GITHUB_REF_NAME -ne 'main') {
               throw 'Manual baseline releases must run from the main branch.'
             }
             $tag = $env:INPUT_TAG
-          } else {
+            $createTagAllowed = $true
+          } elseif ($env:GITHUB_EVENT_NAME -eq 'push' -and $env:GITHUB_REF_TYPE -eq 'branch') {
+            if ($env:GITHUB_REF_NAME -match '^release-candidate/(v\d+\.\d+\.\d+)$') {
+              $tag = $Matches[1]
+            } else {
+              throw 'Branch release builds must use release-candidate/vX.Y.Z.'
+            }
+            $createTagAllowed = $true
+          } elseif ($env:GITHUB_EVENT_NAME -eq 'push' -and $env:GITHUB_REF_TYPE -eq 'tag') {
             $tag = $env:GITHUB_REF_NAME
+          } else {
+            throw 'Release builds are allowed only from a release-candidate branch, a vX.Y.Z tag, or manual main dispatch.'
           }
           if ($tag -notmatch '^v\d+\.\d+\.\d+$') { throw "Invalid release tag: $tag" }
           $tagRef = "refs/tags/$tag"
@@ -56,14 +108,39 @@ jobs:
           } elseif ($LASTEXITCODE -ne 1) {
             throw "Could not check tag: $tag"
           }
-          if ($env:GITHUB_EVENT_NAME -eq 'push' -and -not $tagExists) { throw "Pushed tag is missing from checkout: $tag" }
+          if ($env:GITHUB_EVENT_NAME -eq 'push' -and $env:GITHUB_REF_TYPE -eq 'tag' -and -not $tagExists) { throw "Pushed tag is missing from checkout: $tag" }
+          if (-not $tagExists -and -not $createTagAllowed) { throw "Tag $tag can only be created from a validated candidate branch or manual main dispatch." }
           $version = Get-Content -Raw version.json | ConvertFrom-Json
-          $components = @($version.components.app, $version.components.plugin, $version.components.node) | Select-Object -Unique
           $releaseVersion = [string]$version.components.app
-          if ($components.Count -ne 1 -or ("v" + $releaseVersion) -ne $tag) { throw "Tag $tag does not match component versions in version.json" }
+          $nodeVersion = [string]$version.components.node
+          $pluginVersion = [string]$version.components.plugin
+          if (-not $releaseVersion -or $nodeVersion -ne $releaseVersion) { throw 'APP and Node versions in version.json must match.' }
+          if ($pluginVersion -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid plugin version in version.json: $pluginVersion" }
+          if (("v" + $releaseVersion) -ne $tag) { throw "Tag $tag does not match APP and Node versions in version.json" }
           "RELEASE_TAG=$tag" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "CREATE_TAG=$(-not $tagExists)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "CREATE_TAG_ALLOWED=$createTagAllowed" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "FROZEN_PLUGIN=$($pluginVersion -ne $releaseVersion)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           exit 0
+      - name: Clear previous Codeg export from the release checkout
+        shell: pwsh
+        run: |
+          $workspace = (Resolve-Path -LiteralPath $env:GITHUB_WORKSPACE).Path
+          $target = Join-Path $workspace 'tether/node/bin/agents-runtime/web'
+          if (Test-Path -LiteralPath $target) {
+            $directory = Get-Item -LiteralPath $target
+            if ($directory.FullName -ne $target -or ($directory.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+              throw "Unexpected Codeg export directory: $target"
+            }
+            Remove-Item -LiteralPath $directory.FullName -Recurse -Force
+          }
+      - uses: actions/download-artifact@v8
+        with:
+          name: codeg-web
+          path: tether/node/bin/agents-runtime/web
+      - name: Hydrate pinned Herdr v0.9.5 runtime
+        shell: pwsh
+        run: python scripts/hydrate_herdr_runtime.py
       - name: Install Python project and test dependencies
         shell: pwsh
         run: |
@@ -90,21 +167,50 @@ jobs:
           TETHER_REQUIRE_SIGNED_RELEASE: '1'
         run: |
           if (-not $env:TETHER_RELEASE_PRIVATE_KEY) { throw 'TETHER_RELEASE_PRIVATE_KEY secret is required; unsigned releases are rejected by 0.2.14+ clients.' }
-          python scripts/build_release.py; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $builderArgs = @()
+          if ($env:FROZEN_PLUGIN -eq 'True') {
+            $pluginVersion = [string](Get-Content -Raw version.json | ConvertFrom-Json).components.plugin
+            $frozenDirectory = Join-Path $env:RUNNER_TEMP 'tether-frozen-plugin'
+            New-Item -ItemType Directory -Path $frozenDirectory -Force | Out-Null
+            $frozenManifest = Join-Path $frozenDirectory 'tether-update.json'
+            $frozenArchive = Join-Path $frozenDirectory "tether-plugin-$pluginVersion.zip"
+            $releaseBase = "https://github.com/qi001007/tether-harness/releases/download/v$pluginVersion"
+            Invoke-WebRequest -Uri "$releaseBase/tether-update.json" -OutFile $frozenManifest
+            Invoke-WebRequest -Uri "$releaseBase/tether-plugin-$pluginVersion.zip" -OutFile $frozenArchive
+            $builderArgs = @('--frozen-plugin-manifest', $frozenManifest, '--frozen-plugin-archive', $frozenArchive)
+          }
+          python scripts/build_release.py @builderArgs; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $version = (Get-Content -Raw version.json | ConvertFrom-Json).components.app
-          $expected = @("tether-app-$version.zip", "tether-plugin-$version.zip", "tether-node-$version.zip", 'tether-update.json')
+          $expected = @("tether-app-$version.zip", "tether-node-$version.zip", 'tether-update.json')
+          if ($env:FROZEN_PLUGIN -ne 'True') { $expected += "tether-plugin-$version.zip" }
           foreach ($name in $expected) { if (-not (Test-Path (Join-Path release $name))) { throw "Release asset missing: $name" } }
           python -c "import json; from tether.release import verify_signature; verify_signature(json.load(open('release/tether-update.json', encoding='utf-8'))); print('manifest signature verified')"
           if ($LASTEXITCODE -ne 0) { throw 'Release manifest signature did not verify' }
 
+      - name: Retain signed packages for candidate verification
+        if: github.ref_type == 'branch' && startsWith(github.ref_name, 'release-candidate/')
+        uses: actions/upload-artifact@v7
+        with:
+          name: signed-${{ env.RELEASE_TAG }}-candidate
+          path: |
+            release/*.zip
+            release/tether-update.json
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
       - name: Create or refresh a draft release and upload artifacts
+        if: github.ref_type != 'branch' || !startsWith(github.ref_name, 'release-candidate/')
         uses: actions/github-script@v9
         with:
           script: |
             const fs = require('node:fs')
             const path = require('node:path')
             const tag = process.env.RELEASE_TAG
+            const releaseVersion = tag.slice(1)
+            const frozenPlugin = process.env.FROZEN_PLUGIN === 'True'
             if (process.env.CREATE_TAG === 'True') {
+              if (process.env.CREATE_TAG_ALLOWED !== 'True') throw new Error(`Refusing to create ${tag} from an unapproved ref.`)
               try {
                 await github.rest.git.createRef({ owner: context.repo.owner, repo: context.repo.repo,
                   ref: `refs/tags/${tag}`, sha: context.sha })
@@ -116,7 +222,9 @@ jobs:
                 if (existing.data.object.sha !== context.sha) throw new Error(`Tag ${tag} was concurrently created at a different commit.`)
               }
             }
-            const names = ['tether-app', 'tether-plugin', 'tether-node'].map(name => `${name}-${tag.slice(1)}.zip`).concat('tether-update.json')
+            const names = ['tether-app', 'tether-node'].map(name => `${name}-${releaseVersion}.zip`).concat('tether-update.json')
+            if (!frozenPlugin) names.splice(1, 0, `tether-plugin-${releaseVersion}.zip`)
+            const obsoletePluginName = `tether-plugin-${releaseVersion}.zip`
             const { owner, repo } = context.repo
             let release
             try {
@@ -129,7 +237,11 @@ jobs:
               const created = await github.rest.repos.createRelease({ owner, repo, tag_name: tag, name: tag, draft: true, prerelease: false, body: 'Build passed. Review artifacts and notes before publishing.' })
               release = created.data
             }
-            for (const asset of release.assets) if (names.includes(asset.name)) await github.rest.repos.deleteReleaseAsset({ owner, repo, asset_id: asset.id })
+            for (const asset of release.assets) {
+              if (names.includes(asset.name) || (frozenPlugin && asset.name === obsoletePluginName)) {
+                await github.rest.repos.deleteReleaseAsset({ owner, repo, asset_id: asset.id })
+              }
+            }
             for (const name of names) {
               await github.rest.repos.uploadReleaseAsset({ owner, repo, release_id: release.id, name, data: fs.readFileSync(path.join('release', name)) })
             }

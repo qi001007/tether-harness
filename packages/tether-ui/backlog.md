@@ -1,4 +1,9 @@
 # tether-ui backlog
+- 2026-11-07：DSH Web guest 显示连接中/可重试加载错误（20 秒首载超时），忽略 transient abort 并允许迟到成功恢复；Hub 凭据仅在 guest 当前 origin 与批准 URL 完全相同时注入。
+- 2026-11-07：更新检查显示 Node 文件版本已安装但进程仍旧或 restart_required 时，不再把重试标为完成；同轮 APP 更新可恢复并验证目标 Node 版本，否则提示从设备菜单手动重启。
+- 2026-11-07：更新完成确认使用 prepare 实际固定的目标版本；仅在本次 Node 更新已应用后等待 Node 重启；无 APP 待应用时将延期的 Node 重启标为可重试失败。
+- 2026-11-07：Croc 接收轮询加入 25 秒握手无进展与 45 秒进度停滞上限；只有两端 `transfer_info.cancel_by_transfer_id` 声明支持时，超时清理才按发送/接收任务 ID 精确取消，不支持的旧节点只报告超时，避免误取消节点上的后续任务。
+- 2026-11-07：从共享源码重新生成 Web bundle，同步移除未挂载的 Agents 旧视图。
 - 2026-11-03：顶栏增加 `TetherMark` 网络标记和 `host.windowControls` 自绘窗口控制（仅 APP host）；顶栏整体 `-webkit-app-region: drag`，按钮 `no-drag`。连接按钮移入右侧组，避免和 `marginLeft:auto` 抢空间；`TetherMark` 图标与 `assets/tether-app-s.ico` 同构。
 - 2026-11-02：登录页左侧改为 `LoginNetwork` 惯性 SVG 动效（直线边、指针推斥、减少动态时静止）；登录/邀请码注册是同一卡片内两个绝对定位视图（固定舞台 344 px、opacity+translateX），不要再条件展开表单；底部“返回 DSH”已删，退出只保留右上角 ×。
 - 2026-11-02：账户昵称/头像改由 Hub 账户保存：`/api/state.user` 下发 `display_name`/`avatar`，保存走 `POST /api/auth/profile`（乐观更新、失败回滚、pending 字段不被轮询覆盖）。账户页默认收起，昵称/密码编辑用绝对定位弹窗；设置面板在收起/昵称弹窗/密码弹窗三态均为 760×560，不要再把编辑表单内联展开。
@@ -96,3 +101,5 @@
 - 2026-11-04：主页右侧卡片按内容高度排（快速启动行 + 来源/账号信息 + 底部 21 个 Agent 总览画廊），不要用 `flex:1` 拉满成空卡片；目录/主页切换必须靠常驻工具栏。`npm run build` 只打 DSH 插件，WebUI 必须另跑 `npm run build:web`；插件清单要包含 `agents-home.js`/`agent-accounts-panel.js`。ACP `ready` 事件把“正在启动”原位替换为“已连接”，不要再追加一行。远程应用页刷新/重载/关闭全部纯图标，去掉说明句。
 - 2026-11-04：账号管理 UI = 紧凑卡 + 弹层（不是输入框+保存）；Codex 显示邮箱/套餐/当前/5h-7d 额度条/重新登录/×，设备码弹层显示 URL+码+复制+浏览器打开；非 Codex 的“添加账号”必须在终端直接运行 `argv`（不是只显示命令），DSH 用快照。切换 Agent 时 `AgentAccountsPanel` 必须带 `key={selected.id}` 重挂载，否则会残留上一个 Agent 的账号；非 Codex 隐藏“退出当前登录”。
 - 2026-11-04：结构化对话页按 Codeg 活动时间线重做：用户气泡右对齐；assistant 先用「执行过程 · N 步 · 耗时」胶囊，展开后左侧轨道逐行显示思考/终端/文件/Agent/计划，工具行可展开输出；最终回答独立；顶部必须有「‹ 主页」和常驻「主页」tab，ACP tab 与主页互切不丢会话；右上「会话详情」开右侧卡。目录/账号必须先读 localStorage 缓存再后台刷新，账号列表不要等 app-server probe。
+- 2026-11-07：Agents runtime 的状态检查/启动按设备单飞复用；同源下 token/代次 URL 变化时更新已存在的主页 pane，pane key 保持不变；Herdr 消息只接受来自父窗口且 origin 精确匹配的请求。
+- 2026-11-07：从 Codeg 显式选择 Herdr 项目时按规范化 cwd 生成 pane key，并仅对该终端启用 cwd 哈希的 Herdr project scope；通用 Herdr 保留默认 pane/session。

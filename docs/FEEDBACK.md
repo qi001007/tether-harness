@@ -1,5 +1,12 @@
 # 用户反馈与处理
 
+## 2026-11-07 APP 稳定性与插件收缩
+
+- [ ] 主机可逐台更新三节点。云端在隔离环境中通过实际更新接口从官方签名 0.4.2 安装测试签名的 0.4.4，覆盖安装故障回滚、重新暂存、自动重连、设备身份与工作区保留。重打的 Node ZIP 已通过 Ubuntu WSL 干净安装和 Bash PTY，短下载恢复通过本地 HTTP 验证。现网云端仍为 0.3.6，需正式签名并建立兼容基线，再核对逐台重连与业务。
+- [ ] DSH 冷启动与跨节点连接保持稳定。0.4.4 隔离 APP 已打开两台 Windows 的输入区，并在云端测试工作区提交消息。目标 DSH 持久化了消息并启动任务，模型调用因缺少 API key 结束。云端 DSH Web 的两次独立冷启动均通过鉴权。Windows 双向 100 MiB 已核对吞吐与 SHA-256。待验云端模型回复、Windows 一键冷启动及 iPhone 真机映射。
+- [ ] APP 中使用 Codeg 与 Herdr。隔离的真实 APP 通过 `@` 选择确定性 ACP 测试 Agent，经 Codeg 取得委派完成状态和精确子回复。修复 Agent 主页遮挡后，从侧栏重开父、子会话均读回对应结果。真实 Codex → OpenCode 2.2.0 → 本机 Qwen 的委派也取得任务 ID、终态及精确回复，并核对了 OpenCode 原生数据库。隔离 APP 验证旧 Node 的 Herdr 门禁及重试，云端隔离 0.4.4 Node 验证两个项目使用不同会话并返回各自的实际目录。待逐台升级后，经生产 Hub 验收远端 Herdr 与 Agent 路径。
+- [ ] 插件冻结在具备 DSH 映射、资源管理和设备图的可用版本。官方 0.2.93 已通过签名、包内容核对和当前 DSH CLI 的隔离安装。候选 Node 保留官方原件。待在已登录宿主核对三个入口与 iPhone 映射。
+
 ## 2026-11-03 启动/更新黑色控制台窗口
 
 - [x] F147：用户再次报告开 APP 或更新时会弹黑色窗口。**复测**：用桌面快捷方式启动并 20 ms 采样可见窗口，只有 `Tether` / `Tether WebUI` 主窗口，无 `ConsoleWindowClass`。**剩余漏点 1**：`apps/tether-app/supervisor.js` 的 `killTree()` 调 `taskkill` 时没有 `windowsHide`；更新重启/退出服务会走到这里，`taskkill` 是控制台程序，会闪黑窗。修复：加 `windowsHide: true`，新增 shell 回归断言。0.2.80 已发布并更新两机；启动链无控制台，更新/退出链的 `taskkill` 不再分配可见窗口。**剩余漏点 2（2026-11-03 找到）**：LAPTOP 的桌面/开始菜单快捷方式指向 `Tether-App.cmd` 而不是 `electron.exe`，双击必然先起一个可见 cmd 控制台；已在 LAPTOP 桌面重建为直接启动 `electron.exe`，并给 APP 增加 `ensureAppShortcuts()`，每次启动用 `shell.writeShortcutLink` 自愈桌面/开始菜单快捷方式。判据：桌面快捷方式 target=`electron.exe`、启动、更新、退出全程 20 ms 窗口采样无 `ConsoleWindowClass`。 **0.2.83 复测**：桌面快捷方式冷启动 22 s、20 ms 采样 1,100 次，只新增 WeType `StatusBarWnd` 与两个 Tether `Chrome_WidgetWin_1`，无 cmd/conhost/控制台；LAPTOP 桌面快捷方式已改为 `electron.exe`，开始菜单快捷方式会在 0.2.83 APP 首次启动时由 `ensureAppShortcuts()` 自愈。 **0.2.89 更新重启复测**：用更新同款 `app_restart` 助手重启 APP，30 s / 20 ms 采样 1,500 次，只新增 1 个 `Chrome_WidgetWin_1`（Tether 主窗口），无 cmd/conhost/`ConsoleWindowClass`。

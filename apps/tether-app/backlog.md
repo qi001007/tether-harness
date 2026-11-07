@@ -1,4 +1,7 @@
 # tether-app backlog
+- 2026-11-07：启动时保留指向其他有效 Tether 安装的快捷方式，仍修复本安装和失效链接。
+- 2026-11-07：候选版本元数据同步至 APP `0.4.4`、冻结插件 `0.2.93`、Node `0.4.4`；pyproject 与 APP npm 根锁版本同步为 `0.4.4`，插件源码版本保持独立。
+- 2026-11-07：DSH Web guest 绑定首次批准的主框架 origin，并阻止跨源服务端重定向；Electron 安全导航策略拆为可单测 helper。
 - 2026-11-03：窗口改为 `frame:false` 无原生标题栏，顶栏自绘窗口控制；关闭默认隐藏到 `Tray`，只有托盘“退出”或更新重启才 `app.quit()`。`window-all-closed` 在有托盘时保持进程；第二实例恢复窗口。图标统一使用 `assets/tether-app-s.ico`。
 - 2026-10-31：登记决策抽成 `enrollment.js` 纯函数（device/account/refuse/error），4 个单测覆盖；main.js 只做 fetch/写配置/重启。
 - 2026-10-31：登录登记改为两步：已有设备走 `/enroll` 轮换令牌；`device_not_found`/`device_offline` 才写 `userToken`、清 `nodeToken`、删除旧设备令牌并重启；`device_owned` 拒绝。supervisor 可在只有用户令牌时启动 Node。
@@ -63,3 +66,4 @@
 - 2026-11-03：APP 包与 package-lock 根版本升至 `0.2.89`；iframe 载入后探测默认控件样式，命中后自动修复一次，再次命中显示“DSH 界面样式与 Tether 版本不匹配”遮罩，避免裸控件页面。
 - 2026-11-04：主窗口开启 `webviewTag` 供 Linux DSH Web 顶层内嵌；`will-attach-webview` 删除 guest preload、强制 sandbox/contextIsolation/webSecurity，只允许回环与 RFC1918 地址；`did-attach-webview` 拒绝新窗口并把 guest 导航锁在首次 origin。DSH 外部 `window.open` 已删除；真机 webview 与插件自动安装仍待验。
 - 2026-11-04：APP 默认直接连接 Hub 与 mesh，不跟随系统代理：`main.js` 在 ready 前 `appendSwitch('no-proxy-server')`，只有 `TETHER_USE_SYSTEM_PROXY=1` 才保留系统代理。实测系统代理故障时 Python 节点仍能注册 Hub，但 Electron 渲染器访问 `/api/state` 全部 ERR_FAILED、界面显示 0 台设备；切换直连后 example.com 与 Hub 都可达，设备恢复。不要再在 `whenReady` 里用 `setProxy({mode:'system'})` 覆盖该开关。
+- 2026-11-07：修复 Linux DSH WebView 在 guest 初始 `about:blank` 时把 origin 锁为 `null`、导致首个 LAN 导航被拦截的问题；现在允许首个受限 LAN HTTP(S) 导航建立 origin，之后继续限制同源。新增 Electron 导航守卫回归断言。

@@ -1,4 +1,9 @@
 # 修改记录
+- 2026-11-07：Codeg 构建使用完整上游补丁，并支持输出到全新的独立目录供发行任务使用。
+- 2026-11-07：Codeg 构建从指定的源导出目录识别 Git 边界，补丁检查兼容 Windows CRLF 导出。
+- 2026-11-07：`build_release.py` 默认维持三组件锁步；仅显式提供已签名冻结插件 manifest 和匹配归档时，允许 APP/Node 独立同版本并复用冻结插件包及 Node 修复输入。
+- 2026-11-07：新增 `build_codeg_runtime.ps1`，按锁定 Codeg 版本/提交应用可重放 cwd 补丁并构建、复制 Agents 静态资源。
+- 2026-11-07：构建脚本改为直接调用已安装的 Next CLI，避免 pnpm 对只读共享 node_modules 执行 reconcile；静态导出后恢复 token bootstrap 页面。
 - 2026-10-31：新增 `bench_relay.py`：控制 P50/P95、surface 首屏、分块传输吞吐；同一命令用于 overlay 前后对比。公网 relay 基线：控制 P50 109 ms / P95 113 ms，2 MiB 传输 22.1 秒（约 90 KB/s，哈希一致）。
 - 2026-10-30：`build_release` 插件包映射 `tether/node/dsh_restart.py`，并同步 updater 允许文件集。
 - 2026-10-28：原生 UI bridge 从当前安装的 MIT `dsh-client-ui-attachment@0.2.1-rc.2` factory 单独导出 ComposerAttachments，供原生附件 slot 包装器复用；保留上游 factory hash。
@@ -22,9 +27,12 @@
 - 2026-10-27：修复多行 Python helper 直接传给 `-c` 被引号截断的问题，改用临时 `.py` 文件执行；DryRun/Apply 均实测通过。
 - 2026-10-27：插件独立发布包包含桥生成脚本；发布安装器在缺少本地上游源码包时校验并采用包内预生成桥。
 - 2026-10-27：发布脚本生成0.2.1 APP/插件/Node压缩包及包含大小、SHA-256、协议和最低更新器版本的统一更新清单。
+- 2026-11-07：新增 Herdr v0.9.5 固定资产 hydration helper；发布流程只下载并校验官方四个平台资产 SHA-256/大小，Windows ZIP 仅提取受校验的 `herdr.exe` 与四个 ConPTY 文件，冲突文件不覆盖。
 
 - 2026-10-28：将 qa_native_* 临时 harness 源码归档到仓库外维护备份；正式回归测试源码继续保留在 tests/。
 
 # 变更记录
+
+- 2026-11-07：Node release ZIP 中仅 `laptop/install-node.sh` 被规范为 LF，避免 Windows checkout 的 CRLF 导致 Linux Bash 解析失败。
 
 - 2026-10-28：修正独立插件安装说明，统一引导至 Tether 连接页配置服务，移除旧 Hub 页面入口和本地 Controller 说明。

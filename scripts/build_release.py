@@ -2,20 +2,25 @@
 """Build standalone plugin and APP archives (no repository clone needed)."""
 from __future__ import annotations
 
+import argparse
 import base64
-import hashlib
+import copy
 import json
+import hashlib
 import os
 import re
 import sys
+import stat
+import tempfile
 import time
 import zipfile
 from pathlib import Path
+from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
-from tether.release import canonical_bytes, verify_signature  # noqa: E402
+from tether.release import ReleaseSignatureError, canonical_bytes, verify_signature  # noqa: E402
 
 OUT = ROOT / "release"
 VERSION = json.loads((ROOT / "version.json").read_text(encoding="utf-8"))["components"]["app"]
@@ -24,7 +29,7 @@ SKIP = {"node_modules", "data", "__pycache__", ".pytest_cache", ".venv", ".git",
         ".aws", ".dsh", ".ssh", "credentials"}
 
 
-def add_tree(archive: zipfile.ZipFile, src: Path, prefix: str) -> None:
+def add_tree(archive: zipfile.ZipFile, src: Path, prefix: str, *, plugin_version: str | None = None) -> None:
     for path in src.rglob("*"):
         relative = path.relative_to(ROOT).as_posix()
         if relative.startswith("packages/tether-dsh-surface/updater/"):
@@ -33,10 +38,10 @@ def add_tree(archive: zipfile.ZipFile, src: Path, prefix: str) -> None:
                                     for part in path.parts):
             continue
         if path.is_file():
-            if relative == "packages/dsh-plugin-tether-client/lib/client.js":
+            if relative == "packages/dsh-plugin-tether-client/lib/client.js" and plugin_version is not None:
                 source = path.read_text(encoding="utf-8")
                 source = re.sub(r"(\bPLUGIN_VERSION\s*=\s*['\"])[^'\"]+(['\"])",
-                                rf"\g<1>{VERSION}\g<2>", source, count=1)
+                                rf"\g<1>{plugin_version}\g<2>", source, count=1)
                 archive.writestr(f"{prefix}/{relative}", source.encode("utf-8"), compress_type=zipfile.ZIP_DEFLATED)
             else:
                 archive.write(path, f"{prefix}/{relative}")
@@ -45,7 +50,11 @@ def add_tree(archive: zipfile.ZipFile, src: Path, prefix: str) -> None:
 def add_file(archive: zipfile.ZipFile, rel: str, prefix: str) -> None:
     path = ROOT / rel
     if path.exists():
-        archive.write(path, f"{prefix}/{rel}")
+        if rel == "laptop/install-node.sh":
+            payload = path.read_bytes().replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+            archive.writestr(f"{prefix}/{rel}", payload, compress_type=zipfile.ZIP_DEFLATED)
+        else:
+            archive.write(path, f"{prefix}/{rel}")
 
 
 def add_mapped_file(archive: zipfile.ZipFile, source: str, target: str, prefix: str) -> None:
@@ -104,44 +113,229 @@ def rollout_config() -> dict:
     return rollout
 
 
-def validate_versions() -> None:
-    components = json.loads((ROOT / "version.json").read_text(encoding="utf-8"))["components"]
-    if set(components) != {"app", "plugin", "node"} or len(set(components.values())) != 1:
-        raise ValueError("version.json must define matching app, plugin, and node versions")
+def load_frozen_plugin(manifest_path: Path, archive_path: Path) -> tuple[dict, dict, str]:
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, ValueError) as exc:
+        raise ValueError("frozen plugin manifest is unreadable JSON") from exc
+    if not isinstance(manifest, dict) or manifest.get("schema") != 1 or manifest.get("channel") != "stable":
+        raise ValueError("frozen plugin manifest schema is unsupported")
+    try:
+        verify_signature(manifest)
+    except ReleaseSignatureError as exc:
+        raise ValueError(f"frozen plugin manifest signature is invalid: {exc.code}") from None
+    components = manifest.get("components")
+    entry = components.get("plugin") if isinstance(components, dict) else None
+    if not isinstance(entry, dict):
+        raise ValueError("frozen plugin manifest is missing its plugin component")
+    version = entry.get("version")
+    if not isinstance(version, str) or not re.fullmatch(
+            r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?", version):
+        raise ValueError("frozen plugin version is invalid")
+    expected_name = f"tether-plugin-{version}.zip"
+    if archive_path.name != expected_name:
+        raise ValueError(f"frozen plugin archive must be named {expected_name}")
+    parsed = urlsplit(str(entry.get("url") or ""))
+    expected_url = f"/qi001007/tether-harness/releases/download/v{version}/{expected_name}"
+    if (parsed.scheme != "https" or parsed.netloc != "github.com" or parsed.path != expected_url
+            or parsed.query or parsed.fragment or parsed.username or parsed.password):
+        raise ValueError("frozen plugin URL does not identify its official versioned GitHub asset")
+    size = entry.get("size")
+    digest_expected = entry.get("sha256")
+    if type(size) is not int or size <= 0 or not isinstance(digest_expected, str) \
+            or not re.fullmatch(r"[0-9a-f]{64}", digest_expected):
+        raise ValueError("frozen plugin size or SHA-256 is invalid")
+    if archive_path.stat().st_size != size:
+        raise ValueError("frozen plugin archive size does not match its signed manifest")
+    digest = hashlib.sha256()
+    with archive_path.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+    if digest.hexdigest() != digest_expected:
+        raise ValueError("frozen plugin archive SHA-256 does not match its signed manifest")
+
+    root_prefix = f"tether-plugin-{version}/"
+    packages: dict[str, bytes] = {}
+    package_versions: dict[str, str] = {}
+    seen: set[str] = set()
+    try:
+        with zipfile.ZipFile(archive_path) as archive:
+            for info in archive.infolist():
+                raw = info.filename
+                name = raw[:-1] if info.is_dir() and raw.endswith("/") else raw
+                parts = name.split("/")
+                mode = (info.external_attr >> 16) & 0xFFFF
+                if (not name or "\\" in name or ":" in parts[0] or name.startswith("/")
+                        or any(part in {"", ".", ".."} for part in parts)
+                        or stat.S_ISLNK(mode)):
+                    raise ValueError("frozen plugin archive contains an unsafe path or file type")
+                if not raw.startswith(root_prefix):
+                    raise ValueError("frozen plugin archive has an unexpected top-level path")
+                if raw in seen:
+                    raise ValueError("frozen plugin archive contains duplicate paths")
+                seen.add(raw)
+                if info.is_dir():
+                    continue
+                relative = raw[len(root_prefix):]
+                if relative.startswith("packages/"):
+                    packages[relative] = archive.read(info)
+                    package_parts = relative.split("/")
+                    if len(package_parts) == 3 and package_parts[2] == "package.json":
+                        data = json.loads(packages[relative].decode("utf-8"))
+                        package_versions[package_parts[1]] = str(data.get("version") or "")
+    except (OSError, zipfile.BadZipFile, UnicodeError, ValueError) as exc:
+        if isinstance(exc, ValueError) and str(exc).startswith("frozen plugin archive"):
+            raise
+        raise ValueError("frozen plugin archive is invalid") from exc
+    required_packages = {
+        "dsh-plugin-tether", "dsh-plugin-tether-client",
+        "tether-dsh-native-ui", "tether-dsh-surface",
+    }
+    if not packages or not required_packages.issubset(package_versions):
+        raise ValueError("frozen plugin archive is missing required DSH package manifests")
+    if any(package_versions[name] != version for name in required_packages):
+        raise ValueError("frozen plugin package versions do not match the signed manifest")
+    return manifest, copy.deepcopy(entry), root_prefix
+
+
+def add_frozen_plugin_packages(archive: zipfile.ZipFile, archive_path: Path,
+                               root_prefix: str, target_prefix: str) -> None:
+    with zipfile.ZipFile(archive_path) as frozen:
+        for info in frozen.infolist():
+            if info.is_dir() or not info.filename.startswith(root_prefix + "packages/"):
+                continue
+            relative = info.filename[len(root_prefix):]
+            archive.writestr(f"{target_prefix}/{relative}", frozen.read(info),
+                             compress_type=zipfile.ZIP_DEFLATED)
+
+
+def validate_versions(frozen_plugin_version: str | None = None) -> dict[str, str]:
+    components = json.loads((ROOT / "version.json").read_text(encoding="utf-8")).get("components")
+    if not isinstance(components, dict) or set(components) != {"app", "plugin", "node"}:
+        raise ValueError("version.json must define app, plugin, and node versions")
+    if components["app"] != components["node"]:
+        raise ValueError("APP and Node release versions must match")
+    if frozen_plugin_version is None and components["plugin"] != components["app"]:
+        raise ValueError("a differing plugin version requires an explicitly verified frozen plugin")
+    if frozen_plugin_version is not None and components["plugin"] != frozen_plugin_version:
+        raise ValueError("version.json plugin version does not match the frozen plugin manifest")
     version = components["app"]
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     project_match = re.search(r"(?ms)^\[project\]\s*.*?^version\s*=\s*['\"]([^'\"]+)", pyproject)
     if not project_match or project_match.group(1) != version:
         raise ValueError("pyproject.toml version does not match version.json")
-    package_paths = [ROOT / "apps/tether-app/package.json"] + [
-        ROOT / "packages" / name / "package.json"
-        for name in ("dsh-plugin-tether", "dsh-plugin-tether-client", "tether-dsh-native-ui", "tether-dsh-surface")
-    ]
+    package_paths = [ROOT / "apps/tether-app/package.json"]
+    if frozen_plugin_version is None:
+        package_paths.extend(ROOT / "packages" / name / "package.json" for name in (
+            "dsh-plugin-tether", "dsh-plugin-tether-client", "tether-dsh-native-ui", "tether-dsh-surface"))
     for path in package_paths:
         package = json.loads(path.read_text(encoding="utf-8"))
-        if package.get("version") != version:
+        expected = version if path == ROOT / "apps/tether-app/package.json" else components["plugin"]
+        if package.get("version") != expected:
             raise ValueError(f"{path.relative_to(ROOT)} version does not match version.json")
+    return {name: str(components[name]) for name in ("app", "plugin", "node")}
 
 
-def main() -> None:
-    validate_versions()
+def archive_compatibility(path: Path, component: str, *, max_archive_bytes: int,
+                          max_file_bytes: int, max_files: int, max_compression_ratio: int,
+                          allowed: tuple[str, ...]) -> dict:
+    issues = []
+    size = path.stat().st_size
+    if size > max_archive_bytes:
+        issues.append(f"archive exceeds {max_archive_bytes} byte limit ({size})")
+    largest = (0, "")
+    rejected = []
+    with zipfile.ZipFile(path) as archive:
+        files = [item for item in archive.infolist() if not item.is_dir()]
+        if len(files) > max_files:
+            issues.append(f"archive has {len(files)} files; limit is {max_files}")
+        for item in files:
+            relative = item.filename.split("/", 1)[-1]
+            largest = max(largest, (item.file_size, relative))
+            if item.file_size > max_file_bytes:
+                issues.append(f"member exceeds {max_file_bytes} byte limit: {relative} ({item.file_size})")
+            if item.file_size and (not item.compress_size or item.file_size / item.compress_size > max_compression_ratio):
+                issues.append(f"member exceeds compression ratio {max_compression_ratio}: {relative}")
+            if relative == "version.json" or relative in {"README-INSTALL.md", ".env.example"}:
+                continue
+            if component == "app":
+                if relative == "pyproject.toml":
+                    continue
+                if relative.startswith("tether/") and relative not in allowed:
+                    continue
+                if relative.startswith("packages/tether-ui/"):
+                    continue
+            if component == "node" and relative.startswith("tether/") and Path(relative).name in {"description.md", "backlog.md"}:
+                continue
+            if not (any(relative.startswith(prefix) for prefix in allowed if prefix.endswith("/")) or relative in allowed):
+                rejected.append(relative)
+        if rejected:
+            issues.append("files rejected by updater allowlist: " + ", ".join(rejected[:8]))
+    return {"compatible": not issues, "issues": issues, "archive_bytes": size,
+            "largest_member": {"path": largest[1], "bytes": largest[0]}}
+
+
+def preflight_release_archives(archives: dict[str, Path]) -> dict[str, dict]:
+    from tether.updates import (APP_ALLOWED, MAX_ARCHIVE_BYTES, MAX_ARCHIVE_FILES,
+                                MAX_COMPRESSION_RATIO, MAX_FILE_BYTES, NODE_ALLOWED)
+
+    legacy_limits = {"max_archive_bytes": 100 * 1024 * 1024,
+                     "max_file_bytes": 32 * 1024 * 1024,
+                     "max_files": 4096, "max_compression_ratio": 150}
+    legacy_allowed = {
+        "app": ("apps/tether-app/", "packages/tether-ui/src/", "packages/tether-ui/web/", "assets/",
+                "tether/__init__.py", "tether/updates.py", "tether/updates_cli.py", "tether/release.py",
+                "tether/ed25519.py", "desktop/install-app.ps1", "desktop/install-app.cmd", "version.json"),
+        "node": ("tether/", "laptop/tether-node.ps1", "laptop/bootstrap-node.ps1", "laptop/install-node.sh",
+                 "pyproject.toml", "version.json"),
+    }
+    current_allowed = {"app": APP_ALLOWED, "node": NODE_ALLOWED}
+    current_limits = {"max_archive_bytes": MAX_ARCHIVE_BYTES, "max_file_bytes": MAX_FILE_BYTES,
+                      "max_files": MAX_ARCHIVE_FILES, "max_compression_ratio": MAX_COMPRESSION_RATIO}
+    reports = {}
+    for component, path in archives.items():
+        current = archive_compatibility(path, component, **current_limits, allowed=current_allowed[component])
+        legacy = archive_compatibility(path, component, **legacy_limits, allowed=legacy_allowed[component])
+        reports[component] = {"current": current, "legacy_0.3.6": legacy}
+        print(f"{component} updater preflight: current={current}; legacy_0.3.6={legacy}")
+        if not current["compatible"]:
+            raise ValueError(f"{component} archive cannot be applied by the current updater: {'; '.join(current['issues'])}")
+    return reports
+
+
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description="Build local Tether component release archives")
+    parser.add_argument("--frozen-plugin-manifest", type=Path)
+    parser.add_argument("--frozen-plugin-archive", type=Path)
+    args = parser.parse_args(argv)
+    if bool(args.frozen_plugin_manifest) != bool(args.frozen_plugin_archive):
+        parser.error("--frozen-plugin-manifest and --frozen-plugin-archive must be supplied together")
+    frozen = None
+    if args.frozen_plugin_manifest:
+        frozen = load_frozen_plugin(args.frozen_plugin_manifest, args.frozen_plugin_archive)
+    versions = validate_versions(frozen[1]["version"] if frozen else None)
+    version = versions["app"]
+    plugin_version = versions["plugin"]
     OUT.mkdir(exist_ok=True)
-    plugin_prefix = f"tether-plugin-{VERSION}"
-    app_prefix = f"tether-app-{VERSION}"
+    stage_dir = tempfile.TemporaryDirectory(prefix=".build-release-", dir=OUT)
+    stage = Path(stage_dir.name)
+    plugin_prefix = f"tether-plugin-{plugin_version}"
+    app_prefix = f"tether-app-{version}"
 
-    plugin = OUT / f"tether-plugin-{VERSION}.zip"
-    with zipfile.ZipFile(plugin, "w", zipfile.ZIP_DEFLATED) as archive:
-        add_file(archive, "desktop/install-plugin.ps1", plugin_prefix)
-        add_file(archive, "scripts/build-native-ui-bridge.mjs", plugin_prefix)
-        add_file(archive, "version.json", plugin_prefix)
-        for package in ("dsh-plugin-tether", "dsh-plugin-tether-client", "tether-dsh-native-ui", "tether-dsh-surface"):
-            add_tree(archive, ROOT / "packages" / package, plugin_prefix)
-        for rel in ("tether/__init__.py", "tether/updates.py", "tether/updates_cli.py",
-                    "tether/release.py", "tether/ed25519.py",
-                    "tether/node/__init__.py", "tether/node/dsh_sessions.py",
-                    "tether/node/dsh_restart.py"):
-            add_mapped_file(archive, rel, f"packages/tether-dsh-surface/updater/{rel}", plugin_prefix)
-        archive.writestr(f"{plugin_prefix}/README-INSTALL.md", """# Tether DSH plugin (standalone)
+    plugin = stage / f"tether-plugin-{plugin_version}.zip"
+    if frozen is None:
+        with zipfile.ZipFile(plugin, "w", zipfile.ZIP_DEFLATED) as archive:
+            add_file(archive, "desktop/install-plugin.ps1", plugin_prefix)
+            add_file(archive, "scripts/build-native-ui-bridge.mjs", plugin_prefix)
+            add_file(archive, "version.json", plugin_prefix)
+            for package in ("dsh-plugin-tether", "dsh-plugin-tether-client", "tether-dsh-native-ui", "tether-dsh-surface"):
+                add_tree(archive, ROOT / "packages" / package, plugin_prefix, plugin_version=plugin_version)
+            for rel in ("tether/__init__.py", "tether/updates.py", "tether/updates_cli.py",
+                        "tether/release.py", "tether/ed25519.py",
+                        "tether/node/__init__.py", "tether/node/dsh_sessions.py",
+                        "tether/node/dsh_restart.py"):
+                add_mapped_file(archive, rel, f"packages/tether-dsh-surface/updater/{rel}", plugin_prefix)
+            archive.writestr(f"{plugin_prefix}/README-INSTALL.md", """# Tether DSH plugin (standalone)
 
 1. Close DeepSeek Harness.
 2. Run `desktop\\install-plugin.ps1` from this folder.
@@ -155,7 +349,7 @@ Node ZIP (or the APP, whose supervisor can start a Node). This archive does not 
 or start a server.
 """)
 
-    app = OUT / f"tether-app-{VERSION}.zip"
+    app = stage / f"tether-app-{version}.zip"
     with zipfile.ZipFile(app, "w", zipfile.ZIP_DEFLATED) as archive:
         add_tree(archive, ROOT / "apps" / "tether-app", app_prefix)
         add_tree(archive, ROOT / "packages" / "tether-ui", app_prefix)
@@ -177,13 +371,16 @@ Without a Hub, the APP starts a local private Controller and Node only when the 
 tether-harness-server component is installed. Otherwise, configure a Hub or install that component.
 """)
 
-    node_prefix = f"tether-node-{VERSION}"
-    node = OUT / f"tether-node-{VERSION}.zip"
+    node_prefix = f"tether-node-{version}"
+    node = stage / f"tether-node-{version}.zip"
     with zipfile.ZipFile(node, "w", zipfile.ZIP_DEFLATED) as archive:
         add_tether_runtime(archive, node_prefix)
-        for package in ("dsh-plugin-tether", "dsh-plugin-tether-client",
-                        "tether-dsh-native-ui", "tether-dsh-surface"):
-            add_tree(archive, ROOT / "packages" / package, node_prefix)
+        if frozen is None:
+            for package in ("dsh-plugin-tether", "dsh-plugin-tether-client",
+                            "tether-dsh-native-ui", "tether-dsh-surface"):
+                add_tree(archive, ROOT / "packages" / package, node_prefix, plugin_version=plugin_version)
+        else:
+            add_frozen_plugin_packages(archive, args.frozen_plugin_archive, frozen[2], node_prefix)
         for rel in ("laptop/tether-node.ps1", "laptop/bootstrap-node.ps1",
                     "laptop/install-node.sh", "pyproject.toml", "version.json"):
             add_file(archive, rel, node_prefix)
@@ -206,14 +403,15 @@ backend and launch/bootstrap scripts; it does not install APP or modify a
 DeepSeek Harness profile.
 """)
 
+    preflight_release_archives({"app": app, "node": node})
     rollout = rollout_config()
     manifest = {"schema": 1, "channel": "stable", "released_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 "components": {}}
-    for component, archive in (("app", app), ("plugin", plugin), ("node", node)):
+    for component, archive in (("app", app), ("node", node)):
         payload = archive.read_bytes()
         manifest["components"][component] = {
-            "version": VERSION,
-            "url": f"https://github.com/qi001007/tether-harness/releases/download/v{VERSION}/{archive.name}",
+            "version": version,
+            "url": f"https://github.com/qi001007/tether-harness/releases/download/v{version}/{archive.name}",
             "sha256": hashlib.sha256(payload).hexdigest(),
             "size": len(payload),
             "protocol": 1,
@@ -221,14 +419,31 @@ DeepSeek Harness profile.
             "min_updater": MIN_UPDATER_VERSION,
             "rollout": rollout,
         }
+    if frozen is None:
+        payload = plugin.read_bytes()
+        manifest["components"]["plugin"] = {
+            "version": plugin_version,
+            "url": f"https://github.com/qi001007/tether-harness/releases/download/v{plugin_version}/{plugin.name}",
+            "sha256": hashlib.sha256(payload).hexdigest(), "size": len(payload), "protocol": 1,
+            "min_protocol": 1, "min_updater": MIN_UPDATER_VERSION, "rollout": rollout,
+        }
+    else:
+        manifest["components"]["plugin"] = frozen[1]
     key = release_private_key()
     if key is not None:
         manifest["signature"] = base64.b64encode(key.sign(canonical_bytes(manifest))).decode("ascii")
         verify_signature(manifest)
-    manifest_path = OUT / "tether-update.json"
+    manifest_path = stage / "tether-update.json"
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
-    for archive in (plugin, app, node, manifest_path):
+    staged_artifacts = ((plugin,) if frozen is None else ()) + (app, node, manifest_path)
+    final_artifacts = []
+    for archive in staged_artifacts:
+        destination = OUT / archive.name
+        os.replace(archive, destination)
+        final_artifacts.append(destination)
+    stage_dir.cleanup()
+    for archive in final_artifacts:
         print(archive.name, archive.stat().st_size)
     print("signed" if key is not None else "unsigned development manifest")
 

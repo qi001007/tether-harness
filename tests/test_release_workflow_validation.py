@@ -42,7 +42,8 @@ def _git(repo: Path, *args: str) -> str:
     return result.stdout.strip()
 
 
-def _repo(tmp_path: Path, version: str = "0.2.1") -> tuple[Path, str]:
+def _repo(tmp_path: Path, version: str = "0.2.1", *, plugin_version: str | None = None,
+         node_version: str | None = None) -> tuple[Path, str]:
     repo = tmp_path / "repo"
     repo.mkdir()
     _git(repo, "init", "-b", "main")
@@ -50,7 +51,7 @@ def _repo(tmp_path: Path, version: str = "0.2.1") -> tuple[Path, str]:
     _git(repo, "config", "user.name", "Release Workflow Test")
     (repo / "version.json").write_text(
         json.dumps({"schema": 1, "components": {
-            "app": version, "plugin": version, "node": version,
+            "app": version, "plugin": plugin_version or version, "node": node_version or version,
         }}),
         encoding="utf-8",
     )
@@ -59,18 +60,27 @@ def _repo(tmp_path: Path, version: str = "0.2.1") -> tuple[Path, str]:
     return repo, _git(repo, "rev-parse", "HEAD")
 
 
-def _run_validation(repo: Path, sha: str, tmp_path: Path) -> subprocess.CompletedProcess[bytes]:
+def _run_validation(
+    repo: Path,
+    sha: str,
+    tmp_path: Path,
+    *,
+    event: str = "workflow_dispatch",
+    ref_type: str = "branch",
+    ref_name: str = "main",
+    input_tag: str = "v0.2.1",
+) -> subprocess.CompletedProcess[bytes]:
     script = tmp_path / "validate-release.ps1"
     github_env = tmp_path / "github-env"
     script.write_text(_validation_script(), encoding="utf-8")
     env = dict(os.environ)
     env.update({
-        "GITHUB_EVENT_NAME": "workflow_dispatch",
-        "GITHUB_REF_TYPE": "branch",
-        "GITHUB_REF_NAME": "main",
+        "GITHUB_EVENT_NAME": event,
+        "GITHUB_REF_TYPE": ref_type,
+        "GITHUB_REF_NAME": ref_name,
         "GITHUB_SHA": sha,
         "GITHUB_ENV": str(github_env),
-        "INPUT_TAG": "v0.2.1",
+        "INPUT_TAG": input_tag,
     })
     return subprocess.run(
         [_powershell(), "-NoProfile", "-NonInteractive", "-File", str(script)],
@@ -91,13 +101,83 @@ def test_release_workflow_accepts_new_tag_after_successful_main_validation(tmp_p
     assert not (repo / ".git" / "refs" / "tags" / "v0.2.1").exists()
 
 
+def test_release_workflow_accepts_candidate_branch_and_derives_tag(tmp_path: Path) -> None:
+    repo, sha = _repo(tmp_path)
+
+    result = _run_validation(
+        repo, sha, tmp_path, event="push", ref_type="branch", ref_name="release-candidate/v0.2.1"
+    )
+
+    assert result.returncode == 0, result.stdout.decode(errors="replace") + result.stderr.decode(errors="replace")
+    values = (tmp_path / "github-env").read_text(encoding="utf-8")
+    assert "RELEASE_TAG=v0.2.1" in values
+    assert "CREATE_TAG=True" in values
+    assert "CREATE_TAG_ALLOWED=True" in values
+
+
+def test_release_workflow_rejects_arbitrary_push_branch(tmp_path: Path) -> None:
+    repo, sha = _repo(tmp_path)
+
+    result = _run_validation(repo, sha, tmp_path, event="push", ref_type="branch", ref_name="feature/work")
+
+    assert result.returncode != 0
+    assert b"release-candidate/vX.Y.Z" in result.stdout + result.stderr
+
+
+def test_release_workflow_accepts_only_existing_tag_pushes(tmp_path: Path) -> None:
+    repo, sha = _repo(tmp_path)
+    _git(repo, "tag", "v0.2.1", sha)
+
+    result = _run_validation(repo, sha, tmp_path, event="push", ref_type="tag", ref_name="v0.2.1")
+
+    assert result.returncode == 0, result.stdout.decode(errors="replace") + result.stderr.decode(errors="replace")
+    values = (tmp_path / "github-env").read_text(encoding="utf-8")
+    assert "CREATE_TAG=False" in values
+    assert "CREATE_TAG_ALLOWED=False" in values
+
+
 def test_release_workflow_rejects_component_version_mismatch(tmp_path: Path) -> None:
     repo, sha = _repo(tmp_path, version="0.2.2")
 
     result = _run_validation(repo, sha, tmp_path)
 
     assert result.returncode != 0
-    assert b"does not match component versions" in result.stdout + result.stderr
+    assert b"does not match APP and Node versions" in result.stdout + result.stderr
+
+
+def test_release_workflow_accepts_frozen_plugin_version(tmp_path: Path) -> None:
+    repo, sha = _repo(tmp_path, plugin_version="0.2.93")
+
+    result = _run_validation(repo, sha, tmp_path)
+
+    assert result.returncode == 0, result.stdout.decode(errors="replace") + result.stderr.decode(errors="replace")
+    assert b"FROZEN_PLUGIN=True" in (tmp_path / "github-env").read_bytes()
+
+
+def test_release_workflow_rejects_app_node_version_mismatch(tmp_path: Path) -> None:
+    repo, sha = _repo(tmp_path, node_version="0.2.2")
+
+    result = _run_validation(repo, sha, tmp_path)
+
+    assert result.returncode != 0
+    assert b"APP and Node versions" in result.stdout + result.stderr
+
+
+def test_release_workflow_downloads_and_uploads_only_frozen_component_assets() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    assert "- 'release-candidate/v*'" in workflow
+    assert "Hydrate pinned Herdr v0.9.5 runtime" in workflow
+    assert "CREATE_TAG_ALLOWED !== 'True'" in workflow
+    assert '$releaseBase = "https://github.com/qi001007/tether-harness/releases/download/v$pluginVersion"' in workflow
+    assert "--frozen-plugin-manifest" in workflow
+    assert "--frozen-plugin-archive" in workflow
+    assert "tether-plugin-$pluginVersion.zip" in workflow
+    assert "if (!frozenPlugin) names.splice(1, 0, `tether-plugin-${releaseVersion}.zip`)" in workflow
+    assert "if (names.includes(asset.name) || (frozenPlugin && asset.name === obsoletePluginName))" in workflow
+    posix = (ROOT / ".github" / "workflows" / "posix.yml").read_text(encoding="utf-8")
+    assert "--proto '=https' --tlsv1.2" in posix
+    assert "--frozen-plugin-manifest" in posix and "--frozen-plugin-archive" in posix
+    assert "'version.json'" in posix
 
 
 def test_release_workflow_rejects_tag_pointing_to_another_commit(tmp_path: Path) -> None:

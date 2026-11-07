@@ -1,11 +1,14 @@
 import json
+import socket
 import threading
 import urllib.request
+import pytest
 
 import http.server
 import socketserver
 
 from tether.node import apps as apps_module
+from tether.node.app_gateway import AppRoute, Gateway
 from tether.node.apps import AppCatalog
 
 
@@ -89,3 +92,47 @@ def test_catalog_reloads_when_apps_file_changes(tmp_path, monkeypatch):
         assert [app["name"] for app in catalog.list()["apps"]] == ["Second"]
     finally:
         catalog.stop()
+
+
+def test_catalog_reuses_exact_local_mesh_url_and_binds_new_apps(tmp_path, monkeypatch):
+    monkeypatch.setattr(apps_module, "easy_tier_address", lambda: "127.0.0.1")
+    monkeypatch.setattr(apps_module, "MESH", ("10.144.0.0/24", "127.0.0.0/8"))
+    occupied = socketserver.TCPServer(("127.0.0.1", 0), http.server.BaseHTTPRequestHandler)
+    port = occupied.server_address[1]
+    _write(tmp_path / "apps.json", {"apps": [
+        {"name": "DSH Web", "port": 3080, "listen_port": port,
+         "url": "http://127.0.0.1:%d" % port, "path": "/?token=kept"},
+        {"name": "Agents", "port": 4200, "listen_port": 0, "path": "/"},
+    ]})
+    catalog = AppCatalog(tmp_path)
+    try:
+        result = catalog.list()
+        assert [(app["name"], app["url"], app["path"]) for app in result["apps"]] == [
+            ("DSH Web", "http://127.0.0.1:%d" % port, "/?token=kept"),
+            ("Agents", catalog.gateway.routes[0]["listen"].replace("127.0.0.1:", "http://127.0.0.1:"), "/"),
+        ]
+        assert result["reason"] == ""
+    finally:
+        catalog.stop()
+        occupied.server_close()
+
+
+def test_gateway_closes_prior_sockets_if_a_later_route_bind_fails():
+    first_probe = socket.socket()
+    first_probe.bind(("127.0.0.1", 0))
+    first_port = first_probe.getsockname()[1]
+    first_probe.close()
+    occupied = socketserver.TCPServer(("127.0.0.1", 0), http.server.BaseHTTPRequestHandler)
+    try:
+        with pytest.raises(OSError):
+            Gateway([
+                AppRoute("first", "127.0.0.1", first_port, "127.0.0.1", 1),
+                AppRoute("occupied", "127.0.0.1", occupied.server_address[1], "127.0.0.1", 1),
+            ], ("127.0.0.0/8",))
+        reclaimed = socket.socket()
+        try:
+            reclaimed.bind(("127.0.0.1", first_port))
+        finally:
+            reclaimed.close()
+    finally:
+        occupied.server_close()

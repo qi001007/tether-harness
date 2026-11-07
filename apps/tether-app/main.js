@@ -53,15 +53,7 @@ const row = rowArg ? rowArg.slice('--row='.length) : ''
 const shotDelay = Number(process.env.TETHER_APP_SHOT_DELAY || 2500)
 const shotPanelDelay = Number(process.env.TETHER_APP_SHOT_PANEL_DELAY || 1500)
 
-function dshViewUrlAllowed(value) {
-  try {
-    const parsed = new URL(String(value || ''))
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false
-    const host = parsed.hostname
-    return host === 'localhost' || host === '127.0.0.1' || host === '::1'
-      || /^10\./.test(host) || /^192\.168\./.test(host) || /^172\.(1[6-9]|2\d|3[01])\./.test(host)
-  } catch (_) { return false }
-}
+const { createDshWebNavigationGuard, dshViewUrlAllowed } = require('./dsh-web-navigation.js')
 
 const BROWSER_WEBVIEW_PARTITION = 'persist:tether-browser'
 
@@ -108,6 +100,12 @@ function ensureAppShortcuts() {
   try { links.add(path.join(app.getPath('programs'), 'Tether APP.lnk')) } catch (_) { /* no start menu */ }
   for (const link of links) {
     try {
+      let existing
+      try { existing = shell.readShortcutLink(link) } catch (_) { /* missing or unreadable */ }
+      const sameInstall = existing?.cwd
+        && path.resolve(existing.cwd).toLowerCase() === path.resolve(appPath).toLowerCase()
+      if (!sameInstall && existing?.target && fs.existsSync(existing.target)
+          && (!existing.cwd || fs.existsSync(existing.cwd))) continue
       if (!shell.writeShortcutLink(link, 'update', options)) shell.writeShortcutLink(link, 'create', options)
     } catch (error) {
       log('shortcut update failed path=' + safeRendererPath(link) + ' message=' + safeRendererMessage(error && error.message))
@@ -253,8 +251,7 @@ async function createWindow() {
   })
   mainWindow.webContents.on('did-attach-webview', (_event, contents) => {
     const browserView = contents.session === session.fromPartition(BROWSER_WEBVIEW_PARTITION)
-    let origin = ''
-    try { origin = new URL(contents.getURL()).origin } catch (_) { /* blocked below */ }
+    const navigation = createDshWebNavigationGuard(contents.getURL())
     contents.setWindowOpenHandler(({ url }) => {
       if (browserView) {
         try {
@@ -266,12 +263,25 @@ async function createWindow() {
     })
     if (browserView) return
     contents.on('will-navigate', (event, target) => {
-      try {
-        if (!origin || new URL(target).origin !== origin) {
-          event.preventDefault()
-          log('blocked webview navigation host=' + new URL(target).host)
-        }
-      } catch (_) { event.preventDefault() }
+      if (navigation.navigate(target)) return
+      event.preventDefault()
+      let host = ''
+      try { host = new URL(String(target)).host } catch (_) { /* malformed navigation */ }
+      log('blocked webview navigation host=' + host)
+    })
+    contents.on('did-start-navigation', (_event, target, _isInPlace, isMainFrame) => {
+      if (navigation.didStart(target, isMainFrame)) return
+      contents.stop()
+      let host = ''
+      try { host = new URL(String(target)).host } catch (_) { /* malformed navigation */ }
+      log('stopped webview navigation host=' + host)
+    })
+    contents.on('will-redirect', (event, target, _isInPlace, isMainFrame) => {
+      if (navigation.redirect(target, isMainFrame)) return
+      event.preventDefault()
+      let host = ''
+      try { host = new URL(String(target)).host } catch (_) { /* malformed redirect */ }
+      log('blocked webview redirect host=' + host)
     })
   })
   mainWindow.on('closed', () => { mainWindow = null })

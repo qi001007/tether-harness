@@ -61,6 +61,35 @@ function uniqueName(destination, names) {
   return dir + stem + ' (' + Date.now() + ')' + ext
 }
 
+function directError(payload, status, operation) {
+  const detail = payload && payload.error && typeof payload.error === 'object' ? payload.error : {}
+  const error = new Error(detail.message || (operation + ' failed with HTTP ' + status))
+  error.code = detail.code || 'direct_http_' + status
+  error.directApplicationError = true
+  return error
+}
+
+function isDirectTransportStatus(status) {
+  return status === 502 || status === 503 || status === 504
+}
+
+function isTransferAbort(error, signal) {
+  return Boolean(signal && signal.aborted) || !!(error && (error.code === 'aborted' || error.name === 'AbortError'))
+}
+
+function transferAborted() {
+  return Object.assign(new Error('已取消'), { code: 'aborted' })
+}
+
+async function directErrorResponse(response, operation, signal) {
+  let payload = null
+  try { payload = await response.json() } catch (error) {
+    if (isTransferAbort(error, signal)) throw transferAborted()
+  }
+  if (isTransferAbort(null, signal)) throw transferAborted()
+  return directError(payload, response.status, operation)
+}
+
 export function createTransferPage({ React, Glyph, api, post, C, devices = [], localDevice = '', onNotice, onError }) {
   const h = React.createElement
   const field = {
@@ -88,51 +117,90 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
     const normalized = value && key === String(localDevice || '')
       ? { ...value, host: '127.0.0.1' }
       : value
-    directCache.set(key, normalized)
+    if (normalized) directCache.set(key, normalized)
     return normalized
   }
-  const postFs = async (deviceId, operation, body) => {
+  const postFs = async (deviceId, operation, body, signal) => {
+    if (signal && signal.aborted) throw transferAborted()
     const info = await directInfo(deviceId)
+    if (signal && signal.aborted) throw transferAborted()
     if (info) {
+      let response = null
       try {
-        const response = await fetch('http://' + info.host + ':' + info.port + '/fs/' + operation, {
+        response = await fetch('http://' + info.host + ':' + info.port + '/fs/' + operation, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + info.token },
-          body: JSON.stringify(body)
+          body: JSON.stringify(body),
+          ...(signal ? { signal } : {})
         })
-        if (response.ok) {
-          const payload = await response.json()
-          if (payload && payload.ok === true) return payload.value
-        } else if (response.status === 401) {
-          directCache.delete(String(deviceId || ''))
+      } catch (error) {
+        if (isTransferAbort(error, signal)) throw transferAborted()
+        directCache.delete(String(deviceId || ''))
+        /* the mesh may be down; use the Hub */
+      }
+      if (response && response.ok) {
+        let payload
+        try { payload = await response.json() } catch (error) {
+          if (isTransferAbort(error, signal)) throw transferAborted()
+          throw directError(null, response.status, operation)
         }
-      } catch (_) { /* the mesh may be down; use the Hub */ }
+        if (isTransferAbort(null, signal)) throw transferAborted()
+        if (payload && payload.ok === true) return payload.value
+        throw directError(payload, response.status, operation)
+      }
+      if (response && !isDirectTransportStatus(response.status)) {
+        directCache.delete(String(deviceId || ''))
+        throw await directErrorResponse(response, operation, signal)
+      }
     }
-    return post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/' + operation, body)
+    if (signal && signal.aborted) throw transferAborted()
+    return post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/' + operation, body,
+      undefined, signal ? { signal } : undefined)
   }
   const directRead = async (deviceId, args) => {
+    if (args.signal && args.signal.aborted) throw transferAborted()
     const info = await directInfo(deviceId)
+    if (args.signal && args.signal.aborted) throw transferAborted()
     if (!info) return null
     try {
       const response = await fetch('http://' + info.host + ':' + info.port + '/fs/read_raw', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + info.token },
-        body: JSON.stringify({ path: args.path, offset: args.offset, limit: args.limit })
+        body: JSON.stringify({ path: args.path, offset: args.offset, limit: args.limit }),
+        ...(args.signal ? { signal: args.signal } : {})
       })
-      if (!response.ok) return null
+      if (!response.ok) {
+        if (isDirectTransportStatus(response.status)) { directCache.delete(String(deviceId || '')); return null }
+        throw await directErrorResponse(response, 'read_raw', args.signal)
+      }
+      const rawSize = response.headers.get('X-Tether-Size')
+      const rawOffset = response.headers.get('X-Tether-Offset')
+      if (rawSize === null || rawOffset === null
+          || !Number.isSafeInteger(Number(rawSize)) || Number(rawSize) < 0
+          || !Number.isSafeInteger(Number(rawOffset)) || Number(rawOffset) < 0) {
+        const payload = await response.json().catch(() => null)
+        throw directError(payload, response.status, 'read_raw')
+      }
       const buffer = await response.arrayBuffer()
-      const size = Number(response.headers.get('X-Tether-Size'))
-      const offset = Number(response.headers.get('X-Tether-Offset'))
+      const size = Number(rawSize)
+      const offset = Number(rawOffset)
       return {
         bytes: new Uint8Array(buffer),
-        size: Number.isFinite(size) ? size : 0,
-        offset: Number.isFinite(offset) ? offset : args.offset,
+        size,
+        offset,
         reset: response.headers.get('X-Tether-Reset') === '1'
       }
-    } catch (_) { return null }
+    } catch (error) {
+      if (isTransferAbort(error, args.signal)) throw transferAborted()
+      if (error && error.directApplicationError) throw error
+      directCache.delete(String(deviceId || ''))
+      return null
+    }
   }
   const directWrite = async (deviceId, args) => {
+    if (args.signal && args.signal.aborted) throw transferAborted()
     const info = await directInfo(deviceId)
+    if (args.signal && args.signal.aborted) throw transferAborted()
     if (!info) return null
     try {
       const query = new URLSearchParams({
@@ -143,12 +211,27 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
       const response = await fetch('http://' + info.host + ':' + info.port + '/fs/write_raw?' + query.toString(), {
         method: 'POST',
         headers: { Authorization: 'Bearer ' + info.token },
-        body: args.bytes
+        body: args.bytes,
+        ...(args.signal ? { signal: args.signal } : {})
       })
-      if (!response.ok) return null
-      const payload = await response.json()
-      return payload && payload.ok === true ? payload.value : null
-    } catch (_) { return null }
+      if (!response.ok) {
+        if (isDirectTransportStatus(response.status)) { directCache.delete(String(deviceId || '')); return null }
+        throw await directErrorResponse(response, 'write_raw', args.signal)
+      }
+      let payload
+      try { payload = await response.json() } catch (error) {
+        if (isTransferAbort(error, args.signal)) throw transferAborted()
+        throw directError(null, response.status, 'write_raw')
+      }
+      if (isTransferAbort(null, args.signal)) throw transferAborted()
+      if (payload && payload.ok === true) return payload.value
+      throw directError(payload, response.status, 'write_raw')
+    } catch (error) {
+      if (isTransferAbort(error, args.signal)) throw transferAborted()
+      if (error && error.directApplicationError) throw error
+      directCache.delete(String(deviceId || ''))
+      return null
+    }
   }
   const iconButton = (name, label, onClick, disabled) => h('button', {
     type: 'button', title: label, 'aria-label': label, disabled,
@@ -383,6 +466,7 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
     setJob({ state: 'running', percent: 0, transferred: 0, total, count: items.length, index: 0, error: '' })
     let doneBytes = 0
     let useCroc = false
+  let cancelByTransferId = false
     try {
       const [sourceInfo, targetInfo] = await Promise.all([
         postFs(side(fromSide).device, 'transfer_info', {}),
@@ -390,7 +474,16 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
       ])
       useCroc = !!(sourceInfo && sourceInfo.available && sourceInfo.relay
         && targetInfo && targetInfo.available && targetInfo.relay)
-    } catch (_) { useCroc = false }
+      cancelByTransferId = !!(sourceInfo && sourceInfo.cancel_by_transfer_id
+        && targetInfo && targetInfo.cancel_by_transfer_id)
+    } catch (error) {
+      if (error && error.directApplicationError) {
+        setJob((current) => ({ ...(current || {}), state: 'error', error: error.message || '传输能力检查失败' }))
+        if (onError) onError(error)
+        return
+      }
+      useCroc = false
+    }
     try {
       for (let index = 0; index < items.length; index += 1) {
         const item = items[index]
@@ -411,6 +504,7 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
             transferId: newTransferId(),
             overwrite,
             signal: controller.signal,
+            cancelByTransferId,
             send: (args) => postFs(sourceDevice, 'transfer_send', args),
             receive: (args) => postFs(target.device, 'transfer_receive', args),
             status: (args) => postFs(target.device, 'transfer_status', args),
@@ -444,13 +538,15 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
               overwrite,
               signal: controller.signal,
               read: (args) => postFs(sourceDevice, 'read',
-                { path: args.path, offset: args.offset, limit: args.limit, encoding: 'base64' }),
+                { path: args.path, offset: args.offset, limit: args.limit, encoding: 'base64' }, args.signal),
               readBytes: (args) => directRead(sourceDevice, args),
               writeBytes: (args) => directWrite(target.device, args),
-              write: (args) => postFs(target.device, 'write_chunk',
-                { ...args, transfer_id: args.transferId }),
+              write: (args) => {
+                const { signal, ...body } = args
+                return postFs(target.device, 'write_chunk', { ...body, transfer_id: args.transferId }, signal)
+              },
               status: (args) => postFs(target.device, 'transfer_status',
-                { path: args.path, transfer_id: args.transferId }),
+                { path: args.path, transfer_id: args.transferId }, args.signal),
               cancel: (args) => postFs(target.device, 'transfer_cancel',
                 { path: args.path, transfer_id: args.transferId }),
               onProgress: (value) => {

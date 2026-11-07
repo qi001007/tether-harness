@@ -13,6 +13,13 @@
 
 模型、账号凭证与 DSH 会话属于目标设备上的 DSH Host。Tether 客户端不应创建并行会话，也不应把私有服务令牌发送给目标模型或公开日志。
 
+## APP 更新与远端运行
+
+- APP 更新按设备安装的组件决定范围。先准备 Node 和 APP 的更新包，再按 Node、APP 的顺序应用。重连后核对运行版本。本机 DSH 插件保留独立入口。
+- 发布包在签名前核对与 updater 一致的大小限制和路径白名单。旧 Node 可能因上限或白名单不同而拒绝新版包。独立暂存、依赖验证和回退适用于这种迁移。
+- 文件转移沿用 EasyTier 直连、croc 私有 relay 与 Hub 兼容路径。目标节点返回的读写错误会直接呈现。传输连接不可用时才尝试备用路径。
+- Agents 工作区使用目标 Node 上的 Codeg。进程通过带令牌的健康检查后，目标 Node 提供 APP 网关地址。Herdr 在目标 Node 的 PTY 里运行。Codeg 的构建基线和重放步骤见 [Codeg runtime 构建说明](codeg-runtime-rebuild.md)。
+
 ## 连接与兼容边界
 
 - 客户端通过配置的服务地址连接 Tether 服务；Node 使用出站的安全 WebSocket 连接，不要求目标设备开放公网入站端口。

@@ -191,7 +191,7 @@ class DshWeb:
                 f"WorkingDirectory={ROOT}\nEnvironment=HOME=/root\n"
                 f"Environment=PATH={NODE_DIR / 'bin'}:/usr/local/bin:/usr/bin:/bin\n"
                 f"ExecStart=/usr/bin/python3 {ROOT / 'run.py'}\n"
-                "Restart=always\nRestartSec=3\nMemoryHigh=300M\nMemoryMax=600M\n\n"
+                "Restart=always\nRestartSec=3\nMemoryHigh=384M\nMemoryMax=600M\n\n"
                 "[Install]\nWantedBy=multi-user.target\n", encoding="utf-8")
             GATEWAY_UNIT.write_text(
                 "[Unit]\nDescription=Tether DSH Web gateway (EasyTier private address)\n"

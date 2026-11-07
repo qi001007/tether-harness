@@ -1,4 +1,15 @@
 # 修改记录
+- 2026-11-07：覆盖其他有效安装快捷方式保护与失效链接修复，更新中心隔离 Electron 测试禁用系统快捷方式写入。
+- 2026-11-07：核对 Herdr 项目能力字段、失效目录拒绝以及 APP 的旧节点启动门禁。
+- 2026-11-07：安装器 HTTP 测试按 UTF-8 读取 Git Bash 路径和输出，用 LF 写入测试脚本，并启用 Git Bash 原生符号链接模式以覆盖 Windows 中文临时目录。
+- 2026-11-07：本地 HTTP fixture 覆盖 Node installer 短响应重试、失败保留原归档且不安装、显式镜像 latest 解析和 ZIP 内 installer LF 归一化。
+- 2026-11-07：覆盖 DSH Web guest timeout/abort/late finish/reload/close stale event、凭据同源门禁、首个私网 origin 与同源 303/跨源 redirect 拒绝。
+- 2026-11-07：覆盖当前 Node 仍有 restart_required/进程版本落后时不报完成、APP 同轮恢复检查和手动重启提示。
+- 2026-11-07：UI performance 更新检查改为验证 watch 使用 prepare 固定的 `expectedVersion`。
+- 2026-11-07：更新链路回归覆盖使用 prepared `to_version`、APP 重启后仅等待本次已应用的 Node 更新，以及无 APP 可恢复时的 deferred Node retry 状态。
+- 2026-11-07：release archive 与 updates 集成测试使用显式临时锁步版本夹具；另测分离版本 metadata 必须由匹配冻结插件输入授权。
+- 2026-11-07：工作流回归覆盖 APP/Node 版本不一致拒绝、插件冻结版本通过和冻结模式仅选择 APP/Node 上传。
+- 2026-11-07：覆盖显式冻结插件构建：不生成新插件 ZIP、Manifest 保留签名插件条目、Node 修复包来自冻结归档，并拒绝不成对的参数。
 - 2026-10-31：新增 `test_app_enrollment.mjs` 覆盖设备令牌/账号注册/他人设备拒绝/普通错误；全量 216 mjs。
 - 2026-10-31：新增 18892 代理“显式用户令牌优先、缺省注入 owner”回归；全量 212 mjs。
 - 2026-10-31：新增分块传输服务端用例（续传、冲突、偏移错误、取消、审计）与 `test_transfer_engine.mjs`（顺序分块、续传、冲突、取消、源变化、空文件）；全量 211 mjs / 135 pytest。
@@ -138,3 +149,17 @@
 - 2026-11-04：新增 `test_croc_transfer.py` 5 条：send 的 `--relay/--code/--transfers/--no-local/--transport relay` 参数、receive 的 code 只走 `CROC_SECRET`、缺 relay/短 code/缺源文件拒绝、取消状态；真实 croc 11.6.3 在本机 relay 上 16 MiB 收发成功，仅证明引擎可用，不作为链路速度验收。
 - 2026-11-04：新增 `test_fs_croc.py` 5 条：send 校验源路径、receive+finish 移出暂存、未完成/无任务拒绝、cancel 清暂存、缺 croc 报错；与 adapter 合计 10 条通过。真实端到端 8 MiB 经 Node fs API 完成，SHA-256 一致；`--ignore-stdin` 必须有，否则管道 stdin 会被 croc 当发送源。
 - 2026-11-04：`test_transfer_engine.mjs` 增加 `transferFileCroc` 编排断言：一次性 `tether-` code、send→receive→status→finish 顺序、finish 改名；mjs 23 条通过。
+- 2026-11-07：新增 Agents runtime authenticated readiness、网关路由缺失时不回传节点 loopback、网关 URL 生效路径回归。
+- 2026-11-07：覆盖 Linux 固定归档校验/只提取 server+mcp+computer-helper/坏 SHA 拒绝、默认端口占用回退、apps.json 实际端口注册和 stale-auth route cleanup；覆盖单飞后台安装失败可见、空白 runtime 开启 delegation、原有设置保留及 opt-out 不变。
+- 2026-11-07：覆盖已占用的 DSH mesh listener 只在可信显式 mesh URL 匹配时复用、Agents route 同时发布、Gateway 部分绑定异常清理 socket，以及 runtime status 在 apps.json 被替换后重新登记自身路由并保留 DSH 项。
+- 2026-11-07：覆盖 cwd 到 Herdr pane key/opt-in 标记的传递，以及 Linux/Windows Herdr session scope 的稳定性和默认终端兼容。
+- 2026-11-07：transfer engine 覆盖 direct read/write 应用错误不得重试 Hub/base64 路径。
+
+- 2026-11-07：`test_tether_ui_shared.mjs` 锁定 direct HTTP/JSON 应用错误与 read_raw 元数据校验约束。
+
+- 2026-11-07：transfer engine 保留 direct transport 不可用时回退 Hub chunk 的回归覆盖。
+- 2026-11-07：transfer engine 覆盖 direct read/write 挂起时 AbortSignal 取消、按准确 transfer id 清理、禁止 Hub 重试，以及已确认完成的最终写入在取消竞态下仍成功。
+- 2026-11-07：`test_dsh_web_unit.py` 锁定 DSH Web worker `384M/600M` 阈值及网关 `80M/160M` 阈值，避免安装模板回退。
+- 2026-11-07：新增 Herdr hydration 校验：固定资产 hash/size、精确 Windows ZIP 成员、现存冲突文件拒绝覆盖和全资产验证完成前不安装；release 校验覆盖候选分支、任意分支拒绝与既有 tag。
+
+- 2026-11-07：解除 NativeSurface 设备切换/可见性测试的跳过；DSH 桌面状态测试覆盖 start 后最多 4 秒的 surface 快照缓存。

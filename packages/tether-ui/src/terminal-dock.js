@@ -38,7 +38,7 @@ function isDarkTheme() {
   return !!(typeof document !== 'undefined' && document.body && document.body.hasAttribute('data-ds-dark-theme'))
 }
 
-export function createTerminalDock({ React, Glyph, post, C, device, cwd, height = 240, initialShell = '', initialAgent = '', initialCommand = '', initialArgv = null, label = '', themeMode = 'auto', fill = false, onHeight, onClose }) {
+export function createTerminalDock({ React, Glyph, post, C, device, cwd, height = 240, initialShell = '', initialAgent = '', initialHerdrProject = false, initialCommand = '', initialArgv = null, label = '', themeMode = 'auto', fill = false, onHeight, onClose }) {
   const h = React.createElement
   const runtime = typeof window !== 'undefined' ? window.TetherTerminalRuntime : null
   const [shells, setShells] = React.useState([])
@@ -136,7 +136,7 @@ export function createTerminalDock({ React, Glyph, post, C, device, cwd, height 
         await postRef.current(url('terminal_stop'), { session_id: current })
       } catch (_) { /* node may already have closed it */ }
     }
-    const startSession = async (shellId, agentId) => {
+    const startSession = async (shellId, agentId, knownShells) => {
       fitNow()
       setStatus('starting')
       setError('')
@@ -145,6 +145,14 @@ export function createTerminalDock({ React, Glyph, post, C, device, cwd, height 
         if (agentId) payload.agent = agentId
         else if (Array.isArray(initialArgv) && initialArgv.length) payload.command = initialArgv
         else payload.shell = shellId || undefined
+        if (initialHerdrProject && shellId === 'herdr') {
+          const options = knownShells || (await postRef.current(url('terminal_shells'), {}))?.shells
+          if (disposed) return
+          const herdr = (Array.isArray(options) ? options : []).find((item) => item?.id === 'herdr' && item.available)
+          if (!herdr) throw new Error('此节点没有 Herdr')
+          if (herdr.project_sessions !== true) throw new Error('此节点尚不支持独立的 Herdr 工作区，请更新 Node 后重试。')
+          payload.herdr_project = true
+        }
         const result = await postRef.current(url('terminal_start'), payload)
         if (disposed) {
           if (result && result.session_id) void postRef.current(url('terminal_stop'), { session_id: result.session_id }).catch(() => {})
@@ -294,10 +302,11 @@ export function createTerminalDock({ React, Glyph, post, C, device, cwd, height 
           shellRef.current = ''
           await startSession('', '')
         } else {
-          const preferred = (initialShell && list.some((item) => item.id === initialShell) ? initialShell : ((list.find((item) => item.default) || list[0] || {}).id || ''))
+          const preferred = initialHerdrProject ? 'herdr' : (initialShell && list.some((item) => item.id === initialShell)
+            ? initialShell : ((list.find((item) => item.default) || list[0] || {}).id || ''))
           setShell(preferred)
           shellRef.current = preferred
-          await startSession(preferred)
+          await startSession(preferred, undefined, list)
         }
         if (initialCommand && !(Array.isArray(initialArgv) && initialArgv.length)) {
           setTimeout(() => {

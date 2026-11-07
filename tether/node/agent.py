@@ -416,12 +416,14 @@ class Node:
                 await self._send({"type": "event", **event})
             log(f"[ws] replayed {len(self.store.pending())} pending event(s)")
             hb = asyncio.create_task(self._heartbeat())
+            lag = asyncio.create_task(self._watch_loop_lag())
             try:
                 while True:
                     raw = await ws.recv()
                     await self._handle(json.loads(raw))
             finally:
                 hb.cancel()
+                lag.cancel()
                 for tasks in (self.fs_tasks, self.dsh_tasks, self.surface_tasks):
                     for task in tuple(tasks):
                         task.cancel()
@@ -443,8 +445,17 @@ class Node:
             await asyncio.sleep(2)
             try:
                 await self._send({"type": "heartbeat", "ts": time.time()})
-            except Exception:
+            except Exception as exc:  # noqa: BLE001 - a dead socket is handled by the reconnect loop
+                log(f"[ws] heartbeat send failed: {exc!r}")
                 return
+
+    async def _watch_loop_lag(self) -> None:
+        while True:
+            started = time.monotonic()
+            await asyncio.sleep(2)
+            lag = time.monotonic() - started - 2
+            if lag > 0.5:
+                log(f"[ws] event loop blocked for {lag:.1f}s")
 
     def _persist_device_token(self, token: str) -> None:
         self.device_token = token
@@ -746,6 +757,11 @@ class Node:
             result: dict[str, Any] | None = None
             try:
                 if action == "apply":
+                    if component == "node":
+                        try:
+                            await asyncio.to_thread(self.fs.agents_runtime.stop)
+                        except Exception as exc:  # noqa: BLE001 - best effort; apply reports locks
+                            log(f"[update] agents runtime stop failed before node update: {exc!r}")
                     result = await asyncio.to_thread(manager.apply, msg["prepared_id"])
                 else:
                     result = await asyncio.to_thread(getattr(manager, str(action)))

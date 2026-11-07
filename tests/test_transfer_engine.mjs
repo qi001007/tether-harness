@@ -87,6 +87,78 @@ test('cancellation removes the partial transfer', async () => {
   assert.ok(w.writes.length >= 1)
 })
 
+test('cancel aborts a stalled direct read and cleans only its transfer id', async () => {
+  const controller = new AbortController()
+  let startRead
+  const readStarted = new Promise((resolve) => { startRead = resolve })
+  const cancelIds = []
+  let hubReads = 0
+  let writes = 0
+  const transfer = transferFile({
+    status: async () => ({ exists: false, offset: 0 }),
+    readBytes: ({ signal }) => new Promise((_, reject) => {
+      startRead()
+      signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true })
+    }),
+    read: async () => { hubReads += 1; return { size: 0, offset: 0, base64: '' } },
+    write: async () => { writes += 1; return { offset: 0, complete: true } },
+    cancel: async (args) => cancelIds.push(args.transferId),
+    source: 'source', destination: 'destination', transferId: 'read-job', signal: controller.signal
+  })
+  await readStarted
+  controller.abort()
+  await assert.rejects(transfer, (error) => error.code === 'aborted')
+  assert.equal(hubReads, 0)
+  assert.equal(writes, 0)
+  assert.deepEqual(cancelIds, ['read-job'])
+})
+
+test('cancel aborts a stalled direct write without retrying through Hub', async () => {
+  const controller = new AbortController()
+  let startWrite
+  const writeStarted = new Promise((resolve) => { startWrite = resolve })
+  const cancelIds = []
+  let hubWrites = 0
+  const bytes = new Uint8Array([1, 2, 3])
+  const transfer = transferFile({
+    status: async () => ({ exists: false, offset: 0 }),
+    readBytes: async () => ({ size: bytes.length, offset: 0, bytes }),
+    read: async () => ({ size: bytes.length, offset: 0, base64: '' }),
+    writeBytes: ({ signal }) => new Promise((_, reject) => {
+      startWrite()
+      signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true })
+    }),
+    write: async () => { hubWrites += 1; return { offset: bytes.length, complete: true } },
+    cancel: async (args) => cancelIds.push(args.transferId),
+    source: 'source', destination: 'destination', transferId: 'write-job', signal: controller.signal
+  })
+  await writeStarted
+  controller.abort()
+  await assert.rejects(transfer, (error) => error.code === 'aborted')
+  assert.equal(hubWrites, 0)
+  assert.deepEqual(cancelIds, ['write-job'])
+})
+
+test('a confirmed final write stays successful if cancellation races its response', async () => {
+  const controller = new AbortController()
+  const bytes = new Uint8Array([1, 2, 3])
+  let cancelCalls = 0
+  const result = await transferFile({
+    status: async () => ({ exists: false, offset: 0 }),
+    readBytes: async () => ({ size: bytes.length, offset: 0, bytes }),
+    read: async () => ({ size: bytes.length, offset: 0, base64: '' }),
+    write: async () => ({ offset: bytes.length, complete: true }),
+    writeBytes: async () => {
+      controller.abort()
+      return { offset: bytes.length, complete: true }
+    },
+    cancel: async () => { cancelCalls += 1 },
+    source: 'source', destination: 'destination', transferId: 'completed-job', signal: controller.signal
+  })
+  assert.equal(result.bytes, bytes.length)
+  assert.equal(cancelCalls, 0)
+})
+
 test('a changing source aborts instead of writing mixed bytes', async () => {
   const payload = Buffer.alloc(TRANSFER_CHUNK * 2, 0x51)
   const w = world(payload, { size: payload.length, onRead: (count) => { if (count === 2) w.readSize = 1 } })
@@ -125,6 +197,45 @@ test('next chunk is read while the current chunk is still writing', async () => 
   assert.deepEqual(w.written, payload)
 })
 
+test('direct read application errors do not retry the same read over the Hub', async () => {
+  let hubReads = 0
+  await assert.rejects(transferFile({
+    readBytes: async () => { throw Object.assign(new Error('permission denied'), { code: 'permission_denied' }) },
+    read: async () => { hubReads += 1; return { size: 0, offset: 0, base64: '' } },
+    write: async () => ({ offset: 0, complete: true }),
+    source: 'C:\\private.bin', destination: 'D:\\private.bin'
+  }), (error) => error.code === 'permission_denied')
+  assert.equal(hubReads, 0, 'an application error is not retried through the slower route')
+})
+
+test('direct write application errors do not retry file bytes over the Hub', async () => {
+  const payload = new Uint8Array([1, 2, 3])
+  let hubWrites = 0
+  await assert.rejects(transferFile({
+    read: async () => ({ size: payload.length, offset: 0, base64: Buffer.from(payload).toString('base64') }),
+    readBytes: async () => ({ size: payload.length, offset: 0, bytes: payload }),
+    writeBytes: async () => { throw Object.assign(new Error('quota exceeded'), { code: 'quota_exceeded' }) },
+    write: async () => { hubWrites += 1; return { offset: payload.length, complete: true } },
+    source: 'C:\\source.bin', destination: 'D:\\target.bin'
+  }), (error) => error.code === 'quota_exceeded')
+  assert.equal(hubWrites, 0, 'an application error cannot silently use the base64 route')
+})
+
+test('unavailable direct transports still fall back to Hub chunk transfer', async () => {
+  const payload = Buffer.from('fallback bytes')
+  const w = world(payload)
+  const result = await transferFile({
+    readBytes: async () => null,
+    read: w.read,
+    writeBytes: async () => null,
+    write: w.write,
+    status: w.status,
+    source: 'C:\\source.bin', destination: 'D:\\target.bin', overwrite: true
+  })
+  assert.equal(result.bytes, payload.length)
+  assert.deepEqual(w.written, payload)
+})
+
 test('croc transfer sends a one-time code, polls, then finishes by name', async () => {
   const calls = []
   const result = await transferFileCroc({
@@ -142,6 +253,74 @@ test('croc transfer sends a one-time code, polls, then finishes by name', async 
   assert.equal(calls[1][1].transfer_id, result.transferId)
   assert.equal(calls[2][0], 'finish')
   assert.equal(calls[2][1].name, 'renamed.bin')
+})
+
+test('croc timeout is bounded and skips unsafe legacy cancellation', async () => {
+  const realNow = Date.now
+  let now = 0
+  Date.now = () => { now += 30_000; return now }
+  let receiveCancels = 0
+  let sendCancels = 0
+  try {
+    await assert.rejects(transferFileCroc({
+      source: 'source', destination: 'destination',
+      send: async () => ({ transfer_id: 'send-owned' }),
+      receive: async () => ({ transfer_id: 'receive-owned' }),
+      status: async () => ({ state: 'running', percent: 0 }),
+      finish: async () => ({}),
+      cancel: async () => { receiveCancels += 1 },
+      cancelSend: async () => { sendCancels += 1 }
+    }), (error) => error.code === 'croc_timeout')
+  } finally {
+    Date.now = realNow
+  }
+  assert.equal(receiveCancels, 0)
+  assert.equal(sendCancels, 0)
+})
+
+test('croc timeout cancels only owned send and receive ids when supported', async () => {
+  const realNow = Date.now
+  let now = 0
+  Date.now = () => { now += 30_000; return now }
+  const cancelled = []
+  try {
+    await assert.rejects(transferFileCroc({
+      source: 'source', destination: 'destination', transferId: 'receive-owned', cancelByTransferId: true,
+      send: async () => ({ transfer_id: 'send-owned' }),
+      receive: async () => ({ transfer_id: 'receive-owned' }),
+      status: async () => ({ state: 'running', percent: 0 }),
+      finish: async () => ({}),
+      cancel: async (args) => { cancelled.push(['receive', args.transfer_id]) },
+      cancelSend: async (args) => { cancelled.push(['send', args.transfer_id]) }
+    }), (error) => error.code === 'croc_timeout')
+  } finally {
+    Date.now = realNow
+  }
+  assert.deepEqual(cancelled.sort(), [['receive', 'receive-owned'], ['send', 'send-owned']])
+})
+
+test('croc activity sequence prevents timeout during large transfers below one percent', async () => {
+  const realNow = Date.now
+  let now = 0
+  let polls = 0
+  Date.now = () => { now += 30_000; return now }
+  try {
+    const result = await transferFileCroc({
+      source: 'source', destination: 'destination',
+      send: async () => ({ transfer_id: 'send-owned' }),
+      receive: async () => ({ transfer_id: 'receive-owned' }),
+      status: async () => {
+        polls += 1
+        return { state: polls >= 3 ? 'completed' : 'running', percent: 0, progress_seq: polls }
+      },
+      finish: async () => ({ path: 'destination', bytes: 64 * 1024 ** 3 }),
+      cancel: async () => {}, cancelSend: async () => {}
+    })
+    assert.equal(result.bytes, 64 * 1024 ** 3)
+    assert.equal(polls, 3)
+  } finally {
+    Date.now = realNow
+  }
 })
 
 test('an empty file creates a finished empty destination', async () => {

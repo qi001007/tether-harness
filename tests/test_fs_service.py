@@ -43,6 +43,35 @@ def test_readonly_allows_project_root_and_denies_outside(env, tmp_path: Path) ->
     assert any(row["phase"] == "result" and row["result"] == "ok" for row in audit)
 
 
+def test_agents_runtime_surface_does_not_return_node_loopback_when_gateway_route_is_missing(env) -> None:
+    svc: FsService = env["svc"]
+    svc.agents_runtime.port = 4200
+    svc.agents_runtime.token = "private-token"
+    result = svc._agents_runtime_surface({
+        "running": True, "url": "http://127.0.0.1:4200/", "token": "private-token",
+    })
+    assert result["url"] == ""
+    assert "token" not in result
+
+
+def test_agents_runtime_surface_uses_gateway_route(env) -> None:
+    svc: FsService = env["svc"]
+    svc.agents_runtime.port = 4200
+    svc.agents_runtime.token = "private-token"
+
+    class Gateway:
+        @staticmethod
+        def list(_args):
+            return {"apps": [{"name": "Agents", "url": "https://node.example/agents"}]}
+
+    svc.apps = Gateway()
+    result = svc._agents_runtime_surface({
+        "running": True, "url": "http://127.0.0.1:4200/", "token": "private-token",
+    })
+    assert result["url"].startswith("https://node.example/agents/token.html?token=")
+    assert "token" not in result
+
+
 def test_existing_dsh_workspace_is_writable_in_readonly(env) -> None:
     home: Path = env["home"]
     dsh_dir = home / "dsh-project"

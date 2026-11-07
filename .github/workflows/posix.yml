@@ -7,6 +7,7 @@ on:
       - 'tether/node/terminal.py'
       - 'tests/test_terminal_posix.py'
       - 'laptop/install-node.sh'
+      - 'version.json'
       - '.github/workflows/posix.yml'
 
 jobs:
@@ -30,11 +31,32 @@ jobs:
       - name: Installer prerequisite check
         run: bash laptop/install-node.sh --check
       - name: Build node archive
-        run: python scripts/build_release.py
+        shell: bash
+        run: |
+          app_version=$(python -c "import json;print(json.load(open('version.json'))['components']['app'])")
+          plugin_version=$(python -c "import json;print(json.load(open('version.json'))['components']['plugin'])")
+          if [ "$plugin_version" = "$app_version" ]; then
+            python scripts/build_release.py
+          else
+            if [[ ! "$plugin_version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+              echo "Invalid plugin version in version.json: $plugin_version" >&2
+              exit 1
+            fi
+            frozen_dir="$RUNNER_TEMP/tether-frozen-plugin"
+            mkdir -p "$frozen_dir"
+            base="https://github.com/qi001007/tether-harness/releases/download/v$plugin_version"
+            curl --fail --show-error --silent --location --proto '=https' --tlsv1.2 \
+              "$base/tether-update.json" -o "$frozen_dir/tether-update.json"
+            curl --fail --show-error --silent --location --proto '=https' --tlsv1.2 \
+              "$base/tether-plugin-$plugin_version.zip" -o "$frozen_dir/tether-plugin-$plugin_version.zip"
+            python scripts/build_release.py \
+              --frozen-plugin-manifest "$frozen_dir/tether-update.json" \
+              --frozen-plugin-archive "$frozen_dir/tether-plugin-$plugin_version.zip"
+          fi
       - name: One-shot installer smoke
         shell: bash
         run: |
-          version=$(python -c "import json;print(json.load(open('version.json'))['components']['app'])")
+          version=$(python -c "import json;print(json.load(open('version.json'))['components']['node'])")
           bash laptop/install-node.sh \
             --archive "release/tether-node-$version.zip" \
             --prefix "$RUNNER_TEMP/tether-node-smoke" \

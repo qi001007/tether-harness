@@ -57,6 +57,47 @@ def artifact_server():
     server.close()
 
 
+def _use_lockstep_release_fixture(builder, monkeypatch, version: str) -> None:
+    monkeypatch.setattr(builder, "validate_versions", lambda frozen=None: {
+        "app": version, "plugin": version, "node": version,
+    })
+    add_tree = builder.add_tree
+    add_file = builder.add_file
+
+    class LockstepArchive:
+        def __init__(self, archive):
+            self.archive = archive
+
+        def write(self, source, archive_name):
+            if archive_name.endswith("/package.json"):
+                package = json.loads(Path(source).read_text(encoding="utf-8"))
+                package["version"] = version
+                self.archive.writestr(archive_name, json.dumps(package).encode("utf-8"),
+                                     compress_type=zipfile.ZIP_DEFLATED)
+            else:
+                self.archive.write(source, archive_name)
+
+        def writestr(self, *args, **kwargs):
+            return self.archive.writestr(*args, **kwargs)
+
+        def __getattr__(self, name):
+            return getattr(self.archive, name)
+
+    def add_tree_with_fixture(archive, source, prefix, *, plugin_version=None):
+        return add_tree(LockstepArchive(archive), source, prefix, plugin_version=plugin_version)
+
+    def add_file_with_fixture(archive, relative, prefix):
+        if relative == "version.json":
+            archive.writestr(f"{prefix}/{relative}", json.dumps({"schema": 1, "components": {
+                "app": version, "plugin": version, "node": version,
+            }}).encode("utf-8"))
+        else:
+            add_file(archive, relative, prefix)
+
+    monkeypatch.setattr(builder, "add_tree", add_tree_with_fixture)
+    monkeypatch.setattr(builder, "add_file", add_file_with_fixture)
+
+
 def make_zip(component: str, version: str = "0.2.1", extra: dict[str, bytes] | None = None) -> bytes:
     prefix = f"tether-{component}-{version}/"
     if component == "app":
@@ -739,6 +780,52 @@ def test_mid_apply_failure_rolls_back_replaced_files(artifact_server: ArtifactSe
     assert json.loads((root / "version.json").read_text(encoding="utf-8"))["components"]["app"] == "0.2.0"
 
 
+def test_apply_retry_uses_unique_backup_path_and_preserves_collision(
+    artifact_server: ArtifactServer, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "install"
+    seed_version(root)
+    app = root / "apps" / "tether-app"
+    app.mkdir(parents=True)
+    (app / "main.js").write_bytes(b"old-main")
+    (app / "preload.js").write_bytes(b"old-preload")
+    (app / "package.json").write_text('{"dependencies":{},"devDependencies":{}}', encoding="utf-8")
+    url = install_manifest(artifact_server, "app", make_zip("app"))
+    manager = UpdateManager(root, "app", manifest_url=url, state_dir=tmp_path / "state")
+    prepared = manager.prepare()
+    assert prepared["ok"] is True, prepared
+    monkeypatch.setattr(time, "time", lambda: 123.0)
+    write_atomic = manager._write_atomic
+    failed = False
+
+    def fail_once(target: Path, data: bytes) -> None:
+        nonlocal failed
+        if not failed and target.name == "preload.js":
+            failed = True
+            raise OSError("injected failure before retry")
+        write_atomic(target, data)
+
+    manager._write_atomic = fail_once  # type: ignore[method-assign]
+    first = manager.apply(prepared["prepared_id"])
+    assert first["error_code"] == "apply_failed"
+    assert (app / "main.js").read_bytes() == b"old-main"
+
+    backups = tmp_path / "state" / "backups" / "app"
+    backup_dir = backups / prepared["prepared_id"]
+    timestamp_collision = backup_dir.with_name(backup_dir.name + "-123")
+    timestamp_collision.mkdir()
+    sentinel = timestamp_collision / "keep.txt"
+    sentinel.write_text("do not replace", encoding="utf-8")
+
+    second = manager.apply(prepared["prepared_id"])
+    assert second["ok"] is True, second
+    assert sentinel.read_text(encoding="utf-8") == "do not replace"
+    retained = list(backups.glob(prepared["prepared_id"] + "-123-*"))
+    assert len(retained) == 1
+    assert (retained[0] / "0" / "apps" / "tether-app" / "main.js").read_bytes() == b"old-main"
+    assert (backup_dir / "0" / "apps" / "tether-app" / "main.js").read_bytes() == b"old-main"
+
+
 @pytest.mark.skipif(os.name != "nt", reason="Windows 8.3 aliases only")
 def test_file_dependency_expands_windows_short_paths(tmp_path: Path) -> None:
     import ctypes
@@ -1064,7 +1151,7 @@ def test_legacy_install_without_component_version_uses_known_020_baseline(tmp_pa
 
 
 def test_built_release_archives_prepare_and_apply_for_all_components(
-    artifact_server: ArtifactServer, tmp_path: Path
+    artifact_server: ArtifactServer, tmp_path: Path, monkeypatch
 ) -> None:
     import importlib.util
     import re
@@ -1075,8 +1162,9 @@ def test_built_release_archives_prepare_and_apply_for_all_components(
     builder = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(builder)
     builder.OUT = tmp_path / "release"
-    builder.main()
     version = builder.VERSION
+    _use_lockstep_release_fixture(builder, monkeypatch, version)
+    builder.main([])
 
     manifest = json.loads((builder.OUT / "tether-update.json").read_text(encoding="utf-8"))
     for component in ("app", "plugin", "node"):
@@ -1170,7 +1258,7 @@ def test_built_release_archives_prepare_and_apply_for_all_components(
 
 
 def test_real_020_release_archives_upgrade_with_bootstrap_updater(
-    artifact_server: ArtifactServer, tmp_path: Path
+    artifact_server: ArtifactServer, tmp_path: Path, monkeypatch
 ) -> None:
     import importlib.util
     import re
@@ -1192,7 +1280,8 @@ def test_real_020_release_archives_upgrade_with_bootstrap_updater(
     builder = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(builder)
     builder.OUT = tmp_path / "release-0.2.1"
-    builder.main()
+    _use_lockstep_release_fixture(builder, monkeypatch, builder.VERSION)
+    builder.main([])
     manifest = json.loads((builder.OUT / "tether-update.json").read_text(encoding="utf-8"))
     for component in ("app", "plugin", "node"):
         artifact = (builder.OUT / f"tether-{component}-{version}.zip").read_bytes()

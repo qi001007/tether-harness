@@ -101,19 +101,23 @@ class Gateway:
         self.threads: list[threading.Thread] = []
         self.routes: list[dict[str, object]] = []
         networks = tuple(ipaddress.ip_network(value, strict=False) for value in allowed)
-        for route in routes:
-            route.validate()
-            handler = type("_RouteHandler", (_Handler,), {"route": route, "allowed": networks})
-            server = _Server((route.listen_host, route.listen_port), handler)
-            thread = threading.Thread(target=server.serve_forever, daemon=True)
-            thread.start()
-            self.servers.append(server)
-            self.threads.append(thread)
-            self.routes.append({
-                "name": route.name,
-                "listen": "{}:{}".format(route.listen_host, server.server_address[1]),
-                "target": "{}:{}".format(route.target_host, route.target_port),
-            })
+        try:
+            for route in routes:
+                route.validate()
+                handler = type("_RouteHandler", (_Handler,), {"route": route, "allowed": networks})
+                server = _Server((route.listen_host, route.listen_port), handler)
+                thread = threading.Thread(target=server.serve_forever, daemon=True)
+                thread.start()
+                self.servers.append(server)
+                self.threads.append(thread)
+                self.routes.append({
+                    "name": route.name,
+                    "listen": "{}:{}".format(route.listen_host, server.server_address[1]),
+                    "target": "{}:{}".format(route.target_host, route.target_port),
+                })
+        except BaseException:
+            self.stop()
+            raise
 
     def stop(self) -> None:
         for server in self.servers:

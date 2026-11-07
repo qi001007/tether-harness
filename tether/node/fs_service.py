@@ -637,7 +637,7 @@ class FsService:
         croc = getattr(self, "croc", None)
         if croc is None:
             return {"engine": "croc", "available": False, "version": "", "relay": False}
-        return {"engine": "croc", **croc.info()}
+        return {"engine": "croc", **croc.info(), "cancel_by_transfer_id": True}
 
     def _op_transfer_status(self, args: dict[str, Any]) -> dict[str, Any]:
         if not self._croc_context and args.get("path"):
@@ -658,11 +658,22 @@ class FsService:
         croc = getattr(self, "croc", None)
         if croc is None:
             return {"engine": "croc", "state": "idle"}
-        status = croc.job.cancel() if croc.job else {"state": "idle"}
-        staging = self._croc_context.get("staging")
+        context = self._croc_context
+        requested_id = str(args.get("transfer_id") or "")
+        if requested_id:
+            if not context or context.get("transfer_id") != requested_id:
+                return {"engine": "croc", "state": "unchanged", "cancelled": False}
+            job = context.get("job")
+        else:
+            job = croc.job
+        status = job.cancel() if job else {"state": "idle"}
+        if requested_id and self._croc_context is not context:
+            return {**status, "engine": "croc", "cancelled": False}
+        staging = context.get("staging")
         if staging:
             shutil.rmtree(staging, ignore_errors=True)
-        self._croc_context = {}
+        if not requested_id or self._croc_context is context:
+            self._croc_context = {}
         return {**status, "engine": "croc"}
 
     def _op_transfer_finish(self, args: dict[str, Any]) -> dict[str, Any]:
@@ -813,11 +824,11 @@ class FsService:
                 if isinstance(item, dict) and item.get("name") == "Agents":
                     base = str(item.get("url") or "").rstrip("/")
                     break
-        if not base:
-            base = str(result.get("url") or "").rstrip("/")
-        if base:
-            result["url"] = self.agents_runtime.surface_url(base)
-            result.pop("token", None)
+        # This URL is consumed by the APP viewer. A node-local loopback URL
+        # points at the viewer's machine for remote nodes, so fail closed when
+        # the app gateway has not published the node route yet.
+        result["url"] = self.agents_runtime.surface_url(base) if base else ""
+        result.pop("token", None)
         return result
 
     def _op_agents_runtime_status(self, _args: dict[str, Any]) -> Any:
@@ -831,7 +842,7 @@ class FsService:
         result = self._agents_runtime_surface(result)
         self.audit.add(op="agents_runtime_start", path=str(self.agents_runtime.workspace),
                        mode=self.policy.data.get("mode"),
-                       phase="result", result="ok" if result.get("running") else "failed")
+                       phase="result", result="ok" if result.get("running") or result.get("installing") else "failed")
         return result
 
     def _op_agents_runtime_stop(self, _args: dict[str, Any]) -> Any:

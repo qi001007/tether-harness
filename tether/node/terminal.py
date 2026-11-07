@@ -9,6 +9,7 @@ WebSocket.
 from __future__ import annotations
 
 import base64
+import hashlib
 import os
 import secrets
 import shutil
@@ -118,13 +119,25 @@ def _herdr_wrapper(herdr: str) -> str:
             'set "XDG_STATE_HOME=' + str(state / "state") + '"',
             'set "APPDATA=' + str(state / "appdata") + '"',
             'set "PATH=' + str(home) + ';' + str(home / "node_modules" / ".bin") + ';%PATH%"',
-            '"%~dp0herdr.exe" --session tether %*',
+            'if not defined TETHER_HERDR_SESSION set "TETHER_HERDR_SESSION=tether"',
+            '"%~dp0herdr.exe" --session "%TETHER_HERDR_SESSION%" %*',
             "",
         ]
         wrapper.write_text(chr(10).join(lines), encoding="ascii")
     except OSError:
         return herdr
     return str(wrapper)
+
+
+def _herdr_project_launch(shell_id: str, command: list[str], cwd: Path,
+                          extra_env: dict[str, str] | None, *, windows: bool) -> tuple[list[str], dict[str, str] | None]:
+    if shell_id != "herdr":
+        return command, extra_env
+    digest = hashlib.sha256(os.fsencode(str(cwd.resolve()))).hexdigest()[:20]
+    session = "tether-project-" + digest
+    if windows:
+        return command, {**(extra_env or {}), "TETHER_HERDR_SESSION": session}
+    return [command[0], "--session", session], extra_env
 
 
 def _windows_shells() -> dict[str, tuple[str, list[str], str]]:
@@ -206,7 +219,7 @@ class TerminalService:
     def shells(self) -> list[dict[str, Any]]:
         default = self.default_shell_id()
         return [{"id": shell_id, "name": spec[0], "default": shell_id == default,
-                 "available": self._available(spec)}
+                 "available": self._available(spec), "project_sessions": shell_id == "herdr"}
                 for shell_id, spec in self.specs.items()]
 
     def default_shell_id(self) -> str:
@@ -376,7 +389,10 @@ class TerminalService:
                         cols=cols, rows=rows)
 
     def start(self, args: dict[str, Any]) -> dict[str, Any]:
-        cwd = Path(str(args.get("cwd") or self.cwd)).expanduser()
+        requested_cwd = args.get("cwd")
+        cwd = Path(str(requested_cwd or self.cwd)).expanduser()
+        if args.get("herdr_project") is True and args.get("shell") == "herdr" and (not requested_cwd or not cwd.is_dir()):
+            raise ValueError("Herdr project directory is unavailable")
         if not cwd.is_dir():
             fallback = Path(self.cwd).expanduser()
             cwd = fallback if fallback.is_dir() else Path.home()
@@ -394,6 +410,9 @@ class TerminalService:
             cols, rows = DEFAULT_COLS, DEFAULT_ROWS
         raw_env = args.get("env")
         extra_env = {str(k): str(v) for k, v in raw_env.items()} if isinstance(raw_env, dict) else None
+        if args.get("herdr_project") is True:
+            command, extra_env = _herdr_project_launch(shell_id, command, cwd, extra_env,
+                                                       windows=os.name == "nt")
         session = self._start_pty(command, shell_id, cwd, cols, rows, extra_env)
         if session is None:
             kwargs: dict[str, Any] = {

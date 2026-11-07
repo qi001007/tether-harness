@@ -44,14 +44,15 @@ test('device switching cannot apply the previous device workspace path', () => {
   assert.match(source, /setProjectsDevice\(''\)/)
 })
 
-test('remote device updates order node, installed plugin, then app', async () => {
+test('APP-managed device updates include APP and Node only', async () => {
   const { deviceUpdateComponents, updateAvailableFor } = await import('../packages/tether-ui/src/app.js')
-  assert.deepEqual(deviceUpdateComponents({ app_version: '0.2.4', dsh_surface: true }), ['node', 'plugin', 'app'])
+  assert.deepEqual(deviceUpdateComponents({ app_version: '0.2.4', dsh_surface: true }), ['node', 'app'])
   assert.deepEqual(deviceUpdateComponents({ app_version: '0.2.4' }), ['node', 'app'])
-  assert.deepEqual(deviceUpdateComponents({ dsh_surface: true }), ['node', 'plugin'])
+  assert.deepEqual(deviceUpdateComponents({ dsh_surface: true }), ['node'])
+  assert.deepEqual(deviceUpdateComponents({}), ['node'])
   assert.equal(updateAvailableFor({ devices: { laptop: { app: { update_available: true } } } }, 'app', 'laptop'), true)
-  assert.match(source, /await watchNodeRestart\(scope, entry\.authority\)/)
-  assert.match(source, /await watchAppRestart\(scope, entry\.authority, entry\.checked && entry\.checked\.latest_version\)/)
+  assert.match(source, /await watchNodeRestart\(scope, entry\.authority, entry\.expectedVersion\)/)
+  assert.match(source, /await watchAppRestart\(scope, entry\.authority, entry\.expectedVersion\)/)
 })
 
 test('hover uses an in-app tooltip and double click is guarded', () => {
