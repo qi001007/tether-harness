@@ -41,6 +41,36 @@ test('Hub APP status reports only its configured device as online', async (t) =>
   assert.equal(configuredNodeState.onlineDeviceCount, 1)
 })
 
+test('Hub APP external Node mode does not start or stop a second Node', async (t) => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tether-supervisor-external-node-'))
+  t.after(() => fs.rmSync(dataDir, { recursive: true, force: true }))
+  const spawned = []
+  const supervisor = new Supervisor({
+    repoRoot: root,
+    dataDir,
+    env: {
+      TETHER_CONTROLLER_URL: 'https://hub.example',
+      TETHER_DEVICE: 'node-a',
+      TETHER_NODE_TOKEN: 'device-token',
+      TETHER_NODE_MODE: 'external'
+    },
+    spawnChild: (...args) => { spawned.push(args); throw new Error('external Node mode must not spawn') }
+  })
+  supervisor.healthy = async () => ({ devices: [{ device_id: 'node-a', online: true }] })
+
+  const started = await supervisor.start()
+  assert.equal(started.mode, 'hub')
+  assert.equal(started.node.state, 'external')
+  assert.equal(started.node.deviceOnline, true)
+  assert.equal(supervisor.procs.node, null)
+  assert.equal(spawned.length, 0)
+
+  const stopped = await supervisor.stop()
+  assert.equal(stopped.node.state, 'stopped')
+  assert.equal(supervisor.procs.node, null)
+  assert.equal(spawned.length, 0)
+})
+
 test('missing controller device data remains unknown while an explicit empty list means zero', (t) => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tether-supervisor-state-'))
   t.after(() => fs.rmSync(dataDir, { recursive: true, force: true }))

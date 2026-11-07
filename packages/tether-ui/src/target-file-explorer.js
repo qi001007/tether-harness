@@ -286,7 +286,7 @@ export function TargetFileExplorer({
     body = loading
       ? h('div', { style: { flex: '1 1 auto' } })
       : h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', color: C.mute, fontSize: 12, padding: 24, textAlign: 'center' } },
-        error ? h('span', { role: 'alert', style: { color: C.red || C.danger } }, error) : '目录暂不可用')
+        '目录暂不可用')
   } else if (!visible.length) {
     body = h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', alignContent: 'center', gap: 8, color: C.mute, fontSize: 12, padding: 24, textAlign: 'center' } },
       h('span', null, term ? '未找到匹配 “' + search.trim() + '” 的项目' : emptyText),
@@ -331,7 +331,7 @@ export function TargetFileExplorer({
           h('animateTransform', { attributeName: 'transform', type: 'rotate', from: '0 8 8', to: '360 8 8', dur: '0.8s', repeatCount: 'indefinite' }),
           h('path', { d: 'M13 8a5 5 0 1 1-1.5-3.56' }), h('path', { d: 'M13.2 2.3v3.1h-3.1' }))))
   ) : null
-  const errorToast = error && entries !== null && !loading ? h('div', {
+  const errorToast = error && !loading && (entries !== null || !!path) ? h('div', {
     role: 'alert',
     style: {
       position: 'absolute', left: 12, right: 12, bottom: 12, zIndex: 5, display: 'flex', alignItems: 'center', gap: 8,

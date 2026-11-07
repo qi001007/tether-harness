@@ -1,4 +1,6 @@
 # Tether Python 后端变更记录
+- 2026-11-07：更新器 JSON 读取支持 UTF-8 BOM，兼容旧 APP `version.json` 并允许标准 APP 更新器 prepare。
+- 2026-11-07：只读核对 0.4.4-stability 更新契约：统一 manifest 仍包含 APP/Node 0.4.4 与官方签名插件 0.2.93；`scripts/build_release.py` 对冻结插件验签、校验资产 SHA/大小与四个包版本，并只把原插件条目复制进新 manifest，不生成插件 ZIP；发行 workflow 从稳定版下载这两个冻结资产并验证最终清单签名。Node 的 `update_managers` 与 RPC 仍含 node/plugin/app，plugin 仍支持 check/status/prepare/apply/restart；UI 保留独立 DSH 插件卡及 APP/Node 整机更新计划，既有测试明确将插件排除在 APP/Node 一键计划之外。随后在私有服务器独立工作树只读核对 `UPDATE_COMPONENTS` 确含 app/node/plugin，更新任务支持 APP/插件各自与 Node 的序列，三组件服务能力保留。现场只读核对：真实宿主仓库版本元数据为三组件 0.4.2，当前 DSH desktop profile 四个已安装插件包均为 0.4.2；新稳定 manifest 插件为 0.2.93。更新器以已安装 profile 为 current，并只在远端 SemVer 高于当前版本时置 `update_available`；整机更新序列只准备/应用 Node 与 APP，因此 0.2.93 不会触发插件降级，也不阻断整机更新。未改业务代码、版本号、真实宿主或 Git 状态；插件更新能力保留，插件新版本未发布。
 - 2026-11-03：`UpdateManager.checkout_state()` 的 `git status` 在 Windows 必须带 `CREATE_NO_WINDOW`；否则即使父进程是 `pythonw.exe`，`git.exe` 仍会创建 `ConsoleWindowClass` 黑色窗口。启动 trace 实测修复前 3 个可见控制台、修复后 0 个。插件的 vendored updater 同步同一修复。
 - 2026-10-31：Node 支持 `--user-token`：无设备令牌时随注册发送用户令牌，收到 `device_token` 后写入 `data/device-token.json`（0600）并改用；重启优先读设备令牌。
 - 2026-10-31：Node 新增 `restart_node` 控制消息：有活跃 Tether 任务时拒绝，否则确认、关闭控制 WS 并由 supervisor 以退出码 75 重启；0.2.39 实测 0.80 秒离线、2.99 秒重连。

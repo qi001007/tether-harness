@@ -33,6 +33,8 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
   const [activePane, setActivePane] = React.useState('')
   const [workspaceOpen, setWorkspaceOpen] = React.useState(false)
   const [homeOpen, setHomeOpen] = React.useState(false)
+  const [homeError, setHomeError] = React.useState('')
+  const [homeRetry, setHomeRetry] = React.useState(0)
   const [cwd, setCwd] = React.useState('')
   const since = React.useRef(0)
   const sessionRef = React.useRef('')
@@ -530,27 +532,34 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
   const homeOpenedRef = React.useRef('')
   const runtimeRequests = React.useRef(new Map())
   const runtimeFrame = React.useRef(null)
-  const getAgentsRuntime = (target, allowRetry = false) => {
-    if (runtimeRequests.current.has(target)) return runtimeRequests.current.get(target)
+  const getAgentsRuntime = (target, allowRetry = false, statusOnly = false) => {
+    const requestKey = target + (statusOnly ? ':status' : ':init')
+    if (runtimeRequests.current.has(requestKey)) return runtimeRequests.current.get(requestKey)
     const request = (async () => {
       const base = '/api/devices/' + encodeURIComponent(target) + '/fs/'
       let result = null
       try { result = await post(base + 'agents_runtime_status', {}) } catch (_) { /* node may need a start */ }
       if (result && result.running && result.url) return result
+      if (result && result.running && !result.url) {
+        if (statusOnly) return result
+        throw new Error('设备网络或应用连接尚未就绪，请恢复后重试。')
+      }
+      if (statusOnly) return result
       if (result && result.install_error && !allowRetry) throw new Error('Agents runtime 安装失败：' + result.install_error + '。重新打开 Agents 可重试。')
       if (!result || result.install_error || !result.installing) result = await post(base + 'agents_runtime_start', {})
       const deadline = Date.now() + 5 * 60 * 1000
       while (Date.now() < deadline) {
         if (result && result.running && result.url) return result
+        if (result && result.running && !result.url) throw new Error('设备网络或应用连接尚未就绪，请恢复后重试。')
         if (result && result.install_error) throw new Error('Agents runtime 安装失败：' + result.install_error + '。重新打开 Agents 可重试。')
         await new Promise((resolve) => setTimeout(resolve, 2500))
         result = await post(base + 'agents_runtime_status', {})
       }
       throw new Error('Agents runtime 下载或启动超时（5 分钟）。重新打开 Agents 可重试。')
     })()
-    runtimeRequests.current.set(target, request)
+    runtimeRequests.current.set(requestKey, request)
     request.finally(() => {
-      if (runtimeRequests.current.get(target) === request) runtimeRequests.current.delete(target)
+      if (runtimeRequests.current.get(requestKey) === request) runtimeRequests.current.delete(requestKey)
     }).catch(() => {})
     return request
   }
@@ -562,20 +571,25 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
     const openHome = async () => {
       try {
         const result = await getAgentsRuntime(device, true)
+        if (!result || !result.running || !result.url) throw new Error('设备网络或应用连接尚未就绪，请恢复后重试。')
         const url = String(result.url)
         if (!alive) return
+        setHomeError('')
         setPanes((current) => current.some((pane) => pane.key === 'codeg:home')
           ? current
           : [...current, { key: 'codeg:home', kind: 'web', title: '主页', url: url + (url.includes('?') ? '&' : '?') + 'next=' + encodeURIComponent('/workspace?tether_home=1') }])
         setActivePane((current) => current || 'codeg:home')
         setWorkspaceOpen(true)
       } catch (error) {
-        if (alive) { homeOpenedRef.current = ''; fail(error) }
+        if (alive) {
+          homeOpenedRef.current = ''
+          setHomeError(String((error && error.message) || error || 'Agent 主页暂不可用。'))
+        }
       }
     }
     void openHome()
     return () => { alive = false }
-  }, [device, catalogOpen])
+  }, [device, catalogOpen, homeRetry])
 
   React.useEffect(() => {
     if (!device || catalogOpen) return undefined
@@ -583,21 +597,26 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
     let timer = null
     const check = async () => {
       try {
-        const result = await getAgentsRuntime(device)
+        const result = await getAgentsRuntime(device, false, true)
         if (result && result.running && result.url && alive) {
           const nextUrl = String(result.url)
+          setHomeError('')
           setPanes((current) => {
             const pane = current.find((item) => item.key === 'codeg:home')
-            if (!pane || !pane.url) return current
+            const homeUrl = nextUrl + (nextUrl.includes('?') ? '&' : '?') + 'next=' + encodeURIComponent('/workspace?tether_home=1')
+            if (!pane) return [...current, { key: 'codeg:home', kind: 'web', title: '主页', url: homeUrl }]
+            if (!pane.url) return current.map((item) => item.key === 'codeg:home' ? { ...item, url: homeUrl } : item)
             const withoutNext = (value) => {
               try { const parsed = new URL(value); parsed.searchParams.delete('next'); return parsed.href }
               catch (_) { return '' }
             }
             if (!withoutNext(nextUrl) || withoutNext(pane.url) === withoutNext(nextUrl)) return current
             return current.map((item) => item.key === 'codeg:home'
-              ? { ...item, url: nextUrl + (nextUrl.includes('?') ? '&' : '?') + 'next=' + encodeURIComponent('/workspace?tether_home=1') }
+              ? { ...item, url: homeUrl }
               : item)
           })
+          setActivePane((current) => current || 'codeg:home')
+          setWorkspaceOpen(true)
         }
       } catch (_) { /* node is restarting; the next tick retries */ }
       if (alive) timer = setTimeout(check, 5000)
@@ -605,6 +624,12 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
     timer = setTimeout(check, 5000)
     return () => { alive = false; if (timer) clearTimeout(timer) }
   }, [device, catalogOpen])
+
+  const retryAgentsHome = () => {
+    homeOpenedRef.current = ''
+    setHomeError('')
+    setHomeRetry((current) => current + 1)
+  }
 
   const installAgent = async (agent) => {
     if (!device || installing) return
@@ -693,7 +718,10 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
     style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', background: C.bg }
   },
     workspace,
-    !panes.length ? h('div', { style: { display: 'grid', placeItems: 'center', alignContent: 'center', gap: 10, flex: '1 1 auto', color: C.mute, fontSize: 12 } },
+    !panes.length && homeError ? h('div', { role: 'alert', style: { display: 'grid', placeItems: 'center', alignContent: 'center', gap: 10, flex: '1 1 auto', color: C.mute, fontSize: 12 } },
+      h('div', { style: { color: C.ink, textAlign: 'center' } }, homeError),
+      h('button', { type: 'button', onClick: retryAgentsHome, style: button }, '重试')) : null,
+    !panes.length && !homeError ? h('div', { style: { display: 'grid', placeItems: 'center', alignContent: 'center', gap: 10, flex: '1 1 auto', color: C.mute, fontSize: 12 } },
       h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 18 })),
       '正在打开 Agent 主页…') : null)
 }

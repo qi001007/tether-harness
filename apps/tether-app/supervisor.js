@@ -28,6 +28,7 @@ class Supervisor {
     this.device = env.TETHER_DEVICE || os.hostname()
     this.nodeToken = env.TETHER_NODE_TOKEN || ''
     this.userToken = env.TETHER_USER_TOKEN || ''
+    this.nodeMode = env.TETHER_NODE_MODE === 'external' ? 'external' : 'managed'
     this.hubWss = env.TETHER_HUB_WSS || (this.remoteUrl ? this.remoteUrl.replace(/^http/, 'ws').replace(/\/+$/, '') + '/ws/node' : '')
     this.consolePort = Number(env.TETHER_CONSOLE_PORT || 18894)
     this.localApiToken = crypto.randomBytes(24).toString('hex')
@@ -159,7 +160,7 @@ class Supervisor {
       }
       this.node = { state: 'external', pid: 0, deviceOnline: this.deviceOnline(probe) }
       this.lastError = probe ? '' : '远端 Hub 不可达或请求超时'
-      if ((this.nodeToken || this.userToken) && this.hubWss) {
+      if (this.nodeMode !== 'external' && (this.nodeToken || this.userToken) && this.hubWss) {
         if (this.nodeToken) this.baseEnv.TETHER_NODE_TOKEN = this.nodeToken
         if (this.userToken) this.baseEnv.TETHER_USER_TOKEN = this.userToken
         const node = this.spawnProcess('node', [

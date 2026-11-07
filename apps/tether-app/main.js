@@ -41,6 +41,7 @@ if (fs.existsSync(hubConfigFile)) {
     if (cfg.nodeToken) env.TETHER_NODE_TOKEN = cfg.nodeToken
     if (cfg.userToken) env.TETHER_USER_TOKEN = cfg.userToken
     if (cfg.device) env.TETHER_DEVICE = cfg.device
+    if (cfg.nodeMode === 'external') env.TETHER_NODE_MODE = cfg.nodeMode
   } catch (_) { /* invalid local config is ignored */ }
 }
 const controller = env.TETHER_CONTROLLER_URL || ('http://127.0.0.1:' + (env.TETHER_PORT || 18890))
@@ -203,7 +204,7 @@ async function createWindow() {
     },
     accessToken: env.TETHER_ACCESS_TOKEN || '',
     insecureTls: ['1', 'true', 'yes'].includes(String(env.TETHER_INSECURE_TLS || '').toLowerCase()),
-    localApi: supervisor.remoteUrl
+    localApi: supervisor.remoteUrl && supervisor.procs.node
       ? { device: supervisor.device, port: supervisor.consolePort, token: supervisor.localApiToken }
       : null
   })
@@ -430,8 +431,12 @@ function readHubConfig() {
 }
 const deviceTokenFile = path.join(dataDir, 'device-token.json')
 function writeHubConfig(next) {
+  const current = readHubConfig()
+  const config = current.nodeMode === 'external' && next.nodeMode == null
+    ? { ...next, nodeMode: 'external' }
+    : next
   if (fs.existsSync(hubConfigFile)) fs.copyFileSync(hubConfigFile, hubConfigFile + '.bak-' + Date.now())
-  fs.writeFileSync(hubConfigFile + '.tmp', JSON.stringify(next, null, 2) + '\n')
+  fs.writeFileSync(hubConfigFile + '.tmp', JSON.stringify(config, null, 2) + '\n')
   fs.renameSync(hubConfigFile + '.tmp', hubConfigFile)
 }
 function removeDeviceToken() {

@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 
 from tether.updates import (PLUGIN_HOT_RELOAD_GRACE, UpdateError, UpdateManager, _is_newer,
-                             _restart_cleared, _resolve_latest_manifest_url, _runtime_loaded)
+                             _json_object, _restart_cleared, _resolve_latest_manifest_url, _runtime_loaded)
 
 
 class ArtifactServer:
@@ -55,6 +55,12 @@ def artifact_server():
     server = ArtifactServer()
     yield server
     server.close()
+
+
+def test_json_object_accepts_utf8_bom():
+    assert _json_object(b'\xef\xbb\xbf{"components":{"app":"0.3.1"}}') == {
+        "components": {"app": "0.3.1"}
+    }
 
 
 def _use_lockstep_release_fixture(builder, monkeypatch, version: str) -> None:

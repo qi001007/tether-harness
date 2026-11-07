@@ -3545,6 +3545,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const [updateErrors, setUpdateErrors] = React.useState({ app: '', localPlugin: '', devices: {} })
       const autoUpdateChecksRef = React.useRef({})
       const lastUpdateToastRef = React.useRef({})
+      const activeUpdateToastKeyRef = React.useRef('')
       const [updateToast, setUpdateToast] = React.useState('')
       const [showHub, setShowHub] = React.useState(false)
       const [showAppSettings, setShowAppSettings] = React.useState(false)
@@ -3702,11 +3703,18 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       }
       const setComponentUpdateError = (component, message, scope, notify = true) => {
         if (scope && !scopeIsCurrent(scope)) return
+        const key = (scope ? scope.deviceId : '') + ':' + component
         if (message && notify) {
-          const key = (scope ? scope.deviceId : '') + ':' + component
           if (lastUpdateToastRef.current[key] !== message) {
             lastUpdateToastRef.current[key] = message
+            activeUpdateToastKeyRef.current = key
             setUpdateToast(message)
+          }
+        } else if (!message) {
+          delete lastUpdateToastRef.current[key]
+          if (activeUpdateToastKeyRef.current === key) {
+            activeUpdateToastKeyRef.current = ''
+            setUpdateToast('')
           }
         }
         if (!scope) setUpdateErrors((current) => ({ ...current, [component]: message }))

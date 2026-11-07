@@ -425,7 +425,7 @@ def select_profile(dsh_home: Path, preferred: str | None = None) -> str | None:
 
 def _json_object(raw: bytes) -> dict[str, Any]:
     try:
-        value = json.loads(raw.decode("utf-8"))
+        value = json.loads(raw.decode("utf-8-sig"))
     except (UnicodeError, ValueError):
         raise UpdateError("invalid_json") from None
     if not isinstance(value, dict):
