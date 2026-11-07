@@ -628,8 +628,20 @@ class UpdateManager:
             return True
         return self._allow_loopback_http and parsed.scheme == "http" and _is_loopback(parsed.hostname)
 
-    def _opener(self) -> urllib.request.OpenerDirector:
-        return urllib.request.build_opener(_SafeRedirectHandler(self._allow_loopback_http))
+    def _opener(self, url: str | None = None) -> urllib.request.OpenerDirector:
+        hub_origin = ""
+        try:
+            parsed = urllib.parse.urlsplit(self.manifest_url)
+            if (self.manifest_url != DEFAULT_MANIFEST_URL
+                    and parsed.path.rstrip("/") == "/releases/manifest"):
+                hub_origin = _controller_origin(self.manifest_url)
+        except ValueError:
+            pass
+        handlers: list[Any] = [_SafeRedirectHandler(self._allow_loopback_http)]
+        if (hub_origin and _controller_origin(url) == hub_origin
+                and os.environ.get("TETHER_USE_SYSTEM_PROXY") != "1"):
+            handlers.append(urllib.request.ProxyHandler({}))
+        return urllib.request.build_opener(*handlers)
 
     def _fetch(self, url: str, limit: int, *, timeout: float = 15.0,
                progress: Callable[[int, int | None], None] | None = None) -> bytes:
@@ -637,7 +649,7 @@ class UpdateManager:
             raise UpdateError("insecure_url")
         request = urllib.request.Request(url, headers={"User-Agent": "Tether-Updater/" + UPDATER_VERSION})
         try:
-            with self._opener().open(request, timeout=timeout) as response:
+            with self._opener(url).open(request, timeout=timeout) as response:
                 final_url = response.geturl()
                 if not self._url_allowed(final_url):
                     raise UpdateError("insecure_redirect")

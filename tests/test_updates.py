@@ -9,6 +9,7 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -16,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from tether.updates import (PLUGIN_HOT_RELOAD_GRACE, UpdateError, UpdateManager, _is_newer,
+from tether.updates import (DEFAULT_MANIFEST_URL, PLUGIN_HOT_RELOAD_GRACE, UpdateError, UpdateManager, _is_newer,
                              _json_object, _restart_cleared, _resolve_latest_manifest_url,
                              _runtime_loaded, app_installation_path, load_app_installation)
 
@@ -62,6 +63,34 @@ def test_json_object_accepts_utf8_bom():
     assert _json_object(b'\xef\xbb\xbf{"components":{"app":"0.3.1"}}') == {
         "components": {"app": "0.3.1"}
     }
+
+
+def test_hub_manifest_and_same_origin_artifacts_bypass_system_proxy_by_default(
+        tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("https_proxy", "http://proxy.example:8080")
+    monkeypatch.setenv("HTTPS_PROXY", "http://proxy.example:8080")
+    monkeypatch.setenv("no_proxy", "")
+    monkeypatch.setenv("NO_PROXY", "")
+    monkeypatch.delenv("TETHER_USE_SYSTEM_PROXY", raising=False)
+
+    def proxies(manager: UpdateManager, url: str) -> dict[str, str]:
+        handler = next((item for item in manager._opener(url).handlers
+                        if isinstance(item, urllib.request.ProxyHandler)), None)
+        return handler.proxies if handler is not None else {}
+
+    hub = UpdateManager(tmp_path, "node", manifest_url="https://hub.example/releases/manifest",
+                        fallback_manifest_urls=[])
+    assert proxies(hub, hub.manifest_url) == {}
+    assert proxies(hub, "https://hub.example/releases/artifacts/abc") == {}
+    assert proxies(hub, "https://github.com/owner/repo/releases/download/v0.4.7/node.zip")["https"] == \
+        "http://proxy.example:8080"
+
+    github = UpdateManager(tmp_path, "node", manifest_url=DEFAULT_MANIFEST_URL,
+                           fallback_manifest_urls=[])
+    assert proxies(github, DEFAULT_MANIFEST_URL)["https"] == "http://proxy.example:8080"
+
+    monkeypatch.setenv("TETHER_USE_SYSTEM_PROXY", "1")
+    assert proxies(hub, hub.manifest_url)["https"] == "http://proxy.example:8080"
 
 
 def test_app_binding_checks_device_credential_root_and_expired_pid(tmp_path: Path, monkeypatch) -> None:
@@ -1331,7 +1360,7 @@ def test_legacy_install_without_component_version_uses_known_020_baseline(tmp_pa
 
 
 def test_built_release_archives_prepare_and_apply_for_all_components(
-    artifact_server: ArtifactServer, tmp_path: Path, monkeypatch
+    artifact_server: ArtifactServer, tmp_path: Path, tmp_path_factory, monkeypatch
 ) -> None:
     import importlib.util
     import re
@@ -1378,7 +1407,8 @@ def test_built_release_archives_prepare_and_apply_for_all_components(
         "schema": 1, "components": {"app": "0.2.0", "plugin": "0.2.0", "node": "0.2.0"}
     }), encoding="utf-8")
     node = UpdateManager(node_root, "node", dsh_home=tmp_path / "node-empty-dsh",
-                         manifest_url=manifest_url, state_dir=tmp_path / "node-state")
+                         manifest_url=manifest_url,
+                         state_dir=tmp_path_factory.mktemp("release-state"))
     node_prepared = node.prepare()
     assert node_prepared["ok"] is True, node_prepared
     node_result = node.apply(node_prepared["prepared_id"])

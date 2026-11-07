@@ -166,3 +166,4 @@
 
 - 2026-11-07：解除 NativeSurface 设备切换/可见性测试的跳过；DSH 桌面状态测试覆盖 start 后最多 4 秒的 surface 快照缓存。
 - 2026-11-07：更新 Node update protocol 旧用例契约：外置 Node 的 APP 更新必须调度绑定 APP root 的重启 helper、Node 连接保持可用；只有 managed Node 与同 ROOT 的 APP 待更新时才延迟 Node 重启。
+- 2026-11-07：更新协议回归覆盖 runtime/disk Node 版本不符时保留重启待办、版本匹配时清除历史待办及 unknown 保守处理；更新下载路由覆盖 Hub 同源直连、GitHub 系统代理和显式代理 opt-in；全包集成测试用 fixture 管理的短 `release-state` staging 根，避免 Windows 长临时根超过 MAX_PATH。

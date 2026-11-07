@@ -64,6 +64,74 @@ def test_capabilities_advertise_update_protocol_and_cached_version(tmp_path, mon
     node.store.db.close()
 
 
+def test_node_status_keeps_restart_pending_when_disk_version_differs_from_loaded_runtime(
+        tmp_path, monkeypatch):
+    node = _node(tmp_path, monkeypatch)
+    manager = FakeUpdateManager()
+    result = {"ok": True, "component": "node", "current_version": "0.4.6",
+              "restart_required": True}
+    manager.check = lambda force=False: dict(result)
+    manager.status = lambda: dict(result)
+    node.update_managers["node"] = manager
+    node.node_version = "0.4.5"
+    sent: list[dict] = []
+
+    async def send(message: dict) -> None:
+        sent.append(message)
+
+    monkeypatch.setattr(node, "_send", send)
+    for action in ("check", "status"):
+        asyncio.run(node._update_call({"type": "update_call", "req_id": action,
+                                       "action": action, "component": "node"}))
+
+    assert [message["runtime_version"] for message in sent] == ["0.4.5", "0.4.5"]
+    assert all(message["restart_required"] is True for message in sent)
+    node.store.db.close()
+
+
+def test_node_status_clears_historical_restart_when_loaded_runtime_matches_disk(
+        tmp_path, monkeypatch):
+    node = _node(tmp_path, monkeypatch)
+    manager = FakeUpdateManager()
+    manager.status = lambda: {"ok": True, "component": "node", "current_version": "0.4.6",
+                              "restart_required": True}
+    node.update_managers["node"] = manager
+    node.node_version = "0.4.6"
+    sent: list[dict] = []
+
+    async def send(message: dict) -> None:
+        sent.append(message)
+
+    monkeypatch.setattr(node, "_send", send)
+    asyncio.run(node._update_call({"type": "update_call", "req_id": "caught-up",
+                                   "action": "status", "component": "node"}))
+
+    assert sent[0]["runtime_version"] == "0.4.6"
+    assert sent[0]["restart_required"] is False
+    node.store.db.close()
+
+
+def test_node_status_keeps_restart_pending_for_unknown_runtime_version(tmp_path, monkeypatch):
+    node = _node(tmp_path, monkeypatch)
+    manager = FakeUpdateManager()
+    manager.status = lambda: {"ok": True, "component": "node", "current_version": "0.4.6",
+                              "restart_required": False}
+    node.update_managers["node"] = manager
+    node.node_version = "unknown"
+    sent: list[dict] = []
+
+    async def send(message: dict) -> None:
+        sent.append(message)
+
+    monkeypatch.setattr(node, "_send", send)
+    asyncio.run(node._update_call({"type": "update_call", "req_id": "unknown-runtime",
+                                   "action": "status", "component": "node"}))
+
+    assert sent[0]["runtime_version"] == "unknown"
+    assert sent[0]["restart_required"] is True
+    node.store.db.close()
+
+
 def test_app_manager_uses_trusted_external_installation_root_and_shared_state(tmp_path, monkeypatch):
     import hashlib
 

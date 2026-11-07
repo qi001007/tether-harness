@@ -84,3 +84,4 @@
 - 2026-11-07：Agents runtime 状态若缺少目标节点的 APP 网关路由，返回空嵌入地址并移除 token；不再把目标节点的 127.0.0.1 地址暴露给远程 APP 浏览器。
 - 2026-11-07：Agents runtime 启动与状态以带 Bearer 的 `/api/health` JSON `status=ok` 作为就绪条件；认证探测失败时保留仍存活的进程句柄，避免瞬态超时造成孤儿进程。
 - 2026-11-07：Linux DSH Web 安装生成的 worker unit 将 `MemoryHigh` 从 `300M` 提至 `384M`，硬上限保持 `600M`；网关 unit 的 `80M/160M` 配额保持不变。
+- 2026-11-07：Node update check/status 回报启动时缓存的 `runtime_version`；只有其与有效磁盘 `current_version` 相同才清除历史 `restart_required`，apply 仍要求真实重启。

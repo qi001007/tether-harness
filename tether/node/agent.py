@@ -39,7 +39,7 @@ from .native_surface import NativeSurface, NativeSurfaceError
 from .croc_transfer import CrocTransfer
 from .local_identity import remove_identity, write_identity
 from ..updates import (MAX_UPDATE_PROTOCOL, MIN_UPDATE_PROTOCOL, UPDATE_PROTOCOL, UpdateManager,
-                       _versions_from_root, load_app_installation, select_profile)
+                       UpdateError, _semver, _versions_from_root, load_app_installation, select_profile)
 
 
 def os_label() -> str:
@@ -785,6 +785,14 @@ class Node:
                      "error_code": "update_failed", "error": "update operation failed"},
                 )
             else:
+                if component == "node" and result.get("ok"):
+                    runtime_version = self.node_version
+                    try:
+                        versions_match = _semver(runtime_version) == _semver(result.get("current_version"))
+                    except UpdateError:
+                        versions_match = False
+                    result = {**result, "runtime_version": runtime_version,
+                              "restart_required": not versions_match}
                 await self._send_update_result(
                     response_ws, {"type": "update_result", "req_id": req_id, **result}
                 )
