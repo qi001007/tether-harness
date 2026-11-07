@@ -220,7 +220,7 @@ class CrocTransfer:
                                 text=True, encoding="utf-8", errors="replace", env=merged,
                                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
 
-    def send(self, path: str, code: str, *, transfers: int = 4, transport: str = "relay") -> CrocJob:
+    def send(self, path: str, code: str, *, transfers: int = 4, transport: str = "auto") -> CrocJob:
         binary, relay = self._require()
         source = Path(path).expanduser()
         if not source.exists():
@@ -256,3 +256,4 @@ class CrocTransfer:
 
     def status(self) -> dict[str, Any]:
         return self.job.status() if self.job else {"state": "idle"}
+

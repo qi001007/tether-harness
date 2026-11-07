@@ -17,3 +17,6 @@
 - 2026-10-30：附件 slot 注入原生 sessionId 与 uiWorkspace/sessions 服务；新草稿首次选文件会准备空白 DSH session，自动续接 workspace picker。
 
 - 2026-10-30：附件 slot 注册不再从未注入的 ctx.fileDrag 读取服务；remote.workspaceFiles 与会话绑定足以提供目标附件，原生附件组件继续保留自身拖拽处理。
+
+- 2026-11-08：0.4.11候选UI构建移除已隔离的旧apps-page入口，使用其余已审界面源。
+

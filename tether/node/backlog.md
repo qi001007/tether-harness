@@ -88,3 +88,6 @@
 - 2026-11-07：Node apply 及同根 managed APP apply 前通过本机 Codeg HTTP 快照检查 prompting、待交互、运行中委派/后台任务，并检查 Croc running；活动时以 `update_busy` 拒绝。按锁定类型兼容旧快照省略的委派/后台字段；字段错误或查询失败按未知状态拒绝。检查与新任务/传输启动之间仍有竞态；Node CLI 更新路径不在此守卫范围，外置 APP 更新不阻塞独立 Node。
 - 2026-11-07：Linux DSH Web 安装生成的 worker unit 将 `MemoryHigh` 从 `300M` 提至 `384M`，硬上限保持 `600M`；网关 unit 的 `80M/160M` 配额保持不变。
 - 2026-11-07：Node update check/status 回报启动时缓存的 `runtime_version`；只有其与有效磁盘 `current_version` 相同才清除历史 `restart_required`，apply 仍要求真实重启。
+
+- 2026-11-08：Croc默认传输设为auto，显式relay参数保持可用。
+

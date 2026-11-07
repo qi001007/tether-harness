@@ -38,3 +38,4 @@
 - 2026-11-03：真机验证“禁用→启用”会持久化 `enabled:false`：两页面并发启用失败时 surface 一直停用，只能手动恢复。重载桥已回退为只启用；hot reload 只适用于 surface 模块文件变化的发行，其余靠 8 秒宽限后的重启。
 - 2026-11-03：Hub 更新走 Node 自己的 state dir，surface 的 `/tether-updates` 看不到；`apply` 现在把同一份 `applied-plugin.json` 镜像到 `dsh_home/storages/tether/updates/`，页面 watcher 才能发现待重载。`_scan_dsh_host_pid` 必须按 `dsh_home` 过滤 profile 路径，禁止把别的 DSH（或测试里的真实宿主）当成本机目标重启。
 - 2026-11-07：Node updater 对已配置 Hub `/releases/manifest` 与同源下载默认绕过系统代理，第三方 GitHub 源沿用 Python 标准代理配置；`TETHER_USE_SYSTEM_PROXY=1` 可显式恢复系统代理。
+- 2026-11-08：更新器优先从签名manifest指定的正式URL获取制品，失败后保留Hub与配置mirror回退。

@@ -63,15 +63,25 @@ def add_mapped_file(archive: zipfile.ZipFile, source: str, target: str, prefix: 
         archive.write(path, f"{prefix}/{target}")
 
 
-def add_tether_runtime(archive: zipfile.ZipFile, prefix: str) -> None:
+def add_tether_runtime(archive: zipfile.ZipFile, prefix: str, *, target_platform: str | None = None) -> None:
     """Add only the public client/Node runtime; Controller and web admin UI are private."""
     for rel in ("tether/__init__.py", "tether/updates.py", "tether/updates_cli.py",
                 "tether/release.py", "tether/ed25519.py", "tether/mcp_server.py"):
         add_file(archive, rel, prefix)
     node = ROOT / "tether" / "node"
+    windows_excluded_runtime_files = {
+        "bin/herdr-linux-x86_64",
+        "bin/herdr-macos-x86_64",
+        "bin/herdr-macos-aarch64",
+        "bin/croc-linux-x64",
+        "bin/croc-darwin-x64",
+        "bin/croc-darwin-arm64",
+    }
     for path in node.rglob("*"):
         if path.is_file() and not path.is_symlink() and (
                 path.suffix in {".py", ".html"} or "bin" in path.relative_to(node).parts):
+            if target_platform == "windows" and path.relative_to(node).as_posix() in windows_excluded_runtime_files:
+                continue
             rel = path.relative_to(ROOT).as_posix()
             if "__pycache__" not in path.parts:
                 archive.write(path, f"{prefix}/{rel}")
@@ -353,7 +363,7 @@ or start a server.
     with zipfile.ZipFile(app, "w", zipfile.ZIP_DEFLATED) as archive:
         add_tree(archive, ROOT / "apps" / "tether-app", app_prefix)
         add_tree(archive, ROOT / "packages" / "tether-ui", app_prefix)
-        add_tether_runtime(archive, app_prefix)
+        add_tether_runtime(archive, app_prefix, target_platform="windows")
         add_tree(archive, ROOT / "assets", app_prefix)
         for rel in ("pyproject.toml", ".env.example", "version.json", "desktop/install-app.ps1", "desktop/install-app.cmd"):
             add_file(archive, rel, app_prefix)
@@ -450,3 +460,4 @@ DeepSeek Harness profile.
 
 if __name__ == "__main__":
     main()
+

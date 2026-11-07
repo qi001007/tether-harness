@@ -21,7 +21,6 @@ const dshHost = strip('hosts/dsh.js')
 const transferEngine = strip('transfer.js')
 const transferPage = strip('transfer-page.js')
 const terminalDock = strip('terminal-dock.js')
-const appsPage = strip('apps-page.js')
 const agentIcons = strip('agent-icons.js')
 const agentCache = strip('agent-cache.js')
 const agentAccountCache = strip('agent-account-cache.js')
@@ -48,7 +47,6 @@ ${settingsPanel}
 ${transferEngine}
 ${transferPage}
 ${terminalDock}
-${appsPage}
 ${agentIcons}
 ${agentCache}
 ${agentAccountCache}

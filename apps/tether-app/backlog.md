@@ -75,3 +75,6 @@
 - 2026-11-04：主窗口开启 `webviewTag` 供 Linux DSH Web 顶层内嵌；`will-attach-webview` 删除 guest preload、强制 sandbox/contextIsolation/webSecurity，只允许回环与 RFC1918 地址；`did-attach-webview` 拒绝新窗口并把 guest 导航锁在首次 origin。DSH 外部 `window.open` 已删除；真机 webview 与插件自动安装仍待验。
 - 2026-11-04：APP 默认直接连接 Hub 与 mesh，不跟随系统代理：`main.js` 在 ready 前 `appendSwitch('no-proxy-server')`，只有 `TETHER_USE_SYSTEM_PROXY=1` 才保留系统代理。实测系统代理故障时 Python 节点仍能注册 Hub，但 Electron 渲染器访问 `/api/state` 全部 ERR_FAILED、界面显示 0 台设备；切换直连后 example.com 与 Hub 都可达，设备恢复。不要再在 `whenReady` 里用 `setProxy({mode:'system'})` 覆盖该开关。
 - 2026-11-07：修复 Linux DSH WebView 在 guest 初始 `about:blank` 时把 origin 锁为 `null`、导致首个 LAN 导航被拦截的问题；现在允许首个受限 LAN HTTP(S) 导航建立 origin，之后继续限制同源。新增 Electron 导航守卫回归断言。
+
+- 2026-11-08：APP/Node候选元数据更新至0.4.11；发布仍待CI签名与审阅。
+

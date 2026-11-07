@@ -66,7 +66,7 @@ def test_send_uses_official_croc_flags_and_parses_progress(tmp_path, monkeypatch
     assert "--code" in args and "tether-code-123" in args
     assert "--transfers" in args and "8" in args
     assert "--no-local" not in args
-    assert "--transport" in args and "relay" in args
+    assert "--transport" in args and "auto" in args
     assert kwargs["env"].get("CROC_SECRET") is None
     assert not {"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY",
                 "http_proxy", "https_proxy", "all_proxy"}.intersection(kwargs["env"])
@@ -168,3 +168,4 @@ def test_bundled_binary_matches_host_arch(monkeypatch):
     monkeypatch.setattr(croc_transfer.host_platform, "machine", lambda: "x86_64")
     assert croc_transfer.CrocTransfer(relay="r:1", platform="darwin").binary().endswith("croc-darwin-x64")
     assert croc_transfer.CrocTransfer(relay="r:1", platform="linux").binary().endswith("croc-linux-x64")
+

@@ -5,7 +5,6 @@ import { createConnectionPanel } from './connection-panel.js'
 import { createSettingsPanel } from './settings-panel.js'
 import { createTransferPage } from './transfer-page.js'
 import { createTerminalDock } from './terminal-dock.js'
-import { createAppsPage } from './apps-page.js'
 import { createAgentsPage } from './agents-page.js'
 import { invalidateDirectory, peekDirectory, rememberDirectory } from './file-cache.js'
 
@@ -512,10 +511,22 @@ export async function fetchApiJson(path, init = {}, { activeBase, apiBaseList, p
       continue
     }
     let data = {}
-    try { data = await response.json() } catch (_) { /* empty body */ }
+    try {
+      if (response.status !== 204) data = await response.json()
+    } catch (error) {
+      if (error && error.name === 'AbortError') throw error
+      if (response.ok) {
+        const invalid = new Error('响应不是有效的 JSON')
+        invalid.code = 'invalid_json'
+        invalid.status = response.status
+        invalid.base = base
+        throw invalid
+      }
+    }
     if (!response.ok) {
-      const detail = data && data.detail
-      const error = new Error((detail && detail.error) || (typeof detail === 'string' && detail) || data.error || ('HTTP ' + response.status))
+      const object = data && typeof data === 'object' && !Array.isArray(data) ? data : {}
+      const detail = object.detail
+      const error = new Error((detail && detail.error) || (typeof detail === 'string' && detail) || object.error || ('HTTP ' + response.status))
       error.code = detail && detail.code
       error.status = response.status
       error.base = base
@@ -701,7 +712,7 @@ export function buildTablePreview({ name, text, sourceTruncated, rowLimit, colum
   }
 }
 
-export function MinimalUpdateButton({ React, h, api, post, deviceId, localDeviceId, onRemoteDone, host, C }) {
+export function MinimalUpdateButton({ React, h, api, post, deviceId, localDeviceId, onRemoteDone, host, C, Glyph }) {
   const apiRef = React.useRef(api)
   apiRef.current = api
   const mountedRef = React.useRef(true)
@@ -853,8 +864,9 @@ export function MinimalUpdateButton({ React, h, api, post, deviceId, localDevice
       type: 'button', title: hasOpenJob ? (job.status === 'error' ? '查看更新失败详情' : '查看更新进度') : '更新到 ' + ((summary && summary.target_version) || '最新版本'),
       'aria-label': hasOpenJob ? '查看更新状态' : '更新到最新版本',
       onClick: hasOpenJob ? () => setDetailsOpen(true) : start,
-      style: { width: 30, height: 26, display: 'grid', placeItems: 'center', border: 0, borderRadius: 7, background: C.blue, color: '#fff', fontSize: 15, cursor: 'pointer', flex: '0 0 auto' }
-    }, hasOpenJob ? '↗' : '↓') : null,
+      className: 'tether-hover',
+      style: { width: 28, height: 28, display: 'grid', placeItems: 'center', border: 0, borderRadius: 6, background: 'transparent', color: job && job.status === 'error' ? C.red : C.sub, cursor: 'pointer', flex: '0 0 auto' }
+    }, Glyph ? h(Glyph, { name: hasOpenJob ? 'refresh' : 'download', size: 15 }) : (hasOpenJob ? '↗' : '↓')) : null,
     restoreDetails,
     overlay)
 }
@@ -1814,7 +1826,6 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const accountInitial = String(accountEmail || '').trim().charAt(0).toUpperCase()
       const items = [
         { id: 'workspaces', label: '原生工作区', icon: 'monitor' },
-        { id: 'apps', label: '远程应用', icon: 'apps' },
         { id: 'agents', label: 'Agents', icon: 'bot' },
         { id: 'herdr', label: 'Herdr', icon: 'terminal' },
         { id: 'files', label: '文件资源管理器', icon: 'files' },
@@ -2878,7 +2889,9 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
 
       const retryDocument = () => {
         documentRetryCountRef.current = 0
+        descriptorRetryCountRef.current = 0
         retryCountRef.current = 0
+        if (retryTimerRef.current) { clearTimeout(retryTimerRef.current); retryTimerRef.current = null }
         styleRepairRef.current = false
         setStyleBroken(false)
         setSlow(false)
@@ -2901,12 +2914,13 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const linuxDevice = /linux/i.test(deviceOs)
       const dshInstallSupported = !linuxDevice && (!deviceInfo || !deviceInfo.capabilities
         || deviceInfo.capabilities.dsh_install_supported !== false)
-      const dshWatch = visible && (deviceId === localDeviceId || dshRelevant)
       const dshRestartPidRef = React.useRef(0)
+      const dshAwaitingDescriptorRef = React.useRef(false)
       const dshAutoRepairRef = React.useRef(false)
       const styleRepairRef = React.useRef(false)
       const [dsh, setDsh] = React.useState(null)
       const [dshBusy, setDshBusy] = React.useState('')
+      const dshWatch = visible && (deviceId === localDeviceId || dshRelevant || !!dshBusy)
       const [dshError, setDshError] = React.useState('')
       const [dshWeb, setDshWeb] = React.useState(null)
       const [dshWebBusy, setDshWebBusy] = React.useState('')
@@ -3021,6 +3035,12 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       }, [dshWatch, dshRelevant, deviceId, dshBusy, !!(dsh && dsh.installing)])
       React.useEffect(() => {
         if (!dshBusy) return
+        if (dshAwaitingDescriptorRef.current && currentState.status === 'error') {
+          dshAwaitingDescriptorRef.current = false
+          setDshError(currentState.message || '原生工作区连接失败')
+          setDshBusy('')
+          return
+        }
         if (dshBusy === 'dsh_restart' || dshBusy === 'dsh_install_plugin') {
           if (dsh && dsh.running && dsh.pid && dsh.pid !== dshRestartPidRef.current) {
             setDshBusy('')
@@ -3032,16 +3052,16 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           }
         } else if (dsh && dsh.running && dsh.surface
             && ['document-loaded', 'local'].includes(currentState.status)) {
+          dshAwaitingDescriptorRef.current = false
           setDshBusy('')
           setDshError('')
-          retryDocument()
           return
         }
         if (dsh && dsh.error) {
           setDshError(dsh.error)
           setDshBusy('')
         }
-      }, [dsh, dshBusy])
+      }, [dsh, dshBusy, currentState.status])
       const dshPluginMissing = !!dsh && dsh.installed !== false && dsh.running === true
         && (dsh.surface === false || (dshRelevant && currentState.code === 'descriptor_missing'))
       const dshActionBusy = dshBusy === 'dsh_start' || dshBusy === 'dsh_install'
@@ -3049,12 +3069,19 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const runDsh = async (action) => {
         setDshError('')
         setDshBusy(action)
+        dshAwaitingDescriptorRef.current = false
         if (action === 'dsh_restart' || action === 'dsh_install_plugin') {
           dshRestartPidRef.current = Number(dsh && dsh.pid) || 0
         }
         try {
           const result = await post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/' + action, {})
-          if (result) setDsh(result)
+          if (result) {
+            setDsh(result)
+            if ((action === 'dsh_start' || action === 'dsh_install') && !result.error) {
+              dshAwaitingDescriptorRef.current = true
+              retryDocument()
+            }
+          }
         } catch (error) {
           setDshError(error.message || '操作失败')
           setDshBusy('')
@@ -3241,6 +3268,9 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
               h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center', color: C.mute } }, h(Glyph, { name: 'refresh', size: 20 })),
               h('div', { role: 'status', 'aria-live': 'polite', style: { fontSize: 13, color: C.sub } }, dshStartingLabel),
               dsh && dsh.installing ? h('div', { className: 'tether-num', style: { fontSize: 11.5, color: C.mute } }, (Number(dsh.progress) || 0) + '%') : null)
+            : dshError && currentState.status === 'error'
+              ? h('div', { style: { display: 'grid', placeItems: 'center', alignContent: 'center', gap: 12, flex: '1 1 auto', minHeight: 0, color: C.sub, textAlign: 'center', padding: 24 } },
+                h('div', { role: 'status' }, dshError), btn('重新加载', () => { setDshError(''); retryDocument() }, { primary: true }))
             : dshRelevant && dshRunning && !dshWebOpenable ? (dshStalled
               ? h('div', { style: { display: 'grid', placeItems: 'center', alignContent: 'center', gap: 12, flex: '1 1 auto', minHeight: 0, color: C.sub, textAlign: 'center', padding: 24 } },
                 h('div', { style: { fontSize: 14, color: C.ink } }, '工作区还没有准备好'),
@@ -3459,7 +3489,14 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       stateRef.current = state
       const [deviceId, setDeviceId] = React.useState('')
       const manuallySelectedDeviceRef = React.useRef(false)
-      const selectDevice = (value) => { manuallySelectedDeviceRef.current = true; setDeviceId(value) }
+      const deviceSelectionScopeRef = React.useRef('')
+      const selectDevice = (value) => {
+        manuallySelectedDeviceRef.current = true
+        setDeviceId(value)
+        const key = deviceSelectionScopeRef.current
+        if (!key || !value) return
+        try { window.localStorage.setItem(key, value) } catch (_) { /* storage unavailable */ }
+      }
       const deviceIdRef = React.useRef('')
       const treeDeviceEpochRef = React.useRef(0)
       const loadedDirRef = React.useRef('')
@@ -3496,7 +3533,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const projectsDeviceRef = React.useRef('')
       projectsRef.current = projects
       projectRef.current = project
-      const [view, setView] = React.useState('chat')
+      const [view, setView] = usePersisted('tether.ui.view.v1', 'chat')
       const [terminalOpen, setTerminalOpen] = React.useState(false)
       const [terminalCwd, setTerminalCwd] = React.useState('')
       React.useEffect(() => { setTerminalCwd('') }, [deviceId])
@@ -4471,6 +4508,17 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           if (!isUsableAppState(data)) throw new Error('设备状态响应格式无效')
           stateOkAtRef.current = Date.now()
           setState(data)
+          const userId = data.user && data.user.user_id
+          const selectionKey = userId
+            ? 'tether.ui.device.v1:' + encodeURIComponent(ACTIVE_BASE) + ':' + encodeURIComponent(userId)
+            : ''
+          const scopeChanged = selectionKey !== deviceSelectionScopeRef.current
+          deviceSelectionScopeRef.current = selectionKey
+          if (scopeChanged) manuallySelectedDeviceRef.current = false
+          let savedDeviceId = ''
+          if (scopeChanged && selectionKey) {
+            try { savedDeviceId = window.localStorage.getItem(selectionKey) || '' } catch (_) { /* storage unavailable */ }
+          }
           const profile = data && data.user
           if (profile) {
             const pending = accountPendingRef.current
@@ -4487,7 +4535,12 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           }
           setDeviceId((current) => {
             const devices = Array.isArray(data && data.devices) ? data.devices : []
-            if (current && devices.some((d) => d.device_id === current)) return current
+            if (savedDeviceId && devices.some((d) => d.device_id === savedDeviceId)) {
+              manuallySelectedDeviceRef.current = true
+              return savedDeviceId
+            }
+            if (!scopeChanged && current && devices.some((d) => d.device_id === current)) return current
+            manuallySelectedDeviceRef.current = false
             const local = appLocalDeviceRef.current
             if (local && devices.some((d) => d.device_id === local)) return local
             const online = devices.find((d) => d.online)
@@ -5631,10 +5684,6 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           setView('chat'); setActivePanel('workspaces'); setSidebarCollapsed(true)
           return
         }
-        if (id === 'apps') {
-          setView('apps'); setActivePanel('apps'); setSidebarCollapsed(true)
-          return
-        }
         if (id === 'agents') {
           if (view === 'agents') {
             const frame = Array.from(document.querySelectorAll('iframe')).find((item) => /token\.html|\/workspace/.test(item.src))
@@ -6555,7 +6604,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
               },
               status: liveHubStatus
             }) : null,
-            h(MinimalUpdateButton, { React, h, api, post, deviceId, localDeviceId: appLocalDevice, onRemoteDone: async () => { await loadState(true); await refreshUpdateCenter(true) }, host, C }),
+            h(MinimalUpdateButton, { React, h, api, post, deviceId, localDeviceId: appLocalDevice, onRemoteDone: async () => { await loadState(true); await refreshUpdateCenter(true) }, host, C, Glyph }),
             host && host.kind === 'app' && host.windowControls ? h('div', {
               style: { display: 'flex', alignSelf: 'stretch', marginLeft: 2, WebkitAppRegion: 'no-drag' }
             },
@@ -6566,7 +6615,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         notice || projectsError || updateToast ? renderToasts() : null,
         h('div', { style: { display: 'flex', flex: '1 1 auto', minHeight: 0 } },
           h(ActivityBar, {
-            active: view === 'files' ? 'files' : (view === 'network' ? 'network' : (view === 'transfer' ? 'transfer' : (view === 'apps' ? 'apps' : (view === 'agents' ? 'agents' : 'workspaces')))),
+            active: view === 'files' ? 'files' : (view === 'network' ? 'network' : (view === 'transfer' ? 'transfer' : (view === 'agents' ? 'agents' : 'workspaces'))),
             collapsed: sidebarCollapsed,
             onSelect: selectPanel,
             onPermissions: () => { setShowAppSettings(false); openSettings() },
@@ -6614,14 +6663,6 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
                 onNotice: setNotice,
                 onError: fail
               })
-                : view === 'apps' ? h(createAppsPage, {
-                React, Glyph, post, C,
-                devices: (state && state.devices) || [],
-                localDevice: appLocalDevice,
-                activeDevice: deviceId,
-                onDeviceChange: selectDevice,
-                onError: fail
-              })
                 : view === 'agents' ? h(createAgentsPage, {
                 React, Glyph, post, C,
                 devices: (state && state.devices) || [],
@@ -6651,6 +6692,8 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             if (host) host.activeApiBase = () => ACTIVE_BASE
             treeDeviceEpochRef.current += 1
             deviceIdRef.current = ''
+            deviceSelectionScopeRef.current = ''
+            manuallySelectedDeviceRef.current = false
             setState(null)
             setDeviceId('')
             setProjects(null)

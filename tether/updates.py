@@ -1544,14 +1544,13 @@ class UpdateManager:
 
     def _fetch_artifact(self, item: dict[str, Any],
                         progress: Callable[[int, int | None], None] | None = None) -> bytes:
-        urls: list[str] = []
+        urls: list[str] = [item["url"]]
         source = self._last_source
         if isinstance(source, str) and source.endswith("/releases/manifest"):
             urls.append(source[: -len("/manifest")] + "/artifacts/" + item["sha256"])
         override = os.environ.get("TETHER_UPDATE_ARTIFACT_MIRROR", "").strip()
         if override:
             urls.append(override.rstrip("/") + "/" + item["sha256"])
-        urls.append(item["url"])
         errors: list[UpdateError] = []
         for url in dict.fromkeys(urls):
             try:

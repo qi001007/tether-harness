@@ -561,13 +561,13 @@ export function createSettingsPanel(React) {
           ? h('button', {
             type: 'button', onClick: () => update && update.onUpdate(row), title: row.error, 'aria-label': '重试',
             className: 'tether-hover',
-            style: { width: 28, height: 28, display: 'grid', placeItems: 'center', border: '1px solid ' + danger, borderRadius: 999, background: 'transparent', color: danger, cursor: 'pointer' }
+            style: { width: 28, height: 28, display: 'grid', placeItems: 'center', border: 0, borderRadius: 6, background: 'transparent', color: danger, cursor: 'pointer' }
           }, Glyph ? h(Glyph, { name: 'refresh', size: 14 }) : '!')
           : row.available && row.online
             ? h('button', {
               type: 'button', onClick: () => update && update.onUpdate(row), title: '更新', 'aria-label': '更新 ' + (row.name || ''),
               className: 'tether-hover',
-              style: { width: 28, height: 28, display: 'grid', placeItems: 'center', border: 0, borderRadius: 999, background: blue, color: '#fff', cursor: 'pointer' }
+              style: { width: 28, height: 28, display: 'grid', placeItems: 'center', border: 0, borderRadius: 6, background: 'transparent', color: sub, cursor: 'pointer' }
             }, Glyph ? h(Glyph, { name: 'download', size: 15 }) : '↓')
             : null
       return h('div', {

@@ -36,3 +36,6 @@
 - 2026-11-07：Node release ZIP 中仅 `laptop/install-node.sh` 被规范为 LF，避免 Windows checkout 的 CRLF 导致 Linux Bash 解析失败。
 
 - 2026-10-28：修正独立插件安装说明，统一引导至 Tether 连接页配置服务，移除旧 Hub 页面入口和本地 Controller 说明。
+
+- 2026-11-08：0.4.11候选打包仅在Windows APP过滤六个已确认的非Windows顶层Herdr/Croc二进制；通用Node保持原样。
+

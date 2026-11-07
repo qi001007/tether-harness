@@ -1750,24 +1750,56 @@ def test_manifest_disk_cache_is_used_when_the_network_fails(artifact_server: Art
     assert cached["stale"] is True
 
 
-def test_hub_mirror_is_preferred_over_the_manifest_artifact_url(artifact_server: ArtifactServer, tmp_path: Path) -> None:
-    root = tmp_path / "install"
-    seed_version(root)
+def test_manifest_artifact_url_preferred_with_mirror_fallbacks(
+        artifact_server: ArtifactServer, tmp_path: Path, monkeypatch) -> None:
     archive = make_zip("app", version="0.2.1")
-    url = _signed_manifest(artifact_server, "app", archive)
-    artifact_server.files["/releases/manifest"] = artifact_server.files.pop("/manifest.json")
     sha = hashlib.sha256(archive).hexdigest()
-    artifact_server.files[f"/releases/artifacts/{sha}"] = archive
-    manifest = json.loads(artifact_server.files["/releases/manifest"])
-    for item in manifest["components"].values():
-        item["url"] = "https://unreachable.invalid/tether.zip"
-    artifact_server.files["/releases/manifest"] = json.dumps(manifest).encode()
-    # Re-sign after changing the artifact URL.
-    manifest["signature"] = _base64.b64encode(_TEST_KEY.sign(_canonical_bytes(manifest))).decode("ascii")
-    artifact_server.files["/releases/manifest"] = json.dumps(manifest).encode()
-    manager = _strict_manager(root, artifact_server.base + "/releases/manifest", tmp_path / "state")
-    prepared = manager.prepare()
+    manifest_url = artifact_server.base + "/releases/manifest"
+    hub_url = artifact_server.base + f"/releases/artifacts/{sha}"
+    mirror_url = artifact_server.base + f"/mirror/{sha}"
+
+    def prepare_with_sources(suffix: str, available: set[str], mirror: str | None = None) -> tuple[dict, list[str]]:
+        root = tmp_path / suffix / "install"
+        seed_version(root)
+        _signed_manifest(artifact_server, "app", archive)
+        manifest = json.loads(artifact_server.files.pop("/manifest.json"))
+        for item in manifest["components"].values():
+            item["url"] = artifact_server.base + "/official.zip"
+        manifest["signature"] = _base64.b64encode(_TEST_KEY.sign(_canonical_bytes(manifest))).decode("ascii")
+        artifact_server.files["/releases/manifest"] = json.dumps(manifest).encode()
+        for path in ("/official.zip", f"/releases/artifacts/{sha}", f"/mirror/{sha}"):
+            artifact_server.files.pop(path, None)
+        for path in available:
+            artifact_server.files[path] = archive
+        if mirror:
+            monkeypatch.setenv("TETHER_UPDATE_ARTIFACT_MIRROR", artifact_server.base + mirror)
+        else:
+            monkeypatch.delenv("TETHER_UPDATE_ARTIFACT_MIRROR", raising=False)
+        manager = _strict_manager(root, manifest_url, tmp_path / suffix / "state")
+        requests: list[str] = []
+        fetch = manager._fetch
+
+        def record_fetch(url: str, limit: int, *, timeout: float = 15.0, progress=None) -> bytes:
+            requests.append(url)
+            return fetch(url, limit, timeout=timeout, progress=progress)
+
+        manager._fetch = record_fetch
+        return manager.prepare(), requests
+
+    prepared, requests = prepare_with_sources("official", {"/official.zip"})
     assert prepared["ok"] is True, prepared
+    assert [url for url in requests if "/artifacts/" in url or url.endswith("/official.zip")] == [
+        artifact_server.base + "/official.zip"]
+
+    prepared, requests = prepare_with_sources("hub", {f"/releases/artifacts/{sha}"})
+    assert prepared["ok"] is True, prepared
+    assert [url for url in requests if "/artifacts/" in url or url.endswith("/official.zip")] == [
+        artifact_server.base + "/official.zip", hub_url]
+
+    prepared, requests = prepare_with_sources("mirror", {f"/mirror/{sha}"}, "/mirror")
+    assert prepared["ok"] is True, prepared
+    assert [url for url in requests if "/artifacts/" in url or "/mirror/" in url or url.endswith("/official.zip")] == [
+        artifact_server.base + "/official.zip", hub_url, mirror_url]
 
 
 def test_restart_cleared_requires_a_different_live_host_pid():
