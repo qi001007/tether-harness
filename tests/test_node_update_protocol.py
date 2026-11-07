@@ -231,18 +231,28 @@ def test_invalid_state_while_sending_result_is_transport_churn(
 def test_remote_app_apply_returns_restart_required(tmp_path, monkeypatch):
     node = _node(tmp_path, monkeypatch)
     monkeypatch.delenv("TETHER_NODE_MANAGED", raising=False)
+    app_root = (tmp_path / "bound-app").resolve()
     manager = FakeUpdateManager()
+    manager.root = app_root
     manager.apply = lambda _prepared_id: {"ok": True, "component": "app", "version": "0.2.2",
                                           "restart_required": True}
     node.update_managers["app"] = manager
     node.dsh_sessions.list = lambda: []
     node.dsh_sessions._files = lambda: []
     sent: list[dict] = []
+    scheduled_roots: list[Path] = []
+    node.ws = object()
+    original_ws = node.ws
 
     async def send(message: dict) -> None:
         sent.append(message)
 
+    def schedule(root: Path) -> bool:
+        scheduled_roots.append(root)
+        return True
+
     monkeypatch.setattr(node, "_send", send)
+    monkeypatch.setattr(agent, "schedule_app_restart", schedule)
     asyncio.run(node._update_call({"type": "update_call", "req_id": "app-apply",
                                    "action": "apply", "component": "app",
                                    "prepared_id": "a" * 32}))
@@ -250,6 +260,11 @@ def test_remote_app_apply_returns_restart_required(tmp_path, monkeypatch):
     assert sent[0]["ok"] is True
     assert sent[0]["component"] == "app"
     assert sent[0]["restart_required"] is True
+    assert sent[0]["restart_scheduled"] is True
+    assert scheduled_roots == [app_root]
+    assert node.ws is original_ws
+    assert node.restart_requested is False
+    assert node.update_applying is False
     node.store.db.close()
 
 
@@ -424,6 +439,7 @@ def test_in_progress_apply_result_does_not_request_a_restart(tmp_path, monkeypat
 
 def test_node_restart_is_deferred_when_the_app_update_is_prepared(tmp_path, monkeypatch):
     node = _node(tmp_path, monkeypatch)
+    monkeypatch.setenv("TETHER_NODE_MANAGED", "1")
     manager = FakeUpdateManager()
     node.update_managers["node"] = manager
 
@@ -432,6 +448,7 @@ def test_node_restart_is_deferred_when_the_app_update_is_prepared(tmp_path, monk
             return {"ok": True, "component": "app", "prepared": [{"to_version": "0.2.2"}]}
 
     node.update_managers["app"] = PreparedAppManager()
+    node.update_managers["app"].root = agent.ROOT.resolve()
     node.dsh_sessions.list = lambda: []
     node.dsh_sessions._files = lambda: []
     sent: list[dict] = []

@@ -165,3 +165,4 @@
 - 2026-11-07：新增 Herdr hydration 校验：固定资产 hash/size、精确 Windows ZIP 成员、现存冲突文件拒绝覆盖和全资产验证完成前不安装；release 校验覆盖候选分支、任意分支拒绝与既有 tag。
 
 - 2026-11-07：解除 NativeSurface 设备切换/可见性测试的跳过；DSH 桌面状态测试覆盖 start 后最多 4 秒的 surface 快照缓存。
+- 2026-11-07：更新 Node update protocol 旧用例契约：外置 Node 的 APP 更新必须调度绑定 APP root 的重启 helper、Node 连接保持可用；只有 managed Node 与同 ROOT 的 APP 待更新时才延迟 Node 重启。
