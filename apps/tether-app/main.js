@@ -5,12 +5,17 @@ const { pathToFileURL } = require('node:url')
 const { Supervisor } = require('./supervisor.js')
 const { waitForSupervisorStart, waitForLocalNodeApi } = require('./startup-readiness.js')
 const { UpdateService } = require('./update-service.js')
+const { registerAppInstallation } = require('./app-installation.js')
 const { rendererDiagnostic, isSurfaceBootFailure, isSurfaceErrorPage, isSurfaceUnstyled, rendererFrameState, rendererFrameStyleState, rendererFrameText, rendererRequestScope, rendererSettledFrameState, safeRendererMessage, safeRendererPath } = require('./renderer-diagnostics.js')
 
 const repoRoot = path.resolve(__dirname, '..', '..')
 const webRoot = path.join(repoRoot, 'packages', 'tether-ui', 'web')
 const dataDir = path.join(__dirname, 'data')
 const logFile = path.join(dataDir, 'app.log')
+const processCreationTime = typeof process.getCreationTime === 'function' ? process.getCreationTime() : null
+const appStartedAt = Number.isFinite(processCreationTime) ? processCreationTime : Date.now() - process.uptime() * 1000
+let appStartedVersion = ''
+try { appStartedVersion = String(JSON.parse(fs.readFileSync(path.join(repoRoot, 'version.json'), 'utf8')).components.app || '') } catch (_) { /* unknown runtime version */ }
 
 function loadEnv() {
   const env = { ...process.env }
@@ -69,6 +74,14 @@ function webviewAttachAllowed(params) {
 }
 
 fs.mkdirSync(dataDir, { recursive: true })
+try { registerAppInstallation({ env, dataDir, appRoot: repoRoot, startedAt: appStartedAt, startedVersion: appStartedVersion }) } catch (_) { /* update binding is auxiliary */ }
+let appBindingWatcher = null
+try {
+  appBindingWatcher = fs.watch(dataDir, (_event, filename) => {
+    if (String(filename || '') !== 'device-token.json') return
+    try { registerAppInstallation({ env, dataDir, appRoot: repoRoot, startedAt: appStartedAt, startedVersion: appStartedVersion }) } catch (_) { /* update binding is auxiliary */ }
+  })
+} catch (_) { /* optional device credential changes are also handled on enrollment */ }
 app.setPath('userData', path.join(dataDir, 'electron'))
 app.setName('Tether')
 if (process.platform === 'win32') app.setAppUserModelId('com.tether.app')
@@ -451,6 +464,7 @@ async function applyEnrollment(config, deviceToken, userToken) {
   removeDeviceToken()
   env.TETHER_NODE_TOKEN = deviceToken || ''
   env.TETHER_USER_TOKEN = userToken || ''
+  try { registerAppInstallation({ env, dataDir, appRoot: repoRoot, startedAt: appStartedAt, startedVersion: appStartedVersion }) } catch (_) { /* update binding is auxiliary */ }
   supervisor.nodeToken = deviceToken || ''
   supervisor.userToken = userToken || ''
   try {
@@ -556,6 +570,7 @@ app.on('window-all-closed', () => {
 })
 app.on('before-quit', () => {
   isQuitting = true
+  if (appBindingWatcher) { appBindingWatcher.close(); appBindingWatcher = null }
   supervisor.stopSync()
   if (webServer) webServer.close()
   if (tray) { tray.destroy(); tray = null }

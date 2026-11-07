@@ -161,7 +161,7 @@ export function updateTriggerState(updateInfo, updateErrors, refreshing = false,
     const errors = errorDevices[deviceId] || {}
     const capabilities = (device && device.capabilities) || {}
     const components = device
-      ? ['node', ...(capabilities.dsh_surface ? ['plugin'] : []), ...(capabilities.app_version ? ['app'] : [])]
+      ? ['node', ...(capabilities.dsh_surface ? ['plugin'] : []), ...(hasInstalledApp(capabilities) ? ['app'] : [])]
       : ['node', 'plugin', 'app']
     add(components.map((component) => target[component]), components.map((component) => errors[component]))
   }
@@ -240,20 +240,24 @@ export function updateNeededFor(info) {
 }
 
 export function normalizeUpdateLatest(updateInfo) {
-  let latestVersion = ''
-  const consider = (info) => {
+  const latestVersions = { app: '', plugin: '', node: '' }
+  const consider = (component, info) => {
     if (!info || !info.latest_version || isUpdateInfoStale(info)) return
-    if (!latestVersion || isVersionNewer(info.latest_version, latestVersion)) latestVersion = info.latest_version
+    if (!latestVersions[component] || isVersionNewer(info.latest_version, latestVersions[component])) {
+      latestVersions[component] = info.latest_version
+    }
   }
-  consider(updateInfo.app)
-  consider(updateInfo.localPlugin)
+  consider('app', updateInfo.app)
+  consider('plugin', updateInfo.localPlugin)
   for (const target of Object.values(updateInfo.devices || {})) {
-    for (const component of ['app', 'plugin', 'node']) consider(target && target[component])
+    for (const component of ['app', 'plugin', 'node']) consider(component, target && target[component])
   }
-  const apply = (info) => {
+  const apply = (component, info) => {
+    const latestVersion = latestVersions[component]
     if (!info || !latestVersion || isUpdateInfoStale(info)) return info
     const next = { ...info, latest_version: latestVersion }
-    if (!info.current_version) return next
+    if (!info.current_version || info.restart_required === true
+        || (latestVersion === info.latest_version && typeof info.update_available === 'boolean')) return next
     next.update_available = info.rollout_paused === true
       ? false
       : isVersionNewer(latestVersion, info.current_version)
@@ -261,13 +265,13 @@ export function normalizeUpdateLatest(updateInfo) {
   }
   return {
     ...updateInfo,
-    app: apply(updateInfo.app),
-    localPlugin: apply(updateInfo.localPlugin),
+    app: apply('app', updateInfo.app),
+    localPlugin: apply('plugin', updateInfo.localPlugin),
     devices: Object.fromEntries(Object.entries(updateInfo.devices || {}).map(([deviceId, target]) => [deviceId, {
       ...target,
-      app: apply(target && target.app),
-      plugin: apply(target && target.plugin),
-      node: apply(target && target.node)
+      app: apply('app', target && target.app),
+      plugin: apply('plugin', target && target.plugin),
+      node: apply('node', target && target.node)
     }]))
   }
 }
@@ -339,7 +343,9 @@ export function mergeUpdateStatusInfo(previous, status) {
   const next = { ...(previous || {}), ...(updateInfoAfterStatus(status) || {}) }
   if (previous && !isUpdateInfoStale(previous)) {
     next.latest_version = previous.latest_version
-    if (previous.update_available === true && next.current_version && previous.latest_version) {
+    if (next.restart_required === true && previous.update_available === true) {
+      next.update_available = true
+    } else if (previous.update_available === true && next.current_version && previous.latest_version) {
       next.update_available = previous.rollout_paused === true
         ? false
         : isVersionNewer(previous.latest_version, next.current_version)
@@ -464,7 +470,13 @@ export async function activateLocalDshUpdate({ reloadSurface, status }) {
 }
 
 export function deviceUpdateComponents(capabilities = {}) {
-  return ['node', ...(capabilities.app_version ? ['app'] : [])]
+  return ['node', ...(hasInstalledApp(capabilities) ? ['app'] : [])]
+}
+
+function hasInstalledApp(capabilities = {}) {
+  if (typeof capabilities.app_installed === 'boolean') return capabilities.app_installed
+  return !!(capabilities.app_version
+    || (Array.isArray(capabilities.installed_products) && capabilities.installed_products.includes('app')))
 }
 
 export function localPluginNeedsRestart(info) {
@@ -3905,8 +3917,8 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             const running = target && target.capabilities && target.capabilities.app_version
             const status = await loadUpdateInfo('app', 'status', authority, scope)
             if (target && target.online && running === expectedVersion && isUsableUpdateStatus(status)
-                && status.current_version === expectedVersion) {
-              setComponentUpdateInfo('app', { ...status, restart_required: false }, scope)
+                && status.current_version === expectedVersion && status.restart_required !== true) {
+              setComponentUpdateInfo('app', status, scope)
               return true
             }
           } catch (_) { /* the app and node are restarting; keep polling */ }
@@ -3973,7 +3985,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
               if (!item.online) return
               const scope = { deviceId: item.device_id, epoch: 0 }
               checks.push(automaticUpdateCheck('node', scope, force), automaticUpdateCheck('plugin', scope, force))
-              if (item.capabilities && item.capabilities.app_version) checks.push(automaticUpdateCheck('app', scope, force))
+              if (hasInstalledApp(item.capabilities || {})) checks.push(automaticUpdateCheck('app', scope, force))
             })
             await Promise.allSettled(checks)
             setUpdateInfo((current) => normalizeUpdateLatest(current))
@@ -4067,7 +4079,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const deviceCard = (item) => {
         const node = infoFor('node', item.device_id)
         const app = infoFor('app', item.device_id)
-        const hasApp = !!(item.capabilities && item.capabilities.app_version)
+        const hasApp = hasInstalledApp(item.capabilities || {})
         const infos = [node, ...(hasApp ? [app] : [])]
         const run = updateRunState('device:' + item.device_id)
         const running = run?.state === 'running'
@@ -4311,7 +4323,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             if (item) {
               list.push(['node', { deviceId: local, epoch: 0 }])
               if (item.capabilities && item.capabilities.dsh_surface) list.push(['plugin', { deviceId: local, epoch: 0 }])
-              if (item.capabilities && item.capabilities.app_version) list.push(['app', { deviceId: local, epoch: 0 }])
+              if (hasInstalledApp(item.capabilities || {})) list.push(['app', { deviceId: local, epoch: 0 }])
             }
           }
           for (const key of runningUpdateKey.split('|')) {
@@ -4321,7 +4333,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             if (!item) continue
             list.push(['node', { deviceId: targetId, epoch: 0 }])
             if (item.capabilities && item.capabilities.dsh_surface) list.push(['plugin', { deviceId: targetId, epoch: 0 }])
-            if (item.capabilities && item.capabilities.app_version) list.push(['app', { deviceId: targetId, epoch: 0 }])
+            if (hasInstalledApp(item.capabilities || {})) list.push(['app', { deviceId: targetId, epoch: 0 }])
           }
           const seen = new Set()
           return list.filter(([component, scope]) => {
@@ -4633,7 +4645,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         setProjects(null); setProject(null); setProjectsDevice(''); projectsDeviceRef.current = ''
         projectsRef.current = null; projectRef.current = null
         setPath(''); setPathDraft(''); pathRef.current = ''; setFile(null); setSelected(null)
-        setSessionId(''); setSessionData(null); setRunId(''); setNativeLoaded(false)
+        setSessionId(''); setSessionData(null); setRunId(''); setNative([]); setNativeError(''); setNativeLoaded(false)
         setTreeSelected(''); setDrives([])
         setDirEntries([]); setDirLoading(false); setDirError(''); setHistory({ back: [], forward: [] }); setSearch(''); setContextMenu(null)
         setPreviewBusy(false); setEditMode(false); loadedDirRef.current = ''
@@ -4656,6 +4668,10 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       }, [deviceId])
 
       React.useEffect(() => {
+        if (view === 'files') {
+          loadNative()
+          return undefined
+        }
         if (view !== 'chat') return undefined
         loadNative()
         const t = setInterval(loadNative, 8000)
@@ -6373,7 +6389,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           const caps = (item && item.capabilities) || {}
           const components = local
             ? (product === 'desktop' ? ['app', 'node'] : ['plugin'])
-            : [...(caps.app_version ? ['app'] : []), 'node']
+            : [...(hasInstalledApp(caps) ? ['app'] : []), 'node']
           const infos = components.map((component) => scopedInfo(item.device_id, component))
           const products = components.map((component, index) => ({
             label: component === 'app' ? 'APP' : component === 'plugin' ? '插件' : 'Node',

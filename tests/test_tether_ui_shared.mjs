@@ -749,7 +749,7 @@ test('a running update and a pending plugin restart keep the update trigger hone
   ), 'available', 'a loaded plugin older than the installed profile is not current')
 })
 
-test('one refresh normalizes every update card to the same latest snapshot', async () => {
+test('one refresh normalizes latest versions within each component', async () => {
   const { normalizeUpdateLatest, updateNeededFor, isVersionNewer } = await import('../packages/tether-ui/src/app.js')
   const info = {
     app: null,
@@ -776,8 +776,24 @@ test('one refresh normalizes every update card to the same latest snapshot', asy
     localPlugin: { current_version: '0.2.26', latest_version: '0.2.27', update_available: true },
     devices: { d: { app: { current_version: '0.2.26', latest_version: '0.2.26', update_available: false } } }
   })
-  assert.equal(mixed.devices.d.app.latest_version, '0.2.27', 'all components share the release version')
-  assert.equal(mixed.devices.d.app.update_available, true)
+  assert.equal(mixed.devices.d.app.latest_version, '0.2.26', 'component versions remain scoped')
+  assert.equal(mixed.devices.d.app.update_available, false)
+  const splitRelease = normalizeUpdateLatest({
+    devices: { laptop: {
+      app: { current_version: '4.5.0', latest_version: '4.6.0', update_available: true },
+      node: { current_version: '4.5.0', latest_version: '4.6.0', update_available: true },
+      plugin: { current_version: '0.2.90', latest_version: '0.2.93', update_available: true }
+    } }
+  })
+  assert.equal(splitRelease.devices.laptop.plugin.latest_version, '0.2.93')
+  assert.equal(splitRelease.devices.laptop.plugin.update_available, true)
+  assert.equal(splitRelease.devices.laptop.app.latest_version, '4.6.0')
+  assert.equal(splitRelease.devices.laptop.node.latest_version, '4.6.0')
+  const retryStatus = { current_version: '4.6.0', installed_version: '4.6.0', latest_version: '4.6.0', update_available: true, restart_required: true }
+  const retry = normalizeUpdateLatest({
+    devices: { laptop: { app: { ...retryStatus } } }
+  }).devices.laptop.app
+  assert.equal(retry.update_available, true, 'pending APP restart keeps same-version retry available')
   assert.equal(isVersionNewer('0.2.26', '0.2.25'), true)
   assert.equal(isVersionNewer('0.2.26', '0.2.26'), false)
   assert.equal(updateNeededFor({ current_version: '0.2.26', latest_version: '0.2.26', update_available: false }), false)
@@ -830,13 +846,16 @@ test('settings exposes an edge-gated update section for local and remote devices
   assert.match(shared, /connected\.has\(item\.device_id\)/)
   assert.match(shared, /update: settingsUpdate/)
   assert.match(shared, /product === 'desktop' \? \['app', 'node'\] : \['plugin'\]/)
-  assert.match(shared, /\.\.\.\(caps\.app_version \? \['app'\] : \[\]\), 'node'/)
+  assert.match(shared, /\.\.\.\(hasInstalledApp\(caps\) \? \['app'\] : \[\]\), 'node'/)
 })
 
 test('APP-facing device updates exclude the separately managed DSH plugin', async () => {
   const { deviceUpdateComponents } = await import('../packages/tether-ui/src/app.js')
   assert.deepEqual(deviceUpdateComponents({ dsh_surface: true, app_version: '0.4.2' }), ['node', 'app'])
   assert.deepEqual(deviceUpdateComponents({ dsh_surface: true }), ['node'])
+  assert.deepEqual(deviceUpdateComponents({ app_installed: true }), ['node', 'app'])
+  assert.deepEqual(deviceUpdateComponents({ app_installed: false, app_version: '0.4.2' }), ['node'])
+  assert.deepEqual(deviceUpdateComponents({ installed_products: ['app'] }), ['node', 'app'])
   assert.match(shared, /const infos = \[node, \.\.\.\(hasApp \? \[app\] : \[\]\)\]/)
 })
 

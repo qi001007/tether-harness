@@ -1,4 +1,6 @@
 # Tether Python 后端变更记录
+- 2026-11-07：更新器区分APP磁盘安装版本与可信运行版本；支持同版本完整重试pending APP更新，并仅在新的真实APP进程启动并报告目标版本后清除restart_required；旧pending记录缺少from_version时显示未知，不以崩溃进程的记录冒报运行版本。
+- 2026-11-07：为 0.4.6 候选同步 `version.json` 与 `pyproject.toml` 的 APP/Node 版本；插件保持官方稳定 0.2.93。
 - 2026-11-07：更新器 JSON 读取支持 UTF-8 BOM，兼容旧 APP `version.json` 并允许标准 APP 更新器 prepare。
 - 2026-11-07：只读核对 0.4.4-stability 更新契约：统一 manifest 仍包含 APP/Node 0.4.4 与官方签名插件 0.2.93；`scripts/build_release.py` 对冻结插件验签、校验资产 SHA/大小与四个包版本，并只把原插件条目复制进新 manifest，不生成插件 ZIP；发行 workflow 从稳定版下载这两个冻结资产并验证最终清单签名。Node 的 `update_managers` 与 RPC 仍含 node/plugin/app，plugin 仍支持 check/status/prepare/apply/restart；UI 保留独立 DSH 插件卡及 APP/Node 整机更新计划，既有测试明确将插件排除在 APP/Node 一键计划之外。随后在私有服务器独立工作树只读核对 `UPDATE_COMPONENTS` 确含 app/node/plugin，更新任务支持 APP/插件各自与 Node 的序列，三组件服务能力保留。现场只读核对：真实宿主仓库版本元数据为三组件 0.4.2，当前 DSH desktop profile 四个已安装插件包均为 0.4.2；新稳定 manifest 插件为 0.2.93。更新器以已安装 profile 为 current，并只在远端 SemVer 高于当前版本时置 `update_available`；整机更新序列只准备/应用 Node 与 APP，因此 0.2.93 不会触发插件降级，也不阻断整机更新。未改业务代码、版本号、真实宿主或 Git 状态；插件更新能力保留，插件新版本未发布。
 - 2026-11-03：`UpdateManager.checkout_state()` 的 `git status` 在 Windows 必须带 `CREATE_NO_WINDOW`；否则即使父进程是 `pythonw.exe`，`git.exe` 仍会创建 `ConsoleWindowClass` 黑色窗口。启动 trace 实测修复前 3 个可见控制台、修复后 0 个。插件的 vendored updater 同步同一修复。

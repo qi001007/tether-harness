@@ -64,6 +64,62 @@ def test_capabilities_advertise_update_protocol_and_cached_version(tmp_path, mon
     node.store.db.close()
 
 
+def test_app_manager_uses_trusted_external_installation_root_and_shared_state(tmp_path, monkeypatch):
+    import hashlib
+
+    from tether.updates import app_installation_path
+
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setenv("TETHER_NODE_TOKEN", "node-credential")
+    monkeypatch.delenv("TETHER_NODE_MANAGED", raising=False)
+    node = _node(tmp_path, monkeypatch)
+    root = tmp_path / "separate-app"
+    app_dir = root / "apps" / "tether-app"
+    app_dir.mkdir(parents=True)
+    (app_dir / "main.js").write_text("", encoding="utf-8")
+    (root / "version.json").write_text(json.dumps({
+        "schema": 1, "components": {"app": "0.4.5", "node": "0.4.4", "plugin": "0.2.93"}
+    }), encoding="utf-8")
+    origin = "http://127.0.0.1:18890"
+    record_path = app_installation_path("ws://127.0.0.1:18890/ws/node", "test-node")
+    assert record_path is not None
+    record_path.parent.mkdir(parents=True)
+    record_path.write_text(json.dumps({
+        "schema": 1, "controller_origin": origin, "device_id": "test-node", "root": str(root),
+        "pid": 2_000_000_000, "process_started_at": 1.0, "started_version": "0.4.5",
+        "credential_fingerprint": hashlib.sha256(
+            f"{origin}\ntest-node\nfake".encode()).hexdigest(),
+    }), encoding="utf-8")
+
+    node._refresh_app_update_manager()
+    manager = node.update_managers["app"]
+    assert manager.root == root.resolve()
+    assert manager.state_dir == app_dir / "data" / "updates" / "app"
+    fields = node._app_heartbeat_fields()
+    assert fields == {"app_version": "0.4.5", "app_installed": True}
+    assert manager.app_binding_required is True
+    node.store.db.close()
+
+
+def test_unbound_standalone_node_does_not_advertise_an_app(tmp_path, monkeypatch):
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.delenv("TETHER_NODE_MANAGED", raising=False)
+    node = _node(tmp_path, monkeypatch)
+    assert node._app_heartbeat_fields() == {"app_version": "", "app_installed": False}
+    assert node.update_managers["app"].status()["error_code"] == "app_not_installed"
+    node.store.db.close()
+
+
+def test_managed_node_keeps_same_root_app_update_binding(tmp_path, monkeypatch):
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setenv("TETHER_NODE_MANAGED", "1")
+    node = _node(tmp_path, monkeypatch)
+    manager = node.update_managers["app"]
+    assert manager.root == agent.ROOT.resolve()
+    assert manager.app_binding_required is False
+    node.store.db.close()
+
+
 def test_check_forces_the_manifest_while_status_keeps_the_cache(tmp_path, monkeypatch):
     node = _node(tmp_path, monkeypatch)
     manager = FakeUpdateManager()

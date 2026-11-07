@@ -17,7 +17,8 @@ from pathlib import Path
 import pytest
 
 from tether.updates import (PLUGIN_HOT_RELOAD_GRACE, UpdateError, UpdateManager, _is_newer,
-                             _json_object, _restart_cleared, _resolve_latest_manifest_url, _runtime_loaded)
+                             _json_object, _restart_cleared, _resolve_latest_manifest_url,
+                             _runtime_loaded, app_installation_path, load_app_installation)
 
 
 class ArtifactServer:
@@ -61,6 +62,179 @@ def test_json_object_accepts_utf8_bom():
     assert _json_object(b'\xef\xbb\xbf{"components":{"app":"0.3.1"}}') == {
         "components": {"app": "0.3.1"}
     }
+
+
+def test_app_binding_checks_device_credential_root_and_expired_pid(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    root = tmp_path / "app-install"
+    (root / "apps" / "tether-app").mkdir(parents=True)
+    (root / "apps" / "tether-app" / "main.js").write_text("", encoding="utf-8")
+    seed_version(root)
+    origin = "https://hub.example"
+    device = "LAPTOP-01"
+    credential = "node-credential"
+    record_path = app_installation_path("wss://hub.example/ws/node", device)
+    assert record_path is not None
+    record_path.parent.mkdir(parents=True)
+    fingerprint = hashlib.sha256(f"{origin}\n{device}\n{credential}".encode()).hexdigest()
+    record_path.write_text(json.dumps({
+        "schema": 1, "controller_origin": origin, "device_id": device,
+        "root": str(root), "pid": 2_000_000_000, "process_started_at": 1.0,
+        "started_version": "0.2.0", "credential_fingerprint": fingerprint,
+    }), encoding="utf-8")
+
+    binding = load_app_installation("wss://hub.example/ws/node", device, credential)
+    assert binding is not None
+    assert binding["runtime_running"] is False
+    assert binding["installed_version"] == "0.2.0"
+    assert load_app_installation("wss://hub.example/ws/node", device, "wrong-credential") is None
+    assert load_app_installation("wss://other.example/ws/node", device, credential) is None
+    assert load_app_installation("wss://hub.example/ws/node", "OTHER-DEVICE", credential) is None
+    assert load_app_installation("wss://hub.example/ws/node", device, credential, tmp_path / "other") is None
+
+    (root / "apps" / "tether-app" / "main.js").unlink()
+    assert load_app_installation("wss://hub.example/ws/node", device, credential) is None
+
+
+def test_app_status_keeps_old_runtime_version_and_same_version_retry(
+        artifact_server: ArtifactServer, tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    root = tmp_path / "app-install"
+    app_dir = root / "apps" / "tether-app"
+    app_dir.mkdir(parents=True)
+    (app_dir / "main.js").write_text("", encoding="utf-8")
+    (app_dir / "preload.js").write_text("", encoding="utf-8")
+    (app_dir / "package.json").write_text('{"dependencies":{},"devDependencies":{}}', encoding="utf-8")
+    seed_version(root)
+    (root / "version.json").write_text(json.dumps({
+        "schema": 1, "components": {"app": "0.4.6", "node": "0.2.0", "plugin": "0.2.0"}
+    }), encoding="utf-8")
+    credential = "node-credential"
+    device = "LAPTOP-01"
+    origin = "https://hub.example"
+    record_path = app_installation_path("wss://hub.example/ws/node", device)
+    assert record_path is not None
+    record_path.parent.mkdir(parents=True)
+    record_path.write_text(json.dumps({
+        "schema": 1, "controller_origin": origin, "device_id": device,
+        "root": str(root), "pid": 2_000_000_000, "process_started_at": 1.0,
+        "started_version": "0.2.0",
+        "credential_fingerprint": hashlib.sha256(f"{origin}\n{device}\n{credential}".encode()).hexdigest(),
+    }), encoding="utf-8")
+    state = tmp_path / "updates" / "app"
+    state.mkdir(parents=True)
+    applied_at = int(time.time() * 1000)
+    (state / "applied-app.json").write_text(json.dumps({
+        "schema": 1, "component": "app", "version": "0.4.6", "from_version": "0.2.0",
+        "restart_required": True, "applied_at": applied_at, "pid": 99999999,
+        "process_started_at": 1.0,
+    }), encoding="utf-8")
+    (state / "latest-app.json").write_text(json.dumps({
+        "schema": 1, "component": "app", "version": "0.4.6", "checked_at": time.time(),
+    }), encoding="utf-8")
+    prepared_root = state / "prepared" / ("a" * 32)
+    prepared_root.mkdir(parents=True)
+    (prepared_root / "prepared.json").write_text(json.dumps({
+        "id": "a" * 32, "component": "app", "from_version": "0.4.6",
+        "to_version": "0.4.6", "same_version_retry": True, "files": [],
+    }), encoding="utf-8")
+
+    manifest_url = install_manifest(artifact_server, "app", make_zip("app", version="0.4.6"), version="0.4.6")
+    manager = UpdateManager(root, "app", state_dir=state, device=device, manifest_url=manifest_url,
+                            app_credential=credential, controller_url="wss://hub.example/ws/node",
+                            app_binding_required=True)
+    status = manager.status()
+    assert status["ok"] is True
+    assert status["current_version"] == "0.2.0"
+    assert status["installed_version"] == "0.4.6"
+    assert status["restart_required"] is True
+    assert status["update_available"] is True
+    assert status["prepared"] == [{"prepared_id": "a" * 32, "to_version": "0.4.6"}]
+    prepared = manager.prepare()
+    assert prepared["ok"] is True, prepared
+    retry_record = _json_object((state / "prepared" / prepared["prepared_id"] / "prepared.json").read_bytes())
+    assert retry_record["same_version_retry"] is True
+    first_apply_at = applied_at
+    applied = manager.apply(prepared["prepared_id"])
+    assert applied["ok"] is True, applied
+    applied_record = _json_object((state / "applied-app.json").read_bytes())
+    assert applied_record["applied_at"] == first_apply_at
+    assert applied_record["from_version"] == "0.2.0"
+    assert applied_record["pid"] == 99999999
+    pending = manager.status()
+    assert pending["current_version"] == "0.2.0"
+    assert pending["installed_version"] == "0.4.6"
+    assert pending["restart_required"] is True
+
+    applied_record.pop("from_version")
+    applied_path = state / "applied-app.json"
+    applied_path.write_text(json.dumps(applied_record), encoding="utf-8")
+    binding = _json_object(record_path.read_bytes())
+    binding["started_version"] = "0.4.6"
+    record_path.write_text(json.dumps(binding), encoding="utf-8")
+    missing_baseline = manager.status()
+    assert missing_baseline["current_version"] == ""
+    assert missing_baseline["restart_required"] is True
+
+
+def test_app_restart_clears_for_new_process_identity_even_when_pid_reused(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    root = tmp_path / "app-install"
+    app_dir = root / "apps" / "tether-app"
+    electron = app_dir / "node_modules" / "electron" / "dist" / "electron.exe"
+    electron.parent.mkdir(parents=True)
+    electron.write_bytes(b"electron")
+    (app_dir / "main.js").write_text("", encoding="utf-8")
+    (root / "version.json").write_text(json.dumps({
+        "schema": 1, "components": {"app": "0.4.6", "node": "0.4.4", "plugin": "0.2.93"}
+    }), encoding="utf-8")
+    device = "LAPTOP-01"
+    credential = "node-credential"
+    origin = "https://hub.example"
+    applied_at = 1_790_000_000_000
+    started_at = applied_at / 1000 + 3
+    record_path = app_installation_path("wss://hub.example/ws/node", device)
+    assert record_path is not None
+    record_path.parent.mkdir(parents=True)
+    record_path.write_text(json.dumps({
+        "schema": 1, "controller_origin": origin, "device_id": device, "root": str(root),
+        "pid": 77, "process_started_at": started_at, "started_version": "0.4.6",
+        "credential_fingerprint": hashlib.sha256(f"{origin}\n{device}\n{credential}".encode()).hexdigest(),
+    }), encoding="utf-8")
+    state = tmp_path / "updates" / "app"
+    state.mkdir(parents=True)
+    applied_path = state / "applied-app.json"
+    applied_path.write_text(json.dumps({
+        "schema": 1, "component": "app", "version": "0.4.6", "from_version": "0.4.5",
+        "restart_required": True, "applied_at": applied_at, "pid": 77,
+        "process_started_at": started_at - 10,
+    }), encoding="utf-8")
+    (state / "latest-app.json").write_text(json.dumps({
+        "schema": 1, "component": "app", "version": "0.4.6", "checked_at": time.time(),
+    }), encoding="utf-8")
+
+    class LiveAppProcess:
+        def __init__(self, pid: int):
+            assert pid == 77
+
+        def exe(self) -> str:
+            return str(electron)
+
+        def cmdline(self) -> list[str]:
+            return [str(electron), str(app_dir)]
+
+        def create_time(self) -> float:
+            return started_at
+
+    monkeypatch.setattr("tether.updates.psutil.Process", LiveAppProcess)
+    manager = UpdateManager(root, "app", state_dir=state, device=device,
+                            app_credential=credential, controller_url="wss://hub.example/ws/node",
+                            app_binding_required=True)
+    status = manager.status()
+    assert status["current_version"] == "0.4.6"
+    assert status["installed_version"] == "0.4.6"
+    assert status["restart_required"] is False
+    assert _json_object(applied_path.read_bytes())["restart_required"] is False
 
 
 def _use_lockstep_release_fixture(builder, monkeypatch, version: str) -> None:

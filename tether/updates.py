@@ -177,6 +177,7 @@ ERROR_MESSAGES = {
     "local_state_error": "更新状态无法读取或写入。",
     "local_version_unknown": "无法确认当前安装版本，已阻止更新。",
     "target_missing": "未找到可更新的安装目录。",
+    "app_not_installed": "未找到与当前设备和 Hub 凭据匹配的本机 APP 安装记录。",
     "checkout_state_unknown": "无法确认开发目录状态，已阻止更新。",
     "prepared_id_required": "apply 操作需要 prepared_id。",
     "prepared_stale": "准备的更新已过期，当前版本已变化，请重新检查和准备。",
@@ -433,6 +434,94 @@ def _json_object(raw: bytes) -> dict[str, Any]:
     return value
 
 
+def _controller_origin(value: str | None) -> str:
+    try:
+        parsed = urllib.parse.urlsplit(str(value or ""))
+        scheme = {"ws": "http", "wss": "https"}.get(parsed.scheme.lower(), parsed.scheme.lower())
+        if scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
+            return ""
+        host = parsed.hostname.lower()
+        if ":" in host:
+            host = f"[{host}]"
+        port = parsed.port
+        default = (scheme == "http" and port == 80) or (scheme == "https" and port == 443)
+        return f"{scheme}://{host}" + (f":{port}" if port and not default else "")
+    except (TypeError, ValueError):
+        return ""
+
+
+def app_installation_path(controller_url: str | None, device: str) -> Path | None:
+    origin = _controller_origin(controller_url)
+    if not origin or not device:
+        return None
+    key = hashlib.sha256(f"{origin}\n{device}".encode("utf-8")).hexdigest()
+    return Path.home() / ".tether" / "app-installations" / f"{key}.json"
+
+
+def load_app_installation(controller_url: str | None, device: str, credential: str,
+                          expected_root: Path | None = None) -> dict[str, Any] | None:
+    """Load a local APP binding; a dead PID remains an installation, never a runtime."""
+    path = app_installation_path(controller_url, device)
+    if path is None or not credential:
+        return None
+    try:
+        record = _json_object(path.read_bytes())
+        origin = _controller_origin(controller_url)
+        fingerprint = hashlib.sha256(f"{origin}\n{device}\n{credential}".encode("utf-8")).hexdigest()
+        root_text = record.get("root")
+        root_candidate = Path(root_text).expanduser() if isinstance(root_text, str) else None
+        root = root_candidate.resolve() if root_candidate is not None and root_candidate.is_absolute() else None
+        app_dir = root / "apps" / "tether-app" if root else None
+        if (record.get("schema") != 1 or record.get("controller_origin") != origin
+                or record.get("device_id") != device or record.get("credential_fingerprint") != fingerprint
+                or root is None or root_candidate.is_symlink() or not root.is_dir()
+                or str(root).startswith(("\\\\", "//")) or (root / "apps").is_symlink()
+                or (root / "version.json").is_symlink()
+                or app_dir is None or not (app_dir / "main.js").is_file()
+                or app_dir.is_symlink()
+                or (expected_root is not None and root != Path(expected_root).expanduser().resolve())):
+            return None
+        if os.name == "nt":
+            import ctypes
+            if ctypes.windll.kernel32.GetDriveTypeW(str(root.drive + "\\")) == 4:
+                return None
+        _semver(record.get("started_version"))
+        pid = record.get("pid")
+        started_at = record.get("process_started_at")
+        if type(pid) is not int or pid <= 0 or type(started_at) not in (int, float):
+            return None
+        runtime_running = False
+        try:
+            process = psutil.Process(pid)
+            exe = Path(process.exe()).resolve()
+            argv = process.cmdline()
+            command_paths = [str(arg).replace("/", "\\").casefold() for arg in argv if not str(arg).startswith("--")]
+            app_folded = str(app_dir).replace("/", "\\").casefold().rstrip("\\")
+            expected_exe = app_dir / "node_modules" / "electron" / "dist" / ("electron.exe" if os.name == "nt" else "electron")
+            command_has_app = any(arg == app_folded or arg.startswith(app_folded + "\\") for arg in command_paths)
+            runtime_running = (exe == expected_exe.resolve() and command_has_app
+                               and not any(str(arg).startswith("--type=") for arg in argv)
+                               and abs(process.create_time() - float(started_at)) <= 2.0)
+        except (psutil.Error, OSError, ValueError):
+            pass
+        return {**record, "root": root, "runtime_running": runtime_running,
+                "installed_version": _versions_from_root(root).get("app", "")}
+    except (OSError, UpdateError, TypeError, ValueError):
+        return None
+
+
+def _versions_from_root(root: Path) -> dict[str, str]:
+    try:
+        data = _json_object((root / "version.json").read_bytes())
+        components = data.get("components")
+        if isinstance(components, dict) and isinstance(components.get("app"), str):
+            _semver(components["app"])
+            return {"app": components["app"]}
+    except (OSError, UpdateError):
+        pass
+    return {}
+
+
 def _sha256_path(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -482,6 +571,10 @@ class UpdateManager:
         fallback_manifest_urls: list[str] | None = None,
         allow_unsigned: bool | None = None,
         public_key_hex: str | None = None,
+        app_binding_required: bool = False,
+        app_credential: str | None = None,
+        controller_url: str | None = None,
+        installation_device: str | None = None,
     ) -> None:
         if component not in COMPONENTS:
             raise ValueError("component must be app, plugin, or node")
@@ -493,8 +586,12 @@ class UpdateManager:
         self.dsh_home = Path(dsh_home or (Path.home() / ".dsh")).expanduser().resolve()
         self.state_dir = Path(state_dir or (self.root / ".runtime" / "updates")).expanduser().resolve()
         self.device = _safe_device(device)
+        self.installation_device = installation_device or device or os.environ.get("TETHER_DEVICE") or socket.gethostname()
+        self.app_binding_required = bool(app_binding_required)
+        self.app_credential = app_credential
         explicit_url = manifest_url is not None
         self.manifest_url = manifest_url or os.environ.get("TETHER_UPDATE_MANIFEST_URL") or DEFAULT_MANIFEST_URL
+        self.controller_url = controller_url or os.environ.get("TETHER_CONTROLLER_URL") or self.manifest_url
         self._manifest_urls = []
         urls = [self.manifest_url]
         urls.extend([DEFAULT_MANIFEST_URL] if fallback_manifest_urls is None else fallback_manifest_urls)
@@ -751,6 +848,65 @@ class UpdateManager:
                 pass
         return versions
 
+    def _app_binding(self) -> dict[str, Any] | None:
+        if self.component != "app":
+            return None
+        credential = self.app_credential or os.environ.get("TETHER_NODE_TOKEN", "")
+        return load_app_installation(self.controller_url, self.installation_device, credential, self.root)
+
+    def _app_restart_state(self, applied: dict[str, Any] | None = None) -> tuple[bool, str]:
+        if self.component != "app":
+            return False, ""
+        try:
+            if applied is None:
+                applied = _json_object((self.state_dir / "applied-app.json").read_bytes())
+        except (OSError, UpdateError):
+            applied = None
+        restart = bool(isinstance(applied, dict) and applied.get("component") == "app"
+                       and applied.get("restart_required") is True)
+        if restart and self._app_restart_cleared(applied):
+            applied["restart_required"] = False
+            try:
+                self._write_atomic(self.state_dir / "applied-app.json",
+                                   (json.dumps(applied, indent=2) + "\n").encode("utf-8"))
+            except OSError:
+                pass
+            restart = False
+        return restart, str(applied.get("version") or "") if restart else ""
+
+    def _app_current_version(self, installed: str, applied: dict[str, Any] | None = None) -> str:
+        if self.component != "app":
+            return installed
+        binding = self._app_binding()
+        if binding and binding.get("runtime_running") and isinstance(binding.get("started_version"), str):
+            return binding["started_version"]
+        if applied is None:
+            try:
+                applied = _json_object((self.state_dir / "applied-app.json").read_bytes())
+            except (OSError, UpdateError):
+                applied = None
+        restart, _target = self._app_restart_state(applied)
+        if restart:
+            baseline = applied.get("from_version", "") if isinstance(applied, dict) else ""
+            try:
+                _semver(baseline)
+            except UpdateError:
+                return ""
+            return baseline
+        if binding and isinstance(binding.get("started_version"), str):
+            return binding["started_version"]
+        return "" if self.app_binding_required else installed
+
+    def _app_restart_cleared(self, applied: dict[str, Any], binding: dict[str, Any] | None = None) -> bool:
+        binding = binding or self._app_binding()
+        if not binding or not binding.get("runtime_running"):
+            return False
+        new_process = (binding.get("pid") != applied.get("pid")
+                       or float(binding.get("process_started_at") or 0) != float(applied.get("process_started_at") or 0))
+        return (new_process
+                and float(binding.get("process_started_at") or 0) * 1000 > float(applied.get("applied_at") or 0)
+                and binding.get("started_version") == applied.get("version"))
+
     def _plugin_details(self) -> dict[str, Any]:
         if not (self.dsh_home / "profiles" / self.profile / "node_modules" / "tether-dsh-client").is_dir():
             resolved = select_profile(self.dsh_home, self.profile)
@@ -918,11 +1074,17 @@ class UpdateManager:
 
     def check(self, force: bool = False) -> dict[str, Any]:
         try:
-            current = self._versions()[self.component]
+            if self.component == "app" and self.app_binding_required and self._app_binding() is None:
+                return self._error("app_not_installed")
+            installed = self._versions()[self.component]
+            current = self._app_current_version(installed)
             manifest = self._load_manifest(use_check_cache=True, force=force)
             remote = manifest["components"][self.component]
             version = remote["version"]
-            newer = _is_newer(version, current)
+            restart_required, applied_target = self._app_restart_state()
+            newer = _is_newer(version, installed)
+            if self.component == "app" and restart_required and version == installed == applied_target:
+                newer = True
             allowed = _rollout_allows(remote, self.component, version, self.device)
             update_available = newer and allowed
             checked_at = time.time()
@@ -939,6 +1101,7 @@ class UpdateManager:
             except OSError:
                 pass
             result = {"ok": True, "component": self.component, "current_version": current,
+                      "installed_version": installed if self.component == "app" else None,
                       "latest_version": version, "update_available": update_available,
                       "rollout_paused": newer and not allowed,
                       "rollout_percent": rollout["percent"] if rollout else 100,
@@ -1398,13 +1561,18 @@ class UpdateManager:
             lock_fd, _lock_file = lock
             if not self.root.is_dir():
                 raise UpdateError("target_missing")
+            if self.component == "app" and self.app_binding_required and self._app_binding() is None:
+                raise UpdateError("app_not_installed")
             if self.component == "plugin":
                 self._check_plugin_targets()
             current = self._versions()[self.component]
             manifest = self._load_manifest(force=True)
             item = manifest["components"][self.component]
             target_version = item["version"]
-            if not _is_newer(target_version, current):
+            restart_required, applied_target = self._app_restart_state()
+            same_version_retry = (self.component == "app" and restart_required
+                                  and target_version == current == applied_target)
+            if not _is_newer(target_version, current) and not same_version_retry:
                 return self._error("no_update")
             if not _rollout_allows(item, self.component, target_version, self.device):
                 return self._error("rollout_paused")
@@ -1430,7 +1598,8 @@ class UpdateManager:
             self._write_progress("preparing", 90, target_version)
             record = {
                 "id": prepared_id, "component": self.component, "from_version": current,
-                "to_version": target_version, "sha256": item["sha256"], "size": item["size"],
+                "to_version": target_version, "same_version_retry": same_version_retry,
+                "sha256": item["sha256"], "size": item["size"],
                 "profile": self.profile if self.component == "plugin" else None,
                 "files": [{"path": entry[2], "sha256": _sha256_path(entry[0]),
                            "size": entry[0].stat().st_size,
@@ -1632,7 +1801,12 @@ class UpdateManager:
             expected_version = record["to_version"]
             _semver(expected_version)
             current = self._versions()[self.component]
-            if record.get("from_version") != current or not _is_newer(expected_version, current):
+            restart_required, applied_target = self._app_restart_state()
+            same_version_retry = (self.component == "app" and record.get("same_version_retry") is True
+                                  and restart_required and expected_version == current == applied_target
+                                  and record.get("from_version") == current)
+            if (record.get("from_version") != current
+                    or (not _is_newer(expected_version, current) and not same_version_retry)):
                 raise UpdateError("prepared_stale")
             # A prepare can sit for hours; re-check the held rollout against the
             # cached manifest (no network) so an operator's pause still applies.
@@ -1670,9 +1844,25 @@ class UpdateManager:
             installed_path = self.state_dir / f"installed-{self.component}.json"
             applied_path = self.state_dir / f"applied-{self.component}.json"
             dsh_pid = self._dsh_host_pid() if self.component == "plugin" else None
-            applied_record: dict[str, Any] = {"schema": 1, "component": self.component,
-                                              "version": expected_version, "restart_required": True,
-                                              "applied_at": int(time.time() * 1000)}
+            existing_applied: dict[str, Any] | None = None
+            if self.component == "app":
+                try:
+                    existing_applied = _json_object(applied_path.read_bytes())
+                except (OSError, UpdateError):
+                    pass
+            if (same_version_retry and isinstance(existing_applied, dict)
+                    and existing_applied.get("restart_required") is True
+                    and existing_applied.get("version") == expected_version):
+                applied_record = existing_applied
+            else:
+                applied_record = {"schema": 1, "component": self.component,
+                                  "version": expected_version, "restart_required": True,
+                                  "applied_at": int(time.time() * 1000), "from_version": current}
+                if self.component == "app":
+                    binding = self._app_binding()
+                    if binding:
+                        applied_record["pid"] = binding["pid"]
+                        applied_record["process_started_at"] = binding["process_started_at"]
             if dsh_pid:
                 applied_record["dsh_pid"] = dsh_pid
             for path, content in (
@@ -1836,7 +2026,11 @@ class UpdateManager:
 
     def status(self) -> dict[str, Any]:
         try:
-            current = self._versions()[self.component]
+            if self.component == "app" and self.app_binding_required and self._app_binding() is None:
+                return self._error("app_not_installed")
+            installed = self._versions()[self.component]
+            current = self._app_current_version(installed)
+            app_restart_required, app_restart_target = self._app_restart_state()
             prepared_dir = self.state_dir / "prepared"
             prepared: list[dict[str, str]] = []
             if prepared_dir.is_dir():
@@ -1851,7 +2045,10 @@ class UpdateManager:
                     if not isinstance(to_version, str):
                         continue
                     try:
-                        if not _is_newer(to_version, current):
+                        same_version_retry = (self.component == "app" and app_restart_required
+                                              and to_version == installed == app_restart_target
+                                              and record.get("same_version_retry") is True)
+                        if not _is_newer(to_version, installed) and not same_version_retry:
                             continue
                     except UpdateError:
                         continue
@@ -1861,6 +2058,14 @@ class UpdateManager:
             try:
                 applied = _json_object((self.state_dir / f"applied-{self.component}.json").read_bytes())
                 restart_required = applied.get("component") == self.component and applied.get("restart_required") is True
+                if restart_required and self.component == "app" and self._app_restart_cleared(applied):
+                    restart_required = False
+                    try:
+                        applied["restart_required"] = False
+                        self._write_atomic(self.state_dir / "applied-app.json",
+                                           (json.dumps(applied, indent=2) + "\n").encode("utf-8"))
+                    except OSError:
+                        pass
                 if restart_required and self.component == "plugin":
                     host = self._dsh_host_state()
                     if _restart_cleared(applied, host["descriptor_pid"], host["updated_at"]) or _runtime_loaded(applied, host):
@@ -1895,6 +2100,7 @@ class UpdateManager:
             except UpdateError:
                 newer = False
             result = {"ok": True, "component": self.component, "current_version": current,
+                      "installed_version": installed if self.component == "app" else None,
                       "latest_version": latest_version or None,
                       "update_available": bool(newer and not rollout_paused),
                       "checked_at": checked_at or None, "manifest_source": latest_source,

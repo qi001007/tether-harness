@@ -1,4 +1,5 @@
 # 修改记录
+- 2026-11-07：Node按可信本机APP绑定root/state管理APP更新；heartbeat携带短字段app_version/app_installed，外置APP重启不延迟/停止独立Node，managed同root行为沿用。
 - 2026-11-07：补齐从 Codeg 固定上游提交重放 Agents 前端所需的完整源码改动。
 - 2026-11-07：Herdr 终端清单声明项目会话能力，失效项目路径在启动前报错。
 - 2026-11-07：Codeg 主页按上游版本规则区分 OpenCode 旧版的终端入口和 2.x 的结构化入口。

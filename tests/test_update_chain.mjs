@@ -39,14 +39,26 @@ test('one click downloads every component before the first install and restarts 
     'the product confirms an applied or previously pending Node restart after APP reconnects')
 })
 
+test('external Node configuration skips spawn and does not expose a random local API', () => {
+  assert.match(mainSource, /cfg\.nodeMode === 'external'[\s\S]*?env\.TETHER_NODE_MODE = cfg\.nodeMode/)
+  assert.match(mainSource, /current\.nodeMode === 'external'[\s\S]*?nodeMode: 'external'/,
+    'Hub config rewrites preserve the existing external Node selection')
+  assert.match(mainSource, /localApi: supervisor\.remoteUrl && supervisor\.procs\.node/,
+    'the local console token is only passed when this APP owns a Node process')
+  assert.match(supervisorSource, /this\.nodeMode !== 'external' && \(this\.nodeToken \|\| this\.userToken\)/,
+    'external mode leaves the separately managed Node in place')
+})
+
 test('a device one click prepares APP and Node before applying, keeping plugin separate', () => {
-  assert.match(source, /export function deviceUpdateComponents\(capabilities = \{\}\) \{\s*return \['node', \.\.\.\(capabilities\.app_version \? \['app'\] : \[\]\)\]/)
+  assert.match(source, /export function deviceUpdateComponents\(capabilities = \{\}\) \{\s*return \['node', \.\.\.\(hasInstalledApp\(capabilities\) \? \['app'\] : \[\]\)\]/)
   assert.match(source, /const components = deviceUpdateComponents\(item\.capabilities\)\s*const prepared = \{\}\s*for \(const component of components\) \{[\s\S]*?prepared\[component\] = await prepareUpdateComponent\(component, scope\)/)
   assert.match(source, /for \(const component of \['node', 'app'\]\) \{/)
   assert.match(source, /if \(failures\.length\) break/)
-  assert.match(source, /\[\.\.\.\(caps\.app_version \? \['app'\] : \[\]\), 'node'\]/,
+  assert.match(source, /\.\.\.\(hasInstalledApp\(caps\) \? \['app'\] : \[\]\), 'node'/,
     'settings update rows show APP and Node only for remote devices')
   assert.match(source, /const reconnected = await watchAppRestart\(/)
+  assert.match(source, /status\.current_version === expectedVersion && status\.restart_required !== true/,
+    'APP reconnect is only confirmed after the trusted updater clears restart_required')
   assert.match(source, /else if \(prepared\.node && \(prepared\.node\.applied \|\| prepared\.node\.restartPending\)\) \{\s*const nodeReady = await watchNodeRestart\(scope, entry\.authority, prepared\.node\.expectedVersion\)/,
     'when APP manages the restart, a deferred Node apply is verified after APP reconnects')
   assert.ok(source.indexOf('prepared[component] = await prepareUpdateComponent(component, scope)') < source.indexOf("for (const component of ['node', 'app'])"),

@@ -1,4 +1,6 @@
 # 修改记录
+- 2026-11-07：新增APP安装绑定记录与凭据/root/过期PID校验、Node同根/外置/无APP状态、APP磁盘更新但旧运行版本保持待重启及同版本重试、缺少历史from_version时运行版本未知、组件版本隔离和UI安装能力门禁回归。
+- 2026-11-07：验证更新器读取带 UTF-8 BOM 的 version.json，并覆盖 Hub APP 外部 Node 模式不 spawn 第二个 Node、localApi token 仅注入自管 Node。
 - 2026-11-07：覆盖其他有效安装快捷方式保护与失效链接修复，更新中心隔离 Electron 测试禁用系统快捷方式写入。
 - 2026-11-07：核对 Herdr 项目能力字段、失效目录拒绝以及 APP 的旧节点启动门禁。
 - 2026-11-07：安装器 HTTP 测试按 UTF-8 读取 Git Bash 路径和输出，用 LF 写入测试脚本，并启用 Git Bash 原生符号链接模式以覆盖 Windows 中文临时目录。

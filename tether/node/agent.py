@@ -38,7 +38,8 @@ from .dsh_sessions import DshSessionStore
 from .native_surface import NativeSurface, NativeSurfaceError
 from .croc_transfer import CrocTransfer
 from .local_identity import remove_identity, write_identity
-from ..updates import MAX_UPDATE_PROTOCOL, MIN_UPDATE_PROTOCOL, UPDATE_PROTOCOL, UpdateManager, select_profile
+from ..updates import (MAX_UPDATE_PROTOCOL, MIN_UPDATE_PROTOCOL, UPDATE_PROTOCOL, UpdateManager,
+                       _versions_from_root, load_app_installation, select_profile)
 
 
 def os_label() -> str:
@@ -308,8 +309,9 @@ class Node:
             component: UpdateManager(ROOT, component, dsh_home=self.native_dsh_home,
                                      manifest_url=manifest_url, state_dir=update_state_dir / component,
                                      device=self.device, profile=plugin_profile if component == "plugin" else "desktop")
-              for component in ("node", "plugin", "app")
+              for component in ("node", "plugin")
         }
+        self.update_managers["app"] = self._make_app_update_manager(manifest_url)
         node_status = self.update_managers["node"].status()
         self.node_version = ((node_status.get("current_version") or "unknown")
                              if node_status.get("ok") else "unknown")
@@ -417,6 +419,9 @@ class Node:
             log(f"[ws] replayed {len(self.store.pending())} pending event(s)")
             hb = asyncio.create_task(self._heartbeat())
             lag = asyncio.create_task(self._watch_loop_lag())
+            ticket = first.get("surface_ticket")
+            surface_channel = (asyncio.create_task(self._surface_channel(ws, ticket, connect_options))
+                               if isinstance(ticket, str) and 0 < len(ticket) <= 128 else None)
             try:
                 while True:
                     raw = await ws.recv()
@@ -424,6 +429,9 @@ class Node:
             finally:
                 hb.cancel()
                 lag.cancel()
+                if surface_channel is not None:
+                    surface_channel.cancel()
+                    await asyncio.gather(surface_channel, return_exceptions=True)
                 for tasks in (self.fs_tasks, self.dsh_tasks, self.surface_tasks):
                     for task in tuple(tasks):
                         task.cancel()
@@ -432,6 +440,52 @@ class Node:
                     tasks.clear()
                 await self.native_surface.dispose()
                 self.ws = None
+
+    async def _surface_channel(self, control: Any, ticket: str, options: dict[str, Any]) -> None:
+        from urllib.parse import urlsplit, urlunsplit
+
+        parts = urlsplit(self.url)
+        if not parts.path.endswith("/ws/node"):
+            return
+        endpoint = urlunsplit(parts._replace(path=parts.path[:-4] + "node-surface"))
+        delay = 0.1
+        while self.ws is control:
+            owned: set[asyncio.Task] = set()
+            try:
+                async with websockets.connect(endpoint, **options) as channel:
+                    await channel.send(json.dumps({"type": "register_surface",
+                                                   "device_id": self.device, "ticket": ticket}))
+                    first = json.loads(await asyncio.wait_for(channel.recv(), timeout=10))
+                    if not isinstance(first, dict) or first.get("type") != "surface_registered":
+                        raise RuntimeError("surface registration failed")
+                    delay = 0.1
+                    while self.ws is control:
+                        message = json.loads(await channel.recv())
+                        if not isinstance(message, dict) or message.get("type") != "surface_call":
+                            raise RuntimeError("unexpected surface channel message")
+                        if len(self.surface_tasks) >= 64:
+                            await channel.send(json.dumps({
+                                "type": "surface_result", "req_id": str(message.get("req_id") or ""),
+                                "ok": False, "code": "capacity", "error": "too many pending surface requests",
+                            }))
+                            continue
+                        task = asyncio.create_task(self._surface_call(message, response_ws=channel))
+                        self.surface_tasks.add(task)
+                        owned.add(task)
+                        task.add_done_callback(self.surface_tasks.discard)
+                        task.add_done_callback(owned.discard)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001 - the control channel owns node presence
+                log(f"[surface] channel disconnected: {type(exc).__name__}")
+            finally:
+                for task in tuple(owned):
+                    task.cancel()
+                if owned:
+                    await asyncio.gather(*owned, return_exceptions=True)
+            if self.ws is control:
+                await asyncio.sleep(delay)
+                delay = min(delay * 2, 2.0)
 
     async def _drop_later(self) -> None:
         await asyncio.sleep(self.drop_after or 0)
@@ -444,7 +498,8 @@ class Node:
         while True:
             await asyncio.sleep(2)
             try:
-                await self._send({"type": "heartbeat", "ts": time.time()})
+                app_fields = await asyncio.to_thread(self._app_heartbeat_fields)
+                await self._send({"type": "heartbeat", "ts": time.time(), **app_fields})
             except Exception as exc:  # noqa: BLE001 - a dead socket is handled by the reconnect loop
                 log(f"[ws] heartbeat send failed: {exc!r}")
                 return
@@ -601,7 +656,7 @@ class Node:
         except Exception:
             self.connected = False
 
-    async def _surface_call(self, msg: dict[str, Any]) -> None:
+    async def _surface_call(self, msg: dict[str, Any], response_ws: Any = None) -> None:
         req_id = str(msg.get("req_id") or "")
         op = str(msg.get("op") or "")
         args = msg.get("args") or {}
@@ -618,9 +673,13 @@ class Node:
             reply = {"type": "surface_result", "req_id": req_id, "ok": False,
                      "error": "native surface request failed", "code": "surface_error"}
         try:
-            await self._send(reply)
+            if response_ws is None:
+                await self._send(reply)
+            else:
+                await response_ws.send(json.dumps(reply, ensure_ascii=False))
         except Exception:
-            self.connected = False
+            if response_ws is None or response_ws is self.ws:
+                self.connected = False
 
     def _update_in_progress(self, component: str) -> dict[str, Any]:
         result: dict[str, Any] = {"ok": True, "component": component,
@@ -639,7 +698,8 @@ class Node:
 
     def _app_update_prepared(self) -> bool:
         manager = self.update_managers.get("app")
-        if manager is None:
+        if (manager is None or os.environ.get("TETHER_NODE_MANAGED") != "1"
+                or Path(getattr(manager, "root", ROOT)).resolve() != ROOT.resolve()):
             return False
         try:
             status = manager.status()
@@ -678,6 +738,8 @@ class Node:
             )
             return
         component = str(component)
+        if component == "app":
+            self._refresh_app_update_manager()
         applying = action == "apply"
         app_restart_scheduled = False
         if self.update_applying:
@@ -780,10 +842,17 @@ class Node:
                     else:
                         self.restart_requested = True
                         self.update_applying = True
-                if applying and applied and component == "app" and os.environ.get("TETHER_NODE_MANAGED") == "1":
-                    app_restart_scheduled = await asyncio.to_thread(schedule_app_restart, ROOT)
-                    if app_restart_scheduled:
+                if applying and applied and component == "app":
+                    app_manager = self.update_managers["app"]
+                    app_root = Path(getattr(app_manager, "root", ROOT)).resolve()
+                    same_managed_root = (os.environ.get("TETHER_NODE_MANAGED") == "1"
+                                         and app_root == ROOT.resolve())
+                    restart_scheduled = await asyncio.to_thread(schedule_app_restart, app_root)
+                    if restart_scheduled and same_managed_root:
+                        app_restart_scheduled = True
                         self.update_applying = True
+                        result["restart_scheduled"] = True
+                    elif restart_scheduled:
                         result["restart_scheduled"] = True
                     else:
                         applied = False
@@ -973,14 +1042,43 @@ class Node:
         finally:
             self.dsh_runs.pop(run_id, None)
 
-    def _managed_app_version(self) -> str:
-        if os.environ.get("TETHER_NODE_MANAGED") != "1":
-            return ""
+    def _make_app_update_manager(self, manifest_url: str | None = None) -> UpdateManager:
+        binding = load_app_installation(self.url, self.device, self.token)
+        root = binding["root"] if binding else ROOT
+        managed_same_root = (os.environ.get("TETHER_NODE_MANAGED") == "1" and root == ROOT)
+        state_dir = root / "apps" / "tether-app" / "data" / "updates" / "app"
+        return UpdateManager(root, "app", dsh_home=self.native_dsh_home,
+                             manifest_url=manifest_url, state_dir=state_dir,
+                             device=self.device, profile="desktop",
+                             app_binding_required=not managed_same_root,
+                             app_credential=self.token, controller_url=self.url,
+                             installation_device=self.device)
+
+    def _refresh_app_update_manager(self) -> None:
+        current = self.update_managers.get("app")
+        if current is not None and not isinstance(current, UpdateManager):
+            return
+        manager = self._make_app_update_manager(getattr(current, "manifest_url", None))
+        self.update_managers["app"] = manager
+
+    def _app_heartbeat_fields(self) -> dict[str, Any]:
+        self._refresh_app_update_manager()
+        manager = self.update_managers["app"]
+        binding = load_app_installation(self.url, self.device, self.token, manager.root)
+        if binding is None and manager.app_binding_required:
+            return {"app_version": "", "app_installed": False}
         try:
-            data = json.loads((ROOT / "version.json").read_text(encoding="utf-8"))
-            return str((data.get("components") or {}).get("app") or "")
-        except (OSError, ValueError):
-            return ""
+            installed = str((binding or {}).get("installed_version") or _versions_from_root(manager.root).get("app", ""))
+            manager._app_restart_state()
+            version = manager._app_current_version(installed) if installed else ""
+        except Exception:
+            version = ""
+            installed = ""
+        return {"app_version": version,
+                "app_installed": bool(binding) or (bool(installed) and not manager.app_binding_required)}
+
+    def _managed_app_version(self) -> str:
+        return str(self._app_heartbeat_fields().get("app_version") or "")
 
     def _managed_plugin_version(self) -> str:
         manager = self.update_managers.get("plugin")
@@ -993,9 +1091,12 @@ class Node:
             return ""
 
     def capabilities(self) -> dict[str, Any]:
-        app_version = self._managed_app_version()
+        app_fields = self._app_heartbeat_fields()
+        app_version = str(app_fields.get("app_version") or "")
         plugin_version = self._managed_plugin_version()
         installed = [name for name, version in (("app", app_version), ("plugin", plugin_version)) if version]
+        if app_fields["app_installed"] and "app" not in installed:
+            installed.append("app")
         dsh_desktop = self.fs.dsh_desktop.status()
         return {"os": platform.system(), "release": platform.release(), "os_label": os_label(),
                 "python": platform.python_version(),
@@ -1014,7 +1115,9 @@ class Node:
                 "dsh_native": self.dsh_sessions.available(),
                 "native_dsh_home": str(self.dsh_sessions.home),
                 "surface_protocol": 1,
+                "surface_data_protocol": 1,
                 "app_version": app_version,
+                "app_installed": app_fields["app_installed"],
                 "plugin_version": plugin_version,
                 "installed_products": installed,
                 "dsh_installed": dsh_desktop["installed"],

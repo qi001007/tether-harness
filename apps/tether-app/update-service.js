@@ -49,6 +49,7 @@ class UpdateService {
     // visible to both and node can defer its own restart until the APP applies.
     const stateDir = path.join(this.dataDir, 'updates', 'app')
     const args = ['-m', 'tether.updates_cli', command, '--component', 'app', '--root', this.repoRoot, '--state-dir', stateDir, '--dsh-home', this.dshHome]
+    if (this.env.TETHER_DEVICE) args.push('--device', String(this.env.TETHER_DEVICE))
     if (preparedId) args.push('--prepared-id', preparedId)
     if (force) args.push('--force')
     try {

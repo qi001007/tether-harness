@@ -30,6 +30,13 @@ test('process cleanup never allocates a visible console', () => {
   assert.match(supervisor, /spawnSync\('taskkill',[\s\S]*?windowsHide: true/)
 })
 
+test('APP binding keeps its startup version while enrollment adds a Node credential', () => {
+  assert.match(main, /let appStartedVersion = ''[\s\S]*?version\.json/)
+  assert.match(main, /registerAppInstallation\(\{ env, dataDir, appRoot: repoRoot, startedAt: appStartedAt, startedVersion: appStartedVersion \}\)/)
+  assert.match(main, /fs\.watch\(dataDir,[\s\S]*?String\(filename \|\| ''\) !== 'device-token\.json'/)
+  assert.match(main, /appBindingWatcher\.close\(\)/)
+})
+
 test('startup repairs desktop and start-menu shortcuts to launch Electron directly', () => {
   assert.match(main, /ensureAppShortcuts\(\)/)
   assert.match(main, /shell\.writeShortcutLink\(link, 'update', options\)/)
