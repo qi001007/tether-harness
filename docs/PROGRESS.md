@@ -1,11 +1,12 @@
 # 实时进度
 
-## 0.4.9 候选与当前生产状态（2026-11-07）
+## 0.4.10 候选与当前生产状态（2026-11-07）
 
-- 当前生产：主机 APP+Node 与 cloud Node 已通过正常安装路径运行 0.4.8；Laptop 仍在线 0.4.7。Laptop 旧更新 job `0c1a38b1361b40cd98d331406b87966a` 已以 `update_timeout` 结束，下载仍表现为后台缓慢，尚未 apply 0.4.8。
-- 候选：APP/Node 元数据为 0.4.9，未签名、未发布、未安装。UI 候选允许远端更新收起到后台、失败关闭，并忽略切换设备后的迟到启动响应；Node 与同根 managed APP busy guard 已纳入候选源码，尚未部署或安装。HTTP actual nonempty snapshots 未实机核验；CLI path 和瞬间新任务竞态不在本轮范围。
-- 传输观察：已补充系统代理 flag 和 relay 配置，等待受控 Node 重读后再判断效果。小范围请求代理 1.448 秒、直连 9.759 秒仅代表该小请求，不代表全包传输性能。
-- 验收边界：048 目录报错修复仍待实际新版屏幕复验；生产真实多 Agent 验收保持基础能力通过，不代表完整多 Agent 流程。插件发行保持 0.2.93，现有 DSH 宿主安装版本 0.4.2 未变。
+- 当前生产：主机 APP/Node 与 cloud Node 为 0.4.9；Laptop APP/Node 仍在线 0.4.7。Laptop 更新 job `0b4347...` 因 `device_offline` 结束，未 apply 0.4.9；大包读取仍慢，问题未解决。
+- 已验收：0.4.9 远端更新可收起到后台、顶栏可恢复同一任务，文件页刷新行为通过真实 APP 验收。专属目录已恢复；缓存非空失效显示旧行、错误 banner 与重试入口已实际观察，截图未保存；空缓存失败与恢复点击仍待验。
+- 0.4.10 源码候选拒绝缺少有效 `devices` 的状态快照，保留最后合法上下文；hook focused 回归 9/9 通过，尚未部署。049 短暂离线后曾触发 `state.devices.find` 渲染错误，ErrorBoundary Retry 后已恢复到 DESKTOP native。
+- 下载与代理：旧版 `update_timeout` 任务和慢速大包读取尚未修复。default-opener 与 no-proxy 小请求差异未证明实际路由；Laptop 当前 engine `getproxies` 为空且未使用 `ProxyHandler`，不能据此宣称代理修复有效。两个配置 key 已加载，Croc relay 为 true，效果待受控重读。
+- 传输边界：大帧控制传输与短暂离线只有时间重叠，因果未证实，暂停该方案。官方插件发行保持 0.2.93，现有 DSH 宿主 0.4.2 未变。
 
 ## 0.4.8 候选历史记录（2026-11-07）
 

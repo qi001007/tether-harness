@@ -2,10 +2,12 @@
 
 ## 2026-11-07 当前候选与待验收项
 
-- [ ] Laptop 仍在线 0.4.7；旧更新 job `0c1a38b1361b40cd98d331406b87966a` 以 `update_timeout` 结束，下载仍缓慢且尚未 apply 0.4.8。系统代理 flag 和 relay 配置已补，需受控 Node 重读后再判断。
-- [ ] 049 候选源码已包含更新面板远端后台运行、失败关闭、设备 scope 保护，以及 Node/同根 managed APP busy guard；尚未签名、部署或安装。HTTP actual nonempty snapshots 未实机核验；CLI path 和瞬间新任务竞态不在本轮范围。
-- [ ] 048 目录报错修复需在实际新版屏幕复验；生产多 Agent 证据仍限基础验收。
-- 传输对照仅为小范围请求：代理 1.448 秒、直连 9.759 秒；不能据此推断完整更新包速度。
+- [ ] Laptop APP/Node 仍在线 0.4.7；更新 job `0b4347...` 以 `device_offline` 结束且未 apply 0.4.9，大包读取仍慢。旧 `update_timeout` 下载问题未解决。
+- [ ] 0.4.10 候选的无效状态快照保护尚未部署；049 短暂离线后出现 `state.devices.find` 错误，Retry 后恢复到 DESKTOP native。
+- [ ] 空缓存目录读取失败后的反馈与重试、目录修复新版屏幕复验仍待完成。非空缓存失效已实际观察到旧行、错误 banner 和重试入口；截图未保存。专属目录已恢复。
+- [ ] 代理与 relay 的实际效果待受控 Node 重读；Laptop engine 的 `getproxies` 为空且未使用 `ProxyHandler`，小请求 default-opener/no-proxy 差异不能证明路由变化。
+- [ ] 大帧控制传输与短暂离线只有时间重叠，因果未证实，相关方案暂停。
+- 生产多 Agent 证据仍限基础验收；插件发行 0.2.93、DSH 宿主 0.4.2 保持原状。
 
 ## 0.4.8 候选历史记录（2026-11-07）
 

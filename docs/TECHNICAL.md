@@ -4,9 +4,9 @@
 
 ## 当前候选与生产边界（2026-11-07）
 
-生产主机 APP+Node 与 cloud Node 已正常安装 0.4.8；Laptop 仍为在线 0.4.7，旧更新 job 因 `update_timeout` 结束，尚未 apply 0.4.8。0.4.9 是未签名/未发布候选，包含远端更新详情后台收起、错误关闭、设备 scope 保护及 Node/同根 managed APP busy guard；HTTP actual nonempty snapshots 未实机核验，CLI path 和瞬间新任务竞态不在本轮范围。官方插件发行仍为 0.2.93，DSH 宿主现有安装 0.4.2 未改。
+主机 APP/Node 与 cloud Node 为 0.4.9；Laptop APP/Node 仍为在线 0.4.7，旧更新 job `0b4347...` 因 `device_offline` 结束且未 apply 0.4.9，大包读取仍慢。0.4.10 是未发布候选，状态快照需有有效 `devices` 数组才可替换最后合法 UI 状态；hook focused 回归 9/9 通过，尚未部署。049 曾在短暂离线后触发 `state.devices.find` 错误，ErrorBoundary Retry 后恢复到 DESKTOP native。
 
-系统代理 flag 和 relay 配置已补，效果需等受控 Node 重读验证。1.448 秒代理与 9.759 秒直连的单次小范围对照不能代表完整包传输。048 目录错误修复仍待实际新版屏幕复验；生产多 Agent 验收仅覆盖基础能力。
+049 远端更新后台收起/恢复同一任务和文件页刷新已真实验收。缓存非空路径失效的 banner、旧行和 retry 已实际观察，截图未保存；空缓存反馈/恢复点击仍待验，专属目录已恢复。代理和 relay 配置的实际效果待受控 Node 重读；Laptop engine 当前 `getproxies` 为空且未使用 `ProxyHandler`，小请求时间差不能证明实际路由变化。大帧控制传输与短暂离线仅时间重叠，因果未证实，方案暂停。官方插件发行仍为 0.2.93，DSH 宿主现有安装 0.4.2 未改。
 
 ## 组成与职责
 

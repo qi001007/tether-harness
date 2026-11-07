@@ -30,6 +30,31 @@ function createHookRenderer(initialProps) {
       const prior = hooks[index]
       const changed = !prior || !dependencies || dependencies.some((value, i) => !Object.is(value, prior.dependencies?.[i]))
       if (changed) pendingEffects.push({ index, effect, dependencies })
+    },
+    useLayoutEffect(effect, dependencies) {
+      const index = cursor++
+      const prior = hooks[index]
+      const changed = !prior || !dependencies || dependencies.some((value, i) => !Object.is(value, prior.dependencies?.[i]))
+      if (changed) pendingEffects.push({ index, effect, dependencies })
+    },
+    useMemo(factory, dependencies) {
+      const index = cursor++
+      const prior = hooks[index]
+      const changed = !prior || !dependencies || dependencies.some((value, i) => !Object.is(value, prior.dependencies?.[i]))
+      if (changed) hooks[index] = { value: factory(), dependencies }
+      return hooks[index].value
+    },
+    useCallback(callback, dependencies) {
+      const index = cursor++
+      const prior = hooks[index]
+      const changed = !prior || !dependencies || dependencies.some((value, i) => !Object.is(value, prior.dependencies?.[i]))
+      if (changed) hooks[index] = { value: callback, dependencies }
+      return hooks[index].value
+    },
+    useId() {
+      const index = cursor++
+      if (!hooks[index]) hooks[index] = { value: ':test-' + index + ':' }
+      return hooks[index].value
     }
   }
 
@@ -685,4 +710,107 @@ test('Hub credentials are seeded only into the guest exact approved origin', () 
   assert.equal(dshWebGuestSameOrigin(approved, 'http://192.168.1.21:3080/'), false)
   assert.equal(dshWebGuestSameOrigin(approved, 'https://192.168.1.20:3080/'), false)
   assert.equal(dshWebGuestSameOrigin(approved, 'about:blank'), false)
+})
+
+test('invalid state snapshots keep the last device context while valid empty and recovered snapshots still apply', async () => {
+  const previous = {
+    window: globalThis.window,
+    document: globalThis.document,
+    fetch: globalThis.fetch,
+    setTimeout: globalThis.setTimeout,
+    clearTimeout: globalThis.clearTimeout,
+    setInterval: globalThis.setInterval,
+    clearInterval: globalThis.clearInterval
+  }
+  let timerId = 0
+  const intervals = new Map()
+  const validDevice = { device_id: 'keep-device', name: 'Keep Context', online: true, capabilities: {} }
+  const stateResponses = [
+    { devices: [validDevice], edges: [], sessions: [], runs: [] },
+    {},
+    { detail: { code: 'device_offline' } },
+    { status: 409, body: { detail: { code: 'device_offline', error: 'device offline' } } },
+    { devices: [], edges: [], sessions: [], runs: [] },
+    { devices: [validDevice], edges: [], sessions: [], runs: [] }
+  ]
+  globalThis.window = {
+    innerWidth: 1280,
+    innerHeight: 800,
+    location: { origin: 'https://hub.example', protocol: 'https:', href: 'https://hub.example/' },
+    localStorage: { getItem: (key) => key === 'tether.hub' ? JSON.stringify({ url: 'https://hub.example', token: 'test-token' }) : null, setItem() {}, removeItem() {} },
+    addEventListener() {},
+    removeEventListener() {}
+  }
+  globalThis.document = {
+    hidden: false,
+    visibilityState: 'visible',
+    addEventListener() {},
+    removeEventListener() {}
+  }
+  globalThis.setTimeout = (callback, delay) => ++timerId
+  globalThis.clearTimeout = () => {}
+  globalThis.setInterval = (callback, delay) => { const id = ++timerId; intervals.set(id, { callback, delay }); return id }
+  globalThis.clearInterval = (id) => intervals.delete(id)
+  globalThis.fetch = async (url) => {
+    const path = new URL(url).pathname
+    if (path === '/api/state') {
+      const response = stateResponses.shift()
+      if (response && response.status) return { ok: false, status: response.status, json: async () => response.body }
+      return { ok: true, status: 200, json: async () => response }
+    }
+    if (path === '/api/events' || path === '/app-context') return { ok: false, status: 503, json: async () => ({}) }
+    if (path.endsWith('/workspaces')) return { ok: true, status: 200, json: async () => ({ root: '', workspaces: [] }) }
+    if (path.endsWith('/drives')) return { ok: true, status: 200, json: async () => ({ drives: [] }) }
+    if (path.endsWith('/dsh/sessions')) return { ok: true, status: 200, json: async () => ({ sessions: [] }) }
+    return { ok: true, status: 200, json: async () => ({}) }
+  }
+  const renderer = createHookRenderer({})
+  const panel = createTetherPanel({
+    React: renderer.React,
+    Native: createWebNative(renderer.React),
+    host: {
+      kind: 'web',
+      apiBase: () => 'https://hub.example',
+      apiBases: () => ['https://hub.example'],
+      apiHeaders: () => ({}),
+      hubConfig: () => ({ url: 'https://hub.example' }),
+      surfaceBase: () => ''
+    }
+  })
+  renderer.setComponent(() => panel.App())
+  const selectedDevice = () => walk(renderer.output(), (node) => typeof node.type === 'function' && node.type.name === 'DeviceSwitcher')?.props.value
+  const runStatePoll = async () => {
+    const poll = [...intervals.values()].find((timer) => timer.delay === 2500)
+    assert.ok(poll, 'the normal app state poll is mounted')
+    await poll.callback()
+    await tick()
+    renderer.render()
+  }
+
+  try {
+    renderer.render()
+    await tick()
+    renderer.render()
+    assert.equal(selectedDevice(), 'keep-device', 'the first complete snapshot selects its online device')
+
+    await runStatePoll()
+    assert.equal(selectedDevice(), 'keep-device', 'an empty 2xx object cannot replace the last valid snapshot')
+    assert.match(JSON.stringify(renderer.output()), /设备状态响应格式无效/)
+
+    await runStatePoll()
+    assert.equal(selectedDevice(), 'keep-device', 'a 2xx error-shaped object cannot replace the last valid snapshot')
+
+    await runStatePoll()
+    assert.equal(selectedDevice(), 'keep-device', 'an HTTP 409 leaves the current device context intact')
+
+    await runStatePoll()
+    assert.equal(selectedDevice(), undefined, 'a valid empty devices array follows the existing no-device path')
+    assert.match(JSON.stringify(renderer.output()), /no device/)
+
+    await runStatePoll()
+    assert.equal(selectedDevice(), 'keep-device', 'a later valid snapshot restores the device context')
+  } finally {
+    renderer.dispose()
+    for (const [key, value] of Object.entries(previous)) globalThis[key] = value
+  }
 })

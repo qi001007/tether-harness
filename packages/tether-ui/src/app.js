@@ -526,6 +526,14 @@ export async function fetchApiJson(path, init = {}, { activeBase, apiBaseList, p
   throw lastError || new Error('network error')
 }
 
+function isUsableAppState(data) {
+  const isRecord = (value) => !!value && typeof value === 'object' && !Array.isArray(value)
+  if (!isRecord(data) || !Array.isArray(data.devices)) return false
+  if (!data.devices.every((device) => isRecord(device) && typeof device.device_id === 'string' && !!device.device_id)) return false
+  return ['edges', 'sessions', 'runs'].every((key) => data[key] == null
+    || (Array.isArray(data[key]) && data[key].every(isRecord)))
+}
+
 // A prefetch promise resolves with the request body, but a failed or aborted
 // one must never be treated as preview data: the viewer would render an empty
 // file and the cache would keep serving it.
@@ -4460,6 +4468,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         if (!force && stateRef.current && typeof document !== 'undefined' && document.hidden) return
         try {
           const data = await api('/api/state')
+          if (!isUsableAppState(data)) throw new Error('设备状态响应格式无效')
           stateOkAtRef.current = Date.now()
           setState(data)
           const profile = data && data.user
