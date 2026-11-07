@@ -1,4 +1,5 @@
 # 修改记录
+- 2026-11-07：Node 更新前通过 AgentsRuntime 的认证 loopback API 读取 Codeg connections/snapshots；只在更新 Node 时，拦截 prompting、active delegation、未终态 async/background task、待处理交互与 Croc running，snapshot 异常 fail closed。未加入存活 PTY 守卫，以免空闲交互终端永久阻断更新。
 - 2026-11-07：Croc send 保留自有 relay 与 relay transport，同时允许本机 relay/接口候选探索（移除 `--no-local`），使接收端可尝试可达的发送端本机路径；尚未做真实传输或吞吐验收。
 - 2026-11-07：Node按可信本机APP绑定root/state管理APP更新；heartbeat携带短字段app_version/app_installed，外置APP重启不延迟/停止独立Node，managed同root行为沿用。
 - 2026-11-07：补齐从 Codeg 固定上游提交重放 Agents 前端所需的完整源码改动。
@@ -84,5 +85,6 @@
 - 2026-11-04：`agent_accounts.list(fresh=False)` 只返回已有元数据，不启动 Codex app-server probe；只有 `fresh=true` 才并行探测额度/套餐。UI 打开账号先读缓存，再后台 fresh 刷新；目录和账号都写 localStorage，避免每次进页面重扫。
 - 2026-11-07：Agents runtime 状态若缺少目标节点的 APP 网关路由，返回空嵌入地址并移除 token；不再把目标节点的 127.0.0.1 地址暴露给远程 APP 浏览器。
 - 2026-11-07：Agents runtime 启动与状态以带 Bearer 的 `/api/health` JSON `status=ok` 作为就绪条件；认证探测失败时保留仍存活的进程句柄，避免瞬态超时造成孤儿进程。
+- 2026-11-07：Node apply 及同根 managed APP apply 前通过本机 Codeg HTTP 快照检查 prompting、待交互、运行中委派/后台任务，并检查 Croc running；活动时以 `update_busy` 拒绝。按锁定类型兼容旧快照省略的委派/后台字段；字段错误或查询失败按未知状态拒绝。检查与新任务/传输启动之间仍有竞态；Node CLI 更新路径不在此守卫范围，外置 APP 更新不阻塞独立 Node。
 - 2026-11-07：Linux DSH Web 安装生成的 worker unit 将 `MemoryHigh` 从 `300M` 提至 `384M`，硬上限保持 `600M`；网关 unit 的 `80M/160M` 配额保持不变。
 - 2026-11-07：Node update check/status 回报启动时缓存的 `runtime_version`；只有其与有效磁盘 `current_version` 相同才清除历史 `restart_required`，apply 仍要求真实重启。

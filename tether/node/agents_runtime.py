@@ -17,12 +17,16 @@ import time
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
-from urllib.request import Request, urlopen
+from urllib.request import ProxyHandler, Request, build_opener, urlopen
 
 NO_WINDOW = 0x08000000
 BASE_PORT = 4200
 PORT_SPAN = 100
 NAME = "Agents"
+ACTIVITY_TIMEOUT = 0.75
+ACTIVITY_QUERY_BUDGET = 3.0
+MAX_ACTIVITY_CONNECTIONS = 128
+CONNECTION_STATUSES = {"connecting", "connected", "prompting", "disconnected", "error"}
 LINUX_SERVER_URL = "https://github.com/xintaofei/codeg/releases/download/v0.42.0/codeg-server-linux-x64.tar.gz"
 LINUX_SERVER_SHA256 = "35928d4b93b5fc65bfc4d330f4d653c738af0b033307cf9d59173539d49bf679"
 LINUX_SERVER_ARCHIVE_SIZE = 77466977
@@ -341,6 +345,119 @@ class AgentsRuntime:
                     "running": running, "port": self.port if running else 0,
                     "token": self.token if running else "",
                     "url": "http://127.0.0.1:%d/" % self.port if running else ""}
+
+    def _api_post(self, command: str, args: dict[str, Any], port: int, token: str,
+                  timeout: float) -> Any:
+        request = Request(
+            "http://127.0.0.1:%d/api/%s" % (port, command),
+            data=json.dumps(args).encode("utf-8"),
+            headers={"Authorization": "Bearer " + token,
+                     "Content-Type": "application/json",
+                     "X-Requested-With": "XMLHttpRequest"}, method="POST")
+        opener = build_opener(ProxyHandler({}))
+        with opener.open(request, timeout=timeout) as response:
+            payload = response.read(4 * 1024 * 1024 + 1)
+        if len(payload) > 4 * 1024 * 1024:
+            raise ValueError("Codeg activity response is too large")
+        return json.loads(payload.decode("utf-8"))
+
+    def activity(self) -> dict[str, Any]:
+        """Return a fail-closed snapshot of active Codeg work without starting it."""
+        with self.lock:
+            try:
+                saved_state = self._read_state()
+                self._adopt()
+                process = self.process
+                if process is not None and process.poll() is None:
+                    alive, port, token = True, self.port, self.token
+                elif self.external_pid and self._pid_matches(self.external_pid):
+                    alive, port, token = True, self.port, self.token
+                else:
+                    saved_pid = int(saved_state.get("pid") or 0)
+                    if saved_pid and self._pid_matches(saved_pid):
+                        alive = True
+                        port = int(saved_state.get("port") or 0)
+                        token = str(saved_state.get("token") or "")
+                    else:
+                        return {"ok": True, "busy": False, "reason": ""}
+            except Exception:
+                return {"ok": True, "busy": True, "reason": "activity_unknown"}
+
+            if not alive or not port or not token:
+                return {"ok": True, "busy": True, "reason": "activity_unknown"}
+
+            deadline = time.monotonic() + ACTIVITY_QUERY_BUDGET
+            try:
+                connections = self._api_post(
+                    "acp_list_connections", {}, port, token, ACTIVITY_TIMEOUT)
+                if not isinstance(connections, list) or len(connections) > MAX_ACTIVITY_CONNECTIONS:
+                    raise ValueError("invalid Codeg connection list")
+                for connection in connections:
+                    if (not isinstance(connection, dict)
+                            or not isinstance(connection.get("id"), str)
+                            or not connection["id"]
+                            or not isinstance(connection.get("agent_type"), str)
+                            or connection.get("status") not in CONNECTION_STATUSES):
+                        raise ValueError("invalid Codeg connection entry")
+                    if connection["status"] == "prompting":
+                        return {"ok": True, "busy": True, "reason": "agent_turn_active"}
+
+                    timeout = min(ACTIVITY_TIMEOUT, deadline - time.monotonic())
+                    if timeout <= 0:
+                        raise TimeoutError("Codeg activity query deadline exceeded")
+                    snapshot = self._api_post(
+                        "acp_get_session_snapshot", {"connectionId": connection["id"]},
+                        port, token, timeout)
+                    if (not isinstance(snapshot, dict)
+                            or snapshot.get("status") not in CONNECTION_STATUSES
+                            or not isinstance(snapshot.get("pending_permission"), (dict, type(None)))):
+                        raise ValueError("invalid Codeg session snapshot")
+                    if snapshot["status"] == "prompting":
+                        return {"ok": True, "busy": True, "reason": "agent_turn_active"}
+
+                    for field in ("pending_question", "pending_plan_approval", "pending_user_message"):
+                        if field in snapshot and snapshot[field] is not None:
+                            if not isinstance(snapshot[field], dict):
+                                raise ValueError("invalid Codeg pending interaction")
+                            return {"ok": True, "busy": True,
+                                    "reason": "agent_interaction_pending"}
+                    if snapshot["pending_permission"] is not None:
+                        return {"ok": True, "busy": True,
+                                "reason": "agent_interaction_pending"}
+
+                    delegations = snapshot.get("active_delegations", [])
+                    if not isinstance(delegations, list):
+                        raise ValueError("invalid Codeg delegation snapshot")
+                    if delegations:
+                        for item in delegations:
+                            if (not isinstance(item, dict)
+                                    or not isinstance(item.get("parent_tool_use_id"), str)
+                                    or not isinstance(item.get("child_connection_id"), str)
+                                    or not isinstance(item.get("child_conversation_id"), int)
+                                    or not isinstance(item.get("agent_type"), str)):
+                                raise ValueError("invalid Codeg delegation entry")
+                        return {"ok": True, "busy": True,
+                                "reason": "agent_delegation_active"}
+
+                    async_tasks = snapshot.get("async_tasks", [])
+                    if not isinstance(async_tasks, list):
+                        raise ValueError("invalid Codeg async-task snapshot")
+                    for task in async_tasks:
+                        if not isinstance(task, dict) or not isinstance(task.get("state"), str):
+                            raise ValueError("invalid Codeg async-task entry")
+                        if task["state"] not in {"completed", "failed", "stopped"}:
+                            return {"ok": True, "busy": True,
+                                    "reason": "agent_background_task_active"}
+
+                    outstanding = snapshot.get("background_outstanding", 0)
+                    if not isinstance(outstanding, int) or isinstance(outstanding, bool) or outstanding < 0:
+                        raise ValueError("invalid Codeg background task count")
+                    if outstanding > 0:
+                        return {"ok": True, "busy": True,
+                                "reason": "agent_background_task_active"}
+            except Exception:
+                return {"ok": True, "busy": True, "reason": "activity_unknown"}
+            return {"ok": True, "busy": False, "reason": ""}
 
     def _seed_workspace(self, agent: str = "codex") -> None:
         import urllib.request

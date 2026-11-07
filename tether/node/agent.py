@@ -707,7 +707,7 @@ class Node:
             return False
         return bool(status.get("ok") and status.get("prepared"))
 
-    def _update_busy_reason(self) -> str | None:
+    def _update_busy_reason(self, component: str | None = None) -> str | None:
         if any(run and run.get("state") in ACTIVE for run in self.store.all_runs()):
             return "tether_task_active"
         if any(not task.done() for task in self.tasks.values()):
@@ -718,6 +718,26 @@ class Node:
             return "native_activity_unknown"
         if any(item.get("status") == "running" for item in self.dsh_sessions.list()):
             return "native_dsh_turn_active"
+        if component == "node":
+            try:
+                transfer = self.croc.status()
+            except Exception:
+                return "transfer_activity_unknown"
+            if not isinstance(transfer, dict) or not isinstance(transfer.get("state"), str):
+                return "transfer_activity_unknown"
+            if transfer["state"] == "running":
+                return "croc_transfer_active"
+            if transfer["state"] not in {"idle", "completed", "failed", "cancelled"}:
+                return "transfer_activity_unknown"
+            try:
+                agents = self.fs.agents_runtime.activity()
+            except Exception:
+                return "agents_activity_unknown"
+            if not isinstance(agents, dict) or agents.get("ok") is not True or not isinstance(agents.get("busy"), bool):
+                return "agents_activity_unknown"
+            if agents["busy"]:
+                return "agents_activity_unknown" if agents.get("reason") == "activity_unknown" else str(
+                    agents.get("reason") or "agents_runtime_active")
         return None
 
     async def _update_call(self, msg: dict[str, Any], response_ws: Any = None) -> None:
@@ -742,6 +762,12 @@ class Node:
             self._refresh_app_update_manager()
         applying = action == "apply"
         app_restart_scheduled = False
+        guard_node_runtime = component == "node"
+        if applying and component == "app":
+            app_manager = self.update_managers["app"]
+            guard_node_runtime = (os.environ.get("TETHER_NODE_MANAGED") == "1"
+                                  and Path(getattr(app_manager, "root", ROOT)).resolve()
+                                  == ROOT.resolve())
         if self.update_applying:
             # A second window or a repeated click attaches to the run that is
             # already installing instead of failing with update_busy.
@@ -813,13 +839,21 @@ class Node:
             if applying:
                 # Block new dispatches before inspecting native DSH logs off-loop.
                 self.update_applying = True
-                busy = await asyncio.to_thread(self._update_busy_reason)
+                busy_component = "node" if guard_node_runtime else component
+                busy = await asyncio.to_thread(self._update_busy_reason, busy_component)
                 if busy:
                     self.update_applying = False
+                    busy_error = ("正在执行任务或文件传输，完成或取消后重试。"
+                                  if busy in {"tether_task_active", "native_dsh_turn_active",
+                                              "croc_transfer_active", "agent_turn_active",
+                                              "agent_interaction_pending", "agent_delegation_active",
+                                              "agent_background_task_active"}
+                                  else "无法确认任务或文件传输状态，请稍后重试。")
                     await self._send_update_result(
                         response_ws,
                         {"type": "update_result", "req_id": req_id, "ok": False,
-                         "error_code": "update_busy", "error": busy},
+                         "error_code": "update_busy", "error": busy_error,
+                         "busy_reason": busy},
                     )
                     await self._send_update_result(response_ws, {"type": "update_ready"})
                     return

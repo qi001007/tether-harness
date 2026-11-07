@@ -366,3 +366,127 @@ def test_herdr_project_scope_uses_windows_wrapper_environment(tmp_path: Path) ->
     assert scoped == command
     assert env and env["KEEP"] == "yes"
     assert env["TETHER_HERDR_SESSION"].startswith("tether-project-")
+
+
+@pytest.mark.parametrize(
+    ("connection_status", "snapshot", "expected_busy", "expected_reason"),
+    [
+        ("connected", {"status": "connected", "pending_permission": None,
+                        "active_delegations": [], "async_tasks": [],
+                        "background_outstanding": 0}, False, ""),
+        ("prompting", None, True, "agent_turn_active"),
+        ("connected", {"status": "connected", "pending_permission": None,
+                        "active_delegations": [{"parent_tool_use_id": "tool-1",
+                                                "child_connection_id": "child-1",
+                                                "child_conversation_id": 2,
+                                                "agent_type": "codex"}]},
+         True, "agent_delegation_active"),
+        ("connected", {"status": "connected", "pending_permission": None,
+                        "active_delegations": [], "async_tasks": [{"state": "paused"}],
+                        "background_outstanding": 0}, True, "agent_background_task_active"),
+        ("connected", {"status": "connected", "pending_permission": None,
+                        "active_delegations": [], "async_tasks": [{"state": "completed"}],
+                        "background_outstanding": 0}, False, ""),
+        ("connected", {"status": "connected", "pending_permission": None,
+                        "active_delegations": [], "async_tasks": [],
+                        "background_outstanding": 1}, True, "agent_background_task_active"),
+        ("connected", {"status": "connected", "pending_permission": {"request_id": "p1"}},
+         True, "agent_interaction_pending"),
+        ("connected", {"status": "connected", "pending_permission": None,
+                        "active_delegations": {}}, True, "activity_unknown"),
+        ("connected", {"status": "connected", "pending_permission": None},
+         False, ""),
+        ("connected", {"status": "connected", "pending_permission": None,
+                        "active_delegations": []}, False, ""),
+        ("connected", {"status": "connected", "pending_permission": None,
+                        "active_delegations": [], "async_tasks": {},
+                        "background_outstanding": 0}, True, "activity_unknown"),
+    ],
+)
+def test_agents_activity_reads_authenticated_codeg_snapshots(
+        tmp_path: Path, monkeypatch, connection_status, snapshot, expected_busy, expected_reason) -> None:
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    from tether.node import agents_runtime
+
+    calls = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            body = self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            calls.append((self.path, self.headers.get("Authorization"), json.loads(body),
+                          self.headers.get("X-Requested-With")))
+            if self.path == "/api/acp_list_connections":
+                payload = [{"id": "session-1", "agent_type": "codex",
+                            "status": connection_status}]
+            elif self.path == "/api/acp_get_session_snapshot" and snapshot is not None:
+                payload = snapshot
+            else:
+                self.send_error(404)
+                return
+            raw = json.dumps(payload).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+
+        def log_message(self, *_args):
+            return
+
+    class Process:
+        @staticmethod
+        def poll():
+            return None
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    runtime = object.__new__(AgentsRuntime)
+    runtime.data_dir = tmp_path / "node-data" / "agents-runtime"
+    runtime.process = Process()
+    runtime.external_pid = 0
+    runtime.port = server.server_port
+    runtime.token = "local-test-token"
+    runtime.lock = threading.RLock()
+    monkeypatch.setattr(runtime, "_read_state", lambda: {})
+    monkeypatch.setattr(runtime, "_adopt", lambda: None)
+    monkeypatch.setenv("HTTP_PROXY", "http://127.0.0.1:1")
+    monkeypatch.setenv("NO_PROXY", "")
+    monkeypatch.setattr(agents_runtime, "ACTIVITY_TIMEOUT", 0.5)
+
+    try:
+        result = runtime.activity()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+    assert result == {"ok": True, "busy": expected_busy, "reason": expected_reason}
+    assert calls[0] == ("/api/acp_list_connections", "Bearer local-test-token", {},
+                        "XMLHttpRequest")
+    if connection_status == "prompting":
+        assert len(calls) == 1
+    else:
+        assert calls[1] == ("/api/acp_get_session_snapshot", "Bearer local-test-token",
+                            {"connectionId": "session-1"}, "XMLHttpRequest")
+
+
+def test_agents_activity_reports_unknown_when_alive_runtime_api_is_unavailable(tmp_path: Path,
+                                                                                 monkeypatch) -> None:
+    class Process:
+        @staticmethod
+        def poll():
+            return None
+
+    runtime = object.__new__(AgentsRuntime)
+    runtime.data_dir = tmp_path / "node-data" / "agents-runtime"
+    runtime.process = Process()
+    runtime.external_pid = 0
+    runtime.port = 1
+    runtime.token = "local-test-token"
+    runtime.lock = threading.RLock()
+    monkeypatch.setattr(runtime, "_read_state", lambda: {})
+    monkeypatch.setattr(runtime, "_adopt", lambda: None)
+
+    assert runtime.activity() == {"ok": True, "busy": True, "reason": "activity_unknown"}

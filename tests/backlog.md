@@ -1,4 +1,5 @@
 # 修改记录
+- 2026-11-07：Node update protocol 覆盖 Codeg 活跃委派/Croc 运行时先返回 update_busy 且不 stop/apply、空闲时继续；AgentsRuntime 使用本机 fake HTTP 覆盖 Bearer、loopback直连、prompting/idle/active delegation/paused/completed/background outstanding/pending interaction 与格式异常 fail closed。
 - 2026-11-07：实机 0.4.7 复现已缓存目录的后台 `/fs/list` 失败时仍显示旧行、没有错误/重试（证据 `tether-047-directory-cached-background-failure.png`）；显式刷新会显示原有错误，验证后已恢复自有 QA 目录。源码增加缓存失败提示并保留旧行、空缓存失败显示错误重试态，待 0.4.8 用同一路径实机复验。现有 hook renderer 对 MinimalUpdateButton 覆盖远端完成不整页重载、本机身份匹配仍重载和目标切换时忽略迟到完成回调；该行为测试不替代目录失败的实机验收。
 - 2026-11-07：新增APP安装绑定记录与凭据/root/过期PID校验、Node同根/外置/无APP状态、APP磁盘更新但旧运行版本保持待重启及同版本重试、缺少历史from_version时运行版本未知、组件版本隔离和UI安装能力门禁回归。
 - 2026-11-07：验证更新器读取带 UTF-8 BOM 的 version.json，并覆盖 Hub APP 外部 Node 模式不 spawn 第二个 Node、localApi token 仅注入自管 Node。
@@ -168,3 +169,7 @@
 - 2026-11-07：解除 NativeSurface 设备切换/可见性测试的跳过；DSH 桌面状态测试覆盖 start 后最多 4 秒的 surface 快照缓存。
 - 2026-11-07：更新 Node update protocol 旧用例契约：外置 Node 的 APP 更新必须调度绑定 APP root 的重启 helper、Node 连接保持可用；只有 managed Node 与同 ROOT 的 APP 待更新时才延迟 Node 重启。
 - 2026-11-07：更新协议回归覆盖 runtime/disk Node 版本不符时保留重启待办、版本匹配时清除历史待办及 unknown 保守处理；更新下载路由覆盖 Hub 同源直连、GitHub 系统代理和显式代理 opt-in；全包集成测试用 fixture 管理的短 `release-state` staging 根，避免 Windows 长临时根超过 MAX_PATH。
+- 2026-11-07：更新协议回归覆盖 Node apply 与同根 managed APP apply 遇 Tether/DSH/Codeg 活动或 Croc 传输时先拒绝且不 stop/apply/调度重启，空闲 APP apply 保持原流程；AgentsRuntime 活动快照覆盖认证直连、idle/prompting/委派/后台任务/旧快照省略字段和未知响应。
+# 回归测试变更记录
+- 2026-11-07：MinimalUpdateButton 覆盖远端活动更新转后台后的持续轮询、顶栏恢复不重复 apply、失败关闭后仍可恢复/重试，以及设备切换后忽略旧 scope 的迟到启动响应。
+

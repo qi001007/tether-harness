@@ -154,6 +154,146 @@ test('remote update completion keeps this page while local completion reloads it
   }
 })
 
+test('remote update can move to background, restore details, and close errors without duplicating jobs', async () => {
+  const previous = {
+    window: globalThis.window,
+    setTimeout: globalThis.setTimeout,
+    clearTimeout: globalThis.clearTimeout,
+    setInterval: globalThis.setInterval,
+    clearInterval: globalThis.clearInterval
+  }
+  let timerId = 0
+  const intervals = new Map()
+  let applyCalls = 0
+  let jobStatus = 'running'
+  globalThis.window = { location: { reload() {} } }
+  globalThis.setTimeout = (callback, delay) => { const id = ++timerId; return id }
+  globalThis.clearTimeout = () => {}
+  globalThis.setInterval = (callback, delay) => { const id = ++timerId; intervals.set(id, { callback, delay }); return id }
+  globalThis.clearInterval = (id) => intervals.delete(id)
+
+  const api = async (path, options) => {
+    if (path.endsWith('/update/apply')) {
+      applyCalls += 1
+      return { job_id: 'job-048', status: 'running' }
+    }
+    if (path.endsWith('/update/job')) return { job_id: 'job-048', status: jobStatus, progress: { percent: 42, step: '下载更新' } }
+    if (path.includes('/update?')) return { update_available: true, target_version: '0.4.9' }
+    throw new Error('unexpected update request: ' + path + ' ' + JSON.stringify(options))
+  }
+  const initialProps = {
+    React: null,
+    h: null,
+    api,
+    post: async () => { throw new Error('unexpected POST') },
+    deviceId: 'LAPTOP-01',
+    localDeviceId: 'DESKTOP-LOCAL',
+    host: { kind: 'app', hubConfig: () => ({ url: 'https://hub.example' }) },
+    C: { ink: '#111', blue: '#08f', sub: '#666', red: '#d00' }
+  }
+  const renderer = createHookRenderer(initialProps)
+  const props = rendererProps => ({ ...rendererProps, React: renderer.React, h: renderer.React.createElement })
+  renderer.setComponent((rendererProps) => MinimalUpdateButton(props(rendererProps)))
+
+  try {
+    renderer.render()
+    await tick()
+    renderer.render()
+    const updateButton = walk(renderer.output(), (node) => node.type === 'button' && node.props['aria-label'] === '更新到最新版本')
+    await updateButton.props.onClick()
+    renderer.render()
+
+    const backgroundButton = walk(renderer.output(), (node) => node.type === 'button' && node.children.includes('后台更新'))
+    assert.ok(backgroundButton)
+    await backgroundButton.props.onClick()
+    renderer.render()
+    assert.equal(walk(renderer.output(), (node) => node.props && node.props.role === 'dialog'), null)
+    const poll = [...intervals.values()].find((timer) => timer.delay === 1000)
+    assert.ok(poll, 'backgrounding keeps the existing job poll active')
+    await poll.callback()
+    await tick()
+    renderer.render()
+    const restore = walk(renderer.output(), (node) => node.type === 'button' && node.props['aria-label'] === '查看更新状态')
+    assert.ok(restore)
+    await restore.props.onClick()
+    renderer.render()
+    assert.ok(walk(renderer.output(), (node) => node.props && node.props.role === 'dialog'))
+    assert.equal(applyCalls, 1, 'restoring details does not start another update job')
+    const updateArrow = walk(renderer.output(), (node) => node.type === 'button' && node.props['aria-label'] === '查看更新状态')
+    await updateArrow.props.onClick()
+    assert.equal(applyCalls, 1, 'the update arrow restores an active job instead of posting apply again')
+
+    jobStatus = 'error'
+    await poll.callback()
+    await tick()
+    renderer.render()
+    const close = walk(renderer.output(), (node) => node.type === 'button' && node.children.includes('关闭'))
+    assert.ok(close)
+    await close.props.onClick()
+    renderer.render()
+    assert.equal(walk(renderer.output(), (node) => node.props && node.props.role === 'dialog'), null)
+    assert.ok(walk(renderer.output(), (node) => node.type === 'button' && node.props['aria-label'] === '查看更新状态'))
+
+    const restoreError = walk(renderer.output(), (node) => node.type === 'button' && node.props['aria-label'] === '查看更新状态')
+    await restoreError.props.onClick()
+    renderer.render()
+    const retry = walk(renderer.output(), (node) => node.type === 'button' && node.children.includes('重试'))
+    assert.ok(retry, 'closing the error details preserves the existing retry action')
+    await retry.props.onClick()
+    assert.equal(applyCalls, 2)
+  } finally {
+    renderer.dispose()
+    for (const [key, value] of Object.entries(previous)) globalThis[key] = value
+  }
+})
+
+test('late update start response from an old device scope is ignored', async () => {
+  const previous = { window: globalThis.window, setInterval: globalThis.setInterval, clearInterval: globalThis.clearInterval }
+  let timerId = 0
+  globalThis.window = { location: { reload() {} } }
+  globalThis.setInterval = () => ++timerId
+  globalThis.clearInterval = () => {}
+  let resolveStart
+  const api = async (path, options) => {
+    if (path.endsWith('/update/apply')) return new Promise((resolve) => { resolveStart = resolve })
+    if (path.endsWith('/update/job')) return { job_id: 'new-device-job', status: 'running' }
+    if (path.includes('/update?')) return { update_available: true, target_version: '0.4.9' }
+    throw new Error('unexpected update request: ' + path + ' ' + JSON.stringify(options))
+  }
+  const initialProps = {
+    React: null,
+    h: null,
+    api,
+    deviceId: 'LAPTOP-01',
+    localDeviceId: 'DESKTOP-LOCAL',
+    host: { kind: 'app', hubConfig: () => ({ url: 'https://hub.example' }) },
+    C: { ink: '#111', blue: '#08f', sub: '#666', red: '#d00' }
+  }
+  const renderer = createHookRenderer(initialProps)
+  const props = rendererProps => ({ ...rendererProps, React: renderer.React, h: renderer.React.createElement })
+  renderer.setComponent((rendererProps) => MinimalUpdateButton(props(rendererProps)))
+
+  try {
+    renderer.render()
+    await tick()
+    renderer.render()
+    const updateButton = walk(renderer.output(), (node) => node.type === 'button' && node.props['aria-label'] === '更新到最新版本')
+    const pendingStart = updateButton.props.onClick()
+    await tick()
+    renderer.update({ ...initialProps, deviceId: 'OTHER-DEVICE' })
+    await tick()
+    renderer.render()
+    resolveStart({ job_id: 'old-device-job', status: 'running' })
+    await pendingStart
+    renderer.render()
+    assert.equal(walk(renderer.output(), (node) => node.props && node.props.role === 'dialog'), null)
+    assert.equal(walk(renderer.output(), (node) => node.type === 'button' && node.props['aria-label'] === '查看更新状态'), null)
+  } finally {
+    renderer.dispose()
+    for (const [key, value] of Object.entries(previous)) globalThis[key] = value
+  }
+})
+
 test('NativeSurface cancels obsolete device requests, pauses hidden polling, and waits for iframe load', async () => {
   const previous = {
     fetch: globalThis.fetch,

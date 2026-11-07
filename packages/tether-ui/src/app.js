@@ -701,6 +701,7 @@ export function MinimalUpdateButton({ React, h, api, post, deviceId, localDevice
   const [summary, setSummary] = React.useState(null)
   const [job, setJob] = React.useState(null)
   const [error, setError] = React.useState('')
+  const [detailsOpen, setDetailsOpen] = React.useState(true)
   const hubUrl = host && typeof host.hubConfig === 'function' ? (host.hubConfig() || {}).url : ''
   const originProduct = host && host.kind === 'dsh' ? 'plugin' : 'app'
   const devicePath = deviceId ? '/api/devices/' + encodeURIComponent(deviceId) : ''
@@ -714,6 +715,7 @@ export function MinimalUpdateButton({ React, h, api, post, deviceId, localDevice
     setSummary(null)
     setJob(null)
     setError('')
+    setDetailsOpen(true)
   }, [devicePath])
   const labels = {
     queued: '准备更新', checking: '检查版本', downloading: '下载更新',
@@ -784,22 +786,33 @@ export function MinimalUpdateButton({ React, h, api, post, deviceId, localDevice
     return () => { cancelled = true; clearInterval(timer) }
   }, [hubUrl, devicePath, job && job.job_id, job && job.status])
   const start = async () => {
+    const startScope = { deviceId, hubUrl, originProduct }
+    const isCurrentScope = () => mountedRef.current
+      && scopeRef.current.deviceId === startScope.deviceId
+      && scopeRef.current.hubUrl === startScope.hubUrl
+      && scopeRef.current.originProduct === startScope.originProduct
     setError('')
+    setDetailsOpen(true)
     try {
       const created = await apiRef.current(devicePath + '/update/apply', {
         method: 'POST', body: JSON.stringify({ origin_product: originProduct })
       }, hubUrl)
+      if (!isCurrentScope()) return
       setJob(created)
     } catch (cause) {
+      if (!isCurrentScope()) return
       setError((cause && (cause.message || cause.code)) || '更新启动失败')
     }
   }
   if (!hubUrl || !devicePath) return null
   const available = !!(summary && summary.update_available)
   if (!available && !job) return null
+  const remoteTarget = !localDeviceId || deviceId !== localDeviceId
   const percent = Math.max(0, Math.min(100, Number(job && job.progress && job.progress.percent) || 0))
   const statusText = job ? ((job.progress && job.progress.step) || labels[job.status] || '更新中') : '准备更新'
-  const overlay = job ? h('div', {
+  const activeJob = !!(job && !['done', 'error'].includes(job.status))
+  const hasOpenJob = !!(job && job.status !== 'done')
+  const overlay = job && job.status !== 'done' && detailsOpen ? h('div', {
     role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Tether 更新',
     style: {
       position: 'fixed', inset: 0, zIndex: 2147483000, display: 'grid', placeItems: 'center',
@@ -813,16 +826,28 @@ export function MinimalUpdateButton({ React, h, api, post, deviceId, localDevice
       h('span', { style: { flex: '1 1 auto', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, statusText),
       h('span', { className: 'tether-num' }, percent + '%')),
     error ? h('div', { role: 'alert', style: { color: C.red, fontSize: 12, textAlign: 'center' } }, error) : null,
-    job.status === 'error' ? h('button', {
-      type: 'button', onClick: start,
-      style: { justifySelf: 'center', border: 0, borderRadius: 7, background: C.blue, color: '#fff', padding: '7px 18px', fontSize: 12, cursor: 'pointer' }
-    }, '重试') : null)) : null
+    h('div', { style: { display: 'flex', justifyContent: 'center', gap: 8 } },
+      job.status === 'error' ? h('button', {
+        type: 'button', onClick: start,
+        style: { border: 0, borderRadius: 7, background: C.blue, color: '#fff', padding: '7px 18px', fontSize: 12, cursor: 'pointer' }
+      }, '重试') : null,
+      job.status === 'error' || (activeJob && remoteTarget) ? h('button', {
+        type: 'button', onClick: () => setDetailsOpen(false),
+        style: { border: 0, borderRadius: 7, background: 'transparent', color: C.sub, padding: '7px 14px', fontSize: 12, cursor: 'pointer' }
+      }, job.status === 'error' ? '关闭' : '后台更新') : null))) : null
+  const restoreDetails = hasOpenJob && !available && !detailsOpen ? h('button', {
+    type: 'button', onClick: () => setDetailsOpen(true),
+    'aria-label': '查看更新状态', title: job.status === 'error' ? '更新失败，查看详情' : statusText,
+    style: { height: 26, padding: '0 9px', border: 0, borderRadius: 7, background: job.status === 'error' ? 'var(--dsw-alias-state-error-bg, rgba(180,35,24,0.10))' : 'var(--dsw-alias-interactive-bg-hover, rgba(38,49,72,0.06))', color: job.status === 'error' ? C.red : C.sub, fontSize: 11, cursor: 'pointer', flex: '0 0 auto' }
+  }, job.status === 'error' ? '更新失败' : statusText) : null
   return h('div', { style: { display: 'contents' } },
     available ? h('button', {
-      type: 'button', title: '更新到 ' + ((summary && summary.target_version) || '最新版本'),
-      'aria-label': '更新到最新版本', onClick: start,
+      type: 'button', title: hasOpenJob ? (job.status === 'error' ? '查看更新失败详情' : '查看更新进度') : '更新到 ' + ((summary && summary.target_version) || '最新版本'),
+      'aria-label': hasOpenJob ? '查看更新状态' : '更新到最新版本',
+      onClick: hasOpenJob ? () => setDetailsOpen(true) : start,
       style: { width: 30, height: 26, display: 'grid', placeItems: 'center', border: 0, borderRadius: 7, background: C.blue, color: '#fff', fontSize: 15, cursor: 'pointer', flex: '0 0 auto' }
-    }, '↓') : null,
+    }, hasOpenJob ? '↗' : '↓') : null,
+    restoreDetails,
     overlay)
 }
 

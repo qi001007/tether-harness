@@ -336,6 +336,38 @@ def test_remote_app_apply_returns_restart_required(tmp_path, monkeypatch):
     node.store.db.close()
 
 
+def test_managed_same_root_app_apply_rejects_active_node_work_before_restart(
+        tmp_path, monkeypatch):
+    node = _node(tmp_path, monkeypatch)
+    monkeypatch.setenv("TETHER_NODE_MANAGED", "1")
+    manager = FakeUpdateManager()
+    manager.root = agent.ROOT.resolve()
+    node.update_managers["app"] = manager
+    node.dsh_sessions.list = lambda: []
+    node.dsh_sessions._files = lambda: []
+    monkeypatch.setattr(node.croc, "status", lambda: {"state": "idle"})
+    monkeypatch.setattr(node.fs.agents_runtime, "activity", lambda: {
+        "ok": True, "busy": True, "reason": "agent_turn_active"})
+    scheduled_roots: list[Path] = []
+    monkeypatch.setattr(agent, "schedule_app_restart", lambda root: scheduled_roots.append(root))
+    sent: list[dict] = []
+
+    async def send(message: dict) -> None:
+        sent.append(message)
+
+    monkeypatch.setattr(node, "_send", send)
+    asyncio.run(node._update_call({"type": "update_call", "req_id": "managed-app-busy",
+                                   "action": "apply", "component": "app",
+                                   "prepared_id": "d" * 32}))
+
+    assert sent[0]["error_code"] == "update_busy"
+    assert sent[0]["busy_reason"] == "agent_turn_active"
+    assert manager.apply_calls == 0
+    assert scheduled_roots == []
+    assert node.update_applying is False
+    node.store.db.close()
+
+
 def test_remote_app_restart_is_scheduled_only_after_result_send(tmp_path, monkeypatch):
     node = _node(tmp_path, monkeypatch)
     manager = FakeUpdateManager()
@@ -505,6 +537,94 @@ def test_in_progress_apply_result_does_not_request_a_restart(tmp_path, monkeypat
     node.store.db.close()
 
 
+def test_node_apply_rejects_active_agents_work_before_stop_or_apply(tmp_path, monkeypatch):
+    node = _node(tmp_path, monkeypatch)
+    monkeypatch.delenv("TETHER_NODE_MANAGED", raising=False)
+    manager = FakeUpdateManager()
+    node.update_managers["node"] = manager
+    node.dsh_sessions.list = lambda: []
+    node.dsh_sessions._files = lambda: []
+    stop_calls: list[bool] = []
+    monkeypatch.setattr(node.fs.agents_runtime, "activity", lambda: {
+        "ok": True, "busy": True, "reason": "agent_delegation_active"})
+    monkeypatch.setattr(node.fs.agents_runtime, "stop", lambda: stop_calls.append(True))
+    sent: list[dict] = []
+
+    async def send(message: dict) -> None:
+        sent.append(message)
+
+    monkeypatch.setattr(node, "_send", send)
+    asyncio.run(node._update_call({"type": "update_call", "req_id": "active-agents",
+                                   "action": "apply", "component": "node",
+                                   "prepared_id": "a" * 32}))
+
+    assert sent[0]["error_code"] == "update_busy"
+    assert sent[0]["error"] == "正在执行任务或文件传输，完成或取消后重试。"
+    assert sent[0]["busy_reason"] == "agent_delegation_active"
+    assert manager.apply_calls == 0
+    assert stop_calls == []
+    assert node.restart_requested is False
+    node.store.db.close()
+
+
+def test_node_apply_continues_when_agents_idle(tmp_path, monkeypatch):
+    node = _node(tmp_path, monkeypatch)
+    monkeypatch.delenv("TETHER_NODE_MANAGED", raising=False)
+    manager = FakeUpdateManager()
+    node.update_managers["node"] = manager
+    node.dsh_sessions.list = lambda: []
+    node.dsh_sessions._files = lambda: []
+    stop_calls: list[bool] = []
+    monkeypatch.setattr(node.fs.agents_runtime, "activity", lambda: {
+        "ok": True, "busy": False, "reason": ""})
+    monkeypatch.setattr(node.fs.agents_runtime, "stop", lambda: stop_calls.append(True))
+    sent: list[dict] = []
+
+    async def send(message: dict) -> None:
+        sent.append(message)
+
+    monkeypatch.setattr(node, "_send", send)
+    asyncio.run(node._update_call({"type": "update_call", "req_id": "idle-agents",
+                                   "action": "apply", "component": "node",
+                                   "prepared_id": "b" * 32}))
+
+    assert sent[0]["ok"] is True
+    assert manager.apply_calls == 1
+    assert stop_calls == [True]
+    assert node.restart_requested is True
+    node.store.db.close()
+
+
+def test_node_apply_rejects_running_croc_before_runtime_stop(tmp_path, monkeypatch):
+    node = _node(tmp_path, monkeypatch)
+    monkeypatch.delenv("TETHER_NODE_MANAGED", raising=False)
+    manager = FakeUpdateManager()
+    node.update_managers["node"] = manager
+    node.dsh_sessions.list = lambda: []
+    node.dsh_sessions._files = lambda: []
+    stop_calls: list[bool] = []
+    monkeypatch.setattr(node.croc, "status", lambda: {"state": "running"})
+    monkeypatch.setattr(node.fs.agents_runtime, "activity", lambda: (_ for _ in ()).throw(
+        AssertionError("runtime activity must be short-circuited by active Croc")))
+    monkeypatch.setattr(node.fs.agents_runtime, "stop", lambda: stop_calls.append(True))
+    sent: list[dict] = []
+
+    async def send(message: dict) -> None:
+        sent.append(message)
+
+    monkeypatch.setattr(node, "_send", send)
+    asyncio.run(node._update_call({"type": "update_call", "req_id": "active-croc",
+                                   "action": "apply", "component": "node",
+                                   "prepared_id": "c" * 32}))
+
+    assert sent[0]["error_code"] == "update_busy"
+    assert sent[0]["error"] == "正在执行任务或文件传输，完成或取消后重试。"
+    assert sent[0]["busy_reason"] == "croc_transfer_active"
+    assert manager.apply_calls == 0
+    assert stop_calls == []
+    node.store.db.close()
+
+
 def test_node_restart_is_deferred_when_the_app_update_is_prepared(tmp_path, monkeypatch):
     node = _node(tmp_path, monkeypatch)
     monkeypatch.setenv("TETHER_NODE_MANAGED", "1")
@@ -605,7 +725,8 @@ def test_apply_refuses_native_dsh_open_turn_from_isolated_log(tmp_path, monkeypa
                                    "action": "apply", "component": "node",
                                    "prepared_id": "a" * 32}))
     assert sent[0]["error_code"] == "update_busy"
-    assert sent[0]["error"] == "native_dsh_turn_active"
+    assert sent[0]["error"] == "正在执行任务或文件传输，完成或取消后重试。"
+    assert sent[0]["busy_reason"] == "native_dsh_turn_active"
     assert manager.apply_calls == 0
     assert node.update_applying is False
     node.store.db.close()
@@ -626,7 +747,8 @@ def test_apply_refuses_active_tether_run(tmp_path, monkeypatch):
                                    "action": "apply", "component": "node",
                                    "prepared_id": "a" * 32}))
     assert sent[0]["error_code"] == "update_busy"
-    assert sent[0]["error"] == "tether_task_active"
+    assert sent[0]["error"] == "正在执行任务或文件传输，完成或取消后重试。"
+    assert sent[0]["busy_reason"] == "tether_task_active"
     assert manager.apply_calls == 0
     node.store.db.close()
 
