@@ -27,16 +27,23 @@ function apiUrl(base, targetId, operation) {
   return new URL('/api/devices/' + encodeURIComponent(targetId) + '/fs/' + operation, base).toString()
 }
 
-async function postJson(fetcher, url, body) {
-  const response = await fetcher(url, {
+async function postJson(fetcher, url, body, { signal } = {}) {
+  const request = {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
     body: JSON.stringify(body),
     redirect: 'error'
-  })
+  }
+  if (signal) request.signal = signal
+  const response = await fetcher(url, request)
   if (!response.ok) {
     const error = new Error('服务授权请求失败（HTTP ' + response.status + '）')
     error.status = response.status
+    try {
+      const payload = await response.json()
+      const detail = payload && payload.detail
+      if (detail && typeof detail === 'object' && typeof detail.code === 'string') error.code = detail.code
+    } catch (_) { /* preserve only a structured error code */ }
     throw error
   }
   return response.status === 204 ? null : response.json()
@@ -214,11 +221,11 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
   const revocationFailures = new Set()
   const tupleKey = (actorId, targetId, serviceId) => [actorId, targetId, serviceId].join('\u0000')
 
-  async function catalog(targetId) {
+  async function catalog(targetId, { signal } = {}) {
     if (typeof targetId !== 'string' || !targetId) throw new TypeError('invalid target')
     const actorId = await getActorId()
     if (typeof actorId !== 'string' || !actorId) throw new Error('Controller 登录身份尚未就绪。')
-    const result = await postJson(loginSession.fetch.bind(loginSession), apiUrl(base, targetId, 'service_catalog'), {})
+    const result = await postJson(loginSession.fetch.bind(loginSession), apiUrl(base, targetId, 'service_catalog'), {}, { signal })
     if (!result || result.protocol !== 1 || result.target_id !== targetId || !Array.isArray(result.services)) {
       throw new Error('Controller 返回了无效的服务目录。')
     }
@@ -261,20 +268,85 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     }
     let openedDescriptor = null
     let openedSession = null
+    let cancelOpening = null
     const opening = (async () => {
+      const openingController = new AbortController()
+      cancelOpening = () => openingController.abort()
       try {
-    const serviceCatalog = await catalog(targetId)
+    const serviceCatalog = await catalog(targetId, { signal: openingController.signal })
     if (!serviceCatalog.services.some((service) => service.id === serviceId)) throw new Error('目标服务目录中没有该服务。')
-    if (!isCurrent()) throw new Error('工作台账号已切换，请重新打开服务。')
+    if (!isCurrent() || openingController.signal.aborted) throw new Error('工作台账号已切换，请重新打开服务。')
     const sourceDeviceId = await getLocalDeviceId()
     if (typeof sourceDeviceId !== 'string' || !sourceDeviceId) throw new Error('本机设备身份尚未就绪。')
-    if (!isCurrent()) throw new Error('工作台账号已切换，请重新打开服务。')
-    const descriptor = openedDescriptor = await postJson(loginSession.fetch.bind(loginSession), apiUrl(base, targetId, 'service_open'), {
+    if (!isCurrent() || openingController.signal.aborted) throw new Error('工作台账号已切换，请重新打开服务。')
+    const openBody = {
       service_id: serviceId,
       operation_id: operationId,
       source_device_id: sourceDeviceId
-    })
-    if (!isCurrent()) throw new Error('工作台账号已切换，请重新打开服务。')
+    }
+    const startupController = new AbortController()
+    const startupDeadline = Date.now() + 30000
+    const startupTimer = setTimeout(() => startupController.abort(), 30000)
+    const cancelStartup = () => startupController.abort()
+    openingController.signal.addEventListener('abort', cancelStartup, { once: true })
+    let descriptor
+    try {
+      while (true) {
+        if (!isCurrent() || openingController.signal.aborted) throw new Error('工作台账号已切换，请重新打开服务。')
+        if (startupController.signal.aborted || Date.now() >= startupDeadline) {
+          throw new Error('目标服务启动等待超时，请稍后重试。')
+        }
+        try {
+          descriptor = await postJson(loginSession.fetch.bind(loginSession), apiUrl(base, targetId, 'service_open'),
+            openBody, { signal: startupController.signal })
+          openedDescriptor = descriptor
+          if (!isCurrent() || openingController.signal.aborted) throw new Error('工作台账号已切换，请重新打开服务。')
+          if (startupController.signal.aborted || Date.now() >= startupDeadline) {
+            throw new Error('目标服务启动等待超时，请稍后重试。')
+          }
+          break
+        } catch (error) {
+          if (!isCurrent() || openingController.signal.aborted) throw new Error('工作台账号已切换，请重新打开服务。')
+          if (startupController.signal.aborted) throw new Error('目标服务启动等待超时，请稍后重试。')
+          if (error.status === 401 || error.status === 403 || error.code !== 'service_starting') throw error
+        }
+
+        while (true) {
+          if (!isCurrent() || openingController.signal.aborted) throw new Error('工作台账号已切换，请重新打开服务。')
+          if (startupController.signal.aborted || Date.now() >= startupDeadline) {
+            throw new Error('目标服务启动等待超时，请稍后重试。')
+          }
+          const currentCatalog = await catalog(targetId, { signal: startupController.signal })
+          if (!isCurrent() || openingController.signal.aborted) throw new Error('工作台账号已切换，请重新打开服务。')
+          const status = currentCatalog.services.find((service) => service.id === serviceId)
+          if (!status) throw new Error('目标服务目录中没有该服务。')
+          if (status.state === 'ready') break
+          if (status.state !== 'starting' || status.reason !== 'service_starting') {
+            throw new Error('目标服务启动失败，请检查服务状态后重试。')
+          }
+          const delay = Math.min(500, Math.max(0, startupDeadline - Date.now()))
+          await new Promise((resolve, reject) => {
+            const finish = () => {
+              clearTimeout(timer)
+              startupController.signal.removeEventListener('abort', onAbort)
+            }
+            const onAbort = () => { finish(); reject(new Error('service startup wait aborted')) }
+            const timer = setTimeout(() => { finish(); resolve() }, delay)
+            startupController.signal.addEventListener('abort', onAbort, { once: true })
+          })
+        }
+      }
+    } catch (error) {
+      if (!isCurrent() || openingController.signal.aborted) throw new Error('工作台账号已切换，请重新打开服务。')
+      if (startupController.signal.aborted || Date.now() >= startupDeadline) {
+        throw new Error('目标服务启动等待超时，请稍后重试。')
+      }
+      throw error
+    } finally {
+      clearTimeout(startupTimer)
+      openingController.signal.removeEventListener('abort', cancelStartup)
+    }
+    if (!isCurrent() || openingController.signal.aborted) throw new Error('工作台账号已切换，请重新打开服务。')
     const verified = verifyEndpoint(descriptor, targetId, serviceId)
     const partition = 'persist:tether-wb-' + sha256(key + '\u0000' + generation).slice(0, 40)
     const serviceSession = getServiceSession(partition)
@@ -322,6 +394,7 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
       }
     })()
     opening.generation = generation
+    opening.cancel = () => { if (cancelOpening) cancelOpening() }
     pending.set(key, opening)
     try { return await opening } finally { if (pending.get(key) === opening) pending.delete(key) }
   }
@@ -471,6 +544,7 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     const pendingOpens = [...pending.entries()]
       .filter(([key]) => key.startsWith(actorId + '\u0000'))
       .map(([, opening]) => opening)
+    for (const opening of pendingOpens) if (typeof opening.cancel === 'function') opening.cancel()
     await Promise.allSettled(pendingOpens)
     const records = [...active.entries()].filter(([, record]) => record.actorId === actorId)
     for (const [key, record] of records) {

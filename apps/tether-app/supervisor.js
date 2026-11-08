@@ -37,6 +37,7 @@ class Supervisor {
     this.managedNodeState = this.readManagedNodeState()
     this.localApiToken = this.managedNodeState && this.managedNodeState.token || crypto.randomBytes(24).toString('hex')
     this.python = env.TETHER_PYTHON || path.join(repoRoot, '.venv', 'Scripts', 'python.exe')
+    this.appUpdateBridge = null
     if (!fs.existsSync(this.python)) this.python = process.platform === 'win32' ? 'python' : 'python3'
     this.childPython = this.python
     if (process.platform === 'win32') {
@@ -117,6 +118,10 @@ class Supervisor {
     if (name === 'node') {
       env.TETHER_NODE_MANAGED = '1'
       env.TETHER_LOCAL_API_TOKEN = this.localApiToken
+      if (this.appUpdateBridge) {
+        env.TETHER_APP_UPDATE_BRIDGE_URL = this.appUpdateBridge.url
+        env.TETHER_APP_UPDATE_BRIDGE_TOKEN = this.appUpdateBridge.token
+      }
     }
     this.procArgs[name] = args.slice()
     const child = this.spawnChild(this.childPython, args, {
@@ -149,6 +154,16 @@ class Supervisor {
       if (code !== 0) this.lastError = name + ' exited with code ' + code + '; see ' + path.join(this.logsDir, name + '.log')
     })
     return child
+  }
+
+  setAppUpdateBridge(bridge) {
+    const url = String(bridge && bridge.url || '')
+    const token = String(bridge && bridge.token || '')
+    if (!/^http:\/\/127\.0\.0\.1:\d{1,5}\/v1\/update$/.test(url)
+        || !/^[a-f0-9]{64}$/.test(token)) {
+      throw Object.assign(new Error('Invalid APP update bridge'), { code: 'app_update_bridge_invalid' })
+    }
+    this.appUpdateBridge = { url, token }
   }
 
   readManagedNodeState() {

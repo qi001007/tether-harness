@@ -572,7 +572,7 @@ export function createSettingsPanel(React) {
       },
         h('span', { style: { color: mute } }, product.label),
         h('span', { className: 'tether-num' }, product.current || '—')))
-      const action = row.running
+      const action = row.updateAction || (row.running
         ? h('span', { className: 'tether-spin', title: '更新中', 'aria-label': '更新中', style: { display: 'grid', placeItems: 'center', color: blue } }, Glyph ? h(Glyph, { name: 'refresh', size: 15 }) : null)
         : row.error
           ? h('button', {
@@ -586,7 +586,7 @@ export function createSettingsPanel(React) {
               className: 'tether-hover',
               style: { width: 28, height: 28, display: 'grid', placeItems: 'center', border: 0, borderRadius: 6, background: 'transparent', color: sub, cursor: 'pointer' }
             }, Glyph ? h(Glyph, { name: 'download', size: 15 }) : '↓')
-            : null
+            : null)
       return h('div', {
         key: row.key,
         style: {

@@ -1,4 +1,7 @@
 # tether-app backlog
+- 2026-11-08：工作台服务与远程桌面连接改为使用本机 Node 按可信 network_id 查询的 loopback SOCKS5 route；Electron隔离session走该route，TLS CA/主机名/leaf校验也经成熟 `socks@2.8.10` 代理连接，关闭/清理时复位session代理。未启动APP或重跑远控场景。
+- 2026-11-08：添加 `tether:files-request` 受信主进程/preload桥接到native-workbench files service。IPC只接adapter受限target/op参数；主进程使用iconv-lite支持UTF-8、BOM UTF-8、UTF-16 LE/BE、GB18030文本编码和换行保留，并拒绝GB18030往返有损文本。增加固定iconv-lite运行依赖。仅做语法检查，未执行Node files集成。
+- 2026-11-08：主进程接入 `native-workbench.js` adapter；创建持久 Hub-login Electron partition，通过受信 IPC 提供登录、目录查询、打开、关闭和可见性保活。主进程只接收/处理 bootstrap 与 TLS descriptor，renderer仅从 adapter拿公开 endpoint/状态，不提供 actor/CA/bootstrap；登录完成以Controller `/api/auth/me` 确认，不向renderer传ID token。
 - 2026-11-07：0.4.10 候选版本元数据将 APP/Node 对齐为 0.4.10，官方插件发行版本保持 0.2.93；仅登记候选版本，未安装或发布。
 - 2026-11-07：0.4.9 候选版本元数据将 APP/Node 对齐为 0.4.9，官方插件发行版本保持 0.2.93；仅登记候选版本，未安装或发布。
 - 2026-11-07: 候选发行元数据提升 APP/Node 至 0.4.8，插件保持 0.2.93；本次只更新版本元数据，候选未安装。
@@ -75,6 +78,37 @@
 - 2026-11-04：主窗口开启 `webviewTag` 供 Linux DSH Web 顶层内嵌；`will-attach-webview` 删除 guest preload、强制 sandbox/contextIsolation/webSecurity，只允许回环与 RFC1918 地址；`did-attach-webview` 拒绝新窗口并把 guest 导航锁在首次 origin。DSH 外部 `window.open` 已删除；真机 webview 与插件自动安装仍待验。
 - 2026-11-04：APP 默认直接连接 Hub 与 mesh，不跟随系统代理：`main.js` 在 ready 前 `appendSwitch('no-proxy-server')`，只有 `TETHER_USE_SYSTEM_PROXY=1` 才保留系统代理。实测系统代理故障时 Python 节点仍能注册 Hub，但 Electron 渲染器访问 `/api/state` 全部 ERR_FAILED、界面显示 0 台设备；切换直连后 example.com 与 Hub 都可达，设备恢复。不要再在 `whenReady` 里用 `setProxy({mode:'system'})` 覆盖该开关。
 - 2026-11-07：修复 Linux DSH WebView 在 guest 初始 `about:blank` 时把 origin 锁为 `null`、导致首个 LAN 导航被拦截的问题；现在允许首个受限 LAN HTTP(S) 导航建立 origin，之后继续限制同源。新增 Electron 导航守卫回归断言。
+- 2026-11-08：新 workbench `persist:tether-wb-*` WebView 不再走 legacy 私网地址规则，`will-attach-webview` 改向主进程 workbench授权记录校验partition与精确origin；增加基于Hub login partition的受限`hubRequest` IPC（固定Controller origin，仅GET/POST `/api/`，不向renderer回传Cookie/token）和`workbenchLogout`清理入口。OAuth登录前先用旧actor撤销并清workbench session；若撤销/清理失败，不允许切换账号并在退出时返回`revocation_pending`。共享UI host已接主进程桥，账号事件/行为仍待整体APP验证。
+- 2026-11-08：新增锁定 `eventsource@3.0.7`（支持APP当前 Electron Node 20 runtime）作为 Hub `/api/events` 成熟SSE客户端；事件仅经登录 partition的固定Controller URL取回、只转发JSON device/session事件到可信主窗口，登录切换和登出关闭订阅。Hub业务HTTP同样经主进程固定origin/路由allowlist访问，不把session cookie或ID token暴露给renderer。
+- 2026-11-08：新增仅在OIDC返回`oidc_identity_unbound`的待绑定状态开放的`workbenchBindLegacy`主进程IPC：凭据仅用于Controller旧账号登录并建立旧session，然后由OAuth2Proxy注入服务端的Casdoor ID token调用显式`iss/sub`绑定；主进程再确认 `/api/auth/me` 才发 authenticated。密码、ID token与Controller session cookie不写localStorage或回传renderer；用户输入表单与实登录待联调。
+- 2026-11-08：APP默认数据目录改为Electron平台用户目录；首次加载Hub配置/Supervisor前递归无覆盖复制旧`data`树，包含Node数据库、Electron持久会话、升级/用户记录及日志，保留旧副本且目标已有文件不覆盖。旧数据非空时要求安装器停旧APP和受管Node并带`TETHER_DATA_MIGRATION_QUIESCED=1`，否则明确拒绝启动。`TETHER_APP_DATA_DIR`显式隔离目录，`TETHER_APP_CANDIDATE=1`隔离环境变量/旧Hub配置/快捷方式/安装登记、external Node模式和候选截图路径。
 
-- 2026-11-08：APP/Node候选元数据更新至0.4.11；发布仍待CI签名与审阅。
+- 2026-11-08：--shot启动时隐藏APP窗口（普通启动仍显示），供隔离候选调用既有capturePage截图时不抢桌面焦点。数据迁移仅在旧APP与受管Node停机后设置TETHER_DATA_MIGRATION_QUIESCED=1执行；语法检查通过，候选首屏待隔离启动验证。
 
+- 2026-11-08：候选模式跳过安装注册与watcher、快捷方式、worktree .env/hub.json加载，强制external Node；--shot隐藏窗口并走原capturePage。旧data全目录迁移只在安装器停旧APP及Node后显式标记quiesced；候选仍需父代理隔离启动观察。
+
+- 2026-11-08：为--shot分支补loadURL/wait/renderState/capturePage阶段日志和分别30s/10s/15s有界等待；shot隐藏页启用paintWhenInitiallyHidden且关闭后台节流，仅限诊断模式。用于本次候选首屏定位，不改变常规APP渲染策略。
+
+- 2026-11-08：OIDC登录窗口仅允许精确Controller/Issuer HTTPS origin，或明确配置的localhost回环HTTP origin；修复本机隔离Casdoor HTTP端口被登录导航守卫误拦的问题，仍不开放任意私网URL。
+- 2026-11-08：候选 APP/Node 版本统一到 `0.5.0`，plugin 继续固定 `0.2.93`；锁定 `electron-updater@6.8.12` 作为平台包更新器运行依赖，正式发布仍待候选验证和签名条件。
+- 2026-11-08：packaged APP 主进程从 `resources/tether-source`, `resources/tether-ui/web`, `resources/tether-runtime` 解析源码/UI/固定组件；设置 packaged Python、Agents/Herdr、SFTPGo、Caddy、rclone、EasyTier 绝对路径，不读worktree `.env`，关闭源码树登记更新绑定。
+- 2026-11-08：打包 APP 的更新入口切到 `electron-updater`：preview channel 检查、下载、显式应用和已下载状态由成熟更新组件执行；源码开发模式保留 Tether 签名清单/更新助手。活动状态仍通过现有更新 CLI fail-closed 检查。真实已发布更新清单、Windows/macOS签名与安装更新尚待候选制品验证。
+- 2026-11-08：打包更新真正退出安装前，先要求旧版 APP 活动检查通过，再按私有PID/创建时间/可执行路径/local API token停止本APP拥有的Node；新APP重启后由Supervisor按同一Hub配置恢复Node。
+- 2026-11-08：为打包 Node 注入固定绝对资源路径 `TETHER_NODEJS_EXE`（`components/nodejs`）、`TETHER_MESHCENTRAL_ROOT`、`TETHER_MESHAGENT_EXE`，覆盖Windows x64、Linux x64和macOS x64/arm64；远控Node服务尚未启用，缺少制品时不使用系统PATH回退。
+- 2026-11-08：打包 APP 的 Hub 受管 Node 改为独立后台子进程；私有 `data/private` 状态文件保存随机local API token、device/controller/data目录、PID、进程创建时间与可执行路径。重开时先校验进程身份+token本地API，再复用原Node；显式Stop只关匹配进程，APP退出保留当前Hub Node。Linux目录/文件使用0700/0600，Windows通过icacls仅授当前用户权限。尚未注册系统登录启动任务；系统重启后的自动恢复仍待安装器/平台验证。
+- 2026-11-08：packaged APP新增 `TETHER_DSH_RUNTIME_DIR=resources/tether-runtime/components/dsh` 固定资源映射，供Node受管DSH宿主使用，不回退到系统Node或任意用户目录。
+- 2026-11-08：新增受控登录启动IPC：已安装非候选APP在Windows/macOS使用Electron登录项，在Linux使用当前用户XDG autostart；默认不启用，候选模式无法改系统项。打包APP明确设置 `TETHER_NODE_UPDATE_OWNER=app_installer`，由electron-updater安装完整APP/Node资源树，Node单独更新入口应据此拒绝写入APP-owned运行树。
+- 2026-11-08：主进程为office-preview设置只读打包LibreOffice可执行路径（按Windows/Linux/macOS布局），renderer不能选择或覆写程序路径。
+- 2026-11-08：增加受控`workbenchRegisterAccount` IPC，仅允许主进程确认的未绑定OIDC态向固定Controller注册路由发空请求；成功后主进程重新取`/api/auth/me`可信用户并发布authenticated事件，身份资料不由renderer传入。
+- 2026-11-08：远程桌面隔离session通过可信本机EasyTier SOCKS5路由访问目标服务；TLS预检/证书回调也沿代理做CA、主机名与叶证书校验，固定运行依赖`socks@2.8.10`。公开给UI的服务状态包含原生会话截止时间。
+- 2026-11-08：远程桌面 guest capability 有明确24小时原生截止，主进程只向UI给出截止时间；SOCKS路由从受信本机Node route callback获取，renderer不接触proxy配置。
+
+- 2026-11-08：0.5.0 packaged APP 首启从 per-user app-installations 登记中按 Controller origin、device ID、credential fingerprint 与本地安装根唯一发现旧版数据；确认登记 APP 与私有 managed Node PID 已退出后，只备份并迁移 hub.json、device-token.json、node-hub/node-local SQLite 主文件及 WAL，跳过 Chromium LevelDB 和旧进程状态。新目标非空拒绝合并，身份在副本上复核后才原子切入；默认 packaged Hub 指向已核验公开入口，迁入或用户配置优先。未做正式进程停止/复制，待候选安装器验证。
+
+- 2026-11-08: 0.5.0 首迁移接收 NSIS <installation-id>.migration-source marker，先验证用户本地 snapshot 路径、快照身份指纹和旧 APP/Node 停止状态；迁移成功后移除 marker。白名单补入 policy.json，保留文件访问权限策略；不迁移 managed Node 运行状态。
+
+- 2026-11-09：packaged APP 的 installer-owned 远程更新通过仅绑定 127.0.0.1 临时端口、随机 Bearer 和严格四动作桥接到 electron-updater；Node 凭据仅经子进程环境传递。提交更新前校验下载活动/准备标识，Controller 收到 accepted 后才请求 APP 停 Node 并退出安装。更新通道显式环境变量优先，否则按包内 app-update.yml channel 决定；candidate mode 默认 preview。
+- 2026-11-09: native-workbench service opens now preserve only structured `detail.code` on HTTP errors and handle only `service_starting` in the existing pending open with a 30s AbortSignal-bounded catalog-ready wait, same operation ID, and actor-change cancellation; HTTP 401/403 fail immediately. Focused Node harness passed startup-ready retry/same-ID, auth-stop, and actor-cancel cases; actual QA cold-start observation remains pending due the QA Node lacking the `dsh_native` session-list capability.
+- 2026-11-09：APP 安装提交在 ACK 后遇到停止 Node/quitAndInstall 错误时写入既有 update-result.json；Electron status 回传匹配目标版本的错误，下一次 prepare/apply 清除旧错误。源码/legacy ZIP apply 恢复32位准备标识及进程内准备集合校验。
+- 2026-11-09: cold-start verification did not run: QA-SOURCE DSH-Web is stopped but the source-owned DSH desktop reports running under its isolated `source/node/dsh-home`; the DSH session-list API returns `node_update_required`, so active work cannot be ruled out. No QA DSH process was started/stopped.
+- 2026-11-09: startup open stores each successful descriptor before the actor-generation guard so a login change can still revoke the returned grant; final syntax/module-load check passed.

@@ -3,6 +3,7 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 const crypto = require('node:crypto')
+const http = require('node:http')
 const { promisify } = require('node:util')
 
 const execFileAsync = promisify(execFile)
@@ -48,13 +49,27 @@ class UpdateService {
     this.electronUpdater = null
     this.electronUpdateInfo = null
     this.electronDownloaded = false
+    this.electronLastResult = null
+    this.appUpdateBridge = null
+    this.bridgeApplyAccepted = new Set()
     if (this.packaged) {
       const { autoUpdater } = require('electron-updater')
       this.electronUpdater = autoUpdater
       autoUpdater.autoDownload = false
       autoUpdater.autoInstallOnAppQuit = false
-      autoUpdater.allowPrerelease = String(env.TETHER_UPDATE_CHANNEL || 'preview').toLowerCase() === 'preview'
-      autoUpdater.channel = autoUpdater.allowPrerelease ? 'preview' : 'latest'
+      const updateChannel = String(env.TETHER_UPDATE_CHANNEL || '').trim().toLowerCase()
+      if (updateChannel) {
+        autoUpdater.allowPrerelease = updateChannel === 'preview'
+        autoUpdater.channel = autoUpdater.allowPrerelease ? 'preview' : 'latest'
+      } else {
+        let packagedChannel = ''
+        try {
+          const config = fs.readFileSync(path.join(process.resourcesPath, 'app-update.yml'), 'utf8')
+          const match = config.match(/^channel:\s*([a-z0-9_-]{1,32})\s*$/mi)
+          if (match) packagedChannel = match[1].toLowerCase()
+        } catch (_) { /* electron-updater reports missing packaged configuration on check */ }
+        autoUpdater.allowPrerelease = packagedChannel === 'preview'
+      }
       autoUpdater.on('update-available', (info) => { this.electronUpdateInfo = info })
       autoUpdater.on('update-not-available', (info) => { this.electronUpdateInfo = info })
       autoUpdater.on('update-downloaded', (info) => { this.electronUpdateInfo = info; this.electronDownloaded = true })
@@ -106,13 +121,20 @@ class UpdateService {
   async status() {
     if (this.electronUpdater) {
       const current = this.app.getVersion()
-      return {
+      const result = {
         ok: true, component: 'app', current_version: current,
         latest_version: this.electronUpdateInfo && this.electronUpdateInfo.version || current,
         update_available: !!(this.electronUpdateInfo && this.electronUpdateInfo.version && this.electronUpdateInfo.version !== current),
         prepared: this.electronDownloaded ? [{ prepared_id: [...this.preparedIds][0] || '' }] : [],
         restart_required: false, source: 'electron-updater'
       }
+      let lastResult = this.electronLastResult
+      try {
+        const stored = JSON.parse(fs.readFileSync(path.join(this.app.getPath('userData'), 'update-result.json'), 'utf8'))
+        if (stored && stored.source === 'electron-updater') lastResult = stored
+      } catch (_) { /* no stored Electron apply failure */ }
+      if (lastResult && lastResult.ok === false && lastResult.target_version !== current) result.last_result = lastResult
+      return result
     }
     const result = await this.run('status')
     const lastResultPath = path.join(this.app.getPath('userData'), 'update-result.json')
@@ -149,13 +171,14 @@ class UpdateService {
   async prepare() {
     if (this.electronUpdater) {
       await this.activity()
+      this.clearElectronApplyFailure()
       if (!this.electronUpdateInfo) await this.check()
       if (!this.electronUpdateInfo || this.electronUpdateInfo.version === this.app.getVersion()) {
         throw Object.assign(new Error('没有可用的 APP 更新'), { code: 'update_not_available' })
       }
       this.electronDownloaded = false
       await this.electronUpdater.downloadUpdate()
-      const preparedId = crypto.randomUUID()
+      const preparedId = crypto.randomBytes(16).toString('hex')
       this.preparedIds.add(preparedId)
       this.electronDownloaded = true
       return { ok: true, component: 'app', prepared_id: preparedId, prepared: [{ prepared_id: preparedId }],
@@ -169,17 +192,47 @@ class UpdateService {
     return result
   }
 
-  async apply(preparedId) {
+  async validateElectronPrepared(preparedId) {
     await this.activity()
-    if (typeof preparedId !== 'string' || !/^[A-Za-z0-9_-]{8,160}$/.test(preparedId) || !this.preparedIds.has(preparedId)) {
+    this.assertElectronPrepared(preparedId)
+    return { ok: true, component: 'app', status: 'waiting_for_restart', restart_required: true,
+      current_version: this.app.getVersion(), latest_version: this.electronUpdateInfo.version,
+      source: 'electron-updater' }
+  }
+
+  assertElectronPrepared(preparedId) {
+    if (!this.electronUpdater || typeof preparedId !== 'string' || !/^[a-f0-9]{32}$/.test(preparedId)
+        || !this.preparedIds.has(preparedId)) {
       throw Object.assign(new Error('更新包标识无效'), { code: 'invalid_prepared_id' })
     }
+    if (!this.electronDownloaded || !this.electronUpdateInfo
+        || this.electronUpdateInfo.version === this.app.getVersion()) {
+      throw Object.assign(new Error('更新包尚未下载完成'), { code: 'update_not_prepared' })
+    }
+  }
+
+  async apply(preparedId, { beforeInstall } = {}) {
+    await this.activity()
     if (this.electronUpdater) {
-      if (!this.electronDownloaded) throw Object.assign(new Error('更新包尚未下载完成'), { code: 'update_not_prepared' })
-      await this.stopManagedNode()
-      this.preparedIds.delete(preparedId)
-      this.electronUpdater.quitAndInstall(false, true)
-      return { ok: true, component: 'app', status: 'installing', restart_required: true, source: 'electron-updater' }
+      this.assertElectronPrepared(preparedId)
+      const installing = { ok: true, component: 'app', status: 'installing', restart_required: true,
+        current_version: this.app.getVersion(), latest_version: this.electronUpdateInfo.version,
+        source: 'electron-updater' }
+      this.clearElectronApplyFailure()
+      try {
+        if (beforeInstall) await beforeInstall(installing)
+        this.preparedIds.delete(preparedId)
+        await this.stopManagedNode()
+        this.electronUpdater.quitAndInstall(false, true)
+        return installing
+      } catch (error) {
+        this.recordElectronApplyFailure(error, installing.latest_version)
+        throw error
+      }
+    }
+    if (typeof preparedId !== 'string' || !/^[A-Za-z0-9_-]{8,160}$/.test(preparedId)
+        || !this.preparedIds.has(preparedId)) {
+      throw Object.assign(new Error('更新包标识无效'), { code: 'invalid_prepared_id' })
     }
     const userData = this.app.getPath('userData')
     const helperPath = path.join(userData, 'tether-update-helper.js')
@@ -228,6 +281,121 @@ class UpdateService {
     child.unref()
     this.preparedIds.delete(preparedId)
     return { ok: true, component: 'app', status: 'installing', restart_required: true }
+  }
+
+  clearElectronApplyFailure() {
+    this.electronLastResult = null
+    try { fs.unlinkSync(path.join(this.app.getPath('userData'), 'update-result.json')) } catch (_) { /* no prior failure */ }
+  }
+
+  recordElectronApplyFailure(error, targetVersion) {
+    const code = /^[a-z0-9_]{1,64}$/.test(String(error && error.code || ''))
+      ? String(error.code) : 'app_update_failed'
+    const result = { ok: false, component: 'app', status: 'failed', source: 'electron-updater',
+      target_version: targetVersion, error_code: code,
+      error: String(error && error.message || 'APP update failed').slice(0, 240), retryable: true,
+      failed_at: new Date().toISOString() }
+    this.electronLastResult = result
+    try {
+      fs.writeFileSync(path.join(this.app.getPath('userData'), 'update-result.json'), JSON.stringify(result), { mode: 0o600 })
+    } catch (_) { /* keep the in-memory status result if persistence is unavailable */ }
+  }
+
+  async startAppUpdateBridge() {
+    if (!this.electronUpdater) return null
+    if (this.appUpdateBridge) return this.appUpdateBridge
+    const token = crypto.randomBytes(32).toString('hex')
+    const server = http.createServer(async (request, response) => {
+      const send = (status, body) => {
+        if (response.writableEnded) return
+        response.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
+        response.end(JSON.stringify(body))
+      }
+      if (request.method !== 'POST' || request.url !== '/v1/update') return send(404, { ok: false, error_code: 'not_found' })
+      const authorization = String(request.headers.authorization || '')
+      const supplied = Buffer.from(authorization.startsWith('Bearer ') ? authorization.slice(7) : '')
+      const expected = Buffer.from(token)
+      if (supplied.length !== expected.length || !crypto.timingSafeEqual(supplied, expected)) {
+        return send(401, { ok: false, error_code: 'unauthorized', error: 'APP update service authorization failed' })
+      }
+      let raw = ''
+      try {
+        for await (const chunk of request) {
+          raw += chunk.toString('utf8')
+          if (raw.length > 4096) return send(413, { ok: false, error_code: 'request_too_large' })
+        }
+        const body = JSON.parse(raw)
+        if (!body || typeof body !== 'object' || Array.isArray(body)
+            || !['status', 'check', 'prepare', 'apply'].includes(body.action)) {
+          return send(400, { ok: false, error_code: 'invalid_update_request' })
+        }
+        if (body.action === 'apply') {
+          if (Object.keys(body).some((key) => !['action', 'prepared_id', 'phase'].includes(key))
+              || !['accept', 'commit'].includes(body.phase)) {
+            return send(400, { ok: false, error_code: 'invalid_update_request' })
+          }
+          if (body.phase === 'accept') {
+            const accepted = await this.validateElectronPrepared(body.prepared_id)
+            this.bridgeApplyAccepted.add(body.prepared_id)
+            return send(200, accepted)
+          }
+          if (Object.keys(body).length !== 3 || !this.bridgeApplyAccepted.has(body.prepared_id)) {
+            return send(409, { ok: false, error_code: 'apply_not_accepted' })
+          }
+          try {
+            await this.apply(body.prepared_id, {
+              beforeInstall: async (accepted) => {
+                if (response.writableEnded) throw Object.assign(new Error('APP update acknowledgement unavailable'), { code: 'ack_unavailable' })
+                const flushed = new Promise((resolve, reject) => {
+                  response.once('finish', resolve)
+                  response.once('error', reject)
+                })
+                response.writeHead(202, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
+                response.end(JSON.stringify(accepted))
+                await flushed
+              }
+            })
+            this.bridgeApplyAccepted.delete(body.prepared_id)
+          } catch (error) {
+            this.bridgeApplyAccepted.delete(body.prepared_id)
+            if (!response.writableEnded) send(409, {
+              ok: false,
+              error_code: /^[a-z0-9_]{1,64}$/.test(String(error && error.code || '')) ? error.code : 'app_update_failed',
+              error: String(error && error.message || 'APP update failed').slice(0, 240)
+            })
+          }
+          return
+        }
+        if (Object.keys(body).length !== 1) return send(400, { ok: false, error_code: 'invalid_update_request' })
+        const result = body.action === 'status' ? await this.status()
+          : body.action === 'check' ? await this.check() : await this.prepare()
+        return send(200, result)
+      } catch (error) {
+        if (response.writableEnded) return
+        send(409, {
+          ok: false,
+          error_code: /^[a-z0-9_]{1,64}$/.test(String(error && error.code || '')) ? error.code : 'app_update_failed',
+          error: String(error && error.message || 'APP update failed').slice(0, 240)
+        })
+      }
+    })
+    await new Promise((resolve, reject) => {
+      server.once('error', reject)
+      server.listen(0, '127.0.0.1', resolve)
+    })
+    const address = server.address()
+    if (!address || typeof address === 'string') {
+      server.close()
+      throw new Error('APP update loopback endpoint failed to bind')
+    }
+    this.appUpdateBridge = { server, url: `http://127.0.0.1:${address.port}/v1/update`, token }
+    return { url: this.appUpdateBridge.url, token: this.appUpdateBridge.token }
+  }
+
+  closeAppUpdateBridge() {
+    const server = this.appUpdateBridge && this.appUpdateBridge.server
+    this.appUpdateBridge = null
+    if (server) server.close()
   }
 }
 

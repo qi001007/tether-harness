@@ -21,6 +21,9 @@ import subprocess
 import threading
 import time
 import traceback
+import urllib.error
+import urllib.parse
+import urllib.request
 from pathlib import Path
 from typing import Any
 
@@ -59,6 +62,12 @@ load_dotenv(ROOT / ".env")
 
 ACTIVE = ("queued", "dispatching", "running", "cancelling")
 TERMINAL = ("completed", "cancelled", "failed", "unknown")
+
+
+class _RejectUpdateBridgeRedirects(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req: Any, fp: Any, code: int, msg: str,
+                         headers: Any, newurl: str) -> None:
+        return None
 
 
 def log(*parts: Any) -> None:
@@ -335,6 +344,9 @@ class Node:
               for component in ("node", "plugin")
         }
         self.update_managers["app"] = self._make_app_update_manager(manifest_url)
+        self.app_update_owner = os.environ.get("TETHER_NODE_UPDATE_OWNER", "node").strip().lower()
+        self.app_update_bridge_url = os.environ.get("TETHER_APP_UPDATE_BRIDGE_URL", "").strip()
+        self.app_update_bridge_token = os.environ.get("TETHER_APP_UPDATE_BRIDGE_TOKEN", "").strip()
         self.debian_package_updater = DebianPackageUpdater(self.data_dir)
         self.debian_package_update_status = None
         self.debian_package_update_capability = None
@@ -863,6 +875,15 @@ class Node:
             return
         component = str(component)
         node_update_owner = os.environ.get("TETHER_NODE_UPDATE_OWNER", "").strip().lower()
+        if (component == "node" and os.environ.get("TETHER_NODE_SELF_UPDATE_ENABLED") == "0"
+                and action != "status"):
+            await self._send_update_result(
+                response_ws,
+                {"type": "update_result", "req_id": req_id, "ok": False,
+                 "error_code": "node_update_disabled",
+                 "error": "该节点已禁用自动更新。"},
+            )
+            return
         if (component == "node" and node_update_owner in {"app_installer", "bundle_installer"}
                 and action != "status"):
             owner_label = ("Tether APP installer" if node_update_owner == "app_installer"
@@ -876,6 +897,9 @@ class Node:
                  "error_code": owner_error_code,
                  "error": f"Node runtime updates are managed by {owner_label}"},
             )
+            return
+        if component == "app" and node_update_owner == "app_installer":
+            await self._electron_app_update_call(msg, response_ws, action, req_id)
             return
         debian_node_update = (component == "node" and node_update_owner == DEBIAN_PACKAGE_UPDATE_OWNER)
         if debian_node_update and action not in {"status"}:
@@ -1087,6 +1111,68 @@ class Node:
                     self.update_applying = False
                     await self._send_update_result(response_ws, {"type": "update_ready"})
 
+    async def _electron_app_update_call(self, msg: dict[str, Any], response_ws: Any,
+                                        action: str, req_id: str) -> None:
+        """Route installer-owned APP updates through its authenticated Electron updater bridge."""
+        accepted_sent = False
+        try:
+            if action in {"status", "check", "prepare"}:
+                result = await asyncio.to_thread(self._app_update_bridge_request_sync, action)
+                await self._send_update_result(
+                    response_ws, {"type": "update_result", "req_id": req_id, **result})
+                last_result = result.get("last_result")
+                if (action == "status" and self.update_applying and isinstance(last_result, dict)
+                        and last_result.get("source") == "electron-updater"
+                        and last_result.get("ok") is False):
+                    self.update_applying = False
+                    await self._send_update_result(response_ws, {"type": "update_ready"})
+                return
+            if action != "apply":
+                raise UpdateError("invalid_update_request")
+            if self.update_applying:
+                await self._send_update_result(
+                    response_ws, {"type": "update_result", "req_id": req_id,
+                                  **self._update_in_progress("app")})
+                return
+            async with self.update_lock:
+                self.update_applying = True
+                busy = await asyncio.to_thread(self._update_busy_reason, "node")
+                if busy:
+                    self.update_applying = False
+                    await self._send_update_result(response_ws, {
+                        "type": "update_result", "req_id": req_id, "ok": False,
+                        "error_code": "update_busy",
+                        "error": "目标 Node 正在执行任务或传输，完成后重试。",
+                        "busy_reason": busy})
+                    await self._send_update_result(response_ws, {"type": "update_ready"})
+                    return
+                prepared_id = msg["prepared_id"]
+                accepted = await asyncio.to_thread(
+                    self._app_update_bridge_request_sync, "apply", prepared_id, "accept")
+                accepted["status"] = "installing"
+                accepted["restart_required"] = True
+                sent = await self._send_update_result(
+                    response_ws, {"type": "update_result", "req_id": req_id, **accepted})
+                if not sent:
+                    self.update_applying = False
+                    return
+                accepted_sent = True
+                # Controller has now received the accepted job result. The APP bridge
+                # flushes its acknowledgement before stopping this managed Node.
+                await asyncio.to_thread(
+                    self._app_update_bridge_request_sync, "apply", prepared_id, "commit")
+        except Exception as exc:  # noqa: BLE001 - keep the Node reader alive on updater failures
+            code = getattr(exc, "code", "update_failed")
+            message = getattr(exc, "message", "目标桌面 APP 更新失败。")
+            log(f"[update] {action} app failed: {code}")
+            if not accepted_sent:
+                await self._send_update_result(response_ws, {
+                    "type": "update_result", "req_id": req_id, "ok": False,
+                    "error_code": code, "error": message})
+            if action == "apply" and self.update_applying:
+                self.update_applying = False
+                await self._send_update_result(response_ws, {"type": "update_ready"})
+
     async def emit(self, run_id: str, kind: str, payload: dict[str, Any]) -> None:
         event = self.store.add_event(run_id, kind, payload)
         log(f"[{run_id}] {kind}: {json.dumps(payload, ensure_ascii=False)[:200]}")
@@ -1248,6 +1334,72 @@ class Node:
         finally:
             self.dsh_runs.pop(run_id, None)
 
+    def _app_update_bridge_request_sync(self, action: str, prepared_id: str | None = None,
+                                        phase: str | None = None, *, timeout: float | None = None) -> dict[str, Any]:
+        url = urllib.parse.urlsplit(self.app_update_bridge_url)
+        token = self.app_update_bridge_token
+        try:
+            valid_port = bool(url.port and 1 <= url.port <= 65535)
+        except ValueError:
+            valid_port = False
+        if (self.app_update_owner != "app_installer" or url.scheme != "http" or url.hostname != "127.0.0.1"
+                or not valid_port or url.path != "/v1/update" or url.query or url.fragment
+                or url.username or url.password or len(token) != 64
+                or any(char not in "0123456789abcdef" for char in token)):
+            error = UpdateError("app_update_bridge_unavailable")
+            error.message = "目标桌面 APP 未运行或更新服务暂不可用。"
+            raise error
+        if action not in {"status", "check", "prepare", "apply"}:
+            raise UpdateError("invalid_update_request")
+        payload: dict[str, Any] = {"action": action}
+        if action == "apply":
+            if not isinstance(prepared_id, str) or not prepared_id:
+                raise UpdateError("prepared_id_required")
+            payload["prepared_id"] = prepared_id
+            if phase is not None:
+                if phase not in {"accept", "commit"}:
+                    raise UpdateError("invalid_update_request")
+                payload["phase"] = phase
+        elif prepared_id is not None or phase is not None:
+            raise UpdateError("invalid_update_request")
+        body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+        request = urllib.request.Request(
+            self.app_update_bridge_url, data=body, method="POST",
+            headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"},
+        )
+        limits = {"status": 5.0, "check": 45.0, "prepare": 300.0, "apply": 150.0}
+        opener = urllib.request.build_opener(
+            urllib.request.ProxyHandler({}), _RejectUpdateBridgeRedirects())
+        try:
+            with opener.open(request, timeout=timeout or limits[action]) as response:
+                raw = response.read(256 * 1024 + 1)
+                if len(raw) > 256 * 1024:
+                    raise UpdateError("app_update_reply_too_large")
+                result = json.loads(raw.decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            try:
+                result = json.loads(exc.read(16 * 1024).decode("utf-8"))
+            except (ValueError, UnicodeError):
+                result = {}
+            code = str(result.get("error_code") or "app_update_bridge_failed")
+            message = str(result.get("error") or "目标桌面 APP 更新失败。")[:240]
+            error = UpdateError(code if code and all(ch.islower() or ch.isdigit() or ch == "_" for ch in code) else "app_update_bridge_failed")
+            error.message = message
+            raise error from None
+        except (OSError, TimeoutError, ValueError, UnicodeError):
+            error = UpdateError("app_update_bridge_unavailable")
+            error.message = "目标桌面 APP 未运行或更新服务暂不可用。"
+            raise error from None
+        if not isinstance(result, dict):
+            raise UpdateError("invalid_update_reply")
+        if result.get("ok") is not True:
+            code = str(result.get("error_code") or "app_update_bridge_failed")
+            message = str(result.get("error") or "目标桌面 APP 更新失败。")[:240]
+            error = UpdateError(code if code and all(ch.islower() or ch.isdigit() or ch == "_" for ch in code) else "app_update_bridge_failed")
+            error.message = message
+            raise error
+        return result
+
     def _make_app_update_manager(self, manifest_url: str | None = None) -> UpdateManager:
         binding = load_app_installation(self.url, self.device, self.token)
         root = binding["root"] if binding else ROOT
@@ -1268,11 +1420,22 @@ class Node:
         self.update_managers["app"] = manager
 
     def _app_heartbeat_fields(self) -> dict[str, Any]:
+        if self.app_update_owner == "app_installer":
+            try:
+                status = self._app_update_bridge_request_sync("status", timeout=2.0)
+                version = str(status.get("current_version") or "")
+                _semver(version)
+                return {"app_version": version, "app_installed": True,
+                        "app_update_owner": "electron_updater", "app_update_bridge_available": True}
+            except Exception:
+                return {"app_version": "", "app_installed": False,
+                        "app_update_owner": "electron_updater", "app_update_bridge_available": False}
         self._refresh_app_update_manager()
         manager = self.update_managers["app"]
         binding = load_app_installation(self.url, self.device, self.token, manager.root)
         if binding is None and manager.app_binding_required:
-            return {"app_version": "", "app_installed": False}
+            return {"app_version": "", "app_installed": False,
+                    "app_update_owner": "node_zip", "app_update_bridge_available": False}
         try:
             installed = str((binding or {}).get("installed_version") or _versions_from_root(manager.root).get("app", ""))
             manager._app_restart_state()
@@ -1281,7 +1444,8 @@ class Node:
             version = ""
             installed = ""
         return {"app_version": version,
-                "app_installed": bool(binding) or (bool(installed) and not manager.app_binding_required)}
+                "app_installed": bool(binding) or (bool(installed) and not manager.app_binding_required),
+                "app_update_owner": "node_zip", "app_update_bridge_available": False}
 
     def _managed_app_version(self) -> str:
         return str(self._app_heartbeat_fields().get("app_version") or "")
@@ -1306,7 +1470,8 @@ class Node:
             debian_package_update = self.debian_package_update_capability or {
                 "available": False, "reason": "not_checked",
                 "transaction": self.debian_package_update_status}
-        node_self_update_enabled = node_update_owner not in {"app_installer", "bundle_installer"}
+        node_self_update_enabled = (os.environ.get("TETHER_NODE_SELF_UPDATE_ENABLED") != "0"
+                                    and node_update_owner not in {"app_installer", "bundle_installer"})
         if node_update_owner == DEBIAN_PACKAGE_UPDATE_OWNER:
             node_self_update_enabled = bool(debian_package_update and debian_package_update.get("available"))
         installed = [name for name, version in (("app", app_version), ("plugin", plugin_version)) if version]
@@ -1337,6 +1502,8 @@ class Node:
                 "surface_data_protocol": 1,
                 "app_version": app_version,
                 "app_installed": app_fields["app_installed"],
+                "app_update_owner": app_fields.get("app_update_owner", "node_zip"),
+                "app_update_bridge_available": app_fields.get("app_update_bridge_available", False),
                 "plugin_version": plugin_version,
                 "installed_products": installed,
                 "dsh_installed": dsh_desktop["installed"],

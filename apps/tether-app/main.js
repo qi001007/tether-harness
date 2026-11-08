@@ -72,7 +72,7 @@ if (packaged) {
   env.TETHER_SFTPGO_COMPONENT_DIR = path.join(runtimeRoot, 'components', 'sftpgo')
   env.TETHER_CADDY = packagedExecutable('caddy', 'caddy' + exe)
   env.TETHER_RCLONE = packagedExecutable('rclone', 'rclone' + exe)
-  env.TETHER_UPDATE_CHANNEL = env.TETHER_UPDATE_CHANNEL || (candidateMode ? 'preview' : 'stable')
+  if (candidateMode && !env.TETHER_UPDATE_CHANNEL) env.TETHER_UPDATE_CHANNEL = 'preview'
   env.TETHER_EASYTIER_CORE = packagedExecutable('easytier', 'easytier-core' + exe)
   env.TETHER_EASYTIER_CLI = packagedExecutable('easytier', 'easytier-cli' + exe)
   env.TETHER_NODEJS_EXE = process.platform === 'win32'
@@ -168,6 +168,7 @@ const { enrollmentDecision } = require('./enrollment.js')
 const supervisor = new Supervisor({ repoRoot, dataDir, env, preserveManagedNodeOnExit: packaged })
 const updates = new UpdateService({ repoRoot, dataDir, python: supervisor.childPython, env, app,
   stopManagedNode: () => packaged ? supervisor.stopManagedNode() : Promise.resolve({ stopped: false }) })
+let appUpdateBridgeStarted = false
 let uiOrigin = ''
 
 function log(line) {
@@ -272,6 +273,17 @@ function logRendererNetworkFailure(event, details) {
 
 async function createWindow() {
   ensureAppShortcuts()
+  if (packaged && !appUpdateBridgeStarted) {
+    try {
+      const bridge = await updates.startAppUpdateBridge()
+      if (bridge) {
+        supervisor.setAppUpdateBridge(bridge)
+        appUpdateBridgeStarted = true
+      }
+    } catch (error) {
+      log('APP update bridge unavailable code=' + String(error && error.code || 'bridge_start_failed').slice(0, 64))
+    }
+  }
   const startupResult = await waitForSupervisorStart(supervisor.start())
   if (!startupResult.completed) log('services startup wait timed out; loading UI')
   else if (startupResult.error) log('services failed ' + (startupResult.error.stack || startupResult.error))
@@ -1041,6 +1053,7 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   isQuitting = true
   if (appBindingWatcher) { appBindingWatcher.close(); appBindingWatcher = null }
+  updates.closeAppUpdateBridge()
   supervisor.stopSync()
   if (webServer) webServer.close()
   if (tray) { tray.destroy(); tray = null }
