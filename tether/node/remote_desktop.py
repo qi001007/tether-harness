@@ -20,6 +20,7 @@ import tempfile
 import threading
 import time
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import parse_qs, urlencode, urlsplit
@@ -48,6 +49,7 @@ class MeshCentralDesktop:
 
     MAX_SHARE_SECONDS = 3600
     DEFAULT_SHARE_SECONDS = 1800
+    NATIVE_SHARE_SECONDS = 24 * 60 * 60
 
     def __init__(self, *, node_executable: str | Path, meshcentral_root: str | Path,
                  meshagent_executable: str | Path, data_dir: str | Path, target_id: str,
@@ -115,11 +117,17 @@ class MeshCentralDesktop:
         """
         grant = self._validate_authority(authority)
         duration = self._validate_duration(duration_seconds)
+        native_duration = max(duration, self.NATIVE_SHARE_SECONDS)
         with self._lock:
             shares = self._load_shares()
             existing = shares.get(grant["grant_id"])
             if existing and existing.get("operation_id") == grant["operation_id"]:
-                if existing.get("expires_at", 0) <= int(time.time()):
+                created_at = existing.get("created_at")
+                expires_at = existing.get("expires_at")
+                if (type(created_at) is not int or type(expires_at) is not int
+                        or expires_at > created_at + self.NATIVE_SHARE_SECONDS):
+                    raise RemoteDesktopError("native_session_limit_invalid", "远程桌面会话时限记录无效。")
+                if expires_at <= int(time.time()):
                     raise RemoteDesktopError("grant_expired", "远程桌面授权已过期。")
                 self._match_grant(existing, grant)
                 if not self._native_share_exists(existing):
@@ -142,7 +150,7 @@ class MeshCentralDesktop:
             unattended = bool(grant.get("owner_unattended_enabled") is True and self.owner_unattended_enabled())
             consent = "none" if unattended else "prompt"
             guest_name = "Tether-" + grant["grant_id"][:12]
-            minutes = duration // 60
+            minutes = native_duration // 60
             args = ["DeviceSharing", "--id", node_id, "--add", guest_name,
                     "--type", "desktop", "--consent", consent, "--duration", str(minutes)]
             if view_only:
@@ -162,7 +170,7 @@ class MeshCentralDesktop:
                     "grant_id": grant["grant_id"], "authorization_revision": grant["authorization_revision"],
                     "operation_id": grant["operation_id"], "mesh_node_id": node_id,
                     "share_id": share_id, "guest_path": guest_path, "created_at": now,
-                    "expires_at": now + duration, "consent": consent, "view_only": view_only,
+                    "expires_at": now + native_duration, "consent": consent, "view_only": view_only,
                     "view_only_reason": self._reason_code(state.get("busy_reason"), "agent_busy") if view_only else ""}
             shares[grant["grant_id"]] = item
             self._save_shares(shares)
@@ -203,22 +211,22 @@ class MeshCentralDesktop:
             return {"state": "revoked", "grant_id": grant["grant_id"], "connections_closed": True}
 
     def renew(self, authority: dict[str, Any], *, duration_seconds: int) -> dict[str, Any]:
-        """Rotate the native share for the same Controller grant before expiry.
-
-        A new native guest capability is created first; the previous capability
-        is then revoked and MeshCentral confirms its relay closure. The caller
-        must update its service descriptor to the returned guest_path.
-        """
+        """Keep the bounded native share stable while renewing the shorter Hub lease."""
         grant = self._validate_authority(authority)
-        duration = self._validate_duration(duration_seconds)
+        self._validate_duration(duration_seconds)
         with self._lock:
             shares = self._load_shares()
             old = shares.get(grant["grant_id"])
             if not old:
                 raise RemoteDesktopError("grant_missing", "远程桌面授权记录不存在。")
             self._match_grant(old, grant)
-            if old.get("expires_at", 0) <= int(time.time()):
-                raise RemoteDesktopError("grant_expired", "远程桌面共享已过期，请重新授权。")
+            created_at = old.get("created_at")
+            native_expires_at = old.get("expires_at")
+            if (type(created_at) is not int or type(native_expires_at) is not int
+                    or native_expires_at > created_at + self.NATIVE_SHARE_SECONDS):
+                raise RemoteDesktopError("native_session_limit_invalid", "远程桌面会话时限记录无效。")
+            if native_expires_at <= int(time.time()):
+                raise RemoteDesktopError("native_session_expired", "远程桌面会话已达到24小时上限，请重新打开会话。")
             state = self._device_state()
             if state is None or not state.get("desktop_supported"):
                 raise RemoteDesktopError("desktop_unsupported", "目标桌面状态不可用，无法续期。")
@@ -227,11 +235,25 @@ class MeshCentralDesktop:
             record = self._load_record()
             if not self._native_node_connected(old["mesh_node_id"]):
                 raise RemoteDesktopError("mesh_agent_offline", "MeshCentral 原生 Agent 当前离线。")
-            consent = old["consent"]
+            if not self._native_share_exists(old):
+                raise RemoteDesktopError("grant_revoked", "MeshCentral 已撤销此桌面共享。")
+            unattended = bool(grant.get("owner_unattended_enabled") is True and self.owner_unattended_enabled())
+            requested_consent = "none" if unattended else "prompt"
+            was_view_only = old.get("view_only") is True
+            permission_restriction = (not was_view_only and state["busy"]) or (
+                old.get("consent") == "none" and requested_consent == "prompt")
+            if not permission_restriction:
+                return self._public_share(old)
+
+            # Renewal only replaces a native link when the current desktop state
+            # requires a stricter grant. Permission relaxation waits for a new open.
+            consent = "prompt" if old.get("consent") == "prompt" or requested_consent == "prompt" else "none"
+            view_only = was_view_only or bool(state["busy"])
             guest_name = "Tether-" + grant["grant_id"][:12]
+            expires_at = datetime.fromtimestamp(native_expires_at, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
             args = ["DeviceSharing", "--id", old["mesh_node_id"], "--add", guest_name,
-                    "--type", "desktop", "--consent", consent, "--duration", str(duration // 60)]
-            if state["busy"]:
+                    "--type", "desktop", "--consent", consent, "--end", expires_at]
+            if view_only:
                 args.append("--viewonly")
             output = self._meshctrl(record, args)
             share_id = self._output_value(output, "ID")
@@ -240,9 +262,9 @@ class MeshCentralDesktop:
                 raise RemoteDesktopError("share_create_failed", "MeshCentral 未返回有效桌面共享。")
             guest_path = self._guest_path(share_url)
             renewed = {**old, "share_id": share_id, "guest_path": guest_path,
-                       "created_at": int(time.time()), "expires_at": int(time.time()) + duration,
-                       "view_only": bool(state["busy"]),
-                       "view_only_reason": self._reason_code(state.get("busy_reason"), "agent_busy") if state["busy"] else ""}
+                       "created_at": int(time.time()), "expires_at": native_expires_at,
+                       "consent": consent, "view_only": view_only,
+                       "view_only_reason": self._reason_code(state.get("busy_reason"), "agent_busy") if state["busy"] else old.get("view_only_reason", "")}
             self._meshctrl(record, ["DeviceSharing", "--id", old["mesh_node_id"], "--remove", old["share_id"]])
             if self._native_share_exists(old):
                 self._meshctrl(record, ["DeviceSharing", "--id", old["mesh_node_id"], "--remove", share_id])
@@ -599,7 +621,7 @@ class MeshCentralDesktop:
                                "allowFraming": False,
                                "agentconfig": ["nocertstore=1", "disableUpdate=1", "noUpdateCoreModule=1"],
                                "agentdownloads": {"enabled": False}, "selfUpdate": False},
-        "domains": {"": {"guestDeviceSharing": {"maxSessionTime": 60}}}}
+        "domains": {"": {"guestDeviceSharing": {"maxSessionTime": self.NATIVE_SHARE_SECONDS // 60}}}}
         self._atomic_json(self.config_path, config)
 
     def _health(self, record: dict[str, Any]) -> bool:

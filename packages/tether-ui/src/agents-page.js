@@ -865,7 +865,8 @@ function AgentTargetPage({ React, Glyph, post, C, host, devices = [], localDevic
       serviceView && serviceView.serviceId === 'desktop' && activePane === (serviceView.paneKey || 'codeg:home')
         ? h('div', { role: 'status', style: { marginLeft: 'auto', color: C.sub, fontSize: 11.5 } },
           serviceView.viewOnly ? '只读视图' + (serviceView.viewOnlyReason ? ' · ' + serviceView.viewOnlyReason : '')
-            : serviceView.consent === 'none' ? '已启用无人值守授权' : '等待目标用户确认') : null,
+            : serviceView.consent === 'none' ? '已启用无人值守授权' : '等待目标用户确认',
+          Number.isFinite(serviceView.nativeSessionExpiresAt) ? ' · 会话最晚 ' + new Date(serviceView.nativeSessionExpiresAt).toLocaleString() + ' 结束' : '') : null,
       serviceView && activePane === (serviceView.paneKey || 'codeg:home') ? h('button', { type: 'button', onClick: () => void (serviceView.serviceId === 'desktop' ? closeNativeDesktop() : closeNativeCodeg()),
         style: { marginLeft: serviceView.serviceId === 'desktop' ? 10 : 'auto', height: 28, padding: '0 10px', border: '1px solid ' + C.line, borderRadius: 8,
           background: C.bg, color: C.sub, fontSize: 11.5, cursor: 'pointer' }

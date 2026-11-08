@@ -10,6 +10,7 @@ import os
 import secrets
 import shutil
 import ssl
+import socket
 import subprocess
 import threading
 import time
@@ -214,10 +215,14 @@ class ServiceAccess:
                     raise ServiceAccessError(getattr(exc, "code", "grant_missing"),
                                              "native desktop share could not be verified") from exc
                 if status.get("state") != "ready":
+                    if status.get("state") == "expired":
+                        raise ServiceAccessError("native_session_expired", "native desktop session has reached its 24-hour limit")
+                    if status.get("state") == "revoked":
+                        raise ServiceAccessError("grant_revoked", "native desktop share has been revoked")
                     raise ServiceAccessError("grant_missing", "native desktop share is no longer active")
-                if lease_expires_at > int(status.get("expires_at") or 0):
-                    raise ServiceAccessError("native_share_renewal_required",
-                                             "native desktop share must be renewed before extending its lease")
+                lease_expires_at = min(lease_expires_at, int(status.get("expires_at") or 0))
+                if lease_expires_at <= now:
+                    raise ServiceAccessError("native_session_expired", "native desktop session has reached its 24-hour limit")
             with self._lock:
                 if (self._worker_for(actor_id, service_id, grant_id) is not reuse or
                         grant_id in self.tombstones or not self._worker_alive(reuse)):
@@ -723,7 +728,8 @@ class ServiceAccess:
         manager_port = int(getattr(self, "_manager_port", 0))
         config_path = config_dir / "Caddyfile"
         config = self._render_caddyfile(mesh_ip, port, upstream, manager_port,
-                                       worker_secret, self.ca_storage, service_id=service_id)
+                                        worker_secret, self.ca_storage, worker_log_path=config_dir / "caddy-runtime.log",
+                                        service_id=service_id)
         config_path.write_text(config, encoding="utf-8")
         try:
             os.chmod(config_path, 0o600)
@@ -762,8 +768,10 @@ class ServiceAccess:
 
     @staticmethod
     def _render_caddyfile(mesh_ip: str, worker_port: int, upstream: dict[str, Any], manager_port: int,
-                          worker_secret: str, ca_storage: Path, *, service_id: str = "") -> str:
+                          worker_secret: str, ca_storage: Path, *, worker_log_path: Path,
+                          service_id: str = "") -> str:
         quoted_storage = json.dumps(str(ca_storage).replace("\\", "/"), ensure_ascii=False)
+        quoted_log = json.dumps(str(worker_log_path).replace("\\", "/"), ensure_ascii=False)
         upstream_address = f"{upstream['scheme']}://{upstream['host']}:{int(upstream['port'])}"
         transport = ""
         if upstream["scheme"] == "https":
@@ -782,9 +790,12 @@ class ServiceAccess:
         strip_set_cookie = "" if service_id == "desktop" else "   header_down -Set-Cookie\n"
         upstream_host = ("{http.request.hostport}" if service_id == "files"
                          else "{http.request.host}")
-        return ("{\n admin off\n auto_https disable_redirects\n skip_install_trust\n storage file_system {\n"
+        return ("{\n admin off\n auto_https disable_redirects\n"
+                " log {\n  output file " + quoted_log + " {\n   mode 0600\n"
+                "   roll_size 1MiB\n   roll_keep 2\n   roll_keep_for 24h\n  }\n  format json\n }\n"
+                f" default_sni {mesh_ip}\n skip_install_trust\n storage file_system {{\n"
                 f"  root {quoted_storage}\n }}\n}}\n"
-                f"https://{mesh_ip}:{worker_port} {{\n bind {mesh_ip}\n tls internal\n"
+                f"https://{mesh_ip}:{worker_port} {{\n bind 127.0.0.1\n tls internal\n"
                 f" route /__tether/bootstrap {{\n  reverse_proxy 127.0.0.1:{manager_port}\n }}\n"
                 f" route /__tether/view {{\n  reverse_proxy 127.0.0.1:{manager_port}\n }}\n"
                 " route {\n"
@@ -820,45 +831,41 @@ class ServiceAccess:
         if worker.service_id == "desktop" and isinstance(share, dict):
             descriptor.update({"consent": share.get("consent", "prompt"),
                                "view_only": bool(share.get("view_only")),
-                               "view_only_reason": share.get("view_only_reason", "")})
+                               "view_only_reason": share.get("view_only_reason", ""),
+                               "native_session_expires_at": int(share.get("expires_at") or 0)})
         return descriptor
 
     def _health_check(self, worker: _Worker, _url: str) -> None:
         deadline = time.monotonic() + 20
         root_ca = self.ca_storage / "pki" / "authorities" / "local" / "root.crt"
-        unverified = ssl._create_unverified_context()
         while time.monotonic() < deadline and self._worker_alive(worker):
             try:
-                request = urllib.request.Request(worker.origin + "/", headers={"X-Tether-Worker": worker.worker_secret})
-                try:
-                    with urllib.request.urlopen(request, timeout=1, context=unverified) as response:
-                        if response.status == 401:
-                            break
-                except urllib.error.HTTPError as exc:
-                    if exc.code == 401:
-                        break
+                if not root_ca.is_file():
+                    time.sleep(0.2)
+                    continue
+                context = ssl.create_default_context(cafile=str(root_ca))
+                with socket.create_connection(("127.0.0.1", worker.port), timeout=1) as raw:
+                    with context.wrap_socket(raw, server_hostname=worker.mesh_ip) as tls:
+                        request = (f"GET / HTTP/1.1\r\nHost: {worker.mesh_ip}:{worker.port}\r\n"
+                                   f"X-Tether-Worker: {worker.worker_secret}\r\nConnection: close\r\n\r\n")
+                        tls.sendall(request.encode("ascii"))
+                        status_line = tls.makefile("rb").readline(512).decode("ascii", errors="replace")
+                        parts = status_line.split()
+                        if len(parts) > 1 and parts[1].isdigit() and int(parts[1]) == 401:
+                            return
             except Exception:
                 time.sleep(0.25)
-        else:
-            raise ServiceAccessError("caddy_health_failed", "Caddy worker did not become ready")
-        if not root_ca.is_file():
-            raise ServiceAccessError("caddy_ca_missing", "Caddy did not persist its internal root CA")
-        context = ssl.create_default_context(cafile=str(root_ca))
-        try:
-            request = urllib.request.Request(worker.origin + "/", headers={"X-Tether-Worker": worker.worker_secret})
-            try:
-                urllib.request.urlopen(request, timeout=2, context=context).close()
-            except urllib.error.HTTPError as exc:
-                if exc.code != 401:
-                    raise
-        except Exception as exc:
-            raise ServiceAccessError("caddy_tls_failed", "Caddy listener failed trusted internal TLS verification") from exc
+        raise ServiceAccessError("caddy_health_failed", "Caddy worker did not become ready over trusted loopback TLS")
 
     def _free_port(self, mesh_ip: str) -> int:
-        import socket
-        with socket.socket() as sock:
-            sock.bind((mesh_ip, 0))
-            return int(sock.getsockname()[1])
+        for port in range(52000, 52064):
+            with socket.socket() as sock:
+                try:
+                    sock.bind(("127.0.0.1", port))
+                    return port
+                except OSError:
+                    continue
+        raise ServiceAccessError("caddy_port_pool_exhausted", "reserved Caddy service port range is unavailable")
 
     @staticmethod
     def _worker_alive(worker: _Worker) -> bool:

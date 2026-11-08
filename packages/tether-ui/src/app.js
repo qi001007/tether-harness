@@ -846,6 +846,30 @@ export function MinimalUpdateButton({ React, h, api, post, deviceId, localDevice
       setError((cause && (cause.message || cause.code)) || '更新启动失败')
     }
   }
+  const retry = async () => {
+    const retryJobId = job && job.job_id
+    const retryScope = { deviceId, hubUrl, originProduct }
+    const isCurrentScope = () => mountedRef.current
+      && scopeRef.current.deviceId === retryScope.deviceId
+      && scopeRef.current.hubUrl === retryScope.hubUrl
+      && scopeRef.current.originProduct === retryScope.originProduct
+    if (typeof retryJobId !== 'string' || !retryJobId) {
+      setError('当前更新任务缺少标识，无法安全重试。请重新检查更新状态。')
+      return
+    }
+    setError('')
+    setDetailsOpen(true)
+    try {
+      const retried = await apiRef.current(devicePath + '/update/retry', {
+        method: 'POST', body: JSON.stringify({ job_id: retryJobId })
+      }, hubUrl)
+      if (!isCurrentScope()) return
+      setJob(retried)
+    } catch (cause) {
+      if (!isCurrentScope()) return
+      setError((cause && (cause.message || cause.code)) || '更新重试失败')
+    }
+  }
   if (!hubUrl || !devicePath) return null
   const available = !!(summary && summary.update_available)
   if (!available && !job) return null
@@ -870,7 +894,7 @@ export function MinimalUpdateButton({ React, h, api, post, deviceId, localDevice
     error ? h('div', { role: 'alert', style: { color: C.red, fontSize: 12, textAlign: 'center' } }, error) : null,
     h('div', { style: { display: 'flex', justifyContent: 'center', gap: 8 } },
       job.status === 'error' ? h('button', {
-        type: 'button', onClick: start,
+        type: 'button', onClick: retry,
         style: { border: 0, borderRadius: 7, background: C.blue, color: '#fff', padding: '7px 18px', fontSize: 12, cursor: 'pointer' }
       }, '重试') : null,
       job.status === 'error' || (activeJob && remoteTarget) ? h('button', {

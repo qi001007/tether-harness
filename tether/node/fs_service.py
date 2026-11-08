@@ -22,6 +22,7 @@ import shutil
 import sqlite3
 import time
 import threading
+import uuid
 import zipfile
 import xml.etree.ElementTree as ET
 import time
@@ -86,6 +87,24 @@ def _inside(candidate: Path, root: Path) -> bool:
     try:
         return os.path.commonpath([_norm(candidate), _norm(root)]) == _norm(root)
     except ValueError:
+        return False
+
+
+def _mesh_uuid_hex(value: Any) -> str:
+    raw = str(value or "")
+    try:
+        parsed = uuid.UUID(raw)
+    except (ValueError, TypeError, AttributeError) as exc:
+        raise FsError("invalid EasyTier UUID", "bad_network_id") from exc
+    if raw not in {parsed.hex, str(parsed)}:
+        raise FsError("invalid EasyTier UUID", "bad_network_id")
+    return parsed.hex
+
+
+def _mesh_uuid_matches(value: Any, expected_hex: str) -> bool:
+    try:
+        return _mesh_uuid_hex(value) == expected_hex
+    except FsError:
         return False
 
 
@@ -543,7 +562,14 @@ class FsService:
         mesh_cli = os.environ.get("TETHER_EASYTIER_CLI", "")
         if mesh_core and mesh_cli:
             from .mesh_runtime import EasyTierRuntime
-            self.mesh_runtime = EasyTierRuntime(mesh_core, mesh_cli, data_dir / "managed-mesh")
+            mesh_data_root = data_dir / "managed-mesh"
+            record_root = None
+            if os.name != "nt" and hasattr(os, "geteuid") and os.geteuid() == 0:
+                mesh_data_root = Path("/var/lib/tether-easytier")
+                record_root = data_dir / "managed-mesh"
+            self.mesh_runtime = EasyTierRuntime(mesh_core, mesh_cli, mesh_data_root,
+                                                record_root=record_root)
+            self.transfer_jobs.socks_proxy_resolver = self._network_socks_proxy
         self.service_access = ServiceAccess(data_dir, target_id=device, agents_runtime=self.agents_runtime,
                                             dsh_web=self.dsh_web, network_address=self._network_address)
         try:
@@ -558,18 +584,38 @@ class FsService:
         if runtime is None:
             raise FsError("target is not connected to the selected EasyTier network", "network_not_connected")
         try:
+            expected_network_id = _mesh_uuid_hex(network_id)
             status = runtime.status_for_network(str(network_id))
         except Exception as exc:
             raise FsError("selected EasyTier network status is unavailable", "network_not_connected") from exc
-        if status.get("state") != "ready" or status.get("network_id") != str(network_id):
+        if (status.get("state") != "ready" or
+                not _mesh_uuid_matches(status.get("network_id"), expected_network_id)):
             raise FsError("target is not connected to the selected EasyTier network", "network_not_connected")
-        node = status.get("node")
-        raw_address = node.get("ipv4") if isinstance(node, dict) else None
+        raw_address = status.get("service_ip")
         try:
             address = ipaddress.IPv4Address(str(raw_address).split("/", 1)[0])
         except ipaddress.AddressValueError as exc:
-            raise FsError("selected EasyTier instance has no valid IPv4 address", "network_not_connected") from exc
+            raise FsError("selected EasyTier instance has no valid service address", "network_not_connected") from exc
+        if address not in ipaddress.IPv4Network("10.224.0.0/12"):
+            raise FsError("selected EasyTier instance has an invalid service address", "network_not_connected")
         return str(address)
+
+    def _network_socks_proxy(self, network_id: str) -> dict[str, Any]:
+        runtime = self.mesh_runtime
+        if runtime is None:
+            raise FsError("source network SOCKS route is unavailable", "network_not_connected")
+        try:
+            expected_network_id = _mesh_uuid_hex(network_id)
+            status = runtime.status_for_network(str(network_id))
+        except Exception as exc:
+            raise FsError("source network SOCKS route is unavailable", "network_not_connected") from exc
+        route = status.get("socks_proxy") if isinstance(status, dict) else None
+        if (status.get("state") != "ready" or
+                not _mesh_uuid_matches(status.get("network_id"), expected_network_id) or
+                not isinstance(route, dict) or route.get("host") != "127.0.0.1" or
+                type(route.get("port")) is not int or not 1 <= route["port"] <= 65535):
+            raise FsError("source network SOCKS route is not ready", "network_not_connected")
+        return {"host": route["host"], "port": route["port"]}
 
     def _resolve(self, raw: str | None) -> Path:
         if not raw:
@@ -686,12 +732,16 @@ class FsService:
                 raise FsError("missing Hub service authority", "trusted_hub_required")
             if (not authority.get("actor_id") or not authority.get("target_id") or
                     not authority.get("service_id") or not authority.get("grant_id") or
-                    not authority.get("operation_id") or not authority.get("authorization_revision")):
+                    not authority.get("operation_id") or not authority.get("authorization_revision") or
+                    not authority.get("network_id") or not authority.get("service_ip")):
                 raise FsError("invalid Hub service authority", "trusted_hub_required")
             if str(authority.get("target_id")) != self.device:
                 raise FsError("service authority targets another device", "wrong_target")
+            if (op in {"service_grant_issue", "service_grant_renew"} and
+                    authority.get("service_ip") != self._network_address(str(authority["network_id"]))):
+                raise FsError("service address does not match selected network", "mesh_service_ip_mismatch")
             reserved = {"actor_id", "target_id", "service_id", "grant_id", "operation_id", "authorization_revision",
-                        "issued_at", "expires_at", "kind"}
+                        "network_id", "service_ip", "issued_at", "expires_at", "kind"}
             if any(key in args for key in reserved):
                 raise FsError("service authority fields must be sent outside args", "trusted_hub_required")
             args = {**args, "_hub_authority": authority}
@@ -700,8 +750,13 @@ class FsService:
             if not isinstance(authority, dict) or authority.get("kind") != "hub_transfer":
                 raise FsError("missing Hub transfer authority", "trusted_hub_required")
             if (not authority.get("actor_id") or not authority.get("operation_id") or
-                    not authority.get("authorization_revision") or not authority.get("network_id")):
+                    not authority.get("authorization_revision") or not authority.get("network_id") or
+                    not authority.get("service_ip")):
                 raise FsError("invalid Hub transfer authority", "trusted_hub_required")
+            try:
+                service_ip = str(ipaddress.IPv4Address(str(authority["service_ip"])))
+            except ipaddress.AddressValueError as exc:
+                raise FsError("invalid trusted mesh service address", "trusted_hub_required") from exc
             now = int(time.time())
             try:
                 issued_at = int(authority["issued_at"]) if authority.get("issued_at") is not None else None
@@ -711,6 +766,9 @@ class FsService:
             if (issued_at is None or expires_at <= now or expires_at > now + 60 or
                     issued_at > now + 5 or expires_at > issued_at + 60):
                 raise FsError("Hub transfer authority expired", "authorization_expired")
+            if op in {"transfer_job_prepare", "transfer_job_start", "transfer_job_retry",
+                      "transfer_grant_issue"} and service_ip != self._network_address(str(authority["network_id"])):
+                raise FsError("transfer service address does not match selected network", "mesh_service_ip_mismatch")
             expected_device = authority.get("source_device_id") if op in {"transfer_grant_issue", "transfer_grant_revoke", "transfer_grant_renew", "transfer_move_finalize"} else authority.get("executor_device_id")
             if str(expected_device or "") != self.device:
                 raise FsError("transfer authority targets another device", "wrong_target")
@@ -752,7 +810,7 @@ class FsService:
     def _dispatch_hub_mesh(self, op: str, args: dict[str, Any], authority: dict[str, Any] | None) -> dict[str, Any]:
         if not isinstance(authority, dict) or authority.get("kind") != "hub_mesh":
             raise FsError("missing trusted Hub mesh authority", "trusted_hub_required")
-        required = ("actor_id", "target_id", "network_id", "instance_id", "operation_id",
+        required = ("actor_id", "target_id", "network_id", "instance_id", "operation_id", "service_ip",
                     "authorization_revision", "config_revision", "issued_at", "expires_at")
         if any(not authority.get(field) for field in required) or str(authority["target_id"]) != self.device:
             raise FsError("invalid Hub mesh authority", "trusted_hub_required")
@@ -770,19 +828,29 @@ class FsService:
         if self.mesh_runtime is None:
             raise FsError("EasyTier runtime is not installed", "mesh_runtime_missing")
         network_id, instance_id = str(authority["network_id"]), str(authority["instance_id"])
+        try:
+            normalized_network_id = _mesh_uuid_hex(network_id)
+            normalized_instance_id = _mesh_uuid_hex(instance_id)
+        except FsError as exc:
+            raise FsError("invalid Hub mesh UUID", "trusted_hub_required") from exc
         if op == "mesh_apply":
             config = authority.get("mesh_config")
             if (not isinstance(config, dict) or config.get("network_id") != network_id or
                     config.get("instance_id") != instance_id or config.get("revision") != config_revision):
                 raise FsError("trusted mesh configuration does not match its authority", "trusted_hub_required")
+            if config.get("service_ip") not in (None, authority["service_ip"]):
+                raise FsError("mesh service address does not match trusted authority", "trusted_hub_required")
             if set(authority) - set(required) - {"kind", "mesh_config"}:
                 raise FsError("unexpected fields in Hub mesh authority", "trusted_hub_required")
+            config = {**config, "service_ip": authority["service_ip"]}
             try:
                 current = self.mesh_runtime.status(instance_id)
             except Exception as exc:
                 raise FsError(str(exc), getattr(exc, "code", "mesh_runtime_error")) from exc
-            if (current.get("network_id") not in (None, network_id) or
-                    current.get("instance_id") not in (None, instance_id)):
+            if ((current.get("network_id") is not None and
+                 not _mesh_uuid_matches(current.get("network_id"), normalized_network_id)) or
+                    (current.get("instance_id") is not None and
+                     not _mesh_uuid_matches(current.get("instance_id"), normalized_instance_id))):
                 raise FsError("mesh instance identity changed", "mesh_network_mismatch")
             if current.get("state") == "ready" and current.get("revision") != config_revision:
                 if self._mesh_instance_busy(network_id):
@@ -799,25 +867,43 @@ class FsService:
                           else self.mesh_runtime.status(instance_id))
             except Exception as exc:
                 raise FsError(str(exc), getattr(exc, "code", "mesh_runtime_error")) from exc
-            if op == "mesh_status" and result.get("instance_id") not in (None, instance_id):
+            if (op == "mesh_status" and result.get("instance_id") is not None and
+                    not _mesh_uuid_matches(result.get("instance_id"), normalized_instance_id)):
                 raise FsError("selected network maps to another mesh instance", "mesh_instance_mismatch")
-            if result.get("network_id") is not None and result.get("network_id") != network_id:
+            if (result.get("network_id") is not None and
+                    not _mesh_uuid_matches(result.get("network_id"), normalized_network_id)):
                 raise FsError("mesh instance belongs to another network", "mesh_network_mismatch")
             if result.get("revision") is not None and result.get("revision") != config_revision:
                 raise FsError("mesh operation revision is stale", "stale_revision")
+            if result.get("state") == "ready" and result.get("service_ip") != authority["service_ip"]:
+                raise FsError("mesh service address does not match trusted authority", "mesh_service_ip_mismatch")
             if op == "mesh_remove":
                 reasons = self._mesh_busy_reasons(network_id)
                 if reasons:
                     raise FsError("EasyTier instance has active service or file operations", "mesh_busy")
                 if result.get("state") == "unverified":
                     raise FsError("mesh process identity cannot be verified for removal", "mesh_process_unverified")
+                pre_stop = result
                 try:
                     result = self.mesh_runtime.stop(instance_id)
                 except Exception as exc:
                     raise FsError(str(exc), getattr(exc, "code", "mesh_runtime_error")) from exc
-        if result.get("network_id") not in (None, network_id):
+                pre_stop_matches = (
+                    _mesh_uuid_matches(pre_stop.get("instance_id"), normalized_instance_id) and
+                    ((pre_stop.get("state") == "stopped" and
+                      pre_stop.get("network_id") is None and pre_stop.get("revision") is None) or
+                     (pre_stop.get("state") in {"ready", "stopped"} and
+                      _mesh_uuid_matches(pre_stop.get("network_id"), normalized_network_id) and
+                      pre_stop.get("revision") == config_revision))
+                )
+                if (pre_stop_matches and result.get("state") == "stopped" and
+                        _mesh_uuid_matches(result.get("instance_id"), normalized_instance_id)):
+                    result = {**result, "network_id": network_id, "revision": config_revision}
+        if (result.get("network_id") is not None and
+                not _mesh_uuid_matches(result.get("network_id"), normalized_network_id)):
             raise FsError("mesh runtime returned another network", "mesh_network_mismatch")
-        if result.get("instance_id") not in (None, instance_id):
+        if (result.get("instance_id") is not None and
+                not _mesh_uuid_matches(result.get("instance_id"), normalized_instance_id)):
             raise FsError("mesh runtime returned another instance", "mesh_instance_mismatch")
         if result.get("revision") not in (None, config_revision):
             raise FsError("mesh runtime did not apply the requested revision", "stale_revision")
@@ -826,6 +912,7 @@ class FsService:
         response = {"protocol": 1, "target_id": self.device, "network_id": network_id,
                 "instance_id": instance_id, "state": result.get("state", "unverified"),
                 "revision": result.get("revision"), "node": result.get("node"),
+                "service_ip": result.get("service_ip"),
                 "peers": result.get("peers")}
         if op == "mesh_status":
             reasons = self._mesh_busy_reasons(network_id)
@@ -1142,6 +1229,8 @@ class FsService:
             args["authorization_revision"] = authority.get("authorization_revision")
             args["network_id"] = authority.get("network_id")
             args["mesh_host"] = self._network_address(str(authority.get("network_id") or ""))
+            if args["mesh_host"] != str(authority.get("service_ip") or ""):
+                raise FsError("transfer service address does not match selected network", "mesh_service_ip_mismatch")
             return self.sftpgo_grants.issue(args)
         except GrantError as exc:
             raise FsError(str(exc), exc.code) from exc

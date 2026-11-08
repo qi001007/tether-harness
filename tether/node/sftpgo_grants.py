@@ -49,6 +49,7 @@ class SftpGoGrants:
         self.admin_password = os.environ.get("TETHER_SFTPGO_ADMIN_PASSWORD", "")
         self.sftp_port = int(os.environ.get("TETHER_SFTPGO_SFTP_PORT", "2022" if self._external else "0"))
         self.sftp_host = os.environ.get("TETHER_SFTPGO_SFTP_HOST", "127.0.0.1")
+        self.service_ip = ""
         self._availability_lock = threading.Lock()
         self._availability_at = 0.0
         self._availability = False
@@ -89,6 +90,15 @@ class SftpGoGrants:
             sock.bind((host, 0))
             return int(sock.getsockname()[1])
 
+    @staticmethod
+    def _port_available(host: str, port: int) -> bool:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            try:
+                sock.bind((host, port))
+                return True
+            except OSError:
+                return False
+
     def _load_admin(self) -> dict[str, Any] | None:
         try:
             value = json.loads(self.admin_path.read_text(encoding="utf-8"))
@@ -123,6 +133,7 @@ class SftpGoGrants:
             self.admin_user = str((admin or {}).get("username") or "")
             self.admin_password = str((admin or {}).get("password") or "")
             self.sftp_host = str(state["sftp_host"])
+            self.service_ip = str(state.get("service_ip") or "")
             self.sftp_port = int(state["sftp_port"])
             return True
         except Exception:
@@ -131,7 +142,7 @@ class SftpGoGrants:
     def _ensure_managed(self, mesh_host: str | None = None) -> None:
         with self._managed_lock:
             if self._owned_process():
-                if mesh_host is None or self.sftp_host == mesh_host:
+                if mesh_host is None or self.service_ip == mesh_host:
                     return
                 if self.has_active_grants() or (self.transfer_jobs is not None and self.transfer_jobs.has_active_jobs()):
                     raise GrantError("mesh_busy", "SFTPGo cannot change its network binding during an active transfer")
@@ -163,13 +174,16 @@ class SftpGoGrants:
                     pass
                 os.replace(temp_admin, self.admin_path)
             admin_port = self._free_port("127.0.0.1")
-            self.sftp_host = mesh_host
-            self.sftp_port = self._free_port(mesh_host)
+            if not self._port_available("127.0.0.1", 20222):
+                raise GrantError("sftp_port_conflict", "reserved SFTP service port 20222 is already in use")
+            self.sftp_host = "127.0.0.1"
+            self.service_ip = mesh_host
+            self.sftp_port = 20222
             provider = config.setdefault("data_provider", {})
             provider.update({"driver": "sqlite", "name": str(self.instance_dir / "sftpgo.db"),
                              "create_default_admin": True, "update_mode": 0})
             config.setdefault("sftpd", {}).update({
-                "bindings": [{"address": mesh_host, "port": self.sftp_port}],
+                "bindings": [{"address": "127.0.0.1", "port": self.sftp_port}],
                 "host_keys": [str(self.instance_dir / "id_ed25519")],
                 "password_authentication": False,
                 "keyboard_interactive_authentication": False, "enabled_ssh_commands": [],
@@ -214,7 +228,8 @@ class SftpGoGrants:
                 identity = psutil.Process(self._process.pid)
                 state = {"version": 1, "pid": identity.pid, "create_time": identity.create_time(),
                          "exe": identity.exe(), "admin_port": admin_port,
-                         "sftp_host": mesh_host, "sftp_port": self.sftp_port}
+                         "sftp_host": self.sftp_host, "service_ip": mesh_host,
+                         "sftp_port": self.sftp_port}
             except (OSError, ImportError) as exc:
                 self._process.terminate()
                 raise GrantError("sftpgo_start_failed", "SFTPGo process identity could not be recorded") from exc
@@ -231,7 +246,7 @@ class SftpGoGrants:
                     raise GrantError("sftpgo_start_failed", "the owned SFTPGo core exited before becoming ready")
                 try:
                     self._api("GET", "/version")
-                    with socket.create_connection((mesh_host, self.sftp_port), timeout=0.5):
+                    with socket.create_connection(("127.0.0.1", self.sftp_port), timeout=0.5):
                         return
                 except (GrantError, OSError, ValueError):
                     time.sleep(0.2)

@@ -1,8 +1,10 @@
 'use strict'
 
 const crypto = require('node:crypto')
+const net = require('node:net')
 const tls = require('node:tls')
 const { X509Certificate } = require('node:crypto')
+const { SocksClient } = require('socks')
 
 const SERVICE_IDS = new Set(['dsh', 'codeg', 'herdr', 'files', 'desktop'])
 
@@ -68,6 +70,10 @@ function verifyEndpoint(descriptor, targetId, serviceId) {
     if (!['prompt', 'none'].includes(descriptor.consent) || typeof descriptor.view_only !== 'boolean') {
       throw new Error('服务端返回的远程桌面授权状态无效。')
     }
+    if (!Number.isFinite(expiryMillis(descriptor.native_session_expires_at))
+        || expiryMillis(descriptor.native_session_expires_at) <= Date.now()) {
+      throw new Error('远程桌面会话缺少有效的到期时间。')
+    }
   }
   const origin = new URL('/', endpoint)
   const bootstrap = descriptor.bootstrap
@@ -85,19 +91,63 @@ function verifyEndpoint(descriptor, targetId, serviceId) {
   const actualCa = sha256(Buffer.from(caPem, 'utf8'))
   if (actualCa !== expectedCa) throw new Error('工作台 TLS 根证书指纹不匹配。')
   if (String(descriptor.tls.epoch || '') !== actualCa.slice(0, 16)) throw new Error('工作台 TLS 信任版本与根证书不匹配。')
-  return { endpoint, origin, bootstrapUrl, caPem, epoch: descriptor.tls.epoch }
+  if (typeof descriptor.network_id !== 'string' || !descriptor.network_id) {
+    throw new Error('服务端没有提供可信网络标识。')
+  }
+  return { endpoint, origin, bootstrapUrl, caPem, epoch: descriptor.tls.epoch,
+    networkId: descriptor.network_id,
+    nativeSessionExpiresAt: serviceId === 'desktop' ? expiryMillis(descriptor.native_session_expires_at) : null }
 }
 
-async function verifyMeshCertificate(endpoint, caPem, expectedLeaf) {
+function validateSourceRoute(route, networkId, sourceDeviceId) {
+  const proxy = route && route.socks_proxy
+  if (!route || route.protocol !== 1 || route.state !== 'ready'
+      || route.network_id !== networkId || route.device_id !== sourceDeviceId
+      || !proxy || proxy.host !== '127.0.0.1' || !Number.isInteger(proxy.port)
+      || proxy.port < 1 || proxy.port > 65535) {
+    throw new Error('本机没有就绪的目标网络 SOCKS 路由。')
+  }
+  return { host: proxy.host, port: proxy.port }
+}
+
+async function verifyMeshCertificate(endpoint, caPem, proxy, expectedLeaf) {
   const peer = await new Promise((resolve, reject) => {
     const port = Number(endpoint.port || 443)
-    const socket = tls.connect({ host: endpoint.hostname, port, ca: caPem, rejectUnauthorized: true }, () => {
-      const certificate = socket.getPeerCertificate(true)
-      socket.end()
-      resolve(certificate)
-    })
-    socket.setTimeout(5000, () => socket.destroy(new Error('工作台 TLS 握手超时。')))
-    socket.once('error', reject)
+    let secureSocket = null
+    let settled = false
+    const timeout = setTimeout(() => {
+      if (secureSocket) secureSocket.destroy(new Error('工作台 TLS 握手超时。'))
+      finish(reject, new Error('工作台 SOCKS/TLS 连接超时。'))
+    }, 5000)
+    const finish = (callback, value) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timeout)
+      callback(value)
+    }
+    SocksClient.createConnection({
+      proxy: { host: proxy.host, port: proxy.port, type: 5 },
+      command: 'connect',
+      destination: { host: endpoint.hostname, port },
+      timeout: 5000
+    }).then(({ socket }) => {
+      if (settled) { socket.destroy(); return }
+      try {
+        secureSocket = tls.connect({ socket, host: endpoint.hostname,
+          servername: net.isIP(endpoint.hostname) ? undefined : endpoint.hostname,
+          ca: caPem, rejectUnauthorized: true })
+        secureSocket.setTimeout(5000, () => secureSocket.destroy(new Error('工作台 TLS 握手超时。')))
+        secureSocket.once('secureConnect', () => {
+          const certificate = secureSocket.getPeerCertificate(true)
+          secureSocket.end()
+          finish(resolve, certificate)
+        })
+        secureSocket.once('error', (error) => finish(reject, error))
+      } catch (error) {
+        socket.destroy()
+        finish(reject, error)
+      }
+    }).catch((error) => finish(reject, error))
   })
   if (!peer || !peer.raw) throw new Error('工作台没有返回有效 TLS 证书。')
   const current = sha256(peer.raw)
@@ -105,7 +155,7 @@ async function verifyMeshCertificate(endpoint, caPem, expectedLeaf) {
   return current
 }
 
-function installCertificatePin(serviceSession, endpoint, caPem) {
+function installCertificatePin(serviceSession, endpoint, caPem, proxy) {
   const expectedHost = endpoint.hostname.toLowerCase()
   serviceSession.setCertificateVerifyProc((request, callback) => {
     try {
@@ -118,7 +168,7 @@ function installCertificatePin(serviceSession, endpoint, caPem) {
         return
       }
       const actual = sha256(new X509Certificate(request.certificate.data).raw)
-      void verifyMeshCertificate(endpoint, caPem, actual).then(() => callback(0), () => callback(-2))
+      void verifyMeshCertificate(endpoint, caPem, proxy, actual).then(() => callback(0), () => callback(-2))
     } catch (_) {
       callback(-2)
     }
@@ -134,10 +184,25 @@ function installCertificatePin(serviceSession, endpoint, caPem) {
   })
 }
 
-function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession, getActorId, getLocalDeviceId, logSafe = () => {} }) {
+async function configureSocksProxy(serviceSession, proxy) {
+  if (!serviceSession || typeof serviceSession.setProxy !== 'function') throw new Error('Electron SOCKS 服务隔离不可用。')
+  await serviceSession.setProxy({
+    mode: 'fixed_servers',
+    proxyRules: 'socks5://' + proxy.host + ':' + proxy.port,
+    proxyBypassRules: '<-loopback>'
+  })
+}
+
+async function resetServiceSession(serviceSession) {
+  if (!serviceSession) return
+  if (typeof serviceSession.closeAllConnections === 'function') await serviceSession.closeAllConnections()
+  if (typeof serviceSession.setProxy === 'function') await serviceSession.setProxy({ mode: 'direct' })
+}
+
+function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession, getActorId, getLocalDeviceId, getSourceRoute, logSafe = () => {} }) {
   if (!controllerUrl || !loginSession || typeof loginSession.fetch !== 'function'
       || typeof getServiceSession !== 'function' || typeof getActorId !== 'function'
-      || typeof getLocalDeviceId !== 'function') {
+      || typeof getLocalDeviceId !== 'function' || typeof getSourceRoute !== 'function') {
     throw new TypeError('native workbench requires trusted Controller/session access from Electron main')
   }
   const base = new URL(controllerUrl).origin
@@ -211,12 +276,15 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     })
     if (!isCurrent()) throw new Error('工作台账号已切换，请重新打开服务。')
     const verified = verifyEndpoint(descriptor, targetId, serviceId)
-    await verifyMeshCertificate(verified.origin, verified.caPem)
     const partition = 'persist:tether-wb-' + sha256(key + '\u0000' + generation).slice(0, 40)
     const serviceSession = getServiceSession(partition)
     openedSession = serviceSession
     if (!serviceSession || typeof serviceSession.fetch !== 'function') throw new Error('Electron 服务隔离会话不可用。')
-    installCertificatePin(serviceSession, verified.origin, verified.caPem)
+    const sourceRoute = validateSourceRoute(await getSourceRoute(verified.networkId, sourceDeviceId), verified.networkId, sourceDeviceId)
+    if (!isCurrent()) throw new Error('工作台账号已切换，请重新打开服务。')
+    await configureSocksProxy(serviceSession, sourceRoute)
+    await verifyMeshCertificate(verified.origin, verified.caPem, sourceRoute)
+    installCertificatePin(serviceSession, verified.origin, verified.caPem, sourceRoute)
     if (!isCurrent()) throw new Error('工作台账号已切换，请重新打开服务。')
     const response = await serviceSession.fetch(verified.bootstrapUrl.toString(), {
       method: 'POST',
@@ -233,8 +301,9 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
       publicResult.consent = descriptor.consent
       publicResult.viewOnly = descriptor.view_only
       publicResult.viewOnlyReason = typeof descriptor.view_only_reason === 'string' ? descriptor.view_only_reason : ''
+      publicResult.nativeSessionExpiresAt = verified.nativeSessionExpiresAt
     }
-    active.set(key, { actorId, targetId, serviceId, generation, operationId, descriptor, endpoint: verified.origin, serviceSession,
+    active.set(key, { actorId, targetId, serviceId, generation, operationId, descriptor, endpoint: verified.origin, serviceSession, sourceRoute,
       partition, leaseExpiresAt, public: publicResult, viewTimer: null })
     logSafe('native-workbench-open', { targetId, serviceId, tlsEpoch: verified.epoch })
     return publicResult
@@ -242,6 +311,7 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
         if (openedDescriptor && openedDescriptor.grant_id) await revokeStaleGrant(openedDescriptor.grant_id)
         if (openedSession) {
           try {
+            await resetServiceSession(openedSession)
             await Promise.all([
               typeof openedSession.clearStorageData === 'function' ? openedSession.clearStorageData() : Promise.resolve(),
               typeof openedSession.clearCache === 'function' ? openedSession.clearCache() : Promise.resolve()
@@ -268,6 +338,7 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
       throw error
     }
     active.delete(tupleKey(actorId, targetId, serviceId))
+    await resetServiceSession(record.serviceSession)
     logSafe('native-workbench-close', { targetId, serviceId })
     return { targetId, serviceId, state: 'closed' }
   }
@@ -419,6 +490,7 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
       try {
         const serviceSession = getServiceSession(record.partition)
         if (!serviceSession) throw new Error('session unavailable')
+        await resetServiceSession(serviceSession)
         await Promise.all([
           typeof serviceSession.clearStorageData === 'function' ? serviceSession.clearStorageData() : Promise.resolve(),
           typeof serviceSession.clearCache === 'function' ? serviceSession.clearCache() : Promise.resolve()

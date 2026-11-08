@@ -119,6 +119,7 @@ class RcloneJobs:
         self._resolve = resolver
         self._read_guard = read_guard
         self._write_guard = write_guard
+        self.socks_proxy_resolver = None
         self._binary = binary or os.environ.get("TETHER_RCLONE") or shutil.which("rclone") or ""
         self._db_path = self.data_dir / "transfer-jobs.sqlite3"
         self._grant_dir = self.data_dir / "transfer-grants"
@@ -294,7 +295,8 @@ class RcloneJobs:
         source_root = str(source.get("path") or "")
         if not source_root:
             raise TransferJobError("bad_path", "source root is required")
-        endpoint = {**endpoint, "remote_root": str(grant.get("remote_root") or "/")}
+        endpoint = {**endpoint, "remote_root": str(grant.get("remote_root") or "/"),
+                    "network_id": str(grant.get("network_id") or "")}
         for item in items:
             if not isinstance(item, dict) or item.get("kind") not in ("file", "directory"):
                 raise TransferJobError("bad_args", "each item must contain a path and kind=file|directory")
@@ -777,8 +779,19 @@ class RcloneJobs:
         port = int(endpoint.get("port") or 22)
         known_hosts.write_text(f"[{host}]:{port} {host_key[0]} {host_key[1]}\n", encoding="utf-8")
         config = directory / "rclone.conf"
+        network_id = str(endpoint.get("network_id") or "")
+        if not network_id or not callable(self.socks_proxy_resolver):
+            raise TransferJobError("network_not_connected", "local SOCKS route for the selected network is unavailable", True)
+        try:
+            socks = self.socks_proxy_resolver(network_id)
+        except Exception as exc:
+            raise TransferJobError("network_not_connected", "local SOCKS route for the selected network is unavailable", True) from exc
+        if (not isinstance(socks, dict) or socks.get("host") != "127.0.0.1" or
+                type(socks.get("port")) is not int or not 1 <= socks["port"] <= 65535):
+            raise TransferJobError("network_not_connected", "local SOCKS route for the selected network is invalid", True)
         content = ("[transfer]\ntype = sftp\n" + f"host = {host}\nuser = {endpoint['username']}\nport = {port}\n" +
-                   f"key_file = {key_file}\nknown_hosts_file = {known_hosts}\nshell_type = none\nconnections = 9\n")
+                   f"key_file = {key_file}\nknown_hosts_file = {known_hosts}\nsocks_proxy = {socks['host']}:{socks['port']}\n" +
+                   "shell_type = none\nconnections = 9\n")
         config.write_text(content, encoding="utf-8")
         try:
             os.chmod(known_hosts, stat.S_IRUSR | stat.S_IWUSR)

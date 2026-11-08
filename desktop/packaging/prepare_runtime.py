@@ -148,6 +148,11 @@ def copy_prepared_tree(source: Path, destination: Path) -> None:
 def copy_node_dependencies(source: Path, destination: Path, locked_root: Path,
                            *, omit_symlinks: frozenset[str] = frozenset()) -> None:
     locked_root = locked_root.resolve()
+    source = source.resolve()
+    try:
+        source.relative_to(locked_root)
+    except ValueError as error:
+        raise ValueError(f"dependency source escapes locked Node dependency tree: {source}") from error
     for item in source.rglob("*"):
         relative = item.relative_to(source)
         if item.name == ".package-lock.json":

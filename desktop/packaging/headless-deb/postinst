@@ -5,13 +5,39 @@ DATA_DIR=/var/lib/tether-node
 CONFIG_DIR=/etc/tether-node
 CONFIG_FILE=$CONFIG_DIR/node.env
 PACKAGE_DIR=$DATA_DIR/packages
+EASYTIER_USER=tether-easytier
+EASYTIER_DATA_DIR=/var/lib/tether-easytier
 VERSION=0.5.0
 DEB_NAME="tether-node_${VERSION}_amd64.deb"
+
+if ! getent group "$EASYTIER_USER" >/dev/null 2>&1; then
+    groupadd --system "$EASYTIER_USER"
+fi
+EASYTIER_GID=$(getent group "$EASYTIER_USER" | cut -d: -f3)
+if [ -z "$EASYTIER_GID" ]; then
+    echo "tether-node: unable to resolve the tether-easytier system group" >&2
+    exit 1
+fi
+EASYTIER_ACCOUNT=$(getent passwd "$EASYTIER_USER" || true)
+if [ -z "$EASYTIER_ACCOUNT" ]; then
+    useradd --system --gid "$EASYTIER_USER" --no-create-home \
+        --home-dir /nonexistent --shell /usr/sbin/nologin "$EASYTIER_USER"
+else
+    IFS=: read -r ACCOUNT_NAME _ ACCOUNT_UID ACCOUNT_GID _ ACCOUNT_HOME ACCOUNT_SHELL <<EOF
+$EASYTIER_ACCOUNT
+EOF
+    if [ "$ACCOUNT_NAME" != "$EASYTIER_USER" ] || [ "$ACCOUNT_GID" != "$EASYTIER_GID" ] ||
+       [ "$ACCOUNT_HOME" != /nonexistent ] || [ "$ACCOUNT_SHELL" != /usr/sbin/nologin ]; then
+        echo "tether-node: existing tether-easytier account does not match the managed no-login account" >&2
+        exit 1
+    fi
+fi
 
 install -d -o root -g root -m 0700 "$DATA_DIR"
 install -d -o root -g root -m 0700 "$PACKAGE_DIR"
 install -d -o root -g root -m 0700 "$CONFIG_DIR"
 install -d -o root -g root -m 0700 "$DATA_DIR/workspace" "$DATA_DIR/workspaces"
+install -d -o "$EASYTIER_USER" -g "$EASYTIER_USER" -m 0700 "$EASYTIER_DATA_DIR" "$EASYTIER_DATA_DIR/instances"
 
 if [ ! -e "$CONFIG_FILE" ]; then
     umask 027

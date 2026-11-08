@@ -12,6 +12,12 @@ are installed from the configured Debian repositories:
 The service does not receive broad sudo rules because it already runs under
 systemd as root.
 
+The Node service manages EasyTier networks with the dedicated no-login
+`tether-easytier` system account. Its private network configuration is stored
+under `/var/lib/tether-easytier`; the EasyTier core runs through `setpriv`
+without TUN or elevated capabilities. The `tether-node` service itself remains
+the system-level manager and update owner.
+
 On first installation the service remains stopped until the Node is paired.
 Create a one-time pairing code in the Tether APP, then run this command from a
 terminal:

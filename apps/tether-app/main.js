@@ -7,7 +7,7 @@ const { waitForSupervisorStart, waitForLocalNodeApi } = require('./startup-readi
 const { UpdateService } = require('./update-service.js')
 const { EventSource } = require('eventsource')
 const iconv = require('iconv-lite')
-const { registerAppInstallation } = require('./app-installation.js')
+const { migrateLegacyData, registerAppInstallation } = require('./app-installation.js')
 const { createNativeWorkbench } = require('./native-workbench.js')
 const { rendererDiagnostic, isSurfaceBootFailure, isSurfaceErrorPage, isSurfaceUnstyled, rendererFrameState, rendererFrameStyleState, rendererFrameText, rendererRequestScope, rendererSettledFrameState, safeRendererMessage, safeRendererPath } = require('./renderer-diagnostics.js')
 
@@ -20,26 +20,13 @@ const webRoot = packaged ? path.join(resourcesRoot, 'tether-ui', 'web') : path.j
 const candidateMode = ['1', 'true', 'yes'].includes(String(process.env.TETHER_APP_CANDIDATE || '').toLowerCase())
 const dataDirOverride = String(process.env.TETHER_APP_DATA_DIR || '').trim()
 const dataDir = dataDirOverride ? path.resolve(dataDirOverride) : path.join(app.getPath('userData'), 'data')
-const legacyDataDir = path.join(__dirname, 'data')
 const logFile = path.join(dataDir, 'app.log')
 const processCreationTime = typeof process.getCreationTime === 'function' ? process.getCreationTime() : null
 const appStartedAt = Number.isFinite(processCreationTime) ? processCreationTime : Date.now() - process.uptime() * 1000
 let appStartedVersion = ''
 try { appStartedVersion = String(JSON.parse(fs.readFileSync(path.join(repoRoot, 'version.json'), 'utf8')).components.app || '') } catch (_) { /* unknown runtime version */ }
 const hubConfigFile = path.join(dataDir, 'hub.json')
-fs.mkdirSync(dataDir, { recursive: true })
-if (!candidateMode && !dataDirOverride && path.resolve(legacyDataDir) !== path.resolve(dataDir)
-    && fs.existsSync(legacyDataDir) && fs.readdirSync(legacyDataDir).length) {
-  if (process.env.TETHER_DATA_MIGRATION_QUIESCED !== '1') {
-    throw new Error('APP data migration is waiting for the installer to stop the previous APP and managed Node. Set TETHER_DATA_MIGRATION_QUIESCED=1 only after both are stopped.')
-  }
-  fs.cpSync(legacyDataDir, dataDir, {
-    recursive: true, force: false, errorOnExist: false, dereference: false,
-    filter: (source) => {
-      try { return !fs.lstatSync(source).isSymbolicLink() } catch (_) { return false }
-    }
-  })
-}
+migrateLegacyData({ dataDir, candidateMode, dataDirOverride })
 
 function loadEnv() {
   const env = { ...process.env }
@@ -122,6 +109,9 @@ if (!candidateMode && fs.existsSync(hubConfigFile)) {
     if (cfg.nodeMode === 'external') env.TETHER_NODE_MODE = cfg.nodeMode
   } catch (_) { /* invalid local config is ignored */ }
 }
+const DEFAULT_CONTROLLER_URL = 'https://8-220-198-26.sslip.io'
+if (packaged) env.TETHER_CONTROLLER_URL = env.TETHER_CONTROLLER_URL || DEFAULT_CONTROLLER_URL
+if (!env.TETHER_UPDATE_MANIFEST_URL) env.TETHER_UPDATE_MANIFEST_URL = String(env.TETHER_CONTROLLER_URL).replace(/\/+$/, '') + '/releases/manifest'
 const controller = env.TETHER_CONTROLLER_URL || ('http://127.0.0.1:' + (env.TETHER_PORT || 18890))
 const shotIndex = process.argv.indexOf('--shot')
 const shotPath = shotIndex >= 0 ? path.join(candidateMode ? dataDir : path.join(repoRoot, '.runtime'), 'tether-app-shot.png') : ''
@@ -304,6 +294,23 @@ async function createWindow() {
       return session.fromPartition(partition)
     },
     getLocalDeviceId: () => supervisor.device,
+    getSourceRoute: async (networkId, sourceDeviceId) => {
+      if (!supervisor.remoteUrl || supervisor.node.state !== 'running' || sourceDeviceId !== supervisor.device) {
+        throw new Error('local mesh route is unavailable for this source device')
+      }
+      if (typeof networkId !== 'string' || !/^(?:[0-9a-f]{32}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})$/i.test(networkId)) {
+        throw new Error('invalid mesh network id')
+      }
+      const routeUrl = 'http://127.0.0.1:' + supervisor.consolePort + '/api/devices/'
+        + encodeURIComponent(supervisor.device) + '/mesh/' + encodeURIComponent(networkId) + '/route'
+      const response = await fetch(routeUrl, {
+        headers: { authorization: 'Bearer ' + supervisor.localApiToken },
+        redirect: 'error',
+        signal: AbortSignal.timeout(5000)
+      })
+      if (!response.ok) throw new Error(response.status === 409 ? 'local mesh network is not ready' : 'local mesh route unavailable')
+      return response.json()
+    },
     getActorId: async () => {
       const response = await workbenchLoginSession.fetch(new URL('/api/auth/me', controller).toString(), { redirect: 'error' })
       if (!response.ok) throw new Error(response.status === 401 ? 'Controller login required' : 'Controller identity unavailable')

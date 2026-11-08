@@ -14,6 +14,7 @@ import hmac
 import json
 import sys
 import threading
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -84,7 +85,32 @@ class _Handler(BaseHTTPRequestHandler):
         return parts[3:], parse_qs(parsed.query)
 
     def _get(self, tail: list[str], query: dict[str, list[str]]) -> None:
-        if tail == ["workspaces"]:
+        if len(tail) == 3 and tail[0] == "mesh" and tail[2] == "route":
+            runtime = getattr(self.api.fs, "mesh_runtime", None)
+            if runtime is None:
+                self._error(409, "selected EasyTier network is not ready", "network_not_connected")
+                return
+            network_id = tail[1]
+            try:
+                expected_network_id = uuid.UUID(network_id).hex
+                status = runtime.status_for_network(network_id)
+            except Exception:
+                self._error(400, "network_id is invalid", "bad_network_id")
+                return
+            route = status.get("socks_proxy") if isinstance(status, dict) else None
+            try:
+                runtime_network_id = uuid.UUID(str(status.get("network_id") or "")).hex
+            except (ValueError, TypeError, AttributeError):
+                runtime_network_id = ""
+            if (status.get("state") != "ready" or runtime_network_id != expected_network_id or
+                    not isinstance(route, dict) or route.get("host") != "127.0.0.1" or
+                    type(route.get("port")) is not int or not 1 <= route["port"] <= 65535):
+                self._error(409, "selected EasyTier network is not ready", "network_not_connected")
+                return
+            result = {"protocol": 1, "device_id": self.device, "network_id": network_id,
+                      "state": "ready", "socks_proxy": route,
+                      "peer_connectivity": "unknown"}
+        elif tail == ["workspaces"]:
             result = self._dispatch("workspaces", {})
         elif tail == ["drives"]:
             result = self._dispatch("drives", {})

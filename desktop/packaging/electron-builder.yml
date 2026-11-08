@@ -68,6 +68,7 @@ nsis:
   perMachine: false
   allowElevation: true
   allowToChangeInstallationDirectory: true
+  include: desktop/packaging/nsis/migration.nsh
   createDesktopShortcut: true
   createStartMenuShortcut: true
   runAfterFinish: true
