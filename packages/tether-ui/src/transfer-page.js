@@ -1,4 +1,4 @@
-import { newTransferId, transferFile, transferFileCroc } from './transfer.js'
+import { newTransferId } from './transfer.js'
 import { TargetFileExplorer } from './target-file-explorer.js'
 import { invalidateDirectory, loadDirectory } from './file-cache.js'
 
@@ -61,6 +61,35 @@ function uniqueName(destination, names) {
   return dir + stem + ' (' + Date.now() + ')' + ext
 }
 
+function transferJobView(value) {
+  const job = value && value.value && typeof value.value === 'object' ? value.value : value
+  if (!job || typeof job !== 'object') return null
+  const bytesDone = Math.max(0, Number(job.bytes_done) || 0)
+  const bytesTotal = Math.max(0, Number(job.bytes_total) || 0)
+  const filesDone = Math.max(0, Number(job.files_done) || 0)
+  const filesTotal = Math.max(0, Number(job.files_total) || 0)
+  const percent = bytesTotal ? Math.min(100, Math.round(bytesDone / bytesTotal * 100))
+    : filesTotal ? Math.min(100, Math.round(filesDone / filesTotal * 100))
+      : job.state === 'completed' ? 100 : 0
+  const active = ['queued', 'authorizing', 'running', 'verifying', 'cancelling'].includes(job.state)
+  return { ...job, percent, transferred: bytesDone, total: bytesTotal, count: filesTotal,
+    index: Math.max(0, filesDone - 1), error: job.error && (job.error.message || job.error.code) || '',
+    retryable: !!(job.error && job.error.retryable), active }
+}
+
+function relativeTransferPath(path, root) {
+  const normalize = (value) => String(value || '').replace(/\\/g, '/').replace(/\/{2,}/g, '/').replace(/\/$/, '')
+  const full = normalize(path)
+  const base = normalize(root) || '/'
+  const prefix = base === '/' ? '/' : base + '/'
+  if (!full.startsWith(prefix)) throw new Error('所选项目不在当前源目录中')
+  const relative = full.slice(prefix.length)
+  if (!relative || relative.split('/').some((part) => !part || part === '.' || part === '..')) {
+    throw new Error('所选项目路径无效')
+  }
+  return relative
+}
+
 function directError(payload, status, operation) {
   const detail = payload && payload.error && typeof payload.error === 'object' ? payload.error : {}
   const error = new Error(detail.message || (operation + ' failed with HTTP ' + status))
@@ -90,19 +119,21 @@ async function directErrorResponse(response, operation, signal) {
   return directError(payload, response.status, operation)
 }
 
-export function createTransferPage({ React, Glyph, api, post, C, devices = [], localDevice = '', onNotice, onError }) {
+export function createTransferPage({ React, Glyph, api, post, C, devices = [], localDevice = '', onNotice, onError, hubOnly = false }) {
   const h = React.createElement
   const field = {
     height: 26, boxSizing: 'border-box', border: 0, borderRadius: 6,
     background: C.soft, color: C.ink, fontSize: 12, padding: '0 8px', outline: 'none'
   }
   const onlineDevices = devices.filter((item) => item && item.online)
+  const jobTargetIds = onlineDevices.map((item) => item.device_id).filter(Boolean).join('|')
   const initialLeft = localDevice && onlineDevices.some((item) => item.device_id === localDevice)
     ? localDevice
     : (onlineDevices[0] && onlineDevices[0].device_id) || ''
   const initialRight = (onlineDevices.find((item) => item.device_id !== initialLeft) || {}).device_id || ''
   const directCache = new Map()
   const directInfo = async (deviceId) => {
+    if (hubOnly) return null
     const key = String(deviceId || '')
     if (!key) return null
     if (directCache.has(key)) return directCache.get(key)
@@ -156,82 +187,6 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
     if (signal && signal.aborted) throw transferAborted()
     return post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/' + operation, body,
       undefined, signal ? { signal } : undefined)
-  }
-  const directRead = async (deviceId, args) => {
-    if (args.signal && args.signal.aborted) throw transferAborted()
-    const info = await directInfo(deviceId)
-    if (args.signal && args.signal.aborted) throw transferAborted()
-    if (!info) return null
-    try {
-      const response = await fetch('http://' + info.host + ':' + info.port + '/fs/read_raw', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + info.token },
-        body: JSON.stringify({ path: args.path, offset: args.offset, limit: args.limit }),
-        ...(args.signal ? { signal: args.signal } : {})
-      })
-      if (!response.ok) {
-        if (isDirectTransportStatus(response.status)) { directCache.delete(String(deviceId || '')); return null }
-        throw await directErrorResponse(response, 'read_raw', args.signal)
-      }
-      const rawSize = response.headers.get('X-Tether-Size')
-      const rawOffset = response.headers.get('X-Tether-Offset')
-      if (rawSize === null || rawOffset === null
-          || !Number.isSafeInteger(Number(rawSize)) || Number(rawSize) < 0
-          || !Number.isSafeInteger(Number(rawOffset)) || Number(rawOffset) < 0) {
-        const payload = await response.json().catch(() => null)
-        throw directError(payload, response.status, 'read_raw')
-      }
-      const buffer = await response.arrayBuffer()
-      const size = Number(rawSize)
-      const offset = Number(rawOffset)
-      return {
-        bytes: new Uint8Array(buffer),
-        size,
-        offset,
-        reset: response.headers.get('X-Tether-Reset') === '1'
-      }
-    } catch (error) {
-      if (isTransferAbort(error, args.signal)) throw transferAborted()
-      if (error && error.directApplicationError) throw error
-      directCache.delete(String(deviceId || ''))
-      return null
-    }
-  }
-  const directWrite = async (deviceId, args) => {
-    if (args.signal && args.signal.aborted) throw transferAborted()
-    const info = await directInfo(deviceId)
-    if (args.signal && args.signal.aborted) throw transferAborted()
-    if (!info) return null
-    try {
-      const query = new URLSearchParams({
-        path: args.path, transfer_id: args.transferId, offset: String(args.offset),
-        total: String(args.total), final: args.final ? '1' : '0',
-        overwrite: args.overwrite ? '1' : '0', resume: args.resume ? '1' : '0'
-      })
-      const response = await fetch('http://' + info.host + ':' + info.port + '/fs/write_raw?' + query.toString(), {
-        method: 'POST',
-        headers: { Authorization: 'Bearer ' + info.token },
-        body: args.bytes,
-        ...(args.signal ? { signal: args.signal } : {})
-      })
-      if (!response.ok) {
-        if (isDirectTransportStatus(response.status)) { directCache.delete(String(deviceId || '')); return null }
-        throw await directErrorResponse(response, 'write_raw', args.signal)
-      }
-      let payload
-      try { payload = await response.json() } catch (error) {
-        if (isTransferAbort(error, args.signal)) throw transferAborted()
-        throw directError(null, response.status, 'write_raw')
-      }
-      if (isTransferAbort(null, args.signal)) throw transferAborted()
-      if (payload && payload.ok === true) return payload.value
-      throw directError(payload, response.status, 'write_raw')
-    } catch (error) {
-      if (isTransferAbort(error, args.signal)) throw transferAborted()
-      if (error && error.directApplicationError) throw error
-      directCache.delete(String(deviceId || ''))
-      return null
-    }
   }
   const iconButton = (name, label, onClick, disabled) => h('button', {
     type: 'button', title: label, 'aria-label': label, disabled,
@@ -418,14 +373,15 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
   const [activeSide, setActiveSide] = React.useState('left')
   const [refreshKey, setRefreshKey] = React.useState(0)
   const [job, setJob] = React.useState(null)
+  const [jobPollError, setJobPollError] = React.useState('')
   const [menu, setMenu] = React.useState(null)
   const [dialog, setDialog] = React.useState(null)
   const [dialogText, setDialogText] = React.useState('')
   const [drag, setDrag] = React.useState(null)
   const [dropSide, setDropSide] = React.useState('')
   const clipboardRef = React.useRef(null)
-  const abortRef = React.useRef(null)
   const queueRef = React.useRef(null)
+  const jobContextRef = React.useRef(new Map())
   const dragRef = React.useRef(null)
   const dropSideRef = React.useRef('')
   const latest = React.useRef({})
@@ -449,155 +405,183 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
   const other = (name) => name === 'left' ? 'right' : 'left'
   const itemsFor = (name) => {
     const current = side(name)
-    return current.entries.filter((item) => current.selection.includes(item.path) && !item.dir)
+    return current.entries.filter((item) => current.selection.includes(item.path))
   }
   const refresh = () => setRefreshKey((value) => value + 1)
 
-  const askConflict = (item, destination) => new Promise((resolve) => {
-    setDialog({ kind: 'conflict', item, destination, resolve })
-  })
+  const askConflict = (item, destination) => new Promise((resolve) => setDialog({ kind: 'conflict', item, destination, resolve }))
 
   const startQueue = async (fromSide, items, targetPath, cut = false) => {
-    const target = side(other(fromSide))
-    if (!items.length || !target.path || !target.device) return
-    const controller = new AbortController()
-    abortRef.current = controller
-    const total = items.reduce((sum, item) => sum + (Number(item.size) || 0), 0)
-    setJob({ state: 'running', percent: 0, transferred: 0, total, count: items.length, index: 0, error: '' })
-    let doneBytes = 0
-    let useCroc = false
-  let cancelByTransferId = false
+    const source = side(fromSide)
+    const destination = side(other(fromSide))
+    if (!items.length || !source.path || !source.device || !targetPath || !destination.device) return
+
+    let conflictPolicy = 'fail'
+    const decisions = new Map()
+    const usedNames = (destination.entries || []).map((entry) => entry.name)
     try {
-      const [sourceInfo, targetInfo] = await Promise.all([
-        postFs(side(fromSide).device, 'transfer_info', {}),
-        postFs(target.device, 'transfer_info', {})
-      ])
-      useCroc = !!(sourceInfo && sourceInfo.available && sourceInfo.relay
-        && targetInfo && targetInfo.available && targetInfo.relay)
-      cancelByTransferId = !!(sourceInfo && sourceInfo.cancel_by_transfer_id
-        && targetInfo && targetInfo.cancel_by_transfer_id)
-    } catch (error) {
-      if (error && error.directApplicationError) {
-        setJob((current) => ({ ...(current || {}), state: 'error', error: error.message || '传输能力检查失败' }))
-        if (onError) onError(error)
-        return
-      }
-      useCroc = false
-    }
-    try {
-      for (let index = 0; index < items.length; index += 1) {
-        const item = items[index]
-        const sourceDevice = side(fromSide).device
-        if (useCroc) {
-          let name = item.name
-          let overwrite = false
-          if ((target.entries || []).some((entry) => entry.name === name)) {
-            const choice = await askConflict(item, joinPath(target.path, name))
-            if (choice === 'cancel') throw Object.assign(new Error('已取消'), { code: 'aborted' })
-            if (choice === 'overwrite') overwrite = true
-            else if (choice === 'keep') name = uniqueName(item.name, (target.entries || []).map((entry) => entry.name))
-          }
-          const result = await transferFileCroc({
-            source: item.path,
-            destination: target.path,
-            name,
-            transferId: newTransferId(),
-            overwrite,
-            signal: controller.signal,
-            cancelByTransferId,
-            send: (args) => postFs(sourceDevice, 'transfer_send', args),
-            receive: (args) => postFs(target.device, 'transfer_receive', args),
-            status: (args) => postFs(target.device, 'transfer_status', args),
-            finish: (args) => postFs(target.device, 'transfer_finish', args),
-            cancel: (args) => postFs(target.device, 'transfer_cancel', args),
-            cancelSend: (args) => postFs(sourceDevice, 'transfer_cancel', args),
-            onProgress: (value) => {
-              const percent = Number(value && value.percent) || 0
-              const currentBytes = doneBytes + (Number(item.size) || 0) * percent / 100
-              setJob((current) => ({ ...(current || {}), percent: total ? Math.min(99, Math.round(currentBytes / total * 100)) : 0,
-                transferred: currentBytes, index, count: items.length, state: 'running' }))
-            }
-          })
-          doneBytes += Number(result.bytes) || Number(item.size) || 0
-          if (cut) {
-            await postFs(sourceDevice, 'delete', { path: item.path })
-              .catch(() => { if (onError) onError(new Error('已复制但未能删除源文件：' + item.name)) })
-          }
-          setJob((current) => ({ ...(current || {}), percent: total ? Math.round(doneBytes / total * 100) : 100,
-            transferred: doneBytes, index, state: 'running' }))
+      for (const item of items) {
+        const relativePath = relativeTransferPath(item.path, source.path)
+        const name = relativePath.slice(relativePath.lastIndexOf('/') + 1)
+        if (!(destination.entries || []).some((entry) => entry.name === name)) continue
+        const destinationFullPath = joinPath(targetPath, name)
+        const choice = await askConflict(item, destinationFullPath)
+        if (choice === 'cancel') return
+        if (choice === 'keep') {
+          const keptName = uniqueName(name, usedNames)
+          usedNames.push(keptName)
+          decisions.set(item.path, { destinationPath: relativeTransferPath(joinPath(targetPath, keptName), targetPath) })
           continue
         }
-        let destination = joinPath(target.path, item.name)
-        let overwrite = false
-        while (true) {
-          try {
-            const result = await transferFile({
-              source: item.path,
-              destination,
-              transferId: newTransferId(),
-              overwrite,
-              signal: controller.signal,
-              read: (args) => postFs(sourceDevice, 'read',
-                { path: args.path, offset: args.offset, limit: args.limit, encoding: 'base64' }, args.signal),
-              readBytes: (args) => directRead(sourceDevice, args),
-              writeBytes: (args) => directWrite(target.device, args),
-              write: (args) => {
-                const { signal, ...body } = args
-                return postFs(target.device, 'write_chunk', { ...body, transfer_id: args.transferId }, signal)
-              },
-              status: (args) => postFs(target.device, 'transfer_status',
-                { path: args.path, transfer_id: args.transferId }, args.signal),
-              cancel: (args) => postFs(target.device, 'transfer_cancel',
-                { path: args.path, transfer_id: args.transferId }),
-              onProgress: (value) => {
-                const currentBytes = doneBytes + Math.max(0, Number(value && value.transferred) || 0)
-                setJob((current) => ({ ...(current || {}), percent: total ? Math.min(99, Math.round(currentBytes / total * 100)) : 0,
-                  transferred: currentBytes, index, count: items.length, state: 'running' }))
-              }
-            })
-            doneBytes += Number(result.bytes) || Number(item.size) || 0
-            break
-          } catch (cause) {
-            if (!cause || cause.code !== 'exists') throw cause
-            const choice = await askConflict(item, destination)
-            if (choice === 'cancel') throw Object.assign(new Error('已取消'), { code: 'aborted' })
-            if (choice === 'overwrite') { overwrite = true; continue }
-            if (choice === 'keep') {
-              destination = uniqueName(destination, (side(other(fromSide)).entries || []).map((entry) => entry.name))
-              overwrite = false
-              continue
-            }
-            throw cause
-          }
+        if (choice !== 'overwrite') return
+        const snapshot = await postFs(destination.device, 'destination_fingerprint', { path: destinationFullPath })
+        const expectedKind = item.dir ? 'directory' : 'file'
+        if (!snapshot || snapshot.target_id !== destination.device || snapshot.kind !== expectedKind
+            || typeof snapshot.fingerprint !== 'string' || !snapshot.fingerprint) {
+          throw new Error('目标冲突快照与所选项目不匹配，请刷新目标目录后重试。')
         }
-        if (cut) {
-          await postFs(sourceDevice, 'delete', { path: item.path })
-            .catch(() => { if (onError) onError(new Error('已复制但未能删除源文件：' + item.name)) })
-        }
-        setJob((current) => ({ ...(current || {}), percent: total ? Math.round(doneBytes / total * 100) : 100,
-          transferred: doneBytes, index, state: 'running' }))
+        conflictPolicy = 'overwrite'
+        decisions.set(item.path, { destinationVersion: snapshot.fingerprint })
       }
-      setJob((current) => ({ ...(current || {}), state: 'done', percent: 100, transferred: doneBytes, count: items.length }))
-      if (onNotice) onNotice('已转移 ' + items.length + ' 个文件（' + formatBytes(doneBytes) + '）')
-      invalidateDirectory(side(fromSide).device, side(fromSide).path)
-      invalidateDirectory(target.device, target.path)
-      refresh()
-      setLeftSelection([]); setRightSelection([])
-    } catch (cause) {
-      const aborted = cause && cause.code === 'aborted'
-      setJob((current) => ({ ...(current || {}), state: aborted ? 'cancelled' : 'error', error: aborted ? '已取消' : (cause.message || '传输失败') }))
-      if (!aborted && onError) onError(cause)
-    } finally {
-      abortRef.current = null
+    } catch (error) {
+      if (onError) onError(error)
+      return
+    }
+
+    const operationId = newTransferId()
+    const operationItems = items.map((item) => {
+      const operationItem = {
+        path: relativeTransferPath(item.path, source.path),
+        kind: item.dir ? 'directory' : 'file'
+      }
+      const decision = decisions.get(item.path)
+      if (decision && decision.destinationPath) operationItem.destination_path = decision.destinationPath
+      if (decision && decision.destinationVersion) operationItem.destination_version = decision.destinationVersion
+      return operationItem
+    })
+    const payload = {
+      operation_id: operationId,
+      source: { device_id: source.device, path: source.path },
+      destination: { device_id: destination.device, path: targetPath },
+      items: operationItems,
+      mode: cut ? 'move' : 'copy',
+      conflict_policy: conflictPolicy
+    }
+    const provisional = { operation_id: operationId, target_id: destination.device, state: 'authorizing',
+      files_total: items.length, bytes_total: items.reduce((sum, item) => sum + (Number(item.size) || 0), 0),
+      bytes_done: 0, files_done: 0, error: null }
+    jobContextRef.current.set(operationId, { sourceDevice: source.device, sourcePath: source.path,
+      destinationDevice: destination.device, destinationPath: targetPath, payload })
+    setJobPollError('')
+    setJob(transferJobView(provisional))
+    try {
+      const result = await post('/api/devices/' + encodeURIComponent(destination.device) + '/fs/transfer_job_start', payload)
+      const next = transferJobView(result)
+      if (!next || next.operation_id !== operationId) throw new Error('Controller 未返回匹配的传输作业')
+      setJob(next)
+      if (!next.active && next.state !== 'completed') onError && onError(new Error(next.error || '传输作业启动失败'))
+    } catch (error) {
+      setJob({ ...transferJobView({ ...provisional, state: 'interrupted', error: {
+        code: error && error.code || 'request_failed', message: error && error.message || '无法确认传输作业状态', retryable: true
+      } }), startUnknown: true })
+      if (onError) onError(error)
     }
   }
+
+  const jobRoute = (device, op) => '/api/devices/' + encodeURIComponent(device) + '/fs/transfer_job_' + op
+  React.useEffect(() => {
+    const targets = jobTargetIds.split('|').filter(Boolean)
+    if (!targets.length) { setJob(null); return undefined }
+    let alive = true
+    const loadJobs = async () => {
+      const results = await Promise.allSettled(targets.map((target) => post(jobRoute(target, 'list'), {})))
+      if (!alive) return
+      setJobPollError(results.some((result) => result.status === 'fulfilled') ? '' : '无法读取历史传输作业')
+      const rows = []
+      for (const result of results) {
+        if (result.status !== 'fulfilled') continue
+        const value = result.value && result.value.value && typeof result.value.value === 'object' ? result.value.value : result.value
+        const jobs = Array.isArray(value) ? value : Array.isArray(value && value.jobs) ? value.jobs : []
+        rows.push(...jobs)
+      }
+      const normalized = rows.map(transferJobView).filter(Boolean)
+        .sort((a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || '')))
+      if (!normalized.length) return
+      const selected = normalized.find((item) => item.active) || normalized[0]
+      setJob((current) => current && current.active ? current : selected)
+    }
+    void loadJobs()
+    return () => { alive = false }
+  }, [jobTargetIds])
+
+  React.useEffect(() => {
+    if (!job || !job.operation_id || !job.active) return undefined
+    let alive = true
+    let timer = null
+    const poll = async () => {
+      try {
+        if (!job.target_id) throw new Error('作业未返回目标设备 ID，已停止状态查询')
+        const result = await post(jobRoute(job.target_id, 'status'), { operation_id: job.operation_id })
+        const next = transferJobView(result)
+        if (!alive || !next) return
+        setJobPollError('')
+        setJob(next)
+        if (next.state === 'completed') {
+          const context = jobContextRef.current.get(next.operation_id)
+          if (context) {
+            invalidateDirectory(context.sourceDevice, context.sourcePath)
+            invalidateDirectory(context.destinationDevice, context.destinationPath)
+            refresh()
+            jobContextRef.current.delete(next.operation_id)
+          }
+          setLeftSelection([]); setRightSelection([])
+          if (onNotice) onNotice('传输已完成（' + next.files_done + ' 个文件，' + formatBytes(next.bytes_done) + '）')
+        } else if (next.state === 'failed' && onError) onError(new Error(next.error || '传输失败'))
+        if (next.active) timer = setTimeout(poll, 1200)
+      } catch (_) {
+        if (alive) setJobPollError('暂时无法读取传输作业状态')
+        if (alive) timer = setTimeout(poll, 2500)
+      }
+    }
+    timer = setTimeout(poll, 1000)
+    return () => { alive = false; if (timer) clearTimeout(timer) }
+  }, [job && job.operation_id, job && job.state, rightDevice])
 
   const start = () => {
     const items = itemsFor(activeSide)
     if (!items.length) return
     void startQueue(activeSide, items, side(other(activeSide)).path)
   }
-  const cancel = () => { if (abortRef.current) abortRef.current.abort() }
+  const cancel = () => {
+    if (job && job.operation_id && job.target_id) {
+      void post(jobRoute(job.target_id, 'cancel'), { operation_id: job.operation_id })
+        .then((result) => { const next = transferJobView(result); if (next) setJob(next) })
+        .catch((error) => { if (onError) onError(error) })
+    }
+  }
+  const retryJob = () => {
+    if (!job || !job.operation_id) return
+    const context = jobContextRef.current.get(job.operation_id)
+    if (job.startUnknown && context && job.target_id) {
+      void post(jobRoute(job.target_id, 'status'), { operation_id: job.operation_id })
+        .then((result) => { const next = transferJobView(result); if (next) setJob(next) })
+        .catch(() => post(jobRoute(job.target_id, 'start'), context.payload)
+          .then((result) => { const next = transferJobView(result); if (next) setJob(next) })
+          .catch((error) => { if (onError) onError(error) }))
+      return
+    }
+    if (['interrupted', 'failed'].includes(job.state) && job.retryable) {
+      if (!job.target_id) { if (onError) onError(new Error('作业未返回目标设备 ID，不能重试')); return }
+      void post(jobRoute(job.target_id, 'retry'), { operation_id: job.operation_id })
+        .then((result) => { const next = transferJobView(result); if (next) setJob(next) })
+        .catch((error) => { if (onError) onError(error) })
+      return
+    }
+    if (!job.target_id) { if (onError) onError(new Error('作业未返回目标设备 ID，不能查询')); return }
+    void post(jobRoute(job.target_id, 'status'), { operation_id: job.operation_id })
+      .then((result) => { const next = transferJobView(result); if (next) setJob(next) })
+      .catch((error) => { if (onError) onError(error) })
+  }
   const swap = () => {
     setLeftDevice(rightDevice); setRightDevice(leftDevice)
     setLeftPath(rightPath); setRightPath(leftPath)
@@ -720,7 +704,7 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
       if (!dragging || !dragging.active || !target) return
       const targetSide = side(target)
       if (!targetSide.path) return
-      void startQueue(dragging.side, dragging.items.filter((entry) => !entry.dir), targetSide.path)
+      void startQueue(dragging.side, dragging.items, targetSide.path)
     }
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
@@ -743,20 +727,32 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
   }
 
   React.useEffect(() => {
-    if (!job || job.state === 'running') return undefined
+    if (!job || job.operation_id || job.state === 'running') return undefined
     const timer = setTimeout(() => setJob(null), job.state === 'done' ? 4000 : 8000)
     return () => clearTimeout(timer)
   }, [job && job.state])
 
   const progress = job ? Math.max(0, Math.min(100, Number(job.percent) || 0)) : 0
+  const transferBusy = !!(job && (job.active || job.state === 'running'))
   const sourceCount = itemsFor(activeSide).length
   const target = side(other(activeSide))
   let footerText = '拖拽文件到另一侧，或用 Ctrl+C / Ctrl+X、Ctrl+V'
   if (job) {
-    if (job.state === 'running') footerText = '正在转移 ' + ((job.index || 0) + 1) + '/' + (job.count || 1)
-    else if (job.state === 'done') footerText = '已转移 ' + (job.count || 0) + ' 个文件'
-    else footerText = job.error || (job.state === 'error' ? '传输失败' : '已取消')
+    if (transferBusy) footerText = (job.state === 'verifying' ? '正在校验 ' : '正在转移 ') + ((job.files_done || job.index || 0) + 1) + '/' + (job.files_total || job.count || 1)
+    else if (job.state === 'completed' || job.state === 'done') footerText = '已转移 ' + (job.files_done || job.count || 0) + ' 个文件'
+    else footerText = job.error || (job.state === 'failed' || job.state === 'error' ? '传输失败' : '已取消')
   } else if (sourceCount) footerText = '已选 ' + sourceCount + ' 个文件 → ' + (target.path || '先在另一侧选择目录')
+  if (jobPollError) footerText = jobPollError + '，正在重试读取'
+  const jobContext = job && jobContextRef.current.get(job.operation_id)
+  const jobSource = job && (job.source || (jobContext && { device_id: jobContext.sourceDevice, path: jobContext.sourcePath }))
+  const jobDestination = job && (job.destination || (jobContext && { device_id: jobContext.destinationDevice, path: jobContext.destinationPath }))
+  const deviceLabel = (id) => (devices.find((item) => item.device_id === id) || {}).name || id || '未知设备'
+  const jobItems = job && (job.items || (jobContext && jobContext.payload.items)) || []
+  const jobSummary = job && job.operation_id && jobSource && jobDestination
+    ? deviceLabel(jobSource.device_id) + ':' + jobSource.path + ' → ' + deviceLabel(jobDestination.device_id) + ':' + jobDestination.path
+      + ' · ' + (job.mode === 'move' ? '剪切' : '复制') + ' · ' + jobItems.length + ' 项 · '
+      + jobItems.map((item) => (item.kind === 'directory' ? '目录 ' : '文件 ') + item.path).join('、')
+    : job && job.operation_id ? '作业 ' + String(job.operation_id).slice(0, 8) : ''
 
   const sideProps = (name) => {
     const current = side(name)
@@ -781,7 +777,7 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
         if (!dragging || dragging.side === name) return
         const targetSide = side(name)
         if (!targetSide.path) return
-        void startQueue(dragging.side, dragging.items.filter((entry) => !entry.dir), targetSide.path)
+        void startQueue(dragging.side, dragging.items, targetSide.path)
         dragRef.current = null
       }
     }
@@ -813,14 +809,17 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
         dropSide === 'right' ? h('div', { style: { position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', background: 'color-mix(in srgb, ' + C.green + ' 10%, transparent)', color: C.green, fontSize: 12, pointerEvents: 'none', borderRadius: 8 } }, '松开，转移到这里') : null)),
     h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, background: C.panel, flex: '0 0 auto', minWidth: 0 } },
       h('div', { style: { flex: '1 1 auto', minWidth: 0, display: 'grid', gap: 2 } },
+        jobSummary ? h('div', { title: jobSummary, style: { fontSize: 10, color: C.mute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, jobSummary) : null,
         h('div', { style: { fontSize: 12, color: C.sub, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, footerText),
         job ? h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
           h('div', { style: { flex: '1 1 auto', height: 5, borderRadius: 999, background: C.soft, overflow: 'hidden' } },
-            h('div', { style: { width: progress + '%', height: '100%', background: job.state === 'error' ? C.red : C.blue, transition: 'width 150ms ease' } })),
-          h('span', { className: 'tether-num', style: { fontSize: 10.5, color: C.mute, whiteSpace: 'nowrap' } }, progress + '% · ' + formatBytes(job.transferred || 0) + ' / ' + formatBytes(job.total || 0))) : null),
-      job && job.state === 'running'
+            h('div', { style: { width: progress + '%', height: '100%', background: job.state === 'error' || job.state === 'failed' ? C.red : C.blue, transition: 'width 150ms ease' } })),
+          h('span', { className: 'tether-num', style: { fontSize: 10.5, color: C.mute, whiteSpace: 'nowrap' } }, progress + '% · ' + formatBytes(job.transferred || 0) + ' / ' + formatBytes(job.total || 0) + ' · ' + formatBytes(Number(job.rate_bytes_per_second) || 0) + '/s')) : null),
+      transferBusy
         ? h('button', { type: 'button', onClick: cancel, style: { ...field, height: 28, padding: '0 12px', cursor: 'pointer' } }, '取消')
-        : !job && sourceCount && target.path
+        : job && job.operation_id && ['failed', 'interrupted'].includes(job.state) && job.retryable
+          ? h('button', { type: 'button', onClick: retryJob, title: job.startUnknown ? '先查询相同作业状态' : '重试传输作业', style: { ...field, height: 28, padding: '0 12px', cursor: 'pointer' } }, job.startUnknown ? '查询' : '重试')
+          : sourceCount && target.path
           ? h('button', {
             type: 'button', onClick: start, title: '转移到另一侧', 'aria-label': '转移到另一侧',
             className: 'tether-press',
@@ -885,7 +884,7 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
           h('button', { type: 'button', onClick: closeDialog, style: { ...field, height: 28, padding: '0 12px', cursor: 'pointer' } }, '取消'),
           dialog.kind === 'conflict'
             ? h(React.Fragment, null,
-              h('button', { type: 'button', onClick: () => { const resolve = dialog.resolve; setDialog(null); resolve('keep') }, style: { ...field, height: 28, padding: '0 12px', cursor: 'pointer' } }, '保留两者'),
+              dialog.item ? h('button', { type: 'button', onClick: () => { const resolve = dialog.resolve; setDialog(null); resolve('keep') }, style: { ...field, height: 28, padding: '0 12px', cursor: 'pointer' } }, '保留两者') : null,
               h('button', { type: 'button', onClick: () => { const resolve = dialog.resolve; setDialog(null); resolve('overwrite') }, style: { height: 28, padding: '0 12px', border: 0, borderRadius: 6, background: C.blue, color: '#fff', fontSize: 12, cursor: 'pointer' } }, '覆盖'))
             : h('button', { type: 'button', onClick: dialog.kind === 'delete' ? confirmDelete : submitName, style: { height: 28, padding: '0 12px', border: 0, borderRadius: 6, background: C.blue, color: '#fff', fontSize: 12, cursor: 'pointer' } }, dialog.kind === 'delete' ? '删除' : '确定')))) : null)
 }

@@ -1,0 +1,107 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import shutil
+import tarfile
+import tempfile
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+STAGING = ROOT / ".runtime" / "desktop-candidate"
+OUTPUT_DIR = ROOT / ".scratch" / "tether-desktop-candidates" / "0.5.0" / "headless" / "linux-x64"
+ARCHIVE_NAME = "Tether-node-runtime-0.5.0-linux-x64.tar.gz"
+
+
+def main() -> int:
+    if not (STAGING / "tether-python").is_file():
+        raise ValueError("PyInstaller Tether runtime is missing")
+    launcher = ROOT / "laptop" / "tether-node-runtime.sh"
+    if not launcher.is_file():
+        raise ValueError("Node owner launcher laptop/tether-node-runtime.sh is missing")
+    source_root = ROOT / "tether"
+    if not (source_root / "node" / "agent.py").is_file():
+        raise ValueError("Tether Node source is missing")
+    for required in [ROOT / "LICENSE", ROOT / "THIRD_PARTY_NOTICES.md", ROOT / "version.json"]:
+        if not required.is_file():
+            raise ValueError(f"Headless Node package metadata is missing: {required.name}")
+    if OUTPUT_DIR.exists():
+        raise ValueError(f"Refusing to replace existing headless artifact directory: {OUTPUT_DIR}")
+
+    OUTPUT_DIR.mkdir(parents=True)
+    temp_root = ROOT / ".scratch"
+    with tempfile.TemporaryDirectory(prefix="tether-headless-stage-", dir=temp_root) as temporary:
+        staging = Path(temporary)
+        package = staging / "tether-node-runtime-0.5.0"
+        resources = package / "resources" / "tether-runtime"
+        resources.mkdir(parents=True)
+        for item in STAGING.iterdir():
+            if item.name in {"tether-python", "node-bin"}:
+                continue
+            destination = resources / item.name
+            if item.is_dir():
+                shutil.copytree(item, destination, symlinks=False)
+            elif item.is_file():
+                shutil.copy2(item, destination)
+        shutil.copy2(STAGING / "tether-python", resources / "tether-python")
+        (resources / "tether-python").chmod(0o755)
+
+        for source in source_root.rglob("*.py"):
+            relative = source.relative_to(ROOT)
+            target = package / "tether-source" / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
+        runtime_bin = STAGING / "node-bin"
+        if not runtime_bin.is_dir():
+            raise ValueError("prepared Codeg/Herdr runtime node-bin is missing")
+        packaged_bin = package / "tether-source" / "tether" / "node" / "bin"
+        if packaged_bin.exists():
+            shutil.rmtree(packaged_bin)
+        shutil.copytree(runtime_bin, packaged_bin, symlinks=False)
+        console_html = ROOT / "tether" / "node" / "console.html"
+        if not console_html.is_file():
+            raise ValueError("Tether Node console.html asset is missing")
+        console_target = package / "tether-source" / "tether" / "node" / "console.html"
+        console_target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(console_html, console_target)
+        shutil.copy2(ROOT / "version.json", package / "tether-source" / "version.json")
+        shutil.copy2(ROOT / "LICENSE", package / "tether-source" / "LICENSE")
+        shutil.copy2(ROOT / "THIRD_PARTY_NOTICES.md", package / "tether-source" / "THIRD_PARTY_NOTICES.md")
+        binary_launcher = package / "bin" / "tether-node"
+        binary_launcher.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(launcher, binary_launcher)
+        binary_launcher.chmod(0o755)
+        laptop_dir = package / "laptop"
+        laptop_dir.mkdir(parents=True, exist_ok=True)
+        for name in ["install-node.sh", "tether-node-runtime.sh"]:
+            source = ROOT / "laptop" / name
+            if not source.is_file():
+                raise ValueError(f"Node owner installer file is missing: laptop/{name}")
+            shutil.copy2(source, laptop_dir / name)
+        (laptop_dir / "install-node.sh").chmod(0o755)
+        (laptop_dir / "tether-node-runtime.sh").chmod(0o755)
+        runtime_manifest = {
+            "schema": 1,
+            "version": "0.5.0",
+            "platform": "linux-x64",
+            "entry": "bin/tether-node",
+            "python": "resources/tether-runtime/tether-python",
+            "resources": "resources/tether-runtime",
+            "source": "tether-source",
+        }
+        (package / "runtime-manifest.json").write_text(json.dumps(runtime_manifest, indent=2) + "\n", encoding="utf-8")
+        archive = OUTPUT_DIR / ARCHIVE_NAME
+        with tarfile.open(archive, "w:gz", compresslevel=1) as output:
+            output.add(package, arcname=package.name, recursive=True)
+    digest = hashlib.sha256()
+    with archive.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+    digest = digest.hexdigest()
+    (OUTPUT_DIR / (ARCHIVE_NAME + ".sha256")).write_text(f"{digest}  {ARCHIVE_NAME}\n", encoding="ascii")
+    print(f"Created {archive} ({archive.stat().st_size} bytes, SHA-256 {digest})")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

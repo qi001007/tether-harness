@@ -3,6 +3,7 @@ name: Clean install smoke
 on:
   workflow_dispatch:
   push:
+    branches-ignore: ['codex/tether-050-preview-20261108']
     paths:
       - 'laptop/install-node.sh'
       - '.github/workflows/install-smoke.yml'

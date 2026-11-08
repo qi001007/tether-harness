@@ -1,0 +1,116 @@
+{
+  "schema": 1,
+  "recorded_at": "2026-11-08",
+  "nodejs": {
+    "version": "24.22.2",
+    "license": "MIT",
+    "source": "https://github.com/nodejs/node/tree/v24.22.2",
+    "assets": [
+      {
+        "name": "node-v24.22.2-darwin-arm64.tar.gz",
+        "url": "https://nodejs.org/dist/v24.22.2/node-v24.22.2-darwin-arm64.tar.gz",
+        "sha256": "aa9549349e47dffaa42dcf95d6e06ade8c4bdafc980979883b88767670df385a",
+        "size": 53068959
+      },
+      {
+        "name": "node-v24.22.2-darwin-x64.tar.gz",
+        "url": "https://nodejs.org/dist/v24.22.2/node-v24.22.2-darwin-x64.tar.gz",
+        "sha256": "d5e336d588c45be0c37dbd52cc29895593009ca4997a77a1fd02815131ed0e52",
+        "size": 54383415
+      },
+      {
+        "name": "node-v24.22.2-linux-x64.tar.xz",
+        "url": "https://nodejs.org/dist/v24.22.2/node-v24.22.2-linux-x64.tar.xz",
+        "sha256": "48cc0e21e048790e54c0cf5749c2725005313d652651c40b7a21feb9697aaf75",
+        "size": 32039312
+      },
+      {
+        "name": "node-v24.22.2-win-x64.zip",
+        "url": "https://nodejs.org/dist/v24.22.2/node-v24.22.2-win-x64.zip",
+        "sha256": "ca1bff5d8ead13c9f2ea404a176db46bd430704d5b5113734049fa365e7799e2",
+        "size": 37754834
+      }
+    ]
+  },
+  "meshcentral": {
+    "version": "1.3.1",
+    "license": "Apache-2.0",
+    "url": "https://registry.npmjs.org/meshcentral/-/meshcentral-1.3.1.tgz",
+    "integrity": "sha512-adf9wyq+78RK6HTRNlF0OO9sPs6dzDaYlScaHRqs2w8xefm/QmS/zdrwuV2UuWWiOqh1RWPxgGNVwF/qvjL0Xg==",
+    "sha256": "e23892965c9437e4392f455648111c8f89652732564a8fd475858934c461fd5f",
+    "size": 78772891,
+    "source": "https://github.com/Ylianst/MeshCentral/tree/1.3.1"
+  },
+  "meshagent": {
+    "version": "legacy-1.2.6",
+    "license": "Apache-2.0",
+    "source": "https://github.com/Ylianst/MeshAgent/tree/legacy-1.2.6",
+    "assets": [
+      {
+        "filename": "MeshService64.exe",
+        "asset": "MeshService64.exe",
+        "size": 3444736,
+        "sha384": "319d3ad514173be85838bf7ba5995e11671d8f8e6df8e51b74c8304c3caf70e754e69db74b1baec1a6430ece213ab293",
+        "url": "https://github.com/Ylianst/MeshAgent/releases/download/legacy-1.2.6/MeshService64.exe",
+        "sha256": "cbf10a37fc01f74f2473aeca0a4b391dca6f9d0a8d0300aa7181dbce7bacc51e"
+      },
+      {
+        "filename": "meshagent_x86-64",
+        "asset": "meshagent_x86-64",
+        "size": 3757520,
+        "sha384": "1bf04d9ced5c4be006d1ed714da04048d26e8f3ffdd02f39b69a73b6d73da98682dda7401ef33f04c621549aff6c3a28",
+        "url": "https://github.com/Ylianst/MeshAgent/releases/download/legacy-1.2.6/meshagent_x86-64",
+        "sha256": "891da8d32d0fbfec933b7ca5aa64b27650c05531a772f993601f20ae7c2c0a3b"
+      },
+      {
+        "filename": "meshagent_osx-arm-64",
+        "asset": "meshagent_osx-arm-64",
+        "size": 3670136,
+        "sha384": "6e3fcfed24b6c28671e39445fdb8cd219040939da1488cbd6c167ae1eb7e2e37382f6e34c8a22961f3e1bc8ef4171673",
+        "url": "https://github.com/Ylianst/MeshAgent/releases/download/legacy-1.2.6/meshagent_osx-arm-64",
+        "sha256": "5bad4449e361b0a1f35e660f5d2b6cfdb11abf4adbb859719fccc6987800aca9"
+      },
+      {
+        "filename": "meshagent_osx-x86-64",
+        "asset": "meshagent_osx-x86-64",
+        "size": 4243736,
+        "sha384": "90f804675a8cbf209cce803f02f98f1c4202291fb8ebe302d003538ea958b4eb1a8607f79ef5ee19d2886194a2039118",
+        "url": "https://github.com/Ylianst/MeshAgent/releases/download/legacy-1.2.6/meshagent_osx-x86-64",
+        "sha256": "d2b5d2dbb2f917354752449ec1b730c0b96f36b30d23a58c8350727e909fa1b4"
+      }
+    ]
+  },
+  "source_archives": [
+    {
+      "name": "meshcentral-1.3.1.tgz",
+      "url": "https://registry.npmjs.org/meshcentral/-/meshcentral-1.3.1.tgz",
+      "size": 78772891,
+      "sha256": "e23892965c9437e4392f455648111c8f89652732564a8fd475858934c461fd5f",
+      "integrity": "sha512-adf9wyq+78RK6HTRNlF0OO9sPs6dzDaYlScaHRqs2w8xefm/QmS/zdrwuV2UuWWiOqh1RWPxgGNVwF/qvjL0Xg=="
+    }
+  ],
+  "platforms": {
+    "windows-x64": {
+      "node_asset": "node-v24.22.2-win-x64.zip",
+      "meshagent_asset": "MeshService64.exe"
+    },
+    "linux-x64": {
+      "node_asset": "node-v24.22.2-linux-x64.tar.xz",
+      "meshagent_asset": "meshagent_x86-64"
+    },
+    "macos-x64": {
+      "node_asset": "node-v24.22.2-darwin-x64.tar.gz",
+      "meshagent_asset": "meshagent_osx-x86-64"
+    },
+    "macos-arm64": {
+      "node_asset": "node-v24.22.2-darwin-arm64.tar.gz",
+      "meshagent_asset": "meshagent_osx-arm-64"
+    }
+  },
+  "policy": {
+    "meshcentral_bind": "127.0.0.1",
+    "agent_downloads_enabled": false,
+    "dynamic_agent_updates": false,
+    "mesh_agent_mode": "process-only run, private per-instance directory, no system installer"
+  }
+}

@@ -90,7 +90,9 @@ def _herdr_binary() -> str:
             name = "herdr-macos-aarch64" if platform.system() == "Darwin" else "herdr-linux-aarch64"
         else:
             name = "herdr-macos-x86_64" if platform.system() == "Darwin" else "herdr-linux-x86_64"
-    bundled = Path(__file__).with_name("bin") / name
+    runtime_dir = os.environ.get("TETHER_HERDR_RUNTIME_DIR")
+    bundled_root = Path(runtime_dir).resolve() if runtime_dir else Path(__file__).with_name("bin")
+    bundled = bundled_root / name
     if bundled.is_file():
         if os.name != "nt":
             try:
@@ -98,6 +100,8 @@ def _herdr_binary() -> str:
             except OSError:
                 pass
         return str(bundled)
+    if runtime_dir:
+        return ""
     return shutil.which("herdr") or ""
 
 

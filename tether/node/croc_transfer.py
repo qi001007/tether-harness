@@ -256,4 +256,3 @@ class CrocTransfer:
 
     def status(self) -> dict[str, Any]:
         return self.job.status() if self.job else {"state": "idle"}
-

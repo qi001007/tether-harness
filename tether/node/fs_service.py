@@ -10,7 +10,9 @@ from __future__ import annotations
 import base64
 import binascii
 import codecs
+from contextvars import ContextVar
 import hashlib
+import ipaddress
 import json
 import mimetypes
 import os
@@ -18,9 +20,7 @@ import re
 import secrets
 import shutil
 import sqlite3
-import subprocess
 import time
-import tempfile
 import threading
 import zipfile
 import xml.etree.ElementTree as ET
@@ -35,6 +35,10 @@ from .agent_registry import AgentRegistry
 from .agent_accounts import AgentAccounts
 from .web_apps import OpenCodeWeb
 from .agents_runtime import AgentsRuntime
+from .transfer_jobs import RcloneJobs, TransferJobError
+from .sftpgo_grants import SftpGoGrants, GrantError
+from .service_access import ServiceAccess, ServiceAccessError
+from .office_preview import OfficePreviewError, office_pdf
 try:
     from .dsh_web import DshWeb
 except Exception:  # an older install may not ship the optional Linux web module
@@ -47,6 +51,19 @@ MAX_TRANSFER_BYTES = 64 * 1024 * 1024 * 1024
 TRANSFER_ID_RE = re.compile(r"[a-f0-9]{8,32}")
 MAX_PREVIEW_BYTES = 8 * 1024 * 1024
 MAX_PREVIEW_TEXT = 512 * 1024
+TRANSFER_PRIVATE_OPS = {
+    "transfer_job_prepare", "transfer_job_start", "transfer_job_status", "transfer_job_list",
+    "transfer_job_cancel", "transfer_job_retry", "transfer_grant_issue", "transfer_grant_revoke",
+    "transfer_grant_renew", "transfer_move_finalize",
+}
+SERVICE_PRIVATE_OPS = {"service_grant_issue", "service_grant_renew", "service_grant_revoke"}
+MESH_PRIVATE_OPS = {"mesh_apply", "mesh_status", "mesh_remove"}
+HUB_FILE_SCOPE_OPS = {
+    "list", "stat", "read", "preview", "destination_fingerprint",
+    "write", "write_chunk", "mkdir", "rename", "copy", "delete",
+}
+HUB_FILE_READ_OPS = {"list", "stat", "read", "preview", "destination_fingerprint", "copy"}
+HUB_FILE_WRITE_OPS = {"destination_fingerprint", "write", "write_chunk", "mkdir", "rename", "copy", "delete"}
 PREVIEW_CACHE_MAX_FILES = 96
 PREVIEW_CACHE_MAX_BYTES = 256 * 1024 * 1024
 TEXT_SUFFIXES = {
@@ -59,31 +76,6 @@ TEXT_SUFFIXES = {
 MARKDOWN_SUFFIXES = {".md", ".markdown"}
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"}
 OFFICE_KINDS = {".doc": "word", ".docx": "word", ".ppt": "powerpoint", ".pptx": "powerpoint"}
-OFFICE_SCRIPT = r'''
-param(
-  [Parameter(Mandatory = $true)][string]$Source,
-  [Parameter(Mandatory = $true)][string]$Output,
-  [Parameter(Mandatory = $true)][string]$Kind
-)
-$ErrorActionPreference = 'Stop'
-if ($Kind -eq 'word') {
-  $app = New-Object -ComObject Word.Application
-  $app.Visible = $false
-  $app.DisplayAlerts = 0
-  try {
-    $doc = $app.Documents.Open($Source, $false, $true)
-    $doc.SaveAs([ref]$Output, [ref]17)
-    $doc.Close($false)
-  } finally { $app.Quit() }
-} else {
-  $app = New-Object -ComObject PowerPoint.Application
-  try {
-    $pres = $app.Presentations.Open($Source, $true, $false, $false)
-    $pres.SaveAs($Output, 32)
-    $pres.Close()
-  } finally { $app.Quit() }
-}
-'''
 
 
 def _norm(path: Path | str) -> str:
@@ -95,6 +87,14 @@ def _inside(candidate: Path, root: Path) -> bool:
         return os.path.commonpath([_norm(candidate), _norm(root)]) == _norm(root)
     except ValueError:
         return False
+
+
+def _transfer_grant_expiry(args: dict[str, Any]) -> int:
+    expires_at = args.pop("grant_expires_at", None)
+    now = int(time.time())
+    if type(expires_at) is not int or expires_at <= now or expires_at > now + 3600:
+        raise FsError("source grant lease must expire within one hour", "bad_grant_expiry")
+    return expires_at
 
 
 def _content_version(data: bytes) -> str:
@@ -330,11 +330,13 @@ class Audit:
     MAX_ROWS = 100_000
     BASE_KEYS = {"ts", "device", "op", "path", "mode", "phase", "result", "reason"}
 
-    def __init__(self, path: Path, *, device: str, max_rows: int | None = None) -> None:
+    def __init__(self, path: Path, *, device: str, max_rows: int | None = None,
+                 context_provider: Any = None) -> None:
         self.path = Path(path)
         self.db_path = self.path.with_suffix(".db")
         self.device = device
         self.max_rows = max_rows or self.MAX_ROWS
+        self.context_provider = context_provider
         self._inserts = 0
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as conn:
@@ -412,6 +414,15 @@ class Audit:
             conn.execute("DELETE FROM audit WHERE id <= ?", (row["id"],))
 
     def add(self, **entry: Any) -> dict[str, Any]:
+        if self.context_provider is not None:
+            try:
+                scope = self.context_provider()
+            except Exception:
+                scope = None
+            if isinstance(scope, dict):
+                for key in ("actor_id", "grant_id", "operation_id"):
+                    if scope.get(key) and key not in entry:
+                        entry[key] = scope[key]
         item = {"ts": time.time(), "device": self.device, **entry}
         with self._connect() as conn:
             self._insert(conn, item)
@@ -446,15 +457,19 @@ class Audit:
 
 class _StreamWriter:
     def __init__(self, service: "FsService", path: Path, part: Path,
-                 handle: Any, total: int, transfer: str) -> None:
+                 handle: Any, total: int, transfer: str, *, expected_version: str | None = None,
+                 discard_on_abort: bool = False) -> None:
         self.service = service
         self.path = path
         self.part = part
         self.handle = handle
         self.total = total
         self.transfer = transfer
+        self.expected_version = expected_version
+        self.discard_on_abort = discard_on_abort
 
     def write(self, data: bytes) -> None:
+        self.service._write_guard(self.path, "write", bytes=self.total)
         self.handle.write(data)
 
     def abort(self) -> None:
@@ -462,6 +477,11 @@ class _StreamWriter:
             self.handle.close()
         except OSError:
             pass
+        if self.discard_on_abort:
+            try:
+                self.part.unlink(missing_ok=True)
+            except OSError:
+                pass
 
     def finish(self) -> dict[str, Any]:
         self.handle.flush()
@@ -469,6 +489,14 @@ class _StreamWriter:
         self.handle.close()
         if self.part.stat().st_size != self.total:
             raise FsError("stream is incomplete", "offset_mismatch")
+        self.service._write_guard(self.path, "write", bytes=self.total)
+        if self.expected_version == "absent":
+            if self.path.exists():
+                raise FsError("file appeared during upload", "conflict")
+        elif self.expected_version is not None:
+            current_version = _path_version(self.path) if self.path.exists() else ""
+            if current_version != self.expected_version:
+                raise FsError("file changed during upload", "conflict")
         os.replace(self.part, self.path)
         st = self.path.stat()
         version = _path_version(self.path)
@@ -490,9 +518,12 @@ class FsService:
         self.workspaces_root.mkdir(parents=True, exist_ok=True)
         self.policy = Policy(data_dir / "policy.json", device=device,
                              node_workspace=workspace, workspaces_root=workspaces_root)
-        self.audit = Audit(data_dir / "audit.jsonl", device=device)
+        self._hub_file_scope: ContextVar[dict[str, Any] | None] = ContextVar(
+            f"hub-file-scope-{device}", default=None)
+        self.audit = Audit(data_dir / "audit.jsonl", device=device,
+                           context_provider=self._hub_file_scope.get)
         self.dsh_desktop = DshDesktop(data_dir, dsh_home=dsh_home)
-        self.dsh_web = DshWeb(data_dir) if DshWeb is not None else None
+        self.dsh_web = DshWeb(data_dir, workspace=workspace) if DshWeb is not None else None
         self.preview_cache_dir = data_dir / "preview-cache"
         self.preview_cache_dir.mkdir(parents=True, exist_ok=True)
         self._office_lock = threading.Lock()
@@ -502,6 +533,43 @@ class FsService:
         self.accounts = AgentAccounts(data_dir)
         self.opencode = OpenCodeWeb(data_dir, workspace)
         self.agents_runtime = AgentsRuntime(data_dir, workspace)
+        self.transfer_jobs = RcloneJobs(data_dir, target_id=device, resolver=self._resolve,
+                                        read_guard=self._read_guard, write_guard=self._write_guard)
+        self.sftpgo_grants = SftpGoGrants(data_dir, device_id=device, resolve=self._resolve,
+                                          read_guard=self._read_guard, write_guard=self._write_guard)
+        self.sftpgo_grants.transfer_jobs = self.transfer_jobs
+        self.mesh_runtime = None
+        mesh_core = os.environ.get("TETHER_EASYTIER_CORE", "")
+        mesh_cli = os.environ.get("TETHER_EASYTIER_CLI", "")
+        if mesh_core and mesh_cli:
+            from .mesh_runtime import EasyTierRuntime
+            self.mesh_runtime = EasyTierRuntime(mesh_core, mesh_cli, data_dir / "managed-mesh")
+        self.service_access = ServiceAccess(data_dir, target_id=device, agents_runtime=self.agents_runtime,
+                                            dsh_web=self.dsh_web, network_address=self._network_address)
+        try:
+            from .files_http import FilesHttpService
+            self.files_http = FilesHttpService(self, self.service_access)
+        except Exception:
+            self.files_http = None
+        self.service_access.files_http = self.files_http
+
+    def _network_address(self, network_id: str) -> str:
+        runtime = self.mesh_runtime
+        if runtime is None:
+            raise FsError("target is not connected to the selected EasyTier network", "network_not_connected")
+        try:
+            status = runtime.status_for_network(str(network_id))
+        except Exception as exc:
+            raise FsError("selected EasyTier network status is unavailable", "network_not_connected") from exc
+        if status.get("state") != "ready" or status.get("network_id") != str(network_id):
+            raise FsError("target is not connected to the selected EasyTier network", "network_not_connected")
+        node = status.get("node")
+        raw_address = node.get("ipv4") if isinstance(node, dict) else None
+        try:
+            address = ipaddress.IPv4Address(str(raw_address).split("/", 1)[0])
+        except ipaddress.AddressValueError as exc:
+            raise FsError("selected EasyTier instance has no valid IPv4 address", "network_not_connected") from exc
+        return str(address)
 
     def _resolve(self, raw: str | None) -> Path:
         if not raw:
@@ -515,6 +583,7 @@ class FsService:
         return p.resolve()
 
     def _read_guard(self, p: Path) -> None:
+        self._require_scope_path(p, "read_roots", self._hub_file_scope.get())
         ok, why = self.policy.can_read(p)
         if not ok:
             self.audit.add(op="read", path=str(p), mode=self.policy.data.get("mode"),
@@ -522,13 +591,49 @@ class FsService:
             raise FsError(why, "denied")
 
     def _write_guard(self, p: Path, op: str, **extra: Any) -> None:
+        self._require_scope_path(p, "write_roots", self._hub_file_scope.get())
         ok, why = self.policy.can_write(p, op=op)
         self.audit.add(op=op, path=str(p), mode=self.policy.data.get("mode"),
                        phase="intent", result="allowed" if ok else "denied", reason=why, **extra)
         if not ok:
             raise FsError(why, "denied")
 
-    def dispatch(self, op: str, args: dict[str, Any]) -> Any:
+    @staticmethod
+    def _scope_roots(scope: dict[str, Any], field: str, *, required: bool = True) -> list[Path]:
+        raw = scope.get(field)
+        if not isinstance(raw, list) or (required and not raw) or any(not isinstance(item, str) or not item.strip() for item in raw):
+            raise FsError("shared path authority has no usable roots", "shared_scope_denied")
+        roots = []
+        for item in raw:
+            root = Path(item).expanduser()
+            if not root.is_absolute():
+                raise FsError("shared path authority contains a non-absolute root", "shared_scope_denied")
+            try:
+                roots.append(root.resolve())
+            except (OSError, RuntimeError) as exc:
+                raise FsError("shared path authority contains an invalid root", "shared_scope_denied") from exc
+        return roots
+
+    @classmethod
+    def _require_scope_path(cls, path: Path, field: str, scope: dict[str, Any] | None) -> None:
+        if scope is None:
+            return
+        grant_check = scope.get("_grant_check")
+        if callable(grant_check):
+            grant_check()
+        if scope.get("_owner_policy") is True:
+            return
+        roots = cls._scope_roots(scope, field)
+        try:
+            resolved = path.resolve()
+        except (OSError, RuntimeError) as exc:
+            raise FsError("could not resolve shared path", "shared_scope_denied") from exc
+        if not any(_inside(resolved, root) for root in roots):
+            raise FsError("resolved path is outside this Hub share", "shared_scope_denied")
+
+    def dispatch(self, op: str, args: dict[str, Any], *, trusted_hub: bool = False) -> Any:
+        if (op in TRANSFER_PRIVATE_OPS or op in SERVICE_PRIVATE_OPS or op in MESH_PRIVATE_OPS) and not trusted_hub:
+            raise FsError("this operation is only accepted on the authenticated Hub control channel", "trusted_hub_required")
         handler = getattr(self, "_op_" + op, None)
         if handler is None:
             raise FsError(f"unknown fs op: {op}", "bad_op")
@@ -540,6 +645,247 @@ class FsService:
             result.setdefault("device_id", self.policy.device)
         return result
 
+    def dispatch_hub(self, op: str, args: dict[str, Any], authority: dict[str, Any] | None = None) -> Any:
+        if op in MESH_PRIVATE_OPS:
+            return self._dispatch_hub_mesh(op, args, authority)
+        if isinstance(authority, dict) and authority.get("kind") == "hub_files" and op not in HUB_FILE_SCOPE_OPS:
+            raise FsError("Hub file authority cannot authorize this operation", "trusted_hub_required")
+        if op in HUB_FILE_SCOPE_OPS and isinstance(authority, dict) and authority.get("kind") == "hub_files":
+            required = ("actor_id", "target_id", "operation_id", "issued_at", "expires_at")
+            now = int(time.time())
+            try:
+                issued, expires = int(authority.get("issued_at") or 0), int(authority.get("expires_at") or 0)
+            except (TypeError, ValueError):
+                issued = expires = 0
+            if (any(not authority.get(key) for key in required) or str(authority.get("target_id")) != self.device or
+                    issued > now + 5 or expires <= now or expires > issued + 60):
+                raise FsError("invalid or expired Hub file authority", "trusted_hub_required")
+            if (args.get("operation_id") is not None and str(args.get("operation_id")) != str(authority["operation_id"])):
+                raise FsError("operation_id does not match Hub file authority", "trusted_hub_required")
+            if any(key in args for key in ("actor_id", "target_id", "issued_at", "expires_at",
+                                           "read_roots", "write_roots", "kind", "_hub_authority")):
+                raise FsError("Hub file authority must be sent outside args", "trusted_hub_required")
+            if any(key not in authority or not isinstance(authority[key], list) for key in ("read_roots", "write_roots")):
+                raise FsError("Hub file authority must include read_roots and write_roots arrays", "trusted_hub_required")
+            self._scope_roots(authority, "read_roots", required=False)
+            self._scope_roots(authority, "write_roots", required=False)
+            if op in HUB_FILE_READ_OPS:
+                self._scope_roots(authority, "read_roots")
+            if op in HUB_FILE_WRITE_OPS:
+                self._scope_roots(authority, "write_roots")
+            token = self._hub_file_scope.set(authority)
+            try:
+                return self.dispatch(op, args, trusted_hub=True)
+            finally:
+                self._hub_file_scope.reset(token)
+        if (op in HUB_FILE_SCOPE_OPS and authority is not None and
+                (not isinstance(authority, dict) or authority.get("kind") != "hub_files")):
+            raise FsError("invalid Hub file authority", "trusted_hub_required")
+        if op in SERVICE_PRIVATE_OPS:
+            if not isinstance(authority, dict) or authority.get("kind") != "hub_service":
+                raise FsError("missing Hub service authority", "trusted_hub_required")
+            if (not authority.get("actor_id") or not authority.get("target_id") or
+                    not authority.get("service_id") or not authority.get("grant_id") or
+                    not authority.get("operation_id") or not authority.get("authorization_revision")):
+                raise FsError("invalid Hub service authority", "trusted_hub_required")
+            if str(authority.get("target_id")) != self.device:
+                raise FsError("service authority targets another device", "wrong_target")
+            reserved = {"actor_id", "target_id", "service_id", "grant_id", "operation_id", "authorization_revision",
+                        "issued_at", "expires_at", "kind"}
+            if any(key in args for key in reserved):
+                raise FsError("service authority fields must be sent outside args", "trusted_hub_required")
+            args = {**args, "_hub_authority": authority}
+            return self.dispatch(op, args, trusted_hub=True)
+        if op in TRANSFER_PRIVATE_OPS:
+            if not isinstance(authority, dict) or authority.get("kind") != "hub_transfer":
+                raise FsError("missing Hub transfer authority", "trusted_hub_required")
+            if (not authority.get("actor_id") or not authority.get("operation_id") or
+                    not authority.get("authorization_revision") or not authority.get("network_id")):
+                raise FsError("invalid Hub transfer authority", "trusted_hub_required")
+            now = int(time.time())
+            try:
+                issued_at = int(authority["issued_at"]) if authority.get("issued_at") is not None else None
+                expires_at = int(authority.get("expires_at") or 0)
+            except (TypeError, ValueError):
+                issued_at, expires_at = 0, 0
+            if (issued_at is None or expires_at <= now or expires_at > now + 60 or
+                    issued_at > now + 5 or expires_at > issued_at + 60):
+                raise FsError("Hub transfer authority expired", "authorization_expired")
+            expected_device = authority.get("source_device_id") if op in {"transfer_grant_issue", "transfer_grant_revoke", "transfer_grant_renew", "transfer_move_finalize"} else authority.get("executor_device_id")
+            if str(expected_device or "") != self.device:
+                raise FsError("transfer authority targets another device", "wrong_target")
+            requested_id = str(args.get("operation_id") or authority.get("operation_id") or "")
+            if requested_id != str(authority.get("operation_id")):
+                raise FsError("operation_id does not match Hub authority", "trusted_hub_required")
+            root_fields = ("source_read_roots", "source_write_roots", "destination_write_roots")
+            if any(field in args for field in root_fields):
+                raise FsError("transfer roots must be sent in Hub authority", "trusted_hub_required")
+            present = [field in authority for field in root_fields]
+            scope = None
+            if any(present):
+                if not all(present) or any(not isinstance(authority[field], list) for field in root_fields):
+                    raise FsError("shared transfer authority must include all operation root arrays", "trusted_hub_required")
+                for field in root_fields:
+                    self._scope_roots(authority, field, required=False)
+                if expected_device == self.device:
+                    if op in {"transfer_grant_issue", "transfer_move_finalize"}:
+                        self._scope_roots(authority, "source_read_roots")
+                        scope = {"read_roots": list(authority["source_read_roots"])}
+                    if op == "transfer_move_finalize":
+                        self._scope_roots(authority, "source_write_roots")
+                        scope["write_roots"] = list(authority["source_write_roots"])
+                    elif op in {"transfer_job_prepare", "transfer_job_start", "transfer_job_retry"}:
+                        self._scope_roots(authority, "destination_write_roots")
+                        scope = {"write_roots": list(authority["destination_write_roots"])}
+                if scope is not None:
+                    scope.update({"actor_id": authority.get("actor_id"),
+                                  "operation_id": authority.get("operation_id")})
+                    token = self._hub_file_scope.set(scope)
+                    try:
+                        args = {**args, "_hub_authority": authority}
+                        return self.dispatch(op, args, trusted_hub=True)
+                    finally:
+                        self._hub_file_scope.reset(token)
+            args = {**args, "_hub_authority": authority}
+        return self.dispatch(op, args, trusted_hub=True)
+
+    def _dispatch_hub_mesh(self, op: str, args: dict[str, Any], authority: dict[str, Any] | None) -> dict[str, Any]:
+        if not isinstance(authority, dict) or authority.get("kind") != "hub_mesh":
+            raise FsError("missing trusted Hub mesh authority", "trusted_hub_required")
+        required = ("actor_id", "target_id", "network_id", "instance_id", "operation_id",
+                    "authorization_revision", "config_revision", "issued_at", "expires_at")
+        if any(not authority.get(field) for field in required) or str(authority["target_id"]) != self.device:
+            raise FsError("invalid Hub mesh authority", "trusted_hub_required")
+        try:
+            now = int(time.time())
+            issued_at, expires_at = int(authority["issued_at"]), int(authority["expires_at"])
+            config_revision = authority["config_revision"]
+        except (TypeError, ValueError):
+            raise FsError("invalid Hub mesh authority", "trusted_hub_required") from None
+        if (issued_at > now + 5 or expires_at <= now or expires_at > now + 45 or
+                expires_at > issued_at + 45 or type(config_revision) is not int or config_revision < 1):
+            raise FsError("Hub mesh authority expired or malformed", "authorization_expired")
+        if args or not isinstance(args, dict):
+            raise FsError("mesh configuration must be sent only in trusted authority", "trusted_hub_required")
+        if self.mesh_runtime is None:
+            raise FsError("EasyTier runtime is not installed", "mesh_runtime_missing")
+        network_id, instance_id = str(authority["network_id"]), str(authority["instance_id"])
+        if op == "mesh_apply":
+            config = authority.get("mesh_config")
+            if (not isinstance(config, dict) or config.get("network_id") != network_id or
+                    config.get("instance_id") != instance_id or config.get("revision") != config_revision):
+                raise FsError("trusted mesh configuration does not match its authority", "trusted_hub_required")
+            if set(authority) - set(required) - {"kind", "mesh_config"}:
+                raise FsError("unexpected fields in Hub mesh authority", "trusted_hub_required")
+            try:
+                current = self.mesh_runtime.status(instance_id)
+            except Exception as exc:
+                raise FsError(str(exc), getattr(exc, "code", "mesh_runtime_error")) from exc
+            if (current.get("network_id") not in (None, network_id) or
+                    current.get("instance_id") not in (None, instance_id)):
+                raise FsError("mesh instance identity changed", "mesh_network_mismatch")
+            if current.get("state") == "ready" and current.get("revision") != config_revision:
+                if self._mesh_instance_busy(network_id):
+                    raise FsError("EasyTier instance has active service or file operations", "mesh_busy")
+            try:
+                result = self.mesh_runtime.apply(config)
+            except Exception as exc:
+                raise FsError(str(exc), getattr(exc, "code", "mesh_runtime_error")) from exc
+        else:
+            if "mesh_config" in authority or set(authority) - set(required) - {"kind"}:
+                raise FsError("unexpected fields in Hub mesh authority", "trusted_hub_required")
+            try:
+                result = (self.mesh_runtime.status_for_network(network_id) if op == "mesh_status"
+                          else self.mesh_runtime.status(instance_id))
+            except Exception as exc:
+                raise FsError(str(exc), getattr(exc, "code", "mesh_runtime_error")) from exc
+            if op == "mesh_status" and result.get("instance_id") not in (None, instance_id):
+                raise FsError("selected network maps to another mesh instance", "mesh_instance_mismatch")
+            if result.get("network_id") is not None and result.get("network_id") != network_id:
+                raise FsError("mesh instance belongs to another network", "mesh_network_mismatch")
+            if result.get("revision") is not None and result.get("revision") != config_revision:
+                raise FsError("mesh operation revision is stale", "stale_revision")
+            if op == "mesh_remove":
+                reasons = self._mesh_busy_reasons(network_id)
+                if reasons:
+                    raise FsError("EasyTier instance has active service or file operations", "mesh_busy")
+                if result.get("state") == "unverified":
+                    raise FsError("mesh process identity cannot be verified for removal", "mesh_process_unverified")
+                try:
+                    result = self.mesh_runtime.stop(instance_id)
+                except Exception as exc:
+                    raise FsError(str(exc), getattr(exc, "code", "mesh_runtime_error")) from exc
+        if result.get("network_id") not in (None, network_id):
+            raise FsError("mesh runtime returned another network", "mesh_network_mismatch")
+        if result.get("instance_id") not in (None, instance_id):
+            raise FsError("mesh runtime returned another instance", "mesh_instance_mismatch")
+        if result.get("revision") not in (None, config_revision):
+            raise FsError("mesh runtime did not apply the requested revision", "stale_revision")
+        if op == "mesh_apply" and result.get("state") != "ready":
+            raise FsError("EasyTier did not confirm the requested configuration", "mesh_apply_unconfirmed")
+        response = {"protocol": 1, "target_id": self.device, "network_id": network_id,
+                "instance_id": instance_id, "state": result.get("state", "unverified"),
+                "revision": result.get("revision"), "node": result.get("node"),
+                "peers": result.get("peers")}
+        if op == "mesh_status":
+            reasons = self._mesh_busy_reasons(network_id)
+            response.update({"busy": bool(reasons), "busy_reasons": reasons})
+        return response
+
+    def _mesh_busy_reasons(self, network_id: str) -> list[str]:
+        now = time.time()
+        reasons: list[str] = []
+        access = getattr(self, "service_access", None)
+        if access is not None:
+            with access._lock:
+                if any(worker.network_id == network_id and worker.lease_expires_at > now and
+                       access._worker_alive(worker) for worker in access.workers.values()):
+                    reasons.append("service_lease")
+        jobs = getattr(self, "transfer_jobs", None)
+        if jobs is not None and jobs.has_active_jobs(network_id=network_id):
+            reasons.append("transfer_job")
+        grants = getattr(self, "sftpgo_grants", None)
+        if grants is not None and grants.has_active_grants(network_id=network_id):
+            reasons.append("transfer_grant")
+        desktop = getattr(access, "remote_desktop", None) if access is not None else None
+        if desktop is not None:
+            try:
+                shares = desktop._load_shares()
+                if any(int(item.get("expires_at") or 0) > int(now) and
+                       item.get("target_id") == self.device for item in shares.values()
+                       if isinstance(item, dict)):
+                    reasons.append("remote_desktop_lease")
+            except Exception:
+                reasons.append("remote_desktop_state_unknown")
+        return reasons
+
+    def _mesh_instance_busy(self, network_id: str) -> bool:
+        return bool(self._mesh_busy_reasons(network_id))
+
+    def _op_service_catalog(self, _args: dict[str, Any]) -> dict[str, Any]:
+        return self.service_access.catalog()
+
+    def _op_service_grant_issue(self, args: dict[str, Any]) -> dict[str, Any]:
+        authority = args.pop("_hub_authority", {})
+        try:
+            return self.service_access.issue(authority, args.get("lease_expires_at"))
+        except ServiceAccessError as exc:
+            raise FsError(str(exc), exc.code) from exc
+
+    def _op_service_grant_renew(self, args: dict[str, Any]) -> dict[str, Any]:
+        authority = args.pop("_hub_authority", {})
+        try:
+            return self.service_access.renew(authority, args.get("lease_expires_at"))
+        except ServiceAccessError as exc:
+            raise FsError(str(exc), exc.code) from exc
+
+    def _op_service_grant_revoke(self, args: dict[str, Any]) -> dict[str, Any]:
+        authority = args.pop("_hub_authority", {})
+        try:
+            return self.service_access.revoke(authority, str(args.get("reason") or ""))
+        except ServiceAccessError as exc:
+            raise FsError(str(exc), exc.code) from exc
+
     def _op_list(self, args: dict[str, Any]) -> dict[str, Any]:
         p = self._resolve(args.get("path"))
         self._read_guard(p)
@@ -550,8 +896,11 @@ class FsService:
             children = list(p.iterdir())
         except PermissionError as exc:
             raise FsError(f"permission denied: {exc}", "denied") from exc
+        scope = self._hub_file_scope.get()
         for child in sorted(children, key=lambda c: (not c.is_dir(), c.name.lower())):
             try:
+                if scope is not None:
+                    self._read_guard(child)
                 st = child.stat()
                 item = {"name": child.name, "path": str(child), "dir": child.is_dir(),
                         "size": st.st_size, "mtime": st.st_mtime,
@@ -559,9 +908,14 @@ class FsService:
                 if not child.is_dir() and not child.suffix:
                     item.update(self._file_format(child))
                 items.append(item)
-            except OSError:
+            except (OSError, FsError):
                 continue
         writable = self.policy.can_write(p, op="write")[0]
+        if scope is not None and scope.get("_owner_policy") is not True:
+            try:
+                self._require_scope_path(p, "write_roots", scope)
+            except FsError:
+                writable = False
         return {"path": str(p), "entries": items, "writable": writable}
 
     def _op_stat(self, args: dict[str, Any]) -> dict[str, Any]:
@@ -571,9 +925,16 @@ class FsService:
             st = p.stat()
         except FileNotFoundError as exc:
             raise FsError("not found", "not_found") from exc
+        writable = self.policy.can_write(p, op="write")[0]
+        scope = self._hub_file_scope.get()
+        if scope is not None and scope.get("_owner_policy") is not True:
+            try:
+                self._require_scope_path(p, "write_roots", scope)
+            except FsError:
+                writable = False
         return {"path": str(p), "dir": p.is_dir(), "size": st.st_size, "mtime": st.st_mtime,
                 "version": _path_version(p) if p.is_file() else "",
-                "writable": self.policy.can_write(p, op="write")[0]}
+                "writable": writable}
 
     def _op_direct_info(self, args: dict[str, Any]) -> dict[str, Any]:
         direct = getattr(self, "direct", None)
@@ -636,8 +997,26 @@ class FsService:
     def _op_transfer_info(self, args: dict[str, Any]) -> dict[str, Any]:
         croc = getattr(self, "croc", None)
         if croc is None:
-            return {"engine": "croc", "available": False, "version": "", "relay": False}
-        return {"engine": "croc", **croc.info(), "cancel_by_transfer_id": True}
+            return {"engine": "croc", "legacy": True, "default_engine": "rclone-sftpgo",
+                    "available": False, "version": "", "relay": False}
+        return {"engine": "croc", "legacy": True, "default_engine": "rclone-sftpgo",
+                **croc.info(), "cancel_by_transfer_id": True}
+
+    def _transfer_capabilities(self) -> dict[str, Any]:
+        rclone_path = str(getattr(self.transfer_jobs, "_binary", "") or "")
+        rclone_ready = bool(rclone_path and Path(rclone_path).is_file())
+        sftpgo_ready = bool(self.sftpgo_grants and self.sftpgo_grants.available())
+        croc = getattr(self, "croc", None)
+        croc_info = croc.info() if croc is not None else {"available": False}
+        return {
+            "transfer_engine": "rclone-sftpgo",
+            "transfer_engines": {
+                "rclone-sftpgo": {"state": "ready" if rclone_ready and sftpgo_ready else "unavailable",
+                                  "rclone_available": rclone_ready, "sftpgo_available": sftpgo_ready},
+                "croc": {"state": "legacy" if croc_info.get("available") else "unavailable",
+                         "available": bool(croc_info.get("available")), "legacy": True},
+            },
+        }
 
     def _op_transfer_status(self, args: dict[str, Any]) -> dict[str, Any]:
         if not self._croc_context and args.get("path"):
@@ -705,6 +1084,104 @@ class FsService:
         shutil.rmtree(staging, ignore_errors=True)
         self._croc_context = {}
         return {"path": str(target), "bytes": target.stat().st_size, "engine": "croc"}
+
+    def _op_transfer_job_prepare(self, args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            authority = args.pop("_hub_authority", {})
+            grant_expires_at = _transfer_grant_expiry(args)
+            prepared = {**args, **authority,
+                        "executor_device_id": authority.get("executor_device_id"),
+                        "expires_at": grant_expires_at}
+            return self.transfer_jobs.prepare(prepared)
+        except TransferJobError as exc:
+            raise FsError(str(exc), exc.code) from exc
+
+    def _op_transfer_job_start(self, args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            authority = args.pop("_hub_authority", {})
+            args["_hub_authority"] = authority
+            return self.transfer_jobs.start(args)
+        except TransferJobError as exc:
+            raise FsError(str(exc), exc.code) from exc
+
+    def _op_transfer_job_status(self, args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return self.transfer_jobs.status(str(args.get("operation_id") or ""))
+        except TransferJobError as exc:
+            raise FsError(str(exc), exc.code) from exc
+
+    def _op_transfer_job_list(self, args: dict[str, Any]) -> dict[str, Any]:
+        return self.transfer_jobs.list()
+
+    def _op_transfer_job_cancel(self, args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return self.transfer_jobs.cancel(str(args.get("operation_id") or ""))
+        except TransferJobError as exc:
+            raise FsError(str(exc), exc.code) from exc
+
+    def _op_transfer_job_retry(self, args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return self.transfer_jobs.retry(args)
+        except TransferJobError as exc:
+            raise FsError(str(exc), exc.code) from exc
+
+    def _op_destination_fingerprint(self, args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return self.transfer_jobs.destination_fingerprint(str(args.get("path") or ""))
+        except TransferJobError as exc:
+            raise FsError(str(exc), exc.code) from exc
+
+    def _op_transfer_grant_issue(self, args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            authority = args.pop("_hub_authority", {})
+            grant_expires_at = _transfer_grant_expiry(args)
+            args["expires_at"] = grant_expires_at
+            args["actor_id"] = authority.get("actor_id")
+            args["source_device_id"] = authority.get("source_device_id")
+            args["executor_device_id"] = authority.get("executor_device_id")
+            args["authorization_revision"] = authority.get("authorization_revision")
+            args["network_id"] = authority.get("network_id")
+            args["mesh_host"] = self._network_address(str(authority.get("network_id") or ""))
+            return self.sftpgo_grants.issue(args)
+        except GrantError as exc:
+            raise FsError(str(exc), exc.code) from exc
+
+    def _op_transfer_grant_revoke(self, args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            args.pop("_hub_authority", None)
+            return self.sftpgo_grants.revoke(args)
+        except GrantError as exc:
+            raise FsError(str(exc), exc.code) from exc
+
+    def _op_transfer_grant_renew(self, args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            authority = args.pop("_hub_authority", {})
+            grant_expires_at = _transfer_grant_expiry(args)
+            args["expires_at"] = grant_expires_at
+            args["actor_id"] = authority.get("actor_id")
+            args["source_device_id"] = authority.get("source_device_id")
+            args["executor_device_id"] = authority.get("executor_device_id")
+            args["authorization_revision"] = authority.get("authorization_revision")
+            args["network_id"] = authority.get("network_id")
+            return self.sftpgo_grants.renew(args)
+        except GrantError as exc:
+            raise FsError(str(exc), exc.code) from exc
+
+    def _op_transfer_move_finalize(self, args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            authority = args.pop("_hub_authority", {})
+            args["authorization_revision"] = authority.get("authorization_revision")
+            result = self.sftpgo_grants.finalize_move(args)
+            for path in result.get("deleted", []):
+                self.audit.add(op="transfer_move_finalize", path=str(path), mode=self.policy.data.get("mode"),
+                               phase="result", result="deleted", operation_id=str(args.get("operation_id") or ""))
+            for item in result.get("errors", []):
+                self.audit.add(op="transfer_move_finalize", path=str(item.get("path") or ""), mode=self.policy.data.get("mode"),
+                               phase="result", result="retained", reason=str(item.get("message") or "delete failed"),
+                               operation_id=str(args.get("operation_id") or ""))
+            return result
+        except GrantError as exc:
+            raise FsError(str(exc), exc.code) from exc
 
     def _terminal_dispatch(self, action: str, args: dict[str, Any]) -> Any:
         terminal = getattr(self, "terminal", None)
@@ -1052,6 +1529,12 @@ class FsService:
         st = p.stat()
         size = st.st_size
         writable = self.policy.can_write(p, op="write")[0]
+        scope = self._hub_file_scope.get()
+        if scope is not None and scope.get("_owner_policy") is not True:
+            try:
+                self._require_scope_path(p, "write_roots", scope)
+            except FsError:
+                writable = False
         result: dict[str, Any] = {
             "path": str(p), "size": size, "writable": writable,
             "version": _path_version(p), "mtime": st.st_mtime,
@@ -1217,27 +1700,10 @@ class FsService:
                 pass
 
     def _office_pdf(self, source: Path, kind: str) -> bytes:
-        if os.name != "nt":
-            raise FsError("Office preview is only available on Windows", "unsupported")
-        with tempfile.TemporaryDirectory(prefix="tether-preview-") as folder:
-            script = Path(folder) / "convert.ps1"
-            target = Path(folder) / "preview.pdf"
-            script.write_text(OFFICE_SCRIPT, encoding="utf-8")
-            flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-            try:
-                run = subprocess.run(
-                    ["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-                     "-File", str(script), "-Source", str(source), "-Output", str(target),
-                     "-Kind", kind],
-                    capture_output=True, text=True, timeout=45, creationflags=flags,
-                )
-            except subprocess.TimeoutExpired:
-                raise FsError("Office preview timed out", "preview_timeout") from None
-            except OSError:
-                raise FsError("Office preview is unavailable", "preview_unavailable") from None
-            if run.returncode != 0 or not target.is_file():
-                raise FsError("Office preview failed; WPS or Office is required", "preview_unavailable")
-            return target.read_bytes()
+        try:
+            return office_pdf(source, kind)
+        except OfficePreviewError as exc:
+            raise FsError(str(exc), exc.code) from exc
 
     def _op_write(self, args: dict[str, Any]) -> dict[str, Any]:
         p = self._resolve(args.get("path"))
@@ -1252,14 +1718,28 @@ class FsService:
             raise FsError("file exists", "exists")
         expected_version = args.get("expected_version")
         if expected_version is not None:
-            if not isinstance(expected_version, str) or len(expected_version) != 64:
+            if expected_version == "absent":
+                if p.exists():
+                    raise FsError("file exists", "conflict")
+            elif not isinstance(expected_version, str) or len(expected_version) != 64:
                 raise FsError("expected_version must be a SHA-256 digest", "bad_args")
+            else:
+                current_version = _path_version(p) if p.exists() else ""
+                if current_version != expected_version:
+                    raise FsError("file changed on target device", "conflict")
+        p.parent.mkdir(parents=True, exist_ok=True)
+        tmp = p.with_name(p.name + ".tether-tmp." + secrets.token_hex(8))
+        tmp.write_bytes(data)
+        self._write_guard(p, "write", bytes=len(data))
+        if expected_version == "absent":
+            if p.exists():
+                tmp.unlink(missing_ok=True)
+                raise FsError("file appeared while saving", "conflict")
+        elif isinstance(expected_version, str):
             current_version = _path_version(p) if p.exists() else ""
             if current_version != expected_version:
+                tmp.unlink(missing_ok=True)
                 raise FsError("file changed on target device", "conflict")
-        p.parent.mkdir(parents=True, exist_ok=True)
-        tmp = p.with_name(p.name + ".tether-tmp")
-        tmp.write_bytes(data)
         os.replace(tmp, p)
         st = p.stat()
         version = _content_version(data)
@@ -1303,18 +1783,23 @@ class FsService:
             raise FsError("final chunk does not complete the file", "bad_args")
         overwrite = args.get("overwrite") is True
         expected_version = args.get("expected_version")
-        if expected_version is not None and (not isinstance(expected_version, str) or len(expected_version) != 64):
+        if expected_version is not None and expected_version != "absent" and (
+                not isinstance(expected_version, str) or len(expected_version) != 64):
             raise FsError("expected_version must be a SHA-256 digest", "bad_args")
         if offset == 0:
             self._write_guard(p, "write", bytes=total)
             if p.exists() and not overwrite:
                 raise FsError("file exists", "exists")
+            if expected_version == "absent" and p.exists():
+                raise FsError("file exists", "conflict")
+            if isinstance(expected_version, str) and expected_version != "absent":
+                current_version = _path_version(p) if p.exists() else ""
+                if current_version != expected_version:
+                    raise FsError("file changed on target device", "conflict")
             if part.exists() and args.get("resume") is not True:
                 part.unlink()
         else:
-            ok, why = self.policy.can_write(p, op="write")
-            if not ok:
-                raise FsError(why, "denied")
+            self._write_guard(p, "write", bytes=total)
             if not part.exists() or part.stat().st_size != offset:
                 raise FsError("partial transfer offset does not match", "offset_mismatch")
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -1329,8 +1814,13 @@ class FsService:
                     "total": total, "complete": False}
         if part.stat().st_size != total:
             raise FsError("partial transfer is incomplete", "offset_mismatch")
-        if expected_version is not None and p.exists() and _path_version(p) != expected_version:
-            raise FsError("file changed on target device", "conflict")
+        self._write_guard(p, "write", bytes=total)
+        if expected_version == "absent" and p.exists():
+            raise FsError("file appeared during upload", "conflict")
+        if isinstance(expected_version, str) and expected_version != "absent":
+            current_version = _path_version(p) if p.exists() else ""
+            if current_version != expected_version:
+                raise FsError("file changed on target device", "conflict")
         if p.exists() and not overwrite:
             raise FsError("file exists", "exists")
         os.replace(part, p)
@@ -1342,17 +1832,28 @@ class FsService:
                 "size": st.st_size, "mtime": st.st_mtime, "version": version, "complete": True}
 
     def open_write_stream(self, path: Any, transfer_id: Any, total: int,
-                          overwrite: bool) -> _StreamWriter:
+                          overwrite: bool, *, expected_version: str | None = None,
+                          discard_on_abort: bool = False) -> _StreamWriter:
         p, part, transfer = self._transfer_part({"path": path, "transfer_id": transfer_id})
         if total < 0 or total > MAX_TRANSFER_BYTES:
             raise FsError("total is out of range", "bad_args")
         self._write_guard(p, "write", bytes=total)
-        if p.exists() and not overwrite:
+        if expected_version == "absent":
+            if p.exists():
+                raise FsError("file exists", "conflict")
+        elif expected_version is not None:
+            if not isinstance(expected_version, str) or len(expected_version) != 64:
+                raise FsError("expected_version must be a SHA-256 digest", "bad_args")
+            current_version = _path_version(p) if p.exists() else ""
+            if current_version != expected_version:
+                raise FsError("file changed on target device", "conflict")
+        elif p.exists() and not overwrite:
             raise FsError("file exists", "exists")
         p.parent.mkdir(parents=True, exist_ok=True)
         if part.exists():
             part.unlink()
-        return _StreamWriter(self, p, part, part.open("wb"), total, transfer)
+        return _StreamWriter(self, p, part, part.open("wb"), total, transfer,
+                             expected_version=expected_version, discard_on_abort=discard_on_abort)
 
     def _op_mkdir(self, args: dict[str, Any]) -> dict[str, Any]:
         p = self._resolve(args.get("path"))

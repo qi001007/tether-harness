@@ -1,0 +1,92 @@
+appId: com.tether.app
+productName: Tether
+artifactName: Tether-${version}-${os}-${arch}.${ext}
+asar: true
+directories:
+  app: apps/tether-app
+  output: .scratch/tether-desktop-candidates/0.5.0
+files:
+  - main.js
+  - preload.js
+  - supervisor.js
+  - startup-readiness.js
+  - update-service.js
+  - update-helper.js
+  - app-installation.js
+  - native-workbench.js
+  - renderer-diagnostics.js
+  - dsh-web-navigation.js
+  - enrollment.js
+  - package.json
+  - '!data/**'
+  - '!**/.env*'
+  - '!**/*.log'
+  - '!**/*.sqlite'
+  - '!**/*.db'
+  - '!**/*.map'
+  - '!**/test/**'
+  - '!**/tests/**'
+extraResources:
+  - from: .runtime/desktop-candidate
+    to: tether-runtime
+    filter:
+      - '**/*'
+      - '!node-bin/**'
+      - '!components/meshcentral-data/**'
+      - '!components/meshcentral-files/**'
+      - '!components/meshcentral-backups/**'
+      - '!components/meshcentral-recordings/**'
+  - from: .runtime/desktop-candidate/node-bin
+    to: tether-source/tether/node/bin
+    filter:
+      - '**/*'
+  - from: tether
+    to: tether-source/tether
+    filter:
+      - '**/*.py'
+      - '!**/__pycache__/**'
+      - '!**/*.pyc'
+  - from: packages/tether-ui/web
+    to: tether-ui/web
+    filter:
+      - '**/*'
+      - '!**/*.map'
+  - from: version.json
+    to: tether-source/version.json
+  - from: LICENSE
+    to: tether-source/LICENSE
+  - from: THIRD_PARTY_NOTICES.md
+    to: tether-source/THIRD_PARTY_NOTICES.md
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: assets/tether-app-s.ico
+nsis:
+  oneClick: false
+  perMachine: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  runAfterFinish: true
+linux:
+  icon: assets/tether-app-s.png
+  category: Utility
+  target:
+    - AppImage
+    - deb
+mac:
+  icon: .runtime/desktop-candidate/tether-app.icns
+  category: public.app-category.utilities
+  minimumSystemVersion: '13.5'
+  target:
+    - dmg
+    - zip
+publish:
+  - provider: github
+    owner: qi001007
+    repo: tether-harness
+    channel: preview
+    releaseType: draft

@@ -775,6 +775,7 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand,
       const sessionId = props.sessionId
       busyRef.current = true
       if (isRoot) setRoot(item.path)
+      if (item.path !== directory) setEntries(null)
       setDirectory(item.path); setSearch('')
       if (opts.fromTree !== true) void revealTree(item.path)
       setBusy(true); setError('')
@@ -847,27 +848,6 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand,
         if (mounted.current) setBusy(false)
       }
     }
-    const nativeComposerInput = () => {
-      if (typeof document === 'undefined') return null
-      // The plugin mounts beside the composer, not inside it, so walking up from
-      // containerRef misses the composer input. The DSH composer owns the only
-      // hidden file input; claim it so the native plus opens the target picker.
-      const inputs = [...document.querySelectorAll('input[type="file"][hidden]')]
-      return inputs.length === 1 ? inputs[0] : null
-    }
-    React.useEffect(() => {
-      if (typeof document === 'undefined') return undefined
-      const interceptNativeFilePicker = (event) => {
-        const input = event.target
-        if (!input || input !== nativeComposerInput()) return
-        event.preventDefault()
-        event.stopPropagation()
-        if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation()
-        if (openPickerRef.current) void openPickerRef.current()
-      }
-      document.addEventListener('click', interceptNativeFilePicker, true)
-      return () => document.removeEventListener('click', interceptNativeFilePicker, true)
-    }, [])
     React.useEffect(() => {
       if (typeof document === 'undefined') return undefined
       const onDrop = (event) => {
@@ -910,12 +890,17 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand,
     }, [bridge])
     React.useEffect(() => {
       if (!pickerCommand) return undefined
-      const openCommand = () => {
-        if (!busy && props.canAcceptDrop && props.sessionId) void openPickerRef.current?.()
+      const openCommand = (sessionId) => {
+        if (busyRef.current || pickerCommand.pendingSessionStart) return 'busy'
+        const currentSession = currentProps.current.sessionId || null
+        if ((sessionId || null) !== currentSession || !openPickerRef.current) return 'not-ready'
+        if (currentSession && !currentProps.current.canAcceptDrop) return 'not-accepting'
+        void openPickerRef.current()
+        return 'opened'
       }
       pickerCommand.open = openCommand
       return () => { if (pickerCommand.open === openCommand) pickerCommand.open = null }
-    }, [busy, props.canAcceptDrop, props.sessionId])
+    }, [pickerCommand])
 
     const bg = 'var(--dsw-alias-bg-layer-1, #ffffff)'
     const soft = 'var(--dsw-alias-bg-layer-2, #f9fafb)'
@@ -1148,7 +1133,7 @@ export function createDshTargetAttachments(React, Native, bridge, pickerCommand,
               cursor: 'pointer'
             }
           }, '×')),
-        TargetFileExplorer({
+        h(TargetFileExplorer, {
             React,
             sort,
             onSort: setSort,

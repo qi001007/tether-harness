@@ -1,0 +1,172 @@
+name: Tether desktop preview candidate
+
+on:
+  push:
+    branches: ['codex/tether-050-preview-20261108']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-codeg-web:
+    name: Build pinned Codeg web runtime
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: spacering-net/codeg
+          ref: e3171d69d208bdf37697b15e8b14f8c9b70825bf
+          path: .runtime/codeg-source
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24.22.2'
+      - name: Install the pinned Codeg dependencies
+        working-directory: .runtime/codeg-source
+        env:
+          COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+        run: corepack pnpm install --frozen-lockfile
+      - name: Build the Codeg static runtime from source
+        shell: pwsh
+        env:
+          CODEG_GALLERY: '0'
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: ./scripts/build_codeg_runtime.ps1 -ExportDirectory .runtime/codeg-built
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: tether-pinned-codeg-web
+          path: .runtime/codeg-built/
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 1
+  package:
+    name: ${{ matrix.target }}
+    needs: build-codeg-web
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: windows-x64
+            runner: windows-latest
+            platform: windows
+            arch: x64
+          - target: linux-x64
+            runner: ubuntu-22.04
+            platform: linux
+            arch: x64
+          - target: macos-x64
+            runner: macos-15-intel
+            platform: macos
+            arch: x64
+          - target: macos-arm64
+            runner: macos-15
+            platform: macos
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24.22.2'
+          cache: npm
+          cache-dependency-path: |
+            apps/tether-app/package-lock.json
+            packages/tether-ui/package-lock.json
+            desktop/packaging/package-lock.json
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.11'
+      - name: Validate candidate version and frozen plugin channel
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $release = Get-Content -Raw version.json | ConvertFrom-Json
+          $app = Get-Content -Raw apps/tether-app/package.json | ConvertFrom-Json
+          if ($release.components.app -ne '0.5.0' -or $release.components.node -ne '0.5.0' -or $app.version -ne '0.5.0') { throw 'APP and Node candidate versions must all be 0.5.0.' }
+          if ($release.components.plugin -ne '0.2.93') { throw 'The candidate must retain the frozen DSH plugin version 0.2.93.' }
+      - name: Install pinned desktop packaging tools
+        run: npm ci --prefix desktop/packaging
+      - name: Install APP production dependencies
+        run: npm ci --prefix apps/tether-app
+      - name: Install and build the shared APP web UI
+        run: |
+          npm ci --prefix packages/tether-ui
+          npm run build:web --prefix packages/tether-ui
+          node -e "const fs=require('node:fs'); if (!fs.statSync('packages/tether-ui/web/dist/app.js').isFile()) process.exit(1)"
+      - name: Build headless Tether Python command runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check . 'pyinstaller==6.22.3'
+          mkdir -p .runtime/desktop-candidate
+          COLLECT_ARGS=()
+          DATA_ARGS=()
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            COLLECT_ARGS+=(--collect-all winpty)
+            DATA_ARGS+=(--add-data 'tether/node/console.html;tether/node')
+          else
+            DATA_ARGS+=(--add-data 'tether/node/console.html:tether/node')
+          fi
+          python -m PyInstaller --noconfirm --clean --onefile \
+            --name tether-python \
+            --distpath .runtime/desktop-candidate \
+            --workpath "$RUNNER_TEMP/tether-pyinstaller" \
+            --specpath "$RUNNER_TEMP/tether-pyinstaller" \
+            --hidden-import tether.node.agent \
+            --hidden-import tether.updates_cli \
+            --collect-all deepseek_harness \
+            --collect-all deepseek_harness_runtime \
+            --collect-all fastapi \
+            --collect-all starlette \
+            --collect-all uvicorn \
+            --collect-all pydantic \
+            --collect-all anyio \
+            --collect-all mcp.server \
+            --collect-all websockets \
+            --collect-all cryptography \
+            --collect-all zstandard \
+            --collect-all psutil \
+            --collect-all dotenv \
+            "${DATA_ARGS[@]}" \
+            "${COLLECT_ARGS[@]}" \
+            desktop/packaging/python_dispatch.py
+      - name: Download the pinned Codeg web runtime artifact
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: tether-pinned-codeg-web
+          path: .runtime/codeg-web
+      - name: Hydrate pinned Herdr runtime
+        run: python scripts/hydrate_herdr_runtime.py --destination .runtime/herdr-runtime
+      - name: Assemble pinned runtime components
+        run: python desktop/packaging/prepare_runtime.py --target ${{ matrix.target }} --codeg-web .runtime/codeg-web --herdr-runtime .runtime/herdr-runtime
+      - name: Build standalone headless Linux Node runtime
+        if: matrix.target == 'linux-x64'
+        run: python desktop/packaging/build_headless_node.py
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: matrix.target == 'linux-x64'
+        with:
+          name: tether-node-runtime-linux-x64-0.5.0-preview
+          path: .scratch/tether-desktop-candidates/0.5.0/headless/linux-x64/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Create macOS application icon
+        if: matrix.platform == 'macos'
+        shell: bash
+        run: bash desktop/packaging/prepare-macos-icon.sh
+      - name: Package installer candidate
+        run: npm run build:${{ matrix.platform }} --prefix desktop/packaging -- ${{ matrix.arch }}
+      - name: Upload preview package artifacts
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: tether-${{ matrix.target }}-0.5.0-preview
+          path: .scratch/tether-desktop-candidates/0.5.0/${{ matrix.target }}/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7

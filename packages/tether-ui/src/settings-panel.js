@@ -43,7 +43,7 @@ export function createSettingsPanel(React) {
     accountAvatar = '', onAvatarChange, onAccountNameChange, initialSection = 'account',
     server = '', connection = {}, device = {}, versions = {}, update = null, dsh = null, dshBusy = '',
     onDshStart, onDshInstall, extraSections = [],
-    onRefreshConnection, onRestartNode, onLogout, onPasswordChanged }) {
+    onRefreshConnection, onRestartNode, onLogout, onPasswordChanged, passwordChangeAvailable = true }) {
     const [section, setSection] = React.useState(initialSection)
     const [currentPassword, setCurrentPassword] = React.useState('')
     const [newPassword, setNewPassword] = React.useState('')
@@ -355,10 +355,11 @@ export function createSettingsPanel(React) {
     const securityCard = h('div', { style: cardStyle },
       h('div', { style: { display: 'flex', alignItems: 'center', gap: 12, minHeight: 36 } },
         h('span', { style: { flex: '1 1 auto', fontSize: 13, color: ink, fontWeight: 'var(--tether-strong, 500)' } }, '密码'),
-        h('button', {
+        passwordChangeAvailable ? h('button', {
           type: 'button', onClick: openPassword, className: 'tether-hover',
           style: { ...secondary, height: 28, padding: '0 10px', display: 'inline-flex', alignItems: 'center', gap: 6 }
-        }, Glyph ? h(Glyph, { name: 'pencil', size: 13 }) : null, '修改密码')))
+        }, Glyph ? h(Glyph, { name: 'pencil', size: 13 }) : null, '修改密码')
+          : h('span', { style: { color: mute, fontSize: 11.5 } }, '由统一登录服务管理')))
     const accountSection = h('div', { style: { display: 'grid', gap: 18, maxWidth: 520 } },
       h('input', { ref: avatarInputRef, type: 'file', accept: 'image/*', onChange: loadAvatar, style: { display: 'none' } }),
       h('div', { style: { display: 'grid', gap: 8 } }, groupTitle('个人资料'), profileCard),
@@ -543,7 +544,23 @@ export function createSettingsPanel(React) {
     ]
     const aboutSection = h('div', { style: { display: 'grid', gap: 14 } },
       h('div', { style: { fontSize: 17, fontWeight: 600, color: ink } }, 'Tether'),
-      card(versionRows))
+      card(versionRows),
+      h('div', { style: { display: 'grid', gap: 8 } },
+        h('div', { style: { fontSize: 13, fontWeight: 600, color: ink } }, '组件来源与许可'),
+        h('div', { style: { display: 'grid', gap: 0, border: '1px solid ' + line, borderRadius: 10, overflow: 'hidden', background: bg } },
+          [
+            { name: 'SFTPGo 核心 · 2.7.6', license: 'AGPL-3.0-only', url: 'https://github.com/drakkan/sftpgo/tree/v2.7.6', notice: 'https://github.com/drakkan/sftpgo/blob/v2.7.6/NOTICE' },
+            { name: 'EasyTier · 2.6.4', license: 'LGPL-3.0-only', url: 'https://github.com/EasyTier/EasyTier/tree/v2.6.4' },
+            { name: 'Caddy · 2.11.9', license: 'Apache-2.0', url: 'https://github.com/caddyserver/caddy/tree/v2.11.9' },
+            { name: 'rclone · 1.76.0', license: 'MIT', url: 'https://github.com/rclone/rclone/tree/v1.76.0' }
+          ].map((item, index) => h('div', { key: item.name, style: { display: 'flex', alignItems: 'center', gap: 10, minHeight: 42, padding: '7px 10px', borderTop: index ? '1px solid ' + line : 0 } },
+            h('div', { style: { minWidth: 0, flex: '1 1 auto', display: 'grid', gap: 2 } },
+              h('span', { style: { color: ink, fontSize: 12 } }, item.name),
+              h('span', { style: { color: mute, fontSize: 10.5 } }, item.license)),
+            h('a', { href: item.url, target: '_blank', rel: 'noreferrer', style: { color: blue, fontSize: 11, flex: '0 0 auto', textDecoration: 'none' } }, '源码'),
+            item.notice ? h('a', { href: item.notice, target: '_blank', rel: 'noreferrer', style: { color: blue, fontSize: 11, flex: '0 0 auto', textDecoration: 'none' } }, 'NOTICE') : null)),
+          h('div', { style: { padding: '9px 10px', color: mute, fontSize: 10.5, lineHeight: 1.5, borderTop: '1px solid ' + line } },
+            'SFTPGo 仅使用开源核心，不包含其专有 WebAdmin 或 WebClient 网页。组件安装与运行状态按目标设备显示；完整第三方声明随应用发布。'))))
     const updateRow = (row, index) => {
       const chips = (row.products || []).map((product) => h('span', {
         key: product.label,
@@ -580,7 +597,8 @@ export function createSettingsPanel(React) {
         h('span', { 'aria-hidden': true, style: { width: 7, height: 7, borderRadius: 999, flex: '0 0 auto', background: row.online ? success : mute } }),
         h('div', { style: { flex: '1 1 auto', minWidth: 0, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' } },
           h('span', { style: { fontSize: 13, color: ink, fontWeight: 'var(--tether-strong, 500)', flex: '0 0 auto', maxWidth: '42%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, row.name || '—'),
-          chips),
+          chips,
+          row.updateReason ? h('span', { style: { color: mute, fontSize: 11, flex: '1 0 100%' } }, row.updateReason) : null),
         h('span', { style: { width: 28, flex: '0 0 28px', display: 'grid', placeItems: 'center' } }, action))
     }
     const updateGroup = (key, label, rows) => rows.length

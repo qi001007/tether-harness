@@ -1,8 +1,23 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { build } from 'esbuild'
 import { bundledMonacoRuntime } from './monaco-build.mjs'
 
 const root = path.resolve(import.meta.dirname, '..', '..', '..')
+const uiRoot = path.join(root, 'packages/tether-ui')
+const cytoscapeBundle = await build({
+  absWorkingDir: uiRoot,
+  stdin: {
+    contents: "import cytoscape from 'cytoscape'; window.__tetherCytoscape = cytoscape",
+    resolveDir: uiRoot,
+    sourcefile: 'cytoscape-runtime.js'
+  },
+  bundle: true,
+  format: 'iife',
+  target: ['chrome120'],
+  write: false,
+  logLevel: 'silent'
+})
 const sharedPath = path.join(root, 'packages/tether-ui/src/app.js')
 const pluginPath = path.join(root, 'packages/dsh-plugin-tether-client/lib/client.js')
 const pluginVersion = JSON.parse(fs.readFileSync(path.join(root, 'packages/dsh-plugin-tether-client/package.json'), 'utf8')).version
@@ -15,6 +30,7 @@ const strip = (file) => fs.readFileSync(path.join(root, 'packages/tether-ui/src'
 const shared = strip('app.js')
 const connectionPanel = strip('connection-panel.js')
 const settingsPanel = strip('settings-panel.js')
+const teamManagement = strip('team-management.js')
 const targetFileExplorer = strip('target-file-explorer.js')
 const fileCache = strip('file-cache.js')
 const dshHost = strip('hosts/dsh.js')
@@ -35,6 +51,8 @@ const plugin = `window.__ModuleLoader__.load({
   factory: (require) => {
     const React = require('react')
     const Native = require('tether-dsh-native-ui')
+${cytoscapeBundle.outputFiles[0].text}
+    const cytoscape = window.__tetherCytoscape
 ${monacoRuntime}
     const EditorRuntime = TetherMonacoRuntime
     const PANEL_ID = 'tether'
@@ -44,6 +62,7 @@ ${fileCache}
 ${dshHost}
 ${connectionPanel}
 ${settingsPanel}
+${teamManagement}
 ${transferEngine}
 ${transferPage}
 ${terminalDock}
@@ -109,6 +128,22 @@ ${shared}
           try {
             const targetFiles = createDshTargetExplorerBridge({ getRpc: () => localPluginRpc, getHost: () => host })
             const targetFilePicker = { open: null, pendingSessionStart: null }
+            ctx.inject(['commandUi'], (scope) => {
+              const commands = scope.get('commandUi')
+              scope.effect(() => commands.register({
+                name: 'tether-target-files',
+                label: () => '目标设备文件',
+                available: () => true,
+                ui: { kind: 'action', run: (session) => {
+                  const result = targetFilePicker.open?.(session?.sessionId) || 'not-ready'
+                  if (result !== 'opened') window.alert(result === 'busy'
+                    ? '目标设备文件浏览器正在打开，请稍候。'
+                    : result === 'not-accepting'
+                      ? '当前会话暂不接受附件。'
+                      : '目标设备文件浏览器尚未就绪，请待工作区加载完成后重试。')
+                } }
+              }), 'tether: target files command')
+            })
             if (ctx.connection && ctx.connection.rpc && typeof ctx.connection.rpc.call === 'function') {
               const attachments = createDshTargetAttachments(React, Native, targetFiles, targetFilePicker, ctx.uiWorkspace, ctx.sessions)
               ctx.slots.inject('conversation.input.attachments', () => ctx.slots.register({

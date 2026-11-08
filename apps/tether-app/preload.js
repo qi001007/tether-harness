@@ -11,8 +11,21 @@ contextBridge.exposeInMainWorld('tetherApp', {
   updatesCheck: () => ipcRenderer.invoke('tether:updates-check'),
   updatesPrepare: () => ipcRenderer.invoke('tether:updates-prepare'),
   updatesApply: (preparedId) => ipcRenderer.invoke('tether:updates-apply', preparedId),
+  autoStartAtLogin: () => ipcRenderer.invoke('tether:autostart-get'),
+  setAutoStartAtLogin: (enabled) => ipcRenderer.invoke('tether:autostart-set', enabled),
   enrollDevice: (userToken) => ipcRenderer.invoke('tether:enroll-device', userToken),
   resetSurfaceAuth: (origin) => ipcRenderer.invoke('tether:reset-surface-auth', origin),
+  workbenchLogin: () => ipcRenderer.invoke('tether:workbench-login'),
+  workbenchBindLegacy: (credentials) => ipcRenderer.invoke('tether:workbench-bind-legacy', credentials),
+  workbenchLogout: () => ipcRenderer.invoke('tether:workbench-logout'),
+  hubRequest: (request) => ipcRenderer.invoke('tether:hub-request', request),
+  subscribeHubEvents: () => ipcRenderer.invoke('tether:hub-events-subscribe'),
+  unsubscribeHubEvents: () => ipcRenderer.invoke('tether:hub-events-unsubscribe'),
+  workbenchCatalog: (targetId) => ipcRenderer.invoke('tether:workbench-catalog', targetId),
+  workbenchOpen: (targetId, serviceId) => ipcRenderer.invoke('tether:workbench-open', targetId, serviceId),
+  workbenchClose: (targetId, serviceId, grantId) => ipcRenderer.invoke('tether:workbench-close', targetId, serviceId, grantId),
+  workbenchView: (targetId, serviceId, visible) => ipcRenderer.invoke('tether:workbench-view', targetId, serviceId, visible),
+  filesRequest: (request) => ipcRenderer.invoke('tether:files-request', request),
   openLogs: () => ipcRenderer.invoke('tether:open-logs'),
   openDataDir: () => ipcRenderer.invoke('tether:open-data'),
   openExternal: (url) => ipcRenderer.invoke('tether:open-external', url),
@@ -21,6 +34,16 @@ contextBridge.exposeInMainWorld('tetherApp', {
     const listener = (_event, value) => callback(value)
     ipcRenderer.on('tether:window-state', listener)
     return () => ipcRenderer.off('tether:window-state', listener)
+  },
+  onWorkbenchLoginResult: (callback) => {
+    const listener = (_event, value) => callback(value)
+    ipcRenderer.on('tether:workbench-login-result', listener)
+    return () => ipcRenderer.off('tether:workbench-login-result', listener)
+  },
+  onHubEvent: (callback) => {
+    const listener = (_event, value) => callback(value)
+    ipcRenderer.on('tether:hub-event', listener)
+    return () => ipcRenderer.off('tether:hub-event', listener)
   },
   onStatus: (callback) => {
     const listener = (_event, value) => callback(value)

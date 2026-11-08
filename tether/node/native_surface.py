@@ -101,8 +101,11 @@ class NativeSurfaceError(Exception):
 
 
 class NativeSurface:
-    def __init__(self, home: Path, device_fs: Any = None) -> None:
+    def __init__(self, home: Path, device_fs: Any = None,
+                 fallback_homes: tuple[Path, ...] | list[Path] = ()) -> None:
         self.home = Path(home)
+        self.fallback_homes = tuple(Path(path) for path in fallback_homes if Path(path) != self.home)
+        self._active_home = self.home
         self._device_fs = device_fs
         self.descriptor = self.home / "storages" / "tether" / "native-surface.json"
         self._snapshot: tuple[int, int, str] | None = None
@@ -122,54 +125,64 @@ class NativeSurface:
         self._lock = asyncio.Lock()
 
     def _load(self) -> bool:
-        try:
-            stat = self.descriptor.stat()
-            data = json.loads(self.descriptor.read_text(encoding="utf-8"))
-        except FileNotFoundError:
-            self._reason = "descriptor_missing"
-            self._clear()
-            return False
-        except (OSError, ValueError):
-            self._reason = "descriptor_invalid"
-            self._clear()
-            return False
-        origin, auth = data.get("origin"), data.get("authenticated_url")
-        if data.get("version") != 1 or not isinstance(origin, str) or not isinstance(auth, str):
-            self._clear()
-            return False
-        try:
-            parsed = urllib.parse.urlsplit(origin)
-            auth_parsed = urllib.parse.urlsplit(auth)
-            port = parsed.port
-            auth_port = auth_parsed.port
-            valid_host = parsed.hostname in ("127.0.0.1", "::1")
-            if (parsed.scheme != "http" or not valid_host or port is None or not 1 <= port <= 65535
-                    or parsed.username or parsed.password or parsed.path not in ("", "/")
-                    or parsed.query or parsed.fragment):
-                raise ValueError
-            if (auth_parsed.scheme != "http" or auth_parsed.hostname != parsed.hostname
-                    or auth_port != port or auth_parsed.username or auth_parsed.password
-                    or auth_parsed.fragment):
-                raise ValueError
-            if not auth_parsed.path.startswith("/") or "\r" in auth or "\n" in auth:
-                raise ValueError
-        except (ValueError, TypeError):
-            self._reason = "descriptor_invalid"
-            self._clear()
-            return False
-        snapshot = (stat.st_mtime_ns, stat.st_size, origin)
-        if self._snapshot is not None and snapshot != self._snapshot:
-            self._reset_auth()
-            self._close_channels()
-            self._close_http_streams()
-        self._snapshot, self._origin, self._auth_url = snapshot, origin.rstrip("/"), auth
-        profile, pid = data.get("profile"), data.get("pid")
-        self._profile = profile if isinstance(profile, str) and re.fullmatch(r"[A-Za-z0-9_-]{1,80}", profile) else None
-        self._pid = pid if type(pid) is int and 0 < pid <= 2_147_483_647 else None
-        updated_at = data.get("updated_at")
-        self._updated_at = float(updated_at) if isinstance(updated_at, (int, float)) and updated_at > 0 else None
-        self._reason = "ready"
-        return True
+        failure = "descriptor_missing"
+        for home in (self.home, *self.fallback_homes):
+            descriptor = home / "storages" / "tether" / "native-surface.json"
+            try:
+                stat = descriptor.stat()
+                data = json.loads(descriptor.read_text(encoding="utf-8"))
+            except FileNotFoundError:
+                continue
+            except (OSError, ValueError):
+                failure = "descriptor_invalid"
+                continue
+            origin, auth = data.get("origin"), data.get("authenticated_url")
+            if data.get("version") != 1 or not isinstance(origin, str) or not isinstance(auth, str):
+                failure = "descriptor_invalid"
+                continue
+            try:
+                parsed = urllib.parse.urlsplit(origin)
+                auth_parsed = urllib.parse.urlsplit(auth)
+                port = parsed.port
+                auth_port = auth_parsed.port
+                valid_host = parsed.hostname in ("127.0.0.1", "::1")
+                if (parsed.scheme != "http" or not valid_host or port is None or not 1 <= port <= 65535
+                        or parsed.username or parsed.password or parsed.path not in ("", "/")
+                        or parsed.query or parsed.fragment):
+                    raise ValueError
+                if (auth_parsed.scheme != "http" or auth_parsed.hostname != parsed.hostname
+                        or auth_port != port or auth_parsed.username or auth_parsed.password
+                        or auth_parsed.fragment):
+                    raise ValueError
+                if not auth_parsed.path.startswith("/") or "\r" in auth or "\n" in auth:
+                    raise ValueError
+            except (ValueError, TypeError):
+                failure = "descriptor_invalid"
+                continue
+            try:
+                with socket.create_connection((parsed.hostname or "", port), timeout=0.5):
+                    pass
+            except (OSError, ValueError):
+                failure = "host_unreachable"
+                continue
+            snapshot = (stat.st_mtime_ns, stat.st_size, origin)
+            if self._snapshot is not None and (snapshot != self._snapshot or home != self._active_home):
+                self._reset_auth()
+                self._close_channels()
+                self._close_http_streams()
+            self.descriptor = descriptor
+            self._active_home = home
+            self._snapshot, self._origin, self._auth_url = snapshot, origin.rstrip("/"), auth
+            profile, pid = data.get("profile"), data.get("pid")
+            self._profile = profile if isinstance(profile, str) and re.fullmatch(r"[A-Za-z0-9_-]{1,80}", profile) else None
+            self._pid = pid if type(pid) is int and 0 < pid <= 2_147_483_647 else None
+            updated_at = data.get("updated_at")
+            self._updated_at = float(updated_at) if isinstance(updated_at, (int, float)) and updated_at > 0 else None
+            self._reason = "ready"
+            return True
+        self._reason = failure
+        self._clear()
+        return False
 
     def _reset_auth(self) -> None:
         # Replace the jar atomically; in-flight openers retain the old jar object.
@@ -184,6 +197,8 @@ class NativeSurface:
     def _clear(self) -> None:
         self._snapshot = None
         self._origin = self._auth_url = ""
+        self._active_home = self.home
+        self.descriptor = self.home / "storages" / "tether" / "native-surface.json"
         self._profile = None
         self._pid = None
         self._updated_at = None
@@ -203,7 +218,7 @@ class NativeSurface:
     def _profile_from_host_argv(self) -> str | None:
         """Infer the profile from the live DSH desktop host when the descriptor omits it."""
         try:
-            profiles = (self.home / "profiles").resolve()
+            profiles = (self._active_home / "profiles").resolve()
         except OSError:
             return None
         try:
@@ -247,6 +262,12 @@ class NativeSurface:
             except (OSError, ValueError):
                 pass
         return self._profile_from_host_argv()
+
+    def active_home(self) -> Path | None:
+        """Return the home owning the selected live DSH surface descriptor."""
+        if not self._load():
+            return None
+        return self._active_home
 
     def available(self) -> bool:
         return self._load()

@@ -1,0 +1,432 @@
+'use strict'
+
+const crypto = require('node:crypto')
+const tls = require('node:tls')
+const { X509Certificate } = require('node:crypto')
+
+const SERVICE_IDS = new Set(['dsh', 'codeg', 'herdr', 'files'])
+
+function sha256(value) {
+  return crypto.createHash('sha256').update(value).digest('hex')
+}
+
+function normalizedFingerprint(value) {
+  return String(value || '').replace(/^sha256[:=]/i, '').replace(/[^a-f0-9]/gi, '').toLowerCase()
+}
+
+function expiryMillis(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value * 1000
+  const text = String(value || '')
+  if (/^\d+(?:\.\d+)?$/.test(text)) return Number(text) * 1000
+  return Date.parse(text)
+}
+
+function apiUrl(base, targetId, operation) {
+  return new URL('/api/devices/' + encodeURIComponent(targetId) + '/fs/' + operation, base).toString()
+}
+
+async function postJson(fetcher, url, body) {
+  const response = await fetcher(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+    body: JSON.stringify(body),
+    redirect: 'error'
+  })
+  if (!response.ok) {
+    const error = new Error('服务授权请求失败（HTTP ' + response.status + '）')
+    error.status = response.status
+    throw error
+  }
+  return response.status === 204 ? null : response.json()
+}
+
+const FILE_OPERATIONS = new Set(['list', 'drives', 'workspaces', 'stat', 'fingerprint', 'preview',
+  'preview_content', 'mkdir', 'rename', 'delete', 'copy', 'content_get', 'content_put'])
+const TEXT_ENCODINGS = new Set(['utf-8', 'utf-8-bom', 'utf-16-le', 'utf-16-be', 'gb18030'])
+const NEWLINE_MODES = new Set(['lf', 'crlf', 'cr'])
+
+function bytesFromRequest(value) {
+  if (value instanceof ArrayBuffer) return Buffer.from(value)
+  if (ArrayBuffer.isView(value)) return Buffer.from(value.buffer, value.byteOffset, value.byteLength)
+  return null
+}
+
+function verifyEndpoint(descriptor, targetId, serviceId) {
+  if (!descriptor || descriptor.protocol !== 1 || descriptor.target_id !== targetId || descriptor.id !== serviceId
+      || descriptor.state !== 'ready' || descriptor.transport !== 'caddy-easytier') {
+    throw new Error((descriptor && descriptor.reason) || '目标服务尚未就绪或授权失败。')
+  }
+  const endpoint = new URL(descriptor.endpoint)
+  if (endpoint.protocol !== 'https:' || endpoint.username || endpoint.password || endpoint.search || endpoint.hash
+      || endpoint.pathname !== '/') throw new Error('服务端返回的工作台 origin 无效。')
+  const bootstrap = descriptor.bootstrap
+  const bootstrapUrl = bootstrap && new URL(bootstrap.url)
+  if (!bootstrap || bootstrap.method !== 'POST' || !bootstrap.ticket || !bootstrap.expires_at
+      || !bootstrapUrl || bootstrapUrl.origin !== endpoint.origin || bootstrapUrl.pathname !== '/__tether/bootstrap') {
+    throw new Error('服务端没有提供有效的一次性工作台 bootstrap。')
+  }
+  if (!Number.isFinite(expiryMillis(bootstrap.expires_at)) || expiryMillis(bootstrap.expires_at) <= Date.now()) {
+    throw new Error('工作台 bootstrap 票据已过期。')
+  }
+  const caPem = descriptor.tls && descriptor.tls.root_ca_pem
+  const expectedCa = normalizedFingerprint(descriptor.tls && descriptor.tls.root_ca_sha256)
+  if (!caPem || !expectedCa) throw new Error('服务端缺少工作台 TLS 信任信息。')
+  const actualCa = sha256(Buffer.from(caPem, 'utf8'))
+  if (actualCa !== expectedCa) throw new Error('工作台 TLS 根证书指纹不匹配。')
+  if (String(descriptor.tls.epoch || '') !== actualCa.slice(0, 16)) throw new Error('工作台 TLS 信任版本与根证书不匹配。')
+  return { endpoint, bootstrapUrl, caPem, epoch: descriptor.tls.epoch }
+}
+
+async function verifyMeshCertificate(endpoint, caPem, expectedLeaf) {
+  const peer = await new Promise((resolve, reject) => {
+    const port = Number(endpoint.port || 443)
+    const socket = tls.connect({ host: endpoint.hostname, port, ca: caPem, rejectUnauthorized: true }, () => {
+      const certificate = socket.getPeerCertificate(true)
+      socket.end()
+      resolve(certificate)
+    })
+    socket.setTimeout(5000, () => socket.destroy(new Error('工作台 TLS 握手超时。')))
+    socket.once('error', reject)
+  })
+  if (!peer || !peer.raw) throw new Error('工作台没有返回有效 TLS 证书。')
+  const current = sha256(peer.raw)
+  if (expectedLeaf && current !== expectedLeaf) throw new Error('工作台 TLS 证书与当前握手不匹配。')
+  return current
+}
+
+function installCertificatePin(serviceSession, endpoint, caPem) {
+  const expectedHost = endpoint.hostname.toLowerCase()
+  serviceSession.setCertificateVerifyProc((request, callback) => {
+    try {
+      if (String(request.hostname || '').toLowerCase() !== expectedHost) {
+        callback(-3)
+        return
+      }
+      if (!request.certificate || !request.certificate.data) {
+        callback(-2)
+        return
+      }
+      const actual = sha256(new X509Certificate(request.certificate.data).raw)
+      void verifyMeshCertificate(endpoint, caPem, actual).then(() => callback(0), () => callback(-2))
+    } catch (_) {
+      callback(-2)
+    }
+  })
+  serviceSession.webRequest.onBeforeRequest({ urls: ['<all_urls>'] }, (details, callback) => {
+    let allowed = false
+    try {
+      const url = new URL(details.url)
+      const origin = new URL(endpoint.origin)
+      allowed = ['https:', 'wss:'].includes(url.protocol) && url.hostname === origin.hostname && url.port === origin.port
+    } catch (_) { /* reject invalid URLs */ }
+    callback({ cancel: !allowed })
+  })
+}
+
+function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession, getActorId, getLocalDeviceId, logSafe = () => {} }) {
+  if (!controllerUrl || !loginSession || typeof loginSession.fetch !== 'function'
+      || typeof getServiceSession !== 'function' || typeof getActorId !== 'function'
+      || typeof getLocalDeviceId !== 'function') {
+    throw new TypeError('native workbench requires trusted Controller/session access from Electron main')
+  }
+  const base = new URL(controllerUrl).origin
+  const active = new Map()
+  const pending = new Map()
+  const operationIds = new Map()
+  const actorGenerations = new Map()
+  const clearingActors = new Set()
+  const revocationFailures = new Set()
+  const tupleKey = (actorId, targetId, serviceId) => [actorId, targetId, serviceId].join('\u0000')
+
+  async function catalog(targetId) {
+    if (typeof targetId !== 'string' || !targetId) throw new TypeError('invalid target')
+    const actorId = await getActorId()
+    if (typeof actorId !== 'string' || !actorId) throw new Error('Controller 登录身份尚未就绪。')
+    const result = await postJson(loginSession.fetch.bind(loginSession), apiUrl(base, targetId, 'service_catalog'), {})
+    if (!result || result.protocol !== 1 || result.target_id !== targetId || !Array.isArray(result.services)) {
+      throw new Error('Controller 返回了无效的服务目录。')
+    }
+    return { protocol: 1, target_id: targetId, services: result.services.map((service) => ({
+      id: service.id, state: service.state, reason: service.reason || '', updated_at: service.updated_at || null
+    })) }
+  }
+
+  async function open(targetId, serviceId) {
+    if (typeof targetId !== 'string' || !targetId || !SERVICE_IDS.has(serviceId)) throw new TypeError('invalid target or service')
+    const actorId = await getActorId()
+    if (typeof actorId !== 'string' || !actorId) throw new Error('Controller 登录身份尚未就绪。')
+    if (clearingActors.has(actorId)) throw new Error('工作台授权正在清理，请稍后重试。')
+    const key = tupleKey(actorId, targetId, serviceId)
+    const cached = active.get(key)
+    if (cached) return cached.public
+    const generation = actorGenerations.get(actorId) || 0
+    const existing = pending.get(key)
+    if (existing) {
+      if (existing.generation === generation) return existing
+      try { await existing } catch (_) { /* stale generation is discarded */ }
+      return open(targetId, serviceId)
+    }
+    const isCurrent = () => (actorGenerations.get(actorId) || 0) === generation
+    const operationId = operationIds.get(key) || crypto.randomUUID()
+    operationIds.set(key, operationId)
+    const revokeStaleGrant = async (grantId) => {
+      if (!grantId) return
+      const newerActive = active.get(key)
+      const newerPending = pending.get(key)
+      if ((newerActive && newerActive.generation > generation)
+          || (newerPending && newerPending.generation > generation)) return
+      try {
+        await postJson(loginSession.fetch.bind(loginSession), apiUrl(base, targetId, 'service_revoke'), {
+          grant_id: grantId, operation_id: operationId
+        })
+      } catch (_) { revocationFailures.add(actorId) }
+    }
+    let openedDescriptor = null
+    let openedSession = null
+    const opening = (async () => {
+      try {
+    const serviceCatalog = await catalog(targetId)
+    if (!serviceCatalog.services.some((service) => service.id === serviceId)) throw new Error('目标服务目录中没有该服务。')
+    if (!isCurrent()) throw new Error('工作台账号已切换，请重新打开服务。')
+    const sourceDeviceId = await getLocalDeviceId()
+    if (typeof sourceDeviceId !== 'string' || !sourceDeviceId) throw new Error('本机设备身份尚未就绪。')
+    if (!isCurrent()) throw new Error('工作台账号已切换，请重新打开服务。')
+    const descriptor = openedDescriptor = await postJson(loginSession.fetch.bind(loginSession), apiUrl(base, targetId, 'service_open'), {
+      service_id: serviceId,
+      operation_id: operationId,
+      source_device_id: sourceDeviceId
+    })
+    if (!isCurrent()) throw new Error('工作台账号已切换，请重新打开服务。')
+    const verified = verifyEndpoint(descriptor, targetId, serviceId)
+    await verifyMeshCertificate(verified.endpoint, verified.caPem)
+    const partition = 'persist:tether-wb-' + sha256(key + '\u0000' + generation).slice(0, 40)
+    const serviceSession = getServiceSession(partition)
+    openedSession = serviceSession
+    if (!serviceSession || typeof serviceSession.fetch !== 'function') throw new Error('Electron 服务隔离会话不可用。')
+    installCertificatePin(serviceSession, verified.endpoint, verified.caPem)
+    if (!isCurrent()) throw new Error('工作台账号已切换，请重新打开服务。')
+    const response = await serviceSession.fetch(verified.bootstrapUrl.toString(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+      body: JSON.stringify({ ticket: descriptor.bootstrap.ticket }),
+      redirect: 'error'
+    })
+    if (!response.ok) throw new Error('工作台 bootstrap 失败（HTTP ' + response.status + '）。')
+    if (!isCurrent()) throw new Error('工作台账号已切换，请重新打开服务。')
+    const leaseExpiresAt = expiryMillis(descriptor.lease_expires_at)
+    if (!Number.isFinite(leaseExpiresAt) || leaseExpiresAt <= Date.now()) throw new Error('工作台授权租约已过期。')
+    const publicResult = { targetId, serviceId, grantId: descriptor.grant_id, endpoint: verified.endpoint.toString(), partition, leaseExpiresAt }
+    active.set(key, { actorId, targetId, serviceId, generation, operationId, descriptor, endpoint: verified.endpoint, serviceSession,
+      partition, leaseExpiresAt, public: publicResult, viewTimer: null })
+    logSafe('native-workbench-open', { targetId, serviceId, tlsEpoch: verified.epoch })
+    return publicResult
+      } catch (error) {
+        if (openedDescriptor && openedDescriptor.grant_id) await revokeStaleGrant(openedDescriptor.grant_id)
+        if (openedSession) {
+          try {
+            await Promise.all([
+              typeof openedSession.clearStorageData === 'function' ? openedSession.clearStorageData() : Promise.resolve(),
+              typeof openedSession.clearCache === 'function' ? openedSession.clearCache() : Promise.resolve()
+            ])
+          } catch (_) { /* no session data may survive */ }
+        }
+        throw error
+      }
+    })()
+    opening.generation = generation
+    pending.set(key, opening)
+    try { return await opening } finally { if (pending.get(key) === opening) pending.delete(key) }
+  }
+
+  async function close(targetId, serviceId, grantId) {
+    const actorId = await getActorId()
+    const record = active.get(tupleKey(actorId, targetId, serviceId))
+    if (!record || !grantId || record.descriptor.grant_id !== grantId) throw new Error('找不到本次工作台授权视图。')
+    if (record.viewTimer) { clearInterval(record.viewTimer); record.viewTimer = null }
+    try {
+      await postJson(loginSession.fetch.bind(loginSession), apiUrl(base, targetId, 'service_close'), { grant_id: grantId })
+    } catch (error) {
+      try { await view(targetId, serviceId, true) } catch (_) { /* retain the original close error */ }
+      throw error
+    }
+    active.delete(tupleKey(actorId, targetId, serviceId))
+    logSafe('native-workbench-close', { targetId, serviceId })
+    return { targetId, serviceId, state: 'closed' }
+  }
+
+  async function view(targetId, serviceId, visible) {
+    const actorId = await getActorId()
+    const record = active.get(tupleKey(actorId, targetId, serviceId))
+    if (!record) throw new Error('工作台授权不存在或已关闭。')
+    if (record.viewTimer) { clearInterval(record.viewTimer); record.viewTimer = null }
+    if (visible) {
+      const ping = () => record.serviceSession.fetch(new URL('/__tether/view', record.endpoint).toString(), {
+        method: 'POST', headers: { 'Origin': record.endpoint.origin, 'Cache-Control': 'no-store' }, redirect: 'error'
+      }).then((response) => {
+        if (!response.ok) throw new Error('工作台视图续联失败（HTTP ' + response.status + '）。')
+      })
+      let firstError = null
+      try { await ping() } catch (error) { firstError = error }
+      record.viewTimer = setInterval(() => { void ping().catch((error) => logSafe('native-workbench-view-error', { targetId, serviceId, message: String(error.message || error) })) }, 60000)
+      if (firstError) throw firstError
+    }
+    return { targetId, serviceId, visible: !!visible }
+  }
+
+  async function requestFiles(request) {
+    if (!request || typeof request !== 'object' || typeof request.targetId !== 'string'
+        || !request.targetId || !FILE_OPERATIONS.has(request.operation)) {
+      throw new TypeError('invalid files request')
+    }
+    const { targetId, operation } = request
+    if (typeof request.path !== 'string' && !['drives', 'workspaces'].includes(operation)) {
+      throw new TypeError('invalid files path')
+    }
+    await open(targetId, 'files')
+    const actorId = await getActorId()
+    const key = tupleKey(actorId, targetId, 'files')
+    const record = active.get(key)
+    if (!record || record.actorId !== actorId || record.targetId !== targetId || record.serviceId !== 'files') {
+      throw new Error('目标文件服务授权不可用。')
+    }
+    let url
+    let method
+    const headers = { 'Origin': record.endpoint.origin, 'Sec-Fetch-Site': 'same-origin', 'Cache-Control': 'no-store' }
+    let body
+    const jsonOperation = ['list', 'drives', 'workspaces', 'stat', 'fingerprint', 'preview', 'mkdir', 'rename', 'delete', 'copy']
+    if (jsonOperation.includes(operation)) {
+      method = 'POST'
+      url = new URL('/api/files/v1/' + operation, record.endpoint)
+      headers['Content-Type'] = 'application/json'
+      body = JSON.stringify(request.body || (request.path ? { path: request.path } : {}))
+    } else if (operation === 'preview_content') {
+      method = 'GET'
+      url = new URL('/api/files/v1/preview/content', record.endpoint)
+      url.searchParams.set('path', request.path)
+      if (request.body && request.body.version) url.searchParams.set('version', String(request.body.version))
+    } else if (operation === 'content_get') {
+      method = 'GET'
+      url = new URL('/api/files/v1/content', record.endpoint)
+      url.searchParams.set('path', request.path)
+      const params = request.body || {}
+      if (Number.isInteger(params.offset) && params.offset >= 0) url.searchParams.set('offset', String(params.offset))
+      if (Number.isInteger(params.limit) && params.limit >= 0) url.searchParams.set('limit', String(params.limit))
+      if (typeof params.range === 'string' && /^bytes=\d+-\d*$/.test(params.range)) headers.Range = params.range
+    } else {
+      method = 'PUT'
+      url = new URL('/api/files/v1/content', record.endpoint)
+      url.searchParams.set('path', request.path)
+      const expectedVersion = String(request.expectedVersion || '')
+      if (expectedVersion !== 'absent' && !/^[a-f0-9]{64}$/i.test(expectedVersion)) {
+        throw new TypeError('invalid expected file version')
+      }
+      if (!TEXT_ENCODINGS.has(request.encoding) || !NEWLINE_MODES.has(request.newline)) {
+        throw new TypeError('invalid text encoding or newline mode')
+      }
+      headers['Content-Type'] = 'application/octet-stream'
+      headers['X-Tether-Expected-Version'] = expectedVersion
+      headers['X-Tether-Text-Encoding'] = request.encoding
+      headers['X-Tether-Newline'] = request.newline
+      body = bytesFromRequest(request.bytes)
+      if (!body && typeof request.text === 'string' && request.encoding === 'utf-8') body = Buffer.from(request.text, 'utf8')
+      if (!body) throw new TypeError('file content must be encoded bytes')
+    }
+    const response = await record.serviceSession.fetch(url.toString(), { method, headers, body,
+      redirect: 'error' })
+    if (operation === 'content_get' || operation === 'preview_content') {
+      if (!response.ok) {
+        let detail = {}
+        try { detail = await response.json() } catch (_) { /* preserve HTTP status */ }
+        const error = new Error((detail && detail.detail && detail.detail.error) || detail.error ||
+          ('目标文件服务请求失败（HTTP ' + response.status + '）。'))
+        error.status = response.status
+        error.code = detail && detail.detail && detail.detail.code || detail.code
+        throw error
+      }
+      return { targetId, status: response.status, etag: response.headers.get('etag'),
+        contentType: response.headers.get('content-type'), bytes: await response.arrayBuffer() }
+    }
+    let result = {}
+    try { result = response.status === 204 ? {} : await response.json() } catch (_) { /* report controlled JSON error below */ }
+    if (!response.ok) {
+      const detail = result && result.detail
+      const error = new Error((detail && detail.error) || (typeof detail === 'string' && detail) ||
+        result.error || ('目标文件服务请求失败（HTTP ' + response.status + '）。'))
+      error.status = response.status
+      error.code = detail && detail.code || result.code
+      throw error
+    }
+    if (!result || typeof result !== 'object' || Array.isArray(result)) throw new Error('目标文件服务返回了无效JSON。')
+    if (result.target_id && result.target_id !== targetId) throw new Error('目标文件服务返回了其他设备的数据。')
+    return { targetId, status: response.status, body: result }
+  }
+
+  function allowGuest(partition, url) {
+    if (typeof partition !== 'string' || !partition || typeof url !== 'string') return false
+    let origin
+    try {
+      const parsed = new URL(url)
+      if (parsed.protocol !== 'https:') return false
+      origin = parsed.origin
+    } catch (_) { return false }
+    for (const record of active.values()) {
+      if (record.partition === partition && record.endpoint.origin === origin) return true
+    }
+    return false
+  }
+
+  async function clearActor(actorId) {
+    if (typeof actorId !== 'string' || !actorId) throw new TypeError('invalid actor')
+    clearingActors.add(actorId)
+    actorGenerations.set(actorId, (actorGenerations.get(actorId) || 0) + 1)
+    const pendingOpens = [...pending.entries()]
+      .filter(([key]) => key.startsWith(actorId + '\u0000'))
+      .map(([, opening]) => opening)
+    await Promise.allSettled(pendingOpens)
+    const records = [...active.entries()].filter(([, record]) => record.actorId === actorId)
+    for (const [key, record] of records) {
+      if (record.viewTimer) clearInterval(record.viewTimer)
+      active.delete(key)
+    }
+    const results = await Promise.all(records.map(async ([, record]) => {
+      const errors = []
+      try {
+        await postJson(loginSession.fetch.bind(loginSession),
+          apiUrl(base, record.targetId, 'service_revoke'), {
+            grant_id: record.descriptor.grant_id, operation_id: record.operationId
+          })
+      } catch (error) {
+        errors.push('revoke_failed')
+      }
+      try {
+        const serviceSession = getServiceSession(record.partition)
+        if (!serviceSession) throw new Error('session unavailable')
+        await Promise.all([
+          typeof serviceSession.clearStorageData === 'function' ? serviceSession.clearStorageData() : Promise.resolve(),
+          typeof serviceSession.clearCache === 'function' ? serviceSession.clearCache() : Promise.resolve()
+        ])
+      } catch (_) {
+        errors.push('storage_clear_failed')
+      }
+      return errors
+    }))
+    const errors = results.flat()
+    for (const key of operationIds.keys()) if (key.startsWith(actorId + '\u0000')) operationIds.delete(key)
+    if (revocationFailures.has(actorId)) errors.push('revoke_failed')
+    revocationFailures.delete(actorId)
+    clearingActors.delete(actorId)
+    logSafe('native-workbench-clear-actor', { count: records.length, failed: errors.length })
+    return { ok: errors.length === 0, cleared: records.length, errors }
+  }
+
+  return {
+    catalog, open, close, view, requestFiles, allowGuest, clearActor,
+    currentActorId: async () => {
+      const actorId = await getActorId()
+      if (typeof actorId !== 'string' || !actorId) throw new Error('Controller 登录身份尚未就绪。')
+      return actorId
+    }
+  }
+}
+
+module.exports = { createNativeWorkbench }

@@ -1,0 +1,36 @@
+{
+  "component": "LibreOffice",
+  "version": "26.8.2",
+  "license": "MPL-2.0; third-party components include LGPL-3.0-or-later and other notices",
+  "source": "https://www.libreoffice.org/about-us/source-code/",
+  "assets": [
+    {
+      "target": "windows-x64",
+      "name": "LibreOffice_26.8.2_Win_x86-64.msi",
+      "url": "https://download.documentfoundation.org/libreoffice/stable/26.8.2/win/x86_64/LibreOffice_26.8.2_Win_x86-64.msi",
+      "size": 375934976,
+      "sha256": "ff4b911403b67ee9e6249f820f9782c44bb32c94fdaa45b0da53a8e419e5307a"
+    },
+    {
+      "target": "linux-x64",
+      "name": "LibreOffice_26.8.2_Linux_x86-64_deb.tar.gz",
+      "url": "https://download.documentfoundation.org/libreoffice/stable/26.8.2/deb/x86_64/LibreOffice_26.8.2_Linux_x86-64_deb.tar.gz",
+      "size": 221006208,
+      "sha256": "8290c8f46cb33d6df8f681cb796e0697461ea070f86ec55b63c94d7eb9d9a476"
+    },
+    {
+      "target": "macos-x64",
+      "name": "LibreOffice_26.8.2_MacOS_x86-64.dmg",
+      "url": "https://download.documentfoundation.org/libreoffice/stable/26.8.2/mac/x86_64/LibreOffice_26.8.2_MacOS_x86-64.dmg",
+      "size": 309690507,
+      "sha256": "0af062779cc17f6f852918b2424c745f7dd2d20d51d7fb8a0925eb92ec0417a7"
+    },
+    {
+      "target": "macos-arm64",
+      "name": "LibreOffice_26.8.2_MacOS_aarch64.dmg",
+      "url": "https://download.documentfoundation.org/libreoffice/stable/26.8.2/mac/aarch64/LibreOffice_26.8.2_MacOS_aarch64.dmg",
+      "size": 299236406,
+      "sha256": "9f24fe83ab1ed5c95eb3df580119f32932f713e577feeac02bf619fb00749b55"
+    }
+  ]
+}

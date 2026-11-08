@@ -59,11 +59,21 @@ class AgentsRuntime:
         self.install_error = ""
 
     def _binary(self) -> str:
-        name = "codeg-server.exe" if os.name == "nt" else "codeg-server"
+        system = platform.system().lower()
+        machine = platform.machine().lower()
+        architecture = {"amd64": "x86_64", "arm64": "aarch64"}.get(machine, machine)
+        supported = {
+            "windows": {"x86_64"},
+            "linux": {"x86_64", "aarch64"},
+            "darwin": {"x86_64", "aarch64"},
+        }
+        if architecture not in supported.get(system, set()):
+            return ""
+        name = "codeg-server.exe" if system == "windows" else "codeg-server"
         path = self.root / name
         if path.is_file():
             return str(path)
-        if platform.system().lower() == "linux" and platform.machine().lower() in {"x86_64", "amd64"}:
+        if system == "linux" and architecture == "x86_64":
             installed = self.data_dir.parent / "agents-runtime-linux" / "bin" / "codeg-server"
             return str(installed) if installed.is_file() else ""
         return ""

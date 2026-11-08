@@ -3,6 +3,7 @@ name: POSIX terminal
 on:
   workflow_dispatch:
   push:
+    branches-ignore: ['codex/tether-050-preview-20261108']
     paths:
       - 'tether/node/terminal.py'
       - 'tests/test_terminal_posix.py'

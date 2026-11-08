@@ -301,7 +301,28 @@ class Node:
         self.croc = CrocTransfer()
         self.fs.croc = self.croc
         ensure_sdk_profile(self.native_dsh_home)
-        self.native_surface = NativeSurface(self.native_dsh_home, device_fs=self.fs)
+        web_home = self.fs.dsh_web.dsh_home if self.fs.dsh_web is not None else None
+        self.native_surface = NativeSurface(
+            self.native_dsh_home, device_fs=self.fs,
+            fallback_homes=(web_home,) if web_home is not None else ())
+        self.fs.service_access.native_surface = self.native_surface
+        self.remote_desktop = None
+        self.remote_desktop_error = "meshcentral_runtime_missing"
+        node_executable = os.environ.get("TETHER_NODEJS_EXE", "")
+        meshcentral_root = os.environ.get("TETHER_MESHCENTRAL_ROOT", "")
+        meshagent_executable = os.environ.get("TETHER_MESHAGENT_EXE", "")
+        if node_executable and meshcentral_root and meshagent_executable:
+            try:
+                from .remote_desktop import MeshCentralDesktop
+                self.remote_desktop = MeshCentralDesktop(
+                    node_executable=node_executable, meshcentral_root=meshcentral_root,
+                    meshagent_executable=meshagent_executable, data_dir=self.data_dir,
+                    target_id=self.device, get_device_state=self._remote_desktop_device_state)
+                self.remote_desktop_error = ""
+            except Exception as exc:
+                self.remote_desktop_error = getattr(exc, "code", "meshcentral_runtime_missing")
+        self.fs.service_access.remote_desktop = self.remote_desktop
+        self.fs.service_access.remote_desktop_error = self.remote_desktop_error
         update_state_dir = self.data_dir / "updates"
         manifest_url = release_manifest_url()
         plugin_profile = select_profile(Path(self.native_dsh_home), "desktop") or "desktop"
@@ -329,6 +350,63 @@ class Node:
         self.cancels: dict[str, asyncio.Event] = {}
         self._dropped = False
 
+    def _remote_desktop_device_state(self) -> dict[str, Any]:
+        system = platform.system()
+        display_supported = False
+        try:
+            if system == "Windows":
+                import ctypes
+                user32 = ctypes.WinDLL("user32", use_last_error=True)
+                user32.OpenInputDesktop.argtypes = [ctypes.c_uint32, ctypes.c_bool, ctypes.c_uint32]
+                user32.OpenInputDesktop.restype = ctypes.c_void_p
+                user32.GetSystemMetrics.argtypes = [ctypes.c_int]
+                user32.GetSystemMetrics.restype = ctypes.c_int
+                user32.CloseDesktop.argtypes = [ctypes.c_void_p]
+                user32.CloseDesktop.restype = ctypes.c_bool
+                desktop = user32.OpenInputDesktop(0, False, 0x0100)
+                if desktop:
+                    try:
+                        display_supported = bool(user32.GetSystemMetrics(0) and user32.GetSystemMetrics(1))
+                    finally:
+                        user32.CloseDesktop(desktop)
+            elif system == "Darwin":
+                import ctypes
+                graphics = ctypes.CDLL("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")
+                graphics.CGMainDisplayID.restype = ctypes.c_uint32
+                display_supported = bool(graphics.CGMainDisplayID())
+            else:
+                display_supported = bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
+        except (AttributeError, OSError, ValueError):
+            display_supported = False
+        desktop_reason = "" if display_supported else "display_unavailable"
+        busy_reason = ""
+        try:
+            if (any(run.get("state") in ACTIVE for run in self.store.all_runs()) or
+                    any(not task.done() for task in self.tasks.values())):
+                busy_reason = "tether_agent_task_active"
+            session_files = self.dsh_sessions._files()
+            if any(path.name.endswith(".zstd") for path in session_files) and not self.dsh_sessions.available():
+                busy_reason = busy_reason or "dsh_activity_unknown"
+            if any(item.get("status") == "running" for item in self.dsh_sessions.list()):
+                busy_reason = busy_reason or "dsh_turn_active"
+            activity = self.fs.agents_runtime.activity()
+            if activity.get("ok") is not True or not isinstance(activity.get("busy"), bool):
+                busy_reason = busy_reason or "agents_activity_unknown"
+            else:
+                if activity["busy"]:
+                    busy_reason = busy_reason or str(activity.get("reason") or "agents_runtime_active")
+        except Exception:
+            busy_reason = busy_reason or "agent_activity_unknown"
+        return {"desktop_supported": display_supported, "desktop_reason": desktop_reason,
+                "busy": bool(busy_reason),
+                "busy_reason": busy_reason}
+
+    def _active_plugin_profile(self, preferred: str) -> str | None:
+        return self.native_surface.active_profile() or select_profile(self._active_plugin_home(), preferred)
+
+    def _active_plugin_home(self) -> Path:
+        return self.native_surface.active_home() or Path(self.native_dsh_home)
+
     async def _warm_updates(self) -> None:
         await asyncio.sleep(2)
         while True:
@@ -337,10 +415,15 @@ class Node:
                     manager = self.update_managers["node"]
                     await asyncio.to_thread(manager.check)
                     plugin = self.update_managers["plugin"]
-                    profile = self.native_surface.active_profile() or select_profile(Path(self.native_dsh_home), plugin.profile)
+                    profile = await asyncio.to_thread(self._active_plugin_profile, plugin.profile)
                     if profile:
-                        plugin.profile = profile
-                        await asyncio.to_thread(plugin.check)
+                        plugin_home = await asyncio.to_thread(self._active_plugin_home)
+                        active_plugin = UpdateManager(
+                            getattr(plugin, "root", ROOT), "plugin", dsh_home=plugin_home,
+                            manifest_url=getattr(plugin, "manifest_url", None),
+                            state_dir=getattr(plugin, "state_dir", None), profile=profile,
+                            device=self.device)
+                        await asyncio.to_thread(active_plugin.check)
             except Exception:
                 pass
             await asyncio.sleep(600)
@@ -609,7 +692,7 @@ class Node:
         op = str(msg.get("op") or "")
         args = msg.get("args") or {}
         try:
-            result = await asyncio.to_thread(self.fs.dispatch, op, args)
+            result = await asyncio.to_thread(self.fs.dispatch_hub, op, args, msg.get("authority"))
             reply = {"type": "fs_result", "req_id": req_id, "ok": True, "result": result}
         except FsError as exc:
             reply = {"type": "fs_result", "req_id": req_id, "ok": False,
@@ -758,6 +841,21 @@ class Node:
             )
             return
         component = str(component)
+        node_update_owner = os.environ.get("TETHER_NODE_UPDATE_OWNER", "").strip().lower()
+        if (component == "node" and node_update_owner in {"app_installer", "bundle_installer"}
+                and action != "status"):
+            owner_label = ("Tether APP installer" if node_update_owner == "app_installer"
+                           else "the complete Node runtime bundle installer")
+            owner_error_code = ("node_update_managed_by_app_installer"
+                                if node_update_owner == "app_installer"
+                                else "node_update_managed_by_bundle_installer")
+            await self._send_update_result(
+                response_ws,
+                {"type": "update_result", "req_id": req_id, "ok": False,
+                 "error_code": owner_error_code,
+                 "error": f"Node runtime updates are managed by {owner_label}"},
+            )
+            return
         if component == "app":
             self._refresh_app_update_manager()
         applying = action == "apply"
@@ -781,7 +879,7 @@ class Node:
             manager = self.update_managers[component]
             if component == "plugin":
                 profile = self.native_surface.active_profile() or select_profile(
-                    Path(self.native_dsh_home), getattr(manager, "profile", "desktop"))
+                    self._active_plugin_home(), getattr(manager, "profile", "desktop"))
                 if not profile:
                     await self._send_update_result(
                         response_ws,
@@ -791,7 +889,7 @@ class Node:
                     )
                     return
                 manager = UpdateManager(getattr(manager, "root", ROOT), component,
-                                        dsh_home=getattr(manager, "dsh_home", Path(self.native_dsh_home)),
+                                        dsh_home=self._active_plugin_home(),
                                         manifest_url=getattr(manager, "manifest_url", None),
                                         state_dir=getattr(manager, "state_dir", None),
                                         profile=profile, device=self.device)
@@ -826,7 +924,7 @@ class Node:
         async with self.update_lock:
             if component == "plugin":
                 profile = self.native_surface.active_profile() or select_profile(
-                    Path(self.native_dsh_home), getattr(self.update_managers[component], "profile", "desktop"))
+                    self._active_plugin_home(), getattr(self.update_managers[component], "profile", "desktop"))
                 if not profile:
                     await self._send_update_result(
                         response_ws,
@@ -835,6 +933,7 @@ class Node:
                          "error": "未找到已安装的 Tether DSH 插件 profile，无法更新插件。"},
                     )
                     return
+                self.update_managers[component].dsh_home = self._active_plugin_home()
                 self.update_managers[component].profile = profile
             if applying:
                 # Block new dispatches before inspecting native DSH logs off-loop.
@@ -1145,6 +1244,9 @@ class Node:
                 "node_version": self.node_version, "update_protocol": UPDATE_PROTOCOL,
                 "min_update_protocol": MIN_UPDATE_PROTOCOL,
                 "max_update_protocol": MAX_UPDATE_PROTOCOL,
+                "node_update_owner": os.environ.get("TETHER_NODE_UPDATE_OWNER", "node"),
+                "node_self_update_enabled": os.environ.get("TETHER_NODE_UPDATE_OWNER", "").strip().lower()
+                not in {"app_installer", "bundle_installer"},
                 "update_features": ["check", "prepare", "apply", "app_restart", "plugin_profile_fallback"],
                 "update_manifest": "hub-or-github",
                 "workspace": str(self.workspace), "agents": ["fake", "dsh"], "fs": True,
@@ -1167,12 +1269,12 @@ class Node:
                 "dsh_version": dsh_desktop["version"],
                 "dsh_installing": dsh_desktop["installing"],
                 "dsh_install_supported": platform.system() == "Windows",
-                "dsh_web_supported": platform.system() == "Linux",
+                "dsh_web_supported": bool(self.fs.dsh_web and self.fs.dsh_web.status().get("supported")),
                 "terminal_user": _current_user(),
                 "terminal_privileged": _is_privileged(),
                 "dsh_surface": self.native_surface.available(),
-                "transfer_engine": "croc",
-                "croc": self.croc.info(),
+                **self.fs._transfer_capabilities(),
+                "croc": {**self.croc.info(), "legacy": True},
                 "direct_api": self.direct.info() if self.direct else None}
 
 
@@ -1252,11 +1354,17 @@ def main() -> None:
         log(f"[node] local identity descriptor not published: {exc}")
 
     async def run_with_identity() -> None:
+        def publish_dsh_identity() -> None:
+            write_identity(node.native_dsh_home, args.device)
+            web = node.fs.dsh_web
+            if web is not None and web.dsh_home.is_dir():
+                write_identity(web.dsh_home, args.device)
+
         async def refresh_identity() -> None:
             while True:
                 await asyncio.sleep(3)
                 try:
-                    write_identity(node.native_dsh_home, args.device)
+                    publish_dsh_identity()
                 except Exception as exc:  # noqa: BLE001 - keep the identity heartbeat auxiliary
                     log(f"[node] local identity refresh failed: {exc}")
 
@@ -1272,11 +1380,18 @@ def main() -> None:
                 node.acp.close_all()
             except Exception:
                 pass
+            try:
+                node.fs.sftpgo_grants.stop_owned()
+            except Exception:
+                pass
             if refresher is not None:
                 refresher.cancel()
                 await asyncio.gather(refresher, return_exceptions=True)
             if identity_published:
                 remove_identity(node.native_dsh_home, args.device)
+                web = node.fs.dsh_web
+                if web is not None and web.dsh_home.is_dir():
+                    remove_identity(web.dsh_home, args.device)
 
     try:
         asyncio.run(run_with_identity())

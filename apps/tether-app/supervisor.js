@@ -15,12 +15,13 @@ function killTree(pid) {
 }
 
 class Supervisor {
-  constructor({ repoRoot, dataDir, env, spawnChild = spawn }) {
+  constructor({ repoRoot, dataDir, env, spawnChild = spawn, preserveManagedNodeOnExit = false }) {
     this.repoRoot = repoRoot
     this.dataDir = dataDir
     this.logsDir = path.join(dataDir, 'logs')
     this.baseEnv = env
     this.spawnChild = spawnChild
+    this.preserveManagedNodeOnExit = preserveManagedNodeOnExit
     this.port = Number(env.TETHER_PORT || 18890)
     this.remoteUrl = (env.TETHER_CONTROLLER_URL || '').replace(/\/+$/, '')
     this.accessToken = env.TETHER_ACCESS_TOKEN || ''
@@ -31,7 +32,10 @@ class Supervisor {
     this.nodeMode = env.TETHER_NODE_MODE === 'external' ? 'external' : 'managed'
     this.hubWss = env.TETHER_HUB_WSS || (this.remoteUrl ? this.remoteUrl.replace(/^http/, 'ws').replace(/\/+$/, '') + '/ws/node' : '')
     this.consolePort = Number(env.TETHER_CONSOLE_PORT || 18894)
-    this.localApiToken = crypto.randomBytes(24).toString('hex')
+    this.managedNodeStateDir = path.join(dataDir, 'private')
+    this.managedNodeStatePath = path.join(this.managedNodeStateDir, 'managed-node-process.json')
+    this.managedNodeState = this.readManagedNodeState()
+    this.localApiToken = this.managedNodeState && this.managedNodeState.token || crypto.randomBytes(24).toString('hex')
     this.python = env.TETHER_PYTHON || path.join(repoRoot, '.venv', 'Scripts', 'python.exe')
     if (!fs.existsSync(this.python)) this.python = process.platform === 'win32' ? 'python' : 'python3'
     this.childPython = this.python
@@ -119,12 +123,13 @@ class Supervisor {
       cwd: this.repoRoot,
       env,
       windowsHide: true,
-      detached: process.platform !== 'win32',
+      detached: (process.platform !== 'win32') || (name === 'node' && this.preserveManagedNodeOnExit && this.mode === 'hub'),
       stdio: ['ignore', log, log]
     })
     child.on('exit', (code) => {
       if (this.procs[name] !== child) return
       this.procs[name] = null
+      if (name === 'node') this.clearManagedNodeState(child.pid)
       const target = name === 'controller' ? this.controller : this.node
       target.state = code === 0 ? 'stopped' : 'error'
       target.pid = 0
@@ -135,6 +140,8 @@ class Supervisor {
           if (this.mode === null || this.procs.node) return
           const replacement = this.spawnProcess('node', this.procArgs.node || [])
           this.procs.node = replacement
+          this.saveManagedNodeState(replacement.pid)
+          if (this.preserveManagedNodeOnExit && this.mode === 'hub') replacement.unref()
           this.node = { state: 'running', pid: replacement.pid, deviceOnline: online }
         }, 250)
         return
@@ -142,6 +149,153 @@ class Supervisor {
       if (code !== 0) this.lastError = name + ' exited with code ' + code + '; see ' + path.join(this.logsDir, name + '.log')
     })
     return child
+  }
+
+  readManagedNodeState() {
+    if (!fs.existsSync(this.managedNodeStatePath)) return null
+    try {
+      const state = JSON.parse(fs.readFileSync(this.managedNodeStatePath, 'utf8'))
+      if (!Number.isSafeInteger(state.pid) || state.pid <= 0 || typeof state.token !== 'string'
+          || state.token.length < 32 || typeof state.device !== 'string' || typeof state.dataDir !== 'string') return { invalid: true }
+      return state
+    } catch (_) { return { invalid: true } }
+  }
+
+  secureManagedNodeStatePath(target, directory = false) {
+    if (process.platform !== 'win32') {
+      try { fs.chmodSync(target, directory ? 0o700 : 0o600) } catch (error) { throw new Error('Cannot protect the managed Node identity file: ' + error.message) }
+      return
+    }
+    const user = process.env.USERNAME
+    if (!user) throw new Error('Cannot determine the Windows account for managed Node file permissions')
+    const account = (process.env.USERDOMAIN || '.') + '\\' + user
+    const rule = account + (directory ? ':(OI)(CI)F' : ':F')
+    const result = spawnSync('icacls.exe', [target, '/inheritance:r', '/grant:r', rule], { windowsHide: true, stdio: 'ignore' })
+    if (result.status !== 0) throw new Error('Windows denied private permissions for the managed Node identity file')
+  }
+
+  saveManagedNodeState(pid) {
+    const state = { pid, token: this.localApiToken, device: this.device,
+      dataDir: path.resolve(this.dataDir), controllerUrl: this.remoteUrl,
+      port: this.consolePort, startedAt: new Date().toISOString() }
+    fs.mkdirSync(this.managedNodeStateDir, { recursive: true, mode: 0o700 })
+    this.secureManagedNodeStatePath(this.managedNodeStateDir, true)
+    const temporary = this.managedNodeStatePath + '.tmp'
+    try { fs.unlinkSync(temporary) } catch (_) { /* no incomplete write */ }
+    const fd = fs.openSync(temporary, 'wx', 0o600)
+    fs.closeSync(fd)
+    this.secureManagedNodeStatePath(temporary)
+    fs.writeFileSync(temporary, JSON.stringify(state), { mode: 0o600 })
+    fs.renameSync(temporary, this.managedNodeStatePath)
+    this.managedNodeState = state
+  }
+
+  clearManagedNodeState(pid) {
+    const state = this.readManagedNodeState()
+    if (state && state.pid === pid) {
+      try { fs.unlinkSync(this.managedNodeStatePath) } catch (_) { /* already cleared */ }
+      this.managedNodeState = null
+    }
+  }
+
+  processAlive(pid) {
+    try { process.kill(pid, 0); return true } catch (error) { return error && error.code === 'EPERM' }
+  }
+
+  processIdentity(pid) {
+    if (process.platform === 'win32') {
+      const script = `$p=Get-CimInstance Win32_Process -Filter "ProcessId = ${pid}"; if ($null -eq $p) { exit 2 }; ConvertTo-Json -Compress @{created=$p.CreationDate.ToUniversalTime().ToString('o');path=$p.ExecutablePath}`
+      const result = spawnSync('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', script], {
+        encoding: 'utf8', windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000
+      })
+      if (result.status !== 0) return null
+      try {
+        const value = JSON.parse(String(result.stdout || '').trim())
+        return value.created && value.path ? { created: value.created, path: path.resolve(value.path) } : null
+      } catch (_) { return null }
+    }
+    if (process.platform === 'linux') {
+      try {
+        const stat = fs.readFileSync('/proc/' + pid + '/stat', 'utf8')
+        const end = stat.lastIndexOf(')')
+        const startTicks = stat.slice(end + 2).trim().split(/\s+/)[19]
+        const executable = fs.realpathSync('/proc/' + pid + '/exe')
+        return startTicks && executable ? { created: startTicks, path: executable } : null
+      } catch (_) { return null }
+    }
+    if (process.platform === 'darwin') {
+      const result = spawnSync('ps', ['-p', String(pid), '-o', 'lstart='], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000 })
+      const created = String(result.stdout || '').trim()
+      return result.status === 0 && created ? { created, path: path.resolve(this.python) } : null
+    }
+    return null
+  }
+
+  sameManagedNodeProcess(state) {
+    const identity = this.processIdentity(state.pid)
+    if (!identity || !state.processCreatedAt || !state.processPath) return false
+    const normalize = (value) => path.resolve(value).toLowerCase()
+    return identity.created === state.processCreatedAt && normalize(identity.path) === normalize(state.processPath)
+  }
+
+  async attachManagedNode() {
+    const state = this.managedNodeState
+    if (!state) return false
+    if (state.invalid) throw Object.assign(new Error('受管 Node 身份文件无效；为避免启动重复设备，已停止自动启动。'), { code: 'managed_node_state_invalid' })
+    const matches = state.device === this.device && state.dataDir === path.resolve(this.dataDir)
+      && state.controllerUrl === this.remoteUrl && state.port === this.consolePort
+    if (!matches) {
+      if (this.processAlive(state.pid)) throw Object.assign(new Error('已有受管 Node 身份与当前 Hub 配置不一致，请先从原 APP 停止该 Node。'), { code: 'managed_node_identity_mismatch' })
+      this.clearManagedNodeState(state.pid)
+      return false
+    }
+    if (this.processAlive(state.pid) && !this.sameManagedNodeProcess(state)) {
+      throw Object.assign(new Error('保存的 Node PID、创建时间或可执行路径不匹配；为避免误接管或重复设备，已停止自动启动。'), { code: 'managed_node_process_mismatch' })
+    }
+    const ready = await waitForLocalNodeApi({ port: state.port, device: state.device, token: state.token }, { timeoutMs: 2500 })
+    if (ready) {
+      this.localApiToken = state.token
+      this.node = { state: 'running', pid: state.pid, deviceOnline: null }
+      this.lastError = ''
+      return true
+    }
+    if (this.processAlive(state.pid)) {
+      throw Object.assign(new Error('已有受管 Node 进程未通过本地身份探测；为避免启动重复设备，已停止自动启动。'), { code: 'managed_node_unverified' })
+    }
+    this.clearManagedNodeState(state.pid)
+    return false
+  }
+
+  async stopManagedNode() {
+    const child = this.procs.node
+    const state = this.managedNodeState
+    if (!child && !state) return { stopped: false }
+    if (!child && state && state.invalid) throw Object.assign(new Error('受管 Node 身份文件无效，不能安全停止进程。'), { code: 'managed_node_state_invalid' })
+    const pid = child && child.pid || state && state.pid
+    if (!Number.isSafeInteger(pid) || pid <= 0) throw Object.assign(new Error('受管 Node PID 无效，不能安全停止进程。'), { code: 'managed_node_process_mismatch' })
+    if (!this.processAlive(pid)) {
+      this.clearManagedNodeState(pid)
+      if (child) this.procs.node = null
+      return { stopped: false }
+    }
+    if (state && (state.pid !== pid || !this.sameManagedNodeProcess(state))) {
+      throw Object.assign(new Error('受管 Node 创建时间或可执行路径不匹配，拒绝停止该PID。'), { code: 'managed_node_process_mismatch' })
+    }
+    const token = state && state.token || this.localApiToken
+    const ready = await waitForLocalNodeApi({ port: this.consolePort, device: this.device, token }, { timeoutMs: 1500 })
+    if (!ready) throw Object.assign(new Error('受管 Node 身份探测失败，拒绝停止未确认进程。'), { code: 'managed_node_unverified' })
+    if (child) this.procs.node = null
+    killTree(pid)
+    const deadline = Date.now() + 5000
+    while (Date.now() < deadline && await waitForLocalNodeApi({ port: this.consolePort, device: this.device, token }, { timeoutMs: 250 })) {
+      await new Promise((resolve) => setTimeout(resolve, 150))
+    }
+    if (await waitForLocalNodeApi({ port: this.consolePort, device: this.device, token }, { timeoutMs: 250 })) {
+      throw Object.assign(new Error('受管 Node 在停止请求后仍通过原身份探测。'), { code: 'managed_node_stop_pending' })
+    }
+    this.clearManagedNodeState(pid)
+    this.node = { state: 'stopped', pid: 0, deviceOnline: false }
+    return { stopped: true }
   }
 
   async start() {
@@ -163,6 +317,20 @@ class Supervisor {
       if (this.nodeMode !== 'external' && (this.nodeToken || this.userToken) && this.hubWss) {
         if (this.nodeToken) this.baseEnv.TETHER_NODE_TOKEN = this.nodeToken
         if (this.userToken) this.baseEnv.TETHER_USER_TOKEN = this.userToken
+        let attached = false
+        if (this.preserveManagedNodeOnExit) {
+          try { attached = await this.attachManagedNode() }
+          catch (error) {
+            this.node = { state: 'error', pid: this.managedNodeState && this.managedNodeState.pid || 0, deviceOnline: false }
+            this.lastError = error.message
+            this.startPolling()
+            return this.snapshot()
+          }
+        }
+        if (attached) {
+          this.startPolling()
+          return this.snapshot()
+        }
         const node = this.spawnProcess('node', [
           '-m', 'tether.node.agent',
           '--workspace', path.join(this.repoRoot, 'work-local'),
@@ -173,6 +341,11 @@ class Supervisor {
           '--db', path.join(this.dataDir, 'node-hub.db')
         ])
         this.procs.node = node
+        if (this.preserveManagedNodeOnExit) {
+          try { this.saveManagedNodeState(node.pid) }
+          catch (error) { this.procs.node = null; killTree(node.pid); throw error }
+          node.unref()
+        }
         this.node = { state: 'running', pid: node.pid, deviceOnline: this.deviceOnline(probe) }
       }
       this.startPolling()
@@ -281,6 +454,17 @@ class Supervisor {
       if (!child) continue
       this.procs[name] = null
       killTree(child.pid)
+      if (name === 'node') this.clearManagedNodeState(child.pid)
+    }
+    if (!this.procs.node && this.managedNodeState && !this.managedNodeState.invalid && this.preserveManagedNodeOnExit) {
+      const state = this.managedNodeState
+      const matches = state.device === this.device && state.dataDir === path.resolve(this.dataDir)
+        && state.controllerUrl === this.remoteUrl && state.port === this.consolePort
+      if (matches && this.processAlive(state.pid) && this.sameManagedNodeProcess(state)
+          && await waitForLocalNodeApi({ port: state.port, device: state.device, token: state.token }, { timeoutMs: 1200 })) {
+        killTree(state.pid)
+        this.clearManagedNodeState(state.pid)
+      }
     }
     this.controller = { state: 'stopped', pid: 0, port: this.port, managed: false }
     this.node = { state: 'stopped', pid: 0, deviceOnline: false }
@@ -292,7 +476,12 @@ class Supervisor {
   stopSync() {
     for (const name of ['node', 'controller']) {
       const child = this.procs[name]
-      if (child) killTree(child.pid)
+      if (child && name === 'node' && this.preserveManagedNodeOnExit && this.mode === 'hub') {
+        try {
+          if (!this.managedNodeState || this.managedNodeState.pid !== child.pid) this.saveManagedNodeState(child.pid)
+          child.unref()
+        } catch (_) { killTree(child.pid) }
+      } else if (child) killTree(child.pid)
       this.procs[name] = null
     }
     if (this.timer) clearInterval(this.timer)

@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "runtime": {
+    "package": "@deepseek-ai/dsh",
+    "version": "0.2.1-rc.5",
+    "license": "MIT",
+    "source": "https://www.npmjs.com/package/@deepseek-ai/dsh/v/0.2.1-rc.5",
+    "entry": "node_modules/@deepseek-ai/dsh/lib/bin.js",
+    "lock": "desktop/packaging/dsh/package-lock.json",
+    "security_overrides": {
+      "undici": { "version": "8.12.2", "advisory": "GHSA-2m5v-pch6-74hx", "scope": "DSH production lock" },
+      "@modelcontextprotocol/client": { "version": "2.3.0", "advisory": "GHSA-6prh-2h8m-c8cw", "scope": "DSH production lock" },
+      "fflate": { "version": "0.8.3", "advisory": "GHSA-px8p-9vwx-vf98", "scope": "DSH production lock" },
+      "zod": { "version": "4.6.7", "advisory": "GHSA-mrhx-c7xc-m3w5", "scope": "DSH production lock" }
+    }
+  },
+  "frozen_plugin": {
+    "name": "tether-plugin-0.2.93.zip",
+    "version": "0.2.93",
+    "url": "https://github.com/qi001007/tether-harness/releases/download/v0.2.93/tether-plugin-0.2.93.zip",
+    "size": 1366561,
+    "sha256": "08f33b371de45895316a3e132f40c11976ed30cdd2fceebc38bcab2608c1f9df",
+    "source": "https://github.com/qi001007/tether-harness/releases/tag/v0.2.93"
+  }
+}

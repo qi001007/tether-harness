@@ -1,0 +1,19 @@
+{
+  "candidate_version": "0.5.0",
+  "channel": "preview",
+  "platforms": ["windows-x64", "linux-x64", "macos-x64", "macos-arm64"],
+  "bundled": [
+    { "id": "codeg", "version": "v0.42.0", "platform_assets": "component-assets.json" },
+    { "id": "easytier", "version": "v2.6.4", "platform_assets": "component-assets.json" },
+    { "id": "sftpgo-core", "version": "v2.7.6", "scope": "binary and required config only; excludes proprietary web frontend and preseeded database" },
+    { "id": "caddy", "version": "v2.11.9", "platform_assets": "component-assets.json" },
+    { "id": "rclone", "version": "v1.76.0", "platform_assets": "component-assets.json" },
+    { "id": "tether-node", "version": "0.5.0", "scope": "headless runtime built from this checkout; Node service lifecycle must use the packaged Supervisor entry" }
+  ],
+  "separate_or_disabled": [
+    { "id": "dsh", "state": "separate-host", "policy": "Keep the original frozen DSH plugin v0.2.93 distribution channel; do not package the same-version development-generated plugin bundle or a DSH host." },
+    { "id": "herdr", "state": "bundled-session-limited", "policy": "The pinned Herdr v0.9.5 binaries and ConPTY helpers are bundled. Node sessions are currently in-memory and do not claim reattachment after APP/Node exit." },
+    { "id": "office-preview", "state": "not-bundled", "policy": "Do not claim office conversion is available in the cross-platform candidate until fixed Windows, Linux and macOS LibreOffice assets and a user-facing repair route are verified." },
+    { "id": "remote-desktop", "state": "disabled", "policy": "Do not bundle or expose RustDesk remote control until platform assets, user authorization and revoke flows are complete." }
+  ]
+}

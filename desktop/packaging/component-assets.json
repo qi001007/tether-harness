@@ -1,0 +1,234 @@
+{
+  "recorded_at": "2026-11-08",
+  "source": "Official fixed-release assets read through GitHub MCP. Metadata only; not proof these platform binaries were downloaded, installed, or run.",
+  "sftpgo_distribution": "Extract core binary and required configuration only. Exclude proprietary templates/static/preseeded database. Include AGPL license and corresponding source.",
+  "source_repositories": [
+    { "name": "Codeg", "version": "v0.42.0", "license": "Apache-2.0", "url": "https://github.com/spacering-net/codeg/tree/v0.42.0", "distribution": "Retain this fixed source tag and Apache license with the server asset." },
+    { "name": "EasyTier", "version": "v2.6.4", "license": "LGPL-3.0-only", "url": "https://github.com/EasyTier/EasyTier/tree/v2.6.4", "distribution": "Retain this fixed source tag and LGPL license with the native asset." },
+    { "name": "Caddy", "version": "v2.11.9", "license": "Apache-2.0", "url": "https://github.com/caddyserver/caddy/tree/v2.11.9", "distribution": "Retain this fixed source tag and Apache license with the server asset." },
+    { "name": "rclone", "version": "v1.76.0", "license": "MIT", "url": "https://github.com/rclone/rclone/tree/v1.76.0", "distribution": "Retain this fixed source tag and MIT license with the transfer asset." },
+    { "name": "SFTPGo", "version": "v2.7.6", "license": "AGPL-3.0-only", "url": "https://github.com/drakkan/sftpgo/tree/v2.7.6", "distribution": "Include source archive, LICENSE and NOTICE; ship core binary/config only, not proprietary web templates or preseeded data." }
+  ],
+  "source_archives": [
+    { "component": "SFTPGo", "version": "v2.7.6", "name": "sftpgo_v2.7.6_src_with_deps.tar.xz", "url": "https://github.com/drakkan/sftpgo/releases/download/v2.7.6/sftpgo_v2.7.6_src_with_deps.tar.xz", "size": 12082368, "sha256": "f6da983e8d35bb698e4d8e99120a61cf0234f90eed396950bbee1a58d705cbad" }
+  ],
+  "platforms": [
+    "windows-x64",
+    "linux-x64",
+    "linux-arm64",
+    "macos-x64",
+    "macos-arm64"
+  ],
+  "components": [
+    {
+      "name": "Codeg",
+      "version": "v0.42.0",
+      "release_url": "https://github.com/spacering-net/codeg/releases/tag/v0.42.0",
+      "assets": [
+        {
+          "platform": "windows-x64",
+          "name": "codeg-server-windows-x64.zip",
+          "size": 74710499,
+          "sha256": "42ad40eaf108e38f6d64c47803e5ee9bffec8853ec280004a0382a1cae86576f",
+          "url": "https://github.com/spacering-net/codeg/releases/download/v0.42.0/codeg-server-windows-x64.zip"
+        },
+        {
+          "platform": "linux-x64",
+          "name": "codeg-server-linux-x64.tar.gz",
+          "size": 77466977,
+          "sha256": "35928d4b93b5fc65bfc4d330f4d653c738af0b033307cf9d59173539d49bf679",
+          "url": "https://github.com/spacering-net/codeg/releases/download/v0.42.0/codeg-server-linux-x64.tar.gz"
+        },
+        {
+          "platform": "linux-arm64",
+          "name": "codeg-server-linux-arm64.tar.gz",
+          "size": 72114508,
+          "sha256": "8b83e98c7516e58df393acc6be34b350ea191a3018424af51d2059c7bdcd7d9c",
+          "url": "https://github.com/spacering-net/codeg/releases/download/v0.42.0/codeg-server-linux-arm64.tar.gz"
+        },
+        {
+          "platform": "macos-x64",
+          "name": "codeg-server-darwin-x64.tar.gz",
+          "size": 70954530,
+          "sha256": "0ad719273a7b29dd9290be7ca92c5e851d9c29f9617445e8992cfbf546f9fe6f",
+          "url": "https://github.com/spacering-net/codeg/releases/download/v0.42.0/codeg-server-darwin-x64.tar.gz"
+        },
+        {
+          "platform": "macos-arm64",
+          "name": "codeg-server-darwin-arm64.tar.gz",
+          "size": 68167948,
+          "sha256": "d57ec9fbf3272ee2668a6278d9c22de5016330e2922f91f67ed2f0508bd8e95a",
+          "url": "https://github.com/spacering-net/codeg/releases/download/v0.42.0/codeg-server-darwin-arm64.tar.gz"
+        }
+      ]
+    },
+    {
+      "name": "EasyTier",
+      "version": "v2.6.4",
+      "release_url": "https://github.com/EasyTier/EasyTier/releases/tag/v2.6.4",
+      "assets": [
+        {
+          "platform": "windows-x64",
+          "name": "easytier-windows-x86_64-v2.6.4.zip",
+          "size": 32657720,
+          "sha256": "27af91e270e554709b048bd32327fefd2dfce5062ae1e8701af7550c6f525f84",
+          "url": "https://github.com/EasyTier/EasyTier/releases/download/v2.6.4/easytier-windows-x86_64-v2.6.4.zip"
+        },
+        {
+          "platform": "linux-x64",
+          "name": "easytier-linux-x86_64-v2.6.4.zip",
+          "size": 25506523,
+          "sha256": "61b659eaedba658fa66fe47d17e1426cdd77e5d02fa15fed447bb4357c09dfd6",
+          "url": "https://github.com/EasyTier/EasyTier/releases/download/v2.6.4/easytier-linux-x86_64-v2.6.4.zip"
+        },
+        {
+          "platform": "linux-arm64",
+          "name": "easytier-linux-aarch64-v2.6.4.zip",
+          "size": 20487230,
+          "sha256": "f533ec25a7ea714e09f645615012200278058525795cc3bb690ff011aec1a70f",
+          "url": "https://github.com/EasyTier/EasyTier/releases/download/v2.6.4/easytier-linux-aarch64-v2.6.4.zip"
+        },
+        {
+          "platform": "macos-x64",
+          "name": "easytier-macos-x86_64-v2.6.4.zip",
+          "size": 33733545,
+          "sha256": "89fc28a6e6995259d76ce3f11775220e8a21c760e94df91a6a9db30a69b6982e",
+          "url": "https://github.com/EasyTier/EasyTier/releases/download/v2.6.4/easytier-macos-x86_64-v2.6.4.zip"
+        },
+        {
+          "platform": "macos-arm64",
+          "name": "easytier-macos-aarch64-v2.6.4.zip",
+          "size": 30174017,
+          "sha256": "4be1882d1aa36d31c1d6ba0596f2cf8a097e371f8da124212324b2e0f8df7e4b",
+          "url": "https://github.com/EasyTier/EasyTier/releases/download/v2.6.4/easytier-macos-aarch64-v2.6.4.zip"
+        }
+      ]
+    },
+    {
+      "name": "SFTPGo",
+      "version": "v2.7.6",
+      "release_url": "https://github.com/drakkan/sftpgo/releases/tag/v2.7.6",
+      "assets": [
+        {
+          "platform": "windows-x64",
+          "name": "sftpgo_v2.7.6_windows_portable.zip",
+          "size": 60263734,
+          "sha256": "af3994bb690962c7575858aee368a4c1d6fd4748b35770bb0773eb06408d504d",
+          "url": "https://github.com/drakkan/sftpgo/releases/download/v2.7.6/sftpgo_v2.7.6_windows_portable.zip"
+        },
+        {
+          "platform": "linux-x64",
+          "name": "sftpgo_v2.7.6_linux_x86_64.tar.xz",
+          "size": 16285680,
+          "sha256": "71f5c9ae3284fc20bb606b2cf396db49645f9bdf4dba770cd76d6fd4720d5cb4",
+          "url": "https://github.com/drakkan/sftpgo/releases/download/v2.7.6/sftpgo_v2.7.6_linux_x86_64.tar.xz"
+        },
+        {
+          "platform": "linux-arm64",
+          "name": "sftpgo_v2.7.6_linux_arm64.tar.xz",
+          "size": 14106656,
+          "sha256": "0d5c54a266515ae86a6a534e76c94807453353a1913ba3a26e81b9c20e548937",
+          "url": "https://github.com/drakkan/sftpgo/releases/download/v2.7.6/sftpgo_v2.7.6_linux_arm64.tar.xz"
+        },
+        {
+          "platform": "macos-x64",
+          "name": "sftpgo_v2.7.6_macOS_x86_64.tar.xz",
+          "size": 14588568,
+          "sha256": "2e1b94db5d6ac82e0585c039d40f5a95e7b5421d9b454293cd3667ce575011cb",
+          "url": "https://github.com/drakkan/sftpgo/releases/download/v2.7.6/sftpgo_v2.7.6_macOS_x86_64.tar.xz"
+        },
+        {
+          "platform": "macos-arm64",
+          "name": "sftpgo_v2.7.6_macOS_arm64.tar.xz",
+          "size": 14587868,
+          "sha256": "a6417b61789ec5dfb74269a3c9cb94c1c4ce9f2b95831467221e9c75c6fa82f7",
+          "url": "https://github.com/drakkan/sftpgo/releases/download/v2.7.6/sftpgo_v2.7.6_macOS_arm64.tar.xz"
+        }
+      ]
+    },
+    {
+      "name": "Caddy",
+      "version": "v2.11.9",
+      "release_url": "https://github.com/caddyserver/caddy/releases/tag/v2.11.9",
+      "assets": [
+        {
+          "platform": "windows-x64",
+          "name": "caddy_2.11.9_windows_amd64.zip",
+          "size": 18384117,
+          "sha256": "ad93112d335ee687100c4c9f11bced16ca590377976b7fe7883882b9e797e472",
+          "url": "https://github.com/caddyserver/caddy/releases/download/v2.11.9/caddy_2.11.9_windows_amd64.zip"
+        },
+        {
+          "platform": "linux-x64",
+          "name": "caddy_2.11.9_linux_amd64.tar.gz",
+          "size": 18020988,
+          "sha256": "5b8cb7faf8726a2028ad96a66e54e6e81e8f361bc6175e5d22bbd997cc5177fb",
+          "url": "https://github.com/caddyserver/caddy/releases/download/v2.11.9/caddy_2.11.9_linux_amd64.tar.gz"
+        },
+        {
+          "platform": "linux-arm64",
+          "name": "caddy_2.11.9_linux_arm64.tar.gz",
+          "size": 16342262,
+          "sha256": "5e377cff994fc9362a6fcf695c53f226cfca3a3ef85bd3a3687cf252d6310165",
+          "url": "https://github.com/caddyserver/caddy/releases/download/v2.11.9/caddy_2.11.9_linux_arm64.tar.gz"
+        },
+        {
+          "platform": "macos-x64",
+          "name": "caddy_2.11.9_mac_amd64.tar.gz",
+          "size": 18468908,
+          "sha256": "22af256a2cc45606f6bfa8786cd89130529331319665926f4e972234a658fb30",
+          "url": "https://github.com/caddyserver/caddy/releases/download/v2.11.9/caddy_2.11.9_mac_amd64.tar.gz"
+        },
+        {
+          "platform": "macos-arm64",
+          "name": "caddy_2.11.9_mac_arm64.tar.gz",
+          "size": 17162425,
+          "sha256": "d075afc620376679a77b453399bf7ada264cab3280b2833e4ed1372abc0c1c13",
+          "url": "https://github.com/caddyserver/caddy/releases/download/v2.11.9/caddy_2.11.9_mac_arm64.tar.gz"
+        }
+      ]
+    },
+    {
+      "name": "rclone",
+      "version": "v1.76.0",
+      "release_url": "https://github.com/rclone/rclone/releases/tag/v1.76.0",
+      "assets": [
+        {
+          "platform": "windows-x64",
+          "name": "rclone-v1.76.0-windows-amd64.zip",
+          "size": 32193987,
+          "sha256": "8b4fd2737ade4e70c057ef4a49deb7cffe94b0fb9d7587c189d149823f21a1dc",
+          "url": "https://github.com/rclone/rclone/releases/download/v1.76.0/rclone-v1.76.0-windows-amd64.zip"
+        },
+        {
+          "platform": "linux-x64",
+          "name": "rclone-v1.76.0-linux-amd64.zip",
+          "size": 32194302,
+          "sha256": "b00f00b3266c3764413afe599d3ec316f6f43b3e0ea8a0bc1d186d2133e46df7",
+          "url": "https://github.com/rclone/rclone/releases/download/v1.76.0/rclone-v1.76.0-linux-amd64.zip"
+        },
+        {
+          "platform": "linux-arm64",
+          "name": "rclone-v1.76.0-linux-arm64.zip",
+          "size": 29231141,
+          "sha256": "ee169016675e23a69d77240565133ff7dbc9b33d16fa8f7053d4af39f1eaeb78",
+          "url": "https://github.com/rclone/rclone/releases/download/v1.76.0/rclone-v1.76.0-linux-arm64.zip"
+        },
+        {
+          "platform": "macos-x64",
+          "name": "rclone-v1.76.0-osx-amd64.zip",
+          "size": 35749026,
+          "sha256": "4f5835733d52b818340f97b1fc0348a70461534d123363a183ca2b660219595a",
+          "url": "https://github.com/rclone/rclone/releases/download/v1.76.0/rclone-v1.76.0-osx-amd64.zip"
+        },
+        {
+          "platform": "macos-arm64",
+          "name": "rclone-v1.76.0-osx-arm64.zip",
+          "size": 33189281,
+          "sha256": "e72dc90b70f4947a7b72b61bde4a4fbba5777b2874fb448951ffdde67ebd0ab7",
+          "url": "https://github.com/rclone/rclone/releases/download/v1.76.0/rclone-v1.76.0-osx-arm64.zip"
+        }
+      ]
+    }
+  ]
+}

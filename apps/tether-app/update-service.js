@@ -2,6 +2,7 @@ const { execFile, spawn } = require('node:child_process')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
+const crypto = require('node:crypto')
 const { promisify } = require('node:util')
 
 const execFileAsync = promisify(execFile)
@@ -31,17 +32,33 @@ function stageUpdaterRuntime(repoRoot, stagingPackage) {
 }
 
 class UpdateService {
-  constructor({ repoRoot, dataDir, python, env, app, exec = execFileAsync, spawnChild = spawn }) {
+  constructor({ repoRoot, dataDir, python, env, app, stopManagedNode = async () => {}, exec = execFileAsync, spawnChild = spawn }) {
     this.repoRoot = repoRoot
     this.dataDir = dataDir
     this.python = python
     this.env = env
     this.app = app
+    this.stopManagedNode = stopManagedNode
     this.exec = exec
     this.spawnChild = spawnChild
+    this.packaged = !!app.isPackaged
     this.dshHome = env.TETHER_NATIVE_DSH_HOME || path.join(os.homedir(), '.dsh')
     this.helperSource = path.join(__dirname, 'update-helper.js')
     this.preparedIds = new Set()
+    this.electronUpdater = null
+    this.electronUpdateInfo = null
+    this.electronDownloaded = false
+    if (this.packaged) {
+      const { autoUpdater } = require('electron-updater')
+      this.electronUpdater = autoUpdater
+      autoUpdater.autoDownload = false
+      autoUpdater.autoInstallOnAppQuit = false
+      autoUpdater.allowPrerelease = String(env.TETHER_UPDATE_CHANNEL || 'preview').toLowerCase() === 'preview'
+      autoUpdater.channel = autoUpdater.allowPrerelease ? 'preview' : 'latest'
+      autoUpdater.on('update-available', (info) => { this.electronUpdateInfo = info })
+      autoUpdater.on('update-not-available', (info) => { this.electronUpdateInfo = info })
+      autoUpdater.on('update-downloaded', (info) => { this.electronUpdateInfo = info; this.electronDownloaded = true })
+    }
   }
 
   async run(command, preparedId, force = false) {
@@ -87,6 +104,16 @@ class UpdateService {
   }
 
   async status() {
+    if (this.electronUpdater) {
+      const current = this.app.getVersion()
+      return {
+        ok: true, component: 'app', current_version: current,
+        latest_version: this.electronUpdateInfo && this.electronUpdateInfo.version || current,
+        update_available: !!(this.electronUpdateInfo && this.electronUpdateInfo.version && this.electronUpdateInfo.version !== current),
+        prepared: this.electronDownloaded ? [{ prepared_id: [...this.preparedIds][0] || '' }] : [],
+        restart_required: false, source: 'electron-updater'
+      }
+    }
     const result = await this.run('status')
     const lastResultPath = path.join(this.app.getPath('userData'), 'update-result.json')
     if (fs.existsSync(lastResultPath)) {
@@ -97,7 +124,17 @@ class UpdateService {
     }
     return result
   }
-  check() { return this.run('check', undefined, true) }
+  async check() {
+    if (!this.electronUpdater) return this.run('check', undefined, true)
+    const current = this.app.getVersion()
+    const checked = await this.electronUpdater.checkForUpdates()
+    const info = checked && checked.updateInfo || this.electronUpdateInfo
+    this.electronUpdateInfo = info || null
+    const latest = info && info.version || current
+    return { ok: true, component: 'app', current_version: current, latest_version: latest,
+      update_available: !!(info && latest !== current), source: 'electron-updater',
+      checked_at: new Date().toISOString(), prepared: [] }
+  }
   async activity() {
     const result = await this.run('activity')
     if (result.busy) {
@@ -110,6 +147,21 @@ class UpdateService {
     return result
   }
   async prepare() {
+    if (this.electronUpdater) {
+      await this.activity()
+      if (!this.electronUpdateInfo) await this.check()
+      if (!this.electronUpdateInfo || this.electronUpdateInfo.version === this.app.getVersion()) {
+        throw Object.assign(new Error('没有可用的 APP 更新'), { code: 'update_not_available' })
+      }
+      this.electronDownloaded = false
+      await this.electronUpdater.downloadUpdate()
+      const preparedId = crypto.randomUUID()
+      this.preparedIds.add(preparedId)
+      this.electronDownloaded = true
+      return { ok: true, component: 'app', prepared_id: preparedId, prepared: [{ prepared_id: preparedId }],
+        current_version: this.app.getVersion(), latest_version: this.electronUpdateInfo.version,
+        update_available: true, downloaded: true, source: 'electron-updater' }
+    }
     const lastResultPath = path.join(this.app.getPath('userData'), 'update-result.json')
     try { fs.unlinkSync(lastResultPath) } catch (_) { /* no previous result */ }
     const result = await this.run('prepare')
@@ -121,6 +173,13 @@ class UpdateService {
     await this.activity()
     if (typeof preparedId !== 'string' || !/^[A-Za-z0-9_-]{8,160}$/.test(preparedId) || !this.preparedIds.has(preparedId)) {
       throw Object.assign(new Error('更新包标识无效'), { code: 'invalid_prepared_id' })
+    }
+    if (this.electronUpdater) {
+      if (!this.electronDownloaded) throw Object.assign(new Error('更新包尚未下载完成'), { code: 'update_not_prepared' })
+      await this.stopManagedNode()
+      this.preparedIds.delete(preparedId)
+      this.electronUpdater.quitAndInstall(false, true)
+      return { ok: true, component: 'app', status: 'installing', restart_required: true, source: 'electron-updater' }
     }
     const userData = this.app.getPath('userData')
     const helperPath = path.join(userData, 'tether-update-helper.js')

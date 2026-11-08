@@ -1,13 +1,33 @@
 import { createTerminalDock } from './terminal-dock.js'
 import { readCatalog, writeCatalog, readHarnesses, writeHarnesses } from './agent-cache.js'
 import { writeAccount } from './agent-account-cache.js'
-export function createAgentsPage({ React, Glyph, post, C, devices = [], localDevice = '', activeDevice = '', onDeviceChange, onOpenWorkbench, onError }) {
-  const h = React.createElement
+export function createAgentsPage(props) {
+  const { React, devices = [], localDevice = '', activeDevice = '' } = props
   const online = devices.filter((item) => item && item.online)
   const initial = activeDevice
     || (localDevice && online.some((item) => item.device_id === localDevice) ? localDevice : '')
     || (online[0] && online[0].device_id) || ''
-  const [device, setDevice] = React.useState(initial)
+  const [targets, setTargets] = React.useState(() => initial ? [initial] : [])
+  React.useEffect(() => {
+    if (activeDevice) setTargets((current) => current.includes(activeDevice) ? current : [...current, activeDevice])
+  }, [activeDevice])
+  const h = React.createElement
+  const onTargetChange = (target) => {
+    if (target) setTargets((current) => current.includes(target) ? current : [...current, target])
+    if (props.onDeviceChange) props.onDeviceChange(target)
+  }
+  return h('div', { style: { flex: '1 1 auto', minWidth: 0, minHeight: 0, position: 'relative' } },
+    ...targets.map((target) => h('div', { key: target, style: { position: 'absolute', inset: 0, display: target === activeDevice || (!activeDevice && target === initial) ? 'flex' : 'none', minWidth: 0, minHeight: 0 } },
+      h(AgentTargetPage, { ...props, initialDevice: target, activeDevice: target, onDeviceChange: onTargetChange }))))
+}
+
+function AgentTargetPage({ React, Glyph, post, C, host, devices = [], localDevice = '', activeDevice = '', initialDevice = '', onDeviceChange, onOpenWorkbench, onError }) {
+  const h = React.createElement
+  const online = devices.filter((item) => item && item.online)
+  const initial = initialDevice || activeDevice
+    || (localDevice && online.some((item) => item.device_id === localDevice) ? localDevice : '')
+    || (online[0] && online[0].device_id) || ''
+  const device = initial
   const [harnesses, setHarnesses] = React.useState(() => readHarnesses(initial) || [])
   const [detecting, setDetecting] = React.useState(false)
   const [session, setSession] = React.useState('')
@@ -35,6 +55,14 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
   const [homeOpen, setHomeOpen] = React.useState(false)
   const [homeError, setHomeError] = React.useState('')
   const [homeRetry, setHomeRetry] = React.useState(0)
+  const [serviceCatalog, setServiceCatalog] = React.useState(null)
+  const [serviceCatalogBusy, setServiceCatalogBusy] = React.useState(false)
+  const [serviceOpening, setServiceOpening] = React.useState(false)
+  const [serviceView, setServiceView] = React.useState(null)
+  const [serviceFrameState, setServiceFrameState] = React.useState('loading')
+  const serviceWebviewRef = React.useRef(null)
+  const [workbenchLoginRequired, setWorkbenchLoginRequired] = React.useState(false)
+  const [workbenchLoginBusy, setWorkbenchLoginBusy] = React.useState(false)
   const [cwd, setCwd] = React.useState('')
   const since = React.useRef(0)
   const sessionRef = React.useRef('')
@@ -402,53 +430,8 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
     if (node) node.scrollTop = node.scrollHeight
   }, [items])
 
-  React.useEffect(() => () => {
-    const ids = new Set(Object.keys(tabCache.current))
-    if (sessionRef.current) ids.add(sessionRef.current)
-    for (const id of ids) {
-      void post('/api/devices/' + encodeURIComponent(device) + '/fs/acp_stop', { session_id: id }).catch(() => {})
-    }
-  }, [])
-
-  React.useEffect(() => {
-    if (device) return
-    const preferred = activeDevice
-      || (localDevice && online.some((item) => item.device_id === localDevice) ? localDevice : '')
-      || (online[0] && online[0].device_id) || ''
-    if (preferred) setDevice(preferred)
-  }, [device, activeDevice, localDevice, devices])
-
-  React.useEffect(() => {
-    if (!activeDevice || activeDevice === device) return
-    if (!online.some((item) => item.device_id === activeDevice)) return
-    setTabs([])
-    tabCache.current = {}
-    clearSession()
-    setPicking(false)
-    setPanes([])
-    setActivePane('')
-    setWorkspaceOpen(false)
-    setCatalog(null)
-    setCatalogError('')
-    setDevice(activeDevice)
-  }, [activeDevice])
-
   const selectDevice = async (value) => {
-    const ids = tabs.map((tab) => tab.id)
-    setTabs([])
-    tabCache.current = {}
-    clearSession()
-    setPicking(false)
-    setPanes([])
-    setActivePane('')
-    setWorkspaceOpen(false)
-    setCatalog(null)
-    setCatalogError('')
-    setDevice(value)
     if (onDeviceChange) onDeviceChange(value)
-    for (const id of ids) {
-      try { await post('/api/devices/' + encodeURIComponent(device) + '/fs/acp_stop', { session_id: id }) } catch (_) { /* already closed */ }
-    }
   }
 
   const addPane = (pane) => {
@@ -568,6 +551,23 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
     if (homeOpenedRef.current === device) return undefined
     homeOpenedRef.current = device
     let alive = true
+    if (host && host.kind === 'app' && host.workbench) {
+      setServiceCatalogBusy(true)
+      void host.workbench.catalog(device).then((result) => {
+        if (!alive) return
+        setServiceCatalog(result)
+        setHomeError('')
+      }).catch((error) => {
+        if (alive) {
+          if (error && (error.status === 401 || error.status === 403 || error.code === 'auth_required'
+            || error.code === 'oidc_identity_unbound')) setWorkbenchLoginRequired(true)
+          setHomeError(String((error && error.message) || error || '服务目录暂不可用。'))
+        }
+      }).finally(() => {
+        if (alive) setServiceCatalogBusy(false)
+      })
+      return () => { alive = false }
+    }
     const openHome = async () => {
       try {
         const result = await getAgentsRuntime(device, true)
@@ -592,7 +592,7 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
   }, [device, catalogOpen, homeRetry])
 
   React.useEffect(() => {
-    if (!device || catalogOpen) return undefined
+    if (!device || catalogOpen || (host && host.kind === 'app' && host.workbench)) return undefined
     let alive = true
     let timer = null
     const check = async () => {
@@ -628,8 +628,143 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
   const retryAgentsHome = () => {
     homeOpenedRef.current = ''
     setHomeError('')
+    setServiceCatalog(null)
     setHomeRetry((current) => current + 1)
   }
+
+  const openNativeCodeg = async () => {
+    if (!device || serviceOpening || !host || !host.workbench) return
+    setServiceOpening(true)
+    setHomeError('')
+    try {
+      const service = await host.workbench.open(device, 'codeg')
+      if (!service || service.targetId !== device || service.serviceId !== 'codeg' || !service.endpoint || !service.partition) {
+        throw new Error('主进程没有返回有效的 Codeg 工作台会话。')
+      }
+      setServiceView(service)
+      setPanes((current) => current.some((pane) => pane.key === 'codeg:home')
+        ? current.map((pane) => pane.key === 'codeg:home' ? { ...pane, kind: 'native-service', service } : pane)
+        : [...current, { key: 'codeg:home', kind: 'native-service', title: 'Codeg', service }])
+      setActivePane('codeg:home')
+      setWorkspaceOpen(true)
+    } catch (error) {
+      if (error && (error.status === 401 || error.status === 403 || error.code === 'auth_required'
+        || error.code === 'oidc_identity_unbound')) setWorkbenchLoginRequired(true)
+      setHomeError(String((error && error.message) || error || 'Codeg 工作台无法打开。'))
+      homeOpenedRef.current = ''
+      setServiceCatalog(null)
+    } finally {
+      setServiceOpening(false)
+    }
+  }
+
+  const openNativeDesktop = async () => {
+    if (!device || serviceOpening || !host || !host.workbench || !desktopService
+        || !['ready', 'stopped'].includes(desktopService.state)) return
+    setServiceOpening(true)
+    setHomeError('')
+    try {
+      const service = await host.workbench.open(device, 'desktop')
+      if (!service || service.targetId !== device || service.serviceId !== 'desktop'
+          || !service.endpoint || !service.partition) {
+        throw new Error('主进程没有返回有效的目标远程桌面会话。')
+      }
+      setServiceView({ ...service, paneKey: 'remote-desktop' })
+      setPanes((current) => current.some((pane) => pane.key === 'remote-desktop')
+        ? current.map((pane) => pane.key === 'remote-desktop' ? { ...pane, kind: 'native-service', service } : pane)
+        : [...current, { key: 'remote-desktop', kind: 'native-service', title: '远程桌面', service }])
+      setActivePane('remote-desktop')
+      setWorkspaceOpen(true)
+    } catch (error) {
+      if (error && (error.status === 401 || error.status === 403 || error.code === 'auth_required'
+        || error.code === 'oidc_identity_unbound')) setWorkbenchLoginRequired(true)
+      setHomeError(String((error && error.message) || error || '目标远程桌面无法打开。'))
+      setServiceCatalog(null)
+    } finally {
+      setServiceOpening(false)
+    }
+  }
+
+  const startWorkbenchLogin = async () => {
+    if (!host || !host.workbench || !host.workbench.login || workbenchLoginBusy) return
+    setWorkbenchLoginBusy(true)
+    setHomeError('')
+    try {
+      const result = await host.workbench.login()
+      if (result && result.ok === false) throw new Error(result.error || '无法打开主进程登录窗口。')
+    } catch (error) {
+      setWorkbenchLoginBusy(false)
+      setHomeError(String((error && error.message) || error || '无法打开主进程登录窗口。'))
+    }
+  }
+
+  React.useEffect(() => {
+    if (!host || !host.workbench || !host.workbench.onLoginResult) return undefined
+    return host.workbench.onLoginResult((result) => {
+      setWorkbenchLoginBusy(false)
+      if (result && result.state === 'authenticated') {
+        setWorkbenchLoginRequired(false)
+        setServiceCatalog(null)
+        setHomeError('')
+        homeOpenedRef.current = ''
+        setHomeRetry((current) => current + 1)
+      }
+    })
+  }, [host])
+
+  const closeNativeCodeg = async () => {
+    if (!serviceView || !host || !host.workbench) return
+    try {
+      await host.workbench.close(device, 'codeg', serviceView.grantId)
+      setPanes((current) => current.filter((pane) => pane.key !== 'codeg:home'))
+      setServiceView(null)
+      setActivePane('')
+      setWorkspaceOpen(false)
+      retryAgentsHome()
+    } catch (error) {
+      setHomeError(String((error && error.message) || error || 'Codeg 工作台视图关闭失败。'))
+    }
+  }
+
+  const closeNativeDesktop = async () => {
+    if (!serviceView || serviceView.serviceId !== 'desktop' || !host || !host.workbench) return
+    try {
+      await host.workbench.close(device, 'desktop', serviceView.grantId)
+      setPanes((current) => current.filter((pane) => pane.key !== 'remote-desktop'))
+      setServiceView(null)
+      setActivePane('')
+      setWorkspaceOpen(false)
+      setServiceCatalog(null)
+    } catch (error) {
+      setHomeError(String((error && error.message) || error || '远程桌面授权撤销失败。'))
+    }
+  }
+
+  React.useEffect(() => {
+    if (!serviceView || !host || !host.workbench) return undefined
+    void host.workbench.view(device, serviceView.serviceId, true).catch((error) => {
+      setHomeError(String((error && error.message) || error || '原生目标视图连接失败。'))
+    })
+  }, [serviceView, device, host])
+
+  React.useEffect(() => {
+    const guest = serviceWebviewRef.current
+    if (!serviceView || !guest || typeof guest.addEventListener !== 'function') return undefined
+    setServiceFrameState('loading')
+    const onStart = (event) => { if (event.isMainFrame) setServiceFrameState('loading') }
+    const onFinish = () => setServiceFrameState('ready')
+    const onFail = (event) => {
+      if (event.isMainFrame && event.errorCode !== -3) setServiceFrameState('error')
+    }
+    guest.addEventListener('did-start-navigation', onStart)
+    guest.addEventListener('did-finish-load', onFinish)
+    guest.addEventListener('did-fail-load', onFail)
+    return () => {
+      guest.removeEventListener('did-start-navigation', onStart)
+      guest.removeEventListener('did-finish-load', onFinish)
+      guest.removeEventListener('did-fail-load', onFail)
+    }
+  }, [serviceView && serviceView.endpoint])
 
   const installAgent = async (agent) => {
     if (!device || installing) return
@@ -680,6 +815,12 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
     height: 28, padding: '0 14px', border: 0, borderRadius: 7, fontSize: 12,
     cursor: 'pointer', color: '#fff', background: C.blue
   }
+  const nativeWorkbench = host && host.kind === 'app' && host.workbench
+  const codegService = serviceCatalog && serviceCatalog.services
+    ? serviceCatalog.services.find((service) => service.id === 'codeg') : null
+  const desktopService = serviceCatalog && serviceCatalog.services
+    ? serviceCatalog.services.find((service) => service.id === 'desktop') : null
+  const serviceStateLabel = { missing: '未安装', stopped: '已停止', starting: '启动中', ready: '已就绪', failed: '启动失败' }
 
   const paneBody = (pane) => pane.kind === 'web'
     ? (pane.url ? h('iframe', {
@@ -689,6 +830,16 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
       sandbox: 'allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-downloads'
     }) : h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', color: C.mute, fontSize: 12, background: C.bg } },
       '正在启动 ' + pane.title + '…'))
+    : pane.kind === 'native-service'
+      ? h('div', { style: { flex: '1 1 auto', minHeight: 0, minWidth: 0, position: 'relative', display: 'flex' } },
+        h('webview', { key: pane.key, ref: serviceWebviewRef, title: pane.title, src: pane.service.endpoint, partition: pane.service.partition,
+          style: { flex: '1 1 auto', width: '100%', minHeight: 0, border: 0, background: '#fff' } }),
+        serviceFrameState === 'loading' ? h('div', { role: 'status', style: { position: 'absolute', inset: 0, display: 'grid', placeItems: 'center',
+          background: 'rgba(255,255,255,.94)', color: C.sub, fontSize: 13, pointerEvents: 'none' } }, '正在连接目标 ' + pane.title + '…') : null,
+        serviceFrameState === 'error' ? h('div', { role: 'alert', style: { position: 'absolute', inset: 0, display: 'grid', placeItems: 'center',
+          alignContent: 'center', gap: 10, padding: 24, background: C.bg, color: C.sub, fontSize: 13, textAlign: 'center' } },
+          h('span', null, '目标 ' + pane.title + ' 页面连接失败。请检查设备连接后重试。'),
+          h('button', { type: 'button', onClick: () => { setServiceFrameState('loading'); serviceWebviewRef.current?.reload?.() }, style: button }, '重试')) : null)
     : h(createTerminalDock, {
       key: pane.key, React, Glyph, post, C, device, cwd: pane.cwd || '',
       initialAgent: pane.agentId || '', initialShell: pane.shell || '', initialHerdrProject: pane.herdrProject || false,
@@ -701,14 +852,21 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
     key: 'workspace',
     style: { flex: '1 1 auto', minHeight: 0, display: workspaceOpen ? 'flex' : 'none', flexDirection: 'column', background: C.bg }
   },
-    h('div', { style: { flex: '1 1 auto', minHeight: 0, position: 'relative', display: 'flex' } },
+    h('div', { style: { display: activePane ? 'flex' : 'none', alignItems: 'center', height: 42, flex: '0 0 42px', padding: '0 12px', borderBottom: '1px solid ' + C.line } },
       activePane && activePane !== 'codeg:home' ? h('button', {
         key: 'back-to-codeg', type: 'button',
-        onClick: () => setActivePane('codeg:home'),
-        style: { position: 'absolute', top: 10, left: 10, zIndex: 9, display: 'inline-flex', alignItems: 'center', gap: 6,
-          height: 28, padding: '0 10px', border: '1px solid ' + C.line, borderRadius: 8, background: 'rgba(255,255,255,.94)',
-          color: C.ink, fontSize: 11.5, cursor: 'pointer', boxShadow: '0 2px 8px rgba(9,30,66,.10)' }
-      }, '← 返回 Codeg') : null,
+        onClick: () => {
+          if (panes.some((pane) => pane.key === 'codeg:home')) setActivePane('codeg:home')
+          else { setWorkspaceOpen(false); setActivePane('') }
+        },
+        style: { height: 28, padding: '0 10px', border: '1px solid ' + C.line, borderRadius: 8, background: C.bg,
+          color: C.ink, fontSize: 11.5, cursor: 'pointer' }
+      }, panes.some((pane) => pane.key === 'codeg:home') ? '← 返回 Codeg' : '← 返回 Agent 主页') : null,
+      serviceView && activePane === (serviceView.paneKey || 'codeg:home') ? h('button', { type: 'button', onClick: () => void (serviceView.serviceId === 'desktop' ? closeNativeDesktop() : closeNativeCodeg()),
+        style: { marginLeft: 'auto', height: 28, padding: '0 10px', border: '1px solid ' + C.line, borderRadius: 8,
+          background: C.bg, color: C.sub, fontSize: 11.5, cursor: 'pointer' }
+      }, serviceView.serviceId === 'desktop' ? '结束远程桌面并撤销授权' : '关闭工作台视图') : null),
+    h('div', { style: { flex: '1 1 auto', minHeight: 0, position: 'relative', display: 'flex' } },
       ...panes.map((pane) => h('div', {
         key: pane.key,
         style: { position: 'absolute', inset: 0, display: pane.key === activePane ? 'flex' : 'none', flexDirection: 'column', minWidth: 0, minHeight: 0 }
@@ -718,10 +876,33 @@ export function createAgentsPage({ React, Glyph, post, C, devices = [], localDev
     style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', background: C.bg }
   },
     workspace,
-    !panes.length && homeError ? h('div', { role: 'alert', style: { display: 'grid', placeItems: 'center', alignContent: 'center', gap: 10, flex: '1 1 auto', color: C.mute, fontSize: 12 } },
+    !panes.length && nativeWorkbench ? h('div', { style: { display: 'grid', placeItems: 'center', alignContent: 'center', gap: 10, flex: '1 1 auto', padding: 24, color: C.mute, fontSize: 12 } },
+      h('div', { style: { fontSize: 16, fontWeight: 600, color: C.ink } }, '目标设备工作台'),
+      serviceCatalogBusy ? h('div', null, '正在读取目标服务状态…')
+        : codegService ? h('div', { style: { textAlign: 'center', lineHeight: 1.6 } },
+          h('div', { style: { color: C.sub } }, '目标设备：' + (devices.find((item) => item.device_id === device)?.name || device)),
+          h('div', { style: { color: C.sub } }, '服务状态：' + (serviceStateLabel[codegService.state] || codegService.state || '未知')),
+          codegService.reason ? h('div', { style: { maxWidth: 520, color: C.sub } }, codegService.reason) : null)
+          : h('div', { style: { color: homeError ? C.danger : C.sub, textAlign: 'center' } }, homeError || 'Controller 服务目录未返回 Codeg 状态。'),
+      homeError && codegService ? h('div', { role: 'alert', style: { maxWidth: 520, color: C.danger, textAlign: 'center' } }, homeError) : null,
+      h('button', { type: 'button', disabled: serviceCatalogBusy || serviceOpening || workbenchLoginBusy,
+        onClick: workbenchLoginRequired ? () => void startWorkbenchLogin() : (codegService ? () => void openNativeCodeg() : retryAgentsHome),
+        style: { ...button, opacity: serviceCatalogBusy || serviceOpening || workbenchLoginBusy ? 0.55 : 1 } },
+      workbenchLoginBusy ? '等待登录完成…' : workbenchLoginRequired ? '通过主进程登录' : serviceOpening ? '正在打开…'
+        : codegService ? (codegService.state === 'ready' ? '打开 Codeg' : '启动并打开 Codeg') : '重试服务目录'),
+      desktopService ? h('div', { style: { marginTop: 4, textAlign: 'center', lineHeight: 1.55 } },
+        h('div', { style: { color: C.sub } }, '远程桌面：' + (serviceStateLabel[desktopService.state] || desktopService.state || '未知')),
+        desktopService.reason ? h('div', { style: { maxWidth: 520, color: C.sub } }, desktopService.reason) : null,
+        h('button', { type: 'button', disabled: serviceCatalogBusy || serviceOpening || workbenchLoginBusy
+          || !['ready', 'stopped'].includes(desktopService.state),
+        onClick: workbenchLoginRequired ? () => void startWorkbenchLogin() : () => void openNativeDesktop(),
+        style: { ...button, marginTop: 8, opacity: serviceCatalogBusy || serviceOpening || workbenchLoginBusy
+          || !['ready', 'stopped'].includes(desktopService.state) ? 0.55 : 1 } },
+        serviceOpening ? '正在授权并连接…' : desktopService.state === 'ready' ? '打开远程桌面（目标同意后连接）' : '启动并打开远程桌面')) : null) : null,
+    !panes.length && !nativeWorkbench && homeError ? h('div', { role: 'alert', style: { display: 'grid', placeItems: 'center', alignContent: 'center', gap: 10, flex: '1 1 auto', color: C.mute, fontSize: 12 } },
       h('div', { style: { color: C.ink, textAlign: 'center' } }, homeError),
       h('button', { type: 'button', onClick: retryAgentsHome, style: button }, '重试')) : null,
-    !panes.length && !homeError ? h('div', { style: { display: 'grid', placeItems: 'center', alignContent: 'center', gap: 10, flex: '1 1 auto', color: C.mute, fontSize: 12 } },
+    !panes.length && !nativeWorkbench && !homeError ? h('div', { style: { display: 'grid', placeItems: 'center', alignContent: 'center', gap: 10, flex: '1 1 auto', color: C.mute, fontSize: 12 } },
       h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 18 })),
       '正在打开 Agent 主页…') : null)
 }

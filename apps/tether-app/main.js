@@ -5,20 +5,45 @@ const { pathToFileURL } = require('node:url')
 const { Supervisor } = require('./supervisor.js')
 const { waitForSupervisorStart, waitForLocalNodeApi } = require('./startup-readiness.js')
 const { UpdateService } = require('./update-service.js')
+const { EventSource } = require('eventsource')
+const iconv = require('iconv-lite')
 const { registerAppInstallation } = require('./app-installation.js')
+const { createNativeWorkbench } = require('./native-workbench.js')
 const { rendererDiagnostic, isSurfaceBootFailure, isSurfaceErrorPage, isSurfaceUnstyled, rendererFrameState, rendererFrameStyleState, rendererFrameText, rendererRequestScope, rendererSettledFrameState, safeRendererMessage, safeRendererPath } = require('./renderer-diagnostics.js')
 
-const repoRoot = path.resolve(__dirname, '..', '..')
-const webRoot = path.join(repoRoot, 'packages', 'tether-ui', 'web')
-const dataDir = path.join(__dirname, 'data')
+app.setName('Tether')
+const packaged = app.isPackaged
+const resourcesRoot = packaged ? process.resourcesPath : ''
+const repoRoot = packaged ? path.join(resourcesRoot, 'tether-source') : path.resolve(__dirname, '..', '..')
+const runtimeRoot = packaged ? path.join(resourcesRoot, 'tether-runtime') : path.join(repoRoot, '.runtime', 'desktop-candidate')
+const webRoot = packaged ? path.join(resourcesRoot, 'tether-ui', 'web') : path.join(repoRoot, 'packages', 'tether-ui', 'web')
+const candidateMode = ['1', 'true', 'yes'].includes(String(process.env.TETHER_APP_CANDIDATE || '').toLowerCase())
+const dataDirOverride = String(process.env.TETHER_APP_DATA_DIR || '').trim()
+const dataDir = dataDirOverride ? path.resolve(dataDirOverride) : path.join(app.getPath('userData'), 'data')
+const legacyDataDir = path.join(__dirname, 'data')
 const logFile = path.join(dataDir, 'app.log')
 const processCreationTime = typeof process.getCreationTime === 'function' ? process.getCreationTime() : null
 const appStartedAt = Number.isFinite(processCreationTime) ? processCreationTime : Date.now() - process.uptime() * 1000
 let appStartedVersion = ''
 try { appStartedVersion = String(JSON.parse(fs.readFileSync(path.join(repoRoot, 'version.json'), 'utf8')).components.app || '') } catch (_) { /* unknown runtime version */ }
+const hubConfigFile = path.join(dataDir, 'hub.json')
+fs.mkdirSync(dataDir, { recursive: true })
+if (!candidateMode && !dataDirOverride && path.resolve(legacyDataDir) !== path.resolve(dataDir)
+    && fs.existsSync(legacyDataDir) && fs.readdirSync(legacyDataDir).length) {
+  if (process.env.TETHER_DATA_MIGRATION_QUIESCED !== '1') {
+    throw new Error('APP data migration is waiting for the installer to stop the previous APP and managed Node. Set TETHER_DATA_MIGRATION_QUIESCED=1 only after both are stopped.')
+  }
+  fs.cpSync(legacyDataDir, dataDir, {
+    recursive: true, force: false, errorOnExist: false, dereference: false,
+    filter: (source) => {
+      try { return !fs.lstatSync(source).isSymbolicLink() } catch (_) { return false }
+    }
+  })
+}
 
 function loadEnv() {
   const env = { ...process.env }
+  if (candidateMode || packaged) return env
   const file = path.join(repoRoot, '.env')
   if (!fs.existsSync(file)) return env
   for (const raw of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
@@ -34,8 +59,56 @@ function loadEnv() {
 }
 
 const env = loadEnv()
-const hubConfigFile = path.join(dataDir, 'hub.json')
-if (fs.existsSync(hubConfigFile)) {
+function packagedExecutable(component, executable) {
+  const componentRoot = path.join(runtimeRoot, 'components', component)
+  const matches = []
+  const walk = (directory) => {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const target = path.join(directory, entry.name)
+      if (entry.isDirectory()) walk(target)
+      else if (entry.isFile() && entry.name.toLowerCase() === executable.toLowerCase()) matches.push(target)
+    }
+  }
+  if (fs.existsSync(componentRoot)) walk(componentRoot)
+  if (matches.length !== 1) throw new Error('Packaged runtime executable is missing or ambiguous: ' + component + '/' + executable)
+  return matches[0]
+}
+if (packaged) {
+  const exe = process.platform === 'win32' ? '.exe' : ''
+  env.TETHER_PYTHON = path.join(runtimeRoot, 'tether-python' + exe)
+  if (!fs.existsSync(env.TETHER_PYTHON)) throw new Error('Packaged Python runtime is missing')
+  env.TETHER_NODE_UPDATE_OWNER = 'app_installer'
+  env.TETHER_RUNTIME_ROOT = runtimeRoot
+  env.TETHER_AGENTS_RUNTIME_DIR = path.join(repoRoot, 'tether', 'node', 'bin', 'agents-runtime')
+  env.TETHER_HERDR_RUNTIME_DIR = path.join(repoRoot, 'tether', 'node', 'bin')
+  env.TETHER_DSH_RUNTIME_DIR = path.join(runtimeRoot, 'components', 'dsh')
+  env.TETHER_SFTPGO_COMPONENT_DIR = path.join(runtimeRoot, 'components', 'sftpgo')
+  env.TETHER_CADDY = packagedExecutable('caddy', 'caddy' + exe)
+  env.TETHER_RCLONE = packagedExecutable('rclone', 'rclone' + exe)
+  env.TETHER_UPDATE_CHANNEL = env.TETHER_UPDATE_CHANNEL || 'preview'
+  env.TETHER_EASYTIER_CORE = packagedExecutable('easytier', 'easytier-core' + exe)
+  env.TETHER_EASYTIER_CLI = packagedExecutable('easytier', 'easytier-cli' + exe)
+  env.TETHER_NODEJS_EXE = process.platform === 'win32'
+    ? path.join(runtimeRoot, 'components', 'nodejs', 'node.exe')
+    : path.join(runtimeRoot, 'components', 'nodejs', 'bin', 'node')
+  env.TETHER_MESHCENTRAL_ROOT = path.join(runtimeRoot, 'components', 'meshcentral')
+  if (process.platform === 'win32') env.TETHER_SOFFICE_EXE = path.join(runtimeRoot, 'components', 'libreoffice', 'program', 'soffice.com')
+  else if (process.platform === 'linux') env.TETHER_SOFFICE_EXE = path.join(runtimeRoot, 'components', 'libreoffice', 'opt', 'libreoffice26.8', 'program', 'soffice')
+  else if (process.platform === 'darwin') env.TETHER_SOFFICE_EXE = path.join(runtimeRoot, 'components', 'libreoffice', 'LibreOffice.app', 'Contents', 'MacOS', 'soffice')
+  let meshAgent
+  if (process.platform === 'win32' && process.arch === 'x64') meshAgent = path.join('windows-x64', 'MeshService64.exe')
+  else if (process.platform === 'darwin' && process.arch === 'arm64') meshAgent = path.join('macos-arm64', 'meshagent_osx-arm-64')
+  else if (process.platform === 'darwin' && process.arch === 'x64') meshAgent = path.join('macos-x64', 'meshagent_osx-x86-64')
+  else if (process.platform === 'linux' && process.arch === 'x64') meshAgent = path.join('linux-x64', 'meshagent_x86-64')
+  else throw new Error('Packaged MeshAgent architecture is not supported')
+  env.TETHER_MESHAGENT_EXE = path.join(runtimeRoot, 'components', 'meshagent', meshAgent)
+}
+if (candidateMode) {
+  env.TETHER_NO_SHORTCUTS = '1'
+  env.TETHER_APP_BINDING = '0'
+  env.TETHER_NODE_MODE = 'external'
+}
+if (!candidateMode && fs.existsSync(hubConfigFile)) {
   try {
     const cfg = JSON.parse(fs.readFileSync(hubConfigFile, 'utf8'))
     if (cfg.url) {
@@ -51,19 +124,30 @@ if (fs.existsSync(hubConfigFile)) {
 }
 const controller = env.TETHER_CONTROLLER_URL || ('http://127.0.0.1:' + (env.TETHER_PORT || 18890))
 const shotIndex = process.argv.indexOf('--shot')
-const shotPath = shotIndex >= 0 ? path.join(repoRoot, '.runtime', 'tether-app-shot.png') : ''
+const shotPath = shotIndex >= 0 ? path.join(candidateMode ? dataDir : path.join(repoRoot, '.runtime'), 'tether-app-shot.png') : ''
 const panelArg = process.argv.find((value) => value.startsWith('--panel='))
 const panel = panelArg ? panelArg.slice('--panel='.length) : ''
 const rowArg = process.argv.find((value) => value.startsWith('--row='))
 const row = rowArg ? rowArg.slice('--row='.length) : ''
 const shotDelay = Number(process.env.TETHER_APP_SHOT_DELAY || 2500)
 const shotPanelDelay = Number(process.env.TETHER_APP_SHOT_PANEL_DELAY || 1500)
+function withShotTimeout(promise, stage, timeoutMs) {
+  if (!shotPath) return promise
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Screenshot stage timed out: ' + stage)), timeoutMs))
+  ])
+}
 
 const { createDshWebNavigationGuard, dshViewUrlAllowed } = require('./dsh-web-navigation.js')
 
 const BROWSER_WEBVIEW_PARTITION = 'persist:tether-browser'
 
 function webviewAttachAllowed(params) {
+  const partition = String(params.partition || '')
+  if (partition.startsWith('persist:tether-wb-')) {
+    return !!(nativeWorkbench && nativeWorkbench.allowGuest(partition, params.src))
+  }
   if (params.partition !== BROWSER_WEBVIEW_PARTITION) return dshViewUrlAllowed(params.src)
   const src = String(params.src || '')
   if (src === 'about:blank') return true
@@ -73,24 +157,27 @@ function webviewAttachAllowed(params) {
   } catch (_) { return false }
 }
 
-fs.mkdirSync(dataDir, { recursive: true })
-try { registerAppInstallation({ env, dataDir, appRoot: repoRoot, startedAt: appStartedAt, startedVersion: appStartedVersion }) } catch (_) { /* update binding is auxiliary */ }
+try {
+  if (candidateMode || packaged) throw new Error('candidate or packaged mode disables source-tree installation binding')
+  registerAppInstallation({ env, dataDir, appRoot: repoRoot, startedAt: appStartedAt, startedVersion: appStartedVersion })
+} catch (_) { /* update binding is auxiliary */ }
 let appBindingWatcher = null
 try {
+  if (candidateMode || packaged) throw new Error('candidate or packaged mode disables source-tree installation binding')
   appBindingWatcher = fs.watch(dataDir, (_event, filename) => {
     if (String(filename || '') !== 'device-token.json') return
     try { registerAppInstallation({ env, dataDir, appRoot: repoRoot, startedAt: appStartedAt, startedVersion: appStartedVersion }) } catch (_) { /* update binding is auxiliary */ }
   })
 } catch (_) { /* optional device credential changes are also handled on enrollment */ }
 app.setPath('userData', path.join(dataDir, 'electron'))
-app.setName('Tether')
 if (process.platform === 'win32') app.setAppUserModelId('com.tether.app')
 // Hub and mesh endpoints must be reached directly; a system proxy can silently
 // break them while leaving ordinary browsing intact.
 if (env.TETHER_USE_SYSTEM_PROXY !== '1') app.commandLine.appendSwitch('no-proxy-server')
 const { enrollmentDecision } = require('./enrollment.js')
-const supervisor = new Supervisor({ repoRoot, dataDir, env })
-const updates = new UpdateService({ repoRoot, dataDir, python: supervisor.childPython, env, app })
+const supervisor = new Supervisor({ repoRoot, dataDir, env, preserveManagedNodeOnExit: packaged })
+const updates = new UpdateService({ repoRoot, dataDir, python: supervisor.childPython, env, app,
+  stopManagedNode: () => packaged ? supervisor.stopManagedNode() : Promise.resolve({ stopped: false }) })
 let uiOrigin = ''
 
 function log(line) {
@@ -100,7 +187,7 @@ function log(line) {
 function ensureAppShortcuts() {
   if (process.platform !== 'win32' || env.TETHER_NO_SHORTCUTS === '1') return
   const appPath = app.getAppPath()
-  const iconPath = path.join(repoRoot, 'assets', 'tether-app-s.ico')
+  const iconPath = path.join(packaged ? runtimeRoot : repoRoot, 'assets', 'tether-app-s.ico')
   const options = {
     target: process.execPath,
     args: '"' + appPath + '"',
@@ -134,6 +221,14 @@ let isQuitting = false
 let rendererConsoleErrors = 0
 let surfaceBootFailureSentAt = 0
 let surfaceStyleFailureSentAt = 0
+let workbenchLoginSession = null
+let nativeWorkbench = null
+let workbenchActorId = ''
+let hubEventSource = null
+let hubEventsSubscribed = false
+let workbenchLoginWindow = null
+let workbenchLoginCompleted = false
+let workbenchBindingPending = false
 
 function showMainWindow() {
   if (!mainWindow) return
@@ -154,7 +249,7 @@ function sendWindowState() {
 
 function createTray() {
   if (tray) return tray
-  const iconPath = path.join(repoRoot, 'assets', 'tether-app-s.ico')
+  const iconPath = path.join(packaged ? runtimeRoot : repoRoot, 'assets', 'tether-app-s.ico')
   const icon = nativeImage.createFromPath(iconPath)
   if (icon.isEmpty()) log('tray icon failed to load ' + iconPath)
   tray = new Tray(icon)
@@ -200,6 +295,29 @@ async function createWindow() {
     if (!ready) log('local node API readiness timed out; loading UI')
   }
 
+  workbenchLoginSession = session.fromPartition('persist:tether-hub-login')
+  nativeWorkbench = createNativeWorkbench({
+    controllerUrl: controller,
+    loginSession: workbenchLoginSession,
+    getServiceSession: (partition) => {
+      if (!/^persist:tether-wb-[a-f0-9]{40}$/.test(String(partition || ''))) throw new Error('invalid service session partition')
+      return session.fromPartition(partition)
+    },
+    getLocalDeviceId: () => supervisor.device,
+    getActorId: async () => {
+      const response = await workbenchLoginSession.fetch(new URL('/api/auth/me', controller).toString(), { redirect: 'error' })
+      if (!response.ok) throw new Error(response.status === 401 ? 'Controller login required' : 'Controller identity unavailable')
+      const user = await response.json()
+      if (!user || typeof user.user_id !== 'string' || !user.user_id) throw new Error('Controller returned no authenticated actor')
+      return user.user_id
+    },
+    logSafe: (event, detail) => {
+      const target = detail && /^[A-Za-z0-9._:-]{1,128}$/.test(String(detail.targetId || '')) ? detail.targetId : 'unknown'
+      const service = detail && /^[a-z]{1,16}$/.test(String(detail.serviceId || '')) ? detail.serviceId : 'unknown'
+      log('workbench event=' + String(event).slice(0, 48) + ' target=' + target + ' service=' + service)
+    }
+  })
+
   const { createWebServer } = await import(pathToFileURL(path.join(webRoot, 'server.mjs')).href)
   webServer = createWebServer({
     root: webRoot,
@@ -227,22 +345,25 @@ async function createWindow() {
   session.defaultSession.webRequest.onErrorOccurred({ urls: ['<all_urls>'] }, (details) => logRendererNetworkFailure('error', details))
   session.defaultSession.webRequest.onCompleted({ urls: ['<all_urls>'] }, (details) => logRendererNetworkFailure('complete', details))
   mainWindow = new BrowserWindow({
+    show: shotIndex < 0,
     width: 1480,
     height: 920,
     minWidth: 960,
     minHeight: 640,
     title: 'Tether',
-    icon: path.join(repoRoot, 'assets', 'tether-app-s.ico'),
+    icon: path.join(packaged ? runtimeRoot : repoRoot, 'assets', 'tether-app-s.ico'),
     backgroundColor: '#ffffff',
     frame: false,
     thickFrame: true,
     autoHideMenuBar: true,
+    paintWhenInitiallyHidden: shotIndex >= 0,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
-      webviewTag: true
+      webviewTag: true,
+      backgroundThrottling: shotIndex < 0
     }
   })
   mainWindow.on('close', (event) => {
@@ -382,10 +503,14 @@ async function createWindow() {
   mainWindow.webContents.on('render-process-gone', (_event, details) => {
     log('renderer process gone reason=' + String(details.reason || 'unknown').slice(0, 40) + ' exitCode=' + Number(details.exitCode || 0))
   })
-  await mainWindow.loadURL(url)
+  if (shotPath) log('shot stage loadURL started')
+  await withShotTimeout(mainWindow.loadURL(url), 'loadURL', 30000)
+  if (shotPath) log('shot stage loadURL complete')
 
   if (shotPath) {
+    log('shot stage wait started')
     await new Promise((resolve) => setTimeout(resolve, shotDelay))
+    log('shot stage wait complete')
     if (panel) {
       await mainWindow.webContents.executeJavaScript(`(() => { const b = [...document.querySelectorAll('button')].find((x) => x.getAttribute('aria-label') === ${JSON.stringify(panel)} || x.title === ${JSON.stringify(panel)} || x.innerText.includes(${JSON.stringify(panel)})); if (b) b.click(); return !!b })()`)
       await new Promise((resolve) => setTimeout(resolve, shotPanelDelay))
@@ -394,7 +519,9 @@ async function createWindow() {
       await mainWindow.webContents.executeJavaScript(`(() => { const b = [...document.querySelectorAll('button')].find((x) => x.title === ${JSON.stringify(row)}); if (b) b.click(); return !!b })()`)
       await new Promise((resolve) => setTimeout(resolve, 2000))
     }
-    const renderState = await mainWindow.webContents.executeJavaScript(`({ readyState: document.readyState, rootContent: !!document.querySelector('#root')?.childElementCount, hasUpdateCenter: (document.querySelector('#root')?.innerText || '').includes('更新中心'), hasWorkspaceError: (document.querySelector('#root')?.innerText || '').includes('工作区接口返回的数据格式无效'), appBridge: !!window.tetherApp, qaRendererErrorCount: window.__qaRendererErrorCount || 0 })`)
+    log('shot stage renderState started')
+    const renderState = await withShotTimeout(mainWindow.webContents.executeJavaScript(`({ readyState: document.readyState, rootContent: !!document.querySelector('#root')?.childElementCount, hasUpdateCenter: (document.querySelector('#root')?.innerText || '').includes('更新中心'), hasWorkspaceError: (document.querySelector('#root')?.innerText || '').includes('工作区接口返回的数据格式无效'), appBridge: !!window.tetherApp, qaRendererErrorCount: window.__qaRendererErrorCount || 0 })`), 'renderState', 10000)
+    log('shot stage renderState complete')
     renderState.rendererConsoleErrors = rendererConsoleErrors
     log('renderer state ' + JSON.stringify(renderState))
     if (!renderState.rootContent || renderState.rendererConsoleErrors || renderState.qaRendererErrorCount) {
@@ -403,7 +530,9 @@ async function createWindow() {
     if (panel.includes('更新') && !renderState.hasUpdateCenter) {
       throw new Error('Renderer did not show the update center: ' + JSON.stringify(renderState))
     }
-    const image = await mainWindow.webContents.capturePage()
+    log('shot stage capturePage started')
+    const image = await withShotTimeout(mainWindow.webContents.capturePage(), 'capturePage', 15000)
+    log('shot stage capturePage complete')
     fs.mkdirSync(path.dirname(shotPath), { recursive: true })
     fs.writeFileSync(shotPath, image.toPNG())
     log('shot ' + shotPath)
@@ -417,9 +546,317 @@ function trustedIpc(event) {
       && new URL(event.senderFrame.url).origin === uiOrigin)
   } catch (_) { return false }
 }
+function encodeFilesRequest(request) {
+  if (request.operation !== 'content_put' || typeof request.text !== 'string') return request
+  if (request.bytes != null || !['utf-8', 'utf-8-bom', 'utf-16-le', 'utf-16-be', 'gb18030'].includes(request.encoding)
+      || !['lf', 'crlf', 'cr'].includes(request.newline)) {
+    throw new TypeError('Invalid text encoding or newline mode')
+  }
+  const separator = request.newline === 'crlf' ? '\r\n' : request.newline === 'cr' ? '\r' : '\n'
+  const text = request.text.replace(/\r\n|\r|\n/g, separator)
+  let bytes
+  if (request.encoding === 'utf-8-bom') {
+    bytes = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(text, 'utf8')])
+  } else if (request.encoding === 'utf-16-le' || request.encoding === 'utf-16-be') {
+    bytes = Buffer.from(text, 'utf16le')
+    if (request.encoding === 'utf-16-be') {
+      for (let index = 0; index < bytes.length; index += 2) {
+        const first = bytes[index]
+        bytes[index] = bytes[index + 1]
+        bytes[index + 1] = first
+      }
+    }
+  } else if (request.encoding === 'gb18030') {
+    bytes = iconv.encode(text, 'gb18030')
+    if (iconv.decode(bytes, 'gb18030') !== text) throw new TypeError('Text cannot be represented in GB18030')
+  } else {
+    bytes = Buffer.from(text, 'utf8')
+  }
+  return { ...request, text: undefined, bytes }
+}
 function handleTrusted(channel, handler, fallback = () => ({ ok: false, error: 'Untrusted IPC caller' })) {
   ipcMain.handle(channel, (event, ...args) => trustedIpc(event) ? handler(event, ...args) : fallback())
 }
+function autoStartFile() {
+  return path.join(app.getPath('appData'), 'autostart', 'com.tether.app.desktop')
+}
+function getAutoStartAtLogin() {
+  if (process.platform === 'linux') return fs.existsSync(autoStartFile())
+  if (process.platform === 'win32' || process.platform === 'darwin') {
+    return !!app.getLoginItemSettings().openAtLogin
+  }
+  return false
+}
+function setAutoStartAtLogin(enabled) {
+  if (!packaged || candidateMode) throw Object.assign(new Error('登录启动只适用于已安装的正式 APP'), { code: 'autostart_unavailable' })
+  if (typeof enabled !== 'boolean') throw new TypeError('enabled must be boolean')
+  if (process.platform === 'win32' || process.platform === 'darwin') {
+    app.setLoginItemSettings({ openAtLogin: enabled, path: process.execPath, args: [] })
+  } else if (process.platform === 'linux') {
+    const target = autoStartFile()
+    if (enabled) {
+      const directory = path.dirname(target)
+      fs.mkdirSync(directory, { recursive: true, mode: 0o700 })
+      const quoteExec = (value) => '"' + String(value).replace(/([\\"`$])/g, '\\$1') + '"'
+      const contents = '[Desktop Entry]\nType=Application\nName=Tether\nExec=' + quoteExec(process.execPath) +
+        '\nTerminal=false\nX-GNOME-Autostart-enabled=true\n'
+      const temporary = target + '.tmp'
+      fs.writeFileSync(temporary, contents, { mode: 0o600 })
+      fs.renameSync(temporary, target)
+    } else {
+      try { fs.unlinkSync(target) } catch (error) { if (error.code !== 'ENOENT') throw error }
+    }
+  } else {
+    throw Object.assign(new Error('当前平台不支持登录启动设置'), { code: 'autostart_unsupported' })
+  }
+  const actual = getAutoStartAtLogin()
+  if (actual !== enabled) throw Object.assign(new Error('操作系统未确认登录启动设置'), { code: 'autostart_unconfirmed' })
+  return { ok: true, enabled: actual }
+}
+async function currentWorkbenchActorId() {
+  if (!workbenchLoginSession) throw new Error('Controller session is unavailable')
+  const origin = trustedControllerOrigin()
+  const response = await workbenchLoginSession.fetch(new URL('/api/auth/me', origin).toString(), { redirect: 'error' })
+  if (!response.ok) throw new Error(response.status === 401 ? 'Controller login required' : 'Controller identity unavailable')
+  const user = await response.json()
+  if (!user || typeof user.user_id !== 'string' || !user.user_id) throw new Error('Controller returned no authenticated actor')
+  return user.user_id
+}
+function trustedControllerOrigin() {
+  const parsed = new URL(controller)
+  const loopback = parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost' || parsed.hostname === '[::1]'
+  if ((parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && loopback))
+      || parsed.username || parsed.password || parsed.search || parsed.hash) {
+    throw new Error('Controller API requires a trusted HTTPS or loopback origin')
+  }
+  return parsed.origin
+}
+async function setWorkbenchActor(actorId) {
+  if (workbenchActorId && workbenchActorId !== actorId) {
+    closeHubEvents()
+    const result = await nativeWorkbench.clearActor(workbenchActorId)
+    if (!result || result.ok !== true) throw new Error('Previous Controller account sessions could not be fully cleared')
+  }
+  workbenchActorId = actorId
+  if (hubEventsSubscribed && actorId) startHubEvents()
+}
+function closeHubEvents() {
+  if (hubEventSource) hubEventSource.close()
+  hubEventSource = null
+}
+function startHubEvents() {
+  closeHubEvents()
+  if (!hubEventsSubscribed || !workbenchActorId || !workbenchLoginSession) return
+  let trustedOrigin
+  try { trustedOrigin = trustedControllerOrigin() } catch (_) { return }
+  const eventsUrl = new URL('/api/events', trustedOrigin)
+  if (eventsUrl.origin !== trustedOrigin) return
+  hubEventSource = new EventSource(eventsUrl.toString(), {
+    fetch: (input, init) => {
+      const requested = new URL(input && input.url ? input.url : String(input))
+      if (requested.origin !== eventsUrl.origin || requested.pathname !== '/api/events') {
+        return Promise.reject(new Error('Controller event URL is not allowed'))
+      }
+      return workbenchLoginSession.fetch(requested.toString(), { ...init, credentials: 'include', redirect: 'error' })
+    }
+  })
+  hubEventSource.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data)
+      if (data && (data.kind === 'device' || data.kind === 'session')
+          && mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('tether:hub-event', data)
+    } catch (_) { /* ignore keepalive and malformed messages */ }
+  }
+}
+async function completeWorkbenchLogin(actorId) {
+  await setWorkbenchActor(actorId)
+  workbenchBindingPending = false
+  workbenchLoginCompleted = true
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('tether:workbench-login-result', { state: 'authenticated' })
+  if (workbenchLoginWindow && !workbenchLoginWindow.isDestroyed()) workbenchLoginWindow.close()
+}
+async function openWorkbenchLogin() {
+  if (!workbenchLoginSession) return { ok: false, error: 'Controller session is unavailable' }
+  try { workbenchActorId = await currentWorkbenchActorId() } catch (_) { /* unauthenticated before login is expected */ }
+  closeHubEvents()
+  if (workbenchActorId) {
+    const cleanup = await nativeWorkbench.clearActor(workbenchActorId)
+    if (!cleanup || cleanup.ok !== true) return { ok: false, error: 'Previous Controller account sessions could not be fully cleared' }
+    // The OAuth callback replaces the login partition cookie before /auth/me
+    // can identify its new actor. Never try to revoke the old actor after that
+    // identity switch; clearActor above already drained pending opens and grants.
+    workbenchActorId = ''
+  }
+  let startUrl
+  try {
+    startUrl = new URL('/oauth2/start', trustedControllerOrigin())
+    startUrl.searchParams.set('rd', '/app/login-complete')
+  } catch (_) { return { ok: false, error: 'Controller URL is invalid' } }
+  const controllerOrigin = trustedControllerOrigin()
+  const issuerOrigin = env.TETHER_OIDC_ISSUER ? new URL(env.TETHER_OIDC_ISSUER).origin : ''
+  if (startUrl.protocol !== 'https:' && !(startUrl.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(startUrl.hostname))) {
+    return { ok: false, error: 'Controller login requires HTTPS' }
+  }
+  if (workbenchLoginWindow && !workbenchLoginWindow.isDestroyed()) {
+    workbenchLoginWindow.focus()
+    return { ok: true, state: 'login_started' }
+  }
+  workbenchLoginWindow = new BrowserWindow({
+    width: 560, height: 760, parent: mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined,
+    title: 'Tether 登录', modal: false,
+    webPreferences: { partition: 'persist:tether-hub-login', nodeIntegration: false,
+      contextIsolation: true, sandbox: true, webSecurity: true }
+  })
+  workbenchLoginCompleted = false
+  workbenchBindingPending = false
+  const allowedOrigin = (value) => {
+    try {
+      const parsed = new URL(value)
+      if (parsed.protocol === 'https:' && (parsed.origin === controllerOrigin || parsed.origin === issuerOrigin)) return true
+      const loopback = parsed.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(parsed.hostname)
+      return loopback && (parsed.origin === controllerOrigin || parsed.origin === issuerOrigin)
+    } catch (_) { return false }
+  }
+  workbenchLoginWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  workbenchLoginWindow.webContents.on('will-navigate', (event, url) => {
+    if (!allowedOrigin(url)) event.preventDefault()
+  })
+  workbenchLoginWindow.webContents.on('will-redirect', (event, url) => {
+    if (!allowedOrigin(url)) event.preventDefault()
+  })
+  workbenchLoginWindow.webContents.on('did-navigate', async (_event, url) => {
+    try {
+      const parsed = new URL(url)
+      if (parsed.origin !== controllerOrigin || parsed.pathname !== '/app/login-complete') return
+      const response = await workbenchLoginSession.fetch(new URL('/api/auth/me', controllerOrigin).toString(), { redirect: 'error' })
+      if (!response.ok) {
+        let detail = null
+        try { detail = await response.json() } catch (_) { /* preserve only known auth state */ }
+        if (detail && detail.detail && detail.detail.code === 'oidc_identity_unbound'
+            && mainWindow && !mainWindow.isDestroyed()) {
+          workbenchBindingPending = true
+          mainWindow.webContents.send('tether:workbench-login-result', { state: 'identity_unbound' })
+        }
+        return
+      }
+      const user = await response.json()
+      if (!user || typeof user.user_id !== 'string' || !user.user_id) return
+      await completeWorkbenchLogin(user.user_id)
+    } catch (_) { /* login result is confirmed only by the authenticated API */ }
+  })
+  workbenchLoginWindow.on('closed', () => {
+    workbenchLoginWindow = null
+    if (!workbenchLoginCompleted && mainWindow && !mainWindow.isDestroyed()) {
+      workbenchBindingPending = false
+      mainWindow.webContents.send('tether:workbench-login-result', { state: 'closed' })
+    }
+    if (!workbenchLoginCompleted && hubEventsSubscribed) {
+      currentWorkbenchActorId().then((actorId) => {
+        workbenchActorId = actorId
+        startHubEvents()
+      }).catch(() => { workbenchActorId = '' })
+    }
+  })
+  try {
+    await workbenchLoginWindow.loadURL(startUrl.toString())
+    return { ok: true, state: 'login_started' }
+  } catch (_) {
+    if (workbenchLoginWindow && !workbenchLoginWindow.isDestroyed()) workbenchLoginWindow.close()
+    return { ok: false, error: 'Controller login could not be opened' }
+  }
+}
+handleTrusted('tether:workbench-login', openWorkbenchLogin)
+handleTrusted('tether:workbench-bind-legacy', async (_event, credentials) => {
+  if (!workbenchBindingPending || !workbenchLoginWindow || workbenchLoginWindow.isDestroyed()) {
+    throw new Error('Explicit Tether account binding is not pending')
+  }
+  if (!credentials || typeof credentials !== 'object') throw new Error('Legacy account credentials are required')
+  const email = String(credentials.email || '').trim()
+  const password = String(credentials.password || '')
+  const totp = String(credentials.totp || '').trim()
+  if (!email || email.length > 320 || !password || password.length > 4096 || totp.length > 16) {
+    throw new Error('Legacy account credentials are invalid')
+  }
+  const origin = trustedControllerOrigin()
+  const login = await workbenchLoginSession.fetch(new URL('/api/auth/login', origin).toString(), {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+    body: JSON.stringify({ email, password, totp }), redirect: 'error'
+  })
+  if (!login.ok) throw new Error('Legacy account sign-in failed; check the account details and try again')
+  const binding = await workbenchLoginSession.fetch(new URL('/api/auth/identity/bind', origin).toString(), {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+    body: '{}', redirect: 'error'
+  })
+  if (!binding.ok) throw new Error(binding.status === 409
+    ? 'This Casdoor identity is already linked to another Tether account'
+    : 'Tether account binding failed; the identity was not linked')
+  const actorId = await currentWorkbenchActorId()
+  await completeWorkbenchLogin(actorId)
+  return { state: 'authenticated' }
+}, () => ({ state: 'error' }))
+handleTrusted('tether:hub-events-subscribe', async () => {
+  hubEventsSubscribed = true
+  await setWorkbenchActor(await currentWorkbenchActorId())
+  return { ok: true }
+}, () => ({ ok: false }))
+handleTrusted('tether:hub-events-unsubscribe', () => {
+  hubEventsSubscribed = false
+  closeHubEvents()
+  return { ok: true }
+}, () => ({ ok: false }))
+handleTrusted('tether:workbench-logout', async () => {
+  let actorId = workbenchActorId
+  if (!actorId) { try { actorId = await currentWorkbenchActorId() } catch (_) { /* already signed out */ } }
+  let cleanupOk = true
+  if (actorId && nativeWorkbench) {
+    try { cleanupOk = (await nativeWorkbench.clearActor(actorId)).ok === true } catch (_) { cleanupOk = false }
+  }
+  hubEventsSubscribed = false
+  workbenchBindingPending = false
+  closeHubEvents()
+  workbenchActorId = ''
+  if (workbenchLoginSession) await workbenchLoginSession.clearStorageData()
+  return { state: cleanupOk ? 'logged_out' : 'revocation_pending' }
+}, () => ({ state: 'error' }))
+handleTrusted('tether:workbench-catalog', async (_event, targetId) => nativeWorkbench.catalog(targetId), () => ({ ok: false }))
+handleTrusted('tether:workbench-open', async (_event, targetId, serviceId) => nativeWorkbench.open(targetId, serviceId), () => ({ ok: false }))
+handleTrusted('tether:workbench-close', async (_event, targetId, serviceId, grantId) => nativeWorkbench.close(targetId, serviceId, grantId), () => ({ ok: false }))
+handleTrusted('tether:workbench-view', async (_event, targetId, serviceId, visible) => nativeWorkbench.view(targetId, serviceId, visible), () => ({ ok: false }))
+handleTrusted('tether:files-request', async (_event, request) => {
+  if (!nativeWorkbench || !request || typeof request !== 'object') throw new Error('Files service is unavailable')
+  return nativeWorkbench.requestFiles(encodeFilesRequest(request))
+}, () => ({ ok: false }))
+handleTrusted('tether:hub-request', async (_event, request) => {
+  if (!workbenchLoginSession || !nativeWorkbench || !request || typeof request !== 'object') {
+    throw new Error('Controller session is unavailable')
+  }
+  const actorId = await currentWorkbenchActorId()
+  await setWorkbenchActor(actorId)
+  const method = String(request.method || 'GET').toUpperCase()
+  const path = String(request.path || '')
+  const teamDelete = method === 'DELETE' && /^\/api\/teams(?:\/[^/]+){1,3}\/?$/.test(path)
+  if ((!['GET', 'POST'].includes(method) && !teamDelete) || !path.startsWith('/api/') || path.startsWith('//') || path.includes('\\')) {
+    throw new Error('Controller API route is not allowed')
+  }
+  if (/^\/api\/(?:auth\/(?:login|accept-invite|identity\/bind)|devices\/[^/]+\/token|releases\/manifest)(?:\/|$)/i.test(path)) {
+    throw new Error('Controller API route requires a separate trusted flow')
+  }
+  const target = new URL(path, trustedControllerOrigin())
+  if (target.origin !== trustedControllerOrigin() || !target.pathname.startsWith('/api/')) {
+    throw new Error('Controller API origin is not allowed')
+  }
+  const hasBody = method === 'POST' || method === 'DELETE'
+  const response = await workbenchLoginSession.fetch(target.toString(), {
+    method,
+    headers: hasBody ? { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } : { 'Cache-Control': 'no-store' },
+    body: hasBody ? JSON.stringify(request.body == null ? {} : request.body) : undefined,
+    redirect: 'error'
+  })
+  const text = await response.text()
+  let body = null
+  if (text) { try { body = JSON.parse(text) } catch (_) { body = { error: 'invalid_json_response' } } }
+  return { status: response.status, body }
+}, () => ({ status: 401, body: { error: 'untrusted_ipc_caller' } }))
 handleTrusted('tether:app-info', () => ({
   version: app.getVersion(),
   controller,
@@ -464,7 +901,7 @@ async function applyEnrollment(config, deviceToken, userToken) {
   removeDeviceToken()
   env.TETHER_NODE_TOKEN = deviceToken || ''
   env.TETHER_USER_TOKEN = userToken || ''
-  try { registerAppInstallation({ env, dataDir, appRoot: repoRoot, startedAt: appStartedAt, startedVersion: appStartedVersion }) } catch (_) { /* update binding is auxiliary */ }
+  if (!packaged) try { registerAppInstallation({ env, dataDir, appRoot: repoRoot, startedAt: appStartedAt, startedVersion: appStartedVersion }) } catch (_) { /* update binding is auxiliary */ }
   supervisor.nodeToken = deviceToken || ''
   supervisor.userToken = userToken || ''
   try {
@@ -511,9 +948,11 @@ handleTrusted('tether:enroll-device', async (_event, userToken) => {
 handleTrusted('tether:updates-status', () => updates.status())
 handleTrusted('tether:updates-check', () => updates.check())
 handleTrusted('tether:updates-prepare', () => updates.prepare())
+handleTrusted('tether:autostart-get', () => ({ ok: true, enabled: getAutoStartAtLogin(), available: packaged && !candidateMode }))
+handleTrusted('tether:autostart-set', (_event, enabled) => setAutoStartAtLogin(enabled))
 handleTrusted('tether:updates-apply', async (_event, preparedId) => {
   const result = await updates.apply(preparedId)
-  setTimeout(() => app.quit(), 150)
+  if (!packaged) setTimeout(() => app.quit(), 150)
   return result
 })
 handleTrusted('tether:window-control', (_event, action) => {
