@@ -1,4 +1,6 @@
 # 变更记录
+- 2026-11-09：Windows recovery 提交使用独立 concurrency group，与仍在打包的POSIX来源run并行；普通提交保留原 preview group，发布端仍等待固定来源完成校验。
+- 2026-11-09：新增 `[windows-recovery]` 窄恢复路径，仅构建Windows；发布前通过固定GitHub API校验run `42520196405`/head `97aa80f20f32c25ed9ad3ad99078d28d8e07924c`、Linux/macOS POSIX jobs及所需artifact归属，再复用该run的Linux/macOS/Node包。草稿附每平台来源run/SHA provenance；普通push仍全矩阵。
 - 2026-11-09：preview 候选工作流按 GitHub ref 设置互斥组并启用 cancel-in-progress，避免同一分支多轮并发构建争写同一 draft release。
 - 2026-11-09：修复 preview 发布聚合 job 缺少 psutil 导致 build_release.py 导入失败，固定安装 psutil 7.2.2；四个平台的上一轮安装包构建已成功。本次连同正常安装登录、Codeg 数据迁移和 Linux LibreOffice 系统依赖修复重新冻结构建。
 - 2026-11-08：候选打包工作流将 macOS x64 package job 时限提高到 65 分钟，其他平台保持 35 分钟；preview draft 汇总 job 限时 20 分钟。

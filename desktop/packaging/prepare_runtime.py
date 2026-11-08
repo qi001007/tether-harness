@@ -44,6 +44,60 @@ def download(asset: dict, destination: Path) -> None:
         raise ValueError(f"download failed size/SHA-256 verification: {asset['name']}")
 
 
+def _sftpgo_pe_machine(path: Path) -> int | None:
+    with path.open("rb") as stream:
+        if stream.read(2) != b"MZ":
+            return None
+        stream.seek(0x3C)
+        offset_bytes = stream.read(4)
+        if len(offset_bytes) != 4:
+            return None
+        stream.seek(int.from_bytes(offset_bytes, "little"))
+        if stream.read(4) != b"PE\0\0":
+            return None
+        machine = stream.read(2)
+        return int.from_bytes(machine, "little") if len(machine) == 2 else None
+
+
+def _select_sftpgo_files(extracted: Path, target: str, asset_name: str) -> tuple[Path, Path]:
+    binary = "sftpgo.exe" if target.startswith("windows") else "sftpgo"
+    expected_pe_machine = {"windows-x64": 0x8664, "windows-arm64": 0xAA64,
+                           "windows-x86": 0x014C}.get(target)
+    if target.startswith("windows") and expected_pe_machine is None:
+        raise ValueError(f"unsupported SFTPGo Windows target: {target}")
+    if target.startswith("windows"):
+        valid_magic = (b"MZ",)
+    elif target.startswith("linux"):
+        valid_magic = (b"\x7fELF",)
+    else:
+        valid_magic = (b"\xfe\xed\xfa\xce", b"\xfe\xed\xfa\xcf", b"\xce\xfa\xed\xfe",
+                       b"\xcf\xfa\xed\xfe", b"\xca\xfe\xba\xbe", b"\xbe\xba\xfe\xca",
+                       b"\xca\xfe\xba\xbf", b"\xbf\xba\xfe\xca")
+    binaries: list[Path] = []
+    configs: list[Path] = []
+    for item in extracted.rglob("*"):
+        if not item.is_file():
+            continue
+        if item.name == binary:
+            with item.open("rb") as stream:
+                header = stream.read(4)
+            if not any(header.startswith(magic) for magic in valid_magic):
+                continue
+            if expected_pe_machine is not None and _sftpgo_pe_machine(item) != expected_pe_machine:
+                continue
+            binaries.append(item)
+        elif item.name == "sftpgo.json":
+            try:
+                config = json.loads(item.read_text(encoding="utf-8-sig"))
+            except (OSError, UnicodeError, ValueError):
+                continue
+            if isinstance(config, dict):
+                configs.append(item)
+    if len(binaries) != 1 or len(configs) != 1:
+        raise ValueError(f"SFTPGo core binary/config missing from {asset_name}")
+    return binaries[0], configs[0]
+
+
 def safe_relative(name: str) -> Path:
     normalized = name.replace("\\", "/")
     parsed = PurePosixPath(normalized)
@@ -674,37 +728,10 @@ def main() -> int:
             download(asset, archive_path)
             extract_archive(archive_path, extracted)
             if component_name == "sftpgo":
-                allowed = {"sftpgo", "sftpgo.exe", "sftpgo.json"}
                 binary = "sftpgo.exe" if args.target.startswith("windows") else "sftpgo"
-                if args.target.startswith("windows"):
-                    valid_magic = (b"MZ",)
-                elif args.target.startswith("linux"):
-                    valid_magic = (b"\x7fELF",)
-                else:
-                    valid_magic = (b"\xfe\xed\xfa\xce", b"\xfe\xed\xfa\xcf", b"\xce\xfa\xed\xfe",
-                                   b"\xcf\xfa\xed\xfe", b"\xca\xfe\xba\xbe", b"\xbe\xba\xfe\xca",
-                                   b"\xca\xfe\xba\xbf", b"\xbf\xba\xfe\xca")
-                binaries = []
-                configs = []
-                for item in extracted.rglob("*"):
-                    if not item.is_file() or item.name not in allowed:
-                        continue
-                    if item.name == binary:
-                        with item.open("rb") as stream:
-                            header = stream.read(4)
-                            if any(header.startswith(magic) for magic in valid_magic):
-                                binaries.append(item)
-                    elif item.name == "sftpgo.json":
-                        try:
-                            config = json.loads(item.read_text(encoding="utf-8"))
-                        except (OSError, UnicodeError, ValueError):
-                            continue
-                        if isinstance(config, dict):
-                            configs.append(item)
-                if len(binaries) != 1 or len(configs) != 1:
-                    raise ValueError(f"SFTPGo core binary/config missing from {asset['name']}")
-                shutil.copy2(binaries[0], destination / binary)
-                shutil.copy2(configs[0], destination / "sftpgo.json")
+                core, config = _select_sftpgo_files(extracted, args.target, asset["name"])
+                shutil.copy2(core, destination / binary)
+                shutil.copy2(config, destination / "sftpgo.json")
                 if not args.target.startswith("windows"):
                     (destination / binary).chmod(0o755)
             else:

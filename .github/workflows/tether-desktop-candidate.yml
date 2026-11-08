@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: tether-desktop-preview-${{ github.ref }}
+  group: ${{ contains(github.event.head_commit.message, '[windows-recovery]') && format('tether-desktop-preview-windows-recovery-{0}', github.ref) || format('tether-desktop-preview-{0}', github.ref) }}
   cancel-in-progress: true
 
 jobs:
@@ -54,7 +54,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(contains(github.event.head_commit.message, '[posix-only]') && '[{"target":"linux-x64","runner":"ubuntu-22.04","platform":"linux","arch":"x64"},{"target":"macos-x64","runner":"macos-15-intel","platform":"macos","arch":"x64"},{"target":"macos-arm64","runner":"macos-15","platform":"macos","arch":"arm64"}]' || '[{"target":"windows-x64","runner":"windows-latest","platform":"windows","arch":"x64"},{"target":"linux-x64","runner":"ubuntu-22.04","platform":"linux","arch":"x64"},{"target":"macos-x64","runner":"macos-15-intel","platform":"macos","arch":"x64"},{"target":"macos-arm64","runner":"macos-15","platform":"macos","arch":"arm64"}]') }}
+        include: ${{ fromJSON(contains(github.event.head_commit.message, '[windows-recovery]') && '[{"target":"windows-x64","runner":"windows-latest","platform":"windows","arch":"x64"}]' || contains(github.event.head_commit.message, '[posix-only]') && '[{"target":"linux-x64","runner":"ubuntu-22.04","platform":"linux","arch":"x64"},{"target":"macos-x64","runner":"macos-15-intel","platform":"macos","arch":"x64"},{"target":"macos-arm64","runner":"macos-15","platform":"macos","arch":"arm64"}]' || '[{"target":"windows-x64","runner":"windows-latest","platform":"windows","arch":"x64"},{"target":"linux-x64","runner":"ubuntu-22.04","platform":"linux","arch":"x64"},{"target":"macos-x64","runner":"macos-15-intel","platform":"macos","arch":"x64"},{"target":"macos-arm64","runner":"macos-15","platform":"macos","arch":"arm64"}]') }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: ${{ matrix.target == 'macos-x64' && 65 || 35 }}
     steps:
@@ -221,6 +221,7 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 20
     permissions:
+      actions: read
       contents: write
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -231,10 +232,109 @@ jobs:
           python-version: '3.11'
       - name: Install manifest signing dependency
         run: python -m pip install --disable-pip-version-check 'cryptography>=42,<50' 'PyYAML==6.0.2' 'psutil==7.2.2'
+      - name: Verify fixed POSIX package source run
+        if: ${{ contains(github.event.head_commit.message, '[windows-recovery]') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import urllib.request
+
+          repository = 'qi001007/tether-harness'
+          run_id = 42520196405
+          expected_sha = '97aa80f20f32c25ed9ad3ad99078d28d8e07924c'
+          api = 'https://api.github.com/repos/' + repository
+          token = os.environ['GH_TOKEN']
+
+          def get(path):
+              request = urllib.request.Request(api + path, headers={
+                  'Accept': 'application/vnd.github+json',
+                  'Authorization': 'Bearer ' + token,
+                  'X-GitHub-Api-Version': '2022-11-28',
+              })
+              with urllib.request.urlopen(request, timeout=20) as response:
+                  return json.loads(response.read())
+
+          run = get('/actions/runs/' + str(run_id))
+          if run.get('id') != run_id or run.get('status') != 'completed':
+              raise SystemExit('fixed POSIX source run is not complete or has an unexpected ID')
+          if (run.get('path') != '.github/workflows/tether-desktop-candidate.yml'
+                  or run.get('head_branch') != 'codex/tether-050-preview-20261108'
+                  or run.get('head_sha') != expected_sha
+                  or (run.get('repository') or {}).get('full_name') != repository
+                  or (run.get('head_repository') or {}).get('full_name') != repository):
+              raise SystemExit('fixed POSIX source run repository, workflow, or head SHA mismatch')
+
+          jobs = get('/actions/runs/' + str(run_id) + '/jobs?per_page=100').get('jobs', [])
+          required_jobs = {'Build pinned Codeg web runtime', 'linux-x64', 'macos-x64', 'macos-arm64'}
+          successful_jobs = {job.get('name') for job in jobs
+                             if job.get('status') == 'completed' and job.get('conclusion') == 'success'}
+          if not required_jobs.issubset(successful_jobs):
+              raise SystemExit('fixed POSIX source run lacks successful jobs: '
+                               + ', '.join(sorted(required_jobs - successful_jobs)))
+
+          required_artifacts = {
+              'tether-linux-x64-0.5.0-preview',
+              'tether-macos-x64-0.5.0-preview',
+              'tether-macos-arm64-0.5.0-preview',
+              'tether-node-runtime-linux-x64-0.5.0-preview',
+          }
+          artifacts = get('/actions/runs/' + str(run_id) + '/artifacts?per_page=100').get('artifacts', [])
+          available = {item.get('name'): item for item in artifacts}
+          missing = required_artifacts - available.keys()
+          if missing:
+              raise SystemExit('fixed POSIX source run lacks artifacts: ' + ', '.join(sorted(missing)))
+          for name in sorted(required_artifacts):
+              artifact = available[name]
+              source = artifact.get('workflow_run') or {}
+              if (artifact.get('expired') or not str(artifact.get('digest', '')).startswith('sha256:')
+                      or source.get('id') != run_id or source.get('head_sha') != expected_sha):
+                  raise SystemExit('fixed POSIX artifact provenance or integrity metadata mismatch: ' + name)
+          print('Verified fixed POSIX artifacts from run %s at %s: %s' %
+                (run_id, expected_sha, ', '.join(sorted(required_artifacts))))
+          PY
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           pattern: 'tether-*-0.5.0-preview'
           path: .release-inputs
+      - name: Download Linux package from verified source run
+        if: ${{ contains(github.event.head_commit.message, '[windows-recovery]') }}
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: tether-linux-x64-0.5.0-preview
+          path: .release-inputs/tether-linux-x64-0.5.0-preview
+          github-token: ${{ github.token }}
+          repository: qi001007/tether-harness
+          run-id: 42520196405
+      - name: Download macOS x64 package from verified source run
+        if: ${{ contains(github.event.head_commit.message, '[windows-recovery]') }}
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: tether-macos-x64-0.5.0-preview
+          path: .release-inputs/tether-macos-x64-0.5.0-preview
+          github-token: ${{ github.token }}
+          repository: qi001007/tether-harness
+          run-id: 42520196405
+      - name: Download macOS arm64 package from verified source run
+        if: ${{ contains(github.event.head_commit.message, '[windows-recovery]') }}
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: tether-macos-arm64-0.5.0-preview
+          path: .release-inputs/tether-macos-arm64-0.5.0-preview
+          github-token: ${{ github.token }}
+          repository: qi001007/tether-harness
+          run-id: 42520196405
+      - name: Download Linux Node runtime from verified source run
+        if: ${{ contains(github.event.head_commit.message, '[windows-recovery]') }}
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: tether-node-runtime-linux-x64-0.5.0-preview
+          path: .release-inputs/tether-node-runtime-linux-x64-0.5.0-preview
+          github-token: ${{ github.token }}
+          repository: qi001007/tether-harness
+          run-id: 42520196405
       - name: Fetch the fixed original DSH plugin release metadata and archive
         shell: bash
         run: |
@@ -260,11 +360,17 @@ jobs:
             --output-dir .release-manifest
       - name: Assemble unique draft release assets
         shell: bash
+        env:
+          WINDOWS_RECOVERY: ${{ contains(github.event.head_commit.message, '[windows-recovery]') }}
+          SOURCE_SHA: ${{ github.sha }}
+          SOURCE_RUN_ID: ${{ github.run_id }}
+          SOURCE_REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
           python - <<'PY'
           import hashlib
           import json
+          import os
           import shutil
           from pathlib import Path
           import yaml
@@ -387,6 +493,31 @@ jobs:
               add_file(manifest_dir / name)
           required = {'Tether-0.5.0-win-x64.exe', 'Tether-node-runtime-0.5.0-linux-x64.tar.gz',
                       'Tether-node-runtime-0.5.0-linux-x64.deb', 'tether-update.json', 'preview-mac.yml'}
+          recovery = os.environ['WINDOWS_RECOVERY'].lower() == 'true'
+          current_source = {'run_id': int(os.environ['SOURCE_RUN_ID']),
+                            'head_sha': os.environ['SOURCE_SHA']}
+          reused_source = {'run_id': 42520196405,
+                           'head_sha': '97aa80f20f32c25ed9ad3ad99078d28d8e07924c'}
+          artifact_sources = {name: current_source for name in sorted(expected)}
+          if recovery:
+              for name in {
+                      'tether-linux-x64-0.5.0-preview',
+                      'tether-macos-x64-0.5.0-preview',
+                      'tether-macos-arm64-0.5.0-preview',
+                      'tether-node-runtime-linux-x64-0.5.0-preview'}:
+                  artifact_sources[name] = reused_source
+          (output / 'package-build-provenance.json').write_text(json.dumps({
+              'repository': os.environ['SOURCE_REPOSITORY'],
+              'current_source_sha': os.environ['SOURCE_SHA'],
+              'current_run_id': int(os.environ['SOURCE_RUN_ID']),
+              'mode': 'windows-recovery' if recovery else 'same-run',
+              'artifacts': artifact_sources,
+          }, indent=2) + '\n', encoding='utf-8')
+          with Path(os.environ['GITHUB_STEP_SUMMARY']).open('a', encoding='utf-8') as summary:
+              summary.write('| Artifact | Source run | Source commit |\n| --- | ---: | --- |\n')
+              for name, source in sorted(artifact_sources.items()):
+                  summary.write(f"| {name} | {source['run_id']} | `{source['head_sha']}` |\n")
+          required.add('package-build-provenance.json')
           missing = required - {path.name for path in output.iterdir() if path.is_file()}
           if missing:
               raise SystemExit('missing required release files: ' + ', '.join(sorted(missing)))
@@ -398,7 +529,7 @@ jobs:
           tag_name: v0.5.0-preview.1
           target_commitish: ${{ github.sha }}
           name: Tether 0.5.0 Preview 1
-          body: 'Preview candidate assembled from the four-platform CI artifacts. This draft is not a stable release.'
+          body: 'Preview candidate assembled from per-platform CI artifacts. See package-build-provenance.json for each artifact source run and commit. This draft is not a stable release.'
           draft: true
           prerelease: true
           make_latest: false

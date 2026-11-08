@@ -31,3 +31,5 @@
 
 - 2026-11-09：LibreOffice Linux runtime 纳入固定 notofonts/noto-cjk NotoSansCJKsc-Regular.otf 与 OFL-1.1 LICENSE（commit f8d157532fbfaeda587e826d4cd5b21a49186f7c），安装到现有 share/fonts/truetype，以修复 DOCX 中文正文预览缺字。
 - 2026-11-09：SFTPGo 打包仅选文件头匹配目标平台的唯一 core（ELF/Mach-O/MZ），并校验唯一 JSON 配置；避免同名 bash completion 覆盖真正 core；POSIX core mode 755。
+
+- 2026-11-09: Windows SFTPGo portable ZIP includes x64, x86 and ARM64 sftpgo.exe files. Selection now verifies PE machine architecture for the requested Windows target; JSON config parsing accepts UTF-8 BOM. Linux ELF and macOS Mach-O core filtering remain intact.
