@@ -9,12 +9,13 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ contains(github.event.head_commit.message, '[windows-recovery]') && format('tether-desktop-preview-windows-recovery-{0}', github.ref) || format('tether-desktop-preview-{0}', github.ref) }}
+  group: ${{ (contains(github.event.head_commit.message, '[windows-recovery]') || contains(github.event.head_commit.message, '[preview-publish-only]')) && format('tether-desktop-preview-windows-recovery-{0}', github.ref) || format('tether-desktop-preview-{0}', github.ref) }}
   cancel-in-progress: true
 
 jobs:
   build-codeg-web:
     name: Build pinned Codeg web runtime
+    if: ${{ !contains(github.event.head_commit.message, '[preview-publish-only]') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -50,6 +51,7 @@ jobs:
           retention-days: 1
   package:
     name: ${{ matrix.target }}
+    if: ${{ !contains(github.event.head_commit.message, '[preview-publish-only]') }}
     needs: build-codeg-web
     strategy:
       fail-fast: false
@@ -216,8 +218,8 @@ jobs:
           retention-days: 7
   publish-preview-draft:
     name: Sign and assemble preview draft
-    if: ${{ github.ref == 'refs/heads/codex/tether-050-preview-20261108' && !contains(github.event.head_commit.message, '[posix-only]') }}
-    needs: package
+    if: ${{ always() && !cancelled() && github.ref == 'refs/heads/codex/tether-050-preview-20261108' && !contains(github.event.head_commit.message, '[posix-only]') && (contains(github.event.head_commit.message, '[preview-publish-only]') || (needs.build-codeg-web.result == 'success' && needs.package.result == 'success')) }}
+    needs: [build-codeg-web, package]
     runs-on: ubuntu-22.04
     timeout-minutes: 20
     permissions:
@@ -233,7 +235,7 @@ jobs:
       - name: Install manifest signing dependency
         run: python -m pip install --disable-pip-version-check 'cryptography>=42,<50' 'PyYAML==6.0.2' 'psutil==7.2.2'
       - name: Verify fixed POSIX package source run
-        if: ${{ contains(github.event.head_commit.message, '[windows-recovery]') }}
+        if: ${{ contains(github.event.head_commit.message, '[windows-recovery]') || contains(github.event.head_commit.message, '[preview-publish-only]') }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -295,12 +297,84 @@ jobs:
           print('Verified fixed POSIX artifacts from run %s at %s: %s' %
                 (run_id, expected_sha, ', '.join(sorted(required_artifacts))))
           PY
+      - name: Verify fixed Windows package source run
+        if: ${{ contains(github.event.head_commit.message, '[preview-publish-only]') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import urllib.request
+
+          repository = 'qi001007/tether-harness'
+          run_id = 42523512038
+          expected_sha = '898976b2319261012df8b4da77fa643b9e2f6360'
+          api = 'https://api.github.com/repos/' + repository
+          token = os.environ['GH_TOKEN']
+
+          def get(path):
+              request = urllib.request.Request(api + path, headers={
+                  'Accept': 'application/vnd.github+json',
+                  'Authorization': 'Bearer ' + token,
+                  'X-GitHub-Api-Version': '2022-11-28',
+              })
+              with urllib.request.urlopen(request, timeout=20) as response:
+                  return json.loads(response.read())
+
+          run = get('/actions/runs/' + str(run_id))
+          if run.get('id') != run_id or run.get('status') != 'completed':
+              raise SystemExit('fixed Windows source run is not complete or has an unexpected ID')
+          if (run.get('path') != '.github/workflows/tether-desktop-candidate.yml'
+                  or run.get('head_branch') != 'codex/tether-050-preview-20261108'
+                  or run.get('head_sha') != expected_sha
+                  or (run.get('repository') or {}).get('full_name') != repository
+                  or (run.get('head_repository') or {}).get('full_name') != repository):
+              raise SystemExit('fixed Windows source run repository, workflow, or head SHA mismatch')
+
+          jobs = get('/actions/runs/' + str(run_id) + '/jobs?per_page=100').get('jobs', [])
+          required_jobs = {'Build pinned Codeg web runtime', 'windows-x64'}
+          successful_jobs = {job.get('name') for job in jobs
+                             if job.get('status') == 'completed' and job.get('conclusion') == 'success'}
+          if not required_jobs.issubset(successful_jobs):
+              raise SystemExit('fixed Windows source run lacks successful jobs: '
+                               + ', '.join(sorted(required_jobs - successful_jobs)))
+
+          name = 'tether-windows-x64-0.5.0-preview'
+          artifacts = get('/actions/runs/' + str(run_id) + '/artifacts?per_page=100').get('artifacts', [])
+          artifact = next((item for item in artifacts if item.get('name') == name), None)
+          if artifact is None or artifact.get('expired'):
+              raise SystemExit('fixed Windows source artifact is missing or expired')
+          source = artifact.get('workflow_run') or {}
+          if (artifact.get('id') != 13635146500
+                  or artifact.get('size_in_bytes') != 1036137974
+                  or artifact.get('digest') != 'sha256:176c3cd7a49864ebe9e6d0888d10b840ce8d41b55e5afb3d30b3f92cae52b524'
+                  or source.get('id') != run_id or source.get('head_sha') != expected_sha):
+              raise SystemExit('fixed Windows artifact provenance or integrity metadata mismatch')
+          print('Verified fixed Windows artifact from run %s at %s' % (run_id, expected_sha))
+          PY
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        if: ${{ !contains(github.event.head_commit.message, '[windows-recovery]') && !contains(github.event.head_commit.message, '[preview-publish-only]') }}
         with:
           pattern: 'tether-*-0.5.0-preview'
           path: .release-inputs
-      - name: Download Linux package from verified source run
+      - name: Download Windows package from current recovery run
         if: ${{ contains(github.event.head_commit.message, '[windows-recovery]') }}
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: tether-windows-x64-0.5.0-preview
+          path: .release-inputs/tether-windows-x64-0.5.0-preview
+      - name: Download Windows package from verified source run
+        if: ${{ contains(github.event.head_commit.message, '[preview-publish-only]') }}
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: tether-windows-x64-0.5.0-preview
+          path: .release-inputs/tether-windows-x64-0.5.0-preview
+          github-token: ${{ github.token }}
+          repository: qi001007/tether-harness
+          run-id: 42523512038
+      - name: Download Linux package from verified source run
+        if: ${{ contains(github.event.head_commit.message, '[windows-recovery]') || contains(github.event.head_commit.message, '[preview-publish-only]') }}
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: tether-linux-x64-0.5.0-preview
@@ -309,7 +383,7 @@ jobs:
           repository: qi001007/tether-harness
           run-id: 42520196405
       - name: Download macOS x64 package from verified source run
-        if: ${{ contains(github.event.head_commit.message, '[windows-recovery]') }}
+        if: ${{ contains(github.event.head_commit.message, '[windows-recovery]') || contains(github.event.head_commit.message, '[preview-publish-only]') }}
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: tether-macos-x64-0.5.0-preview
@@ -318,7 +392,7 @@ jobs:
           repository: qi001007/tether-harness
           run-id: 42520196405
       - name: Download macOS arm64 package from verified source run
-        if: ${{ contains(github.event.head_commit.message, '[windows-recovery]') }}
+        if: ${{ contains(github.event.head_commit.message, '[windows-recovery]') || contains(github.event.head_commit.message, '[preview-publish-only]') }}
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: tether-macos-arm64-0.5.0-preview
@@ -327,7 +401,7 @@ jobs:
           repository: qi001007/tether-harness
           run-id: 42520196405
       - name: Download Linux Node runtime from verified source run
-        if: ${{ contains(github.event.head_commit.message, '[windows-recovery]') }}
+        if: ${{ contains(github.event.head_commit.message, '[windows-recovery]') || contains(github.event.head_commit.message, '[preview-publish-only]') }}
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: tether-node-runtime-linux-x64-0.5.0-preview
@@ -362,6 +436,7 @@ jobs:
         shell: bash
         env:
           WINDOWS_RECOVERY: ${{ contains(github.event.head_commit.message, '[windows-recovery]') }}
+          PUBLISH_ONLY: ${{ contains(github.event.head_commit.message, '[preview-publish-only]') }}
           SOURCE_SHA: ${{ github.sha }}
           SOURCE_RUN_ID: ${{ github.run_id }}
           SOURCE_REPOSITORY: ${{ github.repository }}
@@ -494,23 +569,30 @@ jobs:
           required = {'Tether-0.5.0-win-x64.exe', 'Tether-node-runtime-0.5.0-linux-x64.tar.gz',
                       'Tether-node-runtime-0.5.0-linux-x64.deb', 'tether-update.json', 'preview-mac.yml'}
           recovery = os.environ['WINDOWS_RECOVERY'].lower() == 'true'
+          publish_only = os.environ['PUBLISH_ONLY'].lower() == 'true'
           current_source = {'run_id': int(os.environ['SOURCE_RUN_ID']),
                             'head_sha': os.environ['SOURCE_SHA']}
           reused_source = {'run_id': 42520196405,
                            'head_sha': '97aa80f20f32c25ed9ad3ad99078d28d8e07924c'}
+          reused_windows_source = {'run_id': 42523512038,
+                                   'head_sha': '898976b2319261012df8b4da77fa643b9e2f6360'}
           artifact_sources = {name: current_source for name in sorted(expected)}
-          if recovery:
+          if recovery or publish_only:
               for name in {
                       'tether-linux-x64-0.5.0-preview',
                       'tether-macos-x64-0.5.0-preview',
                       'tether-macos-arm64-0.5.0-preview',
                       'tether-node-runtime-linux-x64-0.5.0-preview'}:
                   artifact_sources[name] = reused_source
+          if publish_only:
+              artifact_sources['tether-windows-x64-0.5.0-preview'] = reused_windows_source
           (output / 'package-build-provenance.json').write_text(json.dumps({
               'repository': os.environ['SOURCE_REPOSITORY'],
               'current_source_sha': os.environ['SOURCE_SHA'],
               'current_run_id': int(os.environ['SOURCE_RUN_ID']),
-              'mode': 'windows-recovery' if recovery else 'same-run',
+              'publisher_source': {'run_id': int(os.environ['SOURCE_RUN_ID']),
+                                   'head_sha': os.environ['SOURCE_SHA']},
+              'mode': 'preview-publish-only' if publish_only else 'windows-recovery' if recovery else 'same-run',
               'artifacts': artifact_sources,
           }, indent=2) + '\n', encoding='utf-8')
           with Path(os.environ['GITHUB_STEP_SUMMARY']).open('a', encoding='utf-8') as summary:

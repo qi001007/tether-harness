@@ -11,3 +11,5 @@
 - 2026-10-28：允许从 main 输入新版本号生成首个 Draft Release；验证组件版本与本次提交，构建验证通过后才创建缺失 tag，并拒绝不同提交的已有 tag 及已发布 Release 覆盖。
 - 2026-10-28：成功校验路径显式以退出码 0 结束，避免无 tag 时 `git show-ref` 的预期退出码 1 泄漏到 GitHub Actions PowerShell 包装层。
 - 2026-11-07：release workflow 仅接受精确 `release-candidate/vX.Y.Z` 分支创建缺失 tag；手动 main 与既有 tag 校验保留。构建前通过固定 SHA/大小的 Herdr runtime hydration 补齐干净 checkout。
+
+- [x] Add `[preview-publish-only]` recovery for failed draft assembly: verify and reuse Windows artifact `tether-windows-x64-0.5.0-preview` from run `42523512038` / `898976b2319261012df8b4da77fa643b9e2f6360`, plus the verified POSIX artifacts from run `42520196405` / `97aa80f20f32c25ed9ad3ad99078d28d8e07924c`; skip package builds, record per-artifact provenance, and download Windows into its named directory. Ordinary and `[windows-recovery]` flows remain intact.
