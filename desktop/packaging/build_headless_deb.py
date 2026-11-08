@@ -107,6 +107,19 @@ def _nfpm_config(build: Path, payload: Path) -> Path:
             or office_dependencies.get("source_sha256") != "8290c8f46cb33d6df8f681cb796e0697461ea070f86ec55b63c94d7eb9d9a476"):
         raise ValueError("Debian runtime is missing verified LibreOffice system dependency metadata")
     depends = list(dict.fromkeys([*depends, "passwd", "util-linux"]))
+    script_files = {
+        "preinstall": "preinst", "postinstall": "postinst",
+        "preremove": "prerm", "postremove": "postrm",
+    }
+    scripts = {}
+    for action, filename in script_files.items():
+        script_source = packaging / filename
+        script_bytes = script_source.read_bytes().replace(b"\r\n", b"\n")
+        if b"\r" in script_bytes:
+            raise ValueError(f"Debian maintainer script contains a bare carriage return: {filename}")
+        script_target = build / filename
+        script_target.write_bytes(script_bytes)
+        scripts[action] = str(script_target)
     config = {
         "name": "tether-node",
         "arch": "amd64",
@@ -123,12 +136,7 @@ def _nfpm_config(build: Path, payload: Path) -> Path:
             {"src": str(packaging / "README.Debian"), "dst": "/usr/share/doc/tether-node/README.Debian", "file_info": {"mode": 0o644}},
             {"src": str(payload / "laptop" / "tether-node-pair"), "dst": "/usr/bin/tether-node-pair", "file_info": {"mode": 0o755}},
         ],
-        "scripts": {
-            "preinstall": str(packaging / "preinst"),
-            "postinstall": str(packaging / "postinst"),
-            "preremove": str(packaging / "prerm"),
-            "postremove": str(packaging / "postrm"),
-        },
+        "scripts": scripts,
         "deb": {"arch": "amd64"},
     }
     path = build / "nfpm.yaml"

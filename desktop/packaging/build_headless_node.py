@@ -15,6 +15,14 @@ OUTPUT_DIR = ROOT / ".scratch" / "tether-desktop-candidates" / "0.5.0" / "headle
 ARCHIVE_NAME = "Tether-node-runtime-0.5.0-linux-x64.tar.gz"
 
 
+def copy_lf_script(source: Path, destination: Path) -> None:
+    content = source.read_bytes().replace(b"\r\n", b"\n")
+    if b"\r" in content:
+        raise ValueError(f"Linux runtime script contains a bare carriage return: {source.name}")
+    destination.write_bytes(content)
+    shutil.copystat(source, destination)
+
+
 def main() -> int:
     if not (STAGING / "tether-python").is_file():
         raise ValueError("PyInstaller Tether runtime is missing")
@@ -71,7 +79,7 @@ def main() -> int:
         shutil.copy2(ROOT / "THIRD_PARTY_NOTICES.md", package / "tether-source" / "THIRD_PARTY_NOTICES.md")
         binary_launcher = package / "bin" / "tether-node"
         binary_launcher.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(launcher, binary_launcher)
+        copy_lf_script(launcher, binary_launcher)
         binary_launcher.chmod(0o755)
         laptop_dir = package / "laptop"
         laptop_dir.mkdir(parents=True, exist_ok=True)
@@ -79,7 +87,7 @@ def main() -> int:
             source = ROOT / "laptop" / name
             if not source.is_file():
                 raise ValueError(f"Node owner installer file is missing: laptop/{name}")
-            shutil.copy2(source, laptop_dir / name)
+            copy_lf_script(source, laptop_dir / name)
         (laptop_dir / "install-node.sh").chmod(0o755)
         (laptop_dir / "tether-node-runtime.sh").chmod(0o755)
         (laptop_dir / "tether-node-pair").chmod(0o755)

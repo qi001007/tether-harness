@@ -2,6 +2,8 @@
 - 2026-11-09：NSIS同目录首装快照与主进程直接迁移对齐，快照apps.json和agents-runtime持久目录/WAL，跳过runtime.json和server.log；递归拒绝reparse point，并在快照前确认旧Codeg进程已停止，保持私有ACL与snapshot marker流程。
 
 - 2026-11-09：Linux LibreOffice headless runtime 的 Debian Depends 明确包含 `libnspr4`、`libnss3`；Ubuntu 24.04最小镜像实测缺少 soffice.bin 所需 NSS/NSPR SONAME，随包 runtime 先前依赖数组为空。
+- 2026-11-09：nFPM Debian打包将preinst/postinst/prerm/postrm四个maintainer脚本规范化为LF，避免CRLF shebang在Linux上解析为缺失的`/bin/sh\r`而无法安装。
+- 2026-11-09：headless runtime构建入口将Linux Node/安装/配对shell入口规范化为LF，避免CRLF shebang导致Node launcher或CLI无法启动。
 
 - 2026-11-09：electron-builder `afterPack` 增加最终 appOutDir runtime 检查；按打包器资源目录 API 检查 Python、Node、MeshCentral、对应平台 MeshAgent、LibreOffice，以及 Caddy/Rclone/EasyTier 四个唯一可执行文件，避免不完整输出通过候选生成步骤。
 
