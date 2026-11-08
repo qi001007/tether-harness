@@ -305,6 +305,13 @@ class EasyTierRuntime:
                 "credential_private_key": key}
 
     def _render_config(self, config: dict[str, Any], credential_path: Path) -> str:
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
+
+        private_key = X25519PrivateKey.from_private_bytes(
+            base64.b64decode(config["credential_private_key"], validate=True))
+        public_key = base64.b64encode(private_key.public_key().public_bytes(
+            serialization.Encoding.Raw, serialization.PublicFormat.Raw)).decode("ascii")
         lines = [
             f'instance_name = "tether-{config["instance_id"]}"',
             f'instance_id = "{config["instance_id"]}"',
@@ -325,6 +332,7 @@ class EasyTierRuntime:
             "[secure_mode]",
             "enabled = true",
             f'local_private_key = "{config["credential_private_key"]}"',
+            f'local_public_key = "{public_key}"',
             "",
             "[[proxy_network]]",
             'cidr = "127.0.0.1/32"',
