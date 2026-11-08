@@ -372,15 +372,6 @@ def assemble_dsh(manifest: dict, target: str, runtime_destination: Path, plugin_
         postinstall = node_pty / "scripts" / "post-install.js"
         subprocess.run([node, str(postinstall)], cwd=node_pty, check=True, timeout=120)
         helper = native_dir / "spawn-helper"
-        if platform == "linux" and not helper.is_file():
-            node_gyp = node_modules / ".bin" / "node-gyp"
-            if not node_gyp.is_file():
-                raise ValueError("locked node-gyp build tool is missing for the Linux node-pty helper")
-            subprocess.run([str(node_gyp), "rebuild"], cwd=node_pty, check=True, timeout=600)
-            build_release = node_pty / "build" / "Release"
-            if not (build_release / "pty.node").is_file() or not (build_release / "spawn-helper").is_file():
-                raise ValueError("node-gyp did not build both the Linux PTY module and spawn-helper")
-            helper = build_release / "spawn-helper"
         if platform == "darwin" and not helper.is_file():
             raise ValueError(f"locked node-pty has no spawn-helper for {target}")
         if platform == "win32":
@@ -389,7 +380,7 @@ def assemble_dsh(manifest: dict, target: str, runtime_destination: Path, plugin_
                 raise ValueError("locked node-pty Windows ConPTY runtime files are missing")
         helper_script = node_modules / "@deepseek-ai" / "dsh-subprocess-local" / "scripts" / "ensure-spawn-helper.mjs"
         subprocess.run([node, str(helper_script)], cwd=install_root, check=True, timeout=120)
-        if platform != "win32" and (not helper.is_file() or not os.access(helper, os.X_OK)):
+        if platform == "darwin" and not os.access(helper, os.X_OK):
             raise ValueError(f"node-pty spawn-helper is missing or not executable for {target}")
         subprocess.run([npm, "prune", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund"],
                        cwd=install_root, check=True, timeout=600)

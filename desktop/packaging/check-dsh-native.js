@@ -14,23 +14,35 @@ const terminal = nodePty.spawn(process.execPath, ['--version'], {
 })
 let output = ''
 let finished = false
-const timeout = setTimeout(() => {
+let forceExit
+
+function finish(code, message) {
   if (finished) return
   finished = true
+  clearTimeout(timeout)
+  clearTimeout(forceExit)
+  if (message) process.stderr.write(message)
+  process.stdout.write('', () => process.exit(code))
+}
+
+const timeout = setTimeout(() => {
+  if (finished) return
   terminal.kill()
-  process.stderr.write('Bundled DSH PTY command did not finish within 8 seconds.\n')
-  process.exitCode = 1
+  finish(1, 'Bundled DSH PTY command did not finish within 8 seconds.\n')
 }, 8000)
+forceExit = setTimeout(() => {
+  if (finished) return
+  terminal.kill()
+  finish(1, 'Bundled DSH PTY check did not clean up after its timeout.\n')
+}, 10000)
 
 terminal.onData((data) => { output += data })
 terminal.onExit(({ exitCode }) => {
   if (finished) return
-  finished = true
-  clearTimeout(timeout)
   if (exitCode !== 0 || !output.includes(process.versions.node)) {
-    process.stderr.write('Bundled DSH PTY did not return the expected Node version.\n')
-    process.exitCode = 1
+    finish(1, 'Bundled DSH PTY did not return the expected Node version.\n')
     return
   }
-  process.stdout.write(`Bundled DSH PTY and Koffi are available under Node ${process.versions.node}.\n`)
+  clearTimeout(forceExit)
+  finish(0, `Bundled DSH PTY and Koffi are available under Node ${process.versions.node}.\n`)
 })

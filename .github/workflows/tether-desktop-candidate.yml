@@ -166,6 +166,7 @@ jobs:
         run: .runtime/desktop-candidate/components/libreoffice/opt/libreoffice26.8/program/soffice --headless --version
       - name: Check the bundled DSH PTY and native dependencies
         shell: pwsh
+        timeout-minutes: 2
         run: |
           $ErrorActionPreference = 'Stop'
           $node = if ($env:RUNNER_OS -eq 'Windows') { '.runtime/desktop-candidate/components/nodejs/node.exe' } else { '.runtime/desktop-candidate/components/nodejs/bin/node' }
