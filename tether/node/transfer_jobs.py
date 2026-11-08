@@ -459,7 +459,7 @@ class RcloneJobs:
         try:
             config_path = self._write_rclone_config(operation_id, endpoint, key_file)
             file_items = [item for item in items if item[2] == "file"]
-            batch_files = file_items if len(file_items) > 1 else []
+            batch_files = file_items
             batch_rules = [_rclone_include_rule(item[0]) for item in batch_files]
             if batch_files:
                 self._start_rc(operation_id, config_path)
