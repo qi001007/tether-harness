@@ -313,6 +313,22 @@ def assemble_libreoffice(manifest: dict, target: str, destination: Path) -> None
                         external_dependencies.add(" | ".join(external_alternatives))
             # Ubuntu's NSS/NSPR packages provide the SONAMEs required by soffice.bin.
             external_dependencies.update({"libnspr4", "libnss3"})
+            font_directory = destination / "opt" / "libreoffice26.8" / "share" / "fonts" / "truetype"
+            for font in manifest.get("linux_fonts", []):
+                if not re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", str(font.get("name") or "")):
+                    raise ValueError("invalid pinned LibreOffice font filename")
+                font_archive = workspace / font["name"]
+                license_archive = workspace / font["license_file"]
+                download(font, font_archive)
+                license_asset = {"name": font["license_file"], "url": font["license_url"],
+                                 "size": font["license_size"], "sha256": font["license_sha256"]}
+                download(license_asset, license_archive)
+                with font_archive.open("rb") as stream:
+                    if stream.read(4) != b"OTTO":
+                        raise ValueError(f"pinned LibreOffice font is not an OpenType CFF font: {font['name']}")
+                font_directory.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(font_archive, font_directory / font["name"])
+                shutil.copy2(license_archive, font_directory / font["license_file"])
             (destination / "linux-dependencies.json").write_text(json.dumps({
                 "source_archive": asset["name"],
                 "source_sha256": asset["sha256"],
@@ -659,14 +675,38 @@ def main() -> int:
             extract_archive(archive_path, extracted)
             if component_name == "sftpgo":
                 allowed = {"sftpgo", "sftpgo.exe", "sftpgo.json"}
-                found = set()
-                for item in extracted.rglob("*"):
-                    if item.is_file() and item.name in allowed:
-                        found.add(item.name)
-                        shutil.copy2(item, destination / item.name)
                 binary = "sftpgo.exe" if args.target.startswith("windows") else "sftpgo"
-                if binary not in found or "sftpgo.json" not in found:
+                if args.target.startswith("windows"):
+                    valid_magic = (b"MZ",)
+                elif args.target.startswith("linux"):
+                    valid_magic = (b"\x7fELF",)
+                else:
+                    valid_magic = (b"\xfe\xed\xfa\xce", b"\xfe\xed\xfa\xcf", b"\xce\xfa\xed\xfe",
+                                   b"\xcf\xfa\xed\xfe", b"\xca\xfe\xba\xbe", b"\xbe\xba\xfe\xca",
+                                   b"\xca\xfe\xba\xbf", b"\xbf\xba\xfe\xca")
+                binaries = []
+                configs = []
+                for item in extracted.rglob("*"):
+                    if not item.is_file() or item.name not in allowed:
+                        continue
+                    if item.name == binary:
+                        with item.open("rb") as stream:
+                            header = stream.read(4)
+                            if any(header.startswith(magic) for magic in valid_magic):
+                                binaries.append(item)
+                    elif item.name == "sftpgo.json":
+                        try:
+                            config = json.loads(item.read_text(encoding="utf-8"))
+                        except (OSError, UnicodeError, ValueError):
+                            continue
+                        if isinstance(config, dict):
+                            configs.append(item)
+                if len(binaries) != 1 or len(configs) != 1:
                     raise ValueError(f"SFTPGo core binary/config missing from {asset['name']}")
+                shutil.copy2(binaries[0], destination / binary)
+                shutil.copy2(configs[0], destination / "sftpgo.json")
+                if not args.target.startswith("windows"):
+                    (destination / binary).chmod(0o755)
             else:
                 if component_name != "codeg":
                     copy_tree(extracted, destination)

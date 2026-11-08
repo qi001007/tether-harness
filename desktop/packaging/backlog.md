@@ -28,3 +28,6 @@
 - 2026-11-08：Debian候选运行包补建受限`tether-easytier` system group/user（no-login、no-home），仅初始化`/var/lib/tether-easytier[/instances]`私有目录，并声明`passwd`/`util-linux`运行依赖；README说明root Node服务与非提权EasyTier子进程的权限边界。
 - 2026-11-08：候选 workflow 根据 commit message 的 `[posix-only]` 标记选择纯 Linux/macOS matrix，并跳过预览聚合；普通 push 和手动 dispatch 保持完整矩阵。
 - 2026-11-08：候选构建器分别替换 runtime 根和 `node-bin` extraResource 源路径，避免前缀替换拼出无效 YAML；两条资源映射都按唯一匹配检查。
+
+- 2026-11-09：LibreOffice Linux runtime 纳入固定 notofonts/noto-cjk NotoSansCJKsc-Regular.otf 与 OFL-1.1 LICENSE（commit f8d157532fbfaeda587e826d4cd5b21a49186f7c），安装到现有 share/fonts/truetype，以修复 DOCX 中文正文预览缺字。
+- 2026-11-09：SFTPGo 打包仅选文件头匹配目标平台的唯一 core（ELF/Mach-O/MZ），并校验唯一 JSON 配置；避免同名 bash completion 覆盖真正 core；POSIX core mode 755。

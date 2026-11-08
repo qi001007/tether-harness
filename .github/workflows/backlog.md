@@ -1,4 +1,5 @@
 # 变更记录
+- 2026-11-09：preview 候选工作流按 GitHub ref 设置互斥组并启用 cancel-in-progress，避免同一分支多轮并发构建争写同一 draft release。
 - 2026-11-09：修复 preview 发布聚合 job 缺少 psutil 导致 build_release.py 导入失败，固定安装 psutil 7.2.2；四个平台的上一轮安装包构建已成功。本次连同正常安装登录、Codeg 数据迁移和 Linux LibreOffice 系统依赖修复重新冻结构建。
 - 2026-11-08：候选打包工作流将 macOS x64 package job 时限提高到 65 分钟，其他平台保持 35 分钟；preview draft 汇总 job 限时 20 分钟。
 - 2026-11-07：发行先从固定 Codeg 提交重建前端。候选分支保留验签后的 Actions 构建产物，版本标签和 main 手动流程生成发行草稿。

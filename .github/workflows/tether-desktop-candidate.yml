@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: tether-desktop-preview-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-codeg-web:
     name: Build pinned Codeg web runtime
