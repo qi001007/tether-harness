@@ -120,6 +120,7 @@ jobs:
             --workpath "$RUNNER_TEMP/tether-pyinstaller" \
             --specpath "$RUNNER_TEMP/tether-pyinstaller" \
             --hidden-import tether.node.agent \
+            --hidden-import tether.node.pair_cli \
             --hidden-import tether.updates_cli \
             --collect-all deepseek_harness \
             --collect-all deepseek_harness_runtime \
@@ -155,12 +156,22 @@ jobs:
           if (!(Test-Path -LiteralPath $node -PathType Leaf)) { throw "Bundled Node runtime missing: $node" }
           & $python -m tether.node.agent --help
           if ($LASTEXITCODE -ne 0) { throw "Frozen Python entry check failed with exit $LASTEXITCODE" }
+          & $python -m tether.node.pair_cli --help
+          if ($LASTEXITCODE -ne 0) { throw "Frozen Node pairing entry check failed with exit $LASTEXITCODE" }
           & $node --version
           if ($LASTEXITCODE -ne 0) { throw "Bundled Node entry check failed with exit $LASTEXITCODE" }
       - name: Check the bundled LibreOffice runtime
         if: matrix.target == 'linux-x64'
         shell: bash
         run: .runtime/desktop-candidate/components/libreoffice/opt/libreoffice26.8/program/soffice --headless --version
+      - name: Check the bundled DSH PTY and native dependencies
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $node = if ($env:RUNNER_OS -eq 'Windows') { '.runtime/desktop-candidate/components/nodejs/node.exe' } else { '.runtime/desktop-candidate/components/nodejs/bin/node' }
+          $env:TETHER_DSH_RUNTIME_DIR = (Resolve-Path -LiteralPath '.runtime/desktop-candidate/components/dsh').Path
+          & $node desktop/packaging/check-dsh-native.js
+          if ($LASTEXITCODE -ne 0) { throw "Bundled DSH native check failed with exit $LASTEXITCODE" }
       - name: Build standalone headless Linux Node runtime
         if: matrix.target == 'linux-x64'
         run: python desktop/packaging/build_headless_node.py

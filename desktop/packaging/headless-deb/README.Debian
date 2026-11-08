@@ -12,11 +12,20 @@ are installed from the configured Debian repositories:
 The service does not receive broad sudo rules because it already runs under
 systemd as root.
 
-On first installation the service remains stopped until a Controller URL and
-enrollment credentials are configured in /etc/tether-node/node.env. This file
-and all Node identity, database, logs, and private runtime state are kept
-outside the package at root-only paths: /etc/tether-node and
-/var/lib/tether-node. Edit the environment file as root, then run:
+On first installation the service remains stopped until the Node is paired.
+Create a one-time pairing code in the Tether APP, then run this command from a
+terminal:
+
+    sudo tether-node-pair
+
+It asks for the Hub WebSocket URL if one is not configured, then prompts for
+the one-time code without echoing it. The Node uses its hostname as the device
+id unless TETHER_DEVICE is already configured. On success it writes the
+credential to the root-private /etc/tether-node/node.env file and enables the
+service. Node identity, database, logs, and private runtime state stay outside
+the package under /var/lib/tether-node.
+
+If pairing completed but the service did not start, run:
 
     systemctl enable --now tether-node.service
 

@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PREFIX="${TETHER_NODE_PREFIX:-/opt/tether-node}"
+CURRENT="$PREFIX/current"
+SOURCE_ROOT="$CURRENT/tether-source"
+PYTHON="$CURRENT/resources/tether-runtime/tether-python"
+
+[ -x "$PYTHON" ] || { echo "bundled tether-python is missing: $PYTHON" >&2; exit 1; }
+[ -d "$SOURCE_ROOT/tether/node" ] || { echo "bundled Tether Node sources are missing" >&2; exit 1; }
+
+export TETHER_NODE_PREFIX="$PREFIX"
+export TETHER_NODE_ENV_FILE="${TETHER_NODE_ENV_FILE:-/etc/tether-node/node.env}"
+export TETHER_NODE_DATA_DIR="${TETHER_NODE_DATA_DIR:-/var/lib/tether-node}"
+export PYTHONPATH="$SOURCE_ROOT${PYTHONPATH:+:$PYTHONPATH}"
+
+exec "$PYTHON" -m tether.node.pair_cli "$@"

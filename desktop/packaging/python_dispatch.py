@@ -6,13 +6,13 @@ import runpy
 import sys
 
 
-ALLOWED_MODULES = {"tether.node.agent", "tether.updates_cli"}
+ALLOWED_MODULES = {"tether.node.agent", "tether.node.pair_cli", "tether.updates_cli"}
 
 
 def main() -> int:
     args = sys.argv[1:]
     if len(args) < 2 or args[0] != "-m" or args[1] not in ALLOWED_MODULES:
-        print("This bundled runtime accepts only the managed Tether Node and updater commands.", file=sys.stderr)
+        print("This bundled runtime accepts only managed Tether Node, pairing, and updater commands.", file=sys.stderr)
         return 64
     module = args[1]
     sys.argv = [module, *args[2:]]

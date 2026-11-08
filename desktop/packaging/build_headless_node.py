@@ -73,13 +73,14 @@ def main() -> int:
         binary_launcher.chmod(0o755)
         laptop_dir = package / "laptop"
         laptop_dir.mkdir(parents=True, exist_ok=True)
-        for name in ["install-node.sh", "tether-node-runtime.sh"]:
+        for name in ["install-node.sh", "tether-node-runtime.sh", "tether-node-pair"]:
             source = ROOT / "laptop" / name
             if not source.is_file():
                 raise ValueError(f"Node owner installer file is missing: laptop/{name}")
             shutil.copy2(source, laptop_dir / name)
         (laptop_dir / "install-node.sh").chmod(0o755)
         (laptop_dir / "tether-node-runtime.sh").chmod(0o755)
+        (laptop_dir / "tether-node-pair").chmod(0o755)
         runtime_manifest = {
             "schema": 1,
             "version": "0.5.0",

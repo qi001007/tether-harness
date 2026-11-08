@@ -48,7 +48,9 @@ def _extract_runtime(temporary: Path) -> Path:
         raise ValueError("headless runtime manifest does not match the Debian package")
     for path in (
         "bin/tether-node", "resources/tether-runtime/tether-python",
-        "tether-source/tether/node/agent.py", "tether-source/tether/node/console.html",
+        "laptop/tether-node-pair",
+        "tether-source/tether/node/agent.py", "tether-source/tether/node/pair_cli.py",
+        "tether-source/tether/node/console.html",
         "resources/tether-runtime/components/nodejs/bin/node",
         "resources/tether-runtime/components/meshcentral/meshcentral.js",
     ):
@@ -79,6 +81,7 @@ def _nfpm_config(build: Path, payload: Path) -> Path:
             {"src": "/opt/tether-node/releases/0.5.0", "dst": "/opt/tether-node/current", "type": "symlink"},
             {"src": str(packaging / "tether-node.service"), "dst": "/usr/lib/systemd/system/tether-node.service", "file_info": {"mode": 0o644}},
             {"src": str(packaging / "README.Debian"), "dst": "/usr/share/doc/tether-node/README.Debian", "file_info": {"mode": 0o644}},
+            {"src": str(payload / "laptop" / "tether-node-pair"), "dst": "/usr/bin/tether-node-pair", "file_info": {"mode": 0o755}},
         ],
         "scripts": {name: str(packaging / name) for name in ("preinst", "postinst", "prerm", "postrm")},
         "deb": {"arch": "amd64"},

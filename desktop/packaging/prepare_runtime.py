@@ -334,7 +334,7 @@ def assemble_meshagent(remote: dict, target: str, destination: Path) -> None:
     }, indent=2) + "\n", encoding="utf-8")
 
 
-def assemble_dsh(manifest: dict, runtime_destination: Path, plugin_destination: Path,
+def assemble_dsh(manifest: dict, target: str, runtime_destination: Path, plugin_destination: Path,
                  licenses_destination: Path) -> None:
     package_dir = Path(__file__).with_name("dsh")
     lock = package_dir / "package-lock.json"
@@ -351,14 +351,59 @@ def assemble_dsh(manifest: dict, runtime_destination: Path, plugin_destination: 
         shutil.copy2(lock, install_root / "package-lock.json")
         shutil.copy2(package_json, install_root / "package.json")
         npm = "npm.cmd" if sys.platform == "win32" else "npm"
-        subprocess.run([npm, "ci", "--omit=dev", "--no-audit", "--no-fund"],
+        subprocess.run([npm, "ci", "--ignore-scripts", "--no-audit", "--no-fund"],
                        cwd=install_root, check=True, timeout=900)
         node_modules = install_root / "node_modules"
         entry = node_modules / "@deepseek-ai" / "dsh" / "lib" / "bin.js"
         if not entry.is_file():
             raise ValueError("locked DSH npm install has no lib/bin.js entry")
+        platform, architecture = {
+            "windows-x64": ("win32", "x64"), "linux-x64": ("linux", "x64"),
+            "macos-x64": ("darwin", "x64"), "macos-arm64": ("darwin", "arm64"),
+        }[target]
+        node_pty = node_modules / "node-pty"
+        native_dir = node_pty / "prebuilds" / f"{platform}-{architecture}"
+        native_module = native_dir / ("conpty.node" if platform == "win32" else "pty.node")
+        if not native_module.is_file():
+            raise ValueError(f"locked node-pty has no native module for {target}")
+        node = shutil.which("node.exe" if sys.platform == "win32" else "node")
+        if not node:
+            raise ValueError("pinned Node.js is unavailable while assembling DSH native dependencies")
+        postinstall = node_pty / "scripts" / "post-install.js"
+        subprocess.run([node, str(postinstall)], cwd=node_pty, check=True, timeout=120)
+        helper = native_dir / "spawn-helper"
+        if platform == "linux" and not helper.is_file():
+            node_gyp = node_modules / ".bin" / "node-gyp"
+            if not node_gyp.is_file():
+                raise ValueError("locked node-gyp build tool is missing for the Linux node-pty helper")
+            subprocess.run([str(node_gyp), "rebuild"], cwd=node_pty, check=True, timeout=600)
+            build_release = node_pty / "build" / "Release"
+            if not (build_release / "pty.node").is_file() or not (build_release / "spawn-helper").is_file():
+                raise ValueError("node-gyp did not build both the Linux PTY module and spawn-helper")
+            helper = build_release / "spawn-helper"
+        if platform == "darwin" and not helper.is_file():
+            raise ValueError(f"locked node-pty has no spawn-helper for {target}")
+        if platform == "win32":
+            conpty_dir = node_pty / "build" / "Release" / "conpty"
+            if not (conpty_dir / "conpty.dll").is_file() or not (conpty_dir / "OpenConsole.exe").is_file():
+                raise ValueError("locked node-pty Windows ConPTY runtime files are missing")
+        helper_script = node_modules / "@deepseek-ai" / "dsh-subprocess-local" / "scripts" / "ensure-spawn-helper.mjs"
+        subprocess.run([node, str(helper_script)], cwd=install_root, check=True, timeout=120)
+        if platform != "win32" and (not helper.is_file() or not os.access(helper, os.X_OK)):
+            raise ValueError(f"node-pty spawn-helper is missing or not executable for {target}")
+        subprocess.run([npm, "prune", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund"],
+                       cwd=install_root, check=True, timeout=600)
         runtime_destination.mkdir(parents=True, exist_ok=True)
-        copy_tree(node_modules, runtime_destination / "node_modules")
+        runtime_dependencies = runtime_destination / "node_modules"
+        runtime_dependencies.mkdir(parents=True, exist_ok=True)
+        for item in node_modules.iterdir():
+            if item.name == "meshcentral":
+                continue
+            target_path = runtime_dependencies / item.name
+            if item.is_dir():
+                copy_node_dependencies(item, target_path, node_modules)
+            elif item.is_file():
+                shutil.copy2(item, target_path)
         shutil.copy2(package_json, runtime_destination / "package.json")
         shutil.copy2(lock, runtime_destination / "package-lock.json")
         (runtime_destination / "runtime.json").write_text(json.dumps({
@@ -440,7 +485,7 @@ def main() -> int:
     assemble_meshcentral(remote_manifest["source_archives"][0], meshcentral_dir, source_archive)
     assemble_meshagent(remote_manifest["meshagent"], args.target, component_root / "meshagent" / args.target)
     assemble_libreoffice(libreoffice_manifest, args.target, component_root / "libreoffice")
-    assemble_dsh(dsh_manifest, component_root / "dsh", component_root / "dsh-plugin",
+    assemble_dsh(dsh_manifest, args.target, component_root / "dsh", component_root / "dsh-plugin",
                  output / "licenses" / "DSH-node-dependencies")
     for icon_name in ["tether-app-s.ico", "tether-app-s.png"]:
         icon_source = ROOT / "assets" / icon_name
