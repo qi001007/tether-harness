@@ -786,12 +786,22 @@ class ServiceAccess:
         if service_id == "files":
             header_injection = f"   header_up X-Tether-Worker {worker_secret}\n"
             strip_worker = ""
+        elif service_id == "dsh":
+            # DSH signs its auth cookie for the request Host authority. Keep the
+            # browser's external origin checked by forward_auth, then present the
+            # same loopback authority used by NativeSurface for the upstream hop.
+            upstream_host = f"{upstream['host']}:{int(upstream['port'])}"
+            header_injection = ("   header_up Cookie {http.request.header.X-Tether-Upstream-Cookie}\n"
+                                "   header_up Authorization {http.request.header.X-Tether-Upstream-Authorization}\n"
+                                f"   header_up Origin http://{upstream_host}\n")
         elif service_id != "desktop":
             header_injection = ("   header_up Cookie {http.request.header.X-Tether-Upstream-Cookie}\n"
                                 "   header_up Authorization {http.request.header.X-Tether-Upstream-Authorization}\n")
         strip_set_cookie = "" if service_id == "desktop" else "   header_down -Set-Cookie\n"
-        upstream_host = ("{http.request.hostport}" if service_id == "files"
-                         else "{http.request.host}")
+        if service_id == "files":
+            upstream_host = "{http.request.hostport}"
+        elif service_id != "dsh":
+            upstream_host = "{http.request.host}"
         return ("{\n admin off\n auto_https disable_redirects\n"
                 " log {\n  output file " + quoted_log + " {\n   mode 0600\n"
                 "   roll_size 1MiB\n   roll_keep 2\n   roll_keep_for 24h\n  }\n  format json\n }\n"

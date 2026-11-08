@@ -82,9 +82,13 @@ if (!baseConfig.includes(outputSetting)) throw new Error('electron-builder outpu
 const tempConfig = path.join(os.tmpdir(), `tether-builder-${platformTarget[platform]}.yml`)
 const builderOutput = outputParent.replaceAll('\\', '/') + `/${platformTarget[platform]}`
 const runtimeSetting = 'from: .runtime/desktop-candidate'
-if (baseConfig.split(runtimeSetting).length !== 3) throw new Error('electron-builder runtime resource mapping changed unexpectedly.')
+const nodeBinSetting = runtimeSetting + '/node-bin'
+if (baseConfig.split(runtimeSetting).length !== 3 || baseConfig.split(nodeBinSetting).length !== 2) {
+  throw new Error('electron-builder runtime resource mapping changed unexpectedly.')
+}
 const config = baseConfig.replace(outputSetting, `output: "${builderOutput}"`)
-  .replaceAll(runtimeSetting, `from: "${runtimeRoot.replaceAll('\\', '/')}"`)
+  .replace(nodeBinSetting, `from: "${runtimeRoot.replaceAll('\\', '/')}/node-bin"`)
+  .replace(runtimeSetting, `from: "${runtimeRoot.replaceAll('\\', '/')}"`)
   .replace('appId: com.tether.app', `appId: com.tether.app\nelectronVersion: ${electronVersion}`)
 writeFileSync(tempConfig, config)
 const args = [builderCli, '--projectDir', repoRoot,
