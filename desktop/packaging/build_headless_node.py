@@ -7,6 +7,8 @@ import tarfile
 import tempfile
 from pathlib import Path
 
+from prepare_runtime import copy_prepared_tree
+
 ROOT = Path(__file__).resolve().parents[2]
 STAGING = ROOT / ".runtime" / "desktop-candidate"
 OUTPUT_DIR = ROOT / ".scratch" / "tether-desktop-candidates" / "0.5.0" / "headless" / "linux-x64"
@@ -40,7 +42,7 @@ def main() -> int:
                 continue
             destination = resources / item.name
             if item.is_dir():
-                shutil.copytree(item, destination, symlinks=False)
+                copy_prepared_tree(item, destination)
             elif item.is_file():
                 shutil.copy2(item, destination)
         shutil.copy2(STAGING / "tether-python", resources / "tether-python")
@@ -57,7 +59,7 @@ def main() -> int:
         packaged_bin = package / "tether-source" / "tether" / "node" / "bin"
         if packaged_bin.exists():
             shutil.rmtree(packaged_bin)
-        shutil.copytree(runtime_bin, packaged_bin, symlinks=False)
+        copy_prepared_tree(runtime_bin, packaged_bin)
         console_html = ROOT / "tether" / "node" / "console.html"
         if not console_html.is_file():
             raise ValueError("Tether Node console.html asset is missing")

@@ -9,6 +9,7 @@ import os
 import re
 import shutil
 import sys
+import stat
 import tarfile
 import tempfile
 import subprocess
@@ -104,20 +105,72 @@ def copy_tree(source: Path, destination: Path) -> None:
             shutil.copy2(item, target)
 
 
-def copy_node_dependencies(source: Path, destination: Path, locked_root: Path) -> None:
+def copy_prepared_tree(source: Path, destination: Path) -> None:
+    """Copy an assembled tree while retaining only existing relative in-tree links."""
+    source = source.resolve()
+    destination.mkdir(parents=True, exist_ok=True)
+    symlinks = []
+    for item in source.rglob("*"):
+        relative = item.relative_to(source)
+        target = destination / relative
+        mode = item.lstat().st_mode
+        if stat.S_ISLNK(mode):
+            link = os.readlink(item)
+            link_parts = PurePosixPath(link.replace("\\", "/")).parts
+            resolved = item.resolve(strict=True)
+            try:
+                resolved.relative_to(source)
+            except ValueError as error:
+                raise ValueError(f"prepared runtime link escapes its component: {relative}") from error
+            if (Path(link).is_absolute() or PurePosixPath(link.replace("\\", "/")).is_absolute()
+                    or not link_parts or ":" in link_parts[0]):
+                raise ValueError(f"prepared runtime link is not relative: {relative}")
+            symlinks.append((target, link, resolved.is_dir(), relative))
+        elif stat.S_ISDIR(mode):
+            target.mkdir(parents=True, exist_ok=True)
+        elif stat.S_ISREG(mode):
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(item, target)
+        else:
+            raise ValueError(f"special file in prepared runtime tree: {relative}")
+    for target, link, is_directory, relative in symlinks:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if target.exists() or target.is_symlink():
+            raise ValueError(f"prepared runtime link collides with another entry: {relative}")
+        target.symlink_to(link, target_is_directory=is_directory)
+    for target, _, _, relative in symlinks:
+        try:
+            target.resolve(strict=True).relative_to(destination.resolve())
+        except (OSError, ValueError) as error:
+            raise ValueError(f"copied runtime link is dangling or escapes its component: {relative}") from error
+
+
+def copy_node_dependencies(source: Path, destination: Path, locked_root: Path,
+                           *, omit_symlinks: frozenset[str] = frozenset()) -> None:
     locked_root = locked_root.resolve()
     for item in source.rglob("*"):
         relative = item.relative_to(source)
         if item.name == ".package-lock.json":
             continue
         if item.is_symlink():
+            link = os.readlink(item)
+            link_parts = PurePosixPath(link.replace("\\", "/")).parts
+            if (Path(link).is_absolute() or PurePosixPath(link.replace("\\", "/")).is_absolute()
+                    or not link_parts or ":" in link_parts[0]):
+                raise ValueError(f"absolute symbolic link in locked Node dependency tree: {item}")
             try:
-                item.resolve(strict=True).relative_to(locked_root)
+                resolved = item.resolve(strict=True)
+                resolved.relative_to(locked_root)
             except (OSError, ValueError) as error:
                 raise ValueError(f"symbolic link escapes or is missing in locked Node dependency tree: {item}") from error
+            link_name = item.relative_to(locked_root).as_posix()
+            if link_name in omit_symlinks:
+                if link_name != ".bin/meshcentral" or resolved != (locked_root / "meshcentral" / "bin" / "meshcentral").resolve():
+                    raise ValueError(f"unexpected locked dependency link omission: {link_name}")
+                continue
             target = destination / relative
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.symlink_to(os.readlink(item), target_is_directory=item.resolve(strict=True).is_dir())
+            target.symlink_to(link, target_is_directory=resolved.is_dir())
             continue
         target = destination / relative
         if item.is_dir():
@@ -199,6 +252,21 @@ def assemble_libreoffice(manifest: dict, target: str, destination: Path) -> None
             for package in debs:
                 subprocess.run(["dpkg-deb", "-x", str(package), str(destination)],
                                check=True, timeout=180)
+            launcher_links = [destination / "usr" / "local" / "bin" / "libreoffice26.8"]
+            launcher_links.extend((destination / "usr" / "share" / "applications").glob("*.desktop"))
+            for link in launcher_links:
+                if not link.is_symlink():
+                    continue
+                target_text = os.readlink(link)
+                if not target_text.startswith("/opt/libreoffice26.8/"):
+                    raise ValueError(f"unexpected LibreOffice launcher link: {link.relative_to(destination)}")
+                target_parts = PurePosixPath(target_text).parts
+                if len(target_parts) < 3 or target_parts[:2] != ("/", "opt") or ".." in target_parts:
+                    raise ValueError(f"unsafe LibreOffice launcher target: {link.relative_to(destination)}")
+                relocated_target = destination.joinpath(*target_parts[1:])
+                if not relocated_target.is_file():
+                    raise ValueError(f"LibreOffice launcher points outside its bundled runtime: {link.relative_to(destination)}")
+                link.unlink()
             external_dependencies = set()
             for package_name, depends in package_depends:
                 groups = []
@@ -304,7 +372,8 @@ def assemble_meshcentral(remote: dict, destination: Path, source_output: Path) -
                 continue
             target = target_dependencies / item.name
             if item.is_dir():
-                copy_node_dependencies(item, target, dependencies)
+                omitted = frozenset({".bin/meshcentral"}) if item.name == ".bin" else frozenset()
+                copy_node_dependencies(item, target, dependencies, omit_symlinks=omitted)
             elif item.is_file():
                 shutil.copy2(item, target)
         source_output.parent.mkdir(parents=True, exist_ok=True)

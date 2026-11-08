@@ -21,6 +21,8 @@ def _extract_runtime(temporary: Path) -> Path:
         raise ValueError(f"headless runtime tarball is missing: {ARCHIVE}")
     destination = temporary / "unpacked"
     destination.mkdir()
+    deferred_links = []
+    member_names = set()
     with tarfile.open(ARCHIVE, "r:gz") as archive:
         for member in archive.getmembers():
             name = member.name.rstrip("/")
@@ -28,9 +30,31 @@ def _extract_runtime(temporary: Path) -> Path:
             if (not parts or parts[0] != PACKAGE_ROOT or name.startswith("/")
                     or "\\" in name or any(part in ("", ".", "..") for part in parts)):
                 raise ValueError(f"unsafe runtime archive path: {member.name}")
-            if not (member.isdir() or member.isfile()):
+            if name in member_names:
+                raise ValueError(f"duplicate runtime archive path: {member.name}")
+            member_names.add(name)
+            if not (member.isdir() or member.isfile() or member.issym()):
                 raise ValueError(f"unsupported runtime archive entry: {member.name}")
             target = destination.joinpath(*parts)
+            if member.issym():
+                link = PurePosixPath(member.linkname)
+                if (not member.linkname or link.is_absolute() or "\\" in member.linkname
+                        or ":" in (link.parts[0] if link.parts else "")):
+                    raise ValueError(f"unsafe runtime archive link: {member.name}")
+                resolved_parts = list(parts[:-1])
+                for part in link.parts:
+                    if part in ("", "."):
+                        continue
+                    if part == "..":
+                        if len(resolved_parts) <= 1:
+                            raise ValueError(f"runtime archive link escapes package root: {member.name}")
+                        resolved_parts.pop()
+                    else:
+                        resolved_parts.append(part)
+                if not resolved_parts or resolved_parts[0] != PACKAGE_ROOT:
+                    raise ValueError(f"runtime archive link escapes package root: {member.name}")
+                deferred_links.append((target, member.linkname, PurePosixPath(*resolved_parts), name))
+                continue
             if member.isdir():
                 target.mkdir(parents=True, exist_ok=True)
             else:
@@ -41,7 +65,22 @@ def _extract_runtime(temporary: Path) -> Path:
                 with source, target.open("wb") as output:
                     shutil.copyfileobj(source, output)
                 target.chmod(0o755 if member.mode & 0o111 else 0o644)
+    symlink_names = {name for _, _, _, name in deferred_links}
+    for target, _, _, name in deferred_links:
+        if any("/".join(PurePosixPath(name).parts[:index]) in symlink_names
+               for index in range(1, len(PurePosixPath(name).parts))):
+            raise ValueError(f"runtime archive link has a symlink parent: {name}")
+        if target.exists() or target.is_symlink():
+            raise ValueError(f"runtime archive link collides with an existing entry: {name}")
     package = destination / PACKAGE_ROOT
+    for target, link, _, _name in deferred_links:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.symlink_to(link)
+    for target, _, _, name in deferred_links:
+        try:
+            target.resolve(strict=True).relative_to(package.resolve())
+        except (OSError, ValueError) as error:
+            raise ValueError(f"runtime archive link is dangling or escapes package root: {name}") from error
     manifest = json.loads((package / "runtime-manifest.json").read_text(encoding="utf-8"))
     if (manifest.get("schema") != 1 or manifest.get("version") != "0.5.0"
             or manifest.get("platform") != "linux-x64"):
