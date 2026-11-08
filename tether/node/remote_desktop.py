@@ -282,7 +282,7 @@ class MeshCentralDesktop:
         if not certificate.is_file():
             raise RemoteDesktopError("meshcentral_certificate_missing", "MeshCentral 本机证书尚未生成。")
         return {"scheme": "https", "host": "127.0.0.1", "port": int(record["port"]),
-                "tls_server_name": "localhost.", "trust_certificate_path": str(certificate)}
+                "tls_server_name": "localhost", "trust_certificate_path": str(certificate)}
 
     def stop(self) -> dict[str, Any]:
         """Stop only the exact MeshCentral server process started by this adapter."""
@@ -334,9 +334,11 @@ class MeshCentralDesktop:
             self._prepare_meshagent_cache()
             port = self._free_port()
             self._write_config(port)
+            self._replace_invalid_web_certificate()
             self._ensure_admin_account()
             creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
-            argv = [str(self.node), str(self.entry), "--datapath", str(self.root), "--configfile", "config.json"]
+            argv = [str(self.node), str(self.entry), "--datapath", str(self.root), "--configfile", "config.json",
+                    "--cert", "localhost"]
             environment = {key: value for key, value in os.environ.items()
                            if not key.startswith("MESHCENTRAL_") and key not in {"NODE_OPTIONS", "NODE_PATH"}}
             try:
@@ -616,13 +618,94 @@ class MeshCentralDesktop:
         return shares
 
     def _write_config(self, port: int) -> None:
-        config = {"settings": {"cert": "localhost.", "port": int(port), "portBind": "127.0.0.1",
+        config = {"settings": {"cert": "localhost", "port": int(port), "portBind": "127.0.0.1",
                                "redirPort": 0, "relayPort": 0, "mpsPort": 0,
                                "allowFraming": False,
                                "agentconfig": ["nocertstore=1", "disableUpdate=1", "noUpdateCoreModule=1"],
                                "agentdownloads": {"enabled": False}, "selfUpdate": False},
         "domains": {"": {"guestDeviceSharing": {"maxSessionTime": self.NATIVE_SHARE_SECONDS // 60}}}}
         self._atomic_json(self.config_path, config)
+
+    def _replace_invalid_web_certificate(self) -> None:
+        public = self.root / "webserver-cert-public.crt"
+        private = self.root / "webserver-cert-private.key"
+        present = [path for path in (public, private) if path.exists() or path.is_symlink()]
+        if not present:
+            return
+        for path in present:
+            try:
+                if path.is_symlink() or not path.is_file():
+                    raise OSError("certificate path is not a regular file")
+            except OSError as error:
+                raise RemoteDesktopError("meshcentral_certificate_backup_failed", "MeshCentral 证书文件状态无法确认。") from error
+        try:
+            from cryptography import x509
+            from cryptography.x509.oid import ExtensionOID
+
+            if not public.is_file():
+                raise OSError("public certificate is missing")
+            certificate = x509.load_pem_x509_certificate(public.read_bytes())
+            san = certificate.extensions.get_extension_for_oid(ExtensionOID.SUBJECT_ALTERNATIVE_NAME).value
+            invalid_uri = any(
+                (urlsplit(value).hostname or "").lower() == "localhost."
+                for value in san.get_values_for_type(x509.UniformResourceIdentifier)
+            )
+        except Exception:
+            invalid_uri = True
+        if not invalid_uri:
+            return
+        if self._server_data_process_running():
+            raise RemoteDesktopError("meshcentral_certificate_in_use", "MeshCentral 证书仍被运行中的受管服务使用。")
+
+        backup_dir = self.root / "certificate-backups"
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            secure_private_directory(backup_dir)
+        except MeshRuntimeError as error:
+            raise RemoteDesktopError("meshcentral_certificate_backup_failed", "MeshCentral 证书备份目录无法保护。") from error
+        stamp = str(time.time_ns())
+        pairs = [(path, backup_dir / f"{stamp}-{path.name}") for path in present]
+        copied: list[tuple[Path, Path]] = []
+        try:
+            for source, backup in pairs:
+                shutil.copy2(source, backup)
+                self._secure_file(backup)
+                if source.stat().st_size != backup.stat().st_size:
+                    raise OSError("certificate backup size mismatch")
+                copied.append((source, backup))
+            for source, _ in copied:
+                source.unlink()
+        except OSError as error:
+            for source, backup in copied:
+                if backup.exists() and not source.exists():
+                    shutil.copy2(backup, source)
+                    self._secure_file(source)
+            raise RemoteDesktopError("meshcentral_certificate_backup_failed", "MeshCentral 证书未能安全备份。") from error
+
+    def _server_data_process_running(self) -> bool:
+        expected_name = self.node.name.casefold()
+        for process in psutil.process_iter(["name"]):
+            try:
+                process_name = str(process.info.get("name") or "").casefold()
+            except psutil.NoSuchProcess:
+                continue
+            except psutil.AccessDenied:
+                continue
+            if process_name != expected_name:
+                continue
+            try:
+                if Path(process.exe()).resolve() != self.node:
+                    continue
+                command = process.cmdline()
+            except psutil.NoSuchProcess:
+                continue
+            except psutil.AccessDenied as error:
+                raise RemoteDesktopError("meshcentral_process_identity_unavailable", "无法确认 MeshCentral 是否正在使用证书。") from error
+            except (OSError, ValueError):
+                continue
+            if str(self.entry) in command and str(self.root) in command:
+                return True
+        return False
 
     def _health(self, record: dict[str, Any]) -> bool:
         import ssl

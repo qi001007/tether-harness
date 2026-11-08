@@ -75,6 +75,7 @@ nsis:
 linux:
   icon: assets/tether-app-s.png
   category: Utility
+  maintainer: Tether maintainers
   target:
     - AppImage
     - deb
