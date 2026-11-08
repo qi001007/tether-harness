@@ -13,3 +13,4 @@
 - 2026-11-07：release workflow 仅接受精确 `release-candidate/vX.Y.Z` 分支创建缺失 tag；手动 main 与既有 tag 校验保留。构建前通过固定 SHA/大小的 Herdr runtime hydration 补齐干净 checkout。
 
 - [x] Add `[preview-publish-only]` recovery for failed draft assembly: verify and reuse Windows artifact `tether-windows-x64-0.5.0-preview` from run `42523512038` / `898976b2319261012df8b4da77fa643b9e2f6360`, plus the verified POSIX artifacts from run `42520196405` / `97aa80f20f32c25ed9ad3ad99078d28d8e07924c`; skip package builds, record per-artifact provenance, and download Windows into its named directory. Ordinary and `[windows-recovery]` flows remain intact.
+- [x] Publish aggregation skips only the explicit electron-builder diagnostic files `builder-debug.yml` and `builder-effective-config.yaml` from both release outputs and normalized package checksum manifests, keeping existing artifacts compatible without weakening other hash/collision checks.

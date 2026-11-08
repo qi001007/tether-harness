@@ -26,6 +26,7 @@ from tether.release import ReleaseSignatureError, canonical_bytes, verify_signat
 OUT = ROOT / "release"
 VERSION = json.loads((ROOT / "version.json").read_text(encoding="utf-8"))["components"]["app"]
 MIN_UPDATER_VERSION = "0.2.1"
+APP_NODE_MIN_UPDATER_VERSION = "0.2.31"
 SKIP = {"node_modules", "data", "__pycache__", ".pytest_cache", ".venv", ".git", "release",
         ".aws", ".dsh", ".ssh", "credentials"}
 
@@ -455,7 +456,7 @@ DeepSeek Harness profile.
             "size": len(payload),
             "protocol": 1,
             "min_protocol": 1,
-            "min_updater": MIN_UPDATER_VERSION,
+            "min_updater": APP_NODE_MIN_UPDATER_VERSION,
             "rollout": rollout,
         }
     if node_deb is not None:

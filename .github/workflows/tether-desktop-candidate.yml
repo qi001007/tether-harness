@@ -498,6 +498,8 @@ jobs:
                   name = item.get('name')
                   if not isinstance(name, str) or Path(name).name != name:
                       raise SystemExit('unsafe filename in candidate checksum manifest')
+                  if name in {'builder-debug.yml', 'builder-effective-config.yaml'}:
+                      continue
                   target_name = name
                   if name == 'preview-mac.yml':
                       if artifact_name not in {'tether-macos-x64-0.5.0-preview', 'tether-macos-arm64-0.5.0-preview'}:

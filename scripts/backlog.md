@@ -1,4 +1,5 @@
 # 修改记录
+- 2026-11-09：新建 APP/Node 更新清单的最低 updater 版本设为 0.2.31，以匹配当前归档尺寸与文件 allowlist；插件沿用原门槛，冻结插件 manifest entry 原样透传。
 - 2026-11-07：Codeg 构建使用完整上游补丁，并支持输出到全新的独立目录供发行任务使用。
 - 2026-11-07：Codeg 构建从指定的源导出目录识别 Git 边界，补丁检查兼容 Windows CRLF 导出。
 - 2026-11-07：`build_release.py` 默认维持三组件锁步；仅显式提供已签名冻结插件 manifest 和匹配归档时，允许 APP/Node 独立同版本并复用冻结插件包及 Node 修复输入。
@@ -33,9 +34,10 @@
 
 # 变更记录
 
+- 2026-11-08：Windows APP 发布候选按平台过滤六个非 Windows 顶层 Herdr/Croc 二进制；Node 通用包保持原样。
 - 2026-11-07：Node release ZIP 中仅 `laptop/install-node.sh` 被规范为 LF，避免 Windows checkout 的 CRLF 导致 Linux Bash 解析失败。
 
 - 2026-10-28：修正独立插件安装说明，统一引导至 Tether 连接页配置服务，移除旧 Hub 页面入口和本地 Controller 说明。
+- 2026-11-08：扩展签名发布构建器支持显式`preview`渠道/tag和固定`--node-deb`输入；在签名清单加入`components.node.debian.amd64`完整包名/版本/架构/不可变tag资产URL/大小/SHA，要求`dpkg-deb`元数据匹配后才签名。workflow需由汇总任务传入四平台构建结果和Linux deb；未执行GitHub写入/发布。
 
-- 2026-11-08：0.4.11候选打包仅在Windows APP过滤六个已确认的非Windows顶层Herdr/Croc二进制；通用Node保持原样。
-
+- 2026-11-08：候选发行构建器逐字段调用`dpkg-deb --field`读取Package/Version/Architecture；对隔离Deb样例确认各字段单独返回值后再校验headless包元数据，避免多字段--field输出行格式差异。
