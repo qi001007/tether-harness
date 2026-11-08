@@ -24,6 +24,10 @@ REMOTE_MANIFEST = Path(__file__).with_name("remote-desktop-assets.json")
 DSH_MANIFEST = Path(__file__).with_name("dsh-assets.json")
 LICENSE_DIR = Path(__file__).with_name("licenses")
 TARGETS = {"windows-x64", "linux-x64", "macos-x64", "macos-arm64"}
+MESHCENTRAL_TIMESTAMP_SOURCE_SHA256 = "19de2c8d87e8bbd12b1a7b46fe0dfa4a78c3c46a70464814b1f106af1d07eb26"
+MESHCENTRAL_TIMESTAMP_PATCHED_SHA256 = "5abee591a3c5e1d8864b4e14df3832be7e11089ce60a3b39b9d31dc9614839ba"
+MESHCTRL_SOURCE_SHA256 = "f40a77911f4bddd211b3807236a986db5647ea968d151bddeed01ce8253aec15"
+MESHCTRL_PATCHED_SHA256 = "11e5a718832d8caa6c99c6fc21d72ab4fb499729fa32bc8dfac5e01af238b140"
 
 
 def download(asset: dict, destination: Path) -> None:
@@ -381,13 +385,60 @@ def assemble_meshcentral(remote: dict, destination: Path, source_output: Path) -
                 copy_node_dependencies(item, target, dependencies, omit_symlinks=omitted)
             elif item.is_file():
                 shutil.copy2(item, target)
+        patches = [
+            patch_meshcentral_timestamp_argument(destination / "meshcentral.js"),
+            patch_meshctrl_tls_validation(destination / "meshctrl.js"),
+        ]
         source_output.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(archive_path, source_output)
     (destination / "tether-runtime.json").write_text(json.dumps({
         "component": "MeshCentral", "version": "1.3.1", "license": "Apache-2.0",
         "source": "https://github.com/Ylianst/MeshCentral/tree/1.3.1",
         "dependencies_lock": "desktop/packaging/meshcentral/package-lock.json",
+        "local_patches": patches,
     }, indent=2) + "\n", encoding="utf-8")
+
+
+def patch_meshcentral_timestamp_argument(meshcentral_entry: Path) -> dict[str, str]:
+    expected_source_digest = MESHCENTRAL_TIMESTAMP_SOURCE_SHA256
+    patched_digest = MESHCENTRAL_TIMESTAMP_PATCHED_SHA256
+    source_bytes = meshcentral_entry.read_bytes()
+    source_digest = hashlib.sha256(source_bytes).hexdigest()
+    if source_digest != expected_source_digest:
+        raise ValueError("pinned MeshCentral 1.3.1 source changed; refusing to apply the Tether patch")
+    needle = b"'dev', 'mysql', 'mariadb', 'trustedproxy', 'migratevolumeinfo'"
+    if source_bytes.count(needle) != 1:
+        raise ValueError("pinned MeshCentral argument allowlist did not match the reviewed source")
+    patched_bytes = source_bytes.replace(
+        needle,
+        b"'dev', 'mysql', 'mariadb', 'trustedproxy', 'agenttimestampserver', 'migratevolumeinfo'",
+        1,
+    )
+    if hashlib.sha256(patched_bytes).hexdigest() != patched_digest:
+        raise ValueError("Tether MeshCentral timestamp-flag patch output did not match its reviewed hash")
+    meshcentral_entry.write_bytes(patched_bytes)
+    return {"file": "meshcentral.js",
+            "purpose": "Allow the upstream no-agenttimestampserver option used to avoid external TSA requests.",
+            "upstream_sha256": expected_source_digest,
+            "patched_sha256": patched_digest}
+
+
+def patch_meshctrl_tls_validation(meshctrl_entry: Path) -> dict[str, str]:
+    source_bytes = meshctrl_entry.read_bytes()
+    source_digest = hashlib.sha256(source_bytes).hexdigest()
+    if source_digest != MESHCTRL_SOURCE_SHA256:
+        raise ValueError("pinned MeshCentral 1.3.1 meshctrl.js changed; refusing the Tether TLS patch")
+    needle = b"{ rejectUnauthorized: false, checkServerIdentity: onVerifyServer }"
+    if source_bytes.count(needle) != 3:
+        raise ValueError("pinned MeshCentral TLS options did not match the reviewed source")
+    patched_bytes = source_bytes.replace(needle, b"{ rejectUnauthorized: true }")
+    if hashlib.sha256(patched_bytes).hexdigest() != MESHCTRL_PATCHED_SHA256:
+        raise ValueError("Tether MeshCtrl TLS patch output did not match its reviewed hash")
+    meshctrl_entry.write_bytes(patched_bytes)
+    return {"file": "meshctrl.js",
+            "purpose": "Use Node.js CA and hostname verification for MeshCentral local administration and agent downloads.",
+            "upstream_sha256": MESHCTRL_SOURCE_SHA256,
+            "patched_sha256": MESHCTRL_PATCHED_SHA256}
 
 
 def assemble_meshagent(remote: dict, target: str, destination: Path) -> None:

@@ -126,7 +126,9 @@ class EasyTierRuntime:
             previous_revision = record.get("revision")
             if type(previous_revision) is int and values["revision"] < previous_revision:
                 raise MeshRuntimeError("stale network configuration revision")
-            if type(previous_revision) is int and values["revision"] == previous_revision and record.get("config_sha256") != digest:
+            if (type(previous_revision) is int and values["revision"] == previous_revision and
+                    record.get("config_sha256") != digest and
+                    not self._legacy_mesh_template_only(config_path, body)):
                 raise MeshRuntimeError("configuration changed without a new revision")
         if record and record.get("network_id") == values["network_id"] and record.get("config_sha256") == digest and self._owned_process(record):
             if record.get("revision") != values["revision"]:
@@ -137,7 +139,7 @@ class EasyTierRuntime:
 
         self._atomic_text(candidate_path, body)
         try:
-            self._check_config(candidate_path)
+            self._check_config(candidate_path, values["network_name"], values["credential_private_key"])
         except Exception:
             candidate_path.unlink(missing_ok=True)
             raise
@@ -155,7 +157,8 @@ class EasyTierRuntime:
             raise MeshRuntimeError("EasyTier SOCKS listener port is already in use")
         port = self._rpc_port(instance_id, records)
         self._prepare_child_directory(directory, config_path, credential_path)
-        process = self._start(instance_id, directory, port)
+        process = self._start(instance_id, directory, port, values["network_name"],
+                              values["credential_private_key"])
         record = {
             "network_id": values["network_id"],
             "instance_id": instance_id,
@@ -316,13 +319,12 @@ class EasyTierRuntime:
             f'instance_name = "tether-{config["instance_id"]}"',
             f'instance_id = "{config["instance_id"]}"',
             f'ipv4 = "{config["ipv4"]}"',
-            "listeners = []",
+            'listeners = ["tcp://0.0.0.0:0", "udp://0.0.0.0:0"]',
             f'socks5_proxy = "socks5://127.0.0.1:{config["socks_port"]}"',
             f'credential_file = {self._toml_string(str(credential_path))}',
             "",
             "[network_identity]",
             f'network_name = "{config["network_name"]}"',
-            'network_secret = ""',
             "",
             "[flags]",
             "no_tun = true",
@@ -368,6 +370,29 @@ class EasyTierRuntime:
         for peer in config["peers"]:
             lines.extend(["", "[[peer]]", f'uri = {self._toml_string(peer)}'])
         return "\n".join(lines) + "\n"
+
+    @staticmethod
+    def _legacy_mesh_template_only(config_path: Path, candidate: str) -> bool:
+        """Permit only the logger removal and dynamic listener template migration."""
+        try:
+            import tomllib
+            previous = tomllib.loads(config_path.read_text(encoding="utf-8"))
+            current = tomllib.loads(candidate)
+        except (OSError, ValueError):
+            return False
+        old_logger = previous.pop("file_logger", None)
+        old_listeners = previous.pop("listeners", None)
+        new_listeners = current.pop("listeners", None)
+        return (old_logger is not None and old_listeners == [] and
+                new_listeners == ["tcp://0.0.0.0:0", "udp://0.0.0.0:0"] and
+                "file_logger" not in current and previous == current)
+
+    @staticmethod
+    def _native_log_level() -> str:
+        if (os.environ.get("TETHER_EASYTIER_DIAGNOSTICS") == "1" and
+                os.environ.get("TETHER_EASYTIER_LOG_LEVEL", "").strip().lower() == "debug"):
+            return "debug"
+        return "warn"
 
     @staticmethod
     def _toml_string(value: str) -> str:
@@ -421,20 +446,28 @@ class EasyTierRuntime:
             except OSError:
                 return False
 
-    def _check_config(self, config_path: Path) -> None:
+    def _check_config(self, config_path: Path, network_name: str, credential: str) -> None:
         environment = {key: value for key, value in os.environ.items() if not key.startswith("ET_")}
-        result = subprocess.run([str(self.core), "--check-config", "--config-file", str(config_path)],
+        environment["ET_CREDENTIAL"] = credential
+        result = subprocess.run([str(self.core), "--check-config", "--config-file", str(config_path),
+                                 "--network-name", network_name],
                                 cwd=str(config_path.parent), stdin=subprocess.DEVNULL,
                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=20, env=environment,
                                 check=False, shell=False)
         if result.returncode:
             raise MeshRuntimeError("EasyTier rejected the network configuration")
 
-    def _start(self, instance_id: str, directory: Path, port: int) -> subprocess.Popen:
+    def _start(self, instance_id: str, directory: Path, port: int,
+               network_name: str, credential: str) -> subprocess.Popen:
         rpc = f"127.0.0.1:{port}"
+        log_level = self._native_log_level()
         argv = [str(self.core), "--config-dir", str(directory), "--no-tun", "--use-smoltcp",
-                "--rpc-portal", rpc, "--rpc-portal-whitelist", RPC_DENY_CIDR]
+                "--rpc-portal", rpc, "--rpc-portal-whitelist", RPC_DENY_CIDR,
+                "--network-name", network_name,
+                "--file-log-level", log_level, "--file-log-dir", str(directory),
+                "--file-log-size", "2", "--file-log-count", "2"]
         environment = {key: value for key, value in os.environ.items() if not key.startswith("ET_")}
+        environment["ET_CREDENTIAL"] = credential
         creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
         if os.name != "nt" and os.geteuid() == 0:
             try:

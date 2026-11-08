@@ -302,7 +302,7 @@ class ServiceAccess:
     def _desktop_upstream(self, local: dict[str, Any], share: dict[str, Any]) -> tuple[dict[str, Any], str]:
         if (not isinstance(local, dict) or local.get("scheme") != "https" or
                 local.get("host") != "127.0.0.1" or type(local.get("port")) is not int or
-                not 1 <= local["port"] <= 65535 or local.get("tls_server_name") != "localhost"):
+                not 1 <= local["port"] <= 65535 or local.get("tls_server_name") != "127.0.0.1"):
             raise ServiceAccessError("desktop_upstream_invalid", "MeshCentral upstream is not a valid loopback TLS endpoint")
         certificate = Path(str(local.get("trust_certificate_path") or "")).resolve()
         private_root = Path(self.remote_desktop.root).resolve()
@@ -319,7 +319,7 @@ class ServiceAccess:
                 not query.get("c") or parsed.fragment):
             raise ServiceAccessError("desktop_guest_path_invalid", "MeshCentral returned an invalid native guest path")
         return ({"scheme": "https", "host": "127.0.0.1", "port": local["port"],
-                 "tls_server_name": "localhost", "trust_certificate_path": str(certificate)}, guest_path)
+                 "tls_server_name": "127.0.0.1", "trust_certificate_path": str(certificate)}, guest_path)
 
     def renew(self, authority: dict[str, Any], lease_expires_at: int) -> dict[str, Any]:
         self._validate_authority(authority)
@@ -483,17 +483,19 @@ class ServiceAccess:
     def _codeg_status(self) -> dict[str, Any]:
         runtime = self.agents_runtime
         if runtime is None:
-            return {"ready": False, "reason": "codeg_missing"}
+            return {"ready": False, "state": "missing", "reason": "codeg_missing"}
         try:
             status = runtime.status()
             if not status.get("running"):
-                return {"ready": False, "reason": "codeg_stopped"}
+                available = bool(runtime._binary())
+                return {"ready": False, "state": "stopped" if available else "missing",
+                        "reason": "codeg_stopped" if available else "codeg_missing"}
             port, token = int(status.get("port") or 0), str(status.get("token") or "")
             if not port or not token or not runtime._authenticated_ready(port, token):
-                return {"ready": False, "reason": "codeg_health_failed"}
+                return {"ready": False, "state": "failed", "reason": "codeg_health_failed"}
             return {"ready": True, "port": port, "headers": {"Authorization": "Bearer " + token}}
         except Exception:
-            return {"ready": False, "reason": "codeg_health_failed"}
+            return {"ready": False, "state": "failed", "reason": "codeg_health_failed"}
 
     def _open_upstream(self, service_id: str) -> tuple[int, dict[str, str], str]:
         if service_id == "dsh":

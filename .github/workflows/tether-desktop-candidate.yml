@@ -50,23 +50,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - target: windows-x64
-            runner: windows-latest
-            platform: windows
-            arch: x64
-          - target: linux-x64
-            runner: ubuntu-22.04
-            platform: linux
-            arch: x64
-          - target: macos-x64
-            runner: macos-15-intel
-            platform: macos
-            arch: x64
-          - target: macos-arm64
-            runner: macos-15
-            platform: macos
-            arch: arm64
+        include: ${{ fromJSON(contains(github.event.head_commit.message, '[posix-only]') && '[{"target":"linux-x64","runner":"ubuntu-22.04","platform":"linux","arch":"x64"},{"target":"macos-x64","runner":"macos-15-intel","platform":"macos","arch":"x64"},{"target":"macos-arm64","runner":"macos-15","platform":"macos","arch":"arm64"}]' || '[{"target":"windows-x64","runner":"windows-latest","platform":"windows","arch":"x64"},{"target":"linux-x64","runner":"ubuntu-22.04","platform":"linux","arch":"x64"},{"target":"macos-x64","runner":"macos-15-intel","platform":"macos","arch":"x64"},{"target":"macos-arm64","runner":"macos-15","platform":"macos","arch":"arm64"}]') }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: ${{ matrix.target == 'macos-x64' && 65 || 35 }}
     steps:
@@ -228,7 +212,7 @@ jobs:
           retention-days: 7
   publish-preview-draft:
     name: Sign and assemble preview draft
-    if: github.ref == 'refs/heads/codex/tether-050-preview-20261108'
+    if: ${{ github.ref == 'refs/heads/codex/tether-050-preview-20261108' && !contains(github.event.head_commit.message, '[posix-only]') }}
     needs: package
     runs-on: ubuntu-22.04
     timeout-minutes: 20

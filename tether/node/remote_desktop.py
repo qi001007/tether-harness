@@ -282,7 +282,7 @@ class MeshCentralDesktop:
         if not certificate.is_file():
             raise RemoteDesktopError("meshcentral_certificate_missing", "MeshCentral 本机证书尚未生成。")
         return {"scheme": "https", "host": "127.0.0.1", "port": int(record["port"]),
-                "tls_server_name": "localhost", "trust_certificate_path": str(certificate)}
+                "tls_server_name": "127.0.0.1", "trust_certificate_path": str(certificate)}
 
     def stop(self) -> dict[str, Any]:
         """Stop only the exact MeshCentral server process started by this adapter."""
@@ -338,7 +338,7 @@ class MeshCentralDesktop:
             self._ensure_admin_account()
             creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
             argv = [str(self.node), str(self.entry), "--datapath", str(self.root), "--configfile", "config.json",
-                    "--cert", "localhost"]
+                    "--cert", "127.0.0.1", "--no-agenttimestampserver"]
             environment = {key: value for key, value in os.environ.items()
                            if not key.startswith("MESHCENTRAL_") and key not in {"NODE_OPTIONS", "NODE_PATH"}}
             try:
@@ -417,14 +417,24 @@ class MeshCentralDesktop:
         import urllib.request
         mesh_id = group["id"].split("/")[2]
         url = f"https://127.0.0.1:{int(self._load_record()['port'])}/meshsettings?{urlencode({'id': mesh_id})}"
-        request = urllib.request.Request(url, headers={"Host": f"localhost:{int(self._load_record()['port'])}"})
+        request = urllib.request.Request(url, headers={"Host": f"127.0.0.1:{int(self._load_record()['port'])}"})
         try:
-            with urllib.request.urlopen(request, context=ssl._create_unverified_context(), timeout=5) as response:
-                msh = response.read(32 * 1024).decode("utf-8")
+            ca = self.root / "root-cert-public.crt"
+            context = ssl.create_default_context(cafile=str(ca))
+            with urllib.request.urlopen(request, context=context, timeout=5) as response:
+                msh_bytes = response.read(512 * 1024 + 1)
         except (OSError, UnicodeError, urllib.error.URLError) as error:
             raise RemoteDesktopError("mesh_agent_config_failed", "MeshCentral 未能生成本机 Agent 配置。") from error
+        if len(msh_bytes) > 512 * 1024:
+            raise RemoteDesktopError("mesh_agent_config_too_large", "MeshCentral Agent 配置超过安全大小限制。")
+        try:
+            msh = msh_bytes.decode("utf-8")
+        except UnicodeError as error:
+            raise RemoteDesktopError("mesh_agent_config_invalid", "MeshCentral Agent 配置格式无效。") from error
         if not msh.startswith("\r\nMeshName=") or "\r\nMeshID=0x" not in msh or "\r\nServerID=" not in msh:
             raise RemoteDesktopError("mesh_agent_config_invalid", "MeshCentral Agent 配置格式无效。")
+        if not msh.endswith("\r\n"):
+            raise RemoteDesktopError("mesh_agent_config_truncated", "MeshCentral Agent 配置未完整返回。")
         self._atomic_bytes(self.agent_path.with_suffix(".msh"), msh.encode("utf-8"))
 
     @property
@@ -584,7 +594,8 @@ class MeshCentralDesktop:
                        if not key.startswith("MESHCTRL_") and key not in {"NODE_OPTIONS", "NODE_PATH"}}
         environment.update({"MESHCTRL_URL": f"wss://127.0.0.1:{int(record['port'])}",
                             "MESHCTRL_LOGINUSER": account["username"],
-                            "MESHCTRL_LOGINPASS": account["password"]})
+                            "MESHCTRL_LOGINPASS": account["password"],
+                            "NODE_EXTRA_CA_CERTS": str(self.root / "root-cert-public.crt")})
         wrapper = ("const log=console.log;console.log=(...a)=>log(...(a.length===1&&Array.isArray(a[0])"
                    "?[JSON.stringify(a[0])]:a));require(process.argv[1]);")
         result = subprocess.run([str(self.node), "-e", wrapper, str(self.meshctrl), *args],
@@ -618,7 +629,7 @@ class MeshCentralDesktop:
         return shares
 
     def _write_config(self, port: int) -> None:
-        config = {"settings": {"cert": "localhost", "port": int(port), "portBind": "127.0.0.1",
+        config = {"settings": {"cert": "127.0.0.1", "port": int(port), "portBind": "127.0.0.1",
                                "redirPort": 0, "relayPort": 0, "mpsPort": 0,
                                "allowFraming": False,
                                "agentconfig": ["nocertstore=1", "disableUpdate=1", "noUpdateCoreModule=1"],
@@ -640,19 +651,22 @@ class MeshCentralDesktop:
                 raise RemoteDesktopError("meshcentral_certificate_backup_failed", "MeshCentral 证书文件状态无法确认。") from error
         try:
             from cryptography import x509
-            from cryptography.x509.oid import ExtensionOID
+            from cryptography.x509.oid import ExtensionOID, NameOID
 
             if not public.is_file():
                 raise OSError("public certificate is missing")
             certificate = x509.load_pem_x509_certificate(public.read_bytes())
             san = certificate.extensions.get_extension_for_oid(ExtensionOID.SUBJECT_ALTERNATIVE_NAME).value
+            common_names = certificate.subject.get_attributes_for_oid(NameOID.COMMON_NAME)
+            invalid_name = len(common_names) != 1 or common_names[0].value != "127.0.0.1"
             invalid_uri = any(
                 (urlsplit(value).hostname or "").lower() == "localhost."
                 for value in san.get_values_for_type(x509.UniformResourceIdentifier)
             )
         except Exception:
+            invalid_name = True
             invalid_uri = True
-        if not invalid_uri:
+        if not invalid_name and not invalid_uri:
             return
         if self._server_data_process_running():
             raise RemoteDesktopError("meshcentral_certificate_in_use", "MeshCentral 证书仍被运行中的受管服务使用。")
@@ -713,7 +727,9 @@ class MeshCentralDesktop:
         import urllib.request
         request = urllib.request.Request(f"https://127.0.0.1:{int(record['port'])}/", method="GET")
         try:
-            with urllib.request.urlopen(request, context=ssl._create_unverified_context(), timeout=2) as response:
+            ca = self.root / "root-cert-public.crt"
+            context = ssl.create_default_context(cafile=str(ca))
+            with urllib.request.urlopen(request, context=context, timeout=2) as response:
                 return response.status == 200
         except (OSError, urllib.error.URLError):
             return False

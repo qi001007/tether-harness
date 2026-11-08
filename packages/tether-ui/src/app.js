@@ -3543,6 +3543,9 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const [networkDetailId, setNetworkDetailId] = React.useState('')
       const [showNetworkLinks, setShowNetworkLinks] = React.useState(false)
       const [networkRefreshing, setNetworkRefreshing] = React.useState(false)
+      const [privateNetworks, setPrivateNetworks] = React.useState([])
+      const [privateNetworksError, setPrivateNetworksError] = React.useState('')
+      const [retryingNetworkId, setRetryingNetworkId] = React.useState('')
       const [notice, setNotice] = React.useState('')
       const [busy, setBusy] = React.useState(false)
       const [native, setNative] = React.useState([])
@@ -5911,11 +5914,44 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         window.addEventListener('pointerup', stop)
         window.addEventListener('pointercancel', stop)
       }
+      const loadPrivateNetworks = async () => {
+        const generation = ACTIVE_BASE_GENERATION
+        try {
+          const data = await api('/api/networks')
+          if (generation !== ACTIVE_BASE_GENERATION) return
+          const records = Array.isArray(data) ? data : (data && Array.isArray(data.networks) ? data.networks : null)
+          if (!records) throw new Error('私有网络响应格式无效')
+          setPrivateNetworks(records.filter((item) => item && typeof item === 'object'))
+          setPrivateNetworksError('')
+        } catch (error) {
+          if (generation !== ACTIVE_BASE_GENERATION) return
+          setPrivateNetworksError(error && error.message ? error.message : '私有网络读取失败')
+        }
+      }
+      const retryPrivateNetwork = async (network) => {
+        const id = network && (network.network_id || network.id)
+        if (!id || network.can_retry !== true || retryingNetworkId) return
+        setRetryingNetworkId(id)
+        try {
+          await post('/api/networks/' + encodeURIComponent(id) + '/retry', {})
+          await loadPrivateNetworks()
+          await loadState(true)
+          setNotice('已请求恢复私有网络「' + (network.name || id) + '」')
+        } catch (error) {
+          setPrivateNetworksError(error && error.message ? error.message : '私有网络恢复失败')
+          await loadPrivateNetworks()
+        } finally {
+          setRetryingNetworkId('')
+        }
+      }
       const refreshNetwork = async () => {
         if (networkRefreshing) return
         setNetworkRefreshing(true)
-        try { await loadState() } finally { setTimeout(() => setNetworkRefreshing(false), 280) }
+        try { await Promise.all([loadState(), loadPrivateNetworks()]) } finally { setTimeout(() => setNetworkRefreshing(false), 280) }
       }
+      React.useEffect(() => {
+        if (view === 'network' && loggedIn) loadPrivateNetworks()
+      }, [view, loggedIn])
 
       React.useEffect(() => {
         if (!contextMenu) return undefined
@@ -6501,6 +6537,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         const networkDetail = devices.find((item) => item.device_id === networkDetailId) || null
         const orderedDevices = orderNetworkDevices(devices, localId)
         const online = devices.filter((item) => item.online)
+        const recoverableNetworks = privateNetworks.filter((item) => item.state === 'failed' || item.state === 'provisioning')
         const caps = (item) => {
           const values = []
           const capabilities = item.capabilities || {}
@@ -6599,6 +6636,18 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
               h('button', { title: '刷新', 'aria-label': '刷新', onClick: refreshNetwork, className: 'tether-hover', style: { width: 28, height: 28, display: 'grid', placeItems: 'center', border: 0, borderRadius: 6, background: 'transparent', color: C.mute, cursor: 'pointer' } },
                 networkRefreshing ? h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 16 })) : h(Glyph, { name: 'refresh', size: 16 })))),
           userId && sharedDevices.length ? h('div', { style: { padding: '0 18px 8px', color: C.mute, fontSize: 10.5 } }, '共享设备的可见性和在线状态来自 Hub；团队网络映射尚未接入，显示设备不代表当前网络可达。') : null,
+          privateNetworksError ? h('div', { role: 'status', style: { margin: '0 18px 8px', padding: '8px 10px', borderRadius: 8, background: C.soft, color: C.amber, fontSize: 11 } }, '私有网络状态读取失败：' + privateNetworksError) : null,
+          recoverableNetworks.length ? h('div', { style: { display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, padding: '0 18px 10px', flex: '0 0 auto' } },
+            h('span', { style: { color: C.mute, fontSize: 11 } }, '私有网络恢复'),
+            recoverableNetworks.map((item) => {
+              const id = item.network_id || item.id
+              const label = item.name || id || '未命名网络'
+              const canRetry = item.can_retry === true && !!id
+              return h('div', { key: id || label, style: { display: 'flex', alignItems: 'center', gap: 7, padding: '4px 6px 4px 9px', border: '1px solid ' + C.line, borderRadius: 8, background: C.panel, minWidth: 0 } },
+                h('span', { style: { fontSize: 11.5, color: C.ink, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, title: label }, label),
+                pill(item.state === 'failed' ? '失败' : '配置中', item.state === 'failed' ? C.amber : C.mute),
+                canRetry ? btn(retryingNetworkId === id ? '恢复中…' : '重试', () => retryPrivateNetwork(item), { primary: true, disabled: !!retryingNetworkId }) : null)
+            })) : null,
           h('div', { style: { display: 'flex', flex: '1 1 auto', minHeight: 0, padding: '0 18px 18px', alignItems: 'stretch', position: 'relative' } },
             h('div', { style: { width: networkListWidth, flex: '0 0 auto', minHeight: 0, display: 'flex', flexDirection: 'column', transition: networkResizing ? 'none' : 'width 180ms cubic-bezier(.2,.85,.2,1.15)' } },
               h('div', { className: 'tether-scroll', style: { flex: '1 1 auto', minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8, paddingRight: 6 } },

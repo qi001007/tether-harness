@@ -26,7 +26,14 @@ if (appPackage.version !== expectedVersion || version.components?.app !== expect
 }
 if (version.components.plugin !== '0.2.93') throw new Error('Candidate must retain the frozen DSH plugin version 0.2.93.')
 
-const runtimeRoot = path.join(repoRoot, '.runtime/desktop-candidate')
+const defaultRuntimeRoot = path.join(repoRoot, '.runtime/desktop-candidate')
+const runtimeRoot = path.resolve(process.env.TETHER_CANDIDATE_RUNTIME_ROOT || defaultRuntimeRoot)
+if (process.env.TETHER_CANDIDATE_RUNTIME_ROOT) {
+  const allowedRuntimeRoot = path.resolve(repoRoot, '.scratch/tether-desktop-candidates/0.5.0')
+  if (runtimeRoot !== allowedRuntimeRoot && !runtimeRoot.startsWith(allowedRuntimeRoot + path.sep)) {
+    throw new Error('TETHER_CANDIDATE_RUNTIME_ROOT must point into the isolated 0.5.0 candidate scratch directory.')
+  }
+}
 const runtimeExe = path.join(runtimeRoot, process.platform === 'win32' ? 'tether-python.exe' : 'tether-python')
 if (!existsSync(runtimeExe)) throw new Error(`Missing packaged Python runtime: ${runtimeExe}`)
 const nodeRuntime = path.join(runtimeRoot, 'components/nodejs', process.platform === 'win32' ? 'node.exe' : 'bin/node')
@@ -74,7 +81,10 @@ const outputSetting = 'output: .scratch/tether-desktop-candidates/0.5.0'
 if (!baseConfig.includes(outputSetting)) throw new Error('electron-builder output setting changed unexpectedly.')
 const tempConfig = path.join(os.tmpdir(), `tether-builder-${platformTarget[platform]}.yml`)
 const builderOutput = outputParent.replaceAll('\\', '/') + `/${platformTarget[platform]}`
+const runtimeSetting = 'from: .runtime/desktop-candidate'
+if (baseConfig.split(runtimeSetting).length !== 3) throw new Error('electron-builder runtime resource mapping changed unexpectedly.')
 const config = baseConfig.replace(outputSetting, `output: "${builderOutput}"`)
+  .replaceAll(runtimeSetting, `from: "${runtimeRoot.replaceAll('\\', '/')}"`)
   .replace('appId: com.tether.app', `appId: com.tether.app\nelectronVersion: ${electronVersion}`)
 writeFileSync(tempConfig, config)
 const args = [builderCli, '--projectDir', repoRoot,
