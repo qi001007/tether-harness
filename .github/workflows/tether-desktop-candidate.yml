@@ -107,11 +107,12 @@ jobs:
           mkdir -p .runtime/desktop-candidate
           COLLECT_ARGS=()
           DATA_ARGS=()
+          CONSOLE_PAGE="$(python -c "from pathlib import Path; print(Path('tether/node/console.html').resolve().as_posix())")"
           if [ "$RUNNER_OS" = "Windows" ]; then
             COLLECT_ARGS+=(--collect-all winpty)
-            DATA_ARGS+=(--add-data 'tether/node/console.html;tether/node')
+            DATA_ARGS+=(--add-data "$CONSOLE_PAGE;tether/node")
           else
-            DATA_ARGS+=(--add-data 'tether/node/console.html:tether/node')
+            DATA_ARGS+=(--add-data "$CONSOLE_PAGE:tether/node")
           fi
           python -m PyInstaller --noconfirm --clean --onefile \
             --name tether-python \
