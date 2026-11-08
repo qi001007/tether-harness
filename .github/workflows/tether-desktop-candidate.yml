@@ -547,8 +547,7 @@ jobs:
           if dates:
               merged['releaseDate'] = max(dates)
           (output / 'preview-mac.yml').write_text(yaml.safe_dump(merged, sort_keys=False), encoding='utf-8')
-          (output / 'preview-mac-x64.yml').unlink()
-          (output / 'preview-mac-arm64.yml').unlink()
+          # Per-architecture checksum manifests reference these files; keep them beside the canonical merged updater manifest.
 
           headless = artifacts['tether-node-runtime-linux-x64-0.5.0-preview']
           headless_names = {
