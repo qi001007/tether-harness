@@ -3722,6 +3722,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const [hubAddress, setHubAddress] = React.useState('')
       const hubProbeRef = React.useRef(null)
       const stateOkAtRef = React.useRef(0)
+      const hubAuthRequiredRef = React.useRef(false)
       const formatCheckTime = (date) => date ? [date.getHours(), date.getMinutes(), date.getSeconds()].map((part) => String(part).padStart(2, '0')).join(':') : ''
       React.useEffect(() => {
         if (!host || typeof host.connectionInfo !== 'function') return undefined
@@ -3729,6 +3730,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         host.connectionInfo(host.activeApiBase ? host.activeApiBase() : undefined).then((info) => {
           if (!alive || !info) return
           setHubAddress(info.address || '')
+          if (host.kind === 'app' && !EXPLICIT_AUTHORITY) return
           if (info.status && info.status !== 'unknown') setHubStatus(info.status)
           setHubCheckedAt(info.checkedAt ? new Date(info.checkedAt) : null)
           setHubDuration(Number.isFinite(info.durationMs) ? info.durationMs : null)
@@ -3759,6 +3761,12 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       }
       const probeConfiguredHub = async ({ silent = false } = {}) => {
         if (!host || typeof host.probeConnection !== 'function') return null
+        if (host.kind === 'app' && !EXPLICIT_AUTHORITY) {
+          setHubError('')
+          if (silent) return null
+          setHubBusy(true)
+          try { return await loadState(true) } finally { setHubBusy(false) }
+        }
         if (hubProbeRef.current) return hubProbeRef.current
         const generation = ACTIVE_BASE_GENERATION
         const base = ACTIVE_BASE
@@ -4528,6 +4536,12 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             stateOkAtRef.current = Date.now()
             setState(data)
             setStateRefreshError('')
+            if (host && host.kind === 'app' && !EXPLICIT_AUTHORITY) {
+              hubAuthRequiredRef.current = false
+              setHubStatus('online')
+              setHubError('')
+              setHubCheckedAt(new Date())
+            }
             const userId = data.user && data.user.user_id
             const selectionKey = userId
               ? 'tether.ui.device.v1:' + encodeURIComponent(ACTIVE_BASE) + ':' + encodeURIComponent(userId)
@@ -4566,11 +4580,14 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             if (generation !== ACTIVE_BASE_GENERATION || base !== ACTIVE_BASE) return
             if (host && host.kind === 'app' && !EXPLICIT_AUTHORITY
                 && ((error && error.status === 401) || (error && ['auth_required', 'unauthorized', 'invalid_session', 'session_expired', 'oidc_identity_unbound'].includes(error.code)))) {
+              hubAuthRequiredRef.current = true
+              setHubStatus('unknown')
+              setHubError('')
               setState(null)
               setDeviceId('')
               if (error && error.code === 'oidc_identity_unbound') setIdentityBindRequired(true)
               const message = error && error.code === 'oidc_identity_unbound'
-                ? '当前登录身份尚未关联 Tether 账号，请联系管理员完成身份绑定。'
+                ? '当前登录身份尚未关联 Tether 账号，请在弹出的对话框中选择创建新账号或关联已有账号。'
                 : '请先使用右上角“Hub 登录”完成统一身份认证。'
               setStateRefreshError(message)
               return
@@ -4606,6 +4623,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           }
           if (!result || result.state !== 'authenticated') return
           EXPLICIT_AUTHORITY = false
+          hubAuthRequiredRef.current = false
           try { window.localStorage.setItem('tether.hub.mode', 'oauth') } catch (_) { /* session remains main-owned */ }
           setIdentityBindRequired(false)
           setIdentityBindMode('')
@@ -4723,10 +4741,14 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       }
 
       React.useEffect(() => {
-        loadState()
-        const t = setInterval(loadState, 2500)
+        const poll = () => {
+          if (host && host.kind === 'app' && !EXPLICIT_AUTHORITY && hubAuthRequiredRef.current) return
+          void loadState()
+        }
+        poll()
+        const t = setInterval(poll, 2500)
         return () => clearInterval(t)
-      }, [loadState])
+      }, [host, loadState])
 
       React.useEffect(() => {
         if (!showAppSettings) return undefined
