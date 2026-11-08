@@ -104,3 +104,5 @@
 - 2026-11-04：结构化对话页按 Codeg 活动时间线重做：用户气泡右对齐；assistant 先用「执行过程 · N 步 · 耗时」胶囊，展开后左侧轨道逐行显示思考/终端/文件/Agent/计划，工具行可展开输出；最终回答独立；顶部必须有「‹ 主页」和常驻「主页」tab，ACP tab 与主页互切不丢会话；右上「会话详情」开右侧卡。目录/账号必须先读 localStorage 缓存再后台刷新，账号列表不要等 app-server probe。
 - 2026-11-07：Agents runtime 的状态检查/启动按设备单飞复用；同源下 token/代次 URL 变化时更新已存在的主页 pane，pane key 保持不变；Herdr 消息只接受来自父窗口且 origin 精确匹配的请求。
 - 2026-11-07：从 Codeg 显式选择 Herdr 项目时按规范化 cwd 生成 pane key，并仅对该终端启用 cwd 哈希的 Herdr project scope；通用 Herdr 保留默认 pane/session。
+
+- 2026-11-09：首开遮罩区分等待登录、登录中、读取中和读取失败；未登录时中央按钮调用既有 Hub 登录，身份关联对话框保持。Web 构建通过，隔离 Windows 候选 bundle 已同步；未实际启动验收。

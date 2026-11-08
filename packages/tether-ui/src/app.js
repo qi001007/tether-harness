@@ -6901,10 +6901,15 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           h('main', { className: 'tether-workbench', style: { flex: '1 1 auto', display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0, position: 'relative' } },
             !state ? h('div', { style: { position: 'absolute', inset: 0, zIndex: 15, display: 'grid', placeItems: 'center', alignContent: 'center', gap: 10,
               padding: 24, background: C.bg, color: C.sub, textAlign: 'center' } },
-              h('div', { style: { fontSize: 15, fontWeight: 600, color: C.ink } }, '正在连接并读取设备状态'),
+              h('div', { style: { fontSize: 15, fontWeight: 600, color: C.ink } },
+                identityBindRequired ? '需要完成账号关联' : hubAuthRequiredRef.current
+                  ? (hubLoginBusy ? '等待登录完成' : '等待 Hub 登录')
+                  : stateLoading ? '正在读取设备状态' : stateRefreshError ? '读取设备状态失败' : '正在连接并读取设备状态'),
               h('div', { style: { maxWidth: 480, fontSize: 12, lineHeight: 1.6 } }, stateRefreshError || '已保留工作台页面，正在获取 Hub 的设备与会话数据。'),
-              h('button', { type: 'button', onClick: () => { void loadState(true) }, style: { height: 28, padding: '0 12px', border: 0, borderRadius: 7,
-                background: C.soft, color: C.ink, fontSize: 12, cursor: 'pointer' } }, '重新读取')) : null,
+              h('button', { type: 'button', disabled: hubAuthRequiredRef.current && hubLoginBusy,
+                onClick: () => { if (hubAuthRequiredRef.current) loginHub(); else void loadState(true) }, style: { height: 28, padding: '0 12px', border: 0, borderRadius: 7,
+                background: C.soft, color: C.ink, fontSize: 12, cursor: hubAuthRequiredRef.current && hubLoginBusy ? 'default' : 'pointer' } },
+              hubAuthRequiredRef.current ? (hubLoginBusy ? '正在等待登录…' : 'Hub 登录') : stateLoading ? '正在读取…' : '重新读取')) : null,
             identityBindRequired ? h('div', { role: 'presentation', style: { position: 'absolute', inset: 0, zIndex: 25, display: 'grid', placeItems: 'center', padding: 24,
               background: 'rgba(16,24,40,.34)' } },
               h('form', { role: 'dialog', 'aria-modal': true, 'aria-labelledby': 'tether-identity-bind-title', onSubmit: bindLegacyIdentity,

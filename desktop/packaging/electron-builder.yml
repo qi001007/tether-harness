@@ -92,3 +92,4 @@ publish:
     repo: tether-harness
     channel: preview
     releaseType: draft
+afterPack: ./desktop/packaging/check-packaged-runtime.cjs
