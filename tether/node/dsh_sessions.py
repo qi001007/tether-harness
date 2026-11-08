@@ -206,8 +206,9 @@ def build_transcript(rows: list[dict[str, Any]]) -> dict[str, Any]:
 
 class DshSessionStore:
     def __init__(self, home: Path | str | None = None) -> None:
-        env = os.environ.get("TETHER_NATIVE_DSH_HOME")
-        self.home = Path(home or env or (Path.home() / ".dsh")).expanduser()
+        native_home = os.environ.get("TETHER_NATIVE_DSH_HOME")
+        configured_home = os.environ.get("DSH_HOME")
+        self.home = Path(native_home or home or configured_home or (Path.home() / ".dsh")).expanduser()
         self.root = self.home / "sessions"
         self._cache: dict[str, tuple[tuple[int, int], list[dict[str, Any]]]] = {}
 

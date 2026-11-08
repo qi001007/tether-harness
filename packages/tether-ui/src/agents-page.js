@@ -862,8 +862,12 @@ function AgentTargetPage({ React, Glyph, post, C, host, devices = [], localDevic
         style: { height: 28, padding: '0 10px', border: '1px solid ' + C.line, borderRadius: 8, background: C.bg,
           color: C.ink, fontSize: 11.5, cursor: 'pointer' }
       }, panes.some((pane) => pane.key === 'codeg:home') ? '← 返回 Codeg' : '← 返回 Agent 主页') : null,
+      serviceView && serviceView.serviceId === 'desktop' && activePane === (serviceView.paneKey || 'codeg:home')
+        ? h('div', { role: 'status', style: { marginLeft: 'auto', color: C.sub, fontSize: 11.5 } },
+          serviceView.viewOnly ? '只读视图' + (serviceView.viewOnlyReason ? ' · ' + serviceView.viewOnlyReason : '')
+            : serviceView.consent === 'none' ? '已启用无人值守授权' : '等待目标用户确认') : null,
       serviceView && activePane === (serviceView.paneKey || 'codeg:home') ? h('button', { type: 'button', onClick: () => void (serviceView.serviceId === 'desktop' ? closeNativeDesktop() : closeNativeCodeg()),
-        style: { marginLeft: 'auto', height: 28, padding: '0 10px', border: '1px solid ' + C.line, borderRadius: 8,
+        style: { marginLeft: serviceView.serviceId === 'desktop' ? 10 : 'auto', height: 28, padding: '0 10px', border: '1px solid ' + C.line, borderRadius: 8,
           background: C.bg, color: C.sub, fontSize: 11.5, cursor: 'pointer' }
       }, serviceView.serviceId === 'desktop' ? '结束远程桌面并撤销授权' : '关闭工作台视图') : null),
     h('div', { style: { flex: '1 1 auto', minHeight: 0, position: 'relative', display: 'flex' } },
@@ -893,6 +897,7 @@ function AgentTargetPage({ React, Glyph, post, C, host, devices = [], localDevic
       desktopService ? h('div', { style: { marginTop: 4, textAlign: 'center', lineHeight: 1.55 } },
         h('div', { style: { color: C.sub } }, '远程桌面：' + (serviceStateLabel[desktopService.state] || desktopService.state || '未知')),
         desktopService.reason ? h('div', { style: { maxWidth: 520, color: C.sub } }, desktopService.reason) : null,
+        desktopService.agent_busy ? h('div', { style: { maxWidth: 520, color: C.sub } }, '目标 Agent 正在处理任务，连接将以只读方式打开。') : null,
         h('button', { type: 'button', disabled: serviceCatalogBusy || serviceOpening || workbenchLoginBusy
           || !['ready', 'stopped'].includes(desktopService.state),
         onClick: workbenchLoginRequired ? () => void startWorkbenchLogin() : () => void openNativeDesktop(),

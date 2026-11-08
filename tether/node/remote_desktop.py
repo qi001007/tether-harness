@@ -256,11 +256,11 @@ class MeshCentralDesktop:
         record = self._load_record()
         if not record or not self._owned_server(record) or not self._health(record):
             raise RemoteDesktopError("meshcentral_unavailable", "MeshCentral 本机服务尚未就绪。")
-        certificate = self.root / "webserver-cert-public.crt"
+        certificate = self.root / "root-cert-public.crt"
         if not certificate.is_file():
             raise RemoteDesktopError("meshcentral_certificate_missing", "MeshCentral 本机证书尚未生成。")
         return {"scheme": "https", "host": "127.0.0.1", "port": int(record["port"]),
-                "tls_server_name": "localhost", "trust_certificate_path": str(certificate)}
+                "tls_server_name": "localhost.", "trust_certificate_path": str(certificate)}
 
     def stop(self) -> dict[str, Any]:
         """Stop only the exact MeshCentral server process started by this adapter."""
@@ -318,10 +318,11 @@ class MeshCentralDesktop:
             environment = {key: value for key, value in os.environ.items()
                            if not key.startswith("MESHCENTRAL_") and key not in {"NODE_OPTIONS", "NODE_PATH"}}
             try:
-                process = subprocess.Popen(argv, cwd=str(self.meshcentral), stdin=subprocess.DEVNULL,
-                                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                           env=environment, shell=False, close_fds=(os.name != "nt"),
-                                           creationflags=creation_flags)
+                with (self.root / "meshcentral.log").open("ab") as log:
+                    process = subprocess.Popen(argv, cwd=str(self.meshcentral), stdin=subprocess.DEVNULL,
+                                               stdout=log, stderr=subprocess.STDOUT,
+                                               env=environment, shell=False, close_fds=(os.name != "nt"),
+                                               creationflags=creation_flags)
             except OSError as error:
                 raise RemoteDesktopError("meshcentral_start_failed", "MeshCentral 无法启动。") from error
             record = {"pid": process.pid, "create_time": self._process_create_time(process.pid),
@@ -593,7 +594,7 @@ class MeshCentralDesktop:
         return shares
 
     def _write_config(self, port: int) -> None:
-        config = {"settings": {"cert": "localhost", "port": int(port), "portBind": "127.0.0.1",
+        config = {"settings": {"cert": "localhost.", "port": int(port), "portBind": "127.0.0.1",
                                "redirPort": 0, "relayPort": 0, "mpsPort": 0,
                                "allowFraming": False,
                                "agentconfig": ["nocertstore=1", "disableUpdate=1", "noUpdateCoreModule=1"],

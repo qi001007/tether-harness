@@ -12,6 +12,7 @@ import time
 import io
 import json
 import os
+import platform
 import re
 import shutil
 import sqlite3
@@ -76,6 +77,7 @@ def _resolve_latest_manifest_url(url: str) -> str:
     _LATEST_RESOLVE_CACHE[url] = (now + _LATEST_RESOLVE_TTL, resolved)
     return resolved
 MAX_ARCHIVE_BYTES = 180 * 1024 * 1024
+MAX_DEB_BYTES = 1024 * 1024 * 1024
 MAX_UNPACKED_BYTES = 640 * 1024 * 1024
 MAX_FILE_BYTES = 128 * 1024 * 1024
 MAX_ARCHIVE_FILES = 8192
@@ -163,6 +165,8 @@ ERROR_MESSAGES = {
     "manifest_unavailable": "暂时无法获取更新清单，请稍后重试。",
     "artifact_too_large": "更新文件超过大小限制。",
     "artifact_hash_mismatch": "更新文件校验失败。",
+    "debian_artifact_unavailable": "当前设备没有可用的受签名 Debian 更新包。",
+    "debian_package_invalid": "准备的 Debian 更新包与签名清单不匹配。",
     "rollout_paused": "该版本正在分批发布，当前设备暂未开放。",
     "updater_too_old": "当前更新器版本过旧。",
     "dirty_checkout": "检测到未提交的开发文件，已阻止更新以保留本地工作。",
@@ -605,7 +609,7 @@ class UpdateManager:
         self._allow_unsigned = bool(allow_unsigned)
         self._public_key_hex = public_key_hex
         self.channel = str(os.environ.get("TETHER_UPDATE_CHANNEL") or "stable").strip().lower()
-        if self.channel not in {"stable", "beta"}:
+        if self.channel not in {"stable", "beta", "preview"}:
             self.channel = "stable"
         self._disk_manifest_path = self.state_dir / "manifest-cache.json"
         self._last_source = ""
@@ -627,6 +631,25 @@ class UpdateManager:
         if parsed.scheme == "https":
             return True
         return self._allow_loopback_http and parsed.scheme == "http" and _is_loopback(parsed.hostname)
+
+    @staticmethod
+    def _debian_architecture() -> str | None:
+        if sys.platform != "linux":
+            return None
+        machine = platform.machine().lower()
+        return {"x86_64": "amd64", "amd64": "amd64",
+                "aarch64": "arm64", "arm64": "arm64"}.get(machine)
+
+    def _node_debian_artifact(self, item: dict[str, Any]) -> dict[str, Any]:
+        architecture = self._debian_architecture()
+        packages = item.get("debian")
+        package = packages.get(architecture) if architecture and isinstance(packages, dict) else None
+        if (not isinstance(package, dict) or package.get("format") != "deb"
+                or package.get("package") != "tether-node"
+                or package.get("architecture") != architecture
+                or package.get("version") != item.get("version")):
+            raise UpdateError("debian_artifact_unavailable")
+        return package
 
     def _opener(self, url: str | None = None) -> urllib.request.OpenerDirector:
         hub_origin = ""
@@ -691,7 +714,7 @@ class UpdateManager:
         if type(manifest.get("schema")) is not int or manifest.get("schema") != 1:
             raise UpdateError("unsupported_manifest")
         channel = manifest.get("channel", "stable")
-        if not isinstance(channel, str) or channel not in {"stable", "beta"}:
+        if not isinstance(channel, str) or channel not in {"stable", "beta", "preview"}:
             raise UpdateError("invalid_manifest")
         if channel != "stable" and channel != self.channel:
             raise UpdateError("channel_not_selected")
@@ -723,6 +746,25 @@ class UpdateManager:
                 raise UpdateError("invalid_manifest")
             if not isinstance(item.get("sha256"), str) or not re.fullmatch(r"[0-9a-f]{64}", item["sha256"]):
                 raise UpdateError("invalid_manifest")
+            if "debian" in item:
+                if name != "node" or not isinstance(item["debian"], dict):
+                    raise UpdateError("invalid_manifest")
+                for architecture, package in item["debian"].items():
+                    if architecture not in {"amd64", "arm64"} or not isinstance(package, dict):
+                        raise UpdateError("invalid_manifest")
+                    if set(package) != {"format", "package", "architecture", "version", "url", "size", "sha256"}:
+                        raise UpdateError("invalid_manifest")
+                    if (package.get("format") != "deb" or package.get("package") != "tether-node"
+                            or package.get("architecture") != architecture
+                            or package.get("version") != item.get("version")):
+                        raise UpdateError("invalid_manifest")
+                    _semver(package.get("version"))
+                    if not self._url_allowed(package.get("url")):
+                        raise UpdateError("insecure_url")
+                    if type(package.get("size")) is not int or not 0 < package["size"] <= MAX_DEB_BYTES:
+                        raise UpdateError("invalid_manifest")
+                    if not isinstance(package.get("sha256"), str) or not re.fullmatch(r"[0-9a-f]{64}", package["sha256"]):
+                        raise UpdateError("invalid_manifest")
         try:
             verify_signature(manifest, self._public_key_hex)
         except ReleaseSignatureError as exc:
@@ -1092,6 +1134,9 @@ class UpdateManager:
             current = self._app_current_version(installed)
             manifest = self._load_manifest(use_check_cache=True, force=force)
             remote = manifest["components"][self.component]
+            debian_package = None
+            if self.component == "node" and os.environ.get("TETHER_NODE_UPDATE_OWNER", "").strip().lower() == "deb_package_manager":
+                debian_package = self._node_debian_artifact(remote)
             version = remote["version"]
             restart_required, applied_target = self._app_restart_state()
             newer = _is_newer(version, installed)
@@ -1120,6 +1165,10 @@ class UpdateManager:
                       "checked_at": checked_at, "stale": self._last_stale,
                       "manifest_source": self._last_source, "device": self.device,
                       "checkout": self._checkout_info(), "error": ""}
+            if debian_package is not None:
+                result.update({"update_method": "deb_package_manager",
+                               "architecture": debian_package["architecture"],
+                               "artifact_sha256": debian_package["sha256"]})
             if self._lock_info() is not None:
                 result["in_progress"] = True
                 result["status"] = "in_progress"
@@ -1543,7 +1592,8 @@ class UpdateManager:
         return staged
 
     def _fetch_artifact(self, item: dict[str, Any],
-                        progress: Callable[[int, int | None], None] | None = None) -> bytes:
+                        progress: Callable[[int, int | None], None] | None = None,
+                        *, max_bytes: int = MAX_ARCHIVE_BYTES) -> bytes:
         urls: list[str] = []
         source = self._last_source
         if isinstance(source, str) and source.endswith("/releases/manifest"):
@@ -1555,7 +1605,7 @@ class UpdateManager:
         errors: list[UpdateError] = []
         for url in dict.fromkeys(urls):
             try:
-                return self._fetch(url, MAX_ARCHIVE_BYTES, timeout=ARTIFACT_CHECK_TIMEOUT,
+                return self._fetch(url, max_bytes, timeout=ARTIFACT_CHECK_TIMEOUT,
                                    progress=progress)
             except UpdateError as exc:
                 errors.append(exc)
@@ -1581,6 +1631,10 @@ class UpdateManager:
             manifest = self._load_manifest(force=True)
             item = manifest["components"][self.component]
             target_version = item["version"]
+            debian_package = None
+            debian_bytes = None
+            if self.component == "node" and os.environ.get("TETHER_NODE_UPDATE_OWNER", "").strip().lower() == "deb_package_manager":
+                debian_package = self._node_debian_artifact(item)
             restart_required, applied_target = self._app_restart_state()
             same_version_retry = (self.component == "app" and restart_required
                                   and target_version == current == applied_target)
@@ -1599,19 +1653,29 @@ class UpdateManager:
                     self._write_progress("downloading", percent,
                                          f"{received}/{expected}" if expected else str(received))
 
-            archive_bytes = self._fetch_artifact(item, download_progress)
+            if debian_package is None:
+                archive_bytes = self._fetch_artifact(item, download_progress)
+            else:
+                debian_bytes = self._fetch_artifact(debian_package, download_progress, max_bytes=MAX_DEB_BYTES)
+                if (len(debian_bytes) != debian_package["size"]
+                        or hashlib.sha256(debian_bytes).hexdigest() != debian_package["sha256"]):
+                    raise UpdateError("artifact_hash_mismatch")
+                archive_bytes = b""
             self._write_progress("preparing", 65, target_version)
             prepared_id = uuid.uuid4().hex
             self.state_dir.mkdir(parents=True, exist_ok=True)
             prepared_root = self.state_dir / "prepared" / prepared_id
             prepared_root.mkdir(parents=True, exist_ok=False)
-            staged = self._validate_archive(archive_bytes, item, prepared_root)
+            staged = [] if debian_package is not None else self._validate_archive(archive_bytes, item, prepared_root)
+            if debian_package is not None:
+                self._write_atomic(prepared_root / "tether-node.deb", debian_bytes or b"")
             self._check_dependencies(staged)
             self._write_progress("preparing", 90, target_version)
             record = {
                 "id": prepared_id, "component": self.component, "from_version": current,
                 "to_version": target_version, "same_version_retry": same_version_retry,
                 "sha256": item["sha256"], "size": item["size"],
+                "debian_package": debian_package,
                 "profile": self.profile if self.component == "plugin" else None,
                 "files": [{"path": entry[2], "sha256": _sha256_path(entry[0]),
                            "size": entry[0].stat().st_size,
@@ -1622,7 +1686,13 @@ class UpdateManager:
             self._write_progress("prepared", 100, prepared_id)
             return {"ok": True, "prepared_id": prepared_id, "component": self.component,
                     "from_version": current, "to_version": target_version,
-                    "size": item["size"], "sha256": item["sha256"], "error": ""}
+                    "size": debian_package["size"] if debian_package else item["size"],
+                    "sha256": debian_package["sha256"] if debian_package else item["sha256"],
+                    **({"update_method": "deb_package_manager",
+                       "package": debian_package["package"],
+                       "architecture": debian_package["architecture"]}
+                      if debian_package else {}),
+                    "error": ""}
         except UpdateError as exc:
             if prepared_root is not None:
                 shutil.rmtree(prepared_root, ignore_errors=True)
@@ -1780,6 +1850,48 @@ class UpdateManager:
         if not staged:
             raise UpdateError("prepared_empty")
         return prepared_root, record, staged
+
+    def load_debian_prepared(self, prepared_id: str) -> dict[str, Any]:
+        """Return a signed-manifest-bound Debian artifact for the package adapter."""
+        if (self.component != "node"
+                or os.environ.get("TETHER_NODE_UPDATE_OWNER", "").strip().lower() != "deb_package_manager"
+                or not re.fullmatch(r"[a-f0-9]{32}", prepared_id)):
+            raise UpdateError("debian_package_invalid")
+        prepared_root = self.state_dir / "prepared" / prepared_id
+        try:
+            record = _json_object((prepared_root / "prepared.json").read_bytes())
+        except (OSError, UpdateError):
+            raise UpdateError("prepared_not_found") from None
+        package = record.get("debian_package")
+        architecture = self._debian_architecture()
+        if (record.get("id") != prepared_id or record.get("component") != "node"
+                or not isinstance(package, dict) or package.get("format") != "deb"
+                or package.get("package") != "tether-node"
+                or package.get("architecture") != architecture
+                or package.get("version") != record.get("to_version")):
+            raise UpdateError("debian_package_invalid")
+        cached = self._load_disk_manifest(MANIFEST_DISK_MAX_AGE)
+        manifest_item = (cached.get("components") or {}).get("node") if cached else None
+        signed_package = self._node_debian_artifact(manifest_item) if isinstance(manifest_item, dict) else None
+        if signed_package != package:
+            raise UpdateError("prepared_stale")
+        artifact = prepared_root / "tether-node.deb"
+        try:
+            if artifact.is_symlink() or not artifact.is_file():
+                raise UpdateError("debian_package_invalid")
+            resolved = artifact.resolve(strict=True)
+            if resolved.parent != prepared_root.resolve(strict=True):
+                raise UpdateError("debian_package_invalid")
+            if artifact.stat().st_size != package["size"] or _sha256_path(artifact) != package["sha256"]:
+                raise UpdateError("prepared_hash_mismatch")
+        except OSError:
+            raise UpdateError("debian_package_invalid") from None
+        if record.get("from_version") != self._versions()["node"]:
+            raise UpdateError("prepared_stale")
+        return {"prepared_id": prepared_id, "package": package["package"],
+                "architecture": package["architecture"], "version": package["version"],
+                "sha256": package["sha256"], "size": package["size"],
+                "artifact_path": str(resolved)}
 
     def _write_atomic(self, target: Path, data: bytes) -> None:
         target.parent.mkdir(parents=True, exist_ok=True)

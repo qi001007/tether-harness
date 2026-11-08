@@ -35,6 +35,8 @@ from .terminal import TerminalService
 from .apps import AppCatalog
 from .acp import AcpService
 from .dsh_sessions import DshSessionStore
+from .debian_package_update import (DebianPackageUpdateError, DebianPackageUpdater,
+                                    OWNER as DEBIAN_PACKAGE_UPDATE_OWNER)
 from .native_surface import NativeSurface, NativeSurfaceError
 from .croc_transfer import CrocTransfer
 from .local_identity import remove_identity, write_identity
@@ -268,7 +270,6 @@ class Node:
         self.drop_for = drop_for
         self._block_until = 0.0
         self.agent = agent
-        self.dsh_home = dsh_home or str(ROOT / ".runtime" / "dsh-home")
         self.data_dir = Path(data_dir or (ROOT / ".runtime")).expanduser().resolve()
         self.device_token_path = self.data_dir / "device-token.json"
         try:
@@ -282,8 +283,9 @@ class Node:
         self.provider = provider
         self.model = model
         self.workspaces_root = workspaces_root or default_workspaces_root()
-        self.dsh_sessions = DshSessionStore()
+        self.dsh_sessions = DshSessionStore(dsh_home)
         self.native_dsh_home = self.dsh_sessions.home
+        self.dsh_home = str(self.native_dsh_home)
         self.fs = FsService(device=device, workspace=workspace,
                             data_dir=self.data_dir,
                             workspaces_root=self.workspaces_root,
@@ -333,6 +335,16 @@ class Node:
               for component in ("node", "plugin")
         }
         self.update_managers["app"] = self._make_app_update_manager(manifest_url)
+        self.debian_package_updater = DebianPackageUpdater(self.data_dir)
+        self.debian_package_update_status = None
+        self.debian_package_update_capability = None
+        if os.environ.get("TETHER_NODE_UPDATE_OWNER", "").strip().lower() == DEBIAN_PACKAGE_UPDATE_OWNER:
+            try:
+                self.debian_package_update_capability = self.debian_package_updater.availability()
+                self.debian_package_update_status = self.debian_package_update_capability.get("transaction")
+            except DebianPackageUpdateError as exc:
+                log(f"[update] package transaction reconciliation failed: {exc.code}")
+                self.debian_package_update_capability = {"available": False, "reason": exc.code}
         node_status = self.update_managers["node"].status()
         self.node_version = ((node_status.get("current_version") or "unknown")
                              if node_status.get("ok") else "unknown")
@@ -813,6 +825,15 @@ class Node:
             if transfer["state"] not in {"idle", "completed", "failed", "cancelled"}:
                 return "transfer_activity_unknown"
             try:
+                if self.fs.transfer_jobs.has_active_jobs():
+                    return "transfer_job_active"
+                if self.fs.sftpgo_grants.has_active_grants():
+                    return "transfer_grant_active"
+                if self.fs.service_access.has_active_workers():
+                    return "service_grant_active"
+            except Exception:
+                return "node_business_activity_unknown"
+            try:
                 agents = self.fs.agents_runtime.activity()
             except Exception:
                 return "agents_activity_unknown"
@@ -856,6 +877,27 @@ class Node:
                  "error": f"Node runtime updates are managed by {owner_label}"},
             )
             return
+        debian_node_update = (component == "node" and node_update_owner == DEBIAN_PACKAGE_UPDATE_OWNER)
+        if debian_node_update and action not in {"status"}:
+            try:
+                availability = await asyncio.to_thread(self.debian_package_updater.availability)
+            except DebianPackageUpdateError as exc:
+                await self._send_update_result(
+                    response_ws,
+                    {"type": "update_result", "req_id": req_id, "ok": False,
+                     "error_code": exc.code, "error": exc.message},
+                )
+                return
+            self.debian_package_update_capability = availability
+            if not availability["available"]:
+                reason = str(availability.get("reason") or "debian_update_unavailable")
+                await self._send_update_result(
+                    response_ws,
+                    {"type": "update_result", "req_id": req_id, "ok": False,
+                     "error_code": reason,
+                     "error": "Native Debian package updates are unavailable on this Node"},
+                )
+                return
         if component == "app":
             self._refresh_app_update_manager()
         applying = action == "apply"
@@ -906,7 +948,8 @@ class Node:
                 await self._send_update_result(
                     response_ws,
                     {"type": "update_result", "req_id": req_id, "ok": False,
-                     "error_code": "update_failed", "error": "update operation failed"},
+                     "error_code": getattr(exc, "code", "update_failed"),
+                     "error": getattr(exc, "message", "update operation failed")},
                 )
             else:
                 if component == "node" and result.get("ok"):
@@ -917,6 +960,11 @@ class Node:
                         versions_match = False
                     result = {**result, "runtime_version": runtime_version,
                               "restart_required": not versions_match}
+                if debian_node_update and action == "status":
+                    package_status = await asyncio.to_thread(self.debian_package_updater.availability)
+                    self.debian_package_update_capability = package_status
+                    result = {**result, "package_update": package_status,
+                              "node_self_update_enabled": bool(package_status.get("available"))}
                 await self._send_update_result(
                     response_ws, {"type": "update_result", "req_id": req_id, **result}
                 )
@@ -946,6 +994,7 @@ class Node:
                                   if busy in {"tether_task_active", "native_dsh_turn_active",
                                               "croc_transfer_active", "agent_turn_active",
                                               "agent_interaction_pending", "agent_delegation_active",
+                                              "transfer_job_active", "transfer_grant_active", "service_grant_active",
                                               "agent_background_task_active"}
                                   else "无法确认任务或文件传输状态，请稍后重试。")
                     await self._send_update_result(
@@ -961,14 +1010,29 @@ class Node:
             try:
                 if action == "apply":
                     if component == "node":
-                        try:
-                            await asyncio.to_thread(self.fs.agents_runtime.stop)
-                        except Exception as exc:  # noqa: BLE001 - best effort; apply reports locks
-                            log(f"[update] agents runtime stop failed before node update: {exc!r}")
-                    result = await asyncio.to_thread(manager.apply, msg["prepared_id"])
+                        if debian_node_update:
+                            result = await asyncio.to_thread(self.debian_package_updater.apply,
+                                                             manager, msg["prepared_id"])
+                            if result.get("ok"):
+                                package_capability = dict(self.debian_package_update_capability or {})
+                                package_capability["transaction"] = {
+                                    "prepared_id": msg["prepared_id"],
+                                    "state": result.get("status", "in_progress"),
+                                    "unit": result.get("unit"),
+                                    "target_version": result.get("target_version")}
+                                self.debian_package_update_capability = package_capability
+                        else:
+                            try:
+                                await asyncio.to_thread(self.fs.agents_runtime.stop)
+                            except Exception as exc:  # noqa: BLE001 - best effort; apply reports locks
+                                log(f"[update] agents runtime stop failed before node update: {exc!r}")
+                            result = await asyncio.to_thread(manager.apply, msg["prepared_id"])
+                    else:
+                        result = await asyncio.to_thread(manager.apply, msg["prepared_id"])
                 else:
                     result = await asyncio.to_thread(getattr(manager, str(action)))
-                applied = (bool(result.get("ok")) and result.get("status") != "in_progress"
+                applied = (not debian_node_update and bool(result.get("ok"))
+                           and result.get("status") != "in_progress"
                            and result.get("in_progress") is not True)
                 node_deferred = False
                 if applied and component == "plugin" and action == "apply":
@@ -1015,7 +1079,8 @@ class Node:
                 await self._send_update_result(
                     response_ws,
                     {"type": "update_result", "req_id": req_id, "ok": False,
-                     "error_code": "update_failed", "error": "update operation failed"},
+                     "error_code": getattr(exc, "code", "update_failed"),
+                     "error": getattr(exc, "message", "update operation failed")},
                 )
             finally:
                 if applying and not self.restart_requested and not app_restart_scheduled:
@@ -1235,6 +1300,15 @@ class Node:
         app_fields = self._app_heartbeat_fields()
         app_version = str(app_fields.get("app_version") or "")
         plugin_version = self._managed_plugin_version()
+        node_update_owner = os.environ.get("TETHER_NODE_UPDATE_OWNER", "node").strip().lower()
+        debian_package_update = None
+        if node_update_owner == DEBIAN_PACKAGE_UPDATE_OWNER:
+            debian_package_update = self.debian_package_update_capability or {
+                "available": False, "reason": "not_checked",
+                "transaction": self.debian_package_update_status}
+        node_self_update_enabled = node_update_owner not in {"app_installer", "bundle_installer"}
+        if node_update_owner == DEBIAN_PACKAGE_UPDATE_OWNER:
+            node_self_update_enabled = bool(debian_package_update and debian_package_update.get("available"))
         installed = [name for name, version in (("app", app_version), ("plugin", plugin_version)) if version]
         if app_fields["app_installed"] and "app" not in installed:
             installed.append("app")
@@ -1244,9 +1318,10 @@ class Node:
                 "node_version": self.node_version, "update_protocol": UPDATE_PROTOCOL,
                 "min_update_protocol": MIN_UPDATE_PROTOCOL,
                 "max_update_protocol": MAX_UPDATE_PROTOCOL,
-                "node_update_owner": os.environ.get("TETHER_NODE_UPDATE_OWNER", "node"),
-                "node_self_update_enabled": os.environ.get("TETHER_NODE_UPDATE_OWNER", "").strip().lower()
-                not in {"app_installer", "bundle_installer"},
+                "node_update_owner": node_update_owner or "node",
+                "node_self_update_enabled": node_self_update_enabled,
+                **({"debian_package_update": debian_package_update}
+                   if debian_package_update is not None else {}),
                 "update_features": ["check", "prepare", "apply", "app_restart", "plugin_profile_fallback"],
                 "update_manifest": "hub-or-github",
                 "workspace": str(self.workspace), "agents": ["fake", "dsh"], "fs": True,
@@ -1321,7 +1396,7 @@ def main() -> None:
     ap.add_argument("--drop-after", type=float, default=None, help="test: close the socket N seconds after the first dispatch")
     ap.add_argument("--drop-for", type=float, default=0.0, help="test: keep the socket down for N seconds")
     ap.add_argument("--agent", choices=["fake", "dsh"], default=os.environ.get("TETHER_AGENT", "fake"))
-    ap.add_argument("--dsh-home", default=os.environ.get("DSH_HOME", str(ROOT / ".runtime" / "dsh-home")))
+    ap.add_argument("--dsh-home", default=None)
     ap.add_argument("--provider", default=os.environ.get("DSH_PROVIDER", "deepseek-official"))
     ap.add_argument("--model", default=os.environ.get("DSH_MODEL", "deepseek-v4-flash"))
     ap.add_argument("--console-port", type=int, default=int(os.environ.get("TETHER_CONSOLE_PORT", "18893")))

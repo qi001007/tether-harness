@@ -4,7 +4,7 @@ const crypto = require('node:crypto')
 const tls = require('node:tls')
 const { X509Certificate } = require('node:crypto')
 
-const SERVICE_IDS = new Set(['dsh', 'codeg', 'herdr', 'files'])
+const SERVICE_IDS = new Set(['dsh', 'codeg', 'herdr', 'files', 'desktop'])
 
 function sha256(value) {
   return crypto.createHash('sha256').update(value).digest('hex')
@@ -57,12 +57,23 @@ function verifyEndpoint(descriptor, targetId, serviceId) {
     throw new Error((descriptor && descriptor.reason) || '目标服务尚未就绪或授权失败。')
   }
   const endpoint = new URL(descriptor.endpoint)
-  if (endpoint.protocol !== 'https:' || endpoint.username || endpoint.password || endpoint.search || endpoint.hash
-      || endpoint.pathname !== '/') throw new Error('服务端返回的工作台 origin 无效。')
+  if (endpoint.protocol !== 'https:' || endpoint.username || endpoint.password || endpoint.hash
+      || (serviceId !== 'desktop' && endpoint.search)
+      || (serviceId !== 'desktop' && endpoint.pathname !== '/')) throw new Error('服务端返回的工作台 origin 无效。')
+  if (serviceId === 'desktop') {
+    const query = new URLSearchParams(endpoint.search)
+    if (!['/sharing', '/default/sharing'].includes(endpoint.pathname) || !query.get('c')) {
+      throw new Error('服务端返回的远程桌面 guest 页面无效。')
+    }
+    if (!['prompt', 'none'].includes(descriptor.consent) || typeof descriptor.view_only !== 'boolean') {
+      throw new Error('服务端返回的远程桌面授权状态无效。')
+    }
+  }
+  const origin = new URL('/', endpoint)
   const bootstrap = descriptor.bootstrap
   const bootstrapUrl = bootstrap && new URL(bootstrap.url)
   if (!bootstrap || bootstrap.method !== 'POST' || !bootstrap.ticket || !bootstrap.expires_at
-      || !bootstrapUrl || bootstrapUrl.origin !== endpoint.origin || bootstrapUrl.pathname !== '/__tether/bootstrap') {
+      || !bootstrapUrl || bootstrapUrl.origin !== origin.origin || bootstrapUrl.pathname !== '/__tether/bootstrap') {
     throw new Error('服务端没有提供有效的一次性工作台 bootstrap。')
   }
   if (!Number.isFinite(expiryMillis(bootstrap.expires_at)) || expiryMillis(bootstrap.expires_at) <= Date.now()) {
@@ -74,7 +85,7 @@ function verifyEndpoint(descriptor, targetId, serviceId) {
   const actualCa = sha256(Buffer.from(caPem, 'utf8'))
   if (actualCa !== expectedCa) throw new Error('工作台 TLS 根证书指纹不匹配。')
   if (String(descriptor.tls.epoch || '') !== actualCa.slice(0, 16)) throw new Error('工作台 TLS 信任版本与根证书不匹配。')
-  return { endpoint, bootstrapUrl, caPem, epoch: descriptor.tls.epoch }
+  return { endpoint, origin, bootstrapUrl, caPem, epoch: descriptor.tls.epoch }
 }
 
 async function verifyMeshCertificate(endpoint, caPem, expectedLeaf) {
@@ -147,7 +158,9 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
       throw new Error('Controller 返回了无效的服务目录。')
     }
     return { protocol: 1, target_id: targetId, services: result.services.map((service) => ({
-      id: service.id, state: service.state, reason: service.reason || '', updated_at: service.updated_at || null
+      id: service.id, state: service.state, reason: service.reason || '',
+      agent_busy: service.agent_busy === true, view_only_reason: service.view_only_reason || '',
+      updated_at: service.updated_at || null
     })) }
   }
 
@@ -198,12 +211,12 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     })
     if (!isCurrent()) throw new Error('工作台账号已切换，请重新打开服务。')
     const verified = verifyEndpoint(descriptor, targetId, serviceId)
-    await verifyMeshCertificate(verified.endpoint, verified.caPem)
+    await verifyMeshCertificate(verified.origin, verified.caPem)
     const partition = 'persist:tether-wb-' + sha256(key + '\u0000' + generation).slice(0, 40)
     const serviceSession = getServiceSession(partition)
     openedSession = serviceSession
     if (!serviceSession || typeof serviceSession.fetch !== 'function') throw new Error('Electron 服务隔离会话不可用。')
-    installCertificatePin(serviceSession, verified.endpoint, verified.caPem)
+    installCertificatePin(serviceSession, verified.origin, verified.caPem)
     if (!isCurrent()) throw new Error('工作台账号已切换，请重新打开服务。')
     const response = await serviceSession.fetch(verified.bootstrapUrl.toString(), {
       method: 'POST',
@@ -216,7 +229,12 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     const leaseExpiresAt = expiryMillis(descriptor.lease_expires_at)
     if (!Number.isFinite(leaseExpiresAt) || leaseExpiresAt <= Date.now()) throw new Error('工作台授权租约已过期。')
     const publicResult = { targetId, serviceId, grantId: descriptor.grant_id, endpoint: verified.endpoint.toString(), partition, leaseExpiresAt }
-    active.set(key, { actorId, targetId, serviceId, generation, operationId, descriptor, endpoint: verified.endpoint, serviceSession,
+    if (serviceId === 'desktop') {
+      publicResult.consent = descriptor.consent
+      publicResult.viewOnly = descriptor.view_only
+      publicResult.viewOnlyReason = typeof descriptor.view_only_reason === 'string' ? descriptor.view_only_reason : ''
+    }
+    active.set(key, { actorId, targetId, serviceId, generation, operationId, descriptor, endpoint: verified.origin, serviceSession,
       partition, leaseExpiresAt, public: publicResult, viewTimer: null })
     logSafe('native-workbench-open', { targetId, serviceId, tlsEpoch: verified.epoch })
     return publicResult

@@ -1,0 +1,25 @@
+Tether Node Debian package
+==========================
+
+This package installs a system service named tether-node.service. The service
+runs as root so the managed Node can use the approved system package updater
+and perform its configured device-management operations. Install or upgrade
+the package with APT as root so its declared LibreOffice runtime dependencies
+are installed from the configured Debian repositories:
+
+    sudo apt install ./Tether-node-runtime-0.5.0-linux-x64.deb
+
+The service does not receive broad sudo rules because it already runs under
+systemd as root.
+
+On first installation the service remains stopped until a Controller URL and
+enrollment credentials are configured in /etc/tether-node/node.env. This file
+and all Node identity, database, logs, and private runtime state are kept
+outside the package at root-only paths: /etc/tether-node and
+/var/lib/tether-node. Edit the environment file as root, then run:
+
+    systemctl enable --now tether-node.service
+
+The signed preview channel is selected for this candidate package. The package
+manager owns Debian runtime updates; the legacy per-file Node updater is not
+used. Removing the package keeps /var/lib/tether-node data and credentials.

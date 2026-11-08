@@ -104,13 +104,21 @@ def copy_tree(source: Path, destination: Path) -> None:
             shutil.copy2(item, target)
 
 
-def copy_node_dependencies(source: Path, destination: Path) -> None:
+def copy_node_dependencies(source: Path, destination: Path, locked_root: Path) -> None:
+    locked_root = locked_root.resolve()
     for item in source.rglob("*"):
         relative = item.relative_to(source)
-        if ".bin" in relative.parts or item.name == ".package-lock.json":
+        if item.name == ".package-lock.json":
             continue
         if item.is_symlink():
-            raise ValueError(f"symbolic link in locked Node dependency tree: {item}")
+            try:
+                item.resolve(strict=True).relative_to(locked_root)
+            except (OSError, ValueError) as error:
+                raise ValueError(f"symbolic link escapes or is missing in locked Node dependency tree: {item}") from error
+            target = destination / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.symlink_to(os.readlink(item), target_is_directory=item.resolve(strict=True).is_dir())
+            continue
         target = destination / relative
         if item.is_dir():
             target.mkdir(parents=True, exist_ok=True)
@@ -177,9 +185,61 @@ def assemble_libreoffice(manifest: dict, target: str, destination: Path) -> None
             debs = sorted(extracted.rglob("*.deb"))
             if not debs:
                 raise ValueError("LibreOffice Linux archive contains no Debian packages")
+            package_names = set()
+            package_depends = []
+            for package in debs:
+                package_field = subprocess.run(["dpkg-deb", "-f", str(package), "Package"],
+                                               check=True, capture_output=True, text=True, timeout=30).stdout.strip()
+                depends_field = subprocess.run(["dpkg-deb", "-f", str(package), "Depends"],
+                                               check=True, capture_output=True, text=True, timeout=30).stdout
+                if not re.fullmatch(r"[a-z0-9][a-z0-9+.-]*", package_field):
+                    raise ValueError(f"invalid Debian package metadata in {package.name}")
+                package_names.add(package_field)
+                package_depends.append((package.name, " ".join(depends_field.split())))
             for package in debs:
                 subprocess.run(["dpkg-deb", "-x", str(package), str(destination)],
                                check=True, timeout=180)
+            external_dependencies = set()
+            for package_name, depends in package_depends:
+                groups = []
+                current = []
+                depth = 0
+                for character in depends:
+                    if character == "(":
+                        depth += 1
+                    elif character == ")":
+                        depth -= 1
+                        if depth < 0:
+                            raise ValueError(f"malformed Depends field in {package_name}")
+                    if character == "," and depth == 0:
+                        groups.append("".join(current).strip())
+                        current = []
+                    else:
+                        current.append(character)
+                if depth != 0:
+                    raise ValueError(f"malformed Depends field in {package_name}")
+                if current:
+                    groups.append("".join(current).strip())
+                for group in groups:
+                    if not group:
+                        continue
+                    alternatives = [item.strip() for item in group.split("|")]
+                    names = [re.match(r"^([a-z0-9][a-z0-9+.-]*)", item) for item in alternatives]
+                    if any(match is None for match in names):
+                        raise ValueError(f"unrecognized Depends entry in {package_name}: {group}")
+                    # LibreOffice packages contained in this official archive are installed as
+                    # files in the runtime tree; only their external package dependencies belong
+                    # in the enclosing Tether Debian package metadata.
+                    external_alternatives = [item for item, match in zip(alternatives, names)
+                                             if match and match.group(1) not in package_names]
+                    if external_alternatives:
+                        external_dependencies.add(" | ".join(external_alternatives))
+            (destination / "linux-dependencies.json").write_text(json.dumps({
+                "source_archive": asset["name"],
+                "source_sha256": asset["sha256"],
+                "bundled_debian_packages": sorted(package_names),
+                "depends": sorted(external_dependencies),
+            }, indent=2) + "\n", encoding="utf-8")
             executable = destination / "opt" / "libreoffice26.8" / "program" / "soffice"
         else:
             mount = workspace / "mount"
@@ -244,7 +304,7 @@ def assemble_meshcentral(remote: dict, destination: Path, source_output: Path) -
                 continue
             target = target_dependencies / item.name
             if item.is_dir():
-                copy_node_dependencies(item, target)
+                copy_node_dependencies(item, target, dependencies)
             elif item.is_file():
                 shutil.copy2(item, target)
         source_output.parent.mkdir(parents=True, exist_ok=True)

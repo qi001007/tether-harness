@@ -1,0 +1,22 @@
+[Unit]
+Description=Tether Node
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/var/lib/tether-node
+EnvironmentFile=-/etc/tether-node/node.env
+Environment=TETHER_NODE_PREFIX=/var/lib/tether-node
+Environment=TETHER_NODE_DATA_DIR=/var/lib/tether-node
+Environment=TETHER_NODE_ENV_FILE=/etc/tether-node/node.env
+Environment=TETHER_NODE_UPDATE_OWNER=deb_package_manager
+Environment=TETHER_UPDATE_CHANNEL=preview
+ExecStart=/opt/tether-node/current/bin/tether-node
+Restart=always
+RestartSec=3
+UMask=0077
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

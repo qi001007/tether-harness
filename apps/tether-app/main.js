@@ -85,7 +85,7 @@ if (packaged) {
   env.TETHER_SFTPGO_COMPONENT_DIR = path.join(runtimeRoot, 'components', 'sftpgo')
   env.TETHER_CADDY = packagedExecutable('caddy', 'caddy' + exe)
   env.TETHER_RCLONE = packagedExecutable('rclone', 'rclone' + exe)
-  env.TETHER_UPDATE_CHANNEL = env.TETHER_UPDATE_CHANNEL || 'preview'
+  env.TETHER_UPDATE_CHANNEL = env.TETHER_UPDATE_CHANNEL || (candidateMode ? 'preview' : 'stable')
   env.TETHER_EASYTIER_CORE = packagedExecutable('easytier', 'easytier-core' + exe)
   env.TETHER_EASYTIER_CLI = packagedExecutable('easytier', 'easytier-cli' + exe)
   env.TETHER_NODEJS_EXE = process.platform === 'win32'
@@ -790,6 +790,30 @@ handleTrusted('tether:workbench-bind-legacy', async (_event, credentials) => {
   if (!binding.ok) throw new Error(binding.status === 409
     ? 'This Casdoor identity is already linked to another Tether account'
     : 'Tether account binding failed; the identity was not linked')
+  const actorId = await currentWorkbenchActorId()
+  await completeWorkbenchLogin(actorId)
+  return { state: 'authenticated' }
+}, () => ({ state: 'error' }))
+handleTrusted('tether:workbench-register-account', async () => {
+  if (!workbenchBindingPending || !workbenchLoginWindow || workbenchLoginWindow.isDestroyed()) {
+    throw new Error('Explicit Tether account creation is not pending')
+  }
+  const origin = trustedControllerOrigin()
+  const response = await workbenchLoginSession.fetch(new URL('/api/auth/identity/register', origin).toString(), {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+    body: '{}', redirect: 'error'
+  })
+  if (!response.ok) {
+    let code = ''
+    try { const body = await response.json(); code = String(body?.detail?.code || '') } catch (_) { /* keep generic */ }
+    const messages = {
+      oidc_email_required: '身份提供方没有提供有效邮箱，请先完善账号资料。',
+      oidc_email_unverified: '请先在身份提供方验证邮箱，再创建 Tether 账号。',
+      oidc_account_conflict: '此邮箱已用于另一个 Tether 账号；请改用绑定现有账号流程。',
+      identity_already_bound: '此登录身份已关联其他 Tether 账号。'
+    }
+    throw new Error(messages[code] || 'Tether 账号创建失败；未关联或覆盖任何现有账号。')
+  }
   const actorId = await currentWorkbenchActorId()
   await completeWorkbenchLogin(actorId)
   return { state: 'authenticated' }

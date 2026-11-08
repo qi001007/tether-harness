@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('tetherApp', {
   resetSurfaceAuth: (origin) => ipcRenderer.invoke('tether:reset-surface-auth', origin),
   workbenchLogin: () => ipcRenderer.invoke('tether:workbench-login'),
   workbenchBindLegacy: (credentials) => ipcRenderer.invoke('tether:workbench-bind-legacy', credentials),
+  workbenchRegisterAccount: () => ipcRenderer.invoke('tether:workbench-register-account'),
   workbenchLogout: () => ipcRenderer.invoke('tether:workbench-logout'),
   hubRequest: (request) => ipcRenderer.invoke('tether:hub-request', request),
   subscribeHubEvents: () => ipcRenderer.invoke('tether:hub-events-subscribe'),

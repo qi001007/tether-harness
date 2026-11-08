@@ -11,6 +11,7 @@ import os
 import re
 import sys
 import stat
+import subprocess
 import tempfile
 import time
 import zipfile
@@ -317,17 +318,44 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Build local Tether component release archives")
     parser.add_argument("--frozen-plugin-manifest", type=Path)
     parser.add_argument("--frozen-plugin-archive", type=Path)
+    parser.add_argument("--release-tag")
+    parser.add_argument("--channel", choices=("stable", "preview"), default="stable")
+    parser.add_argument("--node-deb", type=Path)
+    parser.add_argument("--output-dir", type=Path)
     args = parser.parse_args(argv)
     if bool(args.frozen_plugin_manifest) != bool(args.frozen_plugin_archive):
         parser.error("--frozen-plugin-manifest and --frozen-plugin-archive must be supplied together")
     frozen = None
     if args.frozen_plugin_manifest:
         frozen = load_frozen_plugin(args.frozen_plugin_manifest, args.frozen_plugin_archive)
+    if args.channel == "preview":
+        if not args.node_deb or not frozen or frozen[1].get("version") != "0.2.93":
+            parser.error("preview requires the frozen 0.2.93 plugin manifest/archive and the signed Node Debian asset")
     versions = validate_versions(frozen[1]["version"] if frozen else None)
     version = versions["app"]
     plugin_version = versions["plugin"]
-    OUT.mkdir(exist_ok=True)
-    stage_dir = tempfile.TemporaryDirectory(prefix=".build-release-", dir=OUT)
+    release_tag = args.release_tag or f"v{version}"
+    if args.channel == "stable":
+        if release_tag != f"v{version}":
+            parser.error("stable release tag must match the APP/Node component version")
+    elif release_tag != f"v{version}-preview.1":
+        parser.error("the first preview release tag must be v<APP/Node version>-preview.1")
+    node_deb = args.node_deb.resolve() if args.node_deb else None
+    if node_deb is not None:
+        if not node_deb.is_file():
+            parser.error("--node-deb must name an existing Debian package")
+        try:
+            fields = [subprocess.run(
+                ["dpkg-deb", "--field", str(node_deb), name],
+                check=True, capture_output=True, text=True).stdout.strip()
+                for name in ("Package", "Version", "Architecture")]
+        except (OSError, subprocess.CalledProcessError):
+            parser.error("--node-deb requires dpkg-deb to verify package metadata")
+        if fields != ["tether-node", version, "amd64"]:
+            parser.error("--node-deb must be Package=tether-node, matching version, Architecture=amd64")
+    output_dir = args.output_dir.resolve() if args.output_dir else OUT
+    output_dir.mkdir(parents=True, exist_ok=True)
+    stage_dir = tempfile.TemporaryDirectory(prefix=".build-release-", dir=output_dir)
     stage = Path(stage_dir.name)
     plugin_prefix = f"tether-plugin-{plugin_version}"
     app_prefix = f"tether-app-{version}"
@@ -415,13 +443,14 @@ DeepSeek Harness profile.
 
     preflight_release_archives({"app": app, "node": node})
     rollout = rollout_config()
-    manifest = {"schema": 1, "channel": "stable", "released_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    manifest = {"schema": 1, "channel": args.channel,
+                "released_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 "components": {}}
     for component, archive in (("app", app), ("node", node)):
         payload = archive.read_bytes()
         manifest["components"][component] = {
             "version": version,
-            "url": f"https://github.com/qi001007/tether-harness/releases/download/v{version}/{archive.name}",
+            "url": f"https://github.com/qi001007/tether-harness/releases/download/{release_tag}/{archive.name}",
             "sha256": hashlib.sha256(payload).hexdigest(),
             "size": len(payload),
             "protocol": 1,
@@ -429,6 +458,19 @@ DeepSeek Harness profile.
             "min_updater": MIN_UPDATER_VERSION,
             "rollout": rollout,
         }
+    if node_deb is not None:
+        payload = node_deb.read_bytes()
+        node_entry = manifest["components"]["node"]
+        node_entry["debian"] = {"amd64": {
+            "format": "deb", "package": "tether-node", "architecture": "amd64",
+            "version": version,
+            "url": f"https://github.com/qi001007/tether-harness/releases/download/{release_tag}/{node_deb.name}",
+            "sha256": hashlib.sha256(payload).hexdigest(), "size": len(payload),
+        }}
+        node_deb_stage = stage / node_deb.name
+        node_deb_stage.write_bytes(payload)
+    else:
+        node_deb_stage = None
     if frozen is None:
         payload = plugin.read_bytes()
         manifest["components"]["plugin"] = {
@@ -440,16 +482,18 @@ DeepSeek Harness profile.
     else:
         manifest["components"]["plugin"] = frozen[1]
     key = release_private_key()
+    if args.channel == "preview" and key is None:
+        raise SystemExit("TETHER_RELEASE_PRIVATE_KEY is required for a signed preview candidate")
     if key is not None:
         manifest["signature"] = base64.b64encode(key.sign(canonical_bytes(manifest))).decode("ascii")
         verify_signature(manifest)
     manifest_path = stage / "tether-update.json"
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
-    staged_artifacts = ((plugin,) if frozen is None else ()) + (app, node, manifest_path)
+    staged_artifacts = ((plugin,) if frozen is None else ()) + (app, node) + ((node_deb_stage,) if node_deb_stage else ()) + (manifest_path,)
     final_artifacts = []
     for archive in staged_artifacts:
-        destination = OUT / archive.name
+        destination = output_dir / archive.name
         os.replace(archive, destination)
         final_artifacts.append(destination)
     stage_dir.cleanup()
@@ -460,4 +504,3 @@ DeepSeek Harness profile.
 
 if __name__ == "__main__":
     main()
-

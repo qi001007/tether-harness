@@ -1,0 +1,18 @@
+#!/bin/sh
+set -eu
+
+if [ "${1:-}" = upgrade ] && command -v systemctl >/dev/null 2>&1; then
+    install -d -m 0755 /run/tether-node
+    CURRENT=/opt/tether-node/current
+    if [ -L "$CURRENT" ]; then
+        readlink "$CURRENT" > /run/tether-node/previous-current
+    else
+        rm -f /run/tether-node/previous-current
+    fi
+    if systemctl is-active --quiet tether-node.service; then
+        : > /run/tether-node/was-active
+        systemctl stop tether-node.service
+    fi
+fi
+
+exit 0

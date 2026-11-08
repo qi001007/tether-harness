@@ -1,0 +1,103 @@
+#!/bin/sh
+set -eu
+
+DATA_DIR=/var/lib/tether-node
+CONFIG_DIR=/etc/tether-node
+CONFIG_FILE=$CONFIG_DIR/node.env
+PACKAGE_DIR=$DATA_DIR/packages
+VERSION=0.5.0
+DEB_NAME="tether-node_${VERSION}_amd64.deb"
+
+install -d -o root -g root -m 0700 "$DATA_DIR"
+install -d -o root -g root -m 0700 "$PACKAGE_DIR"
+install -d -o root -g root -m 0700 "$CONFIG_DIR"
+install -d -o root -g root -m 0700 "$DATA_DIR/workspace" "$DATA_DIR/workspaces"
+
+if [ ! -e "$CONFIG_FILE" ]; then
+    umask 027
+    cat > "$CONFIG_FILE" <<'EOF'
+TETHER_NODE_PREFIX=/var/lib/tether-node
+TETHER_NODE_DATA_DIR=/var/lib/tether-node
+TETHER_NODE_UPDATE_OWNER=deb_package_manager
+TETHER_CONTROLLER=
+TETHER_NODE_TOKEN=
+TETHER_USER_TOKEN=
+TETHER_DEVICE=
+TETHER_CONSOLE_PORT=18894
+TETHER_AGENT=dsh
+TETHER_WORKSPACES_ROOT=/var/lib/tether-node/workspaces
+EOF
+fi
+chown root:root "$CONFIG_FILE"
+chmod 0600 "$CONFIG_FILE"
+
+CACHE_SOURCE=""
+if [ -f "$PACKAGE_DIR/$DEB_NAME" ]; then
+    CACHE_SOURCE="$PACKAGE_DIR/$DEB_NAME"
+elif [ -f "/var/cache/apt/archives/$DEB_NAME" ]; then
+    CACHE_SOURCE="/var/cache/apt/archives/$DEB_NAME"
+fi
+if [ -n "$CACHE_SOURCE" ]; then
+    [ "$(dpkg-deb -f "$CACHE_SOURCE" Package 2>/dev/null || true)" = tether-node ] || {
+        echo "tether-node: refusing cached package with unexpected package identity" >&2
+        exit 1
+    }
+    [ "$(dpkg-deb -f "$CACHE_SOURCE" Version 2>/dev/null || true)" = "$VERSION" ] || {
+        echo "tether-node: refusing cached package with unexpected version" >&2
+        exit 1
+    }
+    [ "$(dpkg-deb -f "$CACHE_SOURCE" Architecture 2>/dev/null || true)" = amd64 ] || {
+        echo "tether-node: refusing cached package with unexpected architecture" >&2
+        exit 1
+    }
+    if [ "$CACHE_SOURCE" != "$PACKAGE_DIR/$DEB_NAME" ]; then
+        cp -- "$CACHE_SOURCE" "$PACKAGE_DIR/.$DEB_NAME.$$"
+        chown root:root "$PACKAGE_DIR/.$DEB_NAME.$$"
+        chmod 0600 "$PACKAGE_DIR/.$DEB_NAME.$$"
+        mv -f -- "$PACKAGE_DIR/.$DEB_NAME.$$" "$PACKAGE_DIR/$DEB_NAME"
+    fi
+fi
+
+CURRENT=/opt/tether-node/current
+NEXT=/opt/tether-node/.current-$VERSION-$$
+ln -s "releases/$VERSION" "$NEXT"
+mv -Tf "$NEXT" "$CURRENT"
+
+if command -v systemctl >/dev/null 2>&1; then
+    systemctl daemon-reload || true
+    START_FAILED=0
+    if grep -Eq '^TETHER_CONTROLLER=.+$' "$CONFIG_FILE"; then
+        systemctl enable tether-node.service >/dev/null 2>&1 || true
+        systemctl restart tether-node.service || START_FAILED=1
+    elif [ -e /run/tether-node/was-active ]; then
+        systemctl start tether-node.service || START_FAILED=1
+    else
+        echo "tether-node: installed as a root system service; configure TETHER_CONTROLLER and enrollment credentials in $CONFIG_FILE before starting" >&2
+    fi
+    if [ "$START_FAILED" -eq 1 ]; then
+        echo "tether-node: new service failed to start; restoring the previous runtime selection" >&2
+        PREVIOUS=""
+        if [ -f /run/tether-node/previous-current ]; then
+            IFS= read -r PREVIOUS < /run/tether-node/previous-current || true
+        fi
+        case "$PREVIOUS" in
+            releases/*)
+                if [ -d "/opt/tether-node/$PREVIOUS" ]; then
+                    ROLLBACK_LINK="/opt/tether-node/.current-rollback-$$"
+                    ln -s "$PREVIOUS" "$ROLLBACK_LINK"
+                    mv -Tf "$ROLLBACK_LINK" "$CURRENT"
+                    systemctl reset-failed tether-node.service >/dev/null 2>&1 || true
+                    systemctl start tether-node.service || echo "tether-node: previous runtime restored but service restart also failed" >&2
+                else
+                    echo "tether-node: previous runtime is unavailable; service remains stopped" >&2
+                fi
+                ;;
+            *)
+                echo "tether-node: no valid previous runtime selection; service remains stopped" >&2
+                ;;
+        esac
+        exit 1
+    fi
+fi
+rm -f /run/tether-node/was-active /run/tether-node/previous-current
+exit 0

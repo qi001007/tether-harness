@@ -104,6 +104,7 @@ class ServiceAccess:
         self.caddy = os.environ.get("TETHER_CADDY") or shutil.which("caddy") or ""
         self.ca_storage = self.data_dir / "caddy-storage"
         self.workers: dict[str, _Worker] = {}
+        self._starting_grants: set[tuple[str, str, str]] = set()
         self.tombstones: dict[str, int] = {}
         self._lock = threading.RLock()
         self._owner_lock = self._take_owner_lock()
@@ -137,8 +138,8 @@ class ServiceAccess:
         return handle
 
     @staticmethod
-    def worker_id(actor_id: str, service_id: str) -> str:
-        return hashlib.sha256((actor_id + "\0" + service_id).encode()).hexdigest()[:24]
+    def worker_id(actor_id: str, service_id: str, grant_id: str) -> str:
+        return hashlib.sha256((actor_id + "\0" + service_id + "\0" + grant_id).encode()).hexdigest()[:24]
 
     def catalog(self) -> dict[str, Any]:
         codeg = self._codeg_status()
@@ -175,55 +176,63 @@ class ServiceAccess:
                                      "service access secrets cannot be stored privately")
         actor_id, service_id = str(authority["actor_id"]), str(authority["service_id"])
         grant_id, revision = str(authority["grant_id"]), str(authority["authorization_revision"])
+        claim = (actor_id, service_id, grant_id)
         lease_expires_at = int(lease_expires_at)
         now = int(time.time())
         if lease_expires_at <= now or lease_expires_at > now + MAX_LEASE_SECONDS:
             raise ServiceAccessError("bad_lease", "service lease must expire within one hour")
         network_id = str(authority["network_id"])
-        try:
-            mesh_ip = str(self.network_address(network_id)) if self.network_address is not None else ""
-        except Exception as exc:
-            raise ServiceAccessError(getattr(exc, "code", "network_not_connected"),
-                                     "target is not connected to the selected EasyTier network") from exc
-        if not mesh_ip:
-            raise ServiceAccessError("network_not_connected", "target has no address on the selected EasyTier network")
+        existing = None
+        claimed = False
         with self._lock:
             if grant_id in self.tombstones:
                 raise ServiceAccessError("grant_revoked", "this grant has been revoked")
-            existing = self._worker_for(actor_id, service_id)
-            if existing and existing.grant_id != grant_id and existing.lease_expires_at > now:
-                raise ServiceAccessError("grant_conflict", "another active grant owns this service worker")
-            if existing and existing.grant_id == grant_id and existing.revision != revision:
+            if claim in self._starting_grants:
+                raise ServiceAccessError("grant_start_in_progress", "this service grant is already starting")
+            existing = self._worker_for(actor_id, service_id, grant_id)
+            if existing and existing.revision != revision:
                 raise ServiceAccessError("authorization_changed", "service grant revision changed")
-            if existing and existing.grant_id == grant_id and existing.network_id != network_id:
+            if existing and existing.network_id != network_id:
                 raise ServiceAccessError("network_changed", "service grant is bound to another EasyTier network")
-            if existing and existing.grant_id == grant_id and existing.mesh_ip != mesh_ip:
-                raise ServiceAccessError("network_changed", "service worker must be reopened on the current network address")
-            if (existing and existing.grant_id == grant_id and
+            if (existing and
                     getattr(existing, "authority", {}).get("operation_id") != authority.get("operation_id")):
                 raise ServiceAccessError("grant_operation_conflict", "service grant is bound to another operation")
-            if existing and existing.grant_id == grant_id and self._worker_alive(existing):
-                if service_id == "desktop":
-                    try:
-                        status = self.remote_desktop.view(authority) if self.remote_desktop is not None else {}
-                    except Exception as exc:
-                        raise ServiceAccessError(getattr(exc, "code", "grant_missing"),
-                                                 "native desktop share could not be verified") from exc
-                    if status.get("state") != "ready":
-                        raise ServiceAccessError("grant_missing", "native desktop share is no longer active")
-                    if lease_expires_at > int(status.get("expires_at") or 0):
-                        raise ServiceAccessError("native_share_renewal_required",
-                                                 "native desktop share must be renewed before extending its lease")
-                existing.lease_expires_at = lease_expires_at
-                self._new_bootstrap_ticket(existing)
-                return self._descriptor(existing, operation_id=str(authority["operation_id"]))
+            if existing and self._worker_alive(existing):
+                reuse = existing
+            else:
+                self._starting_grants.add(claim)
+                claimed = True
 
-        if not self.caddy or not Path(self.caddy).is_file():
-            raise ServiceAccessError("caddy_missing", "Caddy is not installed on this Node")
-        self._ensure_manager()
+        if not claimed:
+            mesh_ip = self._network_ip(network_id)
+            if reuse.mesh_ip != mesh_ip:
+                raise ServiceAccessError("network_changed", "service worker must be reopened on the current network address")
+            if service_id == "desktop":
+                try:
+                    status = self.remote_desktop.view(authority) if self.remote_desktop is not None else {}
+                except Exception as exc:
+                    raise ServiceAccessError(getattr(exc, "code", "grant_missing"),
+                                             "native desktop share could not be verified") from exc
+                if status.get("state") != "ready":
+                    raise ServiceAccessError("grant_missing", "native desktop share is no longer active")
+                if lease_expires_at > int(status.get("expires_at") or 0):
+                    raise ServiceAccessError("native_share_renewal_required",
+                                             "native desktop share must be renewed before extending its lease")
+            with self._lock:
+                if (self._worker_for(actor_id, service_id, grant_id) is not reuse or
+                        grant_id in self.tombstones or not self._worker_alive(reuse)):
+                    raise ServiceAccessError("grant_missing", "service grant worker is no longer active")
+                reuse.lease_expires_at = lease_expires_at
+                self._new_bootstrap_ticket(reuse)
+                return self._descriptor(reuse, operation_id=str(authority["operation_id"]))
+
         worker = None
         desktop_share = None
         try:
+            mesh_ip = self._network_ip(network_id)
+            if not self.caddy or not Path(self.caddy).is_file():
+                raise ServiceAccessError("caddy_missing", "Caddy is not installed on this Node")
+            self._ensure_manager()
             endpoint_path = "/"
             if service_id == "desktop":
                 if self.remote_desktop is None:
@@ -250,16 +259,15 @@ class ServiceAccess:
                                         network_id, mesh_ip, upstream, upstream_headers, endpoint_path)
             worker.desktop_share = desktop_share
             with self._lock:
-                prior = self._worker_for(actor_id, service_id)
-                if prior and prior.grant_id != grant_id and self._worker_alive(prior):
-                    raise ServiceAccessError("grant_conflict", "another active grant owns this service worker")
-                self.workers[self.worker_id(actor_id, service_id)] = worker
+                self.workers[self.worker_id(actor_id, service_id, grant_id)] = worker
                 worker.authority = dict(authority)
             self._health_check(worker, health_url)
             return self._descriptor(worker, operation_id=str(authority["operation_id"]))
         except Exception as error:
             with self._lock:
-                self.workers.pop(self.worker_id(actor_id, service_id), None)
+                key = self.worker_id(actor_id, service_id, grant_id)
+                if self.workers.get(key) is worker:
+                    self.workers.pop(key, None)
             if worker is not None:
                 self._stop_worker(worker)
             if desktop_share is not None:
@@ -271,11 +279,25 @@ class ServiceAccess:
             if isinstance(error, ServiceAccessError):
                 raise
             raise ServiceAccessError("service_open_failed", "native service could not be opened") from error
+        finally:
+            with self._lock:
+                if claimed:
+                    self._starting_grants.discard(claim)
+
+    def _network_ip(self, network_id: str) -> str:
+        try:
+            mesh_ip = str(self.network_address(network_id)) if self.network_address is not None else ""
+        except Exception as exc:
+            raise ServiceAccessError(getattr(exc, "code", "network_not_connected"),
+                                     "target is not connected to the selected EasyTier network") from exc
+        if not mesh_ip:
+            raise ServiceAccessError("network_not_connected", "target has no address on the selected EasyTier network")
+        return mesh_ip
 
     def _desktop_upstream(self, local: dict[str, Any], share: dict[str, Any]) -> tuple[dict[str, Any], str]:
         if (not isinstance(local, dict) or local.get("scheme") != "https" or
                 local.get("host") != "127.0.0.1" or type(local.get("port")) is not int or
-                not 1 <= local["port"] <= 65535 or local.get("tls_server_name") != "localhost"):
+                not 1 <= local["port"] <= 65535 or local.get("tls_server_name") != "localhost."):
             raise ServiceAccessError("desktop_upstream_invalid", "MeshCentral upstream is not a valid loopback TLS endpoint")
         certificate = Path(str(local.get("trust_certificate_path") or "")).resolve()
         private_root = Path(self.remote_desktop.root).resolve()
@@ -292,7 +314,7 @@ class ServiceAccess:
                 not query.get("c") or parsed.fragment):
             raise ServiceAccessError("desktop_guest_path_invalid", "MeshCentral returned an invalid native guest path")
         return ({"scheme": "https", "host": "127.0.0.1", "port": local["port"],
-                 "tls_server_name": "localhost", "trust_certificate_path": str(certificate)}, guest_path)
+                 "tls_server_name": "localhost.", "trust_certificate_path": str(certificate)}, guest_path)
 
     def renew(self, authority: dict[str, Any], lease_expires_at: int) -> dict[str, Any]:
         self._validate_authority(authority)
@@ -301,8 +323,9 @@ class ServiceAccess:
         if lease_expires_at <= now or lease_expires_at > now + MAX_LEASE_SECONDS:
             raise ServiceAccessError("bad_lease", "service lease must expire within one hour")
         with self._lock:
-            worker = self._worker_for(str(authority["actor_id"]), str(authority["service_id"]))
-            if (not worker or worker.grant_id != authority["grant_id"] or
+            worker = self._worker_for(str(authority["actor_id"]), str(authority["service_id"]),
+                                      str(authority["grant_id"]))
+            if (not worker or
                     worker.revision != str(authority["authorization_revision"])
                     or not self._worker_alive(worker)):
                 raise ServiceAccessError("grant_missing", "service grant worker is not active")
@@ -340,23 +363,23 @@ class ServiceAccess:
         actor_id, service_id = str(authority["actor_id"]), str(authority["service_id"])
         grant_id = str(authority["grant_id"])
         with self._lock:
-            worker = self._worker_for(actor_id, service_id)
-            if worker and worker.grant_id != grant_id:
-                raise ServiceAccessError("grant_mismatch", "a stale grant cannot revoke the active service worker")
+            worker = self._worker_for(actor_id, service_id, grant_id)
         if worker:
             with worker.publish_lock:
                 with self._lock:
                     self.tombstones[grant_id] = int(time.time())
                     self._save_tombstones()
-                    if self._worker_for(actor_id, service_id) is worker:
-                        self.workers.pop(self.worker_id(actor_id, service_id), None)
+                    key = self.worker_id(actor_id, service_id, grant_id)
+                    if self.workers.get(key) is worker:
+                        self.workers.pop(key, None)
                 self._stop_worker(worker)
                 stopped = worker.process.poll() is not None
         else:
             with self._lock:
                 self.tombstones[grant_id] = int(time.time())
                 self._save_tombstones()
-            stopped = self._stop_worker_record(self.data_dir / "workers" / self.worker_id(actor_id, service_id))
+            stopped = self._stop_worker_record(
+                self.data_dir / "workers" / self.worker_id(actor_id, service_id, grant_id))
         if not stopped:
             raise ServiceAccessError("revoke_pending", "service worker could not yet be confirmed stopped")
         if service_id == "desktop":
@@ -395,12 +418,18 @@ class ServiceAccess:
         if issued_at > int(time.time()) + 5 or expires_at <= int(time.time()) or expires_at > issued_at + 60:
             raise ServiceAccessError("authorization_expired", "Hub service command expired")
 
-    def _worker_for(self, actor_id: str, service_id: str) -> _Worker | None:
-        return self.workers.get(self.worker_id(actor_id, service_id))
+    def _worker_for(self, actor_id: str, service_id: str, grant_id: str) -> _Worker | None:
+        return self.workers.get(self.worker_id(actor_id, service_id, grant_id))
+
+    def has_active_workers(self) -> bool:
+        now = time.time()
+        with self._lock:
+            return any(worker.lease_expires_at > now and self._worker_alive(worker)
+                       for worker in self.workers.values())
 
     def assert_active_worker(self, worker: _Worker) -> None:
         with self._lock:
-            current = self.workers.get(self.worker_id(worker.actor_id, worker.service_id))
+            current = self.workers.get(self.worker_id(worker.actor_id, worker.service_id, worker.grant_id))
             if (current is not worker or worker.grant_id in self.tombstones or
                     worker.lease_expires_at <= time.time()
                     or worker.revision != str(worker.authority.get("authorization_revision", "")) or
@@ -606,7 +635,7 @@ class ServiceAccess:
             ready = bool(status.get("ready"))
             headers = status.get("headers", {}) if ready else {}
         with self._lock:
-            if self.workers.get(self.worker_id(worker.actor_id, worker.service_id)) is not worker:
+            if self.workers.get(self.worker_id(worker.actor_id, worker.service_id, worker.grant_id)) is not worker:
                 return
             worker.upstream_checked_at = time.time()
             worker.upstream_ready = ready
@@ -683,7 +712,7 @@ class ServiceAccess:
                       lease_expires_at: int, network_id: str, mesh_ip: str, upstream: dict[str, Any],
                       upstream_headers: dict[str, str], endpoint_path: str) -> _Worker:
         port = self._free_port(mesh_ip)
-        config_dir = self.data_dir / "workers" / self.worker_id(actor_id, service_id)
+        config_dir = self.data_dir / "workers" / self.worker_id(actor_id, service_id, grant_id)
         config_dir.mkdir(parents=True, exist_ok=True)
         try:
             os.chmod(config_dir, 0o700)

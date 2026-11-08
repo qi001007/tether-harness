@@ -105,7 +105,7 @@ jobs:
           set -euo pipefail
           python -m pip install --disable-pip-version-check . 'pyinstaller==6.22.3'
           mkdir -p .runtime/desktop-candidate
-          COLLECT_ARGS=()
+          COLLECT_ARGS=(--collect-all psutil)
           DATA_ARGS=()
           CONSOLE_PAGE="$(python -c "from pathlib import Path; print(Path('tether/node/console.html').resolve().as_posix())")"
           if [ "$RUNNER_OS" = "Windows" ]; then
@@ -132,7 +132,6 @@ jobs:
             --collect-all websockets \
             --collect-all cryptography \
             --collect-all zstandard \
-            --collect-all psutil \
             --collect-all dotenv \
             "${DATA_ARGS[@]}" \
             "${COLLECT_ARGS[@]}" \
@@ -146,9 +145,43 @@ jobs:
         run: python scripts/hydrate_herdr_runtime.py --destination .runtime/herdr-runtime
       - name: Assemble pinned runtime components
         run: python desktop/packaging/prepare_runtime.py --target ${{ matrix.target }} --codeg-web .runtime/codeg-web --herdr-runtime .runtime/herdr-runtime
+      - name: Check the frozen Python and bundled Node entry points
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $python = if ($env:RUNNER_OS -eq 'Windows') { '.runtime/desktop-candidate/tether-python.exe' } else { '.runtime/desktop-candidate/tether-python' }
+          $node = if ($env:RUNNER_OS -eq 'Windows') { '.runtime/desktop-candidate/components/nodejs/node.exe' } else { '.runtime/desktop-candidate/components/nodejs/bin/node' }
+          if (!(Test-Path -LiteralPath $python -PathType Leaf)) { throw "Frozen Python runtime missing: $python" }
+          if (!(Test-Path -LiteralPath $node -PathType Leaf)) { throw "Bundled Node runtime missing: $node" }
+          & $python -m tether.node.agent --help
+          if ($LASTEXITCODE -ne 0) { throw "Frozen Python entry check failed with exit $LASTEXITCODE" }
+          & $node --version
+          if ($LASTEXITCODE -ne 0) { throw "Bundled Node entry check failed with exit $LASTEXITCODE" }
+      - name: Check the bundled LibreOffice runtime
+        if: matrix.target == 'linux-x64'
+        shell: bash
+        run: .runtime/desktop-candidate/components/libreoffice/opt/libreoffice26.8/program/soffice --headless --version
       - name: Build standalone headless Linux Node runtime
         if: matrix.target == 'linux-x64'
         run: python desktop/packaging/build_headless_node.py
+      - name: Download and verify pinned nFPM
+        if: matrix.target == 'linux-x64'
+        shell: bash
+        run: |
+          set -euo pipefail
+          nfpm_dir="$RUNNER_TEMP/nfpm-2.48.0"
+          mkdir -p "$nfpm_dir"
+          curl --fail --show-error --silent --location --proto '=https' --tlsv1.2 \
+            'https://github.com/goreleaser/nfpm/releases/download/v2.48.0/nfpm_2.48.0_Linux_x86_64.tar.gz' \
+            -o "$nfpm_dir/nfpm.tar.gz"
+          echo '6d7f9a28b2f397934403950fcbba83f598b08d02edbe79a0815b3b4897341750  '"$nfpm_dir/nfpm.tar.gz" | sha256sum --check
+          tar -xzf "$nfpm_dir/nfpm.tar.gz" -C "$nfpm_dir" nfpm
+          chmod 0755 "$nfpm_dir/nfpm"
+          echo "NFPM_EXECUTABLE=$nfpm_dir/nfpm" >> "$GITHUB_ENV"
+          echo "NFPM_ARCHIVE=$nfpm_dir/nfpm.tar.gz" >> "$GITHUB_ENV"
+      - name: Build headless Debian package
+        if: matrix.target == 'linux-x64'
+        run: python desktop/packaging/build_headless_deb.py --nfpm "$NFPM_EXECUTABLE" --nfpm-archive "$NFPM_ARCHIVE"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: matrix.target == 'linux-x64'
         with:
@@ -167,7 +200,205 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: tether-${{ matrix.target }}-0.5.0-preview
-          path: .scratch/tether-desktop-candidates/0.5.0/${{ matrix.target }}/*
+          path: |
+            .scratch/tether-desktop-candidates/0.5.0/${{ matrix.target }}/*.exe
+            .scratch/tether-desktop-candidates/0.5.0/${{ matrix.target }}/*.dmg
+            .scratch/tether-desktop-candidates/0.5.0/${{ matrix.target }}/*.zip
+            .scratch/tether-desktop-candidates/0.5.0/${{ matrix.target }}/*.AppImage
+            .scratch/tether-desktop-candidates/0.5.0/${{ matrix.target }}/*.deb
+            .scratch/tether-desktop-candidates/0.5.0/${{ matrix.target }}/*.yml
+            .scratch/tether-desktop-candidates/0.5.0/${{ matrix.target }}/*.blockmap
+            .scratch/tether-desktop-candidates/0.5.0/${{ matrix.target }}/SHA256SUMS.json
           if-no-files-found: error
           compression-level: 0
           retention-days: 7
+  publish-preview-draft:
+    name: Sign and assemble preview draft
+    if: github.ref == 'refs/heads/codex/tether-050-preview-20261108'
+    needs: package
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.11'
+      - name: Install manifest signing dependency
+        run: python -m pip install --disable-pip-version-check 'cryptography>=42,<50' 'PyYAML==6.0.2'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          pattern: 'tether-*-0.5.0-preview'
+          path: .release-inputs
+      - name: Fetch the fixed original DSH plugin release metadata and archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .release-frozen-plugin
+          base='https://github.com/qi001007/tether-harness/releases/download/v0.2.93'
+          curl --fail --show-error --silent --location --proto '=https' --tlsv1.2 \
+            "$base/tether-update.json" -o .release-frozen-plugin/tether-update.json
+          curl --fail --show-error --silent --location --proto '=https' --tlsv1.2 \
+            "$base/tether-plugin-0.2.93.zip" -o .release-frozen-plugin/tether-plugin-0.2.93.zip
+          echo '08f33b371de45895316a3e132f40c11976ed30cdd2fceebc38bcab2608c1f9df  .release-frozen-plugin/tether-plugin-0.2.93.zip' | sha256sum --check
+      - name: Create signed preview manifest and source archives
+        env:
+          TETHER_RELEASE_PRIVATE_KEY: ${{ secrets.TETHER_RELEASE_PRIVATE_KEY }}
+          TETHER_REQUIRE_SIGNED_RELEASE: '1'
+        run: |
+          python scripts/build_release.py \
+            --channel preview \
+            --release-tag v0.5.0-preview.1 \
+            --frozen-plugin-manifest .release-frozen-plugin/tether-update.json \
+            --frozen-plugin-archive .release-frozen-plugin/tether-plugin-0.2.93.zip \
+            --node-deb .release-inputs/tether-node-runtime-linux-x64-0.5.0-preview/Tether-node-runtime-0.5.0-linux-x64.deb \
+            --output-dir .release-manifest
+      - name: Assemble unique draft release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
+          import json
+          import shutil
+          from pathlib import Path
+          import yaml
+
+          inputs = Path('.release-inputs')
+          expected = {
+              'tether-windows-x64-0.5.0-preview', 'tether-linux-x64-0.5.0-preview',
+              'tether-macos-x64-0.5.0-preview', 'tether-macos-arm64-0.5.0-preview',
+              'tether-node-runtime-linux-x64-0.5.0-preview',
+          }
+          artifacts = {path.name: path for path in inputs.iterdir() if path.is_dir()}
+          if not expected.issubset(artifacts):
+              raise SystemExit('missing candidate artifacts: ' + ', '.join(sorted(expected - artifacts.keys())))
+          output = Path('release-assets')
+          output.mkdir()
+
+          def digest(path):
+              value = hashlib.sha256()
+              with path.open('rb') as stream:
+                  for block in iter(lambda: stream.read(1024 * 1024), b''):
+                      value.update(block)
+              return value.hexdigest()
+
+          def add_file(source, expected_sha=None, expected_size=None, target_name=None):
+              target_name = target_name or source.name
+              if Path(target_name).name != target_name or '\\' in target_name or target_name in {'.', '..'}:
+                  raise SystemExit('unsafe release filename: ' + target_name)
+              if not source.is_file():
+                  raise SystemExit('listed release asset is missing: ' + str(source))
+              current = digest(source)
+              if expected_sha and current.lower() != expected_sha.lower():
+                  raise SystemExit('release asset digest mismatch: ' + source.name)
+              if expected_size is not None and source.stat().st_size != expected_size:
+                  raise SystemExit('release asset size mismatch: ' + source.name)
+              target = output / target_name
+              if target.exists():
+                  if digest(target) != current:
+                      raise SystemExit('release asset name collision: ' + source.name)
+                  return
+              shutil.copy2(source, target)
+
+          for artifact_name in sorted(expected - {'tether-node-runtime-linux-x64-0.5.0-preview'}):
+              artifact_dir = artifacts[artifact_name]
+              checksum_file = artifact_dir / 'SHA256SUMS.json'
+              if not checksum_file.is_file():
+                  raise SystemExit('candidate package has no SHA256SUMS.json: ' + artifact_name)
+              checksum = json.loads(checksum_file.read_text(encoding='utf-8'))
+              normalized_artifacts = []
+              for item in checksum.get('artifacts', []):
+                  name = item.get('name')
+                  if not isinstance(name, str) or Path(name).name != name:
+                      raise SystemExit('unsafe filename in candidate checksum manifest')
+                  target_name = name
+                  if name == 'preview-mac.yml':
+                      if artifact_name not in {'tether-macos-x64-0.5.0-preview', 'tether-macos-arm64-0.5.0-preview'}:
+                          raise SystemExit('unexpected preview-mac.yml outside a macOS artifact')
+                      architecture = 'x64' if artifact_name == 'tether-macos-x64-0.5.0-preview' else 'arm64'
+                      target_name = f'preview-mac-{architecture}.yml'
+                  add_file(artifact_dir / name, item.get('sha256'), item.get('size'), target_name)
+                  normalized_artifacts.append({**item, 'name': target_name})
+              checksum['artifacts'] = normalized_artifacts
+              (output / (artifact_name + '.SHA256SUMS.json')).write_text(
+                  json.dumps(checksum, indent=2) + '\n', encoding='utf-8')
+
+          mac_manifests = []
+          for architecture in ('x64', 'arm64'):
+              path = output / f'preview-mac-{architecture}.yml'
+              if not path.is_file():
+                  raise SystemExit('macOS candidate metadata missing: ' + path.name)
+              info = yaml.safe_load(path.read_text(encoding='utf-8'))
+              if not isinstance(info, dict) or info.get('version') != '0.5.0' or not isinstance(info.get('files'), list):
+                  raise SystemExit('invalid electron-updater metadata: ' + path.name)
+              expected_arch_token = f'mac-{architecture}'
+              matching_zips = [item for item in info['files'] if isinstance(item, dict)
+                               and isinstance(item.get('url'), str)
+                               and item['url'].lower().endswith('.zip')
+                               and expected_arch_token in item['url'].lower()]
+              if not matching_zips or any(not item.get('sha512') or not isinstance(item.get('size'), int)
+                                          for item in matching_zips):
+                  raise SystemExit('macOS metadata lacks the architecture-specific updater zip: ' + path.name)
+              mac_manifests.append(info)
+          if mac_manifests[0]['version'] != mac_manifests[1]['version']:
+              raise SystemExit('macOS update metadata versions differ')
+          merged = dict(mac_manifests[0])
+          merged.pop('path', None)
+          merged.pop('sha512', None)
+          merged.pop('sha2', None)
+          files_by_url = {}
+          for info in mac_manifests:
+              for item in info['files']:
+                  if not isinstance(item, dict) or not isinstance(item.get('url'), str):
+                      raise SystemExit('invalid file entry in macOS update metadata')
+                  previous = files_by_url.get(item['url'])
+                  if previous is not None and previous != item:
+                      raise SystemExit('conflicting macOS update metadata for ' + item['url'])
+                  files_by_url[item['url']] = item
+          merged['files'] = [files_by_url[url] for url in sorted(files_by_url)]
+          dates = [str(info['releaseDate']) for info in mac_manifests if info.get('releaseDate') is not None]
+          if dates:
+              merged['releaseDate'] = max(dates)
+          (output / 'preview-mac.yml').write_text(yaml.safe_dump(merged, sort_keys=False), encoding='utf-8')
+          (output / 'preview-mac-x64.yml').unlink()
+          (output / 'preview-mac-arm64.yml').unlink()
+
+          headless = artifacts['tether-node-runtime-linux-x64-0.5.0-preview']
+          headless_names = {
+              'Tether-node-runtime-0.5.0-linux-x64.tar.gz',
+              'Tether-node-runtime-0.5.0-linux-x64.tar.gz.sha256',
+              'Tether-node-runtime-0.5.0-linux-x64.deb',
+              'Tether-node-runtime-0.5.0-linux-x64.deb.sha256',
+              'Tether-node-runtime-0.5.0-linux-x64.deb.manifest-fragment.json',
+          }
+          for name in sorted(headless_names):
+              add_file(headless / name)
+
+          manifest_dir = Path('.release-manifest')
+          builder_names = {'tether-update.json', 'tether-app-0.5.0.zip', 'tether-node-0.5.0.zip',
+                           'Tether-node-runtime-0.5.0-linux-x64.deb'}
+          for name in sorted(builder_names):
+              add_file(manifest_dir / name)
+          required = {'Tether-0.5.0-win-x64.exe', 'Tether-node-runtime-0.5.0-linux-x64.tar.gz',
+                      'Tether-node-runtime-0.5.0-linux-x64.deb', 'tether-update.json', 'preview-mac.yml'}
+          missing = required - {path.name for path in output.iterdir() if path.is_file()}
+          if missing:
+              raise SystemExit('missing required release files: ' + ', '.join(sorted(missing)))
+          print('Prepared', len(list(output.iterdir())), 'whitelisted candidate release assets.')
+          PY
+      - name: Create or refresh the draft preview release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        with:
+          tag_name: v0.5.0-preview.1
+          target_commitish: ${{ github.sha }}
+          name: Tether 0.5.0 Preview 1
+          body: 'Preview candidate assembled from the four-platform CI artifacts. This draft is not a stable release.'
+          draft: true
+          prerelease: true
+          make_latest: false
+          overwrite_files: true
+          fail_on_unmatched_files: true
+          files: release-assets/*

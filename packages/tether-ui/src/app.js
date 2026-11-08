@@ -3447,6 +3447,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const [stateRefreshError, setStateRefreshError] = React.useState('')
       const [hubLoginBusy, setHubLoginBusy] = React.useState(false)
       const [identityBindRequired, setIdentityBindRequired] = React.useState(false)
+      const [identityBindMode, setIdentityBindMode] = React.useState('')
       const [identityBindBusy, setIdentityBindBusy] = React.useState(false)
       const [identityBindError, setIdentityBindError] = React.useState('')
       const [identityBindEmail, setIdentityBindEmail] = React.useState('')
@@ -4571,6 +4572,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           if (result && result.state === 'closed') { setHubLoginBusy(false); return }
           if (result && result.state === 'identity_unbound') {
             setIdentityBindRequired(true)
+            setIdentityBindMode('')
             setIdentityBindError('')
             setHubLoginBusy(false)
             return
@@ -4579,6 +4581,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           EXPLICIT_AUTHORITY = false
           try { window.localStorage.setItem('tether.hub.mode', 'oauth') } catch (_) { /* session remains main-owned */ }
           setIdentityBindRequired(false)
+          setIdentityBindMode('')
           setIdentityBindError('')
           setIdentityBindEmail('')
           setIdentityBindPassword('')
@@ -4609,6 +4612,20 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           setIdentityBindError(String(error && error.message || error || '旧账号绑定失败，请检查账号信息。'))
         } finally {
           setIdentityBindPassword('')
+          setIdentityBindBusy(false)
+        }
+      }
+
+      const registerNewIdentity = async () => {
+        if (identityBindBusy || !host || !host.workbench || typeof host.workbench.registerAccount !== 'function') return
+        setIdentityBindBusy(true)
+        setIdentityBindError('')
+        try {
+          const result = await host.workbench.registerAccount()
+          if (result && result.ok === false) throw new Error(result.error || '新账号创建失败。')
+        } catch (error) {
+          setIdentityBindError(String(error && error.message || error || '新账号创建失败。'))
+        } finally {
           setIdentityBindBusy(false)
         }
       }
@@ -6797,8 +6814,14 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
               background: 'rgba(16,24,40,.34)' } },
               h('form', { role: 'dialog', 'aria-modal': true, 'aria-labelledby': 'tether-identity-bind-title', onSubmit: bindLegacyIdentity,
                 style: { width: 'min(420px, 100%)', display: 'grid', gap: 14, padding: 22, borderRadius: 12, background: C.bg, boxShadow: C.shadow } },
-                h('div', { id: 'tether-identity-bind-title', style: { fontSize: 16, color: C.ink, fontWeight: 600 } }, '绑定现有 Tether 账号'),
-                h('div', { style: { color: C.sub, fontSize: 12, lineHeight: 1.6 } }, '此登录身份尚未关联 Tether 账号。输入现有账号信息完成一次性关联；密码只在本次提交期间使用，不会保存。'),
+                h('div', { id: 'tether-identity-bind-title', style: { fontSize: 16, color: C.ink, fontWeight: 600 } }, '完成 Tether 账号设置'),
+                h('div', { style: { color: C.sub, fontSize: 12, lineHeight: 1.6 } }, '当前登录身份尚未关联 Tether 账号。可以创建全新账号（不会继承其他账号的数据），或绑定你已有的 Tether 账号。'),
+                h('div', { style: { display: 'flex', gap: 8 } },
+                  h('button', { type: 'button', disabled: identityBindBusy, onClick: () => { setIdentityBindMode('register'); setIdentityBindError('') },
+                    style: { flex: 1, height: 34, border: '1px solid ' + C.line, borderRadius: 7, background: C.bg, color: C.ink, fontSize: 12, cursor: 'pointer' } }, '创建新 Tether 账号'),
+                  h('button', { type: 'button', disabled: identityBindBusy, onClick: () => { setIdentityBindMode('bind'); setIdentityBindError('') },
+                    style: { flex: 1, height: 34, border: '1px solid ' + C.line, borderRadius: 7, background: C.bg, color: C.ink, fontSize: 12, cursor: 'pointer' } }, '关联已有账号')),
+                identityBindMode === 'bind' ? h(React.Fragment, null,
                 h('label', { style: { display: 'grid', gap: 5, color: C.sub, fontSize: 12 } }, '旧账号邮箱',
                   h('input', { type: 'email', autoComplete: 'username', required: true, value: identityBindEmail,
                     onChange: (event) => setIdentityBindEmail(event.target.value), disabled: identityBindBusy,
@@ -6811,10 +6834,14 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
                   h('input', { type: 'text', inputMode: 'numeric', autoComplete: 'one-time-code', value: identityBindTotp,
                     onChange: (event) => setIdentityBindTotp(event.target.value), disabled: identityBindBusy,
                     style: { height: 34, boxSizing: 'border-box', border: '1px solid ' + C.line, borderRadius: 6, padding: '0 9px', color: C.ink, background: C.bg } })),
+                h('button', { type: 'button', disabled: identityBindBusy, onClick: () => setIdentityBindMode(''),
+                  style: { height: 30, border: '1px solid ' + C.line, borderRadius: 7, background: C.bg, color: C.sub, fontSize: 12, cursor: 'pointer' } }, '返回选择')) : null,
+                identityBindMode === 'register' ? h('div', { style: { color: C.sub, fontSize: 12, lineHeight: 1.5 } }, '使用当前已验证的登录身份创建新的 Tether 账号，不会尝试关联已有数据。') : null,
                 identityBindError ? h('div', { role: 'alert', style: { color: C.red, fontSize: 12 } }, identityBindError) : null,
-                h('button', { type: 'submit', disabled: identityBindBusy,
+                identityBindMode ? h('button', { type: identityBindMode === 'bind' ? 'submit' : 'button', disabled: identityBindBusy,
+                  onClick: identityBindMode === 'register' ? () => void registerNewIdentity() : undefined,
                   style: { height: 34, border: 0, borderRadius: 7, background: C.primary, color: C.onPrimary, fontSize: 12, cursor: identityBindBusy ? 'default' : 'pointer', opacity: identityBindBusy ? 0.6 : 1 } },
-                identityBindBusy ? '正在验证并绑定…' : '绑定并继续'))) : null,
+                identityBindBusy ? '正在处理…' : identityBindMode === 'bind' ? '绑定并继续' : '创建新账号并继续') : null)) : null,
             h(SurfaceDeck, { devices: (state && state.devices) || [], deviceId, localDeviceId: appLocalDevice, visible: view === 'chat' }),
             view === 'files' ? renderExplorer() : view === 'network' ? renderNetwork()
               : view === 'transfer' ? h(createTransferPage, {

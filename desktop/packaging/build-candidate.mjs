@@ -86,8 +86,10 @@ rmSync(tempConfig, { force: true })
 if (result.status !== 0) process.exit(result.status || 1)
 
 const artifacts = []
+const artifactSuffixes = ['.exe', '.dmg', '.zip', '.AppImage', '.deb', '.yml', '.blockmap']
 for (const entry of readdirSync(output, { withFileTypes: true })) {
   if (!entry.isFile()) continue
+  if (!artifactSuffixes.some(suffix => entry.name.endsWith(suffix))) continue
   const file = path.join(output, entry.name)
   const hash = createHash('sha256')
   for await (const chunk of createReadStream(file)) hash.update(chunk)
