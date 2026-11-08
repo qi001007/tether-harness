@@ -110,9 +110,17 @@ if (!candidateMode && fs.existsSync(hubConfigFile)) {
   } catch (_) { /* invalid local config is ignored */ }
 }
 const DEFAULT_CONTROLLER_URL = 'https://8-220-198-26.sslip.io'
+const DEFAULT_OIDC_ISSUER = 'https://auth.8-220-198-26.sslip.io'
 if (packaged) env.TETHER_CONTROLLER_URL = env.TETHER_CONTROLLER_URL || DEFAULT_CONTROLLER_URL
 if (!env.TETHER_UPDATE_MANIFEST_URL) env.TETHER_UPDATE_MANIFEST_URL = String(env.TETHER_CONTROLLER_URL).replace(/\/+$/, '') + '/releases/manifest'
 const controller = env.TETHER_CONTROLLER_URL || ('http://127.0.0.1:' + (env.TETHER_PORT || 18890))
+if (packaged && !env.TETHER_OIDC_ISSUER) {
+  try {
+    if (new URL(controller).origin === new URL(DEFAULT_CONTROLLER_URL).origin) {
+      env.TETHER_OIDC_ISSUER = DEFAULT_OIDC_ISSUER
+    }
+  } catch (_) { /* invalid controller URLs are rejected by the trusted controller checks */ }
+}
 const shotIndex = process.argv.indexOf('--shot')
 const shotPath = shotIndex >= 0 ? path.join(candidateMode ? dataDir : path.join(repoRoot, '.runtime'), 'tether-app-shot.png') : ''
 const panelArg = process.argv.find((value) => value.startsWith('--panel='))

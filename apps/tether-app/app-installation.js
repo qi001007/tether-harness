@@ -50,6 +50,81 @@ function pidAlive(pid) {
   try { process.kill(pid, 0); return true } catch (error) { return error && error.code === 'EPERM' }
 }
 
+function lstatIfPresent(target) {
+  try { return fs.lstatSync(target) } catch (error) {
+    if (error && error.code === 'ENOENT') return null
+    throw error
+  }
+}
+
+function processName(pid) {
+  const script = process.platform === 'win32'
+    ? `$p=Get-CimInstance Win32_Process -Filter "ProcessId = ${pid}"; if ($null -eq $p) { exit 2 }; [IO.Path]::GetFileNameWithoutExtension($p.Name)`
+    : null
+  const result = process.platform === 'win32'
+    ? spawnSync('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', script], {
+      encoding: 'utf8', windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000
+    })
+    : spawnSync('ps', ['-p', String(pid), '-o', 'comm='], {
+      encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000
+    })
+  if (result.status !== 0) return null
+  return path.basename(String(result.stdout || '').trim()).replace(/\.exe$/i, '').toLowerCase() || null
+}
+
+function assertCodegRuntimeStopped(dataDir) {
+  const runtimePath = path.join(dataDir, 'agents-runtime', 'runtime.json')
+  const info = lstatIfPresent(runtimePath)
+  if (!info) return
+  if (!info.isFile() || info.isSymbolicLink()) {
+    throw Object.assign(new Error('Legacy Codeg runtime state is not a plain file; refusing data migration.'), { code: 'app_migration_codeg_state_invalid' })
+  }
+  let state
+  try { state = JSON.parse(fs.readFileSync(runtimePath, 'utf8')) } catch (_) {
+    throw Object.assign(new Error('Legacy Codeg runtime state cannot be read; refusing data migration.'), { code: 'app_migration_codeg_state_invalid' })
+  }
+  const pid = Number(state.pid || 0)
+  if (!Number.isSafeInteger(pid) || pid <= 0 || !pidAlive(pid)) return
+  const name = processName(pid)
+  if (name === null) {
+    throw Object.assign(new Error('Cannot verify the legacy Codeg process; close it before migration.'), { code: 'app_migration_codeg_process_unverified' })
+  }
+  if (name === 'codeg-server') {
+    throw Object.assign(new Error('The legacy Codeg service is still running; close it before migration.'), { code: 'app_migration_waiting_for_codeg' })
+  }
+}
+
+function copyPersistentAgentsTree(source, target, isRoot = true) {
+  const info = fs.lstatSync(source)
+  if (info.isSymbolicLink()) {
+    throw Object.assign(new Error('Legacy Codeg data contains a symbolic link or reparse point; refusing data migration.'), { code: 'app_migration_codeg_source_invalid' })
+  }
+  if (info.isDirectory()) {
+    fs.mkdirSync(target, { mode: 0o700 })
+    for (const name of fs.readdirSync(source)) {
+      if (isRoot && (name === 'runtime.json' || name === 'server.log')) continue
+      copyPersistentAgentsTree(path.join(source, name), path.join(target, name), false)
+    }
+    return
+  }
+  if (!info.isFile()) {
+    throw Object.assign(new Error('Legacy Codeg data contains an unexpected file type; refusing data migration.'), { code: 'app_migration_codeg_source_invalid' })
+  }
+  fs.copyFileSync(source, target, fs.constants.COPYFILE_EXCL)
+}
+
+function securePrivateTree(directory) {
+  for (const name of fs.readdirSync(directory)) {
+    const target = path.join(directory, name)
+    const info = fs.lstatSync(target)
+    if (info.isSymbolicLink()) throw Object.assign(new Error('Copied Codeg data contains a symbolic link or reparse point.'), { code: 'app_migration_codeg_source_invalid' })
+    if (info.isDirectory()) {
+      fs.chmodSync(target, 0o700)
+      securePrivateTree(target)
+    } else if (info.isFile()) fs.chmodSync(target, 0o600)
+  }
+}
+
 function dataCredential(dataDir, origin, device) {
   let config
   try { config = JSON.parse(fs.readFileSync(path.join(dataDir, 'hub.json'), 'utf8')) } catch (_) { return null }
@@ -191,15 +266,25 @@ function migrateLegacyData({ dataDir, candidateMode, dataDirOverride }) {
     return null
   }
   assertLegacyProcessesStopped(match)
-  const whitelist = ['hub.json', 'device-token.json', 'policy.json', 'node-hub.db', 'node-hub.db-wal', 'node-local.db', 'node-local.db-wal']
+  assertCodegRuntimeStopped(match.dataDir)
+  const whitelist = ['hub.json', 'device-token.json', 'policy.json', 'node-hub.db', 'node-hub.db-wal', 'node-local.db', 'node-local.db-wal', 'apps.json']
+  const agentsSource = path.join(match.dataDir, 'agents-runtime')
+  let copyAgents = false
+  {
+    const info = lstatIfPresent(agentsSource)
+    if (info) {
+      if (!info.isDirectory() || info.isSymbolicLink()) throw Object.assign(new Error('Legacy Codeg data path is not a plain directory; refusing data migration.'), { code: 'app_migration_codeg_source_invalid' })
+      copyAgents = true
+    }
+  }
   const credential = dataCredential(match.dataDir, match.record.controller_origin, match.record.device_id)
   if (!credential || credential.fingerprint !== match.record.credential_fingerprint) {
     throw Object.assign(new Error('Legacy device identity did not match the registered APP; refusing migration.'), { code: 'app_migration_identity_mismatch' })
   }
   for (const filename of whitelist) {
     const source = path.join(match.dataDir, filename)
-    if (!fs.existsSync(source)) continue
-    const info = fs.lstatSync(source)
+    const info = lstatIfPresent(source)
+    if (!info) continue
     if (!info.isFile() || info.isSymbolicLink()) throw Object.assign(new Error('Legacy APP data contains an unexpected file type; refusing migration.'), { code: 'app_migration_source_invalid' })
   }
   const stamp = new Date().toISOString().replace(/[:.]/g, '-')
@@ -211,7 +296,7 @@ function migrateLegacyData({ dataDir, candidateMode, dataDirOverride }) {
   try {
     for (const filename of whitelist) {
       const source = path.join(match.dataDir, filename)
-      if (!fs.existsSync(source)) continue
+      if (!lstatIfPresent(source)) continue
       if (filename === 'hub.json') {
         const normalized = { ...credential.config, url: match.record.controller_origin, device: match.record.device_id }
         fs.writeFileSync(path.join(backup, filename), JSON.stringify(normalized, null, 2) + '\n', { flag: 'wx', mode: 0o600 })
@@ -220,13 +305,19 @@ function migrateLegacyData({ dataDir, candidateMode, dataDirOverride }) {
       }
       fs.copyFileSync(path.join(backup, filename), path.join(stage, filename), fs.constants.COPYFILE_EXCL)
     }
+    if (copyAgents) {
+      copyPersistentAgentsTree(agentsSource, path.join(backup, 'agents-runtime'))
+      copyPersistentAgentsTree(agentsSource, path.join(stage, 'agents-runtime'))
+    }
     if (process.platform !== 'win32') {
       for (const directoryPath of [backup, stage]) fs.chmodSync(directoryPath, 0o700)
-      for (const filename of whitelist) {
-        for (const directoryPath of [backup, stage]) {
+      for (const directoryPath of [backup, stage]) {
+        for (const filename of whitelist) {
           const target = path.join(directoryPath, filename)
           if (fs.existsSync(target)) fs.chmodSync(target, 0o600)
         }
+        const agentsTarget = path.join(directoryPath, 'agents-runtime')
+        if (fs.existsSync(agentsTarget)) securePrivateTree(agentsTarget)
       }
     }
     const copied = dataCredential(stage, match.record.controller_origin, match.record.device_id)

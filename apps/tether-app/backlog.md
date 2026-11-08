@@ -1,4 +1,6 @@
 # tether-app backlog
+- 2026-11-09：正式安装包使用默认运营 Controller 时提供匹配的 OIDC issuer，避免未配置环境变量的新安装无法跳转登录；显式 QA issuer 和自建 Controller 保持原配置。仅完成配置分支验证，尚未启动候选 APP 验证登录窗口。
+- 2026-11-09：旧版首次迁移在原身份校验和stage切换中新增Codeg持久数据接续：复制apps.json及agents-runtime数据库/配置/附件/WAL，拒绝符号链接或reparse tree；runtime.json、server.log不迁移，且旧Codeg进程存活/身份无法确认时拒绝复制。仅计划用隔离fixture核验，未读取正式数据或启动APP。
 - 2026-11-08：工作台服务与远程桌面连接改为使用本机 Node 按可信 network_id 查询的 loopback SOCKS5 route；Electron隔离session走该route，TLS CA/主机名/leaf校验也经成熟 `socks@2.8.10` 代理连接，关闭/清理时复位session代理。未启动APP或重跑远控场景。
 - 2026-11-08：添加 `tether:files-request` 受信主进程/preload桥接到native-workbench files service。IPC只接adapter受限target/op参数；主进程使用iconv-lite支持UTF-8、BOM UTF-8、UTF-16 LE/BE、GB18030文本编码和换行保留，并拒绝GB18030往返有损文本。增加固定iconv-lite运行依赖。仅做语法检查，未执行Node files集成。
 - 2026-11-08：主进程接入 `native-workbench.js` adapter；创建持久 Hub-login Electron partition，通过受信 IPC 提供登录、目录查询、打开、关闭和可见性保活。主进程只接收/处理 bootstrap 与 TLS descriptor，renderer仅从 adapter拿公开 endpoint/状态，不提供 actor/CA/bootstrap；登录完成以Controller `/api/auth/me` 确认，不向renderer传ID token。

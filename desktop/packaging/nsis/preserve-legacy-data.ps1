@@ -32,6 +32,36 @@ function Assert-ProcessStopped([int]$ProcessId, [double]$ExpectedStartSeconds, [
   throw 'previous_process_still_running'
 }
 
+function Assert-CodegStopped([string]$DataDirectory) {
+  $runtimePath = Join-Path $DataDirectory 'agents-runtime\runtime.json'
+  if (-not (Test-Path -LiteralPath $runtimePath -PathType Leaf)) { return }
+  Assert-PlainPath $runtimePath $false
+  try { $state = Get-Content -LiteralPath $runtimePath -Raw | ConvertFrom-Json } catch { throw 'codeg_runtime_state_invalid' }
+  $processId = 0
+  if ($null -ne $state.pid) {
+    try { $processId = [int]$state.pid } catch { throw 'codeg_runtime_pid_invalid' }
+  }
+  if ($processId -le 0) { return }
+  try { $process = Get-Process -Id $processId -ErrorAction Stop } catch [Microsoft.PowerShell.Commands.ProcessCommandException] { return } catch { throw 'codeg_process_identity_unverifiable' }
+  if ($process.ProcessName -ieq 'codeg-server') { throw 'legacy_codeg_process_still_running' }
+}
+
+function Copy-PersistentAgentsTree([string]$Source, [string]$Target, [bool]$Root = $true) {
+  Assert-PlainPath $Source $true
+  New-Item -ItemType Directory -Path $Target -Force | Out-Null
+  foreach ($entry in Get-ChildItem -LiteralPath $Source -Force) {
+    if (($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'reparse_source_rejected' }
+    if ($Root -and $entry.Name -in @('runtime.json', 'server.log')) { continue }
+    $destination = Join-Path $Target $entry.Name
+    if ($entry.PSIsContainer) {
+      Copy-PersistentAgentsTree $entry.FullName $destination $false
+    } else {
+      Assert-PlainPath $entry.FullName $false
+      [IO.File]::Copy($entry.FullName, $destination, $false)
+    }
+  }
+}
+
 function Protect-PrivateTree([string]$Path, [string]$UserSid) {
   $item = Get-Item -LiteralPath $Path -Force
   if ($item.PSIsContainer) {
@@ -53,7 +83,7 @@ function Write-JsonWithoutBom([string]$Path, [object]$Value) {
 if (-not (Test-Path -LiteralPath $registrationDir -PathType Container)) { exit 0 }
 $install = Get-CanonicalLocalPath $InstallRoot
 $userSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
-$files = @('hub.json', 'device-token.json', 'policy.json', 'node-hub.db', 'node-hub.db-wal', 'node-local.db', 'node-local.db-wal')
+$files = @('hub.json', 'device-token.json', 'policy.json', 'node-hub.db', 'node-hub.db-wal', 'node-local.db', 'node-local.db-wal', 'apps.json')
 
 foreach ($registrationFile in Get-ChildItem -LiteralPath $registrationDir -Filter '*.json' -File) {
   Assert-PlainPath $registrationFile.FullName $false
@@ -80,6 +110,7 @@ foreach ($registrationFile in Get-ChildItem -LiteralPath $registrationDir -Filte
     $nodeState = Get-Content -LiteralPath $nodeStatePath -Raw | ConvertFrom-Json
     Assert-ProcessStopped ([int]$nodeState.pid) 0 $false
   }
+  Assert-CodegStopped $source
 
   $markerPath = Join-Path $registrationDir ($id + '.migration-source')
   $snapshot = Join-Path $snapshotParent $id
@@ -101,6 +132,10 @@ foreach ($registrationFile in Get-ChildItem -LiteralPath $registrationDir -Filte
         [IO.File]::Copy($sourceFile, (Join-Path $snapshotData $name), $false)
       }
     }
+    $agentsSource = Join-Path $source 'agents-runtime'
+    if (Test-Path -LiteralPath $agentsSource -PathType Container) {
+      Copy-PersistentAgentsTree $agentsSource (Join-Path $snapshotData 'agents-runtime')
+    } elseif (Test-Path -LiteralPath $agentsSource) { throw 'codeg_source_not_directory' }
     if (Test-Path -LiteralPath $nodeStatePath -PathType Leaf) {
       $privateDir = Join-Path $snapshotData 'private'
       New-Item -ItemType Directory -Path $privateDir -Force | Out-Null

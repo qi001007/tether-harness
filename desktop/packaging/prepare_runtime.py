@@ -311,6 +311,8 @@ def assemble_libreoffice(manifest: dict, target: str, destination: Path) -> None
                                              if match and match.group(1) not in package_names]
                     if external_alternatives:
                         external_dependencies.add(" | ".join(external_alternatives))
+            # Ubuntu's NSS/NSPR packages provide the SONAMEs required by soffice.bin.
+            external_dependencies.update({"libnspr4", "libnss3"})
             (destination / "linux-dependencies.json").write_text(json.dumps({
                 "source_archive": asset["name"],
                 "source_sha256": asset["sha256"],
