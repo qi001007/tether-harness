@@ -531,7 +531,8 @@ jobs:
           path: .release-herdr
       - name: Stage and revalidate Herdr files for the signed Node ZIP
         if: ${{ !contains(github.event.head_commit.message, '[preview-publish-only]') }}
-        run: python - <<'PY'
+        run: |
+          python - <<'PY'
           import importlib.util
           import shutil
           from pathlib import Path
