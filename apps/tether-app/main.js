@@ -644,7 +644,8 @@ async function currentWorkbenchActorId() {
   if (!workbenchLoginSession) throw new Error('Controller session is unavailable')
   const origin = trustedControllerOrigin()
   const response = await workbenchLoginSession.fetch(new URL('/api/auth/me', origin).toString(), { redirect: 'error' })
-  if (!response.ok) throw new Error(response.status === 401 ? 'Controller login required' : 'Controller identity unavailable')
+  const proxyLoginRequired = response.status === 403 && /text\/html\b/i.test(response.headers.get('content-type') || '')
+  if (!response.ok) throw new Error(response.status === 401 || proxyLoginRequired ? 'Controller login required' : 'Controller identity unavailable')
   const user = await response.json()
   if (!user || typeof user.user_id !== 'string' || !user.user_id) throw new Error('Controller returned no authenticated actor')
   return user.user_id

@@ -5,6 +5,7 @@ const http = require('node:http')
 const https = require('node:https')
 const os = require('node:os')
 const path = require('node:path')
+const { waitForLocalNodeApi } = require('./startup-readiness.js')
 
 function killTree(pid) {
   if (!pid) return
@@ -190,9 +191,14 @@ class Supervisor {
   }
 
   saveManagedNodeState(pid) {
+    const identity = this.processIdentity(pid)
+    if (!identity) {
+      throw Object.assign(new Error('无法确认受管 Node 进程身份，未保存接管记录。'), { code: 'managed_node_identity_unavailable' })
+    }
     const state = { pid, token: this.localApiToken, device: this.device,
       dataDir: path.resolve(this.dataDir), controllerUrl: this.remoteUrl,
-      port: this.consolePort, startedAt: new Date().toISOString() }
+      port: this.consolePort, processCreatedAt: identity.created, processPath: identity.path,
+      startedAt: new Date().toISOString() }
     fs.mkdirSync(this.managedNodeStateDir, { recursive: true, mode: 0o700 })
     this.secureManagedNodeStatePath(this.managedNodeStateDir, true)
     const temporary = this.managedNodeStatePath + '.tmp'

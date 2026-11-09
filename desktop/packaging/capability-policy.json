@@ -1,5 +1,5 @@
 {
-  "candidate_version": "0.5.0",
+  "candidate_version": "0.5.1",
   "channel": "preview",
   "platforms": ["windows-x64", "linux-x64", "macos-x64", "macos-arm64"],
   "bundled": [
@@ -8,7 +8,7 @@
     { "id": "sftpgo-core", "version": "v2.7.6", "scope": "binary and required config only; excludes proprietary web frontend and preseeded database" },
     { "id": "caddy", "version": "v2.11.9", "platform_assets": "component-assets.json" },
     { "id": "rclone", "version": "v1.76.0", "platform_assets": "component-assets.json" },
-    { "id": "tether-node", "version": "0.5.0", "scope": "headless runtime built from this checkout; Node service lifecycle must use the packaged Supervisor entry" }
+    { "id": "tether-node", "version": "0.5.1", "scope": "headless runtime built from this checkout; Node service lifecycle must use the packaged Supervisor entry" }
   ],
   "separate_or_disabled": [
     { "id": "dsh", "state": "separate-host", "policy": "Keep the original frozen DSH plugin v0.2.93 distribution channel; do not package the same-version development-generated plugin bundle or a DSH host." },

@@ -18,20 +18,22 @@ if (platform === 'macos' && process.platform !== 'darwin') throw new Error('macO
 if (platform === 'windows' && process.platform !== 'win32') throw new Error('Windows candidates must be built on a Windows runner.')
 if (platform === 'linux' && process.platform !== 'linux') throw new Error('Linux candidates must be built on a Linux runner.')
 
-const expectedVersion = '0.5.0'
 const appPackage = JSON.parse(readFileSync(path.join(repoRoot, 'apps/tether-app/package.json'), 'utf8'))
 const version = JSON.parse(readFileSync(path.join(repoRoot, 'version.json'), 'utf8'))
-if (appPackage.version !== expectedVersion || version.components?.app !== expectedVersion || version.components?.node !== expectedVersion) {
+const expectedVersion = version.components?.app
+if (!/^\d+\.\d+\.\d+$/.test(expectedVersion)
+    || appPackage.version !== expectedVersion || version.components?.node !== expectedVersion) {
   throw new Error(`Candidate versions must be synchronized to ${expectedVersion}; packaging found app=${appPackage.version}, version.json=${version.components?.app}/${version.components?.node}.`)
 }
 if (version.components.plugin !== '0.2.93') throw new Error('Candidate must retain the frozen DSH plugin version 0.2.93.')
 
+const candidateScratchRoot = path.resolve(repoRoot, '.scratch/tether-desktop-candidates', expectedVersion)
 const defaultRuntimeRoot = path.join(repoRoot, '.runtime/desktop-candidate')
 const runtimeRoot = path.resolve(process.env.TETHER_CANDIDATE_RUNTIME_ROOT || defaultRuntimeRoot)
 if (process.env.TETHER_CANDIDATE_RUNTIME_ROOT) {
-  const allowedRuntimeRoot = path.resolve(repoRoot, '.scratch/tether-desktop-candidates/0.5.0')
+  const allowedRuntimeRoot = candidateScratchRoot
   if (runtimeRoot !== allowedRuntimeRoot && !runtimeRoot.startsWith(allowedRuntimeRoot + path.sep)) {
-    throw new Error('TETHER_CANDIDATE_RUNTIME_ROOT must point into the isolated 0.5.0 candidate scratch directory.')
+    throw new Error(`TETHER_CANDIDATE_RUNTIME_ROOT must point into the isolated ${expectedVersion} candidate scratch directory.`)
   }
 }
 const runtimeExe = path.join(runtimeRoot, process.platform === 'win32' ? 'tether-python.exe' : 'tether-python')
@@ -59,11 +61,11 @@ for (const component of ['codeg', 'easytier', 'sftpgo', 'caddy', 'rclone', 'mesh
   if (!existsSync(path.join(componentDir, component))) throw new Error(`Missing assembled runtime component: ${component}`)
 }
 
-const defaultOutputParent = path.join(repoRoot, '.scratch/tether-desktop-candidates/0.5.0')
+const defaultOutputParent = candidateScratchRoot
 const outputParent = path.resolve(process.env.TETHER_CANDIDATE_OUTPUT_ROOT || defaultOutputParent)
 if (process.env.TETHER_CANDIDATE_OUTPUT_ROOT
-    && !outputParent.replaceAll('\\', '/').includes('/.scratch/tether-desktop-candidates/0.5.0')) {
-  throw new Error('TETHER_CANDIDATE_OUTPUT_ROOT must point into the isolated 0.5.0 candidate scratch directory.')
+    && outputParent !== candidateScratchRoot && !outputParent.startsWith(candidateScratchRoot + path.sep)) {
+  throw new Error(`TETHER_CANDIDATE_OUTPUT_ROOT must point into the isolated ${expectedVersion} candidate scratch directory.`)
 }
 const output = path.join(outputParent, platformTarget[platform])
 if (path.dirname(output) !== outputParent) throw new Error('Refusing to write outside the platform-specific candidate output directory.')
@@ -71,13 +73,25 @@ if (existsSync(output)) throw new Error(`Candidate output already exists; refusi
 mkdirSync(outputParent, { recursive: true })
 const builderCli = path.join(packagingDir, 'node_modules/electron-builder/cli.js')
 if (!existsSync(builderCli)) throw new Error('Packaging tools are not installed; run npm ci in desktop/packaging first.')
+const npmCli = process.env.npm_execpath
+if (!npmCli) throw new Error('Candidate packaging must run through npm so the shared APP web UI can be built first.')
+const uiBuild = spawnSync(process.execPath, [npmCli, 'run', 'build:web', '--prefix', path.join(repoRoot, 'packages/tether-ui')], {
+  cwd: repoRoot, stdio: 'inherit', env: process.env
+})
+if (uiBuild.status !== 0) process.exit(uiBuild.status || 1)
+const appUiBundlePath = path.join(repoRoot, 'packages/tether-ui/web/dist/app.js')
+if (!existsSync(appUiBundlePath)) throw new Error('Missing built APP web UI; run npm run build:web --prefix packages/tether-ui first.')
+const appUiBundle = readFileSync(appUiBundlePath, 'utf8')
+if (!appUiBundle.includes('workbenchLogin') || !appUiBundle.includes('oidc_identity_unbound') || !appUiBundle.includes('authReady')) {
+  throw new Error('Built APP web UI is stale and lacks the OIDC login state gate; run npm run build:web --prefix packages/tether-ui first.')
+}
 const electronPackagePath = path.join(repoRoot, 'apps/tether-app/node_modules/electron/package.json')
 if (!existsSync(electronPackagePath)) throw new Error('Electron is not installed in apps/tether-app; run npm ci --prefix apps/tether-app first.')
 const electronVersion = JSON.parse(readFileSync(electronPackagePath, 'utf8')).version
 if (!/^\d+\.\d+\.\d+$/.test(electronVersion)) throw new Error(`Installed Electron version is not pinned: ${electronVersion}`)
 const baseConfigPath = path.join(packagingDir, 'electron-builder.yml')
 const baseConfig = readFileSync(baseConfigPath, 'utf8')
-const outputSetting = 'output: .scratch/tether-desktop-candidates/0.5.0'
+const outputSetting = `output: .scratch/tether-desktop-candidates/${expectedVersion}`
 if (!baseConfig.includes(outputSetting)) throw new Error('electron-builder output setting changed unexpectedly.')
 const tempConfig = path.join(os.tmpdir(), `tether-builder-${platformTarget[platform]}.yml`)
 const builderOutput = outputParent.replaceAll('\\', '/') + `/${platformTarget[platform]}`

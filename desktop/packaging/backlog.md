@@ -1,4 +1,8 @@
 # 桌面候选打包记录
+- 2026-11-09：0.5.1候选版本从`version.json`读取并校验APP/Node对齐；桌面包与Linux headless Node路径、版本metadata和Debian安装路径随版本生成，保留版本目录内输出限制。
+- 2026-11-09：候选装配脚本通过当前 npm CLI 运行既有 `build:web`，再校验 UI bundle；候选 workflow 仅安装 UI 依赖，避免重复构建。
+- 2026-11-09：QA复现OAuth2 Proxy在无Cookie的`/api/auth/me`返回403 text/html Sign In；主进程仅将该固定Controller认证端点响应映射为`Controller login required`，与401一致，JSON 403及5xx/网络错误保留。该main变更需随安装器app.asar及UI一同打包。
+- 2026-11-09：候选装配脚本在electron-builder前检查共享APP web bundle包含`workbenchLogin`、`oidc_identity_unbound`与`authReady`，拒绝把legacy-only登录表单或落后首开状态的bundle打进新候选；CI仍先执行build:web，防止后续源码推进而产物遗漏。
 - 2026-11-09：NSIS同目录首装快照与主进程直接迁移对齐，快照apps.json和agents-runtime持久目录/WAL，跳过runtime.json和server.log；递归拒绝reparse point，并在快照前确认旧Codeg进程已停止，保持私有ACL与snapshot marker流程。
 
 - 2026-11-09：Linux LibreOffice headless runtime 的 Debian Depends 明确包含 `libnspr4`、`libnss3`；Ubuntu 24.04最小镜像实测缺少 soffice.bin 所需 NSS/NSPR SONAME，随包 runtime 先前依赖数组为空。
@@ -7,7 +11,7 @@
 
 - 2026-11-09：electron-builder `afterPack` 增加最终 appOutDir runtime 检查；按打包器资源目录 API 检查 Python、Node、MeshCentral、对应平台 MeshAgent、LibreOffice，以及 Caddy/Rclone/EasyTier 四个唯一可执行文件，避免不完整输出通过候选生成步骤。
 
-- 2026-11-08：新增 0.5.0 preview 候选装配入口，固定 electron-builder、Windows NSIS/Linux AppImage 与 deb/macOS dmg+zip 目标；准备组件下载及 SHA-256 校验脚本、PyInstaller 无桌面 Python 命令入口、Electron 资源布局与仅上传 Actions artifact 的工作流。每个平台输出目录独立；工作流从本次源码重建APP web UI。打包清单附固定源码来源与SFTPGo源归档，并明确Office预览、RustDesk远控与DSH/Herdr分发边界。Control负责main/Supervisor/APP updater资源接线。
+- 2026-11-08：新增 0.5.0 preview 候选装配入口，固定 electron-builder、Windows NSIS/Linux AppImage 与 deb/macOS dmg+zip 目标；准备组件下载及 SHA-256 校验脚本、PyInstaller 无桌面 Python 命令入口、Electron 资源布局与仅上传 Actions artifact 的工作流。每个平台输出目录独立；候选装配脚本在每个平台打包前调用共享APP web UI的build:web。打包清单附固定源码来源与SFTPGo源归档，并明确Office预览、RustDesk远控与DSH/Herdr分发边界。Control负责main/Supervisor/APP updater资源接线。
 
 - 2026-11-08：收紧Electron打包app文件为显式入口JS allowlist，明确排除data/.env/log/sqlite/db；远控候选新增Node.js 24.22.2、MeshCentral 1.3.1及固定MeshAgent资源清单与npm锁、源归档和许可材料；Runtime路径固定到components/nodejs、components/meshcentral、components/meshagent；macOS CLI同时生成dmg和updater zip；工作流Node版本固定24.22.2并收集Python SDK/MCP动态包资源。产出首个Windows x64 NSIS preview 安装候选；源码后续仍有更新，需在下一批次重建。
 
@@ -34,3 +38,5 @@
 
 - 2026-11-09: Windows SFTPGo portable ZIP includes x64, x86 and ARM64 sftpgo.exe files. Selection now verifies PE machine architecture for the requested Windows target; JSON config parsing accepts UTF-8 BOM. Linux ELF and macOS Mach-O core filtering remain intact.
 - 2026-11-09：候选 SHA256SUMS 生成时排除 electron-builder 的 `builder-debug.yml` 与 `builder-effective-config.yaml` 诊断输出，避免多平台同名文件进入发布清单。
+# Change log
+- 2026-11-09: Candidate packaging now invokes the existing `packages/tether-ui` `build:web` script through the active npm CLI before validating and packaging the shared APP UI bundle.

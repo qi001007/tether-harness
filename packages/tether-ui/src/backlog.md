@@ -1,4 +1,7 @@
 # 变更记录
+- 2026-11-09：Hub鉴权失效时将`SurfaceDeck.authReady`置为false，即使旧state仍缓存也不允许NativeSurface预载catalog或重试请求；保留缓存state以便登录后继续。
+- 2026-11-09：Hub 登录尚未完成或用户取消登录时，说明文字优先显示登录状态及后续动作，避免标题已恢复但仍提示“正在获取设备数据”。
+- 2026-11-09：APP未登录时仅将主进程明确映射的`Controller login required`作为认证状态，展示“登录后连接设备和工作区”；`SurfaceDeck`把外层`authReady`传给`NativeSurface`，未认证或无当前设备记录时不请求缓存deviceId的workbench目录/远端surface，不显示误导性的离线重连状态。泛化identity/service errors继续可见。
 
 ## 2026-11-08
 

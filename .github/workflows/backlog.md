@@ -1,4 +1,7 @@
+- 2026-11-09：publish-preview-draft 是独立 job；在构造签名 APP/Node ZIP 前固定 Node 24.22.2 安装 UI 依赖并运行 build:web，检查登录门控标记，确保发布 ZIP 收录该源码生成的 UI。
 # 变更记录
+- 2026-11-09：0.5.1候选产物名、路径、metadata和preview tag从`version.json` app/node版本派生；默认完整四平台build。保留旧0.5.0来源恢复校验，但汇总仅接收当前版本命名且manifest版本匹配的产物。
+- 2026-11-09：候选workflow仅安装共享UI依赖，由`build-candidate.mjs`单次调用既有`build:web`；保留平台复用、来源provenance与draft发布校验。
 - 2026-11-09：Windows recovery 提交使用独立 concurrency group，与仍在打包的POSIX来源run并行；普通提交保留原 preview group，发布端仍等待固定来源完成校验。
 - 2026-11-09：新增 `[windows-recovery]` 窄恢复路径，仅构建Windows；发布前通过固定GitHub API校验run `42520196405`/head `97aa80f20f32c25ed9ad3ad99078d28d8e07924c`、Linux/macOS POSIX jobs及所需artifact归属，再复用该run的Linux/macOS/Node包。草稿附每平台来源run/SHA provenance；普通push仍全矩阵。
 - 2026-11-09：preview 候选工作流按 GitHub ref 设置互斥组并启用 cancel-in-progress，避免同一分支多轮并发构建争写同一 draft release。

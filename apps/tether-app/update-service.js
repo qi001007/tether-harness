@@ -61,6 +61,7 @@ class UpdateService {
       if (updateChannel) {
         autoUpdater.allowPrerelease = updateChannel === 'preview'
         autoUpdater.channel = autoUpdater.allowPrerelease ? 'preview' : 'latest'
+        autoUpdater.allowDowngrade = false
       } else {
         let packagedChannel = ''
         try {

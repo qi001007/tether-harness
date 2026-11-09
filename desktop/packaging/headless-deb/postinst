@@ -7,7 +7,7 @@ CONFIG_FILE=$CONFIG_DIR/node.env
 PACKAGE_DIR=$DATA_DIR/packages
 EASYTIER_USER=tether-easytier
 EASYTIER_DATA_DIR=/var/lib/tether-easytier
-VERSION=0.5.0
+VERSION=@TETHER_NODE_VERSION@
 DEB_NAME="tether-node_${VERSION}_amd64.deb"
 
 if ! getent group "$EASYTIER_USER" >/dev/null 2>&1; then

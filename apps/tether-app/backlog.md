@@ -1,4 +1,6 @@
 # tether-app backlog
+- 2026-11-09：APP与Node patch版统一升至0.5.1，app package/lock及`version.json` app/node版本同步；本版包含已在隔离安装版验证的managed Node重启接管修复。
+- 2026-11-09：Electron OIDC session访问可信`/api/auth/me`时，未登录OAuth2 Proxy返回的`403 text/html`与API鉴权失败区分；仅该HTML代理拒绝与401标记`Controller login required`，JSON 403/5xx/连接错误仍显示为服务故障。
 - 2026-11-09：正式安装包使用默认运营 Controller 时提供匹配的 OIDC issuer，避免未配置环境变量的新安装无法跳转登录；显式 QA issuer 和自建 Controller 保持原配置。仅完成配置分支验证，尚未启动候选 APP 验证登录窗口。
 - 2026-11-09：旧版首次迁移在原身份校验和stage切换中新增Codeg持久数据接续：复制apps.json及agents-runtime数据库/配置/附件/WAL，拒绝符号链接或reparse tree；runtime.json、server.log不迁移，且旧Codeg进程存活/身份无法确认时拒绝复制。仅计划用隔离fixture核验，未读取正式数据或启动APP。
 - 2026-11-08：工作台服务与远程桌面连接改为使用本机 Node 按可信 network_id 查询的 loopback SOCKS5 route；Electron隔离session走该route，TLS CA/主机名/leaf校验也经成熟 `socks@2.8.10` 代理连接，关闭/清理时复位session代理。未启动APP或重跑远控场景。
@@ -114,3 +116,7 @@
 - 2026-11-09：APP 安装提交在 ACK 后遇到停止 Node/quitAndInstall 错误时写入既有 update-result.json；Electron status 回传匹配目标版本的错误，下一次 prepare/apply 清除旧错误。源码/legacy ZIP apply 恢复32位准备标识及进程内准备集合校验。
 - 2026-11-09: cold-start verification did not run: QA-SOURCE DSH-Web is stopped but the source-owned DSH desktop reports running under its isolated `source/node/dsh-home`; the DSH session-list API returns `node_update_required`, so active work cannot be ruled out. No QA DSH process was started/stopped.
 - 2026-11-09: startup open stores each successful descriptor before the actor-generation guard so a login change can still revoke the returned grant; final syntax/module-load check passed.
+
+- 2026-11-09: After selecting an explicit electron-updater channel, restore `allowDowngrade = false`; the updater channel setter otherwise enables downgrade handling. Keep preview updates forward-only and retain the separate known-good installer as the manual rollback path.
+
+- 2026-11-09: Fixed managed Node identity startup in the packaged APP. `supervisor.js` now imports the existing `waitForLocalNodeApi` helper used by `attachManagedNode`; the missing import had thrown a caught `ReferenceError`, leaving `node=error` and preventing cleanup/spawn of an owned stale-PID record. `saveManagedNodeState` now stores actual `processCreatedAt` and `processPath` from `processIdentity(pid)` and fails explicitly if it cannot verify the process. Installed the patch into the isolated D: app.asar; refreshed only the UI bundle. Targeted syntax check passed. Real installed startup created managed Node PID 47876 with the preserved `APP-QA-c7108d661aff` identity; after the exact installed Tether.exe process tree was exited and relaunched as a different app PID, the same Node PID and creation time were reattached without another registration. See D:\tether-candidate-delivery\0.5.0\installations\candidate-install-20261109\POSTINSTALL-FIX-RESULT.json. The previous NSIS artifact remains pre-patch.

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
 import subprocess
 import tarfile
@@ -9,10 +10,13 @@ import tempfile
 from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parents[2]
-OUTPUT_DIR = ROOT / ".scratch" / "tether-desktop-candidates" / "0.5.0" / "headless" / "linux-x64"
-ARCHIVE = OUTPUT_DIR / "Tether-node-runtime-0.5.0-linux-x64.tar.gz"
-DEB_NAME = "Tether-node-runtime-0.5.0-linux-x64.deb"
-PACKAGE_ROOT = "tether-node-runtime-0.5.0"
+VERSION = json.loads((ROOT / "version.json").read_text(encoding="utf-8"))["components"]["node"]
+if not isinstance(VERSION, str) or not re.fullmatch(r"\d+\.\d+\.\d+", VERSION):
+    raise ValueError("version.json must contain a numeric Tether Node version")
+OUTPUT_DIR = ROOT / ".scratch" / "tether-desktop-candidates" / VERSION / "headless" / "linux-x64"
+ARCHIVE = OUTPUT_DIR / f"Tether-node-runtime-{VERSION}-linux-x64.tar.gz"
+DEB_NAME = f"Tether-node-runtime-{VERSION}-linux-x64.deb"
+PACKAGE_ROOT = f"tether-node-runtime-{VERSION}"
 NFPM_SHA256 = "6d7f9a28b2f397934403950fcbba83f598b08d02edbe79a0815b3b4897341750"
 
 
@@ -82,7 +86,7 @@ def _extract_runtime(temporary: Path) -> Path:
         except (OSError, ValueError) as error:
             raise ValueError(f"runtime archive link is dangling or escapes package root: {name}") from error
     manifest = json.loads((package / "runtime-manifest.json").read_text(encoding="utf-8"))
-    if (manifest.get("schema") != 1 or manifest.get("version") != "0.5.0"
+    if (manifest.get("schema") != 1 or manifest.get("version") != VERSION
             or manifest.get("platform") != "linux-x64"):
         raise ValueError("headless runtime manifest does not match the Debian package")
     for path in (
@@ -115,6 +119,11 @@ def _nfpm_config(build: Path, payload: Path) -> Path:
     for action, filename in script_files.items():
         script_source = packaging / filename
         script_bytes = script_source.read_bytes().replace(b"\r\n", b"\n")
+        if filename == "postinst":
+            placeholder = b"@TETHER_NODE_VERSION@"
+            if script_bytes.count(placeholder) != 1:
+                raise ValueError("Debian postinst must contain exactly one Node version placeholder")
+            script_bytes = script_bytes.replace(placeholder, VERSION.encode("ascii"))
         if b"\r" in script_bytes:
             raise ValueError(f"Debian maintainer script contains a bare carriage return: {filename}")
         script_target = build / filename
@@ -124,14 +133,14 @@ def _nfpm_config(build: Path, payload: Path) -> Path:
         "name": "tether-node",
         "arch": "amd64",
         "platform": "linux",
-        "version": "0.5.0",
+        "version": VERSION,
         "maintainer": "Tether maintainers",
         "description": "Tether headless Node runtime",
         "license": "MIT",
         "depends": depends,
         "contents": [
-            {"src": str(payload) + "/", "dst": "/opt/tether-node/releases/0.5.0", "type": "tree"},
-            {"src": "/opt/tether-node/releases/0.5.0", "dst": "/opt/tether-node/current", "type": "symlink"},
+            {"src": str(payload) + "/", "dst": f"/opt/tether-node/releases/{VERSION}", "type": "tree"},
+            {"src": f"/opt/tether-node/releases/{VERSION}", "dst": "/opt/tether-node/current", "type": "symlink"},
             {"src": str(packaging / "tether-node.service"), "dst": "/usr/lib/systemd/system/tether-node.service", "file_info": {"mode": 0o644}},
             {"src": str(packaging / "README.Debian"), "dst": "/usr/share/doc/tether-node/README.Debian", "file_info": {"mode": 0o644}},
             {"src": str(payload / "laptop" / "tether-node-pair"), "dst": "/usr/bin/tether-node-pair", "file_info": {"mode": 0o755}},
@@ -188,7 +197,7 @@ def main() -> int:
     (OUTPUT_DIR / (DEB_NAME + ".sha256")).write_text(f"{hexdigest}  {DEB_NAME}\n", encoding="ascii")
     metadata = {
         "format": "deb", "package": "tether-node", "architecture": "amd64",
-        "version": "0.5.0", "filename": DEB_NAME,
+        "version": VERSION, "filename": DEB_NAME,
         "size": target.stat().st_size, "sha256": hexdigest,
     }
     (OUTPUT_DIR / (DEB_NAME + ".manifest-fragment.json")).write_text(

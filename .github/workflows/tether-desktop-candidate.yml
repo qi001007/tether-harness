@@ -75,22 +75,24 @@ jobs:
         with:
           python-version: '3.11'
       - name: Validate candidate version and frozen plugin channel
+        id: source-version
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           $release = Get-Content -Raw version.json | ConvertFrom-Json
           $app = Get-Content -Raw apps/tether-app/package.json | ConvertFrom-Json
-          if ($release.components.app -ne '0.5.0' -or $release.components.node -ne '0.5.0' -or $app.version -ne '0.5.0') { throw 'APP and Node candidate versions must all be 0.5.0.' }
+          $lock = Get-Content -Raw apps/tether-app/package-lock.json | ConvertFrom-Json -AsHashtable
+          $candidateVersion = [string]$release.components.app
+          if ($candidateVersion -notmatch '^\d+\.\d+\.\d+$' -or $release.components.node -ne $candidateVersion -or $app.version -ne $candidateVersion -or $lock['version'] -ne $candidateVersion -or $lock['packages'][''].version -ne $candidateVersion) { throw 'APP, Node, and APP lockfile versions must match version.json.' }
           if ($release.components.plugin -ne '0.2.93') { throw 'The candidate must retain the frozen DSH plugin version 0.2.93.' }
+          "TETHER_RELEASE_VERSION=$candidateVersion" >> $env:GITHUB_ENV
+          "release_version=$candidateVersion" >> $env:GITHUB_OUTPUT
       - name: Install pinned desktop packaging tools
         run: npm ci --prefix desktop/packaging
       - name: Install APP production dependencies
         run: npm ci --prefix apps/tether-app
-      - name: Install and build the shared APP web UI
-        run: |
-          npm ci --prefix packages/tether-ui
-          npm run build:web --prefix packages/tether-ui
-          node -e "const fs=require('node:fs'); if (!fs.statSync('packages/tether-ui/web/dist/app.js').isFile()) process.exit(1)"
+      - name: Install shared APP web UI dependencies
+        run: npm ci --prefix packages/tether-ui
       - name: Build headless Tether Python command runtime
         shell: bash
         run: |
@@ -189,8 +191,8 @@ jobs:
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: matrix.target == 'linux-x64'
         with:
-          name: tether-node-runtime-linux-x64-0.5.0-preview
-          path: .scratch/tether-desktop-candidates/0.5.0/headless/linux-x64/*
+          name: tether-node-runtime-linux-x64-${{ steps.source-version.outputs.release_version }}-preview
+          path: .scratch/tether-desktop-candidates/${{ steps.source-version.outputs.release_version }}/headless/linux-x64/*
           if-no-files-found: error
           compression-level: 0
           retention-days: 7
@@ -203,16 +205,16 @@ jobs:
       - name: Upload preview package artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: tether-${{ matrix.target }}-0.5.0-preview
+          name: tether-${{ matrix.target }}-${{ steps.source-version.outputs.release_version }}-preview
           path: |
-            .scratch/tether-desktop-candidates/0.5.0/${{ matrix.target }}/*.exe
-            .scratch/tether-desktop-candidates/0.5.0/${{ matrix.target }}/*.dmg
-            .scratch/tether-desktop-candidates/0.5.0/${{ matrix.target }}/*.zip
-            .scratch/tether-desktop-candidates/0.5.0/${{ matrix.target }}/*.AppImage
-            .scratch/tether-desktop-candidates/0.5.0/${{ matrix.target }}/*.deb
-            .scratch/tether-desktop-candidates/0.5.0/${{ matrix.target }}/*.yml
-            .scratch/tether-desktop-candidates/0.5.0/${{ matrix.target }}/*.blockmap
-            .scratch/tether-desktop-candidates/0.5.0/${{ matrix.target }}/SHA256SUMS.json
+            .scratch/tether-desktop-candidates/${{ steps.source-version.outputs.release_version }}/${{ matrix.target }}/*.exe
+            .scratch/tether-desktop-candidates/${{ steps.source-version.outputs.release_version }}/${{ matrix.target }}/*.dmg
+            .scratch/tether-desktop-candidates/${{ steps.source-version.outputs.release_version }}/${{ matrix.target }}/*.zip
+            .scratch/tether-desktop-candidates/${{ steps.source-version.outputs.release_version }}/${{ matrix.target }}/*.AppImage
+            .scratch/tether-desktop-candidates/${{ steps.source-version.outputs.release_version }}/${{ matrix.target }}/*.deb
+            .scratch/tether-desktop-candidates/${{ steps.source-version.outputs.release_version }}/${{ matrix.target }}/*.yml
+            .scratch/tether-desktop-candidates/${{ steps.source-version.outputs.release_version }}/${{ matrix.target }}/*.blockmap
+            .scratch/tether-desktop-candidates/${{ steps.source-version.outputs.release_version }}/${{ matrix.target }}/SHA256SUMS.json
           if-no-files-found: error
           compression-level: 0
           retention-days: 7
@@ -229,9 +231,32 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24.22.2'
+          cache: npm
+          cache-dependency-path: packages/tether-ui/package-lock.json
+      - name: Build the source UI for signed release archives
+        run: |
+          npm ci --prefix packages/tether-ui
+          npm run build:web --prefix packages/tether-ui
+          node -e "const fs=require('node:fs'); const p='packages/tether-ui/web/dist/app.js'; const s=fs.readFileSync(p,'utf8'); for (const marker of ['hubAuthRequiredRef.current','workbenchLogin','oidc_identity_unbound']) if (!s.includes(marker)) throw new Error('Built UI missing marker: '+marker); console.log('Built release UI:',p,fs.statSync(p).size)"
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: '3.11'
+      - name: Load and validate release version from source
+        id: source-version
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $release = Get-Content -Raw version.json | ConvertFrom-Json
+          $app = Get-Content -Raw apps/tether-app/package.json | ConvertFrom-Json
+          $lock = Get-Content -Raw apps/tether-app/package-lock.json | ConvertFrom-Json -AsHashtable
+          $candidateVersion = [string]$release.components.app
+          if ($candidateVersion -notmatch '^\d+\.\d+\.\d+$' -or $release.components.node -ne $candidateVersion -or $app.version -ne $candidateVersion -or $lock['version'] -ne $candidateVersion -or $lock['packages'][''].version -ne $candidateVersion) { throw 'APP, Node, and APP lockfile versions must match version.json.' }
+          if ($release.components.plugin -ne '0.2.93') { throw 'The candidate must retain the frozen DSH plugin version 0.2.93.' }
+          "TETHER_RELEASE_VERSION=$candidateVersion" >> $env:GITHUB_ENV
+          "release_version=$candidateVersion" >> $env:GITHUB_OUTPUT
       - name: Install manifest signing dependency
         run: python -m pip install --disable-pip-version-check 'cryptography>=42,<50' 'PyYAML==6.0.2' 'psutil==7.2.2'
       - name: Verify fixed POSIX package source run
@@ -356,14 +381,14 @@ jobs:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         if: ${{ !contains(github.event.head_commit.message, '[windows-recovery]') && !contains(github.event.head_commit.message, '[preview-publish-only]') }}
         with:
-          pattern: 'tether-*-0.5.0-preview'
+          pattern: 'tether-*-${{ steps.source-version.outputs.release_version }}-preview'
           path: .release-inputs
       - name: Download Windows package from current recovery run
         if: ${{ contains(github.event.head_commit.message, '[windows-recovery]') }}
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
-          name: tether-windows-x64-0.5.0-preview
-          path: .release-inputs/tether-windows-x64-0.5.0-preview
+          name: tether-windows-x64-${{ steps.source-version.outputs.release_version }}-preview
+          path: .release-inputs/tether-windows-x64-${{ steps.source-version.outputs.release_version }}-preview
       - name: Download Windows package from verified source run
         if: ${{ contains(github.event.head_commit.message, '[preview-publish-only]') }}
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
@@ -427,10 +452,10 @@ jobs:
         run: |
           python scripts/build_release.py \
             --channel preview \
-            --release-tag v0.5.0-preview.1 \
+            --release-tag "v${TETHER_RELEASE_VERSION}-preview.1" \
             --frozen-plugin-manifest .release-frozen-plugin/tether-update.json \
             --frozen-plugin-archive .release-frozen-plugin/tether-plugin-0.2.93.zip \
-            --node-deb .release-inputs/tether-node-runtime-linux-x64-0.5.0-preview/Tether-node-runtime-0.5.0-linux-x64.deb \
+            --node-deb ".release-inputs/tether-node-runtime-linux-x64-${TETHER_RELEASE_VERSION}-preview/Tether-node-runtime-${TETHER_RELEASE_VERSION}-linux-x64.deb" \
             --output-dir .release-manifest
       - name: Assemble unique draft release assets
         shell: bash
@@ -451,10 +476,11 @@ jobs:
           import yaml
 
           inputs = Path('.release-inputs')
+          release_version = os.environ['TETHER_RELEASE_VERSION']
           expected = {
-              'tether-windows-x64-0.5.0-preview', 'tether-linux-x64-0.5.0-preview',
-              'tether-macos-x64-0.5.0-preview', 'tether-macos-arm64-0.5.0-preview',
-              'tether-node-runtime-linux-x64-0.5.0-preview',
+              f'tether-windows-x64-{release_version}-preview', f'tether-linux-x64-{release_version}-preview',
+              f'tether-macos-x64-{release_version}-preview', f'tether-macos-arm64-{release_version}-preview',
+              f'tether-node-runtime-linux-x64-{release_version}-preview',
           }
           artifacts = {path.name: path for path in inputs.iterdir() if path.is_dir()}
           if not expected.issubset(artifacts):
@@ -487,12 +513,14 @@ jobs:
                   return
               shutil.copy2(source, target)
 
-          for artifact_name in sorted(expected - {'tether-node-runtime-linux-x64-0.5.0-preview'}):
+          for artifact_name in sorted(expected - {f'tether-node-runtime-linux-x64-{release_version}-preview'}):
               artifact_dir = artifacts[artifact_name]
               checksum_file = artifact_dir / 'SHA256SUMS.json'
               if not checksum_file.is_file():
                   raise SystemExit('candidate package has no SHA256SUMS.json: ' + artifact_name)
               checksum = json.loads(checksum_file.read_text(encoding='utf-8'))
+              if checksum.get('version') != release_version:
+                  raise SystemExit('candidate checksum manifest has a mismatched version: ' + artifact_name)
               normalized_artifacts = []
               for item in checksum.get('artifacts', []):
                   name = item.get('name')
@@ -502,9 +530,9 @@ jobs:
                       continue
                   target_name = name
                   if name == 'preview-mac.yml':
-                      if artifact_name not in {'tether-macos-x64-0.5.0-preview', 'tether-macos-arm64-0.5.0-preview'}:
+                      if artifact_name not in {f'tether-macos-x64-{release_version}-preview', f'tether-macos-arm64-{release_version}-preview'}:
                           raise SystemExit('unexpected preview-mac.yml outside a macOS artifact')
-                      architecture = 'x64' if artifact_name == 'tether-macos-x64-0.5.0-preview' else 'arm64'
+                      architecture = 'x64' if artifact_name == f'tether-macos-x64-{release_version}-preview' else 'arm64'
                       target_name = f'preview-mac-{architecture}.yml'
                   add_file(artifact_dir / name, item.get('sha256'), item.get('size'), target_name)
                   normalized_artifacts.append({**item, 'name': target_name})
@@ -518,7 +546,7 @@ jobs:
               if not path.is_file():
                   raise SystemExit('macOS candidate metadata missing: ' + path.name)
               info = yaml.safe_load(path.read_text(encoding='utf-8'))
-              if not isinstance(info, dict) or info.get('version') != '0.5.0' or not isinstance(info.get('files'), list):
+              if not isinstance(info, dict) or info.get('version') != release_version or not isinstance(info.get('files'), list):
                   raise SystemExit('invalid electron-updater metadata: ' + path.name)
               expected_arch_token = f'mac-{architecture}'
               matching_zips = [item for item in info['files'] if isinstance(item, dict)
@@ -551,24 +579,27 @@ jobs:
           (output / 'preview-mac.yml').write_text(yaml.safe_dump(merged, sort_keys=False), encoding='utf-8')
           # Per-architecture checksum manifests reference these files; keep them beside the canonical merged updater manifest.
 
-          headless = artifacts['tether-node-runtime-linux-x64-0.5.0-preview']
+          headless = artifacts[f'tether-node-runtime-linux-x64-{release_version}-preview']
+          headless_manifest = json.loads((headless / f'Tether-node-runtime-{release_version}-linux-x64.deb.manifest-fragment.json').read_text(encoding='utf-8'))
+          if headless_manifest.get('version') != release_version:
+              raise SystemExit('headless Node package metadata has a mismatched version')
           headless_names = {
-              'Tether-node-runtime-0.5.0-linux-x64.tar.gz',
-              'Tether-node-runtime-0.5.0-linux-x64.tar.gz.sha256',
-              'Tether-node-runtime-0.5.0-linux-x64.deb',
-              'Tether-node-runtime-0.5.0-linux-x64.deb.sha256',
-              'Tether-node-runtime-0.5.0-linux-x64.deb.manifest-fragment.json',
+              f'Tether-node-runtime-{release_version}-linux-x64.tar.gz',
+              f'Tether-node-runtime-{release_version}-linux-x64.tar.gz.sha256',
+              f'Tether-node-runtime-{release_version}-linux-x64.deb',
+              f'Tether-node-runtime-{release_version}-linux-x64.deb.sha256',
+              f'Tether-node-runtime-{release_version}-linux-x64.deb.manifest-fragment.json',
           }
           for name in sorted(headless_names):
               add_file(headless / name)
 
           manifest_dir = Path('.release-manifest')
-          builder_names = {'tether-update.json', 'tether-app-0.5.0.zip', 'tether-node-0.5.0.zip',
-                           'Tether-node-runtime-0.5.0-linux-x64.deb'}
+          builder_names = {'tether-update.json', f'tether-app-{release_version}.zip', f'tether-node-{release_version}.zip',
+                           f'Tether-node-runtime-{release_version}-linux-x64.deb'}
           for name in sorted(builder_names):
               add_file(manifest_dir / name)
-          required = {'Tether-0.5.0-win-x64.exe', 'Tether-node-runtime-0.5.0-linux-x64.tar.gz',
-                      'Tether-node-runtime-0.5.0-linux-x64.deb', 'tether-update.json', 'preview-mac.yml'}
+          required = {f'Tether-{release_version}-win-x64.exe', f'Tether-node-runtime-{release_version}-linux-x64.tar.gz',
+                      f'Tether-node-runtime-{release_version}-linux-x64.deb', 'tether-update.json', 'preview-mac.yml'}
           recovery = os.environ['WINDOWS_RECOVERY'].lower() == 'true'
           publish_only = os.environ['PUBLISH_ONLY'].lower() == 'true'
           current_source = {'run_id': int(os.environ['SOURCE_RUN_ID']),
@@ -580,13 +611,13 @@ jobs:
           artifact_sources = {name: current_source for name in sorted(expected)}
           if recovery or publish_only:
               for name in {
-                      'tether-linux-x64-0.5.0-preview',
-                      'tether-macos-x64-0.5.0-preview',
-                      'tether-macos-arm64-0.5.0-preview',
-                      'tether-node-runtime-linux-x64-0.5.0-preview'}:
+                      f'tether-linux-x64-{release_version}-preview',
+                      f'tether-macos-x64-{release_version}-preview',
+                      f'tether-macos-arm64-{release_version}-preview',
+                      f'tether-node-runtime-linux-x64-{release_version}-preview'}:
                   artifact_sources[name] = reused_source
           if publish_only:
-              artifact_sources['tether-windows-x64-0.5.0-preview'] = reused_windows_source
+              artifact_sources[f'tether-windows-x64-{release_version}-preview'] = reused_windows_source
           (output / 'package-build-provenance.json').write_text(json.dumps({
               'repository': os.environ['SOURCE_REPOSITORY'],
               'current_source_sha': os.environ['SOURCE_SHA'],
@@ -609,9 +640,9 @@ jobs:
       - name: Create or refresh the draft preview release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
-          tag_name: v0.5.0-preview.1
+          tag_name: v${{ steps.source-version.outputs.release_version }}-preview.1
           target_commitish: ${{ github.sha }}
-          name: Tether 0.5.0 Preview 1
+          name: Tether ${{ steps.source-version.outputs.release_version }} Preview 1
           body: 'Preview candidate assembled from per-platform CI artifacts. See package-build-provenance.json for each artifact source run and commit. This draft is not a stable release.'
           draft: true
           prerelease: true

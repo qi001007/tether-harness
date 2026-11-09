@@ -7,7 +7,7 @@ and perform its configured device-management operations. Install or upgrade
 the package with APT as root so its declared LibreOffice runtime dependencies
 are installed from the configured Debian repositories:
 
-    sudo apt install ./Tether-node-runtime-0.5.0-linux-x64.deb
+    sudo apt install ./Tether-node-runtime-0.5.1-linux-x64.deb
 
 The service does not receive broad sudo rules because it already runs under
 systemd as root.
