@@ -51,8 +51,6 @@ jobs:
           retention-days: 1
   hydrate-herdr-runtime:
     name: Hydrate pinned Herdr runtime once
-    permissions:
-      contents: write
     if: ${{ !contains(github.event.head_commit.message, '[preview-publish-only]') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -63,20 +61,35 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: '3.11'
-      - name: Download and verify the signed Node runtime source
+      - name: Download and verify pinned Herdr assets once
         env:
           GH_TOKEN: ${{ github.token }}
-        shell: bash
         run: |
-          set -euo pipefail
-          archive="$RUNNER_TEMP/tether-node-0.5.1.zip"
-          gh api repos/qi001007/tether-harness/releases/assets/726040037 \
-            -H 'Accept: application/octet-stream' > "$archive"
-          echo '5a8ea437d9506023e0496da4e5bafd9b5c3a6ec7f7f9b72a969afde364ee398e  '"$archive" | sha256sum --check
-          python scripts/hydrate_herdr_runtime.py \
-            --destination .runtime/herdr-runtime \
-            --seed-archive "$archive" \
-            --seed-prefix tether-node-0.5.1
+          python - <<'PY'
+          import importlib.util
+          import subprocess
+          from pathlib import Path
+          spec = importlib.util.spec_from_file_location('hydrate_herdr_runtime', 'scripts/hydrate_herdr_runtime.py')
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          asset_ids = {
+              'herdr-linux-x86_64': 640898235,
+              'herdr-macos-x86_64': 640898229,
+              'herdr-macos-aarch64': 640898230,
+              'herdr-windows-x86_64.zip': 640898234,
+          }
+          ids_by_url = {asset['url']: asset_ids[Path(asset['url']).name] for asset in module.ASSETS.values()}
+          def gh_downloader(url, destination):
+              asset_id = ids_by_url.get(url)
+              if asset_id is None:
+                  raise ValueError('Unpinned Herdr asset URL')
+              with Path(destination).open('wb') as output:
+                  subprocess.run(['gh', 'api', f'repos/herdrdev/herdr/releases/assets/{asset_id}',
+                                  '-H', 'Accept: application/octet-stream'],
+                                 check=True, stdout=output)
+          installed = module.hydrate(Path('.runtime/herdr-runtime'), downloader=gh_downloader)
+          print(f'Verified and hydrated {len(installed)} pinned Herdr files.')
+          PY
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: tether-pinned-herdr-runtime
@@ -510,6 +523,42 @@ jobs:
           github-token: ${{ github.token }}
           repository: qi001007/tether-harness
           run-id: 42520196405
+      - name: Download the verified Herdr artifact for Node release archives
+        if: ${{ !contains(github.event.head_commit.message, '[preview-publish-only]') }}
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: tether-pinned-herdr-runtime
+          path: .release-herdr
+      - name: Stage and revalidate Herdr files for the signed Node ZIP
+        if: ${{ !contains(github.event.head_commit.message, '[preview-publish-only]') }}
+        run: python - <<'PY'
+          import importlib.util
+          import shutil
+          from pathlib import Path
+          spec = importlib.util.spec_from_file_location('hydrate_herdr_runtime', 'scripts/hydrate_herdr_runtime.py')
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          source_root = Path('.release-herdr').resolve()
+          node_bin = Path('tether/node/bin').resolve()
+          for relative, pin in module.FILES.items():
+              source = (source_root / relative).resolve()
+              target = (node_bin / relative).resolve()
+              if not source.is_relative_to(source_root) or not target.is_relative_to(node_bin):
+                  raise SystemExit('Unsafe Herdr runtime path')
+              if source.is_symlink() or not source.is_file():
+                  raise SystemExit('Verified Herdr artifact member is missing or unsafe')
+              size, digest = module._hash_file(source)
+              if size != pin['size'] or digest != pin['sha256']:
+                  raise SystemExit('Herdr artifact failed its pinned file check')
+              if target.exists():
+                  target_size, target_digest = module._hash_file(target)
+                  if target.is_symlink() or target_size != size or target_digest != digest:
+                      raise SystemExit('Conflicting Herdr source file in release workspace')
+              else:
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  shutil.copy2(source, target)
+          print(f'Staged and verified {len(module.FILES)} Herdr files for the Node ZIP.')
+          PY
       - name: Fetch the fixed original DSH plugin release metadata and archive
         shell: bash
         run: |
