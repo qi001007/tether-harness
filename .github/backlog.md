@@ -7,3 +7,4 @@
 
 - 2026-11-09：候选工作流从已校验的Node发布ZIP复用8个Herdr文件，并把已校验Electron官方ZIP放入@electron/get缓存后走原安装程序。
 - 2026-11-09: The common Herdr job downloads the four official v0.9.5 release assets by pinned ID and validates them through the existing hydrator; the publisher stages that verified artifact into `tether/node/bin` before building the signed Node ZIP. The hydrator uses read-only contents access; publisher permissions remain unchanged.
+- 2026-11-09: CI runtime assembly uses the read-only job token with `gh api` tag/name matching for GitHub release assets and bounded curl retries for other official sources; existing pinned size/SHA checks remain.

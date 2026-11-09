@@ -13,6 +13,8 @@ import stat
 import tarfile
 import tempfile
 import subprocess
+import urllib.error
+import urllib.parse
 import urllib.request
 import zipfile
 from pathlib import Path, PurePosixPath
@@ -30,19 +32,105 @@ MESHCTRL_SOURCE_SHA256 = "f40a77911f4bddd211b3807236a986db5647ea968d151bddeed01c
 MESHCTRL_PATCHED_SHA256 = "11e5a718832d8caa6c99c6fc21d72ab4fb499729fa32bc8dfac5e01af238b140"
 
 
+def _safe_asset_location(url: str) -> str:
+    parsed = urllib.parse.urlsplit(url)
+    return f"{parsed.hostname or 'unknown'}{parsed.path}"
+
+
+def _github_release_download(url: str) -> tuple[str, str, str, str] | None:
+    parsed = urllib.parse.urlsplit(url)
+    parts = [urllib.parse.unquote(part) for part in parsed.path.split('/') if part]
+    if (parsed.scheme != 'https' or parsed.hostname != 'github.com' or len(parts) != 6
+            or parts[2:4] != ['releases', 'download']):
+        return None
+    return parts[0], parts[1], parts[4], parts[5]
+
+
+def _download_failure_reason(returncode: int, stderr: str = '', status: str = '') -> str:
+    if status.isdigit() and len(status) == 3 and status != '000':
+        return f'HTTP {status}'
+    match = re.search(r'\bHTTP(?:Error)?\D{0,8}(\d{3})\b', stderr)
+    return f'HTTP {match.group(1)}' if match else f'exit {returncode}'
+
+
+def _download_github_release_asset(asset: dict, destination: Path, parts: tuple[str, str, str, str]) -> bool:
+    gh = shutil.which('gh')
+    if not gh or not os.environ.get('GH_TOKEN', '').strip():
+        return False
+    owner, repo, tag, filename = parts
+    tag_path = urllib.parse.quote(tag, safe='')
+    metadata = subprocess.run(
+        [gh, 'api', f'repos/{owner}/{repo}/releases/tags/{tag_path}',
+         '-H', 'Accept: application/vnd.github+json'],
+        check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=60,
+    )
+    if metadata.returncode:
+        reason = _download_failure_reason(metadata.returncode, metadata.stderr)
+        raise RuntimeError(f'GitHub release metadata request failed ({reason})')
+    release = json.loads(metadata.stdout)
+    if release.get('tag_name') != tag:
+        raise ValueError('GitHub release tag did not match pinned source URL')
+    matches = [item for item in release.get('assets', [])
+               if item.get('name') == filename and item.get('state') == 'uploaded']
+    if len(matches) != 1 or matches[0].get('size') != asset.get('size'):
+        raise ValueError('GitHub release asset name or pinned size did not match')
+    asset_id = matches[0].get('id')
+    if not isinstance(asset_id, int) or asset_id <= 0:
+        raise ValueError('GitHub release asset ID is invalid')
+    with destination.open('wb') as output:
+        result = subprocess.run(
+            [gh, 'api', f'repos/{owner}/{repo}/releases/assets/{asset_id}',
+             '-H', 'Accept: application/octet-stream'],
+            check=False, stdout=output, stderr=subprocess.PIPE, timeout=300,
+        )
+    if result.returncode:
+        destination.unlink(missing_ok=True)
+        detail = result.stderr.decode('utf-8', errors='replace') if isinstance(result.stderr, bytes) else str(result.stderr or '')
+        reason = _download_failure_reason(result.returncode, detail)
+        raise RuntimeError(f'GitHub release asset request failed ({reason})')
+    return True
+
+
+def _download_with_curl(url: str, destination: Path) -> None:
+    result = subprocess.run(
+        ['curl', '--fail', '--location', '--retry', '2', '--retry-delay', '2',
+         '--connect-timeout', '20', '--max-time', '300', '--retry-max-time', '300',
+         '--silent', '--show-error', '--write-out', '%{http_code}',
+         '--output', str(destination), url],
+        check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+    )
+    if result.returncode:
+        reason = _download_failure_reason(result.returncode, result.stderr, result.stdout.strip())
+        raise RuntimeError(f'curl download failed ({reason})')
+
+
 def download(asset: dict, destination: Path) -> None:
-    request = urllib.request.Request(str(asset["url"]), headers={"User-Agent": "Tether-desktop-candidate-builder"})
-    digest = hashlib.sha256()
-    size = 0
-    with urllib.request.urlopen(request, timeout=90) as response, destination.open("wb") as output:
-        while block := response.read(1024 * 1024):
-            output.write(block)
-            digest.update(block)
-            size += len(block)
+    url = str(asset['url'])
+    location = _safe_asset_location(url)
+    try:
+        release_parts = _github_release_download(url)
+        if release_parts is not None and _download_github_release_asset(asset, destination, release_parts):
+            pass
+        else:
+            _download_with_curl(url, destination)
+        digest = hashlib.sha256()
+        size = 0
+        with destination.open('rb') as source:
+            while block := source.read(1024 * 1024):
+                digest.update(block)
+                size += len(block)
+    except Exception as exc:
+        destination.unlink(missing_ok=True)
+        if isinstance(exc, urllib.error.HTTPError):
+            reason = f'HTTP {exc.code}'
+        elif isinstance(exc, (RuntimeError, ValueError)):
+            reason = str(exc)
+        else:
+            reason = type(exc).__name__
+        raise RuntimeError(f"download failed for {asset['name']} ({location}): {reason}") from None
     if size != asset["size"] or digest.hexdigest() != asset["sha256"]:
         destination.unlink(missing_ok=True)
-        raise ValueError(f"download failed size/SHA-256 verification: {asset['name']}")
-
+        raise ValueError(f"download failed size/SHA-256 verification: {asset['name']} ({location})")
 
 def _sftpgo_pe_machine(path: Path) -> int | None:
     with path.open("rb") as stream:

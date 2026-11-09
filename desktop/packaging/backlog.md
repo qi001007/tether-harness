@@ -43,3 +43,4 @@
 - 2026-11-09: Candidate app/Node versions advance to 0.5.2; plugin remains pinned at 0.2.93. Electron Builder output and headless package example now follow the synchronized candidate version; preview tagging remains derived from version.json.
 
 - 2026-11-09：候选构建核对Electron安装包内固定SHA并复用官方缓存；Linux/macOS只恢复Herdr主程序0755，不改Windows ConPTY权限。
+- 2026-11-09: Runtime asset failures now report the asset name and sanitized host/path; GitHub assets use `gh api` tag/name resolution with bounded subprocess timeouts, other sources use curl retry/time limits, and pinned size/SHA verification remains unchanged.

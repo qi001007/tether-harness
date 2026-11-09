@@ -101,6 +101,8 @@ jobs:
     name: ${{ matrix.target }}
     if: ${{ !contains(github.event.head_commit.message, '[preview-publish-only]') }}
     needs: [build-codeg-web, hydrate-herdr-runtime]
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -228,6 +230,8 @@ jobs:
           name: tether-pinned-herdr-runtime
           path: .runtime/herdr-runtime
       - name: Assemble pinned runtime components
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: python desktop/packaging/prepare_runtime.py --target ${{ matrix.target }} --codeg-web .runtime/codeg-web --herdr-runtime .runtime/herdr-runtime
       - name: Check the frozen Python and bundled Node entry points
         shell: pwsh
