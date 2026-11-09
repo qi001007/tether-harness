@@ -1,4 +1,5 @@
 # tether-app backlog
+- 2026-11-09：native workbench desktop descriptor改为根endpoint加同源相对guest_path，bootstrap与TLS仍绑定根origin；renderer仅派生sharing URL，不接受外部host/path。
 - 2026-11-09：APP与Node patch版统一升至0.5.1，app package/lock及`version.json` app/node版本同步；本版包含已在隔离安装版验证的managed Node重启接管修复。
 - 2026-11-09：Electron OIDC session访问可信`/api/auth/me`时，未登录OAuth2 Proxy返回的`403 text/html`与API鉴权失败区分；仅该HTML代理拒绝与401标记`Controller login required`，JSON 403/5xx/连接错误仍显示为服务故障。
 - 2026-11-09：正式安装包使用默认运营 Controller 时提供匹配的 OIDC issuer，避免未配置环境变量的新安装无法跳转登录；显式 QA issuer 和自建 Controller 保持原配置。仅完成配置分支验证，尚未启动候选 APP 验证登录窗口。

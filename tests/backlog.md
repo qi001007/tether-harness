@@ -177,3 +177,4 @@
 - 2026-11-08：既有Croc默认传输断言同步改为auto；未新增测试工程。
 
 - 2026-11-08：既有更新来源测试覆盖manifest正式URL优先及Hub、配置mirror依次回退，使用本地HTTP服务。
+- 2026-11-09：新增远程桌面授权回归，覆盖close允许Controller递增revision且仍绑定actor/target/grant/operation/local mesh node、旧版本拒绝，以及view/renew仍要求revision完全一致（6 cases）。

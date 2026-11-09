@@ -832,8 +832,10 @@ class ServiceAccess:
             raise ServiceAccessError("caddy_ca_missing", "Caddy internal CA root certificate is unavailable")
         pem = root_ca.read_text(encoding="ascii")
         digest = hashlib.sha256(root_ca.read_bytes()).hexdigest()
+        guest_path = getattr(worker, "endpoint_path", "/")
+        endpoint_path = "/" if worker.service_id == "desktop" else guest_path
         descriptor = {"protocol": 1, "target_id": self.target_id, "id": worker.service_id, "state": "ready",
-                "transport": "caddy-easytier", "endpoint": worker.origin + getattr(worker, "endpoint_path", "/"), "grant_id": worker.grant_id,
+                "transport": "caddy-easytier", "endpoint": worker.origin + endpoint_path, "grant_id": worker.grant_id,
                 "authorization_revision": worker.revision, "lease_expires_at": worker.lease_expires_at,
                 "network_id": worker.network_id, "operation_id": operation_id,
                 "bootstrap": {"method": "POST", "url": worker.origin + "/__tether/bootstrap",
@@ -841,7 +843,8 @@ class ServiceAccess:
                 "tls": {"epoch": digest[:16], "root_ca_pem": pem, "root_ca_sha256": digest}}
         share = getattr(worker, "desktop_share", None)
         if worker.service_id == "desktop" and isinstance(share, dict):
-            descriptor.update({"consent": share.get("consent", "prompt"),
+            descriptor.update({"guest_path": guest_path,
+                               "consent": share.get("consent", "prompt"),
                                "view_only": bool(share.get("view_only")),
                                "view_only_reason": share.get("view_only_reason", ""),
                                "native_session_expires_at": int(share.get("expires_at") or 0)})

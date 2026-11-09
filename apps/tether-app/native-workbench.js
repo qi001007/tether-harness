@@ -67,11 +67,17 @@ function verifyEndpoint(descriptor, targetId, serviceId) {
   }
   const endpoint = new URL(descriptor.endpoint)
   if (endpoint.protocol !== 'https:' || endpoint.username || endpoint.password || endpoint.hash
-      || (serviceId !== 'desktop' && endpoint.search)
-      || (serviceId !== 'desktop' && endpoint.pathname !== '/')) throw new Error('服务端返回的工作台 origin 无效。')
+      || endpoint.search || endpoint.pathname !== '/') throw new Error('服务端返回的工作台 origin 无效。')
+  const origin = new URL('/', endpoint)
+  let guestUrl = null
   if (serviceId === 'desktop') {
-    const query = new URLSearchParams(endpoint.search)
-    if (!['/sharing', '/default/sharing'].includes(endpoint.pathname) || !query.get('c')) {
+    const guestPath = String(descriptor.guest_path || '')
+    guestUrl = new URL(guestPath, origin)
+    const query = Array.from(guestUrl.searchParams.entries())
+    if (!guestPath.startsWith('/') || guestPath.startsWith('//') || guestUrl.origin !== origin.origin
+        || guestUrl.username || guestUrl.password || guestUrl.hash
+        || !['/sharing', '/default/sharing'].includes(guestUrl.pathname)
+        || query.length !== 1 || query[0][0] !== 'c' || !query[0][1]) {
       throw new Error('服务端返回的远程桌面 guest 页面无效。')
     }
     if (!['prompt', 'none'].includes(descriptor.consent) || typeof descriptor.view_only !== 'boolean') {
@@ -82,7 +88,6 @@ function verifyEndpoint(descriptor, targetId, serviceId) {
       throw new Error('远程桌面会话缺少有效的到期时间。')
     }
   }
-  const origin = new URL('/', endpoint)
   const bootstrap = descriptor.bootstrap
   const bootstrapUrl = bootstrap && new URL(bootstrap.url)
   if (!bootstrap || bootstrap.method !== 'POST' || !bootstrap.ticket || !bootstrap.expires_at
@@ -101,7 +106,7 @@ function verifyEndpoint(descriptor, targetId, serviceId) {
   if (typeof descriptor.network_id !== 'string' || !descriptor.network_id) {
     throw new Error('服务端没有提供可信网络标识。')
   }
-  return { endpoint, origin, bootstrapUrl, caPem, epoch: descriptor.tls.epoch,
+  return { endpoint, origin, guestUrl, bootstrapUrl, caPem, epoch: descriptor.tls.epoch,
     networkId: descriptor.network_id,
     nativeSessionExpiresAt: serviceId === 'desktop' ? expiryMillis(descriptor.native_session_expires_at) : null }
 }
@@ -368,7 +373,8 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     if (!isCurrent()) throw new Error('工作台账号已切换，请重新打开服务。')
     const leaseExpiresAt = expiryMillis(descriptor.lease_expires_at)
     if (!Number.isFinite(leaseExpiresAt) || leaseExpiresAt <= Date.now()) throw new Error('工作台授权租约已过期。')
-    const publicResult = { targetId, serviceId, grantId: descriptor.grant_id, endpoint: verified.endpoint.toString(), partition, leaseExpiresAt }
+    const publicEndpoint = serviceId === 'desktop' ? verified.guestUrl : verified.endpoint
+    const publicResult = { targetId, serviceId, grantId: descriptor.grant_id, endpoint: publicEndpoint.toString(), partition, leaseExpiresAt }
     if (serviceId === 'desktop') {
       publicResult.consent = descriptor.consent
       publicResult.viewOnly = descriptor.view_only
