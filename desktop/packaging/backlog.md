@@ -41,3 +41,5 @@
 # Change log
 - 2026-11-09: Candidate packaging now invokes the existing `packages/tether-ui` `build:web` script through the active npm CLI before validating and packaging the shared APP UI bundle.
 - 2026-11-09: Candidate app/Node versions advance to 0.5.2; plugin remains pinned at 0.2.93. Electron Builder output and headless package example now follow the synchronized candidate version; preview tagging remains derived from version.json.
+
+- 2026-11-09：候选构建核对Electron安装包内固定SHA并复用官方缓存；Linux/macOS只恢复Herdr主程序0755，不改Windows ConPTY权限。

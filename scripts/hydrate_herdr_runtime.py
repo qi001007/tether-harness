@@ -104,7 +104,7 @@ def _download(url: str, destination: Path) -> None:
 def _extract_member(archive: zipfile.ZipFile, member: str, destination: Path, expected: dict) -> None:
     matches = [item for item in archive.infolist() if item.filename == member and not item.is_dir()]
     if len(matches) != 1 or matches[0].file_size != expected["size"]:
-        raise ValueError(f"Windows Herdr ZIP is missing or duplicates pinned member {member}")
+        raise ValueError(f"Archive is missing or duplicates pinned Herdr member {member}")
     digest = hashlib.sha256()
     size = 0
     with archive.open(matches[0], "r") as source, destination.open("wb") as output:
@@ -121,12 +121,30 @@ def _extract_member(archive: zipfile.ZipFile, member: str, destination: Path, ex
 def hydrate(
     destination: Path = DEFAULT_DESTINATION,
     *,
+    seed_archive: Path | None = None,
+    seed_prefix: str | None = None,
     downloader: Callable[[str, Path], None] = _download,
     assets: dict = ASSETS,
     files: dict = FILES,
 ) -> list[str]:
     destination = Path(destination)
     destination.mkdir(parents=True, exist_ok=True)
+
+    if (seed_archive is None) != (seed_prefix is None):
+        raise ValueError("seed archive and prefix must be supplied together")
+    if seed_archive is not None:
+        prefix = seed_prefix.strip("/")
+        if not prefix or ".." in Path(prefix).parts:
+            raise ValueError("seed archive prefix is unsafe")
+        with zipfile.ZipFile(seed_archive) as archive:
+            for relative, expected in files.items():
+                member = f"{prefix}/tether/node/bin/{relative}"
+                output = destination / relative
+                if output.exists():
+                    _verify_file(output, expected, relative)
+                    continue
+                output.parent.mkdir(parents=True, exist_ok=True)
+                _extract_member(archive, member, output, expected)
 
     # Refuse conflicting local contents before downloading or installing anything.
     for relative, expected in files.items():
@@ -196,8 +214,10 @@ def hydrate(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--destination", type=Path, default=DEFAULT_DESTINATION)
+    parser.add_argument("--seed-archive", type=Path)
+    parser.add_argument("--seed-prefix")
     args = parser.parse_args()
-    installed = hydrate(args.destination)
+    installed = hydrate(args.destination, seed_archive=args.seed_archive, seed_prefix=args.seed_prefix)
     print("Herdr runtime ready; installed " + str(len(installed)) + " missing file(s).")
 
 

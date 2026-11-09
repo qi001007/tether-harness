@@ -5975,8 +5975,10 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           const nextNetworks = records.filter((item) => item && typeof item === 'object')
           setPrivateNetworks(nextNetworks)
           const preferred = preferredId || selectedPrivateNetworkId
-          setSelectedPrivateNetworkId(nextNetworks.some((item) => (item.network_id || item.id) === preferred)
-            ? preferred : ((nextNetworks[0] && (nextNetworks[0].network_id || nextNetworks[0].id)) || ''))
+          const selected = nextNetworks.find((item) => (item.network_id || item.id) === preferred)
+            || nextNetworks.find((item) => item.state === 'ready')
+            || nextNetworks[0]
+          setSelectedPrivateNetworkId((selected && (selected.network_id || selected.id)) || '')
           setPrivateNetworksError('')
         } catch (error) {
           if (generation !== ACTIVE_BASE_GENERATION) return
@@ -6087,12 +6089,20 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         setNetworkRefreshing(true)
         try { await Promise.all([loadState(), loadPrivateNetworks(), loadPrivateTeams()]) } finally { setTimeout(() => setNetworkRefreshing(false), 280) }
       }
+      const privateNetworkUserId = state && state.user && state.user.user_id
+        ? String(state.user.user_id) : ''
       React.useEffect(() => {
-        if (view === 'network' && loggedIn) {
+        if (!privateNetworkUserId) {
+          setPrivateNetworks([])
+          setPrivateTeams([])
+          setSelectedPrivateNetworkId('')
+          return
+        }
+        if (view === 'network') {
           loadPrivateNetworks()
           loadPrivateTeams()
         }
-      }, [view, loggedIn])
+      }, [view, privateNetworkUserId])
 
       React.useEffect(() => {
         if (!contextMenu) return undefined

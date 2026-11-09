@@ -41,3 +41,5 @@
 - 2026-11-08：扩展签名发布构建器支持显式`preview`渠道/tag和固定`--node-deb`输入；在签名清单加入`components.node.debian.amd64`完整包名/版本/架构/不可变tag资产URL/大小/SHA，要求`dpkg-deb`元数据匹配后才签名。workflow需由汇总任务传入四平台构建结果和Linux deb；未执行GitHub写入/发布。
 
 - 2026-11-08：候选发行构建器逐字段调用`dpkg-deb --field`读取Package/Version/Architecture；对隔离Deb样例确认各字段单独返回值后再校验headless包元数据，避免多字段--field输出行格式差异。
+
+- 2026-11-09：Herdr hydrator支持从指定Node发布ZIP提取8个固定文件，逐项按既有大小/SHA核验，缺失或不符即失败。

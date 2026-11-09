@@ -89,6 +89,9 @@ const electronPackagePath = path.join(repoRoot, 'apps/tether-app/node_modules/el
 if (!existsSync(electronPackagePath)) throw new Error('Electron is not installed in apps/tether-app; run npm ci --prefix apps/tether-app first.')
 const electronVersion = JSON.parse(readFileSync(electronPackagePath, 'utf8')).version
 if (!/^\d+\.\d+\.\d+$/.test(electronVersion)) throw new Error(`Installed Electron version is not pinned: ${electronVersion}`)
+const electronDist = path.join(path.dirname(electronPackagePath), 'dist')
+const electronDistVersion = readFileSync(path.join(electronDist, 'version'), 'utf8').trim().replace(/^v/, '')
+if (electronDistVersion !== electronVersion) throw new Error(`Installed Electron binary is ${electronDistVersion}; expected ${electronVersion}.`)
 const baseConfigPath = path.join(packagingDir, 'electron-builder.yml')
 const baseConfig = readFileSync(baseConfigPath, 'utf8')
 const outputSetting = `output: .scratch/tether-desktop-candidates/${expectedVersion}`
@@ -103,7 +106,7 @@ if (baseConfig.split(runtimeSetting).length !== 3 || baseConfig.split(nodeBinSet
 const config = baseConfig.replace(outputSetting, `output: "${builderOutput}"`)
   .replace(nodeBinSetting, `from: "${runtimeRoot.replaceAll('\\', '/')}/node-bin"`)
   .replace(runtimeSetting, `from: "${runtimeRoot.replaceAll('\\', '/')}"`)
-  .replace('appId: com.tether.app', `appId: com.tether.app\nelectronVersion: ${electronVersion}`)
+  .replace('appId: com.tether.app', `appId: com.tether.app\nelectronVersion: ${electronVersion}\nelectronDist: "${electronDist.replaceAll('\\', '/')}"`)
 writeFileSync(tempConfig, config)
 const args = [builderCli, '--projectDir', repoRoot,
   '--config', tempConfig,

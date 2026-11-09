@@ -759,6 +759,7 @@ function AgentTargetPage({ React, Glyph, post, C, host, devices = [], localDevic
     guest.addEventListener('did-start-navigation', onStart)
     guest.addEventListener('did-finish-load', onFinish)
     guest.addEventListener('did-fail-load', onFail)
+    guest.src = serviceView.endpoint
     return () => {
       guest.removeEventListener('did-start-navigation', onStart)
       guest.removeEventListener('did-finish-load', onFinish)
@@ -832,7 +833,7 @@ function AgentTargetPage({ React, Glyph, post, C, host, devices = [], localDevic
       '正在启动 ' + pane.title + '…'))
     : pane.kind === 'native-service'
       ? h('div', { style: { flex: '1 1 auto', minHeight: 0, minWidth: 0, position: 'relative', display: 'flex' } },
-        h('webview', { key: pane.key, ref: serviceWebviewRef, title: pane.title, src: pane.service.endpoint, partition: pane.service.partition,
+        h('webview', { key: pane.key, ref: serviceWebviewRef, title: pane.title, partition: pane.service.partition,
           style: { flex: '1 1 auto', width: '100%', minHeight: 0, border: 0, background: '#fff' } }),
         serviceFrameState === 'loading' ? h('div', { role: 'status', style: { position: 'absolute', inset: 0, display: 'grid', placeItems: 'center',
           background: 'rgba(255,255,255,.94)', color: C.sub, fontSize: 13, pointerEvents: 'none' } }, '正在连接目标 ' + pane.title + '…') : null,

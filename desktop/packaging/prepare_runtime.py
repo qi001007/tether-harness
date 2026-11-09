@@ -703,6 +703,8 @@ def main() -> int:
         if not (herdr_source / relative).is_file():
             raise ValueError(f"pinned Herdr runtime is missing {relative}")
     copy_tree(herdr_source, node_bin)
+    if not args.target.startswith("windows"):
+        (node_bin / herdr_required[0]).chmod(0o755)
     for notice in ["LICENSE.herdr", "THIRD-PARTY-NOTICES.herdr"]:
         source = ROOT / "tether/node/bin" / notice
         if not source.exists() and notice == "THIRD-PARTY-NOTICES.herdr":

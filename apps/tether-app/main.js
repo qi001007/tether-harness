@@ -726,6 +726,7 @@ async function openWorkbenchLogin() {
     return { ok: false, error: 'Controller login requires HTTPS' }
   }
   if (workbenchLoginWindow && !workbenchLoginWindow.isDestroyed()) {
+    workbenchLoginWindow.show()
     workbenchLoginWindow.focus()
     return { ok: true, state: 'login_started' }
   }
@@ -787,6 +788,10 @@ async function openWorkbenchLogin() {
   })
   try {
     await workbenchLoginWindow.loadURL(startUrl.toString())
+    if (workbenchLoginWindow && !workbenchLoginWindow.isDestroyed()) {
+      workbenchLoginWindow.show()
+      workbenchLoginWindow.focus()
+    }
     return { ok: true, state: 'login_started' }
   } catch (_) {
     if (workbenchLoginWindow && !workbenchLoginWindow.isDestroyed()) workbenchLoginWindow.close()
@@ -806,7 +811,7 @@ handleTrusted('tether:workbench-bind-legacy', async (_event, credentials) => {
     throw new Error('Legacy account credentials are invalid')
   }
   const origin = trustedControllerOrigin()
-  const login = await workbenchLoginSession.fetch(new URL('/api/auth/login', origin).toString(), {
+  const login = await workbenchLoginSession.fetch(new URL('/admin/login', origin).toString(), {
     method: 'POST', headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
     body: JSON.stringify({ email, password, totp }), redirect: 'error'
   })

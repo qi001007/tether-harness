@@ -49,10 +49,43 @@ jobs:
           if-no-files-found: error
           include-hidden-files: true
           retention-days: 1
+  hydrate-herdr-runtime:
+    name: Hydrate pinned Herdr runtime once
+    if: ${{ !contains(github.event.head_commit.message, '[preview-publish-only]') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.11'
+      - name: Download and verify the signed Node runtime source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/tether-node-0.5.1.zip"
+          gh api repos/qi001007/tether-harness/releases/assets/726040037 \
+            -H 'Accept: application/octet-stream' > "$archive"
+          echo '5a8ea437d9506023e0496da4e5bafd9b5c3a6ec7f7f9b72a969afde364ee398e  '"$archive" | sha256sum --check
+          python scripts/hydrate_herdr_runtime.py \
+            --destination .runtime/herdr-runtime \
+            --seed-archive "$archive" \
+            --seed-prefix tether-node-0.5.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: tether-pinned-herdr-runtime
+          path: .runtime/herdr-runtime/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
   package:
     name: ${{ matrix.target }}
     if: ${{ !contains(github.event.head_commit.message, '[preview-publish-only]') }}
-    needs: build-codeg-web
+    needs: [build-codeg-web, hydrate-herdr-runtime]
     strategy:
       fail-fast: false
       matrix:
@@ -90,7 +123,45 @@ jobs:
       - name: Install pinned desktop packaging tools
         run: npm ci --prefix desktop/packaging
       - name: Install APP production dependencies
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
         run: npm ci --prefix apps/tether-app
+      - name: Download Electron release asset and seed the verified electron-get cache
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ELECTRON_ASSET_ID: ${{ matrix.target == 'windows-x64' && '249672704' || matrix.target == 'linux-x64' && '249666501' || matrix.target == 'macos-x64' && '249674370' || '249673532' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          case '${{ matrix.target }}' in
+            windows-x64) platform=win32; arch=x64 ;;
+            linux-x64) platform=linux; arch=x64 ;;
+            macos-x64) platform=darwin; arch=x64 ;;
+            macos-arm64) platform=darwin; arch=arm64 ;;
+            *) echo 'Unsupported Electron target' >&2; exit 1 ;;
+          esac
+          archive="$RUNNER_TEMP/electron-v33.4.11-$platform-$arch.zip"
+          gh api "repos/electron/electron/releases/assets/$ELECTRON_ASSET_ID" \
+            -H 'Accept: application/octet-stream' > "$archive"
+          ELECTRON_ARCHIVE="$archive" ELECTRON_PLATFORM="$platform" ELECTRON_ARCH="$arch" node - <<'NODE'
+          const fs = require('node:fs')
+          const crypto = require('node:crypto')
+          const path = require('node:path')
+          const electronDir = path.resolve('apps/tether-app/node_modules/electron')
+          const pkg = JSON.parse(fs.readFileSync(path.join(electronDir, 'package.json'), 'utf8'))
+          if (pkg.version !== '33.4.11') throw new Error(`Unexpected Electron package version: ${pkg.version}`)
+          const file = `electron-v${pkg.version}-${process.env.ELECTRON_PLATFORM}-${process.env.ELECTRON_ARCH}.zip`
+          const expected = JSON.parse(fs.readFileSync(path.join(electronDir, 'checksums.json'), 'utf8'))[file]
+          if (!expected) throw new Error(`Pinned Electron checksum is missing: ${file}`)
+          const archive = process.env.ELECTRON_ARCHIVE
+          const actual = crypto.createHash('sha256').update(fs.readFileSync(archive)).digest('hex')
+          if (actual !== expected) throw new Error(`Official Electron asset failed the package-pinned checksum: ${file}`)
+          const url = `https://github.com/electron/electron/releases/download/v${pkg.version}/${file}`
+          const { Cache } = require(path.resolve(electronDir, '../@electron/get/dist/cjs/Cache.js'))
+          new Cache().putFileInCache(url, archive, file).then(() => console.log(`Seeded verified Electron cache for ${file}`))
+            .catch(error => { console.error(error.message); process.exitCode = 1 })
+          NODE
+          node apps/tether-app/node_modules/electron/install.js
       - name: Install shared APP web UI dependencies
         run: npm ci --prefix packages/tether-ui
       - name: Build headless Tether Python command runtime
@@ -136,8 +207,11 @@ jobs:
         with:
           name: tether-pinned-codeg-web
           path: .runtime/codeg-web
-      - name: Hydrate pinned Herdr runtime
-        run: python scripts/hydrate_herdr_runtime.py --destination .runtime/herdr-runtime
+      - name: Download the verified pinned Herdr runtime artifact
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: tether-pinned-herdr-runtime
+          path: .runtime/herdr-runtime
       - name: Assemble pinned runtime components
         run: python desktop/packaging/prepare_runtime.py --target ${{ matrix.target }} --codeg-web .runtime/codeg-web --herdr-runtime .runtime/herdr-runtime
       - name: Check the frozen Python and bundled Node entry points
