@@ -42,7 +42,14 @@ async function postJson(fetcher, url, body, { signal } = {}) {
     try {
       const payload = await response.json()
       const detail = payload && payload.detail
-      if (detail && typeof detail === 'object' && typeof detail.code === 'string') error.code = detail.code
+      if (detail && typeof detail === 'object' && typeof detail.code === 'string') {
+        error.code = detail.code
+        if (detail.code === 'edge_not_connected') {
+  error.message = '这两台设备尚未连接，请先在互联页面建立连接。'
+} else if (detail.code === 'network_not_connected') {
+          error.message = '这两台设备尚未互联，请先在互联页面加入同一个网络。'
+        }
+      }
     } catch (_) { /* preserve only a structured error code */ }
     throw error
   }

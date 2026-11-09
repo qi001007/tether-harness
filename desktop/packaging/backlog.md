@@ -40,3 +40,4 @@
 - 2026-11-09：候选 SHA256SUMS 生成时排除 electron-builder 的 `builder-debug.yml` 与 `builder-effective-config.yaml` 诊断输出，避免多平台同名文件进入发布清单。
 # Change log
 - 2026-11-09: Candidate packaging now invokes the existing `packages/tether-ui` `build:web` script through the active npm CLI before validating and packaging the shared APP UI bundle.
+- 2026-11-09: Candidate app/Node versions advance to 0.5.2; plugin remains pinned at 0.2.93. Electron Builder output and headless package example now follow the synchronized candidate version; preview tagging remains derived from version.json.

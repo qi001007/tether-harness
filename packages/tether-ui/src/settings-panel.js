@@ -613,6 +613,10 @@ export function createSettingsPanel(React) {
     const updateSection = h('div', { style: { display: 'grid', gap: 16 } },
       h('div', { style: { display: 'flex', alignItems: 'center', minHeight: 28 } },
         h('strong', { style: { fontSize: 15, color: ink, fontWeight: 'var(--tether-strong, 600)' } }, '更新'),
+        update && update.onOpenAppUpdates ? h('button', {
+          type: 'button', onClick: update.onOpenAppUpdates,
+          style: { ...secondary, marginLeft: 'auto', height: 28 }
+        }, '本机 APP 更新') : null,
         h('button', {
           type: 'button', onClick: () => update && update.onRefresh && update.onRefresh(), disabled: !!(update && update.refreshing),
           title: '刷新', 'aria-label': '刷新更新状态', className: 'tether-hover',

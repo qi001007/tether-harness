@@ -106,3 +106,5 @@
 - 2026-11-07：从 Codeg 显式选择 Herdr 项目时按规范化 cwd 生成 pane key，并仅对该终端启用 cwd 哈希的 Herdr project scope；通用 Herdr 保留默认 pane/session。
 
 - 2026-11-09：首开遮罩区分等待登录、登录中、读取中和读取失败；未登录时中央按钮调用既有 Hub 登录，身份关联对话框保持。Web 构建通过，隔离 Windows 候选 bundle 已同步；未实际启动验收。
+- 2026-11-09：设置→更新新增本机 APP 更新入口，转接现有 Update Center/electron-updater；本机 APP 信息与远端设备列表分开显示，Tether APP 卡显示当前版本、真实更新通道及检查结果，APP 更新不再尝试把远端 Node 更新和本机安装混为一项。设置→关于读取现有受信 `tether:app-info` 的版本字段，无需 Hub 登录。
+- 2026-11-09：互联页接入个人/团队私网创建、选择、成员加入/移除及真实成员状态；native 业务连接要求双方在所选网络 ready，并提示断开后的服务授权撤销状态。本机桌面更新行仅显示 APP，与 desktop APP-only 更新动作一致。

@@ -3600,6 +3600,15 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const [privateNetworks, setPrivateNetworks] = React.useState([])
       const [privateNetworksError, setPrivateNetworksError] = React.useState('')
       const [retryingNetworkId, setRetryingNetworkId] = React.useState('')
+      const [selectedPrivateNetworkId, setSelectedPrivateNetworkId] = React.useState('')
+      const [privateTeams, setPrivateTeams] = React.useState([])
+      const [privateTeamsError, setPrivateTeamsError] = React.useState('')
+      const [showPrivateNetworkCreate, setShowPrivateNetworkCreate] = React.useState(false)
+      const [privateNetworkName, setPrivateNetworkName] = React.useState('')
+      const [privateNetworkScope, setPrivateNetworkScope] = React.useState('personal')
+      const [privateNetworkTeamId, setPrivateNetworkTeamId] = React.useState('')
+      const [privateNetworkDeviceId, setPrivateNetworkDeviceId] = React.useState('')
+      const [privateNetworkBusy, setPrivateNetworkBusy] = React.useState(false)
       const [notice, setNotice] = React.useState('')
       const [busy, setBusy] = React.useState(false)
       const [native, setNative] = React.useState([])
@@ -3699,6 +3708,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const [freshSession, setFreshSession] = React.useState(false)
       const [appLocalDevice, setAppLocalDevice] = React.useState('')
       const appLocalDeviceRef = React.useRef('')
+      const [localAppVersion, setLocalAppVersion] = React.useState('')
       const [showUpdate, setShowUpdate] = React.useState(false)
       const [updateRefreshing, setUpdateRefreshing] = React.useState(false)
       const [updatePage, setUpdatePage] = React.useState(1)
@@ -3754,6 +3764,17 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       accountAvatarRef.current = accountAvatar
       const accountPendingRef = React.useRef(null)
       const [windowMaximized, setWindowMaximized] = React.useState(false)
+      React.useEffect(() => {
+        if (!host || host.kind !== 'app' || typeof host.appVersion !== 'function') {
+          setLocalAppVersion('')
+          return undefined
+        }
+        let alive = true
+        host.appVersion().then((version) => {
+          if (alive) setLocalAppVersion(version)
+        }).catch(() => {})
+        return () => { alive = false }
+      }, [host])
       React.useEffect(() => {
         if (!host || !host.windowControls) return undefined
         let alive = true
@@ -4229,9 +4250,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const productCard = (product) => {
         if (host && host.kind === 'web') return null
         const localId = appLocalDevice || deviceId
-        const localDevice = ((state && state.devices) || []).find((item) => item.device_id === localId)
-        const nodeUpdateManaged = product === 'desktop' && localDevice?.capabilities?.node_self_update_enabled === false
-        const components = product === 'desktop' ? ['app', ...(nodeUpdateManaged ? [] : ['node'])] : ['localPlugin']
+        const components = product === 'desktop' ? ['app'] : ['localPlugin']
         const infos = components.map((component) => {
           const info = infoFor(component, component === 'node' ? localId : '')
           if (component === 'localPlugin' && !info.latest_version && localId) {
@@ -4254,17 +4273,21 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           restartRequired: runtimeRestartRequired, failed })
         const active = card.kind === 'running'
         const versionText = product === 'desktop'
-          ? versionLine('APP', { current: infos[0].current_version, latest: infos[0].latest_version },
-            nodeUpdateManaged ? { current: localDevice?.capabilities?.node_version || '', latest: '' } : { current: infos[1]?.current_version, latest: infos[1]?.latest_version })
+          ? 'APP ' + (infos[0].update_available === true
+            ? versionTuple(infos[0].current_version, infos[0].latest_version)
+            : (infos[0].current_version || '—'))
           : '插件 ' + versionTuple(infos[0].runtime_version || infos[0].current_version, infos[0].latest_version)
-        const title = product === 'desktop' ? 'Tether Desktop（APP + Node）' : 'Tether for DSH（插件）'
+        const title = product === 'desktop' ? 'Tether APP' : 'Tether for DSH（插件）'
+        const channelText = product === 'desktop' && infos[0].channel
+          ? '更新通道：' + (infos[0].channel === 'preview' ? '预览' : infos[0].channel)
+          : ''
         return h('div', { key: product, style: { padding: 12, borderRadius: 8, background: C.panel, marginBottom: 10 } },
           h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 } },
             h('strong', { style: { fontSize: 13 } }, title),
             h('span', { style: { marginLeft: 'auto' } }, active ? h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center', color: C.amber } }, h(Glyph, { name: 'refresh', size: 14 }))
               : pill(card.pill, updateToneColor(card.tone)))),
           h('div', { style: { color: C.sub, fontSize: 12, lineHeight: '19px' } }, versionText),
-          nodeUpdateManaged ? h('div', { style: { color: C.mute, fontSize: 11, marginTop: 3 } }, 'Node 由安装包或独立安装器更新') : null,
+          channelText ? h('div', { style: { color: C.mute, fontSize: 11, marginTop: 3 } }, channelText) : null,
           updateProgressBar(infos, active),
           h('div', { style: { marginTop: 8 } },
             active ? btn(h('span', { className: 'tether-spin', style: { width: 16, height: 16, display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 16 })), () => {}, { primary: true, disabled: true })
@@ -4330,9 +4353,8 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         let failure = ''
         try {
           const nodeScope = localId ? { deviceId: localId, epoch: 0 } : null
-          const localCapabilities = ((stateRef.current?.devices || []).find((item) => item.device_id === localId) || {}).capabilities || {}
           const plan = product === 'desktop'
-            ? [...(localCapabilities.node_self_update_enabled === false ? [] : [{ component: 'node', scope: nodeScope }]), { component: 'app', scope: null }]
+            ? [{ component: 'app', scope: null }]
             : [{ component: 'localPlugin', scope: null }]
           const prepared = {}
           for (const step of plan) {
@@ -4358,9 +4380,9 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             failure = nodeRestartManualMessage
             setComponentUpdateError('node', nodeRestartManualMessage, nodeScope)
           }
-          // Everything is downloaded before the first apply. Node goes first so
-          // the APP (and with it the node process) restarts exactly once.
-          const order = product === 'desktop' ? ['node', 'app'] : ['localPlugin']
+          // The desktop product plan applies only the APP package; its restart is
+          // followed by an explicit APP and managed Node readiness check.
+          const order = product === 'desktop' ? ['app'] : ['localPlugin']
           if (!failure) for (const component of order) {
             const entry = prepared[component]
             if (!entry || entry.failed || entry.current || entry.inProgress || !entry.preparedId) continue
@@ -4370,6 +4392,9 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
                 if (!applied || applied.ok === false) failure = failure || 'APP 更新失败'
                 else {
                   setNotice('APP 正在重启并安装更新…')
+                  if (!stateRef.current?.user || !nodeScope) {
+                    continue
+                  }
                   if (updateInfoRunning(applied)) {
                     const settled = await waitForUpdateSettle('app', null, entry.authority)
                     if (!settled) failure = failure || 'APP 更新仍在进行，尚未确认完成'
@@ -5939,18 +5964,33 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         window.addEventListener('pointerup', stop)
         window.addEventListener('pointercancel', stop)
       }
-      const loadPrivateNetworks = async () => {
+      const privateNetworkStateLabel = (value) => ({ ready: '已就绪', provisioning: '配置中', failed: '失败', pending: '等待处理', removing: '移除中', revocation_pending: '撤销中', removed: '已移除' }[value] || '状态未知')
+      const loadPrivateNetworks = async (preferredId = '') => {
         const generation = ACTIVE_BASE_GENERATION
         try {
           const data = await api('/api/networks')
           if (generation !== ACTIVE_BASE_GENERATION) return
           const records = Array.isArray(data) ? data : (data && Array.isArray(data.networks) ? data.networks : null)
           if (!records) throw new Error('私有网络响应格式无效')
-          setPrivateNetworks(records.filter((item) => item && typeof item === 'object'))
+          const nextNetworks = records.filter((item) => item && typeof item === 'object')
+          setPrivateNetworks(nextNetworks)
+          const preferred = preferredId || selectedPrivateNetworkId
+          setSelectedPrivateNetworkId(nextNetworks.some((item) => (item.network_id || item.id) === preferred)
+            ? preferred : ((nextNetworks[0] && (nextNetworks[0].network_id || nextNetworks[0].id)) || ''))
           setPrivateNetworksError('')
         } catch (error) {
           if (generation !== ACTIVE_BASE_GENERATION) return
           setPrivateNetworksError(error && error.message ? error.message : '私有网络读取失败')
+        }
+      }
+      const loadPrivateTeams = async () => {
+        try {
+          const data = await api('/api/teams')
+          const rows = Array.isArray(data && data.teams) ? data.teams : []
+          setPrivateTeams(rows.filter((team) => team && ['owner', 'admin'].includes(team.role)))
+          setPrivateTeamsError('')
+        } catch (error) {
+          setPrivateTeamsError(error && error.message ? error.message : '团队列表读取失败')
         }
       }
       const retryPrivateNetwork = async (network) => {
@@ -5959,23 +5999,99 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         setRetryingNetworkId(id)
         try {
           await post('/api/networks/' + encodeURIComponent(id) + '/retry', {})
-          await loadPrivateNetworks()
+          await loadPrivateNetworks(id)
           await loadState(true)
           setNotice('已请求恢复私有网络「' + (network.name || id) + '」')
         } catch (error) {
+          await loadPrivateNetworks(id)
           setPrivateNetworksError(error && error.message ? error.message : '私有网络恢复失败')
-          await loadPrivateNetworks()
         } finally {
           setRetryingNetworkId('')
+        }
+      }
+      const createPrivateNetwork = async () => {
+        const name = privateNetworkName.trim()
+        if (!name || privateNetworkBusy) return
+        if (privateNetworkScope === 'team' && !privateNetworkTeamId) {
+          setPrivateNetworksError('请选择一个由你管理的团队。')
+          return
+        }
+        setPrivateNetworkBusy(true)
+        setPrivateNetworksError('')
+        try {
+          const body = privateNetworkScope === 'team'
+            ? { scope_kind: 'team', team_id: privateNetworkTeamId, name }
+            : { scope_kind: 'personal', name }
+          const created = await post('/api/networks', body)
+          const createdId = created && (created.network_id || created.id)
+          if (!createdId) throw new Error('网络创建失败，请刷新后重试。')
+          setSelectedPrivateNetworkId(createdId)
+          setPrivateNetworkName('')
+          setShowPrivateNetworkCreate(false)
+          await loadPrivateNetworks(createdId)
+          setNotice('已创建私有网络「' + (created.name || name) + '」')
+        } catch (error) {
+          setPrivateNetworksError(error && error.message ? error.message : '私有网络创建失败')
+        } finally {
+          setPrivateNetworkBusy(false)
+        }
+      }
+      const joinPrivateNetworkDevice = async (network, device) => {
+        const id = network && (network.network_id || network.id)
+        if (!id || !device || privateNetworkBusy) return
+        const networkName = network.name || id
+        const deviceName = device.name || device.device_id
+        if (network.state !== 'ready') {
+          setPrivateNetworksError('网络「' + networkName + '」当前不可用，请先将网络恢复到“已就绪”状态。')
+          return
+        }
+        if (!window.confirm('确认将设备「' + deviceName + '」加入私有网络「' + networkName + '」？团队网络需先在“团队与共享”中分享该设备。')) return
+        setPrivateNetworkBusy(true)
+        setPrivateNetworksError('')
+        try {
+          const result = await post('/api/networks/' + encodeURIComponent(id) + '/devices', { device_id: device.device_id })
+          await Promise.all([loadPrivateNetworks(), loadState(true)])
+          const joinedState = result && result.device && result.device.state
+          setNotice(joinedState === 'ready'
+            ? '设备「' + deviceName + '」已在网络「' + networkName + '」就绪。'
+            : '已提交设备「' + deviceName + '」加入网络「' + networkName + '」；当前状态：' + privateNetworkStateLabel(joinedState) + '。')
+        } catch (error) {
+          setPrivateNetworksError(error && error.message ? error.message : '设备加入网络失败')
+        } finally {
+          setPrivateNetworkBusy(false)
+        }
+      }
+      const removePrivateNetworkDevice = async (network, member) => {
+        const id = network && (network.network_id || network.id)
+        if (!id || !member || privateNetworkBusy) return
+        const device = ((state && state.devices) || []).find((item) => item.device_id === member.device_id)
+        const networkName = network.name || id
+        const deviceName = (device && device.name) || member.device_id
+        if (!window.confirm('确认将设备「' + deviceName + '」从私有网络「' + networkName + '」移除？该设备将断开此网络，并关闭相关服务会话。')) return
+        setPrivateNetworkBusy(true)
+        setPrivateNetworksError('')
+        try {
+          const result = await api('/api/networks/' + encodeURIComponent(id) + '/devices/' + encodeURIComponent(member.device_id), { method: 'DELETE' })
+          await Promise.all([loadPrivateNetworks(), loadState(true)])
+          setNotice(result && (result.state === 'revocation_pending' || result.credential_revocation === 'pending')
+            ? '已提交从网络「' + networkName + '」移除设备「' + deviceName + '」；仍在关闭相关会话与传输，请稍后刷新。'
+            : '已从网络「' + networkName + '」移除设备「' + deviceName + '」')
+        } catch (error) {
+          setPrivateNetworksError(error && error.message ? error.message : '设备移出网络失败')
+        } finally {
+          setPrivateNetworkBusy(false)
         }
       }
       const refreshNetwork = async () => {
         if (networkRefreshing) return
         setNetworkRefreshing(true)
-        try { await Promise.all([loadState(), loadPrivateNetworks()]) } finally { setTimeout(() => setNetworkRefreshing(false), 280) }
+        try { await Promise.all([loadState(), loadPrivateNetworks(), loadPrivateTeams()]) } finally { setTimeout(() => setNetworkRefreshing(false), 280) }
       }
       React.useEffect(() => {
-        if (view === 'network' && loggedIn) loadPrivateNetworks()
+        if (view === 'network' && loggedIn) {
+          loadPrivateNetworks()
+          loadPrivateTeams()
+        }
       }, [view, loggedIn])
 
       React.useEffect(() => {
@@ -6541,9 +6657,34 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         const from = edge && edge.from
         const to = edge && edge.to
         if (!from || !to || from === to) return
+        if (connected) {
+          const network = privateNetworks.find((item) => (item.network_id || item.id) === selectedPrivateNetworkId)
+          const members = Array.isArray(network && network.devices) ? network.devices : []
+          const fromMember = members.find((item) => item.device_id === from && item.state === 'ready')
+          const toMember = members.find((item) => item.device_id === to && item.state === 'ready')
+          if (!network || network.state !== 'ready' || !fromMember || !toMember) {
+            setPrivateNetworksError('连接设备前，请选择一个已就绪的私有网络，并确认两台设备都显示“已就绪”。')
+            return
+          }
+          const deviceLabel = (id) => {
+            const device = ((state && state.devices) || []).find((item) => item.device_id === id)
+            return device && (device.name || device.device_id) || id
+          }
+          if (!window.confirm('确认在私有网络「' + (network.name || network.network_id) + '」中连接设备「' + deviceLabel(from) + '」和「' + deviceLabel(to) + '」？')) return
+        }
         try {
-          const data = await post('/api/edges', { from, to, connected })
+          const data = await post('/api/edges', { from, to, connected, mode: 'native' })
           setState((current) => current ? { ...current, edges: (data && data.edges) || [] } : current)
+          const disconnectState = data && data.disconnect_state
+          if (!connected && disconnectState === 'closed') {
+            setNotice('连接已断开，相关会话与传输已关闭。')
+          } else if (!connected && disconnectState === 'pending') {
+            setNotice('连接已断开；仍在关闭相关会话与传输，请稍后刷新。')
+          } else if (!connected) {
+            setNotice('已提交断开连接。')
+          } else {
+            setNotice('已连接这两台设备。')
+          }
         } catch (error) {
           fail(error)
         }
@@ -6563,6 +6704,11 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         const orderedDevices = orderNetworkDevices(devices, localId)
         const online = devices.filter((item) => item.online)
         const recoverableNetworks = privateNetworks.filter((item) => item.state === 'failed' || item.state === 'provisioning')
+        const selectedNetwork = privateNetworks.find((item) => (item.network_id || item.id) === selectedPrivateNetworkId) || null
+        const networkMembers = Array.isArray(selectedNetwork && selectedNetwork.devices)
+          ? selectedNetwork.devices.filter((item) => item && item.state !== 'removed') : []
+        const memberIds = new Set(networkMembers.map((item) => item.device_id))
+        const joinableDevices = ownDevices.filter((item) => item && item.device_id && !memberIds.has(item.device_id))
         const caps = (item) => {
           const values = []
           const capabilities = item.capabilities || {}
@@ -6660,8 +6806,77 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
               }, h(Glyph, { name: 'link', size: 13 }), '连接管理'),
               h('button', { title: '刷新', 'aria-label': '刷新', onClick: refreshNetwork, className: 'tether-hover', style: { width: 28, height: 28, display: 'grid', placeItems: 'center', border: 0, borderRadius: 6, background: 'transparent', color: C.mute, cursor: 'pointer' } },
                 networkRefreshing ? h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 16 })) : h(Glyph, { name: 'refresh', size: 16 })))),
-          userId && sharedDevices.length ? h('div', { style: { padding: '0 18px 8px', color: C.mute, fontSize: 10.5 } }, '共享设备的可见性和在线状态来自 Hub；团队网络映射尚未接入，显示设备不代表当前网络可达。') : null,
-          privateNetworksError ? h('div', { role: 'status', style: { margin: '0 18px 8px', padding: '8px 10px', borderRadius: 8, background: C.soft, color: C.amber, fontSize: 11 } }, '私有网络状态读取失败：' + privateNetworksError) : null,
+          userId && sharedDevices.length ? h('div', { style: { padding: '0 18px 8px', color: C.mute, fontSize: 10.5 } }, '共享设备在 Hub 中可见不代表已加入所选私有网络；请在成员状态中确认显示“已就绪”。') : null,
+          privateNetworksError ? h('div', { role: 'status', style: { margin: '0 18px 8px', padding: '8px 10px', borderRadius: 8, background: C.soft, color: C.amber, fontSize: 11 } }, '私有网络操作未完成：' + privateNetworksError) : null,
+          h('section', { 'aria-label': '私有网络成员管理', style: { margin: '0 18px 10px', padding: '9px 10px', border: '1px solid ' + C.line, borderRadius: 9, background: C.panel, display: 'grid', gap: 8, flex: '0 0 auto' } },
+            h('div', { style: { display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 } },
+              h('strong', { style: { fontSize: 11.5, color: C.ink, flex: '0 0 auto' } }, '私有网络'),
+              h('select', {
+                value: selectedPrivateNetworkId, 'aria-label': '选择私有网络',
+                onChange: (event) => { setSelectedPrivateNetworkId(event.target.value); setPrivateNetworkDeviceId('') },
+                style: { height: 28, minWidth: 120, maxWidth: 310, flex: '1 1 auto', border: '1px solid ' + C.line, borderRadius: 6, background: C.bg, color: C.ink, fontSize: 11.5, padding: '0 6px' }
+              },
+                h('option', { value: '' }, '选择网络'),
+                privateNetworks.map((item) => {
+                  const id = item.network_id || item.id
+                  const scope = item.scope_kind === 'team' ? '团队' : '个人'
+                  return h('option', { key: id, value: id }, (item.name || id) + ' · ' + scope + ' · ' + privateNetworkStateLabel(item.state))
+                })),
+              selectedNetwork ? pill(privateNetworkStateLabel(selectedNetwork.state), selectedNetwork.state === 'ready' ? C.green : selectedNetwork.state === 'failed' ? C.amber : C.mute) : null,
+              h('button', {
+                type: 'button', onClick: () => setShowPrivateNetworkCreate((value) => !value),
+                style: { height: 28, padding: '0 9px', border: '1px solid ' + C.line, borderRadius: 6, background: C.bg, color: C.sub, fontSize: 11, cursor: 'pointer', flex: '0 0 auto' }
+              }, showPrivateNetworkCreate ? '取消创建' : '创建网络')),
+            showPrivateNetworkCreate ? h('div', { style: { display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' } },
+              h('input', {
+                value: privateNetworkName, maxLength: 64, placeholder: '网络名称', 'aria-label': '网络名称',
+                onChange: (event) => setPrivateNetworkName(event.target.value),
+                style: { height: 28, minWidth: 120, flex: '1 1 170px', boxSizing: 'border-box', border: '1px solid ' + C.line, borderRadius: 6, padding: '0 8px', background: C.bg, color: C.ink, fontSize: 11.5 }
+              }),
+              h('select', {
+                value: privateNetworkScope,
+                onChange: (event) => { const scope = event.target.value; setPrivateNetworkScope(scope); if (scope === 'team' && !privateNetworkTeamId && privateTeams[0]) setPrivateNetworkTeamId(privateTeams[0].team_id) },
+                style: { height: 28, border: '1px solid ' + C.line, borderRadius: 6, background: C.bg, color: C.ink, fontSize: 11.5 }
+              }, h('option', { value: 'personal' }, '个人网络'), h('option', { value: 'team', disabled: !privateTeams.length }, '团队网络')),
+              privateNetworkScope === 'team' ? h('select', {
+                value: privateNetworkTeamId, 'aria-label': '选择团队', onChange: (event) => setPrivateNetworkTeamId(event.target.value),
+                style: { height: 28, minWidth: 120, maxWidth: 220, border: '1px solid ' + C.line, borderRadius: 6, background: C.bg, color: C.ink, fontSize: 11.5 }
+              }, privateTeams.length ? privateTeams.map((team) => h('option', { key: team.team_id, value: team.team_id }, (team.name || team.team_id) + ' · ' + team.role)) : h('option', { value: '' }, '没有可管理的团队')) : null,
+              privateNetworkScope === 'team' && privateTeamsError ? h('span', { role: 'status', style: { color: C.amber, fontSize: 10.5 } }, privateTeamsError) : null,
+              h('button', {
+                type: 'button', disabled: privateNetworkBusy || !privateNetworkName.trim() || (privateNetworkScope === 'team' && !privateNetworkTeamId),
+                onClick: createPrivateNetwork,
+                style: { height: 28, padding: '0 10px', border: 0, borderRadius: 6, background: C.blue, color: C.onPrimary, fontSize: 11, cursor: 'pointer', opacity: privateNetworkBusy ? 0.6 : 1 }
+              }, privateNetworkBusy ? '处理中…' : '创建')) : null,
+            selectedNetwork ? h('div', { style: { display: 'grid', gap: 7 } },
+              h('div', { style: { display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' } },
+                h('span', { style: { color: C.mute, fontSize: 10.5, flex: '0 0 auto' } }, '加入设备'),
+                h('select', {
+                  value: privateNetworkDeviceId, 'aria-label': '选择要加入网络的设备',
+                  onChange: (event) => setPrivateNetworkDeviceId(event.target.value), disabled: privateNetworkBusy || !joinableDevices.length,
+                  style: { height: 28, minWidth: 140, flex: '1 1 180px', border: '1px solid ' + C.line, borderRadius: 6, background: C.bg, color: C.ink, fontSize: 11.5 }
+                }, h('option', { value: '' }, joinableDevices.length ? '选择本人设备' : '没有可加入的本人设备'),
+                  joinableDevices.map((item) => h('option', { key: item.device_id, value: item.device_id, disabled: !item.online }, (item.name || item.device_id) + (item.online ? '' : ' · 离线')))),
+                h('button', {
+                  type: 'button', disabled: privateNetworkBusy || selectedNetwork.state !== 'ready' || !privateNetworkDeviceId,
+                  onClick: () => { const device = joinableDevices.find((item) => item.device_id === privateNetworkDeviceId); if (device) void joinPrivateNetworkDevice(selectedNetwork, device) },
+                  style: { height: 28, padding: '0 10px', border: 0, borderRadius: 6, background: C.ink, color: C.onPrimary, fontSize: 11, cursor: 'pointer', opacity: privateNetworkBusy || selectedNetwork.state !== 'ready' || !privateNetworkDeviceId ? 0.5 : 1 }
+                }, privateNetworkBusy ? '处理中…' : '加入所选网络')),
+              selectedNetwork.scope_kind === 'team' ? h('div', { style: { color: C.mute, fontSize: 10.5 } }, '团队网络只能加入已在“团队与共享”中分享给该团队的设备。') : null,
+              h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' } },
+                h('span', { style: { color: C.mute, fontSize: 10.5, flex: '0 0 auto' } }, '成员状态'),
+                networkMembers.length ? networkMembers.map((member) => {
+                  const device = allDevices.find((item) => item.device_id === member.device_id)
+                  const label = device && device.name || member.device_id
+                    const status = privateNetworkStateLabel(member.state)
+                  return h('span', { key: member.device_id, title: member.device_id, style: { display: 'inline-flex', alignItems: 'center', gap: 5, minHeight: 25, padding: '0 5px 0 8px', border: '1px solid ' + C.line, borderRadius: 999, background: C.bg, fontSize: 10.5, color: C.ink } },
+                    label, pill(status, member.state === 'ready' ? C.green : member.state === 'failed' || member.state === 'revocation_pending' ? C.amber : C.mute),
+                    h('button', { type: 'button', title: '移出网络 ' + (selectedNetwork.name || selectedNetwork.network_id), 'aria-label': '移出 ' + label,
+                      disabled: privateNetworkBusy,
+                      onClick: () => void removePrivateNetworkDevice(selectedNetwork, member),
+                      style: { border: 0, background: 'transparent', color: C.red, fontSize: 14, cursor: 'pointer', lineHeight: 1, padding: '0 2px' } }, '×'))
+                }) : h('span', { style: { color: C.mute, fontSize: 10.5 } }, '此网络还没有成员'))
+            ) : null),
           recoverableNetworks.length ? h('div', { style: { display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, padding: '0 18px 10px', flex: '0 0 auto' } },
             h('span', { style: { color: C.mute, fontSize: 11 } }, '私有网络恢复'),
             recoverableNetworks.map((item) => {
@@ -6761,7 +6976,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         const appUpdateUnavailable = caps.app_update_owner === 'electron_updater'
           && caps.app_update_bridge_available !== true
           const components = local
-            ? (product === 'desktop' ? ['app', ...(nodeUpdateManaged ? [] : ['node'])] : ['plugin'])
+            ? (product === 'desktop' ? ['app'] : ['plugin'])
             : [...(hasApp ? ['app'] : []), ...(nodeUpdateManaged ? [] : ['node'])]
           const installerOwnedNode = ['app_installer', 'bundle_installer'].includes(caps.node_update_owner)
           const updateOrigin = local ? '' : hasApp ? 'app'
@@ -6804,6 +7019,9 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             .map((item) => makeRow(item, false, '')),
           refreshing: updateRefreshing,
           onRefresh: () => { void refreshUpdateCenter(true) },
+          onOpenAppUpdates: host && host.kind === 'app'
+            ? () => { setShowAppSettings(false); openUpdateCenter() }
+            : null,
           onUpdate: (row) => {
             if (!row) return
             if (row.local) { void runProductUpdate(row.product); return }
@@ -7113,7 +7331,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             device_id: localDeviceRecord.device_id || appLocalDevice || deviceId,
             online: !!localDeviceRecord.online
           },
-          versions: { app: localCaps.app_version, node: localCaps.node_version, plugin: localCaps.plugin_version },
+          versions: { app: localAppVersion || updateInfo.app?.current_version || localCaps.app_version, node: localCaps.node_version, plugin: localCaps.plugin_version },
           update: settingsUpdate,
           extraSections: host.kind === 'app' ? [{
             id: 'teams', label: '团队与共享',

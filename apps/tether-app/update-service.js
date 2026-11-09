@@ -48,6 +48,8 @@ class UpdateService {
     this.preparedIds = new Set()
     this.electronUpdater = null
     this.electronUpdateInfo = null
+    this.electronUpdateAvailable = false
+    this.electronUpdateChannel = 'latest'
     this.electronDownloaded = false
     this.electronLastResult = null
     this.appUpdateBridge = null
@@ -62,6 +64,7 @@ class UpdateService {
         autoUpdater.allowPrerelease = updateChannel === 'preview'
         autoUpdater.channel = autoUpdater.allowPrerelease ? 'preview' : 'latest'
         autoUpdater.allowDowngrade = false
+        this.electronUpdateChannel = autoUpdater.channel
       } else {
         let packagedChannel = ''
         try {
@@ -70,9 +73,10 @@ class UpdateService {
           if (match) packagedChannel = match[1].toLowerCase()
         } catch (_) { /* electron-updater reports missing packaged configuration on check */ }
         autoUpdater.allowPrerelease = packagedChannel === 'preview'
+        this.electronUpdateChannel = packagedChannel || autoUpdater.channel || 'latest'
       }
-      autoUpdater.on('update-available', (info) => { this.electronUpdateInfo = info })
-      autoUpdater.on('update-not-available', (info) => { this.electronUpdateInfo = info })
+      autoUpdater.on('update-available', (info) => { this.electronUpdateInfo = info; this.electronUpdateAvailable = true })
+      autoUpdater.on('update-not-available', (info) => { this.electronUpdateInfo = info; this.electronUpdateAvailable = false })
       autoUpdater.on('update-downloaded', (info) => { this.electronUpdateInfo = info; this.electronDownloaded = true })
     }
   }
@@ -125,7 +129,9 @@ class UpdateService {
       const result = {
         ok: true, component: 'app', current_version: current,
         latest_version: this.electronUpdateInfo && this.electronUpdateInfo.version || current,
-        update_available: !!(this.electronUpdateInfo && this.electronUpdateInfo.version && this.electronUpdateInfo.version !== current),
+        update_available: this.electronUpdateAvailable,
+        channel: this.electronUpdateChannel,
+        downloaded: this.electronDownloaded,
         prepared: this.electronDownloaded ? [{ prepared_id: [...this.preparedIds][0] || '' }] : [],
         restart_required: false, source: 'electron-updater'
       }
@@ -153,9 +159,10 @@ class UpdateService {
     const checked = await this.electronUpdater.checkForUpdates()
     const info = checked && checked.updateInfo || this.electronUpdateInfo
     this.electronUpdateInfo = info || null
+    this.electronUpdateAvailable = checked && checked.isUpdateAvailable === true
     const latest = info && info.version || current
     return { ok: true, component: 'app', current_version: current, latest_version: latest,
-      update_available: !!(info && latest !== current), source: 'electron-updater',
+      update_available: this.electronUpdateAvailable, channel: this.electronUpdateChannel, source: 'electron-updater',
       checked_at: new Date().toISOString(), prepared: [] }
   }
   async activity() {
@@ -174,7 +181,7 @@ class UpdateService {
       await this.activity()
       this.clearElectronApplyFailure()
       if (!this.electronUpdateInfo) await this.check()
-      if (!this.electronUpdateInfo || this.electronUpdateInfo.version === this.app.getVersion()) {
+      if (!this.electronUpdateAvailable || !this.electronUpdateInfo) {
         throw Object.assign(new Error('没有可用的 APP 更新'), { code: 'update_not_available' })
       }
       this.electronDownloaded = false
