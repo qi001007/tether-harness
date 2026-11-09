@@ -31,6 +31,10 @@ VIEW_TTL_SECONDS = 15 * 60
 LOGGER = logging.getLogger(__name__)
 
 
+class _ServiceAccessHTTPServer(ThreadingHTTPServer):
+    request_queue_size = 128
+
+
 class ServiceAccessError(RuntimeError):
     def __init__(self, code: str, message: str) -> None:
         super().__init__(message)
@@ -612,7 +616,7 @@ class ServiceAccess:
                                               "X-Tether-Upstream-Authorization": upstream.get("Authorization", ""),
                                               "Cache-Control": "no-store"})
 
-            self._httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+            self._httpd = _ServiceAccessHTTPServer(("127.0.0.1", 0), Handler)
             self._httpd.daemon_threads = True
             port = int(self._httpd.server_address[1])
             self._http_thread = threading.Thread(target=self._httpd.serve_forever, daemon=True,

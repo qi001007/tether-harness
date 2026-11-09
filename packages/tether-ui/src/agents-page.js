@@ -1,6 +1,48 @@
 import { createTerminalDock } from './terminal-dock.js'
 import { readCatalog, writeCatalog, readHarnesses, writeHarnesses } from './agent-cache.js'
 import { writeAccount } from './agent-account-cache.js'
+
+function NativeServicePane({ React, C, pane }) {
+  const h = React.createElement
+  const webviewRef = React.useRef(null)
+  const [frameState, setFrameState] = React.useState('loading')
+
+  React.useEffect(() => {
+    const guest = webviewRef.current
+    const endpoint = pane.service && pane.service.endpoint
+    if (!endpoint || !guest || typeof guest.addEventListener !== 'function') return undefined
+    setFrameState('loading')
+    const onStart = (event) => { if (event.isMainFrame && !event.isInPlace) setFrameState('loading') }
+    const onFinish = () => setFrameState('ready')
+    const onFail = (event) => {
+      if (event.isMainFrame && event.errorCode !== -3) setFrameState('error')
+    }
+    guest.addEventListener('did-start-navigation', onStart)
+    guest.addEventListener('did-finish-load', onFinish)
+    guest.addEventListener('did-fail-load', onFail)
+    guest.src = endpoint
+    return () => {
+      guest.removeEventListener('did-start-navigation', onStart)
+      guest.removeEventListener('did-finish-load', onFinish)
+      guest.removeEventListener('did-fail-load', onFail)
+    }
+  }, [pane.service && pane.service.endpoint])
+
+  const button = {
+    height: 28, padding: '0 14px', border: 0, borderRadius: 7, fontSize: 12,
+    cursor: 'pointer', color: '#fff', background: C.blue
+  }
+  return h('div', { style: { flex: '1 1 auto', minHeight: 0, minWidth: 0, position: 'relative', display: 'flex' } },
+    h('webview', { key: pane.key, ref: webviewRef, title: pane.title, partition: pane.service.partition,
+      style: { flex: '1 1 auto', width: '100%', minHeight: 0, border: 0, background: '#fff' } }),
+    frameState === 'loading' ? h('div', { role: 'status', style: { position: 'absolute', inset: 0, display: 'grid', placeItems: 'center',
+      background: 'rgba(255,255,255,.94)', color: C.sub, fontSize: 13, pointerEvents: 'none' } }, '正在连接目标 ' + pane.title + '…') : null,
+    frameState === 'error' ? h('div', { role: 'alert', style: { position: 'absolute', inset: 0, display: 'grid', placeItems: 'center',
+      alignContent: 'center', gap: 10, padding: 24, background: C.bg, color: C.sub, fontSize: 13, textAlign: 'center' } },
+      h('span', null, '目标 ' + pane.title + ' 页面连接失败。请检查设备连接后重试。'),
+      h('button', { type: 'button', onClick: () => { setFrameState('loading'); webviewRef.current?.reload?.() }, style: button }, '重试')) : null)
+}
+
 export function createAgentsPage(props) {
   const { React, devices = [], localDevice = '', activeDevice = '' } = props
   const online = devices.filter((item) => item && item.online)
@@ -59,8 +101,6 @@ function AgentTargetPage({ React, Glyph, post, C, host, devices = [], localDevic
   const [serviceCatalogBusy, setServiceCatalogBusy] = React.useState(false)
   const [serviceOpening, setServiceOpening] = React.useState(false)
   const [serviceView, setServiceView] = React.useState(null)
-  const [serviceFrameState, setServiceFrameState] = React.useState('loading')
-  const serviceWebviewRef = React.useRef(null)
   const [workbenchLoginRequired, setWorkbenchLoginRequired] = React.useState(false)
   const [workbenchLoginBusy, setWorkbenchLoginBusy] = React.useState(false)
   const [cwd, setCwd] = React.useState('')
@@ -747,26 +787,6 @@ function AgentTargetPage({ React, Glyph, post, C, host, devices = [], localDevic
     })
   }, [serviceView, device, host])
 
-  React.useEffect(() => {
-    const guest = serviceWebviewRef.current
-    if (!serviceView || !guest || typeof guest.addEventListener !== 'function') return undefined
-    setServiceFrameState('loading')
-    const onStart = (event) => { if (event.isMainFrame) setServiceFrameState('loading') }
-    const onFinish = () => setServiceFrameState('ready')
-    const onFail = (event) => {
-      if (event.isMainFrame && event.errorCode !== -3) setServiceFrameState('error')
-    }
-    guest.addEventListener('did-start-navigation', onStart)
-    guest.addEventListener('did-finish-load', onFinish)
-    guest.addEventListener('did-fail-load', onFail)
-    guest.src = serviceView.endpoint
-    return () => {
-      guest.removeEventListener('did-start-navigation', onStart)
-      guest.removeEventListener('did-finish-load', onFinish)
-      guest.removeEventListener('did-fail-load', onFail)
-    }
-  }, [serviceView && serviceView.endpoint])
-
   const installAgent = async (agent) => {
     if (!device || installing) return
     setInstalling(agent.id)
@@ -832,15 +852,7 @@ function AgentTargetPage({ React, Glyph, post, C, host, devices = [], localDevic
     }) : h('div', { style: { flex: '1 1 auto', display: 'grid', placeItems: 'center', color: C.mute, fontSize: 12, background: C.bg } },
       '正在启动 ' + pane.title + '…'))
     : pane.kind === 'native-service'
-      ? h('div', { style: { flex: '1 1 auto', minHeight: 0, minWidth: 0, position: 'relative', display: 'flex' } },
-        h('webview', { key: pane.key, ref: serviceWebviewRef, title: pane.title, partition: pane.service.partition,
-          style: { flex: '1 1 auto', width: '100%', minHeight: 0, border: 0, background: '#fff' } }),
-        serviceFrameState === 'loading' ? h('div', { role: 'status', style: { position: 'absolute', inset: 0, display: 'grid', placeItems: 'center',
-          background: 'rgba(255,255,255,.94)', color: C.sub, fontSize: 13, pointerEvents: 'none' } }, '正在连接目标 ' + pane.title + '…') : null,
-        serviceFrameState === 'error' ? h('div', { role: 'alert', style: { position: 'absolute', inset: 0, display: 'grid', placeItems: 'center',
-          alignContent: 'center', gap: 10, padding: 24, background: C.bg, color: C.sub, fontSize: 13, textAlign: 'center' } },
-          h('span', null, '目标 ' + pane.title + ' 页面连接失败。请检查设备连接后重试。'),
-          h('button', { type: 'button', onClick: () => { setServiceFrameState('loading'); serviceWebviewRef.current?.reload?.() }, style: button }, '重试')) : null)
+      ? h(NativeServicePane, { key: pane.service.partition, React, C, pane })
     : h(createTerminalDock, {
       key: pane.key, React, Glyph, post, C, device, cwd: pane.cwd || '',
       initialAgent: pane.agentId || '', initialShell: pane.shell || '', initialHerdrProject: pane.herdrProject || false,

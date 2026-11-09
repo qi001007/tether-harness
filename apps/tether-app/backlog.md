@@ -125,3 +125,5 @@
 - 2026-11-09: Native workbench maps the structured `edge_not_connected` error to a direct instruction to connect the devices on the network page.
 
 - 2026-11-09：旧账号绑定改用现有/admin/login session-cookie入口后再调用/api/auth/identity/bind；不将个人token当作旧session。
+- 2026-11-09：工作台接受并验证Controller返回的operation_id；复用grant时以真实operation_id关闭/撤销，成功关闭后释放匹配ID，明确operation_conflict才允许重试，未知超时保留ID。远程桌面结束要求确认service_revoke的connections_closed；Codeg仍使用service_close。
+- 2026-11-09：新增workbench operation生命周期定向覆盖，验证close/reopen、冲突、未知失败保留ID与桌面撤销确认。

@@ -44,9 +44,11 @@ async function postJson(fetcher, url, body, { signal } = {}) {
       const detail = payload && payload.detail
       if (detail && typeof detail === 'object' && typeof detail.code === 'string') {
         error.code = detail.code
-        if (detail.code === 'edge_not_connected') {
-  error.message = '这两台设备尚未连接，请先在互联页面建立连接。'
-} else if (detail.code === 'network_not_connected') {
+        if (detail.code === 'operation_conflict') {
+          error.message = '本次工作台会话已结束，请重新打开。'
+        } else if (detail.code === 'edge_not_connected') {
+          error.message = '这两台设备尚未连接，请先在互联页面建立连接。'
+        } else if (detail.code === 'network_not_connected') {
           error.message = '这两台设备尚未互联，请先在互联页面加入同一个网络。'
         }
       }
@@ -69,7 +71,8 @@ function bytesFromRequest(value) {
 
 function verifyEndpoint(descriptor, targetId, serviceId) {
   if (!descriptor || descriptor.protocol !== 1 || descriptor.target_id !== targetId || descriptor.id !== serviceId
-      || descriptor.state !== 'ready' || descriptor.transport !== 'caddy-easytier') {
+      || descriptor.state !== 'ready' || descriptor.transport !== 'caddy-easytier'
+      || typeof descriptor.operation_id !== 'string' || !descriptor.operation_id.trim()) {
     throw new Error((descriptor && descriptor.reason) || '目标服务尚未就绪或授权失败。')
   }
   const endpoint = new URL(descriptor.endpoint)
@@ -264,18 +267,24 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
       return open(targetId, serviceId)
     }
     const isCurrent = () => (actorGenerations.get(actorId) || 0) === generation
-    const operationId = operationIds.get(key) || crypto.randomUUID()
-    operationIds.set(key, operationId)
-    const revokeStaleGrant = async (grantId) => {
+    const requestedOperationId = operationIds.get(key) || crypto.randomUUID()
+    let operationId = requestedOperationId
+    operationIds.set(key, requestedOperationId)
+    const revokeStaleGrant = async (grantId, grantOperationId = operationId) => {
       if (!grantId) return
       const newerActive = active.get(key)
       const newerPending = pending.get(key)
       if ((newerActive && newerActive.generation > generation)
           || (newerPending && newerPending.generation > generation)) return
       try {
-        await postJson(loginSession.fetch.bind(loginSession), apiUrl(base, targetId, 'service_revoke'), {
-          grant_id: grantId, operation_id: operationId
+        const result = await postJson(loginSession.fetch.bind(loginSession), apiUrl(base, targetId, 'service_revoke'), {
+          grant_id: grantId, operation_id: grantOperationId
         })
+        if (!result || result.grant_id !== grantId || result.state !== 'revoked' || result.connections_closed !== true) {
+          revocationFailures.add(actorId)
+          return
+        }
+        if (operationIds.get(key) === grantOperationId) operationIds.delete(key)
       } catch (_) { revocationFailures.add(actorId) }
     }
     let openedDescriptor = null
@@ -293,7 +302,7 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     if (!isCurrent() || openingController.signal.aborted) throw new Error('工作台账号已切换，请重新打开服务。')
     const openBody = {
       service_id: serviceId,
-      operation_id: operationId,
+      operation_id: requestedOperationId,
       source_device_id: sourceDeviceId
     }
     const startupController = new AbortController()
@@ -312,14 +321,22 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
           descriptor = await postJson(loginSession.fetch.bind(loginSession), apiUrl(base, targetId, 'service_open'),
             openBody, { signal: startupController.signal })
           openedDescriptor = descriptor
+          if (descriptor && typeof descriptor.operation_id === 'string' && descriptor.operation_id.trim()) {
+            operationId = descriptor.operation_id
+          }
           if (!isCurrent() || openingController.signal.aborted) throw new Error('工作台账号已切换，请重新打开服务。')
           if (startupController.signal.aborted || Date.now() >= startupDeadline) {
             throw new Error('目标服务启动等待超时，请稍后重试。')
           }
+          if (!descriptor || typeof descriptor.operation_id !== 'string' || !descriptor.operation_id.trim()) {
+            throw new Error('Controller 返回的工作台 operation_id 无效。')
+          }
+          operationIds.set(key, operationId)
           break
         } catch (error) {
           if (!isCurrent() || openingController.signal.aborted) throw new Error('工作台账号已切换，请重新打开服务。')
           if (startupController.signal.aborted) throw new Error('目标服务启动等待超时，请稍后重试。')
+          if (error.code === 'operation_conflict' && operationIds.get(key) === requestedOperationId) operationIds.delete(key)
           if (error.status === 401 || error.status === 403 || error.code !== 'service_starting') throw error
         }
 
@@ -393,7 +410,11 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     logSafe('native-workbench-open', { targetId, serviceId, tlsEpoch: verified.epoch })
     return publicResult
       } catch (error) {
-        if (openedDescriptor && openedDescriptor.grant_id) await revokeStaleGrant(openedDescriptor.grant_id)
+        if (openedDescriptor && openedDescriptor.grant_id) {
+          await revokeStaleGrant(openedDescriptor.grant_id,
+            typeof openedDescriptor.operation_id === 'string' && openedDescriptor.operation_id.trim()
+              ? openedDescriptor.operation_id : operationId)
+        }
         if (openedSession) {
           try {
             await resetServiceSession(openedSession)
@@ -414,16 +435,27 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
 
   async function close(targetId, serviceId, grantId) {
     const actorId = await getActorId()
-    const record = active.get(tupleKey(actorId, targetId, serviceId))
+    const key = tupleKey(actorId, targetId, serviceId)
+    const record = active.get(key)
     if (!record || !grantId || record.descriptor.grant_id !== grantId) throw new Error('找不到本次工作台授权视图。')
     if (record.viewTimer) { clearInterval(record.viewTimer); record.viewTimer = null }
     try {
-      await postJson(loginSession.fetch.bind(loginSession), apiUrl(base, targetId, 'service_close'), { grant_id: grantId })
+      if (serviceId === 'desktop') {
+        const result = await postJson(loginSession.fetch.bind(loginSession), apiUrl(base, targetId, 'service_revoke'), {
+          grant_id: grantId, operation_id: record.operationId
+        })
+        if (!result || result.grant_id !== grantId || result.state !== 'revoked' || result.connections_closed !== true) {
+          throw new Error('远程桌面授权尚未确认撤销，请稍后重试。')
+        }
+      } else {
+        await postJson(loginSession.fetch.bind(loginSession), apiUrl(base, targetId, 'service_close'), { grant_id: grantId })
+      }
     } catch (error) {
       try { await view(targetId, serviceId, true) } catch (_) { /* retain the original close error */ }
       throw error
     }
-    active.delete(tupleKey(actorId, targetId, serviceId))
+    if (operationIds.get(key) === record.operationId) operationIds.delete(key)
+    active.delete(key)
     await resetServiceSession(record.serviceSession)
     logSafe('native-workbench-close', { targetId, serviceId })
     return { targetId, serviceId, state: 'closed' }
