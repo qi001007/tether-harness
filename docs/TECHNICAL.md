@@ -1,6 +1,27 @@
 # Tether 技术说明
 
+## 2026-11-11 更新事务与当前部署边界
+
+- Node 更新器先持久化事务与恢复材料，再替换文件；应用后的状态为 `awaiting_acceptance`。Hub/APP 核验目标 Node 的版本、事务 ID/状态及所需服务状态后，才调用 commit 清理备份；验收失败则调用 rollback。APP 重启后可从 Node status 发现待验收事务并继续验收。Node 提供 commit/rollback RPC，Hub 对应路由已部署。
+- Hub 当前 release 为 `/opt/tether/releases/update-transaction-20261111-r1`，其中 `app.py` 与 `update_jobs.py` 已更新；部署后 health 为 ok、3 台 online、无 stale。前一 release 保留，便于回滚。
+- 本地门禁结果：Node pytest 107 passed / 2 skipped；Hub 39 passed；UI update_chain 24/24；candidate+UI 40/40；workflow 10/10；生成 bundle 与 web build checks 通过。pytest exit code 0；结束时出现既有 `agent_registry.catalog` interpreter-shutdown 线程噪声。
+- 端到端边界：GitHub 签名 0.5.2 preview 尚未发布，update source 尚未实际返回 0.5.2，真实设备尚未从 UI 完成 prepare/apply/restart/service acceptance/commit；尚无对应成功截图或微信送达确认。源码、定向测试及 Hub 路由健康不等于设备更新验收。
+- 409 恢复与磁盘：DESKTOP-LOCAL 的 409 来自切换到候选 Node 侧部署破坏真实 APP 基线；当前已恢复 `D:\Tether\node` 0.2.3，APP 中 LAPTOP-01 DSH workspace/composer 恢复，3/4 设备在线。DESKTOP-LOCAL 当前为 0.2.3。E:.scratch 曾占 78.316 GB / 1,090,126 个文件；清除 18 个可复现旧候选输出后释放 71.87 GB，可用空间约 74.78 GB。构建候选以 owner marker、路径约束保护清理边界，并保留当前及最近一个候选；candidate tests 16/16。
+
 本文公开 Tether 客户端、插件、Node 与服务端之间的兼容边界，不记录私有服务地址、部署操作、凭据位置或内部服务器实现。
+
+## 2026-11-10 0.5.2 桌面认证候选
+
+- 常规桌面登录使用系统浏览器访问 Casdoor Authorization Code + PKCE，固定 loopback 回调为 `http://127.0.0.1:18893/oauth/callback`。桌面 public client 不含 client secret；访问与刷新令牌只在 Electron 主进程内加密持久化，不下发 renderer。候选模式可从外部凭据文件调用 Casdoor 登录并完成同一 loopback 回调，该分支不在常规模式启用。
+- 迁移前仅接受可验证的旧版有效会话作为兼容路径。OIDC 登录成功或用户显式退出后，主进程持久化 `oidc` 模式；后续启动不恢复旧 Hub bearer/cookie。UI 先检查认证态，未认证时暂停工作台状态读取，认证后再进入原设备工作台。
+- 服务端同时接受原 web audience 与 `tether-desktop` audience；补丁在独立服务端工作树完成并通过 5 项定向测试，正式 `current` 已切换到 r7，runtime 继续复用 r6 虚拟环境。Casdoor public client 使用空 secret、固定 loopback 和 Authorization Code + refresh token；未改变应用数据库 schema。旧 web OAuth 和旧 Bearer 切换后均通过。
+- 客户端的两个实机根因已修复：OIDC 分支只允许 `oidcAuth.fetch` 注入一次 Bearer，避免大小写不同的重复 `Authorization` 被服务端拒绝；设备列表和原生工作台 Controller API 统一走 `controllerFetch`，不再绕回旧 cookie session。42 项定向测试通过。
+- packaged r5 已使用原账号完成真实登录并读取 4 台原设备；加密会话写入后，移除候选凭据环境变量并重启同一包，已登录状态与设备列表自动恢复。尚未完成显式退出后的第二次登录。
+- packaged r5 portable 为 823,711,922 字节，SHA-256 `4674619ab9967f01371dfb25ae2b4a1d29be357d9ae9b7f45af88b0b28eebfaa`；本轮未配置代码签名，仍是 preview 候选。
+- 节点工作台仍有独立兼容缺口：现有节点对 `service_catalog` 返回 `bad_op`，部分旧记录返回 `device_not_found`，所以 DSH/Codeg 未完成本轮 UI 打开验收。该结果不能归因于桌面 OIDC，也不能据后台运行状态推断工作台已通过。
+- 主人提供的正式控制面只读结果显示，LAPTOP-01 与 REMOTESTITCH-HUB 的旧 `dsh_status`、`agents_runtime_status`、`drives`、`workspaces` 均返回 HTTP 200；两台 DSH 的 `running=true`、`surface=true`，Agents runtime `running=true` 且 URL 存在，drives/workspaces 非空。证据支持旧节点功能仍在线，当前断点是新 `service_catalog` 接口不兼容；后续应复用旧 status/list 接口实现 legacy compatibility，再独立评估打开服务所需的授权与路由契约，不以整机重装作为默认方案。
+- 0.5.2 源码候选对结构化 `bad_op` 与 `device_not_found` 使用按 actor/target 隔离、60 秒 TTL 的 protocol 1 missing catalog，覆盖 dsh/codeg/herdr/files/desktop，标记 `legacy: true` 且不标为 ready；401/403 和其他 Controller 错误仍向 UI 抛出。Agents 对 missing Codeg 禁用启动并按错误码显示升级或重连提示；DSH 状态轮询将 missing 记录作为服务状态，不视为读取异常。候选尚待定向测试及打包后的 UI 验证，节点协议兼容和真实工作台使用仍未通过。
+- 2026-11-10 UI 稳定性源码补丁：Electron 托管 OAuth 下，远端 `GET /api/devices/{id}/dsh/surface` 通过已有受限 `hubRequest` 主进程通道；不向 renderer 暴露 token、请求头或绝对 URL，保留 HTTP 状态和响应 body，并在 IPC 前后检查取消信号。Web、DSH 和显式 legacy 分支不变。`/app-context` localDeviceId 只有存在于当前 `state.devices` 时才可触发自动选择；用户手动选择仍优先。源码测试不证明 packaged UI 稳定，也不提供旧工作区协议兼容或节点升级能力；30 秒 packaged UI 实机观察待完成。
 
 ## 当前候选与生产边界（2026-11-07）
 
@@ -77,10 +98,33 @@ Agents 当前源码入口为 `tether/node/agents_runtime.py`、`tether/node/agen
 
 离线回归、隔离 UI 检查、本机 DSH 验收、干净安装、真实跨设备操作和公开发布是不同的验证层。某一层通过不能替代其他层。当前进度和未验收项目见 [PROGRESS.md](PROGRESS.md)；功能需求和反馈见 [PRD.md](PRD.md) 与 [FEEDBACK.md](FEEDBACK.md)。
 
+## 0.5.2 旧节点兼容边界
+
+- Files 首次仍按现代协议探测。只有返回可识别的结构化 `bad_op` 时，客户端才将该设备的 list 能力归类为 legacy，并调用 Controller 已有的 `POST /api/devices/{device_id}/fs/list`；请求仅传 `{path}`，不会复用现代 `service_open`，也不会在任意错误后盲目二次回退。
+- legacy 响应必须包含匹配的可选 `device_id`、字符串 `path` 和合法 entries；客户端只接收条目名称、路径和目录类型，并把 `writable` 固定为 `false`。该兼容层只恢复旧节点浏览，不声称恢复写入、上传、删除或重命名。
+- 旧 Codeg 即使本机系统路由可达，也必须先存在 Controller 可信网络及设备成员映射。`mesh_networks` 与 `mesh_network_devices` 为空时，APP 明确阻止打开；系统路由或直接 URL 不能替代 Controller 授权关系。
+- OIDC 恢复使用测试凭据文件启动引导，成功后只持久化加密会话。凭据文件、数据库哈希和回滚转储属于私有运行材料，不进入公开仓库。
+
 ## 编码四原则
 
 1. 编码前思考：先核对实际行为，写明假设与权衡。
 2. 简洁优先：用满足当前需求的最少结构实现。
 3. 精准修改：只改与反馈直接相关的内容。
 4. 目标驱动执行：定义成功标准并按对应层级验证。
+
+## 2026-11-11 DESKTOP-LOCAL 0.5.2 候选验收边界
+
+- 本次可见验收针对旁路部署 `D:\Tether\node-0.5.2-r11`：计划任务 `TetherNode` 为 Running，console 端口 18894；18893 只承担 OIDC 回调并在登录后释放。Hub 显示 DESKTOP-LOCAL online、`node_version=0.5.2`、心跳 0 秒。生产 `mesh_networks` 数量为 0。
+- 本地桥通过 wrong token 401 / valid token 200 核对鉴权，当前策略为 `readonly`。
+- 候选 APP OIDC authenticated 且 session 持久化；真实打开 DESKTOP-LOCAL DeepSeek Harness 工作区，输入框可见并可聚焦。没有发送聊天消息，因此这项证据不代表模型回复或对话链路已验收。
+- 账户恢复范围仅为 Casdoor `tether/tether-owner` 凭据与尝试元数据重置；owner/name/id/subject 保留。不得在项目文档中写入密码、token 或用户邮箱。
+- 机器证据与截图分别为 `.scratch/evidence/desktop-local-0.5.2-pass.json`、`.scratch/evidence/r11-desktop-local-dsh-0.5.2.png`。回滚备份位于 `D:\Tether\rollback\node-0.5.2-r11-20261111-033300-315` 和 `D:\Tether\rollback\node-0.5.2-r11-port18894-20261111-034104-043`。
+- 验收范围不包含 REMOTESTITCH-HUB 与 LAPTOP-01（仍为 0.4.11）、生产 mesh 创建、Codeg（缺少 trusted network）、Settings/About 版本显示（仍为“—”）或签名公开 0.5.2。该结果仅是 DESKTOP-LOCAL 阶段性候选验收，不能作为项目完成或正式发布结论。
+
+## 2026-11-11 REMOTESTITCH-HUB Node 0.5.2 旁路部署边界
+
+- 候选目录 `/opt/tether-node/releases/0.5.2-r11`，独立 venv；状态 `/opt/tether-node/state-0.5.2-r11`；备份 `/opt/tether-node/backups/pre-0.5.2-r11-20261110T205700Z`；drop-in `90-0.5.2-r11.conf`。回退命令为 `.scratch/qa/deploy-remotestitch-node-0.5.2-r11.ps1 -Phase Rollback`。
+- 服务 active/running、restart 0；console 18894 仅回环。Hub online / Node 0.5.2 / 心跳约 1 秒；生产 mesh 0。identity hash、full policy、allowed roots、DSH web/gateway 原 PID 与 HTTP 401 基线保持；最近日志无 Node 错误。
+- APP 选择 `REMOTESTITCH-HUB` 后，虽短暂出现读取失败/加载态，等待后真实显示 DeepSeek Harness 工作区 `tether-dsh-qa.BfHzqlTT` 和输入框。Terra 聚焦输入框并观察约 10 秒稳定；没有输入或发送。证据：`.scratch/evidence/r11-remotestitch-hub-dsh-0.5.2-pass.png` 与 `.scratch/evidence/remotestitch-hub-0.5.2-pass.json`。
+- 该阶段仅验收 Node 与 DSH。Node 重启后旧 Codeg 子进程未恢复；Codeg 另受 trusted network 缺失阻塞。LAPTOP-01 仍为 0.4.11，生产 mesh 为 0，Settings/About 版本仍为“—”，无签名公开 0.5.2。测试为 63 passed / 1 skipped / 2 failed；失败是旧精确相等断言未计入新增 `app_update` 字段，故不宣称全绿或项目完成。
 

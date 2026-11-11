@@ -1,4 +1,16 @@
 # tether-app backlog
+- 2026-11-11：为 external 常驻 Node 增加显式 loopback API 桥配置：仅接受有效端口和至少 32 位安全 token；Supervisor 不启动/停止外部 Node，snapshot 不含凭据；APP 启动及每次 mesh route 前用 Bearer+设备路径验证 API，route 回包须匹配设备、网络和本机 SOCKS 地址。未配置仍拒绝；不涉及 Codeg 可见验收。
+- 2026-11-10：旧节点 Files 在结构化 `service_catalog bad_op` 分类后新增最小只读 `list`：冷/热缓存均走固定认证 `POST /api/devices/{target}/fs/list`，请求体只含 `path`，严格校验设备、路径和目录项并强制 `writable:false`；现代 list 与旧节点 drives/workspaces 原路径不变。旧 Codeg 网络目录为空或没有 ready 网络时返回明确的安全配置错误，仍禁止直连或放宽成员/`service_ip` 校验。
+- 2026-11-10：修复 Electron legacy Codeg guest 初始生命周期：`prepareGuest` 先按隔离 session 唯一匹配活动记录，允许已由 attach 参数门禁验证的 `about:blank` 初始页；已导航 HTTP(S) 仍必须与授权 endpoint 严格同源，其他 URL 全部失败关闭。
+- 2026-11-10：修正旧节点 Codeg 打开契约：网络目录严格读取生产 `devices`（不接受 `members` 别名）；legacy 分类缓存冷/过期时先重新执行一次 catalog，仍仅以结构化 `bad_op` 进入兼容路径；guest 私密 token URL 首次加载失败时保留安全重试，成功后才标记已准备。
+- 2026-11-10：第二段旧节点兼容仅对 `bad_op` 分类读取 `agents_runtime_status`；Codeg ready 只公开状态和 legacy open marker。打开时重新校验严格 token URL、ready 网络双端成员与目标 `service_ip`，经本机 SOCKS 隔离 session 加载；IPC 仅返回无查询 root origin、本地 view ID 与 partition。legacy view/close/clear 不调用远端 ping/revoke/start，token URL 只由主进程 guest 准备阶段加载一次。
+- 2026-11-10：legacy catalog 仅由结构化 `service_catalog bad_op` 建立 actor+target+generation 缓存；`device_not_found`、认证、网络及其他错误直接上抛。`drives`/`workspaces` 冷缓存会先分类一次：legacy 在 `service_open` 前走现有主进程认证 Controller GET，现代目录复用于同次原生 open；严格校验状态、设备 ID 与数组字段，其他文件操作继续使用原生 Files service。
+- 2026-11-10：原生 workbench catalog 仅对结构化 `bad_op` / `device_not_found` 降级为 protocol 1 的五服务 `missing` 目录，标记 `legacy: true`，按 actor+target 缓存 60 秒；401/403 与其他错误继续上抛，清理 actor 时清除该缓存。为旧协议节点提供升级说明，为身份未连接记录提供重连说明，避免 DSH 5 秒轮询反复命中同一失败请求。r2 已在在线 REMOTESTITCH-HUB 上约 45 秒稳定显示升级说明与禁用按钮；portable 构建退出码 0，大小 823,673,294 字节，SHA-256 `38cb0ccd3403af7d4dd870e199ae552a6c70447a4d24878db9aaabef089e5bca`。下一步仍需复用旧节点 status/list 接口适配，暂不改 open 路径或要求重装，未宣称 Codeg/DSH 真机工作台可用。
+- 2026-11-10：实机确认 OIDC 登录成功，`oidc-session.json` 已加密落盘且 `desktopAuthMode=oidc`；随后设备列表与原生工作台 catalog 因仍直接使用 Electron session fetch、未携带 OIDC Bearer 而收到登录重定向。将 native workbench `getActorId` 与 `tether:hub-request` 的 Controller API 请求统一改走 `controllerFetch`，保留原 URL、方法、请求体、redirect 和路由 allowlist；legacy cookie 探测与显式旧账号绑定保持原路径。
+- 2026-11-10：修复 Electron Controller OIDC 401：诊断确认 `validate /api/auth/me` 返回 200，而紧接的 `controllerFetch` 对 `/api/auth/me` 和 `/api/events` 返回 401；根因是 `controllerFetch` 预先写入 Authorization 后，`oidcAuth.fetch` 再追加 Bearer，形成重复 Authorization 值。移除 OIDC 分支预先注入，让 `oidcAuth.fetch` 唯一添加 Bearer；保留 Controller URL 限制和 `redirect: 'error'`，legacy bearer 分支不变。此前移除 `credentials: 'omit'` 并非根因。
+- 2026-11-10：修复候选 OIDC Casdoor 生产请求形状：OAuth 参数按 Casdoor camelCase 约定放在 `POST /api/login` query，JSON body 仅含登录字段；账号密码不进入 query/header。回归断言覆盖请求边界。
+- 2026-11-10：candidate-only OIDC QA 登录入口：仅候选模式且配置凭据文件时，由候选自身调用 Casdoor `/api/login` 并把 authorization code/state送入既有 loopback callback；交互式/MFA 响应明确失败，常规模式仍打开系统浏览器。新增定向单测；未构建安装包，需 packaged candidate 实际验收。
+- 2026-11-10：0.5.2 visible login 接入系统浏览器 Casdoor Authorization Code + PKCE，固定回调 `http://127.0.0.1:18893/oauth/callback`；访问/刷新令牌仅由主进程加密保存，旧版有效会话仅在迁移前作为兼容入口，成功登录及显式退出均持久化 `oidc` 模式，启动时不再回退旧 bearer/cookie。登录状态先于工作台状态轮询，UI 按认证状态门控。25 项 Node 定向测试通过；Windows runtime 与 portable 冷启动通过。正式 Hub 已切换 r7 dual audience，旧 web OAuth/旧 Bearer 保持可用，4 条设备记录保留；真实用户登录与原设备 UI 仍待验收。
 - 2026-11-09：正式安装包使用默认运营 Controller 时提供匹配的 OIDC issuer，避免未配置环境变量的新安装无法跳转登录；显式 QA issuer 和自建 Controller 保持原配置。仅完成配置分支验证，尚未启动候选 APP 验证登录窗口。
 - 2026-11-09：旧版首次迁移在原身份校验和stage切换中新增Codeg持久数据接续：复制apps.json及agents-runtime数据库/配置/附件/WAL，拒绝符号链接或reparse tree；runtime.json、server.log不迁移，且旧Codeg进程存活/身份无法确认时拒绝复制。仅计划用隔离fixture核验，未读取正式数据或启动APP。
 - 2026-11-08：工作台服务与远程桌面连接改为使用本机 Node 按可信 network_id 查询的 loopback SOCKS5 route；Electron隔离session走该route，TLS CA/主机名/leaf校验也经成熟 `socks@2.8.10` 代理连接，关闭/清理时复位session代理。未启动APP或重跑远控场景。
@@ -114,3 +126,11 @@
 - 2026-11-09：APP 安装提交在 ACK 后遇到停止 Node/quitAndInstall 错误时写入既有 update-result.json；Electron status 回传匹配目标版本的错误，下一次 prepare/apply 清除旧错误。源码/legacy ZIP apply 恢复32位准备标识及进程内准备集合校验。
 - 2026-11-09: cold-start verification did not run: QA-SOURCE DSH-Web is stopped but the source-owned DSH desktop reports running under its isolated `source/node/dsh-home`; the DSH session-list API returns `node_update_required`, so active work cannot be ruled out. No QA DSH process was started/stopped.
 - 2026-11-09: startup open stores each successful descriptor before the actor-generation guard so a login change can still revoke the returned grant; final syntax/module-load check passed.
+
+- 2026-11-10：新增远端 DSH surface 主进程票据兑换：仅接 targetId，校验可信 gateway/303/token-free endpoint，隔离 partition 并复用 grant 清理；通用 Hub IPC 拒绝 DSH surface 路由。
+- 2026-11-10：修复 `dsh-native` guest attach：主进程已兑换 ticket 后，`prepareGuest` 直接复用隔离 session，禁止落入 legacy Codeg 的 `loadURL` 流程；保留本地 close/clear/view 清理语义。
+- 2026-11-10：修正生产 DSH gateway 校验：`g<port>` 子域端口保持 1..65535 范围约束，公网 URL 严格使用默认 HTTPS 端口，不再错误要求公网端口等于目标 DSH 端口。
+- 2026-11-11：远端 DSH ticket 改由 main-owned 隐藏 BrowserWindow 在随机隔离 partition 中做真实 document navigation；锁定 gateway Origin，只接受精确 `/?tether_native=1` 与合规 `__Host-tether_` Cookie，失败销毁窗口并清 session/cache，renderer 始终看不到 ticket。
+- 2026-11-11：远端 DSH hidden bootstrap 的脱敏失败日志新增固定阶段事件（创建、导航、endpoint 校验、Cookie 校验、record 完成）；只沿用安全 target/service ID，不记录 URL、host、ticket、Cookie 或原始异常。
+- 2026-11-11：修复 CHIPS Cookie 验证：在每次新建的专用随机 partition 中用空过滤器读取 Cookie，保留 `__Host-tether_`、HttpOnly、Secure、根路径校验，并要求规范化 domain 精确匹配最终 endpoint hostname。
+- 2026-11-11：修复 Electron 33 managed guest 预提交 attach：main 在注册导航事件前同步按唯一隔离 session 取得无秘密 policy；`dsh-native` 接受空 URL/about:blank 后只允许精确 token-free endpoint 的主框架导航，其他路径、查询、fragment 和跨源均失败，子框架不受影响。

@@ -47,4 +47,27 @@ function createDshWebNavigationGuard(initialUrl) {
   }
 }
 
-module.exports = { createDshWebNavigationGuard, dshViewUrlAllowed }
+function createExactEndpointNavigationGuard(endpoint, initialUrl) {
+  let expected
+  try { expected = new URL(String(endpoint || '')).href } catch (_) { throw new TypeError('invalid exact endpoint') }
+  const precommit = (value) => value === '' || value === 'about:blank'
+  const exact = (value) => {
+    try { return new URL(String(value || '')).href === expected } catch (_) { return false }
+  }
+  let committed = exact(initialUrl)
+  if (!committed && !precommit(String(initialUrl || ''))) throw new TypeError('invalid initial guest URL')
+  const topLevel = (value, allowPrecommit) => {
+    const text = String(value || '')
+    if (!committed && allowPrecommit && precommit(text)) return true
+    if (!exact(text)) return false
+    committed = true
+    return true
+  }
+  return {
+    navigate(value) { return topLevel(value, true) },
+    didStart(value, isMainFrame) { return isMainFrame === false || topLevel(value, true) },
+    redirect(value, isMainFrame) { return isMainFrame === false || topLevel(value, false) }
+  }
+}
+
+module.exports = { createDshWebNavigationGuard, createExactEndpointNavigationGuard, dshViewUrlAllowed }

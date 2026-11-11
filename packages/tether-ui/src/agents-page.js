@@ -634,10 +634,17 @@ function AgentTargetPage({ React, Glyph, post, C, host, devices = [], localDevic
 
   const openNativeCodeg = async () => {
     if (!device || serviceOpening || !host || !host.workbench) return
+    const legacyCodeg = serviceCatalog && serviceCatalog.legacy === true
+    const catalogCodeg = serviceCatalog && serviceCatalog.services
+      ? serviceCatalog.services.find((service) => service.id === 'codeg') : null
+    if (legacyCodeg && (!catalogCodeg || catalogCodeg.state !== 'ready'
+        || catalogCodeg.open_mode !== 'legacy-codeg' || typeof host.workbench.openLegacyCodeg !== 'function')) return
     setServiceOpening(true)
     setHomeError('')
     try {
-      const service = await host.workbench.open(device, 'codeg')
+      const service = legacyCodeg
+        ? await host.workbench.openLegacyCodeg(device)
+        : await host.workbench.open(device, 'codeg')
       if (!service || service.targetId !== device || service.serviceId !== 'codeg' || !service.endpoint || !service.partition) {
         throw new Error('主进程没有返回有效的 Codeg 工作台会话。')
       }
@@ -821,6 +828,14 @@ function AgentTargetPage({ React, Glyph, post, C, host, devices = [], localDevic
   const desktopService = serviceCatalog && serviceCatalog.services
     ? serviceCatalog.services.find((service) => service.id === 'desktop') : null
   const serviceStateLabel = { missing: '未安装', stopped: '已停止', starting: '启动中', ready: '已就绪', failed: '启动失败' }
+  const codegUnavailableLabel = codegService && codegService.reason_code === 'bad_op'
+    ? '升级节点后可用'
+    : codegService && codegService.reason_code === 'device_not_found' ? '目标节点未连接' : '服务不可用'
+  const legacyCodegBlocked = !!(serviceCatalog && serviceCatalog.legacy === true
+    && (!codegService || codegService.state !== 'ready' || codegService.open_mode !== 'legacy-codeg'))
+  const legacyCodegLabel = codegService && codegService.state === 'missing' ? 'Codeg 未安装'
+    : codegService && codegService.state === 'stopped' ? 'Codeg 未运行'
+      : 'Codeg 状态异常'
 
   const paneBody = (pane) => pane.kind === 'web'
     ? (pane.url ? h('iframe', {
@@ -890,11 +905,14 @@ function AgentTargetPage({ React, Glyph, post, C, host, devices = [], localDevic
           codegService.reason ? h('div', { style: { maxWidth: 520, color: C.sub } }, codegService.reason) : null)
           : h('div', { style: { color: homeError ? C.danger : C.sub, textAlign: 'center' } }, homeError || 'Controller 服务目录未返回 Codeg 状态。'),
       homeError && codegService ? h('div', { role: 'alert', style: { maxWidth: 520, color: C.danger, textAlign: 'center' } }, homeError) : null,
-      h('button', { type: 'button', disabled: serviceCatalogBusy || serviceOpening || workbenchLoginBusy,
+      h('button', { type: 'button', disabled: serviceCatalogBusy || serviceOpening || workbenchLoginBusy
+          || legacyCodegBlocked || (codegService && codegService.state === 'missing'),
         onClick: workbenchLoginRequired ? () => void startWorkbenchLogin() : (codegService ? () => void openNativeCodeg() : retryAgentsHome),
-        style: { ...button, opacity: serviceCatalogBusy || serviceOpening || workbenchLoginBusy ? 0.55 : 1 } },
+        style: { ...button, opacity: serviceCatalogBusy || serviceOpening || workbenchLoginBusy
+          || legacyCodegBlocked || (codegService && codegService.state === 'missing') ? 0.55 : 1 } },
       workbenchLoginBusy ? '等待登录完成…' : workbenchLoginRequired ? '通过主进程登录' : serviceOpening ? '正在打开…'
-        : codegService ? (codegService.state === 'ready' ? '打开 Codeg' : '启动并打开 Codeg') : '重试服务目录'),
+        : codegService ? (legacyCodegBlocked ? legacyCodegLabel : codegService.state === 'ready' ? '打开 Codeg'
+          : codegService.state === 'missing' ? codegUnavailableLabel : '启动并打开 Codeg') : '重试服务目录'),
       desktopService ? h('div', { style: { marginTop: 4, textAlign: 'center', lineHeight: 1.55 } },
         h('div', { style: { color: C.sub } }, '远程桌面：' + (serviceStateLabel[desktopService.state] || desktopService.state || '未知')),
         desktopService.reason ? h('div', { style: { maxWidth: 520, color: C.sub } }, desktopService.reason) : null,

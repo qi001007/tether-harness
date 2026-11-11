@@ -39,4 +39,30 @@ async function waitForLocalNodeApi(options, { timeoutMs = 8000, retryMs = 200 } 
   return false
 }
 
-module.exports = { waitForSupervisorStart, waitForLocalNodeApi }
+async function getLocalMeshRoute({ port, device, token, networkId, fetchImpl = fetch }) {
+  const unavailable = () => new Error('local mesh route unavailable')
+  if (!await waitForLocalNodeApi({ port, device, token }, { timeoutMs: 1200, retryMs: 100 })) throw unavailable()
+  const url = 'http://127.0.0.1:' + port + '/api/devices/' + encodeURIComponent(device)
+    + '/mesh/' + encodeURIComponent(networkId) + '/route'
+  let response
+  try {
+    response = await fetchImpl(url, {
+      headers: { authorization: 'Bearer ' + token },
+      redirect: 'error',
+      signal: AbortSignal.timeout(5000)
+    })
+    if (!response.ok) throw unavailable()
+    const route = await response.json()
+    const normalize = (value) => String(value || '').replace(/-/g, '').toLowerCase()
+    if (!route || route.device_id !== device || normalize(route.network_id) !== normalize(networkId)
+        || route.state !== 'ready' || !route.socks_proxy || route.socks_proxy.host !== '127.0.0.1'
+        || !Number.isInteger(route.socks_proxy.port) || route.socks_proxy.port < 1 || route.socks_proxy.port > 65535) {
+      throw unavailable()
+    }
+    return route
+  } catch (_) {
+    throw unavailable()
+  }
+}
+
+module.exports = { waitForSupervisorStart, waitForLocalNodeApi, getLocalMeshRoute }

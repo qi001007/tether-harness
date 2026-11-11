@@ -1,4 +1,12 @@
 # docs 变更记录
+- 2026-11-11：仅同步 `PROGRESS.md`、`FEEDBACK.md`、`TECHNICAL.md` 与本 backlog 的当前真实状态：记录 E 盘 `.scratch` 清理及候选保留规则、DESKTOP-LOCAL 回滚至 Node 0.2.3 与 LAPTOP-01 DSH 恢复、Node/APP/Hub 更新事务门禁及 Hub 可回滚 release 部署；明确签名 preview、update source 0.5.2、真实设备 UI 端到端、成功截图与微信送达仍未完成，并将此前 DESKTOP-LOCAL 0.5.2 状态标为已回滚历史。记录 pytest exit 0 及既有 interpreter-shutdown 线程噪声。
+- 2026-11-11：记录 REMOTESTITCH-HUB Node 0.5.2 r11 阶段性旁路部署、服务/身份/策略基线及 APP 内 DSH 可见聚焦验收；登记部署与回滚路径、截图/机器证据；更新旧节点待办为 REMOTESTITCH-HUB 已验收、LAPTOP-01 仍待升级；如实记录 63 passed / 1 skipped / 2 failed 及失败断言原因、Codeg/mesh/版本显示/签名发布缺口。
+- 2026-11-10：回填 r2 UI 稳定性实机证据：在线 REMOTESTITCH-HUB 约 45 秒保持设备选择与旧节点兼容提示，新增日志无 CORS/404/HTTP 400 且主框架仅启动导航 1 次；记录截图路径、portable 大小/SHA-256、包内 UI bundle 一致性，以及旧工作区/Codeg 仍未完成的边界。
+- 2026-11-10：记录节点 `service_catalog` 结构化 `bad_op` / `device_not_found` 的源码候选降级行为、Agents 禁止启动的状态提示及尚待测试/打包/界面验证的边界；不宣称节点或真机工作台通过。
+- 2026-11-10：登记主人提供的 LAPTOP-01/REMOTESTITCH-HUB 旧 status/list 只读 HTTP 200 证据；明确下一步复用旧接口完成 legacy compatibility，当前 `legacy: true` catalog 仍全为 missing，不改 open 路径或要求整机重装。
+- 2026-11-10：记录 packaged r5 portable 最终大小 823,711,922 字节与 SHA-256 `4674619ab9967f01371dfb25ae2b4a1d29be357d9ae9b7f45af88b0b28eebfaa`，保持 unsigned preview 边界。
+- 2026-11-10：回填 0.5.2 packaged r5 原账号真实登录、4 台原设备读取和移除候选凭据环境变量后的重启免登录证据；记录重复 `Authorization` 与工作台绕开 OIDC 两个客户端根因、42 项定向测试，以及旧节点 `service_catalog` 的 `bad_op` / `device_not_found` 兼容阻塞。显式退出重登和 node2 DSH/Codeg 保持未完成。
+- 2026-11-10：记录 0.5.2 visible login 的实现范围、25 项 Node 定向测试、两条冻结 `tether-python --help` 入口、Windows runtime、portable 冷启动和最终 SHA-256；补录正式 r7、Casdoor public client、dual audience、旧 web/旧 Bearer 兼容、4 条设备记录与 DESKTOP 稳定心跳证据。F149 继续把主人真实登录、原设备 UI、会话持久化和 node2 工作台列为未完成。
 - 2026-11-07：登记 0.4.10 候选与真实生产状态：主机 APP/Node、cloud Node 为 0.4.9，Laptop APP/Node 仍 0.4.7 且旧任务因 device_offline 结束；记录状态快照保护回归及下载、目录缓存、代理/relay待验边界。
 - 2026-11-07：登记 0.4.9 候选与当前生产边界：主机 APP+Node、cloud Node 已正常安装 0.4.8，Laptop 仍在线 0.4.7 且旧 job 以 update_timeout 结束；标记 proxy/relay 重读、048 目录屏幕复验和多 Agent 全流程仍待验。
 - 2026-11-07：登记 0.4.8 源码候选的远端更新上下文、缓存失败反馈和 Croc 本机路径探索修复，保持现网 0.4.7 与待分发候选的边界；记录真实生产 APP 的 Codex 父子只读委派闭环，明确跨引擎/远端复杂协作、手机和吞吐仍待验收。
@@ -136,3 +144,5 @@
 - 2026-10-30：本地生成并离线检查0.2.29 unsigned APP/Plugin/Node归档，manifest中的三包版本、size、SHA-256均匹配；归档不含scratch、QA fixture或私有server源码，无签名。
 - 2026-11-04：新增 `PROJECT-REPORT.md` 供外部 Codex 接手；该报告是快照与入口索引，不替代 PROGRESS/FEEDBACK/TECHNICAL 的事实所有权，结构化页复刻失败与验证缺口按报告第 6 节执行。
 - 2026-11-07：将旧版交接快照移至本地清理归档。将插件回退候选、验收证据边界和 Codeg 源码入口收进 `PROGRESS.md`。
+- 2026-11-10：记录 0.5.2 r4 旧节点 Files 只读兼容、OIDC 恢复、实机目录浏览截图、候选哈希与定向回归；明确 Codeg 仍受 Controller 可信网络缺失阻断，以及微信通知只有 SDK 返回而无手机回执。
+- 2026-11-11：更新 `PROGRESS.md`、`FEEDBACK.md`、`TECHNICAL.md`，记录 DESKTOP-LOCAL 0.5.2 r11 的阶段性候选可见验收、证据/回滚位置及未完成门禁；不表示项目完成或签名公开发布。

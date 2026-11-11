@@ -192,3 +192,28 @@ def test_release_workflow_rejects_tag_pointing_to_another_commit(tmp_path: Path)
 
     assert result.returncode != 0
     assert b"points to" in result.stdout + result.stderr
+
+
+def test_desktop_preview_workflow_uses_one_version_branch_tag_and_artifact_set() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "tether-desktop-candidate.yml").read_text(encoding="utf-8")
+    version = json.loads((ROOT / "version.json").read_text(encoding="utf-8"))["components"]["app"]
+
+    assert "concurrency:\n  group: ${{ github.workflow }}-${{ github.ref }}\n  cancel-in-progress: true" in workflow
+    assert version == "0.5.2"
+    assert "codex/tether-052-preview-20261111" in workflow
+    assert "v0.5.2-preview.1" not in workflow
+    assert workflow.count("v0.5.2-preview.2") == 2
+    assert "--channel preview" in workflow
+    assert "--release-tag v0.5.2-preview.2" in workflow
+    assert "tag_name: v0.5.2-preview.2" in workflow
+    assert "draft: false" in workflow
+    assert "prerelease: true" in workflow
+    assert "make_latest: false" in workflow
+    assert "0.5.0" not in workflow
+    assert "tether-${{ matrix.target }}-0.5.2-preview" in workflow
+    assert ".scratch/tether-desktop-candidates/0.5.2/${{ matrix.target }}" in workflow
+    assert "tether-node-runtime-linux-x64-0.5.2-preview" in workflow
+    assert "version.json" in workflow
+    assert "checksum.get('version') != '0.5.2'" in workflow
+    assert "checksum.get('platform') != target" in workflow
+    assert "refs/heads/codex/tether-052-preview-20261111" in workflow

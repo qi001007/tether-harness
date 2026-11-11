@@ -26,6 +26,35 @@ test('a DSH guest attached at about:blank may establish one allowed LAN origin',
   assert.match(main, /navigation\.redirect\(target, isMainFrame\)/)
 })
 
+test('dsh-native guest policy is installed before handlers and uses its exact endpoint guard', () => {
+  const attached = main.slice(main.indexOf("mainWindow.webContents.on('did-attach-webview'"), main.indexOf("mainWindow.on('closed'"))
+  assert.ok(attached.indexOf('nativeWorkbench.guestPolicy(contents)') < attached.indexOf("contents.on('will-navigate'"))
+  assert.match(attached, /workbenchPolicy\.serviceId === 'dsh-native'[\s\S]*?createExactEndpointNavigationGuard\(workbenchPolicy\.endpoint, contents\.getURL\(\)\)/)
+})
+
+test('dsh-native exact guard permits only its authorized top-level endpoint', () => {
+  const endpoint = 'https://g25800.hub.example.com/?tether_native=1'
+  const rejected = [
+    'https://g25800.hub.example.com/',
+    endpoint + '&extra=1',
+    endpoint + '#fragment',
+    'https://attacker.example/?tether_native=1'
+  ]
+  for (const initial of ['', 'about:blank']) {
+    const guard = dshWebNavigation.createExactEndpointNavigationGuard(endpoint, initial)
+    assert.equal(guard.navigate(initial), true)
+    for (const target of rejected) {
+      assert.equal(dshWebNavigation.createExactEndpointNavigationGuard(endpoint, initial).navigate(target), false)
+      assert.equal(dshWebNavigation.createExactEndpointNavigationGuard(endpoint, initial).didStart(target, true), false)
+      assert.equal(dshWebNavigation.createExactEndpointNavigationGuard(endpoint, initial).redirect(target, true), false)
+    }
+    assert.equal(guard.didStart(endpoint, true), true)
+    assert.equal(guard.redirect(endpoint, true), true)
+    assert.equal(guard.didStart('https://attacker.example/frame', false), true)
+    assert.equal(guard.redirect('https://attacker.example/frame', false), true)
+  }
+})
+
 test('DSH guest binds the first approved main origin and allows same-origin 303 redirects only', () => {
   const guard = dshWebNavigation.createDshWebNavigationGuard('about:blank')
   const approved = 'http://192.168.1.50:3080/?token=guest-token'

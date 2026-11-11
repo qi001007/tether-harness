@@ -39,3 +39,5 @@
 - 2026-11-03：Hub 更新走 Node 自己的 state dir，surface 的 `/tether-updates` 看不到；`apply` 现在把同一份 `applied-plugin.json` 镜像到 `dsh_home/storages/tether/updates/`，页面 watcher 才能发现待重载。`_scan_dsh_host_pid` 必须按 `dsh_home` 过滤 profile 路径，禁止把别的 DSH（或测试里的真实宿主）当成本机目标重启。
 - 2026-11-07：Node updater 对已配置 Hub `/releases/manifest` 与同源下载默认绕过系统代理，第三方 GitHub 源沿用 Python 标准代理配置；`TETHER_USE_SYSTEM_PROXY=1` 可显式恢复系统代理。
 - 2026-11-08：更新器优先从签名manifest指定的正式URL获取制品，失败后保留Hub与配置mirror回退。
+- 2026-11-11：Node ZIP 更新新增持久事务：apply 记录逐目标备份映射并停在 awaiting_acceptance，commit 清理恢复材料，rollback 可由重建后的 manager 恢复；CLI 暴露 commit/rollback。定向 pytest 覆盖提交、重建后回滚、非法/跨组件/越界事务及 apply 中途失败。
+- 2026-11-11：对齐 Node UI 验收门：awaiting_acceptance 时 status 暴露 transaction/prepared_id 并清除待验收重启提示；commit 原子清除 applied-node 的 restart_required 后才删备份。Node rollback 成功响应后请求一次重启。

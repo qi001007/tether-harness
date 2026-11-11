@@ -17,7 +17,8 @@ def _default_root() -> Path:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="tether-updates")
-    parser.add_argument("action", choices=("status", "check", "prepare", "apply", "activity"))
+    parser.add_argument("action", choices=("status", "check", "prepare", "apply", "commit",
+                                            "rollback", "activity"))
     parser.add_argument("--component", required=True, choices=("app", "plugin", "node"))
     parser.add_argument("--prepared-id")
     parser.add_argument("--root", type=Path, default=_default_root())
@@ -50,12 +51,18 @@ def main(argv: list[str] | None = None) -> int:
         result = manager.check(force=args.force)
     elif args.action == "prepare":
         result = manager.prepare()
-    else:
+    elif args.action == "apply":
         if not args.prepared_id:
             result = {"ok": False, "component": args.component, "error_code": "prepared_id_required",
                       "error": "apply 操作需要 prepared_id。"}
         else:
             result = manager.apply(args.prepared_id)
+    elif args.action in {"commit", "rollback"}:
+        if not args.prepared_id:
+            result = {"ok": False, "component": args.component, "error_code": "prepared_id_required",
+                      "error": f"{args.action} 操作需要 prepared_id。"}
+        else:
+            result = getattr(manager, args.action)(args.prepared_id)
 
     sys.stdout.write(json.dumps(result, ensure_ascii=False, separators=(",", ":")) + "\n")
     return 0 if result.get("ok") else 1

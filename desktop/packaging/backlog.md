@@ -1,9 +1,12 @@
 # 桌面候选打包记录
+- 2026-11-11：候选构建成功后写入路径/版本/平台所有权标记，并仅扫描隔离候选根的直接子目录；最多保留当前和最近一个有效受管候选，未知目录、无效标记与失败构建均不触发清理。
 - 2026-11-09：NSIS同目录首装快照与主进程直接迁移对齐，快照apps.json和agents-runtime持久目录/WAL，跳过runtime.json和server.log；递归拒绝reparse point，并在快照前确认旧Codeg进程已停止，保持私有ACL与snapshot marker流程。
 
 - 2026-11-09：Linux LibreOffice headless runtime 的 Debian Depends 明确包含 `libnspr4`、`libnss3`；Ubuntu 24.04最小镜像实测缺少 soffice.bin 所需 NSS/NSPR SONAME，随包 runtime 先前依赖数组为空。
 
 - 2026-11-09：electron-builder `afterPack` 增加最终 appOutDir runtime 检查；按打包器资源目录 API 检查 Python、Node、MeshCentral、对应平台 MeshAgent、LibreOffice，以及 Caddy/Rclone/EasyTier 四个唯一可执行文件，避免不完整输出通过候选生成步骤。
+
+- 2026-11-10：0.5.2 候选版本同步 APP/Node 元数据；Windows 候选输出改为 portable，并在构建前生成 web UI、核对认证标记及打包版本，纳入 OIDC 主进程模块。Windows runtime 装配与入口检查通过，最终 portable 为 `Tether-0.5.2-win-x64.exe`（823,706,692 字节，SHA-256 `f2ffe0faaa787ea5431f5e85e20c41f58ef7a254c3f342708d65c97a4ddadb90`）；全新数据目录冷启动退出码 0、stderr 为空、renderer/console 错误均为 0，截图显示干净的 Casdoor 登录入口。正式交付目录仍待真实登录验收后生成。
 
 - 2026-11-08：新增 0.5.0 preview 候选装配入口，固定 electron-builder、Windows NSIS/Linux AppImage 与 deb/macOS dmg+zip 目标；准备组件下载及 SHA-256 校验脚本、PyInstaller 无桌面 Python 命令入口、Electron 资源布局与仅上传 Actions artifact 的工作流。每个平台输出目录独立；工作流从本次源码重建APP web UI。打包清单附固定源码来源与SFTPGo源归档，并明确Office预览、RustDesk远控与DSH/Herdr分发边界。Control负责main/Supervisor/APP updater资源接线。
 
@@ -26,3 +29,4 @@
 - 2026-11-08：Debian候选运行包补建受限`tether-easytier` system group/user（no-login、no-home），仅初始化`/var/lib/tether-easytier[/instances]`私有目录，并声明`passwd`/`util-linux`运行依赖；README说明root Node服务与非提权EasyTier子进程的权限边界。
 - 2026-11-08：候选 workflow 根据 commit message 的 `[posix-only]` 标记选择纯 Linux/macOS matrix，并跳过预览聚合；普通 push 和手动 dispatch 保持完整矩阵。
 - 2026-11-08：候选构建器分别替换 runtime 根和 `node-bin` extraResource 源路径，避免前缀替换拼出无效 YAML；两条资源映射都按唯一匹配检查。
+- 2026-11-11：候选 run marker 改为平台无关，构建前完成直接子目录/链接校验、登记与旧受管 run 清理；失败 run 保留 marker。清理跨平台和有效旧版本保留 current + 最近一个受管 run，不接管非空无标记目录；候选测试 16 项通过。

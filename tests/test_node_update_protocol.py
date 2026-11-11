@@ -36,6 +36,12 @@ class FakeUpdateManager:
         return {"ok": True, "component": "node", "version": "0.2.2",
                 "restart_required": True}
 
+    def commit(self, prepared_id: str) -> dict:
+        return {"ok": True, "component": "node", "prepared_id": prepared_id, "status": "committed"}
+
+    def rollback(self, prepared_id: str) -> dict:
+        return {"ok": True, "component": "node", "prepared_id": prepared_id, "status": "rolled_back"}
+
 
 def _node(tmp_path: Path, monkeypatch) -> Node:
     dsh_home = tmp_path / "dsh"
@@ -164,7 +170,8 @@ def test_app_manager_uses_trusted_external_installation_root_and_shared_state(tm
     assert manager.root == root.resolve()
     assert manager.state_dir == app_dir / "data" / "updates" / "app"
     fields = node._app_heartbeat_fields()
-    assert fields == {"app_version": "0.4.5", "app_installed": True}
+    assert fields == {"app_version": "0.4.5", "app_installed": True,
+                      "app_update_owner": "node_zip", "app_update_bridge_available": False}
     assert manager.app_binding_required is True
     node.store.db.close()
 
@@ -173,7 +180,9 @@ def test_unbound_standalone_node_does_not_advertise_an_app(tmp_path, monkeypatch
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.delenv("TETHER_NODE_MANAGED", raising=False)
     node = _node(tmp_path, monkeypatch)
-    assert node._app_heartbeat_fields() == {"app_version": "", "app_installed": False}
+    assert node._app_heartbeat_fields() == {"app_version": "", "app_installed": False,
+                                             "app_update_owner": "node_zip",
+                                             "app_update_bridge_available": False}
     assert node.update_managers["app"].status()["error_code"] == "app_not_installed"
     node.store.db.close()
 
@@ -825,6 +834,59 @@ def test_apply_success_requests_restart_even_if_result_send_fails(tmp_path, monk
     assert node.update_applying is True
     assert ws.closed is True
     assert manager.apply_calls == 1
+    node.store.db.close()
+
+
+def test_node_update_call_dispatches_commit_without_restart(tmp_path, monkeypatch):
+    node = _node(tmp_path, monkeypatch)
+    manager = FakeUpdateManager()
+    node.update_managers["node"] = manager
+    sent = []
+
+    async def capture(_ws, result):
+        sent.append(result)
+
+    monkeypatch.setattr(node, "_send_update_result", capture)
+
+    async def exercise(action):
+        await node._update_call({"type": "update_call", "req_id": action, "action": action,
+                                 "component": "node", "prepared_id": "a" * 32})
+
+    asyncio.run(exercise("commit"))
+
+    assert [item["status"] for item in sent] == ["committed"]
+    assert node.restart_requested is False
+    node.store.db.close()
+
+
+def test_node_rollback_restarts_after_sending_success_response(tmp_path, monkeypatch):
+    node = _node(tmp_path, monkeypatch)
+    manager = FakeUpdateManager()
+    node.update_managers["node"] = manager
+    events = []
+
+    class FakeWebSocket:
+        closed = False
+
+        async def send(self, payload):
+            events.append(("response", node.restart_requested, json.loads(payload)))
+
+        async def close(self, **_kwargs):
+            self.closed = True
+            events.append(("close", node.restart_requested))
+
+    ws = FakeWebSocket()
+    node.ws = ws
+    asyncio.run(node._update_call({"type": "update_call", "req_id": "rollback-1",
+                                   "action": "rollback", "component": "node",
+                                   "prepared_id": "a" * 32}))
+
+    assert events[0][0] == "response"
+    assert events[0][1] is False
+    assert events[0][2]["restart_required"] is True
+    assert node.restart_requested is True
+    assert node.update_applying is True
+    assert ws.closed is True
     node.store.db.close()
 
 

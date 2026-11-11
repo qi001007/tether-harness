@@ -4,9 +4,10 @@ artifactName: Tether-${version}-${os}-${arch}.${ext}
 asar: true
 directories:
   app: apps/tether-app
-  output: .scratch/tether-desktop-candidates/0.5.0
+  output: .scratch/tether-desktop-candidates/0.5.2
 files:
   - main.js
+  - oidc-auth.js
   - preload.js
   - supervisor.js
   - startup-readiness.js

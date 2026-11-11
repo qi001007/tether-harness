@@ -52,12 +52,15 @@ export function createElectronHost({ apiBase = '' } = {}) {
     },
     workbench: {
       login: () => window.tetherApp.workbenchLogin(),
+      authStatus: () => window.tetherApp.workbenchAuthStatus(),
       bindLegacy: (credentials) => window.tetherApp.workbenchBindLegacy(credentials),
       registerAccount: () => window.tetherApp.workbenchRegisterAccount(),
       logout: () => window.tetherApp.workbenchLogout(),
       onLoginResult: (callback) => window.tetherApp.onWorkbenchLoginResult(callback),
       catalog: (targetId) => window.tetherApp.workbenchCatalog(targetId),
       open: (targetId, serviceId) => window.tetherApp.workbenchOpen(targetId, serviceId),
+      openLegacyCodeg: (targetId) => window.tetherApp.workbenchOpenLegacyCodeg(targetId),
+      openDshSurface: (targetId) => window.tetherApp.workbenchOpenDshSurface(targetId),
       close: (targetId, serviceId, grantId) => window.tetherApp.workbenchClose(targetId, serviceId, grantId),
       view: (targetId, serviceId, visible) => window.tetherApp.workbenchView(targetId, serviceId, visible)
     },

@@ -1,4 +1,6 @@
 # UI 宿主适配变更记录
+- 2026-11-10：Electron host 新增只接收 targetId 的 `openLegacyCodeg` 桥；token URL 不经过 preload、IPC 返回值或 renderer。
+- 2026-11-10：Electron host 通过主进程认证桥接取得状态、发起系统浏览器登录并在授权后给固定 Controller 请求附加访问令牌；刷新与身份切换由主进程会话处理。25 项 Node 定向测试、portable 未登录冷启动和正式 r7 dual audience 部署通过；真实登录及原设备列表待验收。
 - 2026-10-28：暴露一次性本机 surface 重载接口；唯一启用的 `tether-dsh-surface` 插件由 `remote.pluginManager` 重新应用，其 `application` 状态原样返回并区分 `restart-required`。
 - 2026-10-28：新增 owner-only 目标身份绑定附件读取桥；固定配置 Hub 地址、逐块请求原始 base64 字节、单文件 10 MiB 上限，并在目标设备或会话变化时拒绝 addFiles。
 
@@ -19,3 +21,5 @@
 - 2026-10-30：DSH Composer 的默认隐藏文件输入点击改进入当前会话的远端工作区选择器；原生文件选择器保留为显式“本机文件…”入口。owner RPC 身份、会话工作区 capability 与原始字节校验继续限定远端选择。
 
 - 2026-10-30：DSH Composer slot 按原生 session-maybe contract 注入 sessionId；新草稿选择目标文件时调用官方 uiWorkspace.startSession 创建空会话，并在新 session 挂载后自动续开远端 picker。缺少工作区时显示提示，不静默回退本机文件对话框。
+
+- 2026-11-10：Electron host 增加 targetId-only openDshSurface 窄桥，供远端 NativeSurface 使用。

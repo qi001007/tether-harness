@@ -20,13 +20,14 @@ const nodeAgentSource = read('tether/node/agent.py')
 const appRestartSource = read('tether/node/app_restart.py')
 
 test('one click downloads every component before the first install and restarts once', () => {
-  assert.match(source, /const plan = product === 'desktop'\s*\? \[\{ component: 'node', scope: nodeScope \}, \{ component: 'app', scope: null \}\]\s*: \[\{ component: 'localPlugin', scope: null \}\]/)
+  assert.match(source, /const plan = product === 'desktop'\s*\? \[\.\.\.\(localCapabilities\.node_self_update_enabled === false \? \[\] : \[\{ component: 'node', scope: nodeScope \}\]\), \{ component: 'app', scope: null \}\]\s*: \[\{ component: 'localPlugin', scope: null \}\]/,
+    'the desktop plan omits a Node self-update owned by an installer and always includes APP')
   assert.match(source, /for \(const step of plan\) \{[\s\S]*?prepared\[step\.component\] = await prepareUpdateComponent\(step\.component, step\.scope\)/)
   assert.match(source, /const order = product === 'desktop' \? \['node', 'app'\] : \['localPlugin'\]/)
   assert.match(source, /if \(!failure\) for \(const component of order\)/,
     'any failed prepare prevents applying the components that did prepare')
-  assert.match(source, /product === 'desktop' \? \['app', 'node'\] : \['localPlugin'\]/,
-    'the DSH product card stays an explicit standalone plugin update')
+  assert.match(source, /const components = product === 'desktop' \? \['app', \.\.\.\(nodeUpdateManaged \? \[\] : \['node'\]\)\] : \['localPlugin'\]/,
+    'the desktop card reflects installer-owned Node while DSH remains plugin-only')
   assert.match(source, /for \(const component of order\) \{[\s\S]*?const entry = prepared\[component\]/)
   assert.match(source, /if \(!entry \|\| entry\.failed \|\| entry\.current \|\| entry\.inProgress \|\| !entry\.preparedId\) continue/)
   assert.ok(source.indexOf('prepared[step.component] = await prepareUpdateComponent') < source.indexOf('for (const component of order)'),
@@ -35,34 +36,34 @@ test('one click downloads every component before the first install and restarts 
     'a node held for the APP restart is not restarted on its own')
   assert.match(source, /const reconnected = await watchAppRestart\(nodeScope, entry\.authority, entry\.expectedVersion\)/,
     'the deferred Node restart is confirmed after APP reconnects')
-  assert.match(source, /else if \(prepared\.node && \(prepared\.node\.applied \|\| prepared\.node\.restartPending\)\) \{\s*const nodeReady = await watchNodeRestart\(nodeScope, entry\.authority, prepared\.node\.expectedVersion\)/,
-    'the product confirms an applied or previously pending Node restart after APP reconnects')
+  assert.match(source, /else if \(prepared\.node && !prepared\.node\.rollbackAttempted\s*&& \(prepared\.node\.applied \|\| prepared\.node\.restartPending\)\) \{\s*const nodeReady = await watchNodeRestart\(nodeScope, entry\.authority, prepared\.node\.expectedVersion, prepared\.node\.preparedId\)/,
+    'the product checks Node after APP reconnect only while its transaction remains pending')
 })
 
-test('external Node configuration skips spawn and does not expose a random local API', () => {
+test('external Node configuration skips spawn and exposes local API only after explicit validation', () => {
   assert.match(mainSource, /cfg\.nodeMode === 'external'[\s\S]*?env\.TETHER_NODE_MODE = cfg\.nodeMode/)
   assert.match(mainSource, /current\.nodeMode === 'external'[\s\S]*?nodeMode: 'external'/,
     'Hub config rewrites preserve the existing external Node selection')
-  assert.match(mainSource, /localApi: supervisor\.remoteUrl && supervisor\.procs\.node/,
-    'the local console token is only passed when this APP owns a Node process')
+  assert.match(mainSource, /localApi: supervisor\.remoteUrl && localApiReady && supervisor\.hasLocalNodeApi\(\)/,
+    'the local API is exposed only after authenticated readiness and explicit ownership/configuration')
+  assert.match(supervisorSource, /this\.nodeMode === 'external' && \(externalPort !== undefined \|\| externalToken !== undefined\)/)
+  assert.match(supervisorSource, /hasLocalNodeApi\(\)/)
   assert.match(supervisorSource, /this\.nodeMode !== 'external' && \(this\.nodeToken \|\| this\.userToken\)/,
     'external mode leaves the separately managed Node in place')
 })
 
 test('a device one click prepares APP and Node before applying, keeping plugin separate', () => {
-  assert.match(source, /export function deviceUpdateComponents\(capabilities = \{\}\) \{\s*return \['node', \.\.\.\(hasInstalledApp\(capabilities\) \? \['app'\] : \[\]\)\]/)
-  assert.match(source, /const components = deviceUpdateComponents\(item\.capabilities\)\s*const prepared = \{\}\s*for \(const component of components\) \{[\s\S]*?prepared\[component\] = await prepareUpdateComponent\(component, scope\)/)
-  assert.match(source, /for \(const component of \['node', 'app'\]\) \{/)
-  assert.match(source, /if \(failures\.length\) break/)
-  assert.match(source, /\.\.\.\(hasInstalledApp\(caps\) \? \['app'\] : \[\]\), 'node'/,
-    'settings update rows show APP and Node only for remote devices')
-  assert.match(source, /const reconnected = await watchAppRestart\(/)
-  assert.match(source, /status\.current_version === expectedVersion && status\.restart_required !== true/,
-    'APP reconnect is only confirmed after the trusted updater clears restart_required')
-  assert.match(source, /else if \(prepared\.node && \(prepared\.node\.applied \|\| prepared\.node\.restartPending\)\) \{\s*const nodeReady = await watchNodeRestart\(scope, entry\.authority, prepared\.node\.expectedVersion\)/,
-    'when APP manages the restart, a deferred Node apply is verified after APP reconnects')
-  assert.ok(source.indexOf('prepared[component] = await prepareUpdateComponent(component, scope)') < source.indexOf("for (const component of ['node', 'app'])"),
-    'a device run also downloads everything before installing')
+  assert.match(source, /export function deviceUpdateComponents\(capabilities = \{\}\) \{\s*return \[\.\.\.\(capabilities\.node_self_update_enabled === false \? \[\] : \['node'\]\), \.\.\.\(hasInstalledApp\(capabilities\) \? \['app'\] : \[\]\)\]/,
+    'device update components honor Node ownership and installed APP capability')
+  assert.match(source, /const componentNames = \[\.\.\.\(nodeUpdateManaged \? \[\] : \['node'\]\), \.\.\.\(hasApp \? \['app'\] : \[\]\)\]/)
+  assert.match(source, /const updateOrigin = hasApp \? 'app'\s*: capabilities\.node_self_update_enabled === true && !installerOwnedNode \? 'node' : ''/,
+    'device updates select the APP or Node owner for the remote update job')
+  assert.match(source, /h\(MinimalUpdateButton, \{[\s\S]*?originProduct: updateOrigin, triggerLabel: '一键更新'/,
+    'the device button starts the Hub-owned job with its selected component owner')
+  assert.match(source, /devicePath \+ '\/update\/apply'[\s\S]*?body: JSON\.stringify\(\{ origin_product: originProduct \}\)/,
+    'one-click submits the chosen origin to the device update job API')
+  assert.match(source, /devicePath \+ '\/update\/job'[\s\S]*?const timer = setInterval\(poll, 1000\)/,
+    'the device card follows the persistent job instead of running a second local prepare sequence')
 })
 
 test('a running update shows a determinate progress bar instead of a restart dialog', () => {
@@ -88,33 +89,102 @@ test('a running update shows a determinate progress bar instead of a restart dia
 test('a second window attaches to a running install instead of failing it', () => {
   assert.match(source, /return !!\(info && \(info\.in_progress === true \|\| info\.status === 'in_progress'\)\)/)
   assert.match(source, /const running = options\.running === true \|\| list\.some\(updateInfoRunning\)/)
-  assert.match(source, /if \(updateInfoRunning\(checked\)\) return \{ inProgress: true, checked \}/)
-  assert.match(source, /if \(updateInfoRunning\(prepared\)\) return \{ inProgress: true, checked \}/)
+  const start = source.indexOf('export async function runUpdateSequence(')
+  const end = source.indexOf('\n}', start)
+  const sequence = source.slice(start, end)
+  assert.match(sequence, /if \(updateInfoRunning\(checked\)\) return \{ attached: true, updated: false \}/)
+  assert.match(sequence, /if \(updateInfoRunning\(prepared\)\) return \{ attached: true, updated: false \}/)
+  assert.match(sequence, /if \(updateInfoRunning\(result\)\) return \{ attached: true, updated: false \}/)
+  assert.ok(sequence.indexOf('updateInfoRunning(prepared)') < sequence.indexOf('const result = await apply('),
+    'a second window attaches before starting apply when preparation is already running')
   assert.match(source, /const waitForUpdateSettle = async \(component, scope, authority\) => \{/)
   assert.match(source, /if \(isUsableUpdateStatus\(status\) && !updateInfoRunning\(status\)\) return status/)
-  assert.match(source, /const settled = await waitForUpdateSettle\(component, entry\.scope, entry\.authority\)\s*if \(!settled\) \{ failure = failure \|\| component \+ ' 更新仍在进行，尚未确认完成'; continue \}/)
-  assert.match(source, /if \(updateInfoRunning\(result\)\) \{\s*const settled = await waitForUpdateSettle\(component, entry\.scope, entry\.authority\)/)
-  assert.match(source, /if \(updateInfoRunning\(result\)\) \{\s*const settled = await waitForUpdateSettle\(component, scope, entry\.authority\)/)
+  assert.match(source, /const settled = await waitForUpdateSettle\(component, entry\.scope, entry\.authority\)\s*if \(!settled\) \{\s*const reason = component \+ ' 更新仍在进行，尚未确认完成'\s*failure = component === 'node' \? await rollbackPreparedNode\(reason\) : failure \|\| reason\s*continue/,
+    'a still-running Node update is rolled back after settling times out')
+  assert.match(source, /const latest = await apiRef\.current\(devicePath \+ '\/update\/job'/)
+  assert.match(source, /const restored = latest && latest\.status !== 'done' \? latest : null/,
+    'a second device window restores the existing nonterminal job')
+  assert.match(source, /const next = await apiRef\.current\(devicePath \+ '\/update\/job'/)
+  assert.match(source, /const timer = setInterval\(poll, 1000\)/,
+    'the attached job is observed until its terminal status')
 })
 
 test('a Node restart is not treated as complete from stale status or timeout', () => {
-  assert.match(source, /const watchNodeRestart = async \(scope, authority, expectedVersion\)/)
+  assert.match(source, /const watchNodeRestart = async \(scope, authority, expectedVersion, preparedId\)/)
   assert.match(source, /await loadUpdateInfo\('node', 'status', authority, scope\)/)
-  assert.match(source, /target && target\.online && versionOk && isUsableUpdateStatus\(status\) && !status\.restart_required/)
+  assert.match(source, /target && target\.online && versionOk && isUsableUpdateStatus\(status\) && statusVersionOk/)
+  assert.match(source, /const verifyNodeServices = async \(scope, authority, capabilities\)/)
+  assert.match(source, /\/fs\/service_catalog/)
+  assert.match(source, /\/fs\/dsh_status/)
+  assert.match(source, /fetchSurfaceDescriptor\(scope\.deviceId\)/)
+  assert.match(source, /surfaceInfo\.response\.ok[\s\S]*?surfaceInfo\.data\.nativeService/)
+  assert.match(source, /updateAction\('node', 'commit', preparedId, scope, authority\)/)
   assert.match(source, /return false\s*\n\s*\}/,
     'timeout and a changed scope both fail instead of returning implicit success')
+})
+
+test('prepared Node restart commits only the matching awaiting-acceptance transaction', () => {
+  const start = source.indexOf('const watchNodeRestart = async')
+  const end = source.indexOf('const watchAppRestart = async', start)
+  const watcher = source.slice(start, end)
+
+  assert.match(watcher, /status\.current_version === expectedVersion/)
+  assert.match(watcher, /const transaction = status\.transaction \|\| status\.node_transaction/)
+  assert.match(watcher, /transaction\.prepared_id === preparedId\s*&& transaction\.state === 'awaiting_acceptance'/)
+  assert.match(watcher, /if \(!preparedId && !status\.restart_required\) return true/)
+  assert.match(watcher, /if \(!transactionReady\) continue/)
+  assert.match(watcher, /if \(!preparedId && !status\.restart_required\) return true[\s\S]*?if \(!transactionReady\) continue[\s\S]*?verifyNodeServices[\s\S]*?updateAction\('node', 'commit', preparedId, scope, authority\)/)
+  assert.doesNotMatch(watcher, /transactionReady[\s\S]{0,120}!status\.restart_required/,
+    'restart_required must not gate the prepared transaction acceptance path')
+})
+
+test('Node apply commits only after service acceptance and rolls back on acceptance failure', () => {
+  assert.match(source, /if \(action === 'apply' \|\| action === 'commit' \|\| action === 'rollback'\) body\.prepared_id = preparedId/)
+  assert.match(source, /rollbackPreparedNode\(reason\)/)
+  assert.match(source, /const rollbackAppliedNode = async \(scope, authority, preparedId, reason\) => \{[\s\S]*?updateAction\('node', 'rollback', preparedId, scope, authority\)/)
+  assert.match(source, /Node 验收失败，已自动回滚/)
+  assert.match(source, /Node 验收失败且自动回滚失败/)
+  assert.match(source, /withUpdateTimeout\(verifyNodeServices\(scope, authority, target\.capabilities \|\| \{\}\), 20000, 'Node 服务验收超时'\)/)
+})
+
+test('APP phase failures roll back an applied deferred Node exactly once', () => {
+  const start = source.indexOf('const runProductUpdate = async (product)')
+  const end = source.indexOf('\n      React.useEffect', start)
+  const update = source.slice(start, end)
+  assert.match(update, /const rollbackPreparedNode = async \(reason\) => \{/)
+  assert.match(update, /if \(!node \|\| !node\.applied \|\| !node\.preparedId\) return reason/)
+  assert.match(update, /node\.rollbackAttempted = true\s*node\.rollbackFailure = await rollbackAppliedNode\(node\.scope \|\| nodeScope, node\.authority, node\.preparedId, reason\)\s*return node\.rollbackFailure/)
+  assert.match(update, /if \(node\.rollbackAttempted\) return node\.rollbackFailure \|\| reason/)
+  assert.match(update, /if \(!applied \|\| applied\.ok === false\) failure = await rollbackPreparedNode\('APP 更新失败'\)/,
+    'a false APP apply result rolls back the applied Node')
+  assert.match(update, /catch \(error\) \{\s*const reason = component === 'node' \? 'Node 更新失败' : component === 'app' \? 'APP 更新失败'[\s\S]*?failure = component === 'app' \? await rollbackPreparedNode\(reason\) : failure \|\| reason/,
+    'an APP apply exception rolls back the applied Node')
+  assert.match(update, /if \(!reconnected\) failure = await rollbackPreparedNode\('APP 更新后尚未重新连接，请稍后刷新'\)/,
+    'failed APP restart acceptance rolls back the applied Node')
+  assert.match(update, /if \(typeof nodeReady === 'string'\) \{\s*prepared\.node\.rollbackAttempted = true/,
+    'a rollback returned by watchNodeRestart is recorded so it is not repeated')
+  assert.match(update, /failure = await rollbackPreparedNode\(nodeFailure\)/,
+    'watcher failure uses its rollback text as the final run failure')
+  assert.match(update, /prepared\.node\.rollbackFailure = nodeReady/)
+  assert.match(update, /failure = component === 'node' \? await rollbackPreparedNode\(reason\) : failure \|\| reason/)
+})
+
+test('APP restart completes only this run prepared Node and ignores old pending restarts', () => {
+  assert.match(source, /watchNodeRestart\(nodeScope, entry\.authority, prepared\.node\.expectedVersion, prepared\.node\.preparedId\)/)
+  assert.match(source, /watchNodeRestart\(entry\.scope, entry\.authority, entry\.expectedVersion, entry\.preparedId\)/)
+  assert.match(source, /if \(!preparedId && !status\.restart_required\) return true[\s\S]*?if \(!transactionReady\) continue[\s\S]*?updateAction\('node', 'commit', preparedId, scope, authority\)/)
+  assert.match(source, /restartPending[\s\S]*?!\(prepared\.app && prepared\.app\.preparedId\)/)
 })
 
 test('restart watchers use the version that prepare actually pinned', () => {
   assert.match(source, /const preparedRow = \(prepared\.prepared \|\| \[\]\)\.find\(\(item\) => item && item\.prepared_id === preparedId\)/)
   assert.match(source, /const expectedVersion = prepared\.to_version \|\| \(preparedRow && preparedRow\.to_version\) \|\| checked\.latest_version/)
-  assert.match(source, /watchAppRestart\(scope, entry\.authority, entry\.expectedVersion\)/)
-  assert.match(source, /watchNodeRestart\(entry\.scope, entry\.authority, entry\.expectedVersion\)/)
+  assert.match(source, /watchAppRestart\(nodeScope, entry\.authority, entry\.expectedVersion\)/)
+  assert.match(source, /watchNodeRestart\(entry\.scope, entry\.authority, entry\.expectedVersion, entry\.preparedId\)/)
 })
 
-test('a deferred Node restart without an APP update remains pending for retry', () => {
-  assert.match(source, /if \(result\.restart_deferred === true\) \{\s*if \(!prepared\.app \|\| !prepared\.app\.preparedId\) \{\s*failure = failure \|\| nodeRestartManualMessage/)
-  assert.match(source, /if \(result\.restart_deferred === true\) \{\s*if \(!prepared\.app \|\| !prepared\.app\.preparedId\) \{\s*failures\.push\(nodeRestartManualMessage\)/)
+test('a deferred Node restart without an APP update rolls back its applied package', () => {
+  assert.match(source, /if \(result\.restart_deferred === true\) \{\s*if \(!prepared\.app \|\| !prepared\.app\.preparedId\) \{\s*failure = await rollbackPreparedNode\(nodeRestartManualMessage\)/)
 })
 
 test('a current Node with a pending restart is not reported complete', () => {
@@ -128,7 +198,51 @@ test('a current Node with a pending restart is not reported complete', () => {
 
 test('an APP staged in the same run may recover the pending Node restart', () => {
   assert.match(source, /prepared\.node && prepared\.node\.restartPending\s*&& !\(prepared\.app && prepared\.app\.preparedId\)/)
-  assert.match(source, /else if \(prepared\.node && \(prepared\.node\.applied \|\| prepared\.node\.restartPending\)\)/)
+  assert.match(source, /else if \(prepared\.node && !prepared\.node\.rollbackAttempted\s*&& \(prepared\.node\.applied \|\| prepared\.node\.restartPending\)\)/)
+})
+
+test('a reloaded local UI discovers and adopts only a valid pending Node transaction', () => {
+  const start = source.indexOf('const prepareUpdateComponent = async')
+  const end = source.indexOf('const openUpdateCenter', start)
+  const prepare = source.slice(start, end)
+  assert.match(prepare, /const transaction = status\.transaction \|\| status\.node_transaction/)
+  assert.match(prepare, /transaction\.prepared_id[\s\S]*?transaction\.state === 'awaiting_acceptance'[\s\S]*?transaction\.to_version/)
+  assert.match(prepare, /acceptancePending: true[\s\S]*?preparedId[\s\S]*?expectedVersion[\s\S]*?authority:[\s\S]*?scope/)
+  assert.match(prepare, /restartPending: nodeRestartIsPending\(scope, status\)/)
+  assert.match(source, /component === 'node' && scope && scope\.deviceId === \(appLocalDevice \|\| deviceId\)[\s\S]*?result\.update_available !== true[\s\S]*?loadUpdateInfo\('node', 'status'/,
+    'a no-update check after UI reload also loads transaction status')
+  const cardStart = source.indexOf('const productCard =')
+  const cardEnd = source.indexOf('const deviceCard =', cardStart)
+  const card = source.slice(cardStart, cardEnd)
+  assert.match(card, /nodeAcceptancePending/)
+  assert.match(card, /restartAction: nodeAcceptancePending \? 'update'/)
+  assert.match(card, /restartPill: nodeAcceptancePending \? '待验收'/)
+  assert.match(card, /updateButton\(card, \(\) => runProductUpdate\(product\)/,
+    'the pending acceptance card stays clickable and enters the product update runner')
+  assert.match(source, /restartAction === 'update' \? '继续验收'/)
+})
+
+test('a recovered Node transaction commits before APP apply and rolls back on failed acceptance', () => {
+  const start = source.indexOf('const runProductUpdate = async (product)')
+  const end = source.indexOf('\n      React.useEffect', start)
+  const update = source.slice(start, end)
+  assert.match(update, /prepared\.node && prepared\.node\.acceptancePending/)
+  assert.match(update, /watchNodeRestart\(prepared\.node\.scope, prepared\.node\.authority,\s*prepared\.node\.expectedVersion, prepared\.node\.preparedId\)/)
+  assert.match(update, /if \(nodeReady === true\) prepared\.node\.current = true\s*else \{[\s\S]*?prepared\.node\.rollbackAttempted = typeof nodeReady === 'string'/)
+  assert.match(update, /prepared\.node\.current = true[\s\S]*?const order = product === 'desktop' \? \['node', 'app'\]/)
+  assert.ok(update.indexOf('prepared.node.acceptancePending') < update.indexOf("updateAction('app', 'apply'"),
+    'the recovered Node acceptance commits before applying APP')
+  assert.match(update, /if \(!entry \|\| entry\.failed \|\| entry\.current \|\| entry\.inProgress \|\| !entry\.preparedId\) continue/,
+    'after acceptance, the existing order skips another Node apply and still handles an APP update')
+})
+
+test('a current Node without a valid acceptance transaction remains current', () => {
+  const start = source.indexOf('const prepareUpdateComponent = async')
+  const end = source.indexOf('const openUpdateCenter', start)
+  const prepare = source.slice(start, end)
+  assert.match(prepare, /if \(transaction && typeof transaction\.prepared_id === 'string'[\s\S]*?transaction\.state === 'awaiting_acceptance'[\s\S]*?typeof transaction\.to_version === 'string'/)
+  assert.match(prepare, /return \{ current: true, checked, status,[\s\S]*?restartPending: nodeRestartIsPending\(scope, status\) \}/)
+  assert.match(source, /restartPending: nodeRestartIsPending\(scope, status\)/)
 })
 
 test('a local plugin apply that scheduled a DSH restart does not fall back to a manual button', () => {
@@ -204,7 +318,7 @@ test('the shortcut and restart path launch Electron directly without a console',
   assert.match(supervisorSource, /pythonw\.exe/)
   assert.match(supervisorSource, /this\.spawnChild\(this\.childPython, args/)
   assert.match(supervisorSource, /spawnSync\(this\.childPython, \['-c'/)
-  assert.match(mainSource, /new UpdateService\(\{ repoRoot, dataDir, python: supervisor\.childPython, env, app \}\)/)
+  assert.match(mainSource, /new UpdateService\(\{ repoRoot, dataDir, python: supervisor\.childPython, env, app,\s*stopManagedNode: \(\) => packaged \? supervisor\.stopManagedNode\(\) : Promise\.resolve\(\{ stopped: false \}\) \}\)/)
   assert.match(appCmdSource, /if \/i not "%~1"=="--hidden"/)
   assert.match(appCmdSource, /wscript \/\/nologo .*Tether-App\.vbs/)
   assert.match(appCmdSource, /-WindowStyle Hidden/)

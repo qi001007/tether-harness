@@ -1,5 +1,24 @@
 # 用户反馈与处理
 
+## 2026-11-11 当前推进状态与未完成项
+
+- [x] 恢复 409 前的真实 APP 基线：原因是 DESKTOP-LOCAL 被切到 0.5.2 候选 Node 侧部署；已恢复 `D:\Tether\node` 0.2.3，LAPTOP-01 的 DSH workspace/composer 在 APP 中恢复。当前设备 3/4 在线；DESKTOP-LOCAL 当前版本为 0.2.3。旧 0.5.2 现场记录是已回滚历史，不代表当前运行状态。
+- [x] 缓解 E 盘空间耗尽：`.scratch` 曾占 78.316 GB / 1,090,126 个文件；删除 18 个可复现旧候选输出，释放 71.87 GB，E 盘可用约 74.78 GB。候选目录增加 marker、路径校验及保留当前+最近一个的清理规则，candidate tests 16/16。
+- [x] 更新事务实现与本地门禁：Node 持久事务、commit/rollback、APP 重启续验和 Hub Node 服务验收已实现；Node 107 passed / 2 skipped、Hub 39 passed、UI update_chain 24/24、candidate+UI 40/40、workflow 10/10，bundle/web checks 通过。pytest 进程退出时出现既有 `agent_registry.catalog` interpreter-shutdown 线程噪声，exit code 0。
+- [x] Hub 新 release 已部署：`/opt/tether/releases/update-transaction-20261111-r1` 部署 `app.py` / `update_jobs.py`，commit/rollback 路由在线，health ok、3 online、无 stale，旧 release 保留。
+- [ ] 发布 GitHub 签名 0.5.2 preview，并确认 update source 实际返回 0.5.2。
+- [ ] 真实设备经 APP UI 完成 prepare/apply/restart/service acceptance/commit 全链路，核对最终版本与服务状态。
+- [ ] 保存真实端到端成功截图并经微信送达；目前没有成功截图及手机送达回执。
+
+## 2026-11-10 0.5.2 visible login 验收
+
+- [x] F149：桌面 APP 提供可见登录流程。常规模式使用系统浏览器 Casdoor Authorization Code + PKCE；固定回调 `http://127.0.0.1:18893/oauth/callback`；令牌仅由主进程加密保存；未认证时 UI 显示登录入口且不开始工作台轮询。候选专用入口从桌面凭据文件完成同一 Code + PKCE 回调，不把密码写入 URL、日志或交付目录；常规模式保持系统浏览器。修复重复 `Authorization` 及工作台绕开 OIDC 请求路径后，42 项定向回归通过。
+- [x] F149 真实登录与持久化：packaged r5 使用原账号登录成功，读取原有 4 台设备；加密 OIDC 会话落盘。关闭候选后以同一数据目录重启并移除候选凭据环境变量，界面直接恢复已登录状态和设备列表。
+- [ ] F149 节点工作台续验：`LAPTOP-01` 的 `service_catalog` 返回 `bad_op`，部分旧记录返回 `device_not_found`，说明已安装节点与新工作台协议/设备身份不兼容；node2 DSH/Codeg 尚未打开。显式退出后的第二次登录也尚未执行，不能标记完成。
+- [x] F149 防止节点兼容错误造成界面反复报错：r2 将结构化 `bad_op` / `device_not_found` 降级为 60 秒 missing catalog，并在 Agents 禁用不可用服务的启动操作、显示升级或重连原因；401/403 仍保持认证错误。在线 `REMOTESTITCH-HUB` 约 45 秒实机观察保持稳定，日志无新增 CORS/404/HTTP 400；不代表节点已升级或 DSH/Codeg 已通过。
+- [ ] F149 旧节点兼容后续：主人提供的正式控制面只读结果显示 LAPTOP-01、REMOTESTITCH-HUB 的 DSH、Agents runtime、drives、workspaces 旧接口均 HTTP 200，服务运行状态为 true 且列表非空；后续复用这些 status/list 接口构造明确标记的 legacy 状态，评估安全的 open 兼容方案。当前目录仍不伪造 ready，本轮不改 open 路径，也不要求整机重装。
+- [x] F149 UI 稳定性实机验收：r2 让 Electron 托管 OAuth 的远端 DSH descriptor 经 `hubRequest` IPC，且 app-context localDeviceId 仅在当前设备快照存在时自动选中。在线 `REMOTESTITCH-HUB` 四次快照覆盖约 45 秒，设备选择、升级提示和禁用按钮保持不变；新增日志 CORS/404/HTTP 400 均为 0，主框架仅启动导航 1 次。`LAPTOP-01` 当时离线并稳定返回 HTTP 409，不计作在线兼容通过。
+
 ## 2026-11-07 当前候选与待验收项
 
 - [ ] Laptop APP/Node 仍在线 0.4.7；更新 job `0b4347...` 以 `device_offline` 结束且未 apply 0.4.9，大包读取仍慢。旧 `update_timeout` 下载问题未解决。
@@ -329,4 +348,23 @@
 - [x] F121：结构化页要按 Codeg 的 UI/逻辑重做，不要自己画；要能回主页继续选 Agent；目录/账号要像成熟软件一样秒开。判据：思考/工具/计划在左侧轨道，执行过程胶囊可折叠，最终回答独立；右上能开对话详情；有主页入口；目录/账号缓存后 ≤100ms。**实现 2026-11-04**：以 Codeg 开源仓库 `xintaofei/codeg`（Apache-2.0）的活动时间线/消息/详情结构为参照，重做 ACP 页：用户气泡右对齐、执行过程胶囊（N 步/耗时/展开）、左侧轨道行（思考/终端/文件/Agent/计划，状态与详情展开）、最终 Markdown；顶部「‹ 主页 + Agent + 状态 + 会话详情 + 停止」，主页 tab 常驻且保留 ACP tab；右侧对话详情卡（状态/Agent/模型/目录/会话/步骤/消息）；目录和账号增加本地缓存与预取，账号列表 `fresh=false` 立即返回元数据，后台 `fresh=true` 刷额度/套餐。**实测**：目录打开 **14ms**；账号弹层 **60ms 内**出现；Codex 真实会话「已连接 → 主页 → Codex tab → 详情」全通过；全量 216 passed / 3 skipped。**仍缺**：真实 Codex 两次遇到模型容量，未抓到实时思考/工具流；轨道布局用本地演示数据验收（演示代码已删）；首页首次进入约 **0.83s**，冷启动仍走一次 catalog 网络，下一步应在 App 启动时预取。
 
 - [ ] 2026-11-08：Windows APP仅打包目标平台Herdr/Croc资源，Node保持通用；按Hub/用户恢复显式设备选择并保留当前页面；Croc默认auto，更新优先使用manifest正式下载源并保留Hub/mirror回退。候选待签名CI与最终复核；未发布。
+
+- [x] F122：0.5.2 登录恢复后，在线旧节点的 Files 不应继续走现代 `service_open` 并报 HTTP 403。已加入窄范围 legacy `fs/list` 兼容并在 `REMOTESTITCH-HUB` 真机验证工作区列出、进入子目录、返回和刷新；旧节点条目强制只读，现代路径未改。r4 截图为 `E:\M_Assistant\runtime\evidence\tether-r4-remotestitch-files-success-20261110.png`。
+- [ ] F123：让旧 Codeg 在不削弱授权边界的前提下从 APP 打开。当前 runtime 已就绪且 `10.144.0.1:37301` 可达，但 Controller 尚无可信网络/设备成员记录；APP 现给出准确阻断提示，没有绕过 Controller 直连。完成判据是创建并验证当前 owner 的可信网络映射后，从 Agents 页打开旧 Codeg，看到真实工作台并保留授权审计。
+
+## 2026-11-11 DESKTOP-LOCAL 0.5.2 验收记录
+
+- [x] 阶段性候选验收：DESKTOP-LOCAL 通过旁路部署运行 `D:\Tether\node-0.5.2-r11`，`TetherNode` 计划任务 Running，console 18894；18893 仅用于 OIDC 回调并在登录后释放。Hub 报 online、`node_version=0.5.2`、心跳 0 秒；生产 `mesh_networks` 仍为 0。
+- [x] 本地桥鉴权与策略：wrong token 为 401，valid token 为 200，policy 为 `readonly`。
+- [x] APP 工作区可见验收：OIDC authenticated 且 session 持久化；已进入 DESKTOP-LOCAL DeepSeek Harness 工作区，输入框可见、可聚焦；未发送聊天消息。
+- [x] 证据与回滚：`.scratch/evidence/r11-desktop-local-dsh-0.5.2.png`、`.scratch/evidence/desktop-local-0.5.2-pass.json`；备份 `D:\Tether\rollback\node-0.5.2-r11-20261111-033300-315`、`D:\Tether\rollback\node-0.5.2-r11-port18894-20261111-034104-043`。
+- [x] 账户恢复边界：仅重置 Casdoor `tether/tether-owner` 凭据和尝试元数据，保留 owner/name/id/subject；不记录密码、token、用户邮箱。
+- [ ] LAPTOP-01 升级到 0.5.2（当前仍为 0.4.11）；REMOTESTITCH-HUB Node/DSH 阶段性验收已完成，见下方记录。
+- [x] REMOTESTITCH-HUB Node 0.5.2 / DSH 阶段性验收（2026-11-11）：r11 旁路部署、服务健康及 APP 真实工作区/输入框可见并聚焦通过；未发送消息。部署位置、回滚、运行基线与证据见 `PROGRESS.md`。旧 Codeg 子进程未恢复，本项仅覆盖 DSH。
+- [ ] 创建并验收生产 mesh（当前 mesh 数量为 0）。
+- [ ] 恢复 Codeg 所需 trusted network（当前仍被缺少 trusted network 阻塞）。
+- [ ] 修复 Settings/About 版本显示（当前仍为“—”）。
+- [ ] 签名并公开发布 0.5.2。
+
+以上为 DESKTOP-LOCAL 与 REMOTESTITCH-HUB 的阶段性候选验收，不代表项目完成。
 

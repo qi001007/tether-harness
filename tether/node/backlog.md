@@ -151,3 +151,5 @@
 - 2026-11-09：对 app_installer owner 的 APP 更新请求走本地 Electron updater 委托，不调用 Node legacy ZIP manager；Node 只在 bridge 可达时报告实际 APP 版本/安装态。HTTP 客户端禁用代理并拒绝重定向，bridge 失败作为 update_result 返回；apply 先向 Controller 确认 accepted 再让 APP 提交安装。
 - 2026-11-09：使用单独的 TETHER_NODE_SELF_UPDATE_ENABLED=0 标记隔离 QA Node，capability 与直接 Node 更新写入口都拒绝更新；提示“该节点已禁用自动更新”，保留 TETHER_NODE_MANAGED 的原有 Supervisor/重启语义，未设置自更新标记的独立 Node 保持原策略。
 - 2026-11-09：恢复 legacy APP apply 的既有8–160位 prepared ID 字符集合与进程内准备集合校验；Electron 安装提交失败写入既有 update-result 状态，Node status 转交持久 job 诊断并解除更新阻塞，新 prepare/apply 清除此错误。
+- 2026-11-11：Node update_call 接入 commit/rollback；两者只处理对应 prepared_id，不触发 Node 重启。协议定向测试通过。
+- 2026-11-11：Node commit 继续不重启；成功 rollback 返回 restart_required=true，在响应发送后关闭连接并让主循环执行一次 Node 重启。

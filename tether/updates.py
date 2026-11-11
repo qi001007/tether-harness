@@ -184,6 +184,12 @@ ERROR_MESSAGES = {
     "app_not_installed": "未找到与当前设备和 Hub 凭据匹配的本机 APP 安装记录。",
     "checkout_state_unknown": "无法确认开发目录状态，已阻止更新。",
     "prepared_id_required": "apply 操作需要 prepared_id。",
+    "transaction_not_found": "未找到该 Node 更新事务。",
+    "transaction_mismatch": "该更新事务不属于当前组件。",
+    "transaction_state_invalid": "该更新事务当前状态不允许此操作。",
+    "transaction_path_invalid": "更新事务目录不安全。",
+    "transaction_target_invalid": "更新事务包含安装目录之外的目标。",
+    "transaction_backup_invalid": "更新事务备份路径不安全。",
     "prepared_stale": "准备的更新已过期，当前版本已变化，请重新检查和准备。",
     "invalid_archive_version": "更新压缩包版本与清单不一致。",
     "invalid_json": "更新数据格式无效。",
@@ -1907,6 +1913,188 @@ class UpdateManager:
             if temp.exists():
                 temp.unlink()
 
+    def _node_transaction_path(self, prepared_id: str) -> Path:
+        if not re.fullmatch(r"[a-f0-9]{32}", prepared_id):
+            raise UpdateError("invalid_prepared_id")
+        transactions = self.state_dir / "transactions"
+        transaction_dir = transactions / prepared_id
+        if (transactions.is_symlink() or transaction_dir.is_symlink()
+                or transaction_dir.resolve(strict=False).parent != transactions.resolve(strict=False)):
+            raise UpdateError("transaction_path_invalid")
+        path = transaction_dir / "transaction.json"
+        if path.is_symlink():
+            raise UpdateError("transaction_path_invalid")
+        return path
+
+    def _read_node_transaction(self, prepared_id: str) -> tuple[Path, dict[str, Any]]:
+        path = self._node_transaction_path(prepared_id)
+        try:
+            record = _json_object(path.read_bytes())
+        except (OSError, UpdateError):
+            raise UpdateError("transaction_not_found") from None
+        if record.get("id") != prepared_id or record.get("component") != self.component:
+            raise UpdateError("transaction_mismatch")
+        if (record.get("state") not in {"applying", "awaiting_acceptance", "committing", "recovery_required"}
+                or not isinstance(record.get("from_version"), str)
+                or not isinstance(record.get("to_version"), str)
+                or not isinstance(record.get("targets"), list)):
+            raise UpdateError("transaction_state_invalid")
+        _semver(record["from_version"])
+        _semver(record["to_version"])
+        return path, record
+
+    def _validate_node_transaction_targets(self, record: dict[str, Any]) -> list[tuple[Path, Path | None]]:
+        backup_dir = self.state_dir / "backups" / "node" / str(record["id"])
+        try:
+            backup_root = backup_dir.resolve(strict=False)
+            backups = self.state_dir / "backups"
+            node_backups = backups / "node"
+            backup_parent = node_backups.resolve(strict=False)
+            if (backup_root.parent != backup_parent or backup_dir.is_symlink()
+                    or backups.is_symlink() or node_backups.is_symlink()):
+                raise ValueError
+        except (OSError, ValueError):
+            raise UpdateError("transaction_path_invalid") from None
+        validated: list[tuple[Path, Path | None]] = []
+        seen: set[Path] = set()
+        for item in record["targets"]:
+            if not isinstance(item, dict) or not isinstance(item.get("target"), str):
+                raise UpdateError("transaction_state_invalid")
+            raw_target = Path(item["target"])
+            try:
+                resolved_target = raw_target.resolve(strict=False)
+                if self.root == resolved_target or self.root in resolved_target.parents:
+                    target = self._safe_target(raw_target)
+                elif (resolved_target.parent == self.state_dir
+                      and resolved_target.name in {"installed-node.json", "applied-node.json"}
+                      and not raw_target.is_symlink()):
+                    target = resolved_target
+                else:
+                    raise ValueError
+            except (ValueError, OSError, UpdateError):
+                raise UpdateError("transaction_target_invalid") from None
+            if target in seen:
+                raise UpdateError("transaction_state_invalid")
+            seen.add(target)
+            backup_value = item.get("backup")
+            backup: Path | None = None
+            if backup_value is not None:
+                if not isinstance(backup_value, str):
+                    raise UpdateError("transaction_state_invalid")
+                backup = Path(backup_value)
+                try:
+                    backup.absolute().relative_to(backup_dir)
+                    if backup.is_symlink() or not backup.resolve(strict=False).is_relative_to(backup_root):
+                        raise ValueError
+                    cursor = backup_dir
+                    for part in backup.relative_to(backup_dir).parts:
+                        cursor = cursor / part
+                        if cursor.is_symlink():
+                            raise ValueError
+                except (OSError, ValueError):
+                    raise UpdateError("transaction_backup_invalid") from None
+            validated.append((target, backup))
+        return validated
+
+    def commit(self, prepared_id: str) -> dict[str, Any]:
+        if self.component != "node":
+            return self._error("transaction_mismatch")
+        lock_fd = None
+        try:
+            lock = self._lock()
+            if lock is None:
+                return self._in_progress_result()
+            lock_fd, _lock_file = lock
+            path, record = self._read_node_transaction(prepared_id)
+            if record["state"] not in {"awaiting_acceptance", "committing"}:
+                raise UpdateError("transaction_state_invalid")
+            self._validate_node_transaction_targets(record)
+            backup_dir = self.state_dir / "backups" / "node" / prepared_id
+            completed = path.parent.parent / "completed"
+            prepared_dir = self.state_dir / "prepared" / prepared_id
+            if prepared_dir.is_symlink():
+                raise UpdateError("transaction_path_invalid")
+            if completed.is_symlink():
+                raise UpdateError("transaction_path_invalid")
+            applied_path = self.state_dir / "applied-node.json"
+            applied = _json_object(applied_path.read_bytes())
+            if applied.get("component") != "node":
+                raise UpdateError("transaction_state_invalid")
+            applied["restart_required"] = False
+            self._write_atomic(applied_path, (json.dumps(applied, indent=2) + "\n").encode("utf-8"))
+            if record["state"] == "awaiting_acceptance":
+                record["state"] = "committing"
+                self._write_atomic(path, (json.dumps(record, indent=2) + "\n").encode("utf-8"))
+            self._write_atomic(completed / f"{prepared_id}.json", json.dumps({
+                "id": prepared_id, "component": "node", "from_version": record["from_version"],
+                "to_version": record["to_version"], "state": "committed",
+            }, indent=2).encode("utf-8"))
+            shutil.rmtree(backup_dir)
+            shutil.rmtree(prepared_dir, ignore_errors=True)
+            shutil.rmtree(path.parent)
+            return {"ok": True, "component": "node", "prepared_id": prepared_id,
+                    "from_version": record["from_version"], "version": record["to_version"],
+                    "status": "committed", "error": ""}
+        except UpdateError as exc:
+            return self._error(exc.code)
+        except OSError:
+            return self._error("local_state_error")
+        finally:
+            if lock_fd is not None:
+                self._unlock(lock_fd)
+                os.close(lock_fd)
+
+    def rollback(self, prepared_id: str) -> dict[str, Any]:
+        if self.component != "node":
+            return self._error("transaction_mismatch")
+        lock_fd = None
+        try:
+            lock = self._lock()
+            if lock is None:
+                return self._in_progress_result()
+            lock_fd, _lock_file = lock
+            path, record = self._read_node_transaction(prepared_id)
+            if record["state"] == "committing":
+                raise UpdateError("transaction_state_invalid")
+            targets = self._validate_node_transaction_targets(record)
+            success = self._rollback(targets)
+            if not success:
+                record["state"] = "recovery_required"
+                record["recovery_error"] = "rollback_failed"
+                self._write_atomic(path, (json.dumps(record, indent=2) + "\n").encode("utf-8"))
+                return self._error("rollback_failed")
+            completed = path.parent.parent / "completed"
+            if completed.is_symlink():
+                raise UpdateError("transaction_path_invalid")
+            self._write_atomic(completed / f"{prepared_id}.json", json.dumps({
+                "id": prepared_id, "component": "node", "from_version": record["from_version"],
+                "to_version": record["to_version"], "state": "rolled_back",
+            }, indent=2).encode("utf-8"))
+            prepared_dir = self.state_dir / "prepared" / prepared_id
+            if prepared_dir.is_symlink():
+                raise UpdateError("transaction_path_invalid")
+            shutil.rmtree(prepared_dir, ignore_errors=True)
+            shutil.rmtree(self.state_dir / "backups" / "node" / prepared_id, ignore_errors=True)
+            shutil.rmtree(path.parent)
+            return {"ok": True, "component": "node", "prepared_id": prepared_id,
+                    "from_version": record["from_version"], "version": record["to_version"],
+                    "status": "rolled_back", "error": ""}
+        except UpdateError as exc:
+            return self._error(exc.code)
+        except OSError:
+            try:
+                if "record" in locals() and "path" in locals():
+                    record["state"] = "recovery_required"
+                    record["recovery_error"] = "local_state_error"
+                    self._write_atomic(path, (json.dumps(record, indent=2) + "\n").encode("utf-8"))
+            except OSError:
+                pass
+            return self._error("local_state_error")
+        finally:
+            if lock_fd is not None:
+                self._unlock(lock_fd)
+                os.close(lock_fd)
+
     def apply(self, prepared_id: str) -> dict[str, Any]:
         lock_fd = None
         replaced: list[tuple[Path, Path | None]] = []
@@ -1951,6 +2139,16 @@ class UpdateManager:
                 # turns every retry into apply_failed.
                 backup_dir.rename(backup_dir.with_name(backup_dir.name + f"-{int(time.time())}-{uuid.uuid4().hex}"))
             backup_dir.mkdir(parents=True, exist_ok=False)
+            transaction_path = None
+            transaction: dict[str, Any] | None = None
+            if self.component == "node":
+                transaction_path = self._node_transaction_path(prepared_id)
+                transaction_path.parent.mkdir(parents=True, exist_ok=False)
+                transaction = {"schema": 1, "id": prepared_id, "component": "node",
+                               "from_version": current, "to_version": expected_version,
+                               "state": "applying", "stage": "prepared", "targets": []}
+                self._write_atomic(transaction_path,
+                                   (json.dumps(transaction, indent=2) + "\n").encode("utf-8"))
             total_files = max(1, len(staged))
             for target_index, (source, target, relative) in enumerate(staged):
                 safe_target = self._safe_target(target)
@@ -1959,8 +2157,20 @@ class UpdateManager:
                     backup = backup_dir / str(target_index) / Path(*PurePosixPath(relative).parts)
                     backup.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(safe_target, backup)
+                if transaction is not None and transaction_path is not None:
+                    target_record = {"target": str(safe_target),
+                                     "backup": str(backup) if backup else None,
+                                     "stage": "prepared"}
+                    transaction["targets"].append(target_record)
+                    transaction["stage"] = "replacing"
+                    self._write_atomic(transaction_path,
+                                       (json.dumps(transaction, indent=2) + "\n").encode("utf-8"))
                 replaced.append((safe_target, backup))
                 self._write_atomic(safe_target, source.read_bytes())
+                if transaction is not None and transaction_path is not None:
+                    target_record["stage"] = "replaced"
+                    self._write_atomic(transaction_path,
+                                       (json.dumps(transaction, indent=2) + "\n").encode("utf-8"))
                 self._write_progress("installing", 5 + int(85 * (target_index + 1) / total_files),
                                      relative)
 
@@ -1999,7 +2209,18 @@ class UpdateManager:
                     backup.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(path, backup)
                 replaced.append((path, backup))
+                if transaction is not None and transaction_path is not None:
+                    target_record = {"target": str(path), "backup": str(backup) if backup else None,
+                                     "stage": "prepared"}
+                    transaction["targets"].append(target_record)
+                    transaction["stage"] = "replacing"
+                    self._write_atomic(transaction_path,
+                                       (json.dumps(transaction, indent=2) + "\n").encode("utf-8"))
                 self._write_atomic(path, (json.dumps(content, indent=2) + "\n").encode("utf-8"))
+                if transaction is not None and transaction_path is not None:
+                    target_record["stage"] = "replaced"
+                    self._write_atomic(transaction_path,
+                                       (json.dumps(transaction, indent=2) + "\n").encode("utf-8"))
 
             if self.component == "plugin":
                 # The surface's local updater owns this record; mirror the node's
@@ -2029,11 +2250,29 @@ class UpdateManager:
                     version_backup.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(safe_version_target, version_backup)
                 replaced.append((safe_version_target, version_backup))
+                if transaction is not None and transaction_path is not None:
+                    target_record = {"target": str(safe_version_target),
+                                     "backup": str(version_backup) if version_backup else None,
+                                     "stage": "prepared"}
+                    transaction["targets"].append(target_record)
+                    transaction["stage"] = "replacing"
+                    self._write_atomic(transaction_path,
+                                       (json.dumps(transaction, indent=2) + "\n").encode("utf-8"))
                 self._write_atomic(safe_version_target, version_bytes)
-            try:
-                shutil.rmtree(prepared_root, ignore_errors=True)
-            except OSError:
-                pass
+                if transaction is not None and transaction_path is not None:
+                    target_record["stage"] = "replaced"
+                    self._write_atomic(transaction_path,
+                                       (json.dumps(transaction, indent=2) + "\n").encode("utf-8"))
+            if transaction is not None and transaction_path is not None:
+                transaction["state"] = "awaiting_acceptance"
+                transaction["stage"] = "written"
+                self._write_atomic(transaction_path,
+                                   (json.dumps(transaction, indent=2) + "\n").encode("utf-8"))
+            else:
+                try:
+                    shutil.rmtree(prepared_root, ignore_errors=True)
+                except OSError:
+                    pass
             restart_scheduled = False
             if self.component == "plugin" and dsh_pid:
                 # Give a hot-reload-capable host a short window to load the new
@@ -2045,13 +2284,43 @@ class UpdateManager:
             return {"ok": True, "component": self.component, "version": expected_version,
                     "backup_dir": str(backup_dir), "restart_required": True,
                     "restart_scheduled": restart_scheduled,
+                    **({"status": "awaiting_acceptance", "prepared_id": prepared_id}
+                       if transaction is not None else {}),
                     "updated_files": len(staged), "error": ""}
         except UpdateError as exc:
             rolled_back = self._rollback(replaced)
+            if self.component == "node" and not rolled_back and backup_dir is not None:
+                try:
+                    path = self._node_transaction_path(prepared_id)
+                    transaction = _json_object(path.read_bytes())
+                    transaction["state"] = "recovery_required"
+                    transaction["recovery_error"] = exc.code
+                    self._write_atomic(path, (json.dumps(transaction, indent=2) + "\n").encode("utf-8"))
+                except (OSError, UpdateError):
+                    pass
+            if self.component == "node" and rolled_back and backup_dir is not None:
+                try:
+                    shutil.rmtree(self._node_transaction_path(prepared_id).parent)
+                except OSError:
+                    pass
             self._write_progress("failed", 0, exc.code)
             return self._error("rollback_failed" if not rolled_back else exc.code)
         except Exception:
             rolled_back = self._rollback(replaced)
+            if self.component == "node" and not rolled_back and backup_dir is not None:
+                try:
+                    path = self._node_transaction_path(prepared_id)
+                    transaction = _json_object(path.read_bytes())
+                    transaction["state"] = "recovery_required"
+                    transaction["recovery_error"] = "apply_failed"
+                    self._write_atomic(path, (json.dumps(transaction, indent=2) + "\n").encode("utf-8"))
+                except (OSError, UpdateError):
+                    pass
+            if self.component == "node" and rolled_back and backup_dir is not None:
+                try:
+                    shutil.rmtree(self._node_transaction_path(prepared_id).parent)
+                except OSError:
+                    pass
             self._write_progress("failed", 0, "apply_failed")
             return self._error("apply_failed" if rolled_back else "rollback_failed")
         finally:
@@ -2155,6 +2424,36 @@ class UpdateManager:
             installed = self._versions()[self.component]
             current = self._app_current_version(installed)
             app_restart_required, app_restart_target = self._app_restart_state()
+            node_transaction = None
+            if self.component == "node":
+                transactions_dir = self.state_dir / "transactions"
+                try:
+                    if transactions_dir.is_dir() and not transactions_dir.is_symlink():
+                        for transaction_dir in sorted(transactions_dir.iterdir()):
+                            if (not re.fullmatch(r"[a-f0-9]{32}", transaction_dir.name)
+                                    or not transaction_dir.is_dir() or transaction_dir.is_symlink()):
+                                continue
+                            transaction_path = transaction_dir / "transaction.json"
+                            if transaction_path.is_symlink():
+                                continue
+                            try:
+                                candidate = _json_object(transaction_path.read_bytes())
+                            except (OSError, UpdateError):
+                                continue
+                            if (candidate.get("id") == transaction_dir.name
+                                    and candidate.get("component") == "node"
+                                    and candidate.get("state") in {
+                                        "applying", "awaiting_acceptance", "committing", "recovery_required"}):
+                                node_transaction = {
+                                    "prepared_id": transaction_dir.name,
+                                    "state": candidate["state"],
+                                    "from_version": candidate.get("from_version"),
+                                    "to_version": candidate.get("to_version"),
+                                }
+                                if candidate["state"] == "awaiting_acceptance":
+                                    break
+                except OSError:
+                    node_transaction = None
             prepared_dir = self.state_dir / "prepared"
             prepared: list[dict[str, str]] = []
             if prepared_dir.is_dir():
@@ -2200,6 +2499,10 @@ class UpdateManager:
                                                (json.dumps(applied, indent=2) + "\n").encode("utf-8"))
                         except OSError:
                             pass
+                if (restart_required and self.component == "node"
+                        and node_transaction is not None
+                        and node_transaction["state"] == "awaiting_acceptance"):
+                    restart_required = False
             except (OSError, UpdateError):
                 pass
             installed_latest: bool | None = None
@@ -2232,6 +2535,8 @@ class UpdateManager:
                       "prepared": prepared, "restart_required": restart_required,
                       "installed_latest": installed_latest, "checkout": self._checkout_info(),
                       "error": ""}
+            if self.component == "node":
+                result["transaction"] = node_transaction
             if self._lock_info() is not None:
                 result["in_progress"] = True
                 result["status"] = "in_progress"

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import http from 'node:http'
 import test from 'node:test'
-import { waitForLocalNodeApi, waitForSupervisorStart } from '../apps/tether-app/startup-readiness.js'
+import { getLocalMeshRoute, waitForLocalNodeApi, waitForSupervisorStart } from '../apps/tether-app/startup-readiness.js'
 
 test('APP waits for supervisor startup with a bound', async () => {
   const started = await waitForSupervisorStart(Promise.resolve({ mode: 'hub' }), 100)
@@ -50,4 +50,44 @@ test('APP readiness timeout is bounded and does not report unavailable API as re
   })
   assert.equal(result, false)
   assert.ok(Date.now() - started < 500)
+})
+
+test('external local mesh bridge authenticates the configured device before returning its route', async (t) => {
+  const requests = []
+  const server = http.createServer((req, res) => {
+    requests.push({ path: req.url, authorization: req.headers.authorization })
+    const ok = req.headers.authorization === 'Bearer ' + 'x'.repeat(40)
+      && req.url.startsWith('/api/devices/DEVICE-A/')
+    res.writeHead(ok ? 200 : 404, { 'content-type': 'application/json' })
+    if (req.url.endsWith('/policy')) res.end('{}')
+    else res.end(JSON.stringify({ device_id: 'DEVICE-A', network_id: '12345678-1234-1234-1234-123456789abc',
+      state: 'ready', socks_proxy: { host: '127.0.0.1', port: 32123 } }))
+  })
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+  t.after(() => server.close())
+  const port = server.address().port
+  const route = await getLocalMeshRoute({ port, device: 'DEVICE-A', token: 'x'.repeat(40),
+    networkId: '12345678-1234-1234-1234-123456789abc' })
+  assert.equal(route.socks_proxy.port, 32123)
+  assert.deepEqual(requests.map(({ path }) => path), [
+    '/api/devices/DEVICE-A/policy',
+    '/api/devices/DEVICE-A/mesh/12345678-1234-1234-1234-123456789abc/route'
+  ])
+  await assert.rejects(getLocalMeshRoute({ port, device: 'DEVICE-B', token: 'x'.repeat(40),
+    networkId: '12345678-1234-1234-1234-123456789abc' }), /local mesh route unavailable/)
+  await assert.rejects(getLocalMeshRoute({ port, device: 'DEVICE-A', token: 'wrong-token',
+    networkId: '12345678-1234-1234-1234-123456789abc' }), /local mesh route unavailable/)
+})
+
+test('mesh route response for a different device fails closed', async (t) => {
+  const server = http.createServer((req, res) => {
+    res.writeHead(200, { 'content-type': 'application/json' })
+    res.end(req.url.endsWith('/policy') ? '{}' : JSON.stringify({ device_id: 'OTHER',
+      network_id: '12345678123412341234123456789abc', state: 'ready',
+      socks_proxy: { host: '127.0.0.1', port: 32123 } }))
+  })
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+  t.after(() => server.close())
+  await assert.rejects(getLocalMeshRoute({ port: server.address().port, device: 'DEVICE-A',
+    token: 'x'.repeat(40), networkId: '12345678-1234-1234-1234-123456789abc' }), /local mesh route unavailable/)
 })

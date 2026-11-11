@@ -31,11 +31,22 @@ class Supervisor {
     this.userToken = env.TETHER_USER_TOKEN || ''
     this.nodeMode = env.TETHER_NODE_MODE === 'external' ? 'external' : 'managed'
     this.hubWss = env.TETHER_HUB_WSS || (this.remoteUrl ? this.remoteUrl.replace(/^http/, 'ws').replace(/\/+$/, '') + '/ws/node' : '')
-    this.consolePort = Number(env.TETHER_CONSOLE_PORT || 18894)
+    const externalPort = env.TETHER_CONSOLE_PORT
+    const externalToken = env.TETHER_LOCAL_API_TOKEN
+    this.externalLocalApiConfigured = false
+    if (this.nodeMode === 'external' && (externalPort !== undefined || externalToken !== undefined)) {
+      if (!/^[0-9]{1,5}$/.test(String(externalPort || '')) || Number(externalPort) < 1 || Number(externalPort) > 65535
+          || typeof externalToken !== 'string' || !/^[A-Za-z0-9._~-]{32,}$/.test(externalToken)) {
+        throw new Error('invalid external local Node API configuration')
+      }
+      this.externalLocalApiConfigured = true
+    }
+    this.consolePort = this.externalLocalApiConfigured ? Number(externalPort) : Number(externalPort || 18894)
     this.managedNodeStateDir = path.join(dataDir, 'private')
     this.managedNodeStatePath = path.join(this.managedNodeStateDir, 'managed-node-process.json')
     this.managedNodeState = this.readManagedNodeState()
-    this.localApiToken = this.managedNodeState && this.managedNodeState.token || crypto.randomBytes(24).toString('hex')
+    this.localApiToken = this.externalLocalApiConfigured ? externalToken
+      : this.managedNodeState && this.managedNodeState.token || crypto.randomBytes(24).toString('hex')
     this.python = env.TETHER_PYTHON || path.join(repoRoot, '.venv', 'Scripts', 'python.exe')
     this.appUpdateBridge = null
     if (!fs.existsSync(this.python)) this.python = process.platform === 'win32' ? 'python' : 'python3'
@@ -58,6 +69,12 @@ class Supervisor {
 
   baseUrl() {
     return this.remoteUrl || 'http://127.0.0.1:' + this.port
+  }
+
+  hasLocalNodeApi() {
+    return this.nodeMode === 'external'
+      ? this.externalLocalApiConfigured
+      : this.node.state === 'running'
   }
 
   safeServiceUrl(value) {

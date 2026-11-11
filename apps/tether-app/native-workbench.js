@@ -27,6 +27,45 @@ function apiUrl(base, targetId, operation) {
   return new URL('/api/devices/' + encodeURIComponent(targetId) + '/fs/' + operation, base).toString()
 }
 
+function strictLegacyCodegUrl(value) {
+  if (typeof value !== 'string') return null
+  const match = /^http:\/\/((?:0|[1-9]\d{0,2})(?:\.(?:0|[1-9]\d{0,2})){3}):([1-9]\d{0,4})\/token\.html\?token=([^&#]+)$/.exec(value)
+  if (!match || match[1].split('.').some((part) => Number(part) > 255) || Number(match[2]) > 65535) return null
+  let parsed
+  try { parsed = new URL(value) } catch (_) { return null }
+  const effectivePort = parsed.port || (parsed.protocol === 'http:' ? '80' : '')
+  if (parsed.protocol !== 'http:' || parsed.username || parsed.password || parsed.hash
+      || parsed.hostname !== match[1] || effectivePort !== match[2]
+      || parsed.pathname !== '/token.html' || [...parsed.searchParams.keys()].length !== 1
+      || !parsed.searchParams.get('token')) return null
+  return parsed
+}
+
+function legacyCodegService(status, targetId) {
+  const base = { id: 'codeg', agent_busy: false, view_only_reason: '', updated_at: null,
+    legacy: true }
+  if (!status || typeof status !== 'object' || Array.isArray(status)
+      || (status.device_id && status.device_id !== targetId)) {
+    return { ...base, state: 'failed', reason: '旧节点返回了无效的 Codeg 状态。', reason_code: 'legacy_status_invalid' }
+  }
+  if (status.running === true) {
+    if (status.installed === true && strictLegacyCodegUrl(status.url)) {
+      return { ...base, state: 'ready', reason: '', reason_code: '', open_mode: 'legacy-codeg' }
+    }
+    return { ...base, state: 'failed', reason: '旧节点 Codeg 运行状态不一致。', reason_code: 'legacy_status_invalid' }
+  }
+  if (status.running !== false) {
+    return { ...base, state: 'failed', reason: '旧节点返回了无效的 Codeg 状态。', reason_code: 'legacy_status_invalid' }
+  }
+  if (status.installed === false) {
+    return { ...base, state: 'missing', reason: '目标节点未安装 Codeg。', reason_code: 'legacy_codeg_missing' }
+  }
+  if (status.installed === true) {
+    return { ...base, state: 'stopped', reason: '目标节点 Codeg 已停止。', reason_code: 'legacy_codeg_stopped' }
+  }
+  return { ...base, state: 'failed', reason: '旧节点返回了无效的 Codeg 状态。', reason_code: 'legacy_status_invalid' }
+}
+
 async function postJson(fetcher, url, body, { signal } = {}) {
   const request = {
     method: 'POST',
@@ -191,6 +230,22 @@ function installCertificatePin(serviceSession, endpoint, caPem, proxy) {
   })
 }
 
+function installLegacyOriginGuard(serviceSession, endpoint) {
+  if (!serviceSession.webRequest || typeof serviceSession.webRequest.onBeforeRequest !== 'function') {
+    throw new Error('Electron 服务请求隔离不可用。')
+  }
+  serviceSession.webRequest.onBeforeRequest({ urls: ['<all_urls>'] }, (details, callback) => {
+    let allowed = false
+    try {
+      const target = new URL(details.url)
+      allowed = !target.username && !target.password && !target.hash
+        && ['http:', 'ws:'].includes(target.protocol)
+        && target.hostname === endpoint.hostname && target.port === endpoint.port
+    } catch (_) { /* reject invalid URLs */ }
+    callback({ cancel: !allowed })
+  })
+}
+
 async function configureSocksProxy(serviceSession, proxy) {
   if (!serviceSession || typeof serviceSession.setProxy !== 'function') throw new Error('Electron SOCKS 服务隔离不可用。')
   await serviceSession.setProxy({
@@ -206,26 +261,171 @@ async function resetServiceSession(serviceSession) {
   if (typeof serviceSession.setProxy === 'function') await serviceSession.setProxy({ mode: 'direct' })
 }
 
-function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession, getActorId, getLocalDeviceId, getSourceRoute, logSafe = () => {} }) {
+function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession, createBootstrapContents, getActorId, getLocalDeviceId, getSourceRoute, logSafe = () => {} }) {
   if (!controllerUrl || !loginSession || typeof loginSession.fetch !== 'function'
-      || typeof getServiceSession !== 'function' || typeof getActorId !== 'function'
+      || typeof getServiceSession !== 'function' || typeof createBootstrapContents !== 'function' || typeof getActorId !== 'function'
       || typeof getLocalDeviceId !== 'function' || typeof getSourceRoute !== 'function') {
     throw new TypeError('native workbench requires trusted Controller/session access from Electron main')
   }
   const base = new URL(controllerUrl).origin
+  const trustedControllerHost = new URL(controllerUrl).hostname
   const active = new Map()
   const pending = new Map()
   const operationIds = new Map()
   const actorGenerations = new Map()
+  const incompatibleCatalogs = new Map()
+  const managedSessions = new WeakSet()
   const clearingActors = new Set()
   const revocationFailures = new Set()
   const tupleKey = (actorId, targetId, serviceId) => [actorId, targetId, serviceId].join('\u0000')
+
+  async function openDshSurface(targetId) {
+    if (typeof targetId !== 'string' || !targetId || targetId.length > 200) throw new TypeError('invalid target')
+    const actorId = await getActorId()
+    if (typeof actorId !== 'string' || !actorId) throw new Error('Controller 登录身份尚未就绪。')
+    const key = tupleKey(actorId, targetId, 'dsh-native')
+    const generation = actorGenerations.get(actorId) || 0
+    const activeRecord = active.get(key)
+    if (activeRecord) await close(targetId, 'dsh-native', activeRecord.grantId)
+    const response = await loginSession.fetch(new URL('/api/devices/' + encodeURIComponent(targetId) + '/dsh/surface', base).toString(), {
+      method: 'GET', headers: { 'Cache-Control': 'no-store' }, redirect: 'error'
+    })
+    if (!response.ok) throw new Error('DSH surface 授权失败（HTTP ' + response.status + '）。')
+    const descriptor = await response.json()
+    let ticketUrl
+    try { ticketUrl = new URL(descriptor && (descriptor.url || descriptor.endpoint)) } catch (_) { throw new Error('Hub 返回了无效的 DSH gateway。') }
+    const expectedHost = new RegExp('^g([1-9]\\d{0,4})\\.' + trustedControllerHost.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&') + '$', 'i')
+    const gatewayMatch = expectedHost.exec(ticketUrl.hostname)
+    const ticketEntries = [...ticketUrl.searchParams.entries()]
+    if (!descriptor || descriptor.available !== true || ticketUrl.protocol !== 'https:' || ticketUrl.username || ticketUrl.password
+        || ticketUrl.hash || ticketUrl.port || !gatewayMatch || Number(gatewayMatch[1]) > 65535
+        || ticketUrl.pathname !== '/tether-connect' || ticketEntries.length !== 1 || ticketEntries[0][0] !== 'ticket'
+        || !ticketEntries[0][1]) throw new Error('Hub 返回了无效的 DSH gateway。')
+    const partition = 'persist:tether-wb-' + crypto.randomBytes(20).toString('hex')
+    const serviceSession = getServiceSession(partition)
+    if (!serviceSession || !serviceSession.cookies || typeof serviceSession.cookies.get !== 'function') {
+      throw new Error('Electron 服务隔离会话不可用。')
+    }
+    managedSessions.add(serviceSession)
+    let bootstrap = null
+    let bootstrapStage = 'create-bootstrap'
+    const destroyBootstrap = () => {
+      if (!bootstrap) return
+      const current = bootstrap
+      bootstrap = null
+      try { current.destroy() } catch (_) { /* hidden bootstrap may already be gone */ }
+    }
+    try {
+      bootstrap = createBootstrapContents(partition)
+      const contents = bootstrap && bootstrap.contents
+      if (!contents || contents.session !== serviceSession || typeof contents.loadURL !== 'function'
+          || typeof contents.getURL !== 'function' || typeof contents.on !== 'function'
+          || typeof contents.stop !== 'function' || typeof bootstrap.destroy !== 'function') {
+        throw new Error('invalid bootstrap contents')
+      }
+      bootstrapStage = 'navigate-bootstrap'
+      let blocked = false
+      const allowsOrigin = (value) => {
+        try { return new URL(String(value)).origin === ticketUrl.origin } catch (_) { return false }
+      }
+      const block = (event) => {
+        blocked = true
+        if (event && typeof event.preventDefault === 'function') event.preventDefault()
+        contents.stop()
+      }
+      contents.on('will-navigate', (event, url) => { if (!allowsOrigin(url)) block(event) })
+      contents.on('will-redirect', (event, url, _isInPlace, isMainFrame) => {
+        if (isMainFrame !== false && !allowsOrigin(url)) block(event)
+      })
+      contents.on('did-start-navigation', (_event, url, _isInPlace, isMainFrame) => {
+        if (isMainFrame !== false && !allowsOrigin(url)) block()
+      })
+      await contents.loadURL(ticketUrl.toString())
+      if (blocked) throw new Error('blocked bootstrap navigation')
+      bootstrapStage = 'validate-endpoint'
+      let endpoint
+      try { endpoint = new URL(contents.getURL()) } catch (_) { throw new Error('invalid bootstrap endpoint') }
+      const endpointQuery = [...endpoint.searchParams.entries()]
+      const expectedEndpoint = new URL('/?tether_native=1', ticketUrl.origin)
+      if (endpoint.origin !== ticketUrl.origin || endpoint.protocol !== 'https:' || endpoint.username || endpoint.password
+          || endpoint.port || endpoint.hash || endpoint.pathname !== '/' || endpointQuery.length !== 1
+          || endpointQuery[0][0] !== 'tether_native' || endpointQuery[0][1] !== '1'
+          || endpoint.href !== expectedEndpoint.href) {
+        throw new Error('invalid bootstrap endpoint')
+      }
+      bootstrapStage = 'validate-cookie'
+      const cookies = await serviceSession.cookies.get({})
+      if (!Array.isArray(cookies) || !cookies.some((cookie) => cookie && typeof cookie.name === 'string'
+          && cookie.name.startsWith('__Host-tether_') && cookie.httpOnly === true && cookie.secure === true
+          && cookie.path === '/'
+          && String(cookie.domain || '').replace(/^\./, '').toLowerCase() === endpoint.hostname.toLowerCase())) {
+        throw new Error('missing bootstrap cookie')
+      }
+      bootstrapStage = 'finalize-record'
+      if ((actorGenerations.get(actorId) || 0) !== generation) throw new Error('工作台账号已切换，请重新打开服务。')
+      const grantId = crypto.randomBytes(20).toString('hex')
+      const record = { actorId, targetId, serviceId: 'dsh-native', generation, grantId, endpoint,
+        serviceSession, partition, legacy: true, public: { targetId, serviceId: 'dsh-native', grantId,
+          endpoint: endpoint.toString(), partition } }
+      active.set(key, record)
+      return record.public
+    } catch (_) {
+      logSafe('dsh-bootstrap-failed-' + bootstrapStage, { targetId, serviceId: 'dsh-native' })
+      destroyBootstrap()
+      try { await resetServiceSession(serviceSession) } catch (_) { /* continue clearing stored credentials */ }
+      await Promise.allSettled([
+        typeof serviceSession.clearStorageData === 'function' ? serviceSession.clearStorageData() : Promise.resolve(),
+        typeof serviceSession.clearCache === 'function' ? serviceSession.clearCache() : Promise.resolve()
+      ])
+      throw new Error('DSH gateway 票据兑换失败。')
+    } finally {
+      destroyBootstrap()
+    }
+  }
+
+  function legacyCatalogEntry(actorId, targetId) {
+    const cacheKey = tupleKey(actorId, targetId, 'catalog')
+    const cached = incompatibleCatalogs.get(cacheKey)
+    const generation = actorGenerations.get(actorId) || 0
+    if (!cached || cached.generation !== generation || cached.expiresAt <= Date.now()) {
+      if (cached) incompatibleCatalogs.delete(cacheKey)
+      return null
+    }
+    return cached
+  }
 
   async function catalog(targetId, { signal } = {}) {
     if (typeof targetId !== 'string' || !targetId) throw new TypeError('invalid target')
     const actorId = await getActorId()
     if (typeof actorId !== 'string' || !actorId) throw new Error('Controller 登录身份尚未就绪。')
-    const result = await postJson(loginSession.fetch.bind(loginSession), apiUrl(base, targetId, 'service_catalog'), {}, { signal })
+    const cacheKey = tupleKey(actorId, targetId, 'catalog')
+    const generation = actorGenerations.get(actorId) || 0
+    const cached = legacyCatalogEntry(actorId, targetId)
+    if (cached) return cached.value
+    let result
+    try {
+      result = await postJson(loginSession.fetch.bind(loginSession), apiUrl(base, targetId, 'service_catalog'), {}, { signal })
+    } catch (error) {
+      if (!error || error.code !== 'bad_op') throw error
+      if ((actorGenerations.get(actorId) || 0) !== generation) throw new Error('工作台账号已切换，请重新打开服务。')
+      const reason = '目标节点版本过旧，请升级节点后重试。'
+      let codeg
+      try {
+        const status = await postJson(loginSession.fetch.bind(loginSession), apiUrl(base, targetId, 'agents_runtime_status'), {}, { signal })
+        codeg = legacyCodegService(status, targetId)
+      } catch (statusError) {
+        codeg = { id: 'codeg', state: 'failed', reason: '无法读取旧节点 Codeg 状态。',
+          reason_code: statusError && statusError.code || 'legacy_status_unavailable', agent_busy: false,
+          view_only_reason: '', updated_at: null, legacy: true }
+      }
+      if ((actorGenerations.get(actorId) || 0) !== generation) throw new Error('工作台账号已切换，请重新打开服务。')
+      const value = { protocol: 1, target_id: targetId, legacy: true, services: [...SERVICE_IDS].map((id) => id === 'codeg'
+        ? codeg
+        : { id, state: 'missing', reason, reason_code: error.code,
+            agent_busy: false, view_only_reason: '', updated_at: null }) }
+      incompatibleCatalogs.set(cacheKey, { generation, value, expiresAt: Date.now() + 60_000 })
+      return value
+    }
     if (!result || result.protocol !== 1 || result.target_id !== targetId || !Array.isArray(result.services)) {
       throw new Error('Controller 返回了无效的服务目录。')
     }
@@ -236,7 +436,7 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     })) }
   }
 
-  async function open(targetId, serviceId) {
+  async function open(targetId, serviceId, prefetchedCatalog = null) {
     if (typeof targetId !== 'string' || !targetId || !SERVICE_IDS.has(serviceId)) throw new TypeError('invalid target or service')
     const actorId = await getActorId()
     if (typeof actorId !== 'string' || !actorId) throw new Error('Controller 登录身份尚未就绪。')
@@ -249,7 +449,7 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     if (existing) {
       if (existing.generation === generation) return existing
       try { await existing } catch (_) { /* stale generation is discarded */ }
-      return open(targetId, serviceId)
+      return open(targetId, serviceId, prefetchedCatalog)
     }
     const isCurrent = () => (actorGenerations.get(actorId) || 0) === generation
     const operationId = operationIds.get(key) || crypto.randomUUID()
@@ -273,7 +473,7 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
       const openingController = new AbortController()
       cancelOpening = () => openingController.abort()
       try {
-    const serviceCatalog = await catalog(targetId, { signal: openingController.signal })
+    const serviceCatalog = prefetchedCatalog || await catalog(targetId, { signal: openingController.signal })
     if (!serviceCatalog.services.some((service) => service.id === serviceId)) throw new Error('目标服务目录中没有该服务。')
     if (!isCurrent() || openingController.signal.aborted) throw new Error('工作台账号已切换，请重新打开服务。')
     const sourceDeviceId = await getLocalDeviceId()
@@ -352,6 +552,7 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     const serviceSession = getServiceSession(partition)
     openedSession = serviceSession
     if (!serviceSession || typeof serviceSession.fetch !== 'function') throw new Error('Electron 服务隔离会话不可用。')
+    managedSessions.add(serviceSession)
     const sourceRoute = validateSourceRoute(await getSourceRoute(verified.networkId, sourceDeviceId), verified.networkId, sourceDeviceId)
     if (!isCurrent()) throw new Error('工作台账号已切换，请重新打开服务。')
     await configureSocksProxy(serviceSession, sourceRoute)
@@ -399,11 +600,171 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     try { return await opening } finally { if (pending.get(key) === opening) pending.delete(key) }
   }
 
+  async function openLegacyCodeg(targetId) {
+    if (typeof targetId !== 'string' || !targetId) throw new TypeError('invalid target')
+    const actorId = await getActorId()
+    if (typeof actorId !== 'string' || !actorId) throw new Error('Controller 登录身份尚未就绪。')
+    if (clearingActors.has(actorId)) throw new Error('工作台授权正在清理，请稍后重试。')
+    const generation = actorGenerations.get(actorId) || 0
+    let legacy = legacyCatalogEntry(actorId, targetId)
+    if (!legacy) {
+      await catalog(targetId)
+      if ((actorGenerations.get(actorId) || 0) !== generation || clearingActors.has(actorId)) {
+        throw new Error('工作台账号已切换，请重新打开服务。')
+      }
+      legacy = legacyCatalogEntry(actorId, targetId)
+    }
+    const codeg = legacy && legacy.value && legacy.value.services
+      && legacy.value.services.find((service) => service.id === 'codeg')
+    if (!legacy || !codeg || codeg.state !== 'ready' || codeg.open_mode !== 'legacy-codeg') {
+      throw new Error('目标 Codeg 未通过旧节点兼容检查。')
+    }
+    const key = tupleKey(actorId, targetId, 'codeg')
+    const cached = active.get(key)
+    if (cached) {
+      if (cached.legacy === true && cached.generation === generation) return cached.public
+      throw new Error('目标 Codeg 已由其他工作台模式打开。')
+    }
+
+    let serviceSession = null
+    try {
+      const status = await postJson(loginSession.fetch.bind(loginSession),
+        apiUrl(base, targetId, 'agents_runtime_status'), {})
+      const current = legacyCodegService(status, targetId)
+      const tokenUrl = status && strictLegacyCodegUrl(status.url)
+      if (current.state !== 'ready' || !tokenUrl) throw new Error(current.reason || '目标 Codeg 尚未运行。')
+      if ((actorGenerations.get(actorId) || 0) !== generation || clearingActors.has(actorId)) {
+        throw new Error('工作台账号已切换，请重新打开服务。')
+      }
+      const sourceDeviceId = await getLocalDeviceId()
+      if (typeof sourceDeviceId !== 'string' || !sourceDeviceId) throw new Error('本机设备身份尚未就绪。')
+
+      const networksResponse = await loginSession.fetch(new URL('/api/networks', base).toString(), {
+        method: 'GET', headers: { 'Cache-Control': 'no-store' }, redirect: 'error'
+      })
+      let networksPayload
+      try { networksPayload = await networksResponse.json() } catch (_) { throw new Error('Controller 返回了无效的网络目录。') }
+      if (!networksResponse.ok) {
+        const detail = networksPayload && networksPayload.detail
+        const error = new Error((detail && detail.error) || (typeof detail === 'string' && detail)
+          || (networksPayload && networksPayload.error) || ('网络目录请求失败（HTTP ' + networksResponse.status + '）。'))
+        error.status = networksResponse.status
+        error.code = detail && detail.code || networksPayload && networksPayload.code
+        throw error
+      }
+      const networks = Array.isArray(networksPayload) ? networksPayload
+        : networksPayload && Array.isArray(networksPayload.networks) ? networksPayload.networks : null
+      if (!networks) throw new Error('Controller 返回了无效的网络目录。')
+      const readyNetworks = networks.filter((item) => item && item.state === 'ready')
+      if (!readyNetworks.length) throw new Error('Controller 尚未配置可信网络，无法安全打开旧 Codeg。')
+      const network = readyNetworks.find((item) => {
+        if (typeof item.network_id !== 'string' || !item.network_id
+            || !Array.isArray(item.devices)) return false
+        const source = item.devices.find((device) => device && device.device_id === sourceDeviceId && device.state === 'ready')
+        const target = item.devices.find((device) => device && device.device_id === targetId && device.state === 'ready')
+        return !!source && !!target && target.service_ip === tokenUrl.hostname
+      })
+      if (!network) throw new Error('没有同时连接本机与目标设备的可信网络。')
+      const sourceRoute = validateSourceRoute(await getSourceRoute(network.network_id, sourceDeviceId),
+        network.network_id, sourceDeviceId)
+      if ((actorGenerations.get(actorId) || 0) !== generation || clearingActors.has(actorId)) {
+        throw new Error('工作台账号已切换，请重新打开服务。')
+      }
+      const partition = 'persist:tether-wb-' + sha256(key + '\u0000' + generation + '\u0000legacy-codeg').slice(0, 40)
+      serviceSession = getServiceSession(partition)
+      if (!serviceSession || typeof serviceSession.fetch !== 'function') throw new Error('Electron 服务隔离会话不可用。')
+      managedSessions.add(serviceSession)
+      installLegacyOriginGuard(serviceSession, tokenUrl)
+      await configureSocksProxy(serviceSession, sourceRoute)
+      if ((actorGenerations.get(actorId) || 0) !== generation || clearingActors.has(actorId)) {
+        throw new Error('工作台账号已切换，请重新打开服务。')
+      }
+      const grantId = crypto.randomUUID()
+      const endpoint = new URL('/', tokenUrl)
+      const publicResult = { targetId, serviceId: 'codeg', grantId, endpoint: endpoint.toString(),
+        partition, legacy: true }
+      active.set(key, { actorId, targetId, serviceId: 'codeg', generation, legacy: true, grantId,
+        endpoint, legacyTokenUrl: tokenUrl.toString(), guestPrepared: false, serviceSession, sourceRoute,
+        partition, public: publicResult, viewTimer: null })
+      logSafe('native-workbench-open-legacy', { targetId, serviceId: 'codeg' })
+      return publicResult
+    } catch (error) {
+      if (serviceSession) {
+        try {
+          await resetServiceSession(serviceSession)
+          await Promise.all([
+            typeof serviceSession.clearStorageData === 'function' ? serviceSession.clearStorageData() : Promise.resolve(),
+            typeof serviceSession.clearCache === 'function' ? serviceSession.clearCache() : Promise.resolve()
+          ])
+        } catch (_) { /* no legacy session data may survive */ }
+      }
+      throw error
+    }
+  }
+
+  function managedGuestRecord(contents) {
+    if (!contents || !contents.session || typeof contents.getURL !== 'function') throw new TypeError('invalid guest contents')
+    if (!managedSessions.has(contents.session)) return null
+    const records = [...active.values()].filter((item) => item.serviceSession === contents.session)
+    if (records.length !== 1) throw new Error('工作台 guest 与活动授权不匹配。')
+    const record = records[0]
+    const currentUrl = String(contents.getURL() || '')
+    if (record.serviceId === 'dsh-native') {
+      if (currentUrl === '' || currentUrl === 'about:blank') return record
+      let committedUrl
+      try { committedUrl = new URL(currentUrl) } catch (_) { throw new Error('工作台 guest 与活动授权不匹配。') }
+      if (!record.endpoint || committedUrl.href !== record.endpoint.href) {
+        throw new Error('工作台 guest 与活动授权不匹配。')
+      }
+      return record
+    }
+    let guestUrl
+    try { guestUrl = new URL(currentUrl) } catch (_) { throw new Error('工作台 guest 与活动授权不匹配。') }
+    if (guestUrl.href !== 'about:blank'
+        && ((guestUrl.protocol !== 'http:' && guestUrl.protocol !== 'https:')
+          || !record.endpoint || record.endpoint.origin !== guestUrl.origin)) {
+      throw new Error('工作台 guest 与活动授权不匹配。')
+    }
+    return record
+  }
+
+  function guestPolicy(contents) {
+    const record = managedGuestRecord(contents)
+    if (!record) return { managed: false }
+    if (record.serviceId === 'dsh-native') {
+      return { managed: true, serviceId: record.serviceId, endpoint: record.endpoint.href }
+    }
+    return { managed: true, serviceId: record.serviceId }
+  }
+
+  async function prepareGuest(contents) {
+    const record = managedGuestRecord(contents)
+    if (!record) return { managed: false, prepared: false }
+    if (record.serviceId === 'dsh-native') return { managed: true, prepared: false }
+    if (record.legacy !== true) return { managed: true, prepared: false }
+    if (record.guestPrepared) return { managed: true, prepared: false }
+    if (typeof contents.loadURL !== 'function') throw new Error('工作台 guest 无法加载目标页面。')
+    await contents.loadURL(record.legacyTokenUrl)
+    record.guestPrepared = true
+    return { managed: true, prepared: true }
+  }
+
   async function close(targetId, serviceId, grantId) {
     const actorId = await getActorId()
     const record = active.get(tupleKey(actorId, targetId, serviceId))
-    if (!record || !grantId || record.descriptor.grant_id !== grantId) throw new Error('找不到本次工作台授权视图。')
+    const recordGrantId = record && record.legacy === true ? record.grantId : record && record.descriptor && record.descriptor.grant_id
+    if (!record || !grantId || recordGrantId !== grantId) throw new Error('找不到本次工作台授权视图。')
     if (record.viewTimer) { clearInterval(record.viewTimer); record.viewTimer = null }
+    if (record.legacy === true) {
+      active.delete(tupleKey(actorId, targetId, serviceId))
+      await resetServiceSession(record.serviceSession)
+      await Promise.all([
+        typeof record.serviceSession.clearStorageData === 'function' ? record.serviceSession.clearStorageData() : Promise.resolve(),
+        typeof record.serviceSession.clearCache === 'function' ? record.serviceSession.clearCache() : Promise.resolve()
+      ])
+      logSafe('native-workbench-close-legacy', { targetId, serviceId })
+      return { targetId, serviceId, state: 'closed' }
+    }
     try {
       await postJson(loginSession.fetch.bind(loginSession), apiUrl(base, targetId, 'service_close'), { grant_id: grantId })
     } catch (error) {
@@ -421,6 +782,7 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     const record = active.get(tupleKey(actorId, targetId, serviceId))
     if (!record) throw new Error('工作台授权不存在或已关闭。')
     if (record.viewTimer) { clearInterval(record.viewTimer); record.viewTimer = null }
+    if (record.legacy === true) return { targetId, serviceId, visible: !!visible }
     if (visible) {
       const ping = () => record.serviceSession.fetch(new URL('/__tether/view', record.endpoint).toString(), {
         method: 'POST', headers: { 'Origin': record.endpoint.origin, 'Cache-Control': 'no-store' }, redirect: 'error'
@@ -444,8 +806,72 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     if (typeof request.path !== 'string' && !['drives', 'workspaces'].includes(operation)) {
       throw new TypeError('invalid files path')
     }
-    await open(targetId, 'files')
     const actorId = await getActorId()
+    if (typeof actorId !== 'string' || !actorId) throw new Error('Controller 登录身份尚未就绪。')
+    const generation = actorGenerations.get(actorId) || 0
+    const rootOperation = ['drives', 'workspaces'].includes(operation)
+    const legacyOperation = rootOperation || operation === 'list'
+    let classifiedCatalog = null
+    let legacyEntry = legacyOperation ? legacyCatalogEntry(actorId, targetId) : null
+    if (legacyOperation && !legacyEntry) {
+      classifiedCatalog = await catalog(targetId)
+      if ((actorGenerations.get(actorId) || 0) !== generation || clearingActors.has(actorId)) {
+        throw new Error('工作台账号已切换，请重新打开服务。')
+      }
+      if (classifiedCatalog.legacy === true) legacyEntry = legacyCatalogEntry(actorId, targetId)
+    }
+    if (operation === 'list' && legacyEntry) {
+      const response = await loginSession.fetch(apiUrl(base, targetId, 'list'), {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+        body: JSON.stringify({ path: request.path }), redirect: 'error'
+      })
+      let result
+      try { result = await response.json() } catch (_) { throw new Error('Controller 返回了无效的旧节点文件响应。') }
+      if (!response.ok) {
+        const detail = result && result.detail
+        const error = new Error((detail && detail.error) || (typeof detail === 'string' && detail)
+          || (result && result.error) || ('旧节点文件请求失败（HTTP ' + response.status + '）。'))
+        error.status = response.status
+        error.code = detail && detail.code || result && result.code
+        throw error
+      }
+      if ((actorGenerations.get(actorId) || 0) !== generation || clearingActors.has(actorId)) {
+        throw new Error('工作台账号已切换，请重新打开服务。')
+      }
+      if (!result || typeof result !== 'object' || Array.isArray(result)
+          || (Object.hasOwn(result, 'device_id') && result.device_id !== targetId)
+          || typeof result.path !== 'string' || !Array.isArray(result.entries)
+          || !result.entries.every((entry) => entry && typeof entry === 'object' && !Array.isArray(entry)
+            && typeof entry.name === 'string' && typeof entry.path === 'string' && typeof entry.dir === 'boolean')) {
+        throw new Error('Controller 返回了无效的旧节点文件响应。')
+      }
+      return { targetId, status: response.status, body: { ...result, writable: false } }
+    }
+    if (rootOperation && legacyEntry) {
+      const url = new URL('/api/devices/' + encodeURIComponent(targetId) + '/' + operation, base)
+      const response = await loginSession.fetch(url.toString(), {
+        method: 'GET', headers: { 'Cache-Control': 'no-store' }, redirect: 'error'
+      })
+      let result
+      try { result = await response.json() } catch (_) { throw new Error('Controller 返回了无效的旧节点文件响应。') }
+      if (!response.ok) {
+        const detail = result && result.detail
+        const error = new Error((detail && detail.error) || (typeof detail === 'string' && detail)
+          || (result && result.error) || ('旧节点文件请求失败（HTTP ' + response.status + '）。'))
+        error.status = response.status
+        error.code = detail && detail.code || result && result.code
+        throw error
+      }
+      if ((actorGenerations.get(actorId) || 0) !== generation || clearingActors.has(actorId)) {
+        throw new Error('工作台账号已切换，请重新打开服务。')
+      }
+      if (!result || typeof result !== 'object' || Array.isArray(result)
+          || (result.device_id && result.device_id !== targetId) || !Array.isArray(result[operation])) {
+        throw new Error('Controller 返回了无效的旧节点文件响应。')
+      }
+      return { targetId, status: response.status, body: result }
+    }
+    await open(targetId, 'files', classifiedCatalog)
     const key = tupleKey(actorId, targetId, 'files')
     const record = active.get(key)
     if (!record || record.actorId !== actorId || record.targetId !== targetId || record.serviceId !== 'files') {
@@ -525,14 +951,17 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
 
   function allowGuest(partition, url) {
     if (typeof partition !== 'string' || !partition || typeof url !== 'string') return false
-    let origin
+    let parsed
     try {
-      const parsed = new URL(url)
-      if (parsed.protocol !== 'https:') return false
-      origin = parsed.origin
+      parsed = new URL(url)
     } catch (_) { return false }
     for (const record of active.values()) {
-      if (record.partition === partition && record.endpoint.origin === origin) return true
+      if (record.partition !== partition || record.endpoint.origin !== parsed.origin) continue
+      if (record.serviceId === 'dsh-native') {
+        return parsed.protocol === 'https:' && !parsed.username && !parsed.password && parsed.href === record.endpoint.href
+      }
+      if (record.legacy === true) return parsed.protocol === 'http:' && !parsed.username && !parsed.password
+      return parsed.protocol === 'https:'
     }
     return false
   }
@@ -553,16 +982,18 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     }
     const results = await Promise.all(records.map(async ([, record]) => {
       const errors = []
-      try {
-        await postJson(loginSession.fetch.bind(loginSession),
-          apiUrl(base, record.targetId, 'service_revoke'), {
-            grant_id: record.descriptor.grant_id, operation_id: record.operationId
-          })
-      } catch (error) {
-        errors.push('revoke_failed')
+      if (record.legacy !== true) {
+        try {
+          await postJson(loginSession.fetch.bind(loginSession),
+            apiUrl(base, record.targetId, 'service_revoke'), {
+              grant_id: record.descriptor.grant_id, operation_id: record.operationId
+            })
+        } catch (error) {
+          errors.push('revoke_failed')
+        }
       }
       try {
-        const serviceSession = getServiceSession(record.partition)
+        const serviceSession = record.serviceSession || getServiceSession(record.partition)
         if (!serviceSession) throw new Error('session unavailable')
         await resetServiceSession(serviceSession)
         await Promise.all([
@@ -575,6 +1006,7 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
       return errors
     }))
     const errors = results.flat()
+    for (const key of incompatibleCatalogs.keys()) if (key.startsWith(actorId + '\u0000')) incompatibleCatalogs.delete(key)
     for (const key of operationIds.keys()) if (key.startsWith(actorId + '\u0000')) operationIds.delete(key)
     if (revocationFailures.has(actorId)) errors.push('revoke_failed')
     revocationFailures.delete(actorId)
@@ -584,7 +1016,7 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
   }
 
   return {
-    catalog, open, close, view, requestFiles, allowGuest, clearActor,
+    catalog, open, openLegacyCodeg, openDshSurface, guestPolicy, prepareGuest, close, view, requestFiles, allowGuest, clearActor,
     currentActorId: async () => {
       const actorId = await getActorId()
       if (typeof actorId !== 'string' || !actorId) throw new Error('Controller 登录身份尚未就绪。')

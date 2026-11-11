@@ -503,6 +503,48 @@ test('NativeSurface treats a missing DSH descriptor as startup and retries befor
   }
 })
 
+test('Electron OAuth NativeSurface fetches remote descriptors through hubRequest and preserves status/body', async () => {
+  const previous = { fetch: globalThis.fetch, window: globalThis.window, document: globalThis.document,
+    setTimeout: globalThis.setTimeout, clearTimeout: globalThis.clearTimeout }
+  const timers = new Map()
+  let timerId = 0
+  globalThis.setTimeout = (callback, delay) => { const id = ++timerId; timers.set(id, { callback, delay }); return id }
+  globalThis.clearTimeout = (id) => timers.delete(id)
+  globalThis.document = { visibilityState: 'visible', addEventListener() {}, removeEventListener() {} }
+  globalThis.window = { location: { origin: 'https://controller.example', protocol: 'https:' },
+    localStorage: { getItem: () => null, setItem() {} } }
+  const fetchPaths = []
+  globalThis.fetch = async (url) => {
+    const path = new URL(url).pathname
+    fetchPaths.push(path)
+    if (path.endsWith('/dsh/surface')) throw new Error('OAuth descriptor must not use renderer fetch')
+    return { ok: false, status: 404, json: async () => ({}) }
+  }
+  const requests = []
+  const host = { kind: 'app', apiBase: () => 'https://controller.example', surfaceBase: () => 'https://controller.example',
+    hubRequest: async (request) => {
+      requests.push(request)
+      return { status: 404, body: { detail: { code: 'descriptor_missing' } } }
+    } }
+  const renderer = createHookRenderer({ deviceId: 'device-a', online: true, visible: true, localDeviceId: '' })
+  const surface = createTetherPanel({ React: renderer.React, Native: createWebNative(renderer.React), host }).NativeSurface
+  renderer.setComponent(surface)
+  try {
+    renderer.render()
+    await tick(); await tick(); await tick()
+    assert.deepEqual(requests[0], { method: 'GET', path: '/api/devices/device-a/dsh/surface' })
+    assert.equal(fetchPaths.some((path) => path.endsWith('/dsh/surface')), false)
+    assert.ok([...timers.values()].some((timer) => timer.delay === 4000),
+      'the existing descriptor_missing state uses the preserved 404 status and body')
+  } finally {
+    renderer.dispose()
+    for (const key of Object.keys(previous)) {
+      if (previous[key] === undefined) delete globalThis[key]
+      else globalThis[key] = previous[key]
+    }
+  }
+})
+
 test('NativeSurface offers running Linux DSH Web after native descriptor failure without changing Windows actions', async () => {
   const previous = { fetch: globalThis.fetch, window: globalThis.window, document: globalThis.document }
   globalThis.document = { visibilityState: 'visible', addEventListener() {}, removeEventListener() {} }

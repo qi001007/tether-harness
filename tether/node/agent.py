@@ -864,8 +864,8 @@ class Node:
         action = msg.get("action")
         allowed = {"type", "req_id", "action", "component", "prepared_id"}
         if (set(msg) - allowed or not isinstance(component, str) or component not in self.update_managers
-                or not isinstance(action, str) or action not in {"check", "status", "prepare", "apply", "restart"}
-                or (action == "apply") != ("prepared_id" in msg)
+                or not isinstance(action, str) or action not in {"check", "status", "prepare", "apply", "commit", "rollback", "restart"}
+                or (action in {"apply", "commit", "rollback"}) != ("prepared_id" in msg)
                 or (action == "restart" and component != "plugin")):
             await self._send_update_result(
                 response_ws,
@@ -1053,6 +1053,8 @@ class Node:
                             result = await asyncio.to_thread(manager.apply, msg["prepared_id"])
                     else:
                         result = await asyncio.to_thread(manager.apply, msg["prepared_id"])
+                elif action in {"commit", "rollback"}:
+                    result = await asyncio.to_thread(getattr(manager, action), msg["prepared_id"])
                 else:
                     result = await asyncio.to_thread(getattr(manager, str(action)))
                 applied = (not debian_node_update and bool(result.get("ok"))
@@ -1060,6 +1062,9 @@ class Node:
                            and result.get("in_progress") is not True)
                 node_deferred = False
                 if applied and component == "plugin" and action == "apply":
+                    result["restart_required"] = True
+                rollback_node = action == "rollback" and component == "node" and applied
+                if rollback_node:
                     result["restart_required"] = True
                 if applying and applied and component == "node":
                     node_deferred = await asyncio.to_thread(self._app_update_prepared)
@@ -1094,6 +1099,15 @@ class Node:
                     if self.ws is not None:
                         try:
                             await self.ws.close(code=1012, reason="node update applied")
+                        except Exception:
+                            pass
+                    return
+                if rollback_node:
+                    self.restart_requested = True
+                    self.update_applying = True
+                    if self.ws is not None:
+                        try:
+                            await self.ws.close(code=1012, reason="node update rolled back")
                         except Exception:
                             pass
                     return

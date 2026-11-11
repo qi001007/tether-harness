@@ -1,4 +1,11 @@
 # 修改记录
+- 2026-11-11：覆盖 external Node local API 桥未配置/错误 port 与 token 拒绝、正确 Bearer+设备 route 验证、错误凭据/设备与不匹配 route 回包拒绝、snapshot/log 无 token；保留 external 不 spawn/stop 和 managed route 的既有回归。
+- 2026-11-10：覆盖 legacy Files list 冷/热缓存固定 POST、path-only 请求、强制只读、现代 service_open 保持，以及 401/403/device_not_found/网络/畸形/错设备/代际变化失败关闭；补充旧 Codeg 空或无 ready 网络的准确错误回归。
+- 2026-11-10：增加 Electron legacy guest 初始 `about:blank` 回归：唯一隔离 session 可加载主进程私密 token URL，错误 HTTP origin 被拒绝，同时保留首次加载失败后的安全重试覆盖。
+- 2026-11-10：补充 legacy Codeg 生产契约回归：仅接受网络 `devices`、拒绝 `members` 别名；冷缓存和 60 秒过期缓存均先以 `service_catalog bad_op` 重新分类且零 `service_open`；guest token URL 首次加载失败后可重试，成功后只加载一次。
+- 2026-11-10：覆盖 legacy Codeg 状态映射与目录脱敏、严格 URL/网络/`service_ip` 校验、token-free 公开结果和一次性 guest 准备、HTTP/WS origin 门禁、legacy lifecycle 本地清理、窄 IPC 桥及 Agents 非 ready 禁用。
+- 2026-11-10：`test_native_workbench_catalog.mjs` 覆盖仅 `bad_op` 缓存、actor/target/generation 隔离、冷缓存 drives 先 catalog 后固定 GET 且零 service_open、workspaces 响应校验、非根操作保留原生路径，以及 legacy 根请求失败后不二次回退。
+- 2026-11-10：覆盖 Electron OAuth 远端 DSH descriptor 走 `hubRequest` 且保留 HTTP 404/body 状态，以及 localDeviceId 不在设备快照时不覆盖当前设备、存在时可自动选择、手选优先。
 - 2026-11-07：新增 RootApp hook renderer 回归，覆盖合法 snapshot 后 2xx 空对象/错误结构和 HTTP 409 不覆盖设备上下文、合法空设备数组及恢复合法 snapshot；结构验证防止 malformed devices/sessions/runs/edges 集合进入渲染。
 - 2026-11-07：Node update protocol 覆盖 Codeg 活跃委派/Croc 运行时先返回 update_busy 且不 stop/apply、空闲时继续；AgentsRuntime 使用本机 fake HTTP 覆盖 Bearer、loopback直连、prompting/idle/active delegation/paused/completed/background outstanding/pending interaction 与格式异常 fail closed。
 - 2026-11-07：实机 0.4.7 复现已缓存目录的后台 `/fs/list` 失败时仍显示旧行、没有错误/重试（证据 `tether-047-directory-cached-background-failure.png`）；显式刷新会显示原有错误，验证后已恢复自有 QA 目录。源码增加缓存失败提示并保留旧行、空缓存失败显示错误重试态，待 0.4.8 用同一路径实机复验。现有 hook renderer 对 MinimalUpdateButton 覆盖远端完成不整页重载、本机身份匹配仍重载和目标切换时忽略迟到完成回调；该行为测试不替代目录失败的实机验收。
@@ -172,8 +179,19 @@
 - 2026-11-07：更新协议回归覆盖 runtime/disk Node 版本不符时保留重启待办、版本匹配时清除历史待办及 unknown 保守处理；更新下载路由覆盖 Hub 同源直连、GitHub 系统代理和显式代理 opt-in；全包集成测试用 fixture 管理的短 `release-state` staging 根，避免 Windows 长临时根超过 MAX_PATH。
 - 2026-11-07：更新协议回归覆盖 Node apply 与同根 managed APP apply 遇 Tether/DSH/Codeg 活动或 Croc 传输时先拒绝且不 stop/apply/调度重启，空闲 APP apply 保持原流程；AgentsRuntime 活动快照覆盖认证直连、idle/prompting/委派/后台任务/旧快照省略字段和未知响应。
 # 回归测试变更记录
+- 2026-11-10：增加 0.5.2 桌面登录、PKCE/固定回调、public client 无 secret、主进程令牌边界、一次 401 刷新、退出清理、旧 cookie 探测失败干净回登录页、认证门控及 portable 构建契约定向回归；25/25 通过。冻结 `tether-python` 的 `tether.node.agent --help` 与 `tether.node.pair_cli --help` 两条真实入口均通过；Windows runtime 已装配，最终 portable 冷启动退出码 0、renderer/console 错误均为 0。真实登录与原设备列表另行验收。
+
 - 2026-11-07：MinimalUpdateButton 覆盖远端活动更新转后台后的持续轮询、顶栏恢复不重复 apply、失败关闭后仍可恢复/重试，以及设备切换后忽略旧 scope 的迟到启动响应。
 
 - 2026-11-08：既有Croc默认传输断言同步改为auto；未新增测试工程。
 
 - 2026-11-08：既有更新来源测试覆盖manifest正式URL优先及Hub、配置mirror依次回退，使用本地HTTP服务。
+
+- 2026-11-10：增加远端 DSH surface ticket 隔离、窄 IPC、Hub route 拦截与空文档错误状态契约回归。
+- 2026-11-10：新增动态回归，证明 `dsh-native prepareGuest` 返回 managed 且不调用 `loadURL`，避免重复加载或暴露一次性 ticket。
+- 2026-11-10：DSH gateway 动态测试改用生产形态 `https://g25800.<trusted-host>/...`，并覆盖非默认公网 HTTPS 端口在 ticket 兑换前被拒绝。
+- 2026-11-11：覆盖 main-owned 隐藏 DSH bootstrap 安全偏好、真实 ticket document navigation、精确安全落点与 Cookie 成功，以及跨源、错误落点、缺 Cookie、非默认公网端口的销毁和隔离 session 清理；继续证明 managed guest 不重复加载 ticket。
+- 2026-11-11：OIDC 集成回归断言 hidden bootstrap 跨源、错误 endpoint、缺 Cookie 分别记录固定脱敏阶段，且日志载荷不含 ticket、gateway host 或原始错误内容。
+- 2026-11-11：OIDC hidden bootstrap 回归固定 Cookie 查询过滤器为 `{}`，成功夹具带 gateway domain，并证明其他 domain 的同形安全 Cookie 在 `validate-cookie` 阶段被拒绝和清理。
+- 2026-11-11：覆盖 `dsh-native` 空 URL attach、无秘密同步 policy、精确 endpoint 顶层导航、同源错误路径/额外查询/fragment/跨源拒绝、子框架放行，以及错误 session 和已关闭 record 失败。
+- 2026-11-11：对齐更新器回归断言与源码：artifact 顺序验证同源 Hub → 配置镜像 → manifest URL；Node ZIP heartbeat 精确保留 owner 与 bridge availability 字段。

@@ -71,6 +71,53 @@ test('Hub APP external Node mode does not start or stop a second Node', async (t
   assert.equal(spawned.length, 0)
 })
 
+test('external Node local API is opt-in and rejects malformed credentials or ports', (t) => {
+  const dataDirs = []
+  t.after(() => dataDirs.forEach((dataDir) => fs.rmSync(dataDir, { recursive: true, force: true })))
+  const make = (extra = {}) => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tether-supervisor-external-api-'))
+    dataDirs.push(dataDir)
+    return new Supervisor({ repoRoot: root, dataDir, env: {
+      TETHER_CONTROLLER_URL: 'https://hub.example', TETHER_DEVICE: 'node-a',
+      TETHER_NODE_MODE: 'external', ...extra
+    } })
+  }
+  const absent = make()
+  assert.equal(absent.hasLocalNodeApi(), false)
+  for (const config of [
+    { TETHER_CONSOLE_PORT: '18894' },
+    { TETHER_LOCAL_API_TOKEN: 'x'.repeat(40) },
+    { TETHER_CONSOLE_PORT: '0', TETHER_LOCAL_API_TOKEN: 'x'.repeat(40) },
+    { TETHER_CONSOLE_PORT: '65536', TETHER_LOCAL_API_TOKEN: 'x'.repeat(40) },
+    { TETHER_CONSOLE_PORT: '18894x', TETHER_LOCAL_API_TOKEN: 'x'.repeat(40) },
+    { TETHER_CONSOLE_PORT: '18894', TETHER_LOCAL_API_TOKEN: 'short' },
+    { TETHER_CONSOLE_PORT: '18894', TETHER_LOCAL_API_TOKEN: 'x'.repeat(31) },
+    { TETHER_CONSOLE_PORT: '18894', TETHER_LOCAL_API_TOKEN: 'x'.repeat(32) + ' ' }
+  ]) assert.throws(() => make(config), /invalid external local Node API configuration/)
+
+  const token = 'a'.repeat(40)
+  const configured = make({ TETHER_CONSOLE_PORT: '43210', TETHER_LOCAL_API_TOKEN: token })
+  assert.equal(configured.hasLocalNodeApi(), true)
+  assert.equal(configured.consolePort, 43210)
+  assert.equal(configured.localApiToken === token, true)
+  assert.equal(JSON.stringify(configured.snapshot()).includes(token), false)
+  assert.equal(fs.readdirSync(configured.logsDir).join('').includes(token), false)
+})
+
+test('attached managed Node remains eligible for the local API without a child handle', (t) => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tether-supervisor-attached-node-'))
+  t.after(() => fs.rmSync(dataDir, { recursive: true, force: true }))
+  const supervisor = new Supervisor({ repoRoot: root, dataDir, env: { TETHER_NODE_MODE: 'managed' } })
+  supervisor.node = { state: 'running', pid: 12345, deviceOnline: true }
+  supervisor.procs.node = null
+
+  assert.equal(supervisor.hasLocalNodeApi(), true)
+  for (const state of ['stopped', 'error']) {
+    supervisor.node.state = state
+    assert.equal(supervisor.hasLocalNodeApi(), false)
+  }
+})
+
 test('missing controller device data remains unknown while an explicit empty list means zero', (t) => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tether-supervisor-state-'))
   t.after(() => fs.rmSync(dataDir, { recursive: true, force: true }))

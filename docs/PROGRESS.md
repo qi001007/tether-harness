@@ -1,5 +1,27 @@
 # 实时进度
 
+## 2026-11-11 当前真实状态（更新事务与 409 恢复）
+
+- 磁盘：`E:.scratch` 曾占用 78.316 GB、1,090,126 个文件；删除 18 个可复现的旧候选输出，释放 71.87 GB，E 盘可用空间约 74.78 GB。候选构建新增 owner marker、直接子路径校验和自动保留当前及最近一个候选；candidate tests 16/16。
+- APP 基线：409 的直接原因是 DESKTOP-LOCAL 被切到 0.5.2 候选 Node 侧部署，破坏原有真实 APP 基线。现已恢复 `D:\Tether\node` 0.2.3；APP 中 LAPTOP-01 的 DSH workspace/composer 已恢复可见。当前 Hub 设备 3/4 在线；DESKTOP-LOCAL 当前是 0.2.3，不是 0.5.2。此前“DESKTOP-LOCAL 0.5.2 阶段性验收”仅作为已回滚的历史记录。
+- 更新实现与本地门禁：Node 持久更新事务、commit/rollback、APP 重启后续验收，以及 Hub 对 Node 服务状态的验收均已实现。Node pytest 107 passed / 2 skipped；Hub 39 passed；UI `update_chain` 24/24；candidate + UI 40/40；workflow 10/10；生成 bundle 与 web build 检查通过。pytest 结束时有既有 `agent_registry.catalog` interpreter-shutdown 线程噪声，pytest exit code 为 0。
+- Hub 部署：已通过可回滚的新 release `/opt/tether/releases/update-transaction-20261111-r1` 部署 `app.py` 与 `update_jobs.py`；commit/rollback 路由在线，健康检查 ok，3 台 online、无 stale；旧 release 保留以供回滚。
+- 尚未完成：GitHub 签名 0.5.2 preview 发布；让 update source 实际返回 0.5.2；真实设备从 APP UI 完成 prepare → apply → restart → service acceptance → commit 的端到端验收；成功截图保存与微信实际送达确认。
+
+## 2026-11-10 0.5.2 visible login 候选
+
+- 已实现：常规模式使用系统浏览器 Casdoor Authorization Code + PKCE，固定 loopback 回调 `127.0.0.1:18893/oauth/callback`；令牌仅由主进程加密保存。候选模式可从外部凭据文件调用同一 Casdoor Code + PKCE 链路，凭据不进入 URL、日志或交付目录；常规模式没有自动填充。
+- 已修复并通过：Controller OIDC 请求不再重复写入 `Authorization`；设备列表和原生工作台 API 统一走 `controllerFetch`。42 项 OIDC、Electron 集成、API 路由和候选构建定向测试通过；冻结 `tether-python` 的两条真实 `--help` 入口及 Windows runtime 装配此前已通过。
+- packaged r5 实包验收：使用原账号完成真实登录，`oidc-session.json` 加密落盘且 `desktopAuthMode=oidc`；界面读取到原有 4 台设备。用同一数据目录关闭并重启候选，同时移除候选凭据环境变量，界面直接恢复“退出登录”和设备列表，证明会话持久化有效。
+- 最终 portable：`Tether.exe` 为 823,711,922 字节，SHA-256 `4674619ab9967f01371dfb25ae2b4a1d29be357d9ae9b7f45af88b0b28eebfaa`；构建退出码 0，未配置代码签名，交付状态仍为 unsigned preview。
+- 服务端：dual audience 补丁 5 项定向测试通过；正式 `current` 已切换到 r7，runtime 继续复用 r6 虚拟环境，Casdoor `tether-desktop` public client 为无 secret 的固定 loopback 配置。旧 web OAuth 仍以 `tether-hub-stage` + S256 跳转，旧 Bearer 在本机和公网均返回 200；r6、变更前配置与回退 SQL 已保留。
+- packaged r5 界面观察到：`LAPTOP-01` 与 `REMOTESTITCH-HUB` 在线，`DESKTOP-LOCAL` 与历史测试设备 `TETHER-REMOTE-TEST` 离线。设备记录和登录身份已恢复，但此快照不替代各目标节点的版本/能力验收。
+- 当前阻塞：已安装节点对原生工作台 `service_catalog` 返回 `bad_op`，部分陈旧/不匹配记录返回 `device_not_found`；因此 node2 DSH/Codeg 尚未打开，根因边界已从桌面认证收窄为节点协议/运行时兼容。显式退出后第二次登录仍待验证。
+- r2 候选已针对这两种结构化错误加入 60 秒 `missing` 服务目录缓存；Agents 对缺失 Codeg 禁止启动并显示升级/重连原因，DSH 状态读取接受 `missing` 目录。在线 `REMOTESTITCH-HUB` 的 Agents 页面连续约 45 秒保持设备选择、升级提示和禁用按钮不变；这只证明错误展示稳定，不代表节点升级或工作台可用。
+- 主人补充的正式控制面只读证据：`LAPTOP-01` 与 `REMOTESTITCH-HUB` 的 `dsh_status`、`agents_runtime_status`、`drives`、`workspaces` 均 HTTP 200；两台 DSH 均 `running=true` 且 `surface=true`，Agents runtime 均 `running=true` 且有 URL，驱动与工作区列表非空。这表明旧节点功能在线，失败边界是新 `service_catalog` 协议不兼容。下一步优先复用旧 status/list 接口做 legacy compatibility；不把整机重装作为默认处理。本轮没有改 `open` 路径，也未将 legacy 服务标成 ready。
+- UI 稳定性 r2 实机通过：Electron 托管 OAuth 的远端 DSH descriptor 改经既有 `hubRequest`，app-context localDeviceId 只有存在于当前设备快照时才可自动切换，手选仍优先。在线 `REMOTESTITCH-HUB` 四次快照覆盖约 45 秒，未出现“暂无设备”、404、HTTP 400、`Failed to fetch` 或可见重载；r2 启动后的日志新增行为为 CORS 0、404 0、HTTP 400 0，主框架仅启动导航 1 次。截图为 `E:\M_Assistant\runtime\evidence\tether-r2-remotestitch-stable-20261110.png`。新增 descriptor 与设备选择回归、Electron OIDC 10 项及 catalog 4 项通过；完整历史测试文件仍有既存失败，旧工作区协议和 Codeg 打开仍未完成。
+- r2 portable 构建退出码 0，文件为 `.scratch/tether-desktop-candidates/0.5.2/legacy-stability-r2/windows-x64/Tether-0.5.2-win-x64.exe`，大小 823,673,294 字节，SHA-256 `38cb0ccd3403af7d4dd870e199ae552a6c70447a4d24878db9aaabef089e5bca`；包内共享 UI bundle 与源码构建 SHA-256 一致。该包未签名，仍是 preview 候选；未覆盖正式 delivery r5。
+
 ## 0.4.10 候选与当前生产状态（2026-11-07）
 
 - 当前生产：主机 APP/Node 与 cloud Node 为 0.4.9；Laptop APP/Node 仍在线 0.4.7。Laptop 更新 job `0b4347...` 因 `device_offline` 结束，未 apply 0.4.9；大包读取仍慢，问题未解决。
@@ -951,4 +973,33 @@ Windows 10:46 异常重启后，主机 Node 未运行。通过原安装的开始
 - 修复包沙箱验证（2026-11-06）：本机假 token/假控制器跑通 bootstrap（Python 3.11 venv + Node v24.12 + 615 npm 包），`tether-node.ps1` 成功监听 18893/18895 并持续重连假控制器；测试目录已删除。真实笔记本只差运行修复包。
 
 - 2026-11-08：0.4.11候选源已准备平台过滤、UI/设备上下文、Croc auto及更新下载源顺序修改；签名CI与最终复核待完成，未发布。
+
+## 2026-11-10 0.5.2 旧节点兼容阶段成果
+
+- 已恢复测试所有者账号，并通过桌面凭据文件完成 OIDC PKCE 自动登录；会话以加密 `oidc-session.json` 持久化，重启 r4 后无需再次登录。明文测试凭据只保留在桌面约定 TXT，不写入项目、日志或本文档。
+- r4 在在线 `REMOTESTITCH-HUB` 旧节点上真实通过只读文件浏览：工作区 `tether-dsh-qa.BfHzqlTT` 可列出，进入 `tether-qa-048-d5e690ac`、返回和刷新均成功，旧的 HTTP 403 已消失。验收截图：`E:\M_Assistant\runtime\evidence\tether-r4-remotestitch-files-success-20261110.png`。
+- 兼容实现只对结构化 `bad_op` 判定出的旧节点使用固定 `POST /api/devices/{device_id}/fs/list`，请求体仅含 `path`；严格校验设备、路径和条目，并强制旧节点结果为只读。现代节点 `service_open` 路径不变，也没有第二条不受控回退。
+- r4 便携候选：`legacy-files-r4/windows-x64/Tether-0.5.2-win-x64.exe`，823,675,679 B，SHA-256 `50656bd0a268a8ecdc469afe6dffeaac47eaee59ed3c1cae4760a43237ee14ff`；独立计算与清单一致。当前 r4 进程仍监听 `127.0.0.1:18998`。
+- 定向回归：native workbench 18/18、Electron OIDC 11/11。相邻集合为 49/51；两项失败是本批修改前已存在的 native surface VM `require(...) is not a function` 与 `localDeviceId` 依赖断言，未把它们写成已修复。
+- Codeg runtime 已被识别为就绪，旧 EasyTier 地址 `10.144.0.1:37301` 从本机可达；但 Controller 的 `mesh_networks` / `mesh_network_devices` 当前为空，APP 因此明确提示“Controller 尚未配置可信网络，无法安全打开旧 Codeg。”本阶段没有绕过 Controller 做不安全直连，Codeg 工作台仍是下一阶段缺口。
+- 微信成果通知 request `d6b245f3-8e84-4a5a-92b2-17f8d2b6b293` 已到 `channel_send_returned`；这只证明本地 SDK 调用返回，桥没有手机送达或已读回执。
+
+## 2026-11-11 DESKTOP-LOCAL 0.5.2 阶段性候选验收
+
+- DESKTOP-LOCAL 通过旁路部署运行 `D:\Tether\node-0.5.2-r11`；计划任务 `TetherNode` 状态为 Running，Node console 使用 18894。18893 仅供 OIDC 回调使用，登录后已释放。
+- Hub 报告 DESKTOP-LOCAL online、`node_version` 为 `0.5.2`、心跳 0 秒；生产 `mesh_networks` 数量仍为 0。本地桥 wrong token 返回 401，valid token 返回 200，策略为 `readonly`。
+- 候选 APP OIDC 状态 authenticated，session 已持久化；真实进入 DESKTOP-LOCAL 的 DeepSeek Harness 工作区，输入框可见且可聚焦。本次未发送聊天消息。
+- 证据：截图 `.scratch/evidence/r11-desktop-local-dsh-0.5.2.png`；机器记录 `.scratch/evidence/desktop-local-0.5.2-pass.json`。回滚备份为 `D:\Tether\rollback\node-0.5.2-r11-20261111-033300-315` 与 `D:\Tether\rollback\node-0.5.2-r11-port18894-20261111-034104-043`。
+- 账户恢复仅重置 Casdoor `tether/tether-owner` 的凭据和尝试元数据，保留 owner/name/id/subject；文档不记录密码、token 或用户邮箱。
+- DESKTOP-LOCAL 验收当时 REMOTESTITCH-HUB 与 LAPTOP-01 均为 0.4.11；当前 REMOTESTITCH-HUB 已完成 Node/DSH 阶段验收，LAPTOP-01 仍为 0.4.11。生产 mesh 尚未创建；Codeg 仍因没有 trusted network 阻塞；Settings/About 版本仍显示“—”；尚无签名公开 0.5.2。
+- 本记录是 DESKTOP-LOCAL 阶段性候选验收，不代表项目完成，也不替代其余节点、生产 mesh、Codeg、版本显示和签名公开发布验收。
+
+## 2026-11-11 REMOTESTITCH-HUB Node 0.5.2 阶段性旁路部署与可见验收
+
+- 候选部署于 `/opt/tether-node/releases/0.5.2-r11`，使用独立 venv；状态目录 `/opt/tether-node/state-0.5.2-r11`，部署前备份 `/opt/tether-node/backups/pre-0.5.2-r11-20261110T205700Z`，systemd drop-in 为 `90-0.5.2-r11.conf`。可通过 `.scratch/qa/deploy-remotestitch-node-0.5.2-r11.ps1 -Phase Rollback` 回退。
+- systemd 服务 active/running，restart 计数 0；Node console `18894` 仅监听回环。Hub 显示 online、`node_version=0.5.2`，心跳约 1 秒；生产 mesh 数量仍为 0。identity hash、full policy 与 allowed roots 保持原值；DSH web/gateway 原 PID 与 HTTP 401 基线保持，最近日志无 Node 错误。
+- APP 真实选择 `REMOTESTITCH-HUB`。首次短暂显示读取失败/加载态；等待后进入 DeepSeek Harness 工作区 `tether-dsh-qa.BfHzqlTT`，输入框出现。Terra 聚焦输入框并观察约 10 秒稳定；未输入、未发送消息。
+- 截图 `.scratch/evidence/r11-remotestitch-hub-dsh-0.5.2-pass.png`；机器记录 `.scratch/evidence/remotestitch-hub-0.5.2-pass.json`。这是 Node/DSH 阶段性验收，不代表项目完成。
+- 已完成 REMOTESTITCH-HUB Node 0.5.2 与 DSH 可见验收；LAPTOP-01 仍为 0.4.11。生产 mesh 仍为 0；Codeg 仍因缺少 trusted network 阻塞，且本次 Node 重启后旧 Codeg 子进程未恢复（本阶段仅验收 DSH）；Settings/About 版本仍显示“—”；尚无签名公开 0.5.2。回退方式与路径如上。
+- 定向测试结果 `63 passed / 1 skipped / 2 failed`。两项失败为旧精确相等断言未包含新增 `app_update` 字段；不记为全绿。
 

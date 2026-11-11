@@ -1,14 +1,15 @@
-const { app, BrowserWindow, ipcMain, shell, session, webFrameMain, Tray, Menu, nativeImage } = require('electron')
+const { app, BrowserWindow, ipcMain, shell, session, safeStorage, webFrameMain, Tray, Menu, nativeImage } = require('electron')
 const fs = require('node:fs')
 const path = require('node:path')
 const { pathToFileURL } = require('node:url')
 const { Supervisor } = require('./supervisor.js')
-const { waitForSupervisorStart, waitForLocalNodeApi } = require('./startup-readiness.js')
+const { waitForSupervisorStart, waitForLocalNodeApi, getLocalMeshRoute } = require('./startup-readiness.js')
 const { UpdateService } = require('./update-service.js')
 const { EventSource } = require('eventsource')
 const iconv = require('iconv-lite')
 const { migrateLegacyData, registerAppInstallation } = require('./app-installation.js')
 const { createNativeWorkbench } = require('./native-workbench.js')
+const { createOidcAuth, createCandidateOidcOpenExternal } = require('./oidc-auth')
 const { rendererDiagnostic, isSurfaceBootFailure, isSurfaceErrorPage, isSurfaceUnstyled, rendererFrameState, rendererFrameStyleState, rendererFrameText, rendererRequestScope, rendererSettledFrameState, safeRendererMessage, safeRendererPath } = require('./renderer-diagnostics.js')
 
 app.setName('Tether')
@@ -137,7 +138,7 @@ function withShotTimeout(promise, stage, timeoutMs) {
   ])
 }
 
-const { createDshWebNavigationGuard, dshViewUrlAllowed } = require('./dsh-web-navigation.js')
+const { createDshWebNavigationGuard, createExactEndpointNavigationGuard, dshViewUrlAllowed } = require('./dsh-web-navigation.js')
 
 const BROWSER_WEBVIEW_PARTITION = 'persist:tether-browser'
 
@@ -176,6 +177,22 @@ const { enrollmentDecision } = require('./enrollment.js')
 const supervisor = new Supervisor({ repoRoot, dataDir, env, preserveManagedNodeOnExit: packaged })
 const updates = new UpdateService({ repoRoot, dataDir, python: supervisor.childPython, env, app,
   stopManagedNode: () => packaged ? supervisor.stopManagedNode() : Promise.resolve({ stopped: false }) })
+const oidcAuth = createOidcAuth({
+  issuer: env.TETHER_OIDC_ISSUER || DEFAULT_OIDC_ISSUER,
+  clientId: 'tether-desktop',
+  redirectUri: 'http://127.0.0.1:18893/oauth/callback',
+  storageFile: path.join(dataDir, 'oidc-session.json'),
+  safeStorage,
+  openExternal: candidateMode && String(env.TETHER_OIDC_BOOTSTRAP_CREDENTIALS_FILE || '').trim()
+    ? createCandidateOidcOpenExternal({
+      issuer: env.TETHER_OIDC_ISSUER || DEFAULT_OIDC_ISSUER,
+      credentialsFile: String(env.TETHER_OIDC_BOOTSTRAP_CREDENTIALS_FILE).trim()
+    })
+    : (url) => shell.openExternal(url)
+})
+const legacyControllerSession = { fetch: (...args) => controllerFetch(...args) }
+let controllerAuthMode = ''
+let legacyUserToken = env.TETHER_USER_TOKEN || ''
 let appUpdateBridgeStarted = false
 let uiOrigin = ''
 
@@ -225,8 +242,6 @@ let nativeWorkbench = null
 let workbenchActorId = ''
 let hubEventSource = null
 let hubEventsSubscribed = false
-let workbenchLoginWindow = null
-let workbenchLoginCompleted = false
 let workbenchBindingPending = false
 
 function showMainWindow() {
@@ -293,46 +308,64 @@ async function createWindow() {
     }
   }
   const startupResult = await waitForSupervisorStart(supervisor.start())
+  let localApiReady = false
   if (!startupResult.completed) log('services startup wait timed out; loading UI')
   else if (startupResult.error) log('services failed ' + (startupResult.error.stack || startupResult.error))
   else if (startupResult.state) log('services ' + startupResult.state.mode + ' controller=' + startupResult.state.controller.state + ' node=' + startupResult.state.node.state)
-  if (startupResult.completed && startupResult.state && startupResult.state.mode === 'hub' && startupResult.state.node.state === 'running') {
-    const ready = await waitForLocalNodeApi({
+  if (startupResult.completed && startupResult.state && startupResult.state.mode === 'hub'
+      && (startupResult.state.node.state === 'running' || supervisor.nodeMode === 'external' && supervisor.externalLocalApiConfigured)) {
+    localApiReady = await waitForLocalNodeApi({
       port: supervisor.consolePort,
       device: supervisor.device,
       token: supervisor.localApiToken
     }, { timeoutMs: 3000 })
-    if (!ready) log('local node API readiness timed out; loading UI')
+    if (!localApiReady) log('local node API readiness timed out; loading UI')
   }
 
   workbenchLoginSession = session.fromPartition('persist:tether-hub-login')
+  await oidcAuth.initialize()
+  try { await refreshWorkbenchAuthStatus() } catch (error) {
+    controllerAuthMode = ''
+    log('Controller authentication status unavailable code=' + String(error && error.code || 'status_failed').slice(0, 64))
+  }
   nativeWorkbench = createNativeWorkbench({
     controllerUrl: controller,
-    loginSession: workbenchLoginSession,
+    loginSession: legacyControllerSession,
     getServiceSession: (partition) => {
       if (!/^persist:tether-wb-[a-f0-9]{40}$/.test(String(partition || ''))) throw new Error('invalid service session partition')
       return session.fromPartition(partition)
     },
+    createBootstrapContents: (partition) => {
+      if (!/^persist:tether-wb-[a-f0-9]{40}$/.test(String(partition || ''))) throw new Error('invalid bootstrap partition')
+      const bootstrapWindow = new BrowserWindow({
+        show: false,
+        webPreferences: {
+          partition,
+          nodeIntegration: false,
+          contextIsolation: true,
+          sandbox: true,
+          webSecurity: true
+        }
+      })
+      bootstrapWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+      return {
+        contents: bootstrapWindow.webContents,
+        destroy: () => { if (!bootstrapWindow.isDestroyed()) bootstrapWindow.destroy() }
+      }
+    },
     getLocalDeviceId: () => supervisor.device,
     getSourceRoute: async (networkId, sourceDeviceId) => {
-      if (!supervisor.remoteUrl || supervisor.node.state !== 'running' || sourceDeviceId !== supervisor.device) {
-        throw new Error('local mesh route is unavailable for this source device')
+      if (!supervisor.remoteUrl || !supervisor.hasLocalNodeApi() || sourceDeviceId !== supervisor.device) {
+        throw new Error('local mesh route unavailable')
       }
       if (typeof networkId !== 'string' || !/^(?:[0-9a-f]{32}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})$/i.test(networkId)) {
         throw new Error('invalid mesh network id')
       }
-      const routeUrl = 'http://127.0.0.1:' + supervisor.consolePort + '/api/devices/'
-        + encodeURIComponent(supervisor.device) + '/mesh/' + encodeURIComponent(networkId) + '/route'
-      const response = await fetch(routeUrl, {
-        headers: { authorization: 'Bearer ' + supervisor.localApiToken },
-        redirect: 'error',
-        signal: AbortSignal.timeout(5000)
-      })
-      if (!response.ok) throw new Error(response.status === 409 ? 'local mesh network is not ready' : 'local mesh route unavailable')
-      return response.json()
+      return getLocalMeshRoute({ port: supervisor.consolePort, device: supervisor.device,
+        token: supervisor.localApiToken, networkId })
     },
     getActorId: async () => {
-      const response = await workbenchLoginSession.fetch(new URL('/api/auth/me', controller).toString(), { redirect: 'error' })
+      const response = await controllerFetch(new URL('/api/auth/me', controller).toString(), { redirect: 'error' })
       if (!response.ok) throw new Error(response.status === 401 ? 'Controller login required' : 'Controller identity unavailable')
       const user = await response.json()
       if (!user || typeof user.user_id !== 'string' || !user.user_id) throw new Error('Controller returned no authenticated actor')
@@ -362,7 +395,7 @@ async function createWindow() {
     },
     accessToken: env.TETHER_ACCESS_TOKEN || '',
     insecureTls: ['1', 'true', 'yes'].includes(String(env.TETHER_INSECURE_TLS || '').toLowerCase()),
-    localApi: supervisor.remoteUrl && supervisor.procs.node
+    localApi: supervisor.remoteUrl && localApiReady && supervisor.hasLocalNodeApi()
       ? { device: supervisor.device, port: supervisor.consolePort, token: supervisor.localApiToken }
       : null
   })
@@ -413,7 +446,20 @@ async function createWindow() {
   })
   mainWindow.webContents.on('did-attach-webview', (_event, contents) => {
     const browserView = contents.session === session.fromPartition(BROWSER_WEBVIEW_PARTITION)
-    const navigation = createDshWebNavigationGuard(contents.getURL())
+    let workbenchPolicy = { managed: false }
+    if (!browserView && nativeWorkbench) {
+      try {
+        workbenchPolicy = nativeWorkbench.guestPolicy(contents)
+      } catch (_) {
+        try { contents.stop() } catch (_) { /* guest may already be gone */ }
+        try { contents.destroy() } catch (_) { /* fail closed */ }
+        log('blocked unmatched workbench guest')
+        return
+      }
+    }
+    const navigation = workbenchPolicy.managed && workbenchPolicy.serviceId === 'dsh-native'
+      ? createExactEndpointNavigationGuard(workbenchPolicy.endpoint, contents.getURL())
+      : createDshWebNavigationGuard(contents.getURL())
     contents.setWindowOpenHandler(({ url }) => {
       if (browserView) {
         try {
@@ -445,6 +491,13 @@ async function createWindow() {
       try { host = new URL(String(target)).host } catch (_) { /* malformed redirect */ }
       log('blocked webview redirect host=' + host)
     })
+    if (nativeWorkbench) {
+      void nativeWorkbench.prepareGuest(contents).catch(() => {
+        try { contents.stop() } catch (_) { /* guest may already be gone */ }
+        try { contents.destroy() } catch (_) { /* fail closed */ }
+        log('blocked unmatched workbench guest')
+      })
+    }
   })
   mainWindow.on('closed', () => { mainWindow = null })
   mainWindow.on('maximize', sendWindowState)
@@ -641,9 +694,8 @@ function setAutoStartAtLogin(enabled) {
   return { ok: true, enabled: actual }
 }
 async function currentWorkbenchActorId() {
-  if (!workbenchLoginSession) throw new Error('Controller session is unavailable')
   const origin = trustedControllerOrigin()
-  const response = await workbenchLoginSession.fetch(new URL('/api/auth/me', origin).toString(), { redirect: 'error' })
+  const response = await controllerFetch(new URL('/api/auth/me', origin).toString())
   if (!response.ok) throw new Error(response.status === 401 ? 'Controller login required' : 'Controller identity unavailable')
   const user = await response.json()
   if (!user || typeof user.user_id !== 'string' || !user.user_id) throw new Error('Controller returned no authenticated actor')
@@ -658,6 +710,81 @@ function trustedControllerOrigin() {
   }
   return parsed.origin
 }
+function oidcAuthorizationHeader() {
+  return oidcAuth.authorizationHeader()
+}
+async function controllerFetch(input, init = {}) {
+  const target = new URL(input && input.url ? input.url : String(input), trustedControllerOrigin())
+  if (target.origin !== trustedControllerOrigin()) throw new Error('Controller API origin is not allowed')
+  const headers = new Headers(init.headers || {})
+  if (controllerAuthMode === 'oidc') {
+    return oidcAuth.fetch(target.toString(), { ...init, headers: Object.fromEntries(headers.entries()), redirect: 'error' })
+  }
+  if (readHubConfig().desktopAuthMode === 'oidc') throw new Error('Controller login required')
+  if (controllerAuthMode === 'legacy-bearer' && legacyUserToken) {
+    headers.set('Authorization', 'Bearer ' + legacyUserToken)
+    return fetch(target.toString(), { ...init, headers, credentials: 'omit', redirect: 'error' })
+  }
+  if (!workbenchLoginSession) throw new Error('Controller session is unavailable')
+  return workbenchLoginSession.fetch(target.toString(), { ...init, headers, credentials: 'include', redirect: 'error' })
+}
+async function validateControllerSession(fetcher) {
+  const response = await fetcher(new URL('/api/auth/me', trustedControllerOrigin()).toString(), { cache: 'no-store' })
+  if (!response.ok) {
+    let code = ''
+    try { const body = await response.json(); code = String(body?.detail?.code || '') } catch (_) { /* retain auth state only */ }
+    return { authenticated: false, identityUnbound: code === 'oidc_identity_unbound' }
+  }
+  const user = await response.json()
+  if (!user || typeof user.user_id !== 'string' || !user.user_id) return { authenticated: false, identityUnbound: false }
+  return { authenticated: true, identityUnbound: false, user: { user_id: user.user_id, email: user.email || '' } }
+}
+async function refreshWorkbenchAuthStatus() {
+  const oidcStatus = await oidcAuth.status()
+  const allowLegacyFallback = readHubConfig().desktopAuthMode !== 'oidc'
+  if (oidcStatus && oidcStatus.state === 'authenticated' && oidcAuthorizationHeader()) {
+    const result = await validateControllerSession((url, init) => oidcAuth.fetch(url, init))
+    if (result.authenticated || result.identityUnbound) {
+      controllerAuthMode = 'oidc'
+      setDesktopAuthMode('oidc')
+      workbenchBindingPending = result.identityUnbound
+      if (result.authenticated) await setWorkbenchActor(result.user.user_id)
+      return { ...result, authenticated: result.authenticated, source: 'oidc' }
+    }
+  }
+  if (allowLegacyFallback && legacyUserToken) {
+    const result = await validateControllerSession((url, init = {}) => fetch(url, {
+      ...init, headers: { ...(init.headers || {}), Authorization: 'Bearer ' + legacyUserToken }, credentials: 'omit', redirect: 'error'
+    }))
+    if (result.authenticated) {
+      controllerAuthMode = 'legacy-bearer'
+      workbenchBindingPending = false
+      await setWorkbenchActor(result.user.user_id)
+      return { ...result, source: 'legacy-bearer' }
+    }
+  }
+  if (allowLegacyFallback && workbenchLoginSession) {
+    let result
+    try {
+      result = await validateControllerSession((url, init) => workbenchLoginSession.fetch(url, { ...init, credentials: 'include', redirect: 'manual' }))
+    } catch (_) {
+      controllerAuthMode = ''
+      workbenchBindingPending = false
+      return { authenticated: false, identityUnbound: false }
+    }
+    if (result.authenticated) {
+      controllerAuthMode = 'legacy-cookie'
+      workbenchBindingPending = false
+      await setWorkbenchActor(result.user.user_id)
+      return { ...result, source: 'legacy-cookie' }
+    }
+    controllerAuthMode = ''
+    workbenchBindingPending = result.identityUnbound
+    return result
+  }
+  controllerAuthMode = ''
+  return { authenticated: false, identityUnbound: false }
+}
 async function setWorkbenchActor(actorId) {
   if (workbenchActorId && workbenchActorId !== actorId) {
     closeHubEvents()
@@ -670,6 +797,14 @@ async function setWorkbenchActor(actorId) {
 function closeHubEvents() {
   if (hubEventSource) hubEventSource.close()
   hubEventSource = null
+}
+function safeLoginError(error) {
+  return String(error && error.message || error || '桌面登录未完成').replace(/[\r\n]+/g, ' ').slice(0, 256)
+}
+function setDesktopAuthMode(mode) {
+  const config = readHubConfig()
+  if (config.desktopAuthMode === mode) return
+  writeHubConfig({ ...config, desktopAuthMode: mode })
 }
 function startHubEvents() {
   closeHubEvents()
@@ -684,7 +819,7 @@ function startHubEvents() {
       if (requested.origin !== eventsUrl.origin || requested.pathname !== '/api/events') {
         return Promise.reject(new Error('Controller event URL is not allowed'))
       }
-      return workbenchLoginSession.fetch(requested.toString(), { ...init, credentials: 'include', redirect: 'error' })
+      return controllerFetch(requested.toString(), init)
     }
   })
   hubEventSource.onmessage = (event) => {
@@ -698,103 +833,35 @@ function startHubEvents() {
 async function completeWorkbenchLogin(actorId) {
   await setWorkbenchActor(actorId)
   workbenchBindingPending = false
-  workbenchLoginCompleted = true
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('tether:workbench-login-result', { state: 'authenticated' })
-  if (workbenchLoginWindow && !workbenchLoginWindow.isDestroyed()) workbenchLoginWindow.close()
 }
 async function openWorkbenchLogin() {
-  if (!workbenchLoginSession) return { ok: false, error: 'Controller session is unavailable' }
-  try { workbenchActorId = await currentWorkbenchActorId() } catch (_) { /* unauthenticated before login is expected */ }
-  closeHubEvents()
-  if (workbenchActorId) {
-    const cleanup = await nativeWorkbench.clearActor(workbenchActorId)
-    if (!cleanup || cleanup.ok !== true) return { ok: false, error: 'Previous Controller account sessions could not be fully cleared' }
-    // The OAuth callback replaces the login partition cookie before /auth/me
-    // can identify its new actor. Never try to revoke the old actor after that
-    // identity switch; clearActor above already drained pending opens and grants.
-    workbenchActorId = ''
-  }
-  let startUrl
-  try {
-    startUrl = new URL('/oauth2/start', trustedControllerOrigin())
-    startUrl.searchParams.set('rd', '/app/login-complete')
-  } catch (_) { return { ok: false, error: 'Controller URL is invalid' } }
-  const controllerOrigin = trustedControllerOrigin()
-  const issuerOrigin = env.TETHER_OIDC_ISSUER ? new URL(env.TETHER_OIDC_ISSUER).origin : ''
-  if (startUrl.protocol !== 'https:' && !(startUrl.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(startUrl.hostname))) {
-    return { ok: false, error: 'Controller login requires HTTPS' }
-  }
-  if (workbenchLoginWindow && !workbenchLoginWindow.isDestroyed()) {
-    workbenchLoginWindow.focus()
-    return { ok: true, state: 'login_started' }
-  }
-  workbenchLoginWindow = new BrowserWindow({
-    width: 560, height: 760, parent: mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined,
-    title: 'Tether 登录', modal: false,
-    webPreferences: { partition: 'persist:tether-hub-login', nodeIntegration: false,
-      contextIsolation: true, sandbox: true, webSecurity: true }
-  })
-  workbenchLoginCompleted = false
+  if (!oidcAuth) return { ok: false, error: '桌面身份认证不可用' }
   workbenchBindingPending = false
-  const allowedOrigin = (value) => {
-    try {
-      const parsed = new URL(value)
-      if (parsed.protocol === 'https:' && (parsed.origin === controllerOrigin || parsed.origin === issuerOrigin)) return true
-      const loopback = parsed.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(parsed.hostname)
-      return loopback && (parsed.origin === controllerOrigin || parsed.origin === issuerOrigin)
-    } catch (_) { return false }
-  }
-  workbenchLoginWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
-  workbenchLoginWindow.webContents.on('will-navigate', (event, url) => {
-    if (!allowedOrigin(url)) event.preventDefault()
-  })
-  workbenchLoginWindow.webContents.on('will-redirect', (event, url) => {
-    if (!allowedOrigin(url)) event.preventDefault()
-  })
-  workbenchLoginWindow.webContents.on('did-navigate', async (_event, url) => {
-    try {
-      const parsed = new URL(url)
-      if (parsed.origin !== controllerOrigin || parsed.pathname !== '/app/login-complete') return
-      const response = await workbenchLoginSession.fetch(new URL('/api/auth/me', controllerOrigin).toString(), { redirect: 'error' })
-      if (!response.ok) {
-        let detail = null
-        try { detail = await response.json() } catch (_) { /* preserve only known auth state */ }
-        if (detail && detail.detail && detail.detail.code === 'oidc_identity_unbound'
-            && mainWindow && !mainWindow.isDestroyed()) {
-          workbenchBindingPending = true
-          mainWindow.webContents.send('tether:workbench-login-result', { state: 'identity_unbound' })
-        }
-        return
-      }
-      const user = await response.json()
-      if (!user || typeof user.user_id !== 'string' || !user.user_id) return
-      await completeWorkbenchLogin(user.user_id)
-    } catch (_) { /* login result is confirmed only by the authenticated API */ }
-  })
-  workbenchLoginWindow.on('closed', () => {
-    workbenchLoginWindow = null
-    if (!workbenchLoginCompleted && mainWindow && !mainWindow.isDestroyed()) {
-      workbenchBindingPending = false
-      mainWindow.webContents.send('tether:workbench-login-result', { state: 'closed' })
-    }
-    if (!workbenchLoginCompleted && hubEventsSubscribed) {
-      currentWorkbenchActorId().then((actorId) => {
-        workbenchActorId = actorId
-        startHubEvents()
-      }).catch(() => { workbenchActorId = '' })
-    }
-  })
   try {
-    await workbenchLoginWindow.loadURL(startUrl.toString())
+    const login = await oidcAuth.beginLogin()
+    void login.completion.then(async () => {
+      setDesktopAuthMode('oidc')
+      const result = await refreshWorkbenchAuthStatus()
+      if (result.authenticated) await completeWorkbenchLogin(result.user.user_id)
+      else if (result.identityUnbound && mainWindow && !mainWindow.isDestroyed()) {
+        workbenchBindingPending = true
+        mainWindow.webContents.send('tether:workbench-login-result', { state: 'identity_unbound' })
+      } else if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('tether:workbench-login-result', { state: 'closed', error: 'Casdoor 登录已完成，但 Hub 未确认登录状态。' })
+      }
+    }).catch((error) => {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('tether:workbench-login-result', { state: 'closed', error: safeLoginError(error) })
+    })
     return { ok: true, state: 'login_started' }
-  } catch (_) {
-    if (workbenchLoginWindow && !workbenchLoginWindow.isDestroyed()) workbenchLoginWindow.close()
-    return { ok: false, error: 'Controller login could not be opened' }
+  } catch (error) {
+    return { ok: false, error: String(error && error.message || error || '桌面登录未完成') }
   }
 }
 handleTrusted('tether:workbench-login', openWorkbenchLogin)
+handleTrusted('tether:workbench-auth-status', refreshWorkbenchAuthStatus, () => ({ authenticated: false }))
 handleTrusted('tether:workbench-bind-legacy', async (_event, credentials) => {
-  if (!workbenchBindingPending || !workbenchLoginWindow || workbenchLoginWindow.isDestroyed()) {
+  if (!workbenchBindingPending || !workbenchLoginSession) {
     throw new Error('Explicit Tether account binding is not pending')
   }
   if (!credentials || typeof credentials !== 'object') throw new Error('Legacy account credentials are required')
@@ -810,8 +877,10 @@ handleTrusted('tether:workbench-bind-legacy', async (_event, credentials) => {
     body: JSON.stringify({ email, password, totp }), redirect: 'error'
   })
   if (!login.ok) throw new Error('Legacy account sign-in failed; check the account details and try again')
+  const authorization = oidcAuthorizationHeader()
+  if (!authorization) throw new Error('Casdoor 登录状态已失效，请重新登录后再绑定。')
   const binding = await workbenchLoginSession.fetch(new URL('/api/auth/identity/bind', origin).toString(), {
-    method: 'POST', headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', Authorization: authorization },
     body: '{}', redirect: 'error'
   })
   if (!binding.ok) throw new Error(binding.status === 409
@@ -822,11 +891,11 @@ handleTrusted('tether:workbench-bind-legacy', async (_event, credentials) => {
   return { state: 'authenticated' }
 }, () => ({ state: 'error' }))
 handleTrusted('tether:workbench-register-account', async () => {
-  if (!workbenchBindingPending || !workbenchLoginWindow || workbenchLoginWindow.isDestroyed()) {
+  if (!workbenchBindingPending) {
     throw new Error('Explicit Tether account creation is not pending')
   }
   const origin = trustedControllerOrigin()
-  const response = await workbenchLoginSession.fetch(new URL('/api/auth/identity/register', origin).toString(), {
+  const response = await oidcAuth.fetch(new URL('/api/auth/identity/register', origin).toString(), {
     method: 'POST', headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
     body: '{}', redirect: 'error'
   })
@@ -856,6 +925,7 @@ handleTrusted('tether:hub-events-unsubscribe', () => {
   return { ok: true }
 }, () => ({ ok: false }))
 handleTrusted('tether:workbench-logout', async () => {
+  setDesktopAuthMode('oidc')
   let actorId = workbenchActorId
   if (!actorId) { try { actorId = await currentWorkbenchActorId() } catch (_) { /* already signed out */ } }
   let cleanupOk = true
@@ -866,11 +936,16 @@ handleTrusted('tether:workbench-logout', async () => {
   workbenchBindingPending = false
   closeHubEvents()
   workbenchActorId = ''
+  controllerAuthMode = ''
+  legacyUserToken = ''
+  await oidcAuth.logout()
   if (workbenchLoginSession) await workbenchLoginSession.clearStorageData()
   return { state: cleanupOk ? 'logged_out' : 'revocation_pending' }
 }, () => ({ state: 'error' }))
 handleTrusted('tether:workbench-catalog', async (_event, targetId) => nativeWorkbench.catalog(targetId), () => ({ ok: false }))
 handleTrusted('tether:workbench-open', async (_event, targetId, serviceId) => nativeWorkbench.open(targetId, serviceId), () => ({ ok: false }))
+handleTrusted('tether:workbench-open-legacy-codeg', async (_event, targetId) => nativeWorkbench.openLegacyCodeg(targetId), () => ({ ok: false }))
+handleTrusted('tether:workbench-open-dsh-surface', async (_event, targetId) => nativeWorkbench.openDshSurface(targetId), () => ({ ok: false }))
 handleTrusted('tether:workbench-close', async (_event, targetId, serviceId, grantId) => nativeWorkbench.close(targetId, serviceId, grantId), () => ({ ok: false }))
 handleTrusted('tether:workbench-view', async (_event, targetId, serviceId, visible) => nativeWorkbench.view(targetId, serviceId, visible), () => ({ ok: false }))
 handleTrusted('tether:files-request', async (_event, request) => {
@@ -893,11 +968,16 @@ handleTrusted('tether:hub-request', async (_event, request) => {
     throw new Error('Controller API route requires a separate trusted flow')
   }
   const target = new URL(path, trustedControllerOrigin())
+  let decodedPath = target.pathname
+  try { decodedPath = decodeURIComponent(decodedPath) } catch (_) { throw new Error('Controller API route is not allowed') }
+  if (/^\/api\/devices\/[^/]+\/dsh\/surface\/?$/i.test(decodedPath)) {
+    throw new Error('DSH surface route requires a separate trusted flow')
+  }
   if (target.origin !== trustedControllerOrigin() || !target.pathname.startsWith('/api/')) {
     throw new Error('Controller API origin is not allowed')
   }
   const hasBody = method === 'POST' || method === 'DELETE'
-  const response = await workbenchLoginSession.fetch(target.toString(), {
+  const response = await controllerFetch(target.toString(), {
     method,
     headers: hasBody ? { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } : { 'Cache-Control': 'no-store' },
     body: hasBody ? JSON.stringify(request.body == null ? {} : request.body) : undefined,
@@ -1062,6 +1142,7 @@ app.on('before-quit', () => {
   isQuitting = true
   if (appBindingWatcher) { appBindingWatcher.close(); appBindingWatcher = null }
   updates.closeAppUpdateBridge()
+  void oidcAuth.close()
   supervisor.stopSync()
   if (webServer) webServer.close()
   if (tray) { tray.destroy(); tray = null }

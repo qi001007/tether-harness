@@ -785,6 +785,173 @@ def test_dirty_development_checkout_accepts_an_explicit_update(
     assert json.loads((root / "version.json").read_text(encoding="utf-8"))["components"]["node"] == "0.2.1"
 
 
+def test_node_update_waits_for_acceptance_then_commits(
+        artifact_server: ArtifactServer, tmp_path: Path) -> None:
+    root = tmp_path / "install"
+    seed_version(root)
+    target = root / "tether" / "node" / "agent.py"
+    target.parent.mkdir(parents=True)
+    target.write_bytes(b"old-node")
+    state = tmp_path / "state"
+    url = install_manifest(artifact_server, "node", make_zip("node"), version="0.2.1")
+    manager = UpdateManager(root, "node", manifest_url=url, state_dir=state)
+
+    prepared = manager.prepare()
+    applied = manager.apply(prepared["prepared_id"])
+
+    assert applied["ok"] is True
+    assert applied["status"] == "awaiting_acceptance"
+    transaction = state / "transactions" / prepared["prepared_id"] / "transaction.json"
+    assert json.loads(transaction.read_text(encoding="utf-8"))["state"] == "awaiting_acceptance"
+    pending_status = manager.status()
+    assert pending_status["restart_required"] is False
+    assert pending_status["transaction"] == {
+        "prepared_id": prepared["prepared_id"], "state": "awaiting_acceptance",
+        "from_version": "0.2.0", "to_version": "0.2.1",
+    }
+    backup = state / "backups" / "node" / prepared["prepared_id"]
+    prepared_dir = state / "prepared" / prepared["prepared_id"]
+    assert backup.is_dir() and prepared_dir.is_dir()
+
+    committed = manager.commit(prepared["prepared_id"])
+
+    assert committed["ok"] is True, committed
+    assert committed["status"] == "committed"
+    assert target.read_bytes() == b"new-node"
+    assert _json_object((state / "applied-node.json").read_bytes())["restart_required"] is False
+    assert not backup.exists() and not prepared_dir.exists() and not transaction.exists()
+
+
+def test_node_transaction_rolls_back_after_manager_recreation(
+        artifact_server: ArtifactServer, tmp_path: Path) -> None:
+    root = tmp_path / "install"
+    seed_version(root)
+    target = root / "tether" / "node" / "agent.py"
+    target.parent.mkdir(parents=True)
+    target.write_bytes(b"old-node")
+    state = tmp_path / "state"
+    url = install_manifest(artifact_server, "node", make_zip("node"), version="0.2.1")
+    manager = UpdateManager(root, "node", manifest_url=url, state_dir=state)
+    prepared = manager.prepare()
+    assert manager.apply(prepared["prepared_id"])["status"] == "awaiting_acceptance"
+
+    restarted = UpdateManager(root, "node", manifest_url=url, state_dir=state)
+    rolled_back = restarted.rollback(prepared["prepared_id"])
+
+    assert rolled_back["ok"] is True, rolled_back
+    assert rolled_back["status"] == "rolled_back"
+    assert target.read_bytes() == b"old-node"
+    assert json.loads((root / "version.json").read_text(encoding="utf-8"))["components"]["node"] == "0.2.0"
+    assert not (root / "pyproject.toml").exists()
+
+
+def test_node_transaction_rejects_invalid_id_and_wrong_component(
+        artifact_server: ArtifactServer, tmp_path: Path) -> None:
+    root = tmp_path / "install"
+    seed_version(root)
+    url = install_manifest(artifact_server, "node", make_zip("node"), version="0.2.1")
+    node = UpdateManager(root, "node", manifest_url=url, state_dir=tmp_path / "state")
+    prepared = node.prepare()
+    assert node.apply(prepared["prepared_id"])["status"] == "awaiting_acceptance"
+
+    assert node.commit("../" + prepared["prepared_id"])["error_code"] == "invalid_prepared_id"
+    app = UpdateManager(root, "app", state_dir=tmp_path / "state")
+    assert app.rollback(prepared["prepared_id"])["error_code"] == "transaction_mismatch"
+
+
+def test_node_transaction_rejects_target_outside_install_root(
+        artifact_server: ArtifactServer, tmp_path: Path) -> None:
+    root = tmp_path / "install"
+    seed_version(root)
+    url = install_manifest(artifact_server, "node", make_zip("node"), version="0.2.1")
+    manager = UpdateManager(root, "node", manifest_url=url, state_dir=tmp_path / "state")
+    prepared = manager.prepare()
+    assert manager.apply(prepared["prepared_id"])["status"] == "awaiting_acceptance"
+    transaction_path = (manager.state_dir / "transactions" / prepared["prepared_id"]
+                        / "transaction.json")
+    transaction = json.loads(transaction_path.read_text(encoding="utf-8"))
+    transaction["targets"][0]["target"] = str(tmp_path / "outside.txt")
+    transaction_path.write_text(json.dumps(transaction), encoding="utf-8")
+
+    result = manager.rollback(prepared["prepared_id"])
+
+    assert result["ok"] is False
+    assert result["error_code"] == "transaction_target_invalid"
+    assert (tmp_path / "outside.txt").exists() is False
+
+
+def test_node_rollback_failure_keeps_recovery_transaction(
+        artifact_server: ArtifactServer, tmp_path: Path, monkeypatch) -> None:
+    root = tmp_path / "install"
+    seed_version(root)
+    url = install_manifest(artifact_server, "node", make_zip("node"), version="0.2.1")
+    manager = UpdateManager(root, "node", manifest_url=url, state_dir=tmp_path / "state")
+    prepared = manager.prepare()
+    assert manager.apply(prepared["prepared_id"])["status"] == "awaiting_acceptance"
+    monkeypatch.setattr(manager, "_rollback", lambda _targets: False)
+
+    result = manager.rollback(prepared["prepared_id"])
+
+    transaction_path = (manager.state_dir / "transactions" / prepared["prepared_id"]
+                        / "transaction.json")
+    assert result["ok"] is False and result["error_code"] == "rollback_failed"
+    assert json.loads(transaction_path.read_text(encoding="utf-8"))["state"] == "recovery_required"
+    assert (manager.state_dir / "backups" / "node" / prepared["prepared_id"]).is_dir()
+
+
+@pytest.mark.parametrize("action", ["commit", "rollback"])
+def test_updates_cli_dispatches_node_transaction_actions(tmp_path: Path, monkeypatch, capsys, action: str) -> None:
+    from tether import updates_cli
+
+    calls = []
+
+    class Manager:
+        def __init__(self, **_kwargs):
+            pass
+
+        def commit(self, prepared_id):
+            calls.append(("commit", prepared_id))
+            return {"ok": True, "status": "committed"}
+
+        def rollback(self, prepared_id):
+            calls.append(("rollback", prepared_id))
+            return {"ok": True, "status": "rolled_back"}
+
+    monkeypatch.setattr(updates_cli, "UpdateManager", Manager)
+    assert updates_cli.main([action, "--component", "node", "--prepared-id", "a" * 32,
+                             "--root", str(tmp_path), "--state-dir", str(tmp_path / "state")]) == 0
+    assert calls == [(action, "a" * 32)]
+    assert json.loads(capsys.readouterr().out)["ok"] is True
+
+
+def test_node_apply_failure_still_restores_replaced_files(
+        artifact_server: ArtifactServer, tmp_path: Path, monkeypatch) -> None:
+    root = tmp_path / "install"
+    seed_version(root)
+    target = root / "tether" / "node" / "agent.py"
+    target.parent.mkdir(parents=True)
+    target.write_bytes(b"old-node")
+    url = install_manifest(artifact_server, "node", make_zip("node"), version="0.2.1")
+    manager = UpdateManager(root, "node", manifest_url=url, state_dir=tmp_path / "state")
+    prepared = manager.prepare()
+    original = manager._write_atomic
+    replacements = 0
+
+    def fail_during_apply(path: Path, data: bytes) -> None:
+        nonlocal replacements
+        if path == target:
+            replacements += 1
+            if replacements == 1:
+                raise OSError("injected update failure")
+        original(path, data)
+
+    monkeypatch.setattr(manager, "_write_atomic", fail_during_apply)
+    result = manager.apply(prepared["prepared_id"])
+
+    assert result["ok"] is False
+    assert target.read_bytes() == b"old-node"
+
+
 def test_checkout_state_hides_the_git_console_on_windows(tmp_path: Path, monkeypatch) -> None:
     root = tmp_path / "checkout"
     (root / ".git").mkdir(parents=True)
@@ -1750,7 +1917,7 @@ def test_manifest_disk_cache_is_used_when_the_network_fails(artifact_server: Art
     assert cached["stale"] is True
 
 
-def test_manifest_artifact_url_preferred_with_mirror_fallbacks(
+def test_hub_artifact_preferred_then_mirror_then_manifest_url(
         artifact_server: ArtifactServer, tmp_path: Path, monkeypatch) -> None:
     archive = make_zip("app", version="0.2.1")
     sha = hashlib.sha256(archive).hexdigest()
@@ -1786,20 +1953,20 @@ def test_manifest_artifact_url_preferred_with_mirror_fallbacks(
         manager._fetch = record_fetch
         return manager.prepare(), requests
 
-    prepared, requests = prepare_with_sources("official", {"/official.zip"})
+    prepared, requests = prepare_with_sources("official", {"/official.zip"}, "/mirror")
     assert prepared["ok"] is True, prepared
-    assert [url for url in requests if "/artifacts/" in url or url.endswith("/official.zip")] == [
-        artifact_server.base + "/official.zip"]
+    artifact_requests = [url for url in requests if url != manifest_url]
+    assert artifact_requests == [hub_url, mirror_url, artifact_server.base + "/official.zip"]
 
-    prepared, requests = prepare_with_sources("hub", {f"/releases/artifacts/{sha}"})
+    prepared, requests = prepare_with_sources("hub", {f"/releases/artifacts/{sha}"}, "/mirror")
     assert prepared["ok"] is True, prepared
-    assert [url for url in requests if "/artifacts/" in url or url.endswith("/official.zip")] == [
-        artifact_server.base + "/official.zip", hub_url]
+    artifact_requests = [url for url in requests if url != manifest_url]
+    assert artifact_requests == [hub_url]
 
     prepared, requests = prepare_with_sources("mirror", {f"/mirror/{sha}"}, "/mirror")
     assert prepared["ok"] is True, prepared
-    assert [url for url in requests if "/artifacts/" in url or "/mirror/" in url or url.endswith("/official.zip")] == [
-        artifact_server.base + "/official.zip", hub_url, mirror_url]
+    artifact_requests = [url for url in requests if url != manifest_url]
+    assert artifact_requests == [hub_url, mirror_url]
 
 
 def test_restart_cleared_requires_a_different_live_host_pid():

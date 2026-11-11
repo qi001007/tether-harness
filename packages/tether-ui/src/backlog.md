@@ -1,5 +1,14 @@
 # 变更记录
 
+## 2026-11-10
+
+- `agents-page.js`：APP 的 legacy Codeg ready 状态使用专用主进程 opener 和 token-free native webview；legacy stopped/missing/failed 均禁用，并显示未运行、未安装或状态异常，不触发旧 `agents_runtime_start`。
+- `app.js`：Electron 托管 OAuth 下，远端 DSH surface descriptor 通过既有 `hubRequest` IPC 请求，保留 HTTP 状态/body，并在 IPC 前后尊重取消；本机、Web、DSH 与显式 legacy 路径不变。`/app-context` 的本机设备 ID 仅在当前设备快照中存在时才可自动选中，用户手选仍优先。r2 在在线 REMOTESTITCH-HUB 上观察约 45 秒，设备选择保持且无新增 CORS/404/HTTP 400，截图已保存；旧工作区协议仍待兼容。
+
+## 2026-11-10
+
+- `app.js`：桌面 UI 先读取主进程认证状态，未认证时显示登录入口并暂停工作台状态请求；认证后再加载原设备工作台。25 项 Node 定向测试及 portable 未登录页通过，正式 r7 dual audience 已部署；真实用户登录与原设备列表仍待验收。
+
 ## 2026-11-08
 
 - `settings-panel.js`：设置→关于增加开源组件版本、许可证、官方源码与 SFTPGo NOTICE 入口；明确只用 SFTPGo 核心，不含其专有 WebAdmin/WebClient 页面，并提示随包完整第三方声明。
@@ -23,3 +32,10 @@
 
 - 2026-11-09：更新中心远程组件通过既有 MinimalUpdateButton 创建/呈现持久 Update Job，保留组件选择并按 APP/Node owner 合约分流；取消仅显示服务端真实状态，不承诺后端未提供的取消操作。
 - 2026-11-09：若受管 APP 安装器拥有更新但目标桌面暂未运行，设备卡与更新中心明确提示先启动目标桌面 APP；不暴露 loopback、token 或队列内部信息。
+
+- 2026-11-10：打包 Electron 远端 NativeSurface 改走受控 DSH guest，renderer 只接收 token-free endpoint/partition/grant；空文档与 did-fail-load 显示可重试错误，重试重新申请授权。
+- 2026-11-11：Electron 远端 NativeSurface 严格验证 main 返回的 HTTPS endpoint：默认端口、根路径、无 userinfo/hash，且唯一查询必须精确为 `tether_native=1`；guest 完成加载时再次与批准 endpoint 精确比对。
+- 2026-11-11：Node 更新在版本/在线/重启状态通过后，继续验收 `service_catalog`，并在目标声明 `dsh_surface` 时验收 DSH running/surface 与原生 surface descriptor；通过后携带 `prepared_id` commit。验收或重启超时会 best-effort rollback，并显示回滚结果；APP 重启后的 Node watcher 只对本轮有 `preparedId` 的更新提交。
+- 2026-11-11：Node 持久事务 apply 后以 `awaiting_acceptance`、匹配的 `prepared_id` 作为 service health/commit 门禁；commit 前允许 `restart_required=true`，事务缺失或不匹配继续等待并最终回滚。
+- 2026-11-11：联合更新中 Node 已 apply 并等待 APP 重启验收时，APP apply 失败/异常、安装未 settle 或重连失败会回滚本轮 Node 事务；记录 watcher 已执行的回滚结果，避免重复 rollback，并将回滚结果保留为最终更新错误。
+- 2026-11-11：修复本机 UI 重启后的 Node 持久事务接管：仅识别有效 `awaiting_acceptance` 事务，卡片提供“待验收”入口；先完成 Node health/commit，再继续本轮 APP 更新，验收失败沿用 watcher 自动回滚。
