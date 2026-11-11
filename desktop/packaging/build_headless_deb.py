@@ -9,10 +9,11 @@ import tempfile
 from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parents[2]
-OUTPUT_DIR = ROOT / ".scratch" / "tether-desktop-candidates" / "0.5.0" / "headless" / "linux-x64"
-ARCHIVE = OUTPUT_DIR / "Tether-node-runtime-0.5.0-linux-x64.tar.gz"
-DEB_NAME = "Tether-node-runtime-0.5.0-linux-x64.deb"
-PACKAGE_ROOT = "tether-node-runtime-0.5.0"
+VERSION = json.loads((ROOT / "version.json").read_text(encoding="utf-8"))["components"]["node"]
+OUTPUT_DIR = ROOT / ".scratch" / "tether-desktop-candidates" / VERSION / "headless" / "linux-x64"
+ARCHIVE = OUTPUT_DIR / f"Tether-node-runtime-{VERSION}-linux-x64.tar.gz"
+DEB_NAME = f"Tether-node-runtime-{VERSION}-linux-x64.deb"
+PACKAGE_ROOT = f"tether-node-runtime-{VERSION}"
 NFPM_SHA256 = "6d7f9a28b2f397934403950fcbba83f598b08d02edbe79a0815b3b4897341750"
 
 
@@ -82,7 +83,7 @@ def _extract_runtime(temporary: Path) -> Path:
         except (OSError, ValueError) as error:
             raise ValueError(f"runtime archive link is dangling or escapes package root: {name}") from error
     manifest = json.loads((package / "runtime-manifest.json").read_text(encoding="utf-8"))
-    if (manifest.get("schema") != 1 or manifest.get("version") != "0.5.0"
+    if (manifest.get("schema") != 1 or manifest.get("version") != VERSION
             or manifest.get("platform") != "linux-x64"):
         raise ValueError("headless runtime manifest does not match the Debian package")
     for path in (
@@ -107,25 +108,28 @@ def _nfpm_config(build: Path, payload: Path) -> Path:
             or office_dependencies.get("source_sha256") != "8290c8f46cb33d6df8f681cb796e0697461ea070f86ec55b63c94d7eb9d9a476"):
         raise ValueError("Debian runtime is missing verified LibreOffice system dependency metadata")
     depends = list(dict.fromkeys([*depends, "passwd", "util-linux"]))
+    readme = _write_versioned_file(
+        build, "README.Debian", Path("headless-deb") / "README.Debian", "@TETHER_VERSION@"
+    )
     config = {
         "name": "tether-node",
         "arch": "amd64",
         "platform": "linux",
-        "version": "0.5.0",
+        "version": VERSION,
         "maintainer": "Tether maintainers",
         "description": "Tether headless Node runtime",
         "license": "MIT",
         "depends": depends,
         "contents": [
-            {"src": str(payload) + "/", "dst": "/opt/tether-node/releases/0.5.0", "type": "tree"},
-            {"src": "/opt/tether-node/releases/0.5.0", "dst": "/opt/tether-node/current", "type": "symlink"},
+            {"src": str(payload) + "/", "dst": f"/opt/tether-node/releases/{VERSION}", "type": "tree"},
+            {"src": f"/opt/tether-node/releases/{VERSION}", "dst": "/opt/tether-node/current", "type": "symlink"},
             {"src": str(packaging / "tether-node.service"), "dst": "/usr/lib/systemd/system/tether-node.service", "file_info": {"mode": 0o644}},
-            {"src": str(packaging / "README.Debian"), "dst": "/usr/share/doc/tether-node/README.Debian", "file_info": {"mode": 0o644}},
+            {"src": str(readme), "dst": "/usr/share/doc/tether-node/README.Debian", "file_info": {"mode": 0o644}},
             {"src": str(payload / "laptop" / "tether-node-pair"), "dst": "/usr/bin/tether-node-pair", "file_info": {"mode": 0o755}},
         ],
         "scripts": {
             "preinstall": str(packaging / "preinst"),
-            "postinstall": str(packaging / "postinst"),
+            "postinstall": str(_write_postinstall(build)),
             "preremove": str(packaging / "prerm"),
             "postremove": str(packaging / "postrm"),
         },
@@ -134,6 +138,17 @@ def _nfpm_config(build: Path, payload: Path) -> Path:
     path = build / "nfpm.yaml"
     # JSON is a valid YAML subset and safely quotes local absolute paths.
     path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
+def _write_postinstall(build: Path) -> Path:
+    return _write_versioned_file(build, "postinst", Path("headless-deb") / "postinst", "@TETHER_VERSION@")
+
+
+def _write_versioned_file(build: Path, name: str, source: Path, marker: str) -> Path:
+    template = (ROOT / "desktop" / "packaging" / source).read_text(encoding="utf-8")
+    path = build / name
+    path.write_text(template.replace(marker, VERSION), encoding="utf-8")
     return path
 
 
@@ -180,7 +195,7 @@ def main() -> int:
     (OUTPUT_DIR / (DEB_NAME + ".sha256")).write_text(f"{hexdigest}  {DEB_NAME}\n", encoding="ascii")
     metadata = {
         "format": "deb", "package": "tether-node", "architecture": "amd64",
-        "version": "0.5.0", "filename": DEB_NAME,
+        "version": VERSION, "filename": DEB_NAME,
         "size": target.stat().st_size, "sha256": hexdigest,
     }
     (OUTPUT_DIR / (DEB_NAME + ".manifest-fragment.json")).write_text(

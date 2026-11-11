@@ -9,3 +9,4 @@
 - 独立插件压缩包包含桥生成器；没有上游源码时验证随包桥的生成完整性，并支持离线包预检。
 - 2026-10-27：插件安装前从可信仓库源码复制固定七个 updater 文件（含 `release.py`/`ed25519.py`），完整发布 ZIP 则验证内嵌资源；目标限制在 surface package 内并拒绝 junction/symlink。
 - 2026-10-29：补齐源码 updater 的 `release.py`/`ed25519.py` 并同步安装脚本清单，修复源码安装的 DSH 本机插件卡永远“检查失败/插件 -(-)”；回归 `test_dsh_local_updates` 与 `test_release_archive` 预检。
+- 2026-11-11：修正 Linux headless Node tar/Deb 版本号硬编码导致产物落入 0.5.0 目录的问题；构建产物路径和 Debian runtime 版本统一读取 `version.json`。

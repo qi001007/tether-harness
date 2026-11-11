@@ -11,8 +11,9 @@ from prepare_runtime import copy_prepared_tree
 
 ROOT = Path(__file__).resolve().parents[2]
 STAGING = ROOT / ".runtime" / "desktop-candidate"
-OUTPUT_DIR = ROOT / ".scratch" / "tether-desktop-candidates" / "0.5.0" / "headless" / "linux-x64"
-ARCHIVE_NAME = "Tether-node-runtime-0.5.0-linux-x64.tar.gz"
+VERSION = json.loads((ROOT / "version.json").read_text(encoding="utf-8"))["components"]["node"]
+OUTPUT_DIR = ROOT / ".scratch" / "tether-desktop-candidates" / VERSION / "headless" / "linux-x64"
+ARCHIVE_NAME = f"Tether-node-runtime-{VERSION}-linux-x64.tar.gz"
 
 
 def main() -> int:
@@ -34,7 +35,7 @@ def main() -> int:
     temp_root = ROOT / ".scratch"
     with tempfile.TemporaryDirectory(prefix="tether-headless-stage-", dir=temp_root) as temporary:
         staging = Path(temporary)
-        package = staging / "tether-node-runtime-0.5.0"
+        package = staging / f"tether-node-runtime-{VERSION}"
         resources = package / "resources" / "tether-runtime"
         resources.mkdir(parents=True)
         for item in STAGING.iterdir():
@@ -85,7 +86,7 @@ def main() -> int:
         (laptop_dir / "tether-node-pair").chmod(0o755)
         runtime_manifest = {
             "schema": 1,
-            "version": "0.5.0",
+            "version": VERSION,
             "platform": "linux-x64",
             "entry": "bin/tether-node",
             "python": "resources/tether-runtime/tether-python",

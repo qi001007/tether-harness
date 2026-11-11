@@ -195,3 +195,4 @@
 - 2026-11-11：OIDC hidden bootstrap 回归固定 Cookie 查询过滤器为 `{}`，成功夹具带 gateway domain，并证明其他 domain 的同形安全 Cookie 在 `validate-cookie` 阶段被拒绝和清理。
 - 2026-11-11：覆盖 `dsh-native` 空 URL attach、无秘密同步 policy、精确 endpoint 顶层导航、同源错误路径/额外查询/fragment/跨源拒绝、子框架放行，以及错误 session 和已关闭 record 失败。
 - 2026-11-11：对齐更新器回归断言与源码：artifact 顺序验证同源 Hub → 配置镜像 → manifest URL；Node ZIP heartbeat 精确保留 owner 与 bridge availability 字段。
+- 2026-11-11：Added a lightweight regression check that Linux headless Node and Debian artifact names/paths/runtime metadata follow `version.json`, including the generated post-install version; no candidate build is run.

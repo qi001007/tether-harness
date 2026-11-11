@@ -217,3 +217,31 @@ def test_desktop_preview_workflow_uses_one_version_branch_tag_and_artifact_set()
     assert "checksum.get('version') != '0.5.2'" in workflow
     assert "checksum.get('platform') != target" in workflow
     assert "refs/heads/codex/tether-052-preview-20261111" in workflow
+
+
+def test_headless_linux_builders_derive_artifact_paths_and_metadata_from_version_json(monkeypatch, tmp_path: Path) -> None:
+    import importlib
+
+    monkeypatch.syspath_prepend(str(ROOT / "desktop" / "packaging"))
+    node_builder = importlib.import_module("build_headless_node")
+    deb_builder = importlib.import_module("build_headless_deb")
+    version = json.loads((ROOT / "version.json").read_text(encoding="utf-8"))["components"]["node"]
+
+    assert node_builder.VERSION == deb_builder.VERSION == version
+    assert node_builder.OUTPUT_DIR == ROOT / ".scratch" / "tether-desktop-candidates" / version / "headless" / "linux-x64"
+    assert deb_builder.OUTPUT_DIR == node_builder.OUTPUT_DIR
+    assert node_builder.ARCHIVE_NAME == f"Tether-node-runtime-{version}-linux-x64.tar.gz"
+    assert deb_builder.ARCHIVE.name == node_builder.ARCHIVE_NAME
+    assert deb_builder.DEB_NAME == f"Tether-node-runtime-{version}-linux-x64.deb"
+
+    postinstall = deb_builder._write_postinstall(tmp_path)
+    contents = postinstall.read_text(encoding="utf-8")
+    assert f"VERSION={version}" in contents
+    assert "@TETHER_VERSION@" not in contents
+
+    readme = deb_builder._write_versioned_file(
+        tmp_path, "README.Debian", Path("headless-deb") / "README.Debian", "@TETHER_VERSION@"
+    )
+    readme_contents = readme.read_text(encoding="utf-8")
+    assert f"Tether-node-runtime-{version}-linux-x64.deb" in readme_contents
+    assert "@TETHER_VERSION@" not in readme_contents
