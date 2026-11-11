@@ -254,7 +254,7 @@ jobs:
         run: |
           python scripts/build_release.py \
             --channel preview \
-            --release-tag v0.5.2-preview.2 \
+            --release-tag v0.5.2-preview.1 \
             --frozen-plugin-manifest .release-frozen-plugin/tether-update.json \
             --frozen-plugin-archive .release-frozen-plugin/tether-plugin-0.2.93.zip \
             --node-deb .release-inputs/tether-node-runtime-linux-x64-0.5.2-preview/Tether-node-runtime-0.5.2-linux-x64.deb \
@@ -399,9 +399,9 @@ jobs:
       - name: Create or refresh the draft preview release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
-          tag_name: v0.5.2-preview.2
+          tag_name: v0.5.2-preview.1
           target_commitish: ${{ github.sha }}
-          name: Tether 0.5.2 Preview 2
+          name: Tether 0.5.2 Preview 1
           body: 'Preview candidate assembled from the four-platform CI artifacts. This draft is not a stable release.'
           draft: false
           prerelease: true

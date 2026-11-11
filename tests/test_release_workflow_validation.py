@@ -201,11 +201,11 @@ def test_desktop_preview_workflow_uses_one_version_branch_tag_and_artifact_set()
     assert "concurrency:\n  group: ${{ github.workflow }}-${{ github.ref }}\n  cancel-in-progress: true" in workflow
     assert version == "0.5.2"
     assert "codex/tether-052-preview-20261111" in workflow
-    assert "v0.5.2-preview.1" not in workflow
-    assert workflow.count("v0.5.2-preview.2") == 2
+    assert workflow.count("v0.5.2-preview.1") == 2
+    assert "v0.5.2-preview.2" not in workflow
     assert "--channel preview" in workflow
-    assert "--release-tag v0.5.2-preview.2" in workflow
-    assert "tag_name: v0.5.2-preview.2" in workflow
+    assert "--release-tag v0.5.2-preview.1" in workflow
+    assert "tag_name: v0.5.2-preview.1" in workflow
     assert "draft: false" in workflow
     assert "prerelease: true" in workflow
     assert "make_latest: false" in workflow
