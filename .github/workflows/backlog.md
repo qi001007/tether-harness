@@ -1,4 +1,5 @@
 # 变更记录
+- 2026-11-12：增加 codex/tether-055-native-mode-20261112 的 0.5.5 preview 构建、汇总和 draft 门禁，保留旧分支映射。
 - 2026-11-11：Actions run 42937706743 的 build jobs 全绿，但因首个 preview 标签错误为 preview.2 而被发布脚本拒绝；已改回首个合法标签 preview.1。
 - 2026-11-11：将 `v0.5.2-preview.2` 作为公开 prerelease 发布，使 Hub 可按固定 tag 无认证拉取；继续使用 preview channel 且 `make_latest: false`，不影响 stable/latest。
 - 2026-11-11：为避开已运行的旧候选任务，将 manifest 与 draft 发布 tag/name 统一到 `v0.5.2-preview.2` / Preview 2；0.5.2 artifact 与预览分支保持不变，并同步测试期望。

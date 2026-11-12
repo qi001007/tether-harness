@@ -1,4 +1,5 @@
 # 修改记录
+- 2026-11-12：更新 desktop preview workflow 的 0.5.5 分支、版本、tag 和 draft 汇总断言；两个定向检查通过。
 - 2026-11-12：desktop preview workflow validation asserts the isolated 0.5.4 branch/version/tag and draft aggregation while retaining 0.5.2/0.5.3 mappings.
 - 2026-11-12：signed-release workflow validation asserts that `v*-preview.*` tags are excluded from the stable release trigger.
 - 2026-11-12：candidate build tests now expect the 0.5.4 scratch output root alongside synchronized APP/Node/Python metadata.
