@@ -214,5 +214,6 @@
 
 - 2026-11-12：候选 workflow 回归验证汇总 job 构建共享 UI、下载并校验 pinned Codeg web artifact，且在 `build_release.py` 之前替换 checkout 内旧静态树。
 - 2026-11-12：候选 workflow 对 Codeg web artifact 使用本次运行的动态摘要；临时目录行为测试验证四入口缺失时保留旧树、完整产物替换后无 stale 文件（2 项 focused workflow 测试通过）。
+- 2026-11-12：候选构建合约测试实际调用 `builderTargetArgs` 验证 Windows NSIS 及 Linux/macOS 原 target 不变。
 - 2026-11-12：覆盖 Herdr `agent_not_ready` 时保留新建 tab/PTy 并返回 session + `agent_state=blocked`，同时覆盖 fatal cleanup、成功 ready 和 `agent_wait_timeout` 安全阶段码；`test_terminal.py` + `test_agents_runtime.py` 61/61 通过。
 - 2026-11-12：`test_app_installation.mjs` 覆盖已登录/已登出的有效 external OIDC profile 原样保留，以及缺认证模式、缺节点模式、无效 Hub origin、空 device 仍拒绝迁移合并。

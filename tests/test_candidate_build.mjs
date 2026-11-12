@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync,
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
-import { pruneManagedCandidateOutputs, writeCandidateOwnershipMarker } from '../desktop/packaging/build-candidate.mjs'
+import { builderTargetArgs, pruneManagedCandidateOutputs, writeCandidateOwnershipMarker } from '../desktop/packaging/build-candidate.mjs'
 
 const root = new URL('../', import.meta.url)
 const read = path => readFileSync(new URL(path, root), 'utf8')
@@ -55,9 +55,10 @@ test('desktop OIDC helper is included in the packaged application', () => {
   assert.match(read('desktop/packaging/electron-builder.yml'), /^  - oidc-auth\.js$/m)
 })
 
-test('Windows candidate builds and collects the 0.5.3 portable executable', () => {
-  assert.match(buildScript, /platform === 'windows' \? \['--win', 'portable'\]/)
-  assert.doesNotMatch(buildScript, /\['--win', 'nsis'\]/)
+test('candidate builder uses NSIS on Windows and keeps Linux and macOS targets', () => {
+  assert.deepEqual(builderTargetArgs('windows'), ['--win', 'nsis'])
+  assert.deepEqual(builderTargetArgs('linux'), ['--linux', 'AppImage', 'deb'])
+  assert.deepEqual(builderTargetArgs('macos'), ['--mac', 'dmg', 'zip'])
 
   const builderConfig = read('desktop/packaging/electron-builder.yml')
   const artifactTemplate = builderConfig.match(/^artifactName: (.+)$/m)?.[1]

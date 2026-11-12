@@ -33,3 +33,4 @@
 - 2026-11-11：Linux headless Node tar/Deb builder now derives artifact paths, package metadata, Debian runtime selection and packaged install instructions from `version.json` so preview builds cannot silently land under stale 0.5.0 paths.
 
 - 2026-11-12：候选构建输出与 runtime guard 改为随已校验 APP/Node 版本分根，0.5.3 预览不覆盖 0.5.2 资产；electron-builder 基础输出根更新为 0.5.3。
+- 2026-11-12：Windows 候选 builder target 从 portable 改为 NSIS，Linux AppImage/deb 与 macOS dmg/zip 保持原样；候选测试直接验证传入 electron-builder 的平台参数。

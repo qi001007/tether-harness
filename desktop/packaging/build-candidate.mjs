@@ -135,6 +135,13 @@ export function pruneManagedCandidateOutputs({ allowedOutputParent, currentOutpu
   return removed
 }
 
+export function builderTargetArgs(platform) {
+  if (platform === 'windows') return ['--win', 'nsis']
+  if (platform === 'linux') return ['--linux', 'AppImage', 'deb']
+  if (platform === 'macos') return ['--mac', 'dmg', 'zip']
+  throw new Error(`Unsupported candidate platform: ${platform}`)
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
 const packagingDir = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(packagingDir, '../..')
@@ -279,7 +286,7 @@ for (const marker of ['workbenchAuthStatus', 'authReady']) {
 }
 const args = [builderCli, '--projectDir', repoRoot,
   '--config', tempConfig,
-  ...(platform === 'windows' ? ['--win', 'portable'] : platform === 'linux' ? ['--linux', 'AppImage', 'deb'] : ['--mac', 'dmg', 'zip']),
+  ...builderTargetArgs(platform),
   '--' + arch, '--publish', 'never']
 const result = spawnSync(process.execPath, args, { cwd: repoRoot, stdio: 'inherit', env: process.env })
 rmSync(tempConfig, { force: true })
