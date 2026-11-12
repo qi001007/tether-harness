@@ -209,3 +209,6 @@
 - 2026-11-12：现代远端 Codeg direct gateway 行为回归覆盖 owner+EasyTier、共同 ready network 优先、非 owner/无路由沿用 service_open、账号或目录错误拒绝、URL host 精确匹配及凭据不出 renderer。
 - 2026-11-12：Herdr Agent CLI 路径发现覆盖八个 canonical 类型、保留 Codeg/Node PATH、忽略 Node registry 启用状态作为第二真相、缺失 CLI 拒绝，以及 Herdr 失败不透出原始输出的安全阶段码；focused terminal/runtime suite 待验证。
 - 2026-11-12：Herdr CLI discovery 与安全阶段错误 focused suite 53/53 通过（`test_terminal.py` + `test_agents_runtime.py`）。
+
+- 2026-11-12：候选 workflow 回归验证汇总 job 构建共享 UI、下载并校验 pinned Codeg web artifact，且在 `build_release.py` 之前替换 checkout 内旧静态树。
+- 2026-11-12：候选 workflow 对 Codeg web artifact 使用本次运行的动态摘要；临时目录行为测试验证四入口缺失时保留旧树、完整产物替换后无 stale 文件（2 项 focused workflow 测试通过）。

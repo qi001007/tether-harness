@@ -165,3 +165,5 @@
 - 2026-11-12：Herdr Agent类型对齐UI当前八个 canonical Codeg IDs；POSIX project session也向terminal_start返回专用session元数据，无项目目录时不走普通终端cwd fallback。环境先恢复原`APPDATA/XDG_CONFIG_HOME/XDG_STATE_HOME`（缺省用用户目录标准路径）再叠加Codeg record.env；workspace就绪/create/agent启动预算分别约2/1.5/7秒，以约束同步fs请求不超过20秒。focused Python suite 41项通过，实际Agent readiness待真机验证。
 - 2026-11-12：Herdr Agent 启动在认证 Agents Runtime canonical record 后，先尊重其 PATH 与 Node PATH；CLI 未解析时只从现有本机 Agents 安装目录发现八类 vendor CLI 并将所在目录加入本次 pane PATH。找不到 CLI 返回 agent_unavailable；Herdr启动失败仅反馈固定阶段枚举，不透出 CLI stdout/argv/env。focused terminal/runtime suite 待验证。
 - 2026-11-12：focused `tests/test_terminal.py` + `tests/test_agents_runtime.py` 53/53 通过，覆盖 canonical eight CLI discovery、双 PATH 保留、缺失 CLI 拒绝和 Herdr safe phase error。实机 Herdr Agent readiness仍待受控重验。
+
+- 2026-11-12：将 canonical Codeg `tab-store.ts` 的 11 个 Tether 状态 hunk 补进 tracked patch，修复 clean CI 中 `TabItemInternal.forceAgentSelection` 类型与行为缺失；无其他源文件差异遗漏。

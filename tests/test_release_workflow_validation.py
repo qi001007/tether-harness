@@ -221,6 +221,76 @@ def test_desktop_preview_workflow_uses_one_version_branch_tag_and_artifact_set()
     assert "hydrate_herdr_runtime.py --windows-only --destination .release-herdr-runtime" in workflow
     assert "--herdr-runtime .release-herdr-runtime" in workflow
 
+    publish_job = workflow.split("  publish-preview-draft:", 1)[1]
+    assert "node-version: '24.22.2'" in publish_job
+    assert "npm ci --prefix packages/tether-ui" in publish_job
+    assert "npm run build:web --prefix packages/tether-ui" in publish_job
+    assert "name: tether-pinned-codeg-web" in publish_job
+    assert "path: .release-codeg-web" in publish_job
+    assert publish_job.index("Replace stale Codeg runtime web") < publish_job.index("Create signed preview manifest and source archives")
+    codeg_step = publish_job.split("Replace stale Codeg runtime web in the isolated release checkout", 1)[1].split("- name: Create signed preview manifest and source archives", 1)[0]
+    assert "required = ('index.html', 'login.html', 'workspace.html', 'token.html')" in publish_job
+    assert "source_summary = summarize(source)" in publish_job
+    assert "if source_summary != target_summary:" in publish_job
+    assert "json.dumps({'status': 'verified'" in publish_job
+    assert "1007" not in codeg_step
+    assert "77856488" not in codeg_step
+    assert "shutil.rmtree(web)" in publish_job
+    assert "shutil.copytree(source, web)" in publish_job
+    for digest in [
+        "362051628BF50633AB56B9222B7F7A3B5DD4F0E2B9A8F57E83DCEEBE1EFFA584",
+        "F75486D18611935284ACDADAE427136CA00D9BBC10ABBD829F14AA466E1630EA",
+        "AF76659372F6588892C58FCA4D711AF991380F220C9A4F6503E8AAF5D01F755B",
+        "21AA5E9A42EC352DD01E81C03444AA1BB4B039C5AD6801EE499DD9B415AB3A11",
+    ]:
+        assert digest not in codeg_step
+
+
+def test_codeg_web_checkout_step_copies_dynamic_artifact_and_preserves_old_tree_on_invalid_source(tmp_path: Path) -> None:
+    import yaml
+
+    workflow = yaml.safe_load((ROOT / ".github" / "workflows" / "tether-desktop-candidate.yml").read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["publish-preview-draft"]["steps"]
+    step = next(item for item in steps if item.get("name") == "Replace stale Codeg runtime web in the isolated release checkout")
+    run = step["run"]
+    script = run.split("python - <<'PY'\n", 1)[1].rsplit("\nPY", 1)[0]
+
+    def prepare(root: Path, *, missing: str | None = None) -> tuple[Path, Path]:
+        source = root / ".release-codeg-web"
+        web = root / "tether" / "node" / "bin" / "agents-runtime" / "web"
+        source.mkdir(parents=True)
+        web.mkdir(parents=True)
+        for name in ("index.html", "login.html", "workspace.html", "token.html", "chunks/app.js"):
+            if name == missing:
+                continue
+            path = source / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(f"artifact:{name}\n", encoding="utf-8")
+        (web / "stale.js").write_text("stale\n", encoding="utf-8")
+        return source, web
+
+    valid_root = tmp_path / "valid"
+    source, web = prepare(valid_root)
+    result = subprocess.run([os.sys.executable, "-c", script], cwd=valid_root, capture_output=True, text=True, check=False)
+    assert result.returncode == 0, result.stderr
+    source_files = {path.relative_to(source).as_posix(): path.read_bytes() for path in source.rglob("*") if path.is_file()}
+    target_files = {path.relative_to(web).as_posix(): path.read_bytes() for path in web.rglob("*") if path.is_file()}
+    assert target_files == source_files
+    assert "stale.js" not in target_files
+    metadata = json.loads(result.stdout)
+    assert metadata["status"] == "verified"
+    assert metadata["web"] == "tether/node/bin/agents-runtime/web"
+    assert metadata["files"] == len(source_files)
+    assert metadata["bytes"] == sum(map(len, source_files.values()))
+    assert set(metadata["pages"]) == {"index.html", "login.html", "workspace.html", "token.html"}
+
+    invalid_root = tmp_path / "invalid"
+    _, invalid_web = prepare(invalid_root, missing="workspace.html")
+    result = subprocess.run([os.sys.executable, "-c", script], cwd=invalid_root, capture_output=True, text=True, check=False)
+    assert result.returncode != 0
+    assert "required page: workspace.html" in result.stderr
+    assert (invalid_web / "stale.js").read_text(encoding="utf-8") == "stale\n"
+
 
 def test_headless_linux_builders_derive_artifact_paths_and_metadata_from_version_json(monkeypatch, tmp_path: Path) -> None:
     import importlib

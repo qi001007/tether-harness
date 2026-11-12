@@ -233,6 +233,14 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24.22.2'
+      - name: Install and build the shared APP web UI for source archives
+        run: |
+          npm ci --prefix packages/tether-ui
+          npm run build:web --prefix packages/tether-ui
+          node -e "const fs=require('node:fs'); if (!fs.statSync('packages/tether-ui/web/dist/app.js').isFile()) process.exit(1)"
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: '3.11'
@@ -255,6 +263,56 @@ jobs:
           echo '08f33b371de45895316a3e132f40c11976ed30cdd2fceebc38bcab2608c1f9df  .release-frozen-plugin/tether-plugin-0.2.93.zip' | sha256sum --check
       - name: Hydrate pinned Windows Herdr files for the Node update archive
         run: python scripts/hydrate_herdr_runtime.py --windows-only --destination .release-herdr-runtime
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: tether-pinned-codeg-web
+          path: .release-codeg-web
+      - name: Replace stale Codeg runtime web in the isolated release checkout
+        run: |
+          python - <<'PY'
+          import json
+          import hashlib
+          import shutil
+          from pathlib import Path
+
+          root = Path.cwd().resolve()
+          source = (root / '.release-codeg-web').resolve()
+          relative_web = Path('tether/node/bin/agents-runtime/web')
+          web = root / relative_web
+          required = ('index.html', 'login.html', 'workspace.html', 'token.html')
+
+          def summarize(directory):
+              files = sorted((path for path in directory.rglob('*') if path.is_file()),
+                             key=lambda path: path.relative_to(directory).as_posix())
+              pages = {}
+              for name in required:
+                  path = directory / name
+                  if not path.is_file():
+                      raise SystemExit(f'Codeg web artifact is missing required page: {name}')
+                  pages[name] = hashlib.sha256(path.read_bytes()).hexdigest()
+              return {
+                  'files': len(files),
+                  'bytes': sum(path.stat().st_size for path in files),
+                  'pages': pages,
+              }
+
+          if not source.is_dir():
+              raise SystemExit('Pinned Codeg web artifact is missing.')
+          resolved_web = web.resolve()
+          if resolved_web != root / relative_web or not resolved_web.is_relative_to(root):
+              raise SystemExit('Refusing to replace a Codeg web directory outside this checkout.')
+          source_summary = summarize(source)
+          if web.is_symlink():
+              raise SystemExit('Refusing to replace a linked Codeg web directory.')
+          if web.exists():
+              shutil.rmtree(web)
+          shutil.copytree(source, web)
+          target_summary = summarize(web)
+          if source_summary != target_summary:
+              raise SystemExit(f'Codeg web copy mismatch: source={source_summary}, target={target_summary}')
+          print(json.dumps({'status': 'verified', 'web': relative_web.as_posix(), **target_summary},
+                           sort_keys=True, separators=(',', ':')))
+          PY
       - name: Create signed preview manifest and source archives
         env:
           TETHER_RELEASE_PRIVATE_KEY: ${{ secrets.TETHER_RELEASE_PRIVATE_KEY }}

@@ -2744,3 +2744,138 @@ index 7bddc15..df00786 100644
  ] as const
  
  export type AuxPanelTab = (typeof AUX_PANEL_TABS)[number]
+
+diff --git a/src/stores/tab-store.ts b/src/stores/tab-store.ts
+--- a/src/stores/tab-store.ts
++++ b/src/stores/tab-store.ts
+@@ -104,6 +104,8 @@
+    * runs (e.g. `acpListAgents()` keeps failing).
+    */
+   agentTypeProvisional?: boolean
++  /** A home-selected Agent draft keeps the upstream welcome Agent picker hidden. */
++  forceAgentSelection?: boolean
+   /**
+    * Marks a draft tab as "chat mode" (folderless). Set by `openChatModeTab`,
+    * cleared implicitly once the draft binds to a real conversation (whose hidden
+@@ -581,6 +583,7 @@
+     a.workingDir === b.workingDir &&
+     a.status === b.status &&
+     a.agentTypeProvisional === b.agentTypeProvisional &&
++    a.forceAgentSelection === b.forceAgentSelection &&
+     a.isChat === b.isChat
+   )
+ }
+@@ -772,6 +775,7 @@
+   isChat?: boolean
+   workingDir?: string
+   agentType?: AgentType
++  forceAgentSelection?: boolean
+ }
+ 
+ function sanitizeDrafts(value: unknown): PersistedDraft[] {
+@@ -799,6 +803,7 @@
+       ...(typeof e.agentType === "string" && e.agentType.length > 0
+         ? { agentType: e.agentType as AgentType }
+         : {}),
++      ...(e.forceAgentSelection === true ? { forceAgentSelection: true } : {}),
+     })
+   }
+   return out
+@@ -906,6 +911,9 @@
+         ? { workingDir: tab.workingDir }
+         : {}),
+       ...(tab.agentTypeProvisional ? {} : { agentType: tab.agentType }),
++      ...(tab.forceAgentSelection === true
++        ? { forceAgentSelection: true }
++        : {}),
+     })
+   })
+   // Each folder view lists only its own folder's tabs (drafts by their own
+@@ -991,6 +999,9 @@
+       workingDir: draft.workingDir,
+       agentTypeProvisional: resolved.provisional,
+       ...(draft.isChat === true ? { isChat: true } : {}),
++      ...(draft.forceAgentSelection === true
++        ? { forceAgentSelection: true }
++        : {}),
+     }
+     tabs.splice(Math.min(draft.index, tabs.length), 0, tab)
+     groupOf[draft.id] = draft.group
+@@ -2204,6 +2215,9 @@
+     const agentChanged = existingTab.agentType !== targetAgent
+     const provisionalChanged =
+       (existingTab.agentTypeProvisional ?? false) !== provisional
++    const forceAgentSelection = options?.forceAgent != null
++    const forceAgentSelectionChanged =
++      existingTab.forceAgentSelection !== forceAgentSelection
+ 
+     // The singleton means a reopened draft resolves to THIS draft rather than a
+     // tab of its own, so the slot it was closed from has to move this one — a
+@@ -2218,7 +2232,14 @@
+ 
+     if (folderChanged || agentChanged) {
+       set({
+-        ...(moved ? { rawTabs: nextRawTabs } : {}),
++        rawTabs: nextRawTabs.map((tab) =>
++          tab.id === existingTab.id
++            ? {
++                ...tab,
++                forceAgentSelection: forceAgentSelection || undefined,
++              }
++            : tab
++        ),
+         draftRetargetRequests: [
+           ...prevState.draftRetargetRequests,
+           {
+@@ -2233,11 +2254,20 @@
+       })
+       focusTab(existingTab.id)
+       if (moved) recomputeTabs()
+-    } else if (workingDirChanged || provisionalChanged) {
++    } else if (
++      workingDirChanged ||
++      provisionalChanged ||
++      forceAgentSelectionChanged
++    ) {
+       set({
+         rawTabs: nextRawTabs.map((tab) =>
+           tab.id === existingTab.id
+-            ? { ...tab, workingDir, agentTypeProvisional: provisional }
++            ? {
++                ...tab,
++                workingDir,
++                agentTypeProvisional: provisional,
++                forceAgentSelection: forceAgentSelection || undefined,
++              }
+             : tab
+         ),
+         activeTabId: existingTab.id,
+@@ -2427,8 +2457,18 @@
+     const next = prev.map((t) => {
+       if (t.id !== tabId) return t
+       if (t.conversationId != null) return t // not a draft
+-      if (t.agentType === agentType && !t.agentTypeProvisional) return t
+-      return { ...t, agentType, agentTypeProvisional: false }
++      if (
++        t.agentType === agentType &&
++        !t.agentTypeProvisional &&
++        !t.forceAgentSelection
++      )
++        return t
++      return {
++        ...t,
++        agentType,
++        agentTypeProvisional: false,
++        forceAgentSelection: undefined,
++      }
+     })
+     if (next.every((t, i) => t === prev[i])) return
+     set({ rawTabs: next })
+@@ -2467,6 +2507,7 @@
+           title: formatConversationTitle(title) || tab.title,
+           runtimeConversationId,
+           agentTypeProvisional: false,
++          forceAgentSelection: undefined,
+           ...(folderId != null ? { folderId } : {}),
+           ...(workingDir != null ? { workingDir } : {}),
+         }

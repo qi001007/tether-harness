@@ -16,3 +16,5 @@
 
 - 2026-11-12：新增 `codex/tether-053-business-20261112` 候选触发，APP/Node 0.5.3、插件冻结 0.2.93；预览产物使用 version-specific scratch/artifact/tag，GitHub Release 保持 draft prerelease 且 `make_latest: false`。
 - 2026-11-12：候选发布聚合 job 通过现有 Herdr hydrator 仅暂存 Windows Herdr/ConPTY 五个固定文件，并传给 Node ZIP 打包；不复制完整运行时目录，仍仅生成草稿预览。
+
+- 2026-11-12：候选发布汇总 job 在 isolated checkout 构建共享 UI；从本次 pinned Codeg web artifact 动态计算四个入口 SHA、文件数和总字节数，复制后比较实际摘要再替换 checkout 内旧 web，之后组装 APP/Node ZIP。无本机产物固定哈希或大小门禁。

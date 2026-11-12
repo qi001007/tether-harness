@@ -5,8 +5,10 @@
 - 普通 APP 的 Files 请求恢复到既有 OAuth Hub `fs/*` API，移除 app.js 中另行改道到未配齐 Caddy/EasyTier files service 的拦截。Monaco、目录树及权限/版本冲突语义保留；native Files IPC 留给明确的独立调用方。
 - 传输页复用满意版 transferFile/Croc 实现。普通 OAuth APP 的 `hubOnly` 只用已授权的 read/write_chunk，禁用 renderer raw/direct 与 Croc 操作；取消停止后续分块，不宣称目标残片已清理。真实传输及 UI 证据见业务恢复计划。
 - 本机 Node 受控激活复用现有 staged runtime，保留 DSH_HOME、workspace roots、identity 与 policy。readonly 模式仍允许既有允许根与 DSH 注册工作区写入，不应仅凭模式文字推断不可编辑，更未改成全盘写。
-- 同机 Codeg 在主进程中复用既有隔离 token gateway；只对目标等于本机身份开放现代目录兼容，并在验证 stopped 后启动一次、重读 ready。远端现代仍走原 service_open，不对网络错误泛化回退；严格 URL、已鉴权 online/direct host、EasyTier 同网段与隔离会话边界保留。
-- 本轮 APP ASAR 379 成员/305 文件仅 native-workbench.js 不同，新 ASAR SHA-256 `982D12BCC6EA4AD967EAE676DEE941735297E1F90DC5CE3F11A0048E0598AF3A`；候选以原数据重启为 PID 54636。文件 bundle SHA-256 `37A2FF04F8AB2F192798D7A968F267244C1367E119B9A8112E86688E80390240`。这不等于完整安装发行版/更新链路验收。
+- Codeg 在主进程中复用既有隔离 token gateway。同机仍按本机身份门禁；远端现代目录只有在 fresh 已鉴权快照确认目标在线、自有、私网地址与本机 EasyTier 同网段，且没有共同 ready network 时才走既有兼容路径；共同 ready network、非自有或共享设备继续原 service_open。不是 service_open 失败后的泛化回退。严格 token URL/host、隔离 session、actor generation 与 origin guard 保留。
+- 09:26 APP 已部署 owned-device 兼容 ASAR，SHA-256 `DC3AF16FB2C9F2D547321E43C2C42EF1F15184A862EA8327E9FD3CC6F426C71A`，379 成员/305 文件，主代理独立比较仅 native-workbench.js 变化；当前主进程 PID 50948，使用原数据和账号。统一入口 bundle SHA-256 `91DF01D67278DFA38ECD8A967D414AC658D861B8E528AD8346C2F102CBF55808`。客户端“关于”实测为 0.5.2；不能据此声称完整安装发行版或普通更新链路通过。
+- Herdr 选择沿用 Agents Runtime 的 canonical enabled/available/env，Node Registry 只补充已存在 vendor CLI 路径；不作为第二重启用门禁。09:30 本机两个 Node 模块已部署且主代理独立核对源/运行文件 SHA 一致。Herdr capability 为 true，但 Codex QA 启动在约 7 秒返回 agent_start_failed，未达 ready，尚待诊断；没有发送模型 prompt。
+- Laptop 新 Node Prepare 和进程识别实机预检已通过，但仍运行旧 0.4.11，未 Switch。切换 wrapper 显式复用旧 node-local.db，从而保留 data_dir/Codeg 历史，不复制活动 SQLite；回滚只停止唯一候选目录内、本次启动后且同用户的 Codeg 及其子进程。
 
 ## 2026-11-11 更新事务与当前部署边界
 
