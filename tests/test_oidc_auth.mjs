@@ -155,6 +155,32 @@ function makeAuth(issuer, storageFile, options = {}) {
   })
 }
 
+function storeSession(storageFile, safeStorage, overrides = {}) {
+  const session = {
+    id_token: 'saved-id', access_token: 'saved-access', refresh_token: 'saved-refresh',
+    expires_at: Date.now() + 60_000, ...overrides
+  }
+  writeFileSync(storageFile, safeStorage.encryptString(JSON.stringify(session)))
+  return session
+}
+
+function tokenFetch(handler) {
+  return async (input, init = {}) => {
+    const url = new URL(input)
+    if (url.pathname.endsWith('/.well-known/openid-configuration')) {
+      const base = url.origin
+      return { ok: true, status: 200, json: async () => ({ issuer: base, authorization_endpoint: `${base}/authorize`, token_endpoint: `${base}/token` }) }
+    }
+    if (url.pathname === '/token') return handler(new URLSearchParams(init.body || ''))
+    if (url.pathname === '/api') return handler.api ? handler.api(init) : { ok: false, status: 401, json: async () => ({}) }
+    throw new Error('Unexpected OIDC test URL')
+  }
+}
+
+function tokenResponse(status, body) {
+  return { ok: status >= 200 && status < 300, status, json: async () => body }
+}
+
 test('PKCE verifier and challenge use RFC 7636 S256', () => {
   const { verifier, challenge } = createPkcePair()
   assert.match(verifier, /^[A-Za-z0-9_-]{43}$/)
@@ -351,4 +377,221 @@ test('occupied fixed callback port fails clearly without selecting another port'
   const auth = makeAuth(fixture.issuer, join(storageDir, 'session.bin'))
   t.after(() => auth.close())
   await assert.rejects(auth.beginLogin(), /callback port 18893 is occupied/)
+})
+
+test('a new auth instance restores the encrypted session without reopening the browser', async (t) => {
+  const storageDir = mkdtempSync(join(tmpdir(), 'tether-oidc-'))
+  t.after(() => rmSync(storageDir, { recursive: true, force: true }))
+  const safeStorage = encryptedStorage()
+  const storageFile = join(storageDir, 'session.bin')
+  storeSession(storageFile, safeStorage)
+  let browserCalls = 0
+  const auth = makeAuth('https://issuer.invalid', storageFile, {
+    safeStorage,
+    openExternal: async () => { browserCalls += 1 }
+  })
+  t.after(() => auth.close())
+  assert.equal((await auth.initialize()).state, 'authenticated')
+  assert.equal(browserCalls, 0)
+  assert.equal(auth.authorizationHeader(), 'Bearer saved-id')
+  auth.close()
+  assert.equal(existsSync(storageFile), true)
+})
+
+test('temporary safeStorage unavailability preserves the session for a later status check', async (t) => {
+  const storageDir = mkdtempSync(join(tmpdir(), 'tether-oidc-'))
+  t.after(() => rmSync(storageDir, { recursive: true, force: true }))
+  const safeStorage = encryptedStorage()
+  const storageFile = join(storageDir, 'session.bin')
+  storeSession(storageFile, safeStorage)
+  const original = readFileSync(storageFile)
+  safeStorage.isEncryptionAvailable = () => false
+  const auth = makeAuth('https://issuer.invalid', storageFile, { safeStorage })
+  t.after(() => auth.close())
+  assert.equal((await auth.initialize()).state, 'retryable')
+  assert.deepEqual(readFileSync(storageFile), original)
+  safeStorage.isEncryptionAvailable = () => true
+  assert.equal((await auth.ensureSession()).state, 'authenticated')
+  assert.equal(auth.authorizationHeader(), 'Bearer saved-id')
+})
+
+test('expired session refresh rotates credentials and survives a new auth instance', async (t) => {
+  const storageDir = mkdtempSync(join(tmpdir(), 'tether-oidc-'))
+  t.after(() => rmSync(storageDir, { recursive: true, force: true }))
+  const safeStorage = encryptedStorage()
+  const storageFile = join(storageDir, 'session.bin')
+  storeSession(storageFile, safeStorage, { expires_at: Date.now() - 1 })
+  let refreshCalls = 0
+  const fetchImpl = tokenFetch(async (form) => {
+    assert.equal(form.get('grant_type'), 'refresh_token')
+    assert.equal(form.get('refresh_token'), 'saved-refresh')
+    refreshCalls += 1
+    return tokenResponse(200, { id_token: 'rotated-id', access_token: 'rotated-access', refresh_token: 'rotated-refresh', expires_in: 3600 })
+  })
+  const auth = makeAuth('https://issuer.invalid', storageFile, { safeStorage, fetchImpl })
+  t.after(() => auth.close())
+  assert.equal((await auth.initialize()).state, 'retryable')
+  assert.equal((await auth.ensureSession()).state, 'authenticated')
+  assert.equal(auth.authorizationHeader(), 'Bearer rotated-id')
+  const reopened = makeAuth('https://issuer.invalid', storageFile, { safeStorage, fetchImpl })
+  t.after(() => reopened.close())
+  assert.equal((await reopened.initialize()).state, 'authenticated')
+  assert.equal(reopened.authorizationHeader(), 'Bearer rotated-id')
+  assert.equal(refreshCalls, 1)
+})
+
+test('business fetch refreshes an expired session before sending its request', async (t) => {
+  const storageDir = mkdtempSync(join(tmpdir(), 'tether-oidc-'))
+  t.after(() => rmSync(storageDir, { recursive: true, force: true }))
+  const safeStorage = encryptedStorage()
+  const storageFile = join(storageDir, 'session.bin')
+  storeSession(storageFile, safeStorage, { expires_at: Date.now() + 10 })
+  let apiAuthorization = ''
+  const handler = async () => tokenResponse(200, { id_token: 'preflight-id', access_token: 'preflight-access', refresh_token: 'preflight-refresh', expires_in: 3600 })
+  handler.api = async (init) => {
+    apiAuthorization = new Headers(init.headers).get('Authorization')
+    return tokenResponse(200, {})
+  }
+  const auth = makeAuth('https://issuer.invalid', storageFile, { safeStorage, fetchImpl: tokenFetch(handler) })
+  t.after(() => auth.close())
+  await auth.initialize()
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  assert.equal((await auth.fetch('https://issuer.invalid/api')).status, 200)
+  assert.equal(apiAuthorization, 'Bearer preflight-id')
+})
+
+test('temporary refresh failures preserve the encrypted file and a later status check recovers', async (t) => {
+  const storageDir = mkdtempSync(join(tmpdir(), 'tether-oidc-'))
+  t.after(() => rmSync(storageDir, { recursive: true, force: true }))
+  const safeStorage = encryptedStorage()
+  const storageFile = join(storageDir, 'session.bin')
+  storeSession(storageFile, safeStorage, { expires_at: Date.now() - 1 })
+  const original = readFileSync(storageFile)
+  let refreshCalls = 0
+  const fetchImpl = tokenFetch(async () => {
+    refreshCalls += 1
+    if (refreshCalls === 1) throw new Error('network unavailable')
+    if (refreshCalls === 2) return tokenResponse(503, { error: 'invalid_grant' })
+    return tokenResponse(200, { id_token: 'recovered-id', access_token: 'recovered-access', refresh_token: 'recovered-refresh', expires_in: 3600 })
+  })
+  const auth = makeAuth('https://issuer.invalid', storageFile, { safeStorage, fetchImpl })
+  t.after(() => auth.close())
+  assert.equal((await auth.initialize()).state, 'retryable')
+  assert.deepEqual(readFileSync(storageFile), original)
+  assert.equal((await auth.ensureSession()).state, 'retryable')
+  assert.deepEqual(readFileSync(storageFile), original)
+  assert.equal((await auth.ensureSession()).state, 'retryable')
+  assert.deepEqual(readFileSync(storageFile), original)
+  assert.equal((await auth.ensureSession()).state, 'authenticated')
+  assert.equal(auth.authorizationHeader(), 'Bearer recovered-id')
+  assert.equal(refreshCalls, 3)
+})
+
+test('invalid_grant clears the unusable persisted session', async (t) => {
+  const storageDir = mkdtempSync(join(tmpdir(), 'tether-oidc-'))
+  t.after(() => rmSync(storageDir, { recursive: true, force: true }))
+  const safeStorage = encryptedStorage()
+  const storageFile = join(storageDir, 'session.bin')
+  storeSession(storageFile, safeStorage, { expires_at: Date.now() - 1 })
+  const auth = makeAuth('https://issuer.invalid', storageFile, {
+    safeStorage,
+    fetchImpl: tokenFetch(async () => tokenResponse(400, { error: 'invalid_grant' }))
+  })
+  t.after(() => auth.close())
+  assert.equal((await auth.initialize()).state, 'retryable')
+  assert.equal((await auth.ensureSession()).state, 'unauthenticated')
+  assert.equal(existsSync(storageFile), false)
+})
+
+test('an expired session without a refresh token is cleared instead of retrying forever', async (t) => {
+  const storageDir = mkdtempSync(join(tmpdir(), 'tether-oidc-'))
+  t.after(() => rmSync(storageDir, { recursive: true, force: true }))
+  const safeStorage = encryptedStorage()
+  const storageFile = join(storageDir, 'session.bin')
+  storeSession(storageFile, safeStorage, { refresh_token: undefined, expires_at: Date.now() - 1 })
+  const auth = makeAuth('https://issuer.invalid', storageFile, { safeStorage })
+  t.after(() => auth.close())
+  assert.equal((await auth.initialize()).state, 'retryable')
+  assert.equal((await auth.ensureSession()).state, 'unauthenticated')
+  assert.equal(existsSync(storageFile), false)
+})
+
+test('a temporary refresh failure after 401 preserves the session and is not reported as login failure', async (t) => {
+  const storageDir = mkdtempSync(join(tmpdir(), 'tether-oidc-'))
+  t.after(() => rmSync(storageDir, { recursive: true, force: true }))
+  const safeStorage = encryptedStorage()
+  const storageFile = join(storageDir, 'session.bin')
+  storeSession(storageFile, safeStorage)
+  const original = readFileSync(storageFile)
+  const handler = async () => { throw new Error('network unavailable') }
+  handler.api = async () => tokenResponse(401, {})
+  const auth = makeAuth('https://issuer.invalid', storageFile, { safeStorage, fetchImpl: tokenFetch(handler) })
+  t.after(() => auth.close())
+  await auth.initialize()
+  await assert.rejects(auth.fetch('https://issuer.invalid/api'), (error) => error.code === 'OIDC_REFRESH_UNAVAILABLE')
+  assert.deepEqual(readFileSync(storageFile), original)
+})
+
+test('parallel 401 responses share one refresh and retry with the rotated token', async (t) => {
+  const storageDir = mkdtempSync(join(tmpdir(), 'tether-oidc-'))
+  t.after(() => rmSync(storageDir, { recursive: true, force: true }))
+  const safeStorage = encryptedStorage()
+  const storageFile = join(storageDir, 'session.bin')
+  storeSession(storageFile, safeStorage)
+  let refreshCalls = 0
+  let apiCalls = 0
+  let startRefresh
+  let releaseRefresh
+  const refreshStarted = new Promise((resolve) => { startRefresh = resolve })
+  const refreshGate = new Promise((resolve) => { releaseRefresh = resolve })
+  const handler = async (form) => {
+    assert.equal(form.get('grant_type'), 'refresh_token')
+    refreshCalls += 1
+    startRefresh()
+    await refreshGate
+    return tokenResponse(200, { id_token: 'parallel-id', access_token: 'parallel-access', refresh_token: 'parallel-refresh', expires_in: 3600 })
+  }
+  handler.api = async (init) => {
+    apiCalls += 1
+    return tokenResponse(new Headers(init.headers).get('Authorization') === 'Bearer parallel-id' ? 200 : 401, {})
+  }
+  const auth = makeAuth('https://issuer.invalid', storageFile, { safeStorage, fetchImpl: tokenFetch(handler) })
+  t.after(() => auth.close())
+  await auth.initialize()
+  const requests = [auth.fetch('https://issuer.invalid/api'), auth.fetch('https://issuer.invalid/api'), auth.fetch('https://issuer.invalid/api')]
+  await refreshStarted
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(apiCalls, 3)
+  releaseRefresh()
+  const responses = await Promise.all(requests)
+  assert.deepEqual(responses.map((response) => response.status), [200, 200, 200])
+  assert.equal(refreshCalls, 1)
+})
+
+test('logout while refresh is in flight cannot restore the session file', async (t) => {
+  const storageDir = mkdtempSync(join(tmpdir(), 'tether-oidc-'))
+  t.after(() => rmSync(storageDir, { recursive: true, force: true }))
+  const safeStorage = encryptedStorage()
+  const storageFile = join(storageDir, 'session.bin')
+  storeSession(storageFile, safeStorage)
+  let startRefresh
+  let releaseRefresh
+  const refreshStarted = new Promise((resolve) => { startRefresh = resolve })
+  const refreshGate = new Promise((resolve) => { releaseRefresh = resolve })
+  const handler = async () => {
+    startRefresh()
+    await refreshGate
+    return tokenResponse(200, { id_token: 'resurrected-id', access_token: 'resurrected-access', refresh_token: 'resurrected-refresh', expires_in: 3600 })
+  }
+  handler.api = async () => tokenResponse(401, {})
+  const auth = makeAuth('https://issuer.invalid', storageFile, { safeStorage, fetchImpl: tokenFetch(handler) })
+  t.after(() => auth.close())
+  await auth.initialize()
+  const request = auth.fetch('https://issuer.invalid/api')
+  await refreshStarted
+  auth.logout()
+  releaseRefresh()
+  assert.equal((await request).status, 401)
+  assert.equal(auth.status().state, 'unauthenticated')
+  assert.equal(existsSync(storageFile), false)
 })

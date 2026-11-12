@@ -18,3 +18,5 @@
 - 2026-11-12：候选发布聚合 job 通过现有 Herdr hydrator 仅暂存 Windows Herdr/ConPTY 五个固定文件，并传给 Node ZIP 打包；不复制完整运行时目录，仍仅生成草稿预览。
 
 - 2026-11-12：候选发布汇总 job 在 isolated checkout 构建共享 UI；从本次 pinned Codeg web artifact 动态计算四个入口 SHA、文件数和总字节数，复制后比较实际摘要再替换 checkout 内旧 web，之后组装 APP/Node ZIP。无本机产物固定哈希或大小门禁。
+- 2026-11-12：增加独立 0.5.4 登录会话修补候选分支和 `v0.5.4-preview.1` 草稿 tag；0.5.2/0.5.3 分支版本、tag 和 draft 行为保持原样。
+- 2026-11-12：签名 stable 发布工作流排除 `v*-preview.*` tags，避免 preview tag 同时触发旧 signed release job。

@@ -4909,8 +4909,19 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       React.useEffect(() => {
         if (!desktopAuthRequired || !host.workbench || typeof host.workbench.authStatus !== 'function') return undefined
         let alive = true
-        host.workbench.authStatus().then((auth) => {
+        let retryTimer = null
+        const checkAuthStatus = () => host.workbench.authStatus().then((auth) => {
           if (!alive) return
+          if (auth && auth.retryable) {
+            hubAuthRequiredRef.current = false
+            setStateLoading(false)
+            setStateRefreshError('登录状态暂时无法刷新，正在重试。')
+            retryTimer = window.setTimeout(() => {
+              retryTimer = null
+              if (alive) checkAuthStatus()
+            }, 15000)
+            return
+          }
           const authenticated = !!(auth && auth.authenticated)
           workbenchAuthReadyRef.current = authenticated
           setWorkbenchAuthReady(authenticated)
@@ -4937,7 +4948,11 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           setStateLoading(false)
           setStateRefreshError('无法确认 Hub 登录状态：' + String(error && error.message || error))
         })
-        return () => { alive = false }
+        checkAuthStatus()
+        return () => {
+          alive = false
+          if (retryTimer !== null) window.clearTimeout(retryTimer)
+        }
       }, [desktopAuthRequired, host, loadState])
 
       React.useEffect(() => {

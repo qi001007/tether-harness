@@ -166,6 +166,7 @@ def test_release_workflow_rejects_app_node_version_mismatch(tmp_path: Path) -> N
 def test_release_workflow_downloads_and_uploads_only_frozen_component_assets() -> None:
     workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
     assert "- 'release-candidate/v*'" in workflow
+    assert "- '!v*-preview.*'" in workflow
     assert "Hydrate pinned Herdr v0.9.5 runtime" in workflow
     assert "CREATE_TAG_ALLOWED !== 'True'" in workflow
     assert '$releaseBase = "https://github.com/qi001007/tether-harness/releases/download/v$pluginVersion"' in workflow
@@ -199,15 +200,17 @@ def test_desktop_preview_workflow_uses_one_version_branch_tag_and_artifact_set()
     version = json.loads((ROOT / "version.json").read_text(encoding="utf-8"))["components"]["app"]
 
     assert "concurrency:\n  group: ${{ github.workflow }}-${{ github.ref }}\n  cancel-in-progress: true" in workflow
-    assert version == "0.5.3"
+    assert version == "0.5.4"
     assert "codex/tether-052-preview-20261111" in workflow
     assert "codex/tether-053-business-20261112" in workflow
+    assert "codex/tether-054-session-20261112" in workflow
     assert "v0.5.2-preview.1" in workflow
     assert "v0.5.3-preview.1" in workflow
+    assert "v0.5.4-preview.1" in workflow
     assert "--channel preview" in workflow
     assert '--release-tag "$CANDIDATE_TAG"' in workflow
     assert "tag_name: ${{ env.CANDIDATE_TAG }}" in workflow
-    assert "draft: ${{ github.ref == 'refs/heads/codex/tether-053-business-20261112' }}" in workflow
+    assert "draft: ${{ github.ref == 'refs/heads/codex/tether-053-business-20261112' || github.ref == 'refs/heads/codex/tether-054-session-20261112' }}" in workflow
     assert "prerelease: true" in workflow
     assert "make_latest: false" in workflow
     assert "0.5.0" not in workflow
@@ -222,6 +225,7 @@ def test_desktop_preview_workflow_uses_one_version_branch_tag_and_artifact_set()
     assert "--herdr-runtime .release-herdr-runtime" in workflow
 
     publish_job = workflow.split("  publish-preview-draft:", 1)[1]
+    assert "github.ref == 'refs/heads/codex/tether-054-session-20261112'" in publish_job
     assert "node-version: '24.22.2'" in publish_job
     assert "npm ci --prefix packages/tether-ui" in publish_job
     assert "npm run build:web --prefix packages/tether-ui" in publish_job

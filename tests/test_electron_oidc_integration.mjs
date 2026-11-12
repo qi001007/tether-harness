@@ -232,7 +232,7 @@ test('OIDC Controller fetch delegates Bearer injection to oidcAuth while legacy 
   assert.doesNotMatch(oidcBranch, /credentials:\s*'omit'/)
   assert.match(legacyBranch, /fetch\(target\.toString\(\), \{ \.\.\.init, headers, credentials: 'omit', redirect: 'error' \}\)/)
   const oidcAuthSource = read('../apps/tether-app/oidc-auth.js')
-  assert.match(oidcAuthSource, /function fetchWithAuth[\s\S]*?Authorization: `Bearer \$\{session\.id_token\}`/)
+  assert.match(oidcAuthSource, /async function fetchWithAuth[\s\S]*?await ensureSession\(\)[\s\S]*?Authorization: `Bearer \$\{token\}`/)
   const nativeWorkbench = main.slice(main.indexOf('nativeWorkbench = createNativeWorkbench'), main.indexOf('const { createWebServer }'))
   const hubRequest = main.slice(main.indexOf("handleTrusted('tether:hub-request'"), main.indexOf("handleTrusted('tether:app-info'"))
   assert.match(nativeWorkbench, /getActorId:\s*async \(\) => \{\s*const response = await controllerFetch\(new URL\('\/api\/auth\/me', controller\)\.toString\(\), \{ redirect: 'error' \}\)/)

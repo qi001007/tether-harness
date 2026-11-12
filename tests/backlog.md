@@ -1,4 +1,6 @@
 # 修改记录
+- 2026-11-12：desktop preview workflow validation asserts the isolated 0.5.4 branch/version/tag and draft aggregation while retaining 0.5.2/0.5.3 mappings.
+- 2026-11-12：signed-release workflow validation asserts that `v*-preview.*` tags are excluded from the stable release trigger.
 - 2026-11-11：记录 Actions run 42937706743 的 build jobs 全绿但首个 preview 标签错误导致发布失败；将工作流回归断言改为精确要求 preview.1 两处且 preview.2 不出现。
 - 2026-11-11：覆盖 external Node local API 桥未配置/错误 port 与 token 拒绝、正确 Bearer+设备 route 验证、错误凭据/设备与不匹配 route 回包拒绝、snapshot/log 无 token；保留 external 不 spawn/stop 和 managed route 的既有回归。
 - 2026-11-10：覆盖 legacy Files list 冷/热缓存固定 POST、path-only 请求、强制只读、现代 service_open 保持，以及 401/403/device_not_found/网络/畸形/错设备/代际变化失败关闭；补充旧 Codeg 空或无 ready 网络的准确错误回归。
@@ -217,3 +219,4 @@
 - 2026-11-12：候选构建合约测试实际调用 `builderTargetArgs` 验证 Windows NSIS 及 Linux/macOS 原 target 不变。
 - 2026-11-12：覆盖 Herdr `agent_not_ready` 时保留新建 tab/PTy 并返回 session + `agent_state=blocked`，同时覆盖 fatal cleanup、成功 ready 和 `agent_wait_timeout` 安全阶段码；`test_terminal.py` + `test_agents_runtime.py` 61/61 通过。
 - 2026-11-12：`test_app_installation.mjs` 覆盖已登录/已登出的有效 external OIDC profile 原样保留，以及缺认证模式、缺节点模式、无效 Hub origin、空 device 仍拒绝迁移合并。
+- 2026-11-12：OIDC 行为用例覆盖新实例恢复不重开浏览器且 close 保留会话、临时 safeStorage 失败后恢复、到期续期/轮换后重开、503/网络失败保留原加密文件、永久失效清理、并发 401 单次刷新及 logout 竞态；Electron integration 检查 auth-status 先 ensureSession 且 token 不出主进程。

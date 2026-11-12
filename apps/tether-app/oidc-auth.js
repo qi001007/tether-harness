@@ -84,6 +84,9 @@ function createOidcAuth({ issuer, clientId, redirectUri, storageFile, safeStorag
   let loginPending = false
   let rejectPendingLogin = null
   let closed = false
+  let refreshPromise = null
+  let sessionGeneration = 0
+  let storageUnavailable = false
 
   async function discover() {
     if (!metadataPromise) {
@@ -107,6 +110,7 @@ function createOidcAuth({ issuer, clientId, redirectUri, storageFile, safeStorag
   }
 
   function clearStorage() {
+    sessionGeneration += 1
     session = null
     try { fs.rmSync(storageFile, { force: true }) } catch (error) { log('oidc-storage-clear-failed', error) }
   }
@@ -118,10 +122,10 @@ function createOidcAuth({ issuer, clientId, redirectUri, storageFile, safeStorag
       (value.refresh_token === undefined || typeof value.refresh_token === 'string')
   }
 
-  function persist() {
+  function persist(value = session) {
     const directory = path.dirname(storageFile)
     fs.mkdirSync(directory, { recursive: true })
-    const encrypted = safeStorage.encryptString(JSON.stringify(session))
+    const encrypted = safeStorage.encryptString(JSON.stringify(value))
     const temporaryFile = `${storageFile}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`
     try {
       fs.writeFileSync(temporaryFile, encrypted, { mode: 0o600 })
@@ -146,7 +150,11 @@ function createOidcAuth({ issuer, clientId, redirectUri, storageFile, safeStorag
       typeof body.access_token !== 'string' || !body.access_token ||
       !Number.isFinite(Number(body.expires_in)) || Number(body.expires_in) <= 0 ||
       (body.refresh_token !== undefined && typeof body.refresh_token !== 'string')) {
-      throw new Error(body && body.error_description || `OIDC token response is invalid (HTTP ${response.status})`)
+      const error = new Error(`OIDC token response is invalid (HTTP ${response.status})`)
+      const oauthCode = typeof body?.error === 'string' ? body.error : ''
+      error.code = response.status >= 400 && response.status < 500 && response.status !== 429 && ['invalid_grant', 'invalid_token'].includes(oauthCode)
+        ? oauthCode : `http_${response.status}`
+      throw error
     }
     return {
       id_token: body.id_token,
@@ -157,32 +165,46 @@ function createOidcAuth({ issuer, clientId, redirectUri, storageFile, safeStorag
   }
 
   async function refreshSession() {
-    if (!session || !session.refresh_token) {
-      clearStorage()
-      return false
-    }
-    try {
-      const refreshed = await exchangeToken({ grant_type: 'refresh_token', refresh_token: session.refresh_token })
-      session = { ...refreshed, refresh_token: refreshed.refresh_token || session.refresh_token }
-      persist()
-      return true
-    } catch (error) {
-      log('oidc-refresh-failed', error)
-      clearStorage()
-      return false
-    }
+    if (refreshPromise) return refreshPromise
+    if (!session) return false
+    if (!session.refresh_token) { clearStorage(); return false }
+    const previous = session
+    const generation = sessionGeneration
+    const pending = (async () => {
+      try {
+        const refreshed = await exchangeToken({ grant_type: 'refresh_token', refresh_token: previous.refresh_token })
+        if (generation !== sessionGeneration || session !== previous) return false
+        const nextSession = { ...refreshed, refresh_token: refreshed.refresh_token || previous.refresh_token }
+        persist(nextSession)
+        session = nextSession
+        sessionGeneration += 1
+        return true
+      } catch (error) {
+        log('oidc-refresh-failed', { code: String(error && error.code || 'refresh_failed').slice(0, 64) })
+        if (generation === sessionGeneration && session === previous && ['invalid_grant', 'invalid_token'].includes(error && error.code)) clearStorage()
+        return false
+      }
+    })()
+    refreshPromise = pending
+    try { return await pending } finally { if (refreshPromise === pending) refreshPromise = null }
   }
 
   async function initialize() {
-    if (!fs.existsSync(storageFile)) return status()
+    if (!fs.existsSync(storageFile)) { storageUnavailable = false; return status() }
+    if (!safeStorage.isEncryptionAvailable()) { storageUnavailable = true; return { state: 'retryable' } }
+    let encrypted
+    try { encrypted = fs.readFileSync(storageFile) } catch (_) {
+      storageUnavailable = true
+      log('oidc-storage-read-failed')
+      return { state: 'retryable' }
+    }
     try {
-      if (!safeStorage.isEncryptionAvailable()) throw new Error('Electron safeStorage encryption is unavailable')
-      const encrypted = fs.readFileSync(storageFile)
       const decoded = JSON.parse(safeStorage.decryptString(encrypted))
       if (!validateSession(decoded)) throw new Error('Stored OIDC session is invalid')
       session = decoded
-      if (session.expires_at <= Date.now()) await refreshSession()
+      storageUnavailable = false
     } catch (error) {
+      storageUnavailable = false
       log('oidc-storage-invalid', error)
       clearStorage()
     }
@@ -190,7 +212,17 @@ function createOidcAuth({ issuer, clientId, redirectUri, storageFile, safeStorag
   }
 
   function status() {
-    return { state: session && session.expires_at > Date.now() ? 'authenticated' : 'unauthenticated' }
+    return { state: session ? (session.expires_at > Date.now() ? 'authenticated' : 'retryable') : 'unauthenticated' }
+  }
+
+  async function ensureSession() {
+    if (storageUnavailable) {
+      const loaded = await initialize()
+      if (storageUnavailable || !session) return loaded
+    }
+    if (!session || session.expires_at > Date.now()) return status()
+    await refreshSession()
+    return status()
   }
 
   async function beginLogin() {
@@ -242,13 +274,14 @@ function createOidcAuth({ issuer, clientId, redirectUri, storageFile, safeStorag
         return
       }
       try {
-        session = await exchangeToken({ grant_type: 'authorization_code', code, redirect_uri: redirectUri, code_verifier: verifier })
-        persist()
+        const authenticatedSession = await exchangeToken({ grant_type: 'authorization_code', code, redirect_uri: redirectUri, code_verifier: verifier })
+        persist(authenticatedSession)
+        sessionGeneration += 1
+        session = authenticatedSession
         loginPending = false
         response.writeHead(200, { 'content-type': 'text/html; charset=utf-8', connection: 'close' }).end('Sign-in complete. You can return to Tether.')
         resolveCompletion({ state: 'authenticated' })
       } catch (exchangeError) {
-        clearStorage()
         loginPending = false
         response.writeHead(502, { 'content-type': 'text/plain; charset=utf-8', connection: 'close' }).end('Tether could not complete sign-in. Return to the app and try again.')
         rejectCompletion(exchangeError)
@@ -278,12 +311,21 @@ function createOidcAuth({ issuer, clientId, redirectUri, storageFile, safeStorag
   }
 
   async function fetchWithAuth(url, init = {}) {
+    const ready = await ensureSession()
+    if (ready.state === 'retryable') throw Object.assign(new Error('OIDC session refresh is temporarily unavailable'), { code: 'OIDC_REFRESH_UNAVAILABLE' })
     if (!session) return fetchImpl(url, init)
-    const withBearer = () => ({ ...init, headers: { ...(init.headers || {}), Authorization: `Bearer ${session.id_token}` } })
-    const first = await fetchImpl(url, withBearer())
+    const generation = sessionGeneration
+    const usedToken = session.id_token
+    const withBearer = (token) => ({ ...init, headers: { ...(init.headers || {}), Authorization: `Bearer ${token}` } })
+    const first = await fetchImpl(url, withBearer(usedToken))
     if (first.status !== 401) return first
-    if (!await refreshSession()) return first
-    return fetchImpl(url, withBearer())
+    if (!session) return first
+    if (generation === sessionGeneration && session.id_token === usedToken && !await refreshSession()) {
+      if (session) throw Object.assign(new Error('OIDC session refresh is temporarily unavailable'), { code: 'OIDC_REFRESH_UNAVAILABLE' })
+      return first
+    }
+    if (!session || session.id_token === usedToken) return first
+    return fetchImpl(url, withBearer(session.id_token))
   }
 
   function authorizationHeader() {
@@ -306,7 +348,7 @@ function createOidcAuth({ issuer, clientId, redirectUri, storageFile, safeStorag
     }
   }
 
-  return { initialize, status, beginLogin, fetch: fetchWithAuth, authorizationHeader, logout, close }
+  return { initialize, status, ensureSession, beginLogin, fetch: fetchWithAuth, authorizationHeader, logout, close }
 }
 
 module.exports = { createOidcAuth, createPkcePair, createCandidateOidcOpenExternal }

@@ -2,6 +2,14 @@
 
 ## 2026-11-12 业务恢复
 
+- F157 登录保持：实际 Casdoor 桌面应用的 refresh 配置为 0，最新续期 JWT 与访问凭据同为 8 小时，已到期；旧客户端将任意刷新失败删除加密文件。仅将 `admin/tether-desktop` 的 refresh 窗口改为 720 小时，逐字段比对确认其他应用配置未变，原行服务器 mode-600 备份保留。客户端增加单飞续期、轮换后原子保存、临时失败保留/可重试、退出时的代际检查；主进程在状态读取/请求前确保会话有效，UI 在可重试状态保留数据并 15 秒后恢复。主代理独立 37 项 OIDC/集成与 12 项 workflow 测试通过，互联图函数与 E 原基线逐字节相同；真实登录、普通重开和过期路径验收待当前安装包补丁应用后进行。修补发行版为 0.5.4，保留 0.5.3 已发布资产。
+
+- 最新正式安装检查点：四平台最终源 `70520a4` / CI `43149948092`，已发布 `v0.5.3-preview.1`。原始 Windows NSIS 第二次安装 exit 0，`D:\Apps\Tether\Tether.exe` / HKCU 登记为 0.5.3。真实旧 0.5.0 登记先导出再单值接管，旧程序保留；三个旧快捷方式备份后改指向正式 EXE。默认 C profile/18892 实际 info=0.5.3 / DESKTOP-LOCAL、Hub health/state 200，白名单八项布局偏好通过 CDP 迁移；没有复制 Node 凭据。PID 7992 随后出现 Error 窗口、CDP 挂起，原因尚未取得错误正文；该次启动使用了已退出父进程的重定向标准流，属于待核实因素。后台重启动作被自动审批拒绝、未执行，已请用户手动重开。不能标记稳定运行或自动 apply 成功。下文 11:37/09 点候选记录为历史。
+
+- 11:37 后续状态优先于下方 09 点记录：CLI 共享链路已部署，运行 bundle 为 `E709FBA94A31E6E22A716D97D96A5CD3BCD0C9C4B54C59ADE4C0C095376A3D58`。typed Herdr / CLI 各 HTTP 200、返回 PTY 且持续存活，停止成功；脱敏证据 `.scratch/qa/herdr-agent-cli-final-acceptance-20261112.json`。当前候选主进程 22460，用标准 `C:\Users\Administrator\AppData\Roaming\Tether\data` profile 临时运行，仍不是正常安装更新通过。
+- 实测公开 0.5.2 EXE 为 portable，`/S /D` 未安装而在临时目录运行；两个本轮临时进程已精确停止。真正原因是 `build-candidate.mjs` 的 Windows 参数覆盖配置为 portable，需将真实参数改为 NSIS。`--prepackaged` 不触发正常 afterPack，不能假定它自动生成 updater metadata。
+- `hasExistingIdentity` 增加明确 OIDC + external + 有效 Hub origin + 非空 device 的已初始化 profile 路径，不要求 Node credential 或登录 session；允许登出后再次启动。它仅跳过旧目录迁移，真实认证不变；未知/缺字段 profile 仍被拒绝合并。对应行为测试通过。
+
 - 普通 APP 的 Files 请求恢复到既有 OAuth Hub `fs/*` API，移除 app.js 中另行改道到未配齐 Caddy/EasyTier files service 的拦截。Monaco、目录树及权限/版本冲突语义保留；native Files IPC 留给明确的独立调用方。
 - 传输页复用满意版 transferFile/Croc 实现。普通 OAuth APP 的 `hubOnly` 只用已授权的 read/write_chunk，禁用 renderer raw/direct 与 Croc 操作；取消停止后续分块，不宣称目标残片已清理。真实传输及 UI 证据见业务恢复计划。
 - 本机 Node 受控激活复用现有 staged runtime，保留 DSH_HOME、workspace roots、identity 与 policy。readonly 模式仍允许既有允许根与 DSH 注册工作区写入，不应仅凭模式文字推断不可编辑，更未改成全盘写。

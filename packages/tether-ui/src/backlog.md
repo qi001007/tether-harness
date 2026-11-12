@@ -52,3 +52,4 @@
 - 2026-11-11：OIDC Electron APP 的本机 DSH 也走主进程 `openDshSurface` managed gateway；不再因与本机 Node identity 相同而落入 renderer direct Hub/CORS 路径。
 - 2026-11-11：Codeg guest readiness 在 load 监听注册后，以同 endpoint origin 且主框架停止加载的一次快照覆盖 late-listener 竞态；same-document in-place 导航不重置 loading，失败事件与文档导航事件继续驱动状态。
 - 2026-11-12：统一 Agent 入口后，About 的客户端版本优先读取 Electron 现有 `tetherApp.info()` 结果；启动时将持久化的 Herdr 主导航值显示并归一为 Agents。Tether UI Web 与 DSH bundle 已从共享源码重建，未部署。
+- 2026-11-12：桌面 auth-status 暂时无法续期时保留当前界面数据与认证状态，不引导重复登录；每 15 秒重查，effect 卸载时清理唯一重试计时器。永久未认证状态仍进入原登录提示流程。

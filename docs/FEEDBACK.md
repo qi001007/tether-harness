@@ -2,12 +2,17 @@
 
 ## 2026-11-12 当前业务恢复反馈
 
+- [ ] F157：APP 登录一次后，在有效期内重开应自动恢复并续期，避免重复输入账号。18:06 用户手动重开正式 0.5.3，进程/18892 正常，但实际页面未登录、标准 profile 中的加密会话文件已消失。只读确认桌面应用的访问期限 8 小时、refresh 配置 0，最新续期 JWT 实际也仅 8 小时且已过期；客户端将任意续期失败都清除本地会话。处理范围：仅桌面应用续期窗口改为 30 天，访问期限不变；客户端保留临时失败时可恢复的加密会话、序列化并发续期，验证关闭重开及过期续期。完成本项后继续 F156，不改满意的业务页面。
 - [x] F151：恢复 DeepSeek 调好的互联图；实机结果与回退证据见文末。
 - [x] F152：恢复原文件互传交互及双向传输。已恢复满意版双栏与成熟 transferFile 流程；普通 OAuth APP 使用现有 Hub read/write_chunk。4,259,967 B 中文样本经真实 transferFile 双向完成、哈希一致；Terra 又在 APP 拖拽 133 B / 99 B 小文件双向复制，主代理独立读回目标哈希一致。证据 `files-hub-transfer-20261112.json`、`files-ui-transfer-readback-20261112.json` 与 `files-transfer-restored-20261112.png` 位于 `.scratch/evidence`。没有宣称 Croc/现代 mesh 传输或性能验收。
 - [x] F153：恢复 VSCode 风格资源管理器的打开、编辑、保存。仅移除普通 APP 的 native Files 拦截，恢复原已鉴权 Hub API；保留原编辑器。Terra 实机打开文本及 Python 文件并编辑保存；Python 的 Monaco 行号、语法高亮、minimap、状态栏正常，222→247 B，主代理独立预览读回新增注释且版本哈希变化。证据 `.scratch/evidence/files-monaco-restored-20261112.png`、`files-monaco-readback-20261112.json`。仅写专属 QA 文件，未执行 Python。
 - [ ] F154：Codeg/Herdr 合为一个 Agent 页面；先选/新建项目，再选 Agent，然后选择结构化、Herdr 或传统 CLI。统一前端已部署：结构化直接进入新会话且真实回复 `AGENT-1112-LOCAL`；主页与会话来回保留、通用新建入口及打开文件夹通过，细隐藏滚动条及无用关闭按钮已处理。Herdr 和传统 CLI 的实际启动仍待完成验收。
 - [x] F155：修好本机 Codeg 的状态异常和无法打开。已将本机受控切到现有 0.5.2 Node，并部署仅同机的既有 token gateway 打开路径；Terra 正常按钮启动一次后进入真实 Codeg 工作台，主代理独立回读 installed/running=true、port=4201。专属实例 PID 27788，未碰 E 基线的另一个既有实例。截图 `.scratch/evidence/codeg-local-open-20261112.png`；本次仅验启动/打开，统一新入口与新对话另归 F154。
-- [ ] F156：核实并修复更新交付。Hub preview manifest 0.5.2 可达，本机/云端 Node 为 0.5.2，笔记本为 0.4.11。Laptop 0.5.2 迁移业务检查保留 24 项目/167 会话，但确认脚本异常；已完整回滚原 launcher/ACL、旧 Node/Codeg 与数据基线。0.5.3 干净 Codeg 构建通过，四平台 CI 进行中，普通安装更新全链路尚未验收。
+- [ ] F156：核实并修复更新交付。0.5.3 最终四平台 CI 43149948092 已成功、preview 已发布；原始 CI NSIS 正式安装至 D:\Apps\Tether，EXE/登记均为 0.5.3，默认 C profile/18892 的 info 与 Hub 初次通过、布局偏好已恢复。随后 APP 出现 Error 窗口、接口挂起；后台重启被自动审批拒绝且未执行，等待用户手动重开。三台在线 Node 仍为 0.5.2/0.4.11/0.5.2，更新来源不一致尚未解决，APP 自动 apply 未验证。Laptop 先前旁路迁移已完整回滚，24 项目/167 会话基线保留。
+
+11:37 补充 F154/F156：Herdr 和传统 CLI 各使用共享 canonical 配置完成一次 typed API 启动，持续 18 / 12 秒、PTY 存活并停止成功；没有发模型请求，Herdr 菜单可见性未证明。标准 profile 复制后原图与登录保留。公开 0.5.2 EXE 实际为 portable，真实打包入口覆盖了 NSIS 配置，正在修正；同时已修复正常 external OIDC profile 重启被误拒绝的问题。安装更新仍待最终构建后验收。
+
+F156 分发后续：Hub 的旧 0.5.2 pin 已经现有 mirror 方法备份并切到 0.5.3。三组件缓存大小/哈希均通过；公开响应 version/pinned=0.5.3、stale=0，仍为签名 preview。桌面 Node 预览通道与 Hub URL、云端唯一 EnvironmentFile 的预览通道均已备份后补齐，两个 Node 均尚未重启生效。三 Node 更新、正式 APP Error 恢复与自动 apply 仍未完成。
 
 实施与验收计划：`BUSINESS_RESTORE_2026-11-12.md`。本节优先于下方历史快照。
 

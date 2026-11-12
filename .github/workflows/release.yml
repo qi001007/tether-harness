@@ -5,6 +5,7 @@ on:
       - 'release-candidate/v*'
     tags:
       - 'v*'
+      - '!v*-preview.*'
   workflow_dispatch:
     inputs:
       tag:

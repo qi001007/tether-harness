@@ -183,6 +183,7 @@ const oidcAuth = createOidcAuth({
   redirectUri: 'http://127.0.0.1:18893/oauth/callback',
   storageFile: path.join(dataDir, 'oidc-session.json'),
   safeStorage,
+  log: (event) => log('authentication event=' + event),
   openExternal: candidateMode && String(env.TETHER_OIDC_BOOTSTRAP_CREDENTIALS_FILE || '').trim()
     ? createCandidateOidcOpenExternal({
       issuer: env.TETHER_OIDC_ISSUER || DEFAULT_OIDC_ISSUER,
@@ -733,17 +734,37 @@ async function validateControllerSession(fetcher) {
   if (!response.ok) {
     let code = ''
     try { const body = await response.json(); code = String(body?.detail?.code || '') } catch (_) { /* retain auth state only */ }
-    return { authenticated: false, identityUnbound: code === 'oidc_identity_unbound' }
+    return { authenticated: false, identityUnbound: code === 'oidc_identity_unbound', retryable: response.status === 429 || response.status >= 500 }
   }
   const user = await response.json()
   if (!user || typeof user.user_id !== 'string' || !user.user_id) return { authenticated: false, identityUnbound: false }
   return { authenticated: true, identityUnbound: false, user: { user_id: user.user_id, email: user.email || '' } }
 }
 async function refreshWorkbenchAuthStatus() {
-  const oidcStatus = await oidcAuth.status()
+  const oidcStatus = await oidcAuth.ensureSession()
+  if (oidcStatus && oidcStatus.state === 'retryable') {
+    controllerAuthMode = ''
+    return { authenticated: false, identityUnbound: false, retryable: true, source: 'oidc' }
+  }
+  if (!oidcStatus || oidcStatus.state !== 'authenticated') controllerAuthMode = ''
   const allowLegacyFallback = readHubConfig().desktopAuthMode !== 'oidc'
   if (oidcStatus && oidcStatus.state === 'authenticated' && oidcAuthorizationHeader()) {
-    const result = await validateControllerSession((url, init) => oidcAuth.fetch(url, init))
+    let result
+    try { result = await validateControllerSession((url, init) => oidcAuth.fetch(url, init)) } catch (error) {
+      if (error && error.code === 'OIDC_REFRESH_UNAVAILABLE') {
+        controllerAuthMode = ''
+        return { authenticated: false, identityUnbound: false, retryable: true, source: 'oidc' }
+      }
+      if (error instanceof TypeError && error.message === 'fetch failed') {
+        controllerAuthMode = ''
+        return { authenticated: false, identityUnbound: false, retryable: true, source: 'oidc' }
+      }
+      throw error
+    }
+    if (result.retryable) {
+      controllerAuthMode = ''
+      return { ...result, source: 'oidc' }
+    }
     if (result.authenticated || result.identityUnbound) {
       controllerAuthMode = 'oidc'
       setDesktopAuthMode('oidc')
@@ -877,6 +898,8 @@ handleTrusted('tether:workbench-bind-legacy', async (_event, credentials) => {
     body: JSON.stringify({ email, password, totp }), redirect: 'error'
   })
   if (!login.ok) throw new Error('Legacy account sign-in failed; check the account details and try again')
+  const oidcStatus = await oidcAuth.ensureSession()
+  if (oidcStatus.state === 'retryable') throw new Error('Casdoor 登录状态暂时无法刷新，请稍后再试。')
   const authorization = oidcAuthorizationHeader()
   if (!authorization) throw new Error('Casdoor 登录状态已失效，请重新登录后再绑定。')
   const binding = await workbenchLoginSession.fetch(new URL('/api/auth/identity/bind', origin).toString(), {
