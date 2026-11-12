@@ -13,3 +13,6 @@
 - 2026-10-28：允许从 main 输入新版本号生成首个 Draft Release；验证组件版本与本次提交，构建验证通过后才创建缺失 tag，并拒绝不同提交的已有 tag 及已发布 Release 覆盖。
 - 2026-10-28：成功校验路径显式以退出码 0 结束，避免无 tag 时 `git show-ref` 的预期退出码 1 泄漏到 GitHub Actions PowerShell 包装层。
 - 2026-11-07：release workflow 仅接受精确 `release-candidate/vX.Y.Z` 分支创建缺失 tag；手动 main 与既有 tag 校验保留。构建前通过固定 SHA/大小的 Herdr runtime hydration 补齐干净 checkout。
+
+- 2026-11-12：新增 `codex/tether-053-business-20261112` 候选触发，APP/Node 0.5.3、插件冻结 0.2.93；预览产物使用 version-specific scratch/artifact/tag，GitHub Release 保持 draft prerelease 且 `make_latest: false`。
+- 2026-11-12：候选发布聚合 job 通过现有 Herdr hydrator 仅暂存 Windows Herdr/ConPTY 五个固定文件，并传给 Node ZIP 打包；不复制完整运行时目录，仍仅生成草稿预览。

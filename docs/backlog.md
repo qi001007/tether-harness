@@ -1,4 +1,8 @@
 # docs 变更记录
+- 2026-11-12：补录统一 Agent 入口结构化真实回复、主页/原会话返回及通用新建入口验收；主代理复验原互联图拖拽、详情浮层与切页位置保持，记录 Laptop Prepare 完成但未 Switch，Herdr/传统 CLI/普通更新全链路仍待验收。
+- 2026-11-12：PRD补齐保留原满意页面、文件业务、统一项目/Agent/模式入口、真实版本与回退要求；F155记录本机 Codeg 正常启动/打开实机结果，明确未把旧主页当新入口验收。
+- 2026-11-12：F152/F153 记录实机互传、文本及 Python Monaco 保存与主代理独立读回证据；更新本机 Node 受控激活/DSH 保留、同机 Codeg 主进程部署及真实版本/更新边界。
+- 2026-11-12：新增业务恢复计划，登记 F152–F156，分别记录传输、编辑器、统一 Agent、本机 Codeg 与更新实况的具体成功标准；恢复满意原版为视觉基线，不把构建/接口可达当作业务验收。
 - 2026-11-11：仅同步 `PROGRESS.md`、`FEEDBACK.md`、`TECHNICAL.md` 与本 backlog 的当前真实状态：记录 E 盘 `.scratch` 清理及候选保留规则、DESKTOP-LOCAL 回滚至 Node 0.2.3 与 LAPTOP-01 DSH 恢复、Node/APP/Hub 更新事务门禁及 Hub 可回滚 release 部署；明确签名 preview、update source 0.5.2、真实设备 UI 端到端、成功截图与微信送达仍未完成，并将此前 DESKTOP-LOCAL 0.5.2 状态标为已回滚历史。记录 pytest exit 0 及既有 interpreter-shutdown 线程噪声。
 - 2026-11-11：记录 REMOTESTITCH-HUB Node 0.5.2 r11 阶段性旁路部署、服务/身份/策略基线及 APP 内 DSH 可见聚焦验收；登记部署与回滚路径、截图/机器证据；更新旧节点待办为 REMOTESTITCH-HUB 已验收、LAPTOP-01 仍待升级；如实记录 63 passed / 1 skipped / 2 failed 及失败断言原因、Codeg/mesh/版本显示/签名发布缺口。
 - 2026-11-10：回填 r2 UI 稳定性实机证据：在线 REMOTESTITCH-HUB 约 45 秒保持设备选择与旧节点兼容提示，新增日志无 CORS/404/HTTP 400 且主框架仅启动导航 1 次；记录截图路径、portable 大小/SHA-256、包内 UI bundle 一致性，以及旧工作区/Codeg 仍未完成的边界。
@@ -146,3 +150,22 @@
 - 2026-11-07：将旧版交接快照移至本地清理归档。将插件回退候选、验收证据边界和 Codeg 源码入口收进 `PROGRESS.md`。
 - 2026-11-10：记录 0.5.2 r4 旧节点 Files 只读兼容、OIDC 恢复、实机目录浏览截图、候选哈希与定向回归；明确 Codeg 仍受 Controller 可信网络缺失阻断，以及微信通知只有 SDK 返回而无手机回执。
 - 2026-11-11：更新 `PROGRESS.md`、`FEEDBACK.md`、`TECHNICAL.md`，记录 DESKTOP-LOCAL 0.5.2 r11 的阶段性候选可见验收、证据/回滚位置及未完成门禁；不表示项目完成或签名公开发布。
+- 2026-11-11：更新 `PROGRESS.md`、`FEEDBACK.md` 的旧 workspace/composer 截图边界说明，并记录 r11 native guest 布局修复已由当前候选真实刷新验证。
+- 2026-11-11：更新 `FEEDBACK.md`、`PROGRESS.md`、`TECHNICAL.md`，记录旧 Codeg 经 authenticated direct_api + 现有 EasyTier 安全打开、Codex ACP adapter 实际安装版本与 LAPTOP-01 离线导致真实 nonce 未验收，以及原生 DSH guest 状态保持补丁的实机验收边界。
+- 2026-11-11：补记 DESKTOP-LOCAL DSH 真实 `LOCAL-1111-1400` 回复及切换 Agents 后同会话原位保持截图；登记 REMOTESTITCH-HUB 现代 Codeg stopped 单次打开 HTTP 403 未捕获 structured code，不盲回退 legacy 路径。
+- 2026-11-11：修正本次候选启动配置中的本机 source_device_id：以本机 Node `/state` 确认的 DESKTOP-LOCAL 为准，仅在 QA launcher 子进程设置 `TETHER_DEVICE`，不修改 Node/Hub identity。
+- 2026-11-11：更正 REMOTESTITCH-HUB Codeg 待办根因：旧 hostname source identity 触发 403；修正为 DESKTOP-LOCAL 后，真实剩余门禁是 HTTP 409 `edge_not_connected`，无 native edge/mesh，不绕过或改变 Hub 授权。
+- 2026-11-11：记录 Electron OIDC 本机 DSH 也经主进程 managed gateway 的单行 guard 修复；避免 renderer 直接 Hub OAuth/CORS，保留隔离授权边界。共享 bundle 与 r11 SHA-256 一致：`3EECB0F259E3FCB00462336A6710E79AAAED301883D5640D93E6C838CA174665`。
+- 2026-11-11：记录最终实机验收图 `.scratch/evidence/desktop-local-delivery-final.png`：DESKTOP-LOCAL 的已有 DSH 回复在切 Agents 后返回仍原位可见；未再次发送模型请求。
+- 2026-11-11：记录 Codeg Agent 主页原生 route 实现与验证边界：route/sidebar/title/tab 接线已进入 canonical source，fixed overlay、每 tab 重复事件与几何轮询、广域 resize 隐藏规则已移除；tracked patch 正向/反向 apply check 通过。构建、静态部署和真实 APP 调整大小验收待完成。
+
+- 2026-11-11：更新 Codeg 原生主页实施计划、PROGRESS、FEEDBACK 和 TECHNICAL，记录原生路由/resize 实机证据、唯一 Codex nonce 回复、两轮静态部署与仍待复验的默认重开入口/文件编辑器分隔条。
+
+
+- 2026-11-11：收尾 Codeg 原生 Agent 主页验收记录：关闭重开默认原生主页、既有 Codex nonce 会话返回与保留、真实文本编辑器分隔条拖动均通过；不重发消息，保留原始静态 web 回退。
+
+
+- 2026-11-11：F150/F124 与原生 Codeg 主页计划验收结项；默认重开主页、真实 Codex 回复保留、主页/会话/编辑器分隔条拖动均通过。仅清理本次中间静态 web 回退树，保留最初 web 回退与当前部署。
+
+
+- 2026-11-12：纠正互联图被 Cytoscape 取代的视觉回归：恢复已调好的流动环形/三角 NetworkGraph，只更新 r11 WebUI app.js；Terra 实机确认流动、布局、缩放、拖动、浮层和切页后位置正常。旧缓存仅在与备份逐字匹配时删除单一 key，保留原值备份；跨页速度连续未证明。

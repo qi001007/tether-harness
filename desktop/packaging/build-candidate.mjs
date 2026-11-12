@@ -162,10 +162,11 @@ if (version.components.plugin !== '0.2.93') throw new Error('Candidate must reta
 
 const defaultRuntimeRoot = path.join(repoRoot, '.runtime/desktop-candidate')
 const runtimeRoot = path.resolve(process.env.TETHER_CANDIDATE_RUNTIME_ROOT || defaultRuntimeRoot)
+const candidateRoot = path.resolve(repoRoot, `.scratch/tether-desktop-candidates/${expectedVersion}`)
 if (process.env.TETHER_CANDIDATE_RUNTIME_ROOT) {
-  const allowedRuntimeRoot = path.resolve(repoRoot, '.scratch/tether-desktop-candidates/0.5.2')
+  const allowedRuntimeRoot = candidateRoot
   if (runtimeRoot !== allowedRuntimeRoot && !runtimeRoot.startsWith(allowedRuntimeRoot + path.sep)) {
-    throw new Error('TETHER_CANDIDATE_RUNTIME_ROOT must point into the isolated 0.5.2 candidate scratch directory.')
+    throw new Error(`TETHER_CANDIDATE_RUNTIME_ROOT must point into the isolated ${expectedVersion} candidate scratch directory.`)
   }
 }
 const runtimeExe = path.join(runtimeRoot, process.platform === 'win32' ? 'tether-python.exe' : 'tether-python')
@@ -193,12 +194,12 @@ for (const component of ['codeg', 'easytier', 'sftpgo', 'caddy', 'rclone', 'mesh
   if (!existsSync(path.join(componentDir, component))) throw new Error(`Missing assembled runtime component: ${component}`)
 }
 
-const defaultOutputParent = path.join(repoRoot, '.scratch/tether-desktop-candidates/0.5.2')
+const defaultOutputParent = candidateRoot
 const outputParent = path.resolve(process.env.TETHER_CANDIDATE_OUTPUT_ROOT || defaultOutputParent)
-const allowedOutputParent = path.resolve(repoRoot, '.scratch/tether-desktop-candidates/0.5.2')
+const allowedOutputParent = candidateRoot
 if (process.env.TETHER_CANDIDATE_OUTPUT_ROOT
     && outputParent !== allowedOutputParent && !outputParent.startsWith(allowedOutputParent + path.sep)) {
-  throw new Error('TETHER_CANDIDATE_OUTPUT_ROOT must point into the isolated 0.5.2 candidate scratch directory.')
+  throw new Error(`TETHER_CANDIDATE_OUTPUT_ROOT must point into the isolated ${expectedVersion} candidate scratch directory.`)
 }
 const output = path.join(outputParent, platformTarget[platform])
 if (path.dirname(output) !== outputParent) throw new Error('Refusing to write outside the platform-specific candidate output directory.')
@@ -231,7 +232,7 @@ if (electronDistVersion !== electronVersion) {
 }
 const baseConfigPath = path.join(packagingDir, 'electron-builder.yml')
 const baseConfig = readFileSync(baseConfigPath, 'utf8')
-const outputSetting = 'output: .scratch/tether-desktop-candidates/0.5.2'
+const outputSetting = `output: .scratch/tether-desktop-candidates/${expectedVersion}`
 if (!baseConfig.includes(outputSetting)) throw new Error('electron-builder output setting changed unexpectedly.')
 const tempConfig = path.join(os.tmpdir(), `tether-builder-${platformTarget[platform]}.yml`)
 const builderOutput = outputParent.replaceAll('\\', '/') + `/${platformTarget[platform]}`

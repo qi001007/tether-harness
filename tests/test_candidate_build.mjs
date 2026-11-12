@@ -9,13 +9,13 @@ const root = new URL('../', import.meta.url)
 const read = path => readFileSync(new URL(path, root), 'utf8')
 const buildScript = read('desktop/packaging/build-candidate.mjs')
 
-test('candidate app and node versions are synchronized at 0.5.2 with frozen plugin', () => {
+test('candidate app and node versions are synchronized at 0.5.3 with frozen plugin', () => {
   const manifest = JSON.parse(read('version.json'))
   const appPackage = JSON.parse(read('apps/tether-app/package.json'))
   const appLock = JSON.parse(read('apps/tether-app/package-lock.json'))
 
-  assert.equal(manifest.components.app, '0.5.2')
-  assert.equal(manifest.components.node, '0.5.2')
+  assert.equal(manifest.components.app, '0.5.3')
+  assert.equal(manifest.components.node, '0.5.3')
   assert.equal(manifest.components.plugin, '0.2.93')
   assert.equal(appPackage.version, manifest.components.app)
   assert.equal(appLock.version, manifest.components.app)
@@ -29,9 +29,9 @@ test('candidate builder validates manifest semver and synchronized versions', ()
   assert.match(buildScript, /version\.components\.plugin !== '0\.2\.93'/)
 })
 
-test('candidate output and runtime guards use the isolated 0.5.2 scratch root', () => {
-  assert.match(buildScript, /\.scratch\/tether-desktop-candidates\/0\.5\.2/)
-  assert.match(read('desktop/packaging/electron-builder.yml'), /output: \.scratch\/tether-desktop-candidates\/0\.5\.2/)
+test('candidate output and runtime guards use the isolated 0.5.3 scratch root', () => {
+  assert.match(buildScript, /\.scratch\/tether-desktop-candidates\/\$\{expectedVersion\}/)
+  assert.match(read('desktop/packaging/electron-builder.yml'), /output: \.scratch\/tether-desktop-candidates\/0\.5\.3/)
   assert.match(buildScript, /lstatSync\(output\).*?Candidate output already exists/s)
   assert.match(buildScript, /path\.dirname\(managedOutputParent\) !== allowedOutputParent/)
 })
@@ -55,7 +55,7 @@ test('desktop OIDC helper is included in the packaged application', () => {
   assert.match(read('desktop/packaging/electron-builder.yml'), /^  - oidc-auth\.js$/m)
 })
 
-test('Windows candidate builds and collects the 0.5.2 portable executable', () => {
+test('Windows candidate builds and collects the 0.5.3 portable executable', () => {
   assert.match(buildScript, /platform === 'windows' \? \['--win', 'portable'\]/)
   assert.doesNotMatch(buildScript, /\['--win', 'nsis'\]/)
 
@@ -63,10 +63,10 @@ test('Windows candidate builds and collects the 0.5.2 portable executable', () =
   const artifactTemplate = builderConfig.match(/^artifactName: (.+)$/m)?.[1]
   assert.equal(artifactTemplate, 'Tether-${version}-${os}-${arch}.${ext}')
   assert.equal(artifactTemplate
-    .replace('${version}', '0.5.2')
+    .replace('${version}', '0.5.3')
     .replace('${os}', 'win')
     .replace('${arch}', 'x64')
-    .replace('${ext}', 'exe'), 'Tether-0.5.2-win-x64.exe')
+    .replace('${ext}', 'exe'), 'Tether-0.5.3-win-x64.exe')
   assert.match(buildScript, /const artifactSuffixes = \['\.exe'/)
 })
 
@@ -81,11 +81,11 @@ test('candidate output marker records a platform-independent owning run path', (
     const run = path.join(root, 'r11')
     mkdirSync(run)
     const markerPath = writeCandidateOwnershipMarker({
-      outputParent: run, version: '0.5.2'
+      outputParent: run, version: '0.5.3'
     })
     const marker = JSON.parse(readFileSync(markerPath, 'utf8'))
     assert.equal(marker.format, 'tether-candidate-output')
-    assert.equal(marker.version, '0.5.2')
+    assert.equal(marker.version, '0.5.3')
     assert.equal(Object.hasOwn(marker, 'platform'), false)
     assert.equal(marker.path, path.resolve(run))
   } finally {
@@ -98,12 +98,12 @@ test('same legal candidate run marker is reusable by multiple platform builds', 
   try {
     const run = path.join(root, 'r11')
     mkdirSync(run)
-    const windowsMarker = writeCandidateOwnershipMarker({ outputParent: run, version: '0.5.2' })
-    const linuxMarker = writeCandidateOwnershipMarker({ outputParent: run, version: '0.5.2' })
+    const windowsMarker = writeCandidateOwnershipMarker({ outputParent: run, version: '0.5.3' })
+    const linuxMarker = writeCandidateOwnershipMarker({ outputParent: run, version: '0.5.3' })
 
     assert.equal(linuxMarker, windowsMarker)
     assert.deepEqual(JSON.parse(readFileSync(linuxMarker, 'utf8')), {
-      format: 'tether-candidate-output', version: '0.5.2', path: path.resolve(run)
+      format: 'tether-candidate-output', version: '0.5.3', path: path.resolve(run)
     })
   } finally {
     rmSync(root, { recursive: true, force: true })
@@ -117,7 +117,7 @@ test('successful candidate cleanup removes only older valid direct-child runs', 
       const run = path.join(root, name)
       mkdirSync(run)
       writeFileSync(path.join(run, '.tether-candidate-owner.json'), JSON.stringify({
-        format: 'tether-candidate-output', version: '0.5.2', platform: 'windows-x64', path: run, ...marker
+        format: 'tether-candidate-output', version: '0.5.3', platform: 'windows-x64', path: run, ...marker
       }))
       return run
     }
@@ -139,7 +139,7 @@ test('successful candidate cleanup removes only older valid direct-child runs', 
     }
     const removed = pruneManagedCandidateOutputs({
       allowedOutputParent: root, currentOutputParent: currentRun,
-      version: '0.5.2'
+      version: '0.5.3'
     })
 
     assert.deepEqual(removed, [recentRun, oldVersionRun, oldRun])
@@ -157,7 +157,7 @@ test('ownership marker creation refuses unmarked data and rejects marker links',
     const unmarked = path.join(root, 'unmarked')
     mkdirSync(unmarked)
     writeFileSync(path.join(unmarked, 'keep.txt'), 'keep')
-    assert.throws(() => writeCandidateOwnershipMarker({ outputParent: unmarked, version: '0.5.2' }))
+    assert.throws(() => writeCandidateOwnershipMarker({ outputParent: unmarked, version: '0.5.3' }))
     assert.equal(readdirSync(unmarked).includes('.tether-candidate-owner.json'), false)
 
     const linkedRun = path.join(root, 'linked-run')
@@ -168,9 +168,9 @@ test('ownership marker creation refuses unmarked data and rejects marker links',
     const markerPath = path.join(linkedRun, '.tether-candidate-owner.json')
     symlinkSync(markerTarget, markerPath, process.platform === 'win32' ? 'junction' : 'dir')
 
-    assert.throws(() => writeCandidateOwnershipMarker({ outputParent: linkedRun, version: '0.5.2' }))
+    assert.throws(() => writeCandidateOwnershipMarker({ outputParent: linkedRun, version: '0.5.3' }))
     assert.deepEqual(pruneManagedCandidateOutputs({
-      allowedOutputParent: root, currentOutputParent: path.join(root, 'current'), version: '0.5.2'
+      allowedOutputParent: root, currentOutputParent: path.join(root, 'current'), version: '0.5.3'
     }), [])
     assert.equal(readFileSync(path.join(markerTarget, 'keep.txt'), 'utf8'), 'keep')
     assert.equal(readdirSync(root).includes('linked-run'), true)
@@ -185,14 +185,14 @@ test('candidate cleanup never follows a linked or reparse-point directory', () =
     const target = path.join(root, 'target')
     mkdirSync(target)
     writeFileSync(path.join(target, '.tether-candidate-owner.json'), JSON.stringify({
-      format: 'tether-candidate-output', version: '0.5.2', platform: 'windows-x64', path: target
+      format: 'tether-candidate-output', version: '0.5.3', platform: 'windows-x64', path: target
     }))
     const link = path.join(root, 'linked-old-run')
     symlinkSync(target, link, process.platform === 'win32' ? 'junction' : 'dir')
 
     assert.deepEqual(pruneManagedCandidateOutputs({
       allowedOutputParent: root, currentOutputParent: path.join(root, 'current'),
-      version: '0.5.2'
+      version: '0.5.3'
     }), [])
     assert.equal(readdirSync(target).includes('.tether-candidate-owner.json'), true)
     assert.equal(readdirSync(root).includes('linked-old-run'), true)
@@ -208,9 +208,9 @@ test('repeated failed candidate runs converge to current plus the latest managed
     for (const [index, name] of names.entries()) {
       const run = path.join(root, name)
       mkdirSync(run)
-      const marker = writeCandidateOwnershipMarker({ outputParent: run, version: '0.5.2' })
+      const marker = writeCandidateOwnershipMarker({ outputParent: run, version: '0.5.3' })
       pruneManagedCandidateOutputs({
-        allowedOutputParent: root, currentOutputParent: run, version: '0.5.2'
+        allowedOutputParent: root, currentOutputParent: run, version: '0.5.3'
       })
       const timestamp = new Date(1_900_000_000_000 + index * 1000)
       utimesSync(marker, timestamp, timestamp)
@@ -218,7 +218,7 @@ test('repeated failed candidate runs converge to current plus the latest managed
     }
 
     assert.deepEqual(readdirSync(root).sort(), ['r13', 'r14'])
-    assert.equal(readFileSync(path.join(root, 'r14', '.tether-candidate-owner.json'), 'utf8').includes('0.5.2'), true)
+    assert.equal(readFileSync(path.join(root, 'r14', '.tether-candidate-owner.json'), 'utf8').includes('0.5.3'), true)
     assert.equal(readFileSync(path.join(root, 'r14', 'partial-output.bin'), 'utf8'), 'failed-r14')
   } finally {
     rmSync(root, { recursive: true, force: true })
@@ -231,7 +231,7 @@ test('default candidate root is never treated as a managed run', () => {
     mkdirSync(path.join(root, 'windows-x64'))
     assert.deepEqual(pruneManagedCandidateOutputs({
       allowedOutputParent: root, currentOutputParent: root,
-      version: '0.5.2'
+      version: '0.5.3'
     }), [])
     assert.deepEqual(readdirSync(root), ['windows-x64'])
   } finally {

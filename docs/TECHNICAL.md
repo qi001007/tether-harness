@@ -1,5 +1,13 @@
 # Tether 技术说明
 
+## 2026-11-12 业务恢复
+
+- 普通 APP 的 Files 请求恢复到既有 OAuth Hub `fs/*` API，移除 app.js 中另行改道到未配齐 Caddy/EasyTier files service 的拦截。Monaco、目录树及权限/版本冲突语义保留；native Files IPC 留给明确的独立调用方。
+- 传输页复用满意版 transferFile/Croc 实现。普通 OAuth APP 的 `hubOnly` 只用已授权的 read/write_chunk，禁用 renderer raw/direct 与 Croc 操作；取消停止后续分块，不宣称目标残片已清理。真实传输及 UI 证据见业务恢复计划。
+- 本机 Node 受控激活复用现有 staged runtime，保留 DSH_HOME、workspace roots、identity 与 policy。readonly 模式仍允许既有允许根与 DSH 注册工作区写入，不应仅凭模式文字推断不可编辑，更未改成全盘写。
+- 同机 Codeg 在主进程中复用既有隔离 token gateway；只对目标等于本机身份开放现代目录兼容，并在验证 stopped 后启动一次、重读 ready。远端现代仍走原 service_open，不对网络错误泛化回退；严格 URL、已鉴权 online/direct host、EasyTier 同网段与隔离会话边界保留。
+- 本轮 APP ASAR 379 成员/305 文件仅 native-workbench.js 不同，新 ASAR SHA-256 `982D12BCC6EA4AD967EAE676DEE941735297E1F90DC5CE3F11A0048E0598AF3A`；候选以原数据重启为 PID 54636。文件 bundle SHA-256 `37A2FF04F8AB2F192798D7A968F267244C1367E119B9A8112E86688E80390240`。这不等于完整安装发行版/更新链路验收。
+
 ## 2026-11-11 更新事务与当前部署边界
 
 - Node 更新器先持久化事务与恢复材料，再替换文件；应用后的状态为 `awaiting_acceptance`。Hub/APP 核验目标 Node 的版本、事务 ID/状态及所需服务状态后，才调用 commit 清理备份；验收失败则调用 rollback。APP 重启后可从 Node status 发现待验收事务并继续验收。Node 提供 commit/rollback RPC，Hub 对应路由已部署。
@@ -102,7 +110,9 @@ Agents 当前源码入口为 `tether/node/agents_runtime.py`、`tether/node/agen
 
 - Files 首次仍按现代协议探测。只有返回可识别的结构化 `bad_op` 时，客户端才将该设备的 list 能力归类为 legacy，并调用 Controller 已有的 `POST /api/devices/{device_id}/fs/list`；请求仅传 `{path}`，不会复用现代 `service_open`，也不会在任意错误后盲目二次回退。
 - legacy 响应必须包含匹配的可选 `device_id`、字符串 `path` 和合法 entries；客户端只接收条目名称、路径和目录类型，并把 `writable` 固定为 `false`。该兼容层只恢复旧节点浏览，不声称恢复写入、上传、删除或重命名。
-- 旧 Codeg 即使本机系统路由可达，也必须先存在 Controller 可信网络及设备成员映射。`mesh_networks` 与 `mesh_network_devices` 为空时，APP 明确阻止打开；系统路由或直接 URL 不能替代 Controller 授权关系。
+- 现代 mesh Codeg 路由必须使用 Controller 已授权的 mesh 成员映射。旧 Codeg 可沿兼容路径使用已认证 `/api/state` 中目标在线设备的 `capabilities.direct_api.host`，但只有当它严格匹配 runtime token URL 主机、且本机现存 EasyTier 私网接口与目标同网段时才准许；APP 仍使用专用隔离 session、主进程 token bootstrap 和同源请求守卫。普通系统路由或任意直接 URL 不能替代这些授权与主机匹配条件。此兼容路径不创建生产 mesh 记录。
+- 有效 `service_catalog` 的现代 Codeg 仍走现代 `service_open` 授权。2026-11-11 APP source identity 一度回退为 hostname `USER-20250925JD` 并产生 HTTP 403；QA launcher 已使用本地 Node 现有 identity `DESKTOP-LOCAL`。以修正身份进行的已鉴权 `service_open` 明确返回 HTTP 409 `edge_not_connected`：REMOTESTITCH-HUB 未配置 native edge/mesh，请求未进入目标服务启动阶段；不创建 mesh、不改权限、不转 legacy 直连。
+- OIDC Electron APP 的 `NativeSurface` 对任何目标（含本机 Node identity）都优先调用主进程 `workbench.openDshSurface` managed gateway；不因本机身份相等而让 renderer 带 OAuth 状态直接请求 Hub，避免 CORS/重定向登录失败。隔离 service session 与既有 main-owned bootstrap/origin guard 保持不变。2026-11-11 bundle 已部署至 r11，源码和候选 SHA-256 均为 `3EECB0F259E3FCB00462336A6710E79AAAED301883D5640D93E6C838CA174665`；未修改 Node。
 - OIDC 恢复使用测试凭据文件启动引导，成功后只持久化加密会话。凭据文件、数据库哈希和回滚转储属于私有运行材料，不进入公开仓库。
 
 ## 编码四原则
@@ -128,3 +138,25 @@ Agents 当前源码入口为 `tether/node/agents_runtime.py`、`tether/node/agen
 - APP 选择 `REMOTESTITCH-HUB` 后，虽短暂出现读取失败/加载态，等待后真实显示 DeepSeek Harness 工作区 `tether-dsh-qa.BfHzqlTT` 和输入框。Terra 聚焦输入框并观察约 10 秒稳定；没有输入或发送。证据：`.scratch/evidence/r11-remotestitch-hub-dsh-0.5.2-pass.png` 与 `.scratch/evidence/remotestitch-hub-0.5.2-pass.json`。
 - 该阶段仅验收 Node 与 DSH。Node 重启后旧 Codeg 子进程未恢复；Codeg 另受 trusted network 缺失阻塞。LAPTOP-01 仍为 0.4.11，生产 mesh 为 0，Settings/About 版本仍为“—”，无签名公开 0.5.2。测试为 63 passed / 1 skipped / 2 failed；失败是旧精确相等断言未计入新增 `app_update` 字段，故不宣称全绿或项目完成。
 
+
+## 2026-11-11 Codeg 原生主页构建与候选 readiness 修复
+
+- Codeg 原生 Agent 主页静态构建已部署到 LAPTOP-01 默认 agents-runtime/web，1007 个文件；index/workspace/token 的服务响应与构建输出 SHA-256 一致。部署保留最初旧 web 回退目录；最终实机验收后清理了本次创建的中间 web 回退树。未重启 Codeg server、Node 或 APP。
+- 首次实机打开显示原生 Agent 页，但外层 Tether 遮罩持续 loading：webview 在监听注册前已完成导航，did-finish-load 被漏接。修复在注册后读取一次 URL/origin 与 isLoadingMainFrame 快照；did-start-navigation 忽略 isInPlace 同文档导航，保留主框架导航/失败事件。
+- 主进程在严格验证状态 URL 后，仅给内部 token bootstrap URL 副本附加固定 `next=/workspace?tether_home=1`；外部输入验证、origin 守卫与 token 不暴露给 renderer 的约束不变。focused tests 21/21 通过，r11 候选 app.asar 与 tether-ui/web/dist/app.js 已更新并启动为 PID 9996；hash 分别为 `697F5F220B33EC8299C5B0352A34FA447390646C82F5DBBEA19FC8498A13CDD4`、`41A4EB2636D247974127D2A9D7928A3DEFC3530CE2C1C3FD28C42FB362C75381`。Terra 已通过遮罩、原生左栏/聊天区拖动和 Codex nonce 往返保留验收；关闭后重开默认原生 Agent 页已通过；Codeg 内文件编辑器分隔条已在只读 QA 文本文件视图中实测 x=810→690→810（accessibility value 56→41→56），未输入或保存。
+- Electron `did-start-navigation` 的 `isInPlace` 事件语义参考：[webview-tag API](https://www.electronjs.org/docs/latest/api/webview-tag#event-did-start-navigation)。
+
+## 2026-11-11 Codeg Agent 主页原生接入（源码阶段）
+
+- Agent 主页使用 Codeg 已有 WorkbenchRouteContext 与 WorkspaceContent route registry，通过原生 SidebarNavButton 进入；标题条使用原生 WorkbenchPageTitle。页面动作复用 openNewConversationTab(..., { forceAgent }) / openChatModeTab({ forceAgent }) 和 openConversations()。	ether_home=1 只切换原生 route，外层 	ether:show-home 仅在 route owner 注册一次。
+- 移除了每个 ConversationTabView 的固定主页覆盖层、重复 home 监听、250 ms 几何测量和 module-global 选择标记；移除了全局隐藏原生 tab、resize handle、分隔线和会话头的 CSS。原生分栏由框架现有 panel layout 管理。
+- 当前仅完成 canonical source 和 tracked patch。clean source forward check 与 canonical source reverse check 通过；静态构建、部署和真实拖拽/缩放验收仍未完成。
+
+- LAPTOP-01 静态根实机只读确认：TETHER_AGENTS_RUNTIME_DIR 为空；当前 codeg-server.exe 来自默认 gents-runtime 根，源码 _web_dir() 指向其 web 子目录；当前 index.html SHA-256 55092787645CFB0D3AEC200C1273CF46C1DE935B4E990D35C96D1AACB77ED3BE。探针终端已停止；只读证据见 .scratch/qa/codeg-runtime-static-path-laptop-20261111.json。
+
+## 2026-11-12 互联图 NetworkGraph 恢复
+
+- 原因：当前 worktree 的 `NetworkGraph` 使用 Cytoscape 的 cose 单次布局并把像素坐标保存到 `tether.network.positions.v3`；E 主仓库的已调图使用 requestAnimationFrame 力导向、环形/三角初始分布并保存百分比位置和速度。用户确认需要恢复互联图原视觉。
+- 仅将 `NetworkGraph` 函数替换为 E 主仓库原函数，删除其唯一 Cytoscape import；外围 renderNetwork 身份/权限/连接回调、详情浮层、连接管理以及 DSH/Codeg 相关修复保持。详情组件和连接管理函数的恢复前哈希分别在两树相同，未改。
+- 首次旧图卸载前对 `localStorage['tether.network.positions.v3']` 的查询为 absent；随后卸载写入 214 B Cytoscape 像素位置，其中本机节点 `(0,0)`、远端 `(378,608)`，无 `vx/vy`。该值原样备份后，仅在当前值逐字等于备份时删除这一 key；其他存储未动，当前 key 已确认 absent。备份：`.scratch/qa/network-graph-cytoscape-pre-restore-20261112-source-app.js`、`...-running-app.js`。
+- 用已安装 Node v24.22.1 执行 `scripts/build-web.mjs`，exit 0；输出 bundle SHA-256 `1CD2EF1A584AD76E9C1A42E089BB949640CB4E300E29D87C301B0313C5C6570D`。仅更新 r11 `resources/tether-ui/web/dist/app.js`；替换前文件 SHA `41A4EB2636D247974127D2A9D7928A3DEFC3530CE2C1C3FD28C42FB362C75381`，更新后与构建输出一致。PID 8016 继续运行；未改 app.asar、Codeg web/backend、Node 或设备身份/连接状态。已由 Terra 实机确认流动环形/三角、缩放、拖动、浮层和切页后位置正常；跨页速度连续未验证。

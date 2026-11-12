@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import hashlib
 import json
 import shutil
 import subprocess
@@ -8,9 +9,65 @@ import zipfile
 from pathlib import Path
 
 import pytest
+from scripts import hydrate_herdr_runtime
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_node_archive_adds_only_verified_windows_herdr_members_once(tmp_path: Path, monkeypatch) -> None:
+    spec = importlib.util.spec_from_file_location("build_release_herdr", ROOT / "scripts" / "build_release.py")
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    relatives = (
+        "herdr.exe",
+        "conpty/arm64/OpenConsole.exe",
+        "conpty/conpty.dll",
+        "conpty/herdr-conpty.json",
+        "conpty/x64/OpenConsole.exe",
+    )
+    runtime = tmp_path / "herdr-runtime"
+    expected: dict[str, bytes] = {}
+    pinned: dict[str, dict] = {}
+    for relative in relatives:
+        payload = ("pinned fixture " + relative).encode("utf-8")
+        path = runtime / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(payload)
+        expected[relative] = payload
+        pinned[relative] = {
+            "asset": "windows-x86_64",
+            "size": len(payload),
+            "sha256": hashlib.sha256(payload).hexdigest(),
+        }
+    monkeypatch.setattr(hydrate_herdr_runtime, "WINDOWS_RUNTIME_FILES", relatives)
+    monkeypatch.setattr(hydrate_herdr_runtime, "FILES", pinned)
+
+    archive_path = tmp_path / "node.zip"
+    prefix = "tether-node-0.5.3"
+    expected_members = {f"{prefix}/tether/node/bin/{relative}" for relative in relatives}
+    with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as archive:
+        module.add_windows_herdr_runtime(archive, prefix, runtime)
+
+    with zipfile.ZipFile(archive_path) as archive:
+        assert set(archive.namelist()) == expected_members
+        for relative, payload in expected.items():
+            assert archive.read(f"{prefix}/tether/node/bin/{relative}") == payload
+
+    with zipfile.ZipFile(archive_path, "a", zipfile.ZIP_DEFLATED) as archive:
+        with pytest.raises(ValueError, match="already contains Herdr runtime member"):
+            module.add_windows_herdr_runtime(archive, prefix, runtime)
+
+    corrupt_runtime = tmp_path / "corrupt-herdr-runtime"
+    shutil.copytree(runtime, corrupt_runtime)
+    (corrupt_runtime / "herdr.exe").write_bytes(b"tampered")
+    corrupt_archive = tmp_path / "corrupt-node.zip"
+    with zipfile.ZipFile(corrupt_archive, "w", zipfile.ZIP_DEFLATED) as archive:
+        with pytest.raises(ValueError, match="failed pinned size/SHA-256"):
+            module.add_windows_herdr_runtime(archive, prefix, corrupt_runtime)
+        assert archive.namelist() == []
 
 
 def test_node_installer_archive_entry_normalizes_only_its_line_endings(tmp_path: Path, monkeypatch) -> None:

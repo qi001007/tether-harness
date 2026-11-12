@@ -107,3 +107,6 @@
 - 2026-11-07：从 Codeg 显式选择 Herdr 项目时按规范化 cwd 生成 pane key，并仅对该终端启用 cwd 哈希的 Herdr project scope；通用 Herdr 保留默认 pane/session。
 
 - 2026-11-09：首开遮罩区分等待登录、登录中、读取中和读取失败；未登录时中央按钮调用既有 Hub 登录，身份关联对话框保持。Web 构建通过，隔离 Windows 候选 bundle 已同步；未实际启动验收。
+
+- 2026-11-12：将 `NetworkGraph` 函数恢复为 E 主仓库已调好的 requestAnimationFrame 力导向实现，保留环形/三角布局、速度状态和拖动/选择行为；移除唯一 Cytoscape import。外围连接/权限回调与详情/连接管理不变。构建 exit 0，等待 r11 实机刷新复验。
+- 2026-11-12：互联图恢复 bundle 经 Terra 实机验收：流动/环形三角、缩放、拖动、浮层与切页后位置正常；跨页速度连续未证明。旧 Cytoscape key 已按精确备份值条件删除，原始值保留在 QA 备份。

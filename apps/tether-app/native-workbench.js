@@ -2,6 +2,7 @@
 
 const crypto = require('node:crypto')
 const net = require('node:net')
+const os = require('node:os')
 const tls = require('node:tls')
 const { X509Certificate } = require('node:crypto')
 const { SocksClient } = require('socks')
@@ -64,6 +65,33 @@ function legacyCodegService(status, targetId) {
     return { ...base, state: 'stopped', reason: '目标节点 Codeg 已停止。', reason_code: 'legacy_codeg_stopped' }
   }
   return { ...base, state: 'failed', reason: '旧节点返回了无效的 Codeg 状态。', reason_code: 'legacy_status_invalid' }
+}
+
+function ipv4Number(value) {
+  if (!net.isIPv4(value)) return null
+  return value.split('.').reduce((result, part) => ((result << 8) | Number(part)) >>> 0, 0)
+}
+
+function isPrivateIPv4(value) {
+  const ip = ipv4Number(value)
+  if (ip === null) return false
+  const first = ip >>> 24
+  const second = (ip >>> 16) & 255
+  return first === 10 || (first === 172 && second >= 16 && second <= 31)
+    || (first === 192 && second === 168)
+}
+
+function hasLocalEasyTierRoute(targetHost) {
+  const target = ipv4Number(targetHost)
+  if (target === null || !isPrivateIPv4(targetHost)) return false
+  return Object.entries(os.networkInterfaces()).some(([name, interfaces]) => /^et[_-]|easytier/i.test(name)
+    && Array.isArray(interfaces) && interfaces.some((item) => {
+      if (!item || item.internal || !(item.family === 'IPv4' || item.family === 4)
+          || !isPrivateIPv4(item.address)) return false
+      const address = ipv4Number(item.address)
+      const mask = ipv4Number(item.netmask)
+      return address !== null && mask !== null && (address & mask) === (target & mask)
+    }))
 }
 
 async function postJson(fetcher, url, body, { signal } = {}) {
@@ -479,6 +507,26 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     const sourceDeviceId = await getLocalDeviceId()
     if (typeof sourceDeviceId !== 'string' || !sourceDeviceId) throw new Error('本机设备身份尚未就绪。')
     if (!isCurrent() || openingController.signal.aborted) throw new Error('工作台账号已切换，请重新打开服务。')
+    if (serviceId === 'codeg' && targetId === sourceDeviceId) {
+      const localCodeg = await openLegacyCodeg(targetId, {
+        allowModernLocal: true, expectedActorId: actorId, expectedGeneration: generation,
+        catalogResult: serviceCatalog
+      })
+      if (!isCurrent() || openingController.signal.aborted) {
+        throw new Error('工作台账号已切换，请重新打开服务。')
+      }
+      return localCodeg
+    }
+    if (serviceId === 'codeg' && serviceCatalog.protocol === 1 && !serviceCatalog.legacy) {
+      const compatibleCodeg = await openLegacyCodeg(targetId, {
+        allowModernOwnedEasyTier: true, sourceDeviceId, expectedActorId: actorId,
+        expectedGeneration: generation, catalogResult: serviceCatalog
+      })
+      if (!isCurrent() || openingController.signal.aborted) {
+        throw new Error('工作台账号已切换，请重新打开服务。')
+      }
+      if (compatibleCodeg) return compatibleCodeg
+    }
     const openBody = {
       service_id: serviceId,
       operation_id: operationId,
@@ -600,23 +648,39 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     try { return await opening } finally { if (pending.get(key) === opening) pending.delete(key) }
   }
 
-  async function openLegacyCodeg(targetId) {
+  async function openLegacyCodeg(targetId, options = {}) {
     if (typeof targetId !== 'string' || !targetId) throw new TypeError('invalid target')
     const actorId = await getActorId()
     if (typeof actorId !== 'string' || !actorId) throw new Error('Controller 登录身份尚未就绪。')
+    if (options.expectedActorId != null && options.expectedActorId !== actorId) {
+      throw new Error('工作台账号已切换，请重新打开服务。')
+    }
     if (clearingActors.has(actorId)) throw new Error('工作台授权正在清理，请稍后重试。')
     const generation = actorGenerations.get(actorId) || 0
+    if (options.expectedGeneration != null && options.expectedGeneration !== generation) {
+      throw new Error('工作台账号已切换，请重新打开服务。')
+    }
+    const localDeviceId = options.allowModernLocal === true ? await getLocalDeviceId() : ''
+    const allowModernLocal = options.allowModernLocal === true && localDeviceId === targetId
+    if ((actorGenerations.get(actorId) || 0) !== generation || clearingActors.has(actorId)) {
+      throw new Error('工作台账号已切换，请重新打开服务。')
+    }
+    let catalogResult = options.catalogResult || null
     let legacy = legacyCatalogEntry(actorId, targetId)
     if (!legacy) {
-      await catalog(targetId)
+      if (!catalogResult) catalogResult = await catalog(targetId)
       if ((actorGenerations.get(actorId) || 0) !== generation || clearingActors.has(actorId)) {
         throw new Error('工作台账号已切换，请重新打开服务。')
       }
       legacy = legacyCatalogEntry(actorId, targetId)
     }
-    const codeg = legacy && legacy.value && legacy.value.services
-      && legacy.value.services.find((service) => service.id === 'codeg')
-    if (!legacy || !codeg || codeg.state !== 'ready' || codeg.open_mode !== 'legacy-codeg') {
+    const catalogHasCodeg = catalogResult && catalogResult.protocol === 1
+      && catalogResult.target_id === targetId && Array.isArray(catalogResult.services)
+      && catalogResult.services.some((service) => service && service.id === 'codeg')
+    const allowModernOwnedEasyTier = options.allowModernOwnedEasyTier === true
+      && typeof options.sourceDeviceId === 'string' && options.sourceDeviceId && options.sourceDeviceId !== targetId
+      && catalogHasCodeg
+    if (!legacy && !(allowModernLocal && catalogHasCodeg) && !allowModernOwnedEasyTier) {
       throw new Error('目标 Codeg 未通过旧节点兼容检查。')
     }
     const key = tupleKey(actorId, targetId, 'codeg')
@@ -628,35 +692,104 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
 
     let serviceSession = null
     try {
-      const status = await postJson(loginSession.fetch.bind(loginSession),
+      let modernOwnerProof = null
+      if (allowModernOwnedEasyTier) {
+        const stateResponse = await loginSession.fetch(new URL('/api/state', base).toString(), {
+          method: 'GET', headers: { 'Cache-Control': 'no-store' }, redirect: 'error'
+        })
+        let state
+        try { state = await stateResponse.json() } catch (_) { throw new Error('Controller 返回了无效的设备快照。') }
+        if (!stateResponse.ok) {
+          const error = new Error('Controller 无法验证当前账号和目标设备（HTTP ' + stateResponse.status + '）。')
+          error.status = stateResponse.status
+          error.code = state && state.detail && state.detail.code
+          throw error
+        }
+        if (!state || typeof state !== 'object' || Array.isArray(state) || !state.user
+            || typeof state.user !== 'object' || state.user.user_id !== actorId || !Array.isArray(state.devices)) {
+          throw new Error('Controller 返回的账号或设备快照无效。')
+        }
+        if ((actorGenerations.get(actorId) || 0) !== generation || clearingActors.has(actorId)) {
+          throw new Error('工作台账号已切换，请重新打开服务。')
+        }
+
+        const networksResponse = await loginSession.fetch(new URL('/api/networks', base).toString(), {
+          method: 'GET', headers: { 'Cache-Control': 'no-store' }, redirect: 'error'
+        })
+        let networksPayload
+        try { networksPayload = await networksResponse.json() } catch (_) { throw new Error('Controller 返回了无效的网络目录。') }
+        if (!networksResponse.ok) {
+          const error = new Error('Controller 无法验证目标设备的网络状态（HTTP ' + networksResponse.status + '）。')
+          error.status = networksResponse.status
+          error.code = networksPayload && networksPayload.detail && networksPayload.detail.code
+          throw error
+        }
+        const networks = Array.isArray(networksPayload) ? networksPayload
+          : networksPayload && Array.isArray(networksPayload.networks) ? networksPayload.networks : null
+        if (!networks) throw new Error('Controller 返回了无效的网络目录。')
+        if ((actorGenerations.get(actorId) || 0) !== generation || clearingActors.has(actorId)) {
+          throw new Error('工作台账号已切换，请重新打开服务。')
+        }
+        const hasCommonReadyNetwork = networks.some((item) => item && item.state === 'ready'
+          && Array.isArray(item.devices)
+          && item.devices.some((device) => device && device.device_id === options.sourceDeviceId && device.state === 'ready')
+          && item.devices.some((device) => device && device.device_id === targetId && device.state === 'ready'))
+        if (hasCommonReadyNetwork) return null
+
+        const target = state.devices.find((item) => item && item.device_id === targetId)
+        const directHost = target && target.online === true && target.owner_id === actorId
+          && target.capabilities && target.capabilities.direct_api && target.capabilities.direct_api.host
+        if (typeof directHost !== 'string' || !isPrivateIPv4(directHost) || !hasLocalEasyTierRoute(directHost)) return null
+        modernOwnerProof = { directHost, networks }
+      }
+
+      let status = await postJson(loginSession.fetch.bind(loginSession),
         apiUrl(base, targetId, 'agents_runtime_status'), {})
-      const current = legacyCodegService(status, targetId)
+      let current = legacyCodegService(status, targetId)
+      if ((allowModernLocal || modernOwnerProof) && current.state === 'stopped') {
+        if ((actorGenerations.get(actorId) || 0) !== generation || clearingActors.has(actorId)) {
+          throw new Error('工作台账号已切换，请重新打开服务。')
+        }
+        await postJson(loginSession.fetch.bind(loginSession), apiUrl(base, targetId, 'agents_runtime_start'), {})
+        if ((actorGenerations.get(actorId) || 0) !== generation || clearingActors.has(actorId)) {
+          throw new Error('工作台账号已切换，请重新打开服务。')
+        }
+        status = await postJson(loginSession.fetch.bind(loginSession),
+          apiUrl(base, targetId, 'agents_runtime_status'), {})
+        current = legacyCodegService(status, targetId)
+      }
       const tokenUrl = status && strictLegacyCodegUrl(status.url)
       if (current.state !== 'ready' || !tokenUrl) throw new Error(current.reason || '目标 Codeg 尚未运行。')
+      const bootstrapUrl = new URL(tokenUrl)
+      bootstrapUrl.searchParams.set('next', '/workspace?tether_home=1')
       if ((actorGenerations.get(actorId) || 0) !== generation || clearingActors.has(actorId)) {
         throw new Error('工作台账号已切换，请重新打开服务。')
       }
-      const sourceDeviceId = await getLocalDeviceId()
+      const sourceDeviceId = modernOwnerProof ? options.sourceDeviceId : await getLocalDeviceId()
       if (typeof sourceDeviceId !== 'string' || !sourceDeviceId) throw new Error('本机设备身份尚未就绪。')
 
-      const networksResponse = await loginSession.fetch(new URL('/api/networks', base).toString(), {
-        method: 'GET', headers: { 'Cache-Control': 'no-store' }, redirect: 'error'
-      })
-      let networksPayload
-      try { networksPayload = await networksResponse.json() } catch (_) { throw new Error('Controller 返回了无效的网络目录。') }
-      if (!networksResponse.ok) {
-        const detail = networksPayload && networksPayload.detail
-        const error = new Error((detail && detail.error) || (typeof detail === 'string' && detail)
-          || (networksPayload && networksPayload.error) || ('网络目录请求失败（HTTP ' + networksResponse.status + '）。'))
-        error.status = networksResponse.status
-        error.code = detail && detail.code || networksPayload && networksPayload.code
-        throw error
+      let networks
+      if (modernOwnerProof) {
+        networks = modernOwnerProof.networks
+      } else {
+        const networksResponse = await loginSession.fetch(new URL('/api/networks', base).toString(), {
+          method: 'GET', headers: { 'Cache-Control': 'no-store' }, redirect: 'error'
+        })
+        let networksPayload
+        try { networksPayload = await networksResponse.json() } catch (_) { throw new Error('Controller 返回了无效的网络目录。') }
+        if (!networksResponse.ok) {
+          const detail = networksPayload && networksPayload.detail
+          const error = new Error((detail && detail.error) || (typeof detail === 'string' && detail)
+            || (networksPayload && networksPayload.error) || ('网络目录请求失败（HTTP ' + networksResponse.status + '）。'))
+          error.status = networksResponse.status
+          error.code = detail && detail.code || networksPayload && networksPayload.code
+          throw error
+        }
+        networks = Array.isArray(networksPayload) ? networksPayload
+          : networksPayload && Array.isArray(networksPayload.networks) ? networksPayload.networks : null
       }
-      const networks = Array.isArray(networksPayload) ? networksPayload
-        : networksPayload && Array.isArray(networksPayload.networks) ? networksPayload.networks : null
       if (!networks) throw new Error('Controller 返回了无效的网络目录。')
       const readyNetworks = networks.filter((item) => item && item.state === 'ready')
-      if (!readyNetworks.length) throw new Error('Controller 尚未配置可信网络，无法安全打开旧 Codeg。')
       const network = readyNetworks.find((item) => {
         if (typeof item.network_id !== 'string' || !item.network_id
             || !Array.isArray(item.devices)) return false
@@ -664,9 +797,29 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
         const target = item.devices.find((device) => device && device.device_id === targetId && device.state === 'ready')
         return !!source && !!target && target.service_ip === tokenUrl.hostname
       })
-      if (!network) throw new Error('没有同时连接本机与目标设备的可信网络。')
-      const sourceRoute = validateSourceRoute(await getSourceRoute(network.network_id, sourceDeviceId),
-        network.network_id, sourceDeviceId)
+      let sourceRoute = null
+      if (network) {
+        sourceRoute = validateSourceRoute(await getSourceRoute(network.network_id, sourceDeviceId),
+          network.network_id, sourceDeviceId)
+      } else if (modernOwnerProof) {
+        if (modernOwnerProof.directHost !== tokenUrl.hostname) {
+          throw new Error('目标 Codeg 状态 URL 与已鉴权的 EasyTier 地址不匹配。')
+        }
+      } else {
+        const stateResponse = await loginSession.fetch(new URL('/api/state', base).toString(), {
+          method: 'GET', headers: { 'Cache-Control': 'no-store' }, redirect: 'error'
+        })
+        let state
+        try { state = await stateResponse.json() } catch (_) { throw new Error('Controller 返回了无效的设备快照。') }
+        if (!stateResponse.ok) throw new Error('Controller 无法验证目标设备的旧网络地址。')
+        const target = Array.isArray(state && state.devices)
+          ? state.devices.find((item) => item && item.device_id === targetId && item.online === true) : null
+        const legacyHost = target && target.capabilities && target.capabilities.direct_api
+          && target.capabilities.direct_api.host
+        if (legacyHost !== tokenUrl.hostname || !hasLocalEasyTierRoute(tokenUrl.hostname)) {
+          throw new Error('目标 Codeg 未通过已鉴权的旧 EasyTier 网络检查。')
+        }
+      }
       if ((actorGenerations.get(actorId) || 0) !== generation || clearingActors.has(actorId)) {
         throw new Error('工作台账号已切换，请重新打开服务。')
       }
@@ -675,7 +828,8 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
       if (!serviceSession || typeof serviceSession.fetch !== 'function') throw new Error('Electron 服务隔离会话不可用。')
       managedSessions.add(serviceSession)
       installLegacyOriginGuard(serviceSession, tokenUrl)
-      await configureSocksProxy(serviceSession, sourceRoute)
+      if (sourceRoute) await configureSocksProxy(serviceSession, sourceRoute)
+      else await resetServiceSession(serviceSession)
       if ((actorGenerations.get(actorId) || 0) !== generation || clearingActors.has(actorId)) {
         throw new Error('工作台账号已切换，请重新打开服务。')
       }
@@ -683,8 +837,9 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
       const endpoint = new URL('/', tokenUrl)
       const publicResult = { targetId, serviceId: 'codeg', grantId, endpoint: endpoint.toString(),
         partition, legacy: true }
+      // legacy marks the existing token-URL bootstrap flow, not the target Node version.
       active.set(key, { actorId, targetId, serviceId: 'codeg', generation, legacy: true, grantId,
-        endpoint, legacyTokenUrl: tokenUrl.toString(), guestPrepared: false, serviceSession, sourceRoute,
+        endpoint, legacyTokenUrl: bootstrapUrl.toString(), guestPrepared: false, serviceSession, sourceRoute,
         partition, public: publicResult, viewTimer: null })
       logSafe('native-workbench-open-legacy', { targetId, serviceId: 'codeg' })
       return publicResult
@@ -719,6 +874,7 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
       return record
     }
     let guestUrl
+    if (record.legacy === true && (currentUrl === '' || currentUrl === 'about:blank')) return record
     try { guestUrl = new URL(currentUrl) } catch (_) { throw new Error('工作台 guest 与活动授权不匹配。') }
     if (guestUrl.href !== 'about:blank'
         && ((guestUrl.protocol !== 'http:' && guestUrl.protocol !== 'https:')

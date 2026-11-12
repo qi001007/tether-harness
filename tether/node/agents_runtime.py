@@ -371,6 +371,33 @@ class AgentsRuntime:
             raise ValueError("Codeg activity response is too large")
         return json.loads(payload.decode("utf-8"))
 
+    def herdr_agent(self, agent_type: str) -> dict[str, Any]:
+        """Read one enabled Codeg agent for the Herdr terminal bridge."""
+        with self.lock:
+            state = self.status()
+            if not state.get("running") or not self.port or not self.token:
+                raise ValueError("Agents Runtime must be running to start an agent in Herdr")
+            try:
+                records = self._api_post("acp_list_agents", {}, self.port, self.token, 3.0)
+            except Exception:
+                raise ValueError("Agents Runtime agent catalog is unavailable") from None
+            if isinstance(records, dict) and isinstance(records.get("agents"), list):
+                records = records["agents"]
+            if not isinstance(records, list) or len(records) > 256:
+                raise ValueError("Agents Runtime returned an invalid agent catalog")
+            matches = [record for record in records
+                       if isinstance(record, dict) and record.get("agent_type") == agent_type]
+            if len(matches) != 1:
+                raise ValueError("The selected agent is not registered in Agents Runtime")
+            record = matches[0]
+            env = record.get("env")
+            if (record.get("enabled") is not True or record.get("available") is not True
+                    or not isinstance(env, dict)
+                    or any(not isinstance(key, str) or not isinstance(value, str)
+                           for key, value in env.items())):
+                raise ValueError("The selected agent is disabled or unavailable in Agents Runtime")
+            return {"agent_type": agent_type, "env": dict(env)}
+
     def activity(self) -> dict[str, Any]:
         """Return a fail-closed snapshot of active Codeg work without starting it."""
         with self.lock:

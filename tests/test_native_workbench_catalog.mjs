@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
 import test from 'node:test'
+import os from 'node:os'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 
@@ -391,10 +392,12 @@ test('legacy Codeg prepares about:blank with the private URL, rejects a wrong or
   } }
   await assert.rejects(workbench.prepareGuest({ ...contents, getURL: () => 'http://100.64.0.9:4096/' }),
     /guest 与活动授权不匹配/)
-  await assert.rejects(workbench.prepareGuest(contents), /first load failed/)
+  await assert.rejects(workbench.prepareGuest({ ...contents, getURL: () => '' }), /first load failed/)
   assert.deepEqual(await workbench.prepareGuest(contents), { managed: true, prepared: true })
   assert.deepEqual(await workbench.prepareGuest(contents), { managed: true, prepared: false })
-  assert.deepEqual(loaded, ['http://100.64.0.8:4096/token.html?token=private-token'])
+  assert.deepEqual(loaded, [
+    'http://100.64.0.8:4096/token.html?token=private-token&next=%2Fworkspace%3Ftether_home%3D1'
+  ])
 
   const requestResults = []
   session.calls.beforeRequest({ url: 'http://100.64.0.8:4096/workspace' }, (result) => requestResults.push(result))
@@ -408,6 +411,63 @@ test('legacy Codeg prepares about:blank with the private URL, rejects a wrong or
     { path: '/api/networks', method: 'GET' }
   ], 'cold open must classify with bad_op before re-reading status and must never call service_open')
   assert.equal(controllerCalls.some((call) => /service_open|agents_runtime_start/.test(call.path)), false)
+})
+
+test('legacy Codeg uses only the authenticated target EasyTier address when no managed mesh route matches', async () => {
+  const originalNetworkInterfaces = os.networkInterfaces
+  const session = legacySession()
+  os.networkInterfaces = () => ({
+    et_6_zngp: [{ address: '10.144.0.2', netmask: '255.255.255.0', family: 'IPv4', internal: false }]
+  })
+  try {
+    const calls = []
+    const workbench = workbenchWith(async (url, init) => {
+      const path = new URL(url).pathname
+      calls.push({ path, method: init.method })
+      if (path.endsWith('/service_catalog')) return jsonResponse(400, { detail: { code: 'bad_op' } })
+      if (path.endsWith('/agents_runtime_status')) return jsonResponse(200,
+        readyLegacyStatus('http://10.144.0.3:3444/token.html?token=private-token'))
+      if (path === '/api/networks') return jsonResponse(200, { networks: [] })
+      if (path === '/api/state') return jsonResponse(200, { devices: [{ device_id: 'target-1', online: true,
+        capabilities: { direct_api: { host: '10.144.0.3', port: 18895, token: 'private-api-token' } } }] })
+      throw new Error('unexpected request: ' + path)
+    }, { getServiceSession: () => session })
+
+    const opened = await workbench.openLegacyCodeg('target-1')
+    assert.equal(opened.endpoint, 'http://10.144.0.3:3444/')
+    assert.equal(opened.legacy, true)
+    assert.doesNotMatch(JSON.stringify(opened), /private-token|private-api-token/)
+    assert.deepEqual(session.calls.proxy, [{ mode: 'direct' }])
+    assert.deepEqual(calls.slice(-2), [
+      { path: '/api/networks', method: 'GET' },
+      { path: '/api/state', method: 'GET' }
+    ])
+  } finally {
+    os.networkInterfaces = originalNetworkInterfaces
+  }
+})
+
+test('legacy Codeg rejects an EasyTier address that does not match the authenticated target snapshot', async () => {
+  const originalNetworkInterfaces = os.networkInterfaces
+  os.networkInterfaces = () => ({
+    et_6_zngp: [{ address: '10.144.0.2', netmask: '255.255.255.0', family: 'IPv4', internal: false }]
+  })
+  try {
+    const workbench = workbenchWith(async (url) => {
+      const path = new URL(url).pathname
+      if (path.endsWith('/service_catalog')) return jsonResponse(400, { detail: { code: 'bad_op' } })
+      if (path.endsWith('/agents_runtime_status')) return jsonResponse(200,
+        readyLegacyStatus('http://10.144.0.3:3444/token.html?token=private-token'))
+      if (path === '/api/networks') return jsonResponse(200, { networks: [] })
+      if (path === '/api/state') return jsonResponse(200, { devices: [{ device_id: 'target-1', online: true,
+        capabilities: { direct_api: { host: '10.144.0.9' } } }] })
+      throw new Error('unexpected request: ' + path)
+    }, { getServiceSession: () => legacySession() })
+    await assert.rejects(workbench.openLegacyCodeg('target-1'),
+      /目标 Codeg 未通过已鉴权的旧 EasyTier 网络检查/)
+  } finally {
+    os.networkInterfaces = originalNetworkInterfaces
+  }
 })
 
 test('legacy Codeg reclassifies an expired cache before opening without service_open', async () => {
@@ -443,7 +503,340 @@ test('legacy Codeg reclassifies an expired cache before opening without service_
   }
 })
 
-test('legacy Codeg reports the exact safe error when no ready Controller network exists', async () => {
+test('legacy Codeg opens from a fresh ready status when its cached catalog says stopped', async () => {
+  let statusReads = 0
+  const session = legacySession()
+  const workbench = workbenchWith(async (url) => {
+    const path = new URL(url).pathname
+    if (path.endsWith('/service_catalog')) return jsonResponse(400, { detail: { code: 'bad_op' } })
+    if (path.endsWith('/agents_runtime_status')) {
+      statusReads += 1
+      return jsonResponse(200, statusReads === 1
+        ? { device_id: 'target-1', installed: true, running: false, url: '' }
+        : readyLegacyStatus())
+    }
+    if (path === '/api/networks') return jsonResponse(200, readyNetworks())
+    throw new Error('unexpected request: ' + path)
+  }, { getServiceSession: () => session, getSourceRoute: async () => readyRoute })
+
+  const cached = await workbench.catalog('target-1')
+  assert.equal(cached.services.find((service) => service.id === 'codeg').state, 'stopped')
+  const opened = await workbench.openLegacyCodeg('target-1')
+  assert.equal(opened.endpoint, 'http://100.64.0.8:4096/')
+  assert.equal(statusReads, 2, 'open must re-read authenticated runtime status instead of trusting stale stopped state')
+})
+
+test('modern same-device Codeg starts its stopped runtime once and opens through the isolated token gateway', async () => {
+  const originalNetworkInterfaces = os.networkInterfaces
+  const session = legacySession()
+  const calls = []
+  let statusReads = 0
+  let startCalls = 0
+  os.networkInterfaces = () => ({
+    et_6_zngp: [{ address: '10.144.0.2', netmask: '255.255.255.0', family: 'IPv4', internal: false }]
+  })
+  try {
+    const workbench = workbenchWith(async (url, init) => {
+      const path = new URL(url).pathname
+      calls.push({ path, method: init.method })
+      if (path.endsWith('/service_catalog')) return jsonResponse(200, {
+        protocol: 1, target_id: 'target-1', services: [{ id: 'codeg', state: 'stopped' }]
+      })
+      if (path.endsWith('/agents_runtime_status')) {
+        statusReads += 1
+        return jsonResponse(200, statusReads === 1
+          ? { device_id: 'target-1', installed: true, running: false, url: '' }
+          : readyLegacyStatus('http://10.144.0.3:3444/token.html?token=private-token'))
+      }
+      if (path.endsWith('/agents_runtime_start')) {
+        startCalls += 1
+        return jsonResponse(200, { installed: true, running: true })
+      }
+      if (path === '/api/networks') return jsonResponse(200, { networks: [] })
+      if (path === '/api/state') return jsonResponse(200, { devices: [{ device_id: 'target-1', online: true,
+        capabilities: { direct_api: { host: '10.144.0.3', port: 18895 } } }] })
+      throw new Error('unexpected request: ' + path)
+    }, { getServiceSession: () => session, getLocalDeviceId: async () => 'target-1' })
+
+    const opened = await workbench.open('target-1', 'codeg')
+    assert.equal(opened.endpoint, 'http://10.144.0.3:3444/')
+    assert.equal(opened.legacy, true, 'legacy identifies the token URL bootstrap mode')
+    assert.match(opened.partition, /^persist:tether-wb-[a-f0-9]{40}$/)
+    assert.doesNotMatch(JSON.stringify(opened), /private-token|token\.html|\?token=/)
+    assert.deepEqual(session.calls.proxy, [{ mode: 'direct' }])
+    assert.equal(statusReads, 2)
+    assert.equal(startCalls, 1)
+    assert.deepEqual(calls.map((call) => call.path), [
+      '/api/devices/target-1/fs/service_catalog',
+      '/api/devices/target-1/fs/agents_runtime_status',
+      '/api/devices/target-1/fs/agents_runtime_start',
+      '/api/devices/target-1/fs/agents_runtime_status',
+      '/api/networks', '/api/state'
+    ])
+    assert.equal(calls.some((call) => call.path.endsWith('/service_open')), false)
+  } finally {
+    os.networkInterfaces = originalNetworkInterfaces
+  }
+})
+
+test('modern remote Codeg remains on service_open and never starts through the local token gateway', async () => {
+  const calls = []
+  const workbench = workbenchWith(async (url, init) => {
+    const path = new URL(url).pathname
+    calls.push({ path, method: init.method })
+    if (path.endsWith('/service_catalog')) return jsonResponse(200, {
+      protocol: 1, target_id: 'target-1', services: [{ id: 'codeg', state: 'ready' }]
+    })
+    if (path === '/api/state') return jsonResponse(200, { user: { user_id: 'actor-1' }, devices: [
+      { device_id: 'target-1', online: true, owner_id: 'another-actor' }
+    ] })
+    if (path === '/api/networks') return jsonResponse(200, { networks: [] })
+    if (path.endsWith('/service_open')) return jsonResponse(409, { detail: { code: 'native_path_reached' } })
+    throw new Error('unexpected remote fallback: ' + path)
+  })
+
+  await assert.rejects(workbench.open('target-1', 'codeg'),
+    (error) => error.status === 409 && error.code === 'native_path_reached')
+  assert.deepEqual(calls.map((call) => call.path), [
+    '/api/devices/target-1/fs/service_catalog', '/api/state', '/api/networks',
+    '/api/devices/target-1/fs/service_open'
+  ])
+})
+
+test('modern owned remote Codeg uses the token gateway only after fresh EasyTier ownership proof', async () => {
+  const originalNetworkInterfaces = os.networkInterfaces
+  const session = legacySession()
+  const calls = []
+  let statusReads = 0
+  let startCalls = 0
+  os.networkInterfaces = () => ({
+    et_6_zngp: [{ address: '10.144.0.2', netmask: '255.255.255.0', family: 'IPv4', internal: false }]
+  })
+  try {
+    const workbench = workbenchWith(async (url, init) => {
+      const path = new URL(url).pathname
+      calls.push(path)
+      if (path.endsWith('/service_catalog')) return jsonResponse(200, {
+        protocol: 1, target_id: 'target-1', services: [{ id: 'codeg', state: 'stopped' }]
+      })
+      if (path === '/api/state') return jsonResponse(200, { user: { user_id: 'actor-1' }, devices: [
+        { device_id: 'target-1', online: true, owner_id: 'actor-1',
+          capabilities: { direct_api: { host: '10.144.0.3', port: 18895, token: 'private-api-token' } } }
+      ] })
+      if (path === '/api/networks') return jsonResponse(200, { networks: [] })
+      if (path.endsWith('/agents_runtime_status')) {
+        statusReads += 1
+        return jsonResponse(200, statusReads === 1
+          ? { device_id: 'target-1', installed: true, running: false, url: '' }
+          : readyLegacyStatus('http://10.144.0.3:3444/token.html?token=private-token'))
+      }
+      if (path.endsWith('/agents_runtime_start')) {
+        startCalls += 1
+        return jsonResponse(200, { installed: true, running: true })
+      }
+      throw new Error('unexpected request: ' + path)
+    }, { getServiceSession: () => session })
+
+    const opened = await workbench.open('target-1', 'codeg')
+    assert.equal(opened.endpoint, 'http://10.144.0.3:3444/')
+    assert.equal(opened.legacy, true)
+    assert.deepEqual(session.calls.proxy, [{ mode: 'direct' }])
+    assert.doesNotMatch(JSON.stringify(opened), /private-token|private-api-token/)
+    assert.equal(statusReads, 2)
+    assert.equal(startCalls, 1)
+    assert.deepEqual(calls, [
+      '/api/devices/target-1/fs/service_catalog', '/api/state', '/api/networks',
+      '/api/devices/target-1/fs/agents_runtime_status',
+      '/api/devices/target-1/fs/agents_runtime_start',
+      '/api/devices/target-1/fs/agents_runtime_status'
+    ])
+  } finally {
+    os.networkInterfaces = originalNetworkInterfaces
+  }
+})
+
+test('modern Codeg keeps a common ready network on service_open without requiring legacy direct_api', async () => {
+  const calls = []
+  const networks = { networks: [{ network_id: 'shared-network', state: 'ready', devices: [
+    { device_id: 'local-1', state: 'ready' }, { device_id: 'target-1', state: 'ready' }
+  ] }] }
+  const workbench = workbenchWith(async (url, init) => {
+    const path = new URL(url).pathname
+    calls.push(path)
+    if (path.endsWith('/service_catalog')) return jsonResponse(200, {
+      protocol: 1, target_id: 'target-1', services: [{ id: 'codeg', state: 'ready' }]
+    })
+    if (path === '/api/state') return jsonResponse(200, { user: { user_id: 'actor-1' }, devices: [] })
+    if (path === '/api/networks') return jsonResponse(200, networks)
+    if (path.endsWith('/service_open')) return jsonResponse(409, { detail: { code: 'native_path_reached' } })
+    throw new Error('unexpected request: ' + path)
+  })
+
+  await assert.rejects(workbench.open('target-1', 'codeg'),
+    (error) => error.status === 409 && error.code === 'native_path_reached')
+  assert.deepEqual(calls, [
+    '/api/devices/target-1/fs/service_catalog', '/api/state', '/api/networks',
+    '/api/devices/target-1/fs/service_open'
+  ])
+})
+
+test('modern Codeg fails closed on an account mismatch or malformed network directory', async () => {
+  for (const [label, state, networks, expected] of [
+    ['account mismatch', { user: { user_id: 'other-actor' }, devices: [] }, { networks: [] }, /账号或设备快照无效/],
+    ['malformed networks', { user: { user_id: 'actor-1' }, devices: [] }, { networks: 'unknown' }, /无效的网络目录/]
+  ]) {
+    const calls = []
+    const workbench = workbenchWith(async (url, init) => {
+      const path = new URL(url).pathname
+      calls.push(path)
+      if (path.endsWith('/service_catalog')) return jsonResponse(200, {
+        protocol: 1, target_id: 'target-1', services: [{ id: 'codeg', state: 'ready' }]
+      })
+      if (path === '/api/state') return jsonResponse(200, state)
+      if (path === '/api/networks') return jsonResponse(200, networks)
+      throw new Error('unexpected request: ' + path)
+    })
+    await assert.rejects(workbench.open('target-1', 'codeg'), expected, label)
+    assert.equal(calls.some((path) => path.endsWith('/service_open')), false, label)
+    assert.equal(calls.some((path) => path.endsWith('/agents_runtime_start')), false, label)
+  }
+})
+
+test('modern Codeg falls through to service_open when an owned target lacks a local EasyTier route', async () => {
+  const originalNetworkInterfaces = os.networkInterfaces
+  os.networkInterfaces = () => ({})
+  try {
+    const calls = []
+    const workbench = workbenchWith(async (url, init) => {
+      const path = new URL(url).pathname
+      calls.push(path)
+      if (path.endsWith('/service_catalog')) return jsonResponse(200, {
+        protocol: 1, target_id: 'target-1', services: [{ id: 'codeg', state: 'ready' }]
+      })
+      if (path === '/api/state') return jsonResponse(200, { user: { user_id: 'actor-1' }, devices: [
+        { device_id: 'target-1', online: true, owner_id: 'actor-1',
+          capabilities: { direct_api: { host: '10.144.0.3' } } }
+      ] })
+      if (path === '/api/networks') return jsonResponse(200, { networks: [] })
+      if (path.endsWith('/service_open')) return jsonResponse(409, { detail: { code: 'native_path_reached' } })
+      throw new Error('unexpected request: ' + path)
+    })
+
+    await assert.rejects(workbench.open('target-1', 'codeg'),
+      (error) => error.status === 409 && error.code === 'native_path_reached')
+    assert.deepEqual(calls, [
+      '/api/devices/target-1/fs/service_catalog', '/api/state', '/api/networks',
+      '/api/devices/target-1/fs/service_open'
+    ])
+  } finally {
+    os.networkInterfaces = originalNetworkInterfaces
+  }
+})
+
+test('modern Codeg preserves authenticated state errors without trying service_open', async () => {
+  const calls = []
+  const workbench = workbenchWith(async (url, init) => {
+    const path = new URL(url).pathname
+    calls.push(path)
+    if (path.endsWith('/service_catalog')) return jsonResponse(200, {
+      protocol: 1, target_id: 'target-1', services: [{ id: 'codeg', state: 'ready' }]
+    })
+    if (path === '/api/state') return jsonResponse(403, { detail: { code: 'forbidden' } })
+    throw new Error('unexpected request: ' + path)
+  })
+
+  await assert.rejects(workbench.open('target-1', 'codeg'),
+    (error) => error.status === 403 && error.code === 'forbidden')
+  assert.deepEqual(calls, ['/api/devices/target-1/fs/service_catalog', '/api/state'])
+})
+
+test('modern owned Codeg rejects a token URL outside the proven direct host', async () => {
+  const originalNetworkInterfaces = os.networkInterfaces
+  os.networkInterfaces = () => ({
+    et_6_zngp: [{ address: '10.144.0.2', netmask: '255.255.255.0', family: 'IPv4', internal: false }]
+  })
+  try {
+    const workbench = workbenchWith(async (url) => {
+      const path = new URL(url).pathname
+      if (path.endsWith('/service_catalog')) return jsonResponse(200, {
+        protocol: 1, target_id: 'target-1', services: [{ id: 'codeg', state: 'ready' }]
+      })
+      if (path === '/api/state') return jsonResponse(200, { user: { user_id: 'actor-1' }, devices: [
+        { device_id: 'target-1', online: true, owner_id: 'actor-1',
+          capabilities: { direct_api: { host: '10.144.0.3' } } }
+      ] })
+      if (path === '/api/networks') return jsonResponse(200, { networks: [] })
+      if (path.endsWith('/agents_runtime_status')) return jsonResponse(200,
+        readyLegacyStatus('http://10.144.0.4:3444/token.html?token=private-token'))
+      throw new Error('unexpected request: ' + path)
+    })
+
+    await assert.rejects(workbench.open('target-1', 'codeg'), /已鉴权的 EasyTier 地址不匹配/)
+  } finally {
+    os.networkInterfaces = originalNetworkInterfaces
+  }
+})
+
+test('modern same-device Codeg rejects a wrong status identity or URL without starting runtime', async () => {
+  for (const [status, expected] of [
+    [{ device_id: 'other-device', installed: true, running: true,
+      url: 'http://10.144.0.3:3444/token.html?token=private-token' }, /旧节点返回了无效的 Codeg 状态/],
+    [{ device_id: 'other-device', installed: true, running: false, url: '' }, /旧节点返回了无效的 Codeg 状态/],
+    [{ device_id: 'target-1', installed: true, running: true,
+      url: 'http://localhost:3444/token.html?token=private-token' }, /旧节点 Codeg 运行状态不一致/]
+  ]) {
+    const calls = []
+    const workbench = workbenchWith(async (url, init) => {
+      const path = new URL(url).pathname
+      calls.push({ path, method: init.method })
+      if (path.endsWith('/service_catalog')) return jsonResponse(200, {
+        protocol: 1, target_id: 'target-1', services: [{ id: 'codeg', state: 'ready' }]
+      })
+      if (path.endsWith('/agents_runtime_status')) return jsonResponse(200, status)
+      throw new Error('unexpected request: ' + path)
+    }, { getLocalDeviceId: async () => 'target-1' })
+
+    await assert.rejects(workbench.open('target-1', 'codeg'), expected)
+    assert.equal(calls.some((call) => call.path.endsWith('/agents_runtime_start')), false)
+    assert.equal(calls.some((call) => call.path.endsWith('/service_open')), false)
+  }
+})
+
+test('modern same-device Codeg cancels a pending runtime start when its actor generation changes', async () => {
+  let actorId = 'actor-1'
+  let markStartReached
+  const startReached = new Promise((resolve) => { markStartReached = resolve })
+  let finishStart
+  const startResponse = new Promise((resolve) => { finishStart = resolve })
+  const calls = []
+  const workbench = workbenchWith(async (url, init) => {
+    const path = new URL(url).pathname
+    calls.push(path)
+    if (path.endsWith('/service_catalog')) return jsonResponse(200, {
+      protocol: 1, target_id: 'target-1', services: [{ id: 'codeg', state: 'stopped' }]
+    })
+    if (path.endsWith('/agents_runtime_status')) {
+      return jsonResponse(200, { device_id: 'target-1', installed: true, running: false, url: '' })
+    }
+    if (path.endsWith('/agents_runtime_start')) {
+      markStartReached()
+      return startResponse
+    }
+    throw new Error('unexpected request: ' + path)
+  }, { getActorId: async () => actorId, getLocalDeviceId: async () => 'target-1' })
+
+  const opening = workbench.open('target-1', 'codeg')
+  await startReached
+  const clearing = workbench.clearActor('actor-1')
+  finishStart(jsonResponse(200, { installed: true, running: true }))
+  await assert.rejects(opening, /工作台账号已切换/)
+  await clearing
+  assert.equal(calls.filter((path) => path.endsWith('/agents_runtime_start')).length, 1)
+  assert.equal(calls.filter((path) => path.endsWith('/agents_runtime_status')).length, 1)
+  assert.equal(calls.some((path) => path.endsWith('/service_open')), false)
+})
+
+test('legacy Codeg reports the exact safe error when no trusted legacy or managed network route exists', async () => {
   for (const networks of [
     { networks: [] },
     { networks: [{ network_id: '12422c03150d483a9f86c97899d04450', state: 'stopped', devices: [] }] }
@@ -454,13 +847,14 @@ test('legacy Codeg reports the exact safe error when no ready Controller network
       if (path.endsWith('/service_catalog')) return jsonResponse(400, { detail: { code: 'bad_op' } })
       if (path.endsWith('/agents_runtime_status')) return jsonResponse(200, readyLegacyStatus())
       if (path === '/api/networks') return jsonResponse(200, networks)
+      if (path === '/api/state') return jsonResponse(200, { devices: [] })
       throw new Error('unexpected request: ' + path)
     }, {
       getServiceSession: () => legacySession(),
       getSourceRoute: async () => { routeCalls += 1; return readyRoute }
     })
     await assert.rejects(workbench.openLegacyCodeg('target-1'),
-      (error) => error.message === 'Controller 尚未配置可信网络，无法安全打开旧 Codeg。')
+      (error) => error.message === '目标 Codeg 未通过已鉴权的旧 EasyTier 网络检查。')
     assert.equal(routeCalls, 0)
   }
 })
@@ -535,8 +929,10 @@ test('legacy view, close, and clearActor skip remote lifecycle calls and clear i
   assert.equal(paths.some((path) => /service_(?:close|revoke)$/.test(path) || path.endsWith('/__tether/view')), false)
 })
 
-test('Agents selects the narrow legacy opener and disables every non-ready legacy Codeg state', () => {
+test('Agents can start stopped legacy Codeg but keeps missing and failed legacy states disabled', () => {
   assert.match(agentsPage, /serviceCatalog && serviceCatalog\.legacy === true/)
+  assert.match(agentsPage, /\['ready', 'stopped'\]\.includes\(catalogCodeg\.state\)/)
+  assert.match(agentsPage, /const runtime = await getAgentsRuntime\(device, true\)/)
   assert.match(agentsPage, /await host\.workbench\.openLegacyCodeg\(device\)/)
   assert.match(agentsPage, /legacyCodegBlocked \|\| \(codegService && codegService\.state === 'missing'\)/)
   assert.match(agentsPage, /codegService\.state === 'missing' \? 'Codeg 未安装'[\s\S]*codegService\.state === 'stopped' \? 'Codeg 未运行'[\s\S]*'Codeg 状态异常'/)

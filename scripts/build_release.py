@@ -88,6 +88,20 @@ def add_tether_runtime(archive: zipfile.ZipFile, prefix: str, *, target_platform
                 archive.write(path, f"{prefix}/{rel}")
 
 
+def add_windows_herdr_runtime(archive: zipfile.ZipFile, prefix: str, herdr_runtime: Path) -> None:
+    from scripts.hydrate_herdr_runtime import verify_windows_runtime
+
+    herdr_runtime = Path(herdr_runtime)
+    relatives = verify_windows_runtime(herdr_runtime)
+    targets = [f"{prefix}/tether/node/bin/{relative}" for relative in relatives]
+    existing = {item.filename for item in archive.infolist()}
+    duplicate = next((target for target in targets if target in existing), None)
+    if duplicate is not None:
+        raise ValueError(f"Node ZIP already contains Herdr runtime member: {duplicate}")
+    for relative, target in zip(relatives, targets, strict=True):
+        archive.write(herdr_runtime / relative, target)
+
+
 def release_private_key():
     material = os.environ.get("TETHER_RELEASE_PRIVATE_KEY", "").strip()
     key_file = os.environ.get("TETHER_RELEASE_PRIVATE_KEY_FILE", "").strip()
@@ -321,6 +335,8 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--release-tag")
     parser.add_argument("--channel", choices=("stable", "preview"), default="stable")
     parser.add_argument("--node-deb", type=Path)
+    parser.add_argument("--herdr-runtime", type=Path,
+                         help="directory containing the pinned, hydrated Windows Herdr/ConPTY files")
     parser.add_argument("--output-dir", type=Path)
     args = parser.parse_args(argv)
     if bool(args.frozen_plugin_manifest) != bool(args.frozen_plugin_archive):
@@ -341,6 +357,7 @@ def main(argv: list[str] | None = None) -> None:
     elif release_tag != f"v{version}-preview.1":
         parser.error("the first preview release tag must be v<APP/Node version>-preview.1")
     node_deb = args.node_deb.resolve() if args.node_deb else None
+    herdr_runtime = args.herdr_runtime.resolve() if args.herdr_runtime else None
     if node_deb is not None:
         if not node_deb.is_file():
             parser.error("--node-deb must name an existing Debian package")
@@ -413,6 +430,8 @@ tether-harness-server component is installed. Otherwise, configure a Hub or inst
     node = stage / f"tether-node-{version}.zip"
     with zipfile.ZipFile(node, "w", zipfile.ZIP_DEFLATED) as archive:
         add_tether_runtime(archive, node_prefix)
+        if herdr_runtime is not None:
+            add_windows_herdr_runtime(archive, node_prefix, herdr_runtime)
         if frozen is None:
             for package in ("dsh-plugin-tether", "dsh-plugin-tether-client",
                             "tether-dsh-native-ui", "tether-dsh-surface"):

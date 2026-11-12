@@ -82,7 +82,7 @@
 - 2026-11-04：OpenCode 用 `opencode serve`（不是 `web`，`web` 在 LAPTOP 1.18.21 报 `ServeError` 且会开浏览器）并注册到 `apps.json`；`OpenCodeWeb` 负责端口 4096–4195、启动等待、`opencode.json` 状态（pid/port）与重启接管。`status` 发现进程已死会清掉 `apps.json` 里的陈旧条目；`stop` 同时支持自己起的与接管的进程。`fs_service._opencode_surface` 把网关 `url` 拼进 status/start 返回值，UI 才不用知道 mesh 端口。
 - 2026-11-04：Agent 目录扩到 21 个（Codeg 20 + DSH + Copilot），`resolve_agent_executable` 先 PATH 后 `TETHER_AGENT_HOME`（默认 `D:\Tether\agents`，POSIX `/opt/tether/agents`）；Windows 必须 `.exe/.cmd/.bat` 优先于无后缀 npm shell 脚本。`agents_install` 只用内置 npm 包名，`--prefix`/`--cache` 都落 Agent Home，system 类返回官网地址不硬装。`terminal_start {agent}` 由 Node 用目录里的 `command+args` 起 PTY，绝不让前端拼命令。DSH 的 CLI 是 `dsh <profile>`（本机无 tui profile），Agents 里用 `workbench` 表面切到原生 DSH 工作台，不要起 `dsh tui`。
 - 2026-11-04：目录扫描不能串行跑 `--version`：并行（最多 8 路、单次 1.5 s）+ 节点启动后台预热 + 30 s 缓存；本机缓存命中 0.45 s、强制扫描 1.6 s。DSH 的 `--version` 输出是错误提示（缺 DSH_HOME），版本字段置空，不要把报错当版本显示。
-- 2026-11-04：Herdr 必须能看见 Tether 安装的 Agent：Windows 的 winpty 不把改动后的 os.environ 带给 Herdr 服务/子 shell，靠 `_session_env` 注入 PATH 无效。改成 `~/.tether/herdr/herdr.cmd` 包装器（ASCII 路径、复制 `herdr.exe` 到本地、显式设置 `HERDR_HOME/XDG/APPDATA/PATH` 再启动），并把 `D:\Tethergents` 追加到用户 PATH（安装时也自动追加，含备份）。Herdr 新建 pane 从用户注册表读 PATH，实测 `herdr agent start gemini` 成功。不要依赖 Herdr 进程环境给 pane 传 PATH。
+- 2026-11-04：Herdr 必须能看见 Tether 安装的 Agent：Windows 的 winpty 不把改动后的 os.environ 带给 Herdr 服务/子 shell，靠 `_session_env` 注入 PATH 无效。改成 `~/.tether/herdr/herdr.cmd` 包装器（ASCII 路径、复制 `herdr.exe` 到本地、显式设置 `HERDR_HOME/XDG/APPDATA/PATH` 再启动），并把 `D:\Tetheragents` 追加到用户 PATH（安装时也自动追加，含备份）。Herdr 新建 pane 从用户注册表读 PATH，实测 `herdr agent start gemini` 成功。不要依赖 Herdr 进程环境给 pane 传 PATH。
 - 2026-11-04：账号快照只允许内置组（codex/claude/gemini/opencode/qoder），文件路径写死、不接收用户路径；profile id 必须 `[a-z0-9]{8,32}`，写入 600，切换前不改动未在 profile 里的文件。`agents_test` 用 `--version` 并带 cwd/env，返回码与输出都回传。
 - 2026-11-04：账号 `current` 继续按 live 文件 SHA 指纹判断，不写 active 指针（真实换号后自然只有匹配的那份为当前）；`save` 发现实时指纹与已有档案完全一致时直接返回现有列表，避免同一账号重复生成多份“当前”档案。
 - 2026-11-04：账号管理接 Codex app-server：`account/read`/`login/start`（device code）/`logout`/`rateLimits/read`；每个档案是一个独立 `CODEX_HOME`（`<data>/agent-accounts/codex/<id>/home`，只放 auth.json/config.toml），添加/重登在档案内做，切换只覆盖 live `~/.codex` 的 auth/config，不碰 sessions。列表首次自动导入 live 账号，`imported` 标记防止删除后又被自动导入；`current` 优先按 JWT 的 account_id 匹配，fake/旧档案回退 SHA 指纹。非 Codex 用 `login_command` + registry 解析后的 executable 生成 argv，由 UI 直接起 PTY；Codex 之外不提供 logout（避免误删 live 文件）。
@@ -153,3 +153,15 @@
 - 2026-11-09：恢复 legacy APP apply 的既有8–160位 prepared ID 字符集合与进程内准备集合校验；Electron 安装提交失败写入既有 update-result 状态，Node status 转交持久 job 诊断并解除更新阻塞，新 prepare/apply 清除此错误。
 - 2026-11-11：Node update_call 接入 commit/rollback；两者只处理对应 prepared_id，不触发 Node 重启。协议定向测试通过。
 - 2026-11-11：Node commit 继续不重启；成功 rollback 返回 restart_required=true，在响应发送后关闭连接并让主循环执行一次 Node 重启。
+- 2026-11-11：将 Codeg Agent 主页接入原生 `agents` workbench route，新增 Sidebar/标题入口，并复用原生 tab API 启动指定 Agent；移除每会话 fixed 覆盖层、250 ms 几何轮询和广域隐藏原生分隔条的 CSS。`agents-runtime-codeg.patch` 已定向再生，clean source 正向与 canonical source 反向 apply check 通过；单次静态构建和实机部署待依赖恢复。
+
+- 2026-11-11：修复 Codeg 初始 ctiveTabId 恢复覆盖显式 gents route；只忽略首次 null→非空 tab 初始化，后续本地切换及 remote activation 保留原行为。tracked Codeg patch 定向加入 layout.tsx hunk，clean forward/canonical reverse apply-check 通过；增量 Next 构建并更新 LAPTOP-01 静态 web，四个入口响应哈希已核对。
+
+
+- 2026-11-11：LAPTOP-01 原生 Codeg 默认主页修复静态部署后，Terra 实机确认关闭/重开默认 Agent route、既有 nonce 会话返回与 Codeg 文件编辑器分隔条拖动；只读 QA 文件、未输入/保存；保留原始 web rollback。
+
+
+- 2026-11-12：Herdr terminal dock 可从本机 Agents Runtime 鉴权读取选中 `acp_list_agents` canonical record，只接受 enabled/available agent；复用 Herdr project session 的真实 PTY、CLI workspace/tab 与严格返回的 pane ID启动，shells 响应 flat `herdr_agent_start` 能力标记。Agent env只在本次 CLI 启动内存传递，错误清理本次 tab/PTY，不停止既有 Herdr server；尚待本机 Codeg agent readiness 实测。
+- 2026-11-12：Herdr Agent类型对齐UI当前八个 canonical Codeg IDs；POSIX project session也向terminal_start返回专用session元数据，无项目目录时不走普通终端cwd fallback。环境先恢复原`APPDATA/XDG_CONFIG_HOME/XDG_STATE_HOME`（缺省用用户目录标准路径）再叠加Codeg record.env；workspace就绪/create/agent启动预算分别约2/1.5/7秒，以约束同步fs请求不超过20秒。focused Python suite 41项通过，实际Agent readiness待真机验证。
+- 2026-11-12：Herdr Agent 启动在认证 Agents Runtime canonical record 后，先尊重其 PATH 与 Node PATH；CLI 未解析时只从现有本机 Agents 安装目录发现八类 vendor CLI 并将所在目录加入本次 pane PATH。找不到 CLI 返回 agent_unavailable；Herdr启动失败仅反馈固定阶段枚举，不透出 CLI stdout/argv/env。focused terminal/runtime suite 待验证。
+- 2026-11-12：focused `tests/test_terminal.py` + `tests/test_agents_runtime.py` 53/53 通过，覆盖 canonical eight CLI discovery、双 PATH 保留、缺失 CLI 拒绝和 Herdr safe phase error。实机 Herdr Agent readiness仍待受控重验。

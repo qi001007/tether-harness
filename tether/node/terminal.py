@@ -10,12 +10,15 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
 import os
+import re
 import secrets
 import shutil
 import signal
 import subprocess
 import threading
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -26,6 +29,84 @@ MAX_POLL = 128 * 1024
 NO_WINDOW = 0x08000000
 DEFAULT_COLS = 120
 DEFAULT_ROWS = 30
+HERDR_AGENT_KINDS = {
+    "codex": "codex", "claude_code": "claude", "gemini": "gemini",
+    "open_code": "opencode", "cursor": "cursor", "kimi_code": "kimi",
+    "qwen_code": "qwen", "qoder": "qodercli",
+}
+HERDR_AGENT_CLI_ALIASES = {
+    "codex": ("codex",), "claude_code": ("claude",), "gemini": ("gemini",),
+    "open_code": ("opencode",), "cursor": ("cursor-agent", "cursor"),
+    "kimi_code": ("kimi",), "qwen_code": ("qwen",),
+    "qoder": ("qodercli", "qoder", "qoder-cli"),
+}
+_HERDR_ERROR_PHASES = {
+    "server_not_running", "workspace_command_failed", "workspace_command_timeout",
+    "invalid_response", "agent_cli_unavailable", "agent_start_failed",
+    "agent_start_timeout",
+}
+_ENV_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def herdr_agent_kind(agent_type: str) -> str | None:
+    return HERDR_AGENT_KINDS.get(agent_type)
+
+
+def _path_join(*values: str) -> str:
+    parts: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        for raw in value.split(os.pathsep):
+            item = raw.strip()
+            if not item:
+                continue
+            key = os.path.normcase(os.path.normpath(item))
+            if key not in seen:
+                seen.add(key)
+                parts.append(item)
+    return os.pathsep.join(parts)
+
+
+def herdr_agent_command_path(agent_type: str, records: list[dict[str, Any]]) -> str:
+    aliases = HERDR_AGENT_CLI_ALIASES.get(agent_type, ())
+    for alias in aliases:
+        for record in records:
+            command = record.get("command") if isinstance(record, dict) else None
+            if not isinstance(command, str) or not command:
+                continue
+            candidate = Path(command)
+            if candidate.stem.lower() == alias.lower() and candidate.is_file():
+                return str(candidate)
+    return ""
+
+
+def herdr_agent_environment(agent_type: str, configured: dict[str, str],
+                            node_env: dict[str, str],
+                            records: list[dict[str, Any]] | None = None) -> dict[str, str] | None:
+    env = {
+        "APPDATA": node_env.get("APPDATA") or
+            (str(Path.home() / "AppData" / "Roaming") if os.name == "nt" else ""),
+        "XDG_CONFIG_HOME": node_env.get("XDG_CONFIG_HOME") or str(Path.home() / ".config"),
+        "XDG_STATE_HOME": node_env.get("XDG_STATE_HOME") or str(Path.home() / ".local" / "state"),
+    }
+    env.update(configured)
+    aliases = HERDR_AGENT_CLI_ALIASES.get(agent_type, ())
+    if not aliases:
+        return None
+
+    path = _path_join(env.get("PATH", ""), node_env.get("PATH", ""))
+    if path:
+        env["PATH"] = path
+    if any(shutil.which(alias, path=path) for alias in aliases):
+        return env
+
+    command = herdr_agent_command_path(agent_type, records or [])
+    if not command:
+        return None
+    env["PATH"] = _path_join(path, str(Path(command).parent))
+    return env
+
+
 PS_INIT = (
     "chcp 65001 > $null; "
     "[Console]::OutputEncoding=[Text.Encoding]::UTF8; "
@@ -139,9 +220,10 @@ def _herdr_project_launch(shell_id: str, command: list[str], cwd: Path,
         return command, extra_env
     digest = hashlib.sha256(os.fsencode(str(cwd.resolve()))).hexdigest()[:20]
     session = "tether-project-" + digest
+    session_env = {**(extra_env or {}), "TETHER_HERDR_SESSION": session}
     if windows:
-        return command, {**(extra_env or {}), "TETHER_HERDR_SESSION": session}
-    return [command[0], "--session", session], extra_env
+        return command, session_env
+    return [command[0], "--session", session], session_env
 
 
 def _windows_shells() -> dict[str, tuple[str, list[str], str]]:
@@ -195,6 +277,10 @@ def _posix_pty_command(command: list[str]) -> list[str]:
     if exe.endswith(("bash", "zsh", "sh", "fish")):
         return [exe, "-l"]
     return list(command)
+
+
+class _HerdrServerNotReady(Exception):
+    pass
 
 
 class TerminalService:
@@ -392,9 +478,135 @@ class TerminalService:
                         process=process, fd=master, pty_mode=True,
                         cols=cols, rows=rows)
 
+    def _herdr_cli(self, session: str, cwd: Path, env: dict[str, str],
+                   arguments: list[str], timeout: float) -> dict[str, Any]:
+        binary = _herdr_binary()
+        if not binary:
+            raise ValueError("Herdr is not installed on this node")
+        agent_start = arguments[:2] == ["agent", "start"]
+        kwargs: dict[str, Any] = {
+            "cwd": str(cwd), "env": env, "stdin": subprocess.DEVNULL,
+            "stdout": subprocess.PIPE, "stderr": subprocess.PIPE,
+            "text": True, "encoding": "utf-8", "errors": "replace", "timeout": timeout,
+        }
+        if os.name == "nt":
+            kwargs["creationflags"] = NO_WINDOW
+        try:
+            result = subprocess.run([binary, "--session", session, *arguments], **kwargs)
+        except subprocess.TimeoutExpired:
+            phase = "agent_start_timeout" if agent_start else "workspace_command_timeout"
+            raise ValueError("Herdr command failed [" + phase + "]") from None
+        except OSError:
+            phase = "agent_cli_unavailable" if agent_start else "workspace_command_failed"
+            raise ValueError("Herdr command failed [" + phase + "]") from None
+        try:
+            payload = json.loads(result.stdout or result.stderr)
+        except (ValueError, TypeError):
+            raise ValueError("Herdr command failed [invalid_response]") from None
+        if result.returncode or not isinstance(payload, dict) or payload.get("error"):
+            error = payload.get("error") if isinstance(payload, dict) else None
+            code = error.get("code") if isinstance(error, dict) else ""
+            if code == "server_not_running":
+                raise _HerdrServerNotReady()
+            if agent_start:
+                phase = ("agent_cli_unavailable" if code in {
+                    "command_not_found", "executable_not_found", "agent_not_found"}
+                    else "agent_start_timeout" if code == "timeout" else "agent_start_failed")
+            else:
+                phase = "workspace_command_failed"
+            if phase not in _HERDR_ERROR_PHASES:
+                phase = "workspace_command_failed"
+            raise ValueError("Herdr command failed [" + phase + "]")
+        result_data = payload.get("result")
+        if not isinstance(result_data, dict):
+            raise ValueError("Herdr command failed [invalid_response]")
+        return result_data
+
+    def _herdr_agent_environment(self, configured: dict[str, str]) -> dict[str, str]:
+        env = {
+            "APPDATA": self.env.get("APPDATA") or
+                (str(Path.home() / "AppData" / "Roaming") if os.name == "nt" else ""),
+            "XDG_CONFIG_HOME": self.env.get("XDG_CONFIG_HOME") or str(Path.home() / ".config"),
+            "XDG_STATE_HOME": self.env.get("XDG_STATE_HOME") or str(Path.home() / ".local" / "state"),
+        }
+        env.update(configured)
+        return env
+
+    def _herdr_project_pane(self, session: str, cwd: Path, env: dict[str, str],
+                            agent_type: str, agent_kind: str,
+                            agent_env: dict[str, str]) -> tuple[str, str | None]:
+        deadline = time.monotonic() + 1.5
+        workspaces: list[dict[str, Any]] | None = None
+        while time.monotonic() < deadline:
+            try:
+                result = self._herdr_cli(session, cwd, env, ["workspace", "list"], 0.5)
+                raw = result.get("workspaces")
+                if not isinstance(raw, list) or any(not isinstance(item, dict) for item in raw):
+                    raise ValueError("Herdr workspace list is invalid")
+                workspaces = raw
+                break
+            except _HerdrServerNotReady:
+                time.sleep(0.25)
+        if workspaces is None:
+            raise ValueError("Herdr project session did not become ready")
+
+        label = "Tether " + (cwd.name or "workspace")
+        create_env = [item for key, value in sorted(agent_env.items()) for item in ("--env", key + "=" + value)]
+        created_tab: str | None = None
+        try:
+            if workspaces:
+                workspace_id = workspaces[0].get("workspace_id")
+                if not isinstance(workspace_id, str) or not workspace_id:
+                    raise ValueError("Herdr workspace list is invalid")
+                created = self._herdr_cli(session, cwd, env,
+                    ["tab", "create", "--workspace", workspace_id, "--cwd", str(cwd),
+                     "--label", label, "--focus", *create_env], 1.5)
+                root_pane = created.get("root_pane")
+                tab = created.get("tab")
+                pane_id = root_pane.get("pane_id") if isinstance(root_pane, dict) else None
+                tab_id = tab.get("tab_id") if isinstance(tab, dict) else None
+                if isinstance(tab_id, str) and tab_id.startswith(workspace_id + ":t"):
+                    created_tab = tab_id
+                if (not isinstance(pane_id, str) or not pane_id.startswith(workspace_id + ":p")
+                        or not created_tab or root_pane.get("workspace_id") != workspace_id
+                        or root_pane.get("tab_id") != tab_id):
+                    raise ValueError("Herdr tab creation returned invalid pane identity")
+            else:
+                created = self._herdr_cli(session, cwd, env,
+                    ["workspace", "create", "--cwd", str(cwd), "--label", label,
+                     "--focus", *create_env], 1.5)
+                root_pane = created.get("root_pane")
+                workspace = created.get("workspace")
+                tab = created.get("tab")
+                pane_id = root_pane.get("pane_id") if isinstance(root_pane, dict) else None
+                workspace_id = workspace.get("workspace_id") if isinstance(workspace, dict) else None
+                tab_id = tab.get("tab_id") if isinstance(tab, dict) else None
+                if isinstance(workspace_id, str) and isinstance(tab_id, str) and tab_id.startswith(workspace_id + ":t"):
+                    created_tab = tab_id
+                if (not isinstance(workspace_id, str) or not isinstance(tab_id, str)
+                        or not isinstance(pane_id, str) or not pane_id.startswith(workspace_id + ":p")
+                        or not created_tab or root_pane.get("workspace_id") != workspace_id
+                        or root_pane.get("tab_id") != tab_id):
+                    raise ValueError("Herdr workspace creation returned invalid pane identity")
+
+            self._herdr_cli(session, cwd, env,
+                ["agent", "start", agent_type, "--kind", agent_kind, "--pane", pane_id,
+                 "--timeout", "6000"], 7.0)
+            return pane_id, created_tab
+        except Exception:
+            if created_tab:
+                try:
+                    self._herdr_cli(session, cwd, env, ["tab", "close", created_tab], 0.8)
+                except Exception:
+                    pass
+            raise
+
     def start(self, args: dict[str, Any]) -> dict[str, Any]:
         requested_cwd = args.get("cwd")
         cwd = Path(str(requested_cwd or self.cwd)).expanduser()
+        herdr_agent_request = args.get("herdr_agent_type") is not None or "_herdr_agent_env" in args
+        if herdr_agent_request and (not requested_cwd or not cwd.is_dir()):
+            raise ValueError("Herdr project directory is unavailable")
         if args.get("herdr_project") is True and args.get("shell") == "herdr" and (not requested_cwd or not cwd.is_dir()):
             raise ValueError("Herdr project directory is unavailable")
         if not cwd.is_dir():
@@ -402,7 +614,19 @@ class TerminalService:
             cwd = fallback if fallback.is_dir() else Path.home()
         if not cwd.is_dir():
             raise ValueError("terminal cwd is not a directory")
+        herdr_agent_type = args.get("herdr_agent_type")
+        herdr_agent_env = args.get("_herdr_agent_env")
+        herdr_agent_start = herdr_agent_type is not None or "_herdr_agent_env" in args
         raw_command = args.get("command")
+        if herdr_agent_start:
+            if (args.get("shell") != "herdr" or args.get("herdr_project") is not True
+                    or "command" in args or "agent" in args or "env" in args
+                    or not isinstance(herdr_agent_type, str) or not herdr_agent_type
+                    or herdr_agent_kind(herdr_agent_type) is None
+                    or not isinstance(herdr_agent_env, dict)
+                    or any(not isinstance(key, str) or not _ENV_NAME_RE.fullmatch(key)
+                           or not isinstance(value, str) for key, value in herdr_agent_env.items())):
+                raise ValueError("invalid Herdr agent start request")
         if isinstance(raw_command, list) and raw_command and all(isinstance(item, str) for item in raw_command):
             shell_id, command = "agent", list(raw_command)
         else:
@@ -441,6 +665,18 @@ class TerminalService:
         reader.start()
         session.reader = reader
         self.sessions[session.id] = session
+        if herdr_agent_start:
+            project_session = (extra_env or {}).get("TETHER_HERDR_SESSION", "")
+            try:
+                if not project_session:
+                    raise ValueError("Herdr project session is unavailable")
+                self._herdr_project_pane(project_session, cwd,
+                    self._session_env("herdr", extra_env), herdr_agent_type,
+                    herdr_agent_kind(herdr_agent_type),
+                    self._herdr_agent_environment(herdr_agent_env))
+            except Exception:
+                self.stop({"session_id": session.id})
+                raise
         return {"session_id": session.id, "shell": shell_id, "command": command[0],
                 "cwd": str(cwd), "pid": session.pid, "pty": session.pty_mode,
                 "cols": cols, "rows": rows, "user": _current_user(),
@@ -609,7 +845,10 @@ class TerminalService:
 
     def dispatch(self, action: str, args: dict[str, Any]) -> Any:
         if action == "shells":
-            return {"shells": self.shells(), "default": self.default_shell_id()}
+            shells = self.shells()
+            return {"shells": shells, "default": self.default_shell_id(),
+                    "herdr_agent_start": any(item["id"] == "herdr" and item["available"]
+                                              for item in shells)}
         handler = getattr(self, action, None)
         if action not in {"start", "write", "poll", "resize", "stop"} or not callable(handler):
             raise ValueError("unsupported terminal action")

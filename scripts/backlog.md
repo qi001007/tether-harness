@@ -39,3 +39,5 @@
 
 - 2026-11-08：0.4.11候选打包仅在Windows APP过滤六个已确认的非Windows顶层Herdr/Croc二进制；通用Node保持原样。
 
+- 2026-11-12：release packager 可接收已 hydration 的 Herdr 目录；从固定校验表验证后，仅写入 Windows Herdr/ConPTY 五个文件至 Node ZIP，拒绝重复成员。候选 workflow 只 hydration 这五个文件，不复制 APP 的整棵 node-bin。
+

@@ -1,14 +1,28 @@
 # 用户反馈与处理
 
+## 2026-11-12 当前业务恢复反馈
+
+- [x] F151：恢复 DeepSeek 调好的互联图；实机结果与回退证据见文末。
+- [x] F152：恢复原文件互传交互及双向传输。已恢复满意版双栏与成熟 transferFile 流程；普通 OAuth APP 使用现有 Hub read/write_chunk。4,259,967 B 中文样本经真实 transferFile 双向完成、哈希一致；Terra 又在 APP 拖拽 133 B / 99 B 小文件双向复制，主代理独立读回目标哈希一致。证据 `files-hub-transfer-20261112.json`、`files-ui-transfer-readback-20261112.json` 与 `files-transfer-restored-20261112.png` 位于 `.scratch/evidence`。没有宣称 Croc/现代 mesh 传输或性能验收。
+- [x] F153：恢复 VSCode 风格资源管理器的打开、编辑、保存。仅移除普通 APP 的 native Files 拦截，恢复原已鉴权 Hub API；保留原编辑器。Terra 实机打开文本及 Python 文件并编辑保存；Python 的 Monaco 行号、语法高亮、minimap、状态栏正常，222→247 B，主代理独立预览读回新增注释且版本哈希变化。证据 `.scratch/evidence/files-monaco-restored-20261112.png`、`files-monaco-readback-20261112.json`。仅写专属 QA 文件，未执行 Python。
+- [ ] F154：Codeg/Herdr 合为一个 Agent 页面；先选/新建项目，再选 Agent，然后选择结构化、Herdr 或传统 CLI。统一前端已部署：结构化直接进入新会话且真实回复 `AGENT-1112-LOCAL`；主页与会话来回保留、通用新建入口及打开文件夹通过，细隐藏滚动条及无用关闭按钮已处理。Herdr 和传统 CLI 的实际启动仍待完成验收。
+- [x] F155：修好本机 Codeg 的状态异常和无法打开。已将本机受控切到现有 0.5.2 Node，并部署仅同机的既有 token gateway 打开路径；Terra 正常按钮启动一次后进入真实 Codeg 工作台，主代理独立回读 installed/running=true、port=4201。专属实例 PID 27788，未碰 E 基线的另一个既有实例。截图 `.scratch/evidence/codeg-local-open-20261112.png`；本次仅验启动/打开，统一新入口与新对话另归 F154。
+- [ ] F156：核实并修复更新交付。Hub preview manifest 0.5.2 可达，本机 Node 已为 0.5.2、笔记本仍 0.4.11、云端 0.5.2；Laptop 0.5.2 Prepare 通过但未 Switch。当前运行 APP 是 0.5.2 解包候选，0.5.3 preview 源码候选待构建，普通安装更新全链路尚未验收。
+
+实施与验收计划：`BUSINESS_RESTORE_2026-11-12.md`。本节优先于下方历史快照。
+
 ## 2026-11-11 当前推进状态与未完成项
 
-- [x] 恢复 409 前的真实 APP 基线：原因是 DESKTOP-LOCAL 被切到 0.5.2 候选 Node 侧部署；已恢复 `D:\Tether\node` 0.2.3，LAPTOP-01 的 DSH workspace/composer 在 APP 中恢复。当前设备 3/4 在线；DESKTOP-LOCAL 当前版本为 0.2.3。旧 0.5.2 现场记录是已回滚历史，不代表当前运行状态。
+- [x] 恢复 409 前的真实 APP 基线：原因是 DESKTOP-LOCAL 被切到 0.5.2 候选 Node 侧部署；已恢复 `D:\Tether\node` 0.2.3，曾观察到 LAPTOP-01 的 DSH workspace/composer 可见；该截图没有证明横向布局正常，当前 r11 后续复现约 300px 收缩，已由 2026-11-11 layered native surface 定位修复并经 APP 刷新确认铺满。当前设备 3/4 在线；DESKTOP-LOCAL 当前版本为 0.2.3。旧 0.5.2 现场记录是已回滚历史，不代表当前运行状态。
 - [x] 缓解 E 盘空间耗尽：`.scratch` 曾占 78.316 GB / 1,090,126 个文件；删除 18 个可复现旧候选输出，释放 71.87 GB，E 盘可用约 74.78 GB。候选目录增加 marker、路径校验及保留当前+最近一个的清理规则，candidate tests 16/16。
 - [x] 更新事务实现与本地门禁：Node 持久事务、commit/rollback、APP 重启续验和 Hub Node 服务验收已实现；Node 107 passed / 2 skipped、Hub 39 passed、UI update_chain 24/24、candidate+UI 40/40、workflow 10/10，bundle/web checks 通过。pytest 进程退出时出现既有 `agent_registry.catalog` interpreter-shutdown 线程噪声，exit code 0。
 - [x] Hub 新 release 已部署：`/opt/tether/releases/update-transaction-20261111-r1` 部署 `app.py` / `update_jobs.py`，commit/rollback 路由在线，health ok、3 online、无 stale，旧 release 保留。
 - [ ] 发布 GitHub 签名 0.5.2 preview，并确认 update source 实际返回 0.5.2。
 - [ ] 真实设备经 APP UI 完成 prepare/apply/restart/service acceptance/commit 全链路，核对最终版本与服务状态。
 - [ ] 保存真实端到端成功截图并经微信送达；目前没有成功截图及手机送达回执。
+
+- [x] 当前 r11 DSH 宽度塌缩：根因是 layered native guest 的 position 被覆盖为 relative；修复后真实 APP 1454×920 验收到欢迎区居中、composer 约 770px 宽，横向铺满。
+- [ ] 旧节点 Codeg：仅当 Controller 已鉴权设备快照中的 direct_api.host 与 runtime token URL 一致，且本机 EasyTier 私网接口同网段时才允许旧直连；代码及 20 项定向回归已完成，真实 APP 首次打开仍待复验。
 
 ## 2026-11-10 0.5.2 visible login 验收
 
@@ -350,7 +364,7 @@
 - [ ] 2026-11-08：Windows APP仅打包目标平台Herdr/Croc资源，Node保持通用；按Hub/用户恢复显式设备选择并保留当前页面；Croc默认auto，更新优先使用manifest正式下载源并保留Hub/mirror回退。候选待签名CI与最终复核；未发布。
 
 - [x] F122：0.5.2 登录恢复后，在线旧节点的 Files 不应继续走现代 `service_open` 并报 HTTP 403。已加入窄范围 legacy `fs/list` 兼容并在 `REMOTESTITCH-HUB` 真机验证工作区列出、进入子目录、返回和刷新；旧节点条目强制只读，现代路径未改。r4 截图为 `E:\M_Assistant\runtime\evidence\tether-r4-remotestitch-files-success-20261110.png`。
-- [ ] F123：让旧 Codeg 在不削弱授权边界的前提下从 APP 打开。当前 runtime 已就绪且 `10.144.0.1:37301` 可达，但 Controller 尚无可信网络/设备成员记录；APP 现给出准确阻断提示，没有绕过 Controller 直连。完成判据是创建并验证当前 owner 的可信网络映射后，从 Agents 页打开旧 Codeg，看到真实工作台并保留授权审计。
+- [x] F123：让旧 Codeg 在不削弱授权边界的前提下从 APP 打开。2026-11-11 的 r11 真实候选使用已鉴权 Controller `/api/state` 中目标设备的 `capabilities.direct_api.host`，要求其严格匹配 Agents Runtime token URL 主机，并验证本机现有 EasyTier 私网接口与目标同网段；现代 mesh/SOCKS 路径仍优先，legacy 路径保留隔离 service session、主进程 token bootstrap、同源请求守卫与目标 owner/online 校验。LAPTOP-01 已真实打开内嵌 Codeg 工作台（`.scratch/evidence/codeg-open-success.png`）；没有创建 mesh 记录或开放公网服务。
 
 ## 2026-11-11 DESKTOP-LOCAL 0.5.2 验收记录
 
@@ -362,9 +376,17 @@
 - [ ] LAPTOP-01 升级到 0.5.2（当前仍为 0.4.11）；REMOTESTITCH-HUB Node/DSH 阶段性验收已完成，见下方记录。
 - [x] REMOTESTITCH-HUB Node 0.5.2 / DSH 阶段性验收（2026-11-11）：r11 旁路部署、服务健康及 APP 真实工作区/输入框可见并聚焦通过；未发送消息。部署位置、回滚、运行基线与证据见 `PROGRESS.md`。旧 Codeg 子进程未恢复，本项仅覆盖 DSH。
 - [ ] 创建并验收生产 mesh（当前 mesh 数量为 0）。
-- [ ] 恢复 Codeg 所需 trusted network（当前仍被缺少 trusted network 阻塞）。
+- [x] 旧 Codeg legacy 入口可通过已鉴权 direct_api 快照与本机现存 EasyTier 私网安全打开；生产 mesh 仍单独未创建。
 - [ ] 修复 Settings/About 版本显示（当前仍为“—”）。
 - [ ] 签名并公开发布 0.5.2。
 
 以上为 DESKTOP-LOCAL 与 REMOTESTITCH-HUB 的阶段性候选验收，不代表项目完成。
 
+- [x] F124：完成 Codeg 结构化 Agent 的真实发送与回复。LAPTOP-01 上 Codex CLI `0.163.0` 已存在；通过目标 Codeg 已登录设置 API 安装其登记的 ACP adapter，API 回读 `installed_version=2.5.0`，未重装 CLI 或更改账号。Qoder 卡片显示的是 registry 版本 `1.1.81`，诊断中 `installed_version=null`，不能视为已安装。2026-11-11 从 Tether 正常 Agents→Codeg→Codex 结构化入口只发送一次 `CODEG-1111-1320`，约 1 分 40 秒后真实回复；未重发。Terra 确认智能体主页/聊天边界拖动、最大化还原、切主页和 Tether 工作区再返回都保留同一会话与回复；截图 `.scratch/evidence/codeg-codex-final-retained.png`。请求等待期间显示 Reconnecting 4/5，约 1 分 40 秒后自动恢复并返回真实回复。
+- [x] F125：切换 APP 页面后自动返回当前 DSH 原生 guest 与工作区原位。bundle 保留同设备/同来源 `native-document-loading/native-document-loaded` 状态；修正本机身份后，OIDC Electron APP 仍经主进程 managed gateway 打开本机 DSH。DESKTOP-LOCAL 的 `LOCAL-1111-1400` 回复可见，切到 Agents 再返回后原会话原位和内容均保留，无需重选。最终证据：`.scratch/evidence/desktop-local-delivery-final.png`；此前截图 `.scratch/evidence/desktop-local-real-reply.png`、`.scratch/evidence/desktop-local-after-switch.png`。
+- [ ] F126：REMOTESTITCH-HUB Codeg 仍无可用的现代工作台连接。原启动配置让 APP `source_device_id` 回退到 Windows hostname `USER-20250925JD`，因此 main `service_open` 返回 HTTP 403；QA launcher 已改为进程级 `TETHER_DEVICE=DESKTOP-LOCAL`，与本地 Node `/state` identity 对齐。用修正身份后，已鉴权 `service_open` 的确切结果为 HTTP 409 `edge_not_connected`：当前缺少 DESKTOP-LOCAL→REMOTESTITCH-HUB native edge/mesh，所以请求未进入目标服务启动阶段。保留授权阻断，不创建 mesh、不改 Hub 权限，也不回退到 legacy 私网直连。
+
+
+- [x] F150：Codeg 自定义 Agent 主页固定覆盖原生工作区，拖动编辑边界和缩放不如原生顺滑。已改为原生 `agents` workbench route/Sidebar/标题，由原生 WorkspaceContent 控制页面；结构化启动和终端动作沿用原生 APIs。fixed 覆盖层、每 tab 重复事件、250 ms 几何轮询和广域 resize/header 隐藏 CSS 已移除。canonical source 与 tracked patch 检查通过，静态构建/部署完成；r11 实机确认原生主页显示、遮罩消失、左侧栏及聊天区域边界可拖动、窗口最大化/还原，切主页与 Tether 工作区均保留原 Codex 会话。初次 activeTab 恢复覆盖显式 Agents route 的修复已部署；关闭工作台后重开已直接进入原生 Agent 页，返回同一 Codex nonce 会话。Codeg 内文件编辑器分隔条也已实测：只读打开 QA 文本文件后，editor/chat 分界 x=810→690→810（accessibility value 56→41→56），无输入或保存。原生主页最终截图 `.scratch/evidence/native-agents-default-final.png`；完整会话截图 `.scratch/evidence/codeg-codex-final-retained.png`；编辑器分隔条截图 `.scratch/evidence/codeg-editor-divider-moved.png`。
+
+- [x] F151：互联/设备网络可视化页恢复为原先确认的流动环形/三角力导向图。当前 worktree 的 Cytoscape 单次布局替换了原图，节点形状、动画和位置状态均不同。2026-11-12 只将 `NetworkGraph` 函数替换回 E 主仓库原函数并移除唯一 Cytoscape import，保留外围身份、权限、连接回调及 DSH/Codeg 承载修复；详情与连接管理未改。Terra 实机确认流动、环形/三角、缩放、拖动、浮层和切页后位置正常；跨页速度连续未证明。修复前/后截图 `.scratch/evidence/network-visual-before-20261112.png`、`.scratch/evidence/network-visual-restored-20261112.png`。bundle SHA-256 `1CD2EF1A584AD76E9C1A42E089BB949640CB4E300E29D87C301B0313C5C6570D` 已同步 r11。初次卸载旧图时，位置 key 从之前查询不存在变为 Cytoscape 像素数据；将旧值原样备份后仅在当前值与备份逐字相等时删除了 `tether.network.positions.v3`，未动其他 key；备份 `.scratch/qa/network-positions-v3-after-old-graph-unmount-20261112.json`，SHA-256 `FFBD3E3279B09E8406FA09D0AD1F6F115D6FC59B5B66EADD9F666299FD9A1313`。旧缓存中 DESKTOP-LOCAL 节点为 `(0,0)`，远端节点为 `(378,608)`，无 `vx/vy`；删除后即时读回 key 不存在；后续原图验收可重新保存位置。

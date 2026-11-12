@@ -197,3 +197,15 @@
 - 2026-11-11：覆盖 `dsh-native` 空 URL attach、无秘密同步 policy、精确 endpoint 顶层导航、同源错误路径/额外查询/fragment/跨源拒绝、子框架放行，以及错误 session 和已关闭 record 失败。
 - 2026-11-11：对齐更新器回归断言与源码：artifact 顺序验证同源 Hub → 配置镜像 → manifest URL；Node ZIP heartbeat 精确保留 owner 与 bridge availability 字段。
 - 2026-11-11：Added a lightweight regression check that Linux headless Node and Debian artifact names/paths/runtime metadata follow `version.json`, including the generated post-install version; no candidate build is run.
+
+- 2026-11-11：补充旧 Codeg legacy EasyTier opener 回归和陈旧 stopped 目录状态的 fresh-ready 开门回归，覆盖 Controller 认证快照/IP 精确匹配、本机 EasyTier 私网同网段准入及快照不匹配拒绝；21 项 `test_native_workbench_catalog.mjs` 全通过。
+- 2026-11-11：真实 `prepareGuest` 断言覆盖 legacy token bootstrap 固定 `next=/workspace?tether_home=1`；`test_native_workbench_catalog.mjs` 定向运行 21/21 通过。
+
+- 2026-11-12：覆盖 Herdr 同机 Agent 启动链的 authenticated Codeg agent record 检查、disabled拒绝、八个 canonical agent type、POSIX project session metadata、无效cwd拒绝、用户XDG/AppData回退、同步CLI预算与真实CLI root pane/workspace create pane绑定；Python focused suite 42项通过。
+
+- 2026-11-12：更新 0.5.3 版本/候选输出门禁；定向候选测试 16/16、预览 workflow validation 1/1 通过。
+- 2026-11-12：Node ZIP Herdr 行为回归使用临时 ZIP 验证五个精确成员、载荷校验、重复拒绝和哈希失败不写入；ZIP、hydrator 与 workflow 定向验证共 6 项通过。
+
+- 2026-11-12：现代远端 Codeg direct gateway 行为回归覆盖 owner+EasyTier、共同 ready network 优先、非 owner/无路由沿用 service_open、账号或目录错误拒绝、URL host 精确匹配及凭据不出 renderer。
+- 2026-11-12：Herdr Agent CLI 路径发现覆盖八个 canonical 类型、保留 Codeg/Node PATH、忽略 Node registry 启用状态作为第二真相、缺失 CLI 拒绝，以及 Herdr 失败不透出原始输出的安全阶段码；focused terminal/runtime suite 待验证。
+- 2026-11-12：Herdr CLI discovery 与安全阶段错误 focused suite 53/53 通过（`test_terminal.py` + `test_agents_runtime.py`）。

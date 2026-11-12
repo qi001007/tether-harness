@@ -8,7 +8,6 @@ import { createTransferPage } from './transfer-page.js'
 import { createTerminalDock } from './terminal-dock.js'
 import { createAgentsPage } from './agents-page.js'
 import { invalidateDirectory, peekDirectory, rememberDirectory } from './file-cache.js'
-import cytoscape from 'cytoscape'
 
 export function isUpdateTargetCurrent(requestDevice, requestEpoch, currentDevice, currentEpoch) {
   return requestDevice === currentDevice && requestEpoch === currentEpoch
@@ -1018,75 +1017,12 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       try { EXPLICIT_AUTHORITY = window.localStorage.getItem('tether.hub.mode') === 'legacy' } catch (_) { /* default to OAuth session */ }
     }
     if (host) host.activeApiBase = () => ACTIVE_BASE
-    const nativeFilesRoute = (path) => {
-      if (typeof path !== 'string') return null
-      let match = path.match(/^\/api\/devices\/([^/]+)\/fs\/(list|stat|fingerprint|preview|mkdir|rename|delete|copy|write)$/)
-      if (match) return { targetId: decodeURIComponent(match[1]), operation: match[2] }
-      match = path.match(/^\/api\/devices\/([^/]+)\/(drives|workspaces)$/)
-      if (match) return { targetId: decodeURIComponent(match[1]), operation: match[2] }
-      return null
-    }
-    const nativeFileData = async (path, init) => {
-      const route = nativeFilesRoute(path)
-      if (!route || EXPLICIT_AUTHORITY || !host || host.kind !== 'app' || typeof host.filesRequest !== 'function') return null
-      const method = String((init && init.method) || 'GET').toUpperCase()
-      let body = {}
-      if (init && init.body != null) {
-        try { body = JSON.parse(init.body) } catch (_) { throw new Error('文件请求正文不是有效 JSON') }
-      }
-      if (['drives', 'workspaces'].includes(route.operation)) body = {}
-      let request
-      if (route.operation === 'write') {
-        const text = typeof body.text === 'string' ? body.text : ''
-        request = { targetId: route.targetId, operation: 'content_put', path: body.path,
-          text, expectedVersion: body.expected_version || 'absent', encoding: body.encoding || 'utf-8', newline: body.newline || 'lf' }
-      } else {
-        request = { targetId: route.targetId, operation: route.operation, path: body.path, body }
-      }
-      const result = await host.filesRequest(request)
-      if (!result || result.targetId !== route.targetId) throw new Error('目标设备身份校验失败，未接受文件响应')
-      const data = result.body && typeof result.body === 'object' ? result.body : {}
-      if (result.status < 200 || result.status >= 300) {
-        const detail = data.detail
-        const error = new Error((detail && detail.error) || (typeof detail === 'string' && detail) || data.error || ('HTTP ' + result.status))
-        error.code = detail && detail.code || data.code
-        error.status = result.status
-        throw error
-      }
-      const previewName = String(body.path || '').toLowerCase()
-      const rawTextPreview = ['text', 'markdown'].includes(data.kind) && !/\.(zip|xlsx|xlsm)$/.test(previewName)
-      if (route.operation !== 'preview' || !data.kind
-          || !(rawTextPreview || ['image', 'pdf'].includes(data.kind))) return data
-      const bytesResult = await host.filesRequest({ targetId: route.targetId, operation: 'preview_content', path: body.path, body: { version: data.version } })
-      if (!bytesResult || bytesResult.targetId !== route.targetId || bytesResult.status < 200 || bytesResult.status >= 300) {
-        const error = new Error('无法读取目标文件预览内容')
-        error.status = bytesResult && bytesResult.status
-        throw error
-      }
-      const bytes = new Uint8Array(bytesResult.bytes || new ArrayBuffer(0))
-      if (data.kind === 'text' || data.kind === 'markdown') {
-        const encoding = data.encoding === 'utf-8-bom' ? 'utf-8' : (data.encoding || 'utf-8')
-        data.text = new TextDecoder(encoding).decode(bytes)
-      } else {
-        let binary = ''
-        for (let offset = 0; offset < bytes.length; offset += 0x8000) binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000))
-        data.base64 = btoa(binary)
-        if (bytesResult.contentType) data.mime = bytesResult.contentType
-      }
-      return data
-    }
     async function api(path, options, pinnedBase) {
       const mayChangeActiveBase = pinnedBase === undefined || pinnedBase === null
       const requestBaseGeneration = ACTIVE_BASE_GENERATION
       const init = { ...(options || {}) }
       let response
       try {
-        const nativeData = await nativeFileData(path, init)
-        if (nativeData) {
-          assertCurrentAuthorityGeneration(requestBaseGeneration, ACTIVE_BASE_GENERATION)
-          if (nativeData.target_id && nativeData.target_id !== nativeFilesRoute(path).targetId) throw new Error('目标设备身份校验失败')
-          return nativeData
-        }
         response = await fetchApiJsonForAuthority(path, init, {
           activeBase: ACTIVE_BASE,
           apiBaseList: apiCandidatesForAuthority(ACTIVE_BASE, host && host.apiBases ? host.apiBases() : apiBaseList, EXPLICIT_AUTHORITY ? ACTIVE_BASE : ''),
@@ -2003,7 +1939,6 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const items = [
         { id: 'workspaces', label: '原生工作区', icon: 'monitor' },
         { id: 'agents', label: 'Agents', icon: 'bot' },
-        { id: 'herdr', label: 'Herdr', icon: 'terminal' },
         { id: 'files', label: '文件资源管理器', icon: 'files' },
         { id: 'transfer', label: '文件转移', icon: 'transfer' },
         { id: 'network', label: '互联', icon: 'devices' }
@@ -2123,198 +2058,349 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
 
     function NetworkGraph({ devices, edges = [], localId, selectedId, onSelect, onOpen, onOpenDetails, onToggleEdge, onContextMenu }) {
       const stage = React.useRef(null)
-      const cyRef = React.useRef(null)
-      const latest = React.useRef({ devices, edges, localId, selectedId, onSelect, onOpen, onOpenDetails, onToggleEdge, onContextMenu })
+      const nodesRef = React.useRef([])
+      const dragRef = React.useRef(null)
+      const frameRef = React.useRef(0)
+      const centerIdRef = React.useRef('')
+      const [nodes, setNodes] = React.useState([])
+      const [zoom, setZoom] = React.useState(1)
       const [connectMode, setConnectMode] = React.useState(false)
       const [connectFrom, setConnectFrom] = React.useState('')
-      const [zoom, setZoom] = React.useState(1)
-      latest.current = { devices, edges, localId, selectedId, onSelect, onOpen, onOpenDetails, onToggleEdge, onContextMenu,
-        connectMode, connectFrom, setConnectMode, setConnectFrom }
-      const centerId = (devices.find((item) => item.device_id === localId) || devices[0] || {}).device_id || ''
-      const graphKey = devices.map((item) => item.device_id).join('|')
-      const topologyKey = graphKey + '|' + (edges || []).map((edge) => networkEdgeKey(edge && edge.from, edge && edge.to)).sort().join('|')
-      const lastLayoutKey = React.useRef(graphKey)
-      const readStoredPositions = (center) => {
-        try {
-          const all = JSON.parse(window.localStorage.getItem('tether.network.positions.v3') || '{}')
-          return all && typeof all === 'object' && all[center] && typeof all[center] === 'object' ? all[center] : {}
-        } catch (_) { return {} }
-      }
-      const saveStoredPositions = () => {
-        const cy = cyRef.current
-        const center = latest.current.localId || (latest.current.devices[0] || {}).device_id
-        if (!cy || !center) return
-        try {
-          const all = JSON.parse(window.localStorage.getItem('tether.network.positions.v3') || '{}')
-          all[center] = Object.fromEntries(cy.nodes().map((node) => {
-            const pos = node.position()
-            return [node.id(), { x: pos.x, y: pos.y }]
-          }))
-          window.localStorage.setItem('tether.network.positions.v3', JSON.stringify(all))
-        } catch (_) { /* storage is optional */ }
-      }
-      const makeElements = () => {
-        const stored = readStoredPositions(centerId)
-        const remotes = devices.filter((item) => item.device_id !== centerId)
-        const elements = devices.map((item) => {
-          const id = String(item.device_id || '')
-          const saved = stored[id]
-          const index = remotes.findIndex((candidate) => candidate.device_id === id)
-          const angle = -Math.PI / 2 + index * (2 * Math.PI / Math.max(1, remotes.length))
-          return { data: { id, label: item.name || id, color: item.device_id === centerId ? C.ink : deviceOsTheme(item).color,
-            textColor: item.device_id === centerId ? C.onPrimary : C.ink, online: !!item.online,
-            center: item.device_id === centerId, selected: item.device_id === selectedId },
-            position: saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)
-              ? { x: saved.x, y: saved.y }
-              : item.device_id === centerId ? { x: 0, y: 0 } : { x: Math.cos(angle) * 125, y: Math.sin(angle) * 125 } }
-        })
-        const seen = new Set()
-        for (const edge of edges || []) {
-          if (!edge || !edge.from || !edge.to || edge.from === edge.to) continue
-          const pair = [String(edge.from), String(edge.to)].sort()
-          const pairKey = pair.join('\u0000')
-          if (seen.has(pairKey) || !devices.some((d) => d.device_id === pair[0]) || !devices.some((d) => d.device_id === pair[1])) continue
-          seen.add(pairKey)
-          const left = devices.find((d) => d.device_id === pair[0])
-          const right = devices.find((d) => d.device_id === pair[1])
-          elements.push({ data: { id: 'edge-' + encodeURIComponent(pair[0]) + '-' + encodeURIComponent(pair[1]),
-            source: pair[0], target: pair[1], online: !!(left.online && right.online),
-            leftName: left.name || left.device_id, rightName: right.name || right.device_id } })
-        }
-        return elements
-      }
-      React.useEffect(() => {
-        if (!stage.current) return undefined
-        const cy = cytoscape({ container: stage.current, elements: makeElements(), minZoom: 0.35, maxZoom: 2.5,
-          zoom: 1, wheelSensitivity: 0.22, boxSelectionEnabled: false, autoungrabify: false,
-          style: [
-            { selector: 'node', style: { 'background-color': 'data(color)', 'label': 'data(label)', 'color': 'data(textColor)',
-              'font-family': 'Inter, system-ui, sans-serif', 'font-size': 11, 'font-weight': 600, 'text-wrap': 'ellipsis',
-              'text-max-width': 150, 'text-valign': 'center', 'text-halign': 'center', 'width': 'label', 'height': 30,
-              'padding': '8px', 'shape': 'round-rectangle', 'border-width': 2, 'border-color': 'transparent', 'opacity': 1,
-              'overlay-opacity': 0, 'text-outline-width': 0, 'z-index': 2 } },
-            { selector: 'node[?center]', style: { 'background-color': C.ink, 'color': C.onPrimary, 'font-size': 12, 'font-weight': 700,
-              'height': 36, 'padding': '12px', 'border-color': C.ink, 'z-index': 4 } },
-            { selector: 'node[?selected]', style: { 'border-color': C.blue, 'border-width': 3 } },
-            { selector: 'node[?connecting]', style: { 'border-color': C.blue, 'border-width': 4 } },
-            { selector: 'node[online = false]', style: { 'opacity': 0.55 } },
-            { selector: 'edge', style: { 'curve-style': 'bezier', 'line-color': C.sub, 'width': 1.5, 'opacity': 0.7,
-              'line-style': 'solid', 'target-arrow-shape': 'none', 'source-arrow-shape': 'none', 'overlay-opacity': 0, 'z-index': 1 } },
-            { selector: 'edge[online = false]', style: { 'line-style': 'dashed', 'opacity': 0.42 } }
-          ], layout: { name: 'preset', fit: false }
-        })
-        cyRef.current = cy
-        const centerNode = centerId ? cy.getElementById(centerId) : cy.collection()
-        if (centerNode.length) centerNode.lock()
-        cy.on('tap', 'node', (event) => {
-          const item = latest.current.devices.find((candidate) => candidate.device_id === event.target.id())
-          if (!item) return
-          if (latest.current.onSelect) latest.current.onSelect(item)
-          if (latest.current.connectMode) {
-            const from = latest.current.connectFrom
-            if (!from) { latest.current.setConnectFrom(item.device_id); return }
-            if (from !== item.device_id && !networkEdgeConnected(latest.current.edges, from, item.device_id)
-                && latest.current.onToggleEdge) latest.current.onToggleEdge({ from, to: item.device_id }, true)
-            latest.current.setConnectFrom('')
-            latest.current.setConnectMode(false)
-            return
-          }
-          if (latest.current.onOpenDetails) latest.current.onOpenDetails(item)
-        })
-        cy.on('dbltap', 'node', (event) => {
-          const item = latest.current.devices.find((candidate) => candidate.device_id === event.target.id())
-          if (item && latest.current.onOpen) latest.current.onOpen(item)
-        })
-        cy.on('cxttap', 'node', (event) => {
-          const item = latest.current.devices.find((candidate) => candidate.device_id === event.target.id())
-          if (!item || !latest.current.onContextMenu) return
-          event.originalEvent?.preventDefault?.()
-          latest.current.onContextMenu(event.originalEvent, item)
-        })
-        cy.on('tap', 'edge', (event) => {
-          const edge = event.target
-          if (latest.current.onToggleEdge) latest.current.onToggleEdge({ from: edge.data('source'), to: edge.data('target') }, false)
-        })
-        cy.on('dragfree', 'node', saveStoredPositions)
-        cy.on('zoom', () => setZoom(cy.zoom()))
-        cy.one('layoutstop', () => { const local = cy.getElementById(centerId); if (local.length) { local.lock(); cy.center(local) } })
-        cy.layout({ name: 'cose', animate: true, animationDuration: 500, fit: false, randomize: false,
-          nodeRepulsion: 7000, idealEdgeLength: 115, edgeElasticity: 95, gravity: 0.14, numIter: 220, padding: 24 }).run()
-        return () => { saveStoredPositions(); cy.destroy(); cyRef.current = null }
-      }, [])
-
-      React.useEffect(() => {
-        const cy = cyRef.current
-        if (!cy) return
-        const wanted = new Set(devices.map((item) => String(item.device_id)))
-        cy.batch(() => {
-          cy.nodes().forEach((node) => { if (!wanted.has(node.id())) cy.remove(node) })
-          const current = new Set(cy.nodes().map((node) => node.id()))
-          for (const item of devices) {
-            const id = String(item.device_id || '')
-            if (!id) continue
-            const data = { id, label: item.name || id, color: item.device_id === centerId ? C.ink : deviceOsTheme(item).color,
-              textColor: item.device_id === centerId ? C.onPrimary : C.ink, online: !!item.online,
-              center: item.device_id === centerId, selected: item.device_id === selectedId, connecting: item.device_id === connectFrom }
-            if (current.has(id)) cy.getElementById(id).data(data)
-            else {
-              const stored = readStoredPositions(centerId)[id]
-              const others = devices.filter((d) => d.device_id !== centerId)
-              const ix = others.findIndex((d) => d.device_id === item.device_id)
-              const angle = -Math.PI / 2 + ix * (2 * Math.PI / Math.max(1, others.length))
-              cy.add({ data, position: stored && Number.isFinite(stored.x) && Number.isFinite(stored.y)
-                ? { x: stored.x, y: stored.y } : item.device_id === centerId ? { x: 0, y: 0 } : { x: Math.cos(angle) * 125, y: Math.sin(angle) * 125 } })
-            }
-          }
-          const desired = new Map(makeElements().filter((item) => item.data.source).map((item) => [item.data.id, item]))
-          cy.edges().forEach((edge) => { if (!desired.has(edge.id())) cy.remove(edge) })
-          for (const item of desired.values()) {
-            const existing = cy.getElementById(item.data.id)
-            if (existing.length) existing.data(item.data)
-            else cy.add(item)
-          }
-        })
-        cy.nodes().unlock()
-        const center = centerId ? cy.getElementById(centerId) : cy.collection()
-        if (center.length) { center.position({ x: 0, y: 0 }); center.lock(); cy.center(center) }
-        if (connectMode && connectFrom && !devices.some((item) => item.device_id === connectFrom)) setConnectFrom('')
-        if (graphKey !== lastLayoutKey.current) {
-          lastLayoutKey.current = graphKey
-          cy.layout({ name: 'cose', animate: true, animationDuration: 450, fit: false, randomize: false,
-            nodeRepulsion: 7000, idealEdgeLength: 115, edgeElasticity: 95, gravity: 0.14, numIter: 180, padding: 24 }).run()
-        }
-      }, [topologyKey, localId, selectedId, edges, devices, connectMode, connectFrom])
       React.useEffect(() => {
         if (!connectMode) return undefined
-        const onKey = (event) => { if (event.key === 'Escape') { setConnectMode(false); setConnectFrom('') } }
+        const onKey = (event) => {
+          if (event.key === 'Escape') { setConnectMode(false); setConnectFrom('') }
+        }
         window.addEventListener('keydown', onKey)
         return () => window.removeEventListener('keydown', onKey)
       }, [connectMode])
-      const center = () => {
-        const cy = cyRef.current
-        if (!cy) return
-        cy.zoom(1)
-        const node = cy.getElementById(centerId)
-        if (node.length) cy.center(node)
-        setZoom(1)
+      const posZoom = zoom <= 1 ? 0.72 + 0.28 * zoom : zoom
+      const key = devices.map((item) => item.device_id).join('|')
+      React.useEffect(() => {
+        if (connectFrom && !devices.some((item) => item.device_id === connectFrom)) setConnectFrom('')
+      }, [key, connectFrom])
+      const centerId = (devices.find((item) => item.device_id === localId) || devices[0] || {}).device_id || ''
+      centerIdRef.current = centerId
+      const update = (next) => { nodesRef.current = next; setNodes(next) }
+      const kick = () => { if (!frameRef.current) frameRef.current = requestAnimationFrame(animate) }
+      const readStoredPositions = () => {
+        try {
+          const all = JSON.parse(window.localStorage.getItem('tether.network.positions.v3') || '{}')
+          return all && typeof all === 'object' ? all : {}
+        } catch (_) { return {} }
       }
-      return h('div', { style: { position: 'absolute', inset: 0, overflow: 'hidden', touchAction: 'none' } },
-        h('div', { ref: stage, style: { position: 'absolute', inset: 0 } }),
-        h('div', { style: { position: 'absolute', left: 14, top: 12, display: 'flex', alignItems: 'center', gap: 14, fontSize: 12, color: C.mute, pointerEvents: 'none', zIndex: 1 } },
+      const saveStoredPositions = (center, list) => {
+        if (!center || !list.length) return
+        try {
+          const all = readStoredPositions()
+          all[center] = Object.fromEntries(list.map((node) => [node.id, {
+            x: Math.round(node.x * 100) / 100,
+            y: Math.round(node.y * 100) / 100,
+            vx: Math.round((node.vx || 0) * 10000) / 10000,
+            vy: Math.round((node.vy || 0) * 10000) / 10000
+          }]))
+          window.localStorage.setItem('tether.network.positions.v3', JSON.stringify(all))
+        } catch (_) { /* storage is optional */ }
+      }
+      React.useEffect(() => {
+        const center = devices.find((item) => item.device_id === localId) || devices[0]
+        const remotes = center ? devices.filter((item) => item.device_id !== center.device_id) : []
+        const stored = (center && readStoredPositions()[center.device_id]) || {}
+        const radius = Math.min(42, 30 + remotes.length * 2.2)
+        const angles = remotes.length === 2
+          ? [210, 330]
+          : remotes.map((_item, index) => -90 + index * (360 / Math.max(1, remotes.length)))
+        const next = devices.map((item) => {
+          const index = remotes.findIndex((candidate) => candidate.device_id === item.device_id)
+          const saved = stored[item.device_id]
+          const angle = index < 0 ? 0 : angles[index] * Math.PI / 180
+          const valid = saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)
+          return {
+            id: item.device_id,
+            x: valid ? clamp(saved.x, 4, 96) : (index < 0 ? 50 : 50 + Math.cos(angle) * radius),
+            y: valid ? clamp(saved.y, 7, 93) : (index < 0 ? 50 : 50 + Math.sin(angle) * radius),
+            vx: valid && Number.isFinite(saved.vx) ? saved.vx : 0,
+            vy: valid && Number.isFinite(saved.vy) ? saved.vy : 0
+          }
+        })
+        update(next)
+        kick()
+      }, [key, localId])
+      React.useEffect(() => () => { saveStoredPositions(centerIdRef.current, nodesRef.current) }, [])
+      React.useEffect(() => () => { if (frameRef.current) cancelAnimationFrame(frameRef.current) }, [])
+      React.useEffect(() => {
+        const el = stage.current
+        if (!el) return undefined
+        const onWheel = (event) => {
+          event.preventDefault()
+          setZoom((value) => clamp(value * Math.pow(0.998, event.deltaY), 0.4, 1.2))
+        }
+        el.addEventListener('wheel', onWheel, { passive: false })
+        return () => el.removeEventListener('wheel', onWheel)
+      }, [])
+      function animate() {
+        const list = nodesRef.current.map((node) => ({ ...node }))
+        if (!list.length) { frameRef.current = 0; return }
+        const byId = new Map(list.map((node) => [node.id, node]))
+        const center = byId.get(centerIdRef.current)
+        const fx = new Map(list.map((node) => [node.id, 0]))
+        const fy = new Map(list.map((node) => [node.id, 0]))
+        let moving = false
+        for (const node of list) {
+          if (dragRef.current && dragRef.current.id === node.id) continue
+          if (!center || node.id === center.id) {
+            fx.set(node.id, fx.get(node.id) + (50 - node.x) * 0.0006)
+            fy.set(node.id, fy.get(node.id) + (50 - node.y) * 0.0006)
+            continue
+          }
+          const dx = center.x - node.x
+          const dy = center.y - node.y
+          const distance = Math.max(0.001, Math.hypot(dx, dy))
+          const pull = (distance - 40) * 0.0035 + Math.max(0, distance - 55) * 0.01
+          fx.set(node.id, fx.get(node.id) + dx / distance * pull)
+          fy.set(node.id, fy.get(node.id) + dy / distance * pull)
+          fx.set(center.id, fx.get(center.id) - dx / distance * pull * 0.22)
+          fy.set(center.id, fy.get(center.id) - dy / distance * pull * 0.22)
+        }
+        for (let i = 0; i < list.length; i += 1) {
+          for (let j = i + 1; j < list.length; j += 1) {
+            const dx = list[j].x - list[i].x
+            const dy = list[j].y - list[i].y
+            const distance = Math.max(0.001, Math.hypot(dx, dy))
+            if (distance >= 15) continue
+            const push = (15 - distance) * 0.004
+            fx.set(list[i].id, fx.get(list[i].id) - dx / distance * push)
+            fy.set(list[i].id, fy.get(list[i].id) - dy / distance * push)
+            fx.set(list[j].id, fx.get(list[j].id) + dx / distance * push)
+            fy.set(list[j].id, fy.get(list[j].id) + dy / distance * push)
+          }
+        }
+        for (const node of list) {
+          if (dragRef.current && dragRef.current.id === node.id) { moving = true; continue }
+          node.vx = (node.vx + fx.get(node.id)) * 0.95
+          node.vy = (node.vy + fy.get(node.id)) * 0.95
+          node.x = clamp(node.x + node.vx, 4, 96)
+          node.y = clamp(node.y + node.vy, 7, 93)
+          if (node.x <= 4 || node.x >= 96) node.vx *= -0.35
+          if (node.y <= 7 || node.y >= 93) node.vy *= -0.35
+          if (Math.abs(node.vx) + Math.abs(node.vy) > 0.002) moving = true
+        }
+        update(list)
+        frameRef.current = moving ? requestAnimationFrame(animate) : 0
+      }
+      const chooseConnect = (item) => {
+        if (!item) return
+        if (onSelect) onSelect(item)
+        if (!connectFrom) { setConnectFrom(item.device_id); return }
+        if (connectFrom === item.device_id) { setConnectFrom(''); return }
+        if (onToggleEdge) onToggleEdge({ from: connectFrom, to: item.device_id }, true)
+        setConnectFrom('')
+        setConnectMode(false)
+      }
+      const startDrag = (event, item) => {
+        if (event.button !== 0) return
+        event.preventDefault(); event.stopPropagation()
+        if (connectMode) { chooseConnect(item); return }
+        const node = nodesRef.current.find((candidate) => candidate.id === item.device_id)
+        dragRef.current = {
+          id: item.device_id, item, lastX: node ? node.x : 50, lastY: node ? node.y : 50,
+          startX: node ? node.x : 50, startY: node ? node.y : 50, vx: 0, vy: 0, moved: false
+        }
+        event.currentTarget.setPointerCapture?.(event.pointerId)
+        kick()
+      }
+      const moveDrag = (event) => {
+        const drag = dragRef.current
+        if (!drag || !stage.current) return
+        const rect = stage.current.getBoundingClientRect()
+        if (!rect.width || !rect.height) return
+        const x = clamp(50 + (((event.clientX - rect.left) / rect.width * 100) - 50) / posZoom, 4, 96)
+        const y = clamp(50 + (((event.clientY - rect.top) / rect.height * 100) - 50) / posZoom, 7, 93)
+        if (Math.hypot(x - drag.startX, y - drag.startY) > 0.8) drag.moved = true
+        drag.vx = x - drag.lastX
+        drag.vy = y - drag.lastY
+        drag.lastX = x; drag.lastY = y
+        update(nodesRef.current.map((node) => node.id === drag.id ? { ...node, x, y, vx: drag.vx * 0.8, vy: drag.vy * 0.8 } : node))
+        kick()
+      }
+      const endDrag = () => {
+        const drag = dragRef.current
+        if (!drag) return
+        dragRef.current = null
+        if (!drag.moved && drag.item) {
+          if (onSelect) onSelect(drag.item)
+          if (onOpenDetails) onOpenDetails(drag.item)
+        }
+        saveStoredPositions(centerIdRef.current, nodesRef.current)
+        kick()
+      }
+      const screen = (node) => ({ x: 50 + (node.x - 50) * posZoom, y: 50 + (node.y - 50) * posZoom })
+      const center = nodes.find((node) => node.id === centerId) || nodes[0]
+      const remotes = center ? nodes.filter((node) => node.id !== center.id) : []
+      const lookup = new Map(devices.map((item) => [item.device_id, item]))
+      const compact = zoom < (devices.length > 12 ? 1.05 : 0.72)
+      const linkPoints = (from, to, fromId, toId) => {
+        const el = stage.current
+        const rect = el && el.getBoundingClientRect()
+        if (!rect || !rect.width || !rect.height) return { x1: from.x, y1: from.y, x2: to.x, y2: to.y }
+        const a = { x: from.x / 100 * rect.width, y: from.y / 100 * rect.height }
+        const b = { x: to.x / 100 * rect.width, y: to.y / 100 * rect.height }
+        const dx = b.x - a.x
+        const dy = b.y - a.y
+        const length = Math.hypot(dx, dy)
+        if (!length) return null
+        const inset = (id) => {
+          const isCenter = center && center.id === id
+          if (compact) return isCenter ? 9 : 6
+          return isCenter ? 14 : 3
+        }
+        const start = inset(fromId)
+        const end = inset(toId)
+        if (length <= start + end + 1) return null
+        const ux = dx / length
+        const uy = dy / length
+        return {
+          x1: (a.x + ux * start) / rect.width * 100,
+          y1: (a.y + uy * start) / rect.height * 100,
+          x2: (b.x - ux * end) / rect.width * 100,
+          y2: (b.y - uy * end) / rect.height * 100
+        }
+      }
+      const edgePairs = []
+      const seenEdges = new Set()
+      for (const edge of edges || []) {
+        const key = networkEdgeKey(edge && edge.from, edge && edge.to)
+        if (!key || seenEdges.has(key)) continue
+        const left = nodes.find((node) => node.id === edge.from)
+        const right = nodes.find((node) => node.id === edge.to)
+        if (!left || !right) continue
+        seenEdges.add(key)
+        const leftItem = lookup.get(edge.from)
+        const rightItem = lookup.get(edge.to)
+        edgePairs.push({
+          key, edge,
+          from: left, to: right,
+          online: !!(leftItem && leftItem.online && rightItem && rightItem.online),
+          leftName: (leftItem && (leftItem.name || leftItem.device_id)) || edge.from,
+          rightName: (rightItem && (rightItem.name || rightItem.device_id)) || edge.to
+        })
+      }
+      return h('div', { ref: stage, style: { position: 'absolute', inset: 0, overflow: 'hidden', touchAction: 'none' } },
+        h('div', { style: { position: 'absolute', left: 14, top: 12, display: 'flex', alignItems: 'center', gap: 14, fontSize: 12, color: C.mute, pointerEvents: 'none' } },
           h('span', null, '网络'),
           ['windows', 'linux', 'mac'].map((kind) => h('span', { key: kind, style: { display: 'flex', alignItems: 'center', gap: 5, fontSize: 10.5, color: C.mute } },
-            h('span', { style: { width: 7, height: 7, borderRadius: 4, background: DEVICE_OS_THEME[kind].color } }), DEVICE_OS_THEME[kind].label))),
-        h('button', { type: 'button', onClick: () => { setConnectMode((value) => !value); setConnectFrom('') }, title: connectMode ? '取消连接模式' : '连接两台设备',
-          'aria-label': connectMode ? '取消连接模式' : '连接两台设备', className: 'tether-hover',
-          style: { position: 'absolute', right: 12, top: 8, zIndex: 5, display: 'flex', alignItems: 'center', gap: 5, height: 26,
-            padding: '0 10px', border: '1px solid ' + (connectMode ? C.blue : C.line), borderRadius: 999,
-            background: connectMode ? C.soft : C.layer1, color: connectMode ? C.blue : C.sub, fontSize: 11.5, cursor: 'pointer' }
+            h('span', { style: { width: 7, height: 7, borderRadius: 4, background: DEVICE_OS_THEME[kind].color } }),
+            DEVICE_OS_THEME[kind].label))),
+        h('button', {
+          type: 'button', onClick: () => { setConnectMode((value) => !value); setConnectFrom('') },
+          title: connectMode ? '取消连接模式' : '连接两台设备',
+          'aria-label': connectMode ? '取消连接模式' : '连接两台设备',
+          className: 'tether-hover',
+          style: {
+            position: 'absolute', right: 12, top: 8, zIndex: 5, display: 'flex', alignItems: 'center', gap: 5,
+            height: 26, padding: '0 10px', border: '1px solid ' + (connectMode ? C.blue : C.line),
+            borderRadius: 999, background: connectMode ? C.soft : C.layer1,
+            color: connectMode ? C.blue : C.sub, fontSize: 11.5, cursor: 'pointer'
+          }
         }, h(Glyph, { name: 'link', size: 13 }), connectMode ? '取消' : '连接'),
-        h('button', { type: 'button', onClick: center, title: '回到本机并重置缩放', 'aria-label': '回到本机并重置缩放', className: 'tether-hover',
-          style: { position: 'absolute', right: 12, bottom: 10, zIndex: 5, fontSize: 10, color: C.mute, background: C.layer1,
-            border: 0, borderRadius: 999, padding: '3px 8px', cursor: 'pointer' } }, Math.round(zoom * 100) + '% · 本机'),
-        connectMode ? h('div', { 'aria-live': 'polite', style: { position: 'absolute', left: '50%', bottom: 12, transform: 'translateX(-50%)', zIndex: 4,
-          padding: '4px 9px', borderRadius: 999, background: C.layer1, color: C.sub, fontSize: 10.5, pointerEvents: 'none', whiteSpace: 'nowrap' }
+        h('svg', { viewBox: '0 0 100 100', preserveAspectRatio: 'none', style: { position: 'absolute', inset: 0, width: '100%', height: '100%' } },
+          edgePairs.map((pair) => {
+            const points = linkPoints(screen(pair.from), screen(pair.to), pair.from.id, pair.to.id)
+            if (!points) return null
+            return h('g', { key: 'edge:' + pair.key },
+              h('title', null, pair.leftName + ' ↔ ' + pair.rightName + ' · 点击断开'),
+              h('line', {
+                ...points, stroke: 'transparent', strokeWidth: 16, vectorEffect: 'non-scaling-stroke',
+                style: { cursor: 'pointer', pointerEvents: 'stroke' },
+                onClick: (event) => {
+                  event.stopPropagation()
+                  if (onToggleEdge) onToggleEdge({ from: pair.from.id, to: pair.to.id }, false)
+                }
+              }),
+              h('line', {
+                ...points, stroke: C.sub, strokeWidth: zoom > 1 ? 1 : 1.2, vectorEffect: 'non-scaling-stroke',
+                strokeDasharray: pair.online ? undefined : '4 5', opacity: pair.online ? 0.7 : 0.4,
+                style: { pointerEvents: 'none' }
+              }))
+          })
+        ),
+        edgePairs.map((pair) => {
+          const left = screen(pair.from)
+          const right = screen(pair.to)
+          const midX = (left.x + right.x) / 2
+          const midY = (left.y + right.y) / 2
+          if (nodes.some((node) => Math.hypot(node.x - midX, node.y - midY) < 9)) return null
+          return h('button', {
+            key: 'mid:' + pair.key, type: 'button',
+            title: '断开 ' + pair.leftName + ' ↔ ' + pair.rightName,
+            'aria-label': '断开 ' + pair.leftName + ' ↔ ' + pair.rightName,
+            onPointerDown: (event) => event.stopPropagation(),
+            onClick: (event) => {
+              event.stopPropagation()
+              if (onToggleEdge) onToggleEdge({ from: pair.from.id, to: pair.to.id }, false)
+            },
+            className: 'tether-hover',
+            style: {
+              position: 'absolute', left: midX + '%', top: midY + '%',
+              transform: 'translate(-50%, -50%)', zIndex: 4, width: 18, height: 18, padding: 0,
+              display: 'grid', placeItems: 'center', border: '1px solid ' + C.line, borderRadius: 999,
+              background: C.layer1, color: C.sub, cursor: 'pointer'
+            }
+          }, h(Glyph, { name: 'link', size: 11 }))
+        }),
+        nodes.map((node) => {
+          const item = lookup.get(node.id) || { device_id: node.id, name: node.id, online: false }
+          const isCenter = center && center.id === node.id
+          const selected = node.id === selectedId
+          const pos = screen(node)
+          return h('div', {
+            key: 'node:' + node.id,
+            onPointerDown: (event) => startDrag(event, item),
+            onPointerMove: moveDrag,
+            onPointerUp: endDrag,
+            onPointerCancel: endDrag,
+            onDoubleClick: () => onOpen(item),
+            onContextMenu: (event) => { event.preventDefault(); event.stopPropagation(); if (onContextMenu) onContextMenu(event, item) },
+            title: item.name || item.device_id,
+            style: compact ? {
+              position: 'absolute', left: pos.x + '%', top: pos.y + '%', transform: 'translate(-50%, -50%)',
+              zIndex: isCenter ? 3 : 2, width: isCenter ? 22 : 16, height: isCenter ? 22 : 16,
+              borderRadius: '50%', cornerShape: 'round', border: 0, padding: 0, background: 'transparent',
+              opacity: item.online ? 1 : 0.46, cursor: connectMode ? 'crosshair' : 'grab', userSelect: 'none',
+              outline: connectFrom === node.id ? '2px solid ' + C.blue : 'none', outlineOffset: 2
+            } : {
+              position: 'absolute', left: pos.x + '%', top: pos.y + '%', transform: 'translate(-50%, -50%)',
+              zIndex: isCenter ? 3 : 2, display: 'flex', alignItems: 'center', gap: 6,
+              padding: isCenter ? '8px 12px' : '6px 9px', borderRadius: 999,
+              background: isCenter ? C.ink : deviceOsTheme(item).soft,
+              color: isCenter ? C.onPrimary : C.ink,
+              fontSize: isCenter ? 12 : 11, boxShadow: isCenter ? C.shadow : (selected ? '0 1px 3px rgba(16,24,40,0.12)' : '0 1px 2px rgba(16,24,40,0.06)'),
+              transition: 'background-color 160ms ease',
+              cursor: connectMode ? 'crosshair' : 'grab', whiteSpace: 'nowrap', opacity: item.online ? 1 : 0.55, userSelect: 'none',
+              outline: connectFrom === node.id ? '2px solid ' + C.blue : 'none', outlineOffset: 2
+            }
+          },
+            compact
+              ? h('span', {
+                className: 'tether-node-fill',
+                'data-center': isCenter ? 'true' : undefined,
+                'data-selected': selected ? 'true' : undefined,
+                style: {
+                  background: isCenter ? C.ink : deviceOsTheme(item).color,
+                  borderRadius: '50%', cornerShape: 'round', pointerEvents: 'none'
+                }
+              })
+              : h('span', { style: { width: 7, height: 7, borderRadius: 4, background: deviceOsTheme(item).color, display: 'inline-block', flex: '0 0 auto' } }),
+            compact ? null : (item.name || item.device_id))
+        }),
+        h('div', { onClick: () => setZoom(1), title: '重置缩放', style: { position: 'absolute', right: 12, bottom: 10, zIndex: 4, fontSize: 10, color: C.mute, background: C.layer1, borderRadius: 999, padding: '2px 7px', cursor: 'pointer' } }, Math.round(zoom * 100) + '%'),
+        connectMode ? h('div', {
+          'aria-live': 'polite',
+          style: {
+            position: 'absolute', left: '50%', bottom: 12, transform: 'translateX(-50%)', zIndex: 4,
+            padding: '4px 9px', borderRadius: 999, background: C.layer1, color: C.sub,
+            fontSize: 10.5, pointerEvents: 'none', whiteSpace: 'nowrap'
+          }
         }, connectFrom ? '再点一台设备完成连接' : '点选第一台设备') : null,
         !devices.length ? h('div', { style: { position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: C.mute, fontSize: 12 } }, '暂无设备 · 目标机需接入 Hub') : null
       )
@@ -2658,7 +2744,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           }
         }
         const isLocalTarget = !!(localDeviceId && id === localDeviceId)
-        if (host && host.kind === 'app' && !EXPLICIT_AUTHORITY && !isLocalTarget
+        if (host && host.kind === 'app' && !EXPLICIT_AUTHORITY
             && host.workbench && typeof host.workbench.openDshSurface === 'function') {
           const service = await host.workbench.openDshSurface(id)
           return { response: { ok: true, status: 200 }, data: { nativeService: service } }
@@ -2770,7 +2856,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         if (!visible && !preload) return () => { current = false; controller.abort() }
         const existing = surfaceStateRef.current
         if (existing && existing.deviceId === deviceId && existing.sourceKey === surfaceSourceKey
-            && ['document-loading', 'document-loaded'].includes(existing.status) && existing.url) {
+            && ['document-loading', 'document-loaded', 'native-document-loading', 'native-document-loaded'].includes(existing.status) && existing.url) {
           return () => { current = false; controller.abort() }
         }
         setState({ deviceId, status: 'loading', url: '' })
@@ -3252,7 +3338,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         }
       const nativeSurfaceGuest = ['native-document-loading', 'native-document-loaded', 'native-document-error'].includes(currentState.status)
           && currentState.deviceId === deviceId && host.kind === 'app' ? (
-        h('div', { className: 'tether-native-surface', style: { ...nativeSurfaceContainerStyle(visible, layered), position: 'relative' } },
+        h('div', { className: 'tether-native-surface', style: { ...nativeSurfaceContainerStyle(visible, layered), ...(layered ? {} : { position: 'relative' }) } },
           currentState.status === 'native-document-error' ? h('div', { role: 'alert', style: { position: 'absolute', inset: 0, zIndex: 2, display: 'grid', placeItems: 'center', alignContent: 'center', gap: 10, background: C.bg } },
             h('div', null, currentState.message || 'DSH 页面无法连接。'), btn('重新连接', retryDocument, { primary: true })) : null,
           h('webview', { key: currentState.grantId, partition: currentState.partition, src: currentState.url, ref: onNativeGuest,
@@ -3683,7 +3769,11 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       React.useEffect(() => { setTerminalCwd('') }, [deviceId])
       const [terminalHeight, setTerminalHeight] = React.useState(220)
       const [terminalKey, setTerminalKey] = React.useState(0)
-      const [activePanel, setActivePanel] = usePersisted('tether.ui.panel.v2', 'workspaces')
+      const [storedActivePanel, setActivePanel] = usePersisted('tether.ui.panel.v2', 'workspaces')
+      const activePanel = storedActivePanel === 'herdr' ? 'agents' : storedActivePanel
+      React.useEffect(() => {
+        if (storedActivePanel === 'herdr') setActivePanel('agents')
+      }, [storedActivePanel])
       const [sidebarCollapsed, setSidebarCollapsed] = usePersisted('tether.ui.panelCollapsed', false)
       const [sidebarWidth, setSidebarWidth] = usePersisted('tether.ui.panelWidth.v2', UI.defaultSide)
       const [resizing, setResizing] = React.useState(false)
@@ -3823,6 +3913,15 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const [updateToast, setUpdateToast] = React.useState('')
       const [showHub, setShowHub] = React.useState(false)
       const [showAppSettings, setShowAppSettings] = React.useState(false)
+      const [desktopAppVersion, setDesktopAppVersion] = React.useState('')
+      React.useEffect(() => {
+        if (!showAppSettings || !host || host.kind !== 'app' || typeof host.appInfo !== 'function') return undefined
+        let active = true
+        Promise.resolve(host.appInfo()).then((info) => {
+          if (active && info && typeof info.version === 'string') setDesktopAppVersion(info.version)
+        }).catch(() => {})
+        return () => { active = false }
+      }, [showAppSettings, host])
       const [localDsh, setLocalDsh] = React.useState(null)
       const [dshBusy, setDshBusy] = React.useState('')
       const localDshTargetRef = React.useRef('')
@@ -6118,9 +6217,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           return
         }
         if (id === 'herdr') {
-          window.__tetherHerdrPending = true
           setView('agents'); setActivePanel('agents'); setSidebarCollapsed(true)
-          window.dispatchEvent(new Event('tether:open-herdr'))
           return
         }
         if (id === 'network') {
@@ -7352,7 +7449,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             device_id: localDeviceRecord.device_id || appLocalDevice || deviceId,
             online: !!localDeviceRecord.online
           },
-          versions: { app: localCaps.app_version, node: localCaps.node_version, plugin: localCaps.plugin_version },
+          versions: { app: desktopAppVersion || localCaps.app_version, node: localCaps.node_version, plugin: localCaps.plugin_version },
           update: settingsUpdate,
           extraSections: host.kind === 'app' ? [{
             id: 'teams', label: '团队与共享',

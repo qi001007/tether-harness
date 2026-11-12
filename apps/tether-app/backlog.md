@@ -134,3 +134,14 @@
 - 2026-11-11：远端 DSH hidden bootstrap 的脱敏失败日志新增固定阶段事件（创建、导航、endpoint 校验、Cookie 校验、record 完成）；只沿用安全 target/service ID，不记录 URL、host、ticket、Cookie 或原始异常。
 - 2026-11-11：修复 CHIPS Cookie 验证：在每次新建的专用随机 partition 中用空过滤器读取 Cookie，保留 `__Host-tether_`、HttpOnly、Secure、根路径校验，并要求规范化 domain 精确匹配最终 endpoint hostname。
 - 2026-11-11：修复 Electron 33 managed guest 预提交 attach：main 在注册导航事件前同步按唯一隔离 session 取得无秘密 policy；`dsh-native` 接受空 URL/about:blank 后只允许精确 token-free endpoint 的主框架导航，其他路径、查询、fragment 和跨源均失败，子框架不受影响。
+
+- 2026-11-11：旧 Codeg 兼容打开在现代 ready mesh/SOCKS 路由不匹配时，可回退到当前已鉴权 Controller 快照中的在线目标 capabilities.direct_api.host；仅当它精确匹配 runtime token URL 且命中本机 RFC1918 EasyTier 接口同网段时走 OS 私网直连。专用 session、单 origin 请求守卫与主进程 token bootstrap 保留，匹配现代 mesh 时仍优先 SOCKS。
+- 2026-11-11：旧 Codeg 兼容打开在现代 ready mesh/SOCKS 路由不匹配时，可回退到当前已鉴权 Controller 快照中的在线目标 `capabilities.direct_api.host`；仅当它精确匹配 runtime token URL 且命中本机 RFC1918 EasyTier 接口同网段时走 OS 私网直连。专用 session、单 origin 请求守卫与主进程 token bootstrap 保留，匹配现代 mesh 时仍优先 SOCKS。
+
+- 2026-11-11：legacy Codeg 在服务目录状态可能陈旧或已停止时，点击启动并打开后先复用目标 Agents Runtime 启停/轮询，再由主进程用新鲜鉴权状态与严格 URL 校验；managed legacy guest 允许首次 bootstrap 的空/about:blank URL，后续 origin 守卫不变。
+- 2026-11-11：严格校验 legacy Codeg token URL 后，仅在主进程 bootstrap 副本添加固定 `next=/workspace?tether_home=1`，确保 packaged APP 打开原生 Agents route；renderer 仍只接收 root endpoint，token 与 origin guard 不变。
+- 2026-11-12：现代目录中的同机 Codeg 仅在本地目标复用既有隔离 token 网关；运行时停止时只启动一次并重新读取 ready 状态，远端现代 Codeg 继续走原 `service_open`。保留身份代次、在线直连路由、严格 token URL、origin 守卫及 session 清理。`legacy` 标记表示既有 token URL wire mode。新增同机启动/隔离、远端路由、错误身份/URL与账号切换行为用例；25 项 native-workbench catalog 用例通过。
+
+- 2026-11-12：modern remote Codeg 仅在 fresh Controller snapshot 确认当前 actor、目标为该 actor 在线自有设备、没有共同 ready network，且 direct_api 私网地址与本机 EasyTier 子网匹配时，复用既有隔离 token gateway；共享/非owner/无旧网条件继续原 `service_open`，状态/网络目录错误原样失败。启动后状态 URL 仍严格匹配证明过的 direct host，token 不进入 renderer。
+
+- 2026-11-12：新增 0.5.3 APP 候选版本，package.json 与 package-lock.json 同步，Node 版本由 version.json/pyproject.toml 保持同号；插件冻结 0.2.93，尚未构建或发布。

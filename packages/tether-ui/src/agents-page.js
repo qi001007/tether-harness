@@ -1,6 +1,12 @@
 import { createTerminalDock } from './terminal-dock.js'
 import { readCatalog, writeCatalog, readHarnesses, writeHarnesses } from './agent-cache.js'
 import { writeAccount } from './agent-account-cache.js'
+
+const HERDR_SUPPORTED_CODEG_TYPES = new Set([
+  'codex', 'claude_code', 'gemini', 'open_code', 'cursor',
+  'kimi_code', 'qwen_code', 'qoder'
+])
+
 export function createAgentsPage(props) {
   const { React, devices = [], localDevice = '', activeDevice = '' } = props
   const online = devices.filter((item) => item && item.online)
@@ -61,6 +67,7 @@ function AgentTargetPage({ React, Glyph, post, C, host, devices = [], localDevic
   const [serviceView, setServiceView] = React.useState(null)
   const [serviceFrameState, setServiceFrameState] = React.useState('loading')
   const serviceWebviewRef = React.useRef(null)
+  const handledHerdrRequests = React.useRef(new Set())
   const [workbenchLoginRequired, setWorkbenchLoginRequired] = React.useState(false)
   const [workbenchLoginBusy, setWorkbenchLoginBusy] = React.useState(false)
   const [cwd, setCwd] = React.useState('')
@@ -461,22 +468,23 @@ function AgentTargetPage({ React, Glyph, post, C, host, devices = [], localDevic
       icon: agent.icon, dark: true, initialCommand: command, initialArgv: argv })
   }
 
-  const openHerdr = (projectCwd = '') => {
-    if (!herdrAvailable) { fail(new Error('此节点没有 Herdr')); return }
+  const openHerdr = (projectCwd = '', codegAgentType = '') => {
+    if (!herdrAvailable) { setHomeError('此节点没有 Herdr'); return }
+    if (!HERDR_SUPPORTED_CODEG_TYPES.has(codegAgentType)) {
+      setHomeError('Herdr 暂不支持所选 Agent 类型'); return
+    }
     const cwd = typeof projectCwd === 'string' && projectCwd.length <= 4096 && !projectCwd.includes('\0')
       ? projectCwd.trim() : ''
+    if (!cwd) { setHomeError('打开 Herdr 前请先选择项目'); return }
     const normalizedCwd = cwd.replace(/\\/g, '/').replace(/\/+$/, '')
-    const key = normalizedCwd ? 'herdr:' + normalizedCwd : 'herdr'
-    addPane({ key, kind: 'terminal', shell: 'herdr', cwd, herdrProject: !!normalizedCwd,
-      title: 'Herdr', icon: 'bot', dark: true })
+    const key = 'herdr:' + normalizedCwd + ':' + codegAgentType
+    setHomeError('')
+    addPane({ key, kind: 'terminal', shell: 'herdr', cwd, herdrProject: true,
+      herdrAgentType: codegAgentType, targetId: device,
+      title: 'Herdr · ' + codegAgentType, icon: 'bot', dark: true })
   }
 
   React.useEffect(() => {
-    const open = () => { if (herdrAvailable) openHerdr() }
-    if (typeof window !== 'undefined' && window.__tetherHerdrPending) {
-      window.__tetherHerdrPending = false
-      open()
-    }
     const onMessage = (event) => {
       const data = event && event.data
       const frame = runtimeFrame.current
@@ -484,13 +492,11 @@ function AgentTargetPage({ React, Glyph, post, C, host, devices = [], localDevic
       let origin = ''
       try { origin = new URL(pane && pane.url).origin } catch (_) { /* no active Codeg frame */ }
       if (!event || !frame || event.source !== frame.contentWindow || !origin || event.origin !== origin) return
-      if (data && data.type === 'tether:open-herdr') openHerdr(data.cwd)
+      if (data && data.type === 'tether:open-herdr') openHerdr(data.cwd, data.agent_type)
     }
     window.addEventListener('message', onMessage)
-    window.addEventListener('tether:open-herdr', open)
     return () => {
       window.removeEventListener('message', onMessage)
-      window.removeEventListener('tether:open-herdr', open)
     }
   }, [herdrAvailable, device, panes])
 
@@ -637,11 +643,16 @@ function AgentTargetPage({ React, Glyph, post, C, host, devices = [], localDevic
     const legacyCodeg = serviceCatalog && serviceCatalog.legacy === true
     const catalogCodeg = serviceCatalog && serviceCatalog.services
       ? serviceCatalog.services.find((service) => service.id === 'codeg') : null
-    if (legacyCodeg && (!catalogCodeg || catalogCodeg.state !== 'ready'
-        || catalogCodeg.open_mode !== 'legacy-codeg' || typeof host.workbench.openLegacyCodeg !== 'function')) return
+    if (legacyCodeg && (!catalogCodeg || !['ready', 'stopped'].includes(catalogCodeg.state)
+        || (catalogCodeg.state === 'ready' && catalogCodeg.open_mode !== 'legacy-codeg')
+        || typeof host.workbench.openLegacyCodeg !== 'function')) return
     setServiceOpening(true)
     setHomeError('')
     try {
+      if (legacyCodeg) {
+        const runtime = await getAgentsRuntime(device, true)
+        if (!runtime || runtime.running !== true || !runtime.url) throw new Error('Codeg 未能启动并通过就绪检查。')
+      }
       const service = legacyCodeg
         ? await host.workbench.openLegacyCodeg(device)
         : await host.workbench.open(device, 'codeg')
@@ -719,20 +730,6 @@ function AgentTargetPage({ React, Glyph, post, C, host, devices = [], localDevic
     })
   }, [host])
 
-  const closeNativeCodeg = async () => {
-    if (!serviceView || !host || !host.workbench) return
-    try {
-      await host.workbench.close(device, 'codeg', serviceView.grantId)
-      setPanes((current) => current.filter((pane) => pane.key !== 'codeg:home'))
-      setServiceView(null)
-      setActivePane('')
-      setWorkspaceOpen(false)
-      retryAgentsHome()
-    } catch (error) {
-      setHomeError(String((error && error.message) || error || 'Codeg 工作台视图关闭失败。'))
-    }
-  }
-
   const closeNativeDesktop = async () => {
     if (!serviceView || serviceView.serviceId !== 'desktop' || !host || !host.workbench) return
     try {
@@ -758,7 +755,7 @@ function AgentTargetPage({ React, Glyph, post, C, host, devices = [], localDevic
     const guest = serviceWebviewRef.current
     if (!serviceView || !guest || typeof guest.addEventListener !== 'function') return undefined
     setServiceFrameState('loading')
-    const onStart = (event) => { if (event.isMainFrame) setServiceFrameState('loading') }
+    const onStart = (event) => { if (event.isMainFrame && !event.isInPlace) setServiceFrameState('loading') }
     const onFinish = () => setServiceFrameState('ready')
     const onFail = (event) => {
       if (event.isMainFrame && event.errorCode !== -3) setServiceFrameState('error')
@@ -766,12 +763,66 @@ function AgentTargetPage({ React, Glyph, post, C, host, devices = [], localDevic
     guest.addEventListener('did-start-navigation', onStart)
     guest.addEventListener('did-finish-load', onFinish)
     guest.addEventListener('did-fail-load', onFail)
+    try {
+      const currentOrigin = new URL(guest.getURL()).origin
+      const endpointOrigin = new URL(serviceView.endpoint).origin
+      if (currentOrigin === endpointOrigin
+          && typeof guest.isLoadingMainFrame === 'function' && !guest.isLoadingMainFrame()) {
+        setServiceFrameState('ready')
+      }
+    } catch (_) { /* guest may not be attached yet */ }
     return () => {
       guest.removeEventListener('did-start-navigation', onStart)
       guest.removeEventListener('did-finish-load', onFinish)
       guest.removeEventListener('did-fail-load', onFail)
     }
   }, [serviceView && serviceView.endpoint])
+
+  React.useEffect(() => {
+    const guest = serviceWebviewRef.current
+    if (!serviceView || serviceView.serviceId !== 'codeg'
+        || serviceView.targetId !== device || !guest
+        || typeof guest.addEventListener !== 'function') return undefined
+    const onInPageNavigation = (event) => {
+      if (!event || event.isMainFrame !== true || typeof event.url !== 'string') return
+      let actionUrl
+      try {
+        actionUrl = new URL(event.url)
+        if (actionUrl.origin !== new URL(serviceView.endpoint).origin) return
+      } catch (_) { return }
+      const params = new URLSearchParams(actionUrl.hash.slice(1))
+      if (params.get('tether_action') !== 'open_herdr') return
+      const requestIds = params.getAll('request_id')
+      const agentTypes = params.getAll('agent_type')
+      const cwds = params.getAll('cwd')
+      const requestId = requestIds[0] || ''
+      const codegAgentType = agentTypes[0] || ''
+      const cwd = cwds[0] || ''
+      const actionKeys = Array.from(params.keys()).sort().join(',')
+      const fixedAction = requestIds.length === 1 && agentTypes.length === 1
+        && cwds.length === 1 && actionKeys === 'agent_type,cwd,request_id,tether_action'
+        && params.getAll('tether_action').length === 1
+        && /^[0-9a-f-]{36}$/i.test(requestId)
+        && cwd.length > 0 && cwd.length <= 4096 && !cwd.includes('\0')
+      if (fixedAction && !handledHerdrRequests.current.has(requestId)) {
+        handledHerdrRequests.current.add(requestId)
+        if (handledHerdrRequests.current.size > 128) {
+          handledHerdrRequests.current.delete(handledHerdrRequests.current.values().next().value)
+        }
+        openHerdr(cwd, codegAgentType)
+      }
+      // The action is a same-document hash only. Clear it with a fixed script;
+      // never interpolate the path or Agent value into guest JavaScript.
+      if (typeof guest.executeJavaScript === 'function') {
+        void guest.executeJavaScript(
+          "history.replaceState(history.state, '', location.pathname + location.search)"
+        ).catch(() => {})
+      }
+    }
+    guest.addEventListener('did-navigate-in-page', onInPageNavigation)
+    return () => guest.removeEventListener('did-navigate-in-page', onInPageNavigation)
+  }, [serviceView && serviceView.endpoint, serviceView && serviceView.targetId,
+    serviceView && serviceView.serviceId, device, herdrAvailable])
 
   const installAgent = async (agent) => {
     if (!device || installing) return
@@ -832,7 +883,8 @@ function AgentTargetPage({ React, Glyph, post, C, host, devices = [], localDevic
     ? '升级节点后可用'
     : codegService && codegService.reason_code === 'device_not_found' ? '目标节点未连接' : '服务不可用'
   const legacyCodegBlocked = !!(serviceCatalog && serviceCatalog.legacy === true
-    && (!codegService || codegService.state !== 'ready' || codegService.open_mode !== 'legacy-codeg'))
+    && (!codegService || !['ready', 'stopped'].includes(codegService.state)
+      || (codegService.state === 'ready' && codegService.open_mode !== 'legacy-codeg')))
   const legacyCodegLabel = codegService && codegService.state === 'missing' ? 'Codeg 未安装'
     : codegService && codegService.state === 'stopped' ? 'Codeg 未运行'
       : 'Codeg 状态异常'
@@ -858,6 +910,7 @@ function AgentTargetPage({ React, Glyph, post, C, host, devices = [], localDevic
     : h(createTerminalDock, {
       key: pane.key, React, Glyph, post, C, device, cwd: pane.cwd || '',
       initialAgent: pane.agentId || '', initialShell: pane.shell || '', initialHerdrProject: pane.herdrProject || false,
+      initialHerdrAgentType: pane.herdrAgentType || '',
       initialCommand: pane.initialCommand || '', initialArgv: pane.initialArgv || null, label: pane.title,
       themeMode: 'dark', fill: true,
       height: Math.max(420, (typeof window !== 'undefined' ? window.innerHeight : 900) - 168),
@@ -882,10 +935,10 @@ function AgentTargetPage({ React, Glyph, post, C, host, devices = [], localDevic
           serviceView.viewOnly ? '只读视图' + (serviceView.viewOnlyReason ? ' · ' + serviceView.viewOnlyReason : '')
             : serviceView.consent === 'none' ? '已启用无人值守授权' : '等待目标用户确认',
           Number.isFinite(serviceView.nativeSessionExpiresAt) ? ' · 会话最晚 ' + new Date(serviceView.nativeSessionExpiresAt).toLocaleString() + ' 结束' : '') : null,
-      serviceView && activePane === (serviceView.paneKey || 'codeg:home') ? h('button', { type: 'button', onClick: () => void (serviceView.serviceId === 'desktop' ? closeNativeDesktop() : closeNativeCodeg()),
+      serviceView && serviceView.serviceId === 'desktop' && activePane === (serviceView.paneKey || 'codeg:home') ? h('button', { type: 'button', onClick: () => void closeNativeDesktop(),
         style: { marginLeft: serviceView.serviceId === 'desktop' ? 10 : 'auto', height: 28, padding: '0 10px', border: '1px solid ' + C.line, borderRadius: 8,
           background: C.bg, color: C.sub, fontSize: 11.5, cursor: 'pointer' }
-      }, serviceView.serviceId === 'desktop' ? '结束远程桌面并撤销授权' : '关闭工作台视图') : null),
+      }, '结束远程桌面并撤销授权') : null),
     h('div', { style: { flex: '1 1 auto', minHeight: 0, position: 'relative', display: 'flex' } },
       ...panes.map((pane) => h('div', {
         key: pane.key,

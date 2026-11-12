@@ -61,6 +61,44 @@ def test_authenticated_ready_rejects_non_ok_body(monkeypatch) -> None:
     assert runtime._authenticated_ready(4200, "test-token") is False
 
 
+def test_herdr_agent_uses_authenticated_runtime_catalog_and_keeps_env_internal() -> None:
+    from threading import RLock
+
+    runtime = object.__new__(AgentsRuntime)
+    runtime.lock = RLock()
+    runtime.port = 4201
+    runtime.token = "private-test-token"
+    runtime.status = lambda: {"running": True}
+    captured = {}
+
+    def api_post(command, args, port, token, timeout):
+        captured.update({"command": command, "args": args, "port": port, "token": token, "timeout": timeout})
+        return [{"agent_type": "codex", "enabled": True, "available": True,
+                 "env": {"CODEX_HOME": "D:/Tether/user/.codex"}}]
+
+    runtime._api_post = api_post
+    result = runtime.herdr_agent("codex")
+
+    assert result == {"agent_type": "codex", "env": {"CODEX_HOME": "D:/Tether/user/.codex"}}
+    assert captured == {"command": "acp_list_agents", "args": {}, "port": 4201,
+                        "token": "private-test-token", "timeout": 3.0}
+
+
+def test_herdr_agent_rejects_disabled_or_malformed_runtime_record() -> None:
+    from threading import RLock
+
+    runtime = object.__new__(AgentsRuntime)
+    runtime.lock = RLock()
+    runtime.port = 4201
+    runtime.token = "private-test-token"
+    runtime.status = lambda: {"running": True}
+    runtime._api_post = lambda *_args: [{"agent_type": "codex", "enabled": False,
+                                       "available": True, "env": {}}]
+
+    with pytest.raises(ValueError, match="disabled or unavailable"):
+        runtime.herdr_agent("codex")
+
+
 def _make_runtime_archive(path: Path, members: dict[str, bytes]) -> None:
     with tarfile.open(path, "w:gz") as archive:
         for name, contents in members.items():
@@ -355,7 +393,7 @@ def test_herdr_project_scope_is_stable_per_cwd_and_opt_in(tmp_path: Path) -> Non
     assert scoped[1] == "--session" and scoped[2].startswith("tether-project-")
     assert scoped != other
     assert unchanged == command
-    assert env is None
+    assert env["TETHER_HERDR_SESSION"] == scoped[2]
 
 
 def test_herdr_project_scope_uses_windows_wrapper_environment(tmp_path: Path) -> None:

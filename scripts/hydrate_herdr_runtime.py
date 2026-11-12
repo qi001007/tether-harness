@@ -77,6 +77,9 @@ FILES = {
         "sha256": "b7fd936c2668b87b9ecf7b3366dc6568afc1c6f981874cba3e955a1c35cf8160",
     },
 }
+WINDOWS_RUNTIME_FILES = tuple(
+    relative for relative, spec in FILES.items() if spec["asset"] == "windows-x86_64"
+)
 
 
 def _hash_file(path: Path) -> tuple[int, str]:
@@ -93,6 +96,16 @@ def _verify_file(path: Path, expected: dict, label: str) -> None:
     size, digest = _hash_file(path)
     if size != expected["size"] or digest != expected["sha256"]:
         raise ValueError(f"{label} failed pinned size/SHA-256 verification")
+
+
+def verify_windows_runtime(destination: Path) -> tuple[str, ...]:
+    destination = Path(destination)
+    for relative in WINDOWS_RUNTIME_FILES:
+        path = destination / relative
+        if not path.is_file():
+            raise ValueError(f"pinned Herdr runtime is missing {relative}")
+        _verify_file(path, FILES[relative], relative)
+    return WINDOWS_RUNTIME_FILES
 
 
 def _download(url: str, destination: Path) -> None:
@@ -196,8 +209,11 @@ def hydrate(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--destination", type=Path, default=DEFAULT_DESTINATION)
+    parser.add_argument("--windows-only", action="store_true",
+                        help="hydrate only the pinned Windows Herdr executable and ConPTY files")
     args = parser.parse_args()
-    installed = hydrate(args.destination)
+    files = {relative: FILES[relative] for relative in WINDOWS_RUNTIME_FILES} if args.windows_only else FILES
+    installed = hydrate(args.destination, files=files)
     print("Herdr runtime ready; installed " + str(len(installed)) + " missing file(s).")
 
 

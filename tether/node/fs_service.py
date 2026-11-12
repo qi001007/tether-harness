@@ -36,6 +36,7 @@ from .agent_registry import AgentRegistry
 from .agent_accounts import AgentAccounts
 from .web_apps import OpenCodeWeb
 from .agents_runtime import AgentsRuntime
+from .terminal import herdr_agent_environment, herdr_agent_kind
 from .transfer_jobs import RcloneJobs, TransferJobError
 from .sftpgo_grants import SftpGoGrants, GrantError
 from .service_access import ServiceAccess, ServiceAccessError
@@ -1282,6 +1283,34 @@ class FsService:
             raise FsError(str(exc), "terminal_error") from None
 
     def _op_terminal_start(self, args: dict[str, Any]) -> Any:
+        if "herdr_agent_type" in args:
+            agent_type = args.get("herdr_agent_type")
+            if (not isinstance(agent_type, str) or herdr_agent_kind(agent_type) is None
+                    or args.get("shell") != "herdr" or args.get("herdr_project") is not True
+                    or any(key in args for key in ("agent", "command", "env", "_herdr_agent_env"))):
+                raise FsError("invalid Herdr agent start request", "bad_args")
+            runtime = getattr(self, "agents_runtime", None)
+            if runtime is None:
+                raise FsError("Agents Runtime is unavailable", "unavailable")
+            try:
+                record = runtime.herdr_agent(agent_type)
+            except ValueError as exc:
+                raise FsError(str(exc), "terminal_error") from None
+            node_env = getattr(self.terminal, "env", os.environ)
+            if not isinstance(node_env, dict):
+                node_env = os.environ
+            agent_env = herdr_agent_environment(agent_type, record["env"], node_env)
+            if agent_env is None:
+                registry = getattr(self, "agents", None)
+                catalog = registry.catalog() if registry is not None else {}
+                records = catalog.get("agents") if isinstance(catalog, dict) else None
+                agent_env = herdr_agent_environment(
+                    agent_type, record["env"], node_env,
+                    records if isinstance(records, list) else [])
+            if agent_env is None:
+                raise FsError("The selected agent CLI is not installed on this node.",
+                              "agent_unavailable")
+            args = {**args, "_herdr_agent_env": agent_env}
         agent_id = str(args.get("agent") or "").strip()
         if agent_id:
             record = self.agents.get(agent_id)

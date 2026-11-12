@@ -31,3 +31,5 @@
 - 2026-11-08：候选构建器分别替换 runtime 根和 `node-bin` extraResource 源路径，避免前缀替换拼出无效 YAML；两条资源映射都按唯一匹配检查。
 - 2026-11-11：候选 run marker 改为平台无关，构建前完成直接子目录/链接校验、登记与旧受管 run 清理；失败 run 保留 marker。清理跨平台和有效旧版本保留 current + 最近一个受管 run，不接管非空无标记目录；候选测试 16 项通过。
 - 2026-11-11：Linux headless Node tar/Deb builder now derives artifact paths, package metadata, Debian runtime selection and packaged install instructions from `version.json` so preview builds cannot silently land under stale 0.5.0 paths.
+
+- 2026-11-12：候选构建输出与 runtime guard 改为随已校验 APP/Node 版本分根，0.5.3 预览不覆盖 0.5.2 资产；electron-builder 基础输出根更新为 0.5.3。

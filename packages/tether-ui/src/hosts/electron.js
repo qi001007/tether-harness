@@ -5,6 +5,7 @@ export function createElectronHost({ apiBase = '' } = {}) {
   return {
     ...webHost,
     kind: 'app',
+    appInfo: () => window.tetherApp.info(),
     hubRequest: (request) => window.tetherApp.hubRequest(request),
     filesRequest: (request) => window.tetherApp.filesRequest(request),
     subscribeHubEvents: (callback) => {

@@ -38,7 +38,7 @@ function isDarkTheme() {
   return !!(typeof document !== 'undefined' && document.body && document.body.hasAttribute('data-ds-dark-theme'))
 }
 
-export function createTerminalDock({ React, Glyph, post, C, device, cwd, height = 240, initialShell = '', initialAgent = '', initialHerdrProject = false, initialCommand = '', initialArgv = null, label = '', themeMode = 'auto', fill = false, onHeight, onClose }) {
+export function createTerminalDock({ React, Glyph, post, C, device, cwd, height = 240, initialShell = '', initialAgent = '', initialHerdrProject = false, initialHerdrAgentType = '', initialCommand = '', initialArgv = null, label = '', themeMode = 'auto', fill = false, onHeight, onClose }) {
   const h = React.createElement
   const runtime = typeof window !== 'undefined' ? window.TetherTerminalRuntime : null
   const [shells, setShells] = React.useState([])
@@ -152,6 +152,10 @@ export function createTerminalDock({ React, Glyph, post, C, device, cwd, height 
           if (!herdr) throw new Error('此节点没有 Herdr')
           if (herdr.project_sessions !== true) throw new Error('此节点尚不支持独立的 Herdr 工作区，请更新 Node 后重试。')
           payload.herdr_project = true
+        }
+        if (initialHerdrAgentType) {
+          if (shellId !== 'herdr') throw new Error('所选 Agent 只能通过 Herdr 启动')
+          payload.herdr_agent_type = initialHerdrAgentType
         }
         const result = await postRef.current(url('terminal_start'), payload)
         if (disposed) {
@@ -292,6 +296,11 @@ export function createTerminalDock({ React, Glyph, post, C, device, cwd, height 
         if (disposed) return
         const list = (catalog && Array.isArray(catalog.shells) ? catalog.shells : [])
           .filter((item) => item && item.available)
+        if (initialHerdrAgentType) {
+          if (!catalog || catalog.herdr_agent_start !== true) {
+            throw new Error('目标 Node 尚不支持通过 Herdr 启动所选 Agent，请更新 Node 后重试。')
+          }
+        }
         setShells(list)
         if (initialAgent) {
           setShell(initialAgent)
@@ -302,7 +311,7 @@ export function createTerminalDock({ React, Glyph, post, C, device, cwd, height 
           shellRef.current = ''
           await startSession('', '')
         } else {
-          const preferred = initialHerdrProject ? 'herdr' : (initialShell && list.some((item) => item.id === initialShell)
+          const preferred = initialHerdrAgentType || initialHerdrProject ? 'herdr' : (initialShell && list.some((item) => item.id === initialShell)
             ? initialShell : ((list.find((item) => item.default) || list[0] || {}).id || ''))
           setShell(preferred)
           shellRef.current = preferred

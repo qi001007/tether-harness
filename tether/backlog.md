@@ -41,3 +41,5 @@
 - 2026-11-08：更新器优先从签名manifest指定的正式URL获取制品，失败后保留Hub与配置mirror回退。
 - 2026-11-11：Node ZIP 更新新增持久事务：apply 记录逐目标备份映射并停在 awaiting_acceptance，commit 清理恢复材料，rollback 可由重建后的 manager 恢复；CLI 暴露 commit/rollback。定向 pytest 覆盖提交、重建后回滚、非法/跨组件/越界事务及 apply 中途失败。
 - 2026-11-11：对齐 Node UI 验收门：awaiting_acceptance 时 status 暴露 transaction/prepared_id 并清除待验收重启提示；commit 原子清除 applied-node 的 restart_required 后才删备份。Node rollback 成功响应后请求一次重启。
+
+- 2026-11-12：候选 metadata 提升 APP/Node 至 0.5.3，plugin 保持 0.2.93；未重建依赖、未发布。

@@ -8,7 +8,7 @@
 (function () {
   var params = new URLSearchParams(location.search)
   var token = params.get('token')
-  var next = params.get('next') || '/workspace'
+  var next = params.get('next') || '/workspace?tether_home=1'
   if (!token) { location.replace('/login'); return }
   if (next.charAt(0) !== '/') next = '/workspace'
   try { localStorage.setItem('codeg_token', token) } catch (_) {}

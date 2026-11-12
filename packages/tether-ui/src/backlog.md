@@ -1,5 +1,10 @@
 # 变更记录
 
+## 2026-11-12
+
+- `app.js`：桌面 Files Explorer 恢复通过既有 OAuth `hubRequest` 调用 Controller 文件 API，移除强制转入 Native Files/Caddy-EasyTier 的请求拦截；保留主进程 Native Files IPC 与 DSH 入口。用 `D:\Tether\work` 中唯一 QA 文本文件实测 Hub list/write/preview 可用，Native Files legacy preview 返回 HTTP 409；QA 文件已删除。Node 0.2.3 preview 尚不返回现代编辑标记，需在候选 Node 激活后经 APP 实际编辑复验。
+- `transfer-page.js`：恢复满意版双栏传输页及既有 Croc/分块 transport 分支；标准 OAuth APP 的 `hubOnly` 路径只用 Hub `read`/`write_chunk`，跳过 Croc/raw direct/status/cancel，并通过 AbortSignal 停止后续分块、如实显示取消；非 Hub-only direct/Croc 条件保持原样。0.5.2 Node `write_chunk` 实机小文件传输待激活后验收。
+
 ## 2026-11-10
 
 - `agents-page.js`：APP 的 legacy Codeg ready 状态使用专用主进程 opener 和 token-free native webview；legacy stopped/missing/failed 均禁用，并显示未运行、未安装或状态异常，不触发旧 `agents_runtime_start`。
@@ -39,3 +44,9 @@
 - 2026-11-11：Node 持久事务 apply 后以 `awaiting_acceptance`、匹配的 `prepared_id` 作为 service health/commit 门禁；commit 前允许 `restart_required=true`，事务缺失或不匹配继续等待并最终回滚。
 - 2026-11-11：联合更新中 Node 已 apply 并等待 APP 重启验收时，APP apply 失败/异常、安装未 settle 或重连失败会回滚本轮 Node 事务；记录 watcher 已执行的回滚结果，避免重复 rollback，并将回滚结果保留为最终更新错误。
 - 2026-11-11：修复本机 UI 重启后的 Node 持久事务接管：仅识别有效 `awaiting_acceptance` 事务，卡片提供“待验收”入口；先完成 Node health/commit，再继续本轮 APP 更新，验收失败沿用 watcher 自动回滚。
+
+- 2026-11-11：修复 layered 原生 DSH guest 容器在 native-document 状态下被 position:relative 覆盖绝对定位的问题；保留非 layered guest 所需的相对定位，避免 DSH 页面收缩到约 300px。
+- 2026-11-11：切换页面时保留同设备、同来源的 native-document-loading/native-document-loaded 状态，避免重复获取描述符销毁当前原生 guest 和授权。
+- 2026-11-11：OIDC Electron APP 的本机 DSH 也走主进程 `openDshSurface` managed gateway；不再因与本机 Node identity 相同而落入 renderer direct Hub/CORS 路径。
+- 2026-11-11：Codeg guest readiness 在 load 监听注册后，以同 endpoint origin 且主框架停止加载的一次快照覆盖 late-listener 竞态；same-document in-place 导航不重置 loading，失败事件与文档导航事件继续驱动状态。
+- 2026-11-12：统一 Agent 入口后，About 的客户端版本优先读取 Electron 现有 `tetherApp.info()` 结果；启动时将持久化的 Herdr 主导航值显示并归一为 Agents。Tether UI Web 与 DSH bundle 已从共享源码重建，未部署。

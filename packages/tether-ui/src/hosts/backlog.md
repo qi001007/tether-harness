@@ -23,3 +23,4 @@
 - 2026-10-30：DSH Composer slot 按原生 session-maybe contract 注入 sessionId；新草稿选择目标文件时调用官方 uiWorkspace.startSession 创建空会话，并在新 session 挂载后自动续开远端 picker。缺少工作区时显示提示，不静默回退本机文件对话框。
 
 - 2026-11-10：Electron host 增加 targetId-only openDshSurface 窄桥，供远端 NativeSurface 使用。
+- 2026-11-12：Electron host 暴露已有 `tetherApp.info()` 只读桥给 About 使用，直接展示当前 APP 版本，不增加 IPC。

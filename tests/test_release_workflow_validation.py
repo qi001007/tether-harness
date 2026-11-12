@@ -199,24 +199,27 @@ def test_desktop_preview_workflow_uses_one_version_branch_tag_and_artifact_set()
     version = json.loads((ROOT / "version.json").read_text(encoding="utf-8"))["components"]["app"]
 
     assert "concurrency:\n  group: ${{ github.workflow }}-${{ github.ref }}\n  cancel-in-progress: true" in workflow
-    assert version == "0.5.2"
+    assert version == "0.5.3"
     assert "codex/tether-052-preview-20261111" in workflow
-    assert workflow.count("v0.5.2-preview.1") == 2
-    assert "v0.5.2-preview.2" not in workflow
+    assert "codex/tether-053-business-20261112" in workflow
+    assert "v0.5.2-preview.1" in workflow
+    assert "v0.5.3-preview.1" in workflow
     assert "--channel preview" in workflow
-    assert "--release-tag v0.5.2-preview.1" in workflow
-    assert "tag_name: v0.5.2-preview.1" in workflow
-    assert "draft: false" in workflow
+    assert '--release-tag "$CANDIDATE_TAG"' in workflow
+    assert "tag_name: ${{ env.CANDIDATE_TAG }}" in workflow
+    assert "draft: ${{ github.ref == 'refs/heads/codex/tether-053-business-20261112' }}" in workflow
     assert "prerelease: true" in workflow
     assert "make_latest: false" in workflow
     assert "0.5.0" not in workflow
-    assert "tether-${{ matrix.target }}-0.5.2-preview" in workflow
-    assert ".scratch/tether-desktop-candidates/0.5.2/${{ matrix.target }}" in workflow
-    assert "tether-node-runtime-linux-x64-0.5.2-preview" in workflow
+    assert "tether-${{ matrix.target }}-${{ env.CANDIDATE_VERSION }}-preview" in workflow
+    assert ".scratch/tether-desktop-candidates/${{ env.CANDIDATE_VERSION }}/${{ matrix.target }}" in workflow
+    assert "tether-node-runtime-linux-x64-${{ env.CANDIDATE_VERSION }}-preview" in workflow
     assert "version.json" in workflow
-    assert "checksum.get('version') != '0.5.2'" in workflow
+    assert "checksum.get('version') != candidate_version" in workflow
     assert "checksum.get('platform') != target" in workflow
     assert "refs/heads/codex/tether-052-preview-20261111" in workflow
+    assert "hydrate_herdr_runtime.py --windows-only --destination .release-herdr-runtime" in workflow
+    assert "--herdr-runtime .release-herdr-runtime" in workflow
 
 
 def test_headless_linux_builders_derive_artifact_paths_and_metadata_from_version_json(monkeypatch, tmp_path: Path) -> None:
