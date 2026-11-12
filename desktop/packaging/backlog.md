@@ -34,3 +34,5 @@
 
 - 2026-11-12：候选构建输出与 runtime guard 改为随已校验 APP/Node 版本分根，0.5.3 预览不覆盖 0.5.2 资产；electron-builder 基础输出根更新为 0.5.3。
 - 2026-11-12：Windows 候选 builder target 从 portable 改为 NSIS，Linux AppImage/deb 与 macOS dmg/zip 保持原样；候选测试直接验证传入 electron-builder 的平台参数。
+- 2026-11-12：同步 0.5.4 候选的 APP/Node/Python 发行版本，保留插件 0.2.93；输出仍按候选版本隔离，避免覆盖已发布的 0.5.3 资产。
+- 2026-11-12：将 electron-builder 固定输出根同步到 0.5.4；保持构建器的版本匹配保护，修正初次 0.5.4 CI 候选失败的路径元数据。

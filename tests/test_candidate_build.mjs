@@ -9,13 +9,13 @@ const root = new URL('../', import.meta.url)
 const read = path => readFileSync(new URL(path, root), 'utf8')
 const buildScript = read('desktop/packaging/build-candidate.mjs')
 
-test('candidate app and node versions are synchronized at 0.5.3 with frozen plugin', () => {
+test('candidate app and node versions are synchronized at 0.5.4 with frozen plugin', () => {
   const manifest = JSON.parse(read('version.json'))
   const appPackage = JSON.parse(read('apps/tether-app/package.json'))
   const appLock = JSON.parse(read('apps/tether-app/package-lock.json'))
 
-  assert.equal(manifest.components.app, '0.5.3')
-  assert.equal(manifest.components.node, '0.5.3')
+  assert.equal(manifest.components.app, '0.5.4')
+  assert.equal(manifest.components.node, '0.5.4')
   assert.equal(manifest.components.plugin, '0.2.93')
   assert.equal(appPackage.version, manifest.components.app)
   assert.equal(appLock.version, manifest.components.app)
@@ -29,9 +29,9 @@ test('candidate builder validates manifest semver and synchronized versions', ()
   assert.match(buildScript, /version\.components\.plugin !== '0\.2\.93'/)
 })
 
-test('candidate output and runtime guards use the isolated 0.5.3 scratch root', () => {
+test('candidate output and runtime guards use the isolated 0.5.4 scratch root', () => {
   assert.match(buildScript, /\.scratch\/tether-desktop-candidates\/\$\{expectedVersion\}/)
-  assert.match(read('desktop/packaging/electron-builder.yml'), /output: \.scratch\/tether-desktop-candidates\/0\.5\.3/)
+  assert.match(read('desktop/packaging/electron-builder.yml'), /output: \.scratch\/tether-desktop-candidates\/0\.5\.4/)
   assert.match(buildScript, /lstatSync\(output\).*?Candidate output already exists/s)
   assert.match(buildScript, /path\.dirname\(managedOutputParent\) !== allowedOutputParent/)
 })

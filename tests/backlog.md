@@ -1,6 +1,7 @@
 # 修改记录
 - 2026-11-12：desktop preview workflow validation asserts the isolated 0.5.4 branch/version/tag and draft aggregation while retaining 0.5.2/0.5.3 mappings.
 - 2026-11-12：signed-release workflow validation asserts that `v*-preview.*` tags are excluded from the stable release trigger.
+- 2026-11-12：candidate build tests now expect the 0.5.4 scratch output root alongside synchronized APP/Node/Python metadata.
 - 2026-11-11：记录 Actions run 42937706743 的 build jobs 全绿但首个 preview 标签错误导致发布失败；将工作流回归断言改为精确要求 preview.1 两处且 preview.2 不出现。
 - 2026-11-11：覆盖 external Node local API 桥未配置/错误 port 与 token 拒绝、正确 Bearer+设备 route 验证、错误凭据/设备与不匹配 route 回包拒绝、snapshot/log 无 token；保留 external 不 spawn/stop 和 managed route 的既有回归。
 - 2026-11-10：覆盖 legacy Files list 冷/热缓存固定 POST、path-only 请求、强制只读、现代 service_open 保持，以及 401/403/device_not_found/网络/畸形/错设备/代际变化失败关闭；补充旧 Codeg 空或无 ready 网络的准确错误回归。
