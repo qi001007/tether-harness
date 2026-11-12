@@ -3,19 +3,19 @@ import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync,
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
-import { builderTargetArgs, pruneManagedCandidateOutputs, writeCandidateOwnershipMarker } from '../desktop/packaging/build-candidate.mjs'
+import { builderTargetArgs, pruneManagedCandidateOutputs, replaceCandidateOutputSetting, writeCandidateOwnershipMarker } from '../desktop/packaging/build-candidate.mjs'
 
 const root = new URL('../', import.meta.url)
 const read = path => readFileSync(new URL(path, root), 'utf8')
 const buildScript = read('desktop/packaging/build-candidate.mjs')
 
-test('candidate app and node versions are synchronized at 0.5.4 with frozen plugin', () => {
+test('candidate app and node versions are synchronized at 0.5.5 with frozen plugin', () => {
   const manifest = JSON.parse(read('version.json'))
   const appPackage = JSON.parse(read('apps/tether-app/package.json'))
   const appLock = JSON.parse(read('apps/tether-app/package-lock.json'))
 
-  assert.equal(manifest.components.app, '0.5.4')
-  assert.equal(manifest.components.node, '0.5.4')
+  assert.equal(manifest.components.app, '0.5.5')
+  assert.equal(manifest.components.node, '0.5.5')
   assert.equal(manifest.components.plugin, '0.2.93')
   assert.equal(appPackage.version, manifest.components.app)
   assert.equal(appLock.version, manifest.components.app)
@@ -29,11 +29,19 @@ test('candidate builder validates manifest semver and synchronized versions', ()
   assert.match(buildScript, /version\.components\.plugin !== '0\.2\.93'/)
 })
 
-test('candidate output and runtime guards use the isolated 0.5.4 scratch root', () => {
+test('candidate output and runtime guards use the isolated versioned scratch root', () => {
   assert.match(buildScript, /\.scratch\/tether-desktop-candidates\/\$\{expectedVersion\}/)
-  assert.match(read('desktop/packaging/electron-builder.yml'), /output: \.scratch\/tether-desktop-candidates\/0\.5\.4/)
+  assert.match(read('desktop/packaging/electron-builder.yml'), /output: \.scratch\/tether-desktop-candidates\/\d+\.\d+\.\d+/)
   assert.match(buildScript, /lstatSync\(output\).*?Candidate output already exists/s)
   assert.match(buildScript, /path\.dirname\(managedOutputParent\) !== allowedOutputParent/)
+})
+
+test('candidate builder rewrites the versioned base output for the active candidate', () => {
+  const baseConfig = 'directories:\n  output: .scratch/tether-desktop-candidates/0.5.4\n'
+  assert.equal(replaceCandidateOutputSetting(baseConfig, 'D:/candidate/0.5.5/windows-x64'),
+    'directories:\n  output: "D:/candidate/0.5.5/windows-x64"\n')
+  assert.throws(() => replaceCandidateOutputSetting('directories:\n  output: dist\n', 'D:/candidate/0.5.5'),
+    /electron-builder output setting changed unexpectedly/)
 })
 
 test('web build and desktop auth bundle markers are required before electron-builder', () => {

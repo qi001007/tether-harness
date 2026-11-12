@@ -1,4 +1,5 @@
 # 桌面候选打包记录
+- 2026-11-13：候选 builder 将固定版本号的 electron-builder 输出根重定向到当前 manifest 版本目录，避免 0.5.5 使用残留的 0.5.4 静态配置时四平台共同失败。
 - 2026-11-11：候选构建成功后写入路径/版本/平台所有权标记，并仅扫描隔离候选根的直接子目录；最多保留当前和最近一个有效受管候选，未知目录、无效标记与失败构建均不触发清理。
 - 2026-11-09：NSIS同目录首装快照与主进程直接迁移对齐，快照apps.json和agents-runtime持久目录/WAL，跳过runtime.json和server.log；递归拒绝reparse point，并在快照前确认旧Codeg进程已停止，保持私有ACL与snapshot marker流程。
 

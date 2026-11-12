@@ -142,6 +142,12 @@ export function builderTargetArgs(platform) {
   throw new Error(`Unsupported candidate platform: ${platform}`)
 }
 
+export function replaceCandidateOutputSetting(baseConfig, builderOutput) {
+  const settings = [...baseConfig.matchAll(/^([ \t]*output: )\.scratch\/tether-desktop-candidates\/\d+\.\d+\.\d+[ \t]*$/gm)]
+  if (settings.length !== 1) throw new Error('electron-builder output setting changed unexpectedly.')
+  return baseConfig.replace(settings[0][0], `${settings[0][1]}"${builderOutput}"`)
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
 const packagingDir = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(packagingDir, '../..')
@@ -239,8 +245,6 @@ if (electronDistVersion !== electronVersion) {
 }
 const baseConfigPath = path.join(packagingDir, 'electron-builder.yml')
 const baseConfig = readFileSync(baseConfigPath, 'utf8')
-const outputSetting = `output: .scratch/tether-desktop-candidates/${expectedVersion}`
-if (!baseConfig.includes(outputSetting)) throw new Error('electron-builder output setting changed unexpectedly.')
 const tempConfig = path.join(os.tmpdir(), `tether-builder-${platformTarget[platform]}.yml`)
 const builderOutput = outputParent.replaceAll('\\', '/') + `/${platformTarget[platform]}`
 const runtimeSetting = 'from: .runtime/desktop-candidate'
@@ -248,7 +252,7 @@ const nodeBinSetting = runtimeSetting + '/node-bin'
 if (baseConfig.split(runtimeSetting).length !== 3 || baseConfig.split(nodeBinSetting).length !== 2) {
   throw new Error('electron-builder runtime resource mapping changed unexpectedly.')
 }
-const config = baseConfig.replace(outputSetting, `output: "${builderOutput}"`)
+const config = replaceCandidateOutputSetting(baseConfig, builderOutput)
   .replace(nodeBinSetting, `from: "${runtimeRoot.replaceAll('\\', '/')}/node-bin"`)
   .replace(runtimeSetting, `from: "${runtimeRoot.replaceAll('\\', '/')}"`)
   .replace('appId: com.tether.app', `appId: com.tether.app\nelectronVersion: ${electronVersion}\nelectronDist: "${electronDist.replaceAll('\\', '/')}"`)
