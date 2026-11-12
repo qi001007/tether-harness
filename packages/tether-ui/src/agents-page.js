@@ -670,10 +670,11 @@ function AgentTargetPage({ React, Glyph, post, C, host, devices = [], localDevic
       if (!service || service.targetId !== device || service.serviceId !== 'codeg' || !service.endpoint || !service.partition) {
         throw new Error('主进程没有返回有效的 Codeg 工作台会话。')
       }
-      setServiceView(service)
+      const homeService = { ...service, endpoint: new URL('/workspace?tether_home=1', service.endpoint).href }
+      setServiceView(homeService)
       setPanes((current) => current.some((pane) => pane.key === 'codeg:home')
-        ? current.map((pane) => pane.key === 'codeg:home' ? { ...pane, kind: 'native-service', service } : pane)
-        : [...current, { key: 'codeg:home', kind: 'native-service', title: 'Codeg', service }])
+        ? current.map((pane) => pane.key === 'codeg:home' ? { ...pane, kind: 'native-service', service: homeService } : pane)
+        : [...current, { key: 'codeg:home', kind: 'native-service', title: 'Codeg', service: homeService }])
       setActivePane('codeg:home')
       setWorkspaceOpen(true)
     } catch (error) {
@@ -930,11 +931,12 @@ function AgentTargetPage({ React, Glyph, post, C, host, devices = [], localDevic
       height: Math.max(420, (typeof window !== 'undefined' ? window.innerHeight : 900) - 168),
       onClose: () => closePane(pane.key)
     })
+  const showWorkspaceHeader = !!activePane && (activePane !== 'codeg:home' || serviceView && serviceView.serviceId === 'desktop')
   const workspace = panes.length ? h('div', {
     key: 'workspace',
     style: { flex: '1 1 auto', minHeight: 0, display: workspaceOpen ? 'flex' : 'none', flexDirection: 'column', background: C.bg }
   },
-    h('div', { style: { display: activePane ? 'flex' : 'none', alignItems: 'center', height: 42, flex: '0 0 42px', padding: '0 12px', borderBottom: '1px solid ' + C.line } },
+    showWorkspaceHeader ? h('div', { style: { display: 'flex', alignItems: 'center', height: 42, flex: '0 0 42px', padding: '0 12px', borderBottom: '1px solid ' + C.line } },
       activePane && activePane !== 'codeg:home' ? h('button', {
         key: 'back-to-codeg', type: 'button',
         onClick: () => {
@@ -952,7 +954,7 @@ function AgentTargetPage({ React, Glyph, post, C, host, devices = [], localDevic
       serviceView && serviceView.serviceId === 'desktop' && activePane === (serviceView.paneKey || 'codeg:home') ? h('button', { type: 'button', onClick: () => void closeNativeDesktop(),
         style: { marginLeft: serviceView.serviceId === 'desktop' ? 10 : 'auto', height: 28, padding: '0 10px', border: '1px solid ' + C.line, borderRadius: 8,
           background: C.bg, color: C.sub, fontSize: 11.5, cursor: 'pointer' }
-      }, '结束远程桌面并撤销授权') : null),
+      }, '结束远程桌面并撤销授权') : null) : null,
     h('div', { style: { flex: '1 1 auto', minHeight: 0, position: 'relative', display: 'flex' } },
       ...panes.map((pane) => h('div', {
         key: pane.key,

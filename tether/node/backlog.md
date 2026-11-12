@@ -170,3 +170,4 @@
 
 - 2026-11-12：将 canonical Codeg `tab-store.ts` 的 11 个 Tether 状态 hunk 补进 tracked patch，修复 clean CI 中 `TabItemInternal.forceAgentSelection` 类型与行为缺失；无其他源文件差异遗漏。
 - 2026-11-12：Herdr 官方 `agent_not_ready`（例如交互式 Codex 升级提示）现在作为用户可处理的 `blocked` 状态返回并保留本次 PTY/tab；成功启动返回 `ready`。其它启动失败仍关闭本次新建 tab 并停止 PTY，`agent_wait_timeout` 映射为脱敏 `agent_start_timeout`。仅源码与 focused 验证，未部署。
+- 2026-11-12：统一 Agent 新建流程：默认只在首次成功空 tab 快照后进入 Agents；重复 New Chat 侧栏项移除，标签/快捷键入口转到 Agent Home 并保留项目上下文；强制选择的结构化草稿隐藏 Codeg 欢迎模板，保留原生 ChatInput、已选 Agent 与连接诊断。简体中文新建操作与草稿 tab 标为“新建任务”。38 个 focused tests、production TypeScript 检查与 Codeg patch 双向 apply-check 通过；Node 24.22.1 单次 Next 静态构建成功，1007 文件 ZIP/manifest 已生成，未部署。完整哈希见 `.scratch/qa/codeg-unified-agent-flow-20261112/manifest.json`。

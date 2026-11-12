@@ -1,5 +1,6 @@
 # Generated Web bundle change log
 
+- 2026-11-12: Rebuilt from shared source after the empty Codeg header fix, preserving the F157 authentication recovery flow. Installed bundle is 8,208,989 B, SHA-256 `45B71E8A9B4D71181110FD6DE54F3E0A77DC9128D3ED734692C98758AF5965EA`; actual installed APP UI reload and normal Open Codeg action confirmed guest y=40 matching main y=40 (previously 83). APP process was not restarted; restart/expiry QA remains pending.
 - 2026-11-12: Rebuilt `app.js` with the authenticated Hub file route and restored transfer UI; Node v24.22.1 build succeeded, 8,202,984 B, SHA-256 `37A2FF04F8AB2F192798D7A968F267244C1367E119B9A8112E86688E80390240`. Bidirectional `transferFile` QA passed between DESKTOP-LOCAL 0.5.2 and LAPTOP-01 0.4.11; read-back SHA-256 matched for both 4,259,967 B Chinese text files. QA samples retained under `D:\Tether\work\codex-transfer-qa-20261112-a7ad7a5f9480` on both devices.
 - 2026-10-30: Rebuilt `app.js` with update response arbitration, stale/cache provenance, and visible stale or failed update states.
 - 2026-10-30: Rebuilt `app.js` with visibility-aware single-flight native-surface polling, obsolete request cancellation, iframe document-load readiness, and bounded retry handling.
@@ -11,6 +12,7 @@
 - 2026-11-11：从共享 UI 源码重建 app.js，让 OIDC Electron APP 本机 DSH 使用主进程 managed gateway。
 - 2026-11-11：从共享 UI 源码重建 app.js，更新 Codeg native-service guest load 状态快照及 in-place 导航处理。
 - 2026-11-12：从共享 UI 源码重建 `app.js`，包含统一 Agent 导航、Herdr 面板启动值归一及 About 客户端版本读取；8,206,204 B，SHA-256 `91DF01D67278DFA38ECD8A967D414AC658D861B8E528AD8346C2F102CBF55808`。尚未部署。
+- 2026-11-12：从共享 UI 源码重建 `app.js`，包含显式打开 Codeg 时复用 `/workspace?tether_home=1` 进入智能体主页；8,209,131 B，SHA-256 `91A78B69F46FBC600737A569EC3F55E6BFF6D0FFEE66D3521E77A4F0E2F6D931`。等待实际 cached guest 验收。
 
 - 2026-11-12：重建 `app.js`，恢复原互联图动画布局与拖动位置行为；Node v24.22.1 构建成功，8,198,437 B，SHA-256 `1CD2EF1A584AD76E9C1A42E089BB949640CB4E300E29D87C301B0313C5C6570D`，已同步至当前 r11 WebUI，Terra 实机确认流动环形/三角布局、缩放、拖动、浮层与切页位置正常；跨页速度连续未证明。
 - 2026-11-12：恢复版 pp.js 已由 Terra 实机验收，流动环形/三角布局、缩放、拖动、浮层和切页位置正常；未验证跨页速度连续。

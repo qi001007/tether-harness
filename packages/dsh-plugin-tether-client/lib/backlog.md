@@ -1,4 +1,5 @@
 # 修改记录
+- 2026-11-12：通过现有共享 UI 构建器重新生成 client.js，同步空 Codeg header 的按内容显示条件。仅再生开发产物，未覆盖任何目标 DSH 已安装插件或改变其版本。
 - 2026-11-10：从共享源码重新生成 `client.js`，同步旧节点 Codeg 状态文案、仅 ready 可打开的界面约束及最新 Files 根列表兼容；该生成同步不替代桌面 APP 主进程的隔离会话与实机验收。
 - 2026-11-07：从共享源码重新生成 `client.js`，同步移除未挂载的 Agents 旧视图。
 - 2026-10-30：0.2.27 重建 `client.js`，包含 latest 归一化、跳过已最新 Node 的产品更新与设备序列。
@@ -60,4 +61,6 @@
 - 2026-10-30：重建 `client.js`，将 Composer 加号的隐藏文件输入点击默认转到远端会话工作区 picker，并保留“本机文件…”入口。
 
 - 2026-10-30：重建 client.js，按 DSH InputBar 的 session-maybe 附件 slot 注入 sessionId；无 session 时通过官方 uiWorkspace.startSession 准备空会话后自动打开远端文件 picker。
+- 2026-11-12：从共享 UI 源码重建 `client.js`，同步统一 Agent 导航与共享 host 变更；5,241,049 B，SHA-256 `679DE6CDB79F475EE1AAC6233B2C46C171D09B58CFEE7D570EA4087453524C02`。尚未部署。
+- 2026-11-12：按现有 `build.mjs` 重建 `client.js`；5,243,821 B，SHA-256 `23BF05A7D71445EC00A04DE25C3D8A6A6846918E031F1BAE97A588CFF1F382CA`。本次 Codeg guest 路由修复仅进入 Tether Web bundle。
 - 2026-10-30：按 `build.mjs` 从 client package.json 生成 `0.2.29` bundle；离线插件 ZIP 中嵌入版本已核对。

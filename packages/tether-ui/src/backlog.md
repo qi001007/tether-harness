@@ -53,3 +53,6 @@
 - 2026-11-11：Codeg guest readiness 在 load 监听注册后，以同 endpoint origin 且主框架停止加载的一次快照覆盖 late-listener 竞态；same-document in-place 导航不重置 loading，失败事件与文档导航事件继续驱动状态。
 - 2026-11-12：统一 Agent 入口后，About 的客户端版本优先读取 Electron 现有 `tetherApp.info()` 结果；启动时将持久化的 Herdr 主导航值显示并归一为 Agents。Tether UI Web 与 DSH bundle 已从共享源码重建，未部署。
 - 2026-11-12：桌面 auth-status 暂时无法续期时保留当前界面数据与认证状态，不引导重复登录；每 15 秒重查，effect 卸载时清理唯一重试计时器。永久未认证状态仍进入原登录提示流程。
+- 2026-11-12：Codeg native `codeg:home` pane 不再保留无按钮内容的 42px header 空槽；返回按钮和远程桌面状态/结束操作仍显示在需要的 pane 上。
+- 2026-11-12：native Codeg 主页不渲染空白顶部 header；`codeg:home` 内容从 guest 顶部开始，其他带返回/桌面操作的工作台 pane 保留 42px 工具栏。
+- 2026-11-12：显式点击“打开 Codeg”时，UI 将主进程返回的 endpoint 复制为同源 `/workspace?tether_home=1`，使缓存 guest 也回到智能体主页；不改 main 授权记录，切换 pane 和打开历史会话不触发此导航。

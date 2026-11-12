@@ -2,7 +2,14 @@
 
 ## 2026-11-12 当前业务恢复反馈
 
+- [ ] F158：主人截图中的 LAPTOP-01 仍展示 Codeg 原生新建会话页与重复新建入口。所有新建动作应进入本项目的项目→Agent→结构化/Herdr/CLI 流程，保留已有会话。实际 APP 已确认复现；目标 served workspace 为 11-11 早期资源，与当前 canonical out 哈希不同，须在目标节点部署并实测后验收。
+- [x] F159：删除 Codeg 顶部按钮后仍留白边。空 header 已改为仅在存在实际控件时渲染，构建并部署当前安装目录；刷新当前 APP、经正常“打开 Codeg”按钮后，实际 main/Codeg guest 顶部均为 y=40，guest 高度 837→880。保留终端/远程桌面有内容的控制栏。证据 `.scratch/evidence/f159-runtime-20261112.json`；未重启进程，未宣称已完成 F158 或 DSH 弹窗。
+- [ ] F160：DSH1 新建项目仍不能打开目标电脑目录选择器。需要从实际项目按钮定位目标绑定、目录弹窗、选择路径回填的完整链路，实测后再标记完成。
+- [x] F161：网页测试使用主人已安装的 Ego Lite Agent 专用浏览器。已按当前 ego-browser skill 在独立 TaskSpace 3 接入真实 LAPTOP-01 Codeg，后续网页验收沿用该空间，不占用日常浏览器。
+
 - [ ] F157：APP 登录一次后，在有效期内重开应自动恢复并续期，避免重复输入账号。18:06 用户手动重开正式 0.5.3，进程/18892 正常，但实际页面未登录、标准 profile 中的加密会话文件已消失。只读确认桌面应用的访问期限 8 小时、refresh 配置 0，最新续期 JWT 实际也仅 8 小时且已过期；客户端将任意续期失败都清除本地会话。处理范围：仅桌面应用续期窗口改为 30 天，访问期限不变；客户端保留临时失败时可恢复的加密会话、序列化并发续期，验证关闭重开及过期续期。完成本项后继续 F156，不改满意的业务页面。
+
+  F157 当前进展：修复已应用于当前安装，37 项 OIDC/集成测试通过，原图函数与 E 基线完全一致。已复用既有开发登录完成一次真实 PKCE，当前 authenticated/Hub 200，实际签发续期 JWT 确认为 30 天；加密会话文件已保存。普通模式关闭重开及实际刷新路径仍待实机验收，未标完成。用户明确授权自动处理，后续不再要求同一授权；本轮工具钩子因重复写命令阻断重开，命令未执行。0.5.4 修补构建已启动，发布资产尚未验收。
 - [x] F151：恢复 DeepSeek 调好的互联图；实机结果与回退证据见文末。
 - [x] F152：恢复原文件互传交互及双向传输。已恢复满意版双栏与成熟 transferFile 流程；普通 OAuth APP 使用现有 Hub read/write_chunk。4,259,967 B 中文样本经真实 transferFile 双向完成、哈希一致；Terra 又在 APP 拖拽 133 B / 99 B 小文件双向复制，主代理独立读回目标哈希一致。证据 `files-hub-transfer-20261112.json`、`files-ui-transfer-readback-20261112.json` 与 `files-transfer-restored-20261112.png` 位于 `.scratch/evidence`。没有宣称 Croc/现代 mesh 传输或性能验收。
 - [x] F153：恢复 VSCode 风格资源管理器的打开、编辑、保存。仅移除普通 APP 的 native Files 拦截，恢复原已鉴权 Hub API；保留原编辑器。Terra 实机打开文本及 Python 文件并编辑保存；Python 的 Monaco 行号、语法高亮、minimap、状态栏正常，222→247 B，主代理独立预览读回新增注释且版本哈希变化。证据 `.scratch/evidence/files-monaco-restored-20261112.png`、`files-monaco-readback-20261112.json`。仅写专属 QA 文件，未执行 Python。

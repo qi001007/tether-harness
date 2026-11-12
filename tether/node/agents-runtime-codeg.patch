@@ -21,10 +21,18 @@ index 1829f60..d105e1c 100644
  
    return null
 diff --git a/src/app/workspace/layout.tsx b/src/app/workspace/layout.tsx
-index 8396502..826dbfc 100644
---- a/src/app/workspace/layout.tsx
-+++ b/src/app/workspace/layout.tsx
-@@ -94,6 +94,7 @@ import {
+index 8396502..486abf4 100644
+@@ -41,7 +41,8 @@
+ } from "@/contexts/acp-connections-context"
+ import { DelegationProvider } from "@/contexts/delegation-context"
+ import { ConversationRuntimeProvider } from "@/contexts/conversation-runtime-context"
+-import { TabProvider, useTabStore, useTabActions } from "@/contexts/tab-context"
++import { TabProvider, useTabStore } from "@/contexts/tab-context"
++import { WorkbenchRouteConversationSync } from "@/components/layout/workbench-route-conversation-sync"
+ import { SidebarProvider, useSidebarContext } from "@/contexts/sidebar-context"
+ import { SearchDialogProvider } from "@/contexts/search-dialog-context"
+ import { AutomationsViewProvider } from "@/contexts/automations-view-context"
+@@ -94,6 +95,7 @@
    PetFocusBridge,
  } from "@/components/workspace/deep-link-bootstrap"
  import { WorkspaceOpenFolderListener } from "@/components/workspace/workspace-open-folder-listener"
@@ -32,37 +40,33 @@ index 8396502..826dbfc 100644
  import { WorkspaceRestoreNotices } from "@/components/workspace/workspace-restore-notices"
  import { HeavyPluginsWarmup } from "@/components/ai-elements/heavy-plugins-warmup"
  import {
-@@ -1489,15 +1490,28 @@ function WorkbenchRouteConversationSync() {
-   const { consumeRemoteActivation } = useTabActions()
-   const { openConversations } = useWorkbenchRoute()
-   const prevRef = useRef(activeTabId)
-+  // Hydrating the first active tab is not a user choosing to leave an
-+  // explicitly requested initial route such as Tether's Agent home.
-+  const hadInitialActiveTabRef = useRef(activeTabId !== null)
-   useEffect(() => {
-     if (prevRef.current === activeTabId) return
-+    const previousTabId = prevRef.current
-     prevRef.current = activeTabId
-+    const remoteActivation = consumeRemoteActivation()
-+    if (
-+      !hadInitialActiveTabRef.current &&
-+      previousTabId === null &&
-+      activeTabId !== null
-+    ) {
-+      hadInitialActiveTabRef.current = true
-+      return
-+    }
-     // A remote tab snapshot that mirrors another client's focus also changes
-     // activeTabId. That's not a local conversation activation, so don't hijack
-     // this window into the conversations route — doing so would unmount whatever
-     // non-conversation view it's on (e.g. the Automations editor + unsaved
-     // edits). Local activations leave the flag false and switch as before.
+@@ -1484,25 +1486,6 @@
+ // without patching each call site. Re-selecting the ALREADY-active tab does not
+ // change activeTabId, so the interactive conversation pickers (sidebar list,
+ // search dialog, run history) also call openConversations() directly.
+-function WorkbenchRouteConversationSync() {
+-  const activeTabId = useTabStore((s) => s.activeTabId)
+-  const { consumeRemoteActivation } = useTabActions()
+-  const { openConversations } = useWorkbenchRoute()
+-  const prevRef = useRef(activeTabId)
+-  useEffect(() => {
+-    if (prevRef.current === activeTabId) return
+-    prevRef.current = activeTabId
+-    // A remote tab snapshot that mirrors another client's focus also changes
+-    // activeTabId. That's not a local conversation activation, so don't hijack
+-    // this window into the conversations route — doing so would unmount whatever
+-    // non-conversation view it's on (e.g. the Automations editor + unsaved
+-    // edits). Local activations leave the flag false and switch as before.
 -    if (consumeRemoteActivation()) return
-+    if (remoteActivation) return
-     openConversations()
-   }, [activeTabId, openConversations, consumeRemoteActivation])
-   return null
-@@ -1567,6 +1581,7 @@ function WorkspaceLayoutInner({ children }: { children: React.ReactNode }) {
+-    openConversations()
+-  }, [activeTabId, openConversations, consumeRemoteActivation])
+-  return null
+-}
+-
+ function WorkspaceLayoutInner({ children }: { children: React.ReactNode }) {
+   return (
+     <AppWorkspaceProvider>
+@@ -1567,6 +1550,7 @@
                                            listener calls openConversations() to
                                            surface a launcher-opened folder. */}
                                      <WorkspaceOpenFolderListener />
@@ -97,24 +101,38 @@ index a24c3bc..84517b2 100644
          {/* Folder selector — replaces the old folder-name breadcrumb. Switches
              folders for a draft; a static chip for a bound conversation. */}
 diff --git a/src/components/conversations/conversation-detail-panel.tsx b/src/components/conversations/conversation-detail-panel.tsx
-index b361fae..adb4305 100644
---- a/src/components/conversations/conversation-detail-panel.tsx
-+++ b/src/components/conversations/conversation-detail-panel.tsx
-@@ -2412,7 +2412,12 @@ const ConversationTabView = memo(function ConversationTabView({
-                 agentType={selectedAgent}
-               />
+index b361fae..6469e01 100644
+@@ -2406,13 +2406,23 @@
+           <div className="flex min-h-full flex-col">
+             <div className="flex-1" />
+             <div className="mx-auto flex w-full chat-content-w shrink-0 flex-col gap-6 px-4 py-4">
+-              <WelcomeHero />
+-              <QuickActions
+-                onSelect={handleQuickAction}
+-                agentType={selectedAgent}
+-              />
++              {ownTab?.forceAgentSelection ? null : (
++                <>
++                  <WelcomeHero />
++                  <QuickActions
++                    onSelect={handleQuickAction}
++                    agentType={selectedAgent}
++                  />
++                </>
++              )}
                <div className="flex justify-center">
 -                <AgentSelector
 +                {ownTab?.forceAgentSelection ? (
 +                  <span className="text-xs text-muted-foreground">
-+                    已选择 {selectedAgent}
++                    {folder?.name ? `${folder.name} · ` : ""}
++                    {getAgentLabel(selectedAgent)}
 +                  </span>
 +                ) : (
 +                  <AgentSelector
                    // The selector spans the row it is given (it has to measure
                    // how much room it has), so the centring lives inside it now
                    // — the `justify-center` above only centres a full-width box.
-@@ -2431,7 +2436,8 @@ const ConversationTabView = memo(function ConversationTabView({
+@@ -2431,7 +2441,8 @@
                    // Drafts remain switchable while connecting; saved
                    // conversations retain the agent they were created with.
                    disabled={dbConversationId != null}
@@ -124,6 +142,21 @@ index b361fae..adb4305 100644
                </div>
                {composerBlockedMessage ? (
                  <div className="flex w-full items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+@@ -2490,9 +2501,11 @@
+               />
+             </div>
+             <div className="flex-1" />
+-            <div className="mx-auto w-full chat-content-w shrink-0 px-4 pb-6">
+-              <WelcomeTip />
+-            </div>
++            {ownTab?.forceAgentSelection ? null : (
++              <div className="mx-auto w-full chat-content-w shrink-0 px-4 pb-6">
++                <WelcomeTip />
++              </div>
++            )}
+           </div>
+         </ScrollArea>
+       ) : showDraftHeader ? (
 diff --git a/src/components/conversations/folder-tabs-empty-state.test.tsx b/src/components/conversations/folder-tabs-empty-state.test.tsx
 index 382d505..8a8c677 100644
 --- a/src/components/conversations/folder-tabs-empty-state.test.tsx
@@ -861,10 +894,8 @@ index 94c1079..d956d99 100644
    )
  }
 diff --git a/src/components/layout/sidebar.tsx b/src/components/layout/sidebar.tsx
-index 29e2264..5c1cabe 100644
---- a/src/components/layout/sidebar.tsx
-+++ b/src/components/layout/sidebar.tsx
-@@ -3,32 +3,25 @@
+index 29e2264..827adc5 100644
+@@ -3,32 +3,24 @@
  import {
    useCallback,
    useEffect,
@@ -886,7 +917,7 @@ index 29e2264..5c1cabe 100644
 -  Map as MapIcon,
 -  Menu,
    MessagesSquare,
-   SquarePen,
+-  SquarePen,
 -  Zap,
 +  Workflow,
    type LucideIcon,
@@ -900,7 +931,15 @@ index 29e2264..5c1cabe 100644
  import { useWorkbenchRoute } from "@/contexts/workbench-route-context"
  import { useFolderTabsStore } from "@/stores/folder-tabs-store"
  import {
-@@ -58,41 +51,23 @@ import { formatShortcutLabel } from "@/lib/keyboard-shortcuts"
+@@ -50,66 +42,30 @@
+   DropdownMenuTrigger,
+ } from "@/components/ui/dropdown-menu"
+ import { useIsMobile } from "@/hooks/use-mobile"
+-import { useIsMac } from "@/hooks/use-is-mac"
+ import { usePlatform } from "@/hooks/use-platform"
+ import { useZoomLevel } from "@/hooks/use-appearance"
+-import { useShortcutSettings } from "@/hooks/use-shortcut-settings"
+-import { formatShortcutLabel } from "@/lib/keyboard-shortcuts"
  import { isDesktop } from "@/lib/platform"
  import { leftChromeReserve } from "@/lib/window-chrome"
  import {
@@ -942,11 +981,29 @@ index 29e2264..5c1cabe 100644
 +import { EMPTY_TAG_FILTER } from "@/lib/conversation-tags"
  import { SidebarSectionOrderControl } from "./sidebar-section-order-control"
  import { cn } from "@/lib/utils"
+-
+-// Keyboard-shortcut hint at the trailing edge of the New chat row.
+-// Mirrors the folder count badge exactly — same chip (0.9375rem height,
+-// 0.3125rem radius, bg-primary/10, text-primary, 0.625rem text) per the request
+-// to match it. That pairing is also solidly legible (text-primary on
+-// primary/10 ≈ 14:1 light / 11:1 dark), unlike the muted-on-muted kbd it
+-// replaces (4.34:1). Revealed only on hover / keyboard focus of its row (each
+-// row is a `group`); font-mono renders the shortcut glyphs cleanly.
+-const SHORTCUT_BADGE_CLASS = cn(
+-  "ml-auto inline-flex h-[0.9375rem] shrink-0 items-center justify-center",
+-  "rounded-[0.3125rem] bg-primary/10 px-[0.25rem]",
+-  "font-mono text-[0.625rem] font-medium leading-none text-primary",
+-  "opacity-0 transition-opacity duration-150",
+-  "group-hover:opacity-100 group-focus-visible:opacity-100"
+-)
  
-@@ -118,16 +93,6 @@ const SHORTCUT_BADGE_CLASS = cn(
+ // Which sections the order editor should render as switched-off. Module
+ // constants rather than a per-render `new Set`, so the reference is stable and
+@@ -117,16 +73,6 @@
+ // visibility toggle today.
  const NO_HIDDEN_SECTIONS: ReadonlySet<SidebarSectionId> = new Set()
  const RECENT_HIDDEN: ReadonlySet<SidebarSectionId> = new Set(["recent"])
- 
+-
 -// Icon per optional nav row. The visibility checkboxes in the view-options menu
 -// carry the same glyph as the row they switch, so that group reads as a mirror
 -// of the nav block rather than three bare labels.
@@ -956,11 +1013,10 @@ index 29e2264..5c1cabe 100644
 -  forge: LayoutTemplate,
 -  canvas: MapIcon,
 -}
--
+ 
  /**
   * A fixed top-of-sidebar action / route row. `active` marks the row as the
-  * current workbench route (selected styling); `trailing` carries a shortcut hint
-@@ -171,12 +136,9 @@ function SidebarNavButton({
+@@ -171,16 +117,11 @@
  
  export function Sidebar() {
    const t = useTranslations("Folder.sidebar")
@@ -971,11 +1027,15 @@ index 29e2264..5c1cabe 100644
 -  const { unseenFailures } = useAutomationsView()
 -  const { attentionCount } = useTasksView()
 -  const { routeId, setRoute, openConversations } = useWorkbenchRoute()
+-  const isMac = useIsMac()
 +  const { setRoute, routeId } = useWorkbenchRoute()
-   const isMac = useIsMac()
    const { isMac: platformIsMac } = usePlatform()
    const { zoomLevel } = useZoomLevel()
-@@ -196,9 +158,6 @@ export function Sidebar() {
+-  const { shortcuts } = useShortcutSettings()
+   const isMobile = useIsMobile()
+   const listRef = useRef<SidebarConversationListHandle>(null)
+   // On desktop the header's top-left is owned by the fixed window-chrome overlay
+@@ -196,9 +137,6 @@
    const [showCompleted, setShowCompleted] = useState(false)
    const [showWorktrees, setShowWorktrees] = useState(true)
    const [showRecent, setShowRecent] = useState(true)
@@ -985,7 +1045,7 @@ index 29e2264..5c1cabe 100644
    const [sortMode, setSortMode] = useState<SidebarSortMode>("created")
    const [sectionOrder, setSectionOrder] = useState<SidebarSectionOrder>(
      DEFAULT_SECTION_ORDER
-@@ -209,22 +168,7 @@ export function Sidebar() {
+@@ -209,26 +147,7 @@
    // with the tab set, see `TabProvider`), so this reads it live.
    const tabsFollowFolder = useFolderTabsStore((s) => s.enabled)
    const setTabsFollowFolder = useFolderTabsStore((s) => s.setEnabled)
@@ -1005,10 +1065,14 @@ index 29e2264..5c1cabe 100644
 -      tagsHydrated ? pruneTagFilter(rawTagFilter, tagsById) : rawTagFilter,
 -    [rawTagFilter, tagsById, tagsHydrated]
 -  )
-   const newConversationShortcutLabel = formatShortcutLabel(
-     shortcuts.new_conversation,
-     isMac
-@@ -244,19 +188,10 @@ export function Sidebar() {
+-  const newConversationShortcutLabel = formatShortcutLabel(
+-    shortcuts.new_conversation,
+-    isMac
+-  )
+   // General umbrella name for the eye menu (tag filter + list toggles + nav
+   // rows + sort + section order). Kept generic so the accessible name / tooltip
+   // stays accurate as the menu gains options.
+@@ -244,18 +163,9 @@
      setShowCompleted(loadShowCompleted())
      setShowWorktrees(loadShowWorktrees())
      setShowRecent(loadShowRecent())
@@ -1017,18 +1081,17 @@ index 29e2264..5c1cabe 100644
      setSectionOrder(loadSectionOrder())
 -    setRawTagFilter(loadTagFilter())
    }, [])
- 
+-
 -  const handleSetTagFilter = useCallback((next: TagFilter) => {
 -    setRawTagFilter(next)
 -    saveTagFilter(next)
 -  }, [])
 -
 -  const closeViewOptions = useCallback(() => setViewOptionsOpen(false), [])
--
+ 
    const handleSetShowCompleted = useCallback((value: boolean) => {
      setShowCompleted(value)
-     saveShowCompleted(value)
-@@ -272,17 +207,7 @@ export function Sidebar() {
+@@ -272,17 +182,7 @@
      saveShowRecent(value)
    }, [])
  
@@ -1047,10 +1110,16 @@ index 29e2264..5c1cabe 100644
    const handleSetSortMode = useCallback((value: string) => {
      const mode: SidebarSortMode = value === "updated" ? "updated" : "created"
      setSortMode(mode)
-@@ -318,22 +243,9 @@ export function Sidebar() {
-     // conversation is visible (mirrors tapping a conversation card, which the
-     // list wrapper already closes on).
-     if (isMobile) toggle()
+@@ -312,31 +212,6 @@
+       setAllExpanded(true)
+     }
+   }, [allExpanded])
+-
+-  const handleNewConversation = useCallback(() => {
+-    // On mobile the sidebar is a Drawer overlay — close it so the new
+-    // conversation is visible (mirrors tapping a conversation card, which the
+-    // list wrapper already closes on).
+-    if (isMobile) toggle()
 -    // Starting a conversation always returns to the conversation workspace (in
 -    // case a route like Automations was taking over the content region).
 -    openConversations()
@@ -1062,17 +1131,18 @@ index 29e2264..5c1cabe 100644
 -      return
 -    }
 -    openNewConversationTab(activeFolder.id, activeFolder.path)
-+    setRoute("agents")
-   }, [
+-  }, [
 -    activeFolder,
 -    openChatModeTab,
 -    openNewConversationTab,
 -    openConversations,
-+    setRoute,
-     isMobile,
-     toggle,
-   ])
-@@ -385,7 +297,7 @@ export function Sidebar() {
+-    isMobile,
+-    toggle,
+-  ])
+ 
+   if (!isOpen) return null
+ 
+@@ -385,7 +260,7 @@
            <Button
              variant="ghost"
              size="icon"
@@ -1081,7 +1151,7 @@ index 29e2264..5c1cabe 100644
              onClick={() => listRef.current?.scrollToActive()}
              title={t("locateActiveConversation")}
              aria-label={t("locateActiveConversation")}
-@@ -420,7 +332,7 @@ export function Sidebar() {
+@@ -420,7 +295,7 @@
                <Button
                  variant="ghost"
                  size="icon"
@@ -1090,7 +1160,7 @@ index 29e2264..5c1cabe 100644
                  title={viewOptionsLabel}
                  aria-label={viewOptionsLabel}
                >
-@@ -457,11 +369,6 @@ export function Sidebar() {
+@@ -457,11 +332,6 @@
                    flipping two of them used to cost two round trips through the
                    trigger. The one action it used to carry — expand/collapse
                    all — is now a header button of its own. */}
@@ -1102,7 +1172,7 @@ index 29e2264..5c1cabe 100644
                <DropdownMenuSub>
                  <DropdownMenuSubTrigger>
                    <MessagesSquare className="text-muted-foreground" />
-@@ -495,35 +402,7 @@ export function Sidebar() {
+@@ -495,35 +365,7 @@
                    </DropdownMenuCheckboxItem>
                  </DropdownMenuSubContent>
                </DropdownMenuSub>
@@ -1139,11 +1209,33 @@ index 29e2264..5c1cabe 100644
                  checked={tabsFollowFolder}
                  onCheckedChange={setTabsFollowFolder}
                  onSelect={(event) => event.preventDefault()}
-@@ -572,6 +451,15 @@ export function Sidebar() {
-           the list below. Each row is a `group` so its shortcut hint reveals on
+@@ -563,105 +405,47 @@
+         </div>
+       </div>
+ 
+-      {/* Fixed actions above the scrollable list. `shrink-0` keeps them pinned —
+-          they never scroll with the conversation list. Rows are `rounded-full`
++      {/* Fixed navigation above the scrollable list. `shrink-0` keeps it pinned —
++          it never scrolls with the conversation list. Rows are `rounded-full`
+           like the conversation pills, and the icon/text geometry matches the
+           folder header: a 0.875rem icon + 0.875rem label at a 0.4375rem gap, with
+           the row's pl-[0.4375rem] (atop the container's px-1.5) placing the icon
+           center on the same 0.875rem rail axis as the folder/conversation icons in
+-          the list below. Each row is a `group` so its shortcut hint reveals on
++          the list below. Each row is a `group` so trailing badges reveal on
            hover / keyboard focus. */}
        <div className="flex shrink-0 flex-col gap-0.5 px-1.5 pt-1.5">
-+        <SidebarNavButton
+         <SidebarNavButton
+-          icon={SquarePen}
+-          label={t("newChat")}
+-          onClick={handleNewConversation}
+-          trailing={
+-            newConversationShortcutLabel ? (
+-              <kbd className={SHORTCUT_BADGE_CLASS}>
+-                {newConversationShortcutLabel}
+-              </kbd>
+-            ) : null
+-          }
 +          icon={Bot}
 +          label={tSettings("agents")}
 +          active={routeId === "agents"}
@@ -1152,13 +1244,6 @@ index 29e2264..5c1cabe 100644
 +            setRoute("agents")
 +          }}
 +        />
-         <SidebarNavButton
-           icon={SquarePen}
-           label={t("newChat")}
-@@ -584,84 +472,29 @@ export function Sidebar() {
-             ) : null
-           }
-         />
 +        <SidebarNavButton
 +          icon={Workflow}
 +          label={t("automations")}
@@ -1176,7 +1261,7 @@ index 29e2264..5c1cabe 100644
 +            if (isMobile) toggle()
 +            setRoute("tasks")
 +          }}
-+        />
+         />
          {/* Search is deliberately NOT a row here: it moved to the fixed top-left
              window chrome (`LeftEdgeChrome`, plus the mobile `FolderTitleBar`),
              which — unlike this sidebar — never unmounts, so the button survives
@@ -1259,7 +1344,7 @@ index 29e2264..5c1cabe 100644
  
        {/* On mobile, clicking a conversation card auto-closes the Drawer */}
        <div
-@@ -677,7 +510,6 @@ export function Sidebar() {
+@@ -677,7 +461,6 @@
              : undefined
          }
        >
@@ -1267,7 +1352,7 @@ index 29e2264..5c1cabe 100644
          <SidebarConversationList
            ref={listRef}
            showCompleted={showCompleted}
-@@ -685,7 +517,7 @@ export function Sidebar() {
+@@ -685,7 +468,7 @@
            showRecent={showRecent}
            sortMode={sortMode}
            sectionOrder={sectionOrder}
@@ -1324,10 +1409,8 @@ index 106ede2..f09ae69 100644
      </div>
    )
 diff --git a/src/components/layout/workspace-chrome-controller.tsx b/src/components/layout/workspace-chrome-controller.tsx
-index a77d55d..6ff6c14 100644
---- a/src/components/layout/workspace-chrome-controller.tsx
-+++ b/src/components/layout/workspace-chrome-controller.tsx
-@@ -74,7 +74,7 @@ export function WorkspaceChromeController() {
+index a77d55d..a4e5b15 100644
+@@ -74,7 +74,7 @@
      openBrowserTab,
      setActivePane,
    } = useWorkspaceActions()
@@ -1336,21 +1419,26 @@ index a77d55d..6ff6c14 100644
    const { shortcuts } = useShortcutSettings()
    // Search open-state is shared (see search-dialog-context): the trigger lives
    // in the sidebar, but this always-mounted controller owns the dialog and the
-@@ -233,12 +233,8 @@ export function WorkspaceChromeController() {
+@@ -233,12 +233,12 @@
          return
        }
        if (matchShortcutEvent(e, shortcuts.new_conversation)) {
 -        if (!activeFolder) return
-         e.preventDefault()
+-        e.preventDefault()
 -        // Return to the conversation workspace if a route (e.g. Automations) was
 -        // covering the content region, else the new tab opens unseen.
 -        openConversations()
 -        openNewConversationTab(activeFolder.id, activeFolder.path)
-+        openAgentsHome()
++        e.preventDefault()
++        openAgentsHome(
++          activeFolder && activeFolder.kind !== "chat"
++            ? { projectId: activeFolder.id }
++            : undefined
++        )
          return
        }
        if (matchShortcutEvent(e, shortcuts.open_folder)) {
-@@ -397,6 +393,7 @@ export function WorkspaceChromeController() {
+@@ -397,6 +397,7 @@
      handleOpenFolder,
      handleOpenSettings,
      openConversations,
@@ -2741,8 +2829,7 @@ index 7bddc15..df00786 100644
  export type AuxPanelTab = (typeof AUX_PANEL_TABS)[number]
 
 diff --git a/src/stores/tab-store.ts b/src/stores/tab-store.ts
---- a/src/stores/tab-store.ts
-+++ b/src/stores/tab-store.ts
+index 35c010e..eb3ca9c 100644
 @@ -104,6 +104,8 @@
     * runs (e.g. `acpListAgents()` keeps failing).
     */
@@ -2752,7 +2839,15 @@ diff --git a/src/stores/tab-store.ts b/src/stores/tab-store.ts
    /**
     * Marks a draft tab as "chat mode" (folderless). Set by `openChatModeTab`,
     * cleared implicitly once the draft binds to a real conversation (whose hidden
-@@ -581,6 +583,7 @@
+@@ -428,6 +430,7 @@
+ // backend hiccup). Both the invariant prune and the blob write wait for it; the
+ // session self-heals the moment any snapshot lands.
+ let tabsSnapshotLoaded = false
++export const hasLoadedTabsSnapshot = () => tabsSnapshotLoaded
+ const childSummaryInFlight = new Set<number>()
+ const childSeedBuffer = new Map<
+   number,
+@@ -581,6 +584,7 @@
      a.workingDir === b.workingDir &&
      a.status === b.status &&
      a.agentTypeProvisional === b.agentTypeProvisional &&
@@ -2760,7 +2855,7 @@ diff --git a/src/stores/tab-store.ts b/src/stores/tab-store.ts
      a.isChat === b.isChat
    )
  }
-@@ -772,6 +775,7 @@
+@@ -772,6 +776,7 @@
    isChat?: boolean
    workingDir?: string
    agentType?: AgentType
@@ -2768,7 +2863,7 @@ diff --git a/src/stores/tab-store.ts b/src/stores/tab-store.ts
  }
  
  function sanitizeDrafts(value: unknown): PersistedDraft[] {
-@@ -799,6 +803,7 @@
+@@ -799,6 +804,7 @@
        ...(typeof e.agentType === "string" && e.agentType.length > 0
          ? { agentType: e.agentType as AgentType }
          : {}),
@@ -2776,7 +2871,7 @@ diff --git a/src/stores/tab-store.ts b/src/stores/tab-store.ts
      })
    }
    return out
-@@ -906,6 +911,9 @@
+@@ -906,6 +912,9 @@
          ? { workingDir: tab.workingDir }
          : {}),
        ...(tab.agentTypeProvisional ? {} : { agentType: tab.agentType }),
@@ -2786,7 +2881,7 @@ diff --git a/src/stores/tab-store.ts b/src/stores/tab-store.ts
      })
    })
    // Each folder view lists only its own folder's tabs (drafts by their own
-@@ -991,6 +999,9 @@
+@@ -991,6 +1000,9 @@
        workingDir: draft.workingDir,
        agentTypeProvisional: resolved.provisional,
        ...(draft.isChat === true ? { isChat: true } : {}),
@@ -2796,7 +2891,7 @@ diff --git a/src/stores/tab-store.ts b/src/stores/tab-store.ts
      }
      tabs.splice(Math.min(draft.index, tabs.length), 0, tab)
      groupOf[draft.id] = draft.group
-@@ -2204,6 +2215,9 @@
+@@ -2204,6 +2216,9 @@
      const agentChanged = existingTab.agentType !== targetAgent
      const provisionalChanged =
        (existingTab.agentTypeProvisional ?? false) !== provisional
@@ -2806,7 +2901,7 @@ diff --git a/src/stores/tab-store.ts b/src/stores/tab-store.ts
  
      // The singleton means a reopened draft resolves to THIS draft rather than a
      // tab of its own, so the slot it was closed from has to move this one — a
-@@ -2218,7 +2232,14 @@
+@@ -2218,7 +2233,14 @@
  
      if (folderChanged || agentChanged) {
        set({
@@ -2822,7 +2917,7 @@ diff --git a/src/stores/tab-store.ts b/src/stores/tab-store.ts
          draftRetargetRequests: [
            ...prevState.draftRetargetRequests,
            {
-@@ -2233,11 +2254,20 @@
+@@ -2233,11 +2255,20 @@
        })
        focusTab(existingTab.id)
        if (moved) recomputeTabs()
@@ -2845,7 +2940,7 @@ diff --git a/src/stores/tab-store.ts b/src/stores/tab-store.ts
              : tab
          ),
          activeTabId: existingTab.id,
-@@ -2427,8 +2457,18 @@
+@@ -2427,8 +2458,18 @@
      const next = prev.map((t) => {
        if (t.id !== tabId) return t
        if (t.conversationId != null) return t // not a draft
@@ -2866,7 +2961,7 @@ diff --git a/src/stores/tab-store.ts b/src/stores/tab-store.ts
      })
      if (next.every((t, i) => t === prev[i])) return
      set({ rawTabs: next })
-@@ -2467,6 +2507,7 @@
+@@ -2467,6 +2508,7 @@
            title: formatConversationTitle(title) || tab.title,
            runtimeConversationId,
            agentTypeProvisional: false,
@@ -2961,3 +3056,260 @@ index 0000000..56899ed
 +    expect(mocks.openNewConversationTab).not.toHaveBeenCalled()
 +  })
 +})
+diff --git a/src/components/layout/workbench-route-conversation-sync.tsx b/src/components/layout/workbench-route-conversation-sync.tsx
+new file mode 100644
+index 0000000..70433a6
+@@ -0,0 +1,66 @@
++"use client"
++
++import { useEffect, useRef } from "react"
++import { useWorkbenchRoute } from "@/contexts/workbench-route-context"
++import { useTabActions, useTabStore } from "@/contexts/tab-context"
++import { hasLoadedTabsSnapshot } from "@/stores/tab-store"
++
++export function WorkbenchRouteConversationSync() {
++  const activeTabId = useTabStore((s) => s.activeTabId)
++  const rawTabs = useTabStore((s) => s.rawTabs)
++  const tabsHydrated = useTabStore((s) => s.tabsHydrated)
++  const { consumeRemoteActivation } = useTabActions()
++  const { routeId, openAgentsHome, openConversations } = useWorkbenchRoute()
++  const prevRef = useRef(activeTabId)
++  const initialSnapshotCheckedRef = useRef(false)
++  // Hydrating the first active tab is not a user choosing to leave an
++  // explicitly requested initial route such as Tether's Agent home.
++  const hadInitialActiveTabRef = useRef(activeTabId !== null)
++
++  useEffect(() => {
++    const activeTabChanged = prevRef.current !== activeTabId
++    const previousTabId = prevRef.current
++    prevRef.current = activeTabId
++    const remoteActivation = activeTabChanged
++      ? consumeRemoteActivation()
++      : false
++
++    if (
++      !initialSnapshotCheckedRef.current &&
++      tabsHydrated &&
++      hasLoadedTabsSnapshot()
++    ) {
++      initialSnapshotCheckedRef.current = true
++      if (routeId === "conversations" && rawTabs.length === 0) {
++        if (!activeTabChanged) consumeRemoteActivation()
++        openAgentsHome()
++        return
++      }
++    }
++
++    if (!activeTabChanged) return
++    if (
++      !hadInitialActiveTabRef.current &&
++      previousTabId === null &&
++      activeTabId !== null
++    ) {
++      hadInitialActiveTabRef.current = true
++      return
++    }
++    // A remote tab snapshot that mirrors another client's focus also changes
++    // activeTabId. That's not a local conversation activation, so don't hijack
++    // this window into another route. Local activations leave the flag false
++    // and switch as before.
++    if (remoteActivation) return
++    openConversations()
++  }, [
++    activeTabId,
++    consumeRemoteActivation,
++    openAgentsHome,
++    openConversations,
++    rawTabs,
++    routeId,
++    tabsHydrated,
++  ])
++  return null
++}
+diff --git a/src/components/layout/workbench-route-conversation-sync.test.tsx b/src/components/layout/workbench-route-conversation-sync.test.tsx
+new file mode 100644
+index 0000000..c340719
+@@ -0,0 +1,127 @@
++import { act, render, screen, waitFor } from "@testing-library/react"
++import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
++
++const { listOpenedTabs } = vi.hoisted(() => ({
++  listOpenedTabs: vi.fn(),
++}))
++
++vi.mock("@/lib/api", async (importOriginal) => ({
++  ...(await importOriginal<typeof import("@/lib/api")>()),
++  listOpenedTabs,
++}))
++
++import { WorkbenchRouteProvider, useWorkbenchRoute } from "@/contexts/workbench-route-context"
++import { resetTabStore, useTabStore } from "@/stores/tab-store"
++import { WorkbenchRouteConversationSync } from "./workbench-route-conversation-sync"
++
++function Probe() {
++  const { routeId, openConversations } = useWorkbenchRoute()
++  return (
++    <>
++      <span data-testid="route">{routeId}</span>
++      <button onClick={openConversations}>open conversations</button>
++    </>
++  )
++}
++
++function renderSync() {
++  return render(
++    <WorkbenchRouteProvider>
++      <WorkbenchRouteConversationSync />
++      <Probe />
++    </WorkbenchRouteProvider>
++  )
++}
++
++beforeEach(() => {
++  resetTabStore()
++  listOpenedTabs.mockReset()
++})
++
++afterEach(() => {
++  resetTabStore()
++})
++
++describe("WorkbenchRouteConversationSync", () => {
++  it("opens Agent home after a successful empty tab snapshot", async () => {
++    listOpenedTabs.mockResolvedValue({ version: 1, items: [] })
++    renderSync()
++
++    act(() => useTabStore.getState().hydrate())
++
++    await waitFor(() => expect(screen.getByTestId("route")).toHaveTextContent("agents"))
++  })
++
++  it("keeps the conversations route when a persisted tab is restored", async () => {
++    listOpenedTabs.mockResolvedValue({
++      version: 1,
++      items: [
++        {
++          folder_id: 7,
++          conversation_id: 19,
++          agent_type: "claude_code",
++          is_pinned: false,
++          is_active: true,
++        },
++      ],
++    })
++    renderSync()
++
++    act(() => useTabStore.getState().hydrate())
++
++    await waitFor(() =>
++      expect(useTabStore.getState().tabsHydrated).toBe(true)
++    )
++    expect(screen.getByTestId("route")).toHaveTextContent("conversations")
++
++    act(() => useTabStore.getState().closeTab("conv-7-claude_code-19"))
++
++    await waitFor(() =>
++      expect(useTabStore.getState().rawTabs).toHaveLength(0)
++    )
++    expect(screen.getByTestId("route")).toHaveTextContent("conversations")
++  })
++
++  it("does not redirect when the tab snapshot fails", async () => {
++    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
++    listOpenedTabs.mockRejectedValue(new Error("offline"))
++    renderSync()
++
++    act(() => useTabStore.getState().hydrate())
++
++    await waitFor(() =>
++      expect(useTabStore.getState().tabsHydrated).toBe(true)
++    )
++    expect(screen.getByTestId("route")).toHaveTextContent("conversations")
++    errorSpy.mockRestore()
++  })
++
++  it("does not redirect an explicit structured draft back to Agent home", async () => {
++    listOpenedTabs.mockResolvedValue({ version: 1, items: [] })
++    renderSync()
++
++    act(() => useTabStore.getState().hydrate())
++    await waitFor(() => expect(screen.getByTestId("route")).toHaveTextContent("agents"))
++
++    act(() => {
++      useTabStore.setState({
++        rawTabs: [
++          {
++            id: "structured-draft",
++            kind: "conversation",
++            folderId: 7,
++            conversationId: null,
++            agentType: "claude_code",
++            title: "New conversation",
++            isPinned: false,
++            forceAgentSelection: true,
++          },
++        ],
++        activeTabId: "structured-draft",
++      })
++      screen.getByText("open conversations").click()
++    })
++
++    expect(screen.getByTestId("route")).toHaveTextContent("conversations")
++  })
++})
+diff --git a/src/i18n/messages/zh-CN.json b/src/i18n/messages/zh-CN.json
+index 5ffa16a..0629b4b 100644
+@@ -2173,7 +2173,7 @@
+       "locateActiveConversation": "定位当前会话",
+       "expandAllGroups": "展开全部分组",
+       "collapseAllGroups": "折叠全部分组",
+-      "newConversation": "新建会话",
++      "newConversation": "新建任务",
+       "newConversationShort": "新建",
+       "newChat": "新建会话",
+       "search": "搜索",
+@@ -2289,7 +2289,7 @@
+       "showMoreRecent": "显示更多（{count}）",
+       "resetRecentLimit": "重置为前 {count} 条",
+       "noFolders": "没有打开的文件夹",
+-      "newChatAction": "新建聊天",
++      "newChatAction": "新建任务",
+       "automations": "自动化",
+       "tasks": "待办任务",
+       "loadingSubsessions": "正在加载子会话…",
+@@ -2324,7 +2324,7 @@
+       "reloaded": "当前会话已重新加载",
+       "reload": "重新加载",
+       "activeConversationIndicator": "当前激活会话",
+-      "newConversation": "新建会话",
++      "newConversation": "新建任务",
+       "emptyFolderScope": "{name} 中没有打开的会话",
+       "emptyChatScope": "没有打开的聊天",
+       "closeConversation": "关闭会话",
+@@ -2399,7 +2399,7 @@
+     },
+     "conversationCard": {
+       "untitledConversation": "未命名会话",
+-      "newConversation": "新建会话",
++      "newConversation": "新建任务",
+       "maximize": "最大化",
+       "restore": "还原",
+       "attachToCurrentSession": "添加到会话",
+@@ -3135,7 +3135,7 @@
+     "tabContext": {
+       "loadingConversation": "加载中...",
+       "untitledConversation": "未命名会话",
+-      "newConversation": "新建会话"
++      "newConversation": "新建任务"
+     },
+     "fileTreeTab": {
+       "workspace": "工作区",
+@@ -3541,7 +3541,7 @@
+         "tips": {
+           "tileTabs": "右键点击会话标签选择「平铺显示」，可同屏对比多个会话",
+           "pinTab": "双击会话标签可将其固定，避免被新打开的会话自动替换",
+-          "shortcutsNewSearch": "<shortcut>{newConversation}</shortcut> 快速新建会话，<shortcut>{searchConversations}</shortcut> 搜索历史会话",
++          "shortcutsNewSearch": "<shortcut>{newConversation}</shortcut> 快速新建任务，<shortcut>{searchConversations}</shortcut> 搜索历史会话",
+           "slashAtMention": "在输入框输入 / 触发斜杠命令，输入 @ 引用项目内文件",
+           "pasteDropFiles": "直接粘贴截图或把文件拖到输入框，即可作为附件",
+           "queueMessage": "智能体回复中也能继续输入并排队，回答完毕会自动续发",
