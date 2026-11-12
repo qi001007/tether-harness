@@ -371,8 +371,8 @@ class AgentsRuntime:
             raise ValueError("Codeg activity response is too large")
         return json.loads(payload.decode("utf-8"))
 
-    def herdr_agent(self, agent_type: str) -> dict[str, Any]:
-        """Read one enabled Codeg agent for the Herdr terminal bridge."""
+    def agent_record(self, agent_type: str) -> dict[str, Any]:
+        """Read one enabled Codeg agent record for typed terminal launches."""
         with self.lock:
             state = self.status()
             if not state.get("running") or not self.port or not self.token:
@@ -397,6 +397,10 @@ class AgentsRuntime:
                            for key, value in env.items())):
                 raise ValueError("The selected agent is disabled or unavailable in Agents Runtime")
             return {"agent_type": agent_type, "env": dict(env)}
+
+    def herdr_agent(self, agent_type: str) -> dict[str, Any]:
+        """Keep the existing Herdr caller on the shared authenticated catalog."""
+        return self.agent_record(agent_type)
 
     def activity(self) -> dict[str, Any]:
         """Return a fail-closed snapshot of active Codeg work without starting it."""

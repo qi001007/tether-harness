@@ -38,7 +38,7 @@ function isDarkTheme() {
   return !!(typeof document !== 'undefined' && document.body && document.body.hasAttribute('data-ds-dark-theme'))
 }
 
-export function createTerminalDock({ React, Glyph, post, C, device, cwd, height = 240, initialShell = '', initialAgent = '', initialHerdrProject = false, initialHerdrAgentType = '', initialCommand = '', initialArgv = null, label = '', themeMode = 'auto', fill = false, onHeight, onClose }) {
+export function createTerminalDock({ React, Glyph, post, C, device, cwd, height = 240, initialShell = '', initialAgent = '', initialHerdrProject = false, initialHerdrAgentType = '', initialRuntimeAgentType = '', initialCommand = '', initialArgv = null, label = '', themeMode = 'auto', fill = false, onHeight, onClose }) {
   const h = React.createElement
   const runtime = typeof window !== 'undefined' ? window.TetherTerminalRuntime : null
   const [shells, setShells] = React.useState([])
@@ -57,6 +57,7 @@ export function createTerminalDock({ React, Glyph, post, C, device, cwd, height 
   const termRef = React.useRef(null)
   const sessionRef = React.useRef('')
   const shellRef = React.useRef('')
+  const runtimeAgentTypeRef = React.useRef(initialRuntimeAgentType)
   const ptyRef = React.useRef(true)
   const deviceRef = React.useRef(device)
   const postRef = React.useRef(post)
@@ -142,7 +143,8 @@ export function createTerminalDock({ React, Glyph, post, C, device, cwd, height 
       setError('')
       try {
         const payload = { cwd, cols: term.cols || 120, rows: term.rows || 30 }
-        if (agentId) payload.agent = agentId
+        if (runtimeAgentTypeRef.current) payload.runtime_agent_type = runtimeAgentTypeRef.current
+        else if (agentId) payload.agent = agentId
         else if (Array.isArray(initialArgv) && initialArgv.length) payload.command = initialArgv
         else payload.shell = shellId || undefined
         if (initialHerdrProject && shellId === 'herdr') {
@@ -283,6 +285,7 @@ export function createTerminalDock({ React, Glyph, post, C, device, cwd, height 
         void stopSession().then(() => startSession(current, initialAgent || undefined))
       },
       changeShell: (next) => {
+        runtimeAgentTypeRef.current = ''
         setShell(next)
         shellRef.current = next
         void stopSession().then(() => startSession(next))
@@ -296,13 +299,25 @@ export function createTerminalDock({ React, Glyph, post, C, device, cwd, height 
         if (disposed) return
         const list = (catalog && Array.isArray(catalog.shells) ? catalog.shells : [])
           .filter((item) => item && item.available)
+        if (initialRuntimeAgentType && (!catalog || catalog.runtime_agent_start !== true)) {
+          throw new Error('目标 Node 尚不支持使用 Agents Runtime 配置启动 CLI，请更新 Node 后重试。')
+        }
+        if (initialRuntimeAgentType && (initialAgent || initialHerdrAgentType || initialCommand || initialArgv)) {
+          throw new Error('所选 Agent CLI 启动参数冲突')
+        }
         if (initialHerdrAgentType) {
           if (!catalog || catalog.herdr_agent_start !== true) {
             throw new Error('目标 Node 尚不支持通过 Herdr 启动所选 Agent，请更新 Node 后重试。')
           }
         }
         setShells(list)
-        if (initialAgent) {
+        if (initialRuntimeAgentType) {
+          const preferred = (catalog && catalog.default && list.some((item) => item.id === catalog.default)
+            ? catalog.default : ((list[0] || {}).id || ''))
+          setShell(preferred)
+          shellRef.current = preferred
+          await startSession(preferred, undefined, list)
+        } else if (initialAgent) {
           setShell(initialAgent)
           shellRef.current = initialAgent
           await startSession(initialAgent, initialAgent)

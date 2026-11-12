@@ -209,6 +209,9 @@
 - 2026-11-12：现代远端 Codeg direct gateway 行为回归覆盖 owner+EasyTier、共同 ready network 优先、非 owner/无路由沿用 service_open、账号或目录错误拒绝、URL host 精确匹配及凭据不出 renderer。
 - 2026-11-12：Herdr Agent CLI 路径发现覆盖八个 canonical 类型、保留 Codeg/Node PATH、忽略 Node registry 启用状态作为第二真相、缺失 CLI 拒绝，以及 Herdr 失败不透出原始输出的安全阶段码；focused terminal/runtime suite 待验证。
 - 2026-11-12：Herdr CLI discovery 与安全阶段错误 focused suite 53/53 通过（`test_terminal.py` + `test_agents_runtime.py`）。
+- 2026-11-12：typed CLI 用 Codeg Home Vitest 验证 `open_cli` hash 仅含 request id、canonical Agent type 和项目 cwd；Node focused suite 验证共享 authenticated record/env、旧客户端 capability、严格 cwd/混参拒绝、现有 agent PTY 与 Windows `.cmd` shim。Codeg focused 1/1、Node runtime/terminal 57/57 通过。
+- 2026-11-12：新增 PATH 可解析时不调用 Node Registry catalog 的 spy 行为测试；terminal/runtime focused suite 58/58 通过。
 
 - 2026-11-12：候选 workflow 回归验证汇总 job 构建共享 UI、下载并校验 pinned Codeg web artifact，且在 `build_release.py` 之前替换 checkout 内旧静态树。
 - 2026-11-12：候选 workflow 对 Codeg web artifact 使用本次运行的动态摘要；临时目录行为测试验证四入口缺失时保留旧树、完整产物替换后无 stale 文件（2 项 focused workflow 测试通过）。
+- 2026-11-12：覆盖 Herdr `agent_not_ready` 时保留新建 tab/PTy 并返回 session + `agent_state=blocked`，同时覆盖 fatal cleanup、成功 ready 和 `agent_wait_timeout` 安全阶段码；`test_terminal.py` + `test_agents_runtime.py` 61/61 通过。

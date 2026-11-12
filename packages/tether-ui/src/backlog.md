@@ -2,6 +2,8 @@
 
 ## 2026-11-12
 
+- `agents-page.js` / `terminal-dock.js`：Codeg Home 的传统 CLI 通过与 Herdr 相同的无凭据哈希桥启动，按设备、项目路径和 canonical Agent 类型固定 pane；新 Node capability 门禁后只发送 typed Agent 请求，Node 复用已鉴权 catalog 的配置环境与既有 PTY，旧 Node 明确提示升级。源码/构建已通过，实际部署验收另记。
+
 - `app.js`：桌面 Files Explorer 恢复通过既有 OAuth `hubRequest` 调用 Controller 文件 API，移除强制转入 Native Files/Caddy-EasyTier 的请求拦截；保留主进程 Native Files IPC 与 DSH 入口。用 `D:\Tether\work` 中唯一 QA 文本文件实测 Hub list/write/preview 可用，Native Files legacy preview 返回 HTTP 409；QA 文件已删除。Node 0.2.3 preview 尚不返回现代编辑标记，需在候选 Node 激活后经 APP 实际编辑复验。
 - `transfer-page.js`：恢复满意版双栏传输页及既有 Croc/分块 transport 分支；标准 OAuth APP 的 `hubOnly` 路径只用 Hub `read`/`write_chunk`，跳过 Croc/raw direct/status/cancel，并通过 AbortSignal 停止后续分块、如实显示取消；非 Hub-only direct/Croc 条件保持原样。0.5.2 Node `write_chunk` 实机小文件传输待激活后验收。
 

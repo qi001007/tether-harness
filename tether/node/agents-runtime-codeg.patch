@@ -1780,10 +1780,10 @@ index 21fa778..705eece 100644
          className="size-3 shrink-0 text-muted-foreground/50"
 diff --git a/src/components/workspace/tether-agent-home.tsx b/src/components/workspace/tether-agent-home.tsx
 new file mode 100644
-index 0000000..faffe00
+index 0000000..b86ded9
 --- /dev/null
 +++ b/src/components/workspace/tether-agent-home.tsx
-@@ -0,0 +1,696 @@
+@@ -0,0 +1,691 @@
 +"use client"
 +
 +import { useCallback, useEffect, useMemo, useRef, useState } from "react"
@@ -1802,7 +1802,6 @@ index 0000000..faffe00
 +import { WorkbenchPageTitle } from "@/components/workbench/workbench-page-title"
 +import { useActiveFolder } from "@/contexts/active-folder-context"
 +import { useTabActions, useTabStore } from "@/contexts/tab-context"
-+import { useTerminalContext } from "@/contexts/terminal-context"
 +import { useWorkbenchRoute } from "@/contexts/workbench-route-context"
 +import { useAppWorkspaceStore } from "@/stores/app-workspace-store"
 +import { useAcpAgents } from "@/hooks/use-acp-agents"
@@ -1860,7 +1859,6 @@ index 0000000..faffe00
 +    requestedProjectId,
 +    requestedTargetGroup,
 +  } = useWorkbenchRoute()
-+  const { createTerminalWithCommand } = useTerminalContext()
 +  const [selectedProjectId, setSelectedProjectId] = useState<number | null>(
 +    requestedProjectId ??
 +      (activeFolder?.kind === "chat" ? null : (activeFolder?.id ?? null))
@@ -1898,21 +1896,18 @@ index 0000000..faffe00
 +  )
 +
 +  const handleOpenTerminal = useCallback(
-+    async (agent: AcpAgentInfo) => {
++    (agent: AcpAgentInfo) => {
 +      const command = agentCliCommand(agent.agent_type)
 +      if (!command || !selectedProject) return
-+      const terminalId = await createTerminalWithCommand(
-+        agent.name,
-+        command,
-+        undefined,
-+        {
-+          folderId: selectedProject.id,
-+          workingDir: selectedProject.path,
-+        }
-+      )
-+      if (terminalId) openConversations()
++      const action = new URLSearchParams({
++        tether_action: "open_cli",
++        request_id: crypto.randomUUID(),
++        agent_type: agent.agent_type,
++        cwd: selectedProject.path,
++      })
++      window.location.hash = action.toString()
 +    },
-+    [createTerminalWithCommand, openConversations, selectedProject]
++    [selectedProject]
 +  )
 +
 +  const handleOpenHerdr = useCallback(
@@ -2879,3 +2874,90 @@ diff --git a/src/stores/tab-store.ts b/src/stores/tab-store.ts
            ...(folderId != null ? { folderId } : {}),
            ...(workingDir != null ? { workingDir } : {}),
          }
+diff --git a/src/components/workspace/tether-agent-home.test.tsx b/src/components/workspace/tether-agent-home.test.tsx
+new file mode 100644
+index 0000000..56899ed
+--- /dev/null
++++ b/src/components/workspace/tether-agent-home.test.tsx
+@@ -0,0 +1,81 @@
++import { cleanup, fireEvent, render, screen } from "@testing-library/react"
++import { afterEach, describe, expect, it, vi } from "vitest"
++
++const mocks = vi.hoisted(() => ({
++  project: { id: 7, kind: "project", name: "Selected", path: "D:/work/selected" },
++  agent: {
++    agent_type: "codex",
++    name: "Codex",
++    enabled: true,
++    available: true,
++    env: {},
++    distribution_type: "system",
++  },
++  openNewConversationTab: vi.fn(),
++  openConversations: vi.fn(),
++}))
++
++vi.mock("next-intl", () => ({ useTranslations: () => (key: string) => key }))
++vi.mock("@/contexts/active-folder-context", () => ({
++  useActiveFolder: () => ({ activeFolder: mocks.project }),
++}))
++vi.mock("@/contexts/tab-context", () => ({
++  useTabActions: () => ({ openNewConversationTab: mocks.openNewConversationTab }),
++  useTabStore: (selector: (state: unknown) => unknown) => selector({
++    tabs: [{ id: "tab-1", agentType: "codex" }],
++    activeTabId: "tab-1",
++  }),
++}))
++vi.mock("@/contexts/workbench-route-context", () => ({
++  useWorkbenchRoute: () => ({
++    openConversations: mocks.openConversations,
++    requestedAgentType: null,
++    requestedProjectId: null,
++    requestedTargetGroup: null,
++  }),
++}))
++vi.mock("@/stores/app-workspace-store", () => ({
++  useAppWorkspaceStore: (selector: (state: unknown) => unknown) => selector({
++    allFolders: [mocks.project],
++  }),
++}))
++vi.mock("zustand/react/shallow", () => ({ useShallow: (selector: unknown) => selector }))
++vi.mock("@/hooks/use-acp-agents", () => ({
++  useAcpAgents: () => ({ agents: [mocks.agent], refresh: vi.fn() }),
++}))
++vi.mock("@/components/agent-icon", () => ({ AgentIcon: () => null }))
++vi.mock("@/components/workbench/workbench-page-title", () => ({
++  WorkbenchPageTitle: () => null,
++}))
++vi.mock("@/components/layout/new-folder-dropdown", () => ({
++  NewFolderDropdown: () => null,
++}))
++vi.mock("@/lib/api", () => ({ acpUpdateAgentPreferences: vi.fn() }))
++
++import { TetherAgentPage } from "./tether-agent-home"
++
++afterEach(() => {
++  cleanup()
++  window.history.replaceState({}, "", "/workspace")
++  mocks.openNewConversationTab.mockReset()
++  mocks.openConversations.mockReset()
++})
++
++describe("TetherAgentPage terminal launch bridge", () => {
++  it("sends a token-free typed CLI action for the selected Agent and project", () => {
++    render(<TetherAgentPage />)
++    fireEvent.click(screen.getByRole("button", { name: "终端" }))
++
++    const params = new URLSearchParams(window.location.hash.slice(1))
++    expect(params.get("tether_action")).toBe("open_cli")
++    expect(params.get("agent_type")).toBe("codex")
++    expect(params.get("cwd")).toBe(mocks.project.path)
++    expect(params.get("request_id")).toMatch(/^[0-9a-f-]{36}$/i)
++    expect(Array.from(params.keys()).sort()).toEqual([
++      "agent_type", "cwd", "request_id", "tether_action",
++    ])
++    expect(params.has("command")).toBe(false)
++    expect(params.has("env")).toBe(false)
++    expect(mocks.openNewConversationTab).not.toHaveBeenCalled()
++  })
++})

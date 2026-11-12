@@ -67,7 +67,7 @@ function AgentTargetPage({ React, Glyph, post, C, host, devices = [], localDevic
   const [serviceView, setServiceView] = React.useState(null)
   const [serviceFrameState, setServiceFrameState] = React.useState('loading')
   const serviceWebviewRef = React.useRef(null)
-  const handledHerdrRequests = React.useRef(new Set())
+  const handledAgentLaunchRequests = React.useRef(new Set())
   const [workbenchLoginRequired, setWorkbenchLoginRequired] = React.useState(false)
   const [workbenchLoginBusy, setWorkbenchLoginBusy] = React.useState(false)
   const [cwd, setCwd] = React.useState('')
@@ -484,6 +484,17 @@ function AgentTargetPage({ React, Glyph, post, C, host, devices = [], localDevic
       title: 'Herdr · ' + codegAgentType, icon: 'bot', dark: true })
   }
 
+  const openRuntimeCli = (projectCwd = '', codegAgentType = '') => {
+    const cwd = typeof projectCwd === 'string' && projectCwd.length <= 4096 && !projectCwd.includes('\0')
+      ? projectCwd.trim() : ''
+    if (!cwd || !codegAgentType) { setHomeError('打开终端前请先选择项目和 Agent'); return }
+    const normalizedCwd = cwd.replace(/\\/g, '/').replace(/\/+$/, '')
+    const key = 'cli:' + device + ':' + normalizedCwd + ':' + codegAgentType
+    setHomeError('')
+    addPane({ key, kind: 'terminal', cwd, runtimeAgentType: codegAgentType,
+      targetId: device, title: codegAgentType + ' CLI', icon: 'bot', dark: true })
+  }
+
   React.useEffect(() => {
     const onMessage = (event) => {
       const data = event && event.data
@@ -791,7 +802,8 @@ function AgentTargetPage({ React, Glyph, post, C, host, devices = [], localDevic
         if (actionUrl.origin !== new URL(serviceView.endpoint).origin) return
       } catch (_) { return }
       const params = new URLSearchParams(actionUrl.hash.slice(1))
-      if (params.get('tether_action') !== 'open_herdr') return
+      const action = params.get('tether_action')
+      if (action !== 'open_herdr' && action !== 'open_cli') return
       const requestIds = params.getAll('request_id')
       const agentTypes = params.getAll('agent_type')
       const cwds = params.getAll('cwd')
@@ -804,12 +816,13 @@ function AgentTargetPage({ React, Glyph, post, C, host, devices = [], localDevic
         && params.getAll('tether_action').length === 1
         && /^[0-9a-f-]{36}$/i.test(requestId)
         && cwd.length > 0 && cwd.length <= 4096 && !cwd.includes('\0')
-      if (fixedAction && !handledHerdrRequests.current.has(requestId)) {
-        handledHerdrRequests.current.add(requestId)
-        if (handledHerdrRequests.current.size > 128) {
-          handledHerdrRequests.current.delete(handledHerdrRequests.current.values().next().value)
+      if (fixedAction && !handledAgentLaunchRequests.current.has(requestId)) {
+        handledAgentLaunchRequests.current.add(requestId)
+        if (handledAgentLaunchRequests.current.size > 128) {
+          handledAgentLaunchRequests.current.delete(handledAgentLaunchRequests.current.values().next().value)
         }
-        openHerdr(cwd, codegAgentType)
+        if (action === 'open_herdr') openHerdr(cwd, codegAgentType)
+        else openRuntimeCli(cwd, codegAgentType)
       }
       // The action is a same-document hash only. Clear it with a fixed script;
       // never interpolate the path or Agent value into guest JavaScript.
@@ -908,9 +921,10 @@ function AgentTargetPage({ React, Glyph, post, C, host, devices = [], localDevic
           h('span', null, '目标 ' + pane.title + ' 页面连接失败。请检查设备连接后重试。'),
           h('button', { type: 'button', onClick: () => { setServiceFrameState('loading'); serviceWebviewRef.current?.reload?.() }, style: button }, '重试')) : null)
     : h(createTerminalDock, {
-      key: pane.key, React, Glyph, post, C, device, cwd: pane.cwd || '',
+      key: pane.key, React, Glyph, post, C, device: pane.targetId || device, cwd: pane.cwd || '',
       initialAgent: pane.agentId || '', initialShell: pane.shell || '', initialHerdrProject: pane.herdrProject || false,
       initialHerdrAgentType: pane.herdrAgentType || '',
+      initialRuntimeAgentType: pane.runtimeAgentType || '',
       initialCommand: pane.initialCommand || '', initialArgv: pane.initialArgv || null, label: pane.title,
       themeMode: 'dark', fill: true,
       height: Math.max(420, (typeof window !== 'undefined' ? window.innerHeight : 900) - 168),

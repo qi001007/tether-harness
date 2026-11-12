@@ -110,3 +110,4 @@
 
 - 2026-11-12：将 `NetworkGraph` 函数恢复为 E 主仓库已调好的 requestAnimationFrame 力导向实现，保留环形/三角布局、速度状态和拖动/选择行为；移除唯一 Cytoscape import。外围连接/权限回调与详情/连接管理不变。构建 exit 0，等待 r11 实机刷新复验。
 - 2026-11-12：互联图恢复 bundle 经 Terra 实机验收：流动/环形三角、缩放、拖动、浮层与切页后位置正常；跨页速度连续未证明。旧 Cytoscape key 已按精确备份值条件删除，原始值保留在 QA 备份。
+- 2026-11-12：Codeg Agent Home 的终端入口改为 token-free `open_cli` typed hash action；外层按已验证 guest origin/target 解析后创建设备绑定 Tether TerminalDock pane，Dock 只发送 canonical `runtime_agent_type` 与项目 cwd，不再让 Codeg 自己以裸命令创建终端。

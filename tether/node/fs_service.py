@@ -36,7 +36,9 @@ from .agent_registry import AgentRegistry
 from .agent_accounts import AgentAccounts
 from .web_apps import OpenCodeWeb
 from .agents_runtime import AgentsRuntime
-from .terminal import herdr_agent_environment, herdr_agent_kind
+from .terminal import (RUNTIME_AGENT_CLI_ALIASES, herdr_agent_environment,
+                       herdr_agent_kind, runtime_agent_command_path,
+                       runtime_agent_environment)
 from .transfer_jobs import RcloneJobs, TransferJobError
 from .sftpgo_grants import SftpGoGrants, GrantError
 from .service_access import ServiceAccess, ServiceAccessError
@@ -1283,17 +1285,51 @@ class FsService:
             raise FsError(str(exc), "terminal_error") from None
 
     def _op_terminal_start(self, args: dict[str, Any]) -> Any:
+        if "runtime_agent_type" in args:
+            agent_type = args.get("runtime_agent_type")
+            if (not isinstance(agent_type, str) or agent_type not in RUNTIME_AGENT_CLI_ALIASES
+                    or any(key in args for key in (
+                        "command", "env", "agent", "herdr_agent_type", "herdr_project",
+                        "_runtime_agent_env", "_herdr_agent_env", "shell"))):
+                raise FsError("invalid runtime agent start request", "bad_args")
+            cwd = args.get("cwd")
+            if not isinstance(cwd, str) or not cwd or not Path(cwd).expanduser().is_dir():
+                raise FsError("Agent project directory is unavailable", "bad_args")
+            runtime = getattr(self, "agents_runtime", None)
+            if runtime is None:
+                raise FsError("Agents Runtime is unavailable", "unavailable")
+            try:
+                record = runtime.agent_record(agent_type)
+            except ValueError as exc:
+                raise FsError(str(exc), "terminal_error") from None
+            node_env = getattr(self.terminal, "env", os.environ)
+            if not isinstance(node_env, dict):
+                node_env = os.environ
+            agent_env = runtime_agent_environment(agent_type, record["env"], node_env)
+            command = runtime_agent_command_path(agent_type, agent_env or {}, [])
+            if not command:
+                catalog = self.agents.catalog() if getattr(self, "agents", None) is not None else {}
+                records = catalog.get("agents") if isinstance(catalog, dict) else None
+                records = records if isinstance(records, list) else []
+                agent_env = runtime_agent_environment(agent_type, record["env"], node_env, records)
+                command = runtime_agent_command_path(agent_type, agent_env or {}, records)
+            if agent_env is None or not command:
+                raise FsError("The selected agent CLI is not installed on this node.",
+                              "agent_unavailable")
+            args = {**args, "shell": "agent", "command": [command],
+                    "_runtime_agent_env": agent_env}
         if "herdr_agent_type" in args:
             agent_type = args.get("herdr_agent_type")
             if (not isinstance(agent_type, str) or herdr_agent_kind(agent_type) is None
                     or args.get("shell") != "herdr" or args.get("herdr_project") is not True
-                    or any(key in args for key in ("agent", "command", "env", "_herdr_agent_env"))):
+                    or any(key in args for key in ("agent", "command", "env", "_herdr_agent_env",
+                                                    "runtime_agent_type", "_runtime_agent_env"))):
                 raise FsError("invalid Herdr agent start request", "bad_args")
             runtime = getattr(self, "agents_runtime", None)
             if runtime is None:
                 raise FsError("Agents Runtime is unavailable", "unavailable")
             try:
-                record = runtime.herdr_agent(agent_type)
+                record = runtime.agent_record(agent_type)
             except ValueError as exc:
                 raise FsError(str(exc), "terminal_error") from None
             node_env = getattr(self.terminal, "env", os.environ)

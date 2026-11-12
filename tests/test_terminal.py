@@ -68,6 +68,7 @@ def test_terminal_lists_shells_and_starts_in_requested_cwd(tmp_path) -> None:
     assert any(item["available"] for item in catalog["shells"])
     herdr = next((item for item in catalog["shells"] if item["id"] == "herdr"), None)
     assert catalog["herdr_agent_start"] is bool(herdr and herdr["available"])
+    assert catalog["runtime_agent_start"] is True
     assert all(item["project_sessions"] == (item["id"] == "herdr") for item in catalog["shells"])
     nested = tmp_path / "nested"
     nested.mkdir()
@@ -100,11 +101,12 @@ def test_herdr_project_agent_uses_the_verified_root_pane_from_cli(tmp_path, monk
         raise AssertionError(arguments)
 
     monkeypatch.setattr(terminal, "_herdr_cli", cli)
-    pane_id, tab_id = terminal._herdr_project_pane(
+    pane_id, tab_id, agent_state = terminal._herdr_project_pane(
         "project-session", tmp_path, {}, "qoder", "qodercli",
         terminal._herdr_agent_environment({"QODER_HOME": "user-config"}))
 
     assert (pane_id, tab_id) == ("w7:p9", "w7:t4")
+    assert agent_state == "ready"
     start = calls[-1]
     assert start[start.index("--pane") + 1] == "w7:p9"
     assert start[start.index("--kind") + 1] == "qodercli"
@@ -146,6 +148,81 @@ def test_herdr_project_agent_failure_closes_only_the_tab_created_for_this_start(
     assert calls[-2][calls[-2].index("--timeout") + 1] == "6000"
 
 
+@pytest.mark.parametrize("agent_failure,expected_state", [
+    ("agent_not_ready", "blocked"),
+    ("agent_start_failed", None),
+])
+def test_herdr_agent_not_ready_keeps_user_action_prompt_and_fatal_still_cleans_up(
+        tmp_path, monkeypatch, agent_failure, expected_state) -> None:
+    import tether.node.terminal as terminal_module
+
+    class FakePty:
+        cancelled = 0
+
+        def isalive(self):
+            return True
+
+        def cancel_io(self):
+            self.cancelled += 1
+
+    class NoopThread:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def start(self):
+            pass
+
+    fake_pty = FakePty()
+    session = terminal_module._Session("session-herdr", str(tmp_path), "herdr",
+                                       pty=fake_pty, pty_mode=True)
+    terminal = TerminalService.__new__(TerminalService)
+    terminal.cwd = tmp_path
+    terminal.env = {}
+    terminal.specs = {"herdr": ("Herdr", ["herdr"], "herdr")}
+    terminal.forced_shell = ["herdr"]
+    terminal.sessions = {}
+    terminal._start_pty = lambda *_args, **_kwargs: session
+    calls = []
+
+    def herdr_cli(_session, _cwd, _env, arguments, _timeout):
+        calls.append(arguments)
+        if arguments[:2] == ["workspace", "list"]:
+            return {"workspaces": [{"workspace_id": "w3"}]}
+        if arguments[:2] == ["tab", "create"]:
+            return {"root_pane": {"pane_id": "w3:p4", "tab_id": "w3:t5",
+                                  "workspace_id": "w3"},
+                    "tab": {"tab_id": "w3:t5"}}
+        if arguments[:2] == ["agent", "start"]:
+            if agent_failure == "agent_not_ready":
+                raise terminal_module._HerdrAgentNotReady()
+            raise ValueError("Herdr command failed [agent_start_failed]")
+        if arguments[:2] == ["tab", "close"]:
+            return {"type": "ok"}
+        raise AssertionError(arguments)
+
+    terminal._herdr_cli = herdr_cli
+    monkeypatch.setattr(terminal_module.threading, "Thread", NoopThread)
+    request = {"shell": "herdr", "herdr_project": True,
+               "herdr_agent_type": "codex", "_herdr_agent_env": {},
+               "cwd": str(tmp_path)}
+
+    if expected_state == "blocked":
+        result = terminal.start(request)
+        assert result["session_id"] == session.id
+        assert result["agent_state"] == "blocked"
+        assert session.id in terminal.sessions
+        assert terminal._is_alive(session)
+        assert fake_pty.cancelled == 0
+        assert not any(call[:2] == ["tab", "close"] for call in calls)
+    else:
+        with pytest.raises(ValueError, match=r"agent_start_failed"):
+            terminal.start(request)
+        assert session.id not in terminal.sessions
+        assert session.closed
+        assert fake_pty.cancelled == 1
+        assert calls[-1] == ["tab", "close", "w3:t5"]
+
+
 def test_herdr_capability_matches_the_current_codeg_agent_types() -> None:
     from tether.node.terminal import HERDR_AGENT_CLI_ALIASES, HERDR_AGENT_KINDS
 
@@ -155,6 +232,15 @@ def test_herdr_capability_matches_the_current_codeg_agent_types() -> None:
         "qwen_code": "qwen", "qoder": "qodercli",
     }
     assert set(HERDR_AGENT_CLI_ALIASES) == set(HERDR_AGENT_KINDS)
+
+
+def test_runtime_agent_cli_aliases_cover_home_terminal_actions() -> None:
+    from tether.node.terminal import RUNTIME_AGENT_CLI_ALIASES
+
+    assert set(RUNTIME_AGENT_CLI_ALIASES) == {
+        "codex", "qoder", "gemini", "claude_code", "open_code", "open_claw",
+        "code_buddy", "kimi_code", "minimax_code", "command_code", "cursor",
+    }
 
 
 @pytest.mark.parametrize("agent_type,command", [
@@ -208,7 +294,12 @@ def test_herdr_agent_environment_keeps_codeg_and_node_paths_when_cli_is_resolvab
     assert str(node_path) in env["PATH"].split(os.pathsep)
 
 
-def test_herdr_cli_reports_only_an_allowlisted_agent_failure_phase(tmp_path, monkeypatch) -> None:
+@pytest.mark.parametrize("error_code,phase", [
+    ("command_not_found", "agent_cli_unavailable"),
+    ("agent_wait_timeout", "agent_start_timeout"),
+])
+def test_herdr_cli_reports_only_an_allowlisted_agent_failure_phase(
+        tmp_path, monkeypatch, error_code, phase) -> None:
     from types import SimpleNamespace
     import tether.node.terminal as terminal_module
 
@@ -216,11 +307,11 @@ def test_herdr_cli_reports_only_an_allowlisted_agent_failure_phase(tmp_path, mon
     monkeypatch.setattr(terminal_module, "_herdr_binary", lambda: "herdr.exe")
     monkeypatch.setattr(terminal_module.subprocess, "run", lambda *_args, **_kwargs:
                         SimpleNamespace(returncode=1,
-                                        stdout='{"error":{"code":"command_not_found",'
+                                        stdout='{"error":{"code":"' + error_code + '",'
                                                '"message":"secret payload"}}',
                                         stderr="secret stderr"))
 
-    with pytest.raises(ValueError, match=r"Herdr command failed \[agent_cli_unavailable\]") as exc:
+    with pytest.raises(ValueError, match=rf"Herdr command failed \[{phase}\]") as exc:
         terminal._herdr_cli("qa-session", tmp_path, {}, ["agent", "start", "codex"], 1.0)
 
     assert "secret" not in str(exc.value)
@@ -272,10 +363,11 @@ def test_herdr_project_agent_uses_workspace_create_root_pane_when_new(tmp_path, 
         raise AssertionError(arguments)
 
     monkeypatch.setattr(terminal, "_herdr_cli", cli)
-    pane_id, tab_id = terminal._herdr_project_pane(
+    pane_id, tab_id, agent_state = terminal._herdr_project_pane(
         "project-session", tmp_path, {}, "codex", "codex", {})
 
     assert (pane_id, tab_id) == ("w2:p1", "w2:t1")
+    assert agent_state == "ready"
     assert not any(call[:2] == ["tab", "create"] for call in calls)
     assert calls[-1][calls[-1].index("--pane") + 1] == "w2:p1"
 
@@ -286,7 +378,7 @@ def test_fs_terminal_start_uses_authenticated_record_and_registry_only_for_cli_p
     class Runtime:
         calls = 0
 
-        def herdr_agent(self, agent_type):
+        def agent_record(self, agent_type):
             self.calls += 1
             assert agent_type == "codex"
             return {"agent_type": agent_type, "env": {"CODEX_PROFILE": "default"}}
@@ -328,6 +420,143 @@ def test_fs_terminal_start_uses_authenticated_record_and_registry_only_for_cli_p
     with pytest.raises(FsError, match="invalid Herdr agent start request"):
         fs._op_terminal_start({**request, "command": ["cmd.exe"]})
     assert runtime.calls == 1
+
+
+def test_fs_runtime_agent_cli_uses_codeg_record_and_registry_only_for_path(tmp_path) -> None:
+    from tether.node.fs_service import FsError, FsService
+
+    class Runtime:
+        calls = 0
+
+        def agent_record(self, agent_type):
+            self.calls += 1
+            assert agent_type == "codex"
+            return {"agent_type": agent_type, "env": {"CODEX_PROFILE": "shared-account"}}
+
+    class Terminal:
+        args = None
+        env = {"PATH": "node-task-path"}
+
+        def dispatch(self, action, args):
+            assert action == "start"
+            self.args = args
+            return {"session_id": "session-cli", "shell": "agent"}
+
+    class Agents:
+        def catalog(self):
+            return {"agents": [{"id": "local-record", "command": str(cli_path),
+                                "enabled": False, "available": False}]}
+
+    cli_path = tmp_path / "codex.CMD"
+    cli_path.touch()
+    runtime = Runtime()
+    terminal = Terminal()
+    fs = FsService.__new__(FsService)
+    fs.agents_runtime = runtime
+    fs.terminal = terminal
+    fs.agents = Agents()
+    request = {"runtime_agent_type": "codex", "cwd": str(tmp_path)}
+
+    result = fs._op_terminal_start(request)
+
+    assert result == {"session_id": "session-cli", "shell": "agent"}
+    assert runtime.calls == 1
+    assert terminal.args["shell"] == "agent"
+    assert terminal.args["command"] == [str(cli_path)]
+    assert terminal.args["_runtime_agent_env"]["CODEX_PROFILE"] == "shared-account"
+    assert str(tmp_path) in terminal.args["_runtime_agent_env"]["PATH"].split(os.pathsep)
+    assert "_runtime_agent_env" not in result
+    with pytest.raises(FsError, match="invalid runtime agent start request"):
+        fs._op_terminal_start({**request, "command": ["cmd.exe"]})
+    with pytest.raises(FsError, match="invalid runtime agent start request"):
+        fs._op_terminal_start({**request, "env": {"TOKEN": "must-not-pass"}})
+    assert runtime.calls == 1
+
+
+def test_fs_runtime_agent_cli_skips_registry_catalog_when_path_resolves(tmp_path, monkeypatch) -> None:
+    from tether.node.fs_service import FsService
+    from tether.node import terminal as terminal_module
+
+    cli_path = tmp_path / "codex"
+    cli_path.touch()
+
+    class Runtime:
+        calls = 0
+
+        def agent_record(self, agent_type):
+            self.calls += 1
+            assert agent_type == "codex"
+            return {"agent_type": agent_type, "env": {"CODEX_PROFILE": "shared-account"}}
+
+    class Terminal:
+        env = {"PATH": "node-path"}
+        args = None
+
+        def dispatch(self, action, args):
+            assert action == "start"
+            self.args = args
+            return {"session_id": "session-path", "shell": "agent"}
+
+    class Agents:
+        def catalog(self):
+            raise AssertionError("Node registry catalog must not run for PATH-resolved CLIs")
+
+    monkeypatch.setattr(
+        terminal_module.shutil, "which",
+        lambda alias, path=None: str(cli_path) if alias == "codex" else None,
+    )
+    runtime = Runtime()
+    terminal = Terminal()
+    fs = FsService.__new__(FsService)
+    fs.agents_runtime = runtime
+    fs.terminal = terminal
+    fs.agents = Agents()
+
+    result = fs._op_terminal_start({"runtime_agent_type": "codex", "cwd": str(tmp_path)})
+
+    assert result["session_id"] == "session-path"
+    assert runtime.calls == 1
+    assert terminal.args["command"] == [str(cli_path)]
+    assert terminal.args["_runtime_agent_env"]["CODEX_PROFILE"] == "shared-account"
+    assert "node-path" in terminal.args["_runtime_agent_env"]["PATH"]
+
+
+def test_runtime_agent_cli_requires_real_project_cwd_and_uses_agent_pty(tmp_path) -> None:
+    import sys
+
+    terminal = TerminalService(tmp_path)
+    with pytest.raises(ValueError, match="Agent project directory is unavailable"):
+        terminal.start({"runtime_agent_type": "codex", "shell": "agent",
+                        "command": [sys.executable], "_runtime_agent_env": {},
+                        "cwd": str(tmp_path / "missing")})
+    session = terminal.start({"runtime_agent_type": "codex", "shell": "agent",
+                              "command": [sys.executable, "-c", "import os; print(os.environ['CODEX_PROFILE'])"],
+                              "_runtime_agent_env": {"CODEX_PROFILE": "shared-account"},
+                              "cwd": str(tmp_path)})
+    try:
+        output = b""
+        since = 0
+        deadline = time.time() + 10
+        while time.time() < deadline:
+            result = terminal.poll({"session_id": session["session_id"], "since": since})
+            since = result["next"]
+            output += base64.b64decode(result["data"])
+            if b"shared-account" in output:
+                break
+            time.sleep(0.1)
+        assert b"shared-account" in output
+        assert session["shell"] == "agent"
+        assert session["cwd"] == str(tmp_path)
+    finally:
+        terminal.stop({"session_id": session["session_id"]})
+
+
+def test_runtime_agent_windows_cmd_shim_remains_in_agent_pty() -> None:
+    from tether.node.terminal import _windows_pty_command
+
+    assert _windows_pty_command("agent", ["codex.cmd", "--help"]) == [
+        "cmd.exe", "/d", "/s", "/c", 'codex.cmd --help'
+    ]
 
 
 def test_terminal_falls_back_for_bad_cwd_and_rejects_bad_shell(tmp_path) -> None:

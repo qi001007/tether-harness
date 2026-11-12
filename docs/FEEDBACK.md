@@ -7,7 +7,7 @@
 - [x] F153：恢复 VSCode 风格资源管理器的打开、编辑、保存。仅移除普通 APP 的 native Files 拦截，恢复原已鉴权 Hub API；保留原编辑器。Terra 实机打开文本及 Python 文件并编辑保存；Python 的 Monaco 行号、语法高亮、minimap、状态栏正常，222→247 B，主代理独立预览读回新增注释且版本哈希变化。证据 `.scratch/evidence/files-monaco-restored-20261112.png`、`files-monaco-readback-20261112.json`。仅写专属 QA 文件，未执行 Python。
 - [ ] F154：Codeg/Herdr 合为一个 Agent 页面；先选/新建项目，再选 Agent，然后选择结构化、Herdr 或传统 CLI。统一前端已部署：结构化直接进入新会话且真实回复 `AGENT-1112-LOCAL`；主页与会话来回保留、通用新建入口及打开文件夹通过，细隐藏滚动条及无用关闭按钮已处理。Herdr 和传统 CLI 的实际启动仍待完成验收。
 - [x] F155：修好本机 Codeg 的状态异常和无法打开。已将本机受控切到现有 0.5.2 Node，并部署仅同机的既有 token gateway 打开路径；Terra 正常按钮启动一次后进入真实 Codeg 工作台，主代理独立回读 installed/running=true、port=4201。专属实例 PID 27788，未碰 E 基线的另一个既有实例。截图 `.scratch/evidence/codeg-local-open-20261112.png`；本次仅验启动/打开，统一新入口与新对话另归 F154。
-- [ ] F156：核实并修复更新交付。Hub preview manifest 0.5.2 可达，本机 Node 已为 0.5.2、笔记本仍 0.4.11、云端 0.5.2；Laptop 0.5.2 Prepare 通过但未 Switch。当前运行 APP 是 0.5.2 解包候选，0.5.3 preview 源码候选待构建，普通安装更新全链路尚未验收。
+- [ ] F156：核实并修复更新交付。Hub preview manifest 0.5.2 可达，本机/云端 Node 为 0.5.2，笔记本为 0.4.11。Laptop 0.5.2 迁移业务检查保留 24 项目/167 会话，但确认脚本异常；已完整回滚原 launcher/ACL、旧 Node/Codeg 与数据基线。0.5.3 干净 Codeg 构建通过，四平台 CI 进行中，普通安装更新全链路尚未验收。
 
 实施与验收计划：`BUSINESS_RESTORE_2026-11-12.md`。本节优先于下方历史快照。
 

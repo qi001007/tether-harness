@@ -43,3 +43,5 @@
 - 2026-11-11：对齐 Node UI 验收门：awaiting_acceptance 时 status 暴露 transaction/prepared_id 并清除待验收重启提示；commit 原子清除 applied-node 的 restart_required 后才删备份。Node rollback 成功响应后请求一次重启。
 
 - 2026-11-12：候选 metadata 提升 APP/Node 至 0.5.3，plugin 保持 0.2.93；未重建依赖、未发布。
+
+- 2026-11-12：修复 Codeg clean CI patch 漏掉的 `src/stores/tab-store.ts`：加入 `forceAgentSelection` 类型、draft 状态保存/恢复、选 Agent 消费与会话绑定清理；clean forward 与 canonical reverse 检查通过。

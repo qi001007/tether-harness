@@ -8,7 +8,8 @@
 - Codeg 在主进程中复用既有隔离 token gateway。同机仍按本机身份门禁；远端现代目录只有在 fresh 已鉴权快照确认目标在线、自有、私网地址与本机 EasyTier 同网段，且没有共同 ready network 时才走既有兼容路径；共同 ready network、非自有或共享设备继续原 service_open。不是 service_open 失败后的泛化回退。严格 token URL/host、隔离 session、actor generation 与 origin guard 保留。
 - 09:26 APP 已部署 owned-device 兼容 ASAR，SHA-256 `DC3AF16FB2C9F2D547321E43C2C42EF1F15184A862EA8327E9FD3CC6F426C71A`，379 成员/305 文件，主代理独立比较仅 native-workbench.js 变化；当前主进程 PID 50948，使用原数据和账号。统一入口 bundle SHA-256 `91DF01D67278DFA38ECD8A967D414AC658D861B8E528AD8346C2F102CBF55808`。客户端“关于”实测为 0.5.2；不能据此声称完整安装发行版或普通更新链路通过。
 - Herdr 选择沿用 Agents Runtime 的 canonical enabled/available/env，Node Registry 只补充已存在 vendor CLI 路径；不作为第二重启用门禁。09:30 本机两个 Node 模块已部署且主代理独立核对源/运行文件 SHA 一致。Herdr capability 为 true，但 Codex QA 启动在约 7 秒返回 agent_start_failed，未达 ready，尚待诊断；没有发送模型 prompt。
-- Laptop 新 Node Prepare 和进程识别实机预检已通过，但仍运行旧 0.4.11，未 Switch。切换 wrapper 显式复用旧 node-local.db，从而保留 data_dir/Codeg 历史，不复制活动 SQLite；回滚只停止唯一候选目录内、本次启动后且同用户的 Codeg 及其子进程。
+- Laptop 切换 wrapper 显式复用旧 node-local.db，实际新 Node --db、CODEG_DATA_DIR、端口和 24 项目/167 会话都与旧基线匹配，没有复制 SQLite。该次确认脚本失败，ERROR 状态替换丢失 start_attempt_utc 又导致 StrictMode 回退异常；仅在候选 Codeg 已停的条件下备份并补回空字段，复用原 helper 完成 ROLLED_BACK。原 launcher SHA/ACL、0.4.11 Node、旧 Codeg 与 24/167 基线已恢复；不能把该迁移当成普通更新成功。
+- 传统 CLI 补充链路已实现并通过定向测试/构建：Home 只发无凭据的 open_cli hash，外层沿现有 origin/main-frame/固定参数校验路由到设备绑定 TerminalDock；新 Node capability 声明理解 runtime_agent_type，每次仍通过已鉴权的 Codeg catalog 读取 enabled/available/env，Node Registry 仅用于缺少 vendor 路径时的查找。旧 Node 不支持时明确拒绝。此补充尚未部署，不能声称三种模式均实机通过。
 
 ## 2026-11-11 更新事务与当前部署边界
 

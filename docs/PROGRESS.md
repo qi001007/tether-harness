@@ -7,7 +7,7 @@
 - 统一 Agent 新前端已部署：实际项目选择→Codex→结构化直接进入新会话，收到 `AGENT-1112-LOCAL`，UI 显示用时 1 秒；回主页、返回原会话以及通用“新建会话”入口通过。Herdr 路径修复正在部署，Herdr 与传统 CLI 尚未完整验收。
 - 本机 Codeg 正常启动与真实回复已通过；原会话和 DSH 保留。截图 `unified-agent-home-20261112.png`、`unified-agent-local-reply-20261112.png` 位于 `.scratch/evidence`。09:15–09:19 主代理又实测原互联图拖拽、连线跟随、详情浮层和切页位置保持，均通过。
 - 本机 Node 已受控切到现有 `D:\Tether\node-0.5.2-r11`，设备身份与策略未变；DSH 既有 `LOCAL-1111-1400` 回复及 composer 实机保留。精确回退 `D:\Tether\rollback\node-0.5.2-r11-20261112-073438-324`。同机 Codeg 主进程 token gateway 修复已部署，25 项门禁通过，实际打开待统一前端部署后验收。
-- 更新源 preview manifest 0.5.2 可达，实际运行节点版本仍不一致；Laptop 新 Node Prepare 通过但未 Switch，旧 0.4.11 仍在线。0.5.3 preview 源码候选待构建，当前 APP 是 0.5.2 解包候选。计划及验收表见 `BUSINESS_RESTORE_2026-11-12.md`；下方均为历史分阶段记录。
+- 更新源 preview manifest 0.5.2 可达，实际运行节点版本仍不一致。Laptop 曾切到 staged 0.5.2，实际 Node/端口/DSH、旧 DB 路径、24 个项目/167 条会话和 APP 新主页均验证保留；确认控制脚本异常后已完整回滚至 0.4.11，原 launcher 哈希/ACL 和旧 Codeg 24/167 基线均恢复。后续先核实原更新器能否直接更新最终 0.5.3，不重复安装 runtime。0.5.3 的干净 Codeg 构建已通过，四平台安装包 CI 进行中；CLI 共用所选 Agent 配置的补充源码/构建通过，尚未部署。当前 APP 为 0.5.2 解包候选。
 
 ## 2026-11-11 当前真实状态（更新事务与 409 恢复）
 
