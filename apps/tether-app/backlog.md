@@ -145,3 +145,4 @@
 - 2026-11-12：modern remote Codeg 仅在 fresh Controller snapshot 确认当前 actor、目标为该 actor 在线自有设备、没有共同 ready network，且 direct_api 私网地址与本机 EasyTier 子网匹配时，复用既有隔离 token gateway；共享/非owner/无旧网条件继续原 `service_open`，状态/网络目录错误原样失败。启动后状态 URL 仍严格匹配证明过的 direct host，token 不进入 renderer。
 
 - 2026-11-12：新增 0.5.3 APP 候选版本，package.json 与 package-lock.json 同步，Node 版本由 version.json/pyproject.toml 保持同号；插件冻结 0.2.93，尚未构建或发布。
+- 2026-11-12：迁移判定将完整的 OIDC + external Node `hub.json` 配置视为已初始化 profile，即使用户已登出且没有 Node credential / OIDC session 文件；认证启动路径不变，缺必需字段仍拒绝合并。

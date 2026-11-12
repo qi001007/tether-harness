@@ -144,6 +144,7 @@ function hasExistingIdentity(dataDir) {
   let config
   try { config = JSON.parse(fs.readFileSync(path.join(dataDir, 'hub.json'), 'utf8')) } catch (_) { return false }
   const device = String(config.device || '').trim()
+  if (config.desktopAuthMode === 'oidc' && config.nodeMode === 'external' && hubOrigin(config.url) && device) return true
   let credential = String(config.nodeToken || '')
   try {
     const saved = JSON.parse(fs.readFileSync(path.join(dataDir, 'device-token.json'), 'utf8'))
