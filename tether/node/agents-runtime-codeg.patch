@@ -1868,7 +1868,7 @@ index 21fa778..705eece 100644
          className="size-3 shrink-0 text-muted-foreground/50"
 diff --git a/src/components/workspace/tether-agent-home.tsx b/src/components/workspace/tether-agent-home.tsx
 new file mode 100644
-index 0000000..b86ded9
+index 0000000..8f54cb4
 --- /dev/null
 +++ b/src/components/workspace/tether-agent-home.tsx
 @@ -0,0 +1,691 @@
@@ -1898,7 +1898,7 @@ index 0000000..b86ded9
 +import { isOpenCodeV1Release } from "@/lib/agent-version"
 +import { acpUpdateAgentPreferences } from "@/lib/api"
 +import type { AcpAgentInfo, AgentType, FolderDetail } from "@/lib/types"
-+import { cn } from "@/lib/utils"
++import { cn, randomUUID } from "@/lib/utils"
 +import { NewFolderDropdown } from "@/components/layout/new-folder-dropdown"
 +import { formatFolderLabelWithAlias } from "@/lib/folder-display"
 +
@@ -1989,7 +1989,7 @@ index 0000000..b86ded9
 +      if (!command || !selectedProject) return
 +      const action = new URLSearchParams({
 +        tether_action: "open_cli",
-+        request_id: crypto.randomUUID(),
++        request_id: randomUUID(),
 +        agent_type: agent.agent_type,
 +        cwd: selectedProject.path,
 +      })
@@ -2003,7 +2003,7 @@ index 0000000..b86ded9
 +      if (!selectedProject || !HERDR_AGENT_KIND[agent.agent_type]) return
 +      const action = new URLSearchParams({
 +        tether_action: "open_herdr",
-+        request_id: crypto.randomUUID(),
++        request_id: randomUUID(),
 +        agent_type: agent.agent_type,
 +        cwd: selectedProject.path,
 +      })
@@ -2971,10 +2971,10 @@ index 35c010e..eb3ca9c 100644
          }
 diff --git a/src/components/workspace/tether-agent-home.test.tsx b/src/components/workspace/tether-agent-home.test.tsx
 new file mode 100644
-index 0000000..56899ed
+index 0000000..5219a04
 --- /dev/null
 +++ b/src/components/workspace/tether-agent-home.test.tsx
-@@ -0,0 +1,81 @@
+@@ -0,0 +1,106 @@
 +import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 +import { afterEach, describe, expect, it, vi } from "vitest"
 +
@@ -3033,6 +3033,7 @@ index 0000000..56899ed
 +
 +afterEach(() => {
 +  cleanup()
++  vi.unstubAllGlobals()
 +  window.history.replaceState({}, "", "/workspace")
 +  mocks.openNewConversationTab.mockReset()
 +  mocks.openConversations.mockReset()
@@ -3054,6 +3055,30 @@ index 0000000..56899ed
 +    expect(params.has("command")).toBe(false)
 +    expect(params.has("env")).toBe(false)
 +    expect(mocks.openNewConversationTab).not.toHaveBeenCalled()
++  })
++
++  it("opens CLI and Herdr with getRandomValues when randomUUID is unavailable", () => {
++    vi.stubGlobal("crypto", {
++      getRandomValues: (bytes: Uint8Array) => bytes.fill(0),
++    })
++
++    expect(typeof crypto.randomUUID).toBe("undefined")
++    expect(typeof crypto.getRandomValues).toBe("function")
++
++    render(<TetherAgentPage />)
++    fireEvent.click(screen.getByRole("button", { name: "终端" }))
++
++    const cliParams = new URLSearchParams(window.location.hash.slice(1))
++    expect(cliParams.get("tether_action")).toBe("open_cli")
++    expect(cliParams.get("request_id")).toBe("00000000-0000-4000-8000-000000000000")
++
++    fireEvent.click(screen.getByRole("button", { name: "Herdr" }))
++
++    const herdrParams = new URLSearchParams(window.location.hash.slice(1))
++    expect(herdrParams.get("tether_action")).toBe("open_herdr")
++    expect(herdrParams.get("agent_type")).toBe("codex")
++    expect(herdrParams.get("cwd")).toBe(mocks.project.path)
++    expect(herdrParams.get("request_id")).toBe("00000000-0000-4000-8000-000000000000")
 +  })
 +})
 diff --git a/src/components/layout/workbench-route-conversation-sync.tsx b/src/components/layout/workbench-route-conversation-sync.tsx
