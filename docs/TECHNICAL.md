@@ -1,8 +1,17 @@
 # Tether 技术说明
 
+## 2026-11-13 原生项目入口约束
+
+- F163 的项目上下文使用现有 `WorkbenchRoute.requestedProjectId`，没有显式选择时回退到当前会话的原生文件夹；Agent Home 不再维护本地项目 ID，也不渲染项目列。原生项目名选择项目，原有箭头独立折叠；打开文件夹与 launcher 事件进入 Agent Home，只有结构化动作才建草稿。
+- 返回终端主页时保留侧栏选择；进入实际历史会话时清除显式选择，使 Home 跟随该会话项目。首次全新草稿和复用草稿都必须保留同一 `forceAgentSelection` 标记。实际验收按两个项目、无已有草稿、已有历史会话分别执行；聚焦单元测试与真实 APP 结果分别记录。
+
 ## 2026-11-12 业务恢复
 
-- F158/F159 运行时定位：LAPTOP Codeg 实际返回的 workspace 为旧前端（`08fab9...`），token bridge 与 canonical 相同；不能因 token 默认跳转 agents 就认定所有新建动作已经适配。外层 `agents-page.js` 的固定 header 在 `codeg:home` 时没有内容，仍占 43px；应让容器随实际控件显示，保持终端和远程桌面操作栏。F160 还在核对原生 DSH Host 项目选择器的真实运行接口，不直接修改生成 vendor bundle。
+- F162 私网模式入口：真实 guest 是普通 HTTP 私网 origin，浏览器只提供 `crypto.getRandomValues`，没有仅限安全上下文的 `crypto.randomUUID`。Home 两个点击回调在创建请求 ID 时先抛 TypeError，故没有 hash 导航、终端 API 请求或 PTY。上游已有 `@/lib/utils.randomUUID`，其他 Codeg context/HTTP 预览正在使用；复用该函数即可，不加依赖/新生成器或降低浏览器安全设置。回归须显式移除原生 randomUUID，分别验证 Herdr/CLI 的固定字段与请求 ID。
+- Node 首跳验收：当前实际旧 0.5.2 updater/CLI 没有 commit 方法，首次升级保留传统 backup 并清 prepared，Node 重启后 current/runtime=0.5.4、restart_required=false，status.transaction=null。不能仅凭本地最新源码推断运行旧端会生成事务。QA verify 原来直接调用被主进程禁止的 `/dsh/surface`，已移除此错误探针，保留真实 service_catalog 与 fs/dsh_status；该 API 必须走产品既有受信任工作台入口。CDP helper 同时补检查 exceptionDetails，避免把受拒绝调用读成 HTTP 0。
+
+- F158/F159：目标旧静态文件已以实际服务目录为边界替换并逐项校验，原 24 项目/167 会话不变。项目/标签新建均进入项目→Agent 主页，选定 Agent 的结构化草稿保留原生 ChatInput 并隐藏上游欢迎模板；工作台首次空快照路由由独立同步组件处理。APP 主进程已准备的 guest 在重挂载时不会再走 token 页，因此 `openNativeCodeg` 仅对本次 pane 的 service 副本指定 `/workspace?tether_home=1`；不改主进程 descriptor、认证或会话返回路径。空 header 仅在有控件时渲染，真实 guest/main y=40 对齐。当前安装 UI SHA `91A78B69F46FBC600737A569EC3F55E6BFF6D0FFEE66D3521E77A4F0E2F6D931`。
+- F160：DSH 0.2.1-rc.5 的 `directory-picker` auto 默认选 native，NativeDirectoryFlow 不渲染页面弹窗而调用目标机器 OS。在原 desktop profile 的 Cordis patch 禁用稳定 auto row，插入官方 `@deepseek-ai/dsh-host-directory-picker-browse` 与 `@deepseek-ai/dsh-client-ui-directory-picker-browse`，使用默认配置；不修改原生 vendor bundle、不覆写 Tether 0.4.1 插件。原 profile 790 B/原 SHA `b863843b...` 已原位备份，追加后 SHA `aac510d0...`，原字节前缀、owner 与 ACL 均保持。Host HMR 处理配置后仅重载对应 guest，fresh boot 读到 browse client；页面目录弹窗→创建/选择专属 QA 目录→注册 dsh workspace 的实际链路通过。原 Host PID8244 保留；下一次普通 Host 重启仍需随常规回归确认持久配置加载。
 
 - F157 登录保持：实际 Casdoor 桌面应用的 refresh 配置为 0，最新续期 JWT 与访问凭据同为 8 小时，已到期；旧客户端将任意刷新失败删除加密文件。仅将 `admin/tether-desktop` 的 refresh 窗口改为 720 小时，逐字段比对确认其他应用配置未变，原行服务器 mode-600 备份保留。客户端增加单飞续期、轮换后原子保存、临时失败保留/可重试、退出时的代际检查；主进程在状态读取/请求前确保会话有效，UI 在可重试状态保留数据并 15 秒后恢复。主代理独立 37 项 OIDC/集成与 12 项 workflow 测试通过，互联图函数与 E 原基线逐字节相同；真实登录、普通重开和过期路径验收待当前安装包补丁应用后进行。修补发行版为 0.5.4，保留 0.5.3 已发布资产。
 
