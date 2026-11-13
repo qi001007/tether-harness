@@ -150,9 +150,10 @@ def test_herdr_project_agent_failure_closes_only_the_tab_created_for_this_start(
 
 @pytest.mark.parametrize("agent_failure,expected_state", [
     ("agent_not_ready", "blocked"),
+    ("agent_timeout", "unverified"),
     ("agent_start_failed", None),
 ])
-def test_herdr_agent_not_ready_keeps_user_action_prompt_and_fatal_still_cleans_up(
+def test_herdr_agent_unready_keeps_user_action_prompt_and_fatal_still_cleans_up(
         tmp_path, monkeypatch, agent_failure, expected_state) -> None:
     import tether.node.terminal as terminal_module
 
@@ -195,6 +196,8 @@ def test_herdr_agent_not_ready_keeps_user_action_prompt_and_fatal_still_cleans_u
         if arguments[:2] == ["agent", "start"]:
             if agent_failure == "agent_not_ready":
                 raise terminal_module._HerdrAgentNotReady()
+            if agent_failure == "agent_timeout":
+                raise terminal_module._HerdrAgentNotReady("unverified")
             raise ValueError("Herdr command failed [agent_start_failed]")
         if arguments[:2] == ["tab", "close"]:
             return {"type": "ok"}
@@ -206,10 +209,10 @@ def test_herdr_agent_not_ready_keeps_user_action_prompt_and_fatal_still_cleans_u
                "herdr_agent_type": "codex", "_herdr_agent_env": {},
                "cwd": str(tmp_path)}
 
-    if expected_state == "blocked":
+    if expected_state in {"blocked", "unverified"}:
         result = terminal.start(request)
         assert result["session_id"] == session.id
-        assert result["agent_state"] == "blocked"
+        assert result["agent_state"] == expected_state
         assert session.id in terminal.sessions
         assert terminal._is_alive(session)
         assert fake_pty.cancelled == 0
@@ -315,6 +318,37 @@ def test_herdr_cli_reports_only_an_allowlisted_agent_failure_phase(
         terminal._herdr_cli("qa-session", tmp_path, {}, ["agent", "start", "codex"], 1.0)
 
     assert "secret" not in str(exc.value)
+
+
+def test_herdr_cli_timeout_code_returns_unverified_without_error_text(tmp_path, monkeypatch) -> None:
+    from types import SimpleNamespace
+    import tether.node.terminal as terminal_module
+
+    terminal = TerminalService(tmp_path)
+    monkeypatch.setattr(terminal_module, "_herdr_binary", lambda: "herdr.exe")
+    monkeypatch.setattr(terminal_module.subprocess, "run", lambda *_args, **_kwargs:
+        SimpleNamespace(returncode=1,
+                        stdout='{"error":{"code":"timeout","message":"secret payload"}}',
+                        stderr="secret stderr"))
+
+    with pytest.raises(terminal_module._HerdrAgentNotReady) as exc:
+        terminal._herdr_cli("qa-session", tmp_path, {}, ["agent", "start", "codex"], 7.0)
+
+    assert exc.value.state == "unverified"
+    assert "secret" not in str(exc.value)
+
+
+def test_herdr_cli_subprocess_timeout_remains_fatal(tmp_path, monkeypatch) -> None:
+    import tether.node.terminal as terminal_module
+
+    terminal = TerminalService(tmp_path)
+    monkeypatch.setattr(terminal_module, "_herdr_binary", lambda: "herdr.exe")
+    def subprocess_timeout(*_args, **_kwargs):
+        raise terminal_module.subprocess.TimeoutExpired("herdr", timeout=7.0)
+    monkeypatch.setattr(terminal_module.subprocess, "run", subprocess_timeout)
+
+    with pytest.raises(ValueError, match="agent_start_timeout"):
+        terminal._herdr_cli("qa-session", tmp_path, {}, ["agent", "start", "codex"], 7.0)
 
 
 def test_herdr_project_session_metadata_exists_on_posix(tmp_path) -> None:

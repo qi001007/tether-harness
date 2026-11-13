@@ -157,3 +157,5 @@
 - 2026-11-13：Windows Electron APP 更新使用可写的安装卷根目录 `tether-up` 作为 NSIS 临时目录；在 APP 更新关闭前验证创建与写入能力，只在同步 `quitAndInstall(true, true)` 调用窗口临时覆盖子进程 TEMP/TMP，并在 finally 恢复。静默安装继续强制安装后重开；非 Windows 更新参数保持原行为。
 
 - 2026-11-13：Windows packaged APP 更新在下载前按现有 electron-updater 缓存卷检查 2 × files[].size 合计 + 512 MiB；安装前重验 1 × files[].size 合计 + 512 MiB。空间/元数据检查只影响 prepare/apply，错误包含所需与当前可用空间；低空间 apply 保留下载包并在确认回执、停止 Node、退出 APP 前拒绝。现有 TEMP、profile、下载和签名校验路径不变。
+
+- 2026-11-13 058候选：仅将package.json与lock根版本从0.5.7同步到0.5.8，依赖不变；Herdr修复位于Node，APP交互与原互联图未更改。候选构建版本17项Root独立通过，尚未发布/部署。

@@ -239,3 +239,7 @@
 - 2026-11-13：候选版本测试同步到 APP/Node 0.5.7、plugin 0.2.93，并在 workflow 校验中保留 0.5.6 兼容断言及新增 0.5.7 branch/tag/publish gate。
 
 - 2026-11-13：packaged APP 与 bundled managed Node 均由 APP installer 更新的归属保护回归：APP bridge 注册不改局部 Node owner；独立 external Node 不继承该 APP env，Node协议测试确认其注册后仍为 node owner。
+
+- 2026-11-13 F154: 扩展Herdr就绪等待超时保留PTY/tab、unverified状态、秘密不泄漏及真正subprocess超时仍fatal测试，Root与实现代理各36passed；测试临时目录均在D。
+
+- 2026-11-13 058候选：版本同步断言更新APP/Node为0.5.8，插件维持0.2.93；Root独立候选构建17项、workflow校验12项通过，未把CI或源码候选计为实机安装。

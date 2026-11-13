@@ -24,3 +24,5 @@
 - 2026-11-12：签名 stable 发布工作流排除 `v*-preview.*` tags，避免 preview tag 同时触发旧 signed release job。
 
 - 2026-11-13：候选 workflow 新增 `codex/tether-057-recovery-20261113` / `v0.5.7-preview.1` 映射及发布门禁，保留 0.5.2–0.5.6 既有分支、tag 和 draft 条件。
+
+- 2026-11-13 058候选：沿用057流程增加codex/tether-058-herdr-20261113的push、版本/tag、签名装配作业准入和draft映射；保留draft/prerelease/make_latest=false及posix-only门禁。Root独立workflow验证12项通过，未自动公开。

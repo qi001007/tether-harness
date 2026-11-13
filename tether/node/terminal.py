@@ -316,7 +316,9 @@ class _HerdrServerNotReady(Exception):
 
 
 class _HerdrAgentNotReady(Exception):
-    pass
+    def __init__(self, state: str = "blocked") -> None:
+        super().__init__()
+        self.state = state
 
 
 class TerminalService:
@@ -547,9 +549,11 @@ class TerminalService:
             if agent_start:
                 if code == "agent_not_ready":
                     raise _HerdrAgentNotReady()
+                if code == "timeout":
+                    raise _HerdrAgentNotReady("unverified")
                 phase = ("agent_cli_unavailable" if code in {
                     "command_not_found", "executable_not_found", "agent_not_found"}
-                    else "agent_start_timeout" if code in {"timeout", "agent_wait_timeout"}
+                    else "agent_start_timeout" if code == "agent_wait_timeout"
                     else "agent_start_failed")
             else:
                 phase = "workspace_command_failed"
@@ -632,8 +636,8 @@ class TerminalService:
                 self._herdr_cli(session, cwd, env,
                     ["agent", "start", agent_type, "--kind", agent_kind, "--pane", pane_id,
                      "--timeout", "6000"], 7.0)
-            except _HerdrAgentNotReady:
-                return pane_id, created_tab, "blocked"
+            except _HerdrAgentNotReady as not_ready:
+                return pane_id, created_tab, not_ready.state
             return pane_id, created_tab, "ready"
         except Exception:
             if created_tab:
