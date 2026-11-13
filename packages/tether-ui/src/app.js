@@ -7330,6 +7330,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
               h(createAgentsPage, {
                 key: ACTIVE_BASE_GENERATION + '|' + String((state && state.user && (state.user.id || state.user.email)) || accountName || hubEmail || ''),
                 React, Glyph, post, C, host,
+                isActive: view === 'agents',
                 devices: (state && state.devices) || [],
                 localDevice: appLocalDevice,
                 activeDevice: deviceId,

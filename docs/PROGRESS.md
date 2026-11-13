@@ -2,9 +2,13 @@
 
 ## 2026-11-13 最新实机状态
 
+本轮冷启动续验：正式055以原C profile重开，公开IPC确认authenticated=true，APP055、三台在线Node均055。为后续正常更新验收临时增加localhost诊断端口；这不是最终无诊断启动验收。旧055安装缓存已按原大小/SHA核验归档到D盘，C盘释放约1GB。原生主页启动的传统CLI已真实显示Codex0.163.0，当前停在首次Windows沙箱设置选择；未代选安全设置，已关闭本次终端并返回原项目主页。另确认APP冷启动只加载catalog而不自动打开Codeg，F173正在精准修复；不得将手动点开成功当作默认入口已完成。
+
+F173源码已完成：真正进入当前设备Agents页后，一次性复用既有Codeg打开流程；隐藏保活页不会在切设备时后台打开Codeg，已有pane/会话不重建。app.js仅新增一行可见性参数，移除此行后的原始Git blob与eb3501父版本完全一致；未改原图或重复添加项目管理。Root独立38项native/主页/Herdr行为回归、共享UI与WebUI构建和check通过，尚未安装。F172已有真实编译证据：43342284944的Windows job131614714682整体success，NSIS及资产上传均成功，Linux和macOS ARM也成功；最终含F173的候选仍须完整CI和正常升级。
+
 本轮续验：128MB目标已独立stat/SHA核对为134217728字节、摘要与源一致，旧取消任务的4MiB残留也已通过其transfer_id清理，完整目标摘要不变。修复后的typed CLI确实加载OpenAI Codex0.163.0且无缺daemon错误，测试PTY已关闭；其输出含原生Windows沙箱初始化提示，未操作安全设置，不据此宣布交互Agent已完全就绪。当前Codex无model_provider_id绑定、raw env为空，已核对两入口默认CODEX_HOME同用户profile；adapter与native CLI不是同一启动entry。
 
-F171：互传页在短暂离线时自动把Laptop换成Cloud，根因是用onlineDevices重新选择两侧；源码现改为在完整devices目录仍存在时保留设备/路径/选择，下拉保留当前离线项。待正常Node更新产生的短暂offline实机验收。F172：e774源CI43338515201的Windows实际NSIS编译失败于`${IfNot}`未定义；函数定义前已显式引入LogicLib/FileFunc，和F171一起进入下一候选。当前正式APP与三台Node仍055，未将失败构建计为发布/安装。
+F171：互传页在短暂离线时自动把Laptop换成Cloud，根因是用onlineDevices重新选择两侧；源码现改为在完整devices目录仍存在时保留设备/路径/选择，下拉保留当前离线项。待正常Node更新产生的短暂offline实机验收。F172的e774源编译失败已由后续eb3501真实Windows编译成功纠正，最终候选与安装仍待完成。当前正式APP与三台Node仍055，未将源码/CI计为发布或安装。
 
 08:30 后补充：055的大文件互传界面已显示完整128MB目标，最终SHA回读仍待验。取消任务留下4MiB临时分块，确认是正常APP的hubOnly分支未提供已有transfer_cancel回调；已补接原Hub owner路由，独立transfer engine17项、FsService17项及UI/web build/check通过，实机取消清理待下一候选。原图/互传布局未重做。
 

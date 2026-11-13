@@ -1,4 +1,6 @@
 # 修改记录
+- 2026-11-13：原生 Agents 自动打开行为回归覆盖 hidden mount 不打开、首次显示自动打开、隐藏/显示现有 pane 不重建，以及 modern/legacy runtime 门禁和失败后的手动重试。
+- 2026-11-13：将 Herdr pane 测试改为从当前 Agents 源提取 openHerdr 实际闭包执行，覆盖项目/Agent pane key、路径归一化、目标与 Agent 透传，以及缺少项目和不支持 Agent 的拒绝。
 - 2026-11-12：desktop preview workflow validation asserts the isolated 0.5.4 branch/version/tag and draft aggregation while retaining 0.5.2/0.5.3 mappings.
 - 2026-11-13：更新候选版本同步及 desktop preview workflow 测试期望至 0.5.6 / `codex/tether-056-reconnect-20261113` / `v0.5.6-preview.1`；冻结插件 0.2.93、旧候选映射与 draft prerelease 门禁保持。
 - 2026-11-12：signed-release workflow validation asserts that `v*-preview.*` tags are excluded from the stable release trigger.

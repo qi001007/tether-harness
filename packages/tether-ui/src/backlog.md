@@ -1,5 +1,11 @@
 # 变更记录
 
+## 2026-11-13
+
+- 原生 APP 的 Agents 冷启动在服务目录读取成功后自动打开 Codeg 主页，仅作一次尝试；已有 pane、登录等待或不可用状态不触发自动导航，失败继续使用现有重试入口。未构建或部署。
+
+- keepalive Agents 仅在当前页面和目标 pane 可见时自动打开 Codeg；隐藏挂载不消耗一次性尝试，后续首次显示可打开。catalog、pane 保活和设备选择逻辑保持不变。未构建或部署。
+
 ## 2026-11-12
 
 - `agents-page.js` / `terminal-dock.js`：Codeg Home 的传统 CLI 通过与 Herdr 相同的无凭据哈希桥启动，按设备、项目路径和 canonical Agent 类型固定 pane；新 Node capability 门禁后只发送 typed Agent 请求，Node 复用已鉴权 catalog 的配置环境与既有 PTY，旧 Node 明确提示升级。源码/构建已通过，实际部署验收另记。

@@ -2,12 +2,15 @@
 
 ## 2026-11-13 最新实机结果
 
+- [ ] F173 原生主页默认入口：055正常数据目录重启后，Agents停在“目标设备工作台/已就绪/打开Codeg”；已补可见页的一次性原生自动打开，隐藏保活页/已有pane不抢导航，自动失败不循环且可手动重试。Root独立38项native/主页/Herdr行为回归及shared/web build/check通过；下一候选实机验收待完成。
+- [ ] F154 续验边界：传统CLI从原生work/Codex入口确实加载0.163.0，缺daemon已消失；真实屏幕仍停在首次Windows沙箱设置选择，未操作安全设置。已关闭该QA终端并回到原项目主页，不能标记三模式交互全部通过。
+
 - [ ] F171 互传设备保持：实机右侧由Laptop自动改为Cloud；三台Direct API仍可达。已将回退依据改为完整设备目录，短暂离线保留原节点、目录和选择，下拉显示离线状态；实际Node更新时的保持验收待完成。
-- [ ] F172 Windows构建：真实CI43338515201在NSIS migration.nsh的`${IfNot}`失败，尚无可交付Windows包。已补函数定义之前的LogicLib/FileFunc依赖，保持LF和升级流程；下一CI必须实际编译通过。
+- [x] F172 NSIS编译修复：补函数定义之前的LogicLib/FileFunc后，eb3501的CI43342284944 Windows job131614714682完整success，NSIS打包与资产上传均成功。此项仅证明编译修复；含F173的最终发布/安装继续按F165验收。
 - [x] 大文件摘要续验：APP055真实拖拽的128MB目标独立SHA与源一致；仅清理旧取消任务对应4MiB分块后，完整目标摘要仍一致。候选UI取消清理仍归F170待验。
 
-- [ ] F170 文件取消：实机取消128MB任务后残留4MiB `.tether-part.136cb3739efe1488`，正常APP hubOnly缺少cleanup callback；已接回原transfer_cancel通道，17项engine与17项FS测试通过（含另一任务分块保留）。完整128MB目标已在界面出现，摘要回读及候选实机取消清理未完成。
-- [ ] F154 同版本组件修复：Laptop Codex0.163.0官方daemon-only安装exit0，原auth/config和自动更新语义保留，current已恢复；typed CLI验收PTY已创建，启动结果未读。不能据组件安装成功标三模式完成。
+- [ ] F170 文件取消：实机取消128MB任务后残留4MiB `.tether-part.136cb3739efe1488`，正常APP hubOnly缺少cleanup callback；已接回原transfer_cancel通道，17项engine与17项FS测试通过（含另一任务分块保留）。完整128MB目标独立摘要回读通过，候选实机取消清理仍待完成。
+- [ ] F154 同版本组件修复：Laptop Codex0.163.0官方daemon-only安装exit0，原auth/config和自动更新语义保留，current已恢复；typed CLI及真实APP终端均已读取到0.163.0启动画面，当前首次Windows沙箱设置仍待用户选择。不能据组件安装成功标三模式完成。
 
 - [ ] F165 / F156 APP更新：055已通过同包短TEMP安装成功，正式进程2776自动恢复登录；259/260字符MoveFileW对照及NSIS成功画面证实长临时路径阻断。源码已补updater短TEMP与静默安装，安装器自身兼容旧APP的补充仍在实现，下一版正常更新待验。EXE为NotSigned，manifest签名与资产SHA已核。
 - [ ] F164 源码修复：显式重开重新验证endpoint/token，失败保留旧授权和存储；就绪检查不再把Chrome错误页视为ready，并移除重复短超时。Root独立34项native和47项Python测试通过；未发布/部署，真实断连恢复待验。

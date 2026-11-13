@@ -8,7 +8,7 @@ const HERDR_SUPPORTED_CODEG_TYPES = new Set([
 ])
 
 export function createAgentsPage(props) {
-  const { React, devices = [], localDevice = '', activeDevice = '' } = props
+  const { React, devices = [], localDevice = '', activeDevice = '', isActive = true } = props
   const online = devices.filter((item) => item && item.online)
   const initial = activeDevice
     || (localDevice && online.some((item) => item.device_id === localDevice) ? localDevice : '')
@@ -24,10 +24,11 @@ export function createAgentsPage(props) {
   }
   return h('div', { style: { flex: '1 1 auto', minWidth: 0, minHeight: 0, position: 'relative' } },
     ...targets.map((target) => h('div', { key: target, style: { position: 'absolute', inset: 0, display: target === activeDevice || (!activeDevice && target === initial) ? 'flex' : 'none', minWidth: 0, minHeight: 0 } },
-      h(AgentTargetPage, { ...props, initialDevice: target, activeDevice: target, onDeviceChange: onTargetChange }))))
+      h(AgentTargetPage, { ...props, isActive: isActive && (target === activeDevice || (!activeDevice && target === initial)),
+        initialDevice: target, activeDevice: target, onDeviceChange: onTargetChange }))))
 }
 
-function AgentTargetPage({ React, Glyph, post, C, host, devices = [], localDevice = '', activeDevice = '', initialDevice = '', onDeviceChange, onOpenWorkbench, onError }) {
+function AgentTargetPage({ React, Glyph, post, C, host, isActive = true, devices = [], localDevice = '', activeDevice = '', initialDevice = '', onDeviceChange, onOpenWorkbench, onError }) {
   const h = React.createElement
   const online = devices.filter((item) => item && item.online)
   const initial = initialDevice || activeDevice
@@ -64,6 +65,7 @@ function AgentTargetPage({ React, Glyph, post, C, host, devices = [], localDevic
   const [serviceCatalog, setServiceCatalog] = React.useState(null)
   const [serviceCatalogBusy, setServiceCatalogBusy] = React.useState(false)
   const [serviceOpening, setServiceOpening] = React.useState(false)
+  const nativeCodegAutoDecision = React.useRef(false)
   const [serviceView, setServiceView] = React.useState(null)
   const [serviceFrameState, setServiceFrameState] = React.useState('loading')
   const serviceWebviewRef = React.useRef(null)
@@ -915,6 +917,15 @@ function AgentTargetPage({ React, Glyph, post, C, host, devices = [], localDevic
   const legacyCodegLabel = codegService && codegService.state === 'missing' ? 'Codeg 未安装'
     : codegService && codegService.state === 'stopped' ? 'Codeg 未运行'
       : 'Codeg 状态异常'
+
+  React.useEffect(() => {
+    if (!nativeWorkbench || !isActive || !serviceCatalog || serviceCatalogBusy || nativeCodegAutoDecision.current) return
+    nativeCodegAutoDecision.current = true
+    if (panes.length || activePane || workspaceOpen || serviceOpening || workbenchLoginRequired
+        || !codegService || codegService.state === 'missing' || legacyCodegBlocked) return
+    void openNativeCodeg()
+  }, [nativeWorkbench, isActive, serviceCatalog, serviceCatalogBusy, panes.length, activePane, workspaceOpen,
+    serviceOpening, workbenchLoginRequired, codegService, legacyCodegBlocked])
 
   const paneBody = (pane) => pane.kind === 'web'
     ? (pane.url ? h('iframe', {
