@@ -2,6 +2,9 @@
 
 ## 2026-11-13 最新实机结果
 
+- [ ] F170 文件取消：实机取消128MB任务后残留4MiB `.tether-part.136cb3739efe1488`，正常APP hubOnly缺少cleanup callback；已接回原transfer_cancel通道，17项engine与17项FS测试通过（含另一任务分块保留）。完整128MB目标已在界面出现，摘要回读及候选实机取消清理未完成。
+- [ ] F154 同版本组件修复：Laptop Codex0.163.0官方daemon-only安装exit0，原auth/config和自动更新语义保留，current已恢复；typed CLI验收PTY已创建，启动结果未读。不能据组件安装成功标三模式完成。
+
 - [ ] F165 / F156 APP更新：055已通过同包短TEMP安装成功，正式进程2776自动恢复登录；259/260字符MoveFileW对照及NSIS成功画面证实长临时路径阻断。源码已补updater短TEMP与静默安装，安装器自身兼容旧APP的补充仍在实现，下一版正常更新待验。EXE为NotSigned，manifest签名与资产SHA已核。
 - [ ] F164 源码修复：显式重开重新验证endpoint/token，失败保留旧授权和存储；就绪检查不再把Chrome错误页视为ready，并移除重复短超时。Root独立34项native和47项Python测试通过；未发布/部署，真实断连恢复待验。
 - [ ] F168 启动入口持久性：已由原14675用户将旧DB/DSH home固定参数放到原任务调用的外部稳定入口，930字节/SHA独立回读一致、ACL保留，任务/策略/当前进程不变；新根launcher被包覆盖不再影响这些参数。下一次正常更新后的真实启动验收仍待完成。

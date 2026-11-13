@@ -2,6 +2,10 @@
 
 ## 2026-11-13 最新实机状态
 
+08:30 后补充：055的大文件互传界面已显示完整128MB目标，最终SHA回读仍待验。取消任务留下4MiB临时分块，确认是正常APP的hubOnly分支未提供已有transfer_cancel回调；已补接原Hub owner路由，独立transfer engine17项、FsService17项及UI/web build/check通过，实机取消清理待下一候选。原图/互传布局未重做。
+
+Laptop官方同版本Codex daemon修复实际exit0，current由absent变为valid-junction，原auth/config校验未变、自动更新开关保留；独立stat确认daemon程序存在。传统CLI验收会话ce34afd2b8b499ea1e3b9fc4已创建，尚未读取启动结果或关闭。验收脚本变量错误触发本地PreToolUse重复目标拦截，指定mcp-proof B段无派发/失败记录；最小只读工具探针可运行，但包含实际目标读取仍被同一规则拒绝，未换参数/通道绕过。
+
 07:37 后最新核实：正式 `D:\Apps\Tether\Tether.exe` 已安装为 0.5.5，新主进程2776自动恢复登录，默认C profile、无QA参数和数据目录覆盖。旧卸载器失败定位到临时路径长度：实际MoveFileW在259字符成功、260字符返回error 3；同一已核SHA安装包使用 `D:\tether-up-055` 后完成安装。Windows EXE的Authenticode为NotSigned；发行信任证据是签名manifest与资产摘要。
 
 下一批修复尚未部署：Codeg显式重开重新读取endpoint/token，保留会话存储；就绪检查避免重复短超时和loopback代理干扰；Windows updater短TEMP/TMP和静默安装。Root独立验证47项Python运行时/文件服务测试、34项native workbench测试和update-service定向脚本通过，并与d374发布基线对比；不据此声称正式APP已包含修复。

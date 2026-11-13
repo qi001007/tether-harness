@@ -163,6 +163,32 @@ def test_chunked_transfer_rejects_existing_conflicts_and_bad_offsets(env) -> Non
     assert cancelled["cancelled"] is True
 
 
+def test_hub_transfer_cancel_removes_only_the_requested_partial(env) -> None:
+    svc: FsService = env["svc"]
+    folder = env["root"] / "transfer"
+    svc.dispatch("mkdir", {"path": str(folder)})
+    target = folder / "cancel.bin"
+    payload = base64.b64encode(b"partial").decode()
+    transfer = "136cb3739efe1488"
+    other_transfer = "e17a9e3f10234abc"
+
+    for transfer_id in (transfer, other_transfer):
+        result = svc.dispatch("write_chunk", {
+            "path": str(target), "transfer_id": transfer_id, "offset": 0, "total": 20,
+            "base64": payload,
+        })
+        assert result["complete"] is False
+
+    cancelled = svc.dispatch_hub("transfer_cancel", {
+        "path": str(target), "transfer_id": transfer,
+    })
+
+    assert cancelled["cancelled"] is True
+    assert not target.exists()
+    assert not target.with_name(target.name + ".tether-part." + transfer).exists()
+    assert target.with_name(target.name + ".tether-part." + other_transfer).exists()
+
+
 def test_audit_uses_sqlite_and_pages_newest_first(env) -> None:
     svc: FsService = env["svc"]
     for index in range(12):

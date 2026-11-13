@@ -550,7 +550,7 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
               },
               status: hubOnly ? undefined : (args) => postFs(target.device, 'transfer_status',
                 { path: args.path, transfer_id: args.transferId }, args.signal),
-              cancel: hubOnly ? undefined : (args) => postFs(target.device, 'transfer_cancel',
+              cancel: (args) => postFs(target.device, 'transfer_cancel',
                 { path: args.path, transfer_id: args.transferId }),
               onProgress: (value) => {
                 const currentBytes = doneBytes + Math.max(0, Number(value && value.transferred) || 0)

@@ -226,3 +226,4 @@
 - 2026-11-12：覆盖 Herdr `agent_not_ready` 时保留新建 tab/PTy 并返回 session + `agent_state=blocked`，同时覆盖 fatal cleanup、成功 ready 和 `agent_wait_timeout` 安全阶段码；`test_terminal.py` + `test_agents_runtime.py` 61/61 通过。
 - 2026-11-12：`test_app_installation.mjs` 覆盖已登录/已登出的有效 external OIDC profile 原样保留，以及缺认证模式、缺节点模式、无效 Hub origin、空 device 仍拒绝迁移合并。
 - 2026-11-12：OIDC 行为用例覆盖新实例恢复不重开浏览器且 close 保留会话、临时 safeStorage 失败后恢复、到期续期/轮换后重开、503/网络失败保留原加密文件、永久失效清理、并发 401 单次刷新及 logout 竞态；Electron integration 检查 auth-status 先 ensureSession 且 token 不出主进程。
+- 2026-11-13：新增 `test_hub_transfer_cancel_removes_only_the_requested_partial`，经 Hub Node dispatch 取消后验证目标文件未落盘、指定 `.tether-part` 被清除且另一个 transfer_id 的分块保留。
