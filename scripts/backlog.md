@@ -41,3 +41,4 @@
 
 - 2026-11-12：release packager 可接收已 hydration 的 Herdr 目录；从固定校验表验证后，仅写入 Windows Herdr/ConPTY 五个文件至 Node ZIP，拒绝重复成员。候选 workflow 只 hydration 这五个文件，不复制 APP 的整棵 node-bin。
 
+- 2026-11-13：release builder 的 preview tag 校验改为精确匹配当前 APP/Node 版本与正整数序号；保留 stable 规则。

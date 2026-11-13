@@ -107,6 +107,59 @@ def test_release_preflight_checks_current_limits_and_reports_legacy_incompatibil
     assert any("member exceeds 5 byte limit" in issue for issue in oversized["issues"])
 
 
+def test_preview2_tag_reaches_archive_stage_and_invalid_sequences_are_rejected(tmp_path: Path, monkeypatch) -> None:
+    spec = importlib.util.spec_from_file_location("build_release_preview_tag", ROOT / "scripts" / "build_release.py")
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    app_version = "0.5.8"
+    plugin_version = "0.2.93"
+    monkeypatch.setattr(module, "validate_versions", lambda frozen=None: {
+        "app": app_version, "node": app_version, "plugin": plugin_version})
+    manifest = tmp_path / "manifest.json"
+    archive = tmp_path / "plugin.zip"
+    node_deb = tmp_path / "node.deb"
+    for path in (manifest, archive, node_deb):
+        path.write_bytes(b"fixture")
+    monkeypatch.setattr(module, "load_frozen_plugin", lambda *_args: (
+        {}, {"version": plugin_version}, f"tether-plugin-{plugin_version}/"))
+    monkeypatch.setattr(module, "OUT", tmp_path / "release")
+    deb_fields: list[str] = []
+
+    def read_deb_field(command, **_kwargs):
+        field = command[-1]
+        deb_fields.append(field)
+        values = {"Package": "tether-node", "Version": app_version, "Architecture": "amd64"}
+        return subprocess.CompletedProcess(command, 0, stdout=values[field])
+
+    class ArchiveStageReached(Exception):
+        pass
+
+    def stop_before_large_archives(*_args, **_kwargs):
+        raise ArchiveStageReached
+
+    monkeypatch.setattr(module.subprocess, "run", read_deb_field)
+    monkeypatch.setattr(module, "add_tree", stop_before_large_archives)
+    args = [
+        "--channel", "preview", "--release-tag", "v0.5.8-preview.2",
+        "--frozen-plugin-manifest", str(manifest), "--frozen-plugin-archive", str(archive),
+        "--node-deb", str(node_deb), "--output-dir", str(module.OUT),
+    ]
+    with pytest.raises(ArchiveStageReached):
+        module.main(args)
+    assert deb_fields == ["Package", "Version", "Architecture"]
+
+    invalid_tags = (
+        "v0.5.8-preview.0", "v0.5.8-preview.01", "v0.5.8-preview.-1",
+        "v0.5.9-preview.2", "v0.5.8-preview.2trailing", "v0.5.8-preview.2.0",
+    )
+    for tag in invalid_tags:
+        before = len(deb_fields)
+        with pytest.raises(SystemExit):
+            module.main([*args[:3], tag, *args[4:]])
+        assert len(deb_fields) == before
+
+
 def test_frozen_plugin_build_keeps_signed_entry_and_packages_without_emitting_plugin_zip(tmp_path: Path, monkeypatch) -> None:
     spec = importlib.util.spec_from_file_location("build_release_frozen", ROOT / "scripts" / "build_release.py")
     assert spec and spec.loader

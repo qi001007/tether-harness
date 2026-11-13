@@ -354,8 +354,10 @@ def main(argv: list[str] | None = None) -> None:
     if args.channel == "stable":
         if release_tag != f"v{version}":
             parser.error("stable release tag must match the APP/Node component version")
-    elif release_tag != f"v{version}-preview.1":
-        parser.error("the first preview release tag must be v<APP/Node version>-preview.1")
+    elif not re.fullmatch(
+        rf"v{re.escape(version)}-preview\.[1-9][0-9]*", release_tag
+    ):
+        parser.error("preview release tag must be v<APP/Node version>-preview.<positive integer>")
     node_deb = args.node_deb.resolve() if args.node_deb else None
     herdr_runtime = args.herdr_runtime.resolve() if args.herdr_runtime else None
     if node_deb is not None:

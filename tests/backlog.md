@@ -245,3 +245,4 @@
 - 2026-11-13 058候选：版本同步断言更新APP/Node为0.5.8，插件维持0.2.93；Root独立候选构建17项、workflow校验12项通过，未把CI或源码候选计为实机安装。
 
 - 2026-11-13 F164：新增同runtime不重载已准备guest、runtime轮换后恢复会话/Home及无效guest路由回退验证。Root独立native-workbench 36项及Codeg route-provider 4项通过；canonical39段反向apply-check通过，正式APP尚未包含该修补。
+- 2026-11-13：新增 preview.2 tag 进入归档阶段及无效序号/版本拒绝测试；候选重组 workflow 的固定 run、分支门禁和 runtime 路径拒绝 guard 定向测试通过（21 passed）。

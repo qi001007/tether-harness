@@ -211,9 +211,12 @@ def test_desktop_preview_workflow_uses_one_version_branch_tag_and_artifact_set()
     assert "refs/heads/codex/tether-058-herdr-20261113' && '0.5.8'" in workflow
     assert "refs/heads/codex/tether-058-herdr-20261113' && 'v0.5.8-preview.1'" in workflow
     assert "codex/tether-058-route-recovery-20261113" in workflow
+    assert "codex/tether-058-preview2-reassemble-20261113" in workflow
     assert "refs/heads/codex/tether-058-route-recovery-20261113' && '0.5.8'" in workflow
     assert "refs/heads/codex/tether-058-route-recovery-20261113' && 'v0.5.8-preview.2'" in workflow
-    assert "name: Tether ${{ env.CANDIDATE_VERSION }} ${{ github.ref == 'refs/heads/codex/tether-058-route-recovery-20261113' && 'Preview 2' || 'Preview 1' }}" in workflow
+    assert "refs/heads/codex/tether-058-preview2-reassemble-20261113' && '0.5.8'" in workflow
+    assert "refs/heads/codex/tether-058-preview2-reassemble-20261113' && 'v0.5.8-preview.2'" in workflow
+    assert "name: Tether ${{ env.CANDIDATE_VERSION }} ${{ (github.ref == 'refs/heads/codex/tether-058-preview2-reassemble-20261113' || github.ref == 'refs/heads/codex/tether-058-route-recovery-20261113') && 'Preview 2' || 'Preview 1' }}" in workflow
     assert "v0.5.2-preview.1" in workflow
     assert "v0.5.3-preview.1" in workflow
     assert "v0.5.4-preview.1" in workflow
@@ -224,7 +227,7 @@ def test_desktop_preview_workflow_uses_one_version_branch_tag_and_artifact_set()
     assert "--channel preview" in workflow
     assert '--release-tag "$CANDIDATE_TAG"' in workflow
     assert "tag_name: ${{ env.CANDIDATE_TAG }}" in workflow
-    assert "draft: ${{ github.ref == 'refs/heads/codex/tether-053-business-20261112' || github.ref == 'refs/heads/codex/tether-054-session-20261112' || github.ref == 'refs/heads/codex/tether-055-native-mode-20261112' || github.ref == 'refs/heads/codex/tether-056-reconnect-20261113' || github.ref == 'refs/heads/codex/tether-057-recovery-20261113' || github.ref == 'refs/heads/codex/tether-058-herdr-20261113' || github.ref == 'refs/heads/codex/tether-058-route-recovery-20261113' }}" in workflow
+    assert "draft: ${{ github.ref == 'refs/heads/codex/tether-053-business-20261112' || github.ref == 'refs/heads/codex/tether-054-session-20261112' || github.ref == 'refs/heads/codex/tether-055-native-mode-20261112' || github.ref == 'refs/heads/codex/tether-056-reconnect-20261113' || github.ref == 'refs/heads/codex/tether-057-recovery-20261113' || github.ref == 'refs/heads/codex/tether-058-herdr-20261113' || github.ref == 'refs/heads/codex/tether-058-route-recovery-20261113' || github.ref == 'refs/heads/codex/tether-058-preview2-reassemble-20261113' }}" in workflow
     assert "prerelease: true" in workflow
     assert "make_latest: false" in workflow
     assert "0.5.0" not in workflow
@@ -244,7 +247,11 @@ def test_desktop_preview_workflow_uses_one_version_branch_tag_and_artifact_set()
     assert "github.ref == 'refs/heads/codex/tether-056-reconnect-20261113'" in publish_job
     assert "github.ref == 'refs/heads/codex/tether-057-recovery-20261113'" in publish_job
     assert "github.ref == 'refs/heads/codex/tether-058-herdr-20261113'" in publish_job
-    assert "github.ref == 'refs/heads/codex/tether-057-recovery-20261113' || github.ref == 'refs/heads/codex/tether-058-herdr-20261113' || github.ref == 'refs/heads/codex/tether-058-route-recovery-20261113') && !contains" in publish_job
+    assert "always()" in publish_job
+    assert "needs.package.result == 'success'" in publish_job
+    assert "github.ref == 'refs/heads/codex/tether-058-preview2-reassemble-20261113'" in publish_job
+    assert "github.ref == 'refs/heads/codex/tether-058-route-recovery-20261113'" in publish_job
+    assert "&& !contains(github.event.head_commit.message, '[posix-only]')" in publish_job
     assert "node-version: '24.22.2'" in publish_job
     assert "npm ci --prefix packages/tether-ui" in publish_job
     assert "npm run build:web --prefix packages/tether-ui" in publish_job
@@ -267,6 +274,63 @@ def test_desktop_preview_workflow_uses_one_version_branch_tag_and_artifact_set()
         "21AA5E9A42EC352DD01E81C03444AA1BB4B039C5AD6801EE499DD9B415AB3A11",
     ]:
         assert digest not in codeg_step
+
+
+def test_preview2_reassembly_uses_fixed_artifacts_and_guard_rejects_runtime_changes(tmp_path: Path) -> None:
+    import yaml
+
+    workflow = yaml.safe_load((ROOT / ".github" / "workflows" / "tether-desktop-candidate.yml").read_text(encoding="utf-8"))
+    branch = "refs/heads/codex/tether-058-preview2-reassemble-20261113"
+    jobs = workflow["jobs"]
+    assert jobs["build-codeg-web"]["if"] == "${{ github.ref != '" + branch + "' }}"
+    assert jobs["package"]["if"] == "${{ github.ref != '" + branch + "' }}"
+
+    publish = jobs["publish-preview-draft"]
+    condition = publish["if"]
+    assert "always()" in condition
+    assert "needs.package.result == 'success'" in condition
+    assert "github.ref == '" + branch + "'" in condition
+    assert "[posix-only]" in condition
+    assert publish["permissions"] == {"actions": "read", "contents": "write"}
+    steps = publish["steps"]
+    checkout = next(step for step in steps if step.get("uses", "").startswith("actions/checkout@"))
+    assert checkout["with"]["fetch-depth"] == 2
+    artifact_steps = [step for step in steps if step.get("uses", "").startswith("actions/download-artifact@")]
+    assert len(artifact_steps) == 2
+    fixed_run = "${{ github.ref == '" + branch + "' && '43410891693' || github.run_id }}"
+    assert all(step["with"]["run-id"] == fixed_run for step in artifact_steps)
+    assert all(step["with"]["github-token"] == "${{ secrets.GITHUB_TOKEN }}" for step in artifact_steps)
+    release_action = next(step for step in steps if step.get("uses", "").startswith("softprops/action-gh-release@"))
+    assert release_action["with"]["prerelease"] is True
+    assert release_action["with"]["make_latest"] is False
+
+    guard = next(step for step in steps if step.get("name") == "Guard fixed preview.2 reassembly source")
+    assert guard["env"]["EXPECTED_PARENT"] == "e77e313fe4a4f4497441000ad87711321f40074a"
+    script = guard["run"].split("python - <<'PY'\n", 1)[1].rsplit("\nPY", 1)[0]
+
+    def run_guard(repo: Path, changed_file: str) -> subprocess.CompletedProcess[str]:
+        repo.mkdir(parents=True)
+        subprocess.run(["git", "init", "--quiet"], cwd=repo, check=True)
+        subprocess.run(["git", "config", "user.name", "workflow guard test"], cwd=repo, check=True)
+        subprocess.run(["git", "config", "user.email", "workflow-guard@example.invalid"], cwd=repo, check=True)
+        (repo / "baseline.txt").write_text("base\n", encoding="utf-8")
+        subprocess.run(["git", "add", "baseline.txt"], cwd=repo, check=True)
+        subprocess.run(["git", "commit", "--quiet", "-m", "base"], cwd=repo, check=True)
+        parent = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo, check=True, capture_output=True, text=True).stdout.strip()
+        changed = repo / changed_file
+        changed.parent.mkdir(parents=True, exist_ok=True)
+        changed.write_text("candidate\n", encoding="utf-8")
+        subprocess.run(["git", "add", "--", changed_file], cwd=repo, check=True)
+        subprocess.run(["git", "commit", "--quiet", "-m", "candidate"], cwd=repo, check=True)
+        env = os.environ.copy()
+        env["EXPECTED_PARENT"] = parent
+        return subprocess.run([os.sys.executable, "-c", script], cwd=repo, env=env, capture_output=True, text=True, check=False)
+
+    allowed = run_guard(tmp_path / "allowed", "tests/test_release_archive.py")
+    assert allowed.returncode == 0, allowed.stderr
+    runtime = run_guard(tmp_path / "runtime", "packages/tether-ui/src/agents-page.js")
+    assert runtime.returncode != 0
+    assert "unapproved paths" in runtime.stderr
 
 
 def test_codeg_web_checkout_step_copies_dynamic_artifact_and_preserves_old_tree_on_invalid_source(tmp_path: Path) -> None:
