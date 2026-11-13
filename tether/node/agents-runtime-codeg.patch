@@ -343,14 +343,65 @@ index 5ffa16a..0629b4b 100644
            "pasteDropFiles": "直接粘贴截图或把文件拖到输入框，即可作为附件",
            "queueMessage": "智能体回复中也能继续输入并排队，回答完毕会自动续发",
 diff --git a/src/contexts/workbench-route-context.test.tsx b/src/contexts/workbench-route-context.test.tsx
-index 4f5ebb2..16789f5 100644
+index 4f5ebb2..1c651a0 100644
 --- a/src/contexts/workbench-route-context.test.tsx
 +++ b/src/contexts/workbench-route-context.test.tsx
-@@ -7,13 +7,33 @@ import {
- } from "./workbench-route-context"
- 
- function Probe() {
+@@ -1,46 +1,118 @@
+-import { fireEvent, render } from "@testing-library/react"
+-import { describe, expect, it, vi } from "vitest"
+-
+-import {
+-  WorkbenchRouteProvider,
+-  useWorkbenchRoute,
+-} from "./workbench-route-context"
+-
+-function Probe() {
 -  const { routeId, isConversations, setRoute, openConversations } =
+-    useWorkbenchRoute()
+-  return (
+-    <div>
+-      <span data-testid="route">{routeId}</span>
+-      <span data-testid="isConv">{String(isConversations)}</span>
+-      <button onClick={() => setRoute("automations")}>go</button>
+-      <button onClick={openConversations}>back</button>
+-    </div>
+-  )
+-}
+-
+-describe("WorkbenchRouteProvider", () => {
+-  it("defaults to the conversation workspace and switches routes", () => {
+-    const { getByTestId, getByText } = render(
+-      <WorkbenchRouteProvider>
+-        <Probe />
+-      </WorkbenchRouteProvider>
+-    )
+-    expect(getByTestId("route").textContent).toBe("conversations")
+-    expect(getByTestId("isConv").textContent).toBe("true")
+-
+-    fireEvent.click(getByText("go"))
+-    expect(getByTestId("route").textContent).toBe("automations")
+-    expect(getByTestId("isConv").textContent).toBe("false")
+-
+-    fireEvent.click(getByText("back"))
+-    expect(getByTestId("route").textContent).toBe("conversations")
+-    expect(getByTestId("isConv").textContent).toBe("true")
+-  })
+-
+-  it("throws when used outside the provider", () => {
+-    const spy = vi.spyOn(console, "error").mockImplementation(() => {})
+-    expect(() => render(<Probe />)).toThrow(/WorkbenchRouteProvider/)
+-    spy.mockRestore()
+-  })
+-})
++import { fireEvent, render } from "@testing-library/react"
++import { describe, expect, it, vi } from "vitest"
++
++import {
++  WorkbenchRouteProvider,
++  useWorkbenchRoute,
++} from "./workbench-route-context"
++
++function Probe() {
 +  const {
 +    routeId,
 +    isConversations,
@@ -359,13 +410,13 @@ index 4f5ebb2..16789f5 100644
 +    openAgentsHome,
 +    openConversations,
 +  } =
-     useWorkbenchRoute()
-   return (
-     <div>
-       <span data-testid="route">{routeId}</span>
-       <span data-testid="isConv">{String(isConversations)}</span>
++    useWorkbenchRoute()
++  return (
++    <div>
++      <span data-testid="route">{routeId}</span>
++      <span data-testid="isConv">{String(isConversations)}</span>
 +      <span data-testid="project">{requestedProjectId ?? "none"}</span>
-       <button onClick={() => setRoute("automations")}>go</button>
++      <button onClick={() => setRoute("automations")}>go</button>
 +      <button onClick={() => setRoute("agents")}>agents</button>
 +      <button onClick={() => openAgentsHome({ projectId: 2 })}>select B</button>
 +      <button
@@ -378,13 +429,61 @@ index 4f5ebb2..16789f5 100644
 +        show home
 +      </button>
 +      <button onClick={() => openAgentsHome({ projectId: 1 })}>select A</button>
-       <button onClick={openConversations}>back</button>
-     </div>
-   )
-@@ -43,4 +63,30 @@ describe("WorkbenchRouteProvider", () => {
-     expect(() => render(<Probe />)).toThrow(/WorkbenchRouteProvider/)
-     spy.mockRestore()
-   })
++      <button onClick={openConversations}>back</button>
++    </div>
++  )
++}
++
++describe("WorkbenchRouteProvider", () => {
++  it("keeps the native home marker through hydration and mirrors home/conversation routes", () => {
++    const originalUrl = window.location.pathname + window.location.search + window.location.hash
++    window.history.replaceState({}, "", "/workspace?keep=1&tether_home=1#panel")
++    const { getByTestId, getByText, unmount } = render(
++      <WorkbenchRouteProvider>
++        <Probe />
++      </WorkbenchRouteProvider>
++    )
++
++    expect(getByTestId("route").textContent).toBe("agents")
++    expect(new URLSearchParams(window.location.search).getAll("tether_home")).toEqual(["1"])
++    expect(window.location.search).toContain("keep=1")
++    expect(window.location.hash).toBe("#panel")
++
++    fireEvent.click(getByText("back"))
++    expect(getByTestId("route").textContent).toBe("conversations")
++    expect(new URLSearchParams(window.location.search).getAll("tether_home")).toEqual([])
++    expect(window.location.search).toContain("keep=1")
++    expect(window.location.hash).toBe("#panel")
++
++    fireEvent.click(getByText("agents"))
++    expect(new URLSearchParams(window.location.search).getAll("tether_home")).toEqual(["1"])
++    unmount()
++    window.history.replaceState({}, "", originalUrl)
++  })
++
++  it("defaults to the conversation workspace and switches routes", () => {
++    const { getByTestId, getByText } = render(
++      <WorkbenchRouteProvider>
++        <Probe />
++      </WorkbenchRouteProvider>
++    )
++    expect(getByTestId("route").textContent).toBe("conversations")
++    expect(getByTestId("isConv").textContent).toBe("true")
++
++    fireEvent.click(getByText("go"))
++    expect(getByTestId("route").textContent).toBe("automations")
++    expect(getByTestId("isConv").textContent).toBe("false")
++
++    fireEvent.click(getByText("back"))
++    expect(getByTestId("route").textContent).toBe("conversations")
++    expect(getByTestId("isConv").textContent).toBe("true")
++  })
++
++  it("throws when used outside the provider", () => {
++    const spy = vi.spyOn(console, "error").mockImplementation(() => {})
++    expect(() => render(<Probe />)).toThrow(/WorkbenchRouteProvider/)
++    spy.mockRestore()
++  })
 +
 +  it("keeps the native sidebar project while returning to Agent Home, then clears it for conversations", () => {
 +    const { getByTestId, getByText, getByRole } = render(
@@ -411,7 +510,7 @@ index 4f5ebb2..16789f5 100644
 +    fireEvent.click(getByText("select A"))
 +    expect(getByTestId("project").textContent).toBe("1")
 +  })
- })
++})
 diff --git a/src/components/workspace/tether-agent-home.tsx b/src/components/workspace/tether-agent-home.tsx
 new file mode 100644
 index 0000000..e4b4aee
@@ -3285,34 +3384,141 @@ index 659ea8d..166977c 100644
  }
 +
 diff --git a/src/contexts/workbench-route-context.tsx b/src/contexts/workbench-route-context.tsx
-index 6f2c336..bf711a2 100644
+index 6f2c336..85d15d0 100644
 --- a/src/contexts/workbench-route-context.tsx
 +++ b/src/contexts/workbench-route-context.tsx
-@@ -4,10 +4,12 @@ import {
-   createContext,
-   useCallback,
-   useContext,
+@@ -1,95 +1,166 @@
+-"use client"
+-
+-import {
+-  createContext,
+-  useCallback,
+-  useContext,
+-  useMemo,
+-  useState,
+-  type ReactNode,
+-} from "react"
+-
+-/**
+- * The view occupying the main content region. `"conversations"` is the default
+- * workspace (folder/conversation tabs); every other id is a full-page "route"
+- * rendered in place of it (see WORKBENCH_ROUTES in workbench-content.tsx).
+- *
+- * To add a future left-sidebar route: extend this union, register a page
+- * component in WORKBENCH_ROUTES, and add a SidebarNavButton that calls
+- * `setRoute("<id>")`. Nothing else needs to change.
+- */
+-export type WorkbenchRouteId =
+-  | "conversations"
+-  | "automations"
+-  | "tasks"
+-  | "forge"
+-  | "tokenUsage"
+-  | "canvas"
+-
+-interface WorkbenchRouteContextValue {
+-  routeId: WorkbenchRouteId
+-  /** Convenience for the common branch — `routeId === "conversations"`. */
+-  isConversations: boolean
+-  setRoute: (id: WorkbenchRouteId) => void
+-  /** Sugar for returning to the conversation workspace. */
+-  openConversations: () => void
+-}
+-
+-const WorkbenchRouteContext = createContext<WorkbenchRouteContextValue | null>(
+-  null
+-)
+-
+-/**
+- * Drives which view fills the main content region. This mirrors the codebase's
+- * lifted-state idiom (search-dialog-context): the trigger lives in the sidebar
+- * (which unmounts when collapsed) while the content swap is owned by
+- * WorkspaceContent — both read this single source of truth.
+- *
+- * State is in-memory only: a reload lands back on the conversation workspace.
+- * That is deliberate; static export rules out URL route segments, and the
+- * established pattern here is in-memory context rather than query params.
+- */
+-export function useWorkbenchRoute() {
+-  const ctx = useOptionalWorkbenchRoute()
+-  if (!ctx) {
+-    throw new Error(
+-      "useWorkbenchRoute must be used within WorkbenchRouteProvider"
+-    )
+-  }
+-  return ctx
+-}
+-
+-/**
+- * The route, or `null` outside the workspace layout.
+- *
+- * Null is a supported answer, not a failure: transcript surfaces also render
+- * in windows that have no workbench at all (the pet panel, the standalone
+- * commit / merge windows), and asking "is the file column reachable from
+- * here?" has to be answerable there too — see `use-open-file-target.ts`.
+- */
+-export function useOptionalWorkbenchRoute(): WorkbenchRouteContextValue | null {
+-  return useContext(WorkbenchRouteContext)
+-}
+-
+-export function WorkbenchRouteProvider({ children }: { children: ReactNode }) {
+-  const [routeId, setRouteId] = useState<WorkbenchRouteId>("conversations")
+-
+-  const setRoute = useCallback((id: WorkbenchRouteId) => setRouteId(id), [])
+-  const openConversations = useCallback(() => setRouteId("conversations"), [])
+-
+-  const value = useMemo<WorkbenchRouteContextValue>(
+-    () => ({
+-      routeId,
+-      isConversations: routeId === "conversations",
+-      setRoute,
+-      openConversations,
+-    }),
+-    [routeId, setRoute, openConversations]
+-  )
+-
+-  return (
+-    <WorkbenchRouteContext.Provider value={value}>
+-      {children}
+-    </WorkbenchRouteContext.Provider>
+-  )
+-}
++"use client"
++
++import {
++  createContext,
++  useCallback,
++  useContext,
 +  useEffect,
-   useMemo,
-   useState,
-   type ReactNode,
- } from "react"
++  useMemo,
++  useState,
++  type ReactNode,
++} from "react"
 +import type { AgentType } from "@/lib/types"
- 
- /**
-  * The view occupying the main content region. `"conversations"` is the default
-@@ -20,6 +22,7 @@ import {
-  */
- export type WorkbenchRouteId =
-   | "conversations"
++
++/**
++ * The view occupying the main content region. `"conversations"` is the default
++ * workspace (folder/conversation tabs); every other id is a full-page "route"
++ * rendered in place of it (see WORKBENCH_ROUTES in workbench-content.tsx).
++ *
++ * To add a future left-sidebar route: extend this union, register a page
++ * component in WORKBENCH_ROUTES, and add a SidebarNavButton that calls
++ * `setRoute("<id>")`. Nothing else needs to change.
++ */
++export type WorkbenchRouteId =
++  | "conversations"
 +  | "agents"
-   | "automations"
-   | "tasks"
-   | "forge"
-@@ -31,6 +34,15 @@ interface WorkbenchRouteContextValue {
-   /** Convenience for the common branch — `routeId === "conversations"`. */
-   isConversations: boolean
-   setRoute: (id: WorkbenchRouteId) => void
++  | "automations"
++  | "tasks"
++  | "forge"
++  | "tokenUsage"
++  | "canvas"
++
++interface WorkbenchRouteContextValue {
++  routeId: WorkbenchRouteId
++  /** Convenience for the common branch — `routeId === "conversations"`. */
++  isConversations: boolean
++  setRoute: (id: WorkbenchRouteId) => void
 +  /** Open the shared Agent home with optional host/group context. */
 +  openAgentsHome: (options?: {
 +    agentType?: AgentType
@@ -3322,31 +3528,58 @@ index 6f2c336..bf711a2 100644
 +  requestedAgentType: AgentType | null
 +  requestedProjectId: number | null
 +  requestedTargetGroup: string | null
-   /** Sugar for returning to the conversation workspace. */
-   openConversations: () => void
- }
-@@ -73,18 +85,70 @@ export function useOptionalWorkbenchRoute(): WorkbenchRouteContextValue | null {
- 
- export function WorkbenchRouteProvider({ children }: { children: ReactNode }) {
-   const [routeId, setRouteId] = useState<WorkbenchRouteId>("conversations")
++  /** Sugar for returning to the conversation workspace. */
++  openConversations: () => void
++}
++
++const WorkbenchRouteContext = createContext<WorkbenchRouteContextValue | null>(
++  null
++)
++
++/**
++ * Drives which view fills the main content region. This mirrors the codebase's
++ * lifted-state idiom (search-dialog-context): the trigger lives in the sidebar
++ * (which unmounts when collapsed) while the content swap is owned by
++ * WorkspaceContent — both read this single source of truth.
++ *
++ * Agents and conversations mirror their route in a small Tether query marker
++ * so an authorized native guest refresh can restore the visible workspace.
++ */
++export function useWorkbenchRoute() {
++  const ctx = useOptionalWorkbenchRoute()
++  if (!ctx) {
++    throw new Error(
++      "useWorkbenchRoute must be used within WorkbenchRouteProvider"
++    )
++  }
++  return ctx
++}
++
++/**
++ * The route, or `null` outside the workspace layout.
++ *
++ * Null is a supported answer, not a failure: transcript surfaces also render
++ * in windows that have no workbench at all (the pet panel, the standalone
++ * commit / merge windows), and asking "is the file column reachable from
++ * here?" has to be answerable there too — see `use-open-file-target.ts`.
++ */
++export function useOptionalWorkbenchRoute(): WorkbenchRouteContextValue | null {
++  return useContext(WorkbenchRouteContext)
++}
++
++export function WorkbenchRouteProvider({ children }: { children: ReactNode }) {
++  const [routeId, setRouteId] = useState<WorkbenchRouteId>("conversations")
++  const [routeHydrated, setRouteHydrated] = useState(false)
 +  const [requestedAgentType, setRequestedAgentType] = useState<AgentType | null>(null)
 +  const [requestedProjectId, setRequestedProjectId] = useState<number | null>(null)
 +  const [requestedTargetGroup, setRequestedTargetGroup] = useState<string | null>(null)
- 
--  const setRoute = useCallback((id: WorkbenchRouteId) => setRouteId(id), [])
--  const openConversations = useCallback(() => setRouteId("conversations"), [])
++
 +  useEffect(() => {
 +    const params = new URLSearchParams(window.location.search)
 +    if (params.get("tether_home") === "1") {
 +      setRouteId("agents")
-+      params.delete("tether_home")
-+      const search = params.toString()
-+      window.history.replaceState(
-+        window.history.state,
-+        "",
-+        window.location.pathname + (search ? `?${search}` : "") + window.location.hash
-+      )
 +    }
++    setRouteHydrated(true)
 +
 +    const onMessage = (event: MessageEvent) => {
 +      if (event.data?.type === "tether:show-home") {
@@ -3358,6 +3591,19 @@ index 6f2c336..bf711a2 100644
 +    window.addEventListener("message", onMessage)
 +    return () => window.removeEventListener("message", onMessage)
 +  }, [])
++
++  useEffect(() => {
++    if (!routeHydrated || (routeId !== "agents" && routeId !== "conversations")) return
++    const url = new URL(window.location.href)
++    if (routeId === "agents") {
++      url.searchParams.set("tether_home", "1")
++    } else {
++      url.searchParams.delete("tether_home")
++    }
++    if (url.href !== window.location.href) {
++      window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash)
++    }
++  }, [routeHydrated, routeId])
 +
 +  const setRoute = useCallback((id: WorkbenchRouteId) => {
 +    setRequestedAgentType(null)
@@ -3381,24 +3627,28 @@ index 6f2c336..bf711a2 100644
 +    setRequestedTargetGroup(null)
 +    setRouteId("conversations")
 +  }, [])
- 
-   const value = useMemo<WorkbenchRouteContextValue>(
-     () => ({
-       routeId,
-       isConversations: routeId === "conversations",
-       setRoute,
++
++  const value = useMemo<WorkbenchRouteContextValue>(
++    () => ({
++      routeId,
++      isConversations: routeId === "conversations",
++      setRoute,
 +      openAgentsHome,
 +      requestedAgentType,
 +      requestedProjectId,
 +      requestedTargetGroup,
-       openConversations,
-     }),
--    [routeId, setRoute, openConversations]
++      openConversations,
++    }),
 +    [routeId, setRoute, openAgentsHome, requestedAgentType, requestedProjectId,
 +      requestedTargetGroup, openConversations]
-   )
- 
-   return (
++  )
++
++  return (
++    <WorkbenchRouteContext.Provider value={value}>
++      {children}
++    </WorkbenchRouteContext.Provider>
++  )
++}
 diff --git a/src/components/layout/right-edge-chrome.tsx b/src/components/layout/right-edge-chrome.tsx
 index 94c1079..d956d99 100644
 --- a/src/components/layout/right-edge-chrome.tsx

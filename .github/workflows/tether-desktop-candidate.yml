@@ -10,11 +10,12 @@ on:
       - 'codex/tether-056-reconnect-20261113'
       - 'codex/tether-057-recovery-20261113'
       - 'codex/tether-058-herdr-20261113'
+      - 'codex/tether-058-route-recovery-20261113'
   workflow_dispatch:
 
 env:
-  CANDIDATE_VERSION: ${{ github.ref == 'refs/heads/codex/tether-058-herdr-20261113' && '0.5.8' || github.ref == 'refs/heads/codex/tether-057-recovery-20261113' && '0.5.7' || github.ref == 'refs/heads/codex/tether-056-reconnect-20261113' && '0.5.6' || github.ref == 'refs/heads/codex/tether-055-native-mode-20261112' && '0.5.5' || github.ref == 'refs/heads/codex/tether-054-session-20261112' && '0.5.4' || github.ref == 'refs/heads/codex/tether-053-business-20261112' && '0.5.3' || '0.5.2' }}
-  CANDIDATE_TAG: ${{ github.ref == 'refs/heads/codex/tether-058-herdr-20261113' && 'v0.5.8-preview.1' || github.ref == 'refs/heads/codex/tether-057-recovery-20261113' && 'v0.5.7-preview.1' || github.ref == 'refs/heads/codex/tether-056-reconnect-20261113' && 'v0.5.6-preview.1' || github.ref == 'refs/heads/codex/tether-055-native-mode-20261112' && 'v0.5.5-preview.1' || github.ref == 'refs/heads/codex/tether-054-session-20261112' && 'v0.5.4-preview.1' || github.ref == 'refs/heads/codex/tether-053-business-20261112' && 'v0.5.3-preview.1' || 'v0.5.2-preview.1' }}
+  CANDIDATE_VERSION: ${{ github.ref == 'refs/heads/codex/tether-058-route-recovery-20261113' && '0.5.8' || github.ref == 'refs/heads/codex/tether-058-herdr-20261113' && '0.5.8' || github.ref == 'refs/heads/codex/tether-057-recovery-20261113' && '0.5.7' || github.ref == 'refs/heads/codex/tether-056-reconnect-20261113' && '0.5.6' || github.ref == 'refs/heads/codex/tether-055-native-mode-20261112' && '0.5.5' || github.ref == 'refs/heads/codex/tether-054-session-20261112' && '0.5.4' || github.ref == 'refs/heads/codex/tether-053-business-20261112' && '0.5.3' || '0.5.2' }}
+  CANDIDATE_TAG: ${{ github.ref == 'refs/heads/codex/tether-058-route-recovery-20261113' && 'v0.5.8-preview.2' || github.ref == 'refs/heads/codex/tether-058-herdr-20261113' && 'v0.5.8-preview.1' || github.ref == 'refs/heads/codex/tether-057-recovery-20261113' && 'v0.5.7-preview.1' || github.ref == 'refs/heads/codex/tether-056-reconnect-20261113' && 'v0.5.6-preview.1' || github.ref == 'refs/heads/codex/tether-055-native-mode-20261112' && 'v0.5.5-preview.1' || github.ref == 'refs/heads/codex/tether-054-session-20261112' && 'v0.5.4-preview.1' || github.ref == 'refs/heads/codex/tether-053-business-20261112' && 'v0.5.3-preview.1' || 'v0.5.2-preview.1' }}
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -228,7 +229,7 @@ jobs:
           retention-days: 7
   publish-preview-draft:
     name: Sign and assemble preview draft
-    if: ${{ (github.ref == 'refs/heads/codex/tether-052-preview-20261111' || github.ref == 'refs/heads/codex/tether-053-business-20261112' || github.ref == 'refs/heads/codex/tether-054-session-20261112' || github.ref == 'refs/heads/codex/tether-055-native-mode-20261112' || github.ref == 'refs/heads/codex/tether-056-reconnect-20261113' || github.ref == 'refs/heads/codex/tether-057-recovery-20261113' || github.ref == 'refs/heads/codex/tether-058-herdr-20261113') && !contains(github.event.head_commit.message, '[posix-only]') }}
+    if: ${{ (github.ref == 'refs/heads/codex/tether-052-preview-20261111' || github.ref == 'refs/heads/codex/tether-053-business-20261112' || github.ref == 'refs/heads/codex/tether-054-session-20261112' || github.ref == 'refs/heads/codex/tether-055-native-mode-20261112' || github.ref == 'refs/heads/codex/tether-056-reconnect-20261113' || github.ref == 'refs/heads/codex/tether-057-recovery-20261113' || github.ref == 'refs/heads/codex/tether-058-herdr-20261113' || github.ref == 'refs/heads/codex/tether-058-route-recovery-20261113') && !contains(github.event.head_commit.message, '[posix-only]') }}
     needs: package
     runs-on: ubuntu-22.04
     timeout-minutes: 20
@@ -475,9 +476,9 @@ jobs:
         with:
           tag_name: ${{ env.CANDIDATE_TAG }}
           target_commitish: ${{ github.sha }}
-          name: Tether ${{ env.CANDIDATE_VERSION }} Preview 1
+          name: Tether ${{ env.CANDIDATE_VERSION }} ${{ github.ref == 'refs/heads/codex/tether-058-route-recovery-20261113' && 'Preview 2' || 'Preview 1' }}
           body: 'Preview candidate assembled from the four-platform CI artifacts. This draft is not a stable release.'
-          draft: ${{ github.ref == 'refs/heads/codex/tether-053-business-20261112' || github.ref == 'refs/heads/codex/tether-054-session-20261112' || github.ref == 'refs/heads/codex/tether-055-native-mode-20261112' || github.ref == 'refs/heads/codex/tether-056-reconnect-20261113' || github.ref == 'refs/heads/codex/tether-057-recovery-20261113' || github.ref == 'refs/heads/codex/tether-058-herdr-20261113' }}
+          draft: ${{ github.ref == 'refs/heads/codex/tether-053-business-20261112' || github.ref == 'refs/heads/codex/tether-054-session-20261112' || github.ref == 'refs/heads/codex/tether-055-native-mode-20261112' || github.ref == 'refs/heads/codex/tether-056-reconnect-20261113' || github.ref == 'refs/heads/codex/tether-057-recovery-20261113' || github.ref == 'refs/heads/codex/tether-058-herdr-20261113' || github.ref == 'refs/heads/codex/tether-058-route-recovery-20261113' }}
           prerelease: true
           make_latest: false
           overwrite_files: true

@@ -243,3 +243,5 @@
 - 2026-11-13 F154: 扩展Herdr就绪等待超时保留PTY/tab、unverified状态、秘密不泄漏及真正subprocess超时仍fatal测试，Root与实现代理各36passed；测试临时目录均在D。
 
 - 2026-11-13 058候选：版本同步断言更新APP/Node为0.5.8，插件维持0.2.93；Root独立候选构建17项、workflow校验12项通过，未把CI或源码候选计为实机安装。
+
+- 2026-11-13 F164：新增同runtime不重载已准备guest、runtime轮换后恢复会话/Home及无效guest路由回退验证。Root独立native-workbench 36项及Codeg route-provider 4项通过；canonical39段反向apply-check通过，正式APP尚未包含该修补。

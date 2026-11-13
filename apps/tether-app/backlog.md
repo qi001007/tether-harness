@@ -159,3 +159,4 @@
 - 2026-11-13：Windows packaged APP 更新在下载前按现有 electron-updater 缓存卷检查 2 × files[].size 合计 + 512 MiB；安装前重验 1 × files[].size 合计 + 512 MiB。空间/元数据检查只影响 prepare/apply，错误包含所需与当前可用空间；低空间 apply 保留下载包并在确认回执、停止 Node、退出 APP 前拒绝。现有 TEMP、profile、下载和签名校验路径不变。
 
 - 2026-11-13 058候选：仅将package.json与lock根版本从0.5.7同步到0.5.8，依赖不变；Herdr修复位于Node，APP交互与原互联图未更改。候选构建版本17项Root独立通过，尚未发布/部署。
+- 2026-11-13 F164：legacy Codeg 重新授权时，仅当 endpoint/token runtime URL 改变才重建受管 guest；从已准备且同源的 `/workspace` URL 读取固定 `tether_home=1` 标记。相同 runtime 保留 bootstrap、prepared guest 与 revision；无效/未准备 guest 回到 Agent Home。未打包或部署。

@@ -178,3 +178,5 @@
 - 2026-11-12：统一 Agent 新建流程：默认只在首次成功空 tab 快照后进入 Agents；重复 New Chat 侧栏项移除，标签/快捷键入口转到 Agent Home 并保留项目上下文；强制选择的结构化草稿隐藏 Codeg 欢迎模板，保留原生 ChatInput、已选 Agent 与连接诊断。简体中文新建操作与草稿 tab 标为“新建任务”。38 个 focused tests、production TypeScript 检查与 Codeg patch 双向 apply-check 通过；Node 24.22.1 单次 Next 静态构建成功，1007 文件 ZIP/manifest 已生成，未部署。完整哈希见 `.scratch/qa/codeg-unified-agent-flow-20261112/manifest.json`。
 
 - 2026-11-13 F154: 仅保留Herdr CLI agent-start JSON timeout的tab/PTY，返回agent_state=unverified；保持真正进程调用超时/其他fatal清理。Root独立36项通过，独立候选QA实际ready；未发布/部署，超时保留分支实机待验。
+
+- 2026-11-13 F164：canonical Codeg patch仅重生成route-context源码与测试两段，其余37段保持；新增Home/会话URL标记同步供重新授权恢复页面。Root独立36项native/4项route测试及完整39段reverse apply-check通过，两个新段在官方e317基线上forward通过；等待preview.2构建、部署与真实重连验收。

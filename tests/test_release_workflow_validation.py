@@ -210,6 +210,10 @@ def test_desktop_preview_workflow_uses_one_version_branch_tag_and_artifact_set()
     assert "codex/tether-058-herdr-20261113" in workflow
     assert "refs/heads/codex/tether-058-herdr-20261113' && '0.5.8'" in workflow
     assert "refs/heads/codex/tether-058-herdr-20261113' && 'v0.5.8-preview.1'" in workflow
+    assert "codex/tether-058-route-recovery-20261113" in workflow
+    assert "refs/heads/codex/tether-058-route-recovery-20261113' && '0.5.8'" in workflow
+    assert "refs/heads/codex/tether-058-route-recovery-20261113' && 'v0.5.8-preview.2'" in workflow
+    assert "name: Tether ${{ env.CANDIDATE_VERSION }} ${{ github.ref == 'refs/heads/codex/tether-058-route-recovery-20261113' && 'Preview 2' || 'Preview 1' }}" in workflow
     assert "v0.5.2-preview.1" in workflow
     assert "v0.5.3-preview.1" in workflow
     assert "v0.5.4-preview.1" in workflow
@@ -220,7 +224,7 @@ def test_desktop_preview_workflow_uses_one_version_branch_tag_and_artifact_set()
     assert "--channel preview" in workflow
     assert '--release-tag "$CANDIDATE_TAG"' in workflow
     assert "tag_name: ${{ env.CANDIDATE_TAG }}" in workflow
-    assert "draft: ${{ github.ref == 'refs/heads/codex/tether-053-business-20261112' || github.ref == 'refs/heads/codex/tether-054-session-20261112' || github.ref == 'refs/heads/codex/tether-055-native-mode-20261112' || github.ref == 'refs/heads/codex/tether-056-reconnect-20261113' || github.ref == 'refs/heads/codex/tether-057-recovery-20261113' || github.ref == 'refs/heads/codex/tether-058-herdr-20261113' }}" in workflow
+    assert "draft: ${{ github.ref == 'refs/heads/codex/tether-053-business-20261112' || github.ref == 'refs/heads/codex/tether-054-session-20261112' || github.ref == 'refs/heads/codex/tether-055-native-mode-20261112' || github.ref == 'refs/heads/codex/tether-056-reconnect-20261113' || github.ref == 'refs/heads/codex/tether-057-recovery-20261113' || github.ref == 'refs/heads/codex/tether-058-herdr-20261113' || github.ref == 'refs/heads/codex/tether-058-route-recovery-20261113' }}" in workflow
     assert "prerelease: true" in workflow
     assert "make_latest: false" in workflow
     assert "0.5.0" not in workflow
@@ -240,7 +244,7 @@ def test_desktop_preview_workflow_uses_one_version_branch_tag_and_artifact_set()
     assert "github.ref == 'refs/heads/codex/tether-056-reconnect-20261113'" in publish_job
     assert "github.ref == 'refs/heads/codex/tether-057-recovery-20261113'" in publish_job
     assert "github.ref == 'refs/heads/codex/tether-058-herdr-20261113'" in publish_job
-    assert "github.ref == 'refs/heads/codex/tether-057-recovery-20261113' || github.ref == 'refs/heads/codex/tether-058-herdr-20261113') && !contains" in publish_job
+    assert "github.ref == 'refs/heads/codex/tether-057-recovery-20261113' || github.ref == 'refs/heads/codex/tether-058-herdr-20261113' || github.ref == 'refs/heads/codex/tether-058-route-recovery-20261113') && !contains" in publish_job
     assert "node-version: '24.22.2'" in publish_job
     assert "npm ci --prefix packages/tether-ui" in publish_job
     assert "npm run build:web --prefix packages/tether-ui" in publish_job

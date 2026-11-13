@@ -42,6 +42,27 @@ function strictLegacyCodegUrl(value) {
   return parsed
 }
 
+function legacyRuntimeUrl(value) {
+  const parsed = new URL(value)
+  parsed.searchParams.delete('next')
+  return parsed.toString()
+}
+
+function legacyGuestNext(record) {
+  const contents = record && record.guestPrepared && record.guestContents
+  if (!contents || contents.isDestroyed && contents.isDestroyed()
+      || contents.session !== record.serviceSession || typeof contents.getURL !== 'function') return '/workspace?tether_home=1'
+  try {
+    const url = new URL(contents.getURL())
+    const endpoint = new URL(record.endpoint)
+    if (url.origin !== endpoint.origin || url.pathname !== '/workspace') return '/workspace?tether_home=1'
+    const markers = url.searchParams.getAll('tether_home')
+    if (markers.length === 0) return '/workspace'
+    if (markers.length === 1 && markers[0] === '1') return '/workspace?tether_home=1'
+  } catch (_) { /* an invalid or uncommitted guest route opens the default home */ }
+  return '/workspace?tether_home=1'
+}
+
 function legacyCodegService(status, targetId) {
   const base = { id: 'codeg', agent_busy: false, view_only_reason: '', updated_at: null,
     legacy: true }
@@ -766,8 +787,12 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
       }
       const tokenUrl = status && strictLegacyCodegUrl(status.url)
       if (current.state !== 'ready' || !tokenUrl) throw new Error(current.reason || '目标 Codeg 尚未运行。')
-      const bootstrapUrl = new URL(tokenUrl)
-      bootstrapUrl.searchParams.set('next', '/workspace?tether_home=1')
+      const currentRuntimeUrl = legacyRuntimeUrl(tokenUrl.toString())
+      const previousRuntimeUrl = cached && (cached.legacyRuntimeUrl
+        || (cached.legacyTokenUrl && legacyRuntimeUrl(cached.legacyTokenUrl)))
+      const runtimeChanged = !cached || previousRuntimeUrl !== currentRuntimeUrl
+      const bootstrapUrl = runtimeChanged ? new URL(tokenUrl) : new URL(cached.legacyTokenUrl)
+      if (runtimeChanged) bootstrapUrl.searchParams.set('next', legacyGuestNext(cached))
       if ((actorGenerations.get(actorId) || 0) !== generation || clearingActors.has(actorId)) {
         throw new Error('工作台账号已切换，请重新打开服务。')
       }
@@ -843,13 +868,16 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
       const endpoint = new URL('/', tokenUrl)
       const effectiveGrantId = cached ? cached.grantId : grantId
       const bootstrapRevision = cached
-        ? (cached.bootstrapRevision || 0) + (cached.legacyTokenUrl === bootstrapUrl.toString() ? 0 : 1)
+        ? (cached.bootstrapRevision || 0) + (runtimeChanged ? 1 : 0)
         : 1
       const publicResult = { targetId, serviceId: 'codeg', grantId: effectiveGrantId, endpoint: endpoint.toString(),
         partition, legacy: true, bootstrapRevision }
       // legacy marks the existing token-URL bootstrap flow, not the target Node version.
       active.set(key, { actorId, targetId, serviceId: 'codeg', generation, legacy: true,
-        grantId: effectiveGrantId, endpoint, legacyTokenUrl: bootstrapUrl.toString(), bootstrapRevision, guestPrepared: false,
+        grantId: effectiveGrantId, endpoint, legacyRuntimeUrl: currentRuntimeUrl,
+        legacyTokenUrl: bootstrapUrl.toString(), bootstrapRevision,
+        guestPrepared: runtimeChanged ? false : cached.guestPrepared,
+        guestContents: runtimeChanged ? null : cached.guestContents,
         serviceSession, sourceRoute, partition, public: publicResult, viewTimer: null,
         refreshOptions: { allowModernLocal, allowModernOwnedEasyTier,
           sourceDeviceId: allowModernOwnedEasyTier ? options.sourceDeviceId : '' } })
@@ -914,6 +942,7 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     if (record.guestPrepared) return { managed: true, prepared: false }
     if (typeof contents.loadURL !== 'function') throw new Error('工作台 guest 无法加载目标页面。')
     await contents.loadURL(record.legacyTokenUrl)
+    record.guestContents = contents
     record.guestPrepared = true
     return { managed: true, prepared: true }
   }

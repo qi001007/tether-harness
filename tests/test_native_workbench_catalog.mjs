@@ -460,6 +460,101 @@ test('reopening legacy Codeg refreshes its origin and token bootstrap without cl
   assert.equal(session.calls.cache, 0)
 })
 
+test('same-runtime Codeg refresh preserves the prepared guest and a changed runtime restores its route', async () => {
+  const session = legacySession()
+  let statusUrl = 'http://100.64.0.8:4096/token.html?token=first-secret'
+  const workbench = workbenchWith(async (url) => {
+    const path = new URL(url).pathname
+    if (path.endsWith('/service_catalog')) return jsonResponse(400, { detail: { code: 'bad_op' } })
+    if (path.endsWith('/agents_runtime_status')) return jsonResponse(200, readyLegacyStatus(statusUrl))
+    if (path === '/api/networks') return jsonResponse(200, readyNetworks())
+    throw new Error('unexpected request: ' + path)
+  }, { getServiceSession: () => session, getSourceRoute: async () => readyRoute })
+
+  const first = await workbench.openLegacyCodeg('target-1')
+  let currentUrl = 'about:blank'
+  const loaded = []
+  const guest = { session, getURL: () => currentUrl, async loadURL(url) {
+    loaded.push(url)
+    currentUrl = 'http://100.64.0.8:4096/token.html?token=internal-token'
+  } }
+  await workbench.prepareGuest(guest)
+  currentUrl = 'http://100.64.0.8:4096/workspace?filter=open#thread'
+
+  const sameRuntime = await workbench.open('target-1', 'codeg')
+  assert.equal(sameRuntime.bootstrapRevision, first.bootstrapRevision)
+  assert.deepEqual(await workbench.prepareGuest(guest), { managed: true, prepared: false })
+  assert.equal(loaded.length, 1, 'same token and endpoint must keep the already-prepared guest')
+
+  statusUrl = 'http://100.64.0.8:4096/token.html?token=rotated-secret'
+  const rotated = await workbench.open('target-1', 'codeg')
+  assert.equal(rotated.bootstrapRevision, first.bootstrapRevision + 1)
+  await workbench.prepareGuest(guest)
+  assert.match(loaded[1], /next=%2Fworkspace(?:&|$)/)
+  assert.doesNotMatch(loaded[1], /filter|thread/)
+
+  currentUrl = 'http://100.64.0.8:4096/workspace?tether_home=1&filter=open#home'
+  statusUrl = 'http://100.64.0.8:4201/token.html?token=endpoint-rotation'
+  const endpointRotation = await workbench.open('target-1', 'codeg')
+  assert.equal(endpointRotation.bootstrapRevision, rotated.bootstrapRevision + 1)
+  const replacementGuest = { session, getURL: () => 'about:blank', async loadURL(url) { loaded.push(url) } }
+  await workbench.prepareGuest(replacementGuest)
+  assert.match(loaded[2], /next=%2Fworkspace%3Ftether_home%3D1/)
+  assert.doesNotMatch(loaded[2], /filter=open|#home/)
+})
+
+test('invalid or unprepared cached guest routes fall back to native Agent Home on runtime change', async () => {
+  for (const route of [
+    'about:blank',
+    'chrome-error://chromewebdata/',
+    'http://100.64.0.9:4096/workspace',
+    'http://100.64.0.8:4096/other',
+    'http://100.64.0.8:4096/workspace?tether_home=0',
+    'http://100.64.0.8:4096/workspace?tether_home=1&tether_home=1'
+  ]) {
+    const session = legacySession()
+    let token = 'first'
+    const workbench = workbenchWith(async (url) => {
+      const path = new URL(url).pathname
+      if (path.endsWith('/service_catalog')) return jsonResponse(400, { detail: { code: 'bad_op' } })
+      if (path.endsWith('/agents_runtime_status')) {
+        return jsonResponse(200, readyLegacyStatus('http://100.64.0.8:4096/token.html?token=' + token))
+      }
+      if (path === '/api/networks') return jsonResponse(200, readyNetworks())
+      throw new Error('unexpected request: ' + path)
+    }, { getServiceSession: () => session, getSourceRoute: async () => readyRoute })
+    await workbench.openLegacyCodeg('target-1')
+    let currentUrl = 'about:blank'
+    const loaded = []
+    const guest = { session, getURL: () => currentUrl, async loadURL(url) { loaded.push(url) } }
+    await workbench.prepareGuest(guest)
+    currentUrl = route
+    token = 'rotated'
+    await workbench.open('target-1', 'codeg')
+    const replacementGuest = { session, getURL: () => 'about:blank', async loadURL(url) { loaded.push(url) } }
+    await workbench.prepareGuest(replacementGuest)
+    assert.match(loaded[1], /next=%2Fworkspace%3Ftether_home%3D1/, route)
+  }
+
+  const session = legacySession()
+  let token = 'first'
+  const workbench = workbenchWith(async (url) => {
+    const path = new URL(url).pathname
+    if (path.endsWith('/service_catalog')) return jsonResponse(400, { detail: { code: 'bad_op' } })
+    if (path.endsWith('/agents_runtime_status')) {
+      return jsonResponse(200, readyLegacyStatus('http://100.64.0.8:4096/token.html?token=' + token))
+    }
+    if (path === '/api/networks') return jsonResponse(200, readyNetworks())
+    throw new Error('unexpected request: ' + path)
+  }, { getServiceSession: () => session, getSourceRoute: async () => readyRoute })
+  await workbench.openLegacyCodeg('target-1')
+  token = 'rotated-without-prepared-guest'
+  await workbench.open('target-1', 'codeg')
+  const loaded = []
+  await workbench.prepareGuest({ session, getURL: () => 'about:blank', async loadURL(url) { loaded.push(url) } })
+  assert.match(loaded[0], /next=%2Fworkspace%3Ftether_home%3D1/)
+})
+
 test('failed legacy Codeg refresh preserves the previous active grant and guest storage', async () => {
   const session = legacySession()
   let failRefresh = false
