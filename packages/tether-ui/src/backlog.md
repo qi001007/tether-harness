@@ -10,6 +10,7 @@
 ## 2026-11-10
 
 - `agents-page.js`：APP 的 legacy Codeg ready 状态使用专用主进程 opener 和 token-free native webview；legacy stopped/missing/failed 均禁用，并显示未运行、未安装或状态异常，不触发旧 `agents_runtime_start`。
+- 2026-11-13：Codeg guest 页面重试先由 `openNativeCodeg` 在通过入口门禁后显示加载态；fresh open 失败时显式恢复错误态，保留原 pane 并让重试按钮继续可用。未构建或部署。
 - `app.js`：Electron 托管 OAuth 下，远端 DSH surface descriptor 通过既有 `hubRequest` IPC 请求，保留 HTTP 状态/body，并在 IPC 前后尊重取消；本机、Web、DSH 与显式 legacy 路径不变。`/app-context` 的本机设备 ID 仅在当前设备快照中存在时才可自动选中，用户手选仍优先。r2 在在线 REMOTESTITCH-HUB 上观察约 45 秒，设备选择保持且无新增 CORS/404/HTTP 400，截图已保存；旧工作区协议仍待兼容。
 
 ## 2026-11-10
@@ -53,6 +54,7 @@
 - 2026-11-11：Codeg guest readiness 在 load 监听注册后，以同 endpoint origin 且主框架停止加载的一次快照覆盖 late-listener 竞态；same-document in-place 导航不重置 loading，失败事件与文档导航事件继续驱动状态。
 - 2026-11-12：统一 Agent 入口后，About 的客户端版本优先读取 Electron 现有 `tetherApp.info()` 结果；启动时将持久化的 Herdr 主导航值显示并归一为 Agents。Tether UI Web 与 DSH bundle 已从共享源码重建，未部署。
 - 2026-11-12：桌面 auth-status 暂时无法续期时保留当前界面数据与认证状态，不引导重复登录；每 15 秒重查，effect 卸载时清理唯一重试计时器。永久未认证状态仍进入原登录提示流程。
+- 2026-11-13：Codeg 工作台显式重试重新走主进程授权/状态读取，并递增本地打开版本以重建同 partition guest（即使 endpoint 未变化）；仅同 endpoint 的页面加载状态可标记 ready，避免错误页伪装成功。
 - 2026-11-12：Codeg native `codeg:home` pane 不再保留无按钮内容的 42px header 空槽；返回按钮和远程桌面状态/结束操作仍显示在需要的 pane 上。
 - 2026-11-12：native Codeg 主页不渲染空白顶部 header；`codeg:home` 内容从 guest 顶部开始，其他带返回/桌面操作的工作台 pane 保留 42px 工具栏。
 - 2026-11-12：显式点击“打开 Codeg”时，UI 将主进程返回的 endpoint 复制为同源 `/workspace?tether_home=1`，使缓存 guest 也回到智能体主页；不改 main 授权记录，切换 pane 和打开历史会话不触发此导航。

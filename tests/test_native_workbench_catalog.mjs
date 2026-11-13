@@ -413,6 +413,72 @@ test('legacy Codeg prepares about:blank with the private URL, rejects a wrong or
   assert.equal(controllerCalls.some((call) => /service_open|agents_runtime_start/.test(call.path)), false)
 })
 
+test('reopening legacy Codeg refreshes its origin and token bootstrap without clearing the guest partition', async () => {
+  const session = legacySession()
+  let statusReads = 0
+  const workbench = workbenchWith(async (url) => {
+    const path = new URL(url).pathname
+    if (path.endsWith('/service_catalog')) return jsonResponse(400, { detail: { code: 'bad_op' } })
+    if (path.endsWith('/agents_runtime_status')) {
+      statusReads += 1
+      const statusUrl = statusReads <= 2
+        ? 'http://100.64.0.8:4096/token.html?token=first-secret'
+        : statusReads === 3
+          ? 'http://100.64.0.8:4201/token.html?token=rotated-secret'
+          : 'http://100.64.0.8:4201/token.html?token=rotated-again-secret'
+      return jsonResponse(200, readyLegacyStatus(statusUrl))
+    }
+    if (path === '/api/networks') return jsonResponse(200, readyNetworks())
+    throw new Error('unexpected request: ' + path)
+  }, { getServiceSession: () => session, getSourceRoute: async () => readyRoute })
+
+  const first = await workbench.openLegacyCodeg('target-1')
+  const loaded = []
+  const guest = { session, getURL: () => 'about:blank', async loadURL(url) { loaded.push(url) } }
+  await workbench.prepareGuest(guest)
+  const refreshed = await workbench.open('target-1', 'codeg')
+
+  assert.equal(refreshed.endpoint, 'http://100.64.0.8:4201/')
+  assert.equal(refreshed.grantId, first.grantId)
+  assert.equal(refreshed.partition, first.partition)
+  assert.equal(workbench.allowGuest(first.partition, first.endpoint), false)
+  assert.equal(workbench.allowGuest(first.partition, refreshed.endpoint), true)
+  assert.equal(session.calls.storage, 0)
+  assert.equal(session.calls.cache, 0)
+  assert.deepEqual(await workbench.prepareGuest(guest), { managed: true, prepared: true })
+  assert.match(loaded[0], /first-secret/)
+  assert.match(loaded[1], /rotated-secret/)
+
+  const sameOriginRefresh = await workbench.open('target-1', 'codeg')
+  assert.equal(sameOriginRefresh.endpoint, refreshed.endpoint)
+  assert.deepEqual(await workbench.prepareGuest(guest), { managed: true, prepared: true })
+  assert.match(loaded[2], /rotated-again-secret/)
+  assert.equal(session.calls.storage, 0)
+  assert.equal(session.calls.cache, 0)
+})
+
+test('failed legacy Codeg refresh preserves the previous active grant and guest storage', async () => {
+  const session = legacySession()
+  let failRefresh = false
+  const workbench = workbenchWith(async (url) => {
+    const path = new URL(url).pathname
+    if (path.endsWith('/service_catalog')) return jsonResponse(400, { detail: { code: 'bad_op' } })
+    if (path.endsWith('/agents_runtime_status')) {
+      if (failRefresh) throw new Error('temporary status failure')
+      return jsonResponse(200, readyLegacyStatus())
+    }
+    if (path === '/api/networks') return jsonResponse(200, readyNetworks())
+    throw new Error('unexpected request: ' + path)
+  }, { getServiceSession: () => session, getSourceRoute: async () => readyRoute })
+
+  const opened = await workbench.openLegacyCodeg('target-1')
+  failRefresh = true
+  await assert.rejects(workbench.open('target-1', 'codeg'), /temporary status failure/)
+  assert.equal(workbench.allowGuest(opened.partition, opened.endpoint), true)
+  assert.equal(session.calls.storage, 0)
+  assert.equal(session.calls.cache, 0)
+})
+
 test('legacy Codeg uses only the authenticated target EasyTier address when no managed mesh route matches', async () => {
   const originalNetworkInterfaces = os.networkInterfaces
   const session = legacySession()
@@ -650,6 +716,51 @@ test('modern owned remote Codeg uses the token gateway only after fresh EasyTier
       '/api/devices/target-1/fs/agents_runtime_start',
       '/api/devices/target-1/fs/agents_runtime_status'
     ])
+  } finally {
+    os.networkInterfaces = originalNetworkInterfaces
+  }
+})
+
+test('cached owned legacy Codeg returns to native service_open when a ready mesh route appears', async () => {
+  const originalNetworkInterfaces = os.networkInterfaces
+  const session = legacySession()
+  let commonNetworkReady = false
+  const calls = []
+  os.networkInterfaces = () => ({
+    et_6_zngp: [{ address: '10.144.0.2', netmask: '255.255.255.0', family: 'IPv4', internal: false }]
+  })
+  try {
+    const workbench = workbenchWith(async (url) => {
+      const path = new URL(url).pathname
+      calls.push(path)
+      if (path.endsWith('/service_catalog')) return jsonResponse(200, {
+        protocol: 1, target_id: 'target-1', services: [{ id: 'codeg', state: 'ready' }]
+      })
+      if (path === '/api/state') return jsonResponse(200, { user: { user_id: 'actor-1' }, devices: [
+        { device_id: 'target-1', online: true, owner_id: 'actor-1',
+          capabilities: { direct_api: { host: '10.144.0.3', port: 18895, token: 'private-api-token' } } }
+      ] })
+      if (path === '/api/networks') return jsonResponse(200, { networks: commonNetworkReady ? [{
+        network_id: 'mesh-1', state: 'ready', devices: [
+          { device_id: 'local-1', state: 'ready', service_ip: '10.144.0.2' },
+          { device_id: 'target-1', state: 'ready', service_ip: '10.144.0.3' }
+        ]
+      }] : [] })
+      if (path.endsWith('/agents_runtime_status')) return jsonResponse(200,
+        readyLegacyStatus('http://10.144.0.3:3444/token.html?token=private-token'))
+      if (path.endsWith('/service_open')) return jsonResponse(409, { detail: { code: 'native_path_reached' } })
+      throw new Error('unexpected request: ' + path)
+    }, { getServiceSession: () => session })
+
+    const opened = await workbench.open('target-1', 'codeg')
+    assert.equal(opened.legacy, true)
+    commonNetworkReady = true
+    await assert.rejects(workbench.open('target-1', 'codeg'),
+      (error) => error.status === 409 && error.code === 'native_path_reached')
+    assert.equal(session.calls.storage, 0)
+    assert.equal(session.calls.cache, 0)
+    assert.equal(workbench.allowGuest(opened.partition, opened.endpoint), false)
+    assert.equal(calls.some((path) => path.endsWith('/service_open')), true)
   } finally {
     os.networkInterfaces = originalNetworkInterfaces
   }

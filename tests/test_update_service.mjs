@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url'
 import vm from 'node:vm'
 
 const require = createRequire(import.meta.url)
+const Module = require('node:module')
 const { UpdateService, stageUpdaterRuntime } = require('../apps/tether-app/update-service.js')
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'tether-update-service-'))
@@ -256,6 +257,110 @@ try {
   assert.deepEqual([...inject.matchAll(/'([^']+)'/g)].map(([, service]) => service), [
     'slots', 'layout', 'connection', 'remote', 'remote.pluginManager', 'commandUi', 'uiWorkspace', 'sessions'
   ])
+
+  if (process.platform === 'win32') {
+    const updater = new EventEmitter()
+    const installCalls = []
+    let installError = null
+    updater.quitAndInstall = (...args) => {
+      installCalls.push({ args, temp: process.env.TEMP, tmp: process.env.TMP })
+      if (installError) throw installError
+    }
+    const originalLoad = Module._load
+    Module._load = function (request, parent, isMain) {
+      if (request === 'electron-updater') return { autoUpdater: updater }
+      return originalLoad.call(this, request, parent, isMain)
+    }
+    let packagedService
+    try {
+      packagedService = new UpdateService({
+        repoRoot, dataDir, python: 'python-fixture', env: {},
+        app: { getPath: (name) => name === 'exe' ? 'D:\\Apps\\Tether\\Tether.exe' : userData,
+          getVersion: () => '0.5.5', isPackaged: true },
+        exec,
+        stopManagedNode: async () => { stopEnv = { temp: process.env.TEMP, tmp: process.env.TMP } }
+      })
+    } finally {
+      Module._load = originalLoad
+    }
+
+    const originalMkdirSync = fs.mkdirSync
+    const originalMkdtempSync = fs.mkdtempSync
+    const originalRmdirSync = fs.rmdirSync
+    const originalTemp = process.env.TEMP
+    const originalTmp = process.env.TMP
+    let stopEnv
+    let mkdirError = null
+    let mkdirPath = ''
+    let probePrefix = ''
+    let removedProbe = ''
+    let beforeInstallTemp = null
+    fs.mkdirSync = (directory) => {
+      mkdirPath = directory
+      if (mkdirError) throw mkdirError
+      return directory
+    }
+    fs.mkdtempSync = (prefix) => { probePrefix = prefix; return `${prefix}fixture` }
+    fs.rmdirSync = (directory) => { removedProbe = directory }
+    process.env.TEMP = 'before-temp'
+    process.env.TMP = 'before-tmp'
+    try {
+      const preparedId = 'a'.repeat(32)
+      packagedService.electronUpdateInfo = { version: '0.5.6' }
+      packagedService.electronDownloaded = true
+      packagedService.preparedIds.add(preparedId)
+      await packagedService.apply(preparedId, {
+        beforeInstall: async () => { beforeInstallTemp = { temp: process.env.TEMP, tmp: process.env.TMP } }
+      })
+      assert.equal(mkdirPath, 'D:\\tether-up')
+      assert.equal(probePrefix, path.join('D:\\tether-up', 'write-probe-'))
+      assert.equal(removedProbe, `${probePrefix}fixture`)
+      assert.deepEqual(beforeInstallTemp, { temp: 'before-temp', tmp: 'before-tmp' })
+      assert.deepEqual(stopEnv, { temp: 'before-temp', tmp: 'before-tmp' })
+      assert.deepEqual(installCalls[0], { args: [true, true], temp: 'D:\\tether-up', tmp: 'D:\\tether-up' })
+      assert.equal(process.env.TEMP, 'before-temp')
+      assert.equal(process.env.TMP, 'before-tmp')
+
+      delete process.env.TEMP
+      delete process.env.TMP
+      const missingEnvPreparedId = 'd'.repeat(32)
+      packagedService.preparedIds.add(missingEnvPreparedId)
+      installError = null
+      await packagedService.apply(missingEnvPreparedId)
+      assert.deepEqual(installCalls[1], { args: [true, true], temp: 'D:\\tether-up', tmp: 'D:\\tether-up' })
+      assert.equal(process.env.TEMP, undefined)
+      assert.equal(process.env.TMP, undefined)
+      process.env.TEMP = 'before-temp'
+      process.env.TMP = 'before-tmp'
+
+      const failedPreparedId = 'b'.repeat(32)
+      packagedService.preparedIds.add(failedPreparedId)
+      installError = new Error('synchronous install call failure')
+      await assert.rejects(packagedService.apply(failedPreparedId), /synchronous install call failure/)
+      assert.equal(process.env.TEMP, 'before-temp')
+      assert.equal(process.env.TMP, 'before-tmp')
+      assert.equal(JSON.parse(fs.readFileSync(path.join(userData, 'update-result.json'), 'utf8')).ok, false)
+
+      const mkdirFailedPreparedId = 'c'.repeat(32)
+      packagedService.preparedIds.add(mkdirFailedPreparedId)
+      mkdirError = Object.assign(new Error('access denied'), { code: 'EACCES' })
+      const priorStopCalls = stopEnv
+      await assert.rejects(packagedService.apply(mkdirFailedPreparedId), (error) => error.code === 'app_update_temp_dir_failed'
+        && error.message.includes('无法创建 APP 更新临时目录'))
+      assert.equal(installCalls.length, 3)
+      assert.equal(stopEnv, priorStopCalls, 'temp directory failure must happen before stopping the managed node')
+      assert.equal(process.env.TEMP, 'before-temp')
+      assert.equal(process.env.TMP, 'before-tmp')
+    } finally {
+      fs.mkdirSync = originalMkdirSync
+      fs.mkdtempSync = originalMkdtempSync
+      fs.rmdirSync = originalRmdirSync
+      if (originalTemp === undefined) delete process.env.TEMP
+      else process.env.TEMP = originalTemp
+      if (originalTmp === undefined) delete process.env.TMP
+      else process.env.TMP = originalTmp
+    }
+  }
 } finally {
   fs.rmSync(temp, { recursive: true, force: true })
 }

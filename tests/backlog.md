@@ -1,6 +1,6 @@
 # 修改记录
-- 2026-11-12：更新 desktop preview workflow 的 0.5.5 分支、版本、tag 和 draft 汇总断言；两个定向检查通过。
 - 2026-11-12：desktop preview workflow validation asserts the isolated 0.5.4 branch/version/tag and draft aggregation while retaining 0.5.2/0.5.3 mappings.
+- 2026-11-13：更新候选版本同步及 desktop preview workflow 测试期望至 0.5.6 / `codex/tether-056-reconnect-20261113` / `v0.5.6-preview.1`；冻结插件 0.2.93、旧候选映射与 draft prerelease 门禁保持。
 - 2026-11-12：signed-release workflow validation asserts that `v*-preview.*` tags are excluded from the stable release trigger.
 - 2026-11-12：candidate build tests now expect the 0.5.4 scratch output root alongside synchronized APP/Node/Python metadata.
 - 2026-11-11：记录 Actions run 42937706743 的 build jobs 全绿但首个 preview 标签错误导致发布失败；将工作流回归断言改为精确要求 preview.1 两处且 preview.2 不出现。
@@ -113,6 +113,7 @@
 - 2026-10-27：增加 Hub 地址编辑输入的空配置、正常路径保留、敏感附加参数隐藏提示及断开按钮可用状态回归。
 - 2026-10-28：修复更新服务 helper CLI 集成测试对仓库 `.venv/Scripts/python.exe` 的硬编码，按显式环境变量、有效项目虚拟环境和 PATH 顺序探测可运行 Python，保留真实 helper activity/apply/relaunch 断言。
 # 变更记录
+- 2026-11-12：desktop preview workflow validation 覆盖 0.5.5/native-mode 分支与 preview tag，并保留旧版映射和 draft 行为。
 
 - 2026-10-29：Node P0 连接回归覆盖控制面 WSS 禁用环境代理、更新结果不跨重连 WebSocket 发送、Node apply 在断线后仍关闭当前连接请求重启，以及 closing socket 的 `InvalidStateError` 只按传输中断收敛；定向 Node 更新/并发测试 21 项通过。
 - 2026-10-28：附件目标读取回归覆盖跨 chunk 版本变化拒绝、PNG MIME、SDK slot priority 胜者顺序及原生 `fileDrag.read`/locale props 透传。
@@ -219,6 +220,9 @@
 - 2026-11-12：候选 workflow 回归验证汇总 job 构建共享 UI、下载并校验 pinned Codeg web artifact，且在 `build_release.py` 之前替换 checkout 内旧静态树。
 - 2026-11-12：候选 workflow 对 Codeg web artifact 使用本次运行的动态摘要；临时目录行为测试验证四入口缺失时保留旧树、完整产物替换后无 stale 文件（2 项 focused workflow 测试通过）。
 - 2026-11-12：候选构建合约测试实际调用 `builderTargetArgs` 验证 Windows NSIS 及 Linux/macOS 原 target 不变。
+- 2026-11-13：真实本地 HTTP server 覆盖运行时 Catalog 在短 health 超时后仍必须由 Bearer `acp_list_agents` 成功确认，错误 token 拒绝；另覆盖 service catalog 复用 status 的单次健康结果、不发第二个短探测。`tests/test_agents_runtime.py` 30 项通过。
+- 2026-11-13：真实本机health server+坏HTTP代理覆盖loopback健康检查绕过代理，仍强制Bearer且保持其它认证catalog请求直连；current Node环境代理变量presence也以只读布尔检查，未输出值。
+- 2026-11-13：`test_native_workbench_catalog.mjs` 覆盖 cached legacy Codeg 显式重开后 endpoint/token bootstrap 刷新且 grant、partition 与存储保留、刷新失败不清空原活动授权，以及 fresh ready mesh 出现后回到既有 `service_open` 路径；focused suite 34/34 通过。
 - 2026-11-12：覆盖 Herdr `agent_not_ready` 时保留新建 tab/PTy 并返回 session + `agent_state=blocked`，同时覆盖 fatal cleanup、成功 ready 和 `agent_wait_timeout` 安全阶段码；`test_terminal.py` + `test_agents_runtime.py` 61/61 通过。
 - 2026-11-12：`test_app_installation.mjs` 覆盖已登录/已登出的有效 external OIDC profile 原样保留，以及缺认证模式、缺节点模式、无效 Hub origin、空 device 仍拒绝迁移合并。
 - 2026-11-12：OIDC 行为用例覆盖新实例恢复不重开浏览器且 close 保留会话、临时 safeStorage 失败后恢复、到期续期/轮换后重开、503/网络失败保留原加密文件、永久失效清理、并发 401 单次刷新及 logout 竞态；Electron integration 检查 auth-status 先 ensureSession 且 token 不出主进程。

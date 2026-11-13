@@ -145,6 +145,9 @@
 - 2026-11-12：modern remote Codeg 仅在 fresh Controller snapshot 确认当前 actor、目标为该 actor 在线自有设备、没有共同 ready network，且 direct_api 私网地址与本机 EasyTier 子网匹配时，复用既有隔离 token gateway；共享/非owner/无旧网条件继续原 `service_open`，状态/网络目录错误原样失败。启动后状态 URL 仍严格匹配证明过的 direct host，token 不进入 renderer。
 
 - 2026-11-12：新增 0.5.3 APP 候选版本，package.json 与 package-lock.json 同步，Node 版本由 version.json/pyproject.toml 保持同号；插件冻结 0.2.93，尚未构建或发布。
+- 2026-11-13：准备 0.5.6 reconnect 候选的 APP 版本元数据；package.json 与 lockfile 根包版本同步，插件仍冻结 0.2.93。尚未构建或发布。
 - 2026-11-12：迁移判定将完整的 OIDC + external Node `hub.json` 配置视为已初始化 profile，即使用户已登出且没有 Node credential / OIDC session 文件；认证启动路径不变，缺必需字段仍拒绝合并。
 - 2026-11-12：OIDC 加密 session 在启动时恢复；auth-status 与业务 fetch 在需要时先续期，refresh 单飞并持久化轮换 token。仅永久无效 refresh token 或显式 logout 清理；临时失败保留文件并返回 retryable，在途 refresh 不可覆盖 logout。auth-status 仅记录固定事件名。
+- 2026-11-13：复用中的 legacy Codeg 工作台每次显式重开都重新读取已鉴权服务状态与严格 token URL；刷新成功更新原 grant/partition 的 endpoint/bootstrap，失败保留原活动授权和存储，不清理会话数据。
 - 2026-11-12：准备 0.5.4 登录会话修补版的 APP 版本元数据，package.json 与 lockfile 根包版本保持一致；已发布 0.5.3 安装包维持 0.5.3。
+- 2026-11-13：Windows Electron APP 更新使用可写的安装卷根目录 `tether-up` 作为 NSIS 临时目录；在 APP 更新关闭前验证创建与写入能力，只在同步 `quitAndInstall(true, true)` 调用窗口临时覆盖子进程 TEMP/TMP，并在 finally 恢复。静默安装继续强制安装后重开；非 Windows 更新参数保持原行为。

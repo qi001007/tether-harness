@@ -471,8 +471,15 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     if (clearingActors.has(actorId)) throw new Error('工作台授权正在清理，请稍后重试。')
     const key = tupleKey(actorId, targetId, serviceId)
     const cached = active.get(key)
-    if (cached) return cached.public
     const generation = actorGenerations.get(actorId) || 0
+    if (cached && !(serviceId === 'codeg' && cached.legacy === true)) return cached.public
+    if (cached && cached.legacy === true && cached.generation === generation) {
+      const refreshed = await openLegacyCodeg(targetId, { ...cached.refreshOptions,
+        expectedActorId: actorId, expectedGeneration: generation })
+      if (refreshed) return refreshed
+      await resetServiceSession(cached.serviceSession)
+      if (active.get(key) === cached) active.delete(key)
+    }
     const existing = pending.get(key)
     if (existing) {
       if (existing.generation === generation) return existing
@@ -660,6 +667,12 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     if (options.expectedGeneration != null && options.expectedGeneration !== generation) {
       throw new Error('工作台账号已切换，请重新打开服务。')
     }
+    const key = tupleKey(actorId, targetId, 'codeg')
+    const cached = active.get(key)
+    if (cached && (cached.legacy !== true || cached.generation !== generation)) {
+      throw new Error('目标 Codeg 已由其他工作台模式打开。')
+    }
+    if (cached && cached.refreshOptions) options = { ...cached.refreshOptions, ...options }
     const localDeviceId = options.allowModernLocal === true ? await getLocalDeviceId() : ''
     const allowModernLocal = options.allowModernLocal === true && localDeviceId === targetId
     if ((actorGenerations.get(actorId) || 0) !== generation || clearingActors.has(actorId)) {
@@ -683,13 +696,6 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     if (!legacy && !(allowModernLocal && catalogHasCodeg) && !allowModernOwnedEasyTier) {
       throw new Error('目标 Codeg 未通过旧节点兼容检查。')
     }
-    const key = tupleKey(actorId, targetId, 'codeg')
-    const cached = active.get(key)
-    if (cached) {
-      if (cached.legacy === true && cached.generation === generation) return cached.public
-      throw new Error('目标 Codeg 已由其他工作台模式打开。')
-    }
-
     let serviceSession = null
     try {
       let modernOwnerProof = null
@@ -835,16 +841,20 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
       }
       const grantId = crypto.randomUUID()
       const endpoint = new URL('/', tokenUrl)
-      const publicResult = { targetId, serviceId: 'codeg', grantId, endpoint: endpoint.toString(),
+      const effectiveGrantId = cached ? cached.grantId : grantId
+      const publicResult = { targetId, serviceId: 'codeg', grantId: effectiveGrantId, endpoint: endpoint.toString(),
         partition, legacy: true }
       // legacy marks the existing token-URL bootstrap flow, not the target Node version.
-      active.set(key, { actorId, targetId, serviceId: 'codeg', generation, legacy: true, grantId,
-        endpoint, legacyTokenUrl: bootstrapUrl.toString(), guestPrepared: false, serviceSession, sourceRoute,
-        partition, public: publicResult, viewTimer: null })
-      logSafe('native-workbench-open-legacy', { targetId, serviceId: 'codeg' })
+      active.set(key, { actorId, targetId, serviceId: 'codeg', generation, legacy: true,
+        grantId: effectiveGrantId, endpoint, legacyTokenUrl: bootstrapUrl.toString(), guestPrepared: false,
+        serviceSession, sourceRoute, partition, public: publicResult, viewTimer: null,
+        refreshOptions: { allowModernLocal, allowModernOwnedEasyTier,
+          sourceDeviceId: allowModernOwnedEasyTier ? options.sourceDeviceId : '' } })
+      logSafe(cached ? 'native-workbench-refresh-legacy' : 'native-workbench-open-legacy',
+        { targetId, serviceId: 'codeg' })
       return publicResult
     } catch (error) {
-      if (serviceSession) {
+      if (serviceSession && !cached) {
         try {
           await resetServiceSession(serviceSession)
           await Promise.all([

@@ -1,5 +1,25 @@
 # Tether 技术说明
 
+## 2026-11-13 正式 APP 与连接恢复候选
+
+正式 APP 已通过同一已核摘要的055安装包完成升级；旧卸载器会将旧文件改名到其插件临时目录，最长投影路径超过 Win32 路径边界时返回 error 3 / exit 2。259/260 字符 MoveFileW 对照与短 TEMP 安装成功共同支持此定位。后续 APP 更新服务在关闭前检查安装卷短临时目录，启动 NSIS 的同步调用期间设置子进程 TEMP/TMP，并恢复 APP 原环境。新安装器也为旧版 APP 发起的升级设置其旧卸载子进程环境，避免必须先修改已安装旧 APP。
+
+Codeg 工作台候选在显式重开时重新验证目标 endpoint/token，保留 grant/partition 和会话存储；UI 只在实际页面 origin 与目标一致时显示就绪。公开状态仍使用认证 health；typed CLI / Herdr 使用本次认证 catalog 请求，避免无关的重复短探测。该候选尚未发布或进行真实断连恢复验收。
+
+Laptop 的传统 Codex CLI 实际为0.163.0；Codeg显示的2.5.0是ACP适配器版本。真实Node PATH解析的codex与显式codex.exe为同一路径，canonical agent.env为空，profile为C:\Users\14675\.codex；缺失的是该profile的daemon current/bin/codex.exe。不能据两个版本数字判为两份CLI，也不能据通用doctor的安装正常结论排除daemon缺件。
+
+## 2026-11-13 Laptop 旧依赖迁移结果
+
+旧 0.4.11 updater 会拒绝 Python 依赖声明变化，实际预检也确认缺少 fastapi、部分精确版本不匹配。计划对最终签名 0.5.5 做一次独立安装：新程序和 venv 放在 `D:\Tether\node-0.5.5`，新启动配置显式使用原 `--db D:\Tether\node-0.3.6\.runtime\node-local.db`。Node 的 data_dir 由数据库父目录决定，因而保留现有身份、授权、Codeg runtime 状态及会话库，避免复制仍在使用的 SQLite。
+
+- 准备阶段：校验官方包版本、签名和 SHA；只安装新 venv，执行依赖、模块路径与 pip check 验证，原程序继续运行。
+- 切换阶段：沿用原 TetherNode/TetherNodeWatchdog 的同用户任务和触发器，备份原配置，独立 worker 只切换准确识别的 Node Python 进程链。Codeg 可以通过原数据目录正常重开；原 DSH Host、desktop profile 和 0.4.1 插件保留。
+- 验收阶段：核对真实 current/runtime 版本、Hub 在线与服务状态、正常新开 Codeg 和 DSH、原历史摘要及终端模式，再确认切换。使用已有超时退回思路保留旧程序与任务配置，不伪造旧 updater 的事务提交。
+
+迁移已执行并于22:43:17Z confirmed。原任务写入被系统拒绝后，未改变任务或权限，改为备份并原位写入普通用户可写的旧launcher，转发到已验证新launcher。停止时先识别并停止runtime子进程，再等待venv wrapper自然退出；原一分钟watchdog接管。600秒验收窗内首次发现DSH_HOME继承环境覆盖配置，自动回退后，launcher显式追加原--dsh-home并同步更新准备元数据哈希；最终原Host PID8244及C profile回读一致。原任务XML、DB路径保持；全部尝试及一致性DB备份保留。旧目录仍包含活动数据，不能作为普通旧版本目录删除。终端模式失败不记为通过。
+
+APP最终055安装正常apply后被旧卸载器exit2阻断，干净重试同样失败；没有绕过卸载门禁或改注册表。恢复现有053普通进程后登录自动恢复；默认C profile的desktopAuthMode=oidc禁用legacy fallback，进程无QA变量/目录覆盖，用户未再次输入账号。
+
 ## 2026-11-13 原生项目入口约束
 
 - F163 的项目上下文使用现有 `WorkbenchRoute.requestedProjectId`，没有显式选择时回退到当前会话的原生文件夹；Agent Home 不再维护本地项目 ID，也不渲染项目列。原生项目名选择项目，原有箭头独立折叠；打开文件夹与 launcher 事件进入 Agent Home，只有结构化动作才建草稿。

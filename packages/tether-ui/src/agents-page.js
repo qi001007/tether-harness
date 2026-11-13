@@ -67,6 +67,7 @@ function AgentTargetPage({ React, Glyph, post, C, host, devices = [], localDevic
   const [serviceView, setServiceView] = React.useState(null)
   const [serviceFrameState, setServiceFrameState] = React.useState('loading')
   const serviceWebviewRef = React.useRef(null)
+  const codegOpenRevision = React.useRef(0)
   const handledAgentLaunchRequests = React.useRef(new Set())
   const [workbenchLoginRequired, setWorkbenchLoginRequired] = React.useState(false)
   const [workbenchLoginBusy, setWorkbenchLoginBusy] = React.useState(false)
@@ -657,6 +658,7 @@ function AgentTargetPage({ React, Glyph, post, C, host, devices = [], localDevic
     if (legacyCodeg && (!catalogCodeg || !['ready', 'stopped'].includes(catalogCodeg.state)
         || (catalogCodeg.state === 'ready' && catalogCodeg.open_mode !== 'legacy-codeg')
         || typeof host.workbench.openLegacyCodeg !== 'function')) return
+    setServiceFrameState('loading')
     setServiceOpening(true)
     setHomeError('')
     try {
@@ -671,6 +673,7 @@ function AgentTargetPage({ React, Glyph, post, C, host, devices = [], localDevic
         throw new Error('主进程没有返回有效的 Codeg 工作台会话。')
       }
       const homeService = { ...service, endpoint: new URL('/workspace?tether_home=1', service.endpoint).href }
+      homeService.openRevision = ++codegOpenRevision.current
       setServiceView(homeService)
       setPanes((current) => current.some((pane) => pane.key === 'codeg:home')
         ? current.map((pane) => pane.key === 'codeg:home' ? { ...pane, kind: 'native-service', service: homeService } : pane)
@@ -678,6 +681,7 @@ function AgentTargetPage({ React, Glyph, post, C, host, devices = [], localDevic
       setActivePane('codeg:home')
       setWorkspaceOpen(true)
     } catch (error) {
+      setServiceFrameState('error')
       if (error && (error.status === 401 || error.status === 403 || error.code === 'auth_required'
         || error.code === 'oidc_identity_unbound')) setWorkbenchLoginRequired(true)
       setHomeError(String((error && error.message) || error || 'Codeg 工作台无法打开。'))
@@ -768,7 +772,14 @@ function AgentTargetPage({ React, Glyph, post, C, host, devices = [], localDevic
     if (!serviceView || !guest || typeof guest.addEventListener !== 'function') return undefined
     setServiceFrameState('loading')
     const onStart = (event) => { if (event.isMainFrame && !event.isInPlace) setServiceFrameState('loading') }
-    const onFinish = () => setServiceFrameState('ready')
+    const setReadyForCurrentOrigin = () => {
+      try {
+        const current = new URL(guest.getURL())
+        const expected = new URL(serviceView.endpoint)
+        setServiceFrameState(current.origin === expected.origin ? 'ready' : 'error')
+      } catch (_) { setServiceFrameState('error') }
+    }
+    const onFinish = () => setReadyForCurrentOrigin()
     const onFail = (event) => {
       if (event.isMainFrame && event.errorCode !== -3) setServiceFrameState('error')
     }
@@ -776,11 +787,13 @@ function AgentTargetPage({ React, Glyph, post, C, host, devices = [], localDevic
     guest.addEventListener('did-finish-load', onFinish)
     guest.addEventListener('did-fail-load', onFail)
     try {
-      const currentOrigin = new URL(guest.getURL()).origin
-      const endpointOrigin = new URL(serviceView.endpoint).origin
-      if (currentOrigin === endpointOrigin
+      const current = new URL(guest.getURL())
+      const expected = new URL(serviceView.endpoint)
+      if (current.origin === expected.origin
           && typeof guest.isLoadingMainFrame === 'function' && !guest.isLoadingMainFrame()) {
         setServiceFrameState('ready')
+      } else if (current.protocol === 'chrome-error:') {
+        setServiceFrameState('error')
       }
     } catch (_) { /* guest may not be attached yet */ }
     return () => {
@@ -788,7 +801,7 @@ function AgentTargetPage({ React, Glyph, post, C, host, devices = [], localDevic
       guest.removeEventListener('did-finish-load', onFinish)
       guest.removeEventListener('did-fail-load', onFail)
     }
-  }, [serviceView && serviceView.endpoint])
+  }, [serviceView && serviceView.endpoint, serviceView && serviceView.openRevision])
 
   React.useEffect(() => {
     const guest = serviceWebviewRef.current
@@ -835,7 +848,7 @@ function AgentTargetPage({ React, Glyph, post, C, host, devices = [], localDevic
     }
     guest.addEventListener('did-navigate-in-page', onInPageNavigation)
     return () => guest.removeEventListener('did-navigate-in-page', onInPageNavigation)
-  }, [serviceView && serviceView.endpoint, serviceView && serviceView.targetId,
+  }, [serviceView && serviceView.endpoint, serviceView && serviceView.openRevision, serviceView && serviceView.targetId,
     serviceView && serviceView.serviceId, device, herdrAvailable])
 
   const installAgent = async (agent) => {
@@ -913,14 +926,16 @@ function AgentTargetPage({ React, Glyph, post, C, host, devices = [], localDevic
       '正在启动 ' + pane.title + '…'))
     : pane.kind === 'native-service'
       ? h('div', { style: { flex: '1 1 auto', minHeight: 0, minWidth: 0, position: 'relative', display: 'flex' } },
-        h('webview', { key: pane.key, ref: serviceWebviewRef, title: pane.title, src: pane.service.endpoint, partition: pane.service.partition,
+        h('webview', { key: pane.service.serviceId === 'codeg'
+          ? pane.key + ':' + pane.service.endpoint + ':' + (pane.service.openRevision || 0) : pane.key,
+          ref: serviceWebviewRef, title: pane.title, src: pane.service.endpoint, partition: pane.service.partition,
           style: { flex: '1 1 auto', width: '100%', minHeight: 0, border: 0, background: '#fff' } }),
         serviceFrameState === 'loading' ? h('div', { role: 'status', style: { position: 'absolute', inset: 0, display: 'grid', placeItems: 'center',
           background: 'rgba(255,255,255,.94)', color: C.sub, fontSize: 13, pointerEvents: 'none' } }, '正在连接目标 ' + pane.title + '…') : null,
         serviceFrameState === 'error' ? h('div', { role: 'alert', style: { position: 'absolute', inset: 0, display: 'grid', placeItems: 'center',
           alignContent: 'center', gap: 10, padding: 24, background: C.bg, color: C.sub, fontSize: 13, textAlign: 'center' } },
           h('span', null, '目标 ' + pane.title + ' 页面连接失败。请检查设备连接后重试。'),
-          h('button', { type: 'button', onClick: () => { setServiceFrameState('loading'); serviceWebviewRef.current?.reload?.() }, style: button }, '重试')) : null)
+          h('button', { type: 'button', onClick: () => { void openNativeCodeg() }, style: button }, '重试')) : null)
     : h(createTerminalDock, {
       key: pane.key, React, Glyph, post, C, device: pane.targetId || device, cwd: pane.cwd || '',
       initialAgent: pane.agentId || '', initialShell: pane.shell || '', initialHerdrProject: pane.herdrProject || false,

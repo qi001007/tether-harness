@@ -226,13 +226,13 @@ class AgentsRuntime:
             return False
 
     def _authenticated_ready(self, port: int, token: str) -> bool:
-        import urllib.request
-        request = urllib.request.Request(
+        request = Request(
             "http://127.0.0.1:%d/api/health" % port, data=b"{}",
             headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"},
             method="POST")
         try:
-            with urllib.request.urlopen(request, timeout=0.8) as response:
+            opener = build_opener(ProxyHandler({}))
+            with opener.open(request, timeout=0.8) as response:
                 payload = json.loads(response.read(512).decode("utf-8"))
                 return response.status == 200 and isinstance(payload, dict) and payload.get("status") == "ok"
         except Exception:
@@ -374,8 +374,8 @@ class AgentsRuntime:
     def agent_record(self, agent_type: str) -> dict[str, Any]:
         """Read one enabled Codeg agent record for typed terminal launches."""
         with self.lock:
-            state = self.status()
-            if not state.get("running") or not self.port or not self.token:
+            self._adopt()
+            if not self._is_running() or not self.port or not self.token:
                 raise ValueError("Agents Runtime must be running to start an agent in Herdr")
             try:
                 records = self._api_post("acp_list_agents", {}, self.port, self.token, 3.0)

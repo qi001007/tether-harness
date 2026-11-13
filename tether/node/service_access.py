@@ -491,7 +491,7 @@ class ServiceAccess:
                 return {"ready": False, "state": "stopped" if available else "missing",
                         "reason": "codeg_stopped" if available else "codeg_missing"}
             port, token = int(status.get("port") or 0), str(status.get("token") or "")
-            if not port or not token or not runtime._authenticated_ready(port, token):
+            if not port or not token:
                 return {"ready": False, "state": "failed", "reason": "codeg_health_failed"}
             return {"ready": True, "port": port, "headers": {"Authorization": "Bearer " + token}}
         except Exception:

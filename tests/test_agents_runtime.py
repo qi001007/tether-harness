@@ -31,18 +31,23 @@ class _Response:
 
 
 def test_authenticated_ready_sends_bearer_to_codeg_health(monkeypatch) -> None:
-    import urllib.request
+    from tether.node import agents_runtime
 
     captured = {}
 
-    def open_request(request, timeout):
-        captured["url"] = request.full_url
-        captured["authorization"] = request.get_header("Authorization")
-        captured["method"] = request.get_method()
-        captured["timeout"] = timeout
-        return _Response()
+    class Opener:
+        def open(self, request, timeout):
+            captured["url"] = request.full_url
+            captured["authorization"] = request.get_header("Authorization")
+            captured["method"] = request.get_method()
+            captured["timeout"] = timeout
+            return _Response()
 
-    monkeypatch.setattr(urllib.request, "urlopen", open_request)
+    def build_no_proxy_opener(handler):
+        captured["proxy_disabled"] = handler.proxies == {}
+        return Opener()
+
+    monkeypatch.setattr(agents_runtime, "build_opener", build_no_proxy_opener)
     runtime = object.__new__(AgentsRuntime)
     assert runtime._authenticated_ready(4200, "test-token") is True
     assert captured == {
@@ -50,13 +55,78 @@ def test_authenticated_ready_sends_bearer_to_codeg_health(monkeypatch) -> None:
         "authorization": "Bearer test-token",
         "method": "POST",
         "timeout": 0.8,
+        "proxy_disabled": True,
     }
 
 
-def test_authenticated_ready_rejects_non_ok_body(monkeypatch) -> None:
-    import urllib.request
+def test_authenticated_health_bypasses_bad_proxy_but_catalog_remains_authenticated(monkeypatch) -> None:
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-    monkeypatch.setattr(urllib.request, "urlopen", lambda *_args, **_kwargs: _Response(b'{"status":"error"}'))
+    calls = {"health": 0, "catalog": 0, "proxy": 0}
+
+    class LocalCodeg(BaseHTTPRequestHandler):
+        def do_POST(self):
+            if self.path == "/api/health" and self.headers.get("Authorization") == "Bearer test-token":
+                calls["health"] += 1
+                payload = b'{"status":"ok"}'
+            elif self.path == "/api/acp_list_agents" and self.headers.get("Authorization") == "Bearer test-token":
+                calls["catalog"] += 1
+                payload = b"[]"
+            else:
+                self.send_error(401)
+                return
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, *_args):
+            pass
+
+    class BadProxy(BaseHTTPRequestHandler):
+        def do_POST(self):
+            calls["proxy"] += 1
+            payload = b"proxy unavailable"
+            self.send_response(502)
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, *_args):
+            pass
+
+    codeg = ThreadingHTTPServer(("127.0.0.1", 0), LocalCodeg)
+    proxy = ThreadingHTTPServer(("127.0.0.1", 0), BadProxy)
+    servers = [codeg, proxy]
+    threads = [threading.Thread(target=server.serve_forever, daemon=True) for server in servers]
+    for thread in threads:
+        thread.start()
+    monkeypatch.setenv("HTTP_PROXY", "http://127.0.0.1:%d" % proxy.server_address[1])
+    monkeypatch.setenv("NO_PROXY", "")
+    monkeypatch.delenv("http_proxy", raising=False)
+    monkeypatch.delenv("no_proxy", raising=False)
+    try:
+        runtime = object.__new__(AgentsRuntime)
+        assert runtime._authenticated_ready(codeg.server_address[1], "test-token") is True
+        assert runtime._api_post("acp_list_agents", {}, codeg.server_address[1], "test-token", 3.0) == []
+        assert calls == {"health": 1, "catalog": 1, "proxy": 0}
+    finally:
+        for server in servers:
+            server.shutdown()
+            server.server_close()
+        for thread in threads:
+            thread.join(timeout=2)
+
+
+def test_authenticated_ready_rejects_non_ok_body(monkeypatch) -> None:
+    from tether.node import agents_runtime
+
+    class Opener:
+        @staticmethod
+        def open(*_args, **_kwargs):
+            return _Response(b'{"status":"error"}')
+
+    monkeypatch.setattr(agents_runtime, "build_opener", lambda *_args: Opener())
     runtime = object.__new__(AgentsRuntime)
     assert runtime._authenticated_ready(4200, "test-token") is False
 
@@ -68,7 +138,8 @@ def test_herdr_agent_uses_authenticated_runtime_catalog_and_keeps_env_internal()
     runtime.lock = RLock()
     runtime.port = 4201
     runtime.token = "private-test-token"
-    runtime.status = lambda: {"running": True}
+    runtime._adopt = lambda: None
+    runtime._is_running = lambda: True
     captured = {}
 
     def api_post(command, args, port, token, timeout):
@@ -91,12 +162,131 @@ def test_herdr_agent_rejects_disabled_or_malformed_runtime_record() -> None:
     runtime.lock = RLock()
     runtime.port = 4201
     runtime.token = "private-test-token"
-    runtime.status = lambda: {"running": True}
+    runtime._adopt = lambda: None
+    runtime._is_running = lambda: True
     runtime._api_post = lambda *_args: [{"agent_type": "codex", "enabled": False,
                                        "available": True, "env": {}}]
 
     with pytest.raises(ValueError, match="disabled or unavailable"):
         runtime.herdr_agent("codex")
+
+
+def test_agent_record_uses_authenticated_catalog_instead_of_short_health_probe(tmp_path: Path) -> None:
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from threading import RLock
+    import time
+
+    calls = []
+
+    class Process:
+        @staticmethod
+        def poll():
+            return None
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            calls.append((self.path, self.headers.get("Authorization")))
+            if self.path == "/api/health":
+                time.sleep(1.0)
+                payload = b'{"status":"ok"}'
+                status = 200
+            elif self.path == "/api/acp_list_agents" and self.headers.get("Authorization") == "Bearer valid-token":
+                payload = json.dumps([{"agent_type": "codex", "enabled": True,
+                                       "available": True, "env": {}}]).encode()
+                status = 200
+            else:
+                payload = b'{"error":"unauthorized"}'
+                status = 401
+            self.send_response(status)
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, *_args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        runtime = object.__new__(AgentsRuntime)
+        runtime.lock = RLock()
+        runtime.process = Process()
+        runtime.external_pid = 0
+        runtime.port = server.server_address[1]
+        runtime.token = "valid-token"
+
+        assert runtime.agent_record("codex") == {"agent_type": "codex", "env": {}}
+        assert calls == [("/api/acp_list_agents", "Bearer valid-token")]
+
+        runtime.token = "wrong-token"
+        with pytest.raises(ValueError, match="agent catalog is unavailable"):
+            runtime.agent_record("codex")
+        assert calls[-1] == ("/api/acp_list_agents", "Bearer wrong-token")
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_service_catalog_uses_runtime_authenticated_status_once(tmp_path: Path) -> None:
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    import time
+    from tether.node.service_access import ServiceAccess
+
+    calls = []
+
+    class Process:
+        @staticmethod
+        def poll():
+            return None
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            calls.append(self.path)
+            if self.path != "/api/health" or self.headers.get("Authorization") != "Bearer valid-token":
+                self.send_error(401)
+                return
+            if len(calls) > 1:
+                time.sleep(1.0)
+            payload = b'{"status":"ok"}'
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, *_args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        runtime_root = tmp_path / "runtime"
+        (runtime_root / "web").mkdir(parents=True)
+        (runtime_root / "web" / "index.html").write_text("ok", encoding="utf-8")
+        binary = runtime_root / ("codeg-server.exe" if os.name == "nt" else "codeg-server")
+        binary.write_bytes(b"test")
+        runtime = object.__new__(AgentsRuntime)
+        runtime.data_dir = tmp_path / "data" / "agents-runtime"
+        runtime.workspace = tmp_path
+        runtime.root = runtime_root
+        runtime.process = Process()
+        runtime.external_pid = 0
+        runtime.port = server.server_address[1]
+        runtime.token = "valid-token"
+        runtime.lock = threading.RLock()
+
+        access = object.__new__(ServiceAccess)
+        access.agents_runtime = runtime
+        assert access._codeg_status() == {
+            "ready": True, "port": runtime.port,
+            "headers": {"Authorization": "Bearer valid-token"}}
+        assert calls == ["/api/health"]
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
 
 
 def _make_runtime_archive(path: Path, members: dict[str, bytes]) -> None:

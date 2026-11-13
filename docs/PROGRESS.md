@@ -1,6 +1,52 @@
 # 实时进度
 
+## 2026-11-13 最新实机状态
+
+07:37 后最新核实：正式 `D:\Apps\Tether\Tether.exe` 已安装为 0.5.5，新主进程2776自动恢复登录，默认C profile、无QA参数和数据目录覆盖。旧卸载器失败定位到临时路径长度：实际MoveFileW在259字符成功、260字符返回error 3；同一已核SHA安装包使用 `D:\tether-up-055` 后完成安装。Windows EXE的Authenticode为NotSigned；发行信任证据是签名manifest与资产摘要。
+
+下一批修复尚未部署：Codeg显式重开重新读取endpoint/token，保留会话存储；就绪检查避免重复短超时和loopback代理干扰；Windows updater短TEMP/TMP和静默安装。Root独立验证47项Python运行时/文件服务测试、34项native workbench测试和update-service定向脚本通过，并与d374发布基线对比；不据此声称正式APP已包含修复。
+
+文件业务：正式APP055的Laptop Monaco实际修改、Ctrl+S和独立字节回读通过；双向拖拽实传46/45字节，摘要及内容一致。128MB传输取消后目标最终文件不存在，随后完整实传仍在进行。Laptop外部稳定启动入口已由原14675用户部署并独立回读930字节/SHA，ACL保留，原任务和当前进程未动；固定旧DB/DSH参数不会随新根launcher被包覆盖而消失。重启验收尚待下一次正常Node更新，不将落盘等同于重启通过。
+
+| 目标 | 当前已核实状态 | 未完成工作 |
+| --- | --- | --- |
+| DESKTOP-LOCAL | Node 0.5.5 在线，正常 prepare/apply/verify/commit 已完成，事务 `4ed240348836450e9f09b5a35d8b82e4`。正式包已从正常按钮打开原生项目页，首次 Codex 结构化已连接，旧回复 AGENT-1112-LOCAL 保留，空白验收标签已关闭。 | 当前 APP 0.5.3 的旧工作台缓存曾指向已失效网关，需关闭旧授权视图并刷新主页面后恢复；此自动恢复问题另记 F164，不能据成功截图声称已修复。 |
+| REMOTESTITCH-HUB | Node 0.5.5 在线，正常 prepare/apply/verify/commit 完成，事务 `62b0d492e9b046ab92e7a2b20a6b3a1a`；实际文件 stat 和 DSH running/surface 通过。 | 本次未验收 Cloud Codeg 新消息或终端模式。 |
+| LAPTOP-01 | Node 0.5.5 已在线并确认保留；新程序在 D:\Tether\node-0.5.5，数据仍用原 node-0.3.6\.runtime。原两项 Limited 任务 XML 不变，旧入口转发到新 launcher；显式 --dsh-home 指回 C:\Users\14675\.dsh，原 DSH Host PID8244 / surface 保留。24目录、167会话及摘要与原基线一致。 | 固定入口切换经历安全回退后于22:43:17Z confirmed，保留全部旧程序、DB与失败现场；这不是旧 updater 的 commit RPC。CLI / Herdr 实机失败另归 F154。 |
+| 正式 APP | 0.5.5已正式安装，新主进程2776；默认C profile、无QA变量/数据目录覆盖，自动恢复登录，远程文件列表和Monaco可见。 | 同包短TEMP安装已解决旧卸载阻断；永久更新修复仍为源码，下一版正常更新和全部业务回归待验。 |
+| F154 / F163 | F163正式055节点页面通过：最左原生栏唯一管理项目和会话；Desktop/Laptop首次结构化连接、模型选择器和原回复保留。普通APP冷启动后仍能正常按钮打开Laptop Home。 | F154尚未完成：Laptop CLI缺Codex daemon并退出1；Herdr报Runtime未运行，而相邻外部status为true，确切原因待查。不把入口显示成功当作三种模式全部通过。 |
+| 0.5.5 | 源d374的CI43289999723全成功，27资产已发布且manifest验签，MCP回读tag/target均为d374；Hub实际分发055，APP和三台Node均055。 | 保留旧卸载失败与短路径成功对照；三模式、断连恢复和正常更新仍有待验项，不据版本一致声称整体验收完成。 |
+
+F163/r3 已完成当前可见页面验收。新建分支保留既有 Agent 选择标记，连接门槛使用已有 Agent registry 的 fresh/所选可用状态；不再依赖已隐藏选择器的回调。Root 独立验证 Desktop 与 Laptop 真正无旧草稿时首次新建都出现已连接和模型选择器，未发新消息。Laptop 保留两个原项目，Desktop 临时验证目录仅关闭了工作区入口、未删除文件；空白验证标签已关闭。证据：`.scratch/evidence/f163-r3-desktop-acceptance-20261113.json`、`f163-r3-laptop-acceptance-20261113.json`、`f163-r3-laptop-final-20261113.json`。
+
+Laptop 两种保留基线已区分：SQLite 的 Codeg 自建 `folder`/`conversation` 表为 3/1；原生 CLI 历史聚合 API 为 24 个目录、167 个会话。后者的目录与会话 ID 排序 JSON 哈希与 F158 完全相同，不能把两种统计直接比较为数据变化。
+
+F157 当前已安装修复的普通冷启动已通过：正常自更新关闭旧主进程51040后，旧卸载器失败，重新打开现有APP的新主进程43340直接恢复登录，无用户登录输入；无QA环境变量、无数据目录覆盖、无9223调试端口，标准C profile的desktopAuthMode=oidc阻止legacy回退，真实设备图可读。原8小时访问期自然到期后加密会话更新、仍保持认证的旁证也保留。未执行强制过期或第二轮重启；最终055安装仍归F165。证据：`.scratch/evidence/f157-normal-cold-restore-20261113.json`、`.scratch/evidence/f157-natural-expiry-supporting-20261113.json`。
+
+本轮缓存核查：F162 QA 部署脚本使用 `ZipFile.ExtractToDirectory` 并目录 swap，保留 ZIP 固定旧时间；普通 Node updater 则把解压字节写入新临时文件再 `os.replace`，会生成新 mtime。Desktop guest 已读取新兼容回调；随后对 `/workspace` 带 `If-Modified-Since: Wed, 11 Nov 2026 16:00:00 GMT` 的 HTTP 请求返回 200、新版内容哈希和 2026-11-12 16:55:17Z 的 Last-Modified。证据 `.scratch/evidence/f162-cache-validation-20261113.json`。随后在 Desktop 完成了两按钮启动、关闭和返回主页实测；F154/F163 的原生项目布局仍需修正，F156/F157 也未完成。
+
 ## 2026-11-12 当前业务恢复
+
+晚间最新实机状态（优先于下面历史检查点）：
+
+| 目标 | 已核对的实际状态 | 当前工作 |
+| --- | --- | --- |
+| 正式 APP | 当前仍为0.5.3，已恢复正常打开，新主进程43340；默认C profile、无QA变量/数据目录覆盖，打开即登录，互联图和原生Codeg Home均可见。 | 最终055签名NSIS已核SHA；正常electron-updater apply进入installing，但旧卸载器exit2，干净重试同样失败，已关闭安装器并恢复原APP。055未安装，见F165。 |
+| DESKTOP-LOCAL | Node current/runtime 均 0.5.4、在线、restart_required=false，DSH running/surface=true | 真实 Home 暴露 F162：Herdr/CLI 的 UUID 调用在私网 HTTP 不可用，修复中；未启动测试 PTY。 |
+| REMOTESTITCH-HUB | Node current/runtime 均 0.5.4、在线、DSH running/surface=true | 普通 check 仍读稳定源 0.4.11，需激活已保存的 preview 环境。SSH 连接超时，已先用 Node 通道读回确认 PID/环境未变。 |
+| LAPTOP-01 | Node 0.5.5 已在线并确认保留；新程序在 D:\Tether\node-0.5.5，数据仍用原 node-0.3.6\.runtime。原两项 Limited 任务 XML 不变，旧入口转发到新 launcher；显式 --dsh-home 指回 C:\Users\14675\.dsh，原 DSH Host PID8244 / surface 保留。24目录、167会话及摘要与原基线一致。 | 固定入口切换经历安全回退后于22:43:17Z confirmed，保留全部旧程序、DB与失败现场；这不是旧 updater 的 commit RPC。CLI / Herdr 实机失败另归 F154。 |
+
+本轮首次 0.5.2→0.5.4 使用的是实际旧 updater 协议：备份旧源码/CLI 证实没有 commit，已安装并重连后的新 status 无待验收事务。保留回滚备份，不伪造 commit 成功。新 0.5.4 源已含事务能力，下一次现代更新须按真实事务状态验收。
+
+21 点后续发行状态：`v0.5.4-preview.1` 已于 13:38:23Z 发布，MCP 独立回读 tag 与 Release 均指向 `934fd32a2757478f047162880e7dd11d88fbea72`，draft=false/prerelease=true、27 资产；项目公钥验签及 manifest app/node 摘要通过。实际 APP 0.5.3 的 electron-updater 已识别 0.5.4，prepare 正在等待，安装文件暂为 0 B、无明确失败，未安装/重启。Hub cache 已准备并验签 0.5.4，磁盘 pin 切换且原 0.5.3 备份保留；服务内存仍返回 0.5.3，需要受控重新加载，尚未声称节点更新成功。
+
+21:30 前 F160 实机闭环通过：LAPTOP-01 的“添加工作区”在当前页面打开有目录列表的弹窗，使用原生“新建文件夹”创建并选择专属 QA 目录，确认后弹窗关闭且工作区出现。主代理独立从 Hub 回读 D:\Tether\work\tether-f160-qa-20261112 的 stat 和已注册 dsh workspace，HTTP 200、exists/writable=true，ID `077eccba-e224-458c-b197-10fede21046a`。证据未保存列表每一行的完整路径，不以旧行内容判断目录归属。仅切换该 Host 自带 picker 配置和重载目标 guest，原 Host/插件/项目保留；F160 已完成。后文“弹窗待验”为先前检查点。
+
+21 点检查点：LAPTOP-01 的 F158 构建已通过现有 Croc 传输并部署到实际 Codeg 静态目录，1007 文件逐项校验，原服务进程未重启。真实 APP 正常打开进入统一项目/Agent 主页，work→Codex→结构化显示 `work · Codex`，没有原生欢迎模板或重复新建行；主页/既有会话往返与原回复保留通过。24 项目/167 会话及路径/ID 摘要不变。当前安装 UI bundle 为 `91A78B69...`，包含 F159 空栏与显式主页入口修复。没有发送新的模型消息，Herdr/CLI 与正式更新验收仍另列待办。
+
+21 点传输与 DSH 检查点：本机 Node 缺失私有 Croc relay 配置，补入现有 `10.144.0.1:19009` 后按原计划任务受控重启，实际 relay=true，22,234,488 B 包及清单/脚本成功传至 Laptop 并读回摘要。DSH 原来调用目标机器 OS 弹窗；在原 0.2.1-rc.5 Host/profile 内禁用 auto picker，接入自带 browse host/client，不改 0.4.1 插件、账号、DB 或 ACL。仅重载 Laptop guest 后已确认 browse client 生效；当时目录弹窗和路径回填尚在验收。
+
+21 点发行与浏览器检查点：包含新增 UI 修复的 CI `43217784179`（源 `934fd32a2757478f047162880e7dd11d88fbea72`）全部成功；当时 0.5.4 仍为 draft，旧 target_commitish 待修正，尚未发布/安装。Ego 专用空间 3 意外消失，按 skill 保留个人空间不操作，已询问专用空间恢复；当前 APP 原生验收继续。普通 APP 关闭重开/过期续期验收仍受自动审批拒绝，未绕过。
 
 20 点检查点：F159 空栏已实际生效，当前 D:\Apps\Tether 的 Codeg guest y=40，与 main 对齐，高度 880，bundle `45B71E...`。本次通过 UI-only reload 完成，没有关闭 APP。自动审批再次拒绝了已授权的 APP 关闭重开命令（blocked by policy，未派发），普通重开/本地过期刷新实测仍待执行，不变更方式绕过。F158 已完成源码本地化、主代理独立 38 项定向测试、production TypeScript 和单次 Next 静态构建，1007 文件/77,856,350 B，完整 ZIP SHA `2a287efa...`；尚未部署到 Laptop，故仍未标完成。0.5.4 的上一版 CI 43205233087 已成功创建 27 资产 draft，源为 504bf709，尚未含本次 UI 追加修复，未发布。
 

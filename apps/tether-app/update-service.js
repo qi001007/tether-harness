@@ -10,6 +10,25 @@ const execFileAsync = promisify(execFile)
 
 const UPDATER_RUNTIME_FILES = ['updates.py', 'updates_cli.py', 'release.py', 'ed25519.py']
 
+function ensureWindowsUpdaterTempDir(executablePath) {
+  const volumeRoot = path.parse(executablePath).root
+  let tempDir = ''
+  try {
+    if (!volumeRoot) throw new Error('无法确定 APP 安装卷')
+    tempDir = path.join(volumeRoot, 'tether-up')
+    fs.mkdirSync(tempDir, { recursive: true })
+    // Confirm this volume-root directory is writable before the app starts shutting down.
+    const writeProbe = fs.mkdtempSync(path.join(tempDir, 'write-probe-'))
+    fs.rmdirSync(writeProbe)
+    return tempDir
+  } catch (error) {
+    const detail = String(error && error.message || error).replace(/[\r\n]/g, ' ').slice(0, 160)
+    throw Object.assign(new Error(`无法创建 APP 更新临时目录${tempDir ? ` ${tempDir}` : ''}：${detail}`), {
+      code: 'app_update_temp_dir_failed'
+    })
+  }
+}
+
 // The helper runs after the APP process is gone, so it must carry a self-contained
 // copy of every module tether.updates_cli imports. Walk the package instead of
 // listing files: a new import (release.py, ed25519.py) previously broke self-update.
@@ -220,10 +239,28 @@ class UpdateService {
         source: 'electron-updater' }
       this.clearElectronApplyFailure()
       try {
+        const nsisTempDir = process.platform === 'win32'
+          ? ensureWindowsUpdaterTempDir(this.app.getPath('exe')) : null
         if (beforeInstall) await beforeInstall(installing)
         this.preparedIds.delete(preparedId)
         await this.stopManagedNode()
-        this.electronUpdater.quitAndInstall(false, true)
+        if (nsisTempDir) {
+          const previousTemp = process.env.TEMP
+          const previousTmp = process.env.TMP
+          // NsisUpdater calls spawn synchronously inside quitAndInstall.
+          try {
+            process.env.TEMP = nsisTempDir
+            process.env.TMP = nsisTempDir
+            this.electronUpdater.quitAndInstall(true, true)
+          } finally {
+            if (previousTemp === undefined) delete process.env.TEMP
+            else process.env.TEMP = previousTemp
+            if (previousTmp === undefined) delete process.env.TMP
+            else process.env.TMP = previousTmp
+          }
+        } else {
+          this.electronUpdater.quitAndInstall(false, true)
+        }
         return installing
       } catch (error) {
         this.recordElectronApplyFailure(error, installing.latest_version)

@@ -1,21 +1,53 @@
 # 用户反馈与处理
 
+## 2026-11-13 最新实机结果
+
+- [ ] F165 / F156 APP更新：055已通过同包短TEMP安装成功，正式进程2776自动恢复登录；259/260字符MoveFileW对照及NSIS成功画面证实长临时路径阻断。源码已补updater短TEMP与静默安装，安装器自身兼容旧APP的补充仍在实现，下一版正常更新待验。EXE为NotSigned，manifest签名与资产SHA已核。
+- [ ] F164 源码修复：显式重开重新验证endpoint/token，失败保留旧授权和存储；就绪检查不再把Chrome错误页视为ready，并移除重复短超时。Root独立34项native和47项Python测试通过；未发布/部署，真实断连恢复待验。
+- [ ] F168 启动入口持久性：已由原14675用户将旧DB/DSH home固定参数放到原任务调用的外部稳定入口，930字节/SHA独立回读一致、ACL保留，任务/策略/当前进程不变；新根launcher被包覆盖不再影响这些参数。下一次正常更新后的真实启动验收仍待完成。
+
+- [x] F163：正式055节点页与普通APP冷启动后均复验原生左栏唯一管理项目/会话；主区只选Agent/模式，重复项目方框/列已移除。Laptop首次Codex连接与原CODEG-1111-1320回复保留，24目录/167会话摘要不变。最终APP停在Laptop work/Codex主页。
+- [x] F156 节点部分：Desktop/Cloud正常更新事务committed，Laptop沿原固定任务入口切到独立055程序并于22:43:17Z confirmed；原数据库路径、任务XML与原DSH Host PID8244保留。中途DSH环境覆盖造成选错home，已安全回退并以显式原--dsh-home修正，最终status回读原C profile、surface=true。
+- [x] F157 当前安装修复：新普通进程43340，无QA/目录覆盖，未输入登录信息，自动恢复登录并读取真实设备图；自然访问期到期续期旁证保留。尚未强制过期或做第二轮重启，不混称最终055安装成功。
+- [ ] F154：Laptop CLI在正确原项目目录退出1，报官方Codex daemon可执行文件缺失；目标机help确认--no-daemon及daemon bootstrap，但均未安装/修改共享Agent记录。Herdr实机报Runtime未运行，外部status为true，尚未证实原因。两种模式均未通过。
+- [ ] F164：更新后旧工作台缓存仍需关闭失效grant并刷新主页面；普通启动一度显示codeg_health_failed，正常启动按钮可重开。自动恢复仍待修复，成功截图不代表已修复。
+- [ ] F165 / F156 APP部分：已核SHA的055 NSIS由正常electron-updater apply进入installing，旧卸载器exit2阻断；同包干净重试仍失败。未改注册表/安装器门禁，已关闭安装器、恢复可用053 APP；新版本未安装。证据`.scratch/evidence/f156-app-update-uninstaller-exit2-20261113.json`。
+
+## 本轮早先检查点（以上方新增结果为准）
+
+- [ ] F156 Laptop 权限续验：第二次切换记录 `rollback_failed / CimException / 拒绝访问`，系统拒绝原计划任务配置写入；只读诊断确认原两任务 Limited/Ready/enabled、XML仍原版，旧Node PID未变、候选无进程。再次读取24目录/167会话及原摘要完全一致。下一步先验证原 launcher 普通用户写权限，沿用原固定任务入口调用已安装新版本，全程不改任务配置或权限；尚未执行该方案。
+
+- [ ] F156 Laptop 续进：独立 055 venv 六依赖、pip check 和真实源路径验证通过，Finalized metadata 已写；原 DB 路径保持不变。首次 Switch 在停止旧 Node 前失败，旧 PID、原任务 XML 和 enabled 状态均未变。备份 DB 与原 DB 的 DACL 哈希相同，所有者分别是14675和Administrators，正在移除不必要的所有者复制并保留首次失败证据后重试。证据 `.scratch/evidence/f163-laptop-055-prepared-20261113.json`、`f163-laptop-055-switch-diagnostic-20261113.json`；不把独立程序已安装当作活动节点已升级。
+
+- [ ] F164：节点/Hub 更新后的自动连接恢复。Hub 配置重载后，Desktop/Laptop 的持久设备摘要仍在线，但真实更新 RPC 返回 409 device_offline；Direct API 仍可用。Desktop 已精确重启原 Node 模块进程并恢复原计划任务，控制 RPC 恢复。正常升 0.5.5 后，APP 0.5.3 的旧 Codeg 工作台授权缓存仍返回已失效的 60411 网关；关闭该失效视图、正常启动 Codeg并刷新主页面后，普通按钮打开新版成功。无界取消清理是源码候选，尚未取得实际任务栈，不记为已证实根因或已修复。后续须验证真实断连自动恢复及失效视图自动重开。
+
+- [ ] F156 最新：最终 055/d374 已发布并验签，Hub 实际分发 0.5.5，Desktop/Cloud 正常更新事务均 committed。Desktop 正式 Codeg 页与首次结构化连接、旧回复保留已通过。Laptop 的真实只读预检在修正模板、PS5 JSON 数组解析后 ready，正式 ZIP 已从 Hub 缓存下载并进入独立 Prepare；尚未切任务。APP 最终 055 NSIS 已完整下载并核 SHA，prepared id ae6a4ba5c428b317ee79f689130433ab，尚未安装。
+
+- [x] F158 首次草稿续验：补齐新建分支的 `forceAgentSelection`，并让已选 Agent 的草稿直接使用现有 registry 的 fresh/可用状态启动连接，移除对隐藏选择器回调的依赖。Root 已在 Desktop 与 Laptop 分别从无旧草稿状态首次新建，实际看到已连接和模型选择器，欢迎模板与快捷卡片均未出现；未发新模型消息。两台截图与连接证据保存在 `.scratch/evidence/f163-r3-*-acceptance-20261113.json` 及对应 PNG。
+
+- [x] F162：真实 Desktop guest 已加载新版兼容回调；Root 在 work/Codex 项目下分别经 Home 启动 Herdr 与传统 CLI，均显示对应模式的 CLI 界面。各自通过 UI“关闭终端”返回 Home，随后 session poll 均确认会话已移除。没有发送模型请求。缓存根因与七个入口文件 mtime/hash、`/workspace` 条件请求证据见 `.scratch/evidence/f162-cache-validation-20261113.json`；Desktop PTY 结果见 `.scratch/evidence/f162-native-ui-20261113.json`，不替代跨节点验收。
+- [x] F163 当前页面：重复项目列及其独立选择状态已移除；唯一项目入口复用最左侧原生栏。Desktop 原生打开目录停在 Home、A/B 选择、CLI/Herdr 目录及关闭返回、历史会话和原回复保留通过；Laptop 两个现有项目选择、真正首次结构化连接与原回复保留通过。两台均使用 r3 静态页，Codeg 进程未重启；Laptop 24/167 的历史元数据摘要不变。正式包构建、跨节点终端模式和安装后回归仍归 F154/F156，不据页面验收标全项目完成。
+- [ ] F156：Desktop/Cloud Node 0.5.4 在线；Laptop 仍 0.4.11。官方 ZIP 大小、SHA 及补齐的签名 manifest 已核实；原 updater prepare 实际失败于 `dependency_change_requires_manual_install`，没有 prepared id。只读预检发现 fastapi 缺失、pydantic/anyio 与新版本精确要求不符；尚未安装依赖、apply 或重启。APP 0.5.3 已下载官方 0.5.4 NSIS，未安装。055 CI attempt 2 全成功并生成 27 资产 draft `443313908`，但含用户否定的重复项目列，保持未发布；F163 修正并重新验收后再交付。
+- [ ] F154：结构化先前收到真实回复；本轮 Desktop Herdr/CLI 启动与关闭通过，Desktop/Laptop 首次新建结构化均实际连接，F163 原生布局已验收。仍需跨节点终端模式、正式安装后回归；Herdr 首次瞬时未 ready 的确切原因尚未证明。055 源 d374 的全部平台、Codeg 与签名组装 CI 已成功，最终 manifest 已由 Root 独立验签；草稿尚未发布。
+
 ## 2026-11-12 当前业务恢复反馈
 
-- [ ] F158：主人截图中的 LAPTOP-01 仍展示 Codeg 原生新建会话页与重复新建入口。所有新建动作应进入本项目的项目→Agent→结构化/Herdr/CLI 流程，保留已有会话。实际 APP 已确认复现；目标 served workspace 为 11-11 早期资源，与当前 canonical out 哈希不同，须在目标节点部署并实测后验收。
+- [ ] F162：真实私网 Codeg Home 的 Herdr/终端点击无响应。Desktop guest `http://10.144.0.2:60411` 实测 `isSecureContext=false`、`crypto.randomUUID` 不存在、`getRandomValues` 可用，点击捕获同一 TypeError，尚未发送启动请求/创建 PTY。修复只复用上游 `@/lib/utils` 已有兼容函数，覆盖两个按钮并补无 randomUUID 的实际条件回归；部署后重新从 Home 验收，不能用早先 typed API 启动代替。已发布 0.5.4 保持不变，后续修补版使用 0.5.5。
+
+- [x] F158：主人截图中的 LAPTOP-01 仍展示 Codeg 原生新建会话页与重复新建入口。已向目标实际静态目录部署本次 1007 文件构建，APP 正常“打开 Codeg”明确进入项目/Agent 主页；侧栏重复新建行移除，项目/标签新建返回统一入口。实际 APP 已走通 work→Codex→结构化，显示 `work · Codex`，没有上游欢迎模板；回主页、打开原验收会话并保留原回复、再回主页通过。部署前后原生 CLI 历史聚合的 24 个目录/167 个会话及路径/ID 摘要一致；这不是 SQLite 自建项目表数量。证据 `.scratch/evidence/f158-ui-navigation-20261112.json`、`f158-codeg-data-after-20261112.json`。本项不代替 Herdr/CLI、新模型回复或正式 0.5.4 更新验收。
 - [x] F159：删除 Codeg 顶部按钮后仍留白边。空 header 已改为仅在存在实际控件时渲染，构建并部署当前安装目录；刷新当前 APP、经正常“打开 Codeg”按钮后，实际 main/Codeg guest 顶部均为 y=40，guest 高度 837→880。保留终端/远程桌面有内容的控制栏。证据 `.scratch/evidence/f159-runtime-20261112.json`；未重启进程，未宣称已完成 F158 或 DSH 弹窗。
-- [ ] F160：DSH1 新建项目仍不能打开目标电脑目录选择器。需要从实际项目按钮定位目标绑定、目录弹窗、选择路径回填的完整链路，实测后再标记完成。
-- [x] F161：网页测试使用主人已安装的 Ego Lite Agent 专用浏览器。已按当前 ego-browser skill 在独立 TaskSpace 3 接入真实 LAPTOP-01 Codeg，后续网页验收沿用该空间，不占用日常浏览器。
+- [x] F160：DSH1 新建项目仍不能打开目标电脑目录选择器。已在真实 LAPTOP-01 原 DSH Host/profile 切换到其自带 browse host/client，避免弹窗只出现在目标机器的 OS 桌面；保留原 0.4.1 插件与 Host。实际 APP“添加工作区”已打开页面内目录弹窗，列出目标目录，经“新建文件夹”创建并选择 `D:\Tether\work\tether-f160-qa-20261112`，打开后工作区列表显示此项。主代理独立回读 fs/stat 与 workspaces 均 HTTP 200，目录存在/可写，注册类型 dsh、ID `077eccba-e224-458c-b197-10fede21046a`。未改原项目，未发送模型请求；只重载目标 guest，未重启 Host。
+- [x] F161：网页测试使用主人已安装的 Ego Lite Agent 专用浏览器。已按当前 ego-browser skill 在独立 TaskSpace 3 接入真实 LAPTOP-01 Codeg并完成基线检查，没有占用日常浏览器。该空间随后意外消失，已停止网页操作并按 skill 询问是否重建专用空间；不使用仅余的用户个人空间，APP 本身的验收继续进行。
 
 - [ ] F157：APP 登录一次后，在有效期内重开应自动恢复并续期，避免重复输入账号。18:06 用户手动重开正式 0.5.3，进程/18892 正常，但实际页面未登录、标准 profile 中的加密会话文件已消失。只读确认桌面应用的访问期限 8 小时、refresh 配置 0，最新续期 JWT 实际也仅 8 小时且已过期；客户端将任意续期失败都清除本地会话。处理范围：仅桌面应用续期窗口改为 30 天，访问期限不变；客户端保留临时失败时可恢复的加密会话、序列化并发续期，验证关闭重开及过期续期。完成本项后继续 F156，不改满意的业务页面。
 
-  F157 当前进展：修复已应用于当前安装，37 项 OIDC/集成测试通过，原图函数与 E 基线完全一致。已复用既有开发登录完成一次真实 PKCE，当前 authenticated/Hub 200，实际签发续期 JWT 确认为 30 天；加密会话文件已保存。普通模式关闭重开及实际刷新路径仍待实机验收，未标完成。用户明确授权自动处理，后续不再要求同一授权；本轮工具钩子因重复写命令阻断重开，命令未执行。0.5.4 修补构建已启动，发布资产尚未验收。
+  F157 当前进展：修复已应用于当前安装，37 项 OIDC/集成测试通过，原图函数与 E 基线完全一致。已复用既有开发登录完成一次真实 PKCE，当前 authenticated/Hub 200，实际签发续期 JWT 确认为 30 天；加密会话文件已保存。普通模式关闭重开及实际刷新路径仍待实机验收，未标完成。用户明确授权自动处理，后续不再要求同一授权；APP 关闭重开曾被自动审批拒绝、未执行。包含修复及最终 UI 源的 0.5.4 已验签并发布，APP 自带更新器已识别，实际下载安装仍在进行。
 - [x] F151：恢复 DeepSeek 调好的互联图；实机结果与回退证据见文末。
 - [x] F152：恢复原文件互传交互及双向传输。已恢复满意版双栏与成熟 transferFile 流程；普通 OAuth APP 使用现有 Hub read/write_chunk。4,259,967 B 中文样本经真实 transferFile 双向完成、哈希一致；Terra 又在 APP 拖拽 133 B / 99 B 小文件双向复制，主代理独立读回目标哈希一致。证据 `files-hub-transfer-20261112.json`、`files-ui-transfer-readback-20261112.json` 与 `files-transfer-restored-20261112.png` 位于 `.scratch/evidence`。没有宣称 Croc/现代 mesh 传输或性能验收。
 - [x] F153：恢复 VSCode 风格资源管理器的打开、编辑、保存。仅移除普通 APP 的 native Files 拦截，恢复原已鉴权 Hub API；保留原编辑器。Terra 实机打开文本及 Python 文件并编辑保存；Python 的 Monaco 行号、语法高亮、minimap、状态栏正常，222→247 B，主代理独立预览读回新增注释且版本哈希变化。证据 `.scratch/evidence/files-monaco-restored-20261112.png`、`files-monaco-readback-20261112.json`。仅写专属 QA 文件，未执行 Python。
 - [ ] F154：Codeg/Herdr 合为一个 Agent 页面；先选/新建项目，再选 Agent，然后选择结构化、Herdr 或传统 CLI。统一前端已部署：结构化直接进入新会话且真实回复 `AGENT-1112-LOCAL`；主页与会话来回保留、通用新建入口及打开文件夹通过，细隐藏滚动条及无用关闭按钮已处理。Herdr 和传统 CLI 的实际启动仍待完成验收。
 - [x] F155：修好本机 Codeg 的状态异常和无法打开。已将本机受控切到现有 0.5.2 Node，并部署仅同机的既有 token gateway 打开路径；Terra 正常按钮启动一次后进入真实 Codeg 工作台，主代理独立回读 installed/running=true、port=4201。专属实例 PID 27788，未碰 E 基线的另一个既有实例。截图 `.scratch/evidence/codeg-local-open-20261112.png`；本次仅验启动/打开，统一新入口与新对话另归 F154。
-- [ ] F156：核实并修复更新交付。0.5.3 最终四平台 CI 43149948092 已成功、preview 已发布；原始 CI NSIS 正式安装至 D:\Apps\Tether，EXE/登记均为 0.5.3，默认 C profile/18892 的 info 与 Hub 初次通过、布局偏好已恢复。随后 APP 出现 Error 窗口、接口挂起；后台重启被自动审批拒绝且未执行，等待用户手动重开。三台在线 Node 仍为 0.5.2/0.4.11/0.5.2，更新来源不一致尚未解决，APP 自动 apply 未验证。Laptop 先前旁路迁移已完整回滚，24 项目/167 会话基线保留。
+- [ ] F156：核实并修复更新交付。0.5.4 preview 已从 CI 成功源 `934fd32a` 发布，27 资产及签名清单核验通过，tag/Release 目标一致。当前正式安装仍为 D:\Apps\Tether 的 0.5.3；实际 APP 自带 electron-updater 已识别 0.5.4 并调用 prepare，但安装文件暂未出现字节进度、未报明确失败，尚未 apply。Hub 已缓存/校验三组件并将磁盘 pin 从 0.5.3 备份后切到 0.5.4，当前服务进程仍返回旧值，正在准备配置切换及受控重新加载。三台 Node 仍为 0.5.2/0.4.11/0.5.2，统一升级待此后执行。Laptop 现行旧 updater 已实际核对：Node 更新排除 .runtime/data 且不映射 DSH profile，24 项目/167 会话及 DSH 0.4.1 基线保留。
 
 11:37 补充 F154/F156：Herdr 和传统 CLI 各使用共享 canonical 配置完成一次 typed API 启动，持续 18 / 12 秒、PTY 存活并停止成功；没有发模型请求，Herdr 菜单可见性未证明。标准 profile 复制后原图与登录保留。公开 0.5.2 EXE 实际为 portable，真实打包入口覆盖了 NSIS 配置，正在修正；同时已修复正常 external OIDC profile 重启被误拒绝的问题。安装更新仍待最终构建后验收。
 
