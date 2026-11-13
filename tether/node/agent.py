@@ -44,7 +44,8 @@ from .native_surface import NativeSurface, NativeSurfaceError
 from .croc_transfer import CrocTransfer
 from .local_identity import remove_identity, write_identity
 from ..updates import (MAX_UPDATE_PROTOCOL, MIN_UPDATE_PROTOCOL, UPDATE_PROTOCOL, UpdateManager,
-                       UpdateError, _semver, _versions_from_root, load_app_installation, select_profile)
+                       UpdateError, _controller_origin, _semver, _versions_from_root,
+                       load_app_installation, select_profile)
 
 
 def os_label() -> str:
@@ -280,6 +281,15 @@ class Node:
         self._block_until = 0.0
         self.agent = agent
         self.data_dir = Path(data_dir or (ROOT / ".runtime")).expanduser().resolve()
+        self.app_update_bridge_state_path = self.data_dir / "app-update-bridge.json"
+        self.app_update_bridge_state = self._load_app_update_bridge_state()
+        legacy_app_owner = os.environ.get("TETHER_NODE_UPDATE_OWNER", "").strip().lower() == "app_installer"
+        self.app_update_owner = os.environ.get(
+            "TETHER_APP_UPDATE_OWNER", "app_installer" if legacy_app_owner else "node_zip").strip().lower()
+        if self.app_update_bridge_state:
+            self.app_update_owner = str(self.app_update_bridge_state["owner"])
+        self.app_update_verified_version = str(
+            (self.app_update_bridge_state or {}).get("verified_app_version") or "")
         self.device_token_path = self.data_dir / "device-token.json"
         try:
             saved = json.loads(self.device_token_path.read_text(encoding="utf-8"))
@@ -344,9 +354,9 @@ class Node:
               for component in ("node", "plugin")
         }
         self.update_managers["app"] = self._make_app_update_manager(manifest_url)
-        self.app_update_owner = os.environ.get("TETHER_NODE_UPDATE_OWNER", "node").strip().lower()
         self.app_update_bridge_url = os.environ.get("TETHER_APP_UPDATE_BRIDGE_URL", "").strip()
         self.app_update_bridge_token = os.environ.get("TETHER_APP_UPDATE_BRIDGE_TOKEN", "").strip()
+        self.app_update_bridge_legacy = bool(legacy_app_owner and self.app_update_bridge_url and self.app_update_bridge_token)
         self.debian_package_updater = DebianPackageUpdater(self.data_dir)
         self.debian_package_update_status = None
         self.debian_package_update_capability = None
@@ -862,11 +872,15 @@ class Node:
         req_id = str(msg.get("req_id") or "")
         component = msg.get("component")
         action = msg.get("action")
-        allowed = {"type", "req_id", "action", "component", "prepared_id"}
+        registration = action == "register_app_bridge"
+        allowed = ({"type", "req_id", "action", "component", "bridge_url", "bridge_token"}
+                   if registration else {"type", "req_id", "action", "component", "prepared_id"})
         if (set(msg) - allowed or not isinstance(component, str) or component not in self.update_managers
-                or not isinstance(action, str) or action not in {"check", "status", "prepare", "apply", "commit", "rollback", "restart"}
+                or not isinstance(action, str) or action not in {"check", "status", "prepare", "apply", "commit", "rollback", "restart", "register_app_bridge"}
                 or (action in {"apply", "commit", "rollback"}) != ("prepared_id" in msg)
-                or (action == "restart" and component != "plugin")):
+                or (action == "restart" and component != "plugin")
+                or (registration and (component != "app" or set(msg) != {
+                    "type", "req_id", "action", "component", "bridge_url", "bridge_token"}))):
             await self._send_update_result(
                 response_ws,
                 {"type": "update_result", "req_id": req_id, "ok": False,
@@ -874,6 +888,9 @@ class Node:
             )
             return
         component = str(component)
+        if registration:
+            await self._register_app_update_bridge(msg, response_ws, req_id)
+            return
         node_update_owner = os.environ.get("TETHER_NODE_UPDATE_OWNER", "").strip().lower()
         if (component == "node" and os.environ.get("TETHER_NODE_SELF_UPDATE_ENABLED") == "0"
                 and action != "status"):
@@ -898,7 +915,7 @@ class Node:
                  "error": f"Node runtime updates are managed by {owner_label}"},
             )
             return
-        if component == "app" and node_update_owner == "app_installer":
+        if component == "app" and self.app_update_owner == "app_installer":
             await self._electron_app_update_call(msg, response_ws, action, req_id)
             return
         debian_node_update = (component == "node" and node_update_owner == DEBIAN_PACKAGE_UPDATE_OWNER)
@@ -1348,15 +1365,79 @@ class Node:
         finally:
             self.dsh_runs.pop(run_id, None)
 
+    async def _register_app_update_bridge(self, msg: dict[str, Any], response_ws: Any, req_id: str) -> None:
+        bridge_url = msg.get("bridge_url")
+        bridge_token = msg.get("bridge_token")
+        try:
+            status = await asyncio.to_thread(
+                self._app_update_bridge_request_sync, "status", timeout=5.0,
+                bridge_url=bridge_url, bridge_token=bridge_token, allow_unowned=True)
+            version = str(status.get("current_version") or "")
+            _semver(version)
+            controller_origin = self._app_controller_origin()
+            if (status.get("device_id") != self.device
+                    or status.get("controller_origin") != controller_origin):
+                raise UpdateError("app_update_bridge_identity_mismatch")
+            state = {"schema": 1, "device_id": self.device,
+                     "controller_origin": controller_origin, "owner": "app_installer",
+                     "verified_app_version": version}
+            self.data_dir.mkdir(parents=True, exist_ok=True)
+            temp = self.app_update_bridge_state_path.with_suffix(".tmp")
+            temp.write_text(json.dumps(state, separators=(",", ":")), encoding="utf-8")
+            os.replace(temp, self.app_update_bridge_state_path)
+            try:
+                os.chmod(self.app_update_bridge_state_path, 0o600)
+            except OSError:
+                pass
+        except Exception as exc:
+            code = getattr(exc, "code", "app_update_bridge_invalid")
+            await self._send_update_result(response_ws, {
+                "type": "update_result", "req_id": req_id, "ok": False,
+                "error_code": code if isinstance(code, str) and code.islower() else "app_update_bridge_invalid",
+                "error": "APP 更新桥身份验证失败；现有绑定未更改。"})
+            return
+        self.app_update_bridge_url = str(bridge_url)
+        self.app_update_bridge_token = str(bridge_token)
+        self.app_update_owner = "app_installer"
+        self.app_update_verified_version = version
+        self.app_update_bridge_state = state
+        self.app_update_bridge_legacy = False
+        await self._send_update_result(response_ws, {
+            "type": "update_result", "req_id": req_id, "ok": True,
+            "app_update_owner": "app_installer", "app_version": version,
+            "app_update_bridge_available": True})
+
+    def _app_controller_origin(self) -> str:
+        return _controller_origin(self.url)
+
+    def _load_app_update_bridge_state(self) -> dict[str, Any] | None:
+        path = self.data_dir / "app-update-bridge.json"
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))
+            if (not isinstance(value, dict) or set(value) != {
+                    "schema", "device_id", "controller_origin", "owner", "verified_app_version"}
+                    or value.get("schema") != 1 or value.get("device_id") != self.device
+                    or value.get("controller_origin") != self._app_controller_origin()
+                    or value.get("owner") != "app_installer"):
+                return None
+            _semver(str(value.get("verified_app_version") or ""))
+            return value
+        except (OSError, ValueError, TypeError, UpdateError):
+            return None
+
     def _app_update_bridge_request_sync(self, action: str, prepared_id: str | None = None,
-                                        phase: str | None = None, *, timeout: float | None = None) -> dict[str, Any]:
-        url = urllib.parse.urlsplit(self.app_update_bridge_url)
-        token = self.app_update_bridge_token
+                                        phase: str | None = None, *, timeout: float | None = None,
+                                        bridge_url: str | None = None, bridge_token: str | None = None,
+                                        allow_unowned: bool = False) -> dict[str, Any]:
+        endpoint = bridge_url if bridge_url is not None else self.app_update_bridge_url
+        url = urllib.parse.urlsplit(endpoint)
+        token = bridge_token if bridge_token is not None else self.app_update_bridge_token
         try:
             valid_port = bool(url.port and 1 <= url.port <= 65535)
         except ValueError:
             valid_port = False
-        if (self.app_update_owner != "app_installer" or url.scheme != "http" or url.hostname != "127.0.0.1"
+        if ((not allow_unowned and self.app_update_owner != "app_installer")
+                or url.scheme != "http" or url.hostname != "127.0.0.1"
                 or not valid_port or url.path != "/v1/update" or url.query or url.fragment
                 or url.username or url.password or len(token) != 64
                 or any(char not in "0123456789abcdef" for char in token)):
@@ -1378,7 +1459,7 @@ class Node:
             raise UpdateError("invalid_update_request")
         body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
         request = urllib.request.Request(
-            self.app_update_bridge_url, data=body, method="POST",
+            endpoint, data=body, method="POST",
             headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"},
         )
         limits = {"status": 5.0, "check": 45.0, "prepare": 300.0, "apply": 150.0}
@@ -1439,11 +1520,33 @@ class Node:
                 status = self._app_update_bridge_request_sync("status", timeout=2.0)
                 version = str(status.get("current_version") or "")
                 _semver(version)
+                bridge_device = status.get("device_id")
+                bridge_controller = status.get("controller_origin")
+                if bridge_device is None and bridge_controller is None and self.app_update_bridge_legacy:
+                    pass
+                elif (bridge_device != self.device or bridge_controller != self._app_controller_origin()):
+                    raise UpdateError("app_update_bridge_identity_mismatch")
+                if version != self.app_update_verified_version:
+                    state = {"schema": 1, "device_id": self.device,
+                             "controller_origin": self._app_controller_origin(), "owner": "app_installer",
+                             "verified_app_version": version}
+                    self.data_dir.mkdir(parents=True, exist_ok=True)
+                    temp = self.app_update_bridge_state_path.with_suffix(".tmp")
+                    temp.write_text(json.dumps(state, separators=(",", ":")), encoding="utf-8")
+                    os.replace(temp, self.app_update_bridge_state_path)
+                    try:
+                        os.chmod(self.app_update_bridge_state_path, 0o600)
+                    except OSError:
+                        pass
+                    self.app_update_bridge_state = state
+                    self.app_update_verified_version = version
                 return {"app_version": version, "app_installed": True,
-                        "app_update_owner": "electron_updater", "app_update_bridge_available": True}
+                        "app_update_owner": "electron_updater", "app_update_bridge_available": True,
+                        "app_update_bridge_registration": 1}
             except Exception:
-                return {"app_version": "", "app_installed": False,
-                        "app_update_owner": "electron_updater", "app_update_bridge_available": False}
+                return {"app_version": self.app_update_verified_version, "app_installed": bool(self.app_update_verified_version),
+                        "app_update_owner": "electron_updater", "app_update_bridge_available": False,
+                        "app_update_bridge_registration": 1}
         self._refresh_app_update_manager()
         manager = self.update_managers["app"]
         binding = load_app_installation(self.url, self.device, self.token, manager.root)
@@ -1518,6 +1621,7 @@ class Node:
                 "app_installed": app_fields["app_installed"],
                 "app_update_owner": app_fields.get("app_update_owner", "node_zip"),
                 "app_update_bridge_available": app_fields.get("app_update_bridge_available", False),
+                "app_update_bridge_registration": app_fields.get("app_update_bridge_registration", 1),
                 "plugin_version": plugin_version,
                 "installed_products": installed,
                 "dsh_installed": dsh_desktop["installed"],

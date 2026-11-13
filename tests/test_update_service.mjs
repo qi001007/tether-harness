@@ -260,6 +260,8 @@ try {
 
   if (process.platform === 'win32') {
     const updater = new EventEmitter()
+    let downloadCalls = 0
+    updater.downloadUpdate = async () => { downloadCalls++; return [] }
     const installCalls = []
     let installError = null
     updater.quitAndInstall = (...args) => {
@@ -287,6 +289,7 @@ try {
     const originalMkdirSync = fs.mkdirSync
     const originalMkdtempSync = fs.mkdtempSync
     const originalRmdirSync = fs.rmdirSync
+    const originalStatfsSync = fs.statfsSync
     const originalTemp = process.env.TEMP
     const originalTmp = process.env.TMP
     let stopEnv
@@ -295,6 +298,11 @@ try {
     let probePrefix = ''
     let removedProbe = ''
     let beforeInstallTemp = null
+    const updateInfo = { version: '0.5.6', files: [{ size: 1000 }, { size: 2000 }] }
+    const reserveBytes = 512n * 1024n * 1024n
+    let freeBytes = 2n * 3000n + reserveBytes
+    let statfsError = null
+    let statfsCalls = 0
     fs.mkdirSync = (directory) => {
       mkdirPath = directory
       if (mkdirError) throw mkdirError
@@ -302,13 +310,64 @@ try {
     }
     fs.mkdtempSync = (prefix) => { probePrefix = prefix; return `${prefix}fixture` }
     fs.rmdirSync = (directory) => { removedProbe = directory }
+    fs.statfsSync = (cacheRoot, options) => {
+      statfsCalls++
+      assert.equal(cacheRoot, process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'))
+      assert.deepEqual(options, { bigint: true })
+      if (statfsError) throw statfsError
+      return { bavail: freeBytes, bsize: 1n }
+    }
     process.env.TEMP = 'before-temp'
     process.env.TMP = 'before-tmp'
     try {
+      packagedService.electronUpdateInfo = updateInfo
+      freeBytes = 2n * 3000n + reserveBytes - 1n
+      await assert.rejects(packagedService.prepare(), (error) => error.code === 'insufficient_update_cache_space'
+        && error.message.includes('需要 0.6 GB') && error.message.includes('当前可用 0.5 GB'))
+      assert.equal(downloadCalls, 0, 'low cache space must stop before downloadUpdate')
+
+      packagedService.electronDownloaded = false
+      packagedService.electronUpdateInfo = { version: '0.5.6', files: [{ url: 'missing-size.exe' }] }
+      await assert.rejects(packagedService.prepare(), (error) => error.code === 'update_size_unavailable')
+      assert.equal(downloadCalls, 0, 'missing metadata size must stop before downloadUpdate')
+
+      packagedService.electronUpdateInfo = updateInfo
+      statfsError = Object.assign(new Error('fixture statfs failure'), { code: 'EACCES' })
+      await assert.rejects(packagedService.prepare(), (error) => error.code === 'update_cache_space_unavailable')
+      assert.equal(downloadCalls, 0, 'statfs failure must stop before downloadUpdate')
+
+      statfsError = null
+      packagedService.electronDownloaded = false
+      freeBytes = 2n * 3000n + reserveBytes
+      await packagedService.prepare()
+      assert.equal(downloadCalls, 1, 'sufficient cache space must reach the existing downloader')
+
+      const priorStatfsCalls = statfsCalls
+      packagedService.electronDownloaded = true
+      packagedService.electronUpdateInfo = { version: '0.5.6', files: [] }
+      await packagedService.prepare()
+      assert.equal(statfsCalls, priorStatfsCalls, 'already-downloaded same-process updates skip the redundant gate')
+
       const preparedId = 'a'.repeat(32)
-      packagedService.electronUpdateInfo = { version: '0.5.6' }
+      packagedService.electronUpdateInfo = updateInfo
       packagedService.electronDownloaded = true
       packagedService.preparedIds.add(preparedId)
+      freeBytes = 3000n + reserveBytes - 1n
+      const stopBeforeSpaceFailure = stopEnv
+      const installBeforeSpaceFailure = installCalls.length
+      let beforeInstallAfterSpaceFailure = false
+      await assert.rejects(packagedService.apply(preparedId, {
+        beforeInstall: async () => { beforeInstallAfterSpaceFailure = true }
+      }), (error) => error.code === 'insufficient_update_cache_space'
+        && error.message.includes('需要 0.6 GB') && error.message.includes('当前可用 0.5 GB'))
+      assert.equal(beforeInstallAfterSpaceFailure, false)
+      assert.equal(stopEnv, stopBeforeSpaceFailure)
+      assert.equal(installCalls.length, installBeforeSpaceFailure)
+      assert.equal(packagedService.preparedIds.has(preparedId), true, 'low-space apply keeps the prepared update retryable')
+      assert.equal(packagedService.electronDownloaded, true)
+      assert.equal(mkdirPath, '', 'low-space apply must fail before creating the installer temp directory')
+
+      freeBytes = 3000n + reserveBytes
       await packagedService.apply(preparedId, {
         beforeInstall: async () => { beforeInstallTemp = { temp: process.env.TEMP, tmp: process.env.TMP } }
       })
@@ -355,12 +414,55 @@ try {
       fs.mkdirSync = originalMkdirSync
       fs.mkdtempSync = originalMkdtempSync
       fs.rmdirSync = originalRmdirSync
+      fs.statfsSync = originalStatfsSync
       if (originalTemp === undefined) delete process.env.TEMP
       else process.env.TEMP = originalTemp
       if (originalTmp === undefined) delete process.env.TMP
       else process.env.TMP = originalTmp
     }
   }
+
+  const originalElectronUpdater = service.electronUpdater
+  const originalAppEnv = service.env
+  const originalGetVersion = service.app.getVersion
+  service.electronUpdater = {}
+  service.deviceId = 'DESKTOP-LOCAL'
+  service.env = { TETHER_DEVICE: 'stale-environment-id', TETHER_CONTROLLER_URL: 'wss://HUB.EXAMPLE:443/ws/node' }
+  service.app.getVersion = () => '0.5.6'
+  const bridgeStatus = await service.status()
+  assert.equal(bridgeStatus.device_id, 'DESKTOP-LOCAL')
+  assert.equal(bridgeStatus.controller_origin, 'https://hub.example')
+  assert.equal(bridgeStatus.current_version, '0.5.6')
+  assert.ok(!Object.hasOwn(bridgeStatus, 'token'))
+
+  const identity = { actorId: 'actor-1', controllerOrigin: 'https://hub.example',
+    deviceId: 'DESKTOP-LOCAL', endpoint: 'http://127.0.0.1:43123/v1/update' }
+  assert.equal(service.shouldRefreshAppUpdateBridgeRegistration(identity), true)
+  service.rememberAppUpdateBridgeRegistration(identity)
+  assert.equal(service.shouldRefreshAppUpdateBridgeRegistration(identity), false,
+    'a healthy registered identity does not repeat state and registration requests')
+  assert.equal(service.shouldRefreshAppUpdateBridgeRegistration({ ...identity, actorId: 'actor-2' }), true)
+  assert.equal(service.shouldRefreshAppUpdateBridgeRegistration({ ...identity, controllerOrigin: 'https://other.example' }), true)
+  assert.equal(service.shouldRefreshAppUpdateBridgeRegistration({ ...identity, deviceId: 'LAPTOP-01' }), true)
+  assert.equal(service.shouldRefreshAppUpdateBridgeRegistration({ ...identity, endpoint: 'http://127.0.0.1:43124/v1/update' }), true)
+  const reconnected = (online, lastSeen, available = false) => service.isAppUpdateBridgeReconnect({
+    device_id: 'DESKTOP-LOCAL', online, last_seen: lastSeen,
+    capabilities: { app_update_bridge_registration: 1, app_update_bridge_available: available }
+  })
+  assert.equal(reconnected(true, '2026-11-13T00:00:00Z'), true)
+  assert.equal(reconnected(true, '2026-11-13T00:00:00Z'), false,
+    'repeated healthy event snapshots do not trigger another registration')
+  assert.equal(reconnected(true, '2026-11-13T00:00:00Z', true), false)
+  assert.equal(reconnected(false, '2026-11-13T00:00:01Z'), false)
+  assert.equal(reconnected(true, '2026-11-13T00:00:02Z'), true,
+    'an online event after the Node was offline refreshes the bridge')
+  const restartedService = new UpdateService({ repoRoot, dataDir, python: 'python-fixture',
+    env: {}, app: { getPath: () => userData, isPackaged: false }, deviceId: 'DESKTOP-LOCAL', exec })
+  assert.equal(restartedService.shouldRefreshAppUpdateBridgeRegistration(identity), true,
+    'a new APP process has no in-memory registration key and can rebind after Node restart')
+  service.electronUpdater = originalElectronUpdater
+  service.env = originalAppEnv
+  service.app.getVersion = originalGetVersion
 } finally {
   fs.rmSync(temp, { recursive: true, force: true })
 }

@@ -4,10 +4,36 @@ import { createAgentsPage } from '../packages/tether-ui/src/agents-page.js'
 
 function hookRenderer() {
   const instances = new Map()
+  const webviews = new Map()
   const pending = []
   let current = null
   const React = {
-    createElement(type, props, ...children) { return { type, props: props || {}, children } },
+    createElement(type, props, ...children) {
+      if (type === 'webview' && props && props.ref && typeof props.ref === 'object') {
+        let guest = webviews.get(props.key)
+        if (!guest) {
+          const listeners = new Map()
+          guest = {
+            url: props.src,
+            getURL() { return this.url },
+            isLoadingMainFrame() { return false },
+            addEventListener(name, listener) { listeners.set(name, listener) },
+            removeEventListener(name) { listeners.delete(name) },
+            executeJavaScript() { return Promise.resolve() },
+            navigate(url) {
+              this.url = url
+              const listener = listeners.get('did-navigate-in-page')
+              if (listener) listener({ isMainFrame: true, url })
+            }
+          }
+          webviews.set(props.key, guest)
+        } else {
+          guest.url = props.src
+        }
+        props.ref.current = guest
+      }
+      return { type, props: props || {}, children }
+    },
     useState(initial) {
       const slot = current.cursor++
       if (!(slot in current.hooks)) current.hooks[slot] = typeof initial === 'function' ? initial() : initial
@@ -50,6 +76,7 @@ function hookRenderer() {
   }
   return {
     React,
+    navigateWebview(key, url) { const guest = webviews.get(key); if (guest) guest.navigate(url) },
     async render(props) {
       let tree
       for (let round = 0; round < 12; round += 1) {
@@ -86,6 +113,16 @@ function findButton(node, label) {
   return findButton(node.children || [], label)
 }
 
+function findElement(node, type) {
+  if (Array.isArray(node)) {
+    for (const child of node) { const found = findElement(child, type); if (found) return found }
+    return null
+  }
+  if (!node || typeof node !== 'object') return null
+  if (node.type === type) return node
+  return findElement(node.children || [], type)
+}
+
 function pageProps(React, open, calls, options = {}) {
   return {
     React,
@@ -113,22 +150,27 @@ function pageProps(React, open, calls, options = {}) {
   }
 }
 
-test('native Agents opens Codeg once on cold start and manual retry remains available after failure', async () => {
+test('native Agents refreshes a retained Codeg pane on re-entry and manual retry remains available after failure', async () => {
   const previousWindow = globalThis.window
   globalThis.window = { innerHeight: 900, addEventListener() {}, removeEventListener() {} }
   try {
-    const success = { targetId: 'target-a', serviceId: 'codeg', endpoint: 'https://codeg.example.test', partition: 'persist:codeg' }
+    const success = { targetId: 'target-a', serviceId: 'codeg', endpoint: 'https://codeg.example.test', partition: 'persist:codeg', bootstrapRevision: 1 }
+    const refreshed = { ...success, endpoint: 'https://codeg-next.example.test', bootstrapRevision: 2 }
     const calls = { catalog: 0, open: 0 }
     const renderer = hookRenderer()
-    const props = pageProps(renderer.React, async () => success, calls)
+    const props = pageProps(renderer.React, async () => calls.open === 1 ? success : refreshed, calls)
     let tree = await renderer.render({ ...props, isActive: false })
     assert.equal(calls.open, 0, 'a hidden Agents page does not open Codeg in the background')
     tree = await renderer.render(props)
     assert.equal(calls.open, 1, 'a ready native catalog opens Codeg automatically once')
     assert.ok(findButton(tree, '打开 Codeg') === null, 'the native guest replaces the placeholder instead of leaving a second launch CTA')
+    const initialGuestKey = findElement(tree, 'webview').props.key
     await renderer.render({ ...props, isActive: false, devices: [...props.devices] })
     tree = await renderer.render(props)
-    assert.equal(calls.open, 1, 'hiding and showing an existing Codeg pane does not reopen it')
+    assert.equal(calls.open, 2, 'returning to Agents refreshes the retained Codeg authorization once')
+    assert.notEqual(findElement(tree, 'webview').props.key, initialGuestKey, 'a changed runtime endpoint remounts the existing guest')
+    await renderer.render(props)
+    assert.equal(calls.open, 2, 'same-page renders do not repeat the activation refresh')
 
     const retryCalls = { catalog: 0, open: 0 }
     const retryRenderer = hookRenderer()
@@ -150,6 +192,61 @@ test('native Agents opens Codeg once on cold start and manual retry remains avai
     manualOpen.props.onClick()
     await retryRenderer.render(retryProps)
     assert.equal(retryCalls.open, 2, 'manual retry can open Codeg after the failed automatic attempt')
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window
+    else globalThis.window = previousWindow
+  }
+})
+
+test('native Agents retains the existing Codeg guest when endpoint and bootstrap are unchanged', async () => {
+  const previousWindow = globalThis.window
+  globalThis.window = { innerHeight: 900, addEventListener() {}, removeEventListener() {} }
+  try {
+    const success = { targetId: 'target-a', serviceId: 'codeg', endpoint: 'https://codeg.example.test', partition: 'persist:codeg', bootstrapRevision: 1 }
+    const calls = { catalog: 0, open: 0 }
+    const renderer = hookRenderer()
+    const props = pageProps(renderer.React, async () => success, calls)
+    const firstTree = await renderer.render(props)
+    const firstGuestKey = findElement(firstTree, 'webview').props.key
+    await renderer.render({ ...props, isActive: false, devices: [...props.devices] })
+    const returnedTree = await renderer.render(props)
+    assert.equal(calls.open, 2, 're-entry still performs a fresh main-process status read')
+    assert.equal(findElement(returnedTree, 'webview').props.key, firstGuestKey,
+      'an unchanged endpoint and bootstrap revision preserve the guest instance, tabs, and draft')
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window
+    else globalThis.window = previousWindow
+  }
+})
+
+test('native Agents does not steal an active Herdr pane, then refreshes when returning to Codeg', async () => {
+  const previousWindow = globalThis.window
+  globalThis.window = { innerHeight: 900, addEventListener() {}, removeEventListener() {} }
+  try {
+    const first = { targetId: 'target-a', serviceId: 'codeg', endpoint: 'https://codeg.example.test', partition: 'persist:codeg', bootstrapRevision: 1 }
+    const refreshed = { ...first, endpoint: 'https://codeg-next.example.test', bootstrapRevision: 2 }
+    const calls = { catalog: 0, open: 0 }
+    const renderer = hookRenderer()
+    const props = pageProps(renderer.React, async () => calls.open === 1 ? first : refreshed, calls)
+    let tree = await renderer.render(props)
+    const guest = findElement(tree, 'webview')
+    const initialGuestKey = guest.props.key
+    renderer.navigateWebview(initialGuestKey,
+      'https://codeg.example.test/workspace#tether_action=open_herdr&request_id=12345678-1234-1234-1234-123456789abc&agent_type=codex&cwd=C%3A%5Cproject')
+    tree = await renderer.render(props)
+    assert.equal(calls.open, 1, 'opening Herdr does not refresh Codeg')
+    assert.ok(findButton(tree, '返回 Codeg'), 'Herdr exposes the existing return-to-Codeg control')
+
+    await renderer.render({ ...props, isActive: false, devices: [...props.devices] })
+    tree = await renderer.render(props)
+    assert.equal(calls.open, 1, 'returning to Agents while Herdr is active does not open or select Codeg')
+    assert.ok(findButton(tree, '返回 Codeg'), 'the existing Herdr pane remains active after returning to Agents')
+
+    findButton(tree, '返回 Codeg').props.onClick()
+    tree = await renderer.render(props)
+    assert.equal(calls.open, 2, 'returning to the visible Codeg pane refreshes its runtime authorization')
+    assert.notEqual(findElement(tree, 'webview').props.key, initialGuestKey,
+      'the guest remounts when the refreshed endpoint/bootstrap changes')
   } finally {
     if (previousWindow === undefined) delete globalThis.window
     else globalThis.window = previousWindow

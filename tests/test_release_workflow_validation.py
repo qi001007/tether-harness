@@ -200,21 +200,23 @@ def test_desktop_preview_workflow_uses_one_version_branch_tag_and_artifact_set()
     version = json.loads((ROOT / "version.json").read_text(encoding="utf-8"))["components"]["app"]
 
     assert "concurrency:\n  group: ${{ github.workflow }}-${{ github.ref }}\n  cancel-in-progress: true" in workflow
-    assert version == "0.5.6"
+    assert version == "0.5.7"
     assert "codex/tether-052-preview-20261111" in workflow
     assert "codex/tether-053-business-20261112" in workflow
     assert "codex/tether-054-session-20261112" in workflow
     assert "codex/tether-055-native-mode-20261112" in workflow
     assert "codex/tether-056-reconnect-20261113" in workflow
+    assert "codex/tether-057-recovery-20261113" in workflow
     assert "v0.5.2-preview.1" in workflow
     assert "v0.5.3-preview.1" in workflow
     assert "v0.5.4-preview.1" in workflow
     assert "v0.5.5-preview.1" in workflow
     assert "v0.5.6-preview.1" in workflow
+    assert "v0.5.7-preview.1" in workflow
     assert "--channel preview" in workflow
     assert '--release-tag "$CANDIDATE_TAG"' in workflow
     assert "tag_name: ${{ env.CANDIDATE_TAG }}" in workflow
-    assert "draft: ${{ github.ref == 'refs/heads/codex/tether-053-business-20261112' || github.ref == 'refs/heads/codex/tether-054-session-20261112' || github.ref == 'refs/heads/codex/tether-055-native-mode-20261112' || github.ref == 'refs/heads/codex/tether-056-reconnect-20261113' }}" in workflow
+    assert "draft: ${{ github.ref == 'refs/heads/codex/tether-053-business-20261112' || github.ref == 'refs/heads/codex/tether-054-session-20261112' || github.ref == 'refs/heads/codex/tether-055-native-mode-20261112' || github.ref == 'refs/heads/codex/tether-056-reconnect-20261113' || github.ref == 'refs/heads/codex/tether-057-recovery-20261113' }}" in workflow
     assert "prerelease: true" in workflow
     assert "make_latest: false" in workflow
     assert "0.5.0" not in workflow
@@ -232,6 +234,7 @@ def test_desktop_preview_workflow_uses_one_version_branch_tag_and_artifact_set()
     assert "github.ref == 'refs/heads/codex/tether-054-session-20261112'" in publish_job
     assert "github.ref == 'refs/heads/codex/tether-055-native-mode-20261112'" in publish_job
     assert "github.ref == 'refs/heads/codex/tether-056-reconnect-20261113'" in publish_job
+    assert "github.ref == 'refs/heads/codex/tether-057-recovery-20261113'" in publish_job
     assert "node-version: '24.22.2'" in publish_job
     assert "npm ci --prefix packages/tether-ui" in publish_job
     assert "npm run build:web --prefix packages/tether-ui" in publish_job

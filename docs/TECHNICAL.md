@@ -202,3 +202,12 @@ Agents 当前源码入口为 `tether/node/agents_runtime.py`、`tether/node/agen
 - 仅将 `NetworkGraph` 函数替换为 E 主仓库原函数，删除其唯一 Cytoscape import；外围 renderNetwork 身份/权限/连接回调、详情浮层、连接管理以及 DSH/Codeg 相关修复保持。详情组件和连接管理函数的恢复前哈希分别在两树相同，未改。
 - 首次旧图卸载前对 `localStorage['tether.network.positions.v3']` 的查询为 absent；随后卸载写入 214 B Cytoscape 像素位置，其中本机节点 `(0,0)`、远端 `(378,608)`，无 `vx/vy`。该值原样备份后，仅在当前值逐字等于备份时删除这一 key；其他存储未动，当前 key 已确认 absent。备份：`.scratch/qa/network-graph-cytoscape-pre-restore-20261112-source-app.js`、`...-running-app.js`。
 - 用已安装 Node v24.22.1 执行 `scripts/build-web.mjs`，exit 0；输出 bundle SHA-256 `1CD2EF1A584AD76E9C1A42E089BB949640CB4E300E29D87C301B0313C5C6570D`。仅更新 r11 `resources/tether-ui/web/dist/app.js`；替换前文件 SHA `41A4EB2636D247974127D2A9D7928A3DEFC3530CE2C1C3FD28C42FB362C75381`，更新后与构建输出一致。PID 8016 继续运行；未改 app.asar、Codeg web/backend、Node 或设备身份/连接状态。已由 Terra 实机确认流动环形/三角、缩放、拖动、浮层和切页后位置正常；跨页速度连续未验证。
+
+
+## 2026-11-13 F175/F176候选边界
+
+- F175：packaged APP通过现有OIDC owner通道向本机Node注册loopback更新桥。Node先回读严格device/controller/version身份，成功后才替换绑定；endpoint/token只在内存，持久文件只存最后验证版本及归属。APP与Node更新归属分开；external Node保留原独立更新，packaged自带managed Node保留原归属门禁。
+- Hub生产增量仅增加owner-only app-bridge route，基于当前live字节合入，保留prepare=1200s及其余全部内容；不整体覆盖dirty主树。
+- F176：Windows正常electron-updater仍使用公开singleton下载/签名链。下载前检查当前缓存卷足够容纳两份公开size及512MiB余量；安装前重新检查一份及512MiB。失败保留可重试prepared状态且不退出APP/停止Node。NSIS TEMP/TMP沿用安装卷短目录，仅影响安装子进程。
+- D缓存adapter注入方案已否决并未集成：6.8.12自定义AppAdapter会使原HTTP executor为空，不能作为安全下载入口。
+- 此节记录源码候选，未替代发布/正式更新/Node重连的实机验收。

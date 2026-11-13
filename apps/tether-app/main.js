@@ -65,6 +65,7 @@ if (packaged) {
   const exe = process.platform === 'win32' ? '.exe' : ''
   env.TETHER_PYTHON = path.join(runtimeRoot, 'tether-python' + exe)
   if (!fs.existsSync(env.TETHER_PYTHON)) throw new Error('Packaged Python runtime is missing')
+  env.TETHER_APP_UPDATE_OWNER = 'app_installer'
   env.TETHER_NODE_UPDATE_OWNER = 'app_installer'
   env.TETHER_RUNTIME_ROOT = runtimeRoot
   env.TETHER_AGENTS_RUNTIME_DIR = path.join(repoRoot, 'tether', 'node', 'bin', 'agents-runtime')
@@ -176,6 +177,7 @@ if (env.TETHER_USE_SYSTEM_PROXY !== '1') app.commandLine.appendSwitch('no-proxy-
 const { enrollmentDecision } = require('./enrollment.js')
 const supervisor = new Supervisor({ repoRoot, dataDir, env, preserveManagedNodeOnExit: packaged })
 const updates = new UpdateService({ repoRoot, dataDir, python: supervisor.childPython, env, app,
+  deviceId: supervisor.device,
   stopManagedNode: () => packaged ? supervisor.stopManagedNode() : Promise.resolve({ stopped: false }) })
 const oidcAuth = createOidcAuth({
   issuer: env.TETHER_OIDC_ISSUER || DEFAULT_OIDC_ISSUER,
@@ -195,6 +197,7 @@ const legacyControllerSession = { fetch: (...args) => controllerFetch(...args) }
 let controllerAuthMode = ''
 let legacyUserToken = env.TETHER_USER_TOKEN || ''
 let appUpdateBridgeStarted = false
+let appUpdateBridgeRegistrationPromise = null
 let uiOrigin = ''
 
 function log(line) {
@@ -329,6 +332,7 @@ async function createWindow() {
     controllerAuthMode = ''
     log('Controller authentication status unavailable code=' + String(error && error.code || 'status_failed').slice(0, 64))
   }
+  void refreshAppUpdateBridgeRegistration()
   nativeWorkbench = createNativeWorkbench({
     controllerUrl: controller,
     loginSession: legacyControllerSession,
@@ -814,6 +818,53 @@ async function setWorkbenchActor(actorId) {
   }
   workbenchActorId = actorId
   if (hubEventsSubscribed && actorId) startHubEvents()
+  void refreshAppUpdateBridgeRegistration()
+}
+
+async function refreshAppUpdateBridgeRegistration(force = false) {
+  if (!packaged || !appUpdateBridgeStarted || controllerAuthMode !== 'oidc' || !workbenchActorId) return false
+  const deviceId = String(supervisor.device || '')
+  const bridge = updates.appUpdateBridge
+  if (!deviceId || !bridge || !bridge.url || !bridge.token) return false
+  let controllerOrigin
+  try { controllerOrigin = trustedControllerOrigin() } catch (_) { return false }
+  const identity = { actorId: workbenchActorId, controllerOrigin,
+    deviceId, endpoint: bridge.url }
+  if (appUpdateBridgeRegistrationPromise) {
+    await appUpdateBridgeRegistrationPromise.catch(() => false)
+  }
+  if (!updates.shouldRefreshAppUpdateBridgeRegistration(identity, force)) return false
+  appUpdateBridgeRegistrationPromise = (async () => {
+    const stateResponse = await controllerFetch(new URL('/api/state', identity.controllerOrigin).toString(), {
+      cache: 'no-store', signal: AbortSignal.timeout(5000)
+    })
+    if (!stateResponse.ok) return false
+    const state = await stateResponse.json()
+    const device = Array.isArray(state.devices)
+      ? state.devices.find((item) => item && item.device_id === deviceId) : null
+    if (!device || !device.online || device.capabilities?.app_update_bridge_registration !== 1) return false
+    const response = await controllerFetch(new URL(
+      '/api/devices/' + encodeURIComponent(deviceId) + '/updates/app-bridge', identity.controllerOrigin
+    ).toString(), {
+      method: 'POST', cache: 'no-store',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bridge_url: bridge.url, bridge_token: bridge.token }),
+      signal: AbortSignal.timeout(5000)
+    })
+    if (!response.ok) return false
+    const result = await response.json()
+    if (result && result.ok === true && workbenchActorId === identity.actorId
+        && supervisor.device === identity.deviceId && trustedControllerOrigin() === identity.controllerOrigin
+        && updates.appUpdateBridge?.url === identity.endpoint) {
+      updates.rememberAppUpdateBridgeRegistration(identity)
+      return true
+    }
+    return false
+  })().catch((error) => {
+    log('APP update bridge registration unavailable code=' + String(error && error.code || 'registration_failed').slice(0, 64))
+    return false
+  }).finally(() => { appUpdateBridgeRegistrationPromise = null })
+  return appUpdateBridgeRegistrationPromise
 }
 function closeHubEvents() {
   if (hubEventSource) hubEventSource.close()
@@ -828,8 +879,9 @@ function setDesktopAuthMode(mode) {
   writeHubConfig({ ...config, desktopAuthMode: mode })
 }
 function startHubEvents() {
-  closeHubEvents()
   if (!hubEventsSubscribed || !workbenchActorId || !workbenchLoginSession) return
+  if (hubEventSource && hubEventSource.readyState !== EventSource.CLOSED) return
+  closeHubEvents()
   let trustedOrigin
   try { trustedOrigin = trustedControllerOrigin() } catch (_) { return }
   const eventsUrl = new URL('/api/events', trustedOrigin)
@@ -846,6 +898,11 @@ function startHubEvents() {
   hubEventSource.onmessage = (event) => {
     try {
       const data = JSON.parse(event.data)
+      if (data && data.kind === 'device' && data.device?.device_id === supervisor.device) {
+        if (updates.isAppUpdateBridgeReconnect(data.device)) {
+          void refreshAppUpdateBridgeRegistration(true)
+        }
+      }
       if (data && (data.kind === 'device' || data.kind === 'session')
           && mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('tether:hub-event', data)
     } catch (_) { /* ignore keepalive and malformed messages */ }

@@ -170,6 +170,8 @@
 - 2026-11-12：typed CLI 先用 Codeg record 配置及 Node PATH 解析可执行文件；仅未命中时才读取 Node Registry 作为路径候选，避免 PATH 已可用时执行昂贵 catalog 版本检测。
 - 2026-11-13：Agents Runtime 仍以单次认证 health 控制公开 status；service catalog 复用该结果，避免紧邻的第二个 0.8s health 探测造成 `codeg_health_failed`。typed Herdr/CLI 则以本次真实 Bearer `acp_list_agents` 请求验证运行时和 canonical record，避免先被无关的短 health 请求误拒；死进程、端口/token 缺失或错误凭据仍失败。定向本地 HTTP 行为验证及 `tests/test_agents_runtime.py` 30 项通过，未改目标机。
 - 2026-11-13：health readiness 与其他本机 API 请求统一使用显式 `ProxyHandler({})`，确保配置了坏 HTTP_PROXY/缺少 localhost bypass 时仍对 loopback 直连；本机 Desktop Node 代理变量全不存在，健康探测连续 200（4–16 ms），未把代理列为当前实机故障根因。真实双 HTTP server 测试证明默认代理路径返回502、显式无代理 health及认证catalog成功。
+- 2026-11-13：F175 分离 APP installer owner 与 Node self-update owner；owner 注册的 APP loopback bridge 需回读匹配 device/controller/semver 后才替换，token 与 endpoint 仅存内存。data_dir 只原子保存 owner、device/controller、最后验证 APP 版本，Node 重启后桥不可用时仍如实报告该版本并等待 APP 刷新注册。
+- 2026-11-13：F175 使用现有 `_controller_origin` 统一 WebSocket/HTTP origin 规范；旧 managed/env bridge 在旧 APP status 缺少身份字段时保持版本可用，外部 owner bridge 仍严格要求设备与 controller 匹配。
 
 - 2026-11-12：将 canonical Codeg `tab-store.ts` 的 11 个 Tether 状态 hunk 补进 tracked patch，修复 clean CI 中 `TabItemInternal.forceAgentSelection` 类型与行为缺失；无其他源文件差异遗漏。
 - 2026-11-12：Herdr 官方 `agent_not_ready`（例如交互式 Codex 升级提示）现在作为用户可处理的 `blocked` 状态返回并保留本次 PTY/tab；成功启动返回 `ready`。其它启动失败仍关闭本次新建 tab 并停止 PTY，`agent_wait_timeout` 映射为脱敏 `agent_start_timeout`。仅源码与 focused 验证，未部署。

@@ -5,6 +5,7 @@ import json
 import os
 import sys
 import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from tether.node import agent
@@ -51,6 +52,30 @@ def _node(tmp_path: Path, monkeypatch) -> Node:
     store = NodeStore(data_dir / "node.db")
     node = Node(url="ws://127.0.0.1:18890/ws/node", token="fake", device="test-node",
                 workspace=tmp_path / "workspace", store=store, agent="fake", data_dir=data_dir)
+    return node
+
+
+def _bridge_node(data_dir: Path, url: str = "ws://127.0.0.1:18890/ws/node") -> Node:
+    node = Node.__new__(Node)
+    node.url = url
+    node.device = "test-node"
+    node.data_dir = data_dir
+    node.app_update_bridge_state_path = data_dir / "app-update-bridge.json"
+    node.app_update_bridge_state = node._load_app_update_bridge_state()
+    legacy_app_owner = os.environ.get("TETHER_NODE_UPDATE_OWNER", "").strip().lower() == "app_installer"
+    node.app_update_owner = os.environ.get(
+        "TETHER_APP_UPDATE_OWNER", "app_installer" if legacy_app_owner else "node_zip").strip().lower()
+    if node.app_update_bridge_state:
+        node.app_update_owner = node.app_update_bridge_state["owner"]
+    node.app_update_verified_version = str((node.app_update_bridge_state or {}).get("verified_app_version") or "")
+    node.app_update_bridge_url = os.environ.get("TETHER_APP_UPDATE_BRIDGE_URL", "")
+    node.app_update_bridge_token = os.environ.get("TETHER_APP_UPDATE_BRIDGE_TOKEN", "")
+    node.app_update_bridge_legacy = bool(
+        node.app_update_owner == "app_installer" and node.app_update_bridge_url and node.app_update_bridge_token)
+    node.update_managers = {"app": object(), "node": FakeUpdateManager()}
+    node.update_applying = False
+    node.node_version = "0.2.1"
+    node.ws = object()
     return node
 
 
@@ -187,6 +212,20 @@ def test_unbound_standalone_node_does_not_advertise_an_app(tmp_path, monkeypatch
     node.store.db.close()
 
 
+def test_legacy_managed_app_bridge_without_identity_still_reports_its_version(tmp_path, monkeypatch):
+    monkeypatch.setenv("TETHER_NODE_UPDATE_OWNER", "app_installer")
+    monkeypatch.setenv("TETHER_APP_UPDATE_BRIDGE_URL", "http://127.0.0.1:43123/v1/update")
+    monkeypatch.setenv("TETHER_APP_UPDATE_BRIDGE_TOKEN", "a" * 64)
+    node = _bridge_node(tmp_path / "data")
+    monkeypatch.setattr(node, "_app_update_bridge_request_sync", lambda *_args, **_kwargs: {
+        "ok": True, "current_version": "0.5.5"})
+    assert node._app_heartbeat_fields() == {
+        "app_version": "0.5.5", "app_installed": True, "app_update_owner": "electron_updater",
+        "app_update_bridge_available": True, "app_update_bridge_registration": 1,
+    }
+    assert node.app_update_verified_version == "0.5.5"
+
+
 def test_managed_node_keeps_same_root_app_update_binding(tmp_path, monkeypatch):
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setenv("TETHER_NODE_MANAGED", "1")
@@ -195,6 +234,163 @@ def test_managed_node_keeps_same_root_app_update_binding(tmp_path, monkeypatch):
     assert manager.root == agent.ROOT.resolve()
     assert manager.app_binding_required is False
     node.store.db.close()
+
+
+def test_external_app_bridge_registration_verifies_identity_and_persists_no_secret(tmp_path, monkeypatch):
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0"))))
+            assert self.path == "/v1/update"
+            assert self.headers.get("Authorization") == "Bearer " + "a" * 64
+            assert body == {"action": "status"}
+            payload = json.dumps({"ok": True, "current_version": "0.5.6",
+                                 "device_id": "test-node",
+                                 "controller_origin": "https://hub.example"}).encode()
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, *_args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    replacement_server = None
+    replacement_thread = None
+    try:
+        monkeypatch.setenv("TETHER_NODE_UPDATE_OWNER", "node")
+        monkeypatch.setenv("TETHER_APP_UPDATE_OWNER", "node_zip")
+        monkeypatch.delenv("TETHER_APP_UPDATE_BRIDGE_URL", raising=False)
+        monkeypatch.delenv("TETHER_APP_UPDATE_BRIDGE_TOKEN", raising=False)
+        node = _bridge_node(tmp_path / "data", "WSS://HUB.EXAMPLE:443/ws/node")
+        assert node._app_controller_origin() == "https://hub.example"
+        sent = []
+
+        async def send(message):
+            sent.append(message)
+
+        monkeypatch.setattr(node, "_send", send)
+        url = f"http://127.0.0.1:{server.server_port}/v1/update"
+        asyncio.run(node._update_call({
+            "type": "update_call", "req_id": "register-1", "action": "register_app_bridge",
+            "component": "app", "bridge_url": url, "bridge_token": "a" * 64,
+        }))
+
+        assert sent[-1] == {"type": "update_result", "req_id": "register-1", "ok": True,
+                            "app_update_owner": "app_installer", "app_version": "0.5.6",
+                            "app_update_bridge_available": True}
+        assert node.app_update_bridge_url == url
+        assert node.app_update_bridge_token == "a" * 64
+        assert os.environ["TETHER_NODE_UPDATE_OWNER"] == "node"
+        state = json.loads(node.app_update_bridge_state_path.read_text(encoding="utf-8"))
+        assert state == {"schema": 1, "device_id": "test-node",
+                         "controller_origin": "https://hub.example", "owner": "app_installer",
+                         "verified_app_version": "0.5.6"}
+        assert "bridge_url" not in state and "bridge_token" not in state
+
+        replacement_server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        replacement_thread = threading.Thread(target=replacement_server.serve_forever, daemon=True)
+        replacement_thread.start()
+        replacement_url = f"http://127.0.0.1:{replacement_server.server_port}/v1/update"
+        asyncio.run(node._update_call({
+            "type": "update_call", "req_id": "register-2", "action": "register_app_bridge",
+            "component": "app", "bridge_url": replacement_url, "bridge_token": "a" * 64,
+        }))
+        assert sent[-1]["ok"] is True
+        assert node.app_update_bridge_url == replacement_url
+        asyncio.run(node._update_call({
+            "type": "update_call", "req_id": "node-check", "action": "check", "component": "node",
+        }))
+        assert sent[-1]["ok"] is True
+        assert sent[-1]["component"] == "node"
+
+        restarted = _bridge_node(node.data_dir, node.url)
+        assert restarted.app_update_owner == "app_installer"
+        assert restarted.app_update_bridge_url == ""
+        assert restarted.app_update_bridge_token == ""
+        assert restarted._app_heartbeat_fields() == {
+            "app_version": "0.5.6", "app_installed": True,
+            "app_update_owner": "electron_updater", "app_update_bridge_available": False,
+            "app_update_bridge_registration": 1,
+        }
+        assert os.environ["TETHER_NODE_UPDATE_OWNER"] == "node"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+        if replacement_server is not None:
+            replacement_server.shutdown()
+            replacement_server.server_close()
+        if replacement_thread is not None:
+            replacement_thread.join(timeout=2)
+
+
+def test_app_bridge_rejects_invalid_or_mismatched_replacement_without_losing_binding(tmp_path, monkeypatch):
+    node = _bridge_node(tmp_path / "data")
+    node.app_update_owner = "app_installer"
+    node.app_update_bridge_url = "http://127.0.0.1:18893/v1/update"
+    node.app_update_bridge_token = "b" * 64
+    prior = {"schema": 1, "device_id": node.device,
+             "controller_origin": node._app_controller_origin(), "owner": "app_installer",
+             "verified_app_version": "0.5.5"}
+    node.data_dir.mkdir(parents=True, exist_ok=True)
+    node.app_update_bridge_state_path.write_text(json.dumps(prior), encoding="utf-8")
+    node.app_update_bridge_state = prior
+    node.app_update_verified_version = "0.5.5"
+    old_bytes = node.app_update_bridge_state_path.read_bytes()
+    node.ws = object()
+    sent = []
+
+    async def send(message):
+        sent.append(message)
+
+    monkeypatch.setattr(node, "_send", send)
+    asyncio.run(node._update_call({
+        "type": "update_call", "req_id": "bad-url", "action": "register_app_bridge",
+        "component": "app", "bridge_url": node.app_update_bridge_url + "?x=1",
+        "bridge_token": "c" * 64,
+    }))
+    assert sent[-1]["ok"] is False
+    assert node.app_update_bridge_url == "http://127.0.0.1:18893/v1/update"
+    assert node.app_update_bridge_token == "b" * 64
+
+    asyncio.run(node._update_call({
+        "type": "update_call", "req_id": "bad-token", "action": "register_app_bridge",
+        "component": "app", "bridge_url": "http://127.0.0.1:18894/v1/update",
+        "bridge_token": "not-a-token",
+    }))
+    assert sent[-1]["ok"] is False
+    assert node.app_update_bridge_token == "b" * 64
+
+    monkeypatch.setattr(node, "_app_update_bridge_request_sync", lambda *_a, **_k: {
+        "ok": True, "current_version": "0.5.6", "device_id": "wrong-device",
+        "controller_origin": node._app_controller_origin(),
+    })
+    asyncio.run(node._update_call({
+        "type": "update_call", "req_id": "bad-identity", "action": "register_app_bridge",
+        "component": "app", "bridge_url": "http://127.0.0.1:18894/v1/update",
+        "bridge_token": "d" * 64,
+    }))
+    assert sent[-1]["ok"] is False
+    assert node.app_update_bridge_url == "http://127.0.0.1:18893/v1/update"
+    assert node.app_update_bridge_token == "b" * 64
+    assert node.app_update_bridge_state_path.read_bytes() == old_bytes
+
+    monkeypatch.setattr(node, "_app_update_bridge_request_sync", lambda *_a, **_k: {
+        "ok": True, "current_version": "0.5.6", "device_id": node.device,
+        "controller_origin": "https://wrong-controller.invalid",
+    })
+    asyncio.run(node._update_call({
+        "type": "update_call", "req_id": "bad-controller", "action": "register_app_bridge",
+        "component": "app", "bridge_url": "http://127.0.0.1:18895/v1/update",
+        "bridge_token": "e" * 64,
+    }))
+    assert sent[-1]["ok"] is False
+    assert node.app_update_bridge_url == "http://127.0.0.1:18893/v1/update"
+    assert node.app_update_bridge_token == "b" * 64
+    assert node.app_update_bridge_state_path.read_bytes() == old_bytes
 
 
 def test_check_forces_the_manifest_while_status_keeps_the_cache(tmp_path, monkeypatch):

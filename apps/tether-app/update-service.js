@@ -29,6 +29,41 @@ function ensureWindowsUpdaterTempDir(executablePath) {
   }
 }
 
+const WINDOWS_UPDATE_CACHE_RESERVE_BYTES = 512n * 1024n * 1024n
+
+function ensureWindowsUpdateCacheSpace(updateInfo, copyCount) {
+  const files = updateInfo && updateInfo.files
+  if (!Array.isArray(files) || files.length === 0
+      || files.some((file) => !Number.isSafeInteger(file && file.size) || file.size <= 0)) {
+    throw Object.assign(new Error('无法确认 APP 更新包大小，已停止操作。'), {
+      code: 'update_size_unavailable'
+    })
+  }
+
+  const assetBytes = files.reduce((total, file) => total + BigInt(file.size), 0n)
+  const requiredBytes = assetBytes * BigInt(copyCount) + WINDOWS_UPDATE_CACHE_RESERVE_BYTES
+  const cacheRoot = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local')
+  let availableBytes
+  try {
+    const stats = fs.statfsSync(cacheRoot, { bigint: true })
+    if (typeof stats.bavail !== 'bigint' || typeof stats.bsize !== 'bigint' || stats.bsize <= 0n) {
+      throw new Error('statfs result unavailable')
+    }
+    availableBytes = stats.bavail * stats.bsize
+  } catch (_) {
+    throw Object.assign(new Error('无法读取 APP 更新缓存磁盘空间，已停止操作。'), {
+      code: 'update_cache_space_unavailable'
+    })
+  }
+  if (availableBytes < requiredBytes) {
+    const requiredGb = (Math.ceil(Number(requiredBytes) / 100000000) / 10).toFixed(1)
+    const availableGb = (Math.floor(Number(availableBytes) / 100000000) / 10).toFixed(1)
+    throw Object.assign(new Error(`APP 更新缓存空间不足：至少需要 ${requiredGb} GB 可用空间，当前可用 ${availableGb} GB。`), {
+      code: 'insufficient_update_cache_space'
+    })
+  }
+}
+
 // The helper runs after the APP process is gone, so it must carry a self-contained
 // copy of every module tether.updates_cli imports. Walk the package instead of
 // listing files: a new import (release.py, ed25519.py) previously broke self-update.
@@ -52,12 +87,13 @@ function stageUpdaterRuntime(repoRoot, stagingPackage) {
 }
 
 class UpdateService {
-  constructor({ repoRoot, dataDir, python, env, app, stopManagedNode = async () => {}, exec = execFileAsync, spawnChild = spawn }) {
+  constructor({ repoRoot, dataDir, python, env, app, deviceId = '', stopManagedNode = async () => {}, exec = execFileAsync, spawnChild = spawn }) {
     this.repoRoot = repoRoot
     this.dataDir = dataDir
     this.python = python
     this.env = env
     this.app = app
+    this.deviceId = String(deviceId || '')
     this.stopManagedNode = stopManagedNode
     this.exec = exec
     this.spawnChild = spawnChild
@@ -71,6 +107,8 @@ class UpdateService {
     this.electronLastResult = null
     this.appUpdateBridge = null
     this.bridgeApplyAccepted = new Set()
+    this.appUpdateBridgeRegistrationKey = ''
+    this.appUpdateDeviceObservation = null
     if (this.packaged) {
       const { autoUpdater } = require('electron-updater')
       this.electronUpdater = autoUpdater
@@ -140,8 +178,21 @@ class UpdateService {
   async status() {
     if (this.electronUpdater) {
       const current = this.app.getVersion()
+      let controllerOrigin = ''
+      try {
+        const parsed = new URL(String(this.env.TETHER_CONTROLLER_URL || ''))
+        const protocol = parsed.protocol === 'ws:' ? 'http:' : parsed.protocol === 'wss:' ? 'https:' : parsed.protocol
+        if ((protocol === 'http:' || protocol === 'https:') && !parsed.username && !parsed.password
+            && !parsed.search && !parsed.hash) {
+          parsed.protocol = protocol
+          parsed.hostname = parsed.hostname.toLowerCase()
+          if ((protocol === 'http:' && parsed.port === '80') || (protocol === 'https:' && parsed.port === '443')) parsed.port = ''
+          controllerOrigin = parsed.origin
+        }
+      } catch (_) { /* identity is unavailable until the controller is configured */ }
       const result = {
         ok: true, component: 'app', current_version: current,
+        device_id: this.deviceId || String(this.env.TETHER_DEVICE || ''), controller_origin: controllerOrigin,
         latest_version: this.electronUpdateInfo && this.electronUpdateInfo.version || current,
         update_available: !!(this.electronUpdateInfo && this.electronUpdateInfo.version && this.electronUpdateInfo.version !== current),
         prepared: this.electronDownloaded ? [{ prepared_id: [...this.preparedIds][0] || '' }] : [],
@@ -195,6 +246,9 @@ class UpdateService {
       if (!this.electronUpdateInfo || this.electronUpdateInfo.version === this.app.getVersion()) {
         throw Object.assign(new Error('没有可用的 APP 更新'), { code: 'update_not_available' })
       }
+      if (process.platform === 'win32' && !this.electronDownloaded) {
+        ensureWindowsUpdateCacheSpace(this.electronUpdateInfo, 2)
+      }
       this.electronDownloaded = false
       await this.electronUpdater.downloadUpdate()
       const preparedId = crypto.randomBytes(16).toString('hex')
@@ -234,6 +288,7 @@ class UpdateService {
     await this.activity()
     if (this.electronUpdater) {
       this.assertElectronPrepared(preparedId)
+      if (process.platform === 'win32') ensureWindowsUpdateCacheSpace(this.electronUpdateInfo, 1)
       const installing = { ok: true, component: 'app', status: 'installing', restart_required: true,
         current_version: this.app.getVersion(), latest_version: this.electronUpdateInfo.version,
         source: 'electron-updater' }
@@ -427,6 +482,27 @@ class UpdateService {
     }
     this.appUpdateBridge = { server, url: `http://127.0.0.1:${address.port}/v1/update`, token }
     return { url: this.appUpdateBridge.url, token: this.appUpdateBridge.token }
+  }
+
+  shouldRefreshAppUpdateBridgeRegistration(identity, force = false) {
+    if (!identity || !identity.actorId || !identity.controllerOrigin || !identity.deviceId || !identity.endpoint) return false
+    const key = [identity.actorId, identity.controllerOrigin, identity.deviceId, identity.endpoint].join('\0')
+    return !!force || key !== this.appUpdateBridgeRegistrationKey
+  }
+
+  rememberAppUpdateBridgeRegistration(identity) {
+    this.appUpdateBridgeRegistrationKey = [identity.actorId, identity.controllerOrigin,
+      identity.deviceId, identity.endpoint].join('\0')
+  }
+
+  isAppUpdateBridgeReconnect(device) {
+    if (!device || device.device_id !== this.deviceId
+        || device.capabilities?.app_update_bridge_registration !== 1) return false
+    const current = { online: device.online === true, lastSeen: String(device.last_seen || '') }
+    const previous = this.appUpdateDeviceObservation
+    this.appUpdateDeviceObservation = current
+    if (!current.online || device.capabilities?.app_update_bridge_available !== false) return false
+    return !previous || !previous.online || (!!current.lastSeen && current.lastSeen !== previous.lastSeen)
   }
 
   closeAppUpdateBridge() {

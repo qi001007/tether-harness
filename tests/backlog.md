@@ -159,7 +159,7 @@
 - 2026-11-02：0.2.64 新增互联图契约：`tether.network.positions.v2`、两远端 `[210,330]`、无 `animate()`、卸载保存、节点附近隐藏断开按钮、>12 台圆点。全量 mjs 230 / cjs 6 / pytest 147+1。
 - 2026-11-02：0.2.65 新增详情浮层契约：`position:absolute; top/right/bottom:8px; width:300`、画布容器 `position:relative`、根样式不再 `flex:0 0 auto`。全量 mjs 231 / cjs 6 / pytest 147+1。
 - 2026-11-02：0.2.66 新增力导向/接力契约：`function animate()` 必须存在、`tether.network.positions.v3` 存 `vx/vy`、布局读取保存速度、远端无中心拉力。全量 mjs 231 / cjs 6 / pytest 147+1。
-- 2026-11-02：0.2.67 新增启动无窗口契约：`UpdateService` 使用 `supervisor.childPython`，serverCheck 使用 `childPython`，禁止启动更新检查再走 `python.exe`。全量 mjs 231 / cjs 6 / pytest 147+1。
+- 2026-11-02：0.2.67 新增启动无窗口契约：UpdateService` 使用 `supervisor.childPython`，serverCheck 使用 `childPython`，禁止启动更新检查再走 `python.exe`。全量 mjs 231 / cjs 6 / pytest 147+1。
 - 2026-11-02：0.2.68 新增更新页版式契约：不再有 `versionText`/` → `；组件胶囊 `chips`、行 `borderTop`、固定 28px 操作位；有/无更新行尺寸一致。全量 mjs 231 / cjs 6 / pytest 147+1。
 - 2026-11-03：0.2.90 热重载契约：`_runtime_loaded` 用 descriptor 的 `plugin_version` 清 `restart_required`；`apply` 以 8 秒宽限+期望版本安排重启助手，助手握手成功即退出；重载桥只启用、禁止停用（DSH 持久化 `enabled:false`），客户端 watcher 2 秒轮询并去重。新增 surface/助手/桥测试；全量 mjs 243 / cjs 8 / pytest 160+4 skipped。
 - 2026-11-03：0.2.91 新增 Windows 8.3 短路径回归（`_file_dependency_path` 展开短名）；`_hot_reload_capable` 只对带 `plugin_version` 的 surface 给宽限。全量 mjs 243 / cjs 8 / pytest 161+5 skipped。
@@ -225,7 +225,17 @@
 - 2026-11-13：真实本地 HTTP server 覆盖运行时 Catalog 在短 health 超时后仍必须由 Bearer `acp_list_agents` 成功确认，错误 token 拒绝；另覆盖 service catalog 复用 status 的单次健康结果、不发第二个短探测。`tests/test_agents_runtime.py` 30 项通过。
 - 2026-11-13：真实本机health server+坏HTTP代理覆盖loopback健康检查绕过代理，仍强制Bearer且保持其它认证catalog请求直连；current Node环境代理变量presence也以只读布尔检查，未输出值。
 - 2026-11-13：`test_native_workbench_catalog.mjs` 覆盖 cached legacy Codeg 显式重开后 endpoint/token bootstrap 刷新且 grant、partition 与存储保留、刷新失败不清空原活动授权，以及 fresh ready mesh 出现后回到既有 `service_open` 路径；focused suite 34/34 通过。
+- 2026-11-13：legacy Codeg 新鲜打开的 `bootstrapRevision` 只在私有 bootstrap URL 变化时递增；Agents native auto-open 行为覆盖 Codeg 可见时回页刷新、Herdr 活动时回 Agents 不切 pane、返回 Codeg 后刷新、endpoint变化重挂和凭据未变时保留 guest；两个 Node focused 文件 38/38 通过。
 - 2026-11-12：覆盖 Herdr `agent_not_ready` 时保留新建 tab/PTy 并返回 session + `agent_state=blocked`，同时覆盖 fatal cleanup、成功 ready 和 `agent_wait_timeout` 安全阶段码；`test_terminal.py` + `test_agents_runtime.py` 61/61 通过。
 - 2026-11-12：`test_app_installation.mjs` 覆盖已登录/已登出的有效 external OIDC profile 原样保留，以及缺认证模式、缺节点模式、无效 Hub origin、空 device 仍拒绝迁移合并。
 - 2026-11-12：OIDC 行为用例覆盖新实例恢复不重开浏览器且 close 保留会话、临时 safeStorage 失败后恢复、到期续期/轮换后重开、503/网络失败保留原加密文件、永久失效清理、并发 401 单次刷新及 logout 竞态；Electron integration 检查 auth-status 先 ensureSession 且 token 不出主进程。
 - 2026-11-13：新增 `test_hub_transfer_cancel_removes_only_the_requested_partial`，经 Hub Node dispatch 取消后验证目标文件未落盘、指定 `.tether-part` 被清除且另一个 transfer_id 的分块保留。
+- 2026-11-13：F175 定向验证 Hub app-bridge owner-only 注册与无 APP 版本门槛、Node 对 bridge identity/semver 的验证及失败保留、重启仅从无秘密元数据恢复版本，和 UpdateService status 不回传桥 token；focused 测试通过，部署待独立审核。
+- 2026-11-13：F175 增加注册刷新去重/Node 离线后重连行为、APP 新进程可重新绑定、旧 managed bridge 缺身份字段兼容、WSS 默认端口与大小写规范化及 Hub owner 查询单次断言。
+- 2026-11-13：`test_electron_oidc_integration.mjs` 用实际 main 函数 VM 验证同 actor 复用 SSE、closed/actor-change 重建顺序，以及重连事件仍触发桥刷新。
+
+- 2026-11-13：Windows packaged UpdateService 回归覆盖两份安装器缓存+512 MiB 的下载预检阈值、安装前一份+余量重验、缺少 size/statfs 失败不下载，以及低空间 apply 不回执/停 Node/退出且保留 prepared 可重试；tests/test_update_service.mjs 与 node --check 通过。
+
+- 2026-11-13：候选版本测试同步到 APP/Node 0.5.7、plugin 0.2.93，并在 workflow 校验中保留 0.5.6 兼容断言及新增 0.5.7 branch/tag/publish gate。
+
+- 2026-11-13：packaged APP 与 bundled managed Node 均由 APP installer 更新的归属保护回归：APP bridge 注册不改局部 Node owner；独立 external Node 不继承该 APP env，Node协议测试确认其注册后仍为 node owner。

@@ -2,6 +2,18 @@
 
 ## 2026-11-13 最新实机状态
 
+正式 APP056 已恢复：主人明确回复继续向导后，从 D 盘已核大小/SHA 的同一官方安装器完成安装；D:\Apps\Tether\Tether.exe 实际存在，ProductVersion=0.5.6.0。第一次普通启动 PID15884 无诊断参数/目录覆盖，自动恢复登录、原互联图保留，进入 Agents 自动打开原生 Codeg 主页，左侧原生项目栏唯一。当前为后续验收临时使用 localhost 诊断端口的 PID51244；最终普通启动仍须复验。055→056 曾依赖手动修复，F165 自动更新不能标通过。
+
+三台 Node 均实际运行056且无待提交事务。Laptop 复用现有 prepared id 329d04738b864a0194028f759f3ae03e 正常 apply/restart/commit，1372 文件更新；原稳定任务入口、D:\Tether\node-0.3.6\.runtime 数据与 C:\Users\14675\.dsh Host PID8244 保留。原24目录/167会话三项摘要与更新前完全一致。F168 固定入口重启通过。
+
+实际业务续验：互传两侧设备/目录/选择跨本次 Laptop 更新保持，未捕获 UI offline 标签，故不宣称强制离线阶段验证；128MB 验收任务至少24MB后点击取消，目标目录（含隐藏项）回读为空，先前完整128MB目标仍保留。Monaco通过正常文件页打开 Laptop QA Python 文件、修改 value=3→4、Ctrl+S，owner API 回读44字节及 SHA a56633c9...e8762b 一致。F170取消清理、F171本次更新选择保持、F173实际首次自动打开已通过。证据 .scratch/evidence/f180-official-056-business-acceptance-20261113.json 及对应截图。
+
+仍有实际缺陷：更新后原 Codeg 保活页仍连接旧2120端点，回到 Agents 不会刷新，页面内立即重连未恢复。公开 open 可解析新53570端点，但已有页面未替换，F164 继续精准修复，不能以源码已有 fresh grant 机制当实机通过。Herdr/CLI 三模式完整交互尚未验收。
+
+C盘：本轮精确归档与官方 pip/uv 清理实际释放1,670,823,936B；4.44GB是清理后的历史值。056安装器随后自动重建C盘约1.045GB当前缓存，APP缓存也增长，最近读取约3.29GB，不再宣称仍有4.44GB。两份约2.94GB旧pytest输出删除被执行策略拒绝，未删除且未绕过；活动Herdr/Codex、账号/项目/聊天/原DSH数据保留。F175正式APP版本桥接与F176下载/安装前空间检查均仅源码候选，定向回归通过，尚未发布或部署；废弃的D缓存adapter方案没有集成。
+
+升级前续验：Laptop仍为24目录/167会话，原路径摘要2c312982...ef277及会话ID摘要5c03b444...feb3b均与原基线一致；预留空取消目录，原128MB完整目标保留。Desktop/Laptop Codeg当前running且无install_error，Cloud已安装但stopped；三Node真实运行版本055。另发现F175：Hub APP字段仍指向已退出的E主仓0411 source登记，与D盘正式055不一致；packaged模式停用旧source绑定，external Node未接installer bridge。本项待后续修复，不代表正式APP实际降级，也不以删登记代替正确上报。最终056源码CI43346692574的Windows/Linux/macOS ARM已成功，仍等待macOS Intel及聚合发布，未安装056。
+
 本轮冷启动续验：正式055以原C profile重开，公开IPC确认authenticated=true，APP055、三台在线Node均055。为后续正常更新验收临时增加localhost诊断端口；这不是最终无诊断启动验收。旧055安装缓存已按原大小/SHA核验归档到D盘，C盘释放约1GB。原生主页启动的传统CLI已真实显示Codex0.163.0，当前停在首次Windows沙箱设置选择；未代选安全设置，已关闭本次终端并返回原项目主页。另确认APP冷启动只加载catalog而不自动打开Codeg，F173正在精准修复；不得将手动点开成功当作默认入口已完成。
 
 F173源码已完成：真正进入当前设备Agents页后，一次性复用既有Codeg打开流程；隐藏保活页不会在切设备时后台打开Codeg，已有pane/会话不重建。app.js仅新增一行可见性参数，移除此行后的原始Git blob与eb3501父版本完全一致；未改原图或重复添加项目管理。Root独立38项native/主页/Herdr行为回归、共享UI与WebUI构建和check通过，尚未安装。F172已有真实编译证据：43342284944的Windows job131614714682整体success，NSIS及资产上传均成功，Linux和macOS ARM也成功；最终含F173的候选仍须完整CI和正常升级。
@@ -1124,3 +1136,5 @@ Windows 10:46 异常重启后，主机 Node 未运行。通过原安装的开始
 - 使用已安装 Node v24.22.1 执行 `packages/tether-ui/scripts/build-web.mjs`，exit 0；bundle 8,198,437 B，SHA-256 `1CD2EF1A584AD76E9C1A42E089BB949640CB4E300E29D87C301B0313C5C6570D`。仅同步至 r11 `resources/tether-ui/web/dist/app.js`；PID 8016 未重启，Codeg 静态 web、asar、Node 和连接数据未触碰。
 - Terra 实机确认流动、环形/三角布局、缩放、拖动、浮层及切页回来位置正常；跨页速度连续未证明。截图 `.scratch/evidence/network-visual-restored-20261112.png`。
 - 旧图首次卸载前查询时位置 key 不存在；卸载后 Cytoscape 写入像素坐标。先将单 key 原值备份；旧值中 DESKTOP-LOCAL 节点为 `(0,0)`，远端节点为 `(378,608)`，无 `vx/vy`。仅当当前值与备份逐字相等时删除了 `tether.network.positions.v3`，没有更改其他 localStorage 项。删除后即时读回 key 不存在；后续原图验收可重新保存位置；备份 `.scratch/qa/network-positions-v3-after-old-graph-unmount-20261112.json`，214 B，SHA-256 `FFBD3E3279B09E8406FA09D0AD1F6F115D6FC59B5B66EADD9F666299FD9A1313`。旧源码/运行 bundle 备份仍保留于 `.scratch/qa/network-graph-cytoscape-pre-restore-20261112-*`。
+
+2026-11-13 056续验：Desktop原生入口自动打开，新结构化草稿实际已连接且设置加载，随后关闭空白标签；原AGENT-1112-LOCAL回复保留。Herdr从同项目D:\Tether\work启动，真实spaces菜单和Codex升级提示可见；未代选CLI升级，Tether关闭终端返回主页。仅记启动通过，不代替三模式交互。

@@ -9,13 +9,13 @@ const root = new URL('../', import.meta.url)
 const read = path => readFileSync(new URL(path, root), 'utf8')
 const buildScript = read('desktop/packaging/build-candidate.mjs')
 
-test('candidate app and node versions are synchronized at 0.5.6 with frozen plugin', () => {
+test('candidate app and node versions are synchronized at 0.5.7 with frozen plugin', () => {
   const manifest = JSON.parse(read('version.json'))
   const appPackage = JSON.parse(read('apps/tether-app/package.json'))
   const appLock = JSON.parse(read('apps/tether-app/package-lock.json'))
 
-  assert.equal(manifest.components.app, '0.5.6')
-  assert.equal(manifest.components.node, '0.5.6')
+  assert.equal(manifest.components.app, '0.5.7')
+  assert.equal(manifest.components.node, '0.5.7')
   assert.equal(manifest.components.plugin, '0.2.93')
   assert.equal(appPackage.version, manifest.components.app)
   assert.equal(appLock.version, manifest.components.app)

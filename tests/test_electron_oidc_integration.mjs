@@ -68,6 +68,94 @@ test('workbench auth status is bridged through trusted main IPC, preload, and El
   assert.match(electronHost, /authStatus:\s*\(\)\s*=>\s*window\.tetherApp\.workbenchAuthStatus\(\)/)
 })
 
+test('packaged APP and managed Node remain owned by the APP installer', () => {
+  const packaged = main.slice(main.indexOf('if (packaged) {'), main.indexOf('\nif (candidateMode)'))
+  assert.match(packaged, /env\.TETHER_APP_UPDATE_OWNER = 'app_installer'/)
+  assert.match(packaged, /env\.TETHER_NODE_UPDATE_OWNER = 'app_installer'/)
+  const registration = main.slice(main.indexOf('async function refreshAppUpdateBridgeRegistration('), main.indexOf('function startHubEvents('))
+  assert.doesNotMatch(registration, /TETHER_NODE_UPDATE_OWNER/)
+})
+
+test('same-actor workbench refresh reuses its SSE and only rebuilds closed or changed-actor sources', async () => {
+  const section = (start, end) => {
+    const from = main.indexOf(start)
+    const to = main.indexOf(end, from)
+    assert.ok(from >= 0 && to > from, `missing main function section ${start}`)
+    return main.slice(from, to)
+  }
+  const calls = []
+  const sources = []
+  class FakeEventSource {
+    static CONNECTING = 0
+    static OPEN = 1
+    static CLOSED = 2
+    constructor(url) {
+      this.url = url
+      this.readyState = FakeEventSource.CONNECTING
+      this.id = sources.length + 1
+      sources.push(this)
+      calls.push(`open:${this.id}`)
+    }
+    close() {
+      this.readyState = FakeEventSource.CLOSED
+      calls.push(`close:${this.id}`)
+    }
+  }
+  let workbenchActorId = ''
+  let hubEventsSubscribed = true
+  let hubEventSource = null
+  const workbenchLoginSession = {}
+  const context = {
+    EventSource: FakeEventSource,
+    URL,
+    JSON,
+    Promise,
+    workbenchActorId,
+    hubEventsSubscribed,
+    hubEventSource,
+    workbenchLoginSession,
+    nativeWorkbench: { clearActor: async (actorId) => { calls.push(`clear:${actorId}`); return { ok: true } } },
+    refreshAppUpdateBridgeRegistration: (force = false) => { calls.push(`refresh:${force}`); return Promise.resolve(false) },
+    trustedControllerOrigin: () => 'https://hub.example',
+    controllerFetch: async () => new Response('{}'),
+    supervisor: { device: 'DESKTOP-LOCAL' },
+    updates: { isAppUpdateBridgeReconnect: (device) => device.reconnect === true },
+    mainWindow: null
+  }
+  const source = [
+    section('function closeHubEvents()', 'function safeLoginError('),
+    section('async function setWorkbenchActor(', 'async function refreshAppUpdateBridgeRegistration('),
+    section('function startHubEvents()', 'async function completeWorkbenchLogin(')
+  ].join('\n')
+  const vm = await import('node:vm')
+  vm.runInNewContext(source, context)
+  await vm.runInNewContext("setWorkbenchActor('actor-a')", context)
+  const first = sources[0]
+  await vm.runInNewContext("setWorkbenchActor('actor-a')", context)
+  assert.equal(sources.length, 1, 'a repeated same-actor request keeps an OPEN/CONNECTING source')
+  first.readyState = FakeEventSource.OPEN
+  await vm.runInNewContext("setWorkbenchActor('actor-a')", context)
+  assert.equal(sources.length, 1, 'an OPEN source also stays attached across same-actor requests')
+
+  first.readyState = FakeEventSource.CLOSED
+  await vm.runInNewContext("setWorkbenchActor('actor-a')", context)
+  assert.equal(sources.length, 2, 'a CLOSED source is recreated')
+  await vm.runInNewContext("setWorkbenchActor('actor-b')", context)
+  assert.equal(sources.length, 3, 'a changed actor receives a fresh source')
+  assert.ok(calls.indexOf('close:2') < calls.indexOf('clear:actor-a'))
+  assert.ok(calls.indexOf('clear:actor-a') < calls.indexOf('open:3'))
+
+  const reconnectSource = sources[2]
+  reconnectSource.onmessage({ data: JSON.stringify({ kind: 'device', device: {
+    device_id: 'DESKTOP-LOCAL', reconnect: false
+  } }) })
+  reconnectSource.onmessage({ data: JSON.stringify({ kind: 'device', device: {
+    device_id: 'DESKTOP-LOCAL', reconnect: true
+  } }) })
+  assert.equal(calls.filter((call) => call === 'refresh:true').length, 1,
+    'the preserved stream still delivers the targeted bridge reconnect refresh')
+})
+
 test('legacy Codeg bridge accepts only targetId and keeps the token URL in main-process guest preparation', () => {
   assert.match(main, /handleTrusted\('tether:workbench-open-legacy-codeg',\s*async \(_event, targetId\) => nativeWorkbench\.openLegacyCodeg\(targetId\)/)
   assert.match(preload, /workbenchOpenLegacyCodeg:\s*\(targetId\)\s*=>\s*ipcRenderer\.invoke\('tether:workbench-open-legacy-codeg', targetId\)/)

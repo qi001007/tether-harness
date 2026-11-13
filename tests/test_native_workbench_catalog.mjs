@@ -433,12 +433,14 @@ test('reopening legacy Codeg refreshes its origin and token bootstrap without cl
   }, { getServiceSession: () => session, getSourceRoute: async () => readyRoute })
 
   const first = await workbench.openLegacyCodeg('target-1')
+  assert.equal(first.bootstrapRevision, 1)
   const loaded = []
   const guest = { session, getURL: () => 'about:blank', async loadURL(url) { loaded.push(url) } }
   await workbench.prepareGuest(guest)
   const refreshed = await workbench.open('target-1', 'codeg')
 
   assert.equal(refreshed.endpoint, 'http://100.64.0.8:4201/')
+  assert.equal(refreshed.bootstrapRevision, 2, 'a changed private bootstrap URL signals a guest refresh without exposing its token')
   assert.equal(refreshed.grantId, first.grantId)
   assert.equal(refreshed.partition, first.partition)
   assert.equal(workbench.allowGuest(first.partition, first.endpoint), false)
@@ -451,6 +453,7 @@ test('reopening legacy Codeg refreshes its origin and token bootstrap without cl
 
   const sameOriginRefresh = await workbench.open('target-1', 'codeg')
   assert.equal(sameOriginRefresh.endpoint, refreshed.endpoint)
+  assert.equal(sameOriginRefresh.bootstrapRevision, 3, 'a token rotation on the same origin still signals a guest refresh')
   assert.deepEqual(await workbench.prepareGuest(guest), { managed: true, prepared: true })
   assert.match(loaded[2], /rotated-again-secret/)
   assert.equal(session.calls.storage, 0)

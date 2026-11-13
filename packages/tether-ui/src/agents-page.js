@@ -66,6 +66,7 @@ function AgentTargetPage({ React, Glyph, post, C, host, isActive = true, devices
   const [serviceCatalogBusy, setServiceCatalogBusy] = React.useState(false)
   const [serviceOpening, setServiceOpening] = React.useState(false)
   const nativeCodegAutoDecision = React.useRef(false)
+  const nativeCodegWasVisible = React.useRef(false)
   const [serviceView, setServiceView] = React.useState(null)
   const [serviceFrameState, setServiceFrameState] = React.useState('loading')
   const serviceWebviewRef = React.useRef(null)
@@ -652,7 +653,7 @@ function AgentTargetPage({ React, Glyph, post, C, host, isActive = true, devices
     setHomeRetry((current) => current + 1)
   }
 
-  const openNativeCodeg = async () => {
+  const openNativeCodeg = async ({ preserveExisting = false } = {}) => {
     if (!device || serviceOpening || !host || !host.workbench) return
     const legacyCodeg = serviceCatalog && serviceCatalog.legacy === true
     const catalogCodeg = serviceCatalog && serviceCatalog.services
@@ -660,7 +661,7 @@ function AgentTargetPage({ React, Glyph, post, C, host, isActive = true, devices
     if (legacyCodeg && (!catalogCodeg || !['ready', 'stopped'].includes(catalogCodeg.state)
         || (catalogCodeg.state === 'ready' && catalogCodeg.open_mode !== 'legacy-codeg')
         || typeof host.workbench.openLegacyCodeg !== 'function')) return
-    setServiceFrameState('loading')
+    if (!preserveExisting) setServiceFrameState('loading')
     setServiceOpening(true)
     setHomeError('')
     try {
@@ -675,20 +676,33 @@ function AgentTargetPage({ React, Glyph, post, C, host, isActive = true, devices
         throw new Error('主进程没有返回有效的 Codeg 工作台会话。')
       }
       const homeService = { ...service, endpoint: new URL('/workspace?tether_home=1', service.endpoint).href }
+      const currentPane = panes.find((pane) => pane.key === 'codeg:home' && pane.kind === 'native-service')
+      const sameBootstrap = preserveExisting && currentPane
+        && currentPane.service.endpoint === homeService.endpoint
+        && currentPane.service.partition === homeService.partition
+        && currentPane.service.bootstrapRevision === homeService.bootstrapRevision
+      if (sameBootstrap) {
+        setHomeError('')
+        return
+      }
       homeService.openRevision = ++codegOpenRevision.current
+      setServiceFrameState('loading')
       setServiceView(homeService)
       setPanes((current) => current.some((pane) => pane.key === 'codeg:home')
         ? current.map((pane) => pane.key === 'codeg:home' ? { ...pane, kind: 'native-service', service: homeService } : pane)
         : [...current, { key: 'codeg:home', kind: 'native-service', title: 'Codeg', service: homeService }])
       setActivePane('codeg:home')
       setWorkspaceOpen(true)
+      nativeCodegWasVisible.current = true
     } catch (error) {
       setServiceFrameState('error')
       if (error && (error.status === 401 || error.status === 403 || error.code === 'auth_required'
         || error.code === 'oidc_identity_unbound')) setWorkbenchLoginRequired(true)
       setHomeError(String((error && error.message) || error || 'Codeg 工作台无法打开。'))
-      homeOpenedRef.current = ''
-      setServiceCatalog(null)
+      if (!preserveExisting) {
+        homeOpenedRef.current = ''
+        setServiceCatalog(null)
+      }
     } finally {
       setServiceOpening(false)
     }
@@ -919,9 +933,19 @@ function AgentTargetPage({ React, Glyph, post, C, host, isActive = true, devices
       : 'Codeg 状态异常'
 
   React.useEffect(() => {
-    if (!nativeWorkbench || !isActive || !serviceCatalog || serviceCatalogBusy || nativeCodegAutoDecision.current) return
+    const hasCodegPane = panes.some((pane) => pane.key === 'codeg:home' && pane.kind === 'native-service')
+    const codegVisible = isActive && workspaceOpen && activePane === 'codeg:home' && hasCodegPane
+    if (!codegVisible) nativeCodegWasVisible.current = false
+    else if (!nativeCodegWasVisible.current) {
+      nativeCodegWasVisible.current = true
+      if (nativeWorkbench && nativeCodegAutoDecision.current && serviceCatalog && !serviceCatalogBusy && !serviceOpening) {
+        void openNativeCodeg({ preserveExisting: true })
+      }
+    }
+    if (!nativeWorkbench || !isActive || !serviceCatalog || serviceCatalogBusy || serviceOpening || hasCodegPane) return
+    if (nativeCodegAutoDecision.current) return
     nativeCodegAutoDecision.current = true
-    if (panes.length || activePane || workspaceOpen || serviceOpening || workbenchLoginRequired
+    if (panes.length || activePane || workspaceOpen || workbenchLoginRequired
         || !codegService || codegService.state === 'missing' || legacyCodegBlocked) return
     void openNativeCodeg()
   }, [nativeWorkbench, isActive, serviceCatalog, serviceCatalogBusy, panes.length, activePane, workspaceOpen,

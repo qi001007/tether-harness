@@ -149,5 +149,11 @@
 - 2026-11-12：迁移判定将完整的 OIDC + external Node `hub.json` 配置视为已初始化 profile，即使用户已登出且没有 Node credential / OIDC session 文件；认证启动路径不变，缺必需字段仍拒绝合并。
 - 2026-11-12：OIDC 加密 session 在启动时恢复；auth-status 与业务 fetch 在需要时先续期，refresh 单飞并持久化轮换 token。仅永久无效 refresh token 或显式 logout 清理；临时失败保留文件并返回 retryable，在途 refresh 不可覆盖 logout。auth-status 仅记录固定事件名。
 - 2026-11-13：复用中的 legacy Codeg 工作台每次显式重开都重新读取已鉴权服务状态与严格 token URL；刷新成功更新原 grant/partition 的 endpoint/bootstrap，失败保留原活动授权和存储，不清理会话数据。
+- 2026-11-13：F175 将 packaged APP 更新桥通过现有 OIDC owner 请求注册到本机 Node；loopback status 额外提供 device/controller 身份用于 Node 回读验证，注册失败不影响 APP 启动，桥 token 不进入 renderer。
+- 2026-11-13：F175 注册刷新按 actor/controller/device/loopback endpoint 去重；只在身份或 endpoint 变化、或本机 Node 离线后以桥不可用状态重连时刷新。Hub state 与 owner POST 均为 5 秒上限，身份字段取本机 supervisor device。
+- 2026-11-13：legacy Codeg 公开打开结果附带不含凭据的 `bootstrapRevision`，仅在主进程新鲜 runtime token URL 改变时递增；保留原 grant、隔离 partition 和会话存储。
+- 2026-11-13：同一 actor 的认证/Hub 请求复用仍为 OPEN/CONNECTING 的 SSE；只在 actor 变化或源缺失/CLOSED 时重建，保留本机 Node 桥不可用重连事件。
 - 2026-11-12：准备 0.5.4 登录会话修补版的 APP 版本元数据，package.json 与 lockfile 根包版本保持一致；已发布 0.5.3 安装包维持 0.5.3。
 - 2026-11-13：Windows Electron APP 更新使用可写的安装卷根目录 `tether-up` 作为 NSIS 临时目录；在 APP 更新关闭前验证创建与写入能力，只在同步 `quitAndInstall(true, true)` 调用窗口临时覆盖子进程 TEMP/TMP，并在 finally 恢复。静默安装继续强制安装后重开；非 Windows 更新参数保持原行为。
+
+- 2026-11-13：Windows packaged APP 更新在下载前按现有 electron-updater 缓存卷检查 2 × files[].size 合计 + 512 MiB；安装前重验 1 × files[].size 合计 + 512 MiB。空间/元数据检查只影响 prepare/apply，错误包含所需与当前可用空间；低空间 apply 保留下载包并在确认回执、停止 Node、退出 APP 前拒绝。现有 TEMP、profile、下载和签名校验路径不变。

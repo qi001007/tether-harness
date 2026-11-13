@@ -42,3 +42,5 @@
 - 2026-11-13：修正 NSIS upgrade-temp 函数的预处理 include 顺序，在其定义前显式加载 LogicLib.nsh/FileFunc.nsh，避免 Windows CI 在解析 `${IfNot}` 时失败；卸载与临时目录行为不变，等待下一次 Windows CI 真编译。
 
 - 2026-11-13：准备 Laptop 稳定入口安装 helper（默认 Plan、-Execute 才写）：固定旧 shim SHA/新稿 CRLF SHA、CreateNew 回滚备份、同目录原子替换并核对 SHA 与 ACL；未运行/上传。
+
+- 2026-11-13：准备 0.5.7 预览候选版本：APP/Node 同步为 0.5.7，插件保持冻结 0.2.93；仅更新应用包锁文件顶层版本，不重解依赖。

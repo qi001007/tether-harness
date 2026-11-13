@@ -842,11 +842,14 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
       const grantId = crypto.randomUUID()
       const endpoint = new URL('/', tokenUrl)
       const effectiveGrantId = cached ? cached.grantId : grantId
+      const bootstrapRevision = cached
+        ? (cached.bootstrapRevision || 0) + (cached.legacyTokenUrl === bootstrapUrl.toString() ? 0 : 1)
+        : 1
       const publicResult = { targetId, serviceId: 'codeg', grantId: effectiveGrantId, endpoint: endpoint.toString(),
-        partition, legacy: true }
+        partition, legacy: true, bootstrapRevision }
       // legacy marks the existing token-URL bootstrap flow, not the target Node version.
       active.set(key, { actorId, targetId, serviceId: 'codeg', generation, legacy: true,
-        grantId: effectiveGrantId, endpoint, legacyTokenUrl: bootstrapUrl.toString(), guestPrepared: false,
+        grantId: effectiveGrantId, endpoint, legacyTokenUrl: bootstrapUrl.toString(), bootstrapRevision, guestPrepared: false,
         serviceSession, sourceRoute, partition, public: publicResult, viewTimer: null,
         refreshOptions: { allowModernLocal, allowModernOwnedEasyTier,
           sourceDeviceId: allowModernOwnedEasyTier ? options.sourceDeviceId : '' } })
