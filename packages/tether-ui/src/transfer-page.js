@@ -97,6 +97,8 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
     background: C.soft, color: C.ink, fontSize: 12, padding: '0 8px', outline: 'none'
   }
   const onlineDevices = devices.filter((item) => item && item.online)
+  const deviceIds = devices.map((item) => item && item.device_id).filter(Boolean)
+  const onlineDeviceIds = onlineDevices.map((item) => item.device_id)
   const initialLeft = localDevice && onlineDevices.some((item) => item.device_id === localDevice)
     ? localDevice
     : (onlineDevices[0] && onlineDevices[0].device_id) || ''
@@ -351,7 +353,7 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
           !deviceId ? h('option', { value: '' }, '选择设备…') : null,
           devices.map((item) => h('option', {
             key: item.device_id, value: item.device_id,
-            disabled: !item.online || item.device_id === otherDeviceId
+            disabled: (!item.online && item.device_id !== deviceId) || item.device_id === otherDeviceId
           }, (item.name || item.device_id) + (item.online ? '' : ' · 离线') + (item.device_id === otherDeviceId ? ' · 已在另一侧' : '')))),
         iconButton('folderPlus', '新建文件夹', onNewFolder, !deviceId || !path),
         iconButton('filePlus', '新建文件', onNewFile, !deviceId || !path),
@@ -405,17 +407,16 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
   const [leftEntries, setLeftEntries] = React.useState([])
   const [rightEntries, setRightEntries] = React.useState([])
   React.useEffect(() => {
-    const ids = onlineDevices.map((item) => item.device_id)
-    if (!ids.length) return
-    const nextLeft = leftDevice && ids.includes(leftDevice)
+    if (!deviceIds.length) return
+    const nextLeft = leftDevice && deviceIds.includes(leftDevice)
       ? leftDevice
-      : (localDevice && ids.includes(localDevice) ? localDevice : ids[0])
-    const nextRight = rightDevice && ids.includes(rightDevice) && rightDevice !== nextLeft
+      : (localDevice && onlineDeviceIds.includes(localDevice) ? localDevice : (onlineDeviceIds[0] || ''))
+    const nextRight = rightDevice && deviceIds.includes(rightDevice) && rightDevice !== nextLeft
       ? rightDevice
-      : (ids.find((id) => id !== nextLeft) || '')
+      : (onlineDeviceIds.find((id) => id !== nextLeft) || '')
     if (nextLeft !== leftDevice) { setLeftDevice(nextLeft); setLeftPath(''); setLeftSelection([]) }
     if (nextRight !== rightDevice) { setRightDevice(nextRight); setRightPath(''); setRightSelection([]) }
-  }, [devices, localDevice, leftDevice, rightDevice])
+  }, [deviceIds.join('\0'), onlineDeviceIds.join('\0'), localDevice, leftDevice, rightDevice])
   const [activeSide, setActiveSide] = React.useState('left')
   const [refreshKey, setRefreshKey] = React.useState(0)
   const [job, setJob] = React.useState(null)

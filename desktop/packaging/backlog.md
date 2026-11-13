@@ -39,5 +39,6 @@
 - 2026-11-12：将 electron-builder 固定输出根同步到 0.5.4；保持构建器的版本匹配保护，修正初次 0.5.4 CI 候选失败的路径元数据。
 
 - 2026-11-13：NSIS customInit 在旧 Tether 卸载前为已安装升级准备同卷 tether-up 临时目录，确认短路径可写后仅设置当前安装器进程 TEMP/TMP，使后续旧卸载器继承；新装跳过。依据 pinned electron-builder 26.18.0 的 initMultiUser/customInit 调用顺序、FileFunc GetRoot 与 NSIS 内建 GetTempFileName 官方语义，以及仓库 portable.nsi 的 SetEnvironmentVariable 调用形式；本机无 makensis，真实编译留待 0.5.6 CI。
+- 2026-11-13：修正 NSIS upgrade-temp 函数的预处理 include 顺序，在其定义前显式加载 LogicLib.nsh/FileFunc.nsh，避免 Windows CI 在解析 `${IfNot}` 时失败；卸载与临时目录行为不变，等待下一次 Windows CI 真编译。
 
 - 2026-11-13：准备 Laptop 稳定入口安装 helper（默认 Plan、-Execute 才写）：固定旧 shim SHA/新稿 CRLF SHA、CreateNew 回滚备份、同目录原子替换并核对 SHA 与 ACL；未运行/上传。

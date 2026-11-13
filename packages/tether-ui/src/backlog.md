@@ -59,3 +59,4 @@
 - 2026-11-12：native Codeg 主页不渲染空白顶部 header；`codeg:home` 内容从 guest 顶部开始，其他带返回/桌面操作的工作台 pane 保留 42px 工具栏。
 - 2026-11-12：显式点击“打开 Codeg”时，UI 将主进程返回的 endpoint 复制为同源 `/workspace?tether_home=1`，使缓存 guest 也回到智能体主页；不改 main 授权记录，切换 pane 和打开历史会话不触发此导航。
 - 2026-11-13：修复常规 OAuth Hub-only 分块互传取消：即使已停止后续 chunk 请求，也向目标 Node 发送无 AbortSignal 的 `transfer_cancel`，清理本 transfer_id 的临时分块；保留既有 Croc/direct/status 分支与界面。
+- 2026-11-13：传输页保留仍在设备目录中的离线电脑和目录选择，恢复在线时不自动切换目标；设备真正移除或首次加载时才选择在线默认项，当前离线设备仍可在下拉框中识别。

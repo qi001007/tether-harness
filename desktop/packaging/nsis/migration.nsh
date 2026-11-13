@@ -1,4 +1,6 @@
 !ifndef BUILD_UNINSTALLER
+!include LogicLib.nsh
+!include FileFunc.nsh
 Function PreserveTetherLegacyData
   nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\preserve-legacy-data.ps1" -InstallRoot "$INSTDIR"'
   Pop $0

@@ -2,6 +2,10 @@
 
 ## 2026-11-13 最新实机状态
 
+本轮续验：128MB目标已独立stat/SHA核对为134217728字节、摘要与源一致，旧取消任务的4MiB残留也已通过其transfer_id清理，完整目标摘要不变。修复后的typed CLI确实加载OpenAI Codex0.163.0且无缺daemon错误，测试PTY已关闭；其输出含原生Windows沙箱初始化提示，未操作安全设置，不据此宣布交互Agent已完全就绪。当前Codex无model_provider_id绑定、raw env为空，已核对两入口默认CODEX_HOME同用户profile；adapter与native CLI不是同一启动entry。
+
+F171：互传页在短暂离线时自动把Laptop换成Cloud，根因是用onlineDevices重新选择两侧；源码现改为在完整devices目录仍存在时保留设备/路径/选择，下拉保留当前离线项。待正常Node更新产生的短暂offline实机验收。F172：e774源CI43338515201的Windows实际NSIS编译失败于`${IfNot}`未定义；函数定义前已显式引入LogicLib/FileFunc，和F171一起进入下一候选。当前正式APP与三台Node仍055，未将失败构建计为发布/安装。
+
 08:30 后补充：055的大文件互传界面已显示完整128MB目标，最终SHA回读仍待验。取消任务留下4MiB临时分块，确认是正常APP的hubOnly分支未提供已有transfer_cancel回调；已补接原Hub owner路由，独立transfer engine17项、FsService17项及UI/web build/check通过，实机取消清理待下一候选。原图/互传布局未重做。
 
 Laptop官方同版本Codex daemon修复实际exit0，current由absent变为valid-junction，原auth/config校验未变、自动更新开关保留；独立stat确认daemon程序存在。传统CLI验收会话ce34afd2b8b499ea1e3b9fc4已创建，尚未读取启动结果或关闭。验收脚本变量错误触发本地PreToolUse重复目标拦截，指定mcp-proof B段无派发/失败记录；最小只读工具探针可运行，但包含实际目标读取仍被同一规则拒绝，未换参数/通道绕过。
