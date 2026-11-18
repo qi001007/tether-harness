@@ -251,3 +251,4 @@
 - 2026-11-19：设备码用例断言公开 expiresIn 字段，防止 CLI JSON 的 expires_in 缺失。
 - 2026-11-19：SFTPGo存储配置定向测试覆盖Windows新Bolt、旧SQLite文件保留和非Windows SQLite默认。
 - 2026-11-19：新增native作业启动/进度/取消回归，以及rclone暂存文件错误SHA必须在发布前失败的回归。
+- 2026-11-19：候选版本同步约束更新为APP/Node 0.5.9、冻结插件0.2.93。
