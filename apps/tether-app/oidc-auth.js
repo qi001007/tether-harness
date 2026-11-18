@@ -425,7 +425,7 @@ function createOidcAuth({ issuer, clientId, redirectUri, storageFile, safeStorag
       }
     }
     try {
-      onUserCode({ userCode: authorization.user_code, verificationUri: verificationUri.toString() })
+      onUserCode({ userCode: authorization.user_code, verificationUri: verificationUri.toString(), expiresIn: Number(authorization.expires_in) })
     } catch (_) {
       controller.abort()
       loginPending = false

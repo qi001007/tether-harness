@@ -195,7 +195,7 @@ test('device authorization keeps the device code private, handles pending and sl
   })
   t.after(() => auth.close())
   const login = await auth.beginDeviceLogin((details) => shown.push(details))
-  assert.deepEqual(shown, [{ userCode: 'ABCD-EFGH', verificationUri: 'https://auth.example/activate' }])
+  assert.deepEqual(shown, [{ userCode: 'ABCD-EFGH', verificationUri: 'https://auth.example/activate', expiresIn: 60 }])
   assert.equal(Object.hasOwn(login, 'deviceCode'), false)
   assert.equal(JSON.stringify(shown).includes('private-device-code'), false)
   await login.completion

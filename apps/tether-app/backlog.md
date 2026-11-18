@@ -162,3 +162,4 @@
 - 2026-11-13 F164：legacy Codeg 重新授权时，仅当 endpoint/token runtime URL 改变才重建受管 guest；从已准备且同源的 `/workspace` URL 读取固定 `tether_home=1` 标记。相同 runtime 保留 bootstrap、prepared guest 与 revision；无效/未准备 guest 回到 Agent Home。未打包或部署。
 
 - 2026-11-19：0.5.9候选加入Windows安装版设备码登录（--device-sign-in：首实例向stdout返回公开user_code信息；APP界面只呈现user_code与验证网址），并保留--sign-in浏览器登录；版本元数据同步至0.5.9。
+- 2026-11-19：设备码公开回调补充 expiresIn，保证安装版 CLI JSON 输出 expires_in。
