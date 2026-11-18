@@ -78,3 +78,7 @@ There is no macOS APP or DSH Desktop plugin installer yet. Only the Node/transfe
 3. Add macOS plugin support (DSH Desktop profile path on macOS) and a real macOS runner business test.
 4. Build the network-condition matrix (LAN direct, campus NAT, mobile CGNAT, loss/latency via `tc netem` in an isolated netns) and record throughput against raw TCP.
 5. Run the full business chain in clean VMs for all three systems.
+
+## Windows managed SFTPGo storage (0.5.9 candidate)
+
+The packaged Windows Node starts its managed SFTPGo core with Bolt storage at `sftpgo/sftpgo.bolt`. This matches the bundled Windows binary. Existing managed instances with `sftpgo/sftpgo.db` continue using SQLite in place; the installer and Node do not migrate or rewrite that database. Linux and macOS storage defaults are unchanged.

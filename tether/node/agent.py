@@ -1684,7 +1684,8 @@ def main() -> None:
     ap.add_argument("--dsh-home", default=None)
     ap.add_argument("--provider", default=os.environ.get("DSH_PROVIDER", "deepseek-official"))
     ap.add_argument("--model", default=os.environ.get("DSH_MODEL", "deepseek-v4-flash"))
-    ap.add_argument("--console-port", type=int, default=int(os.environ.get("TETHER_CONSOLE_PORT", "18893")))
+    ap.add_argument("--console-port", type=int,
+                    default=int(os.environ.get("TETHER_CONSOLE_PORT", str(local_console.DEFAULT_PORT))))
     ap.add_argument("--local-api-token", default=os.environ.get("TETHER_LOCAL_API_TOKEN", ""))
     args = ap.parse_args()
     workspace = Path(args.workspace).resolve()

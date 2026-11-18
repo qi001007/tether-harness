@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { TRANSFER_CHUNK, newTransferId, transferFile, transferFileCroc } from '../packages/tether-ui/src/transfer.js'
+import { TRANSFER_CHUNK, newTransferId, transferFile, transferFileCroc, transferNativeJob } from '../packages/tether-ui/src/transfer.js'
 
 function world(payload, options = {}) {
   let written = Buffer.from(payload.subarray(0, options.partial || 0))
@@ -332,4 +332,51 @@ test('an empty file creates a finished empty destination', async () => {
   assert.equal(w.writes.length, 1)
   assert.equal(w.writes[0].final, true)
   assert.equal(newTransferId().length, 16)
+})
+
+test('native transfer job starts once, polls the target, and reports byte progress', async () => {
+  const calls = []
+  const progress = []
+  const result = await transferNativeJob({
+    post: async (device, operation, body) => {
+      calls.push({ device, operation, body })
+      if (operation === 'transfer_job_status') return calls.filter((call) => call.operation === operation).length === 1
+        ? { state: 'running', bytes_done: 25, bytes_total: 100 }
+        : { state: 'completed', bytes_done: 100, bytes_total: 100 }
+      return { state: 'queued' }
+    },
+    source: { device_id: 'source', path: 'C:\\source\\' },
+    destination: { device_id: 'target', path: 'D:\\target\\' },
+    item: 'file.bin',
+    onProgress: (value) => progress.push(value)
+  })
+  assert.equal(calls[0].operation, 'transfer_job_start')
+  assert.deepEqual(calls[0].body.items, [{ kind: 'file', path: 'file.bin' }])
+  assert.ok(calls.every((call) => call.device === 'target'))
+  assert.ok(calls.every((call) => call.body.operation_id === result.operationId))
+  assert.equal(progress[0].percent, 25)
+  assert.equal(result.bytes, 100)
+})
+
+test('native transfer cancellation during start cancels only its operation id', async () => {
+  const controller = new AbortController()
+  const calls = []
+  const transfer = transferNativeJob({
+    post: async (device, operation, body) => {
+      calls.push({ device, operation, body })
+      if (operation === 'transfer_job_start') {
+        controller.abort()
+        throw Object.assign(new Error('request aborted'), { name: 'AbortError' })
+      }
+      return { state: 'cancelled' }
+    },
+    source: { device_id: 'source', path: 'C:\\source\\' },
+    destination: { device_id: 'target', path: 'D:\\target\\' },
+    item: 'file.bin',
+    signal: controller.signal
+  })
+  await assert.rejects(transfer, { code: 'aborted' })
+  assert.equal(calls[1].operation, 'transfer_job_cancel')
+  assert.equal(calls[1].body.operation_id, calls[0].body.operation_id)
+  assert.equal(calls.length, 2)
 })

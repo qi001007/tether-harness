@@ -1,4 +1,4 @@
-import { newTransferId, transferFile, transferFileCroc } from './transfer.js'
+import { newTransferId, transferFile, transferFileCroc, transferNativeJob } from './transfer.js'
 import { TargetFileExplorer } from './target-file-explorer.js'
 import { invalidateDirectory, loadDirectory } from './file-cache.js'
 
@@ -468,7 +468,48 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
     setJob({ state: 'running', percent: 0, transferred: 0, total, count: items.length, index: 0, error: '' })
     let doneBytes = 0
     let useCroc = false
+    let useNativeJob = false
   let cancelByTransferId = false
+    if (!cut && items.length === 1 && !(target.entries || []).some((entry) => entry.name === items[0].name)) {
+      try {
+        const result = await api('/api/edges')
+        const edges = result && Array.isArray(result.edges) ? result.edges : []
+        useNativeJob = edges.some((edge) => edge && edge.mode === 'native'
+          && ((edge.from_device === side(fromSide).device && edge.to_device === target.device)
+            || (edge.from_device === target.device && edge.to_device === side(fromSide).device)))
+      } catch (_) { useNativeJob = false }
+    }
+    if (useNativeJob) {
+      const sourceDevice = side(fromSide).device
+      const item = items[0]
+      try {
+        const result = await transferNativeJob({
+          post: (deviceId, operation, body, signal) => post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/' + operation, body, undefined, signal ? { signal } : undefined),
+          source: { device_id: sourceDevice, path: item.path.slice(0, item.path.length - item.name.length) },
+          destination: { device_id: target.device, path: target.path },
+          item: item.name,
+          signal: controller.signal,
+          onProgress: (value) => setJob((current) => ({ ...(current || {}),
+            percent: Math.min(99, Number(value.percent) || 0), transferred: Number(value.transferred) || 0,
+            total: Number(value.total) || total, state: 'running' }))
+        })
+        doneBytes = result.bytes || Number(item.size) || 0
+        setJob((current) => ({ ...(current || {}), state: 'done', percent: 100, transferred: doneBytes }))
+        if (onNotice) onNotice('已转移 1 个文件（' + formatBytes(doneBytes) + '）')
+        invalidateDirectory(sourceDevice, side(fromSide).path)
+        invalidateDirectory(target.device, target.path)
+        refresh()
+        setLeftSelection([]); setRightSelection([])
+        return
+      } catch (error) {
+        setJob((current) => ({ ...(current || {}), state: error.code === 'aborted' ? 'cancelled' : 'error',
+          error: error.message || '原生传输失败' }))
+        if (error.code !== 'aborted' && onError) onError(error)
+        return
+      } finally {
+        abortRef.current = null
+      }
+    }
     if (!hubOnly) {
       try {
         const [sourceInfo, targetInfo] = await Promise.all([

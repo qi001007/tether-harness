@@ -28,6 +28,7 @@ LOGS = ROOT / ".runtime" / "logs"
 PORT = int(os.environ.get("TETHER_PORT", "18890"))
 HOST = os.environ.get("TETHER_HOST", "127.0.0.1")
 DEVICE = os.environ.get("TETHER_DEVICE", "DESKTOP-LOCAL")
+CONSOLE_PORT = int(os.environ.get("TETHER_CONSOLE_PORT", "18894" if sys.platform == "win32" else "18893"))
 WORKSPACE = str(ROOT / "work-local")
 
 
@@ -120,7 +121,7 @@ def main() -> None:
 
     ui = f"http://127.0.0.1:{PORT}"
     print(f"[tether] UI: {ui}")
-    print(f"[tether] local console: http://127.0.0.1:18893")
+    print(f"[tether] local console: http://127.0.0.1:{CONSOLE_PORT}")
     print(f"[tether] logs: {LOGS}")
     if not args.no_browser:
         edge = find_edge()

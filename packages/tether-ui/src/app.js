@@ -3707,6 +3707,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const [stateLoading, setStateLoading] = React.useState(true)
       const [stateRefreshError, setStateRefreshError] = React.useState('')
       const [hubLoginBusy, setHubLoginBusy] = React.useState(false)
+      const [deviceLoginInfo, setDeviceLoginInfo] = React.useState(null)
       const [identityBindRequired, setIdentityBindRequired] = React.useState(false)
       const [identityBindMode, setIdentityBindMode] = React.useState('')
       const [identityBindBusy, setIdentityBindBusy] = React.useState(false)
@@ -4959,11 +4960,13 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         if (!host || host.kind !== 'app' || !host.workbench || typeof host.workbench.onLoginResult !== 'function') return undefined
         return host.workbench.onLoginResult((result) => {
           if (result && result.state === 'closed') {
+            setDeviceLoginInfo(null)
             setHubLoginBusy(false)
             if (result.error) setStateRefreshError(result.error)
             return
           }
           if (result && result.state === 'identity_unbound') {
+            setDeviceLoginInfo(null)
             workbenchAuthReadyRef.current = false
             setWorkbenchAuthReady(false)
             setIdentityBindRequired(true)
@@ -4972,7 +4975,13 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             setHubLoginBusy(false)
             return
           }
+          if (result && result.state === 'device_code') {
+            setDeviceLoginInfo({ userCode: result.userCode, verificationUri: result.verificationUri })
+            setHubLoginBusy(true)
+            return
+          }
           if (!result || result.state !== 'authenticated') return
+          setDeviceLoginInfo(null)
           EXPLICIT_AUTHORITY = false
           workbenchAuthReadyRef.current = true
           setWorkbenchAuthReady(true)
@@ -7228,6 +7237,13 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
               windowControl('toggle-maximize', windowMaximized ? '还原' : '最大化', windowMaximized ? 'restore' : 'maximize'),
               windowControl('close', '关闭', 'close')) : null)
         ),
+        deviceLoginInfo ? h('div', { style: { position: 'absolute', top: 48, right: 12, zIndex: 20, width: 310,
+          padding: 12, border: '1px solid ' + C.line, borderRadius: 8, background: C.bg, boxShadow: '0 8px 28px rgba(0,0,0,.2)',
+          WebkitAppRegion: 'no-drag', userSelect: 'text' } },
+          h('div', { style: { marginBottom: 8 } }, h('span', { style: { color: C.sub, fontSize: 11 } }, '验证码'),
+            h('div', { style: { fontSize: 20, fontWeight: 700, letterSpacing: 1.5, userSelect: 'all' } }, deviceLoginInfo.userCode)),
+          h('div', null, h('span', { style: { color: C.sub, fontSize: 11 } }, '验证网址'),
+            h('div', { style: { fontSize: 12, lineHeight: 1.4, overflowWrap: 'anywhere', userSelect: 'all' } }, deviceLoginInfo.verificationUri))) : null,
         stateRefreshError ? h('div', { role: 'status', 'aria-live': 'polite', style: { flex: '0 0 auto', padding: '6px 12px', background: C.soft,
           color: C.amber, fontSize: 11, borderBottom: '1px solid ' + C.line } }, stateRefreshError) : null,
         notice || projectsError || updateToast ? renderToasts() : null,

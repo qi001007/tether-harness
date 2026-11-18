@@ -180,3 +180,7 @@
 - 2026-11-13 F154: 仅保留Herdr CLI agent-start JSON timeout的tab/PTY，返回agent_state=unverified；保持真正进程调用超时/其他fatal清理。Root独立36项通过，独立候选QA实际ready；未发布/部署，超时保留分支实机待验。
 
 - 2026-11-13 F164：canonical Codeg patch仅重生成route-context源码与测试两段，其余37段保持；新增Home/会话URL标记同步供重新授权恢复页面。Root独立36项native/4项route测试及完整39段reverse apply-check通过，两个新段在官方e317基线上forward通过；等待preview.2构建、部署与真实重连验收。
+
+- 2026-11-19：Windows Node console默认端口统一为18894，agent argparse与console.start共用默认值；TETHER_CONSOLE_PORT及--console-port覆盖仍有效，其他平台维持18893。
+- 2026-11-19：Windows新建受管SFTPGo实例改用Bolt及`sftpgo.bolt`，与随包Windows二进制一致；已有`sftpgo.db`继续使用SQLite且不迁移，其他平台不变。
+- 2026-11-19：目标端原生rclone作业优先使用授权源指纹验证本地暂存文件；错误SHA在发布前失败，已授权指纹匹配时跳过rclone二次下载校验。

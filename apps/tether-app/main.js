@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, session, safeStorage, webFrameMain, Tray, Menu, nativeImage } = require('electron')
+const { app, BrowserWindow, ipcMain, shell, session, safeStorage, webFrameMain, Tray, Menu, nativeImage, dialog } = require('electron')
 const fs = require('node:fs')
 const path = require('node:path')
 const { pathToFileURL } = require('node:url')
@@ -936,6 +936,36 @@ async function openWorkbenchLogin() {
     return { ok: false, error: String(error && error.message || error || '桌面登录未完成') }
   }
 }
+async function openWorkbenchDeviceLogin({ writeResultToStdout = false } = {}) {
+  if (!oidcAuth) return { ok: false, error: '桌面身份认证不可用' }
+  workbenchBindingPending = false
+  try {
+    const login = await oidcAuth.beginDeviceLogin(({ userCode, verificationUri, expiresIn }) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('tether:workbench-login-result', { state: 'device_code', userCode, verificationUri })
+      }
+      if (writeResultToStdout) {
+        try { process.stdout.write(JSON.stringify({ verification_uri: verificationUri, user_code: userCode, expires_in: expiresIn }) + '\n') } catch (_) { /* output is optional in GUI launches */ }
+      }
+    })
+    void login.completion.then(async () => {
+      setDesktopAuthMode('oidc')
+      const result = await refreshWorkbenchAuthStatus()
+      if (result.authenticated) await completeWorkbenchLogin(result.user.user_id)
+      else if (result.identityUnbound && mainWindow && !mainWindow.isDestroyed()) {
+        workbenchBindingPending = true
+        mainWindow.webContents.send('tether:workbench-login-result', { state: 'identity_unbound' })
+      } else if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('tether:workbench-login-result', { state: 'closed', error: 'Casdoor 登录已完成，但 Hub 未确认登录状态。' })
+      }
+    }).catch((error) => {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('tether:workbench-login-result', { state: 'closed', error: safeLoginError(error) })
+    })
+    return { ok: true, state: 'device_login_started' }
+  } catch (error) {
+    return { ok: false, error: String(error && error.message || error || '设备码登录未能启动') }
+  }
+}
 handleTrusted('tether:workbench-login', openWorkbenchLogin)
 handleTrusted('tether:workbench-auth-status', refreshWorkbenchAuthStatus, () => ({ authenticated: false }))
 handleTrusted('tether:workbench-bind-legacy', async (_event, credentials) => {
@@ -1205,10 +1235,44 @@ const locked = app.requestSingleInstanceLock()
 if (!locked) {
   app.quit()
 } else {
-  app.on('second-instance', () => {
+  let pendingInstalledSignIn = packaged && !candidateMode && process.platform === 'win32'
+    ? process.argv.includes('--device-sign-in') ? { mode: 'device', writeResultToStdout: true }
+      : process.argv.includes('--sign-in') ? { mode: 'browser', writeResultToStdout: false } : null
+    : ''
+  let startupComplete = false
+  let installedSignInRunning = false
+  async function runInstalledSignIn() {
+    if (!pendingInstalledSignIn || !startupComplete || installedSignInRunning) return
+    const signInIntent = pendingInstalledSignIn
+    pendingInstalledSignIn = null
+    installedSignInRunning = true
+    try {
+      showMainWindow()
+      const result = signInIntent.mode === 'device'
+        ? await openWorkbenchDeviceLogin({ writeResultToStdout: signInIntent.writeResultToStdout })
+        : await openWorkbenchLogin()
+      if (!result.ok) {
+        log('installed sign-in could not start')
+        dialog.showErrorBox('Tether 登录未能启动', '登录流程无法启动。请检查登录状态并重试。')
+      }
+    } finally {
+      installedSignInRunning = false
+      if (pendingInstalledSignIn) void runInstalledSignIn()
+    }
+  }
+  app.on('second-instance', (_event, commandLine) => {
     showMainWindow()
+    if (packaged && !candidateMode && process.platform === 'win32' && Array.isArray(commandLine)) {
+      if (commandLine.some((argument) => argument === '--device-sign-in')) pendingInstalledSignIn = { mode: 'device', writeResultToStdout: false }
+      else if (commandLine.some((argument) => argument === '--sign-in')) pendingInstalledSignIn = { mode: 'browser', writeResultToStdout: false }
+      void runInstalledSignIn()
+    }
   })
-  app.whenReady().then(createWindow).catch((error) => {
+  app.whenReady().then(async () => {
+    await createWindow()
+    startupComplete = true
+    await runInstalledSignIn()
+  }).catch((error) => {
     log('start failed ' + (error.stack || error))
     app.quit()
   })

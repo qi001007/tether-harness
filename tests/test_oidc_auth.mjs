@@ -44,7 +44,7 @@ function encryptedStorage() {
   }
 }
 
-async function oidcFixture(tokenHandler, apiHandler = null) {
+async function oidcFixture(tokenHandler, apiHandler = null, deviceHandler = null) {
   const calls = []
   const server = createServer(async (request, response) => {
     const body = []
@@ -53,8 +53,13 @@ async function oidcFixture(tokenHandler, apiHandler = null) {
     calls.push({ url: request.url, method: request.method, headers: request.headers, body: text })
     if (request.url === '/.well-known/openid-configuration') {
       response.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({
-        issuer, authorization_endpoint: `${issuer}/authorize`, token_endpoint: `${issuer}/token`
+        issuer, authorization_endpoint: `${issuer}/authorize`, token_endpoint: `${issuer}/token`,
+        device_authorization_endpoint: `${issuer}/device`
       }))
+      return
+    }
+    if (request.url === '/device' && deviceHandler) {
+      await deviceHandler(new URLSearchParams(text), response, calls)
       return
     }
     if (request.url === '/token') {
@@ -151,9 +156,79 @@ function makeAuth(issuer, storageFile, options = {}) {
     safeStorage: options.safeStorage || encryptedStorage(),
     openExternal: options.openExternal || (async () => {}),
     fetchImpl: options.fetchImpl || globalThis.fetch,
+    waitImpl: options.waitImpl,
     log: () => {}
   })
 }
+
+test('device authorization keeps the device code private, handles pending and slow_down, and stores the approved session', async (t) => {
+  const pollIntervals = []
+  let pollCount = 0
+  const fixture = await oidcFixture(async (form, response, calls) => {
+    const call = calls.at(-1)
+    assert.equal(form.get('grant_type'), 'urn:ietf:params:oauth:grant-type:device_code')
+    assert.equal(form.get('device_code'), 'private-device-code')
+    assert.equal(form.get('client_id'), 'tether-desktop')
+    assert.equal(form.has('client_secret'), false)
+    assert.equal(call.headers['content-type'], 'application/x-www-form-urlencoded')
+    pollCount += 1
+    if (pollCount === 1) response.writeHead(400, { 'content-type': 'application/json' }).end(JSON.stringify({ error: 'authorization_pending' }))
+    else if (pollCount === 2) response.writeHead(400, { 'content-type': 'application/json' }).end(JSON.stringify({ error: 'slow_down' }))
+    else response.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({
+      id_token: 'device-id', access_token: 'device-access', refresh_token: 'device-refresh', expires_in: 3600
+    }))
+  }, null, async (form, response, calls) => {
+    assert.deepEqual(Object.fromEntries(form), { client_id: 'tether-desktop', scope: 'openid profile email offline_access' })
+    assert.equal(calls.at(-1).headers['content-type'], 'application/x-www-form-urlencoded')
+    response.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({
+      device_code: 'private-device-code', user_code: 'ABCD-EFGH', verification_uri: 'https://auth.example/activate', expires_in: 60, interval: 1
+    }))
+  })
+  t.after(() => closeServer(fixture.server))
+  const dir = mkdtempSync(join(tmpdir(), 'tether-oidc-device-'))
+  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  const safeStorage = encryptedStorage()
+  const shown = []
+  const auth = makeAuth(fixture.issuer, join(dir, 'session.bin'), {
+    safeStorage,
+    waitImpl: async (milliseconds) => { pollIntervals.push(milliseconds) }
+  })
+  t.after(() => auth.close())
+  const login = await auth.beginDeviceLogin((details) => shown.push(details))
+  assert.deepEqual(shown, [{ userCode: 'ABCD-EFGH', verificationUri: 'https://auth.example/activate' }])
+  assert.equal(Object.hasOwn(login, 'deviceCode'), false)
+  assert.equal(JSON.stringify(shown).includes('private-device-code'), false)
+  await login.completion
+  assert.deepEqual(pollIntervals, [1000, 1000, 6000])
+  assert.equal(auth.status().state, 'authenticated')
+  const saved = JSON.parse(safeStorage.decryptString(readFileSync(join(dir, 'session.bin'))))
+  assert.deepEqual(saved, {
+    id_token: 'device-id', access_token: 'device-access', refresh_token: 'device-refresh', expires_at: saved.expires_at
+  })
+  assert.ok(Number.isFinite(saved.expires_at))
+})
+
+test('device authorization stops for denial and expiration without exposing device codes', async (t) => {
+  for (const errorCode of ['access_denied', 'expired_token']) {
+    let polls = 0
+    const fixture = await oidcFixture(async (_form, response) => {
+      polls += 1
+      response.writeHead(400, { 'content-type': 'application/json' }).end(JSON.stringify({ error: errorCode }))
+    }, null, async (_form, response) => {
+      response.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({
+        device_code: 'private-device-code', user_code: 'ABCD', verification_uri: 'https://auth.example/activate', expires_in: 60, interval: 1
+      }))
+    })
+    t.after(() => closeServer(fixture.server))
+    const dir = mkdtempSync(join(tmpdir(), 'tether-oidc-device-'))
+    t.after(() => rmSync(dir, { recursive: true, force: true }))
+    const auth = makeAuth(fixture.issuer, join(dir, 'session.bin'), { waitImpl: async () => {} })
+    t.after(() => auth.close())
+    const login = await auth.beginDeviceLogin()
+    await assert.rejects(login.completion, errorCode === 'access_denied' ? /denied/ : /expired/)
+    assert.equal(polls, 1)
+  }
+})
 
 function storeSession(storageFile, safeStorage, overrides = {}) {
   const session = {

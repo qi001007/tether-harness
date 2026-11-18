@@ -43,3 +43,22 @@
 
 - DESKTOP 侧加 `--disable-tcp-hole-punching true` 后：latency 在 7–53 ms 间波动，100 MB **37.21 s / 2.82 MB/s**，低于原始参数下的 **28.80 s / 3.64 MB/s**。
 - 结论：瓶颈不在 TCP 打洞本身，更像 EasyTier 单流/TUN 吞吐或本机 TCP 窗口；关闭打洞无收益。两端 EasyTier 已恢复原始启动参数，未保留实验配置。
+## Windows native transfer runtime (0.5.9 candidate)
+
+The Windows managed Node uses the packaged SFTPGo core with its Bolt database for a new instance, because the bundled Windows build does not include SQLite. An existing `sftpgo.db` stays on its current SQLite driver and is left in place. External SFTPGo endpoints and non-Windows Node storage are unaffected. Native transfer still requires the selected EasyTier address and the Node-owned loopback SFTPGo service to be available.
+
+### Windows 0.5.9 source checks and machine acceptance
+
+**Source-level checks**
+
+- `tests/test_sftpgo_grants.py`: 3 passed. These checks cover new Windows Bolt config, preservation of an existing `sftpgo.db`, and the unchanged non-Windows SQLite default. They do not prove a real transfer.
+- OIDC/Electron login integration: 43 passed; local Node console API: 5 passed. These exercise source behavior and are not install acceptance.
+
+**Windows machine acceptance**
+
+| Path | Payload | Elapsed | Integrity |
+| --- | ---: | ---: | --- |
+| Native transfer using Windows SFTPGo Bolt | 100 MiB | 154.701 s | source and destination hashes matched |
+| Previous Hub chunked transfer | 100 MiB | 1209.475 s | recorded as the prior baseline |
+
+The native result is a real two-machine transfer measurement; the table is not a benchmark suite or a claim about other networks. No final 0.5.9 installer or signed update was built from this post-fix state.

@@ -1138,3 +1138,16 @@ Windows 10:46 异常重启后，主机 Node 未运行。通过原安装的开始
 - 旧图首次卸载前查询时位置 key 不存在；卸载后 Cytoscape 写入像素坐标。先将单 key 原值备份；旧值中 DESKTOP-LOCAL 节点为 `(0,0)`，远端节点为 `(378,608)`，无 `vx/vy`。仅当当前值与备份逐字相等时删除了 `tether.network.positions.v3`，没有更改其他 localStorage 项。删除后即时读回 key 不存在；后续原图验收可重新保存位置；备份 `.scratch/qa/network-positions-v3-after-old-graph-unmount-20261112.json`，214 B，SHA-256 `FFBD3E3279B09E8406FA09D0AD1F6F115D6FC59B5B66EADD9F666299FD9A1313`。旧源码/运行 bundle 备份仍保留于 `.scratch/qa/network-graph-cytoscape-pre-restore-20261112-*`。
 
 2026-11-13 056续验：Desktop原生入口自动打开，新结构化草稿实际已连接且设置加载，随后关闭空白标签；原AGENT-1112-LOCAL回复保留。Herdr从同项目D:\Tether\work启动，真实spaces菜单和Codex升级提示可见；未代选CLI升级，Tether关闭终端返回主页。仅记启动通过，不代替三模式交互。
+
+
+## 2026-11-19 0.5.9候选状态
+
+- [x] 代码：Windows Node本地console默认18894；设备码登录与浏览器登录并存。
+- [x] 本机聚焦验证：OIDC与Electron登录集成43项通过，Node console API 5项通过，Windows默认端口断言18894。
+- [x] CI预览配置：分支codex/tether-059-local-acceptance-20261119映射0.5.9-preview.1；普通四平台package成功并签名manifest后直接公开prerelease，draft=false、make_latest=false；package失败不发布。
+- [x] 本地Windows x64 NSIS run-4曾完成，installer SHA-256 `dd537274434885c17cfab10f41d597833ffcfc9c0ffbbfc5b7dae3a29b854430`；它未包含后续SFTPGo Bolt修复，只作为过期构建记录，不作候选。
+- [x] 已合入主控交付的 native transfer 与 SHA256 staging 验证两个hunk：单文件跨节点有native边时由目标Node运行作业；目标暂存内容匹配授权源指纹后本地验hash，避免rclone再次下载源文件校验。错误哈希在发布前失败。
+
+- [x] 后续实机缺陷修复：Windows新建SFTPGo实例改用Bolt，旧SQLite数据库不迁移；新增3项定向配置测试及安装/传输说明。该修复发生在run-4之后，因此run-4不是最终候选。
+
+- [ ] 当前冻结为源码候选；CI的两个`build:web`入口重建静态包。源测试通过后，由主控提交并按发布流程继续验收；此轮未运行完整安装器。

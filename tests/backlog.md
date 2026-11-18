@@ -246,3 +246,7 @@
 
 - 2026-11-13 F164：新增同runtime不重载已准备guest、runtime轮换后恢复会话/Home及无效guest路由回退验证。Root独立native-workbench 36项及Codeg route-provider 4项通过；canonical39段反向apply-check通过，正式APP尚未包含该修补。
 - 2026-11-13：新增 preview.2 tag 进入归档阶段及无效序号/版本拒绝测试；候选重组 workflow 的固定 run、分支门禁和 runtime 路径拒绝 guard 定向测试通过（21 passed）。
+
+- 2026-11-19：覆盖设备码登录轮询/拒绝/过期与公开user_code边界、安装版--device-sign-in入口，以及Node console API。
+- 2026-11-19：SFTPGo存储配置定向测试覆盖Windows新Bolt、旧SQLite文件保留和非Windows SQLite默认。
+- 2026-11-19：新增native作业启动/进度/取消回归，以及rclone暂存文件错误SHA必须在发布前失败的回归。

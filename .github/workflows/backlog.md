@@ -29,3 +29,5 @@
 
 - 2026-11-13：新增 `codex/tether-058-route-recovery-20261113` 独立候选映射到 APP/Node 0.5.8 与 `v0.5.8-preview.2`；保留 `codex/tether-058-herdr-20261113` 的 preview.1 映射，preview release 仍为 draft prerelease 且 `make_latest: false`。
 - 2026-11-13：为固定 0.5.8 preview.2 重新组装分支复用 43410891693 已成功的产物；guard 限定父提交与发行文件白名单，普通候选仍要求 package 成功，draft/prerelease 与 POSIX-only 门禁保留。
+
+- 2026-11-19：为codex/tether-059-local-acceptance-20261119配置0.5.9-preview.1候选版号与tag，复用签名manifest；要求普通四平台package job成功后直接发布公开prerelease（draft=false、prerelease=true、make_latest=false）。

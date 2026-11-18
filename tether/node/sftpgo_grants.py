@@ -109,6 +109,14 @@ class SftpGoGrants:
         return None
 
     @staticmethod
+    def _managed_provider_config(instance_dir: Path, *, platform: str | None = None) -> dict[str, str]:
+        platform = platform or os.name
+        sqlite_path = instance_dir / "sftpgo.db"
+        if platform == "nt" and not sqlite_path.exists():
+            return {"driver": "bolt", "name": str(instance_dir / "sftpgo.bolt")}
+        return {"driver": "sqlite", "name": str(sqlite_path)}
+
+    @staticmethod
     def _same_path(left: str, right: str) -> bool:
         return os.path.normcase(os.path.realpath(left)) == os.path.normcase(os.path.realpath(right))
 
@@ -180,8 +188,8 @@ class SftpGoGrants:
             self.service_ip = mesh_host
             self.sftp_port = 20222
             provider = config.setdefault("data_provider", {})
-            provider.update({"driver": "sqlite", "name": str(self.instance_dir / "sftpgo.db"),
-                             "create_default_admin": True, "update_mode": 0})
+            provider.update(self._managed_provider_config(self.instance_dir))
+            provider.update({"create_default_admin": True, "update_mode": 0})
             config.setdefault("sftpd", {}).update({
                 "bindings": [{"address": "127.0.0.1", "port": self.sftp_port}],
                 "host_keys": [str(self.instance_dir / "id_ed25519")],

@@ -23,6 +23,7 @@ from urllib.parse import parse_qs, unquote, urlsplit
 from .fs_service import FsError
 
 PAGE = Path(__file__).with_name("console.html")
+DEFAULT_PORT = 18894 if sys.platform == "win32" else 18893
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -216,7 +217,7 @@ class _Handler(BaseHTTPRequestHandler):
         pass
 
 
-def start(store: Any, device: str, port: int = 18893, *,
+def start(store: Any, device: str, port: int = DEFAULT_PORT, *,
           api: Any = None, token: str = "") -> ThreadingHTTPServer:
     handler = type("TetherConsoleHandler", (_Handler,), {
         "store": store, "device": device, "api": api, "token": token,

@@ -289,6 +289,25 @@ test('desktop login opens Casdoor authorization externally using fixed public-cl
   assert.doesNotMatch(main, /\/oauth2\/start|workbenchLoginWindow|title:\s*'Tether 登录'/)
 })
 
+test('installed Windows --sign-in invokes the normal browser login for first and existing instances', () => {
+  assert.match(main, /packaged\s*&&\s*!candidateMode\s*&&\s*process\.platform\s*===\s*'win32'[\s\S]*?process\.argv\.includes\('--sign-in'\)/)
+  assert.match(main, /commandLine\.some\(\(argument\)\s*=>\s*argument\s*===\s*'--sign-in'\)/)
+  assert.match(main, /signInIntent\.mode === 'device'[\s\S]*?: await openWorkbenchLogin\(\)/)
+  assert.match(main, /app\.whenReady\(\)\.then\(async \(\) => \{\s*await createWindow\(\)\s*startupComplete = true\s*await runInstalledSignIn\(\)/)
+  assert.doesNotMatch(main, /commandLine[^\n]*(?:issuer|credentialsFile|TETHER_OIDC)/)
+})
+
+test('installed Windows --device-sign-in displays only the user code and verification URI', () => {
+  assert.match(main, /process\.argv\.includes\('--device-sign-in'\)/)
+  assert.match(main, /commandLine\.some\(\(argument\)\s*=>\s*argument\s*===\s*'--device-sign-in'\)/)
+  assert.match(main, /await openWorkbenchDeviceLogin\(\{ writeResultToStdout: signInIntent\.writeResultToStdout \}\)/)
+  assert.match(main, /beginDeviceLogin\(\(\{ userCode, verificationUri, expiresIn \}\) => \{[\s\S]*?JSON\.stringify\(\{ verification_uri: verificationUri, user_code: userCode, expires_in: expiresIn \}\)/)
+  assert.match(main, /webContents\.send\('tether:workbench-login-result', \{ state: 'device_code', userCode, verificationUri \}\)/)
+  assert.match(shared, /result\.state === 'device_code'[\s\S]*?setDeviceLoginInfo\(\{ userCode: result\.userCode, verificationUri: result\.verificationUri \}\)/)
+  assert.doesNotMatch(shared, /result\.deviceCode|result\.device_code/)
+  assert.doesNotMatch(preload, /deviceCode|device_code/)
+})
+
 test('login failures preserve the useful main-process error in IPC and renderer state', () => {
   assert.match(main, /catch \(error\) \{\s*return \{ ok: false, error: String\(error && error\.message \|\| error \|\| '桌面登录未完成'\) \}/)
   assert.match(main, /\{ state: 'closed', error: safeLoginError\(error\) \}/)

@@ -318,6 +318,32 @@ class RcloneJobs:
                     raise TransferJobError("conflict", "destination changed or has no confirmed version", True)
             prepared.append((relative, dst, str(item.get("kind")), str(item.get("destination_version") or "")))
 
+        trusted_file_fingerprints: dict[str, str] | None = None
+        source_fingerprints = grant.get("source_fingerprints")
+        if isinstance(source_fingerprints, list):
+            fingerprints_by_path: dict[str, str] = {}
+            valid_manifest = True
+            for entry in source_fingerprints:
+                if not isinstance(entry, dict):
+                    valid_manifest = False
+                    break
+                try:
+                    fingerprint_path = _safe_relative(str(entry.get("path") or ""))
+                except TransferJobError:
+                    valid_manifest = False
+                    break
+                fingerprint = str(entry.get("sha256") or "")
+                if (fingerprint_path in fingerprints_by_path or
+                        not re.fullmatch(r"[a-f0-9]{64}", fingerprint)):
+                    valid_manifest = False
+                    break
+                fingerprints_by_path[fingerprint_path] = fingerprint
+            if valid_manifest and set(fingerprints_by_path) == {item[0] for item in prepared}:
+                trusted_file_fingerprints = {
+                    relative: fingerprints_by_path[relative]
+                    for relative, _, kind, _ in prepared if kind == "file"
+                }
+
         timestamp = time.time()
         if previous:
             self._update(operation_id, state="queued", bytes_done=0, bytes_total=0, files_done=0,
@@ -329,7 +355,7 @@ class RcloneJobs:
                 db.execute("INSERT INTO jobs(operation_id,payload_hash,payload,state,bytes_total,files_total,updated_at) VALUES(?,?,?,?,?,?,?)",
                            (operation_id, payload_hash, payload_json, "queued", bytes_total, 0, timestamp))
         context = copy_context()
-        thread = threading.Thread(target=context.run, args=(self._run, operation_id, prepared, mode, bytes_total, source_root, dest_root, endpoint, self._key_paths(operation_id)[0], payload.get("conflict_policy", "fail")), daemon=True,
+        thread = threading.Thread(target=context.run, args=(self._run, operation_id, prepared, mode, bytes_total, source_root, dest_root, endpoint, self._key_paths(operation_id)[0], payload.get("conflict_policy", "fail"), trusted_file_fingerprints), daemon=True,
                                   name="rclone-job-" + operation_id[:24])
         thread.start()
         return self._get(operation_id) or {}
@@ -447,7 +473,7 @@ class RcloneJobs:
 
     def _run(self, operation_id: str, items: list[tuple[str, Path, str, str]], mode: str, bytes_total: int,
              source_root: str, dest_root: Path, endpoint: dict[str, Any], key_file: Path,
-             conflict_policy: str) -> None:
+             conflict_policy: str, trusted_file_fingerprints: dict[str, str] | None = None) -> None:
         with self._lock:
             current = self._get(operation_id)
             if current and current["state"] == "cancelling":
@@ -518,22 +544,34 @@ class RcloneJobs:
                         "_filter": {"IncludeRule": batch_rules}, "_async": True,
                     }, bytes_total, files_total)
                     self._update(operation_id, state="verifying")
-                    check_output = self._await_rc_job(operation_id, "operations/check", {
-                        "srcFs": "transfer:", "dstFs": str(batch_stage_root), "download": True,
-                        "oneWay": True, "_filter": {"IncludeRule": batch_rules}, "_async": True,
-                    }, bytes_total, files_total)
-                    if (check_output.get("success") is False or check_output.get("differ") or
-                            check_output.get("error") or check_output.get("missingOnSrc") or
-                            check_output.get("missingOnDst")):
-                        raise TransferJobError("verification_failed", "rclone content verification failed", True)
+                    verify_locally = bool(trusted_file_fingerprints) and all(
+                        relative in trusted_file_fingerprints for relative, _, _, _ in batch_files)
+                    if not verify_locally:
+                        check_output = self._await_rc_job(operation_id, "operations/check", {
+                            "srcFs": "transfer:", "dstFs": str(batch_stage_root), "download": True,
+                            "oneWay": True, "_filter": {"IncludeRule": batch_rules}, "_async": True,
+                        }, bytes_total, files_total)
+                        if (check_output.get("success") is False or check_output.get("differ") or
+                                check_output.get("error") or check_output.get("missingOnSrc") or
+                                check_output.get("missingOnDst")):
+                            raise TransferJobError("verification_failed", "rclone content verification failed", True)
+                    staged_files = []
                     for batch_relative, batch_dst, _, version in batch_files:
                         if self._get(operation_id)["state"] == "cancelling":
                             self._update(operation_id, state="cancelled", rate=0)
                             return
                         stage_file = self._resolve(str(batch_stage_root / Path(*batch_relative.split("/"))))
                         self._write_guard(stage_file, "write")
-                        if not _inside(stage_file, batch_stage_root) or not stage_file.is_file():
+                        if (not _inside(stage_file, batch_stage_root) or not stage_file.is_file() or
+                                (verify_locally and stage_file.is_symlink())):
                             raise TransferJobError("verification_failed", "rclone did not stage a selected file", True)
+                        if verify_locally and _destination_version(stage_file) != trusted_file_fingerprints[batch_relative]:
+                            raise TransferJobError("verification_failed", "staged file does not match the authorized source fingerprint", True)
+                        staged_files.append((batch_relative, stage_file, batch_dst, version))
+                    for _, stage_file, batch_dst, version in staged_files:
+                        if self._get(operation_id)["state"] == "cancelling":
+                            self._update(operation_id, state="cancelled", rate=0)
+                            return
                         if batch_dst.exists():
                             self._write_guard(batch_dst, "write")
                             if conflict_policy != "overwrite" or not version or _destination_version(batch_dst) != version:

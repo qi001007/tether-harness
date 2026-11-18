@@ -74,7 +74,7 @@ function createCandidateOidcOpenExternal({ issuer, credentialsFile, fetchImpl = 
   }
 }
 
-function createOidcAuth({ issuer, clientId, redirectUri, storageFile, safeStorage, openExternal, fetchImpl = globalThis.fetch, log = () => {} }) {
+function createOidcAuth({ issuer, clientId, redirectUri, storageFile, safeStorage, openExternal, fetchImpl = globalThis.fetch, waitImpl, log = () => {} }) {
   const expectedRedirectUri = `http://${CALLBACK_HOST}:${CALLBACK_PORT}${CALLBACK_PATH}`
   if (redirectUri !== expectedRedirectUri) throw new Error(`redirectUri must be ${expectedRedirectUri}`)
 
@@ -83,6 +83,7 @@ function createOidcAuth({ issuer, clientId, redirectUri, storageFile, safeStorag
   let loginServer = null
   let loginPending = false
   let rejectPendingLogin = null
+  let deviceLoginAbortController = null
   let closed = false
   let refreshPromise = null
   let sessionGeneration = 0
@@ -310,6 +311,132 @@ function createOidcAuth({ issuer, clientId, redirectUri, storageFile, safeStorag
     return { authorizationUrl: authorization.toString(), completion }
   }
 
+  async function beginDeviceLogin(onUserCode = () => {}) {
+    if (loginPending) throw new Error('An OIDC login is already in progress')
+    if (closed) throw new Error('OIDC auth module is closed')
+    loginPending = true
+    let metadata
+    try {
+      metadata = await discover()
+      if (typeof metadata.device_authorization_endpoint !== 'string') throw new Error('Device authorization is unavailable')
+      const endpoint = new URL(metadata.device_authorization_endpoint)
+      const issuerUrl = new URL(issuer)
+      const localHttpIssuer = issuerUrl.protocol === 'http:' && ['127.0.0.1', '::1', 'localhost'].includes(issuerUrl.hostname)
+      if ((!localHttpIssuer && endpoint.protocol !== 'https:') || endpoint.origin !== issuerUrl.origin) throw new Error('Device authorization endpoint is invalid')
+    } catch (error) {
+      loginPending = false
+      throw error
+    }
+
+    const controller = new AbortController()
+    deviceLoginAbortController = controller
+    let response
+    try {
+      response = await fetchImpl(metadata.device_authorization_endpoint, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ client_id: clientId, scope: 'openid profile email offline_access' }).toString(),
+        signal: controller.signal
+      })
+    } catch (_) {
+      loginPending = false
+      deviceLoginAbortController = null
+      throw new Error('Device authorization request failed')
+    }
+    const authorization = await response.json().catch(() => null)
+    if (!response.ok || !authorization || typeof authorization.device_code !== 'string' || !authorization.device_code ||
+      typeof authorization.user_code !== 'string' || !/^[A-Za-z0-9-]{4,32}$/.test(authorization.user_code) ||
+      typeof authorization.verification_uri !== 'string' || !Number.isFinite(Number(authorization.expires_in)) || Number(authorization.expires_in) <= 0 ||
+      (authorization.interval !== undefined && (!Number.isFinite(Number(authorization.interval)) || Number(authorization.interval) <= 0))) {
+      loginPending = false
+      deviceLoginAbortController = null
+      throw new Error('Device authorization response is invalid')
+    }
+    let verificationUri
+    try {
+      verificationUri = new URL(authorization.verification_uri)
+      if (verificationUri.protocol !== 'https:') throw new Error()
+    } catch (_) {
+      loginPending = false
+      deviceLoginAbortController = null
+      throw new Error('Device verification URL is invalid')
+    }
+
+    let resolveCompletion
+    let rejectCompletion
+    const completion = new Promise((resolve, reject) => { resolveCompletion = resolve; rejectCompletion = reject })
+    rejectPendingLogin = rejectCompletion
+    const expiresAt = Date.now() + Number(authorization.expires_in) * 1000
+    let interval = Math.max(1, Number(authorization.interval) || 5)
+    const wait = (milliseconds) => new Promise((resolve, reject) => {
+      if (controller.signal.aborted) { reject(new Error('Device sign-in was cancelled')); return }
+      if (waitImpl) {
+        Promise.resolve(waitImpl(milliseconds, controller.signal)).then(resolve, reject)
+        return
+      }
+      const timer = setTimeout(resolve, milliseconds)
+      controller.signal.addEventListener('abort', () => { clearTimeout(timer); reject(new Error('Device sign-in was cancelled')) }, { once: true })
+    })
+    const poll = async () => {
+      try {
+        while (!controller.signal.aborted && Date.now() < expiresAt) {
+          await wait(Math.min(interval * 1000, Math.max(0, expiresAt - Date.now())))
+          const tokenResponse = await fetchImpl(metadata.token_endpoint, {
+            method: 'POST',
+            headers: { 'content-type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+              grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+              device_code: authorization.device_code,
+              client_id: clientId
+            }).toString(),
+            signal: controller.signal
+          })
+          const tokenBody = await tokenResponse.json().catch(() => null)
+          if (tokenResponse.ok) {
+            if (!tokenBody || typeof tokenBody.id_token !== 'string' || !tokenBody.id_token ||
+              typeof tokenBody.access_token !== 'string' || !tokenBody.access_token ||
+              !Number.isFinite(Number(tokenBody.expires_in)) || Number(tokenBody.expires_in) <= 0 ||
+              (tokenBody.refresh_token !== undefined && typeof tokenBody.refresh_token !== 'string')) throw new Error('Device sign-in token response is invalid')
+            const authenticatedSession = {
+              id_token: tokenBody.id_token, access_token: tokenBody.access_token,
+              ...(tokenBody.refresh_token ? { refresh_token: tokenBody.refresh_token } : {}),
+              expires_at: Date.now() + Number(tokenBody.expires_in) * 1000
+            }
+            persist(authenticatedSession)
+            sessionGeneration += 1
+            session = authenticatedSession
+            loginPending = false
+            resolveCompletion({ state: 'authenticated' })
+            return
+          }
+          if (tokenBody?.error === 'authorization_pending') continue
+          if (tokenBody?.error === 'slow_down') { interval += 5; continue }
+          if (tokenBody?.error === 'access_denied') throw new Error('Device sign-in was denied')
+          if (tokenBody?.error === 'expired_token') throw new Error('Device sign-in code expired')
+          throw new Error('Device sign-in failed')
+        }
+        if (!controller.signal.aborted) throw new Error('Device sign-in code expired')
+      } catch (error) {
+        if (!controller.signal.aborted) rejectCompletion(error)
+      } finally {
+        loginPending = false
+        if (deviceLoginAbortController === controller) deviceLoginAbortController = null
+        if (rejectPendingLogin === rejectCompletion) rejectPendingLogin = null
+      }
+    }
+    try {
+      onUserCode({ userCode: authorization.user_code, verificationUri: verificationUri.toString() })
+    } catch (_) {
+      controller.abort()
+      loginPending = false
+      deviceLoginAbortController = null
+      rejectPendingLogin = null
+      throw new Error('Device sign-in display failed')
+    }
+    void poll()
+    return { userCode: authorization.user_code, verificationUri: verificationUri.toString(), expiresIn: Number(authorization.expires_in), completion }
+  }
+
   async function fetchWithAuth(url, init = {}) {
     const ready = await ensureSession()
     if (ready.state === 'retryable') throw Object.assign(new Error('OIDC session refresh is temporarily unavailable'), { code: 'OIDC_REFRESH_UNAVAILABLE' })
@@ -338,6 +465,7 @@ function createOidcAuth({ issuer, clientId, redirectUri, storageFile, safeStorag
 
   function close() {
     closed = true
+    if (deviceLoginAbortController) deviceLoginAbortController.abort()
     if (loginServer) {
       loginServer.close()
       loginServer = null
@@ -348,7 +476,7 @@ function createOidcAuth({ issuer, clientId, redirectUri, storageFile, safeStorag
     }
   }
 
-  return { initialize, status, ensureSession, beginLogin, fetch: fetchWithAuth, authorizationHeader, logout, close }
+  return { initialize, status, ensureSession, beginLogin, beginDeviceLogin, fetch: fetchWithAuth, authorizationHeader, logout, close }
 }
 
 module.exports = { createOidcAuth, createPkcePair, createCandidateOidcOpenExternal }

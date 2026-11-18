@@ -455,3 +455,10 @@ F156 分发后续：Hub 的旧 0.5.2 pin 已经现有 mirror 方法备份并切�
 - [x] F150：Codeg 自定义 Agent 主页固定覆盖原生工作区，拖动编辑边界和缩放不如原生顺滑。已改为原生 `agents` workbench route/Sidebar/标题，由原生 WorkspaceContent 控制页面；结构化启动和终端动作沿用原生 APIs。fixed 覆盖层、每 tab 重复事件、250 ms 几何轮询和广域 resize/header 隐藏 CSS 已移除。canonical source 与 tracked patch 检查通过，静态构建/部署完成；r11 实机确认原生主页显示、遮罩消失、左侧栏及聊天区域边界可拖动、窗口最大化/还原，切主页与 Tether 工作区均保留原 Codex 会话。初次 activeTab 恢复覆盖显式 Agents route 的修复已部署；关闭工作台后重开已直接进入原生 Agent 页，返回同一 Codex nonce 会话。Codeg 内文件编辑器分隔条也已实测：只读打开 QA 文本文件后，editor/chat 分界 x=810→690→810（accessibility value 56→41→56），无输入或保存。原生主页最终截图 `.scratch/evidence/native-agents-default-final.png`；完整会话截图 `.scratch/evidence/codeg-codex-final-retained.png`；编辑器分隔条截图 `.scratch/evidence/codeg-editor-divider-moved.png`。
 
 - [x] F151：互联/设备网络可视化页恢复为原先确认的流动环形/三角力导向图。当前 worktree 的 Cytoscape 单次布局替换了原图，节点形状、动画和位置状态均不同。2026-11-12 只将 `NetworkGraph` 函数替换回 E 主仓库原函数并移除唯一 Cytoscape import，保留外围身份、权限、连接回调及 DSH/Codeg 承载修复；详情与连接管理未改。Terra 实机确认流动、环形/三角、缩放、拖动、浮层和切页后位置正常；跨页速度连续未证明。修复前/后截图 `.scratch/evidence/network-visual-before-20261112.png`、`.scratch/evidence/network-visual-restored-20261112.png`。bundle SHA-256 `1CD2EF1A584AD76E9C1A42E089BB949640CB4E300E29D87C301B0313C5C6570D` 已同步 r11。初次卸载旧图时，位置 key 从之前查询不存在变为 Cytoscape 像素数据；将旧值原样备份后仅在当前值与备份逐字相等时删除了 `tether.network.positions.v3`，未动其他 key；备份 `.scratch/qa/network-positions-v3-after-old-graph-unmount-20261112.json`，SHA-256 `FFBD3E3279B09E8406FA09D0AD1F6F115D6FC59B5B66EADD9F666299FD9A1313`。旧缓存中 DESKTOP-LOCAL 节点为 `(0,0)`，远端节点为 `(378,608)`，无 `vx/vy`；删除后即时读回 key 不存在；后续原图验收可重新保存位置。
+
+- [x] 2026-11-19 Windows APP设备码登录：首实例stdout仅含公开user_code字段，UI显示用户码与验证网址；安装版--sign-in浏览器入口保留。
+- [x] 2026-11-19 Windows Node端口：agent默认和console.start默认统一为18894，TETHER_CONSOLE_PORT/--console-port覆盖有效；scripts/up.py状态显示同步。
+- [ ] 2026-11-19 0.5.9公开预览：四平台package与签名CI完成后，在独立目录试装并验证Tether更新链；保留prerelease且不成为stable/latest。
+- [x] 2026-11-19 Windows SFTPGo新实例启动失败：随包Windows二进制不含SQLite，新的受管实例改用Bolt/sftpgo.bolt；旧sftpgo.db原样保留。
+- [x] 2026-11-19 Windows Bolt原生传输：100 MiB实机复制154.701秒，源/目标哈希一致；源码用例与实机结果分别记录。
+- [x] 2026-11-19 原生传输优化：native边单文件由目标Node执行；授权源SHA与本地暂存文件比对，错哈希不发布并避免二次下载校验。

@@ -1,4 +1,5 @@
 export const TRANSFER_CHUNK = 4 * 1024 * 1024
+const NATIVE_JOB_POLL_MS = 1000
 const CROC_HANDSHAKE_TIMEOUT = 25_000
 const CROC_STALL_TIMEOUT = 45_000
 
@@ -24,6 +25,46 @@ function failure(message, code) {
 
 function isAbort(error, signal) {
   return Boolean(signal && signal.aborted) || !!(error && (error.code === 'aborted' || error.name === 'AbortError'))
+}
+
+export async function transferNativeJob({ post, source, destination, item, signal, onProgress = () => {} }) {
+  const operationId = newTransferId()
+  let started = false
+  try {
+    if (signal && signal.aborted) throw failure('传输已取消', 'aborted')
+    started = true
+    await post(destination.device_id, 'transfer_job_start', {
+      operation_id: operationId,
+      source: { device_id: source.device_id, path: source.path },
+      destination: { device_id: destination.device_id, path: destination.path },
+      items: [{ kind: 'file', path: item }],
+      mode: 'copy',
+      conflict_policy: 'fail'
+    }, signal)
+    while (true) {
+      if (signal && signal.aborted) throw failure('传输已取消', 'aborted')
+      const job = await post(destination.device_id, 'transfer_job_status', { operation_id: operationId }, signal)
+      const bytesDone = Number(job && job.bytes_done) || 0
+      const bytesTotal = Number(job && job.bytes_total) || 0
+      const percent = bytesTotal ? Math.min(100, bytesDone / bytesTotal * 100) : 0
+      if (job && job.state === 'completed') {
+        onProgress({ transferred: bytesDone, total: bytesTotal, percent: 100 })
+        return { operationId, bytes: bytesDone }
+      }
+      if (job && ['failed', 'cancelled', 'interrupted', 'revocation_pending'].includes(job.state)) {
+        throw failure(job.error && (job.error.message || job.error.code)
+          || ('原生传输任务' + job.state), job.state)
+      }
+      onProgress({ transferred: bytesDone, total: bytesTotal, percent })
+      await new Promise((resolve) => setTimeout(resolve, NATIVE_JOB_POLL_MS))
+    }
+  } catch (error) {
+    if (started && isAbort(error, signal)) {
+      await Promise.resolve(post(destination.device_id, 'transfer_job_cancel', { operation_id: operationId })).catch(() => {})
+      throw failure('传输已取消', 'aborted')
+    }
+    throw error
+  }
 }
 
 export function newTransferId() {

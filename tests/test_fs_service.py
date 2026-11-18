@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 from pathlib import Path
 
@@ -161,6 +162,53 @@ def test_chunked_transfer_rejects_existing_conflicts_and_bad_offsets(env) -> Non
 
     cancelled = svc.dispatch("transfer_cancel", {"path": str(target), "transfer_id": transfer})
     assert cancelled["cancelled"] is True
+
+
+def test_rclone_batch_rejects_a_source_fingerprint_mismatch_before_publishing(env, tmp_path: Path,
+                                                                             monkeypatch: pytest.MonkeyPatch) -> None:
+    svc: FsService = env["svc"]
+    jobs = svc.transfer_jobs
+    operation_id = "fingerprint-mismatch"
+    destination_root = env["root"] / "batch-destination"
+    destination_root.mkdir()
+    files = {"first.bin": b"authorized", "second.bin": b"tampered!"}
+    authorized = {"first.bin": b"authorized", "second.bin": b"expected!"}
+    state = {"state": "queued", "files_total": 0}
+    checked: list[str] = []
+
+    def await_job(_op: str, path: str, body: dict, *_args) -> dict:
+        checked.append(path)
+        if path == "sync/copy":
+            stage_root = Path(body["dstFs"])
+            for name, content in files.items():
+                target = stage_root / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(content)
+        return {"success": True}
+
+    monkeypatch.setattr(jobs, "_get", lambda _operation_id: state)
+    monkeypatch.setattr(jobs, "_update", lambda _operation_id, **values: state.update(values))
+    monkeypatch.setattr(jobs, "_write_rclone_config", lambda *_args: tmp_path / "rclone.conf")
+    monkeypatch.setattr(jobs, "_start_rc", lambda op, _config: jobs._rc.setdefault(op, {}))
+    monkeypatch.setattr(jobs, "_rc_call", lambda _op, path, _body: {
+        "count": len(files), "bytes": sum(len(content) for content in authorized.values())
+    } if path == "operations/size" else {})
+    monkeypatch.setattr(jobs, "_await_rc_job", await_job)
+    monkeypatch.setattr(jobs, "_stop_rc", lambda _op: None)
+    monkeypatch.setattr(jobs, "_cleanup_credentials", lambda _op: None)
+
+    jobs._run(operation_id, [
+        (name, destination_root / name, "file", "") for name in files
+    ], "copy", sum(len(content) for content in authorized.values()), "/source", destination_root,
+       {"remote_root": "/"}, tmp_path / "id_ed25519", "fail", {
+           name: hashlib.sha256(content).hexdigest() for name, content in authorized.items()
+       })
+
+    assert state["state"] == "failed"
+    assert json.loads(state["error"])["code"] == "verification_failed"
+    assert not (destination_root / "first.bin").exists()
+    assert not (destination_root / "second.bin").exists()
+    assert "operations/check" not in checked
 
 
 def test_hub_transfer_cancel_removes_only_the_requested_partial(env) -> None:
