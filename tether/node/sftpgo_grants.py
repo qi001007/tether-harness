@@ -20,6 +20,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit
 from urllib.request import Request, urlopen
 
+from .sftp_service_port import SFTP_SERVICE_PORT, bind_sftp_backend
+
 class GrantError(RuntimeError):
     def __init__(self, code: str, message: str) -> None:
         super().__init__(message)
@@ -29,7 +31,8 @@ class GrantError(RuntimeError):
 class SftpGoGrants:
     MAX_GRANT_LEASE_SECONDS = 3600
 
-    def __init__(self, data_dir: Path | str, *, device_id: str, resolve, read_guard, write_guard) -> None:
+    def __init__(self, data_dir: Path | str, *, device_id: str, resolve, read_guard, write_guard,
+                 shared_port=None) -> None:
         self.data_dir = Path(data_dir)
         self.device_id = str(device_id)
         self._resolve = resolve
@@ -41,6 +44,7 @@ class SftpGoGrants:
         self._process: subprocess.Popen[bytes] | None = None
         self._managed_lock = threading.RLock()
         self._external = bool(os.environ.get("TETHER_SFTPGO_ADMIN_URL"))
+        self._shared_port = None if self._external else shared_port
         self.component_dir = Path(os.environ.get("TETHER_SFTPGO_COMPONENT_DIR") or
                                   (Path(__file__).resolve().parents[3] / "tether-runtime" / "components" / "sftpgo"))
         self.binary = self.component_dir / ("sftpgo.exe" if os.name == "nt" else "sftpgo")
@@ -141,7 +145,8 @@ class SftpGoGrants:
             self.admin_user = str((admin or {}).get("username") or "")
             self.admin_password = str((admin or {}).get("password") or "")
             self.sftp_host = str(state["sftp_host"])
-            self.service_ip = str(state.get("service_ip") or "")
+            self.service_ip = str((state.get("shared_service_ip") if self._shared_port else None)
+                                  or state.get("service_ip") or "")
             self.sftp_port = int(state["sftp_port"])
             return True
         except Exception:
@@ -151,6 +156,7 @@ class SftpGoGrants:
         with self._managed_lock:
             if self._owned_process():
                 if mesh_host is None or self.service_ip == mesh_host:
+                    self._attach_shared_source()
                     return
                 if self.has_active_grants() or (self.transfer_jobs is not None and self.transfer_jobs.has_active_jobs()):
                     raise GrantError("mesh_busy", "SFTPGo cannot change its network binding during an active transfer")
@@ -182,11 +188,14 @@ class SftpGoGrants:
                     pass
                 os.replace(temp_admin, self.admin_path)
             admin_port = self._free_port("127.0.0.1")
-            if not self._port_available("127.0.0.1", 20222):
+            if self._shared_port is None and not self._port_available("127.0.0.1", SFTP_SERVICE_PORT):
                 raise GrantError("sftp_port_conflict", "reserved SFTP service port 20222 is already in use")
             self.sftp_host = "127.0.0.1"
             self.service_ip = mesh_host
-            self.sftp_port = 20222
+            self.sftp_port = SFTP_SERVICE_PORT
+            if self._shared_port is not None:
+                with bind_sftp_backend() as backend:
+                    self.sftp_port = backend.getsockname()[1]
             provider = config.setdefault("data_provider", {})
             provider.update(self._managed_provider_config(self.instance_dir))
             provider.update({"create_default_admin": True, "update_mode": 0})
@@ -236,8 +245,9 @@ class SftpGoGrants:
                 identity = psutil.Process(self._process.pid)
                 state = {"version": 1, "pid": identity.pid, "create_time": identity.create_time(),
                          "exe": identity.exe(), "admin_port": admin_port,
-                         "sftp_host": self.sftp_host, "service_ip": mesh_host,
-                         "sftp_port": self.sftp_port}
+                         "sftp_host": self.sftp_host, "service_ip": mesh_host if self._shared_port is None else "",
+                         "sftp_port": self.sftp_port,
+                         **({"shared_service_ip": mesh_host} if self._shared_port is not None else {})}
             except (OSError, ImportError) as exc:
                 self._process.terminate()
                 raise GrantError("sftpgo_start_failed", "SFTPGo process identity could not be recorded") from exc
@@ -255,11 +265,48 @@ class SftpGoGrants:
                 try:
                     self._api("GET", "/version")
                     with socket.create_connection(("127.0.0.1", self.sftp_port), timeout=0.5):
-                        return
+                        break
                 except (GrantError, OSError, ValueError):
                     time.sleep(0.2)
-            self.stop_owned()
-            raise GrantError("sftpgo_start_failed", "the owned SFTPGo core did not become healthy")
+            else:
+                self.stop_owned()
+                raise GrantError("sftpgo_start_failed", "the owned SFTPGo core did not become healthy")
+            try:
+                self._attach_shared_source()
+            except GrantError:
+                self.stop_owned()
+                raise
+
+    def _attach_shared_source(self):
+        if self._shared_port is not None and self.sftp_port != SFTP_SERVICE_PORT:
+            try:
+                self._shared_port.attach("ssh", self.sftp_port)
+            except OSError as exc:
+                raise GrantError("sftp_port_conflict", "reserved SFTP service port 20222 is already in use") from exc
+
+    def restore_service_port(self):
+        if self._shared_port is not None and self._owned_process():
+            try:
+                self._attach_shared_source()
+            except GrantError:
+                pass  # Normal grant issuance reports an unavailable port.
+
+    def supports_shared_relay(self):
+        return self._shared_port is not None and self.binary.is_file()
+
+    def prepare_shared_relay(self):
+        if not self._managed_lock.acquire(blocking=False):
+            raise OSError("a source grant is being prepared")
+        try:
+            if self._shared_port is None:
+                raise OSError("a shared SFTP service port is unavailable")
+            if self._owned_process() and self.sftp_port == SFTP_SERVICE_PORT:
+                if self.has_active_grants():
+                    raise OSError("the legacy SFTPGo listener is serving existing grants")
+                self.stop_owned()
+            return self._shared_port
+        finally:
+            self._managed_lock.release()
 
     def stop_owned(self) -> None:
         if self._external:
@@ -267,6 +314,8 @@ class SftpGoGrants:
         with self._managed_lock:
             if not self._owned_process():
                 return
+            if self._shared_port is not None:
+                self._shared_port.detach("ssh", self.sftp_port)
             try:
                 import psutil
                 state = json.loads(self.owner_path.read_text(encoding="utf-8"))
@@ -364,6 +413,10 @@ class SftpGoGrants:
                 raise GrantError("unsupported_source", "symbolic links are not allowed in transfer grants")
 
     def issue(self, args: dict[str, Any]) -> dict[str, Any]:
+        with self._managed_lock:
+            return self._issue(args)
+
+    def _issue(self, args: dict[str, Any]) -> dict[str, Any]:
         operation_id = str(args.get("operation_id") or "")
         if not operation_id or len(operation_id) > 128 or not operation_id.replace("-", "").replace("_", "").isalnum():
             raise GrantError("bad_operation_id", "operation_id is invalid")
@@ -401,6 +454,7 @@ class SftpGoGrants:
         items = args.get("items") if isinstance(args.get("items"), list) else []
         manifest: list[dict[str, str]] = []
         selected: list[tuple[str, bool]] = []
+        source_stat = {}
         for item in items:
             relative = self._relative(str(item.get("path") or ""))
             candidate = root / Path(*relative.split("/"))
@@ -413,6 +467,11 @@ class SftpGoGrants:
             if item_path.is_file() == is_dir or (item.get("kind") == "directory") != is_dir:
                 raise GrantError("source_missing", "selected source type changed before grant creation")
             manifest.append({"path": relative, "sha256": self._fingerprint(item_path, read_guard=self._read_guard)})
+            if len(items) == 1 and not is_dir:
+                info = item_path.stat()
+                source_stat["single_file_stat"] = {
+                    "path": relative, "size": info.st_size, "mtime_ns": info.st_mtime_ns,
+                }
             selected.append((relative, is_dir))
         if not manifest:
             raise GrantError("bad_args", "at least one source item is required")
@@ -451,11 +510,12 @@ class SftpGoGrants:
             raise GrantError("grant_store_failed", "temporary source grant metadata could not be stored") from exc
         return {"grant_id": operation_id, "operation_id": operation_id,
                 "source_device_id": self.device_id, "executor_device_id": str(args.get("executor_device_id") or ""),
-                "endpoint": {"host": host, "port": self.sftp_port, "username": username,
+                "endpoint": {"host": host, "port": SFTP_SERVICE_PORT if self._shared_port else self.sftp_port,
+                             "username": username,
                              "host_key_fingerprint": fingerprint, "host_key": host_key},
                 "remote_root": "/", "expires_at": expires_at, "network_id": network_id,
                 "authorization_revision": str(args["authorization_revision"]),
-                "source_fingerprints": manifest}
+                "source_fingerprints": manifest, **source_stat}
 
     def has_active_grants(self, *, network_id: str | None = None) -> bool:
         grant_dir = self.data_dir / "transfer-grants"

@@ -318,7 +318,7 @@ test('the shortcut and restart path launch Electron directly without a console',
   assert.match(supervisorSource, /pythonw\.exe/)
   assert.match(supervisorSource, /this\.spawnChild\(this\.childPython, args/)
   assert.match(supervisorSource, /spawnSync\(this\.childPython, \['-c'/)
-  assert.match(mainSource, /new UpdateService\(\{ repoRoot, dataDir, python: supervisor\.childPython, env, app,\s*stopManagedNode: \(\) => packaged \? supervisor\.stopManagedNode\(\) : Promise\.resolve\(\{ stopped: false \}\) \}\)/)
+  assert.match(mainSource, /new UpdateService\(\{ repoRoot, dataDir, python: supervisor\.childPython, env, app,\s*deviceId: supervisor\.device,\s*stopManagedNode: \(\) => packaged \? supervisor\.stopManagedNode\(\) : Promise\.resolve\(\{ stopped: false \}\) \}\)/)
   assert.match(appCmdSource, /if \/i not "%~1"=="--hidden"/)
   assert.match(appCmdSource, /wscript \/\/nologo .*Tether-App\.vbs/)
   assert.match(appCmdSource, /-WindowStyle Hidden/)

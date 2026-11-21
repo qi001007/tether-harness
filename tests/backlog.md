@@ -1,4 +1,10 @@
 # 修改记录
+
+- 2026-11-21 覆盖本机持久偏好、多个批准节点选路、断线偏移、持续慢路重选和 DSH 故障备路。
+- 2026-11-21：真实 TLS 1.3 夹具验证 Node 本机确认、固定 SOCKS 出站目的、续用原任务授权及停止撤回。
+- 2026-11-21：限时 mTLS 测试增加监听就绪发布、退出撤回和过期活性忽略。
+- 2026-11-21：回环 mTLS 夹具验证仅单张证书可透传、同 CA 的其它证书不能接触上游、到期断开连接。
+- 2026-11-21：覆盖通用 Croc 方向、老 Hub 能力协商和共享文件授权禁止 Croc 操作。
 - 2026-11-13：原生 Agents 自动打开行为回归覆盖 hidden mount 不打开、首次显示自动打开、隐藏/显示现有 pane 不重建，以及 modern/legacy runtime 门禁和失败后的手动重试。
 - 2026-11-13：将 Herdr pane 测试改为从当前 Agents 源提取 openHerdr 实际闭包执行，覆盖项目/Agent pane key、路径归一化、目标与 Agent 透传，以及缺少项目和不支持 Agent 的拒绝。
 - 2026-11-12：desktop preview workflow validation asserts the isolated 0.5.4 branch/version/tag and draft aggregation while retaining 0.5.2/0.5.3 mappings.
@@ -252,3 +258,7 @@
 - 2026-11-19：SFTPGo存储配置定向测试覆盖Windows新Bolt、旧SQLite文件保留和非Windows SQLite默认。
 - 2026-11-19：新增native作业启动/进度/取消回归，以及rclone暂存文件错误SHA必须在发布前失败的回归。
 - 2026-11-19：候选版本同步约束更新为APP/Node 0.5.9、冻结插件0.2.93。
+
+- 2026-11-21：覆盖中转 IPC 所有者、顺序、失败补偿、读取失败及传输页设备带入，并同步 Electron 测试壳所需文件。
+
+- 2026-11-21：记录 0.5.10 四平台草稿分支与更新桥接断言，覆盖保存的配对网络恢复、拒绝错误授权和旧目录联接迁移。

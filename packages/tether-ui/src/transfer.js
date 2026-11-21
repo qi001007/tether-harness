@@ -1,5 +1,7 @@
 export const TRANSFER_CHUNK = 4 * 1024 * 1024
 const NATIVE_JOB_POLL_MS = 1000
+const NATIVE_JOB_RECONNECT_MS = 30_000
+const NATIVE_JOB_NO_PROGRESS_MS = 20_000
 const CROC_HANDSHAKE_TIMEOUT = 25_000
 const CROC_STALL_TIMEOUT = 45_000
 
@@ -27,40 +29,119 @@ function isAbort(error, signal) {
   return Boolean(signal && signal.aborted) || !!(error && (error.code === 'aborted' || error.name === 'AbortError'))
 }
 
-export async function transferNativeJob({ post, source, destination, item, signal, onProgress = () => {} }) {
-  const operationId = newTransferId()
-  let started = false
+function isNativeJobConnectionError(error, target) {
+  if (error?.code === 'device_offline' || error?.code === 'node_timeout') return true
+  if (error?.code) return false
+  if (error?.status === 409) return error.message === 'device offline: ' + target
+  if (error?.status) return [502, 503, 504].includes(error.status)
+  return /(?:failed to fetch|fetch failed|network error|net::ERR_[A-Z_]+)$/i.test(error?.message || '')
+}
+
+function nativeJobUnconfirmed(operationId, message) {
+  return Object.assign(failure(message + '（任务号 ' + operationId + '）', 'native_job_unconfirmed'), { operationId })
+}
+
+export async function transferNativeJob({
+  post, source, destination, items, signal, operationId,
+  allowRelay = false, onProgress = () => {}, onReconnecting = () => {}
+}) {
+  let started = Boolean(operationId)
+  let relayEligible = allowRelay && !started && items.length === 1
+  let zeroSince = null
+  let stopRequestedAt = null
+  operationId = operationId || newTransferId()
+  const target = destination.device_id
+  const jobRequest = { operation_id: operationId }
+  let reconnectSince = null
   try {
-    if (signal && signal.aborted) throw failure('传输已取消', 'aborted')
-    started = true
-    await post(destination.device_id, 'transfer_job_start', {
-      operation_id: operationId,
-      source: { device_id: source.device_id, path: source.path },
-      destination: { device_id: destination.device_id, path: destination.path },
-      items: [{ kind: 'file', path: item }],
-      mode: 'copy',
-      conflict_policy: 'fail'
-    }, signal)
+    signal?.throwIfAborted()
+    if (!started) {
+      started = true
+      await post(target, 'transfer_job_start', {
+        ...jobRequest,
+        source: { device_id: source.device_id, path: source.path },
+        destination: { device_id: target, path: destination.path },
+        items: items.map((path) => ({ kind: 'file', path })),
+        mode: 'copy',
+        conflict_policy: 'fail'
+      }, signal)
+    }
     while (true) {
-      if (signal && signal.aborted) throw failure('传输已取消', 'aborted')
-      const job = await post(destination.device_id, 'transfer_job_status', { operation_id: operationId }, signal)
+      signal?.throwIfAborted()
+      let job
+      try {
+        job = await post(target, 'transfer_job_status', jobRequest, signal)
+      } catch (error) {
+        if (isAbort(error, signal) || !isNativeJobConnectionError(error, target)) throw error
+        zeroSince = null
+        const now = Date.now()
+        if (reconnectSince === null) {
+          reconnectSince = now
+          onReconnecting(true)
+        }
+        if (now - (stopRequestedAt ?? reconnectSince) >= NATIVE_JOB_RECONNECT_MS) {
+          throw nativeJobUnconfirmed(operationId, '暂时无法确认传输状态')
+        }
+        await new Promise((resolve) => setTimeout(resolve, NATIVE_JOB_POLL_MS))
+        continue
+      }
+      signal?.throwIfAborted()
+      if (reconnectSince !== null) {
+        reconnectSince = null
+        onReconnecting(false)
+      }
       const bytesDone = Number(job && job.bytes_done) || 0
       const bytesTotal = Number(job && job.bytes_total) || 0
+      const filesDone = Number(job && job.files_done) || 0
       const percent = bytesTotal ? Math.min(100, bytesDone / bytesTotal * 100) : 0
+      const confirmedZero = job?.bytes_done === 0 && job?.files_done === 0
+      if (bytesDone > 0 || filesDone > 0 || job?.state === 'verifying') relayEligible = false
       if (job && job.state === 'completed') {
-        onProgress({ transferred: bytesDone, total: bytesTotal, percent: 100 })
+        onProgress({ transferred: bytesDone, total: bytesTotal, percent: 100, filesDone })
         return { operationId, bytes: bytesDone }
+      }
+      if (stopRequestedAt !== null && relayEligible && job?.state === 'cancelled' && confirmedZero) {
+        return { operationId, useRelay: true }
+      }
+      if (relayEligible && confirmedZero && job?.state === 'failed' &&
+          ['network_not_connected', 'source_connection_failed'].includes(job.error?.code)) {
+        return { operationId, useRelay: true }
       }
       if (job && ['failed', 'cancelled', 'interrupted', 'revocation_pending'].includes(job.state)) {
         throw failure(job.error && (job.error.message || job.error.code)
           || ('原生传输任务' + job.state), job.state)
       }
-      onProgress({ transferred: bytesDone, total: bytesTotal, percent })
+      const now = Date.now()
+      if (stopRequestedAt !== null) {
+        if (now - stopRequestedAt >= NATIVE_JOB_RECONNECT_MS) {
+          throw nativeJobUnconfirmed(operationId, '取消未确认')
+        }
+      } else if (relayEligible && confirmedZero && job?.state === 'running' && bytesTotal > 0) {
+        zeroSince ??= now
+        if (now - zeroSince >= NATIVE_JOB_NO_PROGRESS_MS) {
+          stopRequestedAt = now
+          try {
+            await post(target, 'transfer_job_cancel', jobRequest, signal)
+          } catch (error) {
+            if (isAbort(error, signal) || !isNativeJobConnectionError(error, target)) throw error
+            throw nativeJobUnconfirmed(operationId, '取消未确认')
+          }
+        }
+      } else {
+        zeroSince = null
+      }
+      onProgress({ transferred: bytesDone, total: bytesTotal, percent, filesDone })
       await new Promise((resolve) => setTimeout(resolve, NATIVE_JOB_POLL_MS))
     }
   } catch (error) {
-    if (started && isAbort(error, signal)) {
-      await Promise.resolve(post(destination.device_id, 'transfer_job_cancel', { operation_id: operationId })).catch(() => {})
+    if (isAbort(error, signal)) {
+      if (started) {
+        try {
+          await post(target, 'transfer_job_cancel', jobRequest)
+        } catch (cancelError) {
+          if (cancelError?.code !== 'not_found') throw nativeJobUnconfirmed(operationId, '取消未确认')
+        }
+      }
       throw failure('传输已取消', 'aborted')
     }
     throw error
@@ -81,54 +162,115 @@ export function newTransferCode() {
   return 'tether-' + newTransferId()
 }
 
-export async function transferFileCroc({
+const CROC_RECONNECT_MS = 30_000
+const CROC_POLL_MS = 350
+
+export async function transferFileCroc(options) {
+  const result = await runCrocAttempt(options, true)
+  if (!result?.retry) return result
+  return runCrocAttempt({
+    ...options, transferId: undefined, allowChunkFallback: false, expectedSourceSha256: result.sha256
+  }, false)
+}
+
+async function runCrocAttempt({
   send, receive, status, finish, cancel, cancelSend,
   source, destination, name, transferId, overwrite = false, onProgress = () => {}, signal,
-  cancelByTransferId = false
-}) {
+  targetDevice, cancelByTransferId = false, allowChunkFallback = false, retryFailed = false,
+  verifySha256 = false, expectedSourceSha256, onReconnecting = () => {}
+}, mayRetry) {
   const id = transferId || newTransferId()
   const code = newTransferCode()
   let sendStarted = false
   let receiveStarted = false
   let sendTransferId = ''
   let timedOut = false
+  let handshakeFailed = false
+  let retryableFailure = false
+  let finishing = false
+  let sourceSha256
+  const verification = verifySha256 ? { verify_sha256: true } : {}
   try {
-    const sender = await send({ path: source, code, transfers: 8 })
+    signal?.throwIfAborted()
+    const sender = await send({ path: source, code, transfers: 8, ...verification })
     sendTransferId = String(sender && sender.transfer_id || '')
     sendStarted = true
     if (cancelByTransferId && !sendTransferId) throw failure('发送端未返回任务标识', 'croc_protocol_error')
-    const receiver = await receive({ path: destination, code, transfer_id: id })
+    if (verifySha256) {
+      const sha256 = sender?.sha256
+      if (typeof sha256 !== 'string' || sha256.length !== 64 || !/^[a-f\d]+$/i.test(sha256)) {
+        throw failure('发送端未返回有效的 SHA-256 校验值', 'croc_protocol_error')
+      }
+      sourceSha256 = sha256.toLowerCase()
+      if (expectedSourceSha256 && sourceSha256 !== expectedSourceSha256) {
+        throw failure('源文件在 Croc 重传前已发生变化', 'source_changed')
+      }
+    }
+    signal?.throwIfAborted()
+    const receiver = await receive({ path: destination, code, transfer_id: id, ...verification })
     receiveStarted = true
-    if (cancelByTransferId && receiver && receiver.transfer_id !== id) {
+    if (cancelByTransferId && (allowChunkFallback || receiver) && receiver?.transfer_id !== id) {
       throw failure('接收端传输标识不匹配', 'croc_protocol_error')
     }
-    const startedAt = Date.now()
+    let startedAt = Date.now()
     let lastProgressAt = startedAt
     let lastPercent = 0
     let lastProgressSeq = null
     let legacyActivityAmbiguous = false
     let hasFreshActivity = false
+    let reconnectUntil = null
     while (true) {
-      if (signal && signal.aborted) throw failure('传输已取消', 'aborted')
+      signal?.throwIfAborted()
       let state
       let statusTimer
       try {
         state = await Promise.race([
           status({ transfer_id: id }),
           new Promise((_, reject) => {
-            statusTimer = setTimeout(() => reject(failure('Croc 状态查询超时', 'croc_timeout')), CROC_STALL_TIMEOUT)
+            const timeout = reconnectUntil === null ? CROC_STALL_TIMEOUT : Math.max(0, reconnectUntil - Date.now())
+            statusTimer = setTimeout(() => reject(failure('Croc 状态查询超时', 'croc_timeout')), timeout)
           })
         ])
       } catch (error) {
+        if (!isAbort(error, signal) && cancelByTransferId &&
+            (error?.code === 'croc_timeout' || isNativeJobConnectionError(error, targetDevice))) {
+          const now = Date.now()
+          if (reconnectUntil === null) {
+            reconnectUntil = now + CROC_RECONNECT_MS
+            onReconnecting(true)
+          }
+          if (now >= reconnectUntil) {
+            throw failure('暂时无法确认 Croc 传输状态（任务号 ' + id + '）', 'croc_status_unconfirmed')
+          }
+          await new Promise((resolve) => setTimeout(resolve, CROC_POLL_MS))
+          continue
+        }
         if (error && error.code === 'croc_timeout') timedOut = true
+        handshakeFailed = timedOut && !hasFreshActivity && !legacyActivityAmbiguous
         throw error
       } finally {
         clearTimeout(statusTimer)
+      }
+      signal?.throwIfAborted()
+      if ((allowChunkFallback || retryFailed || reconnectUntil !== null) &&
+          (state?.transfer_id !== id || state.direction !== 'receive')) {
+        throw failure('接收端返回了其他 Croc 任务的状态', 'croc_protocol_error')
+      }
+      if (reconnectUntil !== null) {
+        reconnectUntil = null
+        startedAt = lastProgressAt = Date.now()
+        onReconnecting(false)
       }
       const percent = Math.max(0, Math.min(100, Number(state && state.percent) || 0))
       onProgress({ transferred: 0, total: 0, percent, speed: Number(state && state.speed) || 0 })
       if (state && state.state === 'completed') break
       if (state && (state.state === 'failed' || state.state === 'cancelled')) {
+        handshakeFailed = state.state === 'failed' && !hasFreshActivity && !legacyActivityAmbiguous
+          && percent === 0 && state.progress_seq === 0 && !Number(state.speed)
+          && /comm\.NewConnection failed:\s*dial tcp\b.*\bi\/o timeout\b/i.test(state.error || '')
+        retryableFailure = mayRetry && retryFailed && cancelByTransferId && !overwrite && state.state === 'failed'
+          && (hasFreshActivity || percent > 0 || state.progress_seq > 0)
+          && !/permission denied|access (?:is )?denied|operation not permitted|read.only file system|(?:already )?exists/i.test(state.error || '')
         throw failure((state && state.error) || '传输失败', 'croc_failed')
       }
       const now = Date.now()
@@ -153,13 +295,20 @@ export async function transferFileCroc({
       if (!legacyActivityAmbiguous && now - (hasFreshActivity ? lastProgressAt : startedAt)
           >= (hasFreshActivity ? CROC_STALL_TIMEOUT : CROC_HANDSHAKE_TIMEOUT)) {
         timedOut = true
+        handshakeFailed = !hasFreshActivity
         throw failure(hasFreshActivity ? 'Croc 传输停滞，已超时' : 'Croc 连接未取得进展，已超时', 'croc_timeout')
       }
-      await new Promise((resolve) => setTimeout(resolve, 350))
+      await new Promise((resolve) => setTimeout(resolve, CROC_POLL_MS))
     }
-    const result = await finish({ transfer_id: id, overwrite: !!overwrite, name })
+    signal?.throwIfAborted()
+    finishing = true
+    const result = await finish({
+      transfer_id: id, overwrite: !!overwrite, name,
+      ...(verifySha256 ? { expected_sha256: sourceSha256 } : {})
+    })
     return { path: result.path, transferId: id, bytes: Number(result.bytes) || 0 }
   } catch (error) {
+    if (error?.code === 'croc_status_unconfirmed') throw error
     const cleanups = []
     if (timedOut && !cancelByTransferId) {
       // Older nodes ignore transfer IDs and cancel whichever job is current.
@@ -167,9 +316,47 @@ export async function transferFileCroc({
       if (receiveStarted) cleanups.push(cancel({ transfer_id: id }))
       if (sendStarted && (!cancelByTransferId || sendTransferId)) cleanups.push(cancelSend(cancelByTransferId ? { transfer_id: sendTransferId } : {}))
     }
-    await Promise.allSettled(cleanups)
+    const results = await Promise.allSettled(cleanups)
+    if (isAbort(error, signal)) throw failure('传输已取消', 'aborted')
+    const integrityMismatch = finishing && verifySha256 && error?.code === 'croc_integrity_mismatch'
+    const retryIntegrity = mayRetry && retryFailed && cancelByTransferId && !overwrite && integrityMismatch
+    if (results.length === 2 && (retryIntegrity || retryableFailure || (allowChunkFallback && handshakeFailed))) {
+      const stopped = results.every(({ status, value }, index) => status === 'fulfilled' &&
+        value?.engine === 'croc' && value.direction === (index === 0 ? 'receive' : 'send') &&
+        ['failed', 'cancelled', 'completed'].includes(value.state) && value.cancelled !== false)
+      if (stopped && (retryIntegrity || (retryableFailure && results[0].value.state !== 'completed'))) {
+        return { retry: true, sha256: sourceSha256 }
+      }
+      if (stopped && allowChunkFallback && handshakeFailed && results.every(({ value }) => value.state !== 'completed' &&
+          value.percent === 0 && value.progress_seq === 0)) return null
+    }
     throw error
   }
+}
+
+export async function transferCrocViaHub({
+  post, sourceDevice, targetDevice, source, destination, name, signal, onProgress, onStart, onReconnecting
+}) {
+  const info = (device) => post(device, 'transfer_info', {}, signal).catch((error) => {
+    if (error?.code === 'bad_op' || [404, 405].includes(error?.status)) return null
+    throw error
+  })
+  const [sender, receiver] = await Promise.all([info(sourceDevice), info(targetDevice)])
+  if (![sender, receiver].every((peer) => peer?.available === true && peer.relay === true &&
+      peer.cancel_by_transfer_id === true && peer.verify_sha256_before_finish === true) ||
+      receiver.finish_by_transfer_id !== true) return null
+  signal?.throwIfAborted()
+  onStart()
+  return transferFileCroc({
+    source, destination, name, signal, targetDevice, onProgress, onReconnecting,
+    cancelByTransferId: true, allowChunkFallback: true, retryFailed: true, verifySha256: true,
+    send: (args) => post(sourceDevice, 'transfer_send', args),
+    receive: (args) => post(targetDevice, 'transfer_receive', args),
+    status: (args) => post(targetDevice, 'transfer_status', args),
+    finish: (args) => post(targetDevice, 'transfer_finish', args),
+    cancel: (args) => post(targetDevice, 'transfer_cancel', args),
+    cancelSend: (args) => post(sourceDevice, 'transfer_cancel', args)
+  })
 }
 
 export async function transferFile({

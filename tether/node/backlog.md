@@ -1,4 +1,10 @@
 # 修改记录
+
+- 2026-11-21 持久保存设备对个人网的中转同意；接收端比较有限数量的候选，持续过慢时核实收益并按偏移换路。
+- 2026-11-21：本机受认证的 Console 确认所选设备与期限后，Node 从 Hub 接收公开证书并建立一跳专用 mTLS 转发。仅空闲网重启专属 core 添加 20223 规则，关闭转发后空闲时回撤。
+- 2026-11-21：使用 Node 私有数据目录的限时 mTLS 中继在对应配对网已就绪时发布 sftp_relay 注册和心跳状态。维护入口默认关闭，接收端需另配专用客户端证书。
+- 2026-11-21：新增设备所有者手工启用的限时 mTLS SFTP 密文转发，目标固定本机回环。默认关闭，尚未接入 Node 或 Hub 能力发布。
+- 2026-11-21：拥有设备的原 Croc 请求可按任务号执行 SHA-256 验证和无覆盖发布。兼容旧请求和旧 Hub，共享文件授权不新增 Croc 操作。
 - 2026-11-13：F163 将 Codeg Agent Home 的项目上下文接回原生侧栏：移除重复项目列，原生文件夹行负责选择目标，Open Folder/Clone/launcher 入口打开 Agent Home；三种模式共用所选目录，结构化才创建会话。实测待 Root 部署验收。
 - 2026-11-08：新增 `service_access.py`，按 actor/target/service 管理独立 Caddy worker、短期一次性bootstrap票据、grant cookie、上游 DSH cookie / Codeg Bearer 注入和精确撤销；仅私有 Hub service authority 可 issue/renew/revoke，普通DirectApi拒绝。service_catalog不暴露actor入口；服务缺少Caddy、mesh或原生runtime时返回明确状态。Caddy TLS使用持久内部CA，bootstrap/view/auth仅回环manager处理，授权撤销终止指定worker句柄并确认连接关闭。当前仅完成源码与语法/导入验证，尚未核对Caddyfile真实上游适配、启动Caddy/EasyTier、原生页面访问或WS撤销；files服务暂缺UI入口，保持missing。
 - 2026-11-08：新增目标端受限 rclone 作业与源 SFTPGo 临时公钥授权接口。目的 Node 按 operation_id/规范化payload幂等并落 SQLite，prepare 使用 ssh-keygen 产生仅本机可读 keypair；源 REST 账号从目标 source_root 派生、只读 list/download、限期、限会话并固定 SFTP host key。私有 RPC 要求已认证 Hub WS 顶层 authority，DirectApi 不能签发；目录树递归执行源 Policy read guard、拒绝符号链接；目的 copy 进入 `.tether-incoming`，rclone RC 仅 loopback Basic Auth 并按 jobid/executeId观察，传完后上游 `rclone check --download`验证再发布。支持目标取消、持久查询、失败/中断显式重试、源授权续租/撤销断连接和move源指纹复核。修复取消与授权预检/校验发布阶段的竞态，续租ACL检查不依赖权限数组顺序；单文件 overwrite 要求并在发布前复核显式目标SHA版本，目录覆盖明确拒绝；move finalize按源清单逐项journal并缓存最终结果以支持相同请求重放。隔离执行的 rclone 1.76.0 RC copyto 验证了异步 job/status/SHA一致；实际双 Node + SFTPGo 链与多文件目录待 Controller 唯一启动方联调。运行依赖要由安装器提供 rclone、ssh-keygen，并给 SFTPGo配置loopback admin API、EasyTier SFTP地址和SSH host key；当前不重启正式节点。
@@ -184,3 +190,5 @@
 - 2026-11-19：Windows Node console默认端口统一为18894，agent argparse与console.start共用默认值；TETHER_CONSOLE_PORT及--console-port覆盖仍有效，其他平台维持18893。
 - 2026-11-19：Windows新建受管SFTPGo实例改用Bolt及`sftpgo.bolt`，与随包Windows二进制一致；已有`sftpgo.db`继续使用SQLite且不迁移，其他平台不变。
 - 2026-11-19：目标端原生rclone作业优先使用授权源指纹验证本地暂存文件；错误SHA在发布前失败，已授权指纹匹配时跳过rclone二次下载校验。
+
+- 2026-11-21：恢复已配对网络前核对 Hub 授权、现有实例、配置修订和服务地址，保留现有成员 WSS 配置。

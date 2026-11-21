@@ -111,6 +111,12 @@ class _Handler(BaseHTTPRequestHandler):
             result = {"protocol": 1, "device_id": self.device, "network_id": network_id,
                       "state": "ready", "socks_proxy": route,
                       "peer_connectivity": "unknown"}
+        elif tail == ["sftp-relay", "consent"]:
+            try:
+                result = self.api.fs.local_sftp_relay_status((query.get("network_id") or [""])[0])
+            except FsError as exc:
+                self._error(400, str(exc), exc.code)
+                return
         elif tail == ["workspaces"]:
             result = self._dispatch("workspaces", {})
         elif tail == ["drives"]:
@@ -160,6 +166,12 @@ class _Handler(BaseHTTPRequestHandler):
             result = self._dispatch(tail[1], body)
         elif tail == ["policy"]:
             result = self._dispatch("policy_set", body)
+        elif tail == ["sftp-relay", "consent"]:
+            try:
+                result = self.api.fs.local_sftp_relay_consent(body)
+            except FsError as exc:
+                self._error(400, str(exc), exc.code)
+                return
         elif tail == ["dsh", "workspaces", "register"]:
             try:
                 result = self.api.dsh_sessions.register_workspace(

@@ -24,3 +24,7 @@
 
 - 2026-11-10：Electron host 增加 targetId-only openDshSurface 窄桥，供远端 NativeSurface 使用。
 - 2026-11-12：Electron host 暴露已有 `tetherApp.info()` 只读桥给 About 使用，直接展示当前 APP 版本，不增加 IPC。
+
+- 2026-11-21：Electron 宿主接入专用中转授权调用。Web、DSH 和旧版桌面宿主不显示授权入口。
+
+- 2026-11-21：提供 Windows 已安装应用入口，并兼容旧版本预加载桥接。

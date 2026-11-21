@@ -4,6 +4,7 @@ const path = require('node:path')
 const { pathToFileURL } = require('node:url')
 const { Supervisor } = require('./supervisor.js')
 const { waitForSupervisorStart, waitForLocalNodeApi, getLocalMeshRoute } = require('./startup-readiness.js')
+const { createSftpRelayManager, requiresLocalRelayConsent } = require('./sftp-relay.js')
 const { UpdateService } = require('./update-service.js')
 const { EventSource } = require('eventsource')
 const iconv = require('iconv-lite')
@@ -1062,6 +1063,49 @@ handleTrusted('tether:files-request', async (_event, request) => {
   if (!nativeWorkbench || !request || typeof request !== 'object') throw new Error('Files service is unavailable')
   return nativeWorkbench.requestFiles(encodeFilesRequest(request))
 }, () => ({ ok: false }))
+const manageSftpRelay = createSftpRelayManager({ fetchHub: (...args) => controllerFetch(...args) })
+// External Nodes can hand their console credentials to the first owner-approved launch.
+// Persist only a successful pairing, using the OS keychain and the private App directory.
+const externalRelayFile = path.join(dataDir, 'private', 'external-sftp-relay.enc')
+function canStoreRelayBinding() {
+  return safeStorage.isEncryptionAvailable() && (process.platform !== 'linux' ||
+    safeStorage.getSelectedStorageBackend?.() !== 'basic_text')
+}
+function relayConsole() {
+  const device = supervisor.device
+  const controller = trustedControllerOrigin()
+  if (supervisor.hasLocalNodeApi()) {
+    return { device, controller, port: supervisor.consolePort, token: supervisor.localApiToken }
+  }
+  if (supervisor.nodeMode === 'external' && canStoreRelayBinding() && fs.existsSync(externalRelayFile)) {
+    const saved = JSON.parse(safeStorage.decryptString(fs.readFileSync(externalRelayFile)))
+    if (saved.device === device && saved.controller === controller && Number.isInteger(saved.port) &&
+        saved.port > 0 && saved.port <= 65535 && /^[A-Za-z0-9._~-]{32,}$/.test(saved.token || '')) return saved
+  }
+  throw new Error('请先在本机绑定外置 Node 的控制服务')
+}
+function rememberExternalRelay(binding) {
+  if (!supervisor.externalLocalApiConfigured || !canStoreRelayBinding()) return
+  const directory = path.dirname(externalRelayFile)
+  fs.mkdirSync(directory, { recursive: true, mode: 0o700 })
+  supervisor.secureManagedNodeStatePath(directory, true)
+  const temp = externalRelayFile + '.' + process.pid + '.tmp'
+  try {
+    fs.writeFileSync(temp, safeStorage.encryptString(JSON.stringify(binding)), { flag: 'wx', mode: 0o600 })
+    fs.renameSync(temp, externalRelayFile)
+  } finally { fs.rmSync(temp, { force: true }) }
+}
+handleTrusted('tether:sftp-relay', async (_event, request) => {
+  if (!supervisor.remoteUrl) throw new Error('本机 Node 控制服务不可用')
+  const actorId = await currentWorkbenchActorId()
+  if (!actorId) throw new Error('请先登录 Hub')
+  const binding = relayConsole()
+  const result = await manageSftpRelay(request, binding)
+  if ((request.action === 'enable' && result.enabled) || (request.action === 'setPolicy' && result.persistent)) {
+    try { rememberExternalRelay(binding) } catch (_) { log('External Node relay pairing could not be saved') }
+  }
+  return result
+})
 handleTrusted('tether:hub-request', async (_event, request) => {
   if (!workbenchLoginSession || !nativeWorkbench || !request || typeof request !== 'object') {
     throw new Error('Controller session is unavailable')
@@ -1080,6 +1124,7 @@ handleTrusted('tether:hub-request', async (_event, request) => {
   const target = new URL(path, trustedControllerOrigin())
   let decodedPath = target.pathname
   try { decodedPath = decodeURIComponent(decodedPath) } catch (_) { throw new Error('Controller API route is not allowed') }
+  if (requiresLocalRelayConsent(decodedPath)) throw new Error('中转设置需要本机授权')
   if (/^\/api\/devices\/[^/]+\/dsh\/surface\/?$/i.test(decodedPath)) {
     throw new Error('DSH surface route requires a separate trusted flow')
   }
@@ -1100,6 +1145,7 @@ handleTrusted('tether:hub-request', async (_event, request) => {
 }, () => ({ status: 401, body: { error: 'untrusted_ipc_caller' } }))
 handleTrusted('tether:app-info', () => ({
   version: app.getVersion(),
+  platform: process.platform,
   controller,
   dataDir,
   logFile,
@@ -1230,6 +1276,11 @@ handleTrusted('tether:open-external', (_event, url) => {
   } catch (_) { /* reject malformed URLs */ }
   return false
 }, () => false)
+handleTrusted('tether:open-installed-apps', async () => {
+  if (process.platform !== 'win32') return { ok: false, error: '当前系统不提供这个卸载入口' }
+  await shell.openExternal('ms-settings:appsfeatures')
+  return { ok: true }
+}, () => ({ ok: false, error: 'Untrusted IPC caller' }))
 
 const locked = app.requestSingleInstanceLock()
 if (!locked) {

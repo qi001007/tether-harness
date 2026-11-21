@@ -10,6 +10,7 @@ from __future__ import annotations
 import base64
 import binascii
 import codecs
+import errno
 from contextvars import ContextVar
 import hashlib
 import ipaddress
@@ -19,6 +20,7 @@ import os
 import re
 import secrets
 import shutil
+import stat
 import sqlite3
 import time
 import threading
@@ -41,6 +43,10 @@ from .terminal import (RUNTIME_AGENT_CLI_ALIASES, herdr_agent_environment,
                        runtime_agent_environment)
 from .transfer_jobs import RcloneJobs, TransferJobError
 from .sftpgo_grants import SftpGoGrants, GrantError
+from .sftp_relay import read_offer as read_sftp_relay_offer
+from .sftp_relay_managed import ManagedSftpRelay
+from .sftp_service_port import SHARED_PORT_VERSION, SftpServicePort
+from .mesh_runtime import MeshRelayBusy, MeshRuntimeError
 from .service_access import ServiceAccess, ServiceAccessError
 from .office_preview import OfficePreviewError, office_pdf
 try:
@@ -61,7 +67,9 @@ TRANSFER_PRIVATE_OPS = {
     "transfer_grant_renew", "transfer_move_finalize",
 }
 SERVICE_PRIVATE_OPS = {"service_grant_issue", "service_grant_renew", "service_grant_revoke"}
-MESH_PRIVATE_OPS = {"mesh_apply", "mesh_status", "mesh_remove"}
+MESH_PRIVATE_OPS = {"mesh_apply", "mesh_status", "mesh_remove", "mesh_restore"}
+SFTP_RELAY_PRIVATE_OPS = {"sftp_relay_offer_enable", "sftp_relay_offer_disable", "sftp_relay_offer_release"}
+MESH_WORK_START_OPS = {"transfer_job_start", "transfer_job_retry", "transfer_grant_issue", "service_grant_issue"}
 HUB_FILE_SCOPE_OPS = {
     "list", "stat", "read", "preview", "destination_fingerprint",
     "write", "write_chunk", "mkdir", "rename", "copy", "delete",
@@ -132,6 +140,37 @@ def _path_version(path: Path) -> str:
                 break
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _croc_file_version(path: Path) -> str:
+    before = path.lstat()
+    if not stat.S_ISREG(before.st_mode):
+        raise ValueError("expected a regular file")
+    digest = _path_version(path)
+    after = path.lstat()
+    if ((before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns) !=
+            (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns)):
+        raise ValueError("file changed while computing SHA-256")
+    return digest
+
+
+def _publish_croc_file(source: Path, target: Path, expected_sha256: str) -> None:
+    # POSIX rename replaces existing files. A hard link makes the publication no-overwrite.
+    publish = os.rename if os.name == "nt" else os.link
+    try:
+        publish(source, target)
+        return
+    except OSError as exc:
+        if exc.errno != errno.EXDEV and getattr(exc, "winerror", None) != 17:
+            raise
+    temporary = target.with_name(f".tether-croc-{secrets.token_hex(8)}.part")
+    try:
+        shutil.copy2(source, temporary)
+        if _croc_file_version(temporary) != expected_sha256:
+            raise FsError("received file does not match the source SHA-256", "croc_integrity_mismatch")
+        publish(temporary, target)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def _newline_name(text: str) -> str:
@@ -549,6 +588,7 @@ class FsService:
         self.preview_cache_dir = data_dir / "preview-cache"
         self.preview_cache_dir.mkdir(parents=True, exist_ok=True)
         self._office_lock = threading.Lock()
+        self._croc_lock = threading.Lock()
         self.croc = None
         self._croc_context: dict[str, Any] = {}
         self.agents = AgentRegistry(data_dir)
@@ -558,9 +598,13 @@ class FsService:
         self.transfer_jobs = RcloneJobs(data_dir, target_id=device, resolver=self._resolve,
                                         read_guard=self._read_guard, write_guard=self._write_guard)
         self.sftpgo_grants = SftpGoGrants(data_dir, device_id=device, resolve=self._resolve,
-                                          read_guard=self._read_guard, write_guard=self._write_guard)
+                                          read_guard=self._read_guard, write_guard=self._write_guard,
+                                          shared_port=SftpServicePort())
         self.sftpgo_grants.transfer_jobs = self.transfer_jobs
+        self.sftpgo_grants.restore_service_port()
         self.mesh_runtime = None
+        self.sftp_relay = ManagedSftpRelay(data_dir, device)
+        self._sftp_relay_maintenance = threading.RLock()
         mesh_core = os.environ.get("TETHER_EASYTIER_CORE", "")
         mesh_cli = os.environ.get("TETHER_EASYTIER_CLI", "")
         if mesh_core and mesh_cli:
@@ -581,6 +625,10 @@ class FsService:
         except Exception:
             self.files_http = None
         self.service_access.files_http = self.files_http
+        self._sftp_relay_recovering = set(self.mesh_runtime.stale_sftp_relay_networks()) if self.mesh_runtime else set()
+        if self._sftp_relay_recovering:
+            threading.Thread(target=self._recover_sftp_relay_mappings, name="tether-sftp-relay-recover",
+                             daemon=True).start()
 
     def _network_address(self, network_id: str) -> str:
         runtime = self.mesh_runtime
@@ -589,6 +637,8 @@ class FsService:
         try:
             expected_network_id = _mesh_uuid_hex(network_id)
             status = runtime.status_for_network(str(network_id))
+            if status.get("state") == "stopped":
+                status = runtime.restore_stopped_network(expected_network_id)
         except Exception as exc:
             raise FsError("selected EasyTier network status is unavailable", "network_not_connected") from exc
         if (status.get("state") != "ready" or
@@ -610,6 +660,8 @@ class FsService:
         try:
             expected_network_id = _mesh_uuid_hex(network_id)
             status = runtime.status_for_network(str(network_id))
+            if status.get("state") == "stopped":
+                status = runtime.restore_stopped_network(expected_network_id)
         except Exception as exc:
             raise FsError("source network SOCKS route is unavailable", "network_not_connected") from exc
         route = status.get("socks_proxy") if isinstance(status, dict) else None
@@ -681,13 +733,19 @@ class FsService:
             raise FsError("resolved path is outside this Hub share", "shared_scope_denied")
 
     def dispatch(self, op: str, args: dict[str, Any], *, trusted_hub: bool = False) -> Any:
-        if (op in TRANSFER_PRIVATE_OPS or op in SERVICE_PRIVATE_OPS or op in MESH_PRIVATE_OPS) and not trusted_hub:
+        if (op in TRANSFER_PRIVATE_OPS or op in SERVICE_PRIVATE_OPS or op in MESH_PRIVATE_OPS
+                or op in SFTP_RELAY_PRIVATE_OPS) and not trusted_hub:
             raise FsError("this operation is only accepted on the authenticated Hub control channel", "trusted_hub_required")
         handler = getattr(self, "_op_" + op, None)
         if handler is None:
             raise FsError(f"unknown fs op: {op}", "bad_op")
         try:
-            result = handler(args)
+            if op in {"transfer_send", "transfer_receive", "transfer_status", "transfer_cancel", "transfer_finish"}:
+                # Hub and direct API requests share this receiver and its staging directory.
+                with self._croc_lock:
+                    result = handler(args)
+            else:
+                result = handler(args)
         except DshError as exc:
             raise FsError(str(exc), exc.code) from exc
         if isinstance(result, dict):
@@ -695,8 +753,16 @@ class FsService:
         return result
 
     def dispatch_hub(self, op: str, args: dict[str, Any], authority: dict[str, Any] | None = None) -> Any:
+        if op in MESH_WORK_START_OPS:
+            with self._sftp_relay_maintenance:
+                return self._dispatch_hub_authorized(op, args, authority)
+        return self._dispatch_hub_authorized(op, args, authority)
+
+    def _dispatch_hub_authorized(self, op: str, args: dict[str, Any], authority: dict[str, Any] | None) -> Any:
         if op in MESH_PRIVATE_OPS:
             return self._dispatch_hub_mesh(op, args, authority)
+        if op in SFTP_RELAY_PRIVATE_OPS:
+            return self._dispatch_hub_sftp_relay(op, args, authority)
         if isinstance(authority, dict) and authority.get("kind") == "hub_files" and op not in HUB_FILE_SCOPE_OPS:
             raise FsError("Hub file authority cannot authorize this operation", "trusted_hub_required")
         if op in HUB_FILE_SCOPE_OPS and isinstance(authority, dict) and authority.get("kind") == "hub_files":
@@ -866,8 +932,13 @@ class FsService:
             if "mesh_config" in authority or set(authority) - set(required) - {"kind"}:
                 raise FsError("unexpected fields in Hub mesh authority", "trusted_hub_required")
             try:
-                result = (self.mesh_runtime.status_for_network(network_id) if op == "mesh_status"
-                          else self.mesh_runtime.status(instance_id))
+                if op == "mesh_restore":
+                    result = self.mesh_runtime.restore_stopped_network(
+                        normalized_network_id, expected_instance=normalized_instance_id,
+                        expected_revision=config_revision, expected_service_ip=authority["service_ip"])
+                else:
+                    result = (self.mesh_runtime.status_for_network(network_id) if op == "mesh_status"
+                              else self.mesh_runtime.status(instance_id))
             except Exception as exc:
                 raise FsError(str(exc), getattr(exc, "code", "mesh_runtime_error")) from exc
             if (op == "mesh_status" and result.get("instance_id") is not None and
@@ -910,7 +981,7 @@ class FsService:
             raise FsError("mesh runtime returned another instance", "mesh_instance_mismatch")
         if result.get("revision") not in (None, config_revision):
             raise FsError("mesh runtime did not apply the requested revision", "stale_revision")
-        if op == "mesh_apply" and result.get("state") != "ready":
+        if op in {"mesh_apply", "mesh_restore"} and result.get("state") != "ready":
             raise FsError("EasyTier did not confirm the requested configuration", "mesh_apply_unconfirmed")
         response = {"protocol": 1, "target_id": self.device, "network_id": network_id,
                 "instance_id": instance_id, "state": result.get("state", "unverified"),
@@ -1055,6 +1126,12 @@ class FsService:
         croc = self._croc_engine()
         source = self._resolve(args.get("path"))
         self._read_guard(source)
+        sha256 = None
+        if args.get("verify_sha256") is True:
+            try:
+                sha256 = _croc_file_version(source)
+            except (ValueError, FileNotFoundError) as exc:
+                raise FsError("could not verify a stable source file", "source_changed") from exc
         try:
             job = croc.send(str(source), str(args.get("code") or ""),
                             transfers=int(args.get("transfers") or 4))
@@ -1062,7 +1139,10 @@ class FsService:
             raise FsError(str(exc), getattr(exc, "code", "croc_error")) from exc
         self._croc_context = {"transfer_id": secrets.token_hex(8), "direction": "send",
                               "source": str(source), "job": job}
-        return self._croc_status()
+        status = self._croc_status()
+        if sha256 is not None:
+            status["sha256"] = sha256
+        return status
 
     def _op_transfer_receive(self, args: dict[str, Any]) -> dict[str, Any]:
         croc = self._croc_engine()
@@ -1081,16 +1161,114 @@ class FsService:
         except Exception as exc:
             raise FsError(str(exc), getattr(exc, "code", "croc_error")) from exc
         self._croc_context = {"transfer_id": transfer_id, "direction": "receive",
-                              "staging": str(staging), "destination": str(destination), "job": job}
+                              "staging": str(staging), "destination": str(destination), "job": job,
+                              "verify_sha256": args.get("verify_sha256") is True}
         return self._croc_status()
 
     def _op_transfer_info(self, args: dict[str, Any]) -> dict[str, Any]:
         croc = getattr(self, "croc", None)
         if croc is None:
             return {"engine": "croc", "legacy": True, "default_engine": "rclone-sftpgo",
-                    "available": False, "version": "", "relay": False}
+                    "available": False, "version": "", "relay": False, "finish_by_transfer_id": True,
+                    "verify_sha256_before_finish": True}
         return {"engine": "croc", "legacy": True, "default_engine": "rclone-sftpgo",
-                **croc.info(), "cancel_by_transfer_id": True}
+                **croc.info(), "cancel_by_transfer_id": True, "finish_by_transfer_id": True,
+                "verify_sha256_before_finish": True}
+
+    def local_sftp_relay_status(self, network_id: str) -> dict[str, Any]:
+        try:
+            return self.sftp_relay.persistent_status(network_id)
+        except (TypeError, ValueError) as exc:
+            raise FsError("invalid local SFTP relay network", "invalid_sftp_relay") from exc
+
+    def local_sftp_relay_consent(self, args: dict[str, Any]) -> dict[str, Any]:
+        if self.mesh_runtime is None and not (args.get("persistent") is True and args.get("enabled") is False):
+            raise FsError("the managed device network is unavailable", "network_not_connected")
+        try:
+            return self.sftp_relay.consent(args)
+        except (TypeError, ValueError) as exc:
+            raise FsError("invalid local SFTP relay consent", "invalid_sftp_relay") from exc
+        except (OSError, RuntimeError) as exc:
+            raise FsError("could not save the local SFTP relay consent", "sftp_relay_unavailable") from exc
+
+    def _set_sftp_relay_mapping(self, network_id, enabled):
+        def busy():
+            return (self.transfer_jobs.has_active_jobs(network_id=network_id)
+                    or self.sftpgo_grants.has_active_grants(network_id=network_id)
+                    or self.service_access.has_active_workers())
+
+        with self._sftp_relay_maintenance:
+            self.mesh_runtime.set_sftp_relay_mapping(network_id, enabled, busy)
+
+    def _recover_sftp_relay_mappings(self):
+        for network_id in tuple(self._sftp_relay_recovering):
+            while True:
+                try:
+                    self._set_sftp_relay_mapping(network_id, False)
+                    break
+                except MeshRelayBusy:
+                    time.sleep(3)
+                except (MeshRuntimeError, OSError):
+                    break
+            self._sftp_relay_recovering.discard(network_id)
+
+    def _dispatch_hub_sftp_relay(self, op, args, authority):
+        if self.mesh_runtime is None:
+            raise FsError("the managed device network is unavailable", "network_not_connected")
+        expected_args = {"client_cert_pem"} if op == "sftp_relay_offer_enable" else set()
+        if set(args) != expected_args:
+            raise FsError("invalid SFTP relay request", "invalid_sftp_relay")
+        if (op == "sftp_relay_offer_enable" and isinstance(authority, dict)
+                and authority.get("network_id") in self._sftp_relay_recovering
+                and authority.get("relay_shared_port_version") is None):
+            raise FsError("the previous relay mapping is being recovered", "sftp_relay_unavailable")
+
+        try:
+            return self.sftp_relay.control(op, authority, args.get("client_cert_pem"),
+                                           self.mesh_runtime.status_for_network, self._set_sftp_relay_mapping,
+                                           shared_relay=self.sftpgo_grants.prepare_shared_relay,
+                                           single_network=self.mesh_runtime.has_single_sftp_network)
+        except (TypeError, ValueError) as exc:
+            raise FsError(str(exc), "invalid_sftp_relay") from exc
+        except MeshRelayBusy as exc:
+            raise FsError("wait for active transfers and services on the device", "sftp_relay_busy") from exc
+        except (OSError, RuntimeError) as exc:
+            raise FsError("the managed relay network or listener is unavailable", "sftp_relay_unavailable") from exc
+
+    def _sftp_relay_offer(self) -> dict[str, Any] | None:
+        if self.mesh_runtime is None:
+            return None
+        owned_offer = self.sftp_relay.offer()
+        offer = owned_offer or read_sftp_relay_offer(self.data_dir, self.device)
+        if offer is None:
+            return None
+        try:
+            status = self.mesh_runtime.status_for_network(offer["network_id"])
+        except (OSError, RuntimeError, ValueError):
+            return None
+        if status.get("state") != "ready" or status.get("network_id") != offer["network_id"]:
+            return None
+        if (owned_offer and offer.get("relay_shared_port_version") != SHARED_PORT_VERSION
+                and status.get("sftp_relay_port") != offer["port"]):
+            return None
+        return offer
+
+    def _sftp_relay_heartbeat_fields(self) -> dict[str, Any]:
+        return {
+            "sftp_relay": self._sftp_relay_offer(),
+            "sftp_relay_networks": self.sftp_relay.persistent_networks(),
+            "sftp_relay_client_cert_pem": self._sftp_relay_client_certificate(),
+        }
+
+    def _sftp_relay_client_certificate(self) -> str | None:
+        if self.mesh_runtime is not None and self.transfer_jobs:
+            try:
+                from .sftp_relay_client import relay_client_cert_pem
+
+                return relay_client_cert_pem(self.data_dir)
+            except (ImportError, OSError, ValueError, RuntimeError):
+                pass
+        return None
 
     def _transfer_capabilities(self) -> dict[str, Any]:
         rclone_path = str(getattr(self.transfer_jobs, "_binary", "") or "")
@@ -1098,6 +1276,19 @@ class FsService:
         sftpgo_ready = bool(self.sftpgo_grants and self.sftpgo_grants.available())
         croc = getattr(self, "croc", None)
         croc_info = croc.info() if croc is not None else {"available": False}
+        relay_offer = self._sftp_relay_offer()
+        transfer = {}
+        client_certificate = self._sftp_relay_client_certificate()
+        if client_certificate is not None:
+            transfer["relay_client_cert_pem"] = client_certificate
+            if getattr(self.transfer_jobs, "shared_port_version", None) == SHARED_PORT_VERSION:
+                transfer["sftp_relay_shared_port_version"] = SHARED_PORT_VERSION
+        if (self.mesh_runtime is not None and hasattr(self.mesh_runtime, "has_single_sftp_network")
+                and getattr(self.sftp_relay, "shared_port_version", None) == SHARED_PORT_VERSION
+                and self.sftpgo_grants.supports_shared_relay()):
+            transfer["sftp_relay_shared_port_provider_version"] = SHARED_PORT_VERSION
+        if relay_offer is not None:
+            transfer["sftp_relay"] = relay_offer
         return {
             "transfer_engine": "rclone-sftpgo",
             "transfer_engines": {
@@ -1106,6 +1297,7 @@ class FsService:
                 "croc": {"state": "legacy" if croc_info.get("available") else "unavailable",
                          "available": bool(croc_info.get("available")), "legacy": True},
             },
+            **({"transfer": transfer} if transfer else {}),
         }
 
     def _op_transfer_status(self, args: dict[str, Any]) -> dict[str, Any]:
@@ -1136,21 +1328,26 @@ class FsService:
         else:
             job = croc.job
         status = job.cancel() if job else {"state": "idle"}
-        if requested_id and self._croc_context is not context:
-            return {**status, "engine": "croc", "cancelled": False}
         staging = context.get("staging")
         if staging:
             shutil.rmtree(staging, ignore_errors=True)
-        if not requested_id or self._croc_context is context:
-            self._croc_context = {}
+        self._croc_context = {}
         return {**status, "engine": "croc"}
 
     def _op_transfer_finish(self, args: dict[str, Any]) -> dict[str, Any]:
         context = self._croc_context
         if not context or context.get("direction") != "receive":
             raise FsError("no receive transfer", "croc_no_transfer")
-        status = self._croc_status()
-        if status.get("state") != "completed":
+        if "transfer_id" in args and args["transfer_id"] != context["transfer_id"]:
+            raise FsError("no matching receive transfer", "croc_no_transfer")
+        verify_sha256 = context.get("verify_sha256") or "expected_sha256" in args
+        expected_sha256 = args.get("expected_sha256")
+        if verify_sha256:
+            if (args.get("transfer_id") != context["transfer_id"] or args.get("overwrite") is True
+                    or not isinstance(expected_sha256, str) or not re.fullmatch(r"[a-fA-F0-9]{64}", expected_sha256)):
+                raise FsError("verified finish requires a transfer ID, SHA-256 and no overwrite", "bad_args")
+            expected_sha256 = expected_sha256.lower()
+        if context["job"].status().get("state") != "completed":
             raise FsError("transfer is not complete", "croc_not_complete")
         staging = Path(context["staging"])
         entries = [entry for entry in staging.iterdir() if not entry.name.startswith(".")]
@@ -1163,14 +1360,26 @@ class FsService:
         if name != Path(name).name or name in (".", ".."):
             raise FsError("invalid destination name", "bad_args")
         target = destination / name
+        self._write_guard(target, "write")
         if target.exists():
             if args.get("overwrite") is not True:
                 raise FsError("destination already exists", "exists")
             if target.is_dir() or source.is_dir():
                 raise FsError("cannot overwrite a directory", "exists")
             target.unlink()
-        self._write_guard(target, "write")
-        shutil.move(str(source), str(target))
+        if verify_sha256:
+            try:
+                received_sha256 = _croc_file_version(source)
+            except (ValueError, FileNotFoundError) as exc:
+                raise FsError("could not verify a stable received file", "croc_integrity_mismatch") from exc
+            if received_sha256 != expected_sha256:
+                raise FsError("received file does not match the source SHA-256", "croc_integrity_mismatch")
+            try:
+                _publish_croc_file(source, target, expected_sha256)
+            except FileExistsError as exc:
+                raise FsError("destination already exists", "exists") from exc
+        else:
+            shutil.move(str(source), str(target))
         shutil.rmtree(staging, ignore_errors=True)
         self._croc_context = {}
         return {"path": str(target), "bytes": target.stat().st_size, "engine": "croc"}

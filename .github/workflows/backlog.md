@@ -31,3 +31,5 @@
 - 2026-11-13：为固定 0.5.8 preview.2 重新组装分支复用 43410891693 已成功的产物；guard 限定父提交与发行文件白名单，普通候选仍要求 package 成功，draft/prerelease 与 POSIX-only 门禁保留。
 
 - 2026-11-19：为codex/tether-059-local-acceptance-20261119配置0.5.9-preview.1候选版号与tag，复用签名manifest；要求普通四平台package job成功后直接发布公开prerelease（draft=false、prerelease=true、make_latest=false）。
+
+- 2026-11-21：为 0.5.10 独立分支启用四平台构建和签名组装，成功后生成 Preview 1 草稿。

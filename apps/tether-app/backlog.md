@@ -1,4 +1,6 @@
 # tether-app backlog
+
+- 2026-11-21 接入个人网的本机常驻中转设置，DSH 新连接遇到真实网络不可达时复用授权 Surface 入口。
 - 2026-11-11：为 external 常驻 Node 增加显式 loopback API 桥配置：仅接受有效端口和至少 32 位安全 token；Supervisor 不启动/停止外部 Node，snapshot 不含凭据；APP 启动及每次 mesh route 前用 Bearer+设备路径验证 API，route 回包须匹配设备、网络和本机 SOCKS 地址。未配置仍拒绝；不涉及 Codeg 可见验收。
 - 2026-11-10：旧节点 Files 在结构化 `service_catalog bad_op` 分类后新增最小只读 `list`：冷/热缓存均走固定认证 `POST /api/devices/{target}/fs/list`，请求体只含 `path`，严格校验设备、路径和目录项并强制 `writable:false`；现代 list 与旧节点 drives/workspaces 原路径不变。旧 Codeg 网络目录为空或没有 ready 网络时返回明确的安全配置错误，仍禁止直连或放宽成员/`service_ip` 校验。
 - 2026-11-10：修复 Electron legacy Codeg guest 初始生命周期：`prepareGuest` 先按隔离 session 唯一匹配活动记录，允许已由 attach 参数门禁验证的 `about:blank` 初始页；已导航 HTTP(S) 仍必须与授权 endpoint 严格同源，其他 URL 全部失败关闭。
@@ -163,3 +165,7 @@
 
 - 2026-11-19：0.5.9候选加入Windows安装版设备码登录（--device-sign-in：首实例向stdout返回公开user_code信息；APP界面只呈现user_code与验证网址），并保留--sign-in浏览器登录；版本元数据同步至0.5.9。
 - 2026-11-19：设备码公开回调补充 expiresIn，保证安装版 CLI JSON 输出 expires_in。
+
+- 2026-11-21：增加本机受信任的临时 SFTP 中转 IPC。先调本机授权再登记 Hub，启动失败撤回本机，普通代理不提供代授权。
+
+- 2026-11-21：桌面 APP 版本更新到 0.5.10。受信 IPC 仅在 Windows 打开系统「已安装的应用」页。

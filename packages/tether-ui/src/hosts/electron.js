@@ -7,6 +7,7 @@ export function createElectronHost({ apiBase = '' } = {}) {
     kind: 'app',
     appInfo: () => window.tetherApp.info(),
     hubRequest: (request) => window.tetherApp.hubRequest(request),
+    sftpRelay: typeof window.tetherApp.sftpRelay === 'function' ? (request) => window.tetherApp.sftpRelay(request) : undefined,
     filesRequest: (request) => window.tetherApp.filesRequest(request),
     subscribeHubEvents: (callback) => {
       const removeListener = window.tetherApp.onHubEvent(callback)
@@ -69,6 +70,9 @@ export function createElectronHost({ apiBase = '' } = {}) {
       action: (name) => window.tetherApp.windowControl(name),
       state: () => window.tetherApp.windowControl('state'),
       onState: (callback) => window.tetherApp.onWindowState(callback)
-    }
+    },
+    openInstalledApps: typeof window.tetherApp.openInstalledApps === 'function'
+      ? () => window.tetherApp.openInstalledApps()
+      : undefined
   }
 }

@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('tetherApp', {
   workbenchRegisterAccount: () => ipcRenderer.invoke('tether:workbench-register-account'),
   workbenchLogout: () => ipcRenderer.invoke('tether:workbench-logout'),
   hubRequest: (request) => ipcRenderer.invoke('tether:hub-request', request),
+  sftpRelay: (request) => ipcRenderer.invoke('tether:sftp-relay', request),
   subscribeHubEvents: () => ipcRenderer.invoke('tether:hub-events-subscribe'),
   unsubscribeHubEvents: () => ipcRenderer.invoke('tether:hub-events-unsubscribe'),
   workbenchCatalog: (targetId) => ipcRenderer.invoke('tether:workbench-catalog', targetId),
@@ -33,6 +34,7 @@ contextBridge.exposeInMainWorld('tetherApp', {
   openLogs: () => ipcRenderer.invoke('tether:open-logs'),
   openDataDir: () => ipcRenderer.invoke('tether:open-data'),
   openExternal: (url) => ipcRenderer.invoke('tether:open-external', url),
+  openInstalledApps: () => ipcRenderer.invoke('tether:open-installed-apps'),
   windowControl: (action) => ipcRenderer.invoke('tether:window-control', action),
   onWindowState: (callback) => {
     const listener = (_event, value) => callback(value)

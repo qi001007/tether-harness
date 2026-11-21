@@ -616,7 +616,8 @@ class Node:
             await asyncio.sleep(2)
             try:
                 app_fields = await asyncio.to_thread(self._app_heartbeat_fields)
-                await self._send({"type": "heartbeat", "ts": time.time(), **app_fields})
+                relay = await asyncio.to_thread(self.fs._sftp_relay_heartbeat_fields)
+                await self._send({"type": "heartbeat", "ts": time.time(), **app_fields, **relay})
             except Exception as exc:  # noqa: BLE001 - a dead socket is handled by the reconnect loop
                 log(f"[ws] heartbeat send failed: {exc!r}")
                 return
@@ -1633,6 +1634,7 @@ class Node:
                 "terminal_user": _current_user(),
                 "terminal_privileged": _is_privileged(),
                 "dsh_surface": self.native_surface.available(),
+                "mesh_restore_on_register": self.fs.mesh_runtime is not None,
                 **self.fs._transfer_capabilities(),
                 "croc": {**self.croc.info(), "legacy": True},
                 "direct_api": self.direct.info() if self.direct else None}

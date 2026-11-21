@@ -2550,6 +2550,51 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             !rows.length ? h('div', { style: { padding: 24, color: C.mute, fontSize: 12, textAlign: 'center' } }, edges.length ? '没有匹配的连接' : '尚未建立连接') : null)))
     }
 
+    function SftpRelayDialog({ networks, initialPair, manage, onClose }) {
+      const [id, setId] = React.useState(() => (networks.find(network => initialPair?.source && initialPair?.executor &&
+        [initialPair.source, initialPair.executor].every(peer => network.devices.some(member => member.device_id === peer))) || networks[0])?.id || '')
+      const [policy, setPolicy] = React.useState(null)
+      const [error, setError] = React.useState('')
+      const [saving, setSaving] = React.useState(false)
+      React.useEffect(() => {
+        let open = true
+        setPolicy(null)
+        setError('')
+        if (id) manage({ action: 'getPolicy', network_id: id }).then(result => {
+          if (open) setPolicy(result)
+        }).catch(reason => { if (open) setError(reason.message) })
+        return () => { open = false }
+      }, [id])
+      const toggle = async () => {
+        setSaving(true)
+        setError('')
+        try {
+          setPolicy(await manage({ action: 'setPolicy', network_id: id, enabled: !policy.persistent }))
+        } catch (reason) {
+          setPolicy(null)
+          setError(reason.message)
+          try { setPolicy(await manage({ action: 'getPolicy', network_id: id })) } catch {}
+        } finally {
+          setSaving(false)
+        }
+      }
+      return h('div', { style: { position: 'absolute', inset: 0, zIndex: 85, padding: 20, display: 'grid',
+        placeItems: 'center', background: 'rgba(16,24,40,.35)' },
+        onPointerDown: event => { if (!saving && event.target === event.currentTarget) onClose() } },
+        h('section', { role: 'dialog', 'aria-modal': true, 'aria-label': '自动中转', style: {
+          width: 'min(440px, 100%)', display: 'grid', gap: 12, padding: 16, borderRadius: 12, background: C.bg, boxShadow: C.shadow } },
+          h('header', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+            h('strong', null, '自动中转'), btn('关闭', onClose, { disabled: saving })),
+          h('label', { style: { display: 'grid', gap: 4 } }, '我的私网',
+            h('select', { value: id, disabled: saving, onChange: event => setId(event.target.value) },
+              networks.map(network => h('option', { key: network.id, value: network.id }, network.name || network.id)))),
+          h('label', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+            h('input', { type: 'checkbox', checked: !!policy?.persistent, disabled: saving || policy?.network_id !== id, onChange: toggle }),
+            '允许这台设备为此私网自动转发'),
+          h('div', { style: { color: C.mute } }, '开启后，其他设备传文件时可自动借道这台设备。此设置会保留，直到你关闭。'),
+          error ? h('div', { role: 'alert', style: { color: C.red } }, error) : null))
+    }
+
     function FileTree({ roots, children, open, onToggle, onOpenFile, onContextMenuNode, selected, onHoverEntry, onLeaveEntry }) {
       const rows = []
       const walk = (node, depth, ancestors) => {
@@ -3784,6 +3829,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const [networkOwnershipFilter, setNetworkOwnershipFilter] = React.useState('all')
       const [networkDetailId, setNetworkDetailId] = React.useState('')
       const [showNetworkLinks, setShowNetworkLinks] = React.useState(false)
+      const [relayDialog, setRelayDialog] = React.useState(null)
       const [networkRefreshing, setNetworkRefreshing] = React.useState(false)
       const [privateNetworks, setPrivateNetworks] = React.useState([])
       const [privateNetworksError, setPrivateNetworksError] = React.useState('')
@@ -3912,17 +3958,20 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const lastUpdateToastRef = React.useRef({})
       const activeUpdateToastKeyRef = React.useRef('')
       const [updateToast, setUpdateToast] = React.useState('')
-      const [showHub, setShowHub] = React.useState(false)
       const [showAppSettings, setShowAppSettings] = React.useState(false)
+      const [showHub, setShowHub] = React.useState(false)
       const [desktopAppVersion, setDesktopAppVersion] = React.useState('')
+      const [desktopPlatform, setDesktopPlatform] = React.useState('')
       React.useEffect(() => {
-        if (!showAppSettings || !host || host.kind !== 'app' || typeof host.appInfo !== 'function') return undefined
+        if (!host || host.kind !== 'app' || typeof host.appInfo !== 'function') return undefined
         let active = true
         Promise.resolve(host.appInfo()).then((info) => {
-          if (active && info && typeof info.version === 'string') setDesktopAppVersion(info.version)
+          if (!active || !info) return
+          if (typeof info.version === 'string') setDesktopAppVersion(info.version)
+          if (typeof info.platform === 'string') setDesktopPlatform(info.platform)
         }).catch(() => {})
         return () => { active = false }
-      }, [showAppSettings, host])
+      }, [host])
       const [localDsh, setLocalDsh] = React.useState(null)
       const [dshBusy, setDshBusy] = React.useState('')
       const localDshTargetRef = React.useRef('')
@@ -4059,11 +4108,6 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         const timer = setInterval(run, 15000)
         return () => clearInterval(timer)
       }, [host])
-      React.useEffect(() => {
-        if (!showHub) return undefined
-        probeConfiguredHub()
-        return undefined
-      }, [showHub])
       const updateScope = (component) => component === 'node' || component === 'plugin'
         ? (deviceId ? { deviceId, epoch: 0 } : null)
         : null
@@ -6337,9 +6381,10 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         setNetworkRefreshing(true)
         try { await Promise.all([loadState(), loadPrivateNetworks()]) } finally { setTimeout(() => setNetworkRefreshing(false), 280) }
       }
+      const nativeNetworkOwner = host?.kind === 'app' && !EXPLICIT_AUTHORITY && state?.user?.user_id
       React.useEffect(() => {
-        if (view === 'network' && loggedIn) loadPrivateNetworks()
-      }, [view, loggedIn])
+        if (view === 'network' && (loggedIn || nativeNetworkOwner)) loadPrivateNetworks()
+      }, [view, loggedIn, nativeNetworkOwner])
 
       React.useEffect(() => {
         if (!contextMenu) return undefined
@@ -6912,6 +6957,19 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         }
       }
 
+      const relayUserId = state?.user?.user_id
+      const relayOwners = relayUserId ? ((state && state.devices) || []).filter(item => item.owner_id === relayUserId) : []
+      const canManageRelay = host?.kind === 'app' && host.sftpRelay
+        && relayOwners.some(item => item.device_id === appLocalDevice)
+      const relayNetworks = canManageRelay ? privateNetworks
+        .filter(item => item.scope_kind === 'personal' && item.scope_id === relayUserId
+          && Array.isArray(item.devices) && item.devices.some(member => member.device_id === appLocalDevice))
+        .map(item => ({ ...item, id: item.network_id || item.id })).filter(item => item.id)
+        : []
+      const openTransferRelay = async (source, executor) => {
+        await loadPrivateNetworks()
+        setRelayDialog({ source, executor })
+      }
       const renderNetwork = () => {
         const allDevices = (state && state.devices) || []
         const userId = state && state.user && state.user.user_id
@@ -7016,6 +7074,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
                   color: networkOwnershipFilter === key ? C.ink : C.mute, fontSize: 10.5, cursor: 'pointer' }
               }, label + ' ' + count))) : null,
             h('span', { style: { marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 } },
+              relayNetworks.length ? btn('自动中转', () => setRelayDialog({})) : null,
               h('button', {
                 type: 'button', title: '连接管理', 'aria-label': '连接管理', onClick: () => setShowNetworkLinks(true),
                 className: 'tether-hover',
@@ -7205,27 +7264,18 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             : (stateLoading ? '正在读取设备状态…' : '设备列表暂不可用')),
           device && device.capabilities && (!device.capabilities.fs || device.capabilities.surface_protocol !== 1) ? pill('节点待更新', C.amber) : null,
           h('div', { style: { marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, alignSelf: 'stretch', flex: '0 0 auto' } },
-            host && host.kind === 'app' ? h('button', {
+            host && host.kind === 'app' && (hubLoginBusy || EXPLICIT_AUTHORITY || !(workbenchAuthReady || (state && state.user))) ? h('button', {
               type: 'button', disabled: hubLoginBusy,
-              onClick: () => state && state.user && !EXPLICIT_AUTHORITY ? logoutHub() : loginHub(),
+              onClick: () => loginHub(),
               style: { height: 26, padding: '0 10px', border: 0, borderRadius: 6, background: C.soft, color: C.sub,
                 fontSize: 11, cursor: hubLoginBusy ? 'default' : 'pointer', opacity: hubLoginBusy ? 0.6 : 1, WebkitAppRegion: 'no-drag' }
-            }, hubLoginBusy ? '正在登录…' : (state && state.user && !EXPLICIT_AUTHORITY ? '退出登录' : (EXPLICIT_AUTHORITY ? '切换 OAuth' : 'Hub 登录'))) : null,
+            }, hubLoginBusy ? '正在登录…' : (EXPLICIT_AUTHORITY ? '切换 OAuth' : 'Hub 登录')) : null,
             host && (host.kind === 'dsh' || host.kind === 'app') ? h(Connection.Trigger, {
               onClick: () => {
-                if (host.kind === 'dsh' || host.kind === 'app') {
-                  let saved = {}
-                  try { saved = JSON.parse(window.localStorage.getItem('tether.hub') || '{}') } catch (_) { /* ignore */ }
-                  setHubUrl(hubAddressForEditor(saved.url || ''))
-                  setHubUnsafeExistingUrl(hubUrlNeedsReplacement(saved.url || ''))
-                  setHubToken(saved.token || '')
-                  setHubEmail(saved.email || '')
-                }
-                setHubState(null)
-                setHubStatus('unknown')
-                setHubError('')
-                if (host.connectionInfo) host.connectionInfo(host.activeApiBase && host.activeApiBase()).then((info) => setHubAddress(info.address || '')).catch(() => setHubAddress(''))
-                setShowHub(true)
+                setShowSettings(false)
+                setSettingsSection('connection')
+                setShowAppSettings(true)
+                probeConfiguredHub()
               },
               status: liveHubStatus
             }) : null,
@@ -7337,7 +7387,9 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
                 React, Glyph, api, post, C,
                 devices: (state && state.devices) || [],
                 localDevice: appLocalDevice,
+                userId: state?.user?.user_id,
                 hubOnly: host && host.kind === 'app' && !EXPLICIT_AUTHORITY,
+                onLocalRelay: canManageRelay ? openTransferRelay : undefined,
                 onNotice: setNotice,
                 onError: fail
               })
@@ -7356,9 +7408,14 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
               })) : null
         ),
         ),
-        showHub && host && (host.kind === 'dsh' || host.kind === 'app') ? h(Connection.Panel, {
+        relayDialog && canManageRelay ? h(SftpRelayDialog, {
+          key: ACTIVE_BASE_GENERATION + ':' + relayUserId + ':' + appLocalDevice,
+          networks: relayNetworks, ownDevices: relayOwners, localId: appLocalDevice,
+          initialPair: relayDialog, manage: host.sftpRelay, onClose: () => setRelayDialog(null)
+        }) : null,
+        showHub && host && (host.kind === 'dsh' || EXPLICIT_AUTHORITY) ? h(Connection.Panel, {
           open: true,
-          onClose: () => setShowHub(false),
+          onClose: () => { setShowHub(false); setShowAppSettings(true) },
           info: { address: hubAddress || '未知', status: liveHubStatus, checkedAt: hubCheckedAt, durationMs: hubDuration },
           busy: hubBusy, error: hubError, onProbe: probeConfiguredHub,
           defaultUrl: hubUrl || hubAddress || '',
@@ -7476,6 +7533,13 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           server: hubAddress || hubUrl || '',
           connection: { status: liveHubStatus, checkedAt: hubCheckedAt, durationMs: hubDuration, token: hubToken },
           passwordChangeAvailable: host.kind !== 'app' || EXPLICIT_AUTHORITY,
+          accountSignedIn: host.kind === 'app' && !EXPLICIT_AUTHORITY
+            ? !!(workbenchAuthReady || (state && state.user))
+            : !!(loggedIn || (state && state.user)),
+          uninstallAvailable: host.kind === 'app' && desktopPlatform === 'win32' && typeof host.openInstalledApps === 'function',
+          onOpenInstalledApps: host.kind === 'app' && typeof host.openInstalledApps === 'function'
+            ? () => host.openInstalledApps()
+            : undefined,
           device: {
             ...localDeviceRecord,
             device_id: localDeviceRecord.device_id || appLocalDevice || deviceId,
@@ -7498,6 +7562,19 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           onDshStart: () => runLocalDsh('dsh_start'),
           onDshInstall: () => runLocalDsh('dsh_install'),
           onRefreshConnection: probeConfiguredHub,
+          onConfigureConnection: (host.kind === 'dsh' || EXPLICIT_AUTHORITY) ? () => {
+            let saved = {}
+            try { saved = JSON.parse(window.localStorage.getItem('tether.hub') || '{}') } catch (_) { /* ignore malformed config */ }
+            setHubUrl(hubAddressForEditor(saved.url || ''))
+            setHubUnsafeExistingUrl(hubUrlNeedsReplacement(saved.url || ''))
+            setHubToken(saved.token || '')
+            setHubEmail(saved.email || '')
+            setHubState(null)
+            setHubStatus('unknown')
+            setHubError('')
+            setShowAppSettings(false)
+            setShowHub(true)
+          } : undefined,
           onRestartNode: async () => {
             const id = appLocalDevice || deviceId
             if (!id) return

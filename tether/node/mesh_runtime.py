@@ -28,6 +28,11 @@ from typing import Any
 from urllib.parse import urlsplit
 
 try:
+    import tomllib
+except ImportError:  # Python 3.10
+    import tomli as tomllib
+
+try:
     import psutil
 except ImportError:  # pragma: no cover - declared by the Node runtime
     psutil = None
@@ -37,10 +42,18 @@ class MeshRuntimeError(RuntimeError):
     """A safe-to-report runtime error; messages never contain credential data."""
 
 
+class MeshRelayBusy(MeshRuntimeError):
+    """The selected node has work using the current core."""
+
+
 CADDY_PORT_RANGE = range(52000, 52064)
 SOCKS_PORT_RANGE = range(53000, 53064)
 SFTP_PORT = 20222
+SFTP_RELAY_PORT = 20223
+SFTP_RELAY_CONFIG = ".sftp-relay-effective"
 RPC_DENY_CIDR = "192.0.2.1/32"
+MEMBER_WSS_ENV = "TETHER_MESH_MEMBER_WSS"
+TRANSPORT_CONFIG = ".transport-runtime.toml"
 MESH_VIP_POOL = ipaddress.IPv4Network("10.240.0.0/12")
 SERVICE_IP_POOL = ipaddress.IPv4Network("10.224.0.0/12")
 
@@ -93,6 +106,8 @@ class EasyTierRuntime:
         self.root.mkdir(parents=True, exist_ok=True)
         self.record_root.mkdir(parents=True, exist_ok=True)
         self._records = self.record_root / "instances.json"
+        self._applying_sftp_topology = threading.Lock()
+        self._applying_sftp_networks = {}
 
     def apply(self, config: dict[str, Any]) -> dict[str, Any]:
         """Apply trusted Controller configuration; unchanged config is a no-op.
@@ -103,9 +118,16 @@ class EasyTierRuntime:
         """
         values = self._validate_config(config)
         with self._instance_lock(values["instance_id"]):
-            return self._apply_locked(values)
+            with self._applying_sftp_topology:
+                self._applying_sftp_networks[values["instance_id"]] = values["network_id"]
+            try:
+                return self._apply_locked(values)
+            finally:
+                with self._applying_sftp_topology:
+                    self._applying_sftp_networks.pop(values["instance_id"])
 
-    def _apply_locked(self, values: dict[str, Any]) -> dict[str, Any]:
+    def _apply_locked(self, values: dict[str, Any], *,
+                      restored_credential_file: str | None = None) -> dict[str, Any]:
         instance_id = values["instance_id"]
         directory = self._instance_dir(instance_id)
         directory.mkdir(parents=True, exist_ok=True)
@@ -120,6 +142,15 @@ class EasyTierRuntime:
         render_values = {**values, "socks_port": socks_port}
         body = self._render_config(render_values, credential_path)
         digest = hashlib.sha256(body.encode("utf-8")).hexdigest()
+        member_wss = self._member_wss(values["network_id"], values["peers"])
+        if member_wss:
+            # Preserve the digest written by existing member WSS deployments.
+            transport = {"relay": None, "quic": False, "member_wss": member_wss}
+            transport_digest = hashlib.sha256(json.dumps(transport, sort_keys=True).encode()).hexdigest()
+        else:
+            transport_digest = None
+        transport_candidate_path = directory / ".transport.validate.toml"
+        transport_config_path = directory / TRANSPORT_CONFIG
         if record:
             if record.get("network_id") != values["network_id"]:
                 raise MeshRuntimeError("instance_id is already assigned to another network")
@@ -129,8 +160,14 @@ class EasyTierRuntime:
             if (type(previous_revision) is int and values["revision"] == previous_revision and
                     record.get("config_sha256") != digest and
                     not self._legacy_mesh_template_only(config_path, body)):
-                raise MeshRuntimeError("configuration changed without a new revision")
-        if record and record.get("network_id") == values["network_id"] and record.get("config_sha256") == digest and self._owned_process(record):
+                previous_digest = digest
+                if restored_credential_file is not None:
+                    previous_body = self._render_config(render_values, restored_credential_file)
+                    previous_digest = hashlib.sha256(previous_body.encode("utf-8")).hexdigest()
+                if previous_digest != record.get("config_sha256"):
+                    raise MeshRuntimeError("configuration changed without a new revision")
+        if (record and record.get("network_id") == values["network_id"] and record.get("config_sha256") == digest
+                and record.get("transport_sha256") == transport_digest and self._owned_process(record)):
             if record.get("revision") != values["revision"]:
                 record["revision"] = values["revision"]
                 records[instance_id] = record
@@ -140,25 +177,44 @@ class EasyTierRuntime:
         self._atomic_text(candidate_path, body)
         try:
             self._check_config(candidate_path, values["network_name"], values["credential_private_key"])
+            if member_wss:
+                # Keep the Hub state independent of this Node-local transport.
+                transport_values = dict(render_values)
+                if member_wss["mode"] == "listen":
+                    transport_values["member_wss_port"] = member_wss["port"]
+                transport_body = self._render_config(transport_values, credential_path)
+                if member_wss["mode"] == "dial":
+                    transport_body += (f'\n[[peer]]\nuri = {self._toml_string(member_wss["uri"])}\n'
+                                       f'peer_public_key = {self._toml_string(member_wss["public_key"])}\n')
+                self._atomic_text(transport_candidate_path, transport_body)
+                self._check_config(transport_candidate_path, values["network_name"], values["credential_private_key"])
         except Exception:
             candidate_path.unlink(missing_ok=True)
+            transport_candidate_path.unlink(missing_ok=True)
             raise
         if record and self._pid_exists(record):
             if not self._owned_process(record):
                 candidate_path.unlink(missing_ok=True)
+                transport_candidate_path.unlink(missing_ok=True)
                 raise MeshRuntimeError("existing EasyTier process identity cannot be verified")
             self._stop_record(record)
 
         if not credential_path.exists():
             self._atomic_text(credential_path, "{}\n")
+        if member_wss:
+            os.replace(transport_candidate_path, transport_config_path)
+            self._prepare_child_directory(directory, transport_config_path, credential_path)
+        else:
+            transport_candidate_path.unlink(missing_ok=True)
+            transport_config_path.unlink(missing_ok=True)
         os.replace(candidate_path, config_path)
         self._restrict(config_path)
         if not self._port_available(socks_port):
             raise MeshRuntimeError("EasyTier SOCKS listener port is already in use")
         port = self._rpc_port(instance_id, records)
         self._prepare_child_directory(directory, config_path, credential_path)
-        process = self._start(instance_id, directory, port, values["network_name"],
-                              values["credential_private_key"])
+        process = self._start(instance_id, directory, port, values["network_name"], values["credential_private_key"],
+                              transport_config_path if transport_digest else None)
         record = {
             "network_id": values["network_id"],
             "instance_id": instance_id,
@@ -174,6 +230,8 @@ class EasyTierRuntime:
             "create_time": self._create_time(process.pid),
             "executable": str(self.core),
         }
+        if transport_digest:
+            record["transport_sha256"] = transport_digest
         records[instance_id] = record
         self._save_records(records)
         return self._wait_ready(instance_id, record)
@@ -206,6 +264,83 @@ class EasyTierRuntime:
                     "revision": result.get("revision"), "node": None, "peers": None}
         return result
 
+    def restore_stopped_network(self, network_id: str, *, expected_instance: str | None = None,
+                                expected_revision: int | None = None,
+                                expected_service_ip: str | None = None) -> dict[str, Any]:
+        """Restart only a recorded, stopped instance from its unchanged local config."""
+        network_id = self._uuid(network_id, "network_id")
+        matches = [(instance_id, record) for instance_id, record in self._load_records().items()
+                   if isinstance(record, dict) and record.get("network_id") == network_id]
+        if len(matches) != 1:
+            raise MeshRuntimeError("existing paired network instance is unavailable")
+        instance_id, _record = matches[0]
+        with self._instance_lock(instance_id):
+            records = self._load_records()
+            record = records.get(instance_id)
+            if (not isinstance(record, dict) or record.get("instance_id") != instance_id
+                    or record.get("network_id") != network_id
+                    or type(record.get("revision")) is not int or record["revision"] < 1):
+                raise MeshRuntimeError("existing paired network record is invalid")
+            if expected_instance is not None and (instance_id != expected_instance
+                    or record["revision"] != expected_revision or record.get("service_ip") != expected_service_ip):
+                raise MeshRuntimeError("saved network does not match the current Hub membership")
+            status = self._status_locked(instance_id)
+            if (status.get("state") == "ready" and status.get("network_id") == network_id
+                    and status.get("revision") == record["revision"]):
+                return status
+            if status.get("state") != "stopped" or self._pid_exists(record):
+                raise MeshRuntimeError("existing EasyTier instance is not verifiably stopped")
+            directory = self._instance_dir(instance_id)
+            config_path = directory / "config.toml"
+            if (directory.is_symlink() or config_path.is_symlink()
+                    or Path(str(record.get("directory") or "")).resolve() != directory
+                    or Path(str(record.get("config_path") or "")).resolve() != config_path):
+                raise MeshRuntimeError("existing network configuration path is invalid")
+            try:
+                body = config_path.read_bytes()
+            except OSError as error:
+                raise MeshRuntimeError("existing network configuration is unavailable") from error
+            digest = hashlib.sha256(body).hexdigest()
+            if not re.fullmatch(r"[a-f0-9]{64}", str(record.get("config_sha256") or "")) or digest != record.get("config_sha256"):
+                raise MeshRuntimeError("existing network configuration changed")
+            try:
+                saved = tomllib.loads(body.decode("utf-8"))
+                peers = [peer["uri"] for peer in saved.get("peer", [])]
+                service_ip = saved["proxy_network"][0]["mapped_cidr"].removesuffix("/32")
+                config = {
+                    "network_id": network_id,
+                    "instance_id": instance_id,
+                    "revision": record["revision"],
+                    "network_name": saved["network_identity"]["network_name"],
+                    "ipv4": saved["ipv4"],
+                    "service_ip": service_ip,
+                    "peers": peers,
+                    "credential_private_key": saved["secure_mode"]["local_private_key"],
+                }
+                values = self._validate_config(config)
+                if (values["ipv4"] != record.get("ipv4")
+                        or values["service_ip"] != record.get("service_ip")
+                        or type(record.get("socks_port")) is not int
+                        or record["socks_port"] not in SOCKS_PORT_RANGE):
+                    raise MeshRuntimeError("existing network configuration does not match its record")
+                saved_credential_file = saved["credential_file"]
+                saved_credential_path = Path(saved_credential_file)
+                credential_path = directory / "managed-credentials.json"
+                if (saved_credential_path.resolve(strict=False) != credential_path.resolve(strict=False)
+                        or saved_credential_path.is_symlink()
+                        or saved["instance_id"] != instance_id
+                        or saved["socks5_proxy"] != f"socks5://127.0.0.1:{record['socks_port']}"):
+                    raise MeshRuntimeError("existing network configuration does not match its record")
+                restored_credential_file = None
+                if saved_credential_file != str(credential_path):
+                    if (not saved_credential_path.is_absolute() or credential_path.is_symlink()
+                            or not (saved_credential_path.is_file() and credential_path.is_file())):
+                        raise MeshRuntimeError("existing network credential file is unavailable")
+                    restored_credential_file = saved_credential_file
+            except (KeyError, IndexError, TypeError, ValueError) as error:
+                raise MeshRuntimeError("existing network configuration is invalid") from error
+            return self._apply_locked(values, restored_credential_file=restored_credential_file)
+
     def _status_locked(self, instance_id: str) -> dict[str, Any]:
         record = self._load_records().get(instance_id)
         if not record:
@@ -228,7 +363,97 @@ class EasyTierRuntime:
         return {"state": "ready", "network_id": record["network_id"], "instance_id": instance_id,
                 "revision": record["revision"], "service_ip": record.get("service_ip"),
                 "node": node, "socks_proxy": {"host": "127.0.0.1", "port": record["socks_port"]},
+                **({"sftp_relay_port": SFTP_RELAY_PORT} if record.get("sftp_relay") else {}),
                 "peers": None, "peer_connectivity": "unknown"}
+
+    def has_single_sftp_network(self, network_id: str) -> bool:
+        # Every managed instance maps its service IPv4 back to the same loopback.
+        # A second configured instance might become reachable during this lease.
+        with self._applying_sftp_topology:
+            records = self._load_records()
+            if len(records) != 1:
+                return False
+            instance_id, record = next(iter(records.items()))
+            return (record.get("network_id") == network_id
+                    and all(key == instance_id and value == network_id
+                            for key, value in self._applying_sftp_networks.items()))
+
+    def set_sftp_relay_mapping(self, network_id: str, enabled: bool, busy) -> None:
+        status = self.status_for_network(network_id)
+        if status.get("state") != "ready":
+            raise MeshRuntimeError("the managed relay network is not ready")
+        instance = status["instance_id"]
+        with self._instance_lock(instance):
+            records = self._load_records()
+            original = records.get(instance)
+            if (not original or original.get("network_id") != network_id
+                    or not self._owned_process(original)):
+                raise MeshRuntimeError("the managed relay network changed")
+            if bool(original.get("sftp_relay")) == enabled:
+                return
+            if busy():
+                raise MeshRelayBusy("the managed relay network is busy")
+            directory = self._instance_dir(instance)
+            config_path = directory / "config.toml"
+            override = directory / SFTP_RELAY_CONFIG
+            base = config_path.read_text(encoding="utf-8")
+            if hashlib.sha256(base.encode("utf-8")).hexdigest() != original.get("config_sha256"):
+                raise MeshRuntimeError("the managed base configuration changed")
+            network = re.search(r'^network_name = "([^"\n]+)"$', base, re.M)
+            secret = re.search(r'^local_private_key = "([A-Za-z0-9+/=]+)"$', base, re.M)
+            if not network or not secret:
+                raise MeshRuntimeError("the managed base configuration is not recognized")
+            network_name, credential = network[1], secret[1]
+            transport = directory / TRANSPORT_CONFIG if original.get("transport_sha256") else None
+            effective_base = transport.read_text(encoding="utf-8") if transport else base
+            if enabled:
+                relay_acl = (
+                    '\n[[acl.acl_v1.chains.rules]]\nname = "tether-sftp-relay"\npriority = 998\n'
+                    'enabled = true\nprotocol = 1\n'
+                    f'ports = ["{SFTP_RELAY_PORT}"]\ndestination_ips = ["{status["service_ip"]}/32"]\n'
+                    'action = 1\nstateful = true\n'
+                )
+                self._atomic_text(override, effective_base + relay_acl)
+                try:
+                    self._check_config(override, network_name, credential)
+                    self._prepare_child_directory(directory, override, directory / "managed-credentials.json")
+                except Exception:
+                    override.unlink(missing_ok=True)
+                    raise
+            if busy():
+                if enabled:
+                    override.unlink(missing_ok=True)
+                raise MeshRelayBusy("the managed relay network is busy")
+
+            def start(use_override):
+                effective = override if use_override else transport
+                process = self._start(instance, directory, original["rpc_port"], network_name, credential, effective)
+                active = {**original, "pid": process.pid, "create_time": self._create_time(process.pid)}
+                if use_override:
+                    active["sftp_relay"] = True
+                else:
+                    active.pop("sftp_relay", None)
+                records[instance] = active
+                self._save_records(records)
+                self._wait_ready(instance, active)
+
+            self._stop_record(original)
+            try:
+                start(enabled)
+            except Exception:
+                attempt = records[instance]
+                if self._owned_process(attempt):
+                    self._stop_record(attempt)
+                start(not enabled)
+                if enabled:
+                    override.unlink(missing_ok=True)
+                raise
+            if not enabled:
+                override.unlink(missing_ok=True)
+
+    def stale_sftp_relay_networks(self) -> list[str]:
+        return [record["network_id"] for record in self._load_records().values()
+                if isinstance(record, dict) and record.get("sftp_relay") and record.get("network_id")]
 
     def stop(self, instance_id: str) -> dict[str, Any]:
         """Stop only a process whose executable, pid and creation time still match."""
@@ -307,7 +532,7 @@ class EasyTierRuntime:
                 "network_name": name, "ipv4": ipv4, "service_ip": str(service_ip), "peers": normalized_peers,
                 "credential_private_key": key}
 
-    def _render_config(self, config: dict[str, Any], credential_path: Path) -> str:
+    def _render_config(self, config: dict[str, Any], credential_path: str | Path) -> str:
         from cryptography.hazmat.primitives import serialization
         from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 
@@ -315,11 +540,14 @@ class EasyTierRuntime:
             base64.b64decode(config["credential_private_key"], validate=True))
         public_key = base64.b64encode(private_key.public_key().public_bytes(
             serialization.Encoding.Raw, serialization.PublicFormat.Raw)).decode("ascii")
+        listeners = ["tcp://0.0.0.0:0", "udp://0.0.0.0:0"]
+        if config.get("member_wss_port") is not None:
+            listeners.append(f'ws://127.0.0.1:{config["member_wss_port"]}')
         lines = [
             f'instance_name = "tether-{config["instance_id"]}"',
             f'instance_id = "{config["instance_id"]}"',
             f'ipv4 = "{config["ipv4"]}"',
-            'listeners = ["tcp://0.0.0.0:0", "udp://0.0.0.0:0"]',
+            f"listeners = {json.dumps(listeners)}",
             f'socks5_proxy = "socks5://127.0.0.1:{config["socks_port"]}"',
             f'credential_file = {self._toml_string(str(credential_path))}',
             "",
@@ -371,11 +599,44 @@ class EasyTierRuntime:
             lines.extend(["", "[[peer]]", f'uri = {self._toml_string(peer)}'])
         return "\n".join(lines) + "\n"
 
+    def _member_wss(self, network_id: str, peers: list[str]) -> dict[str, Any] | None:
+        raw = os.environ.get(MEMBER_WSS_ENV)
+        if not raw:
+            return None
+        try:
+            values = json.loads(raw)
+            common = {"network_id", "mode", "expires_at"}
+            mode = values["mode"]
+            if mode == "dial" and set(values) == common | {"uri", "public_key"}:
+                self._validate_wss_pin(values, self._uuid(values["network_id"], "network_id"), peers)
+            elif mode == "listen" and set(values) == common | {"port"}:
+                if type(values["port"]) is not int or not 1024 <= values["port"] <= 65535:
+                    raise ValueError
+            else:
+                raise ValueError
+            if type(values["expires_at"]) is not int:
+                raise ValueError
+            if self._uuid(values["network_id"], "network_id") != network_id:
+                return None
+        except (ValueError, KeyError, TypeError, AttributeError, MeshRuntimeError) as error:
+            raise MeshRuntimeError("invalid local EasyTier member WSS configuration") from error
+        return values if values["expires_at"] > time.time() else None
+
+    @staticmethod
+    def _validate_wss_pin(values: dict[str, Any], network_id: str, peers: list[str]) -> None:
+        uri = values["uri"]
+        url = urlsplit(uri)
+        if (len(uri) > 512 or url.scheme != "wss" or not url.hostname or url.username is not None
+                or url.password is not None or url.fragment or url.path != "/tether-mesh-relay"
+                or url.query != f"network={network_id}" or uri in peers):
+            raise ValueError
+        if len(base64.b64decode(values["public_key"], validate=True)) != 32:
+            raise ValueError
+
     @staticmethod
     def _legacy_mesh_template_only(config_path: Path, candidate: str) -> bool:
         """Permit only the logger removal and dynamic listener template migration."""
         try:
-            import tomllib
             previous = tomllib.loads(config_path.read_text(encoding="utf-8"))
             current = tomllib.loads(candidate)
         except (OSError, ValueError):
@@ -458,10 +719,14 @@ class EasyTierRuntime:
             raise MeshRuntimeError("EasyTier rejected the network configuration")
 
     def _start(self, instance_id: str, directory: Path, port: int,
-               network_name: str, credential: str) -> subprocess.Popen:
+               network_name: str, credential: str,
+               transport_config_path: Path | None = None) -> subprocess.Popen:
         rpc = f"127.0.0.1:{port}"
         log_level = self._native_log_level()
-        argv = [str(self.core), "--config-dir", str(directory), "--no-tun", "--use-smoltcp",
+        launch_path = transport_config_path or directory
+        config_args = (["--config-file", str(transport_config_path)] if transport_config_path is not None
+                       else ["--config-dir", str(directory)])
+        argv = [str(self.core), *config_args, "--no-tun", "--use-smoltcp",
                 "--rpc-portal", rpc, "--rpc-portal-whitelist", RPC_DENY_CIDR,
                 "--network-name", network_name,
                 "--file-log-level", log_level, "--file-log-dir", str(directory),
@@ -498,7 +763,7 @@ class EasyTierRuntime:
                 try:
                     child = psutil.Process(process.pid)
                     if (Path(child.exe()).resolve() == self.core and
-                            str(self._instance_dir(instance_id)) in child.cmdline()):
+                              str(launch_path) in child.cmdline()):
                         return process
                 except (psutil.Error, OSError):
                     pass
@@ -604,9 +869,12 @@ class EasyTierRuntime:
     def _owned_process(self, record: dict[str, Any]) -> bool:
         try:
             process = psutil.Process(int(record["pid"]))
+            directory = self._instance_dir(record["instance_id"])
+            launch_path = (directory / SFTP_RELAY_CONFIG if record.get("sftp_relay") else
+                           directory / TRANSPORT_CONFIG if record.get("transport_sha256") else directory)
             return (abs(process.create_time() - float(record["create_time"])) < 0.01
                     and Path(process.exe()).resolve() == self.core
-                    and str(self._instance_dir(record["instance_id"])) in process.cmdline())
+                    and str(launch_path) in process.cmdline())
         except (psutil.Error, OSError, ValueError, KeyError, TypeError):
             return False
 

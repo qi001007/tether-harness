@@ -48,6 +48,16 @@ function crumbsFor(path, root) {
   return out
 }
 
+const treePaneWidths = new Map()
+const TREE_PANE_MIN = 120
+const TREE_PANE_LIST_RESERVE = 180
+
+function clampTreePaneWidth(value, hostWidth, fallback) {
+  const width = Number.isFinite(value) ? value : fallback
+  const max = Math.max(TREE_PANE_MIN, (Number(hostWidth) || 0) - TREE_PANE_LIST_RESERVE)
+  return Math.round(Math.min(max, Math.max(TREE_PANE_MIN, width)))
+}
+
 function sortEntries(entries, sort) {
   const key = sort && ['name', 'mtime', 'size'].includes(sort.key) ? sort.key : 'name'
   const direction = sort && sort.dir === 'desc' ? -1 : 1
@@ -73,7 +83,7 @@ export function TargetFileExplorer({
   emptyText = '空文件夹', placeholder = '从左侧选择工作区或磁盘',
   searchPlaceholder = '搜索当前目录',
   sort = { key: 'name', dir: 'asc' }, onSort, search = '', onSearch = () => {},
-  treeChildren = null, expanded = {}, onToggleTree,
+  treeChildren = null, expanded = {}, onToggleTree, layoutKey = 'default',
   compact = false, selectionMode = 'single', selectedPaths = [], onSelectionChange,
   onContextMenu, onBlankContextMenu, onDragItem, onRowPointerDown, onDismissError, deviceName = ''
 }) {
@@ -349,15 +359,71 @@ export function TargetFileExplorer({
       style: { width: 22, height: 22, flex: '0 0 auto', border: 0, borderRadius: 5, background: 'transparent', color: C.mute, fontSize: 15, lineHeight: '22px', padding: 0, cursor: 'pointer' }
     }, '×') : null
   ) : null
+  const defaultTreeWidth = compact ? 148 : 224
+  const treeWidth = treePaneWidths.has(layoutKey) ? treePaneWidths.get(layoutKey) : defaultTreeWidth
+  const resizeTreePane = (event) => {
+    if (event.button !== 0) return
+    event.preventDefault()
+    event.stopPropagation()
+    const handle = event.currentTarget
+    const pane = handle.parentElement
+    const row = pane && pane.parentElement
+    if (!pane || !row) return
+    const startX = event.clientX
+    const startWidth = pane.getBoundingClientRect().width
+    handle.setAttribute('data-active', 'true')
+    const previousCursor = document.body.style.cursor
+    const previousSelect = document.body.style.userSelect
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+    const move = (ev) => {
+      const next = clampTreePaneWidth(startWidth + ev.clientX - startX, row.getBoundingClientRect().width, defaultTreeWidth)
+      pane.style.width = next + 'px'
+      pane.style.flexBasis = next + 'px'
+      treePaneWidths.set(layoutKey, next)
+    }
+    const stop = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', stop)
+      window.removeEventListener('pointercancel', stop)
+      handle.removeAttribute('data-active')
+      document.body.style.cursor = previousCursor
+      document.body.style.userSelect = previousSelect
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', stop)
+    window.addEventListener('pointercancel', stop)
+  }
+  const resetTreePane = (event) => {
+    event.preventDefault()
+    event.stopPropagation()
+    treePaneWidths.delete(layoutKey)
+    const pane = event.currentTarget.parentElement
+    if (!pane) return
+    pane.style.width = defaultTreeWidth + 'px'
+    pane.style.flexBasis = defaultTreeWidth + 'px'
+  }
   return h(ReactRuntime.Fragment, null,
     h('div', { style: { display: 'flex', flex: '1 1 auto', minHeight: 0, minWidth: 0 } },
     h('div', {
       style: {
-        width: compact ? 148 : 224, flex: '0 0 auto', overflow: 'auto', padding: '6px 8px',
-        background: C.soft, borderRight: C.line ? '1px solid ' + C.line : 0
+        position: 'relative', width: treeWidth, flex: '0 1 ' + treeWidth + 'px', alignSelf: 'stretch',
+        minWidth: TREE_PANE_MIN, maxWidth: 'calc(100% - ' + TREE_PANE_LIST_RESERVE + 'px)'
       }
-    }, rootGroup('工作区', workspaces, '未发现工作区'), rootGroup('此电脑', drives, '未发现磁盘')),
-    h('div', { style: { display: 'flex', flexDirection: 'column', flex: '1 1 auto', minWidth: 0, minHeight: 0, background: C.bg } },
+    },
+      h('div', {
+        style: {
+          position: 'absolute', inset: 0, overflow: 'auto', padding: '6px 8px',
+          background: C.soft, borderRight: C.line ? '1px solid ' + C.line : 0
+        }
+      }, rootGroup('工作区', workspaces, '未发现工作区'), rootGroup('此电脑', drives, '未发现磁盘')),
+      h('div', {
+        className: 'tether-resizer tether-side-split', role: 'separator', 'aria-orientation': 'vertical',
+        title: '拖动调整目录树宽度，双击复位', 'aria-label': '调整目录树宽度',
+        onPointerDown: resizeTreePane, onDoubleClick: resetTreePane,
+        style: { position: 'absolute', top: 0, right: -4, width: 9, height: '100%', cursor: 'col-resize', zIndex: 3, touchAction: 'none' }
+      })),
+    h('div', { style: { display: 'flex', flexDirection: 'column', flex: '1 1 auto', minWidth: 160, minHeight: 0, background: C.bg } },
       h('div', {
         style: {
           display: 'flex', alignItems: 'center', gap: 8, height: 46, padding: '0 14px',

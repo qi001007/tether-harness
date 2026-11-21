@@ -43,7 +43,8 @@ export function createSettingsPanel(React) {
     accountAvatar = '', onAvatarChange, onAccountNameChange, initialSection = 'account',
     server = '', connection = {}, device = {}, versions = {}, update = null, dsh = null, dshBusy = '',
     onDshStart, onDshInstall, extraSections = [],
-    onRefreshConnection, onRestartNode, onLogout, onPasswordChanged, passwordChangeAvailable = true }) {
+    onRefreshConnection, onConfigureConnection, onRestartNode, onLogout, onPasswordChanged, passwordChangeAvailable = true,
+    accountSignedIn = true, uninstallAvailable = false, onOpenInstalledApps }) {
     const [section, setSection] = React.useState(initialSection)
     const [currentPassword, setCurrentPassword] = React.useState('')
     const [newPassword, setNewPassword] = React.useState('')
@@ -67,6 +68,8 @@ export function createSettingsPanel(React) {
     const cropImageRef = React.useRef(null)
     const cropDragRef = React.useRef(null)
     const cropUrlRef = React.useRef('')
+    const [uninstallBusy, setUninstallBusy] = React.useState(false)
+    const [uninstallNotice, setUninstallNotice] = React.useState(null)
     const [keepSurfaces, setKeepSurfaces] = React.useState(() => {
       try { return localStorage.getItem('tether.keepSurfaces') !== '0' } catch (_) { return true }
     })
@@ -77,6 +80,8 @@ export function createSettingsPanel(React) {
       setMessage('')
       setCurrentPassword(''); setNewPassword(''); setConfirmPassword('')
       setPasswordTouched({ current: false, next: false, confirm: false })
+      setUninstallBusy(false)
+      setUninstallNotice(null)
     }, [open, initialSection])
     React.useEffect(() => { setAvatar(accountAvatar || '') }, [accountAvatar])
     React.useEffect(() => {
@@ -86,6 +91,7 @@ export function createSettingsPanel(React) {
       if (open) return
       setEditModal('')
       setCrop(null); setCropError('')
+      setUninstallNotice(null)
       if (cropUrlRef.current) { URL.revokeObjectURL(cropUrlRef.current); cropUrlRef.current = '' }
     }, [open])
     React.useEffect(() => () => {
@@ -285,6 +291,20 @@ export function createSettingsPanel(React) {
       setRefreshing(true)
       try { await onRefreshConnection() } finally { setRefreshing(false) }
     }
+    const openInstalledApps = async () => {
+      if (uninstallBusy || typeof onOpenInstalledApps !== 'function') return
+      setUninstallBusy(true)
+      setUninstallNotice(null)
+      try {
+        const result = await onOpenInstalledApps()
+        if (result && result.ok === false) throw new Error(result.error || '未能打开 Windows 设置')
+        setUninstallNotice({ tone: 'ok', text: '已请求打开 Windows 设置，请在列表中选择 Tether。' })
+      } catch (error) {
+        setUninstallNotice({ tone: 'error', text: String(error && error.message || error || '未能打开 Windows 设置') })
+      } finally {
+        setUninstallBusy(false)
+      }
+    }
 
     const textAction = (label, onClick, color = blue) => h('button', {
       type: 'button', onClick, className: 'tether-hover',
@@ -364,11 +384,14 @@ export function createSettingsPanel(React) {
       h('input', { ref: avatarInputRef, type: 'file', accept: 'image/*', onChange: loadAvatar, style: { display: 'none' } }),
       h('div', { style: { display: 'grid', gap: 8 } }, groupTitle('个人资料'), profileCard),
       h('div', { style: { display: 'grid', gap: 8 } }, groupTitle('登录与安全'), securityCard),
-      h('div', { style: { borderTop: '1px solid ' + line, paddingTop: 14 } },
-        h('button', {
-          type: 'button', onClick: onLogout, className: 'tether-hover',
-          style: { border: 0, background: 'transparent', padding: 0, color: danger, fontSize: 12.5, cursor: 'pointer' }
-        }, '退出登录')))
+      accountSignedIn && typeof onLogout === 'function'
+        ? h('div', { style: { borderTop: '1px solid ' + line, paddingTop: 14 } },
+          h('button', {
+            type: 'button', onClick: onLogout, className: 'tether-hover',
+            style: { border: 0, background: 'transparent', padding: 0, color: danger, fontSize: 12.5, cursor: 'pointer' }
+          }, '退出登录'))
+        : h('div', { style: { borderTop: '1px solid ' + line, paddingTop: 14, color: mute, fontSize: 12, lineHeight: 1.5 } },
+          '尚未登录'))
     const cropModal = crop ? h('div', {
       onPointerDown: (event) => { if (event.target === event.currentTarget) closeCrop() },
       style: { position: 'absolute', inset: 0, zIndex: 80, display: 'grid', placeItems: 'center', padding: 24, background: 'rgba(16,24,40,.45)' }
@@ -455,6 +478,12 @@ export function createSettingsPanel(React) {
     },
       h('section', {
         role: 'dialog', 'aria-label': '修改密码', onPointerDown: (event) => event.stopPropagation(),
+        onKeyDown: (event) => {
+          if (event.key !== 'Escape') return
+          event.preventDefault()
+          event.stopPropagation()
+          closePassword()
+        },
         style: { width: 'min(380px, 100%)', maxHeight: 'calc(100vh - 48px)', background: bg, borderRadius: 12, boxShadow: 'var(--dsw-elevation-panel, 0 18px 50px rgba(16,24,40,.22))', overflow: 'hidden', display: 'flex', flexDirection: 'column' }
       },
         h('header', { style: { height: 44, padding: '0 14px', display: 'flex', alignItems: 'center', borderBottom: '1px solid ' + line, flex: '0 0 auto' } },
@@ -488,7 +517,10 @@ export function createSettingsPanel(React) {
           h('span', { style: { width: 7, height: 7, borderRadius: 4, background: dotColor } }), statusLabel)],
         ['最近检测', timeText(connection.checkedAt)],
         ['响应', Number.isFinite(connection.durationMs) ? connection.durationMs + ' ms' : '—']
-      ]))
+      ]),
+      typeof onConfigureConnection === 'function' ? h('button', {
+        type: 'button', onClick: onConfigureConnection, style: { ...secondary, justifySelf: 'start' }
+      }, '修改服务器连接') : null)
     const workspaceSection = h('div', { style: { display: 'grid', gap: 12 } },
       h('div', {
         title: '切换设备时保留最近三个原生工作区；关闭后释放后台页面',
@@ -619,6 +651,19 @@ export function createSettingsPanel(React) {
           style: { marginLeft: 'auto', width: 28, height: 28, display: 'grid', placeItems: 'center', border: 0, borderRadius: 6, background: 'transparent', color: sub, cursor: update && update.refreshing ? 'default' : 'pointer' }
         }, Glyph ? h('span', { className: update && update.refreshing ? 'tether-spin' : '', style: { display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 16 })) : '↻')),
       updateGroups.length ? updateGroups : h('div', { style: { fontSize: 12, color: mute } }, '没有已连接的设备'))
+    const uninstallSection = h('div', { style: { display: 'grid', gap: 12, maxWidth: 520 } },
+      h('div', { style: { fontSize: 15, fontWeight: 600, color: ink } }, '卸载 Tether'),
+      h('div', { style: { fontSize: 12.5, color: sub, lineHeight: 1.6 } },
+        '前往 Windows「已安装的应用」，选择 Tether 并按系统提示卸载。'),
+      h('button', {
+        type: 'button', onClick: () => { void openInstalledApps() },
+        disabled: uninstallBusy || typeof onOpenInstalledApps !== 'function',
+        style: { ...secondary, justifySelf: 'start', opacity: uninstallBusy ? 0.5 : 1, cursor: uninstallBusy ? 'default' : 'pointer' }
+      }, uninstallBusy ? '正在打开…' : '打开 Windows 已安装的应用'),
+      uninstallNotice ? h('div', {
+        role: uninstallNotice.tone === 'error' ? 'alert' : 'status',
+        style: { color: uninstallNotice.tone === 'error' ? danger : success, fontSize: 12, lineHeight: 1.5 }
+      }, uninstallNotice.text) : null)
     const builtIn = [
       { id: 'account', label: '账号', render: () => accountSection },
       { id: 'connection', label: '连接', render: () => connectionSection },
@@ -627,7 +672,8 @@ export function createSettingsPanel(React) {
       { id: 'device', label: '本机设备', render: () => deviceSection },
       { id: 'about', label: '关于', render: () => aboutSection }
     ]
-    const sections = builtIn.concat((Array.isArray(extraSections) ? extraSections : [])
+    const optional = uninstallAvailable ? [{ id: 'uninstall', label: '卸载', render: () => uninstallSection }] : []
+    const sections = builtIn.concat(optional).concat((Array.isArray(extraSections) ? extraSections : [])
       .filter((item) => item && item.id && item.label && typeof item.render === 'function'))
     const current = sections.find((item) => item.id === section) || sections[0]
     const nav = h('div', {
@@ -644,7 +690,7 @@ export function createSettingsPanel(React) {
       }, item.label)))
     return h('div', {
       onPointerDown: (event) => { if (event.target === event.currentTarget) onClose() },
-      style: { position: 'absolute', inset: 0, zIndex: 40, background: 'rgba(16,24,40,0.35)', display: 'grid', placeItems: 'center', padding: 24 }
+      style: { position: 'absolute', inset: '40px 0 0 0', zIndex: 40, background: 'rgba(16,24,40,0.35)', display: 'grid', placeItems: 'center', padding: 24 }
     },
       h('section', {
         role: 'dialog', 'aria-label': '设置',

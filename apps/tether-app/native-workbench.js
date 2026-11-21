@@ -17,6 +17,13 @@ function normalizedFingerprint(value) {
   return String(value || '').replace(/^sha256[:=]/i, '').replace(/[^a-f0-9]/gi, '').toLowerCase()
 }
 
+function isMeshDialUnavailable(error) {
+  const message = String(error && error.message || '')
+  return /\b(?:ECONNREFUSED|ENETUNREACH|EHOSTUNREACH|ETIMEDOUT)\b/.test(message)
+    || /^Socks5 proxy rejected connection - (?:NetworkUnreachable|HostUnreachable|ConnectionRefused)$/.test(message)
+    || message === 'Proxy connection timed out'
+}
+
 function expiryMillis(value) {
   if (typeof value === 'number' && Number.isFinite(value)) return value * 1000
   const text = String(value || '')
@@ -212,7 +219,9 @@ async function verifyMeshCertificate(endpoint, caPem, proxy, expectedLeaf) {
     let settled = false
     const timeout = setTimeout(() => {
       if (secureSocket) secureSocket.destroy(new Error('工作台 TLS 握手超时。'))
-      finish(reject, new Error('工作台 SOCKS/TLS 连接超时。'))
+      const error = new Error('工作台 SOCKS/TLS 连接超时。')
+      if (!secureSocket) error.code = 'mesh_dial_unreachable'
+      finish(reject, error)
     }, 5000)
     const finish = (callback, value) => {
       if (settled) return
@@ -242,7 +251,10 @@ async function verifyMeshCertificate(endpoint, caPem, proxy, expectedLeaf) {
         socket.destroy()
         finish(reject, error)
       }
-    }).catch((error) => finish(reject, error))
+    }).catch((error) => {
+      if (isMeshDialUnavailable(error)) error.code = 'mesh_dial_unreachable'
+      finish(reject, error)
+    })
   })
   if (!peer || !peer.raw) throw new Error('工作台没有返回有效 TLS 证书。')
   const current = sha256(peer.raw)
@@ -328,14 +340,15 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
   const revocationFailures = new Set()
   const tupleKey = (actorId, targetId, serviceId) => [actorId, targetId, serviceId].join('\u0000')
 
-  async function openDshSurface(targetId) {
+  async function openDshSurface(targetId, serviceId = 'dsh-native') {
     if (typeof targetId !== 'string' || !targetId || targetId.length > 200) throw new TypeError('invalid target')
+    if (serviceId !== 'dsh-native' && serviceId !== 'dsh') throw new TypeError('invalid DSH surface service')
     const actorId = await getActorId()
     if (typeof actorId !== 'string' || !actorId) throw new Error('Controller 登录身份尚未就绪。')
-    const key = tupleKey(actorId, targetId, 'dsh-native')
+    const key = tupleKey(actorId, targetId, serviceId)
     const generation = actorGenerations.get(actorId) || 0
     const activeRecord = active.get(key)
-    if (activeRecord) await close(targetId, 'dsh-native', activeRecord.grantId)
+    if (activeRecord) await close(targetId, serviceId, activeRecord.grantId)
     const response = await loginSession.fetch(new URL('/api/devices/' + encodeURIComponent(targetId) + '/dsh/surface', base).toString(), {
       method: 'GET', headers: { 'Cache-Control': 'no-store' }, redirect: 'error'
     })
@@ -413,8 +426,8 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
       bootstrapStage = 'finalize-record'
       if ((actorGenerations.get(actorId) || 0) !== generation) throw new Error('工作台账号已切换，请重新打开服务。')
       const grantId = crypto.randomBytes(20).toString('hex')
-      const record = { actorId, targetId, serviceId: 'dsh-native', generation, grantId, endpoint,
-        serviceSession, partition, legacy: true, public: { targetId, serviceId: 'dsh-native', grantId,
+      const record = { actorId, targetId, serviceId, dshSurface: true, generation, grantId, endpoint,
+        serviceSession, partition, legacy: true, public: { targetId, serviceId, grantId,
           endpoint: endpoint.toString(), partition } }
       active.set(key, record)
       return record.public
@@ -667,6 +680,10 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
             ])
           } catch (_) { /* no session data may survive */ }
         }
+        if (serviceId === 'dsh' && error.code === 'mesh_dial_unreachable'
+            && isCurrent() && !openingController.signal.aborted) {
+          return openDshSurface(targetId, 'dsh')
+        }
         throw error
       }
     })()
@@ -905,7 +922,7 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     if (records.length !== 1) throw new Error('工作台 guest 与活动授权不匹配。')
     const record = records[0]
     const currentUrl = String(contents.getURL() || '')
-    if (record.serviceId === 'dsh-native') {
+    if (record.dshSurface === true) {
       if (currentUrl === '' || currentUrl === 'about:blank') return record
       let committedUrl
       try { committedUrl = new URL(currentUrl) } catch (_) { throw new Error('工作台 guest 与活动授权不匹配。') }
@@ -928,8 +945,8 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
   function guestPolicy(contents) {
     const record = managedGuestRecord(contents)
     if (!record) return { managed: false }
-    if (record.serviceId === 'dsh-native') {
-      return { managed: true, serviceId: record.serviceId, endpoint: record.endpoint.href }
+    if (record.dshSurface === true) {
+      return { managed: true, serviceId: 'dsh-native', endpoint: record.endpoint.href }
     }
     return { managed: true, serviceId: record.serviceId }
   }
@@ -937,7 +954,7 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
   async function prepareGuest(contents) {
     const record = managedGuestRecord(contents)
     if (!record) return { managed: false, prepared: false }
-    if (record.serviceId === 'dsh-native') return { managed: true, prepared: false }
+    if (record.dshSurface === true) return { managed: true, prepared: false }
     if (record.legacy !== true) return { managed: true, prepared: false }
     if (record.guestPrepared) return { managed: true, prepared: false }
     if (typeof contents.loadURL !== 'function') throw new Error('工作台 guest 无法加载目标页面。')
@@ -1155,7 +1172,7 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     } catch (_) { return false }
     for (const record of active.values()) {
       if (record.partition !== partition || record.endpoint.origin !== parsed.origin) continue
-      if (record.serviceId === 'dsh-native') {
+      if (record.dshSurface === true) {
         return parsed.protocol === 'https:' && !parsed.username && !parsed.password && parsed.href === record.endpoint.href
       }
       if (record.legacy === true) return parsed.protocol === 'http:' && !parsed.username && !parsed.password

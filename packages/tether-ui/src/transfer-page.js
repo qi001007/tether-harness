@@ -1,6 +1,10 @@
-import { newTransferId, transferFile, transferFileCroc, transferNativeJob } from './transfer.js'
+import { newTransferId, transferCrocViaHub, transferFile, transferFileCroc, transferNativeJob } from './transfer.js'
 import { TargetFileExplorer } from './target-file-explorer.js'
 import { invalidateDirectory, loadDirectory } from './file-cache.js'
+
+const NATIVE_TRANSFER_MAX_ITEMS = 1024 // Matches the Controller's request limit.
+const CROC_ROUTE_PREFERENCE_MS = 120_000
+const CROC_LARGE_UPLOAD_BYTES = 32 * 1024 * 1024
 
 function separator(path) {
   return String(path || '').includes('\\') ? '\\' : '/'
@@ -9,6 +13,39 @@ function separator(path) {
 function joinPath(base, name) {
   if (!base) return name
   return String(base).replace(/[\\/]+$/, '') + separator(base) + name
+}
+
+export function selectNativeCopyBatch({ items, target, cut }) {
+  if (cut || !items.length || items.length > NATIVE_TRANSFER_MAX_ITEMS) return null
+  const first = items[0]
+  const path = first.path.slice(0, first.path.length - first.name.length)
+  if (!path || items.some((item) => item.dir || item.path !== path + item.name)) return null
+
+  const windowsTarget = /^[A-Za-z]:[/\\]|^\\\\/.test(target.path)
+  const nameKey = (name) => windowsTarget ? name.toLowerCase() : name
+  const names = items.map((item) => item.name)
+  const keys = new Set(names.map(nameKey))
+  if (keys.size !== names.length || target.entries.some((entry) => keys.has(nameKey(entry.name)))) return null
+  return { path, names }
+}
+
+export function hasNativeTransferEdge(result, sourceDevice, targetDevice) {
+  return Array.isArray(result?.edges) && result.edges.some((edge) => {
+    if (edge?.mode !== 'native') return false
+    const from = edge.from ?? edge.from_device
+    const to = edge.to ?? edge.to_device
+    return (from === sourceDevice && to === targetDevice) || (from === targetDevice && to === sourceDevice)
+  })
+}
+
+export function isCrocUploadCandidate(source, target, bytes) {
+  if (!(bytes >= CROC_LARGE_UPLOAD_BYTES)) return false
+  if (!source?.online || !target?.online) return false
+  const from = source.capabilities
+  const to = target.capabilities
+  return from?.os === 'Windows' && from.app_installed === true &&
+    to?.os === 'Linux' && to.app_installed === false &&
+    [from, to].every((caps) => caps.croc?.available === true && caps.croc?.relay === true)
 }
 
 function formatBytes(value) {
@@ -90,7 +127,8 @@ async function directErrorResponse(response, operation, signal) {
   return directError(payload, response.status, operation)
 }
 
-export function createTransferPage({ React, Glyph, api, post, C, devices = [], localDevice = '', onNotice, onError, hubOnly = false }) {
+export function createTransferPage({ React, Glyph, api, post, C, devices = [], localDevice = '', userId,
+  onNotice, onError, onLocalRelay, hubOnly = false }) {
   const h = React.createElement
   const field = {
     height: 26, boxSizing: 'border-box', border: 0, borderRadius: 6,
@@ -123,6 +161,9 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
     if (normalized) directCache.set(key, normalized)
     return normalized
   }
+  const postHubFs = (deviceId, operation, body, signal) => post(
+    '/api/devices/' + encodeURIComponent(deviceId) + '/fs/' + operation, body,
+    undefined, signal ? { signal } : undefined)
   const postFs = async (deviceId, operation, body, signal) => {
     if (signal && signal.aborted) throw transferAborted()
     const info = await directInfo(deviceId)
@@ -157,8 +198,7 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
       }
     }
     if (signal && signal.aborted) throw transferAborted()
-    return post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/' + operation, body,
-      undefined, signal ? { signal } : undefined)
+    return postHubFs(deviceId, operation, body, signal)
   }
   const directRead = async (deviceId, args) => {
     if (args.signal && args.signal.aborted) throw transferAborted()
@@ -394,7 +434,8 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
         onSearch: setSearch,
         treeChildren,
         expanded,
-        onToggleTree: (item) => { void toggleTree(item) }
+        onToggleTree: (item) => { void toggleTree(item) },
+        layoutKey: side
       }))
   }
 
@@ -427,7 +468,8 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
   const [dropSide, setDropSide] = React.useState('')
   const clipboardRef = React.useRef(null)
   const abortRef = React.useRef(null)
-  const queueRef = React.useRef(null)
+  const pendingNativeJobRef = React.useRef(null)
+  const crocRouteRef = React.useRef(new Map())
   const dragRef = React.useRef(null)
   const dropSideRef = React.useRef('')
   const latest = React.useRef({})
@@ -459,9 +501,109 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
     setDialog({ kind: 'conflict', item, destination, resolve })
   })
 
+  const copyFileInChunks = ({ sourceDevice, targetDevice, source, destination, overwrite, signal,
+    onProgress, relay = false }) => {
+    const request = relay ? postHubFs : postFs
+    return transferFile({
+      source, destination, transferId: newTransferId(), overwrite, signal, onProgress,
+      read: (args) => request(sourceDevice, 'read',
+        { path: args.path, offset: args.offset, limit: args.limit, encoding: 'base64' }, args.signal),
+      readBytes: relay ? undefined : (args) => directRead(sourceDevice, args),
+      writeBytes: relay ? undefined : (args) => directWrite(targetDevice, args),
+      write: (args) => {
+        const { signal, ...body } = args
+        return request(targetDevice, 'write_chunk', { ...body, transfer_id: args.transferId }, signal)
+      },
+      status: relay || hubOnly ? undefined : (args) => postFs(targetDevice, 'transfer_status',
+        { path: args.path, transfer_id: args.transferId }, args.signal),
+      cancel: (args) => request(targetDevice, 'transfer_cancel',
+        { path: args.path, transfer_id: args.transferId })
+    })
+  }
+
+  const runNativeJob = async ({ source, destination, items, total, relayItem }, controller, operationId) => {
+    try {
+      const onProgress = (value) => setJob((current) => ({ ...current,
+        percent: Math.min(99, value.percent), transferred: value.transferred,
+        total: value.total || total, index: Math.min(items.length - 1, value.filesDone || 0) }))
+      const onReconnecting = (reconnecting) => setJob((current) => ({ ...current, reconnecting }))
+      const sourceDevice = source.device_id
+      const targetDevice = destination.device_id
+      const sourceNode = devices.find((device) => device?.device_id === sourceDevice)
+      const targetNode = devices.find((device) => device?.device_id === targetDevice)
+      const ownsBoth = userId && sourceNode?.owner_id === userId && targetNode?.owner_id === userId
+      const routeKey = !operationId && relayItem && ownsBoth ? JSON.stringify([userId, sourceDevice, targetDevice]) : null
+      const previous = routeKey ? crocRouteRef.current.get(routeKey) : undefined
+      const recent = previous?.until > Date.now() ? previous : undefined
+      const preferCroc = recent?.worked === true
+      const preferCrocUpload = routeKey && !recent && isCrocUploadCandidate(sourceNode, targetNode, total)
+      if (routeKey && recent?.worked !== false) crocRouteRef.current.delete(routeKey)
+      const rememberCroc = (worked) => {
+        if (routeKey) crocRouteRef.current.set(routeKey, { worked, until: Date.now() + CROC_ROUTE_PREFERENCE_MS })
+      }
+      const tryCroc = (notice) => transferCrocViaHub({
+        post: postHubFs, sourceDevice, targetDevice, source: relayItem.path,
+        destination: destination.path, name: relayItem.name, signal: controller.signal,
+        onStart: () => { if (onNotice) onNotice(notice) },
+        onProgress: (value) => onProgress({ ...value, transferred: Math.round(total * value.percent / 100) }),
+        onReconnecting
+      })
+      const triedCroc = preferCroc || preferCrocUpload
+      let result = triedCroc
+        ? await tryCroc(preferCrocUpload ? '正在使用 Croc 发送大文件' : '使用上次成功的 Croc 中转')
+        : null
+      if (result && preferCroc) crocRouteRef.current.set(routeKey, recent)
+      if (triedCroc && !result) rememberCroc(false)
+      if (!result) {
+        result = await transferNativeJob({
+          post: postHubFs, source, destination, items, operationId, signal: controller.signal,
+          allowRelay: Boolean(relayItem), onProgress, onReconnecting
+        })
+      }
+      if (result.useRelay) {
+        result = routeKey && !triedCroc ? await tryCroc('直传未开始，已切换到 Croc 中转') : null
+        if (routeKey && !triedCroc) rememberCroc(Boolean(result))
+        if (!result) {
+          if (onNotice) onNotice('已切换到 Hub 分块复制')
+          result = await copyFileInChunks({
+            sourceDevice, targetDevice, source: relayItem.path,
+            destination: joinPath(destination.path, relayItem.name), overwrite: false,
+            signal: controller.signal, onProgress, relay: true
+          })
+        }
+      }
+      const doneBytes = result.bytes || total
+      setJob((current) => ({ ...current, state: 'done', percent: 100, transferred: doneBytes }))
+      if (onNotice) onNotice('已转移 ' + items.length + ' 个文件（' + formatBytes(doneBytes) + '）')
+      invalidateDirectory(source.device_id, source.path)
+      invalidateDirectory(destination.device_id, destination.path)
+      refresh()
+      setLeftSelection([]); setRightSelection([])
+    } catch (error) {
+      const cancelled = isTransferAbort(error, controller.signal) || error.code === 'cancelled'
+      const unconfirmed = error.code === 'native_job_unconfirmed'
+      if (unconfirmed) pendingNativeJobRef.current = { source, destination, items, total, operationId: error.operationId }
+      setJob((current) => ({ ...current, state: unconfirmed ? 'unconfirmed' : cancelled ? 'cancelled' : 'error',
+        error: cancelled ? '传输已取消' : error.message || '原生传输失败' }))
+      if (!cancelled && !unconfirmed && onError) onError(error)
+    } finally {
+      abortRef.current = null
+    }
+  }
+
+  const resumeNativeJob = () => {
+    const pending = pendingNativeJobRef.current
+    if (!pending || abortRef.current) return
+    pendingNativeJobRef.current = null
+    const controller = new AbortController()
+    abortRef.current = controller
+    setJob((current) => ({ ...current, state: 'running', reconnecting: false, error: '' }))
+    void runNativeJob(pending, controller, pending.operationId)
+  }
+
   const startQueue = async (fromSide, items, targetPath, cut = false) => {
     const target = side(other(fromSide))
-    if (!items.length || !target.path || !target.device) return
+    if (abortRef.current || pendingNativeJobRef.current || !items.length || !target.path || !target.device) return
     const controller = new AbortController()
     abortRef.current = controller
     const total = items.reduce((sum, item) => sum + (Number(item.size) || 0), 0)
@@ -469,46 +611,20 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
     let doneBytes = 0
     let useCroc = false
     let useNativeJob = false
-  let cancelByTransferId = false
-    if (!cut && items.length === 1 && !(target.entries || []).some((entry) => entry.name === items[0].name)) {
+    let cancelByTransferId = false
+    const nativeBatch = items.length === 1 ? selectNativeCopyBatch({ items, target, cut }) : null
+    if (nativeBatch) {
       try {
-        const result = await api('/api/edges')
-        const edges = result && Array.isArray(result.edges) ? result.edges : []
-        useNativeJob = edges.some((edge) => edge && edge.mode === 'native'
-          && ((edge.from_device === side(fromSide).device && edge.to_device === target.device)
-            || (edge.from_device === target.device && edge.to_device === side(fromSide).device)))
+        useNativeJob = hasNativeTransferEdge(await api('/api/edges'), side(fromSide).device, target.device)
       } catch (_) { useNativeJob = false }
     }
     if (useNativeJob) {
-      const sourceDevice = side(fromSide).device
-      const item = items[0]
-      try {
-        const result = await transferNativeJob({
-          post: (deviceId, operation, body, signal) => post('/api/devices/' + encodeURIComponent(deviceId) + '/fs/' + operation, body, undefined, signal ? { signal } : undefined),
-          source: { device_id: sourceDevice, path: item.path.slice(0, item.path.length - item.name.length) },
-          destination: { device_id: target.device, path: target.path },
-          item: item.name,
-          signal: controller.signal,
-          onProgress: (value) => setJob((current) => ({ ...(current || {}),
-            percent: Math.min(99, Number(value.percent) || 0), transferred: Number(value.transferred) || 0,
-            total: Number(value.total) || total, state: 'running' }))
-        })
-        doneBytes = result.bytes || Number(item.size) || 0
-        setJob((current) => ({ ...(current || {}), state: 'done', percent: 100, transferred: doneBytes }))
-        if (onNotice) onNotice('已转移 1 个文件（' + formatBytes(doneBytes) + '）')
-        invalidateDirectory(sourceDevice, side(fromSide).path)
-        invalidateDirectory(target.device, target.path)
-        refresh()
-        setLeftSelection([]); setRightSelection([])
-        return
-      } catch (error) {
-        setJob((current) => ({ ...(current || {}), state: error.code === 'aborted' ? 'cancelled' : 'error',
-          error: error.message || '原生传输失败' }))
-        if (error.code !== 'aborted' && onError) onError(error)
-        return
-      } finally {
-        abortRef.current = null
-      }
+      return runNativeJob({
+        source: { device_id: side(fromSide).device, path: nativeBatch.path },
+        destination: { device_id: target.device, path: target.path },
+        items: nativeBatch.names, total,
+        relayItem: hubOnly && items.length === 1 && total > 0 ? items[0] : undefined
+      }, controller)
     }
     if (!hubOnly) {
       try {
@@ -523,6 +639,7 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
       } catch (error) {
         if (error && error.directApplicationError) {
           setJob((current) => ({ ...(current || {}), state: 'error', error: error.message || '传输能力检查失败' }))
+          abortRef.current = null
           if (onError) onError(error)
           return
         }
@@ -576,24 +693,13 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
         let overwrite = false
         while (true) {
           try {
-            const result = await transferFile({
+            const result = await copyFileInChunks({
+              sourceDevice,
+              targetDevice: target.device,
               source: item.path,
               destination,
-              transferId: newTransferId(),
               overwrite,
               signal: controller.signal,
-              read: (args) => postFs(sourceDevice, 'read',
-                { path: args.path, offset: args.offset, limit: args.limit, encoding: 'base64' }, args.signal),
-              readBytes: (args) => directRead(sourceDevice, args),
-              writeBytes: (args) => directWrite(target.device, args),
-              write: (args) => {
-                const { signal, ...body } = args
-                return postFs(target.device, 'write_chunk', { ...body, transfer_id: args.transferId }, signal)
-              },
-              status: hubOnly ? undefined : (args) => postFs(target.device, 'transfer_status',
-                { path: args.path, transfer_id: args.transferId }, args.signal),
-              cancel: (args) => postFs(target.device, 'transfer_cancel',
-                { path: args.path, transfer_id: args.transferId }),
               onProgress: (value) => {
                 const currentBytes = doneBytes + Math.max(0, Number(value && value.transferred) || 0)
                 setJob((current) => ({ ...(current || {}), percent: total ? Math.min(99, Math.round(currentBytes / total * 100)) : 0,
@@ -660,7 +766,7 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
   }
   const pasteInto = (name) => {
     const clip = clipboardRef.current
-    if (!clip || !clip.items.length || clip.side === name) return
+    if (abortRef.current || pendingNativeJobRef.current || !clip || !clip.items.length || clip.side === name) return
     void startQueue(clip.side, clip.items, side(name).path, clip.cut)
     if (clip.cut) clipboardRef.current = null
   }
@@ -788,7 +894,7 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
   }
 
   React.useEffect(() => {
-    if (!job || job.state === 'running') return undefined
+    if (!job || job.state === 'running' || job.state === 'unconfirmed') return undefined
     const timer = setTimeout(() => setJob(null), job.state === 'done' ? 4000 : 8000)
     return () => clearTimeout(timer)
   }, [job && job.state])
@@ -796,9 +902,15 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
   const progress = job ? Math.max(0, Math.min(100, Number(job.percent) || 0)) : 0
   const sourceCount = itemsFor(activeSide).length
   const target = side(other(activeSide))
+  const relaySource = side(activeSide).device
+  const canOfferRelay = typeof onLocalRelay === 'function' && !!userId && !!localDevice && job?.state !== 'running'
+    && !!relaySource && !!target.device && new Set([localDevice, relaySource, target.device]).size === 3
+    && [relaySource, target.device].every(id => devices.some(device => device.device_id === id && device.owner_id === userId && device.online))
   let footerText = '拖拽文件到另一侧，或用 Ctrl+C / Ctrl+X、Ctrl+V'
   if (job) {
-    if (job.state === 'running') footerText = '正在转移 ' + ((job.index || 0) + 1) + '/' + (job.count || 1)
+    if (job.state === 'running') footerText = job.reconnecting
+      ? '连接暂时中断，正在查询原传输任务'
+      : '正在转移 ' + ((job.index || 0) + 1) + '/' + (job.count || 1)
     else if (job.state === 'done') footerText = '已转移 ' + (job.count || 0) + ' 个文件'
     else footerText = job.error || (job.state === 'error' ? '传输失败' : '已取消')
   } else if (sourceCount) footerText = '已选 ' + sourceCount + ' 个文件 → ' + (target.path || '先在另一侧选择目录')
@@ -835,6 +947,10 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
   return h('div', { style: { flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', padding: '12px 16px 14px', gap: 10, background: C.bg } },
     h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, flex: '0 0 auto' } },
       h('div', { style: { fontSize: 17, fontWeight: 600, color: C.ink } }, '文件转移'),
+      canOfferRelay ? h('button', { type: 'button', className: 'tether-hover',
+        onClick: () => void onLocalRelay(relaySource, target.device),
+        style: { height: 26, padding: '0 8px', border: '1px solid ' + C.line, borderRadius: 6, background: C.panel, color: C.sub } },
+      '自动中转') : null,
       h('div', { style: { marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10, color: C.mute, fontSize: 11.5 } },
         h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 5 } },
           h('span', { style: { width: 6, height: 6, borderRadius: 3, background: C.blue } }),
@@ -858,21 +974,24 @@ export function createTransferPage({ React, Glyph, api, post, C, devices = [], l
         dropSide === 'right' ? h('div', { style: { position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', background: 'color-mix(in srgb, ' + C.green + ' 10%, transparent)', color: C.green, fontSize: 12, pointerEvents: 'none', borderRadius: 8 } }, '松开，转移到这里') : null)),
     h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, background: C.panel, flex: '0 0 auto', minWidth: 0 } },
       h('div', { style: { flex: '1 1 auto', minWidth: 0, display: 'grid', gap: 2 } },
-        h('div', { style: { fontSize: 12, color: C.sub, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, footerText),
+        h('div', { title: job && job.state === 'unconfirmed' ? footerText : undefined,
+          style: { fontSize: 12, color: C.sub, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, footerText),
         job ? h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
           h('div', { style: { flex: '1 1 auto', height: 5, borderRadius: 999, background: C.soft, overflow: 'hidden' } },
             h('div', { style: { width: progress + '%', height: '100%', background: job.state === 'error' ? C.red : C.blue, transition: 'width 150ms ease' } })),
           h('span', { className: 'tether-num', style: { fontSize: 10.5, color: C.mute, whiteSpace: 'nowrap' } }, progress + '% · ' + formatBytes(job.transferred || 0) + ' / ' + formatBytes(job.total || 0))) : null),
       job && job.state === 'running'
         ? h('button', { type: 'button', onClick: cancel, style: { ...field, height: 28, padding: '0 12px', cursor: 'pointer' } }, '取消')
-        : !job && sourceCount && target.path
-          ? h('button', {
-            type: 'button', onClick: start, title: '转移到另一侧', 'aria-label': '转移到另一侧',
-            className: 'tether-press',
-            style: { width: 32, height: 32, flex: '0 0 auto', display: 'grid', placeItems: 'center', border: 0, borderRadius: 999,
-              background: C.blue, color: '#fff', cursor: 'pointer' }
-          }, h(Glyph, { name: 'transfer', size: 16 }))
-          : null),
+        : job && job.state === 'unconfirmed'
+          ? h('button', { type: 'button', onClick: resumeNativeJob, style: { ...field, height: 28, padding: '0 12px', cursor: 'pointer' } }, '继续查询')
+          : !job && sourceCount && target.path
+            ? h('button', {
+              type: 'button', onClick: start, title: '转移到另一侧', 'aria-label': '转移到另一侧',
+              className: 'tether-press',
+              style: { width: 32, height: 32, flex: '0 0 auto', display: 'grid', placeItems: 'center', border: 0, borderRadius: 999,
+                background: C.blue, color: '#fff', cursor: 'pointer' }
+            }, h(Glyph, { name: 'transfer', size: 16 }))
+            : null),
     menu ? h('div', {
       role: 'menu', onMouseDown: (event) => event.stopPropagation(),
       style: { position: 'fixed', left: menu.x, top: menu.y, zIndex: 2147483000, minWidth: 160, padding: 4,

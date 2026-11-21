@@ -34,7 +34,7 @@ async function main() {
   if (!fs.existsSync(python) || !fs.existsSync(electron)) throw new Error('Expected the project Python and Electron runtimes to be installed.')
   process.stderr.write('[qa-updates] copying isolated app sources\n')
   fs.mkdirSync(appDir, { recursive: true })
-  for (const name of ['main.js', 'dsh-web-navigation.js', 'preload.js', 'supervisor.js', 'startup-readiness.js', 'renderer-diagnostics.js', 'enrollment.js', 'update-service.js', 'update-helper.js', 'package.json']) {
+  for (const name of ['main.js', 'dsh-web-navigation.js', 'preload.js', 'supervisor.js', 'startup-readiness.js', 'sftp-relay.js', 'renderer-diagnostics.js', 'enrollment.js', 'update-service.js', 'update-helper.js', 'package.json']) {
     process.stderr.write('[qa-updates] copy app/' + name + '\n')
     const destination = path.join(appDir, name)
     copy(path.join(projectRoot, 'apps', 'tether-app', name), destination)
