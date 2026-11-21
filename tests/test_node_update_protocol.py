@@ -12,6 +12,25 @@ from tether.node import agent
 from tether.node.agent import Node, NodeStore, restart_node_process
 
 
+def test_frozen_windows_desktop_node_reads_installed_version(tmp_path):
+    module_file = tmp_path / "_MEI" / "tether" / "node" / "agent.py"
+    resources = tmp_path / "Tether" / "resources"
+    executable = resources / "tether-runtime" / "tether-python.exe"
+    version_file = resources / "tether-source" / "version.json"
+    version_file.parent.mkdir(parents=True)
+    version_file.write_text(json.dumps({"components": {"app": "0.5.11", "node": "0.5.11"}}), encoding="utf-8")
+
+    root = agent._installation_root(str(module_file), str(executable), frozen=True)
+    assert root == version_file.parent
+    node = agent.UpdateManager(root, "node", state_dir=tmp_path / "updates")
+    assert node.status()["current_version"] == "0.5.11"
+
+    assert agent._installation_root(str(module_file), str(executable), frozen=False) == module_file.parents[2]
+    assert agent._installation_root(str(module_file), str(executable.with_suffix("")), frozen=True) == module_file.parents[2]
+    version_file.unlink()
+    assert agent._installation_root(str(module_file), str(executable), frozen=True) == module_file.parents[2]
+
+
 class FakeUpdateManager:
     def __init__(self) -> None:
         self.apply_calls = 0

@@ -194,3 +194,4 @@
 - 2026-11-21：恢复已配对网络前核对 Hub 授权、现有实例、配置修订和服务地址，保留现有成员 WSS 配置。
 
 - 2026-11-21 Windows 预览使用 DSH 已锁定的本地文档引擎，并兼容原安装的有效外置转换器路径。
+- 2026-11-22：Windows APP 自带的冻结 Node 从安装包的 resources/tether-source/version.json 读取版本，避免 PyInstaller 解包目录缺少元数据时上报旧默认版本。
