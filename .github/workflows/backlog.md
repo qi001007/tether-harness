@@ -35,3 +35,5 @@
 - 2026-11-21：为 0.5.10 独立分支启用四平台构建和签名组装，成功后生成 Preview 1 草稿。
 
 - 2026-11-21：Intel macOS 从源码构建 cryptography 50.0.2 并静态链接 Homebrew OpenSSL，附带许可证。打包前用 otool 核对绑定没有动态 OpenSSL 依赖，打包后继续运行已有冻结入口检查。原 CI 44916646225 在该入口加载 _rust 时缺少 SSL_get0_group_name。
+
+- 2026-11-22：Windows 草稿构建自动查找同渠道最近公开 Windows 安装器，只下载并校验旧元数据与 blockmap。单文件差分与原 preview.yml 一并纳入 CI 资产摘要；缺旧基包时照常生成整包。
