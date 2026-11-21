@@ -3753,6 +3753,8 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const [stateRefreshError, setStateRefreshError] = React.useState('')
       const [hubLoginBusy, setHubLoginBusy] = React.useState(false)
       const [deviceLoginInfo, setDeviceLoginInfo] = React.useState(null)
+      const [localEnrollmentAvailable, setLocalEnrollmentAvailable] = React.useState(false)
+      const [localEnrollmentBusy, setLocalEnrollmentBusy] = React.useState(false)
       const [identityBindRequired, setIdentityBindRequired] = React.useState(false)
       const [identityBindMode, setIdentityBindMode] = React.useState('')
       const [identityBindBusy, setIdentityBindBusy] = React.useState(false)
@@ -4972,6 +4974,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           setWorkbenchAuthReady(authenticated)
           hubAuthRequiredRef.current = !authenticated
           setIdentityBindRequired(!!(auth && auth.identityUnbound))
+          setLocalEnrollmentAvailable(authenticated && auth.localEnrollmentAvailable === true)
           if (authenticated) {
             setStateRefreshError('')
             void loadState(true)
@@ -5026,6 +5029,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           }
           if (!result || result.state !== 'authenticated') return
           setDeviceLoginInfo(null)
+          setLocalEnrollmentAvailable(result.localEnrollmentAvailable === true)
           EXPLICIT_AUTHORITY = false
           workbenchAuthReadyRef.current = true
           setWorkbenchAuthReady(true)
@@ -5078,6 +5082,26 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           setIdentityBindError(String(error && error.message || error || '新账号创建失败。'))
         } finally {
           setIdentityBindBusy(false)
+        }
+      }
+
+      const enrollLocalDevice = async () => {
+        if (localEnrollmentBusy || !host?.workbench?.enrollLocalDevice) return
+        setLocalEnrollmentBusy(true)
+        const generation = ACTIVE_BASE_GENERATION
+        try {
+          const result = await host.workbench.enrollLocalDevice()
+          if (generation !== ACTIVE_BASE_GENERATION) return
+          if (result?.ok || result?.unavailable) setLocalEnrollmentAvailable(false)
+          if (!result?.ok) throw new Error(result?.error || '本机接入未完成。')
+          appLocalDeviceRef.current = result.device_id
+          setAppLocalDevice(result.device_id)
+          setNotice('已接入本机，正在刷新设备。')
+          await loadState(true)
+        } catch (error) {
+          if (generation === ACTIVE_BASE_GENERATION) fail(error)
+        } finally {
+          setLocalEnrollmentBusy(false)
         }
       }
 
@@ -7264,6 +7288,11 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             : (stateLoading ? '正在读取设备状态…' : '设备列表暂不可用')),
           device && device.capabilities && (!device.capabilities.fs || device.capabilities.surface_protocol !== 1) ? pill('节点待更新', C.amber) : null,
           h('div', { style: { marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, alignSelf: 'stretch', flex: '0 0 auto' } },
+            desktopAuthRequired && workbenchAuthReady && localEnrollmentAvailable ? h('button', {
+              type: 'button', disabled: localEnrollmentBusy, onClick: () => { void enrollLocalDevice() },
+              style: { height: 26, padding: '0 10px', border: 0, borderRadius: 6, background: C.primary, color: C.onPrimary,
+                fontSize: 11, cursor: localEnrollmentBusy ? 'default' : 'pointer', WebkitAppRegion: 'no-drag' }
+            }, localEnrollmentBusy ? '正在接入…' : '接入本机') : null,
             host && host.kind === 'app' && (hubLoginBusy || EXPLICIT_AUTHORITY || !(workbenchAuthReady || (state && state.user))) ? h('button', {
               type: 'button', disabled: hubLoginBusy,
               onClick: () => loginHub(),

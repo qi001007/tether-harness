@@ -149,3 +149,28 @@ test('a malformed URL returns 400 and leaves the server alive', async () => {
     await app.close()
   }
 })
+
+
+test('the same APP window uses the verified local identity after device enrollment', async () => {
+  const node = http.createServer((req, res) => {
+    const valid = req.url === '/api/devices/new-fixture/policy' && req.headers.authorization === 'Bearer local-test-token'
+    res.writeHead(valid ? 200 : 401, { 'content-type': 'application/json' }).end('{}')
+  })
+  const port = await listen(node)
+  const app = createWebServer({ controller: 'http://127.0.0.1:9', port: 0, device: 'placeholder' })
+  const base = await app.listen()
+  try {
+    const cookie = await proxySession(base)
+    const before = await fetch(base + '/api/devices/new-fixture/policy', { headers: { cookie } })
+    assert.equal(before.status, 502)
+    app.setLocalIdentity('new-fixture', { device: 'new-fixture', port, token: 'local-test-token' })
+    const context = await (await fetch(base + '/app-context')).json()
+    assert.deepEqual(context, { device: 'new-fixture', hub: false })
+    const after = await fetch(base + '/api/devices/new-fixture/policy', { headers: { cookie } })
+    assert.equal(after.status, 200)
+    assert.equal(after.headers.get('x-tether-local'), '1')
+  } finally {
+    await app.close()
+    await new Promise((resolve) => node.close(resolve))
+  }
+})

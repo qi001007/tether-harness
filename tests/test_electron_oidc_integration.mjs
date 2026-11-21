@@ -371,7 +371,7 @@ test('legacy cookie probe rejection returns unauthenticated without an error pay
 test('OIDC tokens remain in the main process and auth status only returns identity state', () => {
   assert.doesNotMatch(preload, /authorizationHeader|accessToken|oidcAuth|oidc-session/i)
   assert.doesNotMatch(electronHost, /authorizationHeader|accessToken|oidcAuth/i)
-  assert.match(main, /return \{ \.\.\.result, authenticated: result\.authenticated, source: 'oidc' \}/)
+  assert.match(main, /return \{ \.\.\.result, authenticated: result\.authenticated, source: 'oidc',\s*localEnrollmentAvailable: result\.authenticated && canEnrollLocalDevice\(\) \}/)
   assert.doesNotMatch(main, /webContents\.send\([^\n]*token|webContents\.send\([^\n]*accessToken/i)
 })
 

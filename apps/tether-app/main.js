@@ -175,7 +175,7 @@ if (process.platform === 'win32') app.setAppUserModelId('com.tether.app')
 // Hub and mesh endpoints must be reached directly; a system proxy can silently
 // break them while leaving ordinary browsing intact.
 if (env.TETHER_USE_SYSTEM_PROXY !== '1') app.commandLine.appendSwitch('no-proxy-server')
-const { enrollmentDecision } = require('./enrollment.js')
+const { enrollmentDecision, newLocalDeviceId, canEnrollManagedNode, requestLocalPairing } = require('./enrollment.js')
 const supervisor = new Supervisor({ repoRoot, dataDir, env, preserveManagedNodeOnExit: packaged })
 const updates = new UpdateService({ repoRoot, dataDir, python: supervisor.childPython, env, app,
   deviceId: supervisor.device,
@@ -775,7 +775,8 @@ async function refreshWorkbenchAuthStatus() {
       setDesktopAuthMode('oidc')
       workbenchBindingPending = result.identityUnbound
       if (result.authenticated) await setWorkbenchActor(result.user.user_id)
-      return { ...result, authenticated: result.authenticated, source: 'oidc' }
+      return { ...result, authenticated: result.authenticated, source: 'oidc',
+        localEnrollmentAvailable: result.authenticated && canEnrollLocalDevice() }
     }
   }
   if (allowLegacyFallback && legacyUserToken) {
@@ -912,7 +913,11 @@ function startHubEvents() {
 async function completeWorkbenchLogin(actorId) {
   await setWorkbenchActor(actorId)
   workbenchBindingPending = false
-  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('tether:workbench-login-result', { state: 'authenticated' })
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('tether:workbench-login-result', {
+      state: 'authenticated', localEnrollmentAvailable: canEnrollLocalDevice()
+    })
+  }
 }
 async function openWorkbenchLogin() {
   if (!oidcAuth) return { ok: false, error: '桌面身份认证不可用' }
@@ -1125,6 +1130,9 @@ handleTrusted('tether:hub-request', async (_event, request) => {
   let decodedPath = target.pathname
   try { decodedPath = decodeURIComponent(decodedPath) } catch (_) { throw new Error('Controller API route is not allowed') }
   if (requiresLocalRelayConsent(decodedPath)) throw new Error('中转设置需要本机授权')
+  if (/^\/api\/pairing\/(?:codes|exchange)(?:\/|$)/i.test(decodedPath)) {
+    throw new Error('Pairing credentials require a separate trusted flow')
+  }
   if (/^\/api\/devices\/[^/]+\/dsh\/surface\/?$/i.test(decodedPath)) {
     throw new Error('DSH surface route requires a separate trusted flow')
   }
@@ -1167,6 +1175,12 @@ function readHubConfig() {
   try { return JSON.parse(fs.readFileSync(hubConfigFile, 'utf8')) || {} } catch (_) { return {} }
 }
 const deviceTokenFile = path.join(dataDir, 'device-token.json')
+let localEnrollmentPending = false
+
+function canEnrollLocalDevice() {
+  return !candidateMode && controllerAuthMode === 'oidc' && !localEnrollmentPending
+    && canEnrollManagedNode({ supervisor, config: readHubConfig(), hasDeviceTokenFile: fs.existsSync(deviceTokenFile) })
+}
 function writeHubConfig(next) {
   const current = readHubConfig()
   const config = current.nodeMode === 'external' && next.nodeMode == null
@@ -1186,6 +1200,11 @@ async function applyEnrollment(config, deviceToken, userToken) {
     return { ok: false, error: 'could not save the device credential' }
   }
   removeDeviceToken()
+  if (config.device && config.device !== supervisor.device) {
+    env.TETHER_DEVICE = config.device
+    supervisor.device = config.device
+    updates.deviceId = config.device
+  }
   env.TETHER_NODE_TOKEN = deviceToken || ''
   env.TETHER_USER_TOKEN = userToken || ''
   if (!packaged) try { registerAppInstallation({ env, dataDir, appRoot: repoRoot, startedAt: appStartedAt, startedVersion: appStartedVersion }) } catch (_) { /* update binding is auxiliary */ }
@@ -1194,10 +1213,42 @@ async function applyEnrollment(config, deviceToken, userToken) {
   try {
     await supervisor.restart()
   } catch (_) {
-    return { ok: false, error: 'credential saved but node restart failed' }
+    return { ok: false, code: 'node_restart_failed', error: 'credential saved but node restart failed' }
   }
   return { ok: true, device_id: String(config.device || env.TETHER_DEVICE || '') }
 }
+handleTrusted('tether:workbench-enroll-local-device', async () => {
+  if (!canEnrollLocalDevice()) return { ok: false, unavailable: true, error: '本机已有设备身份或由独立 Node 管理。' }
+  localEnrollmentPending = true
+  try {
+    const actorId = await currentWorkbenchActorId()
+    const origin = trustedControllerOrigin()
+    const deviceId = newLocalDeviceId(supervisor.device)
+    const canContinue = () => controllerAuthMode === 'oidc' && workbenchActorId === actorId
+      && canEnrollManagedNode({ supervisor, config: readHubConfig(), hasDeviceTokenFile: fs.existsSync(deviceTokenFile) })
+    if (!canContinue()) return { ok: false, error: '登录状态或本机身份已变化，请重新确认。' }
+    const deviceToken = await requestLocalPairing({
+      origin, actorId, deviceId, platform: process.platform,
+      issue: controllerFetch, exchange: fetch, canContinue
+    })
+    if (!canContinue()) return { ok: false, error: '登录状态或本机身份已变化，请重新确认。' }
+    const receipt = await applyEnrollment({ ...readHubConfig(), device: deviceId }, deviceToken, '')
+    if (!receipt.ok && receipt.code !== 'node_restart_failed') {
+      return { ok: false, error: '无法保存本机设备凭据，请重试。' }
+    }
+    if (!receipt.ok) return { ok: false, unavailable: true, error: '已保存本机凭据，请重启 Tether 连接本机。' }
+    const localApi = { port: supervisor.consolePort, device: deviceId, token: supervisor.localApiToken }
+    const ready = await waitForLocalNodeApi(localApi)
+    webServer.setLocalIdentity(deviceId, ready ? localApi : null)
+    if (!ready) return { ok: false, unavailable: true, error: '已保存本机凭据。若本机未连上，请重启 Tether。' }
+    return { ok: true, device_id: deviceId }
+  } catch (_) {
+    return { ok: false, error: '本机接入未完成，请检查 Hub 连接后重试。' }
+  } finally {
+    localEnrollmentPending = false
+  }
+})
+
 handleTrusted('tether:enroll-device', async (_event, userToken) => {
   if (typeof userToken !== 'string' || !userToken || userToken.length > 4096) {
     return { ok: false, error: 'invalid session token' }

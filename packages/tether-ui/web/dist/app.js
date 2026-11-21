@@ -183501,6 +183501,8 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const [stateRefreshError, setStateRefreshError] = React2.useState("");
     const [hubLoginBusy, setHubLoginBusy] = React2.useState(false);
     const [deviceLoginInfo, setDeviceLoginInfo] = React2.useState(null);
+    const [localEnrollmentAvailable, setLocalEnrollmentAvailable] = React2.useState(false);
+    const [localEnrollmentBusy, setLocalEnrollmentBusy] = React2.useState(false);
     const [identityBindRequired, setIdentityBindRequired] = React2.useState(false);
     const [identityBindMode, setIdentityBindMode] = React2.useState("");
     const [identityBindBusy, setIdentityBindBusy] = React2.useState(false);
@@ -184861,6 +184863,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         setWorkbenchAuthReady(authenticated);
         hubAuthRequiredRef.current = !authenticated;
         setIdentityBindRequired(!!(auth && auth.identityUnbound));
+        setLocalEnrollmentAvailable(authenticated && auth.localEnrollmentAvailable === true);
         if (authenticated) {
           setStateRefreshError("");
           void loadState(true);
@@ -184912,6 +184915,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         }
         if (!result || result.state !== "authenticated") return;
         setDeviceLoginInfo(null);
+        setLocalEnrollmentAvailable(result.localEnrollmentAvailable === true);
         EXPLICIT_AUTHORITY = false;
         workbenchAuthReadyRef.current = true;
         setWorkbenchAuthReady(true);
@@ -184967,6 +184971,25 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         setIdentityBindError(String(error && error.message || error || "\u65B0\u8D26\u53F7\u521B\u5EFA\u5931\u8D25\u3002"));
       } finally {
         setIdentityBindBusy(false);
+      }
+    };
+    const enrollLocalDevice = async () => {
+      if (localEnrollmentBusy || !host?.workbench?.enrollLocalDevice) return;
+      setLocalEnrollmentBusy(true);
+      const generation = ACTIVE_BASE_GENERATION;
+      try {
+        const result = await host.workbench.enrollLocalDevice();
+        if (generation !== ACTIVE_BASE_GENERATION) return;
+        if (result?.ok || result?.unavailable) setLocalEnrollmentAvailable(false);
+        if (!result?.ok) throw new Error(result?.error || "\u672C\u673A\u63A5\u5165\u672A\u5B8C\u6210\u3002");
+        appLocalDeviceRef.current = result.device_id;
+        setAppLocalDevice(result.device_id);
+        setNotice("\u5DF2\u63A5\u5165\u672C\u673A\uFF0C\u6B63\u5728\u5237\u65B0\u8BBE\u5907\u3002");
+        await loadState(true);
+      } catch (error) {
+        if (generation === ACTIVE_BASE_GENERATION) fail2(error);
+      } finally {
+        setLocalEnrollmentBusy(false);
       }
     };
     const loginHub = () => {
@@ -187808,6 +187831,24 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         h3(
           "div",
           { style: { marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, alignSelf: "stretch", flex: "0 0 auto" } },
+          desktopAuthRequired && workbenchAuthReady && localEnrollmentAvailable ? h3("button", {
+            type: "button",
+            disabled: localEnrollmentBusy,
+            onClick: () => {
+              void enrollLocalDevice();
+            },
+            style: {
+              height: 26,
+              padding: "0 10px",
+              border: 0,
+              borderRadius: 6,
+              background: C2.primary,
+              color: C2.onPrimary,
+              fontSize: 11,
+              cursor: localEnrollmentBusy ? "default" : "pointer",
+              WebkitAppRegion: "no-drag"
+            }
+          }, localEnrollmentBusy ? "\u6B63\u5728\u63A5\u5165\u2026" : "\u63A5\u5165\u672C\u673A") : null,
           host && host.kind === "app" && (hubLoginBusy || EXPLICIT_AUTHORITY || !(workbenchAuthReady || state && state.user)) ? h3("button", {
             type: "button",
             disabled: hubLoginBusy,
@@ -188925,6 +188966,7 @@ function createElectronHost({ apiBase = "" } = {}) {
       authStatus: () => window.tetherApp.workbenchAuthStatus(),
       bindLegacy: (credentials) => window.tetherApp.workbenchBindLegacy(credentials),
       registerAccount: () => window.tetherApp.workbenchRegisterAccount(),
+      enrollLocalDevice: () => window.tetherApp.workbenchEnrollLocalDevice(),
       logout: () => window.tetherApp.workbenchLogout(),
       onLoginResult: (callback) => window.tetherApp.onWorkbenchLoginResult(callback),
       catalog: (targetId) => window.tetherApp.workbenchCatalog(targetId),

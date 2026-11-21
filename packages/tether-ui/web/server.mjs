@@ -14,9 +14,14 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; ch
 export function createWebServer({ root = import.meta.dirname, controller = 'http://127.0.0.1:18890', port = 18891, host = '127.0.0.1', accessToken = '', insecureTls = false, device = '', hub = false, localApi = null, connectionInfo, probeConnection } = {}) {
   const target = new URL(controller)
   const here = root
-  const localDevice = localApi && localApi.device ? String(localApi.device) : ''
-  const localPort = localApi && Number(localApi.port) ? Number(localApi.port) : 0
-  const localToken = (localApi && localApi.token) || ''
+  let localDevice, localPort, localToken
+  const setLocalIdentity = (deviceId, api) => {
+    device = deviceId
+    localDevice = api?.device ? String(api.device) : ''
+    localPort = Number(api?.port) || 0
+    localToken = api?.token || ''
+  }
+  setLocalIdentity(device, localApi)
   const proxyToken = crypto.randomBytes(32).toString('hex')
   const realRoot = fs.realpathSync(here)
   const cookieToken = (req) => {
@@ -208,6 +213,7 @@ export function createWebServer({ root = import.meta.dirname, controller = 'http
   return {
     server,
     port,
+    setLocalIdentity,
     listen: () => new Promise((resolve, reject) => {
       server.once('error', reject)
       server.listen(port, host, () => {

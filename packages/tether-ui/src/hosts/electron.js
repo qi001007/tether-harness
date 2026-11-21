@@ -57,6 +57,7 @@ export function createElectronHost({ apiBase = '' } = {}) {
       authStatus: () => window.tetherApp.workbenchAuthStatus(),
       bindLegacy: (credentials) => window.tetherApp.workbenchBindLegacy(credentials),
       registerAccount: () => window.tetherApp.workbenchRegisterAccount(),
+      enrollLocalDevice: () => window.tetherApp.workbenchEnrollLocalDevice(),
       logout: () => window.tetherApp.workbenchLogout(),
       onLoginResult: (callback) => window.tetherApp.onWorkbenchLoginResult(callback),
       catalog: (targetId) => window.tetherApp.workbenchCatalog(targetId),

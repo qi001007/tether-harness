@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('tetherApp', {
   workbenchAuthStatus: () => ipcRenderer.invoke('tether:workbench-auth-status'),
   workbenchBindLegacy: (credentials) => ipcRenderer.invoke('tether:workbench-bind-legacy', credentials),
   workbenchRegisterAccount: () => ipcRenderer.invoke('tether:workbench-register-account'),
+  workbenchEnrollLocalDevice: () => ipcRenderer.invoke('tether:workbench-enroll-local-device'),
   workbenchLogout: () => ipcRenderer.invoke('tether:workbench-logout'),
   hubRequest: (request) => ipcRenderer.invoke('tether:hub-request', request),
   sftpRelay: (request) => ipcRenderer.invoke('tether:sftp-relay', request),
