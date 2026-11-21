@@ -193,11 +193,11 @@ const meshagentPath = path.join(runtimeRoot, 'components/meshagent', platformTar
     ? 'meshagent_x86-64' : platformTarget[platform] === 'macos-x64' ? 'meshagent_osx-x86-64' : 'meshagent_osx-arm-64')
 if (!existsSync(meshagentPath)) throw new Error(`Missing pinned MeshAgent runtime: ${meshagentPath}`)
 const officeRelative = process.platform === 'win32'
-  ? 'program/soffice.com'
+  ? 'dsh/node_modules/@deepseek-ai/libreoffice-kit-win32-x64/bin/libreoffice-kit.exe'
   : process.platform === 'darwin'
-    ? 'LibreOffice.app/Contents/MacOS/soffice'
-    : 'opt/libreoffice26.8/program/soffice'
-const officeExecutable = path.join(runtimeRoot, 'components/libreoffice', officeRelative)
+    ? 'libreoffice/LibreOffice.app/Contents/MacOS/soffice'
+    : 'libreoffice/opt/libreoffice26.8/program/soffice'
+const officeExecutable = path.join(runtimeRoot, 'components', officeRelative)
 if (!existsSync(officeExecutable)) throw new Error(`Missing pinned LibreOffice runtime: ${officeExecutable}`)
 for (const icon of ['assets/tether-app-s.ico', 'assets/tether-app-s.png']) {
   if (!existsSync(path.join(runtimeRoot, icon))) throw new Error(`Missing packaged app resource: ${icon}`)

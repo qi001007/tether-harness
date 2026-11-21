@@ -113,7 +113,20 @@ def office_pdf(source: Path, kind: str) -> bytes:
     if not export_filter:
         raise OfficePreviewError("office_convert_failed", "Unsupported Office document type.")
 
-    executable = _soffice_executable()
+    runtime = os.environ.get("TETHER_RUNTIME_ROOT")
+    configured = os.environ.get("TETHER_SOFFICE_EXE")
+    kit = None
+    if os.name == "nt" and not (configured and Path(configured).is_file()):
+        # Older standalone Nodes can retain the path supplied by the packaged App.
+        if not runtime and configured:
+            legacy = Path(configured)
+            if tuple(part.lower() for part in legacy.parts[-4:]) == ("components", "libreoffice", "program", "soffice.com"):
+                runtime = str(legacy.parents[3])
+        if runtime:
+            kit_path = Path(runtime) / "components/dsh/node_modules/@deepseek-ai/libreoffice-kit/lib/cli.js"
+            if kit_path.is_file() and not (Path(runtime) / "components/libreoffice/program/soffice.com").is_file():
+                kit = kit_path
+    executable = str(Path(runtime) / "components/nodejs/node.exe") if kit else _soffice_executable()
     if not executable:
         raise OfficePreviewError(
             "office_missing",
@@ -144,23 +157,30 @@ def office_pdf(source: Path, kind: str) -> bytes:
         except OSError:
             raise OfficePreviewError("office_convert_failed", "The Office source file could not be staged.") from None
 
-        argv = [
-            executable,
-            "--headless",
-            "--norestore",
-            "--nodefault",
-            "--nolockcheck",
-            "-env:UserInstallation=" + profile_dir.as_uri(),
-            "--convert-to",
-            "pdf:" + export_filter,
-            "--outdir",
-            str(output_dir),
-            str(staged_source),
-        ]
+        child_env = None
+        if kit:
+            argv = [executable, str(kit), "convert", "--input", str(staged_source), "--output", str(output_pdf)]
+            child_env = os.environ.copy()
+            redist = Path(runtime) / "components/libreoffice/System64"
+            child_env["PATH"] = str(redist) + os.pathsep + child_env.get("PATH", "")
+        else:
+            argv = [
+                executable,
+                "--headless",
+                "--norestore",
+                "--nodefault",
+                "--nolockcheck",
+                "-env:UserInstallation=" + profile_dir.as_uri(),
+                "--convert-to",
+                "pdf:" + export_filter,
+                "--outdir",
+                str(output_dir),
+                str(staged_source),
+            ]
         try:
             with (work / "conversion.log").open("wb") as log:
                 process = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=log,
-                                           stderr=subprocess.STDOUT, shell=False,
+                                           stderr=subprocess.STDOUT, shell=False, env=child_env,
                                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
                 deadline = time.monotonic() + 45
                 while process.poll() is None:

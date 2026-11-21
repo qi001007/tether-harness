@@ -42,11 +42,16 @@ module.exports = async function checkPackagedRuntime(context) {
   if (!meshAgent) throw new Error(`Unsupported packaged MeshAgent platform/architecture: ${platform}/${arch}`)
   requireFile(path.join(runtime, 'components', 'meshagent', ...meshAgent), 'MeshAgent')
 
-  const office = windows ? ['program', 'soffice.com'] : platform === 'linux'
-    ? ['opt', 'libreoffice26.8', 'program', 'soffice']
-    : platform === 'darwin' ? ['LibreOffice.app', 'Contents', 'MacOS', 'soffice'] : null
+  const office = windows ? ['dsh', 'node_modules', '@deepseek-ai', 'libreoffice-kit-win32-x64', 'bin', 'libreoffice-kit.exe'] : platform === 'linux'
+    ? ['libreoffice', 'opt', 'libreoffice26.8', 'program', 'soffice']
+    : platform === 'darwin' ? ['libreoffice', 'LibreOffice.app', 'Contents', 'MacOS', 'soffice'] : null
   if (!office) throw new Error(`Unsupported packaged runtime platform: ${platform}`)
-  requireFile(path.join(runtime, 'components', 'libreoffice', ...office), 'LibreOffice executable')
+  requireFile(path.join(runtime, 'components', ...office), 'LibreOffice executable')
+
+  if (windows) {
+    requireFile(path.join(runtime, 'components', 'dsh', 'node_modules', '@deepseek-ai', 'libreoffice-kit', 'lib', 'cli.js'), 'Office converter')
+    requireFile(path.join(runtime, 'components', 'libreoffice', 'System64', 'msvcp140_2.dll'), 'Office C++ runtime')
+  }
 
   for (const [component, executable] of [
     ['caddy', `caddy${suffix}`], ['rclone', `rclone${suffix}`],

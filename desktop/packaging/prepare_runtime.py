@@ -237,10 +237,24 @@ def assemble_libreoffice(manifest: dict, target: str, destination: Path) -> None
         download(asset, archive_path)
         if target == "windows-x64":
             system_drive = os.environ.get("SystemDrive", "C:")
+            extracted = workspace / "unpacked"
+            extracted.mkdir()
             subprocess.run(["msiexec.exe", "/a", str(archive_path), "/qn",
-                            f"TARGETDIR={destination}", f"ROOTDRIVE={system_drive}"],
+                            f"TARGETDIR={extracted}", f"ROOTDRIVE={system_drive}"],
                            check=True, timeout=900, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            executable = destination / "program" / "soffice.com"
+            # The pinned DSH converter supplies the Office engine. Keep its Windows
+            # C++ runtime available on systems without a global redistributable.
+            redist = extracted / "System64"
+            libraries = ("msvcp140.dll", "msvcp140_1.dll", "msvcp140_2.dll",
+                         "vcruntime140.dll", "vcruntime140_1.dll")
+            if not all((redist / name).is_file() for name in libraries):
+                raise ValueError("Pinned Windows C++ redistributable is incomplete")
+            shutil.copytree(redist, destination / "System64")
+            (destination / "asset.json").write_text(json.dumps({
+                "component": "Office Windows C++ redistributable", "source_asset": asset["name"],
+                "sha256": asset["sha256"], "target": target, "directory": "System64",
+            }, indent=2) + "\n", encoding="utf-8")
+            return
         elif target == "linux-x64":
             extracted = workspace / "extracted"
             extract_archive(archive_path, extracted)
@@ -632,7 +646,9 @@ def main() -> int:
     for relative in herdr_required:
         if not (herdr_source / relative).is_file():
             raise ValueError(f"pinned Herdr runtime is missing {relative}")
-    copy_tree(herdr_source, node_bin)
+        target = node_bin / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(herdr_source / relative, target)
     for notice in ["LICENSE.herdr", "THIRD-PARTY-NOTICES.herdr"]:
         source = ROOT / "tether/node/bin" / notice
         if not source.exists() and notice == "THIRD-PARTY-NOTICES.herdr":
