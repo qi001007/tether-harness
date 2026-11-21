@@ -58,7 +58,19 @@ def os_label() -> str:
             pass
     return platform.platform(terse=True)
 
-ROOT = Path(__file__).resolve().parents[2]
+def _installation_root(module_file: str, executable: str, *, frozen: bool) -> Path:
+    if frozen:
+        runtime = Path(executable).resolve()
+        if (runtime.name.lower() == "tether-python.exe" and runtime.parent.name.lower() == "tether-runtime"
+                and runtime.parent.parent.name.lower() == "resources"):
+            source = runtime.parent.parent / "tether-source"
+            version = source / "version.json"
+            if version.is_file() and version.resolve() == version:
+                return source
+    return Path(module_file).resolve().parents[2]
+
+
+ROOT = _installation_root(__file__, sys.executable, frozen=bool(getattr(sys, "frozen", False)))
 load_dotenv(ROOT / ".env")
 
 ACTIVE = ("queued", "dispatching", "running", "cancelling")

@@ -118,6 +118,53 @@ test('attached managed Node remains eligible for the local API without a child h
   }
 })
 
+test('managed Node persists the spawned process identity and stops its console child before an update', async (t) => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tether-supervisor-managed-identity-'))
+  const childScript = path.join(dataDir, 'managed-tree.cjs')
+  fs.writeFileSync(childScript, `
+    if (process.argv[2] === 'console') {
+      require('node:http').createServer((request, response) => {
+        response.writeHead(request.headers.authorization === 'Bearer ' + process.env.TETHER_LOCAL_API_TOKEN ? 200 : 401)
+        response.end()
+      }).listen(Number(process.env.TETHER_CONSOLE_PORT), '127.0.0.1')
+    } else {
+      require('node:child_process').spawn(process.execPath, [__filename, 'console'], { stdio: 'inherit' })
+    }
+  `)
+  const portProbe = http.createServer()
+  await new Promise((resolve) => portProbe.listen(0, '127.0.0.1', resolve))
+  const port = portProbe.address().port
+  await new Promise((resolve) => portProbe.close(resolve))
+  const options = { repoRoot: root, dataDir, preserveManagedNodeOnExit: true,
+    env: { TETHER_CONTROLLER_URL: 'https://hub.example', TETHER_DEVICE: 'node-a',
+      TETHER_PYTHON: process.execPath, TETHER_CONSOLE_PORT: String(port) } }
+  const first = new Supervisor(options)
+  first.mode = 'hub'
+  const child = first.spawnProcess('node', [childScript])
+  first.procs.node = child
+  t.after(async () => {
+    await first.stop()
+    fs.rmSync(dataDir, { recursive: true, force: true })
+  })
+  first.saveManagedNodeState(child.pid)
+  const state = first.readManagedNodeState()
+  assert.equal(state.pid, child.pid)
+  assert.equal(state.processCreatedAt, first.processIdentity(child.pid).created)
+  assert.ok(state.processPath)
+  if (process.platform === 'win32') {
+    const { processCreatedAt, processPath, ...legacyState } = state
+    first.writeManagedNodeState(legacyState)
+  }
+
+  const reopened = new Supervisor(options)
+  assert.equal(await reopened.attachManagedNode(), true)
+  assert.equal(reopened.node.pid, child.pid)
+  assert.equal(reopened.readManagedNodeState().processCreatedAt, state.processCreatedAt)
+  assert.deepEqual(await reopened.stopManagedNode(), { stopped: true })
+  assert.equal(reopened.processAlive(child.pid), false)
+  assert.equal(reopened.readManagedNodeState(), null)
+})
+
 test('missing controller device data remains unknown while an explicit empty list means zero', (t) => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tether-supervisor-state-'))
   t.after(() => fs.rmSync(dataDir, { recursive: true, force: true }))

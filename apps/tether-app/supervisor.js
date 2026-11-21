@@ -5,6 +5,7 @@ const http = require('node:http')
 const https = require('node:https')
 const os = require('node:os')
 const path = require('node:path')
+const { waitForLocalNodeApi } = require('./startup-readiness.js')
 
 function killTree(pid) {
   if (!pid) return
@@ -162,8 +163,17 @@ class Supervisor {
           if (this.mode === null || this.procs.node) return
           const replacement = this.spawnProcess('node', this.procArgs.node || [])
           this.procs.node = replacement
-          this.saveManagedNodeState(replacement.pid)
-          if (this.preserveManagedNodeOnExit && this.mode === 'hub') replacement.unref()
+          if (this.preserveManagedNodeOnExit && this.mode === 'hub') {
+            try { this.saveManagedNodeState(replacement.pid) }
+            catch (error) {
+              this.procs.node = null
+              killTree(replacement.pid)
+              this.node = { state: 'error', pid: 0, deviceOnline: false }
+              this.lastError = error.message
+              return
+            }
+            replacement.unref()
+          }
           this.node = { state: 'running', pid: replacement.pid, deviceOnline: online }
         }, 250)
         return
@@ -207,9 +217,17 @@ class Supervisor {
   }
 
   saveManagedNodeState(pid) {
-    const state = { pid, token: this.localApiToken, device: this.device,
+    // A frozen Windows Node may serve its console from a child of the
+    // bootloader. Persist the original spawn PID for tree termination.
+    const identity = this.processIdentity(pid)
+    if (!identity) throw new Error('Could not verify the managed Node process at startup')
+    this.writeManagedNodeState({ pid, token: this.localApiToken, device: this.device,
       dataDir: path.resolve(this.dataDir), controllerUrl: this.remoteUrl,
-      port: this.consolePort, startedAt: new Date().toISOString() }
+      port: this.consolePort, startedAt: new Date().toISOString(),
+      processCreatedAt: identity.created, processPath: identity.path })
+  }
+
+  writeManagedNodeState(state) {
     fs.mkdirSync(this.managedNodeStateDir, { recursive: true, mode: 0o700 })
     this.secureManagedNodeStatePath(this.managedNodeStateDir, true)
     const temporary = this.managedNodeStatePath + '.tmp'
@@ -270,6 +288,26 @@ class Supervisor {
     return identity.created === state.processCreatedAt && normalize(identity.path) === normalize(state.processPath)
   }
 
+  managedNodeIdentityToVerify(state, child) {
+    if (state.processCreatedAt || state.processPath) {
+      return this.sameManagedNodeProcess(state) ? state : null
+    }
+    const identity = this.processIdentity(state.pid)
+    if (!identity) return null
+    let expectedPath
+    try { expectedPath = fs.realpathSync(this.childPython) } catch (_) { return null }
+    const correctPath = process.platform === 'win32'
+      ? identity.path.toLowerCase() === expectedPath.toLowerCase() : identity.path === expectedPath
+    if (!correctPath) return null
+    if (!child || child.pid !== state.pid) {
+      // Only Windows reports both creation times in the same clock. An old
+      // record cannot verify a PID created after the record (or long before it).
+      const ageAtSave = Date.parse(state.startedAt) - Date.parse(identity.created)
+      if (process.platform !== 'win32' || !(ageAtSave >= 0 && ageAtSave <= 30_000)) return null
+    }
+    return { ...state, processCreatedAt: identity.created, processPath: identity.path }
+  }
+
   async attachManagedNode() {
     const state = this.managedNodeState
     if (!state) return false
@@ -281,11 +319,20 @@ class Supervisor {
       this.clearManagedNodeState(state.pid)
       return false
     }
-    if (this.processAlive(state.pid) && !this.sameManagedNodeProcess(state)) {
+    if (!this.processAlive(state.pid)) {
+      this.clearManagedNodeState(state.pid)
+      return false
+    }
+    const verifiedState = this.managedNodeIdentityToVerify(state)
+    if (!verifiedState) {
       throw Object.assign(new Error('保存的 Node PID、创建时间或可执行路径不匹配；为避免误接管或重复设备，已停止自动启动。'), { code: 'managed_node_process_mismatch' })
     }
     const ready = await waitForLocalNodeApi({ port: state.port, device: state.device, token: state.token }, { timeoutMs: 2500 })
     if (ready) {
+      if (!this.sameManagedNodeProcess(verifiedState)) {
+        throw Object.assign(new Error('本地身份探测期间 Node 进程发生变化，已停止自动启动。'), { code: 'managed_node_process_mismatch' })
+      }
+      if (verifiedState !== state) this.writeManagedNodeState(verifiedState)
       this.localApiToken = state.token
       this.node = { state: 'running', pid: state.pid, deviceOnline: null }
       this.lastError = ''
@@ -310,20 +357,26 @@ class Supervisor {
       if (child) this.procs.node = null
       return { stopped: false }
     }
-    if (state && (state.pid !== pid || !this.sameManagedNodeProcess(state))) {
+    const verifiedState = state && state.pid === pid ? this.managedNodeIdentityToVerify(state, child) : null
+    if (state && !verifiedState) {
       throw Object.assign(new Error('受管 Node 创建时间或可执行路径不匹配，拒绝停止该PID。'), { code: 'managed_node_process_mismatch' })
     }
     const token = state && state.token || this.localApiToken
     const ready = await waitForLocalNodeApi({ port: this.consolePort, device: this.device, token }, { timeoutMs: 1500 })
     if (!ready) throw Object.assign(new Error('受管 Node 身份探测失败，拒绝停止未确认进程。'), { code: 'managed_node_unverified' })
+    if (verifiedState && !this.sameManagedNodeProcess(verifiedState)) {
+      throw Object.assign(new Error('本地身份探测期间 Node 进程发生变化，拒绝停止该PID。'), { code: 'managed_node_process_mismatch' })
+    }
     if (child) this.procs.node = null
     killTree(pid)
+    const nodeStillRunning = async () => this.processAlive(pid)
+      || await waitForLocalNodeApi({ port: this.consolePort, device: this.device, token }, { timeoutMs: 250 })
     const deadline = Date.now() + 5000
-    while (Date.now() < deadline && await waitForLocalNodeApi({ port: this.consolePort, device: this.device, token }, { timeoutMs: 250 })) {
+    while (Date.now() < deadline && await nodeStillRunning()) {
       await new Promise((resolve) => setTimeout(resolve, 150))
     }
-    if (await waitForLocalNodeApi({ port: this.consolePort, device: this.device, token }, { timeoutMs: 250 })) {
-      throw Object.assign(new Error('受管 Node 在停止请求后仍通过原身份探测。'), { code: 'managed_node_stop_pending' })
+    if (await nodeStillRunning()) {
+      throw Object.assign(new Error('受管 Node 进程或本地服务在停止请求后仍在运行。'), { code: 'managed_node_stop_pending' })
     }
     this.clearManagedNodeState(pid)
     this.node = { state: 'stopped', pid: 0, deviceOnline: false }
