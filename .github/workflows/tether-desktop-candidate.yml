@@ -232,10 +232,14 @@ jobs:
         if: matrix.platform == 'macos'
         shell: bash
         run: bash desktop/packaging/prepare-macos-icon.sh
-      - name: Package installer candidate
+      - name: Package Windows installer candidate
+        if: matrix.platform == 'windows'
         env:
-          TETHER_WINDOWS_DELTA_REPOSITORY: ${{ matrix.target == 'windows-x64' && github.repository || '' }}
-          TETHER_WINDOWS_DELTA_GITHUB_TOKEN: ${{ matrix.target == 'windows-x64' && github.token || '' }}
+          TETHER_WINDOWS_DELTA_REPOSITORY: ${{ github.repository }}
+          TETHER_WINDOWS_DELTA_GITHUB_TOKEN: ${{ github.token }}
+        run: python desktop/packaging/build_windows_release.py ${{ matrix.arch }}
+      - name: Package installer candidate
+        if: matrix.platform != 'windows'
         run: npm run build:${{ matrix.platform }} --prefix desktop/packaging -- ${{ matrix.arch }}
       - name: Upload preview package artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7

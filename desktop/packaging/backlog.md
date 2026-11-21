@@ -50,3 +50,5 @@
 - 2026-11-21 Windows 包合并重复 Office 引擎，保留离线 Word/PPT 预览和 C++ 运行库。各平台仅打入对应的 Herdr 二进制及许可。
 
 - 2026-11-22：Windows 单文件差分复用 electron-updater COPY/DOWNLOAD 计划，集中新增字节并把 SHA-512 记录到 preview.yml。隔离构建可用 TETHER_WINDOWS_DELTA_BASE_DIR 选择旧候选目录。
+
+- 2026-11-22：Windows 发行和隔离 QA 共用 NSIS 压缩入口。核验锁定的 7-Zip 24.09 并固定四线程，复现原公仓安装器的 LZMA2 分块。压缩参数仅在本次打包时生效，打包退出后还原依赖文件。
