@@ -118,7 +118,9 @@ test('attached managed Node remains eligible for the local API without a child h
   }
 })
 
-test('managed Node persists the spawned process identity and stops its console child before an update', async (t) => {
+for (const identityAvailable of [true, false]) test(identityAvailable
+  ? 'managed Node persists the spawned process identity and stops its console child before an update'
+  : 'managed Node starts and safely stops its own live child when OS identity lookup is unavailable', async (t) => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tether-supervisor-managed-identity-'))
   const childScript = path.join(dataDir, 'managed-tree.cjs')
   fs.writeFileSync(childScript, `
@@ -136,27 +138,39 @@ test('managed Node persists the spawned process identity and stops its console c
   const port = portProbe.address().port
   await new Promise((resolve) => portProbe.close(resolve))
   const options = { repoRoot: root, dataDir, preserveManagedNodeOnExit: true,
-    env: { TETHER_CONTROLLER_URL: 'https://hub.example', TETHER_DEVICE: 'node-a',
+    env: { TETHER_CONTROLLER_URL: 'https://hub.example', TETHER_DEVICE: 'node-a', TETHER_NODE_TOKEN: 'fixture-device',
       TETHER_PYTHON: process.execPath, TETHER_CONSOLE_PORT: String(port) } }
-  const first = new Supervisor(options)
-  first.mode = 'hub'
-  const child = first.spawnProcess('node', [childScript])
-  first.procs.node = child
+  const { spawn } = await import('node:child_process')
+  const first = new Supervisor({ ...options,
+    spawnChild: (executable, _args, options) => spawn(executable, [childScript], options) })
+  first.healthy = async () => ({ devices: [] })
+  if (!identityAvailable) first.processIdentity = () => null
   t.after(async () => {
     await first.stop()
     fs.rmSync(dataDir, { recursive: true, force: true })
   })
-  first.saveManagedNodeState(child.pid)
+  assert.equal((await first.start()).node.state, 'running')
+  const child = first.procs.node
   const state = first.readManagedNodeState()
   assert.equal(state.pid, child.pid)
+  const reopened = new Supervisor(options)
+  if (!identityAvailable) {
+    reopened.processIdentity = () => null
+    assert.equal(state.processCreatedAt, undefined)
+    await assert.rejects(reopened.attachManagedNode(), { code: 'managed_node_process_mismatch' })
+    assert.deepEqual(await first.stopManagedNode(), { stopped: true })
+    assert.equal(first.processAlive(child.pid), false)
+    assert.equal(first.readManagedNodeState(), null)
+    return
+  }
   assert.equal(state.processCreatedAt, first.processIdentity(child.pid).created)
   assert.ok(state.processPath)
   if (process.platform === 'win32') {
     const { processCreatedAt, processPath, ...legacyState } = state
     first.writeManagedNodeState(legacyState)
+    reopened.managedNodeState = reopened.readManagedNodeState()
   }
 
-  const reopened = new Supervisor(options)
   assert.equal(await reopened.attachManagedNode(), true)
   assert.equal(reopened.node.pid, child.pid)
   assert.equal(reopened.readManagedNodeState().processCreatedAt, state.processCreatedAt)
