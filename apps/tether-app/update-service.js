@@ -30,6 +30,173 @@ function ensureWindowsUpdaterTempDir(executablePath) {
 }
 
 const WINDOWS_UPDATE_CACHE_RESERVE_BYTES = 512n * 1024n * 1024n
+const MAX_DELTA_HEADER_BYTES = 1024 * 1024
+
+function validDeltaSize(value) {
+  return Number.isSafeInteger(value) && value > 0
+}
+
+function validSha512(value) {
+  return typeof value === 'string' && /^[A-Za-z0-9+/]{86}==$/.test(value)
+}
+
+function trustedDeltaUrl(asset, installer, provider) {
+  if (asset.username || asset.password || installer.username || installer.password) return false
+  if (asset.origin !== installer.origin) return false
+  if (['127.0.0.1', '[::1]'].includes(asset.hostname)) {
+    const { GenericProvider } = require('electron-updater/out/providers/GenericProvider')
+    return provider instanceof GenericProvider && ['http:', 'https:'].includes(asset.protocol)
+      && provider.baseUrl.origin === asset.origin
+      && path.posix.dirname(asset.pathname) === path.posix.dirname(installer.pathname)
+  }
+  if (asset.origin === 'https://github.com') {
+    return asset.pathname.startsWith('/qi001007/tether-harness/releases/download/')
+      && path.posix.dirname(asset.pathname) === path.posix.dirname(installer.pathname)
+  }
+  if (asset.origin === 'https://api.github.com') {
+    const releaseAsset = /^\/repos\/qi001007\/tether-harness\/releases\/assets\/\d+$/
+    return releaseAsset.test(asset.pathname) && releaseAsset.test(installer.pathname)
+  }
+  return false
+}
+
+async function readDeltaBytes(file, buffer, position) {
+  let offset = 0
+  while (offset < buffer.length) {
+    const { bytesRead } = await file.read(buffer, offset, buffer.length - offset, position + offset)
+    if (bytesRead === 0) throw new Error('Truncated Windows installer delta or source')
+    offset += bytesRead
+  }
+}
+
+async function applyWindowsDelta(source, patch, destination, entry, target, checkCancelled) {
+  const delta = await fs.promises.open(patch, 'r')
+  try {
+    if ((await delta.stat()).size !== entry.size) throw new Error('Windows installer delta size differs from metadata')
+    const sizeBytes = Buffer.alloc(4)
+    await readDeltaBytes(delta, sizeBytes, 0)
+    const headerSize = sizeBytes.readUInt32BE(0)
+    if (headerSize === 0 || headerSize > MAX_DELTA_HEADER_BYTES || 4 + headerSize > entry.size) {
+      throw new Error('Invalid Windows installer delta header size')
+    }
+    const header = Buffer.alloc(headerSize)
+    await readDeltaBytes(delta, header, 4)
+    const { format, operations } = JSON.parse(header.toString('utf8'))
+    if (format !== 1 || !Array.isArray(operations)) throw new Error('Unsupported Windows installer delta format')
+    let outputSize = 0
+    let literalEnd = 4 + headerSize
+    for (const operation of operations) {
+      if (!Array.isArray(operation) || operation.length !== 2) throw new Error('Invalid Windows installer delta operation')
+      const [offset, length] = operation
+      if (!Number.isSafeInteger(offset) || !validDeltaSize(length) || length > target.size - outputSize) {
+        throw new Error('Invalid Windows installer delta range')
+      }
+      if (offset === -1) {
+        if (length > entry.size - literalEnd) throw new Error('Truncated Windows installer delta literal')
+        literalEnd += length
+      } else if (offset < 0 || length > entry.sourceSize - offset) {
+        throw new Error('Windows installer delta range exceeds source')
+      }
+      outputSize += length
+    }
+    if (outputSize !== target.size || literalEnd !== entry.size) throw new Error('Windows installer delta has incomplete or extra data')
+
+    const output = await fs.promises.open(destination, 'wx')
+    try {
+      const digest = crypto.createHash('sha512')
+      const buffer = Buffer.allocUnsafe(1024 * 1024)
+      let literalOffset = 4 + headerSize
+      let outputOffset = 0
+      for (const [sourceOffset, length] of operations) {
+        const literal = sourceOffset === -1
+        const input = literal ? delta : source
+        const inputOffset = literal ? literalOffset : sourceOffset
+        for (let copied = 0; copied < length;) {
+          checkCancelled()
+          const chunk = buffer.subarray(0, Math.min(buffer.length, length - copied))
+          await readDeltaBytes(input, chunk, inputOffset + copied)
+          digest.update(chunk)
+          for (let written = 0; written < chunk.length;) {
+            const { bytesWritten } = await output.write(chunk, written, chunk.length - written, outputOffset + written)
+            if (bytesWritten === 0) throw new Error('Unable to write Windows installer from delta')
+            written += bytesWritten
+          }
+          outputOffset += chunk.length
+          copied += chunk.length
+        }
+        if (literal) literalOffset += length
+      }
+      checkCancelled()
+      if (digest.digest('base64') !== target.sha512) throw new Error('Reconstructed Windows installer SHA512 differs from Electron update metadata')
+    } finally {
+      await output.close()
+    }
+  } finally {
+    await delta.close()
+  }
+}
+
+function configureWindowsDelta(updater, currentVersion) {
+  if (typeof updater.differentialDownloadInstaller !== 'function') return
+  // NsisUpdater 6.8.12 calls this hook before its signature check. Returning true
+  // goes directly to its complete GET. Returning false verifies and stages our installer.
+  updater.differentialDownloadInstaller = async (fileInfo, options, destination, provider, oldInstallerName) => {
+    const { info } = options.updateInfoAndProvider
+    const target = fileInfo.info
+    const entries = Array.isArray(info.tetherDelta) ? info.tetherDelta.filter((entry) =>
+      entry?.fromVersion === currentVersion && entry.toVersion === info.version) : []
+    const entry = entries[0]
+    if (entries.length !== 1 || !validDeltaSize(target.size) || !validSha512(target.sha512)
+        || !validDeltaSize(entry.sourceSize) || !validSha512(entry.sourceSha512)
+        || !validDeltaSize(entry.size) || entry.size >= target.size || !validSha512(entry.sha512)
+        || typeof entry.path !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]*\.delta$/.test(entry.path)) return true
+
+    const { CancellationError } = require('builder-util-runtime')
+    const { cancellationToken } = options
+    const checkCancelled = () => {
+      if (cancellationToken.cancelled) throw new CancellationError()
+    }
+    const patch = `${destination}.delta`
+    try {
+      const [{ url }] = provider.resolveFiles({ ...info, files: [{ url: entry.path, sha512: entry.sha512 }] })
+      if (!trustedDeltaUrl(url, fileInfo.url, provider)) return true
+      checkCancelled()
+      const source = await fs.promises.open(path.join(updater.downloadedUpdateHelper.cacheDir, oldInstallerName), 'r')
+      try {
+        const sourceStat = await source.stat()
+        if (!sourceStat.isFile() || sourceStat.size !== entry.sourceSize) throw new Error('Cached Windows installer size differs from delta source')
+        const digest = crypto.createHash('sha512')
+        for await (const chunk of source.createReadStream({ autoClose: false, highWaterMark: 1024 * 1024 })) {
+          checkCancelled()
+          digest.update(chunk)
+        }
+        checkCancelled()
+        if (digest.digest('base64') !== entry.sourceSha512) throw new Error('Cached Windows installer SHA512 differs from delta source')
+        const headers = Object.fromEntries(Object.entries(options.requestHeaders || {}).filter(([name]) => name.toLowerCase() !== 'range'))
+        await updater.httpExecutor.download(url, patch, {
+          headers, cancellationToken, sha512: entry.sha512,
+          onProgress: updater.listenerCount('download-progress') > 0
+            ? (progress) => updater.emit('download-progress', progress) : undefined
+        })
+        await applyWindowsDelta(source, patch, destination, entry, target, checkCancelled)
+        updater.logger.info(`Windows installer delta verified (${currentVersion} → ${info.version}, ${entry.size} bytes)`)
+        return false
+      } finally {
+        await source.close()
+      }
+    } catch (error) {
+      await fs.promises.rm(destination, { force: true })
+      checkCancelled()
+      if (error instanceof CancellationError) throw error
+      updater.logger.warn(`Windows installer delta unavailable, downloading full installer: ${error.message}`)
+      return true
+    } finally {
+      await fs.promises.rm(patch, { force: true }).catch((error) => {
+        updater.logger.warn(`Could not remove temporary Windows installer delta: ${error.message}`)
+      })
+    }
+  }
+}
 
 function ensureWindowsUpdateCacheSpace(updateInfo, copyCount) {
   const files = updateInfo && updateInfo.files
@@ -114,6 +281,9 @@ class UpdateService {
       this.electronUpdater = autoUpdater
       autoUpdater.autoDownload = false
       autoUpdater.autoInstallOnAppQuit = false
+      if (process.platform === 'win32' && process.arch === 'x64') {
+        configureWindowsDelta(autoUpdater, app.getVersion())
+      }
       const updateChannel = String(env.TETHER_UPDATE_CHANNEL || '').trim().toLowerCase()
       if (updateChannel) {
         autoUpdater.allowPrerelease = updateChannel === 'preview'
@@ -512,4 +682,4 @@ class UpdateService {
   }
 }
 
-module.exports = { UpdateService, stageUpdaterRuntime }
+module.exports = { UpdateService, stageUpdaterRuntime, configureWindowsDelta }

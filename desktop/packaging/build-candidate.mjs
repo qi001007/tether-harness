@@ -152,6 +152,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
 const packagingDir = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(packagingDir, '../..')
 const [platform, arch] = process.argv.slice(2)
+const deltaGitHubToken = process.env.TETHER_WINDOWS_DELTA_GITHUB_TOKEN
+delete process.env.TETHER_WINDOWS_DELTA_GITHUB_TOKEN
 const platformTarget = { windows: 'windows-x64', linux: 'linux-x64', macos: `macos-${arch}` }
 if (!platformTarget[platform] || !['x64', 'arm64'].includes(arch)
     || (platform !== 'macos' && arch !== 'x64')) {
@@ -296,8 +298,16 @@ const result = spawnSync(process.execPath, args, { cwd: repoRoot, stdio: 'inheri
 rmSync(tempConfig, { force: true })
 if (result.status !== 0) process.exit(result.status || 1)
 
+const deltaBase = process.env.TETHER_WINDOWS_DELTA_BASE_DIR
+const deltaRepository = process.env.TETHER_WINDOWS_DELTA_REPOSITORY
+if (platform === 'windows' && (deltaBase || deltaRepository)) {
+  const { buildWindowsDelta } = await import('./build-windows-delta.mjs')
+  await buildWindowsDelta({ targetDirectory: output, fromDirectory: deltaBase, repository: deltaRepository,
+    token: deltaGitHubToken })
+}
+
 const artifacts = []
-const artifactSuffixes = ['.exe', '.dmg', '.zip', '.AppImage', '.deb', '.yml', '.blockmap']
+const artifactSuffixes = ['.exe', '.dmg', '.zip', '.AppImage', '.deb', '.yml', '.blockmap', '.delta']
 for (const entry of readdirSync(output, { withFileTypes: true })) {
   if (!entry.isFile()) continue
   if (entry.name === 'builder-debug.yml' || entry.name === 'builder-effective-config.yaml'

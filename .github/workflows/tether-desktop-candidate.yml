@@ -233,6 +233,9 @@ jobs:
         shell: bash
         run: bash desktop/packaging/prepare-macos-icon.sh
       - name: Package installer candidate
+        env:
+          TETHER_WINDOWS_DELTA_REPOSITORY: ${{ matrix.target == 'windows-x64' && github.repository || '' }}
+          TETHER_WINDOWS_DELTA_GITHUB_TOKEN: ${{ matrix.target == 'windows-x64' && github.token || '' }}
         run: npm run build:${{ matrix.platform }} --prefix desktop/packaging -- ${{ matrix.arch }}
       - name: Upload preview package artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
@@ -246,6 +249,7 @@ jobs:
             .scratch/tether-desktop-candidates/${{ env.CANDIDATE_VERSION }}/${{ matrix.target }}/*.deb
             .scratch/tether-desktop-candidates/${{ env.CANDIDATE_VERSION }}/${{ matrix.target }}/*.yml
             .scratch/tether-desktop-candidates/${{ env.CANDIDATE_VERSION }}/${{ matrix.target }}/*.blockmap
+            .scratch/tether-desktop-candidates/${{ env.CANDIDATE_VERSION }}/${{ matrix.target }}/*.delta
             .scratch/tether-desktop-candidates/${{ env.CANDIDATE_VERSION }}/${{ matrix.target }}/SHA256SUMS.json
           if-no-files-found: error
           compression-level: 0
