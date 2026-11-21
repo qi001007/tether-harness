@@ -219,12 +219,12 @@ class Supervisor {
   saveManagedNodeState(pid) {
     // A frozen Windows Node may serve its console from a child of the
     // bootloader. Persist the original spawn PID for tree termination.
+    const startedAt = this.managedNodeState?.pid === pid ? this.managedNodeState.startedAt : new Date().toISOString()
     const identity = this.processIdentity(pid)
-    if (!identity) throw new Error('Could not verify the managed Node process at startup')
     this.writeManagedNodeState({ pid, token: this.localApiToken, device: this.device,
       dataDir: path.resolve(this.dataDir), controllerUrl: this.remoteUrl,
-      port: this.consolePort, startedAt: new Date().toISOString(),
-      processCreatedAt: identity.created, processPath: identity.path })
+      port: this.consolePort, startedAt,
+      ...(identity ? { processCreatedAt: identity.created, processPath: identity.path } : {}) })
   }
 
   writeManagedNodeState(state) {
@@ -254,7 +254,7 @@ class Supervisor {
 
   processIdentity(pid) {
     if (process.platform === 'win32') {
-      const script = `$p=Get-CimInstance Win32_Process -Filter "ProcessId = ${pid}"; if ($null -eq $p) { exit 2 }; ConvertTo-Json -Compress @{created=$p.CreationDate.ToUniversalTime().ToString('o');path=$p.ExecutablePath}`
+      const script = `[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); $p=Get-Process -Id ${pid} -ErrorAction Stop; ConvertTo-Json -Compress @{created=$p.StartTime.ToUniversalTime().ToString('o');path=$p.Path}`
       const result = spawnSync('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', script], {
         encoding: 'utf8', windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000
       })
@@ -285,10 +285,12 @@ class Supervisor {
     const identity = this.processIdentity(state.pid)
     if (!identity || !state.processCreatedAt || !state.processPath) return false
     const normalize = (value) => path.resolve(value).toLowerCase()
-    return identity.created === state.processCreatedAt && normalize(identity.path) === normalize(state.processPath)
+    const sameCreationTime = process.platform === 'win32'
+      ? Date.parse(identity.created) === Date.parse(state.processCreatedAt) : identity.created === state.processCreatedAt
+    return sameCreationTime && normalize(identity.path) === normalize(state.processPath)
   }
 
-  managedNodeIdentityToVerify(state, child) {
+  managedNodeIdentityToVerify(state) {
     if (state.processCreatedAt || state.processPath) {
       return this.sameManagedNodeProcess(state) ? state : null
     }
@@ -299,12 +301,10 @@ class Supervisor {
     const correctPath = process.platform === 'win32'
       ? identity.path.toLowerCase() === expectedPath.toLowerCase() : identity.path === expectedPath
     if (!correctPath) return null
-    if (!child || child.pid !== state.pid) {
-      // Only Windows reports both creation times in the same clock. An old
-      // record cannot verify a PID created after the record (or long before it).
-      const ageAtSave = Date.parse(state.startedAt) - Date.parse(identity.created)
-      if (process.platform !== 'win32' || !(ageAtSave >= 0 && ageAtSave <= 30_000)) return null
-    }
+    // Only Windows reports both creation times in the same clock. A record
+    // without a saved OS identity can only attach to its original process.
+    const ageAtSave = Date.parse(state.startedAt) - Date.parse(identity.created)
+    if (process.platform !== 'win32' || !(ageAtSave >= 0 && ageAtSave <= 30_000)) return null
     return { ...state, processCreatedAt: identity.created, processPath: identity.path }
   }
 
@@ -357,14 +357,19 @@ class Supervisor {
       if (child) this.procs.node = null
       return { stopped: false }
     }
-    const verifiedState = state && state.pid === pid ? this.managedNodeIdentityToVerify(state, child) : null
-    if (state && !verifiedState) {
+    const verifiedState = !child && state ? this.managedNodeIdentityToVerify(state) : null
+    if ((!child && !verifiedState) || (state && state.pid !== pid)) {
       throw Object.assign(new Error('受管 Node 创建时间或可执行路径不匹配，拒绝停止该PID。'), { code: 'managed_node_process_mismatch' })
     }
     const token = state && state.token || this.localApiToken
     const ready = await waitForLocalNodeApi({ port: this.consolePort, device: this.device, token }, { timeoutMs: 1500 })
     if (!ready) throw Object.assign(new Error('受管 Node 身份探测失败，拒绝停止未确认进程。'), { code: 'managed_node_unverified' })
-    if (verifiedState && !this.sameManagedNodeProcess(verifiedState)) {
+    // A live child handle is already tied to this spawn. A reopened App only
+    // has a saved PID and needs independent OS identity checks before killing it.
+    const sameProcess = child
+      ? this.procs.node === child && child.exitCode === null && child.signalCode === null
+      : this.sameManagedNodeProcess(verifiedState)
+    if (!sameProcess) {
       throw Object.assign(new Error('本地身份探测期间 Node 进程发生变化，拒绝停止该PID。'), { code: 'managed_node_process_mismatch' })
     }
     if (child) this.procs.node = null
@@ -563,7 +568,9 @@ class Supervisor {
       const child = this.procs[name]
       if (child && name === 'node' && this.preserveManagedNodeOnExit && this.mode === 'hub') {
         try {
-          if (!this.managedNodeState || this.managedNodeState.pid !== child.pid) this.saveManagedNodeState(child.pid)
+          if (!this.managedNodeState || this.managedNodeState.pid !== child.pid || !this.managedNodeState.processCreatedAt) {
+            this.saveManagedNodeState(child.pid)
+          }
           child.unref()
         } catch (_) { killTree(child.pid) }
       } else if (child) killTree(child.pid)
