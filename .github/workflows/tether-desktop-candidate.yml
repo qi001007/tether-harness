@@ -111,8 +111,26 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python -m pip install --disable-pip-version-check . 'pyinstaller==6.22.3'
           mkdir -p .runtime/desktop-candidate
+          if [ "$RUNNER_OS" = macOS ] && [ "$RUNNER_ARCH" = X64 ]; then
+            # pyca no longer ships Intel Mac wheels. Keep its binding's OpenSSL
+            # separate from the same-named dylibs collected for Python's _ssl.
+            openssl_dir="$(brew --prefix openssl@3)"
+            OPENSSL_DIR="$openssl_dir" OPENSSL_STATIC=1 python -m pip install \
+              --disable-pip-version-check --no-cache-dir --no-binary cryptography \
+              . 'pyinstaller==6.22.3' 'cryptography==50.0.2'
+            cryptography_extension="$(python -c 'from cryptography.hazmat.bindings import _rust; print(_rust.__file__)')"
+            cryptography_libraries="$(otool -L "$cryptography_extension")"
+            printf '%s\n' "$cryptography_libraries"
+            if grep -Eq '(^|[[:space:]/])lib(ssl|crypto)([.]|[[:space:]])' <<< "$cryptography_libraries"; then
+              echo 'Intel macOS cryptography still links to shared OpenSSL' >&2
+              exit 1
+            fi
+            mkdir -p .runtime/desktop-candidate/licenses
+            cp "$openssl_dir/LICENSE.txt" .runtime/desktop-candidate/licenses/LICENSE.OpenSSL
+          else
+            python -m pip install --disable-pip-version-check . 'pyinstaller==6.22.3'
+          fi
           COLLECT_ARGS=(--collect-all psutil)
           DATA_ARGS=()
           CONSOLE_PAGE="$(python -c "from pathlib import Path; print(Path('tether/node/console.html').resolve().as_posix())")"
