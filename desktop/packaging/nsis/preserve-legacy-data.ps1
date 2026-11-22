@@ -1,5 +1,7 @@
 param(
   [Parameter(Mandatory = $true)][string]$InstallRoot,
+  [string]$LegacyInstallRoot,
+  [string]$LegacyCanonicalRoot,
   [string]$RegistrationDir = (Join-Path $HOME '.tether\app-installations'),
   [string]$SnapshotParent = (Join-Path $env:LOCALAPPDATA 'Tether\migration-snapshots')
 )
@@ -82,6 +84,10 @@ function Write-JsonWithoutBom([string]$Path, [object]$Value) {
 
 if (-not (Test-Path -LiteralPath $registrationDir -PathType Container)) { exit 0 }
 $install = Get-CanonicalLocalPath $InstallRoot
+$legacyAlias = $null
+if ($LegacyInstallRoot -and $LegacyCanonicalRoot -and (Get-CanonicalLocalPath $LegacyCanonicalRoot) -eq $install) {
+  $legacyAlias = Get-CanonicalLocalPath $LegacyInstallRoot
+}
 $userSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 $files = @('hub.json', 'device-token.json', 'policy.json', 'node-hub.db', 'node-hub.db-wal', 'node-local.db', 'node-local.db-wal', 'apps.json')
 
@@ -97,6 +103,9 @@ foreach ($registrationFile in Get-ChildItem -LiteralPath $registrationDir -Filte
   finally { $digest.Dispose() }
   if ($registrationFile.BaseName -ne $id) { continue }
   $legacyRoot = Get-CanonicalLocalPath $rootText
+  if ($legacyAlias -and ($legacyRoot -eq $legacyAlias -or $legacyRoot.StartsWith($legacyAlias + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase))) {
+    $legacyRoot = $install + $legacyRoot.Substring($legacyAlias.Length)
+  }
   if ($legacyRoot -ne $install -and -not $legacyRoot.StartsWith($install + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) { continue }
   if (-not (Test-Path -LiteralPath $legacyRoot -PathType Container)) { continue }
   Assert-PlainPath $legacyRoot $true

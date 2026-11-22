@@ -1,8 +1,10 @@
 !ifndef BUILD_UNINSTALLER
 !include LogicLib.nsh
 !include FileFunc.nsh
+Var TetherLegacyInstallRoot
+Var TetherLegacyCanonicalRoot
 Function PreserveTetherLegacyData
-  nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\preserve-legacy-data.ps1" -InstallRoot "$INSTDIR"'
+  nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\preserve-legacy-data.ps1" -InstallRoot "$INSTDIR" -LegacyInstallRoot "$TetherLegacyInstallRoot" -LegacyCanonicalRoot "$TetherLegacyCanonicalRoot"'
   Pop $0
   Pop $1
   StrCmp $0 0 migration_preserved
@@ -10,6 +12,150 @@ Function PreserveTetherLegacyData
     SetErrorLevel 1
     Quit
   migration_preserved:
+FunctionEnd
+
+; Stack input and output are the selected installation path. Only an existing
+; Tether installation needs resolution, and its handle follows junctions.
+Function ResolveTetherInstallRoot
+  Exch $0
+  Push $1
+  Push $2
+  ${If} ${FileExists} "$0\resources\app.asar"
+    System::Call 'kernel32::CreateFileW(w r0, i 0, i 7, p 0, i 3, i 0x02000000, p 0)p.r1'
+    ${If} $1 == -1
+      Goto resolve_tether_root_failed
+    ${EndIf}
+    System::Call 'kernel32::GetFinalPathNameByHandleW(p r1, w .r0, i ${NSIS_MAX_STRLEN}, i 0)i.r2'
+    System::Call 'kernel32::CloseHandle(p r1)'
+    ${If} $2 <= 0
+    ${OrIf} $2 >= ${NSIS_MAX_STRLEN}
+      Goto resolve_tether_root_failed
+    ${EndIf}
+    StrCpy $2 $0 4
+    ${If} $2 != "\\?\"
+      Goto resolve_tether_root_failed
+    ${EndIf}
+    StrCpy $0 $0 "" 4
+    ${GetRoot} "$0" $2
+    StrLen $2 $2
+    ${If} $2 != 2
+      Goto resolve_tether_root_failed
+    ${EndIf}
+  ${EndIf}
+  Pop $2
+  Pop $1
+  Exch $0
+  Return
+
+resolve_tether_root_failed:
+  MessageBox MB_ICONSTOP|MB_OK "Tether could not resolve the previous installation folder. Check that the installation drive is available, then retry." /SD IDOK
+  SetErrorLevel 1
+  Quit
+FunctionEnd
+
+; Both electron-builder's uninstallOldVersion and legacy un.onInit read this
+; key. Keep the old uninstall executable reachable via the original junction;
+; only change where it operates. The builder writes the final registration.
+!macro TetherCanonicalizeRegistration ROOT_KEY SELECT_ROOT PERSIST_ROOT
+  Push $0
+  Push $1
+  ReadRegStr $0 ${ROOT_KEY} "${INSTALL_REGISTRY_KEY}" InstallLocation
+  ${If} $0 != ""
+    !if ${SELECT_ROOT} == 1
+      ${If} ${isUpdated}
+      ${AndIfNot} ${FileExists} "$0\resources\app.asar"
+        MessageBox MB_ICONSTOP|MB_OK "The previous Tether installation folder is unavailable. Reconnect its drive, then retry the update." /SD IDOK
+        SetErrorLevel 1
+        Quit
+      ${EndIf}
+    !endif
+    Push $0
+    Call ResolveTetherInstallRoot
+    Pop $1
+    !if ${SELECT_ROOT} == 1
+      ${If} $INSTDIR == $0
+      ${OrIf} ${isUpdated}
+        ${If} $0 != $1
+          StrCpy $TetherLegacyInstallRoot $0
+          StrCpy $TetherLegacyCanonicalRoot $1
+        ${EndIf}
+        StrCpy $INSTDIR $1
+      ${EndIf}
+    !endif
+    !if ${PERSIST_ROOT} == 1
+      ${If} $0 != $1
+        ClearErrors
+        WriteRegStr ${ROOT_KEY} "${INSTALL_REGISTRY_KEY}" InstallLocation "$1"
+        ${If} ${Errors}
+          MessageBox MB_ICONSTOP|MB_OK "Tether could not update the previous installation path. Run the installer with the permissions used for the previous installation." /SD IDOK
+          SetErrorLevel 1
+          Quit
+        ${EndIf}
+      ${EndIf}
+    !endif
+  ${EndIf}
+  Pop $1
+  Pop $0
+!macroend
+
+!macro TetherPrepareUpgrade
+  !insertmacro TetherCanonicalizeRegistration SHELL_CONTEXT 1 1
+  ${If} $installMode == "all"
+    !insertmacro TetherCanonicalizeRegistration HKCU 0 1
+  ${EndIf}
+  Push $INSTDIR
+  Call ResolveTetherInstallRoot
+  Pop $INSTDIR
+  Call ValidateTetherInstallRoot
+  Call PrepareUpgradeTemp
+  Call PreserveTetherLegacyData
+!macroend
+
+Function ValidateTetherInstallRoot
+  Push $0
+  Push $1
+  Push $2
+  StrCpy $2 "0"
+
+validate_tether_root:
+  ${If} ${FileExists} "$INSTDIR\${APP_EXECUTABLE_FILENAME}"
+  ${AndIf} ${FileExists} "$INSTDIR\resources\app.asar"
+    Goto validate_tether_root_done
+  ${EndIf}
+  ${GetRoot} "$INSTDIR" $0
+  StrCmp $INSTDIR "$0\" validate_tether_root_nonempty
+  ClearErrors
+  FindFirst $0 $1 "$INSTDIR\*.*"
+  IfErrors validate_tether_root_done
+  ${DoWhile} $1 != ""
+    ${If} $1 != "."
+    ${AndIf} $1 != ".."
+      FindClose $0
+      Goto validate_tether_root_nonempty
+    ${EndIf}
+    FindNext $0 $1
+  ${Loop}
+  FindClose $0
+  Goto validate_tether_root_done
+
+validate_tether_root_nonempty:
+  ${If} $2 == "0"
+    MessageBox MB_ICONEXCLAMATION|MB_OKCANCEL "The selected folder contains other files. Choose OK to install in its ${APP_FILENAME} subfolder, or Cancel to stop and select another folder." /SD IDCANCEL IDOK validate_tether_root_subfolder
+  ${Else}
+    MessageBox MB_ICONSTOP|MB_OK "The suggested folder also contains other files. Restart the installer and choose an empty or new folder." /SD IDOK
+  ${EndIf}
+  SetErrorLevel 1
+  Quit
+
+validate_tether_root_subfolder:
+  StrCpy $2 "1"
+  StrCpy $INSTDIR "$INSTDIR\${APP_FILENAME}"
+  Goto validate_tether_root
+
+validate_tether_root_done:
+  Pop $2
+  Pop $1
+  Pop $0
 FunctionEnd
 
 Function PrepareUpgradeTemp
@@ -25,23 +171,7 @@ Function PrepareUpgradeTemp
     Goto prepare_upgrade_temp_done
   ${EndIf}
 
-  ; Resolve the installed file through junctions before choosing the old uninstaller's volume.
-  System::Call 'kernel32::CreateFileW(w "$INSTDIR\resources\app.asar", i 0, i 7, p 0, i 3, i 128, p 0)p.r3'
-  ${If} $3 == -1
-    Goto prepare_upgrade_temp_failed
-  ${EndIf}
-  System::Call 'kernel32::GetFinalPathNameByHandleW(p r3, w .r0, i ${NSIS_MAX_STRLEN}, i 0)i.r4'
-  System::Call 'kernel32::CloseHandle(p r3)'
-  ${If} $4 <= 0
-  ${OrIf} $4 >= ${NSIS_MAX_STRLEN}
-    Goto prepare_upgrade_temp_failed
-  ${EndIf}
-  StrCpy $4 $0 4
-  ${If} $4 != "\\?\"
-    Goto prepare_upgrade_temp_failed
-  ${EndIf}
-  StrCpy $0 $0 "" 4
-  ${GetRoot} "$0" $0
+  ${GetRoot} "$INSTDIR" $0
   StrLen $4 $0
   ${If} $4 != 2
     Goto prepare_upgrade_temp_failed
@@ -81,7 +211,7 @@ prepare_upgrade_temp_failed:
   Pop $2
   Pop $1
   Pop $0
-  MessageBox MB_ICONSTOP|MB_OK "Tether could not prepare a writable short temporary directory on the installation drive. The previous installation was not uninstalled. Check that the drive is writable, then retry."
+  MessageBox MB_ICONSTOP|MB_OK "Tether could not prepare a writable short temporary directory on the installation drive. The previous installation was not uninstalled. Check that the drive is writable, then retry." /SD IDOK
   SetErrorLevel 1
   Quit
 
@@ -93,22 +223,26 @@ prepare_upgrade_temp_done:
   Pop $0
 FunctionEnd
 !macro customInit
+  !insertmacro TetherCanonicalizeRegistration SHELL_CONTEXT 1 0
   Call PrepareUpgradeTemp
   InitPluginsDir
   SetOutPath "$PLUGINSDIR"
   File /oname=preserve-legacy-data.ps1 "${PROJECT_DIR}\desktop\packaging\nsis\preserve-legacy-data.ps1"
   ${if} ${Silent}
-    Call PreserveTetherLegacyData
+    ; Assisted per-machine silent install elevates after .onInit. Its elevated
+    ; instance runs this hook again before the old uninstaller is invoked.
+    ${If} $installMode != "all"
+    ${OrIf} ${UAC_IsAdmin}
+      !insertmacro TetherPrepareUpgrade
+    ${EndIf}
   ${endIf}
 !macroend
 
 !macro customPageAfterChangeDir
   !undef MUI_PAGE_CUSTOMFUNCTION_PRE
   !define MUI_PAGE_CUSTOMFUNCTION_PRE tetherMigrationInstallFilesPre
+  Function tetherMigrationInstallFilesPre
+    !insertmacro TetherPrepareUpgrade
+  FunctionEnd
 !macroend
-
-Function tetherMigrationInstallFilesPre
-  Call instFilesPre
-  Call PreserveTetherLegacyData
-FunctionEnd
 !endif
