@@ -91,8 +91,15 @@ function Assert-WorkspaceProfilePath([string]$Directory, [string]$Install) {
   }
 }
 
+function Get-WorkspaceFileDigest([string]$Path) {
+  $stream = [IO.File]::OpenRead($Path)
+  $sha256 = [Security.Cryptography.SHA256]::Create()
+  try { return [Convert]::ToBase64String($sha256.ComputeHash($stream)) }
+  finally { $sha256.Dispose(); $stream.Dispose() }
+}
+
 function Test-WorkspaceFileMatch([string]$First, [string]$Second) {
-  return (Get-FileHash -LiteralPath $First -Algorithm SHA256).Hash -eq (Get-FileHash -LiteralPath $Second -Algorithm SHA256).Hash
+  return (Get-WorkspaceFileDigest $First) -ceq (Get-WorkspaceFileDigest $Second)
 }
 
 function Preserve-InternalWorkspace([string]$Install) {
