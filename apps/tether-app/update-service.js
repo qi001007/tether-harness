@@ -11,10 +11,10 @@ const execFileAsync = promisify(execFile)
 const UPDATER_RUNTIME_FILES = ['updates.py', 'updates_cli.py', 'release.py', 'ed25519.py']
 
 function ensureWindowsUpdaterTempDir(executablePath) {
-  const volumeRoot = path.parse(executablePath).root
   let tempDir = ''
   try {
-    if (!volumeRoot) throw new Error('无法确定 APP 安装卷')
+    const volumeRoot = path.parse(fs.realpathSync.native(executablePath)).root
+    if (!/^[A-Za-z]:\\$/.test(volumeRoot)) throw new Error('无法确定 APP 安装卷')
     tempDir = path.join(volumeRoot, 'tether-up')
     fs.mkdirSync(tempDir, { recursive: true })
     // Confirm this volume-root directory is writable before the app starts shutting down.

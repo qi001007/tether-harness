@@ -25,8 +25,25 @@ Function PrepareUpgradeTemp
     Goto prepare_upgrade_temp_done
   ${EndIf}
 
-  ${GetRoot} "$INSTDIR" $0
-  ${If} $0 == ""
+  ; Resolve the installed file through junctions before choosing the old uninstaller's volume.
+  System::Call 'kernel32::CreateFileW(w "$INSTDIR\resources\app.asar", i 0, i 7, p 0, i 3, i 128, p 0)p.r3'
+  ${If} $3 == -1
+    Goto prepare_upgrade_temp_failed
+  ${EndIf}
+  System::Call 'kernel32::GetFinalPathNameByHandleW(p r3, w .r0, i ${NSIS_MAX_STRLEN}, i 0)i.r4'
+  System::Call 'kernel32::CloseHandle(p r3)'
+  ${If} $4 <= 0
+  ${OrIf} $4 >= ${NSIS_MAX_STRLEN}
+    Goto prepare_upgrade_temp_failed
+  ${EndIf}
+  StrCpy $4 $0 4
+  ${If} $4 != "\\?\"
+    Goto prepare_upgrade_temp_failed
+  ${EndIf}
+  StrCpy $0 $0 "" 4
+  ${GetRoot} "$0" $0
+  StrLen $4 $0
+  ${If} $4 != 2
     Goto prepare_upgrade_temp_failed
   ${EndIf}
   StrCpy $1 "$0\tether-up"

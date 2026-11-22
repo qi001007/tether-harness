@@ -259,6 +259,9 @@ try {
   ])
 
   if (process.platform === 'win32') {
+    const executableAlias = 'D:\\Apps\\Tether\\Tether.exe'
+    const physicalExecutable = 'E:\\Project\\Runtime\\Apps\\Tether\\Tether.exe'
+    const installerTemp = 'E:\\tether-up'
     const updater = new EventEmitter()
     let downloadCalls = 0
     updater.downloadUpdate = async () => { downloadCalls++; return [] }
@@ -277,7 +280,7 @@ try {
     try {
       packagedService = new UpdateService({
         repoRoot, dataDir, python: 'python-fixture', env: {},
-        app: { getPath: (name) => name === 'exe' ? 'D:\\Apps\\Tether\\Tether.exe' : userData,
+        app: { getPath: (name) => name === 'exe' ? executableAlias : userData,
           getVersion: () => '0.5.5', isPackaged: true },
         exec,
         stopManagedNode: async () => { stopEnv = { temp: process.env.TEMP, tmp: process.env.TMP } }
@@ -290,6 +293,7 @@ try {
     const originalMkdtempSync = fs.mkdtempSync
     const originalRmdirSync = fs.rmdirSync
     const originalStatfsSync = fs.statfsSync
+    const originalRealpathNative = fs.realpathSync.native
     const originalTemp = process.env.TEMP
     const originalTmp = process.env.TMP
     let stopEnv
@@ -310,6 +314,10 @@ try {
     }
     fs.mkdtempSync = (prefix) => { probePrefix = prefix; return `${prefix}fixture` }
     fs.rmdirSync = (directory) => { removedProbe = directory }
+    fs.realpathSync.native = (filename) => {
+      assert.equal(filename, executableAlias)
+      return physicalExecutable
+    }
     fs.statfsSync = (cacheRoot, options) => {
       statfsCalls++
       assert.equal(cacheRoot, process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'))
@@ -371,12 +379,12 @@ try {
       await packagedService.apply(preparedId, {
         beforeInstall: async () => { beforeInstallTemp = { temp: process.env.TEMP, tmp: process.env.TMP } }
       })
-      assert.equal(mkdirPath, 'D:\\tether-up')
-      assert.equal(probePrefix, path.join('D:\\tether-up', 'write-probe-'))
+      assert.equal(mkdirPath, installerTemp)
+      assert.equal(probePrefix, path.join(installerTemp, 'write-probe-'))
       assert.equal(removedProbe, `${probePrefix}fixture`)
       assert.deepEqual(beforeInstallTemp, { temp: 'before-temp', tmp: 'before-tmp' })
       assert.deepEqual(stopEnv, { temp: 'before-temp', tmp: 'before-tmp' })
-      assert.deepEqual(installCalls[0], { args: [true, true], temp: 'D:\\tether-up', tmp: 'D:\\tether-up' })
+      assert.deepEqual(installCalls[0], { args: [true, true], temp: installerTemp, tmp: installerTemp })
       assert.equal(process.env.TEMP, 'before-temp')
       assert.equal(process.env.TMP, 'before-tmp')
 
@@ -386,7 +394,7 @@ try {
       packagedService.preparedIds.add(missingEnvPreparedId)
       installError = null
       await packagedService.apply(missingEnvPreparedId)
-      assert.deepEqual(installCalls[1], { args: [true, true], temp: 'D:\\tether-up', tmp: 'D:\\tether-up' })
+      assert.deepEqual(installCalls[1], { args: [true, true], temp: installerTemp, tmp: installerTemp })
       assert.equal(process.env.TEMP, undefined)
       assert.equal(process.env.TMP, undefined)
       process.env.TEMP = 'before-temp'
@@ -415,6 +423,7 @@ try {
       fs.mkdtempSync = originalMkdtempSync
       fs.rmdirSync = originalRmdirSync
       fs.statfsSync = originalStatfsSync
+      fs.realpathSync.native = originalRealpathNative
       if (originalTemp === undefined) delete process.env.TEMP
       else process.env.TEMP = originalTemp
       if (originalTmp === undefined) delete process.env.TMP
