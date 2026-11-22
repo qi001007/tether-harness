@@ -4616,7 +4616,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             h('span', { style: { marginLeft: 'auto' } }, active ? h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center', color: C.amber } }, h(Glyph, { name: 'refresh', size: 14 }))
               : pill(card.pill, updateToneColor(card.tone)))),
           h('div', { style: { color: C.sub, fontSize: 12, lineHeight: '19px' } }, versionText),
-          nodeUpdateManaged ? h('div', { style: { color: C.mute, fontSize: 11, marginTop: 3 } }, 'Node 由安装包或独立安装器更新') : null,
+          null,
           updateProgressBar(infos, active),
           h('div', { style: { marginTop: 8 } },
             active ? btn(h('span', { className: 'tether-spin', style: { width: 16, height: 16, display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 16 })), () => {}, { primary: true, disabled: true })
@@ -4664,7 +4664,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
                 : pill(card.pill, updateToneColor(card.tone)))),
           h('div', { style: { color: C.sub, fontSize: 12, lineHeight: '19px' } },
             versionRows.map((text) => h('div', { key: text }, text))),
-          nodeUpdateManaged ? h('div', { style: { color: C.mute, fontSize: 11, marginTop: 3 } }, 'Node 由安装包或独立安装器更新') : null,
+          null,
           h('div', { style: { marginTop: 8 } },
             updateAction || (active ? btn(h('span', { className: 'tether-spin', style: { width: 16, height: 16, display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 16 })), () => {}, { primary: true, disabled: true })
               : !item.online ? btn('离线', () => {}, { primary: true, disabled: true })
@@ -7275,9 +7275,11 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           const hasApp = hasInstalledApp(caps)
         const appUpdateUnavailable = caps.app_update_owner === 'electron_updater'
           && caps.app_update_bridge_available !== true
+          // Always show the Node version next to APP. An app-managed Node is still a
+          // real component; hiding it behind a note reads as a regression.
           const components = local
-            ? (product === 'desktop' ? ['app', ...(nodeUpdateManaged ? [] : ['node'])] : ['plugin'])
-            : [...(hasApp ? ['app'] : []), ...(nodeUpdateManaged ? [] : ['node'])]
+            ? (product === 'desktop' ? ['app', 'node'] : ['plugin'])
+            : [...(hasApp ? ['app'] : []), ...(caps.node_version ? ['node'] : [])]
           const updateOrigin = local ? '' : deviceUpdateOrigin(caps)
           const infos = components.map((component) => scopedInfo(item.device_id, component))
           const products = components.map((component, index) => ({
@@ -7303,7 +7305,6 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             products,
             updateAction,
             updateReason: appUpdateUnavailable ? '请先启动目标桌面 APP 后再更新'
-              : nodeUpdateManaged ? 'Node 由安装包或独立安装器更新'
               : (!local && !hasApp && !updateOrigin ? '此设备尚未报告可用的 Node 自更新能力' : ''),
             available: (local || !!updateOrigin) && infos.some((info) => info && info.update_available === true && !isUpdateInfoStale(info)),
             running: deviceUpdateRunning(item.device_id),
