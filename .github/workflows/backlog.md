@@ -1,4 +1,5 @@
 # 变更记录
+- 2026-11-22：Windows 安装器第二次修订后仍按最初四平台构建的提交校验差异，再复用同一版本的非 Windows 产物。
 - 2026-11-13：新增 `codex/tether-056-reconnect-20261113` desktop candidate 触发，映射 APP/Node 0.5.6 与 `v0.5.6-preview.1`；保留旧版本映射，聚合结果为 draft prerelease 且 `make_latest: false`。
 - 2026-11-12：增加 `codex/tether-055-native-mode-20261112` desktop candidate 触发与 0.5.5/`v0.5.5-preview.1` 选择，并纳入 preview draft 汇总；旧候选映射保持不变。
 - 2026-11-11：Actions run 42937706743 的 build jobs 全绿，但因首个 preview 标签错误为 preview.2 而被发布脚本拒绝；已改回首个合法标签 preview.1。

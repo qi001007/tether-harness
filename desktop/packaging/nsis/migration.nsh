@@ -163,7 +163,12 @@ validate_tether_root_nonempty:
 
 validate_tether_root_subfolder:
   StrCpy $2 "1"
-  StrCpy $INSTDIR "$INSTDIR\${APP_FILENAME}"
+  ; Let the assisted installer suggest its product subfolder only after consent.
+  StrCpy $1 $INSTDIR
+  Call instFilesPre
+  ${If} $INSTDIR == $1
+    StrCpy $INSTDIR "$INSTDIR\${APP_FILENAME}"
+  ${EndIf}
   Goto validate_tether_root
 
 validate_tether_root_done:
