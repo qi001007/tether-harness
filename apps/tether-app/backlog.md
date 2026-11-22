@@ -1,5 +1,8 @@
 # tether-app backlog
 
+- 2026-11-22：Electron 预下载允许原生任务继续运行，接受安装与真正重启前仍检查忙态。Windows 最近一次 APP 更新回执存入本机 `updates/windows-app-receipt.json`，只记录版本、时间、结果及实际观察到的下载方式和有效载荷。新版启动且本机更新桥就绪后标记完成。
+- 2026-11-22：Windows APP 更新按实际安装卷选择私有缓存，解析安装目录联接，复用已有同卷缓存。旧缓存仅作为经大小和 SHA-512 验证的单补丁基线，下载文件和安装器临时目录留在安装卷且独立于卸载目录。准备与安装均检查该卷空间。安装器通过本次启动环境取得同卷临时目录，不更改用户环境配置。
+
 - 2026-11-21 接入个人网的本机常驻中转设置，DSH 新连接遇到真实网络不可达时复用授权 Surface 入口。
 - 2026-11-11：为 external 常驻 Node 增加显式 loopback API 桥配置：仅接受有效端口和至少 32 位安全 token；Supervisor 不启动/停止外部 Node，snapshot 不含凭据；APP 启动及每次 mesh route 前用 Bearer+设备路径验证 API，route 回包须匹配设备、网络和本机 SOCKS 地址。未配置仍拒绝；不涉及 Codeg 可见验收。
 - 2026-11-10：旧节点 Files 在结构化 `service_catalog bad_op` 分类后新增最小只读 `list`：冷/热缓存均走固定认证 `POST /api/devices/{target}/fs/list`，请求体只含 `path`，严格校验设备、路径和目录项并强制 `writable:false`；现代 list 与旧节点 drives/workspaces 原路径不变。旧 Codeg 网络目录为空或没有 ready 网络时返回明确的安全配置错误，仍禁止直连或放宽成员/`service_ip` 校验。

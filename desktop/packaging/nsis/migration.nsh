@@ -198,12 +198,13 @@ Function PrepareUpgradeTemp
   StrCpy $1 "$0\tether-up"
   CreateDirectory "$1"
   ${IfNot} ${FileExists} "$1"
-    Goto prepare_upgrade_temp_failed
+    Goto prepare_upgrade_temp_fallback
   ${EndIf}
 
+prepare_upgrade_temp_test:
   ClearErrors
   GetTempFileName $2 "$1"
-  IfErrors prepare_upgrade_temp_failed
+  IfErrors prepare_upgrade_temp_fallback
   FileOpen $3 "$2" w
   IfErrors prepare_upgrade_temp_failed
   FileClose $3
@@ -220,6 +221,22 @@ Function PrepareUpgradeTemp
     Goto prepare_upgrade_temp_failed
   ${EndIf}
   Goto prepare_upgrade_temp_done
+
+prepare_upgrade_temp_fallback:
+  ; A standard user may install on a drive whose root does not allow writes.
+  ; Only the non-elevated installer may use the updater's per-user directory.
+  ${If} ${UAC_IsAdmin}
+  ${OrIf} $1 != "$0\tether-up"
+    Goto prepare_upgrade_temp_failed
+  ${EndIf}
+  ReadEnvStr $1 "TETHER_UPDATER_TEMP"
+  ${GetRoot} "$1" $4
+  ${If} $4 != $0
+  ${OrIf} $1 == "$0\tether-up"
+  ${OrIfNot} ${FileExists} "$1\."
+    Goto prepare_upgrade_temp_failed
+  ${EndIf}
+  Goto prepare_upgrade_temp_test
 
 prepare_upgrade_temp_failed:
   ${If} $2 != ""

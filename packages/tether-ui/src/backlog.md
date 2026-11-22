@@ -78,3 +78,5 @@
 - 2026-11-21：已登录用户可明确选择接入尚无身份的本机，完成后同一窗口立即使用新的设备身份。
 
 - 2026-11-22 Verify the restarted Node through its authenticated DSH surface before committing a one-click update.
+
+- 2026-11-22 设备更新默认在后台执行。不同设备可以分别启动，同一设备的开始和重试请求去重。标题栏依据选中设备选择 APP 或 Node，保留 DSH 插件入口。有新发行时忽略指向旧发行的失败作业。Windows 本机正式 App 检查到 0.5.12 或以上且支持随包接管时，只准备 App 安装包。保留旧版本和独立 Node 的更新流程。

@@ -302,8 +302,13 @@ const deltaBase = process.env.TETHER_WINDOWS_DELTA_BASE_DIR
 const deltaRepository = process.env.TETHER_WINDOWS_DELTA_REPOSITORY
 if (platform === 'windows' && (deltaBase || deltaRepository)) {
   const { buildWindowsDelta } = await import('./build-windows-delta.mjs')
-  await buildWindowsDelta({ targetDirectory: output, fromDirectory: deltaBase, repository: deltaRepository,
-    token: deltaGitHubToken })
+  const options = { targetDirectory: output, fromDirectory: deltaBase, repository: deltaRepository,
+    token: deltaGitHubToken }
+  const previousBase = await buildWindowsDelta(options)
+  // A user who skipped one release should still need only one patch.
+  if (previousBase && deltaRepository && !deltaBase) {
+    await buildWindowsDelta({ ...options, previousBase })
+  }
 }
 
 const artifacts = []

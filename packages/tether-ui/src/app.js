@@ -242,6 +242,30 @@ export function isVersionNewer(candidate, current) {
   return false
 }
 
+export function windowsAppUpdateAdoptsNode(host, platform, update) {
+  const target = /^(\d+\.\d+\.\d+)(?:[-+][\w.+-]+)?$/.exec(update?.latest_version || '')?.[1]
+  return host?.kind === 'app' && /^win(?:dows|32)(?:\b|$)/i.test(platform || '')
+    && update?.source === 'electron-updater' && update.update_available === true && !isUpdateInfoStale(update)
+    && !!target && (target === '0.5.12' || isVersionNewer(target, '0.5.12'))
+}
+
+const startingUpdates = new Set()
+
+export function beginDeviceUpdate(authority, deviceId) {
+  const key = JSON.stringify([String(authority || '').replace(/\/+$/, ''), deviceId])
+  if (startingUpdates.has(key)) return null
+  startingUpdates.add(key)
+  return () => startingUpdates.delete(key)
+}
+
+export function currentDeviceUpdateJob(summary, job) {
+  const target = summary?.target_version
+  if (summary?.update_available === true && typeof target === 'string' && target
+      && typeof job?.target_version === 'string' && job.target_version && job.target_version !== target
+      && ['error', 'failed', 'cancelled'].includes(job.status)) return null
+  return job
+}
+
 export function updateNeededFor(info) {
   if (!info) return true
   if (isUpdateInfoStale(info)) return true
@@ -490,6 +514,12 @@ function hasInstalledApp(capabilities = {}) {
   if (typeof capabilities.app_installed === 'boolean') return capabilities.app_installed
   return !!(capabilities.app_version
     || (Array.isArray(capabilities.installed_products) && capabilities.installed_products.includes('app')))
+}
+
+export function deviceUpdateOrigin(capabilities = {}) {
+  if (hasInstalledApp(capabilities)) return 'app'
+  const installerOwnedNode = ['app_installer', 'bundle_installer'].includes(capabilities.node_update_owner)
+  return capabilities.node_self_update_enabled === true && !installerOwnedNode ? 'node' : ''
 }
 
 export function localPluginNeedsRestart(info) {
@@ -748,16 +778,18 @@ export function buildTablePreview({ name, text, sourceTruncated, rowLimit, colum
 }
 
 export function MinimalUpdateButton({ React, h, api, post, deviceId, localDeviceId, onRemoteDone, host, C, Glyph,
-                                     originProduct: requestedOriginProduct, triggerLabel = '', disabled = false,
+                                     originProduct: requestedOriginProduct, triggerLabel = '', disabled = false, busy = false,
                                      onJobChange }) {
   const apiRef = React.useRef(api)
   apiRef.current = api
   const mountedRef = React.useRef(true)
   const doneJobRef = React.useRef('')
   const [summary, setSummary] = React.useState(null)
-  const [job, setJob] = React.useState(null)
+  const [storedJob, setJob] = React.useState(null)
+  const job = currentDeviceUpdateJob(summary, storedJob)
   const [error, setError] = React.useState('')
-  const [detailsOpen, setDetailsOpen] = React.useState(true)
+  const [detailsOpen, setDetailsOpen] = React.useState(false)
+  const [submitting, setSubmitting] = React.useState(false)
   const hubUrl = host && typeof host.hubConfig === 'function' ? (host.hubConfig() || {}).url : ''
   const originProduct = requestedOriginProduct || (host && host.kind === 'dsh' ? 'plugin' : 'app')
   const jobChangeRef = React.useRef(onJobChange)
@@ -776,7 +808,8 @@ export function MinimalUpdateButton({ React, h, api, post, deviceId, localDevice
     setSummary(null)
     setJob(null)
     setError('')
-    setDetailsOpen(true)
+    setDetailsOpen(false)
+    setSubmitting(false)
   }, [devicePath])
   const labels = {
     queued: '准备更新', checking: '检查版本', downloading: '下载更新',
@@ -792,13 +825,14 @@ export function MinimalUpdateButton({ React, h, api, post, deviceId, localDevice
         setSummary(data || null)
         setError('')
         if (data && data.job) {
-          setJob(data.job)
-          notifyJobChange(data.job)
+          const current = currentDeviceUpdateJob(data, data.job)
+          setJob(current)
+          notifyJobChange(current)
         } else {
           try {
             const latest = await apiRef.current(devicePath + '/update/job', { method: 'GET' }, hubUrl)
             if (cancelled) return
-            const restored = latest && latest.status !== 'done' ? latest : null
+            const restored = currentDeviceUpdateJob(data, latest && latest.status !== 'done' ? latest : null)
             setJob(restored)
             setError(restored && ['error', 'failed', 'cancelled'].includes(restored.status)
               ? ((restored.error && (restored.error.detail || restored.error.code)) || '更新失败') : '')
@@ -823,7 +857,7 @@ export function MinimalUpdateButton({ React, h, api, post, deviceId, localDevice
     let cancelled = false
     const poll = async () => {
       try {
-        const next = await apiRef.current(devicePath + '/update/job', { method: 'GET' }, hubUrl)
+        const next = currentDeviceUpdateJob(summary, await apiRef.current(devicePath + '/update/job', { method: 'GET' }, hubUrl))
         if (cancelled) return
         setJob(next)
         notifyJobChange(next)
@@ -868,15 +902,19 @@ export function MinimalUpdateButton({ React, h, api, post, deviceId, localDevice
     }
     const timer = setInterval(poll, 1000)
     return () => { cancelled = true; clearInterval(timer) }
-  }, [hubUrl, devicePath, job && job.job_id, job && job.status])
+  }, [hubUrl, devicePath, job && job.job_id, job && job.status, summary?.target_version, summary?.update_available])
   const start = async () => {
+    if (disabled || busy || (job && job.status !== 'done')) return
+    const release = beginDeviceUpdate(hubUrl, deviceId)
+    if (!release) return
     const startScope = { deviceId, hubUrl, originProduct }
     const isCurrentScope = () => mountedRef.current
       && scopeRef.current.deviceId === startScope.deviceId
       && scopeRef.current.hubUrl === startScope.hubUrl
       && scopeRef.current.originProduct === startScope.originProduct
     setError('')
-    setDetailsOpen(true)
+    setDetailsOpen(false)
+    setSubmitting(true)
     try {
       const created = await apiRef.current(devicePath + '/update/apply', {
         method: 'POST', body: JSON.stringify({ origin_product: originProduct })
@@ -889,6 +927,9 @@ export function MinimalUpdateButton({ React, h, api, post, deviceId, localDevice
       const message = (cause && (cause.message || cause.code)) || '更新启动失败'
       setError(message)
       notifyJobChange({ status: 'error', error: { detail: message } })
+    } finally {
+      release()
+      if (isCurrentScope()) setSubmitting(false)
     }
   }
   const retry = async () => {
@@ -902,8 +943,12 @@ export function MinimalUpdateButton({ React, h, api, post, deviceId, localDevice
       setError('当前更新任务缺少标识，无法安全重试。请重新检查更新状态。')
       return
     }
+    if (disabled || busy || !['error', 'failed', 'cancelled'].includes(job.status)) return
+    const release = beginDeviceUpdate(hubUrl, deviceId)
+    if (!release) return
     setError('')
-    setDetailsOpen(true)
+    setDetailsOpen(false)
+    setSubmitting(true)
     try {
       const retried = await apiRef.current(devicePath + '/update/retry', {
         method: 'POST', body: JSON.stringify({ job_id: retryJobId })
@@ -916,12 +961,14 @@ export function MinimalUpdateButton({ React, h, api, post, deviceId, localDevice
       const message = (cause && (cause.message || cause.code)) || '更新重试失败'
       setError(message)
       notifyJobChange({ status: 'error', error: { detail: message } })
+    } finally {
+      release()
+      if (isCurrentScope()) setSubmitting(false)
     }
   }
   if (!hubUrl || !devicePath) return null
   const available = !!(summary && summary.update_available)
   if (!available && !job) return null
-  const remoteTarget = !localDeviceId || deviceId !== localDeviceId
   const jobFailed = !!(job && ['error', 'failed', 'cancelled'].includes(job.status))
   const percent = Math.max(0, Math.min(100, Number(job && job.progress && job.progress.percent) || 0))
   const statusText = job ? ((job.progress && job.progress.step) || labels[job.status] || '更新中') : '准备更新'
@@ -943,10 +990,10 @@ export function MinimalUpdateButton({ React, h, api, post, deviceId, localDevice
     error ? h('div', { role: 'alert', style: { color: C.red, fontSize: 12, textAlign: 'center' } }, error) : null,
     h('div', { style: { display: 'flex', justifyContent: 'center', gap: 8 } },
       jobFailed ? h('button', {
-        type: 'button', onClick: retry,
+        type: 'button', disabled: disabled || busy || submitting, onClick: retry,
         style: { border: 0, borderRadius: 7, background: C.blue, color: '#fff', padding: '7px 18px', fontSize: 12, cursor: 'pointer' }
       }, '重试') : null,
-      jobFailed || (activeJob && remoteTarget) ? h('button', {
+      jobFailed || activeJob ? h('button', {
         type: 'button', onClick: () => setDetailsOpen(false),
         style: { border: 0, borderRadius: 7, background: 'transparent', color: C.sub, padding: '7px 14px', fontSize: 12, cursor: 'pointer' }
       }, jobFailed ? '关闭' : '后台更新') : null))) : null
@@ -957,7 +1004,7 @@ export function MinimalUpdateButton({ React, h, api, post, deviceId, localDevice
   }, jobFailed ? '更新失败' : statusText) : null
   return h('div', { style: { display: 'contents' } },
     available ? h('button', {
-      type: 'button', disabled,
+      type: 'button', disabled: disabled || submitting || (busy && !hasOpenJob),
       title: hasOpenJob ? (jobFailed ? '查看更新失败详情' : '查看更新进度') : '更新到 ' + ((summary && summary.target_version) || '最新版本'),
       'aria-label': hasOpenJob ? '查看更新状态' : '更新到最新版本',
       onClick: hasOpenJob ? () => setDetailsOpen(true) : start,
@@ -4408,8 +4455,8 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         }
         return null
       }
-      const prepareUpdateComponent = async (component, scope) => {
-        const checked = await updateAction(component, 'check', undefined, scope)
+      const prepareUpdateComponent = async (component, scope, checked = undefined) => {
+        if (checked === undefined) checked = await updateAction(component, 'check', undefined, scope)
         if (!checked || checked.ok === false) return { failed: true, checked }
         if (updateInfoRunning(checked)) return { inProgress: true, checked }
         if (checked.update_available !== true) {
@@ -4433,7 +4480,8 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         const preparedId = prepared.prepared_id || ((prepared.prepared || [])[0] || {}).prepared_id
         if (!preparedId) return { failed: true, checked }
         const preparedRow = (prepared.prepared || []).find((item) => item && item.prepared_id === preparedId)
-        const expectedVersion = prepared.to_version || (preparedRow && preparedRow.to_version) || checked.latest_version
+        const expectedVersion = prepared.to_version || (preparedRow && preparedRow.to_version)
+          || prepared.latest_version || checked.latest_version
         return { checked, prepared, preparedId, expectedVersion, authority: checked.authorityBase, scope }
       }
       const openUpdateCenter = () => {
@@ -4473,6 +4521,9 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         : (updateInfo[component] || {})
       const updateToneColor = (tone) => tone === 'red' ? C.red : tone === 'green' ? C.green : tone === 'amber' ? C.amber : C.mute
       const updateRunState = (key) => updateRuns[key] || null
+      const deviceUpdateRunning = (id) => updateRunState('device:' + id)?.state === 'running'
+        || (id === (appLocalDevice || deviceId) && ['desktop', 'dsh'].some((product) =>
+          updateRunState('product:' + product)?.state === 'running'))
       const trackDeviceUpdateJob = (key, job) => {
         if (!job) {
           setUpdateRun(key, null)
@@ -4501,10 +4552,10 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         }
       }
       const updateButton = (card, onRetry, onRecheck, onPrimary, disabled = false) => {
-        if (card.action === 'retry') return btn('重试', onRetry, { primary: true, disabled: anyUpdateRunning || disabled })
-        if (card.action === 'recheck') return btn('重试', onRecheck, { primary: true, disabled: anyUpdateRunning || disabled })
-        if (card.action === 'restart') return btn('立即生效', applyDshUpdate, { primary: true, disabled: anyUpdateRunning || disabled })
-        return btn(card.disabled ? '一键更新' : card.label, onPrimary, { primary: true, disabled: anyUpdateRunning || disabled || card.disabled })
+        if (card.action === 'retry') return btn('重试', onRetry, { primary: true, disabled })
+        if (card.action === 'recheck') return btn('重试', onRecheck, { primary: true, disabled })
+        if (card.action === 'restart') return btn('立即生效', applyDshUpdate, { primary: true, disabled })
+        return btn(card.disabled ? '一键更新' : card.label, onPrimary, { primary: true, disabled: disabled || card.disabled })
       }
       const updateProgressBar = (infos, active) => {
         if (!active) return null
@@ -4522,7 +4573,8 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         if (host && host.kind === 'web') return null
         const localId = appLocalDevice || deviceId
         const localDevice = ((state && state.devices) || []).find((item) => item.device_id === localId)
-        const nodeUpdateManaged = product === 'desktop' && localDevice?.capabilities?.node_self_update_enabled === false
+        const nodeUpdateManaged = product === 'desktop' && (localDevice?.capabilities?.node_self_update_enabled === false
+          || windowsAppUpdateAdoptsNode(host, localDevice?.platform, infoFor('app')))
         const components = product === 'desktop' ? ['app', ...(nodeUpdateManaged ? [] : ['node'])] : ['localPlugin']
         const infos = components.map((component) => {
           const info = infoFor(component, component === 'node' ? localId : '')
@@ -4566,7 +4618,8 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           updateProgressBar(infos, active),
           h('div', { style: { marginTop: 8 } },
             active ? btn(h('span', { className: 'tether-spin', style: { width: 16, height: 16, display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 16 })), () => {}, { primary: true, disabled: true })
-              : updateButton(card, () => runProductUpdate(product), () => refreshUpdateCenter(true), () => runProductUpdate(product))))
+              : updateButton(card, () => runProductUpdate(product), () => refreshUpdateCenter(true),
+                () => runProductUpdate(product), deviceUpdateRunning(localId))))
       }
       const deviceCard = (item) => {
         const node = infoFor('node', item.device_id)
@@ -4578,9 +4631,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           && capabilities.app_update_bridge_available !== true
         const componentNames = [...(nodeUpdateManaged ? [] : ['node']), ...(hasApp ? ['app'] : [])]
         const infos = componentNames.map((component) => component === 'node' ? node : app)
-        const installerOwnedNode = ['app_installer', 'bundle_installer'].includes(capabilities.node_update_owner)
-        const updateOrigin = hasApp ? 'app'
-          : capabilities.node_self_update_enabled === true && !installerOwnedNode ? 'node' : ''
+        const updateOrigin = deviceUpdateOrigin(capabilities)
         const runKey = 'device:' + item.device_id
         const run = updateRunState('device:' + item.device_id)
         const running = run?.state === 'running'
@@ -4593,7 +4644,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             React, h, api, post, deviceId: item.device_id, localDeviceId: appLocalDevice,
             onRemoteDone: async () => { await loadState(true); await refreshUpdateCenter(true) },
             host, C, Glyph, originProduct: updateOrigin, triggerLabel: '一键更新',
-            disabled: anyUpdateRunning && !running,
+            disabled: !item.online, busy: running,
             onJobChange: (job) => trackDeviceUpdateJob(runKey, job)
           })
           : null
@@ -4613,9 +4664,9 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             versionRows.map((text) => h('div', { key: text }, text))),
           nodeUpdateManaged ? h('div', { style: { color: C.mute, fontSize: 11, marginTop: 3 } }, 'Node 由安装包或独立安装器更新') : null,
           h('div', { style: { marginTop: 8 } },
-            active ? btn(h('span', { className: 'tether-spin', style: { width: 16, height: 16, display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 16 })), () => {}, { primary: true, disabled: true })
+            updateAction || (active ? btn(h('span', { className: 'tether-spin', style: { width: 16, height: 16, display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 16 })), () => {}, { primary: true, disabled: true })
               : !item.online ? btn('离线', () => {}, { primary: true, disabled: true })
-                : updateAction || (card.action === 'update'
+                : card.action === 'update'
                   ? btn('暂不可更新', () => {}, { primary: true, disabled: true })
                   : updateButton(card, () => refreshUpdateCenter(true), () => refreshUpdateCenter(true),
                     () => refreshUpdateCenter(true), false))))
@@ -4623,14 +4674,22 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const runProductUpdate = async (product) => {
         const localId = appLocalDevice || deviceId
         const runKey = 'product:' + product
+        if (deviceUpdateRunning(localId)) return
+        const hubUrl = typeof host?.hubConfig === 'function' ? (host.hubConfig() || {}).url : ACTIVE_BASE
+        const release = beginDeviceUpdate(hubUrl, localId)
+        if (!release) return
         setUpdateRun(runKey, { state: 'running' })
-        setUpdateBusy('product:' + product)
+        setUpdateBusy(runKey)
         let failure = ''
         try {
           const nodeScope = localId ? { deviceId: localId, epoch: 0 } : null
-          const localCapabilities = ((stateRef.current?.devices || []).find((item) => item.device_id === localId) || {}).capabilities || {}
+          const localDevice = (stateRef.current?.devices || []).find((item) => item.device_id === localId)
+          const appCheck = product === 'desktop' ? await updateAction('app', 'check', undefined, null) : undefined
+          if (product === 'desktop' && !appCheck) { failure = 'APP 更新检查失败'; return }
+          const appAdoptsNode = windowsAppUpdateAdoptsNode(host, localDevice?.platform, appCheck)
+          const updateNode = localDevice?.capabilities?.node_self_update_enabled !== false && !appAdoptsNode
           const plan = product === 'desktop'
-            ? [...(localCapabilities.node_self_update_enabled === false ? [] : [{ component: 'node', scope: nodeScope }]), { component: 'app', scope: null }]
+            ? [...(updateNode ? [{ component: 'node', scope: nodeScope }] : []), { component: 'app', scope: null }]
             : [{ component: 'localPlugin', scope: null }]
           const prepared = {}
           const rollbackPreparedNode = async (reason) => {
@@ -4648,7 +4707,8 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
               continue
             }
             try {
-              prepared[step.component] = await prepareUpdateComponent(step.component, step.scope)
+              prepared[step.component] = await prepareUpdateComponent(step.component, step.scope,
+                step.component === 'app' ? appCheck : undefined)
             } catch (error) {
               prepared[step.component] = { failed: true }
               setComponentUpdateError(step.component, shortUpdateError(error), step.scope)
@@ -4657,6 +4717,9 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
               failure = step.component === 'app' ? 'APP 更新失败'
                 : step.component === 'node' ? 'Node 更新失败' : '插件更新失败'
             }
+          }
+          if (appAdoptsNode && prepared.app?.preparedId && prepared.app.expectedVersion !== appCheck.latest_version) {
+            failure = 'APP 更新目标已变化，请重新检查'
           }
           if (!failure && Object.values(prepared).some((entry) => entry && entry.inProgress)) failure = '有组件正在更新，请完成后重试'
           if (!failure && prepared.node && prepared.node.acceptancePending) {
@@ -4674,8 +4737,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             failure = nodeRestartManualMessage
             setComponentUpdateError('node', nodeRestartManualMessage, nodeScope)
           }
-          // Everything is downloaded before the first apply. Node goes first so
-          // the APP (and with it the node process) restarts exactly once.
+          // Finish all downloads before applying. Only legacy desktop updates also apply Node.
           const order = product === 'desktop' ? ['node', 'app'] : ['localPlugin']
           if (!failure) for (const component of order) {
             const entry = prepared[component]
@@ -4751,9 +4813,12 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           failure = shortUpdateError(error)
           setComponentUpdateError(product === 'desktop' ? 'app' : 'localPlugin', failure, null)
         } finally {
-          await refreshUpdateCenter(true)
-          setUpdateRun(runKey, failure ? { state: 'error', message: failure } : { state: 'done' })
-          setUpdateBusy('')
+          try { await refreshUpdateCenter(true) }
+          finally {
+            setUpdateRun(runKey, failure ? { state: 'error', message: failure } : { state: 'done' })
+            setUpdateBusy((current) => current === runKey ? '' : current)
+            release()
+          }
         }
       }
       React.useEffect(() => {
@@ -7180,6 +7245,8 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const liveHubStatus = hubBusy ? 'checking'
         : (stateOkAtRef.current && Date.now() - stateOkAtRef.current < 8000 ? 'online'
           : (hubStatus === 'offline' ? 'offline' : 'checking'))
+      const selectedUpdateTarget = (state?.devices || []).find((item) => item.device_id === deviceId)
+      const topbarUpdateOrigin = host?.kind === 'dsh' ? 'plugin' : deviceUpdateOrigin(selectedUpdateTarget?.capabilities)
       const settingsUpdate = (() => {
         const localId = appLocalDevice || deviceId
         const devices = (state && state.devices) || []
@@ -7202,15 +7269,14 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         const makeRow = (item, local, product) => {
           const caps = (item && item.capabilities) || {}
           const nodeUpdateManaged = caps.node_self_update_enabled === false
+            || (local && product === 'desktop' && windowsAppUpdateAdoptsNode(host, item.platform, updateInfo.app))
           const hasApp = hasInstalledApp(caps)
         const appUpdateUnavailable = caps.app_update_owner === 'electron_updater'
           && caps.app_update_bridge_available !== true
           const components = local
             ? (product === 'desktop' ? ['app', ...(nodeUpdateManaged ? [] : ['node'])] : ['plugin'])
             : [...(hasApp ? ['app'] : []), ...(nodeUpdateManaged ? [] : ['node'])]
-          const installerOwnedNode = ['app_installer', 'bundle_installer'].includes(caps.node_update_owner)
-          const updateOrigin = local ? '' : hasApp ? 'app'
-            : caps.node_self_update_enabled === true && !installerOwnedNode ? 'node' : ''
+          const updateOrigin = local ? '' : deviceUpdateOrigin(caps)
           const infos = components.map((component) => scopedInfo(item.device_id, component))
           const products = components.map((component, index) => ({
             label: component === 'app' ? 'APP' : component === 'plugin' ? '插件' : 'Node',
@@ -7224,7 +7290,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
               React, h, api, post, deviceId: item.device_id, localDeviceId: localId,
               onRemoteDone: async () => { await loadState(true); await refreshUpdateCenter(true) },
               host, C, Glyph, originProduct: updateOrigin,
-              disabled: anyUpdateRunning && !(run && run.state === 'running'),
+              disabled: !item.online, busy: run?.state === 'running',
               onJobChange: (job) => trackDeviceUpdateJob(key, job)
             })
             : null
@@ -7238,7 +7304,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
               : nodeUpdateManaged ? 'Node 由安装包或独立安装器更新'
               : (!local && !hasApp && !updateOrigin ? '此设备尚未报告可用的 Node 自更新能力' : ''),
             available: (local || !!updateOrigin) && infos.some((info) => info && info.update_available === true && !isUpdateInfoStale(info)),
-            running: !!(run && run.state === 'running'),
+            running: deviceUpdateRunning(item.device_id),
             error: run && run.state === 'error' ? (run.message || '更新失败') : ''
           }
         }
@@ -7307,7 +7373,13 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
               },
               status: liveHubStatus
             }) : null,
-            h(MinimalUpdateButton, { React, h, api, post, deviceId, localDeviceId: appLocalDevice, onRemoteDone: async () => { await loadState(true); await refreshUpdateCenter(true) }, host, C, Glyph }),
+            topbarUpdateOrigin ? h(MinimalUpdateButton, {
+              React, h, api, post, deviceId, localDeviceId: appLocalDevice,
+              onRemoteDone: async () => { await loadState(true); await refreshUpdateCenter(true) },
+              host, C, Glyph, originProduct: topbarUpdateOrigin,
+              disabled: !selectedUpdateTarget?.online, busy: deviceUpdateRunning(deviceId),
+              onJobChange: (job) => trackDeviceUpdateJob('device:' + deviceId, job)
+            }) : null,
             host && host.kind === 'app' && host.windowControls ? h('div', {
               style: { display: 'flex', alignSelf: 'stretch', marginLeft: 2, WebkitAppRegion: 'no-drag' }
             },
