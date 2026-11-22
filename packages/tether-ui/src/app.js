@@ -4334,9 +4334,8 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         if (!dshStatus || dshStatus.running !== true || dshStatus.surface !== true) {
           throw new Error('DSH 服务尚未运行或原生界面未就绪')
         }
-        const surfaceInfo = await fetchSurfaceDescriptor(scope.deviceId)
-        if (!surfaceInfo || !surfaceInfo.response || !surfaceInfo.response.ok
-            || !(surfaceInfo.data && (surfaceInfo.data.available === true || surfaceInfo.data.nativeService))) {
+        const surface = await api('/api/devices/' + encodeURIComponent(scope.deviceId) + '/dsh/surface', {}, authority)
+        if (!surface || !(surface.available === true || surface.nativeService)) {
           throw new Error('DSH 原生界面描述符不可用')
         }
         return true

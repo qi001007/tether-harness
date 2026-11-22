@@ -116,11 +116,31 @@ test('a Node restart is not treated as complete from stale status or timeout', (
   assert.match(source, /const verifyNodeServices = async \(scope, authority, capabilities\)/)
   assert.match(source, /\/fs\/service_catalog/)
   assert.match(source, /\/fs\/dsh_status/)
-  assert.match(source, /fetchSurfaceDescriptor\(scope\.deviceId\)/)
-  assert.match(source, /surfaceInfo\.response\.ok[\s\S]*?surfaceInfo\.data\.nativeService/)
   assert.match(source, /updateAction\('node', 'commit', preparedId, scope, authority\)/)
   assert.match(source, /return false\s*\n\s*\}/,
     'timeout and a changed scope both fail instead of returning implicit success')
+})
+
+test('Node acceptance reads the DSH descriptor from the same authenticated authority', async () => {
+  const start = source.indexOf('const verifyNodeServices =')
+  const end = source.indexOf('const watchNodeRestart =', start)
+  const getVerifier = new Function('api', 'post', source.slice(start, end) + '\nreturn verifyNodeServices')
+  const scope = { deviceId: 'new-device' }
+  const authority = 'native-session'
+  const checked = []
+  const post = async (path, body, via) => {
+    assert.equal(via, authority)
+    checked.push(path)
+    return { running: true, surface: true }
+  }
+  const verify = getVerifier(async (path, options, via) => {
+    assert.equal(path, '/api/devices/new-device/dsh/surface')
+    assert.equal(via, authority)
+    return { available: true }
+  }, post)
+  assert.equal(await verify(scope, authority, { dsh_surface: true }), true)
+  assert.deepEqual(checked, ['/api/devices/new-device/fs/service_catalog', '/api/devices/new-device/fs/dsh_status'])
+  await assert.rejects(getVerifier(async () => ({ available: false }), post)(scope, authority, { dsh_surface: true }))
 })
 
 test('prepared Node restart commits only the matching awaiting-acceptance transaction', () => {

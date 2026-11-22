@@ -39,3 +39,5 @@
 - 2026-11-22：Windows 草稿构建自动查找同渠道最近公开 Windows 安装器，只下载并校验旧元数据与 blockmap。单文件差分与原 preview.yml 一并纳入 CI 资产摘要；缺旧基包时照常生成整包。
 
 - 2026-11-22：Windows 草稿构建通过共享入口固定 NSIS 压缩线程。Linux 和 macOS 沿用各自原打包命令。
+
+- 2026-11-22 Build the signed 0.5.11 preview and include the bundled TOML license.
