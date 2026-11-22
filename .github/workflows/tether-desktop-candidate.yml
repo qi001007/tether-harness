@@ -275,7 +275,7 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
-          fetch-depth: 2
+          fetch-depth: 3
       - name: Guard fixed preview.2 reassembly source
         if: ${{ github.ref == 'refs/heads/codex/tether-058-preview2-reassemble-20261113' }}
         env:
@@ -330,10 +330,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "434b626cd6f4904e7071fa9169c38d17e34f740d"
+          test "$(git rev-parse HEAD^^)" = "434b626cd6f4904e7071fa9169c38d17e34f740d"
           python - <<'PY'
           import subprocess
-          changes = set(subprocess.check_output(['git', 'diff', '--name-only', 'HEAD^', 'HEAD'], text=True).splitlines())
+          changes = set(subprocess.check_output(['git', 'diff', '--name-only', '434b626cd6f4904e7071fa9169c38d17e34f740d', 'HEAD'], text=True).splitlines())
           allowed = {'.github/workflows/tether-desktop-candidate.yml', '.github/workflows/backlog.md', 'desktop/packaging/nsis/migration.nsh', 'desktop/packaging/nsis/backlog.md'}
           if not changes <= allowed:
               raise SystemExit('Non-Windows code differs from the earlier build')
