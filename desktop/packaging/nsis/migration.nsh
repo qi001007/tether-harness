@@ -225,7 +225,8 @@ prepare_upgrade_temp_test:
 prepare_upgrade_temp_fallback:
   ; A standard user may install on a drive whose root does not allow writes.
   ; Only the non-elevated installer may use the updater's per-user directory.
-  ${If} ${UAC_IsAdmin}
+  System::Call 'shell32::IsUserAnAdmin()i.r4'
+  ${If} $4 != 0
   ${OrIf} $1 != "$0\tether-up"
     Goto prepare_upgrade_temp_failed
   ${EndIf}
