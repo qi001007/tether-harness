@@ -43,3 +43,5 @@
 - 2026-11-22 Build the signed 0.5.11 preview and include the bundled TOML license.
 
 - 2026-11-22 增加 Windows 原位升级与单包节点的 0.5.12 预览发行。
+
+- 2026-11-22 Rebuild the corrected Windows preview from the verified platform build parent and reuse matching Linux and macOS outputs.
