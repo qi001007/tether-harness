@@ -132,7 +132,7 @@ Function ValidateTetherInstallRoot
   StrCpy $2 "0"
 
 validate_tether_root:
-  ${If} ${FileExists} "$INSTDIR\${APP_EXECUTABLE_FILENAME}"
+  ${If} ${FileExists} "$INSTDIR\${PRODUCT_FILENAME}.exe"
   ${AndIf} ${FileExists} "$INSTDIR\resources\app.asar"
     Goto validate_tether_root_done
   ${EndIf}
