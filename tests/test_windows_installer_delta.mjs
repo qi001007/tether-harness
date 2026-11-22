@@ -30,12 +30,17 @@ const delta = makeDelta([[-1, literal.length], [0, source.length], [-1, literal.
 
 async function setup(t, {
   origin = 'https://github.com/qi001007/tether-harness/releases/download/v0.5.11-preview.1/',
-  generic = false, mutateEntry = () => {}, sourceBytes = source, patchBytes = delta, servedPatch = patchBytes,
+  generic = false, mutateEntry = () => {}, sourceBytes = source, legacySourceBytes, patchBytes = delta, servedPatch = patchBytes,
   cancel = false, patchError = false, signatureError = false
 } = {}) {
   const cache = await fs.mkdtemp(path.join(os.tmpdir(), 'tether-installer-delta-'))
   t.after(() => fs.rm(cache, { recursive: true, force: true }))
   await fs.writeFile(path.join(cache, 'installer.exe'), sourceBytes)
+  const legacy = path.join(cache, 'former-volume')
+  if (legacySourceBytes) {
+    await fs.mkdir(legacy)
+    await fs.writeFile(path.join(legacy, 'installer.exe'), legacySourceBytes)
+  }
   const requests = []
   const signatureChecks = []
   const token = new CancellationToken()
@@ -62,7 +67,7 @@ async function setup(t, {
     if (patch && patchError) throw new Error('patch server returned unavailable')
     if (options.sha512 !== hash(bytes)) throw new Error('HTTP download checksum mismatch')
   } }
-  configureWindowsDelta(updater, fromVersion)
+  configureWindowsDelta(updater, fromVersion, () => legacySourceBytes ? legacy : null)
   const entry = {
     fromVersion, toVersion, sourceSize: source.length, sourceSha512: hash(source),
     size: patchBytes.length, sha512: hash(patchBytes), path: 'Tether-0.5.10-to-0.5.11-win-x64.delta'
@@ -87,6 +92,18 @@ test('one trusted delta reconstructs the target through the NSIS signature and p
   assert.deepEqual(signatureChecks, [target])
   assert.equal(prepared.version, toVersion)
   assert.deepEqual(await fs.readFile(prepared.downloadedFile), target)
+  assert.deepEqual((await pending()).sort(), [installerName, 'update-info.json'].sort())
+})
+
+test('a verified installer in the former cache is read in place for single-patch reconstruction', async (t) => {
+  const { download, requests, signatureChecks, pending } = await setup(t, {
+    sourceBytes: Buffer.alloc(source.length),
+    legacySourceBytes: source
+  })
+  await download()
+  assert.equal(requests.length, 1)
+  assert.match(requests[0], /\.delta$/)
+  assert.deepEqual(signatureChecks, [target])
   assert.deepEqual((await pending()).sort(), [installerName, 'update-info.json'].sort())
 })
 
