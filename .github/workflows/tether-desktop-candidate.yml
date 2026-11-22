@@ -14,6 +14,7 @@ on:
       - 'codex/tether-058-preview2-reassemble-20261113'
       - 'codex/tether-059-local-acceptance-20261119'
       - 'codex/tether-0510-preview-20261121'
+      - 'codex/tether-0513-windows-final-20261122'
       - 'codex/tether-0512-windows-final-20261122'
       - 'codex/tether-0513-preview-20261122'
       - 'codex/tether-0512-preview-20261122'
@@ -21,8 +22,8 @@ on:
   workflow_dispatch:
 
 env:
-  CANDIDATE_VERSION: ${{ github.ref == 'refs/heads/codex/tether-0512-windows-final-20261122' && '0.5.12' || github.ref == 'refs/heads/codex/tether-0513-preview-20261122' && '0.5.13' || github.ref == 'refs/heads/codex/tether-0512-preview-20261122' && '0.5.12' || github.ref == 'refs/heads/codex/tether-0511-preview-20261122' && '0.5.11' || github.ref == 'refs/heads/codex/tether-0510-preview-20261121' && '0.5.10' || github.ref == 'refs/heads/codex/tether-059-local-acceptance-20261119' && '0.5.9' || github.ref == 'refs/heads/codex/tether-058-preview2-reassemble-20261113' && '0.5.8' || github.ref == 'refs/heads/codex/tether-058-route-recovery-20261113' && '0.5.8' || github.ref == 'refs/heads/codex/tether-058-herdr-20261113' && '0.5.8' || github.ref == 'refs/heads/codex/tether-057-recovery-20261113' && '0.5.7' || github.ref == 'refs/heads/codex/tether-056-reconnect-20261113' && '0.5.6' || github.ref == 'refs/heads/codex/tether-055-native-mode-20261112' && '0.5.5' || github.ref == 'refs/heads/codex/tether-054-session-20261112' && '0.5.4' || github.ref == 'refs/heads/codex/tether-053-business-20261112' && '0.5.3' || '0.5.2' }}
-  CANDIDATE_TAG: ${{ github.ref == 'refs/heads/codex/tether-0512-windows-final-20261122' && 'v0.5.12-preview.1' || github.ref == 'refs/heads/codex/tether-0513-preview-20261122' && 'v0.5.13-preview.1' || github.ref == 'refs/heads/codex/tether-0512-preview-20261122' && 'v0.5.12-preview.1' || github.ref == 'refs/heads/codex/tether-0511-preview-20261122' && 'v0.5.11-preview.1' || github.ref == 'refs/heads/codex/tether-0510-preview-20261121' && 'v0.5.10-preview.1' || github.ref == 'refs/heads/codex/tether-059-local-acceptance-20261119' && 'v0.5.9-preview.1' || github.ref == 'refs/heads/codex/tether-058-preview2-reassemble-20261113' && 'v0.5.8-preview.2' || github.ref == 'refs/heads/codex/tether-058-route-recovery-20261113' && 'v0.5.8-preview.2' || github.ref == 'refs/heads/codex/tether-058-herdr-20261113' && 'v0.5.8-preview.1' || github.ref == 'refs/heads/codex/tether-057-recovery-20261113' && 'v0.5.7-preview.1' || github.ref == 'refs/heads/codex/tether-056-reconnect-20261113' && 'v0.5.6-preview.1' || github.ref == 'refs/heads/codex/tether-055-native-mode-20261112' && 'v0.5.5-preview.1' || github.ref == 'refs/heads/codex/tether-054-session-20261112' && 'v0.5.4-preview.1' || github.ref == 'refs/heads/codex/tether-053-business-20261112' && 'v0.5.3-preview.1' || 'v0.5.2-preview.1' }}
+  CANDIDATE_VERSION: ${{ github.ref == 'refs/heads/codex/tether-0513-windows-final-20261122' && '0.5.13' || github.ref == 'refs/heads/codex/tether-0512-windows-final-20261122' && '0.5.12' || github.ref == 'refs/heads/codex/tether-0513-preview-20261122' && '0.5.13' || github.ref == 'refs/heads/codex/tether-0512-preview-20261122' && '0.5.12' || github.ref == 'refs/heads/codex/tether-0511-preview-20261122' && '0.5.11' || github.ref == 'refs/heads/codex/tether-0510-preview-20261121' && '0.5.10' || github.ref == 'refs/heads/codex/tether-059-local-acceptance-20261119' && '0.5.9' || github.ref == 'refs/heads/codex/tether-058-preview2-reassemble-20261113' && '0.5.8' || github.ref == 'refs/heads/codex/tether-058-route-recovery-20261113' && '0.5.8' || github.ref == 'refs/heads/codex/tether-058-herdr-20261113' && '0.5.8' || github.ref == 'refs/heads/codex/tether-057-recovery-20261113' && '0.5.7' || github.ref == 'refs/heads/codex/tether-056-reconnect-20261113' && '0.5.6' || github.ref == 'refs/heads/codex/tether-055-native-mode-20261112' && '0.5.5' || github.ref == 'refs/heads/codex/tether-054-session-20261112' && '0.5.4' || github.ref == 'refs/heads/codex/tether-053-business-20261112' && '0.5.3' || '0.5.2' }}
+  CANDIDATE_TAG: ${{ github.ref == 'refs/heads/codex/tether-0513-windows-final-20261122' && 'v0.5.13-preview.1' || github.ref == 'refs/heads/codex/tether-0512-windows-final-20261122' && 'v0.5.12-preview.1' || github.ref == 'refs/heads/codex/tether-0513-preview-20261122' && 'v0.5.13-preview.1' || github.ref == 'refs/heads/codex/tether-0512-preview-20261122' && 'v0.5.12-preview.1' || github.ref == 'refs/heads/codex/tether-0511-preview-20261122' && 'v0.5.11-preview.1' || github.ref == 'refs/heads/codex/tether-0510-preview-20261121' && 'v0.5.10-preview.1' || github.ref == 'refs/heads/codex/tether-059-local-acceptance-20261119' && 'v0.5.9-preview.1' || github.ref == 'refs/heads/codex/tether-058-preview2-reassemble-20261113' && 'v0.5.8-preview.2' || github.ref == 'refs/heads/codex/tether-058-route-recovery-20261113' && 'v0.5.8-preview.2' || github.ref == 'refs/heads/codex/tether-058-herdr-20261113' && 'v0.5.8-preview.1' || github.ref == 'refs/heads/codex/tether-057-recovery-20261113' && 'v0.5.7-preview.1' || github.ref == 'refs/heads/codex/tether-056-reconnect-20261113' && 'v0.5.6-preview.1' || github.ref == 'refs/heads/codex/tether-055-native-mode-20261112' && 'v0.5.5-preview.1' || github.ref == 'refs/heads/codex/tether-054-session-20261112' && 'v0.5.4-preview.1' || github.ref == 'refs/heads/codex/tether-053-business-20261112' && 'v0.5.3-preview.1' || 'v0.5.2-preview.1' }}
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -75,7 +76,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(github.ref == 'refs/heads/codex/tether-0512-windows-final-20261122' && '[{"target":"windows-x64","runner":"windows-latest","platform":"windows","arch":"x64"}]' || contains(github.event.head_commit.message, '[posix-only]') && '[{"target":"linux-x64","runner":"ubuntu-22.04","platform":"linux","arch":"x64"},{"target":"macos-x64","runner":"macos-15-intel","platform":"macos","arch":"x64"},{"target":"macos-arm64","runner":"macos-15","platform":"macos","arch":"arm64"}]' || '[{"target":"windows-x64","runner":"windows-latest","platform":"windows","arch":"x64"},{"target":"linux-x64","runner":"ubuntu-22.04","platform":"linux","arch":"x64"},{"target":"macos-x64","runner":"macos-15-intel","platform":"macos","arch":"x64"},{"target":"macos-arm64","runner":"macos-15","platform":"macos","arch":"arm64"}]') }}
+        include: ${{ fromJSON((github.ref == 'refs/heads/codex/tether-0512-windows-final-20261122' || github.ref == 'refs/heads/codex/tether-0513-windows-final-20261122') && '[{"target":"windows-x64","runner":"windows-latest","platform":"windows","arch":"x64"}]' || contains(github.event.head_commit.message, '[posix-only]') && '[{"target":"linux-x64","runner":"ubuntu-22.04","platform":"linux","arch":"x64"},{"target":"macos-x64","runner":"macos-15-intel","platform":"macos","arch":"x64"},{"target":"macos-arm64","runner":"macos-15","platform":"macos","arch":"arm64"}]' || '[{"target":"windows-x64","runner":"windows-latest","platform":"windows","arch":"x64"},{"target":"linux-x64","runner":"ubuntu-22.04","platform":"linux","arch":"x64"},{"target":"macos-x64","runner":"macos-15-intel","platform":"macos","arch":"x64"},{"target":"macos-arm64","runner":"macos-15","platform":"macos","arch":"arm64"}]') }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: ${{ matrix.target == 'macos-x64' && 65 || 35 }}
     steps:
@@ -265,7 +266,7 @@ jobs:
           retention-days: 7
   publish-preview-draft:
     name: Sign and assemble preview draft
-    if: ${{ always() && (github.ref == 'refs/heads/codex/tether-0512-windows-final-20261122' || github.ref == 'refs/heads/codex/tether-058-preview2-reassemble-20261113' || (needs.package.result == 'success' && (github.ref == 'refs/heads/codex/tether-052-preview-20261111' || github.ref == 'refs/heads/codex/tether-053-business-20261112' || github.ref == 'refs/heads/codex/tether-054-session-20261112' || github.ref == 'refs/heads/codex/tether-055-native-mode-20261112' || github.ref == 'refs/heads/codex/tether-056-reconnect-20261113' || github.ref == 'refs/heads/codex/tether-057-recovery-20261113' || github.ref == 'refs/heads/codex/tether-058-herdr-20261113' || github.ref == 'refs/heads/codex/tether-058-route-recovery-20261113' || github.ref == 'refs/heads/codex/tether-059-local-acceptance-20261119' || github.ref == 'refs/heads/codex/tether-0510-preview-20261121' || github.ref == 'refs/heads/codex/tether-0511-preview-20261122' || github.ref == 'refs/heads/codex/tether-0513-preview-20261122' || github.ref == 'refs/heads/codex/tether-0512-preview-20261122' || github.ref == 'refs/heads/codex/tether-0512-windows-final-20261122'))) && !contains(github.event.head_commit.message, '[posix-only]') }}
+    if: ${{ always() && ((github.ref == 'refs/heads/codex/tether-0513-windows-final-20261122' && needs.package.result == 'success') || github.ref == 'refs/heads/codex/tether-0512-windows-final-20261122' || github.ref == 'refs/heads/codex/tether-058-preview2-reassemble-20261113' || (needs.package.result == 'success' && (github.ref == 'refs/heads/codex/tether-052-preview-20261111' || github.ref == 'refs/heads/codex/tether-053-business-20261112' || github.ref == 'refs/heads/codex/tether-054-session-20261112' || github.ref == 'refs/heads/codex/tether-055-native-mode-20261112' || github.ref == 'refs/heads/codex/tether-056-reconnect-20261113' || github.ref == 'refs/heads/codex/tether-057-recovery-20261113' || github.ref == 'refs/heads/codex/tether-058-herdr-20261113' || github.ref == 'refs/heads/codex/tether-058-route-recovery-20261113' || github.ref == 'refs/heads/codex/tether-059-local-acceptance-20261119' || github.ref == 'refs/heads/codex/tether-0510-preview-20261121' || github.ref == 'refs/heads/codex/tether-0511-preview-20261122' || github.ref == 'refs/heads/codex/tether-0513-preview-20261122' || github.ref == 'refs/heads/codex/tether-0512-preview-20261122' || github.ref == 'refs/heads/codex/tether-0512-windows-final-20261122'))) && !contains(github.event.head_commit.message, '[posix-only]') }}
     needs: package
     runs-on: ubuntu-22.04
     timeout-minutes: 20
@@ -325,7 +326,7 @@ jobs:
           run-id: ${{ github.ref == 'refs/heads/codex/tether-058-preview2-reassemble-20261113' && '43410891693' || github.ref == 'refs/heads/codex/tether-0512-windows-final-20261122' && '44999284926' || github.run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           pattern: 'tether-*-${{ env.CANDIDATE_VERSION }}-preview'
-          path: ${{ github.ref == 'refs/heads/codex/tether-0512-windows-final-20261122' && '.release-inputs/tether-windows-x64-0.5.12-preview' || '.release-inputs' }}
+          path: ${{ (github.ref == 'refs/heads/codex/tether-0512-windows-final-20261122' || github.ref == 'refs/heads/codex/tether-0513-windows-final-20261122') && format('.release-inputs/tether-windows-x64-{0}-preview', env.CANDIDATE_VERSION) || '.release-inputs' }}
       - name: Verify the Windows-only correction against the four-platform build
         if: ${{ github.ref == 'refs/heads/codex/tether-0512-windows-final-20261122' }}
         shell: bash
@@ -341,12 +342,19 @@ jobs:
           if not changes <= allowed:
               raise SystemExit('Non-Windows code differs from the earlier build')
           PY
+      - name: Verify 0.5.13 native installer correction
+        if: ${{ github.ref == 'refs/heads/codex/tether-0513-windows-final-20261122' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "d65f9011196592c0c59f32c586693c2f58c8b8f7"
+          git diff --exit-code HEAD^ HEAD -- . ':(exclude).github/workflows/tether-desktop-candidate.yml' ':(exclude).github/workflows/backlog.md' ':(exclude)desktop/packaging/nsis/migration.nsh' ':(exclude)desktop/packaging/nsis/backlog.md'
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
-        if: ${{ github.ref == 'refs/heads/codex/tether-0512-windows-final-20261122' }}
+        if: ${{ github.ref == 'refs/heads/codex/tether-0512-windows-final-20261122' || github.ref == 'refs/heads/codex/tether-0513-windows-final-20261122' }}
         with:
-          run-id: '44996467046'
+          run-id: ${{ github.ref == 'refs/heads/codex/tether-0513-windows-final-20261122' && '45020197741' || '44996467046' }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          pattern: 'tether-{linux-*,macos-*,node-runtime-*}-0.5.12-preview'
+          pattern: 'tether-{linux-*,macos-*,node-runtime-*}-${{ env.CANDIDATE_VERSION }}-preview'
           path: .release-inputs
       - name: Fetch the fixed original DSH plugin release metadata and archive
         shell: bash
