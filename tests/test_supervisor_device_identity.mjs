@@ -10,6 +10,39 @@ import { Supervisor } from '../apps/tether-app/supervisor.js'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
+test('the packaged Node adopts the existing data and workspace under the App installer', async (t) => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tether-adoption-'))
+  t.after(() => fs.rmSync(dataDir, { recursive: true, force: true }))
+  const database = path.join(dataDir, 'original.db')
+  fs.writeFileSync(database, 'existing')
+  const token = 'x'.repeat(40)
+  let childArgs, childEnv
+  const supervisor = new Supervisor({
+    repoRoot: root, dataDir,
+    env: { TETHER_CONTROLLER_URL: 'https://hub.example', TETHER_NODE_TOKEN: 'test',
+      TETHER_PYTHON: process.execPath, TETHER_NODE_UPDATE_OWNER: 'app_installer' },
+    managedNode: { workspace: dataDir, database, consolePort: 21234, localApiToken: token,
+      environment: { DSH_HOME: dataDir, TETHER_NODE_UPDATE_OWNER: 'node_zip', PYTHONPATH: 'external' } },
+    spawnChild: (program, args, options) => {
+      assert.equal(program, process.execPath)
+      childArgs = args
+      childEnv = options.env
+      fs.closeSync(options.stdio[1])
+      return Object.assign(new EventEmitter(), { pid: 123 })
+    }
+  })
+  supervisor.healthy = async () => ({ devices: [] })
+  supervisor.startPolling = () => {}
+  await supervisor.start()
+  assert.equal(childArgs[childArgs.indexOf('--workspace') + 1], dataDir)
+  assert.equal(childArgs[childArgs.indexOf('--db') + 1], database)
+  assert.equal(childArgs[childArgs.indexOf('--console-port') + 1], '21234')
+  assert.equal(childEnv.DSH_HOME, dataDir)
+  assert.equal(childEnv.TETHER_LOCAL_API_TOKEN, token)
+  assert.equal(childEnv.TETHER_NODE_UPDATE_OWNER, 'app_installer')
+  assert.equal(childEnv.PYTHONPATH, root)
+})
+
 test('Hub APP status reports only its configured device as online', async (t) => {
   const supervisors = []
   t.after(() => supervisors.forEach((supervisor) => fs.rmSync(supervisor.dataDir, { recursive: true, force: true })))

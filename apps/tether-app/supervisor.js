@@ -16,7 +16,7 @@ function killTree(pid) {
 }
 
 class Supervisor {
-  constructor({ repoRoot, dataDir, env, spawnChild = spawn, preserveManagedNodeOnExit = false }) {
+  constructor({ repoRoot, dataDir, env, managedNode, spawnChild = spawn, preserveManagedNodeOnExit = false }) {
     this.repoRoot = repoRoot
     this.dataDir = dataDir
     this.logsDir = path.join(dataDir, 'logs')
@@ -31,6 +31,29 @@ class Supervisor {
     this.nodeToken = env.TETHER_NODE_TOKEN || ''
     this.userToken = env.TETHER_USER_TOKEN || ''
     this.nodeMode = env.TETHER_NODE_MODE === 'external' ? 'external' : 'managed'
+    this.nodeWorkspace = path.join(preserveManagedNodeOnExit ? dataDir : repoRoot, 'work-local')
+    this.nodeDatabase = path.join(dataDir, 'node-hub.db')
+    this.nodeSettings = {}
+    if (managedNode) {
+      if (this.nodeMode !== 'managed' || !path.isAbsolute(managedNode.workspace || '')
+          || !path.isAbsolute(managedNode.database || '') || !fs.statSync(managedNode.workspace).isDirectory()
+          || !fs.statSync(managedNode.database).isFile()) {
+        throw new Error('无法打开原节点工作区或数据库')
+      }
+      if (!Number.isInteger(managedNode.consolePort) || managedNode.consolePort < 1 || managedNode.consolePort > 65535
+          || (managedNode.localApiToken != null && !/^[^\s]{32,}$/.test(managedNode.localApiToken))) {
+        throw new Error('原节点本机服务配置无效')
+      }
+      this.nodeWorkspace = managedNode.workspace
+      this.nodeDatabase = managedNode.database
+      // Executables and update ownership always come from the installed App.
+      for (const key of ['DSH_HOME', 'DSH_PROVIDER', 'DSH_MODEL', 'TETHER_WORKSPACES_ROOT',
+        'TETHER_CROC_RELAY', 'TETHER_MESH_QUIC_NETWORK', 'TETHER_MESH_MEMBER_WSS',
+        'TETHER_UPDATE_CHANNEL', 'TETHER_UPDATE_MANIFEST_URL', 'RCLONE_MULTI_THREAD_CUTOFF',
+        'RCLONE_MULTI_THREAD_CHUNK_SIZE', 'RCLONE_MULTI_THREAD_STREAMS']) {
+        if (typeof managedNode.environment?.[key] === 'string') this.nodeSettings[key] = managedNode.environment[key]
+      }
+    }
     this.hubWss = env.TETHER_HUB_WSS || (this.remoteUrl ? this.remoteUrl.replace(/^http/, 'ws').replace(/\/+$/, '') + '/ws/node' : '')
     const externalPort = env.TETHER_CONSOLE_PORT
     const externalToken = env.TETHER_LOCAL_API_TOKEN
@@ -42,12 +65,12 @@ class Supervisor {
       }
       this.externalLocalApiConfigured = true
     }
-    this.consolePort = this.externalLocalApiConfigured ? Number(externalPort) : Number(externalPort || 18894)
+    this.consolePort = managedNode?.consolePort || Number(externalPort || 18894)
     this.managedNodeStateDir = path.join(dataDir, 'private')
     this.managedNodeStatePath = path.join(this.managedNodeStateDir, 'managed-node-process.json')
     this.managedNodeState = this.readManagedNodeState()
     this.localApiToken = this.externalLocalApiConfigured ? externalToken
-      : this.managedNodeState && this.managedNodeState.token || crypto.randomBytes(24).toString('hex')
+      : this.managedNodeState && this.managedNodeState.token || managedNode?.localApiToken || crypto.randomBytes(24).toString('hex')
     this.python = env.TETHER_PYTHON || path.join(repoRoot, '.venv', 'Scripts', 'python.exe')
     this.appUpdateBridge = null
     if (!fs.existsSync(this.python)) this.python = process.platform === 'win32' ? 'python' : 'python3'
@@ -134,6 +157,7 @@ class Supervisor {
       TETHER_NODE_TOKEN: this.baseEnv.TETHER_NODE_TOKEN || ''
     }
     if (name === 'node') {
+      Object.assign(env, this.nodeSettings)
       env.TETHER_NODE_MANAGED = '1'
       env.TETHER_LOCAL_API_TOKEN = this.localApiToken
       if (this.appUpdateBridge) {
@@ -423,12 +447,12 @@ class Supervisor {
         }
         const node = this.spawnProcess('node', [
           '-m', 'tether.node.agent',
-          '--workspace', path.join(this.repoRoot, 'work-local'),
+          '--workspace', this.nodeWorkspace,
           '--agent', this.baseEnv.TETHER_AGENT || 'dsh',
           '--device', this.device,
           '--controller', this.hubWss,
           '--console-port', String(this.consolePort),
-          '--db', path.join(this.dataDir, 'node-hub.db')
+          '--db', this.nodeDatabase
         ])
         this.procs.node = node
         if (this.preserveManagedNodeOnExit) {
@@ -492,7 +516,7 @@ class Supervisor {
     this.controller.state = 'online'
     const node = this.spawnProcess('node', [
       '-m', 'tether.node.agent',
-      '--workspace', path.join(this.repoRoot, 'work-local'),
+      '--workspace', this.nodeWorkspace,
       '--agent', this.baseEnv.TETHER_AGENT || 'dsh',
       '--device', this.device,
       '--controller', 'ws://127.0.0.1:' + this.port + '/ws/node',

@@ -268,3 +268,5 @@
 - 2026-11-22 Exercise authenticated DSH verification for available and unavailable services after a Node update.
 
 - 2026-11-22：Windows 更新服务用例模拟 D 盘安装入口指向 E 盘实际 EXE，验证退出并启动安装器时 TEMP/TMP 都使用 E 盘，调用后恢复原环境。
+
+- 2026-11-22 验证采用原数据的节点使用随包运行时，保留本地服务和数据库路径。

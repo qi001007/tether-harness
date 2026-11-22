@@ -48,6 +48,7 @@ function loadEnv() {
 }
 
 const env = loadEnv()
+let managedNode
 function packagedExecutable(component, executable) {
   const componentRoot = path.join(runtimeRoot, 'components', component)
   const matches = []
@@ -110,6 +111,10 @@ if (!candidateMode && fs.existsSync(hubConfigFile)) {
     if (cfg.userToken) env.TETHER_USER_TOKEN = cfg.userToken
     if (cfg.device) env.TETHER_DEVICE = cfg.device
     if (cfg.nodeMode === 'external') env.TETHER_NODE_MODE = cfg.nodeMode
+    if (packaged && cfg.nodeMode === 'managed' && cfg.managedNode) {
+      managedNode = cfg.managedNode
+      env.TETHER_NODE_MODE = 'managed'
+    }
   } catch (_) { /* invalid local config is ignored */ }
 }
 const DEFAULT_CONTROLLER_URL = 'https://8-220-198-26.sslip.io'
@@ -176,7 +181,7 @@ if (process.platform === 'win32') app.setAppUserModelId('com.tether.app')
 // break them while leaving ordinary browsing intact.
 if (env.TETHER_USE_SYSTEM_PROXY !== '1') app.commandLine.appendSwitch('no-proxy-server')
 const { enrollmentDecision, newLocalDeviceId, canEnrollManagedNode, requestLocalPairing } = require('./enrollment.js')
-const supervisor = new Supervisor({ repoRoot, dataDir, env, preserveManagedNodeOnExit: packaged })
+const supervisor = new Supervisor({ repoRoot, dataDir, env, managedNode, preserveManagedNodeOnExit: packaged })
 const updates = new UpdateService({ repoRoot, dataDir, python: supervisor.childPython, env, app,
   deviceId: supervisor.device,
   stopManagedNode: () => packaged ? supervisor.stopManagedNode() : Promise.resolve({ stopped: false }) })
