@@ -7,8 +7,56 @@ import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { Supervisor } from '../apps/tether-app/supervisor.js'
+import { idleForMigration, ownerDevice } from '../apps/tether-app/standalone-node-migration.js'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+
+test('an old Windows installation can hand over only its own idle device', () => {
+  const device = { device_id: 'a', owner_id: 'owner', online: true }
+  const state = { user: { user_id: 'owner' }, devices: [device], runs: [] }
+  const sessions = { sessions: [] }, jobs = { jobs: [{ state: 'interrupted' }] }, copy = { state: 'idle' }
+  assert.equal(ownerDevice(state, 'a'), device)
+  assert.equal(ownerDevice({ ...state, user: { user_id: 'other' } }, 'a'), null)
+  assert.equal(idleForMigration(state, sessions, jobs, copy, 'a'), true)
+  assert.equal(idleForMigration(state, { sessions: [{ status: 'running' }] }, jobs, copy, 'a'), false)
+  assert.equal(idleForMigration(state, sessions, [{ state: 'verifying' }], copy, 'a'), false)
+  assert.equal(idleForMigration(state, sessions, jobs, { state: 'running' }, 'a'), false)
+  assert.equal(idleForMigration({ ...state, runs: [{ device_id: 'a', state: 'dispatching' }] },
+    sessions, jobs, copy, 'a'), false)
+})
+
+test('the packaged Node adopts the existing data and workspace under the App installer', async (t) => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tether-adoption-'))
+  t.after(() => fs.rmSync(dataDir, { recursive: true, force: true }))
+  const database = path.join(dataDir, 'original.db')
+  fs.writeFileSync(database, 'existing')
+  const token = 'x'.repeat(40)
+  let childArgs, childEnv
+  const supervisor = new Supervisor({
+    repoRoot: root, dataDir,
+    env: { TETHER_CONTROLLER_URL: 'https://hub.example', TETHER_NODE_TOKEN: 'test',
+      TETHER_PYTHON: process.execPath, TETHER_NODE_UPDATE_OWNER: 'app_installer' },
+    managedNode: { workspace: dataDir, database, consolePort: 21234, localApiToken: token,
+      environment: { DSH_HOME: dataDir, TETHER_NODE_UPDATE_OWNER: 'node_zip', PYTHONPATH: 'external' } },
+    spawnChild: (program, args, options) => {
+      assert.equal(program, process.execPath)
+      childArgs = args
+      childEnv = options.env
+      fs.closeSync(options.stdio[1])
+      return Object.assign(new EventEmitter(), { pid: 123 })
+    }
+  })
+  supervisor.healthy = async () => ({ devices: [] })
+  supervisor.startPolling = () => {}
+  await supervisor.start()
+  assert.equal(childArgs[childArgs.indexOf('--workspace') + 1], dataDir)
+  assert.equal(childArgs[childArgs.indexOf('--db') + 1], database)
+  assert.equal(childArgs[childArgs.indexOf('--console-port') + 1], '21234')
+  assert.equal(childEnv.DSH_HOME, dataDir)
+  assert.equal(childEnv.TETHER_LOCAL_API_TOKEN, token)
+  assert.equal(childEnv.TETHER_NODE_UPDATE_OWNER, 'app_installer')
+  assert.equal(childEnv.PYTHONPATH, root)
+})
 
 test('Hub APP status reports only its configured device as online', async (t) => {
   const supervisors = []

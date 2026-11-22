@@ -53,3 +53,5 @@
 - 2026-11-22：Windows 单文件差分复用 electron-updater COPY/DOWNLOAD 计划，集中新增字节并把 SHA-512 记录到 preview.yml。隔离构建可用 TETHER_WINDOWS_DELTA_BASE_DIR 选择旧候选目录。
 
 - 2026-11-22：Windows 发行和隔离 QA 共用 NSIS 压缩入口。核验锁定的 7-Zip 24.09 并固定四线程，复现原公仓安装器的 LZMA2 分块。压缩参数仅在本次打包时生效，打包退出后还原依赖文件。
+
+- 2026-11-22 Windows 安装包携带原节点接管工具，配合正式更新启动流程直接改用同一 App 内的节点程序。

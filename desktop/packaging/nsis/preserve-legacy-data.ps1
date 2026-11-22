@@ -1,5 +1,7 @@
 param(
   [Parameter(Mandatory = $true)][string]$InstallRoot,
+  [string]$LegacyInstallRoot,
+  [string]$LegacyCanonicalRoot,
   [string]$RegistrationDir = (Join-Path $HOME '.tether\app-installations'),
   [string]$SnapshotParent = (Join-Path $env:LOCALAPPDATA 'Tether\migration-snapshots')
 )
@@ -80,8 +82,115 @@ function Write-JsonWithoutBom([string]$Path, [object]$Value) {
   [IO.File]::WriteAllText($Path, $json + "`n", [System.Text.UTF8Encoding]::new($false))
 }
 
-if (-not (Test-Path -LiteralPath $registrationDir -PathType Container)) { exit 0 }
+function Assert-WorkspaceProfilePath([string]$Directory, [string]$Install) {
+  if ($Directory -eq $Install -or $Directory.StartsWith($Install + '\', [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'workspace_profile_inside_installation'
+  }
+  for ($entry = [IO.DirectoryInfo]::new($Directory); $null -ne $entry; $entry = $entry.Parent) {
+    if (Test-Path -LiteralPath $entry.FullName) { Assert-PlainPath $entry.FullName $true }
+  }
+}
+
+function Get-WorkspaceFileDigest([string]$Path) {
+  $stream = [IO.File]::OpenRead($Path)
+  $sha256 = [Security.Cryptography.SHA256]::Create()
+  try { return [Convert]::ToBase64String($sha256.ComputeHash($stream)) }
+  finally { $sha256.Dispose(); $stream.Dispose() }
+}
+
+function Test-WorkspaceFileMatch([string]$First, [string]$Second) {
+  return (Get-WorkspaceFileDigest $First) -ceq (Get-WorkspaceFileDigest $Second)
+}
+
+function Preserve-InternalWorkspace([string]$Install) {
+  $source = Join-Path $Install 'resources\tether-source\work-local'
+  if (-not (Test-Path -LiteralPath $source)) { return }
+  $snapshot = $null
+  $verified = $false
+  try {
+    Assert-PlainPath (Join-Path $Install 'resources') $true
+    Assert-PlainPath (Join-Path $Install 'resources\tether-source') $true
+    Assert-PlainPath $source $true
+    if (-not (Get-ChildItem -LiteralPath $source -Force | Select-Object -First 1)) { return }
+    $oldExecutables = @(Join-Path $Install 'Tether.exe')
+    if ($LegacyInstallRoot) { $oldExecutables += Join-Path $LegacyInstallRoot 'Tether.exe' }
+    foreach ($process in Get-Process -Name Tether -ErrorAction SilentlyContinue) {
+      if ($process.Path -in $oldExecutables) { throw 'previous_process_still_running' }
+    }
+
+    $profile = $null
+    try {
+      $configured = ([string]$env:TETHER_APP_DATA_DIR).Trim()
+      if (-not $configured) { $configured = Join-Path $env:APPDATA 'Tether\data' }
+      if ($configured -notmatch '^[A-Za-z]:[\\/]') { throw 'workspace_profile_not_absolute' }
+      $candidate = Get-CanonicalLocalPath $configured
+      Assert-WorkspaceProfilePath $candidate $Install
+      New-Item -ItemType Directory -Path $candidate -Force | Out-Null
+      $profile = $candidate
+    } catch {
+      $profile = $null
+    }
+
+    $stageParent = $profile
+    if (-not $stageParent) {
+      $stageParent = Get-CanonicalLocalPath $SnapshotParent
+      Assert-WorkspaceProfilePath $stageParent $Install
+      New-Item -ItemType Directory -Path $stageParent -Force | Out-Null
+    }
+    $snapshot = Join-Path $stageParent ('work-local-upgrade-' + [guid]::NewGuid().ToString('N'))
+    Copy-PersistentAgentsTree $source $snapshot $false
+    $entries = @(Get-ChildItem -LiteralPath $snapshot -Force -Recurse)
+    foreach ($item in $entries) {
+      if ($item.PSIsContainer) { continue }
+      $relative = $item.FullName.Substring($snapshot.Length + 1)
+      if (-not (Test-WorkspaceFileMatch $item.FullName (Join-Path $source $relative))) { throw 'workspace_snapshot_changed' }
+    }
+    $verified = $true
+    if (-not $profile) { throw 'workspace_profile_unavailable' }
+
+    $destination = Join-Path $profile 'work-local'
+    if (-not (Test-Path -LiteralPath $destination)) {
+      [IO.Directory]::Move($snapshot, $destination)
+      return
+    }
+    Assert-PlainPath $destination $true
+    foreach ($item in $entries) {
+      $target = Join-Path $destination ($item.FullName.Substring($snapshot.Length + 1))
+      if (-not (Test-Path -LiteralPath $target)) { continue }
+      Assert-PlainPath $target $item.PSIsContainer
+      if (-not $item.PSIsContainer -and -not (Test-WorkspaceFileMatch $item.FullName $target)) {
+        throw 'workspace_destination_changed'
+      }
+    }
+    foreach ($item in $entries) {
+      $target = Join-Path $destination ($item.FullName.Substring($snapshot.Length + 1))
+      if ($item.PSIsContainer) {
+        New-Item -ItemType Directory -Path $target -Force | Out-Null
+      } elseif (-not (Test-Path -LiteralPath $target)) {
+        [IO.File]::Copy($item.FullName, $target, $false)
+      }
+      Assert-PlainPath $target $item.PSIsContainer
+      if (-not $item.PSIsContainer -and -not (Test-WorkspaceFileMatch $item.FullName $target)) {
+        throw 'workspace_destination_changed'
+      }
+    }
+    Remove-Item -LiteralPath $snapshot -Recurse -Force
+  } catch {
+    if ($verified) {
+      Write-Output $snapshot
+      exit 20
+    }
+    exit 21
+  }
+}
+
 $install = Get-CanonicalLocalPath $InstallRoot
+Preserve-InternalWorkspace $install
+if (-not (Test-Path -LiteralPath $registrationDir -PathType Container)) { exit 0 }
+$legacyAlias = $null
+if ($LegacyInstallRoot -and $LegacyCanonicalRoot -and (Get-CanonicalLocalPath $LegacyCanonicalRoot) -eq $install) {
+  $legacyAlias = Get-CanonicalLocalPath $LegacyInstallRoot
+}
 $userSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 $files = @('hub.json', 'device-token.json', 'policy.json', 'node-hub.db', 'node-hub.db-wal', 'node-local.db', 'node-local.db-wal', 'apps.json')
 
@@ -97,6 +206,9 @@ foreach ($registrationFile in Get-ChildItem -LiteralPath $registrationDir -Filte
   finally { $digest.Dispose() }
   if ($registrationFile.BaseName -ne $id) { continue }
   $legacyRoot = Get-CanonicalLocalPath $rootText
+  if ($legacyAlias -and ($legacyRoot -eq $legacyAlias -or $legacyRoot.StartsWith($legacyAlias + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase))) {
+    $legacyRoot = $install + $legacyRoot.Substring($legacyAlias.Length)
+  }
   if ($legacyRoot -ne $install -and -not $legacyRoot.StartsWith($install + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) { continue }
   if (-not (Test-Path -LiteralPath $legacyRoot -PathType Container)) { continue }
   Assert-PlainPath $legacyRoot $true
