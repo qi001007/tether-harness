@@ -20,7 +20,7 @@ function idleForMigration(state, sessions, transfers, copy, device) {
     && ['idle', 'completed', 'failed', 'cancelled'].includes(copy.state)
 }
 
-async function finishStandaloneUpgrade({ app, dataDir, resources, device, nodeMode, updated, read, log }) {
+async function finishStandaloneUpgrade({ app, dataDir, resources, device, nodeMode, updated, read, restoreLoginStart, log }) {
   const stateFile = path.join(dataDir, 'private', 'standalone-node-migration.json')
   const adopting = updated && nodeMode === 'external'
   if (!adopting && (nodeMode !== 'managed' || !fs.existsSync(stateFile))) return
@@ -30,11 +30,24 @@ async function finishStandaloneUpgrade({ app, dataDir, resources, device, nodeMo
     '-File', script, '-Action', action, '-AppExe', app.getPath('exe'), '-AppDataDir', dataDir]
   const options = { windowsHide: true, timeout: 60000, maxBuffer: 256 * 1024 }
   if (!adopting) {
-    const installed = ownerDevice(await read('/api/state'), device)
-    const caps = installed?.capabilities
-    if (caps?.node_update_owner === 'app_installer' && caps.node_version === app.getVersion()
-        && caps.app_version === app.getVersion()) {
-      await exec(powershell, [...args('Confirm'), '-HubOnlineVerified'], options)
+    // The detached helper starts this instance before it can record the health result.
+    const deadline = Date.now() + 180000
+    while (Date.now() < deadline) {
+      const journal = JSON.parse(fs.readFileSync(stateFile, 'utf8').replace(/^\uFEFF/, ''))
+      if (journal.device !== device || !['switching', 'awaiting_online', 'rollback_requested'].includes(journal.phase)) return
+      if (fs.realpathSync.native(journal.appExe).toLowerCase() !== fs.realpathSync.native(app.getPath('exe')).toLowerCase()) return
+      if (journal.phase === 'rollback_requested') { app.quit(); return }
+      if (journal.phase === 'awaiting_online') {
+        const installed = ownerDevice(await read('/api/state').catch(() => ({})), device)
+        const caps = installed?.capabilities
+        if (caps?.node_update_owner === 'app_installer' && caps.node_version === app.getVersion()
+            && caps.app_version === app.getVersion()) {
+          if (journal.hadLogonTask) restoreLoginStart()
+          await exec(powershell, [...args('Confirm'), '-HubOnlineVerified'], options)
+          return
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, 2000))
     }
     return
   }

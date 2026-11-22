@@ -1383,6 +1383,7 @@ if (!locked) {
     if (packaged && !candidateMode && process.platform === 'win32') {
       void finishStandaloneUpgrade({ app, dataDir, resources: process.resourcesPath,
         device: supervisor.device, nodeMode: supervisor.nodeMode, updated: process.argv.includes('--updated'), log,
+        restoreLoginStart: () => setAutoStartAtLogin(true),
         read: async (route, body) => {
           const options = { cache: 'no-store', signal: AbortSignal.timeout(15000) }
           if (body) Object.assign(options, { method: 'POST', headers: { 'content-type': 'application/json' },
