@@ -67,6 +67,8 @@ def main() -> int:
         console_target = package / "tether-source" / "tether" / "node" / "console.html"
         console_target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(console_html, console_target)
+        tomli_license = Path("tether/node/_tomli/LICENSE")
+        shutil.copy2(ROOT / tomli_license, package / "tether-source" / tomli_license)
         shutil.copy2(ROOT / "version.json", package / "tether-source" / "version.json")
         shutil.copy2(ROOT / "LICENSE", package / "tether-source" / "LICENSE")
         shutil.copy2(ROOT / "THIRD_PARTY_NOTICES.md", package / "tether-source" / "THIRD_PARTY_NOTICES.md")
