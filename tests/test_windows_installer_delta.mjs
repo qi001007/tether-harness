@@ -67,7 +67,9 @@ async function setup(t, {
     if (patch && patchError) throw new Error('patch server returned unavailable')
     if (options.sha512 !== hash(bytes)) throw new Error('HTTP download checksum mismatch')
   } }
-  configureWindowsDelta(updater, fromVersion, () => legacySourceBytes ? legacy : null)
+  const observations = []
+  configureWindowsDelta(updater, fromVersion, () => legacySourceBytes ? legacy : null,
+    (method, bytes) => observations.push({ method, bytes }))
   const entry = {
     fromVersion, toVersion, sourceSize: source.length, sourceSha512: hash(source),
     size: patchBytes.length, sha512: hash(patchBytes), path: 'Tether-0.5.10-to-0.5.11-win-x64.delta'
@@ -79,16 +81,17 @@ async function setup(t, {
   const download = () => updater.doDownloadUpdate({ updateInfoAndProvider: { info, provider }, cancellationToken: token,
     requestHeaders: {}, disableWebInstaller: true, disableDifferentialDownload: false })
   const pending = () => fs.readdir(path.join(cache, 'pending'))
-  return { updater, download, requests, signatureChecks, pending }
+  return { updater, download, requests, signatureChecks, pending, observations }
 }
 
 test('one trusted delta reconstructs the target through the NSIS signature and pending-cache path', async (t) => {
-  const { updater, download, requests, signatureChecks, pending } = await setup(t)
+  const { updater, download, requests, signatureChecks, pending, observations } = await setup(t)
   let prepared
   updater.on('update-downloaded', (event) => { prepared = event })
   await download()
   assert.equal(requests.length, 1)
   assert.match(requests[0], /\.delta$/)
+  assert.deepEqual(observations.at(-1), { method: 'delta', bytes: delta.length })
   assert.deepEqual(signatureChecks, [target])
   assert.equal(prepared.version, toVersion)
   assert.deepEqual(await fs.readFile(prepared.downloadedFile), target)
@@ -119,10 +122,12 @@ for (const [reason, options, expectedRequests] of [
   ['a target reconstruction SHA512 mismatch', { patchBytes: makeDelta([[-1, literal.length], [0, source.length], [-1, literal.length]], Buffer.alloc(literal.length * 2)) }, 2]
 ]) {
   test(`${reason} falls back to one complete installer request`, async (t) => {
-    const { download, requests, signatureChecks, pending } = await setup(t, options)
+    const { download, requests, signatureChecks, pending, observations } = await setup(t, options)
     await download()
     assert.equal(requests.length, expectedRequests)
     assert.match(requests.at(-1), /\.exe$/)
+    assert.equal(observations.at(-1).bytes, undefined, 'fallback cannot reuse patch bytes for the full installer')
+    if (expectedRequests > 1) assert.equal(observations.at(-1).method, 'full_after_delta_fallback')
     assert.deepEqual(signatureChecks, [target])
     assert.deepEqual((await pending()).sort(), [installerName, 'update-info.json'].sort())
   })

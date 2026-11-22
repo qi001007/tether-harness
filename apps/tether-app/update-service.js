@@ -250,12 +250,13 @@ async function openWindowsDeltaSource(paths, entry, checkCancelled) {
   throw lastError
 }
 
-function configureWindowsDelta(updater, currentVersion, legacyCache = () => null) {
+function configureWindowsDelta(updater, currentVersion, legacyCache = () => null, observe = () => {}) {
   if (typeof updater.differentialDownloadInstaller !== 'function') return
   // NsisUpdater 6.8.12 calls this hook before its signature check. Returning true
   // goes directly to its complete GET. Returning false verifies and stages our installer.
   updater.differentialDownloadInstaller = async (fileInfo, options, destination, provider, oldInstallerName) => {
     const { info } = options.updateInfoAndProvider
+    observe('full')
     const target = fileInfo.info
     const entries = Array.isArray(info.tetherDelta) ? info.tetherDelta.filter((entry) =>
       entry?.fromVersion === currentVersion && entry.toVersion === info.version) : []
@@ -280,6 +281,7 @@ function configureWindowsDelta(updater, currentVersion, legacyCache = () => null
       if (legacy) candidates.add(path.join(legacy, oldInstallerName))
       const source = await openWindowsDeltaSource(candidates, entry, checkCancelled)
       try {
+        observe('delta')
         const headers = Object.fromEntries(Object.entries(options.requestHeaders || {}).filter(([name]) => name.toLowerCase() !== 'range'))
         await updater.httpExecutor.download(url, patch, {
           headers, cancellationToken, sha512: entry.sha512,
@@ -287,6 +289,7 @@ function configureWindowsDelta(updater, currentVersion, legacyCache = () => null
             ? (progress) => updater.emit('download-progress', progress) : undefined
         })
         await applyWindowsDelta(source, patch, destination, entry, target, checkCancelled)
+        observe('delta', entry.size)
         updater.logger.info(`Windows installer delta verified (${currentVersion} → ${info.version}, ${entry.size} bytes)`)
         return false
       } finally {
@@ -296,6 +299,7 @@ function configureWindowsDelta(updater, currentVersion, legacyCache = () => null
       await fs.promises.rm(destination, { force: true })
       checkCancelled()
       if (error instanceof CancellationError) throw error
+      observe('full_after_delta_fallback')
       updater.logger.warn(`Windows installer delta unavailable, downloading full installer: ${error.message}`)
       return true
     } finally {
@@ -387,6 +391,7 @@ class UpdateService {
     this.electronLastResult = null
     this.appUpdateBridge = null
     this.windowsCachePromise = null
+    this.windowsReceipt = null
     this.legacyWindowsCacheDir = null
     this.bridgeApplyAccepted = new Set()
     this.appUpdateBridgeRegistrationKey = ''
@@ -397,7 +402,21 @@ class UpdateService {
       autoUpdater.autoDownload = false
       autoUpdater.autoInstallOnAppQuit = false
       if (process.platform === 'win32' && process.arch === 'x64') {
-        configureWindowsDelta(autoUpdater, app.getVersion(), () => this.legacyWindowsCacheDir)
+        configureWindowsDelta(autoUpdater, app.getVersion(), () => this.legacyWindowsCacheDir,
+          (method, bytes) => this.observeWindowsDownload(method, bytes))
+      }
+      if (process.platform === 'win32') {
+        autoUpdater.on('download-progress', ({ transferred, total }) => {
+          if (!validDeltaSize(transferred)) return
+          const method = this.windowsReceipt?.download_method || 'network'
+          if (method === 'delta') return // Only count a hash-verified patch.
+          this.observeWindowsDownload(method, transferred === total ? transferred : undefined)
+        })
+        autoUpdater.on('error', (error) => {
+          if (this.windowsReceipt?.status === 'installing') {
+            this.recordElectronApplyFailure(error, this.windowsReceipt.target_version)
+          }
+        })
       }
       const updateChannel = String(env.TETHER_UPDATE_CHANNEL || '').trim().toLowerCase()
       if (updateChannel) {
@@ -531,7 +550,14 @@ class UpdateService {
           // electron-updater 6.8.12 uses this helper for both download and
           // quitAndInstall. Keep its normal metadata and signature validation.
           const { DownloadedUpdateHelper } = require('electron-updater/out/DownloadedUpdateHelper')
-          updater.downloadedUpdateHelper = new DownloadedUpdateHelper(location.cacheDir)
+          const helper = new DownloadedUpdateHelper(location.cacheDir)
+          const validateDownloadedPath = helper.validateDownloadedPath.bind(helper)
+          helper.validateDownloadedPath = async (...args) => {
+            const file = await validateDownloadedPath(...args)
+            if (file) this.observeWindowsDownload('cache', 0)
+            return file
+          }
+          updater.downloadedUpdateHelper = helper
           this.legacyWindowsCacheDir = location.legacyCacheDir
           return location
         }).catch((error) => {
@@ -541,20 +567,74 @@ class UpdateService {
     }
     return this.windowsCachePromise
   }
+  startWindowsReceipt() {
+    const targetVersion = this.electronUpdateInfo.version
+    if (this.windowsReceipt?.target_version === targetVersion
+        && ['downloading', 'prepared'].includes(this.windowsReceipt.status)) return
+    this.windowsReceipt = {
+      started_at: new Date().toISOString(), from_version: this.app.getVersion(), target_version: targetVersion,
+      status: 'downloading'
+    }
+  }
+
+  observeWindowsDownload(method, bytes) {
+    if (this.windowsReceipt?.status !== 'downloading') return
+    this.windowsReceipt.download_method = method
+    if (bytes == null) delete this.windowsReceipt.payload_bytes
+    else this.windowsReceipt.payload_bytes = bytes
+  }
+
+  saveWindowsReceipt(receipt, status, errorCode) {
+    const directory = path.join(this.dataDir, 'updates')
+    const file = path.join(directory, 'windows-app-receipt.json')
+    const temporary = file + '.tmp'
+    const next = {
+      started_at: receipt.started_at, updated_at: new Date().toISOString(),
+      from_version: receipt.from_version, target_version: receipt.target_version, status,
+      download_method: receipt.download_method, payload_bytes: receipt.payload_bytes, error_code: errorCode
+    }
+    try {
+      if (!fs.existsSync(directory)) fs.mkdirSync(directory, { recursive: true })
+      fs.writeFileSync(temporary, JSON.stringify(next) + '\n', { mode: 0o600 })
+      fs.renameSync(temporary, file)
+    } catch (_) { /* receipt persistence cannot prevent an update */ }
+    return next
+  }
+
+  finishWindowsReceipt() {
+    if (process.platform !== 'win32') return
+    try {
+      const file = path.join(this.dataDir, 'updates', 'windows-app-receipt.json')
+      const receipt = JSON.parse(fs.readFileSync(file, 'utf8'))
+      if (receipt.status !== 'installing' || receipt.target_version !== this.app.getVersion()
+          || receipt.from_version === receipt.target_version) return
+      this.saveWindowsReceipt(receipt, 'completed')
+    } catch (_) { /* no update initiated by a receipt-capable version */ }
+  }
+
   async prepare() {
     if (this.electronUpdater) {
-      await this.activity()
       this.clearElectronApplyFailure()
       if (!this.electronUpdateInfo) await this.check()
       if (!this.electronUpdateInfo || this.electronUpdateInfo.version === this.app.getVersion()) {
         throw Object.assign(new Error('没有可用的 APP 更新'), { code: 'update_not_available' })
       }
-      if (process.platform === 'win32') {
-        const location = await this.windowsUpdateLocation()
-        if (!this.electronDownloaded) ensureWindowsUpdateCacheSpace(this.electronUpdateInfo, 2, location)
+      const windows = process.platform === 'win32'
+      if (windows) this.startWindowsReceipt()
+      try {
+        if (windows) {
+          const location = await this.windowsUpdateLocation()
+          if (!this.electronDownloaded) ensureWindowsUpdateCacheSpace(this.electronUpdateInfo, 2, location)
+        }
+        this.electronDownloaded = false
+        await this.electronUpdater.downloadUpdate()
+      } catch (error) {
+        if (windows) this.windowsReceipt = this.saveWindowsReceipt(this.windowsReceipt, 'failed', this.electronErrorCode(error))
+        throw error
       }
-      this.electronDownloaded = false
-      await this.electronUpdater.downloadUpdate()
+      if (windows && this.windowsReceipt.status === 'downloading') {
+        this.windowsReceipt = this.saveWindowsReceipt(this.windowsReceipt, 'prepared')
+      }
       const preparedId = crypto.randomBytes(16).toString('hex')
       this.preparedIds.add(preparedId)
       this.electronDownloaded = true
@@ -593,17 +673,18 @@ class UpdateService {
     if (this.electronUpdater) {
       this.assertElectronPrepared(preparedId)
       const windowsLocation = process.platform === 'win32' ? await this.windowsUpdateLocation() : null
-      if (windowsLocation) ensureWindowsUpdateCacheSpace(this.electronUpdateInfo, 1, windowsLocation)
       const installing = { ok: true, component: 'app', status: 'installing', restart_required: true,
         current_version: this.app.getVersion(), latest_version: this.electronUpdateInfo.version,
         source: 'electron-updater' }
       this.clearElectronApplyFailure()
       try {
+        if (windowsLocation) ensureWindowsUpdateCacheSpace(this.electronUpdateInfo, 1, windowsLocation)
         const nsisTempDir = windowsLocation ? prepareWindowsInstallerTemp(windowsLocation) : null
         if (beforeInstall) await beforeInstall(installing)
         this.preparedIds.delete(preparedId)
         await this.stopManagedNode()
         if (nsisTempDir) {
+          if (this.windowsReceipt) this.windowsReceipt = this.saveWindowsReceipt(this.windowsReceipt, 'installing')
           const names = ['TEMP', 'TMP', 'TETHER_UPDATER_TEMP']
           const previous = names.map((name) => process.env[name])
           // NsisUpdater calls spawn synchronously inside quitAndInstall.
@@ -683,9 +764,16 @@ class UpdateService {
     try { fs.unlinkSync(path.join(this.app.getPath('userData'), 'update-result.json')) } catch (_) { /* no prior failure */ }
   }
 
-  recordElectronApplyFailure(error, targetVersion) {
-    const code = /^[a-z0-9_]{1,64}$/.test(String(error && error.code || ''))
+  electronErrorCode(error) {
+    return /^[a-z0-9_]{1,64}$/.test(String(error && error.code || ''))
       ? String(error.code) : 'app_update_failed'
+  }
+
+  recordElectronApplyFailure(error, targetVersion) {
+    const code = this.electronErrorCode(error)
+    if (this.windowsReceipt?.target_version === targetVersion) {
+      this.windowsReceipt = this.saveWindowsReceipt(this.windowsReceipt, 'failed', code)
+    }
     const result = { ok: false, component: 'app', status: 'failed', source: 'electron-updater',
       target_version: targetVersion, error_code: code,
       error: String(error && error.message || 'APP update failed').slice(0, 240), retryable: true,
@@ -784,6 +872,7 @@ class UpdateService {
       throw new Error('APP update loopback endpoint failed to bind')
     }
     this.appUpdateBridge = { server, url: `http://127.0.0.1:${address.port}/v1/update`, token }
+    this.finishWindowsReceipt()
     return { url: this.appUpdateBridge.url, token: this.appUpdateBridge.token }
   }
 

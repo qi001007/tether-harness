@@ -268,7 +268,13 @@ try {
     const legacyCache = path.join(updater.app.baseCachePath, 'tether-app-updater')
     const stagedLegacyCache = 'E:\\Other\\tether-app-updater'
     let downloadCalls = 0
-    updater.downloadUpdate = async () => { downloadCalls++; return [] }
+    let cacheHit = false
+    updater.downloadUpdate = async () => {
+      downloadCalls++
+      if (cacheHit) await updater.downloadedUpdateHelper.validateDownloadedPath()
+      else updater.emit('download-progress', { transferred: 3000, total: 3000 })
+      return []
+    }
     const installCalls = []
     let installError = null
     updater.quitAndInstall = (...args) => {
@@ -319,6 +325,7 @@ try {
       if (request === 'electron-updater/out/DownloadedUpdateHelper') {
         return { DownloadedUpdateHelper: class {
           constructor(cacheDir) { this.cacheDir = cacheDir }
+          async validateDownloadedPath() { return cacheHit ? 'validated-installer.exe' : null }
         } }
       }
       return loadWithoutUpdater.call(Module, request, ...args)
@@ -346,11 +353,17 @@ try {
     process.env.TEMP = 'before-temp'
     process.env.TMP = 'before-tmp'
     process.env.TETHER_UPDATER_TEMP = 'before-installer-temp'
+    const receiptFile = path.join(dataDir, 'updates', 'windows-app-receipt.json')
+    originalMkdirSync(path.dirname(receiptFile), { recursive: true })
+    const readReceipt = () => JSON.parse(fs.readFileSync(receiptFile, 'utf8'))
     try {
       packagedService.electronUpdateInfo = updateInfo
       freeBytes = 2n * 3000n + reserveBytes - 1n
       await assert.rejects(packagedService.prepare(), (error) => error.code === 'insufficient_update_cache_space'
         && error.message.includes('需要 0.6 GB') && error.message.includes('当前可用 0.5 GB'))
+      assert.equal(readReceipt().status, 'failed')
+      assert.equal(readReceipt().error_code, 'insufficient_update_cache_space')
+      assert.equal(readReceipt().payload_bytes, undefined)
       assert.equal(downloadCalls, 0, 'low cache space must stop before downloadUpdate')
       assert.equal(path.parse(updater.downloadedUpdateHelper.cacheDir).root, 'E:\\')
       assert.equal(path.dirname(updater.downloadedUpdateHelper.cacheDir), path.dirname(path.dirname(physicalExecutable)),
@@ -370,14 +383,25 @@ try {
       statfsError = null
       packagedService.electronDownloaded = false
       freeBytes = 2n * 3000n + reserveBytes
-      await packagedService.prepare()
+      const activity = packagedService.activity
+      packagedService.activity = async () => { throw Object.assign(new Error('busy'), { code: 'update_busy' }) }
+      const preparedWhileBusy = await packagedService.prepare()
+      await assert.rejects(packagedService.validateElectronPrepared(preparedWhileBusy.prepared_id), { code: 'update_busy' })
+      await assert.rejects(packagedService.apply(preparedWhileBusy.prepared_id), { code: 'update_busy' })
+      packagedService.activity = activity
       assert.equal(downloadCalls, 1, 'sufficient cache space must reach the existing downloader')
+      assert.equal(readReceipt().download_method, 'network')
+      assert.equal(readReceipt().payload_bytes, 3000)
 
       const priorStatfsCalls = statfsCalls
       packagedService.electronDownloaded = true
       packagedService.electronUpdateInfo = { version: '0.5.6', files: [] }
+      packagedService.windowsReceipt = null
+      cacheHit = true
       await packagedService.prepare()
       assert.equal(statfsCalls, priorStatfsCalls, 'already-downloaded same-process updates skip the redundant gate')
+      assert.equal(readReceipt().download_method, 'cache')
+      assert.equal(readReceipt().payload_bytes, 0)
 
       const preparedId = 'a'.repeat(32)
       packagedService.electronUpdateInfo = updateInfo
@@ -408,6 +432,13 @@ try {
       await packagedService.apply(preparedId, {
         beforeInstall: async () => { beforeInstallTemp = { temp: process.env.TEMP, tmp: process.env.TMP } }
       })
+      assert.equal(readReceipt().status, 'installing')
+      packagedService.app.getVersion = () => updateInfo.version
+      await packagedService.startAppUpdateBridge()
+      assert.equal(readReceipt().status, 'completed')
+      assert.equal(readReceipt().target_version, updateInfo.version)
+      await packagedService.closeAppUpdateBridge()
+      packagedService.app.getVersion = () => '0.5.5'
       assert.equal(mkdirPath, installerTemp)
       assert.equal(probePrefix, path.join(installerTemp, 'write-probe-'))
       assert.equal(removedProbe, `${probePrefix}fixture`)
