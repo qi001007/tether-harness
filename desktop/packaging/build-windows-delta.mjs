@@ -110,7 +110,7 @@ async function readLocalBase(directory, filename) {
   return { ...source, blockMapBytes: await readFile(path.join(directory, `${source.name}.blockmap`)) }
 }
 
-export async function buildWindowsDelta({ targetDirectory, fromDirectory, repository, channel = 'preview', token }) {
+export async function buildWindowsDelta({ targetDirectory, fromDirectory, repository, channel = 'preview', token, previousBase }) {
   if (channel !== 'preview' && channel !== 'stable') throw new Error('Unknown Windows release channel')
   const filename = channel === 'preview' ? 'preview.yml' : 'latest.yml'
   const metadataPath = path.join(targetDirectory, filename)
@@ -120,7 +120,7 @@ export async function buildWindowsDelta({ targetDirectory, fromDirectory, reposi
   let plan
   try {
     source = fromDirectory ? await readLocalBase(fromDirectory, filename)
-      : await fetchPublishedBase(repository, channel, filename, target.version, token)
+      : await fetchPublishedBase(repository, channel, filename, previousBase?.fromVersion ?? target.version, token)
     if (!source || compareVersions(source.version, target.version) >= 0) {
       console.log('Windows delta skipped: no earlier compatible Windows installer')
       return null
@@ -181,7 +181,7 @@ export async function buildWindowsDelta({ targetDirectory, fromDirectory, reposi
       sourceSize: source.size, sourceSha512: source.sha512,
       size: deltaSize, sha512: await hashFile(temporary, 'sha512', 'base64'), path: name }
     await rename(temporary, destination)
-    targetMetadata.tetherDelta = [asset]
+    targetMetadata.tetherDelta = previousBase ? [previousBase, asset] : [asset]
     await writeFile(`${metadataPath}.${process.pid}.tmp`, dump(targetMetadata), { flag: 'wx' })
     await rename(`${metadataPath}.${process.pid}.tmp`, metadataPath)
     console.log(`Windows delta: ${name}, ${deltaSize} bytes (${literalSize} literal bytes)`)
