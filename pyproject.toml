@@ -20,9 +20,11 @@ dependencies = [
   "anyio==4.15.1",
   "mcp>=2.3",
   "zstandard>=0.22",
-  "tomli>=2; python_version < '3.11'",
   "pywinpty>=2.0; sys_platform == 'win32'",
 ]
 
 [tool.setuptools.packages.find]
 include = ["tether", "tether.node*"]
+
+[tool.setuptools.package-data]
+"tether.node._tomli" = ["LICENSE"]

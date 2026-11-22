@@ -80,7 +80,8 @@ def add_tether_runtime(archive: zipfile.ZipFile, prefix: str, *, target_platform
     }
     for path in node.rglob("*"):
         if path.is_file() and not path.is_symlink() and (
-                path.suffix in {".py", ".html"} or "bin" in path.relative_to(node).parts):
+                path.suffix in {".py", ".html"} or "bin" in path.relative_to(node).parts
+                or path == node / "_tomli" / "LICENSE"):
             if target_platform == "windows" and path.relative_to(node).as_posix() in windows_excluded_runtime_files:
                 continue
             rel = path.relative_to(ROOT).as_posix()

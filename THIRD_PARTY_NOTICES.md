@@ -1,5 +1,11 @@
 # Third-party notices
 
+## Tomli
+
+- Project: [Tomli](https://github.com/hukkin/tomli), version 2.3.0
+- License: MIT, included in `tether/node/_tomli/LICENSE`.
+- Tether uses this bundled parser on Python 3.10. Python 3.11 and later use the standard-library `tomllib`.
+
 ## Herdr
 
 - Project: herdrdev/herdr (https://herdr.dev)
