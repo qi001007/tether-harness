@@ -8,8 +8,18 @@ Function PreserveTetherLegacyData
   Pop $0
   Pop $1
   StrCmp $0 0 migration_preserved
+  StrCmp $0 20 migration_workspace_preserved
+  StrCmp $0 21 migration_workspace_failed
     MessageBox MB_ICONSTOP|MB_OK "Tether could not safely preserve the previous device identity. Close the previous Tether APP and its managed Node, then retry installation."
     SetErrorLevel 1
+    Quit
+  migration_workspace_preserved:
+    MessageBox MB_ICONSTOP|MB_OK "Tether could not merge the previous workspace with the selected profile. The complete workspace copy is at:$\r$\n$1$\r$\nResolve the folder conflict, then retry. The old installation has not been uninstalled." /SD IDOK
+    SetErrorLevel 20
+    Quit
+  migration_workspace_failed:
+    MessageBox MB_ICONSTOP|MB_OK "Tether could not copy the previous workspace safely. Close the previous APP and check the workspace and available disk space, then retry. The old installation has not been uninstalled." /SD IDOK
+    SetErrorLevel 21
     Quit
   migration_preserved:
 FunctionEnd
@@ -73,8 +83,12 @@ FunctionEnd
     Call ResolveTetherInstallRoot
     Pop $1
     !if ${SELECT_ROOT} == 1
-      ${If} $INSTDIR == $0
-      ${OrIf} ${isUpdated}
+      ${If} ${FileExists} "$0\resources\app.asar"
+        ${IfNot} ${Silent}
+        ${AndIf} $INSTDIR != $0
+        ${AndIf} $INSTDIR != $1
+          MessageBox MB_ICONINFORMATION|MB_OK "Tether is already installed in $1. The existing installation will be updated there." /SD IDOK
+        ${EndIf}
         ${If} $0 != $1
           StrCpy $TetherLegacyInstallRoot $0
           StrCpy $TetherLegacyCanonicalRoot $1
