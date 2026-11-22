@@ -30,7 +30,7 @@ from urllib.parse import urlsplit
 try:
     import tomllib
 except ImportError:  # Python 3.10
-    import tomli as tomllib
+    from . import _tomli as tomllib
 
 try:
     import psutil

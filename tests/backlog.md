@@ -264,3 +264,5 @@
 - 2026-11-21：记录 0.5.10 四平台草稿分支与更新桥接断言，覆盖保存的配对网络恢复、拒绝错误授权和旧目录联接迁移。
 
 - 2026-11-21：覆盖已有身份拒绝、一次性配对交换、切换账号阻断及同一窗口刷新本机代理。
+
+- 2026-11-22 Exercise authenticated DSH verification for available and unavailable services after a Node update.

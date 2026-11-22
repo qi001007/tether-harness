@@ -46,6 +46,7 @@ extraResources:
     to: tether-source/tether
     filter:
       - '**/*.py'
+      - 'node/_tomli/LICENSE'
       - '!**/__pycache__/**'
       - '!**/*.pyc'
   - from: packages/tether-ui/web

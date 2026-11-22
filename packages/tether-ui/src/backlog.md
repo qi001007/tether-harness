@@ -76,3 +76,5 @@
 - 2026-11-21：退出登录移到设置账号页；连接入口直达设置。左右目录树独立调整宽度，按 Escape 可关闭修改密码对话框。
 
 - 2026-11-21：已登录用户可明确选择接入尚无身份的本机，完成后同一窗口立即使用新的设备身份。
+
+- 2026-11-22 Verify the restarted Node through its authenticated DSH surface before committing a one-click update.

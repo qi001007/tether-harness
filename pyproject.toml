@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tether-harness"
-version = "0.5.10"
+version = "0.5.11"
 description = "MCP/ACP multi-device Agent Harness client (interview prototype)"
 requires-python = ">=3.10"
 dependencies = [
@@ -20,9 +20,11 @@ dependencies = [
   "anyio==4.15.1",
   "mcp>=2.3",
   "zstandard>=0.22",
-  "tomli>=2; python_version < '3.11'",
   "pywinpty>=2.0; sys_platform == 'win32'",
 ]
 
 [tool.setuptools.packages.find]
 include = ["tether", "tether.node*"]
+
+[tool.setuptools.package-data]
+"tether.node._tomli" = ["LICENSE"]

@@ -91,6 +91,7 @@ def _extract_runtime(temporary: Path) -> Path:
         "laptop/tether-node-pair",
         "tether-source/tether/node/agent.py", "tether-source/tether/node/pair_cli.py",
         "tether-source/tether/node/console.html",
+        "tether-source/tether/node/_tomli/LICENSE",
         "resources/tether-runtime/components/nodejs/bin/node",
         "resources/tether-runtime/components/meshcentral/meshcentral.js",
     ):
