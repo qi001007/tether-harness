@@ -1,4 +1,5 @@
 # 变更记录
+- 2026-11-22：四平台制品已完成。单个 Windows 制品解压时明确指定其子目录；汇总任务按固定提交复用成功产物，并检查本次只修改发布流程及其记录。
 - 2026-11-22：Windows 安装器第二次修订后仍按最初四平台构建的提交校验差异，再复用同一版本的非 Windows 产物。
 - 2026-11-13：新增 `codex/tether-056-reconnect-20261113` desktop candidate 触发，映射 APP/Node 0.5.6 与 `v0.5.6-preview.1`；保留旧版本映射，聚合结果为 draft prerelease 且 `make_latest: false`。
 - 2026-11-12：增加 `codex/tether-055-native-mode-20261112` desktop candidate 触发与 0.5.5/`v0.5.5-preview.1` 选择，并纳入 preview draft 汇总；旧候选映射保持不变。
