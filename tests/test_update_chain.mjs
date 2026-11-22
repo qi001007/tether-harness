@@ -19,10 +19,12 @@ const appVbsSource = read('apps/tether-app/Tether-App.vbs')
 const nodeAgentSource = read('tether/node/agent.py')
 const appRestartSource = read('tether/node/app_restart.py')
 
-test('one click downloads every component before the first install and restarts once', () => {
-  assert.match(source, /const plan = product === 'desktop'\s*\? \[\.\.\.\(localCapabilities\.node_self_update_enabled === false \? \[\] : \[\{ component: 'node', scope: nodeScope \}\]\), \{ component: 'app', scope: null \}\]\s*: \[\{ component: 'localPlugin', scope: null \}\]/,
-    'the desktop plan omits a Node self-update owned by an installer and always includes APP')
-  assert.match(source, /for \(const step of plan\) \{[\s\S]*?prepared\[step\.component\] = await prepareUpdateComponent\(step\.component, step\.scope\)/)
+test('one click checks the desktop target, then finishes downloads before the first install', () => {
+  assert.match(source, /const appCheck = product === 'desktop' \? await updateAction\('app', 'check', undefined, null\)[\s\S]*?const appAdoptsNode = windowsAppUpdateAdoptsNode\(host, localDevice\?\.platform, appCheck\)/)
+  assert.match(source, /const updateNode = localDevice\?\.capabilities\?\.node_self_update_enabled !== false && !appAdoptsNode[\s\S]*?const plan = product === 'desktop'\s*\? \[\.\.\.\(updateNode \? \[\{ component: 'node', scope: nodeScope \}\] : \[\]\), \{ component: 'app', scope: null \}\]\s*: \[\{ component: 'localPlugin', scope: null \}\]/,
+    'installer-owned Nodes and qualified Windows targets skip the independent Node download')
+  assert.match(source, /for \(const step of plan\) \{[\s\S]*?prepared\[step\.component\] = await prepareUpdateComponent\(step\.component, step\.scope,\s*step\.component === 'app' \? appCheck : undefined\)/)
+  assert.match(source, /appAdoptsNode && prepared\.app\?\.preparedId && prepared\.app\.expectedVersion !== appCheck\.latest_version/)
   assert.match(source, /const order = product === 'desktop' \? \['node', 'app'\] : \['localPlugin'\]/)
   assert.match(source, /if \(!failure\) for \(const component of order\)/,
     'any failed prepare prevents applying the components that did prepare')
@@ -38,6 +40,80 @@ test('one click downloads every component before the first install and restarts 
     'the deferred Node restart is confirmed after APP reconnects')
   assert.match(source, /else if \(prepared\.node && !prepared\.node\.rollbackAttempted\s*&& \(prepared\.node\.applied \|\| prepared\.node\.restartPending\)\) \{\s*const nodeReady = await watchNodeRestart\(nodeScope, entry\.authority, prepared\.node\.expectedVersion, prepared\.node\.preparedId\)/,
     'the product checks Node after APP reconnect only while its transaction remains pending')
+})
+
+test('only a fresh qualifying Windows App update can adopt the independent Node', async () => {
+  const { windowsAppUpdateAdoptsNode } = await import('../packages/tether-ui/src/app.js')
+  const host = { kind: 'app' }
+  const platform = 'Windows-10-10.0.22631'
+  const app = { source: 'electron-updater', current_version: '0.5.11', latest_version: '0.5.12', update_available: true }
+  assert.equal(windowsAppUpdateAdoptsNode(host, platform, app), true)
+  assert.equal(windowsAppUpdateAdoptsNode(host, 'win32', { ...app, latest_version: '0.5.13' }), true)
+  assert.equal(windowsAppUpdateAdoptsNode(host, platform, { ...app, latest_version: '0.5.11' }), false)
+  assert.equal(windowsAppUpdateAdoptsNode(host, platform, { ...app, latest_version: '1.0' }), false)
+  assert.equal(windowsAppUpdateAdoptsNode(host, platform, { ...app, stale: true }), false)
+  assert.equal(windowsAppUpdateAdoptsNode(host, platform, { ...app, source: 'node-zip' }), false)
+  assert.equal(windowsAppUpdateAdoptsNode(host, platform, { ...app, update_available: false }), false)
+  assert.equal(windowsAppUpdateAdoptsNode(host, 'Linux', app), false)
+  assert.equal(windowsAppUpdateAdoptsNode({ kind: 'dsh' }, platform, app), false)
+})
+
+test('device update buttons submit in parallel and suppress a duplicate click in another view', async () => {
+  const { MinimalUpdateButton, currentDeviceUpdateJob, deviceUpdateOrigin } = await import('../packages/tether-ui/src/app.js')
+  const appDevice = { app_installed: true, node_self_update_enabled: true, node_update_owner: 'node' }
+  const server = { app_installed: false, node_self_update_enabled: true, node_update_owner: 'node' }
+  assert.equal(deviceUpdateOrigin(appDevice), 'app')
+  assert.equal(deviceUpdateOrigin(server), 'node')
+  assert.equal(deviceUpdateOrigin({ ...server, node_update_owner: 'bundle_installer' }), '')
+  assert.equal(deviceUpdateOrigin({ ...server, node_self_update_enabled: false }), '')
+  const calls = []
+  const resolvers = []
+  const api = (url, options) => {
+    calls.push({ url, body: JSON.parse(options.body) })
+    return new Promise((resolve) => resolvers.push(resolve))
+  }
+  const render = (deviceId, originProduct, busy = false, job = null) => {
+    const state = [{ update_available: true, target_version: '0.5.12' }, job, '', false, false]
+    let index = 0
+    const React = {
+      useRef: (current) => ({ current }),
+      useState() { const slot = index++; return [state[slot], (value) => { state[slot] = value }] },
+      useEffect() {}
+    }
+    const h = (type, props, ...children) => ({ type, props, children })
+    const rendered = MinimalUpdateButton({ React, h, api, deviceId, localDeviceId: 'DESKTOP-LOCAL',
+      host: { kind: 'app', hubConfig: () => ({ url: 'https://hub.example/' }) }, C: {},
+      originProduct, triggerLabel: '一键更新', busy })
+    return { button: rendered.children.find((item) => item?.type === 'button'), state }
+  }
+  const failedOldJob = { job_id: 'old-job', status: 'error', target_version: '0.5.11' }
+  const laptop = render('LAPTOP-01', deviceUpdateOrigin(appDevice), false, failedOldJob)
+  const duplicateLaptop = render('LAPTOP-01', deviceUpdateOrigin(appDevice))
+  const headless = render('SERVER', deviceUpdateOrigin(server))
+  const desktop = render('DESKTOP-LOCAL', deviceUpdateOrigin(appDevice))
+  const desktopRequest = desktop.button.props.onClick()
+  const laptopRequest = laptop.button.props.onClick()
+  await duplicateLaptop.button.props.onClick()
+  const headlessRequest = headless.button.props.onClick()
+  assert.deepEqual(calls, [
+    { url: '/api/devices/DESKTOP-LOCAL/update/apply', body: { origin_product: 'app' } },
+    { url: '/api/devices/LAPTOP-01/update/apply', body: { origin_product: 'app' } },
+    { url: '/api/devices/SERVER/update/apply', body: { origin_product: 'node' } }
+  ])
+  assert.equal(laptop.state[3], false, 'a remote download stays in the background')
+  assert.equal(headless.state[3], false)
+  assert.equal(desktop.state[3], false)
+  resolvers.forEach((resolve) => resolve({ job_id: 'job', status: 'queued' }))
+  await Promise.all([desktopRequest, laptopRequest, headlessRequest])
+  const claimedLaptop = render('LAPTOP-01', 'app', true)
+  assert.equal(claimedLaptop.button.props.disabled, true)
+  await claimedLaptop.button.props.onClick()
+  assert.equal(calls.length, 3)
+  const runningOldJob = { ...failedOldJob, status: 'downloading' }
+  assert.equal(currentDeviceUpdateJob({ update_available: true, target_version: '0.5.12' }, runningOldJob), runningOldJob)
+  assert.equal(currentDeviceUpdateJob({ update_available: true, target_version: '0.5.11' }, failedOldJob), failedOldJob)
+  assert.match(source, /topbarUpdateOrigin = host\?\.kind === 'dsh' \? 'plugin' : deviceUpdateOrigin\(selectedUpdateTarget\?\.capabilities\)/)
+  assert.match(source, /originProduct: topbarUpdateOrigin,[\s\S]*?busy: deviceUpdateRunning\(deviceId\)/)
 })
 
 test('external Node configuration skips spawn and exposes local API only after explicit validation', () => {
@@ -56,7 +132,7 @@ test('a device one click prepares APP and Node before applying, keeping plugin s
   assert.match(source, /export function deviceUpdateComponents\(capabilities = \{\}\) \{\s*return \[\.\.\.\(capabilities\.node_self_update_enabled === false \? \[\] : \['node'\]\), \.\.\.\(hasInstalledApp\(capabilities\) \? \['app'\] : \[\]\)\]/,
     'device update components honor Node ownership and installed APP capability')
   assert.match(source, /const componentNames = \[\.\.\.\(nodeUpdateManaged \? \[\] : \['node'\]\), \.\.\.\(hasApp \? \['app'\] : \[\]\)\]/)
-  assert.match(source, /const updateOrigin = hasApp \? 'app'\s*: capabilities\.node_self_update_enabled === true && !installerOwnedNode \? 'node' : ''/,
+  assert.match(source, /const updateOrigin = deviceUpdateOrigin\(capabilities\)/,
     'device updates select the APP or Node owner for the remote update job')
   assert.match(source, /h\(MinimalUpdateButton, \{[\s\S]*?originProduct: updateOrigin, triggerLabel: '一键更新'/,
     'the device button starts the Hub-owned job with its selected component owner')
@@ -102,9 +178,9 @@ test('a second window attaches to a running install instead of failing it', () =
   assert.match(source, /const settled = await waitForUpdateSettle\(component, entry\.scope, entry\.authority\)\s*if \(!settled\) \{\s*const reason = component \+ ' 更新仍在进行，尚未确认完成'\s*failure = component === 'node' \? await rollbackPreparedNode\(reason\) : failure \|\| reason\s*continue/,
     'a still-running Node update is rolled back after settling times out')
   assert.match(source, /const latest = await apiRef\.current\(devicePath \+ '\/update\/job'/)
-  assert.match(source, /const restored = latest && latest\.status !== 'done' \? latest : null/,
+  assert.match(source, /const restored = currentDeviceUpdateJob\(data, latest && latest\.status !== 'done' \? latest : null\)/,
     'a second device window restores the existing nonterminal job')
-  assert.match(source, /const next = await apiRef\.current\(devicePath \+ '\/update\/job'/)
+  assert.match(source, /const next = currentDeviceUpdateJob\(summary, await apiRef\.current\(devicePath \+ '\/update\/job'/)
   assert.match(source, /const timer = setInterval\(poll, 1000\)/,
     'the attached job is observed until its terminal status')
 })
@@ -198,7 +274,7 @@ test('APP restart completes only this run prepared Node and ignores old pending 
 
 test('restart watchers use the version that prepare actually pinned', () => {
   assert.match(source, /const preparedRow = \(prepared\.prepared \|\| \[\]\)\.find\(\(item\) => item && item\.prepared_id === preparedId\)/)
-  assert.match(source, /const expectedVersion = prepared\.to_version \|\| \(preparedRow && preparedRow\.to_version\) \|\| checked\.latest_version/)
+  assert.match(source, /const expectedVersion = prepared\.to_version \|\| \(preparedRow && preparedRow\.to_version\)\s*\|\| prepared\.latest_version \|\| checked\.latest_version/)
   assert.match(source, /watchAppRestart\(nodeScope, entry\.authority, entry\.expectedVersion\)/)
   assert.match(source, /watchNodeRestart\(entry\.scope, entry\.authority, entry\.expectedVersion, entry\.preparedId\)/)
 })

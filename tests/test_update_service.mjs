@@ -241,7 +241,7 @@ try {
   assert.ok(ui.includes("'Tether for DSH（插件）'"))
   assert.ok(ui.includes("'Tether Desktop（APP + Node）'"))
   assert.ok(!ui.includes('目标设备上的'), 'card titles must name the device, not "target device"')
-  assert.ok(ui.includes('disabled: anyUpdateRunning || disabled || card.disabled'), 'one-click must be disabled when already current')
+  assert.ok(ui.includes('disabled: disabled || card.disabled'), 'one-click must be disabled when already current')
   assert.ok(ui.includes("role: 'progressbar'") && ui.includes("'aria-valuenow': percent"),
     'a running install shows determinate progress instead of a confirm dialog')
   assert.ok(!ui.includes("btn('稍后'") && !ui.includes("btn('重启并安装'") && !ui.includes('APP 已下载'),
@@ -260,15 +260,19 @@ try {
 
   if (process.platform === 'win32') {
     const executableAlias = 'D:\\Apps\\Tether\\Tether.exe'
-    const physicalExecutable = 'E:\\Project\\Runtime\\Apps\\Tether\\Tether.exe'
-    const installerTemp = 'E:\\tether-up'
+    let physicalExecutable = 'E:\\Project\\Runtime\\Apps\\Tether\\Tether.exe'
+    let installerTemp
     const updater = new EventEmitter()
+    updater.app = { baseCachePath: 'C:\\Users\\fixture\\AppData\\Local', name: 'Tether' }
+    updater.configOnDisk = { value: Promise.resolve({ updaterCacheDirName: 'tether-app-updater' }) }
+    const legacyCache = path.join(updater.app.baseCachePath, 'tether-app-updater')
+    const stagedLegacyCache = 'E:\\Other\\tether-app-updater'
     let downloadCalls = 0
     updater.downloadUpdate = async () => { downloadCalls++; return [] }
     const installCalls = []
     let installError = null
     updater.quitAndInstall = (...args) => {
-      installCalls.push({ args, temp: process.env.TEMP, tmp: process.env.TMP })
+      installCalls.push({ args, temp: process.env.TEMP, tmp: process.env.TMP, installerTemp: process.env.TETHER_UPDATER_TEMP })
       if (installError) throw installError
     }
     const originalLoad = Module._load
@@ -296,6 +300,7 @@ try {
     const originalRealpathNative = fs.realpathSync.native
     const originalTemp = process.env.TEMP
     const originalTmp = process.env.TMP
+    const originalInstallerTemp = process.env.TETHER_UPDATER_TEMP
     let stopEnv
     let mkdirError = null
     let mkdirPath = ''
@@ -307,6 +312,17 @@ try {
     let freeBytes = 2n * 3000n + reserveBytes
     let statfsError = null
     let statfsCalls = 0
+    let legacyIsRelocated = false
+    let cacheRedirected = false
+    const loadWithoutUpdater = Module._load
+    Module._load = (request, ...args) => {
+      if (request === 'electron-updater/out/DownloadedUpdateHelper') {
+        return { DownloadedUpdateHelper: class {
+          constructor(cacheDir) { this.cacheDir = cacheDir }
+        } }
+      }
+      return loadWithoutUpdater.call(Module, request, ...args)
+    }
     fs.mkdirSync = (directory) => {
       mkdirPath = directory
       if (mkdirError) throw mkdirError
@@ -315,24 +331,31 @@ try {
     fs.mkdtempSync = (prefix) => { probePrefix = prefix; return `${prefix}fixture` }
     fs.rmdirSync = (directory) => { removedProbe = directory }
     fs.realpathSync.native = (filename) => {
-      assert.equal(filename, executableAlias)
-      return physicalExecutable
+      if (filename === executableAlias) return physicalExecutable
+      if (legacyIsRelocated && filename === legacyCache) return stagedLegacyCache
+      if (cacheRedirected && filename === updater.downloadedUpdateHelper?.cacheDir) return 'C:\\unexpected-cache'
+      return filename
     }
     fs.statfsSync = (cacheRoot, options) => {
       statfsCalls++
-      assert.equal(cacheRoot, process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'))
+      assert.equal(cacheRoot, updater.downloadedUpdateHelper.cacheDir)
       assert.deepEqual(options, { bigint: true })
       if (statfsError) throw statfsError
       return { bavail: freeBytes, bsize: 1n }
     }
     process.env.TEMP = 'before-temp'
     process.env.TMP = 'before-tmp'
+    process.env.TETHER_UPDATER_TEMP = 'before-installer-temp'
     try {
       packagedService.electronUpdateInfo = updateInfo
       freeBytes = 2n * 3000n + reserveBytes - 1n
       await assert.rejects(packagedService.prepare(), (error) => error.code === 'insufficient_update_cache_space'
         && error.message.includes('需要 0.6 GB') && error.message.includes('当前可用 0.5 GB'))
       assert.equal(downloadCalls, 0, 'low cache space must stop before downloadUpdate')
+      assert.equal(path.parse(updater.downloadedUpdateHelper.cacheDir).root, 'E:\\')
+      assert.equal(path.dirname(updater.downloadedUpdateHelper.cacheDir), path.dirname(path.dirname(physicalExecutable)),
+        'a linked D: app downloads and stages beside its physical E: installation')
+      installerTemp = path.join(updater.downloadedUpdateHelper.cacheDir, 'install-temp')
 
       packagedService.electronDownloaded = false
       packagedService.electronUpdateInfo = { version: '0.5.6', files: [{ url: 'missing-size.exe' }] }
@@ -363,6 +386,7 @@ try {
       freeBytes = 3000n + reserveBytes - 1n
       const stopBeforeSpaceFailure = stopEnv
       const installBeforeSpaceFailure = installCalls.length
+      const mkdirBeforeSpaceFailure = mkdirPath
       let beforeInstallAfterSpaceFailure = false
       await assert.rejects(packagedService.apply(preparedId, {
         beforeInstall: async () => { beforeInstallAfterSpaceFailure = true }
@@ -373,9 +397,14 @@ try {
       assert.equal(installCalls.length, installBeforeSpaceFailure)
       assert.equal(packagedService.preparedIds.has(preparedId), true, 'low-space apply keeps the prepared update retryable')
       assert.equal(packagedService.electronDownloaded, true)
-      assert.equal(mkdirPath, '', 'low-space apply must fail before creating the installer temp directory')
+      assert.equal(mkdirPath, mkdirBeforeSpaceFailure, 'low-space apply must fail before creating the installer temp directory')
 
       freeBytes = 3000n + reserveBytes
+      cacheRedirected = true
+      await assert.rejects(packagedService.apply(preparedId), (error) => error.code === 'update_cache_space_unavailable')
+      assert.equal(installCalls.length, installBeforeSpaceFailure, 'a cache redirected off the install volume cannot launch')
+      cacheRedirected = false
+
       await packagedService.apply(preparedId, {
         beforeInstall: async () => { beforeInstallTemp = { temp: process.env.TEMP, tmp: process.env.TMP } }
       })
@@ -384,19 +413,22 @@ try {
       assert.equal(removedProbe, `${probePrefix}fixture`)
       assert.deepEqual(beforeInstallTemp, { temp: 'before-temp', tmp: 'before-tmp' })
       assert.deepEqual(stopEnv, { temp: 'before-temp', tmp: 'before-tmp' })
-      assert.deepEqual(installCalls[0], { args: [true, true], temp: installerTemp, tmp: installerTemp })
+      assert.deepEqual(installCalls[0], { args: [true, true], temp: installerTemp, tmp: installerTemp, installerTemp })
       assert.equal(process.env.TEMP, 'before-temp')
       assert.equal(process.env.TMP, 'before-tmp')
+      assert.equal(process.env.TETHER_UPDATER_TEMP, 'before-installer-temp')
 
       delete process.env.TEMP
       delete process.env.TMP
+      delete process.env.TETHER_UPDATER_TEMP
       const missingEnvPreparedId = 'd'.repeat(32)
       packagedService.preparedIds.add(missingEnvPreparedId)
       installError = null
       await packagedService.apply(missingEnvPreparedId)
-      assert.deepEqual(installCalls[1], { args: [true, true], temp: installerTemp, tmp: installerTemp })
+      assert.deepEqual(installCalls[1], { args: [true, true], temp: installerTemp, tmp: installerTemp, installerTemp })
       assert.equal(process.env.TEMP, undefined)
       assert.equal(process.env.TMP, undefined)
+      assert.equal(process.env.TETHER_UPDATER_TEMP, undefined)
       process.env.TEMP = 'before-temp'
       process.env.TMP = 'before-tmp'
 
@@ -412,13 +444,34 @@ try {
       packagedService.preparedIds.add(mkdirFailedPreparedId)
       mkdirError = Object.assign(new Error('access denied'), { code: 'EACCES' })
       const priorStopCalls = stopEnv
-      await assert.rejects(packagedService.apply(mkdirFailedPreparedId), (error) => error.code === 'app_update_temp_dir_failed'
-        && error.message.includes('无法创建 APP 更新临时目录'))
+      await assert.rejects(packagedService.apply(mkdirFailedPreparedId), { code: 'app_update_temp_dir_failed' })
       assert.equal(installCalls.length, 3)
       assert.equal(stopEnv, priorStopCalls, 'temp directory failure must happen before stopping the managed node')
       assert.equal(process.env.TEMP, 'before-temp')
       assert.equal(process.env.TMP, 'before-tmp')
+
+      mkdirError = null
+      legacyIsRelocated = true
+      packagedService.windowsCachePromise = null
+      await packagedService.windowsUpdateLocation()
+      assert.equal(updater.downloadedUpdateHelper.cacheDir, stagedLegacyCache,
+        'reuse an existing user cache junction already on the installation volume')
+
+      legacyIsRelocated = false
+      physicalExecutable = 'C:\\Program Files\\Tether\\Tether.exe'
+      packagedService.windowsCachePromise = null
+      await packagedService.windowsUpdateLocation()
+      assert.equal(updater.downloadedUpdateHelper.cacheDir, legacyCache,
+        'Program Files updates use the current user cache when it is on the same volume')
+
+      physicalExecutable = 'D:\\Program Files\\Tether\\Tether.exe'
+      packagedService.windowsCachePromise = null
+      mkdirError = Object.assign(new Error('installed volume is read-only to this user'), { code: 'EACCES' })
+      await assert.rejects(packagedService.windowsUpdateLocation(),
+        (error) => error.code === 'app_update_cache_location_unavailable')
+      assert.equal(packagedService.windowsCachePromise, null, 'cache setup failure can be retried')
     } finally {
+      Module._load = loadWithoutUpdater
       fs.mkdirSync = originalMkdirSync
       fs.mkdtempSync = originalMkdtempSync
       fs.rmdirSync = originalRmdirSync
@@ -428,6 +481,8 @@ try {
       else process.env.TEMP = originalTemp
       if (originalTmp === undefined) delete process.env.TMP
       else process.env.TMP = originalTmp
+      if (originalInstallerTemp === undefined) delete process.env.TETHER_UPDATER_TEMP
+      else process.env.TETHER_UPDATER_TEMP = originalInstallerTemp
     }
   }
 
