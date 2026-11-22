@@ -7,8 +7,23 @@ import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { Supervisor } from '../apps/tether-app/supervisor.js'
+import { idleForMigration, ownerDevice } from '../apps/tether-app/standalone-node-migration.js'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+
+test('an old Windows installation can hand over only its own idle device', () => {
+  const device = { device_id: 'a', owner_id: 'owner', online: true }
+  const state = { user: { user_id: 'owner' }, devices: [device], runs: [] }
+  const sessions = { sessions: [] }, jobs = { jobs: [{ state: 'interrupted' }] }, copy = { state: 'idle' }
+  assert.equal(ownerDevice(state, 'a'), device)
+  assert.equal(ownerDevice({ ...state, user: { user_id: 'other' } }, 'a'), null)
+  assert.equal(idleForMigration(state, sessions, jobs, copy, 'a'), true)
+  assert.equal(idleForMigration(state, { sessions: [{ status: 'running' }] }, jobs, copy, 'a'), false)
+  assert.equal(idleForMigration(state, sessions, [{ state: 'verifying' }], copy, 'a'), false)
+  assert.equal(idleForMigration(state, sessions, jobs, { state: 'running' }, 'a'), false)
+  assert.equal(idleForMigration({ ...state, runs: [{ device_id: 'a', state: 'dispatching' }] },
+    sessions, jobs, copy, 'a'), false)
+})
 
 test('the packaged Node adopts the existing data and workspace under the App installer', async (t) => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tether-adoption-'))

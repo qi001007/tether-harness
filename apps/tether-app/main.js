@@ -6,6 +6,7 @@ const { Supervisor } = require('./supervisor.js')
 const { waitForSupervisorStart, waitForLocalNodeApi, getLocalMeshRoute } = require('./startup-readiness.js')
 const { createSftpRelayManager, requiresLocalRelayConsent } = require('./sftp-relay.js')
 const { UpdateService } = require('./update-service.js')
+const { finishStandaloneUpgrade } = require('./standalone-node-migration.js')
 const { EventSource } = require('eventsource')
 const iconv = require('iconv-lite')
 const { migrateLegacyData, registerAppInstallation } = require('./app-installation.js')
@@ -1379,6 +1380,20 @@ if (!locked) {
     await createWindow()
     startupComplete = true
     await runInstalledSignIn()
+    if (packaged && !candidateMode && process.platform === 'win32') {
+      void finishStandaloneUpgrade({ app, dataDir, resources: process.resourcesPath,
+        device: supervisor.device, nodeMode: supervisor.nodeMode, updated: process.argv.includes('--updated'), log,
+        read: async (route, body) => {
+          const options = { cache: 'no-store', signal: AbortSignal.timeout(15000) }
+          if (body) Object.assign(options, { method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(body) })
+          const response = await controllerFetch(new URL(route, trustedControllerOrigin()).toString(), options)
+          if (!response.ok) throw new Error('Node adoption status unavailable')
+          const payload = await response.json()
+          if (payload.ok === false) throw new Error('Node adoption check failed')
+          return payload.value ?? payload
+        } }).catch(() => log('Standalone Node migration could not be verified'))
+    }
   }).catch((error) => {
     log('start failed ' + (error.stack || error))
     app.quit()
