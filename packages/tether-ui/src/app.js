@@ -189,8 +189,9 @@ export function updateCardState({ running = false, error = '', hasUpdate = false
                                    restartAction = 'restart' } = {}) {
   if (running) return { kind: 'running', pill: '正在更新', tone: 'amber', action: 'none', label: '更新中', disabled: true }
   if (error) return { kind: 'error', pill: '更新失败', tone: 'red', action: 'retry', label: '重试', disabled: false }
-  if (failed) return { kind: 'failed', pill: '检查失败', tone: 'red', action: 'recheck', label: '重试', disabled: false }
+  // A failed refresh must not hide a known update behind a dead red retry button.
   if (hasUpdate) return { kind: 'update', pill: '有更新', tone: 'amber', action: 'update', label: '一键更新', disabled: false }
+  if (failed) return { kind: 'failed', pill: '检查失败', tone: 'red', action: 'recheck', label: '重试', disabled: false }
   if (restartRequired) {
     return {
       kind: 'restart', pill: restartPill, tone: 'amber',
@@ -226,7 +227,8 @@ export function updateCardStateForInfos(infos, options = {}) {
   const list = (infos || []).filter(Boolean)
   const stale = list.some(isUpdateInfoStale)
   const failed = options.failed === true || list.some((info) => !!info.check_error)
-  const hasUpdate = list.some((info) => !isUpdateInfoStale(info) && info.update_available === true)
+  const hasUpdate = list.some((info) => info && info.update_available === true
+    && !!info.current_version && !!info.latest_version)
   const known = list.length > 0 && list.every((info) => info.current_version && info.latest_version && !isUpdateInfoStale(info))
   const running = options.running === true || list.some(updateInfoRunning)
   return updateCardState({ ...options, running, stale, failed, hasUpdate, known })

@@ -181,6 +181,18 @@ if (process.platform === 'win32') app.setAppUserModelId('com.tether.app')
 // Hub and mesh endpoints must be reached directly; a system proxy can silently
 // break them while leaving ordinary browsing intact.
 if (env.TETHER_USE_SYSTEM_PROXY !== '1') app.commandLine.appendSwitch('no-proxy-server')
+
+async function configureUpdaterNetwork() {
+  // electron-updater uses its own session. Keep Hub and mesh direct, but let
+  // update checks and downloads follow the user's system proxy: direct access
+  // to GitHub is intermittent on many networks and surfaced as a dead retry
+  // button with net::ERR_TIMED_OUT / ERR_CONNECTION_RESET.
+  if (String(env.TETHER_UPDATER_PROXY || '').trim().toLowerCase() === 'direct') return
+  try {
+    const updaterSession = session.fromPartition('electron-updater', { cache: false })
+    await updaterSession.setProxy({ mode: 'system' })
+  } catch (_) { /* the direct default remains */ }
+}
 const { enrollmentDecision, newLocalDeviceId, canEnrollManagedNode, requestLocalPairing } = require('./enrollment.js')
 const supervisor = new Supervisor({ repoRoot, dataDir, env, managedNode, preserveManagedNodeOnExit: packaged })
 const updates = new UpdateService({ repoRoot, dataDir, python: supervisor.childPython, env, app,
@@ -857,7 +869,9 @@ async function refreshAppUpdateBridgeRegistration(force = false) {
       method: 'POST', cache: 'no-store',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ bridge_url: bridge.url, bridge_token: bridge.token }),
-      signal: AbortSignal.timeout(5000)
+      // The Hub forwards this registration to the Node and allows 15 s; a 5 s
+      // client cutoff made every registration time out and retry (DOMException 23).
+      signal: AbortSignal.timeout(20000)
     })
     if (!response.ok) return false
     const result = await response.json()
@@ -1377,6 +1391,7 @@ if (!locked) {
     }
   })
   app.whenReady().then(async () => {
+    await configureUpdaterNetwork()
     await createWindow()
     startupComplete = true
     await runInstalledSignIn()

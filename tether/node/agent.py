@@ -75,6 +75,11 @@ load_dotenv(ROOT / ".env")
 
 ACTIVE = ("queued", "dispatching", "running", "cancelling")
 TERMINAL = ("completed", "cancelled", "failed", "unknown")
+# An apply that expects a process restart can leave the gate closed when the
+# restart never happens (for example an externally managed Node). After this
+# long without a restart the gate is cleared so one stuck update cannot block
+# every later check and update until the Node is restarted by hand.
+UPDATE_APPLY_STALE_SECONDS = 600.0
 
 
 class _RejectUpdateBridgeRedirects(urllib.request.HTTPRedirectHandler):
@@ -392,6 +397,7 @@ class Node:
         self.update_tasks: set[asyncio.Task] = set()
         self.update_lock = asyncio.Lock()
         self.update_applying = False
+        self.update_applying_since = 0.0
         self.restart_requested = False
         self.cancels: dict[str, asyncio.Event] = {}
         self._dropped = False
@@ -811,6 +817,18 @@ class Node:
             if response_ws is None or response_ws is self.ws:
                 self.connected = False
 
+    def _expire_stale_update_apply(self) -> None:
+        """Clear an apply gate whose expected restart never happened."""
+        if not self.update_applying:
+            return
+        since = float(self.update_applying_since or 0.0)
+        if since <= 0 or time.time() - since < UPDATE_APPLY_STALE_SECONDS:
+            return
+        log(f"[update] clearing stale update gate after {int(time.time() - since)}s without restart")
+        self.update_applying = False
+        self.update_applying_since = 0.0
+        self.restart_requested = False
+
     def _update_in_progress(self, component: str) -> dict[str, Any]:
         result: dict[str, Any] = {"ok": True, "component": component,
                                   "status": "in_progress", "in_progress": True,
@@ -882,6 +900,7 @@ class Node:
     async def _update_call(self, msg: dict[str, Any], response_ws: Any = None) -> None:
         if response_ws is None:
             response_ws = self.ws
+        self._expire_stale_update_apply()
         req_id = str(msg.get("req_id") or "")
         component = msg.get("component")
         action = msg.get("action")
@@ -1040,6 +1059,7 @@ class Node:
             if applying:
                 # Block new dispatches before inspecting native DSH logs off-loop.
                 self.update_applying = True
+                self.update_applying_since = time.time()
                 busy_component = "node" if guard_node_runtime else component
                 busy = await asyncio.to_thread(self._update_busy_reason, busy_component)
                 if busy:
@@ -1106,6 +1126,7 @@ class Node:
                     else:
                         self.restart_requested = True
                         self.update_applying = True
+                        self.update_applying_since = time.time()
                 if applying and applied and component == "app":
                     app_manager = self.update_managers["app"]
                     app_root = Path(getattr(app_manager, "root", ROOT)).resolve()
@@ -1115,6 +1136,7 @@ class Node:
                     if restart_scheduled and same_managed_root:
                         app_restart_scheduled = True
                         self.update_applying = True
+                        self.update_applying_since = time.time()
                         result["restart_scheduled"] = True
                     elif restart_scheduled:
                         result["restart_scheduled"] = True
@@ -1135,6 +1157,7 @@ class Node:
                 if rollback_node:
                     self.restart_requested = True
                     self.update_applying = True
+                    self.update_applying_since = time.time()
                     if self.ws is not None:
                         try:
                             await self.ws.close(code=1012, reason="node update rolled back")
@@ -1180,6 +1203,7 @@ class Node:
                 return
             async with self.update_lock:
                 self.update_applying = True
+                self.update_applying_since = time.time()
                 busy = await asyncio.to_thread(self._update_busy_reason, "node")
                 if busy:
                     self.update_applying = False

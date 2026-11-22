@@ -324,8 +324,13 @@ try {
     Module._load = (request, ...args) => {
       if (request === 'electron-updater/out/DownloadedUpdateHelper') {
         return { DownloadedUpdateHelper: class {
-          constructor(cacheDir) { this.cacheDir = cacheDir }
-          async validateDownloadedPath() { return cacheHit ? 'validated-installer.exe' : null }
+          constructor(cacheDir) {
+            this.cacheDir = cacheDir
+            this.file = path.join(temp, 'tether-installer-fixture.exe')
+            fs.writeFileSync(this.file, 'fixture')
+            this.downloadedFileInfo = { fileName: 'tether-installer-fixture.exe', sha512: '', isAdminRightsRequired: false }
+          }
+          async validateDownloadedPath() { return cacheHit ? this.file : null }
         } }
       }
       return loadWithoutUpdater.call(Module, request, ...args)

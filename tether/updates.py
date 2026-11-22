@@ -1757,7 +1757,11 @@ class UpdateManager:
             if os.name == "nt":
                 import msvcrt
 
-                os.lseek(fd, 0, os.SEEK_SET)
+                # Release the exact padding byte acquired by _try_lock. Unlocking
+                # offset 0 left the real lock held for the process lifetime, so a
+                # node that was not restarted after an apply reported every later
+                # update as in_progress until the next process start.
+                os.lseek(fd, LOCK_BYTE_OFFSET, os.SEEK_SET)
                 msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
             else:
                 import fcntl

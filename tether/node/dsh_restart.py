@@ -150,7 +150,7 @@ def _launch(exe: str, dsh_home: Path | None = None) -> subprocess.Popen[Any]:
         "close_fds": True,
     }
     if os.name == "nt":
-        kwargs["creationflags"] = DETACHED
+        kwargs["creationflags"] = DETACHED | getattr(subprocess, "CREATE_NO_WINDOW", 0)
     else:
         kwargs["start_new_session"] = True
     return subprocess.Popen([exe], **kwargs)

@@ -705,6 +705,24 @@ def test_components_share_apply_lock_even_with_different_state_dirs(tmp_path: Pa
     assert lock.exists()
 
 
+def test_unlock_releases_the_shared_lock_before_the_holder_fd_closes(tmp_path: Path) -> None:
+    root = tmp_path / "install"
+    seed_version(root)
+    holder = UpdateManager(root, "app", state_dir=tmp_path / "state-a")
+    waiter = UpdateManager(root, "node", state_dir=tmp_path / "state-b")
+    acquired = holder._lock()
+    assert acquired is not None
+    fd, _lock = acquired
+    try:
+        holder._unlock(fd)
+        again = waiter._lock()
+        assert again is not None
+        waiter._unlock(again[0])
+        os.close(again[0])
+    finally:
+        os.close(fd)
+
+
 def test_lock_left_by_a_dead_process_is_taken_over(tmp_path: Path) -> None:
     root = tmp_path / "install"
     seed_version(root)

@@ -395,11 +395,35 @@ try {
         if ($old -and ($old.CreationDate -ne $plan.process.CreationDate -or !(Same-PhysicalPath $old.ExecutablePath $plan.executable))) {
             Fail 'LEGACY_PROCESS_CHANGED'
         }
-        if ($old) { Stop-Process -Id $old.ProcessId }
+        if ($old) { Stop-Process -Id $old.ProcessId -Force -ErrorAction SilentlyContinue }
+        # The legacy Node can be a launcher shim plus a child interpreter. Stop the
+        # whole tree; stopping only the listener lets the shim respawn it and keeps
+        # the console port bound, which used to abort this migration after the
+        # scheduled task had already been disabled.
+        $legacyTree = @(User-Processes "Name='pythonw.exe' or Name='python.exe' or Name='tether-python.exe'" | Where-Object {
+            (Same-PhysicalPath $_.ExecutablePath $plan.launcher) -or
+            (Same-PhysicalPath $_.ExecutablePath $plan.executable) -or
+            (([string]$_.CommandLine) -match 'tether\.node\.agent' -and
+             (([string]$_.CommandLine) -match [regex]::Escape([string]$state.workspace) -or
+              ([string]$_.CommandLine) -match ('--console-port\s+' + [regex]::Escape([string]$state.port))))
+        })
+        foreach ($legacyProcess in $legacyTree) {
+            if ($legacyProcess.ProcessId -ne $PID) { Stop-Process -Id $legacyProcess.ProcessId -Force -ErrorAction SilentlyContinue }
+        }
         $deadline = [DateTime]::UtcNow.AddSeconds(15)
         do {
             $listeners = @(Get-NetTCPConnection -LocalPort $state.port -State Listen -ErrorAction SilentlyContinue)
             if (!$listeners.Count) { break }
+            foreach ($listener in $listeners) {
+                $ownerProcess = User-Processes "ProcessId=$($listener.OwningProcess)" | Select-Object -First 1
+                if ($ownerProcess -and ((Same-PhysicalPath $ownerProcess.ExecutablePath $plan.launcher) -or
+                    (Same-PhysicalPath $ownerProcess.ExecutablePath $plan.executable) -or
+                    (([string]$ownerProcess.CommandLine) -match 'tether\.node\.agent'))) {
+                    Stop-Process -Id $ownerProcess.ProcessId -Force -ErrorAction SilentlyContinue
+                } else {
+                    Fail 'OLD_CONSOLE_STILL_BOUND'
+                }
+            }
             Start-Sleep -Milliseconds 400
         } while ([DateTime]::UtcNow -lt $deadline)
         if ($listeners.Count) { Fail 'OLD_CONSOLE_STILL_BOUND' }

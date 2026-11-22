@@ -5,6 +5,7 @@ import json
 import os
 import sys
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -732,6 +733,26 @@ def test_update_calls_attach_while_an_apply_is_running(tmp_path, monkeypatch):
     assert all(message["ok"] is True and message["in_progress"] is True for message in sent)
     assert manager.apply_calls == 0
     assert node.update_applying is True
+    node.store.db.close()
+
+
+def test_stale_update_gate_is_cleared_by_the_next_update_call(tmp_path, monkeypatch):
+    node = _node(tmp_path, monkeypatch)
+    manager = FakeUpdateManager()
+    node.update_managers["node"] = manager
+    node.update_applying = True
+    node.update_applying_since = time.time() - agent.UPDATE_APPLY_STALE_SECONDS - 1
+    sent: list[dict] = []
+
+    async def send(message: dict) -> None:
+        sent.append(message)
+
+    monkeypatch.setattr(node, "_send", send)
+    asyncio.run(node._update_call({"type": "update_call", "req_id": "stale-status",
+                                   "action": "status", "component": "node"}))
+
+    assert node.update_applying is False
+    assert sent and sent[0].get("status") != "in_progress"
     node.store.db.close()
 
 

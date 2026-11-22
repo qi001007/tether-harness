@@ -669,40 +669,59 @@ class UpdateService {
   }
 
   async apply(preparedId, { beforeInstall } = {}) {
-    await this.activity()
     if (this.electronUpdater) {
-      this.assertElectronPrepared(preparedId)
-      const windowsLocation = process.platform === 'win32' ? await this.windowsUpdateLocation() : null
-      const installing = { ok: true, component: 'app', status: 'installing', restart_required: true,
-        current_version: this.app.getVersion(), latest_version: this.electronUpdateInfo.version,
-        source: 'electron-updater' }
-      this.clearElectronApplyFailure()
+      let installing = null
       try {
+        await this.activity()
+        this.assertElectronPrepared(preparedId)
+        const windowsLocation = process.platform === 'win32' ? await this.windowsUpdateLocation() : null
+        installing = { ok: true, component: 'app', status: 'installing', restart_required: true,
+          current_version: this.app.getVersion(), latest_version: this.electronUpdateInfo.version,
+          source: 'electron-updater' }
+        this.clearElectronApplyFailure()
         if (windowsLocation) ensureWindowsUpdateCacheSpace(this.electronUpdateInfo, 1, windowsLocation)
         const nsisTempDir = windowsLocation ? prepareWindowsInstallerTemp(windowsLocation) : null
-        if (beforeInstall) await beforeInstall(installing)
-        this.preparedIds.delete(preparedId)
-        await this.stopManagedNode()
-        if (nsisTempDir) {
-          if (this.windowsReceipt) this.windowsReceipt = this.saveWindowsReceipt(this.windowsReceipt, 'installing')
-          const names = ['TEMP', 'TMP', 'TETHER_UPDATER_TEMP']
-          const previous = names.map((name) => process.env[name])
-          // NsisUpdater calls spawn synchronously inside quitAndInstall.
-          try {
-            for (const name of names) process.env[name] = nsisTempDir
-            this.electronUpdater.quitAndInstall(true, true)
-          } finally {
-            names.forEach((name, index) => {
-              if (previous[index] === undefined) delete process.env[name]
-              else process.env[name] = previous[index]
-            })
-          }
-        } else {
-          this.electronUpdater.quitAndInstall(false, true)
+        const helper = this.electronUpdater.downloadedUpdateHelper
+        const installerPath = helper && helper.file
+        if (process.platform === 'win32'
+            && (typeof installerPath !== 'string' || !helper.downloadedFileInfo || !fs.existsSync(installerPath))) {
+          throw Object.assign(new Error('更新安装包尚未准备完成，请重新检查更新后再试。'),
+            { code: 'update_installer_missing' })
         }
+        if (beforeInstall) await beforeInstall(installing)
+        await this.stopManagedNode()
+        // Keep the prepared id until the installer is actually launched so a
+        // failed start can be retried from the downloaded package.
+        this.preparedIds.delete(preparedId)
+        let installError = null
+        const captureInstallError = (error) => { installError = error }
+        this.electronUpdater.once('error', captureInstallError)
+        try {
+          if (nsisTempDir) {
+            if (this.windowsReceipt) this.windowsReceipt = this.saveWindowsReceipt(this.windowsReceipt, 'installing')
+            const names = ['TEMP', 'TMP', 'TETHER_UPDATER_TEMP']
+            const previous = names.map((name) => process.env[name])
+            // NsisUpdater calls spawn synchronously inside quitAndInstall.
+            try {
+              for (const name of names) process.env[name] = nsisTempDir
+              this.electronUpdater.quitAndInstall(true, true)
+            } finally {
+              names.forEach((name, index) => {
+                if (previous[index] === undefined) delete process.env[name]
+                else process.env[name] = previous[index]
+              })
+            }
+          } else {
+            this.electronUpdater.quitAndInstall(false, true)
+          }
+        } finally {
+          this.electronUpdater.removeListener('error', captureInstallError)
+        }
+        if (installError) throw installError
         return installing
       } catch (error) {
-        this.recordElectronApplyFailure(error, installing.latest_version)
+        this.recordElectronApplyFailure(error, (installing && installing.latest_version)
+          || (this.electronUpdateInfo && this.electronUpdateInfo.version))
         throw error
       }
     }

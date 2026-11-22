@@ -294,7 +294,9 @@ class DshWeb:
         try:
             subprocess.run(command, cwd=str(self.workspace), env=self._child_env(),
                            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                           stderr=subprocess.DEVNULL, timeout=PLUGIN_TIMEOUT, check=True)
+                           stderr=subprocess.DEVNULL, timeout=PLUGIN_TIMEOUT, check=True,
+                           creationflags=(getattr(subprocess, "CREATE_NO_WINDOW", 0)
+                                          if os.name == "nt" else 0))
         except subprocess.TimeoutExpired as exc:
             raise RuntimeError("dsh_plugin_install_timeout") from exc
         except (OSError, subprocess.CalledProcessError) as exc:

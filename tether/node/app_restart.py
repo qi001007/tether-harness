@@ -71,7 +71,7 @@ def launch_app(electron: Path, root: Path, log_path: Path) -> None:
         cwd=str(app_dir), env=env,
         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         close_fds=True,
-        creationflags=(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP),
+        creationflags=(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW),
     )
 
 
