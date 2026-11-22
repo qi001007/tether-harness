@@ -176,3 +176,5 @@
 - 2026-11-22：受管 Node 启动时可在 Windows 进程元数据暂不可用的情况下继续联网。安装前使用仍在运行的实际子进程句柄及本地已认证 API；重开 APP 后重新核验已记录的系统身份。Windows 查询切换到 Get-Process，并使用 UTF-8 输出。
 
 - 2026-11-22 Advance the desktop update candidate to 0.5.11.
+
+- 2026-11-22：Windows APP 更新先解析已安装 EXE 的真实路径，再为安装进程选择同卷短临时目录，支持安装入口通过跨盘目录联接访问。

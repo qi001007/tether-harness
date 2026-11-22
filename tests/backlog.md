@@ -266,3 +266,5 @@
 - 2026-11-21：覆盖已有身份拒绝、一次性配对交换、切换账号阻断及同一窗口刷新本机代理。
 
 - 2026-11-22 Exercise authenticated DSH verification for available and unavailable services after a Node update.
+
+- 2026-11-22：Windows 更新服务用例模拟 D 盘安装入口指向 E 盘实际 EXE，验证退出并启动安装器时 TEMP/TMP 都使用 E 盘，调用后恢复原环境。
