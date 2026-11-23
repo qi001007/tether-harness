@@ -10,7 +10,7 @@
 | 实机进度与验收数字 | `PROGRESS.md`（按日期追加，顶部为最新） |
 | 未结反馈 | `FEEDBACK.md`（勾项后保留历史） |
 | 架构、更新事务与兼容边界 | `TECHNICAL.md` |
-| 组网与传输（控制面 / 数据面 / 文件面） | `MESH_LIFECYCLE.md` |
+| 组网与传输（控制面 / 数据面 / 文件面、选路） | `NETWORK_ARCHITECTURE.md`（架构与选路）；`MESH_LIFECYCLE.md`（生命周期） |
 | 发布产线与制品矩阵 | `RELEASE_PIPELINE.md`、`INSTALL_MATRIX.md` |
 | 签名边界与接入 | `SIGNING.md`、`SIGNING_SETUP.md`（`SIGN=0` 默认，签名不是发布阻塞项） |
 | 公开发行历史 | `RELEASES.md`（历史记录，现行状态看 PROGRESS / RELEASE_PIPELINE） |

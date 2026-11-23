@@ -1,5 +1,10 @@
 # 实时进度
 
+## 2026-11-24 · mesh 文件面评估（不接入）
+
+- 基线 `baseline-pre-mesh-file-20261123`（a81899dc）。100 MiB：managed mesh SOCKS 1 流 0.44 MB/s、4 流停滞；外挂 TUN HTTP 4 流 3.11；croc relay 台式→云 2.51、云→笔 1.09–1.31。链路 RTT 116–120 ms、丢包 10–12%，物理上限约 3 MB/s，≥5 MB/s 不可达。
+- 结论：文件面继续 croc/SFTP relay；架构与选路见 `docs/NETWORK_ARCHITECTURE.md`。分支 `codex/tether-mesh-file`（972892f4）保留证据与 `scripts/mesh_file_bench.py`，不接入 APP。
+
 ## 2026-11-21 · 0.5.10 Preview 1 本地集成
 
 - [x] 从公开 0.5.9 发行源码整合自动选路、按作业释放临时转发、已配对网络恢复、设置退出登录及两侧文件树调整。重新生成桌面和 WebUI 加载的前端资源。DSH 插件继续使用 0.2.93。
