@@ -1,5 +1,6 @@
 # 修改记录
 
+- 2026-11-23：文档清理同步 `description.md`：补文件面（transfer_jobs → 私网 SFTPGo / 限时 SFTP 转发，croc 不再是默认）与组网 supervisor 说明；默认页为映射 DSH，Codeg 内置自动登录、共用工作区自动同步。
 - 2026-11-23：`native_surface.py` 注入门改为含查询串匹配，组合 `/plugins/??tether-dsh-client/client.js&rev=…`（urlsplit.path 仅 `/plugins/`） live 命中；组合缓存整段漏插件时按 `__ModuleLoader__.load` 格式追加已部署插件 client.js（只读 `.dsh/profiles/<profile>/node_modules/tether-dsh-client/lib/client.js`，锚点补 flow）——实测组合 4,133,201 B 标记×1、陈旧模拟追加 4,133,223 B、gzip/直连/幂等/无关组合放行均过，`node --check` 通过；部署 SHA `3d1e93a5…6178b`，Node 22112→21904（捕获 cmdline+env 分离重拉，/state 与 fs/list 200，Hub 已注册，managed-node-process.json 已同步新 PID）。证据 `.scratch/injected-combo-{live,stale}.js`。
 
 - 2026-11-22：Python 3.10 使用随 Node 分发的 Tomli，较新 Python 继续使用标准库，独立 Node 更新保留 0.5.9 的外部依赖声明。

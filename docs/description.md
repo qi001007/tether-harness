@@ -1,20 +1,10 @@
 # docs
 
-保存公开产品需求、验收进度、用户反馈、技术边界、恢复门禁和简明发行流程。逐次过程记录和已撤出仓库的资料由维护备份按清单保存；私有服务运维资料不进入公开文档。
+本目录保存 Tether 的需求、实机进度、用户反馈、技术边界、组网事实、发行产线、签名边界与恢复门禁。逐次过程记录和历史版本保留在原文件中，但不再作为现行结论；现行入口见 [PROJECT_INDEX.md](PROJECT_INDEX.md)。
 
-当前发行及候选事实以 `PROGRESS.md` 顶部为准：0.4.10 尚未签名/发布，生产安装、更新任务和待复验边界需明确区分。
+- 单一事实源：`PRD.md`（需求）、`PROGRESS.md`（进度与实测）、`FEEDBACK.md`（反馈）、`TECHNICAL.md`（架构与更新事务）、`MESH_LIFECYCLE.md`（组网与传输）、`RELEASE_PIPELINE.md`（发布产线）、`INSTALL_MATRIX.md`（制品与安装）、`SIGNING.md`（签名边界）。
+- `RELEASES.md` 只记录已发生的发行历史；现行版本与候选状态以 `PROGRESS.md` 顶部和 `version.json` 为准。
+- `docs/release-pipeline/` 只保留设计草稿，实际运行以 `.github/workflows/` 为准。
+- 旧交接、已完成计划和被取代的传输方案已删除或改写为指针，git 历史仍可追溯；删除前的根目录副本见工作区 `.scratch/cleanup-backup-20261123/`。
 
-入口依次为 `PRD.md`（需求）、`PROGRESS.md`（当前实机进度）、`FEEDBACK.md`（待修问题）与 `TECHNICAL.md`（现行架构）。`AGENTS_MULTI_AGENT_PLAN.md`、`ACP_HARNESS_PLAN.md` 和 `CORE_RECOVERY_PLAN.md` 含早期方案或历史状态，阅读时先看顶部的适用范围，不据旧状态重建已迁移的能力。
-
-# 变更记录
-
-## 2026-10-28
-
-- 精简公开反馈和恢复计划，保留有效需求、当前状态与各验收层级边界。
-- 将旧反馈及恢复计划副本存入维护备份并登记 SHA-256。
-- README、PRD、PROGRESS 与 TECHNICAL 以公开客户端、插件、Node 和兼容服务边界为准；不得把本地实现或隔离回归写成已发布/实机通过。
-
-## 2026-10-28 v0.2.1 发布收尾
-
-- 更新公开发行状态与验收边界，记录官方制品下载/清单检查结果。
-- 新增 RELEASES.md，说明 v0.2.1 下载入口及简明发布流程。
+私有 Hub 部署、账号、密钥和用户数据不进入本目录；本机存储与清理口径在工作区 `docs/STORAGE.md`。

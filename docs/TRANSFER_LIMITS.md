@@ -1,64 +1,23 @@
-# 传输吞吐与 overlay 决策
+# 传输吞吐与文件面（历史基准，2026-11-03）
 
-2026-11-03 实测（`scripts/bench_relay.py`，同一 Hub，1 MiB 分块）：
+> 本文件只保留最早一轮基准，**不是现行结论**。现行文件面、选路与实测以 [MESH_LIFECYCLE.md](MESH_LIFECYCLE.md) 和 [PROGRESS.md](PROGRESS.md) 为准；Node 文件服务与 SFTPGo 配置见 [TECHNICAL.md](TECHNICAL.md)。
+
+## 2026-11-03 Hub 中继基准（已过时）
 
 | 路径 | 大小 | 耗时 | 吞吐 | 哈希 |
 | --- | --- | --- | --- | --- |
-| DESKTOP → DESKTOP（仍经 Hub） | 2,097,152 B | 33.87 s | 0.06 MB/s | 一致 |
-| DESKTOP → LAPTOP | 2,097,152 B | 59.36 s | 0.04 MB/s | 一致 |
+| DESKTOP → DESKTOP（经 Hub） | 2,097,152 B | 33.87 s | 0.06 MB/s | 一致 |
+| DESKTOP → LAPTOP（经 Hub） | 2,097,152 B | 59.36 s | 0.04 MB/s | 一致 |
 
-控制面 P50 112.3 ms / P95 115.7 ms。外推 1 GB：约 4.5–7 小时，**当前公网 Hub relay 不满足 1 GB 目标**。
+外推 1 GB 约 4.5–7 小时。该结果只证明“所有字节走 Hub 分块”不可用，促成了数据面改用 EasyTier。
 
-## 2026-11-03 EasyTier 数据面原型
+## 仍成立的原则
 
-- 自建 EasyTier 2.6.4 共享节点（服务器 `10.144.0.1/24`，私有网络，WSS 走 443 `/easytier`）；DESKTOP 加入为 `10.144.0.2/24`，虚拟 IP 上 TCP 22 可达。
-- DESKTOP→服务器 20 MB `scp`（经 EasyTier WSS 中继）：**82.3 s（约 0.24 MB/s）**，SHA-256 一致；是 Hub relay（0.04 MB/s）的约 6 倍，但仍是中继路径。
-- 同一文件走公网 SSH 直连（不经 EasyTier）：**11.5 s（约 1.82 MB/s）**。说明家里上行不是瓶颈，**WSS 中继路径把速度压掉了约 7.5 倍**。
-- 把 Caddy 的 HTTP 移到 8080、把 80/TCP 让给 EasyTier TCP 中继后，同一 20 MB：**12.3 s（约 1.70 MB/s）**，已接近 SSH 直连的 1.82 MB/s，是 Hub relay 的约 42 倍。
-- 服务器安全组只放行 22/80/443；11010 TCP/UDP 从外网不通。80/TCP 中继已绕过该限制，不要求改云安全组。
-- DESKTOP 的 NAT 类型是 `Symmetric`；跨网 P2P 打洞可能失败，同 LAN 直连是最稳的快速路径。
-- 下一步：LAPTOP 运行 `run-bootstrap.cmd`（一次 UAC）加入后测 direct/relay；若 direct 达到 MB/s 级，再把 Tether 文件传输切到虚拟 IP。
+- 不再用分块大小当主要杠杆；大文件走私网文件面，不经 Hub 分块。
+- 不引入 Tailscale / ZeroTier 等第三方组网；不把 Hub 暴露给其他用户。
+- 1 GB 单文件不在当前交付承诺内；当前收尾目标是三台设备六个方向以真实文件传输接近或达到 5 MB/s，判据和数字只在 `PROGRESS.md` 维护。
+- 速度对照必须同一文件、同一对设备、相近时段；不同链路的数字不能直接比较。
 
-## 决策（按主人约束）
+## 已移除的旧结论
 
-- **不引入 Tailscale/Headscale/NetBird/Nebula 等第三方网络组件**；所有节点继续统一走自己的 Hub。
-- 不再用分块大小当主要杠杆：同机对照仍只有 0.06 MB/s，瓶颈是 relay/公网带宽与每块往返，而不是 1 MiB 太大。
-- **1 GB 传输不在当前交付中承诺**；需要服务器带宽升级或 Tether 自研的 Hub 原生流式/直连路径，二者都属于新的传输层工作，不在现有 relay 上继续微调。
-- 普通文件和工程目录传输仍可用；UI 不新增 overlay 选择，不引入第二个网络栈。
-
-## 后续可选（需主人拍板）
-
-1. 升级 Hub 服务器带宽并重跑同一 bench；目标 ≥1 MB/s 再谈 1 GB。
-2. Tether 自研 Hub 原生流式传输（HTTP/2 或裸 TCP 中转），仍不引入第三方组件。
-3. 接受 1 GB 目标降级，只保留现有 relay 能力并明确 UI 提示。
-
-## 2026-11-03 当前 overlay 复测（p2p tcp6）
-
-- EasyTier `peer`：LAPTOP cost=`p2p`、lat **101.46 ms**、tunnel **tcp6**；relay `10.144.0.1` 为 172.40 ms。
-- LAPTOP 经 `10.144.0.2:18080` 拉 DESKTOP 的 100 MB：**104,857,600 B / 28.80 s = 3,640,449 B/s（3.64 MB/s）**。
-- 两台机器的局域网 IPv4 是 `10.68.37.100` 与 `10.68.68.241`，但 ICMP/TCP 探测不可达（客户端隔离/防火墙），EasyTier 实际走 tcp6 公网直连；因此这是**跨网 p2p**，不是同 LAN 档。
-- 结论：同 LAN 15–80 MB/s 仍未复现；需要同交换机/AP 且关闭客户端隔离，或 EasyTier UDP 直连。当前跨网 p2p 3.64 MB/s；Hub relay 仍为 0.04–0.06 MB/s、TCP80 中继 1.70 MB/s。
-
-## 2026-11-03 打洞开关对照
-
-- DESKTOP 侧加 `--disable-tcp-hole-punching true` 后：latency 在 7–53 ms 间波动，100 MB **37.21 s / 2.82 MB/s**，低于原始参数下的 **28.80 s / 3.64 MB/s**。
-- 结论：瓶颈不在 TCP 打洞本身，更像 EasyTier 单流/TUN 吞吐或本机 TCP 窗口；关闭打洞无收益。两端 EasyTier 已恢复原始启动参数，未保留实验配置。
-## Windows native transfer runtime (0.5.9 candidate)
-
-The Windows managed Node uses the packaged SFTPGo core with its Bolt database for a new instance, because the bundled Windows build does not include SQLite. An existing `sftpgo.db` stays on its current SQLite driver and is left in place. External SFTPGo endpoints and non-Windows Node storage are unaffected. Native transfer still requires the selected EasyTier address and the Node-owned loopback SFTPGo service to be available.
-
-### Windows 0.5.9 source checks and machine acceptance
-
-**Source-level checks**
-
-- `tests/test_sftpgo_grants.py`: 3 passed. These checks cover new Windows Bolt config, preservation of an existing `sftpgo.db`, and the unchanged non-Windows SQLite default. They do not prove a real transfer.
-- OIDC/Electron login integration: 43 passed; local Node console API: 5 passed. These exercise source behavior and are not install acceptance.
-
-**Windows machine acceptance**
-
-| Path | Payload | Elapsed | Integrity |
-| --- | ---: | ---: | --- |
-| Native transfer using Windows SFTPGo Bolt | 100 MiB | 154.701 s | source and destination hashes matched |
-| Previous Hub chunked transfer | 100 MiB | 1209.475 s | recorded as the prior baseline |
-
-The native result is a real two-machine transfer measurement; the table is not a benchmark suite or a claim about other networks. No final 0.5.9 installer or signed update was built from this post-fix state.
+- croc 作为主传输引擎、EasyTier WSS/TCP80 中继对照、5.9 时代 100 MiB 单条耗时：均已被后续原生 SFTP/SFTPGo 文件面取代，需要时查 git 历史。

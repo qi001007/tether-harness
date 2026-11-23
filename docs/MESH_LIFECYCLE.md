@@ -1,6 +1,6 @@
 # Mesh 生命周期（EasyTier 常驻 / 自动入网 / P2P 优先）
 
-2026-11-24 只读审计结论。证据：`C:\Program Files\Tether\MeshRuntime\*`、`node-0.5.2-r11\.runtime\managed-mesh\`、`tether/node/mesh_runtime.py`、`fs_service.py`、`easytier-cli -p 127.0.0.1:15888 peer`。
+2026-11-23 只读审计结论。证据：`C:\Program Files\Tether\MeshRuntime\*`、`node-0.5.2-r11\.runtime\managed-mesh\`、`tether/node/mesh_runtime.py`、`fs_service.py`、`easytier-cli -p 127.0.0.1:15888 peer`。
 
 ## 1. 现状（两套并存）
 

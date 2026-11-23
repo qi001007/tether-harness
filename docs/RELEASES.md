@@ -1,5 +1,7 @@
 # Public client releases
 
+> 历史发行记录，内容停在 0.3.6 时代。**现行版本、候选与草稿状态以 `PROGRESS.md` 顶部、`version.json` 和 `RELEASE_PIPELINE.md` 为准**；本文件只用于查旧版本的产物与验证过程，不再更新。
+
 ## v0.3.6 (local candidate, not published)
 
 croc transfer engine and POSIX file-tree fixes:

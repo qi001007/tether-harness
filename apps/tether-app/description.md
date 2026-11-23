@@ -13,4 +13,4 @@ Hub 状态中的节点在线标记按本机配置的 `TETHER_DEVICE` 精确匹�
 `unset ELECTRON_RUN_AS_NODE`。数据目录 `apps/tether-app/data`（gitignored）。截图模式：
 `npx electron . --shot --panel=... --row=...`。
 
-边界：APP 客户端发行包不含私有 Controller；使用 Hub 或安装私有服务组件。未做：托盘、打包安装器、开机自启、端口冲突处理。
+边界：APP 客户端发行包不含私有 Controller；使用 Hub 或安装私有服务组件。托盘、登录项与打包安装器已实现（见 `desktop/packaging`）；端口冲突处理仍按现有探测与错误提示，不自动换端。

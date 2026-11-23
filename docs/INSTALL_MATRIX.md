@@ -1,84 +1,25 @@
-# Install matrix (0.3.6)
+# 安装矩阵（现行形态）
 
-Status of every artifact and every supported entry point. This page is the source of truth for README and the public install page.
+本页只描述客户端制品的打包形态；产线、版本和草稿流程以 [RELEASE_PIPELINE.md](RELEASE_PIPELINE.md) 为准，签名边界见 [SIGNING.md](SIGNING.md)。0.3.6 时代的 ZIP 源包与公网镜像安装脚本已停止维护，需要时查 git 历史。
 
-## Artifacts
+## 制品
 
-| Component | Windows 11 x64 | Linux x64 | macOS arm64 / x64 |
-|---|---|---|---|
-| Tether APP (Electron GUI) | `tether-app-0.3.6.zip` → `install-app.cmd` | not packaged (use WebUI / DSH plugin) | not packaged |
-| DSH plugin (Tether panel) | `tether-plugin-0.3.6.zip` → `desktop/install-plugin.ps1` | installed automatically by the Linux DSH Web installer | not supported yet |
-| Node (headless target agent) | `tether-node-0.3.6.zip` → `laptop/bootstrap-node.ps1` | `curl -fsSL https://8-220-198-26.sslip.io/install.sh \| sudo bash` | `tether-node-0.3.6.zip` → `bash laptop/install-node.sh --no-systemd …` (experimental) |
-| croc transfer binary | `croc.exe` | `croc-linux-x64` | `croc-darwin-arm64` / `croc-darwin-x64` |
+| 组件 | 形态 | 产物名 |
+| --- | --- | --- |
+| Tether APP（Electron） | Windows x64 NSIS 安装器 | `Tether-<v>-win-x64.exe` |
+| Tether APP | macOS arm64 / x64 | `Tether-<v>-mac-<arch>.dmg`（附 zip） |
+| Tether APP | Linux x64 | `Tether-<v>-linux-x64.AppImage` / `.deb` |
+| Node（headless） | Linux x64 | `Tether-node-runtime-<v>-linux-x64.tar.gz` / `.deb` |
+| 更新清单 | 全部 | `latest.yml` / `preview*.yml` + schema 1 组件清单 |
 
-The universal Node ZIP contains all croc binaries and picks the right one at runtime from `sys.platform` + machine architecture.
+- 版本号唯一来源是仓库根 `version.json`；`scripts/release_pipeline.py bump` 同步四处版本，默认 dry-run。
+- Windows 安装器默认 unsigned（`SIGN=0`），发布信任来自 Ed25519 签名的更新清单与 SHA-256；没有 Authenticode 证书时不冒充已签名。
+- 旧版单包字段（`tether-app-<v>.zip`、`tether-node-<v>.zip`、顶层 `url/sha256/size`）仍由 `scripts/build_release.py` 在 promote 前合并，兼容旧客户端。
+- ARM64 仅登记 Node-only / Linux，不在本轮构建范围；win-arm64 与 ARM64 DSH 不可行，原因见 RELEASE_PIPELINE §2。
 
-## Commands verified today
+## 安装入口
 
-### Windows 11
-
-```powershell
-# APP
-Expand-Archive tether-app-0.3.6.zip -DestinationPath tether-app
-.\tether-app\install-app.cmd
-
-# DSH plugin (after DSH Desktop is installed)
-Expand-Archive tether-plugin-0.3.6.zip -DestinationPath tether-plugin
-powershell -ExecutionPolicy Bypass -File .\tether-plugin\desktop\install-plugin.ps1 -Restart
-
-# Node (needs a node token from the Hub)
-Expand-Archive tether-node-0.3.6.zip -DestinationPath tether-node
-powershell -ExecutionPolicy Bypass -File .\tether-node\laptop\bootstrap-node.ps1 `
-  -ControllerUrl wss://<hub>/ws/node -Token <node-token>
-```
-
-### Linux x64
-
-```bash
-curl -fsSL https://8-220-198-26.sslip.io/install.sh | sudo bash
-```
-
-The installer prompts once for the Tether account, downloads the latest Node from `/install/version.json`, registers the device, installs systemd units, and removes the one-time login token. Clicking “安装 DSH Web” in the APP installs DSH + the Tether plugin into the `web` profile.
-
-### macOS (experimental)
-
-```bash
-unzip tether-node-0.3.6.zip
-cd tether-node-0.3.6
-bash laptop/install-node.sh --no-systemd --prefix "$HOME/.local/share/tether-node" \
-  --controller wss://<hub>/ws/node --token <node-token>
-```
-
-There is no macOS APP or DSH Desktop plugin installer yet. Only the Node/transfer/terminal path is expected to work.
-
-## Test coverage
-
-| Check | Windows | Linux | macOS |
-|---|---|---|---|
-| Clean GitHub runner install | ✅ | ✅ | ✅ |
-| APP renderer launch on clean runner | ✅ | n/a | n/a |
-| Node starts and connects | ✅ | ✅ | ✅ (runner) |
-| Real VM login → files → terminal → DSH → transfer | ❌ | ❌ | ❌ |
-| One-command install without a node token | ❌ (Node) / ✅ (APP) | ✅ | ❌ |
-| DSH plugin | ✅ | ✅ (Web) | ❌ |
-| 100 MB croc transfer | ✅ (with Linux server) | ✅ | not measured |
-
-## Known gaps
-
-1. Windows Node install still requires a node token; the account-driven one-command flow only exists on Linux.
-2. macOS has no APP and no DSH plugin installer.
-3. The business chain has been verified on real devices, not on freshly provisioned VMs.
-4. No platform-specific slim Node packages yet; the universal ZIP is larger than necessary.
-5. Throughput has only been measured on two paths: campus → Seoul server, and Seoul server → mobile-data laptop.
-
-## Next steps
-
-1. Add platform-specific Node ZIPs (`-windows-x64`, `-linux-x64`, `-darwin-arm64`, `-darwin-x64`) and teach `install-node.sh` to select them.
-2. Add an account-driven Windows installer so the Node also needs zero manual token arguments.
-3. Add macOS plugin support (DSH Desktop profile path on macOS) and a real macOS runner business test.
-4. Build the network-condition matrix (LAN direct, campus NAT, mobile CGNAT, loss/latency via `tc netem` in an isolated netns) and record throughput against raw TCP.
-5. Run the full business chain in clean VMs for all three systems.
-
-## Windows managed SFTPGo storage (0.5.9 candidate)
-
-The packaged Windows Node starts its managed SFTPGo core with Bolt storage at `sftpgo/sftpgo.bolt`. This matches the bundled Windows binary. Existing managed instances with `sftpgo/sftpgo.db` continue using SQLite in place; the installer and Node do not migrate or rewrite that database. Linux and macOS storage defaults are unchanged.
+- Windows：运行 NSIS 安装器，首次选择安装位置，之后更新沿用原位置。
+- Linux：deb / AppImage（APP）或 node-runtime 包（headless）。
+- macOS：dmg 安装 APP；未公证，Gatekeeper 提示属预期，验收在干净 Mac 上做。
+- 行为验收、真实设备矩阵和未完成项在 `PROGRESS.md`；本页不复制实测数字。

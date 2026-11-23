@@ -1,4 +1,5 @@
 # docs 变更记录
+- 2026-11-23：文档清理。新增 `PROJECT_INDEX.md`；重写本目录 `description.md`、`HIGH_SPEED_INTERCONNECT_PLAN.md`、`TRANSFER_LIMITS.md`、`TRANSFER_ENGINE_DECISION.md`、`INSTALL_MATRIX.md`、`LINUX_MAC_INSTALL.md` 为现行口径或指针，并更新根 `README.md` 的版本、下载、网络、安全、状态与发行流程段落；删除旧交接 `HANDOFF-2026-10-29` 与已完成计划 `PLAN_APP_SHELL_ICON_TRAY_20261103`、`TERMINAL_PAGE_PLAN`、`CODEG_NATIVE_HOME_2026-11-11`、`CLEAN_INSTALL`、`UX_REVIEW_PLAN`；`RELEASES.md` 顶部标注历史。此后本文件只保留仍成立的约束，历史条目以日期保留、不构成当前结论。
 - 2026-11-21：补充普通设备所有者同意入口、自动交换公有证书和 20223 租约到期流程。
 - 2026-11-21：补充 Node 心跳发布适用的 EasyTier 监听条件与 mTLS 接收器配对前提。
 - 2026-11-21：新增限时 SFTP 转发的所有者启用、证书与源主机密钥验证说明。

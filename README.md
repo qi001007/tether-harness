@@ -25,7 +25,7 @@ Tether connects the **DeepSeek Harness (DSH)** desktop app on one machine to the
 
 > **Project status: alpha.** Tether is a working research prototype, not a production multi-tenant service. Read [Status](#status) and [Security](#security) before exposing a Hub to other people.
 
-> **Current client (2026-11-04): v0.3.6.** croc 11.6.3 is the transfer engine (100 MB random data: 26 s upload / 106 s download on the current Seoul path, SHA matched). Linux DSH Web is embedded full-width in the APP, with a persistent Tether sidebar, one-click plugin repair/restart, and restart recovery. The Linux file explorer labels extensionless files by real format (ELF/text/binary), the terminal shows `root · 管理员`, and Agents is a structured chat UI with a Codeg-style per-node agent catalog (list + settings panel, brand icons, auto-detection and manual registration); Herdr 0.9.5 is bundled into the Node and runs as an embedded workspace on Windows and Linux. The install matrix for Windows/Linux/macOS is in [`docs/INSTALL_MATRIX.md`](docs/INSTALL_MATRIX.md); the GitHub v0.3.6 release is still a draft.
+> **Current working tree (2026-11-23): 0.5.14 (preview draft, not public).** The installed client on this workstation is 0.5.13. The transfer path is the target Node's SFTPGo over the private EasyTier mesh with time-limited SFTP relay, not Hub chunking or croc. The APP has account login (email/password + TOTP, device-code fallback), a per-device update job, and a native DSH surface. Release manifests are Ed25519-signed; Windows executables are **not** Authenticode-signed (`SIGN=0` default). Current facts, the baseline tag, and the single source for each topic are indexed in [`docs/PROJECT_INDEX.md`](docs/PROJECT_INDEX.md); setup/product expectations in older sections of this file may predate 0.5.x.
 
 ## Why Tether
 
@@ -78,28 +78,21 @@ There are two different kinds of "target": a **file/command target** uses the No
 
 | You install | Connect to Hub | Control others | File/command target | Native DSH target |
 |---|---|---|---|---|
-| APP only (with DSH) | Yes | Yes | Yes, if `nodeToken` is configured; the APP supervisor starts its Node | **No today** — the APP ZIP does not install the DSH surface plugin, so there is no descriptor |
+| APP only (with DSH) | Yes | Yes | Yes — the supervisor starts its Node | No — the DSH surface descriptor comes from the surface plugin |
 | Plugin only (with DSH) | Yes | Yes | No — no Node | No — no Node |
 | Node only | Yes, headless | n/a | Yes | No descriptor unless the DSH surface plugin is installed separately |
 | APP + plugin | Yes | Yes | Yes | Yes |
 | Plugin + Node | Yes | Yes | Yes | Yes |
 
-A typical desktop uses **APP + plugin** (two views of the same machine). A laptop or a headless box can use **Node only** for file/command control, or **plugin + Node** for native DSH control. The current APP ZIP and plugin ZIP are still the older split; the packaging goal below removes this caveat.
-
-The planned packaging is two user-facing products:
-
-- **Tether Desktop** = APP + Node + DSH surface plugin;
-- **Tether for DSH** = DSH plugin + Node + DSH surface plugin.
-
-Both would include the runtime and the surface descriptor, so both can connect, control, and be controlled. A headless Node installer remains as an advanced option. Until that packaging lands, install **APP + plugin** for the full native experience, or **plugin + Node** for a native headless target.
+A typical desktop uses **APP + plugin** (two views of the same machine). A laptop or a headless box can use **Node only** for file/command control, or **plugin + Node** for native DSH control. On Windows, the installer carries APP and Node together; the DSH surface plugin is installed by the Node's DSH flow.
 
 ## Quick start
 
 ### Prerequisites
 
-- Windows 11, Linux x64, or macOS (experimental; Node-only on macOS for now — see [`docs/INSTALL_MATRIX.md`](docs/INSTALL_MATRIX.md)).
+- Windows 11 x64 or Linux x64; macOS arm64/x64 is experimental (unsigned, not notarized). See [`docs/INSTALL_MATRIX.md`](docs/INSTALL_MATRIX.md).
 - The DeepSeek Harness desktop app installed and signed in on the device that will run the DSH Host.
-- Python 3.11+ and Node.js 24 LTS with `npm` on `PATH` for the client packages.
+- Python 3.11+ and Node.js 24 LTS with `npm` on `PATH` when running from source; release installers bundle the runtime.
 - A reachable, compatible Tether Hub. The public repository does not include the Hub; use an operator-provided Hub or a self-hosted deployment you are authorized to run.
 
 ### 1. Choose your package
@@ -107,8 +100,8 @@ Both would include the runtime and the surface descriptor, so both can connect, 
 | Goal | Install |
 |---|---|
 | Control other machines from a desktop | APP and/or DSH plugin |
-| Make this desktop a target | APP (its supervisor starts a Node) or the Node ZIP |
-| Make a laptop/headless machine a target | Node ZIP |
+| Make this desktop a target | APP (its supervisor starts a Node) or the headless Node runtime package |
+| Make a laptop/headless machine a target | Headless Node runtime package (Linux) |
 | Work with remote machines from inside DSH | DSH plugin + a Hub |
 
 ### 2. Sign in to the same Hub
@@ -134,38 +127,20 @@ When a new version is available, a blue **↓** button appears in the top bar. C
 
 ## Download
 
-### Latest stable: v0.3.6 (server mirror)
+Published builds are GitHub Releases of this repository. The current public preview is 0.5.13; 0.5.14 is a draft and not offered to users. Each release carries a signed schema 1 manifest plus platform installers:
 
-| Package | OS | Download | Size | SHA-256 |
-|---|---|---|---:|---|
-| APP | Windows x64 | [tether-app-0.3.6.zip](https://8-220-198-26.sslip.io/install/tether-app-0.3.6.zip) | 77,058,912 B | `397ab616eb7b54fbf270635b0bc1012143a01f18aec13e1b0717ef9257a91535` |
-| DSH plugin | Windows / Linux | [tether-plugin-0.3.6.zip](https://8-220-198-26.sslip.io/install/tether-plugin-0.3.6.zip) | 1,396,081 B | `3f76d2cc980c34ff48ea7336bf8610ed49b6ce3fcb04713dce4836a1d1a15014` |
-| Node | Windows / Linux / macOS | [tether-node-0.3.6.zip](https://8-220-198-26.sslip.io/install/tether-node-0.3.6.zip) | 76,539,292 B | `b80bd369d6df3d3944baa37785bc4f5742ddbe33960486696b5611ab7a18aa92` |
-| Update manifest | all | [version.json](https://8-220-198-26.sslip.io/install/version.json) | — | — |
+| Package | OS | Artifact |
+|---|---|---|
+| Tether APP | Windows x64 | `Tether-<v>-win-x64.exe` (NSIS) |
+| Tether APP | macOS arm64 / x64 | `Tether-<v>-mac-<arch>.dmg` |
+| Tether APP | Linux x64 | `Tether-<v>-linux-x64.AppImage` / `.deb` |
+| Node (headless) | Linux x64 | `Tether-node-runtime-<v>-linux-x64.tar.gz` / `.deb` |
 
-The GitHub `v0.3.6` release is still a draft; these are the same binaries served by the install mirror. Platform-specific install commands, gaps (macOS APP/plugin) and the test matrix are in [`docs/INSTALL_MATRIX.md`](docs/INSTALL_MATRIX.md).
+- Update manifests are `latest.yml` / `preview*.yml`; the client verifies the Ed25519-signed manifest and each asset's SHA-256 before staging.
+- Windows installers are unsigned (no Authenticode certificate). SHA-256 checks integrity, not publisher identity; SmartScreen may warn.
+- Product form, install entry points and known gaps: [`docs/INSTALL_MATRIX.md`](docs/INSTALL_MATRIX.md) and [`docs/RELEASE_PIPELINE.md`](docs/RELEASE_PIPELINE.md).
 
-```text
-Windows APP:   download the ZIP, extract, run install-app.cmd
-Windows Node:  extract, run laptopootstrap-node.ps1 -ControllerUrl wss://<hub>/ws/node -Token <node-token>
-Linux:         curl -fsSL https://8-220-198-26.sslip.io/install.sh | sudo bash
-macOS (exp.):   extract the Node ZIP, run bash laptop/install-node.sh --no-systemd --prefix "$HOME/.local/share/tether-node" ...
-DSH plugin:    Windows desktop/install-plugin.ps1; Linux DSH Web is installed by the Node's one-click DSH flow
-```
-
-Verify any download with:
-
-```bash
-sha256sum tether-app-0.3.6.zip tether-node-0.3.6.zip tether-plugin-0.3.6.zip
-```
-
-These are **ZIP source packages**, not self-contained EXE installers. They do not bundle Python, Node.js, DSH, or a Hub. Packages are **unsigned**; SHA-256 checks integrity against the mirror, not publisher identity.
-
-### Package contents
-
-- **APP ZIP**: Electron shell, shared UI, Python client/Node runtime, launcher, and bootstrap. Does not include the DSH plugin or a Hub.
-- **DSH plugin ZIP**: the four Tether plugin packages and the installer. Does not include the APP, Node, or a Hub.
-- **Node ZIP**: the headless Node runtime and bootstrap scripts. Does not include the APP, DSH plugin, or a Hub.
+Older ZIP packages (`tether-app-0.3.6.zip`, `tether-node-0.3.6.zip`, `tether-plugin-0.3.6.zip`) and the former mirror install scripts are retired; do not use them for new installs.
 
 ## Versioning
 
@@ -175,16 +150,16 @@ Tether uses **SemVer** and a single version for the client train. The source of 
 {
   "schema": 1,
   "components": {
-    "app": "0.2.6",
-    "plugin": "0.2.6",
-    "node": "0.2.6"
+    "app": "0.5.14",
+    "plugin": "0.2.93",
+    "node": "0.5.14"
   }
 }
 ```
 
-- All APP, plugin, and Node packages in a release share the same version.
+- APP and Node share one version line; the DSH plugin has its own frozen line (0.2.93 filled by `version.json`).
 - Git tags are `vMAJOR.MINOR.PATCH`; the release workflow refuses a tag that does not match `version.json`.
-- Every component ZIP carries a `version.json`; the updater merges only the component it is updating.
+- Every component package carries a `version.json`; the updater merges only the component it is updating.
 - `protocol` is the client/Hub update protocol (`1` today).
 - `min_updater` is the oldest updater allowed to consume the manifest (`0.2.1` today). Older clients must install the `0.2.1` baseline once manually.
 - There is no nightly channel. Only published releases are offered by the official manifest.
@@ -201,60 +176,50 @@ Tether uses **SemVer** and a single version for the client train. The source of 
 
 ## Updates
 
-The APP update center has three rows:
-
-1. **Tether APP** — self-update: manifest check, download, SHA-256, staging, idle apply, relaunch.
-2. **Tether Node** — the selected device's Node updates itself through the Hub; the supervisor restarts it.
-3. **DSH plugin** — the target device's plugin is updated through the Node; restart DSH to load it.
+Updates are per device: the APP asks the Hub for the selected device's job, downloads in the background, and applies when no Tether task is active. On Windows, APP and Node arrive in one installer and are taken over together; on Linux the Node updates from the headless runtime package. A restart brings the device back online, and the Hub job records the transition before the old backup is removed.
 
 Safety rules:
 
 - No automatic restart while a Tether task is active.
-- Downloads are checked against the manifest SHA-256 before staging.
+- Manifests are Ed25519-signed; every asset is checked against its SHA-256 before staging.
 - Apply uses a backup and a file transaction; `data/`, `.env`, workspaces, and credentials are excluded.
 - The updater never copies account credentials, sessions, or user data into a release asset.
-
-Known residuals in 0.2.3 that are still present in 0.2.4:
-
-- After a restart, the update card can still show a stale “restarting” label until the next refresh; the actual `current`/`latest` versions are correct.
-- The root `version.json` plugin field can lag one component behind; the DSH profile and Hub status are authoritative.
-- The DSH-local plugin update button can report a check failure; the APP update center is the working plugin update path.
+- Update-channel selection, single-package takeover and same-volume cache behavior are documented in [`docs/RELEASE_PIPELINE.md`](docs/RELEASE_PIPELINE.md); per-release accepted numbers are in `docs/PROGRESS.md`.
 
 ## Networking and Tailscale
 
-Tether's production path is:
+Tether separates three planes:
 
 ```text
-APP/plugin  ──HTTPS/WSS──▶  Hub (public TLS)  ◀──WSS outbound──  Node
-                                  │
-                                  └── Caddy ──▶ surface_mux ──▶ Hub surface gateway ──▶ Node ──▶ local DSH Host
+Control plane   APP/plugin ──HTTPS/WSS──▶ Hub ──WSS──▶ Node
+Data plane      EasyTier private network (P2P first, relay fallback)
+File plane      target Node SFTPGo / time-limited SFTP relay on the private network
 ```
 
-- Nodes make **outbound** connections; no public inbound port is required.
-- **Tailscale is not required** for multi-device use. The `start-tailscale.ps1` and `start-lan.ps1` scripts in the repository are local-development helpers, not the production architecture.
-- The Hub must be reachable over HTTPS/WSS. Do not expose the loopback Controller port or the DSH Host port directly to the internet.
-- Surface URLs use short-lived tickets and per-gateway cookies; the gateway only relays to the selected Node's local DSH Host.
+- Nodes make **outbound** connections; the Hub does not need public inbound ports.
+- The Hub is the only control plane: accounts, devices, permissions, jobs and audit.
+- The data plane is a self-hosted EasyTier network; relay is a fallback, not the default. See [`docs/MESH_LIFECYCLE.md`](docs/MESH_LIFECYCLE.md) for the current state and phases.
+- **Tailscale is not required** and is not part of the production path. The `start-tailscale.ps1` / `start-lan.ps1` helpers are local development scripts.
+- Do not expose the loopback Controller port, the SFTP services, or the DSH Host port directly to the internet.
 
 ## Security
 
-**Current authentication is single-operator, not multi-tenant.** A Hub uses a shared access token for clients and a shared node token for Nodes. Anyone with those tokens can see and control every device on that Hub. Do not expose a Hub to other users, and do not use it as a public service in its current form.
+**The Hub is a personal deployment, not a multi-tenant service.** APP and plugin use account login (email/password + TOTP, with a device-code fallback); Nodes use per-device credentials issued through the account flow. Do not expose a Hub to other users in its current form.
 
 Current protections:
 
 - TLS at the Caddy edge; loopback-only Controller and mux.
-- Shared-secret authentication for clients and Nodes; constant-time token comparison.
-- Per-device file policy with allowed roots and read-only/read-write modes.
-- Audit records on the target Node.
+- Per-device credentials for Nodes; account sessions stored encrypted on the client.
+- Per-device file policy with allowed roots and read-only/read-write modes; audit records on the target Node.
 - Short-lived native surface tickets; HTTP/WS origin and Host checks.
-- No package signature; SHA-256 is an integrity check only.
+- Ed25519-signed update manifests and SHA-256 per asset. Windows executables are unsigned (no Authenticode); macOS builds are not notarized yet.
+- Device owners grant transfer/relay consent on their own device; time-limited relay leases are revoked on expiry or when the owner turns them off.
 
-Planned (see [Status](#status)):
+Planned or incomplete (see [`docs/PROGRESS.md`](docs/PROGRESS.md) and [`docs/PROJECT_INDEX.md`](docs/PROJECT_INDEX.md)):
 
-- User accounts and login on APP and plugin.
-- One-time device pairing; per-device credentials; revoke/rotate.
-- Per-user device isolation: a user can only see and control their own devices.
-- Secure token storage in the OS credential store instead of plaintext JSON/`.env`.
-- Email verification/password reset, rate limits, session revocation, and signed releases.
+- Multi-user isolation on one Hub, admin dashboard, email verification/password reset, rate limits.
+- Windows Authenticode and Apple Developer ID/notarization (tracked in `docs/SIGNING.md`).
+- Stronger host-level hiding of device credentials.
 
 If you find a security issue, do not paste tokens, personal data, or private device information into a public issue. Open a minimal report and ask for a private channel.
 
@@ -262,24 +227,22 @@ If you find a security issue, do not paste tokens, personal data, or private dev
 
 | Area | Status |
 |---|---|
-| Public release v0.2.6 | Published; all three ZIPs and the manifest verified. v0.2.6 reworks the update center: per-device cards, short deduped error toasts, restart convergence; one-click chain verified end-to-end |
-| Client update chain | Real APP/Node/plugin updates `0.2.1 → 0.2.2 → 0.2.3`; data preserved; `0.2.4` install acceptance pending |
-| Response time | v0.2.4 adds the loopback fast path, per-device caching/prefetch, a stop control, Office preview caching, and concurrent Node request handling. Measured behind the APP gateway: `fs/list` 3–4 ms (Hub 264–681 ms), text preview 3 ms (261–604 ms), PPTX preview 2.9 s cold / 5 ms cached (5.3–5.6 s before) |
-| Same-device APP + plugin | Verified: one DESKTOP-LOCAL DSH Host/session, bidirectional turns, a real `pwsh` command, matching file pages |
-| Remote target native surface | Reproduced on a second local node: v0.2.1 showed a blank DSH panel; upgrading the Node to v0.2.3 loaded the DSH UI and executed `REMOTE-OK`. The local and remote paths use the same Hub gateway; physical second-machine acceptance is still pending. |
-| Cross-device on a second physical machine | Pending; the second machine is online and reports 0.2.3, but real cross-device use has not been accepted |
-| Accounts / login / per-user isolation | **Not implemented** |
-| Digital signatures | Not implemented |
-| Server release automation | Not implemented; the Hub uses a pinned-commit, backed-up, gated deploy with a rollback drill |
+| Public release | 0.5.13 preview is published and pinned in the production Hub. 0.5.14 is a draft preview and is not offered to users |
+| Client update chain | Per-device jobs: background download, idle apply, restart and acceptance via the Hub. Accepted timings and per-device results are in `docs/PROGRESS.md` |
+| Accounts / login | Account login (email/password + TOTP), device-code fallback, encrypted session persistence; Node credentials are per device |
+| Native DSH surface | Real target DSH Host page via signed short-lived tickets; local and remote use the same gateway |
+| Mesh data plane | Source node has a supervisor, peer parsing and P2P status; installer-managed bootstrap is not done (`docs/MESH_LIFECYCLE.md` §4) |
+| File plane | Target Node SFTPGo and owner-approved, time-limited SFTP relay; six-direction 5 MB/s remains the acceptance goal |
+| Digital signatures | Update manifests signed (Ed25519); Windows Authenticode and macOS notarization not implemented |
+| Server release automation | Hub deploy/pin/reload is still manual and gated |
 
 ## Roadmap
 
-- **Two products, one hidden runtime.** Ship **Tether Desktop** (APP + Node + surface plugin) and **Tether for DSH** (plugin + Node + surface plugin). Keep one shared Node runtime per device and reduce the update center to APP and plugin rows; a headless Node installer remains an advanced option.
-- **Accounts and isolation.** User login, one-time device pairing, per-device credentials, per-user device isolation, an admin dashboard with invites/users/devices/health/audit, and invite-only testing.
-- **Host adapter boundary.** Keep accounts, devices, routing, files and updates host-agnostic; put DSH behind a `HostAdapter` + `surface_kind` contract so alternative host/agent runtimes can be added without rewriting the network and account layer.
-- **Remote surface acceptance.** Fix the blank remote DSH panel and accept real cross-device native control on a second physical machine.
-- **Performance instrumentation.** v0.2.4 delivers the first measured step (loopback fast path, per-device caching/prefetch, Office preview caching, concurrent Node request handling). Still to add: per-segment timestamps, p50/p95 latency, incremental event streaming, and file range/preview hooks before optimizing state sync and remote file rendering.
-- **Release hardening.** Signed packages, real update rollback drills, backup/restore drills, and a repeatable server release/rollback process.
+- Mesh phase 2–3: installer-managed mesh bootstrap, remove the hand-installed desktop mesh, surface connection type (direct/relay/offline) in the UI.
+- File plane: meet the six-direction 5 MB/s goal and finish relay consent/lease coverage for all devices.
+- Platform signing: Windows Authenticode and Apple Developer ID/notarization when certificates are available.
+- Accounts and isolation: move the Hub from a personal deployment toward multi-user isolation, admin views and session revocation.
+- Release hardening: Hub pin automation, rollback drills, and ARM64 gaps tracked in `docs/RELEASE_PIPELINE.md`.
 
 ## Development
 
@@ -318,7 +281,7 @@ npm --prefix apps/tether-app start
 | `apps/tether-app/` | Electron APP, supervisor, updater helper |
 | `packages/` | Shared UI, DSH plugin bundles, native UI bridge, surface plugin |
 | `tether/` | Python client, Node runtime, native surface, updater, MCP tools |
-| `desktop/`, `laptop/` | Install/bootstrap scripts |
+| `desktop/` | Packaging, candidate build scripts and installer definitions |
 | `scripts/` | Build, native UI bridge, probes |
 | `tests/` | Python and JavaScript regressions |
 | `docs/` | PRD, progress, feedback, releases, technical notes |
@@ -328,21 +291,23 @@ The Hub/Controller is a **private service** and is not part of this public repos
 
 ## Release process
 
-1. Update `version.json`, `pyproject.toml`, and all component `package.json` files to the same SemVer.
-2. Run the Python and JavaScript regressions.
-3. Commit, create `vX.Y.Z`, and push the tag.
-4. The release workflow validates the tag, runs tests, builds the three ZIPs and `tether-update.json`, and creates a **draft** GitHub Release.
-5. Review the draft assets and manifest; publish it explicitly.
-6. Verify the official `releases/latest/download/tether-update.json` and record the real install/upgrade result separately from the build result.
+1. Bump the version with `python scripts/release_pipeline.py bump --version X.Y.Z --write` (dry-run by default); it syncs `version.json`, `apps/tether-app/package.json`, `package-lock.json` and `pyproject.toml`.
+2. Run the Python and JavaScript regressions; the release matrix runs them again per platform.
+3. Run the manual `release-matrix.yml` workflow with `sign=false` for an unsigned draft, or push a tag for the tag-driven `release.yml` candidate path.
+4. Review the draft assets, manifest and `signing-status.json`; publish explicitly. CI never publishes on its own.
+5. Record the real install/upgrade result separately from the build result in `docs/PROGRESS.md`; Hub pin/reload stays manual.
+6. Signing requirements and secrets: `docs/SIGNING.md` and `docs/SIGNING_SETUP.md`. Details: `docs/RELEASE_PIPELINE.md`.
 
 ## Documentation
 
+- [Project index — single source per topic](docs/PROJECT_INDEX.md)
 - [Product requirements](docs/PRD.md)
 - [Live progress and acceptance boundaries](docs/PROGRESS.md)
 - [User feedback](docs/FEEDBACK.md)
-- [Release notes](docs/RELEASES.md)
+- [Release history](docs/RELEASES.md)
 - [Public technical notes](docs/TECHNICAL.md)
-- [Core recovery and acceptance plan](docs/CORE_RECOVERY_PLAN.md)
+- [Mesh lifecycle](docs/MESH_LIFECYCLE.md)
+- [Release pipeline](docs/RELEASE_PIPELINE.md)
 - [Native DSH surface notes](docs/native-surface.md)
 
 ## License
