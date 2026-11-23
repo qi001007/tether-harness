@@ -158,3 +158,19 @@ def test_local_api_keeps_the_connection_alive_between_calls(local_api) -> None:
                     length = int(header.split(":", 1)[1])
             body = json.loads(stream.read(length))
             assert body["device"] == "DEV"
+
+
+def test_oversized_body_closes_the_connection_before_reuse(local_api) -> None:
+    port = local_api["port"]
+    with socket.create_connection(("127.0.0.1", port), timeout=5) as sock:
+        sock.sendall(b"POST /api/devices/DEV/fs/write HTTP/1.1\r\nHost: 127.0.0.1\r\n"
+                     b"Authorization: Bearer local-token\r\nContent-Length: 3000000\r\n\r\n")
+        head = b""
+        while b"\r\n\r\n" not in head:
+            block = sock.recv(4096)
+            if not block:
+                break
+            head += block
+    text = head.split(b"\r\n\r\n", 1)[0].decode()
+    assert text.startswith("HTTP/1.1 400"), text
+    assert "Connection: close" in text

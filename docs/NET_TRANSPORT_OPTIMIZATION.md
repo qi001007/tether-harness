@@ -20,7 +20,7 @@
 
 | 改动 | 证据 | 前后 |
 | --- | --- | --- |
-| `console.py`：`protocol_version = "HTTP/1.1"`，本地设备 API 复用连接 | `tests/test_node_console_api.py::test_local_api_keeps_the_connection_alive…`（在 HTTP/1.0 下失败） | 200 次 `/state`：服务端 accept 200 → 1，4.80 → 2.57 ms/请求 |
+| `console.py`：`protocol_version = "HTTP/1.1"`，本地设备 API 复用连接；超 2 MiB 的请求体不读时显式回 `Connection: close`，避免保活串包 | `tests/test_node_console_api.py::test_local_api_keeps_the_connection_alive…`（在 HTTP/1.0 下失败）；`test_oversized_body_closes_the_connection_before_reuse` | 200 次 `/state`：服务端 accept 200 → 1，4.80 → 2.57 ms/请求 |
 | `sftp_relay_client.py`：桥并发 10 → 32、backlog 8 → 32 | 8 个分片读 + 换路 challenger + 探针会打到旧上限，challenger 被静默丢弃，慢路永远换不掉 | 上限不再挡换路；回归 `test_relay_bridge_admits_every_range_reader_and_a_challenger` |
 | `transfer_jobs.py`：多分片阈值 32 MiB → 8 MiB | 上表 24 MiB：1 流 0.53 vs 4 流 1.85 MB/s（3.5×） | 8–32 MiB 文件也走并行分片 |
 

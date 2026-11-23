@@ -41,6 +41,8 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
+        if self.close_connection:
+            self.send_header("Connection", "close")
         self.end_headers()
         self.wfile.write(body)
 
@@ -58,6 +60,8 @@ class _Handler(BaseHTTPRequestHandler):
         if length <= 0:
             return {}
         if length > 2 * 1024 * 1024:
+            # The body stays unread, so this connection cannot be reused.
+            self.close_connection = True
             raise FsError("request body too large", "bad_args")
         raw = self.rfile.read(length)
         try:
