@@ -1,6 +1,6 @@
 # 传输优化：连接复用与并行分片（2026-11-24）
 
-分支 `codex/net-transport-opt`，基线 `baseline-pre-mesh-file-20261123` + 现有 HEAD。只动 `tether/node`（console、sftp relay 客户端、transfer_jobs），不发布、不切 Hub、不改安全组。网关命令：`python -m pytest tests/test_fs_service.py tests/test_fs_croc.py tests/test_croc_transfer.py tests/test_sftp_relay*.py tests/test_node_console_api.py tests/test_dsh_rpc.py`（121 passed / 4 skipped）。
+分支 `codex/net-transport-opt`，基线 `baseline-pre-mesh-file-20261123` + 现有 HEAD。只动 `tether/node`（console、sftp relay 客户端、transfer_jobs），不发布、不切 Hub、不改安全组。网关命令：`python -m pytest tests/test_fs_service.py tests/test_fs_croc.py tests/test_croc_transfer.py tests/test_sftp_relay*.py tests/test_node_console_api.py tests/test_dsh_rpc.py`（122 passed / 4 skipped）。
 
 ## 1. 基线（同一 100 MiB 随机文件，SHA-256 `c8a661bf…9314388`）
 
