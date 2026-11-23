@@ -14,6 +14,7 @@
 - A 线（app，源码/协议验证）：随机分区 + `cache:false` 导致每次重下约 18MB 前端、mesh 打开约 29s；改稳定分区 + `cache:true` 后首轮 4MB、后续同进程/重启 0 字节，重开预估 29s→3–6s；放行 `about:blank` 预导航修复 25 次 blocked/空白；60s 保活 + 30min `service_renew`（689ms），34/34 view 204。App 内 30 分钟 UI 复测需候选包。
 - B 线（node，已部署源码节点）：`/state` 4.80→2.57ms（accept 200→1）；relay 并发 10→32；分片阈值 32→8MiB；100MiB 台式→云 wss：单流 0.51、4 流 1.14 MB/s；24MiB 单流 0.53→4 流 1.85；Python 108 passed/4 skipped。
 - 合并：A+B 已并入主分支；源码节点 PID 46652 已加载 node 改动；A 的主进程改动需候选 App 包验证。5MB/s 未达，链路物理上限约 3MB/s，文件面仍 croc。
+- App 级（dev Electron，源码主进程 + A 修复）：远程 Codeg TTFB 28ms / DCL 73ms / load 818ms（52 资源、21 缓存、295KB）；远程 DSH TTFB 11ms / DCL 1508ms / load 2596ms，热重载 TTFB 18ms / DCL 1136ms；本地 DSH 点击→mutation 4–20ms、→frame 6.5–22.8ms；表面保持约 2h（手动重载后 Codeg 目标关闭，已记录）。真实候选包 30 分钟主动交互待补。
 
 ## 2026-11-24 · mesh 文件面评估（不接入）
 
