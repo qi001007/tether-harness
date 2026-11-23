@@ -9,6 +9,12 @@
 - 数字：Electron 冒烟 `cache:false` 每轮 3 次请求 12MB（无缓存目录），`cache:true` 首轮 4MB 后同进程/重启均 0 字节（`Cache` 目录存在）。真协议 34 分钟：34/34 次 view 均 204，+30:00 `service_renew` 200；对照（15min+ 未心跳，且中途续租过）在 +18min 探测 `000`（25s 超时）已死——回收由 view TTL 触发而非租约。单元测试 51/51。
 - 未做：未改 UI/Node/Hub、未发布、未装到笔记本；App 内 30 分钟全链路复测需候选包（本轮以协议级+Electron 缓存冒烟替代，见“未解决项”）。
 
+## 2026-11-24 · 跨节点 Agent 稳定性与传输（A/B 线）
+
+- A 线（app，源码/协议验证）：随机分区 + `cache:false` 导致每次重下约 18MB 前端、mesh 打开约 29s；改稳定分区 + `cache:true` 后首轮 4MB、后续同进程/重启 0 字节，重开预估 29s→3–6s；放行 `about:blank` 预导航修复 25 次 blocked/空白；60s 保活 + 30min `service_renew`（689ms），34/34 view 204。App 内 30 分钟 UI 复测需候选包。
+- B 线（node，已部署源码节点）：`/state` 4.80→2.57ms（accept 200→1）；relay 并发 10→32；分片阈值 32→8MiB；100MiB 台式→云 wss：单流 0.51、4 流 1.14 MB/s；24MiB 单流 0.53→4 流 1.85；Python 108 passed/4 skipped。
+- 合并：A+B 已并入主分支；源码节点 PID 46652 已加载 node 改动；A 的主进程改动需候选 App 包验证。5MB/s 未达，链路物理上限约 3MB/s，文件面仍 croc。
+
 ## 2026-11-24 · mesh 文件面评估（不接入）
 
 - 基线 `baseline-pre-mesh-file-20261123`（a81899dc）。100 MiB：managed mesh SOCKS 1 流 0.44 MB/s、4 流停滞；外挂 TUN HTTP 4 流 3.11；croc relay 台式→云 2.51、云→笔 1.09–1.31。链路 RTT 116–120 ms、丢包 10–12%，物理上限约 3 MB/s，≥5 MB/s 不可达。
