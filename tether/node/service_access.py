@@ -28,6 +28,23 @@ SERVICE_IDS = {"dsh", "codeg", "herdr", "files", "desktop"}
 MAX_LEASE_SECONDS = 3600
 BOOTSTRAP_SECONDS = 60
 VIEW_TTL_SECONDS = 15 * 60
+
+
+class _ManagerServer(ThreadingHTTPServer):
+    """Loopback authorize server shared by every Caddy worker.
+
+    A browser opens a Codeg or DSH page with dozens of parallel asset
+    requests, so all of them reach this server within a few milliseconds. The
+    stdlib default accept backlog is 5; on Windows the overflow is refused and
+    Caddy reports an empty 502, which leaves the page bundle short of chunks
+    and stuck on its loading screen. Keep a deep accept queue and let Caddy
+    reuse one connection per worker instead of dialing once per request.
+    """
+
+    daemon_threads = True
+    request_queue_size = 128
+
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -543,6 +560,9 @@ class ServiceAccess:
 
             class Handler(BaseHTTPRequestHandler):
                 protocol_version = "HTTP/1.1"
+                # An idle Caddy keep-alive connection must not pin a thread
+                # forever; the client redials on demand.
+                timeout = 75
 
                 def log_message(self, *_args):
                     return
@@ -552,7 +572,8 @@ class ServiceAccess:
                     for key, value in (headers or {}).items():
                         self.send_header(key, value)
                     self.send_header("Content-Length", str(len(body)))
-                    self.send_header("Connection", "close")
+                    if self.close_connection:
+                        self.send_header("Connection", "close")
                     self.end_headers()
                     if body:
                         self.wfile.write(body)
@@ -571,6 +592,9 @@ class ServiceAccess:
                     path = urllib.parse.urlsplit(self.path).path
                     if path == "/__tether/bootstrap":
                         if self.headers.get("Origin"):
+                            # The body stays unread, so this connection cannot
+                            # be reused for another request.
+                            self.close_connection = True
                             self._reply(403)
                             return
                         data = self._json()
@@ -583,6 +607,7 @@ class ServiceAccess:
                                                   "Cache-Control": "no-store"})
                         return
                     if path == "/__tether/view":
+                        self._json()
                         worker = access._authenticated_worker(self.headers, self.headers.get("X-Forwarded-Host", ""),
                                                               require_worker_secret=False, require_origin=True)
                         if not worker:
@@ -591,6 +616,7 @@ class ServiceAccess:
                         worker.last_view_at = time.time()
                         self._reply(204, headers={"Cache-Control": "no-store"})
                         return
+                    self.close_connection = True
                     self._reply(404)
 
                 def do_GET(self):
@@ -612,8 +638,7 @@ class ServiceAccess:
                                               "X-Tether-Upstream-Authorization": upstream.get("Authorization", ""),
                                               "Cache-Control": "no-store"})
 
-            self._httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-            self._httpd.daemon_threads = True
+            self._httpd = _ManagerServer(("127.0.0.1", 0), Handler)
             port = int(self._httpd.server_address[1])
             self._http_thread = threading.Thread(target=self._httpd.serve_forever, daemon=True,
                                                  name="service-access-loopback")
