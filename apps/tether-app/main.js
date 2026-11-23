@@ -358,7 +358,11 @@ async function createWindow() {
     loginSession: legacyControllerSession,
     getServiceSession: (partition) => {
       if (!/^persist:tether-wb-[a-f0-9]{40}$/.test(String(partition || ''))) throw new Error('invalid service session partition')
-      return session.fromPartition(partition, { cache: false })
+      // Stable partition + persistent HTTP cache: the DSH/Codeg bundles are
+      // ~18 MB and every open used to re-download them through the mesh.
+      // Partitions are still per actor/target/service and bounded by
+      // gcWorkbenchPartitions (data-maintenance.js).
+      return session.fromPartition(partition, { cache: true })
     },
     createBootstrapContents: (partition) => {
       if (!/^persist:tether-wb-[a-f0-9]{40}$/.test(String(partition || ''))) throw new Error('invalid bootstrap partition')

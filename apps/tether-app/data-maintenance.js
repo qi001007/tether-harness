@@ -1,8 +1,11 @@
 'use strict'
 
 const PARTITION_PREFIX = 'tether-wb-'
-const PARTITION_MAX_AGE_MS = 60 * 60 * 1000
-const PARTITION_MAX_COUNT = 40
+// Workbench partitions now carry a persistent HTTP cache (DSH core+plugin
+// bundles measured ~18 MB on 2026-11-24). Retention is bounded on purpose:
+// keep a warm cache for the same working day, then reclaim the disk.
+const PARTITION_MAX_AGE_MS = 12 * 60 * 60 * 1000
+const PARTITION_MAX_COUNT = 16
 
 function selectStalePartitions(entries, {
   now = Date.now(),

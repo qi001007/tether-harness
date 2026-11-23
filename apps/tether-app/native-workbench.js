@@ -338,6 +338,9 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
   const managedSessions = new WeakSet()
   const clearingActors = new Set()
   const revocationFailures = new Set()
+  const VIEW_HEARTBEAT_MS = 60000
+  const RENEW_WINDOW_MS = 20 * 60 * 1000
+  const UI_ACTIVE_WINDOW_MS = 30 * 60 * 1000
   const tupleKey = (actorId, targetId, serviceId) => [actorId, targetId, serviceId].join('\u0000')
 
   async function openDshSurface(targetId, serviceId = 'dsh-native') {
@@ -363,7 +366,7 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
         || ticketUrl.hash || ticketUrl.port || !gatewayMatch || Number(gatewayMatch[1]) > 65535
         || ticketUrl.pathname !== '/tether-connect' || ticketEntries.length !== 1 || ticketEntries[0][0] !== 'ticket'
         || !ticketEntries[0][1]) throw new Error('Hub 返回了无效的 DSH gateway。')
-    const partition = 'persist:tether-wb-' + crypto.randomBytes(20).toString('hex')
+    const partition = 'persist:tether-wb-' + sha256(key + '\u0000' + generation + '\u0000dsh-surface').slice(0, 40)
     const serviceSession = getServiceSession(partition)
     if (!serviceSession || !serviceSession.cookies || typeof serviceSession.cookies.get !== 'function') {
       throw new Error('Electron 服务隔离会话不可用。')
@@ -427,7 +430,8 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
       if ((actorGenerations.get(actorId) || 0) !== generation) throw new Error('工作台账号已切换，请重新打开服务。')
       const grantId = crypto.randomBytes(20).toString('hex')
       const record = { actorId, targetId, serviceId, dshSurface: true, generation, grantId, endpoint,
-        serviceSession, partition, legacy: true, public: { targetId, serviceId, grantId,
+        serviceSession, partition, legacy: true, lastUiAt: 0,
+        public: { targetId, serviceId, grantId,
           endpoint: endpoint.toString(), partition } }
       active.set(key, record)
       return record.public
@@ -436,8 +440,7 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
       destroyBootstrap()
       try { await resetServiceSession(serviceSession) } catch (_) { /* continue clearing stored credentials */ }
       await Promise.allSettled([
-        typeof serviceSession.clearStorageData === 'function' ? serviceSession.clearStorageData() : Promise.resolve(),
-        typeof serviceSession.clearCache === 'function' ? serviceSession.clearCache() : Promise.resolve()
+        typeof serviceSession.clearStorageData === 'function' ? serviceSession.clearStorageData() : Promise.resolve()
       ])
       throw new Error('DSH gateway 票据兑换失败。')
     } finally {
@@ -666,7 +669,12 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
       publicResult.nativeSessionExpiresAt = verified.nativeSessionExpiresAt
     }
     active.set(key, { actorId, targetId, serviceId, generation, operationId, descriptor, endpoint: verified.origin, serviceSession, sourceRoute,
-      partition, leaseExpiresAt, public: publicResult, viewTimer: null })
+      partition, leaseExpiresAt, public: publicResult, viewTimer: null, lastUiAt: 0 })
+    const openedRecord = active.get(key)
+    // The Node sweeps an idle service worker after 15 minutes without a view
+    // ping and after the 1 hour lease. Keep a heartbeat running while the
+    // record is open so a backgrounded/hidden panel no longer loses its grant.
+    startHeartbeat(openedRecord)
     logSafe('native-workbench-open', { targetId, serviceId, tlsEpoch: verified.epoch })
     return publicResult
       } catch (error) {
@@ -674,10 +682,11 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
         if (openedSession) {
           try {
             await resetServiceSession(openedSession)
-            await Promise.all([
-              typeof openedSession.clearStorageData === 'function' ? openedSession.clearStorageData() : Promise.resolve(),
-              typeof openedSession.clearCache === 'function' ? openedSession.clearCache() : Promise.resolve()
-            ])
+            // Credentials are wiped, but the partition's HTTP cache is kept:
+            // the partition is stable per actor/target/service and re-downloading
+            // the multi-megabyte workspace bundle through the mesh on every
+            // retry is what made opens slow.
+            if (typeof openedSession.clearStorageData === 'function') await openedSession.clearStorageData()
           } catch (_) { /* no session data may survive */ }
         }
         if (serviceId === 'dsh' && error.code === 'mesh_dial_unreachable'
@@ -905,10 +914,8 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
       if (serviceSession && !cached) {
         try {
           await resetServiceSession(serviceSession)
-          await Promise.all([
-            typeof serviceSession.clearStorageData === 'function' ? serviceSession.clearStorageData() : Promise.resolve(),
-            typeof serviceSession.clearCache === 'function' ? serviceSession.clearCache() : Promise.resolve()
-          ])
+          // Keep the HTTP cache (stable partition) and only drop credentials.
+          if (typeof serviceSession.clearStorageData === 'function') await serviceSession.clearStorageData()
         } catch (_) { /* no legacy session data may survive */ }
       }
       throw error
@@ -922,8 +929,12 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     if (records.length !== 1) throw new Error('工作台 guest 与活动授权不匹配。')
     const record = records[0]
     const currentUrl = String(contents.getURL() || '')
+    // A freshly attached webview reports about:blank (or an empty URL) before
+    // its first navigation commits. Destroying it here blanked every modern
+    // mesh DSH surface; the attach policy and the navigation guards already
+    // pin the guest to this grant's origin once it actually navigates.
+    if (currentUrl === '' || currentUrl === 'about:blank') return record
     if (record.dshSurface === true) {
-      if (currentUrl === '' || currentUrl === 'about:blank') return record
       let committedUrl
       try { committedUrl = new URL(currentUrl) } catch (_) { throw new Error('工作台 guest 与活动授权不匹配。') }
       if (!record.endpoint || committedUrl.href !== record.endpoint.href) {
@@ -973,10 +984,9 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     if (record.legacy === true) {
       active.delete(tupleKey(actorId, targetId, serviceId))
       await resetServiceSession(record.serviceSession)
-      await Promise.all([
-        typeof record.serviceSession.clearStorageData === 'function' ? record.serviceSession.clearStorageData() : Promise.resolve(),
-        typeof record.serviceSession.clearCache === 'function' ? record.serviceSession.clearCache() : Promise.resolve()
-      ])
+      // Keep the stable partition's HTTP cache so reopening the same
+      // workspace does not ship the bundle through the mesh again.
+      if (typeof record.serviceSession.clearStorageData === 'function') await record.serviceSession.clearStorageData()
       logSafe('native-workbench-close-legacy', { targetId, serviceId })
       return { targetId, serviceId, state: 'closed' }
     }
@@ -992,23 +1002,65 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     return { targetId, serviceId, state: 'closed' }
   }
 
+  function viewPing(record) {
+    return record.serviceSession.fetch(new URL('/__tether/view', record.endpoint).toString(), {
+      method: 'POST', headers: { 'Origin': record.endpoint.origin, 'Cache-Control': 'no-store' }, redirect: 'error'
+    }).then((response) => {
+      if (!response.ok) throw new Error('工作台视图续联失败（HTTP ' + response.status + '）。')
+    })
+  }
+
+  // Extend the service lease once it runs low. The Node sweeps workers at the
+  // one hour lease boundary, which used to cut long agent sessions mid-turn.
+  async function renewLease(record) {
+    if (!record || record.legacy === true || record.dshSurface === true) return
+    if (!Number.isFinite(record.leaseExpiresAt) || record.leaseExpiresAt - Date.now() > RENEW_WINDOW_MS) return
+    if (!record.lastUiAt || Date.now() - record.lastUiAt > UI_ACTIVE_WINDOW_MS) return
+    try {
+      const result = await postJson(loginSession.fetch.bind(loginSession),
+        apiUrl(base, record.targetId, 'service_renew'), { grant_id: record.descriptor.grant_id })
+      const expires = expiryMillis(result && result.lease_expires_at)
+      if (Number.isFinite(expires) && expires > record.leaseExpiresAt) record.leaseExpiresAt = expires
+      logSafe('native-workbench-renew', { targetId: record.targetId, serviceId: record.serviceId })
+    } catch (error) {
+      logSafe('native-workbench-renew-error', { targetId: record.targetId, serviceId: record.serviceId })
+    }
+  }
+
+  function startHeartbeat(record) {
+    if (!record || record.legacy === true || record.dshSurface === true) return
+    if (record.viewTimer) return
+    const timer = setInterval(() => {
+      if (active.get(tupleKey(record.actorId, record.targetId, record.serviceId)) !== record) {
+        clearInterval(timer)
+        return
+      }
+      void viewPing(record).catch((error) => logSafe('native-workbench-view-error',
+        { targetId: record.targetId, serviceId: record.serviceId }))
+      void renewLease(record)
+    }, VIEW_HEARTBEAT_MS)
+    if (typeof timer.unref === 'function') timer.unref()
+    record.viewTimer = timer
+  }
+
   async function view(targetId, serviceId, visible) {
     const actorId = await getActorId()
     const record = active.get(tupleKey(actorId, targetId, serviceId))
     if (!record) throw new Error('工作台授权不存在或已关闭。')
-    if (record.viewTimer) { clearInterval(record.viewTimer); record.viewTimer = null }
-    if (record.legacy === true) return { targetId, serviceId, visible: !!visible }
-    if (visible) {
-      const ping = () => record.serviceSession.fetch(new URL('/__tether/view', record.endpoint).toString(), {
-        method: 'POST', headers: { 'Origin': record.endpoint.origin, 'Cache-Control': 'no-store' }, redirect: 'error'
-      }).then((response) => {
-        if (!response.ok) throw new Error('工作台视图续联失败（HTTP ' + response.status + '）。')
-      })
-      let firstError = null
-      try { await ping() } catch (error) { firstError = error }
-      record.viewTimer = setInterval(() => { void ping().catch((error) => logSafe('native-workbench-view-error', { targetId, serviceId, message: String(error.message || error) })) }, 60000)
-      if (firstError) throw firstError
+    if (record.legacy === true) {
+      if (record.viewTimer) { clearInterval(record.viewTimer); record.viewTimer = null }
+      return { targetId, serviceId, visible: !!visible }
     }
+    record.lastUiAt = Date.now()
+    if (visible) {
+      try {
+        await viewPing(record)
+      } catch (error) {
+        startHeartbeat(record)
+        throw error
+      }
+    }
+    startHeartbeat(record)
     return { targetId, serviceId, visible: !!visible }
   }
 
@@ -1211,10 +1263,7 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
         const serviceSession = record.serviceSession || getServiceSession(record.partition)
         if (!serviceSession) throw new Error('session unavailable')
         await resetServiceSession(serviceSession)
-        await Promise.all([
-          typeof serviceSession.clearStorageData === 'function' ? serviceSession.clearStorageData() : Promise.resolve(),
-          typeof serviceSession.clearCache === 'function' ? serviceSession.clearCache() : Promise.resolve()
-        ])
+        if (typeof serviceSession.clearStorageData === 'function') await serviceSession.clearStorageData()
       } catch (_) {
         errors.push('storage_clear_failed')
       }

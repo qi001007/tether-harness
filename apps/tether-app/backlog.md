@@ -187,4 +187,6 @@
 
 - 2026-11-23：主进程 whenReady 增加 tether-wb-* 分区 GC（>1h 未用即删），修 1189 个随机持久分区累积 4.93GB 的泄漏；实测清理回收 4.88GB。
 
-- 2026-11-23：持久缓存预算机制落地——tether-wb 服务会话 fromPartition(cache:false) 禁磁盘缓存；data-maintenance.js 集中预算（>1h 清、上限 40 个，启动+每日执行）；tests/test_data_maintenance.mjs 4/4。今后新增持久缓存必须登记预算与回收路径。
+- 2026-11-23：持久缓存预算机制落地——data-maintenance.js 集中预算（启动+每日执行）；tests/test_data_maintenance.mjs。cache:false 的取舍已被 2026-11-24 条目取代，预算与 GC 仍然是硬约束。
+
+- 2026-11-24：跨节点远程 Agent 稳定性——服务会话改回持久磁盘缓存（`fromPartition(partition, {cache:true})`），分区按 actor+target+service 稳定（DSH Surface 不再每次随机），关面板/失败只清凭据不删缓存；分区预算收紧为 12h/16 个，GC 路径不变。实测 DSH 首屏前端 18.0MB（3 个插件包 9.14MB/7.21MB/46KB + 核心 JS 1.68MB + 样式 0.10MB），mesh 0.5–1MB/s 下单次重下约 29s，缓存后重开不再走字节。主进程对活动授权保活：60s `/__tether/view` 心跳不因面板隐藏而停，租约剩余 <20min 且 UI 30min 内还在用时调 `service_renew`。webview 挂载前 `about:blank` 不再被 guest 授权守卫销毁（此前 app.log 25 次 `blocked unmatched workbench guest` 对应空白表面与 Hub 回退）。

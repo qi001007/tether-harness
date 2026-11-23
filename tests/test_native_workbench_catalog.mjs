@@ -1125,7 +1125,9 @@ test('legacy view, close, and clearActor skip remote lifecycle calls and clear i
   await workbench.close('target-1', 'codeg', first.grantId)
   assert.equal(session.calls.closed, 1)
   assert.equal(session.calls.storage, 1)
-  assert.equal(session.calls.cache, 1)
+  // The stable partition keeps its HTTP cache so a reopen does not re-download
+  // the workspace bundle; credentials are still wiped.
+  assert.equal(session.calls.cache, 0)
   await assert.rejects(workbench.prepareGuest({ session, getURL: () => first.endpoint, async loadURL() {} }),
     /guest 与活动授权不匹配/)
 
@@ -1134,7 +1136,7 @@ test('legacy view, close, and clearActor skip remote lifecycle calls and clear i
   assert.equal(cleared.ok, true)
   assert.equal(session.calls.closed, 2)
   assert.equal(session.calls.storage, 2)
-  assert.equal(session.calls.cache, 2)
+  assert.equal(session.calls.cache, 0)
   assert.equal(paths.some((path) => /service_(?:close|revoke)$/.test(path) || path.endsWith('/__tether/view')), false)
 })
 

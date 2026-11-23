@@ -1,5 +1,14 @@
 # 实时进度
 
+## 2026-11-24 · 跨节点远程 Agent 稳定性（阶段 1–3，未发布）
+
+- 环境：App/Node 0.5.13 台式（DESKTOP-LOCAL），目标 REMOTESTITCH-HUB（Hub 报 node 0.5.11，实际服务进程 `/opt/tether-node/releases/0.5.2-r11`，`MAX_LEASE_SECONDS=3600`、`VIEW_TTL_SECONDS=900` 与源码一致）；LAPTOP-01 在线且 Hub 报 0.5.11（并非旧 0.5.5），两者 `surface_protocol=1`、`dsh_surface=true`。
+- 实测（DESKTOP→REMOTESTITCH-HUB，mesh SOCKS 53061，证据 `.scratch/phase1/`）：`service_open` 1.5s、bootstrap 0.89s、首页 TTFB 1.17s / 38.7KB；DSH 前端共 18.0MB（插件包 9.14MB/11.7s、7.21MB/8.4s、46KB；核心 JS 1.68MB/6.2s；样式 0.10MB），单请求 TTFB 0.37–0.51s（偶发 2.53s）。Hub 网关回退 `dsh/surface` TTFB 2.67s，app.log 4 次 `/tether-connect` 403、25 次 `blocked unmatched workbench guest`。
+- 根因（代码+日志+实测）：①`fromPartition(cache:false)` + 关闭/失败时 `clearCache()` + DSH Surface 随机分区 → 每次打开重下 18MB；②主进程 guest 守卫在 webview 尚未提交导航（`about:blank`）时销毁现代 mesh 表面 → 空白页、反复回退 Hub；③面板隐藏即停 `/__tether/view` 心跳（Node 15min 无 view 即回收 worker），且客户端从不 `service_renew`（租约硬上限 1h）。
+- 修复（`apps/tether-app`）：稳定分区保留持久磁盘缓存（`cache:true`，关面板只清凭据），分区预算 12h/16 个；`about:blank` 预导航不再判定越权；授权心跳与 60s view + 剩余 <20min 时 `service_renew`。Node 侧无需改动。
+- 数字：Electron 冒烟 `cache:false` 每轮 3 次请求 12MB（无缓存目录），`cache:true` 首轮 4MB 后同进程/重启均 0 字节（`Cache` 目录存在）。真协议 34 分钟：34/34 次 view 均 204，+30:00 `service_renew` 200；对照（15min+ 未心跳，且中途续租过）在 +18min 探测 `000`（25s 超时）已死——回收由 view TTL 触发而非租约。单元测试 51/51。
+- 未做：未改 UI/Node/Hub、未发布、未装到笔记本；App 内 30 分钟全链路复测需候选包（本轮以协议级+Electron 缓存冒烟替代，见“未解决项”）。
+
 ## 2026-11-24 · mesh 文件面评估（不接入）
 
 - 基线 `baseline-pre-mesh-file-20261123`（a81899dc）。100 MiB：managed mesh SOCKS 1 流 0.44 MB/s、4 流停滞；外挂 TUN HTTP 4 流 3.11；croc relay 台式→云 2.51、云→笔 1.09–1.31。链路 RTT 116–120 ms、丢包 10–12%，物理上限约 3 MB/s，≥5 MB/s 不可达。
