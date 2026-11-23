@@ -16,7 +16,7 @@
 - 合并：A+B 已并入主分支；源码节点 PID 46652 已加载 node 改动；A 的主进程改动需候选 App 包验证。5MB/s 未达，链路物理上限约 3MB/s，文件面仍 croc。
 - App 级（dev Electron，源码主进程 + A 修复）：远程 Codeg TTFB 28ms / DCL 73ms / load 818ms（52 资源、21 缓存、295KB）；远程 DSH TTFB 11ms / DCL 1508ms / load 2596ms，热重载 TTFB 18ms / DCL 1136ms；本地 DSH 点击→mutation 4–20ms、→frame 6.5–22.8ms；表面保持约 2h（手动重载后 Codeg 目标关闭，已记录）。真实候选包 30 分钟主动交互待补。
 - 30 分钟真实任务（dev Electron，LAPTOP-01 DSH，30m42s）：打开 TTFB 14ms / DCL 1006ms / load 2014ms，56 资源、611KB 传输（encoded 6.77MB）、3 缓存；真实建文件 6s（25.4K tok）、追加行 2s（25.8K tok），独立核验内容 `TETHER-30MIN-OK\nSECOND-CHECK`；消息上屏 <1s；点击 p50 6–8ms / p95 9–15ms；30m42s 全程 attached、359 请求 0 失败、0 重导航（30min 未到续租阈值，故无 renew）。证据 `.scratch/applevel/remote-task-30min.png`。
-- Codeg 打不开根因与热修：LAPTOP-01 授权服务 backlog=5 且每响应 `Connection: close`，32 并发 22×502，Codeg 首开 24/52 资源 502 卡 spinner（DSH 同）。热修 `service_access.py`（backlog 128/HTTP1.1 keepalive，d4394040），备份 `.bak-codegfix-20261124-0455`，看门狗重启节点；8/16/32/48 并发 0×502（401 预期），Codeg 首开 TTFB 26ms / DCL 50–70ms / load 212–236ms、99 资源 0×502 直达工作区；笔记本本机重载后在线/工作台正常。App tether-source 旧副本同步中。
+- Codeg 打不开根因与热修：LAPTOP-01 授权服务 backlog=5 且每响应 `Connection: close`，32 并发 22×502，Codeg 首开 24/52 资源 502 卡 spinner（DSH 同）。热修 `service_access.py`（backlog 128/HTTP1.1 keepalive，d4394040），备份 `.bak-codegfix-20261124-0455`，看门狗重启节点；8/16/32/48 并发 0×502（401 预期），Codeg 首开 TTFB 26ms / DCL 50–70ms / load 212–236ms、99 资源 0×502 直达工作区；笔记本本机重载后在线/工作台正常。App tether-source 副本已同步（备份 `.bak-codegfix-20261124-050248`，57192B/SHA 一致，py_compile 通过）；node-0.5.2-r11、旧 prepared/rollback 副本仍为旧版，非当前入口，升级后需复核。
 
 ## 2026-11-24 · mesh 文件面评估（不接入）
 
