@@ -225,3 +225,4 @@
 
 - 2026-11-21：更新 0.5.10 本地集成进度、签名渠道和共享 SFTP 服务端口的说明。
 - 2026-11：发布产线阶段2落地：`.github/workflows/release-matrix.yml`（手动 dispatch、四平台测试+打包、unsigned 降级、schema 1 清单、仅 draft）、`scripts/release_pipeline.py bump`、`SIGNING_SETUP.md`；`release-pipeline/` 草稿仅作设计证据。未触发 workflow、未发布、未切 Hub。
+- 2026-11-24：新增 `NET_TRANSPORT_OPTIMIZATION.md`（传输基线/改动/限制/回滚）；基线 100 MiB 云端 1 流 0.51、4 流 1.14 MB/s，SHA 一致；笔记本 P2P 方向无复测条件。

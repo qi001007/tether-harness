@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import socket
 from pathlib import Path
 from types import SimpleNamespace
 from urllib.error import HTTPError
@@ -137,3 +138,23 @@ def test_local_api_is_disabled_without_a_token(local_api) -> None:
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_local_api_keeps_the_connection_alive_between_calls(local_api) -> None:
+    port = local_api["port"]
+    with socket.create_connection(("127.0.0.1", port), timeout=5) as sock:
+        stream = sock.makefile("rwb")
+        for _ in range(2):
+            stream.write(b"GET /state HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n")
+            stream.flush()
+            status_line = stream.readline().decode()
+            assert status_line.startswith("HTTP/1.1 200"), status_line
+            length = 0
+            while True:
+                header = stream.readline().decode()
+                if header in ("\r\n", "\n", ""):
+                    break
+                if header.lower().startswith("content-length:"):
+                    length = int(header.split(":", 1)[1])
+            body = json.loads(stream.read(length))
+            assert body["device"] == "DEV"

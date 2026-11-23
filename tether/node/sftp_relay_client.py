@@ -23,6 +23,12 @@ from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 from .mesh_runtime import secure_private_directory
 
 
+# One bridge serves every range reader, route probe and route challenger of a
+# transfer. The old ceiling of 10 was reachable with eight readers, so the
+# challenger was silently dropped and slow routes could never be replaced.
+MAX_RELAY_CONNECTIONS = 32
+RELAY_LISTEN_BACKLOG = 32
+
 _identity_lock = threading.Lock()
 _identity_cache: dict[Path, tuple[Path, x509.Certificate]] = {}
 
@@ -122,7 +128,7 @@ async def _serve(listener, expires_at, connect, stopped, ready):
     active = set()
 
     async def handle(reader, writer):
-        if len(active) >= 10 or stopped.is_set() or expires_at <= time.time():
+        if len(active) >= MAX_RELAY_CONNECTIONS or stopped.is_set() or expires_at <= time.time():
             writer.transport.abort()
             return
         task = asyncio.current_task()
@@ -156,7 +162,7 @@ async def _serve(listener, expires_at, connect, stopped, ready):
                 await asyncio.gather(*copies, return_exceptions=True)
                 active.discard(task)
 
-    server = await asyncio.start_server(handle, sock=listener, backlog=8)
+    server = await asyncio.start_server(handle, sock=listener, backlog=RELAY_LISTEN_BACKLOG)
     ready.set_result(None)
     async with server:
         while not stopped.is_set() and expires_at > time.time():

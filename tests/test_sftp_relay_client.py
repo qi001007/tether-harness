@@ -123,3 +123,9 @@ def test_managed_offer_uses_only_fixed_provider_port(tmp_path):
     assert _managed_sftp_relay(dict(scope, sftp_relay=offer), endpoint) == ("10.223.30.9", 20223, when, cert)
     for changes in ({"port": 52060}, {"port": 22}, {"adapter": "other"}, {"server_cert_pem": ""}):
         assert _managed_sftp_relay(dict(scope, sftp_relay={**offer, **changes}), endpoint) is None
+
+
+def test_relay_bridge_admits_every_range_reader_and_a_challenger():
+    # Eight range readers plus a route challenger and probe lanes share one bridge.
+    assert sftp_relay_client.MAX_RELAY_CONNECTIONS >= 8 + 4
+    assert sftp_relay_client.RELAY_LISTEN_BACKLOG >= 16

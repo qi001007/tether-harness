@@ -28,6 +28,9 @@ DEFAULT_PORT = 18894 if sys.platform == "win32" else 18893
 
 
 class _Handler(BaseHTTPRequestHandler):
+    # Keep the loopback device API on one connection per APP session instead of
+    # paying a new TCP handshake for every fs/policy call.
+    protocol_version = "HTTP/1.1"
     store: Any
     api: Any
     device: str
