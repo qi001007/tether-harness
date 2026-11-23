@@ -423,24 +423,31 @@ def test_active_profile_requires_profile_metadata_and_live_host_pid(tmp_path, mo
     home = tmp_path
     path = home / "storages" / "tether" / "native-surface.json"
     path.parent.mkdir(parents=True)
-    data = {"version": 1, "pid": 12345, "profile": "work",
-            "origin": "http://127.0.0.1:33091",
-            "authenticated_url": "http://127.0.0.1:33091/?token=fixture"}
-    path.write_text(json.dumps(data), encoding="utf-8")
-    queried = []
-    monkeypatch.setattr(native_surface_module.psutil, "pid_exists", lambda pid: queried.append(pid) or True)
-    assert NativeSurface(home).active_profile() == "work"
-    assert queried == [12345]
+    # NativeSurface only trusts a descriptor whose host is actually listening,
+    # so bind a real loopback listener instead of a dangling fixed port.
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen()
+        port = listener.getsockname()[1]
+        data = {"version": 1, "pid": 12345, "profile": "work",
+                "origin": f"http://127.0.0.1:{port}",
+                "authenticated_url": f"http://127.0.0.1:{port}/?token=fixture"}
+        path.write_text(json.dumps(data), encoding="utf-8")
+        queried = []
+        monkeypatch.setattr(native_surface_module.psutil, "pid_exists",
+                            lambda pid: queried.append(pid) or True)
+        assert NativeSurface(home).active_profile() == "work"
+        assert queried == [12345]
 
-    data["pid"] = 2147483646
-    path.write_text(json.dumps(data), encoding="utf-8")
-    monkeypatch.setattr(native_surface_module.psutil, "pid_exists", lambda _pid: False)
-    assert NativeSurface(home).active_profile() is None
+        data["pid"] = 2147483646
+        path.write_text(json.dumps(data), encoding="utf-8")
+        monkeypatch.setattr(native_surface_module.psutil, "pid_exists", lambda _pid: False)
+        assert NativeSurface(home).active_profile() is None
 
-    data["pid"] = 12345
-    data.pop("profile")
-    path.write_text(json.dumps(data), encoding="utf-8")
-    assert NativeSurface(home).active_profile() is None
+        data["pid"] = 12345
+        data.pop("profile")
+        path.write_text(json.dumps(data), encoding="utf-8")
+        assert NativeSurface(home).active_profile() is None
 
 
 @pytest.mark.parametrize("path", ["//evil.example/x", "/a/../b", "/a/%2e%2e/b", "https://evil/x"])
@@ -562,3 +569,71 @@ def test_active_profile_falls_back_to_live_dsh_host_argv(tmp_path, monkeypatch):
 
     monkeypatch.setattr(native_surface_module.psutil, "process_iter", lambda *_: [UnrelatedProcess()])
     assert service.active_profile() is None
+
+
+def _plugin_bundle_body():
+    anchor = native_surface_module.DIRECTORY_FLOW_ANCHOR
+    return (
+        "window.__ModuleLoader__.load({\n  id: 'tether-dsh-client',\n  factory: (require) => {\n"
+        "    function apply(ctx) {\n      if (true) {\n        try { noop()\n        "
+        + anchor + "\n          return\n      }\n    }\n  }\n})\n"
+    )
+
+
+def test_directory_flow_injects_once_into_single_and_combo_bundles():
+    inject = native_surface_module.inject_tether_directory_flow
+    anchor = native_surface_module.DIRECTORY_FLOW_ANCHOR
+    body = _plugin_bundle_body().encode("utf-8")
+    headers = {"content-type": "application/javascript; charset=utf-8",
+               "etag": '"rev"', "cache-control": "max-age=3600"}
+    single_path = "/plugins/??tether-dsh-client/client.js"
+    out, out_headers = inject(body, dict(headers), single_path)
+    assert out != body
+    assert out.count(native_surface_module.DIRECTORY_FLOW_MARKER.encode("utf-8")) == 1
+    assert out.count(anchor.encode("utf-8")) == 1
+    assert out_headers["cache-control"] == "no-store"
+    assert "etag" not in out_headers
+    # 应用 combo：本插件段被替换，相邻段原样保留。
+    neighbour = 'window.__ModuleLoader__.load({\n  id: "other-plugin",\n  factory: () => ({})\n})\n'
+    combo = body + b";\n" + neighbour.encode("utf-8")
+    combo_path = "/plugins/??tether-dsh-client/client.js,other-plugin/client.js"
+    out_combo, _ = inject(combo, dict(headers), combo_path)
+    assert out_combo.count(native_surface_module.DIRECTORY_FLOW_MARKER.encode("utf-8")) == 1
+    assert out_combo.endswith(neighbour.encode("utf-8"))
+    # 再注入一次不会叠加（标记已存在）。
+    again, _ = inject(out_combo, dict(headers), combo_path)
+    assert again == out_combo
+
+
+def test_directory_flow_requires_unique_anchor_and_javascript_type():
+    inject = native_surface_module.inject_tether_directory_flow
+    anchor = native_surface_module.DIRECTORY_FLOW_ANCHOR
+    body = _plugin_bundle_body().encode("utf-8")
+    path = "/plugins/??tether-dsh-client/client.js"
+    js = {"content-type": "application/javascript"}
+    duplicated = body.replace(anchor.encode("utf-8"), anchor.encode("utf-8") + b"\n" + anchor.encode("utf-8"))
+    assert inject(duplicated, dict(js), path)[0] == duplicated
+    assert inject(b"no anchor here", dict(js), path)[0] == b"no anchor here"
+    assert inject(body, {"content-type": "application/json"}, path + ".map")[0] == body
+    assert inject(body, dict(js), "/assets/index.js")[0] == body
+
+
+def test_directory_flow_gzip_body_is_decompressed_for_injection():
+    inject = native_surface_module.inject_tether_directory_flow
+    body = _plugin_bundle_body().encode("utf-8")
+    headers = {"content-type": "application/javascript", "content-encoding": "gzip"}
+    out, out_headers = inject(gzip.compress(body), headers, "/plugins/??tether-dsh-client/client.js")
+    assert native_surface_module.DIRECTORY_FLOW_MARKER.encode("utf-8") in out
+    assert "content-encoding" not in out_headers
+    plain, _ = inject(body, {"content-type": "application/javascript"}, "/plugins/??tether-dsh-client/client.js")
+    assert out == plain
+
+
+def test_directory_flow_missing_snippet_passes_through(tmp_path, monkeypatch):
+    monkeypatch.setattr(native_surface_module, "DIRECTORY_FLOW_SNIPPET_PATH", tmp_path / "absent.js")
+    body = _plugin_bundle_body().encode("utf-8")
+    headers = {"content-type": "application/javascript"}
+    out, out_headers = native_surface_module.inject_tether_directory_flow(
+        body, dict(headers), "/plugins/??tether-dsh-client/client.js")
+    assert out == body
+    assert out_headers == headers

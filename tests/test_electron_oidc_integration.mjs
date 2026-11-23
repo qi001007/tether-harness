@@ -3,7 +3,7 @@ import { EventEmitter } from 'node:events'
 import fs from 'node:fs'
 import { createRequire } from 'node:module'
 import test from 'node:test'
-import { safeDshNativeEndpoint } from '../packages/tether-ui/src/app.js'
+import { safeDshNativeEndpoint, safeLocalDshNativeUrl, safeLocalDshSurfaceUrl } from '../packages/tether-ui/src/app.js'
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), 'utf8')
 const require = createRequire(import.meta.url)
@@ -195,6 +195,38 @@ test('renderer accepts only the exact token-free native DSH endpoint', () => {
   assert.equal(safeDshNativeEndpoint('https://g25800.hub.example.com/?tether_native=1&extra=1'), '')
   assert.equal(safeDshNativeEndpoint('https://g25800.hub.example.com/wrong?tether_native=1'), '')
   assert.equal(safeDshNativeEndpoint('https://g25800.hub.example.com/?tether_native=1#fragment'), '')
+})
+
+test('local target takes the loopback descriptor before the Hub ticket and falls back on absence', () => {
+  assert.equal(safeLocalDshSurfaceUrl('http://127.0.0.1:59999/?token=RCFJ0MzxTZMiuMfy0864gI2Wd-RKuJgFDnOJlYHfOXk'),
+    'http://127.0.0.1:59999/?token=RCFJ0MzxTZMiuMfy0864gI2Wd-RKuJgFDnOJlYHfOXk')
+  assert.equal(safeLocalDshSurfaceUrl('http://[::1]:59999/?token=RCFJ0MzxTZMiuMfy0864gI2Wd-RKuJgFDnOJlYHfOXk'),
+    'http://[::1]:59999/?token=RCFJ0MzxTZMiuMfy0864gI2Wd-RKuJgFDnOJlYHfOXk')
+  assert.equal(safeLocalDshSurfaceUrl('https://127.0.0.1:59999/?token=RCFJ0MzxTZMiuMfy0864gI2Wd-RKuJgFDnOJlYHfOXk'), '')
+  assert.equal(safeLocalDshSurfaceUrl('http://127.0.0.1:59999/?token=short'), '')
+  assert.equal(safeLocalDshSurfaceUrl('http://127.0.0.1:59999/'), '')
+  assert.equal(safeLocalDshSurfaceUrl('http://127.0.0.1:59999/?token=RCFJ0MzxTZMiuMfy0864gI2Wd-RKuJgFDnOJlYHfOXk&extra=1'), '')
+  assert.equal(safeLocalDshSurfaceUrl('http://127.0.0.1:59999/other?token=RCFJ0MzxTZMiuMfy0864gI2Wd-RKuJgFDnOJlYHfOXk'), '')
+  assert.equal(safeLocalDshSurfaceUrl('http://127.0.0.1.evil.test:59999/?token=RCFJ0MzxTZMiuMfy0864gI2Wd-RKuJgFDnOJlYHfOXk'), '')
+  assert.equal(safeLocalDshSurfaceUrl('http://user:pass@127.0.0.1:59999/?token=RCFJ0MzxTZMiuMfy0864gI2Wd-RKuJgFDnOJlYHfOXk'), '')
+
+  const approved = 'http://127.0.0.1:59999/?token=RCFJ0MzxTZMiuMfy0864gI2Wd-RKuJgFDnOJlYHfOXk'
+  assert.equal(safeLocalDshNativeUrl('http://127.0.0.1:59999/?tether_native=1', approved),
+    'http://127.0.0.1:59999/?tether_native=1')
+  assert.equal(safeLocalDshNativeUrl('http://127.0.0.1:59999/', approved), '')
+  assert.equal(safeLocalDshNativeUrl('http://127.0.0.1:60000/?tether_native=1', approved), '')
+  assert.equal(safeLocalDshNativeUrl('http://127.0.0.1:59999/?tether_native=1&token=x', approved), '')
+
+  // The renderer asks its own APP proxy for the local descriptor and keeps the
+  // main-process Hub ticket only as the fallback; the direct guest re-enters the
+  // mapped page once after DSH's 303 token exchange.
+  assert.match(shared, /localDeviceId && id === localDeviceId[\s\S]*dsh\/surface/)
+  assert.match(shared, /data\.localDirect/)
+  assert.match(shared, /partition: 'persist:tether-dsh-local', localDirect: true/)
+  assert.match(shared, /safeLocalDshNativeUrl\(guest\.getURL\(\), state\.url\)/)
+  assert.match(shared, /landed\.searchParams\.get\('tether_native'\) === '1'/)
+  assert.match(shared, /guest\.loadURL\(approvedUrl\.origin \+ '\/\?tether_native=1'\)/)
+  assert.match(shared, /const service = await host\.workbench\.openDshSurface\(id\)/)
 })
 
 test('hidden bootstrap navigation receives the ticket but public result and managed guest never do', async () => {

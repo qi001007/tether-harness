@@ -186,6 +186,86 @@ class AgentsRuntime:
     def _log_path(self) -> Path:
         return self.data_dir / "server.log"
 
+    def _append_log(self, message: str) -> None:
+        try:
+            self.data_dir.mkdir(parents=True, exist_ok=True)
+            with open(self._log_path(), "ab") as handle:
+                handle.write(("[%s] %s\n" % (time.strftime("%Y-%m-%dT%H:%M:%S"), message)).encode("utf-8"))
+        except OSError:
+            pass
+
+    @staticmethod
+    def _parse_version(text: str) -> tuple[int, ...]:
+        try:
+            head = str(text or "").strip().splitlines()[0].strip()
+            return tuple(int(part) for part in head.split(".")[:3])
+        except (ValueError, IndexError):
+            return ()
+
+    @staticmethod
+    def _deepseek_acp_binary(home: Path) -> Path | None:
+        for name in ("deepseek-acp.cmd", "deepseek-acp"):
+            direct = home / name
+            if direct.exists():
+                return direct
+            nested = home / "node_modules" / ".bin" / name
+            if nested.exists():
+                return nested
+        return None
+
+    @staticmethod
+    def _deepseek_acp_present(home: Path) -> bool:
+        return AgentsRuntime._deepseek_acp_binary(home) is not None
+
+    def _deepseek_acp_current(self, home: Path) -> bool:
+        binary = self._deepseek_acp_binary(home)
+        if binary is None:
+            return False
+        creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if platform.system() == "Windows" else 0
+        command = [str(binary), "--version"]
+        if platform.system() == "Windows" and binary.suffix.lower() == ".cmd":
+            command = [os.environ.get("COMSPEC", "cmd.exe"), "/c", str(binary), "--version"]
+        try:
+            result = subprocess.run(command, capture_output=True, text=True, timeout=30,
+                                    stdin=subprocess.DEVNULL, creationflags=creationflags)
+            return self._parse_version(result.stdout or result.stderr) >= (0, 11, 0)
+        except (OSError, subprocess.SubprocessError):
+            return False
+
+    def _ensure_deepseek_acp(self, home: Path) -> None:
+        if self._deepseek_acp_current(home):
+            return
+        npm = shutil.which("npm.cmd") or shutil.which("npm")
+        if not npm:
+            self._append_log("deepseek-acp missing and npm unavailable")
+            return
+        lock = home / ".deepseek-acp-install.lock"
+        try:
+            home.mkdir(parents=True, exist_ok=True)
+            os.close(os.open(str(lock), os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+        except FileExistsError:
+            return
+        except OSError as exc:
+            self._append_log("deepseek-acp install skipped: %s" % exc)
+            return
+        cache = home / "cache"
+        creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if platform.system() == "Windows" else 0
+        try:
+            self._append_log("installing deepseek-acp runtime")
+            subprocess.run([npm, "install", "-g", "--prefix", str(home), "--cache", str(cache),
+                            "--force", "--no-audit", "--no-fund", "deepseek-acp@0.11.0"],
+                           timeout=300, check=False, stdin=subprocess.DEVNULL,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                           creationflags=creationflags)
+        except (OSError, subprocess.SubprocessError) as exc:
+            self._append_log("deepseek-acp install failed: %s" % exc)
+        finally:
+            try:
+                lock.unlink()
+            except OSError:
+                pass
+            shutil.rmtree(cache, ignore_errors=True)
+
     def _read_state(self) -> dict[str, Any]:
         try:
             return json.loads(self._state_path().read_text(encoding="utf-8"))
@@ -630,6 +710,7 @@ class AgentsRuntime:
             try:
                 from .agent_registry import agent_home
                 home = agent_home()
+                self._ensure_deepseek_acp(home)
                 extra_paths = [str(candidate) for candidate in
                                (home, home / "bin", home / "node_modules" / ".bin")
                                if candidate.is_dir()]
@@ -645,6 +726,10 @@ class AgentsRuntime:
                 "CODEG_BRIDGE_PORTS": "4311-4320",
                 "NO_COLOR": "1",
             }
+            # Codeg's DeepSeek parser scans $DSH_HOME/sessions; default to the
+            # user's native home the same way the preview/update services do.
+            env.setdefault("DSH_HOME", str(Path(
+                os.environ.get("TETHER_NATIVE_DSH_HOME") or (Path.home() / ".dsh")).expanduser()))
             if extra_paths:
                 env["PATH"] = os.pathsep.join(extra_paths + [str(env.get("PATH") or "")])
             kwargs: dict[str, Any] = {

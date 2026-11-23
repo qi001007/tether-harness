@@ -21,6 +21,9 @@ const cytoscapeBundle = await build({
 const sharedPath = path.join(root, 'packages/tether-ui/src/app.js')
 const pluginPath = path.join(root, 'packages/dsh-plugin-tether-client/lib/client.js')
 const pluginVersion = JSON.parse(fs.readFileSync(path.join(root, 'packages/dsh-plugin-tether-client/package.json'), 'utf8')).version
+// 与 tether/node/native_surface.py 在途注入共用同一段源码，保证两条投递路径行为一致。
+const directoryFlowSnippet = fs.readFileSync(path.join(root, 'tether/node/tether_dsh_directory_flow.js'), 'utf8')
+  .trimEnd().split('\n').map((line) => (line ? '            ' + line : line)).join('\n')
 
 const strip = (file) => fs.readFileSync(path.join(root, 'packages/tether-ui/src', file), 'utf8')
   .replace(/^import .*$/gm, '')
@@ -31,6 +34,8 @@ const shared = strip('app.js')
 const connectionPanel = strip('connection-panel.js')
 const settingsPanel = strip('settings-panel.js')
 const teamManagement = strip('team-management.js')
+const tetherGlyph = strip('tether-glyph.js')
+const tetherFolderPickDialog = strip('tether-folder-pick-dialog.js')
 const targetFileExplorer = strip('target-file-explorer.js')
 const fileCache = strip('file-cache.js')
 const dshHost = strip('hosts/dsh.js')
@@ -51,12 +56,14 @@ const plugin = `window.__ModuleLoader__.load({
   factory: (require) => {
     const React = require('react')
     const Native = require('tether-dsh-native-ui')
-${cytoscapeBundle.outputFiles[0].text}
+;${cytoscapeBundle.outputFiles[0].text}
     const cytoscape = window.__tetherCytoscape
 ${monacoRuntime}
     const EditorRuntime = TetherMonacoRuntime
     const PANEL_ID = 'tether'
     const PLUGIN_VERSION = ${JSON.stringify(pluginVersion)}
+${tetherGlyph}
+${tetherFolderPickDialog}
 ${targetFileExplorer}
 ${fileCache}
 ${dshHost}
@@ -152,6 +159,7 @@ ${shared}
               }, attachments))
             }
             } catch (_) { /* attachments are optional in an embedded surface */ }
+${directoryFlowSnippet}
           return
         }
         ctx.slots.inject('main', function* () {

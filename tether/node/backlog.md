@@ -1,5 +1,7 @@
 # 修改记录
 
+- 2026-11-23：`native_surface.py` 注入门改为含查询串匹配，组合 `/plugins/??tether-dsh-client/client.js&rev=…`（urlsplit.path 仅 `/plugins/`） live 命中；组合缓存整段漏插件时按 `__ModuleLoader__.load` 格式追加已部署插件 client.js（只读 `.dsh/profiles/<profile>/node_modules/tether-dsh-client/lib/client.js`，锚点补 flow）——实测组合 4,133,201 B 标记×1、陈旧模拟追加 4,133,223 B、gzip/直连/幂等/无关组合放行均过，`node --check` 通过；部署 SHA `3d1e93a5…6178b`，Node 22112→21904（捕获 cmdline+env 分离重拉，/state 与 fs/list 200，Hub 已注册，managed-node-process.json 已同步新 PID）。证据 `.scratch/injected-combo-{live,stale}.js`。
+
 - 2026-11-22：Python 3.10 使用随 Node 分发的 Tomli，较新 Python 继续使用标准库，独立 Node 更新保留 0.5.9 的外部依赖声明。
 
 - 2026-11-21 持久保存设备对个人网的中转同意；接收端比较有限数量的候选，持续过慢时核实收益并按偏移换路。
@@ -197,3 +199,6 @@
 
 - 2026-11-21 Windows 预览使用 DSH 已锁定的本地文档引擎，并兼容原安装的有效外置转换器路径。
 - 2026-11-22：Windows APP 自带的冻结 Node 从安装包的 resources/tether-source/version.json 读取版本，避免 PyInstaller 解包目录缺少元数据时上报旧默认版本。
+- 2026-11-23：`agents-runtime-codeg.patch` 由锁定干净基线（0.42.0 tarball，与 pristine HEAD 内容一致）→ canonical source 全量 LF 再生：99 文件（42 改/9 增/48 删，全部 src/），9838 行，含 pick_kind/pick_multiple 通用桥与六个新接线文件；干净副本 LF/CRLF 正向、CS 原样副本反向 apply 均通过（脚本见 .scratch/gen/verify_codeg_patch_0510.py）。CS 静态构建部署后两侧 index.html sha256=fdac4e35…5312。CS vitest 补丁相关 9 文件 140/144 通过，4 项失败为 canonical source 既有（sidebar Clone Repository 头动作×2、route-sync 文本×2），未改源码。
+- 2026-11-23：`native_surface.py` 在途向本插件 bundle（单文件离线验证）锚点注入 `tether_dsh_directory_flow.js`，tether_native=1 的映射 DSH 目录选择改走 Tether 宿主资源管理器；不写 DSH 磁盘/.dsh，标记已存在或锚点不唯一即放行。需 Node 重启生效；片段每次请求现读，改片段无需再重启。仅重启 Node 未重启 APP 时宿主缺席，选择请求 300 秒后按取消兜底。离线证据：.scratch/dsh-pick/injected-{single,combo}.js 均 node --check 通过。
+- 2026-11-23：Node 自管 managed mesh 生命周期：`mesh_supervisor.py` 30 秒单飞巡检（stopped→`restore_stopped_network`，退避 5–60 秒；旧 launch 签名→`relaunch`；unverified 一律不杀），`mesh_runtime.py` 用 record 记录的可执行文件做归属判定、RPC 白名单收紧为 `127.0.0.1/32` 并以 `easytier-cli ... peer list` 读回 peers/cost/tunnel/latency/loss/nat（读不到保持 unknown），console 新增 `/mesh` 摘要且 route 附带 peer 字段。preview 部署表补 `mesh_runtime.py`/`mesh_supervisor.py`/`fs_service.py`。

@@ -1141,8 +1141,11 @@ test('legacy view, close, and clearActor skip remote lifecycle calls and clear i
 test('Agents can start stopped legacy Codeg but keeps missing and failed legacy states disabled', () => {
   assert.match(agentsPage, /serviceCatalog && serviceCatalog\.legacy === true/)
   assert.match(agentsPage, /\['ready', 'stopped'\]\.includes\(catalogCodeg\.state\)/)
-  assert.match(agentsPage, /const runtime = await getAgentsRuntime\(device, true\)/)
+  assert.match(agentsPage, /runtime = await getAgentsRuntime\(device, true\)/)
   assert.match(agentsPage, /await host\.workbench\.openLegacyCodeg\(device\)/)
+  assert.match(agentsPage, /const codegRuntimeToken = \(runtime\) =>/)
+  assert.match(agentsPage, /localStorage\.setItem\('codeg_token',/)
+  assert.match(agentsPage, /'\/token\.html'/)
   assert.match(agentsPage, /legacyCodegBlocked \|\| \(codegService && codegService\.state === 'missing'\)/)
   assert.match(agentsPage, /codegService\.state === 'missing' \? 'Codeg 未安装'[\s\S]*codegService\.state === 'stopped' \? 'Codeg 未运行'[\s\S]*'Codeg 状态异常'/)
   assert.doesNotMatch(agentsPage, /legacyCodegBlocked \? '启动并打开 Codeg'/)

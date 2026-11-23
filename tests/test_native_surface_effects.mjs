@@ -190,6 +190,8 @@ test('remote update can move to background, restore details, and close errors wi
   let timerId = 0
   const intervals = new Map()
   let applyCalls = 0
+  let retryCalls = 0
+  let applied = false
   let jobStatus = 'running'
   globalThis.window = { location: { reload() {} } }
   globalThis.setTimeout = (callback, delay) => { const id = ++timerId; return id }
@@ -200,9 +202,19 @@ test('remote update can move to background, restore details, and close errors wi
   const api = async (path, options) => {
     if (path.endsWith('/update/apply')) {
       applyCalls += 1
+      applied = true
       return { job_id: 'job-048', status: 'running' }
     }
-    if (path.endsWith('/update/job')) return { job_id: 'job-048', status: jobStatus, progress: { percent: 42, step: '下载更新' } }
+    if (path.endsWith('/update/retry')) {
+      retryCalls += 1
+      jobStatus = 'running'
+      return { job_id: 'job-048', status: 'running' }
+    }
+    if (path.endsWith('/update/job')) {
+      return applied
+        ? { job_id: 'job-048', status: jobStatus, progress: { percent: 42, step: '下载更新' } }
+        : { job_id: '', status: 'done' }
+    }
     if (path.includes('/update?')) return { update_available: true, target_version: '0.4.9' }
     throw new Error('unexpected update request: ' + path + ' ' + JSON.stringify(options))
   }
@@ -226,6 +238,10 @@ test('remote update can move to background, restore details, and close errors wi
     renderer.render()
     const updateButton = walk(renderer.output(), (node) => node.type === 'button' && node.props['aria-label'] === '更新到最新版本')
     await updateButton.props.onClick()
+    renderer.render()
+    const openDetails = walk(renderer.output(), (node) => node.type === 'button' && node.props['aria-label'] === '查看更新状态')
+    assert.ok(openDetails, 'a started job stays reachable from the topbar')
+    await openDetails.props.onClick()
     renderer.render()
 
     const backgroundButton = walk(renderer.output(), (node) => node.type === 'button' && node.children.includes('后台更新'))
@@ -265,7 +281,8 @@ test('remote update can move to background, restore details, and close errors wi
     const retry = walk(renderer.output(), (node) => node.type === 'button' && node.children.includes('重试'))
     assert.ok(retry, 'closing the error details preserves the existing retry action')
     await retry.props.onClick()
-    assert.equal(applyCalls, 2)
+    assert.equal(retryCalls, 1, 'retry reuses the failed job')
+    assert.equal(applyCalls, 1, 'retry never starts a duplicate update job')
   } finally {
     renderer.dispose()
     for (const [key, value] of Object.entries(previous)) globalThis[key] = value
@@ -279,9 +296,16 @@ test('late update start response from an old device scope is ignored', async () 
   globalThis.setInterval = () => ++timerId
   globalThis.clearInterval = () => {}
   let resolveStart
+  let applied = false
   const api = async (path, options) => {
-    if (path.endsWith('/update/apply')) return new Promise((resolve) => { resolveStart = resolve })
-    if (path.endsWith('/update/job')) return { job_id: 'new-device-job', status: 'running' }
+    if (path.endsWith('/update/apply')) {
+      applied = true
+      return new Promise((resolve) => { resolveStart = resolve })
+    }
+    if (path.endsWith('/update/job')) {
+      return applied && path.includes('/LAPTOP-01/')
+        ? { job_id: 'new-device-job', status: 'running' } : { job_id: '', status: 'done' }
+    }
     if (path.includes('/update?')) return { update_available: true, target_version: '0.4.9' }
     throw new Error('unexpected update request: ' + path + ' ' + JSON.stringify(options))
   }
@@ -550,7 +574,27 @@ test('NativeSurface offers running Linux DSH Web after native descriptor failure
   globalThis.document = { visibilityState: 'visible', addEventListener() {}, removeEventListener() {} }
   globalThis.window = { location: { origin: 'https://controller.example', protocol: 'https:' },
     localStorage: { getItem: () => null, setItem() {} } }
-  let resolveWebStatus
+  // DSH Web 状态现在来自主进程 workbench 服务目录（不再是 /fs/dsh_web_status）。
+  const approvedUrl = 'http://127.0.0.1:43123/?token=qa-web'
+  let catalogState = 'stopped'
+  let deferCatalog = true
+  const pendingCatalogs = []
+  const releaseCatalog = () => { for (const resolve of pendingCatalogs.splice(0)) resolve() }
+  const workbenchOpens = []
+  const workbench = {
+    catalog: () => {
+      const value = { services: [{ id: 'dsh', state: catalogState,
+        reason: catalogState === 'stopped' ? 'service_stopped' : '' }] }
+      if (!deferCatalog) return Promise.resolve(value)
+      return new Promise((resolve) => { pendingCatalogs.push(() => resolve(value)) })
+    },
+    open: async (targetId, serviceId) => {
+      workbenchOpens.push([targetId, serviceId])
+      return { targetId, serviceId, endpoint: approvedUrl, partition: 'persist:tether-dsh-qa', grantId: 'grant-qa' }
+    },
+    close: async (targetId, serviceId) => ({ targetId, serviceId, state: 'closed' }),
+    view: async () => {}
+  }
   const requests = []
   globalThis.fetch = async (url) => {
     const path = new URL(url).pathname
@@ -558,17 +602,13 @@ test('NativeSurface offers running Linux DSH Web after native descriptor failure
     if (path.endsWith('/dsh/surface')) {
       return { ok: false, status: 400, json: async () => ({ detail: { code: 'node_update_required' } }) }
     }
-    if (path.endsWith('/fs/dsh_web_status')) {
-      return new Promise((resolve) => { resolveWebStatus = () => resolve({ ok: true, status: 200,
-        json: async () => ({ supported: true, running: true, url: 'http://127.0.0.1:43123/?token=qa-web' }) }) })
-    }
     if (path.endsWith('/fs/dsh_status')) {
       return { ok: true, status: 200, json: async () => ({ installed: true, running: false, surface: false }) }
     }
     throw new Error('unexpected QA request: ' + path)
   }
   const host = { kind: 'app', apiBase: () => 'https://controller.example', surfaceBase: () => 'https://controller.example',
-    apiHeaders: () => undefined, hubConfig: () => null }
+    apiHeaders: () => undefined, hubConfig: () => null, workbench }
   const renderers = []
   const makeRenderer = (os) => {
     const renderer = createHookRenderer({ deviceId: 'device-a', online: true, visible: true, localDeviceId: '',
@@ -579,25 +619,29 @@ test('NativeSurface offers running Linux DSH Web after native descriptor failure
     return renderer
   }
   const findButton = (tree, label) => walk(tree, (node) => node.type === 'button' && node.children[0] === label)
-  const flush = async () => { await tick(); await tick(); await tick(); await tick() }
+  const flush = async () => { for (let index = 0; index < 12; index += 1) await tick() }
   try {
     const linux = makeRenderer('Linux')
     linux.render()
     await flush()
     linux.render()
-    assert.equal(findButton(linux.output(), '打开工作区'), null, 'the open action waits for delayed DSH Web status')
+    assert.equal(findButton(linux.output(), '启动 DSH Web'), null, 'the DSH Web action waits for the delayed service catalog')
     assert.equal(requests.filter((path) => /dsh_(?:restart|install|install_plugin|web_start)$/.test(path)).length, 0)
 
-    resolveWebStatus()
+    releaseCatalog()
     await flush()
     linux.render()
-    const open = findButton(linux.output(), '打开工作区')
-    assert.ok(open, 'a running DSH Web URL remains available when native reports node_update_required')
-    open.props.onClick()
+    await flush()
+    linux.render()
+    const open = findButton(linux.output(), '启动 DSH Web')
+    assert.ok(open, 'a stopped DSH Web service is offered when native reports node_update_required')
+    await open.props.onClick()
+    await flush()
     linux.render()
     const webview = walk(linux.output(), (node) => node.type === 'webview')
-    assert.ok(webview, 'the existing open action mounts the DSH Web view')
-    assert.equal(webview.props.src, 'http://127.0.0.1:43123/?token=qa-web')
+    assert.ok(webview, 'the DSH Web action mounts the workbench-granted view')
+    assert.equal(webview.props.src, approvedUrl)
+    assert.deepEqual(workbenchOpens, [['device-a', 'dsh']], 'the view comes from a single workbench grant')
     assert.equal(requests.filter((path) => /dsh_(?:restart|install|install_plugin|web_start)$/.test(path)).length, 0,
       'native descriptor failure does not auto-repair or restart either surface')
     linux.dispose()
@@ -606,19 +650,21 @@ test('NativeSurface offers running Linux DSH Web after native descriptor failure
       const path = new URL(url).pathname
       if (path.endsWith('/dsh/surface')) return { ok: false, status: 400,
         json: async () => ({ detail: { code: 'node_update_required' } }) }
-      if (path.endsWith('/fs/dsh_web_status')) return { ok: true, status: 200,
-        json: async () => ({ supported: false, running: false, url: '' }) }
       if (path.endsWith('/fs/dsh_status')) return { ok: true, status: 200,
         json: async () => ({ installed: true, running: true, surface: false }) }
       throw new Error('unexpected QA request: ' + path)
     }
+    deferCatalog = false
+    catalogState = 'missing'
     const windows = makeRenderer('Windows')
     windows.render()
     await flush()
     windows.render()
-    assert.equal(findButton(windows.output(), '打开工作区'), null, 'Windows keeps using its native DSH surface')
+    assert.equal(findButton(windows.output(), '启动 DSH Web'), null, 'Windows keeps using its native DSH surface')
+    assert.equal(findButton(windows.output(), '打开工作区'), null, 'Windows never advertises the Linux DSH Web workspace')
     assert.equal(walk(windows.output(), (node) => node.type === 'webview'), null,
       'Windows does not switch to the Linux DSH Web view')
+    assert.equal(workbenchOpens.length, 1, 'Windows never requests a workbench grant')
     windows.dispose()
   } finally {
     for (const renderer of renderers) renderer.dispose()
@@ -653,14 +699,20 @@ test('DSH Web guest shows loading, retryable timeout, late recovery, reload, and
     const path = new URL(url).pathname
     if (path.endsWith('/dsh/surface')) return { ok: false, status: 400,
       json: async () => ({ detail: { code: 'node_update_required' } }) }
-    if (path.endsWith('/fs/dsh_web_status')) return { ok: true, status: 200,
-      json: async () => ({ supported: true, running: true, url: approvedUrl }) }
     if (path.endsWith('/fs/dsh_status')) return { ok: true, status: 200,
       json: async () => ({ installed: true, running: false, surface: false }) }
     throw new Error('unexpected QA request: ' + path)
   }
+  // DSH Web 由主进程 workbench 服务目录/授权驱动（旧的 /fs/dsh_web_status 已移除）。
+  const workbench = {
+    catalog: async () => ({ services: [{ id: 'dsh', state: 'stopped', reason: 'service_stopped' }] }),
+    open: async (targetId, serviceId) => ({ targetId, serviceId, endpoint: approvedUrl,
+      partition: 'persist:tether-dsh-qa', grantId: 'grant-qa' }),
+    close: async (targetId, serviceId) => ({ targetId, serviceId, state: 'closed' }),
+    view: async () => {}
+  }
   const host = { kind: 'app', apiBase: () => 'https://controller.example', surfaceBase: () => 'https://controller.example',
-    apiHeaders: () => undefined, hubConfig: () => null }
+    apiHeaders: () => undefined, hubConfig: () => null, workbench }
   const renderer = createHookRenderer({ deviceId: 'device-a', online: true, visible: true, localDeviceId: '',
     deviceInfo: { os: 'Linux', capabilities: { dsh_web_supported: true } } })
   const surface = createTetherPanel({ React: renderer.React, Native: createWebNative(renderer.React), host }).NativeSurface
@@ -676,7 +728,7 @@ test('DSH Web guest shows loading, retryable timeout, late recovery, reload, and
     return items
   }
   const findButton = (tree, label) => walkButtons(tree).find((node) => node.children[0] === label)
-  const flush = async () => { await tick(); await tick(); await tick(); await tick() }
+  const flush = async () => { for (let index = 0; index < 12; index += 1) await tick() }
   const guestListeners = new Map()
   const guest = {
     executeJavaScript: async () => {}, getURL: () => approvedUrl,
@@ -688,7 +740,12 @@ test('DSH Web guest shows loading, retryable timeout, late recovery, reload, and
     renderer.render()
     await flush()
     renderer.render()
-    findButton(renderer.output(), '打开工作区').props.onClick()
+    await flush()
+    renderer.render()
+    const startWeb = findButton(renderer.output(), '启动 DSH Web')
+    assert.ok(startWeb, 'the Linux fallback offers the DSH Web workbench')
+    await startWeb.props.onClick()
+    await flush()
     renderer.render()
     let webview = walk(renderer.output(), (node) => node.type === 'webview')
     assert.ok(webview)
@@ -734,7 +791,8 @@ test('DSH Web guest shows loading, retryable timeout, late recovery, reload, and
     renderer.render()
     assert.ok(walk(renderer.output(), (node) => node.props && node.props.role === 'status' && node.children[0] === '正在连接 DSH Web…'),
       'an old guest finish cannot complete a newer reload attempt')
-    findButton(renderer.output(), '关闭').props.onClick()
+    await findButton(renderer.output(), '关闭').props.onClick()
+    await flush()
     renderer.render()
     webview.props.ref(null)
     staleFinish()
@@ -847,7 +905,7 @@ test('invalid state snapshots keep the last device context while valid empty and
 
     await runStatePoll()
     assert.equal(selectedDevice(), undefined, 'a valid empty devices array follows the existing no-device path')
-    assert.match(JSON.stringify(renderer.output()), /no device/)
+    assert.match(JSON.stringify(renderer.output()), /no device|暂无设备/)
 
     await runStatePoll()
     assert.equal(selectedDevice(), 'keep-device', 'a later valid snapshot restores the device context')
@@ -855,4 +913,112 @@ test('invalid state snapshots keep the last device context while valid empty and
     renderer.dispose()
     for (const [key, value] of Object.entries(previous)) globalThis[key] = value
   }
+})
+
+const DSH_MESH_PARTITION = 'persist:tether-wb-' + 'a1b2c3d4e5'.repeat(4)
+const DSH_MESH_GRANT = 'ab'.repeat(20)
+
+function createMeshSurfaceFixture(options) {
+  const timers = new Map()
+  let timerId = 0
+  const calls = { meshOpen: 0, hubSurface: 0, hubRequest: 0, view: 0, close: [] }
+  const logs = []
+  const originalInfo = console.info
+  console.info = (...args) => { logs.push(args) }
+  globalThis.setTimeout = (callback, delay) => { const id = ++timerId; timers.set(id, { callback, delay }); return id }
+  globalThis.clearTimeout = (id) => timers.delete(id)
+  globalThis.document = { visibilityState: 'visible', addEventListener() {}, removeEventListener() {} }
+  globalThis.window = { location: { origin: 'file://', protocol: 'file:' } , localStorage: { getItem: () => null, setItem() {} } }
+  globalThis.fetch = async (url) => { throw new Error('mesh path must not use renderer fetch: ' + String(url)) }
+  const host = {
+    kind: 'app',
+    apiBase: () => 'https://controller.example',
+    surfaceBase: () => 'https://controller.example',
+    apiHeaders: () => undefined,
+    hubConfig: () => null,
+    hubRequest: async () => { calls.hubRequest += 1; return { status: 500, body: {} } },
+    workbench: {
+      catalog: async () => ({ protocol: 1, target_id: 'target-a', services: [{ id: 'dsh', state: options.catalogState || 'ready' }] }),
+      open: async () => {
+        calls.meshOpen += 1
+        if (options.meshError) throw options.meshError
+        return { targetId: 'target-a', serviceId: 'dsh', grantId: DSH_MESH_GRANT,
+          endpoint: 'https://target-a.mesh.example:44300/', partition: DSH_MESH_PARTITION }
+      },
+      openDshSurface: async () => {
+        calls.hubSurface += 1
+        return { targetId: 'target-a', serviceId: 'dsh-native', grantId: 'cd'.repeat(20),
+          endpoint: 'https://g46285.controller.example/?tether_native=1', partition: DSH_MESH_PARTITION }
+      },
+      close: async (_targetId, _serviceId, grantId) => { calls.close.push(grantId) },
+      view: async () => { calls.view += 1 }
+    }
+  }
+  const renderer = createHookRenderer({ deviceId: 'target-a', online: true, visible: true, localDeviceId: 'local-a' })
+  const surface = createTetherPanel({ React: renderer.React, Native: createWebNative(renderer.React), host }).NativeSurface
+  renderer.setComponent(surface)
+  return {
+    renderer,
+    calls,
+    logs,
+    timers,
+    dispose() {
+      renderer.dispose()
+      console.info = originalInfo
+      delete globalThis.setTimeout
+      delete globalThis.clearTimeout
+      delete globalThis.document
+      delete globalThis.window
+      delete globalThis.fetch
+    }
+  }
+}
+
+test('NativeSurface opens a remote DSH workspace over mesh before any Hub gateway request', async () => {
+  const fixture = createMeshSurfaceFixture({})
+  try {
+    fixture.renderer.render()
+    await tick(); await tick(); await tick()
+    fixture.renderer.render()
+    const webview = walk(fixture.renderer.output(), (node) => node.type === 'webview')
+    assert.ok(webview, 'the mesh session mounts the isolated webview: ' + JSON.stringify(fixture.renderer.output()))
+    assert.equal(webview.props.src, 'https://target-a.mesh.example:44300/')
+    assert.equal(webview.props.partition, DSH_MESH_PARTITION)
+    assert.equal(fixture.calls.meshOpen, 1, 'the mesh workbench session is opened once')
+    assert.equal(fixture.calls.hubSurface, 0, 'the Hub gateway descriptor is not requested when mesh succeeds')
+    assert.equal(fixture.calls.hubRequest, 0, 'the OAuth Hub descriptor is not requested when mesh succeeds')
+  } finally { fixture.dispose() }
+})
+
+test('NativeSurface degrades to the Hub gateway when the mesh dial is unreachable', async () => {
+  const error = new Error('本机没有就绪的目标网络 SOCKS 路由。')
+  error.code = 'mesh_dial_unreachable'
+  const fixture = createMeshSurfaceFixture({ meshError: error })
+  try {
+    fixture.renderer.render()
+    await tick(); await tick(); await tick()
+    fixture.renderer.render()
+    const webview = walk(fixture.renderer.output(), (node) => node.type === 'webview')
+    assert.ok(webview, 'the Hub gateway session still mounts after a mesh failure')
+    assert.equal(webview.props.src, 'https://g46285.controller.example/?tether_native=1')
+    assert.equal(fixture.calls.meshOpen, 1)
+    assert.equal(fixture.calls.hubSurface, 1, 'exactly one Hub gateway descriptor request')
+    const degraded = fixture.logs.find((entry) => String(entry[0]).includes('降级'))
+    assert.ok(degraded, 'the degradation reason is logged: ' + JSON.stringify(fixture.logs))
+    assert.equal(degraded[1].reason, 'open_failed')
+    assert.match(String(degraded[1].message), /SOCKS/)
+  } finally { fixture.dispose() }
+})
+
+test('NativeSurface skips the mesh attempt when the service catalog is not ready', async () => {
+  const fixture = createMeshSurfaceFixture({ catalogState: 'starting' })
+  try {
+    fixture.renderer.render()
+    await tick(); await tick(); await tick()
+    fixture.renderer.render()
+    assert.equal(fixture.calls.meshOpen, 0, 'a starting service is not opened through mesh')
+    assert.equal(fixture.calls.hubSurface, 1, 'the Hub gateway keeps the readable per-code errors')
+    const degraded = fixture.logs.find((entry) => String(entry[0]).includes('降级'))
+    assert.equal(degraded[1].reason, 'catalog_not_ready')
+  } finally { fixture.dispose() }
 })

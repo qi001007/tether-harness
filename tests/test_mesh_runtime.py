@@ -222,3 +222,112 @@ def test_restore_accepts_only_the_migrated_credential_path(managed_mesh, tmp_pat
     assert starts == [instance_id]
     assert config_path.read_bytes() == expected
     assert runtime._load_records()[instance_id]["config_sha256"] == hashlib.sha256(expected).hexdigest()
+
+
+def test_peer_health_reads_the_instances_own_rpc_portal(managed_mesh, monkeypatch) -> None:
+    runtime, config, starts, active = managed_mesh
+    applied = runtime.apply(config)
+    payload = json.dumps([
+        {"id": "self", "hostname": "node", "cost": "Local", "lat_ms": "-", "loss_rate": "-",
+         "tunnel_proto": "-", "nat_type": "Symmetric"},
+        {"id": "peer-a", "hostname": "laptop", "cost": "relay(2)", "lat_ms": "148.00", "loss_rate": "0.0%",
+         "tunnel_proto": "", "nat_type": "Symmetric"},
+        {"id": "peer-b", "hostname": "desktop", "cost": "p2p", "lat_ms": "23.40", "loss_rate": "0.25%",
+         "tunnel_proto": "udp", "nat_type": "PortRestricted"},
+    ]).encode()
+    calls = []
+
+    def run(argv, **_kwargs):
+        calls.append(argv)
+        return SimpleNamespace(returncode=0, stdout=payload)
+
+    monkeypatch.setattr("tether.node.mesh_runtime.subprocess.run", run)
+    health = runtime.peer_health(applied["instance_id"], max_age=0)
+    assert health["peer_connectivity"] == "direct"
+    assert health["peer_count"] == 3 and health["remote_peer_count"] == 2 and health["cost"] == "p2p"
+    assert health["tunnel"] == "udp" and health["latency_ms"] == 23.4 and health["loss_rate"] == 0.25
+    record = runtime._load_records()[applied["instance_id"]]
+    assert calls[0][:2] == [str(runtime.cli), "-p"]
+    assert calls[0][2] == f"127.0.0.1:{record['rpc_port']}" and calls[0][-2:] == ["peer", "list"]
+    assert [peer["hostname"] for peer in runtime.status(applied["instance_id"])["peers"]] == [
+        "node", "laptop", "desktop"]
+
+    monkeypatch.setattr("tether.node.mesh_runtime.subprocess.run",
+                        lambda *_args, **_kwargs: SimpleNamespace(returncode=1, stdout=b""))
+    failed = runtime.peer_health(applied["instance_id"], max_age=0)
+    assert failed["peers"] is None and failed["peer_connectivity"] == "unknown"
+    assert failed["error"] == "peer_query_failed"
+
+
+def test_supervisor_restores_a_stopped_instance_and_reports_real_health(managed_mesh) -> None:
+    from tether.node.mesh_supervisor import MeshSupervisor
+
+    runtime, config, starts, active = managed_mesh
+    applied = runtime.apply(config)
+    starts.clear()
+    active["value"] = False
+    supervisor = MeshSupervisor(runtime)
+    supervisor.tick()
+
+    assert starts == [applied["instance_id"]]
+    assert runtime.status(applied["instance_id"])["state"] == "ready"
+    entry = supervisor.summary()["networks"][0]
+    assert entry["state"] == "ready" and entry["instance_id"] == applied["instance_id"]
+    assert entry["peers"] is None and entry["peer_connectivity"] == "unknown"
+    assert entry["health_error"] == "peer_query_failed"
+
+
+def test_supervisor_never_replaces_a_process_it_cannot_attribute(managed_mesh) -> None:
+    from tether.node.mesh_supervisor import MeshSupervisor
+
+    runtime, config, starts, active = managed_mesh
+    runtime.apply(config)
+    starts.clear()
+    active["value"] = False
+    active["pid_reused"] = True
+    supervisor = MeshSupervisor(runtime)
+    supervisor.tick()
+    supervisor.tick()
+
+    assert starts == []
+    entry = supervisor.summary()["networks"][0]
+    assert entry["state"] == "unverified"
+    assert entry["last_error"] == "process_identity_unverified"
+    assert entry["peer_connectivity"] == "unknown"
+
+
+def test_supervisor_relaunches_an_instance_built_by_a_previous_launch(managed_mesh, monkeypatch) -> None:
+    from tether.node.mesh_supervisor import MeshSupervisor
+
+    runtime, config, starts, active = managed_mesh
+    applied = runtime.apply(config)
+    records = runtime._load_records()
+    records[applied["instance_id"]]["launch_sha256"] = "0" * 64
+    runtime._save_records(records)
+    starts.clear()
+    monkeypatch.setattr(runtime, "_stop_record", lambda _record: active.__setitem__("value", False))
+    supervisor = MeshSupervisor(runtime)
+    supervisor.tick()
+
+    assert starts == [applied["instance_id"]]
+    assert runtime._load_records()[applied["instance_id"]]["launch_sha256"] == runtime.launch_sha256()
+    assert supervisor.summary()["networks"][0]["state"] == "ready"
+
+
+def test_supervisor_backs_off_after_a_failed_restore(managed_mesh) -> None:
+    from tether.node.mesh_supervisor import MeshSupervisor
+
+    runtime, config, starts, active = managed_mesh
+    applied = runtime.apply(config)
+    starts.clear()
+    active["value"] = False
+    record = runtime._load_records()[applied["instance_id"]]
+    Path(record["config_path"]).write_text("# changed\n", encoding="utf-8")
+    supervisor = MeshSupervisor(runtime)
+    supervisor.tick()
+    supervisor.tick()
+
+    assert starts == [] and runtime.status(applied["instance_id"])["state"] == "stopped"
+    entry = supervisor.summary()["networks"][0]
+    assert entry["state"] == "stopped" and "configuration changed" in entry["last_error"]
+    assert entry["retry_in_seconds"] >= 0

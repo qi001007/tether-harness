@@ -80,3 +80,6 @@
 - 2026-11-22 Verify the restarted Node through its authenticated DSH surface before committing a one-click update.
 
 - 2026-11-22 设备更新默认在后台执行。不同设备可以分别启动，同一设备的开始和重试请求去重。标题栏依据选中设备选择 APP 或 Node，保留 DSH 插件入口。有新发行时忽略指向旧发行的失败作业。Windows 本机正式 App 检查到 0.5.12 或以上且支持随包接管时，只准备 App 安装包。保留旧版本和独立 Node 的更新流程。
+- 2026-11-23：NativeSurface 承接映射 DSH（tether_native=1）的目录/文件选择：webview hash 与 iframe postMessage 双通道闭集校验，复用 agents-page 导出的 TetherFolderPickDialog，应答原路返回；iframe 监听对无 addEventListener 的宿主环境（测试 mock）直接跳过。
+
+- 2026-11-23：跨节点阶段 1 落地。NativeSurface 远端目标先试 mesh（目录 dsh=ready 才 open('dsh')，15s 上限，失败/超时回 Hub 网关并打 `[dsh-surface]` 降级日志，5 分钟降级窗口由手动重连清除）；本机仍直连快路。Codeg 无 Hub 兜底，mesh 失败给可读原因不白屏。会话正文与 run events 轮询改为签名比对免重渲染、events 走 after_seq 增量、空闲退避 1→2→3→5s。

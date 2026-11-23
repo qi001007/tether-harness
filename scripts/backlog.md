@@ -45,3 +45,4 @@
 - 2026-11-13：release builder 的 preview tag 校验改为精确匹配当前 APP/Node 版本与正整数序号；保留 stable 规则。
 
 - 2026-11-19：scripts/up.py显示的本地Node console端口跟随平台默认值（Windows 18894、其他平台18893），并尊重TETHER_CONSOLE_PORT。
+- 2026-11：`release_pipeline.py` 的 `status`/`plan` 只读校验版本与矩阵，`bump --version X.Y.Z` 默认 dry-run、`--write` 同步 version.json、APP package.json、package-lock 两处 version、pyproject.toml 并自检，`build`/`promote` 仍明确拒绝；不触发 workflow、不发布。

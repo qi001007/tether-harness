@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlsplit
 
+from .dsh_rpc import DshRpcError
 from .fs_service import FsError
 
 PAGE = Path(__file__).with_name("console.html")
@@ -85,11 +86,28 @@ class _Handler(BaseHTTPRequestHandler):
             return None
         return parts[3:], parse_qs(parsed.query)
 
+    def _dsh_live(self) -> Any:
+        """Native DSH reader proxy; absent when the node was built without it."""
+        client = getattr(self.api, "dsh_rpc", None)
+        if client is None:
+            self._error(409, "native DSH proxy unavailable", "surface_unavailable")
+        return client
+
+    def _dsh_failure(self, exc: DshRpcError) -> None:
+        if exc.code in ("bad_args", "read_only"):
+            status = 400
+        elif exc.code == "session/not-found":
+            status = 404
+        else:
+            status = 502
+        self._error(status, str(exc), exc.code)
+
     def _get(self, tail: list[str], query: dict[str, list[str]]) -> None:
         if len(tail) == 3 and tail[0] == "mesh" and tail[2] == "route":
             runtime = getattr(self.api.fs, "mesh_runtime", None)
             if runtime is None:
-                self._error(409, "selected EasyTier network is not ready", "network_not_connected")
+                self._error(409, "selected EasyTier network is not ready (mesh_runtime_missing)",
+                            "network_not_connected")
                 return
             network_id = tail[1]
             try:
@@ -106,11 +124,27 @@ class _Handler(BaseHTTPRequestHandler):
             if (status.get("state") != "ready" or runtime_network_id != expected_network_id or
                     not isinstance(route, dict) or route.get("host") != "127.0.0.1" or
                     type(route.get("port")) is not int or not 1 <= route["port"] <= 65535):
-                self._error(409, "selected EasyTier network is not ready", "network_not_connected")
+                self._error(409, f"selected EasyTier network is not ready "
+                                 f"(state={status.get('state') if isinstance(status, dict) else 'unknown'}, "
+                                 f"network_id={runtime_network_id or 'unknown'})",
+                            "network_not_connected")
                 return
             result = {"protocol": 1, "device_id": self.device, "network_id": network_id,
                       "state": "ready", "socks_proxy": route,
-                      "peer_connectivity": "unknown"}
+                      "peers": status.get("peers"),
+                      "peer_count": status.get("peer_count"),
+                      "remote_peer_count": status.get("remote_peer_count"),
+                      "peer_connectivity": status.get("peer_connectivity", "unknown"),
+                      "cost": status.get("cost"), "tunnel": status.get("tunnel"),
+                      "latency_ms": status.get("latency_ms"), "loss_rate": status.get("loss_rate"),
+                      "nat_type": status.get("nat_type"), "peer_read_at": status.get("peer_read_at")}
+        elif tail == ["mesh"]:
+            network_id = (query.get("network_id") or [None])[0]
+            try:
+                result = self.api.fs.mesh_summary(network_id)
+            except FsError as exc:
+                self._error(400, str(exc), exc.code)
+                return
         elif tail == ["sftp-relay", "consent"]:
             try:
                 result = self.api.fs.local_sftp_relay_status((query.get("network_id") or [""])[0])
@@ -150,6 +184,31 @@ class _Handler(BaseHTTPRequestHandler):
                 self._error(400, "DSH session not found", "not_found")
                 return
             result = transcript
+        elif tail == ["dsh", "live", "sessions"]:
+            client = self._dsh_live()
+            if client is None:
+                return
+            try:
+                sessions = client.list_sessions()
+            except DshRpcError as exc:
+                self._dsh_failure(exc)
+                return
+            result = {"sessions": sessions, "source": "native"}
+        elif len(tail) == 5 and tail[:3] == ["dsh", "live", "sessions"] and tail[4] == "page":
+            client = self._dsh_live()
+            if client is None:
+                return
+            try:
+                through_seq = int((query.get("throughSeq") or [""])[0])
+                max_messages = int((query.get("maxMessages") or ["50"])[0])
+            except ValueError:
+                self._error(400, "throughSeq and maxMessages must be integers", "bad_args")
+                return
+            try:
+                result = client.page(tail[3], through_seq, max_messages)
+            except DshRpcError as exc:
+                self._dsh_failure(exc)
+                return
         else:
             self._error(404, "local route not found", "not_found")
             return
@@ -171,6 +230,18 @@ class _Handler(BaseHTTPRequestHandler):
                 result = self.api.fs.local_sftp_relay_consent(body)
             except FsError as exc:
                 self._error(400, str(exc), exc.code)
+                return
+        elif len(tail) == 5 and tail[:3] == ["dsh", "live", "sessions"] and tail[4] == "prompt":
+            client = self._dsh_live()
+            if client is None:
+                return
+            try:
+                request_id = body.get("requestId")
+                result = client.prompt(tail[3], str(body.get("text") or ""),
+                                       request_id=str(request_id) if request_id else None,
+                                       mode=str(body.get("mode") or "queue"))
+            except DshRpcError as exc:
+                self._dsh_failure(exc)
                 return
         elif tail == ["dsh", "workspaces", "register"]:
             try:

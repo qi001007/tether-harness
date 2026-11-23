@@ -79,7 +79,7 @@ export function TargetFileExplorer({
   loading = false, error = '', selectedPath = '', disabled = false,
   onRoot, onPath, onSelect, onOpen, onRefresh,
   singleClickOpens = false, editablePath = false, pathLabel = '路径',
-  fileIcon, formatTime = () => '', formatSize = () => '', limit = 10 * 1024 * 1024,
+  fileIcon, formatTime = () => '', formatSize = () => '',
   emptyText = '空文件夹', placeholder = '从左侧选择工作区或磁盘',
   searchPlaceholder = '搜索当前目录',
   sort = { key: 'name', dir: 'asc' }, onSort, search = '', onSearch = () => {},
@@ -90,6 +90,9 @@ export function TargetFileExplorer({
   const ReactRuntime = React
   const h = ReactRuntime.createElement
   const C = colors || {}
+  // No per-file size ceiling here: the explorer only browses/selections paths,
+  // and every consumer (DSH attachments, agent workspace picks) accepts any
+  // file size, so rows are never disabled or greyed by size.
   const [innerMenu, setInnerMenu] = React.useState(null)
   const [band, setBand] = React.useState(null)
   React.useEffect(() => {
@@ -177,9 +180,8 @@ export function TargetFileExplorer({
     const key = group + ':' + item.path
     const children = treeChildren && treeChildren[item.path]
     const isOpen = !!(expanded && expanded[item.path])
-    const oversized = !item.dir && Number(item.size) > limit
     const openRow = () => {
-      if (disabled || oversized) return
+      if (disabled) return
       if (!item.dir) { if (onOpen) onOpen(item); return }
       if (onToggleTree) onToggleTree(item)
       if (depth === 0 && onRoot) onRoot(item.path, { fromTree: true })
@@ -188,7 +190,7 @@ export function TargetFileExplorer({
     return h(ReactRuntime.Fragment, { key },
       h('div', { style: { display: 'flex', alignItems: 'center', minWidth: 0, paddingLeft: depth * 14 } },
         h('button', {
-          type: 'button', title: item.path, disabled: disabled || oversized,
+          type: 'button', title: item.path, disabled,
           'aria-expanded': item.dir ? isOpen : undefined,
           onClick: openRow,
           className: 'tether-hover',
@@ -196,8 +198,7 @@ export function TargetFileExplorer({
             display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, flex: '1 1 auto',
             height: 26, padding: '0 6px', border: 0, borderRadius: 5,
             background: path === item.path ? (C.hover || C.soft) : 'transparent', color: C.ink,
-            font: 'inherit', fontSize: 13, textAlign: 'left', cursor: disabled || oversized ? 'default' : 'pointer',
-            opacity: oversized ? 0.55 : 1
+            font: 'inherit', fontSize: 13, textAlign: 'left', cursor: disabled ? 'default' : 'pointer'
           }
         },
           h('span', {
@@ -206,7 +207,7 @@ export function TargetFileExplorer({
           }, item.dir ? chevron(isOpen) : null),
           fileIcon ? fileIcon(item) : null,
           h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
-            item.name + (oversized ? ' · 超过 10 MiB' : '')))),
+            item.name))),
       isOpen && children ? children.map((child) => treeRow(child, group, depth + 1)) : null)
   }
   const rootGroup = (label, items, empty) => h('div', { key: label, style: { marginBottom: 10 } },
@@ -237,12 +238,11 @@ export function TargetFileExplorer({
     if (singleClickOpens && onOpen) onOpen(item)
   }
   const row = (item) => {
-    const oversized = !item.dir && Number(item.size) > limit
     const selected = selectionMode === 'multiple'
       ? (selectedPaths || []).includes(item.path)
       : selectedPath === item.path
     return h('button', {
-      key: item.path, type: 'button', title: item.path, disabled: disabled || oversized,
+      key: item.path, type: 'button', title: item.path, disabled,
       'data-row-path': item.path,
       draggable: !!onDragItem,
       onDragStart: (event) => { if (onDragItem) onDragItem(event, item) },
@@ -276,7 +276,7 @@ export function TargetFileExplorer({
         border: 0, borderRadius: 6,
         background: selected ? (C.soft || 'transparent') : 'transparent',
         color: C.ink, font: 'inherit', fontSize: compact ? 12.5 : 13, textAlign: 'left',
-        cursor: disabled || oversized ? 'default' : 'pointer', opacity: oversized ? 0.55 : 1,
+        cursor: disabled ? 'default' : 'pointer',
         userSelect: 'none'
       }
     },
@@ -284,7 +284,7 @@ export function TargetFileExplorer({
         h('span', { style: { width: 16, height: 16, display: 'grid', placeItems: 'center', flex: '0 0 auto' } },
           fileIcon ? fileIcon(item) : null),
         h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
-          item.name + (oversized ? ' · 超过 10 MiB' : ''))),
+          item.name)),
       compact ? null : h('span', { style: { color: C.mute, fontSize: 11, whiteSpace: 'nowrap' } }, formatTime(item.mtime)),
       h('span', { style: { color: C.mute, fontSize: 11, textAlign: 'right' } }, item.dir ? '' : formatSize(Number(item.size))))
   }

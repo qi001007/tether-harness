@@ -32,12 +32,14 @@ from dotenv import load_dotenv
 
 from . import console as local_console
 from .dsh_adapter import DshRun
+from .project_sync import start as start_project_sync
 from .fs_service import FsError, FsService
 from .direct_api import DirectApi
 from .terminal import TerminalService
 from .apps import AppCatalog
 from .acp import AcpService
 from .dsh_sessions import DshSessionStore
+from .dsh_rpc import DshRpcClient
 from .debian_package_update import (DebianPackageUpdateError, DebianPackageUpdater,
                                     OWNER as DEBIAN_PACKAGE_UPDATE_OWNER)
 from .native_surface import NativeSurface, NativeSurfaceError
@@ -326,6 +328,7 @@ class Node:
                             data_dir=self.data_dir,
                             workspaces_root=self.workspaces_root,
                             dsh_home=self.native_dsh_home)
+        start_project_sync(self.fs.agents_runtime)
         self.direct = DirectApi(self.fs.dispatch, stream=self.fs)
         self._direct_started = False
         self.fs.direct = self.direct
@@ -344,6 +347,9 @@ class Node:
             self.native_dsh_home, device_fs=self.fs,
             fallback_homes=(web_home,) if web_home is not None else ())
         self.fs.service_access.native_surface = self.native_surface
+        self.dsh_rpc = DshRpcClient(
+            self.native_dsh_home,
+            fallback_homes=(web_home,) if web_home is not None else ())
         self.remote_desktop = None
         self.remote_desktop_error = "meshcentral_runtime_missing"
         node_executable = os.environ.get("TETHER_NODEJS_EXE", "")
@@ -1747,6 +1753,12 @@ def main() -> None:
         log(f"[console] not started: {exc}")
     identity_published = False
     try:
+        node.fs.start_mesh_supervisor()
+        if node.fs.mesh_supervisor is not None:
+            log("[mesh] supervisor started (recorded networks restore and report on their own)")
+    except Exception as exc:  # noqa: BLE001 - mesh recovery must not block the Node service
+        log(f"[mesh] supervisor not started: {exc}")
+    try:
         write_identity(node.native_dsh_home, args.device)
         identity_published = True
     except Exception as exc:  # noqa: BLE001 - identity metadata must not block the Node service
@@ -1781,6 +1793,10 @@ def main() -> None:
                 pass
             try:
                 node.fs.sftpgo_grants.stop_owned()
+            except Exception:
+                pass
+            try:
+                node.fs.stop_mesh_supervisor()
             except Exception:
                 pass
             if refresher is not None:

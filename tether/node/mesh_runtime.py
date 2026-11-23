@@ -51,7 +51,16 @@ SOCKS_PORT_RANGE = range(53000, 53064)
 SFTP_PORT = 20222
 SFTP_RELAY_PORT = 20223
 SFTP_RELAY_CONFIG = ".sftp-relay-effective"
-RPC_DENY_CIDR = "192.0.2.1/32"
+# The management portal stays on loopback and only loopback may talk to it, so the
+# Node can read this instance's peer table with easytier-cli and nothing else can.
+RPC_ALLOW_CIDR = "127.0.0.1/32"
+PEER_HEALTH_MAX_AGE = 10.0
+PEER_QUERY_TIMEOUT = 6
+UNKNOWN_PEER_HEALTH: dict[str, Any] = {
+    "peers": None, "peer_connectivity": "unknown", "peer_count": None,
+    "remote_peer_count": None, "cost": None,
+    "tunnel": None, "latency_ms": None, "loss_rate": None, "nat_type": None, "peer_read_at": None,
+}
 MEMBER_WSS_ENV = "TETHER_MESH_MEMBER_WSS"
 TRANSPORT_CONFIG = ".transport-runtime.toml"
 MESH_VIP_POOL = ipaddress.IPv4Network("10.240.0.0/12")
@@ -108,6 +117,8 @@ class EasyTierRuntime:
         self._records = self.record_root / "instances.json"
         self._applying_sftp_topology = threading.Lock()
         self._applying_sftp_networks = {}
+        self._peer_guard = threading.Lock()
+        self._peer_cache: dict[str, tuple[float, dict[str, Any]]] = {}
 
     def apply(self, config: dict[str, Any]) -> dict[str, Any]:
         """Apply trusted Controller configuration; unchanged config is a no-op.
@@ -229,11 +240,14 @@ class EasyTierRuntime:
             "pid": process.pid,
             "create_time": self._create_time(process.pid),
             "executable": str(self.core),
+            "launch_sha256": self.launch_sha256(),
         }
         if transport_digest:
             record["transport_sha256"] = transport_digest
         records[instance_id] = record
         self._save_records(records)
+        with self._peer_guard:
+            self._peer_cache.pop(instance_id, None)
         return self._wait_ready(instance_id, record)
 
     def status(self, instance_id: str) -> dict[str, Any]:
@@ -364,7 +378,94 @@ class EasyTierRuntime:
                 "revision": record["revision"], "service_ip": record.get("service_ip"),
                 "node": node, "socks_proxy": {"host": "127.0.0.1", "port": record["socks_port"]},
                 **({"sftp_relay_port": SFTP_RELAY_PORT} if record.get("sftp_relay") else {}),
-                "peers": None, "peer_connectivity": "unknown"}
+                **self._peer_fields(instance_id)}
+
+    def _peer_fields(self, instance_id: str) -> dict[str, Any]:
+        """Last read peer table; never invents a value the runtime did not return."""
+        with self._peer_guard:
+            cached = self._peer_cache.get(instance_id)
+        return dict(cached[1]) if cached else dict(UNKNOWN_PEER_HEALTH)
+
+    def peer_health(self, instance_id: str, *, max_age: float = PEER_HEALTH_MAX_AGE) -> dict[str, Any]:
+        """Read this instance's peer table through its own RPC portal, with caching."""
+        instance_id = self._uuid(instance_id, "instance_id")
+        now = time.monotonic()
+        with self._peer_guard:
+            cached = self._peer_cache.get(instance_id)
+        if cached and now - cached[0] < max_age:
+            return dict(cached[1])
+        payload = self._read_peer_health(self._load_records().get(instance_id))
+        with self._peer_guard:
+            self._peer_cache[instance_id] = (time.monotonic(), payload)
+        return dict(payload)
+
+    def _read_peer_health(self, record: dict[str, Any] | None) -> dict[str, Any]:
+        result = dict(UNKNOWN_PEER_HEALTH)
+        if not isinstance(record, dict) or type(record.get("rpc_port")) is not int:
+            result["error"] = "instance_not_recorded"
+            return result
+        if not self.cli.is_file():
+            result["error"] = "cluster_cli_missing"
+            return result
+        argv = [str(self.cli), "-p", f"127.0.0.1:{record['rpc_port']}", "-o", "json", "peer", "list"]
+        try:
+            completed = subprocess.run(argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                       stderr=subprocess.DEVNULL, timeout=PEER_QUERY_TIMEOUT,
+                                       check=False, shell=False)
+        except (OSError, subprocess.SubprocessError):
+            result["error"] = "peer_query_failed"
+            return result
+        if completed.returncode:
+            result["error"] = "peer_query_failed"
+            return result
+        try:
+            value = json.loads(completed.stdout.decode("utf-8", "replace"))
+        except (UnicodeDecodeError, ValueError):
+            result["error"] = "peer_query_invalid"
+            return result
+        peers = self._safe_peers(value)
+        result.update({"peers": peers, "peer_read_at": int(time.time())})
+        result.update(self._peer_summary(peers))
+        return result
+
+    @staticmethod
+    def _peer_summary(peers: list[dict[str, Any]]) -> dict[str, Any]:
+        # easytier-cli renders every metric as text ("218.68", "0.0%", "-"), and the
+        # node itself appears in the table with cost "Local"; both are handled here
+        # instead of being passed on as if they were measurements.
+        remote = [peer for peer in peers if str(peer.get("cost") or "").lower() != "local"]
+        metrics = [(peer, EasyTierRuntime._peer_number(peer.get("latency_ms")),
+                    EasyTierRuntime._peer_number(peer.get("loss_rate"))) for peer in remote]
+        direct = [item for item in metrics if str(item[0].get("cost") or "").lower() in {"p2p", "direct"}]
+        relayed = [item for item in metrics if str(item[0].get("cost") or "").lower().startswith("relay")]
+        if direct:
+            connectivity = "direct"
+        elif relayed:
+            connectivity = "relay"
+        else:
+            connectivity = "unknown"
+        pool = direct or relayed or metrics
+        best = (min(pool, key=lambda item: item[1] if item[1] is not None else float("inf"))
+                if pool else ({}, None, None))
+        return {"peer_connectivity": connectivity,
+                "peer_count": len(peers),
+                "remote_peer_count": len(remote),
+                "cost": best[0].get("cost"),
+                "tunnel": best[0].get("tunnel_type") or None,
+                "latency_ms": best[1],
+                "loss_rate": best[2],
+                "nat_type": best[0].get("nat_type") or None}
+
+    @staticmethod
+    def _peer_number(value: Any) -> float | None:
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, (int, float)):
+            return float(value)
+        if not isinstance(value, str):
+            return None
+        match = re.match(r"\s*(-?\d+(?:\.\d+)?)", value)
+        return float(match.group(1)) if match else None
 
     def has_single_sftp_network(self, network_id: str) -> bool:
         # Every managed instance maps its service IPv4 back to the same loopback.
@@ -472,6 +573,8 @@ class EasyTierRuntime:
             self._stop_record(record)
         records.pop(instance_id, None)
         self._save_records(records)
+        with self._peer_guard:
+            self._peer_cache.pop(instance_id, None)
         return {"state": "stopped", "instance_id": instance_id}
 
     def _validate_config(self, config: dict[str, Any]) -> dict[str, Any]:
@@ -727,7 +830,7 @@ class EasyTierRuntime:
         config_args = (["--config-file", str(transport_config_path)] if transport_config_path is not None
                        else ["--config-dir", str(directory)])
         argv = [str(self.core), *config_args, "--no-tun", "--use-smoltcp",
-                "--rpc-portal", rpc, "--rpc-portal-whitelist", RPC_DENY_CIDR,
+                "--rpc-portal", rpc, "--rpc-portal-whitelist", RPC_ALLOW_CIDR,
                 "--network-name", network_name,
                 "--file-log-level", log_level, "--file-log-dir", str(directory),
                 "--file-log-size", "2", "--file-log-count", "2"]
@@ -873,10 +976,57 @@ class EasyTierRuntime:
             launch_path = (directory / SFTP_RELAY_CONFIG if record.get("sftp_relay") else
                            directory / TRANSPORT_CONFIG if record.get("transport_sha256") else directory)
             return (abs(process.create_time() - float(record["create_time"])) < 0.01
-                    and Path(process.exe()).resolve() == self.core
+                    and Path(process.exe()).resolve() in self._instance_executables(record)
                     and str(launch_path) in process.cmdline())
         except (psutil.Error, OSError, ValueError, KeyError, TypeError):
             return False
+
+    def _instance_executables(self, record: dict[str, Any]) -> tuple[Path, ...]:
+        """Binaries this instance may legitimately run: the installed one or the recorded one.
+
+        The record is written by this Node into its private data directory, so a recorded
+        EasyTier binary stays attributable across a Node/runtime upgrade.
+        """
+        paths = [self.core]
+        recorded = record.get("executable")
+        if isinstance(recorded, str) and Path(recorded).name.lower().startswith("easytier-core"):
+            try:
+                paths.append(Path(recorded).resolve())
+            except OSError:
+                pass
+        return tuple(dict.fromkeys(paths))
+
+    def launch_sha256(self) -> str:
+        """Signature of the launch flags that affect supervision and observability."""
+        body = json.dumps({"core": str(self.core), "rpc_whitelist": RPC_ALLOW_CIDR,
+                           "no_tun": True, "use_smoltcp": True, "log": self._native_log_level()},
+                          sort_keys=True)
+        return hashlib.sha256(body.encode("utf-8")).hexdigest()
+
+    def managed_networks(self) -> list[dict[str, Any]]:
+        """Recorded networks this Node owns; the only input of the lifecycle loop."""
+        entries: list[dict[str, Any]] = []
+        for instance_id, record in self._load_records().items():
+            if not isinstance(record, dict) or record.get("instance_id") != instance_id:
+                continue
+            network_id, revision = record.get("network_id"), record.get("revision")
+            if not isinstance(network_id, str) or type(revision) is not int:
+                continue
+            entries.append({"network_id": network_id, "instance_id": instance_id, "revision": revision,
+                            "launch_sha256": record.get("launch_sha256")})
+        return entries
+
+    def relaunch(self, instance_id: str, *, network_id: str | None = None) -> dict[str, Any]:
+        """Restart one of this Node's own instances from its unchanged local config."""
+        instance_id = self._uuid(instance_id, "instance_id")
+        with self._instance_lock(instance_id):
+            record = self._load_records().get(instance_id)
+            if not isinstance(record, dict) or not self._owned_process(record):
+                raise MeshRuntimeError("existing EasyTier process identity cannot be verified")
+            if network_id is not None and record.get("network_id") != self._uuid(network_id, "network_id"):
+                raise MeshRuntimeError("existing EasyTier instance belongs to another network")
+            self._stop_record(record)
+            return self.restore_stopped_network(record["network_id"])
 
     @staticmethod
     def _pid_exists(record: dict[str, Any]) -> bool:

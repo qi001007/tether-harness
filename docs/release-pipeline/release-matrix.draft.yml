@@ -1,0 +1,246 @@
+# HISTORICAL DRAFT. The runnable workflow is .github/workflows/release-matrix.yml
+# (workflow_dispatch only, draft releases only). This file is kept as design
+# evidence and is never read by Actions.
+# DRAFT ONLY. This file lives outside .github/workflows on purpose: GitHub
+# Actions only scans the top level of .github/workflows, so nothing here runs.
+# Copy it to .github/workflows/release-matrix.yml only after the plan in
+# docs/RELEASE_PIPELINE.md is approved. Pin every action to a commit SHA first.
+name: Tether release matrix (draft)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: APP/Node version, for example 0.5.15
+        required: true
+        type: string
+      channel:
+        description: preview or stable
+        required: true
+        default: preview
+        type: choice
+        options: [preview, stable]
+      publish_draft:
+        description: Assemble and upload a draft (never publishes)
+        required: true
+        default: false
+        type: boolean
+      build_linux_arm64_node:
+        description: Also build the Node-only linux-arm64 archive
+        required: true
+        default: false
+        type: boolean
+      hub_pin:
+        description: Print the Hub pin handoff (does not touch the Hub)
+        required: true
+        default: false
+        type: boolean
+
+concurrency:
+  group: release-matrix-${{ inputs.version }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  VERSION: ${{ inputs.version }}
+  CHANNEL: ${{ inputs.channel }}
+  TAG: ${{ inputs.channel == 'stable' && format('v{0}', inputs.version) || format('v{0}-preview.1', inputs.version) }}
+
+jobs:
+  preflight:
+    name: Version alignment
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - name: Check version.json, pyproject.toml and package.json
+        run: python scripts/release_pipeline.py status --expect "$VERSION"
+      - name: Check the tag shape
+        run: python scripts/release_pipeline.py plan --version "$VERSION" --channel "$CHANNEL"
+
+  test:
+    name: test-${{ matrix.os }}
+    needs: preflight
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.22.2'
+      - name: Install Python and Node test dependencies
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e . pytest pytest-asyncio httpx cryptography 'PyYAML==6.0.2'
+          npm ci --prefix packages/tether-ui
+      - name: Run Python and JavaScript regressions
+        shell: bash
+        run: |
+          python -m pytest -q --deselect tests/test_updates.py::test_built_release_archives_prepare_and_apply_for_all_components
+          node --test --test-force-exit tests/test_*.mjs
+          node --test --test-force-exit tests/test_*.cjs
+
+  build-codeg-web:
+    name: Build pinned Codeg web runtime
+    needs: preflight
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v6
+        with:
+          repository: spacering-net/codeg
+          ref: e3171d69d208bdf37697b15e8b14f8c9b70825bf
+          path: .runtime/codeg-source
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.22.2'
+      - name: Install the pinned Codeg dependencies
+        working-directory: .runtime/codeg-source
+        env:
+          COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+        run: corepack pnpm install --frozen-lockfile
+      - name: Build the Codeg static runtime
+        shell: pwsh
+        env:
+          CODEG_GALLERY: '0'
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: ./scripts/build_codeg_runtime.ps1 -ExportDirectory .runtime/codeg-built
+      - uses: actions/upload-artifact@v7
+        with:
+          name: tether-pinned-codeg-web
+          path: .runtime/codeg-built/
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 1
+
+  package:
+    name: package-${{ matrix.target }}
+    needs: [test, build-codeg-web]
+    strategy:
+      fail-fast: false
+      matrix:
+        # win-arm64 is intentionally absent: codeg-server and herdr publish no
+        # Windows arm64 asset (docs/RELEASE_PIPELINE.md section 5).
+        include:
+          - { target: windows-x64, runner: windows-latest, platform: windows, arch: x64 }
+          - { target: linux-x64, runner: ubuntu-22.04, platform: linux, arch: x64 }
+          - { target: macos-x64, runner: macos-15-intel, platform: macos, arch: x64 }
+          - { target: macos-arm64, runner: macos-15, platform: macos, arch: arm64 }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      # Same pinned toolchain and assembly steps as the candidate workflow:
+      # setup-node 24.22.2, setup-python 3.11, desktop/packaging npm ci,
+      # PyInstaller tether-python, prepare_runtime.py --target <target>,
+      # then build_windows_release.py or npm run build:<platform>.
+      - uses: actions/download-artifact@v8
+        with:
+          name: tether-pinned-codeg-web
+          path: .runtime/codeg-web
+      - name: Build ${{ matrix.target }} installer
+        shell: bash
+        run: |
+          echo "TODO: copy the candidate package steps verbatim"
+          echo "output: Tether-<version>-<os>-<arch>.<ext>"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: tether-${{ matrix.target }}-${{ env.VERSION }}
+          path: .scratch/tether-desktop-candidates/${{ env.VERSION }}/${{ matrix.target }}/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+  package-node-linux-arm64:
+    name: package-linux-arm64-node
+    needs: [test, build-codeg-web]
+    if: inputs.build_linux_arm64_node
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      # Node-only: Python Node + Codeg web + herdr-linux-aarch64 + croc-linux-arm64.
+      # No Electron APP and no DSH surface on this target.
+      - name: Build headless linux-arm64 Node archive
+        shell: bash
+        run: |
+          echo "TODO: hydrate arm64 herdr/croc and run build_headless_node.py generalization"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: tether-node-linux-arm64-${{ env.VERSION }}
+          path: .scratch/tether-desktop-candidates/${{ env.VERSION }}/headless/linux-arm64/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+  assemble-draft:
+    name: Sign manifest and upload draft
+    needs: package
+    if: inputs.publish_draft
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    # Manual approval gate. Create this Environment in repository settings and
+    # add required reviewers before enabling the workflow.
+    environment: release-approval
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: tether-*-${{ env.VERSION }}
+          path: .release-inputs
+      # Reuse the candidate workflow's "Sign and assemble preview draft" job:
+      # build_release.py --channel ... --release-tag ... with
+      # TETHER_RELEASE_PRIVATE_KEY, then create a *draft* release only.
+      - name: Assemble signed manifest
+        env:
+          TETHER_RELEASE_PRIVATE_KEY: ${{ secrets.TETHER_RELEASE_PRIVATE_KEY }}
+          TETHER_REQUIRE_SIGNED_RELEASE: '1'
+        run: |
+          echo "TODO: copy the candidate signing and draft steps verbatim"
+      - name: Upload draft (never publishes)
+        run: 'echo "TODO: softprops/action-gh-release with draft=true, prerelease=true"'
+
+  hub-pin-handoff:
+    name: Hub pin handoff (manual)
+    needs: assemble-draft
+    if: inputs.hub_pin
+    runs-on: ubuntu-24.04
+    environment: hub-approval
+    steps:
+      - name: Print the operator checklist
+        run: |
+          echo "No Hub call is made from CI."
+          echo "1. Verify the draft assets locally with scripts/qa_release_artifacts.py."
+          echo "2. On the Hub host: back up the current pin, cache the release, verify SHA-256."
+          echo "3. Reload the Hub process and confirm the manifest reports the pinned version."
+          echo "See docs/RELEASE_PIPELINE.md section 6 (P2)."

@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, shell, session, safeStorage, webFrameMain, Tray, Menu, nativeImage, dialog } = require('electron')
 const fs = require('node:fs')
 const path = require('node:path')
+const { PARTITION_PREFIX, selectStalePartitions } = require('./data-maintenance')
 const { pathToFileURL } = require('node:url')
 const { Supervisor } = require('./supervisor.js')
 const { waitForSupervisorStart, waitForLocalNodeApi, getLocalMeshRoute } = require('./startup-readiness.js')
@@ -357,7 +358,7 @@ async function createWindow() {
     loginSession: legacyControllerSession,
     getServiceSession: (partition) => {
       if (!/^persist:tether-wb-[a-f0-9]{40}$/.test(String(partition || ''))) throw new Error('invalid service session partition')
-      return session.fromPartition(partition)
+      return session.fromPartition(partition, { cache: false })
     },
     createBootstrapContents: (partition) => {
       if (!/^persist:tether-wb-[a-f0-9]{40}$/.test(String(partition || ''))) throw new Error('invalid bootstrap partition')
@@ -1390,8 +1391,27 @@ if (!locked) {
       void runInstalledSignIn()
     }
   })
+  function gcWorkbenchPartitions() {
+    try {
+      const dir = path.join(app.getPath('userData'), 'Partitions')
+      const entries = fs.readdirSync(dir)
+        .filter((name) => name.startsWith(PARTITION_PREFIX))
+        .map((name) => {
+          try { return { name, mtimeMs: fs.statSync(path.join(dir, name)).mtimeMs } } catch (_) { return null }
+        })
+        .filter(Boolean)
+      const stale = selectStalePartitions(entries)
+      for (const name of stale) {
+        try { fs.rmSync(path.join(dir, name), { recursive: true, force: true }) } catch (_) { /* busy */ }
+      }
+      if (stale.length) log('gc partitions removed=' + stale.length)
+    } catch (_) { /* fresh install has no partitions directory */ }
+  }
+
   app.whenReady().then(async () => {
     await configureUpdaterNetwork()
+    gcWorkbenchPartitions()
+    setInterval(gcWorkbenchPartitions, 24 * 60 * 60 * 1000).unref?.()
     await createWindow()
     startupComplete = true
     await runInstalledSignIn()

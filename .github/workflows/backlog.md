@@ -49,3 +49,5 @@
 - 2026-11-22 增加 Windows 原位升级与单包节点的 0.5.12 预览发行。
 
 - 2026-11-22 Rebuild the corrected Windows preview from the verified platform build parent and reuse matching Linux and macOS outputs.
+
+- 2026-11 新增 `release-matrix.yml`（仅手动 dispatch；P0 四平台各跑 pytest/node 测试后打包；SIGN=0 产 unsigned + SHA256SUMS + signing-status；schema 1 清单 + GitHub draft；无 publish、无 Hub）。`tether-desktop-candidate.yml` 补 test job 并让 package 依赖它，保留手动触发与草稿属性。

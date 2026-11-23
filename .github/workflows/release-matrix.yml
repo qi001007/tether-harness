@@ -1,0 +1,552 @@
+name: Tether release matrix
+
+# Manual-only P0 matrix. Every build ends as a draft: this workflow never
+# publishes a release and never calls the Hub. Signing is off by default
+# (SIGN=0) and produces unsigned installers plus SHA256SUMS; see
+# docs/SIGNING_SETUP.md before dispatching with sign=true.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: APP/Node version, for example 0.5.15
+        required: true
+        type: string
+      channel:
+        description: preview or stable
+        required: true
+        default: preview
+        type: choice
+        options: [preview, stable]
+      sign:
+        description: Sign installers with the platform certificates (requires secrets)
+        required: true
+        default: false
+        type: boolean
+
+concurrency:
+  group: release-matrix-${{ inputs.version }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  VERSION: ${{ inputs.version }}
+  CHANNEL: ${{ inputs.channel }}
+  TAG: ${{ inputs.channel == 'stable' && format('v{0}', inputs.version) || format('v{0}-preview.1', inputs.version) }}
+  SIGN: ${{ inputs.sign && '1' || '0' }}
+
+jobs:
+  preflight:
+    name: Version alignment
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.11'
+      - name: Check version.json, pyproject.toml, package.json and package-lock.json
+        run: python scripts/release_pipeline.py status --expect "$VERSION"
+      - name: Check the tag shape
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          import re
+
+          version = os.environ['VERSION']
+          channel = os.environ['CHANNEL']
+          tag = os.environ['TAG']
+          expected = f'v{version}' if channel == 'stable' else f'v{version}-preview.1'
+          if not re.fullmatch(r'\d+\.\d+\.\d+', version) or tag != expected:
+              raise SystemExit(f'invalid version/tag pair: {version!r} {tag!r}')
+          print('release tag:', tag)
+          PY
+
+  build-codeg-web:
+    name: Build pinned Codeg web runtime
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: spacering-net/codeg
+          ref: e3171d69d208bdf37697b15e8b14f8c9b70825bf
+          path: .runtime/codeg-source
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24.22.2'
+      - name: Install the pinned Codeg dependencies
+        working-directory: .runtime/codeg-source
+        env:
+          COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+        run: corepack pnpm install --frozen-lockfile
+      - name: Build the Codeg static runtime
+        shell: pwsh
+        env:
+          CODEG_GALLERY: '0'
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: ./scripts/build_codeg_runtime.ps1 -ExportDirectory .runtime/codeg-built
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: tether-pinned-codeg-web
+          path: .runtime/codeg-built/
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 1
+
+  package:
+    name: package-${{ matrix.target }}
+    needs: [preflight, build-codeg-web]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: windows-x64, runner: windows-latest, platform: windows, arch: x64 }
+          - { target: linux-x64, runner: ubuntu-22.04, platform: linux, arch: x64 }
+          - { target: macos-arm64, runner: macos-15, platform: macos, arch: arm64 }
+          - { target: macos-x64, runner: macos-15-intel, platform: macos, arch: x64 }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24.22.2'
+          cache: npm
+          cache-dependency-path: |
+            apps/tether-app/package-lock.json
+            packages/tether-ui/package-lock.json
+            desktop/packaging/package-lock.json
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.11'
+      - name: Check the dispatched version
+        run: python scripts/release_pipeline.py status --expect "$VERSION"
+      - name: Install Python and Node test dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install -e . pytest pytest-asyncio httpx cryptography 'PyYAML==6.0.2'
+          npm ci --prefix packages/tether-ui
+      - name: Run Python and JavaScript regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pytest -q --deselect tests/test_updates.py::test_built_release_archives_prepare_and_apply_for_all_components
+          node --test --test-force-exit tests/test_*.mjs
+          node --test --test-force-exit tests/test_*.cjs
+      - name: Install pinned desktop packaging tools
+        run: npm ci --prefix desktop/packaging
+      - name: Install APP production dependencies
+        run: npm ci --prefix apps/tether-app
+      - name: Build the shared APP web UI
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run build:web --prefix packages/tether-ui
+          node -e "const fs=require('node:fs'); if (!fs.statSync('packages/tether-ui/web/dist/app.js').isFile()) process.exit(1)"
+      - name: Build headless Tether Python command runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .runtime/desktop-candidate
+          if [ "$RUNNER_OS" = macOS ] && [ "$RUNNER_ARCH" = X64 ]; then
+            openssl_dir="$(brew --prefix openssl@3)"
+            OPENSSL_DIR="$openssl_dir" OPENSSL_STATIC=1 python -m pip install \
+              --disable-pip-version-check --no-cache-dir --no-binary cryptography \
+              . 'pyinstaller==6.22.3' 'cryptography==50.0.2'
+            cryptography_extension="$(python -c 'from cryptography.hazmat.bindings import _rust; print(_rust.__file__)')"
+            cryptography_libraries="$(otool -L "$cryptography_extension")"
+            printf '%s\n' "$cryptography_libraries"
+            if grep -Eq '(^|[[:space:]/])lib(ssl|crypto)([.]|[[:space:]])' <<< "$cryptography_libraries"; then
+              echo 'Intel macOS cryptography still links to shared OpenSSL' >&2
+              exit 1
+            fi
+            mkdir -p .runtime/desktop-candidate/licenses
+            cp "$openssl_dir/LICENSE.txt" .runtime/desktop-candidate/licenses/LICENSE.OpenSSL
+          else
+            python -m pip install --disable-pip-version-check . 'pyinstaller==6.22.3'
+          fi
+          COLLECT_ARGS=(--collect-all psutil)
+          DATA_ARGS=()
+          CONSOLE_PAGE="$(python -c "from pathlib import Path; print(Path('tether/node/console.html').resolve().as_posix())")"
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            COLLECT_ARGS+=(--collect-all winpty)
+            DATA_ARGS+=(--add-data "$CONSOLE_PAGE;tether/node")
+          else
+            DATA_ARGS+=(--add-data "$CONSOLE_PAGE:tether/node")
+          fi
+          python -m PyInstaller --noconfirm --clean --onefile \
+            --name tether-python \
+            --distpath .runtime/desktop-candidate \
+            --workpath "$RUNNER_TEMP/tether-pyinstaller" \
+            --specpath "$RUNNER_TEMP/tether-pyinstaller" \
+            --hidden-import tether.node.agent \
+            --hidden-import tether.node.pair_cli \
+            --hidden-import tether.updates_cli \
+            --collect-data tether.node._tomli \
+            --collect-all deepseek_harness \
+            --collect-all deepseek_harness_runtime \
+            --collect-all fastapi \
+            --collect-all starlette \
+            --collect-all uvicorn \
+            --collect-all pydantic \
+            --collect-all anyio \
+            --collect-all mcp.server \
+            --collect-all websockets \
+            --collect-all cryptography \
+            --collect-all zstandard \
+            --collect-all dotenv \
+            "${DATA_ARGS[@]}" \
+            "${COLLECT_ARGS[@]}" \
+            desktop/packaging/python_dispatch.py
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: tether-pinned-codeg-web
+          path: .runtime/codeg-web
+      - name: Hydrate pinned Herdr runtime
+        run: python scripts/hydrate_herdr_runtime.py --destination .runtime/herdr-runtime
+      - name: Assemble pinned runtime components
+        run: python desktop/packaging/prepare_runtime.py --target ${{ matrix.target }} --codeg-web .runtime/codeg-web --herdr-runtime .runtime/herdr-runtime
+      - name: Check the frozen Python and bundled Node entry points
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $python = if ($env:RUNNER_OS -eq 'Windows') { '.runtime/desktop-candidate/tether-python.exe' } else { '.runtime/desktop-candidate/tether-python' }
+          $node = if ($env:RUNNER_OS -eq 'Windows') { '.runtime/desktop-candidate/components/nodejs/node.exe' } else { '.runtime/desktop-candidate/components/nodejs/bin/node' }
+          if (!(Test-Path -LiteralPath $python -PathType Leaf)) { throw "Frozen Python runtime missing: $python" }
+          if (!(Test-Path -LiteralPath $node -PathType Leaf)) { throw "Bundled Node runtime missing: $node" }
+          & $python -m tether.node.agent --help
+          if ($LASTEXITCODE -ne 0) { throw "Frozen Python entry check failed with exit $LASTEXITCODE" }
+          & $python -m tether.node.pair_cli --help
+          if ($LASTEXITCODE -ne 0) { throw "Frozen Node pairing entry check failed with exit $LASTEXITCODE" }
+          & $node --version
+          if ($LASTEXITCODE -ne 0) { throw "Bundled Node entry check failed with exit $LASTEXITCODE" }
+      - name: Check the bundled DSH PTY and native dependencies
+        shell: pwsh
+        timeout-minutes: 2
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $node = if ($env:RUNNER_OS -eq 'Windows') { '.runtime/desktop-candidate/components/nodejs/node.exe' } else { '.runtime/desktop-candidate/components/nodejs/bin/node' }
+          $env:TETHER_DSH_RUNTIME_DIR = (Resolve-Path -LiteralPath '.runtime/desktop-candidate/components/dsh').Path
+          & $node desktop/packaging/check-dsh-native.js
+          if ($LASTEXITCODE -ne 0) { throw "Bundled DSH native check failed with exit $LASTEXITCODE" }
+      - name: Build standalone headless Linux Node runtime
+        if: matrix.target == 'linux-x64'
+        run: python desktop/packaging/build_headless_node.py
+      - name: Download and verify pinned nFPM
+        if: matrix.target == 'linux-x64'
+        shell: bash
+        run: |
+          set -euo pipefail
+          nfpm_dir="$RUNNER_TEMP/nfpm-2.48.0"
+          mkdir -p "$nfpm_dir"
+          curl --fail --show-error --silent --location --proto '=https' --tlsv1.2 \
+            'https://github.com/goreleaser/nfpm/releases/download/v2.48.0/nfpm_2.48.0_Linux_x86_64.tar.gz' \
+            -o "$nfpm_dir/nfpm.tar.gz"
+          echo '6d7f9a28b2f397934403950fcbba83f598b08d02edbe79a0815b3b4897341750  '"$nfpm_dir/nfpm.tar.gz" | sha256sum --check
+          tar -xzf "$nfpm_dir/nfpm.tar.gz" -C "$nfpm_dir" nfpm
+          chmod 0755 "$nfpm_dir/nfpm"
+          echo "NFPM_EXECUTABLE=$nfpm_dir/nfpm" >> "$GITHUB_ENV"
+          echo "NFPM_ARCHIVE=$nfpm_dir/nfpm.tar.gz" >> "$GITHUB_ENV"
+      - name: Build headless Debian package
+        if: matrix.target == 'linux-x64'
+        run: python desktop/packaging/build_headless_deb.py --nfpm "$NFPM_EXECUTABLE" --nfpm-archive "$NFPM_ARCHIVE"
+      - name: Create macOS application icon
+        if: matrix.platform == 'macos'
+        shell: bash
+        run: bash desktop/packaging/prepare-macos-icon.sh
+      - name: Check the signing inputs
+        shell: bash
+        env:
+          WINDOWS_CERT_PFX_BASE64: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
+          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+          MAC_CERT_P12_BASE64: ${{ secrets.MAC_CERT_P12_BASE64 }}
+          MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          if [ "$SIGN" != "1" ]; then
+            echo "SIGN=0: building unsigned installers and SHA256SUMS."
+            exit 0
+          fi
+          case "${{ matrix.platform }}" in
+            windows)
+              if [ -z "${WINDOWS_CERT_PFX_BASE64:-}" ] || [ -z "${WINDOWS_CERT_PASSWORD:-}" ]; then
+                echo "::error::SIGN=1 needs WINDOWS_CERT_PFX_BASE64 and WINDOWS_CERT_PASSWORD; see docs/SIGNING_SETUP.md."
+                exit 1
+              fi
+              ;;
+            macos)
+              if [ -z "${MAC_CERT_P12_BASE64:-}" ] || [ -z "${MAC_CERT_PASSWORD:-}" ]; then
+                echo "::error::SIGN=1 needs MAC_CERT_P12_BASE64 and MAC_CERT_PASSWORD; see docs/SIGNING_SETUP.md."
+                exit 1
+              fi
+              if [ -z "${APPLE_ID:-}" ] || [ -z "${APPLE_APP_SPECIFIC_PASSWORD:-}" ] || [ -z "${APPLE_TEAM_ID:-}" ]; then
+                echo "::error::macOS notarization needs APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD and APPLE_TEAM_ID."
+                exit 1
+              fi
+              ;;
+            linux)
+              echo "Linux artifacts have no Authenticode or notarization step; they stay unsigned."
+              ;;
+          esac
+      - name: Package Windows installer
+        if: matrix.platform == 'windows'
+        env:
+          TETHER_WINDOWS_DELTA_REPOSITORY: ${{ github.repository }}
+          TETHER_WINDOWS_DELTA_GITHUB_TOKEN: ${{ github.token }}
+          CSC_LINK: ${{ inputs.sign && secrets.WINDOWS_CERT_PFX_BASE64 || '' }}
+          CSC_KEY_PASSWORD: ${{ inputs.sign && secrets.WINDOWS_CERT_PASSWORD || '' }}
+        run: python desktop/packaging/build_windows_release.py ${{ matrix.arch }}
+      - name: Package installer
+        if: matrix.platform != 'windows'
+        env:
+          CSC_LINK: ${{ inputs.sign && matrix.platform == 'macos' && secrets.MAC_CERT_P12_BASE64 || '' }}
+          CSC_KEY_PASSWORD: ${{ inputs.sign && matrix.platform == 'macos' && secrets.MAC_CERT_PASSWORD || '' }}
+          APPLE_ID: ${{ inputs.sign && secrets.APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ inputs.sign && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ inputs.sign && secrets.APPLE_TEAM_ID || '' }}
+        run: npm run build:${{ matrix.platform }} --prefix desktop/packaging -- ${{ matrix.arch }}
+      - name: Verify Windows Authenticode signatures
+        if: inputs.sign && matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $files = Get-ChildItem -Path ".scratch/tether-desktop-candidates/$env:VERSION/${{ matrix.target }}" -Filter *.exe -File
+          if (-not $files) { throw 'No Windows installer to verify.' }
+          foreach ($file in $files) {
+            $signature = Get-AuthenticodeSignature -FilePath $file.FullName
+            if ($signature.Status -ne 'Valid') { throw "Invalid Authenticode signature on $($file.Name): $($signature.Status)" }
+          }
+      - name: Record signing status and SHA256SUMS
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          version = os.environ['VERSION']
+          target = os.environ['TARGET']
+          platform = os.environ['PLATFORM']
+          channel = os.environ['CHANNEL']
+          sign = os.environ['SIGN'] == '1'
+          roots = [Path('.scratch/tether-desktop-candidates') / version / target]
+          headless = Path('.scratch/tether-desktop-candidates') / version / 'headless' / 'linux-x64'
+          if headless.is_dir():
+              roots.append(headless)
+          checksum_manifest = roots[0] / 'SHA256SUMS.json'
+          if checksum_manifest.is_file():
+              payload = json.loads(checksum_manifest.read_text(encoding='utf-8'))
+              payload['channel'] = channel
+              checksum_manifest.write_text(json.dumps(payload, indent=2) + '\n', encoding='utf-8')
+          skip = {'SHA256SUMS', 'SHA256SUMS.json', 'signing-status.json'}
+          files = sorted(path for root in roots if root.is_dir() for path in root.iterdir()
+                         if path.is_file() and path.name not in skip and not path.name.startswith('builder-'))
+          if not files:
+              raise SystemExit(f'no artifacts to checksum for {target}')
+
+          def digest(path):
+              value = hashlib.sha256()
+              with path.open('rb') as stream:
+                  for block in iter(lambda: stream.read(1024 * 1024), b''):
+                      value.update(block)
+              return value.hexdigest()
+
+          status = 'unsigned'
+          detail = 'SIGN=0: unsigned preview artifacts.'
+          if platform == 'linux':
+              detail = 'Linux artifacts are unsigned; Linux has no Authenticode or notarization path.'
+          elif sign and platform == 'windows':
+              status = 'authenticode-valid'
+              detail = 'Signing requested; every installer passed Get-AuthenticodeSignature.'
+          elif sign and platform == 'macos':
+              status = 'developer-id-unverified'
+              detail = 'Developer ID signing and notarization requested; verify on a clean Mac.'
+          (roots[0] / 'signing-status.json').write_text(json.dumps({
+              'target': target, 'sign_requested': sign, 'signing_status': status,
+              'detail': detail, 'artifacts': [path.name for path in files],
+          }, indent=2) + '\n', encoding='utf-8')
+          (roots[0] / 'SHA256SUMS').write_text(
+              ''.join(f'{digest(path)}  {path.name}\n' for path in files), encoding='ascii')
+          print(f'{target}: {len(files)} artifacts, signing={status}')
+          PY
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: tether-${{ env.VERSION }}-${{ matrix.target }}
+          path: |
+            .scratch/tether-desktop-candidates/${{ env.VERSION }}/${{ matrix.target }}/*.exe
+            .scratch/tether-desktop-candidates/${{ env.VERSION }}/${{ matrix.target }}/*.dmg
+            .scratch/tether-desktop-candidates/${{ env.VERSION }}/${{ matrix.target }}/*.zip
+            .scratch/tether-desktop-candidates/${{ env.VERSION }}/${{ matrix.target }}/*.AppImage
+            .scratch/tether-desktop-candidates/${{ env.VERSION }}/${{ matrix.target }}/*.deb
+            .scratch/tether-desktop-candidates/${{ env.VERSION }}/${{ matrix.target }}/*.yml
+            .scratch/tether-desktop-candidates/${{ env.VERSION }}/${{ matrix.target }}/*.blockmap
+            .scratch/tether-desktop-candidates/${{ env.VERSION }}/${{ matrix.target }}/*.delta
+            .scratch/tether-desktop-candidates/${{ env.VERSION }}/${{ matrix.target }}/SHA256SUMS
+            .scratch/tether-desktop-candidates/${{ env.VERSION }}/${{ matrix.target }}/SHA256SUMS.json
+            .scratch/tether-desktop-candidates/${{ env.VERSION }}/${{ matrix.target }}/signing-status.json
+            .scratch/tether-desktop-candidates/${{ env.VERSION }}/headless/linux-x64/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+  assemble-draft:
+    name: Manifest and draft release
+    needs: [build-codeg-web, package]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.11'
+      - name: Install the manifest signing dependency
+        run: python -m pip install --disable-pip-version-check 'cryptography>=42,<50'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          pattern: tether-${{ env.VERSION }}-*
+          path: .release-inputs
+      - name: Assemble signed schema 1 manifest
+        env:
+          TETHER_RELEASE_PRIVATE_KEY: ${{ secrets.TETHER_RELEASE_PRIVATE_KEY }}
+          TETHER_REQUIRE_SIGNED_RELEASE: '1'
+        run: |
+          python - <<'PY'
+          import base64
+          import hashlib
+          import json
+          import os
+          import shutil
+          import time
+          from pathlib import Path
+
+          from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+          from tether.release import canonical_bytes, verify_signature
+
+          version = os.environ['VERSION']
+          channel = os.environ['CHANNEL']
+          tag = os.environ['TAG']
+          repository = os.environ['GITHUB_REPOSITORY']
+          inputs = Path('.release-inputs')
+          output = Path('release-assets')
+          output.mkdir()
+
+          def digest(path):
+              value = hashlib.sha256()
+              with path.open('rb') as stream:
+                  for block in iter(lambda: stream.read(1024 * 1024), b''):
+                      value.update(block)
+              return value.hexdigest()
+
+          def url(name):
+              return f'https://github.com/{repository}/releases/download/{tag}/{name}'
+
+          app_platforms = {}
+          node_platforms = {}
+          copies = []
+          for artifact in sorted(path for path in inputs.iterdir() if path.is_dir()):
+              prefix = f'tether-{version}-'
+              if not artifact.name.startswith(prefix):
+                  raise SystemExit(f'unexpected artifact name: {artifact.name}')
+              target = artifact.name[len(prefix):]
+              for path in sorted(artifact.rglob('*')):
+                  if not path.is_file():
+                      continue
+                  name = path.name
+                  if name in {'SHA256SUMS', 'SHA256SUMS.json'}:
+                      name = f'{name}-{target}'
+                  elif name == 'signing-status.json':
+                      name = f'signing-status-{target}.json'
+                  elif name == 'preview-mac.yml' and target.startswith('macos-'):
+                      # Keep both macOS updater manifests; publishing must merge them first.
+                      name = f'preview-mac-{target.rsplit("-", 1)[1]}.yml'
+                  copies.append((path, name))
+                  size = path.stat().st_size
+                  checksum = digest(path)
+                  if name.startswith('Tether-node-runtime-') and name.endswith('.tar.gz'):
+                      node_platforms[target] = {'url': url(name), 'size': size, 'sha256': checksum, 'format': 'tar.gz'}
+                  elif target.startswith('windows-') and name.endswith('.exe'):
+                      app_platforms[target] = {'url': url(name), 'size': size, 'sha256': checksum, 'format': 'exe'}
+                  elif target.startswith('macos-') and name.endswith('.dmg'):
+                      app_platforms[target] = {'url': url(name), 'size': size, 'sha256': checksum, 'format': 'dmg'}
+                  elif target.startswith('linux-') and name.endswith('.AppImage'):
+                      app_platforms[target] = {'url': url(name), 'size': size, 'sha256': checksum, 'format': 'AppImage'}
+
+          expected_app = {f'{os_name}-{arch}' for os_name in ('windows', 'linux', 'macos') for arch in ('x64', 'arm64')}
+          expected_app.discard('windows-arm64')
+          expected_app.discard('linux-arm64')
+          if set(app_platforms) != expected_app:
+              raise SystemExit(f'app platforms mismatch: {sorted(app_platforms)} vs {sorted(expected_app)}')
+          if set(node_platforms) != {'linux-x64'}:
+              raise SystemExit(f'node platforms mismatch: {sorted(node_platforms)}')
+
+          component = lambda platforms: {'version': version, 'protocol': 1, 'min_protocol': 1,
+                                         'min_updater': '0.2.1', 'platforms': platforms}
+          manifest = {'schema': 1, 'channel': channel,
+                      'released_at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+                      'components': {'app': component(app_platforms), 'node': component(node_platforms)}}
+
+          material = os.environ.get('TETHER_RELEASE_PRIVATE_KEY', '').strip()
+          if not material:
+              raise SystemExit('TETHER_RELEASE_PRIVATE_KEY is required; an unsigned manifest is not publishable.')
+          seed = base64.b64decode(material.encode('ascii'), validate=True)
+          if len(seed) != 32:
+              raise SystemExit('TETHER_RELEASE_PRIVATE_KEY must contain a 32-byte Ed25519 seed')
+          key = Ed25519PrivateKey.from_private_bytes(seed)
+          manifest['signature'] = base64.b64encode(key.sign(canonical_bytes(manifest))).decode('ascii')
+          verify_signature(manifest)
+
+          seen = set()
+          for source, name in copies:
+              if name in seen:
+                  raise SystemExit(f'duplicate release asset name: {name}')
+              seen.add(name)
+              shutil.copy2(source, output / name)
+          (output / 'tether-update.json').write_text(
+              json.dumps(manifest, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          (output / 'SHA256SUMS').write_text(
+              ''.join(f'{digest(output / name)}  {name}\n' for name in sorted(seen) + ['tether-update.json']),
+              encoding='ascii')
+          print(json.dumps({'schema': 1, 'channel': channel, 'app': sorted(app_platforms),
+                            'node': sorted(node_platforms), 'assets': len(seen) + 2}, sort_keys=True))
+          PY
+      - name: Upload the draft release (never publishes)
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        with:
+          tag_name: ${{ env.TAG }}
+          target_commitish: ${{ github.sha }}
+          name: Tether ${{ env.VERSION }} ${{ inputs.channel }} draft
+          body: |
+            Four-platform ${{ inputs.channel }} draft built from `${{ github.sha }}`.
+            Signing requested: `${{ inputs.sign }}`. See `signing-status.json` per platform.
+            This draft is not published and the Hub is not touched.
+          draft: true
+          prerelease: true
+          make_latest: false
+          overwrite_files: true
+          fail_on_unmatched_files: true
+          files: release-assets/*

@@ -4,6 +4,9 @@
   "description": "Shared Tether React UI for the DSH plugin, Electron APP and WebUI",
   "type": "module",
   "main": "src/index.js",
+  "imports": {
+    "#tether-dsh-flow-fn": "./scripts/flow-fn-stub.mjs"
+  },
   "exports": {
     ".": "./src/index.js",
     "./app": "./src/app.js",

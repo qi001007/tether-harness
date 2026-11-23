@@ -145,96 +145,72 @@ function pageProps(React, open, calls, options = {}) {
         return open(targetId, serviceId)
       },
       openLegacyCodeg: options.openLegacyCodeg,
+      openDshSurface: async () => { calls.dsh += 1 },
       view: async () => ({ ok: true })
     } }
   }
 }
 
-test('native Agents refreshes a retained Codeg pane on re-entry and manual retry remains available after failure', async () => {
+test('native Agents keeps the shell default DSH surface: mount and visibility never auto-open Codeg', async () => {
   const previousWindow = globalThis.window
   globalThis.window = { innerHeight: 900, addEventListener() {}, removeEventListener() {} }
   try {
     const success = { targetId: 'target-a', serviceId: 'codeg', endpoint: 'https://codeg.example.test', partition: 'persist:codeg', bootstrapRevision: 1 }
-    const refreshed = { ...success, endpoint: 'https://codeg-next.example.test', bootstrapRevision: 2 }
-    const calls = { catalog: 0, open: 0 }
+    const calls = { catalog: 0, open: 0, dsh: 0 }
     const renderer = hookRenderer()
-    const props = pageProps(renderer.React, async () => calls.open === 1 ? success : refreshed, calls)
+    const props = pageProps(renderer.React, async (targetId, serviceId) => {
+      assert.equal(targetId, 'target-a')
+      assert.equal(serviceId, 'codeg', 'the manual entry is the only Codeg opener')
+      return success
+    }, calls)
     let tree = await renderer.render({ ...props, isActive: false })
     assert.equal(calls.open, 0, 'a hidden Agents page does not open Codeg in the background')
+    assert.equal(calls.dsh, 0, 'the Agents page never opens a DSH surface itself')
     tree = await renderer.render(props)
-    assert.equal(calls.open, 1, 'a ready native catalog opens Codeg automatically once')
-    assert.ok(findButton(tree, '打开 Codeg') === null, 'the native guest replaces the placeholder instead of leaving a second launch CTA')
-    const initialGuestKey = findElement(tree, 'webview').props.key
+    assert.equal(calls.catalog, 1, 'the native catalog is still read once to arm the manual entry')
+    assert.equal(calls.open, 0, 'a ready native catalog no longer opens Codeg automatically')
+    assert.equal(calls.dsh, 0, 'the default mapped DSH surface stays owned by the shell openDshSurface entry')
+    assert.ok(findElement(tree, 'webview') === null && findElement(tree, 'iframe') === null,
+      'no surface pane is mounted, so the shell default DSH surface is not replaced')
+    assert.ok(findButton(tree, '打开 Codeg'), 'the manual Codeg entry remains available')
     await renderer.render({ ...props, isActive: false, devices: [...props.devices] })
     tree = await renderer.render(props)
-    assert.equal(calls.open, 2, 'returning to Agents refreshes the retained Codeg authorization once')
-    assert.notEqual(findElement(tree, 'webview').props.key, initialGuestKey, 'a changed runtime endpoint remounts the existing guest')
-    await renderer.render(props)
-    assert.equal(calls.open, 2, 'same-page renders do not repeat the activation refresh')
-
-    const retryCalls = { catalog: 0, open: 0 }
-    const retryRenderer = hookRenderer()
-    let shouldFail = true
-    const retryProps = pageProps(retryRenderer.React, async () => {
-      if (shouldFail) throw new Error('open failed')
-      return success
-    }, retryCalls)
-    tree = await retryRenderer.render(retryProps)
-    assert.equal(retryCalls.open, 1, 'a failed automatic attempt is not repeated on rerenders')
-    const retryCatalog = findButton(tree, '重试服务目录')
-    assert.ok(retryCatalog, 'the existing catalog retry remains available')
-    retryCatalog.props.onClick()
-    tree = await retryRenderer.render(retryProps)
-    assert.equal(retryCalls.open, 1, 'refreshing the catalog does not retry automatically')
-    const manualOpen = findButton(tree, '打开 Codeg')
-    assert.ok(manualOpen, 'the existing manual Codeg control remains available')
-    shouldFail = false
-    manualOpen.props.onClick()
-    await retryRenderer.render(retryProps)
-    assert.equal(retryCalls.open, 2, 'manual retry can open Codeg after the failed automatic attempt')
+    assert.equal(calls.open, 0, 'returning to a visible Agents page still does not auto-open Codeg')
+    findButton(tree, '打开 Codeg').props.onClick()
+    tree = await renderer.render(props)
+    assert.equal(calls.open, 1, 'the manual entry opens Codeg exactly once')
+    assert.equal(calls.dsh, 0, 'opening Codeg manually does not touch the DSH surface either')
+    assert.equal(findElement(tree, 'webview').props.src, 'https://codeg.example.test/workspace?tether_home=1')
+    assert.ok(findButton(tree, '打开 Codeg') === null, 'the native guest replaces the placeholder instead of leaving a second launch CTA')
+    const guestKey = findElement(tree, 'webview').props.key
+    await renderer.render({ ...props, isActive: false, devices: [...props.devices] })
+    tree = await renderer.render(props)
+    assert.equal(calls.open, 1, 're-entry keeps the retained guest without the removed automatic refresh')
+    assert.equal(findElement(tree, 'webview').props.key, guestKey,
+      'the manually opened guest instance survives leave-and-return unchanged')
   } finally {
     if (previousWindow === undefined) delete globalThis.window
     else globalThis.window = previousWindow
   }
 })
 
-test('native Agents retains the existing Codeg guest when endpoint and bootstrap are unchanged', async () => {
+test('native Agents does not steal an active Herdr pane and returning to Codeg does not reopen it', async () => {
   const previousWindow = globalThis.window
   globalThis.window = { innerHeight: 900, addEventListener() {}, removeEventListener() {} }
   try {
     const success = { targetId: 'target-a', serviceId: 'codeg', endpoint: 'https://codeg.example.test', partition: 'persist:codeg', bootstrapRevision: 1 }
-    const calls = { catalog: 0, open: 0 }
+    const calls = { catalog: 0, open: 0, dsh: 0 }
     const renderer = hookRenderer()
     const props = pageProps(renderer.React, async () => success, calls)
-    const firstTree = await renderer.render(props)
-    const firstGuestKey = findElement(firstTree, 'webview').props.key
-    await renderer.render({ ...props, isActive: false, devices: [...props.devices] })
-    const returnedTree = await renderer.render(props)
-    assert.equal(calls.open, 2, 're-entry still performs a fresh main-process status read')
-    assert.equal(findElement(returnedTree, 'webview').props.key, firstGuestKey,
-      'an unchanged endpoint and bootstrap revision preserve the guest instance, tabs, and draft')
-  } finally {
-    if (previousWindow === undefined) delete globalThis.window
-    else globalThis.window = previousWindow
-  }
-})
-
-test('native Agents does not steal an active Herdr pane, then refreshes when returning to Codeg', async () => {
-  const previousWindow = globalThis.window
-  globalThis.window = { innerHeight: 900, addEventListener() {}, removeEventListener() {} }
-  try {
-    const first = { targetId: 'target-a', serviceId: 'codeg', endpoint: 'https://codeg.example.test', partition: 'persist:codeg', bootstrapRevision: 1 }
-    const refreshed = { ...first, endpoint: 'https://codeg-next.example.test', bootstrapRevision: 2 }
-    const calls = { catalog: 0, open: 0 }
-    const renderer = hookRenderer()
-    const props = pageProps(renderer.React, async () => calls.open === 1 ? first : refreshed, calls)
     let tree = await renderer.render(props)
-    const guest = findElement(tree, 'webview')
-    const initialGuestKey = guest.props.key
+    findButton(tree, '打开 Codeg').props.onClick()
+    tree = await renderer.render(props)
+    assert.equal(calls.open, 1, 'Codeg starts only from the manual entry')
+    const initialGuestKey = findElement(tree, 'webview').props.key
     renderer.navigateWebview(initialGuestKey,
       'https://codeg.example.test/workspace#tether_action=open_herdr&request_id=12345678-1234-1234-1234-123456789abc&agent_type=codex&cwd=C%3A%5Cproject')
     tree = await renderer.render(props)
-    assert.equal(calls.open, 1, 'opening Herdr does not refresh Codeg')
+    assert.equal(calls.open, 1, 'opening Herdr does not reopen Codeg')
     assert.ok(findButton(tree, '返回 Codeg'), 'Herdr exposes the existing return-to-Codeg control')
 
     await renderer.render({ ...props, isActive: false, devices: [...props.devices] })
@@ -244,21 +220,21 @@ test('native Agents does not steal an active Herdr pane, then refreshes when ret
 
     findButton(tree, '返回 Codeg').props.onClick()
     tree = await renderer.render(props)
-    assert.equal(calls.open, 2, 'returning to the visible Codeg pane refreshes its runtime authorization')
-    assert.notEqual(findElement(tree, 'webview').props.key, initialGuestKey,
-      'the guest remounts when the refreshed endpoint/bootstrap changes')
+    assert.equal(calls.open, 1, 'returning to the visible Codeg pane no longer triggers an automatic refresh')
+    assert.equal(findElement(tree, 'webview').props.key, initialGuestKey,
+      'the retained guest is shown again without a remount')
   } finally {
     if (previousWindow === undefined) delete globalThis.window
     else globalThis.window = previousWindow
   }
 })
 
-test('native Agents opens ready legacy Codeg only after runtime readiness passes its existing guard', async () => {
+test('native Agents opens legacy Codeg only through the manual entry after its runtime readiness guard', async () => {
   const previousWindow = globalThis.window
   globalThis.window = { innerHeight: 900, addEventListener() {}, removeEventListener() {} }
   try {
     const sequence = []
-    const calls = { catalog: 0, open: 0, legacy: 0, runtime: 0 }
+    const calls = { catalog: 0, open: 0, dsh: 0, legacy: 0, runtime: 0 }
     const renderer = hookRenderer()
     const props = pageProps(renderer.React, async () => {
       calls.open += 1
@@ -281,13 +257,21 @@ test('native Agents opens ready legacy Codeg only after runtime readiness passes
         return { targetId, serviceId: 'codeg', endpoint: 'https://codeg.example.test', partition: 'persist:codeg' }
       }
     })
-    await renderer.render(props)
-    assert.deepEqual(sequence, ['runtime-ready', 'legacy-open'], 'legacy open follows the existing runtime readiness check')
+    let tree = await renderer.render(props)
+    assert.deepEqual(sequence, [], 'mounting a ready legacy catalog neither probes runtime nor opens Codeg')
+    assert.equal(calls.runtime, 0)
+    assert.equal(calls.legacy, 0, 'ready legacy Codeg no longer opens automatically')
+    assert.equal(calls.open, 0)
+    const manualOpen = findButton(tree, '打开 Codeg')
+    assert.ok(manualOpen, 'legacy Codeg keeps the same manual entry')
+    manualOpen.props.onClick()
+    tree = await renderer.render(props)
+    assert.deepEqual(sequence, ['runtime-ready', 'legacy-open'], 'the manual legacy open still follows the existing runtime readiness check')
     assert.equal(calls.runtime, 1)
-    assert.equal(calls.legacy, 1, 'ready legacy Codeg opens automatically once')
+    assert.equal(calls.legacy, 1)
     assert.equal(calls.open, 0, 'legacy uses its dedicated existing opener')
 
-    const blockedCalls = { catalog: 0, open: 0, legacy: 0, runtime: 0 }
+    const blockedCalls = { catalog: 0, open: 0, dsh: 0, legacy: 0, runtime: 0 }
     const blockedRenderer = hookRenderer()
     const blockedProps = pageProps(blockedRenderer.React, async () => {
       blockedCalls.open += 1
@@ -302,10 +286,16 @@ test('native Agents opens ready legacy Codeg only after runtime readiness passes
       },
       openLegacyCodeg: async () => { blockedCalls.legacy += 1 }
     })
-    await blockedRenderer.render(blockedProps)
+    tree = await blockedRenderer.render(blockedProps)
     assert.equal(blockedCalls.legacy, 0, 'legacy mode mismatch stays blocked')
     assert.equal(blockedCalls.runtime, 0, 'blocked legacy Codeg does not start or probe runtime')
     assert.equal(blockedCalls.open, 0, 'blocked legacy Codeg never falls through to the modern opener')
+    const blockedButton = findButton(tree, 'Codeg 状态异常')
+    assert.ok(blockedButton && blockedButton.props.disabled === true, 'the blocked legacy entry is disabled instead of opening')
+    blockedButton.props.onClick()
+    await blockedRenderer.render(blockedProps)
+    assert.equal(blockedCalls.legacy + blockedCalls.open + blockedCalls.runtime, 0,
+      'even a forced click cannot bypass the legacy guard')
   } finally {
     if (previousWindow === undefined) delete globalThis.window
     else globalThis.window = previousWindow

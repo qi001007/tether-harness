@@ -51,6 +51,14 @@ NATIVE_SURFACE_STYLE = (
     b'[class*="sidebarCol"]{border-right:0!important}'
     b'</style>'
 )
+# tether_native=1 的映射 DSH 页：目录选择改用 Tether 宿主资源管理器。插件 bundle
+# （直连路径或组合 /plugins/??…&rev=…，门按含查询串的子串匹配）经过本代理时在锚点
+# 处注入与 build.mjs 模板同源的片段；组合缓存整段漏掉本插件时按 __ModuleLoader__.load
+# 格式追加已部署插件的完整模块。bundle 已含标记（新版插件自带该能力）或锚点不唯一时
+# 原样放行，绝不改写 DSH 磁盘上的插件本体。
+DIRECTORY_FLOW_MARKER = "tether-host-directory-flow v2"
+DIRECTORY_FLOW_ANCHOR = "} catch (_) { /* attachments are optional in an embedded surface */ }"
+DIRECTORY_FLOW_SNIPPET_PATH = Path(__file__).resolve().parent / "tether_dsh_directory_flow.js"
 
 
 @dataclass
@@ -92,6 +100,80 @@ def polish_native_html(payload: bytes, headers: dict[str, str]) -> tuple[bytes, 
                if key not in {"etag", "last-modified", "expires"}}
     headers["cache-control"] = "no-store"
     return payload, headers
+
+
+def _combo_client_module(path: str, text: str, plugin_client: Path | None, snippet: str) -> str | None:
+    """DSH 的陈旧组合缓存可能整段漏掉本插件；按 __ModuleLoader__.load 注册格式补回。
+
+    模块基源取目标机已部署插件的 client.js（只读，版本与运行中的 native-ui 一致），
+    缺标记时在唯一锚点处补 flow 片段；读不到或锚点不唯一就放弃追加，原样放行。
+    """
+    parsed = urllib.parse.urlsplit(path)
+    if not parsed.path.startswith("/plugins/") or "tether-dsh-client/client.js" not in parsed.query:
+        return None
+    if "id: 'tether-dsh-client'" in text or 'id: "tether-dsh-client"' in text:
+        return None
+    if plugin_client is None:
+        return None
+    try:
+        module = plugin_client.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+    if not module.strip():
+        return None
+    if DIRECTORY_FLOW_MARKER in module:
+        return module
+    if module.count(DIRECTORY_FLOW_ANCHOR) != 1:
+        return None
+    return module.replace(DIRECTORY_FLOW_ANCHOR, DIRECTORY_FLOW_ANCHOR + "\n" + snippet, 1)
+
+
+def inject_tether_directory_flow(payload: bytes, headers: dict[str, str], path: str,
+                                 plugin_client: Path | None = None) -> tuple[bytes, dict[str, str]]:
+    """Serve the Tether directory-flow bridge inside our own plugin bundle in flight.
+
+    path 含查询串：直连路径与组合 /plugins/??…&rev=… 都按子串门命中。组合响应已含
+    本插件模块时走锚点注入；整段缺失时追加完整模块注册（_combo_client_module）。
+    """
+    if "tether-dsh-client/client.js" not in path:
+        return payload, headers
+    content_type = headers.get("content-type", "").lower()
+    if "javascript" not in content_type and "ecmascript" not in content_type:
+        return payload, headers
+    try:
+        snippet = DIRECTORY_FLOW_SNIPPET_PATH.read_text(encoding="utf-8").strip("\n")
+    except OSError:
+        return payload, headers
+    if not snippet:
+        return payload, headers
+    encoding = headers.get("content-encoding", "").lower()
+    if encoding == "gzip":
+        try:
+            payload = gzip.decompress(payload)
+        except OSError:
+            return payload, headers
+        if len(payload) > MAX_BODY:
+            raise NativeSurfaceError("native DSH response too large", "too_large")
+        headers = {key: value for key, value in headers.items() if key != "content-encoding"}
+    elif encoding not in {"", "identity"}:
+        return payload, headers
+    try:
+        text = payload.decode("utf-8")
+    except UnicodeDecodeError:
+        return payload, headers
+    if DIRECTORY_FLOW_MARKER in text:
+        return payload, headers
+    if text.count(DIRECTORY_FLOW_ANCHOR) == 1:
+        text = text.replace(DIRECTORY_FLOW_ANCHOR, DIRECTORY_FLOW_ANCHOR + "\n" + snippet, 1)
+    else:
+        module = _combo_client_module(path, text, plugin_client, snippet)
+        if module is None:
+            return payload, headers
+        text = text.rstrip() + "\n;\n" + module
+    headers = {key: value for key, value in headers.items()
+               if key not in {"etag", "last-modified", "expires"}}
+    headers["cache-control"] = "no-store"
+    return text.encode("utf-8"), headers
 
 
 class NativeSurfaceError(Exception):
@@ -485,12 +567,20 @@ class NativeSurface:
             return self._device_fs_error(500, "fs_error", "device file request failed")
         return self._device_fs_json(200, result)
 
+    def _plugin_client_path(self) -> Path:
+        """已部署插件模块的只读位置，供陈旧组合缓存漏插件时在途补回完整注册。"""
+        profile = self._profile or "desktop"
+        return (self._active_home / "profiles" / profile / "node_modules"
+                / "tether-dsh-client" / "lib" / "client.js")
+
     def _http(self, args: dict[str, Any], url: str | None = None, origin: str | None = None) -> dict[str, Any]:
         method = str(args.get("method") or "GET").upper()
         if method not in {"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"}:
             raise NativeSurfaceError("unsupported HTTP method", "bad_method")
         url = url or self._target(args.get("path"), origin=origin)
-        path_only = urllib.parse.urlsplit(url).path
+        parsed_url = urllib.parse.urlsplit(url)
+        path_only = parsed_url.path
+        request_path = path_only + ("?" + parsed_url.query if parsed_url.query else "")
         asset_request = method in {"GET", "HEAD"} and (
             path_only.startswith("/plugins/") or path_only.startswith("/assets/"))
         request_timeout = LONG_ASSET_TIMEOUT if asset_request else TIMEOUT
@@ -568,6 +658,8 @@ class NativeSurface:
                 result_headers = {k.lower(): v for k, v in response.headers.items()
                                   if k.lower() in ALLOWED_RESPONSE_HEADERS and "\r" not in v and "\n" not in v}
                 payload, result_headers = polish_native_html(payload, result_headers)
+                payload, result_headers = inject_tether_directory_flow(
+                    payload, result_headers, request_path, self._plugin_client_path())
                 return {"status": response.code, "headers": result_headers,
                         "body_base64": base64.b64encode(payload).decode("ascii")}
 

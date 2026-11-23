@@ -31,9 +31,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/react/cjs/react.production.min.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/react/cjs/react.production.min.js
 var require_react_production_min = __commonJS({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/react/cjs/react.production.min.js"(exports) {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/react/cjs/react.production.min.js"(exports) {
     "use strict";
     var l = Symbol.for("react.element");
     var n2 = Symbol.for("react.portal");
@@ -304,9 +304,9 @@ var require_react_production_min = __commonJS({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/react/index.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/react/index.js
 var require_react = __commonJS({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/react/index.js"(exports, module) {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/react/index.js"(exports, module) {
     "use strict";
     if (true) {
       module.exports = require_react_production_min();
@@ -316,9 +316,9 @@ var require_react = __commonJS({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/scheduler/cjs/scheduler.production.min.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/scheduler/cjs/scheduler.production.min.js
 var require_scheduler_production_min = __commonJS({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/scheduler/cjs/scheduler.production.min.js"(exports) {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/scheduler/cjs/scheduler.production.min.js"(exports) {
     "use strict";
     function f(a, b2) {
       var c = a.length;
@@ -569,9 +569,9 @@ var require_scheduler_production_min = __commonJS({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/scheduler/index.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/scheduler/index.js
 var require_scheduler = __commonJS({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/scheduler/index.js"(exports, module) {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/scheduler/index.js"(exports, module) {
     "use strict";
     if (true) {
       module.exports = require_scheduler_production_min();
@@ -581,9 +581,9 @@ var require_scheduler = __commonJS({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/react-dom/cjs/react-dom.production.min.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/react-dom/cjs/react-dom.production.min.js
 var require_react_dom_production_min = __commonJS({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/react-dom/cjs/react-dom.production.min.js"(exports) {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/react-dom/cjs/react-dom.production.min.js"(exports) {
     "use strict";
     var aa2 = require_react();
     var ca2 = require_scheduler();
@@ -7191,9 +7191,9 @@ var require_react_dom_production_min = __commonJS({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/react-dom/index.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/react-dom/index.js
 var require_react_dom = __commonJS({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/react-dom/index.js"(exports, module) {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/react-dom/index.js"(exports, module) {
     "use strict";
     function checkDCE() {
       if (typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ === "undefined" || typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.checkDCE !== "function") {
@@ -7217,9 +7217,9 @@ var require_react_dom = __commonJS({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/react-dom/client.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/react-dom/client.js
 var require_client = __commonJS({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/react-dom/client.js"(exports) {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/react-dom/client.js"(exports) {
     "use strict";
     var m = require_react_dom();
     if (true) {
@@ -7248,7 +7248,7 @@ var require_client = __commonJS({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/arrays.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/arrays.js
 function tail(arr) {
   if (arr.length === 0) {
     throw new Error("Invalid tail call");
@@ -7442,7 +7442,7 @@ function reverseOrder(comparator) {
 }
 var CompareResult, numberComparator, booleanComparator, ArrayQueue, CallbackIterable;
 var init_arrays = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/arrays.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/arrays.js"() {
     (function(CompareResult2) {
       function isLessThan(result) {
         return result < 0;
@@ -7556,7 +7556,7 @@ var init_arrays = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/errors.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/errors.js
 function onBugIndicatingError(e) {
   errorHandler.onUnexpectedError(e);
   return void 0;
@@ -7616,7 +7616,7 @@ function illegalState(name) {
 }
 var ErrorHandler, errorHandler, canceledName, CancellationError, NotSupportedError, ErrorNoTelemetry, BugIndicatingError;
 var init_errors = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/errors.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/errors.js"() {
     ErrorHandler = class {
       constructor() {
         this.listeners = [];
@@ -7689,7 +7689,7 @@ var init_errors = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/assert.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/assert.js
 function ok(value, message) {
   if (!value) {
     throw new Error(message ? `Assertion failed (${message})` : "Assertion Failed");
@@ -7728,12 +7728,12 @@ function checkAdjacentItems(items, predicate) {
   return true;
 }
 var init_assert = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/assert.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/assert.js"() {
     init_errors();
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/types.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/types.js
 function isString(str) {
   return typeof str === "string";
 }
@@ -7802,12 +7802,12 @@ function validateConstraint(arg, constraint) {
   }
 }
 var init_types = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/types.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/types.js"() {
     init_assert();
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/objects.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/objects.js
 function deepClone(obj) {
   if (!obj || typeof obj !== "object") {
     return obj;
@@ -7926,13 +7926,13 @@ function equals2(one, other) {
 }
 var _hasOwnProperty;
 var init_objects = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/objects.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/objects.js"() {
     init_types();
     _hasOwnProperty = Object.prototype.hasOwnProperty;
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/nls.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/nls.js
 function getNLSMessages() {
   return globalThis._VSCODE_NLS_MESSAGES;
 }
@@ -7992,12 +7992,12 @@ function localize2(data, originalMessage, ...args) {
 }
 var isPseudo;
 var init_nls = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/nls.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/nls.js"() {
     isPseudo = getNLSLanguage() === "pseudo" || typeof document !== "undefined" && document.location && typeof document.location.hash === "string" && document.location.hash.indexOf("pseudo=true") >= 0;
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/platform.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/platform.js
 function isLittleEndian() {
   if (!_isLittleEndianComputed) {
     _isLittleEndianComputed = true;
@@ -8011,7 +8011,7 @@ function isLittleEndian() {
 }
 var LANGUAGE_DEFAULT, _isWindows, _isMacintosh, _isLinux, _isChromeOS, _isNative, _isWeb, _isElectron, _isIOS, _isMobile, _locale, _language, _platformLocale, _translationsConfigFile, _userAgent, $globalThis, nodeProcess, isElectronProcess, isElectronRenderer, _platform, isWindows, isMacintosh, isLinux, isChromeOS, isNative, isElectron, isWeb, isWebWorker, webWorkerOrigin, isIOS, isMobile, platform, userAgent, setTimeout0IsFaster, setTimeout0, OS, _isLittleEndian, _isLittleEndianComputed, isChrome, isFirefox, isSafari, isEdge, isAndroid, hasElectronUserAgent;
 var init_platform = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/platform.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/platform.js"() {
     init_nls();
     LANGUAGE_DEFAULT = "en";
     _isWindows = false;
@@ -8134,7 +8134,7 @@ var init_platform = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/functional.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/functional.js
 function createSingleCallFunction(fn2, fnDidRunCallback) {
   const _this = this;
   let didCall = false;
@@ -8151,14 +8151,14 @@ function createSingleCallFunction(fn2, fnDidRunCallback) {
   };
 }
 var init_functional = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/functional.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/functional.js"() {
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/iterator.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/iterator.js
 var Iterable;
 var init_iterator = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/iterator.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/iterator.js"() {
     init_types();
     (function(Iterable2) {
       function is2(thing) {
@@ -8332,7 +8332,7 @@ var init_iterator = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/lifecycle.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/lifecycle.js
 function setParentOfDisposable(child, parent) {
 }
 function markAsSingleton(singleton) {
@@ -8373,7 +8373,7 @@ function toDisposable(fn2) {
 }
 var FunctionDisposable, DisposableStore, Disposable, MutableDisposable, ReferenceCollection, DisposableMap;
 var init_lifecycle = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/lifecycle.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/lifecycle.js"() {
     init_functional();
     init_iterator();
     FunctionDisposable = class {
@@ -8617,10 +8617,10 @@ var init_lifecycle = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/linkedList.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/linkedList.js
 var Node2, LinkedList;
 var init_linkedList = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/linkedList.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/linkedList.js"() {
     Node2 = class _Node {
       static {
         this.Undefined = new _Node(void 0);
@@ -8732,10 +8732,10 @@ var init_linkedList = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/process.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/process.js
 var safeProcess, vscodeGlobal, cwd, env, platform2;
 var init_process = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/process.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/process.js"() {
     init_platform();
     vscodeGlobal = globalThis.vscode;
     if (typeof vscodeGlobal !== "undefined" && typeof vscodeGlobal.process !== "undefined") {
@@ -8793,10 +8793,10 @@ var init_process = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/stopwatch.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/stopwatch.js
 var performanceNow, StopWatch;
 var init_stopwatch = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/stopwatch.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/stopwatch.js"() {
     performanceNow = globalThis.performance.now.bind(globalThis.performance);
     StopWatch = class _StopWatch {
       static create(highResolution) {
@@ -8824,7 +8824,7 @@ var init_stopwatch = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/event.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/event.js
 function _isBufferLeakWarningEnabled() {
   return !!env["VSCODE_DEV"];
 }
@@ -8851,7 +8851,7 @@ function disposeAndRemove(result, disposables) {
 }
 var _bufferLeakWarnCountThreshold, _bufferLeakWarnTimeThreshold, Event2, EventProfiling, _globalLeakWarningThreshold, leakageMonitorId, LeakageMonitor, Stacktrace, ListenerLeakError, ListenerRefusalError, UniqueContainer, compactionThreshold, Emitter, createEventDeliveryQueue, EventDeliveryQueuePrivate, PauseableEmitter, DebounceEmitter, MicrotaskEmitter, EventMultiplexer, EventBufferer, Relay;
 var init_event = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/event.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/event.js"() {
     init_errors();
     init_functional();
     init_lifecycle();
@@ -9848,10 +9848,10 @@ var init_event = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/config/editorZoom.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/config/editorZoom.js
 var EditorZoom;
 var init_editorZoom = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/config/editorZoom.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/config/editorZoom.js"() {
     init_event();
     EditorZoom = new class {
       constructor() {
@@ -9874,10 +9874,10 @@ var init_editorZoom = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/config/fontInfo.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/config/fontInfo.js
 var GOLDEN_LINE_HEIGHT_RATIO, MINIMUM_LINE_HEIGHT, BareFontInfo, SERIALIZED_FONT_INFO_VERSION, FontInfo, FONT_VARIATION_OFF, FONT_VARIATION_TRANSLATE, DEFAULT_WINDOWS_FONT_FAMILY, DEFAULT_MAC_FONT_FAMILY, DEFAULT_LINUX_FONT_FAMILY, EDITOR_FONT_DEFAULTS;
 var init_fontInfo = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/config/fontInfo.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/config/fontInfo.js"() {
     init_platform();
     init_editorZoom();
     GOLDEN_LINE_HEIGHT_RATIO = isMacintosh ? 1.5 : 1.35;
@@ -10001,10 +10001,10 @@ var init_fontInfo = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/misc/textModelDefaults.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/misc/textModelDefaults.js
 var EDITOR_MODEL_DEFAULTS;
 var init_textModelDefaults = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/misc/textModelDefaults.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/misc/textModelDefaults.js"() {
     EDITOR_MODEL_DEFAULTS = {
       tabSize: 4,
       indentSize: 4,
@@ -10020,7 +10020,7 @@ var init_textModelDefaults = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/wordHelper.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/wordHelper.js
 function createWordRegExp(allowInWords = "") {
   let source = "(-?\\d*\\.\\d\\w*)|([^";
   for (const sep2 of USUAL_WORD_SEPARATORS) {
@@ -10114,7 +10114,7 @@ function _findRegexMatchEnclosingPosition(wordDefinition, text2, pos, stopPos) {
 }
 var USUAL_WORD_SEPARATORS, DEFAULT_WORD_REGEXP, _defaultConfig;
 var init_wordHelper = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/wordHelper.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/wordHelper.js"() {
     init_iterator();
     init_linkedList();
     USUAL_WORD_SEPARATORS = "`~!@#$%^&*()-=+[{]}\\|;:'\",.<>/?";
@@ -10128,7 +10128,7 @@ var init_wordHelper = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/config/editorOptions.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/config/editorOptions.js
 function applyUpdate(value, update) {
   if (typeof value !== "object" || typeof update !== "object" || !value || !update) {
     return new ApplyUpdateResult(update, value !== update);
@@ -10284,7 +10284,7 @@ function register(option) {
 }
 var MINIMAP_GUTTER_WIDTH, ConfigurationChangedEvent, ComputeOptionsMemory, BaseEditorOption, ApplyUpdateResult, ComputedEditorOption, SimpleEditorOption, EditorBooleanOption, EditorIntOption, EditorFloatOption, EditorStringOption, EditorStringEnumOption, EditorEnumOption, EditorAccessibilitySupport, EditorComments, TextEditorCursorStyle, EditorClassName, EditorEmptySelectionClipboard, EditorFind, EditorFontLigatures, EditorFontVariations, EditorFontInfo, EffectiveCursorStyle, EffectiveEditContextEnabled, EffectiveAllowVariableFonts, EffectiveFullwidthCharacterWidth, EditorFontSize, EditorFontWeight, EditorGoToLocation, EditorHover, EditorLayoutInfoComputer, WrappingStrategy, ShowLightbulbIconMode, EditorLightbulb, EditorStickyScroll, EditorInlayHints, EditorLineDecorationsWidth, EditorLineHeight, EditorMinimap, EditorPadding, EditorParameterHints, EditorPixelRatio, PlaceholderOption, EditorQuickSuggestions, EditorRenderLineNumbersOption, EditorRulers, ReadonlyMessage, EditorScrollbar, inUntrustedWorkspace, unicodeHighlightConfigKeys, UnicodeHighlight, InlineEditorSuggest, BracketPairColorization, GuideOptions, EditorSuggest, SmartSelect, WordSegmenterLocales, WrappingIndentOption, EditorWrappingInfoComputer, EditorDropIntoEditor, EditorPasteAs, editorOptionsRegistry, EditorOptions;
 var init_editorOptions = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/config/editorOptions.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/config/editorOptions.js"() {
     init_arrays();
     init_objects();
     init_platform();
@@ -13547,10 +13547,10 @@ var init_editorOptions = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/cancellation.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/cancellation.js
 var shortcutEvent, CancellationToken, MutableToken, CancellationTokenSource;
 var init_cancellation = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/cancellation.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/cancellation.js"() {
     init_event();
     shortcutEvent = Object.freeze(function(callback, context) {
       const handle = setTimeout(callback.bind(context), 0);
@@ -13648,7 +13648,7 @@ var init_cancellation = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/keyCodes.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/keyCodes.js
 function KeyChord(firstPart, secondPart) {
   const chordPart = (secondPart & 65535) << 16 >>> 0;
   return (firstPart | chordPart) >>> 0;
@@ -13658,7 +13658,7 @@ function isModifierKey(keyCode) {
 }
 var KeyCodeStrMap, uiMap, userSettingsUSMap, userSettingsGeneralMap, EVENT_KEY_CODE_MAP, scanCodeStrToInt, scanCodeLowerCaseStrToInt, IMMUTABLE_CODE_TO_KEY_CODE, KeyCodeUtils;
 var init_keyCodes = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/keyCodes.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/keyCodes.js"() {
     KeyCodeStrMap = class {
       constructor() {
         this._keyCodeToStr = [];
@@ -13992,7 +13992,7 @@ var init_keyCodes = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/path.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/path.js
 function validateObject(pathObject, name) {
   if (pathObject === null || typeof pathObject !== "object") {
     throw new ErrorInvalidArgType(name, "Object", pathObject);
@@ -14086,7 +14086,7 @@ function _format2(sep2, pathObject) {
 }
 var CHAR_UPPERCASE_A, CHAR_LOWERCASE_A, CHAR_UPPERCASE_Z, CHAR_LOWERCASE_Z, CHAR_DOT, CHAR_FORWARD_SLASH, CHAR_BACKWARD_SLASH, CHAR_COLON, CHAR_QUESTION_MARK, ErrorInvalidArgType, platformIsWin32, win32, posixCwd, posix, normalize, join, resolve, relative, dirname, basename, extname, sep;
 var init_path = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/path.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/path.js"() {
     init_process();
     CHAR_UPPERCASE_A = 65;
     CHAR_LOWERCASE_A = 97;
@@ -15093,7 +15093,7 @@ var init_path = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/uri.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/uri.js
 function _validateUri(ret, _strict) {
   if (!ret.scheme && _strict) {
     throw new Error(`[UriError]: Scheme is missing: {scheme: "", authority: "${ret.authority}", path: "${ret.path}", query: "${ret.query}", fragment: "${ret.fragment}"}`);
@@ -15293,7 +15293,7 @@ function percentDecode(str) {
 }
 var _schemePattern, _singleSlashStart, _doubleSlashStart, _empty, _slash, _regexp, URI, _pathSepMarker, Uri, encodeTable, _rEncodedAsHex;
 var init_uri = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/uri.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/uri.js"() {
     init_path();
     init_platform();
     _schemePattern = /^\w[\w\d+.-]*$/;
@@ -15645,10 +15645,10 @@ var init_uri = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/position.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/position.js
 var Position;
 var init_position = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/position.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/position.js"() {
     Position = class _Position {
       constructor(lineNumber, column) {
         this.lineNumber = lineNumber;
@@ -15779,10 +15779,10 @@ var init_position = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/range.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/range.js
 var Range;
 var init_range = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/range.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/range.js"() {
     init_position();
     Range = class _Range {
       constructor(startLineNumber, startColumn, endLineNumber, endColumn) {
@@ -16174,10 +16174,10 @@ var init_range = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/selection.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/selection.js
 var Selection;
 var init_selection = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/selection.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/selection.js"() {
     init_position();
     init_range();
     Selection = class _Selection extends Range {
@@ -16307,7 +16307,7 @@ var init_selection = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/codiconsUtil.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/codiconsUtil.js
 function register2(id, fontCharacter) {
   if (isString(fontCharacter)) {
     const val = _codiconFontCharacters[fontCharacter];
@@ -16324,16 +16324,16 @@ function getCodiconFontCharacters() {
 }
 var _codiconFontCharacters;
 var init_codiconsUtil = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/codiconsUtil.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/codiconsUtil.js"() {
     init_types();
     _codiconFontCharacters = /* @__PURE__ */ Object.create(null);
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/codiconsLibrary.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/codiconsLibrary.js
 var codiconsLibrary;
 var init_codiconsLibrary = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/codiconsLibrary.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/codiconsLibrary.js"() {
     init_codiconsUtil();
     codiconsLibrary = {
       add: register2("add", 6e4),
@@ -17102,10 +17102,10 @@ var init_codiconsLibrary = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/codicons.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/codicons.js
 var codiconsDerived, Codicon;
 var init_codicons = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/codicons.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/codicons.js"() {
     init_codiconsUtil();
     init_codiconsLibrary();
     codiconsDerived = {
@@ -17148,10 +17148,10 @@ var init_codicons = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/tokenizationRegistry.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/tokenizationRegistry.js
 var TokenizationRegistry, TokenizationSupportFactoryData;
 var init_tokenizationRegistry = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/tokenizationRegistry.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/tokenizationRegistry.js"() {
     init_event();
     init_lifecycle();
     TokenizationRegistry = class {
@@ -17272,10 +17272,10 @@ var init_tokenizationRegistry = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages.js
 var Token, TokenizationResult, EncodedTokenizationResult, HoverVerbosityAction, CompletionItemKinds, InlineCompletionTriggerKind, SelectedSuggestionInfo, InlineCompletionHintStyle, InlineCompletionEndOfLifeReasonKind, DocumentPasteTriggerKind, SignatureHelpTriggerKind, DocumentHighlightKind, symbolKindNames, SymbolKinds, FoldingRangeKind, NewSymbolNameTag, NewSymbolNameTriggerKind, Command, InlayHintKind, LazyTokenizationSupport, TokenizationRegistry2;
 var init_languages = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages.js"() {
     init_codicons();
     init_uri();
     init_range();
@@ -17983,10 +17983,10 @@ var init_languages = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/standalone/standaloneEnums.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/standalone/standaloneEnums.js
 var AccessibilitySupport, CodeActionTriggerType, CompletionItemInsertTextRule, CompletionItemKind, CompletionItemTag, CompletionTriggerKind, ContentWidgetPositionPreference, CursorChangeReason, DefaultEndOfLine, DocumentHighlightKind2, EditorAutoIndentStrategy, EditorOption, EndOfLinePreference, EndOfLineSequence, GlyphMarginLane, HoverVerbosityAction2, IndentAction, InjectedTextCursorStops, InlayHintKind2, InlineCompletionEndOfLifeReasonKind2, InlineCompletionHintStyle2, InlineCompletionTriggerKind2, KeyCode, MarkerSeverity, MarkerTag, MinimapPosition, MinimapSectionHeaderStyle, MouseTargetType, NewSymbolNameTag2, NewSymbolNameTriggerKind2, OverlayWidgetPositionPreference, OverviewRulerLane, PartialAcceptTriggerKind, PositionAffinity, RenderLineNumbersType, RenderMinimap, ScrollType, ScrollbarVisibility, SelectionDirection, ShowLightbulbIconMode2, SignatureHelpTriggerKind2, SymbolKind, SymbolTag, TextDirection, TextEditorCursorBlinkingStyle, TextEditorCursorStyle2, TrackedRangeStickiness, WrappingIndent;
 var init_standaloneEnums = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/standalone/standaloneEnums.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/standalone/standaloneEnums.js"() {
     (function(AccessibilitySupport2) {
       AccessibilitySupport2[AccessibilitySupport2["Unknown"] = 0] = "Unknown";
       AccessibilitySupport2[AccessibilitySupport2["Disabled"] = 1] = "Disabled";
@@ -18597,7 +18597,7 @@ var init_standaloneEnums = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/editorBaseApi.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/editorBaseApi.js
 function createMonacoBaseAPI() {
   return {
     editor: void 0,
@@ -18620,7 +18620,7 @@ function createMonacoBaseAPI() {
 }
 var KeyMod;
 var init_editorBaseApi = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/editorBaseApi.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/editorBaseApi.js"() {
     init_cancellation();
     init_event();
     init_keyCodes();
@@ -18650,7 +18650,7 @@ var init_editorBaseApi = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/window.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/window.js
 function ensureCodeWindow(targetWindow, fallbackWindowId) {
   const codeWindow = targetWindow;
   if (typeof codeWindow.vscodeWindowId !== "number") {
@@ -18661,18 +18661,18 @@ function ensureCodeWindow(targetWindow, fallbackWindowId) {
 }
 var mainWindow;
 var init_window = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/window.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/window.js"() {
     mainWindow = window;
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/cache.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/cache.js
 function identity(t) {
   return t;
 }
 var LRUCachedFunction, CachedFunction;
 var init_cache = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/cache.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/cache.js"() {
     LRUCachedFunction = class {
       constructor(arg1, arg2) {
         this.lastCache = void 0;
@@ -18723,10 +18723,10 @@ var init_cache = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/lazy.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/lazy.js
 var LazyValueState, Lazy;
 var init_lazy = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/lazy.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/lazy.js"() {
     (function(LazyValueState2) {
       LazyValueState2[LazyValueState2["Uninitialized"] = 0] = "Uninitialized";
       LazyValueState2[LazyValueState2["Running"] = 1] = "Running";
@@ -18771,7 +18771,7 @@ var init_lazy = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/strings.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/strings.js
 function isFalsyOrWhitespace(str) {
   if (!str || typeof str !== "string") {
     return true;
@@ -19201,7 +19201,7 @@ function isEmojiModifier(codePoint) {
 }
 var _formatRegexp, CodePointIterator, GraphemeIterator, CONTAINS_RTL, IS_BASIC_ASCII, UNUSUAL_LINE_TERMINATORS, UTF8_BOM_CHARACTER, GraphemeBreakTree, AmbiguousCharacters, InvisibleCharacters;
 var init_strings = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/strings.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/strings.js"() {
     init_cache();
     init_lazy();
     _formatRegexp = /{(\d+)}/g;
@@ -19421,10 +19421,10 @@ var init_strings = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/standalone-tokens.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/standalone-tokens.css
 var css2;
 var init_standalone_tokens = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/standalone-tokens.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/standalone-tokens.css"() {
     css2 = '/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n\n/* Default standalone editor fonts */\n.monaco-editor,\n.monaco-component,\n.monaco-component.context-view.fixed {\n	font-family: -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "HelveticaNeue-Light", system-ui, "Ubuntu", "Droid Sans", sans-serif;\n}\n\n.monaco-editor {\n	--monaco-monospace-font: "SF Mono", Monaco, Menlo, Consolas, "Ubuntu Mono", "Liberation Mono", "DejaVu Sans Mono", "Courier New", monospace;\n}\n\n.monaco-menu .monaco-action-bar.vertical .action-item .action-menu-item:focus .action-label {\n	stroke-width: 1.2px;\n}\n\n.monaco-editor.vs-dark .monaco-menu .monaco-action-bar.vertical .action-menu-item:focus .action-label,\n.monaco-editor.hc-black .monaco-menu .monaco-action-bar.vertical .action-menu-item:focus .action-label,\n.monaco-editor.hc-light .monaco-menu .monaco-action-bar.vertical .action-menu-item:focus .action-label {\n	stroke-width: 1.2px;\n}\n\n.monaco-hover p {\n	margin: 0;\n}\n\n/* See https://github.com/microsoft/monaco-editor/issues/2168#issuecomment-780078600 */\n.monaco-aria-container {\n	position: absolute !important;\n	top: 0; /* avoid being placed underneath a sibling element */\n	height: 1px;\n	width: 1px;\n	margin: -1px;\n	overflow: hidden;\n	padding: 0;\n	clip: rect(1px, 1px, 1px, 1px);\n	clip-path: inset(50%);\n}\n\n.monaco-editor .synthetic-focus, .monaco-diff-editor .synthetic-focus,\n.monaco-editor [tabindex="0"]:focus, .monaco-diff-editor [tabindex="0"]:focus,\n.monaco-editor [tabindex="-1"]:focus, .monaco-diff-editor [tabindex="-1"]:focus,\n.monaco-editor button:focus, .monaco-diff-editor button:focus,\n.monaco-editor input[type=button]:focus, .monaco-diff-editor input[type=button]:focus,\n.monaco-editor input[type=checkbox]:focus, .monaco-diff-editor input[type=checkbox]:focus,\n.monaco-editor input[type=search]:focus, .monaco-diff-editor input[type=search]:focus,\n.monaco-editor input[type=text]:focus, .monaco-diff-editor input[type=text]:focus,\n.monaco-editor select:focus, .monaco-diff-editor select:focus,\n.monaco-editor textarea:focus, .monaco-diff-editor textarea:focus {\n	outline-width: 1px;\n	outline-style: solid;\n	outline-offset: -1px;\n	outline-color: var(--vscode-focusBorder);\n	opacity: 1\n}\n';
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-947baf574939")) {
       const style = document.createElement("style");
@@ -19435,7 +19435,7 @@ var init_standalone_tokens = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/browser.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/browser.js
 function addMatchMediaChangeListener(targetWindow, query, callback) {
   if (typeof query === "string") {
     query = targetWindow.matchMedia(query);
@@ -19450,7 +19450,7 @@ function getMonacoEnvironment() {
 }
 var WindowManager, userAgent2, isFirefox2, isWebKit, isChrome2, isSafari2, isWebkitWebView, isAndroid2, standalone;
 var init_browser = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/browser.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/browser.js"() {
     init_window();
     WindowManager = class _WindowManager {
       constructor() {
@@ -19489,10 +19489,10 @@ var init_browser = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/canIUse.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/canIUse.js
 var BrowserFeatures;
 var init_canIUse = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/canIUse.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/canIUse.js"() {
     init_browser();
     init_window();
     init_platform();
@@ -19506,7 +19506,7 @@ var init_canIUse = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/keybindings.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/keybindings.js
 function decodeKeybinding(keybinding, OS2) {
   if (typeof keybinding === "number") {
     if (keybinding === 0) {
@@ -19541,7 +19541,7 @@ function createSimpleKeybinding(keybinding, OS2) {
 }
 var KeyCodeChord, Keybinding, ResolvedChord, ResolvedKeybinding;
 var init_keybindings = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/keybindings.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/keybindings.js"() {
     init_errors();
     KeyCodeChord = class {
       constructor(ctrlKey, shiftKey, altKey, metaKey, keyCode) {
@@ -19584,7 +19584,7 @@ var init_keybindings = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/keyboardEvent.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/keyboardEvent.js
 function extractKeyCode(e) {
   if (e.charCode) {
     const char = String.fromCharCode(e.charCode).toUpperCase();
@@ -19628,7 +19628,7 @@ function extractKeyCode(e) {
 }
 var ctrlKeyMod, altKeyMod, shiftKeyMod, metaKeyMod, StandardKeyboardEvent;
 var init_keyboardEvent = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/keyboardEvent.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/keyboardEvent.js"() {
     init_browser();
     init_keyCodes();
     init_keybindings();
@@ -19705,7 +19705,7 @@ var init_keyboardEvent = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/iframe.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/iframe.js
 function getParentWindowIfSameOrigin(w) {
   if (!w.parent || w.parent === w) {
     return null;
@@ -19723,7 +19723,7 @@ function getParentWindowIfSameOrigin(w) {
 }
 var sameOriginWindowChainCache, IframeUtils;
 var init_iframe = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/iframe.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/iframe.js"() {
     sameOriginWindowChainCache = /* @__PURE__ */ new WeakMap();
     IframeUtils = class {
       /**
@@ -19790,10 +19790,10 @@ var init_iframe = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/mouseEvent.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/mouseEvent.js
 var StandardMouseEvent, StandardWheelEvent;
 var init_mouseEvent = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/mouseEvent.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/mouseEvent.js"() {
     init_browser();
     init_iframe();
     init_platform();
@@ -19905,15 +19905,15 @@ var init_mouseEvent = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/symbols.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/symbols.js
 var MicrotaskDelay;
 var init_symbols = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/symbols.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/symbols.js"() {
     MicrotaskDelay = Symbol("MicrotaskDelay");
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/async.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/async.js
 function isThenable(obj) {
   return !!obj && typeof obj.then === "function";
 }
@@ -19995,7 +19995,7 @@ function disposableTimeout(handler, timeout2 = 0, store) {
 }
 var Throttler, timeoutDeferred, microtaskDeferred, Delayer, ThrottledDelayer, TaskQueue, TimeoutTimer, IntervalTimer, RunOnceScheduler, runWhenGlobalIdle, _runWhenIdle, AbstractIdleValue, GlobalIdleValue, DeferredPromise, Promises, ProducerConsumer, AsyncIterableProducer;
 var init_async = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/async.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/async.js"() {
     init_cancellation();
     init_errors();
     init_lifecycle();
@@ -20655,7 +20655,7 @@ var init_async = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/network.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/network.js
 function matchesScheme(target, scheme) {
   if (URI.isUri(target)) {
     return equalsIgnoreCase(target.scheme, scheme);
@@ -20668,7 +20668,7 @@ function matchesSomeScheme(target, ...schemes) {
 }
 var Schemas, connectionTokenQueryName, RemoteAuthoritiesImpl, RemoteAuthorities, nodeModulesPath, nodeModulesAsarPath, VSCODE_AUTHORITY, FileAccessImpl, FileAccess, COI;
 var init_network = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/network.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/network.js"() {
     init_errors();
     init_platform();
     init_strings();
@@ -20876,7 +20876,7 @@ var init_network = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/buffer.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/buffer.js
 function readUInt16LE(source, offset) {
   return source[offset + 0] << 0 >>> 0 | source[offset + 1] << 8 >>> 0;
 }
@@ -20914,7 +20914,7 @@ function encodeHex({ buffer }) {
 }
 var hasBuffer, textDecoder, VSBuffer, hexChars;
 var init_buffer = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/buffer.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/buffer.js"() {
     init_lazy();
     hasBuffer = typeof Buffer !== "undefined";
     new Lazy(() => new Uint8Array(256));
@@ -20949,7 +20949,7 @@ var init_buffer = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/hash.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/hash.js
 function hash(obj) {
   return doHash(obj, 0);
 }
@@ -21011,7 +21011,7 @@ function toHexString(bufferOrValue, bitsize = 32) {
 }
 var ARRAY_HASH_SEED, OBJECT_HASH_SEED, StringSHA1;
 var init_hash = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/hash.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/hash.js"() {
     init_buffer();
     init_strings();
     ARRAY_HASH_SEED = 104579;
@@ -21186,13 +21186,13 @@ var init_hash = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/numbers.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/numbers.js
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
 var MovingAverage, SlidingWindowAverage;
 var init_numbers = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/numbers.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/numbers.js"() {
     MovingAverage = class {
       constructor() {
         this._n = 1;
@@ -21236,7 +21236,7 @@ var init_numbers = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/equals.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/equals.js
 function strictEquals(a, b2) {
   return a === b2;
 }
@@ -21315,7 +21315,7 @@ function equalsIfDefinedC(equals5) {
 }
 var equals4;
 var init_equals = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/equals.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/equals.js"() {
     init_arrays();
     (function(equals5) {
       equals5.strict = strictEquals;
@@ -21333,7 +21333,7 @@ var init_equals = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/logging/logging.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/logging/logging.js
 function addLogger(logger) {
   if (!globalObservableLogger) {
     globalObservableLogger = logger;
@@ -21348,7 +21348,7 @@ function getLogger() {
 }
 var globalObservableLogger, ComposedLogger;
 var init_logging = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/logging/logging.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/logging/logging.js"() {
     ComposedLogger = class {
       constructor(loggers) {
         this.loggers = loggers;
@@ -21417,7 +21417,7 @@ var init_logging = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/debugLocation.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/debugLocation.js
 function parseLine(stackLine) {
   const match2 = stackLine.match(/\((.*):(\d+):(\d+)\)/);
   if (match2) {
@@ -21441,7 +21441,7 @@ function parseLine(stackLine) {
 }
 var DebugLocation, DebugLocationImpl;
 var init_debugLocation = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/debugLocation.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/debugLocation.js"() {
     (function(DebugLocation2) {
       let enabled = false;
       function enable() {
@@ -21481,7 +21481,7 @@ var init_debugLocation = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/debugName.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/debugName.js
 function getDebugName(target, data) {
   const cached = cachedDebugName.get(target);
   if (cached) {
@@ -21571,7 +21571,7 @@ function getFunctionName(fn2) {
 }
 var DebugNameData, countPerName, cachedDebugName, countPerClassName, ownerId;
 var init_debugName = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/debugName.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/debugName.js"() {
     DebugNameData = class {
       constructor(owner, debugNameSource, referenceFn) {
         this.owner = owner;
@@ -21589,7 +21589,7 @@ var init_debugName = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/observables/baseObservable.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/observables/baseObservable.js
 function _setDerivedOpts(derived2) {
   _derived = derived2;
 }
@@ -21598,7 +21598,7 @@ function _setRecomputeInitiallyAndOnChange(recomputeInitiallyAndOnChange2) {
 }
 var _derived, _recomputeInitiallyAndOnChange, ConvenientObservable, BaseObservable;
 var init_baseObservable = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/observables/baseObservable.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/observables/baseObservable.js"() {
     init_debugLocation();
     init_debugName();
     init_logging();
@@ -21691,7 +21691,7 @@ var init_baseObservable = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/observables/derivedImpl.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/observables/derivedImpl.js
 function derivedStateToString(state) {
   switch (state) {
     case 0:
@@ -21708,7 +21708,7 @@ function derivedStateToString(state) {
 }
 var Derived, DerivedWithSetter;
 var init_derivedImpl = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/observables/derivedImpl.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/observables/derivedImpl.js"() {
     init_baseObservable();
     init_assert();
     init_equals();
@@ -22026,7 +22026,7 @@ var init_derivedImpl = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/observables/derived.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/observables/derived.js
 function derived(computeFnOrOwner, computeFn, debugLocation = DebugLocation.ofCaller()) {
   if (computeFn !== void 0) {
     return new Derived(new DebugNameData(computeFnOrOwner, void 0, computeFn), computeFn, void 0, void 0, strictEquals, debugLocation);
@@ -22078,7 +22078,7 @@ function derivedDisposable(computeFnOrOwner, computeFnOrUndefined, debugLocation
   }, strictEquals, debugLocation);
 }
 var init_derived = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/observables/derived.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/observables/derived.js"() {
     init_equals();
     init_event();
     init_lifecycle();
@@ -22090,7 +22090,7 @@ var init_derived = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/reactions/autorunImpl.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/reactions/autorunImpl.js
 function autorunStateToString(state) {
   switch (state) {
     case 1:
@@ -22105,7 +22105,7 @@ function autorunStateToString(state) {
 }
 var AutorunObserver;
 var init_autorunImpl = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/reactions/autorunImpl.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/reactions/autorunImpl.js"() {
     init_assert();
     init_equals();
     init_errors();
@@ -22324,7 +22324,7 @@ var init_autorunImpl = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/reactions/autorun.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/reactions/autorun.js
 function autorun(fn2, debugLocation = DebugLocation.ofCaller()) {
   return new AutorunObserver(new DebugNameData(void 0, void 0, fn2), fn2, void 0, debugLocation);
 }
@@ -22366,7 +22366,7 @@ function autorunWithStore(fn2) {
   });
 }
 var init_autorun = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/reactions/autorun.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/reactions/autorun.js"() {
     init_equals();
     init_event();
     init_lifecycle();
@@ -22376,14 +22376,14 @@ var init_autorun = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/base.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/base.js
 function handleBugIndicatingErrorRecovery(message) {
   const err = new Error("BugIndicatingErrorRecovery: " + message);
   onUnexpectedError(err);
   console.error("recovered from an error that indicates a bug", err);
 }
 var init_base = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/base.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/base.js"() {
     init_errors();
     init_equals();
     init_event();
@@ -22391,7 +22391,7 @@ var init_base = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/transaction.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/transaction.js
 function transaction(fn2, getDebugName2) {
   const tx = new TransactionImpl(fn2, getDebugName2);
   try {
@@ -22423,7 +22423,7 @@ function subtransaction(tx, fn2, getDebugName2) {
 }
 var _globalTransaction, TransactionImpl;
 var init_transaction = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/transaction.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/transaction.js"() {
     init_base();
     init_debugName();
     init_logging();
@@ -22472,7 +22472,7 @@ var init_transaction = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/observables/observableValue.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/observables/observableValue.js
 function observableValue(nameOrOwner, initialValue, debugLocation = DebugLocation.ofCaller()) {
   let debugNameData;
   if (typeof nameOrOwner === "string") {
@@ -22493,7 +22493,7 @@ function disposableObservableValue(nameOrOwner, initialValue, debugLocation = De
 }
 var ObservableValue, DisposableObservableValue;
 var init_observableValue = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/observables/observableValue.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/observables/observableValue.js"() {
     init_transaction();
     init_baseObservable();
     init_equals();
@@ -22571,7 +22571,7 @@ var init_observableValue = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/observables/observableFromEvent.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/observables/observableFromEvent.js
 function observableFromEvent(...args) {
   let owner;
   let event;
@@ -22589,7 +22589,7 @@ function observableFromEventOpts(options, event, getValue, debugLocation = Debug
 }
 var FromEventObservable;
 var init_observableFromEvent = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/observables/observableFromEvent.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/observables/observableFromEvent.js"() {
     init_transaction();
     init_equals();
     init_event();
@@ -22690,7 +22690,7 @@ var init_observableFromEvent = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/observables/observableSignal.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/observables/observableSignal.js
 function observableSignal(debugNameOrOwner, debugLocation = DebugLocation.ofCaller()) {
   if (typeof debugNameOrOwner === "string") {
     return new ObservableSignal(debugNameOrOwner, void 0, debugLocation);
@@ -22700,7 +22700,7 @@ function observableSignal(debugNameOrOwner, debugLocation = DebugLocation.ofCall
 }
 var ObservableSignal;
 var init_observableSignal = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/observables/observableSignal.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/observables/observableSignal.js"() {
     init_transaction();
     init_debugName();
     init_baseObservable();
@@ -22735,7 +22735,7 @@ var init_observableSignal = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/utils/utils.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/utils/utils.js
 function recomputeInitiallyAndOnChange(observable, handleValue) {
   const o2 = new KeepAliveObserver(true, handleValue);
   observable.addObserver(o2);
@@ -22777,7 +22777,7 @@ function isObservable(obj) {
 }
 var KeepAliveObserver, ArrayMap;
 var init_utils = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/utils/utils.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/utils/utils.js"() {
     init_autorun();
     init_observableValue();
     init_equals();
@@ -22854,7 +22854,7 @@ var init_utils = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/logging/consoleObservableLogger.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/logging/consoleObservableLogger.js
 function formatValue(value, availableLen) {
   switch (typeof value) {
     case "number":
@@ -22927,7 +22927,7 @@ function formatObject(value, availableLen) {
   return result;
 }
 var init_consoleObservableLogger = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/logging/consoleObservableLogger.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/logging/consoleObservableLogger.js"() {
     init_debugName();
     init_debugLocation();
     init_equals();
@@ -22936,10 +22936,10 @@ var init_consoleObservableLogger = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/logging/debugger/rpc.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/logging/debugger/rpc.js
 var SimpleTypedRpcConnection;
 var init_rpc = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/logging/debugger/rpc.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/logging/debugger/rpc.js"() {
     SimpleTypedRpcConnection = class _SimpleTypedRpcConnection {
       static createClient(channelFactory, getHandler) {
         return new _SimpleTypedRpcConnection(channelFactory, getHandler);
@@ -22997,7 +22997,7 @@ var init_rpc = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/logging/debugger/debuggerRpc.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/logging/debugger/debuggerRpc.js
 function registerDebugChannel(channelId, createClient) {
   const g = globalThis;
   let queuedNotifications = [];
@@ -23055,12 +23055,12 @@ function createChannelFactoryFromDebugChannel(host) {
   };
 }
 var init_debuggerRpc = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/logging/debugger/debuggerRpc.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/logging/debugger/debuggerRpc.js"() {
     init_rpc();
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/logging/debugger/utils.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/logging/debugger/utils.js
 function deepAssign(target, source) {
   for (const key in source) {
     if (!!target[key] && typeof target[key] === "object" && !!source[key] && typeof source[key] === "object") {
@@ -23083,7 +23083,7 @@ function deepAssignDeleteNulls(target, source) {
 }
 var Throttler2;
 var init_utils2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/logging/debugger/utils.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/logging/debugger/utils.js"() {
     Throttler2 = class {
       constructor() {
         this._timeout = void 0;
@@ -23105,10 +23105,10 @@ var init_utils2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/logging/debugger/devToolsLogger.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/logging/debugger/devToolsLogger.js
 var DevToolsLogger;
 var init_devToolsLogger = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/logging/debugger/devToolsLogger.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/logging/debugger/devToolsLogger.js"() {
     init_autorunImpl();
     init_consoleObservableLogger();
     init_debuggerRpc();
@@ -23539,9 +23539,9 @@ var init_devToolsLogger = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/index.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/index.js
 var init_observableInternal = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/index.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/index.js"() {
     init_equals();
     init_event();
     init_lifecycle();
@@ -23559,7 +23559,7 @@ var init_observableInternal = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/dom.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/dom.js
 function getExternalFocusWindow() {
   for (const checker of externalFocusCheckers) {
     const info = checker();
@@ -24050,7 +24050,7 @@ function setOrRemoveAttribute(element, key, value) {
 }
 var getWindow, getDocument, getWindows, getWindowsCount, getWindowId, getWindowById, onDidRegisterWindow, onWillUnregisterWindow, onDidUnregisterWindow, externalFocusCheckers, DomListener, addStandardDisposableListener, runAtThisOrScheduleAtNextAnimationFrame, scheduleAtNextAnimationFrame, WindowIntervalTimer, AnimationFrameQueueItem, SizeUtils, Dimension, sharedMutationObserver, EventType, EventHelper, FocusTracker, SELECTOR_REGEX, Namespace, ModifierKeyEmitter, DragAndDropObserver, DisposableResizeObserver, maxRecentDisposableResizeObservers, recentDisposableResizeObserverContexts, H_REGEX, n, ObserverNode, LiveElement, ObserverNodeWithElement, ConnectionObserverElement;
 var init_dom = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/dom.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/dom.js"() {
     init_browser();
     init_canIUse();
     init_keyboardEvent();
@@ -24874,10 +24874,10 @@ var init_dom = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/pixelRatio.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/pixelRatio.js
 var DevicePixelRatioMonitor, PixelRatioMonitorImpl, PixelRatioMonitorFacade, PixelRatio;
 var init_pixelRatio = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/pixelRatio.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/pixelRatio.js"() {
     init_dom();
     init_event();
     init_lifecycle();
@@ -24949,7 +24949,7 @@ var init_pixelRatio = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/fastDomNode.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/fastDomNode.js
 function numberAsPixels(value) {
   return typeof value === "number" ? `${value}px` : value;
 }
@@ -24958,7 +24958,7 @@ function createFastDomNode(domNode) {
 }
 var FastDomNode;
 var init_fastDomNode = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/fastDomNode.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/fastDomNode.js"() {
     FastDomNode = class {
       constructor(domNode) {
         this.domNode = domNode;
@@ -25205,7 +25205,7 @@ var init_fastDomNode = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/config/domFontInfo.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/config/domFontInfo.js
 function applyFontInfo(domNode, fontInfo) {
   if (domNode instanceof FastDomNode) {
     domNode.setFontFamily(fontInfo.getMassagedFontFamily());
@@ -25226,19 +25226,19 @@ function applyFontInfo(domNode, fontInfo) {
   }
 }
 var init_domFontInfo = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/config/domFontInfo.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/config/domFontInfo.js"() {
     init_fastDomNode();
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/config/charWidthReader.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/config/charWidthReader.js
 function readCharWidths(targetWindow, bareFontInfo, requests) {
   const reader = new DomCharWidthReader(bareFontInfo, requests);
   reader.read(targetWindow);
 }
 var CharWidthRequest, DomCharWidthReader;
 var init_charWidthReader = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/config/charWidthReader.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/config/charWidthReader.js"() {
     init_domFontInfo();
     CharWidthRequest = class {
       constructor(chr, type) {
@@ -25328,10 +25328,10 @@ var init_charWidthReader = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/config/fontMeasurements.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/config/fontMeasurements.js
 var FontMeasurementsImpl, FontMeasurementsCache, FontMeasurements;
 var init_fontMeasurements = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/config/fontMeasurements.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/config/fontMeasurements.js"() {
     init_dom();
     init_pixelRatio();
     init_event();
@@ -25533,7 +25533,7 @@ var init_fontMeasurements = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/instantiation/common/instantiation.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/instantiation/common/instantiation.js
 function storeServiceDependency(id, target, index) {
   if (target[_util.DI_TARGET] === target) {
     target[_util.DI_DEPENDENCIES].push({ id, index });
@@ -25558,7 +25558,7 @@ function createDecorator(serviceId) {
 }
 var _util, IInstantiationService;
 var init_instantiation = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/instantiation/common/instantiation.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/instantiation/common/instantiation.js"() {
     (function(_util2) {
       _util2.serviceIds = /* @__PURE__ */ new Map();
       _util2.DI_TARGET = "$di$target";
@@ -25572,34 +25572,34 @@ var init_instantiation = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/services/codeEditorService.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/services/codeEditorService.js
 var ICodeEditorService;
 var init_codeEditorService = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/services/codeEditorService.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/services/codeEditorService.js"() {
     init_instantiation();
     ICodeEditorService = createDecorator("codeEditorService");
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/model.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/model.js
 var IModelService;
 var init_model = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/model.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/model.js"() {
     init_instantiation();
     IModelService = createDecorator("modelService");
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/resolverService.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/resolverService.js
 var ITextModelService;
 var init_resolverService = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/resolverService.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/resolverService.js"() {
     init_instantiation();
     ITextModelService = createDecorator("textModelService");
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/actions.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/actions.js
 function toAction(props) {
   return {
     id: props.id,
@@ -25613,7 +25613,7 @@ function toAction(props) {
 }
 var Action, ActionRunner, Separator, SubmenuAction, EmptySubmenuAction;
 var init_actions = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/actions.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/actions.js"() {
     init_event();
     init_lifecycle();
     init_nls();
@@ -25803,10 +25803,10 @@ var init_actions = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/themables.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/themables.js
 var ThemeColor, ThemeIcon;
 var init_themables = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/themables.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/themables.js"() {
     init_codicons();
     (function(ThemeColor2) {
       function isThemeColor(obj) {
@@ -25895,10 +25895,10 @@ var init_themables = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/commands/common/commands.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/commands/common/commands.js
 var ICommandService, CommandsRegistry;
 var init_commands = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/commands/common/commands.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/commands/common/commands.js"() {
     init_event();
     init_iterator();
     init_lifecycle();
@@ -25976,7 +25976,7 @@ var init_commands = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/contextkey/common/scanner.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/contextkey/common/scanner.js
 function hintDidYouMean(...meant) {
   switch (meant.length) {
     case 1:
@@ -25991,7 +25991,7 @@ function hintDidYouMean(...meant) {
 }
 var hintDidYouForgetToOpenOrCloseQuote, hintDidYouForgetToEscapeSlash, Scanner;
 var init_scanner = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/contextkey/common/scanner.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/contextkey/common/scanner.js"() {
     init_errors();
     init_nls();
     hintDidYouForgetToOpenOrCloseQuote = localize(1791, "Did you forget to open or close the quote?");
@@ -26309,7 +26309,7 @@ var init_scanner = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/contextkey/common/contextkey.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/contextkey/common/contextkey.js
 function cmp(a, b2) {
   return a.cmp(b2);
 }
@@ -26425,7 +26425,7 @@ function getTerminals(node) {
 }
 var CONSTANT_VALUES, hasOwnProperty, defaultConfig, errorEmptyString, hintEmptyString, errorNoInAfterNot, errorClosingParenthesis, errorUnexpectedToken, hintUnexpectedToken, errorUnexpectedEOF, hintUnexpectedEOF, Parser, ContextKeyExpr, ContextKeyFalseExpr, ContextKeyTrueExpr, ContextKeyDefinedExpr, ContextKeyEqualsExpr, ContextKeyInExpr, ContextKeyNotInExpr, ContextKeyNotEqualsExpr, ContextKeyNotExpr, ContextKeyGreaterExpr, ContextKeyGreaterEqualsExpr, ContextKeySmallerExpr, ContextKeySmallerEqualsExpr, ContextKeyRegexExpr, ContextKeyNotRegexExpr, ContextKeyAndExpr, ContextKeyOrExpr, RawContextKey, IContextKeyService;
 var init_contextkey = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/contextkey/common/contextkey.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/contextkey/common/contextkey.js"() {
     init_platform();
     init_strings();
     init_scanner();
@@ -27805,10 +27805,10 @@ var init_contextkey = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/registry/common/platform.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/registry/common/platform.js
 var RegistryImpl, Registry;
 var init_platform2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/registry/common/platform.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/registry/common/platform.js"() {
     init_assert();
     init_types();
     RegistryImpl = class {
@@ -27837,7 +27837,7 @@ var init_platform2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/keybinding/common/keybindingsRegistry.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/keybinding/common/keybindingsRegistry.js
 function sorter(a, b2) {
   if (a.weight1 !== b2.weight1) {
     return a.weight1 - b2.weight1;
@@ -27854,7 +27854,7 @@ function sorter(a, b2) {
 }
 var KeybindingsRegistryImpl, KeybindingsRegistry, Extensions;
 var init_keybindingsRegistry = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/keybinding/common/keybindingsRegistry.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/keybinding/common/keybindingsRegistry.js"() {
     init_keybindings();
     init_platform();
     init_commands();
@@ -27950,7 +27950,7 @@ var init_keybindingsRegistry = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/actions/common/actions.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/actions/common/actions.js
 function isIMenuItem(item) {
   return item.command !== void 0;
 }
@@ -27959,7 +27959,7 @@ function isISubmenuItem(item) {
 }
 var __decorate, __param, MenuItemAction_1, MenuId, IMenuService, MenuRegistryChangeEvent, MenuRegistry, SubmenuItemAction, MenuItemAction, Action2;
 var init_actions2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/actions/common/actions.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/actions/common/actions.js"() {
     init_actions();
     init_event();
     init_lifecycle();
@@ -28952,22 +28952,22 @@ var init_actions2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/telemetry/common/telemetry.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/telemetry/common/telemetry.js
 var ITelemetryService;
 var init_telemetry = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/telemetry/common/telemetry.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/telemetry/common/telemetry.js"() {
     init_instantiation();
     ITelemetryService = createDecorator("telemetryService");
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/map.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/map.js
 function isEntries(arg) {
   return Array.isArray(arg);
 }
 var _a2, _b, _c2, ResourceMapEntry, ResourceMap, ResourceSet, LinkedMap, Cache, LRUCache, BidirectionalMap, SetMap, NKeyMap;
 var init_map = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/map.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/map.js"() {
     ResourceMapEntry = class {
       constructor(uri, value) {
         this.uri = uri;
@@ -29612,7 +29612,7 @@ var init_map = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/extpath.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/extpath.js
 function isPathSeparator2(code) {
   return code === 47 || code === 92;
 }
@@ -29745,20 +29745,20 @@ function isWindowsDriveLetter(char0) {
   return char0 >= 65 && char0 <= 90 || char0 >= 97 && char0 <= 122;
 }
 var init_extpath = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/extpath.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/extpath.js"() {
     init_path();
     init_platform();
     init_strings();
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/resources.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/resources.js
 function originalFSPath(uri) {
   return uriToFsPath(uri, true);
 }
 var ExtUri, extUri, isEqual, basenameOrAuthority, basename2, extname2, dirname2, joinPath2, normalizePath, relativePath, resolvePath, isEqualAuthority, hasTrailingPathSeparator, DataUri;
 var init_resources = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/resources.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/resources.js"() {
     init_extpath();
     init_network();
     init_path();
@@ -29962,7 +29962,7 @@ var init_resources = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/log/common/log.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/log/common/log.js
 function canLog(loggerLevel, messageLevel) {
   return loggerLevel !== LogLevel.Off && loggerLevel <= messageLevel;
 }
@@ -30004,7 +30004,7 @@ function LogLevelToString(logLevel) {
 }
 var ILogService, ILoggerService, LogLevel, DEFAULT_LOG_LEVEL, AbstractLogger, ConsoleLogger, MultiplexLogger, AbstractLoggerService, NullLogger, NullLoggerService;
 var init_log = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/log/common/log.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/log/common/log.js"() {
     init_event();
     init_hash();
     init_lifecycle();
@@ -30265,10 +30265,10 @@ var init_log = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/triggerInlineEditCommandsRegistry.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/triggerInlineEditCommandsRegistry.js
 var TriggerInlineEditCommandsRegistry;
 var init_triggerInlineEditCommandsRegistry = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/triggerInlineEditCommandsRegistry.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/triggerInlineEditCommandsRegistry.js"() {
     TriggerInlineEditCommandsRegistry = class _TriggerInlineEditCommandsRegistry {
       static {
         this.REGISTERED_COMMANDS = /* @__PURE__ */ new Set();
@@ -30283,7 +30283,7 @@ var init_triggerInlineEditCommandsRegistry = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/editorExtensions.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/editorExtensions.js
 function registerEditorCommand(editorCommand) {
   EditorContributionRegistry.INSTANCE.registerEditorCommand(editorCommand);
   return editorCommand;
@@ -30297,7 +30297,7 @@ function registerCommand(command) {
 }
 var Command2, MultiCommand, ProxyCommand, EditorCommand, EditorExtensionsRegistry, Extensions2, EditorContributionRegistry, UndoCommand, RedoCommand, SelectAllCommand;
 var init_editorExtensions = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/editorExtensions.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/editorExtensions.js"() {
     init_nls();
     init_uri();
     init_codeEditorService();
@@ -30617,7 +30617,7 @@ var init_editorExtensions = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/worker/webWorker.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/worker/webWorker.js
 function logOnceWebWorkerWarning(err) {
   if (!isWeb) {
     return;
@@ -30636,7 +30636,7 @@ function propertyIsDynamicEvent(name) {
 }
 var DEFAULT_CHANNEL, INITIALIZE, webWorkerWarningLogged, RequestMessage, ReplyMessage, SubscribeEventMessage, EventMessage, UnsubscribeEventMessage, WebWorkerProtocol, WebWorkerClient;
 var init_webWorker = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/worker/webWorker.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/worker/webWorker.js"() {
     init_errors();
     init_event();
     init_lifecycle();
@@ -30932,10 +30932,10 @@ var init_webWorker = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/webWorker/browser/webWorkerDescriptor.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/webWorker/browser/webWorkerDescriptor.js
 var WebWorkerDescriptor;
 var init_webWorkerDescriptor = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/webWorker/browser/webWorkerDescriptor.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/webWorker/browser/webWorkerDescriptor.js"() {
     WebWorkerDescriptor = class {
       constructor(args) {
         this.esmModuleLocation = args.esmModuleLocation;
@@ -30946,16 +30946,16 @@ var init_webWorkerDescriptor = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/webWorker/browser/webWorkerService.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/webWorker/browser/webWorkerService.js
 var IWebWorkerService;
 var init_webWorkerService = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/webWorker/browser/webWorkerService.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/webWorker/browser/webWorkerService.js"() {
     init_instantiation();
     IWebWorkerService = createDecorator("IWebWorkerService");
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/languageConfiguration.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/languageConfiguration.js
 function appendEntry(target, key, value) {
   if (target.has(key)) {
     target.get(key).push(value);
@@ -30965,7 +30965,7 @@ function appendEntry(target, key, value) {
 }
 var IndentAction2, StandardAutoClosingPairConditional, AutoClosingPairs;
 var init_languageConfiguration = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/languageConfiguration.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/languageConfiguration.js"() {
     (function(IndentAction3) {
       IndentAction3[IndentAction3["None"] = 0] = "None";
       IndentAction3[IndentAction3["Indent"] = 1] = "Indent";
@@ -31079,10 +31079,10 @@ var init_languageConfiguration = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/supports/characterPair.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/supports/characterPair.js
 var CharacterPairSupport;
 var init_characterPair = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/supports/characterPair.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/supports/characterPair.js"() {
     init_languageConfiguration();
     CharacterPairSupport = class _CharacterPairSupport {
       static {
@@ -31120,7 +31120,7 @@ var init_characterPair = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/supports.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/supports.js
 function createScopedLineTokens(context, offset) {
   const tokenCount = context.getCount();
   const tokenIndex = context.findTokenIndexAtOffset(offset);
@@ -31140,7 +31140,7 @@ function ignoreBracketsInToken(standardTokenType) {
 }
 var ScopedLineTokens;
 var init_supports = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/supports.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/supports.js"() {
     ScopedLineTokens = class {
       constructor(actual, languageId, firstTokenIndex, lastTokenIndex, firstCharOffset, lastCharOffset) {
         this._scopedLineTokensBrand = void 0;
@@ -31179,7 +31179,7 @@ var init_supports = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/stringBuilder.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/stringBuilder.js
 function getUTF16LE_TextDecoder() {
   if (!_utf16LE_TextDecoder) {
     _utf16LE_TextDecoder = new TextDecoder("UTF-16LE");
@@ -31217,7 +31217,7 @@ function compatDecodeUTF16LE(source, offset, len) {
 }
 var _utf16LE_TextDecoder, _utf16BE_TextDecoder, _platformTextDecoder, StringBuilder;
 var init_stringBuilder = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/stringBuilder.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/stringBuilder.js"() {
     init_strings();
     init_platform();
     init_buffer();
@@ -31291,7 +31291,7 @@ var init_stringBuilder = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/supports/richEditBrackets.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/supports/richEditBrackets.js
 function groupFuzzyBrackets(brackets) {
   const N = brackets.length;
   brackets = brackets.map((b2) => [b2[0].toLowerCase(), b2[1].toLowerCase()]);
@@ -31439,7 +31439,7 @@ function createBracketOrRegExp(pieces, options) {
 }
 var RichEditBracket, RichEditBrackets, toReversedString, BracketsUtils;
 var init_richEditBrackets = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/supports/richEditBrackets.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/supports/richEditBrackets.js"() {
     init_strings();
     init_stringBuilder();
     init_range();
@@ -31557,10 +31557,10 @@ var init_richEditBrackets = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/supports/electricCharacter.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/supports/electricCharacter.js
 var BracketElectricCharacterSupport;
 var init_electricCharacter = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/supports/electricCharacter.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/supports/electricCharacter.js"() {
     init_arrays();
     init_supports();
     init_richEditBrackets();
@@ -31611,7 +31611,7 @@ var init_electricCharacter = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/supports/indentRules.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/supports/indentRules.js
 function resetGlobalRegex(reg) {
   if (reg.global) {
     reg.lastIndex = 0;
@@ -31620,7 +31620,7 @@ function resetGlobalRegex(reg) {
 }
 var IndentRulesSupport;
 var init_indentRules = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/supports/indentRules.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/supports/indentRules.js"() {
     IndentRulesSupport = class {
       constructor(indentationRules) {
         this._indentationRules = indentationRules;
@@ -31671,10 +31671,10 @@ var init_indentRules = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/supports/onEnter.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/supports/onEnter.js
 var OnEnterSupport;
 var init_onEnter = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/supports/onEnter.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/supports/onEnter.js"() {
     init_errors();
     init_strings();
     init_languageConfiguration();
@@ -31776,7 +31776,7 @@ var init_onEnter = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/configuration/common/configuration.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/configuration/common/configuration.js
 function toValuesTree(properties, conflictReporter) {
   const root = /* @__PURE__ */ Object.create(null);
   for (const key in properties) {
@@ -31861,25 +31861,25 @@ function getLanguageTagSettingPlainKey(settingKey) {
 }
 var IConfigurationService;
 var init_configuration = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/configuration/common/configuration.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/configuration/common/configuration.js"() {
     init_instantiation();
     IConfigurationService = createDecorator("configurationService");
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/language.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/language.js
 var ILanguageService;
 var init_language = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/language.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/language.js"() {
     init_instantiation();
     ILanguageService = createDecorator("languageService");
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/instantiation/common/descriptors.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/instantiation/common/descriptors.js
 var SyncDescriptor;
 var init_descriptors = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/instantiation/common/descriptors.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/instantiation/common/descriptors.js"() {
     SyncDescriptor = class {
       constructor(ctor, staticArguments = [], supportsDelayedInstantiation = false) {
         this.ctor = ctor;
@@ -31890,7 +31890,7 @@ var init_descriptors = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/instantiation/common/extensions.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/instantiation/common/extensions.js
 function registerSingleton(id, ctorOrDescriptor, supportsDelayedInstantiation) {
   if (!(ctorOrDescriptor instanceof SyncDescriptor)) {
     ctorOrDescriptor = new SyncDescriptor(ctorOrDescriptor, [], Boolean(supportsDelayedInstantiation));
@@ -31902,16 +31902,16 @@ function getSingletonServiceDescriptors() {
 }
 var _registry;
 var init_extensions = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/instantiation/common/extensions.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/instantiation/common/extensions.js"() {
     init_descriptors();
     _registry = [];
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/mime.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/mime.js
 var Mimes;
 var init_mime = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/mime.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/mime.js"() {
     Mimes = Object.freeze({
       text: "text/plain",
       binary: "application/octet-stream",
@@ -31924,7 +31924,7 @@ var init_mime = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/jsonschemas/common/jsonContributionRegistry.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/jsonschemas/common/jsonContributionRegistry.js
 function normalizeId(id) {
   if (id.length > 0 && id.charAt(id.length - 1) === "#") {
     return id.substring(0, id.length - 1);
@@ -31933,7 +31933,7 @@ function normalizeId(id) {
 }
 var Extensions3, JSONContributionRegistry, jsonContributionRegistry;
 var init_jsonContributionRegistry = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/jsonschemas/common/jsonContributionRegistry.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/jsonschemas/common/jsonContributionRegistry.js"() {
     init_event();
     init_lifecycle();
     init_platform2();
@@ -31966,13 +31966,13 @@ var init_jsonContributionRegistry = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/product/common/product.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/product/common/product.js
 function getDependencyVersion(packageConfiguration, packageName) {
   return packageConfiguration.dependencies?.[packageName]?.replace(/^[~^]/, "");
 }
 var product, vscodeGlobal2, product$1;
 var init_product = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/product/common/product.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/product/common/product.js"() {
     init_process();
     vscodeGlobal2 = globalThis.vscode;
     if (typeof vscodeGlobal2 !== "undefined" && typeof vscodeGlobal2.context !== "undefined") {
@@ -32042,7 +32042,7 @@ var init_product = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/configuration/common/configurationRegistry.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/configuration/common/configurationRegistry.js
 function overrideIdentifiersFromKey(key) {
   const identifiers = [];
   if (OVERRIDE_PROPERTY_REGEX.test(key)) {
@@ -32102,7 +32102,7 @@ function validateProperty(property, schema, extensionId) {
 }
 var Extensions4, resourceLanguageSettingsSchemaId, contributionRegistry, ConfigurationRegistry, OVERRIDE_IDENTIFIER_PATTERN, OVERRIDE_IDENTIFIER_REGEX, OVERRIDE_PROPERTY_PATTERN, OVERRIDE_PROPERTY_REGEX, configurationRegistry, EXTENSION_UNIFICATION_EXTENSION_IDS;
 var init_configurationRegistry = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/configuration/common/configurationRegistry.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/configuration/common/configurationRegistry.js"() {
     init_arrays();
     init_event();
     init_types();
@@ -32464,10 +32464,10 @@ var init_configurationRegistry = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/modesRegistry.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/modesRegistry.js
 var Extensions5, EditorModesRegistry, ModesRegistry, PLAINTEXT_LANGUAGE_ID, PLAINTEXT_EXTENSION;
 var init_modesRegistry = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/modesRegistry.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/modesRegistry.js"() {
     init_nls();
     init_event();
     init_platform2();
@@ -32537,13 +32537,13 @@ var init_modesRegistry = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/supports/languageBracketsConfiguration.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/supports/languageBracketsConfiguration.js
 function filterValidBrackets(bracketPairs) {
   return bracketPairs.filter(([open, close]) => open !== "" && close !== "");
 }
 var LanguageBracketsConfiguration, BracketKindBase, OpeningBracketKind, ClosingBracketKind;
 var init_languageBracketsConfiguration = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/supports/languageBracketsConfiguration.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/supports/languageBracketsConfiguration.js"() {
     init_cache();
     init_richEditBrackets();
     LanguageBracketsConfiguration = class {
@@ -32655,7 +32655,7 @@ var init_languageBracketsConfiguration = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/languageConfigurationRegistry.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/languageConfigurationRegistry.js
 function computeConfig(languageId, registry, configurationService, languageService) {
   let languageConfig = registry.getLanguageConfiguration(languageId);
   if (!languageConfig) {
@@ -32733,7 +32733,7 @@ function combineLanguageConfigurations(configs) {
 }
 var __decorate2, __param2, LanguageConfigurationServiceChangeEvent, ILanguageConfigurationService, LanguageConfigurationService, customizedLanguageConfigKeys, ComposedLanguageConfiguration, LanguageConfigurationContribution, LanguageConfigurationChangeEvent, LanguageConfigurationRegistry, ResolvedLanguageConfiguration;
 var init_languageConfigurationRegistry = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/languageConfigurationRegistry.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/languageConfigurationRegistry.js"() {
     init_event();
     init_lifecycle();
     init_strings();
@@ -33009,10 +33009,10 @@ var init_languageConfigurationRegistry = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/diff/diffChange.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/diff/diffChange.js
 var DiffChange;
 var init_diffChange = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/diff/diffChange.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/diff/diffChange.js"() {
     DiffChange = class {
       /**
        * Constructs a new DiffChange with the given sequence information
@@ -33040,13 +33040,13 @@ var init_diffChange = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/diff/diff.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/diff/diff.js
 function stringDiff(original, modified, pretty) {
   return new LcsDiff(new StringDiffSequence(original), new StringDiffSequence(modified)).ComputeDiff(pretty).changes;
 }
 var StringDiffSequence, Debug, MyArray, DiffChangeHelper, LcsDiff;
 var init_diff = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/diff/diff.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/diff/diff.js"() {
     init_diffChange();
     init_hash();
     StringDiffSequence = class {
@@ -33784,7 +33784,7 @@ var init_diff = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/uint.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/uint.js
 function toUint8(v2) {
   if (v2 < 0) {
     return 0;
@@ -33804,14 +33804,14 @@ function toUint32(v2) {
   return v2 | 0;
 }
 var init_uint = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/uint.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/uint.js"() {
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/characterClassifier.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/characterClassifier.js
 var CharacterClassifier;
 var init_characterClassifier = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/characterClassifier.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/characterClassifier.js"() {
     init_uint();
     CharacterClassifier = class _CharacterClassifier {
       constructor(_defaultValue) {
@@ -33848,7 +33848,7 @@ var init_characterClassifier = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/linkComputer.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/linkComputer.js
 function getStateMachine() {
   if (_stateMachine === null) {
     _stateMachine = new StateMachine([
@@ -34021,7 +34021,7 @@ function computeLinks(model) {
 }
 var Uint8Matrix, StateMachine, _stateMachine, _classifier, LinkComputer;
 var init_linkComputer = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/linkComputer.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/linkComputer.js"() {
     init_characterClassifier();
     Uint8Matrix = class {
       constructor(rows, cols, defaultValue) {
@@ -34216,10 +34216,10 @@ var init_linkComputer = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/supports/inplaceReplaceSupport.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/supports/inplaceReplaceSupport.js
 var BasicInplaceReplace;
 var init_inplaceReplaceSupport = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/supports/inplaceReplaceSupport.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/supports/inplaceReplaceSupport.js"() {
     BasicInplaceReplace = class _BasicInplaceReplace {
       constructor() {
         this._defaultValueSet = [
@@ -34302,10 +34302,10 @@ var init_inplaceReplaceSupport = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/date.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/date.js
 var safeIntl;
 var init_date = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/date.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/date.js"() {
     init_lazy();
     init_platform();
     safeIntl = {
@@ -34358,7 +34358,7 @@ var init_date = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/wordCharacterClassifier.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/wordCharacterClassifier.js
 function getMapForWordSeparators(wordSeparators2, intlSegmenterLocales) {
   const key = `${wordSeparators2}/${intlSegmenterLocales.join(",")}`;
   let result = wordClassifierCache.get(key);
@@ -34370,7 +34370,7 @@ function getMapForWordSeparators(wordSeparators2, intlSegmenterLocales) {
 }
 var WordCharacterClassifier, wordClassifierCache;
 var init_wordCharacterClassifier = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/wordCharacterClassifier.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/wordCharacterClassifier.js"() {
     init_date();
     init_map();
     init_characterClassifier();
@@ -34457,7 +34457,7 @@ var init_wordCharacterClassifier = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model.js
 function isITextSnapshot(obj) {
   return !!obj && typeof obj.read === "function";
 }
@@ -34466,7 +34466,7 @@ function shouldSynchronizeModel(model) {
 }
 var OverviewRulerLane2, GlyphMarginLane2, TextDirection2, InjectedTextCursorStops2, TextModelResolvedOptions, FindMatch, ValidAnnotatedEditOperation, SearchData, ApplyEditsResult;
 var init_model2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model.js"() {
     init_objects();
     (function(OverviewRulerLane3) {
       OverviewRulerLane3[OverviewRulerLane3["Left"] = 1] = "Left";
@@ -34566,7 +34566,7 @@ var init_model2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/textModelSearch.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/textModelSearch.js
 function isMultilineRegexSource(searchString) {
   if (!searchString || searchString.length === 0) {
     return false;
@@ -34642,7 +34642,7 @@ function isValidMatch(wordSeparators2, text2, textLength, matchStartIndex, match
 }
 var LIMIT_FIND_COUNT, SearchParams, LineFeedCounter, TextModelSearch, Searcher;
 var init_textModelSearch = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/textModelSearch.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/textModelSearch.js"() {
     init_strings();
     init_wordCharacterClassifier();
     init_position();
@@ -34986,7 +34986,7 @@ var init_textModelSearch = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/unicodeTextModelHighlighter.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/unicodeTextModelHighlighter.js
 function buildRegExpCharClassExpr(codePoints, flags) {
   const src = `[${escapeRegExpCharacters(codePoints.map((i) => String.fromCodePoint(i)).join(""))}]`;
   return src;
@@ -34996,7 +34996,7 @@ function isAllowedInvisibleCharacter(character) {
 }
 var UnicodeTextModelHighlighter, CodePointHighlighter;
 var init_unicodeTextModelHighlighter = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/unicodeTextModelHighlighter.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/unicodeTextModelHighlighter.js"() {
     init_range();
     init_textModelSearch();
     init_strings();
@@ -35172,10 +35172,10 @@ var init_unicodeTextModelHighlighter = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/linesDiffComputer.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/linesDiffComputer.js
 var LinesDiff, MovedText;
 var init_linesDiffComputer = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/linesDiffComputer.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/linesDiffComputer.js"() {
     LinesDiff = class {
       constructor(changes, moves, hitTimeout) {
         this.changes = changes;
@@ -35192,10 +35192,10 @@ var init_linesDiffComputer = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/ranges/offsetRange.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/ranges/offsetRange.js
 var OffsetRange, OffsetRangeSet;
 var init_offsetRange = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/ranges/offsetRange.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/ranges/offsetRange.js"() {
     init_errors();
     OffsetRange = class _OffsetRange {
       static fromTo(start, endExclusive) {
@@ -35423,7 +35423,7 @@ var init_offsetRange = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/arraysFind.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/arraysFind.js
 function findLast(array, predicate, fromIndex = array.length - 1) {
   const idx = findLastIdx(array, predicate, fromIndex);
   if (idx === -1) {
@@ -35518,7 +35518,7 @@ function findMaxIdx(array, comparator) {
 }
 var MonotonousArray;
 var init_arraysFind = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/arraysFind.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/arraysFind.js"() {
     MonotonousArray = class _MonotonousArray {
       static {
         this.assertInvariants = false;
@@ -35550,10 +35550,10 @@ var init_arraysFind = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/ranges/lineRange.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/ranges/lineRange.js
 var LineRange, LineRangeSet;
 var init_lineRange = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/ranges/lineRange.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/ranges/lineRange.js"() {
     init_errors();
     init_offsetRange();
     init_range();
@@ -35837,10 +35837,10 @@ var init_lineRange = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/text/textLength.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/text/textLength.js
 var TextLength;
 var init_textLength = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/text/textLength.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/text/textLength.js"() {
     init_lineRange();
     init_position();
     init_range();
@@ -35918,13 +35918,13 @@ var init_textLength = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/text/positionToOffsetImpl.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/text/positionToOffsetImpl.js
 function _setPositionOffsetTransformerDependencies(deps) {
   Deps._deps = deps;
 }
 var PositionOffsetTransformerBase, Deps, PositionOffsetTransformer;
 var init_positionToOffsetImpl = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/text/positionToOffsetImpl.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/text/positionToOffsetImpl.js"() {
     init_arraysFind();
     init_offsetRange();
     init_position();
@@ -36030,10 +36030,10 @@ var init_positionToOffsetImpl = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/text/abstractText.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/text/abstractText.js
 var AbstractText, LineBasedText, ArrayText, StringText;
 var init_abstractText = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/text/abstractText.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/text/abstractText.js"() {
     init_assert();
     init_position();
     init_range();
@@ -36119,7 +36119,7 @@ var init_abstractText = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/edits/textEdit.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/edits/textEdit.js
 function rangeFromPositions(start, end) {
   if (start.lineNumber === end.lineNumber && start.column === Number.MAX_SAFE_INTEGER) {
     return Range.fromPositions(end, end);
@@ -36130,7 +36130,7 @@ function rangeFromPositions(start, end) {
 }
 var TextEdit, TextReplacement;
 var init_textEdit = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/edits/textEdit.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/edits/textEdit.js"() {
     init_arrays();
     init_assert();
     init_errors();
@@ -36375,7 +36375,7 @@ var init_textEdit = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/rangeMapping.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/rangeMapping.js
 function normalizePosition(position, content) {
   if (position.lineNumber < 1) {
     return new Position(1, 1);
@@ -36428,7 +36428,7 @@ function getLineRangeMapping(rangeMapping, originalLines, modifiedLines) {
 }
 var LineRangeMapping, DetailedLineRangeMapping, RangeMapping;
 var init_rangeMapping = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/rangeMapping.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/rangeMapping.js"() {
     init_arrays();
     init_assert();
     init_errors();
@@ -36569,7 +36569,7 @@ var init_rangeMapping = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/legacyLinesDiffComputer.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/legacyLinesDiffComputer.js
 function computeDiff(originalSequence, modifiedSequence, continueProcessingPredicate, pretty) {
   const diffAlgo = new LcsDiff(originalSequence, modifiedSequence, continueProcessingPredicate);
   return diffAlgo.ComputeDiff(pretty);
@@ -36620,7 +36620,7 @@ function createContinueProcessingPredicate(maximumRuntime) {
 }
 var MINIMUM_MATCHING_CHARACTER_LENGTH, LegacyLinesDiffComputer, LineSequence, CharSequence, CharChange, LineChange, DiffComputer;
 var init_legacyLinesDiffComputer = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/legacyLinesDiffComputer.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/legacyLinesDiffComputer.js"() {
     init_diff();
     init_linesDiffComputer();
     init_rangeMapping();
@@ -37000,10 +37000,10 @@ var init_legacyLinesDiffComputer = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/defaultLinesDiffComputer/algorithms/diffAlgorithm.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/defaultLinesDiffComputer/algorithms/diffAlgorithm.js
 var DiffAlgorithmResult, SequenceDiff, OffsetPair, InfiniteTimeout, DateTimeout;
 var init_diffAlgorithm = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/defaultLinesDiffComputer/algorithms/diffAlgorithm.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/defaultLinesDiffComputer/algorithms/diffAlgorithm.js"() {
     init_arrays();
     init_errors();
     init_offsetRange();
@@ -37140,13 +37140,13 @@ var init_diffAlgorithm = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/defaultLinesDiffComputer/utils.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/defaultLinesDiffComputer/utils.js
 function isSpace(charCode) {
   return charCode === 32 || charCode === 9;
 }
 var Array2D, LineRangeFragment;
 var init_utils3 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/defaultLinesDiffComputer/utils.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/defaultLinesDiffComputer/utils.js"() {
     Array2D = class {
       constructor(width2, height) {
         this.width = width2;
@@ -37205,10 +37205,10 @@ var init_utils3 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/defaultLinesDiffComputer/algorithms/dynamicProgrammingDiffing.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/defaultLinesDiffComputer/algorithms/dynamicProgrammingDiffing.js
 var DynamicProgrammingDiffing;
 var init_dynamicProgrammingDiffing = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/defaultLinesDiffComputer/algorithms/dynamicProgrammingDiffing.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/defaultLinesDiffComputer/algorithms/dynamicProgrammingDiffing.js"() {
     init_offsetRange();
     init_diffAlgorithm();
     init_utils3();
@@ -37289,10 +37289,10 @@ var init_dynamicProgrammingDiffing = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/defaultLinesDiffComputer/algorithms/myersDiffAlgorithm.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/defaultLinesDiffComputer/algorithms/myersDiffAlgorithm.js
 var MyersDiffAlgorithm, SnakePath, FastInt32Array, FastArrayNegativeIndices;
 var init_myersDiffAlgorithm = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/defaultLinesDiffComputer/algorithms/myersDiffAlgorithm.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/defaultLinesDiffComputer/algorithms/myersDiffAlgorithm.js"() {
     init_offsetRange();
     init_diffAlgorithm();
     MyersDiffAlgorithm = class {
@@ -37425,7 +37425,7 @@ var init_myersDiffAlgorithm = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/defaultLinesDiffComputer/linesSliceCharSequence.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/defaultLinesDiffComputer/linesSliceCharSequence.js
 function isWordChar(charCode) {
   return charCode >= 97 && charCode <= 122 || charCode >= 65 && charCode <= 90 || charCode >= 48 && charCode <= 57;
 }
@@ -37458,7 +37458,7 @@ function getCategory(charCode) {
 }
 var LinesSliceCharSequence, score;
 var init_linesSliceCharSequence = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/defaultLinesDiffComputer/linesSliceCharSequence.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/defaultLinesDiffComputer/linesSliceCharSequence.js"() {
     init_arraysFind();
     init_offsetRange();
     init_position();
@@ -37638,7 +37638,7 @@ var init_linesSliceCharSequence = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/defaultLinesDiffComputer/computeMovedLines.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/defaultLinesDiffComputer/computeMovedLines.js
 function computeMovedLines(changes, originalLines, modifiedLines, hashedOriginalLines, hashedModifiedLines, timeout2) {
   let { moves, excludedChanges } = computeMovesFromSimpleDeletionsToSimpleInsertions(changes, originalLines, modifiedLines, timeout2);
   if (!timeout2.isValid()) {
@@ -37864,7 +37864,7 @@ function removeMovesInSameDiff(changes, moves) {
   return moves;
 }
 var init_computeMovedLines = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/defaultLinesDiffComputer/computeMovedLines.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/defaultLinesDiffComputer/computeMovedLines.js"() {
     init_diffAlgorithm();
     init_rangeMapping();
     init_arrays();
@@ -37878,7 +37878,7 @@ var init_computeMovedLines = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/defaultLinesDiffComputer/heuristicSequenceOptimizations.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/defaultLinesDiffComputer/heuristicSequenceOptimizations.js
 function optimizeSequenceDiffs(sequence1, sequence2, sequenceDiffs) {
   let result = sequenceDiffs;
   result = joinSequenceDiffsByShifting(sequence1, sequence2, result);
@@ -38186,14 +38186,14 @@ function removeVeryShortMatchingTextBetweenLongDiffs(sequence1, sequence2, seque
   return newDiffs;
 }
 var init_heuristicSequenceOptimizations = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/defaultLinesDiffComputer/heuristicSequenceOptimizations.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/defaultLinesDiffComputer/heuristicSequenceOptimizations.js"() {
     init_arrays();
     init_offsetRange();
     init_diffAlgorithm();
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/defaultLinesDiffComputer/lineSequence.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/defaultLinesDiffComputer/lineSequence.js
 function getIndentation(str) {
   let i = 0;
   while (i < str.length && (str.charCodeAt(i) === 32 || str.charCodeAt(i) === 9)) {
@@ -38203,7 +38203,7 @@ function getIndentation(str) {
 }
 var LineSequence2;
 var init_lineSequence = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/defaultLinesDiffComputer/lineSequence.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/defaultLinesDiffComputer/lineSequence.js"() {
     LineSequence2 = class {
       constructor(trimmedHash, lines) {
         this.trimmedHash = trimmedHash;
@@ -38230,13 +38230,13 @@ var init_lineSequence = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/defaultLinesDiffComputer/defaultLinesDiffComputer.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/defaultLinesDiffComputer/defaultLinesDiffComputer.js
 function toLineRangeMapping(sequenceDiff) {
   return new LineRangeMapping(new LineRange(sequenceDiff.seq1Range.start + 1, sequenceDiff.seq1Range.endExclusive + 1), new LineRange(sequenceDiff.seq2Range.start + 1, sequenceDiff.seq2Range.endExclusive + 1));
 }
 var DefaultLinesDiffComputer;
 var init_defaultLinesDiffComputer = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/defaultLinesDiffComputer/defaultLinesDiffComputer.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/defaultLinesDiffComputer/defaultLinesDiffComputer.js"() {
     init_arrays();
     init_assert();
     init_lineRange();
@@ -38407,7 +38407,7 @@ var init_defaultLinesDiffComputer = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/amdX.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/amdX.js
 function resolveAmdNodeModulePath(nodeModuleName, pathInsideNodeModule) {
   const product2 = globalThis._VSCODE_PRODUCT_JSON;
   const isBuilt = Boolean((product2 ?? globalThis.vscode?.context?.configuration()?.product)?.commit);
@@ -38418,16 +38418,16 @@ function resolveAmdNodeModulePath(nodeModuleName, pathInsideNodeModule) {
   return FileAccess.asBrowserUri(resourcePath).toString(true);
 }
 var init_amdX = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/amdX.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/amdX.js"() {
     init_network();
     init_platform();
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/edits/edit.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/edits/edit.js
 var BaseEdit, BaseReplacement;
 var init_edit = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/edits/edit.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/edits/edit.js"() {
     init_errors();
     init_offsetRange();
     BaseEdit = class {
@@ -38620,10 +38620,10 @@ var init_edit = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/edits/stringEdit.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/edits/stringEdit.js
 var BaseStringEdit, BaseStringReplacement, StringEdit, StringReplacement;
 var init_stringEdit = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/edits/stringEdit.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/edits/stringEdit.js"() {
     init_strings();
     init_offsetRange();
     init_edit();
@@ -38743,9 +38743,9 @@ var init_stringEdit = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/text/positionToOffset.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/text/positionToOffset.js
 var init_positionToOffset = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/text/positionToOffset.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/text/positionToOffset.js"() {
     init_stringEdit();
     init_textEdit();
     init_positionToOffsetImpl();
@@ -38761,7 +38761,7 @@ var init_positionToOffset = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/externalLinesDiffComputer.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/externalLinesDiffComputer.js
 function loadExternalModule() {
   if (!externalModulePromise) {
     const url = resolveAmdNodeModulePath("@vscode/diff", "dist/index.js");
@@ -38791,7 +38791,7 @@ async function getExternalLinesDiffComputer(useWasm) {
 }
 var externalModulePromise, externalDiffComputerPromise, externalWasmDiffComputerPromise, ExternalLinesDiffComputer;
 var init_externalLinesDiffComputer = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/externalLinesDiffComputer.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/externalLinesDiffComputer.js"() {
     init_amdX();
     init_lineRange();
     init_offsetRange();
@@ -38846,10 +38846,10 @@ var init_externalLinesDiffComputer = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/linesDiffComputers.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/linesDiffComputers.js
 var linesDiffComputers;
 var init_linesDiffComputers = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/linesDiffComputers.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/diff/linesDiffComputers.js"() {
     init_legacyLinesDiffComputer();
     init_defaultLinesDiffComputer();
     init_externalLinesDiffComputer();
@@ -38862,14 +38862,14 @@ var init_linesDiffComputers = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/color.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/color.js
 function roundFloat(number, decimalPoints) {
   const decimal = Math.pow(10, decimalPoints);
   return Math.round(number * decimal) / decimal;
 }
 var RGBA, HSLA, HSVA, Color;
 var init_color = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/color.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/color.js"() {
     RGBA = class {
       constructor(r, g, b2, a = 1) {
         this._rgbaBrand = void 0;
@@ -39680,7 +39680,7 @@ var init_color = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/defaultDocumentColorsComputer.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/defaultDocumentColorsComputer.js
 function _parseCaptureGroups(captureGroups) {
   const values = [];
   for (const captureGroup of captureGroups) {
@@ -39801,12 +39801,12 @@ function computeDefaultDocumentColors(model) {
   return computeColors(model);
 }
 var init_defaultDocumentColorsComputer = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/defaultDocumentColorsComputer.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/defaultDocumentColorsComputer.js"() {
     init_color();
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/findSectionHeaders.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/findSectionHeaders.js
 function findSectionHeaders(model, options) {
   let headers = [];
   if (options.findRegionSectionHeaders && options.foldingRules?.markers) {
@@ -39904,7 +39904,7 @@ function getHeaderText(text2) {
 }
 var trimDashesRegex, CHUNK_SIZE, MAX_SECTION_LINES;
 var init_findSectionHeaders = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/findSectionHeaders.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/findSectionHeaders.js"() {
     init_textModelSearch();
     init_strings();
     trimDashesRegex = /^-+|-+$/g;
@@ -39913,10 +39913,10 @@ var init_findSectionHeaders = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/prefixSumComputer.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/prefixSumComputer.js
 var PrefixSumComputer, ConstantTimePrefixSumComputer, PrefixSumIndexOfResult;
 var init_prefixSumComputer = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/prefixSumComputer.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/prefixSumComputer.js"() {
     init_arrays();
     init_uint();
     PrefixSumComputer = class {
@@ -40133,10 +40133,10 @@ var init_prefixSumComputer = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/mirrorTextModel.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/mirrorTextModel.js
 var MirrorTextModel;
 var init_mirrorTextModel = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/mirrorTextModel.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/mirrorTextModel.js"() {
     init_strings();
     init_position();
     init_prefixSumComputer();
@@ -40232,10 +40232,10 @@ var init_mirrorTextModel = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/textModelSync/textModelSync.impl.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/textModelSync/textModelSync.impl.js
 var STOP_SYNC_MODEL_DELTA_TIME_MS, WorkerTextModelSyncClient, WorkerTextModelSyncServer, MirrorModel;
 var init_textModelSync_impl = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/textModelSync/textModelSync.impl.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/textModelSync/textModelSync.impl.js"() {
     init_async();
     init_lifecycle();
     init_uri();
@@ -40525,7 +40525,7 @@ var init_textModelSync_impl = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/editorWebWorker.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/editorWebWorker.js
 function resolveLinesDiffComputer(algorithm) {
   switch (algorithm) {
     case "legacy":
@@ -40540,7 +40540,7 @@ function resolveLinesDiffComputer(algorithm) {
 }
 var EditorWorker;
 var init_editorWebWorker = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/editorWebWorker.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/editorWebWorker.js"() {
     init_diff();
     init_range();
     init_linkComputer();
@@ -40825,29 +40825,29 @@ var init_editorWebWorker = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/textResourceConfiguration.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/textResourceConfiguration.js
 var ITextResourceConfigurationService, ITextResourcePropertiesService;
 var init_textResourceConfiguration = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/textResourceConfiguration.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/textResourceConfiguration.js"() {
     init_instantiation();
     ITextResourceConfigurationService = createDecorator("textResourceConfigurationService");
     ITextResourcePropertiesService = createDecorator("textResourcePropertiesService");
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/languageFeatures.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/languageFeatures.js
 var ILanguageFeaturesService;
 var init_languageFeatures = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/languageFeatures.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/languageFeatures.js"() {
     init_instantiation();
     ILanguageFeaturesService = createDecorator("ILanguageFeaturesService");
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/editorWorkerHost.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/editorWorkerHost.js
 var EditorWorkerHost;
 var init_editorWorkerHost = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/editorWorkerHost.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/editorWorkerHost.js"() {
     EditorWorkerHost = class _EditorWorkerHost {
       static {
         this.CHANNEL_NAME = "editorWorkerHost";
@@ -40862,7 +40862,7 @@ var init_editorWorkerHost = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/completionsEnablement.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/completionsEnablement.js
 function getCompletionsEnablementSettingName() {
   return product$1.defaultChatAgent?.completionsEnablementSetting;
 }
@@ -40883,13 +40883,13 @@ function isCompletionsEnabledFromObject(completionsEnablementObject, modeId = "*
   return Boolean(completionsEnablementObject["*"]);
 }
 var init_completionsEnablement = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/completionsEnablement.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/completionsEnablement.js"() {
     init_product();
     init_types();
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/services/editorWorkerService.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/services/editorWorkerService.js
 function canSyncModel(modelService, resource) {
   const model = modelService.getModel(resource);
   if (!model) {
@@ -40902,7 +40902,7 @@ function canSyncModel(modelService, resource) {
 }
 var __decorate3, __param3, EditorWorkerService_1, STOP_WORKER_DELTA_TIME_MS, EditorWorkerService, WordBasedCompletionItemProvider, WorkerManager, SynchronousWorkerClient, EditorWorkerClient;
 var init_editorWorkerService = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/services/editorWorkerService.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/services/editorWorkerService.js"() {
     init_async();
     init_lifecycle();
     init_webWorker();
@@ -41267,13 +41267,13 @@ var init_editorWorkerService = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/standaloneWebWorker.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/standaloneWebWorker.js
 function createWebWorker(modelService, webWorkerService, opts) {
   return new MonacoWebWorkerImpl(modelService, webWorkerService, opts);
 }
 var MonacoWebWorkerImpl;
 var init_standaloneWebWorker = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/standaloneWebWorker.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/standaloneWebWorker.js"() {
     init_editorWorkerService();
     MonacoWebWorkerImpl = class extends EditorWorkerClient {
       constructor(modelService, webWorkerService, opts) {
@@ -41316,10 +41316,10 @@ var init_standaloneWebWorker = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/editorCommon.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/editorCommon.js
 var EditorType;
 var init_editorCommon = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/editorCommon.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/editorCommon.js"() {
     EditorType = {
       ICodeEditor: "vs.editor.ICodeEditor",
       IDiffEditor: "vs.editor.IDiffEditor"
@@ -41327,7 +41327,7 @@ var init_editorCommon = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/nullTokenize.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/nullTokenize.js
 function nullTokenize(languageId, state) {
   return new TokenizationResult([new Token(0, "", languageId)], state);
 }
@@ -41339,7 +41339,7 @@ function nullTokenizeEncoded(languageId, state) {
 }
 var NullState;
 var init_nullTokenize = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/nullTokenize.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/nullTokenize.js"() {
     init_languages();
     NullState = new class {
       clone() {
@@ -41352,7 +41352,7 @@ var init_nullTokenize = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/trustedTypes.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/trustedTypes.js
 function createTrustedTypesPolicy(policyName, policyOptions) {
   const monacoEnvironment2 = getMonacoEnvironment();
   if (monacoEnvironment2?.createTrustedTypesPolicy) {
@@ -41371,16 +41371,16 @@ function createTrustedTypesPolicy(policyName, policyOptions) {
   }
 }
 var init_trustedTypes = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/trustedTypes.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/trustedTypes.js"() {
     init_errors();
     init_browser();
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/encodedTokenAttributes.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/encodedTokenAttributes.js
 var TokenMetadata;
 var init_encodedTokenAttributes = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/encodedTokenAttributes.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/encodedTokenAttributes.js"() {
     TokenMetadata = class {
       static getLanguageId(metadata) {
         return (metadata & 255) >>> 0;
@@ -41467,10 +41467,10 @@ var init_encodedTokenAttributes = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/tokens/lineTokens.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/tokens/lineTokens.js
 var LineTokens, SliceLineTokens, TokenArray, TokenInfo, TokenArrayBuilder;
 var init_lineTokens = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/tokens/lineTokens.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/tokens/lineTokens.js"() {
     init_encodedTokenAttributes();
     init_offsetRange();
     init_errors();
@@ -41841,10 +41841,10 @@ var init_lineTokens = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewLayout/lineDecorations.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewLayout/lineDecorations.js
 var LineDecoration, DecorationSegment, Stack, LineDecorationsNormalizer;
 var init_lineDecorations = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewLayout/lineDecorations.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewLayout/lineDecorations.js"() {
     init_strings();
     LineDecoration = class _LineDecoration {
       constructor(startColumn, endColumn, className2, type) {
@@ -42033,10 +42033,10 @@ var init_lineDecorations = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewLayout/linePart.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewLayout/linePart.js
 var LinePart;
 var init_linePart = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewLayout/linePart.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewLayout/linePart.js"() {
     LinePart = class {
       constructor(endIndex, type, metadata, containsRTL2) {
         this.endIndex = endIndex;
@@ -42055,7 +42055,7 @@ var init_linePart = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewLayout/viewLineRenderer.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewLayout/viewLineRenderer.js
 function renderViewLine(input, sb) {
   if (input.lineContent.length === 0) {
     if (input.lineDecorations.length > 0) {
@@ -42702,7 +42702,7 @@ function renderOverflowingCharCount(n2) {
 }
 var RenderLineInput, DomPosition, CharacterMapping, RenderLineOutput, RenderLineOutput2, ResolvedRenderLineInput;
 var init_viewLineRenderer = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewLayout/viewLineRenderer.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewLayout/viewLineRenderer.js"() {
     init_nls();
     init_strings();
     init_stringBuilder();
@@ -42900,10 +42900,10 @@ var init_viewLineRenderer = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel.js
 var Viewport, MinimapLinesRenderingData, ViewLineData, ViewLineRenderingData, OverviewRulerDecorationsGroup;
 var init_viewModel = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel.js"() {
     init_arrays();
     init_strings();
     Viewport = class {
@@ -42989,7 +42989,7 @@ var init_viewModel = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/common/monarch/monarchCommon.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/common/monarch/monarchCommon.js
 function isFuzzyActionArr(what) {
   return Array.isArray(what);
 }
@@ -43090,12 +43090,12 @@ function stateExists(lexer2, inState) {
   return false;
 }
 var init_monarchCommon = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/common/monarch/monarchCommon.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/common/monarch/monarchCommon.js"() {
     init_strings();
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/common/monarch/monarchLexer.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/common/monarch/monarchLexer.js
 function findBracket(lexer2, matched) {
   if (!matched) {
     return null;
@@ -43121,7 +43121,7 @@ function findBracket(lexer2, matched) {
 }
 var __decorate4, __param4, MonarchTokenizer_1, CACHE_STACK_DEPTH, MonarchStackElementFactory, MonarchStackElement, EmbeddedLanguageData, MonarchLineStateFactory, MonarchLineState, MonarchClassicTokensCollector, MonarchModernTokensCollector, MonarchTokenizer;
 var init_monarchLexer = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/common/monarch/monarchLexer.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/common/monarch/monarchLexer.js"() {
     init_lifecycle();
     init_languages();
     init_nullTokenize();
@@ -43796,7 +43796,7 @@ var init_monarchLexer = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/colorizer.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/colorizer.js
 function _colorize(lines, tabSize, tokenizationSupport, languageIdCodec) {
   return new Promise((c, e) => {
     const execute = () => {
@@ -43868,7 +43868,7 @@ function _actualColorize(lines, tabSize, tokenizationSupport, languageIdCodec) {
 }
 var ttPolicy, Colorizer;
 var init_colorizer = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/colorizer.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/colorizer.js"() {
     init_trustedTypes();
     init_strings();
     init_languages();
@@ -43932,10 +43932,10 @@ var init_colorizer = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/aria/aria.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/aria/aria.css
 var css3;
 var init_aria = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/aria/aria.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/aria/aria.css"() {
     css3 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n.monaco-aria-container {\n	position: absolute; /* try to hide from window but not from screen readers */\n	left:-999em;\n}";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-b11e5311bfa3")) {
       const style = document.createElement("style");
@@ -43946,7 +43946,7 @@ var init_aria = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/aria/aria.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/aria/aria.js
 function setARIAContainer(parent) {
   ariaContainer = document.createElement("div");
   ariaContainer.className = "monaco-aria-container";
@@ -44007,35 +44007,35 @@ function insertMessage(target, msg) {
 }
 var MAX_MESSAGE_LENGTH, ariaContainer, alertContainer, alertContainer2, statusContainer, statusContainer2;
 var init_aria2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/aria/aria.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/aria/aria.js"() {
     init_dom();
     init_aria();
     MAX_MESSAGE_LENGTH = 2e4;
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/editorWorker.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/editorWorker.js
 var IEditorWorkerService;
 var init_editorWorker = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/editorWorker.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/editorWorker.js"() {
     init_instantiation();
     IEditorWorkerService = createDecorator("editorWorkerService");
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/markerDecorations.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/markerDecorations.js
 var IMarkerDecorationsService;
 var init_markerDecorations = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/markerDecorations.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/markerDecorations.js"() {
     init_instantiation();
     IMarkerDecorationsService = createDecorator("markerDecorationsService");
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/services/markerDecorations.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/services/markerDecorations.js
 var __decorate5, __param5, MarkerDecorationsContribution;
 var init_markerDecorations2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/services/markerDecorations.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/services/markerDecorations.js"() {
     init_markerDecorations();
     __decorate5 = function(decorators, target, key, desc) {
       var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -44063,9 +44063,9 @@ var init_markerDecorations2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/services/contribution.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/services/contribution.js
 var init_contribution = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/services/contribution.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/services/contribution.js"() {
     init_extensions();
     init_editorWorker();
     init_editorExtensions();
@@ -44086,10 +44086,10 @@ var init_contribution = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/codeEditor/editor.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/codeEditor/editor.css
 var css4;
 var init_editor = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/codeEditor/editor.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/codeEditor/editor.css"() {
     css4 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n/* -------------------- IE10 remove auto clear button -------------------- */\n\n::-ms-clear {\n	display: none;\n}\n\n/* All widgets */\n/* I am not a big fan of this rule */\n.monaco-editor .editor-widget input {\n	color: inherit;\n}\n\n/* -------------------- Editor -------------------- */\n\n.monaco-editor {\n	position: relative;\n	overflow: visible;\n	-webkit-text-size-adjust: 100%;\n	text-spacing-trim: space-all;\n	color: var(--vscode-editor-foreground);\n	background-color: var(--vscode-editor-background);\n	overflow-wrap: initial;\n}\n.monaco-editor-background {\n	background-color: var(--vscode-editor-background);\n}\n.monaco-editor .rangeHighlight {\n	background-color: var(--vscode-editor-rangeHighlightBackground);\n	box-sizing: border-box;\n	border: 1px solid var(--vscode-editor-rangeHighlightBorder);\n}\n.monaco-editor.hc-black .rangeHighlight, .monaco-editor.hc-light .rangeHighlight {\n	border-style: dotted;\n}\n.monaco-editor .symbolHighlight {\n	background-color: var(--vscode-editor-symbolHighlightBackground);\n	box-sizing: border-box;\n	border: 1px solid var(--vscode-editor-symbolHighlightBorder);\n}\n.monaco-editor.hc-black .symbolHighlight, .monaco-editor.hc-light .symbolHighlight {\n	border-style: dotted;\n}\n\n.monaco-editor .editorCanvas {\n	position: absolute;\n	width: 100%;\n	height: 100%;\n	z-index: 0;\n	pointer-events: none;\n}\n\n/* -------------------- Misc -------------------- */\n\n.monaco-editor .overflow-guard {\n	position: relative;\n	overflow: hidden;\n}\n\n.monaco-editor .view-overlays {\n	position: absolute;\n	top: 0;\n}\n\n.monaco-editor .view-overlays > div, .monaco-editor .margin-view-overlays > div {\n	position: absolute;\n	width: 100%;\n}\n\n/*\n.monaco-editor .auto-closed-character {\n	opacity: 0.3;\n}\n*/\n\n\n.monaco-editor .squiggly-error {\n	border-bottom: 4px double var(--vscode-editorError-border);\n}\n.monaco-editor .squiggly-error::before {\n	display: block;\n	content: '';\n	width: 100%;\n	height: 100%;\n	background: var(--vscode-editorError-background);\n}\n.monaco-editor .squiggly-warning {\n	border-bottom: 4px double var(--vscode-editorWarning-border);\n}\n.monaco-editor .squiggly-warning::before {\n	display: block;\n	content: '';\n	width: 100%;\n	height: 100%;\n	background: var(--vscode-editorWarning-background);\n}\n.monaco-editor .squiggly-info {\n	border-bottom: 4px double var(--vscode-editorInfo-border);\n}\n.monaco-editor .squiggly-info::before {\n	display: block;\n	content: '';\n	width: 100%;\n	height: 100%;\n	background: var(--vscode-editorInfo-background);\n}\n.monaco-editor .squiggly-hint {\n	border-bottom: 2px dotted var(--vscode-editorHint-border);\n}\n.monaco-editor.showUnused .squiggly-unnecessary {\n	border-bottom: 2px dashed var(--vscode-editorUnnecessaryCode-border);\n}\n.monaco-editor.showDeprecated .squiggly-inline-deprecated {\n	text-decoration: line-through;\n	text-decoration-color: var(--vscode-editor-foreground, inherit);\n}\n";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-fa26e047c24e")) {
       const style = document.createElement("style");
@@ -44100,10 +44100,10 @@ var init_editor = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/config/elementSizeObserver.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/config/elementSizeObserver.js
 var ElementSizeObserver;
 var init_elementSizeObserver = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/config/elementSizeObserver.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/config/elementSizeObserver.js"() {
     init_lifecycle();
     init_event();
     init_dom();
@@ -44199,7 +44199,7 @@ var init_elementSizeObserver = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/config/migrateOptions.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/config/migrateOptions.js
 function registerEditorSettingMigration(key, migrate) {
   EditorSettingMigration.items.push(new EditorSettingMigration(key, migrate));
 }
@@ -44220,7 +44220,7 @@ function migrateOptions(options) {
 }
 var EditorSettingMigration, suggestFilteredTypesMapping;
 var init_migrateOptions = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/config/migrateOptions.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/config/migrateOptions.js"() {
     EditorSettingMigration = class _EditorSettingMigration {
       static {
         this.items = [];
@@ -44417,10 +44417,10 @@ var init_migrateOptions = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/config/tabFocus.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/config/tabFocus.js
 var TabFocusImpl, TabFocus;
 var init_tabFocus = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/config/tabFocus.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/config/tabFocus.js"() {
     init_event();
     init_lifecycle();
     TabFocusImpl = class extends Disposable {
@@ -44442,7 +44442,7 @@ var init_tabFocus = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/config/fontInfoFromSettings.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/config/fontInfoFromSettings.js
 function createBareFontInfoFromValidatedSettings(options, pixelRatio, ignoreEditorZoom) {
   const fontFamily = options.get(
     58
@@ -44485,16 +44485,16 @@ function createBareFontInfoFromRawSettings(opts, pixelRatio, ignoreEditorZoom = 
   return BareFontInfo._create(fontFamily, fontWeight, fontSize, fontFeatureSettings, fontVariationSettings, lineHeight, letterSpacing, pixelRatio, ignoreEditorZoom);
 }
 var init_fontInfoFromSettings = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/config/fontInfoFromSettings.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/config/fontInfoFromSettings.js"() {
     init_editorOptions();
     init_fontInfo();
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/accessibility/common/accessibility.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/accessibility/common/accessibility.js
 var IAccessibilityService, CONTEXT_ACCESSIBILITY_MODE_ENABLED;
 var init_accessibility = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/accessibility/common/accessibility.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/accessibility/common/accessibility.js"() {
     init_contextkey();
     init_instantiation();
     IAccessibilityService = createDecorator("accessibilityService");
@@ -44502,10 +44502,10 @@ var init_accessibility = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/inputMode.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/inputMode.js
 var InputModeImpl, InputMode;
 var init_inputMode = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/inputMode.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/inputMode.js"() {
     init_event();
     InputModeImpl = class {
       constructor() {
@@ -44521,7 +44521,7 @@ var init_inputMode = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/config/editorConfiguration.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/config/editorConfiguration.js
 function digitCount(n2) {
   let r = 0;
   while (n2) {
@@ -44550,7 +44550,7 @@ function deepCloneAndMigrateOptions(_options) {
 }
 var __decorate6, __param6, EditorConfiguration, ValidatedEditorOptions, ComputedEditorOptions, EditorOptionsUtil;
 var init_editorConfiguration = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/config/editorConfiguration.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/config/editorConfiguration.js"() {
     init_browser();
     init_arrays();
     init_event();
@@ -44815,10 +44815,10 @@ var init_editorConfiguration = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/performance.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/performance.js
 var inputLatency;
 var init_performance = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/performance.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/performance.js"() {
     init_observableInternal();
     init_observableValue();
     (function(inputLatency2) {
@@ -44966,7 +44966,7 @@ var init_performance = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/domStylesheets.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/domStylesheets.js
 function createStyleSheet(container = mainWindow.document.head, beforeAppend, disposableStore) {
   const style = document.createElement("style");
   style.type = "text/css";
@@ -45024,7 +45024,7 @@ function createCSSRule(selector, cssText, style = getSharedStyleSheet()) {
 }
 var globalStylesheets, _sharedStyleSheet;
 var init_domStylesheets = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/domStylesheets.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/domStylesheets.js"() {
     init_lifecycle();
     init_observableInternal();
     init_browser();
@@ -45036,10 +45036,10 @@ var init_domStylesheets = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/globalPointerMoveMonitor.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/globalPointerMoveMonitor.js
 var GlobalPointerMoveMonitor;
 var init_globalPointerMoveMonitor = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/globalPointerMoveMonitor.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/globalPointerMoveMonitor.js"() {
     init_dom();
     init_lifecycle();
     GlobalPointerMoveMonitor = class {
@@ -45099,7 +45099,7 @@ var init_globalPointerMoveMonitor = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/colorUtils.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/colorUtils.js
 function asCssVariableName(colorIdent) {
   return `--vscode-${colorIdent.replace(/\./g, "-")}`;
 }
@@ -45195,7 +45195,7 @@ function resolveColorValue(colorValue, theme) {
 }
 var Extensions6, DEFAULT_COLOR_CONFIG_VALUE, ColorRegistry, colorRegistry, workbenchColorsSchemaId, schemaRegistry, delayer;
 var init_colorUtils = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/colorUtils.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/colorUtils.js"() {
     init_assert();
     init_async();
     init_color();
@@ -45280,10 +45280,10 @@ var init_colorUtils = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/colors/baseColors.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/colors/baseColors.js
 var foreground, descriptionForeground, iconForeground, focusBorder, contrastBorder, activeContrastBorder, textLinkForeground;
 var init_baseColors = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/colors/baseColors.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/colors/baseColors.js"() {
     init_nls();
     init_color();
     init_colorUtils();
@@ -45309,10 +45309,10 @@ var init_baseColors = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/colors/miscColors.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/colors/miscColors.js
 var badgeBackground, badgeForeground, scrollbarShadow, scrollbarSliderBackground, scrollbarSliderHoverBackground, scrollbarSliderActiveBackground, progressBarBackground;
 var init_miscColors = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/colors/miscColors.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/colors/miscColors.js"() {
     init_nls();
     init_color();
     init_colorUtils();
@@ -45336,10 +45336,10 @@ var init_miscColors = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/colors/editorColors.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/colors/editorColors.js
 var editorBackground, editorForeground, editorWidgetBackground, editorWidgetForeground, editorWidgetBorder, editorErrorForeground, editorErrorBorder, editorWarningBackground, editorWarningForeground, editorWarningBorder, editorInfoForeground, editorInfoBorder, editorHintForeground, editorActiveLinkForeground, editorSelectionBackground, editorSelectionForeground, editorInactiveSelection, editorSelectionHighlight, editorFindMatchForeground, editorFindMatchHighlight, editorFindMatchHighlightForeground, editorFindMatchHighlightBorder, editorFindRangeHighlightBorder, editorHoverBackground, editorHoverForeground, editorHoverBorder, editorInlayHintForeground, editorInlayHintBackground, editorInlayHintTypeForeground, editorInlayHintTypeBackground, editorInlayHintParameterForeground, editorInlayHintParameterBackground, editorLightBulbForeground, defaultInsertColor, defaultRemoveColor, diffInserted, diffRemoved, diffInsertedLine, diffOverviewRulerInserted, diffOverviewRulerRemoved, widgetShadow, widgetBorder, toolbarHoverBackground, breadcrumbsForeground, breadcrumbsBackground, breadcrumbsFocusForeground, breadcrumbsActiveSelectionForeground, headerTransparency, currentBaseColor, incomingBaseColor, commonBaseColor, contentTransparency, rulerTransparency, mergeCurrentHeaderBackground, mergeIncomingHeaderBackground, mergeCommonHeaderBackground, mergeBorder, overviewRulerFindMatchForeground, overviewRulerSelectionHighlightForeground, problemsErrorIconForeground, problemsWarningIconForeground, problemsInfoIconForeground;
 var init_editorColors = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/colors/editorColors.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/colors/editorColors.js"() {
     init_nls();
     init_color();
     init_colorUtils();
@@ -45451,10 +45451,10 @@ var init_editorColors = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/colors/minimapColors.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/colors/minimapColors.js
 var minimapFindMatch, minimapSelectionOccurrenceHighlight, minimapSelection, minimapInfo, minimapWarning, minimapError, minimapBackground, minimapForegroundOpacity;
 var init_minimapColors = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/colors/minimapColors.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/colors/minimapColors.js"() {
     init_nls();
     init_color();
     init_colorUtils();
@@ -45474,9 +45474,9 @@ var init_minimapColors = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/colors/chartsColors.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/colors/chartsColors.js
 var init_chartsColors = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/colors/chartsColors.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/colors/chartsColors.js"() {
     init_nls();
     init_colorUtils();
     init_baseColors();
@@ -45493,10 +45493,10 @@ var init_chartsColors = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/colors/listColors.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/colors/listColors.js
 var listFocusBackground, listFocusForeground, listFocusOutline, listFocusAndSelectionOutline, listActiveSelectionBackground, listActiveSelectionForeground, listActiveSelectionIconForeground, listInactiveSelectionBackground, listInactiveSelectionForeground, listInactiveSelectionIconForeground, listInactiveFocusBackground, listInactiveFocusOutline, listHoverBackground, listHoverForeground, listDropOverBackground, listDropBetweenBackground, listHighlightForeground, listFocusHighlightForeground, listFilterWidgetBackground, listFilterWidgetOutline, listFilterWidgetNoMatchesOutline, listFilterWidgetShadow, treeIndentGuidesStroke, treeInactiveIndentGuidesStroke, tableColumnsBorder, tableOddRowsBackgroundColor, editorActionListForeground;
 var init_listColors = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/colors/listColors.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/colors/listColors.js"() {
     init_nls();
     init_color();
     init_colorUtils();
@@ -45541,10 +45541,10 @@ var init_listColors = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/colors/inputColors.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/colors/inputColors.js
 var inputBackground, inputForeground, inputBorder, inputActiveOptionBorder, inputActiveOptionHoverBackground, inputActiveOptionBackground, inputActiveOptionForeground, inputValidationInfoBackground, inputValidationInfoForeground, inputValidationInfoBorder, inputValidationWarningBackground, inputValidationWarningForeground, inputValidationWarningBorder, inputValidationErrorBackground, inputValidationErrorForeground, inputValidationErrorBorder, selectBackground, selectListBackground, selectForeground, selectBorder, buttonForeground, buttonSeparator, buttonBackground, buttonHoverBackground, buttonBorder, buttonSecondaryForeground, buttonSecondaryBackground, buttonSecondaryBorder, buttonSecondaryHoverBackground, radioActiveForeground, radioActiveBackground, radioActiveBorder, radioInactiveForeground, radioInactiveBackground, radioInactiveBorder, radioInactiveHoverBackground, checkboxBackground, checkboxForeground, checkboxBorder, checkboxDisabledBackground, checkboxDisabledForeground, keybindingLabelBackground, keybindingLabelForeground, keybindingLabelBorder, keybindingLabelBottomBorder;
 var init_inputColors = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/colors/inputColors.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/colors/inputColors.js"() {
     init_nls();
     init_color();
     init_colorUtils();
@@ -45602,10 +45602,10 @@ var init_inputColors = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/colors/menuColors.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/colors/menuColors.js
 var menuBorder, menuForeground, menuBackground, menuSelectionBorder, menuSeparatorBackground;
 var init_menuColors = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/colors/menuColors.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/colors/menuColors.js"() {
     init_nls();
     init_colorUtils();
     init_baseColors();
@@ -45621,10 +45621,10 @@ var init_menuColors = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/colors/quickpickColors.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/colors/quickpickColors.js
 var quickInputBackground, quickInputForeground, quickInputTitleBackground, pickerGroupForeground, pickerGroupBorder, _deprecatedQuickInputListFocusBackground, quickInputListFocusForeground, quickInputListFocusIconForeground, quickInputListFocusBackground;
 var init_quickpickColors = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/colors/quickpickColors.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/colors/quickpickColors.js"() {
     init_nls();
     init_color();
     init_colorUtils();
@@ -45643,9 +45643,9 @@ var init_quickpickColors = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/colors/searchColors.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/colors/searchColors.js
 var init_searchColors = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/colors/searchColors.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/colors/searchColors.js"() {
     init_nls();
     init_colorUtils();
     init_baseColors();
@@ -45656,7 +45656,7 @@ var init_searchColors = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/editorDom.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/editorDom.js
 function createEditorPagePosition(editorViewDomNode) {
   const editorPos = getDomNodePagePosition(editorViewDomNode);
   return new EditorPagePosition(editorPos.left, editorPos.top, editorPos.width, editorPos.height);
@@ -45673,7 +45673,7 @@ function camelToDashes(str) {
 }
 var PageCoordinates, ClientCoordinates, EditorPagePosition, CoordinatesRelativeToEditor, EditorMouseEvent, EditorMouseEventFactory, EditorPointerEventFactory, GlobalEditorPointerMoveMonitor, DynamicCssRules, RefCountedCssRule;
 var init_editorDom = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/editorDom.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/editorDom.js"() {
     init_dom();
     init_domStylesheets();
     init_globalPointerMoveMonitor();
@@ -45932,10 +45932,10 @@ var init_editorDom = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewEventHandler.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewEventHandler.js
 var ViewEventHandler;
 var init_viewEventHandler = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewEventHandler.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewEventHandler.js"() {
     init_lifecycle();
     ViewEventHandler = class extends Disposable {
       constructor() {
@@ -46118,10 +46118,10 @@ var init_viewEventHandler = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/view/viewPart.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/view/viewPart.js
 var ViewPart, PartFingerprints;
 var init_viewPart = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/view/viewPart.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/view/viewPart.js"() {
     init_viewEventHandler();
     ViewPart = class extends ViewEventHandler {
       constructor(context) {
@@ -46169,10 +46169,10 @@ var init_viewPart = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/view/renderingContext.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/view/renderingContext.js
 var RestrictedRenderingContext, RenderingContext, LineVisibleRanges, HorizontalRange, FloatHorizontalRange, HorizontalPosition, VisibleRanges;
 var init_renderingContext = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/view/renderingContext.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/view/renderingContext.js"() {
     RestrictedRenderingContext = class {
       constructor(viewLayout, viewportData) {
         this._restrictedRenderingContextBrand = void 0;
@@ -46284,10 +46284,10 @@ var init_renderingContext = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/viewLines/rangeUtil.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/viewLines/rangeUtil.js
 var RangeUtil;
 var init_rangeUtil = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/viewLines/rangeUtil.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/viewLines/rangeUtil.js"() {
     init_renderingContext();
     RangeUtil = class {
       static _createRange() {
@@ -46400,7 +46400,7 @@ var init_rangeUtil = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/theme.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/theme.js
 function isHighContrast(scheme) {
   return scheme === ColorScheme.HIGH_CONTRAST_DARK || scheme === ColorScheme.HIGH_CONTRAST_LIGHT;
 }
@@ -46409,7 +46409,7 @@ function isDark(scheme) {
 }
 var ColorScheme, ThemeTypeSelector;
 var init_theme = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/theme.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/theme.js"() {
     (function(ColorScheme2) {
       ColorScheme2["DARK"] = "dark";
       ColorScheme2["LIGHT"] = "light";
@@ -46425,7 +46425,7 @@ var init_theme = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/viewLines/viewLine.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/viewLines/viewLine.js
 function createWebKitRenderedLine(domNode, renderLineInput, characterMapping, containsForeignElements) {
   return new WebKitRenderedViewLine(domNode, renderLineInput, characterMapping, containsForeignElements);
 }
@@ -46443,7 +46443,7 @@ function getColumnOfNodeOffset(characterMapping, spanNode, offset) {
 }
 var canUseFastRenderedViewLine, monospaceAssumptionsAreValid, ViewLine, FastRenderedViewLine, RenderedViewLine, WebKitRenderedViewLine, createRenderedLine;
 var init_viewLine = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/viewLines/viewLine.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/viewLines/viewLine.js"() {
     init_browser();
     init_fastDomNode();
     init_platform();
@@ -46967,10 +46967,10 @@ var init_viewLine = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/cursorColumns.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/cursorColumns.js
 var CursorColumns;
 var init_cursorColumns = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/cursorColumns.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/cursorColumns.js"() {
     init_strings();
     CursorColumns = class _CursorColumns {
       static _nextVisibleColumn(codePoint, visibleColumn, tabSize) {
@@ -47061,10 +47061,10 @@ var init_cursorColumns = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/cursorAtomicMoveOperations.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/cursorAtomicMoveOperations.js
 var AtomicTabMoveOperations;
 var init_cursorAtomicMoveOperations = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/cursorAtomicMoveOperations.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/cursorAtomicMoveOperations.js"() {
     init_cursorColumns();
     AtomicTabMoveOperations = class _AtomicTabMoveOperations {
       /**
@@ -47186,7 +47186,7 @@ var init_cursorAtomicMoveOperations = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/mouseTarget.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/mouseTarget.js
 function createEmptyContentDataInLines(horizontalDistanceToText) {
   return {
     isAfterLines: false,
@@ -47235,7 +47235,7 @@ function shadowCaretRangeFromPoint(shadowRoot, x, y) {
 }
 var UnknownHitTestResult, ContentHitTestResult, HitTestResult, PointerHandlerLastRenderData, MouseTarget, ElementPath, HitTestContext, BareHitTestRequest, HitTestRequest, EMPTY_CONTENT_AFTER_LINES, MouseTargetFactory, CharWidthReader;
 var init_mouseTarget = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/mouseTarget.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/mouseTarget.js"() {
     init_editorDom();
     init_viewPart();
     init_viewLine();
@@ -48079,7 +48079,7 @@ var init_mouseTarget = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/decorators.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/decorators.js
 function memoize(_target, key, descriptor) {
   let fnKey = null;
   let fn2 = null;
@@ -48110,14 +48110,14 @@ function memoize(_target, key, descriptor) {
   };
 }
 var init_decorators = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/decorators.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/decorators.js"() {
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/touch.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/touch.js
 var __decorate7, EventType2, Gesture;
 var init_touch = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/touch.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/touch.js"() {
     init_dom();
     init_window();
     init_decorators();
@@ -48387,10 +48387,10 @@ var init_touch = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/widget.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/widget.js
 var Widget;
 var init_widget = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/widget.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/widget.js"() {
     init_dom();
     init_keyboardEvent();
     init_mouseEvent();
@@ -48431,10 +48431,10 @@ var init_widget = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/scrollbar/scrollbarArrow.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/scrollbar/scrollbarArrow.js
 var ARROW_IMG_SIZE, ScrollbarArrow;
 var init_scrollbarArrow = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/scrollbar/scrollbarArrow.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/scrollbar/scrollbarArrow.js"() {
     init_globalPointerMoveMonitor();
     init_widget();
     init_async();
@@ -48507,10 +48507,10 @@ var init_scrollbarArrow = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/scrollbar/scrollbarVisibilityController.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/scrollbar/scrollbarVisibilityController.js
 var ScrollbarVisibilityController;
 var init_scrollbarVisibilityController = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/scrollbar/scrollbarVisibilityController.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/scrollbar/scrollbarVisibilityController.js"() {
     init_async();
     init_lifecycle();
     ScrollbarVisibilityController = class extends Disposable {
@@ -48596,10 +48596,10 @@ var init_scrollbarVisibilityController = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/scrollbar/abstractScrollbar.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/scrollbar/abstractScrollbar.js
 var POINTER_DRAG_RESET_DISTANCE, AbstractScrollbar;
 var init_abstractScrollbar = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/scrollbar/abstractScrollbar.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/scrollbar/abstractScrollbar.js"() {
     init_dom();
     init_fastDomNode();
     init_globalPointerMoveMonitor();
@@ -48799,10 +48799,10 @@ var init_abstractScrollbar = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/scrollbar/scrollbarState.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/scrollbar/scrollbarState.js
 var MINIMUM_SLIDER_SIZE, ScrollbarState;
 var init_scrollbarState = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/scrollbar/scrollbarState.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/scrollbar/scrollbarState.js"() {
     MINIMUM_SLIDER_SIZE = 20;
     ScrollbarState = class _ScrollbarState {
       constructor(arrowSize, scrollbarSize, oppositeScrollbarSize, visibleSize, scrollSize, scrollPosition) {
@@ -48952,10 +48952,10 @@ var init_scrollbarState = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/scrollbar/horizontalScrollbar.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/scrollbar/horizontalScrollbar.js
 var HorizontalScrollbar;
 var init_horizontalScrollbar = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/scrollbar/horizontalScrollbar.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/scrollbar/horizontalScrollbar.js"() {
     init_mouseEvent();
     init_abstractScrollbar();
     init_scrollbarArrow();
@@ -49043,10 +49043,10 @@ var init_horizontalScrollbar = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/scrollbar/verticalScrollbar.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/scrollbar/verticalScrollbar.js
 var VerticalScrollbar;
 var init_verticalScrollbar = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/scrollbar/verticalScrollbar.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/scrollbar/verticalScrollbar.js"() {
     init_mouseEvent();
     init_abstractScrollbar();
     init_scrollbarArrow();
@@ -49142,7 +49142,7 @@ var init_verticalScrollbar = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/scrollable.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/scrollable.js
 function createEaseOutCubic(from, to) {
   const delta = to - from;
   return function(completion) {
@@ -49165,7 +49165,7 @@ function easeOutCubic(t) {
 }
 var ScrollState, Scrollable, SmoothScrollingUpdate, SmoothScrollingOperation;
 var init_scrollable = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/scrollable.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/scrollable.js"() {
     init_event();
     init_lifecycle();
     ScrollState = class _ScrollState {
@@ -49440,10 +49440,10 @@ var init_scrollable = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/scrollbar/media/scrollbars.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/scrollbar/media/scrollbars.css
 var css5;
 var init_scrollbars = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/scrollbar/media/scrollbars.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/scrollbar/media/scrollbars.css"() {
     css5 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n/* Arrows */\n.monaco-scrollable-element > .scrollbar > .scra {\n	cursor: pointer;\n	font-size: 11px !important;\n}\n\n.monaco-scrollable-element > .visible {\n	opacity: 1;\n\n	/* Background rule added for IE9 - to allow clicks on dom node */\n	background:rgba(0,0,0,0);\n\n	transition: opacity 100ms linear;\n	/* In front of peek view */\n	z-index: 11;\n}\n.monaco-scrollable-element > .invisible {\n	opacity: 0;\n	pointer-events: none;\n}\n.monaco-scrollable-element > .invisible.fade {\n	transition: opacity 800ms linear;\n}\n\n.disable-animations .monaco-scrollable-element > .visible,\n.disable-animations .monaco-scrollable-element > .invisible.fade {\n	transition: none;\n}\n\n/* Scrollable Content Inset Shadow */\n.monaco-scrollable-element > .shadow {\n	position: absolute;\n	display: none;\n}\n.monaco-scrollable-element > .shadow.top {\n	display: block;\n	top: 0;\n	left: 3px;\n	height: 3px;\n	width: 100%;\n	box-shadow: var(--vscode-scrollbar-shadow) 0 6px 6px -6px inset;\n}\n.monaco-scrollable-element > .shadow.left {\n	display: block;\n	top: 3px;\n	left: 0;\n	height: 100%;\n	width: 3px;\n	box-shadow: var(--vscode-scrollbar-shadow) 6px 0 6px -6px inset;\n}\n.monaco-scrollable-element > .shadow.top-left-corner {\n	display: block;\n	top: 0;\n	left: 0;\n	height: 3px;\n	width: 3px;\n}\n.monaco-scrollable-element > .shadow.top.left {\n	box-shadow: var(--vscode-scrollbar-shadow) 6px 0 6px -6px inset;\n}\n\n.monaco-scrollable-element > .scrollbar {\n	background: var(--vscode-scrollbar-background);\n}\n\n.monaco-scrollable-element > .scrollbar > .slider {\n	background: var(--vscode-scrollbarSlider-background);\n}\n\n.monaco-scrollable-element > .scrollbar > .slider:hover {\n	background: var(--vscode-scrollbarSlider-hoverBackground);\n}\n\n.monaco-scrollable-element > .scrollbar > .slider.active {\n	background: var(--vscode-scrollbarSlider-activeBackground);\n}\n";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-aba243ef291f")) {
       const style = document.createElement("style");
@@ -49454,7 +49454,7 @@ var init_scrollbars = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/scrollbar/scrollableElement.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/scrollbar/scrollableElement.js
 function resolveOptions(opts) {
   const result = {
     lazyRender: typeof opts.lazyRender !== "undefined" ? opts.lazyRender : false,
@@ -49491,7 +49491,7 @@ function resolveOptions(opts) {
 }
 var HIDE_TIMEOUT, SCROLL_WHEEL_SENSITIVITY, DEFAULT_SCROLLBAR_SIZE, globalDefaultScrollbarSize, _onDidChangeDefaultScrollbarSizeEmitter, onDidChangeDefaultScrollbarSize, MouseWheelClassifierItem, MouseWheelClassifier, AbstractScrollableElement, ScrollableElement, SmoothScrollableElement, DomScrollableElement;
 var init_scrollableElement = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/scrollbar/scrollableElement.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/scrollbar/scrollableElement.js"() {
     init_browser();
     init_dom();
     init_fastDomNode();
@@ -50038,10 +50038,10 @@ var init_scrollableElement = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/dragScrolling.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/dragScrolling.js
 var DragScrolling, DragScrollingOperation, TopBottomDragScrolling, TopBottomDragScrollingOperation, LeftRightDragScrolling, LeftRightDragScrollingOperation;
 var init_dragScrolling = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/dragScrolling.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/dragScrolling.js"() {
     init_dom();
     init_lifecycle();
     init_position();
@@ -50236,10 +50236,10 @@ var init_dragScrolling = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/mouseHandler.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/mouseHandler.js
 var MouseHandler, MouseDownOperation, MouseDownState;
 var init_mouseHandler = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/mouseHandler.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/mouseHandler.js"() {
     init_dom();
     init_mouseEvent();
     init_lifecycle();
@@ -50775,10 +50775,10 @@ var init_mouseHandler = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/event.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/event.js
 var DomEmitter;
 var init_event2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/event.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/event.js"() {
     init_event();
     DomEmitter = class {
       get event() {
@@ -50798,13 +50798,13 @@ var init_event2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/uuid.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/uuid.js
 function prefixedUuid(namespace) {
   return `${namespace}-${generateUuid()}`;
 }
 var generateUuid;
 var init_uuid = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/uuid.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/uuid.js"() {
     generateUuid = (function() {
       if (typeof crypto.randomUUID === "function") {
         return crypto.randomUUID.bind(crypto);
@@ -50846,10 +50846,10 @@ var init_uuid = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/dnd.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/dnd.js
 var DataTransfers;
 var init_dnd = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/dnd.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/dnd.js"() {
     init_mime();
     DataTransfers = {
       /**
@@ -50870,7 +50870,7 @@ var init_dnd = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/dataTransfer.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/dataTransfer.js
 function createStringDataTransferItem(stringOrPromise, id) {
   return {
     id,
@@ -50910,7 +50910,7 @@ function matchesMimeType_normalized(normalizedPattern, normalizedMimeTypes) {
 }
 var VSDataTransfer, UriList;
 var init_dataTransfer = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/dataTransfer.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/dataTransfer.js"() {
     init_arrays();
     init_iterator();
     init_uuid();
@@ -50996,7 +50996,7 @@ var init_dataTransfer = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/dnd/browser/dnd.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/dnd/browser/dnd.js
 function getPathForFile(file) {
   if (isNative && typeof globalThis.vscode?.webUtils?.getPathForFile === "function") {
     return globalThis.vscode?.webUtils?.getPathForFile(file);
@@ -51005,7 +51005,7 @@ function getPathForFile(file) {
 }
 var CodeDataTransfers, DragAndDropContributionRegistry, Extensions7, LocalSelectionTransfer;
 var init_dnd2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/dnd/browser/dnd.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/dnd/browser/dnd.js"() {
     init_platform();
     init_platform2();
     CodeDataTransfers = {
@@ -51040,7 +51040,7 @@ var init_dnd2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/dataTransfer.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/dataTransfer.js
 function toVSDataTransfer(dataTransfer) {
   const vsDataTransfer = new VSDataTransfer();
   for (const item of dataTransfer.items) {
@@ -51098,7 +51098,7 @@ function toExternalVSDataTransfer(sourceDataTransfer, overwriteUriList = false) 
 }
 var INTERNAL_DND_MIME_TYPES;
 var init_dataTransfer2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/dataTransfer.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/dataTransfer.js"() {
     init_dnd();
     init_dataTransfer();
     init_mime();
@@ -51113,7 +51113,7 @@ var init_dataTransfer2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/clipboardUtils.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/clipboardUtils.js
 function storeMetadataInMemory(textToCopy, metadata, isFirefox3) {
   InMemoryClipboardMetadataManager.INSTANCE.set(
     // When writing "LINE\r\n" to the clipboard and then pasting,
@@ -51225,7 +51225,7 @@ function createReadableClipboardData(dataTransfer) {
 }
 var InMemoryClipboardMetadataManager, CopyOptions, ClipboardEventUtils;
 var init_clipboardUtils = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/clipboardUtils.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/clipboardUtils.js"() {
     init_platform();
     init_mime();
     init_uuid();
@@ -51283,10 +51283,10 @@ var init_clipboardUtils = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/textArea/textAreaEditContextState.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/textArea/textAreaEditContextState.js
 var TextAreaState;
 var init_textAreaEditContextState = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/textArea/textAreaEditContextState.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/textArea/textAreaEditContextState.js"() {
     init_strings();
     TextAreaState = class _TextAreaState {
       static {
@@ -51446,10 +51446,10 @@ var init_textAreaEditContextState = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/textArea/textAreaEditContextInput.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/textArea/textAreaEditContextInput.js
 var __decorate8, __param7, TextAreaSyntethicEvents, CompositionContext, TextAreaInput, TextAreaWrapper;
 var init_textAreaEditContextInput = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/textArea/textAreaEditContextInput.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/textArea/textAreaEditContextInput.js"() {
     init_browser();
     init_dom();
     init_event2();
@@ -51945,10 +51945,10 @@ var init_textAreaEditContextInput = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/pointerHandler.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/pointerHandler.js
 var PointerEventHandler, TouchHandler, PointerHandler;
 var init_pointerHandler = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/pointerHandler.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/pointerHandler.js"() {
     init_canIUse();
     init_dom();
     init_touch();
@@ -52080,7 +52080,7 @@ var init_pointerHandler = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/misc/indentation.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/misc/indentation.js
 function _normalizeIndentationFromWhitespace(str, indentSize, insertSpaces) {
   let spacesCnt = 0;
   for (let i = 0; i < str.length; i++) {
@@ -52111,19 +52111,19 @@ function normalizeIndentation(str, indentSize, insertSpaces) {
   return _normalizeIndentationFromWhitespace(str.substring(0, firstNonWhitespaceIndex$1), indentSize, insertSpaces) + str.substring(firstNonWhitespaceIndex$1);
 }
 var init_indentation = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/misc/indentation.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/misc/indentation.js"() {
     init_strings();
     init_cursorColumns();
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursorCommon.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursorCommon.js
 function isQuote(ch) {
   return ch === "'" || ch === '"' || ch === "`";
 }
 var autoCloseAlways, autoCloseNever, autoCloseBeforeWhitespace, CursorConfiguration, CursorState, PartialModelCursorState, PartialViewCursorState, SingleCursorState, EditOperationResult;
 var init_cursorCommon = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursorCommon.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursorCommon.js"() {
     init_position();
     init_range();
     init_selection();
@@ -52456,10 +52456,10 @@ var init_cursorCommon = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/cursorColumnSelection.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/cursorColumnSelection.js
 var ColumnSelection;
 var init_cursorColumnSelection = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/cursorColumnSelection.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/cursorColumnSelection.js"() {
     init_cursorCommon();
     init_position();
     init_range();
@@ -52546,7 +52546,7 @@ var init_cursorColumnSelection = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/commands/replaceCommand.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/commands/replaceCommand.js
 function addPositiveOffsetToModelPosition(model, position, offset) {
   if (offset < 0) {
     throw new Error("Unexpected negative delta");
@@ -52574,7 +52574,7 @@ function addPositiveOffsetToModelPosition(model, position, offset) {
 }
 var ReplaceCommand, ReplaceOvertypeCommand, ReplaceCommandWithoutChangingPosition, ReplaceCommandWithOffsetCursorState, ReplaceOvertypeCommandOnCompositionEnd, ReplaceCommandThatPreservesSelection;
 var init_replaceCommand = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/commands/replaceCommand.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/commands/replaceCommand.js"() {
     init_position();
     init_range();
     init_selection();
@@ -52689,10 +52689,10 @@ var init_replaceCommand = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/cursorMoveOperations.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/cursorMoveOperations.js
 var CursorPosition, MoveOperations;
 var init_cursorMoveOperations = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/cursorMoveOperations.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/cursorMoveOperations.js"() {
     init_strings();
     init_cursorColumns();
     init_position();
@@ -52996,10 +52996,10 @@ var init_cursorMoveOperations = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/cursorDeleteOperations.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/cursorDeleteOperations.js
 var DeleteOperations;
 var init_cursorDeleteOperations = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/cursorDeleteOperations.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/cursorDeleteOperations.js"() {
     init_strings();
     init_replaceCommand();
     init_cursorCommon();
@@ -53206,10 +53206,10 @@ var init_cursorDeleteOperations = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/cursorWordOperations.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/cursorWordOperations.js
 var WordOperations;
 var init_cursorWordOperations = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/cursorWordOperations.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/cursorWordOperations.js"() {
     init_strings();
     init_cursorCommon();
     init_cursorDeleteOperations();
@@ -53812,10 +53812,10 @@ var init_cursorWordOperations = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/cursorMoveCommands.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/cursorMoveCommands.js
 var CursorMoveCommands, CursorMove;
 var init_cursorMoveCommands = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/cursorMoveCommands.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/cursorMoveCommands.js"() {
     init_types();
     init_cursorCommon();
     init_cursorMoveOperations();
@@ -54522,7 +54522,7 @@ var init_cursorMoveCommands = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/supports/indentationLineProcessor.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/supports/indentationLineProcessor.js
 function isLanguageDifferentFromLineStart(model, position) {
   model.tokenization.forceTokenization(position.lineNumber);
   const lineTokens = model.tokenization.getLineTokens(position.lineNumber);
@@ -54534,7 +54534,7 @@ function isLanguageDifferentFromLineStart(model, position) {
 }
 var ProcessedIndentRulesSupport, IndentationContextProcessor, IndentationLineProcessor;
 var init_indentationLineProcessor = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/supports/indentationLineProcessor.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/supports/indentationLineProcessor.js"() {
     init_strings();
     init_supports();
     init_lineTokens();
@@ -54696,7 +54696,7 @@ var init_indentationLineProcessor = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/enterAction.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/enterAction.js
 function getEnterAction(autoIndent, model, range2, languageConfigurationService) {
   model.tokenization.forceTokenization(range2.startLineNumber);
   const languageId = model.getLanguageIdAtPosition(range2.startLineNumber, range2.startColumn);
@@ -54737,14 +54737,14 @@ function getEnterAction(autoIndent, model, range2, languageConfigurationService)
   };
 }
 var init_enterAction = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/enterAction.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/enterAction.js"() {
     init_languageConfiguration();
     init_languageConfigurationRegistry();
     init_indentationLineProcessor();
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/commands/shiftCommand.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/commands/shiftCommand.js
 function cachedStringRepeat(str, count) {
   if (count <= 0) {
     return "";
@@ -54760,7 +54760,7 @@ function cachedStringRepeat(str, count) {
 }
 var __decorate9, __param8, ShiftCommand_1, repeatCache, ShiftCommand;
 var init_shiftCommand = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/commands/shiftCommand.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/commands/shiftCommand.js"() {
     init_strings();
     init_cursorColumns();
     init_range();
@@ -54960,10 +54960,10 @@ var init_shiftCommand = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/commands/surroundSelectionCommand.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/commands/surroundSelectionCommand.js
 var SurroundSelectionCommand, CompositionSurroundSelectionCommand;
 var init_surroundSelectionCommand = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/commands/surroundSelectionCommand.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/commands/surroundSelectionCommand.js"() {
     init_range();
     init_selection();
     SurroundSelectionCommand = class {
@@ -55001,7 +55001,7 @@ var init_surroundSelectionCommand = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/autoIndent.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/autoIndent.js
 function getPrecedingValidLine(model, lineNumber, processedIndentRulesSupport) {
   const languageId = model.tokenization.getLanguageIdAtPosition(lineNumber, 0);
   if (lineNumber > 1) {
@@ -55260,14 +55260,14 @@ function createVirtualModelWithModifiedTokensAtLine(model, modifiedLineNumber, m
   return virtualModel;
 }
 var init_autoIndent = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/autoIndent.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/autoIndent.js"() {
     init_strings();
     init_languageConfiguration();
     init_indentationLineProcessor();
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/cursorTypeEditOperations.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/cursorTypeEditOperations.js
 function getTypingOperation(typedText, previousTypingOperation) {
   if (typedText === " ") {
     return previousTypingOperation === 5 || previousTypingOperation === 6 ? 6 : 5;
@@ -55352,7 +55352,7 @@ function shouldSurroundChar(config, ch) {
 }
 var AutoIndentOperation, AutoClosingOvertypeOperation, AutoClosingOvertypeWithInterceptorsOperation, AutoClosingOpenCharTypeOperation, CompositionEndOvertypeOperation, SurroundSelectionOperation, InterceptorElectricCharOperation, SimpleCharacterTypeOperation, EnterOperation, PasteOperation, CompositionOperation, TypeWithoutInterceptorsOperation, TabOperation, BaseTypeWithAutoClosingCommand, TypeWithAutoClosingCommand, TypeWithIndentationAndAutoClosingCommand;
 var init_cursorTypeEditOperations = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/cursorTypeEditOperations.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/cursorTypeEditOperations.js"() {
     init_errors();
     init_strings();
     init_replaceCommand();
@@ -56169,10 +56169,10 @@ var init_cursorTypeEditOperations = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/cursorTypeOperations.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/cursorTypeOperations.js
 var TypeOperations, CompositionOutcome;
 var init_cursorTypeOperations = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/cursorTypeOperations.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/cursorTypeOperations.js"() {
     init_shiftCommand();
     init_surroundSelectionCommand();
     init_cursorCommon();
@@ -56334,10 +56334,10 @@ var init_cursorTypeOperations = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/editorContextKeys.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/editorContextKeys.js
 var EditorContextKeys;
 var init_editorContextKeys = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/editorContextKeys.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/editorContextKeys.js"() {
     init_nls();
     init_contextkey();
     (function(EditorContextKeys2) {
@@ -56407,7 +56407,7 @@ var init_editorContextKeys = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/coreCommands.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/coreCommands.js
 function registerColumnSelection(id, keybinding) {
   KeybindingsRegistry.registerKeybindingRule({
     id,
@@ -56426,7 +56426,7 @@ function registerOverwritableCommand(handlerId, metadata) {
 }
 var CORE_WEIGHT, CoreEditorCommand, EditorScroll_, RevealLine_, EditorOrNativeTextInputCommand, CoreNavigationCommands, columnSelectionCondition, CoreEditingCommands, EditorHandlerCommand;
 var init_coreCommands = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/coreCommands.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/coreCommands.js"() {
     init_nls();
     init_browser();
     init_types();
@@ -58291,10 +58291,10 @@ var init_coreCommands = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/view/viewController.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/view/viewController.js
 var ViewController;
 var init_viewController = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/view/viewController.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/view/viewController.js"() {
     init_coreCommands();
     init_position();
     init_selection();
@@ -58640,10 +58640,10 @@ var init_viewController = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/view/viewLayer.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/view/viewLayer.js
 var RenderedLinesCollection, VisibleLinesCollection, ViewLayerRenderer;
 var init_viewLayer = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/view/viewLayer.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/view/viewLayer.js"() {
     init_fastDomNode();
     init_trustedTypes();
     init_errors();
@@ -59084,10 +59084,10 @@ var init_viewLayer = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/view/viewOverlays.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/view/viewOverlays.js
 var ViewOverlays, ViewOverlayLine, ContentViewOverlays, MarginViewOverlays;
 var init_viewOverlays = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/view/viewOverlays.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/view/viewOverlays.js"() {
     init_fastDomNode();
     init_domFontInfo();
     init_viewLayer();
@@ -59308,10 +59308,10 @@ var init_viewOverlays = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/view/viewUserInputEvents.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/view/viewUserInputEvents.js
 var ViewUserInputEvents;
 var init_viewUserInputEvents = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/view/viewUserInputEvents.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/view/viewUserInputEvents.js"() {
     init_position();
     ViewUserInputEvents = class _ViewUserInputEvents {
       constructor(coordinatesConverter) {
@@ -59399,10 +59399,10 @@ var init_viewUserInputEvents = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/blockDecorations/blockDecorations.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/blockDecorations/blockDecorations.css
 var css6;
 var init_blockDecorations = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/blockDecorations/blockDecorations.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/blockDecorations/blockDecorations.css"() {
     css6 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n.monaco-editor .blockDecorations-container {\n	position: absolute;\n	top: 0;\n	pointer-events: none;\n}\n\n.monaco-editor .blockDecorations-block {\n	position: absolute;\n	box-sizing: border-box;\n}\n";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-377a193f38bb")) {
       const style = document.createElement("style");
@@ -59413,10 +59413,10 @@ var init_blockDecorations = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/blockDecorations/blockDecorations.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/blockDecorations/blockDecorations.js
 var BlockDecorations;
 var init_blockDecorations2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/blockDecorations/blockDecorations.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/blockDecorations/blockDecorations.js"() {
     init_fastDomNode();
     init_blockDecorations();
     init_viewPart();
@@ -59505,7 +59505,7 @@ var init_blockDecorations2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/contentWidgets/contentWidgets.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/contentWidgets/contentWidgets.js
 function safeInvoke(fn2, thisArg, ...args) {
   try {
     return fn2.call(thisArg, ...args);
@@ -59515,7 +59515,7 @@ function safeInvoke(fn2, thisArg, ...args) {
 }
 var ViewContentWidgets, Widget2, PositionPair, Coordinate, AnchorCoordinate;
 var init_contentWidgets = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/contentWidgets/contentWidgets.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/contentWidgets/contentWidgets.js"() {
     init_dom();
     init_fastDomNode();
     init_viewPart();
@@ -59989,10 +59989,10 @@ var init_contentWidgets = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/currentLineHighlight/currentLineHighlight.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/currentLineHighlight/currentLineHighlight.css
 var css7;
 var init_currentLineHighlight = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/currentLineHighlight/currentLineHighlight.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/currentLineHighlight/currentLineHighlight.css"() {
     css7 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n.monaco-editor .view-overlays .current-line {\n	display: block;\n	position: absolute;\n	left: 0;\n	top: 0;\n	box-sizing: border-box;\n	height: 100%;\n}\n\n.monaco-editor .margin-view-overlays .current-line {\n	display: block;\n	position: absolute;\n	left: 0;\n	top: 0;\n	box-sizing: border-box;\n	height: 100%;\n}\n\n.monaco-editor\n	.margin-view-overlays\n	.current-line.current-line-margin.current-line-margin-both {\n	border-right: 0;\n}\n";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-b65aecdf6993")) {
       const style = document.createElement("style");
@@ -60003,17 +60003,17 @@ var init_currentLineHighlight = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/view/dynamicViewOverlay.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/view/dynamicViewOverlay.js
 var DynamicViewOverlay;
 var init_dynamicViewOverlay = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/view/dynamicViewOverlay.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/view/dynamicViewOverlay.js"() {
     init_viewEventHandler();
     DynamicViewOverlay = class extends ViewEventHandler {
     };
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/themeService.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/themeService.js
 function themeColorFromId(id) {
   return { id };
 }
@@ -60034,7 +60034,7 @@ function registerThemingParticipant(participant) {
 }
 var IThemeService, Extensions8, ThemingRegistry, themingRegistry, Themable;
 var init_themeService = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/themeService.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/themeService.js"() {
     init_event();
     init_lifecycle();
     init_instantiation();
@@ -60082,10 +60082,10 @@ var init_themeService = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/editorColorRegistry.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/editorColorRegistry.js
 var editorLineHighlight, editorInactiveLineHighlight, editorLineHighlightBorder, editorCursorForeground, editorCursorBackground, editorMultiCursorPrimaryForeground, editorMultiCursorPrimaryBackground, editorMultiCursorSecondaryForeground, editorMultiCursorSecondaryBackground, editorWhitespaces, editorLineNumbers, deprecatedEditorIndentGuides, deprecatedEditorActiveIndentGuides, editorIndentGuide1, editorIndentGuide2, editorIndentGuide3, editorIndentGuide4, editorIndentGuide5, editorIndentGuide6, editorActiveIndentGuide1, editorActiveIndentGuide2, editorActiveIndentGuide3, editorActiveIndentGuide4, editorActiveIndentGuide5, editorActiveIndentGuide6, deprecatedEditorActiveLineNumber, editorDimmedLineNumber, editorRuler, editorBracketMatchForeground, editorOverviewRulerBorder, editorOverviewRulerBackground, editorUnnecessaryCodeOpacity, ghostTextForeground, rulerRangeDefault, overviewRulerRangeHighlight, overviewRulerError, overviewRulerWarning, overviewRulerInfo, editorBracketHighlightingForeground1, editorBracketHighlightingForeground2, editorBracketHighlightingForeground3, editorBracketHighlightingForeground4, editorBracketHighlightingForeground5, editorBracketHighlightingForeground6, editorBracketHighlightingUnexpectedBracketForeground, editorBracketPairGuideBackground1, editorBracketPairGuideBackground2, editorBracketPairGuideBackground3, editorBracketPairGuideBackground4, editorBracketPairGuideBackground5, editorBracketPairGuideBackground6, editorBracketPairGuideActiveBackground1, editorBracketPairGuideActiveBackground2, editorBracketPairGuideActiveBackground3, editorBracketPairGuideActiveBackground4, editorBracketPairGuideActiveBackground5, editorBracketPairGuideActiveBackground6;
 var init_editorColorRegistry = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/editorColorRegistry.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/editorColorRegistry.js"() {
     init_nls();
     init_color();
     init_colorUtils();
@@ -60183,10 +60183,10 @@ var init_editorColorRegistry = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/currentLineHighlight/currentLineHighlight.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/currentLineHighlight/currentLineHighlight.js
 var AbstractLineHighlightOverlay, CurrentLineHighlightOverlay, CurrentLineMarginHighlightOverlay;
 var init_currentLineHighlight2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/currentLineHighlight/currentLineHighlight.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/currentLineHighlight/currentLineHighlight.js"() {
     init_currentLineHighlight();
     init_dynamicViewOverlay();
     init_editorColorRegistry();
@@ -60399,10 +60399,10 @@ var init_currentLineHighlight2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/decorations/decorations.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/decorations/decorations.css
 var css8;
 var init_decorations = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/decorations/decorations.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/decorations/decorations.css"() {
     css8 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n/*\n	Keeping name short for faster parsing.\n	cdr = core decorations rendering (div)\n*/\n.monaco-editor .lines-content .cdr {\n	position: absolute;\n	height: 100%;\n}\n";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-1f1c83c7271b")) {
       const style = document.createElement("style");
@@ -60413,10 +60413,10 @@ var init_decorations = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/decorations/decorations.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/decorations/decorations.js
 var DecorationsOverlay;
 var init_decorations2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/decorations/decorations.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/decorations/decorations.js"() {
     init_decorations();
     init_dynamicViewOverlay();
     init_renderingContext();
@@ -60602,10 +60602,10 @@ var init_decorations2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/editorScrollbar/editorScrollbar.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/editorScrollbar/editorScrollbar.js
 var EditorScrollbar2;
 var init_editorScrollbar = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/editorScrollbar/editorScrollbar.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/editorScrollbar/editorScrollbar.js"() {
     init_dom();
     init_fastDomNode();
     init_scrollableElement();
@@ -60791,10 +60791,10 @@ var init_editorScrollbar = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/glyphMargin/glyphMargin.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/glyphMargin/glyphMargin.css
 var css9;
 var init_glyphMargin = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/glyphMargin/glyphMargin.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/glyphMargin/glyphMargin.css"() {
     css9 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n.monaco-editor .glyph-margin {\n	position: absolute;\n	top: 0;\n}\n\n/*\n	Keeping name short for faster parsing.\n	cgmr = core glyph margin rendering (div)\n*/\n.monaco-editor .glyph-margin-widgets .cgmr {\n	position: absolute;\n	display: flex;\n	align-items: center;\n	justify-content: center;\n}\n\n/*\n	Ensure spinning icons are pixel-perfectly centered and avoid wobble.\n	This is only applied to icons that spin to avoid unnecessary\n	GPU layers and blurry subpixel AA.\n*/\n.monaco-editor .glyph-margin-widgets .cgmr.codicon-modifier-spin::before  {\n	position: absolute;\n	top: 50%;\n	left: 50%;\n	transform: translate(-50%, -50%);\n}\n";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-950a413a4a5c")) {
       const style = document.createElement("style");
@@ -60805,10 +60805,10 @@ var init_glyphMargin = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/glyphMargin/glyphMargin.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/glyphMargin/glyphMargin.js
 var DecorationToRender, LineDecorationToRender, VisibleLineDecorationsToRender, DedupOverlay, GlyphMarginWidgets, DecorationBasedGlyphRenderRequest, WidgetBasedGlyphRenderRequest, DecorationBasedGlyph;
 var init_glyphMargin2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/glyphMargin/glyphMargin.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/glyphMargin/glyphMargin.js"() {
     init_fastDomNode();
     init_arrays();
     init_glyphMargin();
@@ -61187,10 +61187,10 @@ var init_glyphMargin2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/indentGuides/indentGuides.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/indentGuides/indentGuides.css
 var css10;
 var init_indentGuides = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/indentGuides/indentGuides.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/indentGuides/indentGuides.css"() {
     css10 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n.monaco-editor .lines-content .core-guide {\n	position: absolute;\n	box-sizing: border-box;\n	height: 100%;\n}\n";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-5940d07e3870")) {
       const style = document.createElement("style");
@@ -61201,10 +61201,10 @@ var init_indentGuides = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/textModelPart.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/textModelPart.js
 var TextModelPart;
 var init_textModelPart = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/textModelPart.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/textModelPart.js"() {
     init_lifecycle();
     TextModelPart = class extends Disposable {
       constructor() {
@@ -61224,7 +61224,7 @@ var init_textModelPart = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/utils.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/utils.js
 function computeIndentLevel(line, tabSize) {
   let indent = 0;
   let i = 0;
@@ -61246,14 +61246,14 @@ function computeIndentLevel(line, tabSize) {
   return indent;
 }
 var init_utils4 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/utils.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/utils.js"() {
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/textModelGuides.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/textModelGuides.js
 var HorizontalGuidesState, IndentGuide, IndentGuideHorizontalLine;
 var init_textModelGuides = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/textModelGuides.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/textModelGuides.js"() {
     (function(HorizontalGuidesState2) {
       HorizontalGuidesState2[HorizontalGuidesState2["Disabled"] = 0] = "Disabled";
       HorizontalGuidesState2[HorizontalGuidesState2["EnabledForActive"] = 1] = "EnabledForActive";
@@ -61281,10 +61281,10 @@ var init_textModelGuides = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/guidesTextModelPart.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/guidesTextModelPart.js
 var GuidesTextModelPart, BracketPairGuidesClassNames;
 var init_guidesTextModelPart = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/guidesTextModelPart.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/guidesTextModelPart.js"() {
     init_arraysFind();
     init_strings();
     init_cursorColumns();
@@ -61608,7 +61608,7 @@ var init_guidesTextModelPart = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/indentGuides/indentGuides.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/indentGuides/indentGuides.js
 function transparentToUndefined(color) {
   if (color && color.isTransparent()) {
     return void 0;
@@ -61617,7 +61617,7 @@ function transparentToUndefined(color) {
 }
 var IndentGuidesOverlay;
 var init_indentGuides2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/indentGuides/indentGuides.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/indentGuides/indentGuides.js"() {
     init_indentGuides();
     init_dynamicViewOverlay();
     init_editorColorRegistry();
@@ -61857,10 +61857,10 @@ var init_indentGuides2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/lineNumbers/lineNumbers.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/lineNumbers/lineNumbers.css
 var css11;
 var init_lineNumbers = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/lineNumbers/lineNumbers.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/lineNumbers/lineNumbers.css"() {
     css11 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n.monaco-editor .margin-view-overlays .line-numbers {\n	bottom: 0;\n	font-variant-numeric: tabular-nums;\n	position: absolute;\n	text-align: right;\n	display: inline-block;\n	vertical-align: middle;\n	box-sizing: border-box;\n	cursor: default;\n}\n\n.monaco-editor .relative-current-line-number {\n	text-align: left;\n	display: inline-block;\n	width: 100%;\n}\n\n.monaco-editor .margin-view-overlays .line-numbers.lh-odd {\n	margin-top: 1px;\n}\n\n.monaco-editor .line-numbers {\n	color: var(--vscode-editorLineNumber-foreground);\n}\n\n.monaco-editor .line-numbers.active-line-number {\n	color: var(--vscode-editorLineNumber-activeForeground);\n}\n";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-3266d1b54897")) {
       const style = document.createElement("style");
@@ -61871,10 +61871,10 @@ var init_lineNumbers = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/lineNumbers/lineNumbers.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/lineNumbers/lineNumbers.js
 var LineNumbersOverlay;
 var init_lineNumbers2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/lineNumbers/lineNumbers.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/lineNumbers/lineNumbers.js"() {
     init_lineNumbers();
     init_platform();
     init_dynamicViewOverlay();
@@ -62063,10 +62063,10 @@ var init_lineNumbers2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/mouseCursor/mouseCursor.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/mouseCursor/mouseCursor.css
 var css12;
 var init_mouseCursor = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/mouseCursor/mouseCursor.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/mouseCursor/mouseCursor.css"() {
     css12 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n.monaco-mouse-cursor-text {\n	cursor: text;\n}\n";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-6f7439069d23")) {
       const style = document.createElement("style");
@@ -62077,19 +62077,19 @@ var init_mouseCursor = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/mouseCursor/mouseCursor.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/mouseCursor/mouseCursor.js
 var MOUSE_CURSOR_TEXT_CSS_CLASS_NAME;
 var init_mouseCursor2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/mouseCursor/mouseCursor.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/mouseCursor/mouseCursor.js"() {
     init_mouseCursor();
     MOUSE_CURSOR_TEXT_CSS_CLASS_NAME = `monaco-mouse-cursor-text`;
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/viewLines/viewLines.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/viewLines/viewLines.css
 var css13;
 var init_viewLines = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/viewLines/viewLines.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/viewLines/viewLines.css"() {
     css13 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n/* Uncomment to see lines flashing when they're painted */\n/*.monaco-editor .view-lines > .view-line {\n	background-color: none;\n	animation-name: flash-background;\n	animation-duration: 800ms;\n}\n@keyframes flash-background {\n	0%   { background-color: lightgreen; }\n	100% { background-color: none }\n}*/\n\n.mtkcontrol {\n	color: rgb(255, 255, 255) !important;\n	background: rgb(150, 0, 0) !important;\n}\n\n/*\n * A full-width character centered in exactly two character cells. The cell width is editor\n * specific and stays inline. Deliberately not scoped to `.monaco-editor`, so that the lines\n * `DOMLineBreaksComputer` measures in a container attached to the document body are styled\n * the same way as the rendered ones.\n */\n.mtkfullwidth {\n	display: inline-block;\n	box-sizing: border-box;\n	text-align: center;\n}\n\n.mtkoverflow {\n	background-color: var(--vscode-button-background, var(--vscode-editor-background));\n	color: var(--vscode-button-foreground, var(--vscode-editor-foreground));\n	border-width: 1px;\n	border-style: solid;\n	border-color: var(--vscode-contrastBorder);\n	border-radius: 2px;\n	padding: 4px;\n	cursor: pointer;\n}\n.mtkoverflow:hover {\n	background-color: var(--vscode-button-hoverBackground);\n}\n\n.monaco-editor.no-user-select .lines-content,\n.monaco-editor.no-user-select .view-line,\n.monaco-editor.no-user-select .view-lines {\n	user-select: none;\n	-webkit-user-select: none;\n}\n/* Use user-select: text for lookup feature on macOS */\n/* https://github.com/microsoft/vscode/issues/85632 */\n.monaco-editor.mac .lines-content:hover,\n.monaco-editor.mac .view-line:hover,\n.monaco-editor.mac .view-lines:hover {\n	user-select: text;\n	-webkit-user-select: text;\n	-ms-user-select: text;\n}\n\n.monaco-editor.enable-user-select {\n	user-select: initial;\n	-webkit-user-select: initial;\n}\n\n.monaco-editor .view-lines {\n	white-space: nowrap;\n}\n\n.monaco-editor .view-line {\n	box-sizing: border-box;\n	position: absolute;\n	width: 100%;\n}\n\n/* There are view-lines in view-zones. We have to make sure this rule does not apply to them, as they don't set a line height */\n.monaco-editor .lines-content > .view-lines > .view-line > span {\n	top: 0;\n	bottom: 0;\n	position: absolute;\n}\n\n.monaco-editor .mtkw {\n	color: var(--vscode-editorWhitespace-foreground) !important;\n}\n\n.monaco-editor .mtkz {\n	display: inline-block;\n	color: var(--vscode-editorWhitespace-foreground) !important;\n}\n\n/* TODO@tokenization bootstrap fix */\n/*.monaco-editor .view-line > span > span {\n	float: none;\n	min-height: inherit;\n	margin-left: inherit;\n}*/\n";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-487e5c19f169")) {
       const style = document.createElement("style");
@@ -62100,10 +62100,10 @@ var init_viewLines = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/viewLines/domReadingContext.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/viewLines/domReadingContext.js
 var DomReadingContext;
 var init_domReadingContext = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/viewLines/domReadingContext.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/viewLines/domReadingContext.js"() {
     DomReadingContext = class {
       get didDomLayout() {
         return this._didDomLayout;
@@ -62145,10 +62145,10 @@ var init_domReadingContext = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/viewLines/viewLineOptions.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/viewLines/viewLineOptions.js
 var ViewLineOptions;
 var init_viewLineOptions = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/viewLines/viewLineOptions.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/viewLines/viewLineOptions.js"() {
     ViewLineOptions = class {
       constructor(config, themeType) {
         this.themeType = themeType;
@@ -62209,10 +62209,10 @@ var init_viewLineOptions = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/viewLines/viewLines.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/viewLines/viewLines.js
 var LastRenderedData, HorizontalRevealRangeRequest, HorizontalRevealSelectionsRequest, ViewLines;
 var init_viewLines2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/viewLines/viewLines.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/viewLines/viewLines.js"() {
     init_mouseCursor2();
     init_async();
     init_platform();
@@ -62932,10 +62932,10 @@ var init_viewLines2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/linesDecorations/linesDecorations.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/linesDecorations/linesDecorations.css
 var css14;
 var init_linesDecorations = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/linesDecorations/linesDecorations.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/linesDecorations/linesDecorations.css"() {
     css14 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n.monaco-editor .lines-decorations {\n	position: absolute;\n	top: 0;\n	background: white;\n}\n\n/*\n	Keeping name short for faster parsing.\n	cldr = core lines decorations rendering (div)\n*/\n.monaco-editor .margin-view-overlays .cldr {\n	position: absolute;\n	height: 100%;\n}";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-7ee3f6e0a7b9")) {
       const style = document.createElement("style");
@@ -62946,10 +62946,10 @@ var init_linesDecorations = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/linesDecorations/linesDecorations.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/linesDecorations/linesDecorations.js
 var LinesDecorationsOverlay;
 var init_linesDecorations2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/linesDecorations/linesDecorations.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/linesDecorations/linesDecorations.js"() {
     init_linesDecorations();
     init_glyphMargin2();
     LinesDecorationsOverlay = class extends DedupOverlay {
@@ -63056,10 +63056,10 @@ var init_linesDecorations2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/margin/margin.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/margin/margin.css
 var css15;
 var init_margin = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/margin/margin.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/margin/margin.css"() {
     css15 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n.monaco-editor .margin {\n	background-color: var(--vscode-editorGutter-background);\n}\n";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-3b6301d0a85a")) {
       const style = document.createElement("style");
@@ -63070,10 +63070,10 @@ var init_margin = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/margin/margin.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/margin/margin.js
 var Margin;
 var init_margin2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/margin/margin.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/margin/margin.js"() {
     init_margin();
     init_fastDomNode();
     init_viewPart();
@@ -63148,10 +63148,10 @@ var init_margin2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/marginDecorations/marginDecorations.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/marginDecorations/marginDecorations.css
 var css16;
 var init_marginDecorations = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/marginDecorations/marginDecorations.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/marginDecorations/marginDecorations.css"() {
     css16 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n/*\n	Keeping name short for faster parsing.\n	cmdr = core margin decorations rendering (div)\n*/\n.monaco-editor .margin-view-overlays .cmdr {\n	position: absolute;\n	left: 0;\n	width: 100%;\n	height: 100%;\n}";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-e76e6c50e304")) {
       const style = document.createElement("style");
@@ -63162,10 +63162,10 @@ var init_marginDecorations = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/marginDecorations/marginDecorations.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/marginDecorations/marginDecorations.js
 var MarginViewLineDecorationsOverlay;
 var init_marginDecorations2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/marginDecorations/marginDecorations.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/marginDecorations/marginDecorations.js"() {
     init_marginDecorations();
     init_glyphMargin2();
     MarginViewLineDecorationsOverlay = class extends DedupOverlay {
@@ -63246,10 +63246,10 @@ var init_marginDecorations2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/minimap/minimap.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/minimap/minimap.css
 var css17;
 var init_minimap = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/minimap/minimap.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/minimap/minimap.css"() {
     css17 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n/* START cover the case that slider is visible on mouseover */\n.monaco-editor .minimap.slider-mouseover .minimap-slider {\n	opacity: 0;\n	transition: opacity 100ms linear;\n}\n.monaco-editor .minimap.slider-mouseover:hover .minimap-slider {\n	opacity: 1;\n}\n.monaco-editor .minimap.slider-mouseover .minimap-slider.active {\n	opacity: 1;\n}\n/* END cover the case that slider is visible on mouseover */\n.monaco-editor .minimap-slider .minimap-slider-horizontal {\n	background: var(--vscode-minimapSlider-background);\n}\n.monaco-editor .minimap-slider:hover .minimap-slider-horizontal {\n	background: var(--vscode-minimapSlider-hoverBackground);\n}\n.monaco-editor .minimap-slider.active .minimap-slider-horizontal {\n	background: var(--vscode-minimapSlider-activeBackground);\n}\n.monaco-editor .minimap-shadow-visible {\n	box-shadow: var(--vscode-shadow-md);\n}\n.monaco-editor .minimap-shadow-hidden {\n	position: absolute;\n	width: 0;\n}\n.monaco-editor .minimap-shadow-visible {\n	position: absolute;\n	left: -6px;\n	width: 6px;\n	pointer-events: none;\n}\n.monaco-editor.no-minimap-shadow .minimap-shadow-visible {\n	position: absolute;\n	left: -1px;\n	width: 1px;\n}\n\n/* 0.5s fade in/out for the minimap */\n.minimap.minimap-autohide-mouseover,\n.minimap.minimap-autohide-scroll {\n	opacity: 0;\n	transition: opacity 0.5s;\n}\n.minimap.minimap-autohide-scroll{\n	pointer-events: none;\n}\n.minimap.minimap-autohide-mouseover:hover,\n.minimap.minimap-autohide-scroll.active {\n	opacity: 1;\n	pointer-events: auto;\n}\n\n.monaco-editor .minimap {\n	z-index: 5;\n}\n\n.monaco-editor .minimap canvas {\n	opacity: 0.9;\n}\n";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-a37601040912")) {
       const style = document.createElement("style");
@@ -63260,10 +63260,10 @@ var init_minimap = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/misc/rgba.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/misc/rgba.js
 var RGBA8;
 var init_rgba = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/misc/rgba.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/misc/rgba.js"() {
     RGBA8 = class _RGBA8 {
       static {
         this.Empty = new _RGBA8(0, 0, 0, 0);
@@ -63291,10 +63291,10 @@ var init_rgba = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel/minimapTokensColorTracker.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel/minimapTokensColorTracker.js
 var MinimapTokensColorTracker;
 var init_minimapTokensColorTracker = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel/minimapTokensColorTracker.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel/minimapTokensColorTracker.js"() {
     init_event();
     init_lifecycle();
     init_rgba();
@@ -63361,10 +63361,10 @@ var init_minimapTokensColorTracker = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/minimap/minimapCharSheet.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/minimap/minimapCharSheet.js
 var allCharCodes, getCharIndex;
 var init_minimapCharSheet = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/minimap/minimapCharSheet.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/minimap/minimapCharSheet.js"() {
     allCharCodes = (() => {
       const v2 = [];
       for (let i = 32; i <= 126; i++) {
@@ -63389,10 +63389,10 @@ var init_minimapCharSheet = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/minimap/minimapCharRenderer.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/minimap/minimapCharRenderer.js
 var MinimapCharRenderer;
 var init_minimapCharRenderer = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/minimap/minimapCharRenderer.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/minimap/minimapCharRenderer.js"() {
     init_minimapCharSheet();
     init_uint();
     MinimapCharRenderer = class _MinimapCharRenderer {
@@ -63479,10 +63479,10 @@ var init_minimapCharRenderer = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/minimap/minimapPreBaked.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/minimap/minimapPreBaked.js
 var charTable, decodeData, prebakedMiniMaps;
 var init_minimapPreBaked = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/minimap/minimapPreBaked.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/minimap/minimapPreBaked.js"() {
     init_functional();
     charTable = {
       "0": 0,
@@ -63516,10 +63516,10 @@ var init_minimapPreBaked = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/minimap/minimapCharRendererFactory.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/minimap/minimapCharRendererFactory.js
 var MinimapCharRendererFactory;
 var init_minimapCharRendererFactory = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/minimap/minimapCharRendererFactory.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/minimap/minimapCharRendererFactory.js"() {
     init_minimapCharRenderer();
     init_minimapCharSheet();
     init_minimapPreBaked();
@@ -63634,16 +63634,16 @@ var init_minimapCharRendererFactory = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/fonts.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/fonts.js
 var DEFAULT_FONT_FAMILY;
 var init_fonts = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/fonts.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/fonts.js"() {
     init_platform();
     DEFAULT_FONT_FAMILY = isWindows ? '"Segoe WPC", "Segoe UI", sans-serif' : isMacintosh ? "-apple-system, BlinkMacSystemFont, sans-serif" : 'system-ui, "Ubuntu", "Droid Sans", sans-serif';
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel/viewModelDecoration.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel/viewModelDecoration.js
 function isModelDecorationVisible(model, decoration) {
   if (decoration.options.hideInCommentTokens && isModelDecorationInComment(model, decoration)) {
     return false;
@@ -63693,7 +63693,7 @@ function testTokensInRange(model, range2, callback) {
 }
 var ViewModelDecoration;
 var init_viewModelDecoration = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel/viewModelDecoration.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel/viewModelDecoration.js"() {
     ViewModelDecoration = class {
       constructor(range2, options) {
         this._viewModelDecorationBrand = void 0;
@@ -63704,10 +63704,10 @@ var init_viewModelDecoration = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/minimap/minimap.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/minimap/minimap.js
 var POINTER_DRAG_RESET_DISTANCE2, GUTTER_DECORATION_WIDTH, MinimapOptions, MinimapLayout, MinimapLine, RenderData, MinimapBuffers, MinimapSamplingState, Minimap, InnerMinimap, ContiguousLineMap;
 var init_minimap2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/minimap/minimap.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/minimap/minimap.js"() {
     init_minimap();
     init_dom();
     init_fastDomNode();
@@ -65225,10 +65225,10 @@ var init_minimap2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/overlayWidgets/overlayWidgets.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/overlayWidgets/overlayWidgets.css
 var css18;
 var init_overlayWidgets = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/overlayWidgets/overlayWidgets.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/overlayWidgets/overlayWidgets.css"() {
     css18 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n.monaco-editor .overlayWidgets {\n	position: absolute;\n	top: 0;\n	left:0;\n}";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-fdf86c7d132d")) {
       const style = document.createElement("style");
@@ -65239,10 +65239,10 @@ var init_overlayWidgets = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/overlayWidgets/overlayWidgets.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/overlayWidgets/overlayWidgets.js
 var ViewOverlayWidgets;
 var init_overlayWidgets2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/overlayWidgets/overlayWidgets.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/overlayWidgets/overlayWidgets.js"() {
     init_overlayWidgets();
     init_fastDomNode();
     init_viewPart();
@@ -65432,10 +65432,10 @@ var init_overlayWidgets2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/overviewRuler/decorationsOverviewRuler.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/overviewRuler/decorationsOverviewRuler.js
 var Settings, DecorationsOverviewRuler;
 var init_decorationsOverviewRuler = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/overviewRuler/decorationsOverviewRuler.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/overviewRuler/decorationsOverviewRuler.js"() {
     init_fastDomNode();
     init_color();
     init_viewPart();
@@ -65879,10 +65879,10 @@ var init_decorationsOverviewRuler = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel/overviewZoneManager.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel/overviewZoneManager.js
 var ColorZone, OverviewRulerZone, OverviewZoneManager;
 var init_overviewZoneManager = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel/overviewZoneManager.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel/overviewZoneManager.js"() {
     ColorZone = class {
       constructor(from, to, colorId) {
         this._colorZoneBrand = void 0;
@@ -66051,10 +66051,10 @@ var init_overviewZoneManager = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/overviewRuler/overviewRuler.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/overviewRuler/overviewRuler.js
 var OverviewRuler;
 var init_overviewRuler = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/overviewRuler/overviewRuler.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/overviewRuler/overviewRuler.js"() {
     init_fastDomNode();
     init_overviewZoneManager();
     init_viewEventHandler();
@@ -66199,10 +66199,10 @@ var init_overviewRuler = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/rulers/rulers.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/rulers/rulers.css
 var css19;
 var init_rulers = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/rulers/rulers.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/rulers/rulers.css"() {
     css19 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n.monaco-editor .view-ruler {\n	position: absolute;\n	top: 0;\n	box-shadow: 1px 0 0 0 var(--vscode-editorRuler-foreground) inset;\n	pointer-events: none;\n}\n";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-7ae4d4ba3c87")) {
       const style = document.createElement("style");
@@ -66213,10 +66213,10 @@ var init_rulers = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/rulers/rulers.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/rulers/rulers.js
 var Rulers;
 var init_rulers2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/rulers/rulers.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/rulers/rulers.js"() {
     init_rulers();
     init_fastDomNode();
     init_viewPart();
@@ -66296,10 +66296,10 @@ var init_rulers2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/scrollDecoration/scrollDecoration.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/scrollDecoration/scrollDecoration.css
 var css20;
 var init_scrollDecoration = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/scrollDecoration/scrollDecoration.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/scrollDecoration/scrollDecoration.css"() {
     css20 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n.monaco-editor .scroll-decoration {\n	position: absolute;\n	top: 0;\n	left: 0;\n	height: 6px;\n	box-shadow: var(--vscode-scrollbar-shadow) 0 6px 6px -6px inset;\n}\n";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-a058d4cda0d2")) {
       const style = document.createElement("style");
@@ -66310,10 +66310,10 @@ var init_scrollDecoration = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/scrollDecoration/scrollDecoration.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/scrollDecoration/scrollDecoration.js
 var ScrollDecorationViewPart;
 var init_scrollDecoration2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/scrollDecoration/scrollDecoration.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/scrollDecoration/scrollDecoration.js"() {
     init_scrollDecoration();
     init_fastDomNode();
     init_viewPart();
@@ -66384,10 +66384,10 @@ var init_scrollDecoration2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/selections/selections.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/selections/selections.css
 var css21;
 var init_selections = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/selections/selections.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/selections/selections.css"() {
     css21 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n/*\n	Keeping name short for faster parsing.\n	cslr = core selections layer rendering (div)\n*/\n.monaco-editor .lines-content .cslr {\n	position: absolute;\n}\n\n.monaco-editor .focused .selected-text {\n	background-color: var(--vscode-editor-selectionBackground);\n}\n\n.monaco-editor .selected-text {\n	background-color: var(--vscode-editor-inactiveSelectionBackground);\n}\n\n.monaco-editor			.top-left-radius		{ border-top-left-radius: 3px; }\n.monaco-editor			.bottom-left-radius		{ border-bottom-left-radius: 3px; }\n.monaco-editor			.top-right-radius		{ border-top-right-radius: 3px; }\n.monaco-editor			.bottom-right-radius	{ border-bottom-right-radius: 3px; }\n\n.monaco-editor.hc-black .top-left-radius		{ border-top-left-radius: 0; }\n.monaco-editor.hc-black .bottom-left-radius		{ border-bottom-left-radius: 0; }\n.monaco-editor.hc-black .top-right-radius		{ border-top-right-radius: 0; }\n.monaco-editor.hc-black .bottom-right-radius	{ border-bottom-right-radius: 0; }\n\n.monaco-editor.hc-light .top-left-radius		{ border-top-left-radius: 0; }\n.monaco-editor.hc-light .bottom-left-radius		{ border-bottom-left-radius: 0; }\n.monaco-editor.hc-light .top-right-radius		{ border-top-right-radius: 0; }\n.monaco-editor.hc-light .bottom-right-radius	{ border-bottom-right-radius: 0; }\n";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-d414256ae5ce")) {
       const style = document.createElement("style");
@@ -66398,7 +66398,7 @@ var init_selections = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/selections/selections.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/selections/selections.js
 function toStyledRange(item) {
   return new HorizontalRangeWithStyle(item);
 }
@@ -66410,7 +66410,7 @@ function abs(n2) {
 }
 var HorizontalRangeWithStyle, LineVisibleRangesWithStyle, SelectionsOverlay;
 var init_selections2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/selections/selections.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/selections/selections.js"() {
     init_selections();
     init_dynamicViewOverlay();
     init_colorUtils();
@@ -66731,10 +66731,10 @@ var init_selections2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/viewCursors/viewCursors.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/viewCursors/viewCursors.css
 var css22;
 var init_viewCursors = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/viewCursors/viewCursors.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/viewCursors/viewCursors.css"() {
     css22 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n.monaco-editor .cursors-layer {\n	position: absolute;\n	top: 0;\n}\n\n.monaco-editor .cursors-layer > .cursor {\n	position: absolute;\n	overflow: hidden;\n	box-sizing: border-box;\n}\n\n/* -- smooth-caret-animation -- */\n.monaco-editor .cursors-layer.cursor-smooth-caret-animation > .cursor {\n	transition: all 80ms;\n}\n\n/* -- block-outline-style -- */\n.monaco-editor .cursors-layer.cursor-block-outline-style > .cursor {\n	background: transparent !important;\n	border-style: solid;\n	border-width: 1px;\n}\n\n/* -- underline-style -- */\n.monaco-editor .cursors-layer.cursor-underline-style > .cursor {\n	border-bottom-width: 2px;\n	border-bottom-style: solid;\n	background: transparent !important;\n}\n\n/* -- underline-thin-style -- */\n.monaco-editor .cursors-layer.cursor-underline-thin-style > .cursor {\n	border-bottom-width: 1px;\n	border-bottom-style: solid;\n	background: transparent !important;\n}\n\n@keyframes monaco-cursor-smooth {\n	0%,\n	20% {\n		opacity: 1;\n	}\n	60%,\n	100% {\n		opacity: 0;\n	}\n}\n\n@keyframes monaco-cursor-phase {\n	0%,\n	20% {\n		opacity: 1;\n	}\n	90%,\n	100% {\n		opacity: 0;\n	}\n}\n\n@keyframes monaco-cursor-expand {\n	0%,\n	20% {\n		transform: scaleY(1);\n	}\n	80%,\n	100% {\n		transform: scaleY(0);\n	}\n}\n\n.cursor-smooth {\n	animation: monaco-cursor-smooth 0.5s ease-in-out 0s 20 alternate;\n}\n\n.cursor-phase {\n	animation: monaco-cursor-phase 0.5s ease-in-out 0s 20 alternate;\n}\n\n.cursor-expand > .cursor {\n	animation: monaco-cursor-expand 0.5s ease-in-out 0s 20 alternate;\n}\n";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-3065962d87b5")) {
       const style = document.createElement("style");
@@ -66745,10 +66745,10 @@ var init_viewCursors = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/viewCursors/viewCursor.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/viewCursors/viewCursor.js
 var ViewCursorRenderData, CursorPlurality, ViewCursor;
 var init_viewCursor = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/viewCursors/viewCursor.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/viewCursors/viewCursor.js"() {
     init_dom();
     init_fastDomNode();
     init_strings();
@@ -66972,10 +66972,10 @@ var init_viewCursor = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/viewCursors/viewCursors.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/viewCursors/viewCursors.js
 var ViewCursors;
 var init_viewCursors2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/viewCursors/viewCursors.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/viewCursors/viewCursors.js"() {
     init_viewCursors();
     init_fastDomNode();
     init_async();
@@ -67326,7 +67326,7 @@ var init_viewCursors2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/viewZones/viewZones.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/viewZones/viewZones.js
 function safeInvoke1Arg(func, arg1) {
   try {
     return func(arg1);
@@ -67337,7 +67337,7 @@ function safeInvoke1Arg(func, arg1) {
 }
 var invalidFunc, ViewZones;
 var init_viewZones = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/viewZones/viewZones.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/viewZones/viewZones.js"() {
     init_fastDomNode();
     init_errors();
     init_viewPart();
@@ -67662,10 +67662,10 @@ var init_viewZones = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/whitespace/whitespace.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/whitespace/whitespace.css
 var css23;
 var init_whitespace = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/whitespace/whitespace.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/whitespace/whitespace.css"() {
     css23 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n.monaco-editor .mwh {\n	position: absolute;\n	color: var(--vscode-editorWhitespace-foreground) !important;\n}\n";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-4a670162ab2a")) {
       const style = document.createElement("style");
@@ -67676,10 +67676,10 @@ var init_whitespace = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/whitespace/whitespace.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/whitespace/whitespace.js
 var WhitespaceOverlay, WhitespaceOptions;
 var init_whitespace2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/whitespace/whitespace.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/whitespace/whitespace.js"() {
     init_whitespace();
     init_dynamicViewOverlay();
     init_strings();
@@ -67945,10 +67945,10 @@ var init_whitespace2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/wordWrapIndicator/wordWrapIndicator.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/wordWrapIndicator/wordWrapIndicator.css
 var css24;
 var init_wordWrapIndicator = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/wordWrapIndicator/wordWrapIndicator.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/wordWrapIndicator/wordWrapIndicator.css"() {
     css24 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n.monaco-editor .wwi {\n	position: absolute;\n	pointer-events: none;\n	color: var(--vscode-editorWordWrapIndicator-foreground);\n}\n";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-c14d56a3ae79")) {
       const style = document.createElement("style");
@@ -67959,10 +67959,10 @@ var init_wordWrapIndicator = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/wordWrapIndicator/wordWrapIndicator.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/wordWrapIndicator/wordWrapIndicator.js
 var WORD_WRAP_INDICATOR_CHAR_CODE, WordWrapIndicatorOverlay, WordWrapIndicatorOptions;
 var init_wordWrapIndicator2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/wordWrapIndicator/wordWrapIndicator.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/wordWrapIndicator/wordWrapIndicator.js"() {
     init_wordWrapIndicator();
     init_dynamicViewOverlay();
     WORD_WRAP_INDICATOR_CHAR_CODE = 8617;
@@ -68076,10 +68076,10 @@ var init_wordWrapIndicator2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewLayout/viewLinesViewportData.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewLayout/viewLinesViewportData.js
 var ViewportData;
 var init_viewLinesViewportData = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewLayout/viewLinesViewportData.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewLayout/viewLinesViewportData.js"() {
     init_range();
     ViewportData = class {
       constructor(selections, partialData, whitespaceViewportData, model) {
@@ -68106,10 +68106,10 @@ var init_viewLinesViewportData = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/editorTheme.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/editorTheme.js
 var EditorTheme;
 var init_editorTheme = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/editorTheme.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/editorTheme.js"() {
     EditorTheme = class {
       get type() {
         return this._theme.type;
@@ -68130,10 +68130,10 @@ var init_editorTheme = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel/viewContext.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel/viewContext.js
 var ViewContext;
 var init_viewContext = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel/viewContext.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel/viewContext.js"() {
     init_editorTheme();
     ViewContext = class {
       constructor(configuration, theme, model) {
@@ -68152,7 +68152,7 @@ var init_viewContext = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/gpuUtils.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/gpuUtils.js
 function ensureNonNullable(value) {
   if (!value) {
     throw new Error(`Value "${value}" cannot be null`);
@@ -68187,7 +68187,7 @@ function observeDevicePixelDimensions(element, parentWindow, callback) {
 }
 var quadVertices;
 var init_gpuUtils = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/gpuUtils.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/gpuUtils.js"() {
     init_errors();
     init_lifecycle();
     quadVertices = new Float32Array([
@@ -68207,10 +68207,10 @@ var init_gpuUtils = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/raster/glyphRasterizer.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/raster/glyphRasterizer.js
 var __decorate10, nextId, GlyphRasterizer;
 var init_glyphRasterizer = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/raster/glyphRasterizer.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/raster/glyphRasterizer.js"() {
     init_decorators();
     init_lifecycle();
     init_platform();
@@ -68438,10 +68438,10 @@ var init_glyphRasterizer = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/taskQueue.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/taskQueue.js
 var __decorate11, __param9, TaskQueue2, PriorityTaskQueue, IdleTaskQueueInternal, IdleTaskQueue;
 var init_taskQueue = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/taskQueue.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/taskQueue.js"() {
     init_dom();
     init_lifecycle();
     init_log();
@@ -68536,10 +68536,10 @@ var init_taskQueue = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/atlas/textureAtlasShelfAllocator.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/atlas/textureAtlasShelfAllocator.js
 var TextureAtlasShelfAllocator;
 var init_textureAtlasShelfAllocator = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/atlas/textureAtlasShelfAllocator.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/atlas/textureAtlasShelfAllocator.js"() {
     init_errors();
     init_gpuUtils();
     TextureAtlasShelfAllocator = class {
@@ -68661,7 +68661,7 @@ var init_textureAtlasShelfAllocator = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/atlas/textureAtlasSlabAllocator.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/atlas/textureAtlasSlabAllocator.js
 function addEntryToMapArray(map, key, entry) {
   let list2 = map.get(key);
   if (!list2) {
@@ -68672,7 +68672,7 @@ function addEntryToMapArray(map, key, entry) {
 }
 var TextureAtlasSlabAllocator;
 var init_textureAtlasSlabAllocator = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/atlas/textureAtlasSlabAllocator.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/atlas/textureAtlasSlabAllocator.js"() {
     init_dom();
     init_errors();
     init_map();
@@ -68962,10 +68962,10 @@ var init_textureAtlasSlabAllocator = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/atlas/textureAtlasPage.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/atlas/textureAtlasPage.js
 var __decorate12, __param10, TextureAtlasPage_1, TextureAtlasPage;
 var init_textureAtlasPage = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/atlas/textureAtlasPage.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/atlas/textureAtlasPage.js"() {
     init_lifecycle();
     init_map();
     init_log();
@@ -69069,10 +69069,10 @@ var init_textureAtlasPage = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/atlas/textureAtlas.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/atlas/textureAtlas.js
 var __decorate13, __param11, TextureAtlas_1, TextureAtlas;
 var init_textureAtlas = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/atlas/textureAtlas.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/atlas/textureAtlas.js"() {
     init_dom();
     init_errors();
     init_event();
@@ -69217,10 +69217,10 @@ var init_textureAtlas = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/severity.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/severity.js
 var Severity, Severity$1;
 var init_severity = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/severity.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/severity.js"() {
     init_strings();
     (function(Severity3) {
       Severity3[Severity3["Ignore"] = 0] = "Ignore";
@@ -69268,10 +69268,10 @@ var init_severity = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/notification/common/notification.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/notification/common/notification.js
 var Severity2, INotificationService, NoOpNotification;
 var init_notification = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/notification/common/notification.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/notification/common/notification.js"() {
     init_severity();
     init_instantiation();
     Severity2 = Severity$1;
@@ -69281,7 +69281,7 @@ var init_notification = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/gpuDisposable.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/gpuDisposable.js
 function wrapDestroyableInDisposable(value) {
   return {
     object: value,
@@ -69290,7 +69290,7 @@ function wrapDestroyableInDisposable(value) {
 }
 var GPULifecycle;
 var init_gpuDisposable = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/gpuDisposable.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/gpuDisposable.js"() {
     init_types();
     (function(GPULifecycle2) {
       async function requestDevice(fallback2) {
@@ -69327,10 +69327,10 @@ var init_gpuDisposable = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/bufferDirtyTracker.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/bufferDirtyTracker.js
 var BufferDirtyTracker;
 var init_bufferDirtyTracker = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/bufferDirtyTracker.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/bufferDirtyTracker.js"() {
     BufferDirtyTracker = class {
       get dataOffset() {
         return this._startIndex;
@@ -69372,13 +69372,13 @@ var init_bufferDirtyTracker = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/objectCollectionBuffer.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/objectCollectionBuffer.js
 function createObjectCollectionBuffer(propertySpecs, capacity) {
   return new ObjectCollectionBuffer(propertySpecs, capacity);
 }
 var ObjectCollectionBuffer, ObjectCollectionBufferEntry;
 var init_objectCollectionBuffer = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/objectCollectionBuffer.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/objectCollectionBuffer.js"() {
     init_event();
     init_lifecycle();
     init_linkedList();
@@ -69474,10 +69474,10 @@ var init_objectCollectionBuffer = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/rectangleRenderer.wgsl.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/rectangleRenderer.wgsl.js
 var rectangleRendererWgsl;
 var init_rectangleRenderer_wgsl = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/rectangleRenderer.wgsl.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/rectangleRenderer.wgsl.js"() {
     rectangleRendererWgsl = /*wgsl*/
     `
 
@@ -69544,10 +69544,10 @@ struct VSOutput {
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/rectangleRenderer.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/rectangleRenderer.js
 var RectangleRenderer;
 var init_rectangleRenderer = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/rectangleRenderer.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/rectangleRenderer.js"() {
     init_dom();
     init_event();
     init_lifecycle();
@@ -69782,10 +69782,10 @@ var init_rectangleRenderer = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/css/media/decorationCssRuleExtractor.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/css/media/decorationCssRuleExtractor.css
 var css25;
 var init_decorationCssRuleExtractor = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/css/media/decorationCssRuleExtractor.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/css/media/decorationCssRuleExtractor.css"() {
     css25 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n.monaco-editor .monaco-decoration-css-rule-extractor {\n	visibility: hidden;\n	pointer-events: none;\n}\n";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-8dddd1ebb6b7")) {
       const style = document.createElement("style");
@@ -69796,10 +69796,10 @@ var init_decorationCssRuleExtractor = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/css/decorationCssRuleExtractor.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/css/decorationCssRuleExtractor.js
 var DecorationCssRuleExtractor;
 var init_decorationCssRuleExtractor2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/css/decorationCssRuleExtractor.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/css/decorationCssRuleExtractor.js"() {
     init_dom();
     init_lifecycle();
     init_decorationCssRuleExtractor();
@@ -69885,10 +69885,10 @@ var init_decorationCssRuleExtractor2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/css/decorationStyleCache.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/css/decorationStyleCache.js
 var DecorationStyleCache;
 var init_decorationStyleCache = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/css/decorationStyleCache.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/css/decorationStyleCache.js"() {
     init_map();
     DecorationStyleCache = class {
       constructor() {
@@ -69928,7 +69928,7 @@ var init_decorationStyleCache = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/utils/runOnChange.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/utils/runOnChange.js
 function runOnChange(observable, cb) {
   let _previousValue;
   let _firstRun = true;
@@ -69960,7 +69960,7 @@ function runOnChange(observable, cb) {
   });
 }
 var init_runOnChange = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/utils/runOnChange.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/utils/runOnChange.js"() {
     init_cancellation();
     init_equals();
     init_event();
@@ -69969,7 +69969,7 @@ var init_runOnChange = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/viewGpuContext.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/viewGpuContext.js
 function requiresDomFullwidthCharacterRendering(options, content) {
   if (!options.useTwoCellFullwidthCharacters) {
     return false;
@@ -70013,7 +70013,7 @@ function supportsCssRule(rule, style) {
 }
 var __decorate14, __param12, ViewGpuContext_1, ViewGpuContext, gpuSupportedDecorationCssRules;
 var init_viewGpuContext = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/viewGpuContext.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/viewGpuContext.js"() {
     init_nls();
     init_dom();
     init_fastDomNode();
@@ -70254,7 +70254,7 @@ var init_viewGpuContext = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/contentSegmenter.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/contentSegmenter.js
 function createContentSegmenter(lineData, options) {
   if (lineData.isBasicASCII && options.useMonospaceOptimizations) {
     return new AsciiContentSegmenter(lineData);
@@ -70263,7 +70263,7 @@ function createContentSegmenter(lineData, options) {
 }
 var AsciiContentSegmenter, GraphemeContentSegmenter;
 var init_contentSegmenter = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/contentSegmenter.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/contentSegmenter.js"() {
     init_date();
     AsciiContentSegmenter = class {
       constructor(lineData) {
@@ -70300,10 +70300,10 @@ var init_contentSegmenter = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/renderStrategy/baseRenderStrategy.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/renderStrategy/baseRenderStrategy.js
 var BaseRenderStrategy;
 var init_baseRenderStrategy = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/renderStrategy/baseRenderStrategy.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/renderStrategy/baseRenderStrategy.js"() {
     init_viewEventHandler();
     BaseRenderStrategy = class extends ViewEventHandler {
       get glyphRasterizer() {
@@ -70321,10 +70321,10 @@ var init_baseRenderStrategy = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/renderStrategy/fullFileRenderStrategy.wgsl.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/renderStrategy/fullFileRenderStrategy.wgsl.js
 var fullFileRenderStrategyWgsl;
 var init_fullFileRenderStrategy_wgsl = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/renderStrategy/fullFileRenderStrategy.wgsl.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/renderStrategy/fullFileRenderStrategy.wgsl.js"() {
     init_textureAtlas();
     init_textureAtlasPage();
     fullFileRenderStrategyWgsl = /*wgsl*/
@@ -70415,7 +70415,7 @@ struct VSOutput {
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/renderStrategy/viewportRenderStrategy.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/renderStrategy/viewportRenderStrategy.js
 function parseCssFontWeight(value) {
   switch (value) {
     case "lighter":
@@ -70438,7 +70438,7 @@ function parseCssOpacity(value) {
 }
 var ViewportRenderStrategy;
 var init_viewportRenderStrategy = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/renderStrategy/viewportRenderStrategy.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/renderStrategy/viewportRenderStrategy.js"() {
     init_dom();
     init_color();
     init_errors();
@@ -70770,7 +70770,7 @@ var init_viewportRenderStrategy = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/renderStrategy/fullFileRenderStrategy.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/renderStrategy/fullFileRenderStrategy.js
 function parseCssFontWeight2(value) {
   switch (value) {
     case "lighter":
@@ -70793,7 +70793,7 @@ function parseCssOpacity2(value) {
 }
 var FullFileRenderStrategy;
 var init_fullFileRenderStrategy = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/renderStrategy/fullFileRenderStrategy.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/gpu/renderStrategy/fullFileRenderStrategy.js"() {
     init_dom();
     init_color();
     init_errors();
@@ -71194,10 +71194,10 @@ var init_fullFileRenderStrategy = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/viewLinesGpu/viewLinesGpu.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/viewLinesGpu/viewLinesGpu.js
 var __decorate15, __param13, ViewLinesGpu;
 var init_viewLinesGpu = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/viewLinesGpu/viewLinesGpu.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/viewLinesGpu/viewLinesGpu.js"() {
     init_dom();
     init_errors();
     init_observableInternal();
@@ -71876,10 +71876,10 @@ var init_viewLinesGpu = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/textArea/textAreaEditContext.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/textArea/textAreaEditContext.css
 var css26;
 var init_textAreaEditContext = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/textArea/textAreaEditContext.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/textArea/textAreaEditContext.css"() {
     css26 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n.monaco-editor .inputarea {\n	min-width: 0;\n	min-height: 0;\n	margin: 0;\n	padding: 0;\n	position: absolute;\n	outline: none !important;\n	resize: none;\n	border: none;\n	overflow: hidden;\n	color: transparent;\n	background-color: transparent;\n	z-index: -10;\n}\n/*.monaco-editor .inputarea {\n	position: fixed !important;\n	width: 800px !important;\n	height: 500px !important;\n	top: initial !important;\n	left: initial !important;\n	bottom: 0 !important;\n	right: 0 !important;\n	color: black !important;\n	background: white !important;\n	line-height: 15px !important;\n	font-size: 14px !important;\n	z-index: 10 !important;\n}*/\n.monaco-editor .inputarea.ime-input {\n	z-index: 10;\n	caret-color: var(--vscode-editorCursor-foreground);\n	color: var(--vscode-editor-foreground);\n}\n";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-47214c2ccaa2")) {
       const style = document.createElement("style");
@@ -71890,10 +71890,10 @@ var init_textAreaEditContext = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/ime.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/ime.js
 var IMEImpl, IME;
 var init_ime = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/ime.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/ime.js"() {
     init_event();
     IMEImpl = class {
       constructor() {
@@ -71923,19 +71923,19 @@ var init_ime = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/keybinding/common/keybinding.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/keybinding/common/keybinding.js
 var IKeybindingService;
 var init_keybinding = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/keybinding/common/keybinding.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/keybinding/common/keybinding.js"() {
     init_instantiation();
     IKeybindingService = createDecorator("keybindingService");
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/editContext.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/editContext.js
 var AbstractEditContext;
 var init_editContext = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/editContext.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/editContext.js"() {
     init_event();
     init_viewPart();
     AbstractEditContext = class extends ViewPart {
@@ -71952,7 +71952,7 @@ var init_editContext = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/screenReaderUtils.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/screenReaderUtils.js
 function ariaLabelForScreenReaderContent(options, keybindingService) {
   const accessibilitySupport = options.get(
     2
@@ -71992,7 +71992,7 @@ function newlinecount(text2) {
 }
 var SimplePagedScreenReaderStrategy;
 var init_screenReaderUtils = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/screenReaderUtils.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/screenReaderUtils.js"() {
     init_range();
     init_nls();
     SimplePagedScreenReaderStrategy = class {
@@ -72086,10 +72086,10 @@ var init_screenReaderUtils = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/textArea/textAreaEditContextRegistry.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/textArea/textAreaEditContextRegistry.js
 var TextAreaEditContextRegistryImpl, TextAreaEditContextRegistry;
 var init_textAreaEditContextRegistry = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/textArea/textAreaEditContextRegistry.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/textArea/textAreaEditContextRegistry.js"() {
     TextAreaEditContextRegistryImpl = class {
       constructor() {
         this._textAreaEditContextMapping = /* @__PURE__ */ new Map();
@@ -72107,7 +72107,7 @@ var init_textAreaEditContextRegistry = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/textArea/textAreaEditContext.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/textArea/textAreaEditContext.js
 function measureText(targetDocument, text2, fontInfo, tabSize) {
   if (text2.length === 0) {
     return 0;
@@ -72129,7 +72129,7 @@ function measureText(targetDocument, text2, fontInfo, tabSize) {
 }
 var __decorate16, __param14, VisibleTextAreaData, canUseZeroSizeTextarea, TextAreaEditContext;
 var init_textAreaEditContext2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/textArea/textAreaEditContext.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/textArea/textAreaEditContext.js"() {
     init_textAreaEditContext();
     init_nls();
     init_browser();
@@ -72839,10 +72839,10 @@ var init_textAreaEditContext2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/native/nativeEditContext.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/native/nativeEditContext.css
 var css27;
 var init_nativeEditContext = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/native/nativeEditContext.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/native/nativeEditContext.css"() {
     css27 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n.monaco-editor .native-edit-context {\n	margin: 0;\n	padding: 0;\n	position: absolute;\n	overflow-y: scroll;\n	scrollbar-width: none;\n	z-index: -10;\n	white-space: pre-wrap;\n}\n\n.monaco-editor .ime-text-area {\n	min-width: 0;\n	min-height: 0;\n	margin: 0;\n	padding: 0;\n	position: absolute;\n	outline: none !important;\n	resize: none;\n	border: none;\n	overflow: hidden;\n	color: transparent;\n	background-color: transparent;\n	z-index: -10;\n}\n\n.monaco-editor .edit-context-composition-none {\n	background-color: transparent;\n	border-bottom: none;\n}\n\n.monaco-editor :not(.hc-black, .hc-light) .edit-context-composition-secondary {\n	border-bottom: 1px solid var(--vscode-editor-compositionBorder);\n}\n\n.monaco-editor :not(.hc-black, .hc-light) .edit-context-composition-primary {\n	border-bottom: 2px solid var(--vscode-editor-compositionBorder);\n}\n\n.monaco-editor :is(.hc-black, .hc-light) .edit-context-composition-secondary {\n	border: 1px solid var(--vscode-editor-compositionBorder);\n}\n\n.monaco-editor :is(.hc-black, .hc-light) .edit-context-composition-primary {\n	border: 2px solid var(--vscode-editor-compositionBorder);\n}\n";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-5d97c816b422")) {
       const style = document.createElement("style");
@@ -72853,7 +72853,7 @@ var init_nativeEditContext = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/native/nativeEditContextUtils.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/native/nativeEditContextUtils.js
 function editContextAddDisposableListener(target, type, listener, options) {
   target.addEventListener(type, listener, options);
   return {
@@ -72864,7 +72864,7 @@ function editContextAddDisposableListener(target, type, listener, options) {
 }
 var __decorate17, __param15, FocusTracker2;
 var init_nativeEditContextUtils = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/native/nativeEditContextUtils.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/native/nativeEditContextUtils.js"() {
     init_dom();
     init_lifecycle();
     init_log();
@@ -72935,10 +72935,10 @@ var init_nativeEditContextUtils = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/native/screenReaderContentRich.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/native/screenReaderContentRich.js
 var __decorate18, __param16, ttPolicy2, LINE_NUMBER_ATTRIBUTE, RichScreenReaderContent, RichRenderedScreenReaderLine, LineInterval, RichScreenReaderState, RichPagedScreenReaderStrategy;
 var init_screenReaderContentRich = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/native/screenReaderContentRich.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/native/screenReaderContentRich.js"() {
     init_dom();
     init_trustedTypes();
     init_accessibility();
@@ -73286,10 +73286,10 @@ var init_screenReaderContentRich = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/native/screenReaderContentSimple.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/native/screenReaderContentSimple.js
 var __decorate19, __param17, SimpleScreenReaderContent;
 var init_screenReaderContentSimple = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/native/screenReaderContentSimple.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/native/screenReaderContentSimple.js"() {
     init_dom();
     init_accessibility();
     init_selection();
@@ -73480,10 +73480,10 @@ var init_screenReaderContentSimple = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/native/screenReaderSupport.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/native/screenReaderSupport.js
 var __decorate20, __param18, ScreenReaderSupport;
 var init_screenReaderSupport = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/native/screenReaderSupport.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/native/screenReaderSupport.js"() {
     init_lifecycle();
     init_nls();
     init_accessibility();
@@ -73677,10 +73677,10 @@ var init_screenReaderSupport = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/native/editContextFactory.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/native/editContextFactory.js
 var EditContext;
 var init_editContextFactory = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/native/editContextFactory.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/native/editContextFactory.js"() {
     (function(EditContext2) {
       function create3(window2, options) {
         return new window2.EditContext(options);
@@ -73690,10 +73690,10 @@ var init_editContextFactory = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/native/nativeEditContextRegistry.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/native/nativeEditContextRegistry.js
 var NativeEditContextRegistryImpl, NativeEditContextRegistry;
 var init_nativeEditContextRegistry = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/native/nativeEditContextRegistry.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/native/nativeEditContextRegistry.js"() {
     NativeEditContextRegistryImpl = class {
       constructor() {
         this._nativeEditContextMapping = /* @__PURE__ */ new Map();
@@ -73714,10 +73714,10 @@ var init_nativeEditContextRegistry = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/native/nativeEditContext.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/native/nativeEditContext.js
 var __decorate21, __param19, CompositionClassName, NativeEditContext;
 var init_nativeEditContext2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/native/nativeEditContext.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/controller/editContext/native/nativeEditContext.js"() {
     init_nativeEditContext();
     init_browser();
     init_dom();
@@ -74261,10 +74261,10 @@ var init_nativeEditContext2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/rulersGpu/rulersGpu.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/rulersGpu/rulersGpu.js
 var RulersGpu;
 var init_rulersGpu = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/rulersGpu/rulersGpu.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/rulersGpu/rulersGpu.js"() {
     init_viewPart();
     init_color();
     init_editorColorRegistry();
@@ -74326,10 +74326,10 @@ var init_rulersGpu = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/gpuMark/gpuMark.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/gpuMark/gpuMark.css
 var css28;
 var init_gpuMark = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/gpuMark/gpuMark.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/gpuMark/gpuMark.css"() {
     css28 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n.monaco-editor .margin-view-overlays .gpu-mark {\n	position: absolute;\n	top: 0;\n	bottom: 0;\n	left: 0;\n	width: 100%;\n	display: inline-block;\n	border-left: solid 2px var(--vscode-editorWarning-foreground);\n	opacity: 0.2;\n	transition: background-color 0.1s linear;\n}\n\n.monaco-editor .margin-view-overlays .gpu-mark:hover {\n	background-color: var(--vscode-editorWarning-foreground)\n}\n";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-353596b5fe24")) {
       const style = document.createElement("style");
@@ -74340,10 +74340,10 @@ var init_gpuMark = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/gpuMark/gpuMark.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/gpuMark/gpuMark.js
 var GpuMarkOverlay;
 var init_gpuMark2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/gpuMark/gpuMark.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/viewParts/gpuMark/gpuMark.js"() {
     init_dynamicViewOverlay();
     init_viewLineOptions();
     init_gpuMark();
@@ -74419,16 +74419,16 @@ var init_gpuMark2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/userInteraction/browser/userInteractionService.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/userInteraction/browser/userInteractionService.js
 var IUserInteractionService;
 var init_userInteractionService = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/userInteraction/browser/userInteractionService.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/userInteraction/browser/userInteractionService.js"() {
     init_instantiation();
     IUserInteractionService = createDecorator("userInteractionService");
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/view.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/view.js
 function safeInvokeNoArg(func) {
   try {
     return func();
@@ -74439,7 +74439,7 @@ function safeInvokeNoArg(func) {
 }
 var __decorate22, __param20, View, EditorRenderingCoordinator, CodeEditorWidgetFocusTracker;
 var init_view = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/view.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/view.js"() {
     init_dom();
     init_fastDomNode();
     init_performance();
@@ -75200,7 +75200,7 @@ var init_view = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/modelLineProjectionData.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/modelLineProjectionData.js
 function hasRightCursorStop(cursorStop) {
   if (cursorStop === null || cursorStop === void 0) {
     return true;
@@ -75215,7 +75215,7 @@ function hasLeftCursorStop(cursorStop) {
 }
 var ModelLineProjectionData, OutputPosition;
 var init_modelLineProjectionData = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/modelLineProjectionData.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/modelLineProjectionData.js"() {
     init_assert();
     init_position();
     init_model2();
@@ -75439,13 +75439,13 @@ var init_modelLineProjectionData = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/textModelEvents.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/textModelEvents.js
 function occupiesHorizontalSpace(options) {
   return options.content.length > 0 || options.widthInEm !== void 0 && options.widthInEm > 0;
 }
 var ModelRawFlush, LineInjectedText, ModelRawLineChanged, ModelLineHeightChanged, ModelFontChanged, ModelRawLinesDeleted, ModelRawLinesInserted, ModelRawEOLChanged, ModelRawContentChangedEvent, ModelInjectedTextChangedEvent, ModelLineHeightChangedEvent, ModelFontChangedEvent, InternalModelContentChangeEvent;
 var init_textModelEvents = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/textModelEvents.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/textModelEvents.js"() {
     ModelRawFlush = class {
       constructor() {
         this.changeType = 1;
@@ -75648,7 +75648,7 @@ var init_textModelEvents = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/view/domLineBreaksComputer.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/view/domLineBreaksComputer.js
 function createLineBreaks(targetWindow, context, lineNumbers, fontInfo, tabSize, firstLineBreakColumn, wrappingIndent, wordBreak, useTwoCellFullwidthCharacters) {
   function createEmptyLineBreakWithPossiblyInjectedText(lineNumber) {
     const injectedTexts = context.getLineInjectedText(lineNumber);
@@ -75997,7 +75997,7 @@ function findSpanIndex(spanStartOffsets, offset) {
 }
 var ttPolicy3, DOMLineBreaksComputerFactory;
 var init_domLineBreaksComputer = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/view/domLineBreaksComputer.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/view/domLineBreaksComputer.js"() {
     init_trustedTypes();
     init_strings();
     init_types();
@@ -76028,10 +76028,10 @@ var init_domLineBreaksComputer = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/codeEditor/codeEditorContributions.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/codeEditor/codeEditorContributions.js
 var CodeEditorContributions;
 var init_codeEditorContributions = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/codeEditor/codeEditorContributions.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/codeEditor/codeEditorContributions.js"() {
     init_dom();
     init_errors();
     init_lifecycle();
@@ -76169,10 +76169,10 @@ var init_codeEditorContributions = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/editorAction.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/editorAction.js
 var InternalEditorAction;
 var init_editorAction = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/editorAction.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/editorAction.js"() {
     InternalEditorAction = class {
       constructor(id, label, alias, metadata, _precondition, _run, _contextKeyService) {
         this.id = id;
@@ -76196,7 +76196,7 @@ var init_editorAction = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/collections.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/collections.js
 function diffSets(before, after2) {
   const removed = [];
   const added = [];
@@ -76223,7 +76223,7 @@ function intersection(setA, setB) {
 }
 var _a3, SetWithKey;
 var init_collections = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/collections.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/collections.js"() {
     SetWithKey = class {
       static {
         _a3 = Symbol.toStringTag;
@@ -76276,10 +76276,10 @@ var init_collections = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/undoRedo/common/undoRedo.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/undoRedo/common/undoRedo.js
 var IUndoRedoService, ResourceEditStackSnapshot, UndoRedoGroup, UndoRedoSource;
 var init_undoRedo = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/undoRedo/common/undoRedo.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/undoRedo/common/undoRedo.js"() {
     init_instantiation();
     IUndoRedoService = createDecorator("undoRedoService");
     ResourceEditStackSnapshot = class {
@@ -76327,7 +76327,7 @@ var init_undoRedo = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/misc/eolCounter.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/misc/eolCounter.js
 function countEOL(text2) {
   let eolCount = 0;
   let firstLineLength = 0;
@@ -76362,11 +76362,11 @@ function countEOL(text2) {
   return [eolCount, firstLineLength, text2.length - lastLineStart, eol];
 }
 var init_eolCounter = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/misc/eolCounter.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/misc/eolCounter.js"() {
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/textModelEditSource.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/textModelEditSource.js
 function createEditSource(metadata) {
   return new TextModelEditSource(metadata, privateSymbol);
 }
@@ -76391,7 +76391,7 @@ function toEditIdentity(id) {
 }
 var privateSymbol, TextModelEditSource, EditSources, EditDeltaInfo, EditSuggestionId;
 var init_textModelEditSource = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/textModelEditSource.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/textModelEditSource.js"() {
     init_uuid();
     init_textLength();
     privateSymbol = Symbol("TextModelEditSource");
@@ -76546,10 +76546,10 @@ var init_textModelEditSource = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/textModelBracketPairs.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/textModelBracketPairs.js
 var BracketInfo, BracketPairInfo, BracketPairWithMinIndentationInfo;
 var init_textModelBracketPairs = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/textModelBracketPairs.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/textModelBracketPairs.js"() {
     BracketInfo = class {
       constructor(range2, nestingLevel, nestingLevelOfEqualBracketType, isInvalid) {
         this.range = range2;
@@ -76580,7 +76580,7 @@ var init_textModelBracketPairs = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/length.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/length.js
 function lengthDiff(startLineCount, startColumnCount, endLineCount, endColumnCount) {
   return startLineCount !== endLineCount ? toLength(endLineCount - startLineCount, endColumnCount) : toLength(0, endColumnCount - startColumnCount);
 }
@@ -76659,7 +76659,7 @@ function lengthOfString(str) {
 }
 var lengthZero, factor;
 var init_length = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/length.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/length.js"() {
     init_strings();
     init_range();
     init_textLength();
@@ -76668,10 +76668,10 @@ var init_length = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/beforeEditPositionMapper.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/beforeEditPositionMapper.js
 var TextEditInfo, BeforeEditPositionMapper, TextEditInfoCache;
 var init_beforeEditPositionMapper = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/beforeEditPositionMapper.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/beforeEditPositionMapper.js"() {
     init_range();
     init_length();
     TextEditInfo = class _TextEditInfo {
@@ -76770,10 +76770,10 @@ var init_beforeEditPositionMapper = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/smallImmutableSet.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/smallImmutableSet.js
 var emptyArr, SmallImmutableSet, identityKeyProvider, DenseKeyProvider;
 var init_smallImmutableSet = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/smallImmutableSet.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/smallImmutableSet.js"() {
     emptyArr = [];
     SmallImmutableSet = class _SmallImmutableSet {
       static {
@@ -76870,10 +76870,10 @@ var init_smallImmutableSet = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/ast.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/ast.js
 var BaseAstNode, PairAstNode, ListAstNode, TwoThreeListAstNode, Immutable23ListAstNode, ArrayListAstNode, ImmutableArrayListAstNode, emptyArray, ImmutableLeafAstNode, TextAstNode, BracketAstNode, InvalidBracketAstNode;
 var init_ast = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/ast.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/ast.js"() {
     init_errors();
     init_cursorColumns();
     init_length();
@@ -77324,10 +77324,10 @@ var init_ast = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/tokenizer.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/tokenizer.js
 var Token2, TextBufferTokenizer, NonPeekableTextBufferTokenizer, FastTokenizer;
 var init_tokenizer = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/tokenizer.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/tokenizer.js"() {
     init_errors();
     init_encodedTokenAttributes();
     init_ast();
@@ -77575,7 +77575,7 @@ var init_tokenizer = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/brackets.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/brackets.js
 function prepareBracketForRegExp2(str) {
   let escaped = escapeRegExpCharacters(str);
   if (/^[\w ]+/.test(str)) {
@@ -77588,7 +77588,7 @@ function prepareBracketForRegExp2(str) {
 }
 var BracketTokens, LanguageAgnosticBracketTokens;
 var init_brackets = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/brackets.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/brackets.js"() {
     init_strings();
     init_ast();
     init_length();
@@ -77683,7 +77683,7 @@ var init_brackets = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/concat23Trees.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/concat23Trees.js
 function concat23Trees(items) {
   if (items.length === 0) {
     return null;
@@ -77821,12 +77821,12 @@ function prepend2(list2, nodeToAppend) {
   }
 }
 var init_concat23Trees = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/concat23Trees.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/concat23Trees.js"() {
     init_ast();
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/nodeReader.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/nodeReader.js
 function getNextChildIdx(node, curIdx = -1) {
   while (true) {
     curIdx++;
@@ -77843,7 +77843,7 @@ function lastOrUndefined(arr) {
 }
 var NodeReader;
 var init_nodeReader = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/nodeReader.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/nodeReader.js"() {
     init_length();
     NodeReader = class {
       constructor(node) {
@@ -77927,14 +77927,14 @@ var init_nodeReader = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/parser.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/parser.js
 function parseDocument(tokenizer, edits, oldNode, createImmutableLists) {
   const parser = new Parser2(tokenizer, edits, oldNode, createImmutableLists);
   return parser.parseDocument();
 }
 var Parser2;
 var init_parser = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/parser.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/parser.js"() {
     init_ast();
     init_beforeEditPositionMapper();
     init_smallImmutableSet();
@@ -78031,7 +78031,7 @@ var init_parser = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/combineTextEditInfos.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/combineTextEditInfos.js
 function combineTextEditInfos(textEditInfoFirst, textEditInfoSecond) {
   if (textEditInfoFirst.length === 0) {
     return textEditInfoSecond;
@@ -78108,7 +78108,7 @@ function toLengthMapping(textEditInfos) {
 }
 var LengthMapping;
 var init_combineTextEditInfos = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/combineTextEditInfos.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/combineTextEditInfos.js"() {
     init_arrays();
     init_beforeEditPositionMapper();
     init_length();
@@ -78141,7 +78141,7 @@ var init_combineTextEditInfos = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/bracketPairsTree.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/bracketPairsTree.js
 function hasUnmatchedClosingBracketAfter(root, positionLength, openingBracketToken) {
   const openingBracketIds = openingBracketToken.bracketIds;
   if (!root.missingOpeningBracketIds.intersects(openingBracketIds)) {
@@ -78360,7 +78360,7 @@ function collectBracketPairs(node, nodeOffsetStart, nodeOffsetEnd, startOffset, 
 }
 var BracketPairsTree, CollectBracketPairsContext;
 var init_bracketPairsTree = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/bracketPairsTree.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsTree/bracketPairsTree.js"() {
     init_event();
     init_lifecycle();
     init_textModelBracketPairs();
@@ -78501,7 +78501,7 @@ var init_bracketPairsTree = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsImpl.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsImpl.js
 function createDisposableRef(object, disposable) {
   return {
     object,
@@ -78526,7 +78526,7 @@ function stripBracketSearchCanceled(result) {
 }
 var BracketPairsTextModelPart, BracketSearchCanceled;
 var init_bracketPairsImpl = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsImpl.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/bracketPairsImpl.js"() {
     init_arrays();
     init_event();
     init_lifecycle();
@@ -79172,10 +79172,10 @@ var init_bracketPairsImpl = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/colorizedBracketPairsDecorationProvider.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/colorizedBracketPairsDecorationProvider.js
 var ColorizedBracketPairsDecorationProvider, ColorProvider;
 var init_colorizedBracketPairsDecorationProvider = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/colorizedBracketPairsDecorationProvider.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/bracketPairsTextModelPart/colorizedBracketPairsDecorationProvider.js"() {
     init_event();
     init_lifecycle();
     init_range();
@@ -79263,7 +79263,7 @@ var init_colorizedBracketPairsDecorationProvider = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/textChange.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/textChange.js
 function escapeNewLine(str) {
   return str.replace(/\n/g, "\\n").replace(/\r/g, "\\r");
 }
@@ -79276,7 +79276,7 @@ function compressConsecutiveTextChanges(prevEdits, currEdits) {
 }
 var TextChange, TextChangeCompressor;
 var init_textChange = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/textChange.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/textChange.js"() {
     init_buffer();
     init_stringBuilder();
     TextChange = class _TextChange {
@@ -79501,7 +79501,7 @@ var init_textChange = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/editStack.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/editStack.js
 function uriGetComparisonKey(resource) {
   return resource.toString();
 }
@@ -79521,7 +79521,7 @@ function isEditStackElement(element) {
 }
 var SingleModelEditStackData, SingleModelEditStackElement, MultiModelEditStackElement, EditStack;
 var init_editStack = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/editStack.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/editStack.js"() {
     init_nls();
     init_errors();
     init_selection();
@@ -79852,7 +79852,7 @@ var init_editStack = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/indentationGuesser.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/indentationGuesser.js
 function spacesDiff(a, aLength, b2, bLength, result) {
   result.spacesDiff = 0;
   result.looksLikeAlignment = false;
@@ -79982,7 +79982,7 @@ function guessIndentation(source, defaultTabSize, defaultInsertSpaces) {
 }
 var SpacesDiffResult;
 var init_indentationGuesser = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/indentationGuesser.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/indentationGuesser.js"() {
     SpacesDiffResult = class {
       constructor() {
         this.spacesDiff = 0;
@@ -79992,7 +79992,7 @@ var init_indentationGuesser = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/intervalTree.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/intervalTree.js
 function getNodeColor(node) {
   return (node.metadata & 1) >>> 0;
 }
@@ -80842,7 +80842,7 @@ function intervalCompare(aStart, aEnd, bStart, bEnd) {
 }
 var IntervalNode, SENTINEL, IntervalTree;
 var init_intervalTree = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/intervalTree.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/intervalTree.js"() {
     IntervalNode = class {
       constructor(id, start, end) {
         this.metadata = 0;
@@ -80997,7 +80997,7 @@ var init_intervalTree = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/pieceTreeTextBuffer/rbTreeBase.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/pieceTreeTextBuffer/rbTreeBase.js
 function leftest2(node) {
   while (node.left !== SENTINEL2) {
     node = node.left;
@@ -81270,7 +81270,7 @@ function recomputeTreeMetadata(tree, x) {
 }
 var TreeNode, SENTINEL2;
 var init_rbTreeBase = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/pieceTreeTextBuffer/rbTreeBase.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/pieceTreeTextBuffer/rbTreeBase.js"() {
     TreeNode = class {
       constructor(piece, color) {
         this.piece = piece;
@@ -81333,7 +81333,7 @@ var init_rbTreeBase = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/pieceTreeTextBuffer/pieceTreeBase.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/pieceTreeTextBuffer/pieceTreeBase.js
 function createUintArray(arr) {
   let r;
   if (arr[arr.length - 1] < 65536) {
@@ -81400,7 +81400,7 @@ function createLineStarts(r, str) {
 }
 var AverageBufferSize, LineStarts, Piece, StringBuffer, PieceTreeSnapshot, PieceTreeSearchCache, PieceTreeBase;
 var init_pieceTreeBase = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/pieceTreeTextBuffer/pieceTreeBase.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/pieceTreeTextBuffer/pieceTreeBase.js"() {
     init_position();
     init_range();
     init_model2();
@@ -82710,10 +82710,10 @@ var init_pieceTreeBase = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/pieceTreeTextBuffer/pieceTreeTextBuffer.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/pieceTreeTextBuffer/pieceTreeTextBuffer.js
 var PieceTreeTextBuffer;
 var init_pieceTreeTextBuffer = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/pieceTreeTextBuffer/pieceTreeTextBuffer.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/pieceTreeTextBuffer/pieceTreeTextBuffer.js"() {
     init_event();
     init_strings();
     init_range();
@@ -83140,10 +83140,10 @@ var init_pieceTreeTextBuffer = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/pieceTreeTextBuffer/pieceTreeTextBufferBuilder.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/pieceTreeTextBuffer/pieceTreeTextBufferBuilder.js
 var PieceTreeTextBufferFactory, PieceTreeTextBufferBuilder;
 var init_pieceTreeTextBufferBuilder = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/pieceTreeTextBuffer/pieceTreeTextBufferBuilder.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/pieceTreeTextBuffer/pieceTreeTextBufferBuilder.js"() {
     init_strings();
     init_pieceTreeBase();
     init_pieceTreeTextBuffer();
@@ -83268,10 +83268,10 @@ var init_pieceTreeTextBufferBuilder = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/observables/lazyObservableValue.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/observables/lazyObservableValue.js
 var LazyObservableValue;
 var init_lazyObservableValue = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/observables/lazyObservableValue.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/observables/lazyObservableValue.js"() {
     init_transaction();
     init_logging();
     init_baseObservable();
@@ -83388,7 +83388,7 @@ var init_lazyObservableValue = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/observables/observableValueOpts.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/observables/observableValueOpts.js
 function observableValueOpts(options, initialValue, debugLocation = DebugLocation.ofCaller()) {
   if (options.lazy) {
     return new LazyObservableValue(new DebugNameData(options.owner, options.debugName, void 0), initialValue, options.equalsFn ?? strictEquals, debugLocation);
@@ -83396,7 +83396,7 @@ function observableValueOpts(options, initialValue, debugLocation = DebugLocatio
   return new ObservableValue(new DebugNameData(options.owner, options.debugName, void 0), initialValue, options.equalsFn ?? strictEquals, debugLocation);
 }
 var init_observableValueOpts = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/observables/observableValueOpts.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/observables/observableValueOpts.js"() {
     init_debugName();
     init_equals();
     init_event();
@@ -83407,10 +83407,10 @@ var init_observableValueOpts = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/tokens/abstractSyntaxTokenBackend.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/tokens/abstractSyntaxTokenBackend.js
 var AttachedViews, AttachedViewState, AttachedViewImpl, AttachedViewHandler, AbstractSyntaxTokenBackend;
 var init_abstractSyntaxTokenBackend = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/tokens/abstractSyntaxTokenBackend.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/tokens/abstractSyntaxTokenBackend.js"() {
     init_arrays();
     init_async();
     init_event();
@@ -83536,10 +83536,10 @@ var init_abstractSyntaxTokenBackend = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/decorationProvider.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/decorationProvider.js
 var LineHeightChangingDecoration, LineFontChangingDecoration;
 var init_decorationProvider = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/decorationProvider.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/decorationProvider.js"() {
     LineHeightChangingDecoration = class {
       static toKey(obj) {
         return `${obj.ownerId};${obj.decorationId};${obj.lineNumber}`;
@@ -83564,7 +83564,7 @@ var init_decorationProvider = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/supports/tokenization.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/supports/tokenization.js
 function parseTokenTheme(source) {
   if (!source || !Array.isArray(source)) {
     return [];
@@ -83699,7 +83699,7 @@ function cleanClassName(className2) {
 }
 var ParsedTokenThemeRule, colorRegExp, ColorMap, TokenTheme, STANDARD_TOKEN_TYPE_REGEXP, ThemeTrieElementRule, ThemeTrieElement;
 var init_tokenization = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/supports/tokenization.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/supports/tokenization.js"() {
     init_color();
     ParsedTokenThemeRule = class {
       constructor(token, index, fontStyle, foreground2, background) {
@@ -83846,10 +83846,10 @@ var init_tokenization = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/tokens/annotations.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/tokens/annotations.js
 var AnnotatedString, AnnotationsUpdate;
 var init_annotations = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/tokens/annotations.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/tokens/annotations.js"() {
     init_arrays();
     AnnotatedString = class {
       constructor(annotations = []) {
@@ -84012,7 +84012,7 @@ var init_annotations = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/textModelStringEdit.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/textModelStringEdit.js
 function offsetEditFromContentChanges(contentChanges) {
   const editsArr = contentChanges.map((c) => new StringReplacement(OffsetRange.ofStartAndLength(c.rangeOffset, c.rangeLength), c.text));
   editsArr.reverse();
@@ -84020,16 +84020,16 @@ function offsetEditFromContentChanges(contentChanges) {
   return edits;
 }
 var init_textModelStringEdit = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/textModelStringEdit.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/textModelStringEdit.js"() {
     init_stringEdit();
     init_offsetRange();
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/tokens/tokenizationFontDecorationsProvider.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/tokens/tokenizationFontDecorationsProvider.js
 var TokenizationFontDecorationProvider;
 var init_tokenizationFontDecorationsProvider = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/tokens/tokenizationFontDecorationsProvider.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/tokens/tokenizationFontDecorationsProvider.js"() {
     init_lifecycle();
     init_range();
     init_decorationProvider();
@@ -84156,7 +84156,7 @@ var init_tokenizationFontDecorationsProvider = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/tokens/treeSitter/cursorUtils.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/tokens/treeSitter/cursorUtils.js
 function gotoNextSibling(newCursor, oldCursor) {
   const n2 = newCursor.gotoNextSibling();
   const o2 = oldCursor.gotoNextSibling();
@@ -84226,11 +84226,11 @@ function getClosestPreviousNodes(cursor, tree) {
   }
 }
 var init_cursorUtils = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/tokens/treeSitter/cursorUtils.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/tokens/treeSitter/cursorUtils.js"() {
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/tokens/treeSitter/treeSitterTree.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/tokens/treeSitter/treeSitterTree.js
 function newTimeOutProgressCallback() {
   let lastYieldTime = performance.now();
   return function parseProgressCallback(_state) {
@@ -84250,7 +84250,7 @@ function rangesIntersect(a, b2) {
 }
 var __decorate23, __param21, TreeSitterTree;
 var init_treeSitterTree = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/tokens/treeSitter/treeSitterTree.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/tokens/treeSitter/treeSitterTree.js"() {
     init_async();
     init_lifecycle();
     init_observableInternal();
@@ -84583,7 +84583,7 @@ var init_treeSitterTree = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/fixedArray.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/fixedArray.js
 function arrayFill(length, value) {
   const arr = [];
   for (let i = 0; i < length; i++) {
@@ -84593,7 +84593,7 @@ function arrayFill(length, value) {
 }
 var FixedArray;
 var init_fixedArray = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/fixedArray.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/fixedArray.js"() {
     init_arrays();
     FixedArray = class {
       constructor(_default) {
@@ -84648,10 +84648,10 @@ var init_fixedArray = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/tokens/contiguousMultilineTokens.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/tokens/contiguousMultilineTokens.js
 var ContiguousMultilineTokens;
 var init_contiguousMultilineTokens = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/tokens/contiguousMultilineTokens.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/tokens/contiguousMultilineTokens.js"() {
     ContiguousMultilineTokens = class {
       /**
        * (Inclusive) start line number for these tokens.
@@ -84682,10 +84682,10 @@ var init_contiguousMultilineTokens = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/tokens/contiguousMultilineTokensBuilder.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/tokens/contiguousMultilineTokensBuilder.js
 var ContiguousMultilineTokensBuilder;
 var init_contiguousMultilineTokensBuilder = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/tokens/contiguousMultilineTokensBuilder.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/tokens/contiguousMultilineTokensBuilder.js"() {
     init_contiguousMultilineTokens();
     ContiguousMultilineTokensBuilder = class {
       constructor() {
@@ -84708,7 +84708,7 @@ var init_contiguousMultilineTokensBuilder = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/textModelTokens.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/textModelTokens.js
 function findLikelyRelevantLines(model, lineNumber, store) {
   let nonWhitespaceColumn = model.getLineFirstNonWhitespaceColumn(lineNumber);
   const likelyRelevantLines = [];
@@ -84747,7 +84747,7 @@ function safeTokenize(languageIdCodec, languageId, tokenizationSupport, text2, h
 }
 var TokenizerWithStateStore, TokenizerWithStateStoreAndTextModel, TrackingTokenizationStateStore, TokenizationStateStore, RangePriorityQueueImpl, DefaultBackgroundTokenizer;
 var init_textModelTokens = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/textModelTokens.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/textModelTokens.js"() {
     init_async();
     init_errors();
     init_platform();
@@ -85116,7 +85116,7 @@ var init_textModelTokens = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/tokens/treeSitter/tokenStore.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/tokens/treeSitter/tokenStore.js
 function isLeaf(node) {
   return node.token !== void 0;
 }
@@ -85195,7 +85195,7 @@ function concat2(node1, node2) {
 }
 var ListNode, TokenQuality, TokenStore;
 var init_tokenStore = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/tokens/treeSitter/tokenStore.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/tokens/treeSitter/tokenStore.js"() {
     ListNode = class _ListNode {
       get children() {
         return this._children;
@@ -85495,16 +85495,16 @@ var init_tokenStore = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/treeSitter/treeSitterThemeService.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/treeSitter/treeSitterThemeService.js
 var ITreeSitterThemeService;
 var init_treeSitterThemeService = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/treeSitter/treeSitterThemeService.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/treeSitter/treeSitterThemeService.js"() {
     init_instantiation();
     ITreeSitterThemeService = createDecorator("treeSitterThemeService");
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/changeTracker.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/changeTracker.js
 function recordChanges(obs) {
   return {
     createChangeSummary: (_previousChangeSummary) => {
@@ -85531,7 +85531,7 @@ function recordChanges(obs) {
   };
 }
 var init_changeTracker = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/changeTracker.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/changeTracker.js"() {
     init_errors();
     init_equals();
     init_event();
@@ -85539,10 +85539,10 @@ var init_changeTracker = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/tokens/treeSitter/treeSitterTokenizationImpl.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/tokens/treeSitter/treeSitterTokenizationImpl.js
 var __decorate24, __param22, TreeSitterTokenizationImpl, TREESITTER_BASE_SCOPES, BRACKETS;
 var init_treeSitterTokenizationImpl = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/tokens/treeSitter/treeSitterTokenizationImpl.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/tokens/treeSitter/treeSitterTokenizationImpl.js"() {
     init_event();
     init_lifecycle();
     init_platform();
@@ -86197,19 +86197,19 @@ var init_treeSitterTokenizationImpl = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/treeSitter/treeSitterLibraryService.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/treeSitter/treeSitterLibraryService.js
 var ITreeSitterLibraryService;
 var init_treeSitterLibraryService = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/treeSitter/treeSitterLibraryService.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/treeSitter/treeSitterLibraryService.js"() {
     init_instantiation();
     ITreeSitterLibraryService = createDecorator("treeSitterLibraryService");
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/utils/promise.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/utils/promise.js
 var ObservablePromise, PromiseResult;
 var init_promise = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/utils/promise.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/utils/promise.js"() {
     init_equals();
     init_event();
     init_lifecycle();
@@ -86254,10 +86254,10 @@ var init_promise = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/tokens/treeSitter/treeSitterSyntaxTokenBackend.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/tokens/treeSitter/treeSitterSyntaxTokenBackend.js
 var __decorate25, __param23, TreeSitterSyntaxTokenBackend;
 var init_treeSitterSyntaxTokenBackend = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/tokens/treeSitter/treeSitterSyntaxTokenBackend.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/tokens/treeSitter/treeSitterSyntaxTokenBackend.js"() {
     init_event();
     init_lifecycle();
     init_lineTokens();
@@ -86426,10 +86426,10 @@ var init_treeSitterSyntaxTokenBackend = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/tokens/sparseTokensStore.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/tokens/sparseTokensStore.js
 var SparseTokensStore;
 var init_sparseTokensStore = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/tokens/sparseTokensStore.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/tokens/sparseTokensStore.js"() {
     init_arrays();
     init_lineTokens();
     SparseTokensStore = class _SparseTokensStore {
@@ -86602,7 +86602,7 @@ var init_sparseTokensStore = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/tokens/contiguousTokensEditing.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/tokens/contiguousTokensEditing.js
 function toUint32Array(arr) {
   if (arr instanceof Uint32Array) {
     return arr;
@@ -86612,7 +86612,7 @@ function toUint32Array(arr) {
 }
 var EMPTY_LINE_TOKENS, ContiguousTokensEditing;
 var init_contiguousTokensEditing = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/tokens/contiguousTokensEditing.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/tokens/contiguousTokensEditing.js"() {
     init_lineTokens();
     EMPTY_LINE_TOKENS = new Uint32Array(0).buffer;
     ContiguousTokensEditing = class _ContiguousTokensEditing {
@@ -86723,13 +86723,13 @@ var init_contiguousTokensEditing = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/tokens/contiguousTokensStore.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/tokens/contiguousTokensStore.js
 function getDefaultMetadata(topLevelLanguageId) {
   return (topLevelLanguageId << 0 | 0 << 8 | 0 << 11 | 1 << 15 | 2 << 24 | 1024) >>> 0;
 }
 var ContiguousTokensStore;
 var init_contiguousTokensStore = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/tokens/contiguousTokensStore.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/tokens/contiguousTokensStore.js"() {
     init_arrays();
     init_position();
     init_contiguousTokensEditing();
@@ -86913,10 +86913,10 @@ var init_contiguousTokensStore = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/tokens/tokenizerSyntaxTokenBackend.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/tokens/tokenizerSyntaxTokenBackend.js
 var TokenizerSyntaxTokenBackend;
 var init_tokenizerSyntaxTokenBackend = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/tokens/tokenizerSyntaxTokenBackend.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/tokens/tokenizerSyntaxTokenBackend.js"() {
     init_errors();
     init_event();
     init_lifecycle();
@@ -87169,10 +87169,10 @@ var init_tokenizerSyntaxTokenBackend = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/tokens/tokenizationTextModelPart.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/tokens/tokenizationTextModelPart.js
 var __decorate26, __param24, TokenizationTextModelPart_1, TokenizationTextModelPart;
 var init_tokenizationTextModelPart = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/tokens/tokenizationTextModelPart.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/tokens/tokenizationTextModelPart.js"() {
     init_errors();
     init_event();
     init_eolCounter();
@@ -87445,7 +87445,7 @@ var init_tokenizationTextModelPart = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/textModel.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/textModel.js
 function createTextBufferFactory(text2) {
   const builder = new PieceTreeTextBufferBuilder();
   builder.acceptChunk(text2);
@@ -87530,7 +87530,7 @@ function _normalizeOptions(options) {
 }
 var __decorate27, __param25, TextModel_1, MODEL_ID, LIMIT_FIND_COUNT2, LONG_LINE_BOUNDARY, LINE_HEIGHT_CEILING, TextModelSnapshot, invalidFunc2, TextModel, DecorationsTrees, DecorationOptions, ModelDecorationOverviewRulerOptions, ModelDecorationGlyphMarginOptions, ModelDecorationMinimapOptions, ModelDecorationInjectedTextOptions, ModelDecorationOptions, TRACKED_RANGE_OPTIONS, DidChangeDecorationsEmitter, DidChangeContentEmitter;
 var init_textModel = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/textModel.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/textModel.js"() {
     init_arrays();
     init_collections();
     init_color();
@@ -89530,7 +89530,7 @@ var init_textModel = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel/monospaceLineBreaksComputer.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel/monospaceLineBreaksComputer.js
 function createLineBreaksFromPreviousLineBreaks(classifier, previousBreakingData, lineText, tabSize, firstLineBreakColumn, columnsForFullWidthChar, wrappingIndent, wordBreak, useTwoCellFullwidthCharacters) {
   if (firstLineBreakColumn === -1) {
     return null;
@@ -89933,7 +89933,7 @@ function computeWrappedTextIndentLength(lineText, tabSize, firstLineBreakColumn,
 }
 var MonospaceLineBreaksComputerFactory, WrappingCharacterClassifier, arrPool1, arrPool2;
 var init_monospaceLineBreaksComputer = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel/monospaceLineBreaksComputer.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel/monospaceLineBreaksComputer.js"() {
     init_strings();
     init_characterClassifier();
     init_textModelEvents();
@@ -90018,10 +90018,10 @@ var init_monospaceLineBreaksComputer = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/oneCursor.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/oneCursor.js
 var Cursor;
 var init_oneCursor = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/oneCursor.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/oneCursor.js"() {
     init_cursorCommon();
     init_position();
     init_range();
@@ -90141,10 +90141,10 @@ var init_oneCursor = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/cursorCollection.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/cursorCollection.js
 var CursorCollection;
 var init_cursorCollection = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/cursorCollection.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/cursorCollection.js"() {
     init_arrays();
     init_arraysFind();
     init_cursorCommon();
@@ -90327,10 +90327,10 @@ var init_cursorCollection = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/cursorContext.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/cursorContext.js
 var CursorContext;
 var init_cursorContext = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/cursorContext.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/cursorContext.js"() {
     CursorContext = class {
       constructor(model, viewModel, coordinatesConverter, cursorConfig) {
         this._cursorContextBrand = void 0;
@@ -90343,10 +90343,10 @@ var init_cursorContext = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewEvents.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewEvents.js
 var ViewCompositionStartEvent, ViewCompositionEndEvent, ViewConfigurationChangedEvent, ViewCursorStateChangedEvent, ViewDecorationsChangedEvent, ViewFlushedEvent, ViewFocusChangedEvent, ViewLanguageConfigurationEvent, ViewLineMappingChangedEvent, ViewLinesChangedEvent, ViewLinesDeletedEvent, ViewLinesInsertedEvent, ViewRevealRangeRequestEvent, ViewScrollChangedEvent, ViewThemeChangedEvent, ViewTokensChangedEvent, ViewTokensColorsChangedEvent, ViewZonesChangedEvent;
 var init_viewEvents = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewEvents.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewEvents.js"() {
     ViewCompositionStartEvent = class {
       constructor() {
         this.type = 0;
@@ -90482,10 +90482,10 @@ var init_viewEvents = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModelEventDispatcher.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModelEventDispatcher.js
 var ViewModelEventDispatcher, ViewModelEventsCollector, ContentSizeChangedEvent, FocusChangedEvent, WidgetFocusChangedEvent, ScrollChangedEvent, ViewZonesChangedEvent2, HiddenAreasChangedEvent, CursorStateChangedEvent, ReadOnlyEditAttemptEvent, ModelDecorationsChangedEvent, ModelLanguageChangedEvent, ModelLanguageConfigurationChangedEvent, ModelContentChangedEvent, ModelOptionsChangedEvent, ModelTokensChangedEvent, ModelLineHeightChangedEvent2, ModelFontChangedEvent2;
 var init_viewModelEventDispatcher = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModelEventDispatcher.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModelEventDispatcher.js"() {
     init_event();
     init_lifecycle();
     ViewModelEventDispatcher = class extends Disposable {
@@ -90872,10 +90872,10 @@ var init_viewModelEventDispatcher = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/cursor.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/cursor.js
 var CursorsController, CursorModelState, AutoClosedAction, CommandExecutor, CompositionLineState, CompositionState;
 var init_cursor = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/cursor.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/cursor/cursor.js"() {
     init_errors();
     init_strings();
     init_cursorCollection();
@@ -91754,7 +91754,7 @@ var init_cursor = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/textToHtmlTokenizer.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/textToHtmlTokenizer.js
 async function tokenizeToString(languageService, text2, languageId) {
   if (!languageId) {
     return _tokenizeToString(text2, languageService.languageIdCodec, fallback);
@@ -91878,7 +91878,7 @@ function _tokenizeToString(text2, languageIdCodec, tokenizationSupport) {
 }
 var fallback;
 var init_textToHtmlTokenizer = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/textToHtmlTokenizer.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languages/textToHtmlTokenizer.js"() {
     init_strings();
     init_lineTokens();
     init_languages();
@@ -91890,10 +91890,10 @@ var init_textToHtmlTokenizer = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewLayout/lineHeights.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewLayout/lineHeights.js
 var CustomLine, LineHeightsManager, CustomLineHeightData, ArrayMap2;
 var init_lineHeights = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewLayout/lineHeights.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewLayout/lineHeights.js"() {
     init_arrays();
     init_collections();
     CustomLine = class {
@@ -92286,10 +92286,10 @@ var init_lineHeights = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewLayout/linesLayout.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewLayout/linesLayout.js
 var PendingChanges, EditorWhitespace, LinesLayout;
 var init_linesLayout = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewLayout/linesLayout.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewLayout/linesLayout.js"() {
     init_strings();
     init_lineHeights();
     PendingChanges = class {
@@ -92997,10 +92997,10 @@ var init_linesLayout = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewLayout/viewLayout.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewLayout/viewLayout.js
 var SMOOTH_SCROLLING_TIME, EditorScrollDimensions, EditorScrollable, ViewLayout;
 var init_viewLayout = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewLayout/viewLayout.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewLayout/viewLayout.js"() {
     init_event();
     init_lifecycle();
     init_scrollable();
@@ -93412,10 +93412,10 @@ var init_viewLayout = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel/inlineDecorations.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel/inlineDecorations.js
 var InlineDecoration, InlineModelDecorationsComputer, InjectedTextInlineDecorationsComputer;
 var init_inlineDecorations = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel/inlineDecorations.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel/inlineDecorations.js"() {
     init_range();
     init_position();
     init_viewModelDecoration();
@@ -93607,10 +93607,10 @@ var init_inlineDecorations = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel/viewModelDecorations.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel/viewModelDecorations.js
 var ViewModelDecorations;
 var init_viewModelDecorations = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel/viewModelDecorations.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel/viewModelDecorations.js"() {
     init_range();
     init_inlineDecorations();
     init_editorOptions();
@@ -93666,7 +93666,7 @@ var init_viewModelDecorations = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel/modelLineProjection.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel/modelLineProjection.js
 function createModelLineProjection(lineBreakData, isVisible) {
   if (lineBreakData === null) {
     if (isVisible) {
@@ -93690,7 +93690,7 @@ function _makeSpaces(count) {
 }
 var ModelLineProjection, IdentityModelLineProjection, HiddenModelLineProjection, _spaces;
 var init_modelLineProjection = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel/modelLineProjection.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel/modelLineProjection.js"() {
     init_position();
     init_textModelEvents();
     init_viewModel();
@@ -93959,10 +93959,10 @@ var init_modelLineProjection = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/coordinatesConverter.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/coordinatesConverter.js
 var IdentityCoordinatesConverter;
 var init_coordinatesConverter = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/coordinatesConverter.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/coordinatesConverter.js"() {
     IdentityCoordinatesConverter = class {
       constructor(model) {
         this._model = model;
@@ -94010,7 +94010,7 @@ var init_coordinatesConverter = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel/viewModelLines.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel/viewModelLines.js
 function normalizeLineRanges(ranges) {
   if (ranges.length === 0) {
     return [];
@@ -94035,7 +94035,7 @@ function normalizeLineRanges(ranges) {
 }
 var ViewModelLinesFromProjectedModel, ViewLineInfo, ViewLineInfoGroupedByModelRange, CoordinatesConverter, ViewModelLinesFromModelAsIs;
 var init_viewModelLines = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel/viewModelLines.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel/viewModelLines.js"() {
     init_position();
     init_range();
     init_textModelGuides();
@@ -94909,10 +94909,10 @@ var init_viewModelLines = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel/glyphLanesModel.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel/glyphLanesModel.js
 var MAX_LANE, GlyphMarginLanesModel;
 var init_glyphLanesModel = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel/glyphLanesModel.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel/glyphLanesModel.js"() {
     init_model2();
     MAX_LANE = GlyphMarginLane2.Right;
     GlyphMarginLanesModel = class {
@@ -94969,7 +94969,7 @@ var init_glyphLanesModel = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel/viewModelImpl.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel/viewModelImpl.js
 function mergeLineRangeArray(arr1, arr2) {
   const result = [];
   let i = 0;
@@ -95010,7 +95010,7 @@ function rangeArraysEqual(arr1, arr2) {
 }
 var ViewModel, ViewportStart, OverviewRulerDecorations, HiddenAreasModel, StableViewport;
 var init_viewModelImpl = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel/viewModelImpl.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/viewModel/viewModelImpl.js"() {
     init_arrays();
     init_async();
     init_color();
@@ -96267,10 +96267,10 @@ var init_viewModelImpl = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/instantiation/common/serviceCollection.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/instantiation/common/serviceCollection.js
 var ServiceCollection;
 var init_serviceCollection = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/instantiation/common/serviceCollection.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/instantiation/common/serviceCollection.js"() {
     ServiceCollection = class {
       constructor(...entries2) {
         this._entries = /* @__PURE__ */ new Map();
@@ -96290,7 +96290,7 @@ var init_serviceCollection = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/codeEditor/codeEditorWidget.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/codeEditor/codeEditorWidget.js
 function getSquigglySVGData(color) {
   return squigglyStart + encodeURIComponent(color.toString()) + squigglyEnd;
 }
@@ -96299,7 +96299,7 @@ function getDotDotDotSVGData(color) {
 }
 var __decorate28, __param26, CodeEditorWidget_1, CodeEditorWidget, EDITOR_ID, ModelData, BooleanEventEmitter, InteractionEmitter, EditorContextKeysManager, EditorModeContext, EditorDecorationsCollection, squigglyStart, squigglyEnd, dotdotdotStart, dotdotdotEnd;
 var init_codeEditorWidget = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/codeEditor/codeEditorWidget.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/codeEditor/codeEditorWidget.js"() {
     init_contribution();
     init_dom();
     init_errors();
@@ -98221,10 +98221,10 @@ var init_codeEditorWidget = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/hover/browser/hover.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/hover/browser/hover.js
 var __decorate29, __param27, IHoverService, WorkbenchHoverDelegate;
 var init_hover = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/hover/browser/hover.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/hover/browser/hover.js"() {
     init_instantiation();
     init_lifecycle();
     init_configuration();
@@ -98316,20 +98316,20 @@ var init_hover = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/contextview/browser/contextView.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/contextview/browser/contextView.js
 var IContextViewService, IContextMenuService;
 var init_contextView = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/contextview/browser/contextView.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/contextview/browser/contextView.js"() {
     init_instantiation();
     IContextViewService = createDecorator("contextViewService");
     IContextMenuService = createDecorator("contextMenuService");
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/hover/browser/hover.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/hover/browser/hover.css
 var css29;
 var init_hover2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/hover/browser/hover.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/hover/browser/hover.css"() {
     css29 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n/* stylelint-disable layer-checker */\n\n.monaco-hover.workbench-hover {\n	position: relative;\n	font-size: 13px;\n	line-height: 19px;\n	/* Must be higher than sash's z-index and terminal canvases */\n	z-index: 40;\n	overflow: hidden;\n	max-width: 700px;\n	background: var(--vscode-editorHoverWidget-background);\n	border: 1px solid var(--vscode-editorHoverWidget-border);\n	border-radius: 5px;\n	color: var(--vscode-editorHoverWidget-foreground);\n	box-shadow: var(--vscode-shadow-lg);\n}\n\n.monaco-hover.workbench-hover.with-pointer {\n	border-radius: 3px;\n}\n\n.monaco-hover.workbench-hover .monaco-action-bar .action-item .codicon {\n	/* Given our font-size, adjust action icons accordingly */\n	width: 13px;\n	height: 13px;\n}\n\n.monaco-hover.workbench-hover hr {\n	border-bottom: none;\n}\n\n.monaco-hover.workbench-hover.compact {\n	font-size: 12px;\n}\n\n.monaco-hover.workbench-hover.compact .monaco-action-bar .action-item .codicon {\n	/* Given our font-size, adjust action icons accordingly */\n	width: 12px;\n	height: 12px;\n}\n\n.monaco-hover.workbench-hover.compact .hover-contents {\n	padding: 2px 8px;\n}\n\n.monaco-hover.workbench-hover.managed-hover-content-owns-padding .hover-contents {\n	padding: 0;\n}\n\n.workbench-hover-container.locked .monaco-hover.workbench-hover {\n	outline: 1px solid var(--vscode-editorHoverWidget-border);\n}\n.workbench-hover-container:focus-within.locked .monaco-hover.workbench-hover {\n	outline-color: var(--vscode-focusBorder);\n}\n\n.workbench-hover-pointer {\n	position: absolute;\n	/* Must be higher than workbench hover z-index */\n	z-index: 41;\n	pointer-events: none;\n}\n\n.workbench-hover-pointer:after {\n	content: '';\n	position: absolute;\n	/* Border box keeps the caret 6px wide so its centre stays exactly PointerSize from its origin. */\n	box-sizing: border-box;\n	width: 6px;\n	height: 6px;\n	background-color: var(--vscode-editorHoverWidget-background);\n	border-right: 1px solid var(--vscode-editorHoverWidget-border);\n	border-bottom: 1px solid var(--vscode-editorHoverWidget-border);\n}\n.workbench-hover-container:not(:focus-within).locked .workbench-hover-pointer:after {\n	border-right-width: 2px;\n	border-bottom-width: 2px;\n}\n.workbench-hover-container:focus-within .workbench-hover-pointer:after {\n	border-right: 1px solid var(--vscode-focusBorder);\n	border-bottom: 1px solid var(--vscode-focusBorder);\n}\n\n.workbench-hover-pointer.left   { left: -3px; }\n.workbench-hover-pointer.right  { right: 3px; }\n.workbench-hover-pointer.top    { top: -3px; }\n.workbench-hover-pointer.bottom { bottom: 3px; }\n\n.workbench-hover-pointer.left:after {\n	transform: rotate(135deg);\n}\n\n.workbench-hover-pointer.right:after {\n	transform: rotate(315deg);\n}\n\n.workbench-hover-pointer.top:after {\n	transform: rotate(225deg);\n}\n\n.workbench-hover-pointer.bottom:after {\n	transform: rotate(45deg);\n}\n\n.monaco-hover.workbench-hover a {\n	color: var(--vscode-textLink-foreground);\n}\n\n.monaco-hover.workbench-hover a:focus {\n	outline: 1px solid;\n	outline-offset: -1px;\n	text-decoration: underline;\n	outline-color: var(--vscode-focusBorder);\n}\n\n.monaco-hover.workbench-hover a.codicon:focus,\n.monaco-hover.workbench-hover a.monaco-button:focus {\n	text-decoration: none;\n}\n\n.monaco-hover.workbench-hover a:hover,\n.monaco-hover.workbench-hover a:active {\n	color: var(--vscode-textLink-activeForeground);\n}\n\n.monaco-hover.workbench-hover code {\n	background: var(--vscode-textCodeBlock-background);\n}\n\n.monaco-hover.workbench-hover.right-aligned {\n	/* The context view service wraps strangely when it's right up against the edge without this */\n	left: 1px;\n}\n\n.monaco-hover.workbench-hover.right-aligned .hover-row.status-bar .actions {\n	flex-direction: row-reverse;\n}\n\n.monaco-hover.workbench-hover.right-aligned .hover-row.status-bar .actions .action-container {\n	margin-right: 0;\n	margin-left: 16px;\n}\n";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-493fa458b082")) {
       const style = document.createElement("style");
@@ -98340,10 +98340,10 @@ var init_hover2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/hover/hoverWidget.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/hover/hoverWidget.css
 var css30;
 var init_hoverWidget = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/hover/hoverWidget.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/hover/hoverWidget.css"() {
     css30 = `/*---------------------------------------------------------------------------------------------
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -98573,13 +98573,13 @@ var init_hoverWidget = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/hover/hoverWidget.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/hover/hoverWidget.js
 function getHoverAccessibleViewHint(shouldHaveHint, keybinding) {
   return shouldHaveHint && keybinding ? localize(7, "Inspect this in the accessible view with {0}.", keybinding) : shouldHaveHint ? localize(8, "Inspect this in the accessible view via the command Open Accessible View which is currently not triggerable via keybinding.") : "";
 }
 var $3, HoverWidget, HoverAction, ClickAction, KeyDownAction;
 var init_hoverWidget2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/hover/hoverWidget.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/hover/hoverWidget.js"() {
     init_dom();
     init_keyboardEvent();
     init_scrollableElement();
@@ -98669,10 +98669,10 @@ var init_hoverWidget2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/naturalLanguage/korean.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/naturalLanguage/korean.js
 var codeBuffer, modernConsonants, modernVowels, modernFinalConsonants, compatibilityJamo;
 var init_korean = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/naturalLanguage/korean.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/naturalLanguage/korean.js"() {
     codeBuffer = new Uint32Array(10);
     modernConsonants = new Uint8Array([
       114,
@@ -98963,7 +98963,7 @@ var init_korean = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/normalization.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/normalization.js
 function normalizeNFD(str) {
   return normalize2(str, "NFD", nfdCache);
 }
@@ -98986,7 +98986,7 @@ function normalize2(str, form, normalizedCache) {
 }
 var nfdCache, nonAsciiCharactersPattern, tryNormalizeToBase;
 var init_normalization = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/normalization.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/normalization.js"() {
     init_map();
     new LRUCache(1e4);
     nfdCache = new LRUCache(1e4);
@@ -99008,7 +99008,7 @@ var init_normalization = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/filters.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/filters.js
 function or2(...filter) {
   return function(word, wordToMatchAgainst) {
     for (let i = 0, len = filter.length; i < len; i++) {
@@ -99460,7 +99460,7 @@ function _doScore(pattern, patternLow, patternPos, patternStart, word, wordLow, 
 }
 var matchesPrefix, wordSeparators, fuzzyContiguousFilter, fuzzySeparateFilter, fuzzyRegExpCache, _maxLen, _minWordMatchPos, _maxWordMatchPos, _diag, _table, _arrows, FuzzyScore, FuzzyScoreOptions;
 var init_filters = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/filters.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/filters.js"() {
     init_map();
     init_korean();
     init_normalization();
@@ -99497,7 +99497,7 @@ var init_filters = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/iconLabels.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/iconLabels.js
 function escapeIcons(text2) {
   return text2.replace(escapeIconsRegex, (match2, escaped) => escaped ? match2 : `\\${match2}`);
 }
@@ -99557,7 +99557,7 @@ function matchesFuzzyIconAware(query, target, enableSeparateSubstringMatching = 
 }
 var iconStartMarker, iconsRegex, escapeIconsRegex, markdownEscapedIconsRegex, stripIconsRegex, _parseIconsRegex;
 var init_iconLabels = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/iconLabels.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/iconLabels.js"() {
     init_filters();
     init_strings();
     init_themables();
@@ -99570,7 +99570,7 @@ var init_iconLabels = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/htmlContent.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/htmlContent.js
 function isMarkdownString(thing) {
   if (thing instanceof MarkdownString) {
     return true;
@@ -99636,7 +99636,7 @@ function isPortableLinkTarget(target) {
 }
 var MarkdownString, placeholderAuthority;
 var init_htmlContent = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/htmlContent.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/htmlContent.js"() {
     init_errors();
     init_iconLabels();
     init_network();
@@ -99701,10 +99701,10 @@ ${appendEscapedMarkdownCodeBlockFence(code, langId)}
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/idGenerator.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/idGenerator.js
 var IdGenerator, defaultGenerator;
 var init_idGenerator = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/idGenerator.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/idGenerator.js"() {
     IdGenerator = class {
       constructor(prefix) {
         this._prefix = prefix;
@@ -99718,7 +99718,7 @@ var init_idGenerator = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/marked/marked.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/marked/marked.js
 function _getDefaults() {
   return {
     async: false,
@@ -99887,7 +99887,7 @@ function marked(src, opt) {
 }
 var _defaults, escapeTest, escapeReplace, escapeTestNoEncode, escapeReplaceNoEncode, escapeReplacements, getEscapeReplacement, caret, noopTest, _Tokenizer, newline, blockCode, fences, hr3, heading, bullet, lheading, _paragraph, blockText, _blockLabel, def, list, _tag, _comment, html, paragraph, blockquote, blockNormal, gfmTable, blockGfm, blockPedantic, escape2, inlineCode, br3, inlineText, _punctuation, punctuation, blockSkip, emStrongLDelim, emStrongRDelimAst, emStrongRDelimUnd, anyPunctuation, autolink, _inlineComment, tag, _inlineLabel, link, reflink, nolink, reflinkSearch, inlineNormal, inlinePedantic, inlineGfm, inlineBreaks, block, inline2, _Lexer, _Renderer, _TextRenderer, _Parser, _Hooks, Marked, markedInstance, parse, lexer;
 var init_marked = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/marked/marked.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/marked/marked.js"() {
     _defaults = _getDefaults();
     escapeTest = /[&<>"']/;
     escapeReplace = new RegExp(escapeTest.source, "g");
@@ -101772,7 +101772,7 @@ ${text2}</tr>
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/marshalling.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/marshalling.js
 function stringify(obj) {
   return JSON.stringify(obj, replacer);
 }
@@ -101825,13 +101825,13 @@ function revive(obj, depth = 0) {
   return obj;
 }
 var init_marshalling = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/marshalling.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/marshalling.js"() {
     init_buffer();
     init_uri();
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/dompurify/dompurify.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/dompurify/dompurify.js
 function _arrayLikeToArray(r, a) {
   (null == a || a > r.length) && (a = r.length);
   for (var e = 0, n2 = Array(a); e < a; e++) n2[e] = r[e];
@@ -103270,7 +103270,7 @@ function createDOMPurify() {
 }
 var entries, setPrototypeOf, isFrozen, getPrototypeOf, getOwnPropertyDescriptor, freeze, seal, create, _ref, apply, construct, arrayForEach, arrayLastIndexOf, arrayPop, arrayPush, arraySplice, arrayIsArray, stringToLowerCase, stringToString, stringMatch, stringReplace, stringIndexOf, stringTrim, numberToString, booleanToString, bigintToString, symbolToString, objectHasOwnProperty, objectToString, regExpTest, typeErrorCreate, html$1, svg$1, svgFilters, svgDisallowed, mathMl$1, mathMlDisallowed, text, html2, svg, mathMl, xml, MUSTACHE_EXPR, ERB_EXPR, TMPLIT_EXPR, DATA_ATTR, ARIA_ATTR, IS_ALLOWED_URI, IS_SCRIPT_OR_DATA, ATTR_WHITESPACE, DOCTYPE_NAME, CUSTOM_ELEMENT, ELEMENT_MARKUP_PROBE, COMMENT_MARKUP_PROBE, FALLBACK_TAG_CLOSE, SELF_CLOSING_TAG, NODE_TYPE, LITERAL_TEXT_ELEMENT_NAMES, LITERAL_TEXT_ELEMENTS, LITERAL_TEXT_CLOSE, getGlobal, _createTrustedTypesPolicy, _createHooksMap, _resolveSetOption, _resolveObjectOption, purify;
 var init_dompurify = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/dompurify/dompurify.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/dompurify/dompurify.js"() {
     entries = Object.entries;
     setPrototypeOf = Object.setPrototypeOf;
     isFrozen = Object.isFrozen;
@@ -103436,7 +103436,7 @@ var init_dompurify = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/domSanitize.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/domSanitize.js
 function validateLink(value, allowedProtocols) {
   if (allowedProtocols.override === "*") {
     return true;
@@ -103617,7 +103617,7 @@ function safeSetInnerHtml(node, untrusted, config) {
 }
 var basicMarkupHtmlTags, defaultAllowedAttrs, fakeRelativeUrlProtocol, defaultDomPurifyConfig, stalePolicyReplacementCount, selfClosingTags, replaceWithPlainTextHook;
 var init_domSanitize = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/domSanitize.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/domSanitize.js"() {
     init_network();
     init_dom();
     init_trustedTypes();
@@ -103735,7 +103735,7 @@ var init_domSanitize = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/iconLabel/iconLabels.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/iconLabel/iconLabels.js
 function renderLabelWithIcons(text2, renderIconsInDefaultColor) {
   const elements = new Array();
   let match2;
@@ -103765,14 +103765,14 @@ function renderIcon(icon, renderDefaultColor) {
 }
 var labelWithIconsRegex;
 var init_iconLabels2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/iconLabel/iconLabels.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/iconLabel/iconLabels.js"() {
     init_dom();
     init_themables();
     labelWithIconsRegex = new RegExp(`(\\\\)?\\$\\((${ThemeIcon.iconNameExpression}(?:${ThemeIcon.iconModifierExpression})?)\\)`, "g");
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/markdownRenderer.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/markdownRenderer.js
 function getLinkTitle(href) {
   try {
     const parsed = URI.parse(href);
@@ -104585,7 +104585,7 @@ function completeTable(tokens) {
 }
 var defaultMarkedRenderers, allowedMarkdownHtmlTags, allowedMarkdownHtmlAttributes, unescapeInfo, maxIncompleteTokensFixRounds;
 var init_markdownRenderer = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/markdownRenderer.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/markdownRenderer.js"() {
     init_errors();
     init_extpath();
     init_htmlContent();
@@ -104699,7 +104699,7 @@ var init_markdownRenderer = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/opener/common/opener.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/opener/common/opener.js
 function extractSelection(uri) {
   let selection = void 0;
   const match2 = /^L?(\d+)(?:,(\d+))?(-L?(\d+)(?:,(\d+))?)?/.exec(uri.fragment);
@@ -104716,14 +104716,14 @@ function extractSelection(uri) {
 }
 var IOpenerService, defaultExternalUriOpenerId;
 var init_opener = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/opener/common/opener.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/opener/common/opener.js"() {
     init_instantiation();
     IOpenerService = createDecorator("openerService");
     defaultExternalUriOpenerId = "default";
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/markdown/browser/markdownRenderer.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/markdown/browser/markdownRenderer.js
 async function openLinkFromMarkdown(openerService, link2, isTrusted, skipValidation) {
   try {
     return await openerService.open(link2, {
@@ -104748,7 +104748,7 @@ function toAllowCommandsOption(isTrusted) {
 }
 var __decorate30, __param28, IMarkdownRendererService, MarkdownRendererService;
 var init_markdownRenderer2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/markdown/browser/markdownRenderer.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/markdown/browser/markdownRenderer.js"() {
     init_markdownRenderer();
     init_errors();
     init_extensions();
@@ -104802,10 +104802,10 @@ var init_markdownRenderer2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/hover/browser/hoverWidget.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/hover/browser/hoverWidget.js
 var __decorate31, __param29, $4, HoverWidget2, CompositeMouseTracker, ElementHoverTarget;
 var init_hoverWidget3 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/hover/browser/hoverWidget.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/hover/browser/hoverWidget.js"() {
     init_hover2();
     init_lifecycle();
     init_event();
@@ -105438,10 +105438,10 @@ var init_hoverWidget3 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/range.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/range.js
 var Range2;
 var init_range2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/range.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/range.js"() {
     (function(Range4) {
       function intersect(one, other) {
         if (one.start >= other.end || other.start >= one.end) {
@@ -105480,7 +105480,7 @@ var init_range2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/layout.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/layout.js
 function layout(viewportSize, viewSize, anchor) {
   const layoutAfterAnchorBoundary = anchor.mode === LayoutAnchorMode.ALIGN ? anchor.offset : anchor.offset + anchor.size;
   const layoutBeforeAnchorBoundary = anchor.mode === LayoutAnchorMode.ALIGN ? anchor.offset + anchor.size : anchor.offset;
@@ -105557,7 +105557,7 @@ function layout2d(viewport, view, anchor, options) {
 }
 var LayoutAnchorMode;
 var init_layout = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/layout.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/layout.js"() {
     init_range2();
     (function(LayoutAnchorMode2) {
       LayoutAnchorMode2[LayoutAnchorMode2["AVOID"] = 0] = "AVOID";
@@ -105566,10 +105566,10 @@ var init_layout = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/contextview/contextview.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/contextview/contextview.css
 var css31;
 var init_contextview = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/contextview/contextview.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/contextview/contextview.css"() {
     css31 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n.context-view {\n	position: absolute;\n}\n\n.context-view.fixed {\n	all: initial;\n	font-family: inherit;\n	font-size: 13px;\n	position: fixed;\n	color: inherit;\n}\n";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-22947a5165b8")) {
       const style = document.createElement("style");
@@ -105580,7 +105580,7 @@ var init_contextview = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/contextview/contextview.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/contextview/contextview.js
 function isAnchor(obj) {
   const anchor = obj;
   return !!anchor && typeof anchor.x === "number" && typeof anchor.y === "number";
@@ -105683,7 +105683,7 @@ function getAnchorRect(anchor) {
 }
 var CONTEXT_VIEW_MENU_MOTION_CLASS, CONTEXT_VIEW_MENU_MOTION_CLOSING_CLASS, CONTEXT_VIEW_MENU_MOTION_CLOSE_ANIMATION_DURATION, CONTEXT_VIEW_MENU_MOTION_ANCESTOR_CLASSES, CONTEXT_VIEW_CLOSE_ANIMATION_DURATION_VARIABLE, CONTEXT_VIEW_MENU_MOTION_SHADOW_VARIABLE, CONTEXT_VIEW_MENU_MOTION_CLOSE_START_OPACITY_VARIABLE, CONTEXT_VIEW_MENU_MOTION_CLOSE_START_TRANSFORM_VARIABLE, CONTEXT_VIEW_MENU_MOTION_OPEN_DURATION_MS, CONTEXT_VIEW_MENU_MOTION_EASING, contextViewMenuCloseAnimation, contextViewMenuMotionStyleSheet, ContextView, SHADOW_ROOT_CSS;
 var init_contextview2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/contextview/contextview.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/contextview/contextview.js"() {
     init_canIUse();
     init_dom();
     init_domStylesheets();
@@ -105984,16 +105984,16 @@ var init_contextview2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/layout/browser/layoutService.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/layout/browser/layoutService.js
 var ILayoutService;
 var init_layoutService = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/layout/browser/layoutService.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/layout/browser/layoutService.js"() {
     init_instantiation();
     ILayoutService = createDecorator("layoutService");
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/hover/hover.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/hover/hover.js
 function isManagedHoverTooltipMarkdownString(obj) {
   const candidate = obj;
   return typeof candidate === "object" && "markdown" in candidate && "markdownNotSupportedFallback" in candidate;
@@ -106003,14 +106003,14 @@ function isManagedHoverTooltipHTMLElement(obj) {
   return typeof candidate === "object" && "element" in candidate;
 }
 var init_hover3 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/hover/hover.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/hover/hover.js"() {
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/hover/browser/updatableHoverWidget.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/hover/browser/updatableHoverWidget.js
 var ManagedHoverWidget;
 var init_updatableHoverWidget = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/hover/browser/updatableHoverWidget.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/hover/browser/updatableHoverWidget.js"() {
     init_dom();
     init_hover3();
     init_cancellation();
@@ -106111,7 +106111,7 @@ var init_updatableHoverWidget = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/hover/browser/hoverService.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/hover/browser/hoverService.js
 function getHoverOptionsIdentity(options) {
   if (options === void 0) {
     return void 0;
@@ -106173,7 +106173,7 @@ function resolveMouseStyleHoverTarget(target, e) {
 }
 var __decorate32, __param30, MAX_HOVER_NESTING_DEPTH, HoverService, HoverContextViewDelegate;
 var init_hoverService = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/hover/browser/hoverService.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/hover/browser/hoverService.js"() {
     init_extensions();
     init_themeService();
     init_colorUtils();
@@ -106803,22 +106803,22 @@ var init_hoverService = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/dialogs/common/dialogs.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/dialogs/common/dialogs.js
 var IDialogService;
 var init_dialogs = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/dialogs/common/dialogs.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/dialogs/common/dialogs.js"() {
     init_instantiation();
     IDialogService = createDecorator("dialogService");
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/undoRedo/common/undoRedoService.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/undoRedo/common/undoRedoService.js
 function getResourceLabel(resource) {
   return resource.scheme === Schemas.file ? resource.fsPath : resource.path;
 }
 var __decorate33, __param31, stackElementCounter, ResourceStackElement, ResourceReasonPair, RemovedResources, WorkspaceStackElement, ResourceEditStack, EditStackSnapshot, missingEditStack, UndoRedoService, WorkspaceVerificationError;
 var init_undoRedoService = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/undoRedo/common/undoRedoService.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/undoRedo/common/undoRedoService.js"() {
     init_errors();
     init_lifecycle();
     init_network();
@@ -107892,10 +107892,10 @@ var init_undoRedoService = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/common/quickInput.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/common/quickInput.js
 var NO_KEY_MODS, QuickInputHideReason, ItemActivation, QuickPickFocus, QuickInputButtonLocation, IQuickInputService;
 var init_quickInput = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/common/quickInput.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/common/quickInput.js"() {
     init_instantiation();
     NO_KEY_MODS = { ctrlCmd: false, alt: false, shift: false };
     (function(QuickInputHideReason2) {
@@ -107929,10 +107929,10 @@ var init_quickInput = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/parts/storage/common/storage.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/parts/storage/common/storage.js
 var StorageHint, StorageState, Storage, InMemoryStorageDatabase;
 var init_storage = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/parts/storage/common/storage.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/parts/storage/common/storage.js"() {
     init_async();
     init_event();
     init_lifecycle();
@@ -108101,7 +108101,7 @@ var init_storage = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/storage/common/storage.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/storage/common/storage.js
 function loadKeyTargets(storage) {
   const keysRaw = storage.get(TARGET_KEY);
   if (keysRaw) {
@@ -108114,7 +108114,7 @@ function loadKeyTargets(storage) {
 }
 var TARGET_KEY, IStorageService, WillSaveStateReason, AbstractStorageService, InMemoryStorageService;
 var init_storage2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/storage/common/storage.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/storage/common/storage.js"() {
     init_async();
     init_event();
     init_lifecycle();
@@ -108354,10 +108354,10 @@ var init_storage2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/services/inlineCompletionsService.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/services/inlineCompletionsService.js
 var __decorate34, __param32, IInlineCompletionsService, InlineCompletionsSnoozing, InlineCompletionsService, snoozeInlineSuggestId, cancelSnoozeInlineSuggestId, LAST_SNOOZE_DURATION_KEY, SnoozeInlineCompletion, CancelSnoozeInlineCompletion;
 var init_inlineCompletionsService = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/services/inlineCompletionsService.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/services/inlineCompletionsService.js"() {
     init_async();
     init_errors();
     init_event();
@@ -108585,19 +108585,19 @@ var init_inlineCompletionsService = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/environment/common/environment.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/environment/common/environment.js
 var IEnvironmentService;
 var init_environment = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/environment/common/environment.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/environment/common/environment.js"() {
     init_instantiation();
     IEnvironmentService = createDecorator("environmentService");
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/languageFeatureDebounce.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/languageFeatureDebounce.js
 var __decorate35, __param33, ILanguageFeatureDebounceService, IdentityHash, NullDebounceInformation, FeatureDebounceInformation, LanguageFeatureDebounceService;
 var init_languageFeatureDebounce = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/languageFeatureDebounce.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/languageFeatureDebounce.js"() {
     init_hash();
     init_map();
     init_numbers();
@@ -108740,7 +108740,7 @@ var init_languageFeatureDebounce = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/glob.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/glob.js
 function starsToRegExp(starCount, isLastPattern) {
   switch (starCount) {
     case 0:
@@ -109218,7 +109218,7 @@ function aggregateBasenameMatches(parsedPatterns, result, ignoreCase) {
 }
 var GLOBSTAR, GLOB_SPLIT, PATH_REGEX, NO_PATH_REGEX, ALL_FORWARD_SLASHES, T1, T2, T3, T3_2, T4, T5, CACHE, FALSE, NULL;
 var init_glob = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/glob.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/glob.js"() {
     init_async();
     init_extpath();
     init_map();
@@ -109246,7 +109246,7 @@ var init_glob = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languageSelector.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languageSelector.js
 function score2(selector, candidateUri, candidateLanguage, candidateIsSynchronized, candidateNotebookUri, candidateNotebookType) {
   if (Array.isArray(selector)) {
     let ret = 0;
@@ -109326,13 +109326,13 @@ function score2(selector, candidateUri, candidateLanguage, candidateIsSynchroniz
   }
 }
 var init_languageSelector = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languageSelector.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languageSelector.js"() {
     init_glob();
     init_path();
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languageFeatureRegistry.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languageFeatureRegistry.js
 function isExclusive(selector) {
   if (typeof selector === "string") {
     return false;
@@ -109353,7 +109353,7 @@ function isBuiltinSelector(selector) {
 }
 var MatchCandidate, LanguageFeatureRegistry;
 var init_languageFeatureRegistry = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languageFeatureRegistry.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/languageFeatureRegistry.js"() {
     init_event();
     init_lifecycle();
     init_model2();
@@ -109495,10 +109495,10 @@ var init_languageFeatureRegistry = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/languageFeaturesService.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/languageFeaturesService.js
 var LanguageFeaturesService;
 var init_languageFeaturesService = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/languageFeaturesService.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/languageFeaturesService.js"() {
     init_languageFeatureRegistry();
     init_languageFeatures();
     init_extensions();
@@ -109547,10 +109547,10 @@ var init_languageFeaturesService = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/tokens/common.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/tokens/common.js
 var RateLimiter;
 var init_common = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/tokens/common.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/tokens/common.js"() {
     RateLimiter = class {
       constructor(timesPerSecond = 5) {
         this.timesPerSecond = timesPerSecond;
@@ -109568,10 +109568,10 @@ var init_common = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/tokens/sparseMultilineTokens.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/tokens/sparseMultilineTokens.js
 var SparseMultilineTokensStorage, SparseLineTokens;
 var init_sparseMultilineTokens = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/tokens/sparseMultilineTokens.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/tokens/sparseMultilineTokens.js"() {
     init_position();
     init_range();
     init_eolCounter();
@@ -109869,10 +109869,10 @@ var init_sparseMultilineTokens = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/semanticTokensProviderStyling.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/semanticTokensProviderStyling.js
 var __decorate36, __param34, SemanticTokensProviderStyling, HashTableEntry, HashTable;
 var init_semanticTokensProviderStyling = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/semanticTokensProviderStyling.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/semanticTokensProviderStyling.js"() {
     init_themeService();
     init_log();
     init_sparseMultilineTokens();
@@ -110057,19 +110057,19 @@ var init_semanticTokensProviderStyling = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/semanticTokensStyling.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/semanticTokensStyling.js
 var ISemanticTokensStylingService;
 var init_semanticTokensStyling = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/semanticTokensStyling.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/semanticTokensStyling.js"() {
     init_instantiation();
     ISemanticTokensStylingService = createDecorator("semanticTokensStylingService");
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/semanticTokensStylingService.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/semanticTokensStylingService.js
 var __decorate37, __param35, SemanticTokensStylingService;
 var init_semanticTokensStylingService = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/semanticTokensStylingService.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/semanticTokensStylingService.js"() {
     init_lifecycle();
     init_language();
     init_themeService();
@@ -110120,10 +110120,10 @@ var init_semanticTokensStylingService = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/services/abstractCodeEditorService.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/services/abstractCodeEditorService.js
 var __decorate38, __param36, AbstractCodeEditorService;
 var init_abstractCodeEditorService = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/services/abstractCodeEditorService.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/services/abstractCodeEditorService.js"() {
     init_event();
     init_lifecycle();
     init_linkedList();
@@ -110253,10 +110253,10 @@ var init_abstractCodeEditorService = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/standaloneCodeEditorService.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/standaloneCodeEditorService.js
 var __decorate39, __param37, StandaloneCodeEditorService;
 var init_standaloneCodeEditorService = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/standaloneCodeEditorService.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/standaloneCodeEditorService.js"() {
     init_dom();
     init_network();
     init_abstractCodeEditorService();
@@ -110362,10 +110362,10 @@ var init_standaloneCodeEditorService = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/standaloneLayoutService.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/standaloneLayoutService.js
 var __decorate40, __param38, StandaloneLayoutService, EditorScopedLayoutService;
 var init_standaloneLayoutService = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/standaloneLayoutService.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/standaloneLayoutService.js"() {
     init_dom();
     init_window();
     init_arrays();
@@ -110445,10 +110445,10 @@ var init_standaloneLayoutService = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/accessibility/browser/accessibilityService.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/accessibility/browser/accessibilityService.js
 var __decorate41, __param39, AccessibilityService;
 var init_accessibilityService = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/accessibility/browser/accessibilityService.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/accessibility/browser/accessibilityService.js"() {
     init_dom();
     init_window();
     init_event();
@@ -110598,10 +110598,10 @@ var init_accessibilityService = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/accessibilitySignal/browser/accessibilitySignalService.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/accessibilitySignal/browser/accessibilitySignalService.js
 var IAccessibilitySignalService, Sound, SoundSource, AccessibilitySignal;
 var init_accessibilitySignalService = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/accessibilitySignal/browser/accessibilitySignalService.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/accessibilitySignal/browser/accessibilitySignalService.js"() {
     init_nls();
     init_instantiation();
     IAccessibilitySignalService = createDecorator("accessibilitySignalService");
@@ -111079,7 +111079,7 @@ var init_accessibilitySignalService = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/actions/common/menuService.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/actions/common/menuService.js
 function groupMenuItems(menuItems) {
   return Array.from(groupAdjacentBy(menuItems, (a, b2) => (a.group || "") === (b2.group || "")), (items) => [items[0].group || "", items]);
 }
@@ -111157,7 +111157,7 @@ function createConfigureKeybindingAction(commandService, keybindingService, comm
 }
 var __decorate42, __param40, PersistedMenuHideState_1, MenuInfo_1, MenuService, PersistedMenuHideState, MenuInfoSnapshot, MenuInfo, MenuImpl;
 var init_menuService = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/actions/common/menuService.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/actions/common/menuService.js"() {
     init_async();
     init_event();
     init_lifecycle();
@@ -111498,10 +111498,10 @@ var init_menuService = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/clipboard/browser/clipboardService.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/clipboard/browser/clipboardService.js
 var __decorate43, __param41, BrowserClipboardService_1, vscodeResourcesMime, BrowserClipboardService;
 var init_clipboardService = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/clipboard/browser/clipboardService.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/clipboard/browser/clipboardService.js"() {
     init_browser();
     init_dom();
     init_window();
@@ -111684,22 +111684,22 @@ var init_clipboardService = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/clipboard/common/clipboardService.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/clipboard/common/clipboardService.js
 var IClipboardService;
 var init_clipboardService2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/clipboard/common/clipboardService.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/clipboard/common/clipboardService.js"() {
     init_instantiation();
     IClipboardService = createDecorator("clipboardService");
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/configuration/common/configurationModels.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/configuration/common/configurationModels.js
 function freeze2(data) {
   return Object.isFrozen(data) ? data : deepFreeze(data);
 }
 var ConfigurationModel, ConfigurationModelParser, ConfigurationInspectValue, Configuration, ConfigurationChangeEvent;
 var init_configurationModels = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/configuration/common/configurationModels.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/configuration/common/configurationModels.js"() {
     init_arrays();
     init_map();
     init_objects();
@@ -112386,10 +112386,10 @@ var init_configurationModels = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/configuration/common/configurations.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/configuration/common/configurations.js
 var DefaultConfiguration;
 var init_configurations = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/configuration/common/configurations.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/configuration/common/configurations.js"() {
     init_lifecycle();
     init_objects();
     init_configurationModels();
@@ -112437,10 +112437,10 @@ var init_configurations = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/ternarySearchTree.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/ternarySearchTree.js
 var StringIterator, ConfigKeysIterator, PathIterator, UriIterator, Undef, TernarySearchTreeNode, TernarySearchTree;
 var init_ternarySearchTree = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/ternarySearchTree.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/ternarySearchTree.js"() {
     init_assert();
     init_strings();
     StringIterator = class {
@@ -113038,10 +113038,10 @@ var init_ternarySearchTree = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/contextkey/common/contextkeys.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/contextkey/common/contextkeys.js
 var IsWindowsContext, IsWebContext, InputFocusedContextKey, InputFocusedContext;
 var init_contextkeys = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/contextkey/common/contextkeys.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/contextkey/common/contextkeys.js"() {
     init_platform();
     init_nls();
     init_contextkey();
@@ -113060,7 +113060,7 @@ var init_contextkeys = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/contextkey/browser/contextKeyService.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/contextkey/browser/contextKeyService.js
 function allEventKeysInContext(event, context) {
   return event.allKeysContainedIn(new Set(Object.keys(context)));
 }
@@ -113094,7 +113094,7 @@ function stringifyURIs(contextValue) {
 }
 var __decorate44, __param42, KEYBINDING_CONTEXT_ATTR, Context, NullContext, ConfigAwareContextValuesContainer, ContextKey, SimpleContextKeyChangeEvent, ArrayContextKeyChangeEvent, CompositeContextKeyChangeEvent, AbstractContextKeyService, ContextKeyService, ScopedContextKeyService;
 var init_contextKeyService = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/contextkey/browser/contextKeyService.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/contextkey/browser/contextKeyService.js"() {
     init_event();
     init_iterator();
     init_lifecycle();
@@ -113506,7 +113506,7 @@ var init_contextKeyService = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/cssValue.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/cssValue.js
 function asFragment(raw) {
   return raw;
 }
@@ -113555,7 +113555,7 @@ function inline3(strings, ...values) {
 }
 var Builder;
 var init_cssValue = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/cssValue.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/cssValue.js"() {
     init_network();
     Builder = class {
       constructor() {
@@ -113571,7 +113571,7 @@ var init_cssValue = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/hover/hoverDelegateFactory.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/hover/hoverDelegateFactory.js
 function setHoverDelegateFactory(hoverDelegateProvider) {
   hoverDelegateFactory = hoverDelegateProvider;
 }
@@ -113586,7 +113586,7 @@ function createInstantHoverDelegate() {
 }
 var nullHoverDelegateFactory, hoverDelegateFactory, defaultHoverDelegateMouse, defaultHoverDelegateElement;
 var init_hoverDelegateFactory = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/hover/hoverDelegateFactory.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/hover/hoverDelegateFactory.js"() {
     init_lazy();
     nullHoverDelegateFactory = () => ({
       get delay() {
@@ -113604,10 +113604,10 @@ var init_hoverDelegateFactory = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/selectBox/selectBox.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/selectBox/selectBox.css
 var css32;
 var init_selectBox = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/selectBox/selectBox.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/selectBox/selectBox.css"() {
     css32 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n.monaco-select-box {\n	width: 100%;\n	cursor: pointer;\n	border-radius: var(--vscode-cornerRadius-small);\n}\n\n.monaco-select-box-dropdown-container {\n	font-size: 13px;\n	font-weight: normal;\n	text-transform: none;\n}\n\n/** Actions */\n\n.monaco-action-bar .action-item.select-container {\n	cursor: default;\n}\n\n.monaco-action-bar .action-item .monaco-select-box {\n	cursor: pointer;\n	min-width: 100px;\n	min-height: 18px;\n	padding: 2px 23px 2px 8px;\n}\n\n.mac .monaco-action-bar .action-item .monaco-select-box {\n	font-size: 11px;\n	border-radius: var(--vscode-cornerRadius-small);\n	min-height: 24px;\n}\n";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-57f850fe593d")) {
       const style = document.createElement("style");
@@ -113618,7 +113618,7 @@ var init_selectBox = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/hover/hoverDelegate2.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/hover/hoverDelegate2.js
 function setBaseLayerHoverDelegate(hoverDelegate) {
   baseHoverDelegate = hoverDelegate;
 }
@@ -113627,7 +113627,7 @@ function getBaseLayerHoverDelegate() {
 }
 var baseHoverDelegate;
 var init_hoverDelegate2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/hover/hoverDelegate2.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/hover/hoverDelegate2.js"() {
     init_lifecycle();
     baseHoverDelegate = {
       showInstantHover: () => void 0,
@@ -113647,10 +113647,10 @@ var init_hoverDelegate2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/list/splice.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/list/splice.js
 var CombinedSpliceable;
 var init_splice = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/list/splice.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/list/splice.js"() {
     CombinedSpliceable = class {
       constructor(spliceables) {
         this.spliceables = spliceables;
@@ -113662,10 +113662,10 @@ var init_splice = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/list/list.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/list/list.css
 var css33;
 var init_list = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/list/list.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/list/list.css"() {
     css33 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n.monaco-list {\n	position: relative;\n	height: 100%;\n	width: 100%;\n	white-space: nowrap;\n	overflow: hidden;\n}\n\n.monaco-list.mouse-support {\n	user-select: none;\n	-webkit-user-select: none;\n}\n\n.monaco-list > .monaco-scrollable-element {\n	height: 100%;\n}\n\n.monaco-list-rows {\n	position: relative;\n	width: 100%;\n	height: 100%;\n}\n\n.monaco-list.horizontal-scrolling .monaco-list-rows {\n	width: auto;\n	min-width: 100%;\n}\n\n.monaco-list-row {\n	position: absolute;\n	box-sizing: border-box;\n	overflow: hidden;\n	width: 100%;\n}\n\n.monaco-list.mouse-support .monaco-list-row {\n	cursor: pointer;\n	touch-action: none;\n}\n\n/* Make sure the scrollbar renders above overlays (sticky scroll) */\n.monaco-list .monaco-scrollable-element > .scrollbar.vertical,\n.monaco-pane-view > .monaco-split-view2.vertical > .monaco-scrollable-element > .scrollbar.vertical {\n	z-index: 14;\n}\n\n/* for OS X ballistic scrolling */\n.monaco-list-row.scrolling {\n	display: none !important;\n}\n\n/* Focus */\n.monaco-list.element-focused,\n.monaco-list.selection-single,\n.monaco-list.selection-multiple {\n	outline: 0 !important;\n}\n\n/* Filter */\n\n.monaco-list-type-filter-message {\n	position: absolute;\n	box-sizing: border-box;\n	width: 100%;\n	height: 100%;\n	top: 0;\n	left: 0;\n	padding: 40px 1em 1em 1em;\n	text-align: center;\n	white-space: normal;\n	opacity: 0.7;\n	pointer-events: none;\n}\n\n.monaco-list-type-filter-message:empty {\n	display: none;\n}\n";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-0cc938c7cd79")) {
       const style = document.createElement("style");
@@ -113676,10 +113676,10 @@ var init_list = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/list/list.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/list/list.js
 var NotSelectableGroupId, ListError;
 var init_list2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/list/list.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/list/list.js"() {
     NotSelectableGroupId = "notSelectable";
     ListError = class extends Error {
       constructor(user, message) {
@@ -113689,7 +113689,7 @@ var init_list2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/list/rangeMap.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/list/rangeMap.js
 function groupIntersect(range2, groups) {
   const result = [];
   for (const r of groups) {
@@ -113734,7 +113734,7 @@ function concat3(...groups) {
 }
 var RangeMap;
 var init_rangeMap = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/list/rangeMap.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/list/rangeMap.js"() {
     init_range2();
     RangeMap = class {
       get paddingTop() {
@@ -113832,10 +113832,10 @@ var init_rangeMap = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/list/rowCache.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/list/rowCache.js
 var RowCache;
 var init_rowCache = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/list/rowCache.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/list/rowCache.js"() {
     init_dom();
     RowCache = class {
       constructor(renderers) {
@@ -113936,10 +113936,10 @@ var init_rowCache = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/dnd/dnd.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/dnd/dnd.css
 var css34;
 var init_dnd3 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/dnd/dnd.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/dnd/dnd.css"() {
     css34 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n.monaco-drag-image {\n	display: inline-block;\n	padding: 1px 7px;\n	border-radius: 10px;\n	font-size: 12px;\n	position: absolute;\n	z-index: 1000;\n\n	/* Default styles */\n	background-color: var(--vscode-list-activeSelectionBackground);\n	color: var(--vscode-list-activeSelectionForeground);\n	outline: 1px solid var(--vscode-list-focusOutline);\n	outline-offset: -1px;\n\n	/*\n	 * Browsers apply an effect to the drag image when the div becomes too\n	 * large which makes them unreadable. Use max width so it does not happen\n	 */\n	max-width: 120px;\n	overflow: hidden;\n	text-overflow: ellipsis;\n	white-space: nowrap;\n}\n";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-0190d939dc35")) {
       const style = document.createElement("style");
@@ -113950,7 +113950,7 @@ var init_dnd3 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/dnd/dnd.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/dnd/dnd.js
 function applyDragImage(event, container, label, extraClasses = []) {
   if (!event.dataTransfer) {
     return;
@@ -113970,13 +113970,13 @@ function applyDragImage(event, container, label, extraClasses = []) {
   setTimeout(() => dragImage.remove(), 0);
 }
 var init_dnd4 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/dnd/dnd.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/dnd/dnd.js"() {
     init_dom();
     init_dnd3();
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/list/listView.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/list/listView.js
 function equalsDragFeedback(f1, f2) {
   if (Array.isArray(f1) && Array.isArray(f2)) {
     return equals(f1, f2);
@@ -113985,7 +113985,7 @@ function equalsDragFeedback(f1, f2) {
 }
 var __decorate45, StaticDND, DefaultOptions, ElementsDragAndDropData, ExternalElementsDragAndDropData, NativeDragAndDropData, ListViewAccessibilityProvider, ListView;
 var init_listView = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/list/listView.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/list/listView.js"() {
     init_dnd();
     init_dom();
     init_event2();
@@ -115344,13 +115344,13 @@ var init_listView = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/observables/constObservable.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/observables/constObservable.js
 function constObservable(value) {
   return new ConstObservable(value);
 }
 var ConstObservable;
 var init_constObservable = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/observables/constObservable.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/observables/constObservable.js"() {
     init_baseObservable();
     ConstObservable = class extends ConvenientObservable {
       constructor(value) {
@@ -115374,7 +115374,7 @@ var init_constObservable = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/list/listWidget.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/list/listWidget.js
 function isListElementDescendantOfClass(e, className2) {
   if (e.classList.contains(className2)) {
     return true;
@@ -115483,7 +115483,7 @@ function relativeComplement(one, other) {
 }
 var __decorate46, TraitRenderer, Trait, SelectionTrait, TraitSpliceable, KeyboardController, TypeNavigationMode, TypeNavigationControllerState, DefaultKeyboardNavigationDelegate, TypeNavigationController, DOMFocusController, DefaultMultipleSelectionController, MouseController, DefaultStyleController, unthemedListStyles, DefaultOptions2, numericSort, PipelineRenderer, AccessibiltyRenderer, ListViewDragAndDrop, List;
 var init_listWidget = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/list/listWidget.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/list/listWidget.js"() {
     init_dom();
     init_domStylesheets();
     init_cssValue();
@@ -116911,10 +116911,10 @@ var init_listWidget = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/selectBox/selectBoxCustom.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/selectBox/selectBoxCustom.css
 var css35;
 var init_selectBoxCustom = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/selectBox/selectBoxCustom.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/selectBox/selectBoxCustom.css"() {
     css35 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n.monaco-select-box-dropdown-container {\n	display: none;\n	box-sizing: border-box;\n	border-radius: var(--vscode-cornerRadius-large);\n	box-shadow: var(--vscode-shadow-lg);\n}\n\n.monaco-select-box-dropdown-container > .select-box-details-pane > .select-box-description-markdown * {\n	margin: 0;\n}\n\n.monaco-select-box-dropdown-container > .select-box-details-pane > .select-box-description-markdown a:focus {\n	outline: 1px solid -webkit-focus-ring-color;\n	outline-offset: -1px;\n}\n\n.monaco-select-box-dropdown-container > .select-box-details-pane > .select-box-description-markdown code {\n	line-height: 15px; /** For some reason, this is needed, otherwise <code> will take up 20px height */\n	font-family: var(--monaco-monospace-font);\n}\n\n\n.monaco-select-box-dropdown-container.visible {\n	display: flex;\n	flex-direction: column;\n	text-align: left;\n	width: 1px;\n	overflow: hidden;\n}\n\n.monaco-select-box-dropdown-container > .select-box-dropdown-list-container {\n	flex: 0 0 auto;\n	align-self: flex-start;\n	width: 100%;\n	overflow: hidden;\n	box-sizing: border-box;\n}\n\n.monaco-select-box-dropdown-container > .select-box-details-pane {\n	padding: 5px 6px;\n}\n\n/* Remove list-level focus ring \u2014 individual rows show their own focus indicators */\n.monaco-select-box-dropdown-container > .select-box-dropdown-list-container .monaco-list:focus::before {\n	outline: 0 !important;\n}\n\n.monaco-select-box-dropdown-container > .select-box-dropdown-list-container .monaco-list .monaco-list-row {\n	cursor: pointer;\n	padding-left: 2px;\n}\n\n.monaco-select-box-dropdown-container > .select-box-dropdown-list-container .monaco-list .monaco-list-row > .option-text {\n	text-overflow: ellipsis;\n	overflow: hidden;\n	padding-left: 6px;\n	white-space: nowrap;\n	float: left;\n}\n\n.monaco-select-box-dropdown-container > .select-box-dropdown-list-container .monaco-list .monaco-list-row > .option-detail {\n	text-overflow: ellipsis;\n	overflow: hidden;\n	padding-left: 6px;\n	white-space: nowrap;\n	float: left;\n	opacity: 0.7;\n}\n\n.monaco-select-box-dropdown-container > .select-box-dropdown-list-container .monaco-list .monaco-list-row > .option-decorator-right {\n	text-overflow: ellipsis;\n	overflow: hidden;\n	padding-right: 10px;\n	white-space: nowrap;\n	float: right;\n}\n\n\n/* Separator styling */\n.monaco-select-box-dropdown-container > .select-box-dropdown-list-container .monaco-list .monaco-list-row.option-separator {\n	cursor: default;\n	border-radius: 0;\n	padding: 0;\n}\n\n.monaco-select-box-dropdown-container > .select-box-dropdown-list-container .monaco-list .monaco-list-row.option-separator > .option-text {\n	visibility: hidden;\n	width: 0;\n	float: none;\n}\n\n.monaco-select-box-dropdown-container > .select-box-dropdown-list-container .monaco-list .monaco-list-row.option-separator > .option-detail {\n	display: none;\n}\n\n.monaco-select-box-dropdown-container > .select-box-dropdown-list-container .monaco-list .monaco-list-row.option-separator > .option-decorator-right {\n	color: var(--vscode-descriptionForeground);\n	font-size: 12px;\n}\n\n.monaco-select-box-dropdown-container > .select-box-dropdown-list-container .monaco-list .monaco-list-row.option-separator::after {\n	content: '';\n	position: absolute;\n	left: 0;\n	right: 0;\n	top: 50%;\n	height: 1px;\n	background-color: var(--vscode-menu-separatorBackground);\n}\n\n/* Accepted CSS hiding technique for accessibility reader text  */\n/* https://webaim.org/techniques/css/invisiblecontent/ */\n\n.monaco-select-box-dropdown-container > .select-box-dropdown-list-container .monaco-list .monaco-list-row > .visually-hidden {\n	position: absolute;\n	left: -10000px;\n	top: auto;\n	width: 1px;\n	height: 1px;\n	overflow: hidden;\n}\n\n.monaco-select-box-dropdown-container > .select-box-dropdown-container-width-control {\n	flex: 1 1 auto;\n	align-self: flex-start;\n	opacity: 0;\n}\n\n.monaco-select-box-dropdown-container > .select-box-dropdown-container-width-control > .width-control-div {\n	overflow: hidden;\n	max-height: 0px;\n}\n\n.monaco-select-box-dropdown-container > .select-box-dropdown-container-width-control > .width-control-div > .option-text-width-control {\n	padding-left: 8px;\n	padding-right: 8px;\n	white-space: nowrap;\n}\n";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-9dc891831938")) {
       const style = document.createElement("style");
@@ -116925,10 +116925,10 @@ var init_selectBoxCustom = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/selectBox/selectBoxCustom.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/selectBox/selectBoxCustom.js
 var $5, SELECT_OPTION_ENTRY_TEMPLATE_ID, SELECT_OPTION_HEIGHT, SelectListRenderer, SelectBoxList;
 var init_selectBoxCustom2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/selectBox/selectBoxCustom.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/selectBox/selectBoxCustom.js"() {
     init_nls();
     init_arrays();
     init_event();
@@ -117798,10 +117798,10 @@ var init_selectBoxCustom2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/selectBox/selectBoxNative.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/selectBox/selectBoxNative.js
 var SelectBoxNative;
 var init_selectBoxNative = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/selectBox/selectBoxNative.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/selectBox/selectBoxNative.js"() {
     init_dom();
     init_touch();
     init_arrays();
@@ -117934,10 +117934,10 @@ var init_selectBoxNative = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/selectBox/selectBox.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/selectBox/selectBox.js
 var SeparatorSelectOption, SelectBox;
 var init_selectBox2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/selectBox/selectBox.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/selectBox/selectBox.js"() {
     init_platform();
     init_widget();
     init_selectBox();
@@ -117984,10 +117984,10 @@ var init_selectBox2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/actionbar/actionbar.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/actionbar/actionbar.css
 var css36;
 var init_actionbar = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/actionbar/actionbar.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/actionbar/actionbar.css"() {
     css36 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n.monaco-action-bar {\n	white-space: nowrap;\n	height: 100%;\n}\n\n.monaco-action-bar .actions-container {\n	display: flex;\n	margin: 0 auto;\n	padding: 0;\n	height: 100%;\n	width: 100%;\n	align-items: center;\n}\n\n.monaco-action-bar.vertical .actions-container {\n	display: inline-block;\n}\n\n.monaco-action-bar .action-item {\n	display: block;\n	align-items: center;\n	justify-content: center;\n	cursor: pointer;\n	position: relative;  /* DO NOT REMOVE - this is the key to preventing the ghosting icon bug in Chrome 42 */\n}\n\n.monaco-action-bar .action-item.disabled {\n	cursor: default;\n}\n\n.monaco-action-bar .action-item .icon,\n.monaco-action-bar .action-item .codicon {\n	display: block;\n}\n\n.monaco-action-bar .action-item .codicon {\n	display: flex;\n	align-items: center;\n	width: 16px;\n	height: 16px;\n}\n\n.monaco-action-bar .action-label,\n.monaco-action-bar .action-item .keybinding  {\n	display: flex;\n	font-size: 11px;\n	padding: 3px;\n	border-radius: var(--vscode-cornerRadius-medium);\n}\n\n.monaco-action-bar .action-item.disabled .action-label:not(.icon) ,\n.monaco-action-bar .action-item.disabled .action-label:not(.icon)::before,\n.monaco-action-bar .action-item.disabled .action-label:not(.icon):hover {\n	color: var(--vscode-disabledForeground);\n}\n\n/* Unable to change color of SVGs, hence opacity is used */\n.monaco-action-bar .action-item.disabled .action-label.icon ,\n.monaco-action-bar .action-item.disabled .action-label.icon::before,\n.monaco-action-bar .action-item.disabled .action-label.icon:hover {\n	opacity: 0.6;\n}\n\n/* Vertical actions */\n\n.monaco-action-bar.vertical {\n	text-align: left;\n}\n\n.monaco-action-bar.vertical .action-item {\n	display: block;\n}\n\n.monaco-action-bar.vertical .action-item .action-label.separator {\n	display: block;\n	border-bottom: 1px solid var(--vscode-menu-separatorBackground, var(--vscode-disabledForeground));\n	padding-top: 1px;\n	margin: 4px .8em;\n	width: 100%;\n	height: 0;\n	background-color: transparent;\n}\n\n.monaco-action-bar .action-item .action-label.separator {\n	width: 1px;\n	height: 16px;\n	margin: 5px 4px !important;\n	cursor: default;\n	min-width: 1px;\n	padding: 0;\n	background-color: var(--vscode-disabledForeground);\n}\n\n.secondary-actions .monaco-action-bar .action-label {\n	margin-left: 6px;\n}\n\n/* Action Items */\n.monaco-action-bar .action-item.select-container {\n	overflow: hidden; /* somehow the dropdown overflows its container, we prevent it here to not push */\n	flex: 1;\n	max-width: 170px;\n	min-width: 60px;\n	display: flex;\n	align-items: center;\n	justify-content: center;\n	margin-right: 10px;\n}\n\n.monaco-action-bar .action-item.action-dropdown-item {\n	display: flex;\n}\n\n.monaco-action-bar .action-item.action-dropdown-item > .action-dropdown-item-separator {\n	display: flex;\n	align-items: center;\n	cursor: default;\n}\n\n.monaco-action-bar .action-item.action-dropdown-item > .action-dropdown-item-separator > div {\n	width: 1px;\n}\n";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-423d9bf7b3f0")) {
       const style = document.createElement("style");
@@ -117998,10 +117998,10 @@ var init_actionbar = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/actionbar/actionViewItems.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/actionbar/actionViewItems.js
 var BaseActionViewItem, ActionViewItem, SelectActionViewItem;
 var init_actionViewItems = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/actionbar/actionViewItems.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/actionbar/actionViewItems.js"() {
     init_browser();
     init_dnd();
     init_dom();
@@ -118358,10 +118358,10 @@ var init_actionViewItems = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/dropdown/dropdown.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/dropdown/dropdown.css
 var css37;
 var init_dropdown = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/dropdown/dropdown.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/dropdown/dropdown.css"() {
     css37 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n.monaco-dropdown {\n	height: 100%;\n	padding: 0;\n}\n\n.monaco-dropdown > .dropdown-label {\n	cursor: pointer;\n	height: 100%;\n	display: flex;\n	align-items: center;\n	justify-content: center;\n}\n\n.monaco-dropdown > .dropdown-label > .action-label.disabled {\n	cursor: default;\n}\n\n.monaco-dropdown .dropdown-menu {\n	border-radius: var(--vscode-cornerRadius-large);\n	box-shadow: var(--vscode-shadow-lg);\n}\n\n.monaco-dropdown-with-primary {\n	display: flex !important;\n	flex-direction: row;\n	border-radius: 5px;\n}\n\n.monaco-dropdown-with-primary > .action-container > .action-label {\n	margin-right: 0;\n}\n\n.monaco-dropdown-with-primary > .dropdown-action-container > .monaco-dropdown > .dropdown-label .codicon[class*='codicon-'] {\n	font-size: 12px;\n	padding-left: 0px;\n	padding-right: 0px;\n	line-height: 16px;\n	margin-left: -3px;\n}\n\n.monaco-dropdown-with-primary > .dropdown-action-container > .monaco-dropdown > .dropdown-label > .action-label {\n	display: block;\n	background-size: 16px;\n	background-position: center center;\n	background-repeat: no-repeat;\n}\n";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-ce4624652faa")) {
       const style = document.createElement("style");
@@ -118372,10 +118372,10 @@ var init_dropdown = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/dropdown/dropdown.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/dropdown/dropdown.js
 var BaseDropdown, DropdownMenu;
 var init_dropdown2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/dropdown/dropdown.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/dropdown/dropdown.js"() {
     init_dom();
     init_keyboardEvent();
     init_touch();
@@ -118535,10 +118535,10 @@ var init_dropdown2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/dropdown/dropdownActionViewItem.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/dropdown/dropdownActionViewItem.js
 var DropdownMenuActionViewItem;
 var init_dropdownActionViewItem = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/dropdown/dropdownActionViewItem.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/dropdown/dropdownActionViewItem.js"() {
     init_event();
     init_dom();
     init_actionViewItems();
@@ -118658,7 +118658,7 @@ var init_dropdownActionViewItem = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/keybindingLabels.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/keybindingLabels.js
 function _simpleAsString(modifiers, key, labels) {
   if (key === null) {
     return "";
@@ -118683,7 +118683,7 @@ function _simpleAsString(modifiers, key, labels) {
 }
 var ModifierLabelProvider, UILabelProvider, AriaLabelProvider, ElectronAcceleratorLabelProvider, UserSettingsLabelProvider;
 var init_keybindingLabels = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/keybindingLabels.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/keybindingLabels.js"() {
     init_nls();
     ModifierLabelProvider = class {
       constructor(mac, windows, linux = windows) {
@@ -118790,16 +118790,16 @@ var init_keybindingLabels = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/action/common/action.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/action/common/action.js
 function isICommandActionToggleInfo(thing) {
   return thing ? thing.condition !== void 0 : false;
 }
 var init_action = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/action/common/action.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/action/common/action.js"() {
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/browser/defaultStyles.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/browser/defaultStyles.js
 function overrideStyles(override, styles) {
   const result = { ...styles };
   for (const key in override) {
@@ -118813,7 +118813,7 @@ function getListStyles(override) {
 }
 var defaultKeybindingLabelStyles, defaultButtonStyles, defaultProgressBarStyles, defaultToggleStyles, defaultCheckboxStyles, defaultInputBoxStyles, defaultFindWidgetStyles, defaultCountBadgeStyles, defaultListStyles, defaultSelectBoxStyles, defaultMenuStyles;
 var init_defaultStyles = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/browser/defaultStyles.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/browser/defaultStyles.js"() {
     init_colorUtils();
     init_baseColors();
     init_chartsColors();
@@ -118998,7 +118998,7 @@ var init_defaultStyles = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/animations/animations.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/animations/animations.js
 function captureAnimationTarget(element) {
   return {
     element,
@@ -119329,7 +119329,7 @@ function triggerClickAnimation(target, animation, icon) {
 }
 var confettiColors, defaultConfettiLaunchDuration, defaultConfettiFallDuration, defaultConfettiFallDistance;
 var init_animations = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/animations/animations.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/animations/animations.js"() {
     init_themables();
     init_dom();
     confettiColors = [
@@ -119346,7 +119346,7 @@ var init_animations = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/window/common/window.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/window/common/window.js
 function hasNativeContextMenu(configurationService, titleBarStyle) {
   if (isWeb) {
     return false;
@@ -119403,15 +119403,15 @@ function getWindowControlsStyle(configurationService) {
   return "native";
 }
 var init_window2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/window/common/window.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/window/common/window.js"() {
     init_platform();
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/actions/browser/menuEntryActionViewItem.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/actions/browser/menuEntryActionViewItem.css
 var css38;
 var init_menuEntryActionViewItem = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/actions/browser/menuEntryActionViewItem.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/actions/browser/menuEntryActionViewItem.css"() {
     css38 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n.monaco-action-bar .action-item.menu-entry .action-label.icon {\n	width: 16px;\n	height: 16px;\n	background-repeat: no-repeat;\n	background-position: 50%;\n	background-size: 16px;\n}\n\n.monaco-action-bar .action-item.menu-entry.text-only .action-label {\n	color: var(--vscode-descriptionForeground);\n	overflow: hidden;\n	border-radius: 2px;\n}\n\n.monaco-action-bar .action-item.menu-entry.text-only.use-comma:not(:last-of-type) .action-label::after {\n	content: ', ';\n}\n\n.monaco-action-bar .action-item.menu-entry.text-only + .action-item:not(.text-only) > .monaco-dropdown .action-label {\n	color: var(--vscode-descriptionForeground);\n}\n\n.monaco-dropdown-with-default {\n	display: flex !important;\n	flex-direction: row;\n	border-radius: 5px;\n}\n\n.monaco-dropdown-with-default > .action-container > .action-label {\n	margin-right: 0;\n}\n\n.monaco-dropdown-with-default > .action-container.menu-entry > .action-label.icon {\n	width: 16px;\n	height: 16px;\n	background-repeat: no-repeat;\n	background-position: 50%;\n	background-size: 16px;\n}\n\n.monaco-dropdown-with-default > .action-container.disabled {\n	cursor: default;\n}\n\n.monaco-dropdown-with-default > .action-container.disabled > .action-label {\n	opacity: 0.4;\n	pointer-events: none;\n}\n\n.monaco-dropdown-with-default:hover {\n	background-color: var(--vscode-toolbar-hoverBackground);\n}\n\n.monaco-dropdown-with-default > .dropdown-action-container > .monaco-dropdown > .dropdown-label .codicon[class*='codicon-'] {\n	font-size: 12px;\n	padding-left: 0px;\n	padding-right: 0px;\n	line-height: 16px;\n	margin-left: -3px;\n}\n\n.monaco-dropdown-with-default > .dropdown-action-container > .monaco-dropdown > .dropdown-label > .action-label {\n	display: block;\n	background-size: 16px;\n	background-position: center center;\n	background-repeat: no-repeat;\n}\n";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-36a22e0a813a")) {
       const style = document.createElement("style");
@@ -119422,7 +119422,7 @@ var init_menuEntryActionViewItem = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/actions/browser/menuEntryActionViewItem.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/actions/browser/menuEntryActionViewItem.js
 function getFlatContextMenuActions(groups, primaryGroup) {
   const target = [];
   getContextMenuActionsImpl(groups, target);
@@ -119505,7 +119505,7 @@ function createActionViewItem(instaService, action, options) {
 }
 var __decorate47, __param43, MenuEntryActionViewItem, SubmenuEntryActionViewItem, DropdownWithDefaultActionViewItem, SubmenuEntrySelectActionViewItem;
 var init_menuEntryActionViewItem2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/actions/browser/menuEntryActionViewItem.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/actions/browser/menuEntryActionViewItem.js"() {
     init_cssValue();
     init_dom();
     init_keyboardEvent();
@@ -119929,10 +119929,10 @@ var init_menuEntryActionViewItem2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/actionbar/actionbar.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/actionbar/actionbar.js
 var ActionBar;
 var init_actionbar2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/actionbar/actionbar.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/actionbar/actionbar.js"() {
     init_dom();
     init_keyboardEvent();
     init_actionViewItems();
@@ -120411,7 +120411,7 @@ var init_actionbar2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/menu/menu.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/menu/menu.js
 function cleanMnemonic(label) {
   const regex = MENU_MNEMONIC_REGEX;
   const matches = regex.exec(label);
@@ -120851,7 +120851,7 @@ ${formatRule(Codicon.menuSubmenu)}
 }
 var MENU_MNEMONIC_REGEX, MENU_ESCAPED_MNEMONIC_REGEX, HorizontalDirection, VerticalDirection, Menu, BaseMenuActionViewItem, SubmenuMenuActionViewItem, MenuSeparatorActionViewItem;
 var init_menu = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/menu/menu.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/menu/menu.js"() {
     init_browser();
     init_touch();
     init_dom();
@@ -121568,10 +121568,10 @@ var init_menu = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/contextview/browser/contextMenuHandler.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/contextview/browser/contextMenuHandler.js
 var ContextMenuHandler;
 var init_contextMenuHandler = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/contextview/browser/contextMenuHandler.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/contextview/browser/contextMenuHandler.js"() {
     init_dom();
     init_mouseEvent();
     init_menu();
@@ -121693,10 +121693,10 @@ var init_contextMenuHandler = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/contextview/browser/contextMenuService.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/contextview/browser/contextMenuService.js
 var __decorate48, __param44, ContextMenuService, ContextMenuMenuDelegate;
 var init_contextMenuService = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/contextview/browser/contextMenuService.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/contextview/browser/contextMenuService.js"() {
     init_dom();
     init_actions();
     init_event();
@@ -121796,10 +121796,10 @@ var init_contextMenuService = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/contextview/browser/contextViewService.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/contextview/browser/contextViewService.js
 var __decorate49, __param45, ContextViewHandler, ContextViewService;
 var init_contextViewService = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/contextview/browser/contextViewService.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/contextview/browser/contextViewService.js"() {
     init_contextview2();
     init_lifecycle();
     init_layoutService();
@@ -121873,10 +121873,10 @@ var init_contextViewService = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/dataChannel/common/dataChannel.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/dataChannel/common/dataChannel.js
 var IDataChannelService, NullDataChannelService;
 var init_dataChannel = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/dataChannel/common/dataChannel.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/dataChannel/common/dataChannel.js"() {
     init_instantiation();
     IDataChannelService = createDecorator("dataChannelService");
     NullDataChannelService = class {
@@ -121890,19 +121890,19 @@ var init_dataChannel = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/defaultAccount/common/defaultAccount.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/defaultAccount/common/defaultAccount.js
 var IDefaultAccountService;
 var init_defaultAccount = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/defaultAccount/common/defaultAccount.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/defaultAccount/common/defaultAccount.js"() {
     init_instantiation();
     IDefaultAccountService = createDecorator("defaultAccountService");
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/instantiation/common/graph.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/instantiation/common/graph.js
 var Node3, Graph;
 var init_graph = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/instantiation/common/graph.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/instantiation/common/graph.js"() {
     Node3 = class {
       constructor(key, data) {
         this.key = key;
@@ -121993,10 +121993,10 @@ var init_graph = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/instantiation/common/instantiationService.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/instantiation/common/instantiationService.js
 var _enableAllTracing, CyclicDependencyError, InstantiationService, Trace;
 var init_instantiationService = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/instantiation/common/instantiationService.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/instantiation/common/instantiationService.js"() {
     init_async();
     init_errors();
     init_lifecycle();
@@ -122361,7 +122361,7 @@ ${graph.toString()}`;
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/keybinding/common/keybindingResolver.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/keybinding/common/keybindingResolver.js
 function KbFound(commandId, commandArgs, isBubble) {
   return { kind: 2, commandId, commandArgs, isBubble };
 }
@@ -122376,7 +122376,7 @@ function printSourceExplanation(kb) {
 }
 var NoMatchingKb, MoreChordsNeeded, KeybindingResolver;
 var init_keybindingResolver = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/keybinding/common/keybindingResolver.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/keybinding/common/keybindingResolver.js"() {
     init_contextkey();
     NoMatchingKb = {
       kind: 0
@@ -122639,13 +122639,13 @@ var init_keybindingResolver = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/keybinding/common/abstractKeybindingService.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/keybinding/common/abstractKeybindingService.js
 function isKeyInComposition(e) {
   return e.keyCode === 114;
 }
 var HIGH_FREQ_COMMANDS, AbstractKeybindingService, KeybindingModifierSet;
 var init_abstractKeybindingService = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/keybinding/common/abstractKeybindingService.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/keybinding/common/abstractKeybindingService.js"() {
     init_async();
     init_errors();
     init_event();
@@ -122947,7 +122947,7 @@ var init_abstractKeybindingService = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/keybinding/common/resolvedKeybindingItem.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/keybinding/common/resolvedKeybindingItem.js
 function toEmptyArrayIfContainsNull(arr) {
   const result = [];
   for (let i = 0, len = arr.length; i < len; i++) {
@@ -122961,7 +122961,7 @@ function toEmptyArrayIfContainsNull(arr) {
 }
 var ResolvedKeybindingItem;
 var init_resolvedKeybindingItem = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/keybinding/common/resolvedKeybindingItem.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/keybinding/common/resolvedKeybindingItem.js"() {
     ResolvedKeybindingItem = class {
       constructor(resolvedKeybinding, command, commandArgs, when, isDefault, extensionId, isBuiltinExtension, systemWide = false) {
         this._resolvedKeybindingItemBrand = void 0;
@@ -122983,10 +122983,10 @@ var init_resolvedKeybindingItem = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/keybinding/common/baseResolvedKeybinding.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/keybinding/common/baseResolvedKeybinding.js
 var BaseResolvedKeybinding;
 var init_baseResolvedKeybinding = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/keybinding/common/baseResolvedKeybinding.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/keybinding/common/baseResolvedKeybinding.js"() {
     init_errors();
     init_keybindingLabels();
     init_keybindings();
@@ -123036,10 +123036,10 @@ var init_baseResolvedKeybinding = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/keybinding/common/usLayoutResolvedKeybinding.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/keybinding/common/usLayoutResolvedKeybinding.js
 var USLayoutResolvedKeybinding;
 var init_usLayoutResolvedKeybinding = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/keybinding/common/usLayoutResolvedKeybinding.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/keybinding/common/usLayoutResolvedKeybinding.js"() {
     init_keyCodes();
     init_keybindings();
     init_baseResolvedKeybinding();
@@ -123258,16 +123258,16 @@ var init_usLayoutResolvedKeybinding = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/label/common/label.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/label/common/label.js
 var ILabelService;
 var init_label = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/label/common/label.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/label/common/label.js"() {
     init_instantiation();
     ILabelService = createDecorator("labelService");
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/list/listPaging.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/list/listPaging.js
 function fromPagedListOptions(modelProvider, options) {
   return {
     ...options,
@@ -123276,7 +123276,7 @@ function fromPagedListOptions(modelProvider, options) {
 }
 var PagedRenderer, PagedAccessibilityProvider, PagedList;
 var init_listPaging = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/list/listPaging.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/list/listPaging.js"() {
     init_arrays();
     init_cancellation();
     init_event();
@@ -123397,10 +123397,10 @@ var init_listPaging = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/sash/sash.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/sash/sash.css
 var css39;
 var init_sash = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/sash/sash.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/sash/sash.css"() {
     css39 = `/*---------------------------------------------------------------------------------------------
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
@@ -123560,10 +123560,10 @@ var init_sash = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/sash/sash.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/sash/sash.js
 var __decorate50, DEBUG, OrthogonalEdge, globalSize, onDidChangeGlobalSize, globalHoverDelay, onDidChangeHoverDelay, MouseEventFactory, GestureEventFactory, OrthogonalPointerEventFactory, PointerEventsDisabledCssClass, Sash;
 var init_sash2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/sash/sash.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/sash/sash.js"() {
     init_dom();
     init_domStylesheets();
     init_event2();
@@ -123996,10 +123996,10 @@ var init_sash2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/splitview/splitview.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/splitview/splitview.css
 var css40;
 var init_splitview = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/splitview/splitview.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/splitview/splitview.css"() {
     css40 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n.monaco-split-view2 {\n	position: relative;\n	width: 100%;\n	height: 100%;\n}\n\n.monaco-split-view2 > .sash-container {\n	position: absolute;\n	width: 100%;\n	height: 100%;\n	pointer-events: none;\n}\n\n.monaco-split-view2 > .sash-container > .monaco-sash {\n	pointer-events: initial;\n}\n\n.monaco-split-view2 > .monaco-scrollable-element {\n	width: 100%;\n	height: 100%;\n}\n\n.monaco-split-view2 > .monaco-scrollable-element > .split-view-container {\n	width: 100%;\n	height: 100%;\n	white-space: nowrap;\n	position: relative;\n}\n\n.monaco-split-view2 > .monaco-scrollable-element > .split-view-container > .split-view-view {\n	white-space: initial;\n	position: absolute;\n}\n\n.monaco-split-view2 > .monaco-scrollable-element > .split-view-container > .split-view-view:not(.visible) {\n	display: none;\n}\n\n.monaco-split-view2.vertical > .monaco-scrollable-element > .split-view-container > .split-view-view {\n	width: 100%;\n}\n\n.monaco-split-view2.horizontal > .monaco-scrollable-element > .split-view-container > .split-view-view {\n	height: 100%;\n}\n\n.monaco-split-view2.separator-border > .monaco-scrollable-element > .split-view-container > .split-view-view:not(:first-child)::before {\n	content: ' ';\n	position: absolute;\n	top: 0;\n	left: 0;\n	z-index: 5;\n	pointer-events: none;\n	background-color: var(--separator-border);\n}\n\n.monaco-split-view2.separator-border.horizontal > .monaco-scrollable-element > .split-view-container > .split-view-view:not(:first-child)::before {\n	height: 100%;\n	width: 1px;\n}\n\n.monaco-split-view2.separator-border.vertical > .monaco-scrollable-element > .split-view-container > .split-view-view:not(:first-child)::before {\n	height: 1px;\n	width: 100%;\n}\n";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-d982e1fba510")) {
       const style = document.createElement("style");
@@ -124010,10 +124010,10 @@ var init_splitview = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/splitview/splitview.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/splitview/splitview.js
 var defaultStyles, ViewItem, VerticalViewItem, HorizontalViewItem, State, Sizing, SplitView;
 var init_splitview2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/splitview/splitview.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/splitview/splitview.js"() {
     init_dom();
     init_event2();
     init_sash2();
@@ -124814,10 +124814,10 @@ var init_splitview2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/table/table.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/table/table.css
 var css41;
 var init_table = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/table/table.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/table/table.css"() {
     css41 = '/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n.monaco-table {\n	display: flex;\n	flex-direction: column;\n	position: relative;\n	height: 100%;\n	width: 100%;\n	white-space: nowrap;\n	overflow: hidden;\n}\n\n.monaco-table > .monaco-split-view2 {\n	border-bottom: 1px solid transparent;\n}\n\n.monaco-table > .monaco-list {\n	flex: 1;\n}\n\n.monaco-table-tr {\n	display: flex;\n	height: 100%;\n}\n\n.monaco-table-th {\n	width: 100%;\n	height: 100%;\n	font-weight: bold;\n	overflow: hidden;\n	text-overflow: ellipsis;\n}\n\n.monaco-table-th,\n.monaco-table-td {\n	box-sizing: border-box;\n	flex-shrink: 0;\n	overflow: hidden;\n	white-space: nowrap;\n	text-overflow: ellipsis;\n}\n\n.monaco-table > .monaco-split-view2 .monaco-sash.vertical::before {\n	content: "";\n	position: absolute;\n	left: calc(var(--vscode-sash-size) / 2);\n	width: 0;\n	border-left: 1px solid transparent;\n}\n\n.monaco-enable-motion .monaco-table > .monaco-split-view2,\n.monaco-enable-motion .monaco-table > .monaco-split-view2 .monaco-sash.vertical::before {\n	transition: border-color 0.2s ease-out;\n}\n';
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-2eb78c249940")) {
       const style = document.createElement("style");
@@ -124828,7 +124828,7 @@ var init_table = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/table/tableWidget.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/table/tableWidget.js
 function asListVirtualDelegate(delegate) {
   return {
     getHeight(row) {
@@ -124841,7 +124841,7 @@ function asListVirtualDelegate(delegate) {
 }
 var TableListRenderer, ColumnHeader, Table;
 var init_tableWidget = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/table/tableWidget.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/table/tableWidget.js"() {
     init_dom();
     init_domStylesheets();
     init_hoverDelegate2();
@@ -125045,10 +125045,10 @@ var init_tableWidget = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/toggle/toggle.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/toggle/toggle.css
 var css42;
 var init_toggle = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/toggle/toggle.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/toggle/toggle.css"() {
     css42 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n.monaco-custom-toggle {\n	margin-left: 2px;\n	float: left;\n	cursor: pointer;\n	overflow: hidden;\n	width: 20px;\n	height: 20px;\n	border-radius: 3px;\n	border: var(--vscode-strokeThickness, 1px) solid var(--monaco-custom-toggle-border-color, transparent);\n	padding: 1px;\n	box-sizing:	border-box;\n	user-select: none;\n	-webkit-user-select: none;\n}\n\n.monaco-custom-toggle:hover {\n	background-color: var(--vscode-inputOption-hoverBackground);\n}\n\ndiv.monaco-custom-toggle:not(.monaco-checkbox):focus {\n	outline: none;\n}\n\ndiv.monaco-custom-toggle:not(.monaco-checkbox):focus-visible {\n	border: var(--vscode-strokeThickness, 1px) dashed var(--vscode-focusBorder);\n}\n\n.monaco-custom-toggle.disabled {\n	opacity: 0.4;\n	cursor: default;\n	pointer-events: none;\n}\n\n.hc-black .monaco-custom-toggle:hover,\n.hc-light .monaco-custom-toggle:hover {\n	border: 1px dashed var(--vscode-focusBorder);\n}\n\n.hc-black .monaco-custom-toggle,\n.hc-light .monaco-custom-toggle {\n	background: none;\n}\n\n.hc-black .monaco-custom-toggle:hover,\n.hc-light .monaco-custom-toggle:hover {\n	background: none;\n}\n\n.monaco-custom-toggle.monaco-checkbox {\n	height: 18px;\n	width: 18px;\n	border: 1px solid transparent;\n	border-radius: 3px;\n	margin-right: 9px;\n	margin-left: 0px;\n	padding: 0px;\n	opacity: 1;\n	background-size: 16px !important;\n}\n\n.monaco-action-bar .checkbox-action-item {\n	display: flex;\n	align-items: center;\n	border-radius: 2px;\n	padding-right: 2px;\n}\n\n.monaco-action-bar .checkbox-action-item:hover {\n	background-color: var(--vscode-toolbar-hoverBackground);\n}\n\n.monaco-action-bar .checkbox-action-item > .monaco-custom-toggle.monaco-checkbox {\n	margin-right: 4px;\n}\n\n.monaco-action-bar .checkbox-action-item > .checkbox-label {\n	font-size: 12px;\n}\n";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-2e5dd4dcb05c")) {
       const style = document.createElement("style");
@@ -125059,7 +125059,7 @@ var init_toggle = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/toggle/toggle.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/toggle/toggle.js
 function createToggleActionViewItemProvider(toggleStyles) {
   return (action, options) => {
     if (action.checked !== void 0) {
@@ -125070,7 +125070,7 @@ function createToggleActionViewItemProvider(toggleStyles) {
 }
 var unthemedToggleStyles, ToggleActionViewItem, Toggle, BaseCheckbox, Checkbox, TriStateCheckbox;
 var init_toggle2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/toggle/toggle.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/toggle/toggle.js"() {
     init_codicons();
     init_event();
     init_htmlContent();
@@ -125379,7 +125379,7 @@ var init_toggle2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/findinput/findInputToggles.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/findinput/findInputToggles.js
 function navigateToggles(event, domNode, getToggleDomNodes, focusInput) {
   if (event.equals(
     15
@@ -125425,7 +125425,7 @@ function navigateToggles(event, domNode, getToggleDomNodes, focusInput) {
 }
 var NLS_CASE_SENSITIVE_TOGGLE_LABEL, NLS_WHOLE_WORD_TOGGLE_LABEL, NLS_REGEX_TOGGLE_LABEL, CaseSensitiveToggle, WholeWordsToggle, RegexToggle;
 var init_findInputToggles = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/findinput/findInputToggles.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/findinput/findInputToggles.js"() {
     init_dom();
     init_toggle2();
     init_codicons();
@@ -125475,7 +125475,7 @@ var init_findInputToggles = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/formattedTextRenderer.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/formattedTextRenderer.js
 function renderText(text2, _options, target) {
   const element = target ?? document.createElement("div");
   element.textContent = text2;
@@ -125601,7 +125601,7 @@ function formatTagType(char, supportCodeSegments) {
 }
 var StringStream;
 var init_formattedTextRenderer = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/formattedTextRenderer.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/formattedTextRenderer.js"() {
     init_dom();
     StringStream = class {
       constructor(source) {
@@ -125626,10 +125626,10 @@ var init_formattedTextRenderer = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/navigator.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/navigator.js
 var ArrayNavigator;
 var init_navigator = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/navigator.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/navigator.js"() {
     ArrayNavigator = class {
       constructor(items, start = 0, end = items.length, index = start - 1) {
         this.items = items;
@@ -125663,10 +125663,10 @@ var init_navigator = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/history.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/history.js
 var HistoryNavigator;
 var init_history = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/history.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/history.js"() {
     init_navigator();
     HistoryNavigator = class {
       constructor(_history = /* @__PURE__ */ new Set(), limit = 10) {
@@ -125750,10 +125750,10 @@ var init_history = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/inputbox/inputBox.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/inputbox/inputBox.css
 var css43;
 var init_inputBox = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/inputbox/inputBox.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/inputbox/inputBox.css"() {
     css43 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n.monaco-inputbox {\n	position: relative;\n	display: block;\n	padding: 0;\n	box-sizing:	border-box;\n	border-radius: 4px;\n\n	/* Customizable */\n	font-size: inherit;\n}\n\n.monaco-inputbox > .ibwrapper > .input,\n.monaco-inputbox > .ibwrapper > .mirror {\n\n	/* Customizable */\n	padding: 4px 6px;\n}\n\n.monaco-inputbox > .ibwrapper {\n	position: relative;\n	width: 100%;\n}\n\n.monaco-inputbox > .ibwrapper > .input {\n	display: inline-block;\n	box-sizing:	border-box;\n	width: 100%;\n	height: 100%;\n	line-height: inherit;\n	border: none;\n	font-family: inherit;\n	font-size: inherit;\n	resize: none;\n	color: inherit;\n}\n\n.monaco-inputbox > .ibwrapper > input {\n	text-overflow: ellipsis;\n}\n\n.monaco-inputbox > .ibwrapper > textarea.input {\n	display: block;\n	scrollbar-width: none; /* Firefox: hide scrollbars */\n	outline: none;\n}\n\n.monaco-inputbox > .ibwrapper > textarea.input::-webkit-scrollbar {\n	display: none; /* Chrome + Safari: hide scrollbar */\n}\n\n.monaco-inputbox > .ibwrapper > textarea.input.empty {\n	white-space: nowrap;\n}\n\n.monaco-inputbox > .ibwrapper > .mirror {\n	position: absolute;\n	display: inline-block;\n	width: 100%;\n	top: 0;\n	left: 0;\n	box-sizing: border-box;\n	white-space: pre-wrap;\n	visibility: hidden;\n	word-wrap: break-word;\n}\n\n/* Context view */\n\n.monaco-inputbox-container {\n	text-align: right;\n}\n\n.monaco-inputbox-container .monaco-inputbox-message {\n	display: inline-block;\n	overflow: hidden;\n	text-align: left;\n	width: 100%;\n	box-sizing:	border-box;\n	padding: 0.4em;\n	font-size: 12px;\n	line-height: 17px;\n	margin-top: -1px;\n	word-wrap: break-word;\n}\n\n/* Action bar support */\n.monaco-inputbox .monaco-action-bar {\n	position: absolute;\n	right: 2px;\n	top: 4px;\n}\n\n.monaco-inputbox .monaco-action-bar .action-item {\n	margin-left: 2px;\n}\n\n.monaco-inputbox .monaco-action-bar .action-item .codicon {\n	background-repeat: no-repeat;\n	width: 16px;\n	height: 16px;\n	color: var(--vscode-icon-foreground);\n}\n";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-e1eb78312139")) {
       const style = document.createElement("style");
@@ -125764,10 +125764,10 @@ var init_inputBox = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/inputbox/inputBox.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/inputbox/inputBox.js
 var $6, InputBox, HistoryInputBox;
 var init_inputBox2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/inputbox/inputBox.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/inputbox/inputBox.js"() {
     init_dom();
     init_cssValue();
     init_event2();
@@ -126316,10 +126316,10 @@ var init_inputBox2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/findinput/findInput.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/findinput/findInput.css
 var css44;
 var init_findInput = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/findinput/findInput.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/findinput/findInput.css"() {
     css44 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n/* ---------- Find input ---------- */\n\n.monaco-findInput {\n	position: relative;\n}\n\n.monaco-findInput .monaco-inputbox {\n	font-size: 13px;\n	width: 100%;\n}\n\n.monaco-findInput > .controls {\n	position: absolute;\n	top: 3px;\n	right: 2px;\n}\n\n.vs .monaco-findInput.disabled {\n	background-color: #E1E1E1;\n}\n\n/* Theming */\n.vs-dark .monaco-findInput.disabled {\n	background-color: #333;\n}\n\n/* Highlighting */\n.monaco-findInput.highlight-0 .controls,\n.hc-light .monaco-findInput.highlight-0 .controls {\n	animation: monaco-findInput-highlight-0 100ms linear 0s;\n}\n\n.monaco-findInput.highlight-1 .controls,\n.hc-light .monaco-findInput.highlight-1 .controls {\n	animation: monaco-findInput-highlight-1 100ms linear 0s;\n}\n\n.hc-black .monaco-findInput.highlight-0 .controls,\n.vs-dark  .monaco-findInput.highlight-0 .controls {\n	animation: monaco-findInput-highlight-dark-0 100ms linear 0s;\n}\n\n.hc-black .monaco-findInput.highlight-1 .controls,\n.vs-dark  .monaco-findInput.highlight-1 .controls {\n	animation: monaco-findInput-highlight-dark-1 100ms linear 0s;\n}\n\n@keyframes monaco-findInput-highlight-0 {\n	0% { background: rgba(253, 255, 0, 0.8); }\n	100% { background: transparent; }\n}\n@keyframes monaco-findInput-highlight-1 {\n	0% { background: rgba(253, 255, 0, 0.8); }\n	/* Made intentionally different such that the CSS minifier does not collapse the two animations into a single one*/\n	99% { background: transparent; }\n}\n\n@keyframes monaco-findInput-highlight-dark-0 {\n	0% { background: rgba(255, 255, 255, 0.44); }\n	100% { background: transparent; }\n}\n@keyframes monaco-findInput-highlight-dark-1 {\n	0% { background: rgba(255, 255, 255, 0.44); }\n	/* Made intentionally different such that the CSS minifier does not collapse the two animations into a single one*/\n	99% { background: transparent; }\n}\n";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-eae6b20e2533")) {
       const style = document.createElement("style");
@@ -126330,10 +126330,10 @@ var init_findInput = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/findinput/findInput.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/findinput/findInput.js
 var NLS_DEFAULT_LABEL, FindInput;
 var init_findInput2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/findinput/findInput.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/findinput/findInput.js"() {
     init_dom();
     init_findInputToggles();
     init_inputBox2();
@@ -126624,10 +126624,10 @@ var init_findInput2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/tree/tree.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/tree/tree.js
 var ObjectTreeElementCollapseState, TreeMouseEventTarget, TreeError, WeakMapper;
 var init_tree = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/tree/tree.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/tree/tree.js"() {
     (function(ObjectTreeElementCollapseState2) {
       ObjectTreeElementCollapseState2[ObjectTreeElementCollapseState2["Expanded"] = 0] = "Expanded";
       ObjectTreeElementCollapseState2[ObjectTreeElementCollapseState2["Collapsed"] = 1] = "Collapsed";
@@ -126662,7 +126662,7 @@ var init_tree = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/tree/indexTreeModel.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/tree/indexTreeModel.js
 function isFilterResult(obj) {
   return !!obj && obj.visibility !== void 0;
 }
@@ -126681,7 +126681,7 @@ function isCollapsibleStateUpdate(update) {
 }
 var IndexTreeModel;
 var init_indexTreeModel = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/tree/indexTreeModel.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/tree/indexTreeModel.js"() {
     init_tree();
     init_arrays();
     init_async();
@@ -127180,10 +127180,10 @@ var init_indexTreeModel = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/tree/media/tree.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/tree/media/tree.css
 var css45;
 var init_tree2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/tree/media/tree.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/tree/media/tree.css"() {
     css45 = '/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n.monaco-tl-row {\n	display: flex;\n	height: 100%;\n	align-items: center;\n	position: relative;\n}\n\n.monaco-tl-row.disabled {\n	cursor: default;\n}\n.monaco-tl-indent {\n	height: 100%;\n	position: absolute;\n	top: 0;\n	left: 16px;\n	pointer-events: none;\n}\n\n.hide-arrows .monaco-tl-indent {\n	left: 12px;\n}\n\n.monaco-tl-indent > .indent-guide {\n	display: inline-block;\n	box-sizing: border-box;\n	height: 100%;\n	border-left: 1px solid transparent;\n	opacity: 0;\n}\n\n.monaco-enable-motion .monaco-tl-indent > .indent-guide {\n	transition: opacity 0.1s linear;\n}\n\n.monaco-tl-twistie,\n.monaco-tl-contents {\n	height: 100%;\n}\n\n.monaco-tl-twistie {\n	font-size: 10px;\n	text-align: right;\n	padding-right: 6px;\n	flex-shrink: 0;\n	width: 16px;\n	display: flex !important;\n	align-items: center;\n	justify-content: center;\n	transform: translateX(3px);\n}\n\n.monaco-tl-contents {\n	flex: 1;\n	overflow: hidden;\n}\n\n.monaco-tl-twistie::before {\n	border-radius: 20px;\n}\n\n.monaco-tl-twistie.collapsed::before {\n	transform: rotate(-90deg);\n}\n\n.monaco-tl-twistie.codicon-tree-item-loading::before {\n	/* Use steps to throttle FPS to reduce CPU usage */\n	animation: codicon-spin 1.25s steps(30) infinite;\n	/* Ensure rotation happens around exact center to prevent wobble */\n	transform-origin: center center;\n}\n\n.monaco-tree-type-filter {\n	position: absolute;\n	top: 0;\n	right: 0;\n	display: flex;\n	padding: 3px;\n	max-width: 200px;\n	z-index: 100;\n	margin: 0 10px 0 6px;\n	border: 1px solid var(--vscode-widget-border);\n	border-bottom-left-radius: 4px;\n	border-bottom-right-radius: 4px;\n}\n\n.monaco-enable-motion .monaco-tree-type-filter {\n	transition: top 0.3s;\n}\n\n.monaco-tree-type-filter.disabled {\n	top: -40px !important;\n}\n\n.monaco-tree-type-filter-input {\n	flex: 1;\n}\n\n.monaco-tree-type-filter-input .monaco-inputbox {\n	height: 23px;\n}\n\n.monaco-tree-type-filter-input .monaco-inputbox > .ibwrapper > .input,\n.monaco-tree-type-filter-input .monaco-inputbox > .ibwrapper > .mirror {\n	padding: 2px 4px;\n}\n\n.monaco-tree-type-filter-input .monaco-findInput > .controls {\n	top: 2px;\n}\n\n.monaco-tree-type-filter-actionbar {\n	margin-left: 4px;\n}\n\n.monaco-tree-type-filter-actionbar .monaco-action-bar .action-label {\n	padding: 2px;\n}\n\n.monaco-list .monaco-scrollable-element .monaco-tree-sticky-container{\n	position: absolute;\n	top: 0;\n	left: 0;\n	width: 100%;\n	height: 0;\n	z-index: 13; /* Settings editor uses z-index: 12 */\n\n	/* Backup color in case the tree does not provide the background color */\n	background-color: var(--vscode-sideBar-background);\n}\n\n.monaco-list .monaco-scrollable-element .monaco-tree-sticky-container .monaco-tree-sticky-row.monaco-list-row{\n	position: absolute;\n	width: 100%;\n	opacity: 1 !important; /* Settings editor uses opacity < 1 */\n	overflow: hidden;\n\n	/* Backup color in case the tree does not provide the background color */\n	background-color: var(--vscode-sideBar-background);\n}\n\n.monaco-list .monaco-scrollable-element .monaco-tree-sticky-container .monaco-tree-sticky-row:hover{\n	background-color: var(--vscode-list-hoverBackground) !important;\n	cursor: pointer;\n}\n\n.monaco-list .monaco-scrollable-element .monaco-tree-sticky-container.empty,\n.monaco-list .monaco-scrollable-element .monaco-tree-sticky-container.empty .monaco-tree-sticky-container-shadow {\n	display: none;\n}\n\n.monaco-list .monaco-scrollable-element .monaco-tree-sticky-container .monaco-tree-sticky-container-shadow {\n	position: absolute;\n	bottom: -3px;\n	left: 0px;\n	height: 0px; /* heigt is 3px and only set when there is a treeStickyScrollShadow color */\n	width: 100%;\n}\n\n.monaco-list .monaco-scrollable-element .monaco-tree-sticky-container[tabindex="0"]:focus{\n	outline: none;\n}\n';
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-e9136942ab7a")) {
       const style = document.createElement("style");
@@ -127194,7 +127194,7 @@ var init_tree2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/tree/abstractTree.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/tree/abstractTree.js
 function asTreeDragAndDropData(data) {
   if (data instanceof ElementsDragAndDropData) {
     return new TreeElementsDragAndDropData(data);
@@ -127308,7 +127308,7 @@ function dfs(node, fn2) {
 }
 var TreeElementsDragAndDropData, TreeNodeListDragAndDrop, ComposedTreeDelegate, RenderIndentGuides, EventCollection, TreeRenderer, FindFilter, FindToggles, TreeFindMode, TreeFindMatchType, DefaultTreeToggles, AbstractFindController, FindController, StickyScrollState, DefaultStickyScrollDelegate, StickyScrollController, StickyScrollWidget, StickyScrollFocus, Trait2, TreeNodeListMouseController, TreeNodeList, AbstractTree;
 var init_abstractTree = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/tree/abstractTree.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/tree/abstractTree.js"() {
     init_dom();
     init_domStylesheets();
     init_cssValue();
@@ -129339,10 +129339,10 @@ var init_abstractTree = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/tree/objectTreeModel.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/tree/objectTreeModel.js
 var ObjectTreeModel;
 var init_objectTreeModel = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/tree/objectTreeModel.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/tree/objectTreeModel.js"() {
     init_indexTreeModel();
     init_tree();
     init_iterator();
@@ -129553,7 +129553,7 @@ var init_objectTreeModel = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/tree/compressedObjectTreeModel.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/tree/compressedObjectTreeModel.js
 function noCompress(element) {
   const elements = [element.element];
   const incompressible = element.incompressible || false;
@@ -129649,7 +129649,7 @@ function mapOptions(compressedNodeUnwrapper, options) {
 }
 var wrapIdentityProvider, CompressedObjectTreeModel, DefaultElementMapper, CompressedTreeNodeWrapper, CompressibleObjectTreeModel;
 var init_compressedObjectTreeModel = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/tree/compressedObjectTreeModel.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/tree/compressedObjectTreeModel.js"() {
     init_indexTreeModel();
     init_objectTreeModel();
     init_tree();
@@ -129957,7 +129957,7 @@ var init_compressedObjectTreeModel = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/tree/objectTree.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/tree/objectTree.js
 function asObjectTreeOptions(compressedTreeNodeProvider, options) {
   return options && {
     ...options,
@@ -129980,7 +129980,7 @@ function asObjectTreeOptions(compressedTreeNodeProvider, options) {
 }
 var __decorate51, ObjectTree, CompressibleRenderer, CompressibleStickyScrollDelegate, CompressibleObjectTree;
 var init_objectTree = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/tree/objectTree.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/tree/objectTree.js"() {
     init_abstractTree();
     init_compressedObjectTreeModel();
     init_objectTreeModel();
@@ -130159,7 +130159,7 @@ var init_objectTree = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/tree/asyncDataTree.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/tree/asyncDataTree.js
 function createAsyncDataTreeNode(props) {
   return {
     ...props,
@@ -130303,7 +130303,7 @@ function getVisibility(filterResult) {
 }
 var AsyncDataTreeNodeWrapper, AsyncDataTreeRenderer, AsyncDataTreeElementsDragAndDropData, AsyncDataTreeNodeListDragAndDrop, AsyncFindFilter, AsyncFindController, AsyncDataTree, CompressibleAsyncDataTreeNodeWrapper, CompressibleAsyncDataTreeRenderer, CompressibleAsyncDataTree;
 var init_asyncDataTree = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/tree/asyncDataTree.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/tree/asyncDataTree.js"() {
     init_listView();
     init_abstractTree();
     init_indexTreeModel();
@@ -131139,10 +131139,10 @@ var init_asyncDataTree = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/tree/dataTree.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/tree/dataTree.js
 var DataTree;
 var init_dataTree = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/tree/dataTree.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/tree/dataTree.js"() {
     init_abstractTree();
     init_objectTreeModel();
     DataTree = class extends AbstractTree {
@@ -131159,7 +131159,7 @@ var init_dataTree = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/list/browser/listService.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/list/browser/listService.js
 function createScopedContextKeyService(contextKeyService, widget) {
   const result = contextKeyService.createScoped(widget.getHTMLElement());
   RawWorkbenchListFocusContextKey.bindTo(result);
@@ -131302,7 +131302,7 @@ function workbenchTreeDataPreamble(accessor, options) {
 }
 var __decorate52, __param46, IListService, ListService, RawWorkbenchListScrollAtBoundaryContextKey, RawWorkbenchListFocusContextKey, WorkbenchTreeStickyScrollFocused, WorkbenchListSupportsMultiSelectContextKey, WorkbenchListFocusContextKey, WorkbenchListHasSelectionOrFocus, WorkbenchListDoubleSelection, WorkbenchListMultiSelection, WorkbenchListSelectionNavigation, WorkbenchListSupportsFind, WorkbenchTreeElementCanCollapse, WorkbenchTreeElementHasParent, WorkbenchTreeElementCanExpand, WorkbenchTreeElementHasChild, WorkbenchTreeFindOpen, WorkbenchListTypeNavigationModeKey, WorkbenchListAutomaticKeyboardNavigationLegacyKey, multiSelectModifierSettingKey, openModeSettingKey, horizontalScrollingKey, defaultFindModeSettingKey, typeNavigationModeSettingKey, keyboardNavigationSettingKey, scrollByPageKey, defaultFindMatchTypeSettingKey, treeIndentKey, treeRenderIndentGuidesKey, listSmoothScrolling, mouseWheelScrollSensitivityKey, fastScrollSensitivityKey, treeExpandMode, treeStickyScroll, treeStickyScrollMaxElements, MultipleSelectionController, WorkbenchList, WorkbenchPagedList, WorkbenchTable, ResourceNavigator, ListResourceNavigator, TableResourceNavigator, TreeResourceNavigator, WorkbenchObjectTree, WorkbenchCompressibleObjectTree, WorkbenchDataTree, WorkbenchAsyncDataTree, WorkbenchCompressibleAsyncDataTree, WorkbenchTreeInternals, configurationRegistry2;
 var init_listService = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/list/browser/listService.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/list/browser/listService.js"() {
     init_dom();
     init_listPaging();
     init_listWidget();
@@ -132161,10 +132161,10 @@ var init_listService = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/log/common/logService.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/log/common/logService.js
 var LogService;
 var init_logService = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/log/common/logService.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/log/common/logService.js"() {
     init_lifecycle();
     init_log();
     LogService = class extends Disposable {
@@ -132201,10 +132201,10 @@ var init_logService = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/markers/common/markers.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/markers/common/markers.js
 var MarkerSeverity2, IMarkerData, IMarkerService;
 var init_markers = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/markers/common/markers.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/markers/common/markers.js"() {
     init_severity();
     init_nls();
     init_instantiation();
@@ -132323,10 +132323,10 @@ var init_markers = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/markers/common/markerService.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/markers/common/markerService.js
 var unsupportedSchemas, DoubleResourceMap, MarkerStats, MarkerService;
 var init_markerService = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/markers/common/markerService.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/markers/common/markerService.js"() {
     init_arrays();
     init_event();
     init_iterator();
@@ -132630,10 +132630,10 @@ var init_markerService = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/progress/common/progress.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/progress/common/progress.js
 var IProgressService, Progress, IEditorProgressService;
 var init_progress = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/progress/common/progress.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/progress/common/progress.js"() {
     init_instantiation();
     IProgressService = createDecorator("progressService");
     Progress = class {
@@ -132653,10 +132653,10 @@ var init_progress = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/userInteraction/browser/userInteractionServiceImpl.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/userInteraction/browser/userInteractionServiceImpl.js
 var UserInteractionService;
 var init_userInteractionServiceImpl = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/userInteraction/browser/userInteractionServiceImpl.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/userInteraction/browser/userInteractionServiceImpl.js"() {
     init_dom();
     init_observableInternal();
     init_extensions();
@@ -132724,10 +132724,10 @@ var init_userInteractionServiceImpl = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/workspace/common/workspace.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/workspace/common/workspace.js
 var IWorkspaceContextService, WorkspaceFolder, WORKSPACE_EXTENSION, STANDALONE_EDITOR_WORKSPACE_ID;
 var init_workspace = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/workspace/common/workspace.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/workspace/common/workspace.js"() {
     init_nls();
     init_path();
     init_ternarySearchTree();
@@ -132751,19 +132751,19 @@ var init_workspace = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/workspace/common/workspaceTrust.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/workspace/common/workspaceTrust.js
 var IWorkspaceTrustManagementService;
 var init_workspaceTrust = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/workspace/common/workspaceTrust.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/workspace/common/workspaceTrust.js"() {
     init_instantiation();
     IWorkspaceTrustManagementService = createDecorator("workspaceTrustManagementService");
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/services/bulkEditService.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/services/bulkEditService.js
 var IBulkEditService, ResourceEdit, ResourceTextEdit, ResourceFileEdit;
 var init_bulkEditService = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/services/bulkEditService.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/services/bulkEditService.js"() {
     init_instantiation();
     init_uri();
     init_types();
@@ -132830,10 +132830,10 @@ var init_bulkEditService = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/editor/common/editor.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/editor/common/editor.js
 var EditorOpenSource;
 var init_editor2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/editor/common/editor.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/editor/common/editor.js"() {
     (function(EditorOpenSource2) {
       EditorOpenSource2[EditorOpenSource2["API"] = 0] = "API";
       EditorOpenSource2[EditorOpenSource2["USER"] = 1] = "USER";
@@ -132841,7 +132841,7 @@ var init_editor2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/services/openerService.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/services/openerService.js
 function shouldOpenExternal(target, options) {
   return !!options?.openExternal || matchesSomeScheme(target, Schemas.mailto, Schemas.http, Schemas.https, Schemas.vsls);
 }
@@ -132850,7 +132850,7 @@ function shouldUseContributedExternalOpeners(target, options) {
 }
 var __decorate53, __param47, CommandOpener, EditorOpener, OpenerService;
 var init_openerService = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/services/openerService.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/services/openerService.js"() {
     init_dom();
     init_window();
     init_cancellation();
@@ -133078,10 +133078,10 @@ var init_openerService = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/services/renameSymbolTrackerService.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/services/renameSymbolTrackerService.js
 var IRenameSymbolTrackerService, NullRenameSymbolTrackerService;
 var init_renameSymbolTrackerService = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/services/renameSymbolTrackerService.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/services/renameSymbolTrackerService.js"() {
     init_observableInternal();
     init_instantiation();
     init_observableValue();
@@ -133096,10 +133096,10 @@ var init_renameSymbolTrackerService = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/config/diffEditor.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/config/diffEditor.js
 var diffEditorDefaultOptions;
 var init_diffEditor = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/config/diffEditor.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/config/diffEditor.js"() {
     diffEditorDefaultOptions = {
       enableSplitViewResizing: true,
       renderSideBySide: true,
@@ -133136,7 +133136,7 @@ var init_diffEditor = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/config/editorConfigurationSchema.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/config/editorConfigurationSchema.js
 function isConfigurationPropertySchema(x) {
   return typeof x.type !== "undefined" || typeof x.anyOf !== "undefined";
 }
@@ -133159,7 +133159,7 @@ function isDiffEditorConfigurationKey(key) {
 }
 var editorConfigurationBaseNode, editorConfiguration, cachedEditorConfigurationKeys, configurationRegistry3;
 var init_editorConfigurationSchema = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/config/editorConfigurationSchema.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/config/editorConfigurationSchema.js"() {
     init_diffEditor();
     init_editorOptions();
     init_textModelDefaults();
@@ -133492,10 +133492,10 @@ var init_editorConfigurationSchema = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/editOperation.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/editOperation.js
 var EditOperation;
 var init_editOperation = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/editOperation.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/editOperation.js"() {
     init_range();
     EditOperation = class {
       static insert(position, text2) {
@@ -133528,18 +133528,18 @@ var init_editOperation = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/editorFeatures.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/editorFeatures.js
 function getEditorFeatures() {
   return editorFeatures.slice(0);
 }
 var editorFeatures;
 var init_editorFeatures = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/editorFeatures.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/editorFeatures.js"() {
     editorFeatures = [];
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/languagesAssociations.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/languagesAssociations.js
 function registerPlatformLanguageAssociation(association, warnOnOverwrite = false) {
   _registerLanguageAssociation(association, false, warnOnOverwrite);
 }
@@ -133688,7 +133688,7 @@ function getAssociationByFirstline(firstLine) {
 }
 var registeredAssociations, nonUserRegisteredAssociations, userRegisteredAssociations;
 var init_languagesAssociations = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/languagesAssociations.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/languagesAssociations.js"() {
     init_glob();
     init_mime();
     init_network();
@@ -133702,10 +133702,10 @@ var init_languagesAssociations = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/languagesRegistry.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/languagesRegistry.js
 var hasOwnProperty2, NULL_LANGUAGE_ID, LanguageIdCodec, LanguagesRegistry;
 var init_languagesRegistry = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/languagesRegistry.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/languagesRegistry.js"() {
     init_event();
     init_lifecycle();
     init_strings();
@@ -133941,10 +133941,10 @@ var init_languagesRegistry = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/languageService.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/languageService.js
 var LanguageService, LanguageSelection;
 var init_languageService = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/languageService.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/languageService.js"() {
     init_event();
     init_lifecycle();
     init_languagesRegistry();
@@ -134036,10 +134036,10 @@ var init_languageService = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/markerDecorationsService.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/markerDecorationsService.js
 var __decorate54, __param48, MarkerDecorationsService, MarkerDecorations;
 var init_markerDecorationsService = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/markerDecorationsService.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/markerDecorationsService.js"() {
     init_markers();
     init_lifecycle();
     init_model2();
@@ -134296,13 +134296,13 @@ var init_markerDecorationsService = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/modelService.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/modelService.js
 function MODEL_ID2(resource) {
   return resource.toString();
 }
 var __decorate55, __param49, ModelService_1, ModelData2, DEFAULT_EOL, DisposedModelInfo, ModelService, DefaultModelSHA1Computer;
 var init_modelService = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/modelService.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/modelService.js"() {
     init_event();
     init_hash();
     init_lifecycle();
@@ -134692,10 +134692,10 @@ var init_modelService = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/standaloneStrings.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/standaloneStrings.js
 var InspectTokensNLS, GoToLineNLS, QuickHelpNLS, QuickCommandNLS, QuickOutlineNLS, StandaloneCodeEditorNLS, ToggleHighContrastNLS, StandaloneServicesNLS;
 var init_standaloneStrings = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/standaloneStrings.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/standaloneStrings.js"() {
     init_nls();
     (function(InspectTokensNLS2) {
       InspectTokensNLS2.inspectTokensAction = localize(836, "Developer: Inspect Tokens");
@@ -134727,19 +134727,19 @@ var init_standaloneStrings = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/common/standaloneTheme.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/common/standaloneTheme.js
 var IStandaloneThemeService;
 var init_standaloneTheme = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/common/standaloneTheme.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/common/standaloneTheme.js"() {
     init_instantiation();
     IStandaloneThemeService = createDecorator("themeService");
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/inMemoryTextModelService.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/inMemoryTextModelService.js
 var __decorate56, __param50, InMemoryTextModelService, InMemoryModelCollection, SimpleModel;
 var init_inMemoryTextModelService = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/inMemoryTextModelService.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/services/inMemoryTextModelService.js"() {
     init_event();
     init_lazy();
     init_lifecycle();
@@ -134826,10 +134826,10 @@ var init_inMemoryTextModelService = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/quickInput/standaloneQuickInput.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/quickInput/standaloneQuickInput.css
 var css46;
 var init_standaloneQuickInput = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/quickInput/standaloneQuickInput.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/quickInput/standaloneQuickInput.css"() {
     css46 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n.quick-input-widget {\n	font-size: 13px;\n}\n\n.quick-input-widget .monaco-highlighted-label .highlight,\n.quick-input-widget .monaco-highlighted-label .highlight {\n	color: #0066BF;\n}\n\n.vs .quick-input-widget .monaco-list-row.focused .monaco-highlighted-label .highlight,\n.vs .quick-input-widget .monaco-list-row.focused .monaco-highlighted-label .highlight {\n	color: #9DDDFF;\n}\n\n.vs-dark .quick-input-widget .monaco-highlighted-label .highlight,\n.vs-dark .quick-input-widget .monaco-highlighted-label .highlight {\n	color: #0097fb;\n}\n\n.hc-black .quick-input-widget .monaco-highlighted-label .highlight,\n.hc-black .quick-input-widget .monaco-highlighted-label .highlight {\n	color: #F38518;\n}\n\n.hc-light .quick-input-widget .monaco-highlighted-label .highlight,\n.hc-light .quick-input-widget .monaco-highlighted-label .highlight {\n	color: #0F4A85;\n}\n\n.monaco-keybinding > .monaco-keybinding-key {\n	background-color: rgba(221, 221, 221, 0.4);\n	border: solid 1px rgba(204, 204, 204, 0.4);\n	border-bottom-color: rgba(187, 187, 187, 0.4);\n	box-shadow: inset 0 -1px 0 rgba(187, 187, 187, 0.4);\n	color: #555;\n}\n\n.hc-black .monaco-keybinding > .monaco-keybinding-key {\n	background-color: transparent;\n	border: solid 1px rgb(111, 195, 223);\n	box-shadow: none;\n	color: #fff;\n}\n\n.hc-light .monaco-keybinding > .monaco-keybinding-key {\n	background-color: transparent;\n	border: solid 1px #0F4A85;\n	box-shadow: none;\n	color: #292929;\n}\n\n.vs-dark .monaco-keybinding > .monaco-keybinding-key {\n	background-color: rgba(128, 128, 128, 0.17);\n	border: solid 1px rgba(51, 51, 51, 0.6);\n	border-bottom-color: rgba(68, 68, 68, 0.6);\n	box-shadow: inset 0 -1px 0 rgba(68, 68, 68, 0.6);\n	color: #ccc;\n}\n";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-69e577c5ba61")) {
       const style = document.createElement("style");
@@ -134840,10 +134840,10 @@ var init_standaloneQuickInput = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/common/quickAccess.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/common/quickAccess.js
 var DefaultQuickAccessFilterValue, Extensions9, QuickAccessRegistry;
 var init_quickAccess = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/common/quickAccess.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/common/quickAccess.js"() {
     init_arrays();
     init_lifecycle();
     init_platform2();
@@ -134885,10 +134885,10 @@ var init_quickAccess = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/quickAccess.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/quickAccess.js
 var __decorate57, __param51, QuickAccessController;
 var init_quickAccess2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/quickAccess.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/quickAccess.js"() {
     init_async();
     init_cancellation();
     init_event();
@@ -135063,10 +135063,10 @@ var init_quickAccess2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/media/quickInput.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/media/quickInput.css
 var css47;
 var init_quickInput2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/media/quickInput.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/media/quickInput.css"() {
     css47 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n.quick-input-widget {\n	position: absolute;\n	width: 600px;\n	z-index: 2550;\n	left: 50%;\n	-webkit-app-region: no-drag;\n	border-radius: var(--vscode-cornerRadius-xLarge);\n	box-shadow: var(--vscode-shadow-xl);\n}\n\n.modern-ui.monaco-enable-motion .quick-input-widget:not(.quick-input-widget-overlay) {\n	animation: quick-input-widget-open 250ms cubic-bezier(0.22, 1, 0.36, 1) both;\n	transform-origin: top center;\n	will-change: transform, opacity;\n}\n\n.modern-ui.monaco-enable-motion .quick-input-widget.quick-input-widget-closing:not(.quick-input-widget-overlay) {\n	animation: quick-input-widget-close 150ms cubic-bezier(0.22, 1, 0.36, 1) both;\n	pointer-events: none;\n}\n\n@keyframes quick-input-widget-open {\n	0% {\n		opacity: 0;\n		transform: scale(0.97);\n	}\n\n	100% {\n		opacity: 1;\n		transform: scale(1);\n	}\n}\n\n@keyframes quick-input-widget-close {\n	0% {\n		opacity: 1;\n		transform: scale(1);\n	}\n\n	100% {\n		opacity: 0;\n		transform: scale(0.99);\n	}\n}\n\n.quick-input-titlebar {\n	cursor: grab;\n	display: flex;\n	align-items: center;\n	border-top-right-radius: 5px;\n	border-top-left-radius: 5px;\n}\n\n.quick-input-widget.no-drag .quick-input-titlebar,\n.quick-input-widget.no-drag .quick-input-title,\n.quick-input-widget.no-drag .quick-input-header {\n	cursor: default;\n}\n.quick-input-widget .monaco-inputbox .monaco-action-bar {\n	top: 0;\n}\n\n.quick-input-widget .monaco-action-bar .monaco-custom-toggle {\n	margin-left: 0;\n	border-radius: 5px;\n	box-sizing: content-box;\n}\n\n.quick-input-left-action-bar {\n	display: flex;\n	margin-left: 4px;\n}\n\n/* give some space between input and action bar */\n.quick-input-inline-action-bar .actions-container > .action-item:first-child {\n	margin-left: 5px;\n}\n\n/* center horizontally */\n.quick-input-inline-action-bar .actions-container > .action-item {\n	margin-top: 2px;\n}\n\n.quick-input-title {\n	cursor: grab;\n	padding: 3px 0px;\n	text-align: center;\n	text-overflow: ellipsis;\n	overflow: hidden;\n	flex: 1;\n}\n\n.quick-input-right-action-bar {\n	display: flex;\n	margin-right: 4px;\n}\n\n.quick-input-right-action-bar .actions-container {\n	justify-content: flex-end;\n}\n\n.quick-input-right-action-bar .actions-container > .action-item {\n	margin-left: 4px;\n}\n\n.quick-input-inline-action-bar .actions-container > .action-item {\n	margin-left: 4px;\n}\n\n.quick-input-titlebar .monaco-action-bar .action-label.codicon {\n	background-position: center;\n	background-repeat: no-repeat;\n	padding: 2px;\n}\n\n.quick-input-description {\n	margin: 6px 6px 6px 11px;\n}\n\n.quick-input-header .quick-input-description {\n	margin: 4px 2px;\n	flex: 1;\n}\n\n.quick-input-header {\n	cursor: grab;\n	display: flex;\n	padding: 6px 6px 4px 6px;\n}\n\n.quick-input-widget .quick-input-filter .monaco-inputbox {\n	border-radius: var(--vscode-cornerRadius-medium);\n}\n\n.quick-input-widget.hidden-input .quick-input-header {\n	/* reduce margins and paddings when input box hidden */\n	padding: 0;\n	margin-bottom: 0;\n}\n\n.quick-input-and-message {\n	display: flex;\n	flex-direction: column;\n	flex-grow: 1;\n	min-width: 0;\n	position: relative;\n}\n\n.quick-input-check-all {\n	align-self: center;\n	margin: 0;\n}\n\n.quick-input-widget .quick-input-header .monaco-checkbox {\n	margin-top: 6px;\n}\n\n.quick-input-filter {\n	flex-grow: 1;\n	display: flex;\n	position: relative;\n}\n\n.quick-input-box {\n	flex-grow: 1;\n}\n\n.quick-input-widget.show-checkboxes .quick-input-box,\n.quick-input-widget.show-checkboxes .quick-input-message {\n	margin-left: 5px;\n}\n\n.quick-input-visible-count {\n	position: absolute;\n	left: -10000px;\n}\n\n.quick-input-count {\n	align-self: center;\n	position: absolute;\n	right: 4px;\n	display: flex;\n	align-items: center;\n}\n\n.quick-input-count .monaco-count-badge {\n	vertical-align: middle;\n	padding: 2px 4px;\n	border-radius: 2px;\n	min-height: auto;\n	line-height: normal;\n}\n\n.quick-input-action {\n	margin-left: 6px;\n}\n\n.quick-input-message {\n	margin-top: -1px;\n	padding: 5px;\n	overflow-wrap: break-word;\n}\n\n.quick-input-message > .codicon {\n	margin: 0 0.2em;\n	vertical-align: text-bottom;\n}\n\n/* Links in descriptions & validations */\n.quick-input-message a {\n	color: inherit;\n}\n\n.quick-input-progress.monaco-progress-container {\n	position: relative;\n}\n\n.quick-input-list {\n	line-height: 22px;\n}\n\n.quick-input-widget.hidden-input .quick-input-list {\n	margin-top: 4px;\n	/* reduce margins when input box hidden */\n	padding-bottom: 4px;\n}\n\n.quick-input-list .monaco-list {\n	overflow: hidden;\n	max-height: calc(20 * 22px);\n	padding-bottom: 7px;\n}\n\n.quick-input-list .monaco-scrollable-element {\n	padding: 0px 6px;\n}\n\n.quick-input-list .quick-input-list-entry {\n	box-sizing: border-box;\n	overflow: hidden;\n	display: flex;\n	padding: 0 6px;\n}\n\n.quick-input-list .quick-input-list-entry.quick-input-list-separator-border {\n	border-top-width: 1px;\n	border-top-style: solid;\n}\n\n.quick-input-list .monaco-list-row {\n	border-radius: 3px;\n}\n\n.quick-input-list .monaco-list-row[data-index=\"0\"] .quick-input-list-entry.quick-input-list-separator-border {\n	border-top-style: none;\n}\n\n.quick-input-list .quick-input-list-label {\n	overflow: hidden;\n	display: flex;\n	height: 100%;\n	flex: 1;\n}\n\n.quick-input-widget .monaco-checkbox {\n	margin-right: 0;\n}\n\n.quick-input-widget .quick-input-list .monaco-checkbox,\n.quick-input-widget .quick-input-tree .monaco-checkbox {\n	margin-top: 4px;\n}\n\n.quick-input-list .quick-input-list-icon {\n	background-size: 16px;\n	background-position: left center;\n	background-repeat: no-repeat;\n	padding-right: 6px;\n	width: 16px;\n	height: 22px;\n	display: flex;\n	align-items: center;\n	justify-content: center;\n}\n\n.quick-input-list .quick-input-list-rows {\n	overflow: hidden;\n	text-overflow: ellipsis;\n	display: flex;\n	flex-direction: column;\n	height: 100%;\n	flex: 1;\n	margin-left: 5px;\n}\n\n.quick-input-list .quick-input-list-rows > .quick-input-list-row {\n	display: flex;\n	align-items: center;\n}\n\n.quick-input-list .quick-input-list-rows > .quick-input-list-row .monaco-icon-label,\n.quick-input-list .quick-input-list-rows > .quick-input-list-row .monaco-icon-label .monaco-icon-label-container > .monaco-icon-name-container {\n	flex: 1;\n	/* make sure the icon label grows within the row */\n}\n\n.quick-input-list .quick-input-list-rows > .quick-input-list-row .codicon[class*='codicon-'] {\n	vertical-align: text-bottom;\n}\n\n.quick-input-list .quick-input-list-rows .monaco-highlighted-label > span {\n	opacity: 1;\n}\n\n.quick-input-list .quick-input-list-entry .quick-input-list-entry-keybinding {\n	margin-right: 8px;\n	/* separate from the separator label or scrollbar if any */\n}\n\n.quick-input-list .quick-input-list-label-meta {\n	opacity: 0.7;\n	line-height: normal;\n	text-overflow: ellipsis;\n	overflow: hidden;\n}\n\n.quick-input-list .monaco-list-row.focused .quick-input-list-label-meta {\n	opacity: 1;\n}\n\n/* preserve list-like styling instead of tree-like styling */\n.quick-input-list .monaco-list .monaco-list-row .monaco-highlighted-label .highlight {\n	font-weight: bold;\n	background-color: unset;\n	color: var(--vscode-list-highlightForeground) !important;\n}\n\n/* preserve list-like styling instead of tree-like styling */\n.quick-input-list .monaco-list .monaco-list-row.focused .monaco-highlighted-label .highlight {\n	color: var(--vscode-quickInputList-focusHighlightForeground) !important;\n}\n\n.quick-input-list .quick-input-list-entry .quick-input-list-separator {\n	margin-right: 4px;\n	font-size: var(--vscode-bodyFontSize-xSmall);\n	color: var(--vscode-descriptionForeground);\n	/* separate from keybindings or actions */\n}\n\n.quick-input-list .quick-input-list-entry-action-bar {\n	display: flex;\n	flex: 0;\n	overflow: visible;\n}\n\n.quick-input-list .quick-input-list-entry .quick-input-list-entry-action-bar .action-label,\n.quick-input-list .quick-input-list-entry .quick-input-list-entry-action-bar .monaco-custom-toggle {\n	/*\n	 * Icon actions and toggles also match `.monaco-action-bar .action-item .codicon`,\n	 * whose equal-specificity `display: flex` would reveal them in the idle state\n	 * when loaded later. The hover, focus, and always-visible rules below remain\n	 * more specific and reveal the controls on intent.\n	 */\n	display: none;\n}\n\n.quick-input-list .quick-input-list-entry-action-bar .action-label.codicon {\n	margin-right: 4px;\n	padding: 2px;\n}\n\n.quick-input-list .quick-input-list-entry-action-bar .monaco-custom-toggle.codicon {\n	margin-right: 4px;\n}\n\n.quick-input-list .quick-input-list-entry-action-bar {\n	margin-top: 1px;\n}\n\n.quick-input-list .quick-input-list-entry-action-bar {\n	margin-right: 4px;\n	/* separate from scrollbar */\n}\n\n.quick-input-list .quick-input-list-entry .quick-input-list-entry-action-bar .action-label.always-visible,\n.quick-input-list .quick-input-list-entry:hover .quick-input-list-entry-action-bar .action-label,\n.quick-input-list .quick-input-list-entry.focus-inside .quick-input-list-entry-action-bar .action-label,\n.quick-input-list .monaco-list-row.focused .quick-input-list-entry-action-bar .action-label,\n.quick-input-list .monaco-list-row.passive-focused .quick-input-list-entry-action-bar .action-label,\n.quick-input-list .quick-input-list-entry .quick-input-list-entry-action-bar .monaco-custom-toggle.always-visible,\n.quick-input-list .quick-input-list-entry:hover .quick-input-list-entry-action-bar .monaco-custom-toggle,\n.quick-input-list .quick-input-list-entry.focus-inside .quick-input-list-entry-action-bar .monaco-custom-toggle,\n.quick-input-list .monaco-list-row.focused .quick-input-list-entry-action-bar .monaco-custom-toggle,\n.quick-input-list .monaco-list-row.passive-focused .quick-input-list-entry-action-bar .monaco-custom-toggle {\n	display: flex;\n}\n\n.quick-input-list > .monaco-list:focus .monaco-list-row.focused {\n	outline: 1px solid var(--vscode-list-focusOutline) !important;\n	outline-offset: -1px;\n}\n\n.quick-input-list > .monaco-list:focus .monaco-list-row.focused .quick-input-list-entry.quick-input-list-separator-border {\n	border-color: transparent;\n}\n\n/* focused items in quick pick */\n.quick-input-list .monaco-list-row.focused .monaco-keybinding-key,\n.quick-input-list .monaco-list-row.focused .quick-input-list-entry .quick-input-list-separator {\n	color: inherit\n}\n\n.quick-input-list .monaco-list-row.focused .monaco-keybinding-key,\n.quick-input-list .monaco-list-row:hover .monaco-keybinding-key {\n	background: none;\n	border-color: var(--vscode-widget-shadow);\n}\n\n/* In light/dark themes the widget shadow can be transparent, leaving the key borders invisible\n	against the focus/hover background. Derive the border from the foreground instead. High contrast\n	themes are excluded so their stronger borders are preserved. */\n:is(.vs, .vs-dark) .quick-input-list .monaco-list-row.focused .monaco-keybinding-key,\n:is(.vs, .vs-dark) .quick-input-list .monaco-list-row:hover .monaco-keybinding-key {\n	border-color: color-mix(in srgb, currentColor 30%, transparent);\n}\n\n.quick-input-list .quick-input-list-separator-as-item {\n	padding: 4px 6px;\n	font-size: 12px;\n}\n\n/* Quick input separators as full-row item */\n.quick-input-list .quick-input-list-separator-as-item .label-name {\n	font-weight: 600;\n}\n\n.quick-input-list .quick-input-list-separator-as-item .label-description {\n	/* Override default description opacity so we don't have a contrast ratio issue. */\n	opacity: 1 !important;\n}\n\n/* Hide border when the item becomes the sticky one */\n.quick-input-list .monaco-tree-sticky-row .quick-input-list-entry.quick-input-list-separator-as-item.quick-input-list-separator-border {\n	border-top-style: none;\n}\n\n/* Give sticky row the same padding as the scrollable list */\n.quick-input-list .monaco-tree-sticky-row {\n	padding: 0 5px;\n}\n\n/* Hide the twistie containers so that there isn't blank indent */\n.quick-input-list .monaco-tl-twistie {\n	display: none !important;\n}\n\n/* Tree */\n\n.quick-input-tree .monaco-list {\n	overflow: hidden;\n	max-height: calc(20 * 22px);\n	padding-bottom: 5px;\n}\n\n.quick-input-tree.quick-input-tree-flat .monaco-tl-indent,\n.quick-input-tree.quick-input-tree-flat .monaco-tl-twistie {\n	display: none !important;\n}\n\n.quick-input-tree.quick-input-tree-flat .monaco-checkbox {\n	margin-left: 6px;\n}\n\n.quick-input-tree .quick-input-tree-entry {\n	box-sizing: border-box;\n	overflow: hidden;\n	display: flex;\n	padding-right: 6px;\n}\n\n.quick-input-tree .quick-input-tree-label {\n	overflow: hidden;\n	display: flex;\n	height: 100%;\n	flex: 1;\n}\n\n.quick-input-tree .quick-input-tree-icon {\n	background-size: 16px;\n	background-position: left center;\n	background-repeat: no-repeat;\n	padding-right: 6px;\n	width: 16px;\n	height: 22px;\n	display: flex;\n	align-items: center;\n	justify-content: center;\n}\n\n.quick-input-tree .quick-input-tree-rows {\n	overflow: hidden;\n	text-overflow: ellipsis;\n	display: flex;\n	flex-direction: column;\n	height: 100%;\n	flex: 1;\n	margin-left: 5px;\n}\n\n.quick-input-tree .quick-input-tree-rows > .quick-input-tree-row {\n	display: flex;\n	align-items: center;\n}\n\n.quick-input-tree .quick-input-tree-rows > .quick-input-tree-row .monaco-icon-label,\n.quick-input-tree .quick-input-tree-rows > .quick-input-tree-row .monaco-icon-label .monaco-icon-label-container > .monaco-icon-name-container {\n	flex: 1;\n	/* make sure the icon label grows within the row */\n}\n\n.quick-input-tree .quick-input-tree-rows > .quick-input-tree-row .codicon[class*='codicon-'] {\n	vertical-align: text-bottom;\n}\n\n.quick-input-tree .quick-input-tree-rows .monaco-highlighted-label > span {\n	opacity: 1;\n}\n\n.quick-input-tree .quick-input-tree-entry-action-bar {\n	display: flex;\n	flex: 0;\n	overflow: visible;\n}\n\n.quick-input-tree .quick-input-tree-entry-action-bar .action-label,\n.quick-input-tree .quick-input-tree-entry-action-bar .monaco-custom-toggle {\n	/*\n	 * By default, actions in the quick input action bar are hidden\n	 * until hovered over them or selected.\n	 */\n	display: none;\n}\n\n.quick-input-tree .quick-input-tree-entry-action-bar .action-label.codicon {\n	margin-right: 4px;\n	padding: 2px;\n}\n\n.quick-input-tree .quick-input-tree-entry-action-bar .monaco-custom-toggle.codicon {\n	margin-right: 4px;\n}\n\n.quick-input-tree .quick-input-tree-entry-action-bar {\n	margin-top: 1px;\n}\n\n.quick-input-tree .quick-input-tree-entry-action-bar {\n	margin-right: 4px;\n	/* separate from scrollbar */\n}\n\n.quick-input-tree .quick-input-tree-entry .quick-input-tree-entry-action-bar .action-label.always-visible,\n.quick-input-tree .quick-input-tree-entry:hover .quick-input-tree-entry-action-bar .action-label,\n.quick-input-tree .quick-input-tree-entry.focus-inside .quick-input-tree-entry-action-bar .action-label,\n.quick-input-tree .monaco-list-row.focused .quick-input-tree-entry-action-bar .action-label,\n.quick-input-tree .monaco-list-row.passive-focused .quick-input-tree-entry-action-bar .action-label,\n.quick-input-tree .quick-input-tree-entry .quick-input-tree-entry-action-bar .monaco-custom-toggle.always-visible,\n.quick-input-tree .quick-input-tree-entry:hover .quick-input-tree-entry-action-bar .monaco-custom-toggle,\n.quick-input-tree .quick-input-tree-entry.focus-inside .quick-input-tree-entry-action-bar .monaco-custom-toggle,\n.quick-input-tree .monaco-list-row.focused .quick-input-tree-entry-action-bar .monaco-custom-toggle,\n.quick-input-tree .monaco-list-row.passive-focused .quick-input-tree-entry-action-bar .monaco-custom-toggle {\n	display: flex;\n}\n\n.quick-input-tree > .monaco-list:focus .monaco-list-row.focused {\n	outline: 1px solid var(--vscode-list-focusOutline) !important;\n	outline-offset: -1px;\n}\n";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-906374690891")) {
       const style = document.createElement("style");
@@ -135077,7 +135077,7 @@ var init_quickInput2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/linkedText.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/linkedText.js
 function parseLinkedText(text2) {
   const result = [];
   let index = 0;
@@ -135101,7 +135101,7 @@ function parseLinkedText(text2) {
 }
 var __decorate58, LinkedText, LINK_REGEX;
 var init_linkedText = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/linkedText.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/linkedText.js"() {
     init_decorators();
     __decorate58 = function(decorators, target, key, desc) {
       var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
@@ -135124,7 +135124,7 @@ var init_linkedText = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/quickInputUtils.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/quickInputUtils.js
 function getIconClass(iconPath) {
   if (!iconPath) {
     return void 0;
@@ -135221,7 +135221,7 @@ function renderQuickInputDescription(description, container, actionHandler) {
 }
 var iconPathToClass, iconClassGenerator, QuickInputToggleButtonAction;
 var init_quickInputUtils = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/quickInputUtils.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/quickInputUtils.js"() {
     init_dom();
     init_domStylesheets();
     init_cssValue();
@@ -135261,10 +135261,10 @@ var init_quickInputUtils = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/quickInput.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/quickInput.js
 var __decorate59, __param52, inQuickInputContextKeyValue, InQuickInputContextKey, inQuickInputContext, quickInputAlignmentContextKeyValue, QuickInputAlignmentContextKey, quickInputTypeContextKeyValue, QuickInputTypeContextKey, endOfQuickInputBoxContextKeyValue, EndOfQuickInputBoxContextKey, endOfQuickInputBoxContext, backButton, QuickInput, QuickPick, InputBox2, QuickInputHoverDelegate;
 var init_quickInput3 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/quickInput.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/quickInput.js"() {
     init_dom();
     init_keyboardEvent();
     init_arrays();
@@ -136245,10 +136245,10 @@ var init_quickInput3 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/toolbar/toolbar.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/toolbar/toolbar.css
 var css48;
 var init_toolbar = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/toolbar/toolbar.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/toolbar/toolbar.css"() {
     css48 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n.monaco-toolbar {\n	height: 100%;\n}\n\n.monaco-toolbar .toolbar-toggle-more {\n	display: inline-block;\n	padding: 0;\n}\n\n.monaco-toolbar.responsive.responsive-all {\n	.monaco-action-bar > .actions-container > .action-item {\n		flex-shrink: 1;\n		min-width: var(--vscode-toolbar-action-min-width, 20px);\n	}\n}\n\n.monaco-toolbar.responsive.responsive-last {\n	.monaco-action-bar > .actions-container > .action-item {\n		flex-shrink: 0;\n	}\n\n	.monaco-action-bar:not(.has-overflow) > .actions-container > .action-item:last-child,\n	.monaco-action-bar.has-overflow > .actions-container > .action-item:nth-last-child(2) {\n		flex-shrink: 1;\n		min-width: var(--vscode-toolbar-action-min-width, 20px);\n	}\n}\n";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-bd9be939072f")) {
       const style = document.createElement("style");
@@ -136259,10 +136259,10 @@ var init_toolbar = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/toolbar/toolbar.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/toolbar/toolbar.js
 var ACTION_MIN_WIDTH, ACTION_PADDING, ACTION_MIN_WIDTH_VAR, ToolBar, ToggleMenuAction;
 var init_toolbar2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/toolbar/toolbar.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/toolbar/toolbar.js"() {
     init_dom();
     init_actionbar2();
     init_actionViewItems();
@@ -136760,10 +136760,10 @@ var init_toolbar2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/button/button.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/button/button.css
 var css49;
 var init_button = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/button/button.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/button/button.css"() {
     css49 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n.monaco-text-button {\n	box-sizing: border-box;\n	display: flex;\n	width: 100%;\n	padding: 4px 8px;\n	border-radius: 4px;\n	text-align: center;\n	cursor: pointer;\n	justify-content: center;\n	align-items: center;\n	border: 1px solid var(--vscode-button-border, transparent);\n	line-height: 16px;\n	font-size: 12px;\n	overflow-wrap: normal;\n}\n\n.monaco-text-button.secondary {\n	border-color: var(--vscode-button-secondaryBorder, var(--vscode-button-border, transparent));\n}\n\n.monaco-text-button.small {\n	line-height: 14px;\n	font-size: 11px;\n	padding: 3px 6px;\n}\n\n.monaco-text-button:focus {\n	outline-offset: 2px !important;\n}\n\n.monaco-text-button:hover {\n	text-decoration: none !important;\n}\n\n.monaco-button.disabled:focus,\n.monaco-button.disabled {\n	opacity: 0.4 !important;\n	cursor: default;\n}\n\n.monaco-text-button .codicon {\n	margin: 0 0.2em;\n	color: inherit !important;\n}\n\n.monaco-text-button.monaco-text-button-with-short-label {\n	flex-direction: row;\n	flex-wrap: wrap;\n	padding: 0 4px;\n	overflow: hidden;\n	height: 28px;\n}\n\n.monaco-text-button.monaco-text-button-with-short-label > .monaco-button-label {\n	flex-basis: 100%;\n}\n\n.monaco-text-button.monaco-text-button-with-short-label > .monaco-button-label-short {\n	flex-grow: 1;\n	width: 0;\n	overflow: hidden;\n}\n\n.monaco-text-button.monaco-text-button-with-short-label > .monaco-button-label,\n.monaco-text-button.monaco-text-button-with-short-label > .monaco-button-label-short {\n	display: flex;\n	justify-content: center;\n	align-items: center;\n	font-weight: normal;\n	font-style: inherit;\n	line-height: 18px;\n	padding: 4px 0;\n}\n\n.monaco-button-dropdown {\n	display: flex;\n	cursor: pointer;\n}\n\n.monaco-button-dropdown.disabled {\n	cursor: default;\n}\n\n.monaco-button-dropdown > .monaco-button:focus {\n	outline-offset: -1px !important;\n}\n\n.monaco-button-dropdown.disabled > .monaco-button.disabled,\n.monaco-button-dropdown.disabled > .monaco-button.disabled:focus,\n.monaco-button-dropdown.disabled > .monaco-button-dropdown-separator {\n	opacity: 0.4 !important;\n}\n\n.monaco-button-dropdown > .monaco-button.monaco-text-button {\n	border-right-width: 0 !important;\n}\n\n.monaco-button-dropdown .monaco-button-dropdown-separator {\n	padding: 4px 0;\n	cursor: default;\n}\n\n.monaco-button-dropdown .monaco-button-dropdown-separator > div {\n	height: 100%;\n	width: 1px;\n}\n\n.monaco-button-dropdown > .monaco-button.monaco-dropdown-button {\n	border: 1px solid var(--vscode-button-border, transparent);\n	border-left-width: 0 !important;\n	border-radius: 0 4px 4px 0;\n	padding: 0 4px;\n	display: flex;\n	align-items: center;\n}\n\n.monaco-button-dropdown > .monaco-button.monaco-dropdown-button.secondary {\n	border-color: var(--vscode-button-secondaryBorder, var(--vscode-button-border, transparent));\n}\n\n.monaco-button-dropdown > .monaco-button.monaco-text-button {\n	border-radius: 4px 0 0 4px;\n}\n\n.monaco-description-button {\n	display: flex;\n	flex-direction: column;\n	align-items: center;\n	margin: 4px 5px; /* allows button focus outline to be visible */\n}\n\n.monaco-description-button .monaco-button-description {\n	font-style: italic;\n	font-size: 11px;\n	padding: 4px 20px;\n}\n\n.monaco-description-button .monaco-button-label,\n.monaco-description-button .monaco-button-description {\n	display: flex;\n	justify-content: center;\n	align-items: center;\n}\n\n.monaco-description-button .monaco-button-label > .codicon,\n.monaco-description-button .monaco-button-description > .codicon {\n	margin: 0 0.2em;\n	color: inherit !important;\n}\n\n/* default color styles - based on CSS variables */\n\n.monaco-button.default-colors,\n.monaco-button-dropdown.default-colors > .monaco-button{\n	color: var(--vscode-button-foreground);\n	background-color: var(--vscode-button-background);\n}\n\n.monaco-button.default-colors:hover,\n.monaco-button-dropdown.default-colors > .monaco-button:hover {\n	background-color: var(--vscode-button-hoverBackground);\n}\n\n.monaco-button.default-colors.secondary,\n.monaco-button-dropdown.default-colors > .monaco-button.secondary {\n	color: var(--vscode-button-secondaryForeground);\n	background-color: var(--vscode-button-secondaryBackground);\n}\n\n.monaco-button.default-colors.secondary:hover,\n.monaco-button-dropdown.default-colors > .monaco-button.secondary:hover {\n	background-color: var(--vscode-button-secondaryHoverBackground);\n}\n\n.monaco-button-dropdown.default-colors .monaco-button-dropdown-separator {\n	background-color: var(--vscode-button-background);\n	border-top: 1px solid var(--vscode-button-border);\n	border-bottom: 1px solid var(--vscode-button-border);\n}\n\n.monaco-button-dropdown.default-colors .monaco-button.secondary + .monaco-button-dropdown-separator {\n	background-color: var(--vscode-button-secondaryBackground);\n	border-top-color: var(--vscode-button-secondaryBorder, var(--vscode-button-border));\n	border-bottom-color: var(--vscode-button-secondaryBorder, var(--vscode-button-border));\n}\n\n.monaco-button-dropdown.default-colors .monaco-button-dropdown-separator > div {\n	background-color: var(--vscode-button-separator);\n}\n";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-09ce9acd01a9")) {
       const style = document.createElement("style");
@@ -136774,10 +136774,10 @@ var init_button = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/button/button.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/button/button.js
 var buttonSanitizerConfig, buttonMarkdownRenderOptions, Button;
 var init_button2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/button/button.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/button/button.js"() {
     init_dom();
     init_keyboardEvent();
     init_markdownRenderer();
@@ -137030,10 +137030,10 @@ var init_button2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/countBadge/countBadge.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/countBadge/countBadge.css
 var css50;
 var init_countBadge = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/countBadge/countBadge.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/countBadge/countBadge.css"() {
     css50 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n.monaco-count-badge {\n	padding: 3px 5px;\n	border-radius: 11px;\n	font-size: 11px;\n	min-width: 18px;\n	min-height: 18px;\n	line-height: 11px;\n	font-weight: normal;\n	text-align: center;\n	display: inline-block;\n	box-sizing: border-box;\n}\n\n.monaco-count-badge.long {\n	padding: 2px 3px;\n	border-radius: 2px;\n	min-height: auto;\n	line-height: normal;\n}\n";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-74cfd6834d12")) {
       const style = document.createElement("style");
@@ -137044,10 +137044,10 @@ var init_countBadge = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/countBadge/countBadge.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/countBadge/countBadge.js
 var CountBadge;
 var init_countBadge2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/countBadge/countBadge.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/countBadge/countBadge.js"() {
     init_dom();
     init_strings();
     init_countBadge();
@@ -137095,10 +137095,10 @@ var init_countBadge2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/progressbar/progressbar.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/progressbar/progressbar.css
 var css51;
 var init_progressbar = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/progressbar/progressbar.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/progressbar/progressbar.css"() {
     css51 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n.monaco-progress-container {\n	width: 100%;\n	height: 2px;\n	overflow: hidden; /* keep progress bit in bounds */\n}\n\n.monaco-progress-container .progress-bit {\n	width: 2%;\n	height: 2px;\n	position: absolute;\n	left: 0;\n	display: none;\n}\n\n.monaco-progress-container.active .progress-bit {\n	display: inherit;\n}\n\n.monaco-progress-container.discrete .progress-bit {\n	left: 0;\n	transition: width 100ms linear;\n}\n\n.monaco-progress-container.discrete.done .progress-bit {\n	width: 100%;\n}\n\n.monaco-progress-container.infinite .progress-bit {\n	animation-name: progress;\n	animation-duration: 4s;\n	animation-iteration-count: infinite;\n	transform: translate3d(0px, 0px, 0px);\n	animation-timing-function: linear;\n}\n\n.monaco-progress-container.infinite.infinite-long-running .progress-bit {\n	/*\n		The more smooth `linear` timing function can cause\n		higher GPU consumption as indicated in\n		https://github.com/microsoft/vscode/issues/97900 &\n		https://github.com/microsoft/vscode/issues/138396\n	*/\n	animation-timing-function: steps(100);\n}\n\n/**\n * The progress bit has a width: 2% (1/50) of the parent container. The animation moves it from 0% to 100% of\n * that container. Since translateX is relative to the progress bit size, we have to multiple it with\n * its relative size to the parent container:\n * parent width: 5000%\n *    bit width: 100%\n * translateX should be as follow:\n *  50%: 5000% * 50% - 50% (set to center) = 2450%\n * 100%: 5000% * 100% - 100% (do not overflow) = 4900%\n */\n@keyframes progress { from { transform: translateX(0%) scaleX(1) } 50% { transform: translateX(2500%) scaleX(3) } to { transform: translateX(4900%) scaleX(1) } }\n";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-f5f9117dbd2f")) {
       const style = document.createElement("style");
@@ -137109,10 +137109,10 @@ var init_progressbar = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/progressbar/progressbar.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/progressbar/progressbar.js
 var CSS_DONE, CSS_ACTIVE, CSS_INFINITE, CSS_INFINITE_LONG_RUNNING, CSS_DISCRETE, NLS_PROGRESS_LABEL, ProgressBar;
 var init_progressbar2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/progressbar/progressbar.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/progressbar/progressbar.js"() {
     init_dom();
     init_async();
     init_lifecycle();
@@ -137203,10 +137203,10 @@ var init_progressbar2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/quickInputBox.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/quickInputBox.js
 var $7, QuickInputBox;
 var init_quickInputBox = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/quickInputBox.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/quickInputBox.js"() {
     init_dom();
     init_findInput2();
     init_toggle2();
@@ -137335,10 +137335,10 @@ var init_quickInputBox = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/iconLabel/iconlabel.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/iconLabel/iconlabel.css
 var css52;
 var init_iconlabel = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/iconLabel/iconlabel.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/iconLabel/iconlabel.css"() {
     css52 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n/* ---------- Icon label ---------- */\n\n.monaco-icon-label {\n	display: flex; /* required for icons support :before rule */\n	overflow: hidden;\n	text-overflow: ellipsis;\n}\n\n.monaco-icon-label::before {\n\n	/* svg icons rendered as background image */\n	background-size: 16px;\n	background-position: left center;\n	background-repeat: no-repeat;\n	padding-right: 6px;\n	width: 16px;\n	height: 22px;\n	line-height: inherit !important;\n	display: inline-block;\n\n	/* fonts icons */\n	-webkit-font-smoothing: antialiased;\n	-moz-osx-font-smoothing: grayscale;\n	vertical-align: top;\n\n	flex-shrink: 0; /* fix for https://github.com/microsoft/vscode/issues/13787 */\n}\n\n.monaco-icon-label-iconpath {\n	width: 16px;\n	height: 22px;\n	margin-right: 6px;\n	display: flex;\n}\n\n.monaco-icon-label-container.disabled {\n	color: var(--vscode-disabledForeground);\n}\n.monaco-icon-label > .monaco-icon-label-container {\n	min-width: 0;\n	overflow: hidden;\n	text-overflow: ellipsis;\n	flex: 1;\n}\n\n.monaco-icon-label > .monaco-icon-label-container > .monaco-icon-name-container > .label-name {\n	color: inherit;\n	white-space: pre; /* enable to show labels that include multiple whitespaces */\n}\n\n.monaco-icon-label > .monaco-icon-label-container > .monaco-icon-name-container > .label-name > .label-separator {\n	margin: 0 2px;\n	opacity: 0.5;\n}\n\n.monaco-icon-label > .monaco-icon-label-container > .monaco-icon-suffix-container > .label-suffix {\n	opacity: .7;\n	white-space: pre;\n}\n\n.monaco-icon-label > .monaco-icon-label-container > .monaco-icon-description-container > .label-description {\n	opacity: .7;\n	margin-left: 0.5em;\n	font-size: 0.9em;\n	white-space: pre; /* enable to show labels that include multiple whitespaces */\n}\n\n.monaco-icon-label.nowrap > .monaco-icon-label-container > .monaco-icon-description-container > .label-description{\n	white-space: nowrap\n}\n\n.vs .monaco-icon-label > .monaco-icon-label-container > .monaco-icon-description-container > .label-description {\n	opacity: .95;\n}\n\n.monaco-icon-label.bold > .monaco-icon-label-container > .monaco-icon-name-container > .label-name,\n.monaco-icon-label.bold > .monaco-icon-label-container > .monaco-icon-suffix-container > .label-suffix,\n.monaco-icon-label.bold > .monaco-icon-label-container > .monaco-icon-description-container > .label-description {\n	font-weight: bold;\n}\n\n.monaco-icon-label.italic > .monaco-icon-label-container > .monaco-icon-name-container > .label-name,\n.monaco-icon-label.italic > .monaco-icon-label-container > .monaco-icon-suffix-container > .label-suffix,\n.monaco-icon-label.italic > .monaco-icon-label-container > .monaco-icon-description-container > .label-description {\n	font-style: italic;\n}\n\n.monaco-icon-label.deprecated {\n	text-decoration: line-through;\n	opacity: 0.66;\n}\n\n.monaco-icon-label.strikethrough > .monaco-icon-label-container > .monaco-icon-name-container > .label-name,\n.monaco-icon-label.strikethrough > .monaco-icon-label-container > .monaco-icon-suffix-container > .label-suffix,\n.monaco-icon-label.strikethrough > .monaco-icon-label-container > .monaco-icon-description-container > .label-description {\n	text-decoration: line-through;\n}\n\n.monaco-icon-label::after {\n	opacity: 0.75;\n	font-size: 90%;\n	font-weight: 600;\n	margin: auto 16px 0 5px; /* https://github.com/microsoft/vscode/issues/113223 */\n	text-align: center;\n}\n\n/* make sure selection color wins when a label is being selected */\n.monaco-list:focus .selected .monaco-icon-label, /* list */\n.monaco-list:focus .selected .monaco-icon-label::after\n{\n	color: inherit !important;\n}\n\n.monaco-list-row.focused .monaco-icon-label > .monaco-icon-label-container > .monaco-icon-description-container > .label-description,\n.monaco-list-row.selected .monaco-icon-label > .monaco-icon-label-container > .monaco-icon-description-container > .label-description {\n	opacity: 1;\n}\n";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-9131c001cd03")) {
       const style = document.createElement("style");
@@ -137349,10 +137349,10 @@ var init_iconlabel = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/highlightedlabel/highlightedLabel.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/highlightedlabel/highlightedLabel.js
 var HighlightedLabel;
 var init_highlightedLabel = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/highlightedlabel/highlightedLabel.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/highlightedlabel/highlightedLabel.js"() {
     init_dom();
     init_hoverDelegate2();
     init_hoverDelegateFactory();
@@ -137470,7 +137470,7 @@ var init_highlightedLabel = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/iconLabel/iconLabel.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/iconLabel/iconLabel.js
 function splitMatches(labels, separator2, matches) {
   if (!matches) {
     return void 0;
@@ -137485,7 +137485,7 @@ function splitMatches(labels, separator2, matches) {
 }
 var FastLabelNode, IconLabel, Label, LabelWithHighlights;
 var init_iconLabel = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/iconLabel/iconLabel.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/iconLabel/iconLabel.js"() {
     init_iconlabel();
     init_dom();
     init_cssValue();
@@ -137750,10 +137750,10 @@ var init_iconLabel = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/keybindingLabel/keybindingLabel.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/keybindingLabel/keybindingLabel.css
 var css53;
 var init_keybindingLabel = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/keybindingLabel/keybindingLabel.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/keybindingLabel/keybindingLabel.css"() {
     css53 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n.monaco-keybinding {\n	display: flex;\n	align-items: center;\n	line-height: 10px;\n}\n\n.monaco-keybinding > .monaco-keybinding-key {\n	display: inline-flex;\n	align-items: center;\n	border-style: solid;\n	border-width: 1px;\n	border-radius: 3px;\n	justify-content: center;\n	min-width: 12px;\n	font-size: 11px;\n	padding: 3px 5px;\n	margin: 0 2px;\n}\n\n.monaco-keybinding > .monaco-keybinding-key:first-child {\n	margin-left: 0;\n}\n\n.monaco-keybinding > .monaco-keybinding-key:last-child {\n	margin-right: 0;\n}\n\n.monaco-keybinding > .monaco-keybinding-key-separator {\n	display: inline-block;\n}\n\n.monaco-keybinding > .monaco-keybinding-key-chord-separator {\n	width: 6px;\n}\n";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-f0756f297f58")) {
       const style = document.createElement("style");
@@ -137764,10 +137764,10 @@ var init_keybindingLabel = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/keybindingLabel/keybindingLabel.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/keybindingLabel/keybindingLabel.js
 var $8, KeybindingLabel;
 var init_keybindingLabel2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/keybindingLabel/keybindingLabel.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/browser/ui/keybindingLabel/keybindingLabel.js"() {
     init_dom();
     init_hoverDelegate2();
     init_hoverDelegateFactory();
@@ -137878,7 +137878,7 @@ var init_keybindingLabel2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/comparers.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/comparers.js
 function compareFileNames(one, other, caseSensitive = false) {
   const a = one || "";
   const b2 = other || "";
@@ -137925,7 +137925,7 @@ function compareByPrefix(one, other, lookFor) {
 }
 var intlFileNameCollatorBaseNumeric;
 var init_comparers = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/comparers.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/comparers.js"() {
     init_date();
     init_lazy();
     intlFileNameCollatorBaseNumeric = new Lazy(() => {
@@ -137950,7 +137950,7 @@ var init_comparers = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/quickInputList.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/quickInputList.js
 function matchesContiguousIconAware(query, target) {
   const { text: text2, iconOffsets } = target;
   if (!iconOffsets || iconOffsets.length === 0) {
@@ -137991,7 +137991,7 @@ function compareEntries(elementA, elementB, lookFor) {
 }
 var __decorate60, __param53, QuickPickItemElementRenderer_1, QuickPickSeparatorElementRenderer_1, $9, BaseQuickPickItemElement, QuickPickItemElement, QuickPickSeparatorFocusReason, QuickPickSeparatorElement, QuickInputItemDelegate, QuickInputAccessibilityProvider, BaseQuickInputListRenderer, QuickPickItemElementRenderer, QuickPickSeparatorElementRenderer, QuickInputList;
 var init_quickInputList = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/quickInputList.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/quickInputList.js"() {
     init_cssValue();
     init_dom();
     init_toolbar2();
@@ -139216,7 +139216,7 @@ var init_quickInputList = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/quickInputActions.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/quickInputActions.js
 function registerQuickInputCommandAndKeybindingRule(rule, options = {}) {
   KeybindingsRegistry.registerCommandAndKeybindingRule({
     weight: 200,
@@ -139297,7 +139297,7 @@ function focusHandler(focus, focusOnQuickNatigate) {
 }
 var ctrlKeyMod2, nextSeparatorFallbackDesc, prevSeparatorFallbackDesc;
 var init_quickInputActions = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/quickInputActions.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/quickInputActions.js"() {
     init_platform();
     init_nls();
     init_contextkey();
@@ -139447,10 +139447,10 @@ var init_quickInputActions = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/tree/quickInputTreeRenderer.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/tree/quickInputTreeRenderer.js
 var __decorate61, __param54, QuickInputTreeRenderer_1, $10, QuickInputCheckboxStateHandler, QuickInputTreeRenderer;
 var init_quickInputTreeRenderer = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/tree/quickInputTreeRenderer.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/tree/quickInputTreeRenderer.js"() {
     init_cssValue();
     init_dom();
     init_toolbar2();
@@ -139614,10 +139614,10 @@ var init_quickInputTreeRenderer = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/tree/quickInputDelegate.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/tree/quickInputDelegate.js
 var QuickInputTreeDelegate;
 var init_quickInputDelegate = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/tree/quickInputDelegate.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/tree/quickInputDelegate.js"() {
     init_quickInputTreeRenderer();
     QuickInputTreeDelegate = class {
       getHeight(_element) {
@@ -139630,7 +139630,7 @@ var init_quickInputDelegate = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/tree/quickInputTree.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/tree/quickInputTree.js
 function getParentNodeState(parentChildren) {
   let containsChecks = false;
   let containsUnchecks = false;
@@ -139655,14 +139655,14 @@ function getParentNodeState(parentChildren) {
   return newState;
 }
 var init_quickInputTree = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/tree/quickInputTree.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/tree/quickInputTree.js"() {
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/tree/quickInputTreeAccessibilityProvider.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/tree/quickInputTreeAccessibilityProvider.js
 var QuickTreeAccessibilityProvider;
 var init_quickInputTreeAccessibilityProvider = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/tree/quickInputTreeAccessibilityProvider.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/tree/quickInputTreeAccessibilityProvider.js"() {
     init_event();
     init_iconLabels();
     init_nls();
@@ -139694,10 +139694,10 @@ var init_quickInputTreeAccessibilityProvider = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/tree/quickInputTreeFilter.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/tree/quickInputTreeFilter.js
 var QuickInputTreeFilter;
 var init_quickInputTreeFilter = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/tree/quickInputTreeFilter.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/tree/quickInputTreeFilter.js"() {
     init_iconLabels();
     QuickInputTreeFilter = class {
       constructor() {
@@ -139724,10 +139724,10 @@ var init_quickInputTreeFilter = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/tree/quickInputTreeSorter.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/tree/quickInputTreeSorter.js
 var QuickInputTreeSorter;
 var init_quickInputTreeSorter = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/tree/quickInputTreeSorter.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/tree/quickInputTreeSorter.js"() {
     init_lifecycle();
     QuickInputTreeSorter = class extends Disposable {
       constructor() {
@@ -139766,10 +139766,10 @@ var init_quickInputTreeSorter = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/tree/quickInputTreeController.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/tree/quickInputTreeController.js
 var __decorate62, __param55, $11, flatHierarchyClass, QuickInputTreeIdentityProvider, QuickInputTreeController;
 var init_quickInputTreeController = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/tree/quickInputTreeController.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/tree/quickInputTreeController.js"() {
     init_dom();
     init_abstractTree();
     init_tree();
@@ -140106,10 +140106,10 @@ var init_quickInputTreeController = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/tree/quickTree.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/tree/quickTree.js
 var QuickTree;
 var init_quickTree = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/tree/quickTree.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/tree/quickTree.js"() {
     init_event();
     init_observableInternal();
     init_platform();
@@ -140276,10 +140276,10 @@ var init_quickTree = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/quickInputController.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/quickInputController.js
 var __decorate63, __param56, QuickInputController_1, $12, VIEWSTATE_STORAGE_KEY, QUICK_INPUT_MOTION_CLOSING_CLASS, QUICK_INPUT_OVERLAY_CLASS, QUICK_INPUT_CLOSE_ANIMATION_DURATION, QUICK_INPUT_MOTION_ANCESTOR_CLASSES, QuickInputController, QuickInputDragAndDropController;
 var init_quickInputController = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/quickInputController.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/quickInputController.js"() {
     init_dom();
     init_domStylesheets();
     init_toolbar2();
@@ -141357,10 +141357,10 @@ var init_quickInputController = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/quickInputService.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/quickInputService.js
 var __decorate64, __param57, QuickInputService;
 var init_quickInputService = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/quickInputService.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/quickinput/browser/quickInputService.js"() {
     init_cancellation();
     init_event();
     init_contextkey();
@@ -141568,10 +141568,10 @@ var init_quickInputService = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/quickInput/standaloneQuickInputService.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/quickInput/standaloneQuickInputService.js
 var __decorate65, __param58, EditorScopedQuickInputService, StandaloneQuickInputService, QuickInputEditorContribution, QuickInputEditorWidget;
 var init_standaloneQuickInputService = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/quickInput/standaloneQuickInputService.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/quickInput/standaloneQuickInputService.js"() {
     init_standaloneQuickInput();
     init_event();
     init_editorExtensions();
@@ -141760,7 +141760,7 @@ var init_standaloneQuickInputService = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/webWorker/browser/webWorkerServiceImpl.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/webWorker/browser/webWorkerServiceImpl.js
 function createBlobWorker(blobUrl, options) {
   if (!blobUrl.startsWith("blob:")) {
     throw new URIError("Not a blob-url: " + blobUrl);
@@ -141813,7 +141813,7 @@ function isPromiseLike(obj) {
 }
 var WebWorkerService, ttPolicy4, WebWorker;
 var init_webWorkerServiceImpl = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/webWorker/browser/webWorkerServiceImpl.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/webWorker/browser/webWorkerServiceImpl.js"() {
     init_trustedTypes();
     init_arrays();
     init_errors();
@@ -141918,10 +141918,10 @@ var init_webWorkerServiceImpl = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/services/standaloneWebWorkerService.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/services/standaloneWebWorkerService.js
 var StandaloneWebWorkerService;
 var init_standaloneWebWorkerService = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/services/standaloneWebWorkerService.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/services/standaloneWebWorkerService.js"() {
     init_browser();
     init_webWorkerServiceImpl();
     StandaloneWebWorkerService = class extends WebWorkerService {
@@ -141964,10 +141964,10 @@ Ensure your bundler properly bundles modules referenced by "new URL(${examplePat
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/common/themes.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/common/themes.js
 var vs2, vs_dark, hc_black, hc_light;
 var init_themes = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/common/themes.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/common/themes.js"() {
     init_editorColorRegistry();
     init_colorUtils();
     init_baseColors();
@@ -142198,7 +142198,7 @@ var init_themes = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/iconRegistry.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/iconRegistry.js
 function registerIcon(id, defaults, description, deprecationMessage) {
   return iconRegistry.registerIcon(id, defaults, description, deprecationMessage);
 }
@@ -142214,7 +142214,7 @@ function initialize() {
 }
 var Extensions10, IconContribution, IconFontDefinition, fontIdRegex, fontIdErrorMessage, IconRegistry, iconRegistry, iconsSchemaId, schemaRegistry2, delayer2, widgetClose;
 var init_iconRegistry = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/iconRegistry.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/common/iconRegistry.js"() {
     init_async();
     init_codicons();
     init_codiconsUtil();
@@ -142374,7 +142374,7 @@ var init_iconRegistry = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/browser/iconsStyleSheet.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/browser/iconsStyleSheet.js
 function getIconsStyleSheet(themeService) {
   const disposable = new DisposableStore();
   const onDidChangeEmmiter = disposable.add(new Emitter());
@@ -142425,7 +142425,7 @@ function getIconsStyleSheet(themeService) {
 }
 var UnthemedProductIconTheme;
 var init_iconsStyleSheet = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/browser/iconsStyleSheet.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/theme/browser/iconsStyleSheet.js"() {
     init_cssValue();
     init_event();
     init_lifecycle();
@@ -142448,7 +142448,7 @@ var init_iconsStyleSheet = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/standaloneThemeService.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/standaloneThemeService.js
 function isBuiltinTheme(themeName) {
   return themeName === VS_LIGHT_THEME_NAME || themeName === VS_DARK_THEME_NAME || themeName === HC_BLACK_THEME_NAME || themeName === HC_LIGHT_THEME_NAME;
 }
@@ -142470,7 +142470,7 @@ function newBuiltInTheme(builtinTheme) {
 }
 var VS_LIGHT_THEME_NAME, VS_DARK_THEME_NAME, HC_BLACK_THEME_NAME, HC_LIGHT_THEME_NAME, colorRegistry2, themingRegistry2, StandaloneTheme, StandaloneThemeService;
 var init_standaloneThemeService = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/standaloneThemeService.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/standaloneThemeService.js"() {
     init_dom();
     init_domStylesheets();
     init_browser();
@@ -142817,10 +142817,10 @@ ${this._themeCSS}`;
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/standaloneTreeSitterLibraryService.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/standaloneTreeSitterLibraryService.js
 var StandaloneTreeSitterLibraryService;
 var init_standaloneTreeSitterLibraryService = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/standaloneTreeSitterLibraryService.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/standaloneTreeSitterLibraryService.js"() {
     StandaloneTreeSitterLibraryService = class {
       getParserClass() {
         throw new Error("not implemented in StandaloneTreeSitterLibraryService");
@@ -142841,7 +142841,7 @@ var init_standaloneTreeSitterLibraryService = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/standaloneServices.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/standaloneServices.js
 function isConfigurationOverrides(thing) {
   return !!thing && typeof thing === "object" && (!thing.overrideIdentifier || typeof thing.overrideIdentifier === "string") && (!thing.resource || thing.resource instanceof URI);
 }
@@ -142867,7 +142867,7 @@ function updateConfigurationService(configurationService, source, isDiffEditor) 
 }
 var __decorate66, __param59, StandaloneEditorProgressService, StandaloneProgressService, StandaloneEnvironmentService, StandaloneDialogService, StandaloneNotificationService, StandaloneCommandService, StandaloneKeybindingService, DomNodeListeners, StandaloneConfigurationService, StandaloneResourceConfigurationService, StandaloneResourcePropertiesService, StandaloneTelemetryService, StandaloneWorkspaceContextService, StandaloneBulkEditService, StandaloneUriLabelService, StandaloneContextViewService, StandaloneWorkspaceTrustManagementService, StandaloneLanguageService, StandaloneLogService, StandaloneContextMenuService, StandaloneAccessbilitySignalService, StandaloneDefaultAccountService, StandaloneServices;
 var init_standaloneServices = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/standaloneServices.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/standaloneServices.js"() {
     init_hoverService();
     init_undoRedoService();
     init_inlineCompletionsService();
@@ -143796,18 +143796,18 @@ var init_standaloneServices = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/hotReloadHelpers.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/hotReloadHelpers.js
 function readHotReloadableExport(value, reader) {
   return value;
 }
 var init_hotReloadHelpers = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/hotReloadHelpers.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/hotReloadHelpers.js"() {
     init_observableInternal();
     init_constObservable();
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/observable/common/platformObservableUtils.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/observable/common/platformObservableUtils.js
 function bindContextKey(key, service, computeValue, debugLocation = DebugLocation.ofCaller()) {
   const boundKey = key.bindTo(service);
   const store = new DisposableStore();
@@ -143819,7 +143819,7 @@ function bindContextKey(key, service, computeValue, debugLocation = DebugLocatio
   return store;
 }
 var init_platformObservableUtils = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/observable/common/platformObservableUtils.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/observable/common/platformObservableUtils.js"() {
     init_lifecycle();
     init_observableInternal();
     init_debugLocation();
@@ -143828,10 +143828,10 @@ var init_platformObservableUtils = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/stableEditorScroll.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/stableEditorScroll.js
 var StableEditorScrollState;
 var init_stableEditorScroll = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/stableEditorScroll.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/stableEditorScroll.js"() {
     StableEditorScrollState = class _StableEditorScrollState {
       static capture(editor2) {
         if (editor2.getScrollTop() === 0 || editor2.hasPendingScrollAnimation()) {
@@ -143882,7 +143882,7 @@ var init_stableEditorScroll = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/utils.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/utils.js
 function joinCombine(arr1, arr2, keySelector, combine) {
   if (arr1.length === 0) {
     return arr2;
@@ -144128,7 +144128,7 @@ function filterWithPrevious(arr, filter) {
 }
 var ObservableElementSizeObserver, ViewZoneOverlayWidget, PlaceholderViewZone, ManagedOverlayWidget, RefCounted, BaseRefCounted, ClonedRefCounted;
 var init_utils5 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/utils.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/utils.js"() {
     init_arraysFind();
     init_cancellation();
     init_lifecycle();
@@ -144304,10 +144304,10 @@ var init_utils5 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/components/accessibleDiffViewer.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/components/accessibleDiffViewer.css
 var css54;
 var init_accessibleDiffViewer = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/components/accessibleDiffViewer.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/components/accessibleDiffViewer.css"() {
     css54 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n.monaco-diff-editor .diff-review {\n	position: absolute;\n\n}\n\n.monaco-component.diff-review {\n	user-select: none;\n	-webkit-user-select: none;\n	z-index: 99;\n\n\n	.diff-review-line-number {\n		text-align: right;\n		display: inline-block;\n		color: var(--vscode-editorLineNumber-foreground);\n	}\n\n	.diff-review-summary {\n		padding-left: 10px;\n	}\n\n	.diff-review-shadow {\n		position: absolute;\n		box-shadow: var(--vscode-scrollbar-shadow) 0 -6px 6px -6px inset;\n	}\n\n	.diff-review-row {\n		white-space: pre;\n	}\n\n	.diff-review-table {\n		display: table;\n		min-width: 100%;\n	}\n\n	.diff-review-row {\n		display: table-row;\n		width: 100%;\n	}\n\n	.diff-review-spacer {\n		display: inline-block;\n		width: 10px;\n		vertical-align: middle;\n	}\n\n	.diff-review-spacer > .codicon {\n		font-size: 9px !important;\n	}\n\n	.diff-review-actions {\n		display: inline-block;\n		position: absolute;\n		right: 10px;\n		top: 2px;\n		z-index: 100;\n	}\n\n	.diff-review-actions .action-label {\n		width: 16px;\n		height: 16px;\n		margin: 2px 0;\n	}\n\n	.revertButton {\n		cursor: pointer;\n	}\n\n	.action-label {\n		background: var(--vscode-editorActionList-background);\n	}\n}\n";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-27dff3c0cad8")) {
       const style = document.createElement("style");
@@ -144318,7 +144318,7 @@ var init_accessibleDiffViewer = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/components/accessibleDiffViewer.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/components/accessibleDiffViewer.js
 function computeViewElementGroups(diffs, originalLineCount, modifiedLineCount) {
   const result = [];
   for (const g of groupAdjacentBy(diffs, (a, b2) => b2.modified.startLineNumber - a.modified.endLineNumberExclusive < 2 * viewElementGroupLineMargin)) {
@@ -144349,7 +144349,7 @@ function computeViewElementGroups(diffs, originalLineCount, modifiedLineCount) {
 }
 var __decorate67, __param60, accessibleDiffViewerInsertIcon, accessibleDiffViewerRemoveIcon, accessibleDiffViewerCloseIcon, AccessibleDiffViewer, ViewModel2, viewElementGroupLineMargin, LineType, ViewElementGroup, HeaderViewElement, DeletedLineViewElement, AddedLineViewElement, UnchangedLineViewElement, View3, AccessibleDiffViewerModelFromEditors;
 var init_accessibleDiffViewer2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/components/accessibleDiffViewer.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/components/accessibleDiffViewer.js"() {
     init_dom();
     init_trustedTypes();
     init_actionbar2();
@@ -144952,10 +144952,10 @@ var init_accessibleDiffViewer2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/registrations.contribution.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/registrations.contribution.js
 var diffInsertIcon, diffRemoveIcon, diffLineAddDecorationBackgroundWithIndicator, diffLineDeleteDecorationBackgroundWithIndicator, diffLineAddDecorationBackground, diffLineDeleteDecorationBackground, diffAddDecoration, diffWholeLineAddDecoration, diffAddDecorationEmpty, diffDeleteDecoration, diffWholeLineDeleteDecoration, diffDeleteDecorationEmpty;
 var init_registrations_contribution = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/registrations.contribution.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/registrations.contribution.js"() {
     init_codicons();
     init_themables();
     init_textModel();
@@ -145034,10 +145034,10 @@ var init_registrations_contribution = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/diffProviderFactoryService.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/diffProviderFactoryService.js
 var __decorate68, __param61, WorkerBasedDocumentDiffProvider_1, IDiffProviderFactoryService, WorkerBasedDiffProviderFactoryService, WorkerBasedDocumentDiffProvider;
 var init_diffProviderFactoryService = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/diffProviderFactoryService.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/diffProviderFactoryService.js"() {
     init_extensions();
     init_instantiation();
     init_event();
@@ -145183,7 +145183,7 @@ var init_diffProviderFactoryService = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/utils/utilsCancellation.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/utils/utilsCancellation.js
 function waitForState(observable, predicate, isError, cancellationToken) {
   if (!predicate) {
     predicate = (state) => state !== null && state !== void 0;
@@ -145233,20 +145233,20 @@ function waitForState(observable, predicate, isError, cancellationToken) {
   });
 }
 var init_utilsCancellation = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/utils/utilsCancellation.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/utils/utilsCancellation.js"() {
     init_errors();
     init_cancellation();
     init_autorun();
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/observables/observableSignalFromEvent.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/observables/observableSignalFromEvent.js
 function observableSignalFromEvent(owner, event, debugLocation = DebugLocation.ofCaller()) {
   return new FromEventObservableSignal(typeof owner === "string" ? owner : new DebugNameData(owner, void 0, void 0), event, debugLocation);
 }
 var FromEventObservableSignal;
 var init_observableSignalFromEvent = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/observables/observableSignalFromEvent.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/observables/observableSignalFromEvent.js"() {
     init_transaction();
     init_debugName();
     init_baseObservable();
@@ -145278,7 +145278,7 @@ var init_observableSignalFromEvent = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/diffEditorViewModel.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/diffEditorViewModel.js
 function normalizeDocumentDiff(diff, original, modified) {
   return {
     changes: diff.changes.map((c) => new DetailedLineRangeMapping(c.original, c.modified, c.innerChanges ? c.innerChanges.map((i) => normalizeRangeMapping(i, original, modified)) : void 0)),
@@ -145304,7 +145304,7 @@ function applyModifiedEdits(diff, textEdits, originalTextModel, modifiedTextMode
 }
 var __decorate69, __param62, DiffEditorViewModel, DiffState, DiffMapping, UnchangedRegion;
 var init_diffEditorViewModel = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/diffEditorViewModel.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/diffEditorViewModel.js"() {
     init_async();
     init_cancellation();
     init_lifecycle();
@@ -145734,7 +145734,7 @@ var init_diffEditorViewModel = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/components/diffEditorViewZones/copySelection.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/components/diffEditorViewZones/copySelection.js
 function enableCopySelection(options) {
   const { domNode, renderLinesResult, diffEntry, originalModel, clipboardService } = options;
   const viewZoneDisposable = new DisposableStore();
@@ -145767,17 +145767,17 @@ function enableCopySelection(options) {
   return viewZoneDisposable;
 }
 var init_copySelection = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/components/diffEditorViewZones/copySelection.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/components/diffEditorViewZones/copySelection.js"() {
     init_dom();
     init_lifecycle();
     init_range();
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/components/diffEditorViewZones/inlineDiffDeletedCodeMargin.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/components/diffEditorViewZones/inlineDiffDeletedCodeMargin.js
 var InlineDiffDeletedCodeMargin;
 var init_inlineDiffDeletedCodeMargin = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/components/diffEditorViewZones/inlineDiffDeletedCodeMargin.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/components/diffEditorViewZones/inlineDiffDeletedCodeMargin.js"() {
     init_dom();
     init_actions();
     init_codicons();
@@ -145909,7 +145909,7 @@ var init_inlineDiffDeletedCodeMargin = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/components/diffEditorViewZones/renderLines.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/components/diffEditorViewZones/renderLines.js
 function renderLines(source, options, decorations, domNode, noExtra = false) {
   applyFontInfo(domNode, options.fontInfo);
   const hasCharChanges = decorations.length > 0;
@@ -145996,7 +145996,7 @@ function renderOriginalLine(viewLineIdx, lineTokens, decorations, hasCharChanges
 }
 var ttPolicy5, LineSource, RenderOptions, RenderLinesResult, RenderLineOutputWithOffset;
 var init_renderLines = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/components/diffEditorViewZones/renderLines.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/components/diffEditorViewZones/renderLines.js"() {
     init_trustedTypes();
     init_domFontInfo();
     init_editorOptions();
@@ -146144,7 +146144,7 @@ var init_renderLines = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/components/diffEditorViewZones/diffEditorViewZones.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/components/diffEditorViewZones/diffEditorViewZones.js
 function computeRangeAlignment(originalEditor, modifiedEditor, diffs, originalEditorAlignmentViewZones, modifiedEditorAlignmentViewZones, innerHunkAlignment) {
   const originalLineHeightOverrides = new ArrayQueue(getAdditionalLineHeights(originalEditor, originalEditorAlignmentViewZones));
   const modifiedLineHeightOverrides = new ArrayQueue(getAdditionalLineHeights(modifiedEditor, modifiedEditorAlignmentViewZones));
@@ -146291,7 +146291,7 @@ function rangeIsSingleLine(range2) {
 }
 var __decorate70, __param63, DiffEditorViewZones;
 var init_diffEditorViewZones = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/components/diffEditorViewZones/diffEditorViewZones.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/components/diffEditorViewZones/diffEditorViewZones.js"() {
     init_dom();
     init_arrays();
     init_async();
@@ -146686,10 +146686,10 @@ var init_diffEditorViewZones = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/features/movedBlocksLinesFeature.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/features/movedBlocksLinesFeature.js
 var MovedBlocksLinesFeature, LinesLayout2, MovedBlockOverlayWidget;
 var init_movedBlocksLinesFeature = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/features/movedBlocksLinesFeature.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/features/movedBlocksLinesFeature.js"() {
     init_dom();
     init_actionbar2();
     init_actions();
@@ -146958,10 +146958,10 @@ var init_movedBlocksLinesFeature = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/components/diffEditorDecorations.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/components/diffEditorDecorations.js
 var DiffEditorDecorations;
 var init_diffEditorDecorations = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/components/diffEditorDecorations.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/components/diffEditorDecorations.js"() {
     init_lifecycle();
     init_observableInternal();
     init_diffEditorViewZones();
@@ -147073,10 +147073,10 @@ var init_diffEditorDecorations = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/2d/point.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/2d/point.js
 var Point;
 var init_point = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/2d/point.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/core/2d/point.js"() {
     Point = class _Point {
       static equals(a, b2) {
         return a.x === b2.x && a.y === b2.y;
@@ -147123,13 +147123,13 @@ var init_point = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/observableCodeEditor.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/observableCodeEditor.js
 function observableCodeEditor(editor2) {
   return ObservableCodeEditor.get(editor2);
 }
 var ObservableCodeEditor;
 var init_observableCodeEditor = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/observableCodeEditor.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/observableCodeEditor.js"() {
     init_equals();
     init_lifecycle();
     init_observableInternal();
@@ -147581,10 +147581,10 @@ var init_observableCodeEditor = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/features/overviewRulerFeature.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/features/overviewRulerFeature.js
 var __decorate71, __param64, OverviewRulerFeature_1, OverviewRulerFeature;
 var init_overviewRulerFeature = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/features/overviewRulerFeature.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/features/overviewRulerFeature.js"() {
     init_dom();
     init_fastDomNode();
     init_scrollbarState();
@@ -147750,10 +147750,10 @@ var init_overviewRulerFeature = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/components/diffEditorEditors.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/components/diffEditorEditors.js
 var __decorate72, __param65, DiffEditorEditors;
 var init_diffEditorEditors = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/components/diffEditorEditors.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/components/diffEditorEditors.js"() {
     init_event();
     init_lifecycle();
     init_observableInternal();
@@ -147943,10 +147943,10 @@ var init_diffEditorEditors = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/components/diffEditorSash.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/components/diffEditorSash.js
 var SashLayout, DiffEditorSash;
 var init_diffEditorSash = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/components/diffEditorSash.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/components/diffEditorSash.js"() {
     init_sash2();
     init_lifecycle();
     init_observableInternal();
@@ -148031,10 +148031,10 @@ var init_diffEditorSash = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/delegatingEditorImpl.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/delegatingEditorImpl.js
 var DelegatingEditor;
 var init_delegatingEditorImpl = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/delegatingEditorImpl.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/delegatingEditorImpl.js"() {
     init_event();
     init_lifecycle();
     DelegatingEditor = class _DelegatingEditor extends Disposable {
@@ -148145,17 +148145,17 @@ var init_delegatingEditorImpl = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/experimental/utils.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/experimental/utils.js
 function derivedConstOnceDefined(owner, fn2) {
   return derivedObservableWithCache(owner, (reader, lastValue) => lastValue ?? fn2(reader));
 }
 var init_utils6 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/experimental/utils.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/base/common/observableInternal/experimental/utils.js"() {
     init_utils();
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/diffEditorOptions.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/diffEditorOptions.js
 function isSimpleDiff(diff, supportsTrueDiffRendering) {
   return diff.mappings.every((m) => isInsertion(m.lineRangeMapping) || isDeletion(m.lineRangeMapping) || supportsTrueDiffRendering && allowsTrueInlineDiffRendering(m.lineRangeMapping));
 }
@@ -148240,7 +148240,7 @@ function validateDiffEditorOptions(options, defaults) {
 }
 var __decorate73, __param66, DiffEditorOptions;
 var init_diffEditorOptions = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/diffEditorOptions.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/diffEditorOptions.js"() {
     init_observableInternal();
     init_accessibility();
     init_diffEditor();
@@ -148370,10 +148370,10 @@ var init_diffEditorOptions = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/actions/browser/actionViewItemService.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/actions/browser/actionViewItemService.js
 var IActionViewItemService, ActionViewItemService;
 var init_actionViewItemService = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/actions/browser/actionViewItemService.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/actions/browser/actionViewItemService.js"() {
     init_event();
     init_extensions();
     init_instantiation();
@@ -148404,10 +148404,10 @@ var init_actionViewItemService = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/actions/browser/toolbar.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/actions/browser/toolbar.js
 var __decorate74, __param67, WorkbenchToolBar, MenuWorkbenchToolBar;
 var init_toolbar3 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/actions/browser/toolbar.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/actions/browser/toolbar.js"() {
     init_dom();
     init_mouseEvent();
     init_toolbar2();
@@ -148665,10 +148665,10 @@ var init_toolbar3 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/textModelText.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/textModelText.js
 var TextModelText;
 var init_textModelText = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/textModelText.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/common/model/textModelText.js"() {
     init_abstractText();
     init_textLength();
     TextModelText = class extends AbstractText {
@@ -148691,10 +148691,10 @@ var init_textModelText = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/multiDiffEditor/utils.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/multiDiffEditor/utils.js
 var ActionRunnerWithContext;
 var init_utils7 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/multiDiffEditor/utils.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/multiDiffEditor/utils.js"() {
     init_actions();
     ActionRunnerWithContext = class extends ActionRunner {
       constructor(_getContext) {
@@ -148709,10 +148709,10 @@ var init_utils7 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/utils/editorGutter.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/utils/editorGutter.js
 var EditorGutter, ManagedGutterItemView;
 var init_editorGutter = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/utils/editorGutter.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/utils/editorGutter.js"() {
     init_dom();
     init_lifecycle();
     init_observableInternal();
@@ -148828,10 +148828,10 @@ var init_editorGutter = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/features/gutterFeature.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/features/gutterFeature.js
 var __decorate75, __param68, emptyArr2, width, DiffEditorGutter, DiffGutterItem, DiffToolBar;
 var init_gutterFeature = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/features/gutterFeature.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/features/gutterFeature.js"() {
     init_dom();
     init_lifecycle();
     init_observableInternal();
@@ -149074,10 +149074,10 @@ var init_gutterFeature = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/features/hideUnchangedRegionsFeature.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/features/hideUnchangedRegionsFeature.js
 var __decorate76, __param69, HideUnchangedRegionsFeature_1, HideUnchangedRegionsFeature, CompactCollapsedCodeOverlayWidget, CollapsedCodeOverlayWidget;
 var init_hideUnchangedRegionsFeature = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/features/hideUnchangedRegionsFeature.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/features/hideUnchangedRegionsFeature.js"() {
     init_dom();
     init_iconLabels2();
     init_codicons();
@@ -149613,10 +149613,10 @@ var init_hideUnchangedRegionsFeature = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/features/revertButtonsFeature.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/features/revertButtonsFeature.js
 var emptyArr3, RevertButtonsFeature, RevertButton;
 var init_revertButtonsFeature = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/features/revertButtonsFeature.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/features/revertButtonsFeature.js"() {
     init_dom();
     init_iconLabels2();
     init_codicons();
@@ -149759,10 +149759,10 @@ var init_revertButtonsFeature = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/style.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/style.css
 var css55;
 var init_style = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/style.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/style.css"() {
     css55 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n.monaco-editor .diff-hidden-lines-widget {\n	width: 100%;\n}\n\n.monaco-editor .diff-hidden-lines {\n	height: 0px; /* The children each have a fixed height, the transform confuses the browser */\n	transform: translate(0px, -10px);\n	font-size: 13px;\n	line-height: 14px;\n}\n\n.monaco-editor .diff-hidden-lines:not(.dragging) .top:hover,\n.monaco-editor .diff-hidden-lines:not(.dragging) .bottom:hover,\n.monaco-editor .diff-hidden-lines .top.dragging,\n.monaco-editor .diff-hidden-lines .bottom.dragging {\n	background-color: var(--vscode-focusBorder);\n}\n\n.monaco-editor .diff-hidden-lines .top,\n.monaco-editor .diff-hidden-lines .bottom {\n	transition: background-color 0.1s ease-out;\n	height: 4px;\n	background-color: transparent;\n	background-clip: padding-box;\n	border-bottom: 2px solid transparent;\n	border-top: 4px solid transparent;\n	/*cursor: n-resize;*/\n}\n\n.monaco-editor.draggingUnchangedRegion.canMoveTop:not(.canMoveBottom) *,\n.monaco-editor .diff-hidden-lines .top.canMoveTop:not(.canMoveBottom),\n.monaco-editor .diff-hidden-lines .bottom.canMoveTop:not(.canMoveBottom) {\n	cursor: n-resize !important;\n}\n\n.monaco-editor.draggingUnchangedRegion:not(.canMoveTop).canMoveBottom *,\n.monaco-editor .diff-hidden-lines .top:not(.canMoveTop).canMoveBottom,\n.monaco-editor .diff-hidden-lines .bottom:not(.canMoveTop).canMoveBottom {\n	cursor: s-resize !important;\n}\n\n.monaco-editor.draggingUnchangedRegion.canMoveTop.canMoveBottom *,\n.monaco-editor .diff-hidden-lines .top.canMoveTop.canMoveBottom,\n.monaco-editor .diff-hidden-lines .bottom.canMoveTop.canMoveBottom {\n	cursor: ns-resize !important;\n}\n\n.monaco-editor .diff-hidden-lines .top {\n	transform: translate(0px, 4px);\n}\n\n.monaco-editor .diff-hidden-lines .bottom {\n	transform: translate(0px, -6px);\n}\n\n.monaco-editor .diff-unchanged-lines {\n	background: var(--vscode-diffEditor-unchangedCodeBackground);\n}\n\n.monaco-editor .noModificationsOverlay {\n	z-index: 1;\n	background: var(--vscode-editor-background);\n\n	display: flex;\n	justify-content: center;\n	align-items: center;\n}\n\n\n.monaco-editor .diff-hidden-lines .center {\n	background: var(--vscode-diffEditor-unchangedRegionBackground);\n	color: var(--vscode-diffEditor-unchangedRegionForeground);\n	overflow: hidden;\n	display: block;\n	text-overflow: ellipsis;\n	white-space: nowrap;\n\n	height: 24px;\n	box-shadow: inset 0 -5px 5px -7px var(--vscode-diffEditor-unchangedRegionShadow), inset 0 5px 5px -7px var(--vscode-diffEditor-unchangedRegionShadow);\n}\n\n.monaco-editor .diff-hidden-lines .first {\n	justify-content: center;\n}\n\n.monaco-editor .diff-hidden-lines .center span.codicon {\n	vertical-align: middle;\n}\n\n.monaco-editor .diff-hidden-lines .center a:hover .codicon {\n	cursor: pointer;\n	color: var(--vscode-editorLink-activeForeground) !important;\n}\n\n.monaco-editor .diff-hidden-lines div.breadcrumb-item {\n	cursor: pointer;\n}\n\n.monaco-editor .diff-hidden-lines div.breadcrumb-item:hover {\n	color: var(--vscode-editorLink-activeForeground);\n}\n\n.monaco-editor .diff-hidden-lines .line-number-control,\n.monaco-editor .diff-hidden-lines .disclosure-toggle {\n	display: none;\n}\n\n.monaco-editor .diff-hidden-lines.diff-hidden-lines-disclosure {\n	display: grid;\n	grid-template-rows: var(--vscode-spacing-size80) var(--vscode-spacing-size240) var(--vscode-spacing-size80);\n	height: var(--vscode-spacing-size400);\n	transform: none;\n	font-size: var(--vscode-fontSize-label2);\n	line-height: var(--vscode-spacing-size160);\n}\n\n.monaco-editor .diff-hidden-lines-disclosure .top,\n.monaco-editor .diff-hidden-lines-disclosure .bottom {\n	box-sizing: border-box;\n	height: var(--vscode-spacing-size80);\n	border: 0;\n	transform: none;\n}\n\n.monaco-editor .diff-hidden-lines-disclosure .center {\n	position: relative;\n	box-sizing: border-box;\n	width: calc(100% - var(--vscode-spacing-size200));\n	height: var(--vscode-spacing-size240);\n	margin: 0 var(--vscode-spacing-size100);\n	border-radius: var(--vscode-cornerRadius-medium);\n	background: transparent;\n	box-shadow: none;\n	color: var(--vscode-descriptionForeground);\n	cursor: pointer;\n}\n\n.monaco-editor .diff-hidden-lines-disclosure .center:hover,\n.monaco-editor .diff-hidden-lines-disclosure .center:focus-within {\n	background: var(--vscode-list-hoverBackground);\n	color: var(--vscode-foreground);\n}\n\n.monaco-editor .diff-hidden-lines-disclosure .disclosure-toggle[role='button'] {\n	display: block;\n	position: absolute;\n	inset: 0;\n	border-radius: inherit;\n}\n\n.monaco-editor .diff-hidden-lines-disclosure .disclosure-toggle:focus-visible,\n.monaco-editor .diff-hidden-lines-disclosure .breadcrumb-item:focus-visible {\n	outline: var(--vscode-strokeThickness) solid var(--vscode-focusBorder);\n	outline-offset: calc(-1 * var(--vscode-strokeThickness));\n}\n\n.monaco-editor .diff-hidden-lines-disclosure .first,\n.monaco-editor .diff-hidden-lines-disclosure .content-row {\n	position: relative;\n	pointer-events: none;\n}\n\n.monaco-editor .diff-hidden-lines-disclosure .content-row {\n	flex: 1;\n	min-width: 0;\n}\n\n.monaco-editor .diff-hidden-lines-disclosure .first {\n	z-index: 1;\n}\n\n.monaco-editor .diff-hidden-lines-disclosure .default-control {\n	display: none;\n}\n\n.monaco-editor .diff-hidden-lines-disclosure .line-number-control {\n	position: absolute;\n	display: flex;\n	justify-content: center;\n	align-items: center;\n	height: 100%;\n	transform: translateX(calc(-1 * var(--vscode-spacing-size100)));\n	color: inherit;\n}\n\n.monaco-editor .diff-hidden-lines-disclosure .line-left,\n.monaco-editor .diff-hidden-lines-disclosure .line-right {\n	min-width: var(--vscode-spacing-size120);\n	height: var(--vscode-strokeThickness);\n	background: var(--vscode-widget-border, var(--vscode-contrastBorder));\n	flex: 1;\n}\n\n.monaco-editor .diff-hidden-lines-disclosure .disclosure-content {\n	display: flex;\n	align-items: center;\n	min-width: 0;\n	margin: 0 var(--vscode-spacing-size60);\n	color: inherit;\n	overflow: hidden;\n	white-space: nowrap;\n	text-overflow: ellipsis;\n}\n\n.monaco-editor .diff-hidden-lines-disclosure .disclosure-content > * {\n	flex-shrink: 0;\n}\n\n.monaco-editor .diff-hidden-lines-disclosure .breadcrumb-item {\n	pointer-events: auto;\n	border-radius: var(--vscode-cornerRadius-small);\n	min-width: 0;\n}\n\n.monaco-editor .diff-hidden-lines-disclosure .disclosure-content > .breadcrumb-item {\n	flex-shrink: 1;\n}\n\n.monaco-editor .diff-hidden-lines-disclosure .breadcrumb-label {\n	min-width: 0;\n	overflow: hidden;\n	white-space: nowrap;\n	text-overflow: ellipsis;\n}\n\n.monaco-editor .movedOriginal {\n	border: 2px solid var(--vscode-diffEditor-move-border);\n}\n\n.monaco-editor .movedModified {\n	border: 2px solid var(--vscode-diffEditor-move-border);\n}\n\n.monaco-editor .movedOriginal.currentMove, .monaco-editor .movedModified.currentMove {\n	border: 2px solid var(--vscode-diffEditor-moveActive-border);\n}\n\n.monaco-diff-editor .moved-blocks-lines path.currentMove {\n	stroke: var(--vscode-diffEditor-moveActive-border);\n}\n\n.monaco-diff-editor .moved-blocks-lines path {\n	pointer-events: visiblestroke;\n}\n\n.monaco-diff-editor .moved-blocks-lines .arrow {\n	fill: var(--vscode-diffEditor-move-border);\n}\n\n.monaco-diff-editor .moved-blocks-lines .arrow.currentMove {\n	fill: var(--vscode-diffEditor-moveActive-border);\n}\n\n.monaco-diff-editor .moved-blocks-lines .arrow-rectangle {\n	fill: var(--vscode-editor-background);\n}\n\n.monaco-diff-editor .moved-blocks-lines {\n	position: absolute;\n	pointer-events: none;\n}\n\n.monaco-diff-editor .moved-blocks-lines path {\n	fill: none;\n	stroke: var(--vscode-diffEditor-move-border);\n	stroke-width: 2;\n}\n\n.monaco-editor .char-delete.diff-range-empty {\n	margin-left: -1px;\n	border-left: solid var(--vscode-diffEditor-removedTextBackground) 3px;\n}\n\n.monaco-editor .char-insert.diff-range-empty {\n	border-left: solid var(--vscode-diffEditor-insertedTextBackground) 3px;\n}\n\n.monaco-editor .fold-unchanged {\n	cursor: pointer;\n}\n\n.monaco-diff-editor .diff-moved-code-block {\n	display: flex;\n	justify-content: flex-end;\n	margin-top: -4px;\n}\n\n.monaco-diff-editor .diff-moved-code-block .action-bar .action-label.codicon {\n	width: 12px;\n	height: 12px;\n	font-size: 12px;\n}\n\n/* ---------- DiffEditor ---------- */\n\n.monaco-diff-editor .diffOverview {\n	z-index: 9;\n}\n\n.monaco-diff-editor .diffOverview .diffViewport {\n	z-index: 10;\n}\n\n/* colors not externalized: using transparancy on background */\n.monaco-diff-editor.vs			.diffOverview { background: rgba(0, 0, 0, 0.03); }\n.monaco-diff-editor.vs-dark		.diffOverview { background: rgba(255, 255, 255, 0.01); }\n\n.monaco-scrollable-element.modified-in-monaco-diff-editor.vs		.scrollbar { background: rgba(0,0,0,0); }\n.monaco-scrollable-element.modified-in-monaco-diff-editor.vs-dark	.scrollbar { background: rgba(0,0,0,0); }\n.monaco-scrollable-element.modified-in-monaco-diff-editor.hc-black	.scrollbar { background: none; }\n.monaco-scrollable-element.modified-in-monaco-diff-editor.hc-light	.scrollbar { background: none; }\n\n.monaco-scrollable-element.modified-in-monaco-diff-editor .slider {\n	z-index: 10;\n}\n.modified-in-monaco-diff-editor				.slider.active { background: rgba(171, 171, 171, .4); }\n.modified-in-monaco-diff-editor.hc-black	.slider.active { background: none; }\n.modified-in-monaco-diff-editor.hc-light	.slider.active { background: none; }\n\n/* ---------- Diff ---------- */\n\n.monaco-editor .insert-sign,\n.monaco-diff-editor .insert-sign,\n.monaco-editor .delete-sign,\n.monaco-diff-editor .delete-sign {\n	font-size: 11px !important;\n	opacity: 0.7 !important;\n	display: flex !important;\n	align-items: center;\n}\n.monaco-editor.hc-black .insert-sign,\n.monaco-diff-editor.hc-black .insert-sign,\n.monaco-editor.hc-black .delete-sign,\n.monaco-diff-editor.hc-black .delete-sign,\n.monaco-editor.hc-light .insert-sign,\n.monaco-diff-editor.hc-light .insert-sign,\n.monaco-editor.hc-light .delete-sign,\n.monaco-diff-editor.hc-light .delete-sign {\n	opacity: 1;\n}\n\n.monaco-editor .inline-deleted-margin-view-zone {\n	text-align: right;\n}\n.monaco-editor .inline-added-margin-view-zone {\n	text-align: right;\n}\n\n.monaco-editor .arrow-revert-change {\n	z-index: 10;\n	position: absolute;\n}\n\n.monaco-editor .arrow-revert-change:hover {\n	cursor: pointer;\n}\n\n/* ---------- Inline Diff ---------- */\n\n.monaco-editor .view-zones .view-lines .view-line span {\n	display: inline-block;\n}\n\n.monaco-editor .margin-view-zones .lightbulb-glyph:hover {\n	cursor: pointer;\n}\n\n.monaco-editor .char-insert, .monaco-diff-editor .char-insert {\n	background-color: var(--vscode-diffEditor-insertedTextBackground);\n}\n\n.monaco-editor .line-insert, .monaco-diff-editor .line-insert {\n	background-color: var(--vscode-diffEditor-insertedLineBackground, var(--vscode-diffEditor-insertedTextBackground));\n}\n\n.monaco-editor .line-insert,\n.monaco-editor .char-insert {\n	box-sizing: border-box;\n	border: 1px solid var(--vscode-diffEditor-insertedTextBorder);\n}\n.monaco-editor.hc-black .line-insert, .monaco-editor.hc-light .line-insert,\n.monaco-editor.hc-black .char-insert, .monaco-editor.hc-light .char-insert {\n	border-style: dashed;\n}\n\n.monaco-editor .line-delete,\n.monaco-editor .char-delete {\n	box-sizing: border-box;\n	border: 1px solid var(--vscode-diffEditor-removedTextBorder);\n}\n.monaco-editor.hc-black .line-delete, .monaco-editor.hc-light .line-delete,\n.monaco-editor.hc-black .char-delete, .monaco-editor.hc-light .char-delete {\n	border-style: dashed;\n}\n\n.monaco-editor .inline-added-margin-view-zone,\n.monaco-editor .gutter-insert, .monaco-diff-editor .gutter-insert {\n	background-color: var(--vscode-diffEditorGutter-insertedLineBackground, var(--vscode-diffEditor-insertedLineBackground), var(--vscode-diffEditor-insertedTextBackground));\n}\n\n.monaco-editor .char-delete, .monaco-diff-editor .char-delete, .monaco-editor .inline-deleted-text {\n	background-color: var(--vscode-diffEditor-removedTextBackground);\n}\n\n.monaco-editor .inline-deleted-text {\n	text-decoration: line-through;\n}\n\n.monaco-editor .line-delete, .monaco-diff-editor .line-delete {\n	background-color: var(--vscode-diffEditor-removedLineBackground, var(--vscode-diffEditor-removedTextBackground));\n}\n\n.monaco-editor .inline-deleted-margin-view-zone,\n.monaco-editor .gutter-delete, .monaco-diff-editor .gutter-delete {\n	background-color: var(--vscode-diffEditorGutter-removedLineBackground, var(--vscode-diffEditor-removedLineBackground), var(--vscode-diffEditor-removedTextBackground));\n}\n\n.monaco-diff-editor.side-by-side .editor.modified {\n	box-shadow: -6px 0 5px -5px var(--vscode-scrollbar-shadow);\n	border-left: 1px solid var(--vscode-diffEditor-border);\n}\n\n.monaco-diff-editor.side-by-side .editor.original {\n	box-shadow: 6px 0 5px -5px var(--vscode-scrollbar-shadow);\n	border-right: 1px solid var(--vscode-diffEditor-border);\n}\n\n.monaco-diff-editor .diffViewport {\n	background: var(--vscode-scrollbarSlider-background);\n}\n\n.monaco-diff-editor .diffViewport:hover {\n	background: var(--vscode-scrollbarSlider-hoverBackground);\n}\n\n.monaco-diff-editor .diffViewport:active {\n	background: var(--vscode-scrollbarSlider-activeBackground);\n}\n\n.monaco-editor .diagonal-fill {\n	background-image: linear-gradient(\n		-45deg,\n		var(--vscode-diffEditor-diagonalFill) 12.5%,\n		#0000 12.5%, #0000 50%,\n		var(--vscode-diffEditor-diagonalFill) 50%, var(--vscode-diffEditor-diagonalFill) 62.5%,\n		#0000 62.5%, #0000 100%\n	);\n	background-size: 8px 8px;\n}\n\n.monaco-diff-editor .gutter {\n	position: relative;\n	overflow: hidden;\n	flex-shrink: 0;\n	flex-grow: 0;\n\n	& > div {\n		position: absolute;\n	}\n\n	.gutterItem {\n		opacity: 0;\n		transition: opacity 0.7s;\n\n		&.showAlways {\n			opacity: 1;\n			transition: none;\n		}\n\n		&.noTransition {\n			transition: none;\n		}\n	}\n\n	&:hover .gutterItem {\n		opacity: 1;\n		transition: opacity 0.1s ease-in-out;\n	}\n\n	.gutterItem {\n		.background {\n			position: absolute;\n			height: 100%;\n			left: 50%;\n			width: 1px;\n\n			border-left: 2px var(--vscode-menu-separatorBackground) solid;\n		}\n\n		.buttons {\n			position: absolute;\n			/*height: 100%;*/\n			width: 100%;\n\n			display: flex;\n			justify-content: center;\n			align-items: center;\n\n			.monaco-toolbar {\n				height: fit-content;\n				.monaco-action-bar  {\n					line-height: 1;\n\n					.actions-container {\n						width: fit-content;\n						border-radius: 4px;\n						background: var(--vscode-editorGutter-itemBackground);\n\n						.action-item {\n							&:hover {\n								background: var(--vscode-toolbar-hoverBackground);\n							}\n\n							.action-label {\n								color: var(--vscode-editorGutter-itemGlyphForeground);\n								padding: 1px 2px;\n							}\n						}\n					}\n				}\n			}\n		}\n	}\n}\n\n\n.monaco-diff-editor .diff-hidden-lines-compact {\n	display: flex;\n	height: 11px;\n	.line-left, .line-right {\n		height: 1px;\n		border-top: 1px solid;\n		border-color: var(--vscode-editorCodeLens-foreground);\n		opacity: 0.5;\n		margin: auto;\n		width: 100%;\n	}\n\n	.line-left {\n		width: 20px;\n	}\n\n	.text {\n		color: var(--vscode-editorCodeLens-foreground);\n		text-wrap: nowrap;\n		font-size: 11px;\n		line-height: 11px;\n		margin: 0 4px;\n	}\n}\n\n.monaco-editor .line-delete-selectable {\n	user-select: text !important;\n	-webkit-user-select: text !important;\n	z-index: 1 !important;\n}\n\n.line-delete-selectable .view-line {\n	user-select: text !important;\n	-webkit-user-select: text !important;\n}\n";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-d3be1b88df5f")) {
       const style = document.createElement("style");
@@ -149773,7 +149773,7 @@ var init_style = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/diffEditorWidget.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/diffEditorWidget.js
 function toLineChanges(state) {
   return state.mappings.map((x) => {
     const m = x.lineRangeMapping;
@@ -149818,7 +149818,7 @@ function toLineChanges(state) {
 }
 var __decorate77, __param70, DiffEditorWidget;
 var init_diffEditorWidget = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/diffEditorWidget.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/diffEditor/diffEditorWidget.js"() {
     init_dom();
     init_async();
     init_arraysFind();
@@ -150439,7 +150439,7 @@ var init_diffEditorWidget = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/editorBrowser.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/editorBrowser.js
 function isCodeEditor(thing) {
   if (thing && typeof thing.getEditorType === "function") {
     return thing.getEditorType() === EditorType.ICodeEditor;
@@ -150448,15 +150448,15 @@ function isCodeEditor(thing) {
   }
 }
 var init_editorBrowser = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/editorBrowser.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/editorBrowser.js"() {
     init_editorCommon();
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/markdownRenderer/browser/renderedMarkdown.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/markdownRenderer/browser/renderedMarkdown.css
 var css56;
 var init_renderedMarkdown = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/markdownRenderer/browser/renderedMarkdown.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/markdownRenderer/browser/renderedMarkdown.css"() {
     css56 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n.monaco-editor .rendered-markdown kbd {\n	background-color: var(--vscode-keybindingLabel-background);\n	color: var(--vscode-keybindingLabel-foreground);\n	border-style: solid;\n	border-width: 1px;\n	border-radius: 3px;\n	border-color: var(--vscode-keybindingLabel-border);\n	border-bottom-color: var(--vscode-keybindingLabel-bottomBorder);\n	box-shadow: inset 0 -1px 0 var(--vscode-widget-shadow);\n	vertical-align: middle;\n	padding: 1px 3px;\n}\n\n.rendered-markdown li:has(input[type=checkbox]) {\n	list-style-type: none;\n}\n";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-8572676416fa")) {
       const style = document.createElement("style");
@@ -150467,10 +150467,10 @@ var init_renderedMarkdown = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/markdownRenderer/browser/editorMarkdownCodeBlockRenderer.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/markdownRenderer/browser/editorMarkdownCodeBlockRenderer.js
 var __decorate78, __param71, EditorMarkdownCodeBlockRenderer_1, EditorMarkdownCodeBlockRenderer;
 var init_editorMarkdownCodeBlockRenderer = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/markdownRenderer/browser/editorMarkdownCodeBlockRenderer.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/markdownRenderer/browser/editorMarkdownCodeBlockRenderer.js"() {
     init_dom();
     init_trustedTypes();
     init_configuration();
@@ -150549,7 +150549,7 @@ var init_editorMarkdownCodeBlockRenderer = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/standaloneCodeEditor.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/standaloneCodeEditor.js
 function createAriaDomNode(parent) {
   if (!parent) {
     if (ariaDomNodeCreated) {
@@ -150576,7 +150576,7 @@ function doCreateModel(modelService, value, languageSelection, uri) {
 }
 var __decorate79, __param72, LAST_GENERATED_COMMAND_ID, ariaDomNodeCreated, StandaloneCodeEditor, StandaloneEditor, StandaloneDiffEditor2;
 var init_standaloneCodeEditor = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/standaloneCodeEditor.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/standaloneCodeEditor.js"() {
     init_aria2();
     init_lifecycle();
     init_codeEditorService();
@@ -150857,9 +150857,9 @@ var init_standaloneCodeEditor = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/multiDiffEditor/colors.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/multiDiffEditor/colors.js
 var init_colors = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/multiDiffEditor/colors.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/multiDiffEditor/colors.js"() {
     init_nls();
     init_colorUtils();
     init_baseColors();
@@ -150878,10 +150878,10 @@ var init_colors = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/multiDiffEditor/virtualizedItemManager.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/multiDiffEditor/virtualizedItemManager.js
 var VirtualizedItemBinding, VirtualizedItemTemplate, VirtualizedItemManager, ManagedVirtualizedItem, VirtualizedTemplatePool;
 var init_virtualizedItemManager = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/multiDiffEditor/virtualizedItemManager.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/multiDiffEditor/virtualizedItemManager.js"() {
     init_errors();
     init_event();
     init_lifecycle();
@@ -151104,10 +151104,10 @@ var init_virtualizedItemManager = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/multiDiffEditor/diffEditorItemTemplate.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/multiDiffEditor/diffEditorItemTemplate.js
 var __decorate80, __param73, binaryFilePlaceholderContentHeight, DiffEditorItemTemplate, DiffEditorItemBinding;
 var init_diffEditorItemTemplate = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/multiDiffEditor/diffEditorItemTemplate.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/multiDiffEditor/diffEditorItemTemplate.js"() {
     init_dom();
     init_button2();
     init_codicons();
@@ -151597,7 +151597,7 @@ var init_diffEditorItemTemplate = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/multiDiffEditor/multiDiffEditorOptions.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/multiDiffEditor/multiDiffEditorOptions.js
 function getMultiDiffEditorVariantConfiguration(variant) {
   switch (variant) {
     case "noCardsNonCompact":
@@ -151630,11 +151630,11 @@ function getMultiDiffEditorVariantConfiguration(variant) {
   }
 }
 var init_multiDiffEditorOptions = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/multiDiffEditor/multiDiffEditorOptions.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/multiDiffEditor/multiDiffEditorOptions.js"() {
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/multiDiffEditor/compressedVirtualizedScrollLayout.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/multiDiffEditor/compressedVirtualizedScrollLayout.js
 function asLayoutRevision(value) {
   return value;
 }
@@ -151767,19 +151767,19 @@ function assertNonNegative(name, value) {
   }
 }
 var init_compressedVirtualizedScrollLayout = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/multiDiffEditor/compressedVirtualizedScrollLayout.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/multiDiffEditor/compressedVirtualizedScrollLayout.js"() {
     init_errors();
     init_offsetRange();
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/multiDiffEditor/compressedVirtualizedScrollView.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/multiDiffEditor/compressedVirtualizedScrollView.js
 function arrayEquals2(a, b2) {
   return a.length === b2.length && a.every((value, index) => value === b2[index]);
 }
 var scrollDirectionRetentionDurationMs, CompressedVirtualizedScrollView;
 var init_compressedVirtualizedScrollView = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/multiDiffEditor/compressedVirtualizedScrollView.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/multiDiffEditor/compressedVirtualizedScrollView.js"() {
     init_dom();
     init_scrollableElement();
     init_arrays();
@@ -152071,7 +152071,7 @@ var init_compressedVirtualizedScrollView = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/multiDiffEditor/multiDiffEditorLogging.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/multiDiffEditor/multiDiffEditorLogging.js
 function formatUri(uri) {
   if (!uri) {
     return "<none>";
@@ -152110,7 +152110,7 @@ function formatValue2(value) {
 }
 var MultiDiffEditorLogger;
 var init_multiDiffEditorLogging = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/multiDiffEditor/multiDiffEditorLogging.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/multiDiffEditor/multiDiffEditorLogging.js"() {
     init_lifecycle();
     init_observableInternal();
     init_resources();
@@ -152206,10 +152206,10 @@ var init_multiDiffEditorLogging = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/multiDiffEditor/style.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/multiDiffEditor/style.css
 var css57;
 var init_style2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/multiDiffEditor/style.css"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/multiDiffEditor/style.css"() {
     css57 = "/*---------------------------------------------------------------------------------------------\n *  Copyright (c) Microsoft Corporation. All rights reserved.\n *  Licensed under the MIT License. See License.txt in the project root for license information.\n *--------------------------------------------------------------------------------------------*/\n\n.monaco-component.multiDiffEditor {\n	position: relative;\n	width: 100%;\n	height: 100%;\n	overflow-y: hidden;\n	background: var(--vscode-multiDiffEditor-background);\n\n	> div {\n		position: absolute;\n		top: 0;\n		left: 0;\n		width: 100%;\n		height: 100%;\n\n		&.placeholder {\n			display: grid;\n			place-items: center;\n			place-content: center;\n			visibility: hidden;\n\n			&.visible {\n				visibility: visible;\n			}\n		}\n	}\n\n	> .multi-diff-root-floating-menu {\n		position: absolute;\n		inset: auto var(--vscode-spacing-size280) var(--vscode-spacing-size240) auto;\n		width: auto;\n	}\n\n	.active {\n		--vscode-multiDiffEditor-border: var(--vscode-focusBorder);\n	}\n\n	.multiDiffEntry {\n		display: flex;\n		flex: 1;\n		flex-direction: column;\n		overflow: hidden;\n\n		.collapse-button {\n			cursor: pointer;\n		}\n\n		.header {\n			z-index: 1000;\n\n			.header-content {\n				display: flex;\n				align-items: center;\n				color: var(--vscode-foreground);\n\n				&.shadow {\n					box-shadow: var(--vscode-scrollbar-shadow) 0 6px 6px -6px;\n				}\n\n				.file-path {\n					display: flex;\n					flex: 1 1 auto;\n					min-width: 0;\n					overflow: hidden;\n\n					.title {\n						flex: 0 1 auto;\n						min-width: 0;\n						overflow: hidden;\n						line-height: 22px;\n						text-overflow: ellipsis;\n\n						&.modified {\n							display: flex;\n							align-items: center;\n						}\n\n						&.modified > .monaco-icon-label {\n							flex: 0 1 auto;\n							min-width: 0;\n						}\n\n						&.original {\n							flex: 1 1 auto;\n						}\n					}\n\n					.multi-diff-resource-label-accessory:empty {\n						display: none;\n					}\n\n					.status:not(.added):not(.deleted):not(.renamed) {\n						display: none;\n					}\n				}\n\n				.actions {\n					flex: 0 0 auto;\n				}\n			}\n		}\n\n		.editorParent {\n			display: flex;\n			flex: 1;\n			flex-direction: column;\n			overflow: hidden;\n		}\n\n		.editorContainer {\n			flex: 1;\n		}\n\n		.binary-file-placeholder {\n			display: none;\n			flex: 1;\n			place-items: center;\n			color: var(--vscode-descriptionForeground);\n\n			&:focus-visible {\n				outline: var(--vscode-strokeThickness) solid var(--vscode-focusBorder);\n				outline-offset: calc(-1 * var(--vscode-strokeThickness));\n			}\n\n			.binary-file-placeholder-content {\n				display: flex;\n				flex-direction: column;\n				align-items: center;\n				gap: var(--vscode-spacing-size80);\n			}\n		}\n	}\n\n	&.multiDiffEditor-standard {\n		.multiDiffEntry {\n			.collapse-button {\n				margin: 0 var(--vscode-spacing-size60);\n\n				a {\n					display: block;\n				}\n			}\n\n			.header {\n				background: var(--vscode-editor-background);\n\n				&:not(.collapsed) .header-content {\n					border-bottom: var(--vscode-strokeThickness) solid var(--vscode-sideBarSectionHeader-border);\n				}\n\n				.header-content {\n					margin: var(--vscode-spacing-size80) 0 0;\n					padding: var(--vscode-spacing-size40) var(--vscode-spacing-size60);\n					border-top: var(--vscode-strokeThickness) solid var(--vscode-multiDiffEditor-border);\n					background: var(--vscode-multiDiffEditor-headerBackground);\n\n					.file-path {\n						.title {\n							font-size: 14px;\n						}\n\n						.status {\n							margin: 0 var(--vscode-spacing-size100);\n							font-weight: var(--vscode-fontWeight-semiBold);\n							line-height: 22px;\n							opacity: 0.75;\n						}\n					}\n\n					.actions {\n						padding: 0 var(--vscode-spacing-size80);\n					}\n				}\n			}\n\n			.editorParent {\n				border-bottom: var(--vscode-strokeThickness) solid var(--vscode-multiDiffEditor-border);\n			}\n		}\n	}\n\n	&.multiDiffEditor-compact {\n		.multiDiffEntry {\n			box-sizing: border-box;\n\n			&::after {\n				position: absolute;\n				right: var(--vscode-spacing-size100);\n				bottom: 0;\n				left: var(--vscode-spacing-size100);\n				z-index: 1001;\n				height: var(--vscode-strokeThickness);\n				pointer-events: none;\n				content: '';\n				background: var(--vscode-panel-border);\n			}\n\n			&.header-hovered,\n			&.header-focused {\n				z-index: 1002;\n				overflow: visible;\n			}\n\n			&.header-hovered::after,\n			&.header-focused::after {\n				right: 0;\n				left: 0;\n				z-index: 1004;\n			}\n\n			&.header-hovered::before,\n			&.header-focused::before {\n				position: absolute;\n				top: calc(-1 * var(--vscode-strokeThickness));\n				right: 0;\n				left: 0;\n				z-index: 1004;\n				height: var(--vscode-strokeThickness);\n				pointer-events: none;\n				content: '';\n				background: var(--vscode-panel-border);\n			}\n\n			&.first-diff-entry.header-hovered::before,\n			&.first-diff-entry.header-focused::before {\n				top: 0;\n			}\n\n			.collapse-button {\n				margin: 0 var(--vscode-spacing-size60);\n\n				a {\n					display: flex;\n					align-items: center;\n					justify-content: center;\n					padding: var(--vscode-spacing-size40);\n					border-radius: var(--vscode-cornerRadius-medium);\n\n					&:hover {\n						background: var(--vscode-toolbar-hoverBackground);\n					}\n\n					&:active {\n						background: var(--vscode-toolbar-activeBackground);\n					}\n\n					&:focus-visible {\n						outline: var(--vscode-strokeThickness) solid var(--vscode-focusBorder);\n						outline-offset: calc(-1 * var(--vscode-strokeThickness));\n					}\n\n					&:focus:not(:focus-visible) {\n						outline: none;\n					}\n				}\n			}\n\n			.header {\n				position: relative;\n				background: var(--vscode-multiDiffEditor-background);\n\n				&[role='button'] {\n					cursor: pointer;\n				}\n\n				.header-content {\n					box-sizing: border-box;\n					height: var(--vscode-spacing-size320);\n					margin: 0;\n					padding: 0;\n					border: none;\n					background: transparent;\n\n					.file-path {\n						.title {\n							font-size: var(--vscode-fontSize-body1);\n						}\n\n						.status {\n							display: inline-flex;\n							align-items: center;\n							justify-content: center;\n							width: var(--vscode-spacing-size160);\n							min-width: var(--vscode-spacing-size160);\n							margin: 0 var(--vscode-spacing-size100);\n							font-size: var(--vscode-fontSize-body2);\n							font-weight: var(--vscode-fontWeight-semiBold);\n							line-height: 22px;\n							opacity: 0.9;\n\n							&.added {\n								color: var(--vscode-gitDecoration-addedResourceForeground);\n							}\n\n							&.deleted {\n								color: var(--vscode-gitDecoration-deletedResourceForeground);\n							}\n\n							&.renamed {\n								color: var(--vscode-gitDecoration-modifiedResourceForeground);\n							}\n						}\n					}\n\n					.actions {\n						padding: 0 var(--vscode-spacing-size80);\n\n						.actions-container {\n							gap: var(--vscode-spacing-size40);\n\n							.action-item:not(.multi-diff-action-always-visible) {\n								visibility: hidden;\n							}\n\n							.action-item:not(.checkbox-action-item) .action-label {\n								padding: var(--vscode-spacing-size40);\n							}\n						}\n					}\n				}\n\n				&:hover .header-content {\n					background: var(--vscode-list-hoverBackground);\n				}\n\n				&:active .header-content {\n					background: var(--vscode-toolbar-activeBackground);\n				}\n\n				&[aria-expanded='false'] + .editorParent {\n					border: none;\n				}\n\n				&:focus {\n					outline: none;\n				}\n\n				&:focus-visible .header-content {\n					outline: var(--vscode-strokeThickness) solid var(--vscode-focusBorder);\n					outline-offset: calc(-1 * var(--vscode-strokeThickness));\n				}\n			}\n\n			&:hover .header .header-content .actions .actions-container .action-item,\n			&:focus-within .header .header-content .actions .actions-container .action-item {\n				visibility: visible;\n			}\n\n			.editorParent {\n				border: none;\n			}\n		}\n\n		&:focus-within .multiDiffEntry.active {\n			z-index: 1002;\n			overflow: visible;\n		}\n\n		&:focus-within .multiDiffEntry.active::after {\n			right: 0;\n			left: 0;\n			z-index: 1004;\n		}\n\n		&:focus-within .multiDiffEntry.active::before {\n			position: absolute;\n			top: calc(-1 * var(--vscode-strokeThickness));\n			right: 0;\n			left: 0;\n			z-index: 1004;\n			height: var(--vscode-strokeThickness);\n			pointer-events: none;\n			content: '';\n			background: var(--vscode-panel-border);\n		}\n\n		&:focus-within .multiDiffEntry.first-diff-entry.active::before {\n			top: 0;\n		}\n\n		&:focus-within .multiDiffEntry.active .header .header-content,\n		&:focus-within .multiDiffEntry.active .header:hover .header-content,\n		&:focus-within .multiDiffEntry.active .header:active .header-content {\n			background: var(--vscode-list-inactiveSelectionBackground);\n		}\n\n		.diff-hidden-lines .center {\n			overflow: hidden;\n			box-shadow: none;\n		}\n\n		.diff-hidden-lines .first {\n			box-sizing: border-box;\n			justify-content: flex-start;\n			padding-left: var(--vscode-spacing-size60);\n		}\n\n		.fold-unchanged {\n			box-sizing: border-box;\n		}\n\n		.editor.original .diff-hidden-lines .center {\n			border-top-left-radius: var(--vscode-cornerRadius-medium);\n			border-bottom-left-radius: var(--vscode-cornerRadius-medium);\n		}\n\n		.editor.modified .diff-hidden-lines .center {\n			border-top-right-radius: var(--vscode-cornerRadius-medium);\n			border-bottom-right-radius: var(--vscode-cornerRadius-medium);\n		}\n	}\n\n	&.multiDiffEditor-card {\n		.multiDiffEntry {\n			padding: 0 var(--vscode-spacing-size80);\n\n			&::before,\n			&::after {\n				display: none;\n				content: none;\n			}\n\n			.header {\n				.header-content {\n					margin: var(--vscode-spacing-size40) 0 0;\n					border: var(--vscode-strokeThickness) solid var(--vscode-widget-border, var(--vscode-editorWidget-border, transparent));\n					border-bottom: none;\n					border-radius: var(--vscode-cornerRadius-medium) var(--vscode-cornerRadius-medium) 0 0;\n					background: var(--vscode-sideBarSectionHeader-background);\n				}\n\n				&[aria-expanded='false'] .header-content {\n					border-bottom: var(--vscode-strokeThickness) solid var(--vscode-widget-border, var(--vscode-editorWidget-border, transparent));\n					border-radius: var(--vscode-cornerRadius-medium);\n				}\n\n				&:hover .header-content {\n					background:\n						linear-gradient(var(--vscode-toolbar-hoverBackground, transparent), var(--vscode-toolbar-hoverBackground, transparent)),\n						var(--vscode-sideBarSectionHeader-background);\n				}\n\n				&:active .header-content {\n					background:\n						linear-gradient(var(--vscode-toolbar-activeBackground, transparent), var(--vscode-toolbar-activeBackground, transparent)),\n						var(--vscode-sideBarSectionHeader-background);\n				}\n			}\n\n			.editorParent {\n				overflow: hidden;\n				border: var(--vscode-strokeThickness) solid var(--vscode-widget-border, var(--vscode-editorWidget-border, transparent));\n				border-top: none;\n				border-radius: 0 0 var(--vscode-cornerRadius-medium) var(--vscode-cornerRadius-medium);\n			}\n\n			&:focus-within .header .header-content {\n				border-color: var(--vscode-focusBorder) var(--vscode-focusBorder) transparent var(--vscode-focusBorder);\n				background:\n					linear-gradient(var(--vscode-list-focusBackground, transparent), var(--vscode-list-focusBackground, transparent)),\n					var(--vscode-sideBarSectionHeader-background);\n			}\n\n			&:focus-within .header[aria-expanded='false'] .header-content {\n				border-bottom-color: var(--vscode-focusBorder);\n			}\n\n			&:focus-within .editorParent {\n				border-color: var(--vscode-widget-border, var(--vscode-editorWidget-border, transparent)) var(--vscode-focusBorder) var(--vscode-focusBorder) var(--vscode-focusBorder);\n			}\n\n			.header.shadow[aria-expanded='true'] .header-content {\n				height: calc(var(--vscode-spacing-size320) + var(--vscode-spacing-size40));\n				margin-top: 0;\n				border-top-color: transparent;\n				border-radius: 0;\n				box-shadow: var(--vscode-scrollbar-shadow) 0 6px 6px -6px;\n			}\n		}\n\n		&:focus-within .multiDiffEntry.active .header .header-content,\n		&:focus-within .multiDiffEntry.active .header:hover .header-content,\n		&:focus-within .multiDiffEntry.active .header:active .header-content {\n			background:\n				linear-gradient(var(--vscode-list-focusBackground, transparent), var(--vscode-list-focusBackground, transparent)),\n				var(--vscode-sideBarSectionHeader-background);\n		}\n	}\n}\n\n:is(.hc-black, .hc-light) .monaco-component.multiDiffEditor.multiDiffEditor-card .multiDiffEntry:focus-within {\n	.header .header-content {\n		border-color: var(--vscode-contrastActiveBorder, var(--vscode-focusBorder)) var(--vscode-contrastActiveBorder, var(--vscode-focusBorder)) transparent var(--vscode-contrastActiveBorder, var(--vscode-focusBorder));\n	}\n\n	.header[aria-expanded='false'] .header-content {\n		border-bottom-color: var(--vscode-contrastActiveBorder, var(--vscode-focusBorder));\n	}\n\n	.editorParent {\n		border-color: var(--vscode-widget-border, var(--vscode-editorWidget-border, transparent)) var(--vscode-contrastActiveBorder, var(--vscode-focusBorder)) var(--vscode-contrastActiveBorder, var(--vscode-focusBorder)) var(--vscode-contrastActiveBorder, var(--vscode-focusBorder));\n	}\n\n	.header.shadow[aria-expanded='true'] .header-content {\n		border-top-color: transparent;\n	}\n}\n";
     if (typeof document !== "undefined" && !document.getElementById("tether-monaco-6a18c5754619")) {
       const style = document.createElement("style");
@@ -152220,7 +152220,7 @@ var init_style2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/multiDiffEditor/multiDiffEditorWidgetImpl.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/multiDiffEditor/multiDiffEditorWidgetImpl.js
 function highlightRange(targetEditor, range2) {
   const modelNow = targetEditor.getModel();
   const decorations = targetEditor.createDecorationsCollection([{ range: range2, options: { description: "symbol-navigate-action-highlight", className: "symbolHighlight" } }]);
@@ -152235,7 +152235,7 @@ function serializeOffsetRange(range2) {
 }
 var __decorate81, __param74, MultiDiffEditorWidgetImpl, VirtualizedViewItem;
 var init_multiDiffEditorWidgetImpl = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/multiDiffEditor/multiDiffEditorWidgetImpl.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/multiDiffEditor/multiDiffEditorWidgetImpl.js"() {
     init_dom();
     init_errors();
     init_lifecycle();
@@ -152810,10 +152810,10 @@ var init_multiDiffEditorWidgetImpl = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/multiDiffEditor/multiDiffEditorWidget.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/multiDiffEditor/multiDiffEditorWidget.js
 var __decorate82, __param75, MultiDiffEditorWidget;
 var init_multiDiffEditorWidget = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/multiDiffEditor/multiDiffEditorWidget.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/browser/widget/multiDiffEditor/multiDiffEditorWidget.js"() {
     init_hotReloadHelpers();
     init_lifecycle();
     init_observableInternal();
@@ -152896,7 +152896,7 @@ var init_multiDiffEditorWidget = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/standaloneEditor.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/standaloneEditor.js
 function create2(domElement, options, override) {
   const instantiationService = StandaloneServices.initialize(override || {});
   return instantiationService.createInstance(StandaloneEditor, domElement, options);
@@ -153248,7 +153248,7 @@ function createMonacoEditorAPI() {
   };
 }
 var init_standaloneEditor = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/standaloneEditor.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/standaloneEditor.js"() {
     init_window();
     init_lifecycle();
     init_strings();
@@ -153284,7 +153284,7 @@ var init_standaloneEditor = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/common/monarch/monarchCompile.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/common/monarch/monarchCompile.js
 function isArrayOf(elemType, obj) {
   if (!obj) {
     return false;
@@ -153717,7 +153717,7 @@ function compile(languageId, json) {
 }
 var Rule;
 var init_monarchCompile = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/common/monarch/monarchCompile.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/common/monarch/monarchCompile.js"() {
     init_types();
     init_monarchCommon();
     Rule = class {
@@ -153755,7 +153755,7 @@ var init_monarchCompile = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/standaloneLanguages.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/standaloneLanguages.js
 function register3(language29) {
   ModesRegistry.registerLanguage(language29);
 }
@@ -154099,7 +154099,7 @@ function createMonacoLanguagesAPI() {
 }
 var EncodedTokenizationSupportAdapter, TokenizationSupportAdapter;
 var init_standaloneLanguages = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/standaloneLanguages.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/standalone/browser/standaloneLanguages.js"() {
     init_color();
     init_range();
     init_languages();
@@ -154222,10 +154222,10 @@ var init_standaloneLanguages = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/contrib/editorState/browser/keybindingCancellation.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/contrib/editorState/browser/keybindingCancellation.js
 var IEditorCancellationTokens, ctxCancellableOperation;
 var init_keybindingCancellation = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/contrib/editorState/browser/keybindingCancellation.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/contrib/editorState/browser/keybindingCancellation.js"() {
     init_editorExtensions();
     init_contextkey();
     init_cancellation();
@@ -154296,9 +154296,9 @@ var init_keybindingCancellation = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/contrib/editorState/browser/editorState.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/contrib/editorState/browser/editorState.js
 var init_editorState = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/contrib/editorState/browser/editorState.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/contrib/editorState/browser/editorState.js"() {
     init_strings();
     init_range();
     init_cancellation();
@@ -154307,19 +154307,19 @@ var init_editorState = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/contrib/format/browser/formattingEdit.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/contrib/format/browser/formattingEdit.js
 var init_formattingEdit = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/contrib/format/browser/formattingEdit.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/contrib/format/browser/formattingEdit.js"() {
     init_editOperation();
     init_range();
     init_stableEditorScroll();
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/extensions/common/extensions.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/extensions/common/extensions.js
 var ExtensionIdentifier, ExtensionIdentifierSet;
 var init_extensions2 = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/extensions/common/extensions.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/platform/extensions/common/extensions.js"() {
     ExtensionIdentifier = class {
       constructor(value) {
         this.value = value;
@@ -154354,7 +154354,7 @@ var init_extensions2 = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/contrib/format/browser/format.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/contrib/format/browser/format.js
 function getRealAndSyntheticDocumentFormattersOrdered(documentFormattingEditProvider, documentRangeFormattingEditProvider, model) {
   const result = [];
   const seen = new ExtensionIdentifierSet();
@@ -154434,7 +154434,7 @@ function ensureFormattingOptions(options, reference) {
 }
 var FormattingConflicts;
 var init_format = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/contrib/format/browser/format.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/contrib/format/browser/format.js"() {
     init_arrays();
     init_cancellation();
     init_errors();
@@ -154520,7 +154520,7 @@ var init_format = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/editor.api.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/editor.api.js
 var editor_api_exports = {};
 __export(editor_api_exports, {
   CancellationTokenSource: () => CancellationTokenSource2,
@@ -154540,7 +154540,7 @@ __export(editor_api_exports, {
 });
 var api, CancellationTokenSource2, Emitter2, KeyCode2, KeyMod2, Position2, Range3, Selection2, SelectionDirection2, MarkerSeverity3, MarkerTag2, Uri2, Token3, editor, languages, monacoEnvironment, globalWithAMD;
 var init_editor_api = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/editor.api.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/editor/editor.api.js"() {
     init_editorOptions();
     init_editorBaseApi();
     init_standaloneEditor();
@@ -154594,7 +154594,7 @@ var init_editor_api = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/python/python.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/python/python.js
 var python_exports = {};
 __export(python_exports, {
   conf: () => conf,
@@ -154602,7 +154602,7 @@ __export(python_exports, {
 });
 var conf, language;
 var init_python = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/python/python.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/python/python.js"() {
     init_editor_api();
     conf = {
       comments: {
@@ -154897,7 +154897,7 @@ var init_python = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/cpp/cpp.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/cpp/cpp.js
 var cpp_exports = {};
 __export(cpp_exports, {
   conf: () => conf2,
@@ -154905,7 +154905,7 @@ __export(cpp_exports, {
 });
 var conf2, language2;
 var init_cpp = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/cpp/cpp.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/cpp/cpp.js"() {
     conf2 = {
       comments: {
         lineComment: "//",
@@ -155295,7 +155295,7 @@ var init_cpp = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/java/java.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/java/java.js
 var java_exports = {};
 __export(java_exports, {
   conf: () => conf3,
@@ -155303,7 +155303,7 @@ __export(java_exports, {
 });
 var conf3, language3;
 var init_java = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/java/java.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/java/java.js"() {
     conf3 = {
       // the default separators except `@$`
       wordPattern: /(-?\d*\.\d\w*)|([^\`\~\!\#\%\^\&\*\(\)\-\=\+\[\{\]\}\\\|\;\:\'\"\,\.\<\>\/\?\s]+)/g,
@@ -155536,7 +155536,7 @@ var init_java = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/typescript/typescript.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/typescript/typescript.js
 var typescript_exports = {};
 __export(typescript_exports, {
   conf: () => conf4,
@@ -155544,7 +155544,7 @@ __export(typescript_exports, {
 });
 var conf4, language4;
 var init_typescript = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/typescript/typescript.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/typescript/typescript.js"() {
     init_editor_api();
     conf4 = {
       wordPattern: /(-?\d*\.\d\w*)|([^\`\~\!\@\#\%\^\&\*\(\)\-\=\+\[\{\]\}\\\|\;\:\'\"\,\.\<\>\/\?\s]+)/g,
@@ -155881,7 +155881,7 @@ var init_typescript = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/javascript/javascript.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/javascript/javascript.js
 var javascript_exports = {};
 __export(javascript_exports, {
   conf: () => conf5,
@@ -155889,7 +155889,7 @@ __export(javascript_exports, {
 });
 var conf5, language5;
 var init_javascript = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/javascript/javascript.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/javascript/javascript.js"() {
     init_typescript();
     conf5 = conf4;
     language5 = {
@@ -155960,7 +155960,7 @@ var init_javascript = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/markdown/markdown.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/markdown/markdown.js
 var markdown_exports = {};
 __export(markdown_exports, {
   conf: () => conf6,
@@ -155968,7 +155968,7 @@ __export(markdown_exports, {
 });
 var conf6, language6;
 var init_markdown = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/markdown/markdown.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/markdown/markdown.js"() {
     conf6 = {
       comments: {
         blockComment: ["<!--", "-->"]
@@ -156198,7 +156198,7 @@ var init_markdown = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/css/css.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/css/css.js
 var css_exports = {};
 __export(css_exports, {
   conf: () => conf7,
@@ -156206,7 +156206,7 @@ __export(css_exports, {
 });
 var conf7, language7;
 var init_css = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/css/css.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/css/css.js"() {
     conf7 = {
       wordPattern: /(#?-?\d*\.\d\w*%?)|((::|[@#.!:])?[\w-?]+%?)|::|[@#.!:]/g,
       comments: {
@@ -156392,7 +156392,7 @@ var init_css = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/html/html.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/html/html.js
 var html_exports = {};
 __export(html_exports, {
   conf: () => conf8,
@@ -156400,7 +156400,7 @@ __export(html_exports, {
 });
 var EMPTY_ELEMENTS, conf8, language8;
 var init_html = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/html/html.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/html/html.js"() {
     init_editor_api();
     EMPTY_ELEMENTS = [
       "area",
@@ -156703,7 +156703,7 @@ var init_html = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/ini/ini.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/ini/ini.js
 var ini_exports = {};
 __export(ini_exports, {
   conf: () => conf9,
@@ -156711,7 +156711,7 @@ __export(ini_exports, {
 });
 var conf9, language9;
 var init_ini = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/ini/ini.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/ini/ini.js"() {
     conf9 = {
       comments: {
         lineComment: "#"
@@ -156783,7 +156783,7 @@ var init_ini = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/yaml/yaml.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/yaml/yaml.js
 var yaml_exports = {};
 __export(yaml_exports, {
   conf: () => conf10,
@@ -156791,7 +156791,7 @@ __export(yaml_exports, {
 });
 var conf10, language10;
 var init_yaml = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/yaml/yaml.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/yaml/yaml.js"() {
     init_editor_api();
     conf10 = {
       comments: {
@@ -156991,7 +156991,7 @@ var init_yaml = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/xml/xml.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/xml/xml.js
 var xml_exports = {};
 __export(xml_exports, {
   conf: () => conf11,
@@ -156999,7 +156999,7 @@ __export(xml_exports, {
 });
 var conf11, language11;
 var init_xml = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/xml/xml.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/xml/xml.js"() {
     init_editor_api();
     conf11 = {
       comments: {
@@ -157088,7 +157088,7 @@ var init_xml = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/sql/sql.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/sql/sql.js
 var sql_exports = {};
 __export(sql_exports, {
   conf: () => conf12,
@@ -157096,7 +157096,7 @@ __export(sql_exports, {
 });
 var conf12, language12;
 var init_sql = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/sql/sql.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/sql/sql.js"() {
     conf12 = {
       comments: {
         lineComment: "--",
@@ -157950,7 +157950,7 @@ var init_sql = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/shell/shell.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/shell/shell.js
 var shell_exports = {};
 __export(shell_exports, {
   conf: () => conf13,
@@ -157958,7 +157958,7 @@ __export(shell_exports, {
 });
 var conf13, language13;
 var init_shell = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/shell/shell.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/shell/shell.js"() {
     conf13 = {
       comments: {
         lineComment: "#"
@@ -158180,7 +158180,7 @@ var init_shell = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/powershell/powershell.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/powershell/powershell.js
 var powershell_exports = {};
 __export(powershell_exports, {
   conf: () => conf14,
@@ -158188,7 +158188,7 @@ __export(powershell_exports, {
 });
 var conf14, language14;
 var init_powershell = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/powershell/powershell.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/powershell/powershell.js"() {
     conf14 = {
       // the default separators except `$-`
       wordPattern: /(-?\d*\.\d\w*)|([^\`\~\!\@\#%\^\&\*\(\)\=\+\[\{\]\}\\\|\;\:\'\"\,\.\<\>\/\?\s]+)/g,
@@ -158428,7 +158428,7 @@ var init_powershell = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/go/go.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/go/go.js
 var go_exports = {};
 __export(go_exports, {
   conf: () => conf15,
@@ -158436,7 +158436,7 @@ __export(go_exports, {
 });
 var conf15, language15;
 var init_go = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/go/go.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/go/go.js"() {
     conf15 = {
       comments: {
         lineComment: "//",
@@ -158655,7 +158655,7 @@ var init_go = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/rust/rust.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/rust/rust.js
 var rust_exports = {};
 __export(rust_exports, {
   conf: () => conf16,
@@ -158663,7 +158663,7 @@ __export(rust_exports, {
 });
 var conf16, language16;
 var init_rust = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/rust/rust.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/rust/rust.js"() {
     conf16 = {
       comments: {
         lineComment: "//",
@@ -159007,7 +159007,7 @@ var init_rust = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/csharp/csharp.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/csharp/csharp.js
 var csharp_exports = {};
 __export(csharp_exports, {
   conf: () => conf17,
@@ -159015,7 +159015,7 @@ __export(csharp_exports, {
 });
 var conf17, language17;
 var init_csharp = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/csharp/csharp.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/csharp/csharp.js"() {
     conf17 = {
       wordPattern: /(-?\d*\.\d\w*)|([^\`\~\!\#\$\%\^\&\*\(\)\-\=\+\[\{\]\}\\\|\;\:\'\"\,\.\<\>\/\?\s]+)/g,
       comments: {
@@ -159342,7 +159342,7 @@ var init_csharp = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/php/php.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/php/php.js
 var php_exports = {};
 __export(php_exports, {
   conf: () => conf18,
@@ -159350,7 +159350,7 @@ __export(php_exports, {
 });
 var conf18, language18;
 var init_php = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/php/php.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/php/php.js"() {
     conf18 = {
       wordPattern: /(-?\d*\.\d\w*)|([^\`\~\!\@\#\%\^\&\*\(\)\-\=\+\[\{\]\}\\\|\;\:\'\"\,\.\<\>\/\?\s]+)/g,
       comments: {
@@ -159851,7 +159851,7 @@ var init_php = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/ruby/ruby.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/ruby/ruby.js
 var ruby_exports = {};
 __export(ruby_exports, {
   conf: () => conf19,
@@ -159859,7 +159859,7 @@ __export(ruby_exports, {
 });
 var conf19, language19;
 var init_ruby = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/ruby/ruby.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/ruby/ruby.js"() {
     conf19 = {
       comments: {
         lineComment: "#",
@@ -160371,7 +160371,7 @@ var init_ruby = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/swift/swift.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/swift/swift.js
 var swift_exports = {};
 __export(swift_exports, {
   conf: () => conf20,
@@ -160379,7 +160379,7 @@ __export(swift_exports, {
 });
 var conf20, language20;
 var init_swift = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/swift/swift.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/swift/swift.js"() {
     conf20 = {
       comments: {
         lineComment: "//",
@@ -160689,7 +160689,7 @@ var init_swift = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/kotlin/kotlin.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/kotlin/kotlin.js
 var kotlin_exports = {};
 __export(kotlin_exports, {
   conf: () => conf21,
@@ -160697,7 +160697,7 @@ __export(kotlin_exports, {
 });
 var conf21, language21;
 var init_kotlin = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/kotlin/kotlin.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/kotlin/kotlin.js"() {
     conf21 = {
       // the default separators except `@$`
       wordPattern: /(-?\d*\.\d\w*)|([^\`\~\!\#\%\^\&\*\(\)\-\=\+\[\{\]\}\\\|\;\:\'\"\,\.\<\>\/\?\s]+)/g,
@@ -160950,7 +160950,7 @@ var init_kotlin = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/lua/lua.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/lua/lua.js
 var lua_exports = {};
 __export(lua_exports, {
   conf: () => conf22,
@@ -160958,7 +160958,7 @@ __export(lua_exports, {
 });
 var conf22, language22;
 var init_lua = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/lua/lua.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/lua/lua.js"() {
     conf22 = {
       comments: {
         lineComment: "--",
@@ -161121,7 +161121,7 @@ var init_lua = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/r/r.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/r/r.js
 var r_exports = {};
 __export(r_exports, {
   conf: () => conf23,
@@ -161129,7 +161129,7 @@ __export(r_exports, {
 });
 var conf23, language23;
 var init_r = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/r/r.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/r/r.js"() {
     conf23 = {
       comments: {
         lineComment: "#"
@@ -161373,7 +161373,7 @@ var init_r = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/perl/perl.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/perl/perl.js
 var perl_exports = {};
 __export(perl_exports, {
   conf: () => conf24,
@@ -161381,7 +161381,7 @@ __export(perl_exports, {
 });
 var conf24, language24;
 var init_perl = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/perl/perl.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/perl/perl.js"() {
     conf24 = {
       comments: {
         lineComment: "#"
@@ -162008,7 +162008,7 @@ var init_perl = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/dart/dart.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/dart/dart.js
 var dart_exports = {};
 __export(dart_exports, {
   conf: () => conf25,
@@ -162016,7 +162016,7 @@ __export(dart_exports, {
 });
 var conf25, language25;
 var init_dart = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/dart/dart.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/dart/dart.js"() {
     conf25 = {
       comments: {
         lineComment: "//",
@@ -162298,7 +162298,7 @@ var init_dart = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/dockerfile/dockerfile.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/dockerfile/dockerfile.js
 var dockerfile_exports = {};
 __export(dockerfile_exports, {
   conf: () => conf26,
@@ -162306,7 +162306,7 @@ __export(dockerfile_exports, {
 });
 var conf26, language26;
 var init_dockerfile = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/dockerfile/dockerfile.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/dockerfile/dockerfile.js"() {
     conf26 = {
       brackets: [
         ["{", "}"],
@@ -162437,7 +162437,7 @@ var init_dockerfile = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/less/less.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/less/less.js
 var less_exports = {};
 __export(less_exports, {
   conf: () => conf27,
@@ -162445,7 +162445,7 @@ __export(less_exports, {
 });
 var conf27, language27;
 var init_less = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/less/less.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/less/less.js"() {
     conf27 = {
       wordPattern: /(#?-?\d*\.\d\w*%?)|([@#!.:]?[\w-?]+%?)|[@#!.]/g,
       comments: {
@@ -162607,7 +162607,7 @@ var init_less = __esm({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/scss/scss.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/scss/scss.js
 var scss_exports = {};
 __export(scss_exports, {
   conf: () => conf28,
@@ -162615,7 +162615,7 @@ __export(scss_exports, {
 });
 var conf28, language28;
 var init_scss = __esm({
-  "../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/scss/scss.js"() {
+  "../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/scss/scss.js"() {
     conf28 = {
       wordPattern: /(#?-?\d*\.\d\w*%?)|([@$#!.:]?[\w-?]+%?)|[@#!.]/g,
       comments: {
@@ -162880,7 +162880,7 @@ var init_scss = __esm({
 var import_react = __toESM(require_react(), 1);
 var import_client = __toESM(require_client(), 1);
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/@xterm/xterm/lib/xterm.mjs
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/@xterm/xterm/lib/xterm.mjs
 var zs = Object.defineProperty;
 var Rl = Object.getOwnPropertyDescriptor;
 var Ll = (s15, t) => {
@@ -171995,7 +171995,7 @@ var Dl = class extends D {
   }
 };
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/@xterm/addon-fit/lib/addon-fit.mjs
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/@xterm/addon-fit/lib/addon-fit.mjs
 var h = 2;
 var _ = 1;
 var o = class {
@@ -172019,7 +172019,7 @@ var o = class {
   }
 };
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/@xterm/xterm/css/xterm.css
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/@xterm/xterm/css/xterm.css
 var css = `/**
  * Copyright (c) 2014 The xterm.js authors. All rights reserved.
  * Copyright (c) 2012-2013, Christopher Jeffrey (MIT License)
@@ -174872,7 +174872,6 @@ function TargetFileExplorer({
   fileIcon,
   formatTime = () => "",
   formatSize = () => "",
-  limit = 10 * 1024 * 1024,
   emptyText = "\u7A7A\u6587\u4EF6\u5939",
   placeholder = "\u4ECE\u5DE6\u4FA7\u9009\u62E9\u5DE5\u4F5C\u533A\u6216\u78C1\u76D8",
   searchPlaceholder = "\u641C\u7D22\u5F53\u524D\u76EE\u5F55",
@@ -175013,9 +175012,8 @@ function TargetFileExplorer({
     const key = group + ":" + item.path;
     const children = treeChildren && treeChildren[item.path];
     const isOpen = !!(expanded && expanded[item.path]);
-    const oversized = !item.dir && Number(item.size) > limit;
     const openRow = () => {
-      if (disabled || oversized) return;
+      if (disabled) return;
       if (!item.dir) {
         if (onOpen) onOpen(item);
         return;
@@ -175035,7 +175033,7 @@ function TargetFileExplorer({
           {
             type: "button",
             title: item.path,
-            disabled: disabled || oversized,
+            disabled,
             "aria-expanded": item.dir ? isOpen : void 0,
             onClick: openRow,
             className: "tether-hover",
@@ -175054,8 +175052,7 @@ function TargetFileExplorer({
               font: "inherit",
               fontSize: 13,
               textAlign: "left",
-              cursor: disabled || oversized ? "default" : "pointer",
-              opacity: oversized ? 0.55 : 1
+              cursor: disabled ? "default" : "pointer"
             }
           },
           h3("span", {
@@ -175066,7 +175063,7 @@ function TargetFileExplorer({
           h3(
             "span",
             { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
-            item.name + (oversized ? " \xB7 \u8D85\u8FC7 10 MiB" : "")
+            item.name
           )
         )
       ),
@@ -175129,7 +175126,6 @@ function TargetFileExplorer({
     if (singleClickOpens && onOpen) onOpen(item);
   };
   const row = (item) => {
-    const oversized = !item.dir && Number(item.size) > limit;
     const selected = selectionMode === "multiple" ? (selectedPaths || []).includes(item.path) : selectedPath === item.path;
     return h3(
       "button",
@@ -175137,7 +175133,7 @@ function TargetFileExplorer({
         key: item.path,
         type: "button",
         title: item.path,
-        disabled: disabled || oversized,
+        disabled,
         "data-row-path": item.path,
         draggable: !!onDragItem,
         onDragStart: (event) => {
@@ -175182,8 +175178,7 @@ function TargetFileExplorer({
           font: "inherit",
           fontSize: compact ? 12.5 : 13,
           textAlign: "left",
-          cursor: disabled || oversized ? "default" : "pointer",
-          opacity: oversized ? 0.55 : 1,
+          cursor: disabled ? "default" : "pointer",
           userSelect: "none"
         }
       },
@@ -175198,7 +175193,7 @@ function TargetFileExplorer({
         h3(
           "span",
           { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
-          item.name + (oversized ? " \xB7 \u8D85\u8FC7 10 MiB" : "")
+          item.name
         )
       ),
       compact ? null : h3("span", { style: { color: C2.mute, fontSize: 11, whiteSpace: "nowrap" } }, formatTime(item.mtime)),
@@ -177851,6 +177846,494 @@ function createTerminalDock({ React: React2, Glyph, post, C: C2, device, cwd: cw
   );
 }
 
+// src/tether-glyph.js
+var TETHER_GLYPHS = {
+  workspace: { cap: "round", join: "round", parts: [
+    { d: "M14 12.05c0 .8-.65 1.45-1.46 1.45H3.46C2.65 13.5 2 12.85 2 12.05v-8.1c0-.8.65-1.45 1.46-1.45h2.4c.49 0 .94.24 1.21.65l.5.73c.27.4.73.65 1.21.65h3.76c.8 0 1.46.65 1.46 1.45v6.02Z" },
+    { d: "M8.7 8.1v3M11.2 8.1v3" }
+  ] },
+  files: { parts: [
+    { d: "M12.3994 13.5986H2.04956C1.49728 13.5986 1.04956 13.1509 1.04956 12.5986V3.40137C1.04956 2.84908 1.49728 2.40137 2.04956 2.40137H4.76632C5.01016 2.40137 5.24561 2.49046 5.42836 2.6519L6.94088 3.98799C7.12364 4.14943 7.35908 4.23852 7.60293 4.23852H12.3994C12.9517 4.23852 13.3994 4.68624 13.3994 5.23852V7.16991" },
+    { d: "M2.55911 7.93683C2.67584 7.49906 3.07229 7.19446 3.52536 7.19446H13.6491C14.3061 7.19446 14.7846 7.81725 14.6153 8.45209L13.4411 12.856C13.3244 13.2938 12.9279 13.5984 12.4748 13.5984H2.35113C1.69411 13.5984 1.21562 12.9756 1.38489 12.3407L2.55911 7.93683Z" }
+  ] },
+  devices: { parts: [
+    { d: "M7.99986 14.0887C11.3626 14.0887 14.0886 11.3627 14.0886 7.99998C14.0886 4.63727 11.3626 1.91125 7.99986 1.91125C4.63715 1.91125 1.91113 4.63727 1.91113 7.99998C1.91113 11.3627 4.63715 14.0887 7.99986 14.0887Z" },
+    { d: "M2.34619 8H13.6538", cap: "square" },
+    { d: "M7.99976 14.0889C9.23509 14.0889 10.1743 11.3629 10.1743 8.00006C10.1743 4.63739 9.23509 1.91138 7.99976 1.91138" },
+    { d: "M7.99973 14.0889C6.76445 14.0889 5.8252 11.3629 5.8252 8.00006C5.8252 4.63739 6.76445 1.91138 7.99973 1.91138" }
+  ] },
+  shield: { join: "round", parts: [
+    { d: "M6.80132 2.14853C7.70663 1.80917 8.70422 1.80919 9.60952 2.14859L14.1296 3.84317V7.11961C14.1296 11.6089 10.7615 13.5975 8.20543 14.5779C5.64931 13.5975 2.28052 11.6089 2.28052 7.11961V3.84317L6.80132 2.14853Z" }
+  ] },
+  gear: { join: "round", parts: [
+    { d: "M6.7 1.6h2.6l.35 1.55.62.26 1.32-.86 1.84 1.84-.86 1.32.26.62 1.55.35v2.6l-1.55.35-.26.62.86 1.32-1.84 1.84-1.32-.86-.62.26-.35 1.55H6.7l-.35-1.55-.62-.26-1.32.86-1.84-1.84.86-1.32-.26-.62L1.6 9.3V6.7l1.55-.35.26-.62-.86-1.32 1.84-1.84 1.32.86.62-.26z" },
+    { d: "M8 6.1a1.9 1.9 0 1 0 0 3.8 1.9 1.9 0 0 0 0-3.8Z" }
+  ] },
+  user: { join: "round", parts: [
+    { d: "M8 7.7a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" },
+    { d: "M3.1 13.7c.4-2.5 2.3-4 4.9-4s4.5 1.5 4.9 4" }
+  ] },
+  monitor: { parts: [
+    { d: "M2 3.2h12v8.1H2z" },
+    { d: "M6 13.8h4M8 11.3v2.5" }
+  ] },
+  apps: { cap: "round", join: "round", parts: [
+    { d: "M2.4 2.4h4.2v4.2H2.4z" },
+    { d: "M9.4 2.4h4.2v4.2H9.4z" },
+    { d: "M2.4 9.4h4.2v4.2H2.4z" },
+    { d: "M9.4 9.4h4.2v4.2H9.4z" }
+  ] },
+  bot: { cap: "round", join: "round", parts: [
+    { d: "M8 2.4v1.3" },
+    { d: "M6.9 2.4h2.2" },
+    { d: "M5 3.7h6a2.2 2.2 0 0 1 2.2 2.2v4.3A2.2 2.2 0 0 1 11 12.4H5a2.2 2.2 0 0 1-2.2-2.2V5.9A2.2 2.2 0 0 1 5 3.7Z" },
+    { d: "M2.8 6.3H1.9v2.8h.9M13.2 6.3h.9v2.8h-.9" },
+    { d: "M6.1 7.2v1.5M9.9 7.2v1.5" },
+    { d: "M3.6 13.8h8.8" }
+  ] },
+  refresh: { parts: [
+    { d: "M13 8a5 5 0 1 1-1.5-3.56" },
+    { d: "M13.2 2.3v3.1h-3.1" }
+  ] },
+  stop: { parts: [
+    { d: "M4.6 4.6h6.8v6.8H4.6z", fill: "currentColor", stroke: false }
+  ] },
+  eye: { parts: [
+    { d: "M1.8 8s2.2-4.2 6.2-4.2S14.2 8 14.2 8s-2.2 4.2-6.2 4.2S1.8 8 1.8 8z" },
+    { d: "M8 9.6A1.6 1.6 0 1 0 8 6.4a1.6 1.6 0 0 0 0 3.2z" }
+  ] },
+  pencil: { parts: [
+    { d: "M10.8 2.6l2.6 2.6-7.7 7.7-3.4.8.8-3.4z" },
+    { d: "M9.4 4l2.6 2.6" }
+  ] },
+  camera: { join: "round", parts: [
+    { d: "M2.2 5.4h2.2l1-1.6h4.2l1 1.6h2.2v7.1H2.2z" },
+    { d: "M8 11.3a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z" }
+  ] },
+  trash: { parts: [
+    { d: "M2.8 4.2h10.4M6 4.2V2.6h4v1.6M4.1 4.2l.7 9.2h6.4l.7-9.2" },
+    { d: "M6.8 6.7v4.6M9.2 6.7v4.6" }
+  ] },
+  arrowUp: { parts: [
+    { d: "M8 13V3M3.6 7.4L8 3l4.4 4.4" }
+  ] },
+  download: { parts: [
+    { d: "M8 2.2v7.4M4.8 6.8L8 10l3.2-3.2" },
+    { d: "M2.6 12.9h10.8" }
+  ] },
+  back: { parts: [
+    { d: "M10.2 3.2L5.4 8l4.8 4.8" }
+  ] },
+  forward: { parts: [
+    { d: "M5.8 3.2L10.6 8l-4.8 4.8" }
+  ] },
+  transfer: { parts: [
+    { d: "M8 1.4a6.6 6.6 0 1 0 0 13.2A6.6 6.6 0 0 0 8 1.4Z" },
+    { d: "M3.6 5.6h7.6M8.9 3.3l2.3 2.3-2.3 2.3" },
+    { d: "M12.4 10.4H4.8M7.1 8.1 4.8 10.4l2.3 2.3" }
+  ] },
+  link: { join: "round", parts: [
+    { d: "M6.4 9.6a2.5 2.5 0 0 0 3.5 0l2-2a2.5 2.5 0 1 0-3.5-3.5l-1 1" },
+    { d: "M9.6 6.4a2.5 2.5 0 0 0-3.5 0l-2 2a2.5 2.5 0 1 0 3.5 3.5l1-1" }
+  ] },
+  search: { parts: [
+    { d: "M7.1 12.2a5.1 5.1 0 1 0 0-10.2 5.1 5.1 0 0 0 0 10.2z" },
+    { d: "M11 11l3 3" }
+  ] },
+  save: { parts: [
+    { d: "M3 2.4h8.2L13.4 4.6v9H3z" },
+    { d: "M5.4 2.4v3.2h5V2.4" },
+    { d: "M5.4 9.2h5.2v4.4H5.4z" }
+  ] },
+  plus: { parts: [
+    { d: "M8 2V14" },
+    { d: "M2 8H14" }
+  ] },
+  chevronDown: { parts: [
+    { d: "M4 6L7.29289 9.29289C7.68342 9.68342 8.31658 9.68342 8.70711 9.29289L12 6" }
+  ] },
+  table: { parts: [
+    { d: "M2.6 3.4h10.8v9.2H2.6z" },
+    { d: "M2.6 6.4h10.8M6.4 6.4v6.2M9.6 6.4v6.2" }
+  ] },
+  plainText: { parts: [
+    { d: "M3 4.2h10M3 8h10M3 11.8h6.2" }
+  ] },
+  chevronRight: { parts: [
+    { d: "M6 12L9.29289 8.70711C9.68342 8.31658 9.68342 7.68342 9.29289 7.29289L6 4" }
+  ] },
+  chevronLeft: { parts: [
+    { d: "M10 4L6.70711 7.29289C6.31658 7.68342 6.31658 8.31658 6.70711 8.70711L10 12" }
+  ] },
+  think: { parts: [
+    { d: "M10.2854 5.71481C12.9673 8.39663 14.1182 11.5938 12.8562 12.8559C11.5942 14.1179 8.39706 12.9669 5.71518 10.2851C3.03333 7.60323 1.88236 4.40608 3.14441 3.14403C4.40644 1.882 7.6036 3.03297 10.2854 5.71481Z" },
+    { d: "M10.2854 10.2851C7.6036 12.9669 4.40644 14.1179 3.14441 12.8559C1.88236 11.5938 3.03333 8.39663 5.71518 5.71481C8.39706 3.03297 11.5942 1.882 12.8562 3.14403C14.1182 4.40608 12.9673 7.60323 10.2854 10.2851Z" },
+    { d: "M8.86291 8.0002C8.86291 8.47549 8.47762 8.86087 8.00224 8.86087C7.52694 8.86087 7.1416 8.47549 7.1416 8.0002C7.1416 7.52485 7.52694 7.13953 8.00224 7.13953C8.47762 7.13953 8.86291 7.52485 8.86291 8.0002Z", fill: "currentColor", stroke: false }
+  ] },
+  tool: { parts: [
+    { d: "M6.27612 1.5L4.52612 14.5" },
+    { d: "M11.4739 1.5L9.72388 14.5" },
+    { d: "M2.39868 5.5H14.0681" },
+    { d: "M1.93188 10.5H13.6013" }
+  ] },
+  folderPlus: { join: "round", parts: [
+    { d: "M1.8 5.2h12.4v7.2H1.8z" },
+    { d: "M1.8 5.2V3.6h4l1.4 1.6" },
+    { d: "M8 7.2v4M6 9.2h4" }
+  ] },
+  filePlus: { join: "round", parts: [
+    { d: "M3.6 2.2h5.6l3.2 3.2v8.4H3.6z" },
+    { d: "M9.2 2.2v3.4h3.2" },
+    { d: "M8 8v4M6 10h4" }
+  ] },
+  file: { parts: [
+    { d: "M4.9375 5.90295H11.0625" },
+    { d: "M4.9375 9.02991H8.27841" },
+    { d: "M12.5 1.32617C13.3039 1.32617 14 1.95171 14 2.77637V13.2246C13.9996 14.0489 13.3036 14.6738 12.5 14.6738H3.5C2.69637 14.6738 2.00042 14.0489 2 13.2246V2.77637C2 1.95171 2.69613 1.32617 3.5 1.32617H12.5ZM3.5 2.32617C3.1993 2.32617 3 2.55186 3 2.77637V13.2246C3.00044 13.4489 3.19963 13.6738 3.5 13.6738H12.5C12.8004 13.6738 12.9996 13.4489 13 13.2246V2.77637C13 2.55186 12.8007 2.32617 12.5 2.32617H3.5Z", fill: "currentColor", stroke: false }
+  ] },
+  folderOpen: { parts: [
+    { d: "M2.55912 7.93683C2.67584 7.49906 3.0723 7.19446 3.52536 7.19446H13.6491C14.3061 7.19446 14.7846 7.81725 14.6153 8.45209L13.4411 12.856C13.3244 13.2938 12.9279 13.5984 12.4748 13.5984H2.35113C1.69411 13.5984 1.21562 12.9756 1.38489 12.3407L2.55912 7.93683Z", fill: "currentColor", opacity: 0.16, stroke: false },
+    { d: "M13.6491 6.69446C14.6346 6.69453 15.3522 7.62895 15.0983 8.58118L13.9245 12.9845C13.7494 13.6412 13.1539 14.0988 12.4743 14.0988H2.35126C1.36574 14.0988 0.648153 13.1643 0.902044 12.212L2.07587 7.80774C2.25102 7.15128 2.84567 6.69455 3.52509 6.69446H13.6491ZM3.52509 7.69446C3.29865 7.69455 3.10004 7.84674 3.04169 8.06555L1.86786 12.4698C1.78345 12.7872 2.02285 13.0988 2.35126 13.0988H12.4743C12.7007 13.0988 12.8992 12.9463 12.9577 12.7277L14.1325 8.32336C14.2171 8.00598 13.9776 7.69453 13.6491 7.69446H3.52509Z", fill: "currentColor", stroke: false },
+    { d: "M4.7666 1.90137C5.13227 1.90144 5.48571 2.03525 5.75977 2.27734L7.27246 3.61328C7.36379 3.69382 7.48174 3.73828 7.60352 3.73828H12.3994C13.2276 3.73841 13.8993 4.41005 13.8994 5.23828V6.7168C13.8183 6.70327 13.735 6.69436 13.6494 6.69434H12.8994V5.23828C12.8993 4.96233 12.6754 4.73841 12.3994 4.73828H7.60352C7.23781 4.73828 6.88446 4.60438 6.61035 4.3623L5.09766 3.02637C5.00636 2.94576 4.88838 2.90144 4.7666 2.90137H2.0498C1.77366 2.90137 1.5498 3.12523 1.5498 3.40137V9.78223L0.902344 12.2119C0.648452 13.1642 1.36604 14.0986 2.35156 14.0986H2.0498C1.2214 14.0986 0.549838 13.427 0.549805 12.5986V3.40137C0.549805 2.57294 1.22138 1.90137 2.0498 1.90137H4.7666Z", fill: "currentColor", stroke: false }
+  ] },
+  folderClose: { parts: [
+    { d: "M1.50439 3.11059C1.50439 2.55831 1.95211 2.1106 2.50439 2.1106H5.43389C5.67773 2.1106 5.91318 2.19969 6.09593 2.36113L7.71649 3.79265C7.89924 3.95409 8.1347 4.04319 8.3785 4.04319H13.4958C14.0481 4.04319 14.4958 4.4909 14.4958 5.04319V12.8894C14.4958 13.4417 14.0481 13.8894 13.4958 13.8894H2.50439C1.95211 13.8894 1.50439 13.4417 1.50439 12.8894V4.04319V3.11059Z" },
+    { d: "M3.63501 7.66614H12.3647" }
+  ] },
+  terminal: { parts: [
+    { d: "M2.5 3.5h11v9h-11z" },
+    { d: "M4.5 6l2 2-2 2" },
+    { d: "M8.5 10h3" }
+  ] }
+};
+function createGlyph(React2) {
+  const h3 = React2.createElement;
+  return function Glyph({ name, size = 16, stroke }) {
+    const glyph = TETHER_GLYPHS[name] || { parts: [] };
+    return h3("svg", {
+      width: size,
+      height: size,
+      viewBox: "0 0 16 16",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: stroke == null ? 1 : stroke,
+      strokeLinecap: glyph.cap || "butt",
+      strokeLinejoin: glyph.join || "miter",
+      "aria-hidden": true
+    }, glyph.parts.map((part, index) => h3("path", {
+      key: index,
+      d: part.d,
+      fill: part.fill || "none",
+      stroke: part.stroke === false ? "none" : void 0,
+      opacity: part.opacity,
+      strokeLinecap: part.cap || glyph.cap || "butt"
+    })));
+  };
+}
+
+// src/tether-folder-pick-dialog.js
+function targetJoinPath(parent, name) {
+  const base = String(parent || "");
+  const separator2 = base.includes("\\") ? "\\" : "/";
+  return base.replace(/[\\/]+$/, "") + separator2 + name;
+}
+function pickRootOf(path, roots) {
+  const value = String(path || "").toLowerCase();
+  if (!value) return "";
+  const match2 = roots.find((item) => value === item.path.toLowerCase() || value.startsWith(item.path.toLowerCase().replace(/[\\/]+$/, "") + "\\") || value.startsWith(item.path.toLowerCase().replace(/[\\/]+$/, "") + "/"));
+  return match2 ? match2.path : "";
+}
+function formatPickTime(seconds) {
+  const value = Number(seconds);
+  if (!Number.isFinite(value) || value <= 0) return "";
+  const date = new Date(value * 1e3);
+  return date.toLocaleDateString([], { month: "2-digit", day: "2-digit" }) + " " + date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+function formatPickSize(bytes) {
+  const value = Number(bytes);
+  if (!Number.isFinite(value) || value < 0) return "";
+  if (value < 1024) return value + " B";
+  if (value < 1024 * 1024) return (value / 1024).toFixed(1) + " KB";
+  return (value / (1024 * 1024)).toFixed(1) + " MB";
+}
+function TetherFolderPickDialog({
+  React: React2,
+  C: C2,
+  Glyph,
+  api: api2,
+  post,
+  device,
+  kind = "folder",
+  multiple = false,
+  title = "",
+  loadRoots,
+  listDirectory,
+  onDone
+}) {
+  const h3 = React2.createElement;
+  const fileMode = kind === "file";
+  const DrawGlyph = Glyph || createGlyph(React2);
+  const [rootList, setRootList] = React2.useState({ workspaces: [], drives: [] });
+  const [deviceName, setDeviceName] = React2.useState(String(device || ""));
+  const [path, setPath] = React2.useState("");
+  const [entries2, setEntries] = React2.useState(null);
+  const [busy, setBusy] = React2.useState(false);
+  const [error, setError] = React2.useState("");
+  const [sort, setSort] = React2.useState({ key: "name", dir: "asc" });
+  const [search2, setSearch] = React2.useState("");
+  const [selectedPath, setSelectedPath] = React2.useState("");
+  const [selectedPaths, setSelectedPaths] = React2.useState([]);
+  const seq = React2.useRef(0);
+  const io = React2.useRef({ post, api: api2, device, loadRoots, listDirectory });
+  io.current = { post, api: api2, device, loadRoots, listDirectory };
+  const cancel = React2.useCallback(() => onDone(""), [onDone]);
+  React2.useEffect(() => {
+    const onKeyDown = (event) => {
+      if (event && event.key === "Escape") cancel();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [cancel]);
+  const enter = React2.useCallback(async (next) => {
+    const target = String(next || "").trim();
+    if (!target) return;
+    const ioNow = io.current;
+    const injected = typeof ioNow.listDirectory === "function";
+    if (!injected && !ioNow.device) return;
+    const current = seq.current + 1;
+    seq.current = current;
+    setBusy(true);
+    setError("");
+    setPath(target);
+    setEntries(null);
+    setSearch("");
+    setSelectedPath("");
+    setSelectedPaths([]);
+    try {
+      let listed;
+      if (injected) {
+        listed = await ioNow.listDirectory(target);
+        if (!Array.isArray(listed)) throw new Error("\u76EE\u5F55\u8BFB\u53D6\u5931\u8D25");
+      } else {
+        const data = await ioNow.post("/api/devices/" + encodeURIComponent(ioNow.device) + "/fs/list", { path: target });
+        if (!data || !Array.isArray(data.entries)) throw new Error("\u76EE\u5F55\u8BFB\u53D6\u5931\u8D25");
+        if (data.device_id && data.device_id !== ioNow.device) throw new Error("\u76EE\u6807\u8BBE\u5907\u8EAB\u4EFD\u6821\u9A8C\u5931\u8D25");
+        listed = data.entries;
+      }
+      if (current !== seq.current) return;
+      setEntries(listed.map((entry) => injected ? { ...entry } : { ...entry, path: targetJoinPath(target, entry.name) }));
+    } catch (err) {
+      if (current !== seq.current) return;
+      setEntries([]);
+      setError(String(err && err.message || err || "\u76EE\u5F55\u8BFB\u53D6\u5931\u8D25"));
+    } finally {
+      if (current === seq.current) setBusy(false);
+    }
+  }, []);
+  React2.useEffect(() => {
+    if (!device && typeof io.current.loadRoots !== "function") return void 0;
+    let live = true;
+    const readRoots = async () => {
+      const ioNow = io.current;
+      if (typeof ioNow.loadRoots === "function") return await ioNow.loadRoots() || null;
+      const base = "/api/devices/" + encodeURIComponent(ioNow.device);
+      const read = (next) => typeof ioNow.api === "function" ? ioNow.api(next).catch(() => null) : Promise.resolve(null);
+      const [workspaceData, driveData] = await Promise.all([read(base + "/workspaces"), read(base + "/drives")]);
+      return {
+        deviceId: ioNow.device,
+        workspaces: workspaceData && Array.isArray(workspaceData.workspaces) ? workspaceData.workspaces : [],
+        drives: driveData && Array.isArray(driveData.drives) ? driveData.drives : []
+      };
+    };
+    readRoots().then((data) => {
+      if (!live || !data) return;
+      const workspaces = Array.isArray(data.workspaces) ? data.workspaces.filter((item) => item && typeof item.path === "string" && item.path && item.kind !== "node").map((item) => ({ name: item.name === "default-workspace" ? "\u9ED8\u8BA4\u5DE5\u4F5C\u533A" : item.name || item.path, path: item.path })) : [];
+      const drives = Array.isArray(data.drives) ? data.drives.filter((item) => item && typeof item.path === "string" && item.path).map((item) => ({ name: item.name || item.path, path: item.path })) : [];
+      setRootList({ workspaces, drives });
+      if (typeof data.deviceId === "string" && data.deviceId) setDeviceName(data.deviceId);
+      if (data.warning) setError(String(data.warning));
+      if (workspaces.length) void enter(workspaces[0].path);
+    }).catch((err) => {
+      if (live) setError(String(err && err.message || err || "\u8BFB\u53D6\u76EE\u6807\u8BBE\u5907\u5931\u8D25"));
+    });
+    return () => {
+      live = false;
+    };
+  }, [device, enter]);
+  const roots = [
+    ...rootList.workspaces.map((item) => ({ ...item, kind: "workspace", dir: true })),
+    ...rootList.drives.map((item) => ({ ...item, kind: "drive", dir: true }))
+  ];
+  const isDriveRoot = rootList.drives.some((item) => item.path === path);
+  const canConfirm = !!path && !isDriveRoot;
+  const kindOf = (target) => {
+    const entry = Array.isArray(entries2) ? entries2.find((item) => item && item.path === target) : null;
+    return entry ? entry.dir ? "dir" : "file" : "";
+  };
+  const ticked = multiple ? selectedPaths : selectedPath ? [selectedPath] : [];
+  const chosen = fileMode ? ticked.filter((target) => kindOf(target) === "file") : multiple ? (() => {
+    const dirs = ticked.filter((target) => kindOf(target) === "dir");
+    return dirs.length ? dirs : canConfirm ? [path] : [];
+  })() : canConfirm ? [path] : [];
+  const canPick = chosen.length > 0 && !busy;
+  const confirmLabel = fileMode ? chosen.length > 1 ? "\u9009\u62E9\u6587\u4EF6\uFF08" + chosen.length + "\uFF09" : "\u9009\u62E9\u6587\u4EF6" : multiple ? chosen.length > 1 ? "\u9009\u62E9\u6587\u4EF6\u5939\uFF08" + chosen.length + "\uFF09" : "\u9009\u62E9\u6587\u4EF6\u5939" : "\u9009\u62E9\u6B64\u6587\u4EF6\u5939";
+  const chosenEntries = () => Array.isArray(entries2) ? entries2.filter((entry) => entry && chosen.includes(entry.path)) : [];
+  const dialogTitle = title || (fileMode ? "\u9009\u62E9\u6587\u4EF6" : "\u9009\u62E9\u5DE5\u4F5C\u533A\u6587\u4EF6\u5939");
+  const fileIcon = (item) => h3("span", {
+    style: { display: "grid", placeItems: "center", color: item && item.dir ? C2.sub : C2.mute }
+  }, h3(DrawGlyph, { name: item && item.dir ? "workspace" : "files", size: 14 }));
+  const mutedButton = {
+    height: 28,
+    padding: "0 12px",
+    border: "1px solid " + C2.line,
+    borderRadius: 6,
+    background: C2.bg,
+    color: C2.sub,
+    fontSize: 12,
+    cursor: "pointer"
+  };
+  return h3(
+    "div",
+    {
+      style: {
+        position: "fixed",
+        inset: 0,
+        zIndex: 2147483e3,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 24,
+        background: "rgba(16, 24, 40, 0.45)"
+      },
+      onClick: (event) => {
+        if (event && event.target === event.currentTarget) cancel();
+      }
+    },
+    h3(
+      "div",
+      {
+        role: "dialog",
+        "aria-modal": "true",
+        "aria-label": dialogTitle,
+        onClick: (event) => {
+          if (event && typeof event.stopPropagation === "function") event.stopPropagation();
+        },
+        style: {
+          width: "min(880px, 100%)",
+          height: "min(600px, 100%)",
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+          background: C2.bg,
+          color: C2.ink,
+          border: "1px solid " + C2.line,
+          borderRadius: 12,
+          boxShadow: "var(--dsw-elevation-panel, 0 24px 64px rgba(16, 24, 40, 0.28))",
+          font: "inherit"
+        }
+      },
+      h3(
+        "div",
+        {
+          style: { display: "flex", alignItems: "center", gap: 12, padding: "14px 18px", borderBottom: "1px solid " + C2.line, flex: "0 0 auto" }
+        },
+        h3(
+          "div",
+          { style: { minWidth: 0, flex: "1 1 auto" } },
+          h3(
+            "div",
+            { style: { height: 20, lineHeight: "20px", fontSize: 15, fontWeight: 600, color: C2.ink } },
+            dialogTitle
+          ),
+          h3("div", {
+            style: { marginTop: 2, height: 18, lineHeight: "18px", color: C2.mute, fontSize: 11.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }
+          }, (multiple && !fileMode ? "\u53EF\u6309\u4F4F Ctrl \u591A\u9009\u6587\u4EF6\u5939\uFF1B" : multiple ? "\u53EF\u6309\u4F4F Ctrl \u591A\u9009\u6587\u4EF6\uFF1B" : "") + (deviceName || "\u6B63\u5728\u8FDE\u63A5\u8BBE\u5907\u2026"))
+        ),
+        h3("button", {
+          type: "button",
+          "aria-label": "\u5173\u95ED",
+          title: "\u5173\u95ED",
+          onClick: cancel,
+          style: { width: 28, height: 28, flex: "0 0 auto", border: 0, borderRadius: 6, background: "transparent", color: C2.sub, fontSize: 18, lineHeight: "22px", cursor: "pointer" }
+        }, "\xD7")
+      ),
+      h3(TargetFileExplorer, {
+        React: React2,
+        colors: { bg: C2.bg, soft: C2.soft, ink: C2.ink, sub: C2.sub, mute: C2.mute, line: C2.line, hover: C2.hover, blue: C2.blue, red: C2.red },
+        roots,
+        rootPath: pickRootOf(path, roots),
+        path,
+        entries: entries2,
+        loading: busy,
+        error,
+        onDismissError: () => setError(""),
+        disabled: busy,
+        placeholder: "\u4ECE\u5DE6\u4FA7\u9009\u62E9\u5DE5\u4F5C\u533A\u6216\u78C1\u76D8",
+        emptyText: "\u7A7A\u6587\u4EF6\u5939",
+        sort,
+        onSort: setSort,
+        search: search2,
+        onSearch: setSearch,
+        onRoot: (next) => {
+          void enter(next);
+        },
+        onPath: (next) => {
+          void enter(next);
+        },
+        selectionMode: multiple ? "multiple" : "single",
+        selectedPath,
+        selectedPaths,
+        onSelectionChange: (next) => setSelectedPaths(Array.isArray(next) ? next : []),
+        onSelect: (item) => {
+          if (multiple) return;
+          setSelectedPath(fileMode && item && !item.dir ? item.path : "");
+        },
+        // A folder click walks in while picking a folder; a file reveals itself
+        // by being ticked, and a double click answers with it.
+        singleClickOpens: !fileMode && !multiple,
+        onOpen: (item) => {
+          if (!item) return;
+          if (item.dir) {
+            void enter(item.path);
+            return;
+          }
+          if (fileMode) onDone([item.path], [item]);
+        },
+        onRefresh: (next) => {
+          void enter(next);
+        },
+        fileIcon,
+        formatTime: formatPickTime,
+        formatSize: formatPickSize,
+        layoutKey: "tether-folder-pick"
+      }),
+      h3(
+        "div",
+        {
+          style: { display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, padding: "10px 18px", borderTop: "1px solid " + C2.line, flex: "0 0 auto" }
+        },
+        h3("button", { type: "button", onClick: cancel, style: mutedButton }, "\u53D6\u6D88"),
+        h3("button", {
+          type: "button",
+          disabled: !canPick,
+          onClick: () => onDone(chosen, chosenEntries()),
+          style: {
+            height: 28,
+            padding: "0 14px",
+            border: 0,
+            borderRadius: 6,
+            background: C2.primary,
+            color: C2.onPrimary,
+            fontSize: 12,
+            cursor: !canPick ? "default" : "pointer",
+            opacity: !canPick ? 0.55 : 1
+          }
+        }, confirmLabel)
+      )
+    )
+  );
+}
+
 // src/agent-cache.js
 var AGENT_CACHE_KEY = "tether-agent-cache-v1";
 var catalogs = /* @__PURE__ */ new Map();
@@ -177968,7 +178451,7 @@ function createAgentsPage(props) {
     ))
   );
 }
-function AgentTargetPage({ React: React2, Glyph, post, C: C2, host, isActive = true, devices = [], localDevice = "", activeDevice = "", initialDevice = "", onDeviceChange, onOpenWorkbench, onError }) {
+function AgentTargetPage({ React: React2, Glyph, post, api: api2, C: C2, host, isActive = true, devices = [], localDevice = "", activeDevice = "", initialDevice = "", onDeviceChange, onOpenWorkbench, onError }) {
   const h3 = React2.createElement;
   const online = devices.filter((item) => item && item.online);
   const initial = initialDevice || activeDevice || (localDevice && online.some((item) => item.device_id === localDevice) ? localDevice : "") || online[0] && online[0].device_id || "";
@@ -178003,13 +178486,37 @@ function AgentTargetPage({ React: React2, Glyph, post, C: C2, host, isActive = t
   const [serviceCatalog, setServiceCatalog] = React2.useState(null);
   const [serviceCatalogBusy, setServiceCatalogBusy] = React2.useState(false);
   const [serviceOpening, setServiceOpening] = React2.useState(false);
-  const nativeCodegAutoDecision = React2.useRef(false);
-  const nativeCodegWasVisible = React2.useRef(false);
   const [serviceView, setServiceView] = React2.useState(null);
   const [serviceFrameState, setServiceFrameState] = React2.useState("loading");
+  const [codegGuestAuth, setCodegGuestAuth] = React2.useState(null);
   const serviceWebviewRef = React2.useRef(null);
   const codegOpenRevision = React2.useRef(0);
+  const codegRedirected = React2.useRef("");
   const handledAgentLaunchRequests = React2.useRef(/* @__PURE__ */ new Set());
+  const [folderPick, setFolderPick] = React2.useState(null);
+  const closeFolderPick = (value) => {
+    const request = folderPick;
+    if (!request) return;
+    setFolderPick(null);
+    const chosen = (Array.isArray(value) ? value : [value]).map((item) => typeof item === "string" ? item.trim() : "").filter(Boolean);
+    const payload = chosen.length ? { type: "tether:pick-folder-result", id: request.id, path: chosen[0], paths: chosen } : { type: "tether:pick-folder-result", id: request.id, cancelled: true };
+    if (request.mode === "iframe") {
+      try {
+        if (request.source && typeof request.source.postMessage === "function") {
+          request.source.postMessage(payload, "*");
+        }
+      } catch (_2) {
+      }
+      return;
+    }
+    const guest = serviceWebviewRef.current;
+    if (!guest || typeof guest.executeJavaScript !== "function") return;
+    try {
+      void guest.executeJavaScript("window.postMessage(" + JSON.stringify(payload) + ", '*')").catch(() => {
+      });
+    } catch (_2) {
+    }
+  };
   const [workbenchLoginRequired, setWorkbenchLoginRequired] = React2.useState(false);
   const [workbenchLoginBusy, setWorkbenchLoginBusy] = React2.useState(false);
   const [cwd2, setCwd] = React2.useState("");
@@ -178496,12 +179003,72 @@ function AgentTargetPage({ React: React2, Glyph, post, C: C2, host, isActive = t
       }
       if (!event || !frame || event.source !== frame.contentWindow || !origin || event.origin !== origin) return;
       if (data && data.type === "tether:open-herdr") openHerdr(data.cwd, data.agent_type);
+      if (data && data.type === "tether:pick-folder") {
+        const id = String(data && data.id || "");
+        if (/^[0-9a-f-]{36}$/i.test(id)) {
+          setFolderPick({
+            id,
+            mode: "iframe",
+            source: event.source || null,
+            kind: data.kind === "file" ? "file" : "folder",
+            multiple: data.multiple === true
+          });
+        }
+      }
+      if (data && data.type === "tether:dsh-prompt") {
+        const reply2 = (payload) => {
+          try {
+            if (event.source && typeof event.source.postMessage === "function") event.source.postMessage(payload, origin);
+          } catch (_2) {
+          }
+        };
+        const id = typeof data.id === "string" ? data.id.slice(0, 200) : "";
+        const sessionId = typeof data.sessionId === "string" ? data.sessionId : "";
+        const text2 = typeof data.text === "string" ? data.text : "";
+        let error = "";
+        if (!id) error = "invalid id";
+        else if (!localDevice || data.device && data.device !== localDevice) error = "device_not_local";
+        else if (!/^[A-Za-z0-9._-]{1,200}$/.test(sessionId)) error = "invalid session id";
+        else if (!text2.trim() || text2.length > 2e5) error = "invalid text";
+        if (error) {
+          reply2({ type: "tether:dsh-prompt-result", id, ok: false, status: 0, error });
+          return;
+        }
+        fetch("/api/devices/" + encodeURIComponent(localDevice) + "/dsh/live/sessions/" + encodeURIComponent(sessionId) + "/prompt", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: text2, mode: "queue" })
+        }).then(async (response) => {
+          let body = null;
+          try {
+            body = await response.json();
+          } catch (_2) {
+          }
+          const failed = !response.ok || body && body.accepted === false;
+          reply2({
+            type: "tether:dsh-prompt-result",
+            id,
+            ok: !failed,
+            status: response.status,
+            error: failed ? String(body && (body.error || body.detail && body.detail.error) || "HTTP " + response.status) : null
+          });
+        }).catch((failure2) => {
+          reply2({
+            type: "tether:dsh-prompt-result",
+            id,
+            ok: false,
+            status: Number(failure2 && failure2.status) || 0,
+            error: String(failure2 && failure2.message || failure2 || "prompt failed")
+          });
+        });
+      }
     };
     window.addEventListener("message", onMessage);
     return () => {
       window.removeEventListener("message", onMessage);
     };
-  }, [herdrAvailable, device, panes]);
+  }, [herdrAvailable, device, localDevice, panes]);
   const openWeb = async (agent2) => {
     const key = "web:" + agent2.id;
     addPane({ key, kind: "web", url: "", title: agent2.name + " Web", icon: agent2.icon, color: agent2.color });
@@ -178651,6 +179218,28 @@ function AgentTargetPage({ React: React2, Glyph, post, C: C2, host, isActive = t
     setServiceCatalog(null);
     setHomeRetry((current) => current + 1);
   };
+  const codegRuntimeToken = (runtime) => {
+    if (!runtime || runtime.running !== true || typeof runtime.url !== "string") return "";
+    try {
+      const parsed = new URL(runtime.url);
+      if (parsed.pathname !== "/token.html") return "";
+      const token = parsed.searchParams.get("token") || "";
+      return /^[A-Za-z0-9_-]{16,200}$/.test(token) ? token : "";
+    } catch (_2) {
+      return "";
+    }
+  };
+  const codegOpenFailureText = (error) => {
+    const code = error && (error.code || error.detail && error.detail.code);
+    if (code === "mesh_dial_unreachable") {
+      return "\u672C\u673A\u6CA1\u6709\u5230\u76EE\u6807\u8282\u70B9\u7684 managed network \u8DEF\u7531\u3002\u8BF7\u786E\u8BA4\u4E24\u53F0\u673A\u5668\u5DF2\u52A0\u5165\u540C\u4E00\u7F51\u7EDC\u540E\u91CD\u8BD5\uFF1BCodeg \u6682\u4E0D\u652F\u6301\u6539\u7528 Hub \u7F51\u5173\u3002";
+    }
+    if (code === "service_starting") return "\u76EE\u6807 Codeg \u670D\u52A1\u6B63\u5728\u542F\u52A8\uFF0C\u8BF7\u7A0D\u5019\u91CD\u8BD5\u3002";
+    if (code === "node_update_required" || error && (error.status === 404 || error.status === 405 || error.status === 501)) {
+      return "\u76EE\u6807\u8282\u70B9\u7248\u672C\u8FC7\u65E7\uFF0C\u6CA1\u6709 Codeg \u5DE5\u4F5C\u53F0\u670D\u52A1\uFF1B\u8BF7\u5347\u7EA7\u8282\u70B9\u540E\u91CD\u8BD5\u3002";
+    }
+    return String(error && error.message || error || "Codeg \u5DE5\u4F5C\u53F0\u65E0\u6CD5\u6253\u5F00\u3002");
+  };
   const openNativeCodeg = async ({ preserveExisting = false } = {}) => {
     if (!device || serviceOpening || !host || !host.workbench) return;
     const legacyCodeg = serviceCatalog && serviceCatalog.legacy === true;
@@ -178660,14 +179249,24 @@ function AgentTargetPage({ React: React2, Glyph, post, C: C2, host, isActive = t
     setServiceOpening(true);
     setHomeError("");
     try {
+      let runtime = null;
       if (legacyCodeg) {
-        const runtime = await getAgentsRuntime(device, true);
+        runtime = await getAgentsRuntime(device, true);
         if (!runtime || runtime.running !== true || !runtime.url) throw new Error("Codeg \u672A\u80FD\u542F\u52A8\u5E76\u901A\u8FC7\u5C31\u7EEA\u68C0\u67E5\u3002");
       }
       const service = legacyCodeg ? await host.workbench.openLegacyCodeg(device) : await host.workbench.open(device, "codeg");
       if (!service || service.targetId !== device || service.serviceId !== "codeg" || !service.endpoint || !service.partition) {
         throw new Error("\u4E3B\u8FDB\u7A0B\u6CA1\u6709\u8FD4\u56DE\u6709\u6548\u7684 Codeg \u5DE5\u4F5C\u53F0\u4F1A\u8BDD\u3002");
       }
+      if (!legacyCodeg) {
+        try {
+          runtime = await getAgentsRuntime(device, false, true);
+        } catch (_2) {
+          runtime = null;
+        }
+      }
+      const guestToken = codegRuntimeToken(runtime);
+      setCodegGuestAuth(guestToken ? { targetId: device, origin: new URL(service.endpoint).origin, token: guestToken } : null);
       const homeService = { ...service, endpoint: new URL("/workspace?tether_home=1", service.endpoint).href };
       const currentPane = panes.find((pane) => pane.key === "codeg:home" && pane.kind === "native-service");
       const sameBootstrap = preserveExisting && currentPane && currentPane.service.endpoint === homeService.endpoint && currentPane.service.partition === homeService.partition && currentPane.service.bootstrapRevision === homeService.bootstrapRevision;
@@ -178681,11 +179280,10 @@ function AgentTargetPage({ React: React2, Glyph, post, C: C2, host, isActive = t
       setPanes((current) => current.some((pane) => pane.key === "codeg:home") ? current.map((pane) => pane.key === "codeg:home" ? { ...pane, kind: "native-service", service: homeService } : pane) : [...current, { key: "codeg:home", kind: "native-service", title: "Codeg", service: homeService }]);
       setActivePane("codeg:home");
       setWorkspaceOpen(true);
-      nativeCodegWasVisible.current = true;
     } catch (error) {
       setServiceFrameState("error");
       if (error && (error.status === 401 || error.status === 403 || error.code === "auth_required" || error.code === "oidc_identity_unbound")) setWorkbenchLoginRequired(true);
-      setHomeError(String(error && error.message || error || "Codeg \u5DE5\u4F5C\u53F0\u65E0\u6CD5\u6253\u5F00\u3002"));
+      setHomeError(codegOpenFailureText(error));
       if (!preserveExisting) {
         homeOpenedRef.current = "";
         setServiceCatalog(null);
@@ -178800,6 +179398,61 @@ function AgentTargetPage({ React: React2, Glyph, post, C: C2, host, isActive = t
   }, [serviceView && serviceView.endpoint, serviceView && serviceView.openRevision]);
   React2.useEffect(() => {
     const guest = serviceWebviewRef.current;
+    const auth = codegGuestAuth;
+    if (!auth || !serviceView || serviceView.serviceId !== "codeg" || serviceView.targetId !== auth.targetId || !guest || typeof guest.addEventListener !== "function" || typeof guest.executeJavaScript !== "function") return void 0;
+    const expectedOrigin = auth.origin;
+    const storeToken = "localStorage.setItem('codeg_token'," + JSON.stringify(auth.token) + ")";
+    const guestRoute = () => {
+      try {
+        const current = new URL(guest.getURL());
+        if (current.origin !== expectedOrigin) return null;
+        return current.pathname;
+      } catch (_2) {
+        return null;
+      }
+    };
+    const atCodegEntry = (path) => path === "/" || path === "/login" || path.startsWith("/login/");
+    const reachWorkspace = (path, allowRedirect) => {
+      if (path === null) return;
+      void guest.executeJavaScript(storeToken).then(() => {
+        const current = guestRoute();
+        if (!allowRedirect || !atCodegEntry(current)) return;
+        const redirectKey = auth.targetId + "\0" + auth.token;
+        if (codegRedirected.current === redirectKey) return;
+        codegRedirected.current = redirectKey;
+        return guest.executeJavaScript("location.replace('/workspace?tether_home=1')");
+      }).catch(() => {
+      });
+    };
+    const onLoad = () => reachWorkspace(guestRoute(), true);
+    const onInPage = (event) => {
+      if (!event || event.isMainFrame !== true || typeof event.url !== "string") return;
+      let path = "";
+      try {
+        const current = new URL(event.url);
+        if (current.origin !== expectedOrigin) return;
+        path = current.pathname;
+      } catch (_2) {
+        return;
+      }
+      if (!atCodegEntry(path)) return;
+      reachWorkspace(path, true);
+    };
+    guest.addEventListener("dom-ready", onLoad);
+    guest.addEventListener("did-finish-load", onLoad);
+    guest.addEventListener("did-navigate-in-page", onInPage);
+    try {
+      if (typeof guest.isLoadingMainFrame === "function" && !guest.isLoadingMainFrame()) onLoad();
+    } catch (_2) {
+    }
+    return () => {
+      guest.removeEventListener("dom-ready", onLoad);
+      guest.removeEventListener("did-finish-load", onLoad);
+      guest.removeEventListener("did-navigate-in-page", onInPage);
+    };
+  }, [codegGuestAuth, serviceView && serviceView.endpoint, serviceView && serviceView.openRevision]);
+  React2.useEffect(() => {
+    const guest = serviceWebviewRef.current;
     if (!serviceView || serviceView.serviceId !== "codeg" || serviceView.targetId !== device || !guest || typeof guest.addEventListener !== "function") return void 0;
     const onInPageNavigation = (event) => {
       if (!event || event.isMainFrame !== true || typeof event.url !== "string") return;
@@ -178812,14 +179465,39 @@ function AgentTargetPage({ React: React2, Glyph, post, C: C2, host, isActive = t
       }
       const params = new URLSearchParams(actionUrl.hash.slice(1));
       const action = params.get("tether_action");
-      if (action !== "open_herdr" && action !== "open_cli") return;
+      if (action !== "open_herdr" && action !== "open_cli" && action !== "pick_folder") return;
       const requestIds = params.getAll("request_id");
+      const requestId = requestIds[0] || "";
+      const actionKeys = Array.from(params.keys()).sort().join(",");
+      const clearActionHash = () => {
+        if (typeof guest.executeJavaScript !== "function") return;
+        void guest.executeJavaScript(
+          "history.replaceState(history.state, '', location.pathname + location.search)"
+        ).catch(() => {
+        });
+      };
+      if (action === "pick_folder") {
+        const pickKind = params.get("pick_kind");
+        const pickMultiple = params.get("pick_multiple");
+        const extraKeys = actionKeys.split(",").filter((key) => key !== "" && key !== "tether_action" && key !== "request_id" && key !== "pick_kind" && key !== "pick_multiple");
+        const validFolderPick = requestIds.length === 1 && extraKeys.length === 0 && params.getAll("tether_action").length === 1 && (pickKind === null || pickKind === "folder" || pickKind === "file") && (pickMultiple === null || pickMultiple === "1") && /^[0-9a-f-]{36}$/i.test(requestId);
+        if (validFolderPick) {
+          const request = {
+            id: requestId,
+            mode: "webview",
+            source: null,
+            kind: pickKind === "file" ? "file" : "folder",
+            multiple: pickMultiple === "1"
+          };
+          setFolderPick((current) => current && current.id === requestId ? current : request);
+        }
+        clearActionHash();
+        return;
+      }
       const agentTypes = params.getAll("agent_type");
       const cwds = params.getAll("cwd");
-      const requestId = requestIds[0] || "";
       const codegAgentType = agentTypes[0] || "";
       const cwd3 = cwds[0] || "";
-      const actionKeys = Array.from(params.keys()).sort().join(",");
       const fixedAction = requestIds.length === 1 && agentTypes.length === 1 && cwds.length === 1 && actionKeys === "agent_type,cwd,request_id,tether_action" && params.getAll("tether_action").length === 1 && /^[0-9a-f-]{36}$/i.test(requestId) && cwd3.length > 0 && cwd3.length <= 4096 && !cwd3.includes("\0");
       if (fixedAction && !handledAgentLaunchRequests.current.has(requestId)) {
         handledAgentLaunchRequests.current.add(requestId);
@@ -178829,12 +179507,7 @@ function AgentTargetPage({ React: React2, Glyph, post, C: C2, host, isActive = t
         if (action === "open_herdr") openHerdr(cwd3, codegAgentType);
         else openRuntimeCli(cwd3, codegAgentType);
       }
-      if (typeof guest.executeJavaScript === "function") {
-        void guest.executeJavaScript(
-          "history.replaceState(history.state, '', location.pathname + location.search)"
-        ).catch(() => {
-        });
-      }
+      clearActionHash();
     };
     guest.addEventListener("did-navigate-in-page", onInPageNavigation);
     return () => guest.removeEventListener("did-navigate-in-page", onInPageNavigation);
@@ -178925,34 +179598,6 @@ function AgentTargetPage({ React: React2, Glyph, post, C: C2, host, isActive = t
   const codegUnavailableLabel = codegService && codegService.reason_code === "bad_op" ? "\u5347\u7EA7\u8282\u70B9\u540E\u53EF\u7528" : codegService && codegService.reason_code === "device_not_found" ? "\u76EE\u6807\u8282\u70B9\u672A\u8FDE\u63A5" : "\u670D\u52A1\u4E0D\u53EF\u7528";
   const legacyCodegBlocked = !!(serviceCatalog && serviceCatalog.legacy === true && (!codegService || !["ready", "stopped"].includes(codegService.state) || codegService.state === "ready" && codegService.open_mode !== "legacy-codeg"));
   const legacyCodegLabel = codegService && codegService.state === "missing" ? "Codeg \u672A\u5B89\u88C5" : codegService && codegService.state === "stopped" ? "Codeg \u672A\u8FD0\u884C" : "Codeg \u72B6\u6001\u5F02\u5E38";
-  React2.useEffect(() => {
-    const hasCodegPane = panes.some((pane) => pane.key === "codeg:home" && pane.kind === "native-service");
-    const codegVisible = isActive && workspaceOpen && activePane === "codeg:home" && hasCodegPane;
-    if (!codegVisible) nativeCodegWasVisible.current = false;
-    else if (!nativeCodegWasVisible.current) {
-      nativeCodegWasVisible.current = true;
-      if (nativeWorkbench && nativeCodegAutoDecision.current && serviceCatalog && !serviceCatalogBusy && !serviceOpening) {
-        void openNativeCodeg({ preserveExisting: true });
-      }
-    }
-    if (!nativeWorkbench || !isActive || !serviceCatalog || serviceCatalogBusy || serviceOpening || hasCodegPane) return;
-    if (nativeCodegAutoDecision.current) return;
-    nativeCodegAutoDecision.current = true;
-    if (panes.length || activePane || workspaceOpen || workbenchLoginRequired || !codegService || codegService.state === "missing" || legacyCodegBlocked) return;
-    void openNativeCodeg();
-  }, [
-    nativeWorkbench,
-    isActive,
-    serviceCatalog,
-    serviceCatalogBusy,
-    panes.length,
-    activePane,
-    workspaceOpen,
-    serviceOpening,
-    workbenchLoginRequired,
-    codegService,
-    legacyCodegBlocked
-  ]);
   const paneBody = (pane) => pane.kind === "web" ? pane.url ? h3("iframe", {
     key: pane.key,
     title: pane.title,
@@ -179145,11 +179790,514 @@ function AgentTargetPage({ React: React2, Glyph, post, C: C2, host, isActive = t
       { style: { display: "grid", placeItems: "center", alignContent: "center", gap: 10, flex: "1 1 auto", color: C2.mute, fontSize: 12 } },
       h3("span", { className: "tether-spin", style: { display: "grid", placeItems: "center" } }, h3(Glyph, { name: "refresh", size: 18 })),
       "\u6B63\u5728\u6253\u5F00 Agent \u4E3B\u9875\u2026"
-    ) : null
+    ) : null,
+    folderPick ? h3(TetherFolderPickDialog, {
+      key: folderPick.id,
+      React: React2,
+      C: C2,
+      Glyph,
+      api: api2,
+      post,
+      device,
+      kind: folderPick.kind === "file" ? "file" : "folder",
+      multiple: folderPick.multiple === true,
+      onDone: closeFolderPick
+    }) : null
   );
 }
 
+// tether-dsh-flow:tether-dsh-flow-fn
+function tether_dsh_flow_fn_default(ctx, React2) {
+  try {
+    if (new URL(window.location.href).searchParams.has("tether_native")) {
+      const tetherLoopbackPage = (() => {
+        try {
+          const host = new URL(window.location.href).hostname;
+          return host === "127.0.0.1" || host === "localhost";
+        } catch (_2) {
+          return false;
+        }
+      })();
+      if (tetherLoopbackPage && !window.__tetherDeviceFsChannel && typeof window.fetch === "function") {
+        window.__tetherDeviceFsChannel = true;
+        const tetherFetch = window.fetch.bind(window);
+        const tetherDeviceSuffix = (suffix) => ({
+          "/list": "/fs/list",
+          "/read": "/fs/read",
+          "/write_chunk": "/fs/write_chunk"
+        })[suffix] || suffix;
+        const tetherFsRoutes = ["/drives", "/workspaces", "/list", "/read", "/write_chunk"];
+        const tetherFsMode = () => {
+          try {
+            if (window.parent && window.parent !== window) return "iframe";
+          } catch (_2) {
+            return "iframe";
+          }
+          try {
+            if (/Electron\//.test(navigator.userAgent || "")) return "hash";
+          } catch (_2) {
+          }
+          return "";
+        };
+        const tetherFsUuid = () => {
+          let id = "";
+          try {
+            id = crypto.randomUUID();
+          } catch (_2) {
+          }
+          if (!/^[0-9a-f-]{36}$/i.test(id)) {
+            id = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+              const r = Math.random() * 16 | 0;
+              return (c === "x" ? r : r & 3 | 8).toString(16);
+            });
+          }
+          return id;
+        };
+        const tetherFsBase64Url = (text2) => {
+          const bytes = new TextEncoder().encode(String(text2 || ""));
+          let binary = "";
+          for (let offset = 0; offset < bytes.length; offset += 32768) {
+            binary += String.fromCharCode(...bytes.subarray(offset, offset + 32768));
+          }
+          return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+        };
+        const tetherFsChunkChars = 262144;
+        const tetherFsPending = /* @__PURE__ */ new Map();
+        let tetherFsListening = false;
+        const onTetherFsMessage = (event) => {
+          const data = event && event.data;
+          if (!data || typeof data !== "object") return;
+          if (data.type !== "tether:fs-chunk" && data.type !== "tether:fs-result") return;
+          const id = String(data.id || "");
+          const entry = tetherFsPending.get(id);
+          if (!entry) return;
+          if (data.type === "tether:fs-chunk") {
+            if (entry.ack) entry.ack(Number(data.seq));
+            return;
+          }
+          tetherFsPending.delete(id);
+          clearTimeout(entry.timer);
+          if (entry.removeAbort) entry.removeAbort();
+          if (data.ok === true) {
+            entry.resolve({ status: Number(data.status) || 200, data: data.data === void 0 ? null : data.data });
+            return;
+          }
+          const error = new Error(String(data.message || "HTTP " + (Number(data.status) || 0)));
+          error.status = Number(data.status) || 0;
+          error.code = typeof data.code === "string" ? data.code : "";
+          entry.reject(error);
+        };
+        let tetherFsSendQueue = Promise.resolve();
+        const tetherFsRelay = (request, signal) => {
+          const mode = tetherFsMode();
+          if (!mode) return Promise.reject(new Error("\u5F53\u524D\u9875\u9762\u6CA1\u6709\u5BBF\u4E3B\u6587\u4EF6\u901A\u9053"));
+          if (!tetherFsListening) {
+            tetherFsListening = true;
+            window.addEventListener("message", onTetherFsMessage);
+          }
+          const id = tetherFsUuid();
+          let settle = null;
+          const result = new Promise((resolve3, reject) => {
+            settle = { resolve: resolve3, reject };
+          });
+          const entry = { resolve: settle.resolve, reject: settle.reject, timer: null, ack: null, removeAbort: null };
+          const abortError = () => new DOMException("The operation was aborted", "AbortError");
+          const drop = () => {
+            if (tetherFsPending.get(id) !== entry) return false;
+            tetherFsPending.delete(id);
+            clearTimeout(entry.timer);
+            return true;
+          };
+          const failRequest = (error) => {
+            if (!drop()) return;
+            entry.reject(error);
+          };
+          tetherFsPending.set(id, entry);
+          entry.timer = setTimeout(() => {
+            const error = new Error("\u5BBF\u4E3B\u6587\u4EF6\u901A\u9053\u54CD\u5E94\u8D85\u65F6");
+            error.status = 0;
+            failRequest(error);
+          }, 12e4);
+          if (signal) {
+            const onAbort = () => {
+              if (entry.ack) entry.ack(-1);
+              failRequest(abortError());
+            };
+            if (signal.aborted) {
+              onAbort();
+              return result;
+            }
+            try {
+              signal.addEventListener("abort", onAbort, { once: true });
+              entry.removeAbort = () => signal.removeEventListener("abort", onAbort);
+            } catch (_2) {
+            }
+          }
+          if (mode === "iframe") {
+            try {
+              window.parent.postMessage({
+                type: "tether:fs-request",
+                id,
+                method: request.method,
+                path: request.path,
+                query: request.query || "",
+                device: request.device,
+                body: request.body === void 0 ? null : request.body
+              }, "*");
+            } catch (_2) {
+              failRequest(new Error("\u5BBF\u4E3B\u6587\u4EF6\u901A\u9053\u4E0D\u53EF\u7528"));
+            }
+            return result;
+          }
+          const chunks = [];
+          if (typeof request.body === "string" && request.body) {
+            const encoded = tetherFsBase64Url(request.body);
+            for (let offset = 0; offset < encoded.length; offset += tetherFsChunkChars) {
+              chunks.push(encoded.slice(offset, offset + tetherFsChunkChars));
+            }
+          }
+          const sendChunk = (seq) => new Promise((ackDone, ackFail) => {
+            const timer = setTimeout(() => {
+              if (!entry.ack) return;
+              entry.ack = null;
+              ackFail(new Error("\u5BBF\u4E3B\u6587\u4EF6\u901A\u9053\u54CD\u5E94\u8D85\u65F6"));
+            }, 2e4);
+            entry.ack = (got) => {
+              if (got !== seq && got !== -1) return;
+              clearTimeout(timer);
+              entry.ack = null;
+              if (got === -1) ackFail(abortError());
+              else ackDone();
+            };
+            const params = new URLSearchParams({
+              tether_action: "fs",
+              request_id: id,
+              fs_device: request.device || "",
+              fs_method: request.method,
+              fs_path: request.path,
+              fs_seq: String(seq),
+              fs_total: String(chunks.length)
+            });
+            if (request.query) params.set("fs_query", request.query);
+            if (chunks[seq]) params.set("fs_chunk", chunks[seq]);
+            window.location.hash = params.toString();
+          });
+          const sendAll = async () => {
+            if (!tetherFsPending.has(id)) throw abortError();
+            if (!chunks.length) {
+              await sendChunk(0);
+              return;
+            }
+            for (let seq = 0; seq < chunks.length; seq += 1) {
+              if (!tetherFsPending.has(id)) throw abortError();
+              await sendChunk(seq);
+            }
+          };
+          const sending = tetherFsSendQueue.then(sendAll, sendAll);
+          tetherFsSendQueue = sending.catch(() => {
+          });
+          sending.catch((error) => {
+            if (entry.ack) entry.ack = null;
+            failRequest(error);
+          });
+          return result;
+        };
+        window.fetch = function(input, init) {
+          try {
+            const raw = typeof input === "string" ? input : input && typeof input.url === "string" ? input.url : "";
+            const parsed = new URL(raw, window.location.href);
+            let suffix = "";
+            let deviceId = "";
+            if (raw && parsed.origin === window.location.origin && parsed.pathname.indexOf("/tether-device-fs/") === 0) {
+              suffix = parsed.pathname.slice("/tether-device-fs".length);
+              deviceId = parsed.searchParams.get("device_id") || "";
+            } else if (raw && (parsed.origin === "http://127.0.0.1:18892" || parsed.origin === "http://127.0.0.1:18890")) {
+              const match2 = parsed.pathname.match(/^\/api\/devices\/([^/]+)\/(drives|workspaces|fs\/[A-Za-z_]+)$/);
+              if (match2) {
+                deviceId = decodeURIComponent(match2[1]);
+                suffix = "/" + match2[2].replace(/^fs\//, "");
+              }
+            }
+            let body = init ? init.body : void 0;
+            if (body !== void 0 && body !== null && typeof body !== "string") return tetherFetch(input, init);
+            if (typeof body === "string") {
+              try {
+                const value = JSON.parse(body);
+                if (value && typeof value === "object" && typeof value.device_id === "string" && value.device_id) {
+                  deviceId = value.device_id;
+                }
+              } catch (_2) {
+              }
+            }
+            if (deviceId && tetherFsRoutes.indexOf(suffix) >= 0) {
+              const method = String(init && init.method || "GET").toUpperCase() === "POST" ? "POST" : "GET";
+              return tetherFsRelay(
+                {
+                  method,
+                  path: tetherDeviceSuffix(suffix),
+                  query: parsed.search || "",
+                  body: typeof body === "string" ? body : void 0,
+                  device: deviceId
+                },
+                init && init.signal
+              ).then((reply) => new Response(
+                reply.data === null || reply.data === void 0 ? "" : JSON.stringify(reply.data),
+                { status: reply.status, headers: { "Content-Type": "application/json" } }
+              ));
+            }
+          } catch (_2) {
+          }
+          return tetherFetch(input, init);
+        };
+      }
+      const tetherPickPending = /* @__PURE__ */ new Map();
+      let tetherPickListening = false;
+      const tetherPickMode = () => {
+        try {
+          if (window.parent && window.parent !== window) return "iframe";
+        } catch (_2) {
+          return "iframe";
+        }
+        try {
+          if (/Electron\//.test(navigator.userAgent || "")) return "hash";
+        } catch (_2) {
+        }
+        return "";
+      };
+      const onTetherPickResult = (event) => {
+        const data = event && event.data;
+        if (!data || typeof data !== "object" || data.type !== "tether:pick-folder-result") return;
+        const id = String(data.id || "");
+        const settle = tetherPickPending.get(id);
+        if (!settle) return;
+        tetherPickPending.delete(id);
+        const rawPaths = data.paths;
+        const rawPath = data.path;
+        const list2 = Array.isArray(rawPaths) ? rawPaths.filter((item) => typeof item === "string").map((item) => item.trim()).filter(Boolean) : typeof rawPath === "string" && rawPath.trim() ? [rawPath.trim()] : [];
+        settle(list2.length ? list2 : null);
+      };
+      const requestTetherHostPick = (options) => {
+        const channel = tetherPickMode();
+        if (!channel) return Promise.resolve(null);
+        if (!tetherPickListening) {
+          tetherPickListening = true;
+          window.addEventListener("message", onTetherPickResult);
+        }
+        const kind = options && options.kind === "file" ? "file" : "folder";
+        const multiple = !!(options && options.multiple);
+        let id = "";
+        try {
+          id = crypto.randomUUID();
+        } catch (_2) {
+        }
+        if (!/^[0-9a-f-]{36}$/i.test(id)) {
+          id = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+            const r = Math.random() * 16 | 0;
+            return (c === "x" ? r : r & 3 | 8).toString(16);
+          });
+        }
+        return new Promise((resolve3) => {
+          const timer = setTimeout(() => {
+            if (!tetherPickPending.has(id)) return;
+            tetherPickPending.delete(id);
+            resolve3(null);
+          }, 3e5);
+          tetherPickPending.set(id, (paths) => {
+            clearTimeout(timer);
+            resolve3(paths);
+          });
+          if (channel === "iframe") {
+            try {
+              window.parent.postMessage({ type: "tether:pick-folder", id, kind, multiple }, "*");
+            } catch (_2) {
+              clearTimeout(timer);
+              tetherPickPending.delete(id);
+              resolve3(null);
+            }
+            return;
+          }
+          const params = new URLSearchParams({ tether_action: "pick_folder", request_id: id });
+          if (kind === "file") params.set("pick_kind", "file");
+          if (multiple) params.set("pick_multiple", "1");
+          window.location.hash = params.toString();
+        });
+      };
+      const TetherHostDirectoryFlow = (props) => {
+        const open = props.open;
+        const armed = React2.useRef(false);
+        const outcome = React2.useRef(props);
+        outcome.current = props;
+        const alive = React2.useRef(true);
+        React2.useEffect(() => {
+          alive.current = true;
+          return () => {
+            alive.current = false;
+          };
+        }, []);
+        React2.useEffect(() => {
+          if (!open) {
+            armed.current = false;
+            return;
+          }
+          if (armed.current) return;
+          armed.current = true;
+          requestTetherHostPick({ kind: "folder" }).then((paths) => {
+            if (!alive.current) return;
+            const path = paths && paths.length ? paths[0] : null;
+            if (path === null) outcome.current.onCancel();
+            else outcome.current.onPicked(path);
+          }, (reason) => {
+            if (!alive.current) return;
+            outcome.current.onError(reason instanceof Error ? reason.message : String(reason));
+          });
+        }, [open]);
+        return null;
+      };
+      const TetherHostWorkspacePicker = (props) => {
+        const open = props.open;
+        const armed = React2.useRef(false);
+        const outcome = React2.useRef(props);
+        outcome.current = props;
+        const alive = React2.useRef(true);
+        React2.useEffect(() => {
+          alive.current = true;
+          return () => {
+            alive.current = false;
+          };
+        }, []);
+        React2.useEffect(() => {
+          if (!open) {
+            armed.current = false;
+            return;
+          }
+          if (armed.current) return;
+          armed.current = true;
+          requestTetherHostPick({ kind: "folder" }).then((paths) => {
+            if (!alive.current) return;
+            const path = paths && paths.length ? paths[0] : null;
+            if (path === null) {
+              outcome.current.onClose();
+              return;
+            }
+            const ui2 = ctx.uiWorkspace;
+            if (!ui2 || !ui2.workspaces || typeof ui2.workspaces.create !== "function") {
+              outcome.current.onClose();
+              return;
+            }
+            return ui2.workspaces.create({ path }).then((workspace) => {
+              if (alive.current) outcome.current.onPick(workspace.workspaceId);
+            }, (reason) => {
+              console.warn("tether host workspace create failed:", reason);
+              if (alive.current) outcome.current.onClose();
+            });
+          }, () => {
+            if (alive.current) outcome.current.onClose();
+          });
+        }, [open]);
+        return null;
+      };
+      ctx.slots.inject("conversation.hero.workspace.directoryFlow", () => ctx.slots.inject("sidebar.workspaces.directoryFlow", function* () {
+        yield ctx.slots.register({ name: "conversation.hero.workspace.directoryFlow", priority: -1e3, inject: () => ({}) }, TetherHostDirectoryFlow);
+        yield ctx.slots.register({ name: "sidebar.workspaces.directoryFlow", priority: -1e3, inject: () => ({}) }, TetherHostDirectoryFlow);
+      }));
+      ctx.slots.inject("conversation.hero.workspace", () => ctx.slots.register({
+        name: "conversation.hero.workspace",
+        priority: -1e3,
+        inject: () => ({})
+      }, TetherHostWorkspacePicker));
+      try {
+        const ui2 = ctx.uiWorkspace;
+        if (ui2 && typeof ui2.pickDirectory === "function") {
+          ui2.pickDirectory = async () => {
+            const paths = await requestTetherHostPick({ kind: "folder" });
+            return paths && paths.length ? paths[0] : null;
+          };
+        }
+      } catch (_2) {
+      }
+    }
+  } catch (_2) {
+  }
+}
+
 // src/app.js
+function dshGuestFlowScript() {
+  const flowFnSource = typeof tether_dsh_flow_fn_default === "function" ? tether_dsh_flow_fn_default.toString() : "";
+  if (!flowFnSource) return "";
+  return `(function () {
+  if (window.__tetherGuestFlowV2) return
+  try { if (!new URL(location.href).searchParams.has('tether_native')) return } catch (_) { return }
+  window.__tetherGuestFlowV2 = true
+  var runFlow = ${flowFnSource}
+  var id = 'tether-dsh-guest-flow'
+  var started = false
+  var findCtx = function () {
+    var root = document.getElementById('root')
+    if (!root) return null
+    var fk = Object.keys(root).find(function (k) { return k.indexOf('__reactContainer$') === 0 })
+    if (!fk) return null
+    var fiber = root[fk]
+    if (fiber && fiber.stateNode && fiber.stateNode.current) fiber = fiber.stateNode.current
+    var found = null
+    var seen = new Set()
+    var isCtx = function (v) { try { return v && typeof v === 'object' && v.reflect && v.fiber } catch (_) { return false } }
+    var walk = function (f, d) {
+      if (!f || d > 80 || found) return
+      var v = f.memoizedProps && f.memoizedProps.value
+      if (v && typeof v === 'object' && !seen.has(v)) { seen.add(v); if (isCtx(v.ctx)) { found = v.ctx; return } }
+      walk(f.child, d + 1); walk(f.sibling, d)
+    }
+    walk(fiber, 0)
+    return found
+  }
+  var mount = function () {
+    var ml = window.__ModuleLoader__
+    if (!ml || ml.mode !== 'live') return false
+    var ctx = findCtx()
+    if (!ctx || !ctx.loader || !ctx.loader.internal) return false
+    var internal = ctx.loader.internal
+    if (internal.loadCache.has(id)) return true
+    if (started) return false
+    var React
+    try { React = internal.makeRequire(id, new Set())('react') } catch (_) { return false }
+    if (!React || typeof React.useRef !== 'function') return false
+    try {
+      ml.load({ id: id, factory: function () { return { name: 'tether-guest-flow', inject: ['slots', 'uiWorkspace'], apply: function (c) { runFlow(c, React) } } } })
+      started = true
+      Promise.resolve(ctx.loader.create({ name: id })).catch(function () { started = false })
+      return false
+    } catch (_) { started = false; return false }
+  }
+  var tries = 0
+  var timer = setInterval(function () {
+    tries += 1
+    var ok = false
+    try { ok = mount() } catch (_) {}
+    if (ok || tries > 240) clearInterval(timer)
+  }, 500)
+})()`;
+}
+function bindDshGuestFlowInjection(guest) {
+  if (!guest || guest.__tetherFlowBound) return;
+  const script = dshGuestFlowScript();
+  if (!script) return;
+  guest.__tetherFlowBound = true;
+  const inject = () => {
+    try {
+      if (typeof guest.executeJavaScript === "function") guest.executeJavaScript(script).catch(() => {
+      });
+    } catch (_2) {
+    }
+  };
+  try {
+    guest.addEventListener("dom-ready", inject);
+    guest.addEventListener("did-navigate", (event) => {
+      if (!event || event.isMainFrame !== false) inject();
+    });
+  } catch (_2) {
+  }
+  inject();
+}
 function responseBelongsToDevice(data, expectedDevice) {
   if (!data || typeof data !== "object" || !expectedDevice) return false;
   return data.device_id == null || data.device_id === expectedDevice;
@@ -179213,6 +180361,26 @@ function safeDshNativeEndpoint(value) {
     const query = [...url.searchParams.entries()];
     const expected = new URL("/?tether_native=1", url.origin);
     return url.protocol === "https:" && !url.username && !url.password && !url.port && !url.hash && url.pathname === "/" && query.length === 1 && query[0][0] === "tether_native" && query[0][1] === "1" && url.href === expected.href ? url.href : "";
+  } catch (_2) {
+    return "";
+  }
+}
+function safeLocalDshSurfaceUrl(value) {
+  try {
+    const url = new URL(String(value || ""));
+    const query = [...url.searchParams.entries()];
+    return url.protocol === "http:" && ["127.0.0.1", "[::1]"].includes(url.hostname) && !url.username && !url.password && !url.hash && url.pathname === "/" && /^[1-9]\d{0,4}$/.test(url.port) && query.length === 1 && query[0][0] === "token" && /^[A-Za-z0-9_-]{16,128}$/.test(query[0][1]) ? url.href : "";
+  } catch (_2) {
+    return "";
+  }
+}
+function safeLocalDshNativeUrl(value, approvedUrl) {
+  try {
+    const approved = new URL(String(approvedUrl || ""));
+    const url = new URL(String(value || ""));
+    const query = [...url.searchParams.entries()];
+    const expected = new URL("/?tether_native=1", approved.origin);
+    return url.protocol === "http:" && url.hostname === approved.hostname && url.port === approved.port && !url.username && !url.password && !url.hash && url.pathname === "/" && query.length === 1 && query[0][0] === "tether_native" && query[0][1] === "1" && url.href === expected.href ? url.href : "";
   } catch (_2) {
     return "";
   }
@@ -179309,8 +180477,8 @@ function updateCardState({
 } = {}) {
   if (running) return { kind: "running", pill: "\u6B63\u5728\u66F4\u65B0", tone: "amber", action: "none", label: "\u66F4\u65B0\u4E2D", disabled: true };
   if (error) return { kind: "error", pill: "\u66F4\u65B0\u5931\u8D25", tone: "red", action: "retry", label: "\u91CD\u8BD5", disabled: false };
-  if (failed) return { kind: "failed", pill: "\u68C0\u67E5\u5931\u8D25", tone: "red", action: "recheck", label: "\u91CD\u8BD5", disabled: false };
   if (hasUpdate) return { kind: "update", pill: "\u6709\u66F4\u65B0", tone: "amber", action: "update", label: "\u4E00\u952E\u66F4\u65B0", disabled: false };
+  if (failed) return { kind: "failed", pill: "\u68C0\u67E5\u5931\u8D25", tone: "red", action: "recheck", label: "\u91CD\u8BD5", disabled: false };
   if (restartRequired) {
     return {
       kind: "restart",
@@ -179343,7 +180511,7 @@ function updateCardStateForInfos(infos, options = {}) {
   const list2 = (infos || []).filter(Boolean);
   const stale = list2.some(isUpdateInfoStale);
   const failed = options.failed === true || list2.some((info) => !!info.check_error);
-  const hasUpdate = list2.some((info) => !isUpdateInfoStale(info) && info.update_available === true);
+  const hasUpdate = list2.some((info) => info && info.update_available === true && !!info.current_version && !!info.latest_version);
   const known = list2.length > 0 && list2.every((info) => info.current_version && info.latest_version && !isUpdateInfoStale(info));
   const running = options.running === true || list2.some(updateInfoRunning);
   return updateCardState({ ...options, running, stale, failed, hasUpdate, known });
@@ -179356,6 +180524,22 @@ function isVersionNewer(candidate, current) {
     if (next[index] !== base[index]) return next[index] > base[index];
   }
   return false;
+}
+function windowsAppUpdateAdoptsNode(host, platform3, update) {
+  const target = /^(\d+\.\d+\.\d+)(?:[-+][\w.+-]+)?$/.exec(update?.latest_version || "")?.[1];
+  return host?.kind === "app" && /^win(?:dows|32)(?:\b|$)/i.test(platform3 || "") && update?.source === "electron-updater" && update.update_available === true && !isUpdateInfoStale(update) && !!target && (target === "0.5.12" || isVersionNewer(target, "0.5.12"));
+}
+var startingUpdates = /* @__PURE__ */ new Set();
+function beginDeviceUpdate(authority, deviceId) {
+  const key = JSON.stringify([String(authority || "").replace(/\/+$/, ""), deviceId]);
+  if (startingUpdates.has(key)) return null;
+  startingUpdates.add(key);
+  return () => startingUpdates.delete(key);
+}
+function currentDeviceUpdateJob(summary, job) {
+  const target = summary?.target_version;
+  if (summary?.update_available === true && typeof target === "string" && target && typeof job?.target_version === "string" && job.target_version && job.target_version !== target && ["error", "failed", "cancelled"].includes(job.status)) return null;
+  return job;
 }
 function normalizeUpdateLatest(updateInfo) {
   const latestVersions = { app: "", plugin: "", node: "" };
@@ -179551,6 +180735,11 @@ function deviceUpdateComponents(capabilities = {}) {
 function hasInstalledApp(capabilities = {}) {
   if (typeof capabilities.app_installed === "boolean") return capabilities.app_installed;
   return !!(capabilities.app_version || Array.isArray(capabilities.installed_products) && capabilities.installed_products.includes("app"));
+}
+function deviceUpdateOrigin(capabilities = {}) {
+  if (hasInstalledApp(capabilities)) return "app";
+  const installerOwnedNode = ["app_installer", "bundle_installer"].includes(capabilities.node_update_owner);
+  return capabilities.node_self_update_enabled === true && !installerOwnedNode ? "node" : "";
 }
 function localPluginNeedsRestart(info) {
   return !!(info && info.runtime_version && info.current_version && info.runtime_version !== info.current_version);
@@ -179820,6 +181009,7 @@ function MinimalUpdateButton({
   originProduct: requestedOriginProduct,
   triggerLabel = "",
   disabled = false,
+  busy = false,
   onJobChange
 }) {
   const apiRef = React2.useRef(api2);
@@ -179827,9 +181017,11 @@ function MinimalUpdateButton({
   const mountedRef = React2.useRef(true);
   const doneJobRef = React2.useRef("");
   const [summary, setSummary] = React2.useState(null);
-  const [job, setJob] = React2.useState(null);
+  const [storedJob, setJob] = React2.useState(null);
+  const job = currentDeviceUpdateJob(summary, storedJob);
   const [error, setError] = React2.useState("");
-  const [detailsOpen, setDetailsOpen] = React2.useState(true);
+  const [detailsOpen, setDetailsOpen] = React2.useState(false);
+  const [submitting, setSubmitting] = React2.useState(false);
   const hubUrl = host && typeof host.hubConfig === "function" ? (host.hubConfig() || {}).url : "";
   const originProduct = requestedOriginProduct || (host && host.kind === "dsh" ? "plugin" : "app");
   const jobChangeRef = React2.useRef(onJobChange);
@@ -179850,7 +181042,8 @@ function MinimalUpdateButton({
     setSummary(null);
     setJob(null);
     setError("");
-    setDetailsOpen(true);
+    setDetailsOpen(false);
+    setSubmitting(false);
   }, [devicePath]);
   const labels = {
     queued: "\u51C6\u5907\u66F4\u65B0",
@@ -179871,13 +181064,14 @@ function MinimalUpdateButton({
         setSummary(data || null);
         setError("");
         if (data && data.job) {
-          setJob(data.job);
-          notifyJobChange(data.job);
+          const current = currentDeviceUpdateJob(data, data.job);
+          setJob(current);
+          notifyJobChange(current);
         } else {
           try {
             const latest = await apiRef.current(devicePath + "/update/job", { method: "GET" }, hubUrl);
             if (cancelled) return;
-            const restored = latest && latest.status !== "done" ? latest : null;
+            const restored = currentDeviceUpdateJob(data, latest && latest.status !== "done" ? latest : null);
             setJob(restored);
             setError(restored && ["error", "failed", "cancelled"].includes(restored.status) ? restored.error && (restored.error.detail || restored.error.code) || "\u66F4\u65B0\u5931\u8D25" : "");
             notifyJobChange(restored);
@@ -179904,7 +181098,7 @@ function MinimalUpdateButton({
     let cancelled = false;
     const poll = async () => {
       try {
-        const next = await apiRef.current(devicePath + "/update/job", { method: "GET" }, hubUrl);
+        const next = currentDeviceUpdateJob(summary, await apiRef.current(devicePath + "/update/job", { method: "GET" }, hubUrl));
         if (cancelled) return;
         setJob(next);
         notifyJobChange(next);
@@ -179956,12 +181150,16 @@ function MinimalUpdateButton({
       cancelled = true;
       clearInterval(timer);
     };
-  }, [hubUrl, devicePath, job && job.job_id, job && job.status]);
+  }, [hubUrl, devicePath, job && job.job_id, job && job.status, summary?.target_version, summary?.update_available]);
   const start = async () => {
+    if (disabled || busy || job && job.status !== "done") return;
+    const release = beginDeviceUpdate(hubUrl, deviceId);
+    if (!release) return;
     const startScope = { deviceId, hubUrl, originProduct };
     const isCurrentScope = () => mountedRef.current && scopeRef.current.deviceId === startScope.deviceId && scopeRef.current.hubUrl === startScope.hubUrl && scopeRef.current.originProduct === startScope.originProduct;
     setError("");
-    setDetailsOpen(true);
+    setDetailsOpen(false);
+    setSubmitting(true);
     try {
       const created = await apiRef.current(devicePath + "/update/apply", {
         method: "POST",
@@ -179975,6 +181173,9 @@ function MinimalUpdateButton({
       const message = cause && (cause.message || cause.code) || "\u66F4\u65B0\u542F\u52A8\u5931\u8D25";
       setError(message);
       notifyJobChange({ status: "error", error: { detail: message } });
+    } finally {
+      release();
+      if (isCurrentScope()) setSubmitting(false);
     }
   };
   const retry = async () => {
@@ -179985,8 +181186,12 @@ function MinimalUpdateButton({
       setError("\u5F53\u524D\u66F4\u65B0\u4EFB\u52A1\u7F3A\u5C11\u6807\u8BC6\uFF0C\u65E0\u6CD5\u5B89\u5168\u91CD\u8BD5\u3002\u8BF7\u91CD\u65B0\u68C0\u67E5\u66F4\u65B0\u72B6\u6001\u3002");
       return;
     }
+    if (disabled || busy || !["error", "failed", "cancelled"].includes(job.status)) return;
+    const release = beginDeviceUpdate(hubUrl, deviceId);
+    if (!release) return;
     setError("");
-    setDetailsOpen(true);
+    setDetailsOpen(false);
+    setSubmitting(true);
     try {
       const retried = await apiRef.current(devicePath + "/update/retry", {
         method: "POST",
@@ -180000,12 +181205,14 @@ function MinimalUpdateButton({
       const message = cause && (cause.message || cause.code) || "\u66F4\u65B0\u91CD\u8BD5\u5931\u8D25";
       setError(message);
       notifyJobChange({ status: "error", error: { detail: message } });
+    } finally {
+      release();
+      if (isCurrentScope()) setSubmitting(false);
     }
   };
   if (!hubUrl || !devicePath) return null;
   const available = !!(summary && summary.update_available);
   if (!available && !job) return null;
-  const remoteTarget = !localDeviceId || deviceId !== localDeviceId;
   const jobFailed = !!(job && ["error", "failed", "cancelled"].includes(job.status));
   const percent = Math.max(0, Math.min(100, Number(job && job.progress && job.progress.percent) || 0));
   const statusText = job ? job.progress && job.progress.step || labels[job.status] || "\u66F4\u65B0\u4E2D" : "\u51C6\u5907\u66F4\u65B0";
@@ -180046,10 +181253,11 @@ function MinimalUpdateButton({
       { style: { display: "flex", justifyContent: "center", gap: 8 } },
       jobFailed ? h3("button", {
         type: "button",
+        disabled: disabled || busy || submitting,
         onClick: retry,
         style: { border: 0, borderRadius: 7, background: C2.blue, color: "#fff", padding: "7px 18px", fontSize: 12, cursor: "pointer" }
       }, "\u91CD\u8BD5") : null,
-      jobFailed || activeJob && remoteTarget ? h3("button", {
+      jobFailed || activeJob ? h3("button", {
         type: "button",
         onClick: () => setDetailsOpen(false),
         style: { border: 0, borderRadius: 7, background: "transparent", color: C2.sub, padding: "7px 14px", fontSize: 12, cursor: "pointer" }
@@ -180068,7 +181276,7 @@ function MinimalUpdateButton({
     { style: { display: "contents" } },
     available ? h3("button", {
       type: "button",
-      disabled,
+      disabled: disabled || submitting || busy && !hasOpenJob,
       title: hasOpenJob ? jobFailed ? "\u67E5\u770B\u66F4\u65B0\u5931\u8D25\u8BE6\u60C5" : "\u67E5\u770B\u66F4\u65B0\u8FDB\u5EA6" : "\u66F4\u65B0\u5230 " + (summary && summary.target_version || "\u6700\u65B0\u7248\u672C"),
       "aria-label": hasOpenJob ? "\u67E5\u770B\u66F4\u65B0\u72B6\u6001" : "\u66F4\u65B0\u5230\u6700\u65B0\u7248\u672C",
       onClick: hasOpenJob ? () => setDetailsOpen(true) : start,
@@ -180989,186 +182197,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     h3("circle", { cx: 10.6, cy: 9.3, r: 2.8, fill: "#0f172a", stroke: "#f5f7fa", strokeWidth: 1.7 }),
     h3("circle", { cx: 21.4, cy: 22.7, r: 2.8, fill: "#0f172a", stroke: "#f59e0b", strokeWidth: 1.7 })
   );
-  const GLYPHS2 = {
-    workspace: { cap: "round", join: "round", parts: [
-      { d: "M14 12.05c0 .8-.65 1.45-1.46 1.45H3.46C2.65 13.5 2 12.85 2 12.05v-8.1c0-.8.65-1.45 1.46-1.45h2.4c.49 0 .94.24 1.21.65l.5.73c.27.4.73.65 1.21.65h3.76c.8 0 1.46.65 1.46 1.45v6.02Z" },
-      { d: "M8.7 8.1v3M11.2 8.1v3" }
-    ] },
-    files: { parts: [
-      { d: "M12.3994 13.5986H2.04956C1.49728 13.5986 1.04956 13.1509 1.04956 12.5986V3.40137C1.04956 2.84908 1.49728 2.40137 2.04956 2.40137H4.76632C5.01016 2.40137 5.24561 2.49046 5.42836 2.6519L6.94088 3.98799C7.12364 4.14943 7.35908 4.23852 7.60293 4.23852H12.3994C12.9517 4.23852 13.3994 4.68624 13.3994 5.23852V7.16991" },
-      { d: "M2.55911 7.93683C2.67584 7.49906 3.07229 7.19446 3.52536 7.19446H13.6491C14.3061 7.19446 14.7846 7.81725 14.6153 8.45209L13.4411 12.856C13.3244 13.2938 12.9279 13.5984 12.4748 13.5984H2.35113C1.69411 13.5984 1.21562 12.9756 1.38489 12.3407L2.55911 7.93683Z" }
-    ] },
-    devices: { parts: [
-      { d: "M7.99986 14.0887C11.3626 14.0887 14.0886 11.3627 14.0886 7.99998C14.0886 4.63727 11.3626 1.91125 7.99986 1.91125C4.63715 1.91125 1.91113 4.63727 1.91113 7.99998C1.91113 11.3627 4.63715 14.0887 7.99986 14.0887Z" },
-      { d: "M2.34619 8H13.6538", cap: "square" },
-      { d: "M7.99976 14.0889C9.23509 14.0889 10.1743 11.3629 10.1743 8.00006C10.1743 4.63739 9.23509 1.91138 7.99976 1.91138" },
-      { d: "M7.99973 14.0889C6.76445 14.0889 5.8252 11.3629 5.8252 8.00006C5.8252 4.63739 6.76445 1.91138 7.99973 1.91138" }
-    ] },
-    shield: { join: "round", parts: [
-      { d: "M6.80132 2.14853C7.70663 1.80917 8.70422 1.80919 9.60952 2.14859L14.1296 3.84317V7.11961C14.1296 11.6089 10.7615 13.5975 8.20543 14.5779C5.64931 13.5975 2.28052 11.6089 2.28052 7.11961V3.84317L6.80132 2.14853Z" }
-    ] },
-    gear: { join: "round", parts: [
-      { d: "M6.7 1.6h2.6l.35 1.55.62.26 1.32-.86 1.84 1.84-.86 1.32.26.62 1.55.35v2.6l-1.55.35-.26.62.86 1.32-1.84 1.84-1.32-.86-.62.26-.35 1.55H6.7l-.35-1.55-.62-.26-1.32.86-1.84-1.84.86-1.32-.26-.62L1.6 9.3V6.7l1.55-.35.26-.62-.86-1.32 1.84-1.84 1.32.86.62-.26z" },
-      { d: "M8 6.1a1.9 1.9 0 1 0 0 3.8 1.9 1.9 0 0 0 0-3.8Z" }
-    ] },
-    user: { join: "round", parts: [
-      { d: "M8 7.7a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" },
-      { d: "M3.1 13.7c.4-2.5 2.3-4 4.9-4s4.5 1.5 4.9 4" }
-    ] },
-    monitor: { parts: [
-      { d: "M2 3.2h12v8.1H2z" },
-      { d: "M6 13.8h4M8 11.3v2.5" }
-    ] },
-    apps: { cap: "round", join: "round", parts: [
-      { d: "M2.4 2.4h4.2v4.2H2.4z" },
-      { d: "M9.4 2.4h4.2v4.2H9.4z" },
-      { d: "M2.4 9.4h4.2v4.2H2.4z" },
-      { d: "M9.4 9.4h4.2v4.2H9.4z" }
-    ] },
-    bot: { cap: "round", join: "round", parts: [
-      { d: "M8 2.4v1.3" },
-      { d: "M6.9 2.4h2.2" },
-      { d: "M5 3.7h6a2.2 2.2 0 0 1 2.2 2.2v4.3A2.2 2.2 0 0 1 11 12.4H5a2.2 2.2 0 0 1-2.2-2.2V5.9A2.2 2.2 0 0 1 5 3.7Z" },
-      { d: "M2.8 6.3H1.9v2.8h.9M13.2 6.3h.9v2.8h-.9" },
-      { d: "M6.1 7.2v1.5M9.9 7.2v1.5" },
-      { d: "M3.6 13.8h8.8" }
-    ] },
-    refresh: { parts: [
-      { d: "M13 8a5 5 0 1 1-1.5-3.56" },
-      { d: "M13.2 2.3v3.1h-3.1" }
-    ] },
-    stop: { parts: [
-      { d: "M4.6 4.6h6.8v6.8H4.6z", fill: "currentColor", stroke: false }
-    ] },
-    eye: { parts: [
-      { d: "M1.8 8s2.2-4.2 6.2-4.2S14.2 8 14.2 8s-2.2 4.2-6.2 4.2S1.8 8 1.8 8z" },
-      { d: "M8 9.6A1.6 1.6 0 1 0 8 6.4a1.6 1.6 0 0 0 0 3.2z" }
-    ] },
-    pencil: { parts: [
-      { d: "M10.8 2.6l2.6 2.6-7.7 7.7-3.4.8.8-3.4z" },
-      { d: "M9.4 4l2.6 2.6" }
-    ] },
-    camera: { join: "round", parts: [
-      { d: "M2.2 5.4h2.2l1-1.6h4.2l1 1.6h2.2v7.1H2.2z" },
-      { d: "M8 11.3a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z" }
-    ] },
-    trash: { parts: [
-      { d: "M2.8 4.2h10.4M6 4.2V2.6h4v1.6M4.1 4.2l.7 9.2h6.4l.7-9.2" },
-      { d: "M6.8 6.7v4.6M9.2 6.7v4.6" }
-    ] },
-    arrowUp: { parts: [
-      { d: "M8 13V3M3.6 7.4L8 3l4.4 4.4" }
-    ] },
-    download: { parts: [
-      { d: "M8 2.2v7.4M4.8 6.8L8 10l3.2-3.2" },
-      { d: "M2.6 12.9h10.8" }
-    ] },
-    back: { parts: [
-      { d: "M10.2 3.2L5.4 8l4.8 4.8" }
-    ] },
-    forward: { parts: [
-      { d: "M5.8 3.2L10.6 8l-4.8 4.8" }
-    ] },
-    transfer: { parts: [
-      { d: "M8 1.4a6.6 6.6 0 1 0 0 13.2A6.6 6.6 0 0 0 8 1.4Z" },
-      { d: "M3.6 5.6h7.6M8.9 3.3l2.3 2.3-2.3 2.3" },
-      { d: "M12.4 10.4H4.8M7.1 8.1 4.8 10.4l2.3 2.3" }
-    ] },
-    link: { join: "round", parts: [
-      { d: "M6.4 9.6a2.5 2.5 0 0 0 3.5 0l2-2a2.5 2.5 0 1 0-3.5-3.5l-1 1" },
-      { d: "M9.6 6.4a2.5 2.5 0 0 0-3.5 0l-2 2a2.5 2.5 0 1 0 3.5 3.5l1-1" }
-    ] },
-    search: { parts: [
-      { d: "M7.1 12.2a5.1 5.1 0 1 0 0-10.2 5.1 5.1 0 0 0 0 10.2z" },
-      { d: "M11 11l3 3" }
-    ] },
-    save: { parts: [
-      { d: "M3 2.4h8.2L13.4 4.6v9H3z" },
-      { d: "M5.4 2.4v3.2h5V2.4" },
-      { d: "M5.4 9.2h5.2v4.4H5.4z" }
-    ] },
-    plus: { parts: [
-      { d: "M8 2V14" },
-      { d: "M2 8H14" }
-    ] },
-    chevronDown: { parts: [
-      { d: "M4 6L7.29289 9.29289C7.68342 9.68342 8.31658 9.68342 8.70711 9.29289L12 6" }
-    ] },
-    table: { parts: [
-      { d: "M2.6 3.4h10.8v9.2H2.6z" },
-      { d: "M2.6 6.4h10.8M6.4 6.4v6.2M9.6 6.4v6.2" }
-    ] },
-    plainText: { parts: [
-      { d: "M3 4.2h10M3 8h10M3 11.8h6.2" }
-    ] },
-    chevronRight: { parts: [
-      { d: "M6 12L9.29289 8.70711C9.68342 8.31658 9.68342 7.68342 9.29289 7.29289L6 4" }
-    ] },
-    chevronLeft: { parts: [
-      { d: "M10 4L6.70711 7.29289C6.31658 7.68342 6.31658 8.31658 6.70711 8.70711L10 12" }
-    ] },
-    think: { parts: [
-      { d: "M10.2854 5.71481C12.9673 8.39663 14.1182 11.5938 12.8562 12.8559C11.5942 14.1179 8.39706 12.9669 5.71518 10.2851C3.03333 7.60323 1.88236 4.40608 3.14441 3.14403C4.40644 1.882 7.6036 3.03297 10.2854 5.71481Z" },
-      { d: "M10.2854 10.2851C7.6036 12.9669 4.40644 14.1179 3.14441 12.8559C1.88236 11.5938 3.03333 8.39663 5.71518 5.71481C8.39706 3.03297 11.5942 1.882 12.8562 3.14403C14.1182 4.40608 12.9673 7.60323 10.2854 10.2851Z" },
-      { d: "M8.86291 8.0002C8.86291 8.47549 8.47762 8.86087 8.00224 8.86087C7.52694 8.86087 7.1416 8.47549 7.1416 8.0002C7.1416 7.52485 7.52694 7.13953 8.00224 7.13953C8.47762 7.13953 8.86291 7.52485 8.86291 8.0002Z", fill: "currentColor", stroke: false }
-    ] },
-    tool: { parts: [
-      { d: "M6.27612 1.5L4.52612 14.5" },
-      { d: "M11.4739 1.5L9.72388 14.5" },
-      { d: "M2.39868 5.5H14.0681" },
-      { d: "M1.93188 10.5H13.6013" }
-    ] },
-    folderPlus: { join: "round", parts: [
-      { d: "M1.8 5.2h12.4v7.2H1.8z" },
-      { d: "M1.8 5.2V3.6h4l1.4 1.6" },
-      { d: "M8 7.2v4M6 9.2h4" }
-    ] },
-    filePlus: { join: "round", parts: [
-      { d: "M3.6 2.2h5.6l3.2 3.2v8.4H3.6z" },
-      { d: "M9.2 2.2v3.4h3.2" },
-      { d: "M8 8v4M6 10h4" }
-    ] },
-    file: { parts: [
-      { d: "M4.9375 5.90295H11.0625" },
-      { d: "M4.9375 9.02991H8.27841" },
-      { d: "M12.5 1.32617C13.3039 1.32617 14 1.95171 14 2.77637V13.2246C13.9996 14.0489 13.3036 14.6738 12.5 14.6738H3.5C2.69637 14.6738 2.00042 14.0489 2 13.2246V2.77637C2 1.95171 2.69613 1.32617 3.5 1.32617H12.5ZM3.5 2.32617C3.1993 2.32617 3 2.55186 3 2.77637V13.2246C3.00044 13.4489 3.19963 13.6738 3.5 13.6738H12.5C12.8004 13.6738 12.9996 13.4489 13 13.2246V2.77637C13 2.55186 12.8007 2.32617 12.5 2.32617H3.5Z", fill: "currentColor", stroke: false }
-    ] },
-    folderOpen: { parts: [
-      { d: "M2.55912 7.93683C2.67584 7.49906 3.0723 7.19446 3.52536 7.19446H13.6491C14.3061 7.19446 14.7846 7.81725 14.6153 8.45209L13.4411 12.856C13.3244 13.2938 12.9279 13.5984 12.4748 13.5984H2.35113C1.69411 13.5984 1.21562 12.9756 1.38489 12.3407L2.55912 7.93683Z", fill: "currentColor", opacity: 0.16, stroke: false },
-      { d: "M13.6491 6.69446C14.6346 6.69453 15.3522 7.62895 15.0983 8.58118L13.9245 12.9845C13.7494 13.6412 13.1539 14.0988 12.4743 14.0988H2.35126C1.36574 14.0988 0.648153 13.1643 0.902044 12.212L2.07587 7.80774C2.25102 7.15128 2.84567 6.69455 3.52509 6.69446H13.6491ZM3.52509 7.69446C3.29865 7.69455 3.10004 7.84674 3.04169 8.06555L1.86786 12.4698C1.78345 12.7872 2.02285 13.0988 2.35126 13.0988H12.4743C12.7007 13.0988 12.8992 12.9463 12.9577 12.7277L14.1325 8.32336C14.2171 8.00598 13.9776 7.69453 13.6491 7.69446H3.52509Z", fill: "currentColor", stroke: false },
-      { d: "M4.7666 1.90137C5.13227 1.90144 5.48571 2.03525 5.75977 2.27734L7.27246 3.61328C7.36379 3.69382 7.48174 3.73828 7.60352 3.73828H12.3994C13.2276 3.73841 13.8993 4.41005 13.8994 5.23828V6.7168C13.8183 6.70327 13.735 6.69436 13.6494 6.69434H12.8994V5.23828C12.8993 4.96233 12.6754 4.73841 12.3994 4.73828H7.60352C7.23781 4.73828 6.88446 4.60438 6.61035 4.3623L5.09766 3.02637C5.00636 2.94576 4.88838 2.90144 4.7666 2.90137H2.0498C1.77366 2.90137 1.5498 3.12523 1.5498 3.40137V9.78223L0.902344 12.2119C0.648452 13.1642 1.36604 14.0986 2.35156 14.0986H2.0498C1.2214 14.0986 0.549838 13.427 0.549805 12.5986V3.40137C0.549805 2.57294 1.22138 1.90137 2.0498 1.90137H4.7666Z", fill: "currentColor", stroke: false }
-    ] },
-    folderClose: { parts: [
-      { d: "M1.50439 3.11059C1.50439 2.55831 1.95211 2.1106 2.50439 2.1106H5.43389C5.67773 2.1106 5.91318 2.19969 6.09593 2.36113L7.71649 3.79265C7.89924 3.95409 8.1347 4.04319 8.3785 4.04319H13.4958C14.0481 4.04319 14.4958 4.4909 14.4958 5.04319V12.8894C14.4958 13.4417 14.0481 13.8894 13.4958 13.8894H2.50439C1.95211 13.8894 1.50439 13.4417 1.50439 12.8894V4.04319V3.11059Z" },
-      { d: "M3.63501 7.66614H12.3647" }
-    ] },
-    terminal: { parts: [
-      { d: "M2.5 3.5h11v9h-11z" },
-      { d: "M4.5 6l2 2-2 2" },
-      { d: "M8.5 10h3" }
-    ] }
-  };
-  function Glyph({ name, size = 16, stroke }) {
-    const glyph = GLYPHS2[name] || { parts: [] };
-    return h3("svg", {
-      width: size,
-      height: size,
-      viewBox: "0 0 16 16",
-      fill: "none",
-      stroke: "currentColor",
-      strokeWidth: stroke == null ? 1 : stroke,
-      strokeLinecap: glyph.cap || "butt",
-      strokeLinejoin: glyph.join || "miter",
-      "aria-hidden": true
-    }, glyph.parts.map((part, index) => h3("path", {
-      key: index,
-      d: part.d,
-      fill: part.fill || "none",
-      stroke: part.stroke === false ? "none" : void 0,
-      opacity: part.opacity,
-      strokeLinecap: part.cap || glyph.cap || "butt"
-    })));
-  }
+  const Glyph = createGlyph(React2);
   function ActivityBar({ active, collapsed, onSelect, onPermissions, permissionsOpen, onAppSettings, appSettingsOpen, onAccount, accountEmail = "", accountAvatar = "" }) {
     const accountInitial = String(accountEmail || "").trim().charAt(0).toUpperCase();
     const items = [
@@ -182322,6 +183351,51 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
   }
   const NATIVE_SURFACE_RETRIES = 3;
   const NATIVE_SURFACE_DOCUMENT_RETRIES = 1;
+  const DSH_MESH_OPEN_TIMEOUT_MS = 15e3;
+  const DSH_MESH_RETRY_MS = 5 * 60 * 1e3;
+  function safeMeshDshEndpoint(value) {
+    try {
+      const url = new URL(String(value || ""));
+      return url.protocol === "https:" && !url.username && !url.password && /^[1-9]\d{0,4}$/.test(url.port) && !url.hash && !url.search && url.pathname === "/" && !!url.hostname ? url.href : "";
+    } catch (_2) {
+      return "";
+    }
+  }
+  function meshDshService(service, targetId) {
+    if (!service || service.targetId !== targetId || service.serviceId !== "dsh" || typeof service.grantId !== "string" || !/^[a-f0-9]{8,64}$/i.test(service.grantId) || typeof service.partition !== "string" || !/^persist:tether-wb-[a-f0-9]{40}$/.test(service.partition)) return null;
+    const endpoint = safeMeshDshEndpoint(service.endpoint);
+    if (!endpoint) return null;
+    return { endpoint, grantId: service.grantId, partition: service.partition, serviceId: "dsh" };
+  }
+  function withMeshTimeout(promise, timeoutMs, onLate) {
+    return new Promise((resolve3, reject) => {
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        const error = new Error("mesh \u5DE5\u4F5C\u53F0\u8FDE\u63A5\u8D85\u65F6");
+        error.code = "mesh_open_timeout";
+        reject(error);
+      }, timeoutMs);
+      Promise.resolve(promise).then((value) => {
+        if (settled) {
+          try {
+            onLate && onLate(value);
+          } catch (_2) {
+          }
+          return;
+        }
+        settled = true;
+        clearTimeout(timer);
+        resolve3(value);
+      }, (error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        reject(error);
+      });
+    });
+  }
   const NATIVE_SURFACE_DOCUMENT_TIMEOUT_MS = 9e4;
   function nativeSurfaceRetryDelay(attempt) {
     return Math.min(1e3 * Math.pow(2, Math.max(0, attempt - 1)), 8e3);
@@ -182350,6 +183424,26 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     } catch (_2) {
     }
   }
+  const TETHER_FS_RELAY_ROUTES = {
+    "/drives": "GET",
+    "/workspaces": "GET",
+    "/fs/list": "POST",
+    "/fs/read": "POST",
+    "/fs/write_chunk": "POST"
+  };
+  const TETHER_FS_RELAY_CHUNK_MAX = 3e5;
+  const TETHER_FS_RELAY_CHUNKS_MAX = 64;
+  const TETHER_FS_RELAY_BODY_MAX = 12 * 1024 * 1024;
+  function tetherFsRelayHostReady() {
+    try {
+      return /^http:\/\/(127\.0\.0\.1|localhost|\[::1\]):\d+$/.test(String(window.location.origin || ""));
+    } catch (_2) {
+      return false;
+    }
+  }
+  function isTetherFsRelayQuery(value) {
+    return !value || /^\?device_id=[A-Za-z0-9._-]{1,80}$/.test(String(value));
+  }
   function NativeSurface({ deviceId, online, visible, localDeviceId, deviceInfo = null, preload = false, layered = false, authReady = true }) {
     const [state, setState] = React2.useState({ deviceId, status: deviceId ? "loading" : "no-device", url: "" });
     const [attempt, setAttempt] = React2.useState(0);
@@ -182372,9 +183466,185 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const documentTimerRef = React2.useRef(null);
     const documentStartedAtRef = React2.useRef(0);
     const nativeGuestRef = React2.useRef(null);
+    const nativeIframeRef = React2.useRef(null);
+    const [folderPick, setFolderPick] = React2.useState(null);
+    const closeFolderPick = (value) => {
+      const request = folderPick;
+      if (!request) return;
+      setFolderPick(null);
+      const chosen = (Array.isArray(value) ? value : [value]).map((item) => typeof item === "string" ? item.trim() : "").filter(Boolean);
+      const payload = chosen.length ? { type: "tether:pick-folder-result", id: request.id, path: chosen[0], paths: chosen } : { type: "tether:pick-folder-result", id: request.id, cancelled: true };
+      if (request.mode === "iframe") {
+        try {
+          if (request.source && typeof request.source.postMessage === "function") {
+            request.source.postMessage(payload, "*");
+          }
+        } catch (_2) {
+        }
+        return;
+      }
+      const guest = nativeGuestRef.current;
+      if (!guest || typeof guest.executeJavaScript !== "function") return;
+      try {
+        void guest.executeJavaScript("window.postMessage(" + JSON.stringify(payload) + ", '*')").catch(() => {
+        });
+      } catch (_2) {
+      }
+    };
+    const fsRelayLocalDeviceRef = React2.useRef(localDeviceId);
+    fsRelayLocalDeviceRef.current = localDeviceId;
+    const fsRelayChunksRef = React2.useRef(/* @__PURE__ */ new Map());
+    const fsRelayReplyGuest = (guest, payload) => {
+      if (!guest || typeof guest.executeJavaScript !== "function") return;
+      try {
+        void guest.executeJavaScript("window.postMessage(" + JSON.stringify(payload) + ", '*')").catch(() => {
+        });
+      } catch (_2) {
+      }
+    };
+    const fsRelayLocalDevice = async () => {
+      if (fsRelayLocalDeviceRef.current) return fsRelayLocalDeviceRef.current;
+      try {
+        const response = await fetch("/app-context", { cache: "no-store" });
+        const context = await response.json();
+        return context && typeof context.device === "string" ? context.device : "";
+      } catch (_2) {
+        return "";
+      }
+    };
+    const fsRelayPerform = async (reply, request) => {
+      const id = String(request && request.id || "");
+      const fail2 = (status2, code, message2) => reply({ type: "tether:fs-result", id, ok: false, status: status2, code, message: message2 });
+      if (!/^[0-9a-f-]{36}$/i.test(id) || !tetherFsRelayHostReady()) return;
+      const method = request.method === "POST" ? "POST" : request.method === "GET" ? "GET" : "";
+      const path = typeof request.path === "string" ? request.path : "";
+      if (!method || !Object.prototype.hasOwnProperty.call(TETHER_FS_RELAY_ROUTES, path)) {
+        fail2(403, "path_denied", "\u8BBE\u5907\u6587\u4EF6\u4E2D\u7EE7\u53EA\u5141\u8BB8\u767D\u540D\u5355\u8DEF\u5F84");
+        return;
+      }
+      if (TETHER_FS_RELAY_ROUTES[path] !== method) {
+        fail2(405, "bad_method", "\u8BBE\u5907\u6587\u4EF6\u4E2D\u7EE7\u65B9\u6CD5\u4E0D\u5141\u8BB8");
+        return;
+      }
+      if (!isTetherFsRelayQuery(request.query)) {
+        fail2(400, "bad_query", "\u8BBE\u5907\u6587\u4EF6\u4E2D\u7EE7\u67E5\u8BE2\u4E32\u65E0\u6548");
+        return;
+      }
+      const localDevice = await fsRelayLocalDevice();
+      if (!localDevice || request.device !== localDevice) {
+        fail2(404, "device_not_found", "\u53EA\u5141\u8BB8\u4E2D\u7EE7\u672C\u673A\u8BBE\u5907");
+        return;
+      }
+      let body;
+      if (request.body !== void 0 && request.body !== null) {
+        if (typeof request.body !== "string" || request.body.length > TETHER_FS_RELAY_BODY_MAX) {
+          fail2(413, "too_large", "\u8BBE\u5907\u6587\u4EF6\u4E2D\u7EE7\u8BF7\u6C42\u4F53\u8FC7\u5927");
+          return;
+        }
+        let parsed;
+        try {
+          parsed = JSON.parse(request.body);
+        } catch (_2) {
+          parsed = null;
+        }
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+          fail2(400, "bad_body", "\u8BBE\u5907\u6587\u4EF6\u4E2D\u7EE7\u8BF7\u6C42\u4F53\u65E0\u6548");
+          return;
+        }
+        if (parsed.device_id != null && String(parsed.device_id) !== localDevice) {
+          fail2(404, "device_not_found", "\u53EA\u5141\u8BB8\u4E2D\u7EE7\u672C\u673A\u8BBE\u5907");
+          return;
+        }
+        body = request.body;
+      } else if (method === "POST") {
+        fail2(400, "bad_body", "\u8BBE\u5907\u6587\u4EF6\u4E2D\u7EE7\u7F3A\u5C11\u8BF7\u6C42\u4F53");
+        return;
+      }
+      const startedAt = performance.now();
+      let response;
+      try {
+        response = await fetch("/api/devices/" + encodeURIComponent(localDevice) + path, {
+          method,
+          headers: body === void 0 ? void 0 : { "Content-Type": "application/json" },
+          body: body === void 0 ? void 0 : body,
+          credentials: "same-origin",
+          cache: "no-store"
+        });
+      } catch (_2) {
+        fail2(502, "local_unreachable", "\u672C\u673A\u8BBE\u5907\u6587\u4EF6\u670D\u52A1\u4E0D\u53EF\u8FBE");
+        return;
+      }
+      const data = await response.json().catch(() => null);
+      reply({
+        type: "tether:fs-result",
+        id,
+        ok: response.ok,
+        status: response.status,
+        data,
+        durationMs: Math.max(0, Math.round(performance.now() - startedAt))
+      });
+    };
+    const fsRelayOnFrame = (guest, params) => {
+      const ids = params.getAll("request_id");
+      const id = ids[0] || "";
+      if (ids.length !== 1 || !/^[0-9a-f-]{36}$/i.test(id)) return;
+      const allowed = [
+        "tether_action",
+        "request_id",
+        "fs_device",
+        "fs_method",
+        "fs_path",
+        "fs_seq",
+        "fs_total",
+        "fs_chunk",
+        "fs_query"
+      ];
+      if ([...params.keys()].some((key) => allowed.indexOf(key) < 0)) return;
+      const method = params.get("fs_method");
+      const path = params.get("fs_path");
+      const device = params.get("fs_device") || "";
+      const query = params.get("fs_query") || "";
+      const seq = Number(params.get("fs_seq"));
+      const total = Number(params.get("fs_total"));
+      if (!Number.isInteger(seq) || seq < 0 || !Number.isInteger(total) || total < 0 || total > TETHER_FS_RELAY_CHUNKS_MAX || (total > 0 ? seq >= total : seq !== 0)) return;
+      const chunk = params.get("fs_chunk") || "";
+      if (chunk.length > TETHER_FS_RELAY_CHUNK_MAX) return;
+      const chunks = fsRelayChunksRef.current;
+      const now = Date.now();
+      for (const [key, value] of chunks) if (now - value.at > 6e4) chunks.delete(key);
+      let entry = chunks.get(id);
+      if (!entry) {
+        entry = { at: now, method, path, device, query, total, parts: [] };
+        chunks.set(id, entry);
+      }
+      entry.at = now;
+      entry.parts[seq] = chunk;
+      fsRelayReplyGuest(guest, { type: "tether:fs-chunk", id, seq });
+      if (total > 0 && seq < total - 1) return;
+      chunks.delete(id);
+      let body;
+      if (total > 0) {
+        try {
+          const encoded = entry.parts.join("").replace(/-/g, "+").replace(/_/g, "/");
+          const binary = atob(encoded);
+          const bytes = new Uint8Array(binary.length);
+          for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+          body = new TextDecoder().decode(bytes);
+        } catch (_2) {
+          fsRelayReplyGuest(guest, { type: "tether:fs-result", id, ok: false, status: 400, code: "bad_body", message: "\u8BBE\u5907\u6587\u4EF6\u4E2D\u7EE7\u8BF7\u6C42\u4F53\u65E0\u6548" });
+          return;
+        }
+      }
+      void fsRelayPerform(
+        (payload) => fsRelayReplyGuest(guest, payload),
+        { id, method, path, device, query, body }
+      );
+    };
     const pollFlightRef = React2.useRef(null);
     const surfaceStateRef = React2.useRef(currentState);
     surfaceStateRef.current = currentState;
+    const localDirectFailedRef = React2.useRef(false);
+    const meshProbeRef = React2.useRef({ deviceId: "", failedAt: 0, reason: "" });
     const surfaceSourceKey = (() => {
       try {
         const hub = host && typeof host.hubConfig === "function" ? host.hubConfig() : null;
@@ -182384,7 +183654,64 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         return ACTIVE_BASE;
       }
     })();
-    const fetchSurfaceDescriptor2 = async (id, signal) => {
+    const tryMeshDshService = async (id) => {
+      const startedAt = performance.now();
+      const degrade = (reason, detail) => {
+        meshProbeRef.current = { deviceId: id, failedAt: Date.now(), reason };
+        try {
+          console.info("[dsh-surface] mesh \u4F18\u5148\u5931\u8D25\uFF0C\u964D\u7EA7 Hub \u7F51\u5173", {
+            deviceId: id,
+            reason,
+            message: detail || "",
+            durationMs: Math.max(0, Math.round(performance.now() - startedAt))
+          });
+        } catch (_2) {
+        }
+        return null;
+      };
+      if (!host || !host.workbench || typeof host.workbench.open !== "function") return degrade("workbench_unavailable");
+      let catalog = null;
+      try {
+        catalog = typeof host.workbench.catalog === "function" ? await host.workbench.catalog(id) : null;
+      } catch (error) {
+        return degrade("catalog_failed", error && error.message);
+      }
+      const entry = catalog && Array.isArray(catalog.services) ? catalog.services.find((service2) => service2 && service2.id === "dsh") : null;
+      if (!entry || entry.state !== "ready") return degrade("catalog_not_ready", entry && entry.state);
+      let service = null;
+      try {
+        service = await withMeshTimeout(host.workbench.open(id, "dsh"), DSH_MESH_OPEN_TIMEOUT_MS, (late) => {
+          const opened = late && late.grantId;
+          if (!opened) return;
+          try {
+            void Promise.resolve(host.workbench.close(id, "dsh", opened)).catch(() => {
+            });
+          } catch (_2) {
+          }
+        });
+      } catch (error) {
+        return degrade(error && error.code === "mesh_open_timeout" ? "open_timeout" : "open_failed", error && error.message);
+      }
+      const verified = meshDshService(service, id);
+      if (!verified) {
+        try {
+          void Promise.resolve(host.workbench.close(id, "dsh", service && service.grantId)).catch(() => {
+          });
+        } catch (_2) {
+        }
+        return degrade("invalid_service");
+      }
+      meshProbeRef.current = { deviceId: id, failedAt: 0, reason: "" };
+      try {
+        console.info("[dsh-surface] mesh \u5DF2\u9009\u4E2D", {
+          deviceId: id,
+          durationMs: Math.max(0, Math.round(performance.now() - startedAt))
+        });
+      } catch (_2) {
+      }
+      return verified;
+    };
+    const fetchSurfaceDescriptor = async (id, signal) => {
       if (host && host.kind === "dsh" && localDeviceId && id === localDeviceId && typeof window !== "undefined" && window.location) {
         const browserHost = /^http:\/\/(127\.0\.0\.1|\[::1\]):\d+$/.test(window.location.origin);
         if (browserHost || window.location.protocol === "dsh-app:") {
@@ -182392,6 +183719,44 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         }
       }
       const isLocalTarget = !!(localDeviceId && id === localDeviceId);
+      if (host && host.kind === "app" && !EXPLICIT_AUTHORITY && isLocalTarget && !localDirectFailedRef.current && typeof window !== "undefined" && window.location && /^http:\/\/(127\.0\.0\.1|\[::1\]):\d+$/.test(window.location.origin)) {
+        let localDescriptor = null;
+        try {
+          const localResponse = await fetch("/api/devices/" + encodeURIComponent(id) + "/dsh/surface", {
+            headers: { "Cache-Control": "no-store" },
+            cache: "no-store",
+            signal
+          });
+          const localData = await localResponse.json().catch(() => null);
+          const localUrl = localData && localData.available === true ? safeLocalDshSurfaceUrl(localData.url) : "";
+          if (localResponse.ok && localUrl) {
+            localDescriptor = { response: { ok: true, status: 200 }, data: {
+              available: true,
+              url: localUrl,
+              pid: Number(localData.pid) || 0,
+              updated_at: localData.updated_at,
+              localDirect: true
+            } };
+          }
+        } catch (error) {
+          if (signal && signal.aborted) throw error;
+        }
+        if (localDescriptor) return localDescriptor;
+        if (signal && signal.aborted) {
+          const error = new Error("The operation was aborted");
+          error.name = "AbortError";
+          throw error;
+        }
+      }
+      if (host && host.kind === "app" && !EXPLICIT_AUTHORITY && !isLocalTarget && !(meshProbeRef.current.deviceId === id && meshProbeRef.current.failedAt && Date.now() - meshProbeRef.current.failedAt < DSH_MESH_RETRY_MS)) {
+        const meshService = await tryMeshDshService(id);
+        if (signal && signal.aborted) {
+          const abortError = new Error("The operation was aborted");
+          abortError.name = "AbortError";
+          throw abortError;
+        }
+        if (meshService) return { response: { ok: true, status: 200 }, data: { meshService } };
+      }
       if (host && host.kind === "app" && !EXPLICIT_AUTHORITY && host.workbench && typeof host.workbench.openDshSurface === "function") {
         const service = await host.workbench.openDshSurface(id);
         return { response: { ok: true, status: 200 }, data: { nativeService: service } };
@@ -182462,6 +183827,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       retryCountRef.current = 0;
       descriptorRetryCountRef.current = 0;
       documentRetryCountRef.current = 0;
+      localDirectFailedRef.current = false;
       if (retryTimerRef.current) {
         clearTimeout(retryTimerRef.current);
         retryTimerRef.current = null;
@@ -182538,10 +183904,41 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       }
       setState({ deviceId, status: "loading", url: "" });
       const descriptorStartedAt = performance.now();
-      fetchSurfaceDescriptor2(deviceId, controller.signal).then(async ({ response, data }) => {
+      fetchSurfaceDescriptor(deviceId, controller.signal).then(async ({ response, data }) => {
         reportNativeSurfaceTiming("descriptor", descriptorStartedAt);
         if (data && data.local) {
           if (current) setState({ deviceId, status: "local", url: "", pid: 0 });
+          return;
+        }
+        if (data && data.localDirect) {
+          const localUrl = safeLocalDshSurfaceUrl(data.url);
+          if (!localUrl) throw new Error("\u672C\u673A DSH \u9875\u9762\u5730\u5740\u65E0\u6548");
+          if (current) setState({
+            deviceId,
+            status: "native-document-loading",
+            url: localUrl,
+            grantId: "local:" + (Number(data.pid) || 0) + ":" + Date.now(),
+            partition: "persist:tether-dsh-local",
+            localDirect: true,
+            pid: Number(data.pid) || 0,
+            sourceKey: surfaceSourceKey
+          });
+          return;
+        }
+        if (data && data.meshService) {
+          const mesh = data.meshService;
+          const meshEndpoint = safeMeshDshEndpoint(mesh.endpoint);
+          if (!meshEndpoint) throw new Error("\u4E3B\u8FDB\u7A0B\u8FD4\u56DE\u7684 mesh \u5DE5\u4F5C\u53F0\u5730\u5740\u65E0\u6548\u3002");
+          if (current) setState({
+            deviceId,
+            status: "native-document-loading",
+            url: meshEndpoint,
+            grantId: mesh.grantId,
+            partition: mesh.partition,
+            mesh: true,
+            serviceId: "dsh",
+            sourceKey: surfaceSourceKey
+          });
           return;
         }
         if (data && data.nativeService) {
@@ -182629,7 +184026,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         const controller = new AbortController();
         pollFlightRef.current = controller;
         try {
-          const { response, data } = await fetchSurfaceDescriptor2(deviceId, controller.signal);
+          const { response, data } = await fetchSurfaceDescriptor(deviceId, controller.signal);
           if (!response.ok) {
             const detail = data && data.detail ? data.detail : {};
             const code = detail.code;
@@ -182744,11 +184141,13 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       return () => clearTimeout(timer);
     }, [deviceId, currentState.status, currentState.url]);
     const retryDocument = () => {
-      const oldGrant = surfaceStateRef.current && surfaceStateRef.current.grantId;
-      if (oldGrant && host.workbench && host.workbench.close) {
-        void host.workbench.close(deviceId, "dsh-native", oldGrant).catch(() => {
+      const oldState = surfaceStateRef.current;
+      const oldGrant = oldState && oldState.grantId;
+      if (oldGrant && !(oldState && oldState.localDirect) && host.workbench && host.workbench.close) {
+        void host.workbench.close(deviceId, oldState.serviceId || "dsh-native", oldGrant).catch(() => {
         });
       }
+      meshProbeRef.current = { deviceId: "", failedAt: 0, reason: "" };
       documentRetryCountRef.current = 0;
       descriptorRetryCountRef.current = 0;
       retryCountRef.current = 0;
@@ -182791,6 +184190,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     if (!dshWebRefCallback.current) dshWebRefCallback.current = (guest) => {
       if (dshWebRef.current === guest) return;
       dshWebRef.current = guest;
+      if (guest) bindDshGuestFlowInjection(guest);
       setDshWebGuestReady(!!guest);
     };
     const dshWebLoadAttemptRef = React2.useRef(0);
@@ -182915,6 +184315,13 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       return void 0;
     }, [deviceId, dshWeb && dshWeb.grantId, dshWebOpen, visible]);
     React2.useEffect(() => {
+      if (host.kind !== "app" || !host.workbench || !host.workbench.view) return void 0;
+      if (!currentState.mesh || currentState.deviceId !== deviceId || !currentState.grantId) return void 0;
+      void host.workbench.view(deviceId, "dsh", !!visible).catch(() => {
+      });
+      return void 0;
+    }, [deviceId, currentState.mesh, currentState.grantId, visible]);
+    React2.useEffect(() => {
       if (!dshWatch && !dshRelevant) {
         setDsh(null);
         return void 0;
@@ -183012,13 +184419,14 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const dshDetecting = dshWatch && !dsh && currentState.status === "error";
     const onNativeGuest = (guest) => {
       nativeGuestRef.current = guest;
+      bindDshGuestFlowInjection(guest);
       if (!guest || guest.__tetherNativeBound) return;
       guest.__tetherNativeBound = true;
       guest.addEventListener("did-finish-load", async () => {
         const state2 = surfaceStateRef.current;
-        const approvedEndpoint = state2 && safeDshNativeEndpoint(state2.url);
-        const guestEndpoint = safeDshNativeEndpoint(guest.getURL());
-        if (!state2 || state2.deviceId !== deviceId || !state2.partition || !approvedEndpoint || guestEndpoint !== approvedEndpoint) return;
+        const approvedEndpoint = state2 && (state2.localDirect ? safeLocalDshSurfaceUrl(state2.url) : state2.mesh ? safeMeshDshEndpoint(state2.url) : safeDshNativeEndpoint(state2.url));
+        const guestEndpoint = state2 && state2.localDirect ? safeLocalDshNativeUrl(guest.getURL(), state2.url) : state2 && state2.mesh ? dshWebGuestSameOrigin(state2.url, guest.getURL()) ? approvedEndpoint : "" : safeDshNativeEndpoint(guest.getURL());
+        if (!state2 || state2.deviceId !== deviceId || !state2.partition || !approvedEndpoint || !guestEndpoint || !state2.localDirect && guestEndpoint !== approvedEndpoint) return;
         try {
           const hasContent = await guest.executeJavaScript("document.body && (document.body.children.length > 0 || document.body.innerText.trim().length > 0)");
           if (!hasContent) throw new Error("empty");
@@ -183027,13 +184435,128 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           setState((prev) => prev.deviceId === deviceId && prev.url === state2.url ? { ...prev, status: "native-document-error", message: "DSH \u9875\u9762\u4E3A\u7A7A\u6216\u672A\u80FD\u6302\u8F7D\uFF0C\u8BF7\u91CD\u65B0\u8FDE\u63A5\u3002" } : prev);
         }
       });
+      guest.addEventListener("did-navigate", (event) => {
+        if (!event || event.isMainFrame === false || typeof event.url !== "string") return;
+        const state2 = surfaceStateRef.current;
+        if (!state2 || state2.deviceId !== deviceId || !state2.localDirect) return;
+        const approved = safeLocalDshSurfaceUrl(state2.url);
+        if (!approved) return;
+        const approvedUrl = new URL(approved);
+        let landed;
+        try {
+          landed = new URL(event.url);
+        } catch (_2) {
+          return;
+        }
+        if (landed.origin !== approvedUrl.origin || landed.pathname !== "/") return;
+        if (landed.searchParams.get("tether_native") === "1") return;
+        if (guest.__tetherDirectNative) return;
+        guest.__tetherDirectNative = true;
+        try {
+          void guest.loadURL(approvedUrl.origin + "/?tether_native=1").catch(() => {
+          });
+        } catch (_2) {
+        }
+      });
       guest.addEventListener("did-fail-load", (event) => {
         if (event.isMainFrame && event.errorCode !== -3) setState((prev) => prev.deviceId === deviceId ? { ...prev, status: "native-document-error", message: "DSH \u9875\u9762\u52A0\u8F7D\u5931\u8D25\uFF0C\u8BF7\u91CD\u65B0\u8FDE\u63A5\u3002" } : prev);
       });
       guest.addEventListener("did-get-response-details", (_event, _status, _newUrl, _originalUrl, httpStatus) => {
         if (Number(httpStatus) >= 400) setState((prev) => prev.deviceId === deviceId ? { ...prev, status: "native-document-error", message: "DSH \u670D\u52A1\u8FD4\u56DE HTTP " + Number(httpStatus) + "\uFF0C\u8BF7\u91CD\u65B0\u8FDE\u63A5\u3002" } : prev);
       });
+      guest.addEventListener("did-navigate-in-page", (event) => {
+        if (!event || event.isMainFrame !== true || typeof event.url !== "string") return;
+        const state2 = surfaceStateRef.current;
+        if (!state2 || state2.deviceId !== deviceId || !state2.url) return;
+        let actionUrl;
+        try {
+          actionUrl = new URL(event.url);
+          if (actionUrl.origin !== new URL(state2.url).origin) return;
+        } catch (_2) {
+          return;
+        }
+        const params = new URLSearchParams(actionUrl.hash.slice(1));
+        if (state2.localDirect && tetherFsRelayHostReady() && params.get("tether_action") === "fs") {
+          fsRelayOnFrame(guest, params);
+          if (typeof guest.executeJavaScript === "function") {
+            void guest.executeJavaScript(
+              "history.replaceState(history.state, '', location.pathname + location.search)"
+            ).catch(() => {
+            });
+          }
+          return;
+        }
+        if (params.get("tether_action") !== "pick_folder") return;
+        const requestIds = params.getAll("request_id");
+        const requestId = requestIds[0] || "";
+        const pickKind = params.get("pick_kind");
+        const pickMultiple = params.get("pick_multiple");
+        const actionKeys = Array.from(params.keys()).sort().join(",");
+        const extraKeys = actionKeys.split(",").filter((key) => key !== "" && key !== "tether_action" && key !== "request_id" && key !== "pick_kind" && key !== "pick_multiple");
+        const validFolderPick = requestIds.length === 1 && extraKeys.length === 0 && params.getAll("tether_action").length === 1 && (pickKind === null || pickKind === "folder" || pickKind === "file") && (pickMultiple === null || pickMultiple === "1") && /^[0-9a-f-]{36}$/i.test(requestId);
+        if (validFolderPick) {
+          const request = {
+            id: requestId,
+            mode: "webview",
+            source: null,
+            kind: pickKind === "file" ? "file" : "folder",
+            multiple: pickMultiple === "1"
+          };
+          setFolderPick((current) => current && current.id === requestId ? current : request);
+        }
+        if (typeof guest.executeJavaScript === "function") {
+          void guest.executeJavaScript(
+            "history.replaceState(history.state, '', location.pathname + location.search)"
+          ).catch(() => {
+          });
+        }
+      });
     };
+    React2.useEffect(() => {
+      if (!["document-loading", "document-loaded"].includes(currentState.status) || currentState.deviceId !== deviceId) return void 0;
+      if (typeof window === "undefined" || typeof window.addEventListener !== "function") return void 0;
+      const onMessage = (event) => {
+        const frame = nativeIframeRef.current;
+        const data = event && event.data;
+        if (!frame || !data || typeof data !== "object") return;
+        if (data.type === "tether:fs-request") {
+          if (event.source !== frame.contentWindow) return;
+          const surface = surfaceStateRef.current;
+          if (!surface || surface.deviceId !== deviceId || !surface.localDirect || !surface.url) return;
+          let approved = "";
+          try {
+            approved = new URL(surface.url).origin;
+          } catch (_2) {
+            approved = "";
+          }
+          if (!approved || event.origin !== approved) return;
+          void fsRelayPerform(
+            (payload) => {
+              try {
+                event.source.postMessage(payload, "*");
+              } catch (_2) {
+              }
+            },
+            { id: data.id, method: data.method, path: data.path, device: data.device, body: data.body }
+          );
+          return;
+        }
+        if (data.type !== "tether:pick-folder") return;
+        if (event.source !== frame.contentWindow) return;
+        const id = String(data.id || "");
+        if (!/^[0-9a-f-]{36}$/i.test(id)) return;
+        const request = {
+          id,
+          mode: "iframe",
+          source: event.source,
+          kind: data.kind === "file" ? "file" : "folder",
+          multiple: data.multiple === true
+        };
+        setFolderPick((current) => current && current.id === id ? current : request);
+      };
+      window.addEventListener("message", onMessage);
+      return () => window.removeEventListener("message", onMessage);
+    }, [currentState.status, currentState.deviceId, deviceId]);
     const nativeSurfaceGuest = ["native-document-loading", "native-document-loaded", "native-document-error"].includes(currentState.status) && currentState.deviceId === deviceId && host.kind === "app" ? h3(
       "div",
       { className: "tether-native-surface", style: { ...nativeSurfaceContainerStyle(visible, layered), ...layered ? {} : { position: "relative" } } },
@@ -183049,7 +184572,19 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         src: currentState.url,
         ref: onNativeGuest,
         style: { width: "100%", height: "100%", border: 0, display: "flex" }
-      })
+      }),
+      folderPick ? h3(TetherFolderPickDialog, {
+        key: folderPick.id,
+        React: React2,
+        C: C2,
+        Glyph,
+        api: api2,
+        post,
+        device: deviceId,
+        kind: folderPick.kind === "file" ? "file" : "folder",
+        multiple: folderPick.multiple === true,
+        onDone: closeFolderPick
+      }) : null
     ) : null;
     const [dshStalledReady, setDshStalledReady] = React2.useState(false);
     React2.useEffect(() => {
@@ -183167,6 +184702,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         h3("iframe", {
           key: deviceId + ":" + (currentState.pid || 0),
           src: currentState.url,
+          ref: nativeIframeRef,
           sandbox: "allow-scripts allow-same-origin allow-forms allow-downloads allow-modals",
           onLoad: () => {
             const loadedState = surfaceStateRef.current;
@@ -183184,6 +184720,18 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           referrerPolicy: "no-referrer",
           style: { flex: "1 1 auto", width: "100%", height: "100%", minWidth: 0, minHeight: 0, border: 0, background: C2.bg }
         }),
+        folderPick ? h3(TetherFolderPickDialog, {
+          key: folderPick.id,
+          React: React2,
+          C: C2,
+          Glyph,
+          api: api2,
+          post,
+          device: deviceId,
+          kind: folderPick.kind === "file" ? "file" : "folder",
+          multiple: folderPick.multiple === true,
+          onDone: closeFolderPick
+        }) : null,
         currentState.status === "document-loading" ? h3("div", {
           role: "status",
           "aria-live": "polite",
@@ -184152,8 +185700,8 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       if (!dshStatus || dshStatus.running !== true || dshStatus.surface !== true) {
         throw new Error("DSH \u670D\u52A1\u5C1A\u672A\u8FD0\u884C\u6216\u539F\u751F\u754C\u9762\u672A\u5C31\u7EEA");
       }
-      const surfaceInfo = await fetchSurfaceDescriptor(scope.deviceId);
-      if (!surfaceInfo || !surfaceInfo.response || !surfaceInfo.response.ok || !(surfaceInfo.data && (surfaceInfo.data.available === true || surfaceInfo.data.nativeService))) {
+      const surface = await api2("/api/devices/" + encodeURIComponent(scope.deviceId) + "/dsh/surface", {}, authority);
+      if (!surface || !(surface.available === true || surface.nativeService)) {
         throw new Error("DSH \u539F\u751F\u754C\u9762\u63CF\u8FF0\u7B26\u4E0D\u53EF\u7528");
       }
       return true;
@@ -184224,8 +185772,8 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       }
       return null;
     };
-    const prepareUpdateComponent = async (component, scope) => {
-      const checked = await updateAction(component, "check", void 0, scope);
+    const prepareUpdateComponent = async (component, scope, checked = void 0) => {
+      if (checked === void 0) checked = await updateAction(component, "check", void 0, scope);
       if (!checked || checked.ok === false) return { failed: true, checked };
       if (updateInfoRunning(checked)) return { inProgress: true, checked };
       if (checked.update_available !== true) {
@@ -184258,7 +185806,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       const preparedId = prepared.prepared_id || ((prepared.prepared || [])[0] || {}).prepared_id;
       if (!preparedId) return { failed: true, checked };
       const preparedRow = (prepared.prepared || []).find((item) => item && item.prepared_id === preparedId);
-      const expectedVersion = prepared.to_version || preparedRow && preparedRow.to_version || checked.latest_version;
+      const expectedVersion = prepared.to_version || preparedRow && preparedRow.to_version || prepared.latest_version || checked.latest_version;
       return { checked, prepared, preparedId, expectedVersion, authority: checked.authorityBase, scope };
     };
     const openUpdateCenter = () => {
@@ -184299,6 +185847,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const infoFor = (component, targetId) => targetId ? (updateInfo.devices[targetId] || {})[component] || {} : updateInfo[component] || {};
     const updateToneColor = (tone) => tone === "red" ? C2.red : tone === "green" ? C2.green : tone === "amber" ? C2.amber : C2.mute;
     const updateRunState = (key) => updateRuns[key] || null;
+    const deviceUpdateRunning = (id) => updateRunState("device:" + id)?.state === "running" || id === (appLocalDevice || deviceId) && ["desktop", "dsh"].some((product2) => updateRunState("product:" + product2)?.state === "running");
     const trackDeviceUpdateJob = (key, job) => {
       if (!job) {
         setUpdateRun(key, null);
@@ -184327,10 +185876,10 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       }
     };
     const updateButton = (card, onRetry, onRecheck, onPrimary, disabled = false) => {
-      if (card.action === "retry") return btn("\u91CD\u8BD5", onRetry, { primary: true, disabled: anyUpdateRunning || disabled });
-      if (card.action === "recheck") return btn("\u91CD\u8BD5", onRecheck, { primary: true, disabled: anyUpdateRunning || disabled });
-      if (card.action === "restart") return btn("\u7ACB\u5373\u751F\u6548", applyDshUpdate, { primary: true, disabled: anyUpdateRunning || disabled });
-      return btn(card.disabled ? "\u4E00\u952E\u66F4\u65B0" : card.label, onPrimary, { primary: true, disabled: anyUpdateRunning || disabled || card.disabled });
+      if (card.action === "retry") return btn("\u91CD\u8BD5", onRetry, { primary: true, disabled });
+      if (card.action === "recheck") return btn("\u91CD\u8BD5", onRecheck, { primary: true, disabled });
+      if (card.action === "restart") return btn("\u7ACB\u5373\u751F\u6548", applyDshUpdate, { primary: true, disabled });
+      return btn(card.disabled ? "\u4E00\u952E\u66F4\u65B0" : card.label, onPrimary, { primary: true, disabled: disabled || card.disabled });
     };
     const updateProgressBar = (infos, active) => {
       if (!active) return null;
@@ -184363,7 +185912,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       if (host && host.kind === "web") return null;
       const localId = appLocalDevice || deviceId;
       const localDevice = (state && state.devices || []).find((item) => item.device_id === localId);
-      const nodeUpdateManaged = product2 === "desktop" && localDevice?.capabilities?.node_self_update_enabled === false;
+      const nodeUpdateManaged = product2 === "desktop" && (localDevice?.capabilities?.node_self_update_enabled === false || windowsAppUpdateAdoptsNode(host, localDevice?.platform, infoFor("app")));
       const components = product2 === "desktop" ? ["app", ...nodeUpdateManaged ? [] : ["node"]] : ["localPlugin"];
       const infos = components.map((component) => {
         const info = infoFor(component, component === "node" ? localId : "");
@@ -184409,13 +185958,19 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           h3("span", { style: { marginLeft: "auto" } }, active ? h3("span", { className: "tether-spin", style: { display: "grid", placeItems: "center", color: C2.amber } }, h3(Glyph, { name: "refresh", size: 14 })) : pill(card.pill, updateToneColor(card.tone)))
         ),
         h3("div", { style: { color: C2.sub, fontSize: 12, lineHeight: "19px" } }, versionText),
-        nodeUpdateManaged ? h3("div", { style: { color: C2.mute, fontSize: 11, marginTop: 3 } }, "Node \u7531\u5B89\u88C5\u5305\u6216\u72EC\u7ACB\u5B89\u88C5\u5668\u66F4\u65B0") : null,
+        null,
         updateProgressBar(infos, active),
         h3(
           "div",
           { style: { marginTop: 8 } },
           active ? btn(h3("span", { className: "tether-spin", style: { width: 16, height: 16, display: "grid", placeItems: "center" } }, h3(Glyph, { name: "refresh", size: 16 })), () => {
-          }, { primary: true, disabled: true }) : updateButton(card, () => runProductUpdate(product2), () => refreshUpdateCenter(true), () => runProductUpdate(product2))
+          }, { primary: true, disabled: true }) : updateButton(
+            card,
+            () => runProductUpdate(product2),
+            () => refreshUpdateCenter(true),
+            () => runProductUpdate(product2),
+            deviceUpdateRunning(localId)
+          )
         )
       );
     };
@@ -184428,8 +185983,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       const appUpdateUnavailable = capabilities.app_update_owner === "electron_updater" && capabilities.app_update_bridge_available !== true;
       const componentNames = [...nodeUpdateManaged ? [] : ["node"], ...hasApp ? ["app"] : []];
       const infos = componentNames.map((component) => component === "node" ? node : app);
-      const installerOwnedNode = ["app_installer", "bundle_installer"].includes(capabilities.node_update_owner);
-      const updateOrigin = hasApp ? "app" : capabilities.node_self_update_enabled === true && !installerOwnedNode ? "node" : "";
+      const updateOrigin = deviceUpdateOrigin(capabilities);
       const runKey = "device:" + item.device_id;
       const run = updateRunState("device:" + item.device_id);
       const running = run?.state === "running";
@@ -184452,7 +186006,8 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         Glyph,
         originProduct: updateOrigin,
         triggerLabel: "\u4E00\u952E\u66F4\u65B0",
-        disabled: anyUpdateRunning && !running,
+        disabled: !item.online,
+        busy: running,
         onJobChange: (job) => trackDeviceUpdateJob(runKey, job)
       }) : null;
       const nodeTuple = versionTuple(node.current_version || item.capabilities && item.capabilities.node_version, node.latest_version);
@@ -184475,13 +186030,13 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           { style: { color: C2.sub, fontSize: 12, lineHeight: "19px" } },
           versionRows.map((text2) => h3("div", { key: text2 }, text2))
         ),
-        nodeUpdateManaged ? h3("div", { style: { color: C2.mute, fontSize: 11, marginTop: 3 } }, "Node \u7531\u5B89\u88C5\u5305\u6216\u72EC\u7ACB\u5B89\u88C5\u5668\u66F4\u65B0") : null,
+        null,
         h3(
           "div",
           { style: { marginTop: 8 } },
-          active ? btn(h3("span", { className: "tether-spin", style: { width: 16, height: 16, display: "grid", placeItems: "center" } }, h3(Glyph, { name: "refresh", size: 16 })), () => {
+          updateAction2 || (active ? btn(h3("span", { className: "tether-spin", style: { width: 16, height: 16, display: "grid", placeItems: "center" } }, h3(Glyph, { name: "refresh", size: 16 })), () => {
           }, { primary: true, disabled: true }) : !item.online ? btn("\u79BB\u7EBF", () => {
-          }, { primary: true, disabled: true }) : updateAction2 || (card.action === "update" ? btn("\u6682\u4E0D\u53EF\u66F4\u65B0", () => {
+          }, { primary: true, disabled: true }) : card.action === "update" ? btn("\u6682\u4E0D\u53EF\u66F4\u65B0", () => {
           }, { primary: true, disabled: true }) : updateButton(
             card,
             () => refreshUpdateCenter(true),
@@ -184495,13 +186050,24 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
     const runProductUpdate = async (product2) => {
       const localId = appLocalDevice || deviceId;
       const runKey = "product:" + product2;
+      if (deviceUpdateRunning(localId)) return;
+      const hubUrl2 = typeof host?.hubConfig === "function" ? (host.hubConfig() || {}).url : ACTIVE_BASE;
+      const release = beginDeviceUpdate(hubUrl2, localId);
+      if (!release) return;
       setUpdateRun(runKey, { state: "running" });
-      setUpdateBusy("product:" + product2);
+      setUpdateBusy(runKey);
       let failure2 = "";
       try {
         const nodeScope = localId ? { deviceId: localId, epoch: 0 } : null;
-        const localCapabilities = ((stateRef.current?.devices || []).find((item) => item.device_id === localId) || {}).capabilities || {};
-        const plan = product2 === "desktop" ? [...localCapabilities.node_self_update_enabled === false ? [] : [{ component: "node", scope: nodeScope }], { component: "app", scope: null }] : [{ component: "localPlugin", scope: null }];
+        const localDevice = (stateRef.current?.devices || []).find((item) => item.device_id === localId);
+        const appCheck = product2 === "desktop" ? await updateAction("app", "check", void 0, null) : void 0;
+        if (product2 === "desktop" && !appCheck) {
+          failure2 = "APP \u66F4\u65B0\u68C0\u67E5\u5931\u8D25";
+          return;
+        }
+        const appAdoptsNode = windowsAppUpdateAdoptsNode(host, localDevice?.platform, appCheck);
+        const updateNode = localDevice?.capabilities?.node_self_update_enabled !== false && !appAdoptsNode;
+        const plan = product2 === "desktop" ? [...updateNode ? [{ component: "node", scope: nodeScope }] : [], { component: "app", scope: null }] : [{ component: "localPlugin", scope: null }];
         const prepared = {};
         const rollbackPreparedNode = async (reason) => {
           const node = prepared.node;
@@ -184518,7 +186084,11 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
             continue;
           }
           try {
-            prepared[step.component] = await prepareUpdateComponent(step.component, step.scope);
+            prepared[step.component] = await prepareUpdateComponent(
+              step.component,
+              step.scope,
+              step.component === "app" ? appCheck : void 0
+            );
           } catch (error) {
             prepared[step.component] = { failed: true };
             setComponentUpdateError(step.component, shortUpdateError(error), step.scope);
@@ -184526,6 +186096,9 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           if (prepared[step.component].failed && !failure2) {
             failure2 = step.component === "app" ? "APP \u66F4\u65B0\u5931\u8D25" : step.component === "node" ? "Node \u66F4\u65B0\u5931\u8D25" : "\u63D2\u4EF6\u66F4\u65B0\u5931\u8D25";
           }
+        }
+        if (appAdoptsNode && prepared.app?.preparedId && prepared.app.expectedVersion !== appCheck.latest_version) {
+          failure2 = "APP \u66F4\u65B0\u76EE\u6807\u5DF2\u53D8\u5316\uFF0C\u8BF7\u91CD\u65B0\u68C0\u67E5";
         }
         if (!failure2 && Object.values(prepared).some((entry) => entry && entry.inProgress)) failure2 = "\u6709\u7EC4\u4EF6\u6B63\u5728\u66F4\u65B0\uFF0C\u8BF7\u5B8C\u6210\u540E\u91CD\u8BD5";
         if (!failure2 && prepared.node && prepared.node.acceptancePending) {
@@ -184620,9 +186193,13 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         failure2 = shortUpdateError(error);
         setComponentUpdateError(product2 === "desktop" ? "app" : "localPlugin", failure2, null);
       } finally {
-        await refreshUpdateCenter(true);
-        setUpdateRun(runKey, failure2 ? { state: "error", message: failure2 } : { state: "done" });
-        setUpdateBusy("");
+        try {
+          await refreshUpdateCenter(true);
+        } finally {
+          setUpdateRun(runKey, failure2 ? { state: "error", message: failure2 } : { state: "done" });
+          setUpdateBusy((current) => current === runKey ? "" : current);
+          release();
+        }
       }
     };
     React2.useEffect(() => {
@@ -185464,11 +187041,35 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         return;
       }
       let live = true;
-      const load3 = async () => {
-        setSessionLoading(true);
+      let timer = null;
+      let idleTicks = 0;
+      let signature = "";
+      const sessionSignature = (data) => {
+        if (!data) return "";
+        const turns = Array.isArray(data.turns) ? data.turns : [];
+        const lastTurn = turns[turns.length - 1];
+        const blocks = lastTurn && Array.isArray(lastTurn.blocks) ? lastTurn.blocks : [];
+        const lastBlock = blocks[blocks.length - 1];
+        const lastLen = lastBlock ? String(lastBlock.text || lastBlock.result || "").length : 0;
+        return [data.status || "", data.updated_at || "", turns.length, blocks.length, lastLen].join(":");
+      };
+      const schedule = () => {
+        if (!live) return;
+        const delay = idleTicks >= 3 ? 5e3 : idleTicks >= 1 ? 3e3 : 1500;
+        timer = setTimeout(() => {
+          void load3(false);
+        }, delay);
+      };
+      const load3 = async (initial) => {
+        if (initial) setSessionLoading(true);
         try {
           const data = await api2("/api/devices/" + encodeURIComponent(deviceId) + "/dsh/sessions/" + encodeURIComponent(sessionId));
-          if (live) {
+          if (!live) return;
+          const next = sessionSignature(data);
+          const changed = initial || next !== signature;
+          signature = next;
+          idleTicks = changed ? 0 : idleTicks + 1;
+          if (changed) {
             setSessionData(data);
             setSessionLoading(false);
           }
@@ -185478,12 +187079,12 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
             fail2(e);
           }
         }
+        schedule();
       };
-      load3();
-      const t = setInterval(load3, 1500);
+      void load3(true);
       return () => {
         live = false;
-        clearInterval(t);
+        if (timer) clearTimeout(timer);
       };
     }, [sessionId, deviceId]);
     React2.useEffect(() => {
@@ -185535,18 +187136,59 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
         return;
       }
       let live = true;
+      let timer = null;
+      let events = [];
+      let cursor = 0;
+      let idleTicks = 0;
+      let signature = "";
+      const seqOf = (event) => {
+        const value = Number(event && event.seq);
+        return Number.isFinite(value) ? value : 0;
+      };
+      const signatureOf = (list2) => {
+        if (!list2.length) return "0";
+        const last = list2[list2.length - 1];
+        return list2.length + ":" + seqOf(last) + ":" + String(last && last.kind || "");
+      };
+      const schedule = () => {
+        if (!live) return;
+        const delay = idleTicks >= 3 ? 5e3 : idleTicks === 2 ? 3e3 : idleTicks === 1 ? 2e3 : 1e3;
+        timer = setTimeout(() => {
+          void load3();
+        }, delay);
+      };
       const load3 = async () => {
         try {
-          const data = await api2("/api/runs/" + encodeURIComponent(runId) + "/events?after_seq=0");
-          if (live) setRunEvents(data.events || []);
+          const data = await api2("/api/runs/" + encodeURIComponent(runId) + "/events?after_seq=" + cursor);
+          if (!live) return;
+          const incoming = Array.isArray(data && data.events) ? data.events : [];
+          if (incoming.length) {
+            const first = seqOf(incoming[0]);
+            const fullSnapshot = !first || cursor > 0 && first <= cursor;
+            const next = fullSnapshot ? incoming : events.concat(incoming);
+            const lastSeq = seqOf(next[next.length - 1]);
+            if (lastSeq > 0) cursor = Math.max(cursor, lastSeq);
+            const nextSignature = signatureOf(next);
+            if (nextSignature !== signature) {
+              signature = nextSignature;
+              events = next;
+              idleTicks = 0;
+              setRunEvents(next);
+            } else {
+              idleTicks += 1;
+            }
+          } else {
+            idleTicks += 1;
+          }
         } catch (_2) {
+          idleTicks += 1;
         }
+        schedule();
       };
-      load3();
-      const t = setInterval(load3, 1e3);
+      void load3();
       return () => {
         live = false;
-        clearInterval(t);
+        if (timer) clearTimeout(timer);
       };
     }, [runId]);
     const runConversation = (run, events) => {
@@ -187696,6 +189338,8 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       });
     }
     const liveHubStatus = hubBusy ? "checking" : stateOkAtRef.current && Date.now() - stateOkAtRef.current < 8e3 ? "online" : hubStatus === "offline" ? "offline" : "checking";
+    const selectedUpdateTarget = (state?.devices || []).find((item) => item.device_id === deviceId);
+    const topbarUpdateOrigin = host?.kind === "dsh" ? "plugin" : deviceUpdateOrigin(selectedUpdateTarget?.capabilities);
     const settingsUpdate = (() => {
       const localId = appLocalDevice || deviceId;
       const devices = state && state.devices || [];
@@ -187717,12 +189361,11 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
       const fallbackVersion = (caps, component) => component === "app" ? caps.app_version : component === "plugin" ? caps.plugin_version : caps.node_version;
       const makeRow = (item, local, product2) => {
         const caps = item && item.capabilities || {};
-        const nodeUpdateManaged = caps.node_self_update_enabled === false;
+        const nodeUpdateManaged = caps.node_self_update_enabled === false || local && product2 === "desktop" && windowsAppUpdateAdoptsNode(host, item.platform, updateInfo.app);
         const hasApp = hasInstalledApp(caps);
         const appUpdateUnavailable = caps.app_update_owner === "electron_updater" && caps.app_update_bridge_available !== true;
-        const components = local ? product2 === "desktop" ? ["app", ...nodeUpdateManaged ? [] : ["node"]] : ["plugin"] : [...hasApp ? ["app"] : [], ...nodeUpdateManaged ? [] : ["node"]];
-        const installerOwnedNode = ["app_installer", "bundle_installer"].includes(caps.node_update_owner);
-        const updateOrigin = local ? "" : hasApp ? "app" : caps.node_self_update_enabled === true && !installerOwnedNode ? "node" : "";
+        const components = local ? product2 === "desktop" ? ["app", "node"] : ["plugin"] : [...hasApp ? ["app"] : [], ...caps.node_version ? ["node"] : []];
+        const updateOrigin = local ? "" : deviceUpdateOrigin(caps);
         const infos = components.map((component) => scopedInfo(item.device_id, component));
         const products = components.map((component, index) => ({
           label: component === "app" ? "APP" : component === "plugin" ? "\u63D2\u4EF6" : "Node",
@@ -187746,7 +189389,8 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           C: C2,
           Glyph,
           originProduct: updateOrigin,
-          disabled: anyUpdateRunning && !(run && run.state === "running"),
+          disabled: !item.online,
+          busy: run?.state === "running",
           onJobChange: (job) => trackDeviceUpdateJob(key, job)
         }) : null;
         return {
@@ -187758,9 +189402,9 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
           online: local ? true : !!item.online,
           products,
           updateAction: updateAction2,
-          updateReason: appUpdateUnavailable ? "\u8BF7\u5148\u542F\u52A8\u76EE\u6807\u684C\u9762 APP \u540E\u518D\u66F4\u65B0" : nodeUpdateManaged ? "Node \u7531\u5B89\u88C5\u5305\u6216\u72EC\u7ACB\u5B89\u88C5\u5668\u66F4\u65B0" : !local && !hasApp && !updateOrigin ? "\u6B64\u8BBE\u5907\u5C1A\u672A\u62A5\u544A\u53EF\u7528\u7684 Node \u81EA\u66F4\u65B0\u80FD\u529B" : "",
+          updateReason: appUpdateUnavailable ? "\u8BF7\u5148\u542F\u52A8\u76EE\u6807\u684C\u9762 APP \u540E\u518D\u66F4\u65B0" : !local && !hasApp && !updateOrigin ? "\u6B64\u8BBE\u5907\u5C1A\u672A\u62A5\u544A\u53EF\u7528\u7684 Node \u81EA\u66F4\u65B0\u80FD\u529B" : "",
           available: (local || !!updateOrigin) && infos.some((info) => info && info.update_available === true && !isUpdateInfoStale(info)),
-          running: !!(run && run.state === "running"),
+          running: deviceUpdateRunning(item.device_id),
           error: run && run.state === "error" ? run.message || "\u66F4\u65B0\u5931\u8D25" : ""
         };
       };
@@ -187875,10 +189519,25 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
             },
             status: liveHubStatus
           }) : null,
-          h3(MinimalUpdateButton, { React: React2, h: h3, api: api2, post, deviceId, localDeviceId: appLocalDevice, onRemoteDone: async () => {
-            await loadState(true);
-            await refreshUpdateCenter(true);
-          }, host, C: C2, Glyph }),
+          topbarUpdateOrigin ? h3(MinimalUpdateButton, {
+            React: React2,
+            h: h3,
+            api: api2,
+            post,
+            deviceId,
+            localDeviceId: appLocalDevice,
+            onRemoteDone: async () => {
+              await loadState(true);
+              await refreshUpdateCenter(true);
+            },
+            host,
+            C: C2,
+            Glyph,
+            originProduct: topbarUpdateOrigin,
+            disabled: !selectedUpdateTarget?.online,
+            busy: deviceUpdateRunning(deviceId),
+            onJobChange: (job) => trackDeviceUpdateJob("device:" + deviceId, job)
+          }) : null,
           host && host.kind === "app" && host.windowControls ? h3(
             "div",
             {
@@ -188163,6 +189822,7 @@ function createTetherPanel({ React: React2, Native, host, EditorRuntime }) {
               React: React2,
               Glyph,
               post,
+              api: api2,
               C: C2,
               host,
               isActive: view === "agents",
@@ -189020,7 +190680,7 @@ __export(monaco_runtime_exports, {
 });
 init_editor_api();
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/_.contribution.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/_.contribution.js
 init_editor_api();
 var languageDefinitions = {};
 var lazyLanguageLoaders = {};
@@ -189067,7 +190727,7 @@ function registerLanguage(def2) {
   });
 }
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/python/register.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/python/register.js
 registerLanguage({
   id: "python",
   extensions: [".py", ".rpy", ".pyw", ".cpy", ".gyp", ".gypi"],
@@ -189076,7 +190736,7 @@ registerLanguage({
   loader: () => Promise.resolve().then(() => (init_python(), python_exports))
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/cpp/register.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/cpp/register.js
 registerLanguage({
   id: "c",
   extensions: [".c", ".h"],
@@ -189090,7 +190750,7 @@ registerLanguage({
   loader: () => Promise.resolve().then(() => (init_cpp(), cpp_exports))
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/java/register.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/java/register.js
 registerLanguage({
   id: "java",
   extensions: [".java", ".jav"],
@@ -189099,7 +190759,7 @@ registerLanguage({
   loader: () => Promise.resolve().then(() => (init_java(), java_exports))
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/typescript/register.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/typescript/register.js
 registerLanguage({
   id: "typescript",
   extensions: [".ts", ".tsx", ".cts", ".mts"],
@@ -189110,7 +190770,7 @@ registerLanguage({
   }
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/javascript/register.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/javascript/register.js
 registerLanguage({
   id: "javascript",
   extensions: [".js", ".es6", ".jsx", ".mjs", ".cjs"],
@@ -189121,7 +190781,7 @@ registerLanguage({
   loader: () => Promise.resolve().then(() => (init_javascript(), javascript_exports))
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/markdown/register.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/markdown/register.js
 registerLanguage({
   id: "markdown",
   extensions: [".md", ".markdown", ".mdown", ".mkdn", ".mkd", ".mdwn", ".mdtxt", ".mdtext"],
@@ -189129,7 +190789,7 @@ registerLanguage({
   loader: () => Promise.resolve().then(() => (init_markdown(), markdown_exports))
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/css/register.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/css/register.js
 registerLanguage({
   id: "css",
   extensions: [".css"],
@@ -189138,7 +190798,7 @@ registerLanguage({
   loader: () => Promise.resolve().then(() => (init_css(), css_exports))
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/html/register.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/html/register.js
 registerLanguage({
   id: "html",
   extensions: [".html", ".htm", ".shtml", ".xhtml", ".mdoc", ".jsp", ".asp", ".aspx", ".jshtm"],
@@ -189147,7 +190807,7 @@ registerLanguage({
   loader: () => Promise.resolve().then(() => (init_html(), html_exports))
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/ini/register.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/ini/register.js
 registerLanguage({
   id: "ini",
   extensions: [".ini", ".properties", ".gitconfig"],
@@ -189156,7 +190816,7 @@ registerLanguage({
   loader: () => Promise.resolve().then(() => (init_ini(), ini_exports))
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/yaml/register.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/yaml/register.js
 registerLanguage({
   id: "yaml",
   extensions: [".yaml", ".yml"],
@@ -189165,7 +190825,7 @@ registerLanguage({
   loader: () => Promise.resolve().then(() => (init_yaml(), yaml_exports))
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/xml/register.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/xml/register.js
 registerLanguage({
   id: "xml",
   extensions: [
@@ -189193,7 +190853,7 @@ registerLanguage({
   loader: () => Promise.resolve().then(() => (init_xml(), xml_exports))
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/sql/register.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/sql/register.js
 registerLanguage({
   id: "sql",
   extensions: [".sql"],
@@ -189201,7 +190861,7 @@ registerLanguage({
   loader: () => Promise.resolve().then(() => (init_sql(), sql_exports))
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/shell/register.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/shell/register.js
 registerLanguage({
   id: "shell",
   extensions: [".sh", ".bash"],
@@ -189209,7 +190869,7 @@ registerLanguage({
   loader: () => Promise.resolve().then(() => (init_shell(), shell_exports))
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/powershell/register.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/powershell/register.js
 registerLanguage({
   id: "powershell",
   extensions: [".ps1", ".psm1", ".psd1"],
@@ -189217,7 +190877,7 @@ registerLanguage({
   loader: () => Promise.resolve().then(() => (init_powershell(), powershell_exports))
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/go/register.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/go/register.js
 registerLanguage({
   id: "go",
   extensions: [".go"],
@@ -189225,7 +190885,7 @@ registerLanguage({
   loader: () => Promise.resolve().then(() => (init_go(), go_exports))
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/rust/register.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/rust/register.js
 registerLanguage({
   id: "rust",
   extensions: [".rs", ".rlib"],
@@ -189233,7 +190893,7 @@ registerLanguage({
   loader: () => Promise.resolve().then(() => (init_rust(), rust_exports))
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/csharp/register.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/csharp/register.js
 registerLanguage({
   id: "csharp",
   extensions: [".cs", ".csx", ".cake"],
@@ -189241,7 +190901,7 @@ registerLanguage({
   loader: () => Promise.resolve().then(() => (init_csharp(), csharp_exports))
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/php/register.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/php/register.js
 registerLanguage({
   id: "php",
   extensions: [".php", ".php4", ".php5", ".phtml", ".ctp"],
@@ -189250,7 +190910,7 @@ registerLanguage({
   loader: () => Promise.resolve().then(() => (init_php(), php_exports))
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/ruby/register.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/ruby/register.js
 registerLanguage({
   id: "ruby",
   extensions: [".rb", ".rbx", ".rjs", ".gemspec", ".pp"],
@@ -189259,7 +190919,7 @@ registerLanguage({
   loader: () => Promise.resolve().then(() => (init_ruby(), ruby_exports))
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/swift/register.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/swift/register.js
 registerLanguage({
   id: "swift",
   aliases: ["Swift", "swift"],
@@ -189268,7 +190928,7 @@ registerLanguage({
   loader: () => Promise.resolve().then(() => (init_swift(), swift_exports))
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/kotlin/register.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/kotlin/register.js
 registerLanguage({
   id: "kotlin",
   extensions: [".kt", ".kts"],
@@ -189277,7 +190937,7 @@ registerLanguage({
   loader: () => Promise.resolve().then(() => (init_kotlin(), kotlin_exports))
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/lua/register.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/lua/register.js
 registerLanguage({
   id: "lua",
   extensions: [".lua"],
@@ -189285,7 +190945,7 @@ registerLanguage({
   loader: () => Promise.resolve().then(() => (init_lua(), lua_exports))
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/r/register.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/r/register.js
 registerLanguage({
   id: "r",
   extensions: [".r", ".rhistory", ".rmd", ".rprofile", ".rt"],
@@ -189293,7 +190953,7 @@ registerLanguage({
   loader: () => Promise.resolve().then(() => (init_r(), r_exports))
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/perl/register.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/perl/register.js
 registerLanguage({
   id: "perl",
   extensions: [".pl", ".pm"],
@@ -189301,7 +190961,7 @@ registerLanguage({
   loader: () => Promise.resolve().then(() => (init_perl(), perl_exports))
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/dart/register.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/dart/register.js
 registerLanguage({
   id: "dart",
   extensions: [".dart"],
@@ -189310,7 +190970,7 @@ registerLanguage({
   loader: () => Promise.resolve().then(() => (init_dart(), dart_exports))
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/dockerfile/register.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/dockerfile/register.js
 registerLanguage({
   id: "dockerfile",
   extensions: [".dockerfile"],
@@ -189319,7 +190979,7 @@ registerLanguage({
   loader: () => Promise.resolve().then(() => (init_dockerfile(), dockerfile_exports))
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/less/register.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/less/register.js
 registerLanguage({
   id: "less",
   extensions: [".less"],
@@ -189328,7 +190988,7 @@ registerLanguage({
   loader: () => Promise.resolve().then(() => (init_less(), less_exports))
 });
 
-// ../../../../.worktrees/tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/scss/register.js
+// ../../../tether-0.5.9-local-acceptance/packages/tether-ui/node_modules/monaco-editor/esm/vs/languages/definitions/scss/register.js
 registerLanguage({
   id: "scss",
   extensions: [".scss"],

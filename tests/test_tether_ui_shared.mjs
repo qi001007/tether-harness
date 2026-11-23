@@ -13,6 +13,7 @@ const transferPage = fs.readFileSync(path.join(root, 'packages/tether-ui/src/tra
 const monacoRuntime = fs.readFileSync(path.join(root, 'packages/tether-ui/src/monaco-runtime.js'), 'utf8')
 const targetExplorer = fs.readFileSync(path.join(root, 'packages/tether-ui/src/target-file-explorer.js'), 'utf8')
 const dshHost = fs.readFileSync(path.join(root, 'packages/tether-ui/src/hosts/dsh.js'), 'utf8')
+const tetherGlyph = fs.readFileSync(path.join(root, 'packages/tether-ui/src/tether-glyph.js'), 'utf8')
 
 test('DSH plugin bundle is up to date with the shared tether-ui source', () => {
   const bundledPanel = connectionPanel.replace(/^export /gm, '').trim()
@@ -42,26 +43,41 @@ test('DSH Composer routes both file entry points to the target computer modal', 
   const build = fs.readFileSync(path.resolve(root, 'packages/tether-ui/scripts/build.mjs'), 'utf8')
   const dsh = fs.readFileSync(path.resolve(root, 'packages/tether-ui/src/hosts/dsh.js'), 'utf8')
   assert.doesNotMatch(build, /name: 'tether-target-file'/)
-  assert.doesNotMatch(build, /label: \(\) => '目标设备文件'/)
+  // The 目标设备文件 command is intentional again: it must open the same target picker modal.
+  assert.match(build, /label: \(\) => '目标设备文件',[\s\S]*?targetFilePicker\.open\?\.\(session\?\.sessionId\)/)
   assert.match(build, /createDshTargetExplorerBridge\(\{ getRpc: \(\) => localPluginRpc, getHost: \(\) => host \}\)/)
   assert.match(build, /createDshTargetAttachments\(React, Native, targetFiles, targetFilePicker, ctx\.uiWorkspace, ctx\.sessions\)/)
   assert.match(build, /inject: \(sessionId\) => \(\{ sessionId \}\)/)
   assert.doesNotMatch(build, /remote\.workspaceFiles/)
   assert.match(dsh, /pickerCommand\.open = openCommand/)
   assert.match(dsh, /h\(Native\.ComposerAttachments/)
-  assert.match(dsh, /interceptNativeFilePicker/)
+  // The blanket click interceptor was replaced by composer-scoped drop interception.
+  assert.match(dsh, /document\.addEventListener\('drop', onDrop, true\)/)
   assert.match(dsh, /event\.preventDefault\(\)[\s\S]*openPickerRef\.current/)
   assert.match(dsh, /createDshTargetExplorerBridge/)
   assert.match(dsh, /'\/drives'/)
   assert.match(dsh, /'\/workspaces'/)
   assert.match(dsh, /'\/fs\/list'/)
   assert.match(dsh, /'\/fs\/read'/)
-  assert.match(dsh, /role: 'dialog', 'aria-modal': 'true'/)
-  assert.match(dsh, /interceptNativeFilePicker/)
-  assert.match(dsh, /资源管理器/)
+  // The attachment picker is the same shared shell dialog as the Tether host
+  // resource manager; DSH only injects its own target-device roots and reader.
+  assert.match(dsh, /TetherFolderPickDialog/)
+  assert.match(dsh, /loadRoots: \(\) => bridge\.getRoots\(\)/)
+  assert.match(dsh, /listDirectory: \(path\) => bridge\.listDirectory\(path\)/)
+  assert.doesNotMatch(dsh, /Native\.FileTypeIcon/)
+  assert.match(dsh, /bridge\.saveDroppedFile\(file\)/)
   assert.doesNotMatch(dsh, /目标电脑文件…/)
   assert.doesNotMatch(dsh, /从目标电脑选择文件/)
   assert.doesNotMatch(dsh, /本机文件…/)
+})
+
+test('a composer drop streams to the target in 4 MiB slices with no size ceiling', () => {
+  const dsh = fs.readFileSync(path.resolve(root, 'packages/tether-ui/src/hosts/dsh.js'), 'utf8')
+  assert.match(dsh, /const DSH_TARGET_WRITE_CHUNK = 4 \* 1024 \* 1024/)
+  assert.doesNotMatch(dsh, /256 \* 1024 \* 1024/)
+  assert.doesNotMatch(dsh, /await file\.arrayBuffer\(\)/)
+  assert.match(dsh, /await file\.slice\(offset, end\)\.arrayBuffer\(\)/)
+  assert.match(dsh, /const end = Math\.min\(offset \+ chunkSize, size\)/)
 })
 
 test('remote editing pins device identity and file version before saving', () => {
@@ -162,8 +178,10 @@ test('connection panels show service checks without duplicate device totals or c
   assert.match(transferPage, /directApplicationError/)
   assert.match(transferPage, /X-Tether-Size/)
   assert.match(transferPage, /isDirectTransportStatus\(response\.status\)/)
-  assert.match(transferPage, /postFs\(sourceDevice, 'read'/)
-  assert.match(transferPage, /postFs\(target\.device, 'write_chunk'/)
+  // Reads/writes stay pinned to their device; relay mode swaps postFs for postHubFs.
+  assert.match(transferPage, /const request = relay \? postHubFs : postFs/)
+  assert.match(transferPage, /read: \(args\) => request\(sourceDevice, 'read'/)
+  assert.match(transferPage, /request\(targetDevice, 'write_chunk'/)
   assert.match(transferPage, /body: args\.bytes,[\s\S]*signal: args\.signal/)
   assert.match(transferPage, /body: JSON\.stringify\(\{ path: args\.path, offset: args\.offset, limit: args\.limit \}\),[\s\S]*signal: args\.signal/)
   assert.match(transferPage, /isTransferAbort\(error, args\.signal\)/)
@@ -180,7 +198,8 @@ test('connection panels show service checks without duplicate device totals or c
   assert.match(shared, /host\.kind === 'dsh' \|\| host\.kind === 'app'/)
   assert.match(shared, /Connection\.Panel/)
   assert.match(shared, /errorKind === 'auth' \? 401/)
-  assert.match(shared, /if \(!loggedIn\)/)
+  // Login still gates every surface except the APP host running on its own device authority.
+  assert.match(shared, /if \(!loggedIn && !\(host && host\.kind === 'app' && !EXPLICIT_AUTHORITY\)\)/)
   assert.match(shared, /showAppSettings/)
   assert.match(shared, /Settings\.SettingsPanel/)
   assert.match(fs.readFileSync(path.join(root, 'packages/tether-ui/src/hosts/dsh.js'), 'utf8'), /probeConnection: async/)
@@ -819,7 +838,11 @@ test('permissions, settings and account share the activity bar footer', () => {
   assert.match(shared, /onClick: onAccount/)
   assert.match(shared, /setSettingsSection\('account'\)/)
   assert.match(shared, /setSettingsSection\('connection'\)/)
-  assert.match(shared, /gear: \{ join: 'round'/)
+  // Glyph artwork lives in its own module (tether-glyph.js) and app.js only draws it via createGlyph.
+  assert.match(shared, /import \{ createGlyph \} from '\.\/tether-glyph\.js'/)
+  assert.match(shared, /const Glyph = createGlyph\(React\)/)
+  assert.match(shared, /\}, h\(Glyph, \{ name: icon, size: 18 \}\)\)/)
+  assert.match(tetherGlyph, /gear: \{ join: 'round', parts: \[/)
 })
 
 test('the permissions drawer paints from cache and refreshes policy and audit in parallel', () => {
@@ -847,7 +870,8 @@ test('settings exposes an edge-gated update section for local and remote devices
   assert.match(shared, /connected\.has\(item\.device_id\)/)
   assert.match(shared, /update: settingsUpdate/)
   assert.match(shared, /product === 'desktop' \? \['app', 'node'\] : \['plugin'\]/)
-  assert.match(shared, /\.\.\.\(hasInstalledApp\(caps\) \? \['app'\] : \[\]\), 'node'/)
+  // Remote rows paint APP and Node chips side by side whenever the Node version is known.
+  assert.match(shared, /\.\.\.\(hasApp \? \['app'\] : \[\]\), \.\.\.\(caps\.node_version \? \['node'\] : \[\]\)/)
 })
 
 test('APP-facing device updates exclude the separately managed DSH plugin', async () => {
@@ -857,7 +881,9 @@ test('APP-facing device updates exclude the separately managed DSH plugin', asyn
   assert.deepEqual(deviceUpdateComponents({ app_installed: true }), ['node', 'app'])
   assert.deepEqual(deviceUpdateComponents({ app_installed: false, app_version: '0.4.2' }), ['node'])
   assert.deepEqual(deviceUpdateComponents({ installed_products: ['app'] }), ['node', 'app'])
-  assert.match(shared, /const infos = \[node, \.\.\.\(hasApp \? \[app\] : \[\]\)\]/)
+  // The device card lists node (unless app-managed) plus app; the DSH plugin stays excluded.
+  assert.match(shared, /const componentNames = \[\.\.\.\(nodeUpdateManaged \? \[\] : \['node'\]\), \.\.\.\(hasApp \? \['app'\] : \[\]\)\]/)
+  assert.match(shared, /const infos = componentNames\.map\(\(component\) => component === 'node' \? node : app\)/)
 })
 
 test('the network detail panel floats over the canvas instead of resizing it', () => {
@@ -937,14 +963,19 @@ test('legacy node responses without device_id remain valid', async () => {
 
 
 test('the target picker can expand the explorer tree', () => {
-  assert.match(dshHost, /treeChildren/)
-  assert.match(dshHost, /onToggleTree/)
+  // The tree belongs to the shared pick dialog now; DSH only feeds it the
+  // target-device roots and listings.
+  const picker = fs.readFileSync(path.join(root, 'packages/tether-ui/src/tether-folder-pick-dialog.js'), 'utf8')
+  assert.match(picker, /h\(TargetFileExplorer, \{/)
+  assert.match(picker, /onRoot: \(next\) => \{ void enter\(next\) \}/)
+  assert.match(picker, /onPath: \(next\) => \{ void enter\(next\) \}/)
+  assert.match(dshHost, /loadRoots: \(\) => bridge\.getRoots\(\)/)
+  assert.match(dshHost, /listDirectory: \(path\) => bridge\.listDirectory\(path\)/)
+  assert.doesNotMatch(dshHost, /treeChildren/, 'DSH keeps no second explorer tree')
   assert.match(targetExplorer, /const treeRow =/)
   assert.match(targetExplorer, /onToggleTree\(item\)/)
   assert.match(targetExplorer, /onRoot\(item\.path, \{ fromTree: true \}\)/)
   assert.doesNotMatch(targetExplorer, /onToggleTree && item\.dir/, 'the arrow is part of the unified row, not a separate button')
-  assert.match(dshHost, /const revealTree = async/)
-  assert.match(dshHost, /opts\.fromTree !== true/)
 })
 
 test('one directory cache serves every explorer entry point', async () => {
@@ -964,4 +995,35 @@ test('one directory cache serves every explorer entry point', async () => {
   cache.invalidateDirectory('D1', 'C:\\x')
   assert.equal(cache.peekDirectory('D1', 'C:\\x'), null)
   cache.clearDirectoryCache()
+})
+
+test('mapped DSH directory picks route to the Tether host explorer only under tether_native', () => {
+  const snippet = fs.readFileSync(path.join(root, 'tether/node/tether_dsh_directory_flow.js'), 'utf8')
+  const indented = snippet.trimEnd().split('\n').map((line) => (line ? '            ' + line : line)).join('\n')
+  assert.ok(snippet.includes('tether-host-directory-flow v2'), 'bridge carries the version marker')
+  assert.ok(plugin.includes(indented), 'plugin bundle embeds the same bridge the proxy injects')
+  assert.match(snippet, /searchParams\.has\('tether_native'\)/, 'desktop-direct DSH keeps its own picker')
+  assert.match(snippet, /conversation\.hero\.workspace\.directoryFlow/)
+  assert.match(snippet, /sidebar\.workspaces\.directoryFlow/)
+  assert.match(snippet, /priority: -1000/)
+  assert.match(snippet, /tether_action: 'pick_folder'/)
+  const py = fs.readFileSync(path.join(root, 'tether/node/native_surface.py'), 'utf8')
+  const anchor = py.match(/DIRECTORY_FLOW_ANCHOR = "(.+)"/)[1]
+  assert.equal(plugin.split(anchor).length - 1, 1, 'proxy anchor stays unique in the bundle')
+  assert.ok(py.includes('tether_dsh_directory_flow.js'), 'proxy reads the shared snippet file')
+  // 宿主侧：webview hash 与 iframe postMessage 双通道、闭集校验、复用同一选择对话框。
+  assert.match(shared, /guest\.addEventListener\('did-navigate-in-page'/)
+  assert.match(shared, /params\.get\('tether_action'\) !== 'pick_folder'/)
+  assert.match(shared, /pick_kind/)
+  assert.match(shared, /pick_multiple/)
+  assert.match(shared, /data\.type !== 'tether:pick-folder'/)
+  assert.match(shared, /event\.source !== frame\.contentWindow/)
+  assert.match(shared, /tether:pick-folder-result/)
+  assert.match(shared, /h\(TetherFolderPickDialog/)
+  assert.match(shared, /import \{ TetherFolderPickDialog \} from '\.\/tether-folder-pick-dialog\.js'/)
+  const picker = fs.readFileSync(path.join(root, 'packages/tether-ui/src/tether-folder-pick-dialog.js'), 'utf8')
+  assert.match(picker, /export function TetherFolderPickDialog/)
+  const agents = fs.readFileSync(path.join(root, 'packages/tether-ui/src/agents-page.js'), 'utf8')
+  assert.match(agents, /import \{ TetherFolderPickDialog \} from '\.\/tether-folder-pick-dialog\.js'/)
+  assert.doesNotMatch(agents, /export function TetherFolderPickDialog/)
 })

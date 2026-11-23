@@ -223,3 +223,4 @@
 - 2026-11-19：0.5.9预览经主人授权改为四平台成功与签名通过后直接公开prerelease；不建draft、不更新latest。
 
 - 2026-11-21：更新 0.5.10 本地集成进度、签名渠道和共享 SFTP 服务端口的说明。
+- 2026-11：发布产线阶段2落地：`.github/workflows/release-matrix.yml`（手动 dispatch、四平台测试+打包、unsigned 降级、schema 1 清单、仅 draft）、`scripts/release_pipeline.py bump`、`SIGNING_SETUP.md`；`release-pipeline/` 草稿仅作设计证据。未触发 workflow、未发布、未切 Hub。

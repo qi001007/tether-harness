@@ -1,9 +1,12 @@
 # Windows 代码签名与发布签名
 
+接入手册（账号、费用、逐步操作与 secret 清单）见 [SIGNING_SETUP.md](SIGNING_SETUP.md)。本文件只保留当前边界与门禁。
+
 ## 当前状态
 
 - 发布 manifest 已用 Ed25519 签名，客户端会验签；`qa_release_artifacts.py` 会校验 manifest 与三件套 SHA-256。
 - **Windows 可执行文件尚未 Authenticode 签名**：APP 的 Electron 入口、任何安装器和生成的快捷方式都没有证书签名，SmartScreen 仍可能提示未知发布者。
+- `release-matrix.yml` 默认 `SIGN=0`，只产出 unsigned 安装器与 `SHA256SUMS`；`sign=true` 时缺证书 secret 会直接失败。
 
 ## 正式发布需要
 

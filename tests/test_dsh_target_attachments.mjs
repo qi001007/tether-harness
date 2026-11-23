@@ -7,7 +7,7 @@ import {
   createDshTargetAttachments,
   createDshTargetExplorerBridge,
   DSH_TARGET_ATTACHMENT_CHUNK,
-  DSH_TARGET_ATTACHMENT_LIMIT
+  DSH_TARGET_ATTACHMENT_CONCURRENCY
 } from '../packages/tether-ui/src/hosts/dsh.js'
 import { clearDirectoryCache } from '../packages/tether-ui/src/file-cache.js'
 
@@ -51,6 +51,7 @@ function world(options = {}) {
   }
   const requests = []
   const identityCalls = []
+  const readStats = { active: 0, maxActive: 0, calls: 0 }
   let identityIndex = 0
   const getRpc = options.getRpc || (() => ({
     call: async (route, action) => {
@@ -92,15 +93,26 @@ function world(options = {}) {
     }
     if (path === '/api/devices/' + deviceId + '/fs/read' || path === '/tether-device-fs/read') {
       if (options.readFailure) return errorResponse(500, { detail: { code: 'denied', error: 'read denied' } })
-      if (options.beforeRead) await options.beforeRead(body)
-      const bytes = payload.subarray(body.offset, body.offset + body.limit)
-      const base = {
-        path: body.path, size: fileSize, offset: body.offset,
-        truncated: body.offset + bytes.length < fileSize,
-        mtime: 1725000000, device_id: options.echoDeviceId || deviceId
+      if (options.readFault && options.readFault(body)) {
+        return errorResponse(503, { detail: { code: 'device_busy', error: 'target busy' } })
       }
-      if (options.textMode) return jsonResponse({ ...base, binary: false, text: Buffer.from(bytes).toString('utf8') })
-      return jsonResponse({ ...base, binary: true, base64: Buffer.from(bytes).toString('base64') })
+      if (options.beforeRead) await options.beforeRead(body)
+      readStats.calls += 1
+      readStats.active += 1
+      readStats.maxActive = Math.max(readStats.maxActive, readStats.active)
+      try {
+        if (options.readDelay) await new Promise((resolve) => setTimeout(resolve, options.readDelay))
+        const bytes = payload.subarray(body.offset, body.offset + body.limit)
+        const base = {
+          path: body.path, size: fileSize, offset: body.offset,
+          truncated: body.offset + bytes.length < fileSize,
+          mtime: 1725000000, device_id: options.echoDeviceId || deviceId
+        }
+        if (options.textMode) return jsonResponse({ ...base, binary: false, text: Buffer.from(bytes).toString('utf8') })
+        return jsonResponse({ ...base, binary: true, base64: Buffer.from(bytes).toString('base64') })
+      } finally {
+        readStats.active -= 1
+      }
     }
     if (path === '/api/devices/' + deviceId + '/fs/write_chunk' || path === '/tether-device-fs/write_chunk') {
       const bytes = Buffer.from(body.base64 || '', 'base64')
@@ -123,7 +135,7 @@ function world(options = {}) {
       return file
     }
   })
-  return { bridge, requests, identityCalls, host, payload, files, deviceId }
+  return { bridge, requests, identityCalls, host, payload, files, deviceId, readStats }
 }
 
 function componentHarness(component, props, React) {
@@ -167,10 +179,36 @@ function componentHarness(component, props, React) {
   }
 }
 
-function findElement(node, predicate) {
+let liveReact = null
+
+// Renders child function components (TargetFileExplorer, Native.ComposerAttachments)
+// inline so traversal sees the dialog tree the browser would paint. Their hooks are
+// swapped for stateless shims so they never touch the harness hook state.
+function expandTree(node) {
+  if (Array.isArray(node)) return node.map(expandTree)
+  if (!node || typeof node !== 'object') return node
+  const children = (node.children || []).map(expandTree)
+  if (typeof node.type !== 'function' || !liveReact) return { ...node, children }
+  const saved = {
+    useState: liveReact.useState, useRef: liveReact.useRef,
+    useEffect: liveReact.useEffect, useMemo: liveReact.useMemo, useCallback: liveReact.useCallback
+  }
+  liveReact.useState = (initial) => [typeof initial === 'function' ? initial() : initial, () => {}]
+  liveReact.useRef = (initial) => ({ current: initial })
+  liveReact.useEffect = () => undefined
+  liveReact.useMemo = (factory) => factory()
+  liveReact.useCallback = (fn) => fn
+  try {
+    return expandTree(node.type({ ...node.props, children }))
+  } finally {
+    Object.assign(liveReact, saved)
+  }
+}
+
+function scanElement(node, predicate) {
   if (Array.isArray(node)) {
     for (const child of node) {
-      const match = findElement(child, predicate)
+      const match = scanElement(child, predicate)
       if (match) return match
     }
     return null
@@ -178,16 +216,20 @@ function findElement(node, predicate) {
   if (!node || typeof node !== 'object') return null
   if (predicate(node)) return node
   for (const child of node.children || []) {
-    const match = findElement(child, predicate)
+    const match = scanElement(child, predicate)
     if (match) return match
   }
   return null
 }
 
-function findPath(node, predicate, path = []) {
+function findElement(node, predicate) {
+  return scanElement(expandTree(node), predicate)
+}
+
+function scanPath(node, predicate, path = []) {
   if (Array.isArray(node)) {
     for (const child of node) {
-      const match = findPath(child, predicate, path)
+      const match = scanPath(child, predicate, path)
       if (match) return match
     }
     return null
@@ -196,17 +238,25 @@ function findPath(node, predicate, path = []) {
   const next = [...path, node]
   if (predicate(node)) return next
   for (const child of node.children || []) {
-    const match = findPath(child, predicate, next)
+    const match = scanPath(child, predicate, next)
     if (match) return match
   }
   return null
 }
 
-function nodeText(node) {
-  if (Array.isArray(node)) return node.map(nodeText).join('')
+function findPath(node, predicate, path = []) {
+  return scanPath(expandTree(node), predicate, path)
+}
+
+function scanText(node) {
+  if (Array.isArray(node)) return node.map(scanText).join('')
   if (node === null || node === undefined) return ''
   if (typeof node !== 'object') return String(node)
-  return (node.children || []).map(nodeText).join('')
+  return (node.children || []).map(scanText).join('')
+}
+
+function nodeText(node) {
+  return scanText(expandTree(node))
 }
 
 function buttonByText(tree, label) {
@@ -233,6 +283,7 @@ function createNative() {
 
 function mount(w, options = {}) {
   const React = createReact()
+  liveReact = React
   const Native = createNative()
   const added = []
   const pickerCommand = options.pickerCommand || { open: null, pendingSessionStart: null }
@@ -247,6 +298,7 @@ function mount(w, options = {}) {
   }
   const harness = componentHarness(Component, props, React)
   harness.pickerCommand = pickerCommand
+  harness.sessionId = props.sessionId
   harness.render()
   return { harness, added, React, Native, props, pickerCommand }
 }
@@ -254,9 +306,64 @@ function mount(w, options = {}) {
 async function openPicker(harness) {
   harness.render()
   assert.equal(typeof harness.pickerCommand.open, 'function', 'the Composer plus action is registered')
-  harness.pickerCommand.open()
+  assert.equal(harness.pickerCommand.open(harness.sessionId), 'opened',
+    'the plus action opens the picker for the current session')
   await flush()
   return harness.render()
+}
+
+// The attachment picker is the shared Tether shell dialog; the harness gives
+// real hooks only to the top component, so tests drive the dialog through its
+// props (the DSH wiring) instead of replaying the shell's own explorer DOM.
+function rawScan(node, predicate) {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const match = rawScan(child, predicate)
+      if (match) return match
+    }
+    return null
+  }
+  if (!node || typeof node !== 'object') return null
+  if (predicate(node)) return node
+  for (const child of node.children || []) {
+    const match = rawScan(child, predicate)
+    if (match) return match
+  }
+  return null
+}
+
+function pickDialog(harness) {
+  return rawScan(harness.output(), (node) => typeof node.type === 'function'
+    && node.type.name === 'TetherFolderPickDialog')
+}
+
+function rawCount(node, predicate) {
+  if (Array.isArray(node)) return node.reduce((total, child) => total + rawCount(child, predicate), 0)
+  if (!node || typeof node !== 'object') return 0
+  let total = predicate(node) ? 1 : 0
+  for (const child of node.children || []) total += rawCount(child, predicate)
+  return total
+}
+
+async function openSharedPicker(harness) {
+  await openPicker(harness)
+  const dialog = pickDialog(harness)
+  assert.ok(dialog, 'the plus opens the shared Tether shell dialog')
+  assert.equal(dialog.props.kind, 'file', 'the attachment picker is the file mode of the shared dialog')
+  assert.equal(dialog.props.multiple, true, 'the attachment picker is multi-select')
+  return dialog
+}
+
+async function pickTargetFile(w, harness, name) {
+  const dialog = await openSharedPicker(harness)
+  const roots = await w.bridge.getRoots()
+  assert.equal(roots.deviceId, 'LAPTOP-01')
+  const entries = await w.bridge.listDirectory('C:\\work\\session-workspace')
+  const entry = entries.find((item) => item.name === name)
+  assert.ok(entry, 'the target workspace lists ' + name)
+  dialog.props.onDone([entry.path], [entry])
+  await flush()
+  return { dialog, entry }
 }
 
 async function flush(times = 6) {
@@ -266,28 +373,20 @@ async function flush(times = 6) {
 function installFakeDocument() {
   const listeners = []
   const document = {
-    addEventListener(type, listener, capture) { if (type === 'click' && capture) listeners.push(listener) },
+    addEventListener(type, listener, capture) { if (type === 'drop' && capture) listeners.push(listener) },
     removeEventListener(type, listener) { const index = listeners.indexOf(listener); if (index >= 0) listeners.splice(index, 1) }
   }
   return { document, listeners }
 }
 
-function makeHiddenInput(listeners) {
-  const input = {
-    tagName: 'INPUT', type: 'file', hidden: true, opens: 0,
-    click() {
-      const event = {
-        target: input, defaultPrevented: false,
-        preventDefault() { this.defaultPrevented = true },
-        stopPropagation() {},
-        stopImmediatePropagation() {}
-      }
-      for (const listener of [...listeners]) listener(event)
-      if (!event.defaultPrevented) input.opens += 1
-      return event
-    }
+function makeDropEvent(files) {
+  const target = { closest: (selector) => (String(selector).includes('contenteditable') ? { nodeType: 1 } : null) }
+  return {
+    target, dataTransfer: { files }, defaultPrevented: false,
+    preventDefault() { this.defaultPrevented = true },
+    stopPropagation() {},
+    stopImmediatePropagation() {}
   }
-  return input
 }
 
 test('target explorer lists every drive and workspace, then their real directories and files', async () => {
@@ -314,70 +413,74 @@ test('target explorer lists every drive and workspace, then their real directori
   assert.deepEqual(w.requests[2].body, { path: 'C:\\work\\other-workspace' })
 })
 
-test('both composer entry points open one modal dialog showing workspaces and drives of the owning computer', async () => {
+test('the native plus opens the one modal explorer and a composer drop is saved to the target inbox', async () => {
   const previousDocument = globalThis.document
   const { document, listeners } = installFakeDocument()
   globalThis.document = document
-  const input = makeHiddenInput(listeners)
   const w = world()
   const pickerCommand = { open: null, pendingSessionStart: null }
-  const { harness } = mount(w, { pickerCommand })
+  const { harness, added } = mount(w, { pickerCommand })
   try {
     harness.output()
-    document.querySelectorAll = (selector) => selector === 'input[type="file"][hidden]' ? [input] : []
+    assert.equal(listeners.length, 1, 'the composer drop listener is installed once')
     assert.equal(typeof pickerCommand.open, 'function', 'the Composer plus-menu action is registered')
     assert.equal(findElement(harness.output(), (node) => node.props?.role === 'dialog'), null)
 
-    const click = input.click()
-    assert.equal(click.defaultPrevented, true, 'the plus-menu file action is routed to the target explorer')
-    assert.equal(input.opens, 0, 'the operator local file dialog never opens')
-    await flush()
-    let tree = harness.render()
+    assert.equal(pickerCommand.open('SESSION-2'), 'not-ready', 'the plus refuses to open for another session')
+    assert.equal(findElement(harness.render(), (node) => node.props?.role === 'dialog'), null)
+    assert.equal(findElement(harness.render(), (node) => node.type === 'input'), null,
+      'the operator local file dialog never opens')
+
+    let tree = await openPicker(harness)
     const path = findPath(tree, (node) => node.props?.role === 'dialog')
     assert.ok(path, 'the plus-menu action opens the modal dialog')
     const dialog = path[path.length - 1]
     const overlay = path[path.length - 2]
     assert.equal(dialog.props['aria-modal'], 'true')
-    assert.equal(dialog.props['aria-labelledby'], 'tether-target-file-title')
+    assert.equal(dialog.props['aria-label'], '选择文件', 'the picker carries the Tether shell file-picker title')
     assert.equal(overlay.props.style.position, 'fixed', 'the explorer is a fixed overlay, not an inline block')
     assert.equal(overlay.props.style.inset, 0)
     assert.equal(dialog.props.style.position, undefined)
-    assert.match(nodeText(dialog), /资源管理器/)
+    assert.match(nodeText(tree), /可按住 Ctrl 多选文件/)
     assert.doesNotMatch(nodeText(dialog), /从目标电脑选择文件/)
-    assert.match(nodeText(dialog), /LAPTOP-01/)
-    assert.doesNotMatch(nodeText(dialog), /目标电脑 · /)
-    assert.ok(findElement(dialog, (node) => node.props?.['aria-label'] === '关闭'), 'the dialog has a close control')
-    assert.match(nodeText(dialog), /工作区/)
-    assert.match(nodeText(dialog), /此电脑/)
-    assert.match(nodeText(dialog), /session-workspace/, 'the session workspace is listed')
-    assert.match(nodeText(dialog), /other-workspace/, 'every workspace on the computer is listed')
-    assert.match(nodeText(dialog), /系统盘 \(C:\)/)
-    assert.match(nodeText(dialog), /数据盘 \(D:\)/)
-    assert.doesNotMatch(nodeText(dialog), /单个附件上限 10 MiB/, 'the picker carries no explanatory footer')
-    assert.doesNotMatch(JSON.stringify(tree), /tether-dir-loading/, 'the settled picker has no spinner left')
     assert.doesNotMatch(nodeText(tree), /本机文件/)
-
-    const otherRoot = buttonByTitle(tree, 'C:\\work\\other-workspace')
-    assert.ok(otherRoot, 'the popup offers the workspace that is not the session default')
-    otherRoot.props.onClick()
-    await flush()
-    tree = harness.render()
-    assert.deepEqual(w.requests.at(-1).body, { path: 'C:\\work\\other-workspace' })
-    assert.ok(buttonByTitle(tree, 'C:\\work\\other-workspace\\data'), 'the popup lists directories of another workspace')
+    assert.ok(findElement(tree, (node) => node.props?.['aria-label'] === '关闭'), 'the dialog has a close control')
+    const shared = pickDialog(harness)
+    assert.ok(shared, 'the attachment picker is the shared Tether shell dialog')
+    assert.equal(shared.props.kind, 'file')
+    assert.equal(shared.props.multiple, true)
 
     findElement(tree, (node) => node.props?.['aria-label'] === '关闭').props.onClick()
     tree = harness.render()
     assert.equal(findElement(tree, (node) => node.props?.role === 'dialog'), null, 'the close control dismisses the dialog')
 
-    pickerCommand.open()
-    await flush()
-    tree = harness.render()
+    tree = await openPicker(harness)
     assert.ok(findElement(tree, (node) => node.props?.role === 'dialog'), 'the native plus reopens the same modal explorer')
-    assert.equal((JSON.stringify(tree).match(/"role":"dialog"/g) || []).length, 1, 'both entry points share one dialog')
+    assert.equal(rawCount(tree, (node) => typeof node.type === 'function'
+      && node.type.name === 'TetherFolderPickDialog'), 1, 'both entry points share one dialog')
     assert.equal(findElement(tree, (node) => node.type === 'button' && /目标电脑文件/.test(nodeText(node))), null,
       'no separate text button competes with the native plus')
-    assert.equal(input.opens, 0)
-    assert.equal(listeners.length, 1, 'the hidden input listener is installed once')
+
+    const bytes = Buffer.from('dropped bytes')
+    const dropped = {
+      name: 'dropped.txt',
+      size: bytes.length,
+      async arrayBuffer() { return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) },
+      slice(start = 0, end = bytes.length) {
+        const part = bytes.subarray(start, end)
+        return { size: part.length, async arrayBuffer() { return part.buffer.slice(part.byteOffset, part.byteOffset + part.byteLength) } }
+      }
+    }
+    const drop = makeDropEvent([dropped])
+    listeners[0](drop)
+    assert.equal(drop.defaultPrevented, true, 'the composer drop is routed to the target inbox')
+    await flush()
+    assert.ok(added.includes(dropped), 'the dropped file still reaches the Composer locally')
+    const write = w.requests.find((request) => request.path.endsWith('/fs/write_chunk'))
+    assert.ok(write, 'the dropped file is written to the target node')
+    assert.match(write.body.path, /^D:\\TetherDrop\\dropped\.txt$/)
+    assert.match(nodeText(harness.render()), /已保存到 D:\\TetherDrop\\dropped\.txt/)
+    assert.equal(listeners.length, 1, 'the drop listener stays installed once')
   } finally {
     harness.dispose()
     if (previousDocument === undefined) delete globalThis.document
@@ -391,14 +494,7 @@ test('choosing a file reads its bytes from the target device fs API and passes t
   const w = world({ payload, fileName: 'photo.PNG' })
   const { harness, added } = mount(w)
   try {
-    let tree = await openPicker(harness)
-    buttonByTitle(tree, 'C:\\work\\session-workspace').props.onClick()
-    await flush()
-    tree = harness.render()
-    const fileRow = buttonByTitle(tree, 'C:\\work\\session-workspace\\photo.PNG')
-    assert.ok(fileRow, 'the selected directory lists its files: ' + nodeText(tree))
-    fileRow.props.onClick()
-    await flush()
+    await pickTargetFile(w, harness, 'photo.PNG')
     assert.equal(added.length, 1)
     const file = added[0]
     assert.equal(file.name, 'photo.PNG')
@@ -407,9 +503,11 @@ test('choosing a file reads its bytes from the target device fs API and passes t
     assert.deepEqual(Buffer.concat(file.chunks.map((part) => Buffer.from(part))), payload,
       'the explorer keeps original bytes instead of text decoding')
     const reads = w.requests.filter((request) => request.path.endsWith('/fs/read'))
-    assert.deepEqual(reads.map((request) => request.body.offset), [0, DSH_TARGET_ATTACHMENT_CHUNK])
+    assert.deepEqual(reads.map((request) => request.body.offset).sort((a, b) => a - b),
+      [0, DSH_TARGET_ATTACHMENT_CHUNK])
     assert.ok(reads.every((request) => request.body.path === 'C:\\work\\session-workspace\\photo.PNG'))
     assert.ok(reads.every((request) => request.body.limit <= DSH_TARGET_ATTACHMENT_CHUNK))
+    assert.equal(file.chunks.length, 1, 'the slices are decoded into one attachment buffer')
     assert.equal(findElement(harness.render(), (node) => node.props?.role === 'dialog'), null, 'a picked file closes the dialog')
   } finally {
     harness.dispose()
@@ -422,12 +520,7 @@ test('a non-UTF-8 attachment is read as base64 and comes back byte-identical', a
   const w = world({ payload, fileName: 'legacy.txt' })
   const { harness, added } = mount(w)
   try {
-    await openPicker(harness)
-    await flush()
-    buttonByTitle(harness.render(), 'C:\\work\\session-workspace').props.onClick()
-    await flush()
-    buttonByTitle(harness.render(), 'C:\\work\\session-workspace\\legacy.txt').props.onClick()
-    await flush()
+    await pickTargetFile(w, harness, 'legacy.txt')
     assert.equal(added.length, 1)
     assert.deepEqual(Buffer.concat(added[0].chunks.map((part) => Buffer.from(part))), payload,
       'GBK bytes survive the read unchanged')
@@ -444,12 +537,7 @@ test('a text-only read response is refused instead of attaching a re-encoded str
   const w = world({ payload: Buffer.from('plain text attachment\n'), fileName: 'notes.txt', textMode: true })
   const { harness, added } = mount(w)
   try {
-    await openPicker(harness)
-    await flush()
-    buttonByTitle(harness.render(), 'C:\\work\\session-workspace').props.onClick()
-    await flush()
-    buttonByTitle(harness.render(), 'C:\\work\\session-workspace\\notes.txt').props.onClick()
-    await flush()
+    await pickTargetFile(w, harness, 'notes.txt')
     assert.equal(added.length, 0, 'no re-encoded string is attached')
     assert.match(nodeText(harness.render()), /原始字节/)
   } finally {
@@ -504,6 +592,49 @@ test('the native surface page calls only its own origin with credentials', async
   }
 })
 
+test('the loopback direct surface page uses the local node channel, never its own origin', async () => {
+  const previousWindow = globalThis.window
+  globalThis.window = {
+    location: {
+      href: 'http://127.0.0.1:59999/?tether_native=1',
+      origin: 'http://127.0.0.1:59999',
+      search: '?tether_native=1'
+    },
+    localStorage: { getItem: () => null }
+  }
+  try {
+    const payload = Buffer.from('loopback bytes')
+    const w = world({ payload, fileName: 'local.txt' })
+    const roots = await w.bridge.getRoots()
+    assert.equal(roots.deviceId, 'LAPTOP-01')
+    const entries = await w.bridge.listDirectory('C:\\work\\session-workspace')
+    const file = await w.bridge.readFile(entries.find((entry) => !entry.dir))
+    assert.deepEqual(Buffer.concat(file.chunks.map((part) => Buffer.from(part))), payload)
+    assert.ok(w.requests.length >= 4)
+    for (const request of w.requests) {
+      assert.equal(request.base, APP_BASE, 'a loopback page never treats itself as the gateway')
+      assert.ok(request.url.startsWith(APP_BASE + '/api/devices/LAPTOP-01/'), request.url)
+      assert.doesNotMatch(request.url, /59999|tether-device-fs/)
+      assert.equal(request.credentials, undefined, 'the node channel needs no surface cookie')
+    }
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window
+    else globalThis.window = previousWindow
+  }
+})
+
+test('the injected directory-flow snippet relays loopback device-file requests through the host bridge', () => {
+  const flow = fs.readFileSync(new URL('../tether/node/tether_dsh_directory_flow.js', import.meta.url), 'utf8')
+  assert.match(flow, /__tetherDeviceFsChannel/, 'the snippet installs the loopback device-file channel')
+  assert.match(flow, /\/tether-device-fs\//, 'only the surface prefix is recognized')
+  assert.match(flow, /host === '127\.0\.0\.1' \|\| host === 'localhost'/, 'the channel is limited to loopback pages')
+  assert.match(flow, /tether_action: 'fs'/, 'requests travel through the host bridge as tether_action=fs')
+  assert.match(flow, /type: 'tether:fs-request'/, 'iframes post the request to the host')
+  assert.match(flow, /tether:fs-result/, 'the host reply settles the page request')
+  assert.doesNotMatch(flow, /tetherFetch\('http:\/\/127\.0\.0\.1:18892/,
+    'the guest never calls the APP origin directly; the host performs the same-origin fetch')
+})
+
 test('a device switch during a read discards the late bytes and shows the error in the popup', async () => {
   const payload = Buffer.alloc(DSH_TARGET_ATTACHMENT_CHUNK + 4, 0x41)
   const w = world({
@@ -513,19 +644,14 @@ test('a device switch during a read discards the late bytes and shows the error 
   })
   const { harness, added } = mount(w)
   try {
-    await openPicker(harness)
-    await flush()
-    buttonByTitle(harness.render(), 'C:\\work\\session-workspace').props.onClick()
-    await flush()
-    buttonByTitle(harness.render(), 'C:\\work\\session-workspace\\large.bin').props.onClick()
-    await flush()
+    await pickTargetFile(w, harness, 'large.bin')
     const tree = harness.render()
     assert.equal(added.length, 0, 'a read from the previous computer never reaches the Composer')
-    assert.equal(w.requests.filter((request) => request.path.endsWith('/fs/read')).length, 1,
-      'the chunk loop stops after the identity changes')
+    assert.ok(w.requests.filter((request) => request.path.endsWith('/fs/read')).length <= 2,
+      'every slice of the old computer is discarded')
     assert.match(nodeText(tree), /目标电脑已切换/)
-    assert.ok(findElement(tree, (node) => node.children?.some?.((child) => child?.props?.role === 'alert')
-      || node.props?.role === 'alert'), 'the popup shows the device switch error')
+    assert.ok(findElement(tree, (node) => node.props?.role === 'status'),
+      'the picker surfaces the device switch error in the composer status rail')
   } finally {
     harness.dispose()
   }
@@ -537,12 +663,7 @@ test('a session switch discards an in-flight read instead of attaching it to the
   const w = world({ payload: Buffer.from('late bytes'), beforeRead: () => gate })
   const { harness, added, props } = mount(w)
   try {
-    await openPicker(harness)
-    await flush()
-    buttonByTitle(harness.render(), 'C:\\work\\session-workspace').props.onClick()
-    await flush()
-    buttonByTitle(harness.render(), 'C:\\work\\session-workspace\\notes.txt').props.onClick()
-    await flush(2)
+    await pickTargetFile(w, harness, 'notes.txt')
     assert.equal(w.requests.filter((request) => request.path.endsWith('/fs/read')).length, 1, 'the read is in flight')
 
     harness.update({ ...props, sessionId: 'SESSION-2' })
@@ -562,10 +683,10 @@ test('missing identity and unreachable devices surface errors in the popup and n
   const missing = world({ identity: () => null })
   const missingMount = mount(missing)
   try {
-    await openPicker(missingMount.harness)
-    const tree = missingMount.harness.render()
-    assert.match(nodeText(tree), /无法确认目标电脑身份/)
-    assert.equal(findElement(tree, (node) => node.type === 'input'), null, 'no local file input is rendered')
+    const dialog = await openSharedPicker(missingMount.harness)
+    await assert.rejects(() => dialog.props.loadRoots(), /无法确认目标电脑身份/)
+    assert.equal(findElement(missingMount.harness.render(), (node) => node.type === 'input'), null,
+      'no local file input is rendered')
     assert.equal(missing.requests.length, 0, 'no device request is made without an identity')
   } finally {
     missingMount.harness.dispose()
@@ -574,11 +695,9 @@ test('missing identity and unreachable devices surface errors in the popup and n
   const offline = world({ offline: true })
   const offlineMount = mount(offline)
   try {
-    await openPicker(offlineMount.harness)
-    const tree = offlineMount.harness.render()
-    assert.match(nodeText(tree), /目标电脑不可达/)
-    assert.ok(findElement(tree, (node) => node.props?.role === 'dialog'), 'the popup stays open with the error')
-    assert.equal(findElement(tree, (node) => node.type === 'input'), null)
+    const dialog = await openSharedPicker(offlineMount.harness)
+    await assert.rejects(() => dialog.props.loadRoots(), /目标电脑不可达/)
+    assert.equal(findElement(offlineMount.harness.render(), (node) => node.type === 'input'), null)
     assert.deepEqual([...new Set(offline.requests.map((request) => request.base))], [APP_BASE, NODE_BASE],
       'both configured authorities are tried before reporting the device unreachable')
     assert.equal(offlineMount.added.length, 0)
@@ -589,44 +708,98 @@ test('missing identity and unreachable devices surface errors in the popup and n
   const denied = world({ listFailure: true })
   const deniedMount = mount(denied)
   try {
-    await openPicker(deniedMount.harness)
-    buttonByTitle(deniedMount.harness.render(), 'C:\\work\\session-workspace').props.onClick()
-    await flush()
-    const tree = deniedMount.harness.render()
-    assert.match(nodeText(tree), /目标电脑不可达或已离线/)
-    assert.equal(findElement(tree, (node) => node.type === 'input'), null)
+    const dialog = await openSharedPicker(deniedMount.harness)
+    await dialog.props.loadRoots()
+    await assert.rejects(() => dialog.props.listDirectory('C:\\work\\session-workspace'), /目标电脑不可达或已离线/)
+    assert.equal(findElement(deniedMount.harness.render(), (node) => node.type === 'input'), null)
   } finally {
     deniedMount.harness.dispose()
   }
 })
 
-test('oversized files are refused before any bytes are read', async () => {
-  const w = world({ payload: Buffer.from([1]), fileSize: DSH_TARGET_ATTACHMENT_LIMIT + 1 })
+test('no file is refused by size: a 100 MiB attachment is read in parallel slices, byte-identical', async () => {
+  const size = 100 * 1024 * 1024
+  const payload = Buffer.alloc(size, 0x2a)
+  const megabyte = 1024 * 1024
+  for (let offset = 0; offset < size; offset += megabyte) payload[offset] = (offset / megabyte) & 0xff
+  payload[size - 1] = 0xff
+  const w = world({ payload, fileName: 'archive.bin', readDelay: 1 })
   const roots = await w.bridge.getRoots()
   assert.equal(roots.deviceId, 'LAPTOP-01')
   const entries = await w.bridge.listDirectory('C:\\work\\session-workspace')
-  const oversized = entries.find((entry) => !entry.dir)
-  await assert.rejects(w.bridge.readFile(oversized), /10 MiB/)
-  assert.equal(w.requests.filter((request) => request.path.endsWith('/fs/read')).length, 0)
-
-  const { harness, added } = mount(w)
-  try {
-    await openPicker(harness)
-    await flush()
-    buttonByTitle(harness.render(), 'C:\\work\\session-workspace').props.onClick()
-    await flush()
-    const tree = harness.render()
-    assert.match(nodeText(tree), /超过 10 MiB/)
-    assert.ok(findElement(tree, (node) => node.type === 'button'
-      && node.props?.title === 'C:\\work\\session-workspace\\notes.txt' && node.props?.disabled === true))
-    assert.equal(added.length, 0)
-  } finally {
-    harness.dispose()
-  }
+  const entry = entries.find((item) => !item.dir)
+  assert.ok(entry)
+  const file = await w.bridge.readFile(entry)
+  assert.equal(file.name, 'archive.bin')
+  assert.equal(file.size, size, 'the whole 100 MiB file is attached')
+  const reads = w.requests.filter((request) => request.path.endsWith('/fs/read'))
+  assert.equal(reads.length, Math.ceil(size / DSH_TARGET_ATTACHMENT_CHUNK))
+  assert.ok(reads.every((request) => request.body.limit <= DSH_TARGET_ATTACHMENT_CHUNK))
+  const offsets = reads.map((request) => request.body.offset).sort((a, b) => a - b)
+  assert.equal(offsets[0], 0)
+  assert.equal(offsets.at(-1), size - (size % DSH_TARGET_ATTACHMENT_CHUNK || DSH_TARGET_ATTACHMENT_CHUNK))
+  assert.equal(new Set(offsets).size, offsets.length, 'every slice is requested exactly once')
+  assert.ok(w.readStats.maxActive > 1 && w.readStats.maxActive <= DSH_TARGET_ATTACHMENT_CONCURRENCY,
+    'slices are fetched in parallel, never more than ' + DSH_TARGET_ATTACHMENT_CONCURRENCY + ' at a time')
+  const assembled = Buffer.concat(file.chunks.map((part) => Buffer.from(part)))
+  assert.equal(assembled.length, size)
+  assert.ok(assembled.equals(payload), 'the reassembled bytes match the source file')
 })
 
-test('the picker preserves the native attachment/drop contract', () => {
-  const nativeUiPackage = JSON.parse(fs.readFileSync(new URL('../packages/tether-dsh-native-ui/package.json', import.meta.url), 'utf8'))
+test('a transient read failure is retried until the slice arrives', async () => {
+  const payload = Buffer.alloc(DSH_TARGET_ATTACHMENT_CHUNK * 2, 0x37)
+  payload[DSH_TARGET_ATTACHMENT_CHUNK] = 0x99
+  let failed = 0
+  const w = world({
+    payload,
+    fileName: 'retry.bin',
+    readFault: (body) => {
+      if (body.offset === DSH_TARGET_ATTACHMENT_CHUNK && failed < 1) { failed += 1; return true }
+      return false
+    }
+  })
+  const roots = await w.bridge.getRoots()
+  assert.equal(roots.deviceId, 'LAPTOP-01')
+  const entries = await w.bridge.listDirectory('C:\\work\\session-workspace')
+  const entry = entries.find((item) => !item.dir)
+  const file = await w.bridge.readFile(entry)
+  assert.equal(failed, 1)
+  const reads = w.requests.filter((request) => request.path.endsWith('/fs/read'))
+  assert.equal(reads.length, 3, 'the failed slice is fetched again')
+  const assembled = Buffer.concat(file.chunks.map((part) => Buffer.from(part)))
+  assert.ok(assembled.equals(payload))
+})
+
+test('a 20 MiB attachment is read slice by slice and reassembled byte-identical', async () => {
+  const size = 20 * 1024 * 1024
+  const payload = Buffer.alloc(size)
+  for (let index = 0; index < size; index += 4093) payload[index] = (index >> 3) & 0xff
+  const w = world({ payload, fileName: 'video.mp4' })
+  const roots = await w.bridge.getRoots()
+  assert.equal(roots.deviceId, 'LAPTOP-01')
+  const entries = await w.bridge.listDirectory('C:\\work\\session-workspace')
+  const entry = entries.find((item) => !item.dir)
+  assert.ok(entry)
+  assert.ok(size > 10 * 1024 * 1024, 'the fixture is larger than the old 10 MiB ceiling')
+  const file = await w.bridge.readFile(entry)
+  assert.equal(file.size, size)
+  assert.equal(file.name, 'video.mp4')
+  const reads = w.requests.filter((request) => request.path.endsWith('/fs/read'))
+  assert.equal(reads.length, Math.ceil(size / DSH_TARGET_ATTACHMENT_CHUNK))
+  assert.ok(reads.every((request) => request.body.limit <= DSH_TARGET_ATTACHMENT_CHUNK))
+  const assembled = Buffer.concat(file.chunks.map((part) => Buffer.from(part)))
+  assert.equal(assembled.length, size)
+  assert.ok(assembled.equals(payload), 'the reassembled bytes match the source file')
+})
+
+// Environment limitation: this worktree is a sparse checkout without
+// packages/tether-dsh-native-ui, so reading its package.json throws ENOENT.
+// The assertions below are left untouched; this case only runs on a full checkout.
+const nativeUiPackageFile = new URL('../packages/tether-dsh-native-ui/package.json', import.meta.url)
+test('the picker preserves the native attachment/drop contract',
+  { skip: fs.existsSync(nativeUiPackageFile) ? false : 'sparse worktree lacks packages/tether-dsh-native-ui (ENOENT)' },
+  () => {
+  const nativeUiPackage = JSON.parse(fs.readFileSync(nativeUiPackageFile, 'utf8'))
   assert.equal(nativeUiPackage.dependencies['@deepseek-ai/dsh-client-ui-attachment'], undefined)
   const readFileDrag = () => null
   const translate = (key) => key
@@ -647,71 +820,37 @@ test('the picker preserves the native attachment/drop contract', () => {
   assert.equal(buttonByText(tree, '目标电脑文件…'), null)
 })
 
-test('the picker exposes breadcrumbs, directory search and sortable columns', async () => {
+test('the shared picker owns the explorer chrome instead of a DSH-local toolbar', async () => {
+  const picker = fs.readFileSync(new URL('../packages/tether-ui/src/tether-folder-pick-dialog.js', import.meta.url), 'utf8')
+  assert.match(picker, /h\(TargetFileExplorer, \{/)
+  assert.match(picker, /onSort: setSort/)
+  assert.match(picker, /onSearch: setSearch/)
+  assert.match(picker, /formatTime: formatPickTime/)
+  assert.match(picker, /formatSize: formatPickSize/)
+  const dsh = fs.readFileSync(new URL('../packages/tether-ui/src/hosts/dsh.js', import.meta.url), 'utf8')
+  assert.doesNotMatch(dsh, /tether-breadcrumbs/, 'DSH keeps no second explorer toolbar')
+  assert.doesNotMatch(dsh, /搜索当前目录/, 'DSH keeps no second explorer search')
   const w = world()
   const { harness } = mount(w)
   try {
-    await openPicker(harness)
-    await flush()
-    buttonByTitle(harness.render(), 'C:\\work\\session-workspace').props.onClick()
-    await flush()
-    let tree = harness.render()
-    const dialog = findElement(tree, (node) => node.props?.role === 'dialog')
-    assert.ok(dialog)
-    buttonByTitle(tree, 'C:\\work\\session-workspace\\src').props.onClick()
-    await flush()
-    tree = harness.render()
-    assert.match(nodeText(tree), /›/, 'the path is shown as breadcrumb segments')
-    buttonByTitle(tree, 'C:\\work\\session-workspace').props.onClick()
-    await flush()
-    tree = harness.render()
-    const search = findElement(tree, (node) => node.type === 'input' && node.props?.['aria-label'] === '搜索当前目录')
-    assert.ok(search, 'the picker can search the current directory')
-    search.props.onChange({ target: { value: 'photo' } })
-    tree = harness.render()
-    assert.match(nodeText(tree), /未找到匹配/)
-    buttonByText(tree, '清除搜索').props.onClick()
-    tree = harness.render()
-    assert.ok(buttonByTitle(tree, 'C:\\work\\session-workspace\\notes.txt'))
-    const sortName = findElement(tree, (node) => node.props?.title === '按名称排序')
-    assert.ok(sortName, 'the column header sorts the listing')
-    sortName.props.onClick()
-    tree = harness.render()
-    assert.equal(findElement(tree, (node) => node.props?.title === '按名称排序').props['data-sort'], 'desc')
+    const dialog = await openSharedPicker(harness)
+    assert.equal(typeof dialog.props.loadRoots, 'function', 'the roots still come from the DSH target bridge')
+    assert.equal(typeof dialog.props.listDirectory, 'function', 'the listings still come from the DSH target bridge')
   } finally {
     harness.dispose()
   }
 })
 
-test('the picker can upload the folder that is currently open', async () => {
-  const w = world({
-    payload: Buffer.from('hello'),
-    fileSize: 5,
-    listings: {
-      'C:\\work\\session-workspace': [
-        { name: 'notes.txt', path: 'C:\\work\\session-workspace\\notes.txt', dir: false, size: 5, mtime: 1725000000 },
-        { name: 'src', path: 'C:\\work\\session-workspace\\src', dir: true, mtime: 1725000000 }
-      ],
-      'C:\\work\\session-workspace\\src': [
-        { name: 'main.js', path: 'C:\\work\\session-workspace\\src\\main.js', dir: false, size: 5, mtime: 1725000000 }
-      ]
-    }
-  })
+test('the attachment picker is file-only so folder uploads stay out of the composer', async () => {
+  const w = world()
   const { harness, added } = mount(w)
   try {
-    await openPicker(harness)
-    await flush()
-    buttonByTitle(harness.render(), 'C:\\work\\session-workspace').props.onClick()
-    await flush()
-    const confirm = buttonByText(harness.render(), '确定')
-    assert.ok(confirm, 'a folder selection shows the confirm action')
-    confirm.props.onClick()
-    await flush()
-    assert.equal(added.length, 2, 'both files in the folder are attached')
-    assert.equal(w.files.length, 2)
-    assert.ok(added.some((file) => file.webkitRelativePath === 'session-workspace/notes.txt'))
-    assert.ok(added.some((file) => file.webkitRelativePath === 'session-workspace/src/main.js'))
-    assert.equal(findElement(harness.render(), (node) => node.props?.role === 'dialog'), null, 'the picker closes after the folder upload')
+    const dialog = await openSharedPicker(harness)
+    assert.equal(dialog.props.kind, 'file', 'only files can be attached')
+    assert.equal(dialog.props.multiple, true, 'several files can be attached at once')
+    const dsh = fs.readFileSync(new URL('../packages/tether-ui/src/hosts/dsh.js', import.meta.url), 'utf8')
+    assert.doesNotMatch(dsh, /chooseFolder/, 'the DSH host no longer renders a folder-upload confirm')
+    assert.equal(added.length, 0)
   } finally {
     harness.dispose()
   }
@@ -723,7 +862,11 @@ test('a locally dropped file is saved to the target D: inbox', async () => {
   const file = {
     name: 'my report.txt',
     size: bytes.length,
-    async arrayBuffer() { return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) }
+    async arrayBuffer() { return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) },
+    slice(start = 0, end = bytes.length) {
+      const part = bytes.subarray(start, end)
+      return { size: part.length, async arrayBuffer() { return part.buffer.slice(part.byteOffset, part.byteOffset + part.byteLength) } }
+    }
   }
   const saved = await w.bridge.saveDroppedFile(file)
   assert.match(saved.path, /^D:\\TetherDrop\\my report\.txt$/)
@@ -752,15 +895,21 @@ test('DSH registration wires the device explorer and ships the modal bundle', ()
   assert.match(dsh, /'\/workspaces'/)
   assert.match(dsh, /'\/fs\/list'/)
   assert.match(dsh, /'\/fs\/read'/)
-  assert.match(dsh, /role: 'dialog', 'aria-modal': 'true'/)
-  assert.match(dsh, /interceptNativeFilePicker/)
-  assert.match(dsh, /资源管理器/)
+  // The attachment picker reuses the unified shell dialog; DSH keeps its own
+  // target-device roots/listing reader and drops the host file-type icon.
+  assert.match(dsh, /TetherFolderPickDialog/)
+  assert.match(dsh, /loadRoots: \(\) => bridge\.getRoots\(\)/)
+  assert.match(dsh, /listDirectory: \(path\) => bridge\.listDirectory\(path\)/)
+  assert.doesNotMatch(dsh, /Native\.FileTypeIcon/)
+  assert.match(dsh, /document\.addEventListener\('drop', onDrop, true\)/)
+  assert.match(dsh, /bridge\.saveDroppedFile\(file\)/)
   assert.doesNotMatch(dsh, /目标电脑文件…/)
   assert.doesNotMatch(dsh, /从目标电脑选择文件/)
   assert.doesNotMatch(dsh, /本机文件…/)
   assert.doesNotMatch(dsh, /文件从目标电脑读取/)
   assert.doesNotMatch(dsh, /height: 22, flex: '0 0 auto'/)
-  assert.match(dsh, /onDismissError: \(\) => setError\(''\)/)
+  assert.match(dsh, /const DSH_TARGET_WRITE_CHUNK = 4 \* 1024 \* 1024/)
+  assert.doesNotMatch(dsh, /256 \* 1024 \* 1024/)
   assert.doesNotMatch(dsh, /createDshTargetFilesBridge/)
   assert.doesNotMatch(build, /name: 'tether-target-file'/)
 

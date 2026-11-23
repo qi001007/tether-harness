@@ -195,146 +195,123 @@ def test_release_workflow_rejects_tag_pointing_to_another_commit(tmp_path: Path)
     assert b"points to" in result.stdout + result.stderr
 
 
-def test_desktop_preview_workflow_uses_one_version_branch_tag_and_artifact_set() -> None:
-    workflow = (ROOT / ".github" / "workflows" / "tether-desktop-candidate.yml").read_text(encoding="utf-8")
+def test_desktop_preview_workflow_is_dispatch_driven_and_draft_only() -> None:
+    import yaml
+
+    raw = (ROOT / ".github" / "workflows" / "tether-desktop-candidate.yml").read_text(encoding="utf-8")
+    workflow = yaml.safe_load(raw)
+    triggers = workflow.get("on", workflow.get(True))
+    assert list(triggers) == ["workflow_dispatch"]
+    inputs = triggers["workflow_dispatch"]["inputs"]
+    assert set(inputs) == {"version", "preview_tag", "posix_only"}
+
+    assert "concurrency:\n  group: ${{ github.workflow }}-${{ inputs.version }}\n  cancel-in-progress: true" in raw
+    assert "CANDIDATE_VERSION: ${{ inputs.version }}" in raw
+    assert "CANDIDATE_TAG: ${{ inputs.preview_tag || format('v{0}-preview.1', inputs.version) }}" in raw
+    assert "refs/heads/codex/" not in raw
+    assert "github.ref == 'refs/heads/" not in raw
+
     version = json.loads((ROOT / "version.json").read_text(encoding="utf-8"))["components"]["app"]
+    assert version not in raw
 
-    assert "concurrency:\n  group: ${{ github.workflow }}-${{ github.ref }}\n  cancel-in-progress: true" in workflow
-    assert version == "0.5.10"
-    candidate_branch = "codex/tether-0510-preview-20261121"
-    assert f"      - '{candidate_branch}'" in workflow
-    assert f"refs/heads/{candidate_branch}' && '{version}'" in workflow
-    assert f"refs/heads/{candidate_branch}' && 'v{version}-preview.1'" in workflow
-    assert "codex/tether-052-preview-20261111" in workflow
-    assert "codex/tether-053-business-20261112" in workflow
-    assert "codex/tether-054-session-20261112" in workflow
-    assert "codex/tether-055-native-mode-20261112" in workflow
-    assert "codex/tether-056-reconnect-20261113" in workflow
-    assert "codex/tether-057-recovery-20261113" in workflow
-    assert "codex/tether-058-herdr-20261113" in workflow
-    assert "refs/heads/codex/tether-058-herdr-20261113' && '0.5.8'" in workflow
-    assert "refs/heads/codex/tether-058-herdr-20261113' && 'v0.5.8-preview.1'" in workflow
-    assert "codex/tether-058-route-recovery-20261113" in workflow
-    assert "codex/tether-058-preview2-reassemble-20261113" in workflow
-    assert "refs/heads/codex/tether-058-route-recovery-20261113' && '0.5.8'" in workflow
-    assert "refs/heads/codex/tether-058-route-recovery-20261113' && 'v0.5.8-preview.2'" in workflow
-    assert "refs/heads/codex/tether-058-preview2-reassemble-20261113' && '0.5.8'" in workflow
-    assert "refs/heads/codex/tether-058-preview2-reassemble-20261113' && 'v0.5.8-preview.2'" in workflow
-    assert "name: Tether ${{ env.CANDIDATE_VERSION }} ${{ (github.ref == 'refs/heads/codex/tether-058-preview2-reassemble-20261113' || github.ref == 'refs/heads/codex/tether-058-route-recovery-20261113') && 'Preview 2' || 'Preview 1' }}" in workflow
-    assert "v0.5.2-preview.1" in workflow
-    assert "v0.5.3-preview.1" in workflow
-    assert "v0.5.4-preview.1" in workflow
-    assert "v0.5.5-preview.1" in workflow
-    assert "v0.5.6-preview.1" in workflow
-    assert "v0.5.7-preview.1" in workflow
-    assert "v0.5.8-preview.1" in workflow
-    assert "--channel preview" in workflow
-    assert '--release-tag "$CANDIDATE_TAG"' in workflow
-    assert "tag_name: ${{ env.CANDIDATE_TAG }}" in workflow
-    assert "draft: ${{ github.ref == 'refs/heads/codex/tether-0510-preview-20261121' || github.ref == 'refs/heads/codex/tether-053-business-20261112' || github.ref == 'refs/heads/codex/tether-054-session-20261112' || github.ref == 'refs/heads/codex/tether-055-native-mode-20261112' || github.ref == 'refs/heads/codex/tether-056-reconnect-20261113' || github.ref == 'refs/heads/codex/tether-057-recovery-20261113' || github.ref == 'refs/heads/codex/tether-058-herdr-20261113' || github.ref == 'refs/heads/codex/tether-058-route-recovery-20261113' || github.ref == 'refs/heads/codex/tether-058-preview2-reassemble-20261113' }}" in workflow
-    assert "prerelease: true" in workflow
-    assert "make_latest: false" in workflow
-    assert "0.5.0" not in workflow
-    assert "tether-${{ matrix.target }}-${{ env.CANDIDATE_VERSION }}-preview" in workflow
-    assert ".scratch/tether-desktop-candidates/${{ env.CANDIDATE_VERSION }}/${{ matrix.target }}" in workflow
-    assert "tether-node-runtime-linux-x64-${{ env.CANDIDATE_VERSION }}-preview" in workflow
-    assert "version.json" in workflow
-    assert "checksum.get('version') != candidate_version" in workflow
-    assert "checksum.get('platform') != target" in workflow
-    assert "refs/heads/codex/tether-052-preview-20261111" in workflow
-    assert "hydrate_herdr_runtime.py --windows-only --destination .release-herdr-runtime" in workflow
-    assert "--herdr-runtime .release-herdr-runtime" in workflow
+    jobs = workflow["jobs"]
+    assert "test" in jobs
+    assert jobs["package"]["needs"] == ["build-codeg-web", "test"]
+    assert "test-${{ matrix.os }}" == jobs["test"]["name"]
+    assert "fail-fast: false" in raw
+    assert "python -m pytest -q" in raw
+    assert "node --test --test-force-exit tests/test_*.mjs" in raw
+    assert "node --test --test-force-exit tests/test_*.cjs" in raw
 
-    publish_job = workflow.split("  publish-preview-draft:", 1)[1]
-    assert "github.ref == 'refs/heads/codex/tether-054-session-20261112'" in publish_job
-    assert "github.ref == 'refs/heads/codex/tether-055-native-mode-20261112'" in publish_job
-    assert "github.ref == 'refs/heads/codex/tether-056-reconnect-20261113'" in publish_job
-    assert "github.ref == 'refs/heads/codex/tether-057-recovery-20261113'" in publish_job
-    assert "github.ref == 'refs/heads/codex/tether-058-herdr-20261113'" in publish_job
-    assert "always()" in publish_job
-    assert "needs.package.result == 'success'" in publish_job
-    assert "github.ref == 'refs/heads/codex/tether-058-preview2-reassemble-20261113'" in publish_job
-    assert "github.ref == 'refs/heads/codex/tether-058-route-recovery-20261113'" in publish_job
-    assert "&& !contains(github.event.head_commit.message, '[posix-only]')" in publish_job
-    assert "node-version: '24.22.2'" in publish_job
-    assert "npm ci --prefix packages/tether-ui" in publish_job
-    assert "npm run build:web --prefix packages/tether-ui" in publish_job
-    assert "name: tether-pinned-codeg-web" in publish_job
-    assert "path: .release-codeg-web" in publish_job
-    assert publish_job.index("Replace stale Codeg runtime web") < publish_job.index("Create signed preview manifest and source archives")
-    codeg_step = publish_job.split("Replace stale Codeg runtime web in the isolated release checkout", 1)[1].split("- name: Create signed preview manifest and source archives", 1)[0]
-    assert "required = ('index.html', 'login.html', 'workspace.html', 'token.html')" in publish_job
-    assert "source_summary = summarize(source)" in publish_job
-    assert "if source_summary != target_summary:" in publish_job
-    assert "json.dumps({'status': 'verified'" in publish_job
-    assert "1007" not in codeg_step
-    assert "77856488" not in codeg_step
-    assert "shutil.rmtree(web)" in publish_job
-    assert "shutil.copytree(source, web)" in publish_job
-    for digest in [
-        "362051628BF50633AB56B9222B7F7A3B5DD4F0E2B9A8F57E83DCEEBE1EFFA584",
-        "F75486D18611935284ACDADAE427136CA00D9BBC10ABBD829F14AA466E1630EA",
-        "AF76659372F6588892C58FCA4D711AF991380F220C9A4F6503E8AAF5D01F755B",
-        "21AA5E9A42EC352DD01E81C03444AA1BB4B039C5AD6801EE499DD9B415AB3A11",
-    ]:
-        assert digest not in codeg_step
+    validate = next(step for step in jobs["package"]["steps"] if step.get("name") == "Validate candidate version and frozen plugin channel")
+    assert "0.2.93" in validate["run"]
+    assert "pyproject.toml" in validate["run"]
+    assert "preview\\.([1-9]\\d*)" in validate["run"]
+
+    assert "name: tether-${{ matrix.target }}-${{ env.CANDIDATE_VERSION }}-preview" in raw
+    assert ".scratch/tether-desktop-candidates/${{ env.CANDIDATE_VERSION }}/${{ matrix.target }}" in raw
+    assert "tether-node-runtime-linux-x64-${{ env.CANDIDATE_VERSION }}-preview" in raw
+    assert "checksum.get('version') != candidate_version" in raw
+    assert "checksum.get('platform') != target" in raw
+    assert "hydrate_herdr_runtime.py --windows-only --destination .release-herdr-runtime" in raw
+    assert "--herdr-runtime .release-herdr-runtime" in raw
+
+    publish = jobs["publish-preview-draft"]
+    assert "always()" in publish["if"]
+    assert "needs.package.result == 'success'" in publish["if"]
+    assert "!inputs.posix_only" in publish["if"]
+    assert publish["permissions"] == {"actions": "read", "contents": "write"}
+    release_action = next(step for step in publish["steps"] if step.get("uses", "").startswith("softprops/action-gh-release@"))
+    assert release_action["with"]["draft"] is True
+    assert release_action["with"]["prerelease"] is True
+    assert release_action["with"]["make_latest"] is False
+    assert "tag_name: ${{ env.CANDIDATE_TAG }}" in raw
 
 
-def test_preview2_reassembly_uses_fixed_artifacts_and_guard_rejects_runtime_changes(tmp_path: Path) -> None:
+def test_desktop_preview_workflow_keeps_draft_and_codeg_guards() -> None:
     import yaml
 
     workflow = yaml.safe_load((ROOT / ".github" / "workflows" / "tether-desktop-candidate.yml").read_text(encoding="utf-8"))
-    branch = "refs/heads/codex/tether-058-preview2-reassemble-20261113"
     jobs = workflow["jobs"]
-    assert jobs["build-codeg-web"]["if"] == "${{ github.ref != '" + branch + "' }}"
-    assert jobs["package"]["if"] == "${{ github.ref != '" + branch + "' }}"
+    assert "if" not in jobs["build-codeg-web"]
+    assert "if" not in jobs["package"]
 
     publish = jobs["publish-preview-draft"]
-    condition = publish["if"]
-    assert "always()" in condition
-    assert "needs.package.result == 'success'" in condition
-    assert "github.ref == '" + branch + "'" in condition
-    assert "[posix-only]" in condition
-    assert publish["permissions"] == {"actions": "read", "contents": "write"}
     steps = publish["steps"]
     checkout = next(step for step in steps if step.get("uses", "").startswith("actions/checkout@"))
     assert checkout["with"]["fetch-depth"] == 2
     artifact_steps = [step for step in steps if step.get("uses", "").startswith("actions/download-artifact@")]
     assert len(artifact_steps) == 2
-    fixed_run = "${{ github.ref == '" + branch + "' && '43410891693' || github.run_id }}"
-    assert all(step["with"]["run-id"] == fixed_run for step in artifact_steps)
+    assert all(step["with"]["run-id"] == "${{ github.run_id }}" for step in artifact_steps)
     assert all(step["with"]["github-token"] == "${{ secrets.GITHUB_TOKEN }}" for step in artifact_steps)
     release_action = next(step for step in steps if step.get("uses", "").startswith("softprops/action-gh-release@"))
+    assert release_action["with"]["draft"] is True
     assert release_action["with"]["prerelease"] is True
     assert release_action["with"]["make_latest"] is False
+    assert "Guard fixed preview.2 reassembly source" not in [step.get("name") for step in steps]
 
-    guard = next(step for step in steps if step.get("name") == "Guard fixed preview.2 reassembly source")
-    assert guard["env"]["EXPECTED_PARENT"] == "e77e313fe4a4f4497441000ad87711321f40074a"
-    script = guard["run"].split("python - <<'PY'\n", 1)[1].rsplit("\nPY", 1)[0]
 
-    def run_guard(repo: Path, changed_file: str) -> subprocess.CompletedProcess[str]:
-        repo.mkdir(parents=True)
-        subprocess.run(["git", "init", "--quiet"], cwd=repo, check=True)
-        subprocess.run(["git", "config", "user.name", "workflow guard test"], cwd=repo, check=True)
-        subprocess.run(["git", "config", "user.email", "workflow-guard@example.invalid"], cwd=repo, check=True)
-        (repo / "baseline.txt").write_text("base\n", encoding="utf-8")
-        subprocess.run(["git", "add", "baseline.txt"], cwd=repo, check=True)
-        subprocess.run(["git", "commit", "--quiet", "-m", "base"], cwd=repo, check=True)
-        parent = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo, check=True, capture_output=True, text=True).stdout.strip()
-        changed = repo / changed_file
-        changed.parent.mkdir(parents=True, exist_ok=True)
-        changed.write_text("candidate\n", encoding="utf-8")
-        subprocess.run(["git", "add", "--", changed_file], cwd=repo, check=True)
-        subprocess.run(["git", "commit", "--quiet", "-m", "candidate"], cwd=repo, check=True)
-        env = os.environ.copy()
-        env["EXPECTED_PARENT"] = parent
-        return subprocess.run([os.sys.executable, "-c", script], cwd=repo, env=env, capture_output=True, text=True, check=False)
+def test_release_matrix_workflow_is_manual_draft_only_and_tests_every_platform() -> None:
+    import yaml
 
-    allowed = run_guard(tmp_path / "allowed", "tests/test_release_archive.py")
-    assert allowed.returncode == 0, allowed.stderr
-    runtime = run_guard(tmp_path / "runtime", "packages/tether-ui/src/agents-page.js")
-    assert runtime.returncode != 0
-    assert "unapproved paths" in runtime.stderr
+    raw = (ROOT / ".github" / "workflows" / "release-matrix.yml").read_text(encoding="utf-8")
+    workflow = yaml.safe_load(raw)
+    triggers = workflow.get("on", workflow.get(True))
+    assert list(triggers) == ["workflow_dispatch"]
+    inputs = triggers["workflow_dispatch"]["inputs"]
+    assert set(inputs) == {"version", "channel", "sign"}
+    assert inputs["sign"]["default"] is False
+
+    assert "concurrency:\n  group: release-matrix-${{ inputs.version }}\n  cancel-in-progress: false" in raw
+    targets = {item["target"]: item["runner"] for item in workflow["jobs"]["package"]["strategy"]["matrix"]["include"]}
+    assert targets == {
+        "windows-x64": "windows-latest",
+        "linux-x64": "ubuntu-22.04",
+        "macos-arm64": "macos-15",
+        "macos-x64": "macos-15-intel",
+    }
+    jobs = workflow["jobs"]
+    assert jobs["package"]["needs"] == ["preflight", "build-codeg-web"]
+    names = [step.get("name") for step in jobs["package"]["steps"]]
+    assert "Run Python and JavaScript regressions" in names
+    assert names.index("Run Python and JavaScript regressions") < names.index("Package installer")
+    assert "Record signing status and SHA256SUMS" in names
+    assert "Verify Windows Authenticode signatures" in names
+    assert "${{ inputs.sign && secrets.WINDOWS_CERT_PFX_BASE64 || '' }}" in raw
+    assert "SIGN=1 needs WINDOWS_CERT_PFX_BASE64" in raw
+
+    assemble = jobs["assemble-draft"]
+    assert assemble["needs"] == ["build-codeg-web", "package"]
+    assert assemble["permissions"] == {"actions": "read", "contents": "write"}
+    release_action = next(step for step in assemble["steps"] if step.get("uses", "").startswith("softprops/action-gh-release@"))
+    assert release_action["with"]["draft"] is True
+    assert release_action["with"]["prerelease"] is True
+    assert release_action["with"]["make_latest"] is False
+    assert "TETHER_RELEASE_PRIVATE_KEY" in raw
+    assert "'platforms': platforms" in raw or "'platforms':" in raw
+    assert "schema': 1" in raw
+    assert "TETHER_REQUIRE_SIGNED_RELEASE: '1'" in raw
+    assert "gh release" not in raw and "hub-pin" not in raw
 
 
 def test_codeg_web_checkout_step_copies_dynamic_artifact_and_preserves_old_tree_on_invalid_source(tmp_path: Path) -> None:

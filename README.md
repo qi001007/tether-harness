@@ -287,7 +287,7 @@ If you find a security issue, do not paste tokens, personal data, or private dev
 git clone https://github.com/qi001007/tether-harness.git
 cd tether-harness
 python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -e . pytest pytest-asyncio httpx
+.\.venv\Scripts\python.exe -m pip install -e ".[test]"
 npm ci --prefix packages/tether-ui
 ```
 

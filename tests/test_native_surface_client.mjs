@@ -91,15 +91,21 @@ test('native surface accepts only ticketed loopback, public ticket and same-host
   assert.doesNotThrow(() => plugin.apply(context))
   assert.equal(undeclaredFileDragReads, 0, 'the plugin never reads a Cordis service it did not inject')
   assert.deepEqual(selections, [null])
-  assert.deepEqual(injectedSlots, ['conversation.input.attachments'], 'native iframe may inject only its attachment slot')
-  assert.equal(registrations.length, 1)
-  assert.equal(registrations[0].options.name, 'conversation.input.attachments')
-  assert.equal(registrations[0].options.priority, -1000)
-  assert.equal(registrations[0].options.locale, 'conversation')
-  const injectedSession = registrations[0].options.inject('SESSION-1')
+  assert.deepEqual(injectedSlots, [
+    'conversation.input.attachments',
+    'conversation.hero.workspace.directoryFlow',
+    'sidebar.workspaces.directoryFlow',
+    'conversation.hero.workspace'
+  ], 'native iframe injects only its attachment slot plus the host directory flow slots')
+  const attachments = registrations.filter((item) => item.options.name === 'conversation.input.attachments')
+  assert.equal(attachments.length, 1, 'the attachment slot is registered exactly once')
+  assert.equal(attachments[0].options.priority, -1000)
+  assert.equal(attachments[0].options.locale, 'conversation')
+  const injectedSession = attachments[0].options.inject('SESSION-1')
   assert.deepEqual(Object.keys(injectedSession), ['sessionId'])
   assert.equal(injectedSession.sessionId, 'SESSION-1')
-  assert.equal(commands.length, 0, 'the native plus is the only file entry; no duplicate command button is registered')
+  assert.deepEqual(commands.map((command) => command.name), ['tether-target-files'],
+    'the embedded surface registers only the target-file picker command; no duplicate attachment button')
 })
 
 test('native surface state is device-bound and its iframe remains mounted while hidden views change', () => {
@@ -158,8 +164,10 @@ test('the DSH plugin embeds the local workspace with the current same-origin ses
 })
 
 test('the local device id participates in the surface effect dependencies', () => {
-  assert.ok(clientSource.includes('}, [deviceId, online, visible, preload, attempt, localDeviceId, surfaceSourceKey])'))
-  assert.ok(clientSource.includes('}, [deviceId, online, visible, localDeviceId, surfaceSourceKey])'))
+  const deps = [...clientSource.matchAll(/\}, \[([^\]]*localDeviceId[^\]]*surfaceSourceKey[^\]]*)\]\)/g)].map((match) => match[1])
+  assert.equal(deps.length, 2, 'both surface effects depend on the local device and the surface source key')
+  assert.ok(deps.every((list) => list.includes('authReady')), 'the surface effects wait for the host auth before loading')
+  assert.ok(deps.some((list) => list.includes('attempt')), 'the preload retry effect keeps its attempt counter')
 })
 
 test('NativeSurface reports document readiness only after iframe onLoad and bounds retries', () => {

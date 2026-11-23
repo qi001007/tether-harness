@@ -1,4 +1,6 @@
 import { createTerminalDock } from './terminal-dock.js'
+import { TargetFileExplorer } from './target-file-explorer.js'
+import { TetherFolderPickDialog } from './tether-folder-pick-dialog.js'
 import { readCatalog, writeCatalog, readHarnesses, writeHarnesses } from './agent-cache.js'
 import { writeAccount } from './agent-account-cache.js'
 
@@ -28,7 +30,7 @@ export function createAgentsPage(props) {
         initialDevice: target, activeDevice: target, onDeviceChange: onTargetChange }))))
 }
 
-function AgentTargetPage({ React, Glyph, post, C, host, isActive = true, devices = [], localDevice = '', activeDevice = '', initialDevice = '', onDeviceChange, onOpenWorkbench, onError }) {
+function AgentTargetPage({ React, Glyph, post, api, C, host, isActive = true, devices = [], localDevice = '', activeDevice = '', initialDevice = '', onDeviceChange, onOpenWorkbench, onError }) {
   const h = React.createElement
   const online = devices.filter((item) => item && item.online)
   const initial = initialDevice || activeDevice
@@ -65,13 +67,53 @@ function AgentTargetPage({ React, Glyph, post, C, host, isActive = true, devices
   const [serviceCatalog, setServiceCatalog] = React.useState(null)
   const [serviceCatalogBusy, setServiceCatalogBusy] = React.useState(false)
   const [serviceOpening, setServiceOpening] = React.useState(false)
-  const nativeCodegAutoDecision = React.useRef(false)
-  const nativeCodegWasVisible = React.useRef(false)
   const [serviceView, setServiceView] = React.useState(null)
   const [serviceFrameState, setServiceFrameState] = React.useState('loading')
+  // { targetId, origin, token } for the embedded Codeg guest; the token rides
+  // the runtime's own token.html entry URL and is injected before the login
+  // route can ask for it again.
+  const [codegGuestAuth, setCodegGuestAuth] = React.useState(null)
   const serviceWebviewRef = React.useRef(null)
   const codegOpenRevision = React.useRef(0)
+  const codegRedirected = React.useRef('')
   const handledAgentLaunchRequests = React.useRef(new Set())
+  // An open tether:pick-folder request from the embedded Codeg page:
+  // { id, mode: 'iframe' | 'webview', source, kind: 'folder' | 'file', multiple }.
+  // The reply goes back over the same channel the request came from — a frame's
+  // postMessage, or a window message dispatched inside the webview guest.
+  const [folderPick, setFolderPick] = React.useState(null)
+  // Answer an open pick request. `value` is the chosen path, or an array of
+  // paths for a multi-selection; an empty answer is a cancel, and the guest
+  // treats both the same way. `paths` carries the whole answer so a file
+  // multi-pick arrives intact, while `path` keeps the single-folder answer
+  // readable by the first version of the bridge.
+  const closeFolderPick = (value) => {
+    const request = folderPick
+    if (!request) return
+    setFolderPick(null)
+    const chosen = (Array.isArray(value) ? value : [value])
+      .map((item) => typeof item === 'string' ? item.trim() : '')
+      .filter(Boolean)
+    const payload = chosen.length
+      ? { type: 'tether:pick-folder-result', id: request.id, path: chosen[0], paths: chosen }
+      : { type: 'tether:pick-folder-result', id: request.id, cancelled: true }
+    if (request.mode === 'iframe') {
+      try {
+        if (request.source && typeof request.source.postMessage === 'function') {
+          request.source.postMessage(payload, '*')
+        }
+      } catch (_) { /* the frame is gone */ }
+      return
+    }
+    const guest = serviceWebviewRef.current
+    if (!guest || typeof guest.executeJavaScript !== 'function') return
+    // The guest cannot postMessage across the webview boundary, so the answer is
+    // dispatched inside it. JSON.stringify is the only value inserted here; the
+    // rest of the script is fixed.
+    try {
+      void guest.executeJavaScript("window.postMessage(" + JSON.stringify(payload) + ", '*')").catch(() => {})
+    } catch (_) { /* the guest is gone */ }
+  }
   const [workbenchLoginRequired, setWorkbenchLoginRequired] = React.useState(false)
   const [workbenchLoginBusy, setWorkbenchLoginBusy] = React.useState(false)
   const [cwd, setCwd] = React.useState('')
@@ -508,12 +550,56 @@ function AgentTargetPage({ React, Glyph, post, C, host, isActive = true, devices
       try { origin = new URL(pane && pane.url).origin } catch (_) { /* no active Codeg frame */ }
       if (!event || !frame || event.source !== frame.contentWindow || !origin || event.origin !== origin) return
       if (data && data.type === 'tether:open-herdr') openHerdr(data.cwd, data.agent_type)
+      if (data && data.type === 'tether:pick-folder') {
+        const id = String((data && data.id) || '')
+        if (/^[0-9a-f-]{36}$/i.test(id)) {
+          setFolderPick({
+            id, mode: 'iframe', source: event.source || null,
+            kind: data.kind === 'file' ? 'file' : 'folder',
+            multiple: data.multiple === true
+          })
+        }
+      }
+      // A prompt typed into the embedded Codeg page. The frame has no node
+      // token, so it is relayed here over the same-origin proxy: server.mjs
+      // whitelists /dsh/live/ for the local device and injects the Bearer.
+      if (data && data.type === 'tether:dsh-prompt') {
+        const reply = (payload) => {
+          try { if (event.source && typeof event.source.postMessage === 'function') event.source.postMessage(payload, origin) } catch (_) { /* the frame is gone */ }
+        }
+        const id = typeof data.id === 'string' ? data.id.slice(0, 200) : ''
+        const sessionId = typeof data.sessionId === 'string' ? data.sessionId : ''
+        const text = typeof data.text === 'string' ? data.text : ''
+        let error = ''
+        if (!id) error = 'invalid id'
+        // The embedded page cannot know which Tether device serves it, so an
+        // omitted `device` means "this one": the frame was loaded through this
+        // app's own pane, and the relay below only ever targets localDevice.
+        else if (!localDevice || (data.device && data.device !== localDevice)) error = 'device_not_local'
+        else if (!/^[A-Za-z0-9._-]{1,200}$/.test(sessionId)) error = 'invalid session id'
+        else if (!text.trim() || text.length > 200000) error = 'invalid text'
+        if (error) { reply({ type: 'tether:dsh-prompt-result', id, ok: false, status: 0, error }); return }
+        fetch('/api/devices/' + encodeURIComponent(localDevice) + '/dsh/live/sessions/' + encodeURIComponent(sessionId) + '/prompt', {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text, mode: 'queue' })
+        }).then(async (response) => {
+          let body = null
+          try { body = await response.json() } catch (_) { /* empty body */ }
+          const failed = !response.ok || (body && body.accepted === false)
+          reply({ type: 'tether:dsh-prompt-result', id, ok: !failed, status: response.status,
+            error: failed ? String((body && (body.error || (body.detail && body.detail.error))) || ('HTTP ' + response.status)) : null })
+        }).catch((failure) => {
+          reply({ type: 'tether:dsh-prompt-result', id, ok: false, status: Number(failure && failure.status) || 0,
+            error: String((failure && failure.message) || failure || 'prompt failed') })
+        })
+      }
     }
     window.addEventListener('message', onMessage)
     return () => {
       window.removeEventListener('message', onMessage)
     }
-  }, [herdrAvailable, device, panes])
+  }, [herdrAvailable, device, localDevice, panes])
 
   const openWeb = async (agent) => {
     const key = 'web:' + agent.id
@@ -653,6 +739,34 @@ function AgentTargetPage({ React, Glyph, post, C, host, isActive = true, devices
     setHomeRetry((current) => current + 1)
   }
 
+  // The Node keeps codeg_token out of its status JSON, but the Agents entry
+  // URL it publishes is the token bootstrap page (…/token.html?token=…). That
+  // URL is the sanctioned hand-off, so the workbench guest reuses its token to
+  // sign in before the Codeg login route can render.
+  const codegRuntimeToken = (runtime) => {
+    if (!runtime || runtime.running !== true || typeof runtime.url !== 'string') return ''
+    try {
+      const parsed = new URL(runtime.url)
+      if (parsed.pathname !== '/token.html') return ''
+      const token = parsed.searchParams.get('token') || ''
+      return /^[A-Za-z0-9_-]{16,200}$/.test(token) ? token : ''
+    } catch (_) { return '' }
+  }
+
+  // 跨节点阶段 1：Codeg 没有 Hub 网关兜底（legacy 路径同样只走 mesh）。
+  // 失败时给出可读原因，交给 homeError 面板显示，绝不留白屏。
+  const codegOpenFailureText = (error) => {
+    const code = error && (error.code || (error.detail && error.detail.code))
+    if (code === 'mesh_dial_unreachable') {
+      return '本机没有到目标节点的 managed network 路由。请确认两台机器已加入同一网络后重试；Codeg 暂不支持改用 Hub 网关。'
+    }
+    if (code === 'service_starting') return '目标 Codeg 服务正在启动，请稍候重试。'
+    if (code === 'node_update_required' || (error && (error.status === 404 || error.status === 405 || error.status === 501))) {
+      return '目标节点版本过旧，没有 Codeg 工作台服务；请升级节点后重试。'
+    }
+    return String((error && error.message) || error || 'Codeg 工作台无法打开。')
+  }
+
   const openNativeCodeg = async ({ preserveExisting = false } = {}) => {
     if (!device || serviceOpening || !host || !host.workbench) return
     const legacyCodeg = serviceCatalog && serviceCatalog.legacy === true
@@ -665,8 +779,9 @@ function AgentTargetPage({ React, Glyph, post, C, host, isActive = true, devices
     setServiceOpening(true)
     setHomeError('')
     try {
+      let runtime = null
       if (legacyCodeg) {
-        const runtime = await getAgentsRuntime(device, true)
+        runtime = await getAgentsRuntime(device, true)
         if (!runtime || runtime.running !== true || !runtime.url) throw new Error('Codeg 未能启动并通过就绪检查。')
       }
       const service = legacyCodeg
@@ -675,6 +790,13 @@ function AgentTargetPage({ React, Glyph, post, C, host, isActive = true, devices
       if (!service || service.targetId !== device || service.serviceId !== 'codeg' || !service.endpoint || !service.partition) {
         throw new Error('主进程没有返回有效的 Codeg 工作台会话。')
       }
+      if (!legacyCodeg) {
+        try { runtime = await getAgentsRuntime(device, false, true) } catch (_) { runtime = null }
+      }
+      const guestToken = codegRuntimeToken(runtime)
+      setCodegGuestAuth(guestToken
+        ? { targetId: device, origin: new URL(service.endpoint).origin, token: guestToken }
+        : null)
       const homeService = { ...service, endpoint: new URL('/workspace?tether_home=1', service.endpoint).href }
       const currentPane = panes.find((pane) => pane.key === 'codeg:home' && pane.kind === 'native-service')
       const sameBootstrap = preserveExisting && currentPane
@@ -693,12 +815,11 @@ function AgentTargetPage({ React, Glyph, post, C, host, isActive = true, devices
         : [...current, { key: 'codeg:home', kind: 'native-service', title: 'Codeg', service: homeService }])
       setActivePane('codeg:home')
       setWorkspaceOpen(true)
-      nativeCodegWasVisible.current = true
     } catch (error) {
       setServiceFrameState('error')
       if (error && (error.status === 401 || error.status === 403 || error.code === 'auth_required'
         || error.code === 'oidc_identity_unbound')) setWorkbenchLoginRequired(true)
-      setHomeError(String((error && error.message) || error || 'Codeg 工作台无法打开。'))
+      setHomeError(codegOpenFailureText(error))
       if (!preserveExisting) {
         homeOpenedRef.current = ''
         setServiceCatalog(null)
@@ -821,6 +942,63 @@ function AgentTargetPage({ React, Glyph, post, C, host, isActive = true, devices
 
   React.useEffect(() => {
     const guest = serviceWebviewRef.current
+    const auth = codegGuestAuth
+    if (!auth || !serviceView || serviceView.serviceId !== 'codeg'
+        || serviceView.targetId !== auth.targetId || !guest
+        || typeof guest.addEventListener !== 'function'
+        || typeof guest.executeJavaScript !== 'function') return undefined
+    const expectedOrigin = auth.origin
+    // The token never enters the script text raw: JSON.stringify keeps it a
+    // single quoted literal, and the regex above already narrowed the charset.
+    const storeToken = "localStorage.setItem('codeg_token'," + JSON.stringify(auth.token) + ")"
+    const guestRoute = () => {
+      try {
+        const current = new URL(guest.getURL())
+        if (current.origin !== expectedOrigin) return null
+        return current.pathname
+      } catch (_) { return null }
+    }
+    const atCodegEntry = (path) => path === '/' || path === '/login' || path.startsWith('/login/')
+    const reachWorkspace = (path, allowRedirect) => {
+      if (path === null) return
+      void guest.executeJavaScript(storeToken).then(() => {
+        const current = guestRoute()
+        if (!allowRedirect || !atCodegEntry(current)) return
+        // A rejected token would bounce back to /login; one bounce per token
+        // keeps a stale runtime from looping the guest.
+        const redirectKey = auth.targetId + '\u0000' + auth.token
+        if (codegRedirected.current === redirectKey) return
+        codegRedirected.current = redirectKey
+        return guest.executeJavaScript("location.replace('/workspace?tether_home=1')")
+      }).catch(() => { /* the guest keeps its own token form */ })
+    }
+    const onLoad = () => reachWorkspace(guestRoute(), true)
+    const onInPage = (event) => {
+      if (!event || event.isMainFrame !== true || typeof event.url !== 'string') return
+      let path = ''
+      try {
+        const current = new URL(event.url)
+        if (current.origin !== expectedOrigin) return
+        path = current.pathname
+      } catch (_) { return }
+      if (!atCodegEntry(path)) return
+      reachWorkspace(path, true)
+    }
+    guest.addEventListener('dom-ready', onLoad)
+    guest.addEventListener('did-finish-load', onLoad)
+    guest.addEventListener('did-navigate-in-page', onInPage)
+    try {
+      if (typeof guest.isLoadingMainFrame === 'function' && !guest.isLoadingMainFrame()) onLoad()
+    } catch (_) { /* the guest may not be attached yet */ }
+    return () => {
+      guest.removeEventListener('dom-ready', onLoad)
+      guest.removeEventListener('did-finish-load', onLoad)
+      guest.removeEventListener('did-navigate-in-page', onInPage)
+    }
+  }, [codegGuestAuth, serviceView && serviceView.endpoint, serviceView && serviceView.openRevision])
+
+  React.useEffect(() => {
+    const guest = serviceWebviewRef.current
     if (!serviceView || serviceView.serviceId !== 'codeg'
         || serviceView.targetId !== device || !guest
         || typeof guest.addEventListener !== 'function') return undefined
@@ -833,14 +1011,48 @@ function AgentTargetPage({ React, Glyph, post, C, host, isActive = true, devices
       } catch (_) { return }
       const params = new URLSearchParams(actionUrl.hash.slice(1))
       const action = params.get('tether_action')
-      if (action !== 'open_herdr' && action !== 'open_cli') return
+      if (action !== 'open_herdr' && action !== 'open_cli' && action !== 'pick_folder') return
       const requestIds = params.getAll('request_id')
+      const requestId = requestIds[0] || ''
+      const actionKeys = Array.from(params.keys()).sort().join(',')
+      // The action is a same-document hash only. Clear it with a fixed script;
+      // never interpolate a path or Agent value into guest JavaScript.
+      const clearActionHash = () => {
+        if (typeof guest.executeJavaScript !== 'function') return
+        void guest.executeJavaScript(
+          "history.replaceState(history.state, '', location.pathname + location.search)"
+        ).catch(() => {})
+      }
+      if (action === 'pick_folder') {
+        // The pick request may name what it wants (folder or file) and whether
+        // several answers are allowed; the keys stay a closed set so nothing
+        // else can ride in on the hash.
+        const pickKind = params.get('pick_kind')
+        const pickMultiple = params.get('pick_multiple')
+        const extraKeys = actionKeys.split(',').filter((key) => key !== ''
+          && key !== 'tether_action' && key !== 'request_id'
+          && key !== 'pick_kind' && key !== 'pick_multiple')
+        const validFolderPick = requestIds.length === 1
+          && extraKeys.length === 0
+          && params.getAll('tether_action').length === 1
+          && (pickKind === null || pickKind === 'folder' || pickKind === 'file')
+          && (pickMultiple === null || pickMultiple === '1')
+          && /^[0-9a-f-]{36}$/i.test(requestId)
+        if (validFolderPick) {
+          const request = {
+            id: requestId, mode: 'webview', source: null,
+            kind: pickKind === 'file' ? 'file' : 'folder',
+            multiple: pickMultiple === '1'
+          }
+          setFolderPick((current) => current && current.id === requestId ? current : request)
+        }
+        clearActionHash()
+        return
+      }
       const agentTypes = params.getAll('agent_type')
       const cwds = params.getAll('cwd')
-      const requestId = requestIds[0] || ''
       const codegAgentType = agentTypes[0] || ''
       const cwd = cwds[0] || ''
-      const actionKeys = Array.from(params.keys()).sort().join(',')
       const fixedAction = requestIds.length === 1 && agentTypes.length === 1
         && cwds.length === 1 && actionKeys === 'agent_type,cwd,request_id,tether_action'
         && params.getAll('tether_action').length === 1
@@ -854,13 +1066,7 @@ function AgentTargetPage({ React, Glyph, post, C, host, isActive = true, devices
         if (action === 'open_herdr') openHerdr(cwd, codegAgentType)
         else openRuntimeCli(cwd, codegAgentType)
       }
-      // The action is a same-document hash only. Clear it with a fixed script;
-      // never interpolate the path or Agent value into guest JavaScript.
-      if (typeof guest.executeJavaScript === 'function') {
-        void guest.executeJavaScript(
-          "history.replaceState(history.state, '', location.pathname + location.search)"
-        ).catch(() => {})
-      }
+      clearActionHash()
     }
     guest.addEventListener('did-navigate-in-page', onInPageNavigation)
     return () => guest.removeEventListener('did-navigate-in-page', onInPageNavigation)
@@ -931,25 +1137,6 @@ function AgentTargetPage({ React, Glyph, post, C, host, isActive = true, devices
   const legacyCodegLabel = codegService && codegService.state === 'missing' ? 'Codeg 未安装'
     : codegService && codegService.state === 'stopped' ? 'Codeg 未运行'
       : 'Codeg 状态异常'
-
-  React.useEffect(() => {
-    const hasCodegPane = panes.some((pane) => pane.key === 'codeg:home' && pane.kind === 'native-service')
-    const codegVisible = isActive && workspaceOpen && activePane === 'codeg:home' && hasCodegPane
-    if (!codegVisible) nativeCodegWasVisible.current = false
-    else if (!nativeCodegWasVisible.current) {
-      nativeCodegWasVisible.current = true
-      if (nativeWorkbench && nativeCodegAutoDecision.current && serviceCatalog && !serviceCatalogBusy && !serviceOpening) {
-        void openNativeCodeg({ preserveExisting: true })
-      }
-    }
-    if (!nativeWorkbench || !isActive || !serviceCatalog || serviceCatalogBusy || serviceOpening || hasCodegPane) return
-    if (nativeCodegAutoDecision.current) return
-    nativeCodegAutoDecision.current = true
-    if (panes.length || activePane || workspaceOpen || workbenchLoginRequired
-        || !codegService || codegService.state === 'missing' || legacyCodegBlocked) return
-    void openNativeCodeg()
-  }, [nativeWorkbench, isActive, serviceCatalog, serviceCatalogBusy, panes.length, activePane, workspaceOpen,
-    serviceOpening, workbenchLoginRequired, codegService, legacyCodegBlocked])
 
   const paneBody = (pane) => pane.kind === 'web'
     ? (pane.url ? h('iframe', {
@@ -1047,5 +1234,11 @@ function AgentTargetPage({ React, Glyph, post, C, host, isActive = true, devices
       h('button', { type: 'button', onClick: retryAgentsHome, style: button }, '重试')) : null,
     !panes.length && !nativeWorkbench && !homeError ? h('div', { style: { display: 'grid', placeItems: 'center', alignContent: 'center', gap: 10, flex: '1 1 auto', color: C.mute, fontSize: 12 } },
       h('span', { className: 'tether-spin', style: { display: 'grid', placeItems: 'center' } }, h(Glyph, { name: 'refresh', size: 18 })),
-      '正在打开 Agent 主页…') : null)
+      '正在打开 Agent 主页…') : null,
+    folderPick ? h(TetherFolderPickDialog, {
+      key: folderPick.id, React, C, Glyph, api, post, device,
+      kind: folderPick.kind === 'file' ? 'file' : 'folder',
+      multiple: folderPick.multiple === true,
+      onDone: closeFolderPick
+    }) : null)
 }

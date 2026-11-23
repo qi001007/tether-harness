@@ -54,7 +54,7 @@ export function createWebServer({ root = import.meta.dirname, controller = 'http
     const pathname = String(url || '').split('?')[0]
     return API_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(prefix + '/'))
   }
-  const LOCAL_ROUTES = ['/fs/', '/workspaces', '/drives', '/policy', '/audit', '/dsh/sessions', '/dsh/surface', '/dsh/workspaces/register']
+  const LOCAL_ROUTES = ['/fs/', '/workspaces', '/drives', '/policy', '/audit', '/dsh/sessions', '/dsh/surface', '/dsh/workspaces/register', '/dsh/live/']
   const isLocalDeviceApi = (url) => {
     if (!localDevice || !localPort) return false
     let parsed

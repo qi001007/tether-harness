@@ -7,7 +7,94 @@ import { createTeamManagementPage } from './team-management.js'
 import { createTransferPage } from './transfer-page.js'
 import { createTerminalDock } from './terminal-dock.js'
 import { createAgentsPage } from './agents-page.js'
+import { TetherFolderPickDialog } from './tether-folder-pick-dialog.js'
+import { createGlyph } from './tether-glyph.js'
 import { invalidateDirectory, peekDirectory, rememberDirectory } from './file-cache.js'
+// 客户端 guest 注入用的目录 flow（构建时由 build-web.mjs 以函数形式内嵌，见 scripts/build-web.mjs）。
+// DSH plugin 构建（build.mjs）会 strip 掉本 import，typeof 守卫保证插件侧安全降级为不注入。
+// 规格符走 package.json 的 imports：Node 直接跑源码时解析到 scripts/flow-fn-stub.mjs，
+// 避免任何 import 本文件的 node --test 套件因 ERR_MODULE_NOT_FOUND 整片失败。
+import dshDirectoryFlowFn from '#tether-dsh-flow-fn'
+
+// 生成注入到 DSH webview guest 的脚本：boot 后通过 React fiber 找到 cordis 根 ctx，
+// 用 __ModuleLoader__.load 注册 flow 模块并经 ctx.loader.create 挂载（与 cordis-client-runner
+// 的 mount 同一套路），使目录/工作区选择改道宿主资源管理器。幂等（window.__tetherGuestFlowV2），
+// 轮询等待 boot 就绪（__ModuleLoader__.mode==='live' 且 #root 已渲染出 cordis ctx）。
+function dshGuestFlowScript() {
+  const flowFnSource = typeof dshDirectoryFlowFn === 'function' ? dshDirectoryFlowFn.toString() : ''
+  if (!flowFnSource) return ''
+  return `(function () {
+  if (window.__tetherGuestFlowV2) return
+  try { if (!new URL(location.href).searchParams.has('tether_native')) return } catch (_) { return }
+  window.__tetherGuestFlowV2 = true
+  var runFlow = ${flowFnSource}
+  var id = 'tether-dsh-guest-flow'
+  var started = false
+  var findCtx = function () {
+    var root = document.getElementById('root')
+    if (!root) return null
+    var fk = Object.keys(root).find(function (k) { return k.indexOf('__reactContainer$') === 0 })
+    if (!fk) return null
+    var fiber = root[fk]
+    if (fiber && fiber.stateNode && fiber.stateNode.current) fiber = fiber.stateNode.current
+    var found = null
+    var seen = new Set()
+    var isCtx = function (v) { try { return v && typeof v === 'object' && v.reflect && v.fiber } catch (_) { return false } }
+    var walk = function (f, d) {
+      if (!f || d > 80 || found) return
+      var v = f.memoizedProps && f.memoizedProps.value
+      if (v && typeof v === 'object' && !seen.has(v)) { seen.add(v); if (isCtx(v.ctx)) { found = v.ctx; return } }
+      walk(f.child, d + 1); walk(f.sibling, d)
+    }
+    walk(fiber, 0)
+    return found
+  }
+  var mount = function () {
+    var ml = window.__ModuleLoader__
+    if (!ml || ml.mode !== 'live') return false
+    var ctx = findCtx()
+    if (!ctx || !ctx.loader || !ctx.loader.internal) return false
+    var internal = ctx.loader.internal
+    if (internal.loadCache.has(id)) return true
+    if (started) return false
+    var React
+    try { React = internal.makeRequire(id, new Set())('react') } catch (_) { return false }
+    if (!React || typeof React.useRef !== 'function') return false
+    try {
+      ml.load({ id: id, factory: function () { return { name: 'tether-guest-flow', inject: ['slots', 'uiWorkspace'], apply: function (c) { runFlow(c, React) } } } })
+      started = true
+      Promise.resolve(ctx.loader.create({ name: id })).catch(function () { started = false })
+      return false
+    } catch (_) { started = false; return false }
+  }
+  var tries = 0
+  var timer = setInterval(function () {
+    tries += 1
+    var ok = false
+    try { ok = mount() } catch (_) {}
+    if (ok || tries > 240) clearInterval(timer)
+  }, 500)
+})()`
+}
+
+// 给 DSH webview guest 绑定 flow 注入：dom-ready / did-navigate(主框架) 时 executeJavaScript。
+// 仅 tether_native=1 的映射页生效（脚本内再校验一次）。不依赖 native_surface 代理在途注入。
+function bindDshGuestFlowInjection(guest) {
+  if (!guest || guest.__tetherFlowBound) return
+  const script = dshGuestFlowScript()
+  if (!script) return
+  guest.__tetherFlowBound = true
+  const inject = () => {
+    try {
+      if (typeof guest.executeJavaScript === 'function') guest.executeJavaScript(script).catch(() => {})
+    } catch (_) { /* guest 可能已销毁 */ }
+  }
+  try {
+    guest.addEventListener('dom-ready', inject)
+    guest.addEventListener('did-navigate', (event) => { if (!event || event.isMainFrame !== false) inject() })
+  } catch (_) { /* 事件不可用时仍尝试立即注入 */ }
+  inject()
+}
 
 export function isUpdateTargetCurrent(requestDevice, requestEpoch, currentDevice, currentEpoch) {
   return requestDevice === currentDevice && requestEpoch === currentEpoch
@@ -79,6 +166,38 @@ export function safeDshNativeEndpoint(value) {
     const expected = new URL('/?tether_native=1', url.origin)
     return url.protocol === 'https:' && !url.username && !url.password && !url.port && !url.hash
       && url.pathname === '/' && query.length === 1 && query[0][0] === 'tether_native' && query[0][1] === '1'
+      && url.href === expected.href
+      ? url.href : ''
+  } catch (_) { return '' }
+}
+
+// 本机直连快路：DSH 描述符里的 authenticated_url 是
+// http://127.0.0.1:<port>/?token=…（与 Hub 票据无关的零 WAN 跳地址）。
+// 只接受精确的 loopback 单 token 根地址，避免把任意本机 URL 塞进 webview。
+export function safeLocalDshSurfaceUrl(value) {
+  try {
+    const url = new URL(String(value || ''))
+    const query = [...url.searchParams.entries()]
+    return url.protocol === 'http:' && ['127.0.0.1', '[::1]'].includes(url.hostname)
+      && !url.username && !url.password && !url.hash && url.pathname === '/'
+      && /^[1-9]\d{0,4}$/.test(url.port)
+      && query.length === 1 && query[0][0] === 'token' && /^[A-Za-z0-9_-]{16,128}$/.test(query[0][1])
+      ? url.href : ''
+  } catch (_) { return '' }
+}
+
+// token 兑换后 DSH 用 303 回到同一 origin 的 `/`（不带查询串）；映射页要再带上
+// tether_native=1 才能启用宿主目录桥与 Tether 面板。这里只认与已批准描述符
+// 同 origin、根路径且查询串恰为 tether_native=1 的落地页。
+export function safeLocalDshNativeUrl(value, approvedUrl) {
+  try {
+    const approved = new URL(String(approvedUrl || ''))
+    const url = new URL(String(value || ''))
+    const query = [...url.searchParams.entries()]
+    const expected = new URL('/?tether_native=1', approved.origin)
+    return url.protocol === 'http:' && url.hostname === approved.hostname && url.port === approved.port
+      && !url.username && !url.password && !url.hash && url.pathname === '/'
+      && query.length === 1 && query[0][0] === 'tether_native' && query[0][1] === '1'
       && url.href === expected.href
       ? url.href : ''
   } catch (_) { return '' }
@@ -1812,176 +1931,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       h('circle', { cx: 10.6, cy: 9.3, r: 2.8, fill: '#0f172a', stroke: '#f5f7fa', strokeWidth: 1.7 }),
       h('circle', { cx: 21.4, cy: 22.7, r: 2.8, fill: '#0f172a', stroke: '#f59e0b', strokeWidth: 1.7 }))
 
-    const GLYPHS = {
-      workspace: { cap: 'round', join: 'round', parts: [
-        { d: 'M14 12.05c0 .8-.65 1.45-1.46 1.45H3.46C2.65 13.5 2 12.85 2 12.05v-8.1c0-.8.65-1.45 1.46-1.45h2.4c.49 0 .94.24 1.21.65l.5.73c.27.4.73.65 1.21.65h3.76c.8 0 1.46.65 1.46 1.45v6.02Z' },
-        { d: 'M8.7 8.1v3M11.2 8.1v3' }
-      ] },
-      files: { parts: [
-        { d: 'M12.3994 13.5986H2.04956C1.49728 13.5986 1.04956 13.1509 1.04956 12.5986V3.40137C1.04956 2.84908 1.49728 2.40137 2.04956 2.40137H4.76632C5.01016 2.40137 5.24561 2.49046 5.42836 2.6519L6.94088 3.98799C7.12364 4.14943 7.35908 4.23852 7.60293 4.23852H12.3994C12.9517 4.23852 13.3994 4.68624 13.3994 5.23852V7.16991' },
-        { d: 'M2.55911 7.93683C2.67584 7.49906 3.07229 7.19446 3.52536 7.19446H13.6491C14.3061 7.19446 14.7846 7.81725 14.6153 8.45209L13.4411 12.856C13.3244 13.2938 12.9279 13.5984 12.4748 13.5984H2.35113C1.69411 13.5984 1.21562 12.9756 1.38489 12.3407L2.55911 7.93683Z' }
-      ] },
-      devices: { parts: [
-        { d: 'M7.99986 14.0887C11.3626 14.0887 14.0886 11.3627 14.0886 7.99998C14.0886 4.63727 11.3626 1.91125 7.99986 1.91125C4.63715 1.91125 1.91113 4.63727 1.91113 7.99998C1.91113 11.3627 4.63715 14.0887 7.99986 14.0887Z' },
-        { d: 'M2.34619 8H13.6538', cap: 'square' },
-        { d: 'M7.99976 14.0889C9.23509 14.0889 10.1743 11.3629 10.1743 8.00006C10.1743 4.63739 9.23509 1.91138 7.99976 1.91138' },
-        { d: 'M7.99973 14.0889C6.76445 14.0889 5.8252 11.3629 5.8252 8.00006C5.8252 4.63739 6.76445 1.91138 7.99973 1.91138' }
-      ] },
-      shield: { join: 'round', parts: [
-        { d: 'M6.80132 2.14853C7.70663 1.80917 8.70422 1.80919 9.60952 2.14859L14.1296 3.84317V7.11961C14.1296 11.6089 10.7615 13.5975 8.20543 14.5779C5.64931 13.5975 2.28052 11.6089 2.28052 7.11961V3.84317L6.80132 2.14853Z' }
-      ] },
-      gear: { join: 'round', parts: [
-        { d: 'M6.7 1.6h2.6l.35 1.55.62.26 1.32-.86 1.84 1.84-.86 1.32.26.62 1.55.35v2.6l-1.55.35-.26.62.86 1.32-1.84 1.84-1.32-.86-.62.26-.35 1.55H6.7l-.35-1.55-.62-.26-1.32.86-1.84-1.84.86-1.32-.26-.62L1.6 9.3V6.7l1.55-.35.26-.62-.86-1.32 1.84-1.84 1.32.86.62-.26z' },
-        { d: 'M8 6.1a1.9 1.9 0 1 0 0 3.8 1.9 1.9 0 0 0 0-3.8Z' }
-      ] },
-      user: { join: 'round', parts: [
-        { d: 'M8 7.7a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z' },
-        { d: 'M3.1 13.7c.4-2.5 2.3-4 4.9-4s4.5 1.5 4.9 4' }
-      ] },
-      monitor: { parts: [
-        { d: 'M2 3.2h12v8.1H2z' },
-        { d: 'M6 13.8h4M8 11.3v2.5' }
-      ] },
-      apps: { cap: 'round', join: 'round', parts: [
-        { d: 'M2.4 2.4h4.2v4.2H2.4z' },
-        { d: 'M9.4 2.4h4.2v4.2H9.4z' },
-        { d: 'M2.4 9.4h4.2v4.2H2.4z' },
-        { d: 'M9.4 9.4h4.2v4.2H9.4z' }
-      ] },
-      bot: { cap: 'round', join: 'round', parts: [
-        { d: 'M8 2.4v1.3' },
-        { d: 'M6.9 2.4h2.2' },
-        { d: 'M5 3.7h6a2.2 2.2 0 0 1 2.2 2.2v4.3A2.2 2.2 0 0 1 11 12.4H5a2.2 2.2 0 0 1-2.2-2.2V5.9A2.2 2.2 0 0 1 5 3.7Z' },
-        { d: 'M2.8 6.3H1.9v2.8h.9M13.2 6.3h.9v2.8h-.9' },
-        { d: 'M6.1 7.2v1.5M9.9 7.2v1.5' },
-        { d: 'M3.6 13.8h8.8' }
-      ] },
-      refresh: { parts: [
-        { d: 'M13 8a5 5 0 1 1-1.5-3.56' },
-        { d: 'M13.2 2.3v3.1h-3.1' }
-      ] },
-      stop: { parts: [
-        { d: 'M4.6 4.6h6.8v6.8H4.6z', fill: 'currentColor', stroke: false }
-      ] },
-      eye: { parts: [
-        { d: 'M1.8 8s2.2-4.2 6.2-4.2S14.2 8 14.2 8s-2.2 4.2-6.2 4.2S1.8 8 1.8 8z' },
-        { d: 'M8 9.6A1.6 1.6 0 1 0 8 6.4a1.6 1.6 0 0 0 0 3.2z' }
-      ] },
-      pencil: { parts: [
-        { d: 'M10.8 2.6l2.6 2.6-7.7 7.7-3.4.8.8-3.4z' },
-        { d: 'M9.4 4l2.6 2.6' }
-      ] },
-      camera: { join: 'round', parts: [
-        { d: 'M2.2 5.4h2.2l1-1.6h4.2l1 1.6h2.2v7.1H2.2z' },
-        { d: 'M8 11.3a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z' }
-      ] },
-      trash: { parts: [
-        { d: 'M2.8 4.2h10.4M6 4.2V2.6h4v1.6M4.1 4.2l.7 9.2h6.4l.7-9.2' },
-        { d: 'M6.8 6.7v4.6M9.2 6.7v4.6' }
-      ] },
-      arrowUp: { parts: [
-        { d: 'M8 13V3M3.6 7.4L8 3l4.4 4.4' }
-      ] },
-      download: { parts: [
-        { d: 'M8 2.2v7.4M4.8 6.8L8 10l3.2-3.2' },
-        { d: 'M2.6 12.9h10.8' }
-      ] },
-      back: { parts: [
-        { d: 'M10.2 3.2L5.4 8l4.8 4.8' }
-      ] },
-      forward: { parts: [
-        { d: 'M5.8 3.2L10.6 8l-4.8 4.8' }
-      ] },
-      transfer: { parts: [
-        { d: 'M8 1.4a6.6 6.6 0 1 0 0 13.2A6.6 6.6 0 0 0 8 1.4Z' },
-        { d: 'M3.6 5.6h7.6M8.9 3.3l2.3 2.3-2.3 2.3' },
-        { d: 'M12.4 10.4H4.8M7.1 8.1 4.8 10.4l2.3 2.3' }
-      ] },
-      link: { join: 'round', parts: [
-        { d: 'M6.4 9.6a2.5 2.5 0 0 0 3.5 0l2-2a2.5 2.5 0 1 0-3.5-3.5l-1 1' },
-        { d: 'M9.6 6.4a2.5 2.5 0 0 0-3.5 0l-2 2a2.5 2.5 0 1 0 3.5 3.5l1-1' }
-      ] },
-      search: { parts: [
-        { d: 'M7.1 12.2a5.1 5.1 0 1 0 0-10.2 5.1 5.1 0 0 0 0 10.2z' },
-        { d: 'M11 11l3 3' }
-      ] },
-      save: { parts: [
-        { d: 'M3 2.4h8.2L13.4 4.6v9H3z' },
-        { d: 'M5.4 2.4v3.2h5V2.4' },
-        { d: 'M5.4 9.2h5.2v4.4H5.4z' }
-      ] },
-      plus: { parts: [
-        { d: 'M8 2V14' },
-        { d: 'M2 8H14' }
-      ] },
-      chevronDown: { parts: [
-        { d: 'M4 6L7.29289 9.29289C7.68342 9.68342 8.31658 9.68342 8.70711 9.29289L12 6' }
-      ] },
-      table: { parts: [
-        { d: 'M2.6 3.4h10.8v9.2H2.6z' },
-        { d: 'M2.6 6.4h10.8M6.4 6.4v6.2M9.6 6.4v6.2' }
-      ] },
-      plainText: { parts: [
-        { d: 'M3 4.2h10M3 8h10M3 11.8h6.2' }
-      ] },
-      chevronRight: { parts: [
-        { d: 'M6 12L9.29289 8.70711C9.68342 8.31658 9.68342 7.68342 9.29289 7.29289L6 4' }
-      ] },
-      chevronLeft: { parts: [
-        { d: 'M10 4L6.70711 7.29289C6.31658 7.68342 6.31658 8.31658 6.70711 8.70711L10 12' }
-      ] },
-      think: { parts: [
-        { d: 'M10.2854 5.71481C12.9673 8.39663 14.1182 11.5938 12.8562 12.8559C11.5942 14.1179 8.39706 12.9669 5.71518 10.2851C3.03333 7.60323 1.88236 4.40608 3.14441 3.14403C4.40644 1.882 7.6036 3.03297 10.2854 5.71481Z' },
-        { d: 'M10.2854 10.2851C7.6036 12.9669 4.40644 14.1179 3.14441 12.8559C1.88236 11.5938 3.03333 8.39663 5.71518 5.71481C8.39706 3.03297 11.5942 1.882 12.8562 3.14403C14.1182 4.40608 12.9673 7.60323 10.2854 10.2851Z' },
-        { d: 'M8.86291 8.0002C8.86291 8.47549 8.47762 8.86087 8.00224 8.86087C7.52694 8.86087 7.1416 8.47549 7.1416 8.0002C7.1416 7.52485 7.52694 7.13953 8.00224 7.13953C8.47762 7.13953 8.86291 7.52485 8.86291 8.0002Z', fill: 'currentColor', stroke: false }
-      ] },
-      tool: { parts: [
-        { d: 'M6.27612 1.5L4.52612 14.5' },
-        { d: 'M11.4739 1.5L9.72388 14.5' },
-        { d: 'M2.39868 5.5H14.0681' },
-        { d: 'M1.93188 10.5H13.6013' }
-      ] },
-      folderPlus: { join: 'round', parts: [
-        { d: 'M1.8 5.2h12.4v7.2H1.8z' },
-        { d: 'M1.8 5.2V3.6h4l1.4 1.6' },
-        { d: 'M8 7.2v4M6 9.2h4' }
-      ] },
-      filePlus: { join: 'round', parts: [
-        { d: 'M3.6 2.2h5.6l3.2 3.2v8.4H3.6z' },
-        { d: 'M9.2 2.2v3.4h3.2' },
-        { d: 'M8 8v4M6 10h4' }
-      ] },
-      file: { parts: [
-        { d: 'M4.9375 5.90295H11.0625' },
-        { d: 'M4.9375 9.02991H8.27841' },
-        { d: 'M12.5 1.32617C13.3039 1.32617 14 1.95171 14 2.77637V13.2246C13.9996 14.0489 13.3036 14.6738 12.5 14.6738H3.5C2.69637 14.6738 2.00042 14.0489 2 13.2246V2.77637C2 1.95171 2.69613 1.32617 3.5 1.32617H12.5ZM3.5 2.32617C3.1993 2.32617 3 2.55186 3 2.77637V13.2246C3.00044 13.4489 3.19963 13.6738 3.5 13.6738H12.5C12.8004 13.6738 12.9996 13.4489 13 13.2246V2.77637C13 2.55186 12.8007 2.32617 12.5 2.32617H3.5Z', fill: 'currentColor', stroke: false }
-      ] },
-      folderOpen: { parts: [
-        { d: 'M2.55912 7.93683C2.67584 7.49906 3.0723 7.19446 3.52536 7.19446H13.6491C14.3061 7.19446 14.7846 7.81725 14.6153 8.45209L13.4411 12.856C13.3244 13.2938 12.9279 13.5984 12.4748 13.5984H2.35113C1.69411 13.5984 1.21562 12.9756 1.38489 12.3407L2.55912 7.93683Z', fill: 'currentColor', opacity: 0.16, stroke: false },
-        { d: 'M13.6491 6.69446C14.6346 6.69453 15.3522 7.62895 15.0983 8.58118L13.9245 12.9845C13.7494 13.6412 13.1539 14.0988 12.4743 14.0988H2.35126C1.36574 14.0988 0.648153 13.1643 0.902044 12.212L2.07587 7.80774C2.25102 7.15128 2.84567 6.69455 3.52509 6.69446H13.6491ZM3.52509 7.69446C3.29865 7.69455 3.10004 7.84674 3.04169 8.06555L1.86786 12.4698C1.78345 12.7872 2.02285 13.0988 2.35126 13.0988H12.4743C12.7007 13.0988 12.8992 12.9463 12.9577 12.7277L14.1325 8.32336C14.2171 8.00598 13.9776 7.69453 13.6491 7.69446H3.52509Z', fill: 'currentColor', stroke: false },
-        { d: 'M4.7666 1.90137C5.13227 1.90144 5.48571 2.03525 5.75977 2.27734L7.27246 3.61328C7.36379 3.69382 7.48174 3.73828 7.60352 3.73828H12.3994C13.2276 3.73841 13.8993 4.41005 13.8994 5.23828V6.7168C13.8183 6.70327 13.735 6.69436 13.6494 6.69434H12.8994V5.23828C12.8993 4.96233 12.6754 4.73841 12.3994 4.73828H7.60352C7.23781 4.73828 6.88446 4.60438 6.61035 4.3623L5.09766 3.02637C5.00636 2.94576 4.88838 2.90144 4.7666 2.90137H2.0498C1.77366 2.90137 1.5498 3.12523 1.5498 3.40137V9.78223L0.902344 12.2119C0.648452 13.1642 1.36604 14.0986 2.35156 14.0986H2.0498C1.2214 14.0986 0.549838 13.427 0.549805 12.5986V3.40137C0.549805 2.57294 1.22138 1.90137 2.0498 1.90137H4.7666Z', fill: 'currentColor', stroke: false }
-      ] },
-      folderClose: { parts: [
-        { d: 'M1.50439 3.11059C1.50439 2.55831 1.95211 2.1106 2.50439 2.1106H5.43389C5.67773 2.1106 5.91318 2.19969 6.09593 2.36113L7.71649 3.79265C7.89924 3.95409 8.1347 4.04319 8.3785 4.04319H13.4958C14.0481 4.04319 14.4958 4.4909 14.4958 5.04319V12.8894C14.4958 13.4417 14.0481 13.8894 13.4958 13.8894H2.50439C1.95211 13.8894 1.50439 13.4417 1.50439 12.8894V4.04319V3.11059Z' },
-        { d: 'M3.63501 7.66614H12.3647' }
-      ] },
-      terminal: { parts: [
-        { d: 'M2.5 3.5h11v9h-11z' },
-        { d: 'M4.5 6l2 2-2 2' },
-        { d: 'M8.5 10h3' }
-      ] }
-    }
-
-    function Glyph({ name, size = 16, stroke }) {
-      const glyph = GLYPHS[name] || { parts: [] }
-      return h('svg', {
-        width: size, height: size, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor',
-        strokeWidth: stroke == null ? 1 : stroke, strokeLinecap: glyph.cap || 'butt', strokeLinejoin: glyph.join || 'miter', 'aria-hidden': true
-      }, glyph.parts.map((part, index) => h('path', {
-        key: index, d: part.d, fill: part.fill || 'none', stroke: part.stroke === false ? 'none' : undefined,
-        opacity: part.opacity, strokeLinecap: part.cap || glyph.cap || 'butt'
-      })))
-    }
+    const Glyph = createGlyph(React)
 
     function ActivityBar({ active, collapsed, onSelect, onPermissions, permissionsOpen, onAppSettings, appSettingsOpen, onAccount, accountEmail = '', accountAvatar = '' }) {
       const accountInitial = String(accountEmail || '').trim().charAt(0).toUpperCase()
@@ -2756,6 +2706,60 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
 
     const NATIVE_SURFACE_RETRIES = 3
     const NATIVE_SURFACE_DOCUMENT_RETRIES = 1
+    // 跨节点阶段 1：远端 workspace 先走 managed network（mesh）直连工作台，
+    // 失败或超时才回落到既有 Hub 网关描述符。5s dial + 5s TLS 在主进程里，
+    // 这里再留一点 bootstrap 余量，避免一次卡死吃掉整个 surface 打开窗口。
+    const DSH_MESH_OPEN_TIMEOUT_MS = 15000
+    // 一次降级后 5 分钟内不再重付 mesh 探测成本；用户手动重连（retryDocument）
+    // 会清掉这个窗口，重新给 mesh 一次机会。
+    const DSH_MESH_RETRY_MS = 5 * 60 * 1000
+
+    // mesh 工作台的 endpoint 是 caddy-easytier 的 https origin（带端口），
+    // 与本机/Hub 网关的 `?tether_native=1` 映射页不是同一种地址，单独校验。
+    function safeMeshDshEndpoint(value) {
+      try {
+        const url = new URL(String(value || ''))
+        return url.protocol === 'https:' && !url.username && !url.password
+          && /^[1-9]\d{0,4}$/.test(url.port) && !url.hash && !url.search
+          && url.pathname === '/' && !!url.hostname
+          ? url.href : ''
+      } catch (_) { return '' }
+    }
+
+    // 渲染进程拿到 mesh 会话后只认主进程给的这四项，其余字段不参与信任判断。
+    function meshDshService(service, targetId) {
+      if (!service || service.targetId !== targetId || service.serviceId !== 'dsh'
+          || typeof service.grantId !== 'string' || !/^[a-f0-9]{8,64}$/i.test(service.grantId)
+          || typeof service.partition !== 'string' || !/^persist:tether-wb-[a-f0-9]{40}$/.test(service.partition)) return null
+      const endpoint = safeMeshDshEndpoint(service.endpoint)
+      if (!endpoint) return null
+      return { endpoint, grantId: service.grantId, partition: service.partition, serviceId: 'dsh' }
+    }
+
+    // IPC 打开不可取消：超时后只把结果交给 onLate 回收授权，不再进入渲染状态。
+    function withMeshTimeout(promise, timeoutMs, onLate) {
+      return new Promise((resolve, reject) => {
+        let settled = false
+        const timer = setTimeout(() => {
+          if (settled) return
+          settled = true
+          const error = new Error('mesh 工作台连接超时')
+          error.code = 'mesh_open_timeout'
+          reject(error)
+        }, timeoutMs)
+        Promise.resolve(promise).then((value) => {
+          if (settled) { try { onLate && onLate(value) } catch (_) { /* best effort */ } return }
+          settled = true
+          clearTimeout(timer)
+          resolve(value)
+        }, (error) => {
+          if (settled) return
+          settled = true
+          clearTimeout(timer)
+          reject(error)
+        })
+      })
+    }
     // The first cold load streams the DSH plugin bundles through the relay
     // (4.2 MB compressed, 25-90 s). A 30 s document timeout killed a page that
     // was still downloading and then forced a second full transfer.
@@ -2787,6 +2791,24 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       } catch (_) { /* performance marks are optional */ }
     }
 
+    // 回环 DSH guest（127.0.0.1:59999）的设备文件请求走宿主中继：guest 经既有桥
+    // （webview hash / iframe postMessage）提交 {tether_action:'fs'}，宿主在 APP 同源
+    // 调 /api/devices/<本机>/fs/* 并把 JSON 原路回传。只认白名单路由与本机设备，
+    // 不接受任意 URL；Hub 网关页（非回环）仍按原 /tether-device-fs 路径取文件。
+    const TETHER_FS_RELAY_ROUTES = { '/drives': 'GET', '/workspaces': 'GET',
+      '/fs/list': 'POST', '/fs/read': 'POST', '/fs/write_chunk': 'POST' }
+    const TETHER_FS_RELAY_CHUNK_MAX = 300000
+    const TETHER_FS_RELAY_CHUNKS_MAX = 64
+    const TETHER_FS_RELAY_BODY_MAX = 12 * 1024 * 1024
+    function tetherFsRelayHostReady() {
+      try {
+        return /^http:\/\/(127\.0\.0\.1|localhost|\[::1\]):\d+$/.test(String(window.location.origin || ''))
+      } catch (_) { return false }
+    }
+    function isTetherFsRelayQuery(value) {
+      return !value || /^\?device_id=[A-Za-z0-9._-]{1,80}$/.test(String(value))
+    }
+
     function NativeSurface({ deviceId, online, visible, localDeviceId, deviceInfo = null, preload = false, layered = false, authReady = true }) {
       const [state, setState] = React.useState({ deviceId, status: deviceId ? 'loading' : 'no-device', url: '' })
       const [attempt, setAttempt] = React.useState(0)
@@ -2813,9 +2835,173 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const documentTimerRef = React.useRef(null)
       const documentStartedAtRef = React.useRef(0)
       const nativeGuestRef = React.useRef(null)
+      const nativeIframeRef = React.useRef(null)
+      // 映射 DSH（tether_native=1）页内发起的目录/文件选择：与 Codeg 服务窗同一桥协议，
+      // webview 走 hash（did-navigate-in-page），iframe 走 postMessage；应答原路返回。
+      // { id, mode: 'iframe' | 'webview', source, kind: 'folder' | 'file', multiple }
+      const [folderPick, setFolderPick] = React.useState(null)
+      const closeFolderPick = (value) => {
+        const request = folderPick
+        if (!request) return
+        setFolderPick(null)
+        const chosen = (Array.isArray(value) ? value : [value])
+          .map((item) => typeof item === 'string' ? item.trim() : '')
+          .filter(Boolean)
+        const payload = chosen.length
+          ? { type: 'tether:pick-folder-result', id: request.id, path: chosen[0], paths: chosen }
+          : { type: 'tether:pick-folder-result', id: request.id, cancelled: true }
+        if (request.mode === 'iframe') {
+          try {
+            if (request.source && typeof request.source.postMessage === 'function') {
+              request.source.postMessage(payload, '*')
+            }
+          } catch (_) { /* the frame is gone */ }
+          return
+        }
+        const guest = nativeGuestRef.current
+        if (!guest || typeof guest.executeJavaScript !== 'function') return
+        // webview _guest 无法跨边界 postMessage，应答在其内部派发；脚本固定，仅插入 JSON。
+        try {
+          void guest.executeJavaScript("window.postMessage(" + JSON.stringify(payload) + ", '*')").catch(() => {})
+        } catch (_) { /* the guest is gone */ }
+      }
+      // 回环 guest 的设备文件中继。guest 只提交方法/白名单路径/请求体；
+      // 设备身份由宿主定为本机，绝不把 guest 给的字符串拼成 URL。
+      const fsRelayLocalDeviceRef = React.useRef(localDeviceId)
+      fsRelayLocalDeviceRef.current = localDeviceId
+      const fsRelayChunksRef = React.useRef(new Map())
+      const fsRelayReplyGuest = (guest, payload) => {
+        if (!guest || typeof guest.executeJavaScript !== 'function') return
+        try {
+          void guest.executeJavaScript("window.postMessage(" + JSON.stringify(payload) + ", '*')").catch(() => {})
+        } catch (_) { /* the guest is gone */ }
+      }
+      const fsRelayLocalDevice = async () => {
+        if (fsRelayLocalDeviceRef.current) return fsRelayLocalDeviceRef.current
+        try {
+          const response = await fetch('/app-context', { cache: 'no-store' })
+          const context = await response.json()
+          return context && typeof context.device === 'string' ? context.device : ''
+        } catch (_) { return '' }
+      }
+      const fsRelayPerform = async (reply, request) => {
+        const id = String(request && request.id || '')
+        const fail = (status, code, message) => reply({ type: 'tether:fs-result', id, ok: false, status, code, message })
+        if (!/^[0-9a-f-]{36}$/i.test(id) || !tetherFsRelayHostReady()) return
+        const method = request.method === 'POST' ? 'POST' : request.method === 'GET' ? 'GET' : ''
+        const path = typeof request.path === 'string' ? request.path : ''
+        if (!method || !Object.prototype.hasOwnProperty.call(TETHER_FS_RELAY_ROUTES, path)) {
+          fail(403, 'path_denied', '设备文件中继只允许白名单路径')
+          return
+        }
+        if (TETHER_FS_RELAY_ROUTES[path] !== method) {
+          fail(405, 'bad_method', '设备文件中继方法不允许')
+          return
+        }
+        if (!isTetherFsRelayQuery(request.query)) {
+          fail(400, 'bad_query', '设备文件中继查询串无效')
+          return
+        }
+        const localDevice = await fsRelayLocalDevice()
+        if (!localDevice || request.device !== localDevice) {
+          fail(404, 'device_not_found', '只允许中继本机设备')
+          return
+        }
+        let body
+        if (request.body !== undefined && request.body !== null) {
+          if (typeof request.body !== 'string' || request.body.length > TETHER_FS_RELAY_BODY_MAX) {
+            fail(413, 'too_large', '设备文件中继请求体过大')
+            return
+          }
+          let parsed
+          try { parsed = JSON.parse(request.body) } catch (_) { parsed = null }
+          if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+            fail(400, 'bad_body', '设备文件中继请求体无效')
+            return
+          }
+          if (parsed.device_id != null && String(parsed.device_id) !== localDevice) {
+            fail(404, 'device_not_found', '只允许中继本机设备')
+            return
+          }
+          body = request.body
+        } else if (method === 'POST') {
+          fail(400, 'bad_body', '设备文件中继缺少请求体')
+          return
+        }
+        const startedAt = performance.now()
+        let response
+        try {
+          response = await fetch('/api/devices/' + encodeURIComponent(localDevice) + path, {
+            method,
+            headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+            body: body === undefined ? undefined : body,
+            credentials: 'same-origin',
+            cache: 'no-store'
+          })
+        } catch (_) {
+          fail(502, 'local_unreachable', '本机设备文件服务不可达')
+          return
+        }
+        const data = await response.json().catch(() => null)
+        reply({ type: 'tether:fs-result', id, ok: response.ok, status: response.status, data,
+          durationMs: Math.max(0, Math.round(performance.now() - startedAt)) })
+      }
+      // webview 一次 hash 导航最多带一个分片；host 逐片确认，收齐最后一片即执行。
+      const fsRelayOnFrame = (guest, params) => {
+        const ids = params.getAll('request_id')
+        const id = ids[0] || ''
+        if (ids.length !== 1 || !/^[0-9a-f-]{36}$/i.test(id)) return
+        const allowed = ['tether_action', 'request_id', 'fs_device', 'fs_method', 'fs_path',
+          'fs_seq', 'fs_total', 'fs_chunk', 'fs_query']
+        if ([...params.keys()].some((key) => allowed.indexOf(key) < 0)) return
+        const method = params.get('fs_method')
+        const path = params.get('fs_path')
+        const device = params.get('fs_device') || ''
+        const query = params.get('fs_query') || ''
+        const seq = Number(params.get('fs_seq'))
+        const total = Number(params.get('fs_total'))
+        if (!Number.isInteger(seq) || seq < 0 || !Number.isInteger(total) || total < 0
+            || total > TETHER_FS_RELAY_CHUNKS_MAX || (total > 0 ? seq >= total : seq !== 0)) return
+        const chunk = params.get('fs_chunk') || ''
+        if (chunk.length > TETHER_FS_RELAY_CHUNK_MAX) return
+        const chunks = fsRelayChunksRef.current
+        const now = Date.now()
+        for (const [key, value] of chunks) if (now - value.at > 60000) chunks.delete(key)
+        let entry = chunks.get(id)
+        if (!entry) {
+          entry = { at: now, method, path, device, query, total, parts: [] }
+          chunks.set(id, entry)
+        }
+        entry.at = now
+        entry.parts[seq] = chunk
+        // 每片都回执（含最后一片）：guest 只有在收到回执后才发下一段 hash，
+        // 否则连写会被浏览器合并成一次导航而丢请求。
+        fsRelayReplyGuest(guest, { type: 'tether:fs-chunk', id, seq })
+        if (total > 0 && seq < total - 1) return
+        chunks.delete(id)
+        let body
+        if (total > 0) {
+          try {
+            const encoded = entry.parts.join('').replace(/-/g, '+').replace(/_/g, '/')
+            const binary = atob(encoded)
+            const bytes = new Uint8Array(binary.length)
+            for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index)
+            body = new TextDecoder().decode(bytes)
+          } catch (_) {
+            fsRelayReplyGuest(guest, { type: 'tether:fs-result', id, ok: false, status: 400, code: 'bad_body', message: '设备文件中继请求体无效' })
+            return
+          }
+        }
+        void fsRelayPerform((payload) => fsRelayReplyGuest(guest, payload),
+          { id, method, path, device, query, body })
+      }
       const pollFlightRef = React.useRef(null)
       const surfaceStateRef = React.useRef(currentState)
       surfaceStateRef.current = currentState
+      // 本机直连失败后，本次设备挂载内不再重试直连，交回主进程 Hub 票据路径。
+      const localDirectFailedRef = React.useRef(false)
+      // mesh 探测失败后记下时间：8s 描述符轮询不再每次都重付一次 5s dial 成本。
+      const meshProbeRef = React.useRef({ deviceId: '', failedAt: 0, reason: '' })
       const surfaceSourceKey = (() => {
         try {
           const hub = host && typeof host.hubConfig === 'function' ? host.hubConfig() : null
@@ -2823,6 +3009,52 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           return nativeSurfaceAuthorityKey(host && typeof host.surfaceBase === 'function' ? host.surfaceBase(isLocal) : '', hub && hub.url || '', ACTIVE_BASE, ACTIVE_BASE_GENERATION)
         } catch (_) { return ACTIVE_BASE }
       })()
+
+      // 跨节点阶段 1：远端目标优先用 managed network（mesh）直连 DSH 工作台。
+      // 返回 null 表示降级（调用方继续走既有 Hub 网关），降级原因写进日志与 ref。
+      const tryMeshDshService = async (id) => {
+        const startedAt = performance.now()
+        const degrade = (reason, detail) => {
+          meshProbeRef.current = { deviceId: id, failedAt: Date.now(), reason }
+          try {
+            console.info('[dsh-surface] mesh 优先失败，降级 Hub 网关', {
+              deviceId: id, reason, message: detail || '', durationMs: Math.max(0, Math.round(performance.now() - startedAt))
+            })
+          } catch (_) { /* logging must never break the fallback */ }
+          return null
+        }
+        if (!host || !host.workbench || typeof host.workbench.open !== 'function') return degrade('workbench_unavailable')
+        // 目录里 dsh 未就绪时不开：open() 会白等一次服务启动窗口，而 Hub 网关
+        // 对「服务未启动/版本不一致」有确定的可读错误。
+        let catalog = null
+        try { catalog = typeof host.workbench.catalog === 'function' ? await host.workbench.catalog(id) : null } catch (error) {
+          return degrade('catalog_failed', error && error.message)
+        }
+        const entry = catalog && Array.isArray(catalog.services)
+          ? catalog.services.find((service) => service && service.id === 'dsh') : null
+        if (!entry || entry.state !== 'ready') return degrade('catalog_not_ready', entry && entry.state)
+        let service = null
+        try {
+          service = await withMeshTimeout(host.workbench.open(id, 'dsh'), DSH_MESH_OPEN_TIMEOUT_MS, (late) => {
+            const opened = late && late.grantId
+            if (!opened) return
+            try { void Promise.resolve(host.workbench.close(id, 'dsh', opened)).catch(() => {}) } catch (_) { /* best effort */ }
+          })
+        } catch (error) {
+          return degrade(error && error.code === 'mesh_open_timeout' ? 'open_timeout' : 'open_failed', error && error.message)
+        }
+        const verified = meshDshService(service, id)
+        if (!verified) {
+          try { void Promise.resolve(host.workbench.close(id, 'dsh', service && service.grantId)).catch(() => {}) } catch (_) { /* best effort */ }
+          return degrade('invalid_service')
+        }
+        meshProbeRef.current = { deviceId: id, failedAt: 0, reason: '' }
+        try {
+          console.info('[dsh-surface] mesh 已选中', { deviceId: id,
+            durationMs: Math.max(0, Math.round(performance.now() - startedAt)) })
+        } catch (_) { /* logging is optional */ }
+        return verified
+      }
 
       const fetchSurfaceDescriptor = async (id, signal) => {
         if (host && host.kind === 'dsh' && localDeviceId && id === localDeviceId
@@ -2838,6 +3070,50 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           }
         }
         const isLocalTarget = !!(localDeviceId && id === localDeviceId)
+        // 本机目标优先走 APP 自身代理的节点控制台描述符（读 native-surface.json，
+        // 返回 http://127.0.0.1:<port>/?token=…），不再为同一台机器绕 Hub 换取票据。
+        // 描述符缺失或本地链路失败时继续走原来的主进程 Hub 票据路径。
+        if (host && host.kind === 'app' && !EXPLICIT_AUTHORITY && isLocalTarget
+            && !localDirectFailedRef.current
+            && typeof window !== 'undefined' && window.location
+            && /^http:\/\/(127\.0\.0\.1|\[::1\]):\d+$/.test(window.location.origin)) {
+          let localDescriptor = null
+          try {
+            const localResponse = await fetch('/api/devices/' + encodeURIComponent(id) + '/dsh/surface', {
+              headers: { 'Cache-Control': 'no-store' }, cache: 'no-store', signal
+            })
+            const localData = await localResponse.json().catch(() => null)
+            const localUrl = localData && localData.available === true ? safeLocalDshSurfaceUrl(localData.url) : ''
+            if (localResponse.ok && localUrl) {
+              localDescriptor = { response: { ok: true, status: 200 }, data: {
+                available: true, url: localUrl, pid: Number(localData.pid) || 0,
+                updated_at: localData.updated_at, localDirect: true
+              } }
+            }
+          } catch (error) {
+            if (signal && signal.aborted) throw error
+          }
+          if (localDescriptor) return localDescriptor
+          if (signal && signal.aborted) {
+            const error = new Error('The operation was aborted')
+            error.name = 'AbortError'
+            throw error
+          }
+        }
+        // 跨节点阶段 1：远端目标先试 mesh（catalog ready + open('dsh')），
+        // 失败/超时按 tryMeshDshService 里记的原因回落到下面的 Hub 网关路径。
+        // 本机目标仍走上面的直连快路，不经过这里。
+        if (host && host.kind === 'app' && !EXPLICIT_AUTHORITY && !isLocalTarget
+            && !(meshProbeRef.current.deviceId === id && meshProbeRef.current.failedAt
+              && Date.now() - meshProbeRef.current.failedAt < DSH_MESH_RETRY_MS)) {
+          const meshService = await tryMeshDshService(id)
+          if (signal && signal.aborted) {
+            const abortError = new Error('The operation was aborted')
+            abortError.name = 'AbortError'
+            throw abortError
+          }
+          if (meshService) return { response: { ok: true, status: 200 }, data: { meshService } }
+        }
         if (host && host.kind === 'app' && !EXPLICIT_AUTHORITY
             && host.workbench && typeof host.workbench.openDshSurface === 'function') {
           const service = await host.workbench.openDshSurface(id)
@@ -2906,6 +3182,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         retryCountRef.current = 0
         descriptorRetryCountRef.current = 0
         documentRetryCountRef.current = 0
+        localDirectFailedRef.current = false
         if (retryTimerRef.current) { clearTimeout(retryTimerRef.current); retryTimerRef.current = null }
         if (documentTimerRef.current) { clearTimeout(documentTimerRef.current); documentTimerRef.current = null }
       }, [deviceId])
@@ -2960,6 +3237,24 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             reportNativeSurfaceTiming('descriptor', descriptorStartedAt)
             if (data && data.local) {
               if (current) setState({ deviceId, status: 'local', url: '', pid: 0 })
+              return
+            }
+            if (data && data.localDirect) {
+              const localUrl = safeLocalDshSurfaceUrl(data.url)
+              if (!localUrl) throw new Error('本机 DSH 页面地址无效')
+              if (current) setState({ deviceId, status: 'native-document-loading', url: localUrl,
+                grantId: 'local:' + (Number(data.pid) || 0) + ':' + Date.now(),
+                partition: 'persist:tether-dsh-local', localDirect: true,
+                pid: Number(data.pid) || 0, sourceKey: surfaceSourceKey })
+              return
+            }
+            if (data && data.meshService) {
+              const mesh = data.meshService
+              const meshEndpoint = safeMeshDshEndpoint(mesh.endpoint)
+              if (!meshEndpoint) throw new Error('主进程返回的 mesh 工作台地址无效。')
+              if (current) setState({ deviceId, status: 'native-document-loading', url: meshEndpoint,
+                grantId: mesh.grantId, partition: mesh.partition, mesh: true, serviceId: 'dsh',
+                sourceKey: surfaceSourceKey })
               return
             }
             if (data && data.nativeService) {
@@ -3143,10 +3438,13 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       }, [deviceId, currentState.status, currentState.url])
 
       const retryDocument = () => {
-        const oldGrant = surfaceStateRef.current && surfaceStateRef.current.grantId
-        if (oldGrant && host.workbench && host.workbench.close) {
-          void host.workbench.close(deviceId, 'dsh-native', oldGrant).catch(() => {})
+        const oldState = surfaceStateRef.current
+        const oldGrant = oldState && oldState.grantId
+        if (oldGrant && !(oldState && oldState.localDirect) && host.workbench && host.workbench.close) {
+          void host.workbench.close(deviceId, oldState.serviceId || 'dsh-native', oldGrant).catch(() => {})
         }
+        // 手动重连重新给 mesh 一次机会（清掉 5 分钟降级窗口）。
+        meshProbeRef.current = { deviceId: '', failedAt: 0, reason: '' }
         documentRetryCountRef.current = 0
         descriptorRetryCountRef.current = 0
         retryCountRef.current = 0
@@ -3191,6 +3489,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       if (!dshWebRefCallback.current) dshWebRefCallback.current = (guest) => {
         if (dshWebRef.current === guest) return
         dshWebRef.current = guest
+        if (guest) bindDshGuestFlowInjection(guest)
         setDshWebGuestReady(!!guest)
       }
       const dshWebLoadAttemptRef = React.useRef(0)
@@ -3287,6 +3586,14 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         })
         return undefined
       }, [deviceId, dshWeb && dshWeb.grantId, dshWebOpen, visible])
+      // mesh 会话和 DSH Web 共用同一个 workbench grant：内嵌在 workspace 时
+      // 同样要上报可见性，主进程才会维持授权（60s ping）。
+      React.useEffect(() => {
+        if (host.kind !== 'app' || !host.workbench || !host.workbench.view) return undefined
+        if (!currentState.mesh || currentState.deviceId !== deviceId || !currentState.grantId) return undefined
+        void host.workbench.view(deviceId, 'dsh', !!visible).catch(() => { /* 下一次可见性变化会重试 */ })
+        return undefined
+      }, [deviceId, currentState.mesh, currentState.grantId, visible])
       React.useEffect(() => {
         if (!dshWatch && !dshRelevant) { setDsh(null); return undefined }
         let alive = true
@@ -3404,14 +3711,22 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const dshDetecting = dshWatch && !dsh && currentState.status === 'error'
         const onNativeGuest = (guest) => {
           nativeGuestRef.current = guest
+          bindDshGuestFlowInjection(guest)
           if (!guest || guest.__tetherNativeBound) return
           guest.__tetherNativeBound = true
           guest.addEventListener('did-finish-load', async () => {
             const state = surfaceStateRef.current
-            const approvedEndpoint = state && safeDshNativeEndpoint(state.url)
-            const guestEndpoint = safeDshNativeEndpoint(guest.getURL())
+            const approvedEndpoint = state && (state.localDirect
+              ? safeLocalDshSurfaceUrl(state.url)
+              : state.mesh ? safeMeshDshEndpoint(state.url) : safeDshNativeEndpoint(state.url))
+            // mesh 工作台是 SPA：落地页可能带自己的路径与查询串，只校验同源。
+            const guestEndpoint = state && state.localDirect
+              ? safeLocalDshNativeUrl(guest.getURL(), state.url)
+              : state && state.mesh
+                ? (dshWebGuestSameOrigin(state.url, guest.getURL()) ? approvedEndpoint : '')
+                : safeDshNativeEndpoint(guest.getURL())
             if (!state || state.deviceId !== deviceId || !state.partition || !approvedEndpoint
-                || guestEndpoint !== approvedEndpoint) return
+                || !guestEndpoint || (!state.localDirect && guestEndpoint !== approvedEndpoint)) return
             try {
               const hasContent = await guest.executeJavaScript('document.body && (document.body.children.length > 0 || document.body.innerText.trim().length > 0)')
               if (!hasContent) throw new Error('empty')
@@ -3421,6 +3736,23 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
                 ? { ...prev, status: 'native-document-error', message: 'DSH 页面为空或未能挂载，请重新连接。' } : prev)
             }
           })
+          guest.addEventListener('did-navigate', (event) => {
+            if (!event || event.isMainFrame === false || typeof event.url !== 'string') return
+            const state = surfaceStateRef.current
+            if (!state || state.deviceId !== deviceId || !state.localDirect) return
+            const approved = safeLocalDshSurfaceUrl(state.url)
+            if (!approved) return
+            const approvedUrl = new URL(approved)
+            let landed
+            try { landed = new URL(event.url) } catch (_) { return }
+            if (landed.origin !== approvedUrl.origin || landed.pathname !== '/') return
+            // 本机描述符的 token 兑换后 DSH 用 303 回到 `/` 并丢掉查询串；
+            // 这里在同 origin 内再进一次带 tether_native=1 的映射页（一次本机导航）。
+            if (landed.searchParams.get('tether_native') === '1') return
+            if (guest.__tetherDirectNative) return
+            guest.__tetherDirectNative = true
+            try { void guest.loadURL(approvedUrl.origin + '/?tether_native=1').catch(() => {}) } catch (_) { /* guest 可能已销毁 */ }
+          })
           guest.addEventListener('did-fail-load', (event) => {
             if (event.isMainFrame && event.errorCode !== -3) setState((prev) => prev.deviceId === deviceId
               ? { ...prev, status: 'native-document-error', message: 'DSH 页面加载失败，请重新连接。' } : prev)
@@ -3429,14 +3761,105 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             if (Number(httpStatus) >= 400) setState((prev) => prev.deviceId === deviceId
               ? { ...prev, status: 'native-document-error', message: 'DSH 服务返回 HTTP ' + Number(httpStatus) + '，请重新连接。' } : prev)
           })
+          guest.addEventListener('did-navigate-in-page', (event) => {
+            if (!event || event.isMainFrame !== true || typeof event.url !== 'string') return
+            const state = surfaceStateRef.current
+            if (!state || state.deviceId !== deviceId || !state.url) return
+            let actionUrl
+            try {
+              actionUrl = new URL(event.url)
+              if (actionUrl.origin !== new URL(state.url).origin) return
+            } catch (_) { return }
+            const params = new URLSearchParams(actionUrl.hash.slice(1))
+            // 回环直连 guest 的设备文件通道：hash 携带白名单请求/分片，宿主同源转发。
+            if (state.localDirect && tetherFsRelayHostReady() && params.get('tether_action') === 'fs') {
+              fsRelayOnFrame(guest, params)
+              if (typeof guest.executeJavaScript === 'function') {
+                void guest.executeJavaScript(
+                  "history.replaceState(history.state, '', location.pathname + location.search)"
+                ).catch(() => {})
+              }
+              return
+            }
+            if (params.get('tether_action') !== 'pick_folder') return
+            // 闭集校验与 agents-page 的 Codeg 桥一致：不许多余键、不许多值。
+            const requestIds = params.getAll('request_id')
+            const requestId = requestIds[0] || ''
+            const pickKind = params.get('pick_kind')
+            const pickMultiple = params.get('pick_multiple')
+            const actionKeys = Array.from(params.keys()).sort().join(',')
+            const extraKeys = actionKeys.split(',').filter((key) => key !== ''
+              && key !== 'tether_action' && key !== 'request_id'
+              && key !== 'pick_kind' && key !== 'pick_multiple')
+            const validFolderPick = requestIds.length === 1
+              && extraKeys.length === 0
+              && params.getAll('tether_action').length === 1
+              && (pickKind === null || pickKind === 'folder' || pickKind === 'file')
+              && (pickMultiple === null || pickMultiple === '1')
+              && /^[0-9a-f-]{36}$/i.test(requestId)
+            if (validFolderPick) {
+              const request = {
+                id: requestId, mode: 'webview', source: null,
+                kind: pickKind === 'file' ? 'file' : 'folder',
+                multiple: pickMultiple === '1'
+              }
+              setFolderPick((current) => current && current.id === requestId ? current : request)
+            }
+            if (typeof guest.executeJavaScript === 'function') {
+              void guest.executeJavaScript(
+                "history.replaceState(history.state, '', location.pathname + location.search)"
+              ).catch(() => {})
+            }
+          })
         }
+      React.useEffect(() => {
+        if (!['document-loading', 'document-loaded'].includes(currentState.status)
+            || currentState.deviceId !== deviceId) return undefined
+        if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return undefined
+        const onMessage = (event) => {
+          const frame = nativeIframeRef.current
+          const data = event && event.data
+          if (!frame || !data || typeof data !== 'object') return
+          if (data.type === 'tether:fs-request') {
+            if (event.source !== frame.contentWindow) return
+            const surface = surfaceStateRef.current
+            if (!surface || surface.deviceId !== deviceId || !surface.localDirect || !surface.url) return
+            let approved = ''
+            try { approved = new URL(surface.url).origin } catch (_) { approved = '' }
+            if (!approved || event.origin !== approved) return
+            void fsRelayPerform(
+              (payload) => { try { event.source.postMessage(payload, '*') } catch (_) { /* the frame is gone */ } },
+              { id: data.id, method: data.method, path: data.path, device: data.device, body: data.body }
+            )
+            return
+          }
+          if (data.type !== 'tether:pick-folder') return
+          if (event.source !== frame.contentWindow) return
+          const id = String(data.id || '')
+          if (!/^[0-9a-f-]{36}$/i.test(id)) return
+          const request = {
+            id, mode: 'iframe', source: event.source,
+            kind: data.kind === 'file' ? 'file' : 'folder',
+            multiple: data.multiple === true
+          }
+          setFolderPick((current) => current && current.id === id ? current : request)
+        }
+        window.addEventListener('message', onMessage)
+        return () => window.removeEventListener('message', onMessage)
+      }, [currentState.status, currentState.deviceId, deviceId])
       const nativeSurfaceGuest = ['native-document-loading', 'native-document-loaded', 'native-document-error'].includes(currentState.status)
           && currentState.deviceId === deviceId && host.kind === 'app' ? (
         h('div', { className: 'tether-native-surface', style: { ...nativeSurfaceContainerStyle(visible, layered), ...(layered ? {} : { position: 'relative' }) } },
           currentState.status === 'native-document-error' ? h('div', { role: 'alert', style: { position: 'absolute', inset: 0, zIndex: 2, display: 'grid', placeItems: 'center', alignContent: 'center', gap: 10, background: C.bg } },
             h('div', null, currentState.message || 'DSH 页面无法连接。'), btn('重新连接', retryDocument, { primary: true })) : null,
           h('webview', { key: currentState.grantId, partition: currentState.partition, src: currentState.url, ref: onNativeGuest,
-            style: { width: '100%', height: '100%', border: 0, display: 'flex' } }))
+            style: { width: '100%', height: '100%', border: 0, display: 'flex' } }),
+          folderPick ? h(TetherFolderPickDialog, {
+            key: folderPick.id, React, C, Glyph, api, post, device: deviceId,
+            kind: folderPick.kind === 'file' ? 'file' : 'folder',
+            multiple: folderPick.multiple === true,
+            onDone: closeFolderPick
+          }) : null)
       ) : null
       const [dshStalledReady, setDshStalledReady] = React.useState(false)
       React.useEffect(() => {
@@ -3525,6 +3948,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             h('iframe', {
               key: deviceId + ':' + (currentState.pid || 0),
               src: currentState.url,
+              ref: nativeIframeRef,
               sandbox: 'allow-scripts allow-same-origin allow-forms allow-downloads allow-modals',
               onLoad: () => {
                 const loadedState = surfaceStateRef.current
@@ -3542,6 +3966,12 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
               referrerPolicy: 'no-referrer',
               style: { flex: '1 1 auto', width: '100%', height: '100%', minWidth: 0, minHeight: 0, border: 0, background: C.bg }
             }),
+            folderPick ? h(TetherFolderPickDialog, {
+              key: folderPick.id, React, C, Glyph, api, post, device: deviceId,
+              kind: folderPick.kind === 'file' ? 'file' : 'folder',
+              multiple: folderPick.multiple === true,
+              onDone: closeFolderPick
+            }) : null,
             currentState.status === 'document-loading' ? h('div', {
               role: 'status', 'aria-live': 'polite',
               style: { position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', padding: '6px 10px', borderRadius: 6, background: 'rgba(255,255,255,.92)', color: C.sub, fontSize: 12, boxShadow: '0 1px 4px rgba(16,24,40,.12)', pointerEvents: 'none' }
@@ -5562,19 +5992,43 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         .map((s) => [normPath(s.workspace), s.workspace])).values())
       const workspaceKey = workspaceNodes.map((w) => w.path + ':' + w.sessions.map((s) => s.key).join('|')).join(';')
 
+      // 会话正文没有增量参数，只能整份取；但只有内容真的变了才重渲染，
+      // 连续 3 次没变化就退避到 5s（原来固定 1.5s 全量重渲染）。
       React.useEffect(() => {
         if (!sessionId || !deviceId) { setSessionData(null); setSessionLoading(false); return }
         let live = true
-        const load = async () => {
-          setSessionLoading(true)
+        let timer = null
+        let idleTicks = 0
+        let signature = ''
+        const sessionSignature = (data) => {
+          if (!data) return ''
+          const turns = Array.isArray(data.turns) ? data.turns : []
+          const lastTurn = turns[turns.length - 1]
+          const blocks = lastTurn && Array.isArray(lastTurn.blocks) ? lastTurn.blocks : []
+          const lastBlock = blocks[blocks.length - 1]
+          const lastLen = lastBlock ? String(lastBlock.text || lastBlock.result || '').length : 0
+          return [data.status || '', data.updated_at || '', turns.length, blocks.length, lastLen].join(':')
+        }
+        const schedule = () => {
+          if (!live) return
+          const delay = idleTicks >= 3 ? 5000 : idleTicks >= 1 ? 3000 : 1500
+          timer = setTimeout(() => { void load(false) }, delay)
+        }
+        const load = async (initial) => {
+          if (initial) setSessionLoading(true)
           try {
             const data = await api('/api/devices/' + encodeURIComponent(deviceId) + '/dsh/sessions/' + encodeURIComponent(sessionId))
-            if (live) { setSessionData(data); setSessionLoading(false) }
+            if (!live) return
+            const next = sessionSignature(data)
+            const changed = initial || next !== signature
+            signature = next
+            idleTicks = changed ? 0 : idleTicks + 1
+            if (changed) { setSessionData(data); setSessionLoading(false) }
           } catch (e) { if (live) { setSessionLoading(false); fail(e) } }
+          schedule()
         }
-        load()
-        const t = setInterval(load, 1500)
-        return () => { live = false; clearInterval(t) }
+        void load(true)
+        return () => { live = false; if (timer) clearTimeout(timer) }
       }, [sessionId, deviceId])
 
       React.useEffect(() => {
@@ -5609,18 +6063,59 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         if (target) { setSessionId(target.session_id); setRunId('') }
       }, [nativeKey, runId])
 
+      // run events 现在按 after_seq 增量取；上游若忽略该参数（首条 seq 不大于
+      // 游标）就整表替换，并靠签名比对避免每秒重渲染。没有新事件时逐级退避 1→2→3→5s。
       React.useEffect(() => {
         if (!runId) { setRunEvents([]); return }
         let live = true
+        let timer = null
+        let events = []
+        let cursor = 0
+        let idleTicks = 0
+        let signature = ''
+        const seqOf = (event) => {
+          const value = Number(event && event.seq)
+          return Number.isFinite(value) ? value : 0
+        }
+        const signatureOf = (list) => {
+          if (!list.length) return '0'
+          const last = list[list.length - 1]
+          return list.length + ':' + seqOf(last) + ':' + String((last && last.kind) || '')
+        }
+        const schedule = () => {
+          if (!live) return
+          const delay = idleTicks >= 3 ? 5000 : idleTicks === 2 ? 3000 : idleTicks === 1 ? 2000 : 1000
+          timer = setTimeout(() => { void load() }, delay)
+        }
         const load = async () => {
           try {
-            const data = await api('/api/runs/' + encodeURIComponent(runId) + '/events?after_seq=0')
-            if (live) setRunEvents(data.events || [])
-          } catch (_) { /* keep previous */ }
+            const data = await api('/api/runs/' + encodeURIComponent(runId) + '/events?after_seq=' + cursor)
+            if (!live) return
+            const incoming = Array.isArray(data && data.events) ? data.events : []
+            if (incoming.length) {
+              const first = seqOf(incoming[0])
+              // 没有 seq 字段或首条不超过游标：按整表快照处理，行为等同原来的全量拉取。
+              const fullSnapshot = !first || (cursor > 0 && first <= cursor)
+              const next = fullSnapshot ? incoming : events.concat(incoming)
+              const lastSeq = seqOf(next[next.length - 1])
+              if (lastSeq > 0) cursor = Math.max(cursor, lastSeq)
+              const nextSignature = signatureOf(next)
+              if (nextSignature !== signature) {
+                signature = nextSignature
+                events = next
+                idleTicks = 0
+                setRunEvents(next)
+              } else {
+                idleTicks += 1
+              }
+            } else {
+              idleTicks += 1
+            }
+          } catch (_) { idleTicks += 1 /* keep previous */ }
+          schedule()
         }
-        load()
-        const t = setInterval(load, 1000)
-        return () => { live = false; clearInterval(t) }
+        void load()
+        return () => { live = false; if (timer) clearTimeout(timer) }
       }, [runId])
 
       const runConversation = (run, events) => {
@@ -7500,7 +7995,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             (agentsMounted || view === 'agents') ? h('div', { style: { flex: '1 1 auto', minWidth: 0, minHeight: 0, display: view === 'agents' ? 'flex' : 'none' } },
               h(createAgentsPage, {
                 key: ACTIVE_BASE_GENERATION + '|' + String((state && state.user && (state.user.id || state.user.email)) || accountName || hubEmail || ''),
-                React, Glyph, post, C, host,
+                React, Glyph, post, api, C, host,
                 isActive: view === 'agents',
                 devices: (state && state.devices) || [],
                 localDevice: appLocalDevice,

@@ -22,6 +22,7 @@ import secrets
 import shutil
 import stat
 import sqlite3
+import sys
 import time
 import threading
 import uuid
@@ -603,6 +604,7 @@ class FsService:
         self.sftpgo_grants.transfer_jobs = self.transfer_jobs
         self.sftpgo_grants.restore_service_port()
         self.mesh_runtime = None
+        self.mesh_supervisor = None
         self.sftp_relay = ManagedSftpRelay(data_dir, device)
         self._sftp_relay_maintenance = threading.RLock()
         mesh_core = os.environ.get("TETHER_EASYTIER_CORE", "")
@@ -617,6 +619,9 @@ class FsService:
             self.mesh_runtime = EasyTierRuntime(mesh_core, mesh_cli, mesh_data_root,
                                                 record_root=record_root)
             self.transfer_jobs.socks_proxy_resolver = self._network_socks_proxy
+            from .mesh_supervisor import MeshSupervisor
+            self.mesh_supervisor = MeshSupervisor(
+                self.mesh_runtime, busy=lambda network_id: bool(self._mesh_busy_reasons(network_id)))
         self.service_access = ServiceAccess(data_dir, target_id=device, agents_runtime=self.agents_runtime,
                                             dsh_web=self.dsh_web, network_address=self._network_address)
         try:
@@ -629,6 +634,36 @@ class FsService:
         if self._sftp_relay_recovering:
             threading.Thread(target=self._recover_sftp_relay_mappings, name="tether-sftp-relay-recover",
                              daemon=True).start()
+
+    def start_mesh_supervisor(self) -> None:
+        """Begin self-managing recorded managed networks; safe to call more than once."""
+        supervisor = self.mesh_supervisor
+        if supervisor is None:
+            return
+        try:
+            supervisor.start()
+        except Exception as exc:  # noqa: BLE001 - mesh recovery must not block node startup
+            print(f"[mesh] supervisor did not start: {exc}", file=sys.stderr)
+
+    def stop_mesh_supervisor(self) -> None:
+        supervisor = self.mesh_supervisor
+        if supervisor is not None:
+            supervisor.stop()
+
+    def mesh_summary(self, network_id: str | None = None) -> dict[str, Any]:
+        """Report what the Node last read itself; unknown stays unknown."""
+        supervisor = self.mesh_supervisor
+        if supervisor is None:
+            return {"available": False, "reason": "mesh_runtime_missing", "running": False, "networks": []}
+        summary = {"available": True, **supervisor.summary()}
+        if network_id is not None:
+            entry = supervisor.network(str(network_id))
+            summary["network"] = entry
+            if entry is None:
+                summary["network"] = {"network_id": str(network_id), "state": "unknown",
+                                      "peer_connectivity": "unknown", "peers": None,
+                                      "last_error": "network_not_supervised"}
+        return summary
 
     def _network_address(self, network_id: str) -> str:
         runtime = self.mesh_runtime
