@@ -114,6 +114,25 @@ def test_local_api_exposes_the_same_host_surface_url(local_api) -> None:
         server.server_close()
 
 
+def test_local_api_reads_real_dsh_account_status(local_api) -> None:
+    base = local_api["api"]
+    api = SimpleNamespace(fs=base.fs, dsh_sessions=base.dsh_sessions,
+                          dsh_rpc=SimpleNamespace(account_status=lambda: {
+                              "state": "logged_in", "reason": "credential-stored",
+                              "attempt_phase": "succeeded", "error_code": None
+                          }))
+    store = SimpleNamespace(snapshot=lambda device: {"device": device})
+    server = console.start(store, "DEV", 0, api=api, token="local-token")
+    try:
+        status, body = call(server.server_address[1], "GET", "/api/devices/DEV/dsh/account-status")
+        assert status == 200
+        assert body == {"state": "logged_in", "reason": "credential-stored",
+                        "attempt_phase": "succeeded", "error_code": None}
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
 def test_local_surface_route_reports_unavailable(local_api) -> None:
     base = local_api["api"]
     api = SimpleNamespace(fs=base.fs, dsh_sessions=base.dsh_sessions,

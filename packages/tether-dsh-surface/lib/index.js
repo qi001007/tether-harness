@@ -1,10 +1,13 @@
+import crypto from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createLocalPluginUpdateHandler, selectedProfile } from './local-updates.js'
 export const name = 'tether-dsh-surface'
-export const inject = ['webServer', 'connection']
+export const inject = ['webServer', 'connection', 'accountController']
+
+const SURFACE_INSTANCE_TOKEN = crypto.randomUUID().replace(/-/g, '')
 
 function isLoopbackOrigin(value) {
   let url
@@ -27,6 +30,11 @@ function identityDirectory() {
 
 function pidIsAlive(pid) {
   try { process.kill(pid, 0); return true } catch (error) { return error.code === 'EPERM' }
+}
+
+function processStartedAt() {
+  const started = Date.now() - Math.max(0, process.uptime() * 1000)
+  return Math.round(started)
 }
 
 function loadedPluginVersion() {
@@ -77,6 +85,8 @@ function publish(webServer, connection) {
   const descriptor = {
     version: 1,
     pid: process.pid,
+    pid_started_at: processStartedAt(),
+    instance_token: SURFACE_INSTANCE_TOKEN,
     profile: installedProfile(),
     origin,
     authenticated_url: connection.authenticatedUrl(origin),
@@ -116,7 +126,8 @@ function publish(webServer, connection) {
   return () => {
     try {
       const latest = JSON.parse(fs.readFileSync(target, 'utf8'))
-      if (latest.pid === process.pid && latest.origin === origin) fs.unlinkSync(target)
+      if (latest.pid === process.pid && latest.instance_token === SURFACE_INSTANCE_TOKEN
+          && latest.origin === origin) fs.unlinkSync(target)
     } catch (error) {
       if (error.code !== 'ENOENT') throw error
     }
@@ -145,11 +156,36 @@ export function apply(ctx) {
     if (action !== 'get') throw new Error('unsupported local identity operation')
     return { ok: true, value: { device_id: readLocalDeviceId() } }
   })
+  const disposeAccount = registerRpc(connection, ctx, '/tether-dsh-account-status', async (action, _payload, _signal, peer) => {
+    if (peer?.principal?.kind !== 'owner') {
+      return { ok: false, error: { code: 'forbidden', message: 'Only the Host owner may read DSH account presence.', details: {} } }
+    }
+    if (action !== 'get') throw new Error('unsupported local account operation')
+    try {
+      const view = await ctx.accountController.getState()
+      const status = view && view.status
+      if (status !== 'signed-out' && status !== 'credential-stored') {
+        return { ok: true, value: { state: 'unknown', reason: 'invalid_account_projection', error_code: null } }
+      }
+      const attemptPhase = view.attempt && typeof view.attempt.phase === 'string' ? view.attempt.phase : null
+      const errorCode = view.attempt && typeof view.attempt.errorCode === 'string' ? view.attempt.errorCode : null
+      return { ok: true, value: {
+        state: status === 'credential-stored' ? 'logged_in' : 'logged_out',
+        reason: status,
+        attempt_phase: attemptPhase,
+        error_code: errorCode
+      } }
+    } catch (error) {
+      return { ok: true, value: { state: 'unknown', reason: 'account_status_unavailable',
+        error_code: String(error && error.code || 'unavailable').slice(0, 64) } }
+    }
+  })
   ctx.effect(() => () => {
     disposed = true
     dispose?.()
     void disposeUpdates?.()
     void disposeIdentity?.()
+    void disposeAccount?.()
   })
   const start = () => {
     if (!disposed) dispose = publish(ctx.webServer, ctx.connection)

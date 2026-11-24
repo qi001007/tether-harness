@@ -30,7 +30,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 DESCRIPTOR_NAME = ("storages", "tether", "native-surface.json")
-READ_ENDPOINTS = frozenset({"session/list", "session/page"})
+READ_ENDPOINTS = frozenset({"session/list", "session/page", "tether-dsh-account-status"})
 ALLOWED_ENDPOINTS = READ_ENDPOINTS | {"session/prompt"}
 AUTH_COOKIE_PREFIX = "dsh-auth"
 TIMEOUT = 20.0
@@ -284,6 +284,21 @@ class DshRpcClient:
         if not isinstance(value, dict) or not isinstance(value.get("records"), list):
             raise DshRpcError("native DSH session page malformed", "bad_response")
         return value
+
+    def account_status(self) -> dict[str, Any]:
+        """Return a redacted DSH account projection; absence of a source is unknown."""
+        try:
+            value = self.rpc("tether-dsh-account-status", {"action": "get"})
+        except DshRpcError as exc:
+            return {"state": "unknown", "reason": exc.code}
+        if not isinstance(value, dict):
+            return {"state": "unknown", "reason": "malformed_account_status"}
+        state = value.get("state") if value.get("state") in {"logged_in", "logged_out", "unknown"} else "unknown"
+        result = {"state": state, "reason": str(value.get("reason") or "provided")[:80]}
+        for key in ("attempt_phase", "error_code"):
+            raw = value.get(key)
+            result[key] = raw[:64] if isinstance(raw, str) and raw else None
+        return result
 
     # -- writer API --------------------------------------------------------
     def prompt(self, session_id: str, text: str, request_id: str | None = None,

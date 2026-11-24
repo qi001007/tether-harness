@@ -2408,6 +2408,17 @@ class FsService:
                        phase="intent", result="started" if result.get("installing") else "skipped")
         return result
 
+    def _op_dsh_account_status(self, _args: dict[str, Any]) -> dict[str, Any]:
+        client = getattr(self, "dsh_rpc", None)
+        account_status = getattr(client, "account_status", None)
+        if not callable(account_status):
+            return {"device_id": self.policy.device, "state": "unknown", "reason": "account_rpc_unavailable"}
+        result = account_status()
+        self.audit.add(op="dsh_account_status", path=str(result.get("reason") or "checked"),
+                       mode=self.policy.data.get("mode"), phase="result",
+                       result=str(result.get("state") or "unknown"))
+        return result
+
     def _op_dsh_install_plugin(self, _args: dict[str, Any]) -> dict[str, Any]:
         result = install_dsh_plugin(self.dsh_desktop)
         self.audit.add(op="dsh_install_plugin", path=result.get("profile_path") or "",

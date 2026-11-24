@@ -157,14 +157,14 @@ test('same-actor workbench refresh reuses its SSE and only rebuilds closed or ch
 })
 
 test('legacy Codeg bridge accepts only targetId and keeps the token URL in main-process guest preparation', () => {
-  assert.match(main, /handleTrusted\('tether:workbench-open-legacy-codeg',\s*async \(_event, targetId\) => nativeWorkbench\.openLegacyCodeg\(targetId\)/)
+  assert.match(main, /handleTrusted\('tether:workbench-open-legacy-codeg',[\s\S]*nativeWorkbench\.openLegacyCodeg\(targetId,[\s\S]*allowModernLocal/)
   assert.match(preload, /workbenchOpenLegacyCodeg:\s*\(targetId\)\s*=>\s*ipcRenderer\.invoke\('tether:workbench-open-legacy-codeg', targetId\)/)
   assert.match(electronHost, /openLegacyCodeg:\s*\(targetId\)\s*=>\s*window\.tetherApp\.workbenchOpenLegacyCodeg\(targetId\)/)
   assert.match(main, /nativeWorkbench\.prepareGuest\(contents\)/)
   const attachedGuest = main.slice(main.indexOf("mainWindow.webContents.on('did-attach-webview'"), main.indexOf("mainWindow.on('closed'"))
   assert.ok(attachedGuest.indexOf("contents.on('will-navigate'") < attachedGuest.indexOf('nativeWorkbench.prepareGuest(contents)'),
     'the token URL is loaded only after navigation guards are installed')
-  assert.match(agentsPage, /await host\.workbench\.openLegacyCodeg\(device\)/)
+  assert.match(agentsPage, /await host\.workbench\.openLegacyCodeg\(device(?:\s*,\s*\{[^}]*forceBootstrapRevision[^}]*\})?\)/)
   assert.doesNotMatch(preload, /tokenUrl|legacyTokenUrl|token\.html/)
   assert.doesNotMatch(electronHost, /tokenUrl|legacyTokenUrl|token\.html/)
   // The Codeg runtime publishes its token bootstrap page; the renderer accepts it only

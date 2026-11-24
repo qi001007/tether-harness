@@ -25,6 +25,13 @@ DSH_VERSION = "0.2.1-rc.5"
 PLUGIN_VERSION = "0.2.93"
 PLUGIN_SHA256 = "08f33b371de45895316a3e132f40c11976ed30cdd2fceebc38bcab2608c1f9df"
 SUPPORTED_SYSTEMS = {"Windows", "Linux", "Darwin"}
+# DSH Web ships a node-pty prebuild per platform and there is no linux-arm64 one,
+# so a Pi has to be told the capability is unavailable instead of being offered an
+# install that cannot succeed. macOS arm64 does ship a prebuild and stays supported.
+LINUX_SUPPORTED_ARCHITECTURES = {"x86_64", "amd64"}
+DSH_STATE_ABSENT = "absent"
+DSH_STATE_PRESENT_BUT_NOT_RUNNABLE = "present_but_not_runnable"
+DSH_STATE_RUNNING = "running"
 STARTUP_TIMEOUT = 25.0
 PLUGIN_TIMEOUT = 300.0
 TOKEN_RE = re.compile(r"[?&]token=([A-Za-z0-9_-]{16,512})")
@@ -62,9 +69,18 @@ class DshWeb:
         self._reader: threading.Thread | None = None
         self._ready = threading.Event()
 
-    def _bundle_error(self) -> tuple[str, str] | None:
-        if platform.system() not in SUPPORTED_SYSTEMS:
-            return "unsupported_platform", "DSH Web is not supported on this operating system"
+    @staticmethod
+    def _platform_support() -> tuple[bool, str]:
+        """Whether this OS *and* architecture ship a DSH Web bundle."""
+        system = platform.system()
+        if system not in SUPPORTED_SYSTEMS:
+            return False, "unsupported_platform"
+        if system == "Linux" and platform.machine().lower() not in LINUX_SUPPORTED_ARCHITECTURES:
+            return False, "unsupported_architecture"
+        return True, ""
+
+    def _bundle_presence(self) -> tuple[str, str] | None:
+        """Check fixed files without conflating their presence with runnability."""
         if self.node_executable is None or not self.node_executable.is_file():
             return "node_runtime_missing", "The bundled Node.js runtime is missing"
         if self.entry is None or self.package_json is None or not self.entry.is_file() or not self.package_json.is_file():
@@ -90,13 +106,37 @@ class DshWeb:
             return "dsh_plugin_bundle_invalid", "The frozen Tether DSH plugin bundle failed its SHA-256 check"
         return None
 
+    def _bundle_error(self) -> tuple[str, str] | None:
+        supported, reason = self._platform_support()
+        if not supported:
+            return reason, ("DSH Web is not supported on this operating system"
+                            if reason == "unsupported_platform"
+                            else "DSH Web has no runtime bundle for this device architecture")
+        return self._bundle_presence()
+
+    def _dsh_state(self, running: bool) -> str:
+        """One exact field shape, not separate support/install/run booleans.
+
+        ``present_but_not_runnable`` is deliberately narrow: the fixed bundle is
+        on disk but this OS/arch combination cannot execute it. A complete,
+        supported bundle that is merely idle stays represented by
+        ``installed=true`` and ``running=false``; it must not borrow the
+        architecture-mismatch state.
+        """
+        if running:
+            return DSH_STATE_RUNNING
+        _, reason = self._platform_support()
+        if reason == "unsupported_architecture" and self._bundle_presence() is None:
+            return DSH_STATE_PRESENT_BUT_NOT_RUNNABLE
+        return DSH_STATE_ABSENT
+
     def status(self) -> dict[str, Any]:
         bundle_error = self._bundle_error()
         running, port = self._owned_status()
         error_code = self._error_code or (bundle_error[0] if bundle_error else "")
         error = self._error or (bundle_error[1] if bundle_error else "")
         return {
-            "supported": platform.system() in SUPPORTED_SYSTEMS,
+            "supported": self._platform_support()[0],
             "installed": bundle_error is None,
             "running": running,
             "installing": self._starting,
@@ -106,6 +146,7 @@ class DshWeb:
             "device_id": "",
             "error_code": error_code,
             "error": error,
+            "dsh_state": self._dsh_state(running),
         }
 
     def install(self) -> dict[str, Any]:

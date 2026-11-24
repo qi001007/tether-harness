@@ -14,6 +14,8 @@ from tether.node.native_surface import MAX_BODY, NativeSurface, NativeSurfaceErr
 from tether.node.fs_service import FsService
 import tether.node.native_surface as native_surface_module
 
+ORIGINAL_PROCESS_IDENTITY_MATCHES = NativeSurface._process_identity_matches
+
 GZIP_BODY = gzip.compress(b"native gzip response body" * 200, mtime=0)
 HTML_BODY = gzip.compress(
     b"<!doctype html><html><head><meta charset=\"utf-8\"></head><body>native</body></html>", mtime=0
@@ -118,6 +120,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def log_message(self, *_):
         pass
+
+
+@pytest.fixture(autouse=True)
+def trust_synthetic_descriptor_processes(monkeypatch):
+    monkeypatch.setattr(
+        NativeSurface, "_process_identity_matches",
+        lambda self, *args, **kwargs: (True, "ready"), raising=False
+    )
 
 
 @pytest.fixture
@@ -390,11 +400,112 @@ def test_http_reauthenticates_on_the_dsh_auth_page(native_home):
     assert base64.b64decode(result["body_base64"]) == b"native"
 
 
+def test_dual_instances_report_bundled_web_instead_of_stale_desktop(tmp_path, native_home):
+    desktop_home, port, _server = native_home
+    web_home = tmp_path / "node-data" / "dsh-web" / "home"
+    descriptor = web_home / "storages" / "tether" / "native-surface.json"
+    descriptor.parent.mkdir(parents=True)
+    descriptor.write_text(json.dumps({
+        "version": 1, "profile": "web", "pid": 9400,
+        "origin": f"http://127.0.0.1:{port}",
+        "authenticated_url": f"http://127.0.0.1:{port}/?token=web-token",
+        "updated_at": 2,
+    }), encoding="utf-8")
+    (desktop_home / "storages" / "tether" / "native-surface.json").unlink()
+
+    surface = NativeSurface(desktop_home, fallback_homes=(web_home,))
+
+    assert surface.local_url() == f"http://127.0.0.1:{port}/?token=web-token"
+    info = surface.descriptor_info()
+    assert info["instance_kind"] == "node-bundled-web"
+    assert info["profile"] == "web"
+    assert info["pid"] == 9400
+    assert info["account_state"] == "unknown"
+    assert "web-token" not in json.dumps(info)
+
+
+class FakeIdentityProcess:
+    def __init__(self, name, argv, ports):
+        self._attrs = {
+            "name": name, "exe": argv[0] if argv else "", "cmdline": argv,
+            "create_time": 1000,
+            "net_connections": [type("Connection", (), {"laddr": ("127.0.0.1", port)})() for port in ports],
+        }
+
+    def as_dict(self, _attrs):
+        return self._attrs
+
+
+def test_descriptor_identity_rejects_reused_pid_and_port_mismatch(tmp_path, monkeypatch):
+    monkeypatch.setattr(native_surface_module.psutil, "Process",
+                        lambda pid: FakeIdentityProcess("steamwebhelper.exe", ["steamwebhelper.exe"], []))
+    surface = NativeSurface(tmp_path)
+
+    ok, reason = ORIGINAL_PROCESS_IDENTITY_MATCHES(
+        surface, 5196, 64053, layer="desktop", profile="desktop", home=tmp_path)
+
+    assert ok is False
+    assert reason == "port_owner_mismatch"
+
+
+def test_descriptor_identity_accepts_bundled_web_only_with_matching_profile(tmp_path, monkeypatch):
+    argv = ["E:/apps/tether/resources/tether-runtime/components/nodejs/node.exe",
+            "E:/apps/tether/resources/tether-runtime/components/dsh/node_modules/@deepseek-ai/dsh/lib/bin.js",
+            "web", "--host", "127.0.0.1", "--no-open", "--port", "0"]
+    monkeypatch.setattr(native_surface_module.psutil, "Process",
+                        lambda pid: FakeIdentityProcess("node.exe", argv, [50669]))
+    surface = NativeSurface(tmp_path)
+
+    ok, reason = ORIGINAL_PROCESS_IDENTITY_MATCHES(
+        surface, 9400, 50669, layer="node-bundled-web", profile="web", home=tmp_path)
+
+    assert ok is True
+    assert reason == "ready"
+
+
+def test_stale_primary_descriptor_is_retired_before_using_bundled_web(native_home, tmp_path):
+    _desktop_home, port, _server = native_home
+    desktop_home = tmp_path / "stale-desktop-home"
+    desktop_descriptor = desktop_home / "storages" / "tether" / "native-surface.json"
+    desktop_descriptor.parent.mkdir(parents=True)
+    desktop_descriptor.write_text(json.dumps({
+        "version": 1, "profile": "desktop", "pid": 5196,
+        "origin": "http://127.0.0.1:1", "authenticated_url": "http://127.0.0.1:1/?token=stale",
+        "updated_at": 1,
+    }), encoding="utf-8")
+    web_home = tmp_path / "node-data" / "dsh-web" / "home"
+    web_descriptor = web_home / "storages" / "tether" / "native-surface.json"
+    web_descriptor.parent.mkdir(parents=True)
+    web_descriptor.write_text(json.dumps({
+        "version": 1, "profile": "web", "pid": 9400,
+        "origin": f"http://127.0.0.1:{port}",
+        "authenticated_url": f"http://127.0.0.1:{port}/?token=web-token", "updated_at": 2,
+    }), encoding="utf-8")
+    surface = NativeSurface(desktop_home, fallback_homes=(web_home,))
+
+    assert surface._load() is True
+    assert not desktop_descriptor.is_file()
+    assert (desktop_home / "storages" / "tether" / "native-surface.json.stale").is_file()
+    info = surface.descriptor_info()
+    assert info["selected_layer"] == "node-bundled-web"
+    assert "desktop:port_down:1" in info["selection_reason"]
+
+
 def test_local_url_only_when_the_descriptor_is_live(native_home, tmp_path):
     home, port, _server = native_home
     surface = NativeSurface(home)
     assert surface.local_url() == f"http://127.0.0.1:{port}/?token=secret-token"
-    assert surface.descriptor_info() == {"pid": 123, "updated_at": 1.0}
+    info = surface.descriptor_info()
+    assert info["account_state"] == "unknown"
+    assert info["pid"] == 123
+    assert info["updated_at"] == 1.0
+    assert info["instance_kind"] == "desktop"
+    assert info["selected_layer"] == "desktop"
+    assert info["selection_reason"] == "primary_valid"
+    assert info["process_identity"] == "ready"
+    assert info["dsh_home"] == str(home)
+    assert info["dsh_home_label"] == home.name
+    assert info["port"] == port
     assert NativeSurface(tmp_path / "empty").local_url() is None
 
 
@@ -434,14 +545,15 @@ def test_active_profile_requires_profile_metadata_and_live_host_pid(tmp_path, mo
                 "authenticated_url": f"http://127.0.0.1:{port}/?token=fixture"}
         path.write_text(json.dumps(data), encoding="utf-8")
         queried = []
-        monkeypatch.setattr(native_surface_module.psutil, "pid_exists",
-                            lambda pid: queried.append(pid) or True)
+        monkeypatch.setattr(NativeSurface, "_process_identity_matches",
+                            lambda self, pid, port, **kwargs: queried.append((pid, port)) or (True, "ready"))
         assert NativeSurface(home).active_profile() == "work"
-        assert queried == [12345]
+        assert queried == [(12345, port), (12345, port)]
 
         data["pid"] = 2147483646
         path.write_text(json.dumps(data), encoding="utf-8")
-        monkeypatch.setattr(native_surface_module.psutil, "pid_exists", lambda _pid: False)
+        monkeypatch.setattr(NativeSurface, "_process_identity_matches",
+                            lambda self, pid, port, **kwargs: (False, "pid_missing"))
         assert NativeSurface(home).active_profile() is None
 
         data["pid"] = 12345

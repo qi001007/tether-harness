@@ -94,6 +94,28 @@ def test_page_arguments_match_native_schema(tmp_path: Path) -> None:
         "throughSeq": 42, "maxMessages": 20}}
 
 
+def test_account_status_returns_redacted_login_projection(tmp_path: Path) -> None:
+    transport = FakeTransport(reply(303, cookies=COOKIE),
+                              reply(200, ok({"state": "logged_in", "reason": "credential-stored",
+                                             "attempt_phase": "succeeded", "error_code": None})))
+    client = make_client(tmp_path, transport)
+
+    result = client.account_status()
+
+    assert result == {"state": "logged_in", "reason": "credential-stored",
+                      "attempt_phase": "succeeded", "error_code": None}
+    assert transport.calls[1]["url"] == "http://127.0.0.1:59999/api/tether-dsh-account-status"
+    assert transport.calls[1]["body"]["payload"] == {"args": {"action": "get"}}
+
+
+def test_account_status_unavailable_is_unknown_not_logged_in(tmp_path: Path) -> None:
+    transport = FakeTransport(reply(303, cookies=COOKIE),
+                              reply(200, failed("endpoint_not_found", "not installed")))
+    client = make_client(tmp_path, transport)
+
+    assert client.account_status() == {"state": "unknown", "reason": "endpoint_not_found"}
+
+
 def test_401_relogins_once(tmp_path: Path) -> None:
     transport = FakeTransport(reply(303, cookies=COOKIE),
                               reply(401),

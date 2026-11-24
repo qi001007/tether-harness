@@ -197,6 +197,11 @@ class NativeSurface:
         self._profile: str | None = None
         self._pid: int | None = None
         self._updated_at: float | None = None
+        self._instance_token = ""
+        self._pid_started_at: float | None = None
+        self._selected_layer = ""
+        self._selection_reason = ""
+        self._process_identity = ""
         self._jar = http.cookiejar.CookieJar()
         self._authenticated = False
         self._auth_lock = threading.Lock()
@@ -206,21 +211,90 @@ class NativeSurface:
         self._pending_http_streams = 0
         self._lock = asyncio.Lock()
 
+    def _layer_for_home(self, home: Path) -> str:
+        try:
+            resolved = home.resolve()
+            if resolved == self.home.resolve():
+                return "desktop"
+            if any(resolved == Path(candidate).resolve() for candidate in self.fallback_homes):
+                return "node-bundled-web"
+        except OSError:
+            pass
+        return "external"
+
+    def _process_identity_matches(self, pid: int, port: int, *, layer: str,
+                                  profile: str | None, home: Path,
+                                  pid_started_at: float | None = None) -> tuple[bool, str]:
+        """Reject a descriptor whose PID was recycled or does not own the advertised port."""
+        try:
+            process = psutil.Process(pid)
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            return False, "pid_missing"
+        try:
+            attrs = process.as_dict(["name", "exe", "cmdline", "create_time", "net_connections"])
+        except (psutil.AccessDenied, psutil.NoSuchProcess):
+            return False, "process_unreadable"
+        name = str(attrs.get("name") or "").lower()
+        exe = str(attrs.get("exe") or "").lower()
+        argv = [str(value).lower() for value in (attrs.get("cmdline") or [])]
+        try:
+            listening = {int(connection.laddr[1]) for connection in attrs.get("net_connections") or []}
+        except (AttributeError, OSError, ValueError):
+            listening = set()
+        if port not in listening:
+            return False, "port_owner_mismatch"
+        joined = " ".join(argv)
+        if layer == "node-bundled-web":
+            if profile != "web" or "@deepseek-ai/dsh/lib/bin.js" not in joined or "web" not in argv:
+                return False, "process_kind_mismatch"
+        else:
+            expected_profile_path = str((home / "profiles" / (profile or "")).resolve()).lower()
+            is_desktop_host = ("dsh-desktop-host" in joined
+                               or ("deepseek harness" in name and "@deepseek-ai" in joined))
+            if not is_desktop_host or profile != "desktop" or expected_profile_path not in joined:
+                return False, "process_kind_mismatch"
+        if pid_started_at is not None:
+            try:
+                created = float(attrs.get("create_time") or 0)
+                if created <= 0 or abs(created * 1000 - pid_started_at) > 5000:
+                    return False, "process_start_mismatch"
+            except (TypeError, ValueError):
+                return False, "process_start_mismatch"
+        return True, "ready"
+
+    def _retire_stale_descriptor(self, descriptor: Path, reason: str) -> None:
+        """Keep a forensic copy instead of letting a reused PID remain selectable."""
+        try:
+            stale = descriptor.with_name(descriptor.name + ".stale")
+            if stale.exists():
+                stale.unlink()
+            descriptor.replace(stale)
+        except OSError:
+            pass
+
+    def _instance_kind(self) -> str:
+        return self._layer_for_home(self._active_home)
+
     def _load(self) -> bool:
         failure = "descriptor_missing"
-        for home in (self.home, *self.fallback_homes):
+        selection_reasons: list[str] = []
+        for index, home in enumerate((self.home, *self.fallback_homes)):
+            layer = self._layer_for_home(home)
             descriptor = home / "storages" / "tether" / "native-surface.json"
             try:
                 stat = descriptor.stat()
                 data = json.loads(descriptor.read_text(encoding="utf-8"))
             except FileNotFoundError:
+                selection_reasons.append(f"{layer}:missing")
                 continue
             except (OSError, ValueError):
                 failure = "descriptor_invalid"
+                selection_reasons.append(f"{layer}:invalid")
                 continue
             origin, auth = data.get("origin"), data.get("authenticated_url")
             if data.get("version") != 1 or not isinstance(origin, str) or not isinstance(auth, str):
                 failure = "descriptor_invalid"
+                selection_reasons.append(f"{layer}:invalid")
                 continue
             try:
                 parsed = urllib.parse.urlsplit(origin)
@@ -240,12 +314,39 @@ class NativeSurface:
                     raise ValueError
             except (ValueError, TypeError):
                 failure = "descriptor_invalid"
+                selection_reasons.append(f"{layer}:invalid")
                 continue
             try:
                 with socket.create_connection((parsed.hostname or "", port), timeout=0.5):
                     pass
             except (OSError, ValueError):
                 failure = "host_unreachable"
+                selection_reasons.append(f"{layer}:port_down:{port}")
+                if index == 0:
+                    self._retire_stale_descriptor(descriptor, failure)
+                continue
+            profile = data.get("profile") if isinstance(data.get("profile"), str) else None
+            pid = data.get("pid") if type(data.get("pid")) is int else None
+            instance_token = (data.get("instance_token")
+                              if isinstance(data.get("instance_token"), str) else "")
+            pid_started_at = data.get("pid_started_at")
+            pid_started_at = float(pid_started_at) if isinstance(pid_started_at, (int, float)) else None
+            if pid is None:
+                failure = "descriptor_invalid"
+                selection_reasons.append(f"{layer}:pid_missing")
+                continue
+            if instance_token and not re.fullmatch(r"[0-9a-f]{32}", instance_token):
+                failure = "descriptor_invalid"
+                selection_reasons.append(f"{layer}:instance_token_invalid")
+                self._retire_stale_descriptor(descriptor, failure)
+                continue
+            process_ok, process_reason = self._process_identity_matches(
+                pid, port, layer=layer, profile=profile, home=home,
+                pid_started_at=pid_started_at)
+            if not process_ok:
+                failure = process_reason
+                selection_reasons.append(f"{layer}:{process_reason}:{pid}/{port}")
+                self._retire_stale_descriptor(descriptor, process_reason)
                 continue
             snapshot = (stat.st_mtime_ns, stat.st_size, origin)
             if self._snapshot is not None and (snapshot != self._snapshot or home != self._active_home):
@@ -255,14 +356,26 @@ class NativeSurface:
             self.descriptor = descriptor
             self._active_home = home
             self._snapshot, self._origin, self._auth_url = snapshot, origin.rstrip("/"), auth
-            profile, pid = data.get("profile"), data.get("pid")
             self._profile = profile if isinstance(profile, str) and re.fullmatch(r"[A-Za-z0-9_-]{1,80}", profile) else None
-            self._pid = pid if type(pid) is int and 0 < pid <= 2_147_483_647 else None
+            self._pid = pid if 0 < pid <= 2_147_483_647 else None
+            self._instance_token = instance_token if re.fullmatch(r"[0-9a-f]{32}", instance_token) else ""
+            self._pid_started_at = pid_started_at if pid_started_at and pid_started_at > 0 else None
             updated_at = data.get("updated_at")
             self._updated_at = float(updated_at) if isinstance(updated_at, (int, float)) and updated_at > 0 else None
+            same_selection = (self._selected_layer == layer
+                              and self._snapshot == snapshot
+                              and self._active_home == home)
+            self._selected_layer = layer
+            self._selection_reason = (self._selection_reason if same_selection
+                                      else "primary_valid" if index == 0
+                                      else "primary_stale_fallback_valid:" + ",".join(selection_reasons))
+            self._process_identity = process_reason
             self._reason = "ready"
             return True
         self._reason = failure
+        self._selected_layer = ""
+        self._selection_reason = ",".join(selection_reasons) or failure
+        self._process_identity = ""
         self._clear()
         return False
 
@@ -284,6 +397,11 @@ class NativeSurface:
         self._profile = None
         self._pid = None
         self._updated_at = None
+        self._instance_token = ""
+        self._pid_started_at = None
+        self._selected_layer = ""
+        self._selection_reason = self._reason
+        self._process_identity = ""
         self._reset_auth()
         self._close_channels()
         self._close_http_streams()
@@ -339,9 +457,14 @@ class NativeSurface:
             loaded = False
         if loaded and self._profile and self._pid is not None:
             try:
-                if psutil.pid_exists(self._pid):
+                port = urllib.parse.urlsplit(self._origin).port
+                process_ok, _reason = self._process_identity_matches(
+                    self._pid, int(port or 0), layer=self._selected_layer,
+                    profile=self._profile, home=self._active_home,
+                    pid_started_at=self._pid_started_at)
+                if process_ok:
                     return self._profile
-            except (OSError, ValueError):
+            except (AttributeError, OSError, TypeError, ValueError):
                 pass
         return self._profile_from_host_argv()
 
@@ -370,14 +493,33 @@ class NativeSurface:
         return {"available": True, "reason": "ready"}
 
     def descriptor_info(self) -> dict[str, Any]:
-        """Identity of the live DSH host, used by the UI to reload after a restart."""
+        """Safe identity of the mapped DSH instance; account state is deliberately unknown."""
         if not self.status().get("available"):
             return {}
-        info: dict[str, Any] = {}
+        parsed = urllib.parse.urlsplit(self._origin)
+        port = parsed.port
+        info: dict[str, Any] = {"account_state": "unknown"}
         if self._pid is not None:
             info["pid"] = self._pid
+        if self._profile:
+            info["profile"] = self._profile
+        if port is not None:
+            info["port"] = port
         if self._updated_at is not None:
             info["updated_at"] = self._updated_at
+            info["descriptor_age_s"] = max(0, int(time.time() - self._updated_at))
+        try:
+            info["dsh_home"] = str(self._active_home)
+            info["dsh_home_label"] = self._active_home.name
+        except OSError:
+            pass
+        info["instance_kind"] = self._instance_kind()
+        info["selected_layer"] = self._selected_layer
+        info["selection_reason"] = self._selection_reason
+        info["process_identity"] = self._process_identity
+        info["instance_token_present"] = bool(self._instance_token)
+        if self._pid_started_at:
+            info["pid_started_at"] = self._pid_started_at
         return info
 
     def local_url(self) -> str | None:

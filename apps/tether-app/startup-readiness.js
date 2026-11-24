@@ -16,17 +16,26 @@ function waitForSupervisorStart(startPromise, timeoutMs = 8000) {
 function probeLocalNodeApi({ port, device, token, timeoutMs = 1000 }) {
   const pathname = '/api/devices/' + encodeURIComponent(device) + '/policy'
   return new Promise((resolve) => {
+    let finished = false
+    const finish = (ready) => {
+      if (finished) return
+      finished = true
+      resolve(ready)
+    }
     const req = http.get({
       hostname: '127.0.0.1',
       port,
       path: pathname,
-      headers: { authorization: 'Bearer ' + token }
+      headers: { authorization: 'Bearer ' + token, connection: 'close' }
     }, (res) => {
+      const ready = res.statusCode === 200
       res.resume()
-      resolve(res.statusCode === 200)
+      res.on('end', () => req.destroy())
+      res.on('close', () => req.destroy())
+      finish(ready)
     })
-    req.setTimeout(timeoutMs, () => { req.destroy(); resolve(false) })
-    req.on('error', () => resolve(false))
+    req.setTimeout(timeoutMs, () => { req.destroy(); finish(false) })
+    req.on('error', () => finish(false))
   })
 }
 

@@ -1,7 +1,8 @@
 const { app, BrowserWindow, ipcMain, shell, session, safeStorage, webFrameMain, Tray, Menu, nativeImage, dialog } = require('electron')
 const fs = require('node:fs')
 const path = require('node:path')
-const { PARTITION_PREFIX, selectStalePartitions } = require('./data-maintenance')
+const { PARTITION_PREFIX, PARTITION_CACHE_SUBDIRS, partitionBudgetReport,
+  partitionDirectoryName, partitionHasCredentialEvidence } = require('./data-maintenance')
 const { pathToFileURL } = require('node:url')
 const { Supervisor } = require('./supervisor.js')
 const { waitForSupervisorStart, waitForLocalNodeApi, getLocalMeshRoute } = require('./startup-readiness.js')
@@ -16,6 +17,9 @@ const { createOidcAuth, createCandidateOidcOpenExternal } = require('./oidc-auth
 const { rendererDiagnostic, isSurfaceBootFailure, isSurfaceErrorPage, isSurfaceUnstyled, rendererFrameState, rendererFrameStyleState, rendererFrameText, rendererRequestScope, rendererSettledFrameState, safeRendererMessage, safeRendererPath } = require('./renderer-diagnostics.js')
 
 app.setName('Tether')
+// One identity string for the shell: the NSIS appId, the window's task-bar group
+// and every desktop entry must agree, or Windows splits them into two groups.
+const APP_USER_MODEL_ID = 'com.tether.app'
 const packaged = app.isPackaged
 const resourcesRoot = packaged ? process.resourcesPath : ''
 const repoRoot = packaged ? path.join(resourcesRoot, 'tether-source') : path.resolve(__dirname, '..', '..')
@@ -30,6 +34,8 @@ const appStartedAt = Number.isFinite(processCreationTime) ? processCreationTime 
 let appStartedVersion = ''
 try { appStartedVersion = String(JSON.parse(fs.readFileSync(path.join(repoRoot, 'version.json'), 'utf8')).components.app || '') } catch (_) { /* unknown runtime version */ }
 const hubConfigFile = path.join(dataDir, 'hub.json')
+const workbenchLoginStateFile = path.join(dataDir, 'workbench-login-state.json')
+const DSH_AUTH_COOKIE_PREFIX = 'dsh-auth'
 migrateLegacyData({ dataDir, candidateMode, dataDirOverride })
 
 function loadEnv() {
@@ -178,7 +184,7 @@ try {
   })
 } catch (_) { /* optional device credential changes are also handled on enrollment */ }
 app.setPath('userData', path.join(dataDir, 'electron'))
-if (process.platform === 'win32') app.setAppUserModelId('com.tether.app')
+if (process.platform === 'win32') app.setAppUserModelId(APP_USER_MODEL_ID)
 // Hub and mesh endpoints must be reached directly; a system proxy can silently
 // break them while leaving ordinary browsing intact.
 if (env.TETHER_USE_SYSTEM_PROXY !== '1') app.commandLine.appendSwitch('no-proxy-server')
@@ -224,32 +230,142 @@ function log(line) {
   fs.appendFileSync(logFile, new Date().toISOString() + ' ' + line + '\n')
 }
 
-function ensureAppShortcuts() {
-  if (process.platform !== 'win32' || env.TETHER_NO_SHORTCUTS === '1') return
-  const appPath = app.getAppPath()
-  const iconPath = path.join(packaged ? runtimeRoot : repoRoot, 'assets', 'tether-app-s.ico')
-  const options = {
-    target: process.execPath,
-    args: '"' + appPath + '"',
-    cwd: appPath,
-    icon: fs.existsSync(iconPath) ? iconPath : process.execPath,
-    iconIndex: 0,
-    description: 'Tether APP'
+function readWorkbenchLoginState() {
+  try {
+    const state = JSON.parse(fs.readFileSync(workbenchLoginStateFile, 'utf8'))
+    const entries = state && typeof state.entries === 'object' && !Array.isArray(state.entries)
+      ? state.entries : {}
+    const safeEntries = {}
+    for (const [name, value] of Object.entries(entries)) {
+      const updatedAt = Number(value && value.updatedAt)
+      if (isTrustedWorkbenchPartition(name) && Number.isFinite(updatedAt) && updatedAt > 0) {
+        safeEntries[name] = { updatedAt }
+      }
+    }
+    return { entries: safeEntries }
+  } catch (_) { return { entries: {} } }
+}
+
+function writeWorkbenchLoginState(state) {
+  try {
+    fs.mkdirSync(path.dirname(workbenchLoginStateFile), { recursive: true })
+    const temp = workbenchLoginStateFile + '.tmp'
+    fs.writeFileSync(temp, JSON.stringify(state, null, 2) + '\n')
+    fs.renameSync(temp, workbenchLoginStateFile)
+    return true
+  } catch (_) { return false }
+}
+
+function isTrustedWorkbenchPartition(partition) {
+  return /^persist:tether-(?:wb-[a-f0-9]{40}|dsh-local)$/.test(String(partition || ''))
+}
+
+function isTrustedDshOrigin(origin) {
+  try {
+    const parsed = new URL(String(origin))
+    return (parsed.protocol === 'https:' && parsed.port !== '80')
+      || (parsed.protocol === 'http:' && (parsed.hostname === '127.0.0.1' || parsed.hostname === '[::1]') && Number(parsed.port) > 0)
+  } catch (_) { return false }
+}
+
+function workbenchInstanceKey(partition) {
+  return String(partition || '').replace(/^persist:/, '')
+}
+
+async function inspectDshLoginState({ partition, origin }) {
+  if (!isTrustedWorkbenchPartition(partition) || !isTrustedDshOrigin(origin)) {
+    return { ok: false, state: 'unknown', reason: 'invalid_surface' }
   }
-  const links = new Set()
-  try { links.add(path.join(app.getPath('desktop'), 'Tether APP.lnk')) } catch (_) { /* no desktop folder */ }
-  try { links.add(path.join(app.getPath('programs'), 'Tether APP.lnk')) } catch (_) { /* no start menu */ }
-  for (const link of links) {
+  let cookies
+  try {
+    cookies = await session.fromPartition(partition).cookies.get({ url: new URL(origin).origin })
+  } catch (error) {
+    return { ok: false, state: 'unknown', reason: 'partition_unavailable',
+      message: String(error && error.message || error).slice(0, 180) }
+  }
+  const state = cookies.some((cookie) => cookie && typeof cookie.name === 'string'
+    && cookie.name.startsWith(DSH_AUTH_COOKIE_PREFIX) && String(cookie.value || '').length > 0) ? 'logged_in' : 'logged_out'
+  const checkedAt = Date.now()
+  const loginState = readWorkbenchLoginState()
+  const evidence = partitionHasCredentialEvidence(
+    path.join(app.getPath('userData'), 'Partitions', workbenchInstanceKey(partition)))
+  if (state === 'logged_in' || evidence) {
+    loginState.entries[partition] = { updatedAt: checkedAt }
+    writeWorkbenchLoginState(loginState)
+  }
+  return { ok: true, state, reason: 'partition_cookie', partitionKey: workbenchInstanceKey(partition),
+    checkedAt }
+}
+
+// The shell entry is owned by the installer. At startup the APP only brings the
+// canonical entry back to the shipped shape and removes the names that older
+// install paths wrote, because a second name on the desktop is a user-visible
+// defect no matter which path produced it.
+function ensureAppShortcuts() {
+  if (!packaged || process.platform !== 'win32' || env.TETHER_NO_SHORTCUTS === '1') return
+  const canonicalName = 'Tether.lnk'
+  const legacyNames = ['Tether APP.lnk', 'Tether-App.cmd', 'Tether APP.cmd']
+
+  // Desktop entries copied from process.execPath kept whatever path launched the
+  // APP. A machine that starts it through the D:\Apps\Tether compatibility
+  // junction would then teach the desktop to point at the junction forever.
+  const resolveReal = (value) => { try { return fs.realpathSync(value) } catch (_) { return value } }
+  const samePath = (left, right) => !!left && !!right &&
+    path.resolve(left).toLowerCase() === path.resolve(right).toLowerCase()
+
+  const target = resolveReal(process.execPath)
+  const installDir = path.dirname(target)
+  const iconPath = path.join(installDir, 'resources', 'tether-runtime', 'assets', 'tether-app-s.ico')
+  if (!fs.existsSync(iconPath)) {
+    log('shortcut repair skipped, packaged icon missing at ' + safeRendererPath(iconPath))
+    return
+  }
+  const options = {
+    target,
+    cwd: installDir,
+    icon: iconPath,
+    iconIndex: 0,
+    description: 'Tether',
+    appUserModelId: APP_USER_MODEL_ID
+  }
+
+  const folders = []
+  try { folders.push(app.getPath('desktop')) } catch (_) { /* no desktop folder */ }
+  try { folders.push(app.getPath('programs')) } catch (_) { /* no start menu folder */ }
+
+  for (const folder of folders) {
+    for (const name of legacyNames) {
+      const link = path.join(folder, name)
+      try {
+        if (!fs.existsSync(link)) continue
+        let ownedElsewhere = false
+        if (/\.lnk$/i.test(name)) {
+          const existing = shell.readShortcutLink(link)
+          ownedElsewhere = !!(existing && existing.target && fs.existsSync(existing.target) &&
+            !samePath(resolveReal(existing.target), target))
+        }
+        if (ownedElsewhere) {
+          log('legacy entry kept, it launches another install: ' + safeRendererPath(link))
+          continue
+        }
+        fs.rmSync(link, { force: true })
+        log('legacy entry removed: ' + safeRendererPath(link))
+      } catch (error) {
+        log('legacy entry cleanup failed path=' + safeRendererPath(link) +
+          ' message=' + safeRendererMessage(error && error.message))
+      }
+    }
+    const link = path.join(folder, canonicalName)
     try {
-      let existing
+      let existing = null
       try { existing = shell.readShortcutLink(link) } catch (_) { /* missing or unreadable */ }
-      const sameInstall = existing?.cwd
-        && path.resolve(existing.cwd).toLowerCase() === path.resolve(appPath).toLowerCase()
-      if (!sameInstall && existing?.target && fs.existsSync(existing.target)
-          && (!existing.cwd || fs.existsSync(existing.cwd))) continue
-      if (!shell.writeShortcutLink(link, 'update', options)) shell.writeShortcutLink(link, 'create', options)
+      if (existing && samePath(existing.target, target) && samePath(existing.cwd, installDir) &&
+          samePath(existing.icon, iconPath)) continue
+      if (!shell.writeShortcutLink(link, 'replace', options)) throw new Error('writeShortcutLink failed')
+      log('entry repaired: ' + safeRendererPath(link))
     } catch (error) {
-      log('shortcut update failed path=' + safeRendererPath(link) + ' message=' + safeRendererMessage(error && error.message))
+      log('entry repair failed path=' + safeRendererPath(link) +
+        ' message=' + safeRendererMessage(error && error.message))
     }
   }
 }
@@ -475,6 +591,10 @@ async function createWindow() {
     mainWindow.hide()
     createTray()
   })
+  // The shared web document is titled "Tether WebUI". Letting it rename the window
+  // would make the taskbar and Alt-Tab disagree with the name the installer puts
+  // on the desktop entry, so the shell keeps its own title.
+  mainWindow.on('page-title-updated', (event) => { event.preventDefault() })
   mainWindow.webContents.on('will-attach-webview', (event, webPreferences, params) => {
     delete webPreferences.preload
     webPreferences.nodeIntegration = false
@@ -1099,7 +1219,10 @@ handleTrusted('tether:workbench-logout', async () => {
 }, () => ({ state: 'error' }))
 handleTrusted('tether:workbench-catalog', async (_event, targetId) => nativeWorkbench.catalog(targetId), () => ({ ok: false }))
 handleTrusted('tether:workbench-open', async (_event, targetId, serviceId) => nativeWorkbench.open(targetId, serviceId), () => ({ ok: false }))
-handleTrusted('tether:workbench-open-legacy-codeg', async (_event, targetId) => nativeWorkbench.openLegacyCodeg(targetId), () => ({ ok: false }))
+handleTrusted('tether:workbench-account-status', async (_event, targetId) => nativeWorkbench.accountStatus(targetId), () => ({ ok: false, state: 'unknown', reason: 'workbench_unavailable' }))
+handleTrusted('tether:workbench-open-legacy-codeg', async (_event, targetId) => nativeWorkbench.openLegacyCodeg(targetId, {
+  allowModernLocal: String(targetId || '') === String(supervisor.device || '')
+}), () => ({ ok: false }))
 handleTrusted('tether:workbench-open-dsh-surface', async (_event, targetId) => nativeWorkbench.openDshSurface(targetId), () => ({ ok: false }))
 handleTrusted('tether:workbench-close', async (_event, targetId, serviceId, grantId) => nativeWorkbench.close(targetId, serviceId, grantId), () => ({ ok: false }))
 handleTrusted('tether:workbench-view', async (_event, targetId, serviceId, visible) => nativeWorkbench.view(targetId, serviceId, visible), () => ({ ok: false }))
@@ -1210,6 +1333,7 @@ handleTrusted('tether:reset-surface-auth', async (_event, origin) => {
     return { ok: false, error: String(error && error.message || error) }
   }
 })
+handleTrusted('tether:inspect-surface-login', (_event, request) => inspectDshLoginState(request || {}))
 function readHubConfig() {
   try { return JSON.parse(fs.readFileSync(hubConfigFile, 'utf8')) || {} } catch (_) { return {} }
 }
@@ -1409,27 +1533,89 @@ if (!locked) {
       void runInstalledSignIn()
     }
   })
-  function gcWorkbenchPartitions() {
+  async function inspectDshAuthCookiePartition(partitionDirectory, name) {
+    try {
+      const partition = 'persist:' + name
+      if (!isTrustedWorkbenchPartition(partition)) return { checked: false, logged: false, evidence: false }
+      const evidence = partitionHasCredentialEvidence(partitionDirectory)
+      let checked = false
+      try {
+        const cookies = await session.fromPartition(partition).cookies.get({})
+        checked = true
+        return { checked, evidence,
+          logged: cookies.some((cookie) => cookie && typeof cookie.name === 'string'
+            && cookie.name.startsWith(DSH_AUTH_COOKIE_PREFIX) && String(cookie.value || '').length > 0) }
+      } catch (_) { return { checked: false, evidence, logged: evidence } }
+    } catch (_) { return { checked: false, logged: false, evidence: false } }
+  }
+
+  function clearWorkbenchCacheOnly(dir, name) {
+    let cleared = 0
+    for (const relative of PARTITION_CACHE_SUBDIRS) {
+      try {
+        const target = path.join(dir, name, ...relative.split('/'))
+        if (!fs.existsSync(target)) continue
+        fs.rmSync(target, { recursive: true, force: true })
+        cleared += 1
+      } catch (_) { /* Chromium may still hold an open cache handle */ }
+    }
+    return cleared
+  }
+
+  async function gcWorkbenchPartitions() {
     try {
       const dir = path.join(app.getPath('userData'), 'Partitions')
-      const entries = fs.readdirSync(dir)
-        .filter((name) => name.startsWith(PARTITION_PREFIX))
-        .map((name) => {
-          try { return { name, mtimeMs: fs.statSync(path.join(dir, name)).mtimeMs } } catch (_) { return null }
-        })
-        .filter(Boolean)
-      const stale = selectStalePartitions(entries)
-      for (const name of stale) {
+      const raw = fs.readdirSync(dir).filter((name) => name.startsWith(PARTITION_PREFIX))
+      const entries = []
+      const unknownAccountSource = []
+      const loginState = readWorkbenchLoginState()
+      const cookieEvidencePartitions = []
+      for (const name of raw) {
+        const partitionKey = 'persist:' + name
+        if (loginState.entries[partitionKey] || !isTrustedWorkbenchPartition(partitionKey)) continue
+        if (partitionHasCredentialEvidence(path.join(dir, name))) {
+          cookieEvidencePartitions.push(name)
+        }
+      }
+      for (const name of raw) {
+        try {
+          const partitionDirectory = path.join(dir, name)
+          const state = await inspectDshAuthCookiePartition(partitionDirectory, name)
+          const evidence = state.evidence
+          if (!state.checked && !evidence) unknownAccountSource.push(name)
+          entries.push({
+            name,
+            mtimeMs: fs.statSync(partitionDirectory).mtimeMs,
+            hasLoginState: state.logged || evidence
+          })
+        } catch (_) {
+          unknownAccountSource.push(name)
+        }
+      }
+      const protectedPartitions = [
+        'tether-dsh-local',
+        ...unknownAccountSource,
+        ...cookieEvidencePartitions,
+        ...(nativeWorkbench && typeof nativeWorkbench.activeServicePartitions === 'function'
+          ? nativeWorkbench.activeServicePartitions().map(partitionDirectoryName) : [])
+      ]
+      const report = partitionBudgetReport(entries, { protectedPartitions, loginEntries: loginState.entries })
+      for (const name of report.removable) {
         try { fs.rmSync(path.join(dir, name), { recursive: true, force: true }) } catch (_) { /* busy */ }
       }
-      if (stale.length) log('gc partitions removed=' + stale.length)
+      const trimmed = report.cacheTrim.filter((name) => clearWorkbenchCacheOnly(dir, name) > 0)
+      if (report.removable.length || trimmed.length) {
+        log('gc partitions removed=' + report.removable.length + ' cache_only=' + trimmed.length)
+        for (const name of report.removable) delete loginState.entries['persist:' + name]
+        writeWorkbenchLoginState(loginState)
+      }
     } catch (_) { /* fresh install has no partitions directory */ }
   }
 
   app.whenReady().then(async () => {
     await configureUpdaterNetwork()
-    gcWorkbenchPartitions()
-    setInterval(gcWorkbenchPartitions, 24 * 60 * 60 * 1000).unref?.()
+    void gcWorkbenchPartitions().catch((error) => log('partition gc failed ' + safeRendererMessage(error && error.message)))
+    setInterval(() => void gcWorkbenchPartitions().catch(() => {}), 24 * 60 * 60 * 1000).unref?.()
     await createWindow()
     startupComplete = true
     await runInstalledSignIn()

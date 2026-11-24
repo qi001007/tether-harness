@@ -3262,6 +3262,88 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         try { await bridge.resetSurfaceAuth(url.origin) } catch (_) { /* best effort */ }
       }
 
+      const surfaceInstanceLabel = (kind) => ({
+        desktop: '桌面 DSH',
+        'node-bundled-web': '捆绑 DSH Web',
+        external: '外部 DSH',
+        unknown: '实例未识别'
+      })[kind] || '实例未识别'
+      const safeSurfaceIdentity = (data) => {
+        if (!data || typeof data !== 'object') return null
+        const kind = ['desktop', 'node-bundled-web', 'external'].includes(data.instance_kind) ? data.instance_kind : 'unknown'
+        const pid = Number(data.pid) || 0
+        const port = Number(data.port) || 0
+        const profile = typeof data.profile === 'string' ? data.profile.replace(/[^A-Za-z0-9._-]/g, '').slice(0, 80) : ''
+        const home = typeof data.dsh_home_label === 'string' ? data.dsh_home_label.replace(/[^A-Za-z0-9._-]/g, '').slice(0, 80) : ''
+        const age = Number(data.descriptor_age_s)
+        return {
+          kind, pid, port, profile,
+          home,
+          selectedLayer: typeof data.selected_layer === 'string' ? data.selected_layer : '',
+          selectionReason: typeof data.selection_reason === 'string' ? data.selection_reason.slice(0, 260) : '',
+          descriptorAgeS: Number.isFinite(age) && age >= 0 ? Math.round(age) : null,
+          instanceTokenPresent: data.instance_token_present === true,
+          pidStartedAt: Number.isFinite(Number(data.pid_started_at)) ? Number(data.pid_started_at) : null,
+          accountState: data.account_state === 'unknown' ? 'unknown' : 'unknown'
+        }
+      }
+      const surfaceIdentityText = (identity, loginState, loginReason) => {
+        if (!identity) return 'DSH 实例：未识别 · 账号：未知'
+        const pieces = ['DSH 实例：' + surfaceInstanceLabel(identity.kind)]
+        if (identity.selectedLayer === 'node-bundled-web') pieces.push('来源：主实例失效后选择捆绑 Web')
+        else if (identity.selectedLayer === 'desktop') pieces.push('来源：桌面实例描述符有效')
+        if (identity.profile) pieces.push('profile ' + identity.profile)
+        if (identity.pid) pieces.push('PID ' + identity.pid)
+        if (identity.port) pieces.push('port ' + identity.port)
+        if (identity.home) pieces.push('home ' + identity.home)
+        const loginLabels = { logged_in: '本实例已登录', logged_out: '本实例未登录', unknown: '未知' }
+        const loginSource = loginReason === 'partition_cookie' ? '（Webview 凭据）' : loginReason ? '（DSH 账号接口）' : ''
+        pieces.push('账号：' + (loginLabels[loginState] || '未知') + loginSource)
+        return pieces.join(' · ')
+      }
+      async function inspectCurrentSurfaceLogin() {
+        const state = surfaceStateRef.current
+        const identity = state && state.deviceId === deviceId && state.identity
+        const urlValue = state && state.deviceId === deviceId && state.url
+        const partition = state && state.deviceId === deviceId && state.partition
+        const bridge = typeof window !== 'undefined' ? window.tetherApp : undefined
+        let result = { state: 'unknown', reason: 'no_account_source' }
+        if (host && host.workbench && typeof host.workbench.accountStatus === 'function') {
+          try {
+            const remote = await host.workbench.accountStatus(deviceId)
+            if (remote && ['logged_in', 'logged_out', 'unknown'].includes(remote.state)) {
+              result = { state: remote.state, reason: remote.reason || 'account_op' }
+            }
+          } catch (_) { /* unknown; never reuse the Hub token as DSH state */ }
+        }
+        if (result.state === 'unknown' && identity && urlValue && partition && bridge
+            && typeof bridge.inspectSurfaceLogin === 'function') {
+          let parsed
+          try { parsed = new URL(urlValue) } catch (_) { return }
+          try {
+            const local = await bridge.inspectSurfaceLogin({
+              partition, origin: parsed.origin,
+              identity: { profile: identity.profile, pid: identity.pid, instanceKind: identity.kind }
+            })
+            if (local && local.ok && ['logged_in', 'logged_out'].includes(local.state)) {
+              result = { state: local.state, reason: 'partition_cookie' }
+            }
+          } catch (_) { /* retain unknown */ }
+        }
+        if (!['logged_in', 'logged_out'].includes(result.state)) return
+        const previous = surfaceStateRef.current
+        if (!previous || previous.deviceId !== deviceId) return
+        if (previous.loginState === result.state) return
+        const reloadAfterLogin = previous.loginState !== 'logged_in' && result.state === 'logged_in'
+        setState((prev) => prev.deviceId === deviceId
+          ? { ...prev, loginState: result.state, loginReason: result.reason, reloadAfterLogin } : prev)
+        if (reloadAfterLogin) {
+          setState((prev) => prev.deviceId === deviceId
+            ? { ...prev, status: 'loading', url: '', message: 'DSH 已登录，正在重新加载工作区…' } : prev)
+          setAttempt((value) => value + 1)
+        }
+      }
+
       React.useEffect(() => {
         retryCountRef.current = 0
         descriptorRetryCountRef.current = 0
@@ -3329,7 +3411,8 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
               if (current) setState({ deviceId, status: 'native-document-loading', url: localUrl,
                 grantId: 'local:' + (Number(data.pid) || 0) + ':' + Date.now(),
                 partition: 'persist:tether-dsh-local', localDirect: true,
-                pid: Number(data.pid) || 0, sourceKey: surfaceSourceKey })
+                pid: Number(data.pid) || 0, sourceKey: surfaceSourceKey,
+                identity: safeSurfaceIdentity(data), loginState: 'unknown' })
               return
             }
             if (data && data.meshService) {
@@ -3338,7 +3421,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
               if (!meshEndpoint) throw new Error('主进程返回的 mesh 工作台地址无效。')
               if (current) setState({ deviceId, status: 'native-document-loading', url: meshEndpoint,
                 grantId: mesh.grantId, partition: mesh.partition, mesh: true, serviceId: 'dsh',
-                sourceKey: surfaceSourceKey })
+                sourceKey: surfaceSourceKey, identity: safeSurfaceIdentity(mesh.surface || data), loginState: 'unknown' })
               return
             }
             if (data && data.nativeService) {
@@ -3348,7 +3431,8 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
                   || !/^persist:tether-wb-[a-f0-9]{40}$/.test(service.partition)
                   || !nativeEndpoint) throw new Error('主进程没有返回有效的隔离 DSH 会话。')
               if (current) setState({ deviceId, status: 'native-document-loading', url: nativeEndpoint,
-                grantId: service.grantId, partition: service.partition, sourceKey: surfaceSourceKey })
+                grantId: service.grantId, partition: service.partition, sourceKey: surfaceSourceKey,
+                identity: safeSurfaceIdentity(service.surface || data), loginState: 'unknown' })
               return
             }
             if (!response.ok) {
@@ -3389,7 +3473,9 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             const url = new URL(surfaceUrl)
             url.searchParams.set('tether_native', '1')
             await resetSurfaceAuth(url)
-            if (current) setState({ deviceId, status: 'document-loading', url: url.href, pid: Number(data.pid) || 0, sourceKey: surfaceSourceKey })
+            if (current) setState({ deviceId, status: 'document-loading', url: url.href, pid: Number(data.pid) || 0,
+              partition: 'persist:tether-dsh-local', sourceKey: surfaceSourceKey,
+              identity: safeSurfaceIdentity(data), loginState: 'unknown' })
           })
           .catch((error) => {
             if (!current) return
@@ -3514,6 +3600,16 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         const timer = setTimeout(() => setSlow(true), 15000)
         return () => clearTimeout(timer)
       }, [visible, currentState.status, currentState.deviceId])
+
+      React.useEffect(() => {
+        const active = ['document-loading', 'document-loaded', 'native-document-loading', 'native-document-loaded']
+          .includes(currentState.status) && currentState.deviceId === deviceId
+        if (!active || !currentState.partition || !currentState.identity) return undefined
+        void inspectCurrentSurfaceLogin()
+        const timer = setInterval(() => void inspectCurrentSurfaceLogin(), 5000)
+        return () => clearInterval(timer)
+      }, [deviceId, currentState.status, currentState.partition, currentState.deviceId,
+          currentState.identity && currentState.identity.kind, currentState.identity && currentState.identity.pid])
 
       React.useEffect(() => {
         if (currentState.status !== 'native-document-loading') return undefined
@@ -3650,6 +3746,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           }
           setDshWeb((current) => ({ ...(current || {}), supported: true, state: 'ready', running: true,
             installing: false, endpoint: service.endpoint, partition: service.partition, grantId: service.grantId,
+            identity: safeSurfaceIdentity(service.surface || service), loginState: 'unknown',
             reason: '', error: '' }))
           beginDshWebLoad()
           setDshWebOpen(true)
@@ -3932,6 +4029,8 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         window.addEventListener('message', onMessage)
         return () => window.removeEventListener('message', onMessage)
       }, [currentState.status, currentState.deviceId, deviceId])
+      const dshLoginState = currentState.loginState || 'unknown'
+      const dshLoginSource = currentState.loginReason || 'none'
       const nativeSurfaceGuest = ['native-document-loading', 'native-document-loaded', 'native-document-error'].includes(currentState.status)
           && currentState.deviceId === deviceId && host.kind === 'app' ? (
         h('div', { className: 'tether-native-surface', style: { ...nativeSurfaceContainerStyle(visible, layered), ...(layered ? {} : { position: 'relative' }) } },
@@ -3939,6 +4038,12 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             h('div', null, currentState.message || 'DSH 页面无法连接。'), btn('重新连接', retryDocument, { primary: true })) : null,
           h('webview', { key: currentState.grantId, partition: currentState.partition, src: currentState.url, ref: onNativeGuest,
             style: { width: '100%', height: '100%', border: 0, display: 'flex' } }),
+          h('div', {
+            role: 'status', 'aria-live': 'polite',
+            style: { position: 'absolute', top: 8, left: 8, zIndex: 3, maxWidth: 460, padding: '5px 8px',
+              borderRadius: 6, background: 'rgba(255,255,255,.86)', color: C.sub, fontSize: 11, lineHeight: '15px',
+              pointerEvents: 'none', overflow: 'hidden', textOverflow: 'ellipsis' }
+          }, surfaceIdentityText(currentState.identity, dshLoginState, dshLoginSource)),
           folderPick ? h(TetherFolderPickDialog, {
             key: folderPick.id, React, C, Glyph, api, post, device: deviceId,
             kind: folderPick.kind === 'file' ? 'file' : 'folder',
@@ -3953,6 +4058,8 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         const timer = setTimeout(() => setDshStalledReady(true), 12000)
         return () => clearTimeout(timer)
       }, [dshStalled, deviceId])
+      const dshWebLoginState = dshWeb && dshWeb.loginState || 'unknown'
+      const dshWebLoginSource = dshWeb && dshWeb.loginReason || 'none'
       const dshWebUrl = dshWeb && dshWeb.running ? String(dshWeb.endpoint || '') : ''
       const dshWebOpenable = host.kind === 'app' && !!dshWebUrl && !!(dshWeb && dshWeb.partition)
       const dshWebLoadAttempt = dshWebLoad.attempt
@@ -3963,6 +4070,40 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         clearDshWebLoadTimer()
         setDshWebLoad({ status: error ? 'error' : 'loaded', attempt, error })
       }
+      const inspectDshWebLogin = async () => {
+        const bridge = typeof window !== 'undefined' ? window.tetherApp : undefined
+        if (!dshWeb || !dshWebUrl || !dshWeb.partition) return
+        let result = { state: 'unknown', reason: 'no_account_source' }
+        if (host && host.workbench && typeof host.workbench.accountStatus === 'function') {
+          try {
+            const remote = await host.workbench.accountStatus(deviceId)
+            if (remote && ['logged_in', 'logged_out', 'unknown'].includes(remote.state)) {
+              result = { state: remote.state, reason: remote.reason || 'account_op' }
+            }
+          } catch (_) { /* unknown, not logged out */ }
+        }
+        if (result.state === 'unknown' && bridge && typeof bridge.inspectSurfaceLogin === 'function') {
+          try {
+            const local = await bridge.inspectSurfaceLogin({
+              partition: dshWeb.partition, origin: new URL(dshWebUrl).origin, identity: dshWeb.identity || {}
+            })
+            if (local && local.ok && ['logged_in', 'logged_out'].includes(local.state)) {
+              result = { state: local.state, reason: 'partition_cookie' }
+            }
+          } catch (_) { /* retain unknown */ }
+        }
+        if (!['logged_in', 'logged_out'].includes(result.state)) return
+        if ((dshWeb.loginState || 'unknown') === result.state) return
+        const reloadAfterLogin = result.state === 'logged_in'
+        setDshWeb((current) => ({ ...(current || {}), loginState: result.state, loginReason: result.reason }))
+        if (reloadAfterLogin) beginDshWebLoad()
+      }
+      React.useEffect(() => {
+        if (!dshWebOpen || !dshWebUrl || !dshWeb || !dshWeb.partition) return undefined
+        void inspectDshWebLogin()
+        const timer = setInterval(() => void inspectDshWebLogin(), 5000)
+        return () => clearInterval(timer)
+      }, [dshWebOpen, dshWebUrl, dshWeb && dshWeb.partition, dshWeb && dshWeb.identity && dshWeb.identity.pid])
       React.useEffect(() => {
         const guest = dshWebRef.current
         if (!dshWebOpen || host.kind !== 'app' || !guest || typeof guest.addEventListener !== 'function') return undefined
@@ -4014,6 +4155,12 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
             style: { display: 'flex', flex: '1 1 auto', width: '100%', height: '100%', minWidth: 0, minHeight: 0, border: 0, background: C.bg }
           }),
           dshWebLoadOverlay,
+          h('div', {
+            role: 'status', 'aria-live': 'polite',
+            style: { position: 'absolute', top: 10, left: 10, zIndex: 2, maxWidth: 460, padding: '5px 8px',
+              borderRadius: 6, background: 'rgba(255,255,255,.86)', color: C.sub, fontSize: 11, lineHeight: '15px',
+              pointerEvents: 'none', overflow: 'hidden', textOverflow: 'ellipsis' }
+          }, surfaceIdentityText(dshWeb.identity, dshWebLoginState, dshWebLoginSource)),
           h('div', { style: { position: 'absolute', top: 10, right: 10, display: 'flex', gap: 6, zIndex: 2 } },
             h('button', {
               type: 'button', className: 'tether-hover',
@@ -4051,6 +4198,12 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
               referrerPolicy: 'no-referrer',
               style: { flex: '1 1 auto', width: '100%', height: '100%', minWidth: 0, minHeight: 0, border: 0, background: C.bg }
             }),
+            h('div', {
+              role: 'status', 'aria-live': 'polite',
+              style: { position: 'absolute', top: 8, left: 8, zIndex: 3, maxWidth: 460, padding: '5px 8px',
+                borderRadius: 6, background: 'rgba(255,255,255,.86)', color: C.sub, fontSize: 11, lineHeight: '15px',
+                pointerEvents: 'none', overflow: 'hidden', textOverflow: 'ellipsis' }
+            }, surfaceIdentityText(currentState.identity, dshLoginState, dshLoginSource)),
             folderPick ? h(TetherFolderPickDialog, {
               key: folderPick.id, React, C, Glyph, api, post, device: deviceId,
               kind: folderPick.kind === 'file' ? 'file' : 'folder',
@@ -4543,7 +4696,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       const localDshTargetRef = React.useRef('')
       const localDshActionRef = React.useRef(0)
       localDshTargetRef.current = appLocalDevice || deviceId || ''
-      const [loggedIn, setLoggedIn] = React.useState(() => {
+      const [hubLoggedIn, setHubLoggedIn] = React.useState(() => {
         try { return !!(JSON.parse(window.localStorage.getItem('tether.hub') || '{}').token) } catch (_) { return false }
       })
       const [hubUrl, setHubUrl] = React.useState(() => {
@@ -4614,7 +4767,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           } catch (_) { /* storage unavailable */ }
           setHubToken('')
           setHubRole('')
-          setLoggedIn(false)
+          setHubLoggedIn(false)
           setNotice('登录已过期，请重新登录')
           return
         }
@@ -5735,7 +5888,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
         setState(null)
         setStateRefreshError('')
         setDeviceId('')
-        setLoggedIn(false)
+        setHubLoggedIn(false)
         workbenchAuthReadyRef.current = false
         setWorkbenchAuthReady(false)
         hubAuthRequiredRef.current = true
@@ -7078,8 +7231,8 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
       }
       const nativeNetworkOwner = host?.kind === 'app' && !EXPLICIT_AUTHORITY && state?.user?.user_id
       React.useEffect(() => {
-        if (view === 'network' && (loggedIn || nativeNetworkOwner)) loadPrivateNetworks()
-      }, [view, loggedIn, nativeNetworkOwner])
+        if (view === 'network' && (hubLoggedIn || nativeNetworkOwner)) loadPrivateNetworks()
+      }, [view, hubLoggedIn, nativeNetworkOwner])
 
       React.useEffect(() => {
         if (!contextMenu) return undefined
@@ -7827,7 +7980,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
 
       const localDeviceRecord = ((state && state.devices) || []).find((item) => item.device_id === (appLocalDevice || deviceId)) || {}
       const localCaps = localDeviceRecord.capabilities || {}
-      if (!loggedIn && !(host && host.kind === 'app' && !EXPLICIT_AUTHORITY)) {
+      if (!hubLoggedIn && !(host && host.kind === 'app' && !EXPLICIT_AUTHORITY)) {
         return h(Connection.LoginScreen, {
           defaultUrl: hubAddress || hubUrl || '',
           defaultEmail: hubEmail,
@@ -8253,7 +8406,7 @@ export function createTetherPanel({ React, Native, host, EditorRuntime }) {
           passwordChangeAvailable: host.kind !== 'app' || EXPLICIT_AUTHORITY,
           accountSignedIn: host.kind === 'app' && !EXPLICIT_AUTHORITY
             ? !!(workbenchAuthReady || (state && state.user))
-            : !!(loggedIn || (state && state.user)),
+            : !!(hubLoggedIn || (state && state.user)),
           uninstallAvailable: host.kind === 'app' && desktopPlatform === 'win32' && typeof host.openInstalledApps === 'function',
           onOpenInstalledApps: host.kind === 'app' && typeof host.openInstalledApps === 'function'
             ? () => host.openInstalledApps()

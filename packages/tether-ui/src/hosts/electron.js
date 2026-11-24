@@ -62,6 +62,7 @@ export function createElectronHost({ apiBase = '' } = {}) {
       onLoginResult: (callback) => window.tetherApp.onWorkbenchLoginResult(callback),
       catalog: (targetId) => window.tetherApp.workbenchCatalog(targetId),
       open: (targetId, serviceId) => window.tetherApp.workbenchOpen(targetId, serviceId),
+      accountStatus: (targetId) => window.tetherApp.workbenchAccountStatus(targetId),
       openLegacyCodeg: (targetId) => window.tetherApp.workbenchOpenLegacyCodeg(targetId),
       openDshSurface: (targetId) => window.tetherApp.workbenchOpenDshSurface(targetId),
       close: (targetId, serviceId, grantId) => window.tetherApp.workbenchClose(targetId, serviceId, grantId),

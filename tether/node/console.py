@@ -182,6 +182,10 @@ class _Handler(BaseHTTPRequestHandler):
             info = getattr(surface, "descriptor_info", None)
             if callable(info):
                 result.update(info() or {})
+        elif tail == ["dsh", "account-status"]:
+            client = self._dsh_live()
+            result = client.account_status() if client is not None else {
+                "state": "unknown", "reason": "native_surface_unavailable"}
         elif tail == ["dsh", "sessions"]:
             result = {"sessions": self.api.dsh_sessions.list(),
                       "home": str(self.api.dsh_sessions.home)}

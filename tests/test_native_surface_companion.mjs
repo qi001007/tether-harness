@@ -136,7 +136,7 @@ test('companion registers authenticated RPCs through the current HostConnectionS
   }
   try {
     apply(ctx)
-    assert.deepEqual(registered.map(({ channel }) => channel), ['/tether-updates', '/tether-identity'])
+    assert.deepEqual(registered.map(({ channel }) => channel), ['/tether-updates', '/tether-identity', '/tether-dsh-account-status'])
     assert.ok(registered.every(({ handler }) => typeof handler === 'function'))
     assert.throws(() => internals.registerRpc({}, ctx, '/missing', () => {}), /requires the DSH connection RPC registration API/)
   } finally {

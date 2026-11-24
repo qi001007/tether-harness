@@ -6,7 +6,7 @@ import test from 'node:test'
 
 import { apply, internals } from '../packages/tether-dsh-surface/lib/index.js'
 
-test('surface publishes its descriptor with the current connection API and resolves the host profile', () => {
+test('surface publishes its descriptor with the current connection API and resolves the host profile', async () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'tether-surface-'))
   const profile = path.join(home, 'profiles', 'desktop')
   fs.mkdirSync(profile, { recursive: true })
@@ -28,16 +28,25 @@ test('surface publishes its descriptor with the current connection API and resol
         register(_owner, channel, handler) { registered.push({ channel, handler }); assert.equal(typeof handler, 'function'); return () => {} }
       },
       webServer: { getOrigin: () => 'http://127.0.0.1:34567' },
+      accountController: { getState: async () => ({ status: 'credential-stored', links: {}, attempt: { phase: 'succeeded' } }) },
       effect: (fn) => { cleanup = fn() },
       get: () => undefined,
     }
     apply(ctx)
-    assert.deepEqual(registered.map(item => item.channel), ['/tether-updates', '/tether-identity'])
+    assert.deepEqual(registered.map(item => item.channel), ['/tether-updates', '/tether-identity', '/tether-dsh-account-status'])
     const identity = registered.find(item => item.channel === '/tether-identity').handler
     assert.deepEqual(identity('get', {}, undefined, { principal: { kind: 'user' } }).error.code, 'forbidden')
     assert.deepEqual(identity('get', {}, undefined, { principal: { kind: 'owner' } }).value, { device_id: 'DESKTOP-LOCAL' })
+    const account = registered.find(item => item.channel === '/tether-dsh-account-status').handler
+    assert.equal((await account('get', {}, undefined, { principal: { kind: 'user' } })).error.code, 'forbidden')
+    assert.deepEqual((await account('get', {}, undefined, { principal: { kind: 'owner' } })).value, {
+      state: 'logged_in', reason: 'credential-stored', attempt_phase: 'succeeded', error_code: null
+    })
     const descriptor = JSON.parse(fs.readFileSync(internals.descriptorPath(), 'utf8'))
     assert.equal(descriptor.version, 1)
+    assert.equal(descriptor.pid, process.pid)
+    assert.match(descriptor.instance_token, /^[0-9a-f]{32}$/)
+    assert.ok(Number.isFinite(descriptor.pid_started_at) && descriptor.pid_started_at <= Date.now())
     assert.equal(descriptor.profile, 'desktop')
     assert.equal(descriptor.origin, 'http://127.0.0.1:34567')
     assert.equal(descriptor.authenticated_url, 'http://127.0.0.1:34567/?token=fixture')

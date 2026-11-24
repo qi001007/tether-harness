@@ -351,6 +351,7 @@ class Node:
         self.dsh_rpc = DshRpcClient(
             self.native_dsh_home,
             fallback_homes=(web_home,) if web_home is not None else ())
+        self.fs.dsh_rpc = self.dsh_rpc
         self.remote_desktop = None
         self.remote_desktop_error = "meshcentral_runtime_missing"
         node_executable = os.environ.get("TETHER_NODEJS_EXE", "")
@@ -1657,6 +1658,7 @@ class Node:
         if app_fields["app_installed"] and "app" not in installed:
             installed.append("app")
         dsh_desktop = self.fs.dsh_desktop.status()
+        dsh_web = self.fs.dsh_web.status() if self.fs.dsh_web else {}
         return {"os": platform.system(), "release": platform.release(), "os_label": os_label(),
                 "python": platform.python_version(),
                 "node_version": self.node_version, "update_protocol": UPDATE_PROTOCOL,
@@ -1691,7 +1693,9 @@ class Node:
                 "dsh_version": dsh_desktop["version"],
                 "dsh_installing": dsh_desktop["installing"],
                 "dsh_install_supported": platform.system() == "Windows",
-                "dsh_web_supported": bool(self.fs.dsh_web and self.fs.dsh_web.status().get("supported")),
+                "dsh_web_supported": bool(dsh_web.get("supported")),
+                "dsh_web_status": dsh_web,
+                "dsh_state": str(dsh_web.get("dsh_state") or "absent"),
                 "terminal_user": _current_user(),
                 "terminal_privileged": _is_privileged(),
                 "dsh_surface": self.native_surface.available(),

@@ -725,8 +725,12 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
       throw new Error('目标 Codeg 已由其他工作台模式打开。')
     }
     if (cached && cached.refreshOptions) options = { ...cached.refreshOptions, ...options }
-    const localDeviceId = options.allowModernLocal === true ? await getLocalDeviceId() : ''
-    const allowModernLocal = options.allowModernLocal === true && localDeviceId === targetId
+    const localDeviceId = await getLocalDeviceId()
+    // A closed grant has no refreshOptions, but reopening the APP's own node is a
+    // supported local path. The modern loopback gateway is allowed only when this
+    // exact trusted device id matches the target; remote targets still require the
+    // old compatibility marker or fresh EasyTier ownership proof.
+    const allowModernLocal = localDeviceId === targetId
     if ((actorGenerations.get(actorId) || 0) !== generation || clearingActors.has(actorId)) {
       throw new Error('工作台账号已切换，请重新打开服务。')
     }
@@ -746,7 +750,9 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
       && typeof options.sourceDeviceId === 'string' && options.sourceDeviceId && options.sourceDeviceId !== targetId
       && catalogHasCodeg
     if (!legacy && !(allowModernLocal && catalogHasCodeg) && !allowModernOwnedEasyTier) {
-      throw new Error('目标 Codeg 未通过旧节点兼容检查。')
+      throw new Error(allowModernLocal || allowModernOwnedEasyTier
+        ? '目标服务目录中没有可用的 Codeg 服务，请检查节点状态后重试。'
+        : '目标 Codeg 未通过旧节点兼容检查。')
     }
     let serviceSession = null
     try {
@@ -829,22 +835,25 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
         localFallbackUrl = localCodegFallbackUrl(status)
         current = legacyCodegService(status, targetId, { allowLoopback: allowModernLocal, fallbackUrl: localFallbackUrl })
       }
-      const loopbackTokenUrl = allowModernLocal && status
-        ? (strictLegacyCodegUrl(status.loopback_url) || localFallbackUrl) : null
-      const meshTokenUrl = status ? strictLegacyCodegUrl(status.url) : null
-      const tokenUrl = meshTokenUrl || loopbackTokenUrl
-      const localLoopback = !meshTokenUrl && !!loopbackTokenUrl
+      const statusUrl = status ? strictLegacyCodegUrl(status.url) : null
+      const loopbackStatusUrl = statusUrl && ['127.0.0.1', '[::1]'].includes(statusUrl.hostname) ? statusUrl : null
+      const loopbackTokenUrl = allowModernLocal
+        ? (strictLegacyCodegUrl(status && status.loopback_url) || loopbackStatusUrl || localFallbackUrl)
+        : null
+      const meshTokenUrl = statusUrl && statusUrl !== loopbackStatusUrl ? statusUrl : null
+      const tokenUrl = loopbackTokenUrl || meshTokenUrl
+      const localLoopback = !!loopbackTokenUrl && (!meshTokenUrl || tokenUrl === loopbackTokenUrl)
       if (current.state !== 'ready' || !tokenUrl) throw new Error(current.reason || '目标 Codeg 尚未运行。')
       const currentRuntimeUrl = legacyRuntimeUrl(tokenUrl.toString())
       const previousRuntimeUrl = cached && (cached.legacyRuntimeUrl
         || (cached.legacyTokenUrl && legacyRuntimeUrl(cached.legacyTokenUrl)))
-      const runtimeChanged = !cached || previousRuntimeUrl !== currentRuntimeUrl
+      const runtimeChanged = !cached || previousRuntimeUrl !== currentRuntimeUrl || options.forceBootstrapRevision === true
       const bootstrapUrl = runtimeChanged ? new URL(tokenUrl) : new URL(cached.legacyTokenUrl)
       if (runtimeChanged) bootstrapUrl.searchParams.set('next', legacyGuestNext(cached))
       if ((actorGenerations.get(actorId) || 0) !== generation || clearingActors.has(actorId)) {
         throw new Error('工作台账号已切换，请重新打开服务。')
       }
-      const sourceDeviceId = modernOwnerProof ? options.sourceDeviceId : await getLocalDeviceId()
+      const sourceDeviceId = modernOwnerProof ? options.sourceDeviceId : localDeviceId
       if (typeof sourceDeviceId !== 'string' || !sourceDeviceId) throw new Error('本机设备身份尚未就绪。')
 
       let sourceRoute = null
@@ -937,6 +946,7 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
         { targetId, serviceId: 'codeg' })
       return publicResult
     } catch (error) {
+      incompatibleCatalogs.delete(tupleKey(actorId, targetId, 'catalog'))
       if (serviceSession && !cached) {
         try {
           await resetServiceSession(serviceSession)
@@ -1009,6 +1019,7 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     if (record.viewTimer) { clearInterval(record.viewTimer); record.viewTimer = null }
     if (record.legacy === true) {
       active.delete(tupleKey(actorId, targetId, serviceId))
+      incompatibleCatalogs.delete(tupleKey(actorId, targetId, 'catalog'))
       await resetServiceSession(record.serviceSession)
       // Keep the stable partition's HTTP cache so reopening the same
       // workspace does not ship the bundle through the mesh again.
@@ -1023,6 +1034,7 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
       throw error
     }
     active.delete(tupleKey(actorId, targetId, serviceId))
+    incompatibleCatalogs.delete(tupleKey(actorId, targetId, 'catalog'))
     await resetServiceSession(record.serviceSession)
     logSafe('native-workbench-close', { targetId, serviceId })
     return { targetId, serviceId, state: 'closed' }
@@ -1305,8 +1317,36 @@ function createNativeWorkbench({ controllerUrl, loginSession, getServiceSession,
     return { ok: errors.length === 0, cleared: records.length, errors }
   }
 
+  async function accountStatus(targetId) {
+    if (typeof targetId !== 'string' || !targetId) throw new TypeError('invalid target')
+    const actorId = await getActorId()
+    if (typeof actorId !== 'string' || !actorId) return { ok: true, state: 'unknown', reason: 'identity_unavailable' }
+    const generation = actorGenerations.get(actorId) || 0
+    try {
+      const result = await postJson(loginSession.fetch.bind(loginSession),
+        apiUrl(base, targetId, 'dsh_account_status'), {}, { signal: AbortSignal.timeout(6000) })
+      if ((actorGenerations.get(actorId) || 0) !== generation) {
+        return { ok: true, state: 'unknown', reason: 'identity_changed' }
+      }
+      const state = ['logged_in', 'logged_out', 'unknown'].includes(result && result.state) ? result.state : 'unknown'
+      return {
+        ok: true, state,
+        reason: String(result && result.reason || 'account_op').slice(0, 80),
+        attempt_phase: typeof result.attempt_phase === 'string' ? result.attempt_phase.slice(0, 64) : null,
+        error_code: typeof result.error_code === 'string' ? result.error_code.slice(0, 64) : null
+      }
+    } catch (_) {
+      return { ok: true, state: 'unknown', reason: 'account_status_unavailable' }
+    }
+  }
+
   return {
-    catalog, open, openLegacyCodeg, openDshSurface, guestPolicy, prepareGuest, close, view, requestFiles, allowGuest, clearActor,
+    catalog, open, accountStatus, openLegacyCodeg, openDshSurface, guestPolicy, prepareGuest, close, view, requestFiles, allowGuest, clearActor,
+    activeServicePartitions: () => [...active.values()].map((record) => record.partition).filter(Boolean),
+    activeDshInstances: () => [...active.values()].filter((record) => record.serviceId === 'dsh').map((record) => ({
+      partition: record.partition, targetId: record.targetId, endpoint: record.endpoint,
+      leaseExpiresAt: record.leaseExpiresAt, lastUiAt: record.lastUiAt || 0
+    })),
     currentActorId: async () => {
       const actorId = await getActorId()
       if (typeof actorId !== 'string' || !actorId) throw new Error('Controller 登录身份尚未就绪。')

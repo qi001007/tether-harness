@@ -505,6 +505,89 @@ test('same-runtime Codeg refresh preserves the prepared guest and a changed runt
   assert.doesNotMatch(loaded[2], /filter=open|#home/)
 })
 
+test('forceBootstrapRevision reopens the same legacy Codeg runtime without relaxing identity checks', async () => {
+  const session = legacySession()
+  const statusUrl = 'http://100.64.0.8:4096/token.html?token=same-secret'
+  const workbench = workbenchWith(async (url) => {
+    const path = new URL(url).pathname
+    if (path.endsWith('/service_catalog')) return jsonResponse(400, { detail: { code: 'bad_op' } })
+    if (path.endsWith('/agents_runtime_status')) return jsonResponse(200, readyLegacyStatus(statusUrl))
+    if (path === '/api/networks') return jsonResponse(200, readyNetworks())
+    throw new Error('unexpected request: ' + path)
+  }, { getServiceSession: () => session, getSourceRoute: async () => readyRoute })
+
+  const first = await workbench.openLegacyCodeg('target-1')
+  let currentUrl = 'about:blank'
+  const loaded = []
+  const guest = { session, getURL: () => currentUrl, async loadURL(url) {
+    loaded.push(url)
+    currentUrl = 'http://100.64.0.8:4096/workspace'
+  } }
+  await workbench.prepareGuest(guest)
+  currentUrl = 'http://100.64.0.8:4096/workspace'
+
+  const sameRuntime = await workbench.openLegacyCodeg('target-1')
+  assert.equal(sameRuntime.bootstrapRevision, first.bootstrapRevision)
+  const forced = await workbench.openLegacyCodeg('target-1', { forceBootstrapRevision: true })
+  assert.equal(forced.bootstrapRevision, sameRuntime.bootstrapRevision + 1)
+  assert.equal(forced.partition, first.partition)
+  await workbench.prepareGuest(guest)
+  assert.equal(loaded.length, 2)
+  assert.match(loaded[1], /token\.html\?token=same-secret/)
+})
+
+test('closing legacy Codeg invalidates its catalog and lets the next open choose the modern path', async () => {
+  const session = legacySession()
+  let mode = 'legacy'
+  const calls = []
+  const workbench = workbenchWith(async (url) => {
+    const path = new URL(url).pathname
+    calls.push(path)
+    if (path.endsWith('/service_catalog')) {
+      return mode === 'legacy'
+        ? jsonResponse(400, { detail: { code: 'bad_op' } })
+        : jsonResponse(200, { protocol: 1, target_id: 'target-1', services: [{ id: 'codeg', state: 'ready' }] })
+    }
+    if (path.endsWith('/agents_runtime_status')) return jsonResponse(200, readyLegacyStatus('http://100.64.0.8:4096/token.html?token=first-secret'))
+    if (path === '/api/networks') return jsonResponse(200, readyNetworks())
+    throw new Error('unexpected request: ' + path)
+  }, { getServiceSession: () => session, getSourceRoute: async () => readyRoute })
+
+  const first = await workbench.openLegacyCodeg('target-1')
+  await workbench.close('target-1', 'codeg', first.grantId)
+  mode = 'modern'
+  const refreshed = await workbench.catalog('target-1')
+  assert.equal(refreshed.legacy, undefined)
+  assert.equal(refreshed.services.find((service) => service.id === 'codeg').state, 'ready')
+  assert.equal(calls.filter((path) => path.endsWith('/service_catalog')).length, 2,
+    'the stale bad_op classification is dropped on close and refreshed on the next catalog read')
+})
+
+test('local legacy Codeg can be reopened after close without a stale bad_op cache', async () => {
+  const session = legacySession()
+  let catalogCalls = 0
+  const workbench = workbenchWith(async (url) => {
+    const path = new URL(url).pathname
+    if (path.endsWith('/service_catalog')) {
+      catalogCalls += 1
+      return jsonResponse(200, { protocol: 1, target_id: 'local-1', services: [{ id: 'codeg', state: 'ready' }] })
+    }
+    if (path.endsWith('/agents_runtime_status')) return jsonResponse(200,
+      { device_id: 'local-1', installed: true, running: true,
+        url: 'http://127.0.0.1:4200/token.html?token=' + 'a'.repeat(40) })
+    if (path === '/api/networks') return jsonResponse(200, { networks: [] })
+    throw new Error('unexpected request: ' + path)
+  }, { getServiceSession: () => session, getLocalDeviceId: () => 'local-1',
+      getLocalCodegRuntime: () => ({ port: 4200, token: 'a'.repeat(40) }) })
+
+  const first = await workbench.openLegacyCodeg('local-1')
+  await workbench.close('local-1', 'codeg', first.grantId)
+  const reopened = await workbench.openLegacyCodeg('local-1')
+  assert.equal(reopened.endpoint, 'http://127.0.0.1:4200/')
+  assert.equal(reopened.targetId, 'local-1')
+  assert.equal(catalogCalls, 2, 'close refreshes the catalog instead of reusing its bad_op result')
+})
+
 test('invalid or unprepared cached guest routes fall back to native Agent Home on runtime change', async () => {
   for (const route of [
     'about:blank',
@@ -1203,7 +1286,7 @@ test('Agents can start stopped legacy Codeg but keeps missing and failed legacy 
   assert.match(agentsPage, /serviceCatalog && serviceCatalog\.legacy === true/)
   assert.match(agentsPage, /\['ready', 'stopped'\]\.includes\(catalogCodeg\.state\)/)
   assert.match(agentsPage, /runtime = await getAgentsRuntime\(device, true\)/)
-  assert.match(agentsPage, /await host\.workbench\.openLegacyCodeg\(device\)/)
+  assert.match(agentsPage, /await host\.workbench\.openLegacyCodeg\(device(?:\s*,\s*\{[^}]*forceBootstrapRevision[^}]*\})?\)/)
   assert.match(agentsPage, /const codegRuntimeToken = \(runtime\) =>/)
   assert.match(agentsPage, /localStorage\.setItem\('codeg_token',/)
   assert.match(agentsPage, /'\/token\.html'/)

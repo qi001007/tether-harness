@@ -162,7 +162,7 @@ test('connection panels show service checks without duplicate device totals or c
   assert.doesNotMatch(settingsPanel, /只影响本机显示|只表示 Hub 可达|切换几乎即时|新版本时/)
   assert.match(settingsPanel, /roleLabel/)
   assert.match(shared, /hubRole/)
-  assert.match(shared, /e\.status === 401[\s\S]*?setLoggedIn\(false\)/)
+  assert.match(shared, /e\.status === 401[\s\S]*?setHubLoggedIn\(false\)/)
   assert.match(connectionPanel, /服务器地址/)
   assert.doesNotMatch(transferPage, /roleLabel: '(?:来源|目标)'|交换来源与目标/)
   assert.match(transferPage, /已在另一侧/)
@@ -199,7 +199,7 @@ test('connection panels show service checks without duplicate device totals or c
   assert.match(shared, /Connection\.Panel/)
   assert.match(shared, /errorKind === 'auth' \? 401/)
   // Login still gates every surface except the APP host running on its own device authority.
-  assert.match(shared, /if \(!loggedIn && !\(host && host\.kind === 'app' && !EXPLICIT_AUTHORITY\)\)/)
+  assert.match(shared, /if \(!hubLoggedIn && !\(host && host\.kind === 'app' && !EXPLICIT_AUTHORITY\)\)/)
   assert.match(shared, /showAppSettings/)
   assert.match(shared, /Settings\.SettingsPanel/)
   assert.match(fs.readFileSync(path.join(root, 'packages/tether-ui/src/hosts/dsh.js'), 'utf8'), /probeConnection: async/)

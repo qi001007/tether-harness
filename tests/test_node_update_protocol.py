@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 import sys
+import hashlib
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -51,6 +52,15 @@ class FakeUpdateManager:
         self.prepare_started.set()
         self.prepare_release.wait(3)
         return {"ok": True, "component": "node", "prepared_id": "a" * 32}
+
+    def cancel(self) -> dict:
+        self.cancel_calls = getattr(self, "cancel_calls", 0) + 1
+        return {"ok": True, "component": "node", "cancelled": True, "error": ""}
+
+    def prefetch(self, now: float | None = None) -> dict:
+        self.prefetch_calls = getattr(self, "prefetch_calls", 0) + 1
+        return {"ok": True, "component": "node", "version": "0.2.2", "size": 10,
+                "served_by": "origin", "error": "", "error_code": ""}
 
     def apply(self, _prepared_id: str) -> dict:
         self.apply_calls += 1
@@ -1197,3 +1207,142 @@ def test_unmanaged_restart_preserves_original_python_command(monkeypatch):
     except ExecRequested:
         pass
     assert captured == [(sys.executable, original)]
+
+
+def test_cancel_is_reachable_while_prepare_holds_the_update_lock(tmp_path, monkeypatch):
+    """A fleet-wide 取消 has to interrupt a running pull, not queue behind it."""
+    node = _node(tmp_path, monkeypatch)
+    manager = FakeUpdateManager()
+    node.update_managers["node"] = manager
+    sent: list[dict] = []
+    lock = threading.Lock()
+
+    async def send(message: dict) -> None:
+        with lock:
+            sent.append(message)
+
+    monkeypatch.setattr(node, "_send", send)
+
+    def run_prepare() -> None:
+        asyncio.run(node._update_call({"type": "update_call", "req_id": "prepare",
+                                       "action": "prepare", "component": "node"}))
+
+    worker = threading.Thread(target=run_prepare)
+    worker.start()
+    assert manager.prepare_started.wait(2)
+
+    asyncio.run(node._update_call({"type": "update_call", "req_id": "cancel",
+                                   "action": "cancel", "component": "node"}))
+
+    assert manager.cancel_calls == 1
+    assert any(message["req_id"] == "cancel" and message["cancelled"] for message in sent)
+    manager.prepare_release.set()
+    worker.join(5)
+    node.store.db.close()
+
+
+def test_prefetch_reports_which_bandwidth_layer_served_the_bytes(tmp_path, monkeypatch):
+    node = _node(tmp_path, monkeypatch)
+    manager = FakeUpdateManager()
+    node.update_managers["node"] = manager
+    sent: list[dict] = []
+
+    async def send(message: dict) -> None:
+        sent.append(message)
+
+    monkeypatch.setattr(node, "_send", send)
+    asyncio.run(node._update_call({"type": "update_call", "req_id": "warm",
+                                   "action": "prefetch", "component": "node"}))
+
+    assert manager.prefetch_calls == 1
+    assert sent[0]["served_by"] == "origin"
+    node.store.db.close()
+
+
+def test_unknown_update_action_is_still_rejected(tmp_path, monkeypatch):
+    node = _node(tmp_path, monkeypatch)
+    sent: list[dict] = []
+
+    async def send(message: dict) -> None:
+        sent.append(message)
+
+    monkeypatch.setattr(node, "_send", send)
+    asyncio.run(node._update_call({"type": "update_call", "req_id": "x",
+                                   "action": "self_destruct", "component": "node"}))
+
+    assert sent[0]["error_code"] == "invalid_update_request"
+    node.store.db.close()
+
+
+class _ManifestFeed:
+    """One loopback feed serving an unsigned manifest; check() never downloads."""
+
+    def __init__(self, version: str, channel: str) -> None:
+        self.files: dict[str, bytes] = {}
+        owner = self
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:
+                payload = owner.files.get(self.path)
+                if payload is None:
+                    self.send_error(404)
+                    return
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+
+            def log_message(self, *_args) -> None:
+                pass
+
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        self.base = f"http://127.0.0.1:{self.server.server_address[1]}"
+        archive = f"node-archive-{version}".encode()
+        entry = {"version": version, "url": f"{self.base}/node.zip",
+                 "sha256": hashlib.sha256(archive).hexdigest(), "size": len(archive),
+                 "protocol": 1, "min_updater": "0.2.1"}
+        self.url = f"{self.base}/manifest.json"
+        self.files["/manifest.json"] = json.dumps(
+            {"schema": 1, "channel": channel,
+             "components": {name: dict(entry) for name in ("app", "plugin", "node")}}).encode()
+        self.files["/node.zip"] = archive
+
+    def close(self) -> None:
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join(timeout=3)
+
+
+def test_update_result_carries_the_source_rejections_to_the_hub(tmp_path, monkeypatch) -> None:
+    """Hub 要能拼出「这台为何看不到新版」，前提是节点把字段真的放进信封，
+    而不是只在 UpdateManager 的返回值里存在。"""
+    monkeypatch.delenv("TETHER_UPDATE_CHANNEL", raising=False)
+    node = _node(tmp_path, monkeypatch)
+    root = tmp_path / "runtime"
+    root.mkdir()
+    (root / "version.json").write_text(json.dumps({"schema": 1, "components": {
+        "app": "0.4.11", "plugin": "0.4.11", "node": "0.4.11"}}), encoding="utf-8")
+    hub, origin = _ManifestFeed("0.5.14", "preview"), _ManifestFeed("0.4.11", "stable")
+    sent: list[dict] = []
+
+    async def send(message: dict) -> None:
+        sent.append(message)
+
+    monkeypatch.setattr(node, "_send", send)
+    node.update_managers = {"app": object(), "node": agent.UpdateManager(
+        root, "node", manifest_url=hub.url, state_dir=tmp_path / "state",
+        fallback_manifest_urls=[origin.url])}
+    try:
+        asyncio.run(node._update_call({"type": "update_call", "req_id": "why",
+                                       "action": "check", "component": "node"}))
+    finally:
+        hub.close()
+        origin.close()
+
+    assert sent and sent[0]["ok"] is True, sent
+    assert sent[0]["latest_version"] == "0.4.11", sent[0]
+    assert sent[0]["policy_rejected_primary"] is True
+    assert {"source": hub.url, "code": "channel_not_selected"} in sent[0]["source_rejections"]
+    node.store.db.close()
